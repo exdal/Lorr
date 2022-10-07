@@ -35,24 +35,25 @@ namespace lr::g
         void SetPatchCount(u32 count);
         // Viewport
         void AddViewport(u32 viewportCount = 1, u32 scissorCount = 0);
-        void SetViewport(u32 viewportID, u32 width, u32 height, float minDepth, float maxDepth);
+        void SetViewport(u32 viewportID, u32 width, u32 height, f32 minDepth, f32 maxDepth);
         void SetScissor(u32 scissorID, u32 x, u32 y, u32 w, u32 h);
         // Rasterizer
         void SetDepthClamp(bool enabled);
         void SetRasterizerDiscard(bool enabled);
         void SetPolygonMode(VkPolygonMode mode);  // TODO: Maybe abstract `VkPolygonMode`
         void SetCullMode(CullMode mode, bool frontFaceClockwise);
-        void SetDepthBias(bool enabled, float constantFactor, float clamp, float slopeFactor);
-        void SetLineWidth(float size);
+        void SetDepthBias(bool enabled, f32 constantFactor, f32 clamp, f32 slopeFactor);
+        void SetLineWidth(f32 size);
         // Multisample
         void SetSampleCount(VkSampleCountFlagBits bits);
-        void SetSampledShading(bool enabled, float minSampleShading);
+        void SetSampledShading(bool enabled, f32 minSampleShading);
         void SetAlphaToCoverage(bool alphaToCoverage, bool alphaToOne);
         // Depth Stencil
         void SetDepthState(bool depthTestEnabled, bool depthWriteEnabled, bool depthBoundsTestEnabled);
         void SetStencilState(bool stencilTestEnabled, VkStencilOpState frontState, VkStencilOpState backState);
-        void SetDepthBounds(float min, float max);
+        void SetDepthBounds(f32 min, f32 max);
         // TODO: Color Blend
+        void SetBlendAttachment(u32 attachmentID, bool enabled, u8 mask);
         // void SetBlendState(bool enabled);
         // void SetBlendColorFactor(VkBlendFactor src, VkBlendFactor dst, VkBlendOp op);
         // void SetBlendAlphaFactor(VkBlendFactor src, VkBlendFactor dst, VkBlendOp op);
@@ -83,7 +84,7 @@ namespace lr::g
         VkPipelineDepthStencilStateCreateInfo m_DepthStencilState;
 
         VkPipelineColorBlendStateCreateInfo m_ColorBlendState;
-        VkPipelineColorBlendAttachmentState m_ColorBlendAttachment;
+        VkPipelineColorBlendAttachmentState m_pColorBlendAttachments[8];
 
         VkPipelineDynamicStateCreateInfo m_DynamicState;
         VkDynamicState m_DynamicStates[16];

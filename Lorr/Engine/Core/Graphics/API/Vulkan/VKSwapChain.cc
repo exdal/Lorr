@@ -17,9 +17,18 @@ namespace lr::g
         colorAttachment.StoreOp = VK_ATTACHMENT_STORE_OP_STORE;
         colorAttachment.FinalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
+        RenderPassAttachment depthAttachment;
+        depthAttachment.Format = ResourceFormat::D32FS8U;
+        depthAttachment.LoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        depthAttachment.StoreOp = VK_ATTACHMENT_STORE_OP_STORE;
+        depthAttachment.StencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        depthAttachment.StencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE;
+        depthAttachment.FinalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
         RenderPassSubpassDesc subpassDesc;
         subpassDesc.ColorAttachmentCount = 1;
         subpassDesc.ppColorAttachments[0] = &colorAttachment;
+        subpassDesc.pDepthAttachment = &depthAttachment;
 
         RenderPassDesc renderPassDesc;
         renderPassDesc.pSubpassDesc = &subpassDesc;
@@ -36,20 +45,40 @@ namespace lr::g
         imageData.Width = m_Width;
         imageData.Height = m_Height;
 
+        ImageDesc depthDesc;
+        depthDesc.Format = ResourceFormat::D32FS8U;
+        depthDesc.Type = ResourceType::DepthAttachment;
+
+        ImageData depthData;
+        depthData.Width = m_Width;
+        depthData.Height = m_Height;
+
         for (u32 i = 0; i < m_FrameCount; i++)
         {
             SwapChainFrame &frame = m_pFrames[i];
 
             /// Create Image Data
             VKImage &currentImage = frame.Image;
-            currentImage.Delete();
-
-            currentImage.Init(&imageDesc, &imageData);
+            VKImage &currentDepthImage = frame.DepthImage;
+            pAPI->DeleteImage(&currentImage);
+            pAPI->DeleteImage(&currentDepthImage);
 
             // Swapchain already gives us the image, so we don't need to create it again
             currentImage.m_pHandle = ppSwapChainImages[i];
-            pAPI->CreateImageView(&currentImage, ResourceType::ShaderResource, m_Format, 1);
-            frame.pFrameBuffer = pAPI->CreateFramebuffer(XMUINT2(m_Width, m_Height), 1, &currentImage, m_pRenderPass);
+            currentImage.m_Type = imageDesc.Type;
+            currentImage.m_Format = imageDesc.Format;
+            currentImage.m_TotalMips = 1;
+
+            pAPI->CreateImageView(&currentImage);
+
+            pAPI->CreateImage(&currentDepthImage, &depthDesc, &depthData);
+            pAPI->AllocateImageMemory(&currentDepthImage, AllocatorType::TLSF);
+            pAPI->BindMemory(&currentDepthImage);
+            
+            pAPI->CreateImageView(&currentDepthImage);
+
+            VKImage pAttachments[2] = { currentImage, currentDepthImage };
+            frame.pFrameBuffer = pAPI->CreateFramebuffer(XMUINT2(m_Width, m_Height), 2, pAttachments, m_pRenderPass);
 
             /// Create Semaphores
 

@@ -19,6 +19,7 @@ namespace lr::g
         ZoneScoped;
 
         m_VertexInputState.vertexAttributeDescriptionCount = inputLayout.m_Count;
+        m_VertexBindingDesc.stride = inputLayout.m_Stride;
 
         for (u32 i = 0; i < inputLayout.m_Count; i++)
         {
@@ -54,7 +55,7 @@ namespace lr::g
         m_ViewportState.scissorCount += scissorCount;
     }
 
-    void VKGraphicsPipelineBuildInfo::SetViewport(u32 viewportID, u32 width, u32 height, float minDepth, float maxDepth)
+    void VKGraphicsPipelineBuildInfo::SetViewport(u32 viewportID, u32 width, u32 height, f32 minDepth, f32 maxDepth)
     {
         ZoneScoped;
 
@@ -109,7 +110,7 @@ namespace lr::g
         m_RasterizationState.frontFace = frontFaceClockwise ? VK_FRONT_FACE_CLOCKWISE : VK_FRONT_FACE_COUNTER_CLOCKWISE;
     }
 
-    void VKGraphicsPipelineBuildInfo::SetDepthBias(bool enabled, float constantFactor, float clamp, float slopeFactor)
+    void VKGraphicsPipelineBuildInfo::SetDepthBias(bool enabled, f32 constantFactor, f32 clamp, f32 slopeFactor)
     {
         ZoneScoped;
 
@@ -119,7 +120,7 @@ namespace lr::g
         m_RasterizationState.depthBiasSlopeFactor = slopeFactor;
     }
 
-    void VKGraphicsPipelineBuildInfo::SetLineWidth(float size)
+    void VKGraphicsPipelineBuildInfo::SetLineWidth(f32 size)
     {
         ZoneScoped;
 
@@ -133,7 +134,7 @@ namespace lr::g
         m_MultisampleState.rasterizationSamples = bits;
     }
 
-    void VKGraphicsPipelineBuildInfo::SetSampledShading(bool enabled, float minSampleShading)
+    void VKGraphicsPipelineBuildInfo::SetSampledShading(bool enabled, f32 minSampleShading)
     {
         ZoneScoped;
     }
@@ -147,7 +148,14 @@ namespace lr::g
     {
         ZoneScoped;
 
-        m_DepthStencilState.depthBoundsTestEnable = depthBoundsTestEnabled;
+        m_DepthStencilState.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+
+        m_DepthStencilState.back.failOp = VK_STENCIL_OP_KEEP;
+        m_DepthStencilState.back.passOp = VK_STENCIL_OP_KEEP;
+        m_DepthStencilState.back.compareOp = VK_COMPARE_OP_ALWAYS;
+        m_DepthStencilState.front = m_DepthStencilState.front;
+
+        m_DepthStencilState.depthTestEnable = depthTestEnabled;
         m_DepthStencilState.depthWriteEnable = depthWriteEnabled;
         m_DepthStencilState.depthBoundsTestEnable = depthBoundsTestEnabled;
     }
@@ -161,12 +169,23 @@ namespace lr::g
         m_DepthStencilState.back = backState;
     }
 
-    void VKGraphicsPipelineBuildInfo::SetDepthBounds(float min, float max)
+    void VKGraphicsPipelineBuildInfo::SetDepthBounds(f32 min, f32 max)
     {
         ZoneScoped;
 
         m_DepthStencilState.minDepthBounds = min;
         m_DepthStencilState.maxDepthBounds = max;
+    }
+
+    void VKGraphicsPipelineBuildInfo::SetBlendAttachment(u32 attachmentID, bool enabled, u8 mask)
+    {
+        ZoneScoped;
+
+        u32 &count = m_ColorBlendState.attachmentCount;
+        count = eastl::max(count, attachmentID + 1);
+
+        m_pColorBlendAttachments[attachmentID].colorWriteMask = mask;
+        m_pColorBlendAttachments[attachmentID].blendEnable = enabled;
     }
 
     void VKGraphicsPipelineBuildInfo::SetDynamicState(const std::initializer_list<VkDynamicState> &dynamicState)
@@ -244,8 +263,7 @@ namespace lr::g
 
         /// ------------------------------------- ///
 
-        buildInfo.m_ColorBlendState.attachmentCount = 1;
-        buildInfo.m_ColorBlendState.pAttachments = &buildInfo.m_ColorBlendAttachment;
+        buildInfo.m_ColorBlendState.pAttachments = buildInfo.m_pColorBlendAttachments;
 
         /// ------------------------------------- ///
 

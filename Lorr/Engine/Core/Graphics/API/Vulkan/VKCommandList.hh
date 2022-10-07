@@ -19,11 +19,14 @@ namespace lr::g
 
             struct Depth
             {
-                float Depth = 0.f;
+                f32 Depth = 0.f;
                 u8 Stencil = 0;
             } DepthStencil;
-        } ClearValue = {};
+        };
 
+        u32 AttachmentCount = 0;
+        _ClearValue pClearValues[8];
+        
         // WH(-1) means we cover entire window/screen, info from swapchain
         XMUINT4 RenderArea = { 0, 0, UINT32_MAX, UINT32_MAX };
     };
@@ -39,8 +42,9 @@ namespace lr::g
         void Init(VkCommandBuffer pHandle, CommandListType type, VkFence pFence);
 
         /// Buffer Commands
-        void SetVertexBuffer(VkBuffer pBuffer);
-        void SetIndexBuffer(VkBuffer pBuffer, bool type32 = true);
+        void SetVertexBuffer(VKBuffer *pBuffer);
+        void SetIndexBuffer(VKBuffer *pBuffer, bool type32 = true);
+        void CopyBuffer(VKBuffer *pSource, VKBuffer *pDest, u32 size);
 
         /// Draw Commands
         void Draw(u32 vertexCount, u32 firstVertex = 0, u32 instanceCount = 1, u32 firstInstance = 1);

@@ -5,6 +5,7 @@
 #pragma once
 
 #include "IO/BufferStream.hh"
+#include "IO/MemoryAllocator.hh"
 
 #include "VKSym.hh"
 
@@ -69,6 +70,22 @@ namespace lr::g
         RenderPassSubpassDesc *pSubpassDesc = nullptr;
     };
 
+    /// ------------------------------------------ ///
+
+    struct VKLinearMemoryAllocator
+    {
+        Memory::LinearMemoryAllocator Allocator;
+        VKBuffer Buffer;
+    };
+
+    struct VKTLSFMemoryAllocator
+    {
+        Memory::TLSFMemoryAllocator Allocator;
+        VKBuffer Buffer;
+    };
+
+    /// ------------------------------------------ ///
+
     enum class APIFlags : u32
     {
         None,
@@ -80,6 +97,9 @@ namespace lr::g
     struct VKAPI
     {
         bool Init(PlatformWindow *pWindow, u32 width, u32 height, APIFlags flags);
+
+        void InitCommandLists();
+        void InitAllocators();
 
         /// COMMAND ///
         void CreateCommandQueue(VKCommandQueue *pHandle, CommandListType type);
@@ -125,19 +145,30 @@ namespace lr::g
         void Frame();
 
         /// RESOURCE ///
+
         VkShaderModule CreateShaderModule(BufferReadStream &buf);
-        void CreateDescriptorSetLayout(VKDescriptorSet *pSet, const std::initializer_list<VKDescriptorBindingDesc> &layouts);
+        void CreateDescriptorSetLayout(VKDescriptorSet *pSet, VKDescriptorSetDesc *pDesc);
 
         // `VKDescriptorBindingDesc::Type` represents descriptor type.
         // `VKDescriptorBindingDesc::ArraySize` represents descriptor count for that type.
         // Same types cannot be used, will result in UB. Other variables are ignored.
         VkDescriptorPool CreateDescriptorPool(const std::initializer_list<VKDescriptorBindingDesc> &layouts);
 
+        u32 GetMemoryTypeIndex(u32 setBits, VkMemoryPropertyFlags propFlags);
+        void AllocateImageMemory(VKImage *pImage, AllocatorType allocatorType);
+        void AllocateBufferMemory(VKBuffer *pBuffer, AllocatorType allocatorType);
+
         void CreateBuffer(VKBuffer *pHandle, BufferDesc *pDesc, BufferData *pData);
+        void BindMemory(VKBuffer *pBuffer);
+        void DeleteBuffer(VKBuffer *pHandle);
+        void MapMemory(VKBuffer *pBuffer, void *&pData);
+        void UnmapMemory(VKBuffer *pBuffer);
 
         void CreateImage(VKImage *pHandle, ImageDesc *pDesc, ImageData *pData);
-        void CreateImageView(VKImage *pHandle, ResourceType type, ResourceFormat format, u32 mipCount);
+        void CreateImageView(VKImage *pHandle);
         VkFramebuffer CreateFramebuffer(XMUINT2 size, u32 attachmentCount, VKImage *pAttachments, VkRenderPass &pRenderPass);
+        void BindMemory(VKImage *pImage);
+        void DeleteImage(VKImage *pImage);
 
         bool IsFormatSupported(VkFormat format, VkColorSpaceKHR *pColorSpaceOut);
         bool IsPresentModeSupported(VkPresentModeKHR format);
@@ -156,6 +187,8 @@ namespace lr::g
         static VkPrimitiveTopology ToVulkanTopology(PrimitiveType type);
         static VkCullModeFlags ToVulkanCullMode(CullMode mode);
         static VkDescriptorType ToVulkanDescriptorType(DescriptorType type);
+        static VkImageUsageFlags ToVulkanImageUsage(ResourceType type);
+        static VkBufferUsageFlagBits ToVulkanBufferUsage(BufferUsage usage);
 
         /// ------------------------------------------------------------- ///
 
@@ -177,7 +210,13 @@ namespace lr::g
         VKPipelineManager m_PipelineManager;
         VkDescriptorPool m_pDescriptorPool = nullptr;
 
+        VKLinearMemoryAllocator m_BufferAlloc_Linear;
+        VKTLSFMemoryAllocator m_BufferAlloc_TLSF;
+        VKTLSFMemoryAllocator m_ImageAlloc_TLSF;
+
         /// Native API
+        VkPhysicalDeviceMemoryProperties m_MemoryProps;
+
         VkSurfaceFormatKHR *m_pValidSurfaceFormats = nullptr;
         u32 m_ValidSurfaceFormatCount = 0;
 

@@ -16,19 +16,29 @@ namespace lr::g
         m_pFence = pFence;
     }
 
-    void VKCommandList::SetVertexBuffer(VkBuffer pBuffer)
+    void VKCommandList::SetVertexBuffer(VKBuffer *pBuffer)
     {
         ZoneScoped;
 
         VkDeviceSize pOffsets[1] = { 0 };
-        vkCmdBindVertexBuffers(m_pHandle, 0, 1, &pBuffer, pOffsets);
+        vkCmdBindVertexBuffers(m_pHandle, 0, 1, &pBuffer->m_pHandle, pOffsets);
     }
 
-    void VKCommandList::SetIndexBuffer(VkBuffer pBuffer, bool type32)
+    void VKCommandList::SetIndexBuffer(VKBuffer *pBuffer, bool type32)
     {
         ZoneScoped;
 
-        vkCmdBindIndexBuffer(m_pHandle, pBuffer, 0, type32 ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16);
+        vkCmdBindIndexBuffer(m_pHandle, pBuffer->m_pHandle, 0, type32 ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16);
+    }
+
+    void VKCommandList::CopyBuffer(VKBuffer *pSource, VKBuffer *pDest, u32 size)
+    {
+        ZoneScoped;
+
+        VkBufferCopy copyRegion = {};
+        copyRegion.size = size;
+        
+        vkCmdCopyBuffer(m_pHandle, pSource->m_pHandle, pDest->m_pHandle, 1, &copyRegion);
     }
 
     void VKCommandList::Draw(u32 vertexCount, u32 firstVertex, u32 instanceCount, u32 firstInstance)
@@ -54,7 +64,11 @@ namespace lr::g
         SwapChainFrame *pCurrentFrame = swapChain.GetCurrentFrame();
 
         VkFramebuffer pFrameBuffer = nullptr;
+
+        // TODO: Clear colors per attachemtns
         VkClearValue clearColor = { 0.0, 0.0, 0.0, 1.0 };
+        VkClearValue depthColor = {};
+
         VkExtent2D renderAreaExt = { beginInfo.RenderArea.z, beginInfo.RenderArea.w };
 
         // Get info from SwapChain
@@ -67,9 +81,11 @@ namespace lr::g
         }
 
         // Set clear colors
-        memcpy(clearColor.color.float32, &beginInfo.ClearValue.RenderTargetColor, sizeof(XMFLOAT4));
-        // clearColor.depthStencil.depth = beginInfo.ClearValue.DepthStencil.Depth;
-        // clearColor.depthStencil.stencil = beginInfo.ClearValue.DepthStencil.Stencil;
+        memcpy(clearColor.color.float32, &beginInfo.pClearValues[0].RenderTargetColor, sizeof(XMFLOAT4));
+        depthColor.depthStencil.depth = beginInfo.pClearValues[1].DepthStencil.Depth;
+        depthColor.depthStencil.stencil = beginInfo.pClearValues[1].DepthStencil.Stencil;
+
+        VkClearValue pClearValues[2] = { clearColor, depthColor };
 
         // Actual info
         VkRenderPassBeginInfo renderPassInfo = {};
@@ -82,8 +98,8 @@ namespace lr::g
 
         renderPassInfo.renderArea.extent = renderAreaExt;
 
-        renderPassInfo.clearValueCount = 1;
-        renderPassInfo.pClearValues = &clearColor;
+        renderPassInfo.clearValueCount = 2;
+        renderPassInfo.pClearValues = pClearValues;
 
         vkCmdBeginRenderPass(m_pHandle, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
     }

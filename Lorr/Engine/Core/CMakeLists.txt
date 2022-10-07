@@ -8,11 +8,6 @@ set(ENGINE_VENDOR
     tracy
     
     Vulkan-Headers
-
-    d3dcompiler
-    dxgi
-    dxguid
-    d3d12
 )
 
 set(ENGINE_COMMON

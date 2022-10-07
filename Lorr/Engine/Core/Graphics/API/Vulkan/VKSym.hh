@@ -80,7 +80,18 @@
     _VK_DEFINE_FUNCTION(vkCmdDispatchIndirect);                     \
     _VK_DEFINE_FUNCTION(vkCmdCopyBuffer);                           \
     _VK_DEFINE_FUNCTION(vkCmdCopyImage);                            \
-    _VK_DEFINE_FUNCTION(vkGetBufferMemoryRequirements);
+    _VK_DEFINE_FUNCTION(vkCreateBuffer);                            \
+    _VK_DEFINE_FUNCTION(vkAllocateMemory);                          \
+    _VK_DEFINE_FUNCTION(vkBindBufferMemory);                        \
+    _VK_DEFINE_FUNCTION(vkGetBufferMemoryRequirements);             \
+    _VK_DEFINE_FUNCTION(vkGetPhysicalDeviceMemoryProperties);       \
+    _VK_DEFINE_FUNCTION(vkDestroyBuffer);                           \
+    _VK_DEFINE_FUNCTION(vkFreeMemory);                              \
+    _VK_DEFINE_FUNCTION(vkMapMemory);                               \
+    _VK_DEFINE_FUNCTION(vkUnmapMemory);                             \
+    _VK_DEFINE_FUNCTION(vkGetImageMemoryRequirements);              \
+    _VK_DEFINE_FUNCTION(vkBindImageMemory);                         \
+    _VK_DEFINE_FUNCTION(vkUpdateDescriptorSets);
 
 _VK_IMPORT_SYMBOLS
 

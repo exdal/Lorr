@@ -112,4 +112,24 @@ namespace lr::g
         Count
     };
 
+    enum class BufferUsage : u32
+    {
+        Vertex = 1 << 0,
+        Index = 1 << 1,
+        Unordered = 1 << 2,
+        Indirect = 1 << 3,
+        CopySrc = 1 << 4,
+        CopyDst = 1 << 5,
+        ConstantBuffer = 1 << 6
+    };
+
+    EnumFlags(BufferUsage);
+
+    enum class AllocatorType
+    {
+        None,
+        Linear,
+        TLSF
+    };
+
 }  // namespace lr::g

@@ -1,6 +1,7 @@
 #include "VKAPI.hh"
 
 #include "Crypto/Light.hh"
+#include "IO/Memory.hh"
 
 /// DEFINE VULKAN FUNCTIONS
 // #include "VKSymbols.hh"
@@ -94,15 +95,19 @@ namespace lr::g
         m_pValidPresentModes = new VkPresentModeKHR[m_ValidPresentModeCount];
         vkGetPhysicalDeviceSurfacePresentModesKHR(m_pPhysicalDevice, m_pSurface, &m_ValidSurfaceFormatCount, m_pValidPresentModes);
 
+        vkGetPhysicalDeviceMemoryProperties(m_pPhysicalDevice, &m_MemoryProps);
+
         // yeah uh, dont delete
         // delete[] ppAvailableDevices;
 
+        InitAllocators();
+
         CreateCommandQueue(&m_DirectQueue, CommandListType::Direct);
-        m_SwapChain.Init(pWindow, this, 0, SwapChainFlags::vSync | SwapChainFlags::TripleBuffering);
+        m_SwapChain.Init(pWindow, this, 0, SwapChainFlags::TripleBuffering);
         m_SwapChain.CreateBackBuffer(this);
         m_PipelineManager.Init(this);
 
-        // LOG_TRACE("Successfully initialized D3D12 device.");
+        LOG_TRACE("Successfully initialized Vulkan context.");
 
         /// INITIALIZE RENDER CONTEXT ///
         m_CommandListPool.Init();
@@ -111,6 +116,17 @@ namespace lr::g
             { 0, DescriptorType::Texture, VK_SHADER_STAGE_FLAG_BITS_MAX_ENUM, 256 },
             { 0, DescriptorType::Sampler, VK_SHADER_STAGE_FLAG_BITS_MAX_ENUM, 256 },
         });
+
+        InitCommandLists();
+
+        BeginCommandList(GetCurrentCommandList());
+
+        return true;
+    }
+
+    void VKAPI::InitCommandLists()
+    {
+        ZoneScoped;
 
         /// In the future, we will have worker threads, i believe in you...
         for (u32 i = 0; i < m_CommandListPool.m_DirectLists.count; i++)
@@ -136,10 +152,40 @@ namespace lr::g
         {
             CreateCommandList(&list, CommandListType::Direct);
         }
+    }
 
-        BeginCommandList(GetCurrentCommandList());
+    void VKAPI::InitAllocators()
+    {
+        ZoneScoped;
 
-        return true;
+        u32 bufferSize_Linear = Memory::MiBToBytes(32);
+        u32 imageSize_TLSF = Memory::MiBToBytes(512);
+
+        BufferDesc bufferDesc;
+        bufferDesc.Mappable = true;
+        bufferDesc.UsageFlags = BufferUsage::CopySrc;
+
+        BufferData buffetData;
+        buffetData.DataLen = bufferSize_Linear;
+
+        /// LINEAR ALLOCATOR ///
+
+        m_BufferAlloc_Linear.Allocator.AddPool(bufferSize_Linear);
+        CreateBuffer(&m_BufferAlloc_Linear.Buffer, &bufferDesc, &buffetData);
+        AllocateBufferMemory(&m_BufferAlloc_Linear.Buffer, AllocatorType::None);
+
+        /// TLSF ALLOCATOR ///
+
+        m_BufferAlloc_TLSF.Allocator.Init(bufferSize_Linear);
+        CreateBuffer(&m_BufferAlloc_TLSF.Buffer, &bufferDesc, &buffetData);
+        AllocateBufferMemory(&m_BufferAlloc_TLSF.Buffer, AllocatorType::None);
+
+        bufferDesc.Mappable = false;
+        bufferDesc.UsageFlags = BufferUsage::CopySrc;
+        buffetData.DataLen = imageSize_TLSF;
+        m_ImageAlloc_TLSF.Allocator.Init(imageSize_TLSF);
+        CreateBuffer(&m_ImageAlloc_TLSF.Buffer, &bufferDesc, &buffetData);
+        AllocateBufferMemory(&m_ImageAlloc_TLSF.Buffer, AllocatorType::None);
     }
 
     void VKAPI::CreateCommandQueue(VKCommandQueue *pHandle, CommandListType type)
@@ -360,22 +406,25 @@ namespace lr::g
 
         VkRenderPass pHandle = nullptr;
 
+        u32 totalAttachmentCount = 0;
+
         RenderPassSubpassDesc *pSubpassDesc = pDesc->pSubpassDesc;
         VkSubpassDescription subpassDescVK = {};
 
-        VkSubpassDependency ppSubpassDeps[2] = {};
-        VkAttachmentDescription ppAttachmentDescs[kMaxColorAttachmentCount] = {};
-        VkAttachmentReference ppAttachmentRefs[kMaxColorAttachmentCount] = {};
+        VkSubpassDependency pSubpassDeps[2] = {};
+        VkAttachmentDescription pAttachmentDescs[kMaxColorAttachmentCount + 1] = {};
+        VkAttachmentReference pAttachmentRefs[kMaxColorAttachmentCount] = {};
 
         VkAttachmentDescription depthAttachment = {};
         VkAttachmentReference depthAttachmentRef = {};
         depthAttachmentRef.attachment = VK_ATTACHMENT_UNUSED;
 
+        totalAttachmentCount = pSubpassDesc->ColorAttachmentCount;
         for (u32 i = 0; i < pSubpassDesc->ColorAttachmentCount; i++)
         {
             RenderPassAttachment *&pColorAttachment = pDesc->pSubpassDesc->ppColorAttachments[i];
-            VkAttachmentReference &attachmentRef = ppAttachmentRefs[i];
-            VkAttachmentDescription &attachment = ppAttachmentDescs[i];
+            VkAttachmentReference &attachmentRef = pAttachmentRefs[i];
+            VkAttachmentDescription &attachment = pAttachmentDescs[i];
 
             // Setup reference
             attachmentRef.attachment = i;
@@ -400,65 +449,57 @@ namespace lr::g
         RenderPassAttachment *&pDepthAttachmentDesc = pSubpassDesc->pDepthAttachment;
         if (pDepthAttachmentDesc)
         {
-            VkFormat depthFormat = VK_FORMAT_D32_SFLOAT;
-            VkAttachmentLoadOp stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-            VkAttachmentStoreOp stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-
-            if (pDepthAttachmentDesc->Flags & AttachmentFlags::AllowStencil)
-            {
-                depthFormat = VK_FORMAT_D24_UNORM_S8_UINT;
-                stencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-                stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE;
-            }
-
             depthAttachmentRef.attachment = pSubpassDesc->ColorAttachmentCount;
             depthAttachmentRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
             depthAttachment.flags = 0;
-            depthAttachment.format = depthFormat;
+            depthAttachment.format = ToVulkanFormat(pDepthAttachmentDesc->Format);
             depthAttachment.samples = pDepthAttachmentDesc->SampleCount;
 
             depthAttachment.loadOp = pDepthAttachmentDesc->LoadOp;
             depthAttachment.storeOp = pDepthAttachmentDesc->StoreOp;
 
-            depthAttachment.stencilLoadOp = stencilLoadOp;
-            depthAttachment.stencilStoreOp = stencilStoreOp;
+            depthAttachment.stencilLoadOp = pDepthAttachmentDesc->StencilLoadOp;
+            depthAttachment.stencilStoreOp = pDepthAttachmentDesc->StencilStoreOp;
 
             depthAttachment.initialLayout = pDepthAttachmentDesc->InitialLayout;
             depthAttachment.finalLayout = pDepthAttachmentDesc->FinalLayout;
+
+            pAttachmentDescs[totalAttachmentCount] = depthAttachment;
+            totalAttachmentCount++;
         }
 
         // TODO: Multiple subpasses
         // Setup subpass
         subpassDescVK.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
         subpassDescVK.colorAttachmentCount = pSubpassDesc->ColorAttachmentCount;
-        subpassDescVK.pColorAttachments = ppAttachmentRefs;
+        subpassDescVK.pColorAttachments = pAttachmentRefs;
         subpassDescVK.pDepthStencilAttachment = &depthAttachmentRef;
 
         // Setup subpass dependency
-        ppSubpassDeps[0].srcSubpass = VK_SUBPASS_EXTERNAL;
-        ppSubpassDeps[0].dstSubpass = 0;
+        pSubpassDeps[0].srcSubpass = VK_SUBPASS_EXTERNAL;
+        pSubpassDeps[0].dstSubpass = 0;
 
-        ppSubpassDeps[0].srcStageMask = m_DirectQueue.m_AcquireStage;  // Command Queue's stage mask
-        ppSubpassDeps[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        pSubpassDeps[0].srcStageMask = m_DirectQueue.m_AcquireStage;  // Command Queue's stage mask
+        pSubpassDeps[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 
-        ppSubpassDeps[0].srcAccessMask = 0;
-        ppSubpassDeps[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        pSubpassDeps[0].srcAccessMask = 0;
+        pSubpassDeps[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 
-        ppSubpassDeps[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+        pSubpassDeps[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
         ////////////////
 
-        ppSubpassDeps[1].srcSubpass = 0;
-        ppSubpassDeps[1].dstSubpass = VK_SUBPASS_EXTERNAL;
+        pSubpassDeps[1].srcSubpass = 0;
+        pSubpassDeps[1].dstSubpass = VK_SUBPASS_EXTERNAL;
 
-        ppSubpassDeps[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        ppSubpassDeps[1].dstStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;  // Don't block ongoing task
+        pSubpassDeps[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        pSubpassDeps[1].dstStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;  // Don't block ongoing task
 
-        ppSubpassDeps[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-        ppSubpassDeps[1].dstAccessMask = 0;
+        pSubpassDeps[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        pSubpassDeps[1].dstAccessMask = 0;
 
-        ppSubpassDeps[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+        pSubpassDeps[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
         // Actual renderpass info
         VkRenderPassCreateInfo renderPassInfo = {};
@@ -466,14 +507,14 @@ namespace lr::g
 
         renderPassInfo.flags = 0;
 
-        renderPassInfo.attachmentCount = pSubpassDesc->ColorAttachmentCount;
-        renderPassInfo.pAttachments = ppAttachmentDescs;
+        renderPassInfo.attachmentCount = totalAttachmentCount;
+        renderPassInfo.pAttachments = pAttachmentDescs;
 
         renderPassInfo.subpassCount = 1;
         renderPassInfo.pSubpasses = &subpassDescVK;
 
         renderPassInfo.dependencyCount = 2;  // TODO: Multiple subpasses
-        renderPassInfo.pDependencies = ppSubpassDeps;
+        renderPassInfo.pDependencies = pSubpassDeps;
 
         vkCreateRenderPass(m_pDevice, &renderPassInfo, nullptr, &pHandle);
 
@@ -589,14 +630,14 @@ namespace lr::g
         return pHandle;
     }
 
-    void VKAPI::CreateDescriptorSetLayout(VKDescriptorSet *pSet, const std::initializer_list<VKDescriptorBindingDesc> &layouts)
+    void VKAPI::CreateDescriptorSetLayout(VKDescriptorSet *pSet, VKDescriptorSetDesc *pDesc)
     {
         ZoneScoped;
 
         VkDescriptorSetLayoutBinding pBindings[8];
 
         u32 idx = 0;
-        for (auto &element : layouts)
+        for (auto &element : pDesc->Bindings)
         {
             pBindings[idx].binding = element.BindingID;
             pBindings[idx].descriptorType = ToVulkanDescriptorType(element.Type);
@@ -622,6 +663,31 @@ namespace lr::g
         allocateCreateInfo.pSetLayouts = &pSet->pSetLayoutHandle;
 
         vkAllocateDescriptorSets(m_pDevice, &allocateCreateInfo, &pSet->pHandle);
+
+        /// ---------------------------------------------------------- ///
+
+        VkWriteDescriptorSet pWriteSets[8];
+        VkDescriptorBufferInfo pBufferInfos[8];
+
+        idx = 0;
+        for (auto &element : pDesc->Bindings)
+        {
+            pBufferInfos[idx].buffer = element.pBuffer->m_pHandle;
+            pBufferInfos[idx].offset = element.pBuffer->m_DataOffset;
+            pBufferInfos[idx].range = element.pBuffer->m_DataSize;
+
+            pWriteSets[idx].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            pWriteSets[idx].pNext = nullptr;
+            pWriteSets[idx].dstSet = pSet->pHandle;
+            pWriteSets[idx].dstBinding = idx;
+            pWriteSets[idx].descriptorCount = element.ArraySize;
+            pWriteSets[idx].descriptorType = ToVulkanDescriptorType(element.Type);
+            pWriteSets[idx].pBufferInfo = &pBufferInfos[idx];
+
+            idx++;
+        }
+
+        vkUpdateDescriptorSets(m_pDevice, idx, pWriteSets, 0, nullptr);
     }
 
     VkDescriptorPool VKAPI::CreateDescriptorPool(const std::initializer_list<VKDescriptorBindingDesc> &layouts)
@@ -653,24 +719,214 @@ namespace lr::g
         return pHandle;
     }
 
+    u32 VKAPI::GetMemoryTypeIndex(u32 setBits, VkMemoryPropertyFlags propFlags)
+    {
+        ZoneScoped;
+
+        for (u32 i = 0; i < m_MemoryProps.memoryTypeCount; i++)
+        {
+            if ((setBits >> i) && ((m_MemoryProps.memoryTypes[i].propertyFlags & propFlags) == propFlags))
+                return i;
+        }
+
+        LOG_ERROR("Memory type index is not found. Bits: {}.", setBits);
+
+        return -1;
+    }
+
+    void VKAPI::AllocateImageMemory(VKImage *pImage, AllocatorType allocatorType)
+    {
+        ZoneScoped;
+
+        VkMemoryAllocateInfo allocInfo = {};
+        allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+
+        VkMemoryRequirements memoryRequirements = {};
+        vkGetImageMemoryRequirements(m_pDevice, pImage->m_pHandle, &memoryRequirements);
+
+        pImage->m_RequiredDataSize = memoryRequirements.size;
+
+        switch (allocatorType)
+        {
+            case AllocatorType::None:
+            {
+                VkMemoryPropertyFlags memProps =
+                    VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+                    | (pImage->m_Mappable ? VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT : 0);
+
+                VkMemoryAllocateInfo memoryAllocInfo = {};
+                memoryAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+                memoryAllocInfo.allocationSize = memoryRequirements.size;
+                memoryAllocInfo.memoryTypeIndex = GetMemoryTypeIndex(memoryRequirements.memoryTypeBits, memProps);
+
+                vkAllocateMemory(m_pDevice, &memoryAllocInfo, nullptr, &pImage->m_pMemoryHandle);
+
+                break;
+            }
+
+            case AllocatorType::Linear:
+            {
+                pImage->m_DataOffset = m_BufferAlloc_Linear.Allocator.Allocate(0, pImage->m_RequiredDataSize);
+                pImage->m_pMemoryHandle = m_BufferAlloc_Linear.Buffer.m_pMemoryHandle;
+
+                break;
+            }
+
+            case AllocatorType::TLSF:
+            {
+                Memory::TLSFBlock *pBlock = m_ImageAlloc_TLSF.Allocator.Allocate(pImage->m_RequiredDataSize);
+                pImage->m_pAllocatorData = pBlock;
+                pImage->m_DataOffset = pBlock->Offset;
+
+                pImage->m_pMemoryHandle = m_ImageAlloc_TLSF.Buffer.m_pMemoryHandle;
+
+                break;
+            }
+        }
+    }
+
+    void VKAPI::AllocateBufferMemory(VKBuffer *pBuffer, AllocatorType allocatorType)
+    {
+        ZoneScoped;
+
+        VkMemoryRequirements memoryRequirements = {};
+        vkGetBufferMemoryRequirements(m_pDevice, pBuffer->m_pHandle, &memoryRequirements);
+
+        pBuffer->m_RequiredDataSize = memoryRequirements.size;
+
+        switch (allocatorType)
+        {
+            case AllocatorType::None:
+            {
+                VkMemoryPropertyFlags memProps =
+                    VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+                    | (pBuffer->m_Mappable ? VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT : 0);
+
+                VkMemoryAllocateInfo memoryAllocInfo = {};
+                memoryAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+                memoryAllocInfo.allocationSize = memoryRequirements.size;
+                memoryAllocInfo.memoryTypeIndex = GetMemoryTypeIndex(memoryRequirements.memoryTypeBits, memProps);
+
+                vkAllocateMemory(m_pDevice, &memoryAllocInfo, nullptr, &pBuffer->m_pMemoryHandle);
+
+                break;
+            }
+
+            case AllocatorType::Linear:
+            {
+                pBuffer->m_DataOffset = m_BufferAlloc_Linear.Allocator.Allocate(0, pBuffer->m_RequiredDataSize);
+                pBuffer->m_pMemoryHandle = m_BufferAlloc_Linear.Buffer.m_pMemoryHandle;
+
+                break;
+            }
+
+            case AllocatorType::TLSF:
+            {
+                Memory::TLSFBlock *pBlock = m_BufferAlloc_TLSF.Allocator.Allocate(pBuffer->m_RequiredDataSize);
+                pBuffer->m_pAllocatorData = pBlock;
+                pBuffer->m_DataOffset = pBlock->Offset;
+
+                pBuffer->m_pMemoryHandle = m_BufferAlloc_TLSF.Buffer.m_pMemoryHandle;
+
+                break;
+            }
+        }
+    }
+
+    void VKAPI::CreateBuffer(VKBuffer *pHandle, BufferDesc *pDesc, BufferData *pData)
+    {
+        ZoneScoped;
+
+        VkBuffer &pBuf = pHandle->m_pHandle;
+        VkDeviceMemory &pMem = pHandle->m_pMemoryHandle;
+
+        VkBufferCreateInfo createInfo = {};
+        createInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+        createInfo.size = pData->DataLen;
+        createInfo.usage = ToVulkanBufferUsage(pDesc->UsageFlags);
+
+        vkCreateBuffer(m_pDevice, &createInfo, nullptr, &pBuf);
+
+        pHandle->m_Mappable = pDesc->Mappable;
+        pHandle->m_DataSize = pData->DataLen;
+    }
+
+    void VKAPI::BindMemory(VKBuffer *pBuffer)
+    {
+        ZoneScoped;
+
+        vkBindBufferMemory(m_pDevice, pBuffer->m_pHandle, pBuffer->m_pMemoryHandle, pBuffer->m_DataOffset);
+    }
+
+    void VKAPI::DeleteBuffer(VKBuffer *pHandle)
+    {
+        ZoneScoped;
+
+        if (pHandle->m_pMemoryHandle)
+            vkFreeMemory(m_pDevice, pHandle->m_pMemoryHandle, nullptr);
+
+        if (pHandle->m_pHandle)
+            vkDestroyBuffer(m_pDevice, pHandle->m_pHandle, nullptr);
+    }
+
+    void VKAPI::MapMemory(VKBuffer *pBuffer, void *&pData)
+    {
+        ZoneScoped;
+
+        vkMapMemory(m_pDevice, pBuffer->m_pMemoryHandle, pBuffer->m_DataOffset, pBuffer->m_RequiredDataSize, 0, &pData);
+    }
+
+    void VKAPI::UnmapMemory(VKBuffer *pBuffer)
+    {
+        ZoneScoped;
+
+        vkUnmapMemory(m_pDevice, pBuffer->m_pMemoryHandle);
+    }
+
     void VKAPI::CreateImage(VKImage *pHandle, ImageDesc *pDesc, ImageData *pData)
     {
         ZoneScoped;
 
-        pHandle->Init(pDesc, pData);
-
         VkImage &pImage = pHandle->m_pHandle;
 
         VkImageCreateInfo imageCreateInfo = {};
+        imageCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+        imageCreateInfo.format = ToVulkanFormat(pDesc->Format);
+        imageCreateInfo.usage = ToVulkanImageUsage(pDesc->Type);
+        imageCreateInfo.imageType = VK_IMAGE_TYPE_2D;
+
+        imageCreateInfo.extent.width = pData->Width;
+        imageCreateInfo.extent.height = pData->Height;
+        imageCreateInfo.extent.depth = 1;
+
+        imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        imageCreateInfo.mipLevels = pDesc->MipMapLevels;
+        imageCreateInfo.arrayLayers = pDesc->ArraySize;
+        imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+
+        vkCreateImage(m_pDevice, &imageCreateInfo, nullptr, &pImage);
+
+        /// ---------------------------------------------- //
+
+        pHandle->m_Width = pData->Width;
+        pHandle->m_Width = pData->Height;
+        pHandle->m_DataSize = pData->DataLen;
+
+        pHandle->m_UsingMip = 0;
+        pHandle->m_TotalMips = pDesc->MipMapLevels;
+
+        pHandle->m_Type = pDesc->Type;
+        pHandle->m_Format = pDesc->Format;
+        pHandle->m_Mappable = pDesc->Mappable;
     }
 
-    void VKAPI::CreateImageView(VKImage *pHandle, ResourceType type, ResourceFormat format, u32 mipCount)
+    void VKAPI::CreateImageView(VKImage *pHandle)
     {
         ZoneScoped;
 
         VkImageAspectFlags aspectFlags = VK_IMAGE_ASPECT_COLOR_BIT;
 
-        if (type == ResourceType::Depth)
+        if (pHandle->m_Type == ResourceType::DepthAttachment)
         {
             aspectFlags = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
         }
@@ -680,7 +936,7 @@ namespace lr::g
 
         imageViewCreateInfo.image = pHandle->m_pHandle;
         imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        imageViewCreateInfo.format = ToVulkanFormat(format);
+        imageViewCreateInfo.format = ToVulkanFormat(pHandle->m_Format);
 
         imageViewCreateInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
         imageViewCreateInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
@@ -689,8 +945,8 @@ namespace lr::g
 
         imageViewCreateInfo.subresourceRange.aspectMask = aspectFlags;
         imageViewCreateInfo.subresourceRange.baseMipLevel = 0;
-        imageViewCreateInfo.subresourceRange.levelCount = 1;
         imageViewCreateInfo.subresourceRange.baseArrayLayer = 0;
+        imageViewCreateInfo.subresourceRange.levelCount = 1;
         imageViewCreateInfo.subresourceRange.layerCount = 1;
 
         vkCreateImageView(m_pDevice, &imageViewCreateInfo, nullptr, &pHandle->m_pViewHandle);
@@ -724,6 +980,24 @@ namespace lr::g
         vkCreateFramebuffer(m_pDevice, &framebufferCreateInfo, nullptr, &pHandle);
 
         return pHandle;
+    }
+
+    void VKAPI::BindMemory(VKImage *pImage)
+    {
+        ZoneScoped;
+
+        vkBindImageMemory(m_pDevice, pImage->m_pHandle, pImage->m_pMemoryHandle, 0);
+    }
+
+    void VKAPI::DeleteImage(VKImage *pImage)
+    {
+        ZoneScoped;
+
+        if (pImage->m_pViewHandle)
+            vkDestroyImageView(m_pDevice, pImage->m_pViewHandle, nullptr);
+
+        if (pImage->m_pHandle)
+            vkDestroyImage(m_pDevice, pImage->m_pHandle, nullptr);
     }
 
     bool VKAPI::IsFormatSupported(VkFormat format, VkColorSpaceKHR *pColorSpaceOut)
@@ -1138,19 +1412,19 @@ namespace lr::g
         return true;
     }
 
-    /// ---------------- Type Conversion LUTs ----------------
+    /// ---------------- Type Conversion LUTs ---------------- //
 
     constexpr VkFormat kFormatLUT[] = {
-        VK_FORMAT_UNDEFINED,
+        VK_FORMAT_UNDEFINED,             // Unknown
         VK_FORMAT_BC1_RGBA_UNORM_BLOCK,  // BC1
         VK_FORMAT_B8G8R8A8_UNORM,        // RGBA8
         VK_FORMAT_B8G8R8A8_SRGB,         // RGBA8_SRGB
+        VK_FORMAT_R16G16B16A16_SFLOAT,   // RGBA16F
         VK_FORMAT_R32G32B32A32_SFLOAT,   // RGBA32F
         VK_FORMAT_R32_UINT,              // R32U
         VK_FORMAT_R32_SFLOAT,            // R32F
         VK_FORMAT_D32_SFLOAT,            // D32F
-        VK_FORMAT_D24_UNORM_S8_UINT,     // D24FS8U
-
+        VK_FORMAT_D32_SFLOAT_S8_UINT,    // D32FS8U
     };
 
     constexpr VkFormat kAttribFormatLUT[] = {
@@ -1174,9 +1448,9 @@ namespace lr::g
     };
 
     constexpr VkCullModeFlags kCullModeLUT[] = {
-        VK_CULL_MODE_FRONT_AND_BACK,  // None
-        VK_CULL_MODE_FRONT_BIT,       // Front
-        VK_CULL_MODE_BACK_BIT,        // Back
+        VK_CULL_MODE_NONE,       // None
+        VK_CULL_MODE_FRONT_BIT,  // Front
+        VK_CULL_MODE_BACK_BIT,   // Back
     };
 
     constexpr VkDescriptorType kDescriptorTypeLUT[] = {
@@ -1185,6 +1459,11 @@ namespace lr::g
         VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,  // ConstantBuffer
         VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,  // StructuredBuffer
         VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,   // RWTexture
+    };
+
+    constexpr VkImageUsageFlags kImageUsageLUT[] = {
+        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,          // ColorAttachment
+        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,  // DepthAttachment
     };
 
     VkFormat VKAPI::ToVulkanFormat(ResourceFormat format)
@@ -1210,6 +1489,33 @@ namespace lr::g
     VkDescriptorType VKAPI::ToVulkanDescriptorType(DescriptorType type)
     {
         return kDescriptorTypeLUT[(u32)type];
+    }
+
+    VkImageUsageFlags VKAPI::ToVulkanImageUsage(ResourceType type)
+    {
+        return kImageUsageLUT[(u32)type];
+    }
+
+    VkBufferUsageFlagBits VKAPI::ToVulkanBufferUsage(BufferUsage usage)
+    {
+        u32 v = 0;
+
+        if (usage & BufferUsage::Vertex)
+            v |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+        if (usage & BufferUsage::Index)
+            v |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+        if (usage & BufferUsage::ConstantBuffer)
+            v |= VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+        if (usage & BufferUsage::Unordered)
+            v |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+        if (usage & BufferUsage::Indirect)
+            v |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
+        if (usage & BufferUsage::CopySrc)
+            v |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+        if (usage & BufferUsage::CopyDst)
+            v |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+
+        return (VkBufferUsageFlagBits)v;
     }
 
 }  // namespace lr::g

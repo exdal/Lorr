@@ -24,6 +24,7 @@ namespace lr::g
     struct SwapChainFrame
     {
         VKImage Image;
+        VKImage DepthImage;
 
         VkFramebuffer pFrameBuffer = nullptr;
 

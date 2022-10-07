@@ -21,7 +21,7 @@ namespace lr::g
     {
         switch (type)
         {
-            case VertexAttribType::Float: return sizeof(float);
+            case VertexAttribType::Float: return sizeof(f32);
             case VertexAttribType::Vec2: return sizeof(XMFLOAT2);
             case VertexAttribType::Vec3: return sizeof(XMFLOAT3);
             case VertexAttribType::Vec3PK: return sizeof(XMFLOAT3PK);

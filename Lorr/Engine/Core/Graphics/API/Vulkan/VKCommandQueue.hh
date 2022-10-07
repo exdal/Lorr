@@ -7,7 +7,7 @@
 #include "VKSym.hh"
 #include "VKCommandList.hh"
 
-namespace lr::g
+namespace lr::Graphics
 {
     struct VKCommandQueue
     {
@@ -35,4 +35,4 @@ namespace lr::g
         u32 m_BatchedListsCount = 0;
     };
 
-}  // namespace lr::g
+}  // namespace lr::Graphics

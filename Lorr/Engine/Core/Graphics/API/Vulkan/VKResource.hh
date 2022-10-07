@@ -8,7 +8,7 @@
 
 #include "Graphics/API/Common.hh"
 
-namespace lr::g
+namespace lr::Graphics
 {
     enum class ResourceFormat : u16
     {
@@ -158,4 +158,4 @@ namespace lr::g
 
     /// ------------------------------------------
 
-}  // namespace lr::g
+}  // namespace lr::Graphics

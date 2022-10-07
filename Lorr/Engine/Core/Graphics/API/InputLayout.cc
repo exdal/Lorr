@@ -1,6 +1,6 @@
 #include "InputLayout.hh"
 
-namespace lr::g
+namespace lr::Graphics
 {
 
 }  // namespace lr

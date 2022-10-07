@@ -8,7 +8,6 @@
 
 namespace lr
 {
-    using namespace g;
     using namespace Graphics;
 
     Camera3D camera;

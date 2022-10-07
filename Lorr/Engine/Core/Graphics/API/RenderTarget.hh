@@ -6,7 +6,7 @@
 
 #include "Graphics/API/Vulkan/VKResource.hh"
 
-namespace lr::g
+namespace lr::Graphics
 {
     /// OpenGL like "FrameBuffer" handle
 

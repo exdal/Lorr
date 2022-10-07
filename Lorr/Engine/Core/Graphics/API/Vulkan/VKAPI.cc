@@ -25,7 +25,7 @@ _VK_IMPORT_SYMBOLS
         return ret;                                \
     }
 
-namespace lr::g
+namespace lr::Graphics
 {
     bool VKAPI::Init(PlatformWindow *pWindow, u32 width, u32 height, APIFlags flags)
     {
@@ -1518,4 +1518,4 @@ namespace lr::g
         return (VkBufferUsageFlagBits)v;
     }
 
-}  // namespace lr::g
+}  // namespace lr::Graphics

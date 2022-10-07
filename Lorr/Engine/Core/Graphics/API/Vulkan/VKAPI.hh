@@ -13,7 +13,7 @@
 #include "VKPipeline.hh"
 #include "VKSwapChain.hh"
 
-namespace lr::g
+namespace lr::Graphics
 {
     /// -------------- RenderPasses --------------
 
@@ -226,4 +226,4 @@ namespace lr::g
         HMODULE m_VulkanLib;
     };
 
-}  // namespace lr::g
+}  // namespace lr::Graphics

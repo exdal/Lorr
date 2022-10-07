@@ -6,7 +6,7 @@
 
 #include "Crypto/Light.hh"
 
-namespace lr::g
+namespace lr::Graphics
 {
     template<typename PipelineStateHandleT>
     struct APIPipelineStateCache
@@ -51,4 +51,4 @@ namespace lr::g
         u32 m_HandleSize = 0;
     };
 
-}  // namespace lr::g
+}  // namespace lr::Graphics

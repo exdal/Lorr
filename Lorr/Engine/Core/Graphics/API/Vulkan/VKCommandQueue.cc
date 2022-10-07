@@ -2,7 +2,7 @@
 
 #include "VKCommandList.hh"
 
-namespace lr::g
+namespace lr::Graphics
 {
     void VKCommandQueue::Init(VkQueue pHandle, VkFence pBatchFence)
     {
@@ -38,4 +38,4 @@ namespace lr::g
         m_PresentStage = present;
     }
 
-}  // namespace lr::g
+}  // namespace lr::Graphics

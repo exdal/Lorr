@@ -1,6 +1,6 @@
 #include "VKResource.hh"
 
-namespace lr::g
+namespace lr::Graphics
 {
 
-}  // namespace lr::g
+}  // namespace lr::Graphics

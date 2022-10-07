@@ -4,7 +4,7 @@
 
 #pragma once
 
-namespace lr::g
+namespace lr::Graphics
 {
     enum class VertexAttribType
     {

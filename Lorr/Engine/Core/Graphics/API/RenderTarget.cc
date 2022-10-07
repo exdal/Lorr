@@ -1,6 +1,6 @@
 #include "RenderTarget.hh"
 
-namespace lr::g
+namespace lr::Graphics
 {
     // RenderTarget &RenderTarget::AttachColor(VKResource *pResource)
     // {

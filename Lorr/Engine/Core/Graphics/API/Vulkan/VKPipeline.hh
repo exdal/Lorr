@@ -9,7 +9,7 @@
 
 #include "VKSym.hh"
 
-namespace lr::g
+namespace lr::Graphics
 {
     struct VKPipeline
     {
@@ -106,4 +106,4 @@ namespace lr::g
         VkPipelineCache m_pPipelineCache;
     };
 
-}  // namespace lr::g
+}  // namespace lr::Graphics

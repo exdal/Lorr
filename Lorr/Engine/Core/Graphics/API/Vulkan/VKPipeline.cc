@@ -2,7 +2,7 @@
 
 #include "VKAPI.hh"
 
-namespace lr::g
+namespace lr::Graphics
 {
     void VKGraphicsPipelineBuildInfo::SetShaderStage(VkShaderModule pShader, VkShaderStageFlagBits stage, eastl::string_view entryPoint)
     {
@@ -270,4 +270,4 @@ namespace lr::g
         buildInfo.m_DynamicState.pDynamicStates = buildInfo.m_DynamicStates;
     }
 
-}  // namespace lr::g
+}  // namespace lr::Graphics

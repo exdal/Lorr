@@ -8,7 +8,7 @@
 
 #include "VKResource.hh"
 
-namespace lr::g
+namespace lr::Graphics
 {
     struct VKAPI;
 
@@ -61,4 +61,4 @@ namespace lr::g
         bool m_Tearing = false;
     };
 
-}  // namespace lr::g
+}  // namespace lr::Graphics

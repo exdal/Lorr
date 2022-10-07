@@ -2,7 +2,7 @@
 
 #include "VKAPI.hh"
 
-namespace lr::g
+namespace lr::Graphics
 {
     void VKSwapChain::CreateBackBuffer(VKAPI *pAPI)
     {
@@ -178,4 +178,4 @@ namespace lr::g
         return XMUINT2(0, 0);
     }
 
-}  // namespace lr::g
+}  // namespace lr::Graphics

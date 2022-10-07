@@ -34,7 +34,7 @@
         return ret;                                                                                                \
     }
 
-namespace lr::g
+namespace lr::Graphics
 {
     enum class PrimitiveType
     {
@@ -132,4 +132,4 @@ namespace lr::g
         TLSF
     };
 
-}  // namespace lr::g
+}  // namespace lr::Graphics

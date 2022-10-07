@@ -25,7 +25,7 @@ namespace lr
 
         PlatformWindow m_Window;
 
-        g::VKAPI *m_pAPI = nullptr;
+        Graphics::VKAPI *m_pAPI = nullptr;
 
         ThreadPoolSPSC m_ThreadPoolSPSCAt;
     };

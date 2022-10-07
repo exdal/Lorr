@@ -5,7 +5,7 @@
 #include "VKAPI.hh"
 #include "VKResource.hh"
 
-namespace lr::g
+namespace lr::Graphics
 {
     void VKCommandList::Init(VkCommandBuffer pHandle, CommandListType type, VkFence pFence)
     {
@@ -231,4 +231,4 @@ namespace lr::g
         }
     }
 
-}  // namespace lr::g
+}  // namespace lr::Graphics

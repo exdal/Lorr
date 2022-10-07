@@ -9,7 +9,7 @@
 #include "VKPipeline.hh"
 #include "VKResource.hh"
 
-namespace lr::g
+namespace lr::Graphics
 {
     struct CommandRenderPassBeginInfo
     {
@@ -86,4 +86,4 @@ namespace lr::g
         eastl::atomic<u8> m_CopyListMask;
     };
 
-}  // namespace lr::g
+}  // namespace lr::Graphics

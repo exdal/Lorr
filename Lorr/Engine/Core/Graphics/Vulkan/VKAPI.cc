@@ -300,8 +300,10 @@ namespace lr::Graphics
         submitInfo.commandBufferInfoCount = 1;
         submitInfo.pCommandBufferInfos = &commandBufferInfo;
 
-        // INVESTIGATE: At the start of submission, we get threading errors from VL.
+        // ~~INVESTIGATE: At the start of submission, we get threading errors from VL.~~
+        // Found the issue, fence mask always set to least set bit in `CommandListPool`
         vkQueueSubmit2(pQueueHandle, 1, &submitInfo, pFence);
+
         m_CommandListPool.SetExecuteState(pList);
 
         // vkWaitForFences(m_pDevice, 1, &pFence, false, UINT64_MAX);
@@ -1556,21 +1558,25 @@ namespace lr::Graphics
         while (true)
         {
             u32 mask = directFenceMask.load(eastl::memory_order_acquire);
+            u32 iterMask = mask;
 
-            if (mask == 0)
-                continue;
-
-            u32 index = Memory::GetLSB(mask);
-
-            VKCommandList *pList = &commandPool.m_DirectLists[index];
-
-            if (vkGetFenceStatus(pAPI->m_pDevice, pList->m_pFence) == VK_SUCCESS)
+            // Iterate over all signaled fences
+            while (iterMask != 0)
             {
-                vkResetFences(pAPI->m_pDevice, 1, &pList->m_pFence);
-                commandPool.Discard(pList);
+                u32 index = Memory::GetLSB(iterMask);
 
-                mask ^= 1 << index;
-                directFenceMask.store(mask, eastl::memory_order_release);
+                VKCommandList *pList = &commandPool.m_DirectLists[index];
+
+                if (vkGetFenceStatus(pAPI->m_pDevice, pList->m_pFence) == VK_SUCCESS)
+                {
+                    mask ^= 1 << index;
+                    directFenceMask.store(mask, eastl::memory_order_release);
+
+                    vkResetFences(pAPI->m_pDevice, 1, &pList->m_pFence);
+                    commandPool.Discard(pList);
+                }
+
+                iterMask ^= 1 << index;
             }
         }
 

@@ -234,7 +234,7 @@ namespace lr::Graphics
             if (&m_DirectLists[i] == pList)
             {
                 u32 fenceMask = m_DirectFenceMask.load(eastl::memory_order_acquire);
-                fenceMask |= 1 << Memory::GetLSB(fenceMask);
+                fenceMask |= 1 << i;
                 m_DirectFenceMask.store(fenceMask, eastl::memory_order_release);
             }
         }

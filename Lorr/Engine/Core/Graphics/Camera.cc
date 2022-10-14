@@ -48,28 +48,78 @@ namespace lr::Graphics
         m_ViewSize = viewSize;
     }
 
-    void Camera3D::SetDirectionAngle(XMFLOAT2 angle, f32 sensitivity)
+    void Camera3D::SetDirectionAngle(XMFLOAT2 angle)
     {
         ZoneScoped;
 
         m_DirectionAngle = angle;
 
-        angle.x *= sensitivity;
-        angle.y *= sensitivity;
+        // angle y = pitch, x = yaw
 
-        angle.y = eastl::clamp(angle.y, 89.0f, -89.0f);
+        angle.y = eastl::clamp(angle.y, -89.0f, 89.0f);
 
         XMFLOAT2 radDirection(XMConvertToRadians(angle.x), XMConvertToRadians(angle.y));
-        XMMATRIX rotationMatrix = XMMatrixRotationRollPitchYaw(radDirection.x, radDirection.y, 0.0);
+        XMMATRIX rotationMatrix = XMMatrixRotationRollPitchYaw(radDirection.y, radDirection.x, 0.0);
 
         m_ViewDirection = XMVector3Normalize(XMVector3TransformCoord(XMVectorSet(0.0, 0.0, 1.0, 0.0), rotationMatrix));
 
-        rotationMatrix = XMMatrixRotationY(radDirection.y);
+        rotationMatrix = XMMatrixRotationY(radDirection.x);
         m_RightDirection = XMVector3TransformCoord(XMVectorSet(1.0, 0.0, 0.0, 0.0), rotationMatrix);
         m_UpDirection = XMVector3TransformCoord(m_UpDirection, rotationMatrix);
     }
 
     void Camera3D::Update(f32 deltaTime, f32 movementSpeed)
+    {
+        ZoneScoped;
+
+        CalculateProjection();
+        CalculateView();
+    }
+
+    void Camera2D::Init(Camera2DDesc *pDesc)
+    {
+        ZoneScoped;
+
+        m_Position = XMVectorSet(pDesc->Position.x, pDesc->Position.y, 0.0, 1.0);
+        m_ViewSize = pDesc->ViewSize;
+
+        m_ZNear = pDesc->ZNear;
+        m_ZFar = pDesc->ZFar;
+    }
+
+    void Camera2D::CalculateView()
+    {
+        ZoneScoped;
+
+        XMMATRIX translation = XMMatrixIdentity();
+        translation = XMMatrixMultiply(translation, XMMatrixTranslationFromVector(m_Position));
+        XMMATRIX rotation = XMMatrixIdentity();
+        rotation = XMMatrixMultiply(rotation, XMMatrixRotationAxis(XMVectorSet(0.0, 0.0, 1.0, 0.0), 0.0));
+        m_View = XMMatrixInverse(nullptr, XMMatrixMultiply(translation, rotation));
+    }
+
+    void Camera2D::CalculateProjection()
+    {
+        ZoneScoped;
+
+        m_Projection = XMMatrixOrthographicOffCenterLH(0.0, m_ViewSize.x, 0.0, m_ViewSize.y, m_ZNear, m_ZFar);
+    }
+
+    void Camera2D::SetPosition(const XMFLOAT2 &position)
+    {
+        ZoneScoped;
+
+        XMVectorSet(position.x, position.y, 0.0, 1.0);
+    }
+
+    void Camera2D::SetSize(const XMFLOAT2 &viewSize)
+    {
+        ZoneScoped;
+
+        m_ViewSize = viewSize;
+    }
+
+    void Camera2D::Update(f32 deltaTime, f32 movementSpeed)
     {
         ZoneScoped;
 

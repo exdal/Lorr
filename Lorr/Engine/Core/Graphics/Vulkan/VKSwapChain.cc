@@ -4,7 +4,39 @@
 
 namespace lr::Graphics
 {
-    void VKSwapChain::CreateBackBuffer(VKAPI *pAPI)
+    void VKSwapChain::CreateHandle(VKAPI *pAPI)
+    {
+        ZoneScoped;
+
+        VkSwapchainCreateInfoKHR swapChainInfo = {};
+        swapChainInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+
+        // Buffer description
+        swapChainInfo.minImageCount = m_FrameCount;
+        swapChainInfo.imageFormat = m_ImageFormat;
+        swapChainInfo.imageColorSpace = m_ColorSpace;
+        swapChainInfo.imageExtent.width = m_Width;
+        swapChainInfo.imageExtent.height = m_Height;
+        swapChainInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+        swapChainInfo.queueFamilyIndexCount = 0;
+        swapChainInfo.pQueueFamilyIndices = nullptr;
+
+        swapChainInfo.imageArrayLayers = 1;
+        swapChainInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+
+        swapChainInfo.presentMode = m_PresentMode;
+        swapChainInfo.preTransform = m_SurfaceCapabilities.currentTransform;
+        swapChainInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+        swapChainInfo.surface = pAPI->m_pSurface;
+        swapChainInfo.clipped = VK_TRUE;
+
+        pAPI->CreateSwapChain(m_pHandle, swapChainInfo);
+
+        m_CurrentFrame = 0;
+    }
+
+    void VKSwapChain::CreateBackBuffers(VKAPI *pAPI)
     {
         ZoneScoped;
 
@@ -15,7 +47,7 @@ namespace lr::Graphics
         colorAttachment.Format = ResourceFormat::RGBA8F;
         colorAttachment.LoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
         colorAttachment.StoreOp = VK_ATTACHMENT_STORE_OP_STORE;
-        colorAttachment.FinalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        colorAttachment.FinalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
         RenderPassAttachment depthAttachment;
         depthAttachment.Format = ResourceFormat::D32FS8U;
@@ -60,8 +92,6 @@ namespace lr::Graphics
             /// Create Image Data
             VKImage &currentImage = frame.Image;
             VKImage &currentDepthImage = frame.DepthImage;
-            pAPI->DeleteImage(&currentImage);
-            pAPI->DeleteImage(&currentDepthImage);
 
             // Swapchain already gives us the image, so we don't need to create it again
             currentImage.m_pHandle = ppSwapChainImages[i];
@@ -72,9 +102,9 @@ namespace lr::Graphics
             pAPI->CreateImageView(&currentImage);
 
             pAPI->CreateImage(&currentDepthImage, &depthDesc, &depthData);
-            pAPI->AllocateImageMemory(&currentDepthImage, AllocatorType::TLSF);
+            pAPI->AllocateImageMemory(&currentDepthImage, AllocatorType::ImageTLSF);
             pAPI->BindMemory(&currentDepthImage);
-            
+
             pAPI->CreateImageView(&currentDepthImage);
 
             VKImage pAttachments[2] = { currentImage, currentDepthImage };
@@ -84,7 +114,7 @@ namespace lr::Graphics
 
             frame.pAcquireSemp = pAPI->CreateSemaphore();
             frame.pPresentSemp = pAPI->CreateSemaphore();
-            frame.pFence = pAPI->CreateFence(i != 0);
+            frame.pFence = pAPI->CreateFence(true);
         }
     }
 
@@ -103,7 +133,7 @@ namespace lr::Graphics
         return &m_pFrames[nextFrameIdx];
     }
 
-    void VKSwapChain::Init(PlatformWindow *pWindow, VKAPI *pAPI, u32 queueIndex, SwapChainFlags flags)
+    void VKSwapChain::Init(PlatformWindow *pWindow, VKAPI *pAPI, SwapChainFlags flags)
     {
         ZoneScoped;
 
@@ -111,61 +141,27 @@ namespace lr::Graphics
         m_Tearing = (flags & SwapChainFlags::AllowTearing);
         (flags & SwapChainFlags::TripleBuffering) ? m_FrameCount = 3 : 2;
 
-        /// Calculate window metrics
-        m_Width = pWindow->GetWidth();
-        m_Height = pWindow->GetHeight();
+        // Calculate window metrics
+        m_Width = pWindow->m_Width;
+        m_Height = pWindow->m_Height;
 
-        VkSurfaceCapabilitiesKHR capabilities;
-        pAPI->GetSurfaceCapabilities(capabilities);
+        pAPI->GetSurfaceCapabilities(m_SurfaceCapabilities);
 
-        VkFormat imageFormat = VK_FORMAT_B8G8R8A8_UNORM;
-        VkColorSpaceKHR colorSpace;
-        if (!pAPI->IsFormatSupported(imageFormat, &colorSpace))
+        if (!pAPI->IsFormatSupported(m_ImageFormat, &m_ColorSpace))
         {
-            imageFormat = VK_FORMAT_B8G8R8A8_UNORM;
-            pAPI->IsFormatSupported(VK_FORMAT_B8G8R8A8_UNORM, &colorSpace);
+            m_ImageFormat = VK_FORMAT_B8G8R8A8_UNORM;
+            pAPI->IsFormatSupported(m_ImageFormat, &m_ColorSpace);
         }
 
-        VkPresentModeKHR presentMode = VK_PRESENT_MODE_MAILBOX_KHR;
-        if (!pAPI->IsPresentModeSupported(presentMode))
+        if (!pAPI->IsPresentModeSupported(m_PresentMode))
         {
-            presentMode = VK_PRESENT_MODE_FIFO_KHR;
-            m_FrameCount = capabilities.minImageCount;
+            m_PresentMode = VK_PRESENT_MODE_FIFO_KHR;
+            m_FrameCount = m_SurfaceCapabilities.minImageCount;
 
             LOG_WARN("GPU doesn't support mailbox present mode, going back to fifo.");
         }
 
-        VkSwapchainCreateInfoKHR swapChainInfo = {};
-        swapChainInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-
-        // Buffer description
-        swapChainInfo.minImageCount = m_FrameCount;
-        swapChainInfo.imageFormat = imageFormat;
-        swapChainInfo.imageColorSpace = colorSpace;
-        swapChainInfo.imageExtent.width = m_Width;
-        swapChainInfo.imageExtent.height = m_Height;
-        swapChainInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-        swapChainInfo.queueFamilyIndexCount = 0;
-        swapChainInfo.pQueueFamilyIndices = nullptr;
-
-        swapChainInfo.imageArrayLayers = 1;
-        swapChainInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-
-        swapChainInfo.presentMode = presentMode;
-        swapChainInfo.preTransform = capabilities.currentTransform;
-        swapChainInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-        swapChainInfo.surface = pAPI->m_pSurface;
-        swapChainInfo.clipped = VK_TRUE;
-
-        pAPI->CreateSwapChain(m_pHandle, swapChainInfo);
-
-        /// Check if we are in fullscreen
-    }
-
-    void VKSwapChain::Resize(u32 width, u32 height)
-    {
-        ZoneScoped;
+        CreateHandle(pAPI);
     }
 
     void VKSwapChain::NextFrame()
@@ -175,7 +171,26 @@ namespace lr::Graphics
 
     XMUINT2 VKSwapChain::GetViewportSize()
     {
-        return XMUINT2(0, 0);
+        return XMUINT2(m_Width, m_Height);
+    }
+
+    void VKSwapChain::DestroyHandle(VKAPI *pAPI)
+    {
+        ZoneScoped;
+
+        for (u32 i = 0; i < m_FrameCount; i++)
+        {
+            SwapChainFrame &frame = m_pFrames[i];
+
+            pAPI->DeleteFence(frame.pFence);
+            pAPI->DeleteSemaphore(frame.pPresentSemp);
+            pAPI->DeleteSemaphore(frame.pAcquireSemp);
+            pAPI->DeleteFramebuffer(frame.pFrameBuffer);
+            pAPI->DeleteImage(&frame.DepthImage);
+        }
+
+        pAPI->DeleteRenderPass(m_pRenderPass);
+        pAPI->DeleteSwapChain(this);
     }
 
 }  // namespace lr::Graphics

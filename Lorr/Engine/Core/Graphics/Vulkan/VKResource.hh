@@ -4,9 +4,9 @@
 
 #pragma once
 
-#include "VKSym.hh"
+#include "Core/Graphics/Common.hh"
 
-#include "Graphics/API/Common.hh"
+#include "VKSym.hh"
 
 namespace lr::Graphics
 {
@@ -43,7 +43,7 @@ namespace lr::Graphics
         }
     }
 
-    enum class ResourceType : u8
+    enum class ResourceType : u8  // TODO: Remove this
     {
         ColorAttachment,
         DepthAttachment,
@@ -90,7 +90,6 @@ namespace lr::Graphics
 
         ResourceType m_Type;
         ResourceFormat m_Format;
-        bool m_Mappable = false;
 
         AllocatorType m_AllocatorType;
         void *m_pAllocatorData = nullptr;
@@ -120,7 +119,7 @@ namespace lr::Graphics
         u32 m_RequiredDataSize = 0;  // Required data size from Vulkan API
         u32 m_DataSize = 0;          // Real size of data
 
-        ResourceType m_Type;
+        BufferUsage m_Usage;
         ResourceFormat m_Format;
         bool m_Mappable = false;
 
@@ -143,7 +142,8 @@ namespace lr::Graphics
 
     struct VKDescriptorSetDesc
     {
-        std::initializer_list<VKDescriptorBindingDesc> Bindings;
+        u32 BindingCount = 0;
+        VKDescriptorBindingDesc pBindings[8];
     };
 
     struct VKDescriptorSet

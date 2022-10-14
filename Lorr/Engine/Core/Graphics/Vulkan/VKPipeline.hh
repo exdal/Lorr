@@ -4,8 +4,8 @@
 
 #pragma once
 
-#include "Graphics/API/Common.hh"
-#include "Graphics/API/InputLayout.hh"
+#include "Core/Graphics/Common.hh"
+#include "Core/Graphics/InputLayout.hh"
 
 #include "VKSym.hh"
 

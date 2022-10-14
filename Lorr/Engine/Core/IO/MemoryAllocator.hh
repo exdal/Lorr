@@ -16,7 +16,7 @@ namespace lr::Memory
 
         u32 AddPool(u64 size);
 
-        u64 Allocate(u32 pool, u64 size);
+        u64 Allocate(u32 pool, u64 size, u32 alignment);
         void Free(u32 pool);
 
         u32 m_PoolCount = 0;
@@ -62,8 +62,8 @@ namespace lr::Memory
 
         void Init(u32 poolSize);
 
-        TLSFBlock *Allocate(u32 size);
-        void Deallocate(TLSFBlock *pBlock);
+        u32 Allocate(u32 size, u32 alignment, TLSFBlock *&pBlockOut);
+        void Free(TLSFBlock *pBlock);
 
         void AddFreeBlock(TLSFBlock *pBlock);
         TLSFBlock *FindFreeBlock(u32 size);

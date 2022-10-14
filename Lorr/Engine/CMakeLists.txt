@@ -1,5 +1,28 @@
-add_subdirectory(Core)
+set(LORR_VENDOR
+    EASTL
+    EAThread
+    DirectXMath
+    lw
+    fmt
+    spdlog
+    tracy
+    
+    Vulkan-Headers
+    imgui
+)
 
-add_library(Lorr INTERFACE)
-    target_link_libraries(Lorr INTERFACE LCore)
-    target_include_directories(Lorr INTERFACE ../)
+# Core
+LorrComponent(
+    NAME
+        Lorr
+    SOURCE
+        ./*.cc
+    VENDOR
+        ${LORR_VENDOR}
+    PCH
+        pch.hh
+    INCLUDE
+        ./
+    LIBTYPE
+        STATIC
+)

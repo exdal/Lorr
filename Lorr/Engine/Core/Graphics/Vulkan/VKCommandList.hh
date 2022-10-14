@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include "Core/Graphics/APIConfig.hh"
+
 #include "VKSym.hh"
 
 #include "VKPipeline.hh"
@@ -11,22 +13,43 @@
 
 namespace lr::Graphics
 {
+    struct ClearValue
+    {
+        ClearValue()
+        {
+        }
+
+        ClearValue(const XMFLOAT4 &color)
+        {
+            IsDepth = false;
+
+            RenderTargetColor = color;
+        }
+
+        ClearValue(f32 depth, u8 stencil)
+        {
+            IsDepth = true;
+
+            DepthStencilColor.Depth = depth;
+            DepthStencilColor.Stencil = stencil;
+        }
+
+        XMFLOAT4 RenderTargetColor = {};
+
+        struct Depth
+        {
+            f32 Depth = 0.f;
+            u8 Stencil = 0;
+        } DepthStencilColor;
+
+        bool IsDepth = false;
+    };
+
     struct CommandRenderPassBeginInfo
     {
-        union _ClearValue
-        {
-            XMFLOAT4 RenderTargetColor = {};
+        u32 ClearValueCount = 0;
+        ClearValue pClearValues[APIConfig::kMaxColorAttachmentCount] = {};
 
-            struct Depth
-            {
-                f32 Depth = 0.f;
-                u8 Stencil = 0;
-            } DepthStencil;
-        };
-
-        u32 AttachmentCount = 0;
-        _ClearValue pClearValues[8];
-        
         // WH(-1) means we cover entire window/screen, info from swapchain
         XMUINT4 RenderArea = { 0, 0, UINT32_MAX, UINT32_MAX };
     };
@@ -40,6 +63,9 @@ namespace lr::Graphics
     struct VKCommandList
     {
         void Init(VkCommandBuffer pHandle, CommandListType type, VkFence pFence);
+
+        void SetViewport(u32 id, u32 width, u32 height, f32 minDepth, f32 maxDepth);
+        void SetScissor(u32 id, u32 x, u32 y, u32 w, u32 h);
 
         /// Buffer Commands
         void SetVertexBuffer(VKBuffer *pBuffer);
@@ -73,6 +99,7 @@ namespace lr::Graphics
         void Init();
 
         VKCommandList *Request(CommandListType type);
+        void SetExecuteState(VKCommandList *pList);
         void Discard(VKCommandList *pList);
 
         void WaitForAll();
@@ -82,6 +109,8 @@ namespace lr::Graphics
         eastl::array<VKCommandList, 8> m_CopyLists;
 
         eastl::atomic<u32> m_DirectListMask;
+        eastl::atomic<u32> m_DirectFenceMask;
+
         eastl::atomic<u16> m_ComputeListMask;
         eastl::atomic<u8> m_CopyListMask;
     };

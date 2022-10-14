@@ -24,6 +24,7 @@ typedef signed char i8;
 #include <stdio.h>
 
 #include <Windows.h>
+#undef CreateSemaphore
 
 #include <Tracy.hpp>
 
@@ -45,9 +46,9 @@ typedef signed char i8;
 using namespace DirectX;
 using namespace PackedVector;
 
-#include "Utils/EnumFlags.hh"
-#include "Logger/Format.hh"
-#include "Logger/Logger.hh"
+#include "Core/Utils/EnumFlags.hh"
+#include "Core/Logger/Format.hh"
+#include "Core/Logger/Logger.hh"
 
 #define SAFE_DELETE(var) \
     if (var)             \

@@ -4,8 +4,13 @@
 
 #pragma once
 
-#include "IO/BufferStream.hh"
-#include "IO/MemoryAllocator.hh"
+#include <eathread/eathread_pool.h>
+
+#include "Core/Graphics/APIConfig.hh"
+
+#include "Core/IO/BufferStream.hh"
+#include "Core/IO/Memory.hh"
+#include "Core/IO/MemoryAllocator.hh"
 
 #include "VKSym.hh"
 
@@ -16,9 +21,6 @@
 namespace lr::Graphics
 {
     /// -------------- RenderPasses --------------
-
-    constexpr u32 kMaxSubpassCount = 8;
-    constexpr u32 kMaxColorAttachmentCount = 8;
 
     // `AttachmentFlags` also helps us to select `VkSubpassDependency`.
     enum class AttachmentFlags
@@ -50,7 +52,7 @@ namespace lr::Graphics
     {
         // `8` is the maximum attachments per `RenderPass` we support.
         u32 ColorAttachmentCount = 0;
-        RenderPassAttachment *ppColorAttachments[kMaxColorAttachmentCount];
+        RenderPassAttachment *ppColorAttachments[APIConfig::kMaxColorAttachmentCount];
         RenderPassAttachment *pDepthAttachment = nullptr;
 
         // If source subpass index is `0` and ProducerStage is `0`,
@@ -86,6 +88,31 @@ namespace lr::Graphics
 
     /// ------------------------------------------ ///
 
+    struct APIStateManager
+    {
+        void Init(VKAPI *pAPI);
+
+        void UpdateCamera3DData(XMMATRIX mat);
+        void UpdateCamera2DData(XMMATRIX mat);
+
+        /// PIPELINES ///
+        VKPipeline m_PresentPipeline;
+        VKPipeline m_UIPipeline;
+
+        /// RENDERPASS ///
+        VkRenderPass m_pPresentPass = nullptr;
+        VkRenderPass m_pUIPass = nullptr;
+
+        /// DESCRIPTORS ///
+        // * MAT4 descriptor just for camera matrix
+        VKDescriptorSet m_Camera3DDescriptor;
+        VKBuffer m_Camera3DBuffer;
+        VKDescriptorSet m_Camera2DDescriptor;
+        VKBuffer m_Camera2DBuffer;
+
+        VKAPI *m_pAPI = nullptr;
+    };
+
     enum class APIFlags : u32
     {
         None,
@@ -106,11 +133,7 @@ namespace lr::Graphics
         void CreateCommandAllocator(VKCommandAllocator *pHandle, CommandListType type);
         void CreateCommandList(VKCommandList *pHandle, CommandListType type);
 
-        // TODO: VERY BAD NAMES!
-        // Takes a list from pool
         VKCommandList *GetCommandList();
-        // Returns command list of current frame
-        VKCommandList *GetCurrentCommandList();
 
         void BeginCommandList(VKCommandList *pList);
         void EndCommandList(VKCommandList *pList);
@@ -121,13 +144,18 @@ namespace lr::Graphics
         // Does not execute command list in flight. Cannot perform a present operation.
         void ExecuteCommandList(VKCommandList *pList);
         // Executes command list of current frame, it always performs a present operation.
-        void ExecuteCommandQueue();
+        void PresentCommandQueue();
 
+        /// SYNC OBJECTS ///
         VkFence CreateFence(bool signaled);
+        void DeleteFence(VkFence pFence);
+
         VkSemaphore CreateSemaphore(u32 initialValue = 0, bool binary = true);
+        void DeleteSemaphore(VkSemaphore pSemaphore);
 
         /// RENDERPASS ///
         VkRenderPass CreateRenderPass(RenderPassDesc *pDesc);
+        void DeleteRenderPass(VkRenderPass pRenderPass);
 
         /// PIPELINE ///
         VkPipelineCache CreatePipelineCache(u32 initialDataSize = 0, void *pInitialData = nullptr);
@@ -137,16 +165,21 @@ namespace lr::Graphics
                                   VKPipeline *pTargetHandle,
                                   const std::initializer_list<VKDescriptorSet *> &sets);
 
-        /// SWAP CHAIN ///
-        void Resize(u32 width, u32 height);
+        /// SWAPCHAIN ///
         void CreateSwapChain(VkSwapchainKHR &pHandle, VkSwapchainCreateInfoKHR &info);
+        void DeleteSwapChain(VKSwapChain *pSwapChain);
         void GetSwapChainImages(VkSwapchainKHR &pHandle, u32 bufferCount, VkImage *pImages);
+        void ResizeSwapChain(u32 width, u32 height);
 
         void Frame();
+        void WaitForDevice();
 
         /// RESOURCE ///
-
+        // * Shaders * //
         VkShaderModule CreateShaderModule(BufferReadStream &buf);
+        VkShaderModule CreateShaderModule(eastl::string_view path);
+        void DeleteShaderModule(VkShaderModule pShader);
+
         void CreateDescriptorSetLayout(VKDescriptorSet *pSet, VKDescriptorSetDesc *pDesc);
 
         // `VKDescriptorBindingDesc::Type` represents descriptor type.
@@ -154,30 +187,45 @@ namespace lr::Graphics
         // Same types cannot be used, will result in UB. Other variables are ignored.
         VkDescriptorPool CreateDescriptorPool(const std::initializer_list<VKDescriptorBindingDesc> &layouts);
 
-        u32 GetMemoryTypeIndex(u32 setBits, VkMemoryPropertyFlags propFlags);
-        void AllocateImageMemory(VKImage *pImage, AllocatorType allocatorType);
-        void AllocateBufferMemory(VKBuffer *pBuffer, AllocatorType allocatorType);
-
+        // * Buffers * //
         void CreateBuffer(VKBuffer *pHandle, BufferDesc *pDesc, BufferData *pData);
-        void BindMemory(VKBuffer *pBuffer);
         void DeleteBuffer(VKBuffer *pHandle);
+
+        void AllocateBufferMemory(VKBuffer *pBuffer, AllocatorType allocatorType);
+        void FreeBufferMemory(VKBuffer *pBuffer);
+
+        void BindMemory(VKBuffer *pBuffer);
         void MapMemory(VKBuffer *pBuffer, void *&pData);
         void UnmapMemory(VKBuffer *pBuffer);
 
+        void TransferBufferMemory(VKCommandList *pList, VKBuffer *pSrc, VKBuffer *pDst, AllocatorType dstAllocator);
+
+        // * Images * //
         void CreateImage(VKImage *pHandle, ImageDesc *pDesc, ImageData *pData);
-        void CreateImageView(VKImage *pHandle);
-        VkFramebuffer CreateFramebuffer(XMUINT2 size, u32 attachmentCount, VKImage *pAttachments, VkRenderPass &pRenderPass);
-        void BindMemory(VKImage *pImage);
         void DeleteImage(VKImage *pImage);
 
+        void CreateImageView(VKImage *pHandle);
+        VkFramebuffer CreateFramebuffer(XMUINT2 size, u32 attachmentCount, VKImage *pAttachments, VkRenderPass &pRenderPass);
+        void DeleteFramebuffer(VkFramebuffer pFramebuffer);
+
+        void AllocateImageMemory(VKImage *pImage, AllocatorType allocatorType);
+        void FreeImageMemory(VKImage *pImage);
+
+        void BindMemory(VKImage *pImage);
+
+        // * Device Features * //
         bool IsFormatSupported(VkFormat format, VkColorSpaceKHR *pColorSpaceOut);
         bool IsPresentModeSupported(VkPresentModeKHR format);
         void GetSurfaceCapabilities(VkSurfaceCapabilitiesKHR &capabilitiesOut);
+        u32 GetMemoryTypeIndex(u32 setBits, VkMemoryPropertyFlags propFlags);
 
+        // * API Instance * //
         bool LoadVulkan();
         bool SetupInstance(HWND windowHandle);
         bool SetupQueues(VkPhysicalDevice &pPhysicalDevice, VkPhysicalDeviceFeatures &features);
         bool SetupDevice(VkPhysicalDevice &pPhysicalDevice, VkPhysicalDeviceFeatures &features);
+
+        static i64 TFFenceWait(void *pData);
 
         /// ------------------------------------------------------------- ///
 
@@ -199,20 +247,25 @@ namespace lr::Graphics
         VkDevice m_pDevice = nullptr;
         VKSwapChain m_SwapChain;
 
+        APIStateManager m_APIStateMan;
+
         /// Main Queues
         u32 m_AvailableQueueCount = 0;
         eastl::array<u32, 3> m_QueueIndexes;
         VKCommandQueue m_DirectQueue;
-        eastl::array<VKCommandList, 3> m_ListsInFlight;
 
         /// Pools/Caches
         CommandListPool m_CommandListPool;
         VKPipelineManager m_PipelineManager;
         VkDescriptorPool m_pDescriptorPool = nullptr;
 
-        VKLinearMemoryAllocator m_BufferAlloc_Linear;
-        VKTLSFMemoryAllocator m_BufferAlloc_TLSF;
-        VKTLSFMemoryAllocator m_ImageAlloc_TLSF;
+        VKLinearMemoryAllocator m_MADescriptor;
+        VKLinearMemoryAllocator m_MABufferLinear;
+        VKTLSFMemoryAllocator m_MABufferTLSF;
+        VKTLSFMemoryAllocator m_MAImageTLSF;
+
+        u32 m_TransientBufferCount = 0;
+        VKBuffer *m_pTransientBuffers[APIConfig::kTransientBufferCount];
 
         /// Native API
         VkPhysicalDeviceMemoryProperties m_MemoryProps;
@@ -224,6 +277,8 @@ namespace lr::Graphics
         u32 m_ValidPresentModeCount = 0;
 
         HMODULE m_VulkanLib;
+
+        EA::Thread::Thread m_FenceThread;
     };
 
 }  // namespace lr::Graphics

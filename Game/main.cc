@@ -1,4 +1,4 @@
-#include "Engine/Core/Engine.hh"
+#include "Engine.hh"
 
 lr::Engine *pEngine = nullptr;
 
@@ -18,6 +18,7 @@ int main()
     windowDesc.Width = 1280;
     windowDesc.Height = 780;
     windowDesc.Flags = WindowFlags::Centered | WindowFlags::Resizable;
+    windowDesc.CurrentMonitor = 0;
 
     pEngine = new Engine;
     pEngine->Init(appDesc, windowDesc);

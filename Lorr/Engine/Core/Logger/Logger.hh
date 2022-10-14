@@ -10,11 +10,7 @@
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/spdlog.h>
 
-#if _DEBUG
 #define LOG_TRACE(...) lr::Logger::s_pCoreLogger->trace(__VA_ARGS__)
-#else
-#define LOG_TRACE(...) (void *)0
-#endif
 
 #define LOG_INFO(...) lr::Logger::s_pCoreLogger->info(__VA_ARGS__)
 #define LOG_WARN(...) lr::Logger::s_pCoreLogger->warn(__VA_ARGS__)

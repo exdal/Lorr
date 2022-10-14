@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include "Core/Graphics/APIConfig.hh"
+
 #include "VKSym.hh"
 #include "VKCommandList.hh"
 
@@ -29,9 +31,8 @@ namespace lr::Graphics
 
         VkFence m_pBatchFence = nullptr;
 
-        static constexpr u32 kMaxCommandListPerBatch = 8;
-        eastl::array<VKCommandList *, kMaxCommandListPerBatch> m_BatchedLists;
-        eastl::array<VkCommandBuffer, kMaxCommandListPerBatch> m_BatchedListHandles;
+        eastl::array<VKCommandList *, APIConfig::kMaxCommandListPerBatch> m_BatchedLists;
+        eastl::array<VkCommandBuffer, APIConfig::kMaxCommandListPerBatch> m_BatchedListHandles;
         u32 m_BatchedListsCount = 0;
     };
 

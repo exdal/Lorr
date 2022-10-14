@@ -4,7 +4,7 @@
 
 #pragma once
 
-#include "Window/PlatformWindow.hh"
+#include "Core/Window/PlatformWindow.hh"
 
 #include "VKResource.hh"
 
@@ -35,15 +35,17 @@ namespace lr::Graphics
 
     struct VKSwapChain
     {
-        void Init(PlatformWindow *pWindow, VKAPI *pAPI, u32 queueIndex, SwapChainFlags flags);
+        void Init(PlatformWindow *pWindow, VKAPI *pAPI, SwapChainFlags flags);
 
-        void Resize(u32 width, u32 height);
         void NextFrame();
 
-        void CreateBackBuffer(VKAPI *pAPI);
+        void CreateHandle(VKAPI *pAPI);
+        void CreateBackBuffers(VKAPI *pAPI);
         SwapChainFrame *GetCurrentFrame();
         SwapChainFrame *GetNextFrame();
         XMUINT2 GetViewportSize();
+
+        void DestroyHandle(VKAPI *pAPI);
 
         VkSwapchainKHR m_pHandle = nullptr;
         VkRenderPass m_pRenderPass = nullptr;
@@ -59,6 +61,12 @@ namespace lr::Graphics
 
         bool m_vSync = false;
         bool m_Tearing = false;
+
+        /// INTERNALS ///
+        VkSurfaceCapabilitiesKHR m_SurfaceCapabilities;
+        VkFormat m_ImageFormat = VK_FORMAT_B8G8R8A8_UNORM;
+        VkColorSpaceKHR m_ColorSpace;
+        VkPresentModeKHR m_PresentMode = VK_PRESENT_MODE_MAILBOX_KHR;
     };
 
 }  // namespace lr::Graphics

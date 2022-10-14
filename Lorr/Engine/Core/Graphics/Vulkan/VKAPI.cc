@@ -1,7 +1,9 @@
 #include "VKAPI.hh"
 
-#include "Crypto/Light.hh"
-#include "IO/Memory.hh"
+#include "Engine.hh"
+
+#include "Core/Crypto/Light.hh"
+#include "Core/IO/Memory.hh"
 
 /// DEFINE VULKAN FUNCTIONS
 // #include "VKSymbols.hh"
@@ -34,7 +36,7 @@ namespace lr::Graphics
         LOG_TRACE("Initializing Vulkan device...");
 
         LoadVulkan();
-        SetupInstance(pWindow->GetHandle());
+        SetupInstance(pWindow->m_Handle);
 
         u32 availableDeviceCount = 0;
         vkEnumeratePhysicalDevices(m_pInstance, &availableDeviceCount, nullptr);
@@ -103,8 +105,8 @@ namespace lr::Graphics
         InitAllocators();
 
         CreateCommandQueue(&m_DirectQueue, CommandListType::Direct);
-        m_SwapChain.Init(pWindow, this, 0, SwapChainFlags::TripleBuffering);
-        m_SwapChain.CreateBackBuffer(this);
+        m_SwapChain.Init(pWindow, this, SwapChainFlags::TripleBuffering);
+        m_SwapChain.CreateBackBuffers(this);
         m_PipelineManager.Init(this);
 
         LOG_TRACE("Successfully initialized Vulkan context.");
@@ -118,8 +120,11 @@ namespace lr::Graphics
         });
 
         InitCommandLists();
+        m_APIStateMan.Init(this);
 
-        BeginCommandList(GetCurrentCommandList());
+        m_FenceThread.Begin(VKAPI::TFFenceWait, this);
+
+        LOG_TRACE("Initialized Vulkan render context.");
 
         return true;
     }
@@ -146,46 +151,50 @@ namespace lr::Graphics
             VKCommandList &list = m_CommandListPool.m_CopyLists[i];
             CreateCommandList(&list, CommandListType::Copy);
         }
-
-        /// But for now, we are using frames in flight
-        for (auto &list : m_ListsInFlight)
-        {
-            CreateCommandList(&list, CommandListType::Direct);
-        }
     }
 
     void VKAPI::InitAllocators()
     {
         ZoneScoped;
 
-        u32 bufferSize_Linear = Memory::MiBToBytes(32);
-        u32 imageSize_TLSF = Memory::MiBToBytes(512);
+        constexpr u32 kDescriptorMem = Memory::MiBToBytes(1);
+        constexpr u32 kBufferLinearMem = Memory::MiBToBytes(64);
+        constexpr u32 kBufferTLSFMem = Memory::MiBToBytes(512);
+        constexpr u32 kImageTLSFMem = Memory::MiBToBytes(512);
 
-        BufferDesc bufferDesc;
+        BufferDesc bufferDesc = {};
+        BufferData bufferData = {};
+
+        m_MADescriptor.Allocator.AddPool(kDescriptorMem);
+        m_MABufferLinear.Allocator.AddPool(kBufferLinearMem);
+        m_MABufferTLSF.Allocator.Init(kBufferTLSFMem);
+        m_MAImageTLSF.Allocator.Init(kImageTLSFMem);
+
+        bufferDesc.UsageFlags = BufferUsage::CopyDst;
+
         bufferDesc.Mappable = true;
-        bufferDesc.UsageFlags = BufferUsage::CopySrc;
-
-        BufferData buffetData;
-        buffetData.DataLen = bufferSize_Linear;
-
-        /// LINEAR ALLOCATOR ///
-
-        m_BufferAlloc_Linear.Allocator.AddPool(bufferSize_Linear);
-        CreateBuffer(&m_BufferAlloc_Linear.Buffer, &bufferDesc, &buffetData);
-        AllocateBufferMemory(&m_BufferAlloc_Linear.Buffer, AllocatorType::None);
-
-        /// TLSF ALLOCATOR ///
-
-        m_BufferAlloc_TLSF.Allocator.Init(bufferSize_Linear);
-        CreateBuffer(&m_BufferAlloc_TLSF.Buffer, &bufferDesc, &buffetData);
-        AllocateBufferMemory(&m_BufferAlloc_TLSF.Buffer, AllocatorType::None);
+        bufferData.DataLen = kDescriptorMem;
+        CreateBuffer(&m_MADescriptor.Buffer, &bufferDesc, &bufferData);
 
         bufferDesc.Mappable = false;
-        bufferDesc.UsageFlags = BufferUsage::CopySrc;
-        buffetData.DataLen = imageSize_TLSF;
-        m_ImageAlloc_TLSF.Allocator.Init(imageSize_TLSF);
-        CreateBuffer(&m_ImageAlloc_TLSF.Buffer, &bufferDesc, &buffetData);
-        AllocateBufferMemory(&m_ImageAlloc_TLSF.Buffer, AllocatorType::None);
+        bufferData.DataLen = kBufferLinearMem;
+        CreateBuffer(&m_MABufferLinear.Buffer, &bufferDesc, &bufferData);
+
+        bufferData.DataLen = kBufferTLSFMem;
+        CreateBuffer(&m_MABufferTLSF.Buffer, &bufferDesc, &bufferData);
+
+        bufferData.DataLen = kImageTLSFMem;
+        CreateBuffer(&m_MAImageTLSF.Buffer, &bufferDesc, &bufferData);
+
+        AllocateBufferMemory(&m_MADescriptor.Buffer, AllocatorType::None);
+        AllocateBufferMemory(&m_MABufferLinear.Buffer, AllocatorType::None);
+        AllocateBufferMemory(&m_MABufferTLSF.Buffer, AllocatorType::None);
+        AllocateBufferMemory(&m_MAImageTLSF.Buffer, AllocatorType::None);
+
+        BindMemory(&m_MADescriptor.Buffer);
+        BindMemory(&m_MABufferLinear.Buffer);
+        BindMemory(&m_MABufferTLSF.Buffer);
+        BindMemory(&m_MAImageTLSF.Buffer);
     }
 
     void VKAPI::CreateCommandQueue(VKCommandQueue *pHandle, CommandListType type)
@@ -242,33 +251,6 @@ namespace lr::Graphics
         return m_CommandListPool.Request(CommandListType::Direct);
     }
 
-    VKCommandList *VKAPI::GetCurrentCommandList()
-    {
-        ZoneScoped;
-
-        return &m_ListsInFlight[m_SwapChain.m_CurrentFrame];
-    }
-
-    void VKAPI::Resize(u32 width, u32 height)
-    {
-        ZoneScoped;
-    }
-
-    void VKAPI::CreateSwapChain(VkSwapchainKHR &pHandle, VkSwapchainCreateInfoKHR &info)
-    {
-        ZoneScoped;
-
-        VkResult vkResult;
-        VKCall(vkCreateSwapchainKHR(m_pDevice, &info, nullptr, &pHandle), "Failed to create Vulkan SwapChain.");
-    }
-
-    void VKAPI::GetSwapChainImages(VkSwapchainKHR &pHandle, u32 bufferCount, VkImage *pImages)
-    {
-        ZoneScoped;
-
-        vkGetSwapchainImagesKHR(m_pDevice, pHandle, &bufferCount, pImages);
-    }
-
     void VKAPI::BeginCommandList(VKCommandList *pList)
     {
         ZoneScoped;
@@ -293,6 +275,14 @@ namespace lr::Graphics
         vkResetCommandPool(m_pDevice, pAllocator->pHandle, 0);
     }
 
+    struct workdata
+    {
+        VkDevice pDevice;
+        VkFence pFence;
+        VKCommandList *pList;
+        CommandListPool *pool;
+    };
+
     void VKAPI::ExecuteCommandList(VKCommandList *pList)
     {
         ZoneScoped;
@@ -310,41 +300,31 @@ namespace lr::Graphics
         submitInfo.commandBufferInfoCount = 1;
         submitInfo.pCommandBufferInfos = &commandBufferInfo;
 
+        // INVESTIGATE: At the start of submission, we get threading errors from VL.
         vkQueueSubmit2(pQueueHandle, 1, &submitInfo, pFence);
+        m_CommandListPool.SetExecuteState(pList);
 
-        vkWaitForFences(m_pDevice, 1, &pFence, false, UINT64_MAX);
-        vkResetFences(m_pDevice, 1, &pFence);
+        // vkWaitForFences(m_pDevice, 1, &pFence, false, UINT64_MAX);
+        // vkResetFences(m_pDevice, 1, &pFence);
 
-        m_CommandListPool.Discard(pList);
+        // m_CommandListPool.Discard(pList);
     }
 
-    void VKAPI::ExecuteCommandQueue()
+    void VKAPI::PresentCommandQueue()
     {
         ZoneScoped;
 
         VkQueue &pQueueHandle = m_DirectQueue.m_pHandle;
 
         SwapChainFrame *pCurrentFrame = m_SwapChain.GetCurrentFrame();
-        SwapChainFrame *pNextFrame = m_SwapChain.GetNextFrame();
-        VKCommandList *pList = GetCurrentCommandList();
 
         VkSemaphore &pAcquireSemp = pCurrentFrame->pAcquireSemp;
         VkSemaphore &pPresentSemp = pCurrentFrame->pPresentSemp;
-        VkFence &pCurrentFence = pCurrentFrame->pFence;
-        VkFence &pNextFence = pNextFrame->pFence;
-
-        vkWaitForFences(m_pDevice, 1, &pNextFence, false, UINT64_MAX);
-        vkResetFences(m_pDevice, 1, &pNextFence);
 
         VkSubmitInfo2 submitInfo = {};
         submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
 
-        VkCommandBufferSubmitInfo commandBufferInfo = {};
-        commandBufferInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO;
-        commandBufferInfo.commandBuffer = pList->m_pHandle;
-
-        submitInfo.commandBufferInfoCount = 1;
-        submitInfo.pCommandBufferInfos = &commandBufferInfo;
+        submitInfo.commandBufferInfoCount = 0;
 
         VkSemaphoreSubmitInfo acquireSemaphoreInfo = {};
         acquireSemaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
@@ -362,7 +342,7 @@ namespace lr::Graphics
         submitInfo.signalSemaphoreInfoCount = 1;
         submitInfo.pSignalSemaphoreInfos = &presentSemaphoreInfo;
 
-        vkQueueSubmit2(pQueueHandle, 1, &submitInfo, pCurrentFence);
+        vkQueueSubmit2(pQueueHandle, 1, &submitInfo, nullptr);
     }
 
     VkFence VKAPI::CreateFence(bool signaled)
@@ -378,6 +358,13 @@ namespace lr::Graphics
         vkCreateFence(m_pDevice, &fenceInfo, nullptr, &pHandle);
 
         return pHandle;
+    }
+
+    void VKAPI::DeleteFence(VkFence pFence)
+    {
+        ZoneScoped;
+
+        vkDestroyFence(m_pDevice, pFence, nullptr);
     }
 
     VkSemaphore VKAPI::CreateSemaphore(u32 initialValue, bool binary)
@@ -400,6 +387,13 @@ namespace lr::Graphics
         return pHandle;
     }
 
+    void VKAPI::DeleteSemaphore(VkSemaphore pSemaphore)
+    {
+        ZoneScoped;
+
+        vkDestroySemaphore(m_pDevice, pSemaphore, nullptr);
+    }
+
     VkRenderPass VKAPI::CreateRenderPass(RenderPassDesc *pDesc)
     {
         ZoneScoped;
@@ -412,8 +406,8 @@ namespace lr::Graphics
         VkSubpassDescription subpassDescVK = {};
 
         VkSubpassDependency pSubpassDeps[2] = {};
-        VkAttachmentDescription pAttachmentDescs[kMaxColorAttachmentCount + 1] = {};
-        VkAttachmentReference pAttachmentRefs[kMaxColorAttachmentCount] = {};
+        VkAttachmentDescription pAttachmentDescs[APIConfig::kMaxColorAttachmentCount + 1] = {};
+        VkAttachmentReference pAttachmentRefs[APIConfig::kMaxColorAttachmentCount] = {};
 
         VkAttachmentDescription depthAttachment = {};
         VkAttachmentReference depthAttachmentRef = {};
@@ -521,6 +515,13 @@ namespace lr::Graphics
         return pHandle;
     }
 
+    void VKAPI::DeleteRenderPass(VkRenderPass pRenderPass)
+    {
+        ZoneScoped;
+
+        vkDestroyRenderPass(m_pDevice, pRenderPass, nullptr);
+    }
+
     VkPipelineCache VKAPI::CreatePipelineCache(u32 initialDataSize, void *pInitialData)
     {
         ZoneScoped;
@@ -541,7 +542,7 @@ namespace lr::Graphics
     {
         ZoneScoped;
 
-        m_PipelineManager.InitBuildInfo(buildInfo, pRenderPass);
+        m_PipelineManager.InitBuildInfo(buildInfo, pRenderPass ? pRenderPass : m_SwapChain.m_pRenderPass);
     }
 
     void VKAPI::EndPipelineBuildInfo(VKGraphicsPipelineBuildInfo &buildInfo,
@@ -573,6 +574,42 @@ namespace lr::Graphics
         vkCreateGraphicsPipelines(m_pDevice, m_PipelineManager.m_pPipelineCache, 1, &buildInfo.m_CreateInfo, nullptr, &pHandle);
     }
 
+    void VKAPI::CreateSwapChain(VkSwapchainKHR &pHandle, VkSwapchainCreateInfoKHR &info)
+    {
+        ZoneScoped;
+
+        VkResult vkResult;
+        VKCall(vkCreateSwapchainKHR(m_pDevice, &info, nullptr, &pHandle), "Failed to create Vulkan SwapChain.");
+    }
+
+    void VKAPI::DeleteSwapChain(VKSwapChain *pSwapChain)
+    {
+        ZoneScoped;
+
+        vkDestroySwapchainKHR(m_pDevice, pSwapChain->m_pHandle, nullptr);
+    }
+
+    void VKAPI::GetSwapChainImages(VkSwapchainKHR &pHandle, u32 bufferCount, VkImage *pImages)
+    {
+        ZoneScoped;
+
+        vkGetSwapchainImagesKHR(m_pDevice, pHandle, &bufferCount, pImages);
+    }
+
+    void VKAPI::ResizeSwapChain(u32 width, u32 height)
+    {
+        ZoneScoped;
+
+        WaitForDevice();
+
+        m_SwapChain.m_Width = width;
+        m_SwapChain.m_Height = height;
+
+        m_SwapChain.DestroyHandle(this);
+        m_SwapChain.CreateHandle(this);
+        m_SwapChain.CreateBackBuffers(this);
+    }
+
     void VKAPI::Frame()
     {
         ZoneScoped;
@@ -590,8 +627,7 @@ namespace lr::Graphics
 
         m_DirectQueue.SetSemaphoreStage(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
 
-        EndCommandList(GetCurrentCommandList());
-        ExecuteCommandQueue();
+        PresentCommandQueue();
 
         VkPresentInfoKHR presentInfo = {};
         presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -610,8 +646,13 @@ namespace lr::Graphics
         // We cannot predict the next image index
         m_SwapChain.NextFrame();
         // m_SwapChain.m_CurrentBuffer = imageIndex;
+    }
 
-        BeginCommandList(GetCurrentCommandList());
+    void VKAPI::WaitForDevice()
+    {
+        ZoneScoped;
+
+        vkDeviceWaitIdle(m_pDevice);
     }
 
     VkShaderModule VKAPI::CreateShaderModule(BufferReadStream &buf)
@@ -630,27 +671,48 @@ namespace lr::Graphics
         return pHandle;
     }
 
+    VkShaderModule VKAPI::CreateShaderModule(eastl::string_view path)
+    {
+        ZoneScoped;
+
+        FileStream fs(path, false);
+        void *pData = fs.ReadAll<void>();
+        fs.Close();
+
+        BufferReadStream buf(pData, fs.Size());
+        VkShaderModule pModule = CreateShaderModule(buf);
+        free(pData);
+
+        return pModule;
+    }
+
+    void VKAPI::DeleteShaderModule(VkShaderModule pShader)
+    {
+        ZoneScoped;
+
+        vkDestroyShaderModule(m_pDevice, pShader, nullptr);
+    }
+
     void VKAPI::CreateDescriptorSetLayout(VKDescriptorSet *pSet, VKDescriptorSetDesc *pDesc)
     {
         ZoneScoped;
 
         VkDescriptorSetLayoutBinding pBindings[8];
 
-        u32 idx = 0;
-        for (auto &element : pDesc->Bindings)
+        for (u32 i = 0; i < pDesc->BindingCount; i++)
         {
-            pBindings[idx].binding = element.BindingID;
-            pBindings[idx].descriptorType = ToVulkanDescriptorType(element.Type);
-            pBindings[idx].stageFlags = element.ShaderStageFlags;
-            pBindings[idx].descriptorCount = element.ArraySize;
+            VKDescriptorBindingDesc &element = pDesc->pBindings[i];
 
-            idx++;
+            pBindings[i].binding = element.BindingID;
+            pBindings[i].descriptorType = ToVulkanDescriptorType(element.Type);
+            pBindings[i].stageFlags = element.ShaderStageFlags;
+            pBindings[i].descriptorCount = element.ArraySize;
         }
 
         // First we need layout info
         VkDescriptorSetLayoutCreateInfo layoutCreateInfo = {};
         layoutCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        layoutCreateInfo.bindingCount = idx;
+        layoutCreateInfo.bindingCount = pDesc->BindingCount;
         layoutCreateInfo.pBindings = pBindings;
 
         vkCreateDescriptorSetLayout(m_pDevice, &layoutCreateInfo, nullptr, &pSet->pSetLayoutHandle);
@@ -664,30 +726,32 @@ namespace lr::Graphics
 
         vkAllocateDescriptorSets(m_pDevice, &allocateCreateInfo, &pSet->pHandle);
 
+        pSet->BindingCount = pDesc->BindingCount;
+
         /// ---------------------------------------------------------- ///
 
         VkWriteDescriptorSet pWriteSets[8];
         VkDescriptorBufferInfo pBufferInfos[8];
 
-        idx = 0;
-        for (auto &element : pDesc->Bindings)
+        for (u32 i = 0; i < pDesc->BindingCount; i++)
         {
-            pBufferInfos[idx].buffer = element.pBuffer->m_pHandle;
-            pBufferInfos[idx].offset = element.pBuffer->m_DataOffset;
-            pBufferInfos[idx].range = element.pBuffer->m_DataSize;
+            VKDescriptorBindingDesc &element = pDesc->pBindings[i];
 
-            pWriteSets[idx].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            pWriteSets[idx].pNext = nullptr;
-            pWriteSets[idx].dstSet = pSet->pHandle;
-            pWriteSets[idx].dstBinding = idx;
-            pWriteSets[idx].descriptorCount = element.ArraySize;
-            pWriteSets[idx].descriptorType = ToVulkanDescriptorType(element.Type);
-            pWriteSets[idx].pBufferInfo = &pBufferInfos[idx];
+            pBufferInfos[i].buffer = element.pBuffer->m_pHandle;
+            pBufferInfos[i].offset = 0;
+            pBufferInfos[i].range = element.pBuffer->m_DataSize;
 
-            idx++;
+            pWriteSets[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            pWriteSets[i].pNext = nullptr;
+            pWriteSets[i].dstSet = pSet->pHandle;
+            pWriteSets[i].dstBinding = i;
+            pWriteSets[i].dstArrayElement = 0;
+            pWriteSets[i].descriptorCount = element.ArraySize;
+            pWriteSets[i].descriptorType = ToVulkanDescriptorType(element.Type);
+            pWriteSets[i].pBufferInfo = &pBufferInfos[i];
         }
 
-        vkUpdateDescriptorSets(m_pDevice, idx, pWriteSets, 0, nullptr);
+        vkUpdateDescriptorSets(m_pDevice, pDesc->BindingCount, pWriteSets, 0, nullptr);
     }
 
     VkDescriptorPool VKAPI::CreateDescriptorPool(const std::initializer_list<VKDescriptorBindingDesc> &layouts)
@@ -719,70 +783,34 @@ namespace lr::Graphics
         return pHandle;
     }
 
-    u32 VKAPI::GetMemoryTypeIndex(u32 setBits, VkMemoryPropertyFlags propFlags)
+    void VKAPI::CreateBuffer(VKBuffer *pHandle, BufferDesc *pDesc, BufferData *pData)
     {
         ZoneScoped;
 
-        for (u32 i = 0; i < m_MemoryProps.memoryTypeCount; i++)
-        {
-            if ((setBits >> i) && ((m_MemoryProps.memoryTypes[i].propertyFlags & propFlags) == propFlags))
-                return i;
-        }
+        VkBuffer &pBuf = pHandle->m_pHandle;
+        VkDeviceMemory &pMem = pHandle->m_pMemoryHandle;
 
-        LOG_ERROR("Memory type index is not found. Bits: {}.", setBits);
+        VkBufferCreateInfo createInfo = {};
+        createInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+        createInfo.size = pData->DataLen;
+        createInfo.usage = ToVulkanBufferUsage(pDesc->UsageFlags);
 
-        return -1;
+        vkCreateBuffer(m_pDevice, &createInfo, nullptr, &pBuf);
+
+        pHandle->m_Usage = pDesc->UsageFlags;
+        pHandle->m_Mappable = pDesc->Mappable;
+        pHandle->m_DataSize = pData->DataLen;
     }
 
-    void VKAPI::AllocateImageMemory(VKImage *pImage, AllocatorType allocatorType)
+    void VKAPI::DeleteBuffer(VKBuffer *pHandle)
     {
         ZoneScoped;
 
-        VkMemoryAllocateInfo allocInfo = {};
-        allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+        if (pHandle->m_pMemoryHandle)
+            FreeBufferMemory(pHandle);
 
-        VkMemoryRequirements memoryRequirements = {};
-        vkGetImageMemoryRequirements(m_pDevice, pImage->m_pHandle, &memoryRequirements);
-
-        pImage->m_RequiredDataSize = memoryRequirements.size;
-
-        switch (allocatorType)
-        {
-            case AllocatorType::None:
-            {
-                VkMemoryPropertyFlags memProps =
-                    VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-                    | (pImage->m_Mappable ? VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT : 0);
-
-                VkMemoryAllocateInfo memoryAllocInfo = {};
-                memoryAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-                memoryAllocInfo.allocationSize = memoryRequirements.size;
-                memoryAllocInfo.memoryTypeIndex = GetMemoryTypeIndex(memoryRequirements.memoryTypeBits, memProps);
-
-                vkAllocateMemory(m_pDevice, &memoryAllocInfo, nullptr, &pImage->m_pMemoryHandle);
-
-                break;
-            }
-
-            case AllocatorType::Linear:
-            {
-                pImage->m_DataOffset = m_BufferAlloc_Linear.Allocator.Allocate(0, pImage->m_RequiredDataSize);
-                pImage->m_pMemoryHandle = m_BufferAlloc_Linear.Buffer.m_pMemoryHandle;
-
-                break;
-            }
-
-            case AllocatorType::TLSF:
-            {
-                Memory::TLSFBlock *pBlock = m_ImageAlloc_TLSF.Allocator.Allocate(pImage->m_RequiredDataSize);
-                pImage->m_pAllocatorData = pBlock;
-                pImage->m_DataOffset = pBlock->Offset;
-
-                pImage->m_pMemoryHandle = m_ImageAlloc_TLSF.Buffer.m_pMemoryHandle;
-
-                break;
-            }
-        }
+        if (pHandle->m_pHandle)
+            vkDestroyBuffer(m_pDevice, pHandle->m_pHandle, nullptr);
     }
 
     void VKAPI::AllocateBufferMemory(VKBuffer *pBuffer, AllocatorType allocatorType)
@@ -798,9 +826,8 @@ namespace lr::Graphics
         {
             case AllocatorType::None:
             {
-                VkMemoryPropertyFlags memProps =
-                    VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-                    | (pBuffer->m_Mappable ? VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT : 0);
+                VkMemoryPropertyFlags memProps = (pBuffer->m_Mappable ? VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+                                                                      : VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
                 VkMemoryAllocateInfo memoryAllocInfo = {};
                 memoryAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
@@ -812,43 +839,54 @@ namespace lr::Graphics
                 break;
             }
 
-            case AllocatorType::Linear:
+            case AllocatorType::Descriptor:
             {
-                pBuffer->m_DataOffset = m_BufferAlloc_Linear.Allocator.Allocate(0, pBuffer->m_RequiredDataSize);
-                pBuffer->m_pMemoryHandle = m_BufferAlloc_Linear.Buffer.m_pMemoryHandle;
+                pBuffer->m_DataOffset = m_MADescriptor.Allocator.Allocate(0, pBuffer->m_RequiredDataSize, memoryRequirements.alignment);
+                pBuffer->m_pMemoryHandle = m_MADescriptor.Buffer.m_pMemoryHandle;
 
                 break;
             }
 
-            case AllocatorType::TLSF:
+            case AllocatorType::BufferLinear:
             {
-                Memory::TLSFBlock *pBlock = m_BufferAlloc_TLSF.Allocator.Allocate(pBuffer->m_RequiredDataSize);
+                pBuffer->m_DataOffset = m_MABufferLinear.Allocator.Allocate(0, pBuffer->m_RequiredDataSize, memoryRequirements.alignment);
+                pBuffer->m_pMemoryHandle = m_MABufferLinear.Buffer.m_pMemoryHandle;
+
+                break;
+            }
+
+            case AllocatorType::BufferTLSF:
+            {
+                Memory::TLSFBlock *pBlock = nullptr;
+                u32 offset = m_MABufferTLSF.Allocator.Allocate(pBuffer->m_RequiredDataSize, memoryRequirements.alignment, pBlock);
+
+                pBuffer->m_DataOffset = offset;
                 pBuffer->m_pAllocatorData = pBlock;
-                pBuffer->m_DataOffset = pBlock->Offset;
 
-                pBuffer->m_pMemoryHandle = m_BufferAlloc_TLSF.Buffer.m_pMemoryHandle;
+                pBuffer->m_pMemoryHandle = m_MABufferTLSF.Buffer.m_pMemoryHandle;
 
                 break;
             }
+
+            default: break;
         }
     }
 
-    void VKAPI::CreateBuffer(VKBuffer *pHandle, BufferDesc *pDesc, BufferData *pData)
+    void VKAPI::FreeBufferMemory(VKBuffer *pBuffer)
     {
         ZoneScoped;
 
-        VkBuffer &pBuf = pHandle->m_pHandle;
-        VkDeviceMemory &pMem = pHandle->m_pMemoryHandle;
+        if (pBuffer->m_AllocatorType == AllocatorType::BufferTLSF)
+        {
+            Memory::TLSFBlock *pBlock = (Memory::TLSFBlock *)pBuffer->m_pAllocatorData;
+            assert(pBlock != nullptr);
 
-        VkBufferCreateInfo createInfo = {};
-        createInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-        createInfo.size = pData->DataLen;
-        createInfo.usage = ToVulkanBufferUsage(pDesc->UsageFlags);
-
-        vkCreateBuffer(m_pDevice, &createInfo, nullptr, &pBuf);
-
-        pHandle->m_Mappable = pDesc->Mappable;
-        pHandle->m_DataSize = pData->DataLen;
+            m_MABufferTLSF.Allocator.Free(pBlock);
+        }
+        else if (pBuffer->m_AllocatorType == AllocatorType::None)
+        {
+            vkFreeMemory(m_pDevice, pBuffer->m_pMemoryHandle, nullptr);
+        }
     }
 
     void VKAPI::BindMemory(VKBuffer *pBuffer)
@@ -856,17 +894,6 @@ namespace lr::Graphics
         ZoneScoped;
 
         vkBindBufferMemory(m_pDevice, pBuffer->m_pHandle, pBuffer->m_pMemoryHandle, pBuffer->m_DataOffset);
-    }
-
-    void VKAPI::DeleteBuffer(VKBuffer *pHandle)
-    {
-        ZoneScoped;
-
-        if (pHandle->m_pMemoryHandle)
-            vkFreeMemory(m_pDevice, pHandle->m_pMemoryHandle, nullptr);
-
-        if (pHandle->m_pHandle)
-            vkDestroyBuffer(m_pDevice, pHandle->m_pHandle, nullptr);
     }
 
     void VKAPI::MapMemory(VKBuffer *pBuffer, void *&pData)
@@ -881,6 +908,28 @@ namespace lr::Graphics
         ZoneScoped;
 
         vkUnmapMemory(m_pDevice, pBuffer->m_pMemoryHandle);
+    }
+
+    void VKAPI::TransferBufferMemory(VKCommandList *pList, VKBuffer *pSrc, VKBuffer *pDst, AllocatorType dstAllocator)
+    {
+        ZoneScoped;
+
+        // TODO: Currently this technique uses present queue, move it to transfer queue
+
+        BufferDesc dstDesc = {};
+        BufferData dstData = {};
+
+        dstDesc.Mappable = false;
+        dstDesc.UsageFlags = pSrc->m_Usage | BufferUsage::CopyDst;
+        dstDesc.UsageFlags &= ~BufferUsage::CopySrc;
+
+        dstData.DataLen = pSrc->m_DataSize;
+
+        CreateBuffer(pDst, &dstDesc, &dstData);
+        AllocateBufferMemory(pDst, dstAllocator);
+        BindMemory(pDst);
+
+        pList->CopyBuffer(pSrc, pDst, pSrc->m_DataSize);
     }
 
     void VKAPI::CreateImage(VKImage *pHandle, ImageDesc *pDesc, ImageData *pData)
@@ -917,7 +966,20 @@ namespace lr::Graphics
 
         pHandle->m_Type = pDesc->Type;
         pHandle->m_Format = pDesc->Format;
-        pHandle->m_Mappable = pDesc->Mappable;
+    }
+
+    void VKAPI::DeleteImage(VKImage *pImage)
+    {
+        ZoneScoped;
+
+        if (pImage->m_pMemoryHandle)
+            FreeImageMemory(pImage);
+
+        if (pImage->m_pViewHandle)
+            vkDestroyImageView(m_pDevice, pImage->m_pViewHandle, nullptr);
+
+        if (pImage->m_pHandle)
+            vkDestroyImage(m_pDevice, pImage->m_pHandle, nullptr);
     }
 
     void VKAPI::CreateImageView(VKImage *pHandle)
@@ -982,22 +1044,78 @@ namespace lr::Graphics
         return pHandle;
     }
 
+    void VKAPI::DeleteFramebuffer(VkFramebuffer pFramebuffer)
+    {
+        ZoneScoped;
+
+        vkDestroyFramebuffer(m_pDevice, pFramebuffer, nullptr);
+    }
+
+    void VKAPI::AllocateImageMemory(VKImage *pImage, AllocatorType allocatorType)
+    {
+        ZoneScoped;
+
+        VkMemoryAllocateInfo allocInfo = {};
+        allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+
+        VkMemoryRequirements memoryRequirements = {};
+        vkGetImageMemoryRequirements(m_pDevice, pImage->m_pHandle, &memoryRequirements);
+
+        pImage->m_RequiredDataSize = memoryRequirements.size;
+
+        switch (allocatorType)
+        {
+            case AllocatorType::None:
+            {
+                VkMemoryAllocateInfo memoryAllocInfo = {};
+                memoryAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+                memoryAllocInfo.allocationSize = memoryRequirements.size;
+                memoryAllocInfo.memoryTypeIndex = GetMemoryTypeIndex(memoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+                vkAllocateMemory(m_pDevice, &memoryAllocInfo, nullptr, &pImage->m_pMemoryHandle);
+
+                break;
+            }
+
+            case AllocatorType::ImageTLSF:
+            {
+                Memory::TLSFBlock *pBlock = nullptr;
+                u32 offset = m_MABufferTLSF.Allocator.Allocate(pImage->m_RequiredDataSize, memoryRequirements.alignment, pBlock);
+
+                pImage->m_pAllocatorData = pBlock;
+                pImage->m_DataOffset = offset;
+
+                pImage->m_pMemoryHandle = m_MAImageTLSF.Buffer.m_pMemoryHandle;
+
+                break;
+            }
+
+            default: break;
+        }
+    }
+
+    void VKAPI::FreeImageMemory(VKImage *pImage)
+    {
+        ZoneScoped;
+
+        if (pImage->m_AllocatorType == AllocatorType::ImageTLSF)
+        {
+            Memory::TLSFBlock *pBlock = (Memory::TLSFBlock *)pImage->m_pAllocatorData;
+            assert(pBlock != nullptr);
+
+            m_MAImageTLSF.Allocator.Free(pBlock);
+        }
+        else if (pImage->m_AllocatorType == AllocatorType::None)
+        {
+            vkFreeMemory(m_pDevice, pImage->m_pMemoryHandle, nullptr);
+        }
+    }
+
     void VKAPI::BindMemory(VKImage *pImage)
     {
         ZoneScoped;
 
         vkBindImageMemory(m_pDevice, pImage->m_pHandle, pImage->m_pMemoryHandle, 0);
-    }
-
-    void VKAPI::DeleteImage(VKImage *pImage)
-    {
-        ZoneScoped;
-
-        if (pImage->m_pViewHandle)
-            vkDestroyImageView(m_pDevice, pImage->m_pViewHandle, nullptr);
-
-        if (pImage->m_pHandle)
-            vkDestroyImage(m_pDevice, pImage->m_pHandle, nullptr);
     }
 
     bool VKAPI::IsFormatSupported(VkFormat format, VkColorSpaceKHR *pColorSpaceOut)
@@ -1044,6 +1162,21 @@ namespace lr::Graphics
         vkGetPhysicalDeviceSurfaceCapabilitiesKHR(m_pPhysicalDevice, m_pSurface, &capabilitiesOut);
     }
 
+    u32 VKAPI::GetMemoryTypeIndex(u32 setBits, VkMemoryPropertyFlags propFlags)
+    {
+        ZoneScoped;
+
+        for (u32 i = 0; i < m_MemoryProps.memoryTypeCount; i++)
+        {
+            if ((setBits >> i) && ((m_MemoryProps.memoryTypes[i].propertyFlags & propFlags) == propFlags))
+                return i;
+        }
+
+        LOG_ERROR("Memory type index is not found. Bits: {}.", setBits);
+
+        return -1;
+    }
+
     bool VKAPI::LoadVulkan()
     {
         m_VulkanLib = LoadLibraryA("vulkan-1.dll");
@@ -1074,7 +1207,7 @@ namespace lr::Graphics
 
         VkResult vkResult;
 
-#ifdef _DEBUG
+#if _DEBUG
 
         /// Setup Layers
         u32 layerCount = 0;
@@ -1134,7 +1267,7 @@ namespace lr::Graphics
         VkExtensionProperties *ppExtensionProp = new VkExtensionProperties[instanceExtensionCount];
         vkEnumerateInstanceExtensionProperties(nullptr, &instanceExtensionCount, ppExtensionProp);
 
-#ifdef _DEBUG
+#if _DEBUG
         constexpr u32 debugExtensionCount = 2;
 #else
         constexpr u32 debugExtensionCount = 0;
@@ -1145,9 +1278,11 @@ namespace lr::Graphics
             "VK_KHR_get_physical_device_properties2",
             "VK_KHR_win32_surface",
 
+#if _DEBUG
             //! Debug extensions, always put it to bottom
             "VK_EXT_debug_utils",
             "VK_EXT_debug_report",
+#endif
         };
 
         for (auto &pExtensionName : ppRequiredExtensions)
@@ -1193,7 +1328,7 @@ namespace lr::Graphics
         createInfo.enabledExtensionCount = ppRequiredExtensions.count;
         createInfo.ppEnabledExtensionNames = ppRequiredExtensions.data();
 
-#ifdef _DEBUG
+#if _DEBUG
         createInfo.enabledLayerCount = ppRequiredLayers.count;
         createInfo.ppEnabledLayerNames = ppRequiredLayers.data();
 #endif
@@ -1412,7 +1547,37 @@ namespace lr::Graphics
         return true;
     }
 
-    /// ---------------- Type Conversion LUTs ---------------- //
+    i64 VKAPI::TFFenceWait(void *pData)
+    {
+        VKAPI *pAPI = (VKAPI *)pData;
+        CommandListPool &commandPool = pAPI->m_CommandListPool;
+        auto &directFenceMask = commandPool.m_DirectFenceMask;
+
+        while (true)
+        {
+            u32 mask = directFenceMask.load(eastl::memory_order_acquire);
+
+            if (mask == 0)
+                continue;
+
+            u32 index = Memory::GetLSB(mask);
+
+            VKCommandList *pList = &commandPool.m_DirectLists[index];
+
+            if (vkGetFenceStatus(pAPI->m_pDevice, pList->m_pFence) == VK_SUCCESS)
+            {
+                vkResetFences(pAPI->m_pDevice, 1, &pList->m_pFence);
+                commandPool.Discard(pList);
+
+                mask ^= 1 << index;
+                directFenceMask.store(mask, eastl::memory_order_release);
+            }
+        }
+
+        return 1;
+    }
+
+    /// ---------------- Type Conversion LUTs ---------------- ///
 
     constexpr VkFormat kFormatLUT[] = {
         VK_FORMAT_UNDEFINED,             // Unknown
@@ -1432,10 +1597,10 @@ namespace lr::Graphics
         VK_FORMAT_R32_SFLOAT,               // Float
         VK_FORMAT_R32G32_SFLOAT,            // Vec2
         VK_FORMAT_R32G32B32_SFLOAT,         // Vec3
-        VK_FORMAT_B10G11R11_UFLOAT_PACK32,  // Vec3PK
+        VK_FORMAT_B10G11R11_UFLOAT_PACK32,  // Vec3_Packed
         VK_FORMAT_R32G32B32A32_SFLOAT,      // Vec4
         VK_FORMAT_R32_UINT,                 // UInt
-
+        VK_FORMAT_R8G8B8A8_UNORM,           // Vec4U_Packed
     };
 
     constexpr VkPrimitiveTopology kPrimitiveLUT[] = {

@@ -16,7 +16,7 @@ namespace lr::Graphics
     {
         ZoneScoped;
 
-        if (m_BatchedListsCount == kMaxCommandListPerBatch)
+        if (m_BatchedListsCount == APIConfig::kMaxCommandListPerBatch)
         {
             LOG_TRACE("Trying to push a list into a full batch list.");
 

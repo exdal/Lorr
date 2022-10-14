@@ -167,6 +167,7 @@ namespace lr
 
                 break;
             }
+
             case WM_EXITSIZEMOVE:
             {
                 RECT rc;
@@ -177,6 +178,7 @@ namespace lr
 
                 break;
             }
+            
             case WM_SIZE:
             {
                 if (pWindow->m_SizeEnded && wParam != SIZE_MINIMIZED)

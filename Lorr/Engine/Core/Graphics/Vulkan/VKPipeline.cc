@@ -186,12 +186,20 @@ namespace lr::Graphics
 
         m_pColorBlendAttachments[attachmentID].colorWriteMask = mask;
         m_pColorBlendAttachments[attachmentID].blendEnable = enabled;
+
+        m_pColorBlendAttachments[attachmentID].srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+        m_pColorBlendAttachments[attachmentID].dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+        m_pColorBlendAttachments[attachmentID].colorBlendOp = VK_BLEND_OP_ADD;
+        m_pColorBlendAttachments[attachmentID].srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+        m_pColorBlendAttachments[attachmentID].dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+        m_pColorBlendAttachments[attachmentID].alphaBlendOp = VK_BLEND_OP_ADD;
     }
 
     void VKGraphicsPipelineBuildInfo::SetDynamicState(const std::initializer_list<VkDynamicState> &dynamicState)
     {
         ZoneScoped;
 
+        m_DynamicState.dynamicStateCount = dynamicState.size();
         memcpy(m_DynamicStates, dynamicState.begin(), dynamicState.size() * sizeof(VkDynamicState));
     }
 

@@ -4,24 +4,20 @@
 
 #pragma once
 
-#include "Window/BaseWindow.hh"
+#include "Core/Window/BaseWindow.hh"
 
 namespace lr
 {
-    class Win32Window : public BaseWindow
+    struct Win32Window : public BaseWindow
     {
-    public:
         void SetCursor(Cursor cursor) override;
         void Poll() override;
 
-    protected:
         void NativeInit(const WindowDesc &desc) override;
         void GetDisplays() override;
 
-    private:
         static LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
-    private:
         HINSTANCE m_Instance = 0;
     };
 

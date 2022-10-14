@@ -16,6 +16,35 @@ namespace lr::Graphics
         m_pFence = pFence;
     }
 
+    void VKCommandList::SetViewport(u32 id, u32 width, u32 height, f32 minDepth, f32 maxDepth)
+    {
+        ZoneScoped;
+
+        VkViewport vp;
+        vp.width = width;
+        vp.height = height;
+        vp.x = 0;
+        vp.y = 0;
+        vp.minDepth = minDepth;
+        vp.maxDepth = maxDepth;
+
+        vkCmdSetViewport(m_pHandle, 0, 1, &vp);
+    }
+
+    void VKCommandList::SetScissor(u32 id, u32 x, u32 y, u32 w, u32 h)
+    {
+        ZoneScoped;
+
+        VkRect2D sc;
+
+        sc.offset.x = x;
+        sc.offset.y = y;
+        sc.extent.width = w;
+        sc.extent.height = h;
+
+        vkCmdSetScissor(m_pHandle, id, 1, &sc);
+    }
+
     void VKCommandList::SetVertexBuffer(VKBuffer *pBuffer)
     {
         ZoneScoped;
@@ -37,7 +66,7 @@ namespace lr::Graphics
 
         VkBufferCopy copyRegion = {};
         copyRegion.size = size;
-        
+
         vkCmdCopyBuffer(m_pHandle, pSource->m_pHandle, pDest->m_pHandle, 1, &copyRegion);
     }
 
@@ -66,8 +95,7 @@ namespace lr::Graphics
         VkFramebuffer pFrameBuffer = nullptr;
 
         // TODO: Clear colors per attachemtns
-        VkClearValue clearColor = { 0.0, 0.0, 0.0, 1.0 };
-        VkClearValue depthColor = {};
+        VkClearValue pClearValues[8];
 
         VkExtent2D renderAreaExt = { beginInfo.RenderArea.z, beginInfo.RenderArea.w };
 
@@ -75,17 +103,28 @@ namespace lr::Graphics
         if (!pRenderPass)
         {
             pRenderPass = swapChain.m_pRenderPass;
-            pFrameBuffer = pCurrentFrame->pFrameBuffer;
             renderAreaExt.width = swapChain.m_Width;
             renderAreaExt.height = swapChain.m_Height;
         }
 
-        // Set clear colors
-        memcpy(clearColor.color.float32, &beginInfo.pClearValues[0].RenderTargetColor, sizeof(XMFLOAT4));
-        depthColor.depthStencil.depth = beginInfo.pClearValues[1].DepthStencil.Depth;
-        depthColor.depthStencil.stencil = beginInfo.pClearValues[1].DepthStencil.Stencil;
+        if (!pFrameBuffer)
+            pFrameBuffer = pCurrentFrame->pFrameBuffer;
 
-        VkClearValue pClearValues[2] = { clearColor, depthColor };
+        // Set clear colors
+        for (u32 i = 0; i < beginInfo.ClearValueCount; i++)
+        {
+            ClearValue &currentClearColor = beginInfo.pClearValues[i];
+
+            if (!currentClearColor.IsDepth)
+            {
+                memcpy(pClearValues[i].color.float32, &currentClearColor.RenderTargetColor, sizeof(XMFLOAT4));
+            }
+            else
+            {
+                pClearValues[i].depthStencil.depth = currentClearColor.DepthStencilColor.Depth;
+                pClearValues[i].depthStencil.stencil = currentClearColor.DepthStencilColor.Stencil;
+            }
+        }
 
         // Actual info
         VkRenderPassBeginInfo renderPassInfo = {};
@@ -98,7 +137,7 @@ namespace lr::Graphics
 
         renderPassInfo.renderArea.extent = renderAreaExt;
 
-        renderPassInfo.clearValueCount = 2;
+        renderPassInfo.clearValueCount = beginInfo.ClearValueCount;
         renderPassInfo.pClearValues = pClearValues;
 
         vkCmdBeginRenderPass(m_pHandle, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
@@ -152,24 +191,24 @@ namespace lr::Graphics
         u32 setBitPosition = 0;
 
         auto GetListFromMask = [&](auto &&maskAtomic, auto &&listArray) {
-            // Load mask
             auto mask = maskAtomic.load(eastl::memory_order_acquire);
 
-            // Get available bit and return
-            setBitPosition = log2(mask & -mask);
-
-            // Set that bit to 0 and store, so we make it "in use"
-            auto newMask = mask ^ (1 << setBitPosition);
-
-            // Additional checks
             if (mask == 0)
             {
-                LOG_TRACE("All lists are in use, we have to wait for one to become available.");
-                return;
+                // LOG_TRACE("All lists are in use, we have to wait for one to become available.");
+
+                while (!mask)
+                {
+                    mask = maskAtomic.load(eastl::memory_order_acquire);
+                }
             }
 
-            while (!maskAtomic.compare_exchange_weak(mask, newMask, eastl::memory_order_release))
-                ;
+            setBitPosition = Memory::GetLSB(mask);
+            auto newMask = mask ^ (1 << setBitPosition);
+            maskAtomic.store(newMask, eastl::memory_order_release);
+
+            // while (!maskAtomic.compare_exchange_weak(mask, newMask, eastl::memory_order_release))
+            //     ;
 
             pList = &listArray[setBitPosition];
         };
@@ -186,6 +225,21 @@ namespace lr::Graphics
         return pList;
     }
 
+    void CommandListPool::SetExecuteState(VKCommandList *pList)
+    {
+        ZoneScoped;
+
+        for (u32 i = 0; i < m_DirectLists.count; i++)
+        {
+            if (&m_DirectLists[i] == pList)
+            {
+                u32 fenceMask = m_DirectFenceMask.load(eastl::memory_order_acquire);
+                fenceMask |= 1 << Memory::GetLSB(fenceMask);
+                m_DirectFenceMask.store(fenceMask, eastl::memory_order_release);
+            }
+        }
+    }
+
     void CommandListPool::Discard(VKCommandList *pList)
     {
         ZoneScoped;
@@ -196,11 +250,13 @@ namespace lr::Graphics
                 if (&listArray[i] == pList)
                 {
                     // We really don't care if the bit is set before, it shouldn't happen anyway
+
                     auto mask = maskAtomic.load(eastl::memory_order_acquire);
                     auto newMask = mask | (1 << i);
+                    maskAtomic.store(newMask, eastl::memory_order_release);
 
-                    while (!maskAtomic.compare_exchange_weak(mask, newMask, eastl::memory_order_release))
-                        ;
+                    // while (!maskAtomic.compare_exchange_weak(mask, newMask, eastl::memory_order_release))
+                    //     ;
 
                     return;
                 }

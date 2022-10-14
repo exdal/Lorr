@@ -1,6 +1,6 @@
 #include "MemoryAllocator.hh"
 
-#include "IO/Memory.hh"
+#include "Memory.hh"
 
 namespace lr::Memory
 {
@@ -14,20 +14,22 @@ namespace lr::Memory
         return m_PoolCount++;
     }
 
-    u64 LinearMemoryAllocator::Allocate(u32 poolIndex, u64 size)
+    u64 LinearMemoryAllocator::Allocate(u32 poolIndex, u64 size, u32 alignment)
     {
         ZoneScoped;
 
         Pool &pool = m_pPools[poolIndex];
 
-        if (pool.m_Offset + size > pool.m_Size)
+        u32 alignedSize = (size + alignment - 1) & ~(alignment - 1);
+
+        if (pool.m_Offset + alignedSize > pool.m_Size)
         {
-            LOG_ERROR("Linear memory allocator reached it's limit. Allocated {} and requested {}.", pool.m_Size, size);
+            LOG_ERROR("Linear memory allocator reached it's limit. Allocated {} and requested {}.", pool.m_Size, alignedSize);
             return -1;
         }
 
         u64 off = pool.m_Offset;
-        pool.m_Offset += size;
+        pool.m_Offset += alignedSize;
 
         return off;
     }
@@ -65,13 +67,13 @@ namespace lr::Memory
         AddFreeBlock(pHeadBlock);
     }
 
-    TLSFBlock *TLSFMemoryAllocator::Allocate(u32 size)
+    u32 TLSFMemoryAllocator::Allocate(u32 size, u32 alignment, TLSFBlock *&pBlockOut)
     {
         ZoneScoped;
 
         TLSFBlock *pAvailableBlock = nullptr;
 
-        u32 alignedSize = (size + ALIGN_SIZE_MASK) & ~ALIGN_SIZE_MASK;
+        u32 alignedSize = (size + ALIGN_SIZE_MASK - 1) & ~(ALIGN_SIZE_MASK - 1);
 
         /// Find free and closest block available
         TLSFBlock *pBlock = FindFreeBlock(alignedSize);
@@ -90,13 +92,16 @@ namespace lr::Memory
                 AddFreeBlock(pSplitBlock);
             }
 
-            return pBlock;
+            pBlockOut = pBlockOut;
+            
+            u32 alignedOffset = (pBlock->Offset + alignment - 1) & ~(alignment - 1);
+            return alignedOffset;
         }
 
-        return nullptr;
+        return 0;
     }
 
-    void TLSFMemoryAllocator::Deallocate(TLSFBlock *pBlock)
+    void TLSFMemoryAllocator::Free(TLSFBlock *pBlock)
     {
         ZoneScoped;
 

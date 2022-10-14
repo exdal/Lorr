@@ -1,5 +1,7 @@
 #include "BaseWindow.hh"
 
+#include "Engine.hh"
+
 namespace lr
 {
     void BaseWindow::Init(const WindowDesc &desc)
@@ -28,6 +30,11 @@ namespace lr
     void BaseWindow::OnSizeChanged(u32 width, u32 height)
     {
         LOG_TRACE("Window size changed to W: {}, H: {}.", width, height);
+
+        m_Width = width;
+        m_Height = height;
+
+        GetEngine()->OnWindowResize(width, height);
     }
 
 }  // namespace lr

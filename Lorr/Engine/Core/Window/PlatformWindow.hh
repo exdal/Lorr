@@ -7,6 +7,6 @@
 /// Window Handle is defined in BaseWindow.hh
 
 #if _WIN32
-#include "Win32/Win32Window.hh"
+#include "Core/Window/Win32/Win32Window.hh"
 using PlatformWindow = lr::Win32Window;
 #endif

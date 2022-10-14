@@ -27,7 +27,7 @@ namespace lr::Graphics
 
         void SetPosition(const XMFLOAT3 &position);
         void SetSize(const XMFLOAT2 &viewSize);
-        void SetDirectionAngle(XMFLOAT2 angle, f32 sensitivity);
+        void SetDirectionAngle(XMFLOAT2 angle);
 
         void Update(f32 deltaTime, f32 movementSpeed);
 
@@ -47,6 +47,37 @@ namespace lr::Graphics
         f32 m_ZFar = 0.0;
 
         XMFLOAT2 m_DirectionAngle = {};
+    };
+
+    struct Camera2DDesc
+    {
+        XMFLOAT2 Position;
+        XMFLOAT2 ViewSize;
+
+        f32 ZNear = 0.0;
+        f32 ZFar = 0.0;
+    };
+
+    struct Camera2D
+    {
+        void Init(Camera2DDesc *pDesc);
+
+        void CalculateView();
+        void CalculateProjection();
+
+        void SetPosition(const XMFLOAT2 &position);
+        void SetSize(const XMFLOAT2 &viewSize);
+
+        void Update(f32 deltaTime, f32 movementSpeed);
+
+        XMMATRIX m_View = {};
+        XMMATRIX m_Projection = {};
+
+        XMVECTOR m_Position = {};
+        XMFLOAT2 m_ViewSize = {};
+
+        f32 m_ZNear = 0.0;
+        f32 m_ZFar = 0.0;
     };
 
 }  // namespace lr::Graphics

@@ -37,7 +37,6 @@
     _VK_DEFINE_FUNCTION(vkGetSwapchainImagesKHR);                   \
     _VK_DEFINE_FUNCTION(vkDestroyImage);                            \
     _VK_DEFINE_FUNCTION(vkDestroyImageView);                        \
-    _VK_DEFINE_FUNCTION(vkDestroyFramebuffer);                      \
     _VK_DEFINE_FUNCTION(vkCreateImage);                             \
     _VK_DEFINE_FUNCTION(vkCreateImageView);                         \
     _VK_DEFINE_FUNCTION(vkCreateFramebuffer);                       \
@@ -91,7 +90,17 @@
     _VK_DEFINE_FUNCTION(vkUnmapMemory);                             \
     _VK_DEFINE_FUNCTION(vkGetImageMemoryRequirements);              \
     _VK_DEFINE_FUNCTION(vkBindImageMemory);                         \
-    _VK_DEFINE_FUNCTION(vkUpdateDescriptorSets);
+    _VK_DEFINE_FUNCTION(vkUpdateDescriptorSets);                    \
+    _VK_DEFINE_FUNCTION(vkDestroyFramebuffer);                      \
+    _VK_DEFINE_FUNCTION(vkDestroyRenderPass);                       \
+    _VK_DEFINE_FUNCTION(vkDestroyFence);                            \
+    _VK_DEFINE_FUNCTION(vkDestroySemaphore);                        \
+    _VK_DEFINE_FUNCTION(vkDestroySwapchainKHR);                     \
+    _VK_DEFINE_FUNCTION(vkDeviceWaitIdle);                          \
+    _VK_DEFINE_FUNCTION(vkCmdSetViewport);                          \
+    _VK_DEFINE_FUNCTION(vkCmdSetScissor);                           \
+    _VK_DEFINE_FUNCTION(vkDestroyShaderModule);                     \
+    _VK_DEFINE_FUNCTION(vkGetFenceStatus);
 
 _VK_IMPORT_SYMBOLS
 

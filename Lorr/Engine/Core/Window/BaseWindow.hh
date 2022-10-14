@@ -68,14 +68,13 @@ namespace lr
     };
 
 #if _WIN32
-    class Win32Window;
+    struct Win32Window;
     using WindowHandle = HWND;
     using PlatformWindow = Win32Window;
 #endif
 
-    class BaseWindow
+    struct BaseWindow
     {
-    public:
         void Init(const WindowDesc &desc);
         virtual void Poll() = 0;
 
@@ -86,35 +85,9 @@ namespace lr
         bool ShouldClose();
         void OnSizeChanged(u32 width, u32 height);
 
-    public:
-        WindowHandle &GetHandle()
-        {
-            return m_Handle;
-        }
-
-        u32 GetWidth() const
-        {
-            return m_Width;
-        }
-
-        u32 GetHeight() const
-        {
-            return m_Height;
-        }
-
-        bool ShouldClose() const
-        {
-            return m_ShouldClose;
-        }
-
-        bool IsFullscreen() const
-        {
-            return m_IsFullscreen;
-        }
-
-        /// This should not be confused with InputManager::GetMousePos
-        /// This function gets coordinates of monitor space mouse
-        /// Meanwhile InputManager gets window space mouse coordinates
+        // This should not be confused with InputManager::GetMousePos
+        // This function gets coordinates of monitor space mouse
+        // Meanwhile InputManager gets window space mouse coordinates
         XMINT2 GetCursorPos()
         {
             ZoneScoped;
@@ -125,16 +98,9 @@ namespace lr
             return XMINT2(point->x, point->y);
         }
 
-        u32 GetUsingMonitor()
-        {
-            return m_UsingMonitor;
-        }
-
-    protected:
         virtual void NativeInit(const WindowDesc &desc) = 0;
         virtual void GetDisplays() = 0;
 
-    protected:
         WindowHandle m_Handle = nullptr;
 
         u32 m_Width = 0;

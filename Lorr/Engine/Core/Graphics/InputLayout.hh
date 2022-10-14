@@ -12,9 +12,10 @@ namespace lr::Graphics
         Float,
         Vec2,
         Vec3,
-        Vec3PK,
+        Vec3_Packed,
         Vec4,
         UInt,
+        Vec4U_Packed
     };
 
     static constexpr u32 VertexAttribSize(VertexAttribType type)
@@ -24,9 +25,10 @@ namespace lr::Graphics
             case VertexAttribType::Float: return sizeof(f32);
             case VertexAttribType::Vec2: return sizeof(XMFLOAT2);
             case VertexAttribType::Vec3: return sizeof(XMFLOAT3);
-            case VertexAttribType::Vec3PK: return sizeof(XMFLOAT3PK);
+            case VertexAttribType::Vec3_Packed: return sizeof(XMFLOAT3PK);
             case VertexAttribType::Vec4: return sizeof(XMVECTOR);
             case VertexAttribType::UInt: return sizeof(u32);
+            case VertexAttribType::Vec4U_Packed: return sizeof(u32);
             default: return 0;
         }
     }

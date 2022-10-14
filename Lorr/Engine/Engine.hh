@@ -4,11 +4,9 @@
 
 #pragma once
 
-#include "Window/PlatformWindow.hh"
-
-#include "Graphics/API/Vulkan/VKAPI.hh"
-
-#include "OS/ThreadPool.hh"
+#include "Core/Window/BaseWindow.hh"
+#include "Core/Graphics/Vulkan/VKAPI.hh"
+#include "Core/Graphics/Camera.hh"
 
 namespace lr
 {
@@ -21,13 +19,17 @@ namespace lr
     {
         void Init(ApplicationDesc &desc, WindowDesc &windowDesc);
 
+        /// EVENTS ///
+        void OnWindowResize(u32 width, u32 height);
+        
         void Run();
 
         PlatformWindow m_Window;
 
         Graphics::VKAPI *m_pAPI = nullptr;
 
-        ThreadPoolSPSC m_ThreadPoolSPSCAt;
+        Graphics::Camera3D m_Camera3D;
+        Graphics::Camera2D m_Camera2D;
     };
 
     extern Engine *GetEngine();

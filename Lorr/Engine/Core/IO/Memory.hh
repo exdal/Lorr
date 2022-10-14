@@ -83,9 +83,9 @@ namespace lr::Memory
         return (u8)log2(mask);
 #endif
 
-        assert(!"Uh oh");
+        // assert(!"Uh oh");
 
-        return ~0;
+        return 0;
     }
 
 }  // namespace lr::Memory

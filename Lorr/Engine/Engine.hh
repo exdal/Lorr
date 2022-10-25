@@ -4,9 +4,9 @@
 
 #pragma once
 
-#include "Core/Window/BaseWindow.hh"
-#include "Core/Graphics/Vulkan/VKAPI.hh"
+#include "Core/Graphics/RHI/Vulkan/VKAPI.hh"
 #include "Core/Graphics/Camera.hh"
+#include "Core/Window/BaseWindow.hh"
 
 namespace lr
 {

@@ -4,7 +4,7 @@
 #include "Core/IO/MemoryAllocator.hh"
 #include "Core/Utils/Timer.hh"
 
-#include "UI/ImGuiHandler.hh"
+#include "UI/ImGuiRenderer.hh"
 
 namespace lr
 {
@@ -13,7 +13,7 @@ namespace lr
     VKBuffer vertexBuffer;
     VKBuffer indexBuffer;
 
-    UI::ImGuiHandler imguiHandler;
+    UI::ImGuiRenderer imguiHandler;
 
     Memory::TLSFMemoryAllocator memoryAllocator;
 
@@ -29,11 +29,11 @@ namespace lr
         m_pAPI->Init(&m_Window, windowDesc.Width, windowDesc.Height, APIFlags::VSync);
 
         Camera3DDesc camera3DDesc;
-        camera3DDesc.Position = XMFLOAT3(0.0, 0.0, -5.0);
+        camera3DDesc.Position = XMFLOAT3(0.0, 0.0, -3.0);
         camera3DDesc.ViewSize = XMFLOAT2(windowDesc.Width, windowDesc.Height);
         camera3DDesc.ViewDirection = XMFLOAT3(0.0, 0.0, 1.0);
         camera3DDesc.UpDirection = XMFLOAT3(0.0, 1.0, 0.0);
-        camera3DDesc.FOV = 65.0;
+        camera3DDesc.FOV = 60.0;
         camera3DDesc.ZFar = 10000.0;
         camera3DDesc.ZNear = 0.1;
 
@@ -95,7 +95,7 @@ namespace lr
         m_pAPI->TransferBufferMemory(pList, &tempIndexBuffer, &indexBuffer, AllocatorType::BufferTLSF);
 
         m_pAPI->EndCommandList(pList);
-        m_pAPI->ExecuteCommandList(pList);
+        m_pAPI->ExecuteCommandList(pList, true);
 
         m_pAPI->DeleteBuffer(&tempVertexBuffer);
         m_pAPI->DeleteBuffer(&tempIndexBuffer);
@@ -125,48 +125,46 @@ namespace lr
             f32 deltaTime = timer.elapsed();
             timer.reset();
 
-            static f32 angleX = 0;
-            angleX += 45.0 * deltaTime;
-
-            m_Camera3D.SetDirectionAngle(XMFLOAT2(angleX, 0.0));
             m_Camera3D.Update(0, 25.0);
             m_Camera2D.Update(0, 25.0);
 
-            XMMATRIX mat3D = XMMatrixMultiply(m_Camera3D.m_View, m_Camera3D.m_Projection);
-            XMMATRIX mat2D = XMMatrixMultiply(m_Camera2D.m_View, m_Camera2D.m_Projection);
-            stateMan.UpdateCamera3DData(mat3D);
-            stateMan.UpdateCamera2DData(mat2D);
+            // XMMATRIX mat3D = XMMatrixMultiply(m_Camera3D.m_View, m_Camera3D.m_Projection);
+            // XMMATRIX mat2D = XMMatrixMultiply(m_Camera2D.m_View, m_Camera2D.m_Projection);
+            // stateMan.UpdateCamera3DData(mat3D);
+            // stateMan.UpdateCamera2DData(mat2D);
 
-            VKCommandList *pList = m_pAPI->GetCommandList();
-            m_pAPI->BeginCommandList(pList);
+            // VKCommandList *pList = m_pAPI->GetCommandList();
+            // m_pAPI->BeginCommandList(pList);
 
-            CommandRenderPassBeginInfo beginInfo = {};
-            beginInfo.ClearValueCount = 2;
-            beginInfo.pClearValues[0] = ClearValue({ 0.0, 0.0, 0.0, 1.0 });
-            beginInfo.pClearValues[1] = ClearValue(1.0, 0xff);
+            // CommandRenderPassBeginInfo beginInfo = {};
+            // beginInfo.ClearValueCount = 2;
+            // beginInfo.pClearValues[0] = ClearValue({ 0.0, 0.0, 0.0, 1.0 });
+            // beginInfo.pClearValues[1] = ClearValue(1.0, 0xff);
 
-            pList->BeginRenderPass(beginInfo);
-            pList->SetPipeline(&stateMan.m_PresentPipeline);
-            pList->SetPipelineDescriptorSets({ &stateMan.m_Camera3DDescriptor });
+            // pList->BeginRenderPass(beginInfo, stateMan.m_pGeometryPass, nullptr);
+            // pList->SetPipeline(&stateMan.m_GeometryPipeline);
+            // pList->SetPipelineDescriptorSets({ &stateMan.m_Camera3DDescriptor });
 
-            pList->SetViewport(0, m_Window.m_Width, m_Window.m_Height, 0.0, 1.0);
-            pList->SetScissor(0, 0, 0, m_Window.m_Width, m_Window.m_Height);
+            // pList->SetViewport(0, m_Window.m_Width, m_Window.m_Height, 0.0, 1.0);
+            // pList->SetScissor(0, 0, 0, m_Window.m_Width, m_Window.m_Height);
 
-            pList->SetVertexBuffer(&vertexBuffer);
-            pList->SetIndexBuffer(&indexBuffer);
-            pList->DrawIndexed(3);
+            // pList->SetVertexBuffer(&vertexBuffer);
+            // pList->SetIndexBuffer(&indexBuffer);
+            // pList->DrawIndexed(3);
 
-            pList->EndRenderPass();
-            m_pAPI->EndCommandList(pList);
-            m_pAPI->ExecuteCommandList(pList);
+            // pList->EndRenderPass();
+            // m_pAPI->EndCommandList(pList);
+            // m_pAPI->ExecuteCommandList(pList, false);
 
-            imguiHandler.NewFrame();
-            ImGui::SetNextWindowSize(ImVec2(500, 500));
-            ImGui::Begin("Hello");
-            ImGui::End();
-            imguiHandler.EndFrame();
+            // imguiHandler.NewFrame();
+            // ImGui::Begin("Hello");
+            // ImGui::Button("a");
+            // ImGui::ProgressBar(100.5, ImVec2(0, 0), "Test");
+            // ImGui::Image(0, ImVec2(512, 128));
+            // ImGui::End();
+            // imguiHandler.EndFrame();
 
-            m_pAPI->Frame();
+            // m_pAPI->Frame();
             m_Window.Poll();
         }
     }

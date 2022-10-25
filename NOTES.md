@@ -1,0 +1,2 @@
+# Issues
+- Fixed. Deleting a temporary staging buffer gives a validation error because it's being processed in GPU while we delete it. We should wait for that command list to execute. Modify `ExecuteCommandList` function to put a wait operation.

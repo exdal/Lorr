@@ -92,7 +92,7 @@ namespace lr::Memory
                 AddFreeBlock(pSplitBlock);
             }
 
-            pBlockOut = pBlockOut;
+            pBlockOut = pBlock;
             
             u32 alignedOffset = (pBlock->Offset + alignment - 1) & ~(alignment - 1);
             return alignedOffset;

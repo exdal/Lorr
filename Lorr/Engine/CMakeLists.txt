@@ -9,6 +9,11 @@ set(LORR_VENDOR
     
     Vulkan-Headers
     imgui
+
+    d3d12
+    d3dcompiler
+    dxgi
+    dxguid
 )
 
 # Core

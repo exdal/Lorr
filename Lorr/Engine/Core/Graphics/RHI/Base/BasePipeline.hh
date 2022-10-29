@@ -16,9 +16,10 @@ namespace lr::Graphics
     {
         StencilCompareOp Pass;
         StencilCompareOp Fail;
+
         DepthCompareOp DepthFail;
 
-        DepthCompareOp Function;
+        DepthCompareOp CompareFunc;
     };
 
     /// Some notes:
@@ -31,40 +32,30 @@ namespace lr::Graphics
 
         /// States - in order by member index
         // Shader Stages
-        virtual void SetShader(BaseShader *pShader) = 0;
+        virtual void SetShader(BaseShader *pShader, eastl::string_view entryPoint) = 0;
 
         // Vertex Input
         // `bindingID` always will be 0, since we only support one binding for now, see notes
-        virtual void SetInputLayout(u32 bindingID, InputLayout &inputLayout) = 0;
+        virtual void SetInputLayout(InputLayout &inputLayout) = 0;
 
         // Input Assembly
         virtual void SetPrimitiveType(PrimitiveType type) = 0;
-
-        // Tessellation
-        virtual void SetPatchCount(u32 count) = 0;
-
-        // Viewport
-        virtual void AddViewport(u32 viewportCount = 1, u32 scissorCount = 0) = 0;
-        virtual void SetViewport(u32 viewportID, u32 width, u32 height, f32 minDepth, f32 maxDepth) = 0;
-        virtual void SetScissor(u32 scissorID, u32 x, u32 y, u32 w, u32 h) = 0;
 
         // Rasterizer
         virtual void SetDepthClamp(bool enabled) = 0;
         virtual void SetRasterizerDiscard(bool enabled) = 0;
         virtual void SetCullMode(CullMode mode, bool frontFaceClockwise) = 0;
         virtual void SetDepthBias(bool enabled, f32 constantFactor, f32 clamp, f32 slopeFactor) = 0;
-        virtual void SetLineWidth(f32 size) = 0;
 
         // Multisample
         virtual void SetSampleCount(u32 sampleCount) = 0;
-        virtual void SetSampledShading(bool enabled, f32 minSampleShading) = 0;
-        virtual void SetAlphaToCoverage(bool alphaToCoverage, bool alphaToOne) = 0;
+        virtual void SetAlphaToCoverage(bool alphaToCoverage) = 0;
 
         // Depth Stencil
-        virtual void SetDepthState(bool depthTestEnabled, bool depthWriteEnabled, bool depthBoundsTestEnabled) = 0;
+        virtual void SetDepthState(bool depthTestEnabled, bool depthWriteEnabled) = 0;
         virtual void SetStencilState(bool stencilTestEnabled) = 0;
+        virtual void SetDepthFunction(DepthCompareOp function) = 0;
         virtual void SetStencilOperation(DepthStencilOpDesc front, DepthStencilOpDesc back) = 0;
-        virtual void SetDepthBounds(f32 min, f32 max) = 0;
 
         // TODO: Color Blend
         virtual void SetBlendAttachment(u32 attachmentID, bool enabled, u8 mask) = 0;
@@ -72,6 +63,11 @@ namespace lr::Graphics
         // void SetBlendColorFactor(VkBlendFactor src, VkBlendFactor dst, VkBlendOp op);
         // void SetBlendAlphaFactor(VkBlendFactor src, VkBlendFactor dst, VkBlendOp op);
         // void SetBlendWriteState(bool writeR, bool writeG, bool writeB, bool writeA);
+
+        void SetDescriptorSets(std::initializer_list<BaseDescriptorSet *> sets);
+
+        u32 m_DescriptorSetCount = 0;
+        BaseDescriptorSet *m_ppDescriptorSets[8];
     };
 
     struct BasePipeline

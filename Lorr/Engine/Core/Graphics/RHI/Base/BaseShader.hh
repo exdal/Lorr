@@ -4,10 +4,13 @@
 
 #pragma once
 
+#include "Core/Graphics/RHI/Common.hh"
+
 namespace lr::Graphics
 {
     struct BaseShader
     {
+        ShaderType Type = ShaderType::Count;
     };
-    
+
 }  // namespace lr::Graphics

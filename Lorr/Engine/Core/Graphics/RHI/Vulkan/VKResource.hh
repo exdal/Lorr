@@ -10,7 +10,7 @@
 
 namespace lr::Graphics
 {
-    struct VKImage : public BaseImage
+    struct VKImage : BaseImage
     {
         VkImage m_pHandle = nullptr;
         VkImageView m_pViewHandle = nullptr;
@@ -23,42 +23,20 @@ namespace lr::Graphics
         VkImageLayout m_FinalLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     };
 
-    struct VKBuffer : public BaseBuffer
+    struct VKBuffer : BaseBuffer
     {
         VkBuffer m_pHandle = nullptr;
         VkBufferView m_pViewHandle = nullptr;
+
         VkDeviceMemory m_pMemoryHandle = nullptr;
     };
 
-    /// -------------- Descriptors --------------- ///
-
-    struct VKDescriptorBindingDesc
+    struct VKDescriptorSet : BaseDescriptorSet
     {
-        // u32 BindingID = -1;
-        DescriptorType Type;
-        VkShaderStageFlagBits ShaderStageFlags = VK_SHADER_STAGE_FLAG_BITS_MAX_ENUM;
-        u32 ArraySize = 1;
-
-        VKBuffer *pBuffer = nullptr;
-        VKImage *pImage = nullptr;
-    };
-
-    struct VKDescriptorSetDesc
-    {
-        u32 BindingCount = 0;
-        VKDescriptorBindingDesc pBindings[8];
-    };
-
-    struct VKDescriptorSet
-    {
-        u32 BindingCount = 0;
-        VKDescriptorBindingDesc pBindingInfos[8];
-        VkDescriptorBufferInfo pBindingBufferInfos[8];
-
         VkDescriptorSet pHandle = nullptr;
         VkDescriptorSetLayout pSetLayoutHandle = nullptr;
+        
+        VkDescriptorBufferInfo pBindingBufferInfos[8];
     };
-
-    /// ------------------------------------------
 
 }  // namespace lr::Graphics

@@ -21,6 +21,11 @@ typedef signed short i16;
 typedef unsigned char u8;
 typedef signed char i8;
 
+#ifdef PTR_SIZE
+#undef PTR_SIZE
+#endif
+#define PTR_SIZE sizeof(void *)
+
 #include <stdio.h>
 
 #include <Windows.h>

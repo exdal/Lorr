@@ -28,7 +28,7 @@ namespace lr::Graphics
     struct RenderPassAttachment
     {
         AttachmentType Flags = AttachmentType::Undefined;
-        ResourceFormat Format;
+        ResourceFormat Format = ResourceFormat::Unknown;
         u32 SampleCount = 1;  // MSAA -> If > 1_BIT
 
         RenderPassOperation LoadOp = RenderPassOperation::DontCare;
@@ -42,6 +42,7 @@ namespace lr::Graphics
     {
         // `8` is the maximum attachments per `RenderPass` we support.
         u32 ColorAttachmentCount = 0;
+        
         RenderPassAttachment *ppColorAttachments[APIConfig::kMaxColorAttachmentCount];
         RenderPassAttachment *pDepthAttachment = nullptr;
     };
@@ -52,6 +53,12 @@ namespace lr::Graphics
 
     struct BaseRenderPass
     {
+        u32 ColorAttachmentCount = 0;
+        bool HasDepthAttachment = false;
+
+        RenderPassAttachment pColorAttachments[APIConfig::kMaxColorAttachmentCount];
+        RenderPassAttachment DepthAttachment;
+
         BaseRenderTarget *pBoundRenderTarget = nullptr;
     };
 

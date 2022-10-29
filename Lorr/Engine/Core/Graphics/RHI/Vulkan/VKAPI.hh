@@ -64,15 +64,12 @@ namespace lr::Graphics
     {
         bool Init(PlatformWindow *pWindow, u32 width, u32 height, APIFlags flags);
 
-        void InitCommandLists();
         void InitAllocators();
 
         /// COMMAND ///
-        void CreateCommandQueue(BaseCommandQueue *pQueue, CommandListType type);
-        void CreateCommandAllocator(BaseCommandAllocator *pAllocator, CommandListType type);
-        void CreateCommandList(BaseCommandList *pList, CommandListType type);
-
-        BaseCommandList *GetCommandList();
+        BaseCommandQueue *CreateCommandQueue(CommandListType type);
+        BaseCommandAllocator *CreateCommandAllocator(CommandListType type);
+        BaseCommandList *CreateCommandList(CommandListType type);
 
         void BeginCommandList(BaseCommandList *pList);
         void EndCommandList(BaseCommandList *pList);
@@ -95,14 +92,14 @@ namespace lr::Graphics
         void DeleteSemaphore(VkSemaphore pSemaphore);
 
         /// RENDERPASS ///
-        VkRenderPass CreateRenderPass(RenderPassDesc *pDesc);
-        void DeleteRenderPass(VkRenderPass pRenderPass);
+        BaseRenderPass *CreateRenderPass(RenderPassDesc *pDesc);
+        void DeleteRenderPass(BaseRenderPass *pRenderPass);
 
         /// PIPELINE ///
         VkPipelineCache CreatePipelineCache(u32 initialDataSize = 0, void *pInitialData = nullptr);
 
         void BeginPipelineBuildInfo(GraphicsPipelineBuildInfo *pBuildInfo);
-        void EndPipelineBuildInfo(GraphicsPipelineBuildInfo *pBuildInfo, BaseRenderPass *pRenderPass, BasePipeline *pTargetHandle);
+        BasePipeline *EndPipelineBuildInfo(GraphicsPipelineBuildInfo *pBuildInfo, BaseRenderPass *pRenderPass);
 
         /// SWAPCHAIN ///
         void CreateSwapChain(VkSwapchainKHR &pHandle, VkSwapchainCreateInfoKHR &info);
@@ -119,13 +116,13 @@ namespace lr::Graphics
         VkShaderModule CreateShaderModule(eastl::string_view path);
         void DeleteShaderModule(VkShaderModule pShader);
 
-        void CreateDescriptorSetLayout(VKDescriptorSet *pSet, VKDescriptorSetDesc *pDesc);
-        void UpdateDescriptorData(VKDescriptorSet *pSet, VKDescriptorSetDesc *pDesc);
+        BaseDescriptorSet *CreateDescriptorSet(DescriptorSetDesc *pDesc);
+        void UpdateDescriptorData(BaseDescriptorSet *pSet, DescriptorSetDesc *pDesc);
 
         // `VKDescriptorBindingDesc::Type` represents descriptor type.
         // `VKDescriptorBindingDesc::ArraySize` represents descriptor count for that type.
         // Same types cannot be used, will result in UB. Other variables are ignored.
-        VkDescriptorPool CreateDescriptorPool(const std::initializer_list<VKDescriptorBindingDesc> &layouts);
+        VkDescriptorPool CreateDescriptorPool(const std::initializer_list<DescriptorBindingDesc> &layouts);
 
         // * Buffers * //
         void CreateBuffer(VKBuffer *pHandle, BufferDesc *pDesc, BufferData *pData);
@@ -178,6 +175,7 @@ namespace lr::Graphics
         static VkDescriptorType ToVulkanDescriptorType(DescriptorType type);
         static VkImageUsageFlags ToVulkanImageUsage(ImageUsage usage);
         static VkBufferUsageFlagBits ToVulkanBufferUsage(BufferUsage usage);
+        static VkShaderStageFlagBits ToVulkanShaderType(ShaderType type);
 
         /// ------------------------------------------------------------- ///
 
@@ -193,13 +191,11 @@ namespace lr::Graphics
         /// Main Queues
         u32 m_AvailableQueueCount = 0;
         eastl::array<u32, 3> m_QueueIndexes;
-        VKCommandQueue m_DirectQueue;
+        VKCommandQueue *m_pDirectQueue = nullptr;
 
         /// Pools/Caches
-        CommandListPool m_CommandListPool;
         VkPipelineCache m_pPipelineCache = nullptr;
         VkDescriptorPool m_pDescriptorPool = nullptr;
-
         VKLinearMemoryAllocator m_MADescriptor;
         VKLinearMemoryAllocator m_MABufferLinear;
         VKTLSFMemoryAllocator m_MABufferTLSF;

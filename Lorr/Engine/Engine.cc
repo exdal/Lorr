@@ -70,10 +70,10 @@ namespace lr
 
         m_pAPI->BindMemory(&tempVertexBuffer);
 
-        VKCommandList *pList = m_pAPI->GetCommandList();
+        BaseCommandList *pList = m_pAPI->GetCommandList();
 
         m_pAPI->BeginCommandList(pList);
-        m_pAPI->TransferBufferMemory(pList, &tempVertexBuffer, &vertexBuffer, AllocatorType::BufferTLSF);
+        // m_pAPI->TransferBufferMemory(pList, &tempVertexBuffer, &vertexBuffer, AllocatorType::BufferTLSF);
 
         /// ------------------------------------------------------- ///
 
@@ -92,7 +92,7 @@ namespace lr
 
         m_pAPI->BindMemory(&tempIndexBuffer);
 
-        m_pAPI->TransferBufferMemory(pList, &tempIndexBuffer, &indexBuffer, AllocatorType::BufferTLSF);
+        // m_pAPI->TransferBufferMemory(pList, &tempIndexBuffer, &indexBuffer, AllocatorType::BufferTLSF);
 
         m_pAPI->EndCommandList(pList);
         m_pAPI->ExecuteCommandList(pList, true);

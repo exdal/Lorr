@@ -20,7 +20,6 @@ namespace lr::Graphics
 
         VkSemaphore pAcquireSemp = nullptr;
         VkSemaphore pPresentSemp = nullptr;
-        VkFence pFence = nullptr;
     };
 
     struct VKAPI;

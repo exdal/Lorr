@@ -74,7 +74,6 @@ namespace lr::Graphics
 
             frame.pAcquireSemp = pAPI->CreateSemaphore();
             frame.pPresentSemp = pAPI->CreateSemaphore();
-            frame.pFence = pAPI->CreateFence(true);
         }
     }
 
@@ -131,7 +130,6 @@ namespace lr::Graphics
         {
             VKSwapChainFrame &frame = m_pFrames[i];
 
-            pAPI->DeleteFence(frame.pFence);
             pAPI->DeleteSemaphore(frame.pPresentSemp);
             pAPI->DeleteSemaphore(frame.pAcquireSemp);
             pAPI->DeleteFramebuffer(frame.pFrameBuffer);

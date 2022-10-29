@@ -2,26 +2,14 @@
 
 namespace lr::Graphics
 {
-    void D3D12CommandAllocator::Reset()
+    void D3D12CommandList::Init(ID3D12GraphicsCommandList4 *pHandle, D3D12CommandAllocator *pAllocator, CommandListType type)
     {
         ZoneScoped;
 
-        m_pHandle->Reset();
-    }
+        m_pHandle = pHandle;
+        m_pAllocator = pAllocator;
 
-    void D3D12CommandList::Reset()
-    {
-        ZoneScoped;
-
-        m_Allocator.Reset();
-        m_pHandle->Reset(m_Allocator.m_pHandle, nullptr);
-    }
-
-    void D3D12CommandList::Close()
-    {
-        ZoneScoped;
-
-        m_pHandle->Close();
+        m_Type = type;
     }
 
 }  // namespace lr::Graphics

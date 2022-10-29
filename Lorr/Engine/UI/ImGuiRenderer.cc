@@ -69,26 +69,26 @@ namespace lr::UI
         pAPI->AllocateImageMemory(&m_Texture, Graphics::AllocatorType::ImageTLSF);
         pAPI->BindMemory(&m_Texture);
 
-        Graphics::VKCommandList *pList = pAPI->GetCommandList();
-        pAPI->BeginCommandList(pList);
+        // Graphics::VKCommandList *pList = pAPI->GetCommandList();
+        // pAPI->BeginCommandList(pList);
 
-        pList->CopyBuffer(&imageBuffer, &m_Texture);
+        // pList->CopyBuffer(&imageBuffer, &m_Texture);
 
-        pAPI->EndCommandList(pList);
-        pAPI->ExecuteCommandList(pList, true);
+        // pAPI->EndCommandList(pList);
+        // pAPI->ExecuteCommandList(pList, true);
 
-        pAPI->CreateImageView(&m_Texture);
-        pAPI->CreateSampler(&m_Texture);
+        // pAPI->CreateImageView(&m_Texture);
+        // pAPI->CreateSampler(&m_Texture);
 
-        pAPI->DeleteBuffer(&imageBuffer);
+        // pAPI->DeleteBuffer(&imageBuffer);
 
-        Graphics::VKDescriptorSetDesc descriptorDesc = {};
-        descriptorDesc.BindingCount = 1;
-        descriptorDesc.pBindings[0].ArraySize = 1;
-        descriptorDesc.pBindings[0].Type = Graphics::DescriptorType::CombinedSampler;
-        descriptorDesc.pBindings[0].ShaderStageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-        descriptorDesc.pBindings[0].pImage = &m_Texture;
-        pAPI->UpdateDescriptorData(&stateMan.m_UISamplerDescriptor, &descriptorDesc);
+        // Graphics::VKDescriptorSetDesc descriptorDesc = {};
+        // descriptorDesc.BindingCount = 1;
+        // descriptorDesc.pBindings[0].ArraySize = 1;
+        // descriptorDesc.pBindings[0].Type = Graphics::DescriptorType::CombinedSampler;
+        // descriptorDesc.pBindings[0].ShaderStageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+        // descriptorDesc.pBindings[0].pImage = &m_Texture;
+        // pAPI->UpdateDescriptorData(&stateMan.m_UISamplerDescriptor, &descriptorDesc);
     }
 
     void ImGuiRenderer::NewFrame()
@@ -182,49 +182,49 @@ namespace lr::UI
         pAPI->UnmapMemory(&m_VertexBuffer);
         pAPI->UnmapMemory(&m_IndexBuffer);
 
-        Graphics::VKCommandList *pList = pAPI->GetCommandList();
-        pAPI->BeginCommandList(pList);
+        // Graphics::VKCommandList *pList = pAPI->GetCommandList();
+        // pAPI->BeginCommandList(pList);
 
-        Graphics::CommandRenderPassBeginInfo beginInfo = {};
-        beginInfo.RenderArea.z = window.m_Width;
-        beginInfo.RenderArea.w = window.m_Height;
-        beginInfo.ClearValueCount = 2;
-        beginInfo.pClearValues[0] = Graphics::ClearValue({ 0.0, 0.0, 0.0, 1.0 });
-        beginInfo.pClearValues[1] = Graphics::ClearValue(1.0, 0xff);
+        // Graphics::CommandRenderPassBeginInfo beginInfo = {};
+        // beginInfo.RenderArea.z = window.m_Width;
+        // beginInfo.RenderArea.w = window.m_Height;
+        // beginInfo.ClearValueCount = 2;
+        // beginInfo.pClearValues[0] = Graphics::ClearValue({ 0.0, 0.0, 0.0, 1.0 });
+        // beginInfo.pClearValues[1] = Graphics::ClearValue(1.0, 0xff);
 
-        pList->BeginRenderPass(beginInfo, stateMan.m_pUIPass, nullptr);
-        pList->SetPipeline(&stateMan.m_UIPipeline);
-        pList->SetPipelineDescriptorSets({ &stateMan.m_Camera2DDescriptor, &stateMan.m_UISamplerDescriptor });
+        // pList->BeginRenderPass(beginInfo, stateMan.m_pUIPass, nullptr);
+        // pList->SetPipeline(&stateMan.m_UIPipeline);
+        // pList->SetPipelineDescriptorSets({ &stateMan.m_Camera2DDescriptor, &stateMan.m_UISamplerDescriptor });
 
-        pList->SetVertexBuffer(&m_VertexBuffer);
-        pList->SetIndexBuffer(&m_IndexBuffer, false);
+        // pList->SetVertexBuffer(&m_VertexBuffer);
+        // pList->SetIndexBuffer(&m_IndexBuffer, false);
 
-        pList->SetViewport(0, pDrawData->DisplaySize.x, pDrawData->DisplaySize.y, 0.0, 1.0);
+        // pList->SetViewport(0, pDrawData->DisplaySize.x, pDrawData->DisplaySize.y, 0.0, 1.0);
 
-        XMFLOAT2 clipOffset = { pDrawData->DisplayPos.x, pDrawData->DisplayPos.y };
+        // XMFLOAT2 clipOffset = { pDrawData->DisplayPos.x, pDrawData->DisplayPos.y };
 
-        for (u32 i = 0; i < pDrawData->CmdListsCount; i++)
-        {
-            const ImDrawList *pDrawList = pDrawData->CmdLists[i];
+        // for (u32 i = 0; i < pDrawData->CmdListsCount; i++)
+        // {
+        //     const ImDrawList *pDrawList = pDrawData->CmdLists[i];
 
-            for (auto &cmd : pDrawList->CmdBuffer)
-            {
-                XMUINT2 clipMin(cmd.ClipRect.x - clipOffset.x, cmd.ClipRect.y - clipOffset.y);
-                XMUINT2 clipMax(cmd.ClipRect.z - clipOffset.x, cmd.ClipRect.w - clipOffset.y);
-                if (clipMax.x <= clipMin.x || clipMax.y <= clipMin.y)
-                    continue;
+        //     for (auto &cmd : pDrawList->CmdBuffer)
+        //     {
+        //         XMUINT2 clipMin(cmd.ClipRect.x - clipOffset.x, cmd.ClipRect.y - clipOffset.y);
+        //         XMUINT2 clipMax(cmd.ClipRect.z - clipOffset.x, cmd.ClipRect.w - clipOffset.y);
+        //         if (clipMax.x <= clipMin.x || clipMax.y <= clipMin.y)
+        //             continue;
 
-                pList->SetScissor(0, clipMin.x, clipMin.y, clipMax.x, clipMax.y);
+        //         pList->SetScissor(0, clipMin.x, clipMin.y, clipMax.x, clipMax.y);
 
-                pList->DrawIndexed(cmd.ElemCount, cmd.IdxOffset, cmd.VtxOffset);
-            }
-        }
+        //         pList->DrawIndexed(cmd.ElemCount, cmd.IdxOffset, cmd.VtxOffset);
+        //     }
+        // }
 
-        pList->SetScissor(0, 0, 0, window.m_Width, window.m_Height);
+        // pList->SetScissor(0, 0, 0, window.m_Width, window.m_Height);
 
-        pList->EndRenderPass();
-        pAPI->EndCommandList(pList);
-        pAPI->ExecuteCommandList(pList, false);
+        // pList->EndRenderPass();
+        // pAPI->EndCommandList(pList);
+        // pAPI->ExecuteCommandList(pList, false);
     }
 
     void ImGuiRenderer::EndFrame()

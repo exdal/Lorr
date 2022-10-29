@@ -6,7 +6,7 @@
 
 namespace lr::Graphics
 {
-    struct BaseCommandQueue
+    struct BaseCommandQueue 
     {
     };
 

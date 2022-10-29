@@ -10,7 +10,7 @@ namespace lr::Graphics
 
         BufferDesc bufferDesc = {};
         BufferData bufferData = {};
-        VKDescriptorSetDesc descriptorDesc = {};
+        // VKDescriptorSetDesc descriptorDesc = {};
         // VKGraphicsPipelineBuildInfo graphicsBuildInfo = {};
         VkShaderModule pVertexShader = nullptr;
         VkShaderModule pPixelShader = nullptr;
@@ -83,37 +83,37 @@ namespace lr::Graphics
 
         /// ----------------------------------------------------------- ///
 
-        bufferDesc.UsageFlags = BufferUsage::ConstantBuffer;
-        bufferDesc.Mappable = true;
+        // bufferDesc.UsageFlags = BufferUsage::ConstantBuffer;
+        // bufferDesc.Mappable = true;
 
-        bufferData.DataLen = sizeof(XMMATRIX);
+        // bufferData.DataLen = sizeof(XMMATRIX);
 
-        pAPI->CreateBuffer(&m_Camera3DBuffer, &bufferDesc, &bufferData);
-        pAPI->AllocateBufferMemory(&m_Camera3DBuffer, AllocatorType::Descriptor);
-        pAPI->BindMemory(&m_Camera3DBuffer);
+        // pAPI->CreateBuffer(&m_Camera3DBuffer, &bufferDesc, &bufferData);
+        // pAPI->AllocateBufferMemory(&m_Camera3DBuffer, AllocatorType::Descriptor);
+        // pAPI->BindMemory(&m_Camera3DBuffer);
 
-        pAPI->CreateBuffer(&m_Camera2DBuffer, &bufferDesc, &bufferData);
-        pAPI->AllocateBufferMemory(&m_Camera2DBuffer, AllocatorType::Descriptor);
-        pAPI->BindMemory(&m_Camera2DBuffer);
+        // pAPI->CreateBuffer(&m_Camera2DBuffer, &bufferDesc, &bufferData);
+        // pAPI->AllocateBufferMemory(&m_Camera2DBuffer, AllocatorType::Descriptor);
+        // pAPI->BindMemory(&m_Camera2DBuffer);
 
         /// ----------------------------------------------------------- ///
 
-        descriptorDesc.BindingCount = 1;
-        descriptorDesc.pBindings[0].Type = DescriptorType::ConstantBuffer;
-        descriptorDesc.pBindings[0].ShaderStageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-        descriptorDesc.pBindings[0].ArraySize = 1;
+        // descriptorDesc.BindingCount = 1;
+        // descriptorDesc.pBindings[0].Type = DescriptorType::ConstantBuffer;
+        // descriptorDesc.pBindings[0].ShaderStageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+        // descriptorDesc.pBindings[0].ArraySize = 1;
 
-        descriptorDesc.pBindings[0].pBuffer = &m_Camera3DBuffer;
-        pAPI->CreateDescriptorSetLayout(&m_Camera3DDescriptor, &descriptorDesc);
-        pAPI->UpdateDescriptorData(&m_Camera3DDescriptor, &descriptorDesc);
+        // descriptorDesc.pBindings[0].pBuffer = &m_Camera3DBuffer;
+        // pAPI->CreateDescriptorSetLayout(&m_Camera3DDescriptor, &descriptorDesc);
+        // pAPI->UpdateDescriptorData(&m_Camera3DDescriptor, &descriptorDesc);
 
-        descriptorDesc.pBindings[0].pBuffer = &m_Camera2DBuffer;
-        pAPI->CreateDescriptorSetLayout(&m_Camera2DDescriptor, &descriptorDesc);
-        pAPI->UpdateDescriptorData(&m_Camera2DDescriptor, &descriptorDesc);
+        // descriptorDesc.pBindings[0].pBuffer = &m_Camera2DBuffer;
+        // pAPI->CreateDescriptorSetLayout(&m_Camera2DDescriptor, &descriptorDesc);
+        // pAPI->UpdateDescriptorData(&m_Camera2DDescriptor, &descriptorDesc);
 
-        descriptorDesc.pBindings[0].Type = DescriptorType::CombinedSampler;
-        descriptorDesc.pBindings[0].ShaderStageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-        pAPI->CreateDescriptorSetLayout(&m_UISamplerDescriptor, &descriptorDesc);
+        // descriptorDesc.pBindings[0].Type = DescriptorType::CombinedSampler;
+        // descriptorDesc.pBindings[0].ShaderStageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+        // pAPI->CreateDescriptorSetLayout(&m_UISamplerDescriptor, &descriptorDesc);
 
         /// ----------------------------------------------------------- ///
 

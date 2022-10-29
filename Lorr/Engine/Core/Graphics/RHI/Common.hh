@@ -80,27 +80,27 @@ namespace lr::Graphics
         // TODO: Video types
     };
 
-    enum class ShaderType : u8
+    enum class DescriptorType : u8
     {
-        Vertex,
-        Pixel,
-        Compute,
-        TessellationControl,
-        TessellationEvaluation,
+        ShaderResourceView,
+        ConstantBufferView,
+        UnorderedAccessBuffer,
+        UnorderedAccessView,
+        RootConstant,
 
         Count
     };
 
-    enum class DescriptorType : u8
+    enum class ShaderType
     {
-        Sampler,
-        Texture,
-        CombinedSampler,  // AKA Sampler + Texture
-        ConstantBuffer,
-        StructuredBuffer,
-        RWTexture,
+        Vertex,
+        Pixel,
+        Compute,
+        Hull,
+        Domain,
+        Geometry,
 
-        Count
+        Count,
     };
 
 }  // namespace lr::Graphics

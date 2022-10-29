@@ -14,7 +14,7 @@ namespace lr::Graphics
         void Init()
         {
             memset(&m_Hashes[0], 0, sizeof(m_Hashes[0]) * kMaxPipelineStateCount);
-            memset(&m_Handles[0], 0, sizeof(void *) * kMaxPipelineStateCount);
+            memset(&m_Handles[0], 0, PTR_SIZE * kMaxPipelineStateCount);
         }
 
         PipelineStateHandleT *Get(u32 hash)

@@ -147,4 +147,27 @@ namespace lr::Graphics
         void *m_pAllocatorData = nullptr;
     };
 
+    struct DescriptorBindingDesc
+    {
+        // u32 BindingID = -1;
+        DescriptorType Type;
+        ShaderType TargetShader = ShaderType::Count;
+        u32 ArraySize = 1;
+
+        BaseBuffer *pBuffer = nullptr;
+        BaseImage *pImage = nullptr;
+    };
+
+    struct DescriptorSetDesc
+    {
+        u32 BindingCount = 0;
+        DescriptorBindingDesc pBindings[8];
+    };
+
+    struct BaseDescriptorSet
+    {
+        u32 BindingCount = 0;
+        DescriptorBindingDesc pBindingInfos[8];
+    };
+
 }  // namespace lr::Graphics

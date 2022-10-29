@@ -6,6 +6,7 @@
 #include "Core/IO/Memory.hh"
 
 #include "VKCommandList.hh"
+#include "VKRenderPass.hh"
 
 /// DEFINE VULKAN FUNCTIONS
 // #include "VKSymbols.hh"
@@ -109,14 +110,14 @@ namespace lr::Graphics
 
         m_CommandListPool.Init();
         m_pDescriptorPool = CreateDescriptorPool({
-            { DescriptorType::ConstantBuffer, VK_SHADER_STAGE_FLAG_BITS_MAX_ENUM, 256 },
-            { DescriptorType::CombinedSampler, VK_SHADER_STAGE_FLAG_BITS_MAX_ENUM, 256 },
+            { DescriptorType::ConstantBufferView, ShaderType::Count, 256 },
+            { DescriptorType::ShaderResourceView, ShaderType::Count, 256 },
         });
 
         m_pPipelineCache = CreatePipelineCache();
         m_APIStateMan.Init(this);
 
-        CreateCommandQueue(&m_DirectQueue, CommandListType::Direct);
+        m_pDirectQueue = (VKCommandQueue *)CreateCommandQueue(CommandListType::Direct);
         m_SwapChain.Init(pWindow, this, SwapChainFlags::TripleBuffering);
         m_SwapChain.CreateBackBuffers(this);
 
@@ -129,20 +130,6 @@ namespace lr::Graphics
         LOG_TRACE("Initialized Vulkan render context.");
 
         return true;
-    }
-
-    void VKAPI::InitCommandLists()
-    {
-        ZoneScoped;
-
-        for (BaseCommandList *pList : m_CommandListPool.m_DirectLists)
-            CreateCommandList(pList, CommandListType::Direct);
-
-        for (BaseCommandList *pList : m_CommandListPool.m_ComputeLists)
-            CreateCommandList(pList, CommandListType::Compute);
-
-        for (BaseCommandList *pList : m_CommandListPool.m_CopyLists)
-            CreateCommandList(pList, CommandListType::Copy);
     }
 
     void VKAPI::InitAllocators()
@@ -194,70 +181,61 @@ namespace lr::Graphics
         BindMemory(&m_MAImageTLSF.Buffer);
     }
 
-    void VKAPI::CreateCommandQueue(BaseCommandQueue *pQueue, CommandListType type)
+    BaseCommandQueue *VKAPI::CreateCommandQueue(CommandListType type)
     {
         ZoneScoped;
 
-        API_VAR(VKCommandQueue, pQueue);
-        
-        AllocType(pQueueVK);
+        VKCommandQueue *pQueue = AllocType<VKCommandQueue>();
 
         VkQueue pHandle = nullptr;
         VkFence pFence = CreateFence(false);
 
         vkGetDeviceQueue(m_pDevice, m_QueueIndexes[(u32)type], 0, &pHandle);
 
-        pQueueVK->Init(pHandle, pFence);
+        pQueue->Init(pHandle, pFence);
+
+        return pQueue;
     }
 
-    void VKAPI::CreateCommandAllocator(BaseCommandAllocator *pAllocator, CommandListType type)
+    BaseCommandAllocator *VKAPI::CreateCommandAllocator(CommandListType type)
     {
         ZoneScoped;
 
-        API_VAR(VKCommandAllocator, pAllocator);
-
-        AllocType(pAllocatorVK);
-
-        VkCommandPool &pPool = pAllocatorVK->pHandle;
+        VKCommandAllocator *pAllocator = AllocType<VKCommandAllocator>();
 
         VkCommandPoolCreateInfo allocatorInfo = {};
         allocatorInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
         allocatorInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
         allocatorInfo.queueFamilyIndex = m_QueueIndexes[(u32)type];
 
-        vkCreateCommandPool(m_pDevice, &allocatorInfo, nullptr, &pPool);
+        vkCreateCommandPool(m_pDevice, &allocatorInfo, nullptr, &pAllocator->pHandle);
+
+        return pAllocator;
     }
 
-    void VKAPI::CreateCommandList(BaseCommandList *pList, CommandListType type)
+    BaseCommandList *VKAPI::CreateCommandList(CommandListType type)
     {
         ZoneScoped;
 
-        API_VAR(VKCommandList, pList);
-        
-        AllocType(pListVK);
+        BaseCommandAllocator *pAllocator = CreateCommandAllocator(type);
+        API_VAR(VKCommandAllocator, pAllocator);
+
+        VKCommandList *pList = AllocType<VKCommandList>();
 
         VkCommandBuffer pHandle = nullptr;
-        VKCommandAllocator *pAllocator = nullptr;
         VkFence pFence = CreateFence(false);
-
-        CreateCommandAllocator(pAllocator, type);
 
         VkCommandBufferAllocateInfo listInfo = {};
         listInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
         listInfo.commandBufferCount = 1;
         listInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-        listInfo.commandPool = pAllocator->pHandle;
+        listInfo.commandPool = pAllocatorVK->pHandle;
 
         vkAllocateCommandBuffers(m_pDevice, &listInfo, &pHandle);
 
-        pListVK->Init(pHandle, type, pFence);
-    }
+        pList->Init(pHandle, pFence, type);
 
-    BaseCommandList *VKAPI::GetCommandList()
-    {
-        ZoneScoped;
-
-        return m_CommandListPool.Acquire(CommandListType::Direct);
+        return pList;
     }
 
     void VKAPI::BeginCommandList(BaseCommandList *pList)
@@ -296,7 +274,7 @@ namespace lr::Graphics
 
         API_VAR(VKCommandList, pList);
 
-        VkQueue &pQueueHandle = m_DirectQueue.m_pHandle;
+        VkQueue &pQueueHandle = m_pDirectQueue->m_pHandle;
         VkFence &pFence = pListVK->m_pFence;
 
         VkSubmitInfo2 submitInfo = {};
@@ -330,7 +308,7 @@ namespace lr::Graphics
     {
         ZoneScoped;
 
-        VkQueue &pQueueHandle = m_DirectQueue.m_pHandle;
+        VkQueue &pQueueHandle = m_pDirectQueue->m_pHandle;
 
         VKSwapChainFrame *pCurrentFrame = m_SwapChain.GetCurrentFrame();
 
@@ -345,12 +323,12 @@ namespace lr::Graphics
         VkSemaphoreSubmitInfo acquireSemaphoreInfo = {};
         acquireSemaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
         acquireSemaphoreInfo.semaphore = pAcquireSemp;
-        acquireSemaphoreInfo.stageMask = m_DirectQueue.m_AcquireStage;
+        acquireSemaphoreInfo.stageMask = m_pDirectQueue->m_AcquireStage;
 
         VkSemaphoreSubmitInfo presentSemaphoreInfo = {};
         presentSemaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
         presentSemaphoreInfo.semaphore = pPresentSemp;
-        presentSemaphoreInfo.stageMask = m_DirectQueue.m_PresentStage;
+        presentSemaphoreInfo.stageMask = m_pDirectQueue->m_PresentStage;
 
         submitInfo.waitSemaphoreInfoCount = 1;
         submitInfo.pWaitSemaphoreInfos = &acquireSemaphoreInfo;
@@ -424,11 +402,11 @@ namespace lr::Graphics
         vkDestroySemaphore(m_pDevice, pSemaphore, nullptr);
     }
 
-    VkRenderPass VKAPI::CreateRenderPass(RenderPassDesc *pDesc)
+    BaseRenderPass *VKAPI::CreateRenderPass(RenderPassDesc *pDesc)
     {
         ZoneScoped;
 
-        VkRenderPass pHandle = nullptr;
+        VKRenderPass *pRenderPass = AllocType<VKRenderPass>();
 
         u32 totalAttachmentCount = 0;
 
@@ -503,7 +481,7 @@ namespace lr::Graphics
         pSubpassDeps[0].srcSubpass = VK_SUBPASS_EXTERNAL;
         pSubpassDeps[0].dstSubpass = 0;
 
-        pSubpassDeps[0].srcStageMask = m_DirectQueue.m_AcquireStage;  // Command Queue's stage mask
+        pSubpassDeps[0].srcStageMask = m_pDirectQueue->m_AcquireStage;  // Command Queue's stage mask
         pSubpassDeps[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 
         pSubpassDeps[0].srcAccessMask = 0;
@@ -539,16 +517,19 @@ namespace lr::Graphics
         renderPassInfo.dependencyCount = 2;  // TODO: Multiple subpasses
         renderPassInfo.pDependencies = pSubpassDeps;
 
-        vkCreateRenderPass(m_pDevice, &renderPassInfo, nullptr, &pHandle);
+        vkCreateRenderPass(m_pDevice, &renderPassInfo, nullptr, &pRenderPass->m_pHandle);
 
-        return pHandle;
+        return pRenderPass;
     }
 
-    void VKAPI::DeleteRenderPass(VkRenderPass pRenderPass)
+    void VKAPI::DeleteRenderPass(BaseRenderPass *pRenderPass)
     {
         ZoneScoped;
 
-        vkDestroyRenderPass(m_pDevice, pRenderPass, nullptr);
+        API_VAR(VKRenderPass, pRenderPass);
+        vkDestroyRenderPass(m_pDevice, pRenderPassVK->m_pHandle, nullptr);
+
+        FreeType(pRenderPassVK);
     }
 
     VkPipelineCache VKAPI::CreatePipelineCache(u32 initialDataSize, void *pInitialData)
@@ -575,38 +556,41 @@ namespace lr::Graphics
         pBuildInfo->Init();
     }
 
-    void VKAPI::EndPipelineBuildInfo(GraphicsPipelineBuildInfo *pBuildInfo, BaseRenderPass *pRenderPass, BasePipeline *pPipeline)
+    BasePipeline *VKAPI::EndPipelineBuildInfo(GraphicsPipelineBuildInfo *pBuildInfo, BaseRenderPass *pRenderPass)
     {
         ZoneScoped;
 
         API_VAR(VKGraphicsPipelineBuildInfo, pBuildInfo);
-        API_VAR(VKPipeline, pPipeline);
+        VKPipeline *pPipeline = AllocType<VKPipeline>();
+        API_VAR(VKRenderPass, pRenderPass);
 
-        AllocType(pPipelineVK);
+        VkPipeline &pHandle = pPipeline->pHandle;
+        VkPipelineLayout &pLayout = pPipeline->pLayout;
 
-        VkPipeline &pHandle = pPipelineVK->pHandle;
-        VkPipelineLayout &pLayout = pPipelineVK->pLayout;
-
-        u32 idx = 0;
         VkDescriptorSetLayout pSetLayouts[8] = {};
-        for (auto &pSet : pBuildInfoVK->m_CreateInfo)
+        for (u32 i = 0; i < pBuildInfo->m_DescriptorSetCount; i++)
         {
-            pSetLayouts[idx] = pSet->pSetLayoutHandle;
+            BaseDescriptorSet *pSet = pBuildInfo->m_ppDescriptorSets[i];
+            API_VAR(VKDescriptorSet, pSet);
 
-            idx++;
+            pSetLayouts[i] = pSetVK->pSetLayoutHandle;
         }
 
         VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo = {};
         pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-        pipelineLayoutCreateInfo.setLayoutCount = sets.size();
+        pipelineLayoutCreateInfo.setLayoutCount = pBuildInfo->m_DescriptorSetCount;
         pipelineLayoutCreateInfo.pSetLayouts = pSetLayouts;
 
         vkCreatePipelineLayout(m_pDevice, &pipelineLayoutCreateInfo, nullptr, &pLayout);
 
         pBuildInfoVK->m_CreateInfo.layout = pLayout;
-        pBuildInfoVK->m_CreateInfo.renderPass = buildInfo.m_pSetRenderPass;
+        pBuildInfoVK->m_CreateInfo.renderPass = pRenderPassVK->m_pHandle;
 
         vkCreateGraphicsPipelines(m_pDevice, m_pPipelineCache, 1, &pBuildInfoVK->m_CreateInfo, nullptr, &pHandle);
+
+        delete pBuildInfoVK;
+
+        return pPipeline;
     }
 
     void VKAPI::CreateSwapChain(VkSwapchainKHR &pHandle, VkSwapchainCreateInfoKHR &info)
@@ -651,7 +635,7 @@ namespace lr::Graphics
 
         VkSwapchainKHR &pSwapChain = m_SwapChain.m_pHandle;
 
-        VkQueue &pQueueHandle = m_DirectQueue.m_pHandle;
+        VkQueue &pQueueHandle = m_pDirectQueue->m_pHandle;
 
         VKSwapChainFrame *pCurrentFrame = m_SwapChain.GetCurrentFrame();
         VkSemaphore &pAcquireSemp = pCurrentFrame->pAcquireSemp;
@@ -660,7 +644,7 @@ namespace lr::Graphics
         u32 imageIndex;
         vkAcquireNextImageKHR(m_pDevice, pSwapChain, UINT64_MAX, pAcquireSemp, nullptr, &imageIndex);
 
-        m_DirectQueue.SetSemaphoreStage(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
+        m_pDirectQueue->SetSemaphoreStage(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
 
         PresentCommandQueue();
 
@@ -728,19 +712,21 @@ namespace lr::Graphics
         vkDestroyShaderModule(m_pDevice, pShader, nullptr);
     }
 
-    void VKAPI::CreateDescriptorSetLayout(VKDescriptorSet *pSet, VKDescriptorSetDesc *pDesc)
+    BaseDescriptorSet *VKAPI::CreateDescriptorSet(DescriptorSetDesc *pDesc)
     {
         ZoneScoped;
+
+        VKDescriptorSet *pDescriptorSet = AllocType<VKDescriptorSet>();
 
         VkDescriptorSetLayoutBinding pBindings[8] = {};
 
         for (u32 i = 0; i < pDesc->BindingCount; i++)
         {
-            VKDescriptorBindingDesc &element = pDesc->pBindings[i];
+            DescriptorBindingDesc &element = pDesc->pBindings[i];
 
             pBindings[i].binding = i;
             pBindings[i].descriptorType = ToVulkanDescriptorType(element.Type);
-            pBindings[i].stageFlags = element.ShaderStageFlags;
+            pBindings[i].stageFlags = ToVulkanShaderType(element.TargetShader);
             pBindings[i].descriptorCount = element.ArraySize;
         }
 
@@ -750,51 +736,63 @@ namespace lr::Graphics
         layoutCreateInfo.bindingCount = pDesc->BindingCount;
         layoutCreateInfo.pBindings = pBindings;
 
-        vkCreateDescriptorSetLayout(m_pDevice, &layoutCreateInfo, nullptr, &pSet->pSetLayoutHandle);
+        vkCreateDescriptorSetLayout(m_pDevice, &layoutCreateInfo, nullptr, &pDescriptorSet->pSetLayoutHandle);
 
         // And the actual set
         VkDescriptorSetAllocateInfo allocateCreateInfo = {};
         allocateCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
         allocateCreateInfo.descriptorPool = m_pDescriptorPool;
         allocateCreateInfo.descriptorSetCount = 1;
-        allocateCreateInfo.pSetLayouts = &pSet->pSetLayoutHandle;
+        allocateCreateInfo.pSetLayouts = &pDescriptorSet->pSetLayoutHandle;
 
-        vkAllocateDescriptorSets(m_pDevice, &allocateCreateInfo, &pSet->pHandle);
-
-        pSet->BindingCount = pDesc->BindingCount;
+        vkAllocateDescriptorSets(m_pDevice, &allocateCreateInfo, &pDescriptorSet->pHandle);
 
         /// ---------------------------------------------------------- ///
+
+        pDescriptorSet->BindingCount = pDesc->BindingCount;
+        memcpy(pDescriptorSet->pBindingInfos, pDesc->pBindings, pDesc->BindingCount * sizeof(DescriptorBindingDesc));
+
+        return pDescriptorSet;
     }
 
-    void VKAPI::UpdateDescriptorData(VKDescriptorSet *pSet, VKDescriptorSetDesc *pDesc)
+    void VKAPI::UpdateDescriptorData(BaseDescriptorSet *pSet, DescriptorSetDesc *pDesc)
     {
         ZoneScoped;
+
+        API_VAR(VKDescriptorSet, pSet);
 
         VkWriteDescriptorSet pWriteSets[8];
         VkDescriptorBufferInfo pBufferInfos[8];
         VkDescriptorImageInfo pImageInfos[8];
+
         u32 bufferIndex = 0;
         u32 imageIndex = 0;
 
         for (u32 i = 0; i < pDesc->BindingCount; i++)
         {
-            VKDescriptorBindingDesc &element = pDesc->pBindings[i];
+            DescriptorBindingDesc &element = pDesc->pBindings[i];
 
-            if (element.Type == DescriptorType::ConstantBuffer)
+            BaseBuffer *pBuffer = element.pBuffer;
+            BaseImage *pImage = element.pImage;
+
+            API_VAR(VKBuffer, pBuffer);
+            API_VAR(VKImage, pImage);
+
+            if (element.Type == DescriptorType::ConstantBufferView)
             {
-                pBufferInfos[bufferIndex].buffer = element.pBuffer->m_pHandle;
+                pBufferInfos[bufferIndex].buffer = pBufferVK->m_pHandle;
                 pBufferInfos[bufferIndex].offset = 0;
-                pBufferInfos[bufferIndex].range = element.pBuffer->m_DataSize;
+                pBufferInfos[bufferIndex].range = pBufferVK->m_DataSize;
 
                 pWriteSets[i].pBufferInfo = &pBufferInfos[i];
 
                 bufferIndex++;
             }
-            else if (element.Type == DescriptorType::CombinedSampler)
+            else if (element.Type == DescriptorType::ShaderResourceView)
             {
-                pImageInfos[imageIndex].sampler = element.pImage->m_pSampler;
-                pImageInfos[imageIndex].imageView = element.pImage->m_pViewHandle;
-                pImageInfos[imageIndex].imageLayout = element.pImage->m_FinalLayout;
+                pImageInfos[imageIndex].sampler = pImageVK->m_pSampler;
+                pImageInfos[imageIndex].imageView = pImageVK->m_pViewHandle;
+                pImageInfos[imageIndex].imageLayout = pImageVK->m_FinalLayout;
 
                 pWriteSets[i].pImageInfo = &pImageInfos[i];
 
@@ -803,7 +801,7 @@ namespace lr::Graphics
 
             pWriteSets[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             pWriteSets[i].pNext = nullptr;
-            pWriteSets[i].dstSet = pSet->pHandle;
+            pWriteSets[i].dstSet = pSetVK->pHandle;
             pWriteSets[i].dstBinding = i;
             pWriteSets[i].dstArrayElement = 0;
             pWriteSets[i].descriptorCount = element.ArraySize;
@@ -813,7 +811,7 @@ namespace lr::Graphics
         vkUpdateDescriptorSets(m_pDevice, pDesc->BindingCount, pWriteSets, 0, nullptr);
     }
 
-    VkDescriptorPool VKAPI::CreateDescriptorPool(const std::initializer_list<VKDescriptorBindingDesc> &layouts)
+    VkDescriptorPool VKAPI::CreateDescriptorPool(const std::initializer_list<DescriptorBindingDesc> &layouts)
     {
         ZoneScoped;
 
@@ -1568,10 +1566,11 @@ namespace lr::Graphics
         VkExtensionProperties *pDeviceExtensions = new VkExtensionProperties[deviceExtensionCount];
         vkEnumerateDeviceExtensionProperties(pPhysicalDevice, nullptr, &deviceExtensionCount, pDeviceExtensions);
 
-        constexpr eastl::array<const char *, 3> ppRequiredExtensions = {
+        constexpr eastl::array<const char *, 4> ppRequiredExtensions = {
             "VK_KHR_swapchain",
             "VK_KHR_create_renderpass2",
             "VK_KHR_synchronization2",
+            "VK_EXT_extended_dynamic_state2",
         };
 
         for (auto &pExtensionName : ppRequiredExtensions)
@@ -1715,17 +1714,26 @@ namespace lr::Graphics
     };
 
     constexpr VkDescriptorType kDescriptorTypeLUT[] = {
-        VK_DESCRIPTOR_TYPE_SAMPLER,                 // Sampler
-        VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,           // Texture
-        VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,  // CombinedSampler
-        VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,          // ConstantBuffer
-        VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,          // StructuredBuffer
-        VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,           // RWTexture
+        VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,  // ShaderResourceView
+        VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,          // ConstantBufferView
+        VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,          // UnorderedAccessBuffer
+        VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,           // UnorderedAccessView
+        VK_DESCRIPTOR_TYPE_MAX_ENUM,                // RootConstant
     };
 
     constexpr VkImageUsageFlags kImageUsageLUT[] = {
         VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,          // ColorAttachment
         VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,  // DepthAttachment
+    };
+
+    constexpr VkShaderStageFlagBits kShaderTypeLUT[] = {
+        VK_SHADER_STAGE_VERTEX_BIT,
+        VK_SHADER_STAGE_FRAGMENT_BIT,
+        VK_SHADER_STAGE_COMPUTE_BIT,
+        VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT,
+        VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT,
+        VK_SHADER_STAGE_GEOMETRY_BIT,
+        VK_SHADER_STAGE_FLAG_BITS_MAX_ENUM,
     };
 
     VkFormat VKAPI::ToVulkanFormat(ResourceFormat format)
@@ -1791,6 +1799,11 @@ namespace lr::Graphics
             v |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 
         return (VkBufferUsageFlagBits)v;
+    }
+
+    VkShaderStageFlagBits VKAPI::ToVulkanShaderType(ShaderType type)
+    {
+        return kShaderTypeLUT[(u32)type];
     }
 
 }  // namespace lr::Graphics

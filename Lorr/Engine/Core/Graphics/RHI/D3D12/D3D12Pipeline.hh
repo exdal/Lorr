@@ -1,22 +1,22 @@
 //
-// Created on Wednesday 21st September 2022 by e-erdal
+// Created on Thursday 27th October 2022 by e-erdal
 //
 
 #pragma once
 
 #include "Core/Graphics/RHI/Base/BasePipeline.hh"
 
-#include "VKSym.hh"
+#include "D3D12Sym.hh"
 
 namespace lr::Graphics
 {
-    struct VKPipeline : BasePipeline
+    struct D3D12Pipeline : BasePipeline
     {
-        VkPipeline pHandle = nullptr;
-        VkPipelineLayout pLayout = nullptr;
+        ID3D12PipelineState *pHandle = nullptr;
+        ID3D12RootSignature *pLayout = nullptr;
     };
 
-    struct VKGraphicsPipelineBuildInfo : GraphicsPipelineBuildInfo
+    struct D3D12GraphicsPipelineBuildInfo : GraphicsPipelineBuildInfo
     {
         void Init();
 
@@ -34,7 +34,6 @@ namespace lr::Graphics
         // Rasterizer
         void SetDepthClamp(bool enabled);
         void SetRasterizerDiscard(bool enabled);
-        void SetPolygonMode(VkPolygonMode mode);  // TODO: Maybe abstract `VkPolygonMode`
         void SetCullMode(CullMode mode, bool frontFaceClockwise);
         void SetDepthBias(bool enabled, f32 constantFactor, f32 clamp, f32 slopeFactor);
 
@@ -54,35 +53,13 @@ namespace lr::Graphics
         // void SetBlendColorFactor(VkBlendFactor src, VkBlendFactor dst, VkBlendOp op);
         // void SetBlendAlphaFactor(VkBlendFactor src, VkBlendFactor dst, VkBlendOp op);
         // void SetBlendWriteState(bool writeR, bool writeG, bool writeB, bool writeA);
-        // Dynamic State
-        // void SetDynamicState(const std::initializer_list<VkDynamicState> &dynamicState);
-
-        static constexpr u32 kMaxShaderStageCount = 8;
 
         // Good thing that this create info takes pointers,
         // so we can easily enable/disable them by referencing them (nullptr means disabled)
-        VkGraphicsPipelineCreateInfo m_CreateInfo;
+        D3D12_GRAPHICS_PIPELINE_STATE_DESC m_CreateInfo;
 
         // Vars we will reference to create info
-        VkPipelineVertexInputStateCreateInfo m_VertexInputState;
-        VkVertexInputBindingDescription m_VertexBindingDesc;
-        VkVertexInputAttributeDescription m_pVertexAttribs[8];
-
-        VkPipelineInputAssemblyStateCreateInfo m_InputAssemblyState;
-        VkPipelineTessellationStateCreateInfo m_TessellationState;
-
-        VkPipelineViewportStateCreateInfo m_ViewportState;
-
-        VkPipelineRasterizationStateCreateInfo m_RasterizationState;
-        VkPipelineMultisampleStateCreateInfo m_MultisampleState;
-        VkPipelineDepthStencilStateCreateInfo m_DepthStencilState;
-
-        VkPipelineColorBlendStateCreateInfo m_ColorBlendState;
-        VkPipelineColorBlendAttachmentState m_pColorBlendAttachments[8];
-
-        VkPipelineDynamicStateCreateInfo m_DynamicState;
-
-        VkPipelineShaderStageCreateInfo m_pShaderStages[kMaxShaderStageCount];
+        D3D12_INPUT_ELEMENT_DESC m_pVertexAttribs[8];
     };
 
 }  // namespace lr::Graphics

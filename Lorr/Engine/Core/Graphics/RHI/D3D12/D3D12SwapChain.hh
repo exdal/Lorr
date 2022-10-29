@@ -16,6 +16,7 @@ namespace lr::Graphics
 
     struct D3D12SwapChain : public BaseSwapChain
     {
+        /// INTERNALS ///
         IDXGISwapChain3 *m_pHandle = nullptr;
         DXGI_COLOR_SPACE_TYPE m_ColorSpace;
         DXGI_SWAP_EFFECT m_PresentMode;

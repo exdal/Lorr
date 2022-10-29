@@ -1,6 +1,7 @@
 #include "VKPipeline.hh"
 
 #include "VKAPI.hh"
+#include "VKShader.hh"
 
 namespace lr::Graphics
 {
@@ -47,8 +48,8 @@ namespace lr::Graphics
 
         /// ------------------------------------- ///
 
-        m_ViewportState.pViewports = m_pViewports;
-        m_ViewportState.pScissors = m_pScissors;
+        m_ViewportState.pViewports = nullptr;
+        m_ViewportState.pScissors = nullptr;
 
         /// ------------------------------------- ///
 
@@ -65,20 +66,28 @@ namespace lr::Graphics
 
         /// ------------------------------------- ///
 
-        m_DynamicState.pDynamicStates = m_DynamicStates;
+        constexpr eastl::array<VkDynamicState, 4> kDynamicStates = {
+            VK_DYNAMIC_STATE_VIEWPORT,
+            VK_DYNAMIC_STATE_SCISSOR,
+            VK_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY,
+            VK_DYNAMIC_STATE_PATCH_CONTROL_POINTS_EXT,
+        };
+
+        m_DynamicState.dynamicStateCount = kDynamicStates.count;
+        m_DynamicState.pDynamicStates = kDynamicStates.data();
     }
 
-    void VKGraphicsPipelineBuildInfo::SetShader(BaseShader *pShader)
+    void VKGraphicsPipelineBuildInfo::SetShader(BaseShader *pShader, eastl::string_view entryPoint)
     {
         ZoneScoped;
 
-        // VkPipelineShaderStageCreateInfo &shaderStage = m_pShaderStages[m_CreateInfo.stageCount++];
-        // shaderStage.stage = stage;
-        // shaderStage.pName = entryPoint.data();
-        // shaderStage.module = pShader;
+        VkPipelineShaderStageCreateInfo &shaderStage = m_pShaderStages[m_CreateInfo.stageCount++];
+        shaderStage.stage = VKAPI::ToVulkanShaderType(pShader->Type);
+        shaderStage.pName = entryPoint.data();
+        shaderStage.module = ((VKShader *)pShader)->pHandle;
     }
 
-    void VKGraphicsPipelineBuildInfo::SetInputLayout(u32 bindingID, InputLayout &inputLayout)
+    void VKGraphicsPipelineBuildInfo::SetInputLayout(InputLayout &inputLayout)
     {
         ZoneScoped;
 
@@ -102,47 +111,6 @@ namespace lr::Graphics
         ZoneScoped;
 
         m_InputAssemblyState.topology = VKAPI::ToVulkanTopology(type);
-    }
-
-    void VKGraphicsPipelineBuildInfo::SetPatchCount(u32 count)
-    {
-        ZoneScoped;
-
-        m_TessellationState.patchControlPoints = count;
-    }
-
-    void VKGraphicsPipelineBuildInfo::AddViewport(u32 viewportCount, u32 scissorCount)
-    {
-        ZoneScoped;
-
-        m_ViewportState.viewportCount += viewportCount;
-        m_ViewportState.scissorCount += scissorCount;
-    }
-
-    void VKGraphicsPipelineBuildInfo::SetViewport(u32 viewportID, u32 width, u32 height, f32 minDepth, f32 maxDepth)
-    {
-        ZoneScoped;
-
-        VkViewport &vp = m_pViewports[viewportID];
-
-        vp.width = width;
-        vp.height = height;
-        vp.x = 0;
-        vp.y = 0;
-        vp.minDepth = minDepth;
-        vp.maxDepth = maxDepth;
-    }
-
-    void VKGraphicsPipelineBuildInfo::SetScissor(u32 scissorID, u32 x, u32 y, u32 w, u32 h)
-    {
-        ZoneScoped;
-
-        VkRect2D &sc = m_pScissors[scissorID];
-
-        sc.offset.x = x;
-        sc.offset.y = y;
-        sc.extent.width = w;
-        sc.extent.height = h;
     }
 
     void VKGraphicsPipelineBuildInfo::SetDepthClamp(bool enabled)
@@ -184,13 +152,6 @@ namespace lr::Graphics
         m_RasterizationState.depthBiasSlopeFactor = slopeFactor;
     }
 
-    void VKGraphicsPipelineBuildInfo::SetLineWidth(f32 size)
-    {
-        ZoneScoped;
-
-        m_RasterizationState.lineWidth = size;
-    }
-
     void VKGraphicsPipelineBuildInfo::SetSampleCount(u32 bits)
     {
         ZoneScoped;
@@ -198,30 +159,17 @@ namespace lr::Graphics
         m_MultisampleState.rasterizationSamples = (VkSampleCountFlagBits)bits;
     }
 
-    void VKGraphicsPipelineBuildInfo::SetSampledShading(bool enabled, f32 minSampleShading)
+    void VKGraphicsPipelineBuildInfo::SetAlphaToCoverage(bool alphaToCoverage)
     {
         ZoneScoped;
     }
 
-    void VKGraphicsPipelineBuildInfo::SetAlphaToCoverage(bool alphaToCoverage, bool alphaToOne)
+    void VKGraphicsPipelineBuildInfo::SetDepthState(bool depthTestEnabled, bool depthWriteEnabled)
     {
         ZoneScoped;
-    }
-
-    void VKGraphicsPipelineBuildInfo::SetDepthState(bool depthTestEnabled, bool depthWriteEnabled, bool depthBoundsTestEnabled)
-    {
-        ZoneScoped;
-
-        m_DepthStencilState.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
-
-        m_DepthStencilState.back.failOp = VK_STENCIL_OP_KEEP;
-        m_DepthStencilState.back.passOp = VK_STENCIL_OP_KEEP;
-        m_DepthStencilState.back.compareOp = VK_COMPARE_OP_ALWAYS;
-        m_DepthStencilState.front = m_DepthStencilState.front;
 
         m_DepthStencilState.depthTestEnable = depthTestEnabled;
         m_DepthStencilState.depthWriteEnable = depthWriteEnabled;
-        m_DepthStencilState.depthBoundsTestEnable = depthBoundsTestEnabled;
     }
 
     void VKGraphicsPipelineBuildInfo::SetStencilState(bool stencilTestEnabled)
@@ -231,27 +179,26 @@ namespace lr::Graphics
         m_DepthStencilState.stencilTestEnable = stencilTestEnabled;
     }
 
+    void VKGraphicsPipelineBuildInfo::SetDepthFunction(DepthCompareOp function)
+    {
+        ZoneScoped;
+
+        m_DepthStencilState.depthCompareOp = (VkCompareOp)function;
+    }
+
     void VKGraphicsPipelineBuildInfo::SetStencilOperation(DepthStencilOpDesc front, DepthStencilOpDesc back)
     {
         ZoneScoped;
 
-        m_DepthStencilState.front.compareOp = (VkCompareOp)front.Function;
+        m_DepthStencilState.front.compareOp = (VkCompareOp)front.CompareFunc;
         m_DepthStencilState.front.depthFailOp = (VkStencilOp)front.DepthFail;
         m_DepthStencilState.front.failOp = (VkStencilOp)front.Fail;
         m_DepthStencilState.front.passOp = (VkStencilOp)front.Pass;
 
-        m_DepthStencilState.back.compareOp = (VkCompareOp)back.Function;
+        m_DepthStencilState.back.compareOp = (VkCompareOp)back.CompareFunc;
         m_DepthStencilState.back.depthFailOp = (VkStencilOp)back.DepthFail;
         m_DepthStencilState.back.failOp = (VkStencilOp)back.Fail;
         m_DepthStencilState.back.passOp = (VkStencilOp)back.Pass;
-    }
-
-    void VKGraphicsPipelineBuildInfo::SetDepthBounds(f32 min, f32 max)
-    {
-        ZoneScoped;
-
-        m_DepthStencilState.minDepthBounds = min;
-        m_DepthStencilState.maxDepthBounds = max;
     }
 
     void VKGraphicsPipelineBuildInfo::SetBlendAttachment(u32 attachmentID, bool enabled, u8 mask)
@@ -266,9 +213,11 @@ namespace lr::Graphics
 
         m_pColorBlendAttachments[attachmentID].srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
         m_pColorBlendAttachments[attachmentID].dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-        m_pColorBlendAttachments[attachmentID].colorBlendOp = VK_BLEND_OP_ADD;
+
         m_pColorBlendAttachments[attachmentID].srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
         m_pColorBlendAttachments[attachmentID].dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+
+        m_pColorBlendAttachments[attachmentID].colorBlendOp = VK_BLEND_OP_ADD;
         m_pColorBlendAttachments[attachmentID].alphaBlendOp = VK_BLEND_OP_ADD;
     }
 

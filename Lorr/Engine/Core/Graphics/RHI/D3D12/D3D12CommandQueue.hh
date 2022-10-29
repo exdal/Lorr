@@ -4,13 +4,15 @@
 
 #pragma once
 
+#include "Core/Graphics/RHI/Base/BaseCommandQueue.hh"
+
 #include "D3D12Sym.hh"
 
 #include "D3D12CommandList.hh"
 
 namespace lr::Graphics
 {
-    struct D3D12CommandQueue
+    struct D3D12CommandQueue : BaseCommandQueue
     {
         void ExecuteCommandList(D3D12CommandList *pList);
 

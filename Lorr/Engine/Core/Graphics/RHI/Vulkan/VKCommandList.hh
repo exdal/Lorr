@@ -21,7 +21,7 @@ namespace lr::Graphics
     // A VKCommandList cannot execute itself, to execute it, we need to use VKCommandQueue
     struct VKCommandList : BaseCommandList
     {
-        void Init(VkCommandBuffer pHandle, CommandListType type, VkFence pFence);
+        void Init(VkCommandBuffer pHandle, VkFence pFence, CommandListType type);
 
         void SetViewport(u32 id, u32 width, u32 height, f32 minDepth, f32 maxDepth);
         void SetScissor(u32 id, u32 x, u32 y, u32 w, u32 h);

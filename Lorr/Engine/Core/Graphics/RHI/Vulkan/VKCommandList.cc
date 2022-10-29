@@ -7,13 +7,14 @@
 
 namespace lr::Graphics
 {
-    void VKCommandList::Init(VkCommandBuffer pHandle, CommandListType type, VkFence pFence)
+    void VKCommandList::Init(VkCommandBuffer pHandle, VkFence pFence, CommandListType type)
     {
         ZoneScoped;
 
         m_pHandle = pHandle;
-        m_Type = type;
         m_pFence = pFence;
+        
+        m_Type = type;
     }
 
     void VKCommandList::SetViewport(u32 id, u32 width, u32 height, f32 minDepth, f32 maxDepth)

@@ -14,7 +14,7 @@
 
 #define LOG_INFO(...) lr::Logger::s_pCoreLogger->info(__VA_ARGS__)
 #define LOG_WARN(...) lr::Logger::s_pCoreLogger->warn(__VA_ARGS__)
-#define LOG_ERROR(...) lr::Logger::s_pCoreLogger->error(__VA_ARGS__);
+#define LOG_ERROR(...) lr::Logger::s_pCoreLogger->error(__VA_ARGS__)
 
 #define LOG_CRITICAL(...)                                                                                                                            \
     {                                                                                                                                                \

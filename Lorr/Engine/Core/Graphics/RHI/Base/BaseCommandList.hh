@@ -34,8 +34,8 @@ namespace lr::Graphics
 
         struct Depth
         {
-            f32 Depth = 0.f;
-            u8 Stencil = 0;
+            f32 Depth ;
+            u8 Stencil;
         } DepthStencilColor;
 
         bool IsDepth = false;
@@ -50,14 +50,14 @@ namespace lr::Graphics
         XMUINT4 RenderArea = { 0, 0, UINT32_MAX, UINT32_MAX };
     };
 
-    struct BaseCommandAllocator
-    {
-    };
-
     struct BaseCommandList
     {
-        CommandListType m_Type;
-        BaseCommandAllocator *m_pAllocator = nullptr;
+        CommandListType m_Type = CommandListType::Direct;
+    };
+    
+
+    struct BaseCommandAllocator
+    {
     };
 
     struct CommandListPool

@@ -33,7 +33,6 @@ namespace lr::Graphics
 
         // Rasterizer
         void SetDepthClamp(bool enabled);
-        void SetRasterizerDiscard(bool enabled);
         void SetPolygonMode(VkPolygonMode mode);  // TODO: Maybe abstract `VkPolygonMode`
         void SetCullMode(CullMode mode, bool frontFaceClockwise);
         void SetDepthBias(bool enabled, f32 constantFactor, f32 clamp, f32 slopeFactor);

@@ -45,13 +45,13 @@ namespace lr::Memory
 
     /// ------------------------------------------------------ ///
 
-    void TLSFMemoryAllocator::Init(u32 poolSize)
+    void TLSFMemoryAllocator::Init(u64 memSize)
     {
         ZoneScoped;
 
-        m_Size = poolSize;
+        m_Size = memSize;
 
-        m_BlockCount = BLOCK_ALLOC_COUNT;
+        m_BlockCount = 0x1000;
         m_pBlockPool = Memory::Allocate<TLSFBlock>(m_BlockCount);
 
         m_pFrontBlock = m_pBlockPool;
@@ -60,20 +60,18 @@ namespace lr::Memory
         /// CREATE INITIAL BLOCK ///
 
         TLSFBlock *pHeadBlock = AllocateInternalBlock();
-        pHeadBlock->pPrevPhysical = nullptr;
+        pHeadBlock->pPrevPhysical = pHeadBlock;
         pHeadBlock->pNextPhysical = nullptr;
         pHeadBlock->Offset = 0;
 
         AddFreeBlock(pHeadBlock);
     }
 
-    u32 TLSFMemoryAllocator::Allocate(u32 size, u32 alignment, TLSFBlock *&pBlockOut)
+    TLSFBlock *TLSFMemoryAllocator::Allocate(u64 size, u32 alignment)
     {
-        ZoneScoped;
-
         TLSFBlock *pAvailableBlock = nullptr;
 
-        u32 alignedSize = (size + ALIGN_SIZE_MASK - 1) & ~(ALIGN_SIZE_MASK - 1);
+        u64 alignedSize = AlignUp(size, ALIGN_SIZE);
 
         /// Find free and closest block available
         TLSFBlock *pBlock = FindFreeBlock(alignedSize);
@@ -92,13 +90,12 @@ namespace lr::Memory
                 AddFreeBlock(pSplitBlock);
             }
 
-            pBlockOut = pBlock;
-            
-            u32 alignedOffset = (pBlock->Offset + alignment - 1) & ~(alignment - 1);
-            return alignedOffset;
+            pAvailableBlock = pBlock;
+
+            // u32 alignedOffset = (pBlock->Offset + (alignment - 1)) & ~(alignment - 1);
         }
 
-        return 0;
+        return pAvailableBlock;
     }
 
     void TLSFMemoryAllocator::Free(TLSFBlock *pBlock)
@@ -125,26 +122,39 @@ namespace lr::Memory
         AddFreeBlock(pBlock);
     }
 
+    i32 TLSFMemoryAllocator::GetFirstIndex(u64 size)
+    {
+        if (size < MIN_BLOCK_SIZE)
+            return 0;
+
+        return GetMSB(size) - (FL_INDEX_SHIFT - 1);
+    }
+
+    i32 TLSFMemoryAllocator::GetSecondIndex(i32 firstIndex, u32 size)
+    {
+        if (size < MIN_BLOCK_SIZE)
+            return size / (MIN_BLOCK_SIZE / SL_INDEX_COUNT);
+
+        return (size >> ((firstIndex + (FL_INDEX_SHIFT - 1)) - SL_INDEX_COUNT_LOG2)) ^ (1 << SL_INDEX_COUNT_LOG2);
+    }
+
     void TLSFMemoryAllocator::AddFreeBlock(TLSFBlock *pBlock)
     {
         ZoneScoped;
 
         u32 size = GetPhysicalSize(pBlock);
 
-        u32 firstIndex = 0;
-        u32 secondIndex = 0;
-        GetListIndex(size, firstIndex, secondIndex, false);
+        u32 firstIndex = GetFirstIndex(size);
+        u32 secondIndex = GetSecondIndex(firstIndex, size);
 
-        TLSFBlock *pNextBlock = m_ppBlocks[firstIndex][secondIndex];
+        TLSFBlock *pIndexBlock = m_ppBlocks[firstIndex][secondIndex];
 
-        if (pNextBlock)
-        {
-            pNextBlock->pPrevFree = pBlock;
-        }
-
+        pBlock->pNextFree = pIndexBlock;
         pBlock->pPrevFree = nullptr;
-        pBlock->pNextFree = pNextBlock;
         pBlock->IsFree = true;
+
+        if (pIndexBlock)
+            pIndexBlock->pPrevFree = pBlock;
 
         m_ppBlocks[firstIndex][secondIndex] = pBlock;
 
@@ -156,9 +166,8 @@ namespace lr::Memory
     {
         ZoneScoped;
 
-        u32 firstIndex = 0;
-        u32 secondIndex = 0;
-        GetListIndex(size, firstIndex, secondIndex, true);
+        u32 firstIndex = GetFirstIndex(size);
+        u32 secondIndex = GetSecondIndex(firstIndex, size);
 
         u32 secondListMap = m_pSecondListBitmap[firstIndex] & (~0U << secondIndex);
 
@@ -169,11 +178,11 @@ namespace lr::Memory
             if (firstListMap == 0)
                 return nullptr;  // well fuck
 
-            firstIndex = Memory::GetLSB(firstListMap);
+            firstIndex = GetLSB(firstListMap);
             secondListMap = m_pSecondListBitmap[firstIndex];
         }
 
-        secondIndex = Memory::GetLSB(secondListMap);
+        secondIndex = GetLSB(secondListMap);
 
         return m_ppBlocks[firstIndex][secondIndex];
     }
@@ -184,24 +193,19 @@ namespace lr::Memory
 
         u32 size = GetPhysicalSize(pBlock);
 
-        u32 firstIndex = 0;
-        u32 secondIndex = 0;
-        GetListIndex(size, firstIndex, secondIndex, false);
+        u32 firstIndex = GetFirstIndex(size);
+        u32 secondIndex = GetSecondIndex(firstIndex, size);
 
         TLSFBlock *pPrevBlock = pBlock->pPrevFree;
         TLSFBlock *pNextBlock = pBlock->pNextFree;
 
         if (pNextBlock)
-        {
             pNextBlock->pPrevFree = pPrevBlock;
-        }
 
         if (pPrevBlock)
-        {
             pPrevBlock->pNextFree = pNextBlock;
-        }
 
-        pBlock->IsFree = false;
+        // pBlock->IsFree = false;
 
         TLSFBlock *pListBlock = m_ppBlocks[firstIndex][secondIndex];
 
@@ -228,7 +232,7 @@ namespace lr::Memory
         u32 blockSize = GetPhysicalSize(pBlock);
         TLSFBlock *pNewBlock = nullptr;
 
-        if (blockSize >= size + SMALL_BLOCK_SIZE)
+        if (blockSize >= size + MIN_BLOCK_SIZE)
         {
             pNewBlock = AllocateInternalBlock();
 
@@ -259,33 +263,11 @@ namespace lr::Memory
         FreeInternalBlock(pSource);
     }
 
-    void TLSFMemoryAllocator::GetListIndex(u32 size, u32 &firstIndex, u32 &secondIndex, bool aligned)
-    {
-        ZoneScoped;
-
-        u32 alignMask = 1;
-
-        firstIndex = size < FL_INDEX_SHIFT_SIZE ? ALIGN_SIZE_LOG2 : Memory::GetMSB(size) - SL_INDEX_COUNT_LOG2;
-
-        if (aligned)
-        {
-            //? Note: We subtract from 32 because of `u32`, don't forget to change this to `firstIndex` bit count.
-            size += ~0U >> (32 - firstIndex);
-            alignMask = 3;
-        }
-
-        size >>= firstIndex;
-        secondIndex = size & (SL_INDEX_COUNT - 1);
-
-        size >>= SL_INDEX_COUNT_LOG2;
-        firstIndex = (firstIndex - ALIGN_SIZE_LOG2) + (size & alignMask);
-    }
-
     u32 TLSFMemoryAllocator::GetPhysicalSize(TLSFBlock *pBlock)
     {
         ZoneScoped;
 
-        return pBlock->pNextPhysical ? pBlock->pNextPhysical->Offset : m_Size - pBlock->Offset;
+        return pBlock->pNextPhysical ? pBlock->pNextPhysical->Offset - pBlock->Offset : m_Size - pBlock->Offset;
     }
 
     TLSFBlock *TLSFMemoryAllocator::AllocateInternalBlock()
@@ -300,7 +282,7 @@ namespace lr::Memory
             return pBlock;
         }
 
-        return ++m_pBackBlock;
+        return --m_pBackBlock;
     }
 
     void TLSFMemoryAllocator::FreeInternalBlock(TLSFBlock *pBlock)
@@ -309,7 +291,7 @@ namespace lr::Memory
 
         if (pBlock == m_pBackBlock)
         {
-            m_pBackBlock--;
+            m_pBackBlock++;
         }
         else
         {

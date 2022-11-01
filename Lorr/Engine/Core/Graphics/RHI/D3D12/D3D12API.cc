@@ -133,12 +133,39 @@ namespace lr::Graphics
         SAFE_RELEASE(pInfoQueue);
 #endif
 
+        InitAllocators();
+
+        m_CommandListPool.Init();
+        CreateDescriptorPool({
+            { D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 256 },
+            { D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 256 },
+        });
+
+        m_pPipelineCache = CreatePipelineCache();
+
+        m_pDirectQueue = (D3D12CommandQueue *)CreateCommandQueue(CommandListType::Direct);
+        m_SwapChain.Init(pWindow, this, SwapChainFlags::TripleBuffering);
+        m_SwapChain.CreateBackBuffers(this);
+
+        LOG_TRACE("Successfully initialized D3D12 context.");
+
+        InitCommandLists();
+
+        m_FenceThread.Begin(TFFenceWait, this);
+
+        LOG_TRACE("Initialized D3D12 render context.");
+
         return true;
     }
 
     void D3D12API::InitAllocators()
     {
         ZoneScoped;
+
+        constexpr u32 kTypeMem = Memory::MiBToBytes(8);
+
+        m_TypeAllocator.Init(kTypeMem);
+        m_pTypeData = new u8[kTypeMem];
     }
 
     BaseCommandQueue *D3D12API::CreateCommandQueue(CommandListType type)
@@ -165,7 +192,7 @@ namespace lr::Graphics
 
         m_pDevice->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&pAllocator->pHandle));
 
-        return nullptr;
+        return pAllocator;
     }
 
     BaseCommandList *D3D12API::CreateCommandList(CommandListType type)
@@ -175,10 +202,10 @@ namespace lr::Graphics
         BaseCommandAllocator *pAllocator = CreateCommandAllocator(type);
         API_VAR(D3D12CommandAllocator, pAllocator);
 
-        pAllocatorDX->pFence = CreateFence();
-        pAllocatorDX->FenceEvent = CreateEventExA(nullptr, nullptr, false, EVENT_ALL_ACCESS);
-
         D3D12CommandList *pList = AllocType<D3D12CommandList>();
+
+        pList->m_pFence = CreateFence();
+        pList->m_FenceEvent = CreateEventExA(nullptr, nullptr, false, EVENT_ALL_ACCESS);
 
         ID3D12GraphicsCommandList4 *pHandle = nullptr;
         m_pDevice->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, pAllocatorDX->pHandle, nullptr, IID_PPV_ARGS(&pHandle));
@@ -194,10 +221,8 @@ namespace lr::Graphics
 
         API_VAR(D3D12CommandList, pList);
 
-        ID3D12CommandAllocator *pAllocator = pListDX->m_Allocator.pHandle;
-
-        pAllocator->Reset();
-        pListDX->m_pHandle->Reset(pAllocator, nullptr);
+        pListDX->m_pAllocator->Reset();
+        pListDX->Reset(pListDX->m_pAllocator);
     }
 
     void D3D12API::EndCommandList(BaseCommandList *pList)
@@ -215,12 +240,28 @@ namespace lr::Graphics
 
         API_VAR(D3D12CommandAllocator, pAllocator);
 
-        pAllocatorDX->pHandle->Reset();
+        pAllocatorDX->Reset();
     }
 
     void D3D12API::ExecuteCommandList(BaseCommandList *pList, bool waitForFence)
     {
         ZoneScoped;
+
+        API_VAR(D3D12CommandList, pList);
+
+        m_pDirectQueue->ExecuteCommandList(pListDX);
+
+        if (waitForFence)
+        {
+            pListDX->m_pFence->SetEventOnCompletion(pListDX->m_DesiredFenceValue.load(eastl::memory_order_acquire), pListDX->m_FenceEvent);
+            WaitForSingleObjectEx(pListDX->m_FenceEvent, INFINITE, false);
+
+            m_CommandListPool.Release(pList);
+        }
+        else
+        {
+            m_CommandListPool.SignalFence(pList);
+        }
     }
 
     ID3D12Fence *D3D12API::CreateFence(u32 initialValue)
@@ -241,24 +282,21 @@ namespace lr::Graphics
         SAFE_RELEASE(pFence);
     }
 
-    void D3D12API::SignalFence(D3D12CommandAllocator *pAllocator)
+    bool D3D12API::IsFenceSignaled(D3D12CommandList *pList)
     {
         ZoneScoped;
 
-        u32 nextFence = pAllocator->DesiredFenceValue.add_fetch(1, eastl::memory_order_acq_rel);
-        pAllocator->pFence->Signal(nextFence);
-    }
+        u64 completed = pList->m_pFence->GetCompletedValue();
+        u64 desired = pList->m_DesiredFenceValue.load(eastl::memory_order_acquire);
 
-    bool D3D12API::IsFenceSignaled(D3D12CommandAllocator *pAllocator)
-    {
-        ZoneScoped;
-
-        return pAllocator->DesiredFenceValue.load(eastl::memory_order_acquire) == pAllocator->pFence->GetCompletedValue();
+        return completed == desired;
     }
 
     BaseRenderPass *D3D12API::CreateRenderPass(RenderPassDesc *pDesc)
     {
         ZoneScoped;
+
+        return nullptr;
     }
 
     void D3D12API::DeleteRenderPass(BaseRenderPass *pRenderPass)
@@ -338,14 +376,11 @@ namespace lr::Graphics
         return pPipeline;
     }
 
-    void D3D12API::CreateSwapChain(D3D12SwapChain *&pHandle, DXGI_SWAP_CHAIN_DESC1 &desc)
+    void D3D12API::CreateSwapChain(IDXGISwapChain1 *&pHandle, void *pWindowHandle, DXGI_SWAP_CHAIN_DESC1 &desc, DXGI_SWAP_CHAIN_FULLSCREEN_DESC *pFSD)
     {
         ZoneScoped;
-    }
 
-    void D3D12API::DeleteSwapChain(D3D12SwapChain *pSwapChain)
-    {
-        ZoneScoped;
+        m_pFactory->CreateSwapChainForHwnd(m_pDirectQueue->m_pHandle, (HWND)pWindowHandle, &desc, pFSD, nullptr, &pHandle);
     }
 
     void D3D12API::ResizeSwapChain(u32 width, u32 height)
@@ -356,6 +391,38 @@ namespace lr::Graphics
     void D3D12API::Frame()
     {
         ZoneScoped;
+
+        BaseCommandList *pList = GetCommandList();
+        API_VAR(D3D12CommandList, pList);
+
+        ID3D12GraphicsCommandList4 *pGList = pListDX->m_pHandle;
+
+        BeginCommandList(pList);
+
+        D3D12Image &image = m_SwapChain.m_pFrames[m_SwapChain.m_CurrentFrame].Image;
+
+        D3D12_RESOURCE_BARRIER barrier = {};
+        barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        barrier.Transition.pResource = image.m_pHandle;
+
+        barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
+        barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
+
+        pGList->ResourceBarrier(1, &barrier);
+
+        static XMFLOAT4 clear = { 0.0, 0, 0, 0 };
+        pGList->ClearRenderTargetView(image.m_ViewHandle, &clear.x, 0, nullptr);
+
+        barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
+        barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
+
+        pGList->ResourceBarrier(1, &barrier);
+
+        EndCommandList(pList);
+        ExecuteCommandList(pList, false);
+
+        m_SwapChain.Present();
+        m_SwapChain.NextFrame();
     }
 
     BaseDescriptorSet *D3D12API::CreateDescriptorSet(DescriptorSetDesc *pDesc)
@@ -413,24 +480,107 @@ namespace lr::Graphics
         ZoneScoped;
     }
 
-    void D3D12API::CreateDescriptorPool(D3D12DescriptorPool &pool, const std::initializer_list<DescriptorBindingDesc> &layouts)
+    void D3D12API::CreateDescriptorPool(const std::initializer_list<D3D12DescriptorBindingDesc> &bindings)
     {
         ZoneScoped;
 
-        pool.HeapCount = layouts.size();
-
-        u32 idx = 0;
-        for (auto &element : layouts)
+        for (auto &element : bindings)
         {
+            D3D12DescriptorHeap &heap = m_pDescriptorHeaps[element.HeapType];
+            ID3D12DescriptorHeap *pHandle = heap.pHandle;
+
             D3D12_DESCRIPTOR_HEAP_DESC heapDesc = {};
-            heapDesc.Type = ToDXHeapType(element.Type);
-            heapDesc.NumDescriptors = element.ArraySize;
-            heapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+            heapDesc.Type = element.HeapType;
+            heapDesc.NumDescriptors = element.Count;
+            // heapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 
-            m_pDevice->CreateDescriptorHeap(&heapDesc, IID_PPV_ARGS(&pool.pHeaps[idx]));
+            m_pDevice->CreateDescriptorHeap(&heapDesc, IID_PPV_ARGS(&pHandle));
 
-            idx++;
+            heap.pHandle = pHandle;
+            heap.IncrementSize = m_pDevice->GetDescriptorHandleIncrementSize(element.HeapType);
         }
+    }
+
+    D3D12_CPU_DESCRIPTOR_HANDLE D3D12API::AllocateCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE type, u32 index)
+    {
+        ZoneScoped;
+
+        D3D12DescriptorHeap &heap = m_pDescriptorHeaps[type];
+
+        D3D12_CPU_DESCRIPTOR_HANDLE handle = heap.pHandle->GetCPUDescriptorHandleForHeapStart();
+
+        if (index == -1)
+        {
+            handle.ptr += heap.IncrementSize * heap.Offset;
+            heap.Offset++;
+        }
+        else
+        {
+            handle.ptr += heap.IncrementSize * index;
+        }
+
+        return handle;
+    }
+
+    BaseImage *D3D12API::CreateImage(ImageDesc *pDesc, ImageData *pData)
+    {
+        ZoneScoped;
+
+        D3D12Image *pImage = AllocType<D3D12Image>();
+
+        return pImage;
+    }
+
+    void D3D12API::DeleteImage(BaseImage *pImage)
+    {
+        ZoneScoped;
+    }
+
+    void D3D12API::CreateRenderTarget(BaseImage *pImage)
+    {
+        ZoneScoped;
+
+        API_VAR(D3D12Image, pImage);
+
+        pImageDX->m_ViewHandle = AllocateCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+
+        D3D12_RENDER_TARGET_VIEW_DESC viewDesc = {};
+        viewDesc.Format = ToDXFormat(pImage->m_Format);
+        viewDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
+        viewDesc.Texture2D.MipSlice = 0;
+
+        m_pDevice->CreateRenderTargetView(pImageDX->m_pHandle, &viewDesc, pImageDX->m_ViewHandle);
+    }
+
+    i64 D3D12API::TFFenceWait(void *pData)
+    {
+        D3D12API *pAPI = (D3D12API *)pData;
+        CommandListPool &commandPool = pAPI->m_CommandListPool;
+        auto &directFenceMask = commandPool.m_DirectFenceMask;
+
+        while (true)
+        {
+            u32 mask = directFenceMask.load(eastl::memory_order_acquire);
+
+            // Iterate over all signaled fences
+            while (mask != 0)
+            {
+                u32 index = Memory::GetLSB(mask);
+
+                BaseCommandList *pList = commandPool.m_DirectLists[index];
+                API_VAR(D3D12CommandList, pList);
+
+                if (pAPI->IsFenceSignaled(pListDX))
+                {
+                    commandPool.Release(pList);
+                    commandPool.ReleaseFence(index);
+                }
+
+                mask = directFenceMask.load(eastl::memory_order_acquire);
+            }
+        }
+
+        return 1;
     }
 
     /// ---------------- Type Conversion LUTs ---------------- ///
@@ -483,10 +633,12 @@ namespace lr::Graphics
     };
 
     constexpr D3D12_DESCRIPTOR_HEAP_TYPE kDescriptorHeapTypeLUT[] = {
+        D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER,      // Sampler
         D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,  // ShaderResourceView
-        D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER,      // ConstantBufferView
-        D3D12_DESCRIPTOR_HEAP_TYPE_RTV,          // UnorderedAccessBuffer
-        D3D12_DESCRIPTOR_HEAP_TYPE_DSV,          // UnorderedAccessView
+        D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,  // ConstantBufferView
+        D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,  // UnorderedAccessBuffer
+        D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,  // UnorderedAccessView
+        D3D12_DESCRIPTOR_HEAP_TYPE_NUM_TYPES,    // RootConstant
     };
 
     constexpr D3D12_DESCRIPTOR_RANGE_TYPE kDescriptorRangeLUT[] = {

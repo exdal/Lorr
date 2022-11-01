@@ -15,7 +15,7 @@ namespace lr::UI
         ZoneScoped;
 
         Engine *pEngine = GetEngine();
-        Graphics::VKAPI *pAPI = pEngine->m_pAPI;
+        Graphics::VKAPI *pAPI = (Graphics::VKAPI *)pEngine->m_pAPI;
         Graphics::APIStateManager &stateMan = pAPI->m_APIStateMan;
 
         /// INIT IMGUI ///
@@ -65,9 +65,9 @@ namespace lr::UI
         imageData.Width = fontW;
         imageData.Height = fontH;
 
-        pAPI->CreateImage(&m_Texture, &imageDesc, &imageData);
-        pAPI->AllocateImageMemory(&m_Texture, Graphics::AllocatorType::ImageTLSF);
-        pAPI->BindMemory(&m_Texture);
+        // pAPI->CreateImage(&m_Texture, &imageDesc, &imageData);
+        // pAPI->AllocateImageMemory(&m_Texture, Graphics::AllocatorType::ImageTLSF);
+        // pAPI->BindMemory(&m_Texture);
 
         // Graphics::VKCommandList *pList = pAPI->GetCommandList();
         // pAPI->BeginCommandList(pList);
@@ -112,7 +112,7 @@ namespace lr::UI
         Engine *pEngine = GetEngine();
 
         PlatformWindow &window = pEngine->m_Window;
-        Graphics::VKAPI *pAPI = pEngine->m_pAPI;
+        Graphics::VKAPI *pAPI = (Graphics::VKAPI *)pEngine->m_pAPI;
         Graphics::APIStateManager &stateMan = pAPI->m_APIStateMan;
 
         ImDrawData *pDrawData = ImGui::GetDrawData();

@@ -18,6 +18,7 @@
 #include <cwchar>
 #include <exception>
 
+#undef FMT_STATIC_THOUSANDS_SEPARATOR
 #ifndef FMT_STATIC_THOUSANDS_SEPARATOR
 #  include <locale>
 #endif

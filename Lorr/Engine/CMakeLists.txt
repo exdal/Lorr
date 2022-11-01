@@ -3,9 +3,10 @@ set(LORR_VENDOR
     EAThread
     DirectXMath
     lw
-    fmt
-    spdlog
     tracy
+
+    spdlog
+    fmt
     
     Vulkan-Headers
     imgui

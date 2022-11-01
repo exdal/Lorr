@@ -1,5 +1,6 @@
 #include "pch.hh"
 
+//~ Comment them for ASAN
 
 #if TRACY_ENABLE
 #define TRACY_ALLOC(ptr, size) TracySecureAlloc(ptr, size)

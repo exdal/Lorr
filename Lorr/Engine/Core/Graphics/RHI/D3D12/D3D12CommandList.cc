@@ -10,6 +10,16 @@ namespace lr::Graphics
         m_pAllocator = pAllocator;
 
         m_Type = type;
+
+        m_pHandle->Close();
+        m_DesiredFenceValue = 0;
+    }
+
+    void D3D12CommandList::Reset(D3D12CommandAllocator *pAllocator)
+    {
+        ZoneScoped;
+
+        m_pHandle->Reset(pAllocator->pHandle, nullptr);
     }
 
 }  // namespace lr::Graphics

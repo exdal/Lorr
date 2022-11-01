@@ -59,21 +59,22 @@ namespace lr::Graphics
         virtual void ResizeSwapChain(u32 width, u32 height) = 0;
 
         virtual void Frame() = 0;
-        virtual void WaitForDevice() = 0;
 
         /// RESOURCE ///
         virtual BaseDescriptorSet *CreateDescriptorSet(DescriptorSetDesc *pDesc) = 0;
         virtual void UpdateDescriptorData(BaseDescriptorSet *pSet, DescriptorSetDesc *pDesc) = 0;
 
+        // * Images * //
+        virtual BaseImage *CreateImage(ImageDesc *pDesc, ImageData *pData) = 0;
+        virtual void DeleteImage(BaseImage *pImage) = 0;
+
         template<typename T>
         T *AllocType()
         {
-            Memory::TLSFBlock *pBlock = nullptr;
-            u32 offset = m_TypeAllocator.Allocate(sizeof(T) + PTR_SIZE, Memory::TLSFMemoryAllocator::ALIGN_SIZE_LOG2, pBlock);
+            Memory::TLSFBlock *pBlock = m_TypeAllocator.Allocate(sizeof(T) + PTR_SIZE, Memory::TLSFMemoryAllocator::ALIGN_SIZE);
 
-            memcpy(m_pTypeData + offset, pBlock, PTR_SIZE);
-
-            return (T *)(m_pTypeData + offset + PTR_SIZE);
+            memcpy(m_pTypeData + pBlock->Offset, pBlock, PTR_SIZE);
+            return (T *)(m_pTypeData + pBlock->Offset + PTR_SIZE);
         }
 
         template<typename T>

@@ -14,12 +14,16 @@ namespace lr::Graphics
     {
         ID3D12Resource *m_pHandle = nullptr;
         ID3D12Heap *m_pMemoryHandle = nullptr;
+
+        D3D12_CPU_DESCRIPTOR_HANDLE m_ViewHandle = {};
     };
 
     struct D3D12Buffer : BaseBuffer
     {
         ID3D12Resource *m_pHandle = nullptr;
         ID3D12Heap *m_pMemoryHandle = nullptr;
+
+        D3D12_CPU_DESCRIPTOR_HANDLE m_ViewHandle = {};
     };
 
     struct D3D12DescriptorSet : BaseDescriptorSet

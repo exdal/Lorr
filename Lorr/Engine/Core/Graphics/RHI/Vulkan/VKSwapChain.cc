@@ -4,6 +4,36 @@
 
 namespace lr::Graphics
 {
+    void VKSwapChain::Init(PlatformWindow *pWindow, VKAPI *pAPI, SwapChainFlags flags)
+    {
+        ZoneScoped;
+
+        m_vSync = (flags & SwapChainFlags::vSync);
+        (flags & SwapChainFlags::TripleBuffering) ? m_FrameCount = 3 : 2;
+
+        // Calculate window metrics
+        m_Width = pWindow->m_Width;
+        m_Height = pWindow->m_Height;
+
+        pAPI->GetSurfaceCapabilities(m_SurfaceCapabilities);
+
+        if (!pAPI->IsFormatSupported(m_ImageFormat, &m_ColorSpace))
+        {
+            m_ImageFormat = ResourceFormat::BGRA8F;
+            pAPI->IsFormatSupported(m_ImageFormat, &m_ColorSpace);
+        }
+
+        if (!pAPI->IsPresentModeSupported(m_PresentMode))
+        {
+            m_PresentMode = VK_PRESENT_MODE_FIFO_KHR;
+            m_FrameCount = m_SurfaceCapabilities.minImageCount;
+
+            LOG_WARN("GPU doesn't support mailbox present mode, going back to fifo.");
+        }
+
+        CreateHandle(pAPI);
+    }
+
     void VKSwapChain::CreateHandle(VKAPI *pAPI)
     {
         ZoneScoped;
@@ -61,6 +91,8 @@ namespace lr::Graphics
 
             // Swapchain already gives us the image, so we don't need to create it again
             currentImage.m_pHandle = ppSwapChainImages[i];
+            currentImage.m_Width = m_Width;
+            currentImage.m_Height = m_Height;
             currentImage.m_Usage = ImageUsage::ColorAttachment;
             currentImage.m_Format = imageDesc.Format;
             currentImage.m_TotalMips = 1;
@@ -90,36 +122,6 @@ namespace lr::Graphics
 
         u32 nextFrameIdx = (m_CurrentFrame + 1) % m_FrameCount;
         return &m_pFrames[nextFrameIdx];
-    }
-
-    void VKSwapChain::Init(PlatformWindow *pWindow, VKAPI *pAPI, SwapChainFlags flags)
-    {
-        ZoneScoped;
-
-        m_vSync = (flags & SwapChainFlags::vSync);
-        (flags & SwapChainFlags::TripleBuffering) ? m_FrameCount = 3 : 2;
-
-        // Calculate window metrics
-        m_Width = pWindow->m_Width;
-        m_Height = pWindow->m_Height;
-
-        pAPI->GetSurfaceCapabilities(m_SurfaceCapabilities);
-
-        if (!pAPI->IsFormatSupported(m_ImageFormat, &m_ColorSpace))
-        {
-            m_ImageFormat = ResourceFormat::BGRA8F;
-            pAPI->IsFormatSupported(m_ImageFormat, &m_ColorSpace);
-        }
-
-        if (!pAPI->IsPresentModeSupported(m_PresentMode))
-        {
-            m_PresentMode = VK_PRESENT_MODE_FIFO_KHR;
-            m_FrameCount = m_SurfaceCapabilities.minImageCount;
-
-            LOG_WARN("GPU doesn't support mailbox present mode, going back to fifo.");
-        }
-
-        CreateHandle(pAPI);
     }
 
     void VKSwapChain::DestroyHandle(VKAPI *pAPI)

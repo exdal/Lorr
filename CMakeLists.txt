@@ -14,6 +14,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_definitions(-DNOMINMAX)
 add_definitions(-D_CRT_SECURE_NO_WARNINGS)
+# add_compile_options(-fsanitize=address)
+# add_link_options(-fsanitize=address)
 # add_definitions(-DTRACY_ENABLE)
 
 add_subdirectory(Vendor)

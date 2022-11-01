@@ -82,13 +82,14 @@ namespace lr::Graphics
 
     enum class DescriptorType : u8
     {
+        Sampler,
         ShaderResourceView,
         ConstantBufferView,
         UnorderedAccessBuffer,
         UnorderedAccessView,
         RootConstant,
 
-        Count
+        Count,
     };
 
     enum class ShaderType

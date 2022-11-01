@@ -6,6 +6,9 @@
 
 #include "UI/ImGuiRenderer.hh"
 
+#include "Core/Graphics/RHI/D3D12/D3D12API.hh"
+#include "Core/Graphics/RHI/Vulkan/VKAPI.hh"
+
 namespace lr
 {
     using namespace Graphics;
@@ -25,7 +28,7 @@ namespace lr
 
         m_Window.Init(windowDesc);
 
-        m_pAPI = new VKAPI;
+        m_pAPI = new D3D12API;
         m_pAPI->Init(&m_Window, windowDesc.Width, windowDesc.Height, APIFlags::VSync);
 
         Camera3DDesc camera3DDesc;
@@ -47,58 +50,58 @@ namespace lr
 
         m_Camera2D.Init(&camera2DDesc);
 
-        imguiHandler.Init();
+        // imguiHandler.Init();
 
-        XMFLOAT3 pData[3] = { { 0, -0.5, 0 }, { 0.5, 0.5, 0 }, { -0.5, 0.5, 0 } };
-        u32 pIndexData[3] = { 0, 1, 2 };
+        // XMFLOAT3 pData[3] = { { 0, -0.5, 0 }, { 0.5, 0.5, 0 }, { -0.5, 0.5, 0 } };
+        // u32 pIndexData[3] = { 0, 1, 2 };
 
-        BufferDesc bufDesc = {};
-        bufDesc.UsageFlags = BufferUsage::Vertex | BufferUsage::CopySrc;
-        bufDesc.Mappable = true;
+        // BufferDesc bufDesc = {};
+        // bufDesc.UsageFlags = BufferUsage::Vertex | BufferUsage::CopySrc;
+        // bufDesc.Mappable = true;
 
-        BufferData bufData = {};
-        bufData.DataLen = sizeof(XMFLOAT3) * 3;
+        // BufferData bufData = {};
+        // bufData.DataLen = sizeof(XMFLOAT3) * 3;
 
-        VKBuffer tempVertexBuffer;
-        m_pAPI->CreateBuffer(&tempVertexBuffer, &bufDesc, &bufData);
-        m_pAPI->AllocateBufferMemory(&tempVertexBuffer, AllocatorType::None);
+        // VKBuffer tempVertexBuffer;
+        // m_pAPI->CreateBuffer(&tempVertexBuffer, &bufDesc, &bufData);
+        // m_pAPI->AllocateBufferMemory(&tempVertexBuffer, AllocatorType::None);
 
-        void *pMapData = nullptr;
-        m_pAPI->MapMemory(&tempVertexBuffer, pMapData);
-        memcpy(pMapData, pData, bufData.DataLen);
-        m_pAPI->UnmapMemory(&tempVertexBuffer);
+        // void *pMapData = nullptr;
+        // m_pAPI->MapMemory(&tempVertexBuffer, pMapData);
+        // memcpy(pMapData, pData, bufData.DataLen);
+        // m_pAPI->UnmapMemory(&tempVertexBuffer);
 
-        m_pAPI->BindMemory(&tempVertexBuffer);
+        // m_pAPI->BindMemory(&tempVertexBuffer);
 
-        BaseCommandList *pList = m_pAPI->GetCommandList();
+        // BaseCommandList *pList = m_pAPI->GetCommandList();
 
-        m_pAPI->BeginCommandList(pList);
-        // m_pAPI->TransferBufferMemory(pList, &tempVertexBuffer, &vertexBuffer, AllocatorType::BufferTLSF);
+        // m_pAPI->BeginCommandList(pList);
+        // // m_pAPI->TransferBufferMemory(pList, &tempVertexBuffer, &vertexBuffer, AllocatorType::BufferTLSF);
 
-        /// ------------------------------------------------------- ///
+        // /// ------------------------------------------------------- ///
 
-        bufDesc.UsageFlags = BufferUsage::Index | BufferUsage::CopySrc;
-        bufDesc.Mappable = true;
+        // bufDesc.UsageFlags = BufferUsage::Index | BufferUsage::CopySrc;
+        // bufDesc.Mappable = true;
 
-        bufData.DataLen = sizeof(u32) * 3;
+        // bufData.DataLen = sizeof(u32) * 3;
 
-        VKBuffer tempIndexBuffer;
-        m_pAPI->CreateBuffer(&tempIndexBuffer, &bufDesc, &bufData);
-        m_pAPI->AllocateBufferMemory(&tempIndexBuffer, AllocatorType::None);
+        // VKBuffer tempIndexBuffer;
+        // m_pAPI->CreateBuffer(&tempIndexBuffer, &bufDesc, &bufData);
+        // m_pAPI->AllocateBufferMemory(&tempIndexBuffer, AllocatorType::None);
 
-        m_pAPI->MapMemory(&tempIndexBuffer, pMapData);
-        memcpy(pMapData, pIndexData, bufData.DataLen);
-        m_pAPI->UnmapMemory(&tempIndexBuffer);
+        // m_pAPI->MapMemory(&tempIndexBuffer, pMapData);
+        // memcpy(pMapData, pIndexData, bufData.DataLen);
+        // m_pAPI->UnmapMemory(&tempIndexBuffer);
 
-        m_pAPI->BindMemory(&tempIndexBuffer);
+        // m_pAPI->BindMemory(&tempIndexBuffer);
 
-        // m_pAPI->TransferBufferMemory(pList, &tempIndexBuffer, &indexBuffer, AllocatorType::BufferTLSF);
+        // // m_pAPI->TransferBufferMemory(pList, &tempIndexBuffer, &indexBuffer, AllocatorType::BufferTLSF);
 
-        m_pAPI->EndCommandList(pList);
-        m_pAPI->ExecuteCommandList(pList, true);
+        // m_pAPI->EndCommandList(pList);
+        // m_pAPI->ExecuteCommandList(pList, true);
 
-        m_pAPI->DeleteBuffer(&tempVertexBuffer);
-        m_pAPI->DeleteBuffer(&tempIndexBuffer);
+        // m_pAPI->DeleteBuffer(&tempVertexBuffer);
+        // m_pAPI->DeleteBuffer(&tempIndexBuffer);
 
         Run();
     }
@@ -120,7 +123,7 @@ namespace lr
 
         while (!m_Window.ShouldClose())
         {
-            Graphics::APIStateManager &stateMan = m_pAPI->m_APIStateMan;
+            // Graphics::APIStateManager &stateMan = m_pAPI->m_APIStateMan;
 
             f32 deltaTime = timer.elapsed();
             timer.reset();
@@ -164,7 +167,7 @@ namespace lr
             // ImGui::End();
             // imguiHandler.EndFrame();
 
-            // m_pAPI->Frame();
+            m_pAPI->Frame();
             m_Window.Poll();
         }
     }

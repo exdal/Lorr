@@ -6,13 +6,13 @@ namespace lr::Graphics
     {
         ZoneScoped;
 
-        for (BaseCommandList *pList : m_CommandListPool.m_DirectLists)
+        for (BaseCommandList *&pList : m_CommandListPool.m_DirectLists)
             pList = CreateCommandList(CommandListType::Direct);
 
-        for (BaseCommandList *pList : m_CommandListPool.m_ComputeLists)
+        for (BaseCommandList *&pList : m_CommandListPool.m_ComputeLists)
             pList = CreateCommandList(CommandListType::Compute);
 
-        for (BaseCommandList *pList : m_CommandListPool.m_CopyLists)
+        for (BaseCommandList *&pList : m_CommandListPool.m_CopyLists)
             pList = CreateCommandList(CommandListType::Copy);
     }
 

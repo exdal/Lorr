@@ -9,6 +9,8 @@ namespace lr::Graphics
         ZoneScoped;
 
         m_DirectListMask.store(UINT32_MAX, eastl::memory_order_release);
+        m_DirectFenceMask.store(0, eastl::memory_order_release);
+        
         m_ComputeListMask.store(UINT16_MAX, eastl::memory_order_release);
         m_CopyListMask.store(UINT8_MAX, eastl::memory_order_release);
     }

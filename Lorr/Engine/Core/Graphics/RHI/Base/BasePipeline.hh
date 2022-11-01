@@ -43,7 +43,6 @@ namespace lr::Graphics
 
         // Rasterizer
         virtual void SetDepthClamp(bool enabled) = 0;
-        virtual void SetRasterizerDiscard(bool enabled) = 0;
         virtual void SetCullMode(CullMode mode, bool frontFaceClockwise) = 0;
         virtual void SetDepthBias(bool enabled, f32 constantFactor, f32 clamp, f32 slopeFactor) = 0;
 

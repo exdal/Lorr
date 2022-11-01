@@ -914,11 +914,10 @@ namespace lr::Graphics
 
             case AllocatorType::BufferTLSF:
             {
-                Memory::TLSFBlock *pBlock = nullptr;
-                u32 offset = m_MABufferTLSF.Allocator.Allocate(pBuffer->m_RequiredDataSize, memoryRequirements.alignment, pBlock);
+                Memory::TLSFBlock *pBlock = m_MABufferTLSF.Allocator.Allocate(pBuffer->m_RequiredDataSize, memoryRequirements.alignment);
 
-                pBuffer->m_DataOffset = offset;
                 pBuffer->m_pAllocatorData = pBlock;
+                pBuffer->m_DataOffset = pBlock->Offset;
 
                 pBuffer->m_pMemoryHandle = m_MABufferTLSF.Buffer.m_pMemoryHandle;
 
@@ -989,11 +988,11 @@ namespace lr::Graphics
         pList->CopyBuffer(pSrc, pDst, pSrc->m_DataSize);
     }
 
-    void VKAPI::CreateImage(VKImage *pHandle, ImageDesc *pDesc, ImageData *pData)
+    BaseImage *VKAPI::CreateImage(ImageDesc *pDesc, ImageData *pData)
     {
         ZoneScoped;
 
-        VkImage &pImage = pHandle->m_pHandle;
+        VKImage *pImage = AllocType<VKImage>();
 
         VkImageCreateInfo imageCreateInfo = {};
         imageCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -1010,41 +1009,47 @@ namespace lr::Graphics
         imageCreateInfo.arrayLayers = pDesc->ArraySize;
         imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
 
-        vkCreateImage(m_pDevice, &imageCreateInfo, nullptr, &pImage);
+        vkCreateImage(m_pDevice, &imageCreateInfo, nullptr, &pImage->m_pHandle);
 
         /// ---------------------------------------------- //
 
-        pHandle->m_Width = pData->Width;
-        pHandle->m_Height = pData->Height;
-        pHandle->m_DataSize = pData->DataLen;
+        pImage->m_Width = pData->Width;
+        pImage->m_Height = pData->Height;
+        pImage->m_DataSize = pData->DataLen;
 
-        pHandle->m_UsingMip = 0;
-        pHandle->m_TotalMips = pDesc->MipMapLevels;
+        pImage->m_UsingMip = 0;
+        pImage->m_TotalMips = pDesc->MipMapLevels;
 
-        pHandle->m_Usage = pDesc->Usage;
-        pHandle->m_Format = pDesc->Format;
+        pImage->m_Usage = pDesc->Usage;
+        pImage->m_Format = pDesc->Format;
+
+        return pImage;
     }
 
-    void VKAPI::DeleteImage(VKImage *pImage)
+    void VKAPI::DeleteImage(BaseImage *pImage)
     {
         ZoneScoped;
 
-        if (pImage->m_pMemoryHandle)
-            FreeImageMemory(pImage);
+        API_VAR(VKImage, pImage);
 
-        if (pImage->m_pViewHandle)
-            vkDestroyImageView(m_pDevice, pImage->m_pViewHandle, nullptr);
+        if (pImageVK->m_pMemoryHandle)
+            FreeImageMemory(pImageVK);
 
-        if (pImage->m_pSampler)
-            vkDestroySampler(m_pDevice, pImage->m_pSampler, nullptr);
+        if (pImageVK->m_pViewHandle)
+            vkDestroyImageView(m_pDevice, pImageVK->m_pViewHandle, nullptr);
 
-        if (pImage->m_pHandle)
-            vkDestroyImage(m_pDevice, pImage->m_pHandle, nullptr);
+        if (pImageVK->m_pSampler)
+            vkDestroySampler(m_pDevice, pImageVK->m_pSampler, nullptr);
+
+        if (pImageVK->m_pHandle)
+            vkDestroyImage(m_pDevice, pImageVK->m_pHandle, nullptr);
     }
 
-    void VKAPI::CreateImageView(VKImage *pHandle)
+    void VKAPI::CreateImageView(BaseImage *pHandle)
     {
         ZoneScoped;
+
+        API_VAR(VKImage, pHandle);
 
         VkImageAspectFlags aspectFlags = VK_IMAGE_ASPECT_COLOR_BIT;
 
@@ -1056,7 +1061,7 @@ namespace lr::Graphics
         VkImageViewCreateInfo imageViewCreateInfo = {};
         imageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
 
-        imageViewCreateInfo.image = pHandle->m_pHandle;
+        imageViewCreateInfo.image = pHandleVK->m_pHandle;
         imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
         imageViewCreateInfo.format = ToVulkanFormat(pHandle->m_Format);
 
@@ -1071,7 +1076,7 @@ namespace lr::Graphics
         imageViewCreateInfo.subresourceRange.levelCount = 1;
         imageViewCreateInfo.subresourceRange.layerCount = 1;
 
-        vkCreateImageView(m_pDevice, &imageViewCreateInfo, nullptr, &pHandle->m_pViewHandle);
+        vkCreateImageView(m_pDevice, &imageViewCreateInfo, nullptr, &pHandleVK->m_pViewHandle);
     }
 
     void VKAPI::CreateSampler(VKImage *pHandle)
@@ -1168,11 +1173,10 @@ namespace lr::Graphics
 
             case AllocatorType::ImageTLSF:
             {
-                Memory::TLSFBlock *pBlock = nullptr;
-                u32 offset = m_MABufferTLSF.Allocator.Allocate(pImage->m_DataSize, memoryRequirements.alignment, pBlock);
+                Memory::TLSFBlock *pBlock = m_MABufferTLSF.Allocator.Allocate(pImage->m_DataSize, memoryRequirements.alignment);
 
                 pImage->m_pAllocatorData = pBlock;
-                pImage->m_DataOffset = offset;
+                pImage->m_DataOffset = pBlock->Offset;
 
                 pImage->m_pMemoryHandle = m_MAImageTLSF.Buffer.m_pMemoryHandle;
 
@@ -1652,8 +1656,6 @@ namespace lr::Graphics
             // Iterate over all signaled fences
             while (mask != 0)
             {
-                mask = directFenceMask.load(eastl::memory_order_acquire);
-
                 u32 index = Memory::GetLSB(mask);
 
                 BaseCommandList *pList = commandPool.m_DirectLists[index];
@@ -1665,6 +1667,8 @@ namespace lr::Graphics
                     pAPI->ResetFence(pListVK->m_pFence);
                     commandPool.Release(pList);
                 }
+
+                mask = directFenceMask.load(eastl::memory_order_acquire);
             }
         }
 
@@ -1714,6 +1718,7 @@ namespace lr::Graphics
     };
 
     constexpr VkDescriptorType kDescriptorTypeLUT[] = {
+        VK_DESCRIPTOR_TYPE_SAMPLER,                 // Sampler
         VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,  // ShaderResourceView
         VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,          // ConstantBufferView
         VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,          // UnorderedAccessBuffer

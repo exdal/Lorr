@@ -20,11 +20,7 @@ cmake_parse_arguments(
         ${COMPONENT_SOURCE}
     )
 
-    if (${CMAKE_BUILD_TYPE} STREQUAL "Debug")
-        add_library(${COMPONENT_NAME} ${COMPONENT_LIBTYPE} ${SOURCES})
-    else()
-        add_library(${COMPONENT_NAME} STATIC ${SOURCES})
-    endif()
+    add_library(${COMPONENT_NAME} STATIC ${SOURCES})
 
     if (COMPONENT_PCH)
         target_precompile_headers(${COMPONENT_NAME} PUBLIC ${COMPONENT_PCH})

@@ -4,7 +4,8 @@
 
 #pragma once
 
-#include "Core/Graphics/RHI/Vulkan/VKAPI.hh"
+#include "Core/Graphics/RHI/Base/BaseAPI.hh"
+
 #include "Core/Graphics/Camera.hh"
 #include "Core/Window/BaseWindow.hh"
 
@@ -26,7 +27,7 @@ namespace lr
 
         PlatformWindow m_Window;
 
-        Graphics::VKAPI *m_pAPI = nullptr;
+        Graphics::BaseAPI *m_pAPI = nullptr;
 
         Graphics::Camera3D m_Camera3D;
         Graphics::Camera2D m_Camera2D;

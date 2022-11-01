@@ -24,14 +24,11 @@ namespace lr::Memory
     };
 
     /// ------------------------------------------------------------ //
-    //*
-    //* Slightly modified version of Mykhailo Parfeniuk 'ETLSF'
-    //*
 
     struct TLSFBlock
     {
-        u64 Offset = 0;
-        bool IsFree = false;
+        u64 Offset : 63 = 0;
+        u64 IsFree : 1 = 0;
 
         TLSFBlock *pNextPhysical = nullptr;
         TLSFBlock *pPrevPhysical = nullptr;
@@ -42,9 +39,8 @@ namespace lr::Memory
 
     struct TLSFMemoryAllocator
     {
-        static constexpr i32 ALIGN_SIZE_LOG2 = 8;
+        static constexpr i32 ALIGN_SIZE_LOG2 = 3;
         static constexpr i32 ALIGN_SIZE = 1 << ALIGN_SIZE_LOG2;
-        static constexpr i32 ALIGN_SIZE_MASK = ALIGN_SIZE - 1;
 
         static constexpr i32 SL_INDEX_COUNT_LOG2 = 5;
         static constexpr i32 SL_INDEX_COUNT = 1 << SL_INDEX_COUNT_LOG2;
@@ -54,15 +50,13 @@ namespace lr::Memory
         static constexpr i32 FL_INDEX_COUNT = FL_INDEX_MAX - FL_INDEX_SHIFT + 1;
         static constexpr i32 FL_INDEX_SHIFT_SIZE = 1 << FL_INDEX_SHIFT;
 
-        static constexpr i32 SMALL_BLOCK_SIZE = 256;
+        static constexpr u64 MIN_BLOCK_SIZE = 1 << FL_INDEX_SHIFT;
 
-        static constexpr i32 BLOCK_ALLOC_COUNT = 0x20000;
+        /// ------------------------------------------------------------ ///
 
-        /// ------------------------------------------------------------ //
+        void Init(u64 memSize);
 
-        void Init(u32 poolSize);
-
-        u32 Allocate(u32 size, u32 alignment, TLSFBlock *&pBlockOut);
+        TLSFBlock *Allocate(u64 size, u32 alignment = ALIGN_SIZE);
         void Free(TLSFBlock *pBlock);
 
         void AddFreeBlock(TLSFBlock *pBlock);
@@ -72,8 +66,6 @@ namespace lr::Memory
         TLSFBlock *SplitBlock(TLSFBlock *pBlock, u32 size);
         void MergeBlock(TLSFBlock *pTarget, TLSFBlock *pSource);
 
-        void GetListIndex(u32 size, u32 &firstIndex, u32 &secondIndex, bool aligned);
-
         u32 GetPhysicalSize(TLSFBlock *pBlock);
 
         TLSFBlock *AllocateInternalBlock();
@@ -81,17 +73,19 @@ namespace lr::Memory
 
         u64 m_Size = 0;
 
-        /// Bitmaps
-        u32 m_FirstListBitmap = 0;
-        u32 m_pSecondListBitmap[FL_INDEX_COUNT] = { 0 };
+        // Bitmap utils
+        i32 GetFirstIndex(u64 size);
+        i32 GetSecondIndex(i32 firstIndex, u32 size);
 
-        /// Freelist
-        TLSFBlock *m_ppBlocks[FL_INDEX_COUNT][SL_INDEX_COUNT] = { 0 };
+        u32 m_FirstListBitmap = 0;
+        u32 m_pSecondListBitmap[FL_INDEX_COUNT] = {};
 
         u32 m_BlockCount = 0;
+        TLSFBlock *m_pBlockPool = nullptr;
+        TLSFBlock *m_ppBlocks[FL_INDEX_COUNT][SL_INDEX_COUNT] = {};
+
         TLSFBlock *m_pFrontBlock = nullptr;
         TLSFBlock *m_pBackBlock = nullptr;
-        TLSFBlock *m_pBlockPool = nullptr;
     };
 
 }  // namespace lr::Memory

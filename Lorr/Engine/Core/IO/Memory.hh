@@ -1,3 +1,7 @@
+//
+// Created on Monday 26th September 2022 by e-erdal
+//
+
 #pragma once
 
 #include <intrin.h>
@@ -8,10 +12,9 @@ namespace lr::Memory
     template<typename T>
     T *Allocate(u64 count)
     {
-        u64 size = count * sizeof(T);
-
-        T *pData = (T *)malloc(size);
-        memset(pData, 0, size);
+        T *pData = new T[count];
+        assert(pData && "Failed to allocate memory.");
+        // memset(pData, 0, size);
 
         return pData;
     }
@@ -23,13 +26,14 @@ namespace lr::Memory
     {
         u64 size = newCount * sizeof(T);
         pData = (T *)realloc(pData, size);
+        assert(pData && "Failed to allocate memory.");
         memset(pData, 0, size);
     }
 
     template<typename T>
     void Release(T *pData)
     {
-        free(pData);
+        delete[] pData;
     }
 
     template<typename T>
@@ -86,6 +90,12 @@ namespace lr::Memory
         // assert(!"Uh oh");
 
         return 0;
+    }
+
+    template<typename T, typename U>
+    T AlignUp(T size, U alignment)
+    {
+        return (size + (alignment - 1)) & ~(alignment - 1);
     }
 
 }  // namespace lr::Memory

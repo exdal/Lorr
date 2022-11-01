@@ -12,9 +12,10 @@ namespace lr::Graphics
 {
     struct D3D12CommandAllocator : BaseCommandAllocator
     {
-        eastl::atomic<u64> DesiredFenceValue = 0;
-        ID3D12Fence *pFence = nullptr;
-        HANDLE FenceEvent = nullptr;
+        void Reset()
+        {
+            pHandle->Reset();
+        }
 
         ID3D12CommandAllocator *pHandle = nullptr;
     };
@@ -23,9 +24,14 @@ namespace lr::Graphics
     {
         void Init(ID3D12GraphicsCommandList4 *pHandle, D3D12CommandAllocator *pAllocator, CommandListType type);
 
-        CommandListType m_Type;
-        D3D12CommandAllocator m_Allocator;
+        void Reset(D3D12CommandAllocator *pAllocator);
+
+        D3D12CommandAllocator *m_pAllocator = nullptr;
         ID3D12GraphicsCommandList4 *m_pHandle = nullptr;
+
+        eastl::atomic<u64> m_DesiredFenceValue = 0;
+        ID3D12Fence *m_pFence = nullptr;
+        HANDLE m_FenceEvent = nullptr;
     };
 
 }  // namespace lr::Graphics

@@ -13,7 +13,7 @@ namespace lr::Graphics
 
         m_pHandle = pHandle;
         m_pFence = pFence;
-        
+
         m_Type = type;
     }
 
@@ -165,7 +165,7 @@ namespace lr::Graphics
     {
         ZoneScoped;
 
-        VKAPI *pAPI = GetEngine()->m_pAPI;
+        VKAPI *pAPI = (VKAPI *)GetEngine()->m_pAPI;
         APIStateManager &stateMan = pAPI->m_APIStateMan;
         VKSwapChain &swapChain = pAPI->m_SwapChain;
         VKSwapChainFrame *pCurrentFrame = swapChain.GetCurrentFrame();

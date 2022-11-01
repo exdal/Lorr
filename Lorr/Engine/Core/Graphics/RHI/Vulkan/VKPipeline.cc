@@ -120,13 +120,6 @@ namespace lr::Graphics
         m_RasterizationState.depthBiasClamp = enabled;
     }
 
-    void VKGraphicsPipelineBuildInfo::SetRasterizerDiscard(bool enabled)
-    {
-        ZoneScoped;
-
-        m_RasterizationState.rasterizerDiscardEnable = enabled;
-    }
-
     void VKGraphicsPipelineBuildInfo::SetPolygonMode(VkPolygonMode mode)
     {
         ZoneScoped;

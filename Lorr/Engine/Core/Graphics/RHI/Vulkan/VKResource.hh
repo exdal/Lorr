@@ -35,8 +35,6 @@ namespace lr::Graphics
     {
         VkDescriptorSet pHandle = nullptr;
         VkDescriptorSetLayout pSetLayoutHandle = nullptr;
-        
-        VkDescriptorBufferInfo pBindingBufferInfos[8];
     };
 
 }  // namespace lr::Graphics

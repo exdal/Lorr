@@ -46,6 +46,7 @@ namespace lr::Graphics
         void SetPipeline(VKPipeline *pPipeline);
         void SetPipelineDescriptorSets(const std::initializer_list<VKDescriptorSet *> &sets);
 
+        VKCommandAllocator *m_pAllocator = nullptr;
         VkCommandBuffer m_pHandle = nullptr;
         VkFence m_pFence = nullptr;
 

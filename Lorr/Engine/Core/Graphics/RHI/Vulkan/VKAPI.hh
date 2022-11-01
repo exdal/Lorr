@@ -138,10 +138,10 @@ namespace lr::Graphics
         void TransferBufferMemory(VKCommandList *pList, VKBuffer *pSrc, VKBuffer *pDst, AllocatorType dstAllocator);
 
         // * Images * //
-        void CreateImage(VKImage *pHandle, ImageDesc *pDesc, ImageData *pData);
-        void DeleteImage(VKImage *pImage);
+        BaseImage *CreateImage(ImageDesc *pDesc, ImageData *pData);
+        void DeleteImage(BaseImage *pImage);
 
-        void CreateImageView(VKImage *pHandle);
+        void CreateImageView(BaseImage *pHandle);
         void CreateSampler(VKImage *pHandle);
         VkFramebuffer CreateFramebuffer(XMUINT2 size, u32 attachmentCount, VKImage *pAttachments, VkRenderPass &pRenderPass);
         void DeleteFramebuffer(VkFramebuffer pFramebuffer);
@@ -167,15 +167,19 @@ namespace lr::Graphics
 
         /// ------------------------------------------------------------- ///
 
+        // clang-format off
+
         /// Type conversions
-        static VkFormat ToVulkanFormat(ResourceFormat format);
-        static VkFormat ToVulkanFormat(VertexAttribType format);
-        static VkPrimitiveTopology ToVulkanTopology(PrimitiveType type);
-        static VkCullModeFlags ToVulkanCullMode(CullMode mode);
-        static VkDescriptorType ToVulkanDescriptorType(DescriptorType type);
-        static VkImageUsageFlags ToVulkanImageUsage(ImageUsage usage);
-        static VkBufferUsageFlagBits ToVulkanBufferUsage(BufferUsage usage);
-        static VkShaderStageFlagBits ToVulkanShaderType(ShaderType type);
+        static VkFormat                 ToVulkanFormat(ResourceFormat format);
+        static VkFormat                 ToVulkanFormat(VertexAttribType format);
+        static VkPrimitiveTopology      ToVulkanTopology(PrimitiveType type);
+        static VkCullModeFlags          ToVulkanCullMode(CullMode mode);
+        static VkDescriptorType         ToVulkanDescriptorType(DescriptorType type);
+        static VkImageUsageFlags        ToVulkanImageUsage(ImageUsage usage);
+        static VkBufferUsageFlagBits    ToVulkanBufferUsage(BufferUsage usage);
+        static VkShaderStageFlagBits    ToVulkanShaderType(ShaderType type);
+
+        // clang-format on
 
         /// ------------------------------------------------------------- ///
 

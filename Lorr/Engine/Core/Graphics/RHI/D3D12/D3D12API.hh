@@ -13,10 +13,17 @@
 
 namespace lr::Graphics
 {
-    struct D3D12DescriptorPool
+    struct D3D12DescriptorBindingDesc
     {
-        u32 HeapCount = 0;
-        ID3D12DescriptorHeap *pHeaps[(u32)DescriptorType::Count];
+        D3D12_DESCRIPTOR_HEAP_TYPE HeapType;
+        u32 Count;
+    };
+
+    struct D3D12DescriptorHeap
+    {
+        ID3D12DescriptorHeap *pHandle = nullptr;
+        u32 IncrementSize = 0;
+        u32 Offset = 0;
     };
 
     struct D3D12API : BaseAPI
@@ -42,8 +49,7 @@ namespace lr::Graphics
         /// SYNC ///
         ID3D12Fence *CreateFence(u32 initialValue = 0);
         void DeleteFence(ID3D12Fence *pFence);
-        void SignalFence(D3D12CommandAllocator *pAllocator);
-        bool IsFenceSignaled(D3D12CommandAllocator *pAllocator);
+        bool IsFenceSignaled(D3D12CommandList *pList);
 
         /// RENDERPASS ///
         BaseRenderPass *CreateRenderPass(RenderPassDesc *pDesc);
@@ -56,8 +62,9 @@ namespace lr::Graphics
         BasePipeline *EndPipelineBuildInfo(GraphicsPipelineBuildInfo *pBuildInfo, BaseRenderPass *pRenderPass);
 
         /// SWAPCHAIN ///
-        void CreateSwapChain(D3D12SwapChain *&pHandle, DXGI_SWAP_CHAIN_DESC1 &desc);
-        void DeleteSwapChain(D3D12SwapChain *pSwapChain);
+
+        // Leave `pFSD` as `nullptr` for windowed swap chain
+        void CreateSwapChain(IDXGISwapChain1 *&pHandle, void *pWindowHandle, DXGI_SWAP_CHAIN_DESC1 &desc, DXGI_SWAP_CHAIN_FULLSCREEN_DESC *pFSD);
         void ResizeSwapChain(u32 width, u32 height);
 
         void Frame();
@@ -69,7 +76,16 @@ namespace lr::Graphics
         // `VKDescriptorBindingDesc::Type` represents descriptor type.
         // `VKDescriptorBindingDesc::ArraySize` represents descriptor count for that type.
         // Same types cannot be used, will result in UB. Other variables are ignored.
-        void CreateDescriptorPool(D3D12DescriptorPool &pool, const std::initializer_list<DescriptorBindingDesc> &layouts);
+        void CreateDescriptorPool(const std::initializer_list<D3D12DescriptorBindingDesc> &bindings);
+        D3D12_CPU_DESCRIPTOR_HANDLE AllocateCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE type, u32 index = -1);
+
+        // * Images * //
+        BaseImage *CreateImage(ImageDesc *pDesc, ImageData *pData);
+        void DeleteImage(BaseImage *pImage);
+
+        void CreateRenderTarget(BaseImage *pImage);
+
+        static i64 TFFenceWait(void *pData);
 
         /// ------------------------------------------------------------- ///
 
@@ -100,14 +116,16 @@ namespace lr::Graphics
         ID3D12Device4 *m_pDevice = nullptr;
         IDXGIFactory4 *m_pFactory = nullptr;
         IDXGIAdapter1 *m_pAdapter = nullptr;
+        D3D12SwapChain m_SwapChain;
 
         /// Main Queues
         D3D12CommandQueue *m_pDirectQueue = nullptr;
 
         /// Pools/Caches
-        D3D12DescriptorPool m_DescriptorPool;
+        D3D12DescriptorHeap m_pDescriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_NUM_TYPES];
+        ID3D12PipelineLibrary *m_pPipelineCache = nullptr;
 
-        /// Native API
+        EA::Thread::Thread m_FenceThread;
 
         static constexpr D3D_FEATURE_LEVEL kMinimumFeatureLevel = D3D_FEATURE_LEVEL_12_0;
     };

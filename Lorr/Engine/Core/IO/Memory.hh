@@ -12,9 +12,11 @@ namespace lr::Memory
     template<typename T>
     T *Allocate(u64 count)
     {
-        T *pData = new T[count];
+        u64 size = count * sizeof(T);
+
+        T *pData = (T *)malloc(size);
         assert(pData && "Failed to allocate memory.");
-        // memset(pData, 0, size);
+        memset(pData, 0, size);
 
         return pData;
     }
@@ -33,7 +35,7 @@ namespace lr::Memory
     template<typename T>
     void Release(T *pData)
     {
-        delete[] pData;
+        free(pData);
     }
 
     template<typename T>

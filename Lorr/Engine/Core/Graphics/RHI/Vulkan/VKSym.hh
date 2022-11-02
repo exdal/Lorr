@@ -40,7 +40,6 @@
     _VK_DEFINE_FUNCTION(vkCreateImage);                             \
     _VK_DEFINE_FUNCTION(vkCreateImageView);                         \
     _VK_DEFINE_FUNCTION(vkCreateFramebuffer);                       \
-    _VK_DEFINE_FUNCTION(vkCreateRenderPass);                        \
     _VK_DEFINE_FUNCTION(vkAcquireNextImageKHR);                     \
     _VK_DEFINE_FUNCTION(vkCreateSemaphore);                         \
     _VK_DEFINE_FUNCTION(vkCreateFence);                             \
@@ -57,8 +56,6 @@
     _VK_DEFINE_FUNCTION(vkResetCommandPool);                        \
     _VK_DEFINE_FUNCTION(vkFreeCommandBuffers);                      \
     _VK_DEFINE_FUNCTION(vkCmdClearColorImage);                      \
-    _VK_DEFINE_FUNCTION(vkCmdBeginRenderPass);                      \
-    _VK_DEFINE_FUNCTION(vkCmdEndRenderPass);                        \
     _VK_DEFINE_FUNCTION(vkWaitSemaphores);                          \
     _VK_DEFINE_FUNCTION(vkSignalSemaphore);                         \
     _VK_DEFINE_FUNCTION(vkQueueSubmit2);                            \
@@ -92,7 +89,6 @@
     _VK_DEFINE_FUNCTION(vkBindImageMemory);                         \
     _VK_DEFINE_FUNCTION(vkUpdateDescriptorSets);                    \
     _VK_DEFINE_FUNCTION(vkDestroyFramebuffer);                      \
-    _VK_DEFINE_FUNCTION(vkDestroyRenderPass);                       \
     _VK_DEFINE_FUNCTION(vkDestroyFence);                            \
     _VK_DEFINE_FUNCTION(vkDestroySemaphore);                        \
     _VK_DEFINE_FUNCTION(vkDestroySwapchainKHR);                     \

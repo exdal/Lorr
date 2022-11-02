@@ -6,7 +6,6 @@
 #include "Core/IO/Memory.hh"
 
 #include "VKCommandList.hh"
-#include "VKRenderPass.hh"
 
 /// DEFINE VULKAN FUNCTIONS
 // #include "VKSymbols.hh"
@@ -402,136 +401,6 @@ namespace lr::Graphics
         vkDestroySemaphore(m_pDevice, pSemaphore, nullptr);
     }
 
-    BaseRenderPass *VKAPI::CreateRenderPass(RenderPassDesc *pDesc)
-    {
-        ZoneScoped;
-
-        VKRenderPass *pRenderPass = AllocType<VKRenderPass>();
-
-        u32 totalAttachmentCount = 0;
-
-        VkSubpassDescription subpassDescVK = {};
-
-        VkSubpassDependency pSubpassDeps[2] = {};
-        VkAttachmentDescription pAttachmentDescs[APIConfig::kMaxColorAttachmentCount + 1] = {};
-        VkAttachmentReference pAttachmentRefs[APIConfig::kMaxColorAttachmentCount] = {};
-
-        VkAttachmentDescription depthAttachment = {};
-        VkAttachmentReference depthAttachmentRef = {};
-        depthAttachmentRef.attachment = VK_ATTACHMENT_UNUSED;
-
-        totalAttachmentCount = pDesc->ColorAttachmentCount;
-        for (u32 i = 0; i < pDesc->ColorAttachmentCount; i++)
-        {
-            RenderPassAttachment *&pColorAttachment = pDesc->ppColorAttachments[i];
-            VkAttachmentReference &attachmentRef = pAttachmentRefs[i];
-            VkAttachmentDescription &attachment = pAttachmentDescs[i];
-
-            // Setup reference
-            attachmentRef.attachment = i;
-            attachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-            // Setup actual info
-            attachment.flags = 0;
-            attachment.format = ToVulkanFormat(pColorAttachment->Format);
-            attachment.samples = (VkSampleCountFlagBits)pColorAttachment->SampleCount;
-
-            // attachment.loadOp = pColorAttachment->LoadOp;
-            // attachment.storeOp = pColorAttachment->StoreOp;
-
-            // no stencil for color attachments
-            attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-            attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-
-            // attachment.initialLayout = pColorAttachment->InitialLayout;
-            // attachment.finalLayout = pColorAttachment->FinalLayout;
-        }
-
-        RenderPassAttachment *&pDepthAttachmentDesc = pDesc->pDepthAttachment;
-        if (pDepthAttachmentDesc)
-        {
-            depthAttachmentRef.attachment = pDesc->ColorAttachmentCount;
-            depthAttachmentRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
-            depthAttachment.flags = 0;
-            depthAttachment.format = ToVulkanFormat(pDepthAttachmentDesc->Format);
-            depthAttachment.samples = (VkSampleCountFlagBits)pDepthAttachmentDesc->SampleCount;
-
-            // depthAttachment.loadOp = pDepthAttachmentDesc->LoadOp;
-            // depthAttachment.storeOp = pDepthAttachmentDesc->StoreOp;
-
-            // depthAttachment.stencilLoadOp = pDepthAttachmentDesc->StencilLoadOp;
-            // depthAttachment.stencilStoreOp = pDepthAttachmentDesc->StencilStoreOp;
-
-            // depthAttachment.initialLayout = pDepthAttachmentDesc->InitialLayout;
-            // depthAttachment.finalLayout = pDepthAttachmentDesc->FinalLayout;
-
-            pAttachmentDescs[totalAttachmentCount] = depthAttachment;
-            totalAttachmentCount++;
-        }
-
-        // TODO: Multiple subpasses
-        // Setup subpass
-        subpassDescVK.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-        subpassDescVK.colorAttachmentCount = pDesc->ColorAttachmentCount;
-        subpassDescVK.pColorAttachments = pAttachmentRefs;
-        subpassDescVK.pDepthStencilAttachment = &depthAttachmentRef;
-
-        // Setup subpass dependency
-        pSubpassDeps[0].srcSubpass = VK_SUBPASS_EXTERNAL;
-        pSubpassDeps[0].dstSubpass = 0;
-
-        pSubpassDeps[0].srcStageMask = m_pDirectQueue->m_AcquireStage;  // Command Queue's stage mask
-        pSubpassDeps[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-
-        pSubpassDeps[0].srcAccessMask = 0;
-        pSubpassDeps[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-
-        pSubpassDeps[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
-
-        ////////////////
-
-        pSubpassDeps[1].srcSubpass = 0;
-        pSubpassDeps[1].dstSubpass = VK_SUBPASS_EXTERNAL;
-
-        pSubpassDeps[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        pSubpassDeps[1].dstStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;  // Don't block ongoing task
-
-        pSubpassDeps[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-        pSubpassDeps[1].dstAccessMask = 0;
-
-        pSubpassDeps[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
-
-        // Actual renderpass info
-        VkRenderPassCreateInfo renderPassInfo = {};
-        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-
-        renderPassInfo.flags = 0;
-
-        renderPassInfo.attachmentCount = totalAttachmentCount;
-        renderPassInfo.pAttachments = pAttachmentDescs;
-
-        renderPassInfo.subpassCount = 1;
-        renderPassInfo.pSubpasses = &subpassDescVK;
-
-        renderPassInfo.dependencyCount = 2;  // TODO: Multiple subpasses
-        renderPassInfo.pDependencies = pSubpassDeps;
-
-        vkCreateRenderPass(m_pDevice, &renderPassInfo, nullptr, &pRenderPass->m_pHandle);
-
-        return pRenderPass;
-    }
-
-    void VKAPI::DeleteRenderPass(BaseRenderPass *pRenderPass)
-    {
-        ZoneScoped;
-
-        API_VAR(VKRenderPass, pRenderPass);
-        vkDestroyRenderPass(m_pDevice, pRenderPassVK->m_pHandle, nullptr);
-
-        FreeType(pRenderPassVK);
-    }
-
     VkPipelineCache VKAPI::CreatePipelineCache(u32 initialDataSize, void *pInitialData)
     {
         ZoneScoped;
@@ -556,13 +425,12 @@ namespace lr::Graphics
         pBuildInfo->Init();
     }
 
-    BasePipeline *VKAPI::EndPipelineBuildInfo(GraphicsPipelineBuildInfo *pBuildInfo, BaseRenderPass *pRenderPass)
+    BasePipeline *VKAPI::EndPipelineBuildInfo(GraphicsPipelineBuildInfo *pBuildInfo)
     {
         ZoneScoped;
 
         API_VAR(VKGraphicsPipelineBuildInfo, pBuildInfo);
         VKPipeline *pPipeline = AllocType<VKPipeline>();
-        API_VAR(VKRenderPass, pRenderPass);
 
         VkPipeline &pHandle = pPipeline->pHandle;
         VkPipelineLayout &pLayout = pPipeline->pLayout;
@@ -584,7 +452,6 @@ namespace lr::Graphics
         vkCreatePipelineLayout(m_pDevice, &pipelineLayoutCreateInfo, nullptr, &pLayout);
 
         pBuildInfoVK->m_CreateInfo.layout = pLayout;
-        pBuildInfoVK->m_CreateInfo.renderPass = pRenderPassVK->m_pHandle;
 
         vkCreateGraphicsPipelines(m_pDevice, m_pPipelineCache, 1, &pBuildInfoVK->m_CreateInfo, nullptr, &pHandle);
 
@@ -1108,43 +975,6 @@ namespace lr::Graphics
         vkCreateSampler(m_pDevice, &samplerInfo, nullptr, &pHandle->m_pSampler);
     }
 
-    VkFramebuffer VKAPI::CreateFramebuffer(XMUINT2 size, u32 attachmentCount, VKImage *pAttachments, VkRenderPass &pRenderPass)
-    {
-        ZoneScoped;
-
-        VkFramebuffer pHandle = nullptr;
-
-        VkImageView pNativeHandles[8];
-
-        for (u32 i = 0; i < attachmentCount; i++)
-        {
-            pNativeHandles[i] = pAttachments[i].m_pViewHandle;
-        }
-
-        VkFramebufferCreateInfo framebufferCreateInfo = {};
-        framebufferCreateInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-
-        framebufferCreateInfo.renderPass = pRenderPass;
-
-        framebufferCreateInfo.attachmentCount = attachmentCount;
-        framebufferCreateInfo.pAttachments = pNativeHandles;
-
-        framebufferCreateInfo.width = size.x;
-        framebufferCreateInfo.height = size.y;
-        framebufferCreateInfo.layers = 1;
-
-        vkCreateFramebuffer(m_pDevice, &framebufferCreateInfo, nullptr, &pHandle);
-
-        return pHandle;
-    }
-
-    void VKAPI::DeleteFramebuffer(VkFramebuffer pFramebuffer)
-    {
-        ZoneScoped;
-
-        vkDestroyFramebuffer(m_pDevice, pFramebuffer, nullptr);
-    }
-
     void VKAPI::AllocateImageMemory(VKImage *pImage, AllocatorType allocatorType)
     {
         ZoneScoped;
@@ -1570,9 +1400,10 @@ namespace lr::Graphics
         VkExtensionProperties *pDeviceExtensions = new VkExtensionProperties[deviceExtensionCount];
         vkEnumerateDeviceExtensionProperties(pPhysicalDevice, nullptr, &deviceExtensionCount, pDeviceExtensions);
 
-        constexpr eastl::array<const char *, 4> ppRequiredExtensions = {
+        constexpr eastl::array<const char *, 5> ppRequiredExtensions = {
             "VK_KHR_swapchain",
-            "VK_KHR_create_renderpass2",
+            "VK_KHR_depth_stencil_resolve",
+            "VK_KHR_dynamic_rendering",
             "VK_KHR_synchronization2",
             "VK_EXT_extended_dynamic_state2",
         };
@@ -1620,8 +1451,8 @@ namespace lr::Graphics
         vk13Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
         vk12Features.pNext = &vk12Features;
 
-        // Enables `VK_KHR_synchronization2`
         vk13Features.synchronization2 = true;
+        vk13Features.dynamicRendering = true;
 
         VkDeviceCreateInfo deviceCreateInfo = {};
         deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -1668,7 +1499,7 @@ namespace lr::Graphics
                     commandPool.Release(pList);
                 }
 
-                mask = directFenceMask.load(eastl::memory_order_acquire);
+                mask ^= 1 << index;
             }
         }
 

@@ -36,12 +36,6 @@ namespace lr::Graphics
         void Draw(u32 vertexCount, u32 firstVertex = 0, u32 instanceCount = 1, u32 firstInstance = 1);
         void DrawIndexed(u32 indexCount, u32 firstIndex = 0, u32 vertexOffset = 0, u32 instanceCount = 1, u32 firstInstance = 1);
 
-        /// RenderPass Commands
-
-        // If pRenderPass is a nullptr, we use SwapChain's renderpass
-        void BeginRenderPass(CommandRenderPassBeginInfo &beginInfo, VkRenderPass pRenderPass, VkFramebuffer pFrameBuffer);
-        void EndRenderPass();
-
         // Pipeline
         void SetPipeline(VKPipeline *pPipeline);
         void SetPipelineDescriptorSets(const std::initializer_list<VKDescriptorSet *> &sets);

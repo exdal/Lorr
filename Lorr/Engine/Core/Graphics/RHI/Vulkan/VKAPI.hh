@@ -43,11 +43,6 @@ namespace lr::Graphics
         VkFramebuffer m_pGeometryRTV = nullptr;
         VkFramebuffer m_pUIRTV = nullptr;
 
-        /// RENDERPASS ///
-        VkRenderPass m_pGeometryPass = nullptr;
-        VkRenderPass m_pUIPass = nullptr;
-        VkRenderPass m_pPresentPass = nullptr;
-
         /// DESCRIPTORS ///
         // * MAT4 descriptor just for camera matrix
         VKDescriptorSet m_Camera3DDescriptor;
@@ -91,15 +86,11 @@ namespace lr::Graphics
         VkSemaphore CreateSemaphore(u32 initialValue = 0, bool binary = true);
         void DeleteSemaphore(VkSemaphore pSemaphore);
 
-        /// RENDERPASS ///
-        BaseRenderPass *CreateRenderPass(RenderPassDesc *pDesc);
-        void DeleteRenderPass(BaseRenderPass *pRenderPass);
-
         /// PIPELINE ///
         VkPipelineCache CreatePipelineCache(u32 initialDataSize = 0, void *pInitialData = nullptr);
 
         void BeginPipelineBuildInfo(GraphicsPipelineBuildInfo *pBuildInfo);
-        BasePipeline *EndPipelineBuildInfo(GraphicsPipelineBuildInfo *pBuildInfo, BaseRenderPass *pRenderPass);
+        BasePipeline *EndPipelineBuildInfo(GraphicsPipelineBuildInfo *pBuildInfo);
 
         /// SWAPCHAIN ///
         void CreateSwapChain(VkSwapchainKHR &pHandle, VkSwapchainCreateInfoKHR &info);
@@ -143,8 +134,6 @@ namespace lr::Graphics
 
         void CreateImageView(BaseImage *pHandle);
         void CreateSampler(VKImage *pHandle);
-        VkFramebuffer CreateFramebuffer(XMUINT2 size, u32 attachmentCount, VKImage *pAttachments, VkRenderPass &pRenderPass);
-        void DeleteFramebuffer(VkFramebuffer pFramebuffer);
 
         void AllocateImageMemory(VKImage *pImage, AllocatorType allocatorType);
         void FreeImageMemory(VKImage *pImage);

@@ -28,7 +28,7 @@ namespace lr
 
         m_Window.Init(windowDesc);
 
-        m_pAPI = new D3D12API;
+        m_pAPI = new VKAPI;
         m_pAPI->Init(&m_Window, windowDesc.Width, windowDesc.Height, APIFlags::VSync);
 
         Camera3DDesc camera3DDesc;

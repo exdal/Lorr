@@ -289,19 +289,7 @@ namespace lr::Graphics
         u64 completed = pList->m_pFence->GetCompletedValue();
         u64 desired = pList->m_DesiredFenceValue.load(eastl::memory_order_acquire);
 
-        return completed == desired;
-    }
-
-    BaseRenderPass *D3D12API::CreateRenderPass(RenderPassDesc *pDesc)
-    {
-        ZoneScoped;
-
-        return nullptr;
-    }
-
-    void D3D12API::DeleteRenderPass(BaseRenderPass *pRenderPass)
-    {
-        ZoneScoped;
+        return completed >= desired;
     }
 
     ID3D12PipelineLibrary *D3D12API::CreatePipelineCache(u32 initialDataSize, void *pInitialData)
@@ -323,7 +311,7 @@ namespace lr::Graphics
         pBuildInfo->Init();
     }
 
-    BasePipeline *D3D12API::EndPipelineBuildInfo(GraphicsPipelineBuildInfo *pBuildInfo, BaseRenderPass *pRenderPass)
+    BasePipeline *D3D12API::EndPipelineBuildInfo(GraphicsPipelineBuildInfo *pBuildInfo)
     {
         ZoneScoped;
 
@@ -410,8 +398,9 @@ namespace lr::Graphics
 
         pGList->ResourceBarrier(1, &barrier);
 
-        static XMFLOAT4 clear = { 0.0, 0, 0, 0 };
-        pGList->ClearRenderTargetView(image.m_ViewHandle, &clear.x, 0, nullptr);
+        static f32 clear[4] = { 0.0, 0, 0, 0 };
+
+        pGList->ClearRenderTargetView(image.m_ViewHandle, clear, 0, nullptr);
 
         barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
         barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
@@ -576,7 +565,7 @@ namespace lr::Graphics
                     commandPool.ReleaseFence(index);
                 }
 
-                mask = directFenceMask.load(eastl::memory_order_acquire);
+                mask ^= 1 << index;
             }
         }
 

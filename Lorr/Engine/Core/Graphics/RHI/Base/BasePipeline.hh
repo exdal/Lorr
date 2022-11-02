@@ -7,7 +7,7 @@
 #include "Core/Graphics/RHI/Common.hh"
 #include "Core/Graphics/InputLayout.hh"
 
-#include "BaseRenderPass.hh"
+#include "BaseResource.hh"
 #include "BaseShader.hh"
 
 namespace lr::Graphics
@@ -71,7 +71,6 @@ namespace lr::Graphics
 
     struct BasePipeline
     {
-        BaseRenderPass *pBoundRenderPass = nullptr;
     };
 
 }  // namespace lr::Graphics

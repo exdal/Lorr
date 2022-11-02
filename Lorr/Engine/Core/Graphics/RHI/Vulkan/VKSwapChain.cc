@@ -100,7 +100,6 @@ namespace lr::Graphics
             pAPI->CreateImageView(&currentImage);
 
             VKImage pAttachments[1] = { currentImage };
-            frame.pFrameBuffer = pAPI->CreateFramebuffer(XMUINT2(m_Width, m_Height), 1, pAttachments, stateMan.m_pPresentPass);
 
             /// Create Semaphores
 
@@ -134,7 +133,6 @@ namespace lr::Graphics
 
             pAPI->DeleteSemaphore(frame.pPresentSemp);
             pAPI->DeleteSemaphore(frame.pAcquireSemp);
-            pAPI->DeleteFramebuffer(frame.pFrameBuffer);
         }
 
         pAPI->DeleteSwapChain(this);

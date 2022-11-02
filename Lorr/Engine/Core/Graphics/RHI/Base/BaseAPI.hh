@@ -18,7 +18,6 @@
 #include "BaseCommandQueue.hh"
 #include "BaseCommandList.hh"
 #include "BaseSwapChain.hh"
-#include "BaseRenderPass.hh"
 
 namespace lr::Graphics
 {
@@ -47,13 +46,9 @@ namespace lr::Graphics
         // if `waitForFence` set true, does not push fence into wait thread, blocks current thread.
         virtual void ExecuteCommandList(BaseCommandList *pList, bool waitForFence) = 0;
 
-        /// RENDERPASS ///
-        virtual BaseRenderPass *CreateRenderPass(RenderPassDesc *pDesc) = 0;
-        virtual void DeleteRenderPass(BaseRenderPass *pRenderPass) = 0;
-
         /// PIPELINE ///
         virtual void BeginPipelineBuildInfo(GraphicsPipelineBuildInfo *pBuildInfo) = 0;
-        virtual BasePipeline *EndPipelineBuildInfo(GraphicsPipelineBuildInfo *pBuildInfo, BaseRenderPass *pRenderPass) = 0;
+        virtual BasePipeline *EndPipelineBuildInfo(GraphicsPipelineBuildInfo *pBuildInfo) = 0;
 
         /// SWAPCHAIN ///
         virtual void ResizeSwapChain(u32 width, u32 height) = 0;

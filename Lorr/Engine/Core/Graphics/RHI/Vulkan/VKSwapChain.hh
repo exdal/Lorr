@@ -16,8 +16,6 @@ namespace lr::Graphics
     {
         VKImage Image;
 
-        VkFramebuffer pFrameBuffer = nullptr;
-
         VkSemaphore pAcquireSemp = nullptr;
         VkSemaphore pPresentSemp = nullptr;
     };

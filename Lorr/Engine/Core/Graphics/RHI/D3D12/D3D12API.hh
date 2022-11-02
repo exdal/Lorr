@@ -51,15 +51,11 @@ namespace lr::Graphics
         void DeleteFence(ID3D12Fence *pFence);
         bool IsFenceSignaled(D3D12CommandList *pList);
 
-        /// RENDERPASS ///
-        BaseRenderPass *CreateRenderPass(RenderPassDesc *pDesc);
-        void DeleteRenderPass(BaseRenderPass *pRenderPass);
-
         /// PIPELINE ///
         ID3D12PipelineLibrary *CreatePipelineCache(u32 initialDataSize = 0, void *pInitialData = nullptr);
 
         void BeginPipelineBuildInfo(GraphicsPipelineBuildInfo *pBuildInfo);
-        BasePipeline *EndPipelineBuildInfo(GraphicsPipelineBuildInfo *pBuildInfo, BaseRenderPass *pRenderPass);
+        BasePipeline *EndPipelineBuildInfo(GraphicsPipelineBuildInfo *pBuildInfo);
 
         /// SWAPCHAIN ///
 

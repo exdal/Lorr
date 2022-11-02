@@ -161,67 +161,6 @@ namespace lr::Graphics
         vkCmdDrawIndexed(m_pHandle, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
     }
 
-    void VKCommandList::BeginRenderPass(CommandRenderPassBeginInfo &beginInfo, VkRenderPass pRenderPass, VkFramebuffer pFrameBuffer)
-    {
-        ZoneScoped;
-
-        VKAPI *pAPI = (VKAPI *)GetEngine()->m_pAPI;
-        APIStateManager &stateMan = pAPI->m_APIStateMan;
-        VKSwapChain &swapChain = pAPI->m_SwapChain;
-        VKSwapChainFrame *pCurrentFrame = swapChain.GetCurrentFrame();
-
-        // TODO: Clear colors per attachemtns
-        VkClearValue pClearValues[8];
-
-        VkExtent2D renderAreaExt = { beginInfo.RenderArea.z, beginInfo.RenderArea.w };
-
-        // Get info from SwapChain
-        if (beginInfo.RenderArea.z == -1 && beginInfo.RenderArea.w == -1)
-        {
-            renderAreaExt.width = swapChain.m_Width;
-            renderAreaExt.height = swapChain.m_Height;
-        }
-
-        // Set clear colors
-        for (u32 i = 0; i < beginInfo.ClearValueCount; i++)
-        {
-            ClearValue &currentClearColor = beginInfo.pClearValues[i];
-
-            if (!currentClearColor.IsDepth)
-            {
-                memcpy(pClearValues[i].color.float32, &currentClearColor.RenderTargetColor, sizeof(XMFLOAT4));
-            }
-            else
-            {
-                pClearValues[i].depthStencil.depth = currentClearColor.DepthStencilColor.Depth;
-                pClearValues[i].depthStencil.stencil = currentClearColor.DepthStencilColor.Stencil;
-            }
-        }
-
-        // Actual info
-        VkRenderPassBeginInfo renderPassInfo = {};
-        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        renderPassInfo.renderPass = pRenderPass;
-        renderPassInfo.framebuffer = pFrameBuffer;
-
-        renderPassInfo.renderArea.offset.x = beginInfo.RenderArea.x;
-        renderPassInfo.renderArea.offset.y = beginInfo.RenderArea.y;
-
-        renderPassInfo.renderArea.extent = renderAreaExt;
-
-        renderPassInfo.clearValueCount = beginInfo.ClearValueCount;
-        renderPassInfo.pClearValues = pClearValues;
-
-        vkCmdBeginRenderPass(m_pHandle, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-    }
-
-    void VKCommandList::EndRenderPass()
-    {
-        ZoneScoped;
-
-        vkCmdEndRenderPass(m_pHandle);
-    }
-
     void VKCommandList::SetPipeline(VKPipeline *pPipeline)
     {
         ZoneScoped;

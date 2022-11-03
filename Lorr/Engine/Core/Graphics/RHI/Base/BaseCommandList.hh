@@ -7,6 +7,8 @@
 #include "Core/Graphics/RHI/APIConfig.hh"
 #include "Core/Graphics/RHI/Common.hh"
 
+#include "BaseResource.hh"
+
 namespace lr::Graphics
 {
     struct ClearValue
@@ -34,7 +36,7 @@ namespace lr::Graphics
 
         struct Depth
         {
-            f32 Depth ;
+            f32 Depth;
             u8 Stencil;
         } DepthStencilColor;
 
@@ -52,9 +54,14 @@ namespace lr::Graphics
 
     struct BaseCommandList
     {
+        virtual void BarrierTransition(BaseImage *pImage,
+                                       ResourceUsage barrierBefore,
+                                       ShaderStage shaderBefore,
+                                       ResourceUsage barrierAfter,
+                                       ShaderStage shaderAfter) = 0;
+
         CommandListType m_Type = CommandListType::Direct;
     };
-    
 
     struct BaseCommandAllocator
     {
@@ -71,9 +78,9 @@ namespace lr::Graphics
 
         void WaitForAll();
 
-        eastl::array<BaseCommandList *, 32> m_DirectLists;
-        eastl::array<BaseCommandList *, 16> m_ComputeLists;
-        eastl::array<BaseCommandList *, 8> m_CopyLists;
+        eastl::array<BaseCommandList *, 32> m_DirectLists = {};
+        eastl::array<BaseCommandList *, 16> m_ComputeLists = {};
+        eastl::array<BaseCommandList *, 8> m_CopyLists = {};
 
         eastl::atomic<u32> m_DirectListMask;
         eastl::atomic<u32> m_DirectFenceMask;

@@ -27,6 +27,7 @@ namespace lr::Graphics
 
         void CreateHandle(VKAPI *pAPI);
         void CreateBackBuffers(VKAPI *pAPI);
+        BaseImage *GetCurrentImage();
         VKSwapChainFrame *GetCurrentFrame();
         VKSwapChainFrame *GetNextFrame();
 

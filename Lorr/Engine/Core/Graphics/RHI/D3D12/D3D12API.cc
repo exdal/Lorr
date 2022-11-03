@@ -172,7 +172,7 @@ namespace lr::Graphics
     {
         ZoneScoped;
 
-        D3D12CommandQueue *pQueue = AllocType<D3D12CommandQueue>();
+        D3D12CommandQueue *pQueue = AllocTypeInherit<BaseCommandQueue, D3D12CommandQueue>();
 
         D3D12_COMMAND_QUEUE_DESC queueDesc = {};
         queueDesc.NodeMask = 0;
@@ -188,7 +188,7 @@ namespace lr::Graphics
     {
         ZoneScoped;
 
-        D3D12CommandAllocator *pAllocator = AllocType<D3D12CommandAllocator>();
+        D3D12CommandAllocator *pAllocator = AllocTypeInherit<BaseCommandAllocator, D3D12CommandAllocator>();
 
         m_pDevice->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&pAllocator->pHandle));
 
@@ -199,10 +199,10 @@ namespace lr::Graphics
     {
         ZoneScoped;
 
+        D3D12CommandList *pList = AllocTypeInherit<BaseCommandList, D3D12CommandList>();
         BaseCommandAllocator *pAllocator = CreateCommandAllocator(type);
-        API_VAR(D3D12CommandAllocator, pAllocator);
 
-        D3D12CommandList *pList = AllocType<D3D12CommandList>();
+        API_VAR(D3D12CommandAllocator, pAllocator);
 
         pList->m_pFence = CreateFence();
         pList->m_FenceEvent = CreateEventExA(nullptr, nullptr, false, EVENT_ALL_ACCESS);
@@ -316,7 +316,7 @@ namespace lr::Graphics
         ZoneScoped;
 
         API_VAR(D3D12GraphicsPipelineBuildInfo, pBuildInfo);
-        D3D12Pipeline *pPipeline = AllocType<D3D12Pipeline>();
+        D3D12Pipeline *pPipeline = AllocTypeInherit<BasePipeline, D3D12Pipeline>();
 
         D3D12_ROOT_PARAMETER1 pParams[8] = {};
         D3D12_DESCRIPTOR_RANGE1 ppRanges[8][8] = {};
@@ -376,39 +376,44 @@ namespace lr::Graphics
         ZoneScoped;
     }
 
+    BaseSwapChain *D3D12API::GetSwapChain()
+    {
+        return &m_SwapChain;
+    }
+
     void D3D12API::Frame()
     {
         ZoneScoped;
 
-        BaseCommandList *pList = GetCommandList();
-        API_VAR(D3D12CommandList, pList);
+        // BaseCommandList *pList = GetCommandList();
+        // API_VAR(D3D12CommandList, pList);
 
-        ID3D12GraphicsCommandList4 *pGList = pListDX->m_pHandle;
+        // ID3D12GraphicsCommandList4 *pGList = pListDX->m_pHandle;
 
-        BeginCommandList(pList);
+        // BeginCommandList(pList);
 
-        D3D12Image &image = m_SwapChain.m_pFrames[m_SwapChain.m_CurrentFrame].Image;
+        // D3D12Image &image = m_SwapChain.m_pFrames[m_SwapChain.m_CurrentFrame].Image;
 
-        D3D12_RESOURCE_BARRIER barrier = {};
-        barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-        barrier.Transition.pResource = image.m_pHandle;
+        // D3D12_RESOURCE_BARRIER barrier = {};
+        // barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        // barrier.Transition.pResource = image.m_pHandle;
 
-        barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
-        barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
+        // barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
+        // barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
 
-        pGList->ResourceBarrier(1, &barrier);
+        // pGList->ResourceBarrier(1, &barrier);
 
-        static f32 clear[4] = { 0.0, 0, 0, 0 };
+        // static f32 clear[4] = { 0.0, 0, 0, 0 };
 
-        pGList->ClearRenderTargetView(image.m_ViewHandle, clear, 0, nullptr);
+        // pGList->ClearRenderTargetView(image.m_ViewHandle, clear, 0, nullptr);
 
-        barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
-        barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
+        // barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
+        // barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
 
-        pGList->ResourceBarrier(1, &barrier);
+        // pGList->ResourceBarrier(1, &barrier);
 
-        EndCommandList(pList);
-        ExecuteCommandList(pList, false);
+        // EndCommandList(pList);
+        // ExecuteCommandList(pList, false);
 
         m_SwapChain.Present();
         m_SwapChain.NextFrame();
@@ -418,7 +423,7 @@ namespace lr::Graphics
     {
         ZoneScoped;
 
-        D3D12DescriptorSet *pDescriptorSet = AllocType<D3D12DescriptorSet>();
+        D3D12DescriptorSet *pDescriptorSet = AllocTypeInherit<BaseDescriptorSet, D3D12DescriptorSet>();
 
         D3D12_ROOT_SIGNATURE_DESC1 rootSigDesc = {};
 
@@ -515,7 +520,7 @@ namespace lr::Graphics
     {
         ZoneScoped;
 
-        D3D12Image *pImage = AllocType<D3D12Image>();
+        D3D12Image *pImage = AllocTypeInherit<BaseImage, D3D12Image>();
 
         return pImage;
     }
@@ -681,47 +686,71 @@ namespace lr::Graphics
         return kDescriptorRangeLUT[(u32)type];
     }
 
-    D3D12_RESOURCE_STATES D3D12API::ToDXImageUsage(ImageUsage usage)
+    D3D12_RESOURCE_STATES D3D12API::ToDXImageUsage(ResourceUsage usage)
     {
         D3D12_RESOURCE_STATES v = {};
 
-        if (usage & ImageUsage::ColorAttachment)
+        if (usage & ResourceUsage::Undefined)
+            v |= D3D12_RESOURCE_STATE_COMMON;
+
+        if (usage & ResourceUsage::RenderTarget)
             v |= D3D12_RESOURCE_STATE_RENDER_TARGET;
-        if (usage & ImageUsage::DepthAttachment)
+
+        if (usage & ResourceUsage::DepthStencilWrite)
             v |= D3D12_RESOURCE_STATE_DEPTH_WRITE;
-        if (usage & ImageUsage::Sampled)
+
+        if (usage & ResourceUsage::DepthStencilRead)
+            v |= D3D12_RESOURCE_STATE_DEPTH_READ;
+
+        if (usage & ResourceUsage::ShaderResource)
             v |= D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
-        if (usage & ImageUsage::CopySrc)
+
+        if (usage & ResourceUsage::CopySrc)
             v |= D3D12_RESOURCE_STATE_COPY_SOURCE;
-        if (usage & ImageUsage::CopyDst)
+
+        if (usage & ResourceUsage::CopyDst)
             v |= D3D12_RESOURCE_STATE_COPY_DEST;
+
+        if (usage & ResourceUsage::Present)
+            v |= D3D12_RESOURCE_STATE_PRESENT;
 
         return v;
     }
 
-    D3D12_RESOURCE_STATES D3D12API::ToDXBufferUsage(BufferUsage usage)
+    D3D12_RESOURCE_STATES D3D12API::ToDXBufferUsage(ResourceUsage usage)
     {
         D3D12_RESOURCE_STATES v = {};
 
-        if (usage & BufferUsage::Vertex)
+        if (usage & ResourceUsage::VertexBuffer)
             v |= D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
-        if (usage & BufferUsage::Index)
+
+        if (usage & ResourceUsage::IndexBuffer)
             v |= D3D12_RESOURCE_STATE_INDEX_BUFFER;
-        if (usage & BufferUsage::ConstantBuffer)
+
+        if (usage & ResourceUsage::ConstantBuffer)
             v |= D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
-        if (usage & BufferUsage::Unordered)
+
+        if (usage & ResourceUsage::UnorderedAccess)
             v |= D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
-        if (usage & BufferUsage::Indirect)
+
+        if (usage & ResourceUsage::IndirectBuffer)
             v |= D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT;
-        if (usage & BufferUsage::CopySrc)
+
+        if (usage & ResourceUsage::CopySrc)
             v |= D3D12_RESOURCE_STATE_COPY_SOURCE;
-        if (usage & BufferUsage::CopyDst)
+
+        if (usage & ResourceUsage::CopyDst)
             v |= D3D12_RESOURCE_STATE_COPY_DEST;
 
         return v;
     }
 
-    D3D12_SHADER_VISIBILITY D3D12API::ToDXShaderType(ShaderType type)
+    D3D12_RESOURCE_STATES D3D12API::ToDXImageLayout(ResourceUsage usage)
+    {
+        return ToDXImageUsage(usage);
+    }
+
+    D3D12_SHADER_VISIBILITY D3D12API::ToDXShaderType(ShaderStage type)
     {
         return kShaderTypeLUT[(u32)type];
     }

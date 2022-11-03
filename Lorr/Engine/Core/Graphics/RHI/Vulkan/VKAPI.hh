@@ -26,34 +26,13 @@ namespace lr::Graphics
         VKBuffer Buffer;
     };
 
-    /// ------------------------------------------ ///
-
-    // TODO: Temp state manager, move this to actual renderer stuff once its done
-    struct APIStateManager
+    struct VKDescriptorBindingDesc
     {
-        void Init(VKAPI *pAPI);
-
-        void UpdateCamera3DData(XMMATRIX mat);
-        void UpdateCamera2DData(XMMATRIX mat);
-
-        /// PIPELINES ///
-        VKPipeline m_GeometryPipeline;
-        VKPipeline m_UIPipeline;
-
-        VkFramebuffer m_pGeometryRTV = nullptr;
-        VkFramebuffer m_pUIRTV = nullptr;
-
-        /// DESCRIPTORS ///
-        // * MAT4 descriptor just for camera matrix
-        VKDescriptorSet m_Camera3DDescriptor;
-        VKBuffer m_Camera3DBuffer;
-        VKDescriptorSet m_Camera2DDescriptor;
-        VKBuffer m_Camera2DBuffer;
-
-        VKDescriptorSet m_UISamplerDescriptor;
-
-        VKAPI *m_pAPI = nullptr;
+        VkDescriptorType Type;
+        u32 Count;
     };
+
+    /// ------------------------------------------ ///
 
     struct VKAPI : BaseAPI
     {
@@ -97,6 +76,7 @@ namespace lr::Graphics
         void DeleteSwapChain(VKSwapChain *pSwapChain);
         void GetSwapChainImages(VkSwapchainKHR &pHandle, u32 bufferCount, VkImage *pImages);
         void ResizeSwapChain(u32 width, u32 height);
+        BaseSwapChain *GetSwapChain();
 
         void Frame();
         void WaitForDevice();
@@ -110,10 +90,7 @@ namespace lr::Graphics
         BaseDescriptorSet *CreateDescriptorSet(DescriptorSetDesc *pDesc);
         void UpdateDescriptorData(BaseDescriptorSet *pSet, DescriptorSetDesc *pDesc);
 
-        // `VKDescriptorBindingDesc::Type` represents descriptor type.
-        // `VKDescriptorBindingDesc::ArraySize` represents descriptor count for that type.
-        // Same types cannot be used, will result in UB. Other variables are ignored.
-        VkDescriptorPool CreateDescriptorPool(const std::initializer_list<DescriptorBindingDesc> &layouts);
+        VkDescriptorPool CreateDescriptorPool(const std::initializer_list<VKDescriptorBindingDesc> &layouts);
 
         // * Buffers * //
         void CreateBuffer(VKBuffer *pHandle, BufferDesc *pDesc, BufferData *pData);
@@ -159,14 +136,20 @@ namespace lr::Graphics
         // clang-format off
 
         /// Type conversions
-        static VkFormat                 ToVulkanFormat(ResourceFormat format);
-        static VkFormat                 ToVulkanFormat(VertexAttribType format);
-        static VkPrimitiveTopology      ToVulkanTopology(PrimitiveType type);
-        static VkCullModeFlags          ToVulkanCullMode(CullMode mode);
-        static VkDescriptorType         ToVulkanDescriptorType(DescriptorType type);
-        static VkImageUsageFlags        ToVulkanImageUsage(ImageUsage usage);
-        static VkBufferUsageFlagBits    ToVulkanBufferUsage(BufferUsage usage);
-        static VkShaderStageFlagBits    ToVulkanShaderType(ShaderType type);
+        static VkFormat                 ToVKFormat(ResourceFormat format);
+        static VkFormat                 ToVKFormat(VertexAttribType format);
+        static VkPrimitiveTopology      ToVKTopology(PrimitiveType type);
+        static VkCullModeFlags          ToVKCullMode(CullMode mode);
+        static VkDescriptorType         ToVKDescriptorType(DescriptorType type);
+        static VkImageUsageFlags        ToVKImageUsage(ResourceUsage usage);
+        static VkBufferUsageFlagBits    ToVKBufferUsage(ResourceUsage usage);
+        static VkImageLayout            ToVKImageLayout(ResourceUsage usage);
+        static VkShaderStageFlagBits    ToVKShaderType(ShaderStage type);
+        //~ This function takes the shader stages as general, to set a specific stage
+        //~ use this together with `ToVKPipelineShaderStage`
+        static VkPipelineStageFlags     ToVKPipelineStage(ResourceUsage usage);
+        static VkPipelineStageFlags     ToVKPipelineShaderStage(ShaderStage type);
+        static VkAccessFlags            ToVKAccessFlags(ResourceUsage usage);
 
         // clang-format on
 
@@ -178,8 +161,6 @@ namespace lr::Graphics
         VkSurfaceKHR m_pSurface = nullptr;
         VkDevice m_pDevice = nullptr;
         VKSwapChain m_SwapChain;
-
-        APIStateManager m_APIStateMan;
 
         /// Main Queues
         u32 m_AvailableQueueCount = 0;

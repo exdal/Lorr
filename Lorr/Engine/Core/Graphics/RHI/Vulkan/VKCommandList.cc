@@ -5,6 +5,8 @@
 #include "VKAPI.hh"
 #include "VKResource.hh"
 
+#define API_VAR(type, name) type *name##VK = (type *)name
+
 namespace lr::Graphics
 {
     void VKCommandList::Init(VkCommandBuffer pHandle, VkFence pFence, CommandListType type)
@@ -44,6 +46,53 @@ namespace lr::Graphics
         sc.extent.height = h;
 
         vkCmdSetScissor(m_pHandle, id, 1, &sc);
+    }
+
+    void VKCommandList::BarrierTransition(BaseImage *pImage,
+                                         ResourceUsage barrierBefore,
+                                         ShaderStage shaderBefore,
+                                         ResourceUsage barrierAfter,
+                                         ShaderStage shaderAfter)
+    {
+        ZoneScoped;
+
+        API_VAR(VKImage, pImage);
+
+        // TODO: Implement `VkImageSubresourceRange` fully
+        VkImageSubresourceRange subresRange = {};
+        subresRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        subresRange.baseArrayLayer = 0;
+        subresRange.layerCount = 1;
+        subresRange.baseMipLevel = pImageVK->m_UsingMip;
+        subresRange.levelCount = pImageVK->m_TotalMips;
+
+        VkImageMemoryBarrier barrierInfo = {};
+        barrierInfo.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        barrierInfo.pNext = nullptr;
+
+        barrierInfo.image = pImageVK->m_pHandle;
+
+        barrierInfo.oldLayout = VKAPI::ToVKImageLayout(barrierBefore);
+        barrierInfo.newLayout = VKAPI::ToVKImageLayout(barrierAfter);
+
+        barrierInfo.srcAccessMask = VKAPI::ToVKAccessFlags(barrierBefore);
+        barrierInfo.dstAccessMask = VKAPI::ToVKAccessFlags(barrierAfter);
+
+        barrierInfo.subresourceRange = subresRange;
+
+        barrierInfo.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrierInfo.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+
+        vkCmdPipelineBarrier(m_pHandle,
+                             VKAPI::ToVKPipelineStage(barrierBefore) | VKAPI::ToVKPipelineShaderStage(shaderBefore),
+                             VKAPI::ToVKPipelineStage(barrierAfter) | VKAPI::ToVKPipelineShaderStage(shaderAfter),
+                             VK_DEPENDENCY_BY_REGION_BIT,
+                             0,
+                             nullptr,
+                             0,
+                             nullptr,
+                             1,
+                             &barrierInfo);
     }
 
     void VKCommandList::SetVertexBuffer(VKBuffer *pBuffer)

@@ -26,6 +26,12 @@ namespace lr::Graphics
         void SetViewport(u32 id, u32 width, u32 height, f32 minDepth, f32 maxDepth);
         void SetScissor(u32 id, u32 x, u32 y, u32 w, u32 h);
 
+        void BarrierTransition(BaseImage *pImage,
+                              ResourceUsage barrierBefore,
+                              ShaderStage shaderBefore,
+                              ResourceUsage barrierAfter,
+                              ShaderStage shaderAfter);
+
         /// Buffer Commands
         void SetVertexBuffer(VKBuffer *pBuffer);
         void SetIndexBuffer(VKBuffer *pBuffer, bool type32 = true);

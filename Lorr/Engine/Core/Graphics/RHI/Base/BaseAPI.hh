@@ -52,6 +52,7 @@ namespace lr::Graphics
 
         /// SWAPCHAIN ///
         virtual void ResizeSwapChain(u32 width, u32 height) = 0;
+        virtual BaseSwapChain *GetSwapChain() = 0;
 
         virtual void Frame() = 0;
 
@@ -62,6 +63,26 @@ namespace lr::Graphics
         // * Images * //
         virtual BaseImage *CreateImage(ImageDesc *pDesc, ImageData *pData) = 0;
         virtual void DeleteImage(BaseImage *pImage) = 0;
+
+        // TODO: USE ACTUAL ALLOCATORS ASAP
+        // T = Base Type
+        // U = Actual Type
+        template<typename T, typename U>
+        U *AllocTypeInherit()
+        {
+            Memory::TLSFBlock *pBlock = m_TypeAllocator.Allocate(sizeof(T) + sizeof(U) + PTR_SIZE, Memory::TLSFMemoryAllocator::ALIGN_SIZE);
+
+            u64 offset = pBlock->Offset;
+
+            // Copy block address
+            memcpy(m_pTypeData + offset, pBlock, PTR_SIZE);
+            offset += PTR_SIZE;
+
+            void *pBaseAddr = m_pTypeData + offset;
+            T *pBase = new (pBaseAddr) U;
+
+            return (U *)pBase;
+        }
 
         template<typename T>
         T *AllocType()
@@ -88,7 +109,7 @@ namespace lr::Graphics
         Memory::TLSFMemoryAllocator m_TypeAllocator;
         u8 *m_pTypeData = nullptr;
 
-        CommandListPool m_CommandListPool;
+        CommandListPool m_CommandListPool = {};
     };
 
 }  // namespace lr::Graphics

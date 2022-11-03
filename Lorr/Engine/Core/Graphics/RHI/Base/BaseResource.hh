@@ -8,29 +8,30 @@
 
 namespace lr::Graphics
 {
-    enum class BufferUsage : i32
+    enum class ResourceUsage : u32
     {
-        Vertex = 1 << 0,
-        Index = 1 << 1,
-        Unordered = 1 << 2,
-        Indirect = 1 << 3,
-        CopySrc = 1 << 4,
-        CopyDst = 1 << 5,
-        ConstantBuffer = 1 << 6,
+        Undefined = 0,
+
+        VertexBuffer = 1 << 0,
+        IndexBuffer = 1 << 1,
+
+        IndirectBuffer = 1 << 2,
+
+        ConstantBuffer = 1 << 3,
+        ShaderResource = 1 << 4,
+        RenderTarget = 1 << 5,
+        DepthStencilWrite = 1 << 6,
+        DepthStencilRead = 1 << 7,
+
+        CopySrc = 1 << 8,
+        CopyDst = 1 << 9,
+
+        Present = 1 << 10,
+
+        UnorderedAccess = 1 << 11,
     };
 
-    EnumFlags(BufferUsage);
-
-    enum class ImageUsage : i32
-    {
-        ColorAttachment = 1 << 0,
-        DepthAttachment = 1 << 1,
-        Sampled = 1 << 2,
-        CopySrc = 1 << 3,
-        CopyDst = 1 << 4,
-    };
-
-    EnumFlags(ImageUsage);
+    EnumFlags(ResourceUsage);
 
     enum class AllocatorType
     {
@@ -83,7 +84,7 @@ namespace lr::Graphics
 
     struct ImageDesc
     {
-        ImageUsage Usage;
+        ResourceUsage Usage;
         ResourceFormat Format = ResourceFormat::Unknown;
         bool Mappable = false;
 
@@ -103,6 +104,9 @@ namespace lr::Graphics
 
     struct BaseImage
     {
+        ResourceUsage m_Usage;
+        ResourceFormat m_Format;
+
         u32 m_Width = 0;
         u32 m_Height = 0;
         u64 m_DataOffset = 0;
@@ -110,9 +114,6 @@ namespace lr::Graphics
 
         u32 m_UsingMip = 0;
         u32 m_TotalMips = 1;
-
-        ImageUsage m_Usage;
-        ResourceFormat m_Format;
 
         AllocatorType m_AllocatorType;
         void *m_pAllocatorData = nullptr;
@@ -124,7 +125,7 @@ namespace lr::Graphics
     {
         bool Mappable = false;
 
-        BufferUsage UsageFlags;
+        ResourceUsage UsageFlags;
     };
 
     struct BufferData
@@ -139,7 +140,7 @@ namespace lr::Graphics
         u32 m_RequiredDataSize = 0;  // Required data size from Vulkan API
         u32 m_DataSize = 0;          // Real size of data
 
-        BufferUsage m_Usage;
+        ResourceUsage m_Usage;
         ResourceFormat m_Format;
         bool m_Mappable = false;
 
@@ -151,7 +152,7 @@ namespace lr::Graphics
     {
         // u32 BindingID = -1;
         DescriptorType Type;
-        ShaderType TargetShader = ShaderType::Count;
+        ShaderStage TargetShader;
         u32 ArraySize = 1;
 
         BaseBuffer *pBuffer = nullptr;

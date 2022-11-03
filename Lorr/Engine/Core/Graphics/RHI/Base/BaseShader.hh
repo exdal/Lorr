@@ -10,7 +10,7 @@ namespace lr::Graphics
 {
     struct BaseShader
     {
-        ShaderType Type = ShaderType::Count;
+        ShaderStage Type;
     };
 
 }  // namespace lr::Graphics

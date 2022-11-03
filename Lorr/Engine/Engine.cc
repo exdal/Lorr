@@ -18,8 +18,6 @@ namespace lr
 
     UI::ImGuiRenderer imguiHandler;
 
-    Memory::TLSFMemoryAllocator memoryAllocator;
-
     void Engine::Init(ApplicationDesc &desc, WindowDesc &windowDesc)
     {
         ZoneScoped;
@@ -123,8 +121,6 @@ namespace lr
 
         while (!m_Window.ShouldClose())
         {
-            // Graphics::APIStateManager &stateMan = m_pAPI->m_APIStateMan;
-
             f32 deltaTime = timer.elapsed();
             timer.reset();
 
@@ -166,6 +162,18 @@ namespace lr
             // ImGui::Image(0, ImVec2(512, 128));
             // ImGui::End();
             // imguiHandler.EndFrame();
+
+            BaseCommandList *pList = m_pAPI->GetCommandList();
+
+            m_pAPI->BeginCommandList(pList);
+
+            BaseImage *pImage = m_pAPI->GetSwapChain()->GetCurrentImage();
+
+            pList->BarrierTransition(pImage, ResourceUsage::Undefined, ShaderStage::None, ResourceUsage::RenderTarget, ShaderStage::None);
+            pList->BarrierTransition(pImage, ResourceUsage::RenderTarget, ShaderStage::None, ResourceUsage::Present, ShaderStage::None);
+
+            m_pAPI->EndCommandList(pList);
+            m_pAPI->ExecuteCommandList(pList, false);
 
             m_pAPI->Frame();
             m_Window.Poll();

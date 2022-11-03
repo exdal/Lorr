@@ -21,6 +21,7 @@ namespace lr::Graphics
 
     struct BaseSwapChain
     {
+        virtual BaseImage *GetCurrentImage() = 0;
         void NextFrame();
 
         u32 m_CurrentFrame = 0;

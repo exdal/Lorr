@@ -77,12 +77,19 @@ namespace lr::Graphics
             m_pHandle->GetBuffer(i, IID_PPV_ARGS(&currentImage.m_pHandle));
             currentImage.m_Width = m_Width;
             currentImage.m_Height = m_Height;
-            currentImage.m_Usage = ImageUsage::ColorAttachment;
+            currentImage.m_Usage = ResourceUsage::Present;
             currentImage.m_Format = imageDesc.Format;
             currentImage.m_TotalMips = 1;
 
             pAPI->CreateRenderTarget(&currentImage);
         }
+    }
+
+    BaseImage *D3D12SwapChain::GetCurrentImage()
+    {
+        ZoneScoped;
+
+        return &m_pFrames[m_CurrentFrame].Image;
     }
 
     D3D12SwapChainFrame *D3D12SwapChain::GetCurrentFrame()

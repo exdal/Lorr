@@ -43,7 +43,7 @@ namespace lr::Graphics
 
         // Buffer description
         swapChainInfo.minImageCount = m_FrameCount;
-        swapChainInfo.imageFormat = VKAPI::ToVulkanFormat(m_ImageFormat);
+        swapChainInfo.imageFormat = VKAPI::ToVKFormat(m_ImageFormat);
         swapChainInfo.imageColorSpace = m_ColorSpace;
         swapChainInfo.imageExtent.width = m_Width;
         swapChainInfo.imageExtent.height = m_Height;
@@ -71,7 +71,6 @@ namespace lr::Graphics
         ZoneScoped;
 
         VkDevice &pDevice = pAPI->m_pDevice;
-        APIStateManager &stateMan = pAPI->m_APIStateMan;
 
         // Get images
         VkImage ppSwapChainImages[3];
@@ -93,7 +92,7 @@ namespace lr::Graphics
             currentImage.m_pHandle = ppSwapChainImages[i];
             currentImage.m_Width = m_Width;
             currentImage.m_Height = m_Height;
-            currentImage.m_Usage = ImageUsage::ColorAttachment;
+            currentImage.m_Usage = ResourceUsage::Present;
             currentImage.m_Format = imageDesc.Format;
             currentImage.m_TotalMips = 1;
 
@@ -106,6 +105,13 @@ namespace lr::Graphics
             frame.pAcquireSemp = pAPI->CreateSemaphore();
             frame.pPresentSemp = pAPI->CreateSemaphore();
         }
+    }
+
+    BaseImage *VKSwapChain::GetCurrentImage()
+    {
+        ZoneScoped;
+
+        return &m_pFrames[m_CurrentFrame].Image;
     }
 
     VKSwapChainFrame *VKSwapChain::GetCurrentFrame()

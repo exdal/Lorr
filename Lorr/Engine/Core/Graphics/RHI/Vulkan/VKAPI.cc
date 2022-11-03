@@ -109,12 +109,11 @@ namespace lr::Graphics
 
         m_CommandListPool.Init();
         m_pDescriptorPool = CreateDescriptorPool({
-            { DescriptorType::ConstantBufferView, ShaderType::Count, 256 },
-            { DescriptorType::ShaderResourceView, ShaderType::Count, 256 },
+            { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 256 },
+            { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 256 },
         });
 
         m_pPipelineCache = CreatePipelineCache();
-        m_APIStateMan.Init(this);
 
         m_pDirectQueue = (VKCommandQueue *)CreateCommandQueue(CommandListType::Direct);
         m_SwapChain.Init(pWindow, this, SwapChainFlags::TripleBuffering);
@@ -153,7 +152,7 @@ namespace lr::Graphics
         m_MABufferTLSF.Allocator.Init(kBufferTLSFMem);
         m_MAImageTLSF.Allocator.Init(kImageTLSFMem);
 
-        bufferDesc.UsageFlags = BufferUsage::CopyDst;
+        bufferDesc.UsageFlags = ResourceUsage::CopyDst;
 
         bufferDesc.Mappable = true;
         bufferData.DataLen = kDescriptorMem;
@@ -184,7 +183,7 @@ namespace lr::Graphics
     {
         ZoneScoped;
 
-        VKCommandQueue *pQueue = AllocType<VKCommandQueue>();
+        VKCommandQueue *pQueue = AllocTypeInherit<BaseCommandQueue, VKCommandQueue>();
 
         VkQueue pHandle = nullptr;
         VkFence pFence = CreateFence(false);
@@ -200,7 +199,7 @@ namespace lr::Graphics
     {
         ZoneScoped;
 
-        VKCommandAllocator *pAllocator = AllocType<VKCommandAllocator>();
+        VKCommandAllocator *pAllocator = AllocTypeInherit<BaseCommandAllocator, VKCommandAllocator>();
 
         VkCommandPoolCreateInfo allocatorInfo = {};
         allocatorInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
@@ -219,7 +218,7 @@ namespace lr::Graphics
         BaseCommandAllocator *pAllocator = CreateCommandAllocator(type);
         API_VAR(VKCommandAllocator, pAllocator);
 
-        VKCommandList *pList = AllocType<VKCommandList>();
+        VKCommandList *pList = AllocTypeInherit<BaseCommandList, VKCommandList>();
 
         VkCommandBuffer pHandle = nullptr;
         VkFence pFence = CreateFence(false);
@@ -430,7 +429,7 @@ namespace lr::Graphics
         ZoneScoped;
 
         API_VAR(VKGraphicsPipelineBuildInfo, pBuildInfo);
-        VKPipeline *pPipeline = AllocType<VKPipeline>();
+        VKPipeline *pPipeline = AllocTypeInherit<BasePipeline, VKPipeline>();
 
         VkPipeline &pHandle = pPipeline->pHandle;
         VkPipelineLayout &pLayout = pPipeline->pLayout;
@@ -494,6 +493,11 @@ namespace lr::Graphics
         m_SwapChain.DestroyHandle(this);
         m_SwapChain.CreateHandle(this);
         m_SwapChain.CreateBackBuffers(this);
+    }
+
+    BaseSwapChain *VKAPI::GetSwapChain()
+    {
+        return &m_SwapChain;
     }
 
     void VKAPI::Frame()
@@ -583,7 +587,7 @@ namespace lr::Graphics
     {
         ZoneScoped;
 
-        VKDescriptorSet *pDescriptorSet = AllocType<VKDescriptorSet>();
+        VKDescriptorSet *pDescriptorSet = AllocTypeInherit<BaseDescriptorSet, VKDescriptorSet>();
 
         VkDescriptorSetLayoutBinding pBindings[8] = {};
 
@@ -592,8 +596,8 @@ namespace lr::Graphics
             DescriptorBindingDesc &element = pDesc->pBindings[i];
 
             pBindings[i].binding = i;
-            pBindings[i].descriptorType = ToVulkanDescriptorType(element.Type);
-            pBindings[i].stageFlags = ToVulkanShaderType(element.TargetShader);
+            pBindings[i].descriptorType = ToVKDescriptorType(element.Type);
+            pBindings[i].stageFlags = ToVKShaderType(element.TargetShader);
             pBindings[i].descriptorCount = element.ArraySize;
         }
 
@@ -672,13 +676,13 @@ namespace lr::Graphics
             pWriteSets[i].dstBinding = i;
             pWriteSets[i].dstArrayElement = 0;
             pWriteSets[i].descriptorCount = element.ArraySize;
-            pWriteSets[i].descriptorType = ToVulkanDescriptorType(element.Type);
+            pWriteSets[i].descriptorType = ToVKDescriptorType(element.Type);
         }
 
         vkUpdateDescriptorSets(m_pDevice, pDesc->BindingCount, pWriteSets, 0, nullptr);
     }
 
-    VkDescriptorPool VKAPI::CreateDescriptorPool(const std::initializer_list<DescriptorBindingDesc> &layouts)
+    VkDescriptorPool VKAPI::CreateDescriptorPool(const std::initializer_list<VKDescriptorBindingDesc> &layouts)
     {
         ZoneScoped;
 
@@ -689,9 +693,9 @@ namespace lr::Graphics
         u32 idx = 0;
         for (auto &element : layouts)
         {
-            pPoolSizes[idx].type = ToVulkanDescriptorType(element.Type);
-            pPoolSizes[idx].descriptorCount = element.ArraySize;
-            maxSets += element.ArraySize;
+            pPoolSizes[idx].type = element.Type;
+            pPoolSizes[idx].descriptorCount = element.Count;
+            maxSets += element.Count;
 
             idx++;
         }
@@ -717,7 +721,7 @@ namespace lr::Graphics
         VkBufferCreateInfo createInfo = {};
         createInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
         createInfo.size = pData->DataLen;
-        createInfo.usage = ToVulkanBufferUsage(pDesc->UsageFlags);
+        createInfo.usage = ToVKBufferUsage(pDesc->UsageFlags);
 
         vkCreateBuffer(m_pDevice, &createInfo, nullptr, &pBuf);
 
@@ -843,8 +847,8 @@ namespace lr::Graphics
         BufferData dstData = {};
 
         dstDesc.Mappable = false;
-        dstDesc.UsageFlags = pSrc->m_Usage | BufferUsage::CopyDst;
-        dstDesc.UsageFlags &= ~BufferUsage::CopySrc;
+        dstDesc.UsageFlags = pSrc->m_Usage | ResourceUsage::CopyDst;
+        dstDesc.UsageFlags &= ~ResourceUsage::CopySrc;
 
         dstData.DataLen = pSrc->m_DataSize;
 
@@ -859,12 +863,12 @@ namespace lr::Graphics
     {
         ZoneScoped;
 
-        VKImage *pImage = AllocType<VKImage>();
+        VKImage *pImage = AllocTypeInherit<BaseImage, VKImage>();
 
         VkImageCreateInfo imageCreateInfo = {};
         imageCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-        imageCreateInfo.format = ToVulkanFormat(pDesc->Format);
-        imageCreateInfo.usage = ToVulkanImageUsage(pDesc->Usage);
+        imageCreateInfo.format = ToVKFormat(pDesc->Format);
+        imageCreateInfo.usage = ToVKImageUsage(pDesc->Usage);
         imageCreateInfo.imageType = VK_IMAGE_TYPE_2D;
 
         imageCreateInfo.extent.width = pData->Width;
@@ -920,7 +924,7 @@ namespace lr::Graphics
 
         VkImageAspectFlags aspectFlags = VK_IMAGE_ASPECT_COLOR_BIT;
 
-        if (pHandle->m_Usage & ImageUsage::DepthAttachment)
+        if (pHandle->m_Usage & ResourceUsage::DepthStencilWrite)
         {
             aspectFlags = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
         }
@@ -930,7 +934,7 @@ namespace lr::Graphics
 
         imageViewCreateInfo.image = pHandleVK->m_pHandle;
         imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        imageViewCreateInfo.format = ToVulkanFormat(pHandle->m_Format);
+        imageViewCreateInfo.format = ToVKFormat(pHandle->m_Format);
 
         imageViewCreateInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
         imageViewCreateInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
@@ -1045,7 +1049,7 @@ namespace lr::Graphics
     {
         ZoneScoped;
 
-        VkFormat vkFormat = ToVulkanFormat(format);
+        VkFormat vkFormat = ToVKFormat(format);
 
         for (u32 i = 0; i < m_ValidSurfaceFormatCount; i++)
         {
@@ -1401,11 +1405,8 @@ namespace lr::Graphics
         vkEnumerateDeviceExtensionProperties(pPhysicalDevice, nullptr, &deviceExtensionCount, pDeviceExtensions);
 
         constexpr eastl::array<const char *, 5> ppRequiredExtensions = {
-            "VK_KHR_swapchain",
-            "VK_KHR_depth_stencil_resolve",
-            "VK_KHR_dynamic_rendering",
-            "VK_KHR_synchronization2",
-            "VK_EXT_extended_dynamic_state2",
+            "VK_KHR_swapchain",        "VK_KHR_depth_stencil_resolve",   "VK_KHR_dynamic_rendering",
+            "VK_KHR_synchronization2", "VK_EXT_extended_dynamic_state2",
         };
 
         for (auto &pExtensionName : ppRequiredExtensions)
@@ -1557,89 +1558,234 @@ namespace lr::Graphics
         VK_DESCRIPTOR_TYPE_MAX_ENUM,                // RootConstant
     };
 
-    constexpr VkImageUsageFlags kImageUsageLUT[] = {
-        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,          // ColorAttachment
-        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,  // DepthAttachment
-    };
-
-    constexpr VkShaderStageFlagBits kShaderTypeLUT[] = {
-        VK_SHADER_STAGE_VERTEX_BIT,
-        VK_SHADER_STAGE_FRAGMENT_BIT,
-        VK_SHADER_STAGE_COMPUTE_BIT,
-        VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT,
-        VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT,
-        VK_SHADER_STAGE_GEOMETRY_BIT,
-        VK_SHADER_STAGE_FLAG_BITS_MAX_ENUM,
-    };
-
-    VkFormat VKAPI::ToVulkanFormat(ResourceFormat format)
+    VkFormat VKAPI::ToVKFormat(ResourceFormat format)
     {
         return kFormatLUT[(u32)format];
     }
 
-    VkFormat VKAPI::ToVulkanFormat(VertexAttribType format)
+    VkFormat VKAPI::ToVKFormat(VertexAttribType format)
     {
         return kAttribFormatLUT[(u32)format];
     }
 
-    VkPrimitiveTopology VKAPI::ToVulkanTopology(PrimitiveType type)
+    VkPrimitiveTopology VKAPI::ToVKTopology(PrimitiveType type)
     {
         return kPrimitiveLUT[(u32)type];
     }
 
-    VkCullModeFlags VKAPI::ToVulkanCullMode(CullMode mode)
+    VkCullModeFlags VKAPI::ToVKCullMode(CullMode mode)
     {
         return kCullModeLUT[(u32)mode];
     }
 
-    VkDescriptorType VKAPI::ToVulkanDescriptorType(DescriptorType type)
+    VkDescriptorType VKAPI::ToVKDescriptorType(DescriptorType type)
     {
         return kDescriptorTypeLUT[(u32)type];
     }
 
-    VkImageUsageFlags VKAPI::ToVulkanImageUsage(ImageUsage usage)
+    VkImageUsageFlags VKAPI::ToVKImageUsage(ResourceUsage usage)
     {
         u32 v = 0;
 
-        if (usage & ImageUsage::ColorAttachment)
+        if (usage & ResourceUsage::RenderTarget)
             v |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-        if (usage & ImageUsage::DepthAttachment)
+
+        if (usage & ResourceUsage::DepthStencilWrite || usage & ResourceUsage::DepthStencilRead)
             v |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-        if (usage & ImageUsage::Sampled)
+
+        if (usage & ResourceUsage::ShaderResource)
             v |= VK_IMAGE_USAGE_SAMPLED_BIT;
-        if (usage & ImageUsage::CopySrc)
+
+        if (usage & ResourceUsage::CopySrc)
             v |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
-        if (usage & ImageUsage::CopyDst)
+
+        if (usage & ResourceUsage::CopyDst)
             v |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 
         return (VkImageUsageFlags)v;
     }
 
-    VkBufferUsageFlagBits VKAPI::ToVulkanBufferUsage(BufferUsage usage)
+    VkBufferUsageFlagBits VKAPI::ToVKBufferUsage(ResourceUsage usage)
     {
         u32 v = 0;
 
-        if (usage & BufferUsage::Vertex)
+        if (usage & ResourceUsage::VertexBuffer)
             v |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-        if (usage & BufferUsage::Index)
+
+        if (usage & ResourceUsage::IndexBuffer)
             v |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
-        if (usage & BufferUsage::ConstantBuffer)
+
+        if (usage & ResourceUsage::ConstantBuffer)
             v |= VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-        if (usage & BufferUsage::Unordered)
+
+        if (usage & ResourceUsage::UnorderedAccess)
             v |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-        if (usage & BufferUsage::Indirect)
+
+        if (usage & ResourceUsage::IndirectBuffer)
             v |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
-        if (usage & BufferUsage::CopySrc)
+
+        if (usage & ResourceUsage::CopySrc)
             v |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-        if (usage & BufferUsage::CopyDst)
+
+        if (usage & ResourceUsage::CopyDst)
             v |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 
         return (VkBufferUsageFlagBits)v;
     }
 
-    VkShaderStageFlagBits VKAPI::ToVulkanShaderType(ShaderType type)
+    VkImageLayout VKAPI::ToVKImageLayout(ResourceUsage usage)
     {
-        return kShaderTypeLUT[(u32)type];
+        u32 v = 0;
+
+        if (usage & ResourceUsage::Undefined)
+            v |= VK_IMAGE_LAYOUT_UNDEFINED;
+
+        if (usage & ResourceUsage::RenderTarget)
+            v |= VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+        if (usage & ResourceUsage::DepthStencilWrite)
+            v |= VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
+
+        if (usage & ResourceUsage::DepthStencilRead)
+            v |= VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+
+        if (usage & ResourceUsage::ShaderResource)
+            v |= VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+        if (usage & ResourceUsage::CopySrc)
+            v |= VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+
+        if (usage & ResourceUsage::CopyDst)
+            v |= VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+
+        if (usage & ResourceUsage::Present)
+            v |= VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+        if (usage & ResourceUsage::UnorderedAccess)
+            v |= VK_IMAGE_LAYOUT_GENERAL;
+
+        return (VkImageLayout)v;
+    }
+
+    VkShaderStageFlagBits VKAPI::ToVKShaderType(ShaderStage type)
+    {
+        u32 v = 0;
+
+        if (type & ShaderStage::Vertex)
+            v |= VK_SHADER_STAGE_VERTEX_BIT;
+
+        if (type & ShaderStage::Pixel)
+            v |= VK_SHADER_STAGE_FRAGMENT_BIT;
+
+        if (type & ShaderStage::Compute)
+            v |= VK_SHADER_STAGE_COMPUTE_BIT;
+
+        if (type & ShaderStage::Hull)
+            v |= VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
+
+        if (type & ShaderStage::Domain)
+            v |= VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
+
+        if (type & ShaderStage::Geometry)
+            v |= VK_SHADER_STAGE_GEOMETRY_BIT;
+
+        return (VkShaderStageFlagBits)v;
+    }
+
+    VkPipelineStageFlags VKAPI::ToVKPipelineStage(ResourceUsage usage)
+    {
+        u32 v = 0;
+
+        if (usage & ResourceUsage::Undefined)
+            v |= VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+
+        if (usage & ResourceUsage::VertexBuffer || usage & ResourceUsage::IndexBuffer)
+            v |= VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
+
+        if (usage & ResourceUsage::RenderTarget)
+            v |= VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+
+        if (usage & ResourceUsage::DepthStencilWrite || usage & ResourceUsage::DepthStencilRead)
+            v |= VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+
+        if (usage & ResourceUsage::CopySrc || usage & ResourceUsage::CopyDst)
+            v |= VK_PIPELINE_STAGE_TRANSFER_BIT;
+
+        if (usage & ResourceUsage::Present)
+            v |= VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+
+        if (usage & ResourceUsage::IndirectBuffer)
+            v |= VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT;
+
+        return (VkPipelineStageFlagBits)v;
+    }
+
+    VkPipelineStageFlags VKAPI::ToVKPipelineShaderStage(ShaderStage type)
+    {
+        u32 v = 0;
+
+        if (type & ShaderStage::Vertex)
+            v |= VK_PIPELINE_STAGE_VERTEX_SHADER_BIT;
+
+        if (type & ShaderStage::Pixel)
+            v |= VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+
+        if (type & ShaderStage::Compute)
+            v |= VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+
+        if (type & ShaderStage::Hull)
+            v |= VK_PIPELINE_STAGE_TESSELLATION_CONTROL_SHADER_BIT;
+
+        if (type & ShaderStage::Domain)
+            v |= VK_PIPELINE_STAGE_TESSELLATION_EVALUATION_SHADER_BIT;
+
+        if (type & ShaderStage::Geometry)
+            v |= VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT;
+
+        return (VkPipelineStageFlagBits)v;
+    }
+
+    VkAccessFlags VKAPI::ToVKAccessFlags(ResourceUsage usage)
+    {
+        u32 v = 0;
+
+        if (usage & ResourceUsage::Undefined)
+            v |= VK_ACCESS_NONE;
+
+        if (usage & ResourceUsage::VertexBuffer)
+            v |= VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
+
+        if (usage & ResourceUsage::IndexBuffer)
+            v |= VK_ACCESS_INDEX_READ_BIT;
+
+        if (usage & ResourceUsage::IndirectBuffer)
+            v |= VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
+
+        if (usage & ResourceUsage::ConstantBuffer)
+            v |= VK_ACCESS_UNIFORM_READ_BIT;
+
+        if (usage & ResourceUsage::ShaderResource)
+            v |= VK_ACCESS_SHADER_READ_BIT;
+
+        if (usage & ResourceUsage::RenderTarget)
+            v |= VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
+        if (usage & ResourceUsage::DepthStencilWrite)
+            v |= VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
+
+        if (usage & ResourceUsage::DepthStencilRead)
+            v |= VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+
+        if (usage & ResourceUsage::CopySrc)
+            v |= VK_ACCESS_TRANSFER_READ_BIT;
+
+        if (usage & ResourceUsage::CopyDst)
+            v |= VK_ACCESS_TRANSFER_WRITE_BIT;
+
+        if (usage & ResourceUsage::Present)
+            v |= VK_ACCESS_MEMORY_READ_BIT;
+
+        return (VkAccessFlags)v;
     }
 
 }  // namespace lr::Graphics

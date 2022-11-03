@@ -92,16 +92,17 @@ namespace lr::Graphics
         Count,
     };
 
-    enum class ShaderType
+    enum class ShaderStage
     {
-        Vertex,
-        Pixel,
-        Compute,
-        Hull,
-        Domain,
-        Geometry,
-
-        Count,
+        None = 0,
+        Vertex = 1 << 0,
+        Pixel = 1 << 1,
+        Compute = 1 << 2,
+        Hull = 1 << 3,
+        Domain = 1 << 4,
+        Geometry = 1 << 5,
     };
+
+    EnumFlags(ShaderStage);
 
 }  // namespace lr::Graphics

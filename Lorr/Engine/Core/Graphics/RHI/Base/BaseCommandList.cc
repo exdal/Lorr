@@ -29,11 +29,6 @@ namespace lr::Graphics
                 mask = maskAtomic.load(eastl::memory_order_acquire);
             }
 
-            if (mask == 0)
-            {
-                // LOG_TRACE("All lists are in use, we have to wait for one to become available.");
-            }
-
             setBitPosition = Memory::GetLSB(mask);
             decltype(mask) newMask = 0;
 

@@ -14,56 +14,56 @@ namespace lr::UI
     {
         ZoneScoped;
 
-        Engine *pEngine = GetEngine();
-        Graphics::VKAPI *pAPI = (Graphics::VKAPI *)pEngine->m_pAPI;
-        Graphics::APIStateManager &stateMan = pAPI->m_APIStateMan;
+        // Engine *pEngine = GetEngine();
+        // Graphics::VKAPI *pAPI = (Graphics::VKAPI *)pEngine->m_pAPI;
+        // Graphics::APIStateManager &stateMan = pAPI->m_APIStateMan;
 
-        /// INIT IMGUI ///
+        // /// INIT IMGUI ///
 
-        ImGui::CreateContext();
+        // ImGui::CreateContext();
 
-        ImGuiIO &io = ImGui::GetIO();
-        io.IniFilename = 0;
+        // ImGuiIO &io = ImGui::GetIO();
+        // io.IniFilename = 0;
 
-        io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;  // Enable Keyboard Controls
-        io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;      // Enable Docking
+        // io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;  // Enable Keyboard Controls
+        // io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;      // Enable Docking
 
-        io.BackendFlags |= ImGuiBackendFlags_HasMouseCursors;  // We can honor GetMouseCursor() values (optional)
-        io.BackendFlags |= ImGuiBackendFlags_HasSetMousePos;   // We can honor io.WantSetMousePos requests (optional, rarely used)
+        // io.BackendFlags |= ImGuiBackendFlags_HasMouseCursors;  // We can honor GetMouseCursor() values (optional)
+        // io.BackendFlags |= ImGuiBackendFlags_HasSetMousePos;   // We can honor io.WantSetMousePos requests (optional, rarely used)
 
-        io.BackendPlatformName = "imgui_impl_lorr";
+        // io.BackendPlatformName = "imgui_impl_lorr";
 
-        ImGui::StyleColorsDark();
+        // ImGui::StyleColorsDark();
 
-        u8 *pFontData;
-        i32 fontW, fontH, bpp;
-        io.Fonts->GetTexDataAsRGBA32(&pFontData, &fontW, &fontH, &bpp);
+        // u8 *pFontData;
+        // i32 fontW, fontH, bpp;
+        // io.Fonts->GetTexDataAsRGBA32(&pFontData, &fontW, &fontH, &bpp);
 
-        Graphics::BufferDesc imageBufDesc = {};
-        imageBufDesc.Mappable = true;
-        imageBufDesc.UsageFlags = Graphics::BufferUsage::CopySrc;
+        // Graphics::BufferDesc imageBufDesc = {};
+        // imageBufDesc.Mappable = true;
+        // imageBufDesc.UsageFlags = Graphics::BufferUsage::CopySrc;
 
-        Graphics::BufferData imageBufData = {};
-        imageBufData.DataLen = fontW * fontH * sizeof(i32);
+        // Graphics::BufferData imageBufData = {};
+        // imageBufData.DataLen = fontW * fontH * sizeof(i32);
 
-        Graphics::VKBuffer imageBuffer = {};
-        pAPI->CreateBuffer(&imageBuffer, &imageBufDesc, &imageBufData);
-        pAPI->AllocateBufferMemory(&imageBuffer, Graphics::AllocatorType::None);
-        pAPI->BindMemory(&imageBuffer);
+        // Graphics::VKBuffer imageBuffer = {};
+        // pAPI->CreateBuffer(&imageBuffer, &imageBufDesc, &imageBufData);
+        // pAPI->AllocateBufferMemory(&imageBuffer, Graphics::AllocatorType::None);
+        // pAPI->BindMemory(&imageBuffer);
 
-        void *pMapData = nullptr;
-        pAPI->MapMemory(&imageBuffer, pMapData);
-        memcpy(pMapData, pFontData, imageBufData.DataLen);
-        pAPI->UnmapMemory(&imageBuffer);
+        // void *pMapData = nullptr;
+        // pAPI->MapMemory(&imageBuffer, pMapData);
+        // memcpy(pMapData, pFontData, imageBufData.DataLen);
+        // pAPI->UnmapMemory(&imageBuffer);
 
-        Graphics::ImageDesc imageDesc = {};
-        imageDesc.Format = Graphics::ResourceFormat::RGBA8F;
-        imageDesc.Usage = Graphics::ImageUsage::Sampled | Graphics::ImageUsage::CopyDst;
+        // Graphics::ImageDesc imageDesc = {};
+        // imageDesc.Format = Graphics::ResourceFormat::RGBA8F;
+        // imageDesc.Usage = Graphics::ImageUsage::Sampled | Graphics::ImageUsage::CopyDst;
 
-        Graphics::ImageData imageData = {};
-        imageData.DataLen = fontW * fontH * sizeof(i32);
-        imageData.Width = fontW;
-        imageData.Height = fontH;
+        // Graphics::ImageData imageData = {};
+        // imageData.DataLen = fontW * fontH * sizeof(i32);
+        // imageData.Width = fontW;
+        // imageData.Height = fontH;
 
         // pAPI->CreateImage(&m_Texture, &imageDesc, &imageData);
         // pAPI->AllocateImageMemory(&m_Texture, Graphics::AllocatorType::ImageTLSF);
@@ -109,78 +109,78 @@ namespace lr::UI
     {
         ZoneScopedN("ImGuiRenderer::Render");
 
-        Engine *pEngine = GetEngine();
+        // Engine *pEngine = GetEngine();
 
-        PlatformWindow &window = pEngine->m_Window;
-        Graphics::VKAPI *pAPI = (Graphics::VKAPI *)pEngine->m_pAPI;
-        Graphics::APIStateManager &stateMan = pAPI->m_APIStateMan;
+        // PlatformWindow &window = pEngine->m_Window;
+        // Graphics::VKAPI *pAPI = (Graphics::VKAPI *)pEngine->m_pAPI;
+        // Graphics::APIStateManager &stateMan = pAPI->m_APIStateMan;
 
-        ImDrawData *pDrawData = ImGui::GetDrawData();
+        // ImDrawData *pDrawData = ImGui::GetDrawData();
 
-        if (pDrawData->DisplaySize.x <= 0.0f || pDrawData->DisplaySize.y <= 0.0f)
-            return;
+        // if (pDrawData->DisplaySize.x <= 0.0f || pDrawData->DisplaySize.y <= 0.0f)
+        //     return;
 
-        if (pDrawData->TotalIdxCount == 0)
-            return;
+        // if (pDrawData->TotalIdxCount == 0)
+        //     return;
 
-        Graphics::BufferDesc bufferDesc = {};
-        Graphics::BufferData bufferData = {};
+        // Graphics::BufferDesc bufferDesc = {};
+        // Graphics::BufferData bufferData = {};
 
-        bufferDesc.Mappable = true;
+        // bufferDesc.Mappable = true;
 
-        if (m_VertexCount < pDrawData->TotalVtxCount || m_IndexCount < pDrawData->TotalIdxCount)
-        {
-            // Vertex buffer
+        // if (m_VertexCount < pDrawData->TotalVtxCount || m_IndexCount < pDrawData->TotalIdxCount)
+        // {
+        //     // Vertex buffer
 
-            m_VertexCount = pDrawData->TotalVtxCount + 1500;
+        //     m_VertexCount = pDrawData->TotalVtxCount + 1500;
 
-            pAPI->DeleteBuffer(&m_VertexBuffer);
+        //     pAPI->DeleteBuffer(&m_VertexBuffer);
 
-            bufferDesc.UsageFlags = Graphics::BufferUsage::Vertex;
-            bufferData.DataLen = m_VertexCount * sizeof(ImDrawVert);
+        //     bufferDesc.UsageFlags = Graphics::BufferUsage::Vertex;
+        //     bufferData.DataLen = m_VertexCount * sizeof(ImDrawVert);
 
-            pAPI->CreateBuffer(&m_VertexBuffer, &bufferDesc, &bufferData);
-            pAPI->AllocateBufferMemory(&m_VertexBuffer, Graphics::AllocatorType::None);
-            pAPI->BindMemory(&m_VertexBuffer);
+        //     pAPI->CreateBuffer(&m_VertexBuffer, &bufferDesc, &bufferData);
+        //     pAPI->AllocateBufferMemory(&m_VertexBuffer, Graphics::AllocatorType::None);
+        //     pAPI->BindMemory(&m_VertexBuffer);
 
-            // Index buffer
+        //     // Index buffer
 
-            m_IndexCount = pDrawData->TotalIdxCount + 1500;
+        //     m_IndexCount = pDrawData->TotalIdxCount + 1500;
 
-            pAPI->DeleteBuffer(&m_IndexBuffer);
+        //     pAPI->DeleteBuffer(&m_IndexBuffer);
 
-            bufferDesc.UsageFlags = Graphics::BufferUsage::Index;
-            bufferData.DataLen = m_IndexCount * sizeof(ImDrawIdx);
+        //     bufferDesc.UsageFlags = Graphics::BufferUsage::Index;
+        //     bufferData.DataLen = m_IndexCount * sizeof(ImDrawIdx);
 
-            pAPI->CreateBuffer(&m_IndexBuffer, &bufferDesc, &bufferData);
-            pAPI->AllocateBufferMemory(&m_IndexBuffer, Graphics::AllocatorType::None);
-            pAPI->BindMemory(&m_IndexBuffer);
-        }
+        //     pAPI->CreateBuffer(&m_IndexBuffer, &bufferDesc, &bufferData);
+        //     pAPI->AllocateBufferMemory(&m_IndexBuffer, Graphics::AllocatorType::None);
+        //     pAPI->BindMemory(&m_IndexBuffer);
+        // }
 
-        // Map memory
+        // // Map memory
 
-        u32 vertexOffset = 0;
-        u32 indexOffset = 0;
+        // u32 vertexOffset = 0;
+        // u32 indexOffset = 0;
 
-        void *pVertexMapData = nullptr;
-        void *pIndexMapData = nullptr;
+        // void *pVertexMapData = nullptr;
+        // void *pIndexMapData = nullptr;
 
-        pAPI->MapMemory(&m_VertexBuffer, pVertexMapData);
-        pAPI->MapMemory(&m_IndexBuffer, pIndexMapData);
+        // pAPI->MapMemory(&m_VertexBuffer, pVertexMapData);
+        // pAPI->MapMemory(&m_IndexBuffer, pIndexMapData);
 
-        for (u32 i = 0; i < pDrawData->CmdListsCount; i++)
-        {
-            const ImDrawList *pDrawList = pDrawData->CmdLists[i];
+        // for (u32 i = 0; i < pDrawData->CmdListsCount; i++)
+        // {
+        //     const ImDrawList *pDrawList = pDrawData->CmdLists[i];
 
-            memcpy((ImDrawVert *)pVertexMapData + vertexOffset, pDrawList->VtxBuffer.Data, pDrawList->VtxBuffer.Size * sizeof(ImDrawVert));
-            memcpy((ImDrawIdx *)pIndexMapData + indexOffset, pDrawList->IdxBuffer.Data, pDrawList->IdxBuffer.Size * sizeof(ImDrawIdx));
+        //     memcpy((ImDrawVert *)pVertexMapData + vertexOffset, pDrawList->VtxBuffer.Data, pDrawList->VtxBuffer.Size * sizeof(ImDrawVert));
+        //     memcpy((ImDrawIdx *)pIndexMapData + indexOffset, pDrawList->IdxBuffer.Data, pDrawList->IdxBuffer.Size * sizeof(ImDrawIdx));
 
-            vertexOffset += pDrawList->VtxBuffer.Size;
-            indexOffset += pDrawList->IdxBuffer.Size;
-        }
+        //     vertexOffset += pDrawList->VtxBuffer.Size;
+        //     indexOffset += pDrawList->IdxBuffer.Size;
+        // }
 
-        pAPI->UnmapMemory(&m_VertexBuffer);
-        pAPI->UnmapMemory(&m_IndexBuffer);
+        // pAPI->UnmapMemory(&m_VertexBuffer);
+        // pAPI->UnmapMemory(&m_IndexBuffer);
 
         // Graphics::VKCommandList *pList = pAPI->GetCommandList();
         // pAPI->BeginCommandList(pList);

@@ -26,11 +26,11 @@ namespace lr::Graphics
 
         switch (pShader->Type)
         {
-            case ShaderType::Vertex: pTargetHandle = &m_CreateInfo.VS; break;
-            case ShaderType::Pixel: pTargetHandle = &m_CreateInfo.PS; break;
-            case ShaderType::Hull: pTargetHandle = &m_CreateInfo.HS; break;
-            case ShaderType::Domain: pTargetHandle = &m_CreateInfo.DS; break;
-            case ShaderType::Geometry: pTargetHandle = &m_CreateInfo.GS; break;
+            case ShaderStage::Vertex: pTargetHandle = &m_CreateInfo.VS; break;
+            case ShaderStage::Pixel: pTargetHandle = &m_CreateInfo.PS; break;
+            case ShaderStage::Hull: pTargetHandle = &m_CreateInfo.HS; break;
+            case ShaderStage::Domain: pTargetHandle = &m_CreateInfo.DS; break;
+            case ShaderStage::Geometry: pTargetHandle = &m_CreateInfo.GS; break;
 
             default: assert(!"Shader type not implemented"); break;
         }

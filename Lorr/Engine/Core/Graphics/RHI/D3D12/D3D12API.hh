@@ -62,6 +62,7 @@ namespace lr::Graphics
         // Leave `pFSD` as `nullptr` for windowed swap chain
         void CreateSwapChain(IDXGISwapChain1 *&pHandle, void *pWindowHandle, DXGI_SWAP_CHAIN_DESC1 &desc, DXGI_SWAP_CHAIN_FULLSCREEN_DESC *pFSD);
         void ResizeSwapChain(u32 width, u32 height);
+        BaseSwapChain *GetSwapChain();
 
         void Frame();
 
@@ -100,9 +101,10 @@ namespace lr::Graphics
         static D3D12_DESCRIPTOR_HEAP_TYPE       ToDXHeapType(DescriptorType type);
 
         static D3D12_DESCRIPTOR_RANGE_TYPE      ToDXDescriptorRangeType(DescriptorType type);
-        static D3D12_RESOURCE_STATES            ToDXImageUsage(ImageUsage usage);
-        static D3D12_RESOURCE_STATES            ToDXBufferUsage(BufferUsage usage);
-        static D3D12_SHADER_VISIBILITY          ToDXShaderType(ShaderType type);
+        static D3D12_RESOURCE_STATES            ToDXImageUsage(ResourceUsage usage);
+        static D3D12_RESOURCE_STATES            ToDXBufferUsage(ResourceUsage usage);
+        static D3D12_RESOURCE_STATES            ToDXImageLayout(ResourceUsage usage);
+        static D3D12_SHADER_VISIBILITY          ToDXShaderType(ShaderStage type);
 
         // clang-format on
 

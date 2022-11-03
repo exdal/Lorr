@@ -26,6 +26,12 @@ namespace lr::Graphics
 
         void Reset(D3D12CommandAllocator *pAllocator);
 
+        void BarrierTransition(BaseImage *pImage,
+                               ResourceUsage barrierBefore,
+                               ShaderStage shaderBefore,
+                               ResourceUsage barrierAfter,
+                               ShaderStage shaderAfter);
+
         D3D12CommandAllocator *m_pAllocator = nullptr;
         ID3D12GraphicsCommandList4 *m_pHandle = nullptr;
 

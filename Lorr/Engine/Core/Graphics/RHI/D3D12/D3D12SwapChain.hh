@@ -25,6 +25,7 @@ namespace lr::Graphics
 
         void CreateHandle(D3D12API *pAPI, PlatformWindow *pWindow);
         void CreateBackBuffers(D3D12API *pAPI);
+        BaseImage *GetCurrentImage();
         D3D12SwapChainFrame *GetCurrentFrame();
         D3D12SwapChainFrame *GetNextFrame();
 

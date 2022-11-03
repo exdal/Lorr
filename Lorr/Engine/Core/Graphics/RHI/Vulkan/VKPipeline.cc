@@ -82,7 +82,7 @@ namespace lr::Graphics
         ZoneScoped;
 
         VkPipelineShaderStageCreateInfo &shaderStage = m_pShaderStages[m_CreateInfo.stageCount++];
-        shaderStage.stage = VKAPI::ToVulkanShaderType(pShader->Type);
+        shaderStage.stage = VKAPI::ToVKShaderType(pShader->Type);
         shaderStage.pName = entryPoint.data();
         shaderStage.module = ((VKShader *)pShader)->pHandle;
     }
@@ -102,7 +102,7 @@ namespace lr::Graphics
             attribDesc.binding = 0;
             attribDesc.location = i;
             attribDesc.offset = element.m_Offset;
-            attribDesc.format = VKAPI::ToVulkanFormat(element.m_Type);
+            attribDesc.format = VKAPI::ToVKFormat(element.m_Type);
         }
     }
 
@@ -110,7 +110,7 @@ namespace lr::Graphics
     {
         ZoneScoped;
 
-        m_InputAssemblyState.topology = VKAPI::ToVulkanTopology(type);
+        m_InputAssemblyState.topology = VKAPI::ToVKTopology(type);
     }
 
     void VKGraphicsPipelineBuildInfo::SetDepthClamp(bool enabled)
@@ -131,7 +131,7 @@ namespace lr::Graphics
     {
         ZoneScoped;
 
-        m_RasterizationState.cullMode = VKAPI::ToVulkanCullMode(mode);
+        m_RasterizationState.cullMode = VKAPI::ToVKCullMode(mode);
         m_RasterizationState.frontFace = frontFaceClockwise ? VK_FRONT_FACE_CLOCKWISE : VK_FRONT_FACE_COUNTER_CLOCKWISE;
     }
 

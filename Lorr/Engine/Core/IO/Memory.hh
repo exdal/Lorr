@@ -44,6 +44,13 @@ namespace lr::Memory
         memset(pData, 0, count * sizeof(T));
     }
 
+    template<typename T, typename U>
+    void CopyMem(T *pData, U &val, u64 &offset)
+    {
+        memcpy((u8 *)pData + offset, (u8 *)&val, sizeof(U));
+        offset += sizeof(U);
+    }
+
     /// Unit Conversions ///
 
     constexpr u32 KiBToBytes(const u32 x)

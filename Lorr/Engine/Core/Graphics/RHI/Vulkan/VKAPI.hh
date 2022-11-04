@@ -14,18 +14,6 @@
 
 namespace lr::Graphics
 {
-    struct VKLinearMemoryAllocator
-    {
-        Memory::LinearMemoryAllocator Allocator;
-        VKBuffer Buffer;
-    };
-
-    struct VKTLSFMemoryAllocator
-    {
-        Memory::TLSFMemoryAllocator Allocator;
-        VKBuffer Buffer;
-    };
-
     struct VKDescriptorBindingDesc
     {
         VkDescriptorType Type;
@@ -93,35 +81,30 @@ namespace lr::Graphics
         VkDescriptorPool CreateDescriptorPool(const std::initializer_list<VKDescriptorBindingDesc> &layouts);
 
         // * Buffers * //
-        void CreateBuffer(VKBuffer *pHandle, BufferDesc *pDesc, BufferData *pData);
-        void DeleteBuffer(VKBuffer *pHandle);
+        VkDeviceMemory CreateHeap(u64 heapSize, bool cpuWrite);
+        
+        BaseBuffer *CreateBuffer(BufferDesc *pDesc, BufferData *pData);
+        void DeleteBuffer(BaseBuffer *pHandle);
 
-        void AllocateBufferMemory(VKBuffer *pBuffer, AllocatorType allocatorType);
-        void FreeBufferMemory(VKBuffer *pBuffer);
+        void MapMemory(BaseBuffer *pBuffer, void *&pData);
+        void UnmapMemory(BaseBuffer *pBuffer);
 
-        void BindMemory(VKBuffer *pBuffer);
-        void MapMemory(VKBuffer *pBuffer, void *&pData);
-        void UnmapMemory(VKBuffer *pBuffer);
-
-        void TransferBufferMemory(VKCommandList *pList, VKBuffer *pSrc, VKBuffer *pDst, AllocatorType dstAllocator);
+        BaseBuffer *ChangeAllocator(BaseCommandList *pList, BaseBuffer *pTarget, AllocatorType targetAllocator);
 
         // * Images * //
         BaseImage *CreateImage(ImageDesc *pDesc, ImageData *pData);
         void DeleteImage(BaseImage *pImage);
 
         void CreateImageView(BaseImage *pHandle);
-        void CreateSampler(VKImage *pHandle);
-
-        void AllocateImageMemory(VKImage *pImage, AllocatorType allocatorType);
-        void FreeImageMemory(VKImage *pImage);
-
-        void BindMemory(VKImage *pImage);
+        void CreateSampler(BaseImage *pHandle);
+        void CreateRenderTarget(BaseImage *pImage);
 
         // * Device Features * //
         bool IsFormatSupported(ResourceFormat format, VkColorSpaceKHR *pColorSpaceOut);
         bool IsPresentModeSupported(VkPresentModeKHR format);
         void GetSurfaceCapabilities(VkSurfaceCapabilitiesKHR &capabilitiesOut);
         u32 GetMemoryTypeIndex(u32 setBits, VkMemoryPropertyFlags propFlags);
+        u32 GetMemoryTypeIndex(VkMemoryPropertyFlags propFlags);
 
         // * API Instance * //
         bool LoadVulkan();
@@ -170,10 +153,11 @@ namespace lr::Graphics
         /// Pools/Caches
         VkPipelineCache m_pPipelineCache = nullptr;
         VkDescriptorPool m_pDescriptorPool = nullptr;
-        VKLinearMemoryAllocator m_MADescriptor;
-        VKLinearMemoryAllocator m_MABufferLinear;
-        VKTLSFMemoryAllocator m_MABufferTLSF;
-        VKTLSFMemoryAllocator m_MAImageTLSF;
+
+        BufferedAllocator<Memory::LinearMemoryAllocator, VkDeviceMemory> m_MADescriptor;
+        BufferedAllocator<Memory::LinearMemoryAllocator, VkDeviceMemory> m_MABufferLinear;
+        BufferedAllocator<Memory::TLSFMemoryAllocator, VkDeviceMemory> m_MABufferTLSF;
+        BufferedAllocator<Memory::TLSFMemoryAllocator, VkDeviceMemory> m_MAImageTLSF;
 
         /// Native API
         VkPhysicalDeviceMemoryProperties m_MemoryProps;

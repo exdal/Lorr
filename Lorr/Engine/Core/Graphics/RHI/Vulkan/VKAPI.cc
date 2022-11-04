@@ -144,39 +144,17 @@ namespace lr::Graphics
         constexpr u32 kBufferTLSFMem = Memory::MiBToBytes(512);
         constexpr u32 kImageTLSFMem = Memory::MiBToBytes(512);
 
-        BufferDesc bufferDesc = {};
-        BufferData bufferData = {};
-
         m_MADescriptor.Allocator.AddPool(kDescriptorMem);
+        m_MADescriptor.pHeap = CreateHeap(kDescriptorMem, true);
+
         m_MABufferLinear.Allocator.AddPool(kBufferLinearMem);
+        m_MABufferLinear.pHeap = CreateHeap(kBufferLinearMem, true);
+
         m_MABufferTLSF.Allocator.Init(kBufferTLSFMem);
+        m_MABufferTLSF.pHeap = CreateHeap(kBufferTLSFMem, false);
+
         m_MAImageTLSF.Allocator.Init(kImageTLSFMem);
-
-        bufferDesc.UsageFlags = ResourceUsage::CopyDst;
-
-        bufferDesc.Mappable = true;
-        bufferData.DataLen = kDescriptorMem;
-        CreateBuffer(&m_MADescriptor.Buffer, &bufferDesc, &bufferData);
-
-        bufferDesc.Mappable = false;
-        bufferData.DataLen = kBufferLinearMem;
-        CreateBuffer(&m_MABufferLinear.Buffer, &bufferDesc, &bufferData);
-
-        bufferData.DataLen = kBufferTLSFMem;
-        CreateBuffer(&m_MABufferTLSF.Buffer, &bufferDesc, &bufferData);
-
-        bufferData.DataLen = kImageTLSFMem;
-        CreateBuffer(&m_MAImageTLSF.Buffer, &bufferDesc, &bufferData);
-
-        AllocateBufferMemory(&m_MADescriptor.Buffer, AllocatorType::None);
-        AllocateBufferMemory(&m_MABufferLinear.Buffer, AllocatorType::None);
-        AllocateBufferMemory(&m_MABufferTLSF.Buffer, AllocatorType::None);
-        AllocateBufferMemory(&m_MAImageTLSF.Buffer, AllocatorType::None);
-
-        BindMemory(&m_MADescriptor.Buffer);
-        BindMemory(&m_MABufferLinear.Buffer);
-        BindMemory(&m_MABufferTLSF.Buffer);
-        BindMemory(&m_MAImageTLSF.Buffer);
+        m_MAImageTLSF.pHeap = CreateHeap(kImageTLSFMem, false);
     }
 
     BaseCommandQueue *VKAPI::CreateCommandQueue(CommandListType type)
@@ -711,58 +689,57 @@ namespace lr::Graphics
         return pHandle;
     }
 
-    void VKAPI::CreateBuffer(VKBuffer *pHandle, BufferDesc *pDesc, BufferData *pData)
+    VkDeviceMemory VKAPI::CreateHeap(u64 heapSize, bool cpuWrite)
     {
         ZoneScoped;
 
-        VkBuffer &pBuf = pHandle->m_pHandle;
-        VkDeviceMemory &pMem = pHandle->m_pMemoryHandle;
+        VkMemoryPropertyFlags memProps =
+            cpuWrite ? VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT : VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+
+        VkMemoryAllocateInfo memoryAllocInfo = {};
+        memoryAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+        memoryAllocInfo.allocationSize = heapSize;
+        memoryAllocInfo.memoryTypeIndex = GetMemoryTypeIndex(memProps);
+
+        VkDeviceMemory pHandle = nullptr;
+        vkAllocateMemory(m_pDevice, &memoryAllocInfo, nullptr, &pHandle);
+
+        return pHandle;
+    }
+
+    BaseBuffer *VKAPI::CreateBuffer(BufferDesc *pDesc, BufferData *pData)
+    {
+        ZoneScoped;
+
+        VKBuffer *pBuffer = AllocTypeInherit<BaseBuffer, VKBuffer>();
 
         VkBufferCreateInfo createInfo = {};
         createInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
         createInfo.size = pData->DataLen;
         createInfo.usage = ToVKBufferUsage(pDesc->UsageFlags);
 
-        vkCreateBuffer(m_pDevice, &createInfo, nullptr, &pBuf);
-
-        pHandle->m_Usage = pDesc->UsageFlags;
-        pHandle->m_Mappable = pDesc->Mappable;
-        pHandle->m_DataSize = pData->DataLen;
-    }
-
-    void VKAPI::DeleteBuffer(VKBuffer *pHandle)
-    {
-        ZoneScoped;
-
-        if (pHandle->m_pMemoryHandle)
-            FreeBufferMemory(pHandle);
-
-        if (pHandle->m_pHandle)
-            vkDestroyBuffer(m_pDevice, pHandle->m_pHandle, nullptr);
-    }
-
-    void VKAPI::AllocateBufferMemory(VKBuffer *pBuffer, AllocatorType allocatorType)
-    {
-        ZoneScoped;
+        vkCreateBuffer(m_pDevice, &createInfo, nullptr, &pBuffer->m_pHandle);
 
         VkMemoryRequirements memoryRequirements = {};
         vkGetBufferMemoryRequirements(m_pDevice, pBuffer->m_pHandle, &memoryRequirements);
 
+        /// ---------------------------------------------- ///
+
+        pBuffer->m_Usage = pDesc->UsageFlags;
+        pBuffer->m_Mappable = pDesc->Mappable;
+
+        pBuffer->m_DataSize = pData->DataLen;
         pBuffer->m_RequiredDataSize = memoryRequirements.size;
 
-        switch (allocatorType)
+        pBuffer->m_AllocatorType = pDesc->TargetAllocator;
+
+        /// ---------------------------------------------- ///
+
+        switch (pDesc->TargetAllocator)
         {
             case AllocatorType::None:
             {
-                VkMemoryPropertyFlags memProps = (pBuffer->m_Mappable ? VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
-                                                                      : VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-
-                VkMemoryAllocateInfo memoryAllocInfo = {};
-                memoryAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-                memoryAllocInfo.allocationSize = memoryRequirements.size;
-                memoryAllocInfo.memoryTypeIndex = GetMemoryTypeIndex(memoryRequirements.memoryTypeBits, memProps);
-
-                vkAllocateMemory(m_pDevice, &memoryAllocInfo, nullptr, &pBuffer->m_pMemoryHandle);
+                pBuffer->m_pMemoryHandle = CreateHeap(memoryRequirements.size, pBuffer->m_Mappable);
 
                 break;
             }
@@ -770,7 +747,7 @@ namespace lr::Graphics
             case AllocatorType::Descriptor:
             {
                 pBuffer->m_DataOffset = m_MADescriptor.Allocator.Allocate(0, pBuffer->m_RequiredDataSize, memoryRequirements.alignment);
-                pBuffer->m_pMemoryHandle = m_MADescriptor.Buffer.m_pMemoryHandle;
+                pBuffer->m_pMemoryHandle = m_MADescriptor.pHeap;
 
                 break;
             }
@@ -778,7 +755,7 @@ namespace lr::Graphics
             case AllocatorType::BufferLinear:
             {
                 pBuffer->m_DataOffset = m_MABufferLinear.Allocator.Allocate(0, pBuffer->m_RequiredDataSize, memoryRequirements.alignment);
-                pBuffer->m_pMemoryHandle = m_MABufferLinear.Buffer.m_pMemoryHandle;
+                pBuffer->m_pMemoryHandle = m_MABufferLinear.pHeap;
 
                 break;
             }
@@ -790,73 +767,82 @@ namespace lr::Graphics
                 pBuffer->m_pAllocatorData = pBlock;
                 pBuffer->m_DataOffset = pBlock->Offset;
 
-                pBuffer->m_pMemoryHandle = m_MABufferTLSF.Buffer.m_pMemoryHandle;
+                pBuffer->m_pMemoryHandle = m_MABufferTLSF.pHeap;
 
                 break;
             }
 
             default: break;
         }
-    }
-
-    void VKAPI::FreeBufferMemory(VKBuffer *pBuffer)
-    {
-        ZoneScoped;
-
-        if (pBuffer->m_AllocatorType == AllocatorType::BufferTLSF)
-        {
-            Memory::TLSFBlock *pBlock = (Memory::TLSFBlock *)pBuffer->m_pAllocatorData;
-            assert(pBlock != nullptr);
-
-            m_MABufferTLSF.Allocator.Free(pBlock);
-        }
-        else if (pBuffer->m_AllocatorType == AllocatorType::None)
-        {
-            vkFreeMemory(m_pDevice, pBuffer->m_pMemoryHandle, nullptr);
-        }
-    }
-
-    void VKAPI::BindMemory(VKBuffer *pBuffer)
-    {
-        ZoneScoped;
 
         vkBindBufferMemory(m_pDevice, pBuffer->m_pHandle, pBuffer->m_pMemoryHandle, pBuffer->m_DataOffset);
+
+        return pBuffer;
     }
 
-    void VKAPI::MapMemory(VKBuffer *pBuffer, void *&pData)
+    void VKAPI::DeleteBuffer(BaseBuffer *pHandle)
     {
         ZoneScoped;
 
-        vkMapMemory(m_pDevice, pBuffer->m_pMemoryHandle, pBuffer->m_DataOffset, pBuffer->m_RequiredDataSize, 0, &pData);
+        API_VAR(VKBuffer, pHandle);
+
+        if (pHandleVK->m_pMemoryHandle)
+        {
+            if (pHandleVK->m_AllocatorType == AllocatorType::BufferTLSF)
+            {
+                Memory::TLSFBlock *pBlock = (Memory::TLSFBlock *)pHandleVK->m_pAllocatorData;
+                assert(pBlock != nullptr);
+
+                m_MABufferTLSF.Allocator.Free(pBlock);
+            }
+            else if (pHandleVK->m_AllocatorType == AllocatorType::None)
+            {
+                vkFreeMemory(m_pDevice, pHandleVK->m_pMemoryHandle, nullptr);
+            }
+        }
+
+        if (pHandleVK->m_pHandle)
+            vkDestroyBuffer(m_pDevice, pHandleVK->m_pHandle, nullptr);
     }
 
-    void VKAPI::UnmapMemory(VKBuffer *pBuffer)
+    void VKAPI::MapMemory(BaseBuffer *pBuffer, void *&pData)
     {
         ZoneScoped;
 
-        vkUnmapMemory(m_pDevice, pBuffer->m_pMemoryHandle);
+        API_VAR(VKBuffer, pBuffer);
+
+        vkMapMemory(m_pDevice, pBufferVK->m_pMemoryHandle, pBuffer->m_DataOffset, pBuffer->m_RequiredDataSize, 0, &pData);
     }
 
-    void VKAPI::TransferBufferMemory(VKCommandList *pList, VKBuffer *pSrc, VKBuffer *pDst, AllocatorType dstAllocator)
+    void VKAPI::UnmapMemory(BaseBuffer *pBuffer)
+    {
+        ZoneScoped;
+
+        API_VAR(VKBuffer, pBuffer);
+
+        vkUnmapMemory(m_pDevice, pBufferVK->m_pMemoryHandle);
+    }
+
+    BaseBuffer *VKAPI::ChangeAllocator(BaseCommandList *pList, BaseBuffer *pTarget, AllocatorType targetAllocator)
     {
         ZoneScoped;
 
         // TODO: Currently this technique uses present queue, move it to transfer queue
 
-        BufferDesc dstDesc = {};
-        BufferData dstData = {};
+        BufferDesc bufDesc = {};
+        BufferData bufData = {};
 
-        dstDesc.Mappable = false;
-        dstDesc.UsageFlags = pSrc->m_Usage | ResourceUsage::CopyDst;
-        dstDesc.UsageFlags &= ~ResourceUsage::CopySrc;
+        bufDesc.Mappable = false;
+        bufDesc.UsageFlags = pTarget->m_Usage | ResourceUsage::CopyDst;
+        bufDesc.UsageFlags &= ~ResourceUsage::CopySrc;
 
-        dstData.DataLen = pSrc->m_DataSize;
+        bufData.DataLen = pTarget->m_DataSize;
 
-        CreateBuffer(pDst, &dstDesc, &dstData);
-        AllocateBufferMemory(pDst, dstAllocator);
-        BindMemory(pDst);
+        BaseBuffer *pNewBuffer = CreateBuffer(&bufDesc, &bufData);
 
-        pList->CopyBuffer(pSrc, pDst, pSrc->m_DataSize);
+        pList->CopyBuffer(pTarget, pNewBuffer, bufData.DataLen);
+
+        return pNewBuffer;
     }
 
     BaseImage *VKAPI::CreateImage(ImageDesc *pDesc, ImageData *pData)
@@ -882,6 +868,9 @@ namespace lr::Graphics
 
         vkCreateImage(m_pDevice, &imageCreateInfo, nullptr, &pImage->m_pHandle);
 
+        VkMemoryRequirements memoryRequirements = {};
+        vkGetImageMemoryRequirements(m_pDevice, pImage->m_pHandle, &memoryRequirements);
+
         /// ---------------------------------------------- //
 
         pImage->m_Width = pData->Width;
@@ -894,6 +883,38 @@ namespace lr::Graphics
         pImage->m_Usage = pDesc->Usage;
         pImage->m_Format = pDesc->Format;
 
+        pImage->m_RequiredDataSize = memoryRequirements.size;
+
+        pImage->m_AllocatorType = pDesc->TargetAllocator;
+
+        /// ---------------------------------------------- //
+
+        switch (pDesc->TargetAllocator)
+        {
+            case AllocatorType::None:
+            {
+                pImage->m_pMemoryHandle = CreateHeap(memoryRequirements.size, false);
+
+                break;
+            }
+
+            case AllocatorType::ImageTLSF:
+            {
+                Memory::TLSFBlock *pBlock = m_MABufferTLSF.Allocator.Allocate(pImage->m_DataSize, memoryRequirements.alignment);
+
+                pImage->m_pAllocatorData = pBlock;
+                pImage->m_DataOffset = pBlock->Offset;
+
+                pImage->m_pMemoryHandle = m_MAImageTLSF.pHeap;
+
+                break;
+            }
+
+            default: break;
+        }
+
+        vkBindImageMemory(m_pDevice, pImage->m_pHandle, pImage->m_pMemoryHandle, 0);
+
         return pImage;
     }
 
@@ -904,7 +925,19 @@ namespace lr::Graphics
         API_VAR(VKImage, pImage);
 
         if (pImageVK->m_pMemoryHandle)
-            FreeImageMemory(pImageVK);
+        {
+            if (pImage->m_AllocatorType == AllocatorType::ImageTLSF)
+            {
+                Memory::TLSFBlock *pBlock = (Memory::TLSFBlock *)pImage->m_pAllocatorData;
+                assert(pBlock != nullptr);
+
+                m_MAImageTLSF.Allocator.Free(pBlock);
+            }
+            else if (pImage->m_AllocatorType == AllocatorType::None)
+            {
+                vkFreeMemory(m_pDevice, pImageVK->m_pMemoryHandle, nullptr);
+            }
+        }
 
         if (pImageVK->m_pViewHandle)
             vkDestroyImageView(m_pDevice, pImageVK->m_pViewHandle, nullptr);
@@ -950,9 +983,11 @@ namespace lr::Graphics
         vkCreateImageView(m_pDevice, &imageViewCreateInfo, nullptr, &pHandleVK->m_pViewHandle);
     }
 
-    void VKAPI::CreateSampler(VKImage *pHandle)
+    void VKAPI::CreateSampler(BaseImage *pHandle)
     {
         ZoneScoped;
+
+        API_VAR(VKImage, pHandle);
 
         VkSamplerCreateInfo samplerInfo = {};
         samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
@@ -976,73 +1011,12 @@ namespace lr::Graphics
 
         samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK;
 
-        vkCreateSampler(m_pDevice, &samplerInfo, nullptr, &pHandle->m_pSampler);
+        vkCreateSampler(m_pDevice, &samplerInfo, nullptr, &pHandleVK->m_pSampler);
     }
 
-    void VKAPI::AllocateImageMemory(VKImage *pImage, AllocatorType allocatorType)
+    void VKAPI::CreateRenderTarget(BaseImage *pImage)
     {
         ZoneScoped;
-
-        VkMemoryAllocateInfo allocInfo = {};
-        allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-
-        VkMemoryRequirements memoryRequirements = {};
-        vkGetImageMemoryRequirements(m_pDevice, pImage->m_pHandle, &memoryRequirements);
-
-        pImage->m_RequiredDataSize = memoryRequirements.size;
-
-        switch (allocatorType)
-        {
-            case AllocatorType::None:
-            {
-                VkMemoryAllocateInfo memoryAllocInfo = {};
-                memoryAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-                memoryAllocInfo.allocationSize = memoryRequirements.size;
-                memoryAllocInfo.memoryTypeIndex = GetMemoryTypeIndex(memoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-
-                vkAllocateMemory(m_pDevice, &memoryAllocInfo, nullptr, &pImage->m_pMemoryHandle);
-
-                break;
-            }
-
-            case AllocatorType::ImageTLSF:
-            {
-                Memory::TLSFBlock *pBlock = m_MABufferTLSF.Allocator.Allocate(pImage->m_DataSize, memoryRequirements.alignment);
-
-                pImage->m_pAllocatorData = pBlock;
-                pImage->m_DataOffset = pBlock->Offset;
-
-                pImage->m_pMemoryHandle = m_MAImageTLSF.Buffer.m_pMemoryHandle;
-
-                break;
-            }
-
-            default: break;
-        }
-    }
-
-    void VKAPI::FreeImageMemory(VKImage *pImage)
-    {
-        ZoneScoped;
-
-        if (pImage->m_AllocatorType == AllocatorType::ImageTLSF)
-        {
-            Memory::TLSFBlock *pBlock = (Memory::TLSFBlock *)pImage->m_pAllocatorData;
-            assert(pBlock != nullptr);
-
-            m_MAImageTLSF.Allocator.Free(pBlock);
-        }
-        else if (pImage->m_AllocatorType == AllocatorType::None)
-        {
-            vkFreeMemory(m_pDevice, pImage->m_pMemoryHandle, nullptr);
-        }
-    }
-
-    void VKAPI::BindMemory(VKImage *pImage)
-    {
-        ZoneScoped;
-
-        vkBindImageMemory(m_pDevice, pImage->m_pHandle, pImage->m_pMemoryHandle, 0);
     }
 
     bool VKAPI::IsFormatSupported(ResourceFormat format, VkColorSpaceKHR *pColorSpaceOut)
@@ -1102,6 +1076,21 @@ namespace lr::Graphics
         }
 
         LOG_ERROR("Memory type index is not found. Bits: {}.", setBits);
+
+        return -1;
+    }
+
+    u32 VKAPI::GetMemoryTypeIndex(VkMemoryPropertyFlags propFlags)
+    {
+        ZoneScoped;
+
+        for (u32 i = 0; i < m_MemoryProps.memoryTypeCount; i++)
+        {
+            if ((m_MemoryProps.memoryTypes[i].propertyFlags & propFlags) == propFlags)
+                return i;
+        }
+
+        LOG_ERROR("Memory type index is not found.");
 
         return -1;
     }

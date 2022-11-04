@@ -13,8 +13,8 @@ namespace lr
 {
     using namespace Graphics;
 
-    VKBuffer vertexBuffer;
-    VKBuffer indexBuffer;
+    BaseBuffer *pVertexBuffer = nullptr;
+    BaseBuffer *pIndexBuffer = nullptr;
 
     UI::ImGuiRenderer imguiHandler;
 
@@ -26,7 +26,7 @@ namespace lr
 
         m_Window.Init(windowDesc);
 
-        m_pAPI = new VKAPI;
+        m_pAPI = new D3D12API;
         m_pAPI->Init(&m_Window, windowDesc.Width, windowDesc.Height, APIFlags::VSync);
 
         Camera3DDesc camera3DDesc;
@@ -50,56 +50,53 @@ namespace lr
 
         // imguiHandler.Init();
 
-        // XMFLOAT3 pData[3] = { { 0, -0.5, 0 }, { 0.5, 0.5, 0 }, { -0.5, 0.5, 0 } };
-        // u32 pIndexData[3] = { 0, 1, 2 };
+        XMFLOAT3 pData[3] = { { 0, -0.5, 0 }, { 0.5, 0.5, 0 }, { -0.5, 0.5, 0 } };
+        u32 pIndexData[3] = { 0, 1, 2 };
 
-        // BufferDesc bufDesc = {};
-        // bufDesc.UsageFlags = BufferUsage::Vertex | BufferUsage::CopySrc;
-        // bufDesc.Mappable = true;
+        //~ Idea:
+        //~ Create a pool that lasts one frame, it would be very useful for staging buffers
 
-        // BufferData bufData = {};
-        // bufData.DataLen = sizeof(XMFLOAT3) * 3;
+        BufferDesc bufDesc = {};
+        bufDesc.UsageFlags = ResourceUsage::VertexBuffer | ResourceUsage::CopySrc;
+        bufDesc.Mappable = true;
+        bufDesc.TargetAllocator = AllocatorType::None;
 
-        // VKBuffer tempVertexBuffer;
-        // m_pAPI->CreateBuffer(&tempVertexBuffer, &bufDesc, &bufData);
-        // m_pAPI->AllocateBufferMemory(&tempVertexBuffer, AllocatorType::None);
+        BufferData bufData = {};
+        bufData.DataLen = sizeof(XMFLOAT3) * 3;
 
-        // void *pMapData = nullptr;
-        // m_pAPI->MapMemory(&tempVertexBuffer, pMapData);
-        // memcpy(pMapData, pData, bufData.DataLen);
-        // m_pAPI->UnmapMemory(&tempVertexBuffer);
+        BaseBuffer *pTempVertexBuffer = m_pAPI->CreateBuffer(&bufDesc, &bufData);
 
-        // m_pAPI->BindMemory(&tempVertexBuffer);
+        void *pMapData = nullptr;
+        m_pAPI->MapMemory(pTempVertexBuffer, pMapData);
+        memcpy(pMapData, pData, bufData.DataLen);
+        m_pAPI->UnmapMemory(pTempVertexBuffer);
 
-        // BaseCommandList *pList = m_pAPI->GetCommandList();
+        /// ------------------------------------------------------- ///
 
-        // m_pAPI->BeginCommandList(pList);
-        // // m_pAPI->TransferBufferMemory(pList, &tempVertexBuffer, &vertexBuffer, AllocatorType::BufferTLSF);
+        bufDesc.UsageFlags = ResourceUsage::IndexBuffer | ResourceUsage::CopySrc;
+        bufDesc.Mappable = true;
 
-        // /// ------------------------------------------------------- ///
+        bufData.DataLen = sizeof(u32) * 3;
 
-        // bufDesc.UsageFlags = BufferUsage::Index | BufferUsage::CopySrc;
-        // bufDesc.Mappable = true;
+        BaseBuffer *pTempIndexBuffer = m_pAPI->CreateBuffer(&bufDesc, &bufData);
 
-        // bufData.DataLen = sizeof(u32) * 3;
+        m_pAPI->MapMemory(pTempIndexBuffer, pMapData);
+        memcpy(pMapData, pIndexData, bufData.DataLen);
+        m_pAPI->UnmapMemory(pTempIndexBuffer);
 
-        // VKBuffer tempIndexBuffer;
-        // m_pAPI->CreateBuffer(&tempIndexBuffer, &bufDesc, &bufData);
-        // m_pAPI->AllocateBufferMemory(&tempIndexBuffer, AllocatorType::None);
+        /// ------------------------------------------------------- ///
 
-        // m_pAPI->MapMemory(&tempIndexBuffer, pMapData);
-        // memcpy(pMapData, pIndexData, bufData.DataLen);
-        // m_pAPI->UnmapMemory(&tempIndexBuffer);
+        BaseCommandList *pList = m_pAPI->GetCommandList();
+        m_pAPI->BeginCommandList(pList);
 
-        // m_pAPI->BindMemory(&tempIndexBuffer);
+        pVertexBuffer = m_pAPI->ChangeAllocator(pList, pTempIndexBuffer, AllocatorType::BufferTLSF);
+        pIndexBuffer = m_pAPI->ChangeAllocator(pList, pTempVertexBuffer, AllocatorType::BufferTLSF);
 
-        // // m_pAPI->TransferBufferMemory(pList, &tempIndexBuffer, &indexBuffer, AllocatorType::BufferTLSF);
+        m_pAPI->EndCommandList(pList);
+        m_pAPI->ExecuteCommandList(pList, true);
 
-        // m_pAPI->EndCommandList(pList);
-        // m_pAPI->ExecuteCommandList(pList, true);
-
-        // m_pAPI->DeleteBuffer(&tempVertexBuffer);
-        // m_pAPI->DeleteBuffer(&tempIndexBuffer);
+        m_pAPI->DeleteBuffer(pTempVertexBuffer);
+        m_pAPI->DeleteBuffer(pTempIndexBuffer);
 
         Run();
     }

@@ -88,7 +88,8 @@ namespace lr::Graphics
         ResourceFormat Format = ResourceFormat::Unknown;
         bool Mappable = false;
 
-        u32 Alignment = 0;
+        AllocatorType TargetAllocator = AllocatorType::None;
+
         u16 ArraySize = 1;
         u32 MipMapLevels = 1;
     };
@@ -123,9 +124,10 @@ namespace lr::Graphics
 
     struct BufferDesc
     {
+        ResourceUsage UsageFlags;
         bool Mappable = false;
 
-        ResourceUsage UsageFlags;
+        AllocatorType TargetAllocator = AllocatorType::None;
     };
 
     struct BufferData

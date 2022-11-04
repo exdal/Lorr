@@ -32,6 +32,22 @@ namespace lr::Graphics
                                ResourceUsage barrierAfter,
                                ShaderStage shaderAfter);
 
+        void ClearImage(BaseImage *pImage, ClearValue val);
+
+        /// Buffer Commands
+        void SetVertexBuffer(BaseBuffer *pBuffer);
+        void SetIndexBuffer(BaseBuffer *pBuffer, bool type32);
+        void CopyBuffer(BaseBuffer *pSource, BaseBuffer *pDest, u32 size);
+        void CopyBuffer(BaseBuffer *pSource, BaseImage *pDest);
+
+        /// Draw Commands
+        void Draw(u32 vertexCount, u32 firstVertex, u32 instanceCount, u32 firstInstance);
+        void DrawIndexed(u32 indexCount, u32 firstIndex, u32 vertexOffset, u32 instanceCount, u32 firstInstance);
+        
+        // Pipeline
+        void SetPipeline(BasePipeline *pPipeline);
+        void SetPipelineDescriptorSets(const std::initializer_list<BaseDescriptorSet *> &sets);
+
         D3D12CommandAllocator *m_pAllocator = nullptr;
         ID3D12GraphicsCommandList4 *m_pHandle = nullptr;
 

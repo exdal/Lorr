@@ -49,10 +49,10 @@ namespace lr::Graphics
     }
 
     void VKCommandList::BarrierTransition(BaseImage *pImage,
-                                         ResourceUsage barrierBefore,
-                                         ShaderStage shaderBefore,
-                                         ResourceUsage barrierAfter,
-                                         ShaderStage shaderAfter)
+                                          ResourceUsage barrierBefore,
+                                          ShaderStage shaderBefore,
+                                          ResourceUsage barrierAfter,
+                                          ShaderStage shaderAfter)
     {
         ZoneScoped;
 
@@ -95,34 +95,68 @@ namespace lr::Graphics
                              &barrierInfo);
     }
 
-    void VKCommandList::SetVertexBuffer(VKBuffer *pBuffer)
+    void VKCommandList::ClearImage(BaseImage *pImage, ClearValue val)
     {
         ZoneScoped;
+
+        API_VAR(VKImage, pImage);
+
+        VkClearValue color;
+        memcpy(color.color.float32, &val.RenderTargetColor.x, sizeof(XMFLOAT4));
+
+        VkImageSubresourceRange subresRange = {};
+        subresRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        subresRange.baseArrayLayer = 0;
+        subresRange.layerCount = 1;
+        subresRange.baseMipLevel = pImageVK->m_UsingMip;
+        subresRange.levelCount = pImageVK->m_TotalMips;
+
+        vkCmdClearColorImage(m_pHandle,
+                             pImageVK->m_pHandle,
+                             VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                             (const VkClearColorValue *)&color,
+                             1,
+                             &subresRange);
+    }
+
+    void VKCommandList::SetVertexBuffer(BaseBuffer *pBuffer)
+    {
+        ZoneScoped;
+
+        API_VAR(VKBuffer, pBuffer);
 
         VkDeviceSize pOffsets[1] = { 0 };
-        vkCmdBindVertexBuffers(m_pHandle, 0, 1, &pBuffer->m_pHandle, pOffsets);
+        vkCmdBindVertexBuffers(m_pHandle, 0, 1, &pBufferVK->m_pHandle, pOffsets);
     }
 
-    void VKCommandList::SetIndexBuffer(VKBuffer *pBuffer, bool type32)
+    void VKCommandList::SetIndexBuffer(BaseBuffer *pBuffer, bool type32)
     {
         ZoneScoped;
 
-        vkCmdBindIndexBuffer(m_pHandle, pBuffer->m_pHandle, 0, type32 ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16);
+        API_VAR(VKBuffer, pBuffer);
+
+        vkCmdBindIndexBuffer(m_pHandle, pBufferVK->m_pHandle, 0, type32 ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16);
     }
 
-    void VKCommandList::CopyBuffer(VKBuffer *pSource, VKBuffer *pDest, u32 size)
+    void VKCommandList::CopyBuffer(BaseBuffer *pSource, BaseBuffer *pDest, u32 size)
     {
         ZoneScoped;
+
+        API_VAR(VKBuffer, pSource);
+        API_VAR(VKBuffer, pDest);
 
         VkBufferCopy copyRegion = {};
         copyRegion.size = size;
 
-        vkCmdCopyBuffer(m_pHandle, pSource->m_pHandle, pDest->m_pHandle, 1, &copyRegion);
+        vkCmdCopyBuffer(m_pHandle, pSourceVK->m_pHandle, pDestVK->m_pHandle, 1, &copyRegion);
     }
 
-    void VKCommandList::CopyBuffer(VKBuffer *pSource, VKImage *pDest)
+    void VKCommandList::CopyBuffer(BaseBuffer *pSource, BaseImage *pDest)
     {
         ZoneScoped;
+
+        API_VAR(VKBuffer, pSource);
+        API_VAR(VKImage, pDest);
 
         VkImageSubresourceRange subresRange = {};
         subresRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -135,7 +169,7 @@ namespace lr::Graphics
         imageBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
         imageBarrier.pNext = nullptr;
 
-        imageBarrier.image = pDest->m_pHandle;
+        imageBarrier.image = pDestVK->m_pHandle;
 
         imageBarrier.srcAccessMask = 0;
         imageBarrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
@@ -175,7 +209,7 @@ namespace lr::Graphics
         imageCopyInfo.imageSubresource.layerCount = 1;
         imageCopyInfo.imageSubresource.mipLevel = 0;
 
-        vkCmdCopyBufferToImage(m_pHandle, pSource->m_pHandle, pDest->m_pHandle, imageBarrier.newLayout, 1, &imageCopyInfo);
+        vkCmdCopyBufferToImage(m_pHandle, pSourceVK->m_pHandle, pDestVK->m_pHandle, imageBarrier.newLayout, 1, &imageCopyInfo);
 
         imageBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
         imageBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
@@ -193,7 +227,7 @@ namespace lr::Graphics
                              1,
                              &imageBarrier);
 
-        pDest->m_FinalLayout = imageBarrier.newLayout;
+        pDestVK->m_FinalLayout = imageBarrier.newLayout;
     }
 
     void VKCommandList::Draw(u32 vertexCount, u32 firstVertex, u32 instanceCount, u32 firstInstance)
@@ -210,17 +244,19 @@ namespace lr::Graphics
         vkCmdDrawIndexed(m_pHandle, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
     }
 
-    void VKCommandList::SetPipeline(VKPipeline *pPipeline)
+    void VKCommandList::SetPipeline(BasePipeline *pPipeline)
     {
         ZoneScoped;
 
-        // TODO: Support multiple bind points
-        vkCmdBindPipeline(m_pHandle, VK_PIPELINE_BIND_POINT_GRAPHICS, pPipeline->pHandle);
+        API_VAR(VKPipeline, pPipeline);
 
-        m_pSetPipeline = pPipeline;
+        // TODO: Support multiple bind points
+        vkCmdBindPipeline(m_pHandle, VK_PIPELINE_BIND_POINT_GRAPHICS, pPipelineVK->pHandle);
+
+        m_pSetPipeline = pPipelineVK;
     }
 
-    void VKCommandList::SetPipelineDescriptorSets(const std::initializer_list<VKDescriptorSet *> &sets)
+    void VKCommandList::SetPipelineDescriptorSets(const std::initializer_list<BaseDescriptorSet *> &sets)
     {
         ZoneScoped;
 
@@ -228,7 +264,9 @@ namespace lr::Graphics
         VkDescriptorSet pSets[8];
         for (auto &pSet : sets)
         {
-            pSets[idx] = pSet->pHandle;
+            API_VAR(VKDescriptorSet, pSet);
+
+            pSets[idx] = pSetVK->pHandle;
 
             idx++;
         }

@@ -27,24 +27,26 @@ namespace lr::Graphics
         void SetScissor(u32 id, u32 x, u32 y, u32 w, u32 h);
 
         void BarrierTransition(BaseImage *pImage,
-                              ResourceUsage barrierBefore,
-                              ShaderStage shaderBefore,
-                              ResourceUsage barrierAfter,
-                              ShaderStage shaderAfter);
+                               ResourceUsage barrierBefore,
+                               ShaderStage shaderBefore,
+                               ResourceUsage barrierAfter,
+                               ShaderStage shaderAfter);
+
+        void ClearImage(BaseImage *pImage, ClearValue val);
 
         /// Buffer Commands
-        void SetVertexBuffer(VKBuffer *pBuffer);
-        void SetIndexBuffer(VKBuffer *pBuffer, bool type32 = true);
-        void CopyBuffer(VKBuffer *pSource, VKBuffer *pDest, u32 size);
-        void CopyBuffer(VKBuffer *pSource, VKImage *pDest);
+        void SetVertexBuffer(BaseBuffer *pBuffer);
+        void SetIndexBuffer(BaseBuffer *pBuffer, bool type32);
+        void CopyBuffer(BaseBuffer *pSource, BaseBuffer *pDest, u32 size);
+        void CopyBuffer(BaseBuffer *pSource, BaseImage *pDest);
 
         /// Draw Commands
-        void Draw(u32 vertexCount, u32 firstVertex = 0, u32 instanceCount = 1, u32 firstInstance = 1);
-        void DrawIndexed(u32 indexCount, u32 firstIndex = 0, u32 vertexOffset = 0, u32 instanceCount = 1, u32 firstInstance = 1);
+        void Draw(u32 vertexCount, u32 firstVertex, u32 instanceCount, u32 firstInstance);
+        void DrawIndexed(u32 indexCount, u32 firstIndex, u32 vertexOffset, u32 instanceCount, u32 firstInstance);
 
         // Pipeline
-        void SetPipeline(VKPipeline *pPipeline);
-        void SetPipelineDescriptorSets(const std::initializer_list<VKDescriptorSet *> &sets);
+        void SetPipeline(BasePipeline *pPipeline);
+        void SetPipelineDescriptorSets(const std::initializer_list<BaseDescriptorSet *> &sets);
 
         VKCommandAllocator *m_pAllocator = nullptr;
         VkCommandBuffer m_pHandle = nullptr;

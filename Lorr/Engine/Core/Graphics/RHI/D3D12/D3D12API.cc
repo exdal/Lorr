@@ -165,7 +165,24 @@ namespace lr::Graphics
         constexpr u32 kTypeMem = Memory::MiBToBytes(8);
 
         m_TypeAllocator.Init(kTypeMem);
-        m_pTypeData = new u8[kTypeMem];
+        m_pTypeData = Memory::Allocate<u8>(kTypeMem);
+
+        constexpr u32 kDescriptorMem = Memory::MiBToBytes(1);
+        constexpr u32 kBufferLinearMem = Memory::MiBToBytes(64);
+        constexpr u32 kBufferTLSFMem = Memory::MiBToBytes(512);
+        constexpr u32 kImageTLSFMem = Memory::MiBToBytes(512);
+
+        m_MADescriptor.Allocator.AddPool(kDescriptorMem);
+        m_MADescriptor.pHeap = CreateHeap(kDescriptorMem, true);
+
+        m_MABufferLinear.Allocator.AddPool(kBufferLinearMem);
+        m_MABufferLinear.pHeap = CreateHeap(kBufferLinearMem, true);
+
+        m_MABufferTLSF.Allocator.Init(kBufferTLSFMem);
+        m_MABufferTLSF.pHeap = CreateHeap(kBufferTLSFMem, false);
+
+        m_MAImageTLSF.Allocator.Init(kImageTLSFMem);
+        m_MAImageTLSF.pHeap = CreateHeap(kImageTLSFMem, false);
     }
 
     BaseCommandQueue *D3D12API::CreateCommandQueue(CommandListType type)
@@ -385,36 +402,6 @@ namespace lr::Graphics
     {
         ZoneScoped;
 
-        // BaseCommandList *pList = GetCommandList();
-        // API_VAR(D3D12CommandList, pList);
-
-        // ID3D12GraphicsCommandList4 *pGList = pListDX->m_pHandle;
-
-        // BeginCommandList(pList);
-
-        // D3D12Image &image = m_SwapChain.m_pFrames[m_SwapChain.m_CurrentFrame].Image;
-
-        // D3D12_RESOURCE_BARRIER barrier = {};
-        // barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-        // barrier.Transition.pResource = image.m_pHandle;
-
-        // barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
-        // barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
-
-        // pGList->ResourceBarrier(1, &barrier);
-
-        // static f32 clear[4] = { 0.0, 0, 0, 0 };
-
-        // pGList->ClearRenderTargetView(image.m_ViewHandle, clear, 0, nullptr);
-
-        // barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
-        // barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
-
-        // pGList->ResourceBarrier(1, &barrier);
-
-        // EndCommandList(pList);
-        // ExecuteCommandList(pList, false);
-
         m_SwapChain.Present();
         m_SwapChain.NextFrame();
     }
@@ -516,11 +503,182 @@ namespace lr::Graphics
         return handle;
     }
 
+    ID3D12Heap *D3D12API::CreateHeap(u64 heapSize, bool cpuWrite)
+    {
+        ZoneScoped;
+
+        D3D12_HEAP_DESC heapDesc = {};
+        heapDesc.SizeInBytes = heapSize;
+        heapDesc.Alignment = D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT;
+        heapDesc.Flags = D3D12_HEAP_FLAG_ALLOW_ONLY_BUFFERS;
+
+        heapDesc.Properties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+        heapDesc.Properties.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+        heapDesc.Properties.Type = cpuWrite ? D3D12_HEAP_TYPE_UPLOAD : D3D12_HEAP_TYPE_DEFAULT;
+        heapDesc.Properties.VisibleNodeMask = 0;
+        heapDesc.Properties.CreationNodeMask = 0;
+
+        ID3D12Heap *pHandle = nullptr;
+        m_pDevice->CreateHeap(&heapDesc, IID_PPV_ARGS(&pHandle));
+
+        return pHandle;
+    }
+
+    BaseBuffer *D3D12API::CreateBuffer(BufferDesc *pDesc, BufferData *pData)
+    {
+        ZoneScoped;
+
+        D3D12Buffer *pBuffer = AllocTypeInherit<BaseBuffer, D3D12Buffer>();
+
+        D3D12_RESOURCE_DESC resourceDesc = {};
+        resourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+        resourceDesc.Alignment = D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT;
+        resourceDesc.Width = pData->DataLen;
+        resourceDesc.Height = 1;
+        resourceDesc.DepthOrArraySize = 1;
+        resourceDesc.MipLevels = 1;
+        resourceDesc.Format = DXGI_FORMAT_UNKNOWN;
+        resourceDesc.SampleDesc.Count = 1;
+        resourceDesc.SampleDesc.Quality = 0;
+        resourceDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+        resourceDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
+
+        D3D12_RESOURCE_ALLOCATION_INFO memoryInfo = m_pDevice->GetResourceAllocationInfo(0, 1, &resourceDesc);
+
+        /// ---------------------------------------------- ///
+
+        pBuffer->m_RequiredDataSize = memoryInfo.SizeInBytes;
+        pBuffer->m_Alignment = memoryInfo.Alignment;
+        pBuffer->m_Usage = pDesc->UsageFlags;
+        pBuffer->m_Mappable = pDesc->Mappable;
+        pBuffer->m_DataSize = pData->DataLen;
+        pBuffer->m_AllocatorType = pDesc->TargetAllocator;
+
+        /// ---------------------------------------------- ///
+
+        switch (pDesc->TargetAllocator)
+        {
+            case AllocatorType::None:
+            {
+                pBuffer->m_pMemoryHandle = CreateHeap(memoryInfo.SizeInBytes, pBuffer->m_Mappable);
+
+                break;
+            }
+
+            case AllocatorType::Descriptor:
+            {
+                pBuffer->m_DataOffset = m_MADescriptor.Allocator.Allocate(0, pBuffer->m_RequiredDataSize, pBuffer->m_Alignment);
+                pBuffer->m_pMemoryHandle = m_MADescriptor.pHeap;
+
+                break;
+            }
+
+            case AllocatorType::BufferLinear:
+            {
+                pBuffer->m_DataOffset = m_MABufferLinear.Allocator.Allocate(0, pBuffer->m_RequiredDataSize, pBuffer->m_Alignment);
+                pBuffer->m_pMemoryHandle = m_MABufferLinear.pHeap;
+
+                break;
+            }
+
+            case AllocatorType::BufferTLSF:
+            {
+                Memory::TLSFBlock *pBlock = m_MABufferTLSF.Allocator.Allocate(pBuffer->m_RequiredDataSize, pBuffer->m_Alignment);
+
+                pBuffer->m_pAllocatorData = pBlock;
+                pBuffer->m_DataOffset = pBlock->Offset;
+
+                pBuffer->m_pMemoryHandle = m_MABufferTLSF.pHeap;
+
+                break;
+            }
+
+            default: break;
+        }
+
+        m_pDevice->CreatePlacedResource(pBuffer->m_pMemoryHandle,
+                                        pBuffer->m_DataOffset,
+                                        &resourceDesc,
+                                        D3D12_RESOURCE_STATE_GENERIC_READ,
+                                        nullptr,
+                                        IID_PPV_ARGS(&pBuffer->m_pHandle));
+
+        return pBuffer;
+    }
+
+    void D3D12API::DeleteBuffer(BaseBuffer *pHandle)
+    {
+        ZoneScoped;
+
+        API_VAR(D3D12Buffer, pHandle);
+
+        if (pHandleDX->m_pMemoryHandle)
+        {
+            if (pHandleDX->m_AllocatorType == AllocatorType::BufferTLSF)
+            {
+                Memory::TLSFBlock *pBlock = (Memory::TLSFBlock *)pHandleDX->m_pAllocatorData;
+                assert(pBlock != nullptr);
+
+                m_MABufferTLSF.Allocator.Free(pBlock);
+            }
+            else if (pHandleDX->m_AllocatorType == AllocatorType::None)
+            {
+                pHandleDX->m_pMemoryHandle->Release();
+            }
+        }
+
+        if (pHandleDX->m_pHandle)
+            pHandleDX->m_pHandle->Release();
+    }
+
+    void D3D12API::MapMemory(BaseBuffer *pBuffer, void *&pData)
+    {
+        ZoneScoped;
+
+        API_VAR(D3D12Buffer, pBuffer);
+
+        pBufferDX->m_pHandle->Map(0, nullptr, &pData);
+    }
+
+    void D3D12API::UnmapMemory(BaseBuffer *pBuffer)
+    {
+        ZoneScoped;
+
+        API_VAR(D3D12Buffer, pBuffer);
+
+        pBufferDX->m_pHandle->Unmap(0, nullptr);
+    }
+
+    BaseBuffer *D3D12API::ChangeAllocator(BaseCommandList *pList, BaseBuffer *pTarget, AllocatorType targetAllocator)
+    {
+        ZoneScoped;
+
+        // TODO: Currently this technique uses present queue, move it to transfer queue
+
+        BufferDesc bufDesc = {};
+        BufferData bufData = {};
+
+        bufDesc.Mappable = false;
+        bufDesc.UsageFlags = pTarget->m_Usage | ResourceUsage::CopyDst;
+        bufDesc.UsageFlags &= ~ResourceUsage::CopySrc;
+
+        bufData.DataLen = pTarget->m_DataSize;
+
+        BaseBuffer *pNewBuffer = CreateBuffer(&bufDesc, &bufData);
+
+        pList->CopyBuffer(pTarget, pNewBuffer, bufData.DataLen);
+
+        return pNewBuffer;
+    }
+
     BaseImage *D3D12API::CreateImage(ImageDesc *pDesc, ImageData *pData)
     {
         ZoneScoped;
 
         D3D12Image *pImage = AllocTypeInherit<BaseImage, D3D12Image>();
+
+        /// ---------------------------------------------- ///
+        /// ---------------------------------------------- ///
 
         return pImage;
     }
@@ -544,6 +702,11 @@ namespace lr::Graphics
         viewDesc.Texture2D.MipSlice = 0;
 
         m_pDevice->CreateRenderTargetView(pImageDX->m_pHandle, &viewDesc, pImageDX->m_ViewHandle);
+    }
+
+    void D3D12API::CreateSampler(BaseImage *pHandle)
+    {
+        ZoneScoped;
     }
 
     i64 D3D12API::TFFenceWait(void *pData)

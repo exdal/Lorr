@@ -60,9 +60,21 @@ namespace lr::Graphics
         virtual BaseDescriptorSet *CreateDescriptorSet(DescriptorSetDesc *pDesc) = 0;
         virtual void UpdateDescriptorData(BaseDescriptorSet *pSet, DescriptorSetDesc *pDesc) = 0;
 
+        // * Buffers * //
+        virtual BaseBuffer *CreateBuffer(BufferDesc *pDesc, BufferData *pData) = 0;
+        virtual void DeleteBuffer(BaseBuffer *pHandle) = 0;
+
+        virtual void MapMemory(BaseBuffer *pBuffer, void *&pData) = 0;
+        virtual void UnmapMemory(BaseBuffer *pBuffer) = 0;
+
+        virtual BaseBuffer *ChangeAllocator(BaseCommandList *pList, BaseBuffer *pTarget, AllocatorType targetAllocator) = 0;
+
         // * Images * //
         virtual BaseImage *CreateImage(ImageDesc *pDesc, ImageData *pData) = 0;
         virtual void DeleteImage(BaseImage *pImage) = 0;
+
+        virtual void CreateSampler(BaseImage *pHandle) = 0;
+        virtual void CreateRenderTarget(BaseImage *pImage) = 0;
 
         // TODO: USE ACTUAL ALLOCATORS ASAP
         // T = Base Type
@@ -105,6 +117,17 @@ namespace lr::Graphics
 
             pType = nullptr;
         }
+
+        /// ----------------------------------------------------------- ///
+
+        template<typename T, typename U>
+        struct BufferedAllocator
+        {
+            T Allocator;
+            U pHeap;
+        };
+
+        /// ----------------------------------------------------------- ///
 
         Memory::TLSFMemoryAllocator m_TypeAllocator;
         u8 *m_pTypeData = nullptr;

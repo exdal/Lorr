@@ -23,12 +23,15 @@ namespace lr::Graphics
         ID3D12Resource *m_pHandle = nullptr;
         ID3D12Heap *m_pMemoryHandle = nullptr;
 
+        u64 m_Alignment = 0;
+
         D3D12_CPU_DESCRIPTOR_HANDLE m_ViewHandle = {};
     };
 
     struct D3D12DescriptorSet : BaseDescriptorSet
     {
         ID3D12RootSignature *m_pHandle = nullptr;
+        D3D12_GPU_DESCRIPTOR_HANDLE m_DescriptorHandle;
     };
 
 }  // namespace lr::Graphics

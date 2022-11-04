@@ -76,11 +76,26 @@ namespace lr::Graphics
         void CreateDescriptorPool(const std::initializer_list<D3D12DescriptorBindingDesc> &bindings);
         D3D12_CPU_DESCRIPTOR_HANDLE AllocateCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE type, u32 index = -1);
 
+        // * Buffers * //
+        ID3D12Heap *CreateHeap(u64 heapSize, bool cpuWrite);
+
+        BaseBuffer *CreateBuffer(BufferDesc *pDesc, BufferData *pData);
+        void DeleteBuffer(BaseBuffer *pHandle);
+
+        void BindMemory(BaseBuffer *pBuffer);
+        void MapMemory(BaseBuffer *pBuffer, void *&pData);
+        void UnmapMemory(BaseBuffer *pBuffer);
+
+        BaseBuffer *ChangeAllocator(BaseCommandList *pList, BaseBuffer *pTarget, AllocatorType targetAllocator);
+
         // * Images * //
         BaseImage *CreateImage(ImageDesc *pDesc, ImageData *pData);
         void DeleteImage(BaseImage *pImage);
 
         void CreateRenderTarget(BaseImage *pImage);
+        void CreateSampler(BaseImage *pHandle);
+
+        void BindMemory(BaseImage *pImage);
 
         static i64 TFFenceWait(void *pData);
 
@@ -122,6 +137,11 @@ namespace lr::Graphics
         /// Pools/Caches
         D3D12DescriptorHeap m_pDescriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_NUM_TYPES];
         ID3D12PipelineLibrary *m_pPipelineCache = nullptr;
+
+        BufferedAllocator<Memory::LinearMemoryAllocator, ID3D12Heap *> m_MADescriptor;
+        BufferedAllocator<Memory::LinearMemoryAllocator, ID3D12Heap *> m_MABufferLinear;
+        BufferedAllocator<Memory::TLSFMemoryAllocator, ID3D12Heap *> m_MABufferTLSF;
+        BufferedAllocator<Memory::TLSFMemoryAllocator, ID3D12Heap *> m_MAImageTLSF;
 
         EA::Thread::Thread m_FenceThread;
 

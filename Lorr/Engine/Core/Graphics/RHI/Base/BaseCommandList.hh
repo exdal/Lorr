@@ -8,6 +8,7 @@
 #include "Core/Graphics/RHI/Common.hh"
 
 #include "BaseResource.hh"
+#include "BasePipeline.hh"
 
 namespace lr::Graphics
 {
@@ -59,6 +60,22 @@ namespace lr::Graphics
                                        ShaderStage shaderBefore,
                                        ResourceUsage barrierAfter,
                                        ShaderStage shaderAfter) = 0;
+
+        virtual void ClearImage(BaseImage *pImage, ClearValue val) = 0;
+
+        /// Buffer Commands
+        virtual void SetVertexBuffer(BaseBuffer *pBuffer) = 0;
+        virtual void SetIndexBuffer(BaseBuffer *pBuffer, bool type32 = true) = 0;
+        virtual void CopyBuffer(BaseBuffer *pSource, BaseBuffer *pDest, u32 size) = 0;
+        virtual void CopyBuffer(BaseBuffer *pSource, BaseImage *pDest) = 0;
+
+        /// Draw Commands
+        virtual void Draw(u32 vertexCount, u32 firstVertex = 0, u32 instanceCount = 1, u32 firstInstance = 1) = 0;
+        virtual void DrawIndexed(u32 indexCount, u32 firstIndex = 0, u32 vertexOffset = 0, u32 instanceCount = 1, u32 firstInstance = 1) = 0;
+        
+        // Pipeline
+        virtual void SetPipeline(BasePipeline *pPipeline) = 0;
+        virtual void SetPipelineDescriptorSets(const std::initializer_list<BaseDescriptorSet *> &sets) = 0;
 
         CommandListType m_Type = CommandListType::Direct;
     };

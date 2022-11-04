@@ -560,6 +560,7 @@ namespace lr::Graphics
         {
             case AllocatorType::None:
             {
+                pBuffer->m_DataOffset = 0;
                 pBuffer->m_pMemoryHandle = CreateHeap(memoryInfo.SizeInBytes, pBuffer->m_Mappable);
 
                 break;
@@ -596,10 +597,11 @@ namespace lr::Graphics
             default: break;
         }
 
+        D3D12_RESOURCE_STATES initialState = (pBuffer->m_Mappable ? D3D12_RESOURCE_STATE_GENERIC_READ : ToDXBufferUsage(pBuffer->m_Usage));
         m_pDevice->CreatePlacedResource(pBuffer->m_pMemoryHandle,
                                         pBuffer->m_DataOffset,
                                         &resourceDesc,
-                                        D3D12_RESOURCE_STATE_GENERIC_READ,
+                                        initialState,
                                         nullptr,
                                         IID_PPV_ARGS(&pBuffer->m_pHandle));
 
@@ -661,6 +663,7 @@ namespace lr::Graphics
         bufDesc.Mappable = false;
         bufDesc.UsageFlags = pTarget->m_Usage | ResourceUsage::CopyDst;
         bufDesc.UsageFlags &= ~ResourceUsage::CopySrc;
+        bufDesc.TargetAllocator = targetAllocator;
 
         bufData.DataLen = pTarget->m_DataSize;
 

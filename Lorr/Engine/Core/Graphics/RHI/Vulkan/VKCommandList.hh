@@ -31,6 +31,12 @@ namespace lr::Graphics
                                ShaderStage shaderBefore,
                                ResourceUsage barrierAfter,
                                ShaderStage shaderAfter);
+                               
+        void BarrierTransition(BaseBuffer *pBuffer,
+                               ResourceUsage barrierBefore,
+                               ShaderStage shaderBefore,
+                               ResourceUsage barrierAfter,
+                               ShaderStage shaderAfter);
 
         void ClearImage(BaseImage *pImage, ClearValue val);
 

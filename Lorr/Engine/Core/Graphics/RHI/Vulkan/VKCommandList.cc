@@ -95,6 +95,43 @@ namespace lr::Graphics
                              &barrierInfo);
     }
 
+    void VKCommandList::BarrierTransition(BaseBuffer *pBuffer,
+                                          ResourceUsage barrierBefore,
+                                          ShaderStage shaderBefore,
+                                          ResourceUsage barrierAfter,
+                                          ShaderStage shaderAfter)
+    {
+        ZoneScoped;
+
+        API_VAR(VKBuffer, pBuffer);
+
+        VkBufferMemoryBarrier barrierInfo = {};
+        barrierInfo.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+        barrierInfo.pNext = nullptr;
+
+        barrierInfo.buffer = pBufferVK->m_pHandle;
+
+        barrierInfo.offset = pBuffer->m_DataOffset;
+        barrierInfo.size = VK_WHOLE_SIZE;
+
+        barrierInfo.srcAccessMask = VKAPI::ToVKAccessFlags(barrierBefore);
+        barrierInfo.dstAccessMask = VKAPI::ToVKAccessFlags(barrierAfter);
+
+        barrierInfo.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrierInfo.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+
+        vkCmdPipelineBarrier(m_pHandle,
+                             VKAPI::ToVKPipelineStage(barrierBefore) | VKAPI::ToVKPipelineShaderStage(shaderBefore),
+                             VKAPI::ToVKPipelineStage(barrierAfter) | VKAPI::ToVKPipelineShaderStage(shaderAfter),
+                             VK_DEPENDENCY_BY_REGION_BIT,
+                             0,
+                             nullptr,
+                             1,
+                             &barrierInfo,
+                             0,
+                             nullptr);
+    }
+
     void VKCommandList::ClearImage(BaseImage *pImage, ClearValue val)
     {
         ZoneScoped;

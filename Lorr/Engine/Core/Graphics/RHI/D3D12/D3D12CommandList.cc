@@ -48,6 +48,26 @@ namespace lr::Graphics
         m_pHandle->ResourceBarrier(1, &barrier);
     }
 
+    void D3D12CommandList::BarrierTransition(BaseBuffer *pBuffer,
+                                             ResourceUsage barrierBefore,
+                                             ShaderStage shaderBefore,
+                                             ResourceUsage barrierAfter,
+                                             ShaderStage shaderAfter)
+    {
+        ZoneScoped;
+
+        API_VAR(D3D12Buffer, pBuffer);
+
+        D3D12_RESOURCE_BARRIER barrier = {};
+        barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        barrier.Transition.pResource = pBufferDX->m_pHandle;
+
+        barrier.Transition.StateBefore = D3D12API::ToDXBufferUsage(barrierBefore);
+        barrier.Transition.StateAfter = D3D12API::ToDXBufferUsage(barrierAfter);
+
+        m_pHandle->ResourceBarrier(1, &barrier);
+    }
+
     void D3D12CommandList::ClearImage(BaseImage *pImage, ClearValue val)
     {
         ZoneScoped;
@@ -84,6 +104,11 @@ namespace lr::Graphics
     void D3D12CommandList::CopyBuffer(BaseBuffer *pSource, BaseBuffer *pDest, u32 size)
     {
         ZoneScoped;
+
+        API_VAR(D3D12Buffer, pSource);
+        API_VAR(D3D12Buffer, pDest);
+
+        m_pHandle->CopyBufferRegion(pDestDX->m_pHandle, 0, pSourceDX->m_pHandle, 0, size);
     }
 
     void D3D12CommandList::CopyBuffer(BaseBuffer *pSource, BaseImage *pDest)
@@ -125,7 +150,7 @@ namespace lr::Graphics
             API_VAR(D3D12DescriptorSet, pSet);
 
             m_pHandle->SetGraphicsRootDescriptorTable(idx, pSetDX->m_DescriptorHandle);
-            
+
             idx++;
         }
     }

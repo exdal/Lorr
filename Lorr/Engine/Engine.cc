@@ -26,7 +26,7 @@ namespace lr
 
         m_Window.Init(windowDesc);
 
-        m_pAPI = new D3D12API;
+        m_pAPI = new VKAPI;
         m_pAPI->Init(&m_Window, windowDesc.Width, windowDesc.Height, APIFlags::VSync);
 
         Camera3DDesc camera3DDesc;
@@ -57,7 +57,7 @@ namespace lr
         //~ Create a pool that lasts one frame, it would be very useful for staging buffers
 
         BufferDesc bufDesc = {};
-        bufDesc.UsageFlags = ResourceUsage::VertexBuffer | ResourceUsage::CopySrc;
+        bufDesc.UsageFlags = ResourceUsage::CopySrc;
         bufDesc.Mappable = true;
         bufDesc.TargetAllocator = AllocatorType::None;
 
@@ -73,7 +73,7 @@ namespace lr
 
         /// ------------------------------------------------------- ///
 
-        bufDesc.UsageFlags = ResourceUsage::IndexBuffer | ResourceUsage::CopySrc;
+        bufDesc.UsageFlags = ResourceUsage::CopySrc;
         bufDesc.Mappable = true;
 
         bufData.DataLen = sizeof(u32) * 3;
@@ -91,6 +91,9 @@ namespace lr
 
         pVertexBuffer = m_pAPI->ChangeAllocator(pList, pTempIndexBuffer, AllocatorType::BufferTLSF);
         pIndexBuffer = m_pAPI->ChangeAllocator(pList, pTempVertexBuffer, AllocatorType::BufferTLSF);
+
+        pList->BarrierTransition(pVertexBuffer, ResourceUsage::CopyDst, ShaderStage::None, ResourceUsage::VertexBuffer, ShaderStage::None);
+        pList->BarrierTransition(pIndexBuffer, ResourceUsage::CopyDst, ShaderStage::None, ResourceUsage::IndexBuffer, ShaderStage::None);
 
         m_pAPI->EndCommandList(pList);
         m_pAPI->ExecuteCommandList(pList, true);
@@ -124,8 +127,8 @@ namespace lr
             m_Camera3D.Update(0, 25.0);
             m_Camera2D.Update(0, 25.0);
 
-            // XMMATRIX mat3D = XMMatrixMultiply(m_Camera3D.m_View, m_Camera3D.m_Projection);
-            // XMMATRIX mat2D = XMMatrixMultiply(m_Camera2D.m_View, m_Camera2D.m_Projection);
+            XMMATRIX mat3D = XMMatrixMultiply(m_Camera3D.m_View, m_Camera3D.m_Projection);
+            XMMATRIX mat2D = XMMatrixMultiply(m_Camera2D.m_View, m_Camera2D.m_Projection);
             // stateMan.UpdateCamera3DData(mat3D);
             // stateMan.UpdateCamera2DData(mat2D);
 

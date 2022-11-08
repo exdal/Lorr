@@ -33,8 +33,8 @@ namespace lr::Graphics
 
         // Rasterizer
         void SetDepthClamp(bool enabled);
-        void SetPolygonMode(VkPolygonMode mode);  // TODO: Maybe abstract `VkPolygonMode`
         void SetCullMode(CullMode mode, bool frontFaceClockwise);
+        void SetFillMode(FillMode mode);
         void SetDepthBias(bool enabled, f32 constantFactor, f32 clamp, f32 slopeFactor);
 
         // Multisample
@@ -47,39 +47,32 @@ namespace lr::Graphics
         void SetDepthFunction(DepthCompareOp function);
         void SetStencilOperation(DepthStencilOpDesc front, DepthStencilOpDesc back);
 
-        // TODO: Color Blend
-        void SetBlendAttachment(u32 attachmentID, bool enabled, u8 mask);
-        // void SetBlendState(bool enabled);
-        // void SetBlendColorFactor(VkBlendFactor src, VkBlendFactor dst, VkBlendOp op);
-        // void SetBlendAlphaFactor(VkBlendFactor src, VkBlendFactor dst, VkBlendOp op);
-        // void SetBlendWriteState(bool writeR, bool writeG, bool writeB, bool writeA);
-        // Dynamic State
-        // void SetDynamicState(const std::initializer_list<VkDynamicState> &dynamicState);
+        void AddAttachment(PipelineAttachment *pAttachment, bool depth);
 
         static constexpr u32 kMaxShaderStageCount = 8;
 
         // Good thing that this create info takes pointers,
         // so we can easily enable/disable them by referencing them (nullptr means disabled)
-        VkGraphicsPipelineCreateInfo m_CreateInfo;
+        VkGraphicsPipelineCreateInfo m_CreateInfo = {};
 
         // Vars we will reference to create info
-        VkPipelineVertexInputStateCreateInfo m_VertexInputState;
-        VkVertexInputBindingDescription m_VertexBindingDesc;
-        VkVertexInputAttributeDescription m_pVertexAttribs[8];
+        VkPipelineVertexInputStateCreateInfo m_VertexInputState = {};
+        VkVertexInputBindingDescription m_VertexBindingDesc = {};
+        VkVertexInputAttributeDescription m_pVertexAttribs[8] = {};
 
-        VkPipelineInputAssemblyStateCreateInfo m_InputAssemblyState;
-        VkPipelineTessellationStateCreateInfo m_TessellationState;
+        VkPipelineInputAssemblyStateCreateInfo m_InputAssemblyState = {};
+        VkPipelineTessellationStateCreateInfo m_TessellationState = {};
 
-        VkPipelineViewportStateCreateInfo m_ViewportState;
+        VkPipelineViewportStateCreateInfo m_ViewportState = {};
 
-        VkPipelineRasterizationStateCreateInfo m_RasterizationState;
-        VkPipelineMultisampleStateCreateInfo m_MultisampleState;
-        VkPipelineDepthStencilStateCreateInfo m_DepthStencilState;
+        VkPipelineRasterizationStateCreateInfo m_RasterizationState = {};
+        VkPipelineMultisampleStateCreateInfo m_MultisampleState = {};
+        VkPipelineDepthStencilStateCreateInfo m_DepthStencilState = {};
 
-        VkPipelineColorBlendStateCreateInfo m_ColorBlendState;
-        VkPipelineColorBlendAttachmentState m_pColorBlendAttachments[8];
+        VkPipelineColorBlendStateCreateInfo m_ColorBlendState = {};
+        VkPipelineColorBlendAttachmentState m_pColorBlendAttachments[8] = {};
 
-        VkPipelineDynamicStateCreateInfo m_DynamicState;
+        VkPipelineDynamicStateCreateInfo m_DynamicState = {};
 
         VkPipelineShaderStageCreateInfo m_pShaderStages[kMaxShaderStageCount];
     };

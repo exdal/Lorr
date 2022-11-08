@@ -6,6 +6,7 @@
 #include "Core/IO/Memory.hh"
 
 #include "VKCommandList.hh"
+#include "VKShader.hh"
 
 /// DEFINE VULKAN FUNCTIONS
 // #include "VKSymbols.hh"
@@ -222,6 +223,8 @@ namespace lr::Graphics
 
         VkCommandBufferBeginInfo beginInfo = {};
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        beginInfo.pNext = nullptr;
+        beginInfo.flags = 0;
 
         vkBeginCommandBuffer(pListVK->m_pHandle, &beginInfo);
     }
@@ -394,12 +397,14 @@ namespace lr::Graphics
         return pHandle;
     }
 
-    void VKAPI::BeginPipelineBuildInfo(GraphicsPipelineBuildInfo *pBuildInfo)
+    GraphicsPipelineBuildInfo *VKAPI::BeginPipelineBuildInfo()
     {
         ZoneScoped;
 
-        pBuildInfo = new VKGraphicsPipelineBuildInfo;
+        GraphicsPipelineBuildInfo *pBuildInfo = new VKGraphicsPipelineBuildInfo;
         pBuildInfo->Init();
+
+        return pBuildInfo;
     }
 
     BasePipeline *VKAPI::EndPipelineBuildInfo(GraphicsPipelineBuildInfo *pBuildInfo)
@@ -523,9 +528,11 @@ namespace lr::Graphics
         vkDeviceWaitIdle(m_pDevice);
     }
 
-    VkShaderModule VKAPI::CreateShaderModule(BufferReadStream &buf)
+    BaseShader *VKAPI::CreateShader(ShaderStage stage, BufferReadStream &buf)
     {
         ZoneScoped;
+
+        VKShader *pShader = AllocTypeInherit<BaseShader, VKShader>();
 
         VkShaderModule pHandle = nullptr;
 
@@ -536,10 +543,13 @@ namespace lr::Graphics
 
         vkCreateShaderModule(m_pDevice, &createInfo, nullptr, &pHandle);
 
-        return pHandle;
+        pShader->Type = stage;
+        pShader->pHandle = pHandle;
+
+        return pShader;
     }
 
-    VkShaderModule VKAPI::CreateShaderModule(eastl::string_view path)
+    BaseShader *VKAPI::CreateShader(ShaderStage stage, eastl::string_view path)
     {
         ZoneScoped;
 
@@ -548,17 +558,22 @@ namespace lr::Graphics
         fs.Close();
 
         BufferReadStream buf(pData, fs.Size());
-        VkShaderModule pModule = CreateShaderModule(buf);
+        BaseShader *pShader = CreateShader(stage, buf);
+
         free(pData);
 
-        return pModule;
+        return pShader;
     }
 
-    void VKAPI::DeleteShaderModule(VkShaderModule pShader)
+    void VKAPI::DeleteShader(BaseShader *pShader)
     {
         ZoneScoped;
 
-        vkDestroyShaderModule(m_pDevice, pShader, nullptr);
+        API_VAR(VKShader, pShader);
+
+        vkDestroyShaderModule(m_pDevice, pShaderVK->pHandle, nullptr);
+
+        FreeType(pShaderVK);
     }
 
     BaseDescriptorSet *VKAPI::CreateDescriptorSet(DescriptorSetDesc *pDesc)
@@ -604,7 +619,7 @@ namespace lr::Graphics
         return pDescriptorSet;
     }
 
-    void VKAPI::UpdateDescriptorData(BaseDescriptorSet *pSet, DescriptorSetDesc *pDesc)
+    void VKAPI::UpdateDescriptorData(BaseDescriptorSet *pSet)
     {
         ZoneScoped;
 
@@ -617,9 +632,9 @@ namespace lr::Graphics
         u32 bufferIndex = 0;
         u32 imageIndex = 0;
 
-        for (u32 i = 0; i < pDesc->BindingCount; i++)
+        for (u32 i = 0; i < pSetVK->BindingCount; i++)
         {
-            DescriptorBindingDesc &element = pDesc->pBindings[i];
+            DescriptorBindingDesc &element = pSetVK->pBindingInfos[i];
 
             BaseBuffer *pBuffer = element.pBuffer;
             BaseImage *pImage = element.pImage;
@@ -641,7 +656,7 @@ namespace lr::Graphics
             {
                 pImageInfos[imageIndex].sampler = pImageVK->m_pSampler;
                 pImageInfos[imageIndex].imageView = pImageVK->m_pViewHandle;
-                pImageInfos[imageIndex].imageLayout = pImageVK->m_FinalLayout;
+                pImageInfos[imageIndex].imageLayout = pImageVK->m_Layout;
 
                 pWriteSets[i].pImageInfo = &pImageInfos[i];
 
@@ -657,7 +672,7 @@ namespace lr::Graphics
             pWriteSets[i].descriptorType = ToVKDescriptorType(element.Type);
         }
 
-        vkUpdateDescriptorSets(m_pDevice, pDesc->BindingCount, pWriteSets, 0, nullptr);
+        vkUpdateDescriptorSets(m_pDevice, pSetVK->BindingCount, pWriteSets, 0, nullptr);
     }
 
     VkDescriptorPool VKAPI::CreateDescriptorPool(const std::initializer_list<VKDescriptorBindingDesc> &layouts)
@@ -725,13 +740,12 @@ namespace lr::Graphics
 
         /// ---------------------------------------------- ///
 
+        pBuffer->m_RequiredDataSize = memoryRequirements.size;
         pBuffer->m_Usage = pDesc->UsageFlags;
         pBuffer->m_Mappable = pDesc->Mappable;
-
         pBuffer->m_DataSize = pData->DataLen;
-        pBuffer->m_RequiredDataSize = memoryRequirements.size;
-
         pBuffer->m_AllocatorType = pDesc->TargetAllocator;
+        pBuffer->m_Stride = pData->Stride;
 
         /// ---------------------------------------------- ///
 

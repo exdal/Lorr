@@ -2,6 +2,9 @@
 
 #include "D3D12Pipeline.hh"
 #include "D3D12Resource.hh"
+#include "D3D12Shader.hh"
+
+#include <d3dcompiler.h>
 
 #define HRCall(func, message)                                                                                      \
     if (FAILED(hr = func))                                                                                         \
@@ -39,6 +42,29 @@
 
 namespace lr::Graphics
 {
+    static const char *GetFullShaderModel(ShaderStage type)
+    {
+        ZoneScoped;
+
+        const char *pVSTag = "vs_5_1";
+        const char *pPSTag = "ps_5_1";
+        const char *pCSTag = "cs_5_1";
+        const char *pDSTag = "ds_5_1";
+        const char *pHSTag = "hs_5_1";
+
+        switch (type)
+        {
+            case ShaderStage::Vertex: return pVSTag; break;
+            case ShaderStage::Pixel: return pPSTag; break;
+            case ShaderStage::Compute: return pCSTag; break;
+            case ShaderStage::Domain: return pDSTag; break;
+            case ShaderStage::Hull: return pHSTag; break;
+            default: break;
+        }
+
+        return nullptr;
+    }
+
     bool D3D12API::Init(PlatformWindow *pWindow, u32 width, u32 height, APIFlags flags)
     {
         ZoneScoped;
@@ -240,6 +266,13 @@ namespace lr::Graphics
 
         pListDX->m_pAllocator->Reset();
         pListDX->Reset(pListDX->m_pAllocator);
+
+        ID3D12DescriptorHeap *pHeaps[] = {
+            m_pDescriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV].pHandle,
+            // m_pDescriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER].pHandle,
+        };
+
+        pListDX->m_pHandle->SetDescriptorHeaps(1, pHeaps);
     }
 
     void D3D12API::EndCommandList(BaseCommandList *pList)
@@ -320,12 +353,75 @@ namespace lr::Graphics
         return pLibrary;
     }
 
-    void D3D12API::BeginPipelineBuildInfo(GraphicsPipelineBuildInfo *pBuildInfo)
+    BaseShader *D3D12API::CreateShader(ShaderStage stage, BufferReadStream &buf)
     {
         ZoneScoped;
 
-        pBuildInfo = new D3D12GraphicsPipelineBuildInfo;
+        D3D12Shader *pShader = AllocTypeInherit<BaseShader, D3D12Shader>();
+
+        u32 flags = D3DCOMPILE_OPTIMIZATION_LEVEL3;
+
+        ID3DBlob *pCode = nullptr;
+        ID3DBlob *pError = nullptr;
+        HRESULT hr = D3DCompile((LPCVOID)buf.GetData(),
+                                buf.GetLength(),
+                                nullptr,
+                                nullptr,
+                                D3D_COMPILE_STANDARD_FILE_INCLUDE,
+                                "main",
+                                GetFullShaderModel(stage),
+                                flags,
+                                0,
+                                &pCode,
+                                &pError);
+
+        if (hr < 0)
+        {
+            LOG_ERROR("Failed to compile shader! DXC says: {}",
+                      eastl::string_view((const char *)pError->GetBufferPointer(), pError->GetBufferSize()));
+
+            return nullptr;
+        }
+
+        pShader->Type = stage;
+        pShader->pHandle = D3D12_SHADER_BYTECODE{ pCode->GetBufferPointer(), pCode->GetBufferSize() };
+
+        return pShader;
+    }
+
+    BaseShader *D3D12API::CreateShader(ShaderStage stage, eastl::string_view path)
+    {
+        ZoneScoped;
+
+        FileStream fs(path, false);
+        void *pData = fs.ReadAll<void>();
+        fs.Close();
+
+        BufferReadStream buf(pData, fs.Size());
+        BaseShader *pShader = CreateShader(stage, buf);
+
+        free(pData);
+
+        return pShader;
+    }
+
+    void D3D12API::DeleteShader(BaseShader *pShader)
+    {
+        ZoneScoped;
+
+        API_VAR(BaseShader, pShader);
+
+        FreeType(pShaderDX);
+    }
+
+    GraphicsPipelineBuildInfo *D3D12API::BeginPipelineBuildInfo()
+    {
+        ZoneScoped;
+
+        GraphicsPipelineBuildInfo *pBuildInfo = new D3D12GraphicsPipelineBuildInfo;
         pBuildInfo->Init();
+
+        return pBuildInfo;
     }
 
     BasePipeline *D3D12API::EndPipelineBuildInfo(GraphicsPipelineBuildInfo *pBuildInfo)
@@ -336,27 +432,19 @@ namespace lr::Graphics
         D3D12Pipeline *pPipeline = AllocTypeInherit<BasePipeline, D3D12Pipeline>();
 
         D3D12_ROOT_PARAMETER1 pParams[8] = {};
-        D3D12_DESCRIPTOR_RANGE1 ppRanges[8][8] = {};
 
         for (u32 i = 0; i < pBuildInfo->m_DescriptorSetCount; i++)
         {
             BaseDescriptorSet *pSet = pBuildInfo->m_ppDescriptorSets[i];
 
-            pParams[i].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-            pParams[i].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;  // TODO
-
-            pParams[i].DescriptorTable.NumDescriptorRanges = pSet->BindingCount;
-            pParams[i].DescriptorTable.pDescriptorRanges = ppRanges[i];
-
             for (u32 j = 0; j < pSet->BindingCount; j++)
             {
-                D3D12_DESCRIPTOR_RANGE1 &range = ppRanges[i][j];
+                pParams[i].ParameterType = ToDXDescriptorType(pSet->pBindingInfos[j].Type);
+                pParams[i].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;  // TODO
 
-                range.NumDescriptors = 1;
-                range.RangeType = ToDXDescriptorRangeType(pSet->pBindingInfos[j].Type);
-                range.BaseShaderRegister = 0;
-                range.RegisterSpace = 0;
-                range.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+                pParams[i].Descriptor.RegisterSpace = i;
+                pParams[i].Descriptor.ShaderRegister = j;
+                pParams[i].Descriptor.Flags = D3D12_ROOT_DESCRIPTOR_FLAG_NONE;
             }
         }
 
@@ -364,13 +452,17 @@ namespace lr::Graphics
         rootSignatureDesc.Version = D3D_ROOT_SIGNATURE_VERSION_1_1;
         rootSignatureDesc.Desc_1_1.NumParameters = pBuildInfo->m_DescriptorSetCount;
         rootSignatureDesc.Desc_1_1.pParameters = pParams;
+        rootSignatureDesc.Desc_1_1.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 
         ID3DBlob *pRootSigBlob = nullptr;
         ID3DBlob *pErrorBlob = nullptr;
         D3D12SerializeVersionedRootSignature(&rootSignatureDesc, &pRootSigBlob, &pErrorBlob);
 
-        m_pDevice->CreateRootSignature(0, pRootSigBlob, pRootSigBlob->GetBufferSize(), IID_PPV_ARGS(&pPipeline->pLayout));
+        m_pDevice->CreateRootSignature(0, pRootSigBlob->GetBufferPointer(), pRootSigBlob->GetBufferSize(), IID_PPV_ARGS(&pPipeline->pLayout));
         pBuildInfoDX->m_CreateInfo.pRootSignature = pPipeline->pLayout;
+
+        SAFE_RELEASE(pRootSigBlob);
+        SAFE_RELEASE(pErrorBlob);
 
         // TODO: m_CreateInfo->RTVFormats
 
@@ -414,7 +506,7 @@ namespace lr::Graphics
 
         D3D12_ROOT_SIGNATURE_DESC1 rootSigDesc = {};
 
-        D3D12_ROOT_PARAMETER1 pBindings[8] = {};
+        D3D12_ROOT_PARAMETER pBindings[8] = {};
 
         for (u32 i = 0; i < pDesc->BindingCount; i++)
         {
@@ -424,29 +516,25 @@ namespace lr::Graphics
             pBindings[i].ShaderVisibility = ToDXShaderType(element.TargetShader);
 
             // Constant Buffers
-            pBindings[i].Constants.ShaderRegister = i;
-            pBindings[i].Constants.Num32BitValues = element.ArraySize;
+            pBindings[i].Descriptor.RegisterSpace = 0;
+            pBindings[i].Descriptor.ShaderRegister = i;
 
-            // Uniform Buffers
-            // TODO
+            pBindings[i].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
         }
 
-        // // First we need layout info
-        // VkDescriptorSetLayoutCreateInfo layoutCreateInfo = {};
-        // layoutCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        // layoutCreateInfo.bindingCount = pDesc->BindingCount;
-        // layoutCreateInfo.pBindings = pBindings;
+        D3D12_VERSIONED_ROOT_SIGNATURE_DESC rootSignatureDesc = {};
+        rootSignatureDesc.Version = D3D_ROOT_SIGNATURE_VERSION_1_0;
+        rootSignatureDesc.Desc_1_0.NumParameters = pDesc->BindingCount;
+        rootSignatureDesc.Desc_1_0.pParameters = pBindings;
 
-        // vkCreateDescriptorSetLayout(m_pDevice, &layoutCreateInfo, nullptr, &pDescriptorSet->pSetLayoutHandle);
+        ID3DBlob *pRootSigBlob = nullptr;
+        ID3DBlob *pErrorBlob = nullptr;
+        D3D12SerializeVersionedRootSignature(&rootSignatureDesc, &pRootSigBlob, &pErrorBlob);
 
-        // // And the actual set
-        // VkDescriptorSetAllocateInfo allocateCreateInfo = {};
-        // allocateCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        // allocateCreateInfo.descriptorPool = m_pDescriptorPool;
-        // allocateCreateInfo.descriptorSetCount = 1;
-        // allocateCreateInfo.pSetLayouts = &pDescriptorSet->pSetLayoutHandle;
+        m_pDevice->CreateRootSignature(0, pRootSigBlob->GetBufferPointer(), pRootSigBlob->GetBufferSize(), IID_PPV_ARGS(&pDescriptorSet->m_pHandle));
 
-        // vkAllocateDescriptorSets(m_pDevice, &allocateCreateInfo, &pDescriptorSet->pHandle);
+        SAFE_RELEASE(pRootSigBlob);
+        SAFE_RELEASE(pErrorBlob);
 
         /// ---------------------------------------------------------- ///
 
@@ -456,9 +544,40 @@ namespace lr::Graphics
         return pDescriptorSet;
     }
 
-    void D3D12API::UpdateDescriptorData(BaseDescriptorSet *pSet, DescriptorSetDesc *pDesc)
+    void D3D12API::UpdateDescriptorData(BaseDescriptorSet *pSet)
     {
         ZoneScoped;
+
+        API_VAR(D3D12DescriptorSet, pSet);
+
+        u32 bufferIndex = 0;
+        u32 imageIndex = 0;
+
+        for (u32 i = 0; i < pSetDX->BindingCount; i++)
+        {
+            DescriptorBindingDesc &element = pSetDX->pBindingInfos[i];
+
+            BaseBuffer *pBuffer = element.pBuffer;
+            BaseImage *pImage = element.pImage;
+
+            API_VAR(D3D12Buffer, pBuffer);
+            API_VAR(D3D12Image, pImage);
+
+            if (element.Type == DescriptorType::ConstantBufferView)
+            {
+                D3D12_CONSTANT_BUFFER_VIEW_DESC viewDesc = {};
+                viewDesc.BufferLocation = pBufferDX->m_pHandle->GetGPUVirtualAddress();
+                viewDesc.SizeInBytes = pBufferDX->m_DataSize;
+
+                pBufferDX->m_ViewHandle = AllocateCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+                pBufferDX->m_DeviceHandle = AllocateGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+
+                m_pDevice->CreateConstantBufferView(&viewDesc, pBufferDX->m_ViewHandle);
+                pSetDX->m_pDescriptorHandle[bufferIndex] = viewDesc.BufferLocation;
+                pSetDX->m_DescriptorCount++;
+                bufferIndex++;
+            }
+        }
     }
 
     void D3D12API::CreateDescriptorPool(const std::initializer_list<D3D12DescriptorBindingDesc> &bindings)
@@ -473,7 +592,8 @@ namespace lr::Graphics
             D3D12_DESCRIPTOR_HEAP_DESC heapDesc = {};
             heapDesc.Type = element.HeapType;
             heapDesc.NumDescriptors = element.Count;
-            // heapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+            heapDesc.Flags = element.HeapType == D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV ? D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE
+                                                                                        : D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
 
             m_pDevice->CreateDescriptorHeap(&heapDesc, IID_PPV_ARGS(&pHandle));
 
@@ -492,8 +612,29 @@ namespace lr::Graphics
 
         if (index == -1)
         {
-            handle.ptr += heap.IncrementSize * heap.Offset;
-            heap.Offset++;
+            handle.ptr += heap.IncrementSize * heap.GPUOffset;
+            heap.GPUOffset++;
+        }
+        else
+        {
+            handle.ptr += heap.IncrementSize * index;
+        }
+
+        return handle;
+    }
+
+    D3D12_GPU_DESCRIPTOR_HANDLE D3D12API::AllocateGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE type, u32 index)
+    {
+        ZoneScoped;
+
+        D3D12DescriptorHeap &heap = m_pDescriptorHeaps[type];
+
+        D3D12_GPU_DESCRIPTOR_HANDLE handle = heap.pHandle->GetGPUDescriptorHandleForHeapStart();
+
+        if (index == -1)
+        {
+            handle.ptr += heap.IncrementSize * heap.GPUOffset;
+            heap.GPUOffset++;
         }
         else
         {
@@ -553,6 +694,7 @@ namespace lr::Graphics
         pBuffer->m_Mappable = pDesc->Mappable;
         pBuffer->m_DataSize = pData->DataLen;
         pBuffer->m_AllocatorType = pDesc->TargetAllocator;
+        pBuffer->m_Stride = pData->Stride;
 
         /// ---------------------------------------------- ///
 
@@ -661,15 +803,21 @@ namespace lr::Graphics
         BufferData bufData = {};
 
         bufDesc.Mappable = false;
-        bufDesc.UsageFlags = pTarget->m_Usage | ResourceUsage::CopyDst;
+        bufDesc.UsageFlags = ResourceUsage::CopyDst;
         bufDesc.UsageFlags &= ~ResourceUsage::CopySrc;
         bufDesc.TargetAllocator = targetAllocator;
 
+        bufData.Stride = pTarget->m_Stride;
         bufData.DataLen = pTarget->m_DataSize;
 
         BaseBuffer *pNewBuffer = CreateBuffer(&bufDesc, &bufData);
 
         pList->CopyBuffer(pTarget, pNewBuffer, bufData.DataLen);
+
+        pNewBuffer->m_Usage &= ~ResourceUsage::CopyDst;
+        pNewBuffer->m_Usage |= pTarget->m_Usage;
+
+        pList->BarrierTransition(pNewBuffer, ResourceUsage::CopyDst, ShaderStage::None, pTarget->m_Usage, ShaderStage::None);
 
         return pNewBuffer;
     }
@@ -785,13 +933,6 @@ namespace lr::Graphics
         D3D12_CULL_MODE_BACK,   // Back
     };
 
-    constexpr D3D12_ROOT_PARAMETER_TYPE kDescriptorTypeLUT[] = {
-        D3D12_ROOT_PARAMETER_TYPE_SRV,  // ShaderResourceView
-        D3D12_ROOT_PARAMETER_TYPE_CBV,  // ConstantBufferView
-        D3D12_ROOT_PARAMETER_TYPE_UAV,  // UnorderedAccessBuffer
-        D3D12_ROOT_PARAMETER_TYPE_UAV,  // UnorderedAccessView
-    };
-
     constexpr D3D12_DESCRIPTOR_HEAP_TYPE kDescriptorHeapTypeLUT[] = {
         D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER,      // Sampler
         D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,  // ShaderResourceView
@@ -802,10 +943,11 @@ namespace lr::Graphics
     };
 
     constexpr D3D12_DESCRIPTOR_RANGE_TYPE kDescriptorRangeLUT[] = {
-        D3D12_DESCRIPTOR_RANGE_TYPE_SRV,  // ShaderResourceView
-        D3D12_DESCRIPTOR_RANGE_TYPE_CBV,  // ConstantBufferView
-        D3D12_DESCRIPTOR_RANGE_TYPE_UAV,  // UnorderedAccessBuffer
-        D3D12_DESCRIPTOR_RANGE_TYPE_UAV,  // UnorderedAccessView
+        D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER,  // Sampler
+        D3D12_DESCRIPTOR_RANGE_TYPE_SRV,      // ShaderResourceView
+        D3D12_DESCRIPTOR_RANGE_TYPE_CBV,      // ConstantBufferView
+        D3D12_DESCRIPTOR_RANGE_TYPE_UAV,      // UnorderedAccessBuffer
+        D3D12_DESCRIPTOR_RANGE_TYPE_UAV,      // UnorderedAccessView
     };
 
     constexpr D3D12_SHADER_VISIBILITY kShaderTypeLUT[] = {
@@ -839,7 +981,17 @@ namespace lr::Graphics
 
     D3D12_ROOT_PARAMETER_TYPE D3D12API::ToDXDescriptorType(DescriptorType type)
     {
-        return kDescriptorTypeLUT[(u32)type];
+        D3D12_ROOT_PARAMETER_TYPE parameter;
+
+        switch (type)
+        {
+            case DescriptorType::ConstantBufferView: return D3D12_ROOT_PARAMETER_TYPE_CBV;
+            case DescriptorType::ShaderResourceView: return D3D12_ROOT_PARAMETER_TYPE_SRV;
+            case DescriptorType::UnorderedAccessBuffer:
+            case DescriptorType::UnorderedAccessView: return D3D12_ROOT_PARAMETER_TYPE_UAV;
+            case DescriptorType::RootConstant: return D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
+            default: assert(!"Unhandled descriptor type"); return D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+        }
     }
 
     D3D12_DESCRIPTOR_HEAP_TYPE D3D12API::ToDXHeapType(DescriptorType type)

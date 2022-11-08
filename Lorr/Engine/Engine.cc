@@ -1,18 +1,22 @@
 #include "Engine.hh"
 
 #include "Core/Graphics/Camera.hh"
+#include "Core/Graphics/RHI/D3D12/D3D12API.hh"
+#include "Core/Graphics/RHI/Vulkan/VKAPI.hh"
+
 #include "Core/IO/MemoryAllocator.hh"
 #include "Core/Utils/Timer.hh"
 
 #include "UI/ImGuiRenderer.hh"
 
-#include "Core/Graphics/RHI/D3D12/D3D12API.hh"
-#include "Core/Graphics/RHI/Vulkan/VKAPI.hh"
-
 namespace lr
 {
     using namespace Graphics;
 
+    BasePipeline *pPipeline = nullptr;
+    BaseDescriptorSet *pDescriptorSet = nullptr;
+
+    BaseBuffer *pConstantBuffer = nullptr;
     BaseBuffer *pVertexBuffer = nullptr;
     BaseBuffer *pIndexBuffer = nullptr;
 
@@ -27,7 +31,7 @@ namespace lr
         m_Window.Init(windowDesc);
 
         m_pAPI = new VKAPI;
-        m_pAPI->Init(&m_Window, windowDesc.Width, windowDesc.Height, APIFlags::VSync);
+        m_pAPI->Init(&m_Window, windowDesc.Width, windowDesc.Height, APIFlags::None);
 
         Camera3DDesc camera3DDesc;
         camera3DDesc.Position = XMFLOAT3(0.0, 0.0, -3.0);
@@ -48,21 +52,84 @@ namespace lr
 
         m_Camera2D.Init(&camera2DDesc);
 
+        BufferDesc constantBufDesc = {};
+        BufferData constantBufData = {};
+
+        constantBufDesc.Mappable = true;
+        constantBufDesc.TargetAllocator = AllocatorType::Descriptor;
+        constantBufDesc.UsageFlags = ResourceUsage::ConstantBuffer;
+
+        constantBufData.DataLen = 256;
+
+        pConstantBuffer = m_pAPI->CreateBuffer(&constantBufDesc, &constantBufData);
+
+        DescriptorSetDesc descriptorDesc = {};
+        descriptorDesc.BindingCount = 1;
+        descriptorDesc.pBindings[0].Type = DescriptorType::ConstantBufferView;
+        descriptorDesc.pBindings[0].TargetShader = ShaderStage::Vertex;
+        descriptorDesc.pBindings[0].ArraySize = 1;
+        descriptorDesc.pBindings[0].pBuffer = pConstantBuffer;
+
+        pDescriptorSet = m_pAPI->CreateDescriptorSet(&descriptorDesc);
+        m_pAPI->UpdateDescriptorData(pDescriptorSet);
+
+        InputLayout presentLayout = {
+            { VertexAttribType::Vec3, "POSITION" },
+            { VertexAttribType::Vec3, "COLOR" },
+        };
+
+        BaseShader *pVertexShader = m_pAPI->CreateShader(ShaderStage::Vertex, "test.v.spv");
+        BaseShader *pPixelShader = m_pAPI->CreateShader(ShaderStage::Pixel, "test.p.spv");
+
+        GraphicsPipelineBuildInfo *pBuildInfo = m_pAPI->BeginPipelineBuildInfo();
+
+        pBuildInfo->SetInputLayout(presentLayout);
+        pBuildInfo->SetShader(pVertexShader, "main");
+        pBuildInfo->SetShader(pPixelShader, "main");
+        pBuildInfo->SetFillMode(FillMode::Fill);
+        pBuildInfo->SetDepthState(false, false);
+        pBuildInfo->SetDepthFunction(DepthCompareOp::LessEqual);
+        pBuildInfo->SetCullMode(CullMode::None, false);
+        pBuildInfo->SetDescriptorSets({ pDescriptorSet });
+
+        PipelineAttachment colorAttachment = {};
+        colorAttachment.Format = ResourceFormat::RGBA8F;
+        colorAttachment.BlendEnable = false;
+        colorAttachment.WriteMask = 0xf;
+        colorAttachment.SrcBlend = BlendFactor::SrcAlpha;
+        colorAttachment.DstBlend = BlendFactor::InvSrcAlpha;
+        colorAttachment.SrcBlendAlpha = BlendFactor::One;
+        colorAttachment.DstBlendAlpha = BlendFactor::InvSrcAlpha;
+        colorAttachment.Blend = BlendOp::Add;
+        colorAttachment.BlendAlpha = BlendOp::Add;
+        pBuildInfo->AddAttachment(&colorAttachment, false);
+
+        pPipeline = m_pAPI->EndPipelineBuildInfo(pBuildInfo);
+
         // imguiHandler.Init();
 
-        XMFLOAT3 pData[3] = { { 0, -0.5, 0 }, { 0.5, 0.5, 0 }, { -0.5, 0.5, 0 } };
+        struct VertexData
+        {
+            XMFLOAT3 Position;
+            XMFLOAT3 Color;
+        };
+
+        VertexData pData[3] = { { { 0, -0.5, 0 }, { 1.0, 0.0, 0.0 } },
+                                { { 0.5, 0.5, 0 }, { 0.0, 1.0, 0.0 } },
+                                { { -0.5, 0.5, 0 }, { 0.0, 0.0, 1.0 } } };
         u32 pIndexData[3] = { 0, 1, 2 };
 
         //~ Idea:
         //~ Create a pool that lasts one frame, it would be very useful for staging buffers
 
         BufferDesc bufDesc = {};
-        bufDesc.UsageFlags = ResourceUsage::CopySrc;
+        bufDesc.UsageFlags = ResourceUsage::VertexBuffer | ResourceUsage::CopySrc;
         bufDesc.Mappable = true;
         bufDesc.TargetAllocator = AllocatorType::None;
 
         BufferData bufData = {};
-        bufData.DataLen = sizeof(XMFLOAT3) * 3;
+        bufData.DataLen = sizeof(VertexData) * 3;
+        bufData.Stride = sizeof(VertexData);
 
         BaseBuffer *pTempVertexBuffer = m_pAPI->CreateBuffer(&bufDesc, &bufData);
 
@@ -73,7 +140,7 @@ namespace lr
 
         /// ------------------------------------------------------- ///
 
-        bufDesc.UsageFlags = ResourceUsage::CopySrc;
+        bufDesc.UsageFlags = ResourceUsage::IndexBuffer | ResourceUsage::CopySrc;
         bufDesc.Mappable = true;
 
         bufData.DataLen = sizeof(u32) * 3;
@@ -89,11 +156,8 @@ namespace lr
         BaseCommandList *pList = m_pAPI->GetCommandList();
         m_pAPI->BeginCommandList(pList);
 
-        pVertexBuffer = m_pAPI->ChangeAllocator(pList, pTempIndexBuffer, AllocatorType::BufferTLSF);
-        pIndexBuffer = m_pAPI->ChangeAllocator(pList, pTempVertexBuffer, AllocatorType::BufferTLSF);
-
-        pList->BarrierTransition(pVertexBuffer, ResourceUsage::CopyDst, ShaderStage::None, ResourceUsage::VertexBuffer, ShaderStage::None);
-        pList->BarrierTransition(pIndexBuffer, ResourceUsage::CopyDst, ShaderStage::None, ResourceUsage::IndexBuffer, ShaderStage::None);
+        pVertexBuffer = m_pAPI->ChangeAllocator(pList, pTempVertexBuffer, AllocatorType::BufferTLSF);
+        pIndexBuffer = m_pAPI->ChangeAllocator(pList, pTempIndexBuffer, AllocatorType::BufferTLSF);
 
         m_pAPI->EndCommandList(pList);
         m_pAPI->ExecuteCommandList(pList, true);
@@ -124,36 +188,57 @@ namespace lr
             f32 deltaTime = timer.elapsed();
             timer.reset();
 
+            // static f32 angleX = 0;
+            // angleX += 45.0 * deltaTime;
+
+            // m_Camera3D.SetDirectionAngle(XMFLOAT2(angleX, 0.0));
+
             m_Camera3D.Update(0, 25.0);
             m_Camera2D.Update(0, 25.0);
 
             XMMATRIX mat3D = XMMatrixMultiply(m_Camera3D.m_View, m_Camera3D.m_Projection);
             XMMATRIX mat2D = XMMatrixMultiply(m_Camera2D.m_View, m_Camera2D.m_Projection);
-            // stateMan.UpdateCamera3DData(mat3D);
-            // stateMan.UpdateCamera2DData(mat2D);
 
-            // VKCommandList *pList = m_pAPI->GetCommandList();
-            // m_pAPI->BeginCommandList(pList);
+            void *pMapData = nullptr;
+            m_pAPI->MapMemory(pConstantBuffer, pMapData);
+            memcpy(pMapData, &mat3D, sizeof(XMMATRIX));
+            m_pAPI->UnmapMemory(pConstantBuffer);
 
-            // CommandRenderPassBeginInfo beginInfo = {};
-            // beginInfo.ClearValueCount = 2;
-            // beginInfo.pClearValues[0] = ClearValue({ 0.0, 0.0, 0.0, 1.0 });
-            // beginInfo.pClearValues[1] = ClearValue(1.0, 0xff);
+            BaseCommandList *pList = m_pAPI->GetCommandList();
+            BaseImage *pImage = m_pAPI->GetSwapChain()->GetCurrentImage();
 
-            // pList->BeginRenderPass(beginInfo, stateMan.m_pGeometryPass, nullptr);
-            // pList->SetPipeline(&stateMan.m_GeometryPipeline);
-            // pList->SetPipelineDescriptorSets({ &stateMan.m_Camera3DDescriptor });
+            m_pAPI->BeginCommandList(pList);
 
-            // pList->SetViewport(0, m_Window.m_Width, m_Window.m_Height, 0.0, 1.0);
-            // pList->SetScissor(0, 0, 0, m_Window.m_Width, m_Window.m_Height);
+            pList->BarrierTransition(pImage, ResourceUsage::Undefined, ShaderStage::None, ResourceUsage::RenderTarget, ShaderStage::None);
 
-            // pList->SetVertexBuffer(&vertexBuffer);
-            // pList->SetIndexBuffer(&indexBuffer);
-            // pList->DrawIndexed(3);
+            CommandListAttachment attachment;
+            attachment.pHandle = pImage;
+            attachment.LoadOp = AttachmentOperation::Clear;
+            attachment.StoreOp = AttachmentOperation::Store;
 
-            // pList->EndRenderPass();
-            // m_pAPI->EndCommandList(pList);
-            // m_pAPI->ExecuteCommandList(pList, false);
+            CommandListBeginDesc beginDesc = {};
+            beginDesc.RenderArea = { 0, 0, m_Window.m_Width, m_Window.m_Height };
+            beginDesc.ColorAttachmentCount = 1;
+            beginDesc.pColorAttachments[0] = attachment;
+            pList->BeginPass(&beginDesc);
+
+            pList->SetPipeline(pPipeline);
+            pList->SetPipelineDescriptorSets({ pDescriptorSet });
+
+            pList->SetViewport(0, 0, 0, m_Window.m_Width, m_Window.m_Height);
+            pList->SetScissors(0, 0, 0, m_Window.m_Width, m_Window.m_Height);
+            pList->SetPrimitiveType(PrimitiveType::TriangleList);
+
+            pList->SetVertexBuffer(pVertexBuffer);
+            pList->SetIndexBuffer(pIndexBuffer);
+            pList->DrawIndexed(3);
+
+            pList->EndPass();
+
+            pList->BarrierTransition(pImage, ResourceUsage::RenderTarget, ShaderStage::None, ResourceUsage::Present, ShaderStage::None);
+
+            m_pAPI->EndCommandList(pList);
+            m_pAPI->ExecuteCommandList(pList, false);
 
             // imguiHandler.NewFrame();
             // ImGui::Begin("Hello");
@@ -162,18 +247,6 @@ namespace lr
             // ImGui::Image(0, ImVec2(512, 128));
             // ImGui::End();
             // imguiHandler.EndFrame();
-
-            BaseCommandList *pList = m_pAPI->GetCommandList();
-
-            m_pAPI->BeginCommandList(pList);
-
-            BaseImage *pImage = m_pAPI->GetSwapChain()->GetCurrentImage();
-
-            pList->BarrierTransition(pImage, ResourceUsage::Undefined, ShaderStage::None, ResourceUsage::RenderTarget, ShaderStage::None);
-            pList->BarrierTransition(pImage, ResourceUsage::RenderTarget, ShaderStage::None, ResourceUsage::Present, ShaderStage::None);
-
-            m_pAPI->EndCommandList(pList);
-            m_pAPI->ExecuteCommandList(pList, false);
 
             m_pAPI->Frame();
             m_Window.Poll();

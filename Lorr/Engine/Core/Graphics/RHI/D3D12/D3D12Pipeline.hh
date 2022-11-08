@@ -34,6 +34,7 @@ namespace lr::Graphics
         // Rasterizer
         void SetDepthClamp(bool enabled);
         void SetCullMode(CullMode mode, bool frontFaceClockwise);
+        void SetFillMode(FillMode mode);
         void SetDepthBias(bool enabled, f32 constantFactor, f32 clamp, f32 slopeFactor);
 
         // Multisample
@@ -46,12 +47,7 @@ namespace lr::Graphics
         void SetDepthFunction(DepthCompareOp function);
         void SetStencilOperation(DepthStencilOpDesc front, DepthStencilOpDesc back);
 
-        // TODO: Color Blend
-        void SetBlendAttachment(u32 attachmentID, bool enabled, u8 mask);
-        // void SetBlendState(bool enabled);
-        // void SetBlendColorFactor(VkBlendFactor src, VkBlendFactor dst, VkBlendOp op);
-        // void SetBlendAlphaFactor(VkBlendFactor src, VkBlendFactor dst, VkBlendOp op);
-        // void SetBlendWriteState(bool writeR, bool writeG, bool writeB, bool writeA);
+        void AddAttachment(PipelineAttachment *pAttachment, bool depth);
 
         // Good thing that this create info takes pointers,
         // so we can easily enable/disable them by referencing them (nullptr means disabled)

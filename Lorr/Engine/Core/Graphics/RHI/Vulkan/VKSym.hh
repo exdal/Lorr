@@ -51,6 +51,8 @@
     _VK_DEFINE_FUNCTION(vkAllocateCommandBuffers);                  \
     _VK_DEFINE_FUNCTION(vkBeginCommandBuffer);                      \
     _VK_DEFINE_FUNCTION(vkEndCommandBuffer);                        \
+    _VK_DEFINE_FUNCTION(vkCmdBeginRendering);                       \
+    _VK_DEFINE_FUNCTION(vkCmdEndRendering);                         \
     _VK_DEFINE_FUNCTION(vkQueueWaitIdle);                           \
     _VK_DEFINE_FUNCTION(vkCmdPipelineBarrier);                      \
     _VK_DEFINE_FUNCTION(vkResetCommandPool);                        \
@@ -99,7 +101,8 @@
     _VK_DEFINE_FUNCTION(vkGetFenceStatus);                          \
     _VK_DEFINE_FUNCTION(vkCmdCopyBufferToImage);                    \
     _VK_DEFINE_FUNCTION(vkCreateSampler);                           \
-    _VK_DEFINE_FUNCTION(vkDestroySampler);
+    _VK_DEFINE_FUNCTION(vkDestroySampler);                          \
+    _VK_DEFINE_FUNCTION(vkCmdSetPrimitiveTopology);
 
 _VK_IMPORT_SYMBOLS
 

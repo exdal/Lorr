@@ -23,28 +23,29 @@ namespace lr::Graphics
     {
         ID3D12DescriptorHeap *pHandle = nullptr;
         u32 IncrementSize = 0;
-        u32 Offset = 0;
+        u32 CPUOffset = 0;
+        u32 GPUOffset = 0;
     };
 
     struct D3D12API : BaseAPI
     {
-        bool Init(PlatformWindow *pWindow, u32 width, u32 height, APIFlags flags);
+        bool Init(PlatformWindow *pWindow, u32 width, u32 height, APIFlags flags) override;
 
-        void InitAllocators();
+        void InitAllocators() override;
 
         /// COMMAND ///
-        BaseCommandQueue *CreateCommandQueue(CommandListType type);
-        BaseCommandAllocator *CreateCommandAllocator(CommandListType type);
-        BaseCommandList *CreateCommandList(CommandListType type);
+        BaseCommandQueue *CreateCommandQueue(CommandListType type) override;
+        BaseCommandAllocator *CreateCommandAllocator(CommandListType type) override;
+        BaseCommandList *CreateCommandList(CommandListType type) override;
 
-        void BeginCommandList(BaseCommandList *pList);
-        void EndCommandList(BaseCommandList *pList);
-        void ResetCommandAllocator(BaseCommandAllocator *pAllocator);
+        void BeginCommandList(BaseCommandList *pList) override;
+        void EndCommandList(BaseCommandList *pList) override;
+        void ResetCommandAllocator(BaseCommandAllocator *pAllocator) override;
 
         // Executes a specific command list, taken from a `CommandListPool`.
         // Does not execute command list in flight. Cannot perform a present operation.
         // if `waitForFence` set true, does not push fence into wait thread, blocks current thread.
-        void ExecuteCommandList(BaseCommandList *pList, bool waitForFence);
+        void ExecuteCommandList(BaseCommandList *pList, bool waitForFence) override;
 
         /// SYNC ///
         ID3D12Fence *CreateFence(u32 initialValue = 0);
@@ -54,46 +55,50 @@ namespace lr::Graphics
         /// PIPELINE ///
         ID3D12PipelineLibrary *CreatePipelineCache(u32 initialDataSize = 0, void *pInitialData = nullptr);
 
-        void BeginPipelineBuildInfo(GraphicsPipelineBuildInfo *pBuildInfo);
-        BasePipeline *EndPipelineBuildInfo(GraphicsPipelineBuildInfo *pBuildInfo);
+        BaseShader *CreateShader(ShaderStage stage, BufferReadStream &buf) override;
+        BaseShader *CreateShader(ShaderStage stage, eastl::string_view path) override;
+        void DeleteShader(BaseShader *pShader) override;
+
+        GraphicsPipelineBuildInfo *BeginPipelineBuildInfo() override;
+        BasePipeline *EndPipelineBuildInfo(GraphicsPipelineBuildInfo *pBuildInfo) override;
 
         /// SWAPCHAIN ///
 
         // Leave `pFSD` as `nullptr` for windowed swap chain
         void CreateSwapChain(IDXGISwapChain1 *&pHandle, void *pWindowHandle, DXGI_SWAP_CHAIN_DESC1 &desc, DXGI_SWAP_CHAIN_FULLSCREEN_DESC *pFSD);
-        void ResizeSwapChain(u32 width, u32 height);
-        BaseSwapChain *GetSwapChain();
+        void ResizeSwapChain(u32 width, u32 height) override;
+        BaseSwapChain *GetSwapChain() override;
 
-        void Frame();
+        void Frame() override;
 
         /// RESOURCE ///
-        BaseDescriptorSet *CreateDescriptorSet(DescriptorSetDesc *pDesc);
-        void UpdateDescriptorData(BaseDescriptorSet *pSet, DescriptorSetDesc *pDesc);
+        BaseDescriptorSet *CreateDescriptorSet(DescriptorSetDesc *pDesc) override;
+        void UpdateDescriptorData(BaseDescriptorSet *pSet) override;
 
         // `VKDescriptorBindingDesc::Type` represents descriptor type.
         // `VKDescriptorBindingDesc::ArraySize` represents descriptor count for that type.
         // Same types cannot be used, will result in UB. Other variables are ignored.
         void CreateDescriptorPool(const std::initializer_list<D3D12DescriptorBindingDesc> &bindings);
         D3D12_CPU_DESCRIPTOR_HANDLE AllocateCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE type, u32 index = -1);
+        D3D12_GPU_DESCRIPTOR_HANDLE AllocateGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE type, u32 index = -1);
 
         // * Buffers * //
         ID3D12Heap *CreateHeap(u64 heapSize, bool cpuWrite);
 
-        BaseBuffer *CreateBuffer(BufferDesc *pDesc, BufferData *pData);
-        void DeleteBuffer(BaseBuffer *pHandle);
+        BaseBuffer *CreateBuffer(BufferDesc *pDesc, BufferData *pData) override;
+        void DeleteBuffer(BaseBuffer *pHandle) override;
 
-        void BindMemory(BaseBuffer *pBuffer);
-        void MapMemory(BaseBuffer *pBuffer, void *&pData);
-        void UnmapMemory(BaseBuffer *pBuffer);
+        void MapMemory(BaseBuffer *pBuffer, void *&pData) override;
+        void UnmapMemory(BaseBuffer *pBuffer) override;
 
-        BaseBuffer *ChangeAllocator(BaseCommandList *pList, BaseBuffer *pTarget, AllocatorType targetAllocator);
+        BaseBuffer *ChangeAllocator(BaseCommandList *pList, BaseBuffer *pTarget, AllocatorType targetAllocator) override;
 
         // * Images * //
-        BaseImage *CreateImage(ImageDesc *pDesc, ImageData *pData);
-        void DeleteImage(BaseImage *pImage);
+        BaseImage *CreateImage(ImageDesc *pDesc, ImageData *pData) override;
+        void DeleteImage(BaseImage *pImage) override;
 
-        void CreateRenderTarget(BaseImage *pImage);
-        void CreateSampler(BaseImage *pHandle);
+        void CreateRenderTarget(BaseImage *pImage) override;
+        void CreateSampler(BaseImage *pHandle) override;
 
         void BindMemory(BaseImage *pImage);
 

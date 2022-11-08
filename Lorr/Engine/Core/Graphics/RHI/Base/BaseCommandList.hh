@@ -12,6 +12,14 @@
 
 namespace lr::Graphics
 {
+    enum class CommandListType : u8
+    {
+        Direct,
+        Compute,
+        Copy,
+        // TODO: Video types
+    };
+
     struct ClearValue
     {
         ClearValue()
@@ -44,10 +52,27 @@ namespace lr::Graphics
         bool IsDepth = false;
     };
 
-    struct CommandRenderPassBeginInfo
+    enum class AttachmentOperation
     {
-        u32 ClearValueCount = 0;
-        ClearValue pClearValues[APIConfig::kMaxColorAttachmentCount] = {};
+        Load,
+        Store,
+        Clear,
+        DontCare,
+    };
+
+    struct CommandListAttachment
+    {
+        BaseImage *pHandle = nullptr;
+        ClearValue ClearVal;
+        AttachmentOperation LoadOp;
+        AttachmentOperation StoreOp;
+    };
+
+    struct CommandListBeginDesc
+    {
+        u32 ColorAttachmentCount = 0;
+        CommandListAttachment pColorAttachments[APIConfig::kMaxColorAttachmentCount] = {};
+        CommandListAttachment *pDepthAttachment = nullptr;
 
         // WH(-1) means we cover entire window/screen, info from swapchain
         XMUINT4 RenderArea = { 0, 0, UINT32_MAX, UINT32_MAX };
@@ -55,12 +80,15 @@ namespace lr::Graphics
 
     struct BaseCommandList
     {
+        virtual void BeginPass(CommandListBeginDesc *pDesc) = 0;
+        virtual void EndPass() = 0;
+        
         virtual void BarrierTransition(BaseImage *pImage,
                                        ResourceUsage barrierBefore,
                                        ShaderStage shaderBefore,
                                        ResourceUsage barrierAfter,
                                        ShaderStage shaderAfter) = 0;
-                                       
+
         virtual void BarrierTransition(BaseBuffer *pBuffer,
                                        ResourceUsage barrierBefore,
                                        ShaderStage shaderBefore,
@@ -68,6 +96,10 @@ namespace lr::Graphics
                                        ShaderStage shaderAfter) = 0;
 
         virtual void ClearImage(BaseImage *pImage, ClearValue val) = 0;
+
+        virtual void SetViewport(u32 id, u32 x, u32 y, u32 width, u32 height) = 0;
+        virtual void SetScissors(u32 id, u32 x, u32 y, u32 width, u32 height) = 0;
+        virtual void SetPrimitiveType(PrimitiveType type) = 0;
 
         /// Buffer Commands
         virtual void SetVertexBuffer(BaseBuffer *pBuffer) = 0;
@@ -78,7 +110,7 @@ namespace lr::Graphics
         /// Draw Commands
         virtual void Draw(u32 vertexCount, u32 firstVertex = 0, u32 instanceCount = 1, u32 firstInstance = 1) = 0;
         virtual void DrawIndexed(u32 indexCount, u32 firstIndex = 0, u32 vertexOffset = 0, u32 instanceCount = 1, u32 firstInstance = 1) = 0;
-        
+
         // Pipeline
         virtual void SetPipeline(BasePipeline *pPipeline) = 0;
         virtual void SetPipelineDescriptorSets(const std::initializer_list<BaseDescriptorSet *> &sets) = 0;

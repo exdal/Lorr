@@ -5,6 +5,26 @@
 
 namespace lr::Graphics
 {
+    constexpr VkBlendFactor kBlendFactorLUT[] = {
+        VK_BLEND_FACTOR_ZERO,                      // Zero
+        VK_BLEND_FACTOR_ONE,                       // One
+        VK_BLEND_FACTOR_SRC_COLOR,                 // SrcColor
+        VK_BLEND_FACTOR_ONE_MINUS_SRC_COLOR,       // InvSrcColor
+        VK_BLEND_FACTOR_SRC_ALPHA,                 // SrcAlpha
+        VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,       // InvSrcAlpha
+        VK_BLEND_FACTOR_DST_ALPHA,                 // DestAlpha
+        VK_BLEND_FACTOR_ONE_MINUS_DST_ALPHA,       // InvDestAlpha
+        VK_BLEND_FACTOR_DST_COLOR,                 // DestColor
+        VK_BLEND_FACTOR_ONE_MINUS_DST_COLOR,       // InvDestColor
+        VK_BLEND_FACTOR_SRC_ALPHA_SATURATE,        // SrcAlphaSat
+        VK_BLEND_FACTOR_CONSTANT_COLOR,            // ConstantColor
+        VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_COLOR,  // InvConstantColor
+        VK_BLEND_FACTOR_SRC1_COLOR,                // Src1Color
+        VK_BLEND_FACTOR_ONE_MINUS_SRC1_COLOR,      // InvSrc1Color
+        VK_BLEND_FACTOR_SRC1_ALPHA,                // Src1Alpha
+        VK_BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA,      // InvSrc1Alpha
+    };
+
     void VKGraphicsPipelineBuildInfo::Init()
     {
         ZoneScoped;
@@ -66,11 +86,10 @@ namespace lr::Graphics
 
         /// ------------------------------------- ///
 
-        constexpr eastl::array<VkDynamicState, 4> kDynamicStates = {
+        constexpr eastl::array<VkDynamicState, 3> kDynamicStates = {
             VK_DYNAMIC_STATE_VIEWPORT,
             VK_DYNAMIC_STATE_SCISSOR,
             VK_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY,
-            VK_DYNAMIC_STATE_PATCH_CONTROL_POINTS_EXT,
         };
 
         m_DynamicState.dynamicStateCount = kDynamicStates.count;
@@ -82,9 +101,13 @@ namespace lr::Graphics
         ZoneScoped;
 
         VkPipelineShaderStageCreateInfo &shaderStage = m_pShaderStages[m_CreateInfo.stageCount++];
+        shaderStage.flags = 0;
+        shaderStage.pNext = nullptr;
+        
         shaderStage.stage = VKAPI::ToVKShaderType(pShader->Type);
         shaderStage.pName = entryPoint.data();
         shaderStage.module = ((VKShader *)pShader)->pHandle;
+        shaderStage.pSpecializationInfo = nullptr;
     }
 
     void VKGraphicsPipelineBuildInfo::SetInputLayout(InputLayout &inputLayout)
@@ -120,19 +143,19 @@ namespace lr::Graphics
         m_RasterizationState.depthBiasClamp = enabled;
     }
 
-    void VKGraphicsPipelineBuildInfo::SetPolygonMode(VkPolygonMode mode)
-    {
-        ZoneScoped;
-
-        m_RasterizationState.polygonMode = mode;
-    }
-
     void VKGraphicsPipelineBuildInfo::SetCullMode(CullMode mode, bool frontFaceClockwise)
     {
         ZoneScoped;
 
         m_RasterizationState.cullMode = VKAPI::ToVKCullMode(mode);
         m_RasterizationState.frontFace = frontFaceClockwise ? VK_FRONT_FACE_CLOCKWISE : VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    }
+
+    void VKGraphicsPipelineBuildInfo::SetFillMode(FillMode mode)
+    {
+        ZoneScoped;
+
+        m_RasterizationState.polygonMode = (VkPolygonMode)mode;
     }
 
     void VKGraphicsPipelineBuildInfo::SetDepthBias(bool enabled, f32 constantFactor, f32 clamp, f32 slopeFactor)
@@ -194,24 +217,26 @@ namespace lr::Graphics
         m_DepthStencilState.back.passOp = (VkStencilOp)back.Pass;
     }
 
-    void VKGraphicsPipelineBuildInfo::SetBlendAttachment(u32 attachmentID, bool enabled, u8 mask)
+    void VKGraphicsPipelineBuildInfo::AddAttachment(PipelineAttachment *pAttachment, bool depth)
     {
         ZoneScoped;
 
-        u32 &count = m_ColorBlendState.attachmentCount;
-        count = eastl::max(count, attachmentID + 1);
+        if (depth)
+            return;
 
-        m_pColorBlendAttachments[attachmentID].colorWriteMask = mask;
-        m_pColorBlendAttachments[attachmentID].blendEnable = enabled;
+        u32 id = m_ColorBlendState.attachmentCount++;
 
-        m_pColorBlendAttachments[attachmentID].srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-        m_pColorBlendAttachments[attachmentID].dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+        m_pColorBlendAttachments[id].blendEnable = pAttachment->BlendEnable;
+        m_pColorBlendAttachments[id].colorWriteMask = pAttachment->WriteMask;
 
-        m_pColorBlendAttachments[attachmentID].srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-        m_pColorBlendAttachments[attachmentID].dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+        m_pColorBlendAttachments[id].srcColorBlendFactor = kBlendFactorLUT[(u32)pAttachment->SrcBlend];
+        m_pColorBlendAttachments[id].dstColorBlendFactor = kBlendFactorLUT[(u32)pAttachment->DstBlend];
 
-        m_pColorBlendAttachments[attachmentID].colorBlendOp = VK_BLEND_OP_ADD;
-        m_pColorBlendAttachments[attachmentID].alphaBlendOp = VK_BLEND_OP_ADD;
+        m_pColorBlendAttachments[id].srcAlphaBlendFactor = kBlendFactorLUT[(u32)pAttachment->SrcBlendAlpha];
+        m_pColorBlendAttachments[id].dstAlphaBlendFactor = kBlendFactorLUT[(u32)pAttachment->DstBlendAlpha];
+
+        m_pColorBlendAttachments[id].colorBlendOp = (VkBlendOp)pAttachment->Blend;
+        m_pColorBlendAttachments[id].alphaBlendOp = (VkBlendOp)pAttachment->BlendAlpha;
     }
 
 }  // namespace lr::Graphics

@@ -19,33 +19,85 @@ namespace lr::Graphics
         m_Type = type;
     }
 
-    void VKCommandList::SetViewport(u32 id, u32 width, u32 height, f32 minDepth, f32 maxDepth)
+    void VKCommandList::BeginPass(CommandListBeginDesc *pDesc)
     {
         ZoneScoped;
 
-        VkViewport vp;
-        vp.width = width;
-        vp.height = height;
-        vp.x = 0;
-        vp.y = 0;
-        vp.minDepth = minDepth;
-        vp.maxDepth = maxDepth;
+        static constexpr VkAttachmentLoadOp kLoadOpLUT[] = {
+            VK_ATTACHMENT_LOAD_OP_LOAD,       // Load
+            VK_ATTACHMENT_LOAD_OP_MAX_ENUM,   // Store
+            VK_ATTACHMENT_LOAD_OP_CLEAR,      // Clear
+            VK_ATTACHMENT_LOAD_OP_DONT_CARE,  // DontCare
+        };
+        static constexpr VkAttachmentStoreOp kStoreOpLUT[] = {
+            VK_ATTACHMENT_STORE_OP_MAX_ENUM,   // Load
+            VK_ATTACHMENT_STORE_OP_STORE,      // Store
+            VK_ATTACHMENT_STORE_OP_MAX_ENUM,   // Clear
+            VK_ATTACHMENT_STORE_OP_DONT_CARE,  // DontCare
+        };
 
-        vkCmdSetViewport(m_pHandle, 0, 1, &vp);
+        VkRenderingInfo beginInfo = {};
+        beginInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
+        beginInfo.pNext = nullptr;
+        beginInfo.viewMask = 0;  // we don't support multi views yet
+        beginInfo.layerCount = 1;
+        beginInfo.pDepthAttachment = nullptr;
+
+        VkRenderingAttachmentInfo pColorAttachments[APIConfig::kMaxColorAttachmentCount] = {};
+        VkRenderingAttachmentInfo depthAttachment = {};
+
+        for (u32 i = 0; i < pDesc->ColorAttachmentCount; i++)
+        {
+            VkRenderingAttachmentInfo &info = pColorAttachments[i];
+            CommandListAttachment &attachment = pDesc->pColorAttachments[i];
+
+            BaseImage *pImage = attachment.pHandle;
+            API_VAR(VKImage, pImage);
+
+            info.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+            info.pNext = nullptr;
+
+            info.imageView = pImageVK->m_pViewHandle;
+            info.imageLayout = pImageVK->m_Layout;
+            info.loadOp = kLoadOpLUT[(u32)attachment.LoadOp];
+            info.storeOp = kStoreOpLUT[(u32)attachment.StoreOp];
+
+            memcpy(&info.clearValue.color, &attachment.ClearVal.RenderTargetColor, sizeof(XMFLOAT4));
+        }
+
+        if (pDesc->pDepthAttachment)
+        {
+            CommandListAttachment &attachment = *pDesc->pDepthAttachment;
+
+            BaseImage *pImage = attachment.pHandle;
+            API_VAR(VKImage, pImage);
+
+            depthAttachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+            depthAttachment.pNext = nullptr;
+
+            depthAttachment.imageView = pImageVK->m_pViewHandle;
+            depthAttachment.imageLayout = pImageVK->m_Layout;
+            depthAttachment.loadOp = kLoadOpLUT[(u32)attachment.LoadOp];
+            depthAttachment.storeOp = kStoreOpLUT[(u32)attachment.StoreOp];
+
+            memcpy(&depthAttachment.clearValue.color, &attachment.ClearVal.RenderTargetColor, sizeof(XMFLOAT4));
+
+            beginInfo.pDepthAttachment = &depthAttachment;
+        }
+
+        beginInfo.colorAttachmentCount = pDesc->ColorAttachmentCount;
+        beginInfo.pColorAttachments = pColorAttachments;
+        beginInfo.renderArea.offset = { (i32)pDesc->RenderArea.x, (i32)pDesc->RenderArea.y };
+        beginInfo.renderArea.extent = { pDesc->RenderArea.z, pDesc->RenderArea.w };
+
+        vkCmdBeginRendering(m_pHandle, &beginInfo);
     }
 
-    void VKCommandList::SetScissor(u32 id, u32 x, u32 y, u32 w, u32 h)
+    void VKCommandList::EndPass()
     {
         ZoneScoped;
 
-        VkRect2D sc;
-
-        sc.offset.x = x;
-        sc.offset.y = y;
-        sc.extent.width = w;
-        sc.extent.height = h;
-
-        vkCmdSetScissor(m_pHandle, id, 1, &sc);
+        vkCmdEndRendering(m_pHandle);
     }
 
     void VKCommandList::BarrierTransition(BaseImage *pImage,
@@ -93,6 +145,8 @@ namespace lr::Graphics
                              nullptr,
                              1,
                              &barrierInfo);
+
+        pImageVK->m_Layout = barrierInfo.newLayout;
     }
 
     void VKCommandList::BarrierTransition(BaseBuffer *pBuffer,
@@ -154,6 +208,41 @@ namespace lr::Graphics
                              (const VkClearColorValue *)&color,
                              1,
                              &subresRange);
+    }
+
+    void VKCommandList::SetViewport(u32 id, u32 x, u32 y, u32 width, u32 height)
+    {
+        ZoneScoped;
+
+        VkViewport vp;
+        vp.x = x;
+        vp.y = y;
+        vp.width = width;
+        vp.height = height;
+        vp.minDepth = 0.0;
+        vp.maxDepth = 1.0;
+
+        vkCmdSetViewport(m_pHandle, id, 1, &vp);
+    }
+
+    void VKCommandList::SetScissors(u32 id, u32 x, u32 y, u32 width, u32 height)
+    {
+        ZoneScoped;
+
+        VkRect2D rect;
+        rect.offset.x = x;
+        rect.offset.y = y;
+        rect.extent.width = width;
+        rect.extent.height = height;
+
+        vkCmdSetScissor(m_pHandle, id, 1, &rect);
+    }
+
+    void VKCommandList::SetPrimitiveType(PrimitiveType type)
+    {
+        ZoneScoped;
+
+        vkCmdSetPrimitiveTopology(m_pHandle, VKAPI::ToVKTopology(type));
     }
 
     void VKCommandList::SetVertexBuffer(BaseBuffer *pBuffer)
@@ -264,7 +353,7 @@ namespace lr::Graphics
                              1,
                              &imageBarrier);
 
-        pDestVK->m_FinalLayout = imageBarrier.newLayout;
+        pDestVK->m_Layout = imageBarrier.newLayout;
     }
 
     void VKCommandList::Draw(u32 vertexCount, u32 firstVertex, u32 instanceCount, u32 firstInstance)

@@ -47,7 +47,7 @@ namespace lr::Graphics
         virtual void ExecuteCommandList(BaseCommandList *pList, bool waitForFence) = 0;
 
         /// PIPELINE ///
-        virtual void BeginPipelineBuildInfo(GraphicsPipelineBuildInfo *pBuildInfo) = 0;
+        virtual GraphicsPipelineBuildInfo *BeginPipelineBuildInfo() = 0;
         virtual BasePipeline *EndPipelineBuildInfo(GraphicsPipelineBuildInfo *pBuildInfo) = 0;
 
         /// SWAPCHAIN ///
@@ -58,7 +58,11 @@ namespace lr::Graphics
 
         /// RESOURCE ///
         virtual BaseDescriptorSet *CreateDescriptorSet(DescriptorSetDesc *pDesc) = 0;
-        virtual void UpdateDescriptorData(BaseDescriptorSet *pSet, DescriptorSetDesc *pDesc) = 0;
+        virtual void UpdateDescriptorData(BaseDescriptorSet *pSet) = 0;
+
+        virtual BaseShader *CreateShader(ShaderStage stage, BufferReadStream &buf) = 0;
+        virtual BaseShader *CreateShader(ShaderStage stage, eastl::string_view path) = 0;
+        virtual void DeleteShader(BaseShader *pShader) = 0;
 
         // * Buffers * //
         virtual BaseBuffer *CreateBuffer(BufferDesc *pDesc, BufferData *pData) = 0;
@@ -67,6 +71,7 @@ namespace lr::Graphics
         virtual void MapMemory(BaseBuffer *pBuffer, void *&pData) = 0;
         virtual void UnmapMemory(BaseBuffer *pBuffer) = 0;
 
+        // Note: On D3D12 API, this operation also consts additional ResoureBarrier.
         virtual BaseBuffer *ChangeAllocator(BaseCommandList *pList, BaseBuffer *pTarget, AllocatorType targetAllocator) = 0;
 
         // * Images * //

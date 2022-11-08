@@ -4,7 +4,7 @@
 
 #pragma once
 
-#include "Core/Graphics/RHI/Common.hh"
+#include "BaseCommandList.hh"
 
 namespace lr::Graphics
 {

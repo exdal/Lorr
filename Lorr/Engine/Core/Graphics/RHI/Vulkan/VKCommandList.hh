@@ -23,36 +23,40 @@ namespace lr::Graphics
     {
         void Init(VkCommandBuffer pHandle, VkFence pFence, CommandListType type);
 
-        void SetViewport(u32 id, u32 width, u32 height, f32 minDepth, f32 maxDepth);
-        void SetScissor(u32 id, u32 x, u32 y, u32 w, u32 h);
+        void BeginPass(CommandListBeginDesc *pDesc) override;
+        void EndPass() override;
 
         void BarrierTransition(BaseImage *pImage,
                                ResourceUsage barrierBefore,
                                ShaderStage shaderBefore,
                                ResourceUsage barrierAfter,
-                               ShaderStage shaderAfter);
-                               
+                               ShaderStage shaderAfter) override;
+
         void BarrierTransition(BaseBuffer *pBuffer,
                                ResourceUsage barrierBefore,
                                ShaderStage shaderBefore,
                                ResourceUsage barrierAfter,
-                               ShaderStage shaderAfter);
+                               ShaderStage shaderAfter) override;
 
-        void ClearImage(BaseImage *pImage, ClearValue val);
+        void ClearImage(BaseImage *pImage, ClearValue val) override;
+
+        void SetViewport(u32 id, u32 x, u32 y, u32 width, u32 height) override;
+        void SetScissors(u32 id, u32 x, u32 y, u32 width, u32 height) override;
+        void SetPrimitiveType(PrimitiveType type) override;
 
         /// Buffer Commands
-        void SetVertexBuffer(BaseBuffer *pBuffer);
-        void SetIndexBuffer(BaseBuffer *pBuffer, bool type32);
-        void CopyBuffer(BaseBuffer *pSource, BaseBuffer *pDest, u32 size);
-        void CopyBuffer(BaseBuffer *pSource, BaseImage *pDest);
+        void SetVertexBuffer(BaseBuffer *pBuffer) override;
+        void SetIndexBuffer(BaseBuffer *pBuffer, bool type32) override;
+        void CopyBuffer(BaseBuffer *pSource, BaseBuffer *pDest, u32 size) override;
+        void CopyBuffer(BaseBuffer *pSource, BaseImage *pDest) override;
 
         /// Draw Commands
-        void Draw(u32 vertexCount, u32 firstVertex, u32 instanceCount, u32 firstInstance);
-        void DrawIndexed(u32 indexCount, u32 firstIndex, u32 vertexOffset, u32 instanceCount, u32 firstInstance);
+        void Draw(u32 vertexCount, u32 firstVertex, u32 instanceCount, u32 firstInstance) override;
+        void DrawIndexed(u32 indexCount, u32 firstIndex, u32 vertexOffset, u32 instanceCount, u32 firstInstance) override;
 
         // Pipeline
-        void SetPipeline(BasePipeline *pPipeline);
-        void SetPipelineDescriptorSets(const std::initializer_list<BaseDescriptorSet *> &sets);
+        void SetPipeline(BasePipeline *pPipeline) override;
+        void SetPipelineDescriptorSets(const std::initializer_list<BaseDescriptorSet *> &sets) override;
 
         VKCommandAllocator *m_pAllocator = nullptr;
         VkCommandBuffer m_pHandle = nullptr;

@@ -5,6 +5,26 @@
 
 namespace lr::Graphics
 {
+    constexpr D3D12_BLEND kBlendFactorLUT[] = {
+        D3D12_BLEND_ZERO,              // Zero
+        D3D12_BLEND_ONE,               // One
+        D3D12_BLEND_SRC_COLOR,         // SrcColor
+        D3D12_BLEND_INV_SRC_COLOR,     // InvSrcColor
+        D3D12_BLEND_SRC_ALPHA,         // SrcAlpha
+        D3D12_BLEND_INV_SRC_ALPHA,     // InvSrcAlpha
+        D3D12_BLEND_DEST_ALPHA,        // DestAlpha
+        D3D12_BLEND_INV_DEST_ALPHA,    // InvDestAlpha
+        D3D12_BLEND_DEST_COLOR,        // DestColor
+        D3D12_BLEND_INV_DEST_COLOR,    // InvDestColor
+        D3D12_BLEND_SRC_ALPHA_SAT,     // SrcAlphaSat
+        D3D12_BLEND_BLEND_FACTOR,      // ConstantColor
+        D3D12_BLEND_INV_BLEND_FACTOR,  // InvConstantColor
+        D3D12_BLEND_SRC1_COLOR,        // Src1Color
+        D3D12_BLEND_INV_SRC1_COLOR,    // InvSrc1Color
+        D3D12_BLEND_SRC1_ALPHA,        // Src1Alpha
+        D3D12_BLEND_INV_SRC1_ALPHA,    // InvSrc1Alpha
+    };
+
     void D3D12GraphicsPipelineBuildInfo::Init()
     {
         ZoneScoped;
@@ -12,6 +32,7 @@ namespace lr::Graphics
         m_CreateInfo = {};
 
         m_CreateInfo.InputLayout.pInputElementDescs = m_pVertexAttribs;
+        m_CreateInfo.SampleDesc.Count = 1;
 
         SetPrimitiveType(PrimitiveType::TriangleList);
 
@@ -64,7 +85,7 @@ namespace lr::Graphics
         ZoneScoped;
 
         // TODO: DXGI moment
-        // m_CreateInfo.PrimitiveTopologyType = D3D12API::ToDXTopology(type);
+        m_CreateInfo.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
     }
 
     void D3D12GraphicsPipelineBuildInfo::SetDepthClamp(bool enabled)
@@ -79,6 +100,13 @@ namespace lr::Graphics
         ZoneScoped;
 
         m_CreateInfo.RasterizerState.CullMode = D3D12API::ToDXCullMode(mode);
+    }
+
+    void D3D12GraphicsPipelineBuildInfo::SetFillMode(FillMode mode)
+    {
+        ZoneScoped;
+
+        m_CreateInfo.RasterizerState.FillMode = mode == FillMode::Fill ? D3D12_FILL_MODE_SOLID : D3D12_FILL_MODE_WIREFRAME;
     }
 
     void D3D12GraphicsPipelineBuildInfo::SetDepthBias(bool enabled, f32 constantFactor, f32 clamp, f32 slopeFactor)
@@ -142,23 +170,33 @@ namespace lr::Graphics
         m_CreateInfo.DepthStencilState.BackFace.StencilPassOp = (D3D12_STENCIL_OP)back.Pass;
     }
 
-    void D3D12GraphicsPipelineBuildInfo::SetBlendAttachment(u32 attachmentID, bool enabled, u8 mask)
+    void D3D12GraphicsPipelineBuildInfo::AddAttachment(PipelineAttachment *pAttachment, bool depth)
     {
         ZoneScoped;
 
-        D3D12_RENDER_TARGET_BLEND_DESC &desc = m_CreateInfo.BlendState.RenderTarget[attachmentID];
+        if (depth)
+        {
+            m_CreateInfo.DSVFormat = D3D12API::ToDXFormat(pAttachment->Format);
+            return;
+        }
 
-        desc.BlendEnable = enabled;
-        desc.RenderTargetWriteMask = mask;
+        u32 id = m_CreateInfo.NumRenderTargets++;
 
-        desc.SrcBlend = D3D12_BLEND_SRC_ALPHA;
-        desc.DestBlend = D3D12_BLEND_INV_SRC_ALPHA;
+        m_CreateInfo.RTVFormats[id] = D3D12API::ToDXFormat(pAttachment->Format);
 
-        desc.SrcBlendAlpha = D3D12_BLEND_ONE;
-        desc.DestBlendAlpha = D3D12_BLEND_INV_SRC_ALPHA;
+        D3D12_RENDER_TARGET_BLEND_DESC &desc = m_CreateInfo.BlendState.RenderTarget[id];
 
-        desc.BlendOp = D3D12_BLEND_OP_ADD;
-        desc.BlendOpAlpha = D3D12_BLEND_OP_ADD;
+        desc.BlendEnable = pAttachment->BlendEnable;
+        desc.RenderTargetWriteMask = pAttachment->WriteMask;
+
+        desc.SrcBlend = kBlendFactorLUT[(u32)pAttachment->SrcBlend];
+        desc.DestBlend = kBlendFactorLUT[(u32)pAttachment->DstBlend];
+
+        desc.SrcBlendAlpha = kBlendFactorLUT[(u32)pAttachment->SrcBlendAlpha];
+        desc.DestBlendAlpha = kBlendFactorLUT[(u32)pAttachment->DstBlendAlpha];
+
+        desc.BlendOp = (D3D12_BLEND_OP)pAttachment->Blend;
+        desc.BlendOpAlpha = (D3D12_BLEND_OP)pAttachment->BlendAlpha;
     }
 
 }  // namespace lr::Graphics

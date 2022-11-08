@@ -24,23 +24,23 @@ namespace lr::Graphics
 
     struct VKAPI : BaseAPI
     {
-        bool Init(PlatformWindow *pWindow, u32 width, u32 height, APIFlags flags);
+        bool Init(PlatformWindow *pWindow, u32 width, u32 height, APIFlags flags) override;
 
-        void InitAllocators();
+        void InitAllocators() override;
 
         /// COMMAND ///
-        BaseCommandQueue *CreateCommandQueue(CommandListType type);
-        BaseCommandAllocator *CreateCommandAllocator(CommandListType type);
-        BaseCommandList *CreateCommandList(CommandListType type);
+        BaseCommandQueue *CreateCommandQueue(CommandListType type) override;
+        BaseCommandAllocator *CreateCommandAllocator(CommandListType type) override;
+        BaseCommandList *CreateCommandList(CommandListType type) override;
 
-        void BeginCommandList(BaseCommandList *pList);
-        void EndCommandList(BaseCommandList *pList);
-        void ResetCommandAllocator(BaseCommandAllocator *pAllocator);
+        void BeginCommandList(BaseCommandList *pList) override;
+        void EndCommandList(BaseCommandList *pList) override;
+        void ResetCommandAllocator(BaseCommandAllocator *pAllocator) override;
 
         // Executes a specific command list, taken from a `CommandListPool`.
         // Does not execute command list in flight. Cannot perform a present operation.
         // if `waitForFence` set true, does not push fence into wait thread, blocks current thread.
-        void ExecuteCommandList(BaseCommandList *pList, bool waitForFence);
+        void ExecuteCommandList(BaseCommandList *pList, bool waitForFence) override;
         // Executes command list of current frame, it always performs a present operation.
         void PresentCommandQueue();
 
@@ -56,48 +56,48 @@ namespace lr::Graphics
         /// PIPELINE ///
         VkPipelineCache CreatePipelineCache(u32 initialDataSize = 0, void *pInitialData = nullptr);
 
-        void BeginPipelineBuildInfo(GraphicsPipelineBuildInfo *pBuildInfo);
-        BasePipeline *EndPipelineBuildInfo(GraphicsPipelineBuildInfo *pBuildInfo);
+        GraphicsPipelineBuildInfo *BeginPipelineBuildInfo() override;
+        BasePipeline *EndPipelineBuildInfo(GraphicsPipelineBuildInfo *pBuildInfo) override;
 
         /// SWAPCHAIN ///
         void CreateSwapChain(VkSwapchainKHR &pHandle, VkSwapchainCreateInfoKHR &info);
         void DeleteSwapChain(VKSwapChain *pSwapChain);
         void GetSwapChainImages(VkSwapchainKHR &pHandle, u32 bufferCount, VkImage *pImages);
-        void ResizeSwapChain(u32 width, u32 height);
-        BaseSwapChain *GetSwapChain();
+        void ResizeSwapChain(u32 width, u32 height) override;
+        BaseSwapChain *GetSwapChain() override;
 
-        void Frame();
+        void Frame() override;
         void WaitForDevice();
 
         /// RESOURCE ///
         // * Shaders * //
-        VkShaderModule CreateShaderModule(BufferReadStream &buf);
-        VkShaderModule CreateShaderModule(eastl::string_view path);
-        void DeleteShaderModule(VkShaderModule pShader);
+        BaseShader *CreateShader(ShaderStage stage, BufferReadStream &buf) override;
+        BaseShader *CreateShader(ShaderStage stage, eastl::string_view path) override;
+        void DeleteShader(BaseShader *pShader) override;
 
-        BaseDescriptorSet *CreateDescriptorSet(DescriptorSetDesc *pDesc);
-        void UpdateDescriptorData(BaseDescriptorSet *pSet, DescriptorSetDesc *pDesc);
+        BaseDescriptorSet *CreateDescriptorSet(DescriptorSetDesc *pDesc) override;
+        void UpdateDescriptorData(BaseDescriptorSet *pSet) override;
 
         VkDescriptorPool CreateDescriptorPool(const std::initializer_list<VKDescriptorBindingDesc> &layouts);
 
         // * Buffers * //
         VkDeviceMemory CreateHeap(u64 heapSize, bool cpuWrite);
-        
-        BaseBuffer *CreateBuffer(BufferDesc *pDesc, BufferData *pData);
-        void DeleteBuffer(BaseBuffer *pHandle);
 
-        void MapMemory(BaseBuffer *pBuffer, void *&pData);
-        void UnmapMemory(BaseBuffer *pBuffer);
+        BaseBuffer *CreateBuffer(BufferDesc *pDesc, BufferData *pData) override;
+        void DeleteBuffer(BaseBuffer *pHandle) override;
 
-        BaseBuffer *ChangeAllocator(BaseCommandList *pList, BaseBuffer *pTarget, AllocatorType targetAllocator);
+        void MapMemory(BaseBuffer *pBuffer, void *&pData) override;
+        void UnmapMemory(BaseBuffer *pBuffer) override;
+
+        BaseBuffer *ChangeAllocator(BaseCommandList *pList, BaseBuffer *pTarget, AllocatorType targetAllocator) override;
 
         // * Images * //
-        BaseImage *CreateImage(ImageDesc *pDesc, ImageData *pData);
-        void DeleteImage(BaseImage *pImage);
+        BaseImage *CreateImage(ImageDesc *pDesc, ImageData *pData) override;
+        void DeleteImage(BaseImage *pImage) override;
 
         void CreateImageView(BaseImage *pHandle);
-        void CreateSampler(BaseImage *pHandle);
-        void CreateRenderTarget(BaseImage *pImage);
+        void CreateSampler(BaseImage *pHandle) override;
+        void CreateRenderTarget(BaseImage *pImage) override;
 
         // * Device Features * //
         bool IsFormatSupported(ResourceFormat format, VkColorSpaceKHR *pColorSpaceOut);

@@ -6,6 +6,8 @@
 
 #include "Core/Graphics/RHI/Common.hh"
 
+#include "BaseShader.hh"
+
 namespace lr::Graphics
 {
     enum class ResourceUsage : u32
@@ -105,6 +107,8 @@ namespace lr::Graphics
 
     struct BaseImage
     {
+        BaseImage() = default;
+
         ResourceUsage m_Usage;
         ResourceFormat m_Format;
 
@@ -132,15 +136,19 @@ namespace lr::Graphics
 
     struct BufferData
     {
+        u32 Stride = 0;
         u32 DataLen = 0;
         u8 *pData = nullptr;
     };
 
     struct BaseBuffer
     {
+        BaseBuffer() = default;
+        
         u64 m_DataOffset = 0;
         u32 m_RequiredDataSize = 0;  // Required data size from Vulkan API
         u32 m_DataSize = 0;          // Real size of data
+        u32 m_Stride = 0;
 
         ResourceUsage m_Usage;
         ResourceFormat m_Format;
@@ -148,6 +156,18 @@ namespace lr::Graphics
 
         AllocatorType m_AllocatorType;
         void *m_pAllocatorData = nullptr;
+    };
+
+    enum class DescriptorType : u8
+    {
+        Sampler,
+        ShaderResourceView,
+        ConstantBufferView,
+        UnorderedAccessBuffer,
+        UnorderedAccessView,
+        RootConstant,
+
+        Count,
     };
 
     struct DescriptorBindingDesc

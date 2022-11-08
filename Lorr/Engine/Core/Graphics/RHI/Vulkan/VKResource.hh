@@ -20,7 +20,7 @@ namespace lr::Graphics
 
         u32 m_RequiredDataSize = 0;  // Required data size from Vulkan API
 
-        VkImageLayout m_FinalLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        VkImageLayout m_Layout = VK_IMAGE_LAYOUT_UNDEFINED;
     };
 
     struct VKBuffer : BaseBuffer

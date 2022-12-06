@@ -10,11 +10,12 @@ namespace lr
 {
     struct Win32Window : public BaseWindow
     {
-        void SetCursor(Cursor cursor) override;
+        void Init(const WindowDesc &desc);
         void Poll() override;
 
-        void NativeInit(const WindowDesc &desc) override;
-        void GetDisplays() override;
+        void InitDisplays() override;
+
+        void SetCursor(Cursor cursor) override;
 
         static LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
 

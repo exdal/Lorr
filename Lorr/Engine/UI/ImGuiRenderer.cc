@@ -10,110 +10,160 @@ namespace lr::UI
         { Graphics::VertexAttribType::Vec4U_Packed, "COLOR" },
     };
 
-    void ImGuiRenderer::Init()
+    void ImGuiRenderer::Init(u32 width, u32 height)
     {
         ZoneScoped;
 
-        // Engine *pEngine = GetEngine();
-        // Graphics::VKAPI *pAPI = (Graphics::VKAPI *)pEngine->m_pAPI;
-        // Graphics::APIStateManager &stateMan = pAPI->m_APIStateMan;
+        /// INIT IMGUI ///
 
-        // /// INIT IMGUI ///
+        ImGui::CreateContext();
 
-        // ImGui::CreateContext();
+        ImGuiIO &io = ImGui::GetIO();
+        io.IniFilename = 0;
 
-        // ImGuiIO &io = ImGui::GetIO();
-        // io.IniFilename = 0;
+        io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;  // Enable Keyboard Controls
+        io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;      // Enable Docking
 
-        // io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;  // Enable Keyboard Controls
-        // io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;      // Enable Docking
+        io.BackendFlags |= ImGuiBackendFlags_HasMouseCursors;  // We can honor GetMouseCursor() values (optional)
+        io.BackendFlags |= ImGuiBackendFlags_HasSetMousePos;   // We can honor io.WantSetMousePos requests (optional, rarely used)
 
-        // io.BackendFlags |= ImGuiBackendFlags_HasMouseCursors;  // We can honor GetMouseCursor() values (optional)
-        // io.BackendFlags |= ImGuiBackendFlags_HasSetMousePos;   // We can honor io.WantSetMousePos requests (optional, rarely used)
+        io.BackendPlatformName = "imgui_impl_lorr";
+        io.DisplaySize = ImVec2((float)width, (float)height);
 
-        // io.BackendPlatformName = "imgui_impl_lorr";
-
-        // ImGui::StyleColorsDark();
+        ImGui::StyleColorsDark();
 
         // u8 *pFontData;
         // i32 fontW, fontH, bpp;
         // io.Fonts->GetTexDataAsRGBA32(&pFontData, &fontW, &fontH, &bpp);
 
-        // Graphics::BufferDesc imageBufDesc = {};
+        // BufferDesc imageBufDesc = {};
         // imageBufDesc.Mappable = true;
-        // imageBufDesc.UsageFlags = Graphics::BufferUsage::CopySrc;
+        // imageBufDesc.UsageFlags = ResourceUsage::CopySrc;
+        // imageBufDesc.TargetAllocator = AllocatorType::None;
 
-        // Graphics::BufferData imageBufData = {};
+        // BufferData imageBufData = {};
         // imageBufData.DataLen = fontW * fontH * sizeof(i32);
 
-        // Graphics::VKBuffer imageBuffer = {};
-        // pAPI->CreateBuffer(&imageBuffer, &imageBufDesc, &imageBufData);
-        // pAPI->AllocateBufferMemory(&imageBuffer, Graphics::AllocatorType::None);
-        // pAPI->BindMemory(&imageBuffer);
+        // BaseBuffer *pImageBuffer = pAPI->CreateBuffer(&imageBufDesc, &imageBufData);
 
         // void *pMapData = nullptr;
-        // pAPI->MapMemory(&imageBuffer, pMapData);
+        // pAPI->MapMemory(pImageBuffer, pMapData);
         // memcpy(pMapData, pFontData, imageBufData.DataLen);
-        // pAPI->UnmapMemory(&imageBuffer);
+        // pAPI->UnmapMemory(pImageBuffer);
 
-        // Graphics::ImageDesc imageDesc = {};
-        // imageDesc.Format = Graphics::ResourceFormat::RGBA8F;
-        // imageDesc.Usage = Graphics::ImageUsage::Sampled | Graphics::ImageUsage::CopyDst;
+        // ImageDesc imageDesc = {};
+        // imageDesc.Format = ResourceFormat::RGBA8F;
+        // imageDesc.Usage = ResourceUsage::ShaderResource | ResourceUsage::CopyDst;
+        // imageDesc.TargetAllocator = AllocatorType::ImageTLSF;
 
-        // Graphics::ImageData imageData = {};
-        // imageData.DataLen = fontW * fontH * sizeof(i32);
+        // ImageData imageData = {};
+        // imageData.DataLen = imageBufData.DataLen;
         // imageData.Width = fontW;
         // imageData.Height = fontH;
 
-        // pAPI->CreateImage(&m_Texture, &imageDesc, &imageData);
-        // pAPI->AllocateImageMemory(&m_Texture, Graphics::AllocatorType::ImageTLSF);
-        // pAPI->BindMemory(&m_Texture);
+        // m_pTexture = pAPI->CreateImage(&imageDesc, &imageData);
 
-        // Graphics::VKCommandList *pList = pAPI->GetCommandList();
+        // BaseCommandList *pList = pAPI->GetCommandList();
         // pAPI->BeginCommandList(pList);
 
-        // pList->CopyBuffer(&imageBuffer, &m_Texture);
+        // pList->BarrierTransition(m_pTexture, ResourceUsage::Undefined, ShaderStage::None, ResourceUsage::CopyDst, ShaderStage::None, true);
+        // pList->CopyBuffer(pImageBuffer, m_pTexture);
+        // pList->BarrierTransition(m_pTexture, ResourceUsage::CopyDst, ShaderStage::None, ResourceUsage::ShaderResource, ShaderStage::Pixel, false);
 
         // pAPI->EndCommandList(pList);
         // pAPI->ExecuteCommandList(pList, true);
 
-        // pAPI->CreateImageView(&m_Texture);
-        // pAPI->CreateSampler(&m_Texture);
+        // pAPI->CreateSampler(m_pTexture);
 
-        // pAPI->DeleteBuffer(&imageBuffer);
+        // pAPI->DeleteBuffer(pImageBuffer);
 
-        // Graphics::VKDescriptorSetDesc descriptorDesc = {};
+        // DescriptorSetDesc descriptorDesc = {};
         // descriptorDesc.BindingCount = 1;
         // descriptorDesc.pBindings[0].ArraySize = 1;
-        // descriptorDesc.pBindings[0].Type = Graphics::DescriptorType::CombinedSampler;
-        // descriptorDesc.pBindings[0].ShaderStageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-        // descriptorDesc.pBindings[0].pImage = &m_Texture;
-        // pAPI->UpdateDescriptorData(&stateMan.m_UISamplerDescriptor, &descriptorDesc);
+
+        // descriptorDesc.pBindings[0].Type = DescriptorType::ConstantBufferView;
+        // descriptorDesc.pBindings[0].TargetShader = ShaderStage::Vertex;
+        // descriptorDesc.pBindings[0].pBuffer = m_pConstantBufferV;
+
+        // m_pDescriptorSetV = pAPI->CreateDescriptorSet(&descriptorDesc);
+        // pAPI->UpdateDescriptorData(m_pDescriptorSetV);
+
+        // descriptorDesc.pBindings[0].Type = DescriptorType::ShaderResourceView;
+        // descriptorDesc.pBindings[0].TargetShader = ShaderStage::Pixel;
+        // descriptorDesc.pBindings[0].pImage = m_pTexture;
+
+        // m_pDescriptorSetP = pAPI->CreateDescriptorSet(&descriptorDesc);
+        // pAPI->UpdateDescriptorData(m_pDescriptorSetP);
+
+        // InputLayout vertexLayout = {
+        //     { Graphics::VertexAttribType::Vec2, "POSITION" },
+        //     { Graphics::VertexAttribType::Vec2, "TEXCOORD" },
+        //     { Graphics::VertexAttribType::Vec4U_Packed, "COLOR" },
+        // };
+
+        // BaseShader *pVertexShader = pAPI->CreateShader(ShaderStage::Vertex, "imgui.v.spv");
+        // BaseShader *pPixelShader = pAPI->CreateShader(ShaderStage::Pixel, "imgui.p.spv");
+
+        // GraphicsPipelineBuildInfo *pBuildInfo = pAPI->BeginPipelineBuildInfo();
+
+        // pBuildInfo->SetInputLayout(vertexLayout);
+        // pBuildInfo->SetShader(pVertexShader, "main");
+        // pBuildInfo->SetShader(pPixelShader, "main");
+        // pBuildInfo->SetFillMode(FillMode::Fill);
+        // pBuildInfo->SetDepthState(false, false);
+        // pBuildInfo->SetDepthFunction(DepthCompareOp::LessEqual);
+        // pBuildInfo->SetCullMode(CullMode::None, false);
+        // pBuildInfo->SetPrimitiveType(PrimitiveType::TriangleList);
+        // pBuildInfo->SetDescriptorSets({ m_pDescriptorSetV, m_pDescriptorSetP });
+
+        // PipelineAttachment colorAttachment = {};
+        // colorAttachment.Format = ResourceFormat::RGBA8F;
+        // colorAttachment.BlendEnable = true;
+        // colorAttachment.WriteMask = 0xf;
+        // colorAttachment.SrcBlend = BlendFactor::SrcAlpha;
+        // colorAttachment.DstBlend = BlendFactor::InvSrcAlpha;
+        // colorAttachment.SrcBlendAlpha = BlendFactor::One;
+        // colorAttachment.DstBlendAlpha = BlendFactor::InvSrcAlpha;
+        // colorAttachment.Blend = BlendOp::Add;
+        // colorAttachment.BlendAlpha = BlendOp::Add;
+        // pBuildInfo->AddAttachment(&colorAttachment, false);
+
+        // m_pPipeline = pAPI->EndPipelineBuildInfo(pBuildInfo);
+
+        // Camera2DDesc camera2DDesc;
+        // camera2DDesc.Position = XMFLOAT2(0.0, 0.0);
+        // camera2DDesc.ViewSize = XMFLOAT2(1.0, 1.0);
+        // camera2DDesc.ZFar = 1.0;
+        // camera2DDesc.ZNear = 0.0;
+
+        // m_Camera2D.Init(&camera2DDesc);
     }
 
     void ImGuiRenderer::NewFrame()
     {
         ZoneScoped;
 
-        Engine *pEngine = GetEngine();
-        PlatformWindow &window = pEngine->m_Window;
-        ImGuiViewport *pMainViewport = ImGui::GetMainViewport();
-        ImGuiIO &io = ImGui::GetIO();
+        // Engine *pEngine = GetEngine();
+        // PlatformWindow &window = pEngine->m_Window;
+        // ImGuiViewport *pMainViewport = ImGui::GetMainViewport();
+        // ImGuiIO &io = ImGui::GetIO();
 
-        io.DisplaySize = ImVec2((float)window.m_Width, (float)window.m_Height);
+        // io.DisplaySize = ImVec2((float)window.m_Width, (float)window.m_Height);
+        // m_Camera2D.SetSize({ (float)window.m_Width, (float)window.m_Height });
+        // m_Camera2D.Update(0.0, 0.0);
 
-        ImGui::NewFrame();
+        // ImGui::NewFrame();
     }
 
     void ImGuiRenderer::Render()
     {
         ZoneScopedN("ImGuiRenderer::Render");
 
-        // Engine *pEngine = GetEngine();
+        // using namespace Graphics;
 
+        // Engine *pEngine = GetEngine();
         // PlatformWindow &window = pEngine->m_Window;
-        // Graphics::VKAPI *pAPI = (Graphics::VKAPI *)pEngine->m_pAPI;
-        // Graphics::APIStateManager &stateMan = pAPI->m_APIStateMan;
+        // BaseAPI *pAPI = pEngine->m_pAPI;
 
         // ImDrawData *pDrawData = ImGui::GetDrawData();
 
@@ -123,38 +173,44 @@ namespace lr::UI
         // if (pDrawData->TotalIdxCount == 0)
         //     return;
 
-        // Graphics::BufferDesc bufferDesc = {};
-        // Graphics::BufferData bufferData = {};
+        // XMMATRIX mat2D = XMMatrixMultiply(m_Camera2D.m_View, m_Camera2D.m_Projection);
 
-        // bufferDesc.Mappable = true;
+        // void *pMapData = nullptr;
+        // pAPI->MapMemory(m_pConstantBufferV, pMapData);
+        // memcpy(pMapData, &mat2D, sizeof(XMMATRIX));
+        // pAPI->UnmapMemory(m_pConstantBufferV);
 
         // if (m_VertexCount < pDrawData->TotalVtxCount || m_IndexCount < pDrawData->TotalIdxCount)
         // {
+        //     Graphics::BufferDesc bufferDesc = {};
+        //     Graphics::BufferData bufferData = {};
+
+        //     bufferDesc.Mappable = true;
+        //     bufferDesc.TargetAllocator = AllocatorType::None;
+
         //     // Vertex buffer
 
         //     m_VertexCount = pDrawData->TotalVtxCount + 1500;
 
-        //     pAPI->DeleteBuffer(&m_VertexBuffer);
+        //     if (m_pVertexBuffer)
+        //         pAPI->DeleteBuffer(m_pVertexBuffer);
 
-        //     bufferDesc.UsageFlags = Graphics::BufferUsage::Vertex;
+        //     bufferDesc.UsageFlags = ResourceUsage::VertexBuffer;
         //     bufferData.DataLen = m_VertexCount * sizeof(ImDrawVert);
 
-        //     pAPI->CreateBuffer(&m_VertexBuffer, &bufferDesc, &bufferData);
-        //     pAPI->AllocateBufferMemory(&m_VertexBuffer, Graphics::AllocatorType::None);
-        //     pAPI->BindMemory(&m_VertexBuffer);
+        //     m_pVertexBuffer = pAPI->CreateBuffer(&bufferDesc, &bufferData);
 
         //     // Index buffer
 
         //     m_IndexCount = pDrawData->TotalIdxCount + 1500;
 
-        //     pAPI->DeleteBuffer(&m_IndexBuffer);
+        //     if (m_pIndexBuffer)
+        //         pAPI->DeleteBuffer(m_pIndexBuffer);
 
-        //     bufferDesc.UsageFlags = Graphics::BufferUsage::Index;
+        //     bufferDesc.UsageFlags = ResourceUsage::IndexBuffer;
         //     bufferData.DataLen = m_IndexCount * sizeof(ImDrawIdx);
 
-        //     pAPI->CreateBuffer(&m_IndexBuffer, &bufferDesc, &bufferData);
-        //     pAPI->AllocateBufferMemory(&m_IndexBuffer, Graphics::AllocatorType::None);
-        //     pAPI->BindMemory(&m_IndexBuffer);
+        //     m_pIndexBuffer = pAPI->CreateBuffer(&bufferDesc, &bufferData);
         // }
 
         // // Map memory
@@ -165,8 +221,8 @@ namespace lr::UI
         // void *pVertexMapData = nullptr;
         // void *pIndexMapData = nullptr;
 
-        // pAPI->MapMemory(&m_VertexBuffer, pVertexMapData);
-        // pAPI->MapMemory(&m_IndexBuffer, pIndexMapData);
+        // pAPI->MapMemory(m_pVertexBuffer, pVertexMapData);
+        // pAPI->MapMemory(m_pIndexBuffer, pIndexMapData);
 
         // for (u32 i = 0; i < pDrawData->CmdListsCount; i++)
         // {
@@ -179,27 +235,30 @@ namespace lr::UI
         //     indexOffset += pDrawList->IdxBuffer.Size;
         // }
 
-        // pAPI->UnmapMemory(&m_VertexBuffer);
-        // pAPI->UnmapMemory(&m_IndexBuffer);
+        // pAPI->UnmapMemory(m_pVertexBuffer);
+        // pAPI->UnmapMemory(m_pIndexBuffer);
 
-        // Graphics::VKCommandList *pList = pAPI->GetCommandList();
+        // BaseCommandList *pList = pAPI->GetCommandList();
         // pAPI->BeginCommandList(pList);
 
-        // Graphics::CommandRenderPassBeginInfo beginInfo = {};
-        // beginInfo.RenderArea.z = window.m_Width;
-        // beginInfo.RenderArea.w = window.m_Height;
-        // beginInfo.ClearValueCount = 2;
-        // beginInfo.pClearValues[0] = Graphics::ClearValue({ 0.0, 0.0, 0.0, 1.0 });
-        // beginInfo.pClearValues[1] = Graphics::ClearValue(1.0, 0xff);
+        // CommandListAttachment attachment;
+        // attachment.pHandle = pEngine->m_pAPI->GetSwapChain()->GetCurrentImage();
+        // attachment.LoadOp = AttachmentOperation::Clear;
+        // attachment.StoreOp = AttachmentOperation::Store;
 
-        // pList->BeginRenderPass(beginInfo, stateMan.m_pUIPass, nullptr);
-        // pList->SetPipeline(&stateMan.m_UIPipeline);
-        // pList->SetPipelineDescriptorSets({ &stateMan.m_Camera2DDescriptor, &stateMan.m_UISamplerDescriptor });
+        // CommandListBeginDesc beginDesc = {};
+        // beginDesc.RenderArea = { 0, 0, (u32)pDrawData->DisplaySize.x, (u32)pDrawData->DisplaySize.y };
+        // beginDesc.ColorAttachmentCount = 1;
+        // beginDesc.pColorAttachments[0] = attachment;
+        // pList->BeginPass(&beginDesc);
 
-        // pList->SetVertexBuffer(&m_VertexBuffer);
-        // pList->SetIndexBuffer(&m_IndexBuffer, false);
+        // pList->SetPipeline(m_pPipeline);
+        // pList->SetPipelineDescriptorSets({ m_pDescriptorSetV, m_pDescriptorSetP });
 
-        // pList->SetViewport(0, pDrawData->DisplaySize.x, pDrawData->DisplaySize.y, 0.0, 1.0);
+        // pList->SetVertexBuffer(m_pVertexBuffer);
+        // pList->SetIndexBuffer(m_pIndexBuffer, false);
+
+        // pList->SetViewport(0, 0, 0, pDrawData->DisplaySize.x, pDrawData->DisplaySize.y);
 
         // XMFLOAT2 clipOffset = { pDrawData->DisplayPos.x, pDrawData->DisplayPos.y };
 
@@ -214,15 +273,15 @@ namespace lr::UI
         //         if (clipMax.x <= clipMin.x || clipMax.y <= clipMin.y)
         //             continue;
 
-        //         pList->SetScissor(0, clipMin.x, clipMin.y, clipMax.x, clipMax.y);
+        //         pList->SetScissors(0, clipMin.x, clipMin.y, clipMax.x, clipMax.y);
+        //         pList->SetPrimitiveType(PrimitiveType::TriangleList);
 
         //         pList->DrawIndexed(cmd.ElemCount, cmd.IdxOffset, cmd.VtxOffset);
         //     }
         // }
 
-        // pList->SetScissor(0, 0, 0, window.m_Width, window.m_Height);
+        // pList->EndPass();
 
-        // pList->EndRenderPass();
         // pAPI->EndCommandList(pList);
         // pAPI->ExecuteCommandList(pList, false);
     }

@@ -4,7 +4,7 @@
 
 #pragma once
 
-#include "Core/Window/PlatformWindow.hh"
+#include "Core/Window/BaseWindow.hh"
 
 #include "BaseResource.hh"
 

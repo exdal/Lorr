@@ -29,7 +29,7 @@ namespace lr::Graphics
 
     struct D3D12API : BaseAPI
     {
-        bool Init(PlatformWindow *pWindow, u32 width, u32 height, APIFlags flags) override;
+        bool Init(BaseWindow *pWindow, u32 width, u32 height, APIFlags flags) override;
 
         void InitAllocators() override;
 
@@ -83,10 +83,11 @@ namespace lr::Graphics
         D3D12_GPU_DESCRIPTOR_HANDLE AllocateGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE type, u32 index = -1);
 
         // * Buffers * //
-        ID3D12Heap *CreateHeap(u64 heapSize, bool cpuWrite);
+        ID3D12Heap *CreateHeap(u64 heapSize, bool mappable, D3D12_HEAP_FLAGS flags);
 
         BaseBuffer *CreateBuffer(BufferDesc *pDesc, BufferData *pData) override;
         void DeleteBuffer(BaseBuffer *pHandle) override;
+        void CreateBufferView(BaseBuffer *pBuffer);
 
         void MapMemory(BaseBuffer *pBuffer, void *&pData) override;
         void UnmapMemory(BaseBuffer *pBuffer) override;
@@ -96,9 +97,9 @@ namespace lr::Graphics
         // * Images * //
         BaseImage *CreateImage(ImageDesc *pDesc, ImageData *pData) override;
         void DeleteImage(BaseImage *pImage) override;
+        void CreateImageView(BaseImage *pImage);
 
-        void CreateRenderTarget(BaseImage *pImage) override;
-        void CreateSampler(BaseImage *pHandle) override;
+        BaseSampler *CreateSampler(SamplerDesc *pDesc) override;
 
         void BindMemory(BaseImage *pImage);
 
@@ -143,10 +144,10 @@ namespace lr::Graphics
         D3D12DescriptorHeap m_pDescriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_NUM_TYPES];
         ID3D12PipelineLibrary *m_pPipelineCache = nullptr;
 
-        BufferedAllocator<Memory::LinearMemoryAllocator, ID3D12Heap *> m_MADescriptor;
-        BufferedAllocator<Memory::LinearMemoryAllocator, ID3D12Heap *> m_MABufferLinear;
-        BufferedAllocator<Memory::TLSFMemoryAllocator, ID3D12Heap *> m_MABufferTLSF;
-        BufferedAllocator<Memory::TLSFMemoryAllocator, ID3D12Heap *> m_MAImageTLSF;
+        BufferedAllocator<Memory::LinearAllocatorView, ID3D12Heap *> m_MADescriptor;
+        BufferedAllocator<Memory::LinearAllocatorView, ID3D12Heap *> m_MABufferLinear;
+        BufferedAllocator<Memory::TLSFAllocatorView, ID3D12Heap *> m_MABufferTLSF;
+        BufferedAllocator<Memory::TLSFAllocatorView, ID3D12Heap *> m_MAImageTLSF;
 
         EA::Thread::Thread m_FenceThread;
 

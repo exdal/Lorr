@@ -7,12 +7,12 @@ set(LORR_VENDOR
 
     spdlog
     fmt
-    
+
     Vulkan-Headers
     imgui
 
     d3d12
-    d3dcompiler
+    dxcompiler
     dxgi
     dxguid
 )

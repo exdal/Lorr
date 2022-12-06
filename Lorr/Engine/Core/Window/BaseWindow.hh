@@ -4,8 +4,56 @@
 
 #pragma once
 
+#include "Core/EventManager.hh"
+
+#include "Core/Input/Key.hh"
+
 namespace lr
 {
+    enum WindowEvent : Event
+    {
+        WINDOW_EVENT_QUIT,
+        WINDOW_EVENT_RESIZE,
+        WINDOW_EVENT_MOUSE_POSITION,
+        WINDOW_EVENT_MOUSE_STATE,
+        WINDOW_EVENT_MOUSE_WHEEL,
+        WINDOW_EVENT_KEYBOARD_STATE,
+    };
+
+    union WindowEventData
+    {
+        u32 __data[4] = {};
+
+        struct  // WINDOW_EVENT_RESIZE
+        {
+            u32 SizeWidth;
+            u32 SizeHeight;
+        };
+
+        struct  // WINDOW_EVENT_MOUSE_POSITION
+        {
+            u32 MouseX;
+            u32 MouseY;
+        };
+
+        struct  // WINDOW_EVENT_MOUSE_STATE
+        {
+            Input::Key Mouse;
+            Input::MouseState MouseState;
+        };
+
+        struct  // WINDOW_EVENT_MOUSE_WHEEL
+        {
+            float Offset;
+        };
+
+        struct  // WINDOW_EVENT_KEYBOARD_STATE
+        {
+            Input::Key Key;
+            Input::KeyState KeyState;
+        };
+    };
+
     enum class Cursor
     {
         Arrow,
@@ -67,17 +115,11 @@ namespace lr
         WindowFlags Flags;
     };
 
-#if _WIN32
-    struct Win32Window;
-    using WindowHandle = HWND;
-    using PlatformWindow = Win32Window;
-#endif
-
     struct BaseWindow
     {
-        void Init(const WindowDesc &desc);
         virtual void Poll() = 0;
 
+        virtual void InitDisplays() = 0;
         SystemMetrics::Display *GetDisplay(u32 monitor);
 
         virtual void SetCursor(Cursor cursor) = 0;
@@ -85,23 +127,7 @@ namespace lr
         bool ShouldClose();
         void OnSizeChanged(u32 width, u32 height);
 
-        // This should not be confused with InputManager::GetMousePos
-        // This function gets coordinates of monitor space mouse
-        // Meanwhile InputManager gets window space mouse coordinates
-        XMINT2 GetCursorPos()
-        {
-            ZoneScoped;
-
-            LPPOINT point;
-            ::GetCursorPos(point);
-
-            return XMINT2(point->x, point->y);
-        }
-
-        virtual void NativeInit(const WindowDesc &desc) = 0;
-        virtual void GetDisplays() = 0;
-
-        WindowHandle m_Handle = nullptr;
+        void *m_pHandle = nullptr;
 
         u32 m_Width = 0;
         u32 m_Height = 0;
@@ -111,9 +137,12 @@ namespace lr
         bool m_SizeEnded = true;
 
         Cursor m_CurrentCursor = Cursor::Arrow;
+        XMUINT2 m_CursorPosition = XMUINT2(0, 0);
 
         SystemMetrics m_SystemMetrics;
         u32 m_UsingMonitor = 0;
+
+        EventManager<WindowEventData> m_EventManager;
     };
 
 }  // namespace lr

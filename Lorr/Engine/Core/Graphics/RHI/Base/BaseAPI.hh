@@ -7,11 +7,13 @@
 #include <eathread/eathread_thread.h>
 
 #include "Core/Graphics/RHI/APIConfig.hh"
+
 #include "Core/Graphics/RHI/Common.hh"
 
 #include "Core/IO/BufferStream.hh"
-#include "Core/IO/Memory.hh"
-#include "Core/IO/MemoryAllocator.hh"
+
+#include "Core/Memory/Allocator/LinearAllocator.hh"
+#include "Core/Memory/Allocator/TLSFAllocator.hh"
 
 #include "BasePipeline.hh"
 
@@ -25,7 +27,7 @@ namespace lr::Graphics
 
     struct BaseAPI
     {
-        virtual bool Init(PlatformWindow *pWindow, u32 width, u32 height, APIFlags flags) = 0;
+        virtual bool Init(BaseWindow *pWindow, u32 width, u32 height, APIFlags flags) = 0;
 
         void InitCommandLists();
         virtual void InitAllocators() = 0;
@@ -78,16 +80,17 @@ namespace lr::Graphics
         virtual BaseImage *CreateImage(ImageDesc *pDesc, ImageData *pData) = 0;
         virtual void DeleteImage(BaseImage *pImage) = 0;
 
-        virtual void CreateSampler(BaseImage *pHandle) = 0;
-        virtual void CreateRenderTarget(BaseImage *pImage) = 0;
+        virtual BaseSampler *CreateSampler(SamplerDesc *pDesc) = 0;
 
         // TODO: USE ACTUAL ALLOCATORS ASAP
         // T = Base Type
         // U = Actual Type
-        template<typename T, typename U>
-        U *AllocTypeInherit()
+        template<typename _Base, typename _Derived>
+        _Derived *AllocTypeInherit()
         {
-            Memory::TLSFBlock *pBlock = m_TypeAllocator.Allocate(sizeof(T) + sizeof(U) + PTR_SIZE, Memory::TLSFMemoryAllocator::ALIGN_SIZE);
+            static_assert(eastl::is_base_of<_Base, _Derived>::value, "U must be base of T.");
+
+            Memory::TLSFBlock *pBlock = m_TypeAllocator.Allocate(sizeof(_Base) + sizeof(_Derived) + PTR_SIZE, Memory::TLSFAllocatorView::ALIGN_SIZE);
 
             u64 offset = pBlock->Offset;
 
@@ -96,18 +99,18 @@ namespace lr::Graphics
             offset += PTR_SIZE;
 
             void *pBaseAddr = m_pTypeData + offset;
-            T *pBase = new (pBaseAddr) U;
+            _Base *pBase = new (pBaseAddr) _Derived;
 
-            return (U *)pBase;
+            return (_Derived *)pBase;
         }
 
-        template<typename T>
-        T *AllocType()
+        template<typename _Type>
+        _Type *AllocType()
         {
-            Memory::TLSFBlock *pBlock = m_TypeAllocator.Allocate(sizeof(T) + PTR_SIZE, Memory::TLSFMemoryAllocator::ALIGN_SIZE);
+            Memory::TLSFBlock *pBlock = m_TypeAllocator.Allocate(sizeof(_Type) + PTR_SIZE, Memory::TLSFAllocatorView::ALIGN_SIZE);
 
             memcpy(m_pTypeData + pBlock->Offset, pBlock, PTR_SIZE);
-            return (T *)(m_pTypeData + pBlock->Offset + PTR_SIZE);
+            return (_Type *)(m_pTypeData + pBlock->Offset + PTR_SIZE);
         }
 
         template<typename T>
@@ -134,7 +137,7 @@ namespace lr::Graphics
 
         /// ----------------------------------------------------------- ///
 
-        Memory::TLSFMemoryAllocator m_TypeAllocator;
+        Memory::TLSFAllocatorView m_TypeAllocator;
         u8 *m_pTypeData = nullptr;
 
         CommandListPool m_CommandListPool = {};

@@ -4,7 +4,7 @@
 
 #pragma once
 
-#include "Core/IO/Memory.hh"
+#include "Core/Memory/MemoryUtils.hh"
 
 namespace lr::Graphics::APIConfig
 {

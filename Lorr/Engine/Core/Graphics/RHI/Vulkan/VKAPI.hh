@@ -24,7 +24,7 @@ namespace lr::Graphics
 
     struct VKAPI : BaseAPI
     {
-        bool Init(PlatformWindow *pWindow, u32 width, u32 height, APIFlags flags) override;
+        bool Init(BaseWindow *pWindow, u32 width, u32 height, APIFlags flags) override;
 
         void InitAllocators() override;
 
@@ -94,10 +94,12 @@ namespace lr::Graphics
         // * Images * //
         BaseImage *CreateImage(ImageDesc *pDesc, ImageData *pData) override;
         void DeleteImage(BaseImage *pImage) override;
+        void CreateImageView(BaseImage *pImage);
 
-        void CreateImageView(BaseImage *pHandle);
-        void CreateSampler(BaseImage *pHandle) override;
-        void CreateRenderTarget(BaseImage *pImage) override;
+        BaseSampler *CreateSampler(SamplerDesc *pDesc) override;
+
+        void SetAllocator(VKBuffer *pBuffer, AllocatorType targetAllocator);
+        void SetAllocator(VKImage *pImage, AllocatorType targetAllocator);
 
         // * Device Features * //
         bool IsFormatSupported(ResourceFormat format, VkColorSpaceKHR *pColorSpaceOut);
@@ -108,7 +110,7 @@ namespace lr::Graphics
 
         // * API Instance * //
         bool LoadVulkan();
-        bool SetupInstance(HWND windowHandle);
+        bool SetupInstance(void *pHandle);
         bool SetupQueues(VkPhysicalDevice &pPhysicalDevice, VkPhysicalDeviceFeatures &features);
         bool SetupDevice(VkPhysicalDevice &pPhysicalDevice, VkPhysicalDeviceFeatures &features);
 
@@ -154,10 +156,10 @@ namespace lr::Graphics
         VkPipelineCache m_pPipelineCache = nullptr;
         VkDescriptorPool m_pDescriptorPool = nullptr;
 
-        BufferedAllocator<Memory::LinearMemoryAllocator, VkDeviceMemory> m_MADescriptor;
-        BufferedAllocator<Memory::LinearMemoryAllocator, VkDeviceMemory> m_MABufferLinear;
-        BufferedAllocator<Memory::TLSFMemoryAllocator, VkDeviceMemory> m_MABufferTLSF;
-        BufferedAllocator<Memory::TLSFMemoryAllocator, VkDeviceMemory> m_MAImageTLSF;
+        BufferedAllocator<Memory::LinearAllocatorView, VkDeviceMemory> m_MADescriptor;
+        BufferedAllocator<Memory::LinearAllocatorView, VkDeviceMemory> m_MABufferLinear;
+        BufferedAllocator<Memory::TLSFAllocatorView, VkDeviceMemory> m_MABufferTLSF;
+        BufferedAllocator<Memory::TLSFAllocatorView, VkDeviceMemory> m_MAImageTLSF;
 
         /// Native API
         VkPhysicalDeviceMemoryProperties m_MemoryProps;

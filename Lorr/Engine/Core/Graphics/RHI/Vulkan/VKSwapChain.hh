@@ -4,7 +4,7 @@
 
 #pragma once
 
-#include "Core/Window/PlatformWindow.hh"
+#include "Core/Window/BaseWindow.hh"
 
 #include "Core/Graphics/RHI/Base/BaseSwapChain.hh"
 
@@ -23,7 +23,7 @@ namespace lr::Graphics
     struct VKAPI;
     struct VKSwapChain : public BaseSwapChain
     {
-        void Init(PlatformWindow *pWindow, VKAPI *pAPI, SwapChainFlags flags);
+        void Init(BaseWindow *pWindow, VKAPI *pAPI, SwapChainFlags flags);
 
         void CreateHandle(VKAPI *pAPI);
         void CreateBackBuffers(VKAPI *pAPI);

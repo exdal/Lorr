@@ -44,7 +44,7 @@ namespace lr::Graphics
         // Depth Stencil
         void SetDepthState(bool depthTestEnabled, bool depthWriteEnabled);
         void SetStencilState(bool stencilTestEnabled);
-        void SetDepthFunction(DepthCompareOp function);
+        void SetDepthFunction(CompareOp function);
         void SetStencilOperation(DepthStencilOpDesc front, DepthStencilOpDesc back);
 
         void AddAttachment(PipelineAttachment *pAttachment, bool depth);

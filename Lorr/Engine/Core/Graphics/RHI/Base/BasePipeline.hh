@@ -12,88 +12,6 @@
 
 namespace lr::Graphics
 {
-    enum class PrimitiveType
-    {
-        PointList,
-        LineList,
-        LineStrip,
-        TriangleList,
-        TriangleStrip,
-        Patch
-    };
-
-    enum class DepthCompareOp
-    {
-        Never,
-        Less,
-        Equal,
-        LessEqual,
-        Greater,
-        NotEqual,
-        GreaterEqual,
-        Always
-    };
-
-    enum class StencilCompareOp
-    {
-        Keep,
-        Zero,
-        Replace,
-        IncrAndClamp,
-        DecrAndClamp,
-        Invert,
-        IncrAndWrap,
-        DescAndWrap,
-    };
-
-    enum class CullMode : u8
-    {
-        None = 0,
-        Front,
-        Back,
-    };
-
-    enum class FillMode : u8
-    {
-        Fill = 0,
-        Wireframe,
-    };
-
-    enum class BlendFactor
-    {
-        Zero = 0,
-        One,
-
-        SrcColor,
-        InvSrcColor,
-
-        SrcAlpha,
-        InvSrcAlpha,
-        DestAlpha,
-        InvDestAlpha,
-
-        DestColor,
-        InvDestColor,
-
-        SrcAlphaSat,
-        ConstantColor,
-        InvConstantColor,
-
-        Src1Color,
-        InvSrc1Color,
-        Src1Alpha,
-        InvSrc1Alpha,
-    };
-
-    enum class BlendOp
-    {
-        Add,
-        Subtract,
-        ReverseSubtract,
-        Min,
-        Max,
-    };
-
     struct PipelineAttachment
     {
         ResourceFormat Format = ResourceFormat::Unknown;
@@ -115,9 +33,9 @@ namespace lr::Graphics
         StencilCompareOp Pass;
         StencilCompareOp Fail;
 
-        DepthCompareOp DepthFail;
+        CompareOp DepthFail;
 
-        DepthCompareOp CompareFunc;
+        CompareOp CompareFunc;
     };
 
     /// Some notes:
@@ -152,7 +70,7 @@ namespace lr::Graphics
         // Depth Stencil
         virtual void SetDepthState(bool depthTestEnabled, bool depthWriteEnabled) = 0;
         virtual void SetStencilState(bool stencilTestEnabled) = 0;
-        virtual void SetDepthFunction(DepthCompareOp function) = 0;
+        virtual void SetDepthFunction(CompareOp function) = 0;
         virtual void SetStencilOperation(DepthStencilOpDesc front, DepthStencilOpDesc back) = 0;
 
         virtual void AddAttachment(PipelineAttachment *pAttachment, bool depth) = 0;

@@ -19,11 +19,11 @@ namespace lr::Graphics
     struct D3D12API;
     struct D3D12SwapChain : public BaseSwapChain
     {
-        void Init(PlatformWindow *pWindow, D3D12API *pAPI, SwapChainFlags flags);
+        void Init(BaseWindow *pWindow, D3D12API *pAPI, SwapChainFlags flags);
 
         void Present();
 
-        void CreateHandle(D3D12API *pAPI, PlatformWindow *pWindow);
+        void CreateHandle(D3D12API *pAPI, BaseWindow *pWindow);
         void CreateBackBuffers(D3D12API *pAPI);
         BaseImage *GetCurrentImage();
         D3D12SwapChainFrame *GetCurrentFrame();

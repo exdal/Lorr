@@ -14,11 +14,8 @@ namespace lr::Graphics
     {
         VkImage m_pHandle = nullptr;
         VkImageView m_pViewHandle = nullptr;
-        VkSampler m_pSampler = nullptr;
 
         VkDeviceMemory m_pMemoryHandle = nullptr;
-
-        u32 m_RequiredDataSize = 0;  // Required data size from Vulkan API
 
         VkImageLayout m_Layout = VK_IMAGE_LAYOUT_UNDEFINED;
     };
@@ -29,6 +26,11 @@ namespace lr::Graphics
         VkBufferView m_pViewHandle = nullptr;
 
         VkDeviceMemory m_pMemoryHandle = nullptr;
+    };
+
+    struct VKSampler : BaseSampler
+    {
+        VkSampler m_pHandle = nullptr;
     };
 
     struct VKDescriptorSet : BaseDescriptorSet

@@ -17,6 +17,8 @@ namespace lr::Graphics
         m_pFence = pFence;
 
         m_Type = type;
+
+        vkCmdPushConstants(m_pHandle, );
     }
 
     void VKCommandList::BeginPass(CommandListBeginDesc *pDesc)
@@ -284,39 +286,12 @@ namespace lr::Graphics
         API_VAR(VKBuffer, pSource);
         API_VAR(VKImage, pDest);
 
-        VkImageSubresourceRange subresRange = {};
-        subresRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        subresRange.baseArrayLayer = 0;
-        subresRange.layerCount = 1;
-        subresRange.baseMipLevel = pDest->m_UsingMip;
-        subresRange.levelCount = pDest->m_TotalMips;
+        VkImageAspectFlags aspectMask = VK_IMAGE_ASPECT_NONE;
 
-        VkImageMemoryBarrier imageBarrier = {};
-        imageBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        imageBarrier.pNext = nullptr;
-
-        imageBarrier.image = pDestVK->m_pHandle;
-
-        imageBarrier.srcAccessMask = 0;
-        imageBarrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        imageBarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        imageBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-
-        imageBarrier.subresourceRange = subresRange;
-
-        imageBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        imageBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-
-        vkCmdPipelineBarrier(m_pHandle,
-                             VK_PIPELINE_STAGE_HOST_BIT,
-                             VK_PIPELINE_STAGE_TRANSFER_BIT,
-                             VK_DEPENDENCY_BY_REGION_BIT,
-                             0,
-                             nullptr,
-                             0,
-                             nullptr,
-                             1,
-                             &imageBarrier);
+        if (pDest->m_Usage & ResourceUsage::ShaderResource)
+            aspectMask |= VK_IMAGE_ASPECT_COLOR_BIT;
+        if (pDest->m_Usage & ResourceUsage::DepthStencilWrite && pDest->m_Usage & ResourceUsage::DepthStencilRead)
+            aspectMask |= VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
 
         // TODO: Multiple mip levels
         VkBufferImageCopy imageCopyInfo = {};
@@ -330,30 +305,12 @@ namespace lr::Graphics
         imageCopyInfo.imageExtent.height = pDest->m_Height;
         imageCopyInfo.imageExtent.depth = 1;
 
-        imageCopyInfo.imageSubresource.aspectMask = subresRange.aspectMask;
+        imageCopyInfo.imageSubresource.aspectMask = aspectMask;
         imageCopyInfo.imageSubresource.baseArrayLayer = 0;
         imageCopyInfo.imageSubresource.layerCount = 1;
         imageCopyInfo.imageSubresource.mipLevel = 0;
 
-        vkCmdCopyBufferToImage(m_pHandle, pSourceVK->m_pHandle, pDestVK->m_pHandle, imageBarrier.newLayout, 1, &imageCopyInfo);
-
-        imageBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        imageBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-        imageBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-        imageBarrier.newLayout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL;
-
-        vkCmdPipelineBarrier(m_pHandle,
-                             VK_PIPELINE_STAGE_TRANSFER_BIT,
-                             VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                             VK_DEPENDENCY_BY_REGION_BIT,
-                             0,
-                             nullptr,
-                             0,
-                             nullptr,
-                             1,
-                             &imageBarrier);
-
-        pDestVK->m_Layout = imageBarrier.newLayout;
+        vkCmdCopyBufferToImage(m_pHandle, pSourceVK->m_pHandle, pDestVK->m_pHandle, pDestVK->m_Layout, 1, &imageCopyInfo);
     }
 
     void VKCommandList::Draw(u32 vertexCount, u32 firstVertex, u32 instanceCount, u32 firstInstance)

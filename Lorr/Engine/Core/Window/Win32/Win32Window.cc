@@ -2,11 +2,18 @@
 
 namespace lr
 {
-    void Win32Window::NativeInit(const WindowDesc &desc)
+    void Win32Window::Init(const WindowDesc &desc)
     {
         ZoneScoped;
 
-        auto &flags = desc.Flags;
+        m_Width = desc.Width;
+        m_Height = desc.Height;
+
+        m_UsingMonitor = desc.CurrentMonitor;
+
+        InitDisplays();
+
+        m_EventManager.Init();
 
         SystemMetrics::Display *pCurrentDisplay = GetDisplay(m_UsingMonitor);
         if (!pCurrentDisplay)
@@ -47,7 +54,7 @@ namespace lr
         u32 windowWidth = 0;
         u32 windowHeight = 0;
 
-        if (flags & WindowFlags::Fullscreen)
+        if (desc.Flags & WindowFlags::Fullscreen)
         {
             style = WS_POPUP | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
 
@@ -72,7 +79,7 @@ namespace lr
         }
         else
         {
-            if (flags & WindowFlags::Borderless)
+            if (desc.Flags & WindowFlags::Borderless)
             {
                 style = WS_POPUP;
 
@@ -80,7 +87,7 @@ namespace lr
                 windowHeight = pCurrentDisplay->ResH;
             }
 
-            if (flags & WindowFlags::Resizable)
+            if (desc.Flags & WindowFlags::Resizable)
                 style |= WS_MAXIMIZEBOX | WS_THICKFRAME;
 
             RECT rc = { 0, 0, (long)m_Width, (long)m_Height };
@@ -88,28 +95,28 @@ namespace lr
             windowWidth = rc.right - rc.left;
             windowHeight = rc.bottom - rc.top;
 
-            if (flags & WindowFlags::Centered)
+            if (desc.Flags & WindowFlags::Centered)
             {
                 windowPosX += (pCurrentDisplay->ResW / 2) - (windowWidth / 2);
                 windowPosY += (pCurrentDisplay->ResH / 2) - (windowHeight / 2);
             }
         }
 
-        m_Handle =
+        m_pHandle =
             CreateWindowExA(0, wc.lpszClassName, desc.Title.data(), style, windowPosX, windowPosY, windowWidth, windowHeight, 0, 0, m_Instance, this);
 
         i32 swFlags = SW_SHOW;
-        if (flags & WindowFlags::Maximized)
+        if (desc.Flags & WindowFlags::Maximized)
             swFlags = SW_SHOWMAXIMIZED;
 
-        ShowWindow(m_Handle, swFlags);
-        UpdateWindow(m_Handle);  // call WM_PAINT
+        ShowWindow((HWND)m_pHandle, swFlags);
+        UpdateWindow((HWND)m_pHandle);  // call WM_PAINT
 
         // Set user data
-        SetWindowLongPtrA(m_Handle, 0, (LONG_PTR)this);
+        SetWindowLongPtrA((HWND)m_pHandle, 0, (LONG_PTR)this);
     }
 
-    void Win32Window::GetDisplays()
+    void Win32Window::InitDisplays()
     {
         ZoneScoped;
 
@@ -153,36 +160,120 @@ namespace lr
         if (!pWindow)  // User data is not set yet, return default proc
             return DefWindowProcA(hWnd, msg, wParam, lParam);
 
+        auto &eventMan = pWindow->m_EventManager;
+
+        WindowEventData eventData = {};
+
         switch (msg)
         {
             // Those terminate messages are different but we will leave it like that for now
             // Go to the end of file to see more info
             case WM_CLOSE:
             case WM_DESTROY:
-            case WM_QUIT: pWindow->m_ShouldClose = true; break;
-
-            case WM_ENTERSIZEMOVE:
+            case WM_QUIT:
             {
-                pWindow->m_SizeEnded = false;
+                pWindow->m_ShouldClose = true;
+                eventMan.Push(WINDOW_EVENT_QUIT, eventData);
 
                 break;
             }
+
+            case WM_LBUTTONDOWN:
+                eventData.Mouse = Input::LR_KEY_LMOUSE;
+                eventData.MouseState = Input::MouseState::Down;
+                eventMan.Push(WINDOW_EVENT_MOUSE_STATE, eventData);
+                break;
+
+            case WM_LBUTTONUP:
+                eventData.Mouse = Input::LR_KEY_LMOUSE;
+                eventData.MouseState = Input::MouseState::Up;
+                eventMan.Push(WINDOW_EVENT_MOUSE_STATE, eventData);
+                break;
+
+            case WM_LBUTTONDBLCLK:
+                eventData.Mouse = Input::LR_KEY_LMOUSE;
+                eventData.MouseState = Input::MouseState::DoubleClick;
+                eventMan.Push(WINDOW_EVENT_MOUSE_STATE, eventData);
+                break;
+
+            case WM_RBUTTONDOWN:
+                eventData.Mouse = Input::LR_KEY_RMOUSE;
+                eventData.MouseState = Input::MouseState::Down;
+                eventMan.Push(WINDOW_EVENT_MOUSE_STATE, eventData);
+                break;
+
+            case WM_RBUTTONUP:
+                eventData.Mouse = Input::LR_KEY_RMOUSE;
+                eventData.MouseState = Input::MouseState::Up;
+                eventMan.Push(WINDOW_EVENT_MOUSE_STATE, eventData);
+                break;
+
+            case WM_RBUTTONDBLCLK:
+                eventData.Mouse = Input::LR_KEY_RMOUSE;
+                eventData.MouseState = Input::MouseState::DoubleClick;
+                eventMan.Push(WINDOW_EVENT_MOUSE_STATE, eventData);
+                break;
+
+            case WM_MBUTTONDOWN:
+                eventData.Mouse = Input::LR_KEY_MMOUSE;
+                eventData.MouseState = Input::MouseState::Down;
+                eventMan.Push(WINDOW_EVENT_MOUSE_STATE, eventData);
+                break;
+
+            case WM_MBUTTONUP:
+                eventData.Mouse = Input::LR_KEY_MMOUSE;
+                eventData.MouseState = Input::MouseState::Up;
+                eventMan.Push(WINDOW_EVENT_MOUSE_STATE, eventData);
+                break;
+
+            case WM_MBUTTONDBLCLK:
+                eventData.Mouse = Input::LR_KEY_MMOUSE;
+                eventData.MouseState = Input::MouseState::DoubleClick;
+                eventMan.Push(WINDOW_EVENT_MOUSE_STATE, eventData);
+                break;
+
+            case WM_MOUSEMOVE:
+                eventData.MouseX = LOWORD(lParam);
+                eventData.MouseY = HIWORD(lParam);
+                eventMan.Push(WINDOW_EVENT_MOUSE_POSITION, eventData);
+                break;
+
+            case WM_KEYDOWN:
+                eventData.Key = Input::LR_KEY_NONE;
+                eventData.KeyState = Input::KeyState::Down;
+                eventMan.Push(WINDOW_EVENT_KEYBOARD_STATE, eventData);
+                break;
+
+            case WM_KEYUP:
+                eventData.Key = Input::LR_KEY_NONE;
+                eventData.KeyState = Input::KeyState::Up;
+                eventMan.Push(WINDOW_EVENT_KEYBOARD_STATE, eventData);
+                break;
+
+            case WM_ENTERSIZEMOVE: pWindow->m_SizeEnded = false; break;
 
             case WM_EXITSIZEMOVE:
             {
                 RECT rc;
-                GetClientRect(pWindow->m_Handle, &rc);
+                GetClientRect((HWND)pWindow->m_pHandle, &rc);
 
                 pWindow->m_SizeEnded = true;
-                pWindow->OnSizeChanged(rc.right, rc.bottom);
+
+                eventData.SizeWidth = rc.right;
+                eventData.SizeHeight = rc.bottom;
+                eventMan.Push(WINDOW_EVENT_RESIZE, eventData);
 
                 break;
             }
-            
+
             case WM_SIZE:
             {
                 if (pWindow->m_SizeEnded && wParam != SIZE_MINIMIZED)
-                    pWindow->OnSizeChanged((u32)LOWORD(lParam), (u32)HIWORD(lParam));
+                {
+                    eventData.SizeWidth = (u32)LOWORD(lParam);
+                    eventData.SizeHeight = (u32)HIWORD(lParam);
+                    eventMan.Push(WINDOW_EVENT_RESIZE, eventData);
+                }
 
                 break;
             }
@@ -207,19 +298,3 @@ namespace lr
     }
 
 }  // namespace lr
-
-/*
-    WM_CLOSE:
-        Sent as a signal that a window or an application should terminate.
-
-    WM_DESTROY:
-        Sent when a window is being destroyed. It is sent to the window procedure of the window being destroyed after the window is removed
-        from the screen.
-
-        This message is sent first to the window being destroyed and then to the child windows (if any) as they are destroyed. During the
-        processing of the message, it can be assumed that all child windows still exist.
-
-    WM_QUIT:
-        Indicates a request to terminate an application, and is generated when the application calls the PostQuitMessage function. This
-        message causes the GetMessage function to return zero.
-*/

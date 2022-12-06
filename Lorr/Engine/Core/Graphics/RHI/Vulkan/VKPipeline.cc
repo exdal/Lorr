@@ -86,7 +86,7 @@ namespace lr::Graphics
 
         /// ------------------------------------- ///
 
-        constexpr eastl::array<VkDynamicState, 3> kDynamicStates = {
+        constexpr static eastl::array<VkDynamicState, 3> kDynamicStates = {
             VK_DYNAMIC_STATE_VIEWPORT,
             VK_DYNAMIC_STATE_SCISSOR,
             VK_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY,
@@ -103,7 +103,7 @@ namespace lr::Graphics
         VkPipelineShaderStageCreateInfo &shaderStage = m_pShaderStages[m_CreateInfo.stageCount++];
         shaderStage.flags = 0;
         shaderStage.pNext = nullptr;
-        
+
         shaderStage.stage = VKAPI::ToVKShaderType(pShader->Type);
         shaderStage.pName = entryPoint.data();
         shaderStage.module = ((VKShader *)pShader)->pHandle;
@@ -195,7 +195,7 @@ namespace lr::Graphics
         m_DepthStencilState.stencilTestEnable = stencilTestEnabled;
     }
 
-    void VKGraphicsPipelineBuildInfo::SetDepthFunction(DepthCompareOp function)
+    void VKGraphicsPipelineBuildInfo::SetDepthFunction(CompareOp function)
     {
         ZoneScoped;
 

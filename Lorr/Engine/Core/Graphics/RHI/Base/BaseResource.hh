@@ -24,13 +24,17 @@ namespace lr::Graphics
         RenderTarget = 1 << 5,
         DepthStencilWrite = 1 << 6,
         DepthStencilRead = 1 << 7,
+        DepthStencil = DepthStencilWrite | DepthStencilRead,
 
         CopySrc = 1 << 8,
         CopyDst = 1 << 9,
+        // On DX12, Host usages are same as Copy usages, they are both transfer stages
+        HostRead = 1 << 10,
+        HostWrite = 1 << 11,
 
-        Present = 1 << 10,
+        Present = ShaderResource | RenderTarget,
 
-        UnorderedAccess = 1 << 11,
+        UnorderedAccess = 1 << 12,
     };
 
     EnumFlags(ResourceUsage);
@@ -116,6 +120,7 @@ namespace lr::Graphics
         u32 m_Height = 0;
         u64 m_DataOffset = 0;
         u32 m_DataSize = 0;
+        u32 m_RequiredDataSize = 0;  // Required data size from Vulkan API
 
         u32 m_UsingMip = 0;
         u32 m_TotalMips = 1;
@@ -144,7 +149,7 @@ namespace lr::Graphics
     struct BaseBuffer
     {
         BaseBuffer() = default;
-        
+
         u64 m_DataOffset = 0;
         u32 m_RequiredDataSize = 0;  // Required data size from Vulkan API
         u32 m_DataSize = 0;          // Real size of data
@@ -156,6 +161,30 @@ namespace lr::Graphics
 
         AllocatorType m_AllocatorType;
         void *m_pAllocatorData = nullptr;
+    };
+
+    /// SAMPLERS ///
+
+    struct SamplerDesc
+    {
+        Filtering MinFilter = Filtering::Nearest;
+        Filtering MagFilter = Filtering::Nearest;
+        TextureAddressMode AddressU = TextureAddressMode::Wrap;
+        TextureAddressMode AddressV = TextureAddressMode::Wrap;
+        TextureAddressMode AddressW = TextureAddressMode::Wrap;
+        bool UseAnisotropy = false;
+        float MaxAnisotropy = 0;
+        CompareOp ComparisonFunc = CompareOp::Never;
+
+        Filtering MipFilter = Filtering::Nearest;
+        float MipLODBias = 0;
+        float MinLOD = 0;
+        float MaxLOD = 0;
+    };
+
+    struct BaseSampler
+    {
+        BaseSampler() = default;
     };
 
     enum class DescriptorType : u8
@@ -177,8 +206,16 @@ namespace lr::Graphics
         ShaderStage TargetShader;
         u32 ArraySize = 1;
 
-        BaseBuffer *pBuffer = nullptr;
-        BaseImage *pImage = nullptr;
+        ShaderStage RootConstantStage = ShaderStage::None;
+        u32 RootConstantOffset = 0;
+        u32 RootConstantSize = 0;
+
+        union
+        {
+            BaseBuffer *pBuffer = nullptr;
+            BaseImage *pImage;
+            BaseSampler *pSampler;
+        };
     };
 
     struct DescriptorSetDesc

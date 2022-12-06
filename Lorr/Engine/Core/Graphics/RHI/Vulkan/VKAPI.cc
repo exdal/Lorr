@@ -3,7 +3,6 @@
 #include "Engine.hh"
 
 #include "Core/Crypto/Light.hh"
-#include "Core/IO/Memory.hh"
 
 #include "VKCommandList.hh"
 #include "VKShader.hh"
@@ -33,14 +32,14 @@ _VK_IMPORT_SYMBOLS
 
 namespace lr::Graphics
 {
-    bool VKAPI::Init(PlatformWindow *pWindow, u32 width, u32 height, APIFlags flags)
+    bool VKAPI::Init(BaseWindow *pWindow, u32 width, u32 height, APIFlags flags)
     {
         ZoneScoped;
 
         LOG_TRACE("Initializing Vulkan device...");
 
         LoadVulkan();
-        SetupInstance(pWindow->m_Handle);
+        SetupInstance(pWindow->m_pHandle);
 
         u32 availableDeviceCount = 0;
         vkEnumeratePhysicalDevices(m_pInstance, &availableDeviceCount, nullptr);
@@ -137,7 +136,7 @@ namespace lr::Graphics
 
         constexpr u32 kTypeMem = Memory::MiBToBytes(16);
 
-        m_TypeAllocator.Init(kTypeMem);
+        m_TypeAllocator.Init(kTypeMem, 0x2000);
         m_pTypeData = Memory::Allocate<u8>(kTypeMem);
 
         constexpr u32 kDescriptorMem = Memory::MiBToBytes(1);
@@ -145,16 +144,16 @@ namespace lr::Graphics
         constexpr u32 kBufferTLSFMem = Memory::MiBToBytes(512);
         constexpr u32 kImageTLSFMem = Memory::MiBToBytes(512);
 
-        m_MADescriptor.Allocator.AddPool(kDescriptorMem);
+        m_MADescriptor.Allocator.Init(kDescriptorMem);
         m_MADescriptor.pHeap = CreateHeap(kDescriptorMem, true);
 
-        m_MABufferLinear.Allocator.AddPool(kBufferLinearMem);
+        m_MABufferLinear.Allocator.Init(kBufferLinearMem);
         m_MABufferLinear.pHeap = CreateHeap(kBufferLinearMem, true);
 
-        m_MABufferTLSF.Allocator.Init(kBufferTLSFMem);
+        m_MABufferTLSF.Allocator.Init(kBufferTLSFMem, 0x2000);
         m_MABufferTLSF.pHeap = CreateHeap(kBufferTLSFMem, false);
 
-        m_MAImageTLSF.Allocator.Init(kImageTLSFMem);
+        m_MAImageTLSF.Allocator.Init(kImageTLSFMem, 0x2000);
         m_MAImageTLSF.pHeap = CreateHeap(kImageTLSFMem, false);
     }
 
@@ -418,18 +417,37 @@ namespace lr::Graphics
         VkPipelineLayout &pLayout = pPipeline->pLayout;
 
         VkDescriptorSetLayout pSetLayouts[8] = {};
+        VkPushConstantRange pPushConstants[8] = {};
+
+        u32 pushIdx = 0;
         for (u32 i = 0; i < pBuildInfo->m_DescriptorSetCount; i++)
         {
             BaseDescriptorSet *pSet = pBuildInfo->m_ppDescriptorSets[i];
             API_VAR(VKDescriptorSet, pSet);
 
             pSetLayouts[i] = pSetVK->pSetLayoutHandle;
+
+            for (u32 i = 0; i < pSet->BindingCount; i++)
+            {
+                DescriptorBindingDesc &binding = pSetVK->pBindingInfos[i];
+
+                if (binding.Type != DescriptorType::RootConstant)
+                    continue;
+
+                pPushConstants[pushIdx].stageFlags = ToVKShaderType(binding.TargetShader);
+                pPushConstants[pushIdx].offset = binding.RootConstantOffset;
+                pPushConstants[pushIdx].size = binding.RootConstantSize;
+
+                pushIdx++;
+            }
         }
 
         VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo = {};
         pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
         pipelineLayoutCreateInfo.setLayoutCount = pBuildInfo->m_DescriptorSetCount;
         pipelineLayoutCreateInfo.pSetLayouts = pSetLayouts;
+        pipelineLayoutCreateInfo.pushConstantRangeCount = pushIdx;
+        pipelineLayoutCreateInfo.pPushConstantRanges = pPushConstants;
 
         vkCreatePipelineLayout(m_pDevice, &pipelineLayoutCreateInfo, nullptr, &pLayout);
 
@@ -534,12 +552,24 @@ namespace lr::Graphics
 
         VKShader *pShader = AllocTypeInherit<BaseShader, VKShader>();
 
+        pShader->Type = stage;
+
+        ShaderCompileDesc compileDesc = {};
+        compileDesc.Type = stage;
+        compileDesc.Flags = LR_SHADER_FLAG_USE_SPIRV | LR_SHADER_FLAG_MATRIX_ROW_MAJOR | LR_SHADER_FLAG_ALL_RESOURCES_BOUND;
+
+#if _DEBUG
+        compileDesc.Flags |= LR_SHADER_FLAG_WARNINGS_ARE_ERRORS | LR_SHADER_FLAG_SKIP_OPTIMIZATION | LR_SHADER_FLAG_USE_DEBUG;
+#endif
+
+        IDxcBlob *pCode = ShaderCompiler::CompileFromBuffer(&compileDesc, buf);
+
         VkShaderModule pHandle = nullptr;
 
         VkShaderModuleCreateInfo createInfo = {};
         createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-        createInfo.codeSize = buf.GetLength();
-        createInfo.pCode = (u32 *)buf.GetData();
+        createInfo.codeSize = pCode->GetBufferSize();
+        createInfo.pCode = (u32 *)pCode->GetBufferPointer();
 
         vkCreateShaderModule(m_pDevice, &createInfo, nullptr, &pHandle);
 
@@ -584,20 +614,27 @@ namespace lr::Graphics
 
         VkDescriptorSetLayoutBinding pBindings[8] = {};
 
+        u32 descriptorCount = 0;
         for (u32 i = 0; i < pDesc->BindingCount; i++)
         {
             DescriptorBindingDesc &element = pDesc->pBindings[i];
+            VkDescriptorSetLayoutBinding &layoutBinding = pBindings[descriptorCount];
 
-            pBindings[i].binding = i;
-            pBindings[i].descriptorType = ToVKDescriptorType(element.Type);
-            pBindings[i].stageFlags = ToVKShaderType(element.TargetShader);
-            pBindings[i].descriptorCount = element.ArraySize;
+            if (element.Type == DescriptorType::RootConstant)
+                continue;
+
+            layoutBinding.binding = descriptorCount;
+            layoutBinding.descriptorType = ToVKDescriptorType(element.Type);
+            layoutBinding.stageFlags = ToVKShaderType(element.TargetShader);
+            layoutBinding.descriptorCount = element.ArraySize;
+
+            descriptorCount++;
         }
 
         // First we need layout info
         VkDescriptorSetLayoutCreateInfo layoutCreateInfo = {};
         layoutCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        layoutCreateInfo.bindingCount = pDesc->BindingCount;
+        layoutCreateInfo.bindingCount = descriptorCount;
         layoutCreateInfo.pBindings = pBindings;
 
         vkCreateDescriptorSetLayout(m_pDevice, &layoutCreateInfo, nullptr, &pDescriptorSet->pSetLayoutHandle);
@@ -629,50 +666,85 @@ namespace lr::Graphics
         VkDescriptorBufferInfo pBufferInfos[8];
         VkDescriptorImageInfo pImageInfos[8];
 
+        u32 descriptorIndex = 0;
         u32 bufferIndex = 0;
         u32 imageIndex = 0;
 
         for (u32 i = 0; i < pSetVK->BindingCount; i++)
         {
-            DescriptorBindingDesc &element = pSetVK->pBindingInfos[i];
+            DescriptorBindingDesc &element = pSetVK->pBindingInfos[descriptorIndex];
+            VkWriteDescriptorSet &writeSet = pWriteSets[descriptorIndex];
+            VkDescriptorBufferInfo &bufferInfo = pBufferInfos[bufferIndex];
+            VkDescriptorImageInfo &imageInfo = pImageInfos[imageIndex];
 
             BaseBuffer *pBuffer = element.pBuffer;
             BaseImage *pImage = element.pImage;
+            BaseSampler *pSampler = element.pSampler;
 
             API_VAR(VKBuffer, pBuffer);
             API_VAR(VKImage, pImage);
+            API_VAR(VKSampler, pSampler);
 
-            if (element.Type == DescriptorType::ConstantBufferView)
+            writeSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            writeSet.pNext = nullptr;
+            writeSet.dstBinding = i;
+            writeSet.dstSet = pSetVK->pHandle;
+            writeSet.dstArrayElement = 0;
+            writeSet.descriptorCount = element.ArraySize;
+            writeSet.descriptorType = ToVKDescriptorType(element.Type);
+
+            switch (element.Type)
             {
-                pBufferInfos[bufferIndex].buffer = pBufferVK->m_pHandle;
-                pBufferInfos[bufferIndex].offset = 0;
-                pBufferInfos[bufferIndex].range = pBufferVK->m_DataSize;
+                case DescriptorType::ConstantBufferView:
+                {
+                    bufferInfo.buffer = pBufferVK->m_pHandle;
+                    bufferInfo.offset = 0;
+                    bufferInfo.range = pBufferVK->m_DataSize;
 
-                pWriteSets[i].pBufferInfo = &pBufferInfos[i];
+                    writeSet.pBufferInfo = &bufferInfo;
 
-                bufferIndex++;
+                    bufferIndex++;
+                    descriptorIndex++;
+
+                    break;
+                }
+
+                case DescriptorType::ShaderResourceView:
+                {
+                    imageInfo.imageView = pImageVK->m_pViewHandle;
+                    imageInfo.imageLayout = pImageVK->m_Layout;
+
+                    writeSet.pImageInfo = &imageInfo;
+
+                    imageIndex++;
+                    descriptorIndex++;
+
+                    break;
+                }
+
+                case DescriptorType::Sampler:
+                {
+                    imageInfo.sampler = pSamplerVK->m_pHandle;
+
+                    writeSet.pImageInfo = &imageInfo;
+
+                    imageIndex++;
+                    descriptorIndex++;
+
+                    break;
+                }
+
+                case DescriptorType::RootConstant:
+                {
+                    // Ignore push constants.
+                    break;
+                }
+
+                default: LOG_CRITICAL("Unsupported DescriptorType!"); break;
             }
-            else if (element.Type == DescriptorType::ShaderResourceView)
-            {
-                pImageInfos[imageIndex].sampler = pImageVK->m_pSampler;
-                pImageInfos[imageIndex].imageView = pImageVK->m_pViewHandle;
-                pImageInfos[imageIndex].imageLayout = pImageVK->m_Layout;
-
-                pWriteSets[i].pImageInfo = &pImageInfos[i];
-
-                imageIndex++;
-            }
-
-            pWriteSets[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            pWriteSets[i].pNext = nullptr;
-            pWriteSets[i].dstSet = pSetVK->pHandle;
-            pWriteSets[i].dstBinding = i;
-            pWriteSets[i].dstArrayElement = 0;
-            pWriteSets[i].descriptorCount = element.ArraySize;
-            pWriteSets[i].descriptorType = ToVKDescriptorType(element.Type);
         }
 
-        vkUpdateDescriptorSets(m_pDevice, pSetVK->BindingCount, pWriteSets, 0, nullptr);
+        vkUpdateDescriptorSets(m_pDevice, descriptorIndex, pWriteSets, 0, nullptr);
     }
 
     VkDescriptorPool VKAPI::CreateDescriptorPool(const std::initializer_list<VKDescriptorBindingDesc> &layouts)
@@ -760,7 +832,7 @@ namespace lr::Graphics
 
             case AllocatorType::Descriptor:
             {
-                pBuffer->m_DataOffset = m_MADescriptor.Allocator.Allocate(0, pBuffer->m_RequiredDataSize, memoryRequirements.alignment);
+                pBuffer->m_DataOffset = m_MADescriptor.Allocator.Allocate(pBuffer->m_RequiredDataSize, memoryRequirements.alignment);
                 pBuffer->m_pMemoryHandle = m_MADescriptor.pHeap;
 
                 break;
@@ -768,7 +840,7 @@ namespace lr::Graphics
 
             case AllocatorType::BufferLinear:
             {
-                pBuffer->m_DataOffset = m_MABufferLinear.Allocator.Allocate(0, pBuffer->m_RequiredDataSize, memoryRequirements.alignment);
+                pBuffer->m_DataOffset = m_MABufferLinear.Allocator.Allocate(pBuffer->m_RequiredDataSize, memoryRequirements.alignment);
                 pBuffer->m_pMemoryHandle = m_MABufferLinear.pHeap;
 
                 break;
@@ -864,6 +936,16 @@ namespace lr::Graphics
         ZoneScoped;
 
         VKImage *pImage = AllocTypeInherit<BaseImage, VKImage>();
+        pImage->m_Width = pData->Width;
+        pImage->m_Height = pData->Height;
+        pImage->m_DataSize = pData->DataLen;
+        pImage->m_UsingMip = 0;
+        pImage->m_TotalMips = pDesc->MipMapLevels;
+        pImage->m_Usage = pDesc->Usage;
+        pImage->m_Format = pDesc->Format;
+        pImage->m_AllocatorType = pDesc->TargetAllocator;
+
+        /// ---------------------------------------------- //
 
         VkImageCreateInfo imageCreateInfo = {};
         imageCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -882,52 +964,13 @@ namespace lr::Graphics
 
         vkCreateImage(m_pDevice, &imageCreateInfo, nullptr, &pImage->m_pHandle);
 
-        VkMemoryRequirements memoryRequirements = {};
-        vkGetImageMemoryRequirements(m_pDevice, pImage->m_pHandle, &memoryRequirements);
-
         /// ---------------------------------------------- //
 
-        pImage->m_Width = pData->Width;
-        pImage->m_Height = pData->Height;
-        pImage->m_DataSize = pData->DataLen;
-
-        pImage->m_UsingMip = 0;
-        pImage->m_TotalMips = pDesc->MipMapLevels;
-
-        pImage->m_Usage = pDesc->Usage;
-        pImage->m_Format = pDesc->Format;
-
-        pImage->m_RequiredDataSize = memoryRequirements.size;
-
-        pImage->m_AllocatorType = pDesc->TargetAllocator;
-
-        /// ---------------------------------------------- //
-
-        switch (pDesc->TargetAllocator)
-        {
-            case AllocatorType::None:
-            {
-                pImage->m_pMemoryHandle = CreateHeap(memoryRequirements.size, false);
-
-                break;
-            }
-
-            case AllocatorType::ImageTLSF:
-            {
-                Memory::TLSFBlock *pBlock = m_MABufferTLSF.Allocator.Allocate(pImage->m_DataSize, memoryRequirements.alignment);
-
-                pImage->m_pAllocatorData = pBlock;
-                pImage->m_DataOffset = pBlock->Offset;
-
-                pImage->m_pMemoryHandle = m_MAImageTLSF.pHeap;
-
-                break;
-            }
-
-            default: break;
-        }
+        SetAllocator(pImage, pDesc->TargetAllocator);
 
         vkBindImageMemory(m_pDevice, pImage->m_pHandle, pImage->m_pMemoryHandle, 0);
+
+        CreateImageView(pImage);
 
         return pImage;
     }
@@ -956,32 +999,34 @@ namespace lr::Graphics
         if (pImageVK->m_pViewHandle)
             vkDestroyImageView(m_pDevice, pImageVK->m_pViewHandle, nullptr);
 
-        if (pImageVK->m_pSampler)
-            vkDestroySampler(m_pDevice, pImageVK->m_pSampler, nullptr);
-
         if (pImageVK->m_pHandle)
             vkDestroyImage(m_pDevice, pImageVK->m_pHandle, nullptr);
     }
 
-    void VKAPI::CreateImageView(BaseImage *pHandle)
+    void VKAPI::CreateImageView(BaseImage *pImage)
     {
         ZoneScoped;
 
-        API_VAR(VKImage, pHandle);
+        API_VAR(VKImage, pImage);
 
-        VkImageAspectFlags aspectFlags = VK_IMAGE_ASPECT_COLOR_BIT;
+        VkImageAspectFlags aspectFlags = VK_IMAGE_ASPECT_NONE;
 
-        if (pHandle->m_Usage & ResourceUsage::DepthStencilWrite)
+        if (pImage->m_Usage & ResourceUsage::ShaderResource)
         {
-            aspectFlags = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+            aspectFlags |= VK_IMAGE_ASPECT_COLOR_BIT;
+        }
+
+        if (pImage->m_Usage & ResourceUsage::DepthStencilWrite)
+        {
+            aspectFlags |= VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
         }
 
         VkImageViewCreateInfo imageViewCreateInfo = {};
         imageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
 
-        imageViewCreateInfo.image = pHandleVK->m_pHandle;
+        imageViewCreateInfo.image = pImageVK->m_pHandle;
         imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        imageViewCreateInfo.format = ToVKFormat(pHandle->m_Format);
+        imageViewCreateInfo.format = ToVKFormat(pImage->m_Format);
 
         imageViewCreateInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
         imageViewCreateInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
@@ -989,19 +1034,26 @@ namespace lr::Graphics
         imageViewCreateInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
 
         imageViewCreateInfo.subresourceRange.aspectMask = aspectFlags;
-        imageViewCreateInfo.subresourceRange.baseMipLevel = 0;
+        imageViewCreateInfo.subresourceRange.baseMipLevel = pImage->m_UsingMip;
+        imageViewCreateInfo.subresourceRange.levelCount = pImage->m_TotalMips;
         imageViewCreateInfo.subresourceRange.baseArrayLayer = 0;
-        imageViewCreateInfo.subresourceRange.levelCount = 1;
         imageViewCreateInfo.subresourceRange.layerCount = 1;
 
-        vkCreateImageView(m_pDevice, &imageViewCreateInfo, nullptr, &pHandleVK->m_pViewHandle);
+        vkCreateImageView(m_pDevice, &imageViewCreateInfo, nullptr, &pImageVK->m_pViewHandle);
     }
 
-    void VKAPI::CreateSampler(BaseImage *pHandle)
+    BaseSampler *VKAPI::CreateSampler(SamplerDesc *pDesc)
     {
         ZoneScoped;
 
-        API_VAR(VKImage, pHandle);
+        constexpr static VkSamplerAddressMode kAddresModeLUT[] = {
+            VK_SAMPLER_ADDRESS_MODE_REPEAT,
+            VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT,
+            VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+            VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
+        };
+
+        VKSampler *pHandle = AllocTypeInherit<BaseSampler, VKSampler>();
 
         VkSamplerCreateInfo samplerInfo = {};
         samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
@@ -1009,28 +1061,66 @@ namespace lr::Graphics
 
         samplerInfo.flags = 0;
 
-        samplerInfo.magFilter = VK_FILTER_LINEAR;
-        samplerInfo.minFilter = VK_FILTER_LINEAR;
+        samplerInfo.magFilter = (VkFilter)pDesc->MinFilter;
+        samplerInfo.minFilter = (VkFilter)pDesc->MinFilter;
 
-        samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-        samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        samplerInfo.addressModeU = kAddresModeLUT[(u32)pDesc->AddressU];
+        samplerInfo.addressModeV = kAddresModeLUT[(u32)pDesc->AddressV];
+        samplerInfo.addressModeW = kAddresModeLUT[(u32)pDesc->AddressW];
 
-        samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-        samplerInfo.mipLodBias = 0.0;
-        samplerInfo.maxLod = pHandle->m_UsingMip;
-        samplerInfo.minLod = 0.0;
+        samplerInfo.anisotropyEnable = pDesc->UseAnisotropy;
+        samplerInfo.maxAnisotropy = pDesc->MaxAnisotropy;
 
-        samplerInfo.compareEnable = false;
-        samplerInfo.compareOp = VK_COMPARE_OP_NEVER;
+        samplerInfo.mipmapMode = (VkSamplerMipmapMode)pDesc->MipFilter;
+        samplerInfo.mipLodBias = pDesc->MipLODBias;
+        samplerInfo.maxLod = pDesc->MaxLOD;
+        samplerInfo.minLod = pDesc->MinLOD;
+
+        samplerInfo.compareEnable = pDesc->ComparisonFunc != CompareOp::Never;
+        samplerInfo.compareOp = (VkCompareOp)pDesc->ComparisonFunc;
 
         samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK;
 
-        vkCreateSampler(m_pDevice, &samplerInfo, nullptr, &pHandleVK->m_pSampler);
+        vkCreateSampler(m_pDevice, &samplerInfo, nullptr, &pHandle->m_pHandle);
+
+        return pHandle;
     }
 
-    void VKAPI::CreateRenderTarget(BaseImage *pImage)
+    void VKAPI::SetAllocator(VKBuffer *pBuffer, AllocatorType targetAllocator)
     {
         ZoneScoped;
+    }
+
+    void VKAPI::SetAllocator(VKImage *pImage, AllocatorType targetAllocator)
+    {
+        ZoneScoped;
+
+        VkMemoryRequirements memoryRequirements = {};
+        vkGetImageMemoryRequirements(m_pDevice, pImage->m_pHandle, &memoryRequirements);
+
+        switch (targetAllocator)
+        {
+            case AllocatorType::None:
+            {
+                pImage->m_pMemoryHandle = CreateHeap(memoryRequirements.size, false);
+
+                break;
+            }
+
+            case AllocatorType::ImageTLSF:
+            {
+                Memory::TLSFBlock *pBlock = m_MABufferTLSF.Allocator.Allocate(pImage->m_DataSize, memoryRequirements.alignment);
+
+                pImage->m_pAllocatorData = pBlock;
+                pImage->m_DataOffset = pBlock->Offset;
+
+                pImage->m_pMemoryHandle = m_MAImageTLSF.pHeap;
+
+                break;
+            }
+
+            default: break;
+        }
     }
 
     bool VKAPI::IsFormatSupported(ResourceFormat format, VkColorSpaceKHR *pColorSpaceOut)
@@ -1133,7 +1223,7 @@ namespace lr::Graphics
         return true;
     }
 
-    bool VKAPI::SetupInstance(HWND windowHandle)
+    bool VKAPI::SetupInstance(void *pHandle)
     {
         ZoneScoped;
 
@@ -1269,7 +1359,7 @@ namespace lr::Graphics
 
         VkWin32SurfaceCreateInfoKHR surfaceInfo = {};
         surfaceInfo.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
-        surfaceInfo.hwnd = windowHandle;
+        surfaceInfo.hwnd = (HWND)pHandle;
         surfaceInfo.hinstance = GetModuleHandleA(NULL);  // TODO
 
         VKCallRet(vkCreateInstance(&createInfo, nullptr, &m_pInstance), "Failed to create Vulkan Instance.", false);
@@ -1553,12 +1643,12 @@ namespace lr::Graphics
     };
 
     constexpr VkDescriptorType kDescriptorTypeLUT[] = {
-        VK_DESCRIPTOR_TYPE_SAMPLER,                 // Sampler
-        VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,  // ShaderResourceView
-        VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,          // ConstantBufferView
-        VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,          // UnorderedAccessBuffer
-        VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,           // UnorderedAccessView
-        VK_DESCRIPTOR_TYPE_MAX_ENUM,                // RootConstant
+        VK_DESCRIPTOR_TYPE_SAMPLER,         // Sampler
+        VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,   // ShaderResourceView
+        VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,  // ConstantBufferView
+        VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,  // UnorderedAccessBuffer
+        VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,   // UnorderedAccessView
+        VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,  // RootConstant
     };
 
     VkFormat VKAPI::ToVKFormat(ResourceFormat format)
@@ -1638,36 +1728,31 @@ namespace lr::Graphics
 
     VkImageLayout VKAPI::ToVKImageLayout(ResourceUsage usage)
     {
-        u32 v = 0;
-
-        if (usage & ResourceUsage::Undefined)
-            v |= VK_IMAGE_LAYOUT_UNDEFINED;
-
         if (usage & ResourceUsage::RenderTarget)
-            v |= VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            return VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
         if (usage & ResourceUsage::DepthStencilWrite)
-            v |= VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
+            return VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
 
         if (usage & ResourceUsage::DepthStencilRead)
-            v |= VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+            return VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
 
         if (usage & ResourceUsage::ShaderResource)
-            v |= VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            return VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
         if (usage & ResourceUsage::CopySrc)
-            v |= VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+            return VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
 
         if (usage & ResourceUsage::CopyDst)
-            v |= VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            return VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
 
-        if (usage & ResourceUsage::Present)
-            v |= VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        if (usage == ResourceUsage::Present)
+            return VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
         if (usage & ResourceUsage::UnorderedAccess)
-            v |= VK_IMAGE_LAYOUT_GENERAL;
+            return VK_IMAGE_LAYOUT_GENERAL;
 
-        return (VkImageLayout)v;
+        return VK_IMAGE_LAYOUT_UNDEFINED;
     }
 
     VkShaderStageFlagBits VKAPI::ToVKShaderType(ShaderStage type)
@@ -1713,8 +1798,11 @@ namespace lr::Graphics
 
         if (usage & ResourceUsage::CopySrc || usage & ResourceUsage::CopyDst)
             v |= VK_PIPELINE_STAGE_TRANSFER_BIT;
+            
+        if (usage & ResourceUsage::HostRead || usage & ResourceUsage::HostWrite)
+            v |= VK_PIPELINE_STAGE_HOST_BIT;
 
-        if (usage & ResourceUsage::Present)
+        if (usage == ResourceUsage::Present)
             v |= VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
 
         if (usage & ResourceUsage::IndirectBuffer)
@@ -1784,6 +1872,12 @@ namespace lr::Graphics
 
         if (usage & ResourceUsage::CopyDst)
             v |= VK_ACCESS_TRANSFER_WRITE_BIT;
+
+        if (usage & ResourceUsage::HostRead)
+            v |= VK_ACCESS_HOST_READ_BIT;
+
+        if (usage & ResourceUsage::HostWrite)
+            v |= VK_ACCESS_HOST_WRITE_BIT;
 
         if (usage & ResourceUsage::Present)
             v |= VK_ACCESS_MEMORY_READ_BIT;

@@ -56,7 +56,10 @@ namespace lr::Graphics
             default: assert(!"Shader type not implemented"); break;
         }
 
-        *pTargetHandle = ((D3D12Shader *)pShader)->pHandle;
+        IDxcBlob *pCode = ((D3D12Shader *)pShader)->pHandle;
+
+        pTargetHandle->pShaderBytecode = pCode->GetBufferPointer();
+        pTargetHandle->BytecodeLength = pCode->GetBufferSize();
     }
 
     void D3D12GraphicsPipelineBuildInfo::SetInputLayout(InputLayout &inputLayout)
@@ -148,7 +151,7 @@ namespace lr::Graphics
         m_CreateInfo.DepthStencilState.StencilEnable = stencilTestEnabled;
     }
 
-    void D3D12GraphicsPipelineBuildInfo::SetDepthFunction(DepthCompareOp function)
+    void D3D12GraphicsPipelineBuildInfo::SetDepthFunction(CompareOp function)
     {
         ZoneScoped;
 

@@ -4,7 +4,7 @@
 
 namespace lr::Graphics
 {
-    void D3D12SwapChain::Init(PlatformWindow *pWindow, D3D12API *pAPI, SwapChainFlags flags)
+    void D3D12SwapChain::Init(BaseWindow *pWindow, D3D12API *pAPI, SwapChainFlags flags)
     {
         ZoneScoped;
 
@@ -25,7 +25,7 @@ namespace lr::Graphics
         m_pHandle->Present(0, 0);
     }
 
-    void D3D12SwapChain::CreateHandle(D3D12API *pAPI, PlatformWindow *pWindow)
+    void D3D12SwapChain::CreateHandle(D3D12API *pAPI, BaseWindow *pWindow)
     {
         ZoneScoped;
 
@@ -49,7 +49,7 @@ namespace lr::Graphics
         swapChainDesc.AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED;
 
         IDXGISwapChain1 *pHandle1 = nullptr;
-        pAPI->CreateSwapChain(pHandle1, pWindow->m_Handle, swapChainDesc, nullptr);
+        pAPI->CreateSwapChain(pHandle1, pWindow->m_pHandle, swapChainDesc, nullptr);
 
         pHandle1->QueryInterface(IID_PPV_ARGS(&m_pHandle));
         SAFE_RELEASE(pHandle1);
@@ -75,13 +75,18 @@ namespace lr::Graphics
 
             // Swapchain already gives us the image, so we don't need to create it again
             m_pHandle->GetBuffer(i, IID_PPV_ARGS(&currentImage.m_pHandle));
+
             currentImage.m_Width = m_Width;
             currentImage.m_Height = m_Height;
-            currentImage.m_Usage = ResourceUsage::Present;
-            currentImage.m_Format = imageDesc.Format;
+            currentImage.m_DataSize = ~0;
+            currentImage.m_UsingMip = 0;
             currentImage.m_TotalMips = 1;
+            currentImage.m_Usage = ResourceUsage::Present;
+            currentImage.m_Format = m_ImageFormat;
+            currentImage.m_RequiredDataSize = ~0;
+            currentImage.m_AllocatorType = AllocatorType::Count;
 
-            pAPI->CreateRenderTarget(&currentImage);
+            pAPI->CreateImageView(&currentImage);
         }
     }
 

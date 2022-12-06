@@ -6,14 +6,14 @@
 
 #include <imgui.h>
 
-#include "Core/Graphics/RHI/Vulkan/VKAPI.hh"
-#include "Core/Graphics/RHI/Vulkan/VKPipeline.hh"
+#include "Core/Graphics/RHI/Base/BaseAPI.hh"
+#include "Core/Graphics/Camera.hh"
 
 namespace lr::UI
 {
     struct ImGuiRenderer
     {
-        void Init();
+        void Init(u32 width, u32 height);
 
         void NewFrame();
         void Render();
@@ -21,10 +21,18 @@ namespace lr::UI
 
         void Destroy();
 
-        Graphics::VKBuffer m_VertexBuffer = {};
-        Graphics::VKBuffer m_IndexBuffer = {};
+        Graphics::BasePipeline *m_pPipeline = nullptr;
 
-        Graphics::VKImage m_Texture;
+        Graphics::BaseDescriptorSet *m_pDescriptorSetV = nullptr;
+        Graphics::BaseDescriptorSet *m_pDescriptorSetP = nullptr;
+        Graphics::BaseBuffer *m_pConstantBufferV = nullptr;
+
+        Graphics::BaseBuffer *m_pVertexBuffer = nullptr;
+        Graphics::BaseBuffer *m_pIndexBuffer = nullptr;
+
+        Graphics::BaseImage *m_pTexture = nullptr;
+
+        Graphics::Camera2D m_Camera2D;
 
         u32 m_VertexCount = 0;
         u32 m_IndexCount = 0;

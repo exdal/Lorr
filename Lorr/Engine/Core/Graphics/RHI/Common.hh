@@ -14,21 +14,100 @@ namespace lr::Graphics
     };
     EnumFlags(APIFlags);
 
-    enum class TextureFiltering : u8
+    enum class PrimitiveType
     {
-        Point = 0,
-        Linear,
-        Ansio,
-
-        Count
+        PointList,
+        LineList,
+        LineStrip,
+        TriangleList,
+        TriangleStrip,
+        Patch
     };
 
-    enum class TextureAddress : u8
+    enum class CompareOp
+    {
+        Never,
+        Less,
+        Equal,
+        LessEqual,
+        Greater,
+        NotEqual,
+        GreaterEqual,
+        Always
+    };
+
+    enum class StencilCompareOp
+    {
+        Keep,
+        Zero,
+        Replace,
+        IncrAndClamp,
+        DecrAndClamp,
+        Invert,
+        IncrAndWrap,
+        DescAndWrap,
+    };
+
+    enum class CullMode : u8
+    {
+        None = 0,
+        Front,
+        Back,
+    };
+
+    enum class FillMode : u8
+    {
+        Fill = 0,
+        Wireframe,
+    };
+
+    enum class BlendFactor
+    {
+        Zero = 0,
+        One,
+
+        SrcColor,
+        InvSrcColor,
+
+        SrcAlpha,
+        InvSrcAlpha,
+        DestAlpha,
+        InvDestAlpha,
+
+        DestColor,
+        InvDestColor,
+
+        SrcAlphaSat,
+        ConstantColor,
+        InvConstantColor,
+
+        Src1Color,
+        InvSrc1Color,
+        Src1Alpha,
+        InvSrc1Alpha,
+    };
+
+    enum class BlendOp
+    {
+        Add,
+        Subtract,
+        ReverseSubtract,
+        Min,
+        Max,
+    };
+
+    enum class Filtering
+    {
+        Nearest,
+        Linear,
+    };
+
+    enum class TextureAddressMode
     {
         Wrap,
         Mirror,
-        Clamp,
-        Border,
+        ClampToEdge,
+        ClampToBorder,
     };
 
 }  // namespace lr::Graphics

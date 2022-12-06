@@ -102,7 +102,8 @@
     _VK_DEFINE_FUNCTION(vkCmdCopyBufferToImage);                    \
     _VK_DEFINE_FUNCTION(vkCreateSampler);                           \
     _VK_DEFINE_FUNCTION(vkDestroySampler);                          \
-    _VK_DEFINE_FUNCTION(vkCmdSetPrimitiveTopology);
+    _VK_DEFINE_FUNCTION(vkCmdSetPrimitiveTopology);                 \
+    _VK_DEFINE_FUNCTION(vkCmdPushConstants);
 
 _VK_IMPORT_SYMBOLS
 

@@ -82,7 +82,7 @@ namespace lr::Graphics
     {
         virtual void BeginPass(CommandListBeginDesc *pDesc) = 0;
         virtual void EndPass() = 0;
-        
+
         virtual void BarrierTransition(BaseImage *pImage,
                                        ResourceUsage barrierBefore,
                                        ShaderStage shaderBefore,
@@ -102,6 +102,7 @@ namespace lr::Graphics
         virtual void SetPrimitiveType(PrimitiveType type) = 0;
 
         /// Buffer Commands
+        virtual void SetRootConstants() = 0;
         virtual void SetVertexBuffer(BaseBuffer *pBuffer) = 0;
         virtual void SetIndexBuffer(BaseBuffer *pBuffer, bool type32 = true) = 0;
         virtual void CopyBuffer(BaseBuffer *pSource, BaseBuffer *pDest, u32 size) = 0;

@@ -4,10 +4,11 @@
 
 #pragma once
 
-#include "Core/Graphics/RHI/Base/BaseAPI.hh"
-
-#include "Core/Graphics/Camera.hh"
 #include "Core/Window/BaseWindow.hh"
+#include "Core/Window/Win32/Win32Window.hh"
+
+#include "Renderer/RendererManager.hh"
+#include "UI/ImGuiRenderer.hh"
 
 namespace lr
 {
@@ -21,16 +22,15 @@ namespace lr
         void Init(ApplicationDesc &desc, WindowDesc &windowDesc);
 
         /// EVENTS ///
-        void OnWindowResize(u32 width, u32 height);
-        
+        void Poll(f32 deltaTime);
+
         void Run();
 
-        PlatformWindow m_Window;
+        Win32Window m_Window;
+        Renderer::RendererManager m_RendererMan;
+        UI::ImGuiRenderer m_ImGui;
 
-        Graphics::BaseAPI *m_pAPI = nullptr;
-
-        Graphics::Camera3D m_Camera3D;
-        Graphics::Camera2D m_Camera2D;
+        bool m_ShuttingDown = false;
     };
 
     extern Engine *GetEngine();

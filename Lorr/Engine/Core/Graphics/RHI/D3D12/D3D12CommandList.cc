@@ -57,7 +57,7 @@ namespace lr::Graphics
             BaseImage *pImage = attachment.pHandle;
             API_VAR(D3D12Image, pImage);
 
-            info.cpuDescriptor = pImageDX->m_ViewHandle;
+            info.cpuDescriptor = pImageDX->m_ShaderViewCPU;
             info.BeginningAccess.Type = kBeginningAccessLUT[(u32)attachment.LoadOp];
             info.EndingAccess.Type = kEndingAccessLUT[(u32)attachment.StoreOp];
 
@@ -74,7 +74,7 @@ namespace lr::Graphics
             BaseImage *pImage = attachment.pHandle;
             API_VAR(D3D12Image, pImage);
 
-            depthAttachment.cpuDescriptor = pImageDX->m_ViewHandle;
+            depthAttachment.cpuDescriptor = pImageDX->m_DepthStencilViewCPU;
             depthAttachment.DepthBeginningAccess.Type = kBeginningAccessLUT[(u32)attachment.LoadOp];
             depthAttachment.DepthEndingAccess.Type = kEndingAccessLUT[(u32)attachment.StoreOp];
 
@@ -143,7 +143,7 @@ namespace lr::Graphics
 
         API_VAR(D3D12Image, pImage);
 
-        m_pHandle->ClearRenderTargetView(pImageDX->m_ViewHandle, &val.RenderTargetColor.x, 0, nullptr);
+        m_pHandle->ClearRenderTargetView(pImageDX->m_RenderTargetViewCPU, &val.RenderTargetColor.x, 0, nullptr);
     }
 
     void D3D12CommandList::SetViewport(u32 id, u32 x, u32 y, u32 width, u32 height)
@@ -253,15 +253,11 @@ namespace lr::Graphics
         ZoneScoped;
 
         u32 idx = 0;
-        for (auto &pSet : sets)
+        for (BaseDescriptorSet *pSet : sets)
         {
             API_VAR(D3D12DescriptorSet, pSet);
 
-            // heap offsets are wrong
-            for (u32 i = 0; i < pSetDX->m_DescriptorCount; i++)
-                m_pHandle->SetGraphicsRootConstantBufferView(i, pSetDX->m_pDescriptorHandle[i]);
-
-            idx++;
+            m_pHandle->SetGraphicsRootDescriptorTable(idx++, pSetDX->m_pDescriptorHandles[0]);
         }
     }
 

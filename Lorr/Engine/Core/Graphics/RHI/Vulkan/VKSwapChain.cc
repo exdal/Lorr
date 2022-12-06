@@ -4,7 +4,7 @@
 
 namespace lr::Graphics
 {
-    void VKSwapChain::Init(PlatformWindow *pWindow, VKAPI *pAPI, SwapChainFlags flags)
+    void VKSwapChain::Init(BaseWindow *pWindow, VKAPI *pAPI, SwapChainFlags flags)
     {
         ZoneScoped;
 
@@ -90,15 +90,18 @@ namespace lr::Graphics
 
             // Swapchain already gives us the image, so we don't need to create it again
             currentImage.m_pHandle = ppSwapChainImages[i];
+
+            currentImage.m_Usage = ResourceUsage::Present;
             currentImage.m_Width = m_Width;
             currentImage.m_Height = m_Height;
-            currentImage.m_Usage = ResourceUsage::Present;
-            currentImage.m_Format = imageDesc.Format;
+            currentImage.m_DataSize = ~0;
+            currentImage.m_UsingMip = 0;
             currentImage.m_TotalMips = 1;
+            currentImage.m_Format = m_ImageFormat;
+            currentImage.m_RequiredDataSize = ~0;
+            currentImage.m_AllocatorType = AllocatorType::Count;
 
             pAPI->CreateImageView(&currentImage);
-
-            VKImage pAttachments[1] = { currentImage };
 
             /// Create Semaphores
 

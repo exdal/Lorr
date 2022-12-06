@@ -1,57 +1,16 @@
-#include "MemoryAllocator.hh"
+#include "TLSFAllocator.hh"
 
-#include "Memory.hh"
+#include "Core/Memory/MemoryUtils.hh"
 
 namespace lr::Memory
 {
-    u32 LinearMemoryAllocator::AddPool(u64 size)
-    {
-        ZoneScoped;
-
-        Pool &pool = m_pPools[m_PoolCount];
-        pool.m_Size = size;
-
-        return m_PoolCount++;
-    }
-
-    u64 LinearMemoryAllocator::Allocate(u32 poolIndex, u64 size, u32 alignment)
-    {
-        ZoneScoped;
-
-        Pool &pool = m_pPools[poolIndex];
-
-        u32 alignedSize = (size + alignment - 1) & ~(alignment - 1);
-
-        if (pool.m_Offset + alignedSize > pool.m_Size)
-        {
-            LOG_ERROR("Linear memory allocator reached it's limit. Allocated {} and requested {}.", pool.m_Size, alignedSize);
-            return -1;
-        }
-
-        u64 off = pool.m_Offset;
-        pool.m_Offset += alignedSize;
-
-        return off;
-    }
-
-    void LinearMemoryAllocator::Free(u32 poolIndex)
-    {
-        ZoneScoped;
-
-        Pool &pool = m_pPools[poolIndex];
-
-        pool.m_Offset = 0;
-    }
-
-    /// ------------------------------------------------------ ///
-
-    void TLSFMemoryAllocator::Init(u64 memSize)
+    void TLSFAllocatorView::Init(u64 memSize, u32 blockCount)
     {
         ZoneScoped;
 
         m_Size = memSize;
 
-        m_BlockCount = 0x1000;
+        m_BlockCount = blockCount;
         m_pBlockPool = Memory::Allocate<TLSFBlock>(m_BlockCount);
 
         m_pFrontBlock = m_pBlockPool;
@@ -67,11 +26,34 @@ namespace lr::Memory
         AddFreeBlock(pHeadBlock);
     }
 
-    TLSFBlock *TLSFMemoryAllocator::Allocate(u64 size, u32 alignment)
+    void TLSFAllocatorView::Delete()
+    {
+        ZoneScoped;
+
+        Memory::Release(m_pBlockPool);
+    }
+
+    bool TLSFAllocatorView::CanAllocate(u64 size, u32 alignment)
+    {
+        ZoneScoped;
+
+        u64 alignedSize = Memory::AlignUp(size, ALIGN_SIZE);
+        TLSFBlock *pBlock = FindFreeBlock(alignedSize);
+
+        if (!pBlock)
+            return false;
+
+        if (!pBlock->IsFree && GetPhysicalSize(pBlock) < size)
+            return false;
+
+        return true;
+    }
+
+    TLSFBlock *TLSFAllocatorView::Allocate(u64 size, u32 alignment)
     {
         TLSFBlock *pAvailableBlock = nullptr;
 
-        u64 alignedSize = AlignUp(size, ALIGN_SIZE);
+        u64 alignedSize = Memory::AlignUp(size, ALIGN_SIZE);
 
         /// Find free and closest block available
         TLSFBlock *pBlock = FindFreeBlock(alignedSize);
@@ -91,14 +73,12 @@ namespace lr::Memory
             }
 
             pAvailableBlock = pBlock;
-
-            // u32 alignedOffset = (pBlock->Offset + (alignment - 1)) & ~(alignment - 1);
         }
 
         return pAvailableBlock;
     }
 
-    void TLSFMemoryAllocator::Free(TLSFBlock *pBlock)
+    void TLSFAllocatorView::Free(TLSFBlock *pBlock)
     {
         ZoneScoped;
 
@@ -122,7 +102,7 @@ namespace lr::Memory
         AddFreeBlock(pBlock);
     }
 
-    i32 TLSFMemoryAllocator::GetFirstIndex(u64 size)
+    i32 TLSFAllocatorView::GetFirstIndex(u64 size)
     {
         if (size < MIN_BLOCK_SIZE)
             return 0;
@@ -130,7 +110,7 @@ namespace lr::Memory
         return GetMSB(size) - (FL_INDEX_SHIFT - 1);
     }
 
-    i32 TLSFMemoryAllocator::GetSecondIndex(i32 firstIndex, u32 size)
+    i32 TLSFAllocatorView::GetSecondIndex(i32 firstIndex, u32 size)
     {
         if (size < MIN_BLOCK_SIZE)
             return size / (MIN_BLOCK_SIZE / SL_INDEX_COUNT);
@@ -138,7 +118,7 @@ namespace lr::Memory
         return (size >> ((firstIndex + (FL_INDEX_SHIFT - 1)) - SL_INDEX_COUNT_LOG2)) ^ (1 << SL_INDEX_COUNT_LOG2);
     }
 
-    void TLSFMemoryAllocator::AddFreeBlock(TLSFBlock *pBlock)
+    void TLSFAllocatorView::AddFreeBlock(TLSFBlock *pBlock)
     {
         ZoneScoped;
 
@@ -162,7 +142,7 @@ namespace lr::Memory
         m_pSecondListBitmap[firstIndex] |= 1 << secondIndex;
     }
 
-    TLSFBlock *TLSFMemoryAllocator::FindFreeBlock(u32 size)
+    TLSFBlock *TLSFAllocatorView::FindFreeBlock(u32 size)
     {
         ZoneScoped;
 
@@ -187,7 +167,7 @@ namespace lr::Memory
         return m_ppBlocks[firstIndex][secondIndex];
     }
 
-    void TLSFMemoryAllocator::RemoveFreeBlock(TLSFBlock *pBlock)
+    void TLSFAllocatorView::RemoveFreeBlock(TLSFBlock *pBlock)
     {
         ZoneScoped;
 
@@ -225,7 +205,7 @@ namespace lr::Memory
         }
     }
 
-    TLSFBlock *TLSFMemoryAllocator::SplitBlock(TLSFBlock *pBlock, u32 size)
+    TLSFBlock *TLSFAllocatorView::SplitBlock(TLSFBlock *pBlock, u32 size)
     {
         ZoneScoped;
 
@@ -252,7 +232,7 @@ namespace lr::Memory
         return pNewBlock;
     }
 
-    void TLSFMemoryAllocator::MergeBlock(TLSFBlock *pTarget, TLSFBlock *pSource)
+    void TLSFAllocatorView::MergeBlock(TLSFBlock *pTarget, TLSFBlock *pSource)
     {
         ZoneScoped;
 
@@ -263,14 +243,14 @@ namespace lr::Memory
         FreeInternalBlock(pSource);
     }
 
-    u32 TLSFMemoryAllocator::GetPhysicalSize(TLSFBlock *pBlock)
+    u32 TLSFAllocatorView::GetPhysicalSize(TLSFBlock *pBlock)
     {
         ZoneScoped;
 
         return pBlock->pNextPhysical ? pBlock->pNextPhysical->Offset - pBlock->Offset : m_Size - pBlock->Offset;
     }
 
-    TLSFBlock *TLSFMemoryAllocator::AllocateInternalBlock()
+    TLSFBlock *TLSFAllocatorView::AllocateInternalBlock()
     {
         ZoneScoped;
 
@@ -285,7 +265,7 @@ namespace lr::Memory
         return --m_pBackBlock;
     }
 
-    void TLSFMemoryAllocator::FreeInternalBlock(TLSFBlock *pBlock)
+    void TLSFAllocatorView::FreeInternalBlock(TLSFBlock *pBlock)
     {
         ZoneScoped;
 
@@ -298,6 +278,66 @@ namespace lr::Memory
             pBlock->pNextPhysical = m_pFrontBlock;
             m_pFrontBlock = pBlock;
         }
+    }
+
+    void TLSFAllocator::Init(AllocatorDesc &desc)
+    {
+        ZoneScoped;
+
+        m_View.Init(desc.DataSize, desc.BlockCount);
+        m_pData = (u8 *)desc.pInitialData;
+        m_SelfAllocated = !(bool)m_pData;
+
+        if (!m_pData)
+            m_pData = Memory::Allocate<u8>(desc.DataSize);
+    }
+
+    void TLSFAllocator::Delete()
+    {
+        ZoneScoped;
+
+        m_View.Delete();
+
+        if (m_SelfAllocated)
+            Memory::Release(m_pData);
+    }
+
+    bool TLSFAllocator::CanAllocate(u64 size, u32 alignment)
+    {
+        ZoneScoped;
+
+        return m_View.CanAllocate(size, alignment);
+    }
+
+    bool TLSFAllocator::Allocate(AllocationInfo &info)
+    {
+        ZoneScoped;
+
+        TLSFBlock *pBlock = m_View.Allocate(info.Size, info.Alignment);
+        if (!pBlock)
+            return false;
+
+        info.pAllocatorData = pBlock;
+
+        void *pData = m_pData + pBlock->Offset;
+
+        if (!info.pData)
+            info.pData = pData;
+        else
+            memcpy(pData, info.pData, info.Size);
+
+        return true;
+    }
+
+    void TLSFAllocator::Free(void *pData, bool freeData)
+    {
+        ZoneScoped;
+
+        TLSFBlock *pBlock = (TLSFBlock *)pData;
+        m_View.Free(pBlock);
+
+        if (freeData)
+            Memory::Release(m_pData);
     }
 
 }  // namespace lr::Memory

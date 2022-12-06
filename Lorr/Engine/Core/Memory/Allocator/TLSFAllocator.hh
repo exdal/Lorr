@@ -1,30 +1,13 @@
 //
-// Created on Monday 26th September 2022 by e-erdal
+// Created on Friday 18th November 2022 by e-erdal
 //
 
 #pragma once
 
+#include "BaseAllocator.hh"
+
 namespace lr::Memory
 {
-    struct LinearMemoryAllocator
-    {
-        struct Pool
-        {
-            u64 m_Offset = 0;
-            u64 m_Size = 0;
-        };
-
-        u32 AddPool(u64 size);
-
-        u64 Allocate(u32 pool, u64 size, u32 alignment);
-        void Free(u32 pool);
-
-        u32 m_PoolCount = 0;
-        Pool m_pPools[24];
-    };
-
-    /// ------------------------------------------------------------ //
-
     struct TLSFBlock
     {
         u64 Offset : 63 = 0;
@@ -37,7 +20,7 @@ namespace lr::Memory
         TLSFBlock *pNextFree = nullptr;
     };
 
-    struct TLSFMemoryAllocator
+    struct TLSFAllocatorView
     {
         static constexpr i32 ALIGN_SIZE_LOG2 = 3;
         static constexpr i32 ALIGN_SIZE = 1 << ALIGN_SIZE_LOG2;
@@ -54,8 +37,10 @@ namespace lr::Memory
 
         /// ------------------------------------------------------------ ///
 
-        void Init(u64 memSize);
+        void Init(u64 memSize, u32 blockCount);
+        void Delete();
 
+        bool CanAllocate(u64 size, u32 alignment);
         TLSFBlock *Allocate(u64 size, u32 alignment = ALIGN_SIZE);
         void Free(TLSFBlock *pBlock);
 
@@ -86,6 +71,15 @@ namespace lr::Memory
 
         TLSFBlock *m_pFrontBlock = nullptr;
         TLSFBlock *m_pBackBlock = nullptr;
+    };
+
+    struct TLSFAllocator : Allocator<TLSFAllocatorView>
+    {
+        void Init(AllocatorDesc &desc) override;
+        void Delete() override;
+        bool CanAllocate(u64 size, u32 alignment) override;
+        bool Allocate(AllocationInfo &info) override;
+        void Free(void *pData, bool freeData) override;
     };
 
 }  // namespace lr::Memory

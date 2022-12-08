@@ -56,11 +56,12 @@ namespace lr::Graphics
         virtual void ResizeSwapChain(u32 width, u32 height) = 0;
         virtual BaseSwapChain *GetSwapChain() = 0;
 
-        virtual void Frame() = 0;
+        virtual void BeginFrame() = 0;
+        virtual void EndFrame() = 0;
 
         /// RESOURCE ///
         virtual BaseDescriptorSet *CreateDescriptorSet(DescriptorSetDesc *pDesc) = 0;
-        virtual void UpdateDescriptorData(BaseDescriptorSet *pSet) = 0;
+        virtual void UpdateDescriptorData(BaseDescriptorSet *pSet, DescriptorSetDesc *pDesc) = 0;
 
         virtual BaseShader *CreateShader(ShaderStage stage, BufferReadStream &buf) = 0;
         virtual BaseShader *CreateShader(ShaderStage stage, eastl::string_view path) = 0;
@@ -79,8 +80,6 @@ namespace lr::Graphics
         // * Images * //
         virtual BaseImage *CreateImage(ImageDesc *pDesc, ImageData *pData) = 0;
         virtual void DeleteImage(BaseImage *pImage) = 0;
-
-        virtual BaseSampler *CreateSampler(SamplerDesc *pDesc) = 0;
 
         // TODO: USE ACTUAL ALLOCATORS ASAP
         // T = Base Type

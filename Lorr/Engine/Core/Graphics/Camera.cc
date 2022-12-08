@@ -93,8 +93,10 @@ namespace lr::Graphics
 
         XMMATRIX translation = XMMatrixIdentity();
         translation = XMMatrixMultiply(translation, XMMatrixTranslationFromVector(m_Position));
+
         XMMATRIX rotation = XMMatrixIdentity();
         rotation = XMMatrixMultiply(rotation, XMMatrixRotationAxis(XMVectorSet(0.0, 0.0, 1.0, 0.0), 0.0));
+
         m_View = XMMatrixInverse(nullptr, XMMatrixMultiply(translation, rotation));
     }
 

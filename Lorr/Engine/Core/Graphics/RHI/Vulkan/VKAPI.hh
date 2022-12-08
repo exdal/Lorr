@@ -66,7 +66,8 @@ namespace lr::Graphics
         void ResizeSwapChain(u32 width, u32 height) override;
         BaseSwapChain *GetSwapChain() override;
 
-        void Frame() override;
+        void BeginFrame() override;
+        void EndFrame() override;
         void WaitForDevice();
 
         /// RESOURCE ///
@@ -76,7 +77,7 @@ namespace lr::Graphics
         void DeleteShader(BaseShader *pShader) override;
 
         BaseDescriptorSet *CreateDescriptorSet(DescriptorSetDesc *pDesc) override;
-        void UpdateDescriptorData(BaseDescriptorSet *pSet) override;
+        void UpdateDescriptorData(BaseDescriptorSet *pSet, DescriptorSetDesc *pDesc) override;
 
         VkDescriptorPool CreateDescriptorPool(const std::initializer_list<VKDescriptorBindingDesc> &layouts);
 
@@ -96,7 +97,7 @@ namespace lr::Graphics
         void DeleteImage(BaseImage *pImage) override;
         void CreateImageView(BaseImage *pImage);
 
-        BaseSampler *CreateSampler(SamplerDesc *pDesc) override;
+        VkSampler CreateSampler(SamplerDesc *pDesc);
 
         void SetAllocator(VKBuffer *pBuffer, AllocatorType targetAllocator);
         void SetAllocator(VKImage *pImage, AllocatorType targetAllocator);

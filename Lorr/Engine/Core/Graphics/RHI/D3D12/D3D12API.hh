@@ -69,11 +69,12 @@ namespace lr::Graphics
         void ResizeSwapChain(u32 width, u32 height) override;
         BaseSwapChain *GetSwapChain() override;
 
-        void Frame() override;
+        void BeginFrame() override;
+        void EndFrame() override;
 
         /// RESOURCE ///
         BaseDescriptorSet *CreateDescriptorSet(DescriptorSetDesc *pDesc) override;
-        void UpdateDescriptorData(BaseDescriptorSet *pSet) override;
+        void UpdateDescriptorData(BaseDescriptorSet *pSet, DescriptorSetDesc *pDesc) override;
 
         // `VKDescriptorBindingDesc::Type` represents descriptor type.
         // `VKDescriptorBindingDesc::ArraySize` represents descriptor count for that type.
@@ -99,7 +100,10 @@ namespace lr::Graphics
         void DeleteImage(BaseImage *pImage) override;
         void CreateImageView(BaseImage *pImage);
 
-        BaseSampler *CreateSampler(SamplerDesc *pDesc) override;
+        void CreateSampler(SamplerDesc *pDesc, D3D12_STATIC_SAMPLER_DESC &samplerOut);
+
+        void SetAllocator(D3D12Buffer *pBuffer, D3D12_RESOURCE_DESC &resourceDesc, AllocatorType targetAllocator);
+        void SetAllocator(D3D12Image *pImage, D3D12_RESOURCE_DESC &resourceDesc, AllocatorType targetAllocator);
 
         void BindMemory(BaseImage *pImage);
 

@@ -16,12 +16,15 @@ namespace lr::Renderer
 
         BasePipeline *m_pPipeline = nullptr;
         BaseDescriptorSet *m_pDescriptorSet = nullptr;
+        BaseDescriptorSet *m_pSamplerSet = nullptr;
 
-        BaseImage *m_pImage = nullptr;
-        BaseSampler *m_pSampler = nullptr;
+        BaseImage *m_pFontImage = nullptr;
 
         BaseBuffer *m_pVertexBuffer = nullptr;
         BaseBuffer *m_pIndexBuffer = nullptr;
+
+        u32 m_VertexCount = 0;
+        u32 m_IndexCount = 0;
     };
 
 }  // namespace lr::Renderer

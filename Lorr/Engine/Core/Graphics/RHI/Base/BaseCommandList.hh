@@ -102,7 +102,7 @@ namespace lr::Graphics
         virtual void SetPrimitiveType(PrimitiveType type) = 0;
 
         /// Buffer Commands
-        virtual void SetRootConstants() = 0;
+        virtual void SetPushConstants(BasePipeline *pPipeline, ShaderStage stage, void *pData, u32 dataSize) = 0;
         virtual void SetVertexBuffer(BaseBuffer *pBuffer) = 0;
         virtual void SetIndexBuffer(BaseBuffer *pBuffer, bool type32 = true) = 0;
         virtual void CopyBuffer(BaseBuffer *pSource, BaseBuffer *pDest, u32 size) = 0;
@@ -110,7 +110,7 @@ namespace lr::Graphics
 
         /// Draw Commands
         virtual void Draw(u32 vertexCount, u32 firstVertex = 0, u32 instanceCount = 1, u32 firstInstance = 1) = 0;
-        virtual void DrawIndexed(u32 indexCount, u32 firstIndex = 0, u32 vertexOffset = 0, u32 instanceCount = 1, u32 firstInstance = 1) = 0;
+        virtual void DrawIndexed(u32 indexCount, u32 firstIndex = 0, u32 vertexOffset = 0, u32 instanceCount = 1, u32 firstInstance = 0) = 0;
 
         // Pipeline
         virtual void SetPipeline(BasePipeline *pPipeline) = 0;

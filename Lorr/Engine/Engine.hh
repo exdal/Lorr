@@ -8,7 +8,7 @@
 #include "Core/Window/Win32/Win32Window.hh"
 
 #include "Renderer/RendererManager.hh"
-#include "UI/ImGuiRenderer.hh"
+#include "UI/ImGui.hh"
 
 namespace lr
 {
@@ -28,7 +28,7 @@ namespace lr
 
         Win32Window m_Window;
         Renderer::RendererManager m_RendererMan;
-        UI::ImGuiRenderer m_ImGui;
+        UI::ImGuiHandler m_ImGui;
 
         bool m_ShuttingDown = false;
     };

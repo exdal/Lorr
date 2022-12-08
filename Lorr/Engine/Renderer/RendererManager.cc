@@ -1,7 +1,7 @@
 #include "RendererManager.hh"
 
-#include "Core/Graphics/RHI/D3D12/D3D12API.hh"
 #include "Core/Graphics/RHI/Vulkan/VKAPI.hh"
+#include "Core/Graphics/RHI/D3D12/D3D12API.hh"
 
 namespace lr::Renderer
 {
@@ -13,8 +13,8 @@ namespace lr::Renderer
 
         switch (type)
         {
-            case APIType::D3D12: m_pAPI = new D3D12API; break;
             case APIType::Vulkan: m_pAPI = new VKAPI; break;
+            case APIType::D3D12: m_pAPI = new D3D12API; break;
         }
 
         m_pAPI->Init(pWindow, pWindow->m_Width, pWindow->m_Height, flags);
@@ -34,7 +34,7 @@ namespace lr::Renderer
         camera2DDesc.Position = XMFLOAT2(0.0, 0.0);
         camera2DDesc.ViewSize = XMFLOAT2(pWindow->m_Width, pWindow->m_Height);
         camera2DDesc.ZFar = 1.0;
-        camera2DDesc.ZNear = 0.1;
+        camera2DDesc.ZNear = 0.0;
 
         m_Camera2D.Init(&camera2DDesc);
 
@@ -50,7 +50,32 @@ namespace lr::Renderer
     {
         ZoneScoped;
 
-        m_pAPI->Frame();
+        m_pAPI->BeginFrame();
+
+        m_Camera2D.Update(0, 0);
+        XMMATRIX mat2D = XMMatrixMultiplyTranspose(m_Camera2D.m_View, m_Camera2D.m_Projection);
+
+        BaseImage *pCurrentImage = m_pAPI->GetSwapChain()->GetCurrentImage();
+
+        BaseCommandList *pList = m_pAPI->GetCommandList();
+        m_pAPI->BeginCommandList(pList);
+
+        pList->BarrierTransition(pCurrentImage, ResourceUsage::Undefined, ShaderStage::None, ResourceUsage::RenderTarget, ShaderStage::None);
+
+        m_pAPI->EndCommandList(pList);
+        m_pAPI->ExecuteCommandList(pList, false);
+
+        m_ImGuiPass.Draw(m_pAPI, mat2D);
+
+        pList = m_pAPI->GetCommandList();
+        m_pAPI->BeginCommandList(pList);
+
+        pList->BarrierTransition(pCurrentImage, ResourceUsage::RenderTarget, ShaderStage::None, ResourceUsage::Present, ShaderStage::None);
+
+        m_pAPI->EndCommandList(pList);
+        m_pAPI->ExecuteCommandList(pList, false);
+
+        m_pAPI->EndFrame();
     }
 
     void RendererManager::InitPasses()

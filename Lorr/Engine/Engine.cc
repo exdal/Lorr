@@ -12,7 +12,7 @@ namespace lr
 
         m_Window.Init(windowDesc);
         m_ImGui.Init(m_Window.m_Width, m_Window.m_Height);
-        m_RendererMan.Init(Renderer::APIType::Vulkan, Graphics::APIFlags::None, &m_Window);
+        m_RendererMan.Init(Renderer::APIType::D3D12, Graphics::APIFlags::None, &m_Window);
 
         Run();
     }
@@ -32,6 +32,7 @@ namespace lr
                 case WINDOW_EVENT_QUIT:
                 {
                     m_ShuttingDown = true;
+                    
                     break;
                 }
 
@@ -40,14 +41,20 @@ namespace lr
                     break;
                 }
 
-                case WINDOW_EVENT_MOUSE_WHEEL:
+                case WINDOW_EVENT_MOUSE_POSITION:
                 {
+                    auto &io = ImGui::GetIO();
+                    io.MousePos.x = data.MouseX;
+                    io.MousePos.y = data.MouseY;
+
                     break;
                 }
 
-                case WINDOW_EVENT_KEYBOARD_STATE:
+                case WINDOW_EVENT_MOUSE_STATE:
                 {
-                    LOG_TRACE("Key state: {}, {}", data.Key, (bool)data.KeyState);
+                    auto &io = ImGui::GetIO();
+                    io.MouseDown[0] = !(bool)data.MouseState;
+
                     break;
                 }
 
@@ -66,6 +73,14 @@ namespace lr
         {
             f32 deltaTime = timer.elapsed();
             timer.reset();
+
+            m_ImGui.NewFrame(m_Window.m_Width, m_Window.m_Height);
+
+            ImGui::Begin("Test");
+            ImGui::Button("Test");
+            ImGui::End();
+
+            m_ImGui.EndFrame();
 
             m_Window.Poll();
             Poll(deltaTime);

@@ -42,6 +42,7 @@ namespace lr::Graphics
         m_CreateInfo.pColorBlendState = &m_ColorBlendState;
         m_CreateInfo.pDynamicState = &m_DynamicState;
         m_CreateInfo.pStages = m_pShaderStages;
+        m_CreateInfo.pNext = &m_RenderingInfo;
 
         m_VertexInputState.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
         m_InputAssemblyState.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -52,6 +53,7 @@ namespace lr::Graphics
         m_DepthStencilState.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
         m_ColorBlendState.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
         m_DynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+        m_RenderingInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
 
         for (u32 i = 0; i < VKGraphicsPipelineBuildInfo::kMaxShaderStageCount; i++)
             m_pShaderStages[i].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -83,6 +85,11 @@ namespace lr::Graphics
         /// ------------------------------------- ///
 
         m_ColorBlendState.pAttachments = m_pColorBlendAttachments;
+        m_ColorBlendState.logicOpEnable = false;
+
+        /// ------------------------------------- ///
+
+        m_RenderingInfo.pColorAttachmentFormats = m_ColorAttachmnetFormats;
 
         /// ------------------------------------- ///
 
@@ -225,6 +232,9 @@ namespace lr::Graphics
             return;
 
         u32 id = m_ColorBlendState.attachmentCount++;
+        m_RenderingInfo.colorAttachmentCount = m_ColorBlendState.attachmentCount;
+
+        m_ColorAttachmnetFormats[id] = VKAPI::ToVKFormat(pAttachment->Format);
 
         m_pColorBlendAttachments[id].blendEnable = pAttachment->BlendEnable;
         m_pColorBlendAttachments[id].colorWriteMask = pAttachment->WriteMask;

@@ -57,7 +57,7 @@ namespace lr::Graphics
             BaseImage *pImage = attachment.pHandle;
             API_VAR(D3D12Image, pImage);
 
-            info.cpuDescriptor = pImageDX->m_ShaderViewCPU;
+            info.cpuDescriptor = pImageDX->m_RenderTargetViewCPU;
             info.BeginningAccess.Type = kBeginningAccessLUT[(u32)attachment.LoadOp];
             info.EndingAccess.Type = kEndingAccessLUT[(u32)attachment.StoreOp];
 
@@ -181,6 +181,18 @@ namespace lr::Graphics
         m_pHandle->IASetPrimitiveTopology(D3D12API::ToDXTopology(type));
     }
 
+    void D3D12CommandList::SetPushConstants(BasePipeline *pPipeline, ShaderStage stage, void *pData, u32 dataSize)
+    {
+        ZoneScoped;
+
+        API_VAR(D3D12Pipeline, pPipeline);
+
+        m_pHandle->SetGraphicsRoot32BitConstants(pPipelineDX->m_pRootConstats[(u32)D3D12API::ToDXShaderType(stage)],
+                                                 dataSize / sizeof(u32),
+                                                 pData,
+                                                 0);
+    }
+
     void D3D12CommandList::SetVertexBuffer(BaseBuffer *pBuffer)
     {
         ZoneScoped;
@@ -222,6 +234,25 @@ namespace lr::Graphics
     void D3D12CommandList::CopyBuffer(BaseBuffer *pSource, BaseImage *pDest)
     {
         ZoneScoped;
+
+        API_VAR(D3D12Buffer, pSource);
+        API_VAR(D3D12Image, pDest);
+
+        D3D12_TEXTURE_COPY_LOCATION destLocation = {};
+        destLocation.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+        destLocation.SubresourceIndex = 0;  // TODO: Mips
+        destLocation.pResource = pDestDX->m_pHandle;
+
+        D3D12_TEXTURE_COPY_LOCATION srcLocation = {};
+        srcLocation.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+        srcLocation.PlacedFootprint.Footprint.Format = D3D12API::ToDXFormat(pDest->m_Format);
+        srcLocation.PlacedFootprint.Footprint.Width = pDest->m_Width;
+        srcLocation.PlacedFootprint.Footprint.Height = pDest->m_Height;
+        srcLocation.PlacedFootprint.Footprint.Depth = 1;
+        srcLocation.PlacedFootprint.Footprint.RowPitch = Memory::AlignUp(pDest->m_Width * 4, D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
+        srcLocation.pResource = pSourceDX->m_pHandle;
+
+        m_pHandle->CopyTextureRegion(&destLocation, 0, 0, 0, &srcLocation, nullptr);
     }
 
     void D3D12CommandList::Draw(u32 vertexCount, u32 firstVertex, u32 instanceCount, u32 firstInstance)
@@ -257,7 +288,8 @@ namespace lr::Graphics
         {
             API_VAR(D3D12DescriptorSet, pSet);
 
-            m_pHandle->SetGraphicsRootDescriptorTable(idx++, pSetDX->m_pDescriptorHandles[0]);
+            if (pSetDX->pDescriptorHandles[0].ptr != 0)  // DAAAAAAAAAAAAAAAAMN
+                m_pHandle->SetGraphicsRootDescriptorTable(idx++, pSetDX->pDescriptorHandles[0]);
         }
     }
 

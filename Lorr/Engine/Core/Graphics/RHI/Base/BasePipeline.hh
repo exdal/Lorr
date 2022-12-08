@@ -38,6 +38,13 @@ namespace lr::Graphics
         CompareOp CompareFunc;
     };
 
+    struct PushConstantDesc
+    {
+        ShaderStage Stage = ShaderStage::None;
+        u32 Offset = 0;
+        u32 Size = 0;
+    };
+
     /// Some notes:
     // * Currently only one vertex binding is supported and it only supports vertex, not instances (actually a TODO)
     // * MSAA is not actually supported
@@ -75,10 +82,14 @@ namespace lr::Graphics
 
         virtual void AddAttachment(PipelineAttachment *pAttachment, bool depth) = 0;
 
-        void SetDescriptorSets(std::initializer_list<BaseDescriptorSet *> sets);
+        void SetDescriptorSets(std::initializer_list<BaseDescriptorSet *> sets, BaseDescriptorSet *pSamplerSet);
+        PushConstantDesc &AddPushConstant();
 
+        BaseDescriptorSet *m_pSamplerDescriptorSet = nullptr;
         u32 m_DescriptorSetCount = 0;
         BaseDescriptorSet *m_ppDescriptorSets[8];
+        u32 m_PushConstantCount = 0;
+        PushConstantDesc m_pPushConstants[8];
     };
 
     struct BasePipeline

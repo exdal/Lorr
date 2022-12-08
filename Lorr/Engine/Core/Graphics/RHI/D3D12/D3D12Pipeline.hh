@@ -14,6 +14,8 @@ namespace lr::Graphics
     {
         ID3D12PipelineState *pHandle = nullptr;
         ID3D12RootSignature *pLayout = nullptr;
+
+        u32 m_pRootConstats[(u32)DescriptorType::Count] = {};
     };
 
     struct D3D12GraphicsPipelineBuildInfo : GraphicsPipelineBuildInfo

@@ -17,8 +17,6 @@ namespace lr::Graphics
         m_pFence = pFence;
 
         m_Type = type;
-
-        vkCmdPushConstants(m_pHandle, );
     }
 
     void VKCommandList::BeginPass(CommandListBeginDesc *pDesc)
@@ -89,8 +87,10 @@ namespace lr::Graphics
 
         beginInfo.colorAttachmentCount = pDesc->ColorAttachmentCount;
         beginInfo.pColorAttachments = pColorAttachments;
-        beginInfo.renderArea.offset = { (i32)pDesc->RenderArea.x, (i32)pDesc->RenderArea.y };
-        beginInfo.renderArea.extent = { pDesc->RenderArea.z, pDesc->RenderArea.w };
+        beginInfo.renderArea.offset.x = (i32)pDesc->RenderArea.x;
+        beginInfo.renderArea.offset.y = (i32)pDesc->RenderArea.y;
+        beginInfo.renderArea.extent.width = pDesc->RenderArea.z;
+        beginInfo.renderArea.extent.height = pDesc->RenderArea.w;
 
         vkCmdBeginRendering(m_pHandle, &beginInfo);
     }
@@ -140,7 +140,7 @@ namespace lr::Graphics
         vkCmdPipelineBarrier(m_pHandle,
                              VKAPI::ToVKPipelineStage(barrierBefore) | VKAPI::ToVKPipelineShaderStage(shaderBefore),
                              VKAPI::ToVKPipelineStage(barrierAfter) | VKAPI::ToVKPipelineShaderStage(shaderAfter),
-                             VK_DEPENDENCY_BY_REGION_BIT,
+                             0,
                              0,
                              nullptr,
                              0,
@@ -245,6 +245,15 @@ namespace lr::Graphics
         ZoneScoped;
 
         vkCmdSetPrimitiveTopology(m_pHandle, VKAPI::ToVKTopology(type));
+    }
+
+    void VKCommandList::SetPushConstants(BasePipeline *pPipeline, ShaderStage stage, void *pData, u32 dataSize)
+    {
+        ZoneScoped;
+
+        API_VAR(VKPipeline, pPipeline);
+
+        vkCmdPushConstants(m_pHandle, pPipelineVK->pLayout, VKAPI::ToVKShaderType(stage), 0, dataSize, pData);
     }
 
     void VKCommandList::SetVertexBuffer(BaseBuffer *pBuffer)

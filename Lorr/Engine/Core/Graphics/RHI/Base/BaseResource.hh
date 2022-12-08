@@ -43,11 +43,12 @@ namespace lr::Graphics
     {
         None,
 
-        Descriptor,    // A linear, small sized pool with CPUW flag for per-frame descriptor data
-        BufferLinear,  // A linear, medium sized pool for buffers
-        BufferTLSF,    // Large sized pool for large scene buffers
-                       //
-        ImageTLSF,     // Large sized pool for large images
+        Descriptor,              // A linear, small sized pool with CPUW flag for per-frame descriptor data
+        BufferLinear,            // A linear, medium sized pool for buffers
+        BufferTLSF,              // Large sized pool for large scene buffers
+        BufferFrameTime = None,  //
+                                 //
+        ImageTLSF,               // Large sized pool for large images
 
         Count,
     };
@@ -182,11 +183,6 @@ namespace lr::Graphics
         float MaxLOD = 0;
     };
 
-    struct BaseSampler
-    {
-        BaseSampler() = default;
-    };
-
     enum class DescriptorType : u8
     {
         Sampler,
@@ -194,27 +190,24 @@ namespace lr::Graphics
         ConstantBufferView,
         UnorderedAccessBuffer,
         UnorderedAccessView,
-        RootConstant,
+        PushConstant,
 
         Count,
     };
 
     struct DescriptorBindingDesc
     {
-        // u32 BindingID = -1;
+        u32 BindingID = -1;
         DescriptorType Type;
         ShaderStage TargetShader;
         u32 ArraySize = 1;
 
-        ShaderStage RootConstantStage = ShaderStage::None;
-        u32 RootConstantOffset = 0;
-        u32 RootConstantSize = 0;
+        SamplerDesc Sampler = {};
 
         union
         {
             BaseBuffer *pBuffer = nullptr;
             BaseImage *pImage;
-            BaseSampler *pSampler;
         };
     };
 
@@ -227,7 +220,7 @@ namespace lr::Graphics
     struct BaseDescriptorSet
     {
         u32 BindingCount = 0;
-        DescriptorBindingDesc pBindingInfos[8];
+        DescriptorBindingDesc pBindings[8];
     };
 
 }  // namespace lr::Graphics

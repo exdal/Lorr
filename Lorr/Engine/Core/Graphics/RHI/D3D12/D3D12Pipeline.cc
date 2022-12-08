@@ -198,8 +198,8 @@ namespace lr::Graphics
         desc.SrcBlendAlpha = kBlendFactorLUT[(u32)pAttachment->SrcBlendAlpha];
         desc.DestBlendAlpha = kBlendFactorLUT[(u32)pAttachment->DstBlendAlpha];
 
-        desc.BlendOp = (D3D12_BLEND_OP)pAttachment->Blend;
-        desc.BlendOpAlpha = (D3D12_BLEND_OP)pAttachment->BlendAlpha;
+        desc.BlendOp = (D3D12_BLEND_OP)((u32)pAttachment->Blend + 1);
+        desc.BlendOpAlpha = (D3D12_BLEND_OP)((u32)pAttachment->BlendAlpha + 1);
     }
 
 }  // namespace lr::Graphics

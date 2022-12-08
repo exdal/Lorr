@@ -28,11 +28,6 @@ namespace lr::Graphics
         VkDeviceMemory m_pMemoryHandle = nullptr;
     };
 
-    struct VKSampler : BaseSampler
-    {
-        VkSampler m_pHandle = nullptr;
-    };
-
     struct VKDescriptorSet : BaseDescriptorSet
     {
         VkDescriptorSet pHandle = nullptr;

@@ -53,7 +53,7 @@ namespace lr::Graphics
         swapChainInfo.pQueueFamilyIndices = nullptr;
 
         swapChainInfo.imageArrayLayers = 1;
-        swapChainInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        swapChainInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
         swapChainInfo.presentMode = m_PresentMode;
         swapChainInfo.preTransform = m_SurfaceCapabilities.currentTransform;

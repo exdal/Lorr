@@ -45,6 +45,7 @@ namespace lr::Graphics
         void SetPrimitiveType(PrimitiveType type) override;
 
         /// Buffer Commands
+        void SetPushConstants(BasePipeline *pPipeline, ShaderStage stage, void *pData, u32 dataSize) override;
         void SetVertexBuffer(BaseBuffer *pBuffer) override;
         void SetIndexBuffer(BaseBuffer *pBuffer, bool type32) override;
         void CopyBuffer(BaseBuffer *pSource, BaseBuffer *pDest, u32 size) override;

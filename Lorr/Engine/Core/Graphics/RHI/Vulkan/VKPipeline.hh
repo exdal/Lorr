@@ -73,6 +73,9 @@ namespace lr::Graphics
         VkPipelineColorBlendAttachmentState m_pColorBlendAttachments[8] = {};
 
         VkPipelineDynamicStateCreateInfo m_DynamicState = {};
+        
+        VkPipelineRenderingCreateInfo m_RenderingInfo = {};
+        VkFormat m_ColorAttachmnetFormats[8] = {};
 
         VkPipelineShaderStageCreateInfo m_pShaderStages[kMaxShaderStageCount];
     };

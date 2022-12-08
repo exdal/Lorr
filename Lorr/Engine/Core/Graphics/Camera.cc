@@ -100,13 +100,6 @@ namespace lr::Graphics
         m_View = XMMatrixInverse(nullptr, XMMatrixMultiply(translation, rotation));
     }
 
-    void Camera2D::CalculateProjection()
-    {
-        ZoneScoped;
-
-        m_Projection = XMMatrixOrthographicOffCenterLH(0.0, m_ViewSize.x, 0.0, m_ViewSize.y, m_ZNear, m_ZFar);
-    }
-
     void Camera2D::SetPosition(const XMFLOAT2 &position)
     {
         ZoneScoped;
@@ -125,7 +118,6 @@ namespace lr::Graphics
     {
         ZoneScoped;
 
-        CalculateProjection();
         CalculateView();
     }
 

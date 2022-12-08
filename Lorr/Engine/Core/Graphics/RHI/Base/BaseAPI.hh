@@ -81,6 +81,9 @@ namespace lr::Graphics
         virtual BaseImage *CreateImage(ImageDesc *pDesc, ImageData *pData) = 0;
         virtual void DeleteImage(BaseImage *pImage) = 0;
 
+        /// UTILITY
+        virtual void CalcOrthoProjection(XMMATRIX &mat, XMFLOAT2 viewSize, float zFar, float zNear) = 0;
+
         // TODO: USE ACTUAL ALLOCATORS ASAP
         // T = Base Type
         // U = Actual Type

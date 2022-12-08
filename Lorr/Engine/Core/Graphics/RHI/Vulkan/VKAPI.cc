@@ -1027,7 +1027,6 @@ namespace lr::Graphics
 
         vkCreateImageView(m_pDevice, &imageViewCreateInfo, nullptr, &pImageVK->m_pViewHandle);
     }
-
     VkSampler VKAPI::CreateSampler(SamplerDesc *pDesc)
     {
         ZoneScoped;
@@ -1152,6 +1151,13 @@ namespace lr::Graphics
 
             default: break;
         }
+    }
+
+    void VKAPI::CalcOrthoProjection(XMMATRIX &mat, XMFLOAT2 viewSize, float zFar, float zNear)
+    {
+        ZoneScoped;
+
+        mat = XMMatrixOrthographicOffCenterLH(0.0, viewSize.x, 0.0, viewSize.y, zNear, zFar);
     }
 
     bool VKAPI::IsFormatSupported(ResourceFormat format, VkColorSpaceKHR *pColorSpaceOut)

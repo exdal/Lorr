@@ -52,7 +52,8 @@ namespace lr::Renderer
 
         m_pAPI->BeginFrame();
 
-        m_Camera2D.Update(0, 0);
+        m_Camera2D.CalculateView();
+        m_pAPI->CalcOrthoProjection(m_Camera2D.m_Projection, m_Camera2D.m_ViewSize, m_Camera2D.m_ZFar, m_Camera2D.m_ZNear);
         XMMATRIX mat2D = XMMatrixMultiplyTranspose(m_Camera2D.m_View, m_Camera2D.m_Projection);
 
         BaseImage *pCurrentImage = m_pAPI->GetSwapChain()->GetCurrentImage();

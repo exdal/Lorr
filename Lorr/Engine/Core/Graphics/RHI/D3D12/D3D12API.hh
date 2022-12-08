@@ -107,6 +107,9 @@ namespace lr::Graphics
 
         void BindMemory(BaseImage *pImage);
 
+        /// UTILITY
+        void CalcOrthoProjection(XMMATRIX &mat, XMFLOAT2 viewSize, float zFar, float zNear) override;
+
         static i64 TFFenceWait(void *pData);
 
         /// ------------------------------------------------------------- ///

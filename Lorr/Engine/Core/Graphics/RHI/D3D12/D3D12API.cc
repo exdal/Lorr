@@ -1080,6 +1080,13 @@ namespace lr::Graphics
         }
     }
 
+    void D3D12API::CalcOrthoProjection(XMMATRIX &mat, XMFLOAT2 viewSize, float zFar, float zNear)
+    {
+        ZoneScoped;
+
+        mat = XMMatrixOrthographicOffCenterLH(0.0, viewSize.x, viewSize.y, 0.0, zNear, zFar);
+    }
+
     i64 D3D12API::TFFenceWait(void *pData)
     {
         D3D12API *pAPI = (D3D12API *)pData;

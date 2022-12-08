@@ -102,6 +102,9 @@ namespace lr::Graphics
         void SetAllocator(VKBuffer *pBuffer, AllocatorType targetAllocator);
         void SetAllocator(VKImage *pImage, AllocatorType targetAllocator);
 
+        /// UTILITY
+        void CalcOrthoProjection(XMMATRIX &mat, XMFLOAT2 viewSize, float zFar, float zNear) override;
+
         // * Device Features * //
         bool IsFormatSupported(ResourceFormat format, VkColorSpaceKHR *pColorSpaceOut);
         bool IsPresentModeSupported(VkPresentModeKHR format);

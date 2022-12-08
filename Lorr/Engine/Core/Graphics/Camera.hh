@@ -63,7 +63,6 @@ namespace lr::Graphics
         void Init(Camera2DDesc *pDesc);
 
         void CalculateView();
-        void CalculateProjection();
 
         void SetPosition(const XMFLOAT2 &position);
         void SetSize(const XMFLOAT2 &viewSize);

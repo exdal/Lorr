@@ -12,12 +12,14 @@ int main()
     using namespace lr;
 
     ApplicationDesc appDesc;
+    appDesc.Engine.TargetAPI = lr::Renderer::APIType::Vulkan;
+    appDesc.Engine.TargetAPIFlags = lr::Graphics::APIFlags::None;
 
-    appDesc.Window.Title = "Test";
-    appDesc.Window.Width = 1280;
-    appDesc.Window.Height = 780;
-    appDesc.Window.Flags = WindowFlags::Centered | WindowFlags::Resizable;
-    appDesc.Window.CurrentMonitor = 1;
+    appDesc.Engine.Window.Title = "Game";
+    appDesc.Engine.Window.Width = 1280;
+    appDesc.Engine.Window.Height = 780;
+    appDesc.Engine.Window.Flags = WindowFlags::Centered | WindowFlags::Resizable;
+    appDesc.Engine.Window.CurrentMonitor = 0;
 
     pApp = new GameApp;
     pApp->Init(appDesc);

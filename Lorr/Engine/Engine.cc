@@ -4,15 +4,15 @@
 
 namespace lr
 {
-    void Engine::Init(WindowDesc &windowDesc)
+    void Engine::Init(EngineDesc &engineDesc)
     {
         ZoneScoped;
 
         Logger::Init();
 
-        m_Window.Init(windowDesc);
+        m_Window.Init(engineDesc.Window);
         m_ImGui.Init(m_Window.m_Width, m_Window.m_Height);
-        m_RendererMan.Init(Renderer::APIType::D3D12, Graphics::APIFlags::None, &m_Window);
+        m_RendererMan.Init(engineDesc.TargetAPI, engineDesc.TargetAPIFlags, &m_Window);
     }
 
     void Engine::DispatchEvents()

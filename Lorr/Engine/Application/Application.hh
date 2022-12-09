@@ -10,8 +10,7 @@ namespace lr
 {
     struct ApplicationDesc
     {
-        bool ConsoleApp = false;
-        WindowDesc Window;
+        EngineDesc Engine;
     };
 
     struct Application

@@ -12,9 +12,17 @@
 
 namespace lr
 {
+    struct EngineDesc
+    {
+        Renderer::APIType TargetAPI;
+        Graphics::APIFlags TargetAPIFlags;
+
+        WindowDesc Window;
+    };
+
     struct Engine
     {
-        void Init(WindowDesc &windowDesc);
+        void Init(EngineDesc &engineDesc);
 
         /// EVENTS ///
         void DispatchEvents();

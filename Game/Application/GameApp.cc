@@ -4,7 +4,7 @@ void GameApp::Init(lr::ApplicationDesc &desc)
 {
     ZoneScoped;
 
-    m_Engine.Init(desc.Window);
+    m_Engine.Init(desc.Engine);
 }
 
 void GameApp::Shutdown()

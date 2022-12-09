@@ -34,6 +34,8 @@ namespace lr::Renderer
         void Init(APIType type, Graphics::APIFlags flags, BaseWindow *pWindow);
         void Shutdown();
 
+        void Resize(u32 width, u32 height);
+
         void Poll();
 
         void InitPasses();

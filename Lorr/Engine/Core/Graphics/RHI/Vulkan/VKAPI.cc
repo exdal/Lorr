@@ -520,7 +520,10 @@ namespace lr::Graphics
         vkAcquireNextImageKHR(m_pDevice, pSwapChain, UINT64_MAX, pAcquireSemp, nullptr, &imageIndex);
 
         if (imageIndex != m_SwapChain.m_CurrentFrame)
+        {
             LOG_WARN("Current image does not match with SwapChain's current image.");
+            m_SwapChain.m_CurrentFrame = imageIndex;
+        }
     }
 
     void VKAPI::EndFrame()

@@ -46,6 +46,14 @@ namespace lr::Renderer
         ZoneScoped;
     }
 
+    void RendererManager::Resize(u32 width, u32 height)
+    {
+        ZoneScoped;
+
+        m_pAPI->ResizeSwapChain(width, height);
+        m_Camera2D.SetSize({ (float)width, (float)height });
+    }
+
     void RendererManager::Poll()
     {
         ZoneScoped;

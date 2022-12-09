@@ -29,7 +29,8 @@ namespace lr::Graphics
         D3D12SwapChainFrame *GetCurrentFrame();
         D3D12SwapChainFrame *GetNextFrame();
 
-        void DestroyHandle(D3D12API *pAPI);
+        void ResizeBuffers();
+        void DeleteBuffers(D3D12API *pAPI);
 
         /// INTERNALS ///
         IDXGISwapChain3 *m_pHandle = nullptr;

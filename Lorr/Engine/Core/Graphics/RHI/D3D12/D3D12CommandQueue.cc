@@ -15,4 +15,18 @@ namespace lr::Graphics
         m_pHandle->Signal(pList->m_pFence, desired);
     }
 
+    void D3D12CommandQueue::WaitIdle()
+    {
+        ZoneScoped;
+
+        u64 nextFence = ++m_FenceValue;
+        m_pHandle->Signal(m_pFence, nextFence);
+        
+        if (m_pFence->GetCompletedValue() < nextFence)
+        {
+            m_pFence->SetEventOnCompletion(nextFence, m_FenceEvent);
+            WaitForSingleObjectEx(m_FenceEvent, INFINITE, false);
+        }
+    }
+
 }  // namespace lr::Graphics

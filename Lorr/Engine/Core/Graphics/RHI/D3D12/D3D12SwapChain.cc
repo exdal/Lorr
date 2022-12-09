@@ -88,6 +88,8 @@ namespace lr::Graphics
 
             pAPI->CreateImageView(&currentImage);
         }
+
+        m_CurrentFrame = 0;
     }
 
     BaseImage *D3D12SwapChain::GetCurrentImage()
@@ -112,16 +114,22 @@ namespace lr::Graphics
         return &m_pFrames[nextFrameIdx];
     }
 
-    void D3D12SwapChain::DestroyHandle(D3D12API *pAPI)
+    void D3D12SwapChain::ResizeBuffers()
     {
         ZoneScoped;
 
-        // for (u32 i = 0; i < m_FrameCount; i++)
-        // {
-        //     D3D12SwapChainFrame &frame = m_pFrames[i];
-        // }
+        m_pHandle->ResizeBuffers(m_FrameCount, m_Width, m_Height, D3D12API::ToDXFormat(m_ImageFormat), 0);
+    }
 
-        // pAPI->DeleteSwapChain(m_pHandle);
+    void D3D12SwapChain::DeleteBuffers(D3D12API *pAPI)
+    {
+        ZoneScoped;
+
+        for (u32 i = 0; i < m_FrameCount; i++)
+        {
+            D3D12SwapChainFrame &frame = m_pFrames[i];
+            pAPI->DeleteImage(&frame.Image);
+        }
     }
 
 }  // namespace lr::Graphics

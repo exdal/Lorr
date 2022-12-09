@@ -196,6 +196,8 @@ namespace lr::Graphics
         ZoneScoped;
 
         D3D12CommandQueue *pQueue = AllocTypeInherit<BaseCommandQueue, D3D12CommandQueue>();
+        pQueue->m_pFence = CreateFence();
+        pQueue->m_FenceEvent = CreateEventExA(nullptr, nullptr, false, EVENT_ALL_ACCESS);
 
         D3D12_COMMAND_QUEUE_DESC queueDesc = {};
         queueDesc.NodeMask = 0;
@@ -500,6 +502,15 @@ namespace lr::Graphics
     void D3D12API::ResizeSwapChain(u32 width, u32 height)
     {
         ZoneScoped;
+
+        m_pDirectQueue->WaitIdle();
+
+        m_SwapChain.m_Width = width;
+        m_SwapChain.m_Height = height;
+
+        m_SwapChain.DeleteBuffers(this);
+        m_SwapChain.ResizeBuffers();
+        m_SwapChain.CreateBackBuffers(this);
     }
 
     BaseSwapChain *D3D12API::GetSwapChain()
@@ -910,6 +921,26 @@ namespace lr::Graphics
     void D3D12API::DeleteImage(BaseImage *pImage)
     {
         ZoneScoped;
+
+        API_VAR(D3D12Image, pImage);
+
+        if (pImageDX->m_pMemoryHandle)
+        {
+            if (pImage->m_AllocatorType == AllocatorType::ImageTLSF)
+            {
+                Memory::TLSFBlock *pBlock = (Memory::TLSFBlock *)pImage->m_pAllocatorData;
+                assert(pBlock != nullptr);
+
+                m_MAImageTLSF.Allocator.Free(pBlock);
+            }
+            else if (pImage->m_AllocatorType == AllocatorType::None)
+            {
+                pImageDX->m_pMemoryHandle->Release();
+            }
+        }
+
+        if (pImageDX->m_pHandle)
+            pImageDX->m_pHandle->Release();
     }
 
     void D3D12API::CreateImageView(BaseImage *pImage)

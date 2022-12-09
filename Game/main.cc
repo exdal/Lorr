@@ -1,10 +1,10 @@
-#include "Engine.hh"
+#include "Application/GameApp.hh"
 
-lr::Engine *pEngine = nullptr;
+lr::Application *pApp = nullptr;
 
-lr::Engine *lr::GetEngine()
+lr::Application *lr::GetApp()
 {
-    return pEngine;
+    return pApp;
 }
 
 int main()
@@ -13,15 +13,15 @@ int main()
 
     ApplicationDesc appDesc;
 
-    WindowDesc windowDesc;
-    windowDesc.Title = "Test";
-    windowDesc.Width = 1280;
-    windowDesc.Height = 780;
-    windowDesc.Flags = WindowFlags::Centered | WindowFlags::Resizable;
-    windowDesc.CurrentMonitor = 1;
+    appDesc.Window.Title = "Test";
+    appDesc.Window.Width = 1280;
+    appDesc.Window.Height = 780;
+    appDesc.Window.Flags = WindowFlags::Centered | WindowFlags::Resizable;
+    appDesc.Window.CurrentMonitor = 1;
 
-    pEngine = new Engine;
-    pEngine->Init(appDesc, windowDesc);
+    pApp = new GameApp;
+    pApp->Init(appDesc);
+    pApp->Run();
 
     return 0;
 }

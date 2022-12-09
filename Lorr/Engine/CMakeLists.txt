@@ -27,8 +27,9 @@ LorrComponent(
         ${LORR_VENDOR}
     PCH
         pch.hh
-    INCLUDE
+    INCLUDE_PUB
         ./
+        ../../
     LIBTYPE
         STATIC
 )

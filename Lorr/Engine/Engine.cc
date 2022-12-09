@@ -4,7 +4,7 @@
 
 namespace lr
 {
-    void Engine::Init(ApplicationDesc &desc, WindowDesc &windowDesc)
+    void Engine::Init(WindowDesc &windowDesc)
     {
         ZoneScoped;
 
@@ -13,11 +13,9 @@ namespace lr
         m_Window.Init(windowDesc);
         m_ImGui.Init(m_Window.m_Width, m_Window.m_Height);
         m_RendererMan.Init(Renderer::APIType::D3D12, Graphics::APIFlags::None, &m_Window);
-
-        Run();
     }
 
-    void Engine::Poll(f32 deltaTime)
+    void Engine::DispatchEvents()
     {
         ZoneScoped;
 
@@ -68,53 +66,22 @@ namespace lr
         }
     }
 
-    void Engine::Run()
+    void Engine::BeginFrame()
     {
         ZoneScoped;
 
-        Timer timer;
+        m_Window.Poll();
+        DispatchEvents();
 
-        while (!m_ShuttingDown)
-        {
-            f32 deltaTime = timer.elapsed();
-            timer.reset();
+        m_ImGui.NewFrame(m_Window.m_Width, m_Window.m_Height);
+    }
 
-            m_Window.Poll();
-            Poll(deltaTime);
+    void Engine::EndFrame()
+    {
+        ZoneScoped;
 
-            m_ImGui.NewFrame(m_Window.m_Width, m_Window.m_Height);
-
-            ImGui::Begin("Dear ImGui Demo", nullptr);
-
-            ImGui::PushItemWidth(ImGui::GetFontSize() * -12);
-
-            // Menu Bar
-
-            ImGui::Text("dear imgui says hello! (%s) (%d)", IMGUI_VERSION, IMGUI_VERSION_NUM);
-            ImGui::Spacing();
-
-            ImGui::Text("ABOUT THIS DEMO:");
-            ImGui::BulletText("Sections below are demonstrating many aspects of the library.");
-            ImGui::BulletText("The \"Examples\" menu above leads to more demo contents.");
-            ImGui::BulletText("The \"Tools\" menu above gives access to: About Box, Style Editor,\n"
-                              "and Metrics/Debugger (general purpose Dear ImGui debugging tool).");
-            ImGui::Separator();
-
-            ImGui::Text("PROGRAMMER GUIDE:");
-            ImGui::BulletText("See the ShowDemoWindow() code in imgui_demo.cpp. <- you are here!");
-            ImGui::BulletText("See comments in imgui.cpp.");
-            ImGui::BulletText("See example applications in the examples/ folder.");
-            ImGui::BulletText("Read the FAQ at http://www.dearimgui.org/faq/");
-            ImGui::BulletText("Set 'io.ConfigFlags |= NavEnableKeyboard' for keyboard controls.");
-            ImGui::BulletText("Set 'io.ConfigFlags |= NavEnableGamepad' for gamepad controls.");
-            ImGui::Separator();
-
-            ImGui::End();
-
-            m_ImGui.EndFrame();
-
-            m_RendererMan.Poll();
-        }
+        m_ImGui.EndFrame();
+        m_RendererMan.Poll();
     }
 
 }  // namespace lr

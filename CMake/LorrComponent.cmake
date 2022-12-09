@@ -4,7 +4,7 @@ cmake_parse_arguments(
     COMPONENT
         "" # options
         "NAME;LIBTYPE" # one value
-        "INCLUDE;SOURCE;VENDOR;PCH" # multi value
+        "INCLUDE_PRIV;INCLUDE_PUB;SOURCE;VENDOR;PCH" # multi value
         ${ARGN}
     )
 
@@ -30,7 +30,14 @@ cmake_parse_arguments(
         target_link_libraries(${COMPONENT_NAME} PUBLIC ${COMPONENT_VENDOR})
     endif()
     
-    target_include_directories(${COMPONENT_NAME} PUBLIC ${COMPONENT_INCLUDE})
+    if (COMPONENT_INCLUDE_PRIV)
+        target_include_directories(${COMPONENT_NAME} PRIVATE ${COMPONENT_INCLUDE_PRIV})
+    endif()
+    
+    if (COMPONENT_INCLUDE_PUB)
+        target_include_directories(${COMPONENT_NAME} PUBLIC ${COMPONENT_INCLUDE_PUB})
+    endif()
+    
     target_compile_definitions(${COMPONENT_NAME} PUBLIC "LR_BUILD_SHARED=$<CONFIG:Debug>")
 
 endfunction(LorrComponent)

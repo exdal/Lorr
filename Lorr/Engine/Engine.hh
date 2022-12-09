@@ -12,19 +12,15 @@
 
 namespace lr
 {
-    struct ApplicationDesc
-    {
-        bool ConsoleApp = false;
-    };
-
     struct Engine
     {
-        void Init(ApplicationDesc &desc, WindowDesc &windowDesc);
+        void Init(WindowDesc &windowDesc);
 
         /// EVENTS ///
-        void Poll(f32 deltaTime);
+        void DispatchEvents();
 
-        void Run();
+        void BeginFrame();
+        void EndFrame();
 
         Win32Window m_Window;
         Renderer::RendererManager m_RendererMan;
@@ -32,7 +28,5 @@ namespace lr
 
         bool m_ShuttingDown = false;
     };
-
-    extern Engine *GetEngine();
 
 }  // namespace lr

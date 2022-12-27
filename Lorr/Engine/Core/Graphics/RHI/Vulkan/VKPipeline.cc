@@ -76,7 +76,7 @@ namespace lr::Graphics
         /// ------------------------------------- ///
 
         m_RasterizationState.lineWidth = 1.0;
-        SetPrimitiveType(PrimitiveType::TriangleList);
+        SetPrimitiveType(LR_PRIMITIVE_TYPE_TRIANGLE_LIST);
 
         /// ------------------------------------- ///
 
@@ -245,8 +245,32 @@ namespace lr::Graphics
         m_pColorBlendAttachments[id].srcAlphaBlendFactor = kBlendFactorLUT[(u32)pAttachment->SrcBlendAlpha];
         m_pColorBlendAttachments[id].dstAlphaBlendFactor = kBlendFactorLUT[(u32)pAttachment->DstBlendAlpha];
 
-        m_pColorBlendAttachments[id].colorBlendOp = (VkBlendOp)pAttachment->Blend;
-        m_pColorBlendAttachments[id].alphaBlendOp = (VkBlendOp)pAttachment->BlendAlpha;
+        m_pColorBlendAttachments[id].colorBlendOp = (VkBlendOp)pAttachment->ColorBlendOp;
+        m_pColorBlendAttachments[id].alphaBlendOp = (VkBlendOp)pAttachment->AlphaBlendOp;
+    }
+
+    void VKComputePipelineBuildInfo::Init()
+    {
+        ZoneScoped;
+
+        m_CreateInfo = {};
+        m_CreateInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+        m_CreateInfo.pNext = nullptr;
+    }
+
+    void VKComputePipelineBuildInfo::SetShader(BaseShader *pShader, eastl::string_view entryPoint)
+    {
+        ZoneScoped;
+
+        VkPipelineShaderStageCreateInfo &shaderStage = m_CreateInfo.stage;
+        shaderStage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        shaderStage.pNext = nullptr;
+        shaderStage.flags = 0;
+
+        shaderStage.stage = VKAPI::ToVKShaderType(pShader->Type);
+        shaderStage.pName = entryPoint.data();
+        shaderStage.module = ((VKShader *)pShader)->pHandle;
+        shaderStage.pSpecializationInfo = nullptr;
     }
 
 }  // namespace lr::Graphics

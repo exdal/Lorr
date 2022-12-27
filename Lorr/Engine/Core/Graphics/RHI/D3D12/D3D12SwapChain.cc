@@ -81,7 +81,7 @@ namespace lr::Graphics
             currentImage.m_DataSize = ~0;
             currentImage.m_UsingMip = 0;
             currentImage.m_TotalMips = 1;
-            currentImage.m_Usage = ResourceUsage::Present;
+            currentImage.m_UsageFlags = LR_RESOURCE_USAGE_PRESENT;
             currentImage.m_Format = m_ImageFormat;
             currentImage.m_RequiredDataSize = ~0;
             currentImage.m_AllocatorType = AllocatorType::Count;

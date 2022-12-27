@@ -6,11 +6,11 @@
 
 namespace lr::Resource
 {
-    enum class ResourceType : u32
+    enum ResourceType : u32
     {
-        Unknown,
-        Shader,
-        Texture,
+        LR_RESOURCE_TYPE_UNKNOWN = 0,
+        LR_RESOURCE_TYPE_SHADER,
+        LR_RESOURCE_TYPE_TEXTURE,
     };
 
     struct ResourceMeta

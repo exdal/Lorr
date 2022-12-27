@@ -46,7 +46,7 @@ namespace lr::Graphics
             D3D12_RENDER_PASS_ENDING_ACCESS_TYPE_NO_ACCESS,  // DontCare
         };
 
-        D3D12_RENDER_PASS_RENDER_TARGET_DESC pColorAttachments[APIConfig::kMaxColorAttachmentCount] = {};
+        D3D12_RENDER_PASS_RENDER_TARGET_DESC pColorAttachments[LR_MAX_RENDER_TARGET_PER_PASS] = {};
         D3D12_RENDER_PASS_DEPTH_STENCIL_DESC depthAttachment = {};
 
         for (u32 i = 0; i < pDesc->ColorAttachmentCount; i++)
@@ -97,46 +97,6 @@ namespace lr::Graphics
         m_pHandle->EndRenderPass();
     }
 
-    void D3D12CommandList::BarrierTransition(BaseImage *pImage,
-                                             ResourceUsage barrierBefore,
-                                             ShaderStage shaderBefore,
-                                             ResourceUsage barrierAfter,
-                                             ShaderStage shaderAfter)
-    {
-        ZoneScoped;
-
-        API_VAR(D3D12Image, pImage);
-
-        D3D12_RESOURCE_BARRIER barrier = {};
-        barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-        barrier.Transition.pResource = pImageDX->m_pHandle;
-
-        barrier.Transition.StateBefore = D3D12API::ToDXImageLayout(barrierBefore);
-        barrier.Transition.StateAfter = D3D12API::ToDXImageLayout(barrierAfter);
-
-        m_pHandle->ResourceBarrier(1, &barrier);
-    }
-
-    void D3D12CommandList::BarrierTransition(BaseBuffer *pBuffer,
-                                             ResourceUsage barrierBefore,
-                                             ShaderStage shaderBefore,
-                                             ResourceUsage barrierAfter,
-                                             ShaderStage shaderAfter)
-    {
-        ZoneScoped;
-
-        API_VAR(D3D12Buffer, pBuffer);
-
-        D3D12_RESOURCE_BARRIER barrier = {};
-        barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-        barrier.Transition.pResource = pBufferDX->m_pHandle;
-
-        barrier.Transition.StateBefore = D3D12API::ToDXBufferUsage(barrierBefore);
-        barrier.Transition.StateAfter = D3D12API::ToDXBufferUsage(barrierAfter);
-
-        m_pHandle->ResourceBarrier(1, &barrier);
-    }
-
     void D3D12CommandList::ClearImage(BaseImage *pImage, ClearValue val)
     {
         ZoneScoped;
@@ -146,51 +106,58 @@ namespace lr::Graphics
         m_pHandle->ClearRenderTargetView(pImageDX->m_RenderTargetViewCPU, &val.RenderTargetColor.x, 0, nullptr);
     }
 
-    void D3D12CommandList::SetViewport(u32 id, u32 x, u32 y, u32 width, u32 height)
+    void D3D12CommandList::SetImageBarrier(BaseImage *pImage, PipelineBarrier *pBarrier)
     {
         ZoneScoped;
 
-        D3D12_VIEWPORT vp;
-        vp.TopLeftX = x;
-        vp.TopLeftY = y;
-        vp.Width = width;
-        vp.Height = height;
-        vp.MinDepth = 0.0;
-        vp.MaxDepth = 1.0;
+        if (pBarrier->CurrentUsage == pBarrier->NextUsage)
+            return;
 
-        m_pHandle->RSSetViewports(1, &vp);
+        API_VAR(D3D12Image, pImage);
+
+        u32 setBarrierCount = 0;
+        D3D12_RESOURCE_BARRIER pBarriers[3] = {};  // by index: 0, src uav, 1 transition, 2 dst uav
+
+        if (pBarrier->CurrentStage == LR_PIPELINE_STAGE_COMPUTE_SHADER)
+        {
+            D3D12_RESOURCE_BARRIER &barrier = pBarriers[setBarrierCount++];
+            barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+            barrier.UAV.pResource = pImageDX->m_pHandle;
+        }
+
+        D3D12_RESOURCE_BARRIER &barrier = pBarriers[setBarrierCount++];
+        barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        barrier.Transition.pResource = pImageDX->m_pHandle;
+        barrier.Transition.StateBefore = D3D12API::ToDXImageUsage(pBarrier->CurrentUsage);
+        barrier.Transition.StateAfter = D3D12API::ToDXImageUsage(pBarrier->NextUsage);
+
+        if (pBarrier->NextStage == LR_PIPELINE_STAGE_COMPUTE_SHADER)
+        {
+            D3D12_RESOURCE_BARRIER &barrier = pBarriers[setBarrierCount++];
+            barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+            barrier.UAV.pResource = pImageDX->m_pHandle;
+        }
+
+        m_pHandle->ResourceBarrier(setBarrierCount, pBarriers);
     }
 
-    void D3D12CommandList::SetScissors(u32 id, u32 x, u32 y, u32 width, u32 height)
+    void D3D12CommandList::SetBufferBarrier(BaseBuffer *pBuffer, PipelineBarrier *pBarrier)
     {
         ZoneScoped;
 
-        D3D12_RECT rect;
-        rect.left = x;
-        rect.top = y;
-        rect.right = width;
-        rect.bottom = height;
+        if (pBarrier->CurrentUsage == pBarrier->NextUsage)
+            return;
 
-        m_pHandle->RSSetScissorRects(1, &rect);
-    }
+        API_VAR(D3D12Buffer, pBuffer);
 
-    void D3D12CommandList::SetPrimitiveType(PrimitiveType type)
-    {
-        ZoneScoped;
+        D3D12_RESOURCE_BARRIER barrier = {};
+        barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        barrier.Transition.pResource = pBufferDX->m_pHandle;
 
-        m_pHandle->IASetPrimitiveTopology(D3D12API::ToDXTopology(type));
-    }
+        barrier.Transition.StateBefore = D3D12API::ToDXImageUsage(pBarrier->CurrentUsage);
+        barrier.Transition.StateAfter = D3D12API::ToDXImageUsage(pBarrier->NextUsage);
 
-    void D3D12CommandList::SetPushConstants(BasePipeline *pPipeline, ShaderStage stage, void *pData, u32 dataSize)
-    {
-        ZoneScoped;
-
-        API_VAR(D3D12Pipeline, pPipeline);
-
-        m_pHandle->SetGraphicsRoot32BitConstants(pPipelineDX->m_pRootConstats[(u32)D3D12API::ToDXShaderType(stage)],
-                                                 dataSize / sizeof(u32),
-                                                 pData,
-                                                 0);
+        m_pHandle->ResourceBarrier(1, &barrier);
     }
 
     void D3D12CommandList::SetVertexBuffer(BaseBuffer *pBuffer)
@@ -269,7 +236,49 @@ namespace lr::Graphics
         m_pHandle->DrawIndexedInstanced(indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
     }
 
-    void D3D12CommandList::SetPipeline(BasePipeline *pPipeline)
+    void D3D12CommandList::Dispatch(u32 groupX, u32 groupY, u32 groupZ)
+    {
+        ZoneScoped;
+
+        m_pHandle->Dispatch(groupX, groupY, groupZ);
+    }
+
+    void D3D12CommandList::SetViewport(u32 id, u32 x, u32 y, u32 width, u32 height)
+    {
+        ZoneScoped;
+
+        D3D12_VIEWPORT vp;
+        vp.TopLeftX = x;
+        vp.TopLeftY = y;
+        vp.Width = width;
+        vp.Height = height;
+        vp.MinDepth = 0.0;
+        vp.MaxDepth = 1.0;
+
+        m_pHandle->RSSetViewports(1, &vp);
+    }
+
+    void D3D12CommandList::SetScissors(u32 id, u32 x, u32 y, u32 width, u32 height)
+    {
+        ZoneScoped;
+
+        D3D12_RECT rect;
+        rect.left = x;
+        rect.top = y;
+        rect.right = width;
+        rect.bottom = height;
+
+        m_pHandle->RSSetScissorRects(1, &rect);
+    }
+
+    void D3D12CommandList::SetPrimitiveType(PrimitiveType type)
+    {
+        ZoneScoped;
+
+        m_pHandle->IASetPrimitiveTopology(D3D12API::ToDXTopology(type));
+    }
+
+    void D3D12CommandList::SetGraphicsPipeline(BasePipeline *pPipeline)
     {
         ZoneScoped;
 
@@ -279,7 +288,17 @@ namespace lr::Graphics
         m_pHandle->SetGraphicsRootSignature(pPipelineDX->pLayout);
     }
 
-    void D3D12CommandList::SetPipelineDescriptorSets(const std::initializer_list<BaseDescriptorSet *> &sets)
+    void D3D12CommandList::SetComputePipeline(BasePipeline *pPipeline)
+    {
+        ZoneScoped;
+
+        API_VAR(D3D12Pipeline, pPipeline);
+
+        m_pHandle->SetPipelineState(pPipelineDX->pHandle);
+        m_pHandle->SetComputeRootSignature(pPipelineDX->pLayout);
+    }
+
+    void D3D12CommandList::SetGraphicsDescriptorSets(const std::initializer_list<BaseDescriptorSet *> &sets)
     {
         ZoneScoped;
 
@@ -288,9 +307,45 @@ namespace lr::Graphics
         {
             API_VAR(D3D12DescriptorSet, pSet);
 
-            if (pSetDX->pDescriptorHandles[0].ptr != 0)  // DAAAAAAAAAAAAAAAAMN
-                m_pHandle->SetGraphicsRootDescriptorTable(idx++, pSetDX->pDescriptorHandles[0]);
+            if (pSetDX->pDescriptorHandles[0].ptr == 0)
+                continue;
+
+            m_pHandle->SetGraphicsRootDescriptorTable(idx++, pSetDX->pDescriptorHandles[0]);
         }
+    }
+
+    void D3D12CommandList::SetComputeDescriptorSets(const std::initializer_list<BaseDescriptorSet *> &sets)
+    {
+        ZoneScoped;
+
+        u32 idx = 0;
+        for (BaseDescriptorSet *pSet : sets)
+        {
+            API_VAR(D3D12DescriptorSet, pSet);
+
+            if (pSetDX->pDescriptorHandles[0].ptr == 0)
+                continue;
+
+            m_pHandle->SetComputeRootDescriptorTable(idx++, pSetDX->pDescriptorHandles[0]);
+        }
+    }
+
+    void D3D12CommandList::SetGraphicsPushConstants(BasePipeline *pPipeline, ShaderStage stage, void *pData, u32 dataSize)
+    {
+        ZoneScoped;
+
+        API_VAR(D3D12Pipeline, pPipeline);
+
+        m_pHandle->SetGraphicsRoot32BitConstants(pPipelineDX->pRootConstats[(u32)D3D12API::ToDXShaderType(stage)], dataSize / sizeof(u32), pData, 0);
+    }
+
+    void D3D12CommandList::SetComputePushConstants(BasePipeline *pPipeline, void *pData, u32 dataSize)
+    {
+        ZoneScoped;
+
+        API_VAR(D3D12Pipeline, pPipeline);
+
+        m_pHandle->SetComputeRoot32BitConstants(pPipelineDX->pRootConstats[LR_SHADER_STAGE_COMPUTE], dataSize / sizeof(u32), pData, 0);
     }
 
 }  // namespace lr::Graphics

@@ -10,6 +10,7 @@ namespace lr
 {
     struct ApplicationDesc
     {
+        eastl::string_view Title;
         EngineDesc Engine;
     };
 
@@ -22,6 +23,7 @@ namespace lr
         void Run();
 
         Engine m_Engine;
+        eastl::string_view m_Title;
     };
 
     Application *GetApp();

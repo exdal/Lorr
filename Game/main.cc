@@ -12,7 +12,8 @@ int main()
     using namespace lr;
 
     ApplicationDesc appDesc;
-    appDesc.Engine.TargetAPI = lr::Renderer::APIType::Vulkan;
+    appDesc.Title = "Game";
+    appDesc.Engine.TargetAPI = lr::Renderer::APIType::D3D12;
     appDesc.Engine.TargetAPIFlags = lr::Graphics::APIFlags::None;
 
     appDesc.Engine.Window.Title = "Game";

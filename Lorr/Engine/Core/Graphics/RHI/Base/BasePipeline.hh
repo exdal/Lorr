@@ -14,42 +14,67 @@ namespace lr::Graphics
 {
     struct PipelineAttachment
     {
-        ResourceFormat Format = ResourceFormat::Unknown;
+        ResourceFormat Format;
 
-        bool BlendEnable = false;
-        u8 WriteMask = 0;
+        union
+        {
+            u32 _u_data[3] = {};
+            struct
+            {
+                ColorMask WriteMask : 4;
+                bool BlendEnable : 1;
 
-        BlendFactor SrcBlend = BlendFactor::Zero;
-        BlendFactor DstBlend = BlendFactor::Zero;
-        BlendOp Blend = BlendOp::Add;
+                BlendFactor SrcBlend : 5;
+                BlendFactor DstBlend : 5;
+                BlendOp ColorBlendOp : 4;
 
-        BlendFactor SrcBlendAlpha = BlendFactor::Zero;
-        BlendFactor DstBlendAlpha = BlendFactor::Zero;
-        BlendOp BlendAlpha = BlendOp::Add;
+                BlendFactor SrcBlendAlpha : 5;
+                BlendFactor DstBlendAlpha : 5;
+                BlendOp AlphaBlendOp : 4;
+            };
+        };
     };
 
     struct DepthStencilOpDesc
     {
-        StencilCompareOp Pass;
-        StencilCompareOp Fail;
+        union
+        {
+            u32 _u_data = 0;
+            struct
+            {
+                StencilOp Pass : 3;
+                StencilOp Fail : 3;
 
-        CompareOp DepthFail;
+                CompareOp DepthFail : 3;
 
-        CompareOp CompareFunc;
+                CompareOp CompareFunc : 3;
+            };
+        };
     };
 
     struct PushConstantDesc
     {
-        ShaderStage Stage = ShaderStage::None;
+        ShaderStage Stage = LR_SHADER_STAGE_NONE;
         u32 Offset = 0;
         u32 Size = 0;
+    };
+
+    struct BasePipelineBuildInfo
+    {
+        void SetDescriptorSets(const std::initializer_list<BaseDescriptorSet *> &sets, BaseDescriptorSet *pSamplerSet);
+        PushConstantDesc &AddPushConstant();
+
+        BaseDescriptorSet *m_pSamplerDescriptorSet = nullptr;
+        u32 m_DescriptorSetCount = 0;
+        BaseDescriptorSet *m_ppDescriptorSets[LR_MAX_DESCRIPTOR_SETS_PER_PIPELINE];
+        u32 m_PushConstantCount = 0;
+        PushConstantDesc m_pPushConstants[LR_MAX_PUSH_CONSTANTS_PER_PIPELINE];
     };
 
     /// Some notes:
     // * Currently only one vertex binding is supported and it only supports vertex, not instances (actually a TODO)
     // * MSAA is not actually supported
-    // * Color blending stage is too restricted, only supporting one attachment
-    struct GraphicsPipelineBuildInfo
+    struct GraphicsPipelineBuildInfo : BasePipelineBuildInfo
     {
         virtual void Init() = 0;
 
@@ -81,19 +106,25 @@ namespace lr::Graphics
         virtual void SetStencilOperation(DepthStencilOpDesc front, DepthStencilOpDesc back) = 0;
 
         virtual void AddAttachment(PipelineAttachment *pAttachment, bool depth) = 0;
+    };
 
-        void SetDescriptorSets(std::initializer_list<BaseDescriptorSet *> sets, BaseDescriptorSet *pSamplerSet);
-        PushConstantDesc &AddPushConstant();
+    struct ComputePipelineBuildInfo : BasePipelineBuildInfo
+    {
+        virtual void Init() = 0;
 
-        BaseDescriptorSet *m_pSamplerDescriptorSet = nullptr;
-        u32 m_DescriptorSetCount = 0;
-        BaseDescriptorSet *m_ppDescriptorSets[8];
-        u32 m_PushConstantCount = 0;
-        PushConstantDesc m_pPushConstants[8];
+        // Shader Stages
+        virtual void SetShader(BaseShader *pShader, eastl::string_view entryPoint) = 0;
+    };
+
+    enum PipelineType
+    {
+        LR_PIPELINE_TYPE_GRAPHICS,
+        LR_PIPELINE_TYPE_COMPUTE,
     };
 
     struct BasePipeline
     {
+        PipelineType Type = LR_PIPELINE_TYPE_GRAPHICS;
     };
 
 }  // namespace lr::Graphics

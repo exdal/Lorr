@@ -16,11 +16,11 @@ namespace lr::Graphics
             pList = CreateCommandList(CommandListType::Copy);
     }
 
-    BaseCommandList *BaseAPI::GetCommandList()
+    BaseCommandList *BaseAPI::GetCommandList(CommandListType type)
     {
         ZoneScoped;
 
-        return m_CommandListPool.Acquire(CommandListType::Direct);
+        return m_CommandListPool.Acquire(type);
     }
 
 }  // namespace lr::Graphics

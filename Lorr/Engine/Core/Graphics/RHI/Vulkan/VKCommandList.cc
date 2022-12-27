@@ -43,7 +43,7 @@ namespace lr::Graphics
         beginInfo.layerCount = 1;
         beginInfo.pDepthAttachment = nullptr;
 
-        VkRenderingAttachmentInfo pColorAttachments[APIConfig::kMaxColorAttachmentCount] = {};
+        VkRenderingAttachmentInfo pColorAttachments[LR_MAX_RENDER_TARGET_PER_PASS] = {};
         VkRenderingAttachmentInfo depthAttachment = {};
 
         for (u32 i = 0; i < pDesc->ColorAttachmentCount; i++)
@@ -102,92 +102,6 @@ namespace lr::Graphics
         vkCmdEndRendering(m_pHandle);
     }
 
-    void VKCommandList::BarrierTransition(BaseImage *pImage,
-                                          ResourceUsage barrierBefore,
-                                          ShaderStage shaderBefore,
-                                          ResourceUsage barrierAfter,
-                                          ShaderStage shaderAfter)
-    {
-        ZoneScoped;
-
-        API_VAR(VKImage, pImage);
-
-        // TODO: Implement `VkImageSubresourceRange` fully
-        VkImageSubresourceRange subresRange = {};
-        subresRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        subresRange.baseArrayLayer = 0;
-        subresRange.layerCount = 1;
-        subresRange.baseMipLevel = pImageVK->m_UsingMip;
-        subresRange.levelCount = pImageVK->m_TotalMips;
-
-        VkImageMemoryBarrier barrierInfo = {};
-        barrierInfo.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        barrierInfo.pNext = nullptr;
-
-        barrierInfo.image = pImageVK->m_pHandle;
-
-        barrierInfo.oldLayout = VKAPI::ToVKImageLayout(barrierBefore);
-        barrierInfo.newLayout = VKAPI::ToVKImageLayout(barrierAfter);
-
-        barrierInfo.srcAccessMask = VKAPI::ToVKAccessFlags(barrierBefore);
-        barrierInfo.dstAccessMask = VKAPI::ToVKAccessFlags(barrierAfter);
-
-        barrierInfo.subresourceRange = subresRange;
-
-        barrierInfo.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrierInfo.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-
-        vkCmdPipelineBarrier(m_pHandle,
-                             VKAPI::ToVKPipelineStage(barrierBefore) | VKAPI::ToVKPipelineShaderStage(shaderBefore),
-                             VKAPI::ToVKPipelineStage(barrierAfter) | VKAPI::ToVKPipelineShaderStage(shaderAfter),
-                             0,
-                             0,
-                             nullptr,
-                             0,
-                             nullptr,
-                             1,
-                             &barrierInfo);
-
-        pImageVK->m_Layout = barrierInfo.newLayout;
-    }
-
-    void VKCommandList::BarrierTransition(BaseBuffer *pBuffer,
-                                          ResourceUsage barrierBefore,
-                                          ShaderStage shaderBefore,
-                                          ResourceUsage barrierAfter,
-                                          ShaderStage shaderAfter)
-    {
-        ZoneScoped;
-
-        API_VAR(VKBuffer, pBuffer);
-
-        VkBufferMemoryBarrier barrierInfo = {};
-        barrierInfo.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-        barrierInfo.pNext = nullptr;
-
-        barrierInfo.buffer = pBufferVK->m_pHandle;
-
-        barrierInfo.offset = pBuffer->m_DataOffset;
-        barrierInfo.size = VK_WHOLE_SIZE;
-
-        barrierInfo.srcAccessMask = VKAPI::ToVKAccessFlags(barrierBefore);
-        barrierInfo.dstAccessMask = VKAPI::ToVKAccessFlags(barrierAfter);
-
-        barrierInfo.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrierInfo.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-
-        vkCmdPipelineBarrier(m_pHandle,
-                             VKAPI::ToVKPipelineStage(barrierBefore) | VKAPI::ToVKPipelineShaderStage(shaderBefore),
-                             VKAPI::ToVKPipelineStage(barrierAfter) | VKAPI::ToVKPipelineShaderStage(shaderAfter),
-                             VK_DEPENDENCY_BY_REGION_BIT,
-                             0,
-                             nullptr,
-                             1,
-                             &barrierInfo,
-                             0,
-                             nullptr);
-    }
-
     void VKCommandList::ClearImage(BaseImage *pImage, ClearValue val)
     {
         ZoneScoped;
@@ -212,48 +126,86 @@ namespace lr::Graphics
                              &subresRange);
     }
 
-    void VKCommandList::SetViewport(u32 id, u32 x, u32 y, u32 width, u32 height)
+    void VKCommandList::SetImageBarrier(BaseImage *pImage, PipelineBarrier *pBarrier)
     {
         ZoneScoped;
 
-        VkViewport vp;
-        vp.x = x;
-        vp.y = y;
-        vp.width = width;
-        vp.height = height;
-        vp.minDepth = 0.0;
-        vp.maxDepth = 1.0;
+        API_VAR(VKImage, pImage);
 
-        vkCmdSetViewport(m_pHandle, id, 1, &vp);
+        // TODO: Implement `VkImageSubresourceRange` fully
+        VkImageSubresourceRange subresRange = {};
+        subresRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        subresRange.baseArrayLayer = 0;
+        subresRange.layerCount = 1;
+        subresRange.baseMipLevel = pImageVK->m_UsingMip;
+        subresRange.levelCount = pImageVK->m_TotalMips;
+
+        VkImageMemoryBarrier2 barrierInfo = {};
+        barrierInfo.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+        barrierInfo.pNext = nullptr;
+
+        barrierInfo.image = pImageVK->m_pHandle;
+        barrierInfo.subresourceRange = subresRange;
+
+        barrierInfo.srcStageMask = VKAPI::ToVKPipelineStage(pBarrier->CurrentStage);
+        barrierInfo.dstStageMask = VKAPI::ToVKPipelineStage(pBarrier->NextStage);
+
+        barrierInfo.srcAccessMask = VKAPI::ToVKAccessFlags(pBarrier->CurrentAccess);
+        barrierInfo.dstAccessMask = VKAPI::ToVKAccessFlags(pBarrier->NextAccess);
+
+        barrierInfo.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        barrierInfo.newLayout = VKAPI::ToVKImageLayout(pBarrier->NextUsage);
+
+        // We initialize images on Vulkan with UNDEFINED or PREINITIALIZED...
+        if (pImageVK->m_Layout != VK_IMAGE_LAYOUT_UNDEFINED)
+            barrierInfo.oldLayout = VKAPI::ToVKImageLayout(pBarrier->CurrentUsage);
+
+        barrierInfo.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrierInfo.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+
+        VkDependencyInfo dependencyInfo = {};
+        dependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+        dependencyInfo.pNext = nullptr;
+        dependencyInfo.dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+        dependencyInfo.imageMemoryBarrierCount = 1;
+        dependencyInfo.pImageMemoryBarriers = &barrierInfo;
+
+        vkCmdPipelineBarrier2(m_pHandle, &dependencyInfo);
+
+        pImageVK->m_Layout = barrierInfo.newLayout;
     }
 
-    void VKCommandList::SetScissors(u32 id, u32 x, u32 y, u32 width, u32 height)
+    void VKCommandList::SetBufferBarrier(BaseBuffer *pBuffer, PipelineBarrier *pBarrier)
     {
         ZoneScoped;
 
-        VkRect2D rect;
-        rect.offset.x = x;
-        rect.offset.y = y;
-        rect.extent.width = width;
-        rect.extent.height = height;
+        API_VAR(VKBuffer, pBuffer);
 
-        vkCmdSetScissor(m_pHandle, id, 1, &rect);
-    }
+        VkBufferMemoryBarrier2 barrierInfo = {};
+        barrierInfo.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
+        barrierInfo.pNext = nullptr;
 
-    void VKCommandList::SetPrimitiveType(PrimitiveType type)
-    {
-        ZoneScoped;
+        barrierInfo.buffer = pBufferVK->m_pHandle;
+        barrierInfo.offset = pBuffer->m_DataOffset;
+        barrierInfo.size = VK_WHOLE_SIZE;
 
-        vkCmdSetPrimitiveTopology(m_pHandle, VKAPI::ToVKTopology(type));
-    }
+        barrierInfo.srcStageMask = VKAPI::ToVKPipelineStage(pBarrier->CurrentStage);
+        barrierInfo.dstStageMask = VKAPI::ToVKPipelineStage(pBarrier->NextStage);
 
-    void VKCommandList::SetPushConstants(BasePipeline *pPipeline, ShaderStage stage, void *pData, u32 dataSize)
-    {
-        ZoneScoped;
+        barrierInfo.srcAccessMask = VKAPI::ToVKAccessFlags(pBarrier->CurrentAccess);
+        barrierInfo.dstAccessMask = VKAPI::ToVKAccessFlags(pBarrier->NextAccess);
 
-        API_VAR(VKPipeline, pPipeline);
+        barrierInfo.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrierInfo.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 
-        vkCmdPushConstants(m_pHandle, pPipelineVK->pLayout, VKAPI::ToVKShaderType(stage), 0, dataSize, pData);
+        VkDependencyInfo dependencyInfo = {};
+        dependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+        dependencyInfo.pNext = nullptr;
+        dependencyInfo.dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+        dependencyInfo.bufferMemoryBarrierCount = 1;
+        dependencyInfo.pBufferMemoryBarriers = &barrierInfo;
+
+        vkCmdPipelineBarrier2(m_pHandle, &dependencyInfo);
     }
 
     void VKCommandList::SetVertexBuffer(BaseBuffer *pBuffer)
@@ -297,9 +249,9 @@ namespace lr::Graphics
 
         VkImageAspectFlags aspectMask = VK_IMAGE_ASPECT_NONE;
 
-        if (pDest->m_Usage & ResourceUsage::ShaderResource)
+        if (pDest->m_UsageFlags & LR_RESOURCE_USAGE_SHADER_RESOURCE)
             aspectMask |= VK_IMAGE_ASPECT_COLOR_BIT;
-        if (pDest->m_Usage & ResourceUsage::DepthStencilWrite && pDest->m_Usage & ResourceUsage::DepthStencilRead)
+        if (pDest->m_UsageFlags & LR_RESOURCE_USAGE_DEPTH_STENCIL)
             aspectMask |= VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
 
         // TODO: Multiple mip levels
@@ -336,24 +288,74 @@ namespace lr::Graphics
         vkCmdDrawIndexed(m_pHandle, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
     }
 
-    void VKCommandList::SetPipeline(BasePipeline *pPipeline)
+    void VKCommandList::Dispatch(u32 groupX, u32 groupY, u32 groupZ)
+    {
+        ZoneScoped;
+
+        vkCmdDispatch(m_pHandle, groupX, groupY, groupZ);
+    }
+
+    void VKCommandList::SetViewport(u32 id, u32 x, u32 y, u32 width, u32 height)
+    {
+        ZoneScoped;
+
+        VkViewport vp;
+        vp.x = x;
+        vp.y = y;
+        vp.width = width;
+        vp.height = height;
+        vp.minDepth = 0.0;
+        vp.maxDepth = 1.0;
+
+        vkCmdSetViewport(m_pHandle, id, 1, &vp);
+    }
+
+    void VKCommandList::SetScissors(u32 id, u32 x, u32 y, u32 width, u32 height)
+    {
+        ZoneScoped;
+
+        VkRect2D rect;
+        rect.offset.x = x;
+        rect.offset.y = y;
+        rect.extent.width = width;
+        rect.extent.height = height;
+
+        vkCmdSetScissor(m_pHandle, id, 1, &rect);
+    }
+
+    void VKCommandList::SetPrimitiveType(PrimitiveType type)
+    {
+        ZoneScoped;
+
+        vkCmdSetPrimitiveTopology(m_pHandle, VKAPI::ToVKTopology(type));
+    }
+
+    void VKCommandList::SetGraphicsPipeline(BasePipeline *pPipeline)
     {
         ZoneScoped;
 
         API_VAR(VKPipeline, pPipeline);
 
-        // TODO: Support multiple bind points
-        vkCmdBindPipeline(m_pHandle, VK_PIPELINE_BIND_POINT_GRAPHICS, pPipelineVK->pHandle);
-
         m_pSetPipeline = pPipelineVK;
+        vkCmdBindPipeline(m_pHandle, VK_PIPELINE_BIND_POINT_GRAPHICS, pPipelineVK->pHandle);
     }
 
-    void VKCommandList::SetPipelineDescriptorSets(const std::initializer_list<BaseDescriptorSet *> &sets)
+    void VKCommandList::SetComputePipeline(BasePipeline *pPipeline)
+    {
+        ZoneScoped;
+
+        API_VAR(VKPipeline, pPipeline);
+
+        m_pSetPipeline = pPipelineVK;
+        vkCmdBindPipeline(m_pHandle, VK_PIPELINE_BIND_POINT_COMPUTE, pPipelineVK->pHandle);
+    }
+
+    void VKCommandList::SetGraphicsDescriptorSets(const std::initializer_list<BaseDescriptorSet *> &sets)
     {
         ZoneScoped;
 
         u32 idx = 0;
-        VkDescriptorSet pSets[8];
+        VkDescriptorSet pSets[LR_MAX_DESCRIPTOR_SETS_PER_PIPELINE];
         for (auto &pSet : sets)
         {
             API_VAR(VKDescriptorSet, pSet);
@@ -364,6 +366,42 @@ namespace lr::Graphics
         }
 
         vkCmdBindDescriptorSets(m_pHandle, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pSetPipeline->pLayout, 0, sets.size(), pSets, 0, nullptr);
+    }
+
+    void VKCommandList::SetComputeDescriptorSets(const std::initializer_list<BaseDescriptorSet *> &sets)
+    {
+        ZoneScoped;
+
+        u32 idx = 0;
+        VkDescriptorSet pSets[LR_MAX_DESCRIPTOR_SETS_PER_PIPELINE];
+        for (auto &pSet : sets)
+        {
+            API_VAR(VKDescriptorSet, pSet);
+
+            pSets[idx] = pSetVK->pHandle;
+
+            idx++;
+        }
+
+        vkCmdBindDescriptorSets(m_pHandle, VK_PIPELINE_BIND_POINT_COMPUTE, m_pSetPipeline->pLayout, 0, sets.size(), pSets, 0, nullptr);
+    }
+
+    void VKCommandList::SetGraphicsPushConstants(BasePipeline *pPipeline, ShaderStage stage, void *pData, u32 dataSize)
+    {
+        ZoneScoped;
+
+        API_VAR(VKPipeline, pPipeline);
+
+        vkCmdPushConstants(m_pHandle, pPipelineVK->pLayout, VKAPI::ToVKShaderType(stage), 0, dataSize, pData);
+    }
+
+    void VKCommandList::SetComputePushConstants(BasePipeline *pPipeline,void *pData, u32 dataSize)
+    {
+        ZoneScoped;
+
+        API_VAR(VKPipeline, pPipeline);
+
+        vkCmdPushConstants(m_pHandle, pPipelineVK->pLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, dataSize, pData);
     }
 
 }  // namespace lr::Graphics

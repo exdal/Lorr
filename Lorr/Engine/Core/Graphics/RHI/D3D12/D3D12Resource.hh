@@ -17,9 +17,12 @@ namespace lr::Graphics
 
         D3D12_CPU_DESCRIPTOR_HANDLE m_ShaderViewCPU = { 0 };
         D3D12_GPU_DESCRIPTOR_HANDLE m_ShaderViewGPU = { 0 };
-        
+
+        D3D12_CPU_DESCRIPTOR_HANDLE m_UnorderedAccessViewCPU = { 0 };
+        D3D12_GPU_DESCRIPTOR_HANDLE m_UnorderedAccessViewGPU = { 0 };
+
         D3D12_CPU_DESCRIPTOR_HANDLE m_RenderTargetViewCPU = { 0 };
-        
+
         D3D12_CPU_DESCRIPTOR_HANDLE m_DepthStencilViewCPU = { 0 };
         D3D12_GPU_DESCRIPTOR_HANDLE m_DepthStencilViewGPU = { 0 };
     };

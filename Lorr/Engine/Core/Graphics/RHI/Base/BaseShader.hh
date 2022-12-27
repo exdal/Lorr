@@ -10,15 +10,16 @@
 
 namespace lr::Graphics
 {
-    enum class ShaderStage
+    enum ShaderStage
     {
-        None = 0,
-        Vertex = 1 << 0,
-        Pixel = 1 << 1,
-        Compute = 1 << 2,
-        Hull = 1 << 3,
-        Domain = 1 << 4,
-        Geometry = 1 << 5,
+        LR_SHADER_STAGE_NONE = 0,
+        LR_SHADER_STAGE_VERTEX = 1 << 0,
+        LR_SHADER_STAGE_PIXEL = 1 << 1,
+        LR_SHADER_STAGE_COMPUTE = 1 << 2,
+        LR_SHADER_STAGE_HULL = 1 << 3,
+        LR_SHADER_STAGE_DOMAIN = 1 << 4,
+
+        LR_SHADER_STAGE_COUNT = 5,
     };
 
     EnumFlags(ShaderStage);

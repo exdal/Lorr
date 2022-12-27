@@ -34,7 +34,7 @@ namespace lr::Graphics
         m_CreateInfo.InputLayout.pInputElementDescs = m_pVertexAttribs;
         m_CreateInfo.SampleDesc.Count = 1;
 
-        SetPrimitiveType(PrimitiveType::TriangleList);
+        SetPrimitiveType(LR_PRIMITIVE_TYPE_TRIANGLE_LIST);
 
         SetSampleCount(1);
     }
@@ -47,11 +47,10 @@ namespace lr::Graphics
 
         switch (pShader->Type)
         {
-            case ShaderStage::Vertex: pTargetHandle = &m_CreateInfo.VS; break;
-            case ShaderStage::Pixel: pTargetHandle = &m_CreateInfo.PS; break;
-            case ShaderStage::Hull: pTargetHandle = &m_CreateInfo.HS; break;
-            case ShaderStage::Domain: pTargetHandle = &m_CreateInfo.DS; break;
-            case ShaderStage::Geometry: pTargetHandle = &m_CreateInfo.GS; break;
+            case LR_SHADER_STAGE_VERTEX: pTargetHandle = &m_CreateInfo.VS; break;
+            case LR_SHADER_STAGE_PIXEL: pTargetHandle = &m_CreateInfo.PS; break;
+            case LR_SHADER_STAGE_HULL: pTargetHandle = &m_CreateInfo.HS; break;
+            case LR_SHADER_STAGE_DOMAIN: pTargetHandle = &m_CreateInfo.DS; break;
 
             default: assert(!"Shader type not implemented"); break;
         }
@@ -109,7 +108,7 @@ namespace lr::Graphics
     {
         ZoneScoped;
 
-        m_CreateInfo.RasterizerState.FillMode = mode == FillMode::Fill ? D3D12_FILL_MODE_SOLID : D3D12_FILL_MODE_WIREFRAME;
+        m_CreateInfo.RasterizerState.FillMode = mode == LR_FILL_MODE_FILL ? D3D12_FILL_MODE_SOLID : D3D12_FILL_MODE_WIREFRAME;
     }
 
     void D3D12GraphicsPipelineBuildInfo::SetDepthBias(bool enabled, f32 constantFactor, f32 clamp, f32 slopeFactor)
@@ -198,8 +197,23 @@ namespace lr::Graphics
         desc.SrcBlendAlpha = kBlendFactorLUT[(u32)pAttachment->SrcBlendAlpha];
         desc.DestBlendAlpha = kBlendFactorLUT[(u32)pAttachment->DstBlendAlpha];
 
-        desc.BlendOp = (D3D12_BLEND_OP)((u32)pAttachment->Blend + 1);
-        desc.BlendOpAlpha = (D3D12_BLEND_OP)((u32)pAttachment->BlendAlpha + 1);
+        desc.BlendOp = (D3D12_BLEND_OP)((u32)pAttachment->ColorBlendOp + 1);
+        desc.BlendOpAlpha = (D3D12_BLEND_OP)((u32)pAttachment->AlphaBlendOp + 1);
+    }
+
+    void D3D12ComputePipelineBuildInfo::Init()
+    {
+        ZoneScoped;
+    }
+
+    void D3D12ComputePipelineBuildInfo::SetShader(BaseShader *pShader, eastl::string_view entryPoint)
+    {
+        ZoneScoped;
+
+        IDxcBlob *pCode = ((D3D12Shader *)pShader)->pHandle;
+
+        m_CreateInfo.CS.pShaderBytecode = pCode->GetBufferPointer();
+        m_CreateInfo.CS.BytecodeLength = pCode->GetBufferSize();
     }
 
 }  // namespace lr::Graphics

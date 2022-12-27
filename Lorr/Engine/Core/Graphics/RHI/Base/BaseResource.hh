@@ -10,33 +10,23 @@
 
 namespace lr::Graphics
 {
-    enum class ResourceUsage : u32
+    enum ResourceUsage : u32
     {
-        Undefined = 0,
+        LR_RESOURCE_USAGE_UNKNOWN = 0,
+        LR_RESOURCE_USAGE_VERTEX_BUFFER = 1 << 0,
+        LR_RESOURCE_USAGE_INDEX_BUFFER = 1 << 1,
+        LR_RESOURCE_USAGE_CONSTANT_BUFFER = 1 << 3,
+        LR_RESOURCE_USAGE_SHADER_RESOURCE = 1 << 4,
+        LR_RESOURCE_USAGE_RENDER_TARGET = 1 << 5,
+        LR_RESOURCE_USAGE_DEPTH_STENCIL = 1 << 6,
+        LR_RESOURCE_USAGE_TRANSFER_SRC = 1 << 7,
+        LR_RESOURCE_USAGE_TRANSFER_DST = 1 << 8,
+        LR_RESOURCE_USAGE_UNORDERED_ACCESS = 1 << 9,
 
-        VertexBuffer = 1 << 0,
-        IndexBuffer = 1 << 1,
+        LR_RESOURCE_USAGE_PRESENT = LR_RESOURCE_USAGE_SHADER_RESOURCE | LR_RESOURCE_USAGE_RENDER_TARGET,
 
-        IndirectBuffer = 1 << 2,
-
-        ConstantBuffer = 1 << 3,
-        ShaderResource = 1 << 4,
-        RenderTarget = 1 << 5,
-        DepthStencilWrite = 1 << 6,
-        DepthStencilRead = 1 << 7,
-        DepthStencil = DepthStencilWrite | DepthStencilRead,
-
-        CopySrc = 1 << 8,
-        CopyDst = 1 << 9,
-        // On DX12, Host usages are same as Copy usages, they are both transfer stages
-        HostRead = 1 << 10,
-        HostWrite = 1 << 11,
-
-        Present = ShaderResource | RenderTarget,
-
-        UnorderedAccess = 1 << 12,
+        LR_RESOURCE_USAGE_MAX = 1U << 31,
     };
-
     EnumFlags(ResourceUsage);
 
     enum class AllocatorType
@@ -53,49 +43,44 @@ namespace lr::Graphics
         Count,
     };
 
-    enum class ResourceFormat : u16
+    enum ResourceFormat : u32
     {
-        Unknown,
-        BC1,
+        LR_RESOURCE_FORMAT_UNKNOWN,
+        LR_RESOURCE_FORMAT_RGBA8F,
+        LR_RESOURCE_FORMAT_RGBA8_SRGBF,
+        LR_RESOURCE_FORMAT_BGRA8F,
+        LR_RESOURCE_FORMAT_RGBA16F,
+        LR_RESOURCE_FORMAT_RGBA32F,
+        LR_RESOURCE_FORMAT_R32U,
+        LR_RESOURCE_FORMAT_R32F,
+        LR_RESOURCE_FORMAT_D32F,
+        LR_RESOURCE_FORMAT_D32FS8U,
+    };
 
-        RGBA8F,       /// Each channel is u8, packed into normalized u32
-        RGBA8_SRGBF,  ///
-        BGRA8F,       ///
-        RGBA16F,      ///
-        RGBA32F,      /// Each channel is float
-        R32U,         /// R channel is 32 bits u32
-        R32F,         /// R channel is 32 bits float
-        D32F,         /// Depth format, A channel is float
-        D32FS8U,      /// Depth format, 32 bits for depth, 8 bits for stencil
-
+    constexpr u32 kResourceFormatSizeLUT[] = {
+        0,                // LR_RESOURCE_FORMAT_UNKNOWN
+        sizeof(u8) * 4,   // LR_RESOURCE_FORMAT_RGBA8F
+        sizeof(u8) * 4,   // LR_RESOURCE_FORMAT_RGBA8_SRGBF
+        sizeof(u8) * 4,   // LR_RESOURCE_FORMAT_BGRA8F
+        sizeof(u16) * 4,  // LR_RESOURCE_FORMAT_RGBA16F
+        sizeof(u32) * 4,  // LR_RESOURCE_FORMAT_RGBA32F
+        sizeof(u32),      // LR_RESOURCE_FORMAT_R32U
+        sizeof(u32),      // LR_RESOURCE_FORMAT_R32F
+        sizeof(u32),      // LR_RESOURCE_FORMAT_D32F
+        sizeof(u32),      // LR_RESOURCE_FORMAT_D32FS8U
     };
 
     constexpr u32 GetResourceFormatSize(ResourceFormat format)
     {
-        switch (format)
-        {
-            case ResourceFormat::BC1: return sizeof(u8);
-            case ResourceFormat::RGBA8_SRGBF:
-            case ResourceFormat::RGBA8F: return sizeof(u8) * 4;
-            case ResourceFormat::RGBA16F: return sizeof(u16) * 4;
-            case ResourceFormat::RGBA32F: return sizeof(float) * 4;
-            case ResourceFormat::R32U: return sizeof(u32);
-            case ResourceFormat::R32F: return sizeof(f32);
-            case ResourceFormat::D32F: return sizeof(f32);
-            case ResourceFormat::D32FS8U: return sizeof(u32);
-            default: return 0;
-        }
+        return kResourceFormatSizeLUT[(u32)format];
     }
 
     /// IMAGES ///
 
     struct ImageDesc
     {
-        ResourceUsage Usage;
-        ResourceFormat Format = ResourceFormat::Unknown;
-        bool Mappable = false;
-
-        AllocatorType TargetAllocator = AllocatorType::None;
+        ResourceUsage UsageFlags = LR_RESOURCE_USAGE_UNKNOWN;
+        ResourceFormat Format = LR_RESOURCE_FORMAT_UNKNOWN;
 
         u16 ArraySize = 1;
         u32 MipMapLevels = 1;
@@ -103,6 +88,8 @@ namespace lr::Graphics
 
     struct ImageData
     {
+        AllocatorType TargetAllocator = AllocatorType::None;
+
         u32 Width = 0;
         u32 Height = 0;
 
@@ -112,16 +99,14 @@ namespace lr::Graphics
 
     struct BaseImage
     {
-        BaseImage() = default;
-
-        ResourceUsage m_Usage;
+        ResourceUsage m_UsageFlags = LR_RESOURCE_USAGE_UNKNOWN;
         ResourceFormat m_Format;
 
         u32 m_Width = 0;
         u32 m_Height = 0;
         u64 m_DataOffset = 0;
         u32 m_DataSize = 0;
-        u32 m_RequiredDataSize = 0;  // Required data size from Vulkan API
+        u32 m_RequiredDataSize = 0;  // Required data size from API
 
         u32 m_UsingMip = 0;
         u32 m_TotalMips = 1;
@@ -134,14 +119,15 @@ namespace lr::Graphics
 
     struct BufferDesc
     {
-        ResourceUsage UsageFlags;
-        bool Mappable = false;
-
-        AllocatorType TargetAllocator = AllocatorType::None;
+        ResourceUsage UsageFlags = LR_RESOURCE_USAGE_UNKNOWN;
     };
 
     struct BufferData
     {
+        AllocatorType TargetAllocator = AllocatorType::None;
+
+        bool Mappable = false;
+
         u32 Stride = 0;
         u32 DataLen = 0;
         u8 *pData = nullptr;
@@ -149,14 +135,12 @@ namespace lr::Graphics
 
     struct BaseBuffer
     {
-        BaseBuffer() = default;
-
         u64 m_DataOffset = 0;
         u32 m_RequiredDataSize = 0;  // Required data size from Vulkan API
         u32 m_DataSize = 0;          // Real size of data
         u32 m_Stride = 0;
 
-        ResourceUsage m_Usage;
+        ResourceUsage m_UsageFlags = LR_RESOURCE_USAGE_UNKNOWN;
         ResourceFormat m_Format;
         bool m_Mappable = false;
 
@@ -168,45 +152,51 @@ namespace lr::Graphics
 
     struct SamplerDesc
     {
-        Filtering MinFilter = Filtering::Nearest;
-        Filtering MagFilter = Filtering::Nearest;
-        TextureAddressMode AddressU = TextureAddressMode::Wrap;
-        TextureAddressMode AddressV = TextureAddressMode::Wrap;
-        TextureAddressMode AddressW = TextureAddressMode::Wrap;
-        bool UseAnisotropy = false;
-        float MaxAnisotropy = 0;
-        CompareOp ComparisonFunc = CompareOp::Never;
+        union
+        {
+            u32 _u_data = 0;
+            struct
+            {
+                Filtering MinFilter : 1;
+                Filtering MagFilter : 1;
+                Filtering MipFilter : 1;
+                TextureAddressMode AddressU : 2;
+                TextureAddressMode AddressV : 2;
+                TextureAddressMode AddressW : 2;
+                u32 UseAnisotropy : 1;
+                CompareOp CompareOp : 3;
+            };
+        };
 
-        Filtering MipFilter = Filtering::Nearest;
+        float MaxAnisotropy = 0;
         float MipLODBias = 0;
         float MinLOD = 0;
         float MaxLOD = 0;
     };
 
-    enum class DescriptorType : u8
+    enum DescriptorType : u8
     {
-        Sampler,
-        ShaderResourceView,
-        ConstantBufferView,
-        UnorderedAccessBuffer,
-        UnorderedAccessView,
-        PushConstant,
+        LR_DESCRIPTOR_TYPE_SAMPLER = 0,
+        LR_DESCRIPTOR_TYPE_SHADER_RESOURCE,
+        LR_DESCRIPTOR_TYPE_CONSTANT_BUFFER,
+        LR_DESCRIPTOR_TYPE_UNORDERED_ACCESS_IMAGE,
+        LR_DESCRIPTOR_TYPE_UNORDERED_ACCESS_BUFFER,
+        LR_DESCRIPTOR_TYPE_PUSH_CONSTANT,
 
-        Count,
+        LR_DESCRIPTOR_TYPE_COUNT,
     };
 
     struct DescriptorBindingDesc
     {
-        u32 BindingID = -1;
+        u8 BindingID = -1;
         DescriptorType Type;
         ShaderStage TargetShader;
         u32 ArraySize = 1;
 
-        SamplerDesc Sampler = {};
-
         union
         {
-            BaseBuffer *pBuffer = nullptr;
+            SamplerDesc *pSamplerInfo = nullptr;
+            BaseBuffer *pBuffer;
             BaseImage *pImage;
         };
     };

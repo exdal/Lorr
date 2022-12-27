@@ -2,7 +2,7 @@
 
 namespace lr::Graphics
 {
-    void GraphicsPipelineBuildInfo::SetDescriptorSets(std::initializer_list<BaseDescriptorSet *> sets, BaseDescriptorSet *pSamplerSet)
+    void BasePipelineBuildInfo::SetDescriptorSets(const std::initializer_list<BaseDescriptorSet *> &sets, BaseDescriptorSet *pSamplerSet)
     {
         ZoneScoped;
 
@@ -12,7 +12,7 @@ namespace lr::Graphics
         memcpy(m_ppDescriptorSets, sets.begin(), sets.size() * PTR_SIZE);
     }
 
-    PushConstantDesc &GraphicsPipelineBuildInfo::AddPushConstant()
+    PushConstantDesc &BasePipelineBuildInfo::AddPushConstant()
     {
         ZoneScoped;
 

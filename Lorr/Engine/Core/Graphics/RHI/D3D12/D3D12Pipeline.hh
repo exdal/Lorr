@@ -15,7 +15,7 @@ namespace lr::Graphics
         ID3D12PipelineState *pHandle = nullptr;
         ID3D12RootSignature *pLayout = nullptr;
 
-        u32 m_pRootConstats[(u32)DescriptorType::Count] = {};
+        u32 pRootConstats[LR_SHADER_STAGE_COUNT] = {};
     };
 
     struct D3D12GraphicsPipelineBuildInfo : GraphicsPipelineBuildInfo
@@ -51,12 +51,20 @@ namespace lr::Graphics
 
         void AddAttachment(PipelineAttachment *pAttachment, bool depth);
 
-        // Good thing that this create info takes pointers,
-        // so we can easily enable/disable them by referencing them (nullptr means disabled)
-        D3D12_GRAPHICS_PIPELINE_STATE_DESC m_CreateInfo;
+        D3D12_GRAPHICS_PIPELINE_STATE_DESC m_CreateInfo = {};
 
         // Vars we will reference to create info
-        D3D12_INPUT_ELEMENT_DESC m_pVertexAttribs[8];
+        D3D12_INPUT_ELEMENT_DESC m_pVertexAttribs[LR_MAX_VERTEX_ATTRIBS_PER_PIPELINE];
+    };
+
+    struct D3D12ComputePipelineBuildInfo : ComputePipelineBuildInfo
+    {
+        void Init() override;
+
+        // Shader Stages
+        void SetShader(BaseShader *pShader, eastl::string_view entryPoint) override;
+
+        D3D12_COMPUTE_PIPELINE_STATE_DESC m_CreateInfo = {};
     };
 
 }  // namespace lr::Graphics

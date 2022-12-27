@@ -55,9 +55,12 @@ namespace lr::Graphics
 
         /// PIPELINE ///
         VkPipelineCache CreatePipelineCache(u32 initialDataSize = 0, void *pInitialData = nullptr);
+        VkPipelineLayout SerializePipelineLayout(PipelineLayoutSerializeDesc *pDesc, BasePipeline *pPipeline);
 
-        GraphicsPipelineBuildInfo *BeginPipelineBuildInfo() override;
-        BasePipeline *EndPipelineBuildInfo(GraphicsPipelineBuildInfo *pBuildInfo) override;
+        GraphicsPipelineBuildInfo *BeginGraphicsPipelineBuildInfo() override;
+        BasePipeline *EndGraphicsPipelineBuildInfo(GraphicsPipelineBuildInfo *pBuildInfo) override;
+        ComputePipelineBuildInfo *BeginComputePipelineBuildInfo() override;
+        BasePipeline *EndComputePipelineBuildInfo(ComputePipelineBuildInfo *pBuildInfo) override;
 
         /// SWAPCHAIN ///
         void CreateSwapChain(VkSwapchainKHR &pHandle, VkSwapchainCreateInfoKHR &info);
@@ -77,7 +80,8 @@ namespace lr::Graphics
         void DeleteShader(BaseShader *pShader) override;
 
         BaseDescriptorSet *CreateDescriptorSet(DescriptorSetDesc *pDesc) override;
-        void UpdateDescriptorData(BaseDescriptorSet *pSet, DescriptorSetDesc *pDesc) override;
+        void DeleteDescriptorSet(BaseDescriptorSet *pSet) override;
+        void UpdateDescriptorData(BaseDescriptorSet *pSet) override;
 
         VkDescriptorPool CreateDescriptorPool(const std::initializer_list<VKDescriptorBindingDesc> &layouts);
 
@@ -98,6 +102,7 @@ namespace lr::Graphics
         void CreateImageView(BaseImage *pImage);
 
         VkSampler CreateSampler(SamplerDesc *pDesc);
+        void DeleteSampler(VkSampler pSampler);
 
         void SetAllocator(VKBuffer *pBuffer, AllocatorType targetAllocator);
         void SetAllocator(VKImage *pImage, AllocatorType targetAllocator);
@@ -134,11 +139,8 @@ namespace lr::Graphics
         static VkBufferUsageFlagBits    ToVKBufferUsage(ResourceUsage usage);
         static VkImageLayout            ToVKImageLayout(ResourceUsage usage);
         static VkShaderStageFlagBits    ToVKShaderType(ShaderStage type);
-        //~ This function takes the shader stages as general, to set a specific stage
-        //~ use this together with `ToVKPipelineShaderStage`
-        static VkPipelineStageFlags     ToVKPipelineStage(ResourceUsage usage);
-        static VkPipelineStageFlags     ToVKPipelineShaderStage(ShaderStage type);
-        static VkAccessFlags            ToVKAccessFlags(ResourceUsage usage);
+        static VkPipelineStageFlags2    ToVKPipelineStage(PipelineStage stage);
+        static VkAccessFlags2           ToVKAccessFlags(PipelineAccess access);
 
         // clang-format on
 
@@ -155,6 +157,7 @@ namespace lr::Graphics
         u32 m_AvailableQueueCount = 0;
         eastl::array<u32, 3> m_QueueIndexes;
         VKCommandQueue *m_pDirectQueue = nullptr;
+        VKCommandQueue *m_pComputeQueue = nullptr;
 
         /// Pools/Caches
         VkPipelineCache m_pPipelineCache = nullptr;
@@ -163,6 +166,7 @@ namespace lr::Graphics
         BufferedAllocator<Memory::LinearAllocatorView, VkDeviceMemory> m_MADescriptor;
         BufferedAllocator<Memory::LinearAllocatorView, VkDeviceMemory> m_MABufferLinear;
         BufferedAllocator<Memory::TLSFAllocatorView, VkDeviceMemory> m_MABufferTLSF;
+        BufferedAllocator<Memory::LinearAllocatorView, VkDeviceMemory> m_MABufferFrameTime;
         BufferedAllocator<Memory::TLSFAllocatorView, VkDeviceMemory> m_MAImageTLSF;
 
         /// Native API

@@ -11,10 +11,10 @@ namespace lr::Resource
     constexpr u32 kResourceFileSignature = 1920102220;
     constexpr u16 kResourceMinVersion = 1;
 
-    enum class ResourceFileFlags : u32
+    enum ResourceFileFlags : u32
     {
-        None,
-        Compressed = 1 << 0,
+        LR_RESOURCE_FILE_FLAGS_NONE = 0,
+        LR_RESOURCE_FILE_FLAGS_COMPRESSED = 1 << 0,
     };
 
     struct alignas(u32) ResourceFileHeader
@@ -24,8 +24,8 @@ namespace lr::Resource
         u32 EngineVersion = 0;
         u32 GameVersion = 0xffffffff;
         u32 OriginalSize = 0xffffffff;
-        ResourceFileFlags Flags = ResourceFileFlags::None;
-        ResourceType Type = ResourceType::Unknown;
+        ResourceFileFlags Flags = LR_RESOURCE_FILE_FLAGS_NONE;
+        ResourceType Type = LR_RESOURCE_TYPE_UNKNOWN;
     };
 
 }  // namespace lr::Resource

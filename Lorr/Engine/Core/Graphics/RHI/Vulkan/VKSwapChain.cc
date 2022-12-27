@@ -19,7 +19,7 @@ namespace lr::Graphics
 
         if (!pAPI->IsFormatSupported(m_ImageFormat, &m_ColorSpace))
         {
-            m_ImageFormat = ResourceFormat::BGRA8F;
+            m_ImageFormat = LR_RESOURCE_FORMAT_BGRA8F;
             pAPI->IsFormatSupported(m_ImageFormat, &m_ColorSpace);
         }
 
@@ -91,7 +91,7 @@ namespace lr::Graphics
             // Swapchain already gives us the image, so we don't need to create it again
             currentImage.m_pHandle = ppSwapChainImages[i];
 
-            currentImage.m_Usage = ResourceUsage::Present;
+            currentImage.m_UsageFlags = LR_RESOURCE_USAGE_PRESENT;
             currentImage.m_Width = m_Width;
             currentImage.m_Height = m_Height;
             currentImage.m_DataSize = ~0;

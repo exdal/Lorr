@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "Core/Graphics/RHI/APIConfig.hh"
 #include "Core/Graphics/RHI/Base/BasePipeline.hh"
 
 #include "VKSym.hh"
@@ -49,16 +50,12 @@ namespace lr::Graphics
 
         void AddAttachment(PipelineAttachment *pAttachment, bool depth);
 
-        static constexpr u32 kMaxShaderStageCount = 8;
-
-        // Good thing that this create info takes pointers,
-        // so we can easily enable/disable them by referencing them (nullptr means disabled)
         VkGraphicsPipelineCreateInfo m_CreateInfo = {};
 
         // Vars we will reference to create info
         VkPipelineVertexInputStateCreateInfo m_VertexInputState = {};
         VkVertexInputBindingDescription m_VertexBindingDesc = {};
-        VkVertexInputAttributeDescription m_pVertexAttribs[8] = {};
+        VkVertexInputAttributeDescription m_pVertexAttribs[LR_MAX_VERTEX_ATTRIBS_PER_PIPELINE] = {};
 
         VkPipelineInputAssemblyStateCreateInfo m_InputAssemblyState = {};
         VkPipelineTessellationStateCreateInfo m_TessellationState = {};
@@ -70,14 +67,25 @@ namespace lr::Graphics
         VkPipelineDepthStencilStateCreateInfo m_DepthStencilState = {};
 
         VkPipelineColorBlendStateCreateInfo m_ColorBlendState = {};
-        VkPipelineColorBlendAttachmentState m_pColorBlendAttachments[8] = {};
+        VkPipelineColorBlendAttachmentState m_pColorBlendAttachments[LR_MAX_RENDER_TARGET_PER_PASS] = {};
 
         VkPipelineDynamicStateCreateInfo m_DynamicState = {};
-        
-        VkPipelineRenderingCreateInfo m_RenderingInfo = {};
-        VkFormat m_ColorAttachmnetFormats[8] = {};
 
-        VkPipelineShaderStageCreateInfo m_pShaderStages[kMaxShaderStageCount];
+        VkPipelineRenderingCreateInfo m_RenderingInfo = {};
+        VkFormat m_ColorAttachmnetFormats[LR_MAX_RENDER_TARGET_PER_PASS] = {};
+
+        static constexpr u32 kMaxShaderStageCount = 8;
+        VkPipelineShaderStageCreateInfo m_pShaderStages[8];
+    };
+
+    struct VKComputePipelineBuildInfo : ComputePipelineBuildInfo
+    {
+        void Init() override;
+
+        // Shader Stages
+        void SetShader(BaseShader *pShader, eastl::string_view entryPoint) override;
+
+        VkComputePipelineCreateInfo m_CreateInfo = {};
     };
 
 }  // namespace lr::Graphics

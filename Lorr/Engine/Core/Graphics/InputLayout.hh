@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include "Core/Graphics/RHI/APIConfig.hh"
+
 namespace lr::Graphics
 {
     enum class VertexAttribType
@@ -52,7 +54,7 @@ namespace lr::Graphics
     /// Compile time Input Layout because we are cool, problem?
     struct InputLayout
     {
-        constexpr InputLayout(const std::initializer_list<VertexAttrib> &elements) : m_Elements({})
+        constexpr InputLayout(const std::initializer_list<VertexAttrib> &elements)
         {
             m_Count = elements.size();
             m_Stride = 0;
@@ -74,7 +76,7 @@ namespace lr::Graphics
 
         u32 m_Count = 0;
         u32 m_Stride = 0;
-        eastl::array<VertexAttrib, 12> m_Elements;
+        eastl::array<VertexAttrib, LR_MAX_VERTEX_ATTRIBS_PER_PIPELINE> m_Elements = {};
     };
 
-}  // namespace lr
+}  // namespace lr::Graphics

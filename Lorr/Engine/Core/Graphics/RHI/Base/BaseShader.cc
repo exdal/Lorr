@@ -16,11 +16,11 @@ namespace lr::Graphics
 
         switch (type)
         {
-            case ShaderStage::Vertex: return VSTag; break;
-            case ShaderStage::Pixel: return PSTag; break;
-            case ShaderStage::Compute: return CSTag; break;
-            case ShaderStage::Domain: return DSTag; break;
-            case ShaderStage::Hull: return HSTag; break;
+            case LR_SHADER_STAGE_VERTEX: return VSTag; break;
+            case LR_SHADER_STAGE_PIXEL: return PSTag; break;
+            case LR_SHADER_STAGE_COMPUTE: return CSTag; break;
+            case LR_SHADER_STAGE_HULL: return HSTag; break;
+            case LR_SHADER_STAGE_DOMAIN: return DSTag; break;
             default: break;
         }
 

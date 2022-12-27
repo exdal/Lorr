@@ -69,7 +69,15 @@ namespace lr::Renderer
         BaseCommandList *pList = m_pAPI->GetCommandList();
         m_pAPI->BeginCommandList(pList);
 
-        pList->BarrierTransition(pCurrentImage, ResourceUsage::Undefined, ShaderStage::None, ResourceUsage::RenderTarget, ShaderStage::None);
+        PipelineBarrier barrier = {
+            .CurrentUsage = LR_RESOURCE_USAGE_UNKNOWN,
+            .CurrentStage = LR_PIPELINE_STAGE_NONE,
+            .CurrentAccess = LR_PIPELINE_ACCESS_NONE,
+            .NextUsage = LR_RESOURCE_USAGE_RENDER_TARGET,
+            .NextStage = LR_PIPELINE_STAGE_RENDER_TARGET,
+            .NextAccess = LR_PIPELINE_ACCESS_RENDER_TARGET_WRITE,
+        };
+        pList->SetImageBarrier(pCurrentImage, &barrier);
 
         m_pAPI->EndCommandList(pList);
         m_pAPI->ExecuteCommandList(pList, false);
@@ -79,7 +87,15 @@ namespace lr::Renderer
         pList = m_pAPI->GetCommandList();
         m_pAPI->BeginCommandList(pList);
 
-        pList->BarrierTransition(pCurrentImage, ResourceUsage::RenderTarget, ShaderStage::None, ResourceUsage::Present, ShaderStage::None);
+        barrier = {
+            .CurrentUsage = LR_RESOURCE_USAGE_RENDER_TARGET,
+            .CurrentStage = LR_PIPELINE_STAGE_RENDER_TARGET,
+            .CurrentAccess = LR_PIPELINE_ACCESS_RENDER_TARGET_WRITE,
+            .NextUsage = LR_RESOURCE_USAGE_PRESENT,
+            .NextStage = LR_PIPELINE_STAGE_NONE,
+            .NextAccess = LR_PIPELINE_ACCESS_NONE,
+        };
+        pList->SetImageBarrier(pCurrentImage, &barrier);
 
         m_pAPI->EndCommandList(pList);
         m_pAPI->ExecuteCommandList(pList, false);

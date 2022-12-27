@@ -32,7 +32,7 @@ namespace lr::Graphics
 
         bool m_vSync = false;
 
-        ResourceFormat m_ImageFormat = ResourceFormat::RGBA8F;
+        ResourceFormat m_ImageFormat = LR_RESOURCE_FORMAT_RGBA8F;
     };
 
 };  // namespace lr::Graphics

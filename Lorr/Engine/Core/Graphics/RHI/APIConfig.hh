@@ -6,14 +6,11 @@
 
 #include "Core/Memory/MemoryUtils.hh"
 
-namespace lr::Graphics::APIConfig
-{
-    constexpr u32 kMaxCommandListPerBatch = 8;
+/// PIPELINE
+#define LR_MAX_DESCRIPTOR_SETS_PER_PIPELINE 8
+#define LR_MAX_DESCRIPTORS_PER_LAYOUT 8
+#define LR_MAX_PUSH_CONSTANTS_PER_PIPELINE 8
+#define LR_MAX_STATIC_SAMPLERS_PER_PIPELINE 8
+#define LR_MAX_VERTEX_ATTRIBS_PER_PIPELINE 8
 
-    constexpr u32 kMaxSubpassCount = 8;
-    constexpr u32 kMaxColorAttachmentCount = 8;
-
-    constexpr u32 kTransientBufferSize = Memory::MiBToBytes(64);
-    constexpr u32 kTransientBufferCount = 1 << 15;
-
-}  // namespace lr::Graphics::APIConfig
+#define LR_MAX_RENDER_TARGET_PER_PASS 8

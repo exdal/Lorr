@@ -36,7 +36,7 @@ namespace lr::Graphics
     {
         ZoneScoped;
 
-        LOG_TRACE("Initializing Vulkan device...");
+        LOG_TRACE("Initializing Vulkan context...");
 
         LoadVulkan();
         SetupInstance(pWindow->m_pHandle);
@@ -110,12 +110,15 @@ namespace lr::Graphics
         m_CommandListPool.Init();
         m_pDescriptorPool = CreateDescriptorPool({
             { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 256 },
-            { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 256 },
+            { VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 256 },
+            { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 256 },
         });
 
         m_pPipelineCache = CreatePipelineCache();
 
         m_pDirectQueue = (VKCommandQueue *)CreateCommandQueue(CommandListType::Direct);
+        m_pComputeQueue = (VKCommandQueue *)CreateCommandQueue(CommandListType::Compute);
+
         m_SwapChain.Init(pWindow, this, SwapChainFlags::TripleBuffering);
         m_SwapChain.CreateBackBuffers(this);
 
@@ -164,11 +167,9 @@ namespace lr::Graphics
         VKCommandQueue *pQueue = AllocTypeInherit<BaseCommandQueue, VKCommandQueue>();
 
         VkQueue pHandle = nullptr;
-        VkFence pFence = CreateFence(false);
-
         vkGetDeviceQueue(m_pDevice, m_QueueIndexes[(u32)type], 0, &pHandle);
 
-        pQueue->Init(pHandle, pFence);
+        pQueue->Init(pHandle);
 
         return pQueue;
     }
@@ -255,19 +256,17 @@ namespace lr::Graphics
         VkQueue &pQueueHandle = m_pDirectQueue->m_pHandle;
         VkFence &pFence = pListVK->m_pFence;
 
-        VkSubmitInfo submitInfo = {};
-        submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+        VkSubmitInfo2 submitInfo = {};
+        submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
 
-        // VkCommandBufferSubmitInfo commandBufferInfo = {};
-        // commandBufferInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO;
-        // commandBufferInfo.commandBuffer = pListVK->m_pHandle;
+        VkCommandBufferSubmitInfo commandBufferInfo = {};
+        commandBufferInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO;
+        commandBufferInfo.commandBuffer = pListVK->m_pHandle;
 
-        submitInfo.commandBufferCount = 1;
-        submitInfo.pCommandBuffers = &pListVK->m_pHandle;
+        submitInfo.commandBufferInfoCount = 1;
+        submitInfo.pCommandBufferInfos = &commandBufferInfo;
 
-        // ~~INVESTIGATE: At the start of submission, we get threading errors from VL.~~
-        // Found the issue, fence mask always set to least set bit in `CommandListPool` (commit `ac0bc8f`)
-        vkQueueSubmit(pQueueHandle, 1, &submitInfo, pFence);
+        vkQueueSubmit2(pQueueHandle, 1, &submitInfo, pFence);
 
         if (waitForFence)
         {
@@ -293,10 +292,8 @@ namespace lr::Graphics
         VkSemaphore &pAcquireSemp = pCurrentFrame->pAcquireSemp;
         VkSemaphore &pPresentSemp = pCurrentFrame->pPresentSemp;
 
-        VkSubmitInfo submitInfo = {};
-        submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-
-        submitInfo.commandBufferCount = 0;
+        VkSubmitInfo2 submitInfo = {};
+        submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
 
         VkSemaphoreSubmitInfo acquireSemaphoreInfo = {};
         acquireSemaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
@@ -308,15 +305,13 @@ namespace lr::Graphics
         presentSemaphoreInfo.semaphore = pPresentSemp;
         presentSemaphoreInfo.stageMask = m_pDirectQueue->m_PresentStage;
 
-        submitInfo.waitSemaphoreCount = 1;
-        submitInfo.pWaitSemaphores = &pAcquireSemp;
+        submitInfo.waitSemaphoreInfoCount = 1;
+        submitInfo.pWaitSemaphoreInfos = &acquireSemaphoreInfo;
 
-        u32 mask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        submitInfo.signalSemaphoreCount = 1;
-        submitInfo.pSignalSemaphores = &pPresentSemp;
-        submitInfo.pWaitDstStageMask = &mask;
+        submitInfo.signalSemaphoreInfoCount = 1;
+        submitInfo.pSignalSemaphoreInfos = &presentSemaphoreInfo;
 
-        vkQueueSubmit(pQueueHandle, 1, &submitInfo, nullptr);
+        vkQueueSubmit2(pQueueHandle, 1, &submitInfo, nullptr);
     }
 
     VkFence VKAPI::CreateFence(bool signaled)
@@ -398,51 +393,36 @@ namespace lr::Graphics
         return pHandle;
     }
 
-    GraphicsPipelineBuildInfo *VKAPI::BeginPipelineBuildInfo()
+    VkPipelineLayout VKAPI::SerializePipelineLayout(PipelineLayoutSerializeDesc *pDesc, BasePipeline *pPipeline)
     {
         ZoneScoped;
 
-        GraphicsPipelineBuildInfo *pBuildInfo = new VKGraphicsPipelineBuildInfo;
-        pBuildInfo->Init();
-
-        return pBuildInfo;
-    }
-
-    BasePipeline *VKAPI::EndPipelineBuildInfo(GraphicsPipelineBuildInfo *pBuildInfo)
-    {
-        ZoneScoped;
-
-        API_VAR(VKGraphicsPipelineBuildInfo, pBuildInfo);
-        VKPipeline *pPipeline = AllocTypeInherit<BasePipeline, VKPipeline>();
-
-        VkPipeline &pHandle = pPipeline->pHandle;
-        VkPipelineLayout &pLayout = pPipeline->pLayout;
-
-        VkDescriptorSetLayout pSetLayouts[8 + 1] = {};
+        VkDescriptorSetLayout pSetLayouts[LR_MAX_DESCRIPTOR_SETS_PER_PIPELINE + 1] = {};
 
         u32 currentSet = 0;
-        for (u32 i = 0; i < pBuildInfo->m_DescriptorSetCount; i++)
+        for (u32 i = 0; i < pDesc->DescriptorSetCount; i++)
         {
-            BaseDescriptorSet *pSet = pBuildInfo->m_ppDescriptorSets[i];
+            BaseDescriptorSet *pSet = pDesc->ppDescriptorSets[i];
             API_VAR(VKDescriptorSet, pSet);
 
             pSetLayouts[currentSet++] = pSetVK->pSetLayoutHandle;
         }
 
-        u32 samplerCount = 0;
-        if (pBuildInfo->m_pSamplerDescriptorSet)
+        u32 samplerIndex = -1;
+        if (pDesc->pSamplerDescriptorSet)
         {
-            BaseDescriptorSet *pSet = pBuildInfo->m_pSamplerDescriptorSet;
+            BaseDescriptorSet *pSet = pDesc->pSamplerDescriptorSet;
             API_VAR(VKDescriptorSet, pSet);
 
+            samplerIndex = currentSet;
             pSetLayouts[currentSet++] = pSetVK->pSetLayoutHandle;
         }
 
-        VkPushConstantRange pPushConstants[8] = {};
+        VkPushConstantRange pPushConstants[LR_MAX_PUSH_CONSTANTS_PER_PIPELINE] = {};
 
-        for (u32 i = 0; i < pBuildInfo->m_PushConstantCount; i++)
+        for (u32 i = 0; i < pDesc->PushConstantCount; i++)
         {
-            PushConstantDesc &pushConstant = pBuildInfo->m_pPushConstants[i];
+            PushConstantDesc &pushConstant = pDesc->pPushConstants[i];
 
             pPushConstants[i].stageFlags = ToVKShaderType(pushConstant.Stage);
             pPushConstants[i].offset = pushConstant.Offset;
@@ -453,14 +433,79 @@ namespace lr::Graphics
         pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
         pipelineLayoutCreateInfo.setLayoutCount = currentSet;
         pipelineLayoutCreateInfo.pSetLayouts = pSetLayouts;
-        pipelineLayoutCreateInfo.pushConstantRangeCount = pBuildInfo->m_PushConstantCount;
+        pipelineLayoutCreateInfo.pushConstantRangeCount = pDesc->PushConstantCount;
         pipelineLayoutCreateInfo.pPushConstantRanges = pPushConstants;
 
+        VkPipelineLayout pLayout = nullptr;
         vkCreatePipelineLayout(m_pDevice, &pipelineLayoutCreateInfo, nullptr, &pLayout);
 
-        pBuildInfoVK->m_CreateInfo.layout = pLayout;
+        return pLayout;
+    }
 
-        vkCreateGraphicsPipelines(m_pDevice, m_pPipelineCache, 1, &pBuildInfoVK->m_CreateInfo, nullptr, &pHandle);
+    GraphicsPipelineBuildInfo *VKAPI::BeginGraphicsPipelineBuildInfo()
+    {
+        ZoneScoped;
+
+        GraphicsPipelineBuildInfo *pBuildInfo = new VKGraphicsPipelineBuildInfo;
+        pBuildInfo->Init();
+
+        return pBuildInfo;
+    }
+
+    BasePipeline *VKAPI::EndGraphicsPipelineBuildInfo(GraphicsPipelineBuildInfo *pBuildInfo)
+    {
+        ZoneScoped;
+
+        API_VAR(VKGraphicsPipelineBuildInfo, pBuildInfo);
+        VKPipeline *pPipeline = AllocTypeInherit<BasePipeline, VKPipeline>();
+
+        PipelineLayoutSerializeDesc layoutDesc = {};
+        layoutDesc.DescriptorSetCount = pBuildInfo->m_DescriptorSetCount;
+        layoutDesc.ppDescriptorSets = pBuildInfo->m_ppDescriptorSets;
+        layoutDesc.PushConstantCount = pBuildInfo->m_PushConstantCount;
+        layoutDesc.pPushConstants = pBuildInfo->m_pPushConstants;
+        layoutDesc.pSamplerDescriptorSet = pBuildInfo->m_pSamplerDescriptorSet;
+
+        VkPipelineLayout pLayout = SerializePipelineLayout(&layoutDesc, pPipeline);
+        pBuildInfoVK->m_CreateInfo.layout = pLayout;
+        pPipeline->pLayout = pLayout;
+        
+        vkCreateGraphicsPipelines(m_pDevice, m_pPipelineCache, 1, &pBuildInfoVK->m_CreateInfo, nullptr, &pPipeline->pHandle);
+
+        delete pBuildInfoVK;
+
+        return pPipeline;
+    }
+
+    ComputePipelineBuildInfo *VKAPI::BeginComputePipelineBuildInfo()
+    {
+        ZoneScoped;
+
+        ComputePipelineBuildInfo *pBuildInfo = new VKComputePipelineBuildInfo;
+        pBuildInfo->Init();
+
+        return pBuildInfo;
+    }
+
+    BasePipeline *VKAPI::EndComputePipelineBuildInfo(ComputePipelineBuildInfo *pBuildInfo)
+    {
+        ZoneScoped;
+
+        API_VAR(VKComputePipelineBuildInfo, pBuildInfo);
+        VKPipeline *pPipeline = AllocTypeInherit<BasePipeline, VKPipeline>();
+
+        PipelineLayoutSerializeDesc layoutDesc = {};
+        layoutDesc.DescriptorSetCount = pBuildInfo->m_DescriptorSetCount;
+        layoutDesc.ppDescriptorSets = pBuildInfo->m_ppDescriptorSets;
+        layoutDesc.PushConstantCount = pBuildInfo->m_PushConstantCount;
+        layoutDesc.pPushConstants = pBuildInfo->m_pPushConstants;
+        layoutDesc.pSamplerDescriptorSet = pBuildInfo->m_pSamplerDescriptorSet;
+
+        VkPipelineLayout pLayout = SerializePipelineLayout(&layoutDesc, pPipeline);
+        pBuildInfoVK->m_CreateInfo.layout = pLayout;
+        pPipeline->pLayout = pLayout;
+
+        vkCreateComputePipelines(m_pDevice, m_pPipelineCache, 1, &pBuildInfoVK->m_CreateInfo, nullptr, &pPipeline->pHandle);
 
         delete pBuildInfoVK;
 
@@ -634,7 +679,7 @@ namespace lr::Graphics
         pDescriptorSet->BindingCount = pDesc->BindingCount;
         memcpy(pDescriptorSet->pBindings, pDesc->pBindings, pDesc->BindingCount * sizeof(DescriptorBindingDesc));
 
-        VkDescriptorSetLayoutBinding pBindings[8] = {};
+        VkDescriptorSetLayoutBinding pBindings[LR_MAX_DESCRIPTORS_PER_LAYOUT] = {};
 
         for (u32 i = 0; i < pDesc->BindingCount; i++)
         {
@@ -650,7 +695,7 @@ namespace lr::Graphics
 
             if (type == VK_DESCRIPTOR_TYPE_SAMPLER)
             {
-                VkSampler pSampler = CreateSampler(&element.Sampler);
+                VkSampler pSampler = CreateSampler(element.pSamplerInfo);
                 layoutBinding.pImmutableSamplers = &pSampler;
             }
         }
@@ -675,23 +720,32 @@ namespace lr::Graphics
         return pDescriptorSet;
     }
 
-    void VKAPI::UpdateDescriptorData(BaseDescriptorSet *pSet, DescriptorSetDesc *pDesc)
+    void VKAPI::DeleteDescriptorSet(BaseDescriptorSet *pSet)
+    {
+        ZoneScoped;
+
+        for (u32 i = 0; i < pSet->BindingCount; i++)
+        {
+        }
+    }
+
+    void VKAPI::UpdateDescriptorData(BaseDescriptorSet *pSet)
     {
         ZoneScoped;
 
         API_VAR(VKDescriptorSet, pSet);
 
-        VkWriteDescriptorSet pWriteSets[8];
-        VkDescriptorBufferInfo pBufferInfos[8];
-        VkDescriptorImageInfo pImageInfos[8];
+        VkWriteDescriptorSet pWriteSets[LR_MAX_DESCRIPTORS_PER_LAYOUT];
+        VkDescriptorBufferInfo pBufferInfos[LR_MAX_DESCRIPTORS_PER_LAYOUT];
+        VkDescriptorImageInfo pImageInfos[LR_MAX_DESCRIPTORS_PER_LAYOUT];
 
         u32 bufferIndex = 0;
         u32 imageIndex = 0;
         u32 descriptorCount = 0;
 
-        for (u32 i = 0; i < pDesc->BindingCount; i++)
+        for (u32 i = 0; i < pSet->BindingCount; i++)
         {
-            DescriptorBindingDesc &element = pDesc->pBindings[i];
+            DescriptorBindingDesc &element = pSet->pBindings[i];
 
             VkWriteDescriptorSet &writeSet = pWriteSets[descriptorCount++];
             VkDescriptorBufferInfo &bufferInfo = pBufferInfos[bufferIndex];
@@ -713,7 +767,7 @@ namespace lr::Graphics
 
             switch (element.Type)
             {
-                case DescriptorType::ConstantBufferView:
+                case LR_DESCRIPTOR_TYPE_CONSTANT_BUFFER:
                 {
                     bufferInfo.buffer = pBufferVK->m_pHandle;
                     bufferInfo.offset = 0;
@@ -726,7 +780,8 @@ namespace lr::Graphics
                     break;
                 }
 
-                case DescriptorType::ShaderResourceView:
+                case LR_DESCRIPTOR_TYPE_SHADER_RESOURCE:
+                case LR_DESCRIPTOR_TYPE_UNORDERED_ACCESS_IMAGE:
                 {
                     imageInfo.imageView = pImageVK->m_pViewHandle;
                     imageInfo.imageLayout = pImageVK->m_Layout;
@@ -750,7 +805,7 @@ namespace lr::Graphics
         ZoneScoped;
 
         VkDescriptorPool pHandle = nullptr;
-        VkDescriptorPoolSize pPoolSizes[(u32)DescriptorType::Count];
+        VkDescriptorPoolSize pPoolSizes[LR_DESCRIPTOR_TYPE_COUNT];
 
         u32 maxSets = 0;
         u32 idx = 0;
@@ -797,10 +852,10 @@ namespace lr::Graphics
         ZoneScoped;
 
         VKBuffer *pBuffer = AllocTypeInherit<BaseBuffer, VKBuffer>();
-        pBuffer->m_Usage = pDesc->UsageFlags;
-        pBuffer->m_Mappable = pDesc->Mappable;
+        pBuffer->m_UsageFlags = pDesc->UsageFlags;
+        pBuffer->m_Mappable = pData->Mappable;
         pBuffer->m_DataSize = pData->DataLen;
-        pBuffer->m_AllocatorType = pDesc->TargetAllocator;
+        pBuffer->m_AllocatorType = pData->TargetAllocator;
         pBuffer->m_Stride = pData->Stride;
 
         /// ---------------------------------------------- ///
@@ -814,7 +869,7 @@ namespace lr::Graphics
 
         /// ---------------------------------------------- ///
 
-        SetAllocator(pBuffer, pDesc->TargetAllocator);
+        SetAllocator(pBuffer, pData->TargetAllocator);
 
         vkBindBufferMemory(m_pDevice, pBuffer->m_pHandle, pBuffer->m_pMemoryHandle, pBuffer->m_DataOffset);
 
@@ -870,46 +925,48 @@ namespace lr::Graphics
 
         // TODO: Currently this technique uses present queue, move it to transfer queue
 
-        BufferDesc bufDesc = {};
-        BufferData bufData = {};
+        // BufferDesc bufDesc = {};
+        // BufferData bufData = {};
 
-        bufDesc.Mappable = false;
-        bufDesc.UsageFlags = pTarget->m_Usage | ResourceUsage::CopyDst;
-        bufDesc.UsageFlags &= ~ResourceUsage::CopySrc;
+        // bufDesc.Mappable = false;
+        // bufDesc.UsageFlags = pTarget->m_Usage | ResourceUsage::CopyDst;
+        // bufDesc.UsageFlags &= ~ResourceUsage::CopySrc;
 
-        bufData.DataLen = pTarget->m_DataSize;
+        // bufData.DataLen = pTarget->m_DataSize;
 
-        BaseBuffer *pNewBuffer = CreateBuffer(&bufDesc, &bufData);
+        // BaseBuffer *pNewBuffer = CreateBuffer(&bufDesc, &bufData);
 
-        pList->CopyBuffer(pTarget, pNewBuffer, bufData.DataLen);
+        // pList->CopyBuffer(pTarget, pNewBuffer, bufData.DataLen);
 
-        return pNewBuffer;
+        return nullptr;
     }
 
     BaseImage *VKAPI::CreateImage(ImageDesc *pDesc, ImageData *pData)
     {
         ZoneScoped;
 
-        if (pData->pData)
-            pDesc->Usage |= ResourceUsage::CopyDst;
-
         VKImage *pImage = AllocTypeInherit<BaseImage, VKImage>();
         pImage->m_Width = pData->Width;
         pImage->m_Height = pData->Height;
         pImage->m_DataSize = pData->DataLen;
+        pImage->m_AllocatorType = pData->TargetAllocator;
         pImage->m_UsingMip = 0;
         pImage->m_TotalMips = pDesc->MipMapLevels;
-        pImage->m_Usage = pDesc->Usage;
+        pImage->m_UsageFlags = pDesc->UsageFlags;
         pImage->m_Format = pDesc->Format;
-        pImage->m_AllocatorType = pDesc->TargetAllocator;
-        pImage->m_Layout = ToVKImageLayout(pDesc->Usage);
+        pImage->m_Layout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+        if (pImage->m_DataSize == 0)
+        {
+            pImage->m_DataSize = pImage->m_Width * pImage->m_Height * GetResourceFormatSize(pImage->m_Format);
+        }
 
         /// ---------------------------------------------- //
 
         VkImageCreateInfo imageCreateInfo = {};
         imageCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
         imageCreateInfo.format = ToVKFormat(pDesc->Format);
-        imageCreateInfo.usage = ToVKImageUsage(pDesc->Usage);
+        imageCreateInfo.usage = ToVKImageUsage(pDesc->UsageFlags);
         imageCreateInfo.imageType = VK_IMAGE_TYPE_2D;
 
         imageCreateInfo.extent.width = pData->Width;
@@ -925,41 +982,11 @@ namespace lr::Graphics
 
         /// ---------------------------------------------- //
 
-        SetAllocator(pImage, pDesc->TargetAllocator);
+        SetAllocator(pImage, pData->TargetAllocator);
 
-        vkBindImageMemory(m_pDevice, pImage->m_pHandle, pImage->m_pMemoryHandle, 0);
+        vkBindImageMemory(m_pDevice, pImage->m_pHandle, pImage->m_pMemoryHandle, pImage->m_DataOffset);
 
         CreateImageView(pImage);
-
-        if (pData->pData)
-        {
-            BufferDesc bufferDesc = {};
-            bufferDesc.Mappable = true;
-            bufferDesc.UsageFlags = ResourceUsage::CopySrc;
-            bufferDesc.TargetAllocator = AllocatorType::BufferFrameTime;
-
-            BufferData bufferData = {};
-            bufferData.DataLen = pData->DataLen;
-
-            BaseBuffer *pImageBuffer = CreateBuffer(&bufferDesc, &bufferData);
-
-            void *pMapData = nullptr;
-            MapMemory(pImageBuffer, pMapData);
-            memcpy(pMapData, pData->pData, pData->DataLen);
-            UnmapMemory(pImageBuffer);
-
-            BaseCommandList *pList = GetCommandList();
-            BeginCommandList(pList);
-
-            pList->BarrierTransition(pImage, ResourceUsage::HostRead, ShaderStage::None, ResourceUsage::CopyDst, ShaderStage::None);
-            pList->CopyBuffer(pImageBuffer, pImage);
-            pList->BarrierTransition(pImage, ResourceUsage::CopyDst, ShaderStage::None, ResourceUsage::ShaderResource, ShaderStage::Pixel);
-
-            EndCommandList(pList);
-            ExecuteCommandList(pList, true);
-
-            DeleteBuffer(pImageBuffer);
-        }
 
         return pImage;
     }
@@ -1000,12 +1027,15 @@ namespace lr::Graphics
 
         VkImageAspectFlags aspectFlags = VK_IMAGE_ASPECT_NONE;
 
-        if (pImage->m_Usage & ResourceUsage::ShaderResource || pImage->m_Usage & ResourceUsage::RenderTarget)
+        constexpr ResourceUsage kColorUsage =
+            LR_RESOURCE_USAGE_SHADER_RESOURCE | LR_RESOURCE_USAGE_RENDER_TARGET | LR_RESOURCE_USAGE_UNORDERED_ACCESS;
+
+        if (pImage->m_UsageFlags & kColorUsage)
         {
             aspectFlags |= VK_IMAGE_ASPECT_COLOR_BIT;
         }
 
-        if (pImage->m_Usage & ResourceUsage::DepthStencilWrite)
+        if (pImage->m_UsageFlags & LR_RESOURCE_USAGE_DEPTH_STENCIL)
         {
             aspectFlags |= VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
         }
@@ -1017,10 +1047,10 @@ namespace lr::Graphics
         imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
         imageViewCreateInfo.format = ToVKFormat(pImage->m_Format);
 
-        imageViewCreateInfo.components.r = VK_COMPONENT_SWIZZLE_R;
-        imageViewCreateInfo.components.g = VK_COMPONENT_SWIZZLE_G;
-        imageViewCreateInfo.components.b = VK_COMPONENT_SWIZZLE_B;
-        imageViewCreateInfo.components.a = VK_COMPONENT_SWIZZLE_A;
+        imageViewCreateInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+        imageViewCreateInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+        imageViewCreateInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+        imageViewCreateInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
 
         imageViewCreateInfo.subresourceRange.aspectMask = aspectFlags;
         imageViewCreateInfo.subresourceRange.baseMipLevel = pImage->m_UsingMip;
@@ -1064,14 +1094,21 @@ namespace lr::Graphics
         samplerInfo.maxLod = pDesc->MaxLOD;
         samplerInfo.minLod = pDesc->MinLOD;
 
-        samplerInfo.compareEnable = pDesc->ComparisonFunc != CompareOp::Never;
-        samplerInfo.compareOp = (VkCompareOp)pDesc->ComparisonFunc;
+        samplerInfo.compareEnable = pDesc->CompareOp != LR_COMPARE_OP_NEVER;
+        samplerInfo.compareOp = (VkCompareOp)pDesc->CompareOp;
 
         samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK;
 
         vkCreateSampler(m_pDevice, &samplerInfo, nullptr, &pHandle);
 
         return pHandle;
+    }
+
+    void VKAPI::DeleteSampler(VkSampler pSampler)
+    {
+        ZoneScoped;
+
+        vkDestroySampler(m_pDevice, pSampler, nullptr);
     }
 
     void VKAPI::SetAllocator(VKBuffer *pBuffer, AllocatorType targetAllocator)
@@ -1146,6 +1183,8 @@ namespace lr::Graphics
 
                 pImage->m_pAllocatorData = pBlock;
                 pImage->m_DataOffset = pBlock->Offset;
+
+                LOG_TRACE("TLSFAllocImage: size = {}, off = {}, block_addr = {}", pImage->m_DataSize, pImage->m_DataOffset, (void *)pBlock);
 
                 pImage->m_pMemoryHandle = m_MAImageTLSF.pHeap;
 
@@ -1315,13 +1354,7 @@ namespace lr::Graphics
 
         /// Setup Extensions
 
-        /// Required extensions
-        // * VK_KHR_surface
-        // * VK_KHR_get_physical_device_properties2
-        // * VK_KHR_win32_surface
-        // Debug only
-        // * VK_EXT_debug_utils
-        // * VK_EXT_debug_report
+        LOG_INFO("Checking instance extensions:");
 
         u32 instanceExtensionCount = 0;
         vkEnumerateInstanceExtensionProperties(nullptr, &instanceExtensionCount, nullptr);
@@ -1363,6 +1396,8 @@ namespace lr::Graphics
                     continue;
                 }
             }
+
+            LOG_INFO("\t{}, {}", pExtensionName, found);
 
             if (found)
                 continue;
@@ -1418,6 +1453,8 @@ namespace lr::Graphics
         VkQueueFamilyProperties *pQueueFamilyProps = new VkQueueFamilyProperties[queueFamilyCount];
         vkGetPhysicalDeviceQueueFamilyProperties(pPhysicalDevice, &queueFamilyCount, pQueueFamilyProps);
 
+        LOG_INFO("Checking available queues({} number of queues available):", queueFamilyCount);
+
         u32 foundGraphicsFamilyIndex = -1;
         u32 foundComputeFamilyIndex = -1;
         u32 foundTransferFamilyIndex = -1;
@@ -1440,6 +1477,7 @@ namespace lr::Graphics
                     break;
                 }
 
+                LOG_INFO("\tQueue{} selected as Graphics/Present queue.", i);
                 m_AvailableQueueCount++;
                 foundGraphicsFamilyIndex = i;
 
@@ -1449,6 +1487,7 @@ namespace lr::Graphics
             constexpr u32 kComputeFilter = VK_QUEUE_GRAPHICS_BIT;
             if (foundComputeFamilyIndex == -1 && props.queueFlags & VK_QUEUE_COMPUTE_BIT && (props.queueFlags & kComputeFilter) == 0)
             {
+                LOG_INFO("\tQueue{} selected as Compute queue.", i);
                 m_AvailableQueueCount++;
                 foundComputeFamilyIndex = i;
 
@@ -1458,6 +1497,7 @@ namespace lr::Graphics
             constexpr u32 kTransferFilter = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT;
             if (foundTransferFamilyIndex == -1 && props.queueFlags & VK_QUEUE_TRANSFER_BIT && (props.queueFlags & kTransferFilter) == 0)
             {
+                LOG_INFO("\tQueue{} selected as Transfer queue.", i);
                 m_AvailableQueueCount++;
                 foundTransferFamilyIndex = i;
 
@@ -1531,6 +1571,8 @@ namespace lr::Graphics
 
         /// Get device extensions
 
+        LOG_INFO("Checking device extensions:");
+
         u32 deviceExtensionCount = 0;
         vkEnumerateDeviceExtensionProperties(pPhysicalDevice, nullptr, &deviceExtensionCount, nullptr);
 
@@ -1559,12 +1601,14 @@ namespace lr::Graphics
                 }
             }
 
-            if (found)
-                continue;
+            LOG_INFO("\t{}, {}", pExtensionName, found);
 
-            LOG_ERROR("Following extension is not found in this device: {}", extensionSV);
+            if (!found)
+            {
+                LOG_ERROR("Following extension is not found in this device: {}", extensionSV);
 
-            return false;
+                return false;
+            }
         }
 
         ////////////////////////////////////
@@ -1585,7 +1629,7 @@ namespace lr::Graphics
         vk13Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
         vk12Features.pNext = &vk12Features;
 
-        vk13Features.synchronization2 = false;
+        vk13Features.synchronization2 = true;
         vk13Features.dynamicRendering = true;
 
         VkDeviceCreateInfo deviceCreateInfo = {};
@@ -1643,17 +1687,16 @@ namespace lr::Graphics
     /// ---------------- Type Conversion LUTs ---------------- ///
 
     constexpr VkFormat kFormatLUT[] = {
-        VK_FORMAT_UNDEFINED,             // Unknown
-        VK_FORMAT_BC1_RGBA_UNORM_BLOCK,  // BC1
-        VK_FORMAT_R8G8B8A8_UNORM,        // RGBA8F
-        VK_FORMAT_R8G8B8A8_SRGB,         // RGBA8_SRGBF
-        VK_FORMAT_B8G8R8A8_UNORM,        // BGRA8F
-        VK_FORMAT_R16G16B16A16_SFLOAT,   // RGBA16F
-        VK_FORMAT_R32G32B32A32_SFLOAT,   // RGBA32F
-        VK_FORMAT_R32_UINT,              // R32U
-        VK_FORMAT_R32_SFLOAT,            // R32F
-        VK_FORMAT_D32_SFLOAT,            // D32F
-        VK_FORMAT_D32_SFLOAT_S8_UINT,    // D32FS8U
+        VK_FORMAT_UNDEFINED,            // Unknown
+        VK_FORMAT_R8G8B8A8_UNORM,       // RGBA8F
+        VK_FORMAT_R8G8B8A8_SRGB,        // RGBA8_SRGBF
+        VK_FORMAT_B8G8R8A8_UNORM,       // BGRA8F
+        VK_FORMAT_R16G16B16A16_SFLOAT,  // RGBA16F
+        VK_FORMAT_R32G32B32A32_SFLOAT,  // RGBA32F
+        VK_FORMAT_R32_UINT,             // R32U
+        VK_FORMAT_R32_SFLOAT,           // R32F
+        VK_FORMAT_D32_SFLOAT,           // D32F
+        VK_FORMAT_D32_SFLOAT_S8_UINT,   // D32FS8U
     };
 
     constexpr VkFormat kAttribFormatLUT[] = {
@@ -1683,12 +1726,12 @@ namespace lr::Graphics
     };
 
     constexpr VkDescriptorType kDescriptorTypeLUT[] = {
-        VK_DESCRIPTOR_TYPE_SAMPLER,         // Sampler
-        VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,   // ShaderResourceView
-        VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,  // ConstantBufferView
-        VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,  // UnorderedAccessBuffer
-        VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,   // UnorderedAccessView
-        VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,  // PushConstant
+        VK_DESCRIPTOR_TYPE_SAMPLER,         // LR_DESCRIPTOR_TYPE_SAMPLER
+        VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,   // LR_DESCRIPTOR_TYPE_SHADER_RESOURCE
+        VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,  // LR_DESCRIPTOR_TYPE_CONSTANT_BUFFER
+        VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,   // LR_DESCRIPTOR_TYPE_UNORDERED_ACCESS_IMAGE
+        VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,  // LR_DESCRIPTOR_TYPE_UNORDERED_ACCESS_BUFFER
+        VK_DESCRIPTOR_TYPE_MAX_ENUM,        // LR_DESCRIPTOR_TYPE_PUSH_CONSTANT
     };
 
     VkFormat VKAPI::ToVKFormat(ResourceFormat format)
@@ -1720,20 +1763,23 @@ namespace lr::Graphics
     {
         u32 v = 0;
 
-        if (usage & ResourceUsage::RenderTarget)
+        if (usage & LR_RESOURCE_USAGE_RENDER_TARGET)
             v |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
-        if (usage & ResourceUsage::DepthStencilWrite || usage & ResourceUsage::DepthStencilRead)
+        if (usage & LR_RESOURCE_USAGE_DEPTH_STENCIL)
             v |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
 
-        if (usage & ResourceUsage::ShaderResource)
+        if (usage & LR_RESOURCE_USAGE_SHADER_RESOURCE)
             v |= VK_IMAGE_USAGE_SAMPLED_BIT;
 
-        if (usage & ResourceUsage::CopySrc)
+        if (usage & LR_RESOURCE_USAGE_TRANSFER_SRC)
             v |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
 
-        if (usage & ResourceUsage::CopyDst)
+        if (usage & LR_RESOURCE_USAGE_TRANSFER_DST)
             v |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+
+        if (usage & LR_RESOURCE_USAGE_UNORDERED_ACCESS)
+            v |= VK_IMAGE_USAGE_STORAGE_BIT;
 
         return (VkImageUsageFlags)v;
     }
@@ -1742,54 +1788,51 @@ namespace lr::Graphics
     {
         u32 v = 0;
 
-        if (usage & ResourceUsage::VertexBuffer)
+        if (usage & LR_RESOURCE_USAGE_VERTEX_BUFFER)
             v |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
 
-        if (usage & ResourceUsage::IndexBuffer)
+        if (usage & LR_RESOURCE_USAGE_INDEX_BUFFER)
             v |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
 
-        if (usage & ResourceUsage::ConstantBuffer)
+        if (usage & LR_RESOURCE_USAGE_CONSTANT_BUFFER)
             v |= VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
 
-        if (usage & ResourceUsage::UnorderedAccess)
-            v |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-
-        if (usage & ResourceUsage::IndirectBuffer)
-            v |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
-
-        if (usage & ResourceUsage::CopySrc)
+        if (usage & LR_RESOURCE_USAGE_TRANSFER_SRC)
             v |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
 
-        if (usage & ResourceUsage::CopyDst)
+        if (usage & LR_RESOURCE_USAGE_TRANSFER_DST)
             v |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+
+        if (usage & LR_RESOURCE_USAGE_UNORDERED_ACCESS)
+            v |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
 
         return (VkBufferUsageFlagBits)v;
     }
 
     VkImageLayout VKAPI::ToVKImageLayout(ResourceUsage usage)
     {
-        if (usage == ResourceUsage::Present)
+        if (usage == LR_RESOURCE_USAGE_PRESENT)
             return VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
-        if (usage & ResourceUsage::RenderTarget)
+        if (usage == LR_RESOURCE_USAGE_UNKNOWN)
+            return VK_IMAGE_LAYOUT_UNDEFINED;
+
+        if (usage & LR_RESOURCE_USAGE_RENDER_TARGET)
             return VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
-        if (usage & ResourceUsage::DepthStencilWrite)
+        if (usage & LR_RESOURCE_USAGE_DEPTH_STENCIL)
             return VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
 
-        if (usage & ResourceUsage::DepthStencilRead)
-            return VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
-
-        if (usage & ResourceUsage::ShaderResource)
+        if (usage & LR_RESOURCE_USAGE_SHADER_RESOURCE)
             return VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
-        if (usage & ResourceUsage::CopySrc)
+        if (usage & LR_RESOURCE_USAGE_TRANSFER_SRC)
             return VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
 
-        if (usage & ResourceUsage::CopyDst)
+        if (usage & LR_RESOURCE_USAGE_TRANSFER_DST)
             return VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
 
-        if (usage & ResourceUsage::UnorderedAccess)
+        if (usage & LR_RESOURCE_USAGE_UNORDERED_ACCESS)
             return VK_IMAGE_LAYOUT_GENERAL;
 
         return VK_IMAGE_LAYOUT_UNDEFINED;
@@ -1799,130 +1842,114 @@ namespace lr::Graphics
     {
         u32 v = 0;
 
-        if (type & ShaderStage::Vertex)
+        if (type & LR_SHADER_STAGE_VERTEX)
             v |= VK_SHADER_STAGE_VERTEX_BIT;
 
-        if (type & ShaderStage::Pixel)
+        if (type & LR_SHADER_STAGE_PIXEL)
             v |= VK_SHADER_STAGE_FRAGMENT_BIT;
 
-        if (type & ShaderStage::Compute)
+        if (type & LR_SHADER_STAGE_COMPUTE)
             v |= VK_SHADER_STAGE_COMPUTE_BIT;
 
-        if (type & ShaderStage::Hull)
+        if (type & LR_SHADER_STAGE_HULL)
             v |= VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
 
-        if (type & ShaderStage::Domain)
+        if (type & LR_SHADER_STAGE_DOMAIN)
             v |= VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
-
-        if (type & ShaderStage::Geometry)
-            v |= VK_SHADER_STAGE_GEOMETRY_BIT;
 
         return (VkShaderStageFlagBits)v;
     }
 
-    VkPipelineStageFlags VKAPI::ToVKPipelineStage(ResourceUsage usage)
+    VkPipelineStageFlags2 VKAPI::ToVKPipelineStage(PipelineStage stage)
     {
         u32 v = 0;
 
-        if (usage == ResourceUsage::Present)
-            return VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+        if (stage == LR_PIPELINE_STAGE_NONE)
+            return VK_PIPELINE_STAGE_2_NONE;
 
-        if (usage == ResourceUsage::Undefined)
-            return VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+        if (stage & LR_PIPELINE_STAGE_VERTEX_INPUT)
+            v |= VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT;
 
-        if (usage & ResourceUsage::VertexBuffer || usage & ResourceUsage::IndexBuffer)
-            v |= VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
+        if (stage & LR_PIPELINE_STAGE_VERTEX_SHADER)
+            v |= VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT;
 
-        if (usage & ResourceUsage::RenderTarget)
-            v |= VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        if (stage & LR_PIPELINE_STAGE_PIXEL_SHADER)
+            v |= VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
 
-        if (usage & ResourceUsage::DepthStencilWrite || usage & ResourceUsage::DepthStencilRead)
-            v |= VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        if (stage & LR_PIPELINE_STAGE_EARLY_PIXEL_TESTS)
+            v |= VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT;
 
-        if (usage & ResourceUsage::CopySrc || usage & ResourceUsage::CopyDst)
-            v |= VK_PIPELINE_STAGE_TRANSFER_BIT;
+        if (stage & LR_PIPELINE_STAGE_LATE_PIXEL_TESTS)
+            v |= VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
 
-        if (usage & ResourceUsage::HostRead || usage & ResourceUsage::HostWrite)
-            v |= VK_PIPELINE_STAGE_HOST_BIT;
+        if (stage & LR_PIPELINE_STAGE_RENDER_TARGET)
+            v |= VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
 
-        if (usage & ResourceUsage::IndirectBuffer)
-            v |= VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT;
+        if (stage & LR_PIPELINE_STAGE_COMPUTE_SHADER)
+            v |= VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+
+        if (stage & LR_PIPELINE_STAGE_TRANSFER)
+            v |= VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+
+        if (stage & LR_PIPELINE_STAGE_ALL_COMMANDS)
+            v |= VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+
+        if (stage & LR_PIPELINE_STAGE_HOST)
+            v |= VK_PIPELINE_STAGE_2_HOST_BIT;
 
         return (VkPipelineStageFlagBits)v;
     }
 
-    VkPipelineStageFlags VKAPI::ToVKPipelineShaderStage(ShaderStage type)
+    VkAccessFlags2 VKAPI::ToVKAccessFlags(PipelineAccess access)
     {
         u32 v = 0;
 
-        if (type & ShaderStage::Vertex)
-            v |= VK_PIPELINE_STAGE_VERTEX_SHADER_BIT;
+        if (access == LR_PIPELINE_ACCESS_NONE)
+            return VK_ACCESS_2_NONE;
 
-        if (type & ShaderStage::Pixel)
-            v |= VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        if (access & LR_PIPELINE_ACCESS_VERTEX_ATTRIB_READ)
+            v |= VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT;
 
-        if (type & ShaderStage::Compute)
-            v |= VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+        if (access & LR_PIPELINE_ACCESS_INDEX_ATTRIB_READ)
+            v |= VK_ACCESS_2_INDEX_READ_BIT;
 
-        if (type & ShaderStage::Hull)
-            v |= VK_PIPELINE_STAGE_TESSELLATION_CONTROL_SHADER_BIT;
+        if (access & LR_PIPELINE_ACCESS_SHADER_READ)
+            v |= VK_ACCESS_2_SHADER_READ_BIT;
 
-        if (type & ShaderStage::Domain)
-            v |= VK_PIPELINE_STAGE_TESSELLATION_EVALUATION_SHADER_BIT;
+        if (access & LR_PIPELINE_ACCESS_SHADER_WRITE)
+            v |= VK_ACCESS_2_SHADER_WRITE_BIT;
 
-        if (type & ShaderStage::Geometry)
-            v |= VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT;
+        if (access & LR_PIPELINE_ACCESS_RENDER_TARGET_READ)
+            v |= VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT;
 
-        return (VkPipelineStageFlagBits)v;
-    }
+        if (access & LR_PIPELINE_ACCESS_RENDER_TARGET_WRITE)
+            v |= VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
 
-    VkAccessFlags VKAPI::ToVKAccessFlags(ResourceUsage usage)
-    {
-        u32 v = 0;
+        if (access & LR_PIPELINE_ACCESS_DEPTH_STENCIL_READ)
+            v |= VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
 
-        if (usage == ResourceUsage::Present)
-            return VK_ACCESS_NONE;
+        if (access & LR_PIPELINE_ACCESS_DEPTH_STENCIL_WRITE)
+            v |= VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 
-        if (usage & ResourceUsage::Undefined)
-            v |= VK_ACCESS_NONE;
+        if (access & LR_PIPELINE_ACCESS_TRANSFER_READ)
+            v |= VK_ACCESS_2_TRANSFER_READ_BIT;
 
-        if (usage & ResourceUsage::VertexBuffer)
-            v |= VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
+        if (access & LR_PIPELINE_ACCESS_TRANSFER_WRITE)
+            v |= VK_ACCESS_2_TRANSFER_WRITE_BIT;
 
-        if (usage & ResourceUsage::IndexBuffer)
-            v |= VK_ACCESS_INDEX_READ_BIT;
+        if (access & LR_PIPELINE_ACCESS_MEMORY_READ)
+            v |= VK_ACCESS_2_MEMORY_READ_BIT;
 
-        if (usage & ResourceUsage::IndirectBuffer)
-            v |= VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
+        if (access & LR_PIPELINE_ACCESS_MEMORY_WRITE)
+            v |= VK_ACCESS_2_MEMORY_WRITE_BIT;
 
-        if (usage & ResourceUsage::ConstantBuffer)
-            v |= VK_ACCESS_UNIFORM_READ_BIT;
+        if (access & LR_PIPELINE_ACCESS_HOST_READ)
+            v |= VK_ACCESS_2_HOST_READ_BIT;
 
-        if (usage & ResourceUsage::ShaderResource)
-            v |= VK_ACCESS_SHADER_READ_BIT;
+        if (access & LR_PIPELINE_ACCESS_HOST_WRITE)
+            v |= VK_ACCESS_2_HOST_WRITE_BIT;
 
-        if (usage & ResourceUsage::RenderTarget)
-            v |= VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-
-        if (usage & ResourceUsage::DepthStencilWrite)
-            v |= VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
-
-        if (usage & ResourceUsage::DepthStencilRead)
-            v |= VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-
-        if (usage & ResourceUsage::CopySrc)
-            v |= VK_ACCESS_TRANSFER_READ_BIT;
-
-        if (usage & ResourceUsage::CopyDst)
-            v |= VK_ACCESS_TRANSFER_WRITE_BIT;
-
-        if (usage & ResourceUsage::HostRead)
-            v |= VK_ACCESS_HOST_READ_BIT;
-
-        if (usage & ResourceUsage::HostWrite)
-            v |= VK_ACCESS_HOST_WRITE_BIT;
-
-        return (VkAccessFlags)v;
+        return (VkAccessFlags2)v;
     }
 
 }  // namespace lr::Graphics

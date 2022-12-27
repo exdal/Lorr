@@ -54,13 +54,16 @@ namespace lr::Graphics
 
         /// PIPELINE ///
         ID3D12PipelineLibrary *CreatePipelineCache(u32 initialDataSize = 0, void *pInitialData = nullptr);
+        ID3D12RootSignature *SerializeRootSignature(PipelineLayoutSerializeDesc *pDesc, BasePipeline *pPipeline);
 
         BaseShader *CreateShader(ShaderStage stage, BufferReadStream &buf) override;
         BaseShader *CreateShader(ShaderStage stage, eastl::string_view path) override;
         void DeleteShader(BaseShader *pShader) override;
 
-        GraphicsPipelineBuildInfo *BeginPipelineBuildInfo() override;
-        BasePipeline *EndPipelineBuildInfo(GraphicsPipelineBuildInfo *pBuildInfo) override;
+        GraphicsPipelineBuildInfo *BeginGraphicsPipelineBuildInfo() override;
+        BasePipeline *EndGraphicsPipelineBuildInfo(GraphicsPipelineBuildInfo *pBuildInfo) override;
+        ComputePipelineBuildInfo *BeginComputePipelineBuildInfo() override;
+        BasePipeline *EndComputePipelineBuildInfo(ComputePipelineBuildInfo *pBuildInfo) override;
 
         /// SWAPCHAIN ///
 
@@ -74,7 +77,8 @@ namespace lr::Graphics
 
         /// RESOURCE ///
         BaseDescriptorSet *CreateDescriptorSet(DescriptorSetDesc *pDesc) override;
-        void UpdateDescriptorData(BaseDescriptorSet *pSet, DescriptorSetDesc *pDesc) override;
+        void DeleteDescriptorSet(BaseDescriptorSet *pSet) override;
+        void UpdateDescriptorData(BaseDescriptorSet *pSet) override;
 
         // `VKDescriptorBindingDesc::Type` represents descriptor type.
         // `VKDescriptorBindingDesc::ArraySize` represents descriptor count for that type.
@@ -122,17 +126,11 @@ namespace lr::Graphics
         static D3D_PRIMITIVE_TOPOLOGY           ToDXTopology(PrimitiveType type);
         static D3D12_CULL_MODE                  ToDXCullMode(CullMode mode);
         static D3D12_ROOT_PARAMETER_TYPE        ToDXDescriptorType(DescriptorType type);
-        
-        //~ IMPORTANT: `DescriptorType` does not represent correct heap types, this is special to D3D12.
-        //~ Since it's an internal thing to manage descriptor pools, we leave it as is.
-        //~ For correct types, see function implementation.
-        static D3D12_DESCRIPTOR_HEAP_TYPE       ToDXHeapType(DescriptorType type);
-
         static D3D12_DESCRIPTOR_RANGE_TYPE      ToDXDescriptorRangeType(DescriptorType type);
         static D3D12_RESOURCE_STATES            ToDXImageUsage(ResourceUsage usage);
         static D3D12_RESOURCE_STATES            ToDXBufferUsage(ResourceUsage usage);
-        static D3D12_RESOURCE_STATES            ToDXImageLayout(ResourceUsage usage);
         static D3D12_SHADER_VISIBILITY          ToDXShaderType(ShaderStage type);
+        static D3D12_COMMAND_LIST_TYPE          ToDXCommandListType(CommandListType type);
 
         // clang-format on
 
@@ -146,6 +144,7 @@ namespace lr::Graphics
 
         /// Main Queues
         D3D12CommandQueue *m_pDirectQueue = nullptr;
+        D3D12CommandQueue *m_pComputeQueue = nullptr;
 
         /// Pools/Caches
         D3D12DescriptorHeap m_pDescriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_NUM_TYPES];
@@ -154,6 +153,7 @@ namespace lr::Graphics
         BufferedAllocator<Memory::LinearAllocatorView, ID3D12Heap *> m_MADescriptor;
         BufferedAllocator<Memory::LinearAllocatorView, ID3D12Heap *> m_MABufferLinear;
         BufferedAllocator<Memory::TLSFAllocatorView, ID3D12Heap *> m_MABufferTLSF;
+        BufferedAllocator<Memory::LinearAllocatorView, ID3D12Heap *> m_MABufferFrameTime;
         BufferedAllocator<Memory::TLSFAllocatorView, ID3D12Heap *> m_MAImageTLSF;
 
         EA::Thread::Thread m_FenceThread;

@@ -23,6 +23,15 @@
 
 namespace lr::Graphics
 {
+    struct PipelineLayoutSerializeDesc
+    {
+        BaseDescriptorSet *pSamplerDescriptorSet = nullptr;
+        u32 DescriptorSetCount = 0;
+        BaseDescriptorSet **ppDescriptorSets = nullptr;
+        u32 PushConstantCount = 0;
+        PushConstantDesc *pPushConstants = nullptr;
+    };
+
     //* Not fully virtual struct that we *only* expose external functions.
 
     struct BaseAPI
@@ -37,7 +46,7 @@ namespace lr::Graphics
         virtual BaseCommandAllocator *CreateCommandAllocator(CommandListType type) = 0;
         virtual BaseCommandList *CreateCommandList(CommandListType type) = 0;
 
-        BaseCommandList *GetCommandList();
+        BaseCommandList *GetCommandList(CommandListType type = CommandListType::Direct);
 
         virtual void BeginCommandList(BaseCommandList *pList) = 0;
         virtual void EndCommandList(BaseCommandList *pList) = 0;
@@ -49,8 +58,10 @@ namespace lr::Graphics
         virtual void ExecuteCommandList(BaseCommandList *pList, bool waitForFence) = 0;
 
         /// PIPELINE ///
-        virtual GraphicsPipelineBuildInfo *BeginPipelineBuildInfo() = 0;
-        virtual BasePipeline *EndPipelineBuildInfo(GraphicsPipelineBuildInfo *pBuildInfo) = 0;
+        virtual GraphicsPipelineBuildInfo *BeginGraphicsPipelineBuildInfo() = 0;
+        virtual BasePipeline *EndGraphicsPipelineBuildInfo(GraphicsPipelineBuildInfo *pBuildInfo) = 0;
+        virtual ComputePipelineBuildInfo *BeginComputePipelineBuildInfo() = 0;
+        virtual BasePipeline *EndComputePipelineBuildInfo(ComputePipelineBuildInfo *pBuildInfo) = 0;
 
         /// SWAPCHAIN ///
         virtual void ResizeSwapChain(u32 width, u32 height) = 0;
@@ -61,7 +72,9 @@ namespace lr::Graphics
 
         /// RESOURCE ///
         virtual BaseDescriptorSet *CreateDescriptorSet(DescriptorSetDesc *pDesc) = 0;
-        virtual void UpdateDescriptorData(BaseDescriptorSet *pSet, DescriptorSetDesc *pDesc) = 0;
+        // Only deletes immutable samplers
+        virtual void DeleteDescriptorSet(BaseDescriptorSet *pSet) = 0;
+        virtual void UpdateDescriptorData(BaseDescriptorSet *pSet) = 0;
 
         virtual BaseShader *CreateShader(ShaderStage stage, BufferReadStream &buf) = 0;
         virtual BaseShader *CreateShader(ShaderStage stage, eastl::string_view path) = 0;

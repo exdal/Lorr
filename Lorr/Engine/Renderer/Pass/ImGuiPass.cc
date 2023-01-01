@@ -119,36 +119,45 @@ namespace lr::Renderer
             { VertexAttribType::Vec4U_Packed, "COLOR" },
         };
 
-        GraphicsPipelineBuildInfo *pBuildInfo = pAPI->BeginGraphicsPipelineBuildInfo();
+        PipelineAttachment colorAttachment = {
+            .Format = pAPI->GetSwapChain()->m_ImageFormat,
+            .BlendEnable = true,
+            .WriteMask = LR_COLOR_MASK_R | LR_COLOR_MASK_G | LR_COLOR_MASK_B | LR_COLOR_MASK_A,
+            .SrcBlend = LR_BLEND_FACTOR_SRC_ALPHA,
+            .DstBlend = LR_BLEND_FACTOR_INV_SRC_ALPHA,
+            .SrcBlendAlpha = LR_BLEND_FACTOR_ONE,
+            .DstBlendAlpha = LR_BLEND_FACTOR_SRC_ALPHA,
+            .ColorBlendOp = LR_BLEND_OP_ADD,
+            .AlphaBlendOp = LR_BLEND_OP_ADD,
+        };
 
-        pBuildInfo->SetInputLayout(inputLayout);
-        pBuildInfo->SetShader(pVertexShader, "main");
-        pBuildInfo->SetShader(pPixelShader, "main");
-        pBuildInfo->SetFillMode(LR_FILL_MODE_FILL);
-        pBuildInfo->SetDepthState(false, false);
-        pBuildInfo->SetDepthFunction(LR_COMPARE_OP_NEVER);
-        pBuildInfo->SetCullMode(LR_CULL_MODE_NONE, false);
-        pBuildInfo->SetDescriptorSets({ m_pDescriptorSet }, m_pSamplerSet);
+        PushConstantDesc cameraConstant = {
+            .Stage = LR_SHADER_STAGE_VERTEX,
+            .Offset = 0,
+            .Size = sizeof(XMMATRIX),
+        };
 
-        PipelineAttachment colorAttachment = {};
-        colorAttachment.Format = pAPI->GetSwapChain()->m_ImageFormat;
-        colorAttachment.BlendEnable = true;
-        colorAttachment.WriteMask = LR_COLOR_MASK_R | LR_COLOR_MASK_G | LR_COLOR_MASK_B | LR_COLOR_MASK_A;
-        colorAttachment.SrcBlend = LR_BLEND_FACTOR_SRC_ALPHA;
-        colorAttachment.DstBlend = LR_BLEND_FACTOR_INV_SRC_ALPHA;
-        colorAttachment.SrcBlendAlpha = LR_BLEND_FACTOR_ONE;
-        colorAttachment.DstBlendAlpha = LR_BLEND_FACTOR_SRC_ALPHA;
-        colorAttachment.ColorBlendOp = LR_BLEND_OP_ADD;
-        colorAttachment.AlphaBlendOp = LR_BLEND_OP_ADD;
-        pBuildInfo->AddAttachment(&colorAttachment, false);
+        GraphicsPipelineBuildInfo buildInfo = {
+            .RenderTargetCount = 1,
+            .pRenderTargets = { colorAttachment },
+            .ShaderCount = 2,
+            .ppShaders = { pVertexShader, pPixelShader },
+            .DescriptorSetCount = 1,
+            .ppDescriptorSets = { m_pDescriptorSet },
+            .pSamplerDescriptorSet = m_pSamplerSet,
+            .PushConstantCount = 1,
+            .pPushConstants = { cameraConstant },
+            .pInputLayout = &inputLayout,
+            .SetFillMode = LR_FILL_MODE_FILL,
+            .SetCullMode = LR_CULL_MODE_NONE,
+            .EnableDepthWrite = false,
+            .EnableDepthTest = false,
+            .DepthCompareOp = LR_COMPARE_OP_NEVER,
+            .MultiSampleBitCount = 1,
+        };
 
-        PushConstantDesc &cameraConstant = pBuildInfo->AddPushConstant();
-        cameraConstant.Offset = 0;
-        cameraConstant.Size = sizeof(XMMATRIX);
-        cameraConstant.Stage = LR_SHADER_STAGE_VERTEX;
-
-        m_pPipeline = pAPI->EndGraphicsPipelineBuildInfo(pBuildInfo);
-    }  // namespace lr::Renderer
+        m_pPipeline = pAPI->CreateGraphicsPipeline(&buildInfo);
+    }
 
     void ImGuiPass::Draw(BaseAPI *pAPI, XMMATRIX &mat2d)
     {

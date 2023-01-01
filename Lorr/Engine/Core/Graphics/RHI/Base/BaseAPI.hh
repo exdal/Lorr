@@ -58,10 +58,8 @@ namespace lr::Graphics
         virtual void ExecuteCommandList(BaseCommandList *pList, bool waitForFence) = 0;
 
         /// PIPELINE ///
-        virtual GraphicsPipelineBuildInfo *BeginGraphicsPipelineBuildInfo() = 0;
-        virtual BasePipeline *EndGraphicsPipelineBuildInfo(GraphicsPipelineBuildInfo *pBuildInfo) = 0;
-        virtual ComputePipelineBuildInfo *BeginComputePipelineBuildInfo() = 0;
-        virtual BasePipeline *EndComputePipelineBuildInfo(ComputePipelineBuildInfo *pBuildInfo) = 0;
+        virtual BasePipeline *CreateGraphicsPipeline(GraphicsPipelineBuildInfo *pBuildInfo) = 0;
+        virtual BasePipeline *CreateComputePipeline(ComputePipelineBuildInfo *pBuildInfo) = 0;
 
         /// SWAPCHAIN ///
         virtual void ResizeSwapChain(u32 width, u32 height) = 0;

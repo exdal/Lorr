@@ -60,10 +60,8 @@ namespace lr::Graphics
         BaseShader *CreateShader(ShaderStage stage, eastl::string_view path) override;
         void DeleteShader(BaseShader *pShader) override;
 
-        GraphicsPipelineBuildInfo *BeginGraphicsPipelineBuildInfo() override;
-        BasePipeline *EndGraphicsPipelineBuildInfo(GraphicsPipelineBuildInfo *pBuildInfo) override;
-        ComputePipelineBuildInfo *BeginComputePipelineBuildInfo() override;
-        BasePipeline *EndComputePipelineBuildInfo(ComputePipelineBuildInfo *pBuildInfo) override;
+        BasePipeline *CreateGraphicsPipeline(GraphicsPipelineBuildInfo *pBuildInfo) override;
+        BasePipeline *CreateComputePipeline(ComputePipelineBuildInfo *pBuildInfo) override;
 
         /// SWAPCHAIN ///
 

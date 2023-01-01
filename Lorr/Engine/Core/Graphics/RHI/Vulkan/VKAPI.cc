@@ -256,13 +256,12 @@ namespace lr::Graphics
         VkQueue &pQueueHandle = m_pDirectQueue->m_pHandle;
         VkFence &pFence = pListVK->m_pFence;
 
-        VkSubmitInfo2 submitInfo = {};
-        submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
-
         VkCommandBufferSubmitInfo commandBufferInfo = {};
         commandBufferInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO;
         commandBufferInfo.commandBuffer = pListVK->m_pHandle;
 
+        VkSubmitInfo2 submitInfo = {};
+        submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
         submitInfo.commandBufferInfoCount = 1;
         submitInfo.pCommandBufferInfos = &commandBufferInfo;
 
@@ -292,9 +291,6 @@ namespace lr::Graphics
         VkSemaphore &pAcquireSemp = pCurrentFrame->pAcquireSemp;
         VkSemaphore &pPresentSemp = pCurrentFrame->pPresentSemp;
 
-        VkSubmitInfo2 submitInfo = {};
-        submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
-
         VkSemaphoreSubmitInfo acquireSemaphoreInfo = {};
         acquireSemaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
         acquireSemaphoreInfo.semaphore = pAcquireSemp;
@@ -305,9 +301,10 @@ namespace lr::Graphics
         presentSemaphoreInfo.semaphore = pPresentSemp;
         presentSemaphoreInfo.stageMask = m_pDirectQueue->m_PresentStage;
 
+        VkSubmitInfo2 submitInfo = {};
+        submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
         submitInfo.waitSemaphoreInfoCount = 1;
         submitInfo.pWaitSemaphoreInfos = &acquireSemaphoreInfo;
-
         submitInfo.signalSemaphoreInfoCount = 1;
         submitInfo.pSignalSemaphoreInfos = &presentSemaphoreInfo;
 
@@ -442,72 +439,269 @@ namespace lr::Graphics
         return pLayout;
     }
 
-    GraphicsPipelineBuildInfo *VKAPI::BeginGraphicsPipelineBuildInfo()
+    BasePipeline *VKAPI::CreateGraphicsPipeline(GraphicsPipelineBuildInfo *pBuildInfo)
     {
         ZoneScoped;
 
-        GraphicsPipelineBuildInfo *pBuildInfo = new VKGraphicsPipelineBuildInfo;
-        pBuildInfo->Init();
-
-        return pBuildInfo;
-    }
-
-    BasePipeline *VKAPI::EndGraphicsPipelineBuildInfo(GraphicsPipelineBuildInfo *pBuildInfo)
-    {
-        ZoneScoped;
-
-        API_VAR(VKGraphicsPipelineBuildInfo, pBuildInfo);
         VKPipeline *pPipeline = AllocTypeInherit<BasePipeline, VKPipeline>();
 
+        constexpr VkBlendFactor kBlendFactorLUT[] = {
+            VK_BLEND_FACTOR_ZERO,                      // Zero
+            VK_BLEND_FACTOR_ONE,                       // One
+            VK_BLEND_FACTOR_SRC_COLOR,                 // SrcColor
+            VK_BLEND_FACTOR_ONE_MINUS_SRC_COLOR,       // InvSrcColor
+            VK_BLEND_FACTOR_SRC_ALPHA,                 // SrcAlpha
+            VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,       // InvSrcAlpha
+            VK_BLEND_FACTOR_DST_ALPHA,                 // DestAlpha
+            VK_BLEND_FACTOR_ONE_MINUS_DST_ALPHA,       // InvDestAlpha
+            VK_BLEND_FACTOR_DST_COLOR,                 // DestColor
+            VK_BLEND_FACTOR_ONE_MINUS_DST_COLOR,       // InvDestColor
+            VK_BLEND_FACTOR_SRC_ALPHA_SATURATE,        // SrcAlphaSat
+            VK_BLEND_FACTOR_CONSTANT_COLOR,            // ConstantColor
+            VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_COLOR,  // InvConstantColor
+            VK_BLEND_FACTOR_SRC1_COLOR,                // Src1Color
+            VK_BLEND_FACTOR_ONE_MINUS_SRC1_COLOR,      // InvSrc1Color
+            VK_BLEND_FACTOR_SRC1_ALPHA,                // Src1Alpha
+            VK_BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA,      // InvSrc1Alpha
+        };
+
+        /// PIPELINE LAYOUT ----------------------------------------------------------
+
         PipelineLayoutSerializeDesc layoutDesc = {};
-        layoutDesc.DescriptorSetCount = pBuildInfo->m_DescriptorSetCount;
-        layoutDesc.ppDescriptorSets = pBuildInfo->m_ppDescriptorSets;
-        layoutDesc.PushConstantCount = pBuildInfo->m_PushConstantCount;
-        layoutDesc.pPushConstants = pBuildInfo->m_pPushConstants;
-        layoutDesc.pSamplerDescriptorSet = pBuildInfo->m_pSamplerDescriptorSet;
+        layoutDesc.DescriptorSetCount = pBuildInfo->DescriptorSetCount;
+        layoutDesc.ppDescriptorSets = pBuildInfo->ppDescriptorSets;
+        layoutDesc.PushConstantCount = pBuildInfo->PushConstantCount;
+        layoutDesc.pPushConstants = pBuildInfo->pPushConstants;
+        layoutDesc.pSamplerDescriptorSet = pBuildInfo->pSamplerDescriptorSet;
 
         VkPipelineLayout pLayout = SerializePipelineLayout(&layoutDesc, pPipeline);
-        pBuildInfoVK->m_CreateInfo.layout = pLayout;
         pPipeline->pLayout = pLayout;
-        
-        vkCreateGraphicsPipelines(m_pDevice, m_pPipelineCache, 1, &pBuildInfoVK->m_CreateInfo, nullptr, &pPipeline->pHandle);
 
-        delete pBuildInfoVK;
+        /// BOUND RENDER TARGETS -----------------------------------------------------
+
+        VkFormat pRenderTargetFormats[LR_MAX_RENDER_TARGET_PER_PASS] = {};
+
+        VkPipelineRenderingCreateInfo renderingInfo = {};
+        renderingInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
+        renderingInfo.pNext = nullptr;
+        renderingInfo.viewMask = 0;
+        renderingInfo.colorAttachmentCount = pBuildInfo->RenderTargetCount;
+        renderingInfo.pColorAttachmentFormats = pRenderTargetFormats;
+        renderingInfo.depthAttachmentFormat = ToVKFormat(pBuildInfo->DepthAttachment.Format);
+
+        for (u32 i = 0; i < pBuildInfo->RenderTargetCount; i++)
+        {
+            pRenderTargetFormats[i] = ToVKFormat(pBuildInfo->pRenderTargets[i].Format);
+        }
+
+        /// BOUND SHADER STAGES ------------------------------------------------------
+
+        VkPipelineShaderStageCreateInfo pShaderStageInfos[LR_SHADER_STAGE_COUNT] = {};
+        for (u32 i = 0; i < pBuildInfo->ShaderCount; i++)
+        {
+            BaseShader *pShader = pBuildInfo->ppShaders[i];
+            API_VAR(VKShader, pShader);
+
+            VkPipelineShaderStageCreateInfo &info = pShaderStageInfos[i];
+            info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+            info.pName = nullptr;
+            info.stage = ToVKShaderType(pShaderVK->Type);
+            info.module = pShaderVK->pHandle;
+            info.pName = "main";
+        }
+
+        /// INPUT LAYOUT  ------------------------------------------------------------
+
+        InputLayout *pInputLayout = pBuildInfo->pInputLayout;
+
+        VkVertexInputBindingDescription inputBindingInfo = {};
+        inputBindingInfo.binding = 0;
+        inputBindingInfo.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+        inputBindingInfo.stride = pInputLayout->m_Stride;
+
+        VkVertexInputAttributeDescription pAttribInfos[LR_MAX_VERTEX_ATTRIBS_PER_PIPELINE] = {};
+        for (u32 i = 0; i < pInputLayout->m_Count; i++)
+        {
+            VertexAttrib &element = pInputLayout->m_Elements[i];
+            VkVertexInputAttributeDescription &attribInfo = pAttribInfos[i];
+
+            attribInfo.binding = 0;
+            attribInfo.location = i;
+            attribInfo.offset = element.m_Offset;
+            attribInfo.format = ToVKFormat(element.m_Type);
+        }
+
+        VkPipelineVertexInputStateCreateInfo inputLayoutInfo = {};
+        inputLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+        inputLayoutInfo.pNext = nullptr;
+        inputLayoutInfo.vertexAttributeDescriptionCount = pInputLayout->m_Count;
+        inputLayoutInfo.pVertexAttributeDescriptions = pAttribInfos;
+        inputLayoutInfo.vertexBindingDescriptionCount = 1;
+        inputLayoutInfo.pVertexBindingDescriptions = &inputBindingInfo;
+
+        /// INPUT ASSEMBLY -----------------------------------------------------------
+
+        VkPipelineInputAssemblyStateCreateInfo inputAssemblyInfo = {};
+        inputAssemblyInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+        inputAssemblyInfo.pNext = nullptr;
+        inputAssemblyInfo.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+
+        /// TESSELLATION -------------------------------------------------------------
+
+        VkPipelineTessellationStateCreateInfo tessellationInfo = {};
+        tessellationInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO;
+        tessellationInfo.pNext = nullptr;
+        tessellationInfo.patchControlPoints = 0;  // TODO
+
+        /// VIEWPORT -----------------------------------------------------------------
+
+        VkPipelineViewportStateCreateInfo viewportInfo = {};
+        viewportInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+        viewportInfo.pNext = nullptr;
+        viewportInfo.viewportCount = 0;
+        viewportInfo.pViewports = nullptr;
+        viewportInfo.scissorCount = 0;
+        viewportInfo.pScissors = nullptr;
+
+        /// RASTERIZER ---------------------------------------------------------------
+
+        VkPipelineRasterizationStateCreateInfo rasterizerInfo = {};
+        rasterizerInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+        rasterizerInfo.pNext = nullptr;
+        rasterizerInfo.depthClampEnable = pBuildInfo->EnableDepthClamp;
+        rasterizerInfo.polygonMode = (VkPolygonMode)pBuildInfo->SetFillMode;
+        rasterizerInfo.cullMode = ToVKCullMode(pBuildInfo->SetCullMode);
+        rasterizerInfo.frontFace = (VkFrontFace)!pBuildInfo->FrontFaceCCW;
+        rasterizerInfo.depthBiasEnable = pBuildInfo->EnableDepthBias;
+        rasterizerInfo.depthBiasConstantFactor = pBuildInfo->DepthBiasFactor;
+        rasterizerInfo.depthBiasClamp = pBuildInfo->DepthBiasClamp;
+        rasterizerInfo.depthBiasSlopeFactor = pBuildInfo->DepthSlopeFactor;
+        rasterizerInfo.lineWidth = 1.0;
+
+        /// MULTISAMPLE --------------------------------------------------------------
+
+        VkPipelineMultisampleStateCreateInfo multisampleInfo = {};
+        multisampleInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+        multisampleInfo.pNext = nullptr;
+        multisampleInfo.rasterizationSamples = (VkSampleCountFlagBits)(1 << (pBuildInfo->MultiSampleBitCount - 1));
+        multisampleInfo.alphaToCoverageEnable = pBuildInfo->EnableAlphaToCoverage;
+        multisampleInfo.alphaToOneEnable = false;
+
+        /// DEPTH STENCIL ------------------------------------------------------------
+
+        VkPipelineDepthStencilStateCreateInfo depthStencilInfo = {};
+        depthStencilInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+        depthStencilInfo.pNext = nullptr;
+        depthStencilInfo.depthTestEnable = pBuildInfo->EnableDepthTest;
+        depthStencilInfo.depthWriteEnable = pBuildInfo->EnableDepthWrite;
+        depthStencilInfo.depthCompareOp = (VkCompareOp)pBuildInfo->DepthCompareOp;
+        depthStencilInfo.depthBoundsTestEnable = false;
+        depthStencilInfo.stencilTestEnable = pBuildInfo->EnableStencilTest;
+
+        depthStencilInfo.front.compareOp = (VkCompareOp)pBuildInfo->StencilFrontFaceOp.CompareFunc;
+        depthStencilInfo.front.depthFailOp = (VkStencilOp)pBuildInfo->StencilFrontFaceOp.DepthFail;
+        depthStencilInfo.front.failOp = (VkStencilOp)pBuildInfo->StencilFrontFaceOp.Fail;
+        depthStencilInfo.front.passOp = (VkStencilOp)pBuildInfo->StencilFrontFaceOp.Pass;
+
+        depthStencilInfo.back.compareOp = (VkCompareOp)pBuildInfo->StencilBackFaceOp.CompareFunc;
+        depthStencilInfo.back.depthFailOp = (VkStencilOp)pBuildInfo->StencilBackFaceOp.DepthFail;
+        depthStencilInfo.back.failOp = (VkStencilOp)pBuildInfo->StencilBackFaceOp.Fail;
+        depthStencilInfo.back.passOp = (VkStencilOp)pBuildInfo->StencilBackFaceOp.Pass;
+
+        /// COLOR BLEND --------------------------------------------------------------
+
+        VkPipelineColorBlendAttachmentState pBlendAttachmentInfos[LR_MAX_RENDER_TARGET_PER_PASS] = {};
+
+        VkPipelineColorBlendStateCreateInfo colorBlendInfo = {};
+        colorBlendInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+        colorBlendInfo.pNext = nullptr;
+        colorBlendInfo.logicOpEnable = false;
+        colorBlendInfo.attachmentCount = pBuildInfo->RenderTargetCount;
+        colorBlendInfo.pAttachments = pBlendAttachmentInfos;
+
+        for (u32 i = 0; i < pBuildInfo->RenderTargetCount; i++)
+        {
+            PipelineAttachment &attachment = pBuildInfo->pRenderTargets[i];
+            VkPipelineColorBlendAttachmentState &renderTarget = pBlendAttachmentInfos[i];
+
+            renderTarget.blendEnable = attachment.BlendEnable;
+            renderTarget.colorWriteMask = attachment.WriteMask;
+            renderTarget.srcColorBlendFactor = kBlendFactorLUT[(u32)attachment.SrcBlend];
+            renderTarget.dstColorBlendFactor = kBlendFactorLUT[(u32)attachment.DstBlend];
+            renderTarget.srcAlphaBlendFactor = kBlendFactorLUT[(u32)attachment.SrcBlendAlpha];
+            renderTarget.dstAlphaBlendFactor = kBlendFactorLUT[(u32)attachment.DstBlendAlpha];
+            renderTarget.colorBlendOp = (VkBlendOp)attachment.ColorBlendOp;
+            renderTarget.alphaBlendOp = (VkBlendOp)attachment.AlphaBlendOp;
+        }
+
+        /// DYNAMIC STATE ------------------------------------------------------------
+
+        constexpr static eastl::array<VkDynamicState, 3> kDynamicStates = {
+            VK_DYNAMIC_STATE_VIEWPORT,
+            VK_DYNAMIC_STATE_SCISSOR,
+            VK_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY,
+        };
+
+        VkPipelineDynamicStateCreateInfo dynamicStateInfo = {};
+        dynamicStateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+        dynamicStateInfo.pNext = nullptr;
+        dynamicStateInfo.dynamicStateCount = kDynamicStates.count;
+        dynamicStateInfo.pDynamicStates = kDynamicStates.data();
+
+        /// GRAPHICS PIPELINE --------------------------------------------------------
+
+        VkGraphicsPipelineCreateInfo createInfo = {};
+        createInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+        createInfo.pNext = &renderingInfo;
+        createInfo.stageCount = pBuildInfo->ShaderCount;
+        createInfo.pStages = pShaderStageInfos;
+        createInfo.pVertexInputState = &inputLayoutInfo;
+        createInfo.pInputAssemblyState = &inputAssemblyInfo;
+        createInfo.pTessellationState = &tessellationInfo;
+        createInfo.pViewportState = &viewportInfo;
+        createInfo.pRasterizationState = &rasterizerInfo;
+        createInfo.pMultisampleState = &multisampleInfo;
+        createInfo.pDepthStencilState = &depthStencilInfo;
+        createInfo.pColorBlendState = &colorBlendInfo;
+        createInfo.pDynamicState = &dynamicStateInfo;
+        createInfo.layout = pLayout;
+
+        vkCreateGraphicsPipelines(m_pDevice, m_pPipelineCache, 1, &createInfo, nullptr, &pPipeline->pHandle);
 
         return pPipeline;
     }
 
-    ComputePipelineBuildInfo *VKAPI::BeginComputePipelineBuildInfo()
+    BasePipeline *VKAPI::CreateComputePipeline(ComputePipelineBuildInfo *pBuildInfo)
     {
         ZoneScoped;
 
-        ComputePipelineBuildInfo *pBuildInfo = new VKComputePipelineBuildInfo;
-        pBuildInfo->Init();
-
-        return pBuildInfo;
-    }
-
-    BasePipeline *VKAPI::EndComputePipelineBuildInfo(ComputePipelineBuildInfo *pBuildInfo)
-    {
-        ZoneScoped;
-
-        API_VAR(VKComputePipelineBuildInfo, pBuildInfo);
         VKPipeline *pPipeline = AllocTypeInherit<BasePipeline, VKPipeline>();
 
         PipelineLayoutSerializeDesc layoutDesc = {};
-        layoutDesc.DescriptorSetCount = pBuildInfo->m_DescriptorSetCount;
-        layoutDesc.ppDescriptorSets = pBuildInfo->m_ppDescriptorSets;
-        layoutDesc.PushConstantCount = pBuildInfo->m_PushConstantCount;
-        layoutDesc.pPushConstants = pBuildInfo->m_pPushConstants;
-        layoutDesc.pSamplerDescriptorSet = pBuildInfo->m_pSamplerDescriptorSet;
+        layoutDesc.DescriptorSetCount = pBuildInfo->DescriptorSetCount;
+        layoutDesc.ppDescriptorSets = pBuildInfo->ppDescriptorSets;
+        layoutDesc.PushConstantCount = pBuildInfo->PushConstantCount;
+        layoutDesc.pPushConstants = pBuildInfo->pPushConstants;
+        layoutDesc.pSamplerDescriptorSet = pBuildInfo->pSamplerDescriptorSet;
 
         VkPipelineLayout pLayout = SerializePipelineLayout(&layoutDesc, pPipeline);
-        pBuildInfoVK->m_CreateInfo.layout = pLayout;
         pPipeline->pLayout = pLayout;
 
-        vkCreateComputePipelines(m_pDevice, m_pPipelineCache, 1, &pBuildInfoVK->m_CreateInfo, nullptr, &pPipeline->pHandle);
+        VkComputePipelineCreateInfo createInfo = {};
+        createInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+        createInfo.pNext = nullptr;
+        createInfo.layout = pLayout;
 
-        delete pBuildInfoVK;
+        VkPipelineShaderStageCreateInfo &shaderStage = createInfo.stage;
+        shaderStage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        shaderStage.pNext = nullptr;
+        shaderStage.flags = 0;
+        shaderStage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+        shaderStage.pName = "main";
+        shaderStage.module = ((VKShader *)pBuildInfo->pShader)->pHandle;
+        shaderStage.pSpecializationInfo = nullptr;
+
+        vkCreateComputePipelines(m_pDevice, m_pPipelineCache, 1, &createInfo, nullptr, &pPipeline->pHandle);
 
         return pPipeline;
     }

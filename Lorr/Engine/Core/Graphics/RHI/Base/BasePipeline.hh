@@ -18,11 +18,11 @@ namespace lr::Graphics
 
         union
         {
-            u32 _u_data[3] = {};
+            u64 _u_data = {};
             struct
             {
                 ColorMask WriteMask : 4;
-                bool BlendEnable : 1;
+                u32 BlendEnable : 1;
 
                 BlendFactor SrcBlend : 5;
                 BlendFactor DstBlend : 5;
@@ -44,9 +44,7 @@ namespace lr::Graphics
             {
                 StencilOp Pass : 3;
                 StencilOp Fail : 3;
-
                 CompareOp DepthFail : 3;
-
                 CompareOp CompareFunc : 3;
             };
         };
@@ -59,72 +57,67 @@ namespace lr::Graphics
         u32 Size = 0;
     };
 
-    struct BasePipelineBuildInfo
-    {
-        void SetDescriptorSets(const std::initializer_list<BaseDescriptorSet *> &sets, BaseDescriptorSet *pSamplerSet);
-        PushConstantDesc &AddPushConstant();
-
-        BaseDescriptorSet *m_pSamplerDescriptorSet = nullptr;
-        u32 m_DescriptorSetCount = 0;
-        BaseDescriptorSet *m_ppDescriptorSets[LR_MAX_DESCRIPTOR_SETS_PER_PIPELINE];
-        u32 m_PushConstantCount = 0;
-        PushConstantDesc m_pPushConstants[LR_MAX_PUSH_CONSTANTS_PER_PIPELINE];
-    };
-
     /// Some notes:
     // * Currently only one vertex binding is supported and it only supports vertex, not instances (actually a TODO)
     // * MSAA is not actually supported
-    struct GraphicsPipelineBuildInfo : BasePipelineBuildInfo
+    struct GraphicsPipelineBuildInfo
     {
-        virtual void Init() = 0;
+        u32 RenderTargetCount = 0;
+        PipelineAttachment pRenderTargets[LR_MAX_RENDER_TARGET_PER_PASS] = {};
+        PipelineAttachment DepthAttachment = {};
 
-        /// States - in order by member index
-        // Shader Stages
-        virtual void SetShader(BaseShader *pShader, eastl::string_view entryPoint) = 0;
+        u32 ShaderCount = 0;
+        BaseShader *ppShaders[LR_SHADER_STAGE_COUNT] = {};
 
-        // Vertex Input
-        // `bindingID` always will be 0, since we only support one binding for now, see notes
-        virtual void SetInputLayout(InputLayout &inputLayout) = 0;
+        u32 DescriptorSetCount = 0;
+        BaseDescriptorSet *ppDescriptorSets[LR_MAX_DESCRIPTOR_SETS_PER_PIPELINE];
+        BaseDescriptorSet *pSamplerDescriptorSet = nullptr;
 
-        // Input Assembly
-        virtual void SetPrimitiveType(PrimitiveType type) = 0;
+        u32 PushConstantCount = 0;
+        PushConstantDesc pPushConstants[LR_MAX_PUSH_CONSTANTS_PER_PIPELINE];
 
-        // Rasterizer
-        virtual void SetDepthClamp(bool enabled) = 0;
-        virtual void SetCullMode(CullMode mode, bool frontFaceClockwise) = 0;
-        virtual void SetFillMode(FillMode mode) = 0;
-        virtual void SetDepthBias(bool enabled, f32 constantFactor, f32 clamp, f32 slopeFactor) = 0;
+        InputLayout *pInputLayout = nullptr;
 
-        // Multisample
-        virtual void SetSampleCount(u32 sampleCount) = 0;
-        virtual void SetAlphaToCoverage(bool alphaToCoverage) = 0;
+        f32 DepthBiasFactor = 0.0;
+        f32 DepthBiasClamp = 0.0;
+        f32 DepthSlopeFactor = 0.0;
+        DepthStencilOpDesc StencilFrontFaceOp = {};
+        DepthStencilOpDesc StencilBackFaceOp = {};
 
-        // Depth Stencil
-        virtual void SetDepthState(bool depthTestEnabled, bool depthWriteEnabled) = 0;
-        virtual void SetStencilState(bool stencilTestEnabled) = 0;
-        virtual void SetDepthFunction(CompareOp function) = 0;
-        virtual void SetStencilOperation(DepthStencilOpDesc front, DepthStencilOpDesc back) = 0;
-
-        virtual void AddAttachment(PipelineAttachment *pAttachment, bool depth) = 0;
+        union
+        {
+            u32 _u_data = 0;
+            struct
+            {
+                u32 EnableDepthClamp : 1;
+                u32 EnableDepthBias : 1;
+                u32 EnableDepthTest : 1;
+                u32 EnableDepthWrite : 1;
+                u32 EnableStencilTest : 1;
+                CompareOp DepthCompareOp : 3;
+                CullMode SetCullMode : 2;
+                FillMode SetFillMode : 1;
+                u32 FrontFaceCCW : 1;
+                u32 EnableAlphaToCoverage : 1;
+                u32 MultiSampleBitCount : 3;
+            };
+        };
     };
 
-    struct ComputePipelineBuildInfo : BasePipelineBuildInfo
+    struct ComputePipelineBuildInfo
     {
-        virtual void Init() = 0;
+        BaseShader *pShader = nullptr;
+        
+        u32 DescriptorSetCount = 0;
+        BaseDescriptorSet *ppDescriptorSets[LR_MAX_DESCRIPTOR_SETS_PER_PIPELINE];
+        BaseDescriptorSet *pSamplerDescriptorSet = nullptr;
 
-        // Shader Stages
-        virtual void SetShader(BaseShader *pShader, eastl::string_view entryPoint) = 0;
-    };
-
-    enum PipelineType
-    {
-        LR_PIPELINE_TYPE_GRAPHICS,
-        LR_PIPELINE_TYPE_COMPUTE,
+        u32 PushConstantCount = 0;
+        PushConstantDesc pPushConstants[LR_MAX_PUSH_CONSTANTS_PER_PIPELINE];
     };
 
     struct BasePipeline
     {
-        PipelineType Type = LR_PIPELINE_TYPE_GRAPHICS;
     };
 
 }  // namespace lr::Graphics

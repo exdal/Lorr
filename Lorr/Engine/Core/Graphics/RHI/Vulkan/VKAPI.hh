@@ -57,10 +57,8 @@ namespace lr::Graphics
         VkPipelineCache CreatePipelineCache(u32 initialDataSize = 0, void *pInitialData = nullptr);
         VkPipelineLayout SerializePipelineLayout(PipelineLayoutSerializeDesc *pDesc, BasePipeline *pPipeline);
 
-        GraphicsPipelineBuildInfo *BeginGraphicsPipelineBuildInfo() override;
-        BasePipeline *EndGraphicsPipelineBuildInfo(GraphicsPipelineBuildInfo *pBuildInfo) override;
-        ComputePipelineBuildInfo *BeginComputePipelineBuildInfo() override;
-        BasePipeline *EndComputePipelineBuildInfo(ComputePipelineBuildInfo *pBuildInfo) override;
+        BasePipeline *CreateGraphicsPipeline(GraphicsPipelineBuildInfo *pBuildInfo) override;
+        BasePipeline *CreateComputePipeline(ComputePipelineBuildInfo *pBuildInfo) override;
 
         /// SWAPCHAIN ///
         void CreateSwapChain(VkSwapchainKHR &pHandle, VkSwapchainCreateInfoKHR &info);

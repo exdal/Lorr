@@ -481,72 +481,199 @@ namespace lr::Graphics
         FreeType(pShaderDX);
     }
 
-    GraphicsPipelineBuildInfo *D3D12API::BeginGraphicsPipelineBuildInfo()
+    BasePipeline *D3D12API::CreateGraphicsPipeline(GraphicsPipelineBuildInfo *pBuildInfo)
     {
         ZoneScoped;
 
-        GraphicsPipelineBuildInfo *pBuildInfo = new D3D12GraphicsPipelineBuildInfo;
-        pBuildInfo->Init();
-
-        return pBuildInfo;
-    }
-
-    BasePipeline *D3D12API::EndGraphicsPipelineBuildInfo(GraphicsPipelineBuildInfo *pBuildInfo)
-    {
-        ZoneScoped;
-
-        API_VAR(D3D12GraphicsPipelineBuildInfo, pBuildInfo);
         D3D12Pipeline *pPipeline = AllocTypeInherit<BasePipeline, D3D12Pipeline>();
+        D3D12_GRAPHICS_PIPELINE_STATE_DESC createInfo = {};
+
+        constexpr D3D12_BLEND kBlendFactorLUT[] = {
+            D3D12_BLEND_ZERO,              // Zero
+            D3D12_BLEND_ONE,               // One
+            D3D12_BLEND_SRC_COLOR,         // SrcColor
+            D3D12_BLEND_INV_SRC_COLOR,     // InvSrcColor
+            D3D12_BLEND_SRC_ALPHA,         // SrcAlpha
+            D3D12_BLEND_INV_SRC_ALPHA,     // InvSrcAlpha
+            D3D12_BLEND_DEST_ALPHA,        // DestAlpha
+            D3D12_BLEND_INV_DEST_ALPHA,    // InvDestAlpha
+            D3D12_BLEND_DEST_COLOR,        // DestColor
+            D3D12_BLEND_INV_DEST_COLOR,    // InvDestColor
+            D3D12_BLEND_SRC_ALPHA_SAT,     // SrcAlphaSat
+            D3D12_BLEND_BLEND_FACTOR,      // ConstantColor
+            D3D12_BLEND_INV_BLEND_FACTOR,  // InvConstantColor
+            D3D12_BLEND_SRC1_COLOR,        // Src1Color
+            D3D12_BLEND_INV_SRC1_COLOR,    // InvSrc1Color
+            D3D12_BLEND_SRC1_ALPHA,        // Src1Alpha
+            D3D12_BLEND_INV_SRC1_ALPHA,    // InvSrc1Alpha
+        };
+
+        /// PIPELINE LAYOUT ----------------------------------------------------------
 
         PipelineLayoutSerializeDesc layoutDesc = {};
-        layoutDesc.DescriptorSetCount = pBuildInfo->m_DescriptorSetCount;
-        layoutDesc.ppDescriptorSets = pBuildInfo->m_ppDescriptorSets;
-        layoutDesc.PushConstantCount = pBuildInfo->m_PushConstantCount;
-        layoutDesc.pPushConstants = pBuildInfo->m_pPushConstants;
-        layoutDesc.pSamplerDescriptorSet = pBuildInfo->m_pSamplerDescriptorSet;
+        layoutDesc.DescriptorSetCount = pBuildInfo->DescriptorSetCount;
+        layoutDesc.ppDescriptorSets = pBuildInfo->ppDescriptorSets;
+        layoutDesc.PushConstantCount = pBuildInfo->PushConstantCount;
+        layoutDesc.pPushConstants = pBuildInfo->pPushConstants;
+        layoutDesc.pSamplerDescriptorSet = pBuildInfo->pSamplerDescriptorSet;
 
         ID3D12RootSignature *pLayout = SerializeRootSignature(&layoutDesc, pPipeline);
-        pBuildInfoDX->m_CreateInfo.pRootSignature = pLayout;
         pPipeline->pLayout = pLayout;
+        createInfo.pRootSignature = pLayout;
 
-        m_pDevice->CreateGraphicsPipelineState(&pBuildInfoDX->m_CreateInfo, IID_PPV_ARGS(&pPipeline->pHandle));
+        /// BOUND RENDER TARGETS -----------------------------------------------------
 
-        delete pBuildInfoDX;
+        createInfo.NumRenderTargets = pBuildInfo->RenderTargetCount;
+
+        for (u32 i = 0; i < pBuildInfo->RenderTargetCount; i++)
+        {
+            createInfo.RTVFormats[i] = ToDXFormat(pBuildInfo->pRenderTargets[i].Format);
+        }
+
+        /// BOUND SHADER STAGES ------------------------------------------------------
+
+        for (u32 i = 0; i < pBuildInfo->ShaderCount; i++)
+        {
+            BaseShader *pShader = pBuildInfo->ppShaders[i];
+            API_VAR(D3D12Shader, pShader);
+
+            D3D12_SHADER_BYTECODE *pTargetHandle = nullptr;
+
+            switch (pShader->Type)
+            {
+                case LR_SHADER_STAGE_VERTEX: pTargetHandle = &createInfo.VS; break;
+                case LR_SHADER_STAGE_PIXEL: pTargetHandle = &createInfo.PS; break;
+                case LR_SHADER_STAGE_HULL: pTargetHandle = &createInfo.HS; break;
+                case LR_SHADER_STAGE_DOMAIN: pTargetHandle = &createInfo.DS; break;
+
+                default: assert(!"Shader type not implemented"); break;
+            }
+
+            IDxcBlob *pCode = pShaderDX->pHandle;
+
+            pTargetHandle->pShaderBytecode = pCode->GetBufferPointer();
+            pTargetHandle->BytecodeLength = pCode->GetBufferSize();
+        }
+
+        /// INPUT LAYOUT  ------------------------------------------------------------
+
+        InputLayout *pInputLayout = pBuildInfo->pInputLayout;
+        D3D12_INPUT_ELEMENT_DESC pInputElements[LR_MAX_VERTEX_ATTRIBS_PER_PIPELINE] = {};
+
+        createInfo.InputLayout.NumElements = pInputLayout->m_Count;
+        createInfo.InputLayout.pInputElementDescs = pInputElements;
+
+        for (u32 i = 0; i < pInputLayout->m_Count; i++)
+        {
+            VertexAttrib &element = pInputLayout->m_Elements[i];
+            D3D12_INPUT_ELEMENT_DESC &attribDesc = pInputElements[i];
+
+            attribDesc.SemanticName = element.m_Name.data();
+            attribDesc.SemanticIndex = 0;
+            attribDesc.Format = D3D12API::ToDXFormat(element.m_Type);
+            attribDesc.InputSlot = 0;
+            attribDesc.AlignedByteOffset = element.m_Offset;
+            attribDesc.InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
+            attribDesc.InstanceDataStepRate = 0;
+        }
+
+        /// INPUT ASSEMBLY -----------------------------------------------------------
+
+        createInfo.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+
+        /// RASTERIZER ---------------------------------------------------------------
+
+        D3D12_RASTERIZER_DESC &rasterizerInfo = createInfo.RasterizerState;
+        rasterizerInfo.DepthClipEnable = pBuildInfo->EnableDepthClamp;
+        rasterizerInfo.CullMode = ToDXCullMode(pBuildInfo->SetCullMode);
+        rasterizerInfo.FillMode = pBuildInfo->SetFillMode == LR_FILL_MODE_FILL ? D3D12_FILL_MODE_SOLID : D3D12_FILL_MODE_WIREFRAME;
+        rasterizerInfo.FrontCounterClockwise = !pBuildInfo->FrontFaceCCW;
+        rasterizerInfo.DepthBias = pBuildInfo->EnableDepthBias;
+        rasterizerInfo.DepthBias = pBuildInfo->DepthBiasFactor;
+        rasterizerInfo.DepthBiasClamp = pBuildInfo->DepthBiasClamp;
+        rasterizerInfo.SlopeScaledDepthBias = pBuildInfo->DepthSlopeFactor;
+
+        /// MULTISAMPLE --------------------------------------------------------------
+
+        createInfo.SampleMask = 1 << (pBuildInfo->MultiSampleBitCount - 1);
+        createInfo.BlendState.AlphaToCoverageEnable = pBuildInfo->EnableAlphaToCoverage;
+        createInfo.SampleDesc.Count = pBuildInfo->MultiSampleBitCount;
+        createInfo.SampleDesc.Quality = pBuildInfo->MultiSampleBitCount - 1;
+
+        /// DEPTH STENCIL ------------------------------------------------------------
+
+        D3D12_DEPTH_STENCIL_DESC &depthStencilInfo = createInfo.DepthStencilState;
+        depthStencilInfo.DepthEnable = pBuildInfo->EnableDepthTest;
+        depthStencilInfo.DepthWriteMask = (D3D12_DEPTH_WRITE_MASK)pBuildInfo->EnableDepthWrite;
+        depthStencilInfo.DepthFunc = (D3D12_COMPARISON_FUNC)pBuildInfo->DepthCompareOp;
+        depthStencilInfo.StencilWriteMask = pBuildInfo->EnableStencilTest;
+
+        depthStencilInfo.FrontFace.StencilFunc = (D3D12_COMPARISON_FUNC)pBuildInfo->StencilFrontFaceOp.CompareFunc;
+        depthStencilInfo.FrontFace.StencilDepthFailOp = (D3D12_STENCIL_OP)pBuildInfo->StencilFrontFaceOp.DepthFail;
+        depthStencilInfo.FrontFace.StencilFailOp = (D3D12_STENCIL_OP)pBuildInfo->StencilFrontFaceOp.Fail;
+        depthStencilInfo.FrontFace.StencilPassOp = (D3D12_STENCIL_OP)pBuildInfo->StencilFrontFaceOp.Pass;
+
+        depthStencilInfo.BackFace.StencilFunc = (D3D12_COMPARISON_FUNC)pBuildInfo->StencilBackFaceOp.CompareFunc;
+        depthStencilInfo.BackFace.StencilDepthFailOp = (D3D12_STENCIL_OP)pBuildInfo->StencilBackFaceOp.DepthFail;
+        depthStencilInfo.BackFace.StencilFailOp = (D3D12_STENCIL_OP)pBuildInfo->StencilBackFaceOp.Fail;
+        depthStencilInfo.BackFace.StencilPassOp = (D3D12_STENCIL_OP)pBuildInfo->StencilBackFaceOp.Pass;
+
+        /// COLOR BLEND --------------------------------------------------------------
+
+        D3D12_BLEND_DESC &colorBlendInfo = createInfo.BlendState;
+
+        colorBlendInfo.IndependentBlendEnable = true;
+
+        for (u32 i = 0; i < pBuildInfo->RenderTargetCount; i++)
+        {
+            PipelineAttachment &attachment = pBuildInfo->pRenderTargets[i];
+            D3D12_RENDER_TARGET_BLEND_DESC &renderTarget = colorBlendInfo.RenderTarget[i];
+
+            renderTarget.BlendEnable = attachment.BlendEnable;
+            renderTarget.RenderTargetWriteMask = attachment.WriteMask;
+            renderTarget.SrcBlend = kBlendFactorLUT[(u32)attachment.SrcBlend];
+            renderTarget.DestBlend = kBlendFactorLUT[(u32)attachment.DstBlend];
+            renderTarget.SrcBlendAlpha = kBlendFactorLUT[(u32)attachment.SrcBlendAlpha];
+            renderTarget.DestBlendAlpha = kBlendFactorLUT[(u32)attachment.DstBlendAlpha];
+            renderTarget.BlendOp = (D3D12_BLEND_OP)((u32)attachment.ColorBlendOp + 1);
+            renderTarget.BlendOpAlpha = (D3D12_BLEND_OP)((u32)attachment.AlphaBlendOp + 1);
+        }
+
+        /// GRAPHICS PIPELINE --------------------------------------------------------
+
+        m_pDevice->CreateGraphicsPipelineState(&createInfo, IID_PPV_ARGS(&pPipeline->pHandle));
 
         return pPipeline;
     }
 
-    ComputePipelineBuildInfo *D3D12API::BeginComputePipelineBuildInfo()
+    BasePipeline *D3D12API::CreateComputePipeline(ComputePipelineBuildInfo *pBuildInfo)
     {
         ZoneScoped;
 
-        ComputePipelineBuildInfo *pBuildInfo = new D3D12ComputePipelineBuildInfo;
-        pBuildInfo->Init();
-
-        return pBuildInfo;
-    }
-
-    BasePipeline *D3D12API::EndComputePipelineBuildInfo(ComputePipelineBuildInfo *pBuildInfo)
-    {
-        ZoneScoped;
-
-        API_VAR(D3D12ComputePipelineBuildInfo, pBuildInfo);
         D3D12Pipeline *pPipeline = AllocTypeInherit<BasePipeline, D3D12Pipeline>();
+        D3D12_COMPUTE_PIPELINE_STATE_DESC createInfo = {};
 
         PipelineLayoutSerializeDesc layoutDesc = {};
-        layoutDesc.DescriptorSetCount = pBuildInfo->m_DescriptorSetCount;
-        layoutDesc.ppDescriptorSets = pBuildInfo->m_ppDescriptorSets;
-        layoutDesc.PushConstantCount = pBuildInfo->m_PushConstantCount;
-        layoutDesc.pPushConstants = pBuildInfo->m_pPushConstants;
-        layoutDesc.pSamplerDescriptorSet = pBuildInfo->m_pSamplerDescriptorSet;
+        layoutDesc.DescriptorSetCount = pBuildInfo->DescriptorSetCount;
+        layoutDesc.ppDescriptorSets = pBuildInfo->ppDescriptorSets;
+        layoutDesc.PushConstantCount = pBuildInfo->PushConstantCount;
+        layoutDesc.pPushConstants = pBuildInfo->pPushConstants;
+        layoutDesc.pSamplerDescriptorSet = pBuildInfo->pSamplerDescriptorSet;
 
         ID3D12RootSignature *pLayout = SerializeRootSignature(&layoutDesc, pPipeline);
-        pBuildInfoDX->m_CreateInfo.pRootSignature = pLayout;
+        createInfo.pRootSignature = pLayout;
         pPipeline->pLayout = pLayout;
 
-        m_pDevice->CreateComputePipelineState(&pBuildInfoDX->m_CreateInfo, IID_PPV_ARGS(&pPipeline->pHandle));
+        /// BOUND SHADER STAGES ------------------------------------------------------
 
-        delete pBuildInfoDX;
+        IDxcBlob *pCode = ((D3D12Shader *)pBuildInfo->pShader)->pHandle;
+
+        createInfo.CS.pShaderBytecode = pCode->GetBufferPointer();
+        createInfo.CS.BytecodeLength = pCode->GetBufferSize();
+
+        /// COMPUTE PIPELINE --------------------------------------------------------=
+
+        m_pDevice->CreateComputePipelineState(&createInfo, IID_PPV_ARGS(&pPipeline->pHandle));
 
         return pPipeline;
     }

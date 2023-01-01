@@ -153,11 +153,13 @@ void GameApp::Poll(f32 deltaTime)
 
             BaseShader *pComputeShader = pAPI->CreateShader(LR_SHADER_STAGE_COMPUTE, "basic.c.hlsl");
 
-            ComputePipelineBuildInfo *pBuildInfo = pAPI->BeginComputePipelineBuildInfo();
-            pBuildInfo->SetShader(pComputeShader, "main");
-            pBuildInfo->SetDescriptorSets({ pComputeSet }, nullptr);
+            ComputePipelineBuildInfo buildInfo = {
+                .pShader = pComputeShader,
+                .DescriptorSetCount = 1,
+                .ppDescriptorSets = { pComputeSet },
+            };
 
-            BasePipeline *pPipeline = pAPI->EndComputePipelineBuildInfo(pBuildInfo);
+            BasePipeline *pPipeline = pAPI->CreateComputePipeline(&buildInfo);
 
             pSet = pAPI->CreateDescriptorSet(&descriptorDesc);
             pAPI->UpdateDescriptorData(pSet);
@@ -178,7 +180,7 @@ void GameApp::Poll(f32 deltaTime)
             pList->SetComputePipeline(pPipeline);
             pList->SetComputeDescriptorSets({ pComputeSet });
 
-            pList->Dispatch(workingArea.x / 16, workingArea.y / 16, 1);
+            pList->Dispatch(((u32)workingArea.x / 16) + 1, ((u32)workingArea.y / 16) + 1, 1);
 
             transitionBarrier = {
                 .CurrentUsage = LR_RESOURCE_USAGE_UNORDERED_ACCESS,

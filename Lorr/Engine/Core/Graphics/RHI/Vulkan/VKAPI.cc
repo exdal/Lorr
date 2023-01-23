@@ -124,7 +124,14 @@ namespace lr::Graphics
 
         LOG_TRACE("Successfully initialized Vulkan context.");
 
-        InitCommandLists();
+        for (CommandList *&pList : m_CommandListPool.m_DirectLists)
+            pList = CreateCommandList(CommandListType::Direct);
+
+        for (CommandList *&pList : m_CommandListPool.m_ComputeLists)
+            pList = CreateCommandList(CommandListType::Compute);
+
+        for (CommandList *&pList : m_CommandListPool.m_CopyLists)
+            pList = CreateCommandList(CommandListType::Copy);
 
         m_FenceThread.Begin(VKAPI::TFFenceWait, this);
 
@@ -160,11 +167,11 @@ namespace lr::Graphics
         m_MAImageTLSF.pHeap = CreateHeap(kImageTLSFMem, false);
     }
 
-    BaseCommandQueue *VKAPI::CreateCommandQueue(CommandListType type)
+    VKCommandQueue *VKAPI::CreateCommandQueue(CommandListType type)
     {
         ZoneScoped;
 
-        VKCommandQueue *pQueue = AllocTypeInherit<BaseCommandQueue, VKCommandQueue>();
+        VKCommandQueue *pQueue = AllocType<VKCommandQueue>();
 
         VkQueue pHandle = nullptr;
         vkGetDeviceQueue(m_pDevice, m_QueueIndexes[(u32)type], 0, &pHandle);
@@ -174,30 +181,28 @@ namespace lr::Graphics
         return pQueue;
     }
 
-    BaseCommandAllocator *VKAPI::CreateCommandAllocator(CommandListType type)
+    VKCommandAllocator *VKAPI::CreateCommandAllocator(CommandListType type)
     {
         ZoneScoped;
 
-        VKCommandAllocator *pAllocator = AllocTypeInherit<BaseCommandAllocator, VKCommandAllocator>();
+        VKCommandAllocator *pAllocator = AllocTypeInherit<CommandAllocator, VKCommandAllocator>();
 
         VkCommandPoolCreateInfo allocatorInfo = {};
         allocatorInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
         allocatorInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
         allocatorInfo.queueFamilyIndex = m_QueueIndexes[(u32)type];
 
-        vkCreateCommandPool(m_pDevice, &allocatorInfo, nullptr, &pAllocator->pHandle);
+        vkCreateCommandPool(m_pDevice, &allocatorInfo, nullptr, &pAllocator->m_pHandle);
 
         return pAllocator;
     }
 
-    BaseCommandList *VKAPI::CreateCommandList(CommandListType type)
+    VKCommandList *VKAPI::CreateCommandList(CommandListType type)
     {
         ZoneScoped;
 
-        BaseCommandAllocator *pAllocator = CreateCommandAllocator(type);
-        API_VAR(VKCommandAllocator, pAllocator);
-
-        VKCommandList *pList = AllocTypeInherit<BaseCommandList, VKCommandList>();
+        VKCommandAllocator *pAllocator = CreateCommandAllocator(type);
+        VKCommandList *pList = AllocTypeInherit<CommandList, VKCommandList>();
 
         VkCommandBuffer pHandle = nullptr;
         VkFence pFence = CreateFence(false);
@@ -206,7 +211,7 @@ namespace lr::Graphics
         listInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
         listInfo.commandBufferCount = 1;
         listInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-        listInfo.commandPool = pAllocatorVK->pHandle;
+        listInfo.commandPool = pAllocator->m_pHandle;
 
         vkAllocateCommandBuffers(m_pDevice, &listInfo, &pHandle);
 
@@ -215,7 +220,7 @@ namespace lr::Graphics
         return pList;
     }
 
-    void VKAPI::BeginCommandList(BaseCommandList *pList)
+    void VKAPI::BeginCommandList(CommandList *pList)
     {
         ZoneScoped;
 
@@ -229,7 +234,7 @@ namespace lr::Graphics
         vkBeginCommandBuffer(pListVK->m_pHandle, &beginInfo);
     }
 
-    void VKAPI::EndCommandList(BaseCommandList *pList)
+    void VKAPI::EndCommandList(CommandList *pList)
     {
         ZoneScoped;
 
@@ -238,16 +243,16 @@ namespace lr::Graphics
         vkEndCommandBuffer(pListVK->m_pHandle);
     }
 
-    void VKAPI::ResetCommandAllocator(BaseCommandAllocator *pAllocator)
+    void VKAPI::ResetCommandAllocator(CommandAllocator *pAllocator)
     {
         ZoneScoped;
 
         API_VAR(VKCommandAllocator, pAllocator);
 
-        vkResetCommandPool(m_pDevice, pAllocatorVK->pHandle, 0);
+        vkResetCommandPool(m_pDevice, pAllocatorVK->m_pHandle, 0);
     }
 
-    void VKAPI::ExecuteCommandList(BaseCommandList *pList, bool waitForFence)
+    void VKAPI::ExecuteCommandList(CommandList *pList, bool waitForFence)
     {
         ZoneScoped;
 
@@ -288,8 +293,8 @@ namespace lr::Graphics
 
         VKSwapChainFrame *pCurrentFrame = m_SwapChain.GetCurrentFrame();
 
-        VkSemaphore &pAcquireSemp = pCurrentFrame->pAcquireSemp;
-        VkSemaphore &pPresentSemp = pCurrentFrame->pPresentSemp;
+        VkSemaphore &pAcquireSemp = pCurrentFrame->m_pAcquireSemp;
+        VkSemaphore &pPresentSemp = pCurrentFrame->m_pPresentSemp;
 
         VkSemaphoreSubmitInfo acquireSemaphoreInfo = {};
         acquireSemaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
@@ -390,47 +395,37 @@ namespace lr::Graphics
         return pHandle;
     }
 
-    VkPipelineLayout VKAPI::SerializePipelineLayout(PipelineLayoutSerializeDesc *pDesc, BasePipeline *pPipeline)
+    VkPipelineLayout VKAPI::SerializePipelineLayout(PipelineLayoutSerializeDesc *pDesc, Pipeline *pPipeline)
     {
         ZoneScoped;
 
         VkDescriptorSetLayout pSetLayouts[LR_MAX_DESCRIPTOR_SETS_PER_PIPELINE + 1] = {};
 
         u32 currentSet = 0;
-        for (u32 i = 0; i < pDesc->DescriptorSetCount; i++)
+        for (u32 i = 0; i < pDesc->m_DescriptorSetCount; i++)
         {
-            BaseDescriptorSet *pSet = pDesc->ppDescriptorSets[i];
+            DescriptorSet *pSet = pDesc->m_ppDescriptorSets[i];
             API_VAR(VKDescriptorSet, pSet);
 
-            pSetLayouts[currentSet++] = pSetVK->pSetLayoutHandle;
-        }
-
-        u32 samplerIndex = -1;
-        if (pDesc->pSamplerDescriptorSet)
-        {
-            BaseDescriptorSet *pSet = pDesc->pSamplerDescriptorSet;
-            API_VAR(VKDescriptorSet, pSet);
-
-            samplerIndex = currentSet;
-            pSetLayouts[currentSet++] = pSetVK->pSetLayoutHandle;
+            pSetLayouts[currentSet++] = pSetVK->m_pSetLayoutHandle;
         }
 
         VkPushConstantRange pPushConstants[LR_MAX_PUSH_CONSTANTS_PER_PIPELINE] = {};
 
-        for (u32 i = 0; i < pDesc->PushConstantCount; i++)
+        for (u32 i = 0; i < pDesc->m_PushConstantCount; i++)
         {
-            PushConstantDesc &pushConstant = pDesc->pPushConstants[i];
+            PushConstantDesc &pushConstant = pDesc->m_pPushConstants[i];
 
-            pPushConstants[i].stageFlags = ToVKShaderType(pushConstant.Stage);
-            pPushConstants[i].offset = pushConstant.Offset;
-            pPushConstants[i].size = pushConstant.Size;
+            pPushConstants[i].stageFlags = ToVKShaderType(pushConstant.m_Stage);
+            pPushConstants[i].offset = pushConstant.m_Offset;
+            pPushConstants[i].size = pushConstant.m_Size;
         }
 
         VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo = {};
         pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
         pipelineLayoutCreateInfo.setLayoutCount = currentSet;
         pipelineLayoutCreateInfo.pSetLayouts = pSetLayouts;
-        pipelineLayoutCreateInfo.pushConstantRangeCount = pDesc->PushConstantCount;
+        pipelineLayoutCreateInfo.pushConstantRangeCount = pDesc->m_PushConstantCount;
         pipelineLayoutCreateInfo.pPushConstantRanges = pPushConstants;
 
         VkPipelineLayout pLayout = nullptr;
@@ -439,11 +434,11 @@ namespace lr::Graphics
         return pLayout;
     }
 
-    BasePipeline *VKAPI::CreateGraphicsPipeline(GraphicsPipelineBuildInfo *pBuildInfo)
+    Pipeline *VKAPI::CreateGraphicsPipeline(GraphicsPipelineBuildInfo *pBuildInfo)
     {
         ZoneScoped;
 
-        VKPipeline *pPipeline = AllocTypeInherit<BasePipeline, VKPipeline>();
+        VKPipeline *pPipeline = AllocTypeInherit<Pipeline, VKPipeline>();
 
         constexpr VkBlendFactor kBlendFactorLUT[] = {
             VK_BLEND_FACTOR_ZERO,                      // Zero
@@ -468,14 +463,13 @@ namespace lr::Graphics
         /// PIPELINE LAYOUT ----------------------------------------------------------
 
         PipelineLayoutSerializeDesc layoutDesc = {};
-        layoutDesc.DescriptorSetCount = pBuildInfo->DescriptorSetCount;
-        layoutDesc.ppDescriptorSets = pBuildInfo->ppDescriptorSets;
-        layoutDesc.PushConstantCount = pBuildInfo->PushConstantCount;
-        layoutDesc.pPushConstants = pBuildInfo->pPushConstants;
-        layoutDesc.pSamplerDescriptorSet = pBuildInfo->pSamplerDescriptorSet;
+        layoutDesc.m_DescriptorSetCount = pBuildInfo->m_DescriptorSetCount;
+        layoutDesc.m_ppDescriptorSets = pBuildInfo->m_ppDescriptorSets;
+        layoutDesc.m_PushConstantCount = pBuildInfo->m_PushConstantCount;
+        layoutDesc.m_pPushConstants = pBuildInfo->m_pPushConstants;
 
         VkPipelineLayout pLayout = SerializePipelineLayout(&layoutDesc, pPipeline);
-        pPipeline->pLayout = pLayout;
+        pPipeline->m_pLayout = pLayout;
 
         /// BOUND RENDER TARGETS -----------------------------------------------------
 
@@ -485,34 +479,34 @@ namespace lr::Graphics
         renderingInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
         renderingInfo.pNext = nullptr;
         renderingInfo.viewMask = 0;
-        renderingInfo.colorAttachmentCount = pBuildInfo->RenderTargetCount;
+        renderingInfo.colorAttachmentCount = pBuildInfo->m_RenderTargetCount;
         renderingInfo.pColorAttachmentFormats = pRenderTargetFormats;
-        renderingInfo.depthAttachmentFormat = ToVKFormat(pBuildInfo->DepthAttachment.Format);
+        renderingInfo.depthAttachmentFormat = ToVKFormat(pBuildInfo->m_DepthAttachment.m_Format);
 
-        for (u32 i = 0; i < pBuildInfo->RenderTargetCount; i++)
+        for (u32 i = 0; i < pBuildInfo->m_RenderTargetCount; i++)
         {
-            pRenderTargetFormats[i] = ToVKFormat(pBuildInfo->pRenderTargets[i].Format);
+            pRenderTargetFormats[i] = ToVKFormat(pBuildInfo->m_pRenderTargets[i].m_Format);
         }
 
         /// BOUND SHADER STAGES ------------------------------------------------------
 
         VkPipelineShaderStageCreateInfo pShaderStageInfos[LR_SHADER_STAGE_COUNT] = {};
-        for (u32 i = 0; i < pBuildInfo->ShaderCount; i++)
+        for (u32 i = 0; i < pBuildInfo->m_ShaderCount; i++)
         {
-            BaseShader *pShader = pBuildInfo->ppShaders[i];
+            Shader *pShader = pBuildInfo->m_ppShaders[i];
             API_VAR(VKShader, pShader);
 
             VkPipelineShaderStageCreateInfo &info = pShaderStageInfos[i];
             info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
             info.pName = nullptr;
-            info.stage = ToVKShaderType(pShaderVK->Type);
-            info.module = pShaderVK->pHandle;
+            info.stage = ToVKShaderType(pShaderVK->m_Type);
+            info.module = pShaderVK->m_pHandle;
             info.pName = "main";
         }
 
         /// INPUT LAYOUT  ------------------------------------------------------------
 
-        InputLayout *pInputLayout = pBuildInfo->pInputLayout;
+        InputLayout *pInputLayout = pBuildInfo->m_pInputLayout;
 
         VkVertexInputBindingDescription inputBindingInfo = {};
         inputBindingInfo.binding = 0;
@@ -568,14 +562,14 @@ namespace lr::Graphics
         VkPipelineRasterizationStateCreateInfo rasterizerInfo = {};
         rasterizerInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
         rasterizerInfo.pNext = nullptr;
-        rasterizerInfo.depthClampEnable = pBuildInfo->EnableDepthClamp;
-        rasterizerInfo.polygonMode = (VkPolygonMode)pBuildInfo->SetFillMode;
-        rasterizerInfo.cullMode = ToVKCullMode(pBuildInfo->SetCullMode);
-        rasterizerInfo.frontFace = (VkFrontFace)!pBuildInfo->FrontFaceCCW;
-        rasterizerInfo.depthBiasEnable = pBuildInfo->EnableDepthBias;
-        rasterizerInfo.depthBiasConstantFactor = pBuildInfo->DepthBiasFactor;
-        rasterizerInfo.depthBiasClamp = pBuildInfo->DepthBiasClamp;
-        rasterizerInfo.depthBiasSlopeFactor = pBuildInfo->DepthSlopeFactor;
+        rasterizerInfo.depthClampEnable = pBuildInfo->m_EnableDepthClamp;
+        rasterizerInfo.polygonMode = (VkPolygonMode)pBuildInfo->m_SetFillMode;
+        rasterizerInfo.cullMode = ToVKCullMode(pBuildInfo->m_SetCullMode);
+        rasterizerInfo.frontFace = (VkFrontFace)!pBuildInfo->m_FrontFaceCCW;
+        rasterizerInfo.depthBiasEnable = pBuildInfo->m_EnableDepthBias;
+        rasterizerInfo.depthBiasConstantFactor = pBuildInfo->m_DepthBiasFactor;
+        rasterizerInfo.depthBiasClamp = pBuildInfo->m_DepthBiasClamp;
+        rasterizerInfo.depthBiasSlopeFactor = pBuildInfo->m_DepthSlopeFactor;
         rasterizerInfo.lineWidth = 1.0;
 
         /// MULTISAMPLE --------------------------------------------------------------
@@ -583,8 +577,8 @@ namespace lr::Graphics
         VkPipelineMultisampleStateCreateInfo multisampleInfo = {};
         multisampleInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
         multisampleInfo.pNext = nullptr;
-        multisampleInfo.rasterizationSamples = (VkSampleCountFlagBits)(1 << (pBuildInfo->MultiSampleBitCount - 1));
-        multisampleInfo.alphaToCoverageEnable = pBuildInfo->EnableAlphaToCoverage;
+        multisampleInfo.rasterizationSamples = (VkSampleCountFlagBits)(1 << (pBuildInfo->m_MultiSampleBitCount - 1));
+        multisampleInfo.alphaToCoverageEnable = pBuildInfo->m_EnableAlphaToCoverage;
         multisampleInfo.alphaToOneEnable = false;
 
         /// DEPTH STENCIL ------------------------------------------------------------
@@ -592,21 +586,21 @@ namespace lr::Graphics
         VkPipelineDepthStencilStateCreateInfo depthStencilInfo = {};
         depthStencilInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
         depthStencilInfo.pNext = nullptr;
-        depthStencilInfo.depthTestEnable = pBuildInfo->EnableDepthTest;
-        depthStencilInfo.depthWriteEnable = pBuildInfo->EnableDepthWrite;
-        depthStencilInfo.depthCompareOp = (VkCompareOp)pBuildInfo->DepthCompareOp;
+        depthStencilInfo.depthTestEnable = pBuildInfo->m_EnableDepthTest;
+        depthStencilInfo.depthWriteEnable = pBuildInfo->m_EnableDepthWrite;
+        depthStencilInfo.depthCompareOp = (VkCompareOp)pBuildInfo->m_DepthCompareOp;
         depthStencilInfo.depthBoundsTestEnable = false;
-        depthStencilInfo.stencilTestEnable = pBuildInfo->EnableStencilTest;
+        depthStencilInfo.stencilTestEnable = pBuildInfo->m_EnableStencilTest;
 
-        depthStencilInfo.front.compareOp = (VkCompareOp)pBuildInfo->StencilFrontFaceOp.CompareFunc;
-        depthStencilInfo.front.depthFailOp = (VkStencilOp)pBuildInfo->StencilFrontFaceOp.DepthFail;
-        depthStencilInfo.front.failOp = (VkStencilOp)pBuildInfo->StencilFrontFaceOp.Fail;
-        depthStencilInfo.front.passOp = (VkStencilOp)pBuildInfo->StencilFrontFaceOp.Pass;
+        depthStencilInfo.front.compareOp = (VkCompareOp)pBuildInfo->m_StencilFrontFaceOp.m_CompareFunc;
+        depthStencilInfo.front.depthFailOp = (VkStencilOp)pBuildInfo->m_StencilFrontFaceOp.m_DepthFail;
+        depthStencilInfo.front.failOp = (VkStencilOp)pBuildInfo->m_StencilFrontFaceOp.m_Fail;
+        depthStencilInfo.front.passOp = (VkStencilOp)pBuildInfo->m_StencilFrontFaceOp.m_Pass;
 
-        depthStencilInfo.back.compareOp = (VkCompareOp)pBuildInfo->StencilBackFaceOp.CompareFunc;
-        depthStencilInfo.back.depthFailOp = (VkStencilOp)pBuildInfo->StencilBackFaceOp.DepthFail;
-        depthStencilInfo.back.failOp = (VkStencilOp)pBuildInfo->StencilBackFaceOp.Fail;
-        depthStencilInfo.back.passOp = (VkStencilOp)pBuildInfo->StencilBackFaceOp.Pass;
+        depthStencilInfo.back.compareOp = (VkCompareOp)pBuildInfo->m_StencilBackFaceOp.m_CompareFunc;
+        depthStencilInfo.back.depthFailOp = (VkStencilOp)pBuildInfo->m_StencilBackFaceOp.m_DepthFail;
+        depthStencilInfo.back.failOp = (VkStencilOp)pBuildInfo->m_StencilBackFaceOp.m_Fail;
+        depthStencilInfo.back.passOp = (VkStencilOp)pBuildInfo->m_StencilBackFaceOp.m_Pass;
 
         /// COLOR BLEND --------------------------------------------------------------
 
@@ -616,22 +610,22 @@ namespace lr::Graphics
         colorBlendInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
         colorBlendInfo.pNext = nullptr;
         colorBlendInfo.logicOpEnable = false;
-        colorBlendInfo.attachmentCount = pBuildInfo->RenderTargetCount;
+        colorBlendInfo.attachmentCount = pBuildInfo->m_RenderTargetCount;
         colorBlendInfo.pAttachments = pBlendAttachmentInfos;
 
-        for (u32 i = 0; i < pBuildInfo->RenderTargetCount; i++)
+        for (u32 i = 0; i < pBuildInfo->m_RenderTargetCount; i++)
         {
-            PipelineAttachment &attachment = pBuildInfo->pRenderTargets[i];
+            PipelineAttachment &attachment = pBuildInfo->m_pRenderTargets[i];
             VkPipelineColorBlendAttachmentState &renderTarget = pBlendAttachmentInfos[i];
 
-            renderTarget.blendEnable = attachment.BlendEnable;
-            renderTarget.colorWriteMask = attachment.WriteMask;
-            renderTarget.srcColorBlendFactor = kBlendFactorLUT[(u32)attachment.SrcBlend];
-            renderTarget.dstColorBlendFactor = kBlendFactorLUT[(u32)attachment.DstBlend];
-            renderTarget.srcAlphaBlendFactor = kBlendFactorLUT[(u32)attachment.SrcBlendAlpha];
-            renderTarget.dstAlphaBlendFactor = kBlendFactorLUT[(u32)attachment.DstBlendAlpha];
-            renderTarget.colorBlendOp = (VkBlendOp)attachment.ColorBlendOp;
-            renderTarget.alphaBlendOp = (VkBlendOp)attachment.AlphaBlendOp;
+            renderTarget.blendEnable = attachment.m_BlendEnable;
+            renderTarget.colorWriteMask = attachment.m_WriteMask;
+            renderTarget.srcColorBlendFactor = kBlendFactorLUT[(u32)attachment.m_SrcBlend];
+            renderTarget.dstColorBlendFactor = kBlendFactorLUT[(u32)attachment.m_DstBlend];
+            renderTarget.srcAlphaBlendFactor = kBlendFactorLUT[(u32)attachment.m_SrcBlendAlpha];
+            renderTarget.dstAlphaBlendFactor = kBlendFactorLUT[(u32)attachment.m_DstBlendAlpha];
+            renderTarget.colorBlendOp = (VkBlendOp)attachment.m_ColorBlendOp;
+            renderTarget.alphaBlendOp = (VkBlendOp)attachment.m_AlphaBlendOp;
         }
 
         /// DYNAMIC STATE ------------------------------------------------------------
@@ -653,7 +647,7 @@ namespace lr::Graphics
         VkGraphicsPipelineCreateInfo createInfo = {};
         createInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
         createInfo.pNext = &renderingInfo;
-        createInfo.stageCount = pBuildInfo->ShaderCount;
+        createInfo.stageCount = pBuildInfo->m_ShaderCount;
         createInfo.pStages = pShaderStageInfos;
         createInfo.pVertexInputState = &inputLayoutInfo;
         createInfo.pInputAssemblyState = &inputAssemblyInfo;
@@ -666,26 +660,25 @@ namespace lr::Graphics
         createInfo.pDynamicState = &dynamicStateInfo;
         createInfo.layout = pLayout;
 
-        vkCreateGraphicsPipelines(m_pDevice, m_pPipelineCache, 1, &createInfo, nullptr, &pPipeline->pHandle);
+        vkCreateGraphicsPipelines(m_pDevice, m_pPipelineCache, 1, &createInfo, nullptr, &pPipeline->m_pHandle);
 
         return pPipeline;
     }
 
-    BasePipeline *VKAPI::CreateComputePipeline(ComputePipelineBuildInfo *pBuildInfo)
+    Pipeline *VKAPI::CreateComputePipeline(ComputePipelineBuildInfo *pBuildInfo)
     {
         ZoneScoped;
 
-        VKPipeline *pPipeline = AllocTypeInherit<BasePipeline, VKPipeline>();
+        VKPipeline *pPipeline = AllocTypeInherit<Pipeline, VKPipeline>();
 
         PipelineLayoutSerializeDesc layoutDesc = {};
-        layoutDesc.DescriptorSetCount = pBuildInfo->DescriptorSetCount;
-        layoutDesc.ppDescriptorSets = pBuildInfo->ppDescriptorSets;
-        layoutDesc.PushConstantCount = pBuildInfo->PushConstantCount;
-        layoutDesc.pPushConstants = pBuildInfo->pPushConstants;
-        layoutDesc.pSamplerDescriptorSet = pBuildInfo->pSamplerDescriptorSet;
+        layoutDesc.m_DescriptorSetCount = pBuildInfo->m_DescriptorSetCount;
+        layoutDesc.m_ppDescriptorSets = pBuildInfo->m_ppDescriptorSets;
+        layoutDesc.m_PushConstantCount = pBuildInfo->m_PushConstantCount;
+        layoutDesc.m_pPushConstants = pBuildInfo->m_pPushConstants;
 
         VkPipelineLayout pLayout = SerializePipelineLayout(&layoutDesc, pPipeline);
-        pPipeline->pLayout = pLayout;
+        pPipeline->m_pLayout = pLayout;
 
         VkComputePipelineCreateInfo createInfo = {};
         createInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
@@ -698,10 +691,10 @@ namespace lr::Graphics
         shaderStage.flags = 0;
         shaderStage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
         shaderStage.pName = "main";
-        shaderStage.module = ((VKShader *)pBuildInfo->pShader)->pHandle;
+        shaderStage.module = ((VKShader *)pBuildInfo->m_pShader)->m_pHandle;
         shaderStage.pSpecializationInfo = nullptr;
 
-        vkCreateComputePipelines(m_pDevice, m_pPipelineCache, 1, &createInfo, nullptr, &pPipeline->pHandle);
+        vkCreateComputePipelines(m_pDevice, m_pPipelineCache, 1, &createInfo, nullptr, &pPipeline->m_pHandle);
 
         return pPipeline;
     }
@@ -753,7 +746,7 @@ namespace lr::Graphics
 
         VkSwapchainKHR &pSwapChain = m_SwapChain.m_pHandle;
         VKSwapChainFrame *pCurrentFrame = m_SwapChain.GetCurrentFrame();
-        VkSemaphore &pAcquireSemp = pCurrentFrame->pAcquireSemp;
+        VkSemaphore &pAcquireSemp = pCurrentFrame->m_pAcquireSemp;
 
         u32 imageIndex;
         vkAcquireNextImageKHR(m_pDevice, pSwapChain, UINT64_MAX, pAcquireSemp, nullptr, &imageIndex);
@@ -772,7 +765,7 @@ namespace lr::Graphics
         VkSwapchainKHR &pSwapChain = m_SwapChain.m_pHandle;
         VkQueue &pQueueHandle = m_pDirectQueue->m_pHandle;
         VKSwapChainFrame *pCurrentFrame = m_SwapChain.GetCurrentFrame();
-        VkSemaphore &pPresentSemp = pCurrentFrame->pPresentSemp;
+        VkSemaphore &pPresentSemp = pCurrentFrame->m_pPresentSemp;
 
         m_pDirectQueue->SetSemaphoreStage(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
 
@@ -804,20 +797,20 @@ namespace lr::Graphics
         vkDeviceWaitIdle(m_pDevice);
     }
 
-    BaseShader *VKAPI::CreateShader(ShaderStage stage, BufferReadStream &buf)
+    Shader *VKAPI::CreateShader(ShaderStage stage, BufferReadStream &buf)
     {
         ZoneScoped;
 
-        VKShader *pShader = AllocTypeInherit<BaseShader, VKShader>();
+        VKShader *pShader = AllocTypeInherit<Shader, VKShader>();
 
-        pShader->Type = stage;
+        pShader->m_Type = stage;
 
         ShaderCompileDesc compileDesc = {};
-        compileDesc.Type = stage;
-        compileDesc.Flags = LR_SHADER_FLAG_USE_SPIRV | LR_SHADER_FLAG_MATRIX_ROW_MAJOR | LR_SHADER_FLAG_ALL_RESOURCES_BOUND;
+        compileDesc.m_Type = stage;
+        compileDesc.m_Flags = LR_SHADER_FLAG_USE_SPIRV | LR_SHADER_FLAG_MATRIX_ROW_MAJOR | LR_SHADER_FLAG_ALL_RESOURCES_BOUND;
 
 #if _DEBUG
-        compileDesc.Flags |= LR_SHADER_FLAG_WARNINGS_ARE_ERRORS | LR_SHADER_FLAG_SKIP_OPTIMIZATION | LR_SHADER_FLAG_USE_DEBUG;
+        compileDesc.m_Flags |= LR_SHADER_FLAG_WARNINGS_ARE_ERRORS | LR_SHADER_FLAG_SKIP_OPTIMIZATION | LR_SHADER_FLAG_USE_DEBUG;
 #endif
 
         IDxcBlob *pCode = ShaderCompiler::CompileFromBuffer(&compileDesc, buf);
@@ -832,13 +825,13 @@ namespace lr::Graphics
 
         vkCreateShaderModule(m_pDevice, &createInfo, nullptr, &pHandle);
 
-        pShader->Type = stage;
-        pShader->pHandle = pHandle;
+        pShader->m_Type = stage;
+        pShader->m_pHandle = pHandle;
 
         return pShader;
     }
 
-    BaseShader *VKAPI::CreateShader(ShaderStage stage, eastl::string_view path)
+    Shader *VKAPI::CreateShader(ShaderStage stage, eastl::string_view path)
     {
         ZoneScoped;
 
@@ -847,83 +840,77 @@ namespace lr::Graphics
         fs.Close();
 
         BufferReadStream buf(pData, fs.Size());
-        BaseShader *pShader = CreateShader(stage, buf);
+        Shader *pShader = CreateShader(stage, buf);
 
         free(pData);
 
         return pShader;
     }
 
-    void VKAPI::DeleteShader(BaseShader *pShader)
+    void VKAPI::DeleteShader(Shader *pShader)
     {
         ZoneScoped;
 
         API_VAR(VKShader, pShader);
 
-        vkDestroyShaderModule(m_pDevice, pShaderVK->pHandle, nullptr);
+        vkDestroyShaderModule(m_pDevice, pShaderVK->m_pHandle, nullptr);
 
         FreeType(pShaderVK);
     }
 
-    BaseDescriptorSet *VKAPI::CreateDescriptorSet(DescriptorSetDesc *pDesc)
+    DescriptorSet *VKAPI::CreateDescriptorSet(DescriptorSetDesc *pDesc)
     {
         ZoneScoped;
 
-        VKDescriptorSet *pDescriptorSet = AllocTypeInherit<BaseDescriptorSet, VKDescriptorSet>();
-        pDescriptorSet->BindingCount = pDesc->BindingCount;
-        memcpy(pDescriptorSet->pBindings, pDesc->pBindings, pDesc->BindingCount * sizeof(DescriptorBindingDesc));
+        VKDescriptorSet *pDescriptorSet = AllocTypeInherit<DescriptorSet, VKDescriptorSet>();
+        pDescriptorSet->m_BindingCount = pDesc->m_BindingCount;
 
         VkDescriptorSetLayoutBinding pBindings[LR_MAX_DESCRIPTORS_PER_LAYOUT] = {};
 
-        for (u32 i = 0; i < pDesc->BindingCount; i++)
+        for (u32 i = 0; i < pDesc->m_BindingCount; i++)
         {
-            DescriptorBindingDesc &element = pDesc->pBindings[i];
+            DescriptorBindingDesc &element = pDesc->m_pBindings[i];
             VkDescriptorSetLayoutBinding &layoutBinding = pBindings[i];
+            pDescriptorSet->m_pBindingTypes[i] = element.m_Type;
 
-            VkDescriptorType type = ToVKDescriptorType(element.Type);
+            VkDescriptorType type = ToVKDescriptorType(element.m_Type);
 
-            layoutBinding.binding = element.BindingID;
+            layoutBinding.binding = element.m_BindingID;
             layoutBinding.descriptorType = type;
-            layoutBinding.stageFlags = ToVKShaderType(element.TargetShader);
-            layoutBinding.descriptorCount = element.ArraySize;
-
-            if (type == VK_DESCRIPTOR_TYPE_SAMPLER)
-            {
-                VkSampler pSampler = CreateSampler(element.pSamplerInfo);
-                layoutBinding.pImmutableSamplers = &pSampler;
-            }
+            layoutBinding.stageFlags = ToVKShaderType(element.m_TargetShader);
+            layoutBinding.descriptorCount = element.m_ArraySize;
         }
 
         // First we need layout info
         VkDescriptorSetLayoutCreateInfo layoutCreateInfo = {};
         layoutCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        layoutCreateInfo.bindingCount = pDesc->BindingCount;
+        layoutCreateInfo.bindingCount = pDesc->m_BindingCount;
         layoutCreateInfo.pBindings = pBindings;
 
-        vkCreateDescriptorSetLayout(m_pDevice, &layoutCreateInfo, nullptr, &pDescriptorSet->pSetLayoutHandle);
+        vkCreateDescriptorSetLayout(m_pDevice, &layoutCreateInfo, nullptr, &pDescriptorSet->m_pSetLayoutHandle);
 
         // And the actual set
         VkDescriptorSetAllocateInfo allocateCreateInfo = {};
         allocateCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
         allocateCreateInfo.descriptorPool = m_pDescriptorPool;
         allocateCreateInfo.descriptorSetCount = 1;
-        allocateCreateInfo.pSetLayouts = &pDescriptorSet->pSetLayoutHandle;
+        allocateCreateInfo.pSetLayouts = &pDescriptorSet->m_pSetLayoutHandle;
 
-        vkAllocateDescriptorSets(m_pDevice, &allocateCreateInfo, &pDescriptorSet->pHandle);
+        vkAllocateDescriptorSets(m_pDevice, &allocateCreateInfo, &pDescriptorSet->m_pHandle);
 
         return pDescriptorSet;
     }
 
-    void VKAPI::DeleteDescriptorSet(BaseDescriptorSet *pSet)
+    void VKAPI::DeleteDescriptorSet(DescriptorSet *pSet)
     {
         ZoneScoped;
 
-        for (u32 i = 0; i < pSet->BindingCount; i++)
+        for (u32 i = 0; i < pSet->m_BindingCount; i++)
         {
         }
     }
 
-    void VKAPI::UpdateDescriptorData(BaseDescriptorSet *pSet)
+    void VKAPI::UpdateDescriptorData(DescriptorSet *pSet, DescriptorSetDesc *pDesc)
     {
         ZoneScoped;
 
@@ -931,46 +918,46 @@ namespace lr::Graphics
 
         VkWriteDescriptorSet pWriteSets[LR_MAX_DESCRIPTORS_PER_LAYOUT];
         VkDescriptorBufferInfo pBufferInfos[LR_MAX_DESCRIPTORS_PER_LAYOUT];
-        VkDescriptorImageInfo pImageInfos[LR_MAX_DESCRIPTORS_PER_LAYOUT];
+        VkDescriptorImageInfo pImageInfos[LR_MAX_DESCRIPTORS_PER_LAYOUT * 2];  // *2 for samplers
 
         u32 bufferIndex = 0;
         u32 imageIndex = 0;
         u32 descriptorCount = 0;
 
-        for (u32 i = 0; i < pSet->BindingCount; i++)
+        for (u32 i = 0; i < pDesc->m_BindingCount; i++)
         {
-            DescriptorBindingDesc &element = pSet->pBindings[i];
+            DescriptorBindingDesc &element = pDesc->m_pBindings[i];
 
             VkWriteDescriptorSet &writeSet = pWriteSets[descriptorCount++];
             VkDescriptorBufferInfo &bufferInfo = pBufferInfos[bufferIndex];
             VkDescriptorImageInfo &imageInfo = pImageInfos[imageIndex];
 
-            BaseBuffer *pBuffer = element.pBuffer;
-            BaseImage *pImage = element.pImage;
+            Sampler *pSampler = element.m_pSampler;
+            Buffer *pBuffer = element.m_pBuffer;
+            Image *pImage = element.m_pImage;
 
+            API_VAR(VKSampler, pSampler);
             API_VAR(VKBuffer, pBuffer);
             API_VAR(VKImage, pImage);
 
             writeSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             writeSet.pNext = nullptr;
-            writeSet.dstBinding = element.BindingID;
-            writeSet.dstSet = pSetVK->pHandle;
+            writeSet.dstBinding = element.m_BindingID;
+            writeSet.dstSet = pSetVK->m_pHandle;
             writeSet.dstArrayElement = 0;
-            writeSet.descriptorCount = element.ArraySize;
-            writeSet.descriptorType = ToVKDescriptorType(element.Type);
+            writeSet.descriptorCount = element.m_ArraySize;
+            writeSet.descriptorType = ToVKDescriptorType(element.m_Type);
 
-            switch (element.Type)
+            switch (element.m_Type)
             {
                 case LR_DESCRIPTOR_TYPE_CONSTANT_BUFFER:
                 {
                     bufferInfo.buffer = pBufferVK->m_pHandle;
                     bufferInfo.offset = 0;
-                    bufferInfo.range = pBufferVK->m_DataSize;
+                    bufferInfo.range = pBufferVK->m_DataLen;
 
                     writeSet.pBufferInfo = &bufferInfo;
-
                     bufferIndex++;
-
                     break;
                 }
 
@@ -981,9 +968,16 @@ namespace lr::Graphics
                     imageInfo.imageLayout = pImageVK->m_Layout;
 
                     writeSet.pImageInfo = &imageInfo;
-
                     imageIndex++;
+                    break;
+                }
 
+                case LR_DESCRIPTOR_TYPE_SAMPLER:
+                {
+                    imageInfo.sampler = pSamplerVK->m_pHandle;
+                    
+                    writeSet.pImageInfo = &imageInfo;
+                    imageIndex++;
                     break;
                 }
 
@@ -1005,9 +999,9 @@ namespace lr::Graphics
         u32 idx = 0;
         for (auto &element : layouts)
         {
-            pPoolSizes[idx].type = element.Type;
-            pPoolSizes[idx].descriptorCount = element.Count;
-            maxSets += element.Count;
+            pPoolSizes[idx].type = element.m_Type;
+            pPoolSizes[idx].descriptorCount = element.m_Count;
+            maxSets += element.m_Count;
 
             idx++;
         }
@@ -1041,36 +1035,35 @@ namespace lr::Graphics
         return pHandle;
     }
 
-    BaseBuffer *VKAPI::CreateBuffer(BufferDesc *pDesc, BufferData *pData)
+    Buffer *VKAPI::CreateBuffer(BufferDesc *pDesc)
     {
         ZoneScoped;
 
-        VKBuffer *pBuffer = AllocTypeInherit<BaseBuffer, VKBuffer>();
-        pBuffer->m_UsageFlags = pDesc->UsageFlags;
-        pBuffer->m_Mappable = pData->Mappable;
-        pBuffer->m_DataSize = pData->DataLen;
-        pBuffer->m_AllocatorType = pData->TargetAllocator;
-        pBuffer->m_Stride = pData->Stride;
+        VKBuffer *pBuffer = AllocTypeInherit<Buffer, VKBuffer>();
+        pBuffer->m_UsageFlags = pDesc->m_UsageFlags;
+        pBuffer->m_TargetAllocator = pDesc->m_TargetAllocator;
+        pBuffer->m_Stride = pDesc->m_Stride;
+        pBuffer->m_DataLen = pDesc->m_DataLen;
 
         /// ---------------------------------------------- ///
 
         VkBufferCreateInfo createInfo = {};
         createInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-        createInfo.size = pData->DataLen;
-        createInfo.usage = ToVKBufferUsage(pDesc->UsageFlags);
+        createInfo.size = pBuffer->m_DataLen;
+        createInfo.usage = ToVKBufferUsage(pBuffer->m_UsageFlags);
 
         vkCreateBuffer(m_pDevice, &createInfo, nullptr, &pBuffer->m_pHandle);
 
         /// ---------------------------------------------- ///
 
-        SetAllocator(pBuffer, pData->TargetAllocator);
+        SetAllocator(pBuffer, pBuffer->m_TargetAllocator);
 
         vkBindBufferMemory(m_pDevice, pBuffer->m_pHandle, pBuffer->m_pMemoryHandle, pBuffer->m_DataOffset);
 
         return pBuffer;
     }
 
-    void VKAPI::DeleteBuffer(BaseBuffer *pHandle)
+    void VKAPI::DeleteBuffer(Buffer *pHandle)
     {
         ZoneScoped;
 
@@ -1078,14 +1071,14 @@ namespace lr::Graphics
 
         if (pHandleVK->m_pMemoryHandle)
         {
-            if (pHandleVK->m_AllocatorType == AllocatorType::BufferTLSF)
+            if (pHandleVK->m_TargetAllocator == LR_RHI_ALLOCATOR_BUFFER_TLSF)
             {
                 Memory::TLSFBlock *pBlock = (Memory::TLSFBlock *)pHandleVK->m_pAllocatorData;
                 assert(pBlock != nullptr);
 
                 m_MABufferTLSF.Allocator.Free(pBlock);
             }
-            else if (pHandleVK->m_AllocatorType == AllocatorType::None)
+            else if (pHandleVK->m_TargetAllocator == LR_RHI_ALLOCATOR_NONE)
             {
                 vkFreeMemory(m_pDevice, pHandleVK->m_pMemoryHandle, nullptr);
             }
@@ -1095,16 +1088,16 @@ namespace lr::Graphics
             vkDestroyBuffer(m_pDevice, pHandleVK->m_pHandle, nullptr);
     }
 
-    void VKAPI::MapMemory(BaseBuffer *pBuffer, void *&pData)
+    void VKAPI::MapMemory(Buffer *pBuffer, void *&pData)
     {
         ZoneScoped;
 
         API_VAR(VKBuffer, pBuffer);
 
-        vkMapMemory(m_pDevice, pBufferVK->m_pMemoryHandle, pBuffer->m_DataOffset, pBuffer->m_RequiredDataSize, 0, &pData);
+        vkMapMemory(m_pDevice, pBufferVK->m_pMemoryHandle, pBuffer->m_DataOffset, pBuffer->m_DeviceDataLen, 0, &pData);
     }
 
-    void VKAPI::UnmapMemory(BaseBuffer *pBuffer)
+    void VKAPI::UnmapMemory(Buffer *pBuffer)
     {
         ZoneScoped;
 
@@ -1113,70 +1106,50 @@ namespace lr::Graphics
         vkUnmapMemory(m_pDevice, pBufferVK->m_pMemoryHandle);
     }
 
-    BaseBuffer *VKAPI::ChangeAllocator(BaseCommandList *pList, BaseBuffer *pTarget, AllocatorType targetAllocator)
+    Image *VKAPI::CreateImage(ImageDesc *pDesc)
     {
         ZoneScoped;
 
-        // TODO: Currently this technique uses present queue, move it to transfer queue
-
-        // BufferDesc bufDesc = {};
-        // BufferData bufData = {};
-
-        // bufDesc.Mappable = false;
-        // bufDesc.UsageFlags = pTarget->m_Usage | ResourceUsage::CopyDst;
-        // bufDesc.UsageFlags &= ~ResourceUsage::CopySrc;
-
-        // bufData.DataLen = pTarget->m_DataSize;
-
-        // BaseBuffer *pNewBuffer = CreateBuffer(&bufDesc, &bufData);
-
-        // pList->CopyBuffer(pTarget, pNewBuffer, bufData.DataLen);
-
-        return nullptr;
-    }
-
-    BaseImage *VKAPI::CreateImage(ImageDesc *pDesc, ImageData *pData)
-    {
-        ZoneScoped;
-
-        VKImage *pImage = AllocTypeInherit<BaseImage, VKImage>();
-        pImage->m_Width = pData->Width;
-        pImage->m_Height = pData->Height;
-        pImage->m_DataSize = pData->DataLen;
-        pImage->m_AllocatorType = pData->TargetAllocator;
-        pImage->m_UsingMip = 0;
-        pImage->m_TotalMips = pDesc->MipMapLevels;
-        pImage->m_UsageFlags = pDesc->UsageFlags;
-        pImage->m_Format = pDesc->Format;
+        VKImage *pImage = AllocTypeInherit<Image, VKImage>();
+        pImage->m_UsageFlags = pDesc->m_UsageFlags;
+        pImage->m_Format = pDesc->m_Format;
+        pImage->m_TargetAllocator = pDesc->m_TargetAllocator;
+        pImage->m_Width = pDesc->m_Width;
+        pImage->m_Height = pDesc->m_Height;
+        pImage->m_ArraySize = pDesc->m_ArraySize;
+        pImage->m_MipMapLevels = pDesc->m_MipMapLevels;
+        pImage->m_DataLen = pDesc->m_DataLen;
+        pImage->m_DataOffset = 0;
+        pImage->m_DeviceDataLen = pDesc->m_DeviceDataLen;
         pImage->m_Layout = VK_IMAGE_LAYOUT_UNDEFINED;
 
-        if (pImage->m_DataSize == 0)
+        if (pImage->m_DataLen == 0)
         {
-            pImage->m_DataSize = pImage->m_Width * pImage->m_Height * GetResourceFormatSize(pImage->m_Format);
+            pImage->m_DataLen = pImage->m_Width * pImage->m_Height * GetImageFormatSize(pImage->m_Format);
         }
 
         /// ---------------------------------------------- //
 
         VkImageCreateInfo imageCreateInfo = {};
         imageCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-        imageCreateInfo.format = ToVKFormat(pDesc->Format);
-        imageCreateInfo.usage = ToVKImageUsage(pDesc->UsageFlags);
+        imageCreateInfo.format = ToVKFormat(pImage->m_Format);
+        imageCreateInfo.usage = ToVKImageUsage(pImage->m_UsageFlags);
         imageCreateInfo.imageType = VK_IMAGE_TYPE_2D;
 
-        imageCreateInfo.extent.width = pData->Width;
-        imageCreateInfo.extent.height = pData->Height;
+        imageCreateInfo.extent.width = pImage->m_Width;
+        imageCreateInfo.extent.height = pImage->m_Height;
         imageCreateInfo.extent.depth = 1;
 
         imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        imageCreateInfo.mipLevels = pDesc->MipMapLevels;
-        imageCreateInfo.arrayLayers = pDesc->ArraySize;
+        imageCreateInfo.mipLevels = pImage->m_MipMapLevels;
+        imageCreateInfo.arrayLayers = pImage->m_ArraySize;
         imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
 
         vkCreateImage(m_pDevice, &imageCreateInfo, nullptr, &pImage->m_pHandle);
 
         /// ---------------------------------------------- //
 
-        SetAllocator(pImage, pData->TargetAllocator);
+        SetAllocator(pImage, pImage->m_TargetAllocator);
 
         vkBindImageMemory(m_pDevice, pImage->m_pHandle, pImage->m_pMemoryHandle, pImage->m_DataOffset);
 
@@ -1185,7 +1158,7 @@ namespace lr::Graphics
         return pImage;
     }
 
-    void VKAPI::DeleteImage(BaseImage *pImage)
+    void VKAPI::DeleteImage(Image *pImage)
     {
         ZoneScoped;
 
@@ -1193,14 +1166,14 @@ namespace lr::Graphics
 
         if (pImageVK->m_pMemoryHandle)
         {
-            if (pImage->m_AllocatorType == AllocatorType::ImageTLSF)
+            if (pImage->m_TargetAllocator == LR_RHI_ALLOCATOR_IMAGE_TLSF)
             {
                 Memory::TLSFBlock *pBlock = (Memory::TLSFBlock *)pImage->m_pAllocatorData;
                 assert(pBlock != nullptr);
 
                 m_MAImageTLSF.Allocator.Free(pBlock);
             }
-            else if (pImage->m_AllocatorType == AllocatorType::None)
+            else if (pImage->m_TargetAllocator == LR_RHI_ALLOCATOR_NONE)
             {
                 vkFreeMemory(m_pDevice, pImageVK->m_pMemoryHandle, nullptr);
             }
@@ -1213,7 +1186,7 @@ namespace lr::Graphics
             vkDestroyImage(m_pDevice, pImageVK->m_pHandle, nullptr);
     }
 
-    void VKAPI::CreateImageView(BaseImage *pImage)
+    void VKAPI::CreateImageView(Image *pImage)
     {
         ZoneScoped;
 
@@ -1247,16 +1220,19 @@ namespace lr::Graphics
         imageViewCreateInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
 
         imageViewCreateInfo.subresourceRange.aspectMask = aspectFlags;
-        imageViewCreateInfo.subresourceRange.baseMipLevel = pImage->m_UsingMip;
-        imageViewCreateInfo.subresourceRange.levelCount = pImage->m_TotalMips;
+        imageViewCreateInfo.subresourceRange.baseMipLevel = 0;
+        imageViewCreateInfo.subresourceRange.levelCount = pImage->m_MipMapLevels;
         imageViewCreateInfo.subresourceRange.baseArrayLayer = 0;
         imageViewCreateInfo.subresourceRange.layerCount = 1;
 
         vkCreateImageView(m_pDevice, &imageViewCreateInfo, nullptr, &pImageVK->m_pViewHandle);
     }
-    VkSampler VKAPI::CreateSampler(SamplerDesc *pDesc)
+
+    Sampler *VKAPI::CreateSampler(SamplerDesc *pDesc)
     {
         ZoneScoped;
+
+        VKSampler *pSampler = AllocTypeInherit<Sampler, VKSampler>();
 
         constexpr static VkSamplerAddressMode kAddresModeLUT[] = {
             VK_SAMPLER_ADDRESS_MODE_REPEAT,
@@ -1265,37 +1241,35 @@ namespace lr::Graphics
             VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
         };
 
-        VkSampler pHandle = nullptr;
-
         VkSamplerCreateInfo samplerInfo = {};
         samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
         samplerInfo.pNext = nullptr;
 
         samplerInfo.flags = 0;
 
-        samplerInfo.magFilter = (VkFilter)pDesc->MinFilter;
-        samplerInfo.minFilter = (VkFilter)pDesc->MinFilter;
+        samplerInfo.magFilter = (VkFilter)pDesc->m_MinFilter;
+        samplerInfo.minFilter = (VkFilter)pDesc->m_MinFilter;
 
-        samplerInfo.addressModeU = kAddresModeLUT[(u32)pDesc->AddressU];
-        samplerInfo.addressModeV = kAddresModeLUT[(u32)pDesc->AddressV];
-        samplerInfo.addressModeW = kAddresModeLUT[(u32)pDesc->AddressW];
+        samplerInfo.addressModeU = kAddresModeLUT[(u32)pDesc->m_AddressU];
+        samplerInfo.addressModeV = kAddresModeLUT[(u32)pDesc->m_AddressV];
+        samplerInfo.addressModeW = kAddresModeLUT[(u32)pDesc->m_AddressW];
 
-        samplerInfo.anisotropyEnable = pDesc->UseAnisotropy;
-        samplerInfo.maxAnisotropy = pDesc->MaxAnisotropy;
+        samplerInfo.anisotropyEnable = pDesc->m_UseAnisotropy;
+        samplerInfo.maxAnisotropy = pDesc->m_MaxAnisotropy;
 
-        samplerInfo.mipmapMode = (VkSamplerMipmapMode)pDesc->MipFilter;
-        samplerInfo.mipLodBias = pDesc->MipLODBias;
-        samplerInfo.maxLod = pDesc->MaxLOD;
-        samplerInfo.minLod = pDesc->MinLOD;
+        samplerInfo.mipmapMode = (VkSamplerMipmapMode)pDesc->m_MipFilter;
+        samplerInfo.mipLodBias = pDesc->m_MipLODBias;
+        samplerInfo.maxLod = pDesc->m_MaxLOD;
+        samplerInfo.minLod = pDesc->m_MinLOD;
 
-        samplerInfo.compareEnable = pDesc->CompareOp != LR_COMPARE_OP_NEVER;
-        samplerInfo.compareOp = (VkCompareOp)pDesc->CompareOp;
+        samplerInfo.compareEnable = pDesc->m_CompareOp != LR_COMPARE_OP_NEVER;
+        samplerInfo.compareOp = (VkCompareOp)pDesc->m_CompareOp;
 
         samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK;
 
-        vkCreateSampler(m_pDevice, &samplerInfo, nullptr, &pHandle);
+        vkCreateSampler(m_pDevice, &samplerInfo, nullptr, &pSampler->m_pHandle);
 
-        return pHandle;
+        return pSampler;
     }
 
     void VKAPI::DeleteSampler(VkSampler pSampler)
@@ -1305,57 +1279,58 @@ namespace lr::Graphics
         vkDestroySampler(m_pDevice, pSampler, nullptr);
     }
 
-    void VKAPI::SetAllocator(VKBuffer *pBuffer, AllocatorType targetAllocator)
+    void VKAPI::SetAllocator(VKBuffer *pBuffer, RHIAllocatorType targetAllocator)
     {
         ZoneScoped;
 
         VkMemoryRequirements memoryRequirements = {};
         vkGetBufferMemoryRequirements(m_pDevice, pBuffer->m_pHandle, &memoryRequirements);
 
-        pBuffer->m_RequiredDataSize = memoryRequirements.size;
+        pBuffer->m_DeviceDataLen = memoryRequirements.size;
 
         switch (targetAllocator)
         {
-            case AllocatorType::None:
+            case LR_RHI_ALLOCATOR_NONE:
             {
-                pBuffer->m_pMemoryHandle = CreateHeap(memoryRequirements.size, pBuffer->m_Mappable);
+                pBuffer->m_DataOffset = 0;
+                pBuffer->m_pMemoryHandle = CreateHeap(pBuffer->m_DeviceDataLen, pBuffer->m_UsageFlags & LR_RESOURCE_USAGE_HOST_VISIBLE);
 
                 break;
             }
 
-            case AllocatorType::Descriptor:
+            case LR_RHI_ALLOCATOR_DESCRIPTOR:
             {
-                pBuffer->m_DataOffset = m_MADescriptor.Allocator.Allocate(pBuffer->m_RequiredDataSize, memoryRequirements.alignment);
+                pBuffer->m_DataOffset = m_MADescriptor.Allocator.Allocate(pBuffer->m_DeviceDataLen, memoryRequirements.alignment);
                 pBuffer->m_pMemoryHandle = m_MADescriptor.pHeap;
 
                 break;
             }
 
-            case AllocatorType::BufferLinear:
+            case LR_RHI_ALLOCATOR_BUFFER_LINEAR:
             {
-                pBuffer->m_DataOffset = m_MABufferLinear.Allocator.Allocate(pBuffer->m_RequiredDataSize, memoryRequirements.alignment);
+                pBuffer->m_DataOffset = m_MABufferLinear.Allocator.Allocate(pBuffer->m_DeviceDataLen, memoryRequirements.alignment);
                 pBuffer->m_pMemoryHandle = m_MABufferLinear.pHeap;
 
                 break;
             }
 
-            case AllocatorType::BufferTLSF:
+            case LR_RHI_ALLOCATOR_BUFFER_TLSF:
             {
-                Memory::TLSFBlock *pBlock = m_MABufferTLSF.Allocator.Allocate(pBuffer->m_RequiredDataSize, memoryRequirements.alignment);
+                Memory::TLSFBlock *pBlock = m_MABufferTLSF.Allocator.Allocate(pBuffer->m_DeviceDataLen, memoryRequirements.alignment);
 
                 pBuffer->m_pAllocatorData = pBlock;
-                pBuffer->m_DataOffset = pBlock->Offset;
+                pBuffer->m_DataOffset = pBlock->m_Offset;
 
                 pBuffer->m_pMemoryHandle = m_MABufferTLSF.pHeap;
 
                 break;
             }
 
-            default: break;
+            default: LOG_CRITICAL("Trying to allocate VKBuffer resource from invalid allocator."); break;
         }
     }
 
-    void VKAPI::SetAllocator(VKImage *pImage, AllocatorType targetAllocator)
+    void VKAPI::SetAllocator(VKImage *pImage, RHIAllocatorType targetAllocator)
     {
         ZoneScoped;
 
@@ -1364,21 +1339,21 @@ namespace lr::Graphics
 
         switch (targetAllocator)
         {
-            case AllocatorType::None:
+            case LR_RHI_ALLOCATOR_NONE:
             {
                 pImage->m_pMemoryHandle = CreateHeap(Memory::AlignUp(memoryRequirements.size, memoryRequirements.alignment), false);
 
                 break;
             }
 
-            case AllocatorType::ImageTLSF:
+            case LR_RHI_ALLOCATOR_IMAGE_TLSF:
             {
-                Memory::TLSFBlock *pBlock = m_MAImageTLSF.Allocator.Allocate(pImage->m_DataSize, memoryRequirements.alignment);
+                Memory::TLSFBlock *pBlock = m_MAImageTLSF.Allocator.Allocate(pImage->m_DataLen, memoryRequirements.alignment);
 
                 pImage->m_pAllocatorData = pBlock;
-                pImage->m_DataOffset = pBlock->Offset;
+                pImage->m_DataOffset = pBlock->m_Offset;
 
-                LOG_TRACE("TLSFAllocImage: size = {}, off = {}, block_addr = {}", pImage->m_DataSize, pImage->m_DataOffset, (void *)pBlock);
+                LOG_TRACE("TLSFAllocImage: size = {}, off = {}, block_addr = {}", pImage->m_DataLen, pImage->m_DataOffset, (void *)pBlock);
 
                 pImage->m_pMemoryHandle = m_MAImageTLSF.pHeap;
 
@@ -1396,7 +1371,7 @@ namespace lr::Graphics
         mat = XMMatrixOrthographicOffCenterLH(0.0, viewSize.x, 0.0, viewSize.y, zNear, zFar);
     }
 
-    bool VKAPI::IsFormatSupported(ResourceFormat format, VkColorSpaceKHR *pColorSpaceOut)
+    bool VKAPI::IsFormatSupported(ImageFormat format, VkColorSpaceKHR *pColorSpaceOut)
     {
         ZoneScoped;
 
@@ -1861,7 +1836,7 @@ namespace lr::Graphics
             {
                 u32 index = Memory::GetLSB(mask);
 
-                BaseCommandList *pList = commandPool.m_DirectLists[index];
+                CommandList *pList = commandPool.m_DirectLists[index];
                 API_VAR(VKCommandList, pList);
 
                 if (pAPI->IsFenceSignaled(pListVK->m_pFence))
@@ -1928,7 +1903,7 @@ namespace lr::Graphics
         VK_DESCRIPTOR_TYPE_MAX_ENUM,        // LR_DESCRIPTOR_TYPE_PUSH_CONSTANT
     };
 
-    VkFormat VKAPI::ToVKFormat(ResourceFormat format)
+    VkFormat VKAPI::ToVKFormat(ImageFormat format)
     {
         return kFormatLUT[(u32)format];
     }

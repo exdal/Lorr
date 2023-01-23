@@ -8,14 +8,14 @@ namespace lr::Graphics
 {
     struct Camera3DDesc
     {
-        XMFLOAT3 Position;
-        XMFLOAT2 ViewSize;
-        XMFLOAT3 ViewDirection;
-        XMFLOAT3 UpDirection;
+        XMFLOAT3 m_Position;
+        XMFLOAT2 m_ViewSize;
+        XMFLOAT3 m_ViewDirection;
+        XMFLOAT3 m_UpDirection;
 
-        f32 FOV;
-        f32 ZNear;
-        f32 ZFar;
+        f32 m_FOV;
+        f32 m_ZNear;
+        f32 m_ZFar;
     };
 
     struct Camera3D
@@ -51,11 +51,11 @@ namespace lr::Graphics
 
     struct Camera2DDesc
     {
-        XMFLOAT2 Position;
-        XMFLOAT2 ViewSize;
+        XMFLOAT2 m_Position;
+        XMFLOAT2 m_ViewSize;
 
-        f32 ZNear = 0.0;
-        f32 ZFar = 0.0;
+        f32 m_ZNear = 0.0;
+        f32 m_ZFar = 0.0;
     };
 
     struct Camera2D

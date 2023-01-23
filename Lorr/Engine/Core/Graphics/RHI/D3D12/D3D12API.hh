@@ -15,37 +15,37 @@ namespace lr::Graphics
 {
     struct D3D12DescriptorBindingDesc
     {
-        D3D12_DESCRIPTOR_HEAP_TYPE HeapType;
-        u32 Count;
+        D3D12_DESCRIPTOR_HEAP_TYPE m_HeapType;
+        u32 m_Count;
     };
 
     struct D3D12DescriptorHeap
     {
-        ID3D12DescriptorHeap *pHandle = nullptr;
-        u32 IncrementSize = 0;
-        u32 CPUOffset = 0;
-        u32 GPUOffset = 0;
+        ID3D12DescriptorHeap *m_pHandle = nullptr;
+        u32 m_IncrementSize = 0;
+        u32 m_CPUOffset = 0;
+        u32 m_GPUOffset = 0;
     };
 
     struct D3D12API : BaseAPI
     {
         bool Init(BaseWindow *pWindow, u32 width, u32 height, APIFlags flags) override;
 
-        void InitAllocators() override;
+        void InitAllocators();
 
         /// COMMAND ///
-        BaseCommandQueue *CreateCommandQueue(CommandListType type) override;
-        BaseCommandAllocator *CreateCommandAllocator(CommandListType type) override;
-        BaseCommandList *CreateCommandList(CommandListType type) override;
+        D3D12CommandQueue *CreateCommandQueue(CommandListType type);
+        D3D12CommandAllocator *CreateCommandAllocator(CommandListType type);
+        D3D12CommandList *CreateCommandList(CommandListType type);
 
-        void BeginCommandList(BaseCommandList *pList) override;
-        void EndCommandList(BaseCommandList *pList) override;
-        void ResetCommandAllocator(BaseCommandAllocator *pAllocator) override;
+        void BeginCommandList(CommandList *pList) override;
+        void EndCommandList(CommandList *pList) override;
+        void ResetCommandAllocator(CommandAllocator *pAllocator) override;
 
         // Executes a specific command list, taken from a `CommandListPool`.
         // Does not execute command list in flight. Cannot perform a present operation.
         // if `waitForFence` set true, does not push fence into wait thread, blocks current thread.
-        void ExecuteCommandList(BaseCommandList *pList, bool waitForFence) override;
+        void ExecuteCommandList(CommandList *pList, bool waitForFence) override;
 
         /// SYNC ///
         ID3D12Fence *CreateFence(u32 initialValue = 0);
@@ -54,14 +54,14 @@ namespace lr::Graphics
 
         /// PIPELINE ///
         ID3D12PipelineLibrary *CreatePipelineCache(u32 initialDataSize = 0, void *pInitialData = nullptr);
-        ID3D12RootSignature *SerializeRootSignature(PipelineLayoutSerializeDesc *pDesc, BasePipeline *pPipeline);
+        ID3D12RootSignature *SerializeRootSignature(PipelineLayoutSerializeDesc *pDesc, Pipeline *pPipeline);
 
-        BaseShader *CreateShader(ShaderStage stage, BufferReadStream &buf) override;
-        BaseShader *CreateShader(ShaderStage stage, eastl::string_view path) override;
-        void DeleteShader(BaseShader *pShader) override;
+        Shader *CreateShader(ShaderStage stage, BufferReadStream &buf) override;
+        Shader *CreateShader(ShaderStage stage, eastl::string_view path) override;
+        void DeleteShader(Shader *pShader) override;
 
-        BasePipeline *CreateGraphicsPipeline(GraphicsPipelineBuildInfo *pBuildInfo) override;
-        BasePipeline *CreateComputePipeline(ComputePipelineBuildInfo *pBuildInfo) override;
+        Pipeline *CreateGraphicsPipeline(GraphicsPipelineBuildInfo *pBuildInfo) override;
+        Pipeline *CreateComputePipeline(ComputePipelineBuildInfo *pBuildInfo) override;
 
         /// SWAPCHAIN ///
 
@@ -74,9 +74,9 @@ namespace lr::Graphics
         void EndFrame() override;
 
         /// RESOURCE ///
-        BaseDescriptorSet *CreateDescriptorSet(DescriptorSetDesc *pDesc) override;
-        void DeleteDescriptorSet(BaseDescriptorSet *pSet) override;
-        void UpdateDescriptorData(BaseDescriptorSet *pSet) override;
+        DescriptorSet *CreateDescriptorSet(DescriptorSetDesc *pDesc) override;
+        void DeleteDescriptorSet(DescriptorSet *pSet) override;
+        void UpdateDescriptorData(DescriptorSet *pSet, DescriptorSetDesc *pDesc) override;
 
         // `VKDescriptorBindingDesc::Type` represents descriptor type.
         // `VKDescriptorBindingDesc::ArraySize` represents descriptor count for that type.
@@ -88,26 +88,24 @@ namespace lr::Graphics
         // * Buffers * //
         ID3D12Heap *CreateHeap(u64 heapSize, bool mappable, D3D12_HEAP_FLAGS flags);
 
-        BaseBuffer *CreateBuffer(BufferDesc *pDesc, BufferData *pData) override;
-        void DeleteBuffer(BaseBuffer *pHandle) override;
-        void CreateBufferView(BaseBuffer *pBuffer);
+        Buffer *CreateBuffer(BufferDesc *pDesc) override;
+        void DeleteBuffer(Buffer *pHandle) override;
+        void CreateBufferView(Buffer *pBuffer);
 
-        void MapMemory(BaseBuffer *pBuffer, void *&pData) override;
-        void UnmapMemory(BaseBuffer *pBuffer) override;
-
-        BaseBuffer *ChangeAllocator(BaseCommandList *pList, BaseBuffer *pTarget, AllocatorType targetAllocator) override;
+        void MapMemory(Buffer *pBuffer, void *&pData) override;
+        void UnmapMemory(Buffer *pBuffer) override;
 
         // * Images * //
-        BaseImage *CreateImage(ImageDesc *pDesc, ImageData *pData) override;
-        void DeleteImage(BaseImage *pImage) override;
-        void CreateImageView(BaseImage *pImage);
+        Image *CreateImage(ImageDesc *pDesc) override;
+        void DeleteImage(Image *pImage) override;
+        void CreateImageView(Image *pImage);
 
-        void CreateSampler(SamplerDesc *pDesc, D3D12_STATIC_SAMPLER_DESC &samplerOut);
+        Sampler *CreateSampler(SamplerDesc *pDesc) override;
 
-        void SetAllocator(D3D12Buffer *pBuffer, D3D12_RESOURCE_DESC &resourceDesc, AllocatorType targetAllocator);
-        void SetAllocator(D3D12Image *pImage, D3D12_RESOURCE_DESC &resourceDesc, AllocatorType targetAllocator);
+        void SetAllocator(D3D12Buffer *pBuffer, D3D12_RESOURCE_DESC &resourceDesc, RHIAllocatorType targetAllocator);
+        void SetAllocator(D3D12Image *pImage, D3D12_RESOURCE_DESC &resourceDesc, RHIAllocatorType targetAllocator);
 
-        void BindMemory(BaseImage *pImage);
+        void BindMemory(Image *pImage);
 
         /// UTILITY
         void CalcOrthoProjection(XMMATRIX &mat, XMFLOAT2 viewSize, float zFar, float zNear) override;
@@ -119,7 +117,7 @@ namespace lr::Graphics
         // clang-format off
 
         /// Type conversions
-        static DXGI_FORMAT                      ToDXFormat(ResourceFormat format);
+        static DXGI_FORMAT                      ToDXFormat(ImageFormat format);
         static DXGI_FORMAT                      ToDXFormat(VertexAttribType format);
         static D3D_PRIMITIVE_TOPOLOGY           ToDXTopology(PrimitiveType type);
         static D3D12_CULL_MODE                  ToDXCullMode(CullMode mode);

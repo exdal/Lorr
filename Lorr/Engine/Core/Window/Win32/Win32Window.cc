@@ -6,10 +6,10 @@ namespace lr
     {
         ZoneScoped;
 
-        m_Width = desc.Width;
-        m_Height = desc.Height;
+        m_Width = desc.m_Width;
+        m_Height = desc.m_Height;
 
-        m_UsingMonitor = desc.CurrentMonitor;
+        m_UsingMonitor = desc.m_CurrentMonitor;
 
         InitDisplays();
 
@@ -24,11 +24,11 @@ namespace lr
 
         if (m_Width == 0 && m_Height == 0)
         {
-            m_Width = pCurrentDisplay->ResW;
-            m_Height = pCurrentDisplay->ResH;
+            m_Width = pCurrentDisplay->m_ResW;
+            m_Height = pCurrentDisplay->m_ResH;
         }
 
-        LOG_TRACE("Creating WIN32 window \"{}\"<{}, {}>", desc.Title, m_Width, m_Height);
+        LOG_TRACE("Creating WIN32 window \"{}\"<{}, {}>", desc.m_Title, m_Width, m_Height);
 
         WNDCLASSEX wc;
         ZeroMemory(&wc, sizeof(WNDCLASSEX));
@@ -49,12 +49,12 @@ namespace lr
         RegisterClassEx(&wc);
 
         DWORD style = (WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_POPUP | WS_VISIBLE);
-        u32 windowPosX = pCurrentDisplay->PosX;
-        u32 windowPosY = pCurrentDisplay->PosY;
+        u32 windowPosX = pCurrentDisplay->m_PosX;
+        u32 windowPosY = pCurrentDisplay->m_PosY;
         u32 windowWidth = 0;
         u32 windowHeight = 0;
 
-        if (desc.Flags & WindowFlags::Fullscreen)
+        if (desc.m_Flags & WindowFlags::Fullscreen)
         {
             style = WS_POPUP | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
 
@@ -72,22 +72,22 @@ namespace lr
                 LOG_ERROR("Fullscreen is not supported by the GPU.");
             }
 
-            windowWidth = pCurrentDisplay->ResW;
-            windowHeight = pCurrentDisplay->ResH;
+            windowWidth = pCurrentDisplay->m_ResW;
+            windowHeight = pCurrentDisplay->m_ResH;
 
             m_IsFullscreen = true;
         }
         else
         {
-            if (desc.Flags & WindowFlags::Borderless)
+            if (desc.m_Flags & WindowFlags::Borderless)
             {
                 style = WS_POPUP;
 
-                windowWidth = pCurrentDisplay->ResW;
-                windowHeight = pCurrentDisplay->ResH;
+                windowWidth = pCurrentDisplay->m_ResW;
+                windowHeight = pCurrentDisplay->m_ResH;
             }
 
-            if (desc.Flags & WindowFlags::Resizable)
+            if (desc.m_Flags & WindowFlags::Resizable)
                 style |= WS_MAXIMIZEBOX | WS_THICKFRAME;
 
             RECT rc = { 0, 0, (long)m_Width, (long)m_Height };
@@ -95,18 +95,18 @@ namespace lr
             windowWidth = rc.right - rc.left;
             windowHeight = rc.bottom - rc.top;
 
-            if (desc.Flags & WindowFlags::Centered)
+            if (desc.m_Flags & WindowFlags::Centered)
             {
-                windowPosX += (pCurrentDisplay->ResW / 2) - (windowWidth / 2);
-                windowPosY += (pCurrentDisplay->ResH / 2) - (windowHeight / 2);
+                windowPosX += (pCurrentDisplay->m_ResW / 2) - (windowWidth / 2);
+                windowPosY += (pCurrentDisplay->m_ResH / 2) - (windowHeight / 2);
             }
         }
 
         m_pHandle =
-            CreateWindowExA(0, wc.lpszClassName, desc.Title.data(), style, windowPosX, windowPosY, windowWidth, windowHeight, 0, 0, m_Instance, this);
+            CreateWindowExA(0, wc.lpszClassName, desc.m_Title.data(), style, windowPosX, windowPosY, windowWidth, windowHeight, 0, 0, m_Instance, this);
 
         i32 swFlags = SW_SHOW;
-        if (desc.Flags & WindowFlags::Maximized)
+        if (desc.m_Flags & WindowFlags::Maximized)
             swFlags = SW_SHOWMAXIMIZED;
 
         ShowWindow((HWND)m_pHandle, swFlags);
@@ -136,14 +136,14 @@ namespace lr
             EnumDisplayDevices(displayDevice.DeviceName, 0, &monitorName, 0);
 
             SystemMetrics::Display display;
-            display.Name = monitorName.DeviceString;
-            display.RefreshRate = devMode.dmDisplayFrequency;
-            display.ResW = devMode.dmPelsWidth;
-            display.ResH = devMode.dmPelsHeight;
-            display.PosX = devMode.dmPosition.x;
-            display.PosY = devMode.dmPosition.y;
+            display.m_Name = monitorName.DeviceString;
+            display.m_RefreshRate = devMode.dmDisplayFrequency;
+            display.m_ResW = devMode.dmPelsWidth;
+            display.m_ResH = devMode.dmPelsHeight;
+            display.m_PosX = devMode.dmPosition.x;
+            display.m_PosY = devMode.dmPosition.y;
 
-            m_SystemMetrics.Displays[currentDevice] = display;
+            m_SystemMetrics.m_Displays[currentDevice] = display;
         }
     }
 
@@ -179,74 +179,74 @@ namespace lr
             }
 
             case WM_LBUTTONDOWN:
-                eventData.Mouse = Input::LR_KEY_LMOUSE;
-                eventData.MouseState = Input::MouseState::Down;
+                eventData.m_Mouse = LR_KEY_LMOUSE;
+                eventData.m_MouseState = LR_MOUSE_STATE_DOWN;
                 eventMan.Push(WINDOW_EVENT_MOUSE_STATE, eventData);
                 break;
 
             case WM_LBUTTONUP:
-                eventData.Mouse = Input::LR_KEY_LMOUSE;
-                eventData.MouseState = Input::MouseState::Up;
+                eventData.m_Mouse = LR_KEY_LMOUSE;
+                eventData.m_MouseState = LR_MOUSE_STATE_UP;
                 eventMan.Push(WINDOW_EVENT_MOUSE_STATE, eventData);
                 break;
 
             case WM_LBUTTONDBLCLK:
-                eventData.Mouse = Input::LR_KEY_LMOUSE;
-                eventData.MouseState = Input::MouseState::DoubleClick;
+                eventData.m_Mouse = LR_KEY_LMOUSE;
+                eventData.m_MouseState = LR_MOUSE_STATE_DOUBLE_CLICK;
                 eventMan.Push(WINDOW_EVENT_MOUSE_STATE, eventData);
                 break;
 
             case WM_RBUTTONDOWN:
-                eventData.Mouse = Input::LR_KEY_RMOUSE;
-                eventData.MouseState = Input::MouseState::Down;
+                eventData.m_Mouse = LR_KEY_RMOUSE;
+                eventData.m_MouseState = LR_MOUSE_STATE_DOWN;
                 eventMan.Push(WINDOW_EVENT_MOUSE_STATE, eventData);
                 break;
 
             case WM_RBUTTONUP:
-                eventData.Mouse = Input::LR_KEY_RMOUSE;
-                eventData.MouseState = Input::MouseState::Up;
+                eventData.m_Mouse = LR_KEY_RMOUSE;
+                eventData.m_MouseState = LR_MOUSE_STATE_UP;
                 eventMan.Push(WINDOW_EVENT_MOUSE_STATE, eventData);
                 break;
 
             case WM_RBUTTONDBLCLK:
-                eventData.Mouse = Input::LR_KEY_RMOUSE;
-                eventData.MouseState = Input::MouseState::DoubleClick;
+                eventData.m_Mouse = LR_KEY_RMOUSE;
+                eventData.m_MouseState = LR_MOUSE_STATE_DOUBLE_CLICK;
                 eventMan.Push(WINDOW_EVENT_MOUSE_STATE, eventData);
                 break;
 
             case WM_MBUTTONDOWN:
-                eventData.Mouse = Input::LR_KEY_MMOUSE;
-                eventData.MouseState = Input::MouseState::Down;
+                eventData.m_Mouse = LR_KEY_MMOUSE;
+                eventData.m_MouseState = LR_MOUSE_STATE_DOWN;
                 eventMan.Push(WINDOW_EVENT_MOUSE_STATE, eventData);
                 break;
 
             case WM_MBUTTONUP:
-                eventData.Mouse = Input::LR_KEY_MMOUSE;
-                eventData.MouseState = Input::MouseState::Up;
+                eventData.m_Mouse = LR_KEY_MMOUSE;
+                eventData.m_MouseState = LR_MOUSE_STATE_UP;
                 eventMan.Push(WINDOW_EVENT_MOUSE_STATE, eventData);
                 break;
 
             case WM_MBUTTONDBLCLK:
-                eventData.Mouse = Input::LR_KEY_MMOUSE;
-                eventData.MouseState = Input::MouseState::DoubleClick;
+                eventData.m_Mouse = LR_KEY_MMOUSE;
+                eventData.m_MouseState = LR_MOUSE_STATE_DOUBLE_CLICK;
                 eventMan.Push(WINDOW_EVENT_MOUSE_STATE, eventData);
                 break;
 
             case WM_MOUSEMOVE:
-                eventData.MouseX = LOWORD(lParam);
-                eventData.MouseY = HIWORD(lParam);
+                eventData.m_MouseX = LOWORD(lParam);
+                eventData.m_MouseY = HIWORD(lParam);
                 eventMan.Push(WINDOW_EVENT_MOUSE_POSITION, eventData);
                 break;
 
             case WM_KEYDOWN:
-                eventData.Key = Input::LR_KEY_NONE;
-                eventData.KeyState = Input::KeyState::Down;
+                eventData.m_Key = LR_KEY_NONE;
+                eventData.m_KeyState = LR_KEY_STATE_DOWN;
                 eventMan.Push(WINDOW_EVENT_KEYBOARD_STATE, eventData);
                 break;
 
             case WM_KEYUP:
-                eventData.Key = Input::LR_KEY_NONE;
-                eventData.KeyState = Input::KeyState::Up;
+                eventData.m_Key = LR_KEY_NONE;
+                eventData.m_KeyState = LR_KEY_STATE_UP;
                 eventMan.Push(WINDOW_EVENT_KEYBOARD_STATE, eventData);
                 break;
 
@@ -259,8 +259,8 @@ namespace lr
 
                 pWindow->m_SizeEnded = true;
 
-                eventData.SizeWidth = rc.right;
-                eventData.SizeHeight = rc.bottom;
+                eventData.m_SizeWidth = rc.right;
+                eventData.m_SizeHeight = rc.bottom;
                 eventMan.Push(WINDOW_EVENT_RESIZE, eventData);
 
                 break;
@@ -270,8 +270,8 @@ namespace lr
             {
                 if (pWindow->m_SizeEnded && wParam != SIZE_MINIMIZED)
                 {
-                    eventData.SizeWidth = (u32)LOWORD(lParam);
-                    eventData.SizeHeight = (u32)HIWORD(lParam);
+                    eventData.m_SizeWidth = (u32)LOWORD(lParam);
+                    eventData.m_SizeHeight = (u32)HIWORD(lParam);
                     eventMan.Push(WINDOW_EVENT_RESIZE, eventData);
                 }
 

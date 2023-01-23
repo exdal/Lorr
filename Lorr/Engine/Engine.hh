@@ -14,10 +14,10 @@ namespace lr
 {
     struct EngineDesc
     {
-        Renderer::APIType TargetAPI;
-        Graphics::APIFlags TargetAPIFlags;
+        Renderer::APIType m_TargetAPI;
+        Graphics::APIFlags m_TargetAPIFlags;
 
-        WindowDesc Window;
+        WindowDesc m_WindowDesc;
     };
 
     struct Engine

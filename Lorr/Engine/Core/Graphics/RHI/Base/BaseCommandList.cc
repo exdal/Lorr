@@ -15,11 +15,11 @@ namespace lr::Graphics
         m_CopyListMask.store(UINT8_MAX, eastl::memory_order_release);
     }
 
-    BaseCommandList *CommandListPool::Acquire(CommandListType type)
+    CommandList *CommandListPool::Acquire(CommandListType type)
     {
         ZoneScoped;
 
-        BaseCommandList *pList = nullptr;
+        CommandList *pList = nullptr;
         u32 setBitPosition = 0;
 
         auto GetListFromMask = [&](auto &&maskAtomic, auto &&listArray) {
@@ -52,7 +52,7 @@ namespace lr::Graphics
         return pList;
     }
 
-    void CommandListPool::Release(BaseCommandList *pList)
+    void CommandListPool::Release(CommandList *pList)
     {
         ZoneScoped;
 
@@ -88,7 +88,7 @@ namespace lr::Graphics
         }
     }
 
-    void CommandListPool::SignalFence(BaseCommandList *pList)
+    void CommandListPool::SignalFence(CommandList *pList)
     {
         ZoneScoped;
 

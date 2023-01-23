@@ -18,56 +18,53 @@ namespace lr::Renderer
 
         /// CREATE TEXTURE
 
-        ImageDesc imageDesc = {};
-        imageDesc.Format = LR_RESOURCE_FORMAT_RGBA8F;
-        imageDesc.UsageFlags = LR_RESOURCE_USAGE_SHADER_RESOURCE | LR_RESOURCE_USAGE_TRANSFER_DST;
-        imageDesc.ArraySize = 1;
-        imageDesc.MipMapLevels = 1;
+        ImageDesc imageDesc = {
+            .m_UsageFlags = LR_RESOURCE_USAGE_SHADER_RESOURCE | LR_RESOURCE_USAGE_TRANSFER_DST,
+            .m_Format = LR_IMAGE_FORMAT_RGBA8F,
+            .m_TargetAllocator = LR_RHI_ALLOCATOR_IMAGE_TLSF,
+            .m_Width = (u16)fontW,
+            .m_Height = (u16)fontH,
+            .m_ArraySize = 1,
+            .m_MipMapLevels = 1,
+        };
 
-        ImageData imageData = {};
-        imageData.TargetAllocator = AllocatorType::ImageTLSF;
-        imageData.Width = fontW;
-        imageData.Height = fontH;
+        m_pFontImage = pAPI->CreateImage(&imageDesc);
 
-        m_pFontImage = pAPI->CreateImage(&imageDesc, &imageData);
+        BufferDesc imageBufferDesc = {
+            .m_UsageFlags = LR_RESOURCE_USAGE_TRANSFER_SRC | LR_RESOURCE_USAGE_HOST_VISIBLE,
+            .m_TargetAllocator = LR_RHI_ALLOCATOR_BUFFER_FRAMETIME,
+            .m_DataLen = (u32)(fontW * fontH * bpp),
+        };
 
-        BufferDesc imageBufferDesc = {};
-        imageBufferDesc.UsageFlags = LR_RESOURCE_USAGE_TRANSFER_SRC;
-
-        BufferData imageBufferData = {};
-        imageBufferData.Mappable = true;
-        imageBufferData.TargetAllocator = AllocatorType::BufferFrameTime;
-        imageBufferData.DataLen = fontW * fontH * bpp;
-
-        BaseBuffer *pImageBuffer = pAPI->CreateBuffer(&imageBufferDesc, &imageBufferData);
+        Buffer *pImageBuffer = pAPI->CreateBuffer(&imageBufferDesc);
 
         void *pMapData = nullptr;
         pAPI->MapMemory(pImageBuffer, pMapData);
-        memcpy(pMapData, pFontData, imageBufferData.DataLen);
+        memcpy(pMapData, pFontData, imageBufferDesc.m_DataLen);
         pAPI->UnmapMemory(pImageBuffer);
 
-        BaseCommandList *pList = pAPI->GetCommandList();
+        CommandList *pList = pAPI->GetCommandList();
         pAPI->BeginCommandList(pList);
 
         PipelineBarrier barrier = {
-            .CurrentUsage = LR_RESOURCE_USAGE_SHADER_RESOURCE,
-            .CurrentStage = LR_PIPELINE_STAGE_PIXEL_SHADER,
-            .CurrentAccess = LR_PIPELINE_ACCESS_SHADER_READ,
-            .NextUsage = LR_RESOURCE_USAGE_TRANSFER_DST,
-            .NextStage = LR_PIPELINE_STAGE_HOST,
-            .NextAccess = LR_PIPELINE_ACCESS_HOST_READ,
+            .m_CurrentUsage = LR_RESOURCE_USAGE_SHADER_RESOURCE,
+            .m_CurrentStage = LR_PIPELINE_STAGE_PIXEL_SHADER,
+            .m_CurrentAccess = LR_PIPELINE_ACCESS_SHADER_READ,
+            .m_NextUsage = LR_RESOURCE_USAGE_TRANSFER_DST,
+            .m_NextStage = LR_PIPELINE_STAGE_HOST,
+            .m_NextAccess = LR_PIPELINE_ACCESS_HOST_READ,
         };
         pList->SetImageBarrier(m_pFontImage, &barrier);
 
         pList->CopyBuffer(pImageBuffer, m_pFontImage);
 
         barrier = {
-            .CurrentUsage = LR_RESOURCE_USAGE_TRANSFER_DST,
-            .CurrentStage = LR_PIPELINE_STAGE_HOST,
-            .CurrentAccess = LR_PIPELINE_ACCESS_HOST_READ,
-            .NextUsage = LR_RESOURCE_USAGE_SHADER_RESOURCE,
-            .NextStage = LR_PIPELINE_STAGE_PIXEL_SHADER,
-            .NextAccess = LR_PIPELINE_ACCESS_SHADER_READ,
+            .m_CurrentUsage = LR_RESOURCE_USAGE_TRANSFER_DST,
+            .m_CurrentStage = LR_PIPELINE_STAGE_HOST,
+            .m_CurrentAccess = LR_PIPELINE_ACCESS_HOST_READ,
+            .m_NextUsage = LR_RESOURCE_USAGE_SHADER_RESOURCE,
+            .m_NextStage = LR_PIPELINE_STAGE_PIXEL_SHADER,
+            .m_NextAccess = LR_PIPELINE_ACCESS_SHADER_READ,
         };
         pList->SetImageBarrier(m_pFontImage, &barrier);
 
@@ -79,39 +76,42 @@ namespace lr::Renderer
         /// CREATE PIPELINE
 
         SamplerDesc samplerDesc = {};
-        samplerDesc.MinFilter = LR_FILTERING_LINEAR;
-        samplerDesc.MagFilter = LR_FILTERING_LINEAR;
-        samplerDesc.MipFilter = LR_FILTERING_NEAREST;
-        samplerDesc.AddressU = LR_TEXTURE_ADDRESS_WRAP;
-        samplerDesc.AddressV = LR_TEXTURE_ADDRESS_WRAP;
-        samplerDesc.MaxLOD = 0;
+        samplerDesc.m_MinFilter = LR_FILTERING_LINEAR;
+        samplerDesc.m_MagFilter = LR_FILTERING_LINEAR;
+        samplerDesc.m_MipFilter = LR_FILTERING_NEAREST;
+        samplerDesc.m_AddressU = LR_TEXTURE_ADDRESS_WRAP;
+        samplerDesc.m_AddressV = LR_TEXTURE_ADDRESS_WRAP;
+        samplerDesc.m_MaxLOD = 0;
 
-        BaseShader *pVertexShader = pAPI->CreateShader(LR_SHADER_STAGE_VERTEX, "imgui.v.hlsl");
-        BaseShader *pPixelShader = pAPI->CreateShader(LR_SHADER_STAGE_PIXEL, "imgui.p.hlsl");
+        Sampler *pSampler = pAPI->CreateSampler(&samplerDesc);
+
+        Shader *pVertexShader = pAPI->CreateShader(LR_SHADER_STAGE_VERTEX, "imgui.v.hlsl");
+        Shader *pPixelShader = pAPI->CreateShader(LR_SHADER_STAGE_PIXEL, "imgui.p.hlsl");
 
         DescriptorSetDesc descriptorDesc = {};
-        descriptorDesc.BindingCount = 1;
+        descriptorDesc.m_BindingCount = 1;
 
-        descriptorDesc.pBindings[0] = {
-            .BindingID = 0,
-            .Type = LR_DESCRIPTOR_TYPE_SHADER_RESOURCE,
-            .TargetShader = LR_SHADER_STAGE_PIXEL,
-            .ArraySize = 1,
-            .pImage = m_pFontImage,
+        descriptorDesc.m_pBindings[0] = {
+            .m_BindingID = 0,
+            .m_Type = LR_DESCRIPTOR_TYPE_SHADER_RESOURCE,
+            .m_TargetShader = LR_SHADER_STAGE_PIXEL,
+            .m_ArraySize = 1,
+            .m_pImage = m_pFontImage,
         };
 
         m_pDescriptorSet = pAPI->CreateDescriptorSet(&descriptorDesc);
-        pAPI->UpdateDescriptorData(m_pDescriptorSet);
+        pAPI->UpdateDescriptorData(m_pDescriptorSet, &descriptorDesc);
 
-        descriptorDesc.pBindings[0] = {
-            .BindingID = 0,
-            .Type = LR_DESCRIPTOR_TYPE_SAMPLER,
-            .TargetShader = LR_SHADER_STAGE_PIXEL,
-            .ArraySize = 1,
-            .pSamplerInfo = &samplerDesc,
+        descriptorDesc.m_pBindings[0] = {
+            .m_BindingID = 0,
+            .m_Type = LR_DESCRIPTOR_TYPE_SAMPLER,
+            .m_TargetShader = LR_SHADER_STAGE_PIXEL,
+            .m_ArraySize = 1,
+            .m_pSampler = pSampler,
         };
 
         m_pSamplerSet = pAPI->CreateDescriptorSet(&descriptorDesc);
+        pAPI->UpdateDescriptorData(m_pSamplerSet, &descriptorDesc);
 
         InputLayout inputLayout = {
             { VertexAttribType::Vec2, "POSITION" },
@@ -120,40 +120,39 @@ namespace lr::Renderer
         };
 
         PipelineAttachment colorAttachment = {
-            .Format = pAPI->GetSwapChain()->m_ImageFormat,
-            .BlendEnable = true,
-            .WriteMask = LR_COLOR_MASK_R | LR_COLOR_MASK_G | LR_COLOR_MASK_B | LR_COLOR_MASK_A,
-            .SrcBlend = LR_BLEND_FACTOR_SRC_ALPHA,
-            .DstBlend = LR_BLEND_FACTOR_INV_SRC_ALPHA,
-            .SrcBlendAlpha = LR_BLEND_FACTOR_ONE,
-            .DstBlendAlpha = LR_BLEND_FACTOR_SRC_ALPHA,
-            .ColorBlendOp = LR_BLEND_OP_ADD,
-            .AlphaBlendOp = LR_BLEND_OP_ADD,
+            .m_Format = pAPI->GetSwapChain()->m_ImageFormat,
+            .m_BlendEnable = true,
+            .m_WriteMask = LR_COLOR_MASK_R | LR_COLOR_MASK_G | LR_COLOR_MASK_B | LR_COLOR_MASK_A,
+            .m_SrcBlend = LR_BLEND_FACTOR_SRC_ALPHA,
+            .m_DstBlend = LR_BLEND_FACTOR_INV_SRC_ALPHA,
+            .m_SrcBlendAlpha = LR_BLEND_FACTOR_ONE,
+            .m_DstBlendAlpha = LR_BLEND_FACTOR_SRC_ALPHA,
+            .m_ColorBlendOp = LR_BLEND_OP_ADD,
+            .m_AlphaBlendOp = LR_BLEND_OP_ADD,
         };
 
         PushConstantDesc cameraConstant = {
-            .Stage = LR_SHADER_STAGE_VERTEX,
-            .Offset = 0,
-            .Size = sizeof(XMMATRIX),
+            .m_Stage = LR_SHADER_STAGE_VERTEX,
+            .m_Offset = 0,
+            .m_Size = sizeof(XMMATRIX),
         };
 
         GraphicsPipelineBuildInfo buildInfo = {
-            .RenderTargetCount = 1,
-            .pRenderTargets = { colorAttachment },
-            .ShaderCount = 2,
-            .ppShaders = { pVertexShader, pPixelShader },
-            .DescriptorSetCount = 1,
-            .ppDescriptorSets = { m_pDescriptorSet },
-            .pSamplerDescriptorSet = m_pSamplerSet,
-            .PushConstantCount = 1,
-            .pPushConstants = { cameraConstant },
-            .pInputLayout = &inputLayout,
-            .SetFillMode = LR_FILL_MODE_FILL,
-            .SetCullMode = LR_CULL_MODE_NONE,
-            .EnableDepthWrite = false,
-            .EnableDepthTest = false,
-            .DepthCompareOp = LR_COMPARE_OP_NEVER,
-            .MultiSampleBitCount = 1,
+            .m_RenderTargetCount = 1,
+            .m_pRenderTargets = { colorAttachment },
+            .m_ShaderCount = 2,
+            .m_ppShaders = { pVertexShader, pPixelShader },
+            .m_DescriptorSetCount = 2,
+            .m_ppDescriptorSets = { m_pDescriptorSet, m_pSamplerSet },
+            .m_PushConstantCount = 1,
+            .m_pPushConstants = { cameraConstant },
+            .m_pInputLayout = &inputLayout,
+            .m_SetFillMode = LR_FILL_MODE_FILL,
+            .m_SetCullMode = LR_CULL_MODE_NONE,
+            .m_EnableDepthWrite = false,
+            .m_EnableDepthTest = false,
+            .m_DepthCompareOp = LR_COMPARE_OP_NEVER,
+            .m_MultiSampleBitCount = 1,
         };
 
         m_pPipeline = pAPI->CreateGraphicsPipeline(&buildInfo);
@@ -164,7 +163,7 @@ namespace lr::Renderer
         ZoneScoped;
 
         // TODO: Actual UI pass with it's own render target
-        BaseImage *pImage = pAPI->GetSwapChain()->GetCurrentImage();
+        Image *pImage = pAPI->GetSwapChain()->GetCurrentImage();
 
         ImDrawData *pDrawData = ImGui::GetDrawData();
 
@@ -177,10 +176,7 @@ namespace lr::Renderer
         if (m_VertexCount < pDrawData->TotalVtxCount || m_IndexCount < pDrawData->TotalIdxCount)
         {
             BufferDesc bufferDesc = {};
-            BufferData bufferData = {};
-
-            bufferData.Mappable = true;
-            bufferData.TargetAllocator = AllocatorType::BufferFrameTime;
+            bufferDesc.m_TargetAllocator = LR_RHI_ALLOCATOR_BUFFER_FRAMETIME;
 
             // Vertex buffer
 
@@ -189,11 +185,11 @@ namespace lr::Renderer
             if (m_pVertexBuffer)
                 pAPI->DeleteBuffer(m_pVertexBuffer);
 
-            bufferDesc.UsageFlags = LR_RESOURCE_USAGE_VERTEX_BUFFER;
-            bufferData.Stride = sizeof(ImDrawVert);
-            bufferData.DataLen = m_VertexCount * sizeof(ImDrawVert);
+            bufferDesc.m_UsageFlags = LR_RESOURCE_USAGE_VERTEX_BUFFER | LR_RESOURCE_USAGE_HOST_VISIBLE;
+            bufferDesc.m_Stride = sizeof(ImDrawVert);
+            bufferDesc.m_DataLen = m_VertexCount * sizeof(ImDrawVert);
 
-            m_pVertexBuffer = pAPI->CreateBuffer(&bufferDesc, &bufferData);
+            m_pVertexBuffer = pAPI->CreateBuffer(&bufferDesc);
 
             // Index buffer
 
@@ -202,11 +198,11 @@ namespace lr::Renderer
             if (m_pIndexBuffer)
                 pAPI->DeleteBuffer(m_pIndexBuffer);
 
-            bufferDesc.UsageFlags = LR_RESOURCE_USAGE_INDEX_BUFFER;
-            bufferData.Stride = sizeof(ImDrawIdx);
-            bufferData.DataLen = m_IndexCount * sizeof(ImDrawIdx);
+            bufferDesc.m_UsageFlags = LR_RESOURCE_USAGE_INDEX_BUFFER | LR_RESOURCE_USAGE_HOST_VISIBLE;
+            bufferDesc.m_Stride = sizeof(ImDrawIdx);
+            bufferDesc.m_DataLen = m_IndexCount * sizeof(ImDrawIdx);
 
-            m_pIndexBuffer = pAPI->CreateBuffer(&bufferDesc, &bufferData);
+            m_pIndexBuffer = pAPI->CreateBuffer(&bufferDesc);
         }
 
         // Map memory
@@ -238,19 +234,19 @@ namespace lr::Renderer
         pAPI->UnmapMemory(m_pIndexBuffer);
         mapDataOffset = 0;
 
-        BaseCommandList *pList = pAPI->GetCommandList();
+        CommandList *pList = pAPI->GetCommandList();
         pAPI->BeginCommandList(pList);
 
-        CommandListAttachment attachment;
-        attachment.pHandle = pImage;
-        attachment.LoadOp = LR_ATTACHMENT_OP_CLEAR;
-        attachment.StoreOp = LR_ATTACHMENT_OP_STORE;
-        attachment.ClearVal = ClearValue({ 0.0, 0.0, 0.0, 1.0 });
+        CommandListAttachment attachment = {};
+        attachment.m_pHandle = pImage;
+        attachment.m_LoadOp = LR_ATTACHMENT_OP_CLEAR;
+        attachment.m_StoreOp = LR_ATTACHMENT_OP_STORE;
+        attachment.m_ClearVal = ClearValue({ 0.0, 0.0, 0.0, 1.0 });
 
         CommandListBeginDesc beginDesc = {};
-        beginDesc.RenderArea = { 0, 0, (u32)pDrawData->DisplaySize.x, (u32)pDrawData->DisplaySize.y };
-        beginDesc.ColorAttachmentCount = 1;
-        beginDesc.pColorAttachments[0] = attachment;
+        beginDesc.m_RenderArea = { 0, 0, (u32)pDrawData->DisplaySize.x, (u32)pDrawData->DisplaySize.y };
+        beginDesc.m_ColorAttachmentCount = 1;
+        beginDesc.m_pColorAttachments[0] = attachment;
         pList->BeginPass(&beginDesc);
 
         pList->SetGraphicsPipeline(m_pPipeline);
@@ -288,7 +284,7 @@ namespace lr::Renderer
 
                 pList->SetScissors(0, clipMin.x, clipMin.y, clipMax.x, clipMax.y);
 
-                BaseDescriptorSet *pSet = (BaseDescriptorSet *)cmd.TextureId;
+                DescriptorSet *pSet = (DescriptorSet *)cmd.TextureId;
                 if (!pSet)
                     pSet = m_pDescriptorSet;
 
@@ -306,7 +302,7 @@ namespace lr::Renderer
         pList->EndPass();
 
         pAPI->EndCommandList(pList);
-        pAPI->ExecuteCommandList(pList, false);
+        pAPI->ExecuteCommandList(pList, true);
     }
 
 }  // namespace lr::Renderer

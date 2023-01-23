@@ -62,29 +62,26 @@ namespace lr::Graphics
         ZoneScoped;
 
         ImageDesc imageDesc;
-        imageDesc.Format = m_ImageFormat;
-
-        ImageData imageData;
-        imageData.Width = m_Width;
-        imageData.Height = m_Height;
+        imageDesc.m_Format = m_ImageFormat;
+        imageDesc.m_Width = m_Width;
+        imageDesc.m_Height = m_Height;
 
         for (u32 i = 0; i < m_FrameCount; i++)
         {
             D3D12SwapChainFrame &frame = m_pFrames[i];
-            D3D12Image &currentImage = frame.Image;
+            D3D12Image &currentImage = frame.m_Image;
 
             // Swapchain already gives us the image, so we don't need to create it again
             m_pHandle->GetBuffer(i, IID_PPV_ARGS(&currentImage.m_pHandle));
 
             currentImage.m_Width = m_Width;
             currentImage.m_Height = m_Height;
-            currentImage.m_DataSize = ~0;
-            currentImage.m_UsingMip = 0;
-            currentImage.m_TotalMips = 1;
+            currentImage.m_DataLen = ~0;
+            currentImage.m_MipMapLevels = 1;
             currentImage.m_UsageFlags = LR_RESOURCE_USAGE_PRESENT;
             currentImage.m_Format = m_ImageFormat;
-            currentImage.m_RequiredDataSize = ~0;
-            currentImage.m_AllocatorType = AllocatorType::Count;
+            currentImage.m_DeviceDataLen = ~0;
+            currentImage.m_TargetAllocator = LR_RHI_ALLOCATOR_COUNT;
 
             pAPI->CreateImageView(&currentImage);
         }
@@ -92,11 +89,11 @@ namespace lr::Graphics
         m_CurrentFrame = 0;
     }
 
-    BaseImage *D3D12SwapChain::GetCurrentImage()
+    Image *D3D12SwapChain::GetCurrentImage()
     {
         ZoneScoped;
 
-        return &m_pFrames[m_CurrentFrame].Image;
+        return &m_pFrames[m_CurrentFrame].m_Image;
     }
 
     D3D12SwapChainFrame *D3D12SwapChain::GetCurrentFrame()
@@ -128,7 +125,7 @@ namespace lr::Graphics
         for (u32 i = 0; i < m_FrameCount; i++)
         {
             D3D12SwapChainFrame &frame = m_pFrames[i];
-            pAPI->DeleteImage(&frame.Image);
+            pAPI->DeleteImage(&frame.m_Image);
         }
     }
 

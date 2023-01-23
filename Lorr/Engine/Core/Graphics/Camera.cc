@@ -6,14 +6,14 @@ namespace lr::Graphics
     {
         ZoneScoped;
 
-        m_Position = XMVectorSet(pDesc->Position.x, pDesc->Position.y, pDesc->Position.z, 0.0);
-        m_ViewDirection = XMVectorSet(pDesc->ViewDirection.x, pDesc->ViewDirection.y, pDesc->ViewDirection.z, 0.0);
-        m_UpDirection = XMVectorSet(pDesc->UpDirection.x, pDesc->UpDirection.y, pDesc->UpDirection.z, 0.0);
+        m_Position = XMVectorSet(pDesc->m_Position.x, pDesc->m_Position.y, pDesc->m_Position.z, 0.0);
+        m_ViewDirection = XMVectorSet(pDesc->m_ViewDirection.x, pDesc->m_ViewDirection.y, pDesc->m_ViewDirection.z, 0.0);
+        m_UpDirection = XMVectorSet(pDesc->m_UpDirection.x, pDesc->m_UpDirection.y, pDesc->m_UpDirection.z, 0.0);
 
-        m_ViewSize = pDesc->ViewSize;
-        m_FOV = pDesc->FOV;
-        m_ZNear = pDesc->ZNear;
-        m_ZFar = pDesc->ZFar;
+        m_ViewSize = pDesc->m_ViewSize;
+        m_FOV = pDesc->m_FOV;
+        m_ZNear = pDesc->m_ZNear;
+        m_ZFar = pDesc->m_ZFar;
 
         m_Aspect = m_ViewSize.x / m_ViewSize.y;
         m_RightDirection = XMVector3Normalize(XMVector3Cross(m_ViewDirection, XMVectorSet(1.0, 0.0, 0.0, 0.0)));
@@ -80,11 +80,11 @@ namespace lr::Graphics
     {
         ZoneScoped;
 
-        m_Position = XMVectorSet(pDesc->Position.x, pDesc->Position.y, 0.0, 1.0);
-        m_ViewSize = pDesc->ViewSize;
+        m_Position = XMVectorSet(pDesc->m_Position.x, pDesc->m_Position.y, 0.0, 1.0);
+        m_ViewSize = pDesc->m_ViewSize;
 
-        m_ZNear = pDesc->ZNear;
-        m_ZFar = pDesc->ZFar;
+        m_ZNear = pDesc->m_ZNear;
+        m_ZFar = pDesc->m_ZFar;
     }
 
     void Camera2D::CalculateView()

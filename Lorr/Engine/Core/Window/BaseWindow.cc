@@ -9,7 +9,7 @@ namespace lr
         if (monitor >= SystemMetrics::kMaxSupportedDisplay)
             return nullptr;
 
-        return &m_SystemMetrics.Displays[monitor];
+        return &m_SystemMetrics.m_Displays[monitor];
     }
 
     bool BaseWindow::ShouldClose()

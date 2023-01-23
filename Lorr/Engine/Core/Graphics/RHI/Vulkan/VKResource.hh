@@ -10,7 +10,7 @@
 
 namespace lr::Graphics
 {
-    struct VKImage : BaseImage
+    struct VKImage : Image
     {
         VkImage m_pHandle = nullptr;
         VkImageView m_pViewHandle = nullptr;
@@ -20,7 +20,7 @@ namespace lr::Graphics
         VkImageLayout m_Layout = VK_IMAGE_LAYOUT_UNDEFINED;
     };
 
-    struct VKBuffer : BaseBuffer
+    struct VKBuffer : Buffer
     {
         VkBuffer m_pHandle = nullptr;
         VkBufferView m_pViewHandle = nullptr;
@@ -28,10 +28,15 @@ namespace lr::Graphics
         VkDeviceMemory m_pMemoryHandle = nullptr;
     };
 
-    struct VKDescriptorSet : BaseDescriptorSet
+    struct VKSampler : Sampler
     {
-        VkDescriptorSet pHandle = nullptr;
-        VkDescriptorSetLayout pSetLayoutHandle = nullptr;
+        VkSampler m_pHandle = nullptr;
+    };
+
+    struct VKDescriptorSet : DescriptorSet
+    {
+        VkDescriptorSet m_pHandle = nullptr;
+        VkDescriptorSetLayout m_pSetLayoutHandle = nullptr;
     };
 
 }  // namespace lr::Graphics

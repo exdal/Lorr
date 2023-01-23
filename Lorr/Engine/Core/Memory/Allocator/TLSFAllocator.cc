@@ -19,9 +19,9 @@ namespace lr::Memory
         /// CREATE INITIAL BLOCK ///
 
         TLSFBlock *pHeadBlock = AllocateInternalBlock();
-        pHeadBlock->pPrevPhysical = pHeadBlock;
-        pHeadBlock->pNextPhysical = nullptr;
-        pHeadBlock->Offset = 0;
+        pHeadBlock->m_pPrevPhysical = pHeadBlock;
+        pHeadBlock->m_pNextPhysical = nullptr;
+        pHeadBlock->m_Offset = 0;
 
         AddFreeBlock(pHeadBlock);
     }
@@ -43,7 +43,7 @@ namespace lr::Memory
         if (!pBlock)
             return false;
 
-        if (!pBlock->IsFree && GetPhysicalSize(pBlock) < size)
+        if (!pBlock->m_IsFree && GetPhysicalSize(pBlock) < size)
             return false;
 
         return true;
@@ -60,7 +60,7 @@ namespace lr::Memory
 
         if (pBlock)
         {
-            assert(pBlock->IsFree && "The block found is not free.");
+            assert(pBlock->m_IsFree && "The block found is not free.");
             assert(GetPhysicalSize(pBlock) >= size && "Found block doesn't match with the aligned size.");
 
             RemoveFreeBlock(pBlock);
@@ -82,10 +82,10 @@ namespace lr::Memory
     {
         ZoneScoped;
 
-        TLSFBlock *pPrev = pBlock->pPrevPhysical;
-        TLSFBlock *pNext = pBlock->pNextPhysical;
+        TLSFBlock *pPrev = pBlock->m_pPrevPhysical;
+        TLSFBlock *pNext = pBlock->m_pNextPhysical;
 
-        if (pPrev && pPrev->IsFree)
+        if (pPrev && pPrev->m_IsFree)
         {
             RemoveFreeBlock(pPrev);
             MergeBlock(pPrev, pBlock);
@@ -93,7 +93,7 @@ namespace lr::Memory
             pBlock = pPrev;
         }
 
-        if (pNext && pNext->IsFree)
+        if (pNext && pNext->m_IsFree)
         {
             RemoveFreeBlock(pNext);
             MergeBlock(pBlock, pNext);
@@ -129,12 +129,12 @@ namespace lr::Memory
 
         TLSFBlock *pIndexBlock = m_ppBlocks[firstIndex][secondIndex];
 
-        pBlock->pNextFree = pIndexBlock;
-        pBlock->pPrevFree = nullptr;
-        pBlock->IsFree = true;
+        pBlock->m_pNextFree = pIndexBlock;
+        pBlock->m_pPrevFree = nullptr;
+        pBlock->m_IsFree = true;
 
         if (pIndexBlock)
-            pIndexBlock->pPrevFree = pBlock;
+            pIndexBlock->m_pPrevFree = pBlock;
 
         m_ppBlocks[firstIndex][secondIndex] = pBlock;
 
@@ -176,14 +176,14 @@ namespace lr::Memory
         u32 firstIndex = GetFirstIndex(size);
         u32 secondIndex = GetSecondIndex(firstIndex, size);
 
-        TLSFBlock *pPrevBlock = pBlock->pPrevFree;
-        TLSFBlock *pNextBlock = pBlock->pNextFree;
+        TLSFBlock *pPrevBlock = pBlock->m_pPrevFree;
+        TLSFBlock *pNextBlock = pBlock->m_pNextFree;
 
         if (pNextBlock)
-            pNextBlock->pPrevFree = pPrevBlock;
+            pNextBlock->m_pPrevFree = pPrevBlock;
 
         if (pPrevBlock)
-            pPrevBlock->pNextFree = pNextBlock;
+            pPrevBlock->m_pNextFree = pNextBlock;
 
         // pBlock->IsFree = false;
 
@@ -216,17 +216,17 @@ namespace lr::Memory
         {
             pNewBlock = AllocateInternalBlock();
 
-            TLSFBlock *pNextBlock = pBlock->pNextPhysical;
-            u64 offset = pBlock->Offset;
+            TLSFBlock *pNextBlock = pBlock->m_pNextPhysical;
+            u64 offset = pBlock->m_Offset;
 
-            pBlock->pNextPhysical = pNewBlock;
+            pBlock->m_pNextPhysical = pNewBlock;
 
-            pNewBlock->Offset = offset + size;
-            pNewBlock->pNextPhysical = pNextBlock;
-            pNewBlock->pPrevPhysical = pBlock;
+            pNewBlock->m_Offset = offset + size;
+            pNewBlock->m_pNextPhysical = pNextBlock;
+            pNewBlock->m_pPrevPhysical = pBlock;
 
             if (pNextBlock)
-                pNextBlock->pPrevPhysical = pNewBlock;
+                pNextBlock->m_pPrevPhysical = pNewBlock;
         }
 
         return pNewBlock;
@@ -236,9 +236,9 @@ namespace lr::Memory
     {
         ZoneScoped;
 
-        TLSFBlock *pNextSource = pSource->pNextPhysical;
-        pTarget->pNextPhysical = pNextSource;
-        pNextSource->pPrevPhysical = pTarget;
+        TLSFBlock *pNextSource = pSource->m_pNextPhysical;
+        pTarget->m_pNextPhysical = pNextSource;
+        pNextSource->m_pPrevPhysical = pTarget;
 
         FreeInternalBlock(pSource);
     }
@@ -247,7 +247,7 @@ namespace lr::Memory
     {
         ZoneScoped;
 
-        return pBlock->pNextPhysical ? pBlock->pNextPhysical->Offset - pBlock->Offset : m_Size - pBlock->Offset;
+        return pBlock->m_pNextPhysical ? pBlock->m_pNextPhysical->m_Offset - pBlock->m_Offset : m_Size - pBlock->m_Offset;
     }
 
     TLSFBlock *TLSFAllocatorView::AllocateInternalBlock()
@@ -257,7 +257,7 @@ namespace lr::Memory
         if (m_pFrontBlock)
         {
             TLSFBlock *pBlock = m_pFrontBlock;
-            m_pFrontBlock = pBlock->pNextPhysical;
+            m_pFrontBlock = pBlock->m_pNextPhysical;
 
             return pBlock;
         }
@@ -275,7 +275,7 @@ namespace lr::Memory
         }
         else
         {
-            pBlock->pNextPhysical = m_pFrontBlock;
+            pBlock->m_pNextPhysical = m_pFrontBlock;
             m_pFrontBlock = pBlock;
         }
     }
@@ -284,12 +284,12 @@ namespace lr::Memory
     {
         ZoneScoped;
 
-        m_View.Init(desc.DataSize, desc.BlockCount);
-        m_pData = (u8 *)desc.pInitialData;
+        m_View.Init(desc.m_DataSize, desc.m_BlockCount);
+        m_pData = (u8 *)desc.m_pInitialData;
         m_SelfAllocated = !(bool)m_pData;
 
         if (!m_pData)
-            m_pData = Memory::Allocate<u8>(desc.DataSize);
+            m_pData = Memory::Allocate<u8>(desc.m_DataSize);
     }
 
     void TLSFAllocator::Delete()
@@ -313,18 +313,18 @@ namespace lr::Memory
     {
         ZoneScoped;
 
-        TLSFBlock *pBlock = m_View.Allocate(info.Size, info.Alignment);
+        TLSFBlock *pBlock = m_View.Allocate(info.m_Size, info.m_Alignment);
         if (!pBlock)
             return false;
 
-        info.pAllocatorData = pBlock;
+        info.m_pAllocatorData = pBlock;
 
-        void *pData = m_pData + pBlock->Offset;
+        void *pData = m_pData + pBlock->m_Offset;
 
-        if (!info.pData)
-            info.pData = pData;
+        if (!info.m_pData)
+            info.m_pData = pData;
         else
-            memcpy(pData, info.pData, info.Size);
+            memcpy(pData, info.m_pData, info.m_Size);
 
         return true;
     }

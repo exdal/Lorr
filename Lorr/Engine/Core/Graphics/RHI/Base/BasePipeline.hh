@@ -14,23 +14,23 @@ namespace lr::Graphics
 {
     struct PipelineAttachment
     {
-        ResourceFormat Format;
+        ImageFormat m_Format;
 
         union
         {
             u64 _u_data = {};
             struct
             {
-                ColorMask WriteMask : 4;
-                u32 BlendEnable : 1;
+                ColorMask m_WriteMask : 4;
+                u32 m_BlendEnable : 1;
 
-                BlendFactor SrcBlend : 5;
-                BlendFactor DstBlend : 5;
-                BlendOp ColorBlendOp : 4;
+                BlendFactor m_SrcBlend : 5;
+                BlendFactor m_DstBlend : 5;
+                BlendOp m_ColorBlendOp : 4;
 
-                BlendFactor SrcBlendAlpha : 5;
-                BlendFactor DstBlendAlpha : 5;
-                BlendOp AlphaBlendOp : 4;
+                BlendFactor m_SrcBlendAlpha : 5;
+                BlendFactor m_DstBlendAlpha : 5;
+                BlendOp m_AlphaBlendOp : 4;
             };
         };
     };
@@ -42,19 +42,19 @@ namespace lr::Graphics
             u32 _u_data = 0;
             struct
             {
-                StencilOp Pass : 3;
-                StencilOp Fail : 3;
-                CompareOp DepthFail : 3;
-                CompareOp CompareFunc : 3;
+                StencilOp m_Pass : 3;
+                StencilOp m_Fail : 3;
+                CompareOp m_DepthFail : 3;
+                CompareOp m_CompareFunc : 3;
             };
         };
     };
 
     struct PushConstantDesc
     {
-        ShaderStage Stage = LR_SHADER_STAGE_NONE;
-        u32 Offset = 0;
-        u32 Size = 0;
+        ShaderStage m_Stage = LR_SHADER_STAGE_NONE;
+        u32 m_Offset = 0;
+        u32 m_Size = 0;
     };
 
     /// Some notes:
@@ -62,61 +62,60 @@ namespace lr::Graphics
     // * MSAA is not actually supported
     struct GraphicsPipelineBuildInfo
     {
-        u32 RenderTargetCount = 0;
-        PipelineAttachment pRenderTargets[LR_MAX_RENDER_TARGET_PER_PASS] = {};
-        PipelineAttachment DepthAttachment = {};
+        u32 m_RenderTargetCount = 0;
+        PipelineAttachment m_pRenderTargets[LR_MAX_RENDER_TARGET_PER_PASS] = {};
+        PipelineAttachment m_DepthAttachment = {};
 
-        u32 ShaderCount = 0;
-        BaseShader *ppShaders[LR_SHADER_STAGE_COUNT] = {};
+        u32 m_ShaderCount = 0;
+        Shader *m_ppShaders[LR_SHADER_STAGE_COUNT] = {};
 
-        u32 DescriptorSetCount = 0;
-        BaseDescriptorSet *ppDescriptorSets[LR_MAX_DESCRIPTOR_SETS_PER_PIPELINE];
-        BaseDescriptorSet *pSamplerDescriptorSet = nullptr;
+        u32 m_DescriptorSetCount = 0;
+        DescriptorSet *m_ppDescriptorSets[LR_MAX_DESCRIPTOR_SETS_PER_PIPELINE];
 
-        u32 PushConstantCount = 0;
-        PushConstantDesc pPushConstants[LR_MAX_PUSH_CONSTANTS_PER_PIPELINE];
+        u32 m_PushConstantCount = 0;
+        PushConstantDesc m_pPushConstants[LR_MAX_PUSH_CONSTANTS_PER_PIPELINE];
 
-        InputLayout *pInputLayout = nullptr;
+        InputLayout *m_pInputLayout = nullptr;
 
-        f32 DepthBiasFactor = 0.0;
-        f32 DepthBiasClamp = 0.0;
-        f32 DepthSlopeFactor = 0.0;
-        DepthStencilOpDesc StencilFrontFaceOp = {};
-        DepthStencilOpDesc StencilBackFaceOp = {};
+        f32 m_DepthBiasFactor = 0.0;
+        f32 m_DepthBiasClamp = 0.0;
+        f32 m_DepthSlopeFactor = 0.0;
+        DepthStencilOpDesc m_StencilFrontFaceOp = {};
+        DepthStencilOpDesc m_StencilBackFaceOp = {};
 
         union
         {
             u32 _u_data = 0;
             struct
             {
-                u32 EnableDepthClamp : 1;
-                u32 EnableDepthBias : 1;
-                u32 EnableDepthTest : 1;
-                u32 EnableDepthWrite : 1;
-                u32 EnableStencilTest : 1;
-                CompareOp DepthCompareOp : 3;
-                CullMode SetCullMode : 2;
-                FillMode SetFillMode : 1;
-                u32 FrontFaceCCW : 1;
-                u32 EnableAlphaToCoverage : 1;
-                u32 MultiSampleBitCount : 3;
+                u32 m_EnableDepthClamp : 1;
+                u32 m_EnableDepthBias : 1;
+                u32 m_EnableDepthTest : 1;
+                u32 m_EnableDepthWrite : 1;
+                u32 m_EnableStencilTest : 1;
+                CompareOp m_DepthCompareOp : 3;
+                CullMode m_SetCullMode : 2;
+                FillMode m_SetFillMode : 1;
+                u32 m_FrontFaceCCW : 1;
+                u32 m_EnableAlphaToCoverage : 1;
+                u32 m_MultiSampleBitCount : 3;
             };
         };
     };
 
     struct ComputePipelineBuildInfo
     {
-        BaseShader *pShader = nullptr;
-        
-        u32 DescriptorSetCount = 0;
-        BaseDescriptorSet *ppDescriptorSets[LR_MAX_DESCRIPTOR_SETS_PER_PIPELINE];
-        BaseDescriptorSet *pSamplerDescriptorSet = nullptr;
+        Shader *m_pShader = nullptr;
 
-        u32 PushConstantCount = 0;
-        PushConstantDesc pPushConstants[LR_MAX_PUSH_CONSTANTS_PER_PIPELINE];
+        u32 m_DescriptorSetCount = 0;
+        DescriptorSet *m_ppDescriptorSets[LR_MAX_DESCRIPTOR_SETS_PER_PIPELINE];
+        DescriptorSet *m_pSamplerDescriptorSet = nullptr;
+
+        u32 m_PushConstantCount = 0;
+        PushConstantDesc m_pPushConstants[LR_MAX_PUSH_CONSTANTS_PER_PIPELINE];
     };
 
-    struct BasePipeline
+    struct Pipeline
     {
     };
 

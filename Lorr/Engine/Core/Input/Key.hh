@@ -4,7 +4,7 @@
 
 #pragma once
 
-namespace lr::Input
+namespace lr
 {
     // They are keys, literal chars, don't confuse them with 'scancodes'
     enum Key : u32
@@ -131,17 +131,17 @@ namespace lr::Input
         LR_KEY_F12,
     };
 
-    enum class MouseState : u8
+    enum MouseState : u8
     {
-        Down,
-        Up,
-        DoubleClick,
+        LR_MOUSE_STATE_DOWN,
+        LR_MOUSE_STATE_UP,
+        LR_MOUSE_STATE_DOUBLE_CLICK,
     };
 
-    enum class KeyState : u8
+    enum KeyState : u8
     {
-        Down,
-        Up,
+        LR_KEY_STATE_DOWN,
+        LR_KEY_STATE_UP,
     };
 
-}  // namespace lr::Input
+}  // namespace lr

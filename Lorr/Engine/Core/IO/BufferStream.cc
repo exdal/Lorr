@@ -1,5 +1,7 @@
 #include "BufferStream.hh"
 
+#include "Core/Memory/MemoryUtils.hh"
+
 namespace lr
 {
     void BaseBufferStream::Seek(u8 seekFlag, u32 position)
@@ -179,7 +181,7 @@ namespace lr
 
         m_DataLen += len;
         m_pData = (u8 *)realloc(m_pData, m_DataLen);
-        _ZEROM((m_pData + m_DataOffset), len);
+        Memory::ZeroMem((m_pData + m_DataOffset), len);
     }
 
     void BufferWriteStream::Assign(void *pData, u32 dataLen, u32 count)

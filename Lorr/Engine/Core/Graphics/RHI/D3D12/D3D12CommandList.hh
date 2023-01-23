@@ -10,34 +10,34 @@
 
 namespace lr::Graphics
 {
-    struct D3D12CommandAllocator : BaseCommandAllocator
+    struct D3D12CommandAllocator : CommandAllocator
     {
         void Reset()
         {
-            pHandle->Reset();
+            m_pHandle->Reset();
         }
 
-        ID3D12CommandAllocator *pHandle = nullptr;
+        ID3D12CommandAllocator *m_pHandle = nullptr;
     };
 
-    struct D3D12CommandList : BaseCommandList
+    struct D3D12CommandList : CommandList
     {
         void Init(ID3D12GraphicsCommandList4 *pHandle, D3D12CommandAllocator *pAllocator, CommandListType type);
         void Reset(D3D12CommandAllocator *pAllocator);
 
         void BeginPass(CommandListBeginDesc *pDesc) override;
         void EndPass() override;
-        void ClearImage(BaseImage *pImage, ClearValue val) override;
+        void ClearImage(Image *pImage, ClearValue val) override;
 
         /// Memory Barriers
-        void SetImageBarrier(BaseImage *pImage, PipelineBarrier *pBarrier) override;
-        void SetBufferBarrier(BaseBuffer *pBuffer, PipelineBarrier *pBarrier) override;
+        void SetImageBarrier(Image *pImage, PipelineBarrier *pBarrier) override;
+        void SetBufferBarrier(Buffer *pBuffer, PipelineBarrier *pBarrier) override;
 
         /// Buffer Commands
-        void SetVertexBuffer(BaseBuffer *pBuffer) override;
-        void SetIndexBuffer(BaseBuffer *pBuffer, bool type32 = true) override;
-        void CopyBuffer(BaseBuffer *pSource, BaseBuffer *pDest, u32 size) override;
-        void CopyBuffer(BaseBuffer *pSource, BaseImage *pDest) override;
+        void SetVertexBuffer(Buffer *pBuffer) override;
+        void SetIndexBuffer(Buffer *pBuffer, bool type32 = true) override;
+        void CopyBuffer(Buffer *pSource, Buffer *pDest, u32 size) override;
+        void CopyBuffer(Buffer *pSource, Image *pDest) override;
 
         /// Draw Commands
         void Draw(u32 vertexCount, u32 firstVertex = 0, u32 instanceCount = 1, u32 firstInstance = 1) override;
@@ -49,12 +49,12 @@ namespace lr::Graphics
         void SetScissors(u32 id, u32 x, u32 y, u32 width, u32 height) override;
         void SetPrimitiveType(PrimitiveType type) override;
 
-        void SetGraphicsPipeline(BasePipeline *pPipeline) override;
-        void SetComputePipeline(BasePipeline *pPipeline) override;
-        void SetGraphicsDescriptorSets(const std::initializer_list<BaseDescriptorSet *> &sets) override;
-        void SetComputeDescriptorSets(const std::initializer_list<BaseDescriptorSet *> &sets) override;
-        void SetGraphicsPushConstants(BasePipeline *pPipeline, ShaderStage stage, void *pData, u32 dataSize) override;
-        void SetComputePushConstants(BasePipeline *pPipeline, void *pData, u32 dataSize) override;
+        void SetGraphicsPipeline(Pipeline *pPipeline) override;
+        void SetComputePipeline(Pipeline *pPipeline) override;
+        void SetGraphicsDescriptorSets(const std::initializer_list<DescriptorSet *> &sets) override;
+        void SetComputeDescriptorSets(const std::initializer_list<DescriptorSet *> &sets) override;
+        void SetGraphicsPushConstants(Pipeline *pPipeline, ShaderStage stage, void *pData, u32 dataSize) override;
+        void SetComputePushConstants(Pipeline *pPipeline, void *pData, u32 dataSize) override;
 
         D3D12CommandAllocator *m_pAllocator = nullptr;
         ID3D12GraphicsCommandList4 *m_pHandle = nullptr;

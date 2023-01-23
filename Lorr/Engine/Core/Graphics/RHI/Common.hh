@@ -14,6 +14,20 @@ namespace lr::Graphics
     };
     EnumFlags(APIFlags);
 
+    enum RHIAllocatorType : u32
+    {
+        LR_RHI_ALLOCATOR_NONE,
+
+        LR_RHI_ALLOCATOR_DESCRIPTOR,                                // A linear, small sized pool with CPUW flag for per-frame descriptor data
+        LR_RHI_ALLOCATOR_BUFFER_LINEAR,                             // A linear, medium sized pool for buffers
+        LR_RHI_ALLOCATOR_BUFFER_TLSF,                               // Large sized pool for large scene buffers
+        LR_RHI_ALLOCATOR_BUFFER_FRAMETIME = LR_RHI_ALLOCATOR_NONE,  //
+                                                                    //
+        LR_RHI_ALLOCATOR_IMAGE_TLSF,                                // Large sized pool for large images
+
+        LR_RHI_ALLOCATOR_COUNT,
+    };
+
     enum ColorMask : u32
     {
         LR_COLOR_MASK_NONE = 0,

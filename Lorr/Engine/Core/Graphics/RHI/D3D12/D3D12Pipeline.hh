@@ -10,12 +10,12 @@
 
 namespace lr::Graphics
 {
-    struct D3D12Pipeline : BasePipeline
+    struct D3D12Pipeline : Pipeline
     {
-        ID3D12PipelineState *pHandle = nullptr;
-        ID3D12RootSignature *pLayout = nullptr;
+        ID3D12PipelineState *m_pHandle = nullptr;
+        ID3D12RootSignature *m_pLayout = nullptr;
 
-        u32 pRootConstats[LR_SHADER_STAGE_COUNT] = {};
+        u32 m_pRootConstats[LR_SHADER_STAGE_COUNT] = {};
     };
 
 }  // namespace lr::Graphics

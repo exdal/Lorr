@@ -43,7 +43,7 @@ namespace lr::Graphics
 
         eastl::vector<LPCWSTR> strFlags;
 
-        if (pDesc->Flags & LR_SHADER_FLAG_USE_SPIRV)
+        if (pDesc->m_Flags & LR_SHADER_FLAG_USE_SPIRV)
         {
             strFlags.push_back(L"-spirv");
         }
@@ -51,17 +51,17 @@ namespace lr::Graphics
         {
             strFlags.push_back(L"-Wno-vk-ignored-features");
             strFlags.push_back(L"-Wno-ignored-attributes");
-            if (pDesc->Flags & LR_SHADER_FLAG_USE_DEBUG)
+            if (pDesc->m_Flags & LR_SHADER_FLAG_USE_DEBUG)
                 strFlags.push_back(DXC_ARG_DEBUG);
-            if (pDesc->Flags & LR_SHADER_FLAG_SKIP_VALIDATION)
+            if (pDesc->m_Flags & LR_SHADER_FLAG_SKIP_VALIDATION)
                 strFlags.push_back(DXC_ARG_SKIP_VALIDATION);
         }
 
-        if (pDesc->Flags & LR_SHADER_FLAG_WARNINGS_ARE_ERRORS)
+        if (pDesc->m_Flags & LR_SHADER_FLAG_WARNINGS_ARE_ERRORS)
             strFlags.push_back(DXC_ARG_WARNINGS_ARE_ERRORS);
-        if (pDesc->Flags & LR_SHADER_FLAG_MATRIX_ROW_MAJOR)
+        if (pDesc->m_Flags & LR_SHADER_FLAG_MATRIX_ROW_MAJOR)
             strFlags.push_back(DXC_ARG_PACK_MATRIX_ROW_MAJOR);
-        if (pDesc->Flags & LR_SHADER_FLAG_SKIP_OPTIMIZATION)
+        if (pDesc->m_Flags & LR_SHADER_FLAG_SKIP_OPTIMIZATION)
             strFlags.push_back(DXC_ARG_SKIP_OPTIMIZATIONS);
         else
             strFlags.push_back(DXC_ARG_OPTIMIZATION_LEVEL3);
@@ -74,19 +74,19 @@ namespace lr::Graphics
 
         DxcDefine pDefines[ShaderCompileDesc::kMaxDefinceCount] = {};
 
-        for (u32 i = 0; i < pDesc->DefineCount; i++)
+        for (u32 i = 0; i < pDesc->m_DefineCount; i++)
         {
-            pDefines[i].Name = pDesc->Defines[i].Name.data();
-            pDefines[i].Value = pDesc->Defines[i].Value.data();
+            pDefines[i].Name = pDesc->m_Defines[i].m_Name.data();
+            pDefines[i].Value = pDesc->m_Defines[i].m_Value.data();
         }
 
-        pUtils->BuildArguments(pDesc->PathOpt.data(),
+        pUtils->BuildArguments(pDesc->m_PathOpt.data(),
                                L"main",
-                               GetFullShaderModel(pDesc->Type).data(),
+                               GetFullShaderModel(pDesc->m_Type).data(),
                                &strFlags[0],
                                strFlags.size(),
                                pDefines,
-                               pDesc->DefineCount,
+                               pDesc->m_DefineCount,
                                pCompilerArgs.get_address());
 
         ls::scoped_comptr<IDxcIncludeHandler> pIncludeHandler;

@@ -16,8 +16,8 @@ namespace lr::Graphics
 {
     struct VKDescriptorBindingDesc
     {
-        VkDescriptorType Type;
-        u32 Count;
+        VkDescriptorType m_Type;
+        u32 m_Count;
     };
 
     /// ------------------------------------------ ///
@@ -26,21 +26,21 @@ namespace lr::Graphics
     {
         bool Init(BaseWindow *pWindow, u32 width, u32 height, APIFlags flags) override;
 
-        void InitAllocators() override;
+        void InitAllocators();
 
         /// COMMAND ///
-        BaseCommandQueue *CreateCommandQueue(CommandListType type) override;
-        BaseCommandAllocator *CreateCommandAllocator(CommandListType type) override;
-        BaseCommandList *CreateCommandList(CommandListType type) override;
+        VKCommandQueue *CreateCommandQueue(CommandListType type);
+        VKCommandAllocator *CreateCommandAllocator(CommandListType type);
+        VKCommandList *CreateCommandList(CommandListType type);
 
-        void BeginCommandList(BaseCommandList *pList) override;
-        void EndCommandList(BaseCommandList *pList) override;
-        void ResetCommandAllocator(BaseCommandAllocator *pAllocator) override;
+        void BeginCommandList(CommandList *pList) override;
+        void EndCommandList(CommandList *pList) override;
+        void ResetCommandAllocator(CommandAllocator *pAllocator) override;
 
         // Executes a specific command list, taken from a `CommandListPool`.
         // Does not execute command list in flight. Cannot perform a present operation.
         // if `waitForFence` set true, does not push fence into wait thread, blocks current thread.
-        void ExecuteCommandList(BaseCommandList *pList, bool waitForFence) override;
+        void ExecuteCommandList(CommandList *pList, bool waitForFence) override;
         // Executes command list of current frame, it always performs a present operation.
         void PresentCommandQueue();
 
@@ -55,10 +55,10 @@ namespace lr::Graphics
 
         /// PIPELINE ///
         VkPipelineCache CreatePipelineCache(u32 initialDataSize = 0, void *pInitialData = nullptr);
-        VkPipelineLayout SerializePipelineLayout(PipelineLayoutSerializeDesc *pDesc, BasePipeline *pPipeline);
+        VkPipelineLayout SerializePipelineLayout(PipelineLayoutSerializeDesc *pDesc, Pipeline *pPipeline);
 
-        BasePipeline *CreateGraphicsPipeline(GraphicsPipelineBuildInfo *pBuildInfo) override;
-        BasePipeline *CreateComputePipeline(ComputePipelineBuildInfo *pBuildInfo) override;
+        Pipeline *CreateGraphicsPipeline(GraphicsPipelineBuildInfo *pBuildInfo) override;
+        Pipeline *CreateComputePipeline(ComputePipelineBuildInfo *pBuildInfo) override;
 
         /// SWAPCHAIN ///
         void CreateSwapChain(VkSwapchainKHR &pHandle, VkSwapchainCreateInfoKHR &info);
@@ -73,43 +73,41 @@ namespace lr::Graphics
 
         /// RESOURCE ///
         // * Shaders * //
-        BaseShader *CreateShader(ShaderStage stage, BufferReadStream &buf) override;
-        BaseShader *CreateShader(ShaderStage stage, eastl::string_view path) override;
-        void DeleteShader(BaseShader *pShader) override;
+        Shader *CreateShader(ShaderStage stage, BufferReadStream &buf) override;
+        Shader *CreateShader(ShaderStage stage, eastl::string_view path) override;
+        void DeleteShader(Shader *pShader) override;
 
-        BaseDescriptorSet *CreateDescriptorSet(DescriptorSetDesc *pDesc) override;
-        void DeleteDescriptorSet(BaseDescriptorSet *pSet) override;
-        void UpdateDescriptorData(BaseDescriptorSet *pSet) override;
+        DescriptorSet *CreateDescriptorSet(DescriptorSetDesc *pDesc) override;
+        void DeleteDescriptorSet(DescriptorSet *pSet) override;
+        void UpdateDescriptorData(DescriptorSet *pSet, DescriptorSetDesc *pDesc) override;
 
         VkDescriptorPool CreateDescriptorPool(const std::initializer_list<VKDescriptorBindingDesc> &layouts);
 
         // * Buffers * //
         VkDeviceMemory CreateHeap(u64 heapSize, bool cpuWrite);
 
-        BaseBuffer *CreateBuffer(BufferDesc *pDesc, BufferData *pData) override;
-        void DeleteBuffer(BaseBuffer *pHandle) override;
+        Buffer *CreateBuffer(BufferDesc *pDesc) override;
+        void DeleteBuffer(Buffer *pHandle) override;
 
-        void MapMemory(BaseBuffer *pBuffer, void *&pData) override;
-        void UnmapMemory(BaseBuffer *pBuffer) override;
-
-        BaseBuffer *ChangeAllocator(BaseCommandList *pList, BaseBuffer *pTarget, AllocatorType targetAllocator) override;
+        void MapMemory(Buffer *pBuffer, void *&pData) override;
+        void UnmapMemory(Buffer *pBuffer) override;
 
         // * Images * //
-        BaseImage *CreateImage(ImageDesc *pDesc, ImageData *pData) override;
-        void DeleteImage(BaseImage *pImage) override;
-        void CreateImageView(BaseImage *pImage);
+        Image *CreateImage(ImageDesc *pDesc) override;
+        void DeleteImage(Image *pImage) override;
+        void CreateImageView(Image *pImage);
 
-        VkSampler CreateSampler(SamplerDesc *pDesc);
+        Sampler *CreateSampler(SamplerDesc *pDesc) override;
         void DeleteSampler(VkSampler pSampler);
 
-        void SetAllocator(VKBuffer *pBuffer, AllocatorType targetAllocator);
-        void SetAllocator(VKImage *pImage, AllocatorType targetAllocator);
+        void SetAllocator(VKBuffer *pBuffer, RHIAllocatorType targetAllocator);
+        void SetAllocator(VKImage *pImage, RHIAllocatorType targetAllocator);
 
         /// UTILITY
         void CalcOrthoProjection(XMMATRIX &mat, XMFLOAT2 viewSize, float zFar, float zNear) override;
 
         // * Device Features * //
-        bool IsFormatSupported(ResourceFormat format, VkColorSpaceKHR *pColorSpaceOut);
+        bool IsFormatSupported(ImageFormat format, VkColorSpaceKHR *pColorSpaceOut);
         bool IsPresentModeSupported(VkPresentModeKHR format);
         void GetSurfaceCapabilities(VkSurfaceCapabilitiesKHR &capabilitiesOut);
         u32 GetMemoryTypeIndex(u32 setBits, VkMemoryPropertyFlags propFlags);
@@ -128,7 +126,7 @@ namespace lr::Graphics
         // clang-format off
 
         /// Type conversions
-        static VkFormat                 ToVKFormat(ResourceFormat format);
+        static VkFormat                 ToVKFormat(ImageFormat format);
         static VkFormat                 ToVKFormat(VertexAttribType format);
         static VkPrimitiveTopology      ToVKTopology(PrimitiveType type);
         static VkCullModeFlags          ToVKCullMode(CullMode mode);

@@ -26,31 +26,31 @@ namespace lr
 
         struct  // WINDOW_EVENT_RESIZE
         {
-            u32 SizeWidth;
-            u32 SizeHeight;
+            u32 m_SizeWidth;
+            u32 m_SizeHeight;
         };
 
         struct  // WINDOW_EVENT_MOUSE_POSITION
         {
-            u32 MouseX;
-            u32 MouseY;
+            u32 m_MouseX;
+            u32 m_MouseY;
         };
 
         struct  // WINDOW_EVENT_MOUSE_STATE
         {
-            Input::Key Mouse;
-            Input::MouseState MouseState;
+            Key m_Mouse;
+            MouseState m_MouseState;
         };
 
         struct  // WINDOW_EVENT_MOUSE_WHEEL
         {
-            float Offset;
+            float m_Offset;
         };
 
         struct  // WINDOW_EVENT_KEYBOARD_STATE
         {
-            Input::Key Key;
-            Input::KeyState KeyState;
+            Key m_Key;
+            KeyState m_KeyState;
         };
     };
 
@@ -86,33 +86,33 @@ namespace lr
     {
         struct Display
         {
-            eastl::string Name;
+            eastl::string m_Name;
 
-            u32 ResW;
-            u32 ResH;
-            u32 PosX;
-            u32 PosY;
+            u32 m_ResW;
+            u32 m_ResH;
+            u32 m_PosX;
+            u32 m_PosY;
 
-            u32 RefreshRate;
+            u32 m_RefreshRate;
         };
 
-        u8 DisplaySize = 0;
+        u8 m_DisplaySize = 0;
 
         static constexpr u32 kMaxSupportedDisplay = 4;
-        eastl::array<Display, kMaxSupportedDisplay> Displays;
+        eastl::array<Display, kMaxSupportedDisplay> m_Displays;
     };
 
     struct WindowDesc
     {
-        eastl::string_view Title = "";
-        eastl::string_view Icon = "";
+        eastl::string_view m_Title = "";
+        eastl::string_view m_Icon = "";
 
-        u32 CurrentMonitor = 0;
+        u32 m_CurrentMonitor = 0;
 
-        u32 Width;
-        u32 Height;
+        u32 m_Width;
+        u32 m_Height;
 
-        WindowFlags Flags;
+        WindowFlags m_Flags;
     };
 
     struct BaseWindow

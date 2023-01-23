@@ -25,7 +25,7 @@ namespace lr::Graphics
     {
         ZoneScoped;
 
-        m_pHandle->Reset(pAllocator->pHandle, nullptr);
+        m_pHandle->Reset(pAllocator->m_pHandle, nullptr);
     }
 
     void D3D12CommandList::BeginPass(CommandListBeginDesc *pDesc)
@@ -49,44 +49,44 @@ namespace lr::Graphics
         D3D12_RENDER_PASS_RENDER_TARGET_DESC pColorAttachments[LR_MAX_RENDER_TARGET_PER_PASS] = {};
         D3D12_RENDER_PASS_DEPTH_STENCIL_DESC depthAttachment = {};
 
-        for (u32 i = 0; i < pDesc->ColorAttachmentCount; i++)
+        for (u32 i = 0; i < pDesc->m_ColorAttachmentCount; i++)
         {
-            CommandListAttachment &attachment = pDesc->pColorAttachments[i];
+            CommandListAttachment &attachment = pDesc->m_pColorAttachments[i];
             D3D12_RENDER_PASS_RENDER_TARGET_DESC &info = pColorAttachments[i];
 
-            BaseImage *pImage = attachment.pHandle;
+            Image *pImage = attachment.m_pHandle;
             API_VAR(D3D12Image, pImage);
 
             info.cpuDescriptor = pImageDX->m_RenderTargetViewCPU;
-            info.BeginningAccess.Type = kBeginningAccessLUT[(u32)attachment.LoadOp];
-            info.EndingAccess.Type = kEndingAccessLUT[(u32)attachment.StoreOp];
+            info.BeginningAccess.Type = kBeginningAccessLUT[(u32)attachment.m_LoadOp];
+            info.EndingAccess.Type = kEndingAccessLUT[(u32)attachment.m_StoreOp];
 
             D3D12_CLEAR_VALUE &clearValue = info.BeginningAccess.Clear.ClearValue;
             clearValue.Format = D3D12API::ToDXFormat(pImage->m_Format);
 
-            memcpy(&clearValue.Color, &attachment.ClearVal.RenderTargetColor, sizeof(XMFLOAT4));
+            memcpy(&clearValue.Color, &attachment.m_ClearVal.m_RenderTargetColor, sizeof(XMFLOAT4));
         }
 
-        if (pDesc->pDepthAttachment)
+        if (pDesc->m_pDepthAttachment)
         {
-            CommandListAttachment &attachment = *pDesc->pDepthAttachment;
+            CommandListAttachment &attachment = *pDesc->m_pDepthAttachment;
 
-            BaseImage *pImage = attachment.pHandle;
+            Image *pImage = attachment.m_pHandle;
             API_VAR(D3D12Image, pImage);
 
             depthAttachment.cpuDescriptor = pImageDX->m_DepthStencilViewCPU;
-            depthAttachment.DepthBeginningAccess.Type = kBeginningAccessLUT[(u32)attachment.LoadOp];
-            depthAttachment.DepthEndingAccess.Type = kEndingAccessLUT[(u32)attachment.StoreOp];
+            depthAttachment.DepthBeginningAccess.Type = kBeginningAccessLUT[(u32)attachment.m_LoadOp];
+            depthAttachment.DepthEndingAccess.Type = kEndingAccessLUT[(u32)attachment.m_StoreOp];
 
             D3D12_CLEAR_VALUE &clearValue = depthAttachment.DepthBeginningAccess.Clear.ClearValue;
             clearValue.Format = D3D12API::ToDXFormat(pImage->m_Format);
 
-            memcpy(&clearValue.Color, &attachment.ClearVal.DepthStencilColor, sizeof(ClearValue::Depth));
+            memcpy(&clearValue.Color, &attachment.m_ClearVal.m_DepthStencilColor, sizeof(ClearValue::Depth));
         }
 
-        m_pHandle->BeginRenderPass(pDesc->ColorAttachmentCount,
+        m_pHandle->BeginRenderPass(pDesc->m_ColorAttachmentCount,
                                    pColorAttachments,
-                                   pDesc->pDepthAttachment ? &depthAttachment : nullptr,
+                                   pDesc->m_pDepthAttachment ? &depthAttachment : nullptr,
                                    D3D12_RENDER_PASS_FLAG_NONE);
     }
 
@@ -97,20 +97,20 @@ namespace lr::Graphics
         m_pHandle->EndRenderPass();
     }
 
-    void D3D12CommandList::ClearImage(BaseImage *pImage, ClearValue val)
+    void D3D12CommandList::ClearImage(Image *pImage, ClearValue val)
     {
         ZoneScoped;
 
         API_VAR(D3D12Image, pImage);
 
-        m_pHandle->ClearRenderTargetView(pImageDX->m_RenderTargetViewCPU, &val.RenderTargetColor.x, 0, nullptr);
+        m_pHandle->ClearRenderTargetView(pImageDX->m_RenderTargetViewCPU, &val.m_RenderTargetColor.x, 0, nullptr);
     }
 
-    void D3D12CommandList::SetImageBarrier(BaseImage *pImage, PipelineBarrier *pBarrier)
+    void D3D12CommandList::SetImageBarrier(Image *pImage, PipelineBarrier *pBarrier)
     {
         ZoneScoped;
 
-        if (pBarrier->CurrentUsage == pBarrier->NextUsage)
+        if (pBarrier->m_CurrentUsage == pBarrier->m_NextUsage)
             return;
 
         API_VAR(D3D12Image, pImage);
@@ -118,7 +118,7 @@ namespace lr::Graphics
         u32 setBarrierCount = 0;
         D3D12_RESOURCE_BARRIER pBarriers[3] = {};  // by index: 0, src uav, 1 transition, 2 dst uav
 
-        if (pBarrier->CurrentStage == LR_PIPELINE_STAGE_COMPUTE_SHADER)
+        if (pBarrier->m_CurrentStage == LR_PIPELINE_STAGE_COMPUTE_SHADER)
         {
             D3D12_RESOURCE_BARRIER &barrier = pBarriers[setBarrierCount++];
             barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
@@ -128,10 +128,10 @@ namespace lr::Graphics
         D3D12_RESOURCE_BARRIER &barrier = pBarriers[setBarrierCount++];
         barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
         barrier.Transition.pResource = pImageDX->m_pHandle;
-        barrier.Transition.StateBefore = D3D12API::ToDXImageUsage(pBarrier->CurrentUsage);
-        barrier.Transition.StateAfter = D3D12API::ToDXImageUsage(pBarrier->NextUsage);
+        barrier.Transition.StateBefore = D3D12API::ToDXImageUsage(pBarrier->m_CurrentUsage);
+        barrier.Transition.StateAfter = D3D12API::ToDXImageUsage(pBarrier->m_NextUsage);
 
-        if (pBarrier->NextStage == LR_PIPELINE_STAGE_COMPUTE_SHADER)
+        if (pBarrier->m_NextStage == LR_PIPELINE_STAGE_COMPUTE_SHADER)
         {
             D3D12_RESOURCE_BARRIER &barrier = pBarriers[setBarrierCount++];
             barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
@@ -141,11 +141,11 @@ namespace lr::Graphics
         m_pHandle->ResourceBarrier(setBarrierCount, pBarriers);
     }
 
-    void D3D12CommandList::SetBufferBarrier(BaseBuffer *pBuffer, PipelineBarrier *pBarrier)
+    void D3D12CommandList::SetBufferBarrier(Buffer *pBuffer, PipelineBarrier *pBarrier)
     {
         ZoneScoped;
 
-        if (pBarrier->CurrentUsage == pBarrier->NextUsage)
+        if (pBarrier->m_CurrentUsage == pBarrier->m_NextUsage)
             return;
 
         API_VAR(D3D12Buffer, pBuffer);
@@ -154,13 +154,13 @@ namespace lr::Graphics
         barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
         barrier.Transition.pResource = pBufferDX->m_pHandle;
 
-        barrier.Transition.StateBefore = D3D12API::ToDXImageUsage(pBarrier->CurrentUsage);
-        barrier.Transition.StateAfter = D3D12API::ToDXImageUsage(pBarrier->NextUsage);
+        barrier.Transition.StateBefore = D3D12API::ToDXImageUsage(pBarrier->m_CurrentUsage);
+        barrier.Transition.StateAfter = D3D12API::ToDXImageUsage(pBarrier->m_NextUsage);
 
         m_pHandle->ResourceBarrier(1, &barrier);
     }
 
-    void D3D12CommandList::SetVertexBuffer(BaseBuffer *pBuffer)
+    void D3D12CommandList::SetVertexBuffer(Buffer *pBuffer)
     {
         ZoneScoped;
 
@@ -168,13 +168,13 @@ namespace lr::Graphics
 
         D3D12_VERTEX_BUFFER_VIEW view = {};
         view.BufferLocation = pBufferDX->m_pHandle->GetGPUVirtualAddress();
-        view.SizeInBytes = pBuffer->m_DataSize;
+        view.SizeInBytes = pBuffer->m_DataLen;
         view.StrideInBytes = pBuffer->m_Stride;
 
         m_pHandle->IASetVertexBuffers(0, 1, &view);
     }
 
-    void D3D12CommandList::SetIndexBuffer(BaseBuffer *pBuffer, bool type32)
+    void D3D12CommandList::SetIndexBuffer(Buffer *pBuffer, bool type32)
     {
         ZoneScoped;
 
@@ -182,13 +182,13 @@ namespace lr::Graphics
 
         D3D12_INDEX_BUFFER_VIEW view = {};
         view.BufferLocation = pBufferDX->m_pHandle->GetGPUVirtualAddress();
-        view.SizeInBytes = pBuffer->m_DataSize;
+        view.SizeInBytes = pBuffer->m_DataLen;
         view.Format = type32 ? DXGI_FORMAT_R32_UINT : DXGI_FORMAT_R16_UINT;
 
         m_pHandle->IASetIndexBuffer(&view);
     }
 
-    void D3D12CommandList::CopyBuffer(BaseBuffer *pSource, BaseBuffer *pDest, u32 size)
+    void D3D12CommandList::CopyBuffer(Buffer *pSource, Buffer *pDest, u32 size)
     {
         ZoneScoped;
 
@@ -198,7 +198,7 @@ namespace lr::Graphics
         m_pHandle->CopyBufferRegion(pDestDX->m_pHandle, 0, pSourceDX->m_pHandle, 0, size);
     }
 
-    void D3D12CommandList::CopyBuffer(BaseBuffer *pSource, BaseImage *pDest)
+    void D3D12CommandList::CopyBuffer(Buffer *pSource, Image *pDest)
     {
         ZoneScoped;
 
@@ -278,74 +278,68 @@ namespace lr::Graphics
         m_pHandle->IASetPrimitiveTopology(D3D12API::ToDXTopology(type));
     }
 
-    void D3D12CommandList::SetGraphicsPipeline(BasePipeline *pPipeline)
+    void D3D12CommandList::SetGraphicsPipeline(Pipeline *pPipeline)
     {
         ZoneScoped;
 
         API_VAR(D3D12Pipeline, pPipeline);
 
-        m_pHandle->SetPipelineState(pPipelineDX->pHandle);
-        m_pHandle->SetGraphicsRootSignature(pPipelineDX->pLayout);
+        m_pHandle->SetPipelineState(pPipelineDX->m_pHandle);
+        m_pHandle->SetGraphicsRootSignature(pPipelineDX->m_pLayout);
     }
 
-    void D3D12CommandList::SetComputePipeline(BasePipeline *pPipeline)
+    void D3D12CommandList::SetComputePipeline(Pipeline *pPipeline)
     {
         ZoneScoped;
 
         API_VAR(D3D12Pipeline, pPipeline);
 
-        m_pHandle->SetPipelineState(pPipelineDX->pHandle);
-        m_pHandle->SetComputeRootSignature(pPipelineDX->pLayout);
+        m_pHandle->SetPipelineState(pPipelineDX->m_pHandle);
+        m_pHandle->SetComputeRootSignature(pPipelineDX->m_pLayout);
     }
 
-    void D3D12CommandList::SetGraphicsDescriptorSets(const std::initializer_list<BaseDescriptorSet *> &sets)
+    void D3D12CommandList::SetGraphicsDescriptorSets(const std::initializer_list<DescriptorSet *> &sets)
     {
         ZoneScoped;
 
         u32 idx = 0;
-        for (BaseDescriptorSet *pSet : sets)
+        for (DescriptorSet *pSet : sets)
         {
             API_VAR(D3D12DescriptorSet, pSet);
 
-            if (pSetDX->pDescriptorHandles[0].ptr == 0)
-                continue;
-
-            m_pHandle->SetGraphicsRootDescriptorTable(idx++, pSetDX->pDescriptorHandles[0]);
+            m_pHandle->SetGraphicsRootDescriptorTable(idx++, pSetDX->m_pDescriptorHandles[0]);
         }
     }
 
-    void D3D12CommandList::SetComputeDescriptorSets(const std::initializer_list<BaseDescriptorSet *> &sets)
+    void D3D12CommandList::SetComputeDescriptorSets(const std::initializer_list<DescriptorSet *> &sets)
     {
         ZoneScoped;
 
         u32 idx = 0;
-        for (BaseDescriptorSet *pSet : sets)
+        for (DescriptorSet *pSet : sets)
         {
             API_VAR(D3D12DescriptorSet, pSet);
 
-            if (pSetDX->pDescriptorHandles[0].ptr == 0)
-                continue;
-
-            m_pHandle->SetComputeRootDescriptorTable(idx++, pSetDX->pDescriptorHandles[0]);
+            m_pHandle->SetComputeRootDescriptorTable(idx++, pSetDX->m_pDescriptorHandles[0]);
         }
     }
 
-    void D3D12CommandList::SetGraphicsPushConstants(BasePipeline *pPipeline, ShaderStage stage, void *pData, u32 dataSize)
+    void D3D12CommandList::SetGraphicsPushConstants(Pipeline *pPipeline, ShaderStage stage, void *pData, u32 dataSize)
     {
         ZoneScoped;
 
         API_VAR(D3D12Pipeline, pPipeline);
 
-        m_pHandle->SetGraphicsRoot32BitConstants(pPipelineDX->pRootConstats[(u32)D3D12API::ToDXShaderType(stage)], dataSize / sizeof(u32), pData, 0);
+        m_pHandle->SetGraphicsRoot32BitConstants(pPipelineDX->m_pRootConstats[(u32)D3D12API::ToDXShaderType(stage)], dataSize / sizeof(u32), pData, 0);
     }
 
-    void D3D12CommandList::SetComputePushConstants(BasePipeline *pPipeline, void *pData, u32 dataSize)
+    void D3D12CommandList::SetComputePushConstants(Pipeline *pPipeline, void *pData, u32 dataSize)
     {
         ZoneScoped;
 
         API_VAR(D3D12Pipeline, pPipeline);
 
-        m_pHandle->SetComputeRoot32BitConstants(pPipelineDX->pRootConstats[LR_SHADER_STAGE_COMPUTE], dataSize / sizeof(u32), pData, 0);
+        m_pHandle->SetComputeRoot32BitConstants(pPipelineDX->m_pRootConstats[LR_SHADER_STAGE_COMPUTE], dataSize / sizeof(u32), pData, 0);
     }
 
 }  // namespace lr::Graphics

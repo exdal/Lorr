@@ -10,9 +10,9 @@
 
 namespace lr::Graphics
 {
-    struct VKShader : BaseShader
+    struct VKShader : Shader
     {
-        VkShaderModule pHandle;
+        VkShaderModule m_pHandle;
     };
 
 }  // namespace lr::Graphics

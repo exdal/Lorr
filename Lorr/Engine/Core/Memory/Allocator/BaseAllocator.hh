@@ -11,22 +11,22 @@ namespace lr::Memory
     struct AllocatorDesc
     {
         // Generic Info
-        u64 DataSize = 0;
-        void *pInitialData = nullptr;
+        u64 m_DataSize = 0;
+        void *m_pInitialData = nullptr;
 
         // TLSF Allocator Info
-        u64 BlockCount = 0;
+        u64 m_BlockCount = 0;
     };
 
     // If `pData` is set to `nullptr`, it will be set to allocated data.
     struct AllocationInfo
     {
-        u64 Size = 0;
-        u32 Alignment = 0;
-        void *pData = nullptr;
+        u64 m_Size = 0;
+        u32 m_Alignment = 0;
+        void *m_pData = nullptr;
 
         // Allocator data output, i.e, address of TLSF block
-        void *pAllocatorData = nullptr;
+        void *m_pAllocatorData = nullptr;
     };
 
     template<typename _View>

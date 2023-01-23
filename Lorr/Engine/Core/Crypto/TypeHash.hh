@@ -13,27 +13,27 @@ namespace lr::c
         template<typename T>
         void Push(T &&type)
         {
-            pData = (u8 *)realloc(pData, DataLen + sizeof(type));
-            memcpy(pData + DataLen, &type, sizeof(type));
+            m_pData = (u8 *)realloc(m_pData, m_DataLen + sizeof(type));
+            memcpy(m_pData + m_DataLen, &type, sizeof(type));
 
-            DataLen += sizeof(type);
+            m_DataLen += sizeof(type);
         }
 
         void Push(void *pVal, u32 size)
         {
-            pData = (u8 *)realloc(pData, DataLen + size);
-            memcpy(pData + DataLen, pVal, size);
+            m_pData = (u8 *)realloc(m_pData, m_DataLen + size);
+            memcpy(m_pData + m_DataLen, pVal, size);
 
-            DataLen += size;
+            m_DataLen += size;
         }
 
         u32 Get()
         {
-            return FNVHash((const char *)pData, DataLen);
+            return FNVHash((const char *)m_pData, m_DataLen);
         }
 
-        u32 DataLen = 0;
-        u8 *pData = nullptr;
+        u32 m_DataLen = 0;
+        u8 *m_pData = nullptr;
     };
 
 }  // namespace lr::c

@@ -10,9 +10,9 @@
 
 namespace lr::Graphics
 {
-    struct D3D12Shader : BaseShader
+    struct D3D12Shader : Shader
     {
-        IDxcBlob *pHandle = nullptr;
+        IDxcBlob *m_pHandle = nullptr;
     };
 
 }  // namespace lr::Graphics

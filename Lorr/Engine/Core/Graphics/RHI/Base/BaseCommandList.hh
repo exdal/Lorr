@@ -28,28 +28,28 @@ namespace lr::Graphics
 
         ClearValue(const XMFLOAT4 &color)
         {
-            IsDepth = false;
+            m_IsDepth = false;
 
-            RenderTargetColor = color;
+            m_RenderTargetColor = color;
         }
 
         ClearValue(f32 depth, u8 stencil)
         {
-            IsDepth = true;
+            m_IsDepth = true;
 
-            DepthStencilColor.Depth = depth;
-            DepthStencilColor.Stencil = stencil;
+            m_DepthStencilColor.m_Depth = depth;
+            m_DepthStencilColor.m_Stencil = stencil;
         }
 
-        XMFLOAT4 RenderTargetColor = {};
+        XMFLOAT4 m_RenderTargetColor = {};
 
         struct Depth
         {
-            f32 Depth;
-            u8 Stencil;
-        } DepthStencilColor;
+            f32 m_Depth;
+            u8 m_Stencil;
+        } m_DepthStencilColor;
 
-        bool IsDepth = false;
+        bool m_IsDepth = false;
     };
 
     enum AttachmentOp
@@ -62,20 +62,21 @@ namespace lr::Graphics
 
     struct CommandListAttachment
     {
-        BaseImage *pHandle = nullptr;
-        ClearValue ClearVal;
-        AttachmentOp LoadOp;
-        AttachmentOp StoreOp;
+        Image *m_pHandle = nullptr;
+        ImageFormat m_Format;
+        ClearValue m_ClearVal;
+        AttachmentOp m_LoadOp;
+        AttachmentOp m_StoreOp;
     };
 
     struct CommandListBeginDesc
     {
-        u32 ColorAttachmentCount = 0;
-        CommandListAttachment pColorAttachments[LR_MAX_RENDER_TARGET_PER_PASS] = {};
-        CommandListAttachment *pDepthAttachment = nullptr;
+        u32 m_ColorAttachmentCount = 0;
+        CommandListAttachment m_pColorAttachments[LR_MAX_RENDER_TARGET_PER_PASS] = {};
+        CommandListAttachment *m_pDepthAttachment = nullptr;
 
         // WH(-1) means we cover entire window/screen, info from swapchain
-        XMUINT4 RenderArea = { 0, 0, UINT32_MAX, UINT32_MAX };
+        XMUINT4 m_RenderArea = { 0, 0, UINT32_MAX, UINT32_MAX };
     };
 
     // Incomplete pipeline stage enums.
@@ -121,30 +122,30 @@ namespace lr::Graphics
 
     struct PipelineBarrier
     {
-        ResourceUsage CurrentUsage = LR_RESOURCE_USAGE_UNKNOWN;
-        PipelineStage CurrentStage = LR_PIPELINE_STAGE_NONE;
-        PipelineAccess CurrentAccess = LR_PIPELINE_ACCESS_NONE;
-        ResourceUsage NextUsage = LR_RESOURCE_USAGE_UNKNOWN;
-        PipelineStage NextStage = LR_PIPELINE_STAGE_NONE;
-        PipelineAccess NextAccess = LR_PIPELINE_ACCESS_NONE;
+        ResourceUsage m_CurrentUsage = LR_RESOURCE_USAGE_UNKNOWN;
+        PipelineStage m_CurrentStage = LR_PIPELINE_STAGE_NONE;
+        PipelineAccess m_CurrentAccess = LR_PIPELINE_ACCESS_NONE;
+        ResourceUsage m_NextUsage = LR_RESOURCE_USAGE_UNKNOWN;
+        PipelineStage m_NextStage = LR_PIPELINE_STAGE_NONE;
+        PipelineAccess m_NextAccess = LR_PIPELINE_ACCESS_NONE;
     };
 
-    struct BaseCommandList
+    struct CommandList
     {
         /// Render Pass
         virtual void BeginPass(CommandListBeginDesc *pDesc) = 0;
         virtual void EndPass() = 0;
-        virtual void ClearImage(BaseImage *pImage, ClearValue val) = 0;
+        virtual void ClearImage(Image *pImage, ClearValue val) = 0;
 
         /// Memory Barriers
-        virtual void SetImageBarrier(BaseImage *pImage, PipelineBarrier *pBarrier) = 0;
-        virtual void SetBufferBarrier(BaseBuffer *pBuffer, PipelineBarrier *pBarrier) = 0;
+        virtual void SetImageBarrier(Image *pImage, PipelineBarrier *pBarrier) = 0;
+        virtual void SetBufferBarrier(Buffer *pBuffer, PipelineBarrier *pBarrier) = 0;
 
         /// Buffer Commands
-        virtual void SetVertexBuffer(BaseBuffer *pBuffer) = 0;
-        virtual void SetIndexBuffer(BaseBuffer *pBuffer, bool type32 = true) = 0;
-        virtual void CopyBuffer(BaseBuffer *pSource, BaseBuffer *pDest, u32 size) = 0;
-        virtual void CopyBuffer(BaseBuffer *pSource, BaseImage *pDest) = 0;
+        virtual void SetVertexBuffer(Buffer *pBuffer) = 0;
+        virtual void SetIndexBuffer(Buffer *pBuffer, bool type32 = true) = 0;
+        virtual void CopyBuffer(Buffer *pSource, Buffer *pDest, u32 size) = 0;
+        virtual void CopyBuffer(Buffer *pSource, Image *pDest) = 0;
 
         /// Draw Commands
         virtual void Draw(u32 vertexCount, u32 firstVertex = 0, u32 instanceCount = 1, u32 firstInstance = 1) = 0;
@@ -156,17 +157,17 @@ namespace lr::Graphics
         virtual void SetScissors(u32 id, u32 x, u32 y, u32 width, u32 height) = 0;
         virtual void SetPrimitiveType(PrimitiveType type) = 0;
 
-        virtual void SetGraphicsPipeline(BasePipeline *pPipeline) = 0;
-        virtual void SetComputePipeline(BasePipeline *pPipeline) = 0;
-        virtual void SetGraphicsDescriptorSets(const std::initializer_list<BaseDescriptorSet *> &sets) = 0;
-        virtual void SetComputeDescriptorSets(const std::initializer_list<BaseDescriptorSet *> &sets) = 0;
-        virtual void SetGraphicsPushConstants(BasePipeline *pPipeline, ShaderStage stage, void *pData, u32 dataSize) = 0;
-        virtual void SetComputePushConstants(BasePipeline *pPipeline, void *pData, u32 dataSize) = 0;
+        virtual void SetGraphicsPipeline(Pipeline *pPipeline) = 0;
+        virtual void SetComputePipeline(Pipeline *pPipeline) = 0;
+        virtual void SetGraphicsDescriptorSets(const std::initializer_list<DescriptorSet *> &sets) = 0;
+        virtual void SetComputeDescriptorSets(const std::initializer_list<DescriptorSet *> &sets) = 0;
+        virtual void SetGraphicsPushConstants(Pipeline *pPipeline, ShaderStage stage, void *pData, u32 dataSize) = 0;
+        virtual void SetComputePushConstants(Pipeline *pPipeline, void *pData, u32 dataSize) = 0;
 
         CommandListType m_Type = CommandListType::Direct;
     };
 
-    struct BaseCommandAllocator
+    struct CommandAllocator
     {
     };
 
@@ -174,16 +175,16 @@ namespace lr::Graphics
     {
         void Init();
 
-        BaseCommandList *Acquire(CommandListType type);
-        void Release(BaseCommandList *pList);
-        void SignalFence(BaseCommandList *pList);
+        CommandList *Acquire(CommandListType type);
+        void Release(CommandList *pList);
+        void SignalFence(CommandList *pList);
         void ReleaseFence(u32 index);
 
         void WaitForAll();
 
-        eastl::array<BaseCommandList *, 32> m_DirectLists = {};
-        eastl::array<BaseCommandList *, 16> m_ComputeLists = {};
-        eastl::array<BaseCommandList *, 8> m_CopyLists = {};
+        eastl::array<CommandList *, 32> m_DirectLists = {};
+        eastl::array<CommandList *, 16> m_ComputeLists = {};
+        eastl::array<CommandList *, 8> m_CopyLists = {};
 
         eastl::atomic<u32> m_DirectListMask;
         eastl::atomic<u32> m_DirectFenceMask;

@@ -21,7 +21,7 @@ namespace lr::Graphics
 
     struct BaseSwapChain
     {
-        virtual BaseImage *GetCurrentImage() = 0;
+        virtual Image *GetCurrentImage() = 0;
         void NextFrame();
 
         u32 m_CurrentFrame = 0;
@@ -32,7 +32,7 @@ namespace lr::Graphics
 
         bool m_vSync = false;
 
-        ResourceFormat m_ImageFormat = LR_RESOURCE_FORMAT_RGBA8F;
+        ImageFormat m_ImageFormat = LR_IMAGE_FORMAT_RGBA8F;
     };
 
 };  // namespace lr::Graphics

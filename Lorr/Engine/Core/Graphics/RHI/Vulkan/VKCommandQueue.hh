@@ -5,14 +5,13 @@
 #pragma once
 
 #include "Core/Graphics/RHI/APIConfig.hh"
-#include "Core/Graphics/RHI/Base/BaseCommandQueue.hh"
 
 #include "VKSym.hh"
 #include "VKCommandList.hh"
 
 namespace lr::Graphics
 {
-    struct VKCommandQueue : BaseCommandQueue
+    struct VKCommandQueue
     {
         void Init(VkQueue pHandle);
         void SetSemaphoreStage(VkPipelineStageFlags2 acquire, VkPipelineStageFlags2 present);

@@ -14,10 +14,10 @@ namespace lr::Graphics
 {
     struct VKSwapChainFrame
     {
-        VKImage Image;
+        VKImage m_Image;
 
-        VkSemaphore pAcquireSemp = nullptr;
-        VkSemaphore pPresentSemp = nullptr;
+        VkSemaphore m_pAcquireSemp = nullptr;
+        VkSemaphore m_pPresentSemp = nullptr;
     };
 
     struct VKAPI;
@@ -27,7 +27,7 @@ namespace lr::Graphics
 
         void CreateHandle(VKAPI *pAPI);
         void CreateBackBuffers(VKAPI *pAPI);
-        BaseImage *GetCurrentImage();
+        Image *GetCurrentImage();
         VKSwapChainFrame *GetCurrentFrame();
         VKSwapChainFrame *GetNextFrame();
 

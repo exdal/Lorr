@@ -11,16 +11,18 @@ int main()
 {
     using namespace lr;
 
-    ApplicationDesc appDesc;
-    appDesc.Title = "Game";
-    appDesc.Engine.TargetAPI = lr::Renderer::APIType::Vulkan;
-    appDesc.Engine.TargetAPIFlags = lr::Graphics::APIFlags::None;
+    ApplicationDesc appDesc = {};
+    appDesc.m_Name = "Game";
+    appDesc.m_EngineDesc.m_TargetAPI = Renderer::APIType::Vulkan;
+    appDesc.m_EngineDesc.m_TargetAPIFlags = Graphics::APIFlags::None;
 
-    appDesc.Engine.Window.Title = "Game";
-    appDesc.Engine.Window.Width = 1480;
-    appDesc.Engine.Window.Height = 780;
-    appDesc.Engine.Window.Flags = WindowFlags::Centered | WindowFlags::Resizable;
-    appDesc.Engine.Window.CurrentMonitor = 0;
+    appDesc.m_EngineDesc.m_WindowDesc = {
+        .m_Title = "Game",
+        .m_CurrentMonitor = 0,
+        .m_Width = 1480,
+        .m_Height = 780,
+        .m_Flags = WindowFlags::Centered | WindowFlags::Resizable,
+    };
 
     pApp = new GameApp;
     pApp->Init(appDesc);

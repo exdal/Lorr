@@ -26,7 +26,7 @@ namespace lr
             ZoneScoped;
 
             Memory::AllocatorDesc allocDesc = {};
-            allocDesc.DataSize = memSize;
+            allocDesc.m_DataSize = memSize;
 
             m_Allocator.Init(allocDesc);
         }
@@ -68,16 +68,16 @@ namespace lr
             ZoneScoped;
 
             Memory::AllocationInfo allocInfo = {};
-            allocInfo.Size = kMaxDataSize + sizeof(Event);
-            allocInfo.Alignment = 1;
-            allocInfo.pData = nullptr;
+            allocInfo.m_Size = kMaxDataSize + sizeof(Event);
+            allocInfo.m_Alignment = 1;
+            allocInfo.m_pData = nullptr;
 
             if (!m_Allocator.Allocate(allocInfo))
                 return;
 
             u64 offset = 0;
-            Memory::CopyMem(allocInfo.pData, event, offset);
-            Memory::CopyMem(allocInfo.pData, data, offset);
+            Memory::CopyMem(allocInfo.m_pData, event, offset);
+            Memory::CopyMem(allocInfo.m_pData, data, offset);
 
             m_Eventcount++;
         }

@@ -17,7 +17,6 @@
 
 #include "BasePipeline.hh"
 
-#include "BaseCommandQueue.hh"
 #include "BaseCommandList.hh"
 #include "BaseSwapChain.hh"
 
@@ -25,11 +24,10 @@ namespace lr::Graphics
 {
     struct PipelineLayoutSerializeDesc
     {
-        BaseDescriptorSet *pSamplerDescriptorSet = nullptr;
-        u32 DescriptorSetCount = 0;
-        BaseDescriptorSet **ppDescriptorSets = nullptr;
-        u32 PushConstantCount = 0;
-        PushConstantDesc *pPushConstants = nullptr;
+        u32 m_DescriptorSetCount = 0;
+        DescriptorSet **m_ppDescriptorSets = nullptr;
+        u32 m_PushConstantCount = 0;
+        PushConstantDesc *m_pPushConstants = nullptr;
     };
 
     //* Not fully virtual struct that we *only* expose external functions.
@@ -38,28 +36,21 @@ namespace lr::Graphics
     {
         virtual bool Init(BaseWindow *pWindow, u32 width, u32 height, APIFlags flags) = 0;
 
-        void InitCommandLists();
-        virtual void InitAllocators() = 0;
-
         /// COMMAND ///
-        virtual BaseCommandQueue *CreateCommandQueue(CommandListType type) = 0;
-        virtual BaseCommandAllocator *CreateCommandAllocator(CommandListType type) = 0;
-        virtual BaseCommandList *CreateCommandList(CommandListType type) = 0;
+        CommandList *GetCommandList(CommandListType type = CommandListType::Direct);
 
-        BaseCommandList *GetCommandList(CommandListType type = CommandListType::Direct);
-
-        virtual void BeginCommandList(BaseCommandList *pList) = 0;
-        virtual void EndCommandList(BaseCommandList *pList) = 0;
-        virtual void ResetCommandAllocator(BaseCommandAllocator *pAllocator) = 0;
+        virtual void BeginCommandList(CommandList *pList) = 0;
+        virtual void EndCommandList(CommandList *pList) = 0;
+        virtual void ResetCommandAllocator(CommandAllocator *pAllocator) = 0;
 
         // Executes a specific command list, taken from a `CommandListPool`.
         // Does not execute command list in flight. Cannot perform a present operation.
         // if `waitForFence` set true, does not push fence into wait thread, blocks current thread.
-        virtual void ExecuteCommandList(BaseCommandList *pList, bool waitForFence) = 0;
+        virtual void ExecuteCommandList(CommandList *pList, bool waitForFence) = 0;
 
         /// PIPELINE ///
-        virtual BasePipeline *CreateGraphicsPipeline(GraphicsPipelineBuildInfo *pBuildInfo) = 0;
-        virtual BasePipeline *CreateComputePipeline(ComputePipelineBuildInfo *pBuildInfo) = 0;
+        virtual Pipeline *CreateGraphicsPipeline(GraphicsPipelineBuildInfo *pBuildInfo) = 0;
+        virtual Pipeline *CreateComputePipeline(ComputePipelineBuildInfo *pBuildInfo) = 0;
 
         /// SWAPCHAIN ///
         virtual void ResizeSwapChain(u32 width, u32 height) = 0;
@@ -69,43 +60,38 @@ namespace lr::Graphics
         virtual void EndFrame() = 0;
 
         /// RESOURCE ///
-        virtual BaseDescriptorSet *CreateDescriptorSet(DescriptorSetDesc *pDesc) = 0;
+        virtual DescriptorSet *CreateDescriptorSet(DescriptorSetDesc *pDesc) = 0;
         // Only deletes immutable samplers
-        virtual void DeleteDescriptorSet(BaseDescriptorSet *pSet) = 0;
-        virtual void UpdateDescriptorData(BaseDescriptorSet *pSet) = 0;
+        virtual void DeleteDescriptorSet(DescriptorSet *pSet) = 0;
+        virtual void UpdateDescriptorData(DescriptorSet *pSet, DescriptorSetDesc *pDesc) = 0;
 
-        virtual BaseShader *CreateShader(ShaderStage stage, BufferReadStream &buf) = 0;
-        virtual BaseShader *CreateShader(ShaderStage stage, eastl::string_view path) = 0;
-        virtual void DeleteShader(BaseShader *pShader) = 0;
+        virtual Shader *CreateShader(ShaderStage stage, BufferReadStream &buf) = 0;
+        virtual Shader *CreateShader(ShaderStage stage, eastl::string_view path) = 0;
+        virtual void DeleteShader(Shader *pShader) = 0;
 
         // * Buffers * //
-        virtual BaseBuffer *CreateBuffer(BufferDesc *pDesc, BufferData *pData) = 0;
-        virtual void DeleteBuffer(BaseBuffer *pHandle) = 0;
+        virtual Buffer *CreateBuffer(BufferDesc *pDesc) = 0;
+        virtual void DeleteBuffer(Buffer *pBuffer) = 0;
 
-        virtual void MapMemory(BaseBuffer *pBuffer, void *&pData) = 0;
-        virtual void UnmapMemory(BaseBuffer *pBuffer) = 0;
-
-        // Note: On D3D12 API, this operation also consts additional ResoureBarrier.
-        virtual BaseBuffer *ChangeAllocator(BaseCommandList *pList, BaseBuffer *pTarget, AllocatorType targetAllocator) = 0;
+        virtual void MapMemory(Buffer *pBuffer, void *&pData) = 0;
+        virtual void UnmapMemory(Buffer *pBuffer) = 0;
 
         // * Images * //
-        virtual BaseImage *CreateImage(ImageDesc *pDesc, ImageData *pData) = 0;
-        virtual void DeleteImage(BaseImage *pImage) = 0;
+        virtual Image *CreateImage(ImageDesc *pDesc) = 0;
+        virtual void DeleteImage(Image *pImage) = 0;
+        virtual Sampler *CreateSampler(SamplerDesc *pDesc) = 0;
 
         /// UTILITY
         virtual void CalcOrthoProjection(XMMATRIX &mat, XMFLOAT2 viewSize, float zFar, float zNear) = 0;
 
-        // TODO: USE ACTUAL ALLOCATORS ASAP
-        // T = Base Type
-        // U = Actual Type
         template<typename _Base, typename _Derived>
         _Derived *AllocTypeInherit()
         {
-            static_assert(eastl::is_base_of<_Base, _Derived>::value, "U must be base of T.");
+            static_assert(eastl::is_base_of<_Base, _Derived>::value, "_Derived must be base of _Base.");
 
             Memory::TLSFBlock *pBlock = m_TypeAllocator.Allocate(sizeof(_Base) + sizeof(_Derived) + PTR_SIZE, Memory::TLSFAllocatorView::ALIGN_SIZE);
 
-            u64 offset = pBlock->Offset;
+            u64 offset = pBlock->m_Offset;
 
             // Copy block address
             memcpy(m_pTypeData + offset, pBlock, PTR_SIZE);
@@ -122,8 +108,8 @@ namespace lr::Graphics
         {
             Memory::TLSFBlock *pBlock = m_TypeAllocator.Allocate(sizeof(_Type) + PTR_SIZE, Memory::TLSFAllocatorView::ALIGN_SIZE);
 
-            memcpy(m_pTypeData + pBlock->Offset, pBlock, PTR_SIZE);
-            return (_Type *)(m_pTypeData + pBlock->Offset + PTR_SIZE);
+            memcpy(m_pTypeData + pBlock->m_Offset, pBlock, PTR_SIZE);
+            return (_Type *)(m_pTypeData + pBlock->m_Offset + PTR_SIZE);
         }
 
         template<typename T>

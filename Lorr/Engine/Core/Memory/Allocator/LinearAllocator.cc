@@ -52,12 +52,12 @@ namespace lr::Memory
     {
         ZoneScoped;
 
-        m_View.Init(desc.DataSize);
-        m_pData = (u8 *)desc.pInitialData;
+        m_View.Init(desc.m_DataSize);
+        m_pData = (u8 *)desc.m_pInitialData;
         m_SelfAllocated = !(bool)m_pData;
 
         if (!m_pData)
-            m_pData = Memory::Allocate<u8>(desc.DataSize);
+            m_pData = Memory::Allocate<u8>(desc.m_DataSize);
     }
 
     void LinearAllocator::Delete()
@@ -79,16 +79,16 @@ namespace lr::Memory
     {
         ZoneScoped;
 
-        u64 offset = m_View.Allocate(info.Size, info.Alignment);
+        u64 offset = m_View.Allocate(info.m_Size, info.m_Alignment);
         if (offset == -1)
             return false;
 
         void *pData = m_pData + offset;
 
-        if (!info.pData)
-            info.pData = pData;
+        if (!info.m_pData)
+            info.m_pData = pData;
         else
-            memcpy(pData, info.pData, info.Size);
+            memcpy(pData, info.m_pData, info.m_Size);
 
         return true;
     }

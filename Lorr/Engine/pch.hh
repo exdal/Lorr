@@ -75,5 +75,3 @@ using namespace PackedVector;
         var->Release();   \
         var = nullptr;    \
     }
-
-#define _ZEROM(x, len) memset((void *)x, 0, len)

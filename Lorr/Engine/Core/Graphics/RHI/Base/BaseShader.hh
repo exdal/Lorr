@@ -24,9 +24,9 @@ namespace lr::Graphics
 
     EnumFlags(ShaderStage);
 
-    struct BaseShader
+    struct Shader
     {
-        ShaderStage Type;
+        ShaderStage m_Type = LR_SHADER_STAGE_NONE;
     };
 
     enum ShaderFlags : u32
@@ -46,17 +46,17 @@ namespace lr::Graphics
     {
         static constexpr u32 kMaxDefinceCount = 16;
 
-        eastl::wstring_view PathOpt;
+        eastl::wstring_view m_PathOpt;
 
-        ShaderStage Type;
-        ShaderFlags Flags;
+        ShaderStage m_Type = LR_SHADER_STAGE_NONE;
+        ShaderFlags m_Flags = LR_SHADER_FLAG_NONE;
 
-        u32 DefineCount = 0;
+        u32 m_DefineCount = 0;
         struct
         {
-            eastl::wstring_view Name;
-            eastl::wstring_view Value;
-        } Defines[kMaxDefinceCount] = {};
+            eastl::wstring_view m_Name;
+            eastl::wstring_view m_Value;
+        } m_Defines[kMaxDefinceCount] = {};
     };
 
     namespace ShaderCompiler

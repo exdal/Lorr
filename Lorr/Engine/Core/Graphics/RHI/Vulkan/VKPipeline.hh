@@ -11,10 +11,10 @@
 
 namespace lr::Graphics
 {
-    struct VKPipeline : BasePipeline
+    struct VKPipeline : Pipeline
     {
-        VkPipeline pHandle = nullptr;
-        VkPipelineLayout pLayout = nullptr;
+        VkPipeline m_pHandle = nullptr;
+        VkPipelineLayout m_pLayout = nullptr;
     };
 
 }  // namespace lr::Graphics

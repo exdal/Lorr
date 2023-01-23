@@ -13,7 +13,7 @@ namespace lr::Graphics
 {
     struct D3D12SwapChainFrame
     {
-        D3D12Image Image;
+        D3D12Image m_Image;
     };
 
     struct D3D12API;
@@ -25,7 +25,7 @@ namespace lr::Graphics
 
         void CreateHandle(D3D12API *pAPI, BaseWindow *pWindow);
         void CreateBackBuffers(D3D12API *pAPI);
-        BaseImage *GetCurrentImage();
+        Image *GetCurrentImage();
         D3D12SwapChainFrame *GetCurrentFrame();
         D3D12SwapChainFrame *GetNextFrame();
 

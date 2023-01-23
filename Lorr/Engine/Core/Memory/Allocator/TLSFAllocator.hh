@@ -10,14 +10,14 @@ namespace lr::Memory
 {
     struct TLSFBlock
     {
-        u64 Offset : 63 = 0;
-        u64 IsFree : 1 = 0;
+        u64 m_Offset : 63 = 0;
+        u64 m_IsFree : 1 = 0;
 
-        TLSFBlock *pNextPhysical = nullptr;
-        TLSFBlock *pPrevPhysical = nullptr;
+        TLSFBlock *m_pNextPhysical = nullptr;
+        TLSFBlock *m_pPrevPhysical = nullptr;
 
-        TLSFBlock *pPrevFree = nullptr;
-        TLSFBlock *pNextFree = nullptr;
+        TLSFBlock *m_pPrevFree = nullptr;
+        TLSFBlock *m_pNextFree = nullptr;
     };
 
     struct TLSFAllocatorView

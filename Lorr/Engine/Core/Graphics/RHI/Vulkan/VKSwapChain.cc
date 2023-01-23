@@ -19,7 +19,7 @@ namespace lr::Graphics
 
         if (!pAPI->IsFormatSupported(m_ImageFormat, &m_ColorSpace))
         {
-            m_ImageFormat = LR_RESOURCE_FORMAT_BGRA8F;
+            m_ImageFormat = LR_IMAGE_FORMAT_BGRA8F;
             pAPI->IsFormatSupported(m_ImageFormat, &m_ColorSpace);
         }
 
@@ -77,16 +77,14 @@ namespace lr::Graphics
         pAPI->GetSwapChainImages(m_pHandle, m_FrameCount, ppSwapChainImages);
 
         ImageDesc imageDesc;
-        imageDesc.Format = m_ImageFormat;
-
-        ImageData imageData;
-        imageData.Width = m_Width;
-        imageData.Height = m_Height;
+        imageDesc.m_Format = m_ImageFormat;
+        imageDesc.m_Width = m_Width;
+        imageDesc.m_Height = m_Height;
 
         for (u32 i = 0; i < m_FrameCount; i++)
         {
             VKSwapChainFrame &frame = m_pFrames[i];
-            VKImage &currentImage = frame.Image;
+            VKImage &currentImage = frame.m_Image;
 
             // Swapchain already gives us the image, so we don't need to create it again
             currentImage.m_pHandle = ppSwapChainImages[i];
@@ -94,27 +92,26 @@ namespace lr::Graphics
             currentImage.m_UsageFlags = LR_RESOURCE_USAGE_PRESENT;
             currentImage.m_Width = m_Width;
             currentImage.m_Height = m_Height;
-            currentImage.m_DataSize = ~0;
-            currentImage.m_UsingMip = 0;
-            currentImage.m_TotalMips = 1;
+            currentImage.m_DataLen = ~0;
+            currentImage.m_MipMapLevels = 1;
             currentImage.m_Format = m_ImageFormat;
-            currentImage.m_RequiredDataSize = ~0;
-            currentImage.m_AllocatorType = AllocatorType::Count;
+            currentImage.m_DeviceDataLen = ~0;
+            currentImage.m_TargetAllocator = LR_RHI_ALLOCATOR_COUNT;
 
             pAPI->CreateImageView(&currentImage);
 
             /// Create Semaphores
 
-            frame.pAcquireSemp = pAPI->CreateSemaphore();
-            frame.pPresentSemp = pAPI->CreateSemaphore();
+            frame.m_pAcquireSemp = pAPI->CreateSemaphore();
+            frame.m_pPresentSemp = pAPI->CreateSemaphore();
         }
     }
 
-    BaseImage *VKSwapChain::GetCurrentImage()
+    Image *VKSwapChain::GetCurrentImage()
     {
         ZoneScoped;
 
-        return &m_pFrames[m_CurrentFrame].Image;
+        return &m_pFrames[m_CurrentFrame].m_Image;
     }
 
     VKSwapChainFrame *VKSwapChain::GetCurrentFrame()
@@ -140,8 +137,8 @@ namespace lr::Graphics
         {
             VKSwapChainFrame &frame = m_pFrames[i];
 
-            pAPI->DeleteSemaphore(frame.pPresentSemp);
-            pAPI->DeleteSemaphore(frame.pAcquireSemp);
+            pAPI->DeleteSemaphore(frame.m_pPresentSemp);
+            pAPI->DeleteSemaphore(frame.m_pAcquireSemp);
         }
 
         pAPI->DeleteSwapChain(this);

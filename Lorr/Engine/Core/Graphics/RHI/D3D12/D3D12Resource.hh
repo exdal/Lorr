@@ -10,24 +10,24 @@
 
 namespace lr::Graphics
 {
-    struct D3D12Image : BaseImage
+    struct D3D12Image : Image
     {
         ID3D12Resource *m_pHandle = nullptr;
         ID3D12Heap *m_pMemoryHandle = nullptr;
 
-        D3D12_CPU_DESCRIPTOR_HANDLE m_ShaderViewCPU = { 0 };
-        D3D12_GPU_DESCRIPTOR_HANDLE m_ShaderViewGPU = { 0 };
+        D3D12_CPU_DESCRIPTOR_HANDLE m_ShaderViewCPU = {};
+        D3D12_GPU_DESCRIPTOR_HANDLE m_ShaderViewGPU = {};
 
-        D3D12_CPU_DESCRIPTOR_HANDLE m_UnorderedAccessViewCPU = { 0 };
-        D3D12_GPU_DESCRIPTOR_HANDLE m_UnorderedAccessViewGPU = { 0 };
+        D3D12_CPU_DESCRIPTOR_HANDLE m_UnorderedAccessViewCPU = {};
+        D3D12_GPU_DESCRIPTOR_HANDLE m_UnorderedAccessViewGPU = {};
 
-        D3D12_CPU_DESCRIPTOR_HANDLE m_RenderTargetViewCPU = { 0 };
+        D3D12_CPU_DESCRIPTOR_HANDLE m_RenderTargetViewCPU = {};
 
-        D3D12_CPU_DESCRIPTOR_HANDLE m_DepthStencilViewCPU = { 0 };
-        D3D12_GPU_DESCRIPTOR_HANDLE m_DepthStencilViewGPU = { 0 };
+        D3D12_CPU_DESCRIPTOR_HANDLE m_DepthStencilViewCPU = {};
+        D3D12_GPU_DESCRIPTOR_HANDLE m_DepthStencilViewGPU = {};
     };
 
-    struct D3D12Buffer : BaseBuffer
+    struct D3D12Buffer : Buffer
     {
         ID3D12Resource *m_pHandle = nullptr;
         ID3D12Heap *m_pMemoryHandle = nullptr;
@@ -39,10 +39,16 @@ namespace lr::Graphics
         D3D12_GPU_VIRTUAL_ADDRESS m_VirtualAddress = 0;
     };
 
-    struct D3D12DescriptorSet : BaseDescriptorSet
+    struct D3D12Sampler : Sampler
     {
-        ID3D12RootSignature *pHandle = nullptr;
-        D3D12_GPU_DESCRIPTOR_HANDLE pDescriptorHandles[8];
+        D3D12_CPU_DESCRIPTOR_HANDLE m_HandleCPU = {};
+        D3D12_GPU_DESCRIPTOR_HANDLE m_HandleGPU = {};
+    };
+
+    struct D3D12DescriptorSet : DescriptorSet
+    {
+        ID3D12RootSignature *m_pHandle = nullptr;
+        D3D12_GPU_DESCRIPTOR_HANDLE m_pDescriptorHandles[8];
     };
 
 }  // namespace lr::Graphics

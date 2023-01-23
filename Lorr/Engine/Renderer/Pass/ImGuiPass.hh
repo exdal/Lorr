@@ -14,14 +14,14 @@ namespace lr::Renderer
         void Init(BaseAPI *pAPI);
         void Draw(BaseAPI *pAPI, XMMATRIX &mat2d);
 
-        BasePipeline *m_pPipeline = nullptr;
-        BaseDescriptorSet *m_pDescriptorSet = nullptr;
-        BaseDescriptorSet *m_pSamplerSet = nullptr;
+        Pipeline *m_pPipeline = nullptr;
+        DescriptorSet *m_pDescriptorSet = nullptr;
+        DescriptorSet *m_pSamplerSet = nullptr;
 
-        BaseImage *m_pFontImage = nullptr;
+        Image *m_pFontImage = nullptr;
 
-        BaseBuffer *m_pVertexBuffer = nullptr;
-        BaseBuffer *m_pIndexBuffer = nullptr;
+        Buffer *m_pVertexBuffer = nullptr;
+        Buffer *m_pIndexBuffer = nullptr;
 
         u32 m_VertexCount = 0;
         u32 m_IndexCount = 0;

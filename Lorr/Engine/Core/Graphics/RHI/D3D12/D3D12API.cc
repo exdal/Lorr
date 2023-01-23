@@ -141,24 +141,30 @@ namespace lr::Graphics
         m_CommandListPool.Init();
         CreateDescriptorPool({
             { D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 256 },
+            { D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, 256 },
             { D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 256 },
         });
 
         m_pPipelineCache = CreatePipelineCache();
 
-        m_pDirectQueue = (D3D12CommandQueue *)CreateCommandQueue(CommandListType::Direct);
-        m_pComputeQueue = (D3D12CommandQueue *)CreateCommandQueue(CommandListType::Compute);
+        m_pDirectQueue = CreateCommandQueue(CommandListType::Direct);
+        m_pComputeQueue = CreateCommandQueue(CommandListType::Compute);
 
         m_SwapChain.Init(pWindow, this, SwapChainFlags::TripleBuffering);
         m_SwapChain.CreateBackBuffers(this);
 
-        LOG_TRACE("Successfully initialized D3D12 context.");
+        for (CommandList *&pList : m_CommandListPool.m_DirectLists)
+            pList = CreateCommandList(CommandListType::Direct);
 
-        InitCommandLists();
+        for (CommandList *&pList : m_CommandListPool.m_ComputeLists)
+            pList = CreateCommandList(CommandListType::Compute);
+
+        for (CommandList *&pList : m_CommandListPool.m_CopyLists)
+            pList = CreateCommandList(CommandListType::Copy);
 
         m_FenceThread.Begin(TFFenceWait, this);
 
-        LOG_TRACE("Initialized D3D12 render context.");
+        LOG_TRACE("Successfully initialized D3D12 API.");
 
         return true;
     }
@@ -193,11 +199,11 @@ namespace lr::Graphics
         m_MAImageTLSF.pHeap = CreateHeap(kImageTLSFMem, false, kImageFlags);
     }
 
-    BaseCommandQueue *D3D12API::CreateCommandQueue(CommandListType type)
+    D3D12CommandQueue *D3D12API::CreateCommandQueue(CommandListType type)
     {
         ZoneScoped;
 
-        D3D12CommandQueue *pQueue = AllocTypeInherit<BaseCommandQueue, D3D12CommandQueue>();
+        D3D12CommandQueue *pQueue = AllocType<D3D12CommandQueue>();
         pQueue->m_pFence = CreateFence();
         pQueue->m_FenceEvent = CreateEventExA(nullptr, nullptr, false, EVENT_ALL_ACCESS);
 
@@ -212,38 +218,36 @@ namespace lr::Graphics
         return pQueue;
     }
 
-    BaseCommandAllocator *D3D12API::CreateCommandAllocator(CommandListType type)
+    D3D12CommandAllocator *D3D12API::CreateCommandAllocator(CommandListType type)
     {
         ZoneScoped;
 
-        D3D12CommandAllocator *pAllocator = AllocTypeInherit<BaseCommandAllocator, D3D12CommandAllocator>();
+        D3D12CommandAllocator *pAllocator = AllocTypeInherit<CommandAllocator, D3D12CommandAllocator>();
 
-        m_pDevice->CreateCommandAllocator(ToDXCommandListType(type), IID_PPV_ARGS(&pAllocator->pHandle));
+        m_pDevice->CreateCommandAllocator(ToDXCommandListType(type), IID_PPV_ARGS(&pAllocator->m_pHandle));
 
         return pAllocator;
     }
 
-    BaseCommandList *D3D12API::CreateCommandList(CommandListType type)
+    D3D12CommandList *D3D12API::CreateCommandList(CommandListType type)
     {
         ZoneScoped;
 
-        D3D12CommandList *pList = AllocTypeInherit<BaseCommandList, D3D12CommandList>();
-        BaseCommandAllocator *pAllocator = CreateCommandAllocator(type);
-
-        API_VAR(D3D12CommandAllocator, pAllocator);
+        D3D12CommandList *pList = AllocTypeInherit<CommandList, D3D12CommandList>();
+        D3D12CommandAllocator *pAllocator = CreateCommandAllocator(type);
 
         pList->m_pFence = CreateFence();
         pList->m_FenceEvent = CreateEventExA(nullptr, nullptr, false, EVENT_ALL_ACCESS);
 
         ID3D12GraphicsCommandList4 *pHandle = nullptr;
-        m_pDevice->CreateCommandList(0, ToDXCommandListType(type), pAllocatorDX->pHandle, nullptr, IID_PPV_ARGS(&pHandle));
+        m_pDevice->CreateCommandList(0, ToDXCommandListType(type), pAllocator->m_pHandle, nullptr, IID_PPV_ARGS(&pHandle));
 
-        pList->Init(pHandle, pAllocatorDX, type);
+        pList->Init(pHandle, pAllocator, type);
 
         return pList;
     }
 
-    void D3D12API::BeginCommandList(BaseCommandList *pList)
+    void D3D12API::BeginCommandList(CommandList *pList)
     {
         ZoneScoped;
 
@@ -252,14 +256,15 @@ namespace lr::Graphics
         pListDX->m_pAllocator->Reset();
         pListDX->Reset(pListDX->m_pAllocator);
 
-        ID3D12DescriptorHeap *pHeaps[] = {
-            m_pDescriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV].pHandle,
+        eastl::array<ID3D12DescriptorHeap *, 2> pHeaps = {
+            m_pDescriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV].m_pHandle,
+            m_pDescriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER].m_pHandle,
         };
 
-        pListDX->m_pHandle->SetDescriptorHeaps(1, pHeaps);
+        pListDX->m_pHandle->SetDescriptorHeaps(pHeaps.count, pHeaps.data());
     }
 
-    void D3D12API::EndCommandList(BaseCommandList *pList)
+    void D3D12API::EndCommandList(CommandList *pList)
     {
         ZoneScoped;
 
@@ -268,7 +273,7 @@ namespace lr::Graphics
         pListDX->m_pHandle->Close();
     }
 
-    void D3D12API::ResetCommandAllocator(BaseCommandAllocator *pAllocator)
+    void D3D12API::ResetCommandAllocator(CommandAllocator *pAllocator)
     {
         ZoneScoped;
 
@@ -277,7 +282,7 @@ namespace lr::Graphics
         pAllocatorDX->Reset();
     }
 
-    void D3D12API::ExecuteCommandList(BaseCommandList *pList, bool waitForFence)
+    void D3D12API::ExecuteCommandList(CommandList *pList, bool waitForFence)
     {
         ZoneScoped;
 
@@ -337,7 +342,7 @@ namespace lr::Graphics
         return pLibrary;
     }
 
-    ID3D12RootSignature *D3D12API::SerializeRootSignature(PipelineLayoutSerializeDesc *pDesc, BasePipeline *pPipeline)
+    ID3D12RootSignature *D3D12API::SerializeRootSignature(PipelineLayoutSerializeDesc *pDesc, Pipeline *pPipeline)
     {
         ZoneScoped;
 
@@ -349,77 +354,54 @@ namespace lr::Graphics
 
         u32 currentSpace = 0;
 
-        for (u32 i = 0; i < pDesc->DescriptorSetCount; i++)
+        for (u32 i = 0; i < pDesc->m_DescriptorSetCount; i++)
         {
-            BaseDescriptorSet *pSet = pDesc->ppDescriptorSets[i];
+            DescriptorSet *pSet = pDesc->m_ppDescriptorSets[i];
             API_VAR(D3D12DescriptorSet, pSet);
 
             pParams[i].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
 
             pParams[i].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-            pParams[i].DescriptorTable.NumDescriptorRanges = pSetDX->BindingCount;
+            pParams[i].DescriptorTable.NumDescriptorRanges = pSetDX->m_BindingCount;
             pParams[i].DescriptorTable.pDescriptorRanges = pRanges[i];
 
-            for (u32 j = 0; j < pSetDX->BindingCount; j++)
+            for (u32 j = 0; j < pSetDX->m_BindingCount; j++)
             {
                 D3D12_DESCRIPTOR_RANGE1 &range = pRanges[i][j];
 
                 range.RegisterSpace = currentSpace;
                 range.BaseShaderRegister = j;
                 range.NumDescriptors = 1;
-                range.RangeType = ToDXDescriptorRangeType(pSetDX->pBindings[j].Type);
-                range.Flags = D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC_WHILE_SET_AT_EXECUTE;
+                range.RangeType = ToDXDescriptorRangeType(pSetDX->m_pBindingTypes[j]);
                 range.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+                if (range.RangeType != D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER)
+                    range.Flags = D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC_WHILE_SET_AT_EXECUTE;
             }
 
             currentSpace++;
         }
 
-        u32 samplerCount = 0;
-        if (pDesc->pSamplerDescriptorSet)
+        for (u32 i = 0; i < pDesc->m_PushConstantCount; i++)
         {
-            BaseDescriptorSet *pSet = pDesc->pSamplerDescriptorSet;
-            API_VAR(D3D12DescriptorSet, pSet);
-
-            samplerCount = pSetDX->BindingCount;
-
-            for (u32 i = 0; i < pSetDX->BindingCount; i++)
-            {
-                D3D12_STATIC_SAMPLER_DESC &sampler = pSamplers[i];
-                DescriptorBindingDesc &binding = pSetDX->pBindings[i];
-                SamplerDesc *pSamplerDesc = binding.pSamplerInfo;
-
-                sampler.ShaderRegister = binding.BindingID;
-                sampler.RegisterSpace = currentSpace++;
-                sampler.ShaderVisibility = ToDXShaderType(binding.TargetShader);
-
-                CreateSampler(pSamplerDesc, sampler);
-            }
-        }
-
-        for (u32 i = 0; i < pDesc->PushConstantCount; i++)
-        {
-            u32 paramIdx = i + pDesc->DescriptorSetCount;
+            u32 paramIdx = i + pDesc->m_DescriptorSetCount;
 
             D3D12_ROOT_PARAMETER1 &param = pParams[paramIdx];
-            PushConstantDesc &pushConstant = pDesc->pPushConstants[i];
+            PushConstantDesc &pushConstant = pDesc->m_pPushConstants[i];
 
-            param.ShaderVisibility = ToDXShaderType(pushConstant.Stage);
+            param.ShaderVisibility = ToDXShaderType(pushConstant.m_Stage);
             param.ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
 
             param.Constants.RegisterSpace = currentSpace++;
             param.Constants.ShaderRegister = 0;
-            param.Constants.Num32BitValues = pushConstant.Size / sizeof(u32);
+            param.Constants.Num32BitValues = pushConstant.m_Size / sizeof(u32);
 
-            pPipelineDX->pRootConstats[(u32)param.ShaderVisibility] = paramIdx;
+            pPipelineDX->m_pRootConstats[(u32)param.ShaderVisibility] = paramIdx;
         }
 
         D3D12_VERSIONED_ROOT_SIGNATURE_DESC rootSignatureDesc = {};
         rootSignatureDesc.Version = D3D_ROOT_SIGNATURE_VERSION_1_1;
-        rootSignatureDesc.Desc_1_1.NumParameters = pDesc->DescriptorSetCount + pDesc->PushConstantCount;
+        rootSignatureDesc.Desc_1_1.NumParameters = pDesc->m_DescriptorSetCount + pDesc->m_PushConstantCount;
         rootSignatureDesc.Desc_1_1.pParameters = pParams;
-        rootSignatureDesc.Desc_1_1.NumStaticSamplers = samplerCount;
-        rootSignatureDesc.Desc_1_1.pStaticSamplers = pSamplers;
         rootSignatureDesc.Desc_1_1.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 
         ls::scoped_comptr<ID3DBlob> pRootSigBlob;
@@ -435,28 +417,28 @@ namespace lr::Graphics
         return pRootSig;
     }
 
-    BaseShader *D3D12API::CreateShader(ShaderStage stage, BufferReadStream &buf)
+    Shader *D3D12API::CreateShader(ShaderStage stage, BufferReadStream &buf)
     {
         ZoneScoped;
 
-        D3D12Shader *pShader = AllocTypeInherit<BaseShader, D3D12Shader>();
+        D3D12Shader *pShader = AllocTypeInherit<Shader, D3D12Shader>();
 
-        pShader->Type = stage;
+        pShader->m_Type = stage;
 
         ShaderCompileDesc compileDesc = {};
-        compileDesc.Type = stage;
-        compileDesc.Flags = LR_SHADER_FLAG_MATRIX_ROW_MAJOR | LR_SHADER_FLAG_ALL_RESOURCES_BOUND;
+        compileDesc.m_Type = stage;
+        compileDesc.m_Flags = LR_SHADER_FLAG_MATRIX_ROW_MAJOR | LR_SHADER_FLAG_ALL_RESOURCES_BOUND;
 
 #if _DEBUG
-        compileDesc.Flags |= LR_SHADER_FLAG_WARNINGS_ARE_ERRORS | LR_SHADER_FLAG_SKIP_OPTIMIZATION | LR_SHADER_FLAG_USE_DEBUG;
+        compileDesc.m_Flags |= LR_SHADER_FLAG_WARNINGS_ARE_ERRORS | LR_SHADER_FLAG_SKIP_OPTIMIZATION | LR_SHADER_FLAG_USE_DEBUG;
 #endif
 
-        pShader->pHandle = ShaderCompiler::CompileFromBuffer(&compileDesc, buf);
+        pShader->m_pHandle = ShaderCompiler::CompileFromBuffer(&compileDesc, buf);
 
         return pShader;
     }
 
-    BaseShader *D3D12API::CreateShader(ShaderStage stage, eastl::string_view path)
+    Shader *D3D12API::CreateShader(ShaderStage stage, eastl::string_view path)
     {
         ZoneScoped;
 
@@ -465,27 +447,27 @@ namespace lr::Graphics
         fs.Close();
 
         BufferReadStream buf(pData, fs.Size());
-        BaseShader *pShader = CreateShader(stage, buf);
+        Shader *pShader = CreateShader(stage, buf);
 
         free(pData);
 
         return pShader;
     }
 
-    void D3D12API::DeleteShader(BaseShader *pShader)
+    void D3D12API::DeleteShader(Shader *pShader)
     {
         ZoneScoped;
 
-        API_VAR(BaseShader, pShader);
+        API_VAR(Shader, pShader);
 
         FreeType(pShaderDX);
     }
 
-    BasePipeline *D3D12API::CreateGraphicsPipeline(GraphicsPipelineBuildInfo *pBuildInfo)
+    Pipeline *D3D12API::CreateGraphicsPipeline(GraphicsPipelineBuildInfo *pBuildInfo)
     {
         ZoneScoped;
 
-        D3D12Pipeline *pPipeline = AllocTypeInherit<BasePipeline, D3D12Pipeline>();
+        D3D12Pipeline *pPipeline = AllocTypeInherit<Pipeline, D3D12Pipeline>();
         D3D12_GRAPHICS_PIPELINE_STATE_DESC createInfo = {};
 
         constexpr D3D12_BLEND kBlendFactorLUT[] = {
@@ -511,35 +493,34 @@ namespace lr::Graphics
         /// PIPELINE LAYOUT ----------------------------------------------------------
 
         PipelineLayoutSerializeDesc layoutDesc = {};
-        layoutDesc.DescriptorSetCount = pBuildInfo->DescriptorSetCount;
-        layoutDesc.ppDescriptorSets = pBuildInfo->ppDescriptorSets;
-        layoutDesc.PushConstantCount = pBuildInfo->PushConstantCount;
-        layoutDesc.pPushConstants = pBuildInfo->pPushConstants;
-        layoutDesc.pSamplerDescriptorSet = pBuildInfo->pSamplerDescriptorSet;
+        layoutDesc.m_DescriptorSetCount = pBuildInfo->m_DescriptorSetCount;
+        layoutDesc.m_ppDescriptorSets = pBuildInfo->m_ppDescriptorSets;
+        layoutDesc.m_PushConstantCount = pBuildInfo->m_PushConstantCount;
+        layoutDesc.m_pPushConstants = pBuildInfo->m_pPushConstants;
 
         ID3D12RootSignature *pLayout = SerializeRootSignature(&layoutDesc, pPipeline);
-        pPipeline->pLayout = pLayout;
+        pPipeline->m_pLayout = pLayout;
         createInfo.pRootSignature = pLayout;
 
         /// BOUND RENDER TARGETS -----------------------------------------------------
 
-        createInfo.NumRenderTargets = pBuildInfo->RenderTargetCount;
+        createInfo.NumRenderTargets = pBuildInfo->m_RenderTargetCount;
 
-        for (u32 i = 0; i < pBuildInfo->RenderTargetCount; i++)
+        for (u32 i = 0; i < pBuildInfo->m_RenderTargetCount; i++)
         {
-            createInfo.RTVFormats[i] = ToDXFormat(pBuildInfo->pRenderTargets[i].Format);
+            createInfo.RTVFormats[i] = ToDXFormat(pBuildInfo->m_pRenderTargets[i].m_Format);
         }
 
         /// BOUND SHADER STAGES ------------------------------------------------------
 
-        for (u32 i = 0; i < pBuildInfo->ShaderCount; i++)
+        for (u32 i = 0; i < pBuildInfo->m_ShaderCount; i++)
         {
-            BaseShader *pShader = pBuildInfo->ppShaders[i];
+            Shader *pShader = pBuildInfo->m_ppShaders[i];
             API_VAR(D3D12Shader, pShader);
 
             D3D12_SHADER_BYTECODE *pTargetHandle = nullptr;
 
-            switch (pShader->Type)
+            switch (pShader->m_Type)
             {
                 case LR_SHADER_STAGE_VERTEX: pTargetHandle = &createInfo.VS; break;
                 case LR_SHADER_STAGE_PIXEL: pTargetHandle = &createInfo.PS; break;
@@ -549,7 +530,7 @@ namespace lr::Graphics
                 default: assert(!"Shader type not implemented"); break;
             }
 
-            IDxcBlob *pCode = pShaderDX->pHandle;
+            IDxcBlob *pCode = pShaderDX->m_pHandle;
 
             pTargetHandle->pShaderBytecode = pCode->GetBufferPointer();
             pTargetHandle->BytecodeLength = pCode->GetBufferSize();
@@ -557,7 +538,7 @@ namespace lr::Graphics
 
         /// INPUT LAYOUT  ------------------------------------------------------------
 
-        InputLayout *pInputLayout = pBuildInfo->pInputLayout;
+        InputLayout *pInputLayout = pBuildInfo->m_pInputLayout;
         D3D12_INPUT_ELEMENT_DESC pInputElements[LR_MAX_VERTEX_ATTRIBS_PER_PIPELINE] = {};
 
         createInfo.InputLayout.NumElements = pInputLayout->m_Count;
@@ -584,39 +565,39 @@ namespace lr::Graphics
         /// RASTERIZER ---------------------------------------------------------------
 
         D3D12_RASTERIZER_DESC &rasterizerInfo = createInfo.RasterizerState;
-        rasterizerInfo.DepthClipEnable = pBuildInfo->EnableDepthClamp;
-        rasterizerInfo.CullMode = ToDXCullMode(pBuildInfo->SetCullMode);
-        rasterizerInfo.FillMode = pBuildInfo->SetFillMode == LR_FILL_MODE_FILL ? D3D12_FILL_MODE_SOLID : D3D12_FILL_MODE_WIREFRAME;
-        rasterizerInfo.FrontCounterClockwise = !pBuildInfo->FrontFaceCCW;
-        rasterizerInfo.DepthBias = pBuildInfo->EnableDepthBias;
-        rasterizerInfo.DepthBias = pBuildInfo->DepthBiasFactor;
-        rasterizerInfo.DepthBiasClamp = pBuildInfo->DepthBiasClamp;
-        rasterizerInfo.SlopeScaledDepthBias = pBuildInfo->DepthSlopeFactor;
+        rasterizerInfo.DepthClipEnable = pBuildInfo->m_EnableDepthClamp;
+        rasterizerInfo.CullMode = ToDXCullMode(pBuildInfo->m_SetCullMode);
+        rasterizerInfo.FillMode = pBuildInfo->m_SetFillMode == LR_FILL_MODE_FILL ? D3D12_FILL_MODE_SOLID : D3D12_FILL_MODE_WIREFRAME;
+        rasterizerInfo.FrontCounterClockwise = !pBuildInfo->m_FrontFaceCCW;
+        rasterizerInfo.DepthBias = pBuildInfo->m_EnableDepthBias;
+        rasterizerInfo.DepthBias = pBuildInfo->m_DepthBiasFactor;
+        rasterizerInfo.DepthBiasClamp = pBuildInfo->m_DepthBiasClamp;
+        rasterizerInfo.SlopeScaledDepthBias = pBuildInfo->m_DepthSlopeFactor;
 
         /// MULTISAMPLE --------------------------------------------------------------
 
-        createInfo.SampleMask = 1 << (pBuildInfo->MultiSampleBitCount - 1);
-        createInfo.BlendState.AlphaToCoverageEnable = pBuildInfo->EnableAlphaToCoverage;
-        createInfo.SampleDesc.Count = pBuildInfo->MultiSampleBitCount;
-        createInfo.SampleDesc.Quality = pBuildInfo->MultiSampleBitCount - 1;
+        createInfo.SampleMask = 1 << (pBuildInfo->m_MultiSampleBitCount - 1);
+        createInfo.BlendState.AlphaToCoverageEnable = pBuildInfo->m_EnableAlphaToCoverage;
+        createInfo.SampleDesc.Count = pBuildInfo->m_MultiSampleBitCount;
+        createInfo.SampleDesc.Quality = pBuildInfo->m_MultiSampleBitCount - 1;
 
         /// DEPTH STENCIL ------------------------------------------------------------
 
         D3D12_DEPTH_STENCIL_DESC &depthStencilInfo = createInfo.DepthStencilState;
-        depthStencilInfo.DepthEnable = pBuildInfo->EnableDepthTest;
-        depthStencilInfo.DepthWriteMask = (D3D12_DEPTH_WRITE_MASK)pBuildInfo->EnableDepthWrite;
-        depthStencilInfo.DepthFunc = (D3D12_COMPARISON_FUNC)pBuildInfo->DepthCompareOp;
-        depthStencilInfo.StencilWriteMask = pBuildInfo->EnableStencilTest;
+        depthStencilInfo.DepthEnable = pBuildInfo->m_EnableDepthTest;
+        depthStencilInfo.DepthWriteMask = (D3D12_DEPTH_WRITE_MASK)pBuildInfo->m_EnableDepthWrite;
+        depthStencilInfo.DepthFunc = (D3D12_COMPARISON_FUNC)pBuildInfo->m_DepthCompareOp;
+        depthStencilInfo.StencilWriteMask = pBuildInfo->m_EnableStencilTest;
 
-        depthStencilInfo.FrontFace.StencilFunc = (D3D12_COMPARISON_FUNC)pBuildInfo->StencilFrontFaceOp.CompareFunc;
-        depthStencilInfo.FrontFace.StencilDepthFailOp = (D3D12_STENCIL_OP)pBuildInfo->StencilFrontFaceOp.DepthFail;
-        depthStencilInfo.FrontFace.StencilFailOp = (D3D12_STENCIL_OP)pBuildInfo->StencilFrontFaceOp.Fail;
-        depthStencilInfo.FrontFace.StencilPassOp = (D3D12_STENCIL_OP)pBuildInfo->StencilFrontFaceOp.Pass;
+        depthStencilInfo.FrontFace.StencilFunc = (D3D12_COMPARISON_FUNC)pBuildInfo->m_StencilFrontFaceOp.m_CompareFunc;
+        depthStencilInfo.FrontFace.StencilDepthFailOp = (D3D12_STENCIL_OP)pBuildInfo->m_StencilFrontFaceOp.m_DepthFail;
+        depthStencilInfo.FrontFace.StencilFailOp = (D3D12_STENCIL_OP)pBuildInfo->m_StencilFrontFaceOp.m_Fail;
+        depthStencilInfo.FrontFace.StencilPassOp = (D3D12_STENCIL_OP)pBuildInfo->m_StencilFrontFaceOp.m_Pass;
 
-        depthStencilInfo.BackFace.StencilFunc = (D3D12_COMPARISON_FUNC)pBuildInfo->StencilBackFaceOp.CompareFunc;
-        depthStencilInfo.BackFace.StencilDepthFailOp = (D3D12_STENCIL_OP)pBuildInfo->StencilBackFaceOp.DepthFail;
-        depthStencilInfo.BackFace.StencilFailOp = (D3D12_STENCIL_OP)pBuildInfo->StencilBackFaceOp.Fail;
-        depthStencilInfo.BackFace.StencilPassOp = (D3D12_STENCIL_OP)pBuildInfo->StencilBackFaceOp.Pass;
+        depthStencilInfo.BackFace.StencilFunc = (D3D12_COMPARISON_FUNC)pBuildInfo->m_StencilBackFaceOp.m_CompareFunc;
+        depthStencilInfo.BackFace.StencilDepthFailOp = (D3D12_STENCIL_OP)pBuildInfo->m_StencilBackFaceOp.m_DepthFail;
+        depthStencilInfo.BackFace.StencilFailOp = (D3D12_STENCIL_OP)pBuildInfo->m_StencilBackFaceOp.m_Fail;
+        depthStencilInfo.BackFace.StencilPassOp = (D3D12_STENCIL_OP)pBuildInfo->m_StencilBackFaceOp.m_Pass;
 
         /// COLOR BLEND --------------------------------------------------------------
 
@@ -624,56 +605,55 @@ namespace lr::Graphics
 
         colorBlendInfo.IndependentBlendEnable = true;
 
-        for (u32 i = 0; i < pBuildInfo->RenderTargetCount; i++)
+        for (u32 i = 0; i < pBuildInfo->m_RenderTargetCount; i++)
         {
-            PipelineAttachment &attachment = pBuildInfo->pRenderTargets[i];
+            PipelineAttachment &attachment = pBuildInfo->m_pRenderTargets[i];
             D3D12_RENDER_TARGET_BLEND_DESC &renderTarget = colorBlendInfo.RenderTarget[i];
 
-            renderTarget.BlendEnable = attachment.BlendEnable;
-            renderTarget.RenderTargetWriteMask = attachment.WriteMask;
-            renderTarget.SrcBlend = kBlendFactorLUT[(u32)attachment.SrcBlend];
-            renderTarget.DestBlend = kBlendFactorLUT[(u32)attachment.DstBlend];
-            renderTarget.SrcBlendAlpha = kBlendFactorLUT[(u32)attachment.SrcBlendAlpha];
-            renderTarget.DestBlendAlpha = kBlendFactorLUT[(u32)attachment.DstBlendAlpha];
-            renderTarget.BlendOp = (D3D12_BLEND_OP)((u32)attachment.ColorBlendOp + 1);
-            renderTarget.BlendOpAlpha = (D3D12_BLEND_OP)((u32)attachment.AlphaBlendOp + 1);
+            renderTarget.BlendEnable = attachment.m_BlendEnable;
+            renderTarget.RenderTargetWriteMask = attachment.m_WriteMask;
+            renderTarget.SrcBlend = kBlendFactorLUT[(u32)attachment.m_SrcBlend];
+            renderTarget.DestBlend = kBlendFactorLUT[(u32)attachment.m_DstBlend];
+            renderTarget.SrcBlendAlpha = kBlendFactorLUT[(u32)attachment.m_SrcBlendAlpha];
+            renderTarget.DestBlendAlpha = kBlendFactorLUT[(u32)attachment.m_DstBlendAlpha];
+            renderTarget.BlendOp = (D3D12_BLEND_OP)((u32)attachment.m_ColorBlendOp + 1);
+            renderTarget.BlendOpAlpha = (D3D12_BLEND_OP)((u32)attachment.m_AlphaBlendOp + 1);
         }
 
         /// GRAPHICS PIPELINE --------------------------------------------------------
 
-        m_pDevice->CreateGraphicsPipelineState(&createInfo, IID_PPV_ARGS(&pPipeline->pHandle));
+        m_pDevice->CreateGraphicsPipelineState(&createInfo, IID_PPV_ARGS(&pPipeline->m_pHandle));
 
         return pPipeline;
     }
 
-    BasePipeline *D3D12API::CreateComputePipeline(ComputePipelineBuildInfo *pBuildInfo)
+    Pipeline *D3D12API::CreateComputePipeline(ComputePipelineBuildInfo *pBuildInfo)
     {
         ZoneScoped;
 
-        D3D12Pipeline *pPipeline = AllocTypeInherit<BasePipeline, D3D12Pipeline>();
+        D3D12Pipeline *pPipeline = AllocTypeInherit<Pipeline, D3D12Pipeline>();
         D3D12_COMPUTE_PIPELINE_STATE_DESC createInfo = {};
 
         PipelineLayoutSerializeDesc layoutDesc = {};
-        layoutDesc.DescriptorSetCount = pBuildInfo->DescriptorSetCount;
-        layoutDesc.ppDescriptorSets = pBuildInfo->ppDescriptorSets;
-        layoutDesc.PushConstantCount = pBuildInfo->PushConstantCount;
-        layoutDesc.pPushConstants = pBuildInfo->pPushConstants;
-        layoutDesc.pSamplerDescriptorSet = pBuildInfo->pSamplerDescriptorSet;
+        layoutDesc.m_DescriptorSetCount = pBuildInfo->m_DescriptorSetCount;
+        layoutDesc.m_ppDescriptorSets = pBuildInfo->m_ppDescriptorSets;
+        layoutDesc.m_PushConstantCount = pBuildInfo->m_PushConstantCount;
+        layoutDesc.m_pPushConstants = pBuildInfo->m_pPushConstants;
 
         ID3D12RootSignature *pLayout = SerializeRootSignature(&layoutDesc, pPipeline);
         createInfo.pRootSignature = pLayout;
-        pPipeline->pLayout = pLayout;
+        pPipeline->m_pLayout = pLayout;
 
         /// BOUND SHADER STAGES ------------------------------------------------------
 
-        IDxcBlob *pCode = ((D3D12Shader *)pBuildInfo->pShader)->pHandle;
+        IDxcBlob *pCode = ((D3D12Shader *)pBuildInfo->m_pShader)->m_pHandle;
 
         createInfo.CS.pShaderBytecode = pCode->GetBufferPointer();
         createInfo.CS.BytecodeLength = pCode->GetBufferSize();
 
         /// COMPUTE PIPELINE --------------------------------------------------------=
 
-        m_pDevice->CreateComputePipelineState(&createInfo, IID_PPV_ARGS(&pPipeline->pHandle));
+        m_pDevice->CreateComputePipelineState(&createInfo, IID_PPV_ARGS(&pPipeline->m_pHandle));
 
         return pPipeline;
     }
@@ -717,34 +697,31 @@ namespace lr::Graphics
         m_SwapChain.NextFrame();
     }
 
-    BaseDescriptorSet *D3D12API::CreateDescriptorSet(DescriptorSetDesc *pDesc)
+    DescriptorSet *D3D12API::CreateDescriptorSet(DescriptorSetDesc *pDesc)
     {
         ZoneScoped;
 
-        D3D12DescriptorSet *pDescriptorSet = AllocTypeInherit<BaseDescriptorSet, D3D12DescriptorSet>();
-        pDescriptorSet->BindingCount = pDesc->BindingCount;
-        memcpy(pDescriptorSet->pBindings, pDesc->pBindings, pDesc->BindingCount * sizeof(DescriptorBindingDesc));
+        D3D12DescriptorSet *pDescriptorSet = AllocTypeInherit<DescriptorSet, D3D12DescriptorSet>();
+        pDescriptorSet->m_BindingCount = pDesc->m_BindingCount;
 
         D3D12_ROOT_SIGNATURE_DESC1 rootSigDesc = {};
+        D3D12_STATIC_SAMPLER_DESC pSamplers[LR_MAX_STATIC_SAMPLERS_PER_PIPELINE] = {};
 
+        u32 samplerCount = 0;
         u32 bindingCount = 0;
         D3D12_ROOT_PARAMETER pBindings[LR_MAX_DESCRIPTORS_PER_LAYOUT] = {};
 
-        for (u32 i = 0; i < pDesc->BindingCount; i++)
+        for (u32 i = 0; i < pDesc->m_BindingCount; i++)
         {
-            DescriptorBindingDesc &element = pDesc->pBindings[i];
-
-            if (element.Type == LR_DESCRIPTOR_TYPE_SAMPLER)
-            {
-                continue;
-            }
+            DescriptorBindingDesc &element = pDesc->m_pBindings[i];
+            pDescriptorSet->m_pBindingTypes[i] = element.m_Type;
 
             D3D12_ROOT_PARAMETER &binding = pBindings[bindingCount];
 
-            binding.ParameterType = ToDXDescriptorType(element.Type);
-            binding.ShaderVisibility = ToDXShaderType(element.TargetShader);
+            binding.ParameterType = ToDXDescriptorType(element.m_Type);
+            binding.ShaderVisibility = ToDXShaderType(element.m_TargetShader);
             binding.Descriptor.RegisterSpace = 0;
-            binding.Descriptor.ShaderRegister = element.BindingID;
+            binding.Descriptor.ShaderRegister = element.m_BindingID;
 
             bindingCount++;
         }
@@ -753,6 +730,8 @@ namespace lr::Graphics
         rootSignatureDesc.Version = D3D_ROOT_SIGNATURE_VERSION_1_0;
         rootSignatureDesc.Desc_1_0.NumParameters = bindingCount;
         rootSignatureDesc.Desc_1_0.pParameters = pBindings;
+        rootSignatureDesc.Desc_1_0.NumStaticSamplers = samplerCount;
+        rootSignatureDesc.Desc_1_0.pStaticSamplers = pSamplers;
 
         ls::scoped_comptr<ID3DBlob> pRootSigBlob;
         ls::scoped_comptr<ID3DBlob> pErrorBlob;
@@ -761,38 +740,41 @@ namespace lr::Graphics
         if (pErrorBlob.get() && pErrorBlob->GetBufferPointer())
             LOG_ERROR("Root signature error: {}", eastl::string_view((const char *)pErrorBlob->GetBufferPointer(), pErrorBlob->GetBufferSize()));
 
-        m_pDevice->CreateRootSignature(0, pRootSigBlob->GetBufferPointer(), pRootSigBlob->GetBufferSize(), IID_PPV_ARGS(&pDescriptorSet->pHandle));
+        m_pDevice->CreateRootSignature(0, pRootSigBlob->GetBufferPointer(), pRootSigBlob->GetBufferSize(), IID_PPV_ARGS(&pDescriptorSet->m_pHandle));
 
         return pDescriptorSet;
     }
 
-    void D3D12API::DeleteDescriptorSet(BaseDescriptorSet *pSet)
+    void D3D12API::DeleteDescriptorSet(DescriptorSet *pSet)
     {
     }
 
-    void D3D12API::UpdateDescriptorData(BaseDescriptorSet *pSet)
+    void D3D12API::UpdateDescriptorData(DescriptorSet *pSet, DescriptorSetDesc *pDesc)
     {
         ZoneScoped;
 
         API_VAR(D3D12DescriptorSet, pSet);
 
-        for (u32 i = 0; i < pSet->BindingCount; i++)
+        for (u32 i = 0; i < pSet->m_BindingCount; i++)
         {
-            DescriptorBindingDesc &element = pSet->pBindings[i];
+            DescriptorBindingDesc &element = pDesc->m_pBindings[i];
 
-            BaseBuffer *pBuffer = element.pBuffer;
-            BaseImage *pImage = element.pImage;
+            Sampler *pSampler = element.m_pSampler;
+            Buffer *pBuffer = element.m_pBuffer;
+            Image *pImage = element.m_pImage;
 
+            API_VAR(D3D12Sampler, pSampler);
             API_VAR(D3D12Buffer, pBuffer);
             API_VAR(D3D12Image, pImage);
 
-            D3D12_GPU_DESCRIPTOR_HANDLE &gpuAddress = pSetDX->pDescriptorHandles[i];
+            D3D12_GPU_DESCRIPTOR_HANDLE &gpuAddress = pSetDX->m_pDescriptorHandles[i];
 
-            switch (element.Type)
+            switch (element.m_Type)
             {
                 case LR_DESCRIPTOR_TYPE_CONSTANT_BUFFER: gpuAddress = pBufferDX->m_ViewGPU; break;
                 case LR_DESCRIPTOR_TYPE_SHADER_RESOURCE: gpuAddress = pImageDX->m_ShaderViewGPU; break;
                 case LR_DESCRIPTOR_TYPE_UNORDERED_ACCESS_IMAGE: gpuAddress = pImageDX->m_UnorderedAccessViewGPU; break;
+                case LR_DESCRIPTOR_TYPE_SAMPLER: gpuAddress = pSamplerDX->m_HandleGPU;
                 default: break;
             }
         }
@@ -804,21 +786,21 @@ namespace lr::Graphics
 
         for (auto &element : bindings)
         {
-            D3D12DescriptorHeap &heap = m_pDescriptorHeaps[element.HeapType];
-            ID3D12DescriptorHeap *pHandle = heap.pHandle;
+            D3D12DescriptorHeap &heap = m_pDescriptorHeaps[element.m_HeapType];
+            ID3D12DescriptorHeap *pHandle = heap.m_pHandle;
 
             D3D12_DESCRIPTOR_HEAP_DESC heapDesc = {};
-            heapDesc.Type = element.HeapType;
-            heapDesc.NumDescriptors = element.Count;
+            heapDesc.Type = element.m_HeapType;
+            heapDesc.NumDescriptors = element.m_Count;
             heapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 
-            if (element.HeapType == D3D12_DESCRIPTOR_HEAP_TYPE_RTV || element.HeapType == D3D12_DESCRIPTOR_HEAP_TYPE_RTV)
+            if (element.m_HeapType == D3D12_DESCRIPTOR_HEAP_TYPE_RTV || element.m_HeapType == D3D12_DESCRIPTOR_HEAP_TYPE_RTV)
                 heapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
 
             m_pDevice->CreateDescriptorHeap(&heapDesc, IID_PPV_ARGS(&pHandle));
 
-            heap.pHandle = pHandle;
-            heap.IncrementSize = m_pDevice->GetDescriptorHandleIncrementSize(element.HeapType);
+            heap.m_pHandle = pHandle;
+            heap.m_IncrementSize = m_pDevice->GetDescriptorHandleIncrementSize(element.m_HeapType);
         }
     }
 
@@ -828,16 +810,16 @@ namespace lr::Graphics
 
         D3D12DescriptorHeap &heap = m_pDescriptorHeaps[type];
 
-        D3D12_CPU_DESCRIPTOR_HANDLE handle = heap.pHandle->GetCPUDescriptorHandleForHeapStart();
+        D3D12_CPU_DESCRIPTOR_HANDLE handle = heap.m_pHandle->GetCPUDescriptorHandleForHeapStart();
 
         if (index == -1)
         {
-            handle.ptr += heap.IncrementSize * heap.CPUOffset;
-            heap.CPUOffset++;
+            handle.ptr += heap.m_IncrementSize * heap.m_CPUOffset;
+            heap.m_CPUOffset++;
         }
         else
         {
-            handle.ptr += heap.IncrementSize * index;
+            handle.ptr += heap.m_IncrementSize * index;
         }
 
         return handle;
@@ -849,16 +831,16 @@ namespace lr::Graphics
 
         D3D12DescriptorHeap &heap = m_pDescriptorHeaps[type];
 
-        D3D12_GPU_DESCRIPTOR_HANDLE handle = heap.pHandle->GetGPUDescriptorHandleForHeapStart();
+        D3D12_GPU_DESCRIPTOR_HANDLE handle = heap.m_pHandle->GetGPUDescriptorHandleForHeapStart();
 
         if (index == -1)
         {
-            handle.ptr += heap.IncrementSize * heap.GPUOffset;
-            heap.GPUOffset++;
+            handle.ptr += heap.m_IncrementSize * heap.m_GPUOffset;
+            heap.m_GPUOffset++;
         }
         else
         {
-            handle.ptr += heap.IncrementSize * index;
+            handle.ptr += heap.m_IncrementSize * index;
         }
 
         return handle;
@@ -891,23 +873,22 @@ namespace lr::Graphics
         return pHandle;
     }
 
-    BaseBuffer *D3D12API::CreateBuffer(BufferDesc *pDesc, BufferData *pData)
+    Buffer *D3D12API::CreateBuffer(BufferDesc *pDesc)
     {
         ZoneScoped;
 
-        D3D12Buffer *pBuffer = AllocTypeInherit<BaseBuffer, D3D12Buffer>();
-        pBuffer->m_UsageFlags = pDesc->UsageFlags;
-        pBuffer->m_DataSize = pData->DataLen;
-        pBuffer->m_Stride = pData->Stride;
-        pBuffer->m_Mappable = pData->Mappable;
-        pBuffer->m_AllocatorType = pData->TargetAllocator;
+        D3D12Buffer *pBuffer = AllocTypeInherit<Buffer, D3D12Buffer>();
+        pBuffer->m_UsageFlags = pDesc->m_UsageFlags;
+        pBuffer->m_TargetAllocator = pDesc->m_TargetAllocator;
+        pBuffer->m_Stride = pDesc->m_Stride;
+        pBuffer->m_DataLen = pDesc->m_DataLen;
 
         /// ---------------------------------------------- ///
 
         D3D12_RESOURCE_DESC resourceDesc = {};
         resourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
         resourceDesc.Alignment = D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT;
-        resourceDesc.Width = pData->DataLen;
+        resourceDesc.Width = pBuffer->m_DataLen;
         resourceDesc.Height = 1;
         resourceDesc.DepthOrArraySize = 1;
         resourceDesc.MipLevels = 1;
@@ -919,10 +900,10 @@ namespace lr::Graphics
 
         /// ---------------------------------------------- ///
 
-        SetAllocator(pBuffer, resourceDesc, pData->TargetAllocator);
+        SetAllocator(pBuffer, resourceDesc, pBuffer->m_TargetAllocator);
 
         m_pDevice->CreatePlacedResource(pBuffer->m_pMemoryHandle,
-                                        pBuffer->m_DataOffset,
+                                        0,  // TODO: SUBRESOURCE ALLOCATION
                                         &resourceDesc,
                                         ToDXBufferUsage(pBuffer->m_UsageFlags),
                                         nullptr,
@@ -935,7 +916,7 @@ namespace lr::Graphics
         return pBuffer;
     }
 
-    void D3D12API::DeleteBuffer(BaseBuffer *pHandle)
+    void D3D12API::DeleteBuffer(Buffer *pHandle)
     {
         ZoneScoped;
 
@@ -943,14 +924,14 @@ namespace lr::Graphics
 
         if (pHandleDX->m_pMemoryHandle)
         {
-            if (pHandleDX->m_AllocatorType == AllocatorType::BufferTLSF)
+            if (pHandleDX->m_TargetAllocator == LR_RHI_ALLOCATOR_BUFFER_TLSF)
             {
                 Memory::TLSFBlock *pBlock = (Memory::TLSFBlock *)pHandleDX->m_pAllocatorData;
                 assert(pBlock != nullptr);
 
                 m_MABufferTLSF.Allocator.Free(pBlock);
             }
-            else if (pHandleDX->m_AllocatorType == AllocatorType::None)
+            else if (pHandleDX->m_TargetAllocator == LR_RHI_ALLOCATOR_NONE)
             {
                 pHandleDX->m_pMemoryHandle->Release();
             }
@@ -960,7 +941,7 @@ namespace lr::Graphics
             pHandleDX->m_pHandle->Release();
     }
 
-    void D3D12API::CreateBufferView(BaseBuffer *pBuffer)
+    void D3D12API::CreateBufferView(Buffer *pBuffer)
     {
         ZoneScoped;
 
@@ -970,7 +951,7 @@ namespace lr::Graphics
         {
             D3D12_CONSTANT_BUFFER_VIEW_DESC viewDesc = {};
             viewDesc.BufferLocation = pBufferDX->m_VirtualAddress;
-            viewDesc.SizeInBytes = pBufferDX->m_DataSize;
+            viewDesc.SizeInBytes = pBufferDX->m_DataLen;
 
             pBufferDX->m_ViewCPU = AllocateCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
             pBufferDX->m_ViewGPU = AllocateGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
@@ -979,7 +960,7 @@ namespace lr::Graphics
         }
     }
 
-    void D3D12API::MapMemory(BaseBuffer *pBuffer, void *&pData)
+    void D3D12API::MapMemory(Buffer *pBuffer, void *&pData)
     {
         ZoneScoped;
 
@@ -988,7 +969,7 @@ namespace lr::Graphics
         pBufferDX->m_pHandle->Map(0, nullptr, &pData);
     }
 
-    void D3D12API::UnmapMemory(BaseBuffer *pBuffer)
+    void D3D12API::UnmapMemory(Buffer *pBuffer)
     {
         ZoneScoped;
 
@@ -997,67 +978,39 @@ namespace lr::Graphics
         pBufferDX->m_pHandle->Unmap(0, nullptr);
     }
 
-    BaseBuffer *D3D12API::ChangeAllocator(BaseCommandList *pList, BaseBuffer *pTarget, AllocatorType targetAllocator)
+    Image *D3D12API::CreateImage(ImageDesc *pDesc)
     {
         ZoneScoped;
 
-        // // TODO: Currently this technique uses present queue, move it to transfer queue
-
-        // BufferDesc bufDesc = {};
-        // BufferData bufData = {};
-
-        // bufDesc.UsageFlags = LR_RESOURCE_USAGE_TRANSFER_DST;
-
-        // bufData.TargetAllocator = targetAllocator;
-        // bufData.Stride = pTarget->m_Stride;
-        // bufData.DataLen = pTarget->m_DataSize;
-        // bufData.Mappable = false;
-
-        // BaseBuffer *pNewBuffer = CreateBuffer(&bufDesc, &bufData);
-
-        // pList->CopyBuffer(pTarget, pNewBuffer, bufData.DataLen);
-
-        // pNewBuffer->m_Usage = pTarget->m_Usage;
-        // pNewBuffer->m_Usage &= ~ResourceUsage::CopySrc;
-
-        // pList->BarrierTransition(pNewBuffer, ResourceUsage::CopyDst, ShaderStage::None, pTarget->m_Usage, ShaderStage::None);
-
-        return nullptr;
-    }
-
-    BaseImage *D3D12API::CreateImage(ImageDesc *pDesc, ImageData *pData)
-    {
-        ZoneScoped;
-
-        D3D12Image *pImage = AllocTypeInherit<BaseImage, D3D12Image>();
-        pImage->m_Width = pData->Width;
-        pImage->m_Height = pData->Height;
-        pImage->m_DataSize = pData->DataLen;
-        pImage->m_UsingMip = 0;
-        pImage->m_TotalMips = pDesc->MipMapLevels;
-        pImage->m_UsageFlags = pDesc->UsageFlags;
-        pImage->m_Format = pDesc->Format;
-        pImage->m_AllocatorType = pData->TargetAllocator;
+        D3D12Image *pImage = AllocTypeInherit<Image, D3D12Image>();
+        pImage->m_UsageFlags = pDesc->m_UsageFlags;
+        pImage->m_Format = pDesc->m_Format;
+        pImage->m_TargetAllocator = pDesc->m_TargetAllocator;
+        pImage->m_Width = pDesc->m_Width;
+        pImage->m_Height = pDesc->m_Height;
+        pImage->m_ArraySize = pDesc->m_ArraySize;
+        pImage->m_MipMapLevels = pDesc->m_MipMapLevels;
+        pImage->m_DataLen = pDesc->m_DataLen;
 
         /// ---------------------------------------------- ///
 
         D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAG_NONE;
 
-        if (pDesc->UsageFlags & LR_RESOURCE_USAGE_RENDER_TARGET)
+        if (pImage->m_UsageFlags & LR_RESOURCE_USAGE_RENDER_TARGET)
             flags |= D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
-        if (pDesc->UsageFlags & LR_RESOURCE_USAGE_DEPTH_STENCIL)
+        if (pImage->m_UsageFlags & LR_RESOURCE_USAGE_DEPTH_STENCIL)
             flags |= D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
-        if (pDesc->UsageFlags & LR_RESOURCE_USAGE_UNORDERED_ACCESS)
+        if (pImage->m_UsageFlags & LR_RESOURCE_USAGE_UNORDERED_ACCESS)
             flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
 
         D3D12_RESOURCE_DESC resourceDesc = {};
         resourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
         resourceDesc.Alignment = 0;
-        resourceDesc.Width = pData->Width;
-        resourceDesc.Height = pData->Height;
-        resourceDesc.DepthOrArraySize = 1;
-        resourceDesc.MipLevels = pDesc->MipMapLevels;
-        resourceDesc.Format = ToDXFormat(pDesc->Format);
+        resourceDesc.Width = pImage->m_Width;
+        resourceDesc.Height = pImage->m_Height;
+        resourceDesc.DepthOrArraySize = pImage->m_ArraySize;
+        resourceDesc.MipLevels = pImage->m_MipMapLevels;
+        resourceDesc.Format = ToDXFormat(pImage->m_Format);
         resourceDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
         resourceDesc.Flags = flags;
         resourceDesc.SampleDesc.Count = 1;
@@ -1065,14 +1018,14 @@ namespace lr::Graphics
 
         /// ---------------------------------------------- ///
 
-        SetAllocator(pImage, resourceDesc, pData->TargetAllocator);
+        SetAllocator(pImage, resourceDesc, pImage->m_TargetAllocator);
 
-        D3D12_RESOURCE_STATES initialState = ToDXImageUsage(pDesc->UsageFlags);
+        D3D12_RESOURCE_STATES initialState = ToDXImageUsage(pImage->m_UsageFlags);
         initialState &= ~D3D12_RESOURCE_STATE_COPY_DEST;
         initialState &= ~D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE;
 
         m_pDevice->CreatePlacedResource(pImage->m_pMemoryHandle,
-                                        pImage->m_DataOffset,
+                                        0,  // TODO: Suballocations
                                         &resourceDesc,
                                         initialState,
                                         nullptr,
@@ -1083,7 +1036,7 @@ namespace lr::Graphics
         return pImage;
     }
 
-    void D3D12API::DeleteImage(BaseImage *pImage)
+    void D3D12API::DeleteImage(Image *pImage)
     {
         ZoneScoped;
 
@@ -1091,14 +1044,14 @@ namespace lr::Graphics
 
         if (pImageDX->m_pMemoryHandle)
         {
-            if (pImage->m_AllocatorType == AllocatorType::ImageTLSF)
+            if (pImage->m_TargetAllocator == LR_RHI_ALLOCATOR_IMAGE_TLSF)
             {
                 Memory::TLSFBlock *pBlock = (Memory::TLSFBlock *)pImage->m_pAllocatorData;
                 assert(pBlock != nullptr);
 
                 m_MAImageTLSF.Allocator.Free(pBlock);
             }
-            else if (pImage->m_AllocatorType == AllocatorType::None)
+            else if (pImage->m_TargetAllocator == LR_RHI_ALLOCATOR_NONE)
             {
                 pImageDX->m_pMemoryHandle->Release();
             }
@@ -1108,7 +1061,7 @@ namespace lr::Graphics
             pImageDX->m_pHandle->Release();
     }
 
-    void D3D12API::CreateImageView(BaseImage *pImage)
+    void D3D12API::CreateImageView(Image *pImage)
     {
         ZoneScoped;
 
@@ -1124,7 +1077,7 @@ namespace lr::Graphics
             viewDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
             viewDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
             viewDesc.Texture2D.MostDetailedMip = 0;
-            viewDesc.Texture2D.MipLevels = pImage->m_TotalMips;
+            viewDesc.Texture2D.MipLevels = pImage->m_MipMapLevels;
             viewDesc.Texture2D.PlaneSlice = 0;
             viewDesc.Texture2D.ResourceMinLODClamp = 0;
 
@@ -1139,7 +1092,7 @@ namespace lr::Graphics
             D3D12_UNORDERED_ACCESS_VIEW_DESC viewDesc = {};
             viewDesc.Format = ToDXFormat(pImageDX->m_Format);
             viewDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
-            viewDesc.Texture2D.MipSlice = pImage->m_UsingMip;
+            viewDesc.Texture2D.MipSlice = 0;
             viewDesc.Texture2D.PlaneSlice = 0;
 
             m_pDevice->CreateUnorderedAccessView(pImageDX->m_pHandle, nullptr, &viewDesc, pImageDX->m_UnorderedAccessViewCPU);
@@ -1170,9 +1123,11 @@ namespace lr::Graphics
         }
     }
 
-    void D3D12API::CreateSampler(SamplerDesc *pDesc, D3D12_STATIC_SAMPLER_DESC &samplerOut)
+    Sampler *D3D12API::CreateSampler(SamplerDesc *pDesc)
     {
         ZoneScoped;
+
+        D3D12Sampler *pSampler = AllocTypeInherit<Sampler, D3D12Sampler>();
 
         constexpr static D3D12_TEXTURE_ADDRESS_MODE kAddresModeLUT[] = {
             D3D12_TEXTURE_ADDRESS_MODE_WRAP,
@@ -1181,86 +1136,98 @@ namespace lr::Graphics
             D3D12_TEXTURE_ADDRESS_MODE_BORDER,
         };
 
-        u32 minFilterVal = (u32)pDesc->MinFilter;
-        u32 magFilterVal = (u32)pDesc->MagFilter;
-        u32 mipFilterVal = (u32)pDesc->MipFilter;
+        u32 minFilterVal = (u32)pDesc->m_MinFilter;
+        u32 magFilterVal = (u32)pDesc->m_MagFilter;
+        u32 mipFilterVal = (u32)pDesc->m_MipFilter;
 
-        samplerOut.Filter = (D3D12_FILTER)(mipFilterVal | (magFilterVal << 2) | (minFilterVal << 4) | (pDesc->UseAnisotropy << 6));
+        D3D12_SAMPLER_DESC samplerDesc = {};
+        samplerDesc.Filter = (D3D12_FILTER)(mipFilterVal | (magFilterVal << 2) | (minFilterVal << 4) | (pDesc->m_UseAnisotropy << 6));
 
-        samplerOut.AddressU = kAddresModeLUT[(u32)pDesc->AddressU];
-        samplerOut.AddressV = kAddresModeLUT[(u32)pDesc->AddressV];
-        samplerOut.AddressW = kAddresModeLUT[(u32)pDesc->AddressW];
+        samplerDesc.AddressU = kAddresModeLUT[(u32)pDesc->m_AddressU];
+        samplerDesc.AddressV = kAddresModeLUT[(u32)pDesc->m_AddressV];
+        samplerDesc.AddressW = kAddresModeLUT[(u32)pDesc->m_AddressW];
 
-        samplerOut.MaxAnisotropy = pDesc->MaxAnisotropy;
+        samplerDesc.MaxAnisotropy = pDesc->m_MaxAnisotropy;
 
-        samplerOut.MipLODBias = pDesc->MipLODBias;
-        samplerOut.MaxLOD = pDesc->MaxLOD;
-        samplerOut.MinLOD = pDesc->MinLOD;
+        samplerDesc.MipLODBias = pDesc->m_MipLODBias;
+        samplerDesc.MaxLOD = pDesc->m_MaxLOD;
+        samplerDesc.MinLOD = pDesc->m_MinLOD;
 
-        samplerOut.ComparisonFunc = (D3D12_COMPARISON_FUNC)pDesc->CompareOp;
+        samplerDesc.ComparisonFunc = (D3D12_COMPARISON_FUNC)pDesc->m_CompareOp;
 
-        samplerOut.BorderColor = D3D12_STATIC_BORDER_COLOR_TRANSPARENT_BLACK;
+        samplerDesc.BorderColor[0] = 0.0;
+        samplerDesc.BorderColor[1] = 0.0;
+        samplerDesc.BorderColor[2] = 0.0;
+        samplerDesc.BorderColor[3] = 0.0;
+
+        pSampler->m_HandleCPU = AllocateCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER);
+        pSampler->m_HandleGPU = AllocateGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER);
+
+        m_pDevice->CreateSampler(&samplerDesc, pSampler->m_HandleCPU);
+
+        return pSampler;
     }
 
-    void D3D12API::SetAllocator(D3D12Buffer *pBuffer, D3D12_RESOURCE_DESC &resourceDesc, AllocatorType targetAllocator)
+    void D3D12API::SetAllocator(D3D12Buffer *pBuffer, D3D12_RESOURCE_DESC &resourceDesc, RHIAllocatorType targetAllocator)
     {
         ZoneScoped;
 
         D3D12_RESOURCE_ALLOCATION_INFO memoryInfo = m_pDevice->GetResourceAllocationInfo(0, 1, &resourceDesc);
-        pBuffer->m_RequiredDataSize = memoryInfo.SizeInBytes;
+        pBuffer->m_DeviceDataLen = memoryInfo.SizeInBytes;
 
         switch (targetAllocator)
         {
-            case AllocatorType::None:
+            case LR_RHI_ALLOCATOR_NONE:
             {
                 pBuffer->m_DataOffset = 0;
-                pBuffer->m_pMemoryHandle = CreateHeap(pBuffer->m_RequiredDataSize, pBuffer->m_Mappable, D3D12_HEAP_FLAG_ALLOW_ONLY_BUFFERS);
+                pBuffer->m_pMemoryHandle =
+                    CreateHeap(pBuffer->m_DeviceDataLen, pBuffer->m_UsageFlags & LR_RESOURCE_USAGE_HOST_VISIBLE, D3D12_HEAP_FLAG_ALLOW_ONLY_BUFFERS);
 
                 break;
             }
 
-            case AllocatorType::Descriptor:
+            case LR_RHI_ALLOCATOR_DESCRIPTOR:
             {
-                pBuffer->m_DataOffset = m_MADescriptor.Allocator.Allocate(pBuffer->m_RequiredDataSize, pBuffer->m_Alignment);
+                pBuffer->m_DataOffset = m_MADescriptor.Allocator.Allocate(pBuffer->m_DeviceDataLen, pBuffer->m_Alignment);
                 pBuffer->m_pMemoryHandle = m_MADescriptor.pHeap;
 
                 break;
             }
 
-            case AllocatorType::BufferLinear:
+            case LR_RHI_ALLOCATOR_BUFFER_LINEAR:
             {
-                pBuffer->m_DataOffset = m_MABufferLinear.Allocator.Allocate(pBuffer->m_RequiredDataSize, pBuffer->m_Alignment);
+                pBuffer->m_DataOffset = m_MABufferLinear.Allocator.Allocate(pBuffer->m_DeviceDataLen, pBuffer->m_Alignment);
                 pBuffer->m_pMemoryHandle = m_MABufferLinear.pHeap;
 
                 break;
             }
 
-            case AllocatorType::BufferTLSF:
+            case LR_RHI_ALLOCATOR_BUFFER_TLSF:
             {
-                Memory::TLSFBlock *pBlock = m_MABufferTLSF.Allocator.Allocate(pBuffer->m_RequiredDataSize, pBuffer->m_Alignment);
+                Memory::TLSFBlock *pBlock = m_MABufferTLSF.Allocator.Allocate(pBuffer->m_DeviceDataLen, pBuffer->m_Alignment);
 
                 pBuffer->m_pAllocatorData = pBlock;
-                pBuffer->m_DataOffset = pBlock->Offset;
+                pBuffer->m_DataOffset = pBlock->m_Offset;
 
                 pBuffer->m_pMemoryHandle = m_MABufferTLSF.pHeap;
 
                 break;
             }
 
-            default: break;
+            default: LOG_CRITICAL("Trying to allocate D3D12Buffer resource from invalid allocator."); break;
         }
     }
 
-    void D3D12API::SetAllocator(D3D12Image *pImage, D3D12_RESOURCE_DESC &resourceDesc, AllocatorType targetAllocator)
+    void D3D12API::SetAllocator(D3D12Image *pImage, D3D12_RESOURCE_DESC &resourceDesc, RHIAllocatorType targetAllocator)
     {
         ZoneScoped;
 
         D3D12_RESOURCE_ALLOCATION_INFO memoryInfo = m_pDevice->GetResourceAllocationInfo(0, 1, &resourceDesc);
-        pImage->m_RequiredDataSize = memoryInfo.SizeInBytes;
+        pImage->m_DeviceDataLen = memoryInfo.SizeInBytes;
 
         switch (targetAllocator)
         {
-            case AllocatorType::None:
+            case LR_RHI_ALLOCATOR_NONE:
             {
                 pImage->m_DataOffset = 0;
                 pImage->m_pMemoryHandle = CreateHeap(memoryInfo.SizeInBytes, false, D3D12_HEAP_FLAG_ALLOW_ONLY_NON_RT_DS_TEXTURES);
@@ -1268,19 +1235,19 @@ namespace lr::Graphics
                 break;
             }
 
-            case AllocatorType::ImageTLSF:
+            case LR_RHI_ALLOCATOR_IMAGE_TLSF:
             {
-                Memory::TLSFBlock *pBlock = m_MAImageTLSF.Allocator.Allocate(pImage->m_RequiredDataSize, memoryInfo.Alignment);
+                Memory::TLSFBlock *pBlock = m_MAImageTLSF.Allocator.Allocate(pImage->m_DeviceDataLen, memoryInfo.Alignment);
 
                 pImage->m_pAllocatorData = pBlock;
-                pImage->m_DataOffset = pBlock->Offset;
+                pImage->m_DataOffset = pBlock->m_Offset;
 
                 pImage->m_pMemoryHandle = m_MAImageTLSF.pHeap;
 
                 break;
             }
 
-            default: break;
+            default: LOG_CRITICAL("Trying to allocate D3D12Image resource from invalid allocator."); break;
         }
     }
 
@@ -1306,7 +1273,7 @@ namespace lr::Graphics
             {
                 u32 index = Memory::GetLSB(mask);
 
-                BaseCommandList *pList = commandPool.m_DirectLists[index];
+                CommandList *pList = commandPool.m_DirectLists[index];
                 API_VAR(D3D12CommandList, pList);
 
                 if (pAPI->IsFenceSignaled(pListDX))
@@ -1386,8 +1353,7 @@ namespace lr::Graphics
         D3D12_COMMAND_LIST_TYPE_COPY,
     };
 
-    DXGI_FORMAT
-    D3D12API::ToDXFormat(ResourceFormat format)
+    DXGI_FORMAT D3D12API::ToDXFormat(ImageFormat format)
     {
         return kFormatLUT[(u32)format];
     }

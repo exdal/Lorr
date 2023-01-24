@@ -90,7 +90,6 @@ namespace lr::Graphics
             static_assert(eastl::is_base_of<_Base, _Derived>::value, "_Derived must be base of _Base.");
 
             Memory::TLSFBlock *pBlock = m_TypeAllocator.Allocate(sizeof(_Base) + sizeof(_Derived) + PTR_SIZE, Memory::TLSFAllocatorView::ALIGN_SIZE);
-
             u64 offset = pBlock->m_Offset;
 
             // Copy block address
@@ -112,26 +111,26 @@ namespace lr::Graphics
             return (_Type *)(m_pTypeData + pBlock->m_Offset + PTR_SIZE);
         }
 
-        template<typename T>
-        void FreeType(T *&pType)
+        template<typename _Type>
+        void FreeType(_Type *&pType)
         {
             assert(pType && "You cannot free non-existing memory.");
 
             Memory::TLSFBlock *pBlock = (Memory::TLSFBlock *)((u8 *)pType - PTR_SIZE);
             m_TypeAllocator.Free(pBlock);
 
-            Memory::ZeroMem((u8 *)pBlock, sizeof(T) + PTR_SIZE);
+            Memory::ZeroMem((u8 *)pBlock, sizeof(_Type) + PTR_SIZE);
 
             pType = nullptr;
         }
 
         /// ----------------------------------------------------------- ///
 
-        template<typename T, typename U>
+        template<typename _Allocator, typename _Heap>
         struct BufferedAllocator
         {
-            T Allocator;
-            U pHeap;
+            _Allocator Allocator;
+            _Heap pHeap;
         };
 
         /// ----------------------------------------------------------- ///

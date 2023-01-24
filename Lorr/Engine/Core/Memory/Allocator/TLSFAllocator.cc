@@ -2,6 +2,12 @@
 
 #include "Core/Memory/MemoryUtils.hh"
 
+#undef LOG_SET_NAME
+#define LOG_SET_NAME "TLSFALLOC"
+
+#undef LOG_TRACE
+#define LOG_TRACE LOG_DISABLED
+
 namespace lr::Memory
 {
     void TLSFAllocatorView::Init(u64 memSize, u32 blockCount)
@@ -53,7 +59,9 @@ namespace lr::Memory
     {
         TLSFBlock *pAvailableBlock = nullptr;
 
-        u64 alignedSize = Memory::AlignUp(size, ALIGN_SIZE);
+        u64 alignedSize = Memory::AlignUp(size, alignment);
+
+        LOG_TRACE("Allocating new {}({} aligned) bytes long block.", size, alignedSize);
 
         /// Find free and closest block available
         TLSFBlock *pBlock = FindFreeBlock(alignedSize);
@@ -63,10 +71,11 @@ namespace lr::Memory
             assert(pBlock->m_IsFree && "The block found is not free.");
             assert(GetPhysicalSize(pBlock) >= size && "Found block doesn't match with the aligned size.");
 
+            LOG_TRACE("Block information: offset: {} isFree: {}", (u64)pBlock->m_Offset, (bool)pBlock->m_IsFree);
+
             RemoveFreeBlock(pBlock);
 
             TLSFBlock *pSplitBlock = SplitBlock(pBlock, size);
-
             if (pSplitBlock)
             {
                 AddFreeBlock(pSplitBlock);
@@ -140,6 +149,8 @@ namespace lr::Memory
 
         m_FirstListBitmap |= 1 << firstIndex;
         m_pSecondListBitmap[firstIndex] |= 1 << secondIndex;
+
+        LOG_TRACE("New block inserted. (size: {} FI: {} SI: {})", size, firstIndex, secondIndex);
     }
 
     TLSFBlock *TLSFAllocatorView::FindFreeBlock(u32 size)
@@ -156,13 +167,24 @@ namespace lr::Memory
             // Could not find any available block in that index, so go higher
             u32 firstListMap = m_FirstListBitmap & (~0U << (firstIndex + 1));
             if (firstListMap == 0)
-                return nullptr;  // well fuck
+            {
+                LOG_ERROR("Failed to allocate block, FL map is zero. "
+                          "(FI: {} SI: {} SL map: {}, FL map: {})",
+                          firstIndex,
+                          secondIndex,
+                          firstListMap,
+                          secondListMap);
+
+                return nullptr;
+            }
 
             firstIndex = GetLSB(firstListMap);
             secondListMap = m_pSecondListBitmap[firstIndex];
         }
 
         secondIndex = GetLSB(secondListMap);
+
+        LOG_TRACE("Found available block at {}x{}.", firstIndex, secondIndex);
 
         return m_ppBlocks[firstIndex][secondIndex];
     }
@@ -185,7 +207,7 @@ namespace lr::Memory
         if (pPrevBlock)
             pPrevBlock->m_pNextFree = pNextBlock;
 
-        // pBlock->IsFree = false;
+        // pBlock->m_IsFree = false;
 
         TLSFBlock *pListBlock = m_ppBlocks[firstIndex][secondIndex];
 

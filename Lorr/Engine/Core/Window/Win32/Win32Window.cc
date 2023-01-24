@@ -1,5 +1,8 @@
 #include "Win32Window.hh"
 
+#undef LOG_SET_NAME
+#define LOG_SET_NAME "WIN32WINDOW"
+
 namespace lr
 {
     void Win32Window::Init(const WindowDesc &desc)

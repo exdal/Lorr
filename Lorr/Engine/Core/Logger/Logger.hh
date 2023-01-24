@@ -10,19 +10,22 @@
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/spdlog.h>
 
-#define LOG_TRACE(...) lr::Logger::s_pCoreLogger->trace(__VA_ARGS__)
+#define LOG_SET_NAME "MAIN"
+#define LOG_DISABLED(...)
 
-#define LOG_INFO(...) lr::Logger::s_pCoreLogger->info(__VA_ARGS__)
-#define LOG_WARN(...) lr::Logger::s_pCoreLogger->warn(__VA_ARGS__)
-#define LOG_ERROR(...) lr::Logger::s_pCoreLogger->error(__VA_ARGS__)
-
-#define LOG_CRITICAL(...)                                                                                                                            \
-    {                                                                                                                                                \
-        lr::Logger::s_pCoreLogger->critical(__VA_ARGS__);                                                                                            \
-        lr::Logger::s_pCoreLogger->dump_backtrace();                                                                                                 \
-        lr::Logger::s_pCoreLogger->flush();                                                                                                          \
-        abort();                                                                                                                                     \
+#define LOG_TRACE(...) lr::Logger::s_pCoreLogger->trace(LOG_SET_NAME " | " __VA_ARGS__)
+#define LOG_INFO(...) lr::Logger::s_pCoreLogger->info(LOG_SET_NAME " | " __VA_ARGS__)
+#define LOG_WARN(...) lr::Logger::s_pCoreLogger->warn(LOG_SET_NAME " | " __VA_ARGS__)
+#define LOG_ERROR(...) lr::Logger::s_pCoreLogger->error(LOG_SET_NAME " | " __VA_ARGS__)
+#define LOG_CRITICAL(...)                                                    \
+    {                                                                        \
+        lr::Logger::s_pCoreLogger->critical(LOG_SET_NAME " | " __VA_ARGS__); \
+        lr::Logger::s_pCoreLogger->dump_backtrace();                         \
+        lr::Logger::s_pCoreLogger->flush();                                  \
+        abort();                                                             \
     }
+
+// #undef LOG_SET_NAME
 
 namespace lr
 {

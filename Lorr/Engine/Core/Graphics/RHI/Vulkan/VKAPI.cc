@@ -7,6 +7,9 @@
 #include "VKCommandList.hh"
 #include "VKShader.hh"
 
+#undef LOG_SET_NAME
+#define LOG_SET_NAME "VKAPI"
+
 /// DEFINE VULKAN FUNCTIONS
 // #include "VKSymbols.hh"
 #define _VK_DEFINE_FUNCTION(_name) PFN_##_name _name

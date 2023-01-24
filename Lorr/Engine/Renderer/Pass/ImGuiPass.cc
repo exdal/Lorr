@@ -1,5 +1,8 @@
 #include "ImGuiPass.hh"
 
+#include "Resources/imgui.v.hh"
+#include "Resources/imgui.p.hh"
+
 #include <imgui.h>
 
 namespace lr::Renderer
@@ -85,8 +88,10 @@ namespace lr::Renderer
 
         Sampler *pSampler = pAPI->CreateSampler(&samplerDesc);
 
-        Shader *pVertexShader = pAPI->CreateShader(LR_SHADER_STAGE_VERTEX, "imgui.v.hlsl");
-        Shader *pPixelShader = pAPI->CreateShader(LR_SHADER_STAGE_PIXEL, "imgui.p.hlsl");
+        BufferReadStream vertexShaderData((void *)kShader_imgui_v, kShader_imgui_v_length);
+        BufferReadStream pixelShaderData((void *)kShader_imgui_p, kShader_imgui_p_length);
+        Shader *pVertexShader = pAPI->CreateShader(LR_SHADER_STAGE_VERTEX, vertexShaderData);
+        Shader *pPixelShader = pAPI->CreateShader(LR_SHADER_STAGE_PIXEL, pixelShaderData);
 
         DescriptorSetDesc descriptorDesc = {};
         descriptorDesc.m_BindingCount = 1;

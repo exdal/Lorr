@@ -2,6 +2,9 @@
 
 #include "D3D12API.hh"
 
+#undef LOG_SET_NAME
+#define LOG_SET_NAME "D3D12SC"
+
 namespace lr::Graphics
 {
     void D3D12SwapChain::Init(BaseWindow *pWindow, D3D12API *pAPI, SwapChainFlags flags)

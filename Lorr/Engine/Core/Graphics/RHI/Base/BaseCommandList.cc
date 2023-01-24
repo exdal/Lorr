@@ -2,6 +2,9 @@
 
 #include <eathread/eathread_thread.h>
 
+#undef LOG_SET_NAME
+#define LOG_SET_NAME "BASECMD"
+
 namespace lr::Graphics
 {
     void CommandListPool::Init()

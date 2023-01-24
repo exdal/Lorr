@@ -9,8 +9,8 @@ namespace lr
         logSinks.emplace_back(std::make_shared<spdlog::sinks::stdout_color_sink_mt>());
         logSinks.emplace_back(std::make_shared<spdlog::sinks::basic_file_sink_mt>("lorr.log", true));
 
-        logSinks[0]->set_pattern("[%n] %Y-%m-%d_%T.%e | %5^%L%$ | %v");
-        logSinks[1]->set_pattern("[%n] %Y-%m-%d_%T.%e | %L | %v");
+        logSinks[0]->set_pattern("%Y-%m-%d_%T.%e | %5^%L%$ | %v");
+        logSinks[1]->set_pattern("%Y-%m-%d_%T.%e | %L | %v");
 
         s_pCoreLogger = std::make_shared<spdlog::logger>("LR", logSinks.begin(), logSinks.end());
         spdlog::register_logger(s_pCoreLogger);

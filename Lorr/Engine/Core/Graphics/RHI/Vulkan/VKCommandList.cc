@@ -5,6 +5,9 @@
 #include "VKAPI.hh"
 #include "VKResource.hh"
 
+#undef LOG_SET_NAME
+#define LOG_SET_NAME "VKCMD"
+
 #define API_VAR(type, name) type *name##VK = (type *)name
 
 namespace lr::Graphics

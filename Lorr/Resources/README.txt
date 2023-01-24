@@ -1,0 +1,1 @@
+Engine resources only, mostly embedded into code.

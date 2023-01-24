@@ -6,6 +6,9 @@
 
 #include "STL/Memory.hh"
 
+#undef LOG_SET_NAME
+#define LOG_SET_NAME "D3D12API"
+
 #define HRCall(func, message)                                                                                      \
     if (FAILED(hr = func))                                                                                         \
     {                                                                                                              \

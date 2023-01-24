@@ -4,6 +4,9 @@
 #include "D3D12Resource.hh"
 #include "D3D12Pipeline.hh"
 
+#undef LOG_SET_NAME
+#define LOG_SET_NAME "D3D12CMD"
+
 #define API_VAR(type, name) type *name##DX = (type *)name
 
 namespace lr::Graphics

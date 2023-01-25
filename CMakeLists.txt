@@ -21,4 +21,4 @@ add_definitions(-D_CRT_SECURE_NO_WARNINGS)
 add_subdirectory(Vendor)
 add_subdirectory(Lorr)
 
-add_subdirectory(Game)
+add_subdirectory(Examples)

@@ -11,40 +11,6 @@
 
 namespace lr::Graphics
 {
-    enum ResourceUsage : u32
-    {
-        LR_RESOURCE_USAGE_UNKNOWN = 0,
-        LR_RESOURCE_USAGE_VERTEX_BUFFER = 1 << 0,
-        LR_RESOURCE_USAGE_INDEX_BUFFER = 1 << 1,
-        LR_RESOURCE_USAGE_CONSTANT_BUFFER = 1 << 3,
-        LR_RESOURCE_USAGE_SHADER_RESOURCE = 1 << 4,
-        LR_RESOURCE_USAGE_RENDER_TARGET = 1 << 5,
-        LR_RESOURCE_USAGE_DEPTH_STENCIL = 1 << 6,
-        LR_RESOURCE_USAGE_TRANSFER_SRC = 1 << 7,
-        LR_RESOURCE_USAGE_TRANSFER_DST = 1 << 8,
-        LR_RESOURCE_USAGE_UNORDERED_ACCESS = 1 << 9,
-        LR_RESOURCE_USAGE_HOST_VISIBLE = 1 << 10,
-
-        LR_RESOURCE_USAGE_PRESENT = LR_RESOURCE_USAGE_SHADER_RESOURCE | LR_RESOURCE_USAGE_RENDER_TARGET,
-
-        LR_RESOURCE_USAGE_MAX = 1U << 31,
-    };
-    EnumFlags(ResourceUsage);
-
-    enum ImageFormat : u32
-    {
-        LR_IMAGE_FORMAT_UNKNOWN,
-        LR_IMAGE_FORMAT_RGBA8F,
-        LR_IMAGE_FORMAT_RGBA8_SRGBF,
-        LR_IMAGE_FORMAT_BGRA8F,
-        LR_IMAGE_FORMAT_RGBA16F,
-        LR_IMAGE_FORMAT_RGBA32F,
-        LR_IMAGE_FORMAT_R32U,
-        LR_IMAGE_FORMAT_R32F,
-        LR_IMAGE_FORMAT_D32F,
-        LR_IMAGE_FORMAT_D32FS8U,
-    };
-
     constexpr u32 kImageFormatSizeLUT[] = {
         0,                // LR_RESOURCE_FORMAT_UNKNOWN
         sizeof(u8) * 4,   // LR_RESOURCE_FORMAT_RGBA8F
@@ -69,7 +35,7 @@ namespace lr::Graphics
     {
         ResourceUsage m_UsageFlags = LR_RESOURCE_USAGE_UNKNOWN;
         ImageFormat m_Format = LR_IMAGE_FORMAT_UNKNOWN;
-        RHIAllocatorType m_TargetAllocator = LR_RHI_ALLOCATOR_NONE;
+        APIAllocatorType m_TargetAllocator = LR_API_ALLOCATOR_NONE;
 
         u16 m_Width = 0;
         u16 m_Height = 0;
@@ -84,7 +50,7 @@ namespace lr::Graphics
     {
         ResourceUsage m_UsageFlags = LR_RESOURCE_USAGE_UNKNOWN;
         ImageFormat m_Format = LR_IMAGE_FORMAT_UNKNOWN;
-        RHIAllocatorType m_TargetAllocator = LR_RHI_ALLOCATOR_NONE;
+        APIAllocatorType m_TargetAllocator = LR_API_ALLOCATOR_NONE;
         void *m_pAllocatorData = nullptr;
 
         u16 m_Width = 0;
@@ -102,7 +68,7 @@ namespace lr::Graphics
     struct BufferDesc
     {
         ResourceUsage m_UsageFlags = LR_RESOURCE_USAGE_UNKNOWN;
-        RHIAllocatorType m_TargetAllocator = LR_RHI_ALLOCATOR_NONE;
+        APIAllocatorType m_TargetAllocator = LR_API_ALLOCATOR_NONE;
 
         u32 m_Stride = 0;
         u32 m_DataLen = 0;
@@ -112,7 +78,7 @@ namespace lr::Graphics
     struct Buffer
     {
         ResourceUsage m_UsageFlags = LR_RESOURCE_USAGE_UNKNOWN;
-        RHIAllocatorType m_TargetAllocator = LR_RHI_ALLOCATOR_NONE;
+        APIAllocatorType m_TargetAllocator = LR_API_ALLOCATOR_NONE;
         void *m_pAllocatorData = nullptr;
 
         u32 m_Stride = 0;

@@ -148,8 +148,14 @@ namespace lr::Graphics
         virtual void CopyBuffer(Buffer *pSource, Image *pDest) = 0;
 
         /// Draw Commands
-        virtual void Draw(u32 vertexCount, u32 firstVertex = 0, u32 instanceCount = 1, u32 firstInstance = 1) = 0;
-        virtual void DrawIndexed(u32 indexCount, u32 firstIndex = 0, u32 vertexOffset = 0, u32 instanceCount = 1, u32 firstInstance = 0) = 0;
+        virtual void Draw(
+            u32 vertexCount, u32 firstVertex = 0, u32 instanceCount = 1, u32 firstInstance = 1) = 0;
+        virtual void DrawIndexed(
+            u32 indexCount,
+            u32 firstIndex = 0,
+            u32 vertexOffset = 0,
+            u32 instanceCount = 1,
+            u32 firstInstance = 0) = 0;
         virtual void Dispatch(u32 groupX, u32 groupY, u32 groupZ) = 0;
 
         /// Pipeline States
@@ -161,7 +167,8 @@ namespace lr::Graphics
         virtual void SetComputePipeline(Pipeline *pPipeline) = 0;
         virtual void SetGraphicsDescriptorSets(const std::initializer_list<DescriptorSet *> &sets) = 0;
         virtual void SetComputeDescriptorSets(const std::initializer_list<DescriptorSet *> &sets) = 0;
-        virtual void SetGraphicsPushConstants(Pipeline *pPipeline, ShaderStage stage, void *pData, u32 dataSize) = 0;
+        virtual void SetGraphicsPushConstants(
+            Pipeline *pPipeline, ShaderStage stage, void *pData, u32 dataSize) = 0;
         virtual void SetComputePushConstants(Pipeline *pPipeline, void *pData, u32 dataSize) = 0;
 
         CommandListType m_Type = CommandListType::Direct;

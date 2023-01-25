@@ -39,7 +39,12 @@ namespace lr::Graphics
 
         /// Draw Commands
         void Draw(u32 vertexCount, u32 firstVertex = 0, u32 instanceCount = 1, u32 firstInstance = 1) override;
-        void DrawIndexed(u32 indexCount, u32 firstIndex = 0, u32 vertexOffset = 0, u32 instanceCount = 1, u32 firstInstance = 0) override;
+        void DrawIndexed(
+            u32 indexCount,
+            u32 firstIndex = 0,
+            u32 vertexOffset = 0,
+            u32 instanceCount = 1,
+            u32 firstInstance = 0) override;
         void Dispatch(u32 groupX, u32 groupY, u32 groupZ) override;
 
         /// Pipeline States
@@ -51,7 +56,8 @@ namespace lr::Graphics
         void SetComputePipeline(Pipeline *pPipeline) override;
         void SetGraphicsDescriptorSets(const std::initializer_list<DescriptorSet *> &sets) override;
         void SetComputeDescriptorSets(const std::initializer_list<DescriptorSet *> &sets) override;
-        void SetGraphicsPushConstants(Pipeline *pPipeline, ShaderStage stage, void *pData, u32 dataSize) override;
+        void SetGraphicsPushConstants(
+            Pipeline *pPipeline, ShaderStage stage, void *pData, u32 dataSize) override;
         void SetComputePushConstants(Pipeline *pPipeline, void *pData, u32 dataSize) override;
 
         VKCommandAllocator *m_pAllocator = nullptr;

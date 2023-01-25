@@ -16,7 +16,7 @@ namespace lr::Graphics
         void WaitIdle();
 
         ID3D12CommandQueue *m_pHandle = nullptr;
-        
+
         ID3D12Fence *m_pFence = nullptr;  // Fence if we need to wait for queue itself (i.e SwapChain resize)
         u64 m_FenceValue = 0;
         HANDLE m_FenceEvent = nullptr;

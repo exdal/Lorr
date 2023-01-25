@@ -13,12 +13,6 @@
 
 namespace lr::Renderer
 {
-    enum class APIType
-    {
-        Vulkan,
-        D3D12,
-    };
-
     // * Note:
     // * Passes:
     // *    - Pipeline barriers must happen outside of pass.
@@ -31,7 +25,7 @@ namespace lr::Renderer
     using namespace Graphics;
     struct RendererManager
     {
-        void Init(APIType type, Graphics::APIFlags flags, BaseWindow *pWindow);
+        void Init(APIType type, APIFlags flags, BaseWindow *pWindow);
         void Shutdown();
 
         void Resize(u32 width, u32 height);

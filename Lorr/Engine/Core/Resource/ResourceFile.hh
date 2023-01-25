@@ -13,8 +13,8 @@ namespace lr::Resource
 
     enum ResourceFileFlags : u32
     {
-        LR_RESOURCE_FILE_FLAGS_NONE = 0,
-        LR_RESOURCE_FILE_FLAGS_COMPRESSED = 1 << 0,
+        LR_RESOURCE_FILE_FLAG_NONE = 0,
+        LR_RESOURCE_FILE_FLAG_COMPRESSED = 1 << 0,
     };
 
     struct alignas(u32) ResourceFileHeader

@@ -66,7 +66,11 @@ namespace lr::Graphics
         /// SWAPCHAIN ///
 
         // Leave `pFSD` as `nullptr` for windowed swap chain
-        void CreateSwapChain(IDXGISwapChain1 *&pHandle, void *pWindowHandle, DXGI_SWAP_CHAIN_DESC1 &desc, DXGI_SWAP_CHAIN_FULLSCREEN_DESC *pFSD);
+        void CreateSwapChain(
+            IDXGISwapChain1 *&pHandle,
+            void *pWindowHandle,
+            DXGI_SWAP_CHAIN_DESC1 &desc,
+            DXGI_SWAP_CHAIN_FULLSCREEN_DESC *pFSD);
         void ResizeSwapChain(u32 width, u32 height) override;
         BaseSwapChain *GetSwapChain() override;
 
@@ -102,8 +106,10 @@ namespace lr::Graphics
 
         Sampler *CreateSampler(SamplerDesc *pDesc) override;
 
-        void SetAllocator(D3D12Buffer *pBuffer, D3D12_RESOURCE_DESC &resourceDesc, RHIAllocatorType targetAllocator);
-        void SetAllocator(D3D12Image *pImage, D3D12_RESOURCE_DESC &resourceDesc, RHIAllocatorType targetAllocator);
+        void SetAllocator(
+            D3D12Buffer *pBuffer, D3D12_RESOURCE_DESC &resourceDesc, APIAllocatorType targetAllocator);
+        void SetAllocator(
+            D3D12Image *pImage, D3D12_RESOURCE_DESC &resourceDesc, APIAllocatorType targetAllocator);
 
         void BindMemory(Image *pImage);
 

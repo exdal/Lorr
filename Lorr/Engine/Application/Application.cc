@@ -4,6 +4,15 @@
 
 namespace lr
 {
+    void Application::InitBase(BaseApplicationDesc &desc)
+    {
+        ZoneScoped;
+
+        m_Name = desc.m_Name;
+
+        m_Engine.Init(desc.m_EngineDesc);
+    }
+
     void Application::Run()
     {
         ZoneScoped;

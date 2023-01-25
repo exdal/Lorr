@@ -9,34 +9,36 @@
 #undef LOG_SET_NAME
 #define LOG_SET_NAME "D3D12API"
 
-#define HRCall(func, message)                                                                                      \
-    if (FAILED(hr = func))                                                                                         \
-    {                                                                                                              \
-        char *pError;                                                                                              \
-        FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, \
-                      NULL,                                                                                        \
-                      hr,                                                                                          \
-                      MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),                                                   \
-                      (LPTSTR)&pError,                                                                             \
-                      0,                                                                                           \
-                      NULL);                                                                                       \
-        LOG_ERROR(message " Details: {}", pError);                                                                 \
-        return;                                                                                                    \
+#define HRCall(func, message)                                                                            \
+    if (FAILED(hr = func))                                                                               \
+    {                                                                                                    \
+        char *pError;                                                                                    \
+        FormatMessage(                                                                                   \
+            FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, \
+            NULL,                                                                                        \
+            hr,                                                                                          \
+            MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),                                                   \
+            (LPTSTR)&pError,                                                                             \
+            0,                                                                                           \
+            NULL);                                                                                       \
+        LOG_ERROR(message " Details: {}", pError);                                                       \
+        return;                                                                                          \
     }
 
-#define HRCallRet(func, message, ret)                                                                              \
-    if (FAILED(hr = func))                                                                                         \
-    {                                                                                                              \
-        char *pError;                                                                                              \
-        FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, \
-                      NULL,                                                                                        \
-                      hr,                                                                                          \
-                      MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),                                                   \
-                      (LPTSTR)&pError,                                                                             \
-                      0,                                                                                           \
-                      NULL);                                                                                       \
-        LOG_ERROR(message " Details: {}", pError);                                                                 \
-        return ret;                                                                                                \
+#define HRCallRet(func, message, ret)                                                                    \
+    if (FAILED(hr = func))                                                                               \
+    {                                                                                                    \
+        char *pError;                                                                                    \
+        FormatMessage(                                                                                   \
+            FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, \
+            NULL,                                                                                        \
+            hr,                                                                                          \
+            MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),                                                   \
+            (LPTSTR)&pError,                                                                             \
+            0,                                                                                           \
+            NULL);                                                                                       \
+        LOG_ERROR(message " Details: {}", pError);                                                       \
+        return ret;                                                                                      \
     }
 //
 
@@ -66,7 +68,10 @@ namespace lr::Graphics
 #endif
 
         // Create factory
-        HRCallRet(CreateDXGIFactory2((deviceFlags), IID_PPV_ARGS(&m_pFactory)), "Failed to create DXGI2 Factory!", false);
+        HRCallRet(
+            CreateDXGIFactory2((deviceFlags), IID_PPV_ARGS(&m_pFactory)),
+            "Failed to create DXGI2 Factory!",
+            false);
 
 #pragma region Select Factory
         // Select suitable adapter
@@ -75,8 +80,9 @@ namespace lr::Graphics
 
         if (pFactory6)
         {
-            for (u32 i = 0;
-                 pFactory6->EnumAdapterByGpuPreference(i, DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE, IID_PPV_ARGS(&m_pAdapter)) != DXGI_ERROR_NOT_FOUND;
+            for (u32 i = 0; pFactory6->EnumAdapterByGpuPreference(
+                                i, DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE, IID_PPV_ARGS(&m_pAdapter))
+                            != DXGI_ERROR_NOT_FOUND;
                  i++)
             {
                 DXGI_ADAPTER_DESC1 adapterDesc = {};
@@ -85,7 +91,8 @@ namespace lr::Graphics
                 if (adapterDesc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE)
                     continue;  // We don't want software adapter
 
-                if (SUCCEEDED(D3D12CreateDevice(m_pAdapter, kMinimumFeatureLevel, _uuidof(ID3D12Device), nullptr)))
+                if (SUCCEEDED(
+                        D3D12CreateDevice(m_pAdapter, kMinimumFeatureLevel, _uuidof(ID3D12Device), nullptr)))
                 {
                     LOG_INFO("Found high performance adapter! ADAPTER{}-{}", i, adapterDesc.VendorId);
 
@@ -106,7 +113,8 @@ namespace lr::Graphics
                 if (adapterDesc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE)
                     continue;  // We don't want software adapter
 
-                if (SUCCEEDED(D3D12CreateDevice(m_pAdapter, kMinimumFeatureLevel, _uuidof(ID3D12Device), nullptr)))
+                if (SUCCEEDED(
+                        D3D12CreateDevice(m_pAdapter, kMinimumFeatureLevel, _uuidof(ID3D12Device), nullptr)))
                 {
                     LOG_INFO("Found adapter! ADAPTER{}-{}", i, adapterDesc.VendorId);
 
@@ -126,7 +134,10 @@ namespace lr::Graphics
 
 #pragma endregion
 
-        HRCallRet(D3D12CreateDevice(m_pAdapter, kMinimumFeatureLevel, IID_PPV_ARGS(&m_pDevice)), "Failed to create D3D12 Device!", false);
+        HRCallRet(
+            D3D12CreateDevice(m_pAdapter, kMinimumFeatureLevel, IID_PPV_ARGS(&m_pDevice)),
+            "Failed to create D3D12 Device!",
+            false);
 
 #ifdef _DEBUG
         ID3D12InfoQueue *pInfoQueue = nullptr;
@@ -186,8 +197,10 @@ namespace lr::Graphics
         constexpr u32 kBufferTLSFMem = Memory::MiBToBytes(512);
         constexpr u32 kImageTLSFMem = Memory::MiBToBytes(512);
 
-        constexpr D3D12_HEAP_FLAGS kBufferFlags = D3D12_HEAP_FLAG_DENY_NON_RT_DS_TEXTURES | D3D12_HEAP_FLAG_DENY_RT_DS_TEXTURES;
-        constexpr D3D12_HEAP_FLAGS kImageFlags = D3D12_HEAP_FLAG_DENY_RT_DS_TEXTURES | D3D12_HEAP_FLAG_DENY_BUFFERS;
+        constexpr D3D12_HEAP_FLAGS kBufferFlags =
+            D3D12_HEAP_FLAG_DENY_NON_RT_DS_TEXTURES | D3D12_HEAP_FLAG_DENY_RT_DS_TEXTURES;
+        constexpr D3D12_HEAP_FLAGS kImageFlags =
+            D3D12_HEAP_FLAG_DENY_RT_DS_TEXTURES | D3D12_HEAP_FLAG_DENY_BUFFERS;
 
         m_MADescriptor.Allocator.Init(kDescriptorMem);
         m_MADescriptor.pHeap = CreateHeap(kDescriptorMem, true, kBufferFlags);
@@ -243,7 +256,8 @@ namespace lr::Graphics
         pList->m_FenceEvent = CreateEventExA(nullptr, nullptr, false, EVENT_ALL_ACCESS);
 
         ID3D12GraphicsCommandList4 *pHandle = nullptr;
-        m_pDevice->CreateCommandList(0, ToDXCommandListType(type), pAllocator->m_pHandle, nullptr, IID_PPV_ARGS(&pHandle));
+        m_pDevice->CreateCommandList(
+            0, ToDXCommandListType(type), pAllocator->m_pHandle, nullptr, IID_PPV_ARGS(&pHandle));
 
         pList->Init(pHandle, pAllocator, type);
 
@@ -295,7 +309,8 @@ namespace lr::Graphics
 
         if (waitForFence)
         {
-            pListDX->m_pFence->SetEventOnCompletion(pListDX->m_DesiredFenceValue.load(eastl::memory_order_acquire), pListDX->m_FenceEvent);
+            pListDX->m_pFence->SetEventOnCompletion(
+                pListDX->m_DesiredFenceValue.load(eastl::memory_order_acquire), pListDX->m_FenceEvent);
             WaitForSingleObjectEx(pListDX->m_FenceEvent, INFINITE, false);
 
             m_CommandListPool.Release(pList);
@@ -345,14 +360,17 @@ namespace lr::Graphics
         return pLibrary;
     }
 
-    ID3D12RootSignature *D3D12API::SerializeRootSignature(PipelineLayoutSerializeDesc *pDesc, Pipeline *pPipeline)
+    ID3D12RootSignature *D3D12API::SerializeRootSignature(
+        PipelineLayoutSerializeDesc *pDesc, Pipeline *pPipeline)
     {
         ZoneScoped;
 
         API_VAR(D3D12Pipeline, pPipeline);
 
-        D3D12_ROOT_PARAMETER1 pParams[LR_MAX_DESCRIPTOR_SETS_PER_PIPELINE + LR_MAX_PUSH_CONSTANTS_PER_PIPELINE] = {};
-        D3D12_DESCRIPTOR_RANGE1 pRanges[LR_MAX_DESCRIPTOR_SETS_PER_PIPELINE][LR_MAX_DESCRIPTORS_PER_LAYOUT] = {};
+        D3D12_ROOT_PARAMETER1
+            pParams[LR_MAX_DESCRIPTOR_SETS_PER_PIPELINE + LR_MAX_PUSH_CONSTANTS_PER_PIPELINE] = {};
+        D3D12_DESCRIPTOR_RANGE1 pRanges[LR_MAX_DESCRIPTOR_SETS_PER_PIPELINE]
+                                       [LR_MAX_DESCRIPTORS_PER_LAYOUT] = {};
         D3D12_STATIC_SAMPLER_DESC pSamplers[LR_MAX_STATIC_SAMPLERS_PER_PIPELINE] = {};
 
         u32 currentSpace = 0;
@@ -409,13 +427,17 @@ namespace lr::Graphics
 
         ls::scoped_comptr<ID3DBlob> pRootSigBlob;
         ls::scoped_comptr<ID3DBlob> pErrorBlob;
-        HRESULT hr = D3D12SerializeVersionedRootSignature(&rootSignatureDesc, pRootSigBlob.get_address(), pErrorBlob.get_address());
+        HRESULT hr = D3D12SerializeVersionedRootSignature(
+            &rootSignatureDesc, pRootSigBlob.get_address(), pErrorBlob.get_address());
 
         if (pErrorBlob.get() && pErrorBlob->GetBufferPointer())
-            LOG_ERROR("Root signature error: {}", eastl::string_view((const char *)pErrorBlob->GetBufferPointer(), pErrorBlob->GetBufferSize()));
+            LOG_ERROR(
+                "Root signature error: {}",
+                eastl::string_view((const char *)pErrorBlob->GetBufferPointer(), pErrorBlob->GetBufferSize()));
 
         ID3D12RootSignature *pRootSig = nullptr;
-        m_pDevice->CreateRootSignature(0, pRootSigBlob->GetBufferPointer(), pRootSigBlob->GetBufferSize(), IID_PPV_ARGS(&pRootSig));
+        m_pDevice->CreateRootSignature(
+            0, pRootSigBlob->GetBufferPointer(), pRootSigBlob->GetBufferSize(), IID_PPV_ARGS(&pRootSig));
 
         return pRootSig;
     }
@@ -433,7 +455,8 @@ namespace lr::Graphics
         compileDesc.m_Flags = LR_SHADER_FLAG_MATRIX_ROW_MAJOR | LR_SHADER_FLAG_ALL_RESOURCES_BOUND;
 
 #if _DEBUG
-        compileDesc.m_Flags |= LR_SHADER_FLAG_WARNINGS_ARE_ERRORS | LR_SHADER_FLAG_SKIP_OPTIMIZATION | LR_SHADER_FLAG_USE_DEBUG;
+        compileDesc.m_Flags |=
+            LR_SHADER_FLAG_WARNINGS_ARE_ERRORS | LR_SHADER_FLAG_SKIP_OPTIMIZATION | LR_SHADER_FLAG_USE_DEBUG;
 #endif
 
         pShader->m_pHandle = ShaderCompiler::CompileFromBuffer(&compileDesc, buf);
@@ -570,7 +593,8 @@ namespace lr::Graphics
         D3D12_RASTERIZER_DESC &rasterizerInfo = createInfo.RasterizerState;
         rasterizerInfo.DepthClipEnable = pBuildInfo->m_EnableDepthClamp;
         rasterizerInfo.CullMode = ToDXCullMode(pBuildInfo->m_SetCullMode);
-        rasterizerInfo.FillMode = pBuildInfo->m_SetFillMode == LR_FILL_MODE_FILL ? D3D12_FILL_MODE_SOLID : D3D12_FILL_MODE_WIREFRAME;
+        rasterizerInfo.FillMode =
+            pBuildInfo->m_SetFillMode == LR_FILL_MODE_FILL ? D3D12_FILL_MODE_SOLID : D3D12_FILL_MODE_WIREFRAME;
         rasterizerInfo.FrontCounterClockwise = !pBuildInfo->m_FrontFaceCCW;
         rasterizerInfo.DepthBias = pBuildInfo->m_EnableDepthBias;
         rasterizerInfo.DepthBias = pBuildInfo->m_DepthBiasFactor;
@@ -592,13 +616,17 @@ namespace lr::Graphics
         depthStencilInfo.DepthFunc = (D3D12_COMPARISON_FUNC)pBuildInfo->m_DepthCompareOp;
         depthStencilInfo.StencilWriteMask = pBuildInfo->m_EnableStencilTest;
 
-        depthStencilInfo.FrontFace.StencilFunc = (D3D12_COMPARISON_FUNC)pBuildInfo->m_StencilFrontFaceOp.m_CompareFunc;
-        depthStencilInfo.FrontFace.StencilDepthFailOp = (D3D12_STENCIL_OP)pBuildInfo->m_StencilFrontFaceOp.m_DepthFail;
+        depthStencilInfo.FrontFace.StencilFunc =
+            (D3D12_COMPARISON_FUNC)pBuildInfo->m_StencilFrontFaceOp.m_CompareFunc;
+        depthStencilInfo.FrontFace.StencilDepthFailOp =
+            (D3D12_STENCIL_OP)pBuildInfo->m_StencilFrontFaceOp.m_DepthFail;
         depthStencilInfo.FrontFace.StencilFailOp = (D3D12_STENCIL_OP)pBuildInfo->m_StencilFrontFaceOp.m_Fail;
         depthStencilInfo.FrontFace.StencilPassOp = (D3D12_STENCIL_OP)pBuildInfo->m_StencilFrontFaceOp.m_Pass;
 
-        depthStencilInfo.BackFace.StencilFunc = (D3D12_COMPARISON_FUNC)pBuildInfo->m_StencilBackFaceOp.m_CompareFunc;
-        depthStencilInfo.BackFace.StencilDepthFailOp = (D3D12_STENCIL_OP)pBuildInfo->m_StencilBackFaceOp.m_DepthFail;
+        depthStencilInfo.BackFace.StencilFunc =
+            (D3D12_COMPARISON_FUNC)pBuildInfo->m_StencilBackFaceOp.m_CompareFunc;
+        depthStencilInfo.BackFace.StencilDepthFailOp =
+            (D3D12_STENCIL_OP)pBuildInfo->m_StencilBackFaceOp.m_DepthFail;
         depthStencilInfo.BackFace.StencilFailOp = (D3D12_STENCIL_OP)pBuildInfo->m_StencilBackFaceOp.m_Fail;
         depthStencilInfo.BackFace.StencilPassOp = (D3D12_STENCIL_OP)pBuildInfo->m_StencilBackFaceOp.m_Pass;
 
@@ -661,11 +689,16 @@ namespace lr::Graphics
         return pPipeline;
     }
 
-    void D3D12API::CreateSwapChain(IDXGISwapChain1 *&pHandle, void *pWindowHandle, DXGI_SWAP_CHAIN_DESC1 &desc, DXGI_SWAP_CHAIN_FULLSCREEN_DESC *pFSD)
+    void D3D12API::CreateSwapChain(
+        IDXGISwapChain1 *&pHandle,
+        void *pWindowHandle,
+        DXGI_SWAP_CHAIN_DESC1 &desc,
+        DXGI_SWAP_CHAIN_FULLSCREEN_DESC *pFSD)
     {
         ZoneScoped;
 
-        m_pFactory->CreateSwapChainForHwnd(m_pDirectQueue->m_pHandle, (HWND)pWindowHandle, &desc, pFSD, nullptr, &pHandle);
+        m_pFactory->CreateSwapChainForHwnd(
+            m_pDirectQueue->m_pHandle, (HWND)pWindowHandle, &desc, pFSD, nullptr, &pHandle);
     }
 
     void D3D12API::ResizeSwapChain(u32 width, u32 height)
@@ -738,12 +771,19 @@ namespace lr::Graphics
 
         ls::scoped_comptr<ID3DBlob> pRootSigBlob;
         ls::scoped_comptr<ID3DBlob> pErrorBlob;
-        D3D12SerializeVersionedRootSignature(&rootSignatureDesc, pRootSigBlob.get_address(), pErrorBlob.get_address());
+        D3D12SerializeVersionedRootSignature(
+            &rootSignatureDesc, pRootSigBlob.get_address(), pErrorBlob.get_address());
 
         if (pErrorBlob.get() && pErrorBlob->GetBufferPointer())
-            LOG_ERROR("Root signature error: {}", eastl::string_view((const char *)pErrorBlob->GetBufferPointer(), pErrorBlob->GetBufferSize()));
+            LOG_ERROR(
+                "Root signature error: {}",
+                eastl::string_view((const char *)pErrorBlob->GetBufferPointer(), pErrorBlob->GetBufferSize()));
 
-        m_pDevice->CreateRootSignature(0, pRootSigBlob->GetBufferPointer(), pRootSigBlob->GetBufferSize(), IID_PPV_ARGS(&pDescriptorSet->m_pHandle));
+        m_pDevice->CreateRootSignature(
+            0,
+            pRootSigBlob->GetBufferPointer(),
+            pRootSigBlob->GetBufferSize(),
+            IID_PPV_ARGS(&pDescriptorSet->m_pHandle));
 
         return pDescriptorSet;
     }
@@ -776,7 +816,9 @@ namespace lr::Graphics
             {
                 case LR_DESCRIPTOR_TYPE_CONSTANT_BUFFER: gpuAddress = pBufferDX->m_ViewGPU; break;
                 case LR_DESCRIPTOR_TYPE_SHADER_RESOURCE: gpuAddress = pImageDX->m_ShaderViewGPU; break;
-                case LR_DESCRIPTOR_TYPE_UNORDERED_ACCESS_IMAGE: gpuAddress = pImageDX->m_UnorderedAccessViewGPU; break;
+                case LR_DESCRIPTOR_TYPE_UNORDERED_ACCESS_IMAGE:
+                    gpuAddress = pImageDX->m_UnorderedAccessViewGPU;
+                    break;
                 case LR_DESCRIPTOR_TYPE_SAMPLER: gpuAddress = pSamplerDX->m_HandleGPU;
                 default: break;
             }
@@ -797,7 +839,8 @@ namespace lr::Graphics
             heapDesc.NumDescriptors = element.m_Count;
             heapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 
-            if (element.m_HeapType == D3D12_DESCRIPTOR_HEAP_TYPE_RTV || element.m_HeapType == D3D12_DESCRIPTOR_HEAP_TYPE_RTV)
+            if (element.m_HeapType == D3D12_DESCRIPTOR_HEAP_TYPE_RTV
+                || element.m_HeapType == D3D12_DESCRIPTOR_HEAP_TYPE_RTV)
                 heapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
 
             m_pDevice->CreateDescriptorHeap(&heapDesc, IID_PPV_ARGS(&pHandle));
@@ -905,12 +948,13 @@ namespace lr::Graphics
 
         SetAllocator(pBuffer, resourceDesc, pBuffer->m_TargetAllocator);
 
-        m_pDevice->CreatePlacedResource(pBuffer->m_pMemoryHandle,
-                                        0,  // TODO: SUBRESOURCE ALLOCATION
-                                        &resourceDesc,
-                                        ToDXBufferUsage(pBuffer->m_UsageFlags),
-                                        nullptr,
-                                        IID_PPV_ARGS(&pBuffer->m_pHandle));
+        m_pDevice->CreatePlacedResource(
+            pBuffer->m_pMemoryHandle,
+            0,  // TODO: SUBRESOURCE ALLOCATION
+            &resourceDesc,
+            ToDXBufferUsage(pBuffer->m_UsageFlags),
+            nullptr,
+            IID_PPV_ARGS(&pBuffer->m_pHandle));
 
         pBuffer->m_VirtualAddress = pBuffer->m_pHandle->GetGPUVirtualAddress();
 
@@ -927,14 +971,14 @@ namespace lr::Graphics
 
         if (pHandleDX->m_pMemoryHandle)
         {
-            if (pHandleDX->m_TargetAllocator == LR_RHI_ALLOCATOR_BUFFER_TLSF)
+            if (pHandleDX->m_TargetAllocator == LR_API_ALLOCATOR_BUFFER_TLSF)
             {
                 Memory::TLSFBlock *pBlock = (Memory::TLSFBlock *)pHandleDX->m_pAllocatorData;
                 assert(pBlock != nullptr);
 
                 m_MABufferTLSF.Allocator.Free(pBlock);
             }
-            else if (pHandleDX->m_TargetAllocator == LR_RHI_ALLOCATOR_NONE)
+            else if (pHandleDX->m_TargetAllocator == LR_API_ALLOCATOR_NONE)
             {
                 pHandleDX->m_pMemoryHandle->Release();
             }
@@ -1027,12 +1071,13 @@ namespace lr::Graphics
         initialState &= ~D3D12_RESOURCE_STATE_COPY_DEST;
         initialState &= ~D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE;
 
-        m_pDevice->CreatePlacedResource(pImage->m_pMemoryHandle,
-                                        0,  // TODO: Suballocations
-                                        &resourceDesc,
-                                        initialState,
-                                        nullptr,
-                                        IID_PPV_ARGS(&pImage->m_pHandle));
+        m_pDevice->CreatePlacedResource(
+            pImage->m_pMemoryHandle,
+            0,  // TODO: Suballocations
+            &resourceDesc,
+            initialState,
+            nullptr,
+            IID_PPV_ARGS(&pImage->m_pHandle));
 
         CreateImageView(pImage);
 
@@ -1047,14 +1092,14 @@ namespace lr::Graphics
 
         if (pImageDX->m_pMemoryHandle)
         {
-            if (pImage->m_TargetAllocator == LR_RHI_ALLOCATOR_IMAGE_TLSF)
+            if (pImage->m_TargetAllocator == LR_API_ALLOCATOR_IMAGE_TLSF)
             {
                 Memory::TLSFBlock *pBlock = (Memory::TLSFBlock *)pImage->m_pAllocatorData;
                 assert(pBlock != nullptr);
 
                 m_MAImageTLSF.Allocator.Free(pBlock);
             }
-            else if (pImage->m_TargetAllocator == LR_RHI_ALLOCATOR_NONE)
+            else if (pImage->m_TargetAllocator == LR_API_ALLOCATOR_NONE)
             {
                 pImageDX->m_pMemoryHandle->Release();
             }
@@ -1098,7 +1143,8 @@ namespace lr::Graphics
             viewDesc.Texture2D.MipSlice = 0;
             viewDesc.Texture2D.PlaneSlice = 0;
 
-            m_pDevice->CreateUnorderedAccessView(pImageDX->m_pHandle, nullptr, &viewDesc, pImageDX->m_UnorderedAccessViewCPU);
+            m_pDevice->CreateUnorderedAccessView(
+                pImageDX->m_pHandle, nullptr, &viewDesc, pImageDX->m_UnorderedAccessViewCPU);
         }
 
         if (pImageDX->m_UsageFlags & LR_RESOURCE_USAGE_RENDER_TARGET)
@@ -1144,7 +1190,8 @@ namespace lr::Graphics
         u32 mipFilterVal = (u32)pDesc->m_MipFilter;
 
         D3D12_SAMPLER_DESC samplerDesc = {};
-        samplerDesc.Filter = (D3D12_FILTER)(mipFilterVal | (magFilterVal << 2) | (minFilterVal << 4) | (pDesc->m_UseAnisotropy << 6));
+        samplerDesc.Filter =
+            (D3D12_FILTER)(mipFilterVal | (magFilterVal << 2) | (minFilterVal << 4) | (pDesc->m_UseAnisotropy << 6));
 
         samplerDesc.AddressU = kAddresModeLUT[(u32)pDesc->m_AddressU];
         samplerDesc.AddressV = kAddresModeLUT[(u32)pDesc->m_AddressV];
@@ -1171,7 +1218,8 @@ namespace lr::Graphics
         return pSampler;
     }
 
-    void D3D12API::SetAllocator(D3D12Buffer *pBuffer, D3D12_RESOURCE_DESC &resourceDesc, RHIAllocatorType targetAllocator)
+    void D3D12API::SetAllocator(
+        D3D12Buffer *pBuffer, D3D12_RESOURCE_DESC &resourceDesc, APIAllocatorType targetAllocator)
     {
         ZoneScoped;
 
@@ -1180,34 +1228,39 @@ namespace lr::Graphics
 
         switch (targetAllocator)
         {
-            case LR_RHI_ALLOCATOR_NONE:
+            case LR_API_ALLOCATOR_NONE:
             {
                 pBuffer->m_DataOffset = 0;
-                pBuffer->m_pMemoryHandle =
-                    CreateHeap(pBuffer->m_DeviceDataLen, pBuffer->m_UsageFlags & LR_RESOURCE_USAGE_HOST_VISIBLE, D3D12_HEAP_FLAG_ALLOW_ONLY_BUFFERS);
+                pBuffer->m_pMemoryHandle = CreateHeap(
+                    pBuffer->m_DeviceDataLen,
+                    pBuffer->m_UsageFlags & LR_RESOURCE_USAGE_HOST_VISIBLE,
+                    D3D12_HEAP_FLAG_ALLOW_ONLY_BUFFERS);
 
                 break;
             }
 
-            case LR_RHI_ALLOCATOR_DESCRIPTOR:
+            case LR_API_ALLOCATOR_DESCRIPTOR:
             {
-                pBuffer->m_DataOffset = m_MADescriptor.Allocator.Allocate(pBuffer->m_DeviceDataLen, pBuffer->m_Alignment);
+                pBuffer->m_DataOffset =
+                    m_MADescriptor.Allocator.Allocate(pBuffer->m_DeviceDataLen, pBuffer->m_Alignment);
                 pBuffer->m_pMemoryHandle = m_MADescriptor.pHeap;
 
                 break;
             }
 
-            case LR_RHI_ALLOCATOR_BUFFER_LINEAR:
+            case LR_API_ALLOCATOR_BUFFER_LINEAR:
             {
-                pBuffer->m_DataOffset = m_MABufferLinear.Allocator.Allocate(pBuffer->m_DeviceDataLen, pBuffer->m_Alignment);
+                pBuffer->m_DataOffset =
+                    m_MABufferLinear.Allocator.Allocate(pBuffer->m_DeviceDataLen, pBuffer->m_Alignment);
                 pBuffer->m_pMemoryHandle = m_MABufferLinear.pHeap;
 
                 break;
             }
 
-            case LR_RHI_ALLOCATOR_BUFFER_TLSF:
+            case LR_API_ALLOCATOR_BUFFER_TLSF:
             {
-                Memory::TLSFBlock *pBlock = m_MABufferTLSF.Allocator.Allocate(pBuffer->m_DeviceDataLen, pBuffer->m_Alignment);
+                Memory::TLSFBlock *pBlock =
+                    m_MABufferTLSF.Allocator.Allocate(pBuffer->m_DeviceDataLen, pBuffer->m_Alignment);
 
                 pBuffer->m_pAllocatorData = pBlock;
                 pBuffer->m_DataOffset = pBlock->m_Offset;
@@ -1221,7 +1274,8 @@ namespace lr::Graphics
         }
     }
 
-    void D3D12API::SetAllocator(D3D12Image *pImage, D3D12_RESOURCE_DESC &resourceDesc, RHIAllocatorType targetAllocator)
+    void D3D12API::SetAllocator(
+        D3D12Image *pImage, D3D12_RESOURCE_DESC &resourceDesc, APIAllocatorType targetAllocator)
     {
         ZoneScoped;
 
@@ -1230,17 +1284,19 @@ namespace lr::Graphics
 
         switch (targetAllocator)
         {
-            case LR_RHI_ALLOCATOR_NONE:
+            case LR_API_ALLOCATOR_NONE:
             {
                 pImage->m_DataOffset = 0;
-                pImage->m_pMemoryHandle = CreateHeap(memoryInfo.SizeInBytes, false, D3D12_HEAP_FLAG_ALLOW_ONLY_NON_RT_DS_TEXTURES);
+                pImage->m_pMemoryHandle =
+                    CreateHeap(memoryInfo.SizeInBytes, false, D3D12_HEAP_FLAG_ALLOW_ONLY_NON_RT_DS_TEXTURES);
 
                 break;
             }
 
-            case LR_RHI_ALLOCATOR_IMAGE_TLSF:
+            case LR_API_ALLOCATOR_IMAGE_TLSF:
             {
-                Memory::TLSFBlock *pBlock = m_MAImageTLSF.Allocator.Allocate(pImage->m_DeviceDataLen, memoryInfo.Alignment);
+                Memory::TLSFBlock *pBlock =
+                    m_MAImageTLSF.Allocator.Allocate(pImage->m_DeviceDataLen, memoryInfo.Alignment);
 
                 pImage->m_pAllocatorData = pBlock;
                 pImage->m_DataOffset = pBlock->m_Offset;

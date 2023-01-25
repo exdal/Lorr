@@ -15,7 +15,7 @@ namespace lr
 
         void InitDisplays() override;
 
-        void SetCursor(Cursor cursor) override;
+        void SetCursor(WindowCursor cursor) override;
 
         static LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
 

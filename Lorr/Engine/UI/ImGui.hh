@@ -6,16 +6,21 @@
 
 #include <imgui.h>
 
+#include "Core/Utils/Timer.hh"
+
 namespace lr::UI
 {
     struct ImGuiHandler
     {
         void Init(u32 width, u32 height);
 
-        void NewFrame(float width, float height);
+        void NewFrame(f32 width, f32 height);
         void EndFrame();
 
         void Destroy();
+
+        Timer m_Timer;
+        ImGuiMouseCursor m_Cursor = ImGuiMouseCursor_Arrow;
     };
 
 }  // namespace lr::UI

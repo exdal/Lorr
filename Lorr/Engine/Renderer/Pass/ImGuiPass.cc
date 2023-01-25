@@ -24,7 +24,7 @@ namespace lr::Renderer
         ImageDesc imageDesc = {
             .m_UsageFlags = LR_RESOURCE_USAGE_SHADER_RESOURCE | LR_RESOURCE_USAGE_TRANSFER_DST,
             .m_Format = LR_IMAGE_FORMAT_RGBA8F,
-            .m_TargetAllocator = LR_RHI_ALLOCATOR_IMAGE_TLSF,
+            .m_TargetAllocator = LR_API_ALLOCATOR_IMAGE_TLSF,
             .m_Width = (u16)fontW,
             .m_Height = (u16)fontH,
             .m_ArraySize = 1,
@@ -35,7 +35,7 @@ namespace lr::Renderer
 
         BufferDesc imageBufferDesc = {
             .m_UsageFlags = LR_RESOURCE_USAGE_TRANSFER_SRC | LR_RESOURCE_USAGE_HOST_VISIBLE,
-            .m_TargetAllocator = LR_RHI_ALLOCATOR_BUFFER_FRAMETIME,
+            .m_TargetAllocator = LR_API_ALLOCATOR_BUFFER_FRAMETIME,
             .m_DataLen = (u32)(fontW * fontH * bpp),
         };
 
@@ -181,7 +181,7 @@ namespace lr::Renderer
         if (m_VertexCount < pDrawData->TotalVtxCount || m_IndexCount < pDrawData->TotalIdxCount)
         {
             BufferDesc bufferDesc = {};
-            bufferDesc.m_TargetAllocator = LR_RHI_ALLOCATOR_BUFFER_FRAMETIME;
+            bufferDesc.m_TargetAllocator = LR_API_ALLOCATOR_BUFFER_FRAMETIME;
 
             // Vertex buffer
 
@@ -219,7 +219,10 @@ namespace lr::Renderer
         for (u32 i = 0; i < pDrawData->CmdListsCount; i++)
         {
             const ImDrawList *pDrawList = pDrawData->CmdLists[i];
-            memcpy((ImDrawVert *)pMapData + mapDataOffset, pDrawList->VtxBuffer.Data, pDrawList->VtxBuffer.Size * sizeof(ImDrawVert));
+            memcpy(
+                (ImDrawVert *)pMapData + mapDataOffset,
+                pDrawList->VtxBuffer.Data,
+                pDrawList->VtxBuffer.Size * sizeof(ImDrawVert));
 
             mapDataOffset += pDrawList->VtxBuffer.Size;
         }
@@ -231,7 +234,10 @@ namespace lr::Renderer
         for (u32 i = 0; i < pDrawData->CmdListsCount; i++)
         {
             const ImDrawList *pDrawList = pDrawData->CmdLists[i];
-            memcpy((ImDrawIdx *)pMapData + mapDataOffset, pDrawList->IdxBuffer.Data, pDrawList->IdxBuffer.Size * sizeof(ImDrawIdx));
+            memcpy(
+                (ImDrawIdx *)pMapData + mapDataOffset,
+                pDrawList->IdxBuffer.Data,
+                pDrawList->IdxBuffer.Size * sizeof(ImDrawIdx));
 
             mapDataOffset += pDrawList->IdxBuffer.Size;
         }
@@ -287,7 +293,7 @@ namespace lr::Renderer
                 if (clipMax.x <= clipMin.x || clipMax.y <= clipMin.y)
                     continue;
 
-                pList->SetScissors(0, clipMin.x, clipMin.y, clipMax.x, clipMax.y);
+                pList->SetScissors(0, clipMin.x, clipMin.y, clipMax.x - clipMin.x, clipMax.y - clipMin.y);
 
                 DescriptorSet *pSet = (DescriptorSet *)cmd.TextureId;
                 if (!pSet)

@@ -4,28 +4,68 @@
 
 #pragma once
 
-namespace lr::Graphics
+namespace lr
 {
-    enum class APIFlags : u32
+    enum APIType : u32
     {
-        None,
+        LR_API_TYPE_NULL,
+        LR_API_TYPE_VULKAN,
+        LR_API_TYPE_D3D12,
+    };
 
-        VSync = 1 << 0,
+    enum APIFlags : u32
+    {
+        LR_API_FLAG_NONE,
+        LR_API_FLAG_VSYNC = 1 << 0,
     };
     EnumFlags(APIFlags);
 
-    enum RHIAllocatorType : u32
+    enum APIAllocatorType : u32
     {
-        LR_RHI_ALLOCATOR_NONE,
+        LR_API_ALLOCATOR_NONE,
 
-        LR_RHI_ALLOCATOR_DESCRIPTOR,                                // A linear, small sized pool with CPUW flag for per-frame descriptor data
-        LR_RHI_ALLOCATOR_BUFFER_LINEAR,                             // A linear, medium sized pool for buffers
-        LR_RHI_ALLOCATOR_BUFFER_TLSF,                               // Large sized pool for large scene buffers
-        LR_RHI_ALLOCATOR_BUFFER_FRAMETIME = LR_RHI_ALLOCATOR_NONE,  //
+        LR_API_ALLOCATOR_DESCRIPTOR,  // A linear, small sized pool with CPUW flag for per-frame descriptor data
+        LR_API_ALLOCATOR_BUFFER_LINEAR,                             // A linear, medium sized pool for buffers
+        LR_API_ALLOCATOR_BUFFER_TLSF,                               // Large sized pool for large scene buffers
+        LR_API_ALLOCATOR_BUFFER_FRAMETIME = LR_API_ALLOCATOR_NONE,  //
                                                                     //
-        LR_RHI_ALLOCATOR_IMAGE_TLSF,                                // Large sized pool for large images
+        LR_API_ALLOCATOR_IMAGE_TLSF,                                // Large sized pool for large images
 
-        LR_RHI_ALLOCATOR_COUNT,
+        LR_API_ALLOCATOR_COUNT,
+    };
+
+    enum ResourceUsage : u32
+    {
+        LR_RESOURCE_USAGE_UNKNOWN = 0,
+        LR_RESOURCE_USAGE_VERTEX_BUFFER = 1 << 0,
+        LR_RESOURCE_USAGE_INDEX_BUFFER = 1 << 1,
+        LR_RESOURCE_USAGE_CONSTANT_BUFFER = 1 << 3,
+        LR_RESOURCE_USAGE_SHADER_RESOURCE = 1 << 4,
+        LR_RESOURCE_USAGE_RENDER_TARGET = 1 << 5,
+        LR_RESOURCE_USAGE_DEPTH_STENCIL = 1 << 6,
+        LR_RESOURCE_USAGE_TRANSFER_SRC = 1 << 7,
+        LR_RESOURCE_USAGE_TRANSFER_DST = 1 << 8,
+        LR_RESOURCE_USAGE_UNORDERED_ACCESS = 1 << 9,
+        LR_RESOURCE_USAGE_HOST_VISIBLE = 1 << 10,
+
+        LR_RESOURCE_USAGE_PRESENT = LR_RESOURCE_USAGE_SHADER_RESOURCE | LR_RESOURCE_USAGE_RENDER_TARGET,
+
+        LR_RESOURCE_USAGE_MAX = 1U << 31,
+    };
+    EnumFlags(ResourceUsage);
+
+    enum ImageFormat : u32
+    {
+        LR_IMAGE_FORMAT_UNKNOWN,
+        LR_IMAGE_FORMAT_RGBA8F,
+        LR_IMAGE_FORMAT_RGBA8_SRGBF,
+        LR_IMAGE_FORMAT_BGRA8F,
+        LR_IMAGE_FORMAT_RGBA16F,
+        LR_IMAGE_FORMAT_RGBA32F,
+        LR_IMAGE_FORMAT_R32U,
+        LR_IMAGE_FORMAT_R32F,
+        LR_IMAGE_FORMAT_D32F,
+        LR_IMAGE_FORMAT_D32FS8U,
     };
 
     enum ColorMask : u32
@@ -129,4 +169,4 @@ namespace lr::Graphics
         LR_TEXTURE_ADDRESS_CLAMP_TO_BORDER,
     };
 
-}  // namespace lr::Graphics
+}  // namespace lr

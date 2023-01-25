@@ -75,7 +75,8 @@ namespace lr::Graphics
                 continue;
             }
 
-            if (!deviceFeatures.tessellationShader || !deviceFeatures.geometryShader || !deviceFeatures.fullDrawIndexUint32)
+            if (!deviceFeatures.tessellationShader || !deviceFeatures.geometryShader
+                || !deviceFeatures.fullDrawIndexUint32)
             {
                 continue;
             }
@@ -92,16 +93,20 @@ namespace lr::Graphics
             return false;
 
         /// Get surface formats
-        vkGetPhysicalDeviceSurfaceFormatsKHR(m_pPhysicalDevice, m_pSurface, &m_ValidSurfaceFormatCount, nullptr);
+        vkGetPhysicalDeviceSurfaceFormatsKHR(
+            m_pPhysicalDevice, m_pSurface, &m_ValidSurfaceFormatCount, nullptr);
 
         m_pValidSurfaceFormats = new VkSurfaceFormatKHR[m_ValidSurfaceFormatCount];
-        vkGetPhysicalDeviceSurfaceFormatsKHR(m_pPhysicalDevice, m_pSurface, &m_ValidSurfaceFormatCount, m_pValidSurfaceFormats);
+        vkGetPhysicalDeviceSurfaceFormatsKHR(
+            m_pPhysicalDevice, m_pSurface, &m_ValidSurfaceFormatCount, m_pValidSurfaceFormats);
 
         /// Get surface present modes
-        vkGetPhysicalDeviceSurfacePresentModesKHR(m_pPhysicalDevice, m_pSurface, &m_ValidSurfaceFormatCount, nullptr);
+        vkGetPhysicalDeviceSurfacePresentModesKHR(
+            m_pPhysicalDevice, m_pSurface, &m_ValidSurfaceFormatCount, nullptr);
 
         m_pValidPresentModes = new VkPresentModeKHR[m_ValidPresentModeCount];
-        vkGetPhysicalDeviceSurfacePresentModesKHR(m_pPhysicalDevice, m_pSurface, &m_ValidSurfaceFormatCount, m_pValidPresentModes);
+        vkGetPhysicalDeviceSurfacePresentModesKHR(
+            m_pPhysicalDevice, m_pSurface, &m_ValidSurfaceFormatCount, m_pValidPresentModes);
 
         vkGetPhysicalDeviceMemoryProperties(m_pPhysicalDevice, &m_MemoryProps);
 
@@ -580,7 +585,8 @@ namespace lr::Graphics
         VkPipelineMultisampleStateCreateInfo multisampleInfo = {};
         multisampleInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
         multisampleInfo.pNext = nullptr;
-        multisampleInfo.rasterizationSamples = (VkSampleCountFlagBits)(1 << (pBuildInfo->m_MultiSampleBitCount - 1));
+        multisampleInfo.rasterizationSamples =
+            (VkSampleCountFlagBits)(1 << (pBuildInfo->m_MultiSampleBitCount - 1));
         multisampleInfo.alphaToCoverageEnable = pBuildInfo->m_EnableAlphaToCoverage;
         multisampleInfo.alphaToOneEnable = false;
 
@@ -770,7 +776,8 @@ namespace lr::Graphics
         VKSwapChainFrame *pCurrentFrame = m_SwapChain.GetCurrentFrame();
         VkSemaphore &pPresentSemp = pCurrentFrame->m_pPresentSemp;
 
-        m_pDirectQueue->SetSemaphoreStage(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
+        m_pDirectQueue->SetSemaphoreStage(
+            VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
 
         PresentCommandQueue();
 
@@ -810,10 +817,12 @@ namespace lr::Graphics
 
         ShaderCompileDesc compileDesc = {};
         compileDesc.m_Type = stage;
-        compileDesc.m_Flags = LR_SHADER_FLAG_USE_SPIRV | LR_SHADER_FLAG_MATRIX_ROW_MAJOR | LR_SHADER_FLAG_ALL_RESOURCES_BOUND;
+        compileDesc.m_Flags =
+            LR_SHADER_FLAG_USE_SPIRV | LR_SHADER_FLAG_MATRIX_ROW_MAJOR | LR_SHADER_FLAG_ALL_RESOURCES_BOUND;
 
 #if _DEBUG
-        compileDesc.m_Flags |= LR_SHADER_FLAG_WARNINGS_ARE_ERRORS | LR_SHADER_FLAG_SKIP_OPTIMIZATION | LR_SHADER_FLAG_USE_DEBUG;
+        compileDesc.m_Flags |=
+            LR_SHADER_FLAG_WARNINGS_ARE_ERRORS | LR_SHADER_FLAG_SKIP_OPTIMIZATION | LR_SHADER_FLAG_USE_DEBUG;
 #endif
 
         IDxcBlob *pCode = ShaderCompiler::CompileFromBuffer(&compileDesc, buf);
@@ -978,7 +987,7 @@ namespace lr::Graphics
                 case LR_DESCRIPTOR_TYPE_SAMPLER:
                 {
                     imageInfo.sampler = pSamplerVK->m_pHandle;
-                    
+
                     writeSet.pImageInfo = &imageInfo;
                     imageIndex++;
                     break;
@@ -1025,7 +1034,8 @@ namespace lr::Graphics
         ZoneScoped;
 
         VkMemoryPropertyFlags memProps =
-            cpuWrite ? VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT : VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+            cpuWrite ? VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+                     : VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
 
         VkMemoryAllocateInfo memoryAllocInfo = {};
         memoryAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
@@ -1074,14 +1084,14 @@ namespace lr::Graphics
 
         if (pHandleVK->m_pMemoryHandle)
         {
-            if (pHandleVK->m_TargetAllocator == LR_RHI_ALLOCATOR_BUFFER_TLSF)
+            if (pHandleVK->m_TargetAllocator == LR_API_ALLOCATOR_BUFFER_TLSF)
             {
                 Memory::TLSFBlock *pBlock = (Memory::TLSFBlock *)pHandleVK->m_pAllocatorData;
                 assert(pBlock != nullptr);
 
                 m_MABufferTLSF.Allocator.Free(pBlock);
             }
-            else if (pHandleVK->m_TargetAllocator == LR_RHI_ALLOCATOR_NONE)
+            else if (pHandleVK->m_TargetAllocator == LR_API_ALLOCATOR_NONE)
             {
                 vkFreeMemory(m_pDevice, pHandleVK->m_pMemoryHandle, nullptr);
             }
@@ -1097,7 +1107,8 @@ namespace lr::Graphics
 
         API_VAR(VKBuffer, pBuffer);
 
-        vkMapMemory(m_pDevice, pBufferVK->m_pMemoryHandle, pBuffer->m_DataOffset, pBuffer->m_DeviceDataLen, 0, &pData);
+        vkMapMemory(
+            m_pDevice, pBufferVK->m_pMemoryHandle, pBuffer->m_DataOffset, pBuffer->m_DeviceDataLen, 0, &pData);
     }
 
     void VKAPI::UnmapMemory(Buffer *pBuffer)
@@ -1169,14 +1180,14 @@ namespace lr::Graphics
 
         if (pImageVK->m_pMemoryHandle)
         {
-            if (pImage->m_TargetAllocator == LR_RHI_ALLOCATOR_IMAGE_TLSF)
+            if (pImage->m_TargetAllocator == LR_API_ALLOCATOR_IMAGE_TLSF)
             {
                 Memory::TLSFBlock *pBlock = (Memory::TLSFBlock *)pImage->m_pAllocatorData;
                 assert(pBlock != nullptr);
 
                 m_MAImageTLSF.Allocator.Free(pBlock);
             }
-            else if (pImage->m_TargetAllocator == LR_RHI_ALLOCATOR_NONE)
+            else if (pImage->m_TargetAllocator == LR_API_ALLOCATOR_NONE)
             {
                 vkFreeMemory(m_pDevice, pImageVK->m_pMemoryHandle, nullptr);
             }
@@ -1197,8 +1208,9 @@ namespace lr::Graphics
 
         VkImageAspectFlags aspectFlags = VK_IMAGE_ASPECT_NONE;
 
-        constexpr ResourceUsage kColorUsage =
-            LR_RESOURCE_USAGE_SHADER_RESOURCE | LR_RESOURCE_USAGE_RENDER_TARGET | LR_RESOURCE_USAGE_UNORDERED_ACCESS;
+        constexpr ResourceUsage kColorUsage = LR_RESOURCE_USAGE_SHADER_RESOURCE
+                                              | LR_RESOURCE_USAGE_RENDER_TARGET
+                                              | LR_RESOURCE_USAGE_UNORDERED_ACCESS;
 
         if (pImage->m_UsageFlags & kColorUsage)
         {
@@ -1282,7 +1294,7 @@ namespace lr::Graphics
         vkDestroySampler(m_pDevice, pSampler, nullptr);
     }
 
-    void VKAPI::SetAllocator(VKBuffer *pBuffer, RHIAllocatorType targetAllocator)
+    void VKAPI::SetAllocator(VKBuffer *pBuffer, APIAllocatorType targetAllocator)
     {
         ZoneScoped;
 
@@ -1293,33 +1305,37 @@ namespace lr::Graphics
 
         switch (targetAllocator)
         {
-            case LR_RHI_ALLOCATOR_NONE:
+            case LR_API_ALLOCATOR_NONE:
             {
                 pBuffer->m_DataOffset = 0;
-                pBuffer->m_pMemoryHandle = CreateHeap(pBuffer->m_DeviceDataLen, pBuffer->m_UsageFlags & LR_RESOURCE_USAGE_HOST_VISIBLE);
+                pBuffer->m_pMemoryHandle = CreateHeap(
+                    pBuffer->m_DeviceDataLen, pBuffer->m_UsageFlags & LR_RESOURCE_USAGE_HOST_VISIBLE);
 
                 break;
             }
 
-            case LR_RHI_ALLOCATOR_DESCRIPTOR:
+            case LR_API_ALLOCATOR_DESCRIPTOR:
             {
-                pBuffer->m_DataOffset = m_MADescriptor.Allocator.Allocate(pBuffer->m_DeviceDataLen, memoryRequirements.alignment);
+                pBuffer->m_DataOffset =
+                    m_MADescriptor.Allocator.Allocate(pBuffer->m_DeviceDataLen, memoryRequirements.alignment);
                 pBuffer->m_pMemoryHandle = m_MADescriptor.pHeap;
 
                 break;
             }
 
-            case LR_RHI_ALLOCATOR_BUFFER_LINEAR:
+            case LR_API_ALLOCATOR_BUFFER_LINEAR:
             {
-                pBuffer->m_DataOffset = m_MABufferLinear.Allocator.Allocate(pBuffer->m_DeviceDataLen, memoryRequirements.alignment);
+                pBuffer->m_DataOffset =
+                    m_MABufferLinear.Allocator.Allocate(pBuffer->m_DeviceDataLen, memoryRequirements.alignment);
                 pBuffer->m_pMemoryHandle = m_MABufferLinear.pHeap;
 
                 break;
             }
 
-            case LR_RHI_ALLOCATOR_BUFFER_TLSF:
+            case LR_API_ALLOCATOR_BUFFER_TLSF:
             {
-                Memory::TLSFBlock *pBlock = m_MABufferTLSF.Allocator.Allocate(pBuffer->m_DeviceDataLen, memoryRequirements.alignment);
+                Memory::TLSFBlock *pBlock =
+                    m_MABufferTLSF.Allocator.Allocate(pBuffer->m_DeviceDataLen, memoryRequirements.alignment);
 
                 pBuffer->m_pAllocatorData = pBlock;
                 pBuffer->m_DataOffset = pBlock->m_Offset;
@@ -1333,7 +1349,7 @@ namespace lr::Graphics
         }
     }
 
-    void VKAPI::SetAllocator(VKImage *pImage, RHIAllocatorType targetAllocator)
+    void VKAPI::SetAllocator(VKImage *pImage, APIAllocatorType targetAllocator)
     {
         ZoneScoped;
 
@@ -1342,21 +1358,27 @@ namespace lr::Graphics
 
         switch (targetAllocator)
         {
-            case LR_RHI_ALLOCATOR_NONE:
+            case LR_API_ALLOCATOR_NONE:
             {
-                pImage->m_pMemoryHandle = CreateHeap(Memory::AlignUp(memoryRequirements.size, memoryRequirements.alignment), false);
+                pImage->m_pMemoryHandle =
+                    CreateHeap(Memory::AlignUp(memoryRequirements.size, memoryRequirements.alignment), false);
 
                 break;
             }
 
-            case LR_RHI_ALLOCATOR_IMAGE_TLSF:
+            case LR_API_ALLOCATOR_IMAGE_TLSF:
             {
-                Memory::TLSFBlock *pBlock = m_MAImageTLSF.Allocator.Allocate(pImage->m_DataLen, memoryRequirements.alignment);
+                Memory::TLSFBlock *pBlock =
+                    m_MAImageTLSF.Allocator.Allocate(pImage->m_DataLen, memoryRequirements.alignment);
 
                 pImage->m_pAllocatorData = pBlock;
                 pImage->m_DataOffset = pBlock->m_Offset;
 
-                LOG_TRACE("TLSFAllocImage: size = {}, off = {}, block_addr = {}", pImage->m_DataLen, pImage->m_DataOffset, (void *)pBlock);
+                LOG_TRACE(
+                    "TLSFAllocImage: size = {}, off = {}, block_addr = {}",
+                    pImage->m_DataLen,
+                    pImage->m_DataOffset,
+                    (void *)pBlock);
 
                 pImage->m_pMemoryHandle = m_MAImageTLSF.pHeap;
 
@@ -1609,8 +1631,12 @@ namespace lr::Graphics
         surfaceInfo.hwnd = (HWND)pHandle;
         surfaceInfo.hinstance = GetModuleHandleA(NULL);  // TODO
 
-        VKCallRet(vkCreateInstance(&createInfo, nullptr, &m_pInstance), "Failed to create Vulkan Instance.", false);
-        VKCallRet(vkCreateWin32SurfaceKHR(m_pInstance, &surfaceInfo, nullptr, &m_pSurface), "Failed to create Vulkan Win32 surface.", false);
+        VKCallRet(
+            vkCreateInstance(&createInfo, nullptr, &m_pInstance), "Failed to create Vulkan Instance.", false);
+        VKCallRet(
+            vkCreateWin32SurfaceKHR(m_pInstance, &surfaceInfo, nullptr, &m_pSurface),
+            "Failed to create Vulkan Win32 surface.",
+            false);
 
         return true;
     }
@@ -1657,7 +1683,8 @@ namespace lr::Graphics
             }
 
             constexpr u32 kComputeFilter = VK_QUEUE_GRAPHICS_BIT;
-            if (foundComputeFamilyIndex == -1 && props.queueFlags & VK_QUEUE_COMPUTE_BIT && (props.queueFlags & kComputeFilter) == 0)
+            if (foundComputeFamilyIndex == -1 && props.queueFlags & VK_QUEUE_COMPUTE_BIT
+                && (props.queueFlags & kComputeFilter) == 0)
             {
                 LOG_INFO("\tQueue{} selected as Compute queue.", i);
                 m_AvailableQueueCount++;
@@ -1667,7 +1694,8 @@ namespace lr::Graphics
             }
 
             constexpr u32 kTransferFilter = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT;
-            if (foundTransferFamilyIndex == -1 && props.queueFlags & VK_QUEUE_TRANSFER_BIT && (props.queueFlags & kTransferFilter) == 0)
+            if (foundTransferFamilyIndex == -1 && props.queueFlags & VK_QUEUE_TRANSFER_BIT
+                && (props.queueFlags & kTransferFilter) == 0)
             {
                 LOG_INFO("\tQueue{} selected as Transfer queue.", i);
                 m_AvailableQueueCount++;
@@ -1749,7 +1777,8 @@ namespace lr::Graphics
         vkEnumerateDeviceExtensionProperties(pPhysicalDevice, nullptr, &deviceExtensionCount, nullptr);
 
         VkExtensionProperties *pDeviceExtensions = new VkExtensionProperties[deviceExtensionCount];
-        vkEnumerateDeviceExtensionProperties(pPhysicalDevice, nullptr, &deviceExtensionCount, pDeviceExtensions);
+        vkEnumerateDeviceExtensionProperties(
+            pPhysicalDevice, nullptr, &deviceExtensionCount, pDeviceExtensions);
 
         constexpr eastl::array<const char *, 5> ppRequiredExtensions = {
             "VK_KHR_swapchain",        "VK_KHR_depth_stencil_resolve",   "VK_KHR_dynamic_rendering",

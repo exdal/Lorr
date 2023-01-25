@@ -10,74 +10,28 @@
 
 namespace lr
 {
-    enum WindowEvent : Event
+    enum WindowCursor : u8
     {
-        WINDOW_EVENT_QUIT,
-        WINDOW_EVENT_RESIZE,
-        WINDOW_EVENT_MOUSE_POSITION,
-        WINDOW_EVENT_MOUSE_STATE,
-        WINDOW_EVENT_MOUSE_WHEEL,
-        WINDOW_EVENT_KEYBOARD_STATE,
+        LR_WINDOW_CURSOR_ARROW,
+        LR_WINDOW_CURSOR_TEXT_INPUT,
+        LR_WINDOW_CURSOR_RESIZE_ALL,
+        LR_WINDOW_CURSOR_RESIZE_NS,
+        LR_WINDOW_CURSOR_RESIZE_EW,
+        LR_WINDOW_CURSOR_RESIZE_NESW,
+        LR_WINDOW_CURSOR_RESIZE_NWSE,
+        LR_WINDOW_CURSOR_HAND,
+        LR_WINDOW_CURSOR_NOT_ALLOWED,
+        LR_WINDOW_CURSOR_HIDDEN,
     };
 
-    union WindowEventData
+    enum WindowFlags : u8
     {
-        u32 __data[4] = {};
-
-        struct  // WINDOW_EVENT_RESIZE
-        {
-            u32 m_SizeWidth;
-            u32 m_SizeHeight;
-        };
-
-        struct  // WINDOW_EVENT_MOUSE_POSITION
-        {
-            u32 m_MouseX;
-            u32 m_MouseY;
-        };
-
-        struct  // WINDOW_EVENT_MOUSE_STATE
-        {
-            Key m_Mouse;
-            MouseState m_MouseState;
-        };
-
-        struct  // WINDOW_EVENT_MOUSE_WHEEL
-        {
-            float m_Offset;
-        };
-
-        struct  // WINDOW_EVENT_KEYBOARD_STATE
-        {
-            Key m_Key;
-            KeyState m_KeyState;
-        };
-    };
-
-    enum class Cursor
-    {
-        Arrow,
-        TextInput,
-        ResizeAll,
-        ResizeEW,
-        ResizeNS,
-        ResizeNESW,
-        ResizeNWSE,
-        Hand,
-        NotAllowed,
-        Hidden,
-    };
-
-    enum class WindowFlags : u8
-    {
-        None,
-        Fullscreen = 1 << 0,
-        VSync = 1 << 1,
-        Centered = 1 << 2,  // Desktop dist. specific
-        Resizable = 1 << 3,
-        Borderless = 1 << 4,
-
-        Maximized = 1 << 5,
+        LR_WINDOW_FLAG_NONE,
+        LR_WINDOW_FLAG_FULLSCREEN = 1 << 0,
+        LR_WINDOW_FLAG_CENTERED = 1 << 1,
+        LR_WINDOW_FLAG_RESIZABLE = 1 << 2,
+        LR_WINDOW_FLAG_BORDERLESS = 1 << 3,
+        LR_WINDOW_FLAG_MAXIMIZED = 1 << 4,
     };
 
     EnumFlags(WindowFlags);
@@ -122,7 +76,7 @@ namespace lr
         virtual void InitDisplays() = 0;
         SystemMetrics::Display *GetDisplay(u32 monitor);
 
-        virtual void SetCursor(Cursor cursor) = 0;
+        virtual void SetCursor(WindowCursor cursor) = 0;
 
         bool ShouldClose();
         void OnSizeChanged(u32 width, u32 height);
@@ -136,13 +90,11 @@ namespace lr
         bool m_IsFullscreen = false;
         bool m_SizeEnded = true;
 
-        Cursor m_CurrentCursor = Cursor::Arrow;
+        WindowCursor m_CurrentCursor = LR_WINDOW_CURSOR_ARROW;
         XMUINT2 m_CursorPosition = XMUINT2(0, 0);
 
         SystemMetrics m_SystemMetrics;
         u32 m_UsingMonitor = 0;
-
-        EventManager<WindowEventData> m_EventManager;
     };
 
 }  // namespace lr

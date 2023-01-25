@@ -100,8 +100,8 @@ namespace lr::Graphics
         Sampler *CreateSampler(SamplerDesc *pDesc) override;
         void DeleteSampler(VkSampler pSampler);
 
-        void SetAllocator(VKBuffer *pBuffer, RHIAllocatorType targetAllocator);
-        void SetAllocator(VKImage *pImage, RHIAllocatorType targetAllocator);
+        void SetAllocator(VKBuffer *pBuffer, APIAllocatorType targetAllocator);
+        void SetAllocator(VKImage *pImage, APIAllocatorType targetAllocator);
 
         /// UTILITY
         void CalcOrthoProjection(XMMATRIX &mat, XMFLOAT2 viewSize, float zFar, float zNear) override;

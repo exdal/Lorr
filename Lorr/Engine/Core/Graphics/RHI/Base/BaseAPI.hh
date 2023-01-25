@@ -7,7 +7,6 @@
 #include <eathread/eathread_thread.h>
 
 #include "Core/Graphics/RHI/APIConfig.hh"
-
 #include "Core/Graphics/RHI/Common.hh"
 
 #include "Core/IO/BufferStream.hh"
@@ -89,7 +88,8 @@ namespace lr::Graphics
         {
             static_assert(eastl::is_base_of<_Base, _Derived>::value, "_Derived must be base of _Base.");
 
-            Memory::TLSFBlock *pBlock = m_TypeAllocator.Allocate(sizeof(_Base) + sizeof(_Derived) + PTR_SIZE, Memory::TLSFAllocatorView::ALIGN_SIZE);
+            Memory::TLSFBlock *pBlock = m_TypeAllocator.Allocate(
+                sizeof(_Base) + sizeof(_Derived) + PTR_SIZE, Memory::TLSFAllocatorView::ALIGN_SIZE);
             u64 offset = pBlock->m_Offset;
 
             // Copy block address
@@ -105,7 +105,8 @@ namespace lr::Graphics
         template<typename _Type>
         _Type *AllocType()
         {
-            Memory::TLSFBlock *pBlock = m_TypeAllocator.Allocate(sizeof(_Type) + PTR_SIZE, Memory::TLSFAllocatorView::ALIGN_SIZE);
+            Memory::TLSFBlock *pBlock =
+                m_TypeAllocator.Allocate(sizeof(_Type) + PTR_SIZE, Memory::TLSFAllocatorView::ALIGN_SIZE);
 
             memcpy(m_pTypeData + pBlock->m_Offset, pBlock, PTR_SIZE);
             return (_Type *)(m_pTypeData + pBlock->m_Offset + PTR_SIZE);

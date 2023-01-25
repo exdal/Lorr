@@ -80,27 +80,34 @@ namespace lr::Graphics
             pDefines[i].Value = pDesc->m_Defines[i].m_Value.data();
         }
 
-        pUtils->BuildArguments(pDesc->m_PathOpt.data(),
-                               L"main",
-                               GetFullShaderModel(pDesc->m_Type).data(),
-                               &strFlags[0],
-                               strFlags.size(),
-                               pDefines,
-                               pDesc->m_DefineCount,
-                               pCompilerArgs.get_address());
+        pUtils->BuildArguments(
+            pDesc->m_PathOpt.data(),
+            L"main",
+            GetFullShaderModel(pDesc->m_Type).data(),
+            &strFlags[0],
+            strFlags.size(),
+            pDefines,
+            pDesc->m_DefineCount,
+            pCompilerArgs.get_address());
 
         ls::scoped_comptr<IDxcIncludeHandler> pIncludeHandler;
         pUtils->CreateDefaultIncludeHandler(pIncludeHandler.get_address());
 
         ls::scoped_comptr<IDxcResult> pResult;
-        HRESULT hr =
-            pCompiler->Compile(&shaderBuffer, pCompilerArgs->GetArguments(), pCompilerArgs->GetCount(), pIncludeHandler.get(), LS_IID_PTR(pResult));
+        HRESULT hr = pCompiler->Compile(
+            &shaderBuffer,
+            pCompilerArgs->GetArguments(),
+            pCompilerArgs->GetCount(),
+            pIncludeHandler.get(),
+            LS_IID_PTR(pResult));
 
         ls::scoped_comptr<IDxcBlobUtf8> pError;
         pResult->GetOutput(DXC_OUT_ERRORS, LS_IID_PTR(pError), nullptr);
 
         if (pError.get() && pError->GetBufferPointer())
-            LOG_ERROR("Shader compiler message: {}", eastl::string_view((const char *)pError->GetBufferPointer(), pError->GetBufferSize()));
+            LOG_ERROR(
+                "Shader compiler message: {}",
+                eastl::string_view((const char *)pError->GetBufferPointer(), pError->GetBufferSize()));
 
         if (hr < 0)
         {

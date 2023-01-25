@@ -83,7 +83,10 @@ namespace lr::Graphics
             depthAttachment.loadOp = kLoadOpLUT[(u32)attachment.m_LoadOp];
             depthAttachment.storeOp = kStoreOpLUT[(u32)attachment.m_StoreOp];
 
-            memcpy(&depthAttachment.clearValue.color, &attachment.m_ClearVal.m_RenderTargetColor, sizeof(XMFLOAT4));
+            memcpy(
+                &depthAttachment.clearValue.color,
+                &attachment.m_ClearVal.m_RenderTargetColor,
+                sizeof(XMFLOAT4));
 
             beginInfo.pDepthAttachment = &depthAttachment;
         }
@@ -121,12 +124,13 @@ namespace lr::Graphics
         subresRange.baseMipLevel = 0;
         subresRange.levelCount = pImageVK->m_MipMapLevels;
 
-        vkCmdClearColorImage(m_pHandle,
-                             pImageVK->m_pHandle,
-                             VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                             (const VkClearColorValue *)&color,
-                             1,
-                             &subresRange);
+        vkCmdClearColorImage(
+            m_pHandle,
+            pImageVK->m_pHandle,
+            VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            (const VkClearColorValue *)&color,
+            1,
+            &subresRange);
     }
 
     void VKCommandList::SetImageBarrier(Image *pImage, PipelineBarrier *pBarrier)
@@ -227,7 +231,8 @@ namespace lr::Graphics
 
         API_VAR(VKBuffer, pBuffer);
 
-        vkCmdBindIndexBuffer(m_pHandle, pBufferVK->m_pHandle, 0, type32 ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16);
+        vkCmdBindIndexBuffer(
+            m_pHandle, pBufferVK->m_pHandle, 0, type32 ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16);
     }
 
     void VKCommandList::CopyBuffer(Buffer *pSource, Buffer *pDest, u32 size)
@@ -274,7 +279,8 @@ namespace lr::Graphics
         imageCopyInfo.imageSubresource.layerCount = 1;
         imageCopyInfo.imageSubresource.mipLevel = 0;
 
-        vkCmdCopyBufferToImage(m_pHandle, pSourceVK->m_pHandle, pDestVK->m_pHandle, pDestVK->m_Layout, 1, &imageCopyInfo);
+        vkCmdCopyBufferToImage(
+            m_pHandle, pSourceVK->m_pHandle, pDestVK->m_pHandle, pDestVK->m_Layout, 1, &imageCopyInfo);
     }
 
     void VKCommandList::Draw(u32 vertexCount, u32 firstVertex, u32 instanceCount, u32 firstInstance)
@@ -284,7 +290,8 @@ namespace lr::Graphics
         vkCmdDraw(m_pHandle, vertexCount, instanceCount, firstVertex, firstInstance);
     }
 
-    void VKCommandList::DrawIndexed(u32 indexCount, u32 firstIndex, u32 vertexOffset, u32 instanceCount, u32 firstInstance)
+    void VKCommandList::DrawIndexed(
+        u32 indexCount, u32 firstIndex, u32 vertexOffset, u32 instanceCount, u32 firstInstance)
     {
         ZoneScoped;
 
@@ -368,7 +375,15 @@ namespace lr::Graphics
             idx++;
         }
 
-        vkCmdBindDescriptorSets(m_pHandle, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pSetPipeline->m_pLayout, 0, sets.size(), pSets, 0, nullptr);
+        vkCmdBindDescriptorSets(
+            m_pHandle,
+            VK_PIPELINE_BIND_POINT_GRAPHICS,
+            m_pSetPipeline->m_pLayout,
+            0,
+            sets.size(),
+            pSets,
+            0,
+            nullptr);
     }
 
     void VKCommandList::SetComputeDescriptorSets(const std::initializer_list<DescriptorSet *> &sets)
@@ -386,10 +401,19 @@ namespace lr::Graphics
             idx++;
         }
 
-        vkCmdBindDescriptorSets(m_pHandle, VK_PIPELINE_BIND_POINT_COMPUTE, m_pSetPipeline->m_pLayout, 0, sets.size(), pSets, 0, nullptr);
+        vkCmdBindDescriptorSets(
+            m_pHandle,
+            VK_PIPELINE_BIND_POINT_COMPUTE,
+            m_pSetPipeline->m_pLayout,
+            0,
+            sets.size(),
+            pSets,
+            0,
+            nullptr);
     }
 
-    void VKCommandList::SetGraphicsPushConstants(Pipeline *pPipeline, ShaderStage stage, void *pData, u32 dataSize)
+    void VKCommandList::SetGraphicsPushConstants(
+        Pipeline *pPipeline, ShaderStage stage, void *pData, u32 dataSize)
     {
         ZoneScoped;
 
@@ -398,7 +422,7 @@ namespace lr::Graphics
         vkCmdPushConstants(m_pHandle, pPipelineVK->m_pLayout, VKAPI::ToVKShaderType(stage), 0, dataSize, pData);
     }
 
-    void VKCommandList::SetComputePushConstants(Pipeline *pPipeline,void *pData, u32 dataSize)
+    void VKCommandList::SetComputePushConstants(Pipeline *pPipeline, void *pData, u32 dataSize)
     {
         ZoneScoped;
 

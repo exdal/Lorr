@@ -99,7 +99,7 @@ namespace lr::Graphics
             currentImage.m_MipMapLevels = 1;
             currentImage.m_Format = m_ImageFormat;
             currentImage.m_DeviceDataLen = ~0;
-            currentImage.m_TargetAllocator = LR_RHI_ALLOCATOR_COUNT;
+            currentImage.m_TargetAllocator = LR_API_ALLOCATOR_COUNT;
 
             pAPI->CreateImageView(&currentImage);
 

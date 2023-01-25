@@ -1,5 +1,7 @@
 #include "ImGui.hh"
 
+#include "Engine.hh"
+
 namespace lr::UI
 {
     void ImGuiHandler::Init(u32 width, u32 height)
@@ -13,19 +15,21 @@ namespace lr::UI
         ImGuiIO &io = ImGui::GetIO();
         io.IniFilename = 0;
 
-        io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;  // Enable Keyboard Controls
-        io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;      // Enable Docking
+        io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+        io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
-        io.BackendFlags |= ImGuiBackendFlags_HasMouseCursors;  // We can honor GetMouseCursor() values (optional)
-        io.BackendFlags |= ImGuiBackendFlags_HasSetMousePos;   // We can honor io.WantSetMousePos requests (optional, rarely used)
+        io.BackendFlags |= ImGuiBackendFlags_HasMouseCursors;
+        io.BackendFlags |= ImGuiBackendFlags_HasSetMousePos;
 
         io.BackendPlatformName = "imgui_impl_lorr";
-        io.DisplaySize = ImVec2((float)width, (float)height);
+        io.DisplaySize = ImVec2((f32)width, (f32)height);
 
         ImGui::StyleColorsDark();
+
+        m_Timer.start();
     }
 
-    void ImGuiHandler::NewFrame(float width, float height)
+    void ImGuiHandler::NewFrame(f32 width, f32 height)
     {
         ZoneScoped;
 
@@ -33,6 +37,17 @@ namespace lr::UI
         ImGuiIO &io = ImGui::GetIO();
 
         io.DisplaySize = ImVec2(width, height);
+        io.DeltaTime = m_Timer.elapsed();
+        m_Timer.reset();
+
+        ImGuiMouseCursor imguiCursor = ImGui::GetMouseCursor();
+        if (m_Cursor != imguiCursor)
+        {
+            m_Cursor = imguiCursor;
+            
+            EngineEventData data = { .m_WindowCursor = (WindowCursor)imguiCursor };
+            Engine::Get()->PushEvent(ENGINE_EVENT_CURSOR_STATE, data);
+        }
 
         ImGui::NewFrame();
     }

@@ -7,14 +7,15 @@ namespace lr::Renderer
 {
     using namespace Graphics;
 
-    void RendererManager::Init(APIType type, Graphics::APIFlags flags, BaseWindow *pWindow)
+    void RendererManager::Init(APIType type, APIFlags flags, BaseWindow *pWindow)
     {
         ZoneScoped;
 
         switch (type)
         {
-            case APIType::Vulkan: m_pAPI = new VKAPI; break;
-            case APIType::D3D12: m_pAPI = new D3D12API; break;
+            case LR_API_TYPE_VULKAN: m_pAPI = new VKAPI; break;
+            case LR_API_TYPE_D3D12: m_pAPI = new D3D12API; break;
+            case LR_API_TYPE_NULL: m_pAPI = nullptr; break;  // TODO
         }
 
         m_pAPI->Init(pWindow, pWindow->m_Width, pWindow->m_Height, flags);

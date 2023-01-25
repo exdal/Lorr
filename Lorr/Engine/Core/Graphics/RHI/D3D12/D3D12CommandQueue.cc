@@ -21,7 +21,7 @@ namespace lr::Graphics
 
         u64 nextFence = ++m_FenceValue;
         m_pHandle->Signal(m_pFence, nextFence);
-        
+
         if (m_pFence->GetCompletedValue() < nextFence)
         {
             m_pFence->SetEventOnCompletion(nextFence, m_FenceEvent);

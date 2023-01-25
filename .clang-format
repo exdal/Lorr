@@ -6,18 +6,17 @@ Language: Cpp
 DerivePointerAlignment: false
 PointerAlignment: Right
 
-ColumnLimit: '150'
+ColumnLimit: '112'
 
-AlignAfterOpenBracket: Align
+AlignAfterOpenBracket: AlwaysBreak
 AlignEscapedNewlines: Left
 AlignOperands: true
-AllowAllArgumentsOnNextLine: false
+AllowAllArgumentsOnNextLine: true
 AllowAllConstructorInitializersOnNextLine: true
-AllowAllParametersOfDeclarationOnNextLine: false
-AlignAfterOpenBracket : Align
+AllowAllParametersOfDeclarationOnNextLine: true
 
 AllowShortBlocksOnASingleLine: Never
-AllowShortCaseLabelsOnASingleLine: true
+AllowShortCaseLabelsOnASingleLine: false
 AllowShortFunctionsOnASingleLine: None
 AllowShortIfStatementsOnASingleLine: Never
 AllowShortLambdasOnASingleLine: None

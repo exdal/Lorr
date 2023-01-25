@@ -13,7 +13,7 @@ namespace lr::Graphics
 
         m_DirectListMask.store(UINT32_MAX, eastl::memory_order_release);
         m_DirectFenceMask.store(0, eastl::memory_order_release);
-        
+
         m_ComputeListMask.store(UINT16_MAX, eastl::memory_order_release);
         m_CopyListMask.store(UINT8_MAX, eastl::memory_order_release);
     }
@@ -38,7 +38,8 @@ namespace lr::Graphics
             do
             {
                 newMask = mask ^ (1 << setBitPosition);
-            } while (!maskAtomic.compare_exchange_weak(mask, newMask, eastl::memory_order_release, eastl::memory_order_relaxed));
+            } while (!maskAtomic.compare_exchange_weak(
+                mask, newMask, eastl::memory_order_release, eastl::memory_order_relaxed));
 
             pList = listArray[setBitPosition];
         };
@@ -72,7 +73,8 @@ namespace lr::Graphics
                     do
                     {
                         newMask = mask | (1 << i);
-                    } while (!maskAtomic.compare_exchange_weak(mask, newMask, eastl::memory_order_release, eastl::memory_order_relaxed));
+                    } while (!maskAtomic.compare_exchange_weak(
+                        mask, newMask, eastl::memory_order_release, eastl::memory_order_relaxed));
 
                     return;
                 }
@@ -105,7 +107,8 @@ namespace lr::Graphics
                 do
                 {
                     newMask = mask | (1 << i);
-                } while (!m_DirectFenceMask.compare_exchange_weak(mask, newMask, eastl::memory_order_release, eastl::memory_order_relaxed));
+                } while (!m_DirectFenceMask.compare_exchange_weak(
+                    mask, newMask, eastl::memory_order_release, eastl::memory_order_relaxed));
             }
         }
     }
@@ -120,7 +123,8 @@ namespace lr::Graphics
         do
         {
             newMask = mask ^ (1 << index);
-        } while (!m_DirectFenceMask.compare_exchange_weak(mask, newMask, eastl::memory_order_release, eastl::memory_order_relaxed));
+        } while (!m_DirectFenceMask.compare_exchange_weak(
+            mask, newMask, eastl::memory_order_release, eastl::memory_order_relaxed));
     }
 
     void CommandListPool::WaitForAll()

@@ -6,9 +6,9 @@
 
 #include "Lorr/Engine/Application/Application.hh"
 
-struct GameApp : lr::Application
+struct ImguiApp : lr::Application
 {
-    void Init(lr::ApplicationDesc &desc) override;
+    void Init(lr::BaseApplicationDesc &desc);
     void Shutdown() override;
     void Poll(f32 deltaTime) override;
 };

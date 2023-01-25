@@ -8,15 +8,18 @@
 
 namespace lr
 {
-    struct ApplicationDesc
+    struct BaseApplicationDesc
     {
         eastl::string_view m_Name;
+        eastl::string_view m_WorkingDir;
+
         EngineDesc m_EngineDesc;
     };
 
     struct Application
     {
-        virtual void Init(ApplicationDesc &desc) = 0;
+        void InitBase(BaseApplicationDesc &desc);
+        
         virtual void Shutdown() = 0;
         virtual void Poll(f32 deltaTime) = 0;
 
@@ -24,8 +27,9 @@ namespace lr
 
         Engine m_Engine;
         eastl::string_view m_Name;
-    };
+        eastl::string_view m_WorkingDir;
 
-    Application *GetApp();
+        static Application *Get();
+    };
 
 }  // namespace lr

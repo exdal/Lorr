@@ -10,9 +10,17 @@ namespace lr
 
         Logger::Init();
 
+        m_EventMan.Init();
         m_Window.Init(engineDesc.m_WindowDesc);
         m_ImGui.Init(m_Window.m_Width, m_Window.m_Height);
         m_RendererMan.Init(engineDesc.m_TargetAPI, engineDesc.m_TargetAPIFlags, &m_Window);
+    }
+
+    void Engine::PushEvent(Event event, EngineEventData &data)
+    {
+        ZoneScoped;
+
+        m_EventMan.Push(event, data);
     }
 
     void Engine::DispatchEvents()
@@ -20,21 +28,21 @@ namespace lr
         ZoneScoped;
 
         u32 eventID = LR_INVALID_EVENT_ID;
-        while (m_Window.m_EventManager.Peek(eventID))
+        while (m_EventMan.Peek(eventID))
         {
-            WindowEventData data = {};
-            Event event = m_Window.m_EventManager.Dispatch(eventID, data);
+            EngineEventData data = {};
+            Event event = m_EventMan.Dispatch(eventID, data);
 
             switch (event)
             {
-                case WINDOW_EVENT_QUIT:
+                case ENGINE_EVENT_QUIT:
                 {
                     m_ShuttingDown = true;
 
                     break;
                 }
 
-                case WINDOW_EVENT_RESIZE:
+                case ENGINE_EVENT_RESIZE:
                 {
                     m_Window.m_Width = data.m_SizeWidth;
                     m_Window.m_Height = data.m_SizeHeight;
@@ -44,20 +52,27 @@ namespace lr
                     break;
                 }
 
-                case WINDOW_EVENT_MOUSE_POSITION:
+                case ENGINE_EVENT_MOUSE_POSITION:
                 {
-                    auto &io = ImGui::GetIO();
+                    ImGuiIO &io = ImGui::GetIO();
                     io.MousePos.x = data.m_MouseX;
                     io.MousePos.y = data.m_MouseY;
 
                     break;
                 }
 
-                case WINDOW_EVENT_MOUSE_STATE:
+                case ENGINE_EVENT_MOUSE_STATE:
                 {
-                    auto &io = ImGui::GetIO();
-                    io.MouseDown[0] = !(bool)data.m_MouseState;
+                    ImGuiIO &io = ImGui::GetIO();
+                    io.MouseDown[data.m_Mouse - 1] = !(bool)data.m_MouseState;
 
+                    break;
+                }
+
+                case ENGINE_EVENT_CURSOR_STATE:
+                {
+                    m_Window.SetCursor(data.m_WindowCursor);
+                    
                     break;
                 }
 

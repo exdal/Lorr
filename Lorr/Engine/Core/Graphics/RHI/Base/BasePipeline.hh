@@ -58,7 +58,8 @@ namespace lr::Graphics
     };
 
     /// Some notes:
-    // * Currently only one vertex binding is supported and it only supports vertex, not instances (actually a TODO)
+    // * Currently only one vertex binding is supported and it only supports vertex, not instances (actually a
+    // TODO)
     // * MSAA is not actually supported
     struct GraphicsPipelineBuildInfo
     {

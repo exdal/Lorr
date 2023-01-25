@@ -11,7 +11,8 @@
 
 namespace lr::Graphics
 {
-    void D3D12CommandList::Init(ID3D12GraphicsCommandList4 *pHandle, D3D12CommandAllocator *pAllocator, CommandListType type)
+    void D3D12CommandList::Init(
+        ID3D12GraphicsCommandList4 *pHandle, D3D12CommandAllocator *pAllocator, CommandListType type)
     {
         ZoneScoped;
 
@@ -87,10 +88,11 @@ namespace lr::Graphics
             memcpy(&clearValue.Color, &attachment.m_ClearVal.m_DepthStencilColor, sizeof(ClearValue::Depth));
         }
 
-        m_pHandle->BeginRenderPass(pDesc->m_ColorAttachmentCount,
-                                   pColorAttachments,
-                                   pDesc->m_pDepthAttachment ? &depthAttachment : nullptr,
-                                   D3D12_RENDER_PASS_FLAG_NONE);
+        m_pHandle->BeginRenderPass(
+            pDesc->m_ColorAttachmentCount,
+            pColorAttachments,
+            pDesc->m_pDepthAttachment ? &depthAttachment : nullptr,
+            D3D12_RENDER_PASS_FLAG_NONE);
     }
 
     void D3D12CommandList::EndPass()
@@ -106,7 +108,8 @@ namespace lr::Graphics
 
         API_VAR(D3D12Image, pImage);
 
-        m_pHandle->ClearRenderTargetView(pImageDX->m_RenderTargetViewCPU, &val.m_RenderTargetColor.x, 0, nullptr);
+        m_pHandle->ClearRenderTargetView(
+            pImageDX->m_RenderTargetViewCPU, &val.m_RenderTargetColor.x, 0, nullptr);
     }
 
     void D3D12CommandList::SetImageBarrier(Image *pImage, PipelineBarrier *pBarrier)
@@ -219,7 +222,8 @@ namespace lr::Graphics
         srcLocation.PlacedFootprint.Footprint.Width = pDest->m_Width;
         srcLocation.PlacedFootprint.Footprint.Height = pDest->m_Height;
         srcLocation.PlacedFootprint.Footprint.Depth = 1;
-        srcLocation.PlacedFootprint.Footprint.RowPitch = Memory::AlignUp(pDest->m_Width * 4, D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
+        srcLocation.PlacedFootprint.Footprint.RowPitch =
+            Memory::AlignUp(pDest->m_Width * 4, D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
         srcLocation.pResource = pSourceDX->m_pHandle;
 
         m_pHandle->CopyTextureRegion(&destLocation, 0, 0, 0, &srcLocation, nullptr);
@@ -232,7 +236,8 @@ namespace lr::Graphics
         m_pHandle->DrawInstanced(vertexCount, instanceCount, firstVertex, firstInstance);
     }
 
-    void D3D12CommandList::DrawIndexed(u32 indexCount, u32 firstIndex, u32 vertexOffset, u32 instanceCount, u32 firstInstance)
+    void D3D12CommandList::DrawIndexed(
+        u32 indexCount, u32 firstIndex, u32 vertexOffset, u32 instanceCount, u32 firstInstance)
     {
         ZoneScoped;
 
@@ -327,13 +332,18 @@ namespace lr::Graphics
         }
     }
 
-    void D3D12CommandList::SetGraphicsPushConstants(Pipeline *pPipeline, ShaderStage stage, void *pData, u32 dataSize)
+    void D3D12CommandList::SetGraphicsPushConstants(
+        Pipeline *pPipeline, ShaderStage stage, void *pData, u32 dataSize)
     {
         ZoneScoped;
 
         API_VAR(D3D12Pipeline, pPipeline);
 
-        m_pHandle->SetGraphicsRoot32BitConstants(pPipelineDX->m_pRootConstats[(u32)D3D12API::ToDXShaderType(stage)], dataSize / sizeof(u32), pData, 0);
+        m_pHandle->SetGraphicsRoot32BitConstants(
+            pPipelineDX->m_pRootConstats[(u32)D3D12API::ToDXShaderType(stage)],
+            dataSize / sizeof(u32),
+            pData,
+            0);
     }
 
     void D3D12CommandList::SetComputePushConstants(Pipeline *pPipeline, void *pData, u32 dataSize)
@@ -342,7 +352,8 @@ namespace lr::Graphics
 
         API_VAR(D3D12Pipeline, pPipeline);
 
-        m_pHandle->SetComputeRoot32BitConstants(pPipelineDX->m_pRootConstats[LR_SHADER_STAGE_COMPUTE], dataSize / sizeof(u32), pData, 0);
+        m_pHandle->SetComputeRoot32BitConstants(
+            pPipelineDX->m_pRootConstats[LR_SHADER_STAGE_COMPUTE], dataSize / sizeof(u32), pData, 0);
     }
 
 }  // namespace lr::Graphics

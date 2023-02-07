@@ -169,4 +169,93 @@ namespace lr
         LR_TEXTURE_ADDRESS_CLAMP_TO_BORDER,
     };
 
+    enum ShaderStage : u32
+    {
+        LR_SHADER_STAGE_NONE = 0,
+        LR_SHADER_STAGE_VERTEX = 1 << 0,
+        LR_SHADER_STAGE_PIXEL = 1 << 1,
+        LR_SHADER_STAGE_COMPUTE = 1 << 2,
+        LR_SHADER_STAGE_HULL = 1 << 3,
+        LR_SHADER_STAGE_DOMAIN = 1 << 4,
+
+        LR_SHADER_STAGE_COUNT = 5,
+    };
+
+    EnumFlags(ShaderStage);
+
+    enum ShaderFlags : u32
+    {
+        LR_SHADER_FLAG_NONE = 0,
+        LR_SHADER_FLAG_USE_SPIRV = 1 << 0,
+        LR_SHADER_FLAG_USE_DEBUG = 1 << 1,
+        LR_SHADER_FLAG_SKIP_OPTIMIZATION = 1 << 2,
+        LR_SHADER_FLAG_MATRIX_ROW_MAJOR = 1 << 3,
+        LR_SHADER_FLAG_WARNINGS_ARE_ERRORS = 1 << 4,
+        LR_SHADER_FLAG_SKIP_VALIDATION = 1 << 5,
+        LR_SHADER_FLAG_ALL_RESOURCES_BOUND = 1 << 6,
+    };
+    EnumFlags(ShaderFlags);
+
+    enum DescriptorType : u8
+    {
+        LR_DESCRIPTOR_TYPE_SAMPLER = 0,
+        LR_DESCRIPTOR_TYPE_SHADER_RESOURCE_IMAGE,
+        LR_DESCRIPTOR_TYPE_SHADER_RESOURCE_BUFFER, // Read-only buffer
+        LR_DESCRIPTOR_TYPE_CONSTANT_BUFFER,
+        LR_DESCRIPTOR_TYPE_UNORDERED_ACCESS_IMAGE,
+        LR_DESCRIPTOR_TYPE_UNORDERED_ACCESS_BUFFER, // Write-read buffer
+        LR_DESCRIPTOR_TYPE_PUSH_CONSTANT,
+
+        LR_DESCRIPTOR_TYPE_COUNT,
+    };
+
+    enum AttachmentOp
+    {
+        LR_ATTACHMENT_OP_LOAD,
+        LR_ATTACHMENT_OP_STORE,
+        LR_ATTACHMENT_OP_CLEAR,
+        LR_ATTACHMENT_OP_DONT_CARE,
+    };
+
+    // Incomplete pipeline stage enums.
+    enum PipelineStage : u32
+    {
+        LR_PIPELINE_STAGE_NONE = 0,
+        LR_PIPELINE_STAGE_VERTEX_INPUT = 1 << 0,
+        LR_PIPELINE_STAGE_VERTEX_SHADER = 1 << 1,
+        LR_PIPELINE_STAGE_PIXEL_SHADER = 1 << 2,
+        LR_PIPELINE_STAGE_EARLY_PIXEL_TESTS = 1 << 3,
+        LR_PIPELINE_STAGE_LATE_PIXEL_TESTS = 1 << 4,
+        LR_PIPELINE_STAGE_RENDER_TARGET = 1 << 5,
+        LR_PIPELINE_STAGE_COMPUTE_SHADER = 1 << 6,
+        LR_PIPELINE_STAGE_TRANSFER = 1 << 7,
+        LR_PIPELINE_STAGE_ALL_COMMANDS = 1 << 8,
+
+        // API exclusive pipeline enums
+        LR_PIPELINE_STAGE_HOST = 1 << 20,
+    };
+    EnumFlags(PipelineStage);
+
+    enum PipelineAccess : u32
+    {
+        LR_PIPELINE_ACCESS_NONE = 0,
+        LR_PIPELINE_ACCESS_VERTEX_ATTRIB_READ = 1 << 0,
+        LR_PIPELINE_ACCESS_INDEX_ATTRIB_READ = 1 << 1,
+        LR_PIPELINE_ACCESS_SHADER_READ = 1 << 2,
+        LR_PIPELINE_ACCESS_SHADER_WRITE = 1 << 3,
+        LR_PIPELINE_ACCESS_RENDER_TARGET_READ = 1 << 4,
+        LR_PIPELINE_ACCESS_RENDER_TARGET_WRITE = 1 << 5,
+        LR_PIPELINE_ACCESS_DEPTH_STENCIL_READ = 1 << 6,
+        LR_PIPELINE_ACCESS_DEPTH_STENCIL_WRITE = 1 << 7,
+        LR_PIPELINE_ACCESS_TRANSFER_READ = 1 << 8,
+        LR_PIPELINE_ACCESS_TRANSFER_WRITE = 1 << 9,
+        LR_PIPELINE_ACCESS_MEMORY_READ = 1 << 10,
+        LR_PIPELINE_ACCESS_MEMORY_WRITE = 1 << 11,
+
+        // API exclusive pipeline enums
+        LR_PIPELINE_ACCESS_HOST_READ = 1 << 20,
+        LR_PIPELINE_ACCESS_HOST_WRITE = 1 << 21,
+    };
+    EnumFlags(PipelineAccess);
+
 }  // namespace lr

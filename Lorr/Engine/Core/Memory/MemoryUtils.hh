@@ -101,6 +101,14 @@ namespace lr::Memory
         return 0;
     }
 
+    template<typename _Type>
+    _Type FillBits(u32 count)
+    {
+        assert(count != 64 && "Mask is 0");
+
+        return ((u64)~0) << count ^ ((u64)~0);
+    }
+
     template<typename T, typename U>
     T AlignUp(T size, U alignment)
     {

@@ -22,7 +22,9 @@ namespace lr
             return;
         }
 
-        LOG_TRACE("Creating WIN32 window \"{}\"<{}, {}>", desc.m_Title, m_Width, m_Height);
+        LOG_TRACE("Creating WIN32 window \"{}\"<{}, {}>", desc.m_Title, desc.m_Width, desc.m_Height);
+
+        m_Instance = GetModuleHandleA(NULL);
 
         WNDCLASSEX wc;
         ZeroMemory(&wc, sizeof(WNDCLASSEX));

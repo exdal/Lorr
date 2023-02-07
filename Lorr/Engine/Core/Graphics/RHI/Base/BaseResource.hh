@@ -37,8 +37,8 @@ namespace lr::Graphics
         ImageFormat m_Format = LR_IMAGE_FORMAT_UNKNOWN;
         APIAllocatorType m_TargetAllocator = LR_API_ALLOCATOR_NONE;
 
-        u16 m_Width = 0;
-        u16 m_Height = 0;
+        u32 m_Width = 0;
+        u32 m_Height = 0;
         u16 m_ArraySize = 1;
         u32 m_MipMapLevels = 1;
 
@@ -81,7 +81,7 @@ namespace lr::Graphics
         APIAllocatorType m_TargetAllocator = LR_API_ALLOCATOR_NONE;
         void *m_pAllocatorData = nullptr;
 
-        u32 m_Stride = 0;
+        u32 m_Stride = 1;
         u32 m_DataLen = 0;
         u32 m_DataOffset = 0;
         u32 m_DeviceDataLen = 0;
@@ -119,21 +119,9 @@ namespace lr::Graphics
 
     /// DESCRIPTORS ///
 
-    enum DescriptorType : u8
-    {
-        LR_DESCRIPTOR_TYPE_SAMPLER = 0,
-        LR_DESCRIPTOR_TYPE_SHADER_RESOURCE,
-        LR_DESCRIPTOR_TYPE_CONSTANT_BUFFER,
-        LR_DESCRIPTOR_TYPE_UNORDERED_ACCESS_IMAGE,
-        LR_DESCRIPTOR_TYPE_UNORDERED_ACCESS_BUFFER,
-        LR_DESCRIPTOR_TYPE_PUSH_CONSTANT,
-
-        LR_DESCRIPTOR_TYPE_COUNT,
-    };
-
     struct DescriptorBindingDesc
     {
-        u8 m_BindingID = -1;
+        u32 m_BindingID = ~0U;
         DescriptorType m_Type;
         ShaderStage m_TargetShader;
         u32 m_ArraySize = 1;

@@ -51,11 +51,11 @@ namespace lr::Renderer
 
         PipelineBarrier barrier = {
             .m_CurrentUsage = LR_RESOURCE_USAGE_SHADER_RESOURCE,
-            .m_CurrentStage = LR_PIPELINE_STAGE_PIXEL_SHADER,
-            .m_CurrentAccess = LR_PIPELINE_ACCESS_SHADER_READ,
+            .m_CurrentStage = LR_PIPELINE_STAGE_HOST,
+            .m_CurrentAccess = LR_PIPELINE_ACCESS_HOST_READ,
             .m_NextUsage = LR_RESOURCE_USAGE_TRANSFER_DST,
-            .m_NextStage = LR_PIPELINE_STAGE_HOST,
-            .m_NextAccess = LR_PIPELINE_ACCESS_HOST_READ,
+            .m_NextStage = LR_PIPELINE_STAGE_TRANSFER,
+            .m_NextAccess = LR_PIPELINE_ACCESS_TRANSFER_WRITE,
         };
         pList->SetImageBarrier(m_pFontImage, &barrier);
 
@@ -63,8 +63,8 @@ namespace lr::Renderer
 
         barrier = {
             .m_CurrentUsage = LR_RESOURCE_USAGE_TRANSFER_DST,
-            .m_CurrentStage = LR_PIPELINE_STAGE_HOST,
-            .m_CurrentAccess = LR_PIPELINE_ACCESS_HOST_READ,
+            .m_CurrentStage = LR_PIPELINE_STAGE_TRANSFER,
+            .m_CurrentAccess = LR_PIPELINE_ACCESS_TRANSFER_WRITE,
             .m_NextUsage = LR_RESOURCE_USAGE_SHADER_RESOURCE,
             .m_NextStage = LR_PIPELINE_STAGE_PIXEL_SHADER,
             .m_NextAccess = LR_PIPELINE_ACCESS_SHADER_READ,
@@ -98,7 +98,7 @@ namespace lr::Renderer
 
         descriptorDesc.m_pBindings[0] = {
             .m_BindingID = 0,
-            .m_Type = LR_DESCRIPTOR_TYPE_SHADER_RESOURCE,
+            .m_Type = LR_DESCRIPTOR_TYPE_SHADER_RESOURCE_IMAGE,
             .m_TargetShader = LR_SHADER_STAGE_PIXEL,
             .m_ArraySize = 1,
             .m_pImage = m_pFontImage,
@@ -125,7 +125,7 @@ namespace lr::Renderer
         };
 
         PipelineAttachment colorAttachment = {
-            .m_Format = pAPI->GetSwapChain()->m_ImageFormat,
+            .m_Format = pAPI->GetSwapChainImageFormat(),
             .m_BlendEnable = true,
             .m_WriteMask = LR_COLOR_MASK_R | LR_COLOR_MASK_G | LR_COLOR_MASK_B | LR_COLOR_MASK_A,
             .m_SrcBlend = LR_BLEND_FACTOR_SRC_ALPHA,
@@ -250,7 +250,7 @@ namespace lr::Renderer
 
         CommandListAttachment attachment = {};
         attachment.m_pHandle = pImage;
-        attachment.m_LoadOp = LR_ATTACHMENT_OP_CLEAR;
+        attachment.m_LoadOp = LR_ATTACHMENT_OP_DONT_CARE;
         attachment.m_StoreOp = LR_ATTACHMENT_OP_STORE;
         attachment.m_ClearVal = ClearValue({ 0.0, 0.0, 0.0, 1.0 });
 
@@ -279,21 +279,12 @@ namespace lr::Renderer
 
             for (auto &cmd : pDrawList->CmdBuffer)
             {
-                XMUINT2 clipMin(cmd.ClipRect.x - clipOffset.x, cmd.ClipRect.y - clipOffset.y);
-                XMUINT2 clipMax(cmd.ClipRect.z - clipOffset.x, cmd.ClipRect.w - clipOffset.y);
-
-                if (clipMin.x < 0.0f)
-                    clipMin.x = 0.0f;
-                if (clipMin.y < 0.0f)
-                    clipMin.y = 0.0f;
-                if (clipMax.x > pDrawData->DisplaySize.x)
-                    clipMax.x = pDrawData->DisplaySize.x;
-                if (clipMax.y > pDrawData->DisplaySize.y)
-                    clipMax.y = pDrawData->DisplaySize.y;
+                ImVec2 clipMin(cmd.ClipRect.x - clipOffset.x, cmd.ClipRect.y - clipOffset.y);
+                ImVec2 clipMax(cmd.ClipRect.z - clipOffset.x, cmd.ClipRect.w - clipOffset.y);
                 if (clipMax.x <= clipMin.x || clipMax.y <= clipMin.y)
                     continue;
 
-                pList->SetScissors(0, clipMin.x, clipMin.y, clipMax.x - clipMin.x, clipMax.y - clipMin.y);
+                pList->SetScissors(0, clipMin.x, clipMin.y, clipMax.x, clipMax.y);
 
                 DescriptorSet *pSet = (DescriptorSet *)cmd.TextureId;
                 if (!pSet)
@@ -313,7 +304,7 @@ namespace lr::Renderer
         pList->EndPass();
 
         pAPI->EndCommandList(pList);
-        pAPI->ExecuteCommandList(pList, true);
+        pAPI->ExecuteCommandList(pList, false);
     }
 
 }  // namespace lr::Renderer

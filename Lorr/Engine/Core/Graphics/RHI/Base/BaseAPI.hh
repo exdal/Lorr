@@ -6,6 +6,7 @@
 
 #include <eathread/eathread_thread.h>
 
+#include "Core/Graphics/Camera.hh"
 #include "Core/Graphics/RHI/APIConfig.hh"
 #include "Core/Graphics/RHI/Common.hh"
 
@@ -81,7 +82,9 @@ namespace lr::Graphics
         virtual Sampler *CreateSampler(SamplerDesc *pDesc) = 0;
 
         /// UTILITY
-        virtual void CalcOrthoProjection(XMMATRIX &mat, XMFLOAT2 viewSize, float zFar, float zNear) = 0;
+        virtual ImageFormat &GetSwapChainImageFormat() = 0;
+        virtual void CalcOrthoProjection(Camera2D &camera) = 0;
+        virtual void CalcPerspectiveProjection(Camera3D &camera) = 0;
 
         template<typename _Base, typename _Derived>
         _Derived *AllocTypeInherit()

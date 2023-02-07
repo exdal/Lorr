@@ -23,7 +23,6 @@ namespace lr::Graphics
         void Init(Camera3DDesc *pDesc);
 
         void CalculateView();
-        void CalculateProjection();
 
         void SetPosition(const XMFLOAT3 &position);
         void SetSize(const XMFLOAT2 &viewSize);
@@ -33,13 +32,13 @@ namespace lr::Graphics
 
         XMMATRIX m_View = {};
         XMMATRIX m_Projection = {};
+        XMMATRIX m_ResultMatrix = {};
 
         XMVECTOR m_Position = {};
         XMFLOAT2 m_ViewSize = {};
 
         XMVECTOR m_ViewDirection = {};
         XMVECTOR m_UpDirection = {};
-        XMVECTOR m_RightDirection = {};
 
         f32 m_FOV = 0.0;
         f32 m_Aspect = 0.0;
@@ -71,6 +70,7 @@ namespace lr::Graphics
 
         XMMATRIX m_View = {};
         XMMATRIX m_Projection = {};
+        XMMATRIX m_ResultMatrix = {};
 
         XMVECTOR m_Position = {};
         XMFLOAT2 m_ViewSize = {};

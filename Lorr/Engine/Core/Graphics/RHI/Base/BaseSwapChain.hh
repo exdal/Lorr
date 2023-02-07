@@ -6,6 +6,7 @@
 
 #include "Core/Window/BaseWindow.hh"
 
+#include "BasePipeline.hh"
 #include "BaseResource.hh"
 
 namespace lr::Graphics

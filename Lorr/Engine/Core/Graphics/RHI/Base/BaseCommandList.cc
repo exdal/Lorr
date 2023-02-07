@@ -11,11 +11,11 @@ namespace lr::Graphics
     {
         ZoneScoped;
 
-        m_DirectListMask.store(UINT32_MAX, eastl::memory_order_release);
+        m_DirectListMask.store(Memory::FillBits<u32>(m_DirectLists.count), eastl::memory_order_release);
+        m_ComputeListMask.store(Memory::FillBits<u16>(m_ComputeLists.count), eastl::memory_order_release);
+        m_CopyListMask.store(Memory::FillBits<u8>(m_CopyLists.count), eastl::memory_order_release);
+        
         m_DirectFenceMask.store(0, eastl::memory_order_release);
-
-        m_ComputeListMask.store(UINT16_MAX, eastl::memory_order_release);
-        m_CopyListMask.store(UINT8_MAX, eastl::memory_order_release);
     }
 
     CommandList *CommandListPool::Acquire(CommandListType type)
@@ -46,11 +46,18 @@ namespace lr::Graphics
 
         switch (type)
         {
-            case CommandListType::Direct: GetListFromMask(m_DirectListMask, m_DirectLists); break;
-            case CommandListType::Compute: GetListFromMask(m_ComputeListMask, m_ComputeLists); break;
-            case CommandListType::Copy: GetListFromMask(m_CopyListMask, m_CopyLists); break;
+            case CommandListType::Direct:
+                GetListFromMask(m_DirectListMask, m_DirectLists);
+                break;
+            case CommandListType::Compute:
+                GetListFromMask(m_ComputeListMask, m_ComputeLists);
+                break;
+            case CommandListType::Copy:
+                GetListFromMask(m_CopyListMask, m_CopyLists);
+                break;
 
-            default: break;
+            default:
+                break;
         }
 
         return pList;
@@ -85,11 +92,18 @@ namespace lr::Graphics
 
         switch (pList->m_Type)
         {
-            case CommandListType::Direct: PlaceIntoArray(m_DirectListMask, m_DirectLists); break;
-            case CommandListType::Compute: PlaceIntoArray(m_ComputeListMask, m_ComputeLists); break;
-            case CommandListType::Copy: PlaceIntoArray(m_CopyListMask, m_CopyLists); break;
+            case CommandListType::Direct:
+                PlaceIntoArray(m_DirectListMask, m_DirectLists);
+                break;
+            case CommandListType::Compute:
+                PlaceIntoArray(m_ComputeListMask, m_ComputeLists);
+                break;
+            case CommandListType::Copy:
+                PlaceIntoArray(m_CopyListMask, m_CopyLists);
+                break;
 
-            default: break;
+            default:
+                break;
         }
     }
 

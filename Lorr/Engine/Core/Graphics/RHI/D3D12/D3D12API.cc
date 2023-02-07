@@ -305,7 +305,24 @@ namespace lr::Graphics
 
         API_VAR(D3D12CommandList, pList);
 
-        m_pDirectQueue->ExecuteCommandList(pListDX);
+        D3D12CommandQueue *pQueue = nullptr;
+
+        switch (pList->m_Type)
+        {
+            case CommandListType::Direct:
+                pQueue = m_pDirectQueue;
+                break;
+            case CommandListType::Compute:
+                pQueue = m_pComputeQueue;
+                break;
+            // case CommandListType::Copy:
+            //     pQueue = m_pTransferQueue->m_pHandle;
+            //     break;
+            default:
+                break;
+        }
+
+        pQueue->ExecuteCommandList(pListDX);
 
         if (waitForFence)
         {
@@ -368,7 +385,7 @@ namespace lr::Graphics
         API_VAR(D3D12Pipeline, pPipeline);
 
         D3D12_ROOT_PARAMETER1
-            pParams[LR_MAX_DESCRIPTOR_SETS_PER_PIPELINE + LR_MAX_PUSH_CONSTANTS_PER_PIPELINE] = {};
+        pParams[LR_MAX_DESCRIPTOR_SETS_PER_PIPELINE + LR_MAX_PUSH_CONSTANTS_PER_PIPELINE] = {};
         D3D12_DESCRIPTOR_RANGE1 pRanges[LR_MAX_DESCRIPTOR_SETS_PER_PIPELINE]
                                        [LR_MAX_DESCRIPTORS_PER_LAYOUT] = {};
         D3D12_STATIC_SAMPLER_DESC pSamplers[LR_MAX_STATIC_SAMPLERS_PER_PIPELINE] = {};
@@ -395,8 +412,20 @@ namespace lr::Graphics
                 range.NumDescriptors = 1;
                 range.RangeType = ToDXDescriptorRangeType(pSetDX->m_pBindingTypes[j]);
                 range.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
-                if (range.RangeType != D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER)
-                    range.Flags = D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC_WHILE_SET_AT_EXECUTE;
+                range.Flags = D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC_WHILE_SET_AT_EXECUTE;
+
+                switch (pSetDX->m_pBindingTypes[j])
+                {
+                    case LR_DESCRIPTOR_TYPE_SAMPLER:
+                        range.Flags = D3D12_DESCRIPTOR_RANGE_FLAG_NONE;
+                        break;
+                    case LR_DESCRIPTOR_TYPE_SHADER_RESOURCE_BUFFER:
+                    case LR_DESCRIPTOR_TYPE_UNORDERED_ACCESS_IMAGE:
+                        range.Flags = D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE ;
+                        break;
+                    default:
+                        break;
+                }
             }
 
             currentSpace++;
@@ -416,7 +445,7 @@ namespace lr::Graphics
             param.Constants.ShaderRegister = 0;
             param.Constants.Num32BitValues = pushConstant.m_Size / sizeof(u32);
 
-            pPipelineDX->m_pRootConstats[(u32)param.ShaderVisibility] = paramIdx;
+            pPipelineDX->m_pRootConstats[(u32)pushConstant.m_Stage] = paramIdx;
         }
 
         D3D12_VERSIONED_ROOT_SIGNATURE_DESC rootSignatureDesc = {};
@@ -548,12 +577,22 @@ namespace lr::Graphics
 
             switch (pShader->m_Type)
             {
-                case LR_SHADER_STAGE_VERTEX: pTargetHandle = &createInfo.VS; break;
-                case LR_SHADER_STAGE_PIXEL: pTargetHandle = &createInfo.PS; break;
-                case LR_SHADER_STAGE_HULL: pTargetHandle = &createInfo.HS; break;
-                case LR_SHADER_STAGE_DOMAIN: pTargetHandle = &createInfo.DS; break;
+                case LR_SHADER_STAGE_VERTEX:
+                    pTargetHandle = &createInfo.VS;
+                    break;
+                case LR_SHADER_STAGE_PIXEL:
+                    pTargetHandle = &createInfo.PS;
+                    break;
+                case LR_SHADER_STAGE_HULL:
+                    pTargetHandle = &createInfo.HS;
+                    break;
+                case LR_SHADER_STAGE_DOMAIN:
+                    pTargetHandle = &createInfo.DS;
+                    break;
 
-                default: assert(!"Shader type not implemented"); break;
+                default:
+                    assert(!"Shader type not implemented");
+                    break;
             }
 
             IDxcBlob *pCode = pShaderDX->m_pHandle;
@@ -565,23 +604,26 @@ namespace lr::Graphics
         /// INPUT LAYOUT  ------------------------------------------------------------
 
         InputLayout *pInputLayout = pBuildInfo->m_pInputLayout;
-        D3D12_INPUT_ELEMENT_DESC pInputElements[LR_MAX_VERTEX_ATTRIBS_PER_PIPELINE] = {};
-
-        createInfo.InputLayout.NumElements = pInputLayout->m_Count;
-        createInfo.InputLayout.pInputElementDescs = pInputElements;
-
-        for (u32 i = 0; i < pInputLayout->m_Count; i++)
+        if (pInputLayout)
         {
-            VertexAttrib &element = pInputLayout->m_Elements[i];
-            D3D12_INPUT_ELEMENT_DESC &attribDesc = pInputElements[i];
+            D3D12_INPUT_ELEMENT_DESC pInputElements[LR_MAX_VERTEX_ATTRIBS_PER_PIPELINE] = {};
 
-            attribDesc.SemanticName = element.m_Name.data();
-            attribDesc.SemanticIndex = 0;
-            attribDesc.Format = D3D12API::ToDXFormat(element.m_Type);
-            attribDesc.InputSlot = 0;
-            attribDesc.AlignedByteOffset = element.m_Offset;
-            attribDesc.InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
-            attribDesc.InstanceDataStepRate = 0;
+            createInfo.InputLayout.NumElements = pInputLayout->m_Count;
+            createInfo.InputLayout.pInputElementDescs = pInputElements;
+
+            for (u32 i = 0; i < pInputLayout->m_Count; i++)
+            {
+                VertexAttrib &element = pInputLayout->m_Elements[i];
+                D3D12_INPUT_ELEMENT_DESC &attribDesc = pInputElements[i];
+
+                attribDesc.SemanticName = element.m_Name.data();
+                attribDesc.SemanticIndex = 0;
+                attribDesc.Format = D3D12API::ToDXFormat(element.m_Type);
+                attribDesc.InputSlot = 0;
+                attribDesc.AlignedByteOffset = element.m_Offset;
+                attribDesc.InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
+                attribDesc.InstanceDataStepRate = 0;
+            }
         }
 
         /// INPUT ASSEMBLY -----------------------------------------------------------
@@ -741,9 +783,7 @@ namespace lr::Graphics
         pDescriptorSet->m_BindingCount = pDesc->m_BindingCount;
 
         D3D12_ROOT_SIGNATURE_DESC1 rootSigDesc = {};
-        D3D12_STATIC_SAMPLER_DESC pSamplers[LR_MAX_STATIC_SAMPLERS_PER_PIPELINE] = {};
 
-        u32 samplerCount = 0;
         u32 bindingCount = 0;
         D3D12_ROOT_PARAMETER pBindings[LR_MAX_DESCRIPTORS_PER_LAYOUT] = {};
 
@@ -766,8 +806,6 @@ namespace lr::Graphics
         rootSignatureDesc.Version = D3D_ROOT_SIGNATURE_VERSION_1_0;
         rootSignatureDesc.Desc_1_0.NumParameters = bindingCount;
         rootSignatureDesc.Desc_1_0.pParameters = pBindings;
-        rootSignatureDesc.Desc_1_0.NumStaticSamplers = samplerCount;
-        rootSignatureDesc.Desc_1_0.pStaticSamplers = pSamplers;
 
         ls::scoped_comptr<ID3DBlob> pRootSigBlob;
         ls::scoped_comptr<ID3DBlob> pErrorBlob;
@@ -814,13 +852,25 @@ namespace lr::Graphics
 
             switch (element.m_Type)
             {
-                case LR_DESCRIPTOR_TYPE_CONSTANT_BUFFER: gpuAddress = pBufferDX->m_ViewGPU; break;
-                case LR_DESCRIPTOR_TYPE_SHADER_RESOURCE: gpuAddress = pImageDX->m_ShaderViewGPU; break;
+                case LR_DESCRIPTOR_TYPE_CONSTANT_BUFFER:
+                    gpuAddress = pBufferDX->m_ConstantBufferViewGPU;
+                    break;
+                case LR_DESCRIPTOR_TYPE_SHADER_RESOURCE_BUFFER:
+                    gpuAddress = pBufferDX->m_ShaderViewGPU;
+                    break;
+                case LR_DESCRIPTOR_TYPE_UNORDERED_ACCESS_BUFFER:
+                    gpuAddress = pBufferDX->m_UnorderedAccessViewGPU;
+                    break;
+                case LR_DESCRIPTOR_TYPE_SHADER_RESOURCE_IMAGE:
+                    gpuAddress = pImageDX->m_ShaderViewGPU;
+                    break;
                 case LR_DESCRIPTOR_TYPE_UNORDERED_ACCESS_IMAGE:
                     gpuAddress = pImageDX->m_UnorderedAccessViewGPU;
                     break;
-                case LR_DESCRIPTOR_TYPE_SAMPLER: gpuAddress = pSamplerDX->m_HandleGPU;
-                default: break;
+                case LR_DESCRIPTOR_TYPE_SAMPLER:
+                    gpuAddress = pSamplerDX->m_HandleGPU;
+                default:
+                    break;
             }
         }
     }
@@ -931,6 +981,11 @@ namespace lr::Graphics
 
         /// ---------------------------------------------- ///
 
+        D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAG_NONE;
+
+        if (pBuffer->m_UsageFlags & LR_RESOURCE_USAGE_UNORDERED_ACCESS)
+            flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+
         D3D12_RESOURCE_DESC resourceDesc = {};
         resourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
         resourceDesc.Alignment = D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT;
@@ -942,17 +997,21 @@ namespace lr::Graphics
         resourceDesc.SampleDesc.Count = 1;
         resourceDesc.SampleDesc.Quality = 0;
         resourceDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-        resourceDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
+        resourceDesc.Flags = flags;
 
         /// ---------------------------------------------- ///
 
         SetAllocator(pBuffer, resourceDesc, pBuffer->m_TargetAllocator);
 
+        D3D12_RESOURCE_STATES initialState = ToDXImageUsage(pBuffer->m_UsageFlags);
+        initialState &= ~D3D12_RESOURCE_STATE_COPY_DEST;
+        initialState &= ~D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE;
+
         m_pDevice->CreatePlacedResource(
             pBuffer->m_pMemoryHandle,
             0,  // TODO: SUBRESOURCE ALLOCATION
             &resourceDesc,
-            ToDXBufferUsage(pBuffer->m_UsageFlags),
+            initialState,
             nullptr,
             IID_PPV_ARGS(&pBuffer->m_pHandle));
 
@@ -996,14 +1055,45 @@ namespace lr::Graphics
 
         if (pBuffer->m_UsageFlags & LR_RESOURCE_USAGE_CONSTANT_BUFFER)
         {
+            pBufferDX->m_ConstantBufferViewCPU = AllocateCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+            pBufferDX->m_ConstantBufferViewGPU = AllocateGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+
             D3D12_CONSTANT_BUFFER_VIEW_DESC viewDesc = {};
             viewDesc.BufferLocation = pBufferDX->m_VirtualAddress;
             viewDesc.SizeInBytes = pBufferDX->m_DataLen;
 
-            pBufferDX->m_ViewCPU = AllocateCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-            pBufferDX->m_ViewGPU = AllocateGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+            m_pDevice->CreateConstantBufferView(&viewDesc, pBufferDX->m_ConstantBufferViewCPU);
+        }
 
-            m_pDevice->CreateConstantBufferView(&viewDesc, pBufferDX->m_ViewCPU);
+        if (pBuffer->m_UsageFlags & LR_RESOURCE_USAGE_SHADER_RESOURCE)
+        {
+            pBufferDX->m_ShaderViewCPU = AllocateCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+            pBufferDX->m_ShaderViewGPU = AllocateGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+
+            D3D12_SHADER_RESOURCE_VIEW_DESC viewDesc = {};
+            viewDesc.Format = DXGI_FORMAT_UNKNOWN;
+            viewDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
+            viewDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+            viewDesc.Buffer.FirstElement = 0;
+            viewDesc.Buffer.NumElements = pBuffer->m_DataLen / pBuffer->m_Stride;
+            viewDesc.Buffer.StructureByteStride = pBuffer->m_Stride;
+
+            m_pDevice->CreateShaderResourceView(pBufferDX->m_pHandle, &viewDesc, pBufferDX->m_ShaderViewCPU);
+        }
+
+        if (pBuffer->m_UsageFlags & LR_RESOURCE_USAGE_UNORDERED_ACCESS)
+        {
+            pBufferDX->m_UnorderedAccessViewCPU = AllocateCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+            pBufferDX->m_UnorderedAccessViewGPU = AllocateGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+
+            D3D12_UNORDERED_ACCESS_VIEW_DESC viewDesc = {};
+            viewDesc.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
+            viewDesc.Buffer.FirstElement = 0;
+            viewDesc.Buffer.NumElements = pBuffer->m_DataLen / pBuffer->m_Stride;
+            viewDesc.Buffer.StructureByteStride = pBuffer->m_Stride;
+
+            m_pDevice->CreateUnorderedAccessView(
+                pBufferDX->m_pHandle, nullptr, &viewDesc, pBufferDX->m_UnorderedAccessViewCPU);
         }
     }
 
@@ -1270,7 +1360,9 @@ namespace lr::Graphics
                 break;
             }
 
-            default: LOG_CRITICAL("Trying to allocate D3D12Buffer resource from invalid allocator."); break;
+            default:
+                LOG_CRITICAL("Trying to allocate D3D12Buffer resource from invalid allocator.");
+                break;
         }
     }
 
@@ -1306,15 +1398,31 @@ namespace lr::Graphics
                 break;
             }
 
-            default: LOG_CRITICAL("Trying to allocate D3D12Image resource from invalid allocator."); break;
+            default:
+                LOG_CRITICAL("Trying to allocate D3D12Image resource from invalid allocator.");
+                break;
         }
     }
 
-    void D3D12API::CalcOrthoProjection(XMMATRIX &mat, XMFLOAT2 viewSize, float zFar, float zNear)
+    ImageFormat &D3D12API::GetSwapChainImageFormat()
+    {
+        return m_SwapChain.m_ImageFormat;
+    }
+
+    void D3D12API::CalcOrthoProjection(Camera2D &camera)
     {
         ZoneScoped;
 
-        mat = XMMatrixOrthographicOffCenterLH(0.0, viewSize.x, viewSize.y, 0.0, zNear, zFar);
+        camera.m_Projection = XMMatrixOrthographicOffCenterLH(
+            0.0, camera.m_ViewSize.x, camera.m_ViewSize.y, 0.0, camera.m_ZNear, camera.m_ZFar);
+    }
+
+    void D3D12API::CalcPerspectiveProjection(Camera3D &camera)
+    {
+        ZoneScoped;
+
+        camera.m_Projection = XMMatrixPerspectiveFovLH(
+            XMConvertToRadians(-camera.m_FOV), camera.m_Aspect, camera.m_ZNear, camera.m_ZFar);
     }
 
     i64 D3D12API::TFFenceWait(void *pData)
@@ -1391,7 +1499,8 @@ namespace lr::Graphics
 
     constexpr D3D12_ROOT_PARAMETER_TYPE kDescriptorTypeLUT[] = {
         D3D12_ROOT_PARAMETER_TYPE_SRV,              // LR_DESCRIPTOR_TYPE_SAMPLER
-        D3D12_ROOT_PARAMETER_TYPE_SRV,              // LR_DESCRIPTOR_TYPE_SHADER_RESOURCE
+        D3D12_ROOT_PARAMETER_TYPE_SRV,              // LR_DESCRIPTOR_TYPE_SHADER_RESOURCE_IMAGE
+        D3D12_ROOT_PARAMETER_TYPE_SRV,              // LR_DESCRIPTOR_TYPE_SHADER_RESOURCE_BUFFER
         D3D12_ROOT_PARAMETER_TYPE_CBV,              // LR_DESCRIPTOR_TYPE_CONSTANT_BUFFER
         D3D12_ROOT_PARAMETER_TYPE_UAV,              // LR_DESCRIPTOR_TYPE_UNORDERED_ACCESS_IMAGE
         D3D12_ROOT_PARAMETER_TYPE_UAV,              // LR_DESCRIPTOR_TYPE_UNORDERED_ACCESS_BUFFER
@@ -1400,10 +1509,11 @@ namespace lr::Graphics
 
     constexpr D3D12_DESCRIPTOR_RANGE_TYPE kDescriptorRangeLUT[] = {
         D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER,  // LR_DESCRIPTOR_TYPE_SAMPLER
-        D3D12_DESCRIPTOR_RANGE_TYPE_SRV,      // LR_DESCRIPTOR_TYPE_SHADER_RESOURCE
+        D3D12_DESCRIPTOR_RANGE_TYPE_SRV,      // LR_DESCRIPTOR_TYPE_SHADER_RESOURCE_IMAGE
+        D3D12_DESCRIPTOR_RANGE_TYPE_SRV,      // LR_DESCRIPTOR_TYPE_SHADER_RESOURCE_BUFFER
         D3D12_DESCRIPTOR_RANGE_TYPE_CBV,      // LR_DESCRIPTOR_TYPE_CONSTANT_BUFFER
         D3D12_DESCRIPTOR_RANGE_TYPE_UAV,      // LR_DESCRIPTOR_TYPE_UNORDERED_ACCESS_IMAGE
-        D3D12_DESCRIPTOR_RANGE_TYPE_UAV,      // LR_DESCRIPTOR_TYPE_UNORDERED_ACCESS_BUFFER
+        D3D12_DESCRIPTOR_RANGE_TYPE_SRV,      // LR_DESCRIPTOR_TYPE_UNORDERED_ACCESS_BUFFER
     };
 
     constexpr D3D12_COMMAND_LIST_TYPE kCommandListType[] = {
@@ -1490,7 +1600,7 @@ namespace lr::Graphics
             v |= D3D12_RESOURCE_STATE_COPY_DEST;
 
         if (usage & LR_RESOURCE_USAGE_UNORDERED_ACCESS)
-            v |= D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+            v |= D3D12_RESOURCE_STATE_COMMON;
 
         return v;
     }

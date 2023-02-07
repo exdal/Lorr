@@ -327,8 +327,8 @@ namespace lr::Graphics
         VkRect2D rect;
         rect.offset.x = x;
         rect.offset.y = y;
-        rect.extent.width = width;
-        rect.extent.height = height;
+        rect.extent.width = width - x;
+        rect.extent.height = height - y;
 
         vkCmdSetScissor(m_pHandle, id, 1, &rect);
     }

@@ -104,7 +104,9 @@ namespace lr::Graphics
         void SetAllocator(VKImage *pImage, APIAllocatorType targetAllocator);
 
         /// UTILITY
-        void CalcOrthoProjection(XMMATRIX &mat, XMFLOAT2 viewSize, float zFar, float zNear) override;
+        ImageFormat &GetSwapChainImageFormat() override;
+        void CalcOrthoProjection(Camera2D &camera) override;
+        void CalcPerspectiveProjection(Camera3D &camera) override;
 
         // * Device Features * //
         bool IsFormatSupported(ImageFormat format, VkColorSpaceKHR *pColorSpaceOut);
@@ -115,7 +117,7 @@ namespace lr::Graphics
 
         // * API Instance * //
         bool LoadVulkan();
-        bool SetupInstance(void *pHandle);
+        bool SetupInstance(BaseWindow *pWindow);
         bool SetupQueues(VkPhysicalDevice &pPhysicalDevice, VkPhysicalDeviceFeatures &features);
         bool SetupDevice(VkPhysicalDevice &pPhysicalDevice, VkPhysicalDeviceFeatures &features);
 
@@ -154,6 +156,7 @@ namespace lr::Graphics
         eastl::array<u32, 3> m_QueueIndexes;
         VKCommandQueue *m_pDirectQueue = nullptr;
         VKCommandQueue *m_pComputeQueue = nullptr;
+        VKCommandQueue *m_pTransferQueue = nullptr;
 
         /// Pools/Caches
         VkPipelineCache m_pPipelineCache = nullptr;

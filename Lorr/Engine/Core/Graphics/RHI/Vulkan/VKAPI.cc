@@ -18,13 +18,13 @@ _VK_IMPORT_SYMBOLS
 #undef _VK_DEFINE_FUNCTION
 
 #define VKCall(fn, err)                            \
-    if (fn != VK_SUCCESS)                          \
+    if ((vkResult = fn) != VK_SUCCESS)             \
     {                                              \
         LOG_CRITICAL(err " - Code: {}", vkResult); \
     }
 
 #define VKCallRet(fn, err, ret)                    \
-    if (fn != VK_SUCCESS)                          \
+    if ((vkResult = fn) != VK_SUCCESS)             \
     {                                              \
         LOG_CRITICAL(err " - Code: {}", vkResult); \
         return ret;                                \
@@ -42,7 +42,7 @@ namespace lr::Graphics
         LOG_TRACE("Initializing Vulkan context...");
 
         LoadVulkan();
-        SetupInstance(pWindow->m_pHandle);
+        SetupInstance(pWindow);
 
         u32 availableDeviceCount = 0;
         vkEnumeratePhysicalDevices(m_pInstance, &availableDeviceCount, nullptr);
@@ -102,11 +102,11 @@ namespace lr::Graphics
 
         /// Get surface present modes
         vkGetPhysicalDeviceSurfacePresentModesKHR(
-            m_pPhysicalDevice, m_pSurface, &m_ValidSurfaceFormatCount, nullptr);
+            m_pPhysicalDevice, m_pSurface, &m_ValidPresentModeCount, nullptr);
 
         m_pValidPresentModes = new VkPresentModeKHR[m_ValidPresentModeCount];
         vkGetPhysicalDeviceSurfacePresentModesKHR(
-            m_pPhysicalDevice, m_pSurface, &m_ValidSurfaceFormatCount, m_pValidPresentModes);
+            m_pPhysicalDevice, m_pSurface, &m_ValidPresentModeCount, m_pValidPresentModes);
 
         vkGetPhysicalDeviceMemoryProperties(m_pPhysicalDevice, &m_MemoryProps);
 
@@ -266,8 +266,23 @@ namespace lr::Graphics
 
         API_VAR(VKCommandList, pList);
 
-        VkQueue &pQueueHandle = m_pDirectQueue->m_pHandle;
+        VkQueue pQueueHandle = nullptr;
         VkFence &pFence = pListVK->m_pFence;
+
+        switch (pList->m_Type)
+        {
+            case CommandListType::Direct:
+                pQueueHandle = m_pDirectQueue->m_pHandle;
+                break;
+            case CommandListType::Compute:
+                pQueueHandle = m_pComputeQueue->m_pHandle;
+                break;
+            case CommandListType::Copy:
+                pQueueHandle = m_pTransferQueue->m_pHandle;
+                break;
+            default:
+                break;
+        }
 
         VkCommandBufferSubmitInfo commandBufferInfo = {};
         commandBufferInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO;
@@ -514,32 +529,36 @@ namespace lr::Graphics
 
         /// INPUT LAYOUT  ------------------------------------------------------------
 
-        InputLayout *pInputLayout = pBuildInfo->m_pInputLayout;
-
-        VkVertexInputBindingDescription inputBindingInfo = {};
-        inputBindingInfo.binding = 0;
-        inputBindingInfo.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-        inputBindingInfo.stride = pInputLayout->m_Stride;
-
-        VkVertexInputAttributeDescription pAttribInfos[LR_MAX_VERTEX_ATTRIBS_PER_PIPELINE] = {};
-        for (u32 i = 0; i < pInputLayout->m_Count; i++)
-        {
-            VertexAttrib &element = pInputLayout->m_Elements[i];
-            VkVertexInputAttributeDescription &attribInfo = pAttribInfos[i];
-
-            attribInfo.binding = 0;
-            attribInfo.location = i;
-            attribInfo.offset = element.m_Offset;
-            attribInfo.format = ToVKFormat(element.m_Type);
-        }
-
         VkPipelineVertexInputStateCreateInfo inputLayoutInfo = {};
         inputLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
         inputLayoutInfo.pNext = nullptr;
-        inputLayoutInfo.vertexAttributeDescriptionCount = pInputLayout->m_Count;
-        inputLayoutInfo.pVertexAttributeDescriptions = pAttribInfos;
-        inputLayoutInfo.vertexBindingDescriptionCount = 1;
-        inputLayoutInfo.pVertexBindingDescriptions = &inputBindingInfo;
+
+        VkVertexInputBindingDescription inputBindingInfo = {};
+        VkVertexInputAttributeDescription pAttribInfos[LR_MAX_VERTEX_ATTRIBS_PER_PIPELINE] = {};
+        
+        InputLayout *pInputLayout = pBuildInfo->m_pInputLayout;
+        if (pInputLayout)
+        {
+            inputBindingInfo.binding = 0;
+            inputBindingInfo.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+            inputBindingInfo.stride = pInputLayout->m_Stride;
+
+            for (u32 i = 0; i < pInputLayout->m_Count; i++)
+            {
+                VertexAttrib &element = pInputLayout->m_Elements[i];
+                VkVertexInputAttributeDescription &attribInfo = pAttribInfos[i];
+
+                attribInfo.binding = 0;
+                attribInfo.location = i;
+                attribInfo.offset = element.m_Offset;
+                attribInfo.format = ToVKFormat(element.m_Type);
+            }
+
+            inputLayoutInfo.vertexAttributeDescriptionCount = pInputLayout->m_Count;
+            inputLayoutInfo.pVertexAttributeDescriptions = pAttribInfos;
+            inputLayoutInfo.vertexBindingDescriptionCount = 1;
+            inputLayoutInfo.pVertexBindingDescriptions = &inputBindingInfo;
+        }
 
         /// INPUT ASSEMBLY -----------------------------------------------------------
 
@@ -560,9 +579,9 @@ namespace lr::Graphics
         VkPipelineViewportStateCreateInfo viewportInfo = {};
         viewportInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
         viewportInfo.pNext = nullptr;
-        viewportInfo.viewportCount = 0;
+        viewportInfo.viewportCount = 1;
         viewportInfo.pViewports = nullptr;
-        viewportInfo.scissorCount = 0;
+        viewportInfo.scissorCount = 1;
         viewportInfo.pScissors = nullptr;
 
         /// RASTERIZER ---------------------------------------------------------------
@@ -712,7 +731,7 @@ namespace lr::Graphics
     {
         ZoneScoped;
 
-        VkResult vkResult;
+        VkResult vkResult = {};
         VKCall(vkCreateSwapchainKHR(m_pDevice, &info, nullptr, &pHandle), "Failed to create Vulkan SwapChain.");
     }
 
@@ -777,7 +796,7 @@ namespace lr::Graphics
         VkSemaphore &pPresentSemp = pCurrentFrame->m_pPresentSemp;
 
         m_pDirectQueue->SetSemaphoreStage(
-            VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
+            VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT);
 
         PresentCommandQueue();
 
@@ -820,7 +839,7 @@ namespace lr::Graphics
         compileDesc.m_Flags =
             LR_SHADER_FLAG_USE_SPIRV | LR_SHADER_FLAG_MATRIX_ROW_MAJOR | LR_SHADER_FLAG_ALL_RESOURCES_BOUND;
 
-#if _DEBUG
+#if 1
         compileDesc.m_Flags |=
             LR_SHADER_FLAG_WARNINGS_ARE_ERRORS | LR_SHADER_FLAG_SKIP_OPTIMIZATION | LR_SHADER_FLAG_USE_DEBUG;
 #endif
@@ -928,9 +947,9 @@ namespace lr::Graphics
 
         API_VAR(VKDescriptorSet, pSet);
 
-        VkWriteDescriptorSet pWriteSets[LR_MAX_DESCRIPTORS_PER_LAYOUT];
-        VkDescriptorBufferInfo pBufferInfos[LR_MAX_DESCRIPTORS_PER_LAYOUT];
-        VkDescriptorImageInfo pImageInfos[LR_MAX_DESCRIPTORS_PER_LAYOUT * 2];  // *2 for samplers
+        VkWriteDescriptorSet pWriteSets[LR_MAX_DESCRIPTORS_PER_LAYOUT] = {};
+        VkDescriptorBufferInfo pBufferInfos[LR_MAX_DESCRIPTORS_PER_LAYOUT] = {};
+        VkDescriptorImageInfo pImageInfos[LR_MAX_DESCRIPTORS_PER_LAYOUT * 2] = {};  // *2 for samplers
 
         u32 bufferIndex = 0;
         u32 imageIndex = 0;
@@ -963,6 +982,8 @@ namespace lr::Graphics
             switch (element.m_Type)
             {
                 case LR_DESCRIPTOR_TYPE_CONSTANT_BUFFER:
+                case LR_DESCRIPTOR_TYPE_SHADER_RESOURCE_BUFFER:
+                case LR_DESCRIPTOR_TYPE_UNORDERED_ACCESS_BUFFER:
                 {
                     bufferInfo.buffer = pBufferVK->m_pHandle;
                     bufferInfo.offset = 0;
@@ -973,7 +994,7 @@ namespace lr::Graphics
                     break;
                 }
 
-                case LR_DESCRIPTOR_TYPE_SHADER_RESOURCE:
+                case LR_DESCRIPTOR_TYPE_SHADER_RESOURCE_IMAGE:
                 case LR_DESCRIPTOR_TYPE_UNORDERED_ACCESS_IMAGE:
                 {
                     imageInfo.imageView = pImageVK->m_pViewHandle;
@@ -993,7 +1014,8 @@ namespace lr::Graphics
                     break;
                 }
 
-                default: break;
+                default:
+                    break;
             }
         }
 
@@ -1345,7 +1367,9 @@ namespace lr::Graphics
                 break;
             }
 
-            default: LOG_CRITICAL("Trying to allocate VKBuffer resource from invalid allocator."); break;
+            default:
+                LOG_CRITICAL("Trying to allocate VKBuffer resource from invalid allocator.");
+                break;
         }
     }
 
@@ -1385,15 +1409,30 @@ namespace lr::Graphics
                 break;
             }
 
-            default: break;
+            default:
+                break;
         }
     }
 
-    void VKAPI::CalcOrthoProjection(XMMATRIX &mat, XMFLOAT2 viewSize, float zFar, float zNear)
+    ImageFormat &VKAPI::GetSwapChainImageFormat()
+    {
+        return m_SwapChain.m_ImageFormat;
+    }
+
+    void VKAPI::CalcOrthoProjection(Camera2D &camera)
     {
         ZoneScoped;
 
-        mat = XMMatrixOrthographicOffCenterLH(0.0, viewSize.x, 0.0, viewSize.y, zNear, zFar);
+        camera.m_Projection = XMMatrixOrthographicOffCenterLH(
+            0.0, camera.m_ViewSize.x, 0.0, camera.m_ViewSize.y, camera.m_ZNear, camera.m_ZFar);
+    }
+
+    void VKAPI::CalcPerspectiveProjection(Camera3D &camera)
+    {
+        ZoneScoped;
+
+        camera.m_Projection = XMMatrixPerspectiveFovRH(
+            XMConvertToRadians(camera.m_FOV), camera.m_Aspect, camera.m_ZNear, camera.m_ZFar);
     }
 
     bool VKAPI::IsFormatSupported(ImageFormat format, VkColorSpaceKHR *pColorSpaceOut)
@@ -1496,55 +1535,11 @@ namespace lr::Graphics
         return true;
     }
 
-    bool VKAPI::SetupInstance(void *pHandle)
+    bool VKAPI::SetupInstance(BaseWindow *pWindow)
     {
         ZoneScoped;
 
         VkResult vkResult;
-
-#if _DEBUG
-
-        /// Setup Layers
-        u32 layerCount = 0;
-        vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
-
-        VkLayerProperties *ppLayerProps = new VkLayerProperties[layerCount];
-        vkEnumerateInstanceLayerProperties(&layerCount, ppLayerProps);
-
-        constexpr eastl::array<const char *, 3> ppRequiredLayers = {
-            "VK_LAYER_LUNARG_monitor",
-            "VK_LAYER_KHRONOS_validation",
-            "VK_LAYER_KHRONOS_synchronization2",
-        };
-
-        for (auto &pLayerName : ppRequiredLayers)
-        {
-            bool found = false;
-            eastl::string_view layerSV(pLayerName);
-
-            for (u32 i = 0; i < layerCount; i++)
-            {
-                VkLayerProperties &prop = ppLayerProps[i];
-
-                if (layerSV == prop.layerName)
-                {
-                    found = true;
-
-                    continue;
-                }
-            }
-
-            if (found)
-                continue;
-
-            LOG_ERROR("Following layer is not found in this instance: {}", layerSV);
-
-            return false;
-        }
-
-        delete[] ppLayerProps;
-
-#endif
 
         /// Setup Extensions
 
@@ -1566,7 +1561,6 @@ namespace lr::Graphics
             "VK_KHR_surface",
             "VK_KHR_get_physical_device_properties2",
             "VK_KHR_win32_surface",
-
 #if _DEBUG
             //! Debug extensions, always put it to bottom
             "VK_EXT_debug_utils",
@@ -1618,18 +1612,17 @@ namespace lr::Graphics
         createInfo.pApplicationInfo = &appInfo;
         createInfo.enabledExtensionCount = ppRequiredExtensions.count;
         createInfo.ppEnabledExtensionNames = ppRequiredExtensions.data();
-
-#if _DEBUG
-        createInfo.enabledLayerCount = ppRequiredLayers.count;
-        createInfo.ppEnabledLayerNames = ppRequiredLayers.data();
-#endif
+        createInfo.enabledLayerCount = 0;  //! WE USE VULKAN CONFIGURATOR FOR LAYERS
+        createInfo.ppEnabledLayerNames = nullptr;
 
         /// Initialize surface
 
+        Win32Window *pOSWindow = (Win32Window *)pWindow;
         VkWin32SurfaceCreateInfoKHR surfaceInfo = {};
         surfaceInfo.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
-        surfaceInfo.hwnd = (HWND)pHandle;
-        surfaceInfo.hinstance = GetModuleHandleA(NULL);  // TODO
+        surfaceInfo.pNext = nullptr;
+        surfaceInfo.hwnd = (HWND)pOSWindow->m_pHandle;
+        surfaceInfo.hinstance = pOSWindow->m_Instance;
 
         VKCallRet(
             vkCreateInstance(&createInfo, nullptr, &m_pInstance), "Failed to create Vulkan Instance.", false);
@@ -1841,7 +1834,7 @@ namespace lr::Graphics
         deviceCreateInfo.queueCreateInfoCount = m_AvailableQueueCount;
         deviceCreateInfo.pQueueCreateInfos = pQueueInfos;
         deviceCreateInfo.enabledExtensionCount = ppRequiredExtensions.count;
-        deviceCreateInfo.ppEnabledExtensionNames = &ppRequiredExtensions[0];
+        deviceCreateInfo.ppEnabledExtensionNames = ppRequiredExtensions.data();
 
         if (vkCreateDevice(pPhysicalDevice, &deviceCreateInfo, nullptr, &m_pDevice) != VK_SUCCESS)
         {
@@ -1928,7 +1921,8 @@ namespace lr::Graphics
 
     constexpr VkDescriptorType kDescriptorTypeLUT[] = {
         VK_DESCRIPTOR_TYPE_SAMPLER,         // LR_DESCRIPTOR_TYPE_SAMPLER
-        VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,   // LR_DESCRIPTOR_TYPE_SHADER_RESOURCE
+        VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,   // LR_DESCRIPTOR_TYPE_SHADER_RESOURCE_IMAGE
+        VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,  // LR_DESCRIPTOR_TYPE_SHADER_RESOURCE_BUFFER
         VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,  // LR_DESCRIPTOR_TYPE_CONSTANT_BUFFER
         VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,   // LR_DESCRIPTOR_TYPE_UNORDERED_ACCESS_IMAGE
         VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,  // LR_DESCRIPTOR_TYPE_UNORDERED_ACCESS_BUFFER
@@ -2004,7 +1998,7 @@ namespace lr::Graphics
         if (usage & LR_RESOURCE_USAGE_TRANSFER_DST)
             v |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 
-        if (usage & LR_RESOURCE_USAGE_UNORDERED_ACCESS)
+        if (usage & LR_RESOURCE_USAGE_UNORDERED_ACCESS || usage & LR_RESOURCE_USAGE_SHADER_RESOURCE)
             v |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
 
         return (VkBufferUsageFlagBits)v;

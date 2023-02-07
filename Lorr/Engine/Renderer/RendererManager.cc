@@ -13,20 +13,26 @@ namespace lr::Renderer
 
         switch (type)
         {
-            case LR_API_TYPE_VULKAN: m_pAPI = new VKAPI; break;
-            case LR_API_TYPE_D3D12: m_pAPI = new D3D12API; break;
-            case LR_API_TYPE_NULL: m_pAPI = nullptr; break;  // TODO
+            case LR_API_TYPE_VULKAN:
+                m_pAPI = new VKAPI;
+                break;
+            case LR_API_TYPE_D3D12:
+                m_pAPI = new D3D12API;
+                break;
+            case LR_API_TYPE_NULL:
+                m_pAPI = nullptr;
+                break;  // TODO
         }
 
         m_pAPI->Init(pWindow, pWindow->m_Width, pWindow->m_Height, flags);
 
         Camera3DDesc camera3DDesc;
-        camera3DDesc.m_Position = XMFLOAT3(0.0, 0.0, 0.0);
+        camera3DDesc.m_Position = XMFLOAT3(278.0, 273.0, -800.0);
         camera3DDesc.m_ViewSize = XMFLOAT2(pWindow->m_Width, pWindow->m_Height);
-        camera3DDesc.m_ViewDirection = XMFLOAT3(0.0, 0.0, 1.0);
+        camera3DDesc.m_ViewDirection = XMFLOAT3(0.0, 0.0, -1.0);
         camera3DDesc.m_UpDirection = XMFLOAT3(0.0, 1.0, 0.0);
         camera3DDesc.m_FOV = 60.0;
-        camera3DDesc.m_ZFar = 10000.0;
+        camera3DDesc.m_ZFar = 100.0;
         camera3DDesc.m_ZNear = 0.1;
 
         m_Camera3D.Init(&camera3DDesc);
@@ -55,15 +61,17 @@ namespace lr::Renderer
         m_Camera2D.SetSize({ (float)width, (float)height });
     }
 
-    void RendererManager::Poll()
+    void RendererManager::Begin()
     {
         ZoneScoped;
 
         m_pAPI->BeginFrame();
 
-        m_Camera2D.CalculateView();
-        m_pAPI->CalcOrthoProjection(m_Camera2D.m_Projection, m_Camera2D.m_ViewSize, m_Camera2D.m_ZFar, m_Camera2D.m_ZNear);
-        XMMATRIX mat2D = XMMatrixMultiplyTranspose(m_Camera2D.m_View, m_Camera2D.m_Projection);
+        m_pAPI->CalcOrthoProjection(m_Camera2D);
+        m_pAPI->CalcPerspectiveProjection(m_Camera3D);
+
+        m_Camera2D.Update(0, 0);
+        m_Camera3D.Update(0, 0);
 
         Image *pCurrentImage = m_pAPI->GetSwapChain()->GetCurrentImage();
 
@@ -82,13 +90,20 @@ namespace lr::Renderer
 
         m_pAPI->EndCommandList(pList);
         m_pAPI->ExecuteCommandList(pList, false);
+    }
 
-        m_ImGuiPass.Draw(m_pAPI, mat2D);
+    void RendererManager::End()
+    {
+        ZoneScoped;
 
-        pList = m_pAPI->GetCommandList();
+        Image *pCurrentImage = m_pAPI->GetSwapChain()->GetCurrentImage();
+
+        m_ImGuiPass.Draw(m_pAPI, m_Camera2D.m_ResultMatrix);
+
+        CommandList *pList = m_pAPI->GetCommandList();
         m_pAPI->BeginCommandList(pList);
 
-        barrier = {
+        PipelineBarrier barrier = {
             .m_CurrentUsage = LR_RESOURCE_USAGE_RENDER_TARGET,
             .m_CurrentStage = LR_PIPELINE_STAGE_RENDER_TARGET,
             .m_CurrentAccess = LR_PIPELINE_ACCESS_RENDER_TARGET_WRITE,

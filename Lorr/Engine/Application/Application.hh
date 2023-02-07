@@ -11,7 +11,6 @@ namespace lr
     struct BaseApplicationDesc
     {
         eastl::string_view m_Name;
-        eastl::string_view m_WorkingDir;
 
         EngineDesc m_EngineDesc;
     };
@@ -27,7 +26,6 @@ namespace lr
 
         Engine m_Engine;
         eastl::string_view m_Name;
-        eastl::string_view m_WorkingDir;
 
         static Application *Get();
     };

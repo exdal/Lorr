@@ -34,8 +34,15 @@ namespace lr::Graphics
 
         u64 m_Alignment = 0;
 
-        D3D12_CPU_DESCRIPTOR_HANDLE m_ViewCPU = {};
-        D3D12_GPU_DESCRIPTOR_HANDLE m_ViewGPU = {};
+        D3D12_CPU_DESCRIPTOR_HANDLE m_ConstantBufferViewCPU = {};
+        D3D12_GPU_DESCRIPTOR_HANDLE m_ConstantBufferViewGPU = {};
+
+        D3D12_CPU_DESCRIPTOR_HANDLE m_ShaderViewCPU = {};
+        D3D12_GPU_DESCRIPTOR_HANDLE m_ShaderViewGPU = {};
+
+        D3D12_CPU_DESCRIPTOR_HANDLE m_UnorderedAccessViewCPU = {};
+        D3D12_GPU_DESCRIPTOR_HANDLE m_UnorderedAccessViewGPU = {};
+
         D3D12_GPU_VIRTUAL_ADDRESS m_VirtualAddress = 0;
     };
 

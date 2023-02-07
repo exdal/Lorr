@@ -89,6 +89,8 @@ namespace lr
         DispatchEvents();
 
         m_ImGui.NewFrame(m_Window.m_Width, m_Window.m_Height);
+
+        m_RendererMan.Begin();
     }
 
     void Engine::EndFrame()
@@ -96,7 +98,7 @@ namespace lr
         ZoneScoped;
 
         m_ImGui.EndFrame();
-        m_RendererMan.Poll();
+        m_RendererMan.End();
     }
 
 }  // namespace lr

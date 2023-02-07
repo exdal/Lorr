@@ -71,7 +71,8 @@ namespace lr::Memory
             assert(pBlock->m_IsFree && "The block found is not free.");
             assert(GetPhysicalSize(pBlock) >= size && "Found block doesn't match with the aligned size.");
 
-            LOG_TRACE("Block information: offset: {} isFree: {}", (u64)pBlock->m_Offset, (bool)pBlock->m_IsFree);
+            LOG_TRACE(
+                "Block information: offset: {} isFree: {}", (u64)pBlock->m_Offset, (bool)pBlock->m_IsFree);
 
             RemoveFreeBlock(pBlock);
 
@@ -124,7 +125,8 @@ namespace lr::Memory
         if (size < MIN_BLOCK_SIZE)
             return size / (MIN_BLOCK_SIZE / SL_INDEX_COUNT);
 
-        return (size >> ((firstIndex + (FL_INDEX_SHIFT - 1)) - SL_INDEX_COUNT_LOG2)) ^ (1 << SL_INDEX_COUNT_LOG2);
+        return (size >> ((firstIndex + (FL_INDEX_SHIFT - 1)) - SL_INDEX_COUNT_LOG2))
+               ^ (1 << SL_INDEX_COUNT_LOG2);
     }
 
     void TLSFAllocatorView::AddFreeBlock(TLSFBlock *pBlock)
@@ -168,12 +170,13 @@ namespace lr::Memory
             u32 firstListMap = m_FirstListBitmap & (~0U << (firstIndex + 1));
             if (firstListMap == 0)
             {
-                LOG_ERROR("Failed to allocate block, FL map is zero. "
-                          "(FI: {} SI: {} SL map: {}, FL map: {})",
-                          firstIndex,
-                          secondIndex,
-                          firstListMap,
-                          secondListMap);
+                LOG_ERROR(
+                    "Failed to allocate block, FL map is zero. "
+                    "(FI: {} SI: {} SL map: {}, FL map: {})",
+                    firstIndex,
+                    secondIndex,
+                    firstListMap,
+                    secondListMap);
 
                 return nullptr;
             }
@@ -269,7 +272,8 @@ namespace lr::Memory
     {
         ZoneScoped;
 
-        return pBlock->m_pNextPhysical ? pBlock->m_pNextPhysical->m_Offset - pBlock->m_Offset : m_Size - pBlock->m_Offset;
+        return pBlock->m_pNextPhysical ? pBlock->m_pNextPhysical->m_Offset - pBlock->m_Offset
+                                       : m_Size - pBlock->m_Offset;
     }
 
     TLSFBlock *TLSFAllocatorView::AllocateInternalBlock()

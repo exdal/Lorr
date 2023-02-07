@@ -52,14 +52,6 @@ namespace lr::Graphics
         bool m_IsDepth = false;
     };
 
-    enum AttachmentOp
-    {
-        LR_ATTACHMENT_OP_LOAD,
-        LR_ATTACHMENT_OP_STORE,
-        LR_ATTACHMENT_OP_CLEAR,
-        LR_ATTACHMENT_OP_DONT_CARE,
-    };
-
     struct CommandListAttachment
     {
         Image *m_pHandle = nullptr;
@@ -78,47 +70,6 @@ namespace lr::Graphics
         // WH(-1) means we cover entire window/screen, info from swapchain
         XMUINT4 m_RenderArea = { 0, 0, UINT32_MAX, UINT32_MAX };
     };
-
-    // Incomplete pipeline stage enums.
-    enum PipelineStage : u32
-    {
-        LR_PIPELINE_STAGE_NONE = 0,
-        LR_PIPELINE_STAGE_VERTEX_INPUT = 1 << 0,
-        LR_PIPELINE_STAGE_VERTEX_SHADER = 1 << 1,
-        LR_PIPELINE_STAGE_PIXEL_SHADER = 1 << 2,
-        LR_PIPELINE_STAGE_EARLY_PIXEL_TESTS = 1 << 3,
-        LR_PIPELINE_STAGE_LATE_PIXEL_TESTS = 1 << 4,
-        LR_PIPELINE_STAGE_RENDER_TARGET = 1 << 5,
-        LR_PIPELINE_STAGE_COMPUTE_SHADER = 1 << 6,
-        LR_PIPELINE_STAGE_TRANSFER = 1 << 7,
-        LR_PIPELINE_STAGE_ALL_COMMANDS = 1 << 8,
-
-        // API exclusive pipeline enums
-        LR_PIPELINE_STAGE_HOST = 1 << 20,
-    };
-    EnumFlags(PipelineStage);
-
-    enum PipelineAccess : u32
-    {
-        LR_PIPELINE_ACCESS_NONE = 0,
-        LR_PIPELINE_ACCESS_VERTEX_ATTRIB_READ = 1 << 0,
-        LR_PIPELINE_ACCESS_INDEX_ATTRIB_READ = 1 << 1,
-        LR_PIPELINE_ACCESS_SHADER_READ = 1 << 2,
-        LR_PIPELINE_ACCESS_SHADER_WRITE = 1 << 3,
-        LR_PIPELINE_ACCESS_RENDER_TARGET_READ = 1 << 4,
-        LR_PIPELINE_ACCESS_RENDER_TARGET_WRITE = 1 << 5,
-        LR_PIPELINE_ACCESS_DEPTH_STENCIL_READ = 1 << 6,
-        LR_PIPELINE_ACCESS_DEPTH_STENCIL_WRITE = 1 << 7,
-        LR_PIPELINE_ACCESS_TRANSFER_READ = 1 << 8,
-        LR_PIPELINE_ACCESS_TRANSFER_WRITE = 1 << 9,
-        LR_PIPELINE_ACCESS_MEMORY_READ = 1 << 10,
-        LR_PIPELINE_ACCESS_MEMORY_WRITE = 1 << 11,
-
-        // API exclusive pipeline enums
-        LR_PIPELINE_ACCESS_HOST_READ = 1 << 20,
-        LR_PIPELINE_ACCESS_HOST_WRITE = 1 << 21,
-    };
-    EnumFlags(PipelineAccess);
 
     struct PipelineBarrier
     {

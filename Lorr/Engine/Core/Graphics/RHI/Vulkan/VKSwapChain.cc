@@ -43,6 +43,7 @@ namespace lr::Graphics
 
         VkSwapchainCreateInfoKHR swapChainInfo = {};
         swapChainInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+        swapChainInfo.pNext = nullptr;
 
         // Buffer description
         swapChainInfo.minImageCount = m_FrameCount;
@@ -102,8 +103,6 @@ namespace lr::Graphics
             currentImage.m_TargetAllocator = LR_API_ALLOCATOR_COUNT;
 
             pAPI->CreateImageView(&currentImage);
-
-            /// Create Semaphores
 
             frame.m_pAcquireSemp = pAPI->CreateSemaphore();
             frame.m_pPresentSemp = pAPI->CreateSemaphore();

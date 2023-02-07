@@ -20,6 +20,7 @@ namespace lr
         {
             beg_ = clock_::now();
         }
+
         double elapsed() const
         {
             return eastl::chrono::duration_cast<second_>(clock_::now() - beg_).count();

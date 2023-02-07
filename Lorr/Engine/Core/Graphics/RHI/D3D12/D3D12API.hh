@@ -114,7 +114,9 @@ namespace lr::Graphics
         void BindMemory(Image *pImage);
 
         /// UTILITY
-        void CalcOrthoProjection(XMMATRIX &mat, XMFLOAT2 viewSize, float zFar, float zNear) override;
+        ImageFormat &GetSwapChainImageFormat() override;
+        void CalcOrthoProjection(Camera2D &camera) override;
+        void CalcPerspectiveProjection(Camera3D &camera) override;
 
         static i64 TFFenceWait(void *pData);
 

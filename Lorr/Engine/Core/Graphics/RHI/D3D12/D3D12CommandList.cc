@@ -40,7 +40,7 @@ namespace lr::Graphics
             D3D12_RENDER_PASS_BEGINNING_ACCESS_TYPE_PRESERVE,   // Load
             D3D12_RENDER_PASS_BEGINNING_ACCESS_TYPE_NO_ACCESS,  // Store
             D3D12_RENDER_PASS_BEGINNING_ACCESS_TYPE_CLEAR,      // Clear
-            D3D12_RENDER_PASS_BEGINNING_ACCESS_TYPE_NO_ACCESS,  // DontCare
+            D3D12_RENDER_PASS_BEGINNING_ACCESS_TYPE_PRESERVE,   // DontCare
         };
 
         static constexpr D3D12_RENDER_PASS_ENDING_ACCESS_TYPE kEndingAccessLUT[] = {

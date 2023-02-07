@@ -18,3 +18,4 @@ cmake_parse_arguments(
 endfunction()
 
 add_example(Imgui PATH Imgui/*.cc)
+add_example(GI PATH GI/*.cc)

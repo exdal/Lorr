@@ -30,7 +30,8 @@ namespace lr::Renderer
 
         void Resize(u32 width, u32 height);
 
-        void Poll();
+        void Begin();
+        void End();
 
         void InitPasses();
 

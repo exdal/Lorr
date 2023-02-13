@@ -10,7 +10,8 @@
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/spdlog.h>
 
-#define LOG_SET_NAME "MAIN"
+#define LOG_DEFAULT_NAME "MAIN"
+#define LOG_SET_NAME LOG_DEFAULT_NAME
 #define LOG_DISABLED(...)
 
 #define LOG_TRACE(...) lr::Logger::s_pCoreLogger->trace(LOG_SET_NAME " | " __VA_ARGS__)

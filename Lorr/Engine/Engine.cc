@@ -2,18 +2,57 @@
 
 #include "Core/Utils/Timer.hh"
 
+#include "Core/Graphics/RHI/D3D12/D3D12API.hh"
+#include "Core/Graphics/RHI/Vulkan/VKAPI.hh"
+
+#include "Renderer/Pass.hh"
+
 namespace lr
 {
     void Engine::Init(EngineDesc &engineDesc)
     {
         ZoneScoped;
 
+        switch (engineDesc.m_TargetAPI)
+        {
+            case LR_API_TYPE_VULKAN:
+                m_pAPI = new Graphics::VKAPI;
+                break;
+            case LR_API_TYPE_D3D12:
+                m_pAPI = new Graphics::D3D12API;
+                break;
+            default:
+                break;
+        }
+
         Logger::Init();
 
         m_EventMan.Init();
         m_Window.Init(engineDesc.m_WindowDesc);
         m_ImGui.Init(m_Window.m_Width, m_Window.m_Height);
-        m_RendererMan.Init(engineDesc.m_TargetAPI, engineDesc.m_TargetAPIFlags, &m_Window);
+
+        Graphics::BaseAPIDesc apiDesc = {
+            .m_Flags = LR_API_FLAG_NONE,
+            .m_SwapChainFlags = LR_SWAP_CHAIN_FLAG_TRIPLE_BUFFERING,
+            .m_pTargetWindow = &m_Window,
+            .m_AllocatorDesc = {
+                .m_MaxTLSFAllocations = 0x2000,
+                .m_DescriptorMem = Memory::MiBToBytes(1),
+                .m_BufferLinearMem = Memory::MiBToBytes(64),
+                .m_BufferTLSFMem = Memory::MiBToBytes(128),
+                .m_BufferTLSFHostMem = Memory::MiBToBytes(64),
+                .m_BufferFrametimeMem = Memory::MiBToBytes(64),
+                .m_ImageTLSFMem = Memory::MiBToBytes(256),
+            },
+        };
+        m_pAPI->Init(&apiDesc);
+
+        Renderer::RenderGraphDesc renderGraphDesc = {
+            .m_pAPI = m_pAPI,
+        };
+        m_RenderGraph.Init(&renderGraphDesc);
+
+        Renderer::AddImguiPass(&m_RenderGraph);
     }
 
     void Engine::PushEvent(Event event, EngineEventData &data)
@@ -47,7 +86,7 @@ namespace lr
                     m_Window.m_Width = data.m_SizeWidth;
                     m_Window.m_Height = data.m_SizeHeight;
 
-                    m_RendererMan.Resize(data.m_SizeWidth, data.m_SizeHeight);
+                    // m_RendererMan.Resize(data.m_SizeWidth, data.m_SizeHeight);
 
                     break;
                 }
@@ -72,11 +111,12 @@ namespace lr
                 case ENGINE_EVENT_CURSOR_STATE:
                 {
                     m_Window.SetCursor(data.m_WindowCursor);
-                    
+
                     break;
                 }
 
-                default: break;
+                default:
+                    break;
             }
         }
     }
@@ -90,7 +130,7 @@ namespace lr
 
         m_ImGui.NewFrame(m_Window.m_Width, m_Window.m_Height);
 
-        m_RendererMan.Begin();
+        m_pAPI->BeginFrame();
     }
 
     void Engine::EndFrame()
@@ -98,7 +138,9 @@ namespace lr
         ZoneScoped;
 
         m_ImGui.EndFrame();
-        m_RendererMan.End();
+
+        m_RenderGraph.Draw();
+        m_pAPI->EndFrame();
     }
 
 }  // namespace lr

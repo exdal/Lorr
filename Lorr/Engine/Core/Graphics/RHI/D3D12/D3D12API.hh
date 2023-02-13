@@ -29,9 +29,8 @@ namespace lr::Graphics
 
     struct D3D12API : BaseAPI
     {
-        bool Init(BaseWindow *pWindow, u32 width, u32 height, APIFlags flags) override;
-
-        void InitAllocators();
+        bool Init(BaseAPIDesc *pDesc) override;
+        void InitAllocators(APIAllocatorInitDesc *pDesc) override;
 
         /// COMMAND ///
         D3D12CommandQueue *CreateCommandQueue(CommandListType type);
@@ -157,7 +156,8 @@ namespace lr::Graphics
         BufferedAllocator<Memory::LinearAllocatorView, ID3D12Heap *> m_MADescriptor;
         BufferedAllocator<Memory::LinearAllocatorView, ID3D12Heap *> m_MABufferLinear;
         BufferedAllocator<Memory::TLSFAllocatorView, ID3D12Heap *> m_MABufferTLSF;
-        BufferedAllocator<Memory::LinearAllocatorView, ID3D12Heap *> m_MABufferFrameTime;
+        BufferedAllocator<Memory::TLSFAllocatorView, ID3D12Heap *> m_MABufferTLSFHost;
+        BufferedAllocator<Memory::LinearAllocatorView, ID3D12Heap *> m_MABufferFrametime;
         BufferedAllocator<Memory::TLSFAllocatorView, ID3D12Heap *> m_MAImageTLSF;
 
         EA::Thread::Thread m_FenceThread;

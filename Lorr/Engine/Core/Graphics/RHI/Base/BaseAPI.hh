@@ -30,11 +30,31 @@ namespace lr::Graphics
         PushConstantDesc *m_pPushConstants = nullptr;
     };
 
+    struct APIAllocatorInitDesc
+    {
+        u32 m_MaxTLSFAllocations = 0x2000;
+        u32 m_DescriptorMem = Memory::MiBToBytes(1);
+        u32 m_BufferLinearMem = Memory::MiBToBytes(64);
+        u32 m_BufferTLSFMem = Memory::MiBToBytes(1024);
+        u32 m_BufferTLSFHostMem = Memory::MiBToBytes(128);
+        u32 m_BufferFrametimeMem = Memory::MiBToBytes(128);
+        u32 m_ImageTLSFMem = Memory::MiBToBytes(1024);
+    };
+
+    struct BaseAPIDesc
+    {
+        APIFlags m_Flags = LR_API_FLAG_NONE;
+        SwapChainFlags m_SwapChainFlags = LR_SWAP_CHAIN_FLAG_NONE;
+        BaseWindow *m_pTargetWindow = nullptr;
+        APIAllocatorInitDesc m_AllocatorDesc = {};
+    };
+
     //* Not fully virtual struct that we *only* expose external functions.
 
     struct BaseAPI
     {
-        virtual bool Init(BaseWindow *pWindow, u32 width, u32 height, APIFlags flags) = 0;
+        virtual bool Init(BaseAPIDesc *pDesc) = 0;
+        virtual void InitAllocators(APIAllocatorInitDesc *pDesc) = 0;
 
         /// COMMAND ///
         CommandList *GetCommandList(CommandListType type = CommandListType::Direct);
@@ -91,12 +111,12 @@ namespace lr::Graphics
         {
             static_assert(eastl::is_base_of<_Base, _Derived>::value, "_Derived must be base of _Base.");
 
-            Memory::TLSFBlock *pBlock = m_TypeAllocator.Allocate(
-                sizeof(_Base) + sizeof(_Derived) + PTR_SIZE, Memory::TLSFAllocatorView::ALIGN_SIZE);
+            Memory::TLSFBlock *pBlock =
+                m_TypeAllocator.Allocate(sizeof(_Derived) + PTR_SIZE, Memory::TLSFAllocatorView::ALIGN_SIZE);
             u64 offset = pBlock->m_Offset;
 
             // Copy block address
-            memcpy(m_pTypeData + offset, pBlock, PTR_SIZE);
+            memcpy(m_pTypeData + offset, &pBlock, PTR_SIZE);
             offset += PTR_SIZE;
 
             void *pBaseAddr = m_pTypeData + offset;
@@ -120,7 +140,7 @@ namespace lr::Graphics
         {
             assert(pType && "You cannot free non-existing memory.");
 
-            Memory::TLSFBlock *pBlock = (Memory::TLSFBlock *)((u8 *)pType - PTR_SIZE);
+            Memory::TLSFBlock *pBlock = *(Memory::TLSFBlock **)((u8 *)pType - PTR_SIZE);
             m_TypeAllocator.Free(pBlock);
 
             Memory::ZeroMem((u8 *)pBlock, sizeof(_Type) + PTR_SIZE);

@@ -241,6 +241,8 @@ namespace lr::Memory
         {
             pNewBlock = AllocateInternalBlock();
 
+            LOG_TRACE("Allocated new block {}:{}", (void *)pNewBlock, size);
+
             TLSFBlock *pNextBlock = pBlock->m_pNextPhysical;
             u64 offset = pBlock->m_Offset;
 
@@ -263,7 +265,9 @@ namespace lr::Memory
 
         TLSFBlock *pNextSource = pSource->m_pNextPhysical;
         pTarget->m_pNextPhysical = pNextSource;
-        pNextSource->m_pPrevPhysical = pTarget;
+        
+        if (pNextSource)
+            pNextSource->m_pPrevPhysical = pTarget;
 
         FreeInternalBlock(pSource);
     }

@@ -27,6 +27,7 @@ namespace lr::Memory
         bool CanAllocate(u64 size, u32 alignment) override;
         bool Allocate(AllocationInfo &info) override;
         void Free(void *pData, bool freeData) override;
+        void Grow(u64 size) override;
     };
 
 }  // namespace lr::Memory

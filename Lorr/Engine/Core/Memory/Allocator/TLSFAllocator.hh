@@ -10,8 +10,8 @@ namespace lr::Memory
 {
     struct TLSFBlock
     {
-        u64 m_Offset : 63 = 0;
-        u64 m_IsFree : 1 = 0;
+        u64 m_Offset : 63;
+        u64 m_IsFree : 1;
 
         TLSFBlock *m_pNextPhysical = nullptr;
         TLSFBlock *m_pPrevPhysical = nullptr;

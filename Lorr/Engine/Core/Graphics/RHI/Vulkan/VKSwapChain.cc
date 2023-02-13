@@ -11,8 +11,8 @@ namespace lr::Graphics
     {
         ZoneScoped;
 
-        m_vSync = (flags & SwapChainFlags::vSync);
-        (flags & SwapChainFlags::TripleBuffering) ? m_FrameCount = 3 : 2;
+        m_vSync = (flags & LR_SWAP_CHAIN_FLAG_VSYNC);
+        (flags & LR_SWAP_CHAIN_FLAG_TRIPLE_BUFFERING) ? m_FrameCount = 3 : 2;
 
         // Calculate window metrics
         m_Width = pWindow->m_Width;
@@ -112,7 +112,7 @@ namespace lr::Graphics
     Image *VKSwapChain::GetCurrentImage()
     {
         ZoneScoped;
-
+        
         return &m_pFrames[m_CurrentFrame].m_Image;
     }
 
@@ -127,8 +127,7 @@ namespace lr::Graphics
     {
         ZoneScoped;
 
-        u32 nextFrameIdx = (m_CurrentFrame + 1) % m_FrameCount;
-        return &m_pFrames[nextFrameIdx];
+        return &m_pFrames[(m_CurrentFrame + 1) % m_FrameCount];
     }
 
     void VKSwapChain::DestroyHandle(VKAPI *pAPI)

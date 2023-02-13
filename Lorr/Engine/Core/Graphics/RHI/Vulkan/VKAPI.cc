@@ -35,14 +35,14 @@ _VK_IMPORT_SYMBOLS
 
 namespace lr::Graphics
 {
-    bool VKAPI::Init(BaseWindow *pWindow, u32 width, u32 height, APIFlags flags)
+    bool VKAPI::Init(BaseAPIDesc *pDesc)
     {
         ZoneScoped;
 
         LOG_TRACE("Initializing Vulkan context...");
 
         LoadVulkan();
-        SetupInstance(pWindow);
+        SetupInstance(pDesc->m_pTargetWindow);
 
         u32 availableDeviceCount = 0;
         vkEnumeratePhysicalDevices(m_pInstance, &availableDeviceCount, nullptr);
@@ -113,7 +113,7 @@ namespace lr::Graphics
         // yeah uh, dont delete
         // delete[] ppAvailableDevices;
 
-        InitAllocators();
+        InitAllocators(&pDesc->m_AllocatorDesc);
 
         m_CommandListPool.Init();
         m_pDescriptorPool = CreateDescriptorPool({
@@ -127,7 +127,7 @@ namespace lr::Graphics
         m_pDirectQueue = (VKCommandQueue *)CreateCommandQueue(CommandListType::Direct);
         m_pComputeQueue = (VKCommandQueue *)CreateCommandQueue(CommandListType::Compute);
 
-        m_SwapChain.Init(pWindow, this, SwapChainFlags::TripleBuffering);
+        m_SwapChain.Init(pDesc->m_pTargetWindow, this, pDesc->m_SwapChainFlags);
         m_SwapChain.CreateBackBuffers(this);
 
         LOG_TRACE("Successfully initialized Vulkan context.");
@@ -148,7 +148,7 @@ namespace lr::Graphics
         return true;
     }
 
-    void VKAPI::InitAllocators()
+    void VKAPI::InitAllocators(APIAllocatorInitDesc *pDesc)
     {
         ZoneScoped;
 
@@ -157,22 +157,23 @@ namespace lr::Graphics
         m_TypeAllocator.Init(kTypeMem, 0x2000);
         m_pTypeData = Memory::Allocate<u8>(kTypeMem);
 
-        constexpr u32 kDescriptorMem = Memory::MiBToBytes(1);
-        constexpr u32 kBufferLinearMem = Memory::MiBToBytes(64);
-        constexpr u32 kBufferTLSFMem = Memory::MiBToBytes(512);
-        constexpr u32 kImageTLSFMem = Memory::MiBToBytes(512);
+        m_MADescriptor.Allocator.Init(pDesc->m_DescriptorMem);
+        m_MADescriptor.pHeap = CreateHeap(pDesc->m_DescriptorMem, true);
 
-        m_MADescriptor.Allocator.Init(kDescriptorMem);
-        m_MADescriptor.pHeap = CreateHeap(kDescriptorMem, true);
+        m_MABufferLinear.Allocator.Init(pDesc->m_BufferLinearMem);
+        m_MABufferLinear.pHeap = CreateHeap(pDesc->m_BufferLinearMem, true);
 
-        m_MABufferLinear.Allocator.Init(kBufferLinearMem);
-        m_MABufferLinear.pHeap = CreateHeap(kBufferLinearMem, true);
+        m_MABufferTLSF.Allocator.Init(pDesc->m_BufferTLSFMem, pDesc->m_MaxTLSFAllocations);
+        m_MABufferTLSF.pHeap = CreateHeap(pDesc->m_BufferTLSFMem, false);
 
-        m_MABufferTLSF.Allocator.Init(kBufferTLSFMem, 0x2000);
-        m_MABufferTLSF.pHeap = CreateHeap(kBufferTLSFMem, false);
+        m_MABufferTLSFHost.Allocator.Init(pDesc->m_BufferTLSFMem, pDesc->m_MaxTLSFAllocations);
+        m_MABufferTLSFHost.pHeap = CreateHeap(pDesc->m_BufferTLSFMem, true);
 
-        m_MAImageTLSF.Allocator.Init(kImageTLSFMem, 0x2000);
-        m_MAImageTLSF.pHeap = CreateHeap(kImageTLSFMem, false);
+        m_MABufferFrametime.Allocator.Init(pDesc->m_BufferFrametimeMem);
+        m_MABufferFrametime.pHeap = CreateHeap(pDesc->m_BufferFrametimeMem, true);
+
+        m_MAImageTLSF.Allocator.Init(pDesc->m_ImageTLSFMem, pDesc->m_MaxTLSFAllocations);
+        m_MAImageTLSF.pHeap = CreateHeap(pDesc->m_ImageTLSFMem, false);
     }
 
     VKCommandQueue *VKAPI::CreateCommandQueue(CommandListType type)
@@ -322,12 +323,12 @@ namespace lr::Graphics
         VkSemaphoreSubmitInfo acquireSemaphoreInfo = {};
         acquireSemaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
         acquireSemaphoreInfo.semaphore = pAcquireSemp;
-        acquireSemaphoreInfo.stageMask = m_pDirectQueue->m_AcquireStage;
+        acquireSemaphoreInfo.stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR;
 
         VkSemaphoreSubmitInfo presentSemaphoreInfo = {};
         presentSemaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
         presentSemaphoreInfo.semaphore = pPresentSemp;
-        presentSemaphoreInfo.stageMask = m_pDirectQueue->m_PresentStage;
+        presentSemaphoreInfo.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
 
         VkSubmitInfo2 submitInfo = {};
         submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
@@ -535,7 +536,7 @@ namespace lr::Graphics
 
         VkVertexInputBindingDescription inputBindingInfo = {};
         VkVertexInputAttributeDescription pAttribInfos[LR_MAX_VERTEX_ATTRIBS_PER_PIPELINE] = {};
-        
+
         InputLayout *pInputLayout = pBuildInfo->m_pInputLayout;
         if (pInputLayout)
         {
@@ -579,10 +580,10 @@ namespace lr::Graphics
         VkPipelineViewportStateCreateInfo viewportInfo = {};
         viewportInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
         viewportInfo.pNext = nullptr;
-        viewportInfo.viewportCount = 1;
-        viewportInfo.pViewports = nullptr;
-        viewportInfo.scissorCount = 1;
-        viewportInfo.pScissors = nullptr;
+        // viewportInfo.viewportCount = 1;
+        // viewportInfo.pViewports = nullptr;
+        // viewportInfo.scissorCount = 1;
+        // viewportInfo.pScissors = nullptr;
 
         /// RASTERIZER ---------------------------------------------------------------
 
@@ -774,10 +775,11 @@ namespace lr::Graphics
 
         VkSwapchainKHR &pSwapChain = m_SwapChain.m_pHandle;
         VKSwapChainFrame *pCurrentFrame = m_SwapChain.GetCurrentFrame();
-        VkSemaphore &pAcquireSemp = pCurrentFrame->m_pAcquireSemp;
+
+        VkSemaphore &pSemaphore = pCurrentFrame->m_pAcquireSemp;
 
         u32 imageIndex;
-        vkAcquireNextImageKHR(m_pDevice, pSwapChain, UINT64_MAX, pAcquireSemp, nullptr, &imageIndex);
+        vkAcquireNextImageKHR(m_pDevice, pSwapChain, UINT64_MAX, pSemaphore, nullptr, &imageIndex);
 
         if (imageIndex != m_SwapChain.m_CurrentFrame)
         {
@@ -793,10 +795,6 @@ namespace lr::Graphics
         VkSwapchainKHR &pSwapChain = m_SwapChain.m_pHandle;
         VkQueue &pQueueHandle = m_pDirectQueue->m_pHandle;
         VKSwapChainFrame *pCurrentFrame = m_SwapChain.GetCurrentFrame();
-        VkSemaphore &pPresentSemp = pCurrentFrame->m_pPresentSemp;
-
-        m_pDirectQueue->SetSemaphoreStage(
-            VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT);
 
         PresentCommandQueue();
 
@@ -804,7 +802,7 @@ namespace lr::Graphics
         presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
 
         presentInfo.waitSemaphoreCount = 1;
-        presentInfo.pWaitSemaphores = &pPresentSemp;
+        presentInfo.pWaitSemaphores = &pCurrentFrame->m_pPresentSemp;
 
         presentInfo.swapchainCount = 1;
         presentInfo.pSwapchains = &pSwapChain;
@@ -1180,6 +1178,7 @@ namespace lr::Graphics
         imageCreateInfo.mipLevels = pImage->m_MipMapLevels;
         imageCreateInfo.arrayLayers = pImage->m_ArraySize;
         imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+        imageCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
         vkCreateImage(m_pDevice, &imageCreateInfo, nullptr, &pImage->m_pHandle);
 
@@ -1335,7 +1334,6 @@ namespace lr::Graphics
 
                 break;
             }
-
             case LR_API_ALLOCATOR_DESCRIPTOR:
             {
                 pBuffer->m_DataOffset =
@@ -1344,7 +1342,6 @@ namespace lr::Graphics
 
                 break;
             }
-
             case LR_API_ALLOCATOR_BUFFER_LINEAR:
             {
                 pBuffer->m_DataOffset =
@@ -1353,7 +1350,6 @@ namespace lr::Graphics
 
                 break;
             }
-
             case LR_API_ALLOCATOR_BUFFER_TLSF:
             {
                 Memory::TLSFBlock *pBlock =
@@ -1361,12 +1357,29 @@ namespace lr::Graphics
 
                 pBuffer->m_pAllocatorData = pBlock;
                 pBuffer->m_DataOffset = pBlock->m_Offset;
-
                 pBuffer->m_pMemoryHandle = m_MABufferTLSF.pHeap;
 
                 break;
             }
+            case LR_API_ALLOCATOR_BUFFER_TLSF_HOST:
+            {
+                Memory::TLSFBlock *pBlock = m_MABufferTLSFHost.Allocator.Allocate(
+                    pBuffer->m_DeviceDataLen, memoryRequirements.alignment);
 
+                pBuffer->m_pAllocatorData = pBlock;
+                pBuffer->m_DataOffset = pBlock->m_Offset;
+                pBuffer->m_pMemoryHandle = m_MABufferTLSFHost.pHeap;
+
+                break;
+            }
+            case LR_API_ALLOCATOR_BUFFER_FRAMETIME:
+            {
+                pBuffer->m_DataOffset =
+                    m_MABufferFrametime.Allocator.Allocate(pBuffer->m_DeviceDataLen, memoryRequirements.alignment);
+                pBuffer->m_pMemoryHandle = m_MABufferFrametime.pHeap;
+
+                break;
+            }
             default:
                 LOG_CRITICAL("Trying to allocate VKBuffer resource from invalid allocator.");
                 break;
@@ -1389,7 +1402,6 @@ namespace lr::Graphics
 
                 break;
             }
-
             case LR_API_ALLOCATOR_IMAGE_TLSF:
             {
                 Memory::TLSFBlock *pBlock =
@@ -1397,18 +1409,10 @@ namespace lr::Graphics
 
                 pImage->m_pAllocatorData = pBlock;
                 pImage->m_DataOffset = pBlock->m_Offset;
-
-                LOG_TRACE(
-                    "TLSFAllocImage: size = {}, off = {}, block_addr = {}",
-                    pImage->m_DataLen,
-                    pImage->m_DataOffset,
-                    (void *)pBlock);
-
                 pImage->m_pMemoryHandle = m_MAImageTLSF.pHeap;
 
                 break;
             }
-
             default:
                 break;
         }

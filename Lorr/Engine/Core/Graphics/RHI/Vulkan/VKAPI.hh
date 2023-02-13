@@ -24,10 +24,9 @@ namespace lr::Graphics
 
     struct VKAPI : BaseAPI
     {
-        bool Init(BaseWindow *pWindow, u32 width, u32 height, APIFlags flags) override;
-
-        void InitAllocators();
-
+        bool Init(BaseAPIDesc *pDesc) override;
+        void InitAllocators(APIAllocatorInitDesc *pDesc) override;
+        
         /// COMMAND ///
         VKCommandQueue *CreateCommandQueue(CommandListType type);
         VKCommandAllocator *CreateCommandAllocator(CommandListType type);
@@ -165,7 +164,8 @@ namespace lr::Graphics
         BufferedAllocator<Memory::LinearAllocatorView, VkDeviceMemory> m_MADescriptor;
         BufferedAllocator<Memory::LinearAllocatorView, VkDeviceMemory> m_MABufferLinear;
         BufferedAllocator<Memory::TLSFAllocatorView, VkDeviceMemory> m_MABufferTLSF;
-        BufferedAllocator<Memory::LinearAllocatorView, VkDeviceMemory> m_MABufferFrameTime;
+        BufferedAllocator<Memory::TLSFAllocatorView, VkDeviceMemory> m_MABufferTLSFHost;
+        BufferedAllocator<Memory::LinearAllocatorView, VkDeviceMemory> m_MABufferFrametime;
         BufferedAllocator<Memory::TLSFAllocatorView, VkDeviceMemory> m_MAImageTLSF;
 
         /// Native API

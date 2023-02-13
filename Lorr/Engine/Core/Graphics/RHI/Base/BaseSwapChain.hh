@@ -6,20 +6,10 @@
 
 #include "Core/Window/BaseWindow.hh"
 
-#include "BasePipeline.hh"
 #include "BaseResource.hh"
 
 namespace lr::Graphics
 {
-    enum class SwapChainFlags : u8
-    {
-        None,
-        vSync = 1 << 0,
-        AllowTearing = 1 << 1,  // TODO
-        TripleBuffering = 1 << 2,
-    };
-    EnumFlags(SwapChainFlags);
-
     struct BaseSwapChain
     {
         virtual Image *GetCurrentImage() = 0;

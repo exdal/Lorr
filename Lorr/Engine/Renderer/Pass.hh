@@ -4,6 +4,9 @@
 
 #pragma once
 
+#include "RenderGraph.hh"
+
 namespace lr::Renderer
 {
+    void AddImguiPass(RenderGraph *pGraph);
 }

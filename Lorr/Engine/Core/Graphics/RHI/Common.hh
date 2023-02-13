@@ -24,15 +24,23 @@ namespace lr
     {
         LR_API_ALLOCATOR_NONE,
 
-        LR_API_ALLOCATOR_DESCRIPTOR,  // A linear, small sized pool with CPUW flag for per-frame descriptor data
-        LR_API_ALLOCATOR_BUFFER_LINEAR,                             // A linear, medium sized pool for buffers
-        LR_API_ALLOCATOR_BUFFER_TLSF,                               // Large sized pool for large scene buffers
-        LR_API_ALLOCATOR_BUFFER_FRAMETIME = LR_API_ALLOCATOR_NONE,  //
-                                                                    //
-        LR_API_ALLOCATOR_IMAGE_TLSF,                                // Large sized pool for large images
+        LR_API_ALLOCATOR_DESCRIPTOR,  // LINEAR - small sized pool with CPUW flag for per-frame descriptor data
+        LR_API_ALLOCATOR_BUFFER_LINEAR,     // LINEAR - medium sized pool for buffers
+        LR_API_ALLOCATOR_BUFFER_TLSF,       // TLSF - Large sized pool for large scene buffers
+        LR_API_ALLOCATOR_BUFFER_TLSF_HOST,  // TLSF - medium sized pool for host visible buffers like UI
+        LR_API_ALLOCATOR_BUFFER_FRAMETIME,  // LINEAR - Small pool for frametime buffers
+        LR_API_ALLOCATOR_IMAGE_TLSF,        // TLSF - Large sized pool for large images
 
-        LR_API_ALLOCATOR_COUNT,
+        LR_API_ALLOCATOR_COUNT,  // Special flag, basically telling API to not allocate anything (ie. SC images)
     };
+
+    enum SwapChainFlags : u8
+    {
+        LR_SWAP_CHAIN_FLAG_NONE,                       // Buffer count = 2
+        LR_SWAP_CHAIN_FLAG_VSYNC = 1 << 0,             // Buffer count = 1
+        LR_SWAP_CHAIN_FLAG_TRIPLE_BUFFERING = 1 << 2,  // Buffer count = 3
+    };
+    EnumFlags(SwapChainFlags);
 
     enum ResourceUsage : u32
     {
@@ -200,10 +208,10 @@ namespace lr
     {
         LR_DESCRIPTOR_TYPE_SAMPLER = 0,
         LR_DESCRIPTOR_TYPE_SHADER_RESOURCE_IMAGE,
-        LR_DESCRIPTOR_TYPE_SHADER_RESOURCE_BUFFER, // Read-only buffer
+        LR_DESCRIPTOR_TYPE_SHADER_RESOURCE_BUFFER,  // Read-only buffer
         LR_DESCRIPTOR_TYPE_CONSTANT_BUFFER,
         LR_DESCRIPTOR_TYPE_UNORDERED_ACCESS_IMAGE,
-        LR_DESCRIPTOR_TYPE_UNORDERED_ACCESS_BUFFER, // Write-read buffer
+        LR_DESCRIPTOR_TYPE_UNORDERED_ACCESS_BUFFER,  // Write-read buffer
         LR_DESCRIPTOR_TYPE_PUSH_CONSTANT,
 
         LR_DESCRIPTOR_TYPE_COUNT,

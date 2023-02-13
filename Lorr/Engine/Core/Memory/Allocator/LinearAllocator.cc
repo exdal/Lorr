@@ -32,7 +32,8 @@ namespace lr::Memory
 
         if (!CanAllocate(size, alignment))
         {
-            LOG_ERROR("Linear memory allocator reached it's limit. Allocated {} and requested {}.", m_Size, size);
+            LOG_ERROR(
+                "Linear memory allocator reached it's limit. Allocated {} and requested {}.", m_Size, size);
             return -1;
         }
 
@@ -84,7 +85,18 @@ namespace lr::Memory
 
         u64 offset = m_View.Allocate(info.m_Size, info.m_Alignment);
         if (offset == -1)
-            return false;
+        {
+            if (m_AutoGrowSize != 0)
+            {
+                Grow(m_AutoGrowSize);
+                m_View.m_Size += m_AutoGrowSize;
+                offset = m_View.Allocate(info.m_Size, info.m_Alignment);
+            }
+            else
+            {
+                return false;
+            }
+        }
 
         void *pData = m_pData + offset;
 
@@ -104,6 +116,13 @@ namespace lr::Memory
 
         if (freeData)
             Memory::Release(m_pData);
+    }
+
+    void LinearAllocator::Grow(u64 size)
+    {
+        ZoneScoped;
+
+        Memory::Reallocate(m_pData, size);
     }
 
 }  // namespace lr::Memory

@@ -167,8 +167,8 @@ namespace lr::Graphics
         if (pImageVK->m_Layout != VK_IMAGE_LAYOUT_UNDEFINED)
             barrierInfo.oldLayout = VKAPI::ToVKImageLayout(pBarrier->m_CurrentUsage);
 
-        barrierInfo.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrierInfo.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrierInfo.srcQueueFamilyIndex = 0;
+        barrierInfo.dstQueueFamilyIndex = 0;
 
         VkDependencyInfo dependencyInfo = {};
         dependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;

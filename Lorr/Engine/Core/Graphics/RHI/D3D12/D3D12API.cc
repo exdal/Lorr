@@ -47,7 +47,7 @@
 
 namespace lr::Graphics
 {
-    bool D3D12API::Init(BaseWindow *pWindow, u32 width, u32 height, APIFlags flags)
+    bool D3D12API::Init(BaseAPIDesc *pDesc)
     {
         ZoneScoped;
 
@@ -150,7 +150,7 @@ namespace lr::Graphics
         SAFE_RELEASE(pInfoQueue);
 #endif
 
-        InitAllocators();
+        InitAllocators(&pDesc->m_AllocatorDesc);
 
         m_CommandListPool.Init();
         CreateDescriptorPool({
@@ -164,7 +164,7 @@ namespace lr::Graphics
         m_pDirectQueue = CreateCommandQueue(CommandListType::Direct);
         m_pComputeQueue = CreateCommandQueue(CommandListType::Compute);
 
-        m_SwapChain.Init(pWindow, this, SwapChainFlags::TripleBuffering);
+        m_SwapChain.Init(pDesc->m_pTargetWindow, this, pDesc->m_SwapChainFlags);
         m_SwapChain.CreateBackBuffers(this);
 
         for (CommandList *&pList : m_CommandListPool.m_DirectLists)
@@ -183,7 +183,7 @@ namespace lr::Graphics
         return true;
     }
 
-    void D3D12API::InitAllocators()
+    void D3D12API::InitAllocators(APIAllocatorInitDesc *pDesc)
     {
         ZoneScoped;
 
@@ -192,27 +192,28 @@ namespace lr::Graphics
         m_TypeAllocator.Init(kTypeMem, 0x2000);
         m_pTypeData = Memory::Allocate<u8>(kTypeMem);
 
-        constexpr u32 kDescriptorMem = Memory::MiBToBytes(1);
-        constexpr u32 kBufferLinearMem = Memory::MiBToBytes(64);
-        constexpr u32 kBufferTLSFMem = Memory::MiBToBytes(512);
-        constexpr u32 kImageTLSFMem = Memory::MiBToBytes(512);
-
         constexpr D3D12_HEAP_FLAGS kBufferFlags =
             D3D12_HEAP_FLAG_DENY_NON_RT_DS_TEXTURES | D3D12_HEAP_FLAG_DENY_RT_DS_TEXTURES;
         constexpr D3D12_HEAP_FLAGS kImageFlags =
             D3D12_HEAP_FLAG_DENY_RT_DS_TEXTURES | D3D12_HEAP_FLAG_DENY_BUFFERS;
 
-        m_MADescriptor.Allocator.Init(kDescriptorMem);
-        m_MADescriptor.pHeap = CreateHeap(kDescriptorMem, true, kBufferFlags);
+        m_MADescriptor.Allocator.Init(pDesc->m_DescriptorMem);
+        m_MADescriptor.pHeap = CreateHeap(pDesc->m_DescriptorMem, true, kBufferFlags);
 
-        m_MABufferLinear.Allocator.Init(kBufferLinearMem);
-        m_MABufferLinear.pHeap = CreateHeap(kBufferLinearMem, true, kBufferFlags);
+        m_MABufferLinear.Allocator.Init(pDesc->m_BufferLinearMem);
+        m_MABufferLinear.pHeap = CreateHeap(pDesc->m_BufferLinearMem, true, kBufferFlags);
 
-        m_MABufferTLSF.Allocator.Init(kBufferTLSFMem, 0x2000);
-        m_MABufferTLSF.pHeap = CreateHeap(kBufferTLSFMem, false, kBufferFlags);
+        m_MABufferTLSF.Allocator.Init(pDesc->m_BufferTLSFMem, pDesc->m_MaxTLSFAllocations);
+        m_MABufferTLSF.pHeap = CreateHeap(pDesc->m_BufferTLSFMem, false, kBufferFlags);
 
-        m_MAImageTLSF.Allocator.Init(kImageTLSFMem, 0x2000);
-        m_MAImageTLSF.pHeap = CreateHeap(kImageTLSFMem, false, kImageFlags);
+        m_MABufferTLSFHost.Allocator.Init(pDesc->m_BufferTLSFMem, pDesc->m_MaxTLSFAllocations);
+        m_MABufferTLSFHost.pHeap = CreateHeap(pDesc->m_BufferTLSFMem, true, kBufferFlags);
+
+        m_MABufferFrametime.Allocator.Init(pDesc->m_BufferFrametimeMem);
+        m_MABufferFrametime.pHeap = CreateHeap(pDesc->m_BufferFrametimeMem, true, kBufferFlags);
+
+        m_MAImageTLSF.Allocator.Init(pDesc->m_ImageTLSFMem, pDesc->m_MaxTLSFAllocations);
+        m_MAImageTLSF.pHeap = CreateHeap(pDesc->m_ImageTLSFMem, false, kImageFlags);
     }
 
     D3D12CommandQueue *D3D12API::CreateCommandQueue(CommandListType type)
@@ -421,7 +422,7 @@ namespace lr::Graphics
                         break;
                     case LR_DESCRIPTOR_TYPE_SHADER_RESOURCE_BUFFER:
                     case LR_DESCRIPTOR_TYPE_UNORDERED_ACCESS_IMAGE:
-                        range.Flags = D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE ;
+                        range.Flags = D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE;
                         break;
                     default:
                         break;
@@ -1009,7 +1010,7 @@ namespace lr::Graphics
 
         m_pDevice->CreatePlacedResource(
             pBuffer->m_pMemoryHandle,
-            0,  // TODO: SUBRESOURCE ALLOCATION
+            pBuffer->m_DataOffset,
             &resourceDesc,
             initialState,
             nullptr,
@@ -1163,7 +1164,7 @@ namespace lr::Graphics
 
         m_pDevice->CreatePlacedResource(
             pImage->m_pMemoryHandle,
-            0,  // TODO: Suballocations
+            pImage->m_DataOffset,
             &resourceDesc,
             initialState,
             nullptr,
@@ -1328,7 +1329,6 @@ namespace lr::Graphics
 
                 break;
             }
-
             case LR_API_ALLOCATOR_DESCRIPTOR:
             {
                 pBuffer->m_DataOffset =
@@ -1337,7 +1337,6 @@ namespace lr::Graphics
 
                 break;
             }
-
             case LR_API_ALLOCATOR_BUFFER_LINEAR:
             {
                 pBuffer->m_DataOffset =
@@ -1346,7 +1345,6 @@ namespace lr::Graphics
 
                 break;
             }
-
             case LR_API_ALLOCATOR_BUFFER_TLSF:
             {
                 Memory::TLSFBlock *pBlock =
@@ -1359,7 +1357,25 @@ namespace lr::Graphics
 
                 break;
             }
+            case LR_API_ALLOCATOR_BUFFER_TLSF_HOST:
+            {
+                Memory::TLSFBlock *pBlock =
+                    m_MABufferTLSFHost.Allocator.Allocate(pBuffer->m_DeviceDataLen, pBuffer->m_Alignment);
 
+                pBuffer->m_pAllocatorData = pBlock;
+                pBuffer->m_DataOffset = pBlock->m_Offset;
+                pBuffer->m_pMemoryHandle = m_MABufferTLSFHost.pHeap;
+
+                break;
+            }
+            case LR_API_ALLOCATOR_BUFFER_FRAMETIME:
+            {
+                pBuffer->m_DataOffset =
+                    m_MABufferFrametime.Allocator.Allocate(pBuffer->m_DeviceDataLen, pBuffer->m_Alignment);
+                pBuffer->m_pMemoryHandle = m_MABufferFrametime.pHeap;
+
+                break;
+            }
             default:
                 LOG_CRITICAL("Trying to allocate D3D12Buffer resource from invalid allocator.");
                 break;
@@ -1384,7 +1400,6 @@ namespace lr::Graphics
 
                 break;
             }
-
             case LR_API_ALLOCATOR_IMAGE_TLSF:
             {
                 Memory::TLSFBlock *pBlock =
@@ -1397,7 +1412,6 @@ namespace lr::Graphics
 
                 break;
             }
-
             default:
                 LOG_CRITICAL("Trying to allocate D3D12Image resource from invalid allocator.");
                 break;

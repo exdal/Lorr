@@ -12,18 +12,19 @@ struct PixelInput
     float4 Color    : COLOR;
 };
 
-struct _CameraInfo
+struct _Constants
 {
-    matrix VPMatrix;
+    float2 Scale; 
+    float2 Translate;
 };
 
-[[vk::push_constant]] ConstantBuffer<_CameraInfo> CameraInfo : register(b0, space2);
+[[vk::push_constant]] ConstantBuffer<_Constants> Constants : register(b0, space2);
 
 PixelInput main(VertexInput input)
 {
     PixelInput output;
 
-    output.Position = mul(CameraInfo.VPMatrix, float4(input.Position, 0.0, 1.0));
+    output.Position = float4(input.Position * Constants.Scale + Constants.Translate, 0.0, 1.0);
     output.TexCoord = input.TexCoord;
     output.Color = input.Color;
 

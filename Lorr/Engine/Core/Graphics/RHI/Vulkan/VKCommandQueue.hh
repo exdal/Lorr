@@ -14,15 +14,11 @@ namespace lr::Graphics
     struct VKCommandQueue
     {
         void Init(VkQueue pHandle);
-        void SetSemaphoreStage(VkPipelineStageFlags2 acquire, VkPipelineStageFlags2 present);
 
         VkQueue m_pHandle = nullptr;
 
         bool m_IsHighPriortiy = false;
         CommandListType m_Type;
-
-        VkPipelineStageFlags2 m_AcquireStage = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-        VkPipelineStageFlags2 m_PresentStage = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
     };
 
 }  // namespace lr::Graphics

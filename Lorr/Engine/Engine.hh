@@ -6,8 +6,9 @@
 
 #include "Core/Window/BaseWindow.hh"
 #include "Core/Window/Win32/Win32Window.hh"
+#include "Core/Graphics/RHI/Base/BaseAPI.hh"
 
-#include "Renderer/RendererManager.hh"
+#include "Renderer/RenderGraph.hh"
 #include "UI/ImGui.hh"
 
 namespace lr
@@ -84,8 +85,9 @@ namespace lr
 
         EventManager<EngineEventData> m_EventMan;
         Win32Window m_Window;
+        Graphics::BaseAPI *m_pAPI = nullptr;
         UI::ImGuiHandler m_ImGui;
-        Renderer::RendererManager m_RendererMan;
+        Renderer::RenderGraph m_RenderGraph;
 
         bool m_ShuttingDown = false;
 

@@ -5,34 +5,57 @@
 
 #pragma once
 
-namespace lr::c
+namespace lr::Hash
 {
-    constexpr u32 kFNVValue = 2166136261U;
-    constexpr u32 kFNVPrime = 16777619U;
+    constexpr u32 kFNV32Value = 2166136261U;
+    constexpr u32 kFNV32Prime = 16777619U;
 
-    constexpr u32 FNVHash(const char *pData, u32 dataLen)
+    constexpr u32 FNV32(const char *pData, u32 dataLen)
     {
-        u32 fnv = kFNVValue;
+        u32 fnv = kFNV32Value;
 
         for (u32 i = 0; i < dataLen; i++)
-        {
-            fnv ^= (u32)pData[i] * kFNVPrime;
-        }
+            fnv ^= (u32)pData[i] * kFNV32Prime;
 
         return fnv;
     }
 
     template<typename T>
-    constexpr u32 FNVHash(const T &val)
+    constexpr u32 FNV32(const T &val)
     {
-        return FNVHash(&val, sizeof(val));
+        return FNV32(&val, sizeof(val));
     }
 
-    constexpr u32 FNVHashString(eastl::string_view str)
+    constexpr u32 FNV32String(eastl::string_view str)
     {
-        return FNVHash(str.data(), str.length());
+        return FNV32(str.data(), str.length());
     }
 
-}  // namespace lr::c
+    constexpr u64 kFNV64Value = 14695981039346656037ULL;
+    constexpr u64 kFNV64Prime = 1099511628211ULL;
 
-#define FNVHashOf(x) (eastl::integral_constant<u32, lr::c::FNVHashString(x)>::value)
+    constexpr u64 FNV64(const char *pData, u32 dataLen)
+    {
+        u64 fnv = kFNV64Value;
+
+        for (u32 i = 0; i < dataLen; i++)
+            fnv ^= (u64)pData[i] * kFNV64Prime;
+
+        return fnv;
+    }
+
+    template<typename T>
+    constexpr u32 FNV64(const T &val)
+    {
+        return FNV64(&val, sizeof(val));
+    }
+
+    constexpr u64 FNV64String(eastl::string_view str)
+    {
+        return FNV64(str.data(), str.length());
+    }
+
+}  // namespace lr::Hash
+
+#define FNV32HashOf(x) (eastl::integral_constant<u32, lr::Hash::FNV32String(x)>::value)
+#define FNV64HashOf(x) (eastl::integral_constant<u64, lr::Hash::FNV64String(x)>::value)

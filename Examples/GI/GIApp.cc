@@ -28,7 +28,7 @@ void GIApp::Init(lr::BaseApplicationDesc &desc)
 
     InitBase(desc);
 
-    Graphics::BaseAPI *pAPI = m_Engine.m_RendererMan.m_pAPI;
+    Graphics::BaseAPI *pAPI = m_Engine.m_pAPI;
 
     /// SCENE GEOMETRY PRECOMPUTATION ///
 
@@ -225,9 +225,9 @@ void GIApp::Poll(f32 deltaTime)
 {
     ZoneScoped;
 
-    Graphics::BaseAPI *pAPI = m_Engine.m_RendererMan.m_pAPI;
+    Graphics::BaseAPI *pAPI = m_Engine.m_pAPI;
     Graphics::Image *pImage = pAPI->GetSwapChain()->GetCurrentImage();
-    Graphics::Camera3D &camera = m_Engine.m_RendererMan.m_Camera3D;
+    Graphics::Camera3D camera = {};
 
     u32 reset = 0;
     static u32 time = 1;

@@ -21,7 +21,7 @@ void ImguiApp::Poll(f32 deltaTime)
 
     ImGui::Begin(m_Name.data());
     ImGui::Checkbox("Show Demo", &showDemo);
-    ImGui::Text("DeltaTime: %f", io.DeltaTime);
+    ImGui::Text("FPS: %f(%f)", io.Framerate, io.DeltaTime);
     ImGui::End();
 
     if (showDemo)

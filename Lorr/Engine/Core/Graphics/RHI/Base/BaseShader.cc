@@ -16,12 +16,23 @@ namespace lr::Graphics
 
         switch (type)
         {
-            case LR_SHADER_STAGE_VERTEX: return VSTag; break;
-            case LR_SHADER_STAGE_PIXEL: return PSTag; break;
-            case LR_SHADER_STAGE_COMPUTE: return CSTag; break;
-            case LR_SHADER_STAGE_HULL: return HSTag; break;
-            case LR_SHADER_STAGE_DOMAIN: return DSTag; break;
-            default: break;
+            case LR_SHADER_STAGE_VERTEX:
+                return VSTag;
+                break;
+            case LR_SHADER_STAGE_PIXEL:
+                return PSTag;
+                break;
+            case LR_SHADER_STAGE_COMPUTE:
+                return CSTag;
+                break;
+            case LR_SHADER_STAGE_HULL:
+                return HSTag;
+                break;
+            case LR_SHADER_STAGE_DOMAIN:
+                return DSTag;
+                break;
+            default:
+                break;
         }
 
         return nullptr;
@@ -105,9 +116,7 @@ namespace lr::Graphics
         pResult->GetOutput(DXC_OUT_ERRORS, LS_IID_PTR(pError), nullptr);
 
         if (pError.get() && pError->GetBufferPointer())
-            LOG_ERROR(
-                "Shader compiler message: {}",
-                eastl::string_view((const char *)pError->GetBufferPointer(), pError->GetBufferSize()));
+            LOG_ERROR("Shader compiler message: {}", (const char *)pError->GetBufferPointer());
 
         if (hr < 0)
         {

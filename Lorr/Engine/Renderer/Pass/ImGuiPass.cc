@@ -2,7 +2,7 @@
 
 #include "Resources/imgui.v.hh"
 #include "Resources/imgui.p.hh"
-
+#include "Core/Graphics/RHI/Vulkan/VKPipeline.hh"
 #include <imgui.h>
 
 namespace lr::Renderer
@@ -151,37 +151,27 @@ namespace lr::Renderer
                 if (passData.m_VertexCount < pDrawData->TotalVtxCount
                     || passData.m_IndexCount < pDrawData->TotalIdxCount)
                 {
-                    Graphics::BufferDesc bufferDesc = {};
-                    bufferDesc.m_TargetAllocator = LR_API_ALLOCATOR_BUFFER_TLSF_HOST;
-
-                    // Vertex buffer
-
                     passData.m_VertexCount = pDrawData->TotalVtxCount + 1500;
+                    passData.m_IndexCount = pDrawData->TotalIdxCount + 1500;
 
                     if (passData.m_pVertexBuffer)
                         resourceMan.DeleteBuffer("imgui_vertex_buffer");
+                    if (passData.m_pIndexBuffer)
+                        resourceMan.DeleteBuffer("imgui_index_buffer");
+
+                    Graphics::BufferDesc bufferDesc = {};
+                    bufferDesc.m_TargetAllocator = LR_API_ALLOCATOR_BUFFER_TLSF_HOST;
 
                     bufferDesc.m_UsageFlags = LR_RESOURCE_USAGE_VERTEX_BUFFER | LR_RESOURCE_USAGE_HOST_VISIBLE;
                     bufferDesc.m_Stride = sizeof(ImDrawVert);
                     bufferDesc.m_DataLen = passData.m_VertexCount * sizeof(ImDrawVert);
-
                     passData.m_pVertexBuffer = resourceMan.CreateBuffer("imgui_vertex_buffer", &bufferDesc);
-
-                    // Index buffer
-
-                    passData.m_IndexCount = pDrawData->TotalIdxCount + 1500;
-
-                    if (passData.m_pIndexBuffer)
-                        resourceMan.DeleteBuffer("imgui_index_buffer");
 
                     bufferDesc.m_UsageFlags = LR_RESOURCE_USAGE_INDEX_BUFFER | LR_RESOURCE_USAGE_HOST_VISIBLE;
                     bufferDesc.m_Stride = sizeof(ImDrawIdx);
                     bufferDesc.m_DataLen = passData.m_IndexCount * sizeof(ImDrawIdx);
-
                     passData.m_pIndexBuffer = resourceMan.CreateBuffer("imgui_index_buffer", &bufferDesc);
                 }
-
-                // Map memory
 
                 u32 mapDataOffset = 0;
                 void *pMapData = nullptr;
@@ -232,9 +222,9 @@ namespace lr::Renderer
 
                 PushConstant pushConstantData = {};
                 pushConstantData.m_Scale.x = 2.0 / pDrawData->DisplaySize.x;
-                pushConstantData.m_Scale.y = 2.0 / pDrawData->DisplaySize.y;
+                pushConstantData.m_Scale.y = -2.0 / pDrawData->DisplaySize.y;
                 pushConstantData.m_Translate.x = -1.0 - pDrawData->DisplayPos.x * pushConstantData.m_Scale.x;
-                pushConstantData.m_Translate.y = -1.0 - pDrawData->DisplayPos.y * pushConstantData.m_Scale.y;
+                pushConstantData.m_Translate.y = 1.0 - pDrawData->DisplayPos.y * pushConstantData.m_Scale.y;
 
                 pList->SetGraphicsPushConstants(
                     passData.m_pPipeline, LR_SHADER_STAGE_VERTEX, &pushConstantData, sizeof(PushConstant));

@@ -5,7 +5,6 @@ set(LORR_VENDOR
     lw
     tracy
 
-    spdlog
     fmt
 
     Vulkan-Headers

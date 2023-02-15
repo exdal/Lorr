@@ -7,9 +7,6 @@
 #include "Core/Crypto/TypeHash.hh"
 #include "Core/Graphics/RHI/Base/BaseAPI.hh"
 
-#undef LOG_SET_NAME
-#define LOG_SET_NAME "RENDERGRAPH"
-
 namespace lr::Renderer
 {
     /*
@@ -198,6 +195,3 @@ namespace lr::Renderer
     };
 
 }  // namespace lr::Renderer
-
-#undef LOG_SET_NAME
-#define LOG_SET_NAME LOG_DEFAULT_NAME

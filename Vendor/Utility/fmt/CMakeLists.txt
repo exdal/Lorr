@@ -124,6 +124,7 @@ endif ()
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH}
   "${CMAKE_CURRENT_SOURCE_DIR}/support/cmake")
 
+
 list(FIND CMAKE_CXX_COMPILE_FEATURES "cxx_variadic_templates" index)
 if (${index} GREATER -1)
   # Use cxx_variadic_templates instead of more appropriate cxx_std_11 for
@@ -215,7 +216,7 @@ endfunction()
 
 # Define the fmt library, its includes and the needed defines.
 add_headers(FMT_HEADERS args.h chrono.h color.h compile.h core.h format.h
-                        format-inl.h locale.h os.h ostream.h printf.h ranges.h
+                        format-inl.h os.h ostream.h printf.h ranges.h std.h
                         xchar.h)
 if (FMT_MODULE)
   set(FMT_SOURCES src/fmt.cc)
@@ -259,12 +260,6 @@ if (CMAKE_BUILD_TYPE STREQUAL "Debug")
 endif ()
 
 if (BUILD_SHARED_LIBS)
-  if (UNIX AND NOT APPLE AND NOT ${CMAKE_SYSTEM_NAME} MATCHES "SunOS" AND
-      NOT EMSCRIPTEN)
-    # Fix rpmlint warning:
-    # unused-direct-shlib-dependency /usr/lib/libformat.so.1.1.0 /lib/libm.so.6.
-    target_link_libraries(fmt -Wl,--as-needed)
-  endif ()
   target_compile_definitions(fmt PRIVATE FMT_EXPORT INTERFACE FMT_SHARED)
 endif ()
 if (FMT_SAFE_DURATION_CAST)

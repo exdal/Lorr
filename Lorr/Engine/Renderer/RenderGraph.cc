@@ -1,8 +1,5 @@
 #include "RenderGraph.hh"
 
-#undef LOG_SET_NAME
-#define LOG_SET_NAME "RENDERGRAPH"
-
 namespace lr::Renderer
 {
     Image *RenderPassResourceManager::CreateImage(eastl::string_view name, ImageDesc *pDesc)

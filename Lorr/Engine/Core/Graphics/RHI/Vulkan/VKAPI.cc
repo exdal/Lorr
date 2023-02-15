@@ -7,9 +7,6 @@
 #include "VKCommandList.hh"
 #include "VKShader.hh"
 
-#undef LOG_SET_NAME
-#define LOG_SET_NAME "VKAPI"
-
 /// DEFINE VULKAN FUNCTIONS
 // #include "VKSymbols.hh"
 #define _VK_DEFINE_FUNCTION(_name) PFN_##_name _name
@@ -166,8 +163,8 @@ namespace lr::Graphics
         m_MABufferTLSF.Allocator.Init(pDesc->m_BufferTLSFMem, pDesc->m_MaxTLSFAllocations);
         m_MABufferTLSF.pHeap = CreateHeap(pDesc->m_BufferTLSFMem, false);
 
-        m_MABufferTLSFHost.Allocator.Init(pDesc->m_BufferTLSFMem, pDesc->m_MaxTLSFAllocations);
-        m_MABufferTLSFHost.pHeap = CreateHeap(pDesc->m_BufferTLSFMem, true);
+        m_MABufferTLSFHost.Allocator.Init(pDesc->m_BufferTLSFHostMem, pDesc->m_MaxTLSFAllocations);
+        m_MABufferTLSFHost.pHeap = CreateHeap(pDesc->m_BufferTLSFHostMem, true);
 
         m_MABufferFrametime.Allocator.Init(pDesc->m_BufferFrametimeMem);
         m_MABufferFrametime.pHeap = CreateHeap(pDesc->m_BufferFrametimeMem, true);
@@ -580,10 +577,10 @@ namespace lr::Graphics
         VkPipelineViewportStateCreateInfo viewportInfo = {};
         viewportInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
         viewportInfo.pNext = nullptr;
-        // viewportInfo.viewportCount = 1;
-        // viewportInfo.pViewports = nullptr;
-        // viewportInfo.scissorCount = 1;
-        // viewportInfo.pScissors = nullptr;
+        viewportInfo.viewportCount = 1;
+        viewportInfo.pViewports = nullptr;
+        viewportInfo.scissorCount = 1;
+        viewportInfo.pScissors = nullptr;
 
         /// RASTERIZER ---------------------------------------------------------------
 
@@ -690,6 +687,8 @@ namespace lr::Graphics
         createInfo.layout = pLayout;
 
         vkCreateGraphicsPipelines(m_pDevice, m_pPipelineCache, 1, &createInfo, nullptr, &pPipeline->m_pHandle);
+
+        LOG_TRACE("Handle: {}({})", (void *)pPipeline, (void *)pPipeline->m_pHandle);
 
         return pPipeline;
     }
@@ -1374,8 +1373,8 @@ namespace lr::Graphics
             }
             case LR_API_ALLOCATOR_BUFFER_FRAMETIME:
             {
-                pBuffer->m_DataOffset =
-                    m_MABufferFrametime.Allocator.Allocate(pBuffer->m_DeviceDataLen, memoryRequirements.alignment);
+                pBuffer->m_DataOffset = m_MABufferFrametime.Allocator.Allocate(
+                    pBuffer->m_DeviceDataLen, memoryRequirements.alignment);
                 pBuffer->m_pMemoryHandle = m_MABufferFrametime.pHeap;
 
                 break;
@@ -1525,12 +1524,12 @@ namespace lr::Graphics
             return false;
         }
 
-#define _VK_DEFINE_FUNCTION(_name)                            \
-    _name = (PFN_##_name)GetProcAddress(m_VulkanLib, #_name); \
-    if (_name == nullptr)                                     \
-    {                                                         \
-        LOG_CRITICAL("Cannot load vulkan function `{}`!");    \
-    }                                                         \
+#define _VK_DEFINE_FUNCTION(_name)                                \
+    _name = (PFN_##_name)GetProcAddress(m_VulkanLib, #_name);     \
+    if (_name == nullptr)                                         \
+    {                                                             \
+        LOG_CRITICAL("Cannot load vulkan function `{}`!", #_name); \
+    }                                                             \
     // LOG_TRACE("Loading Vulkan function: {}:{}", #_name, (void *)_name);
 
         _VK_IMPORT_SYMBOLS

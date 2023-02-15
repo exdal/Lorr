@@ -13,6 +13,8 @@ namespace lr
     {
         ZoneScoped;
 
+        Logger::Init();
+
         switch (engineDesc.m_TargetAPI)
         {
             case LR_API_TYPE_VULKAN:
@@ -24,8 +26,6 @@ namespace lr
             default:
                 break;
         }
-
-        Logger::Init();
 
         m_EventMan.Init();
         m_Window.Init(engineDesc.m_WindowDesc);
@@ -39,10 +39,10 @@ namespace lr
                 .m_MaxTLSFAllocations = 0x2000,
                 .m_DescriptorMem = Memory::MiBToBytes(1),
                 .m_BufferLinearMem = Memory::MiBToBytes(64),
-                .m_BufferTLSFMem = Memory::MiBToBytes(128),
+                .m_BufferTLSFMem = Memory::MiBToBytes(256),
                 .m_BufferTLSFHostMem = Memory::MiBToBytes(64),
                 .m_BufferFrametimeMem = Memory::MiBToBytes(64),
-                .m_ImageTLSFMem = Memory::MiBToBytes(256),
+                .m_ImageTLSFMem = Memory::MiBToBytes(1024),
             },
         };
         m_pAPI->Init(&apiDesc);
@@ -86,7 +86,7 @@ namespace lr
                     m_Window.m_Width = data.m_SizeWidth;
                     m_Window.m_Height = data.m_SizeHeight;
 
-                    // m_RendererMan.Resize(data.m_SizeWidth, data.m_SizeHeight);
+                    m_pAPI->ResizeSwapChain(data.m_SizeWidth, data.m_SizeHeight);
 
                     break;
                 }
@@ -124,7 +124,7 @@ namespace lr
     void Engine::BeginFrame()
     {
         ZoneScoped;
-
+        
         m_Window.Poll();
         DispatchEvents();
 

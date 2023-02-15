@@ -2,9 +2,6 @@
 
 #include "VKAPI.hh"
 
-#undef LOG_SET_NAME
-#define LOG_SET_NAME "VKSC"
-
 namespace lr::Graphics
 {
     void VKSwapChain::Init(BaseWindow *pWindow, VKAPI *pAPI, SwapChainFlags flags)

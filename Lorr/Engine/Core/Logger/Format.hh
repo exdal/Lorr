@@ -20,7 +20,7 @@ namespace fmt
         template<typename FormatContext>
         auto format(eastl::string_view p, FormatContext &ctx) -> decltype(ctx.out())
         {
-            return format_to(ctx.out(), "{:{}}", p.data(), p.size());
+            return fmt::format_to(ctx.out(), "{:{}}", p.data(), p.size());
         }
     };
 
@@ -36,7 +36,7 @@ namespace fmt
         template<typename FormatContext>
         auto format(const eastl::string &p, FormatContext &ctx) -> decltype(ctx.out())
         {
-            return format_to(ctx.out(), "{:{}}", p.c_str(), p.length());
+            return fmt::format_to(ctx.out(), "{:{}}", p.c_str(), p.length());
         }
     };
 

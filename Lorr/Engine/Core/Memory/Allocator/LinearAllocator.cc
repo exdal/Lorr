@@ -2,9 +2,6 @@
 
 #include "Core/Memory/MemoryUtils.hh"
 
-#undef LOG_SET_NAME
-#define LOG_SET_NAME "LINEARALLOC"
-
 namespace lr::Memory
 {
     void LinearAllocatorView::Init(u64 size)

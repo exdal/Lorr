@@ -6,9 +6,6 @@
 
 #include "STL/Memory.hh"
 
-#undef LOG_SET_NAME
-#define LOG_SET_NAME "D3D12API"
-
 #define HRCall(func, message)                                                                            \
     if (FAILED(hr = func))                                                                               \
     {                                                                                                    \
@@ -206,8 +203,8 @@ namespace lr::Graphics
         m_MABufferTLSF.Allocator.Init(pDesc->m_BufferTLSFMem, pDesc->m_MaxTLSFAllocations);
         m_MABufferTLSF.pHeap = CreateHeap(pDesc->m_BufferTLSFMem, false, kBufferFlags);
 
-        m_MABufferTLSFHost.Allocator.Init(pDesc->m_BufferTLSFMem, pDesc->m_MaxTLSFAllocations);
-        m_MABufferTLSFHost.pHeap = CreateHeap(pDesc->m_BufferTLSFMem, true, kBufferFlags);
+        m_MABufferTLSFHost.Allocator.Init(pDesc->m_BufferTLSFHostMem, pDesc->m_MaxTLSFAllocations);
+        m_MABufferTLSFHost.pHeap = CreateHeap(pDesc->m_BufferTLSFHostMem, true, kBufferFlags);
 
         m_MABufferFrametime.Allocator.Init(pDesc->m_BufferFrametimeMem);
         m_MABufferFrametime.pHeap = CreateHeap(pDesc->m_BufferFrametimeMem, true, kBufferFlags);

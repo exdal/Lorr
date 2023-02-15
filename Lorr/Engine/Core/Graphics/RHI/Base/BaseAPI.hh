@@ -113,7 +113,7 @@ namespace lr::Graphics
 
             Memory::TLSFBlock *pBlock =
                 m_TypeAllocator.Allocate(sizeof(_Derived) + PTR_SIZE, Memory::TLSFAllocatorView::ALIGN_SIZE);
-            u64 offset = pBlock->m_Offset;
+            u32 offset = pBlock->m_Offset;
 
             // Copy block address
             memcpy(m_pTypeData + offset, &pBlock, PTR_SIZE);
@@ -131,7 +131,7 @@ namespace lr::Graphics
             Memory::TLSFBlock *pBlock =
                 m_TypeAllocator.Allocate(sizeof(_Type) + PTR_SIZE, Memory::TLSFAllocatorView::ALIGN_SIZE);
 
-            memcpy(m_pTypeData + pBlock->m_Offset, pBlock, PTR_SIZE);
+            memcpy(m_pTypeData + pBlock->m_Offset, &pBlock, PTR_SIZE);
             return (_Type *)(m_pTypeData + pBlock->m_Offset + PTR_SIZE);
         }
 
@@ -142,8 +142,6 @@ namespace lr::Graphics
 
             Memory::TLSFBlock *pBlock = *(Memory::TLSFBlock **)((u8 *)pType - PTR_SIZE);
             m_TypeAllocator.Free(pBlock);
-
-            Memory::ZeroMem((u8 *)pBlock, sizeof(_Type) + PTR_SIZE);
 
             pType = nullptr;
         }

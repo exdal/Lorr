@@ -2,9 +2,6 @@
 
 #include "Engine.hh"
 
-#undef LOG_SET_NAME
-#define LOG_SET_NAME "WINDOW"
-
 namespace lr
 {
     SystemMetrics::Display *BaseWindow::GetDisplay(u32 monitor)

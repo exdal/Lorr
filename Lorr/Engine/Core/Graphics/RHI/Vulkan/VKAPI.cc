@@ -688,8 +688,6 @@ namespace lr::Graphics
 
         vkCreateGraphicsPipelines(m_pDevice, m_pPipelineCache, 1, &createInfo, nullptr, &pPipeline->m_pHandle);
 
-        LOG_TRACE("Handle: {}({})", (void *)pPipeline, (void *)pPipeline->m_pHandle);
-
         return pPipeline;
     }
 

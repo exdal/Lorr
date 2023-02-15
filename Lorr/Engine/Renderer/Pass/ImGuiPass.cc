@@ -2,7 +2,7 @@
 
 #include "Resources/imgui.v.hh"
 #include "Resources/imgui.p.hh"
-#include "Core/Graphics/RHI/Vulkan/VKPipeline.hh"
+
 #include <imgui.h>
 
 namespace lr::Renderer

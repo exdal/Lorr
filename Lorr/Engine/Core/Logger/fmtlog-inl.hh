@@ -145,7 +145,7 @@ public:
     setArg<10>(fmt::string_view(second.s, 2));
     setArg<11>(fmt::string_view(minute.s, 2));
     setArg<12>(fmt::string_view(hour.s, 2));
-    setArg<13>(fmt::string_view(logLevel.s, 1));
+    setArg<13>(fmt::string_view(logLevel.s, 3));
     setArg<14>(fmt::string_view());
     setArg<15>(fmt::string_view());
     setArg<16>(fmt::string_view(year.s, 10)); // Ymd
@@ -381,7 +381,7 @@ public:
     hour.fromi(h);
     setArgVal<14>(info.getBase());
     setArgVal<15>(info.getLocation());
-    logLevel = (const char*)"D I W E O" + (info.logLevel << 2);
+    logLevel = (const char*)"DBG INF WRN ERR OFF" + (info.logLevel << 2);
 
     size_t headerPos = membuf.size();
     fmtlog::vformat_to(membuf, headerPattern, fmt::basic_format_args(args.data(), parttenArgSize));

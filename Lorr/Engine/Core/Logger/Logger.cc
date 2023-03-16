@@ -25,7 +25,7 @@ namespace lr
         fmtlog::setHeaderPattern("{HMSf} | {t:<6} | {s:<16} | {l} | ");
         fmtlog::flushOn(fmtlog::DBG);
         fmtlog::setThreadName("MAIN");
-        fmtlog::startPollingThread(1);
+        fmtlog::startPollingThread(10000);
     }
 
 }  // namespace lr

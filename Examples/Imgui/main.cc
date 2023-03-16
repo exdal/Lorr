@@ -15,10 +15,10 @@ lr::Engine *lr::Engine::Get()
 int main()
 {
     using namespace lr;
+    using namespace lr::Graphics;
 
     BaseApplicationDesc appDesc = {};
     appDesc.m_Name = "ImGui Demo";
-    appDesc.m_EngineDesc.m_TargetAPI = LR_API_TYPE_D3D12;
     appDesc.m_EngineDesc.m_TargetAPIFlags = LR_API_FLAG_NONE;
 
     appDesc.m_EngineDesc.m_WindowDesc = {

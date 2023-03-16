@@ -1,5 +1,5 @@
 //
-// Created on Wednesday 6th July 2022 by e-erdal
+// Created on Wednesday 6th July 2022 by exdal
 //
 // Reworked version of original implementation
 //

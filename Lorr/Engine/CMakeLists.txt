@@ -7,13 +7,12 @@ set(LORR_VENDOR
 
     fmt
 
+    glslang 
+    OGLCompiler 
+    OSDependent 
+    SPIRV 
     Vulkan-Headers
     imgui
-
-    d3d12
-    dxcompiler
-    dxgi
-    dxguid
 )
 
 # Core

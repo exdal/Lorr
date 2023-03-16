@@ -1,5 +1,5 @@
 //
-// Created on Friday 9th December 2022 by e-erdal
+// Created on Friday 9th December 2022 by exdal
 //
 
 #pragma once
@@ -17,7 +17,7 @@ namespace lr
 
     struct Application
     {
-        void InitBase(BaseApplicationDesc &desc);
+        void PreInit(BaseApplicationDesc &desc);
         
         virtual void Shutdown() = 0;
         virtual void Poll(f32 deltaTime) = 0;

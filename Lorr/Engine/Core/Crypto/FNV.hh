@@ -1,0 +1,60 @@
+//
+// Created on Saturday 16th July 2022 by exdal
+//
+
+#pragma once
+
+namespace lr::Hash
+{
+    constexpr u32 kFNV32Value = 2166136261U;
+    constexpr u32 kFNV32Prime = 16777619U;
+
+    constexpr u32 FNV32(const char *pData, u32 dataLen)
+    {
+        u32 fnv = kFNV32Value;
+
+        for (u32 i = 0; i < dataLen; i++)
+            fnv ^= (u32)pData[i] * kFNV32Prime;
+
+        return fnv;
+    }
+
+    template<typename T>
+    constexpr u32 FNV32(const T &val)
+    {
+        return FNV32(&val, sizeof(val));
+    }
+
+    constexpr u32 FNV32String(eastl::string_view str)
+    {
+        return FNV32(str.data(), str.length());
+    }
+
+    constexpr u64 kFNV64Value = 14695981039346656037ULL;
+    constexpr u64 kFNV64Prime = 1099511628211ULL;
+
+    constexpr u64 FNV64(const char *pData, u32 dataLen)
+    {
+        u64 fnv = kFNV64Value;
+
+        for (u32 i = 0; i < dataLen; i++)
+            fnv ^= (u64)pData[i] * kFNV64Prime;
+
+        return fnv;
+    }
+
+    template<typename T>
+    constexpr u64 FNV64(const T &val)
+    {
+        return FNV64(&val, sizeof(val));
+    }
+
+    constexpr u64 FNV64String(eastl::string_view str)
+    {
+        return FNV64(str.data(), str.length());
+    }
+
+}  // namespace lr::Hash
+
+#define FNV32HashOf(x) (eastl::integral_constant<u32, lr::Hash::FNV32String(x)>::value)
+#define FNV64HashOf(x) (eastl::integral_constant<u64, lr::Hash::FNV64String(x)>::value)

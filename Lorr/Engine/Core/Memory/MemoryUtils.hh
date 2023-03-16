@@ -1,5 +1,5 @@
 //
-// Created on Monday 26th September 2022 by e-erdal
+// Created on Monday 26th September 2022 by exdal
 //
 
 #pragma once
@@ -42,6 +42,12 @@ namespace lr::Memory
     void ZeroMem(T *pData, u64 count)
     {
         memset(pData, 0, count * sizeof(T));
+    }
+
+    template<typename _Type>
+    void CopyMem(_Type *pSrc, _Type *pDst, u32 count)
+    {
+        memcpy(pSrc, pDst, sizeof(_Type) * count);
     }
 
     template<typename T, typename U>
@@ -102,7 +108,7 @@ namespace lr::Memory
     }
 
     template<typename _Type>
-    _Type FillBits(u32 count)
+    constexpr _Type FillBits(u32 count)
     {
         assert(count != 64 && "Mask is 0");
 

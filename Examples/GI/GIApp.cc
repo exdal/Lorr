@@ -22,13 +22,16 @@ struct GeometryDataCS
     XMFLOAT4 Color;
 };
 
-void GIApp::Init(lr::BaseApplicationDesc &desc)
+static u32 gTime = 1;
+static XMFLOAT3 gPosition = { 278.0, 273.0, -800.0 };
+
+void GIApp::Init(BaseApplicationDesc &desc)
 {
     ZoneScoped;
 
-    InitBase(desc);
+    PreInit(desc);
 
-    Graphics::BaseAPI *pAPI = m_Engine.m_pAPI;
+    // Renderer::RenderGraph &renderGraph = m_Engine.m_RenderGraph;
 
     /// SCENE GEOMETRY PRECOMPUTATION ///
 
@@ -43,177 +46,257 @@ void GIApp::Init(lr::BaseApplicationDesc &desc)
 
     /// GPU RESOURCE CREATION ///
 
-    m_pFullscreenVS = pAPI->CreateShader(LR_SHADER_STAGE_VERTEX, LR_MAKE_APP_PATH("fs.v.hlsl"));
-    m_pFullscreenPS = pAPI->CreateShader(LR_SHADER_STAGE_PIXEL, LR_MAKE_APP_PATH("fs.p.hlsl"));
-    m_pGlobalIllumCS = pAPI->CreateShader(LR_SHADER_STAGE_COMPUTE, LR_MAKE_APP_PATH("gi.c.hlsl"));
-
-    Graphics::ImageDesc imageDesc = {
-        .m_UsageFlags = LR_RESOURCE_USAGE_SHADER_RESOURCE | LR_RESOURCE_USAGE_UNORDERED_ACCESS,
-        .m_Format = LR_IMAGE_FORMAT_RGBA32F,
-        .m_Width = pAPI->GetSwapChain()->m_Width,
-        .m_Height = pAPI->GetSwapChain()->m_Height,
+    struct GIPassData
+    {
+        Graphics::Image *m_pImage;
+        Graphics::Buffer *m_pSceneDataBuffer;
+        Graphics::DescriptorSet *m_pDescriptorSet;
+        Graphics::Pipeline *m_pPipeline;
     };
 
-    m_pComputeOutput = pAPI->CreateImage(&imageDesc);
+    // renderGraph.AddGraphicsPassAfter<GIPassData>(
+    //     "gi",
+    //     "$head",
+    //     [&](Renderer::RenderGraphResourceManager &resourceMan, GIPassData &passData)
+    //     {
+    //         Graphics::Image *pSwapChainImage = resourceMan.GetSwapChainImage();
 
-    Graphics::SamplerDesc samplerDesc = {
-        .m_MinFilter = LR_FILTERING_LINEAR,
-        .m_MagFilter = LR_FILTERING_LINEAR,
-        .m_MipFilter = LR_FILTERING_NEAREST,
-        .m_AddressU = LR_TEXTURE_ADDRESS_WRAP,
-        .m_AddressV = LR_TEXTURE_ADDRESS_WRAP,
-        .m_MaxLOD = 0,
+    //         Graphics::ImageDesc imageDesc = {
+    //             .m_UsageFlags = LR_RESOURCE_USAGE_SHADER_RESOURCE | LR_RESOURCE_USAGE_UNORDERED_ACCESS,
+    //             .m_Format = LR_IMAGE_FORMAT_RGBA32F,
+    //             .m_Width = pSwapChainImage->m_Width,
+    //             .m_Height = pSwapChainImage->m_Height,
+    //         };
+
+    //         passData.m_pImage = resourceMan.CreateImage("gi_uav", &imageDesc);
+
+    //         Graphics::BufferDesc bufferDesc = {
+    //             .m_UsageFlags = LR_RESOURCE_USAGE_TRANSFER_DST | LR_RESOURCE_USAGE_SHADER_RESOURCE,
+    //             .m_TargetAllocator = LR_API_ALLOCATOR_BUFFER_TLSF,
+    //             .m_Stride = sizeof(GeometryDataCS),
+    //             .m_DataLen = kSceneDataVertexCount * sizeof(GeometryDataCS),
+    //         };
+
+    //         passData.m_pSceneDataBuffer = resourceMan.CreateBuffer("gi_scene_buffer", &bufferDesc);
+
+    //         Graphics::DescriptorSetDesc descriptorDesc = {};
+    //         descriptorDesc.m_BindingCount = 2;
+    //         descriptorDesc.m_pBindings[0] = {
+    //             .m_BindingID = 0,
+    //             .m_Type = LR_DESCRIPTOR_TYPE_UNORDERED_ACCESS_IMAGE,
+    //             .m_TargetShader = LR_SHADER_STAGE_COMPUTE,
+    //             .m_ArraySize = 1,
+    //             .m_pImage = passData.m_pImage,
+    //         };
+
+    //         descriptorDesc.m_pBindings[1] = {
+    //             .m_BindingID = 1,
+    //             .m_Type = LR_DESCRIPTOR_TYPE_SHADER_RESOURCE_BUFFER,
+    //             .m_TargetShader = LR_SHADER_STAGE_COMPUTE,
+    //             .m_ArraySize = 1,
+    //             .m_pBuffer = passData.m_pSceneDataBuffer,
+    //         };
+
+    //         passData.m_pDescriptorSet = resourceMan.CreateDescriptorSet(&descriptorDesc);
+
+    //         Graphics::PushConstantDesc computeConstantDesc = {
+    //             .m_Stage = LR_SHADER_STAGE_COMPUTE,
+    //             .m_Offset = 0,
+    //             .m_Size = sizeof(PushConstantsCS),
+    //         };
+
+    //         Graphics::Shader *pShader =
+    //             resourceMan.CreateShader(LR_SHADER_STAGE_COMPUTE, LR_MAKE_APP_PATH("gi.c.hlsl"));
+    //         Graphics::ComputePipelineBuildInfo computeBuildInfo = {
+    //             .m_pShader = pShader,
+    //             .m_DescriptorSetCount = 1,
+    //             .m_ppDescriptorSets = { passData.m_pDescriptorSet },
+    //             .m_PushConstantCount = 1,
+    //             .m_pPushConstants = { computeConstantDesc },
+    //         };
+
+    //         passData.m_pPipeline = resourceMan.CreateComputePipeline(computeBuildInfo);
+
+    //         resourceMan.DeleteShader(pShader);
+    //     },
+    //     [&](Renderer::RenderGraphResourceManager &resourceMan,
+    //         GIPassData &passData,
+    //         Graphics::CommandList *pList)
+    //     {
+    //         Graphics::BufferDesc uploadBufferDesc = {
+    //             .m_UsageFlags = LR_RESOURCE_USAGE_TRANSFER_SRC | LR_RESOURCE_USAGE_HOST_VISIBLE,
+    //             .m_TargetAllocator = LR_API_ALLOCATOR_BUFFER_FRAMETIME,
+    //             .m_Stride = sizeof(GeometryData),
+    //             .m_DataLen = kSceneDataVertexCount * sizeof(GeometryData),
+    //         };
+
+    //         Graphics::Buffer *pUploadBuffer = resourceMan.CreateBuffer("$notrack", &uploadBufferDesc);
+
+    //         void *pMapData = nullptr;
+    //         resourceMan.MapBuffer(pUploadBuffer, pMapData);
+    //         memcpy(pMapData, kSceneData, uploadBufferDesc.m_DataLen);
+    //         resourceMan.UnmapBuffer(pUploadBuffer);
+
+    //         pList->CopyBuffer(pUploadBuffer, passData.m_pSceneDataBuffer, uploadBufferDesc.m_DataLen);
+    //         resourceMan.DeleteBuffer(pUploadBuffer);
+
+    //         Graphics::PipelineBarrier barrier = {
+    //             .m_CurrentUsage = LR_RESOURCE_USAGE_SHADER_RESOURCE,
+    //             .m_CurrentStage = LR_PIPELINE_STAGE_PIXEL_SHADER,
+    //             .m_CurrentAccess = LR_PIPELINE_ACCESS_SHADER_READ,
+    //             .m_NextUsage = LR_RESOURCE_USAGE_UNORDERED_ACCESS,
+    //             .m_NextStage = LR_PIPELINE_STAGE_COMPUTE_SHADER,
+    //             .m_NextAccess = LR_PIPELINE_ACCESS_SHADER_READ | LR_PIPELINE_ACCESS_SHADER_WRITE,
+    //         };
+    //         pList->SetImageBarrier(passData.m_pImage, &barrier);
+
+    //         resourceMan.UpdateDescriptorSetData(passData.m_pDescriptorSet);
+    //     },
+    //     [=](Renderer::RenderGraphResourceManager &resourceMan,
+    //         GIPassData &passData,
+    //         Graphics::CommandList *pList)
+    //     {
+    //         XMUINT2 res = XMUINT2(passData.m_pImage->m_Width, passData.m_pImage->m_Height);
+    //         PushConstantsCS pushConstantData = {
+    //             .CameraPos = gPosition,
+    //             .Width = res.x,
+    //             .Height = res.y,
+    //             .Time = gTime++,
+    //             .TriangleCount = kSceneDataVertexCount,
+    //         };
+
+    //         pList->SetPipeline(passData.m_pPipeline);
+    //         pList->SetPushConstants(LR_SHADER_STAGE_COMPUTE, 0, &pushConstantData, sizeof(PushConstantsCS));
+    //         pList->SetDescriptorSets({ passData.m_pDescriptorSet });
+
+    //         pList->Dispatch((res.x / 16) + 1, (res.y / 16) + 1, 1);
+    //     },
+    //     [](Renderer::RenderGraphResourceManager &resourceMan)
+    //     {
+    //     });
+
+    struct GIFullscreenPassData
+    {
+        Graphics::Sampler *m_pSampler;
+        Graphics::DescriptorSet *m_pFullScreenDescriptorSet;
+        Graphics::DescriptorSet *m_pDescriptorSetSampler;
+        Graphics::Pipeline *m_pPipeline;
     };
 
-    m_pSampler = pAPI->CreateSampler(&samplerDesc);
+    // m_Engine.m_RenderGraph.AddPassAfter<GIFullscreenPassData, LR_COMMAND_LIST_TYPE_GRAPHICS>(
+    //     "gi_fullscreen",
+    //     "gi",
+    //     Renderer::LR_RENDER_PASS_EXECUTION_DONT_CARE,
+    //     [](Renderer::RenderGraphResourceManager &resourceMan, GIFullscreenPassData &passData)
+    //     {
+    //         Graphics::Image *pGIOutput = resourceMan.Get<Graphics::Image>("gi_uav");
 
-    Graphics::BufferDesc bufferDesc = {
-        .m_UsageFlags = LR_RESOURCE_USAGE_TRANSFER_DST | LR_RESOURCE_USAGE_SHADER_RESOURCE,
-        .m_TargetAllocator = LR_API_ALLOCATOR_BUFFER_TLSF,
-        .m_Stride = sizeof(GeometryDataCS),
-        .m_DataLen = kSceneDataVertexCount * sizeof(GeometryDataCS),
-    };
+    //         Graphics::SamplerDesc samplerDesc = {
+    //             .m_MinFilter = LR_FILTERING_LINEAR,
+    //             .m_MagFilter = LR_FILTERING_LINEAR,
+    //             .m_MipFilter = LR_FILTERING_NEAREST,
+    //             .m_AddressU = LR_TEXTURE_ADDRESS_WRAP,
+    //             .m_AddressV = LR_TEXTURE_ADDRESS_WRAP,
+    //             .m_MaxLOD = 0,
+    //         };
 
-    m_pSceneDataBuffer = pAPI->CreateBuffer(&bufferDesc);
+    //         passData.m_pSampler = resourceMan.CreateSampler("gi_sampler", &samplerDesc);
 
-    /// RESOURCE DATA INITIALIZATION ///
+    //         Graphics::DescriptorSetDesc descriptorDesc = {};
+    //         descriptorDesc.m_BindingCount = 1;
+    //         descriptorDesc.m_pBindings[0] = {
+    //             .m_BindingID = 0,
+    //             .m_Type = LR_DESCRIPTOR_TYPE_SHADER_RESOURCE_IMAGE,
+    //             .m_TargetShader = LR_SHADER_STAGE_PIXEL,
+    //             .m_ArraySize = 1,
+    //             .m_pImage = pGIOutput,
+    //         };
+    //         passData.m_pFullScreenDescriptorSet = resourceMan.CreateDescriptorSet(&descriptorDesc);
 
-    Graphics::PipelineBarrier transitionBarrier = {
-        .m_CurrentUsage = LR_RESOURCE_USAGE_UNORDERED_ACCESS,
-        .m_CurrentStage = LR_PIPELINE_STAGE_NONE,
-        .m_CurrentAccess = LR_PIPELINE_ACCESS_NONE,
-        .m_NextUsage = LR_RESOURCE_USAGE_SHADER_RESOURCE,
-        .m_NextStage = LR_PIPELINE_STAGE_PIXEL_SHADER,
-        .m_NextAccess = LR_PIPELINE_ACCESS_SHADER_READ,
-    };
+    //         descriptorDesc.m_pBindings[0] = {
+    //             .m_BindingID = 0,
+    //             .m_Type = LR_DESCRIPTOR_TYPE_SAMPLER,
+    //             .m_TargetShader = LR_SHADER_STAGE_PIXEL,
+    //             .m_ArraySize = 1,
+    //             .m_pSampler = passData.m_pSampler,
+    //         };
+    //         passData.m_pDescriptorSetSampler = resourceMan.CreateDescriptorSet(&descriptorDesc);
+    //         resourceMan.UpdateDescriptorSetData(passData.m_pDescriptorSetSampler);
 
-    Graphics::CommandList *pList = pAPI->GetCommandList();
-    pAPI->BeginCommandList(pList);
-    Graphics::BufferDesc uploadBufferDesc = {
-        .m_UsageFlags = LR_RESOURCE_USAGE_TRANSFER_SRC | LR_RESOURCE_USAGE_HOST_VISIBLE,
-        .m_TargetAllocator = LR_API_ALLOCATOR_BUFFER_FRAMETIME,
-        .m_Stride = sizeof(GeometryData),
-        .m_DataLen = kSceneDataVertexCount * sizeof(GeometryData),
-    };
+    //         Graphics::PipelineAttachment colorAttachment = {
+    //             .m_Format = resourceMan.GetSwapChainFormat(),
+    //             .m_BlendEnable = false,
+    //             .m_WriteMask = LR_COLOR_MASK_R | LR_COLOR_MASK_G | LR_COLOR_MASK_B | LR_COLOR_MASK_A,
+    //             .m_SrcBlend = LR_BLEND_FACTOR_SRC_ALPHA,
+    //             .m_DstBlend = LR_BLEND_FACTOR_INV_SRC_ALPHA,
+    //             .m_SrcBlendAlpha = LR_BLEND_FACTOR_ONE,
+    //             .m_DstBlendAlpha = LR_BLEND_FACTOR_SRC_ALPHA,
+    //             .m_ColorBlendOp = LR_BLEND_OP_ADD,
+    //             .m_AlphaBlendOp = LR_BLEND_OP_ADD,
+    //         };
 
-    Graphics::Buffer *pUploadBuffer = pAPI->CreateBuffer(&uploadBufferDesc);
+    //         Graphics::Shader *m_pFullscreenVS =
+    //             resourceMan.CreateShader(LR_SHADER_STAGE_VERTEX, LR_MAKE_APP_PATH("fs.v.hlsl"));
+    //         Graphics::Shader *m_pFullscreenPS =
+    //             resourceMan.CreateShader(LR_SHADER_STAGE_PIXEL, LR_MAKE_APP_PATH("fs.p.hlsl"));
 
-    void *pMapData = nullptr;
-    pAPI->MapMemory(pUploadBuffer, pMapData);
-    memcpy(pMapData, kSceneData, uploadBufferDesc.m_DataLen);
-    pAPI->UnmapMemory(pUploadBuffer);
-    pList->CopyBuffer(pUploadBuffer, m_pSceneDataBuffer, uploadBufferDesc.m_DataLen);
+    //         Graphics::GraphicsPipelineBuildInfo graphicsBuildInfo = {
+    //             .m_RenderTargetCount = 1,
+    //             .m_pRenderTargets = { colorAttachment },
+    //             .m_ShaderCount = 2,
+    //             .m_ppShaders = { m_pFullscreenVS, m_pFullscreenPS },
+    //             .m_DescriptorSetCount = 2,
+    //             .m_ppDescriptorSets = { passData.m_pFullScreenDescriptorSet, passData.m_pDescriptorSetSampler },
+    //             .m_PushConstantCount = 0,
+    //             .m_SetFillMode = LR_FILL_MODE_FILL,
+    //             .m_SetCullMode = LR_CULL_MODE_NONE,
+    //             .m_EnableDepthWrite = false,
+    //             .m_EnableDepthTest = false,
+    //             .m_DepthCompareOp = LR_COMPARE_OP_NEVER,
+    //             .m_MultiSampleBitCount = 1,
+    //         };
 
-    pList->SetImageBarrier(m_pComputeOutput, &transitionBarrier);
-    pAPI->EndCommandList(pList);
-    pAPI->ExecuteCommandList(pList, true);
+    //         passData.m_pPipeline = resourceMan.CreateGraphicsPipeline(graphicsBuildInfo);
 
-    pAPI->DeleteBuffer(pUploadBuffer);
+    //         resourceMan.DeleteShader(m_pFullscreenVS);
+    //         resourceMan.DeleteShader(m_pFullscreenPS);
+    //     },
+    //     [](Renderer::RenderGraphResourceManager &resourceMan,
+    //        GIFullscreenPassData &passData,
+    //        Graphics::CommandList *pList)
+    //     {
+    //         Graphics::Image *pGIOutput = resourceMan.Get<Graphics::Image>("gi_uav");
+    //         Graphics::PipelineBarrier barrier = {
+    //             .m_CurrentUsage = LR_RESOURCE_USAGE_UNORDERED_ACCESS,
+    //             .m_CurrentStage = LR_PIPELINE_STAGE_COMPUTE_SHADER,
+    //             .m_CurrentAccess = LR_PIPELINE_ACCESS_SHADER_READ | LR_PIPELINE_ACCESS_SHADER_WRITE,
+    //             .m_CurrentQueue = LR_COMMAND_LIST_TYPE_GRAPHICS,
+    //             .m_NextUsage = LR_RESOURCE_USAGE_SHADER_RESOURCE,
+    //             .m_NextStage = LR_PIPELINE_STAGE_PIXEL_SHADER,
+    //             .m_NextAccess = LR_PIPELINE_ACCESS_SHADER_READ,
+    //             .m_NextQueue = LR_COMMAND_LIST_TYPE_COMPUTE,
+    //         };
+    //         pList->SetImageBarrier(pGIOutput, &barrier);
+    //         resourceMan.UpdateDescriptorSetData(passData.m_pFullScreenDescriptorSet);
+    //     },
+    //     [&](Renderer::RenderGraphResourceManager &resourceMan,
+    //         GIFullscreenPassData &passData,
+    //         Graphics::CommandList *pList)
+    //     {
+    //         Graphics::Image *pImage = resourceMan.GetSwapChainImage();
 
-    Graphics::DescriptorSetDesc descriptorDesc = {};
-    descriptorDesc.m_BindingCount = 1;
-    descriptorDesc.m_pBindings[0] = {
-        .m_BindingID = 0,
-        .m_Type = LR_DESCRIPTOR_TYPE_SHADER_RESOURCE_IMAGE,
-        .m_TargetShader = LR_SHADER_STAGE_PIXEL,
-        .m_ArraySize = 1,
-        .m_pImage = m_pComputeOutput,
-    };
-
-    m_pDescriptorSetFS = pAPI->CreateDescriptorSet(&descriptorDesc);
-    pAPI->UpdateDescriptorData(m_pDescriptorSetFS, &descriptorDesc);
-
-    descriptorDesc.m_pBindings[0] = {
-        .m_BindingID = 0,
-        .m_Type = LR_DESCRIPTOR_TYPE_SAMPLER,
-        .m_TargetShader = LR_SHADER_STAGE_PIXEL,
-        .m_ArraySize = 1,
-        .m_pSampler = m_pSampler,
-    };
-
-    m_pDescriptorSetSampler = pAPI->CreateDescriptorSet(&descriptorDesc);
-    pAPI->UpdateDescriptorData(m_pDescriptorSetSampler, &descriptorDesc);
-
-    transitionBarrier = {
-        .m_CurrentUsage = LR_RESOURCE_USAGE_SHADER_RESOURCE,
-        .m_CurrentStage = LR_PIPELINE_STAGE_PIXEL_SHADER,
-        .m_CurrentAccess = LR_PIPELINE_ACCESS_SHADER_READ,
-        .m_NextUsage = LR_RESOURCE_USAGE_UNORDERED_ACCESS,
-        .m_NextStage = LR_PIPELINE_STAGE_COMPUTE_SHADER,
-        .m_NextAccess = LR_PIPELINE_ACCESS_SHADER_READ,
-    };
-
-    pList = pAPI->GetCommandList();
-    pAPI->BeginCommandList(pList);
-    pList->SetImageBarrier(m_pComputeOutput, &transitionBarrier);
-    pAPI->EndCommandList(pList);
-    pAPI->ExecuteCommandList(pList, true);
-
-    descriptorDesc.m_BindingCount = 2;
-    descriptorDesc.m_pBindings[0] = {
-        .m_BindingID = 0,
-        .m_Type = LR_DESCRIPTOR_TYPE_UNORDERED_ACCESS_IMAGE,
-        .m_TargetShader = LR_SHADER_STAGE_COMPUTE,
-        .m_ArraySize = 1,
-        .m_pImage = m_pComputeOutput,
-    };
-
-    descriptorDesc.m_pBindings[1] = {
-        .m_BindingID = 1,
-        .m_Type = LR_DESCRIPTOR_TYPE_SHADER_RESOURCE_BUFFER,
-        .m_TargetShader = LR_SHADER_STAGE_COMPUTE,
-        .m_ArraySize = 1,
-        .m_pBuffer = m_pSceneDataBuffer,
-    };
-
-    m_pDescriptorSetCS = pAPI->CreateDescriptorSet(&descriptorDesc);
-    pAPI->UpdateDescriptorData(m_pDescriptorSetCS, &descriptorDesc);
-
-    Graphics::PipelineAttachment colorAttachment = {
-        .m_Format = pAPI->GetSwapChainImageFormat(),
-        .m_BlendEnable = false,
-        .m_WriteMask = LR_COLOR_MASK_R | LR_COLOR_MASK_G | LR_COLOR_MASK_B | LR_COLOR_MASK_A,
-        .m_SrcBlend = LR_BLEND_FACTOR_SRC_ALPHA,
-        .m_DstBlend = LR_BLEND_FACTOR_INV_SRC_ALPHA,
-        .m_SrcBlendAlpha = LR_BLEND_FACTOR_ONE,
-        .m_DstBlendAlpha = LR_BLEND_FACTOR_SRC_ALPHA,
-        .m_ColorBlendOp = LR_BLEND_OP_ADD,
-        .m_AlphaBlendOp = LR_BLEND_OP_ADD,
-    };
-
-    Graphics::GraphicsPipelineBuildInfo graphicsBuildInfo = {
-        .m_RenderTargetCount = 1,
-        .m_pRenderTargets = { colorAttachment },
-        .m_ShaderCount = 2,
-        .m_ppShaders = { m_pFullscreenVS, m_pFullscreenPS },
-        .m_DescriptorSetCount = 2,
-        .m_ppDescriptorSets = { m_pDescriptorSetFS, m_pDescriptorSetSampler },
-        .m_PushConstantCount = 0,
-        .m_SetFillMode = LR_FILL_MODE_FILL,
-        .m_SetCullMode = LR_CULL_MODE_NONE,
-        .m_EnableDepthWrite = false,
-        .m_EnableDepthTest = false,
-        .m_DepthCompareOp = LR_COMPARE_OP_NEVER,
-        .m_MultiSampleBitCount = 1,
-    };
-
-    m_pGraphicsPipeline = pAPI->CreateGraphicsPipeline(&graphicsBuildInfo);
-
-    Graphics::PushConstantDesc computeConstantDesc = {
-        .m_Stage = LR_SHADER_STAGE_COMPUTE,
-        .m_Offset = 0,
-        .m_Size = sizeof(PushConstantsCS),
-    };
-
-    Graphics::ComputePipelineBuildInfo computeBuildInfo = {
-        .m_pShader = m_pGlobalIllumCS,
-        .m_DescriptorSetCount = 1,
-        .m_ppDescriptorSets = { m_pDescriptorSetCS },
-        .m_PushConstantCount = 1,
-        .m_pPushConstants = { computeConstantDesc },
-    };
-
-    m_pComputePipeline = pAPI->CreateComputePipeline(&computeBuildInfo);
+    //         pList->SetViewport(0, 0, 0, pImage->m_Width, pImage->m_Height);
+    //         pList->SetScissors(0, 0, 0, pImage->m_Width, pImage->m_Height);
+    //         pList->SetGraphicsPipeline(passData.m_pPipeline);
+    //         pList->SetGraphicsDescriptorSets(
+    //             passData.m_pPipeline,
+    //             { passData.m_pFullScreenDescriptorSet, passData.m_pDescriptorSetSampler });
+    //         pList->SetPrimitiveType(LR_PRIMITIVE_TYPE_TRIANGLE_LIST);
+    //         pList->Draw(3);
+    //     },
+    //     [](Renderer::RenderGraphResourceManager &resourceMan)
+    //     {
+    //     });
 }
 
 void GIApp::Shutdown()
@@ -225,98 +308,24 @@ void GIApp::Poll(f32 deltaTime)
 {
     ZoneScoped;
 
-    Graphics::BaseAPI *pAPI = m_Engine.m_pAPI;
-    Graphics::Image *pImage = pAPI->GetSwapChain()->GetCurrentImage();
-    Graphics::Camera3D camera = {};
+    // Graphics::BaseAPI *pAPI = m_Engine.m_pAPI;
+    // Graphics::Image *pImage = pAPI->GetSwapChain()->GetCurrentImage();
+    // Graphics::Camera3D camera = {};
 
-    u32 reset = 0;
-    static u32 time = 1;
+    // u32 reset = 0;
 
-    // ImGui::SetNextWindowPos({});
-    ImGui::SetNextWindowSize({ 1000, 130 });
-    ImGui::Begin("Camera");
+    // // ImGui::SetNextWindowPos({});
+    // ImGui::SetNextWindowSize({ 1000, 130 });
+    // ImGui::Begin("Camera");
 
-    XMFLOAT3 position = {};
-    XMStoreFloat3(&position, camera.m_Position);
+    // reset |= ImGui::SliderFloat("Position X", &gPosition.x, -1000, 1000);
+    // reset |= ImGui::SliderFloat("Position Y", &gPosition.y, -1000, 1000);
+    // reset |= ImGui::SliderFloat("Position Z", &gPosition.z, -1000, 1000);
 
-    reset |= ImGui::SliderFloat("Position X", &position.x, -1000, 1000);
-    reset |= ImGui::SliderFloat("Position Y", &position.y, -1000, 1000);
-    reset |= ImGui::SliderFloat("Position Z", &position.z, -1000, 1000);
-    camera.SetPosition(position);
+    // if (reset)
+    // {
+    //     gTime = 0;
+    // }
 
-    if (reset)
-    {
-        time = 0;
-    }
-
-    ImGui::End();
-
-    Graphics::CommandList *pList = pAPI->GetCommandList(Graphics::CommandListType::Compute);
-    pAPI->BeginCommandList(pList);
-
-    PushConstantsCS pushConstantData = {
-        .Width = pImage->m_Width,
-        .Height = pImage->m_Height,
-        .Time = time++,
-        .TriangleCount = kSceneDataVertexCount,
-    };
-
-    XMStoreFloat3(&pushConstantData.CameraPos, camera.m_Position);
-
-    pList->SetComputePipeline(m_pComputePipeline);
-    pList->SetComputePushConstants(m_pComputePipeline, &pushConstantData, sizeof(PushConstantsCS));
-    pList->SetComputeDescriptorSets({ m_pDescriptorSetCS });
-    pList->Dispatch((pImage->m_Width / 16) + 1, (pImage->m_Height / 16) + 1, 1);
-
-    pAPI->EndCommandList(pList);
-    pAPI->ExecuteCommandList(pList, true);
-
-    pList = pAPI->GetCommandList();
-    pAPI->BeginCommandList(pList);
-
-    Graphics::PipelineBarrier transitionBarrier = {
-        .m_CurrentUsage = LR_RESOURCE_USAGE_UNORDERED_ACCESS,
-        .m_CurrentStage = LR_PIPELINE_STAGE_COMPUTE_SHADER,
-        .m_CurrentAccess = LR_PIPELINE_ACCESS_SHADER_READ,
-        .m_NextUsage = LR_RESOURCE_USAGE_SHADER_RESOURCE,
-        .m_NextStage = LR_PIPELINE_STAGE_PIXEL_SHADER,
-        .m_NextAccess = LR_PIPELINE_ACCESS_SHADER_READ,
-    };
-
-    pList->SetImageBarrier(m_pComputeOutput, &transitionBarrier);
-
-    Graphics::CommandListAttachment attachment = {};
-    attachment.m_pHandle = pImage;
-    attachment.m_LoadOp = LR_ATTACHMENT_OP_CLEAR;
-    attachment.m_StoreOp = LR_ATTACHMENT_OP_STORE;
-    attachment.m_ClearVal = Graphics::ClearValue({ 0.0, 0.0, 0.0, 1.0 });
-
-    Graphics::CommandListBeginDesc beginDesc = {};
-    beginDesc.m_RenderArea = { 0, 0, (u32)pImage->m_Width, (u32)pImage->m_Height };
-    beginDesc.m_ColorAttachmentCount = 1;
-    beginDesc.m_pColorAttachments[0] = attachment;
-    pList->BeginPass(&beginDesc);
-
-    pList->SetGraphicsPipeline(m_pGraphicsPipeline);
-    pList->SetViewport(0, 0, 0, pImage->m_Width, pImage->m_Height);
-    pList->SetScissors(0, 0, 0, pImage->m_Width, pImage->m_Height);
-    pList->SetGraphicsDescriptorSets({ m_pDescriptorSetFS, m_pDescriptorSetSampler });
-    pList->SetPrimitiveType(LR_PRIMITIVE_TYPE_TRIANGLE_LIST);
-    pList->Draw(3);
-
-    pList->EndPass();
-
-    transitionBarrier = {
-        .m_CurrentUsage = LR_RESOURCE_USAGE_SHADER_RESOURCE,
-        .m_CurrentStage = LR_PIPELINE_STAGE_PIXEL_SHADER,
-        .m_CurrentAccess = LR_PIPELINE_ACCESS_SHADER_READ,
-        .m_NextUsage = LR_RESOURCE_USAGE_UNORDERED_ACCESS,
-        .m_NextStage = LR_PIPELINE_STAGE_COMPUTE_SHADER,
-        .m_NextAccess = LR_PIPELINE_ACCESS_SHADER_READ,
-    };
-
-    pList->SetImageBarrier(m_pComputeOutput, &transitionBarrier);
-
-    pAPI->EndCommandList(pList);
-    pAPI->ExecuteCommandList(pList, false);
+    // ImGui::End();
 }

@@ -44,9 +44,15 @@ typedef signed char i8;
 #include <EASTL/atomic.h>
 #include <EASTL/iterator.h>
 #include <EASTL/queue.h>
+#include <EASTL/span.h>
 
 #include <DirectXMath.h>
 #include <DirectXPackedVector.h>
+
+template<typename _Type>
+using cinitl = const std::initializer_list<_Type>;
+template<typename _Type>
+using initl = std::initializer_list<_Type>;
 
 using namespace DirectX;
 using namespace PackedVector;

@@ -1,14 +1,14 @@
 //
-// Created on Wednesday 4th May 2022 by e-erdal
+// Created on Wednesday 4th May 2022 by exdal
 //
 
 #pragma once
 
 #include "Core/Window/BaseWindow.hh"
 #include "Core/Window/Win32/Win32Window.hh"
-#include "Core/Graphics/RHI/Base/BaseAPI.hh"
+#include "Core/Graphics/Vulkan/VKAPI.hh"
+#include "Core/Graphics/RenderGraph/RenderGraph.hh"
 
-#include "Renderer/RenderGraph.hh"
 #include "UI/ImGui.hh"
 
 namespace lr
@@ -66,8 +66,7 @@ namespace lr
 
     struct EngineDesc
     {
-        APIType m_TargetAPI;
-        APIFlags m_TargetAPIFlags;
+        Graphics::APIFlags m_TargetAPIFlags;
 
         WindowDesc m_WindowDesc;
     };
@@ -80,14 +79,15 @@ namespace lr
         void PushEvent(Event event, EngineEventData &data);
         void DispatchEvents();
 
+        void Prepare();
         void BeginFrame();
         void EndFrame();
 
         EventManager<EngineEventData> m_EventMan;
         Win32Window m_Window;
-        Graphics::BaseAPI *m_pAPI = nullptr;
+        Graphics::VKAPI m_API = {};
+        Graphics::RenderGraph m_RenderGraph;
         UI::ImGuiHandler m_ImGui;
-        Renderer::RenderGraph m_RenderGraph;
 
         bool m_ShuttingDown = false;
 

@@ -1,5 +1,5 @@
 //
-// Created on Friday 18th November 2022 by e-erdal
+// Created on Friday 18th November 2022 by exdal
 //
 
 #pragma once
@@ -23,7 +23,7 @@ namespace lr::Memory
     struct AllocationInfo
     {
         u64 m_Size = 0;
-        u32 m_Alignment = 0;
+        u32 m_Alignment = 1;
         void *m_pData = nullptr;
 
         // Allocator data output, i.e, address of TLSF block

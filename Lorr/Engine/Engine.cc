@@ -2,36 +2,23 @@
 
 #include "Core/Utils/Timer.hh"
 
-#include "Core/Graphics/RHI/D3D12/D3D12API.hh"
-#include "Core/Graphics/RHI/Vulkan/VKAPI.hh"
-
-#include "Renderer/Pass.hh"
+#include "Core/Graphics/Vulkan/VKAPI.hh"
+#include "Core/Graphics/Renderer/Pass.hh"
 
 namespace lr
 {
+    using namespace Graphics;
+
     void Engine::Init(EngineDesc &engineDesc)
     {
         ZoneScoped;
 
         Logger::Init();
-
-        switch (engineDesc.m_TargetAPI)
-        {
-            case LR_API_TYPE_VULKAN:
-                m_pAPI = new Graphics::VKAPI;
-                break;
-            case LR_API_TYPE_D3D12:
-                m_pAPI = new Graphics::D3D12API;
-                break;
-            default:
-                break;
-        }
-
         m_EventMan.Init();
         m_Window.Init(engineDesc.m_WindowDesc);
         m_ImGui.Init(m_Window.m_Width, m_Window.m_Height);
 
-        Graphics::BaseAPIDesc apiDesc = {
+        Graphics::APIDesc apiDesc = {
             .m_Flags = LR_API_FLAG_NONE,
             .m_SwapChainFlags = LR_SWAP_CHAIN_FLAG_TRIPLE_BUFFERING,
             .m_pTargetWindow = &m_Window,
@@ -45,14 +32,14 @@ namespace lr
                 .m_ImageTLSFMem = Memory::MiBToBytes(1024),
             },
         };
-        m_pAPI->Init(&apiDesc);
+        m_API.Init(&apiDesc);
 
-        Renderer::RenderGraphDesc renderGraphDesc = {
-            .m_pAPI = m_pAPI,
+        Graphics::RenderGraphDesc renderGraphDesc = {
+            .m_pAPI = &m_API,
         };
         m_RenderGraph.Init(&renderGraphDesc);
 
-        Renderer::AddImguiPass(&m_RenderGraph);
+        Graphics::InitPasses(&m_RenderGraph);
     }
 
     void Engine::PushEvent(Event event, EngineEventData &data)
@@ -86,7 +73,7 @@ namespace lr
                     m_Window.m_Width = data.m_SizeWidth;
                     m_Window.m_Height = data.m_SizeHeight;
 
-                    m_pAPI->ResizeSwapChain(data.m_SizeWidth, data.m_SizeHeight);
+                    m_API.ResizeSwapChain(data.m_SizeWidth, data.m_SizeHeight);
 
                     break;
                 }
@@ -121,26 +108,30 @@ namespace lr
         }
     }
 
+    void Engine::Prepare()
+    {
+        ZoneScoped;
+    }
+
     void Engine::BeginFrame()
     {
         ZoneScoped;
-        
+
         m_Window.Poll();
         DispatchEvents();
 
-        m_ImGui.NewFrame(m_Window.m_Width, m_Window.m_Height);
-
-        m_pAPI->BeginFrame();
+        m_API.BeginFrame();
+        // m_ImGui.NewFrame(m_Window.m_Width, m_Window.m_Height);
     }
 
     void Engine::EndFrame()
     {
         ZoneScoped;
 
-        m_ImGui.EndFrame();
+        // m_ImGui.EndFrame();
 
         m_RenderGraph.Draw();
-        m_pAPI->EndFrame();
+        m_API.EndFrame();
     }
 
 }  // namespace lr

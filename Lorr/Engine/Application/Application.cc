@@ -4,7 +4,7 @@
 
 namespace lr
 {
-    void Application::InitBase(BaseApplicationDesc &desc)
+    void Application::PreInit(BaseApplicationDesc &desc)
     {
         ZoneScoped;
 
@@ -16,6 +16,8 @@ namespace lr
     void Application::Run()
     {
         ZoneScoped;
+
+        m_Engine.Prepare();
 
         Timer timer;
         while (!m_Engine.m_ShuttingDown)

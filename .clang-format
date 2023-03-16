@@ -60,7 +60,7 @@ IndentCaseLabels: true
 IndentGotoLabels: false
 KeepEmptyLinesAtTheStartOfBlocks: false
 MaxEmptyLinesToKeep: 1
-NamespaceIndentation: All
+NamespaceIndentation: Inner
 SortUsingDeclarations: true
 SpaceAfterCStyleCast: false
 SpaceAfterLogicalNot: false

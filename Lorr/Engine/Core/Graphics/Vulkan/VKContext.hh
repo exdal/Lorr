@@ -10,8 +10,9 @@
 
 #include "Vulkan.hh"
 
-#include "VKCommandList.hh"
+#include "VKDevice.hh"
 #include "VKCommandQueue.hh"
+#include "VKCommandList.hh"
 #include "VKPipeline.hh"
 #include "VKSwapChain.hh"
 
@@ -51,7 +52,7 @@ struct SubmitDesc
     eastl::span<SemaphoreSubmitDesc> m_SignalSemas;
 };
 
-struct VKAPI
+struct VKContext
 {
     bool Init(APIDesc *pDesc);
     void InitAllocators(APIAllocatorInitDesc *pDesc);
@@ -76,8 +77,6 @@ struct VKAPI
     void DeleteSemaphore(Semaphore *pSemaphore);
     void WaitForSemaphore(Semaphore *pSemaphore, u64 desiredValue, u64 timeout = UINT64_MAX);
 
-    u32 GetQueueIndex(CommandListType type);
-
     /// PIPELINE ///
     VkPipelineCache CreatePipelineCache(u32 initialDataSize = 0, void *pInitialData = nullptr);
     VkPipelineLayout SerializePipelineLayout(PipelineLayoutSerializeDesc *pDesc, Pipeline *pPipeline);
@@ -86,12 +85,11 @@ struct VKAPI
     Pipeline *CreateComputePipeline(ComputePipelineBuildInfo *pBuildInfo);
 
     /// SWAPCHAIN ///
-    void CreateSwapChain(VkSwapchainKHR &pHandle, VkSwapchainCreateInfoKHR &info);
-    void DeleteSwapChain(SwapChain *pSwapChain);
-    void GetSwapChainImages(VkSwapchainKHR &pHandle, u32 bufferCount, VkImage *pImages);
-    void ResizeSwapChain(u32 width, u32 height);
-    SwapChain *GetSwapChain();
-    SwapChainFrame *GetCurrentFrame();
+    VKSwapChain *CreateSwapChain(BaseWindow *pWindow, SwapChainFlags flags, VKSwapChain *pOldSwapChain);
+    void DeleteSwapChain(VKSwapChain *pSwapChain, bool keepSelf);
+    void AdvanceSwapChain();
+    void ResizeSwapChain(BaseWindow *pWindow);
+    VKSwapChain *GetSwapChain();
 
     void WaitForWork();
     void BeginFrame();
@@ -146,38 +144,31 @@ struct VKAPI
 #endif
     }
 
-    ImageFormat &GetSwapChainImageFormat();
     Semaphore *GetAvailableAcquireSemaphore(Semaphore *pOldSemaphore);
-
-    // * Device Features * //
-    bool IsFormatSupported(ImageFormat format, VkColorSpaceKHR *pColorSpaceOut);
-    bool IsPresentModeSupported(VkPresentModeKHR format);
-    void GetSurfaceCapabilities(VkSurfaceCapabilitiesKHR &capabilitiesOut);
-    u32 GetMemoryTypeIndex(u32 setBits, VkMemoryPropertyFlags propFlags);
-    u32 GetMemoryTypeIndex(VkMemoryPropertyFlags propFlags);
 
     // * API Instance * //
     bool LoadVulkan();
     bool SetupInstance(BaseWindow *pWindow);
+    bool SetupPhysicalDevice();
+    bool SetupSurface(BaseWindow *pWindow);
     bool SetupQueues(VkPhysicalDevice &pPhysicalDevice, VkPhysicalDeviceFeatures &features);
-    bool SetupDevice(VkPhysicalDevice &pPhysicalDevice, VkPhysicalDeviceFeatures &features);
 
     /// ------------------------------------------------------------- ///
 
     // clang-format off
 
-        /// Type conversions
-        static VkFormat                 ToVKFormat(ImageFormat format);
-        static VkFormat                 ToVKFormat(VertexAttribType format);
-        static VkPrimitiveTopology      ToVKTopology(PrimitiveType type);
-        static VkCullModeFlags          ToVKCullMode(CullMode mode);
-        static VkDescriptorType         ToVKDescriptorType(DescriptorType type);
-        static VkImageUsageFlags        ToVKImageUsage(ImageUsage usage);
-        static VkBufferUsageFlagBits    ToVKBufferUsage(BufferUsage usage);
-        static VkImageLayout            ToVKImageLayout(ImageLayout layout);
-        static VkShaderStageFlagBits    ToVKShaderType(ShaderStage type);
-        static VkPipelineStageFlags2    ToVKPipelineStage(PipelineStage stage);
-        static VkAccessFlags2           ToVKAccessFlags(MemoryAcces access);
+    /// Type conversions
+    static VkFormat                 ToVKFormat(ImageFormat format);
+    static VkFormat                 ToVKFormat(VertexAttribType format);
+    static VkPrimitiveTopology      ToVKTopology(PrimitiveType type);
+    static VkCullModeFlags          ToVKCullMode(CullMode mode);
+    static VkDescriptorType         ToVKDescriptorType(DescriptorType type);
+    static VkImageUsageFlags        ToVKImageUsage(ImageUsage usage);
+    static VkBufferUsageFlagBits    ToVKBufferUsage(BufferUsage usage);
+    static VkImageLayout            ToVKImageLayout(ImageLayout layout);
+    static VkShaderStageFlagBits    ToVKShaderType(ShaderStage type);
+    static VkPipelineStageFlags2    ToVKPipelineStage(PipelineStage stage);
+    static VkAccessFlags2           ToVKAccessFlags(MemoryAccess access);
 
     // clang-format on
 
@@ -192,15 +183,15 @@ struct VKAPI
 
     /// ----------------------------------------------------------- ///
 
-    /// API Handles
+    /// API Context
     VkInstance m_pInstance = nullptr;
-    VkPhysicalDevice m_pPhysicalDevice = nullptr;
-    VkSurfaceKHR m_pSurface = nullptr;
+    VKPhysicalDevice *m_pPhysicalDevice = nullptr;
     VkDevice m_pDevice = nullptr;
-    SwapChain m_SwapChain;
+
+    VKSurface *m_pSurface = nullptr;
+    VKSwapChain *m_pSwapChain = nullptr;
 
     /// Main Queues
-    AvailableQueueInfo m_QueueInfo;
     CommandQueue *m_pDirectQueue = nullptr;
     CommandQueue *m_pComputeQueue = nullptr;
     CommandQueue *m_pTransferQueue = nullptr;
@@ -208,7 +199,7 @@ struct VKAPI
     /// Pools/Caches
     VkPipelineCache m_pPipelineCache = nullptr;
     VkDescriptorPool m_pDescriptorPool = nullptr;
-    eastl::fixed_vector<Semaphore *, 8> m_AcquireSempPool;
+    eastl::fixed_vector<Semaphore *, 8, false> m_AcquireSempPool;
     DescriptorLayoutCache m_LayoutCache = {};
 
     using VKLinearAllocator = BufferedAllocator<Memory::LinearAllocatorView>;
@@ -221,15 +212,6 @@ struct VKAPI
     VKTLSFAllocator m_MABufferTLSF;
     VKTLSFAllocator m_MABufferTLSFHost;
     VKTLSFAllocator m_MAImageTLSF;
-
-    /// Native API
-    VkPhysicalDeviceMemoryProperties m_MemoryProps;
-
-    VkSurfaceFormatKHR *m_pValidSurfaceFormats = nullptr;
-    u32 m_ValidSurfaceFormatCount = 0;
-
-    VkPresentModeKHR *m_pValidPresentModes = nullptr;
-    u32 m_ValidPresentModeCount = 0;
 
     HMODULE m_VulkanLib;
 };

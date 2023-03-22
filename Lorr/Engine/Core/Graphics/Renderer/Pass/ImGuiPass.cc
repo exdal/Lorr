@@ -28,11 +28,6 @@ void AddImguiPass(RenderGraph *pGraph, eastl::string_view name)
         u32 m_IndexCount;
     };
 
-    GraphicsRenderPass *pPass = pGraph->CreateGraphicsPass<ImguiPassData>(name);
-
-    pPass->AddColorAttachment(
-        "$backbuffer", LR_MEMORY_ACCESS_RENDER_TARGET_READ | LR_MEMORY_ACCESS_RENDER_TARGET_WRITE);
-
     DescriptorLayoutElement pFontLayoutElement[] = {
         {
             .m_BindingID = 0,
@@ -51,6 +46,8 @@ void AddImguiPass(RenderGraph *pGraph, eastl::string_view name)
     };
     DescriptorLayoutElement *pPipelineElements[] = { pFontLayoutElement, pSamplerLayoutElement };
 
+    GraphicsRenderPass *pPass = pGraph->CreateGraphicsPass<ImguiPassData>(name);
+    pPass->AddColorAttachment("$backbuffer", LR_MEMORY_ACCESS_RENDER_TARGET_WRITE);
     pGraph->SetCallbacks<ImguiPassData>(
         pPass,
         [](RenderGraphResourceManager &resMan, ImguiPassData &data)

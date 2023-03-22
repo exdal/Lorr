@@ -105,7 +105,7 @@ void RenderGraph::AddGraphicsGroup(
     }
 }
 
-static ImageLayout ToImageLayout(ImageUsage usage)
+static ImageLayout ToImageLayout(MemoryAcces access)
 {
     ZoneScoped;
 
@@ -146,11 +146,11 @@ static PipelineStage ToPipelineStage(ImageLayout layout)
     return kColorStages[layout];
 }
 
-static MemoryAcces ToMemoryAccess(ImageLayout layout, AttachmentOp attachmentOp)
+static MemoryAcces ToCurrentMemoryAccess(ImageLayout layout, AttachmentFlags flags)
 {
     ZoneScoped;
 
-    bool isWrite = attachmentOp != LR_ATTACHMENT_OP_LOAD;  // all other flags are WRITE op.
+    bool isWrite = flags != LR_ATTACHMENT_FLAG_CLEAR;  // all other flags are WRITE op.
 
     struct AccessPair
     {
@@ -181,14 +181,15 @@ void RenderGraph::ExecuteGraphics(GraphicsRenderPass *pPass)
     m_pAPI->BeginCommandList(pList);
 
     /// PREPARE ATTACHMENTS ///
-    eastl::span<RenderPassColorAttachment> colorAttachments = pPass->GetColorAttachments();
-    RenderPassDepthAttachment *pDepthAttachment = pPass->GetDepthAttachment();
+    eastl::span<ColorAttachment> colorAttachments = pPass->GetColorAttachments();
+    DepthAttachment *pDepthAttachment = pPass->GetDepthAttachment();
 
-    for (RenderPassColorAttachment &attachment : colorAttachments)
+    for (ColorAttachment &attachment : colorAttachments)
     {
-        attachment.m_pImage = m_ResourceManager.GetResource<Image>(attachment.m_Hash);
-        ImageLayout currentLayout = attachment.m_pImage->m_Layout;
-        ImageLayout nextLayout = ToImageLayout(attachment.m_Usage);
+        Image *pImage = m_ResourceManager.GetResource<Image>(attachment.m_ResourceID);
+
+        ImageLayout currentLayout = pImage->m_Layout;
+        ImageLayout nextLayout = ToImageLayout(attachment.m_AccessFlags);
 
         PipelineBarrier barrier = {
             .m_CurrentLayout = currentLayout,
@@ -196,9 +197,9 @@ void RenderGraph::ExecuteGraphics(GraphicsRenderPass *pPass)
             .m_CurrentStage = ToPipelineStage(currentLayout),
             .m_NextStage = ToPipelineStage(nextLayout),
             .m_CurrentAccess = ToMemoryAccess(currentLayout, attachment.m_LoadOp),
-            .m_NextAccess = ToMemoryAccess(nextLayout, attachment.m_StoreOp),
+            .m_NextAccess = attachment.m_AccessFlags,
         };
-        pList->SetImageBarrier(attachment.m_pImage, &barrier);
+        pList->SetImageBarrier(pImage, &barrier);
     }
 
     if (pPass->m_Flags & LR_RENDER_PASS_FLAG_ALLOW_EXECUTE)
@@ -209,7 +210,7 @@ void RenderGraph::ExecuteGraphics(GraphicsRenderPass *pPass)
 
         pList->BeginPass(&passDesc);
         pList->SetPipeline(pPass->m_pPipeline);
-        pPass->Execute(m_ResourceManager, pList);
+        pPass->Execute(pList);
         pList->EndPass();
     }
 

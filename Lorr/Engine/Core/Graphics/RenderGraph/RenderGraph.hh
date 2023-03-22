@@ -32,6 +32,21 @@ struct RenderGraph
     void Shutdown();
     void Draw();
 
+    /// RENDERPASSES ///
+
+    template<typename _RenderPass = RenderPass>
+    _RenderPass *GetPass(eastl::string_view name)
+    {
+        ZoneScoped;
+
+        ResourceID hash = Hash::FNV64String(name);
+        for (RenderPass *pPass : m_Passes)
+            if (pPass->m_NameHash == hash)
+                return (_RenderPass *)pPass;
+
+        return nullptr;
+    }
+
     template<typename _Data, typename... _Args>
     GraphicsRenderPass *CreateGraphicsPass(eastl::string_view name)
     {
@@ -60,36 +75,28 @@ struct RenderGraph
         pCallbackPass->SetCallbacks(eastl::forward<_Args>(args)..., m_ResourceManager);
     }
 
+    void ExecuteGraphics(GraphicsRenderPass *pPass);
+
+    /// GROUPS ///
+
     void AddGraphicsGroup(
         eastl::string_view name, eastl::string_view dependantGroup, cinitl<eastl::string_view> &passes);
 
-    void ExecuteGraphics(GraphicsRenderPass *pPass);
+    RenderPassGroup *GetGroup(u32 groupID);
+    RenderPassGroup *GetGroup(eastl::string_view name);
+    RenderPassGroup *GetOrCreateGroup(eastl::string_view name);
+
+    /// RESOURCES ///
 
     void AllocateCommandLists(CommandListType type);
     Semaphore *GetSemaphore(CommandListType type);
     CommandAllocator *GetCommandAllocator(CommandListType type);
     CommandList *GetCommandList(RenderPass *pPass);
 
-    template<typename _RenderPass = RenderPass>
-    _RenderPass *GetPass(eastl::string_view name)
-    {
-        ZoneScoped;
-
-        ResourceID hash = Hash::FNV64String(name);
-        for (RenderPass *pPass : m_Passes)
-            if (pPass->m_NameHash == hash)
-                return (_RenderPass *)pPass;
-
-        return nullptr;
-    }
-
-    RenderPassGroup *GetGroup(u32 groupID);
-    RenderPassGroup *GetGroup(eastl::string_view name);
-    RenderPassGroup *GetOrCreateGroup(eastl::string_view name);
-
+    /// API CONTEXT ///
     VKAPI *m_pAPI = nullptr;
-    RenderGraphResourceManager m_ResourceManager = {};
 
+    /// RESOURCES ///
     Semaphore *m_pSemaphores[LR_MAX_FRAME_COUNT] = {};
     CommandAllocator *m_pCommandAllocators[LR_MAX_FRAME_COUNT] = {};
     eastl::vector<CommandList *> m_CommandLists;
@@ -98,6 +105,7 @@ struct RenderGraph
     Memory::LinearAllocator m_GroupAllocator = {};
     eastl::vector<RenderPass *> m_Passes;
     eastl::vector<RenderPassGroup *> m_Groups;
+    eastl::vector<TrackedResource> m_Resources;
 };
 
 }  // namespace lr::Graphics

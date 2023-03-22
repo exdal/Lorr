@@ -9,20 +9,16 @@
 
 namespace lr::Graphics
 {
-    struct AvailableQueueInfo
-    {
-        u32 m_QueueCount = 0;
-        eastl::array<u8, 4> m_Indexes;
-    };
+struct AvailableQueueInfo
+{
+    u32 m_Present : 1;
+    u32 m_QueueCount : 15;
+    u32 m_Index : 16;
+};
 
-    struct CommandQueue : APIObject<VK_OBJECT_TYPE_QUEUE>
-    {
-        void Init(VkQueue pHandle)
-        {
-            m_pHandle = pHandle;
-        }
-
-        VkQueue m_pHandle = nullptr;
-    };
+struct CommandQueue : APIObject<VK_OBJECT_TYPE_QUEUE>
+{
+    VkQueue m_pHandle = nullptr;
+};
 
 }  // namespace lr::Graphics

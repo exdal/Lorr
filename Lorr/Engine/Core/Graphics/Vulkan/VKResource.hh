@@ -340,62 +340,6 @@ struct DepthClearValue
     u8 m_Stencil;
 };
 
-enum MemoryAcces : u32
-{
-    LR_MEMORY_ACCESS_NONE = 0,
-    LR_MEMORY_ACCESS_VERTEX_ATTRIB_READ = 1 << 0,
-    LR_MEMORY_ACCESS_INDEX_ATTRIB_READ = 1 << 1,
-    LR_MEMORY_ACCESS_SHADER_READ = 1 << 2,
-    LR_MEMORY_ACCESS_SHADER_WRITE = 1 << 3,
-    LR_MEMORY_ACCESS_RENDER_TARGET_READ = 1 << 4,
-    LR_MEMORY_ACCESS_RENDER_TARGET_WRITE = 1 << 5,
-    LR_MEMORY_ACCESS_DEPTH_STENCIL_READ = 1 << 6,
-    LR_MEMORY_ACCESS_DEPTH_STENCIL_WRITE = 1 << 7,
-    LR_MEMORY_ACCESS_TRANSFER_READ = 1 << 8,
-    LR_MEMORY_ACCESS_TRANSFER_WRITE = 1 << 9,
-    LR_MEMORY_ACCESS_MEMORY_READ = 1 << 10,
-    LR_MEMORY_ACCESS_MEMORY_WRITE = 1 << 11,
-    LR_MEMORY_ACCESS_HOST_READ = 1 << 12,
-    LR_MEMORY_ACCESS_HOST_WRITE = 1 << 13,
-};
-EnumFlags(MemoryAcces);
-
-enum AttachmentFlags : u32
-{
-    LR_ATTACHMENT_FLAG_NONE = 0,
-    LR_ATTACHMENT_FLAG_SC_SCALING = 1 << 0,  // Attachment's size is relative to swapchain size
-    LR_ATTACHMENT_FLAG_SC_FORMAT = 1 << 1,   // Attachment's format is relative to swapchain format
-    LR_ATTACHMENT_FLAG_CLEAR = 1 << 2,
-};
-EnumFlags(AttachmentFlags);
-
-using ResourceID = u64;
-struct ColorAttachment
-{
-    union
-    {
-        Image *m_pImage = nullptr;
-        ResourceID m_ResourceID;
-    };
-
-    AttachmentFlags m_Flags = LR_ATTACHMENT_FLAG_NONE;
-    MemoryAcces m_AccessFlags = LR_MEMORY_ACCESS_NONE;
-    ColorClearValue m_ClearValue = {};
-};
-
-struct DepthAttachment
-{
-    union
-    {
-        Image *m_pImage = nullptr;
-        ResourceID m_ResourceID;
-    };
-
-    AttachmentFlags m_Flags = LR_ATTACHMENT_FLAG_NONE;
-    MemoryAcces m_AccessFlags = LR_MEMORY_ACCESS_NONE;
-    DepthClearValue m_ClearValue = {};
-};
-
 enum BlendFactor : u32
 {
     LR_BLEND_FACTOR_ZERO = 0,

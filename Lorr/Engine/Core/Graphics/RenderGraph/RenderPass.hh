@@ -21,12 +21,12 @@ EnumFlags(RenderPassFlags);
 
 struct RenderPass
 {
-    ResourceID m_NameHash = ~0;
+    Hash64 m_NameHash = ~0;
     RenderPassFlags m_Flags = LR_RENDER_PASS_FLAG_NONE;
-    CommandListType m_PassType = LR_COMMAND_LIST_TYPE_GRAPHICS;
 
-    u32 m_BoundGroupID = LR_INVALID_GROUP_ID;  // Only group manager must modify this value
-    u32 m_PassID = 0;
+    CommandListType m_PassType : 3 = LR_COMMAND_LIST_TYPE_GRAPHICS;
+    u32 m_BoundGroupID : 13 = LR_INVALID_GROUP_ID;
+    u32 m_PassID : 16 = 0;
 
     Pipeline *m_pPipeline = nullptr;
     RenderGraphResourceManager *m_pResourceMan = nullptr;
@@ -38,12 +38,7 @@ struct RenderPass
 
 struct GraphicsRenderPass : RenderPass
 {
-    void AddColorAttachment(eastl::string_view imageName, const ColorAttachment &attachment);
-    void AddDepthAttachment(eastl::string_view imageName, const DepthAttachment &attachment);
-    eastl::span<ColorAttachment> GetColorAttachments();
-    DepthAttachment *GetDepthAttachment();
-
-    eastl::fixed_vector<ColorAttachment, LR_MAX_RENDER_TARGET_PER_PASS, false> m_ColorAttachments;
+    eastl::vector<ColorAttachment> m_ColorAttachments;
     DepthAttachment m_DepthAttachment = {};
 };
 

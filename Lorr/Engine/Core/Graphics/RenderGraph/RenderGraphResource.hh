@@ -4,33 +4,55 @@
 
 #pragma once
 
-#include "Core/Crypto/FNV.hh"
+#include "Core/Crypt/FNV.hh"
 
-#include "Core/Graphics/Vulkan/VKAPI.hh"
+#include "Core/Graphics/Vulkan/VKContext.hh"
 #include "Core/Graphics/Vulkan/VKPipeline.hh"
 #include "Core/Graphics/Vulkan/VKResource.hh"
 
 namespace lr::Graphics
 {
+using Hash64 = u64;
+using NameID = eastl::string_view;
+
+enum AttachmentFlags : u32
+{
+    LR_ATTACHMENT_FLAG_NONE = 0,
+    LR_ATTACHMENT_FLAG_SC_SCALING = 1 << 0,  // Attachment's size is relative to swapchain size
+    LR_ATTACHMENT_FLAG_SC_FORMAT = 1 << 1,   // Attachment's format is relative to swapchain format
+    LR_ATTACHMENT_FLAG_CLEAR = 1 << 2,
+};
+EnumFlags(AttachmentFlags);
+
+struct ColorAttachment
+{
+    Hash64 m_Hash = ~0;
+};
+
+struct DepthAttachment
+{
+    Hash64 m_Hash = ~0;
+};
+
 struct RenderGraphResourceManager
 {
     /// TRACKED RESOURCES ///
-    Image *CreateImage(eastl::string_view name, ImageDesc *pDesc);
-    Buffer *CreateBuffer(eastl::string_view name, BufferDesc *pDesc);
-    Sampler *CreateSampler(eastl::string_view name, SamplerDesc *pDesc);
+    Image *CreateImage(NameID name, ImageDesc *pDesc);
+    Buffer *CreateBuffer(NameID name, BufferDesc *pDesc);
+    Sampler *CreateSampler(NameID name, SamplerDesc *pDesc);
 
     /// UNTRACKED RESOURCES ///
     DescriptorSetLayout *CreateDescriptorSetLayout(eastl::span<DescriptorLayoutElement> elements);
     DescriptorSet *CreateDescriptorSet(DescriptorSetLayout *pLayout);
     Shader *CreateShader(ShaderStage type, BufferReadStream &buf);
-    Shader *CreateShader(ShaderStage type, eastl::string_view path);
+    Shader *CreateShader(ShaderStage type, NameID path);
     Pipeline *CreatePipeline(GraphicsPipelineBuildInfo &buildInfo);
 
-    void DeleteImage(eastl::string_view name);
-    void DeleteBuffer(eastl::string_view name);
+    void DeleteImage(NameID name);
+    void DeleteBuffer(NameID name);
     void DeleteBuffer(Buffer *pBuffer);
-    void DeleteSampler(eastl::string_view name);
-    void DeleteDescriptorSet(eastl::string_view name);
+    void DeleteSampler(NameID name);
+    void DeleteDescriptorSet(NameID name);
     void DeleteShader(Shader *pShader);
 
     void UpdateDescriptorSet(DescriptorSet *pSet, cinitl<DescriptorWriteData> &elements);
@@ -38,13 +60,13 @@ struct RenderGraphResourceManager
     void UnmapBuffer(Buffer *pBuffer);
 
     template<typename _Resource>
-    _Resource *GetResource(eastl::string_view name)
+    _Resource *GetResource(NameID name)
     {
         return GetResource<_Resource>(Hash::FNV64String(name));
     }
 
     template<typename _Resource>
-    _Resource *GetResource(ResourceID hash)
+    _Resource *GetResource(Hash64 hash)
     {
         ZoneScoped;
 
@@ -64,11 +86,11 @@ struct RenderGraphResourceManager
     }
 
     template<typename _Resource>
-    void AddResource(eastl::string_view name, _Resource *pResource)
+    void AddResource(NameID name, _Resource *pResource)
     {
         ZoneScoped;
 
-        ResourceID hash = Hash::FNV64String(name);
+        Hash64 hash = Hash::FNV64String(name);
         m_Resources.push_back(TrackedResource{
             .m_Hash = hash,
             .m_pTypelessHandle = pResource,
@@ -77,9 +99,9 @@ struct RenderGraphResourceManager
 
     // Internal
     template<typename _Resource>
-    _Resource *RemoveResource(eastl::string_view name)
+    _Resource *RemoveResource(NameID name)
     {
-        ResourceID hash = Hash::FNV64String(name);
+        Hash64 hash = Hash::FNV64String(name);
         _Resource *pResource = nullptr;
 
         for (u32 i = 0; i < m_Resources.size(); i++)
@@ -98,20 +120,7 @@ struct RenderGraphResourceManager
 
     VKAPI *m_pAPI = nullptr;
 
-    struct TrackedResource
-    {
-        ResourceID m_Hash = 0;
 
-        union
-        {
-            Image *m_pImage = nullptr;
-            Buffer *m_pBuffer;
-            Sampler *m_pSampler;
-            void *m_pTypelessHandle;  // for templates
-        };
-    };
-
-    eastl::vector<TrackedResource> m_Resources;
 };
 
 }  // namespace lr::Graphics

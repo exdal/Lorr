@@ -14,7 +14,7 @@ namespace lr::Hash
         u32 fnv = kFNV32Value;
 
         for (u32 i = 0; i < dataLen; i++)
-            fnv ^= (u32)pData[i] * kFNV32Prime;
+            fnv = (fnv * kFNV32Prime) ^ pData[i];
 
         return fnv;
     }
@@ -38,7 +38,7 @@ namespace lr::Hash
         u64 fnv = kFNV64Value;
 
         for (u32 i = 0; i < dataLen; i++)
-            fnv ^= (u64)pData[i] * kFNV64Prime;
+            fnv = (fnv * kFNV64Prime) ^ pData[i];
 
         return fnv;
     }

@@ -4,9 +4,7 @@
 
 #pragma once
 
-#include "Core/Window/BaseWindow.hh"
 #include "Core/Window/Win32/Win32Window.hh"
-#include "Core/Graphics/Vulkan/VKAPI.hh"
 #include "Core/Graphics/RenderGraph/RenderGraph.hh"
 
 #include "UI/ImGui.hh"
@@ -85,7 +83,6 @@ namespace lr
 
         EventManager<EngineEventData> m_EventMan;
         Win32Window m_Window;
-        Graphics::VKAPI m_API = {};
         Graphics::RenderGraph m_RenderGraph;
         UI::ImGuiHandler m_ImGui;
 

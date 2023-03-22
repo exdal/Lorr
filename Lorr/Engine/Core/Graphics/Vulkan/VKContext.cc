@@ -1,4 +1,4 @@
-#include "VKAPI.hh"
+#include "VKContext.hh"
 
 #include "Core/Window/Win32/Win32Window.hh"
 
@@ -11,96 +11,28 @@ _VK_IMPORT_SYMBOLS
 _VK_IMPORT_INSTANCE_SYMBOLS
 #undef _VK_DEFINE_FUNCTION
 
-#define VKCall(fn, err)                            \
-    if ((vkResult = fn) != VK_SUCCESS)             \
-    {                                              \
-        LOG_CRITICAL(err " - Code: {}", vkResult); \
-    }
-
-#define VKCallRet(fn, err, ret)                    \
-    if ((vkResult = fn) != VK_SUCCESS)             \
-    {                                              \
-        LOG_CRITICAL(err " - Code: {}", vkResult); \
-        return ret;                                \
-    }
-
 namespace lr::Graphics
 {
-bool VKAPI::Init(APIDesc *pDesc)
+bool VKContext::Init(APIDesc *pDesc)
 {
     ZoneScoped;
 
     LOG_TRACE("Initializing Vulkan context...");
 
-    LoadVulkan();
-    SetupInstance(pDesc->m_pTargetWindow);
-
-    u32 availableDeviceCount = 0;
-    vkEnumeratePhysicalDevices(m_pInstance, &availableDeviceCount, nullptr);
-
-    if (availableDeviceCount == 0)
-    {
-        LOG_CRITICAL("No GPU with Vulkan support.");
-        return false;
-    }
-
-    VkPhysicalDevice *ppAvailableDevices = new VkPhysicalDevice[availableDeviceCount];
-    vkEnumeratePhysicalDevices(m_pInstance, &availableDeviceCount, ppAvailableDevices);
-
-    /// Select device
-
-    VkPhysicalDeviceFeatures deviceFeatures;
-
-    for (u32 i = 0; i < availableDeviceCount; i++)
-    {
-        VkPhysicalDevice pCurDevice = ppAvailableDevices[i];
-
-        VkPhysicalDeviceProperties deviceProps;
-
-        vkGetPhysicalDeviceProperties(pCurDevice, &deviceProps);
-        vkGetPhysicalDeviceFeatures(pCurDevice, &deviceFeatures);
-
-        if (deviceProps.deviceType != VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
-        {
-            // We want to run on real GPU
-            continue;
-        }
-
-        if (!deviceFeatures.tessellationShader || !deviceFeatures.geometryShader
-            || !deviceFeatures.fullDrawIndexUint32)
-        {
-            continue;
-        }
-
-        m_pPhysicalDevice = pCurDevice;
-
-        break;
-    }
-
-    if (!SetupQueues(m_pPhysicalDevice, deviceFeatures))
+    if (!LoadVulkan())
         return false;
 
-    if (!SetupDevice(m_pPhysicalDevice, deviceFeatures))
+    if (!SetupInstance(pDesc->m_pTargetWindow))
         return false;
 
-    /// Get surface formats
-    vkGetPhysicalDeviceSurfaceFormatsKHR(m_pPhysicalDevice, m_pSurface, &m_ValidSurfaceFormatCount, nullptr);
+    if (!SetupPhysicalDevice())
+        return false;
 
-    m_pValidSurfaceFormats = new VkSurfaceFormatKHR[m_ValidSurfaceFormatCount];
-    vkGetPhysicalDeviceSurfaceFormatsKHR(
-        m_pPhysicalDevice, m_pSurface, &m_ValidSurfaceFormatCount, m_pValidSurfaceFormats);
+    if (!SetupSurface(pDesc->m_pTargetWindow))
+        return false;
 
-    /// Get surface present modes
-    vkGetPhysicalDeviceSurfacePresentModesKHR(m_pPhysicalDevice, m_pSurface, &m_ValidPresentModeCount, nullptr);
-
-    m_pValidPresentModes = new VkPresentModeKHR[m_ValidPresentModeCount];
-    vkGetPhysicalDeviceSurfacePresentModesKHR(
-        m_pPhysicalDevice, m_pSurface, &m_ValidPresentModeCount, m_pValidPresentModes);
-
-    vkGetPhysicalDeviceMemoryProperties(m_pPhysicalDevice, &m_MemoryProps);
-
-    // yeah uh, dont delete
-    // delete[] ppAvailableDevices;
+    m_pDevice = m_pPhysicalDevice->GetLogicalDevice();
+    m_pPhysicalDevice->InitQueueFamilies(m_pSurface);
 
     InitAllocators(&pDesc->m_AllocatorDesc);
 
@@ -119,9 +51,8 @@ bool VKAPI::Init(APIDesc *pDesc)
     m_pTransferQueue = CreateCommandQueue(LR_COMMAND_LIST_TYPE_TRANSFER);
     SetObjectName(m_pTransferQueue, "Transfer Queue");
 
-    m_SwapChain.Init(pDesc->m_pTargetWindow, this, pDesc->m_SwapChainFlags);
-    SetObjectName(&m_SwapChain, "Swap Chain");
-    m_SwapChain.CreateBackBuffers(this);
+    m_pSwapChain = CreateSwapChain(pDesc->m_pTargetWindow, pDesc->m_SwapChainFlags, nullptr);
+    SetObjectName(m_pSwapChain, "Swap Chain");
 
     ShaderCompiler::Init();
 
@@ -130,7 +61,7 @@ bool VKAPI::Init(APIDesc *pDesc)
     return true;
 }
 
-void VKAPI::InitAllocators(APIAllocatorInitDesc *pDesc)
+void VKContext::InitAllocators(APIAllocatorInitDesc *pDesc)
 {
     ZoneScoped;
 
@@ -145,7 +76,7 @@ void VKAPI::InitAllocators(APIAllocatorInitDesc *pDesc)
     m_MABufferLinear.Allocator.Init(pDesc->m_BufferLinearMem);
     m_MABufferLinear.pHeap = CreateHeap(pDesc->m_BufferLinearMem, true);
 
-    for (u32 i = 0; i < m_SwapChain.m_FrameCount; i++)
+    for (u32 i = 0; i < m_pSwapChain->m_FrameCount; i++)
     {
         m_MABufferFrametime[i].Allocator.Init(pDesc->m_BufferFrametimeMem);
         m_MABufferFrametime[i].pHeap = CreateHeap(pDesc->m_BufferFrametimeMem, true);
@@ -161,21 +92,17 @@ void VKAPI::InitAllocators(APIAllocatorInitDesc *pDesc)
     m_MAImageTLSF.pHeap = CreateHeap(pDesc->m_ImageTLSFMem, false);
 }
 
-CommandQueue *VKAPI::CreateCommandQueue(CommandListType type)
+CommandQueue *VKContext::CreateCommandQueue(CommandListType type)
 {
     ZoneScoped;
 
     CommandQueue *pQueue = new CommandQueue;
-
-    VkQueue pHandle = nullptr;
-    vkGetDeviceQueue(m_pDevice, m_QueueInfo.m_Indexes[type], 0, &pHandle);
-
-    pQueue->Init(pHandle);
+    vkGetDeviceQueue(m_pDevice, m_pPhysicalDevice->GetQueueIndex(type), 0, &pQueue->m_pHandle);
 
     return pQueue;
 }
 
-CommandAllocator *VKAPI::CreateCommandAllocator(CommandListType type, bool resetLists)
+CommandAllocator *VKContext::CreateCommandAllocator(CommandListType type, bool resetLists)
 {
     ZoneScoped;
 
@@ -184,20 +111,19 @@ CommandAllocator *VKAPI::CreateCommandAllocator(CommandListType type, bool reset
     VkCommandPoolCreateInfo allocatorInfo = {};
     allocatorInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
     allocatorInfo.flags = resetLists ? VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT : 0;
-    allocatorInfo.queueFamilyIndex = m_QueueInfo.m_Indexes[type];
+    allocatorInfo.queueFamilyIndex = m_pPhysicalDevice->GetQueueIndex(type);
 
     vkCreateCommandPool(m_pDevice, &allocatorInfo, nullptr, &pAllocator->m_pHandle);
 
     return pAllocator;
 }
 
-CommandList *VKAPI::CreateCommandList(CommandListType type, CommandAllocator *pAllocator)
+CommandList *VKContext::CreateCommandList(CommandListType type, CommandAllocator *pAllocator)
 {
     ZoneScoped;
 
     CommandList *pList = new CommandList;
     pList->m_Type = type;
-    pList->m_pQueueInfo = &m_QueueInfo;
 
     if (pAllocator)
         AllocateCommandList(pList, pAllocator);
@@ -205,7 +131,7 @@ CommandList *VKAPI::CreateCommandList(CommandListType type, CommandAllocator *pA
     return pList;
 }
 
-void VKAPI::AllocateCommandList(CommandList *pList, CommandAllocator *pAllocator)
+void VKContext::AllocateCommandList(CommandList *pList, CommandAllocator *pAllocator)
 {
     ZoneScoped;
 
@@ -219,7 +145,7 @@ void VKAPI::AllocateCommandList(CommandList *pList, CommandAllocator *pAllocator
     vkAllocateCommandBuffers(m_pDevice, &listInfo, &pList->m_pHandle);
 }
 
-void VKAPI::BeginCommandList(CommandList *pList)
+void VKContext::BeginCommandList(CommandList *pList)
 {
     ZoneScoped;
 
@@ -230,31 +156,21 @@ void VKAPI::BeginCommandList(CommandList *pList)
     vkBeginCommandBuffer(pList->m_pHandle, &beginInfo);
 }
 
-void VKAPI::EndCommandList(CommandList *pList)
+void VKContext::EndCommandList(CommandList *pList)
 {
     ZoneScoped;
 
     vkEndCommandBuffer(pList->m_pHandle);
 }
 
-void VKAPI::ResetCommandAllocator(CommandAllocator *pAllocator)
+void VKContext::ResetCommandAllocator(CommandAllocator *pAllocator)
 {
     ZoneScoped;
 
     vkResetCommandPool(m_pDevice, pAllocator->m_pHandle, VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT);
 }
 
-u32 VKAPI::GetQueueIndex(CommandListType type)
-{
-    ZoneScoped;
-
-    if (type == LR_COMMAND_LIST_TYPE_COUNT)
-        return VK_QUEUE_FAMILY_IGNORED;
-
-    return m_QueueInfo.m_Indexes[type];
-}
-
-void VKAPI::Submit(SubmitDesc *pDesc)
+void VKContext::Submit(SubmitDesc *pDesc)
 {
     ZoneScoped;
 
@@ -286,7 +202,7 @@ void VKAPI::Submit(SubmitDesc *pDesc)
     vkQueueSubmit2(pQueueHandle, 1, &submitInfo, nullptr);
 }
 
-Fence *VKAPI::CreateFence(bool signaled)
+Fence *VKContext::CreateFence(bool signaled)
 {
     ZoneScoped;
 
@@ -301,7 +217,7 @@ Fence *VKAPI::CreateFence(bool signaled)
     return pFence;
 }
 
-void VKAPI::DeleteFence(Fence *pFence)
+void VKContext::DeleteFence(Fence *pFence)
 {
     ZoneScoped;
 
@@ -310,21 +226,21 @@ void VKAPI::DeleteFence(Fence *pFence)
     delete pFence;
 }
 
-bool VKAPI::IsFenceSignaled(Fence *pFence)
+bool VKContext::IsFenceSignaled(Fence *pFence)
 {
     ZoneScoped;
 
     return vkGetFenceStatus(m_pDevice, pFence->m_pHandle) == VK_SUCCESS;
 }
 
-void VKAPI::ResetFence(Fence *pFence)
+void VKContext::ResetFence(Fence *pFence)
 {
     ZoneScoped;
 
     vkResetFences(m_pDevice, 1, &pFence->m_pHandle);
 }
 
-Semaphore *VKAPI::CreateSemaphore(u32 initialValue, bool binary)
+Semaphore *VKContext::CreateSemaphore(u32 initialValue, bool binary)
 {
     ZoneScoped;
 
@@ -345,7 +261,7 @@ Semaphore *VKAPI::CreateSemaphore(u32 initialValue, bool binary)
     return pSemaphore;
 }
 
-void VKAPI::DeleteSemaphore(Semaphore *pSemaphore)
+void VKContext::DeleteSemaphore(Semaphore *pSemaphore)
 {
     ZoneScoped;
 
@@ -353,7 +269,7 @@ void VKAPI::DeleteSemaphore(Semaphore *pSemaphore)
     delete pSemaphore;
 }
 
-void VKAPI::WaitForSemaphore(Semaphore *pSemaphore, u64 desiredValue, u64 timeout)
+void VKContext::WaitForSemaphore(Semaphore *pSemaphore, u64 desiredValue, u64 timeout)
 {
     ZoneScoped;
 
@@ -366,7 +282,7 @@ void VKAPI::WaitForSemaphore(Semaphore *pSemaphore, u64 desiredValue, u64 timeou
     vkWaitSemaphores(m_pDevice, &waitInfo, timeout);
 }
 
-VkPipelineCache VKAPI::CreatePipelineCache(u32 initialDataSize, void *pInitialData)
+VkPipelineCache VKContext::CreatePipelineCache(u32 initialDataSize, void *pInitialData)
 {
     ZoneScoped;
 
@@ -382,7 +298,7 @@ VkPipelineCache VKAPI::CreatePipelineCache(u32 initialDataSize, void *pInitialDa
     return pHandle;
 }
 
-VkPipelineLayout VKAPI::SerializePipelineLayout(PipelineLayoutSerializeDesc *pDesc, Pipeline *pPipeline)
+VkPipelineLayout VKContext::SerializePipelineLayout(PipelineLayoutSerializeDesc *pDesc, Pipeline *pPipeline)
 {
     ZoneScoped;
 
@@ -415,7 +331,7 @@ VkPipelineLayout VKAPI::SerializePipelineLayout(PipelineLayoutSerializeDesc *pDe
     return pLayout;
 }
 
-Pipeline *VKAPI::CreateGraphicsPipeline(GraphicsPipelineBuildInfo *pBuildInfo)
+Pipeline *VKContext::CreateGraphicsPipeline(GraphicsPipelineBuildInfo *pBuildInfo)
 {
     ZoneScoped;
 
@@ -647,7 +563,7 @@ Pipeline *VKAPI::CreateGraphicsPipeline(GraphicsPipelineBuildInfo *pBuildInfo)
     return pPipeline;
 }
 
-Pipeline *VKAPI::CreateComputePipeline(ComputePipelineBuildInfo *pBuildInfo)
+Pipeline *VKContext::CreateComputePipeline(ComputePipelineBuildInfo *pBuildInfo)
 {
     ZoneScoped;
 
@@ -681,80 +597,175 @@ Pipeline *VKAPI::CreateComputePipeline(ComputePipelineBuildInfo *pBuildInfo)
     return pPipeline;
 }
 
-void VKAPI::CreateSwapChain(VkSwapchainKHR &pHandle, VkSwapchainCreateInfoKHR &info)
+VKSwapChain *VKContext::CreateSwapChain(BaseWindow *pWindow, SwapChainFlags flags, VKSwapChain *pOldSwapChain)
 {
     ZoneScoped;
 
-    VkResult vkResult = {};
-    VKCall(vkCreateSwapchainKHR(m_pDevice, &info, nullptr, &pHandle), "Failed to create Vulkan SwapChain.");
+    VKSwapChain *pSwapChain = pOldSwapChain;
+
+    if (!pOldSwapChain)
+    {
+        pSwapChain = new VKSwapChain;
+
+        VkFormat format = ToVKFormat(pSwapChain->m_ImageFormat);
+
+        if (!m_pSurface->IsPresentModeSupported(pSwapChain->m_PresentMode))
+            flags |= LR_SWAP_CHAIN_FLAG_VSYNC;
+
+        if (flags & LR_SWAP_CHAIN_FLAG_VSYNC)
+        {
+            pSwapChain->m_PresentMode = VK_PRESENT_MODE_FIFO_KHR;
+            pSwapChain->m_FrameCount = 1;
+        }
+        else if (flags & LR_SWAP_CHAIN_FLAG_TRIPLE_BUFFERING)
+        {
+            pSwapChain->m_FrameCount = 3;
+        }
+
+        pSwapChain->m_FrameCount =
+            eastl::min(pSwapChain->m_FrameCount, m_pSurface->m_MaxImageCount);  // just to make sure
+
+        if (!m_pSurface->IsFormatSupported(format, pSwapChain->m_ColorSpace))
+        {
+            LOG_CRITICAL("SwapChain does not support format {}!", format);
+            return nullptr;
+        }
+    }
+
+    pSwapChain->m_Width = pWindow->m_Width;
+    pSwapChain->m_Height = pWindow->m_Height;
+
+    VkSwapchainCreateInfoKHR swapChainInfo = {
+        .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
+        .pNext = nullptr,
+        .surface = m_pSurface->m_pHandle,
+        .minImageCount = pSwapChain->m_FrameCount,
+        .imageFormat = ToVKFormat(pSwapChain->m_ImageFormat),
+        .imageColorSpace = pSwapChain->m_ColorSpace,
+        .imageExtent = { pSwapChain->m_Width, pSwapChain->m_Height },
+        .imageArrayLayers = 1,
+        .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+        .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE,
+        .queueFamilyIndexCount = 0,
+        .pQueueFamilyIndices = nullptr,
+        .preTransform = m_pSurface->m_CurrentTransform,
+        .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
+        .presentMode = pSwapChain->m_PresentMode,
+        .clipped = VK_TRUE,
+    };
+
+    VkResult result = vkCreateSwapchainKHR(m_pDevice, &swapChainInfo, nullptr, &pSwapChain->m_pHandle);
+
+    VkImage ppSwapChainImages[LR_MAX_FRAME_COUNT] = {};
+    vkGetSwapchainImagesKHR(m_pDevice, pSwapChain->m_pHandle, &pSwapChain->m_FrameCount, &ppSwapChainImages[0]);
+
+    for (u32 i = 0; i < pSwapChain->m_FrameCount; i++)
+    {
+        SwapChainFrame &frame = pSwapChain->m_pFrames[i];
+        Image *&pImage = frame.m_pImage;
+
+        pImage = new Image;
+        pImage->m_pHandle = ppSwapChainImages[i];
+        pImage->m_ImageAspect = VK_IMAGE_ASPECT_COLOR_BIT;
+        pImage->m_Width = pSwapChain->m_Width;
+        pImage->m_Height = pSwapChain->m_Height;
+        pImage->m_DataLen = ~0;
+        pImage->m_MipMapLevels = 1;
+        pImage->m_Format = pSwapChain->m_ImageFormat;
+        pImage->m_DeviceDataLen = ~0;
+        pImage->m_TargetAllocator = LR_API_ALLOCATOR_COUNT;
+        CreateImageView(pImage);
+
+        SetObjectName(pImage, Format("Swap Chain Image {}", i));
+
+        frame.m_pPresentSemp = CreateSemaphore();
+        SetObjectName(frame.m_pPresentSemp, Format("Present Semaphore {}", i));
+    }
+
+    return pSwapChain;
 }
 
-void VKAPI::DeleteSwapChain(SwapChain *pSwapChain)
+void VKContext::DeleteSwapChain(VKSwapChain *pSwapChain, bool keepSelf)
 {
     ZoneScoped;
+
+    for (u32 i = 0; i < pSwapChain->m_FrameCount; i++)
+    {
+        SwapChainFrame &frame = pSwapChain->m_pFrames[i];
+        DeleteSemaphore(frame.m_pPresentSemp);
+
+        auto &bufferQueue = frame.m_BufferDeleteQueue;
+        for (u32 i = 0; i < bufferQueue.size(); i++)
+        {
+            Buffer *pBuffer = bufferQueue.front();
+            DeleteBuffer(pBuffer, false);
+            bufferQueue.pop();
+        }
+
+        auto &imageQueue = frame.m_ImageDeleteQueue;
+        for (u32 i = 0; i < imageQueue.size(); i++)
+        {
+            Image *pImage = imageQueue.front();
+            DeleteImage(pImage, false);
+            imageQueue.pop();
+        }
+
+        vkDestroyImageView(m_pDevice, frame.m_pImage->m_pViewHandle, nullptr);
+    }
+
+    for (Semaphore *pSemaphore : m_AcquireSempPool)
+        DeleteSemaphore(pSemaphore);
+
+    m_AcquireSempPool.clear();
 
     vkDestroySwapchainKHR(m_pDevice, pSwapChain->m_pHandle, nullptr);
+
+    if (!keepSelf)
+        delete pSwapChain;
 }
 
-void VKAPI::GetSwapChainImages(VkSwapchainKHR &pHandle, u32 bufferCount, VkImage *pImages)
-{
-    ZoneScoped;
-
-    vkGetSwapchainImagesKHR(m_pDevice, pHandle, &bufferCount, pImages);
-}
-
-void VKAPI::ResizeSwapChain(u32 width, u32 height)
+void VKContext::ResizeSwapChain(BaseWindow *pWindow)
 {
     ZoneScoped;
 
     WaitForWork();
 
-    m_SwapChain.m_Width = width;
-    m_SwapChain.m_Height = height;
-
-    m_SwapChain.DestroyHandle(this);
-    m_SwapChain.CreateHandle(this);
-    m_SwapChain.CreateBackBuffers(this);
+    DeleteSwapChain(m_pSwapChain, true);
+    m_pSwapChain = CreateSwapChain(pWindow, LR_SWAP_CHAIN_FLAG_NONE, m_pSwapChain);
 }
 
-SwapChain *VKAPI::GetSwapChain()
+VKSwapChain *VKContext::GetSwapChain()
 {
-    return &m_SwapChain;
+    return m_pSwapChain;
 }
 
-SwapChainFrame *VKAPI::GetCurrentFrame()
-{
-    return &m_SwapChain.m_pFrames[m_SwapChain.m_CurrentFrame];
-}
-
-void VKAPI::WaitForWork()
+void VKContext::WaitForWork()
 {
     ZoneScoped;
 
     vkDeviceWaitIdle(m_pDevice);
 }
 
-void VKAPI::BeginFrame()
+void VKContext::BeginFrame()
 {
     ZoneScoped;
 
-    VkSwapchainKHR pSwapChain = m_SwapChain.m_pHandle;
-    SwapChainFrame *pCurrentFrame = GetCurrentFrame();
+    SwapChainFrame *pCurrentFrame = m_pSwapChain->GetCurrentFrame();
     Semaphore *pSemaphore = GetAvailableAcquireSemaphore(pCurrentFrame->m_pAcquireSemp);
 
     u32 imageIdx = 0;
-    VkResult res =
-        vkAcquireNextImageKHR(m_pDevice, pSwapChain, UINT64_MAX, pSemaphore->m_pHandle, nullptr, &imageIdx);
+    VkResult res = vkAcquireNextImageKHR(
+        m_pDevice, m_pSwapChain->m_pHandle, UINT64_MAX, pSemaphore->m_pHandle, nullptr, &imageIdx);
     if (res != VK_SUCCESS)
     {
         assert(!"why?");
         WaitForWork();  // FUCK
     }
 
-    m_SwapChain.Advance(imageIdx, pSemaphore);
+    m_pSwapChain->Advance(imageIdx, pSemaphore);
 
     /// PAST FRAME WORK ///
-    pCurrentFrame = GetCurrentFrame();
+    pCurrentFrame = m_pSwapChain->GetCurrentFrame();
 
     auto &bufferQueue = pCurrentFrame->m_BufferDeleteQueue;
     for (u32 i = 0; i < bufferQueue.size(); i++)
@@ -772,14 +783,14 @@ void VKAPI::BeginFrame()
         imageQueue.pop();
     }
 
-    m_MABufferFrametime[m_SwapChain.m_CurrentFrame].Allocator.Free();
+    m_MABufferFrametime[m_pSwapChain->m_CurrentFrame].Allocator.Free();
 }
 
-void VKAPI::EndFrame()
+void VKContext::EndFrame()
 {
     ZoneScoped;
 
-    SwapChainFrame *pCurrentFrame = GetCurrentFrame();
+    SwapChainFrame *pCurrentFrame = m_pSwapChain->GetCurrentFrame();
 
     VkQueue pQueue = m_pDirectQueue->m_pHandle;
     VkSemaphore acqireSem = pCurrentFrame->m_pAcquireSemp->m_pHandle;
@@ -808,12 +819,12 @@ void VKAPI::EndFrame()
     presentInfo.waitSemaphoreCount = 1;
     presentInfo.pWaitSemaphores = &presentSem;
     presentInfo.swapchainCount = 1;
-    presentInfo.pSwapchains = &m_SwapChain.m_pHandle;
-    presentInfo.pImageIndices = &m_SwapChain.m_CurrentFrame;
+    presentInfo.pSwapchains = &m_pSwapChain->m_pHandle;
+    presentInfo.pImageIndices = &m_pSwapChain->m_CurrentFrame;
     vkQueuePresentKHR(pQueue, &presentInfo);
 }
 
-Shader *VKAPI::CreateShader(ShaderStage stage, BufferReadStream &buf)
+Shader *VKContext::CreateShader(ShaderStage stage, BufferReadStream &buf)
 {
     ZoneScoped;
 
@@ -841,7 +852,7 @@ Shader *VKAPI::CreateShader(ShaderStage stage, BufferReadStream &buf)
     return pShader;
 }
 
-Shader *VKAPI::CreateShader(ShaderStage stage, eastl::string_view path)
+Shader *VKContext::CreateShader(ShaderStage stage, eastl::string_view path)
 {
     ZoneScoped;
 
@@ -857,7 +868,7 @@ Shader *VKAPI::CreateShader(ShaderStage stage, eastl::string_view path)
     return pShader;
 }
 
-void VKAPI::DeleteShader(Shader *pShader)
+void VKContext::DeleteShader(Shader *pShader)
 {
     ZoneScoped;
 
@@ -865,7 +876,7 @@ void VKAPI::DeleteShader(Shader *pShader)
     delete pShader;
 }
 
-DescriptorSetLayout *VKAPI::CreateDescriptorSetLayout(eastl::span<DescriptorLayoutElement> elements)
+DescriptorSetLayout *VKContext::CreateDescriptorSetLayout(eastl::span<DescriptorLayoutElement> elements)
 {
     ZoneScoped;
 
@@ -884,8 +895,8 @@ DescriptorSetLayout *VKAPI::CreateDescriptorSetLayout(eastl::span<DescriptorLayo
         DescriptorLayoutElement &element = elements[i];
 
         binding.binding = element.m_BindingID;
-        binding.descriptorType = VKAPI::ToVKDescriptorType(element.m_Type);
-        binding.stageFlags = VKAPI::ToVKShaderType(element.m_TargetShader);
+        binding.descriptorType = VKContext::ToVKDescriptorType(element.m_Type);
+        binding.stageFlags = VKContext::ToVKShaderType(element.m_TargetShader);
         binding.descriptorCount = element.m_ArraySize;
         binding.pImmutableSamplers = nullptr;  // TODO: static samplers
     }
@@ -900,7 +911,7 @@ DescriptorSetLayout *VKAPI::CreateDescriptorSetLayout(eastl::span<DescriptorLayo
     return pLayout;
 }
 
-DescriptorSet *VKAPI::CreateDescriptorSet(DescriptorSetLayout *pLayout)
+DescriptorSet *VKContext::CreateDescriptorSet(DescriptorSetLayout *pLayout)
 {
     ZoneScoped;
 
@@ -918,7 +929,7 @@ DescriptorSet *VKAPI::CreateDescriptorSet(DescriptorSetLayout *pLayout)
     return pSet;
 }
 
-void VKAPI::DeleteDescriptorSet(DescriptorSet *pSet)
+void VKContext::DeleteDescriptorSet(DescriptorSet *pSet)
 {
     ZoneScoped;
 
@@ -927,7 +938,7 @@ void VKAPI::DeleteDescriptorSet(DescriptorSet *pSet)
     delete pSet;
 }
 
-void VKAPI::UpdateDescriptorSet(DescriptorSet *pSet, cinitl<DescriptorWriteData> &elements)
+void VKContext::UpdateDescriptorSet(DescriptorSet *pSet, cinitl<DescriptorWriteData> &elements)
 {
     ZoneScoped;
 
@@ -995,7 +1006,7 @@ void VKAPI::UpdateDescriptorSet(DescriptorSet *pSet, cinitl<DescriptorWriteData>
     vkUpdateDescriptorSets(m_pDevice, descriptorCount, pWriteSets, 0, nullptr);
 }
 
-VkDescriptorPool VKAPI::CreateDescriptorPool(const std::initializer_list<DescriptorPoolDesc> &layouts)
+VkDescriptorPool VKContext::CreateDescriptorPool(const std::initializer_list<DescriptorPoolDesc> &layouts)
 {
     ZoneScoped;
 
@@ -1024,7 +1035,7 @@ VkDescriptorPool VKAPI::CreateDescriptorPool(const std::initializer_list<Descrip
     return pHandle;
 }
 
-VkDeviceMemory VKAPI::CreateHeap(u64 heapSize, bool cpuWrite)
+VkDeviceMemory VKContext::CreateHeap(u64 heapSize, bool cpuWrite)
 {
     ZoneScoped;
 
@@ -1035,7 +1046,7 @@ VkDeviceMemory VKAPI::CreateHeap(u64 heapSize, bool cpuWrite)
     VkMemoryAllocateInfo memoryAllocInfo = {};
     memoryAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     memoryAllocInfo.allocationSize = heapSize;
-    memoryAllocInfo.memoryTypeIndex = GetMemoryTypeIndex(memProps);
+    memoryAllocInfo.memoryTypeIndex = m_pPhysicalDevice->GetHeapIndex(memProps);
 
     VkDeviceMemory pHandle = nullptr;
     vkAllocateMemory(m_pDevice, &memoryAllocInfo, nullptr, &pHandle);
@@ -1043,7 +1054,7 @@ VkDeviceMemory VKAPI::CreateHeap(u64 heapSize, bool cpuWrite)
     return pHandle;
 }
 
-Buffer *VKAPI::CreateBuffer(BufferDesc *pDesc)
+Buffer *VKContext::CreateBuffer(BufferDesc *pDesc)
 {
     ZoneScoped;
 
@@ -1068,13 +1079,13 @@ Buffer *VKAPI::CreateBuffer(BufferDesc *pDesc)
     return pBuffer;
 }
 
-void VKAPI::DeleteBuffer(Buffer *pBuffer, bool waitForWork)
+void VKContext::DeleteBuffer(Buffer *pBuffer, bool waitForWork)
 {
     ZoneScoped;
 
     if (waitForWork)
     {
-        SwapChainFrame *pCurrentFrame = GetCurrentFrame();
+        SwapChainFrame *pCurrentFrame = m_pSwapChain->GetCurrentFrame();
         pCurrentFrame->m_BufferDeleteQueue.push(pBuffer);
         return;
     }
@@ -1098,7 +1109,7 @@ void VKAPI::DeleteBuffer(Buffer *pBuffer, bool waitForWork)
         vkDestroyBuffer(m_pDevice, pBuffer->m_pHandle, nullptr);
 }
 
-void VKAPI::MapMemory(Buffer *pBuffer, void *&pData)
+void VKContext::MapMemory(Buffer *pBuffer, void *&pData)
 {
     ZoneScoped;
 
@@ -1106,14 +1117,14 @@ void VKAPI::MapMemory(Buffer *pBuffer, void *&pData)
         m_pDevice, pBuffer->m_pMemoryHandle, pBuffer->m_DeviceDataOffset, pBuffer->m_DeviceDataLen, 0, &pData);
 }
 
-void VKAPI::UnmapMemory(Buffer *pBuffer)
+void VKContext::UnmapMemory(Buffer *pBuffer)
 {
     ZoneScoped;
 
     vkUnmapMemory(m_pDevice, pBuffer->m_pMemoryHandle);
 }
 
-Image *VKAPI::CreateImage(ImageDesc *pDesc)
+Image *VKContext::CreateImage(ImageDesc *pDesc)
 {
     ZoneScoped;
 
@@ -1166,13 +1177,13 @@ Image *VKAPI::CreateImage(ImageDesc *pDesc)
     return pImage;
 }
 
-void VKAPI::DeleteImage(Image *pImage, bool waitForWork)
+void VKContext::DeleteImage(Image *pImage, bool waitForWork)
 {
     ZoneScoped;
 
     if (waitForWork)
     {
-        SwapChainFrame *pCurrentFrame = GetCurrentFrame();
+        SwapChainFrame *pCurrentFrame = m_pSwapChain->GetCurrentFrame();
         pCurrentFrame->m_ImageDeleteQueue.push(pImage);
         return;
     }
@@ -1199,7 +1210,7 @@ void VKAPI::DeleteImage(Image *pImage, bool waitForWork)
         vkDestroyImage(m_pDevice, pImage->m_pHandle, nullptr);
 }
 
-void VKAPI::CreateImageView(Image *pImage)
+void VKContext::CreateImageView(Image *pImage)
 {
     ZoneScoped;
 
@@ -1224,7 +1235,7 @@ void VKAPI::CreateImageView(Image *pImage)
     vkCreateImageView(m_pDevice, &imageViewCreateInfo, nullptr, &pImage->m_pViewHandle);
 }
 
-Sampler *VKAPI::CreateSampler(SamplerDesc *pDesc)
+Sampler *VKContext::CreateSampler(SamplerDesc *pDesc)
 {
     ZoneScoped;
 
@@ -1268,14 +1279,14 @@ Sampler *VKAPI::CreateSampler(SamplerDesc *pDesc)
     return pSampler;
 }
 
-void VKAPI::DeleteSampler(VkSampler pSampler)
+void VKContext::DeleteSampler(VkSampler pSampler)
 {
     ZoneScoped;
 
     vkDestroySampler(m_pDevice, pSampler, nullptr);
 }
 
-void VKAPI::SetAllocator(Buffer *pBuffer, APIAllocatorType targetAllocator)
+void VKContext::SetAllocator(Buffer *pBuffer, APIAllocatorType targetAllocator)
 {
     ZoneScoped;
 
@@ -1326,7 +1337,7 @@ void VKAPI::SetAllocator(Buffer *pBuffer, APIAllocatorType targetAllocator)
         }
         case LR_API_ALLOCATOR_BUFFER_FRAMETIME:
         {
-            u32 currentFrame = m_SwapChain.m_CurrentFrame;
+            u32 currentFrame = m_pSwapChain->m_CurrentFrame;
             pBuffer->m_DeviceDataOffset = m_MABufferFrametime[currentFrame].Allocator.Allocate(
                 pBuffer->m_DeviceDataLen, memoryRequirements.alignment);
             pBuffer->m_pMemoryHandle = m_MABufferFrametime[currentFrame].pHeap;
@@ -1339,7 +1350,7 @@ void VKAPI::SetAllocator(Buffer *pBuffer, APIAllocatorType targetAllocator)
     }
 }
 
-void VKAPI::SetAllocator(Image *pImage, APIAllocatorType targetAllocator)
+void VKContext::SetAllocator(Image *pImage, APIAllocatorType targetAllocator)
 {
     ZoneScoped;
 
@@ -1373,12 +1384,7 @@ void VKAPI::SetAllocator(Image *pImage, APIAllocatorType targetAllocator)
     }
 }
 
-ImageFormat &VKAPI::GetSwapChainImageFormat()
-{
-    return m_SwapChain.m_ImageFormat;
-}
-
-Semaphore *VKAPI::GetAvailableAcquireSemaphore(Semaphore *pOldSemaphore)
+Semaphore *VKContext::GetAvailableAcquireSemaphore(Semaphore *pOldSemaphore)
 {
     ZoneScoped;
 
@@ -1403,83 +1409,7 @@ Semaphore *VKAPI::GetAvailableAcquireSemaphore(Semaphore *pOldSemaphore)
     return m_AcquireSempPool[idx];
 }
 
-bool VKAPI::IsFormatSupported(ImageFormat format, VkColorSpaceKHR *pColorSpaceOut)
-{
-    ZoneScoped;
-
-    VkFormat vkFormat = ToVKFormat(format);
-
-    for (u32 i = 0; i < m_ValidSurfaceFormatCount; i++)
-    {
-        VkSurfaceFormatKHR &surfFormat = m_pValidSurfaceFormats[i];
-
-        if (surfFormat.format == vkFormat)
-        {
-            if (pColorSpaceOut)
-                *pColorSpaceOut = surfFormat.colorSpace;
-
-            return true;
-        }
-    }
-
-    return false;
-}
-
-bool VKAPI::IsPresentModeSupported(VkPresentModeKHR mode)
-{
-    ZoneScoped;
-
-    for (u32 i = 0; i < m_ValidSurfaceFormatCount; i++)
-    {
-        VkPresentModeKHR &presentMode = m_pValidPresentModes[i];
-
-        if (presentMode == mode)
-        {
-            return true;
-        }
-    }
-
-    return false;
-}
-
-void VKAPI::GetSurfaceCapabilities(VkSurfaceCapabilitiesKHR &capabilitiesOut)
-{
-    ZoneScoped;
-
-    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(m_pPhysicalDevice, m_pSurface, &capabilitiesOut);
-}
-
-u32 VKAPI::GetMemoryTypeIndex(u32 setBits, VkMemoryPropertyFlags propFlags)
-{
-    ZoneScoped;
-
-    for (u32 i = 0; i < m_MemoryProps.memoryTypeCount; i++)
-    {
-        if ((setBits >> i) && ((m_MemoryProps.memoryTypes[i].propertyFlags & propFlags) == propFlags))
-            return i;
-    }
-
-    LOG_ERROR("Memory type index is not found. Bits: {}.", setBits);
-
-    return -1;
-}
-
-u32 VKAPI::GetMemoryTypeIndex(VkMemoryPropertyFlags propFlags)
-{
-    ZoneScoped;
-
-    for (u32 i = 0; i < m_MemoryProps.memoryTypeCount; i++)
-    {
-        if ((m_MemoryProps.memoryTypes[i].propertyFlags & propFlags) == propFlags)
-            return i;
-    }
-
-    LOG_ERROR("Memory type index is not found.");
-
-    return -1;
-}
-
-bool VKAPI::LoadVulkan()
+bool VKContext::LoadVulkan()
 {
     m_VulkanLib = LoadLibraryA("vulkan-1.dll");
 
@@ -1494,8 +1424,8 @@ bool VKAPI::LoadVulkan()
     if (_name == nullptr)                                          \
     {                                                              \
         LOG_CRITICAL("Cannot load Vulkan function '{}'!", #_name); \
-    }                                                              \
-    // LOG_TRACE("Loading Vulkan function: {}:{}", #_name, (void *)_name);
+        return false;                                              \
+    }
 
     _VK_IMPORT_SYMBOLS
 #undef _VK_DEFINE_FUNCTION
@@ -1503,7 +1433,7 @@ bool VKAPI::LoadVulkan()
     return true;
 }
 
-bool VKAPI::SetupInstance(BaseWindow *pWindow)
+bool VKContext::SetupInstance(BaseWindow *pWindow)
 {
     ZoneScoped;
 
@@ -1582,21 +1512,7 @@ bool VKAPI::SetupInstance(BaseWindow *pWindow)
     createInfo.ppEnabledExtensionNames = ppRequiredExtensions.data();
     createInfo.enabledLayerCount = 0;  //! WE USE VULKAN CONFIGURATOR FOR LAYERS
     createInfo.ppEnabledLayerNames = nullptr;
-
-    /// Initialize surface
-
-    Win32Window *pOSWindow = (Win32Window *)pWindow;
-    VkWin32SurfaceCreateInfoKHR surfaceInfo = {};
-    surfaceInfo.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
-    surfaceInfo.pNext = nullptr;
-    surfaceInfo.hwnd = (HWND)pOSWindow->m_pHandle;
-    surfaceInfo.hinstance = pOSWindow->m_Instance;
-
-    VKCallRet(vkCreateInstance(&createInfo, nullptr, &m_pInstance), "Failed to create Vulkan Instance.", false);
-    VKCallRet(
-        vkCreateWin32SurfaceKHR(m_pInstance, &surfaceInfo, nullptr, &m_pSurface),
-        "Failed to create Vulkan Win32 surface.",
-        false);
+    vkCreateInstance(&createInfo, nullptr, &m_pInstance);
 
     /// LOAD INSTANCE EXCLUSIVE FUNCTIONS ///
 
@@ -1613,212 +1529,38 @@ bool VKAPI::SetupInstance(BaseWindow *pWindow)
     return true;
 }
 
-bool VKAPI::SetupQueues(VkPhysicalDevice &pPhysicalDevice, VkPhysicalDeviceFeatures &features)
+bool VKContext::SetupPhysicalDevice()
 {
     ZoneScoped;
 
-    u32 queueFamilyCount = 0;
-    vkGetPhysicalDeviceQueueFamilyProperties(pPhysicalDevice, &queueFamilyCount, nullptr);
+    m_pPhysicalDevice = new VKPhysicalDevice;
+    SetObjectName(m_pPhysicalDevice, "Physical Device");
 
-    VkQueueFamilyProperties *pQueueFamilyProps = new VkQueueFamilyProperties[queueFamilyCount];
-    vkGetPhysicalDeviceQueueFamilyProperties(pPhysicalDevice, &queueFamilyCount, pQueueFamilyProps);
+    u32 availableDeviceCount = 0;
+    vkEnumeratePhysicalDevices(m_pInstance, &availableDeviceCount, nullptr);
 
-    LOG_INFO("Checking available queues({} number of queues available):", queueFamilyCount);
-
-    u32 foundGraphicsFamilyIndex = -1;
-    u32 foundComputeFamilyIndex = -1;
-    u32 foundTransferFamilyIndex = -1;
-
-    for (u32 i = 0; i < queueFamilyCount; i++)
+    if (availableDeviceCount == 0)
     {
-        VkQueueFamilyProperties &props = pQueueFamilyProps[i];
-
-        if (foundGraphicsFamilyIndex == -1 && props.queueFlags & VK_QUEUE_GRAPHICS_BIT)
-        {
-            VkBool32 presentSupported = false;
-            vkGetPhysicalDeviceSurfaceSupportKHR(pPhysicalDevice, i, m_pSurface, &presentSupported);
-
-            if (!presentSupported)
-            {
-                LOG_ERROR("Graphics queue doesn't support presentantion, abort.");
-
-                break;
-            }
-
-            LOG_INFO("\tQueue{} selected as Graphics/Present queue.", i);
-            m_QueueInfo.m_QueueCount++;
-            foundGraphicsFamilyIndex = i;
-
-            continue;
-        }
-
-        constexpr u32 kComputeFilter = VK_QUEUE_GRAPHICS_BIT;
-        if (foundComputeFamilyIndex == -1 && props.queueFlags & VK_QUEUE_COMPUTE_BIT
-            && (props.queueFlags & kComputeFilter) == 0)
-        {
-            LOG_INFO("\tQueue{} selected as Compute queue.", i);
-            m_QueueInfo.m_QueueCount++;
-            foundComputeFamilyIndex = i;
-
-            continue;
-        }
-
-        constexpr u32 kTransferFilter = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT;
-        if (foundTransferFamilyIndex == -1 && props.queueFlags & VK_QUEUE_TRANSFER_BIT
-            && (props.queueFlags & kTransferFilter) == 0)
-        {
-            LOG_INFO("\tQueue{} selected as Transfer queue.", i);
-            m_QueueInfo.m_QueueCount++;
-            foundTransferFamilyIndex = i;
-
-            continue;
-        }
-
-        break;
-    }
-
-    if (foundGraphicsFamilyIndex == -1)
-    {
-        LOG_CRITICAL("Could not find any queue families matched our requirements.");
+        LOG_CRITICAL("No GPU with Vulkan support.");
         return false;
     }
 
-    if (foundComputeFamilyIndex == -1)
-    {
-        for (u32 i = 0; i < queueFamilyCount; i++)
-        {
-            VkQueueFamilyProperties &props = pQueueFamilyProps[i];
+    VkPhysicalDevice *ppAvailableDevices = new VkPhysicalDevice[availableDeviceCount];
+    vkEnumeratePhysicalDevices(m_pInstance, &availableDeviceCount, ppAvailableDevices);
 
-            if (props.queueFlags & VK_QUEUE_COMPUTE_BIT)
-            {
-                foundComputeFamilyIndex = i;
-                break;
-            }
-        }
-
-        return false;
-    }
-
-    if (foundTransferFamilyIndex == -1)
-    {
-        for (u32 i = 0; i < queueFamilyCount; i++)
-        {
-            VkQueueFamilyProperties &props = pQueueFamilyProps[i];
-
-            if (props.queueFlags & VK_QUEUE_TRANSFER_BIT)
-            {
-                foundTransferFamilyIndex = i;
-                break;
-            }
-        }
-
-        return false;
-    }
-
-    delete[] pQueueFamilyProps;
-
-    m_QueueInfo.m_Indexes[LR_COMMAND_LIST_TYPE_GRAPHICS] = foundGraphicsFamilyIndex;
-    m_QueueInfo.m_Indexes[LR_COMMAND_LIST_TYPE_COMPUTE] = foundComputeFamilyIndex;
-    m_QueueInfo.m_Indexes[LR_COMMAND_LIST_TYPE_TRANSFER] = foundTransferFamilyIndex;
+    m_pPhysicalDevice->Init({ ppAvailableDevices, availableDeviceCount });
 
     return true;
 }
 
-bool VKAPI::SetupDevice(VkPhysicalDevice &pPhysicalDevice, VkPhysicalDeviceFeatures &features)
+bool VKContext::SetupSurface(BaseWindow *pWindow)
 {
     ZoneScoped;
 
-    constexpr float kHighPrior = 1.0;
+    m_pSurface = new VKSurface;
+    SetObjectName(m_pSurface, "Default Surface");
 
-    VkDeviceQueueCreateInfo pQueueInfos[3] = {};
-    for (u32 i = 0; i < m_QueueInfo.m_QueueCount; i++)
-    {
-        pQueueInfos[i].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-        pQueueInfos[i].queueFamilyIndex = m_QueueInfo.m_Indexes[i];
-        pQueueInfos[i].queueCount = 1;
-        pQueueInfos[i].pQueuePriorities = &kHighPrior;
-    }
-
-    /// Get device extensions
-
-    LOG_INFO("Checking device extensions:");
-
-    u32 deviceExtensionCount = 0;
-    vkEnumerateDeviceExtensionProperties(pPhysicalDevice, nullptr, &deviceExtensionCount, nullptr);
-
-    VkExtensionProperties *pDeviceExtensions = new VkExtensionProperties[deviceExtensionCount];
-    vkEnumerateDeviceExtensionProperties(pPhysicalDevice, nullptr, &deviceExtensionCount, pDeviceExtensions);
-
-    constexpr eastl::array<const char *, 6> ppRequiredExtensions = {
-        "VK_KHR_swapchain",        "VK_KHR_depth_stencil_resolve",   "VK_KHR_dynamic_rendering",
-        "VK_KHR_synchronization2", "VK_EXT_extended_dynamic_state2", "VK_KHR_timeline_semaphore",
-    };
-
-    for (auto &pExtensionName : ppRequiredExtensions)
-    {
-        bool found = false;
-        eastl::string_view extensionSV(pExtensionName);
-
-        for (u32 i = 0; i < deviceExtensionCount; i++)
-        {
-            VkExtensionProperties &prop = pDeviceExtensions[i];
-
-            if (extensionSV == prop.extensionName)
-            {
-                found = true;
-
-                continue;
-            }
-        }
-
-        LOG_INFO("\t{}, {}", pExtensionName, found);
-
-        if (!found)
-        {
-            LOG_ERROR("Following extension is not found in this device: {}", extensionSV);
-
-            return false;
-        }
-    }
-
-    ////////////////////////////////////
-    /// Device Feature Configuration ///
-    ////////////////////////////////////
-
-    VkPhysicalDeviceVulkan11Features vk11Features = {};
-    VkPhysicalDeviceVulkan12Features vk12Features = {};
-    VkPhysicalDeviceVulkan13Features vk13Features = {};
-
-    // * Vulkan 1.1
-    vk11Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
-    vk11Features.pNext = &vk12Features;
-
-    // * Vulkan 1.2
-    vk12Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
-    vk12Features.pNext = &vk13Features;
-    vk12Features.timelineSemaphore = true;
-
-    // * Vulkan 1.3
-    vk13Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
-    vk13Features.pNext = nullptr;
-
-    vk13Features.synchronization2 = true;
-    vk13Features.dynamicRendering = true;
-
-    VkDeviceCreateInfo deviceCreateInfo = {};
-    deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-    deviceCreateInfo.pNext = &vk11Features;
-    deviceCreateInfo.queueCreateInfoCount = m_QueueInfo.m_QueueCount;
-    deviceCreateInfo.pQueueCreateInfos = pQueueInfos;
-    deviceCreateInfo.enabledExtensionCount = ppRequiredExtensions.count;
-    deviceCreateInfo.ppEnabledExtensionNames = ppRequiredExtensions.data();
-
-    if (vkCreateDevice(pPhysicalDevice, &deviceCreateInfo, nullptr, &m_pDevice) != VK_SUCCESS)
-    {
-        LOG_CRITICAL("Failed to create Vulkan device. ");
-
-        return false;
-    }
+    m_pSurface->Init(pWindow, m_pInstance, m_pPhysicalDevice);
 
     return true;
 }
@@ -1883,32 +1625,32 @@ constexpr VkImageLayout kImageLayoutLUT[] = {
     VK_IMAGE_LAYOUT_GENERAL,               // LR_IMAGE_LAYOUT_UNORDERED_ACCESS
 };
 
-VkFormat VKAPI::ToVKFormat(ImageFormat format)
+VkFormat VKContext::ToVKFormat(ImageFormat format)
 {
     return kFormatLUT[(u32)format];
 }
 
-VkFormat VKAPI::ToVKFormat(VertexAttribType format)
+VkFormat VKContext::ToVKFormat(VertexAttribType format)
 {
     return kAttribFormatLUT[(u32)format];
 }
 
-VkPrimitiveTopology VKAPI::ToVKTopology(PrimitiveType type)
+VkPrimitiveTopology VKContext::ToVKTopology(PrimitiveType type)
 {
     return kPrimitiveLUT[(u32)type];
 }
 
-VkCullModeFlags VKAPI::ToVKCullMode(CullMode mode)
+VkCullModeFlags VKContext::ToVKCullMode(CullMode mode)
 {
     return kCullModeLUT[(u32)mode];
 }
 
-VkDescriptorType VKAPI::ToVKDescriptorType(DescriptorType type)
+VkDescriptorType VKContext::ToVKDescriptorType(DescriptorType type)
 {
     return kDescriptorTypeLUT[(u32)type];
 }
 
-VkImageUsageFlags VKAPI::ToVKImageUsage(ImageUsage usage)
+VkImageUsageFlags VKContext::ToVKImageUsage(ImageUsage usage)
 {
     u32 v = 0;
 
@@ -1933,7 +1675,7 @@ VkImageUsageFlags VKAPI::ToVKImageUsage(ImageUsage usage)
     return (VkImageUsageFlags)v;
 }
 
-VkBufferUsageFlagBits VKAPI::ToVKBufferUsage(BufferUsage usage)
+VkBufferUsageFlagBits VKContext::ToVKBufferUsage(BufferUsage usage)
 {
     u32 v = 0;
 
@@ -1958,12 +1700,12 @@ VkBufferUsageFlagBits VKAPI::ToVKBufferUsage(BufferUsage usage)
     return (VkBufferUsageFlagBits)v;
 }
 
-VkImageLayout VKAPI::ToVKImageLayout(ImageLayout layout)
+VkImageLayout VKContext::ToVKImageLayout(ImageLayout layout)
 {
     return kImageLayoutLUT[layout];
 }
 
-VkShaderStageFlagBits VKAPI::ToVKShaderType(ShaderStage type)
+VkShaderStageFlagBits VKContext::ToVKShaderType(ShaderStage type)
 {
     u32 v = 0;
 
@@ -1985,7 +1727,7 @@ VkShaderStageFlagBits VKAPI::ToVKShaderType(ShaderStage type)
     return (VkShaderStageFlagBits)v;
 }
 
-VkPipelineStageFlags2 VKAPI::ToVKPipelineStage(PipelineStage stage)
+VkPipelineStageFlags2 VKContext::ToVKPipelineStage(PipelineStage stage)
 {
     u32 v = 0;
 
@@ -2025,7 +1767,7 @@ VkPipelineStageFlags2 VKAPI::ToVKPipelineStage(PipelineStage stage)
     return (VkPipelineStageFlagBits)v;
 }
 
-VkAccessFlags2 VKAPI::ToVKAccessFlags(MemoryAcces access)
+VkAccessFlags2 VKContext::ToVKAccessFlags(MemoryAccess access)
 {
     u32 v = 0;
 

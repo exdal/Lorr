@@ -2,7 +2,6 @@
 
 #include "Core/Utils/Timer.hh"
 
-#include "Core/Graphics/Vulkan/VKAPI.hh"
 #include "Core/Graphics/Renderer/Pass.hh"
 
 namespace lr

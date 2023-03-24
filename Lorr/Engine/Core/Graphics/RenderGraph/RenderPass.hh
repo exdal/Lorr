@@ -4,12 +4,39 @@
 
 #pragma once
 
-#include "RenderGraphResource.hh"
+#include "Core/Crypt/FNV.hh"
+#include "Core/Graphics/Vulkan/VKContext.hh"
 
 #define LR_INVALID_GROUP_ID ~0
 
 namespace lr::Graphics
 {
+using Hash64 = u64;
+using NameID = eastl::string_view;
+
+enum AttachmentFlags : u32
+{
+    LR_ATTACHMENT_FLAG_NONE = 0,
+    LR_ATTACHMENT_FLAG_SC_SCALING = 1 << 0,  // Attachment's size is relative to swapchain size
+    LR_ATTACHMENT_FLAG_SC_FORMAT = 1 << 1,   // Attachment's format is relative to swapchain format
+    LR_ATTACHMENT_FLAG_LOAD = 1 << 2,
+    LR_ATTACHMENT_FLAG_CLEAR = 1 << 3,
+    LR_ATTACHMENT_FLAG_PRESENT = 1 << 4,
+};
+EnumFlags(AttachmentFlags);
+
+struct ColorAttachment
+{
+    Hash64 m_Hash = ~0;
+    MemoryAccess m_Access = LR_MEMORY_ACCESS_NONE;
+    AttachmentFlags m_Flags = LR_ATTACHMENT_FLAG_NONE;
+};
+
+struct DepthAttachment
+{
+    Hash64 m_Hash = ~0;
+};
+
 enum RenderPassFlags : u32
 {
     LR_RENDER_PASS_FLAG_NONE = 0,
@@ -29,88 +56,98 @@ struct RenderPass
     u32 m_PassID : 16 = 0;
 
     Pipeline *m_pPipeline = nullptr;
-    RenderGraphResourceManager *m_pResourceMan = nullptr;
 
-    virtual void Prepare(CommandList *pList) = 0;
-    virtual void Execute(CommandList *pList) = 0;
-    virtual void Shutdown() = 0;
+    virtual void Prepare(VKContext *pContext, CommandList *pList) = 0;
+    virtual void Execute(VKContext *pContext, CommandList *pList) = 0;
+    virtual void Shutdown(VKContext *pContext) = 0;
 };
 
 struct GraphicsRenderPass : RenderPass
 {
+    void AddColorAttachment(NameID name, MemoryAccess access, AttachmentFlags flags = LR_ATTACHMENT_FLAG_LOAD);
+
     eastl::vector<ColorAttachment> m_ColorAttachments;
     DepthAttachment m_DepthAttachment = {};
 };
 
 template<typename _Data>
-using RenderPassSetupFn = eastl::function<void(RenderGraphResourceManager &, _Data &)>;
+using RenderPassSetupFn = eastl::function<void(VKContext *, _Data &)>;
 template<typename _Data>
-using RenderPassPrepareFn = eastl::function<void(RenderGraphResourceManager &, _Data &, CommandList *)>;
+using RenderPassPrepareFn = eastl::function<void(VKContext *, _Data &, CommandList *)>;
 template<typename _Data>
-using RenderPassExecuteFn = eastl::function<void(RenderGraphResourceManager &, _Data &, CommandList *)>;
-using RenderPassShutdownFn = eastl::function<void(RenderGraphResourceManager &)>;
+using RenderPassExecuteFn = eastl::function<void(VKContext *, _Data &, CommandList *)>;
+using RenderPassShutdownFn = eastl::function<void(VKContext *)>;
 
 template<typename _Data>
 struct GraphicsRenderPassCallback : GraphicsRenderPass, _Data
 {
-    GraphicsRenderPassCallback(eastl::string_view name)
+    GraphicsRenderPassCallback(eastl::string_view name, VKContext *pContext)
     {
         ZoneScoped;
 
         m_NameHash = Hash::FNV64String(name);
         m_PassType = LR_COMMAND_LIST_TYPE_GRAPHICS;
+        m_Flags = LR_RENDER_PASS_FLAG_NONE;
     }
 
-    void SetCallbacks(
+    GraphicsRenderPassCallback(
+        eastl::string_view name,
         const RenderPassSetupFn<_Data> &fSetup,
         const RenderPassExecuteFn<_Data> &fExecute,
-        const RenderPassShutdownFn &fShutdown)
+        const RenderPassShutdownFn &fShutdown,
+        VKContext *pContext)
     {
         ZoneScoped;
 
+        m_NameHash = Hash::FNV64String(name);
+        m_PassType = LR_COMMAND_LIST_TYPE_GRAPHICS;
         m_fExecute = fExecute;
         m_fShutdown = fShutdown;
         m_Flags |= LR_RENDER_PASS_FLAG_ALLOW_EXECUTE | LR_RENDER_PASS_FLAG_ALLOW_SHUTDOWN;
 
-        fSetup(*m_pResourceMan, (_Data &)(*this));
+        fSetup(pContext, (_Data &)(*this));
     }
 
-    void SetCallbacks(
+    GraphicsRenderPassCallback(
+        eastl::string_view name,
         const RenderPassSetupFn<_Data> &fSetup,
         const RenderPassPrepareFn<_Data> &fPrepare,
         const RenderPassExecuteFn<_Data> &fExecute,
-        const RenderPassShutdownFn &fShutdown)
+        const RenderPassShutdownFn &fShutdown,
+        VKContext *pContext)
     {
         ZoneScoped;
 
+        m_NameHash = Hash::FNV64String(name);
+        m_PassType = LR_COMMAND_LIST_TYPE_GRAPHICS;
         m_fPrepare = fPrepare;
         m_fExecute = fExecute;
         m_fShutdown = fShutdown;
         m_Flags |= LR_RENDER_PASS_FLAG_ALLOW_PREPARE | LR_RENDER_PASS_FLAG_ALLOW_EXECUTE
                    | LR_RENDER_PASS_FLAG_ALLOW_SHUTDOWN;
 
-        fSetup(*m_pResourceMan, (_Data &)(*this));
+        fSetup(pContext, (_Data &)(*this));
     }
 
-    void Prepare(CommandList *pList) override
+    void Prepare(VKContext *pContext, CommandList *pList) override
     {
         ZoneScoped;
 
-        m_fPrepare(*m_pResourceMan, (_Data &)(*this), pList);
+        m_fPrepare(pContext, (_Data &)(*this), pList);
     }
 
-    void Execute(CommandList *pList) override
+    void Execute(VKContext *pContext, CommandList *pList) override
     {
         ZoneScoped;
 
-        m_fExecute(*m_pResourceMan, (_Data &)(*this), pList);
+        m_fExecute(pContext, (_Data &)(*this), pList);
     }
 
-    void Shutdown() override
+    void Shutdown(VKContext *pContext) override
     {
         ZoneScoped;
 
-        m_fShutdown(*m_pResourceMan);
+        m_fShutdown(pContext);
     }
 
     RenderPassPrepareFn<_Data> m_fPrepare = nullptr;

@@ -19,6 +19,10 @@ bool VKContext::Init(APIDesc *pDesc)
 
     LOG_TRACE("Initializing Vulkan context...");
 
+    constexpr u32 kTypeMem = Memory::MiBToBytes(16);
+    APIAllocator::g_Handle.m_TypeAllocator.Init(kTypeMem, 0x2000);
+    APIAllocator::g_Handle.m_pTypeData = Memory::Allocate<u8>(kTypeMem);
+
     if (!LoadVulkan())
         return false;
 
@@ -31,8 +35,12 @@ bool VKContext::Init(APIDesc *pDesc)
     if (!SetupSurface(pDesc->m_pTargetWindow))
         return false;
 
-    m_pDevice = m_pPhysicalDevice->GetLogicalDevice();
     m_pPhysicalDevice->InitQueueFamilies(m_pSurface);
+    m_pDevice = m_pPhysicalDevice->GetLogicalDevice();
+    m_pSwapChain = CreateSwapChain(pDesc->m_pTargetWindow, pDesc->m_SwapChainFlags, nullptr);
+    SetObjectName(m_pPhysicalDevice, "Physical Device");
+    SetObjectName(m_pSurface, "Default Surface");
+    SetObjectName(m_pSwapChain, "Swap Chain");
 
     InitAllocators(&pDesc->m_AllocatorDesc);
 
@@ -51,9 +59,6 @@ bool VKContext::Init(APIDesc *pDesc)
     m_pTransferQueue = CreateCommandQueue(LR_COMMAND_LIST_TYPE_TRANSFER);
     SetObjectName(m_pTransferQueue, "Transfer Queue");
 
-    m_pSwapChain = CreateSwapChain(pDesc->m_pTargetWindow, pDesc->m_SwapChainFlags, nullptr);
-    SetObjectName(m_pSwapChain, "Swap Chain");
-
     ShaderCompiler::Init();
 
     LOG_TRACE("Successfully initialized Vulkan API.");
@@ -64,11 +69,6 @@ bool VKContext::Init(APIDesc *pDesc)
 void VKContext::InitAllocators(APIAllocatorInitDesc *pDesc)
 {
     ZoneScoped;
-
-    constexpr u32 kTypeMem = Memory::MiBToBytes(16);
-
-    APIAllocator::g_Handle.m_TypeAllocator.Init(kTypeMem, 0x2000);
-    APIAllocator::g_Handle.m_pTypeData = Memory::Allocate<u8>(kTypeMem);
 
     m_MADescriptor.Allocator.Init(pDesc->m_DescriptorMem);
     m_MADescriptor.pHeap = CreateHeap(pDesc->m_DescriptorMem, true);
@@ -1534,7 +1534,6 @@ bool VKContext::SetupPhysicalDevice()
     ZoneScoped;
 
     m_pPhysicalDevice = new VKPhysicalDevice;
-    SetObjectName(m_pPhysicalDevice, "Physical Device");
 
     u32 availableDeviceCount = 0;
     vkEnumeratePhysicalDevices(m_pInstance, &availableDeviceCount, nullptr);
@@ -1558,10 +1557,7 @@ bool VKContext::SetupSurface(BaseWindow *pWindow)
     ZoneScoped;
 
     m_pSurface = new VKSurface;
-    SetObjectName(m_pSurface, "Default Surface");
-
     m_pSurface->Init(pWindow, m_pInstance, m_pPhysicalDevice);
-
     return true;
 }
 

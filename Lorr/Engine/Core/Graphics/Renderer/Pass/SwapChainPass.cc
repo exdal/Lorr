@@ -9,25 +9,7 @@ void Graphics::AddSwapChainAcquirePass(RenderGraph *pGraph, eastl::string_view n
     };
 
     GraphicsRenderPass *pPass = pGraph->CreateGraphicsPass<EmptyPassData>(name);
-    pGraph->SetCallbacks<EmptyPassData>(
-        pPass,
-        [&](RenderGraphResourceManager &, EmptyPassData &)
-        {
-        },
-        [=](RenderGraphResourceManager &, EmptyPassData &, CommandList *)
-        {
-        },
-        [](RenderGraphResourceManager &)
-        {
-        });
-
-    RenderPassColorAttachment colorAttachment = {};
-    colorAttachment.m_Flags = LR_ATTACHMENT_FLAG_NONE;
-    colorAttachment.m_LoadOp = LR_ATTACHMENT_OP_CLEAR;
-    colorAttachment.m_StoreOp = LR_ATTACHMENT_OP_STORE;
-    colorAttachment.m_Usage = LR_IMAGE_USAGE_RENDER_TARGET;
-    colorAttachment.m_ClearValue = ColorClearValue(0.0f, 0.0f, 0.0f, 1.0f);
-    pPass->AddColorAttachment("$backbuffer", colorAttachment);
+    pPass->AddColorAttachment("$backbuffer", LR_MEMORY_ACCESS_RENDER_TARGET_WRITE, LR_ATTACHMENT_FLAG_NONE);
 }
 
 void Graphics::AddSwapChainPresentPass(RenderGraph *pGraph, eastl::string_view name)
@@ -37,13 +19,7 @@ void Graphics::AddSwapChainPresentPass(RenderGraph *pGraph, eastl::string_view n
     };
 
     GraphicsRenderPass *pPass = pGraph->CreateGraphicsPass<EmptyPassData>(name);
-
-    RenderPassColorAttachment colorAttachment = {};
-    colorAttachment.m_Flags = LR_ATTACHMENT_FLAG_NONE;
-    colorAttachment.m_LoadOp = LR_ATTACHMENT_OP_DONT_CARE;
-    colorAttachment.m_StoreOp = LR_ATTACHMENT_OP_DONT_CARE;
-    colorAttachment.m_Usage = LR_IMAGE_USAGE_PRESENT;
-    pPass->AddColorAttachment("$backbuffer", colorAttachment);
+    pPass->AddColorAttachment("$backbuffer", LR_MEMORY_ACCESS_NONE, LR_ATTACHMENT_FLAG_PRESENT);
 }
 
 }  // namespace lr

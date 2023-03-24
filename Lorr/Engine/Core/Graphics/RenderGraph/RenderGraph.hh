@@ -4,7 +4,6 @@
 
 #pragma once
 
-#include "RenderGraphResource.hh"
 #include "RenderPass.hh"
 
 #define LR_RG_MAX_GROUP_COUNT 64
@@ -23,7 +22,7 @@ struct RenderPassGroup
 
 struct RenderGraphDesc
 {
-    VKAPI *m_pAPI = nullptr;
+    APIDesc &m_APIDesc;
 };
 
 struct RenderGraph
@@ -39,7 +38,7 @@ struct RenderGraph
     {
         ZoneScoped;
 
-        ResourceID hash = Hash::FNV64String(name);
+        Hash64 hash = Hash::FNV64String(name);
         for (RenderPass *pPass : m_Passes)
             if (pPass->m_NameHash == hash)
                 return (_RenderPass *)pPass;
@@ -48,7 +47,7 @@ struct RenderGraph
     }
 
     template<typename _Data, typename... _Args>
-    GraphicsRenderPass *CreateGraphicsPass(eastl::string_view name)
+    GraphicsRenderPass *CreateGraphicsPass(eastl::string_view name, _Args &&...args)
     {
         ZoneScoped;
 
@@ -58,21 +57,15 @@ struct RenderGraph
         };
         m_PassAllocator.Allocate(info);
 
-        GraphicsRenderPass *pPass = new (info.m_pData) GraphicsRenderPassCallback<_Data>(name);
-        pPass->m_pResourceMan = &m_ResourceManager;
+        GraphicsRenderPass *pPass = new (info.m_pData)
+            GraphicsRenderPassCallback<_Data>(name, eastl::forward<_Args>(args)..., m_pContext);
+
         pPass->m_PassID = m_Passes.size();
         m_Passes.push_back(pPass);
 
         AllocateCommandLists(LR_COMMAND_LIST_TYPE_GRAPHICS);
 
         return pPass;
-    }
-
-    template<typename _Data, typename... _Args>
-    void SetCallbacks(GraphicsRenderPass *pPass, _Args &&...args)
-    {
-        GraphicsRenderPassCallback<_Data> *pCallbackPass = (GraphicsRenderPassCallback<_Data> *)pPass;
-        pCallbackPass->SetCallbacks(eastl::forward<_Args>(args)..., m_ResourceManager);
     }
 
     void ExecuteGraphics(GraphicsRenderPass *pPass);
@@ -87,25 +80,23 @@ struct RenderGraph
     RenderPassGroup *GetOrCreateGroup(eastl::string_view name);
 
     /// RESOURCES ///
-
     void AllocateCommandLists(CommandListType type);
     Semaphore *GetSemaphore(CommandListType type);
     CommandAllocator *GetCommandAllocator(CommandListType type);
     CommandList *GetCommandList(RenderPass *pPass);
+    Image *GetAttachmentImage(const ColorAttachment &attachment);
 
     /// API CONTEXT ///
-    VKAPI *m_pAPI = nullptr;
-
-    /// RESOURCES ///
+    VKContext *m_pContext = nullptr;
     Semaphore *m_pSemaphores[LR_MAX_FRAME_COUNT] = {};
     CommandAllocator *m_pCommandAllocators[LR_MAX_FRAME_COUNT] = {};
     eastl::vector<CommandList *> m_CommandLists;
 
+    /// RESOURCES ///
     Memory::LinearAllocator m_PassAllocator = {};
     Memory::LinearAllocator m_GroupAllocator = {};
     eastl::vector<RenderPass *> m_Passes;
     eastl::vector<RenderPassGroup *> m_Groups;
-    eastl::vector<TrackedResource> m_Resources;
+    eastl::vector<eastl::pair<Hash64, Image *>> m_Images;
 };
-
 }  // namespace lr::Graphics

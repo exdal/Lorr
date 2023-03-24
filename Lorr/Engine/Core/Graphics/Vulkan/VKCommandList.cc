@@ -109,11 +109,11 @@ void CommandList::SetMemoryBarrier(PipelineBarrier *pBarrier)
     VkMemoryBarrier2 memoryBarrier = {};
     memoryBarrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2;
 
-    memoryBarrier.srcStageMask = VKContext::ToVKPipelineStage(pBarrier->m_CurrentStage);
-    memoryBarrier.dstStageMask = VKContext::ToVKPipelineStage(pBarrier->m_NextStage);
+    memoryBarrier.srcStageMask = VKContext::ToVKPipelineStage(pBarrier->m_SrcStage);
+    memoryBarrier.dstStageMask = VKContext::ToVKPipelineStage(pBarrier->m_DstStage);
 
-    memoryBarrier.srcAccessMask = VKContext::ToVKAccessFlags(pBarrier->m_CurrentAccess);
-    memoryBarrier.dstAccessMask = VKContext::ToVKAccessFlags(pBarrier->m_NextAccess);
+    memoryBarrier.srcAccessMask = VKContext::ToVKAccessFlags(pBarrier->m_SrcAccess);
+    memoryBarrier.dstAccessMask = VKContext::ToVKAccessFlags(pBarrier->m_DstAccess);
 
     VkDependencyInfo dependencyInfo = {};
     dependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
@@ -144,14 +144,14 @@ void CommandList::SetImageBarrier(Image *pImage, PipelineBarrier *pBarrier)
     barrierInfo.image = pImage->m_pHandle;
     barrierInfo.subresourceRange = subresRange;
 
-    barrierInfo.srcStageMask = VKContext::ToVKPipelineStage(pBarrier->m_CurrentStage);
-    barrierInfo.dstStageMask = VKContext::ToVKPipelineStage(pBarrier->m_NextStage);
+    barrierInfo.srcStageMask = VKContext::ToVKPipelineStage(pBarrier->m_SrcStage);
+    barrierInfo.dstStageMask = VKContext::ToVKPipelineStage(pBarrier->m_DstStage);
 
-    barrierInfo.srcAccessMask = VKContext::ToVKAccessFlags(pBarrier->m_CurrentAccess);
-    barrierInfo.dstAccessMask = VKContext::ToVKAccessFlags(pBarrier->m_NextAccess);
+    barrierInfo.srcAccessMask = VKContext::ToVKAccessFlags(pBarrier->m_SrcAccess);
+    barrierInfo.dstAccessMask = VKContext::ToVKAccessFlags(pBarrier->m_DstAccess);
 
-    barrierInfo.oldLayout = VKContext::ToVKImageLayout(pBarrier->m_CurrentLayout);
-    barrierInfo.newLayout = VKContext::ToVKImageLayout(pBarrier->m_NextLayout);
+    barrierInfo.oldLayout = VKContext::ToVKImageLayout(pBarrier->m_SrcLayout);
+    barrierInfo.newLayout = VKContext::ToVKImageLayout(pBarrier->m_DstLayout);
 
     barrierInfo.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     barrierInfo.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -165,7 +165,7 @@ void CommandList::SetImageBarrier(Image *pImage, PipelineBarrier *pBarrier)
 
     vkCmdPipelineBarrier2(m_pHandle, &dependencyInfo);
 
-    pImage->m_Layout = pBarrier->m_NextLayout;
+    pImage->m_Layout = pBarrier->m_DstLayout;
 }
 
 void CommandList::SetBufferBarrier(Buffer *pBuffer, PipelineBarrier *pBarrier)
@@ -180,11 +180,11 @@ void CommandList::SetBufferBarrier(Buffer *pBuffer, PipelineBarrier *pBarrier)
     barrierInfo.offset = pBuffer->m_DeviceDataOffset;
     barrierInfo.size = VK_WHOLE_SIZE;
 
-    barrierInfo.srcStageMask = VKContext::ToVKPipelineStage(pBarrier->m_CurrentStage);
-    barrierInfo.dstStageMask = VKContext::ToVKPipelineStage(pBarrier->m_NextStage);
+    barrierInfo.srcStageMask = VKContext::ToVKPipelineStage(pBarrier->m_SrcStage);
+    barrierInfo.dstStageMask = VKContext::ToVKPipelineStage(pBarrier->m_DstStage);
 
-    barrierInfo.srcAccessMask = VKContext::ToVKAccessFlags(pBarrier->m_CurrentAccess);
-    barrierInfo.dstAccessMask = VKContext::ToVKAccessFlags(pBarrier->m_NextAccess);
+    barrierInfo.srcAccessMask = VKContext::ToVKAccessFlags(pBarrier->m_SrcAccess);
+    barrierInfo.dstAccessMask = VKContext::ToVKAccessFlags(pBarrier->m_DstAccess);
 
     barrierInfo.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     barrierInfo.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;

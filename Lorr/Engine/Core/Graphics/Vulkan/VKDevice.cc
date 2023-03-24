@@ -88,15 +88,21 @@ void VKPhysicalDevice::Init(eastl::span<VkPhysicalDevice> devices)
     m_DeviceExtensions.resize(deviceExtensionCount);
     vkEnumerateDeviceExtensionProperties(m_pHandle, nullptr, &deviceExtensionCount, m_DeviceExtensions.data());
 
+    LOG_INFO("Checking device extensions:");
     for (eastl::string_view required : kRequiredExtensions)
     {
-        LOG_INFO("\tChecking for extension {}...", required);
+        bool foundExtension = false;
         for (VkExtensionProperties &properties : m_DeviceExtensions)
-            if (required == properties.extensionName)
+        {
+            if (required != properties.extensionName)
                 continue;
 
-        LOG_ERROR("Following extension is not found in this device: {}", required);
-        return;
+            foundExtension = true;
+        }
+
+        LOG_INFO("\t{}, {}", required, foundExtension);
+
+        assert(foundExtension);
     }
 
     /// GET DEVICE MEMORY INFO ///
@@ -108,46 +114,48 @@ void VKPhysicalDevice::InitQueueFamilies(VKSurface *pSurface)
 {
     ZoneScoped;
 
-    auto TestQueue = [this, &pSurface](VkQueueFlags desiredQueue, bool requirePresent) -> bool
-    {
-        constexpr VkQueueFlags flagsAll = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT;
-        for (u32 i = 0; i < m_QueueProperties.size(); i++)
-        {
-            VkQueueFamilyProperties &properties = m_QueueProperties[i];
-            VkQueueFlags queueFlags = properties.queueFlags & flagsAll;  // filter other/not available flags
-
-            if (!(queueFlags & desiredQueue))
-                continue;
-
-            VkBool32 presentSupported = false;
-            if (requirePresent)
-            {
-                vkGetPhysicalDeviceSurfaceSupportKHR(m_pHandle, i, pSurface->m_pHandle, &presentSupported);
-
-                if (!presentSupported)
-                {
-                    LOG_ERROR("Present mode not supported on queue {}!", i);
-                    return false;
-                }
-
-                m_PresentQueueIndex = i;
-            }
-
-            return true;
-        }
-
-        return false;
-    };
-
     u32 familyProperyCount = 0;
     vkGetPhysicalDeviceQueueFamilyProperties(m_pHandle, &familyProperyCount, nullptr);
 
     m_QueueProperties.resize(familyProperyCount);
     vkGetPhysicalDeviceQueueFamilyProperties(m_pHandle, &familyProperyCount, m_QueueProperties.data());
 
-    TestQueue(VK_QUEUE_GRAPHICS_BIT, true);
-    TestQueue(VK_QUEUE_COMPUTE_BIT, false);
-    TestQueue(VK_QUEUE_TRANSFER_BIT, false);
+    static float topPrior = 1.0;
+    u32 queueIdx = SelectQueue(pSurface, VK_QUEUE_GRAPHICS_BIT, true, true);
+    if (queueIdx != VK_QUEUE_FAMILY_IGNORED)
+    {
+        m_QueueInfos[LR_COMMAND_LIST_TYPE_GRAPHICS] = {
+            .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+            .pNext = nullptr,
+            .queueFamilyIndex = queueIdx,
+            .queueCount = 1,
+            .pQueuePriorities = &topPrior,
+        };
+    }
+
+    queueIdx = SelectQueue(pSurface, VK_QUEUE_COMPUTE_BIT, false, true);
+    if (queueIdx != VK_QUEUE_FAMILY_IGNORED)
+    {
+        m_QueueInfos[LR_COMMAND_LIST_TYPE_COMPUTE] = {
+            .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+            .pNext = nullptr,
+            .queueFamilyIndex = queueIdx,
+            .queueCount = 1,
+            .pQueuePriorities = &topPrior,
+        };
+    }
+
+    queueIdx = SelectQueue(pSurface, VK_QUEUE_TRANSFER_BIT, false, true);
+    if (queueIdx != VK_QUEUE_FAMILY_IGNORED)
+    {
+        m_QueueInfos[LR_COMMAND_LIST_TYPE_TRANSFER] = {
+            .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+            .pNext = nullptr,
+            .queueFamilyIndex = queueIdx,
+            .queueCount = 1,
+            .pQueuePriorities = &topPrior,
+        };
+    }
 }
 
 VkDevice VKPhysicalDevice::GetLogicalDevice()
@@ -157,8 +165,8 @@ VkDevice VKPhysicalDevice::GetLogicalDevice()
     VkDeviceCreateInfo deviceCreateInfo = {
         .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
         .pNext = &kDeviceFeatures_11,
-        .queueCreateInfoCount = m_QueueInfo.count,
-        .pQueueCreateInfos = m_QueueInfo.data(),
+        .queueCreateInfoCount = m_QueueInfos.count,
+        .pQueueCreateInfos = m_QueueInfos.data(),
         .enabledExtensionCount = kRequiredExtensions.count,
         .ppEnabledExtensionNames = kRequiredExtensions.data(),
     };
@@ -188,7 +196,58 @@ u32 VKPhysicalDevice::GetQueueIndex(CommandListType type)
 {
     ZoneScoped;
 
-    return m_QueueInfo[type].queueFamilyIndex;
+    return m_QueueInfos[type].queueFamilyIndex;
+}
+
+u32 VKPhysicalDevice::SelectQueue(
+    VKSurface *pSurface, VkQueueFlags desiredQueue, bool requirePresent, bool selectBest)
+{
+    ZoneScoped;
+
+    constexpr VkQueueFlags flagsAll = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT;
+    u32 foundIdx = VK_QUEUE_FAMILY_IGNORED;
+    u32 bestCount = ~0;
+
+    for (u32 i = 0; i < m_QueueProperties.size(); i++)
+    {
+        VkQueueFamilyProperties &properties = m_QueueProperties[i];
+        VkQueueFlags queueFlags = properties.queueFlags & flagsAll;  // filter other/not available flags
+
+        if (!(queueFlags & desiredQueue))
+            continue;
+
+        if (selectBest)
+        {
+            queueFlags ^= desiredQueue;
+            u32 setBitCount = _popcnt32(queueFlags);
+            if (setBitCount < bestCount)
+            {
+                bestCount = setBitCount;
+                foundIdx = i;
+            }
+        }
+        else
+        {
+            foundIdx = i;
+            break;
+        }
+    }
+
+    if (requirePresent)
+    {
+        VkBool32 presentSupported = false;
+        vkGetPhysicalDeviceSurfaceSupportKHR(m_pHandle, foundIdx, pSurface->m_pHandle, &presentSupported);
+
+        if (!presentSupported)
+        {
+            LOG_ERROR("Present mode not supported on queue {}!", foundIdx);
+            return VK_QUEUE_FAMILY_IGNORED;
+        }
+
+        m_PresentQueueIndex = foundIdx;
+    }
+
+    return foundIdx;
 }
 
 void VKSurface::Init(BaseWindow *pWindow, VkInstance pInstance, VKPhysicalDevice *pPhysicalDevice)

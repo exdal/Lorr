@@ -21,8 +21,10 @@ struct VKPhysicalDevice : APIObject<VK_OBJECT_TYPE_PHYSICAL_DEVICE>
     u32 GetHeapIndex(VkMemoryPropertyFlags flags);
     u32 GetQueueIndex(CommandListType type);
 
+    u32 SelectQueue(VKSurface *pSurface, VkQueueFlags desiredQueue, bool requirePresent, bool selectBest);
+
     u32 m_PresentQueueIndex = 0;
-    eastl::array<VkDeviceQueueCreateInfo, LR_COMMAND_LIST_TYPE_COUNT> m_QueueInfo;
+    eastl::array<VkDeviceQueueCreateInfo, LR_COMMAND_LIST_TYPE_COUNT> m_QueueInfos;
     eastl::vector<VkQueueFamilyProperties> m_QueueProperties;
     eastl::vector<VkExtensionProperties> m_DeviceExtensions;
 

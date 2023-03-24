@@ -18,16 +18,15 @@ void RenderGraph::Init(RenderGraphDesc *pDesc)
     };
     m_GroupAllocator.Init(allocatorDesc);
 
-    m_ResourceManager.m_pAPI = pDesc->m_pAPI;
-    m_ResourceManager.m_Resources.reserve(Memory::KiBToBytes(16));
-    m_pAPI = pDesc->m_pAPI;
+    m_pContext = new VKContext;
+    m_pContext->Init(&pDesc->m_APIDesc);
 
     for (u32 i = 0; i < LR_MAX_FRAME_COUNT; i++)
     {
-        m_pCommandAllocators[i] = m_pAPI->CreateCommandAllocator(LR_COMMAND_LIST_TYPE_GRAPHICS, true);
-        m_pAPI->SetObjectName(m_pCommandAllocators[i], Format("Render Graph Command Allocator {}", i));
-        m_pSemaphores[i] = m_pAPI->CreateSemaphore(0, false);
-        m_pAPI->SetObjectName(m_pSemaphores[i], Format("Render Graph Semaphore {}", i));
+        m_pCommandAllocators[i] = m_pContext->CreateCommandAllocator(LR_COMMAND_LIST_TYPE_GRAPHICS, true);
+        m_pContext->SetObjectName(m_pCommandAllocators[i], Format("Render Graph Command Allocator {}", i));
+        m_pSemaphores[i] = m_pContext->CreateSemaphore(0, false);
+        m_pContext->SetObjectName(m_pSemaphores[i], Format("Render Graph Semaphore {}", i));
     }
 
     GetOrCreateGroup("$head");
@@ -42,14 +41,15 @@ void RenderGraph::Draw()
 {
     ZoneScoped;
 
-    SwapChain *pSwapChain = m_pAPI->GetSwapChain();
-    SwapChainFrame *pCurrentFrame = m_pAPI->GetCurrentFrame();
+    VKSwapChain *pSwapChain = m_pContext->GetSwapChain();
+    SwapChainFrame *pCurrentFrame = pSwapChain->GetCurrentFrame();
 
     Semaphore *pCurrentSemp = m_pSemaphores[pSwapChain->m_CurrentFrame];
     CommandAllocator *pCurrentAllocator = m_pCommandAllocators[pSwapChain->m_CurrentFrame];
 
-    m_pAPI->WaitForSemaphore(pCurrentSemp, pCurrentSemp->m_Value);
-    m_pAPI->ResetCommandAllocator(pCurrentAllocator);
+    m_pContext->BeginFrame();
+    m_pContext->WaitForSemaphore(pCurrentSemp, pCurrentSemp->m_Value);
+    m_pContext->ResetCommandAllocator(pCurrentAllocator);
 
     ExecuteGraphics(GetPass<GraphicsRenderPass>("$acquire"));
 
@@ -77,6 +77,7 @@ void RenderGraph::Draw()
     }
 
     ExecuteGraphics(GetPass<GraphicsRenderPass>("$present"));
+    m_pContext->EndFrame();
 }
 
 void RenderGraph::AddGraphicsGroup(
@@ -105,29 +106,36 @@ void RenderGraph::AddGraphicsGroup(
     }
 }
 
-static ImageLayout ToImageLayout(MemoryAcces access)
+static MemoryAccess ToMemoryAccess(ImageLayout layout, bool write)
+{
+    constexpr static MemoryAccess kMemoryAccess[] = {
+        LR_MEMORY_ACCESS_NONE,                // LR_IMAGE_LAYOUT_UNDEFINED
+        LR_MEMORY_ACCESS_NONE,                // LR_IMAGE_LAYOUT_PRESENT
+        LR_MEMORY_ACCESS_RENDER_TARGET_READ,  // LR_IMAGE_LAYOUT_ATTACHMENT
+        LR_MEMORY_ACCESS_SHADER_READ,         // LR_IMAGE_LAYOUT_READ_ONLY
+        LR_MEMORY_ACCESS_TRANSFER_READ,       // LR_IMAGE_LAYOUT_TRANSFER_SRC
+        LR_MEMORY_ACCESS_TRANSFER_READ,       // LR_IMAGE_LAYOUT_TRANSFER_DST -- `write` handle this
+        LR_MEMORY_ACCESS_SHADER_READ,         // LR_IMAGE_LAYOUT_UNORDERED_ACCESS
+    };
+    return kMemoryAccess[layout] << (MemoryAccess)write;
+}
+
+static ImageLayout ToImageLayout(MemoryAccess access)
 {
     ZoneScoped;
 
-    switch (usage)
-    {
-        case LR_IMAGE_USAGE_RENDER_TARGET:
-            return LR_IMAGE_LAYOUT_ATTACHMENT;
-        case LR_IMAGE_USAGE_DEPTH_STENCIL:
-        case LR_IMAGE_USAGE_SHADER_RESOURCE:
-            return LR_IMAGE_LAYOUT_READ_ONLY;
-        case LR_IMAGE_USAGE_TRANSFER_SRC:
-            return LR_IMAGE_LAYOUT_TRANSFER_SRC;
-        case LR_IMAGE_USAGE_TRANSFER_DST:
-            return LR_IMAGE_LAYOUT_TRANSFER_DST;
-        case LR_IMAGE_USAGE_UNORDERED_ACCESS:
-            return LR_IMAGE_LAYOUT_UNORDERED_ACCESS;
-        case LR_IMAGE_USAGE_PRESENT:
-            return LR_IMAGE_LAYOUT_PRESENT;
-        default:
-            LOG_ERROR("One ImageUsage flag must be used in render passes.");
-            return LR_IMAGE_LAYOUT_UNDEFINED;
-    }
+    if (access & LR_MEMORY_ACCESS_RENDER_TARGET_UTL)
+        return LR_IMAGE_LAYOUT_ATTACHMENT;
+    if (access & LR_MEMORY_ACCESS_SHADER_READ || access & LR_MEMORY_ACCESS_DEPTH_STENCIL_READ)
+        return LR_IMAGE_LAYOUT_ATTACHMENT;
+    if (access & LR_MEMORY_ACCESS_TRANSFER_READ)
+        return LR_IMAGE_LAYOUT_TRANSFER_SRC;
+    if (access & LR_MEMORY_ACCESS_TRANSFER_WRITE)
+        return LR_IMAGE_LAYOUT_TRANSFER_DST;
+    if (access & LR_MEMORY_ACCESS_SHADER_WRITE)
+        return LR_IMAGE_LAYOUT_UNORDERED_ACCESS;
+
+    return LR_IMAGE_LAYOUT_UNDEFINED;
 }
 
 static PipelineStage ToPipelineStage(ImageLayout layout)
@@ -139,82 +147,71 @@ static PipelineStage ToPipelineStage(ImageLayout layout)
         LR_PIPELINE_STAGE_NONE,            // LR_IMAGE_LAYOUT_PRESENT
         LR_PIPELINE_STAGE_RENDER_TARGET,   // LR_IMAGE_LAYOUT_ATTACHMENT
         LR_PIPELINE_STAGE_PIXEL_SHADER,    // LR_IMAGE_LAYOUT_READ_ONLY
-        LR_PIPELINE_STAGE_TRANSFER,        // LR_IMAGE_LAYOUT_TRANSFER_SRC | LR_IMAGE_LAYOUT_TRANSFER_DST
+        LR_PIPELINE_STAGE_TRANSFER,        // LR_IMAGE_LAYOUT_TRANSFER_SRC
+        LR_PIPELINE_STAGE_TRANSFER,        // LR_IMAGE_LAYOUT_TRANSFER_DST
         LR_PIPELINE_STAGE_COMPUTE_SHADER,  // LR_IMAGE_LAYOUT_UNORDERED_ACCESS
     };
 
     return kColorStages[layout];
 }
 
-static MemoryAcces ToCurrentMemoryAccess(ImageLayout layout, AttachmentFlags flags)
-{
-    ZoneScoped;
-
-    bool isWrite = flags != LR_ATTACHMENT_FLAG_CLEAR;  // all other flags are WRITE op.
-
-    struct AccessPair
-    {
-        MemoryAcces m_Read;
-        MemoryAcces m_Write;
-    };
-    constexpr static AccessPair kColorAccess[] = {
-        { LR_MEMORY_ACCESS_NONE, LR_MEMORY_ACCESS_NONE },                               // UNDEFINED
-        { LR_MEMORY_ACCESS_NONE, LR_MEMORY_ACCESS_NONE },                               // PRESENT
-        { LR_MEMORY_ACCESS_RENDER_TARGET_READ, LR_MEMORY_ACCESS_RENDER_TARGET_WRITE },  // ATTACHMENT
-        { LR_MEMORY_ACCESS_SHADER_READ, LR_MEMORY_ACCESS_SHADER_WRITE },                // READ_ONLY
-        { LR_MEMORY_ACCESS_TRANSFER_READ, LR_MEMORY_ACCESS_TRANSFER_WRITE },            // TRANSFER_SRC
-        { LR_MEMORY_ACCESS_TRANSFER_WRITE, LR_MEMORY_ACCESS_TRANSFER_WRITE },           // TRANSFER_DST
-        { LR_MEMORY_ACCESS_MEMORY_READ, LR_MEMORY_ACCESS_MEMORY_WRITE },                // UNORDERED_ACCESS
-    };
-
-    const AccessPair &access = kColorAccess[layout];
-    return isWrite ? access.m_Write : access.m_Read;
-}
-
 void RenderGraph::ExecuteGraphics(GraphicsRenderPass *pPass)
 {
     ZoneScoped;
 
-    SwapChain *pSwapChain = m_pAPI->GetSwapChain();
+    VKSwapChain *pSwapChain = m_pContext->GetSwapChain();
     CommandList *pList = GetCommandList(pPass);
 
-    m_pAPI->BeginCommandList(pList);
+    m_pContext->BeginCommandList(pList);
 
     /// PREPARE ATTACHMENTS ///
-    eastl::span<ColorAttachment> colorAttachments = pPass->GetColorAttachments();
-    DepthAttachment *pDepthAttachment = pPass->GetDepthAttachment();
+    eastl::span<ColorAttachment> colorAttachments = pPass->m_ColorAttachments;
+    eastl::vector<RenderingColorAttachment> renderingColorAttachments(colorAttachments.size());
+    DepthAttachment *pDepthAttachment = &pPass->m_DepthAttachment;
 
-    for (ColorAttachment &attachment : colorAttachments)
+    for (u32 i = 0; i < colorAttachments.size(); i++)
     {
-        Image *pImage = m_ResourceManager.GetResource<Image>(attachment.m_ResourceID);
+        ColorAttachment &attachment = colorAttachments[i];
+        RenderingColorAttachment &renderingAttachment = renderingColorAttachments[i];
+        Image *pImage = GetAttachmentImage(attachment);
 
         ImageLayout currentLayout = pImage->m_Layout;
-        ImageLayout nextLayout = ToImageLayout(attachment.m_AccessFlags);
+        ImageLayout nextLayout = ToImageLayout(attachment.m_Access);
+        bool attachmentLoad = (attachment.m_Flags & LR_ATTACHMENT_FLAG_LOAD);
+        bool attachmentStore = (attachment.m_Access & LR_MEMORY_ACCESS_IMAGE_WRITE_UTL);
+        bool attachmentPresent = (attachment.m_Flags & LR_ATTACHMENT_FLAG_PRESENT);
 
         PipelineBarrier barrier = {
-            .m_CurrentLayout = currentLayout,
-            .m_NextLayout = nextLayout,
-            .m_CurrentStage = ToPipelineStage(currentLayout),
-            .m_NextStage = ToPipelineStage(nextLayout),
-            .m_CurrentAccess = ToMemoryAccess(currentLayout, attachment.m_LoadOp),
-            .m_NextAccess = attachment.m_AccessFlags,
+            .m_SrcLayout = currentLayout,
+            .m_DstLayout = attachmentPresent ? LR_IMAGE_LAYOUT_PRESENT : nextLayout,
+            .m_SrcStage = ToPipelineStage(currentLayout),
+            .m_DstStage = ToPipelineStage(nextLayout),
+            .m_SrcAccess = ToMemoryAccess(currentLayout, !attachmentLoad),
+            .m_DstAccess = attachment.m_Access,
         };
         pList->SetImageBarrier(pImage, &barrier);
+
+        renderingAttachment = {
+            .m_pImage = pImage,
+            .m_LoadOp = attachmentLoad ? LR_ATTACHMENT_OP_LOAD : LR_ATTACHMENT_OP_DONT_CARE,
+            .m_StoreOp = attachmentStore ? LR_ATTACHMENT_OP_STORE : LR_ATTACHMENT_OP_DONT_CARE,
+        };
     }
 
     if (pPass->m_Flags & LR_RENDER_PASS_FLAG_ALLOW_EXECUTE)
     {
-        RenderPassBeginDesc passDesc = {};
-        passDesc.m_ColorAttachments = colorAttachments;
-        passDesc.m_RenderArea = { 0, 0, pSwapChain->m_Width, pSwapChain->m_Height };
+        RenderingBeginDesc renderingDesc = {
+            .m_RenderArea = { 0, 0, pSwapChain->m_Width, pSwapChain->m_Height },
+            .m_ColorAttachments = renderingColorAttachments,
+        };
 
-        pList->BeginPass(&passDesc);
+        pList->BeginRendering(&renderingDesc);
         pList->SetPipeline(pPass->m_pPipeline);
-        pPass->Execute(pList);
-        pList->EndPass();
+        pPass->Execute(m_pContext, pList);
+        pList->EndRendering();
     }
 
-    m_pAPI->EndCommandList(pList);
+    m_pContext->EndCommandList(pList);
 
     CommandListSubmitDesc pListSubmitDesc[] = { pList };
     SemaphoreSubmitDesc pSignalSemaDesc[1] = {};
@@ -231,46 +228,7 @@ void RenderGraph::ExecuteGraphics(GraphicsRenderPass *pPass)
         submitDesc.m_SignalSemas = pSignalSemaDesc;
     }
 
-    m_pAPI->Submit(&submitDesc);
-}
-
-void RenderGraph::AllocateCommandLists(CommandListType type)
-{
-    ZoneScoped;
-
-    SwapChain *pSwapChain = m_pAPI->GetSwapChain();
-    for (u32 i = 0; i < pSwapChain->m_FrameCount; i++)
-    {
-        CommandAllocator *pAllocator = m_pCommandAllocators[i];
-        CommandList *pList = m_pAPI->CreateCommandList(type, pAllocator);
-        m_pAPI->SetObjectName(pList, Format("List {}", m_CommandLists.size()));
-        m_CommandLists.push_back(pList);
-    }
-}
-
-Semaphore *RenderGraph::GetSemaphore(CommandListType type)
-{
-    ZoneScoped;
-
-    u32 frameIdx = m_pAPI->GetSwapChain()->m_CurrentFrame;
-    return m_pSemaphores[frameIdx];
-}
-
-CommandAllocator *RenderGraph::GetCommandAllocator(CommandListType type)
-{
-    ZoneScoped;
-
-    u32 frameIdx = m_pAPI->GetSwapChain()->m_CurrentFrame;
-    return m_pCommandAllocators[frameIdx];
-}
-
-CommandList *RenderGraph::GetCommandList(RenderPass *pPass)
-{
-    ZoneScoped;
-
-    SwapChain *pSwapChain = m_pAPI->GetSwapChain();
-
-    return m_CommandLists[pPass->m_PassID * pSwapChain->m_FrameCount + pSwapChain->m_CurrentFrame];
+    m_pContext->Submit(&submitDesc);
 }
 
 RenderPassGroup *RenderGraph::GetGroup(u32 groupID)
@@ -284,7 +242,7 @@ RenderPassGroup *RenderGraph::GetGroup(eastl::string_view name)
 {
     ZoneScoped;
 
-    ResourceID hash = Hash::FNV64String(name);
+    Hash64 hash = Hash::FNV64String(name);
     for (RenderPassGroup *pGroup : m_Groups)
         if (pGroup->m_Hash == hash)
             return pGroup;
@@ -296,7 +254,7 @@ RenderPassGroup *RenderGraph::GetOrCreateGroup(eastl::string_view name)
 {
     ZoneScoped;
 
-    ResourceID hash = Hash::FNV64String(name);
+    Hash64 hash = Hash::FNV64String(name);
     for (RenderPassGroup *pGroup : m_Groups)
         if (pGroup->m_Hash == hash)
             return pGroup;
@@ -316,4 +274,55 @@ RenderPassGroup *RenderGraph::GetOrCreateGroup(eastl::string_view name)
     return pGroup;
 }
 
+void RenderGraph::AllocateCommandLists(CommandListType type)
+{
+    ZoneScoped;
+
+    VKSwapChain *pSwapChain = m_pContext->GetSwapChain();
+    for (u32 i = 0; i < pSwapChain->m_FrameCount; i++)
+    {
+        CommandAllocator *pAllocator = m_pCommandAllocators[i];
+        CommandList *pList = m_pContext->CreateCommandList(type, pAllocator);
+        m_pContext->SetObjectName(pList, Format("List {}", m_CommandLists.size()));
+        m_CommandLists.push_back(pList);
+    }
+}
+
+Semaphore *RenderGraph::GetSemaphore(CommandListType type)
+{
+    ZoneScoped;
+
+    u32 frameIdx = m_pContext->GetSwapChain()->m_CurrentFrame;
+    return m_pSemaphores[frameIdx];
+}
+
+CommandAllocator *RenderGraph::GetCommandAllocator(CommandListType type)
+{
+    ZoneScoped;
+
+    u32 frameIdx = m_pContext->GetSwapChain()->m_CurrentFrame;
+    return m_pCommandAllocators[frameIdx];
+}
+
+CommandList *RenderGraph::GetCommandList(RenderPass *pPass)
+{
+    ZoneScoped;
+
+    VKSwapChain *pSwapChain = m_pContext->GetSwapChain();
+    return m_CommandLists[pPass->m_PassID * pSwapChain->m_FrameCount + pSwapChain->m_CurrentFrame];
+}
+
+Image *RenderGraph::GetAttachmentImage(const ColorAttachment &attachment)
+{
+    ZoneScoped;
+
+    if (attachment.m_Hash == FNV64HashOf("$backbuffer"))
+        return m_pContext->GetSwapChain()->GetCurrentFrame()->m_pImage;
+
+    for (auto &pair : m_Images)
+        if (pair.first == attachment.m_Hash)
+            return pair.second;
+
+    return nullptr;
+}
 }  // namespace lr::Graphics

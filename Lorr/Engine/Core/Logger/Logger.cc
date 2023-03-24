@@ -22,7 +22,7 @@ namespace lr
     {
         fmtlog::setLogCB(logcb, fmtlog::DBG);
         fmtlog::setLogFile("lorr.log", true);
-        fmtlog::setHeaderPattern("{HMSf} | {t:<6} | {s:<16} | {l} | ");
+        fmtlog::setHeaderPattern("{HMSf} | {t:<6} | {l} | ");
         fmtlog::flushOn(fmtlog::DBG);
         fmtlog::setThreadName("MAIN");
         fmtlog::startPollingThread(10000);

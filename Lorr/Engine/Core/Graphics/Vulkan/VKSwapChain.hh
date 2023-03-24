@@ -46,7 +46,7 @@ struct VKSwapChain : APIObject<VK_OBJECT_TYPE_SWAPCHAIN_KHR>
     bool m_vSync = false;
     SwapChainFrame m_pFrames[LR_MAX_FRAME_COUNT] = {};
 
-    ImageFormat m_ImageFormat = LR_IMAGE_FORMAT_RGBA8F;
+    ImageFormat m_ImageFormat = LR_IMAGE_FORMAT_BGRA8F;
     VkColorSpaceKHR m_ColorSpace = VK_COLOR_SPACE_MAX_ENUM_KHR;
     VkPresentModeKHR m_PresentMode = VK_PRESENT_MODE_MAILBOX_KHR;
 };

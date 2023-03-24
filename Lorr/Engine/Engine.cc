@@ -31,10 +31,9 @@ namespace lr
                 .m_ImageTLSFMem = Memory::MiBToBytes(1024),
             },
         };
-        m_API.Init(&apiDesc);
 
         Graphics::RenderGraphDesc renderGraphDesc = {
-            .m_pAPI = &m_API,
+            .m_APIDesc = apiDesc,
         };
         m_RenderGraph.Init(&renderGraphDesc);
 
@@ -72,7 +71,7 @@ namespace lr
                     m_Window.m_Width = data.m_SizeWidth;
                     m_Window.m_Height = data.m_SizeHeight;
 
-                    m_API.ResizeSwapChain(data.m_SizeWidth, data.m_SizeHeight);
+                    // m_API.ResizeSwapChain(data.m_SizeWidth, data.m_SizeHeight);
 
                     break;
                 }
@@ -119,7 +118,7 @@ namespace lr
         m_Window.Poll();
         DispatchEvents();
 
-        m_API.BeginFrame();
+        // m_API.BeginFrame();
         // m_ImGui.NewFrame(m_Window.m_Width, m_Window.m_Height);
     }
 
@@ -130,7 +129,7 @@ namespace lr
         // m_ImGui.EndFrame();
 
         m_RenderGraph.Draw();
-        m_API.EndFrame();
+        // m_API.EndFrame();
     }
 
 }  // namespace lr

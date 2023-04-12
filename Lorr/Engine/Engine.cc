@@ -6,18 +6,18 @@
 
 namespace lr
 {
-    using namespace Graphics;
+using namespace Graphics;
 
-    void Engine::Init(EngineDesc &engineDesc)
-    {
-        ZoneScoped;
+void Engine::Init(EngineDesc &engineDesc)
+{
+    ZoneScoped;
 
-        Logger::Init();
-        m_EventMan.Init();
-        m_Window.Init(engineDesc.m_WindowDesc);
-        m_ImGui.Init(m_Window.m_Width, m_Window.m_Height);
+    Logger::Init();
+    m_EventMan.Init();
+    m_Window.Init(engineDesc.m_WindowDesc);
+    m_ImGui.Init(m_Window.m_Width, m_Window.m_Height);
 
-        Graphics::APIDesc apiDesc = {
+    Graphics::APIDesc apiDesc = {
             .m_Flags = LR_API_FLAG_NONE,
             .m_SwapChainFlags = LR_SWAP_CHAIN_FLAG_TRIPLE_BUFFERING,
             .m_pTargetWindow = &m_Window,
@@ -32,104 +32,103 @@ namespace lr
             },
         };
 
-        Graphics::RenderGraphDesc renderGraphDesc = {
-            .m_APIDesc = apiDesc,
-        };
-        m_RenderGraph.Init(&renderGraphDesc);
+    Graphics::RenderGraphDesc renderGraphDesc = {
+        .m_APIDesc = apiDesc,
+    };
+    m_RenderGraph.Init(&renderGraphDesc);
 
-        Graphics::InitPasses(&m_RenderGraph);
-    }
+    Graphics::InitPasses(&m_RenderGraph);
+    m_RenderGraph.Prepare();
+}
 
-    void Engine::PushEvent(Event event, EngineEventData &data)
+void Engine::PushEvent(Event event, EngineEventData &data)
+{
+    ZoneScoped;
+
+    m_EventMan.Push(event, data);
+}
+
+void Engine::DispatchEvents()
+{
+    ZoneScoped;
+
+    u32 eventID = LR_INVALID_EVENT_ID;
+    while (m_EventMan.Peek(eventID))
     {
-        ZoneScoped;
+        EngineEventData data = {};
+        Event event = m_EventMan.Dispatch(eventID, data);
 
-        m_EventMan.Push(event, data);
-    }
-
-    void Engine::DispatchEvents()
-    {
-        ZoneScoped;
-
-        u32 eventID = LR_INVALID_EVENT_ID;
-        while (m_EventMan.Peek(eventID))
+        switch (event)
         {
-            EngineEventData data = {};
-            Event event = m_EventMan.Dispatch(eventID, data);
-
-            switch (event)
+            case ENGINE_EVENT_QUIT:
             {
-                case ENGINE_EVENT_QUIT:
-                {
-                    m_ShuttingDown = true;
+                m_ShuttingDown = true;
 
-                    break;
-                }
-
-                case ENGINE_EVENT_RESIZE:
-                {
-                    m_Window.m_Width = data.m_SizeWidth;
-                    m_Window.m_Height = data.m_SizeHeight;
-
-                    // m_API.ResizeSwapChain(data.m_SizeWidth, data.m_SizeHeight);
-
-                    break;
-                }
-
-                case ENGINE_EVENT_MOUSE_POSITION:
-                {
-                    ImGuiIO &io = ImGui::GetIO();
-                    io.MousePos.x = data.m_MouseX;
-                    io.MousePos.y = data.m_MouseY;
-
-                    break;
-                }
-
-                case ENGINE_EVENT_MOUSE_STATE:
-                {
-                    ImGuiIO &io = ImGui::GetIO();
-                    io.MouseDown[data.m_Mouse - 1] = !(bool)data.m_MouseState;
-
-                    break;
-                }
-
-                case ENGINE_EVENT_CURSOR_STATE:
-                {
-                    m_Window.SetCursor(data.m_WindowCursor);
-
-                    break;
-                }
-
-                default:
-                    break;
+                break;
             }
+
+            case ENGINE_EVENT_RESIZE:
+            {
+                m_Window.m_Width = data.m_SizeWidth;
+                m_Window.m_Height = data.m_SizeHeight;
+
+                // m_API.ResizeSwapChain(data.m_SizeWidth, data.m_SizeHeight);
+
+                break;
+            }
+
+            case ENGINE_EVENT_MOUSE_POSITION:
+            {
+                ImGuiIO &io = ImGui::GetIO();
+                io.MousePos.x = data.m_MouseX;
+                io.MousePos.y = data.m_MouseY;
+
+                break;
+            }
+
+            case ENGINE_EVENT_MOUSE_STATE:
+            {
+                ImGuiIO &io = ImGui::GetIO();
+                io.MouseDown[data.m_Mouse - 1] = !(bool)data.m_MouseState;
+
+                break;
+            }
+
+            case ENGINE_EVENT_CURSOR_STATE:
+            {
+                m_Window.SetCursor(data.m_WindowCursor);
+
+                break;
+            }
+
+            default:
+                break;
         }
     }
+}
 
-    void Engine::Prepare()
-    {
-        ZoneScoped;
-    }
+void Engine::Prepare()
+{
+    ZoneScoped;
+}
 
-    void Engine::BeginFrame()
-    {
-        ZoneScoped;
+void Engine::BeginFrame()
+{
+    ZoneScoped;
 
-        m_Window.Poll();
-        DispatchEvents();
+    m_Window.Poll();
+    DispatchEvents();
 
-        // m_API.BeginFrame();
-        // m_ImGui.NewFrame(m_Window.m_Width, m_Window.m_Height);
-    }
+    m_ImGui.NewFrame(m_Window.m_Width, m_Window.m_Height);
+}
 
-    void Engine::EndFrame()
-    {
-        ZoneScoped;
+void Engine::EndFrame()
+{
+    ZoneScoped;
 
-        // m_ImGui.EndFrame();
+    m_ImGui.EndFrame();
 
-        m_RenderGraph.Draw();
-        // m_API.EndFrame();
-    }
+    m_RenderGraph.Draw();
+}
 
 }  // namespace lr

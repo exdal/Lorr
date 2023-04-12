@@ -13,6 +13,7 @@ DescriptorWriteData::DescriptorWriteData(u32 binding, u32 count, Buffer *pBuffer
     m_pBuffer = pBuffer;
     m_BufferDataOffset = offset;
     m_BufferDataSize = dataSize == ~0 ? pBuffer->m_DataLen : dataSize;
+    m_Type = LR_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 }
 
 DescriptorWriteData::DescriptorWriteData(u32 binding, u32 count, Image *pImage, ImageLayout layout)
@@ -21,6 +22,7 @@ DescriptorWriteData::DescriptorWriteData(u32 binding, u32 count, Image *pImage, 
     m_Count = count;
     m_pImage = pImage;
     m_ImageLayout = layout;
+    m_Type = LR_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
 }
 
 DescriptorWriteData::DescriptorWriteData(u32 binding, u32 count, Sampler *pSampler)
@@ -28,25 +30,7 @@ DescriptorWriteData::DescriptorWriteData(u32 binding, u32 count, Sampler *pSampl
     m_Binding = binding;
     m_Count = count;
     m_pSampler = pSampler;
-}
-
-DescriptorSetLayout *DescriptorLayoutCache::Get(eastl::span<DescriptorLayoutElement> elements, u64 &hashOut)
-{
-    ZoneScoped;
-
-    hashOut = Hash::FNV64((char *)elements.data(), elements.size_bytes());
-    for (CachedLayout &layout : m_Layouts)
-        if (hashOut == layout.m_Hash)
-            return layout.m_pHandle;
-
-    return nullptr;
-}
-
-void DescriptorLayoutCache::Add(DescriptorSetLayout *pLayout, u64 hash)
-{
-    ZoneScoped;
-
-    m_Layouts.push_back({ hash, pLayout });
+    m_Type = LR_DESCRIPTOR_TYPE_SAMPLER;
 }
 
 }  // namespace lr::Graphics

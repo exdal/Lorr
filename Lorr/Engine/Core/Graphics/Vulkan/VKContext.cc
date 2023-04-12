@@ -45,8 +45,8 @@ bool VKContext::Init(APIDesc *pDesc)
     InitAllocators(&pDesc->m_AllocatorDesc);
 
     m_pDescriptorPool = CreateDescriptorPool({
-        { LR_DESCRIPTOR_TYPE_SHADER_RESOURCE_IMAGE, 256 },
-        { LR_DESCRIPTOR_TYPE_CONSTANT_BUFFER, 256 },
+        { LR_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 256 },
+        { LR_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 256 },
         { LR_DESCRIPTOR_TYPE_SAMPLER, 256 },
     });
 
@@ -90,6 +90,13 @@ void VKContext::InitAllocators(APIAllocatorInitDesc *pDesc)
 
     m_MAImageTLSF.Allocator.Init(pDesc->m_ImageTLSFMem, pDesc->m_MaxTLSFAllocations);
     m_MAImageTLSF.pHeap = CreateHeap(pDesc->m_ImageTLSFMem, false);
+}
+
+u32 VKContext::GetQueueIndex(CommandListType type)
+{
+    ZoneScoped;
+
+    return m_pPhysicalDevice->GetQueueIndex(type);
 }
 
 CommandQueue *VKContext::CreateCommandQueue(CommandListType type)
@@ -145,14 +152,19 @@ void VKContext::AllocateCommandList(CommandList *pList, CommandAllocator *pAlloc
     vkAllocateCommandBuffers(m_pDevice, &listInfo, &pList->m_pHandle);
 }
 
-void VKContext::BeginCommandList(CommandList *pList)
+void VKContext::BeginCommandList(CommandList *pList, CommandListUsage usage)
 {
     ZoneScoped;
+
+    constexpr static VkCommandBufferUsageFlags kFlags[] = {
+        VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+        VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT,
+    };
 
     VkCommandBufferBeginInfo beginInfo = {};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     beginInfo.pNext = nullptr;
-    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    beginInfo.flags = kFlags[usage];
     vkBeginCommandBuffer(pList->m_pHandle, &beginInfo);
 }
 
@@ -370,7 +382,7 @@ Pipeline *VKContext::CreateGraphicsPipeline(GraphicsPipelineBuildInfo *pBuildInf
 
     /// BOUND RENDER TARGETS -----------------------------------------------------
 
-    VkFormat pRenderTargetFormats[LR_MAX_RENDER_TARGET_PER_PASS] = {};
+    VkFormat pRenderTargetFormats[LR_MAX_COLOR_ATTACHMENT_PER_PASS] = {};
 
     VkPipelineRenderingCreateInfo renderingInfo = {};
     renderingInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
@@ -406,16 +418,16 @@ Pipeline *VKContext::CreateGraphicsPipeline(GraphicsPipelineBuildInfo *pBuildInf
     VkVertexInputBindingDescription inputBindingInfo = {};
     VkVertexInputAttributeDescription pAttribInfos[LR_MAX_VERTEX_ATTRIBS_PER_PIPELINE] = {};
 
-    InputLayout *pInputLayout = pBuildInfo->m_pInputLayout;
-    if (pInputLayout)
+    InputLayout &inputLayout = pBuildInfo->m_InputLayout;
+    if (inputLayout.m_Count != 0)
     {
         inputBindingInfo.binding = 0;
         inputBindingInfo.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-        inputBindingInfo.stride = pInputLayout->m_Stride;
+        inputBindingInfo.stride = inputLayout.m_Stride;
 
-        for (u32 i = 0; i < pInputLayout->m_Count; i++)
+        for (u32 i = 0; i < inputLayout.m_Count; i++)
         {
-            VertexAttrib &element = pInputLayout->m_Elements[i];
+            VertexAttrib &element = inputLayout.m_Elements[i];
             VkVertexInputAttributeDescription &attribInfo = pAttribInfos[i];
 
             attribInfo.binding = 0;
@@ -424,7 +436,7 @@ Pipeline *VKContext::CreateGraphicsPipeline(GraphicsPipelineBuildInfo *pBuildInf
             attribInfo.format = ToVKFormat(element.m_Type);
         }
 
-        inputLayoutInfo.vertexAttributeDescriptionCount = pInputLayout->m_Count;
+        inputLayoutInfo.vertexAttributeDescriptionCount = inputLayout.m_Count;
         inputLayoutInfo.pVertexAttributeDescriptions = pAttribInfos;
         inputLayoutInfo.vertexBindingDescriptionCount = 1;
         inputLayoutInfo.pVertexBindingDescriptions = &inputBindingInfo;
@@ -502,7 +514,7 @@ Pipeline *VKContext::CreateGraphicsPipeline(GraphicsPipelineBuildInfo *pBuildInf
 
     /// COLOR BLEND --------------------------------------------------------------
 
-    VkPipelineColorBlendAttachmentState pBlendAttachmentInfos[LR_MAX_RENDER_TARGET_PER_PASS] = {};
+    VkPipelineColorBlendAttachmentState pBlendAttachmentInfos[LR_MAX_COLOR_ATTACHMENT_PER_PASS] = {};
 
     VkPipelineColorBlendStateCreateInfo colorBlendInfo = {};
     colorBlendInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
@@ -880,13 +892,7 @@ DescriptorSetLayout *VKContext::CreateDescriptorSetLayout(eastl::span<Descriptor
 {
     ZoneScoped;
 
-    u64 hash = 0;
-    DescriptorSetLayout *pLayout = nullptr;
-    if ((pLayout = m_LayoutCache.Get(elements, hash)))
-        return pLayout;
-
-    pLayout = new DescriptorSetLayout;
-    m_LayoutCache.Add(pLayout, hash);
+    DescriptorSetLayout *pLayout = new DescriptorSetLayout;
 
     VkDescriptorSetLayoutBinding pBindings[LR_MAX_BINDINGS_PER_LAYOUT] = {};
     for (u32 i = 0; i < elements.size(); i++)
@@ -938,7 +944,7 @@ void VKContext::DeleteDescriptorSet(DescriptorSet *pSet)
     delete pSet;
 }
 
-void VKContext::UpdateDescriptorSet(DescriptorSet *pSet, cinitl<DescriptorWriteData> &elements)
+void VKContext::UpdateDescriptorSet(DescriptorSet *pSet, eastl::span<DescriptorWriteData> elements)
 {
     ZoneScoped;
 
@@ -965,9 +971,8 @@ void VKContext::UpdateDescriptorSet(DescriptorSet *pSet, cinitl<DescriptorWriteD
 
         switch (element.m_Type)
         {
-            case LR_DESCRIPTOR_TYPE_CONSTANT_BUFFER:
-            case LR_DESCRIPTOR_TYPE_SHADER_RESOURCE_BUFFER:
-            case LR_DESCRIPTOR_TYPE_UNORDERED_ACCESS_BUFFER:
+            case LR_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
+            case LR_DESCRIPTOR_TYPE_STORAGE_BUFFER:
             {
                 VkDescriptorBufferInfo &bufferInfo = pBufferInfos[bufferIndex++];
                 bufferInfo.buffer = element.m_pBuffer->m_pHandle;
@@ -978,8 +983,8 @@ void VKContext::UpdateDescriptorSet(DescriptorSet *pSet, cinitl<DescriptorWriteD
                 break;
             }
 
-            case LR_DESCRIPTOR_TYPE_SHADER_RESOURCE_IMAGE:
-            case LR_DESCRIPTOR_TYPE_UNORDERED_ACCESS_IMAGE:
+            case LR_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
+            case LR_DESCRIPTOR_TYPE_STORAGE_IMAGE:
             {
                 VkDescriptorImageInfo &imageInfo = pImageInfos[imageIndex++];
                 imageInfo.imageView = element.m_pImage->m_pViewHandle;
@@ -1066,7 +1071,7 @@ Buffer *VKContext::CreateBuffer(BufferDesc *pDesc)
     VkBufferCreateInfo createInfo = {};
     createInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
     createInfo.size = pBuffer->m_DataLen;
-    createInfo.usage = ToVKBufferUsage(pBuffer->m_UsageFlags);
+    createInfo.usage = ToVKBufferUsage(pDesc->m_UsageFlags);
 
     vkCreateBuffer(m_pDevice, &createInfo, nullptr, &pBuffer->m_pHandle);
 
@@ -1146,22 +1151,31 @@ Image *VKContext::CreateImage(ImageDesc *pDesc)
     imageCreateInfo.extent.height = pImage->m_Height;
     imageCreateInfo.extent.depth = 1;
 
-    imageCreateInfo.initialLayout = ToVKImageLayout(pImage->m_Layout);
+    imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     imageCreateInfo.mipLevels = pImage->m_MipMapLevels;
     imageCreateInfo.arrayLayers = pImage->m_ArraySize;
     imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-    imageCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+    if (pDesc->m_UsageFlags & LR_IMAGE_USAGE_CONCURRENT)
+    {
+        imageCreateInfo.sharingMode = VK_SHARING_MODE_CONCURRENT;
+        imageCreateInfo.queueFamilyIndexCount = m_pPhysicalDevice->m_SelectedQueueIndices.size();
+        imageCreateInfo.pQueueFamilyIndices = &m_pPhysicalDevice->m_SelectedQueueIndices[0];
+    }
+    else
+    {
+        imageCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        imageCreateInfo.queueFamilyIndexCount = 0;
+        imageCreateInfo.pQueueFamilyIndices = nullptr;
+    }
 
     vkCreateImage(m_pDevice, &imageCreateInfo, nullptr, &pImage->m_pHandle);
 
-    constexpr ImageUsage kColorUsage =
-        LR_IMAGE_USAGE_SHADER_RESOURCE | LR_IMAGE_USAGE_RENDER_TARGET | LR_IMAGE_USAGE_UNORDERED_ACCESS;
-
-    if (pDesc->m_UsageFlags & kColorUsage)
+    if (pDesc->m_UsageFlags & LR_IMAGE_USAGE_ASPECT_COLOR)
     {
         pImage->m_ImageAspect |= VK_IMAGE_ASPECT_COLOR_BIT;
     }
-    else if (pDesc->m_UsageFlags & LR_IMAGE_USAGE_DEPTH_STENCIL)
+    else if (pDesc->m_UsageFlags & LR_IMAGE_USAGE_ASPECT_DEPTH)
     {
         pImage->m_ImageAspect |= VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
     }
@@ -1603,12 +1617,10 @@ constexpr VkCullModeFlags kCullModeLUT[] = {
 
 constexpr VkDescriptorType kDescriptorTypeLUT[] = {
     VK_DESCRIPTOR_TYPE_SAMPLER,         // LR_DESCRIPTOR_TYPE_SAMPLER
-    VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,   // LR_DESCRIPTOR_TYPE_SHADER_RESOURCE_IMAGE
-    VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,  // LR_DESCRIPTOR_TYPE_SHADER_RESOURCE_BUFFER
-    VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,  // LR_DESCRIPTOR_TYPE_CONSTANT_BUFFER
-    VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,   // LR_DESCRIPTOR_TYPE_UNORDERED_ACCESS_IMAGE
-    VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,  // LR_DESCRIPTOR_TYPE_UNORDERED_ACCESS_BUFFER
-    VK_DESCRIPTOR_TYPE_MAX_ENUM,        // LR_DESCRIPTOR_TYPE_PUSH_CONSTANT
+    VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,   // LR_DESCRIPTOR_TYPE_SAMPLED_IMAGE
+    VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,  // LR_DESCRIPTOR_TYPE_UNIFORM_BUFFER
+    VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,   // LR_DESCRIPTOR_TYPE_STORAGE_IMAGE
+    VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,  // LR_DESCRIPTOR_TYPE_STORAGE_BUFFER
 };
 
 constexpr VkImageLayout kImageLayoutLUT[] = {
@@ -1618,7 +1630,7 @@ constexpr VkImageLayout kImageLayoutLUT[] = {
     VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL,     // LR_IMAGE_LAYOUT_READ_ONLY
     VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,  // LR_IMAGE_LAYOUT_TRANSFER_SRC
     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,  // LR_IMAGE_LAYOUT_TRANSFER_DST
-    VK_IMAGE_LAYOUT_GENERAL,               // LR_IMAGE_LAYOUT_UNORDERED_ACCESS
+    VK_IMAGE_LAYOUT_GENERAL,               // LR_IMAGE_LAYOUT_GENERAL
 };
 
 VkFormat VKContext::ToVKFormat(ImageFormat format)
@@ -1650,13 +1662,13 @@ VkImageUsageFlags VKContext::ToVKImageUsage(ImageUsage usage)
 {
     u32 v = 0;
 
-    if (usage & LR_IMAGE_USAGE_RENDER_TARGET)
+    if (usage & LR_IMAGE_USAGE_COLOR_ATTACHMENT)
         v |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
-    if (usage & LR_IMAGE_USAGE_DEPTH_STENCIL)
+    if (usage & LR_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT)
         v |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
 
-    if (usage & LR_IMAGE_USAGE_SHADER_RESOURCE)
+    if (usage & LR_IMAGE_USAGE_SAMPLED)
         v |= VK_IMAGE_USAGE_SAMPLED_BIT;
 
     if (usage & LR_IMAGE_USAGE_TRANSFER_SRC)
@@ -1665,7 +1677,7 @@ VkImageUsageFlags VKContext::ToVKImageUsage(ImageUsage usage)
     if (usage & LR_IMAGE_USAGE_TRANSFER_DST)
         v |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 
-    if (usage & LR_IMAGE_USAGE_UNORDERED_ACCESS)
+    if (usage & LR_IMAGE_USAGE_STORAGE)
         v |= VK_IMAGE_USAGE_STORAGE_BIT;
 
     return (VkImageUsageFlags)v;
@@ -1675,13 +1687,13 @@ VkBufferUsageFlagBits VKContext::ToVKBufferUsage(BufferUsage usage)
 {
     u32 v = 0;
 
-    if (usage & LR_BUFFER_USAGE_VERTEX_BUFFER)
+    if (usage & LR_BUFFER_USAGE_VERTEX)
         v |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
 
-    if (usage & LR_BUFFER_USAGE_INDEX_BUFFER)
+    if (usage & LR_BUFFER_USAGE_INDEX)
         v |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
 
-    if (usage & LR_BUFFER_USAGE_CONSTANT_BUFFER)
+    if (usage & LR_BUFFER_USAGE_UNIFORM)
         v |= VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
 
     if (usage & LR_BUFFER_USAGE_TRANSFER_SRC)
@@ -1690,7 +1702,7 @@ VkBufferUsageFlagBits VKContext::ToVKBufferUsage(BufferUsage usage)
     if (usage & LR_BUFFER_USAGE_TRANSFER_DST)
         v |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 
-    if (usage & LR_BUFFER_USAGE_UNORDERED_ACCESS)
+    if (usage & LR_BUFFER_USAGE_STORAGE)
         v |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
 
     return (VkBufferUsageFlagBits)v;
@@ -1745,7 +1757,7 @@ VkPipelineStageFlags2 VKContext::ToVKPipelineStage(PipelineStage stage)
     if (stage & LR_PIPELINE_STAGE_LATE_PIXEL_TESTS)
         v |= VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
 
-    if (stage & LR_PIPELINE_STAGE_RENDER_TARGET)
+    if (stage & LR_PIPELINE_STAGE_COLOR_ATTACHMENT)
         v |= VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
 
     if (stage & LR_PIPELINE_STAGE_COMPUTE_SHADER)
@@ -1782,10 +1794,10 @@ VkAccessFlags2 VKContext::ToVKAccessFlags(MemoryAccess access)
     if (access & LR_MEMORY_ACCESS_SHADER_WRITE)
         v |= VK_ACCESS_2_SHADER_WRITE_BIT;
 
-    if (access & LR_MEMORY_ACCESS_RENDER_TARGET_READ)
+    if (access & LR_MEMORY_ACCESS_COLOR_ATTACHMENT_READ)
         v |= VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT;
 
-    if (access & LR_MEMORY_ACCESS_RENDER_TARGET_WRITE)
+    if (access & LR_MEMORY_ACCESS_COLOR_ATTACHMENT_WRITE)
         v |= VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
 
     if (access & LR_MEMORY_ACCESS_DEPTH_STENCIL_READ)
@@ -1811,6 +1823,9 @@ VkAccessFlags2 VKContext::ToVKAccessFlags(MemoryAccess access)
 
     if (access & LR_MEMORY_ACCESS_HOST_WRITE)
         v |= VK_ACCESS_2_HOST_WRITE_BIT;
+
+    if (access & LR_MEMORY_ACCESS_PRESENT)
+        v |= VK_ACCESS_2_NONE;
 
     return (VkAccessFlags2)v;
 }

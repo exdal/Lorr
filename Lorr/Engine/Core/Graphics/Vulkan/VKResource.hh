@@ -31,13 +31,18 @@ enum APIAllocatorType : u32
 
 enum ImageUsage : u32
 {
-    LR_IMAGE_USAGE_SHADER_RESOURCE = 1 << 1,
-    LR_IMAGE_USAGE_RENDER_TARGET = 1 << 2,
-    LR_IMAGE_USAGE_DEPTH_STENCIL = 1 << 3,
+    LR_IMAGE_USAGE_SAMPLED = 1 << 1,  // Read only image
+    LR_IMAGE_USAGE_COLOR_ATTACHMENT = 1 << 2,
+    LR_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT = 1 << 3,
     LR_IMAGE_USAGE_TRANSFER_SRC = 1 << 4,
     LR_IMAGE_USAGE_TRANSFER_DST = 1 << 5,
-    LR_IMAGE_USAGE_UNORDERED_ACCESS = 1 << 6,
-    LR_IMAGE_USAGE_PRESENT = 1 << 7,
+    LR_IMAGE_USAGE_STORAGE = 1 << 6,    // RWA(Read-Write-Atomic) image
+    LR_IMAGE_USAGE_PRESENT = 1 << 7,    // Virtual flag
+    LR_IMAGE_USAGE_CONCURRENT = 1 << 8,  // Vulkan's sharing flag
+
+    LR_IMAGE_USAGE_ASPECT_COLOR =
+        LR_IMAGE_USAGE_SAMPLED | LR_IMAGE_USAGE_COLOR_ATTACHMENT | LR_IMAGE_USAGE_STORAGE,
+    LR_IMAGE_USAGE_ASPECT_DEPTH = LR_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT,
 };
 EnumFlags(ImageUsage);
 
@@ -63,12 +68,12 @@ enum ImageLayout : u32
     LR_IMAGE_LAYOUT_READ_ONLY,
     LR_IMAGE_LAYOUT_TRANSFER_SRC,
     LR_IMAGE_LAYOUT_TRANSFER_DST,
-    LR_IMAGE_LAYOUT_UNORDERED_ACCESS,
+    LR_IMAGE_LAYOUT_GENERAL,
 };
 
 struct ImageDesc
 {
-    ImageUsage m_UsageFlags = LR_IMAGE_USAGE_SHADER_RESOURCE;
+    ImageUsage m_UsageFlags = LR_IMAGE_USAGE_SAMPLED;
     ImageFormat m_Format = LR_IMAGE_FORMAT_UNKNOWN;
     APIAllocatorType m_TargetAllocator = LR_API_ALLOCATOR_NONE;
 
@@ -94,13 +99,12 @@ struct Image : APIObject<VK_OBJECT_TYPE_IMAGE>
     }
 
     ImageFormat m_Format = LR_IMAGE_FORMAT_UNKNOWN;
-    ImageLayout m_Layout = LR_IMAGE_LAYOUT_UNDEFINED;
     APIAllocatorType m_TargetAllocator = LR_API_ALLOCATOR_NONE;
     void *m_pAllocatorData = nullptr;
 
     u32 m_Width = 0;
     u32 m_Height = 0;
-    u16 m_ArraySize = 1;
+    u32 m_ArraySize = 1;
     u32 m_MipMapLevels = 1;
     VkImageAspectFlags m_ImageAspect = 0;
 
@@ -135,21 +139,21 @@ constexpr u32 GetImageFormatSize(ImageFormat format)
 
 enum BufferUsage : u32
 {
-    LR_BUFFER_USAGE_VERTEX_BUFFER = 1 << 0,
-    LR_BUFFER_USAGE_INDEX_BUFFER = 1 << 1,
-    LR_BUFFER_USAGE_CONSTANT_BUFFER = 1 << 2,
+    LR_BUFFER_USAGE_VERTEX = 1 << 0,
+    LR_BUFFER_USAGE_INDEX = 1 << 1,
+    LR_BUFFER_USAGE_UNIFORM = 1 << 2,
     LR_BUFFER_USAGE_TRANSFER_SRC = 1 << 3,
     LR_BUFFER_USAGE_TRANSFER_DST = 1 << 4,
-    LR_BUFFER_USAGE_UNORDERED_ACCESS = 1 << 5,
+    LR_BUFFER_USAGE_STORAGE = 1 << 5,
 };
 EnumFlags(BufferUsage);
 
 struct BufferDesc
 {
-    BufferUsage m_UsageFlags = LR_BUFFER_USAGE_VERTEX_BUFFER;
+    BufferUsage m_UsageFlags = LR_BUFFER_USAGE_VERTEX;
     APIAllocatorType m_TargetAllocator = LR_API_ALLOCATOR_NONE;
 
-    u32 m_Stride = 0;
+    u32 m_Stride = 1;
     u32 m_DataLen = 0;
 };
 
@@ -157,13 +161,11 @@ struct Buffer : APIObject<VK_OBJECT_TYPE_BUFFER>
 {
     void Init(BufferDesc *pDesc)
     {
-        m_UsageFlags = pDesc->m_UsageFlags;
         m_TargetAllocator = pDesc->m_TargetAllocator;
         m_Stride = pDesc->m_Stride;
         m_DataLen = pDesc->m_DataLen;
     }
 
-    BufferUsage m_UsageFlags = LR_BUFFER_USAGE_VERTEX_BUFFER;
     APIAllocatorType m_TargetAllocator = LR_API_ALLOCATOR_NONE;
     void *m_pAllocatorData = nullptr;
 
@@ -232,26 +234,23 @@ struct Sampler : APIObject<VK_OBJECT_TYPE_SAMPLER>
 };
 
 /// DESCRIPTORS ///
-
 enum DescriptorType : u32
 {
     LR_DESCRIPTOR_TYPE_SAMPLER = 0,
-    LR_DESCRIPTOR_TYPE_SHADER_RESOURCE_IMAGE,
-    LR_DESCRIPTOR_TYPE_SHADER_RESOURCE_BUFFER,  // Read-only buffer
-    LR_DESCRIPTOR_TYPE_CONSTANT_BUFFER,
-    LR_DESCRIPTOR_TYPE_UNORDERED_ACCESS_IMAGE,
-    LR_DESCRIPTOR_TYPE_UNORDERED_ACCESS_BUFFER,  // Write-read buffer
-    LR_DESCRIPTOR_TYPE_PUSH_CONSTANT,
+    LR_DESCRIPTOR_TYPE_SAMPLED_IMAGE,   // Read only image
+    LR_DESCRIPTOR_TYPE_UNIFORM_BUFFER,  // Read only buffer
+    LR_DESCRIPTOR_TYPE_STORAGE_IMAGE,   // RW image
+    LR_DESCRIPTOR_TYPE_STORAGE_BUFFER,  // RW Buffer
 
     LR_DESCRIPTOR_TYPE_COUNT,
 };
 
 struct DescriptorLayoutElement
 {
-    u32 m_BindingID : 3;
+    u32 m_BindingID : 3 = 0;
     DescriptorType m_Type : 4;
     ShaderStage m_TargetShader : 4;
-    u32 m_ArraySize : 16;
+    u32 m_ArraySize : 16 = 1;
 };
 
 struct DescriptorSetLayout : APIObject<VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT>
@@ -298,20 +297,6 @@ struct DescriptorPoolDesc
 {
     DescriptorType m_Type;
     u32 m_Count;
-};
-
-struct DescriptorLayoutCache
-{
-    struct CachedLayout
-    {
-        u64 m_Hash = 0;
-        DescriptorSetLayout *m_pHandle = nullptr;
-    };
-
-    DescriptorSetLayout *Get(eastl::span<DescriptorLayoutElement> elements, u64 &hashOut);
-    void Add(DescriptorSetLayout *pLayout, u64 hash);
-
-    eastl::vector<CachedLayout> m_Layouts = {};
 };
 
 /// ATTACHMENTS ///
@@ -389,21 +374,23 @@ enum ColorMask : u32
     LR_COLOR_MASK_G = 1 << 1,
     LR_COLOR_MASK_B = 1 << 2,
     LR_COLOR_MASK_A = 1 << 3,
+
+    LR_COLOR_MASK_RGBA = LR_COLOR_MASK_R | LR_COLOR_MASK_G | LR_COLOR_MASK_B | LR_COLOR_MASK_A,
 };
 EnumFlags(ColorMask);
 
 struct ColorBlendAttachment
 {
-    ColorMask m_WriteMask : 4;
-    u32 m_BlendEnable : 1;
+    ColorMask m_WriteMask : 4 = LR_COLOR_MASK_RGBA;
+    u32 m_BlendEnable : 1 = false;
 
-    BlendFactor m_SrcBlend : 5;
-    BlendFactor m_DstBlend : 5;
-    BlendOp m_ColorBlendOp : 4;
+    BlendFactor m_SrcBlend : 5 = LR_BLEND_FACTOR_SRC_ALPHA;
+    BlendFactor m_DstBlend : 5 = LR_BLEND_FACTOR_INV_SRC_ALPHA;
+    BlendOp m_ColorBlendOp : 4 = LR_BLEND_OP_ADD;
 
-    BlendFactor m_SrcBlendAlpha : 5;
-    BlendFactor m_DstBlendAlpha : 5;
-    BlendOp m_AlphaBlendOp : 4;
+    BlendFactor m_SrcBlendAlpha : 5 = LR_BLEND_FACTOR_ONE;
+    BlendFactor m_DstBlendAlpha : 5 = LR_BLEND_FACTOR_SRC_ALPHA;
+    BlendOp m_AlphaBlendOp : 4 = LR_BLEND_OP_ADD;
 };
 
 struct DepthStencilOpDesc

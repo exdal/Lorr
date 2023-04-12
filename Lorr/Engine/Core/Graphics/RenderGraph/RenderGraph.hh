@@ -12,12 +12,29 @@
 
 namespace lr::Graphics
 {
-struct RenderPassGroup
+template<typename _Resource, typename _Desc>
+struct ResourceCache
 {
-    u32 m_ID = ~0;
-    u64 m_Hash = ~0;
-    u64 m_DependencyMask = 0;
-    eastl::fixed_vector<RenderPass *, LR_RG_MAX_RENDERPASS_PER_GROUP_COUNT, false> m_Passes;
+    _Resource *Get(eastl::span<_Desc> elements, u64 &hashOut)
+    {
+        ZoneScoped;
+
+        hashOut = Hash::FNV64((char *)elements.data(), elements.size_bytes());
+        for (auto &[hash, pHandle] : m_Resources)
+            if (hashOut == hash)
+                return pHandle;
+
+        return nullptr;
+    }
+
+    void Add(_Resource *pResource, u64 hash)
+    {
+        ZoneScoped;
+
+        m_Resources.push_back({ hash, pResource });
+    }
+
+    eastl::vector<ResourceView<_Resource>> m_Resources = {};
 };
 
 struct RenderGraphDesc
@@ -29,9 +46,60 @@ struct RenderGraph
 {
     void Init(RenderGraphDesc *pDesc);
     void Shutdown();
+    void Prepare();
     void Draw();
 
     /// RENDERPASSES ///
+
+    template<typename _Pass>
+    _Pass *AllocateRenderPassCallback()
+    {
+        Memory::AllocationInfo info = {
+            .m_Size = sizeof(_Pass),
+            .m_Alignment = 8,
+        };
+        m_PassAllocator.Allocate(info);
+
+        return new (info.m_pData) _Pass;
+    }
+
+    template<typename _Data>
+    GraphicsRenderPass *CreateGraphicsPass(
+        eastl::string_view name, RenderPassFlags flags = LR_RENDER_PASS_FLAG_NONE)
+    {
+        ZoneScoped;
+
+        auto *pPass = AllocateRenderPassCallback<GraphicsRenderPassCallback<_Data>>();
+
+        pPass->m_NameHash = Hash::FNV64String(name);
+        pPass->m_Flags = flags;
+        pPass->m_PassType = LR_COMMAND_LIST_TYPE_GRAPHICS;
+        pPass->m_PassID = m_Passes.size();
+
+        m_Passes.push_back(pPass);
+
+        return pPass;
+    }
+
+    template<typename _Data>
+    GraphicsRenderPass *CreateGraphicsPassCb(
+        eastl::string_view name,
+        const RenderPassSetupFn<_Data> &fSetup,
+        const RenderPassExecuteFn<_Data> &fExecute,
+        const RenderPassShutdownFn &fShutdown)
+    {
+        ZoneScoped;
+
+        auto *pPass = (GraphicsRenderPassCallback<_Data> *)CreateGraphicsPass<_Data>(name);
+
+        pPass->m_Flags |= LR_RENDER_PASS_FLAG_ALLOW_SETUP | LR_RENDER_PASS_FLAG_ALLOW_EXECUTE
+                          | LR_RENDER_PASS_FLAG_ALLOW_SHUTDOWN;
+        pPass->m_fSetup = fSetup;
+        pPass->m_fExecute = fExecute;
+        pPass->m_fShutdown = fShutdown;
+
+        return pPass;
+    }
 
     template<typename _RenderPass = RenderPass>
     _RenderPass *GetPass(eastl::string_view name)
@@ -46,57 +114,48 @@ struct RenderGraph
         return nullptr;
     }
 
-    template<typename _Data, typename... _Args>
-    GraphicsRenderPass *CreateGraphicsPass(eastl::string_view name, _Args &&...args)
-    {
-        ZoneScoped;
-
-        Memory::AllocationInfo info = {
-            .m_Size = sizeof(GraphicsRenderPassCallback<_Data>),
-            .m_Alignment = 8,
-        };
-        m_PassAllocator.Allocate(info);
-
-        GraphicsRenderPass *pPass = new (info.m_pData)
-            GraphicsRenderPassCallback<_Data>(name, eastl::forward<_Args>(args)..., m_pContext);
-
-        pPass->m_PassID = m_Passes.size();
-        m_Passes.push_back(pPass);
-
-        AllocateCommandLists(LR_COMMAND_LIST_TYPE_GRAPHICS);
-
-        return pPass;
-    }
-
-    void ExecuteGraphics(GraphicsRenderPass *pPass);
-
-    /// GROUPS ///
-
-    void AddGraphicsGroup(
-        eastl::string_view name, eastl::string_view dependantGroup, cinitl<eastl::string_view> &passes);
-
-    RenderPassGroup *GetGroup(u32 groupID);
-    RenderPassGroup *GetGroup(eastl::string_view name);
-    RenderPassGroup *GetOrCreateGroup(eastl::string_view name);
-
     /// RESOURCES ///
+
+    Image *GetAttachmentImage(const RenderPassAttachment &attachment);
+    Image *CreateImage(NameID name, ImageDesc &desc, MemoryAccess initialAccess = LR_MEMORY_ACCESS_NONE);
+    Image *CreateImage(NameID name, Image *pImage, MemoryAccess initialAccess = LR_MEMORY_ACCESS_NONE);
+
+    //! THIS PERFORMS CPU WAIT!!!
+    void SubmitList(CommandList *pList, PipelineStage waitStage, PipelineStage signalStage);
+    void SetImageBarrier(CommandList *pList, Image *pImage, MemoryAccess srcAccess, MemoryAccess dstAccess);
+    void UploadImageData(Image *pImage, MemoryAccess resultAccess, void *pData, u32 dataSize);
+
+    void BuildPassBarriers(RenderPass *pPass);
+    void FinalizeGraphicsPass(GraphicsRenderPass *pPass, GraphicsPipelineBuildInfo *pPipelineInfo);
+    void RecordGraphicsPass(GraphicsRenderPass *pPass, CommandList *pList);
+
+    void SetMemoryAccess(Hash64 resource, MemoryAccess access);
+    MemoryAccess GetResourceAccess(Hash64 resource);
+
+    /// SUBMISSION ///
+
     void AllocateCommandLists(CommandListType type);
-    Semaphore *GetSemaphore(CommandListType type);
+
+    Semaphore *GetSemaphore();
     CommandAllocator *GetCommandAllocator(CommandListType type);
-    CommandList *GetCommandList(RenderPass *pPass);
-    Image *GetAttachmentImage(const ColorAttachment &attachment);
+    CommandList *GetCommandList(u32 submitID);
+    CommandList *GetCommandList(RenderPass *&pPass) { return GetCommandList(pPass->m_SubmitID); }
 
     /// API CONTEXT ///
+
     VKContext *m_pContext = nullptr;
-    Semaphore *m_pSemaphores[LR_MAX_FRAME_COUNT] = {};
-    CommandAllocator *m_pCommandAllocators[LR_MAX_FRAME_COUNT] = {};
+    eastl::vector<Semaphore *> m_Semaphores;
+    eastl::vector<CommandAllocator *> m_CommandAllocators;
     eastl::vector<CommandList *> m_CommandLists;
+    CommandList *m_pSetupList = nullptr;
 
     /// RESOURCES ///
+
     Memory::LinearAllocator m_PassAllocator = {};
-    Memory::LinearAllocator m_GroupAllocator = {};
     eastl::vector<RenderPass *> m_Passes;
-    eastl::vector<RenderPassGroup *> m_Groups;
-    eastl::vector<eastl::pair<Hash64, Image *>> m_Images;
+
+    eastl::vector<ResourceView<Image>> m_Images;
+    eastl::vector<ImageBarrier> m_Barriers;
+    eastl::vector<MemoryAccess> m_LastAccessInfos;  // Latest access info of each image
 };
 }  // namespace lr::Graphics

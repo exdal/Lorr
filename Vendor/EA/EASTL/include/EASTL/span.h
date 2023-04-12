@@ -78,6 +78,7 @@ namespace eastl
 		// constructors / destructor
 		EA_CONSTEXPR span() EA_NOEXCEPT;
 		EA_CONSTEXPR span(const span& other) EA_NOEXCEPT = default;
+		EA_CONSTEXPR span(element_type &element);
 		EA_CONSTEXPR span(pointer ptr, index_type count);
 		EA_CONSTEXPR span(pointer pBegin, pointer pEnd);
 		            ~span() EA_NOEXCEPT = default;
@@ -208,6 +209,13 @@ namespace eastl
 	EA_CONSTEXPR span<T, Extent>::span() EA_NOEXCEPT
 	{
 		static_assert(Extent == dynamic_extent || Extent == 0, "impossible to default construct a span with a fixed Extent different than 0");
+	}
+
+	template <typename T, size_t Extent>
+	EA_CONSTEXPR span<T, Extent>::span(element_type &element)
+	    : mpData(&element), mnSize(1)
+	{
+		EASTL_ASSERT_MSG(Extent == dynamic_extent || Extent == mnSize, "impossible to create a span with a fixed Extent different than the size of the supplied buffer");
 	}
 
 	template <typename T, size_t Extent>

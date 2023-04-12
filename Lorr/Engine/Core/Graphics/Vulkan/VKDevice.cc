@@ -247,6 +247,8 @@ u32 VKPhysicalDevice::SelectQueue(
         m_PresentQueueIndex = foundIdx;
     }
 
+    m_SelectedQueueIndices.push_back(foundIdx);
+
     return foundIdx;
 }
 

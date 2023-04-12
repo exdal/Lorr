@@ -58,12 +58,13 @@ struct VKContext
     void InitAllocators(APIAllocatorInitDesc *pDesc);
 
     /// COMMAND ///
+    u32 GetQueueIndex(CommandListType type);
     CommandQueue *CreateCommandQueue(CommandListType type);
     CommandAllocator *CreateCommandAllocator(CommandListType type, bool resetLists);
     CommandList *CreateCommandList(CommandListType type, CommandAllocator *pAllocator = nullptr);
 
     void AllocateCommandList(CommandList *pList, CommandAllocator *pAllocator);
-    void BeginCommandList(CommandList *pList);
+    void BeginCommandList(CommandList *pList, CommandListUsage usage = LR_COMMAND_LIST_USAGE_ONE_TIME);
     void EndCommandList(CommandList *pList);
     void ResetCommandAllocator(CommandAllocator *pAllocator);
     void Submit(SubmitDesc *pDesc);
@@ -87,7 +88,6 @@ struct VKContext
     /// SWAPCHAIN ///
     VKSwapChain *CreateSwapChain(BaseWindow *pWindow, SwapChainFlags flags, VKSwapChain *pOldSwapChain);
     void DeleteSwapChain(VKSwapChain *pSwapChain, bool keepSelf);
-    void AdvanceSwapChain();
     void ResizeSwapChain(BaseWindow *pWindow);
     VKSwapChain *GetSwapChain();
 
@@ -105,7 +105,7 @@ struct VKContext
 
     DescriptorSet *CreateDescriptorSet(DescriptorSetLayout *pLayout);
     void DeleteDescriptorSet(DescriptorSet *pSet);
-    void UpdateDescriptorSet(DescriptorSet *pSet, cinitl<DescriptorWriteData> &elements);
+    void UpdateDescriptorSet(DescriptorSet *pSet, eastl::span<DescriptorWriteData> elements);
 
     VkDescriptorPool CreateDescriptorPool(cinitl<DescriptorPoolDesc> &layouts);
 
@@ -200,7 +200,6 @@ struct VKContext
     VkPipelineCache m_pPipelineCache = nullptr;
     VkDescriptorPool m_pDescriptorPool = nullptr;
     eastl::fixed_vector<Semaphore *, 8, false> m_AcquireSempPool;
-    DescriptorLayoutCache m_LayoutCache = {};
 
     using VKLinearAllocator = BufferedAllocator<Memory::LinearAllocatorView>;
     using VKTLSFAllocator = BufferedAllocator<Memory::TLSFAllocatorView>;

@@ -16,14 +16,14 @@ void ImguiApp::Poll(f32 deltaTime)
 {
     ZoneScoped;
 
-    // ImGuiIO &io = ImGui::GetIO();
-    // static bool showDemo = true;
+    ImGuiIO &io = ImGui::GetIO();
+    static bool showDemo = true;
 
-    // ImGui::Begin(m_Name.data());
-    // ImGui::Checkbox("Show Demo", &showDemo);
-    // ImGui::Text("FPS: %f(%f)", io.Framerate, io.DeltaTime);
-    // ImGui::End();
+    ImGui::Begin(m_Name.data());
+    ImGui::Checkbox("Show Demo", &showDemo);
+    ImGui::Text("FPS: %f(%f)", io.Framerate, io.DeltaTime);
+    ImGui::End();
 
-    // if (showDemo)
-    //     ImGui::ShowDemoWindow(&showDemo);
+    if (showDemo)
+        ImGui::ShowDemoWindow(&showDemo);
 }

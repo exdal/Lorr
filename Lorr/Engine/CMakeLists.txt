@@ -13,6 +13,7 @@ set(LORR_VENDOR
     SPIRV 
     Vulkan-Headers
     imgui
+    tinygltf
 )
 
 # Core

@@ -4,8 +4,8 @@
 
 #pragma once
 
-#include "Core/Window/Win32/Win32Window.hh"
-#include "Core/Graphics/RenderGraph/RenderGraph.hh"
+#include "Window/Win32/Win32Window.hh"
+#include "Graphics/RenderGraph/RenderGraph.hh"
 
 #include "UI/ImGui.hh"
 

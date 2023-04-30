@@ -50,7 +50,6 @@ void GIApp::Init(BaseApplicationDesc &desc)
     {
         Graphics::Image *m_pImage;
         Graphics::Buffer *m_pSceneDataBuffer;
-        Graphics::DescriptorSet *m_pDescriptorSet;
         Graphics::Pipeline *m_pPipeline;
     };
 
@@ -178,8 +177,6 @@ void GIApp::Init(BaseApplicationDesc &desc)
     struct GIFullscreenPassData
     {
         Graphics::Sampler *m_pSampler;
-        Graphics::DescriptorSet *m_pFullScreenDescriptorSet;
-        Graphics::DescriptorSet *m_pDescriptorSetSampler;
         Graphics::Pipeline *m_pPipeline;
     };
 

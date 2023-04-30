@@ -57,7 +57,7 @@ using initl = std::initializer_list<_Type>;
 using namespace DirectX;
 using namespace PackedVector;
 
-#include "Core/Utils/EnumFlags.hh"
+#include "Utils/EnumFlags.hh"
 #include "Core/Logger/Format.hh"
 #include "Core/Logger/Logger.hh"
 

@@ -1,6 +1,6 @@
 #include "Application.hh"
 
-#include "Core/Utils/Timer.hh"
+#include "Utils/Timer.hh"
 
 namespace lr
 {

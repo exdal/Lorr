@@ -1,8 +1,6 @@
 #include "Engine.hh"
 
-#include "Core/Utils/Timer.hh"
-
-#include "Core/Graphics/Renderer/Pass.hh"
+#include "Graphics/Renderer/Pass.hh"
 
 namespace lr
 {
@@ -19,7 +17,7 @@ void Engine::Init(EngineDesc &engineDesc)
 
     Graphics::APIDesc apiDesc = {
             .m_Flags = LR_API_FLAG_NONE,
-            .m_SwapChainFlags = LR_SWAP_CHAIN_FLAG_TRIPLE_BUFFERING,
+            .m_SwapChainFlags = SwapChainFlag::TripleBuffering,
             .m_pTargetWindow = &m_Window,
             .m_AllocatorDesc = {
                 .m_MaxTLSFAllocations = 0x2000,

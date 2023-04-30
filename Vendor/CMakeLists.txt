@@ -9,6 +9,7 @@ add_subdirectory(Utility/fmt)
 add_subdirectory(Utility/DirectXMath)
 add_subdirectory(Utility/lw)
 add_subdirectory(Utility/tracy)
+add_subdirectory(Utility/tinygltf)
 
 add_subdirectory(Graphics/glslang)
 add_subdirectory(Graphics/imgui)

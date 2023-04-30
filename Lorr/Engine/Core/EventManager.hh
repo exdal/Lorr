@@ -4,8 +4,8 @@
 
 #pragma once
 
-#include "Core/Memory/Allocator/LinearAllocator.hh"
-#include "Core/Memory/MemoryUtils.hh"
+#include "Memory/Allocator/LinearAllocator.hh"
+#include "Memory/MemoryUtils.hh"
 
 #define LR_INVALID_EVENT_ID ~0
 #define LR_GET_EVENT_DATA(type, pTargetData, dataName) type &dataName = *(type *)pTargetData

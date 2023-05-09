@@ -848,22 +848,19 @@ void Context::DeleteShader(Shader *pShader)
 }
 
 DescriptorSetLayout *Context::CreateDescriptorSetLayout(
-    eastl::span<DescriptorLayoutElement> elements, DescriptorSetLayoutType type)
+    eastl::span<DescriptorLayoutElement> elements, DescriptorSetLayoutFlag flags)
 {
     ZoneScoped;
 
-    static constexpr VkDescriptorSetLayoutCreateFlags kCreateFlags[] = {
-        VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT,
-        VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR,
-        VK_DESCRIPTOR_SET_LAYOUT_CREATE_EMBEDDED_IMMUTABLE_SAMPLERS_BIT_EXT,
-    };
-
     DescriptorSetLayout *pLayout = new DescriptorSetLayout;
-    pLayout->m_Type = type;
+
+    VkDescriptorSetLayoutCreateFlags createFlags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
+    if (flags & DescriptorSetLayoutFlag::EmbeddedSamplers)
+        createFlags |= VK_DESCRIPTOR_SET_LAYOUT_CREATE_EMBEDDED_IMMUTABLE_SAMPLERS_BIT_EXT;
 
     VkDescriptorSetLayoutCreateInfo layoutCreateInfo = {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-        .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT | kCreateFlags[(u32)type],
+        .flags = createFlags,
         .bindingCount = (u32)elements.size(),
         .pBindings = elements.data(),
     };
@@ -956,9 +953,6 @@ Buffer *Context::CreateBuffer(BufferDesc *pDesc)
 
     Buffer *pBuffer = new Buffer;
     pBuffer->Init(pDesc);
-
-    if (m_pPhysicalDevice->m_FeatureDescriptorBufferProps.bufferlessPushDescriptors)
-        pDesc->m_UsageFlags &= ~BufferUsage::PushDescriptor;
 
     VkBufferCreateInfo createInfo = {
         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,

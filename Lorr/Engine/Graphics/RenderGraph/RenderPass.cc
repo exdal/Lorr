@@ -31,9 +31,6 @@ RenderPassBuilder::RenderPassBuilder(RenderGraph *pGraph)
 RenderPassBuilder::~RenderPassBuilder()
 {
     ZoneScoped;
-
-    m_pContext->DeleteBuffer(m_ResourceDescriptorInfo.m_pBuffer, false);
-    m_pContext->DeleteBuffer(m_SamplerDescriptorInfo.m_pBuffer, false);
 }
 
 void RenderPassBuilder::BuildPass(RenderPass *pPass)

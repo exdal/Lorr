@@ -9,10 +9,10 @@ namespace lr::Graphics
 
 /// These extensions are REQUIRED to be available on selected device.
 
-static constexpr eastl::array<const char *, 9> kRequiredExtensions = {
+static constexpr eastl::array<const char *, 8> kRequiredExtensions = {
     "VK_KHR_swapchain",         "VK_KHR_depth_stencil_resolve",   "VK_KHR_dynamic_rendering",
     "VK_KHR_synchronization2",  "VK_EXT_extended_dynamic_state2", "VK_KHR_timeline_semaphore",
-    "VK_EXT_descriptor_buffer", "VK_EXT_descriptor_indexing",     "VK_KHR_push_descriptor",
+    "VK_EXT_descriptor_buffer", "VK_EXT_descriptor_indexing",
 };
 
 ////////////////////////////////////
@@ -31,7 +31,7 @@ static VkPhysicalDeviceDescriptorBufferFeaturesEXT kDesciptorBufferFeatures = {
     .pNext = &kBufferDeviceAddressFeatures,
     .descriptorBuffer = true,
     .descriptorBufferImageLayoutIgnored = true,
-    .descriptorBufferPushDescriptors = true,
+    .descriptorBufferPushDescriptors = false,
 };
 
 // * Vulkan 1.3

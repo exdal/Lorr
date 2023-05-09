@@ -22,12 +22,12 @@ enum class DescriptorType : u32
     Count,
 };
 
-enum class DescriptorSetLayoutType
+enum class DescriptorSetLayoutFlag
 {
-    None = 0,
-    PushDescriptor = 1,
-    EmbeddedSamplers = 2,
+    DescriptorBuffer = 1 << 0, // default flag
+    EmbeddedSamplers = 1 << 1,
 };
+EnumFlags(DescriptorSetLayoutFlag);
 
 struct DescriptorLayoutElement : VkDescriptorSetLayoutBinding
 {
@@ -36,19 +36,12 @@ struct DescriptorLayoutElement : VkDescriptorSetLayoutBinding
 
 struct DescriptorSetLayout : APIObject<VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT>
 {
-    DescriptorSetLayoutType m_Type = DescriptorSetLayoutType::None;
     VkDescriptorSetLayout m_pHandle = VK_NULL_HANDLE;
-};
-
-struct DescriptorBindingPushDescriptor : VkDescriptorBufferBindingPushDescriptorBufferHandleEXT
-{
-    DescriptorBindingPushDescriptor(Buffer *pBuffer);
 };
 
 struct DescriptorBindingInfo : VkDescriptorBufferBindingInfoEXT
 {
-    DescriptorBindingInfo(
-        DescriptorBindingPushDescriptor *pPushDescriptorInfo, Buffer *pBuffer, BufferUsage bufferUsage);
+    DescriptorBindingInfo(Buffer *pBuffer, BufferUsage bufferUsage);
 };
 
 struct DescriptorGetInfo
@@ -66,6 +59,19 @@ struct DescriptorGetInfo
         VkDescriptorAddressInfoEXT m_BufferInfo = {};
         VkDescriptorImageInfo m_ImageInfo;
         Sampler *m_pSampler;
+    };
+};
+
+struct WriteDescriptorSet : VkWriteDescriptorSet
+{
+    WriteDescriptorSet(DescriptorType type, u32 binding, u32 arrayElement, Buffer *pBuffer);
+    WriteDescriptorSet(DescriptorType type, u32 binding, u32 arrayElement, Image *pImage, ImageLayout layout);
+    WriteDescriptorSet(DescriptorType type, u32 binding, u32 arrayElement, Sampler *pSampler);
+
+    union
+    {
+        VkDescriptorImageInfo m_ImageInfo = {};
+        VkDescriptorBufferInfo m_BufferInfo;
     };
 };
 

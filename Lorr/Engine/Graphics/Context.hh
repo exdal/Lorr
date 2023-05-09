@@ -114,7 +114,7 @@ struct Context
 
     DescriptorSetLayout *CreateDescriptorSetLayout(
         eastl::span<DescriptorLayoutElement> elements,
-        DescriptorSetLayoutType type = DescriptorSetLayoutType::None);
+        DescriptorSetLayoutFlag flags = DescriptorSetLayoutFlag::DescriptorBuffer);
     u64 GetDescriptorSetLayoutSize(DescriptorSetLayout *pLayout);  // ALIGNED!!!
     u64 GetDescriptorSetLayoutBindingOffset(DescriptorSetLayout *pLayout, u32 bindingID);
     u64 GetDescriptorSize(DescriptorType type);

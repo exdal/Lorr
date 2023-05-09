@@ -14,10 +14,18 @@ DescriptorLayoutElement::DescriptorLayoutElement(
     this->pImmutableSamplers = nullptr;  // TODO: static samplers
 }
 
-DescriptorBindingInfo::DescriptorBindingInfo(Buffer *pBuffer, BufferUsage bufferUsage)
+DescriptorBindingPushDescriptor::DescriptorBindingPushDescriptor(Buffer *pBuffer)
+{
+    this->sType = VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_PUSH_DESCRIPTOR_BUFFER_HANDLE_EXT;
+    this->pNext = nullptr;
+    this->buffer = pBuffer->m_pHandle;
+}
+
+DescriptorBindingInfo::DescriptorBindingInfo(
+    DescriptorBindingPushDescriptor *pPushDescriptorInfo, Buffer *pBuffer, BufferUsage bufferUsage)
 {
     this->sType = VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT;
-    this->pNext = nullptr;
+    this->pNext = pPushDescriptorInfo;
     this->address = pBuffer->m_DeviceAddress;
     this->usage = VK::ToBufferUsage(bufferUsage);
 }
@@ -52,52 +60,6 @@ DescriptorGetInfo::DescriptorGetInfo(u32 binding, DescriptorType type, Sampler *
       m_Type(DescriptorType::Sampler),
       m_pSampler(pSampler)
 {
-}
-
-WriteDescriptorSet::WriteDescriptorSet(DescriptorType type, u32 binding, u32 arrayElement, Buffer *pBuffer)
-{
-    this->sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    this->pNext = nullptr;
-    this->descriptorCount = 1;  // TODO
-    this->descriptorType = VK::ToDescriptorType(type);
-    this->dstBinding = binding;
-    this->dstArrayElement = arrayElement;
-    this->pBufferInfo = &m_BufferInfo;
-
-    m_BufferInfo.buffer = pBuffer->m_pHandle;
-    m_BufferInfo.offset = 0;  // TODO
-    m_BufferInfo.range = pBuffer->m_DataLen;
-}
-
-WriteDescriptorSet::WriteDescriptorSet(
-    DescriptorType type, u32 binding, u32 arrayElement, Image *pImage, ImageLayout layout)
-{
-    this->sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    this->pNext = nullptr;
-    this->descriptorCount = 1;  // TODO
-    this->descriptorType = VK::ToDescriptorType(type);
-    this->dstBinding = binding;
-    this->dstArrayElement = arrayElement;
-    this->pImageInfo = &m_ImageInfo;
-
-    m_ImageInfo.imageView = pImage->m_pViewHandle;
-    m_ImageInfo.imageLayout = VK::ToImageLayout(layout);
-    m_ImageInfo.sampler = nullptr;
-}
-
-WriteDescriptorSet::WriteDescriptorSet(DescriptorType type, u32 binding, u32 arrayElement, Sampler *pSampler)
-{
-    this->sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    this->pNext = nullptr;
-    this->descriptorCount = 1;  // TODO
-    this->descriptorType = VK::ToDescriptorType(type);
-    this->dstBinding = binding;
-    this->dstArrayElement = arrayElement;
-    this->pImageInfo = &m_ImageInfo;
-
-    m_ImageInfo.imageView = nullptr;
-    m_ImageInfo.imageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    m_ImageInfo.sampler = pSampler->m_pHandle;
 }
 
 }  // namespace lr::Graphics

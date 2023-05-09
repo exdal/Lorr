@@ -139,6 +139,9 @@ VkBufferUsageFlags VK::ToBufferUsage(BufferUsage usage)
     if (usage & BufferUsage::ResourceDescriptor)
         v |= VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT;
 
+    if (usage & BufferUsage::PushDescriptor)
+        v |= VK_BUFFER_USAGE_PUSH_DESCRIPTORS_DESCRIPTOR_BUFFER_BIT_EXT;
+
     return (VkBufferUsageFlags)v;
 }
 

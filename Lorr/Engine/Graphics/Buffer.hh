@@ -18,6 +18,7 @@ enum class BufferUsage : u32
     Storage = 1 << 5,
     SamplerDescriptor = 1 << 6,
     ResourceDescriptor = 1 << 7,
+    PushDescriptor = 1 << 8,
 };
 EnumFlags(BufferUsage);
 

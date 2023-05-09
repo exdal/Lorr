@@ -197,10 +197,11 @@ void AddImguiPass(RenderGraph *pGraph, eastl::string_view name)
 
                     pList->SetScissors(0, clipMin.x, clipMin.y, clipMax.x, clipMax.y);
 
-                    Image *pTexture = (Image *)cmd.TextureId;
-                    if (!pTexture)
-                        pTexture = passData.m_pFontImage;
+                    // DescriptorSet *pSet = (DescriptorSet *)cmd.TextureId;
+                    // if (!pSet)
+                    //     pSet = passData.m_pFontDescriptor;
 
+                    // pList->SetDescriptorSets({ pSet, passData.m_pSamplerDescriptor });
                     pList->SetPrimitiveType(PrimitiveType::TriangleList);
                     pList->DrawIndexed(
                         cmd.ElemCount, cmd.IdxOffset + indexOffset, cmd.VtxOffset + vertexOffset);

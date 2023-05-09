@@ -10,8 +10,15 @@ void Graphics::AddSwapChainAcquirePass(RenderGraph *pGraph, eastl::string_view n
     {
     };
 
-    GraphicsRenderPass *pPass = pGraph->CreateGraphicsPass<EmptyPassData>(name, LR_RENDER_PASS_FLAG_NONE);
-    pPass->SetColorAttachment("$backbuffer", MemoryAccess::ColorAttachmentWrite, LR_ATTACHMENT_FLAG_CLEAR);
+    GraphicsRenderPass *pPass = pGraph->CreateGraphicsPassCb<EmptyPassData>(
+        name,
+        [pGraph](Context *pContext, EmptyPassData &data, RenderPassBuilder &builder)
+        {
+            builder.SetInputResource("$backbuffer", { MemoryAccess::None, MemoryAccess::ColorAttachmentWrite });
+            builder.SetColorAttachment("$backbuffer", { AttachmentOp::Clear, AttachmentOp::Store });
+        });
+
+    pPass->m_Flags |= RenderPassFlag::SkipRendering;
 }
 
 void Graphics::AddSwapChainPresentPass(RenderGraph *pGraph, eastl::string_view name)
@@ -20,9 +27,17 @@ void Graphics::AddSwapChainPresentPass(RenderGraph *pGraph, eastl::string_view n
     {
     };
 
-    GraphicsRenderPass *pPass =
-        pGraph->CreateGraphicsPass<EmptyPassData>(name, LR_RENDER_PASS_FLAG_SKIP_RENDERING);
-    pPass->SetColorAttachment("$backbuffer", MemoryAccess::Present, LR_ATTACHMENT_FLAG_PRESENT);
+    GraphicsRenderPass *pPass = pGraph->CreateGraphicsPassCb<EmptyPassData>(
+        name,
+        [pGraph](Context *pContext, EmptyPassData &data, RenderPassBuilder &builder)
+        {
+            builder.SetInputResource(
+                "$backbuffer",
+                { MemoryAccess::ColorAttachmentWrite, MemoryAccess::Present },
+                InputResourceFlag::Present);
+        });
+
+    pPass->m_Flags |= RenderPassFlag::SkipRendering;
 }
 
 }  // namespace lr

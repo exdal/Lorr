@@ -39,12 +39,18 @@ enum class FillMode : u32
 union ColorClearValue
 {
     ColorClearValue(){};
-    ColorClearValue(f32 r, f32 g, f32 b, f32 a) : m_ValFloat({ r, g, b, a }){};
-    ColorClearValue(u32 r, u32 g, u32 b, u32 a) : m_ValUInt({ r, g, b, a }){};
-    ColorClearValue(i32 r, i32 g, i32 b, i32 a) : m_ValInt({ r, g, b, a }){};
-    ColorClearValue(const XMFLOAT4 &val) : m_ValFloat(val){};
-    ColorClearValue(const XMUINT4 &val) : m_ValUInt(val){};
-    ColorClearValue(const XMINT4 &val) : m_ValInt(val){};
+    ColorClearValue(f32 r, f32 g, f32 b, f32 a)
+        : m_ValFloat({ r, g, b, a }){};
+    ColorClearValue(u32 r, u32 g, u32 b, u32 a)
+        : m_ValUInt({ r, g, b, a }){};
+    ColorClearValue(i32 r, i32 g, i32 b, i32 a)
+        : m_ValInt({ r, g, b, a }){};
+    ColorClearValue(const XMFLOAT4 &val)
+        : m_ValFloat(val){};
+    ColorClearValue(const XMUINT4 &val)
+        : m_ValUInt(val){};
+    ColorClearValue(const XMINT4 &val)
+        : m_ValInt(val){};
 
     XMFLOAT4 m_ValFloat = {};
     XMUINT4 m_ValUInt;
@@ -54,7 +60,9 @@ union ColorClearValue
 struct DepthClearValue
 {
     DepthClearValue(){};
-    DepthClearValue(float depth, u8 stencil) : m_Depth(depth), m_Stencil(stencil){};
+    DepthClearValue(float depth, u8 stencil)
+        : m_Depth(depth),
+          m_Stencil(stencil){};
 
     float m_Depth;
     u8 m_Stencil;
@@ -114,18 +122,17 @@ enum class ColorMask : u32
 };
 EnumFlags(ColorMask);
 
-struct ColorBlendAttachment
+struct ColorBlendAttachment : VkPipelineColorBlendAttachmentState
 {
-    ColorMask m_WriteMask : 4 = ColorMask::RGBA;
-    u32 m_BlendEnable : 1 = false;
-
-    BlendFactor m_SrcBlend : 5 = BlendFactor::SrcAlpha;
-    BlendFactor m_DstBlend : 5 = BlendFactor::InvSrcAlpha;
-    BlendOp m_ColorBlendOp : 4 = BlendOp::Add;
-
-    BlendFactor m_SrcBlendAlpha : 5 = BlendFactor::One;
-    BlendFactor m_DstBlendAlpha : 5 = BlendFactor::SrcAlpha;
-    BlendOp m_AlphaBlendOp : 4 = BlendOp::Add;
+    ColorBlendAttachment(
+        bool enabled,
+        ColorMask writeMask = ColorMask::RGBA,
+        BlendFactor srcBlend = BlendFactor::SrcAlpha,
+        BlendFactor dstBlend = BlendFactor::InvSrcAlpha,
+        BlendOp blendOp = BlendOp::Add,
+        BlendFactor srcBlendAlpha = BlendFactor::One,
+        BlendFactor dstBlendAlpha = BlendFactor::SrcAlpha,
+        BlendOp blendOpAlpha = BlendOp::Add);
 };
 
 struct DepthStencilOpDesc
@@ -154,12 +161,12 @@ struct PipelineLayoutSerializeDesc
 // TODO: MSAA.
 struct GraphicsPipelineBuildInfo
 {
-    eastl::vector<ImageFormat> m_ColorAttachmentFormats;
+    eastl::vector<ImageFormat> m_ColorAttachmentFormats = {};
     ImageFormat m_DepthAttachmentFormat = ImageFormat::Unknown;
-    eastl::span<ColorBlendAttachment> m_BlendAttachments;
-    eastl::vector<Shader *> m_Shaders;
-    eastl::vector<DescriptorSetLayout *> m_Layouts;
-    eastl::vector<PushConstantDesc> m_PushConstants;
+    eastl::vector<ColorBlendAttachment> m_BlendAttachments = {};
+    eastl::vector<Shader *> m_Shaders = {};
+    eastl::vector<DescriptorSetLayout *> m_Layouts = {};
+    eastl::vector<PushConstantDesc> m_PushConstants = {};
     InputLayout m_InputLayout = {};
     f32 m_DepthBiasFactor = 0.0;
     f32 m_DepthBiasClamp = 0.0;

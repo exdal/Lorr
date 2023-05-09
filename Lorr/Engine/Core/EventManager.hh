@@ -12,78 +12,72 @@
 
 namespace lr
 {
-    using Event = u32;
+using Event = u32;
 
-    // * Notes:
-    // * Total event data must be `kMaxDataSize`.
-    template<typename _Data>
-    struct EventManager
+// * Notes:
+// * Total event data must be `kMaxDataSize`.
+template<typename _Data>
+struct EventManager
+{
+    static constexpr u32 kMaxDataSize = sizeof(_Data);
+
+    void Init(u32 memSize = 0xfff)
     {
-        static constexpr u32 kMaxDataSize = sizeof(_Data);
+        ZoneScoped;
 
-        void Init(u32 memSize = 0xfff)
+        Memory::AllocatorDesc allocDesc = {};
+        allocDesc.m_DataSize = memSize;
+
+        m_Allocator.Init(allocDesc);
+    }
+
+    void Shutdown() { m_Allocator.Free(nullptr, true); }
+
+    bool Peek(u32 &eventID)
+    {
+        ZoneScoped;
+
+        bool completed = (m_Eventcount - 1) != eventID++;
+
+        if (!completed)
         {
-            ZoneScoped;
-
-            Memory::AllocatorDesc allocDesc = {};
-            allocDesc.m_DataSize = memSize;
-
-            m_Allocator.Init(allocDesc);
+            m_Allocator.Free(nullptr, false);
+            m_Eventcount = 0;
         }
 
-        void Shutdown()
-        {
-            m_Allocator.Free(nullptr, true);
-        }
+        return completed;
+    }
 
-        bool Peek(u32 &eventID)
-        {
-            ZoneScoped;
+    Event Dispatch(u32 eventID, _Data &dataOut)
+    {
+        ZoneScoped;
 
-            bool completed = (m_Eventcount - 1) != eventID++;
+        u8 *pData = m_Allocator.m_pData + ((kMaxDataSize + sizeof(Event)) * eventID);
+        dataOut = *(_Data *)(pData + sizeof(Event));
 
-            if (!completed)
-            {
-                m_Allocator.Free(nullptr, false);
-                m_Eventcount = 0;
-            }
+        return *(Event *)pData;
+    }
 
-            return completed;
-        }
+    void Push(Event event, _Data &data)
+    {
+        static_assert(
+            sizeof(_Data) <= kMaxDataSize, "Maximum size of an event data must be `kMaxDataSize` bytes.");
 
-        Event Dispatch(u32 eventID, _Data &dataOut)
-        {
-            ZoneScoped;
+        ZoneScoped;
 
-            u8 *pData = m_Allocator.m_pData + ((kMaxDataSize + sizeof(Event)) * eventID);
-            dataOut = *(_Data *)(pData + sizeof(Event));
+        void *pData = m_Allocator.Allocate(kMaxDataSize + sizeof(Event));
+        if (pData)
+            return;
 
-            return *(Event *)pData;
-        }
+        u64 offset = 0;
+        Memory::CopyMem(pData, event, offset);
+        Memory::CopyMem(pData, data, offset);
 
-        void Push(Event event, _Data &data)
-        {
-            static_assert(sizeof(_Data) <= kMaxDataSize, "Maximum size of an event data must be `kMaxDataSize` bytes.");
+        m_Eventcount++;
+    }
 
-            ZoneScoped;
-
-            Memory::AllocationInfo allocInfo = {};
-            allocInfo.m_Size = kMaxDataSize + sizeof(Event);
-            allocInfo.m_Alignment = 1;
-            allocInfo.m_pData = nullptr;
-
-            if (!m_Allocator.Allocate(allocInfo))
-                return;
-
-            u64 offset = 0;
-            Memory::CopyMem(allocInfo.m_pData, event, offset);
-            Memory::CopyMem(allocInfo.m_pData, data, offset);
-
-            m_Eventcount++;
-        }
-
-        u32 m_Eventcount = 0;
-        Memory::LinearAllocator m_Allocator;
-    };
+    u32 m_Eventcount = 0;
+    Memory::LinearAllocator m_Allocator;
+};
 
 }  // namespace lr

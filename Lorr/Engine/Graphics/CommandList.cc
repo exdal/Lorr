@@ -76,21 +76,24 @@ DependencyInfo::DependencyInfo()
     this->pImageMemoryBarriers = nullptr;
 }
 
-DependencyInfo::DependencyInfo(eastl::span<ImageBarrier> imageBarriers) : DependencyInfo()
+DependencyInfo::DependencyInfo(eastl::span<ImageBarrier> imageBarriers)
+    : DependencyInfo()
 {
     ZoneScoped;
 
     SetImageBarriers(imageBarriers);
 }
 
-DependencyInfo::DependencyInfo(eastl::span<BufferBarrier> bufferBarriers) : DependencyInfo()
+DependencyInfo::DependencyInfo(eastl::span<BufferBarrier> bufferBarriers)
+    : DependencyInfo()
 {
     ZoneScoped;
 
     SetBufferBarriers(bufferBarriers);
 }
 
-DependencyInfo::DependencyInfo(eastl::span<MemoryBarrier> memoryBarriers) : DependencyInfo()
+DependencyInfo::DependencyInfo(eastl::span<MemoryBarrier> memoryBarriers)
+    : DependencyInfo()
 {
     ZoneScoped;
 
@@ -241,13 +244,11 @@ void CommandList::SetIndexBuffer(Buffer *pBuffer, bool type32)
         m_pHandle, pBuffer->m_pHandle, 0, type32 ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16);
 }
 
-void CommandList::CopyBuffer(Buffer *pSource, Buffer *pDest, u32 size)
+void CommandList::CopyBuffer(Buffer *pSource, Buffer *pDest, u64 size)
 {
     ZoneScoped;
 
-    VkBufferCopy copyRegion = {};
-    copyRegion.size = size;
-
+    VkBufferCopy copyRegion = { .size = size };
     vkCmdCopyBuffer(m_pHandle, pSource->m_pHandle, pDest->m_pHandle, 1, &copyRegion);
 }
 
@@ -354,6 +355,21 @@ void CommandList::SetDescriptorBuffers(eastl::span<DescriptorBindingInfo> bindin
     ZoneScoped;
 
     vkCmdBindDescriptorBuffersEXT(m_pHandle, bindingInfos.size(), bindingInfos.data());
+}
+
+void CommandList::SetDescriptorBufferOffsets(
+    u32 firstSet, u32 setCount, eastl::span<u32> indices, eastl::span<u64> offsets)
+{
+    ZoneScoped;
+
+    vkCmdSetDescriptorBufferOffsetsEXT(
+        m_pHandle,
+        m_pPipeline->m_BindPoint,
+        m_pPipeline->m_pLayout,
+        firstSet,
+        setCount,
+        indices.data(),
+        offsets.data());
 }
 
 CommandListSubmitDesc::CommandListSubmitDesc(CommandList *pList)

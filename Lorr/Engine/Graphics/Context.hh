@@ -23,11 +23,22 @@ enum APIFlags : u32
 };
 EnumFlags(APIFlags);
 
+enum class MemoryFlag
+{
+    Device = 1 << 0,
+    HostVisible = 1 << 1,
+    HostCoherent = 1 << 2,
+    HostCached = 1 << 3,
+
+    HostVisibleCoherent = HostVisible | HostCoherent,
+};
+EnumFlags(MemoryFlag);
+
 struct APIAllocatorInitDesc
 {
-    u32 m_MaxTLSFAllocations = 0x2000;
-    u32 m_DescriptorMem = Memory::MiBToBytes(1);
-    u32 m_BufferLinearMem = Memory::MiBToBytes(64);
+    u32 m_MaxTLSFAllocations = 0x20000;
+    u32 m_DescriptorMem = Memory::MiBToBytes(32);
+    u32 m_BufferLinearMem = Memory::MiBToBytes(128);
     u32 m_BufferTLSFMem = Memory::MiBToBytes(1024);
     u32 m_BufferTLSFHostMem = Memory::MiBToBytes(128);
     u32 m_BufferFrametimeMem = Memory::MiBToBytes(128);
@@ -106,15 +117,16 @@ struct Context
         DescriptorSetLayoutType type = DescriptorSetLayoutType::None);
     u64 GetDescriptorSetLayoutSize(DescriptorSetLayout *pLayout);  // ALIGNED!!!
     u64 GetDescriptorSetLayoutBindingOffset(DescriptorSetLayout *pLayout, u32 bindingID);
-    void GetDescriptor();
+    u64 GetDescriptorSize(DescriptorType type);
+    void GetDescriptorData(const DescriptorGetInfo &info, u64 dataSize, void *pDataOut);
 
     // * Buffers * //
-    VkDeviceMemory CreateHeap(u64 heapSize, bool cpuWrite);
+    VkDeviceMemory CreateHeap(u64 heapSize, MemoryFlag flags);
 
     Buffer *CreateBuffer(BufferDesc *pDesc);
     void DeleteBuffer(Buffer *pHandle, bool waitForWork = true);
 
-    void MapMemory(Buffer *pBuffer, void *&pData);
+    void MapMemory(Buffer *pBuffer, void *&pData, u64 offset, u64 size);
     void UnmapMemory(Buffer *pBuffer);
 
     // * Images * //

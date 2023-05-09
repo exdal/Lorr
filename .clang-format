@@ -46,6 +46,7 @@ BraceWrapping:
 
 SortIncludes: false
 
+PackConstructorInitializers: Never
 BreakBeforeBinaryOperators: NonAssignment
 BreakBeforeTernaryOperators: true
 BreakConstructorInitializers: BeforeColon

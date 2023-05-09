@@ -1,10 +1,9 @@
 #pragma once
 
-// #if defined(LR_BUILD_SHARED)
-// #define LR_API __declspec(dllexport)
-// #else
-// #define LR_API __declspec(dllimport)
-// #endif
+#ifdef PTR_SIZE
+#undef PTR_SIZE
+#endif
+#define PTR_SIZE sizeof(void *)
 
 typedef double f64;
 typedef float f32;
@@ -21,12 +20,8 @@ typedef signed short i16;
 typedef unsigned char u8;
 typedef signed char i8;
 
-#ifdef PTR_SIZE
-#undef PTR_SIZE
-#endif
-#define PTR_SIZE sizeof(void *)
-
 #include <stdio.h>
+#include <stdint.h>
 
 #include <Windows.h>
 #undef CreateSemaphore

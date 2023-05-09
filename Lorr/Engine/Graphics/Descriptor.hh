@@ -19,7 +19,6 @@ enum class DescriptorType : u32
     UniformBuffer,  // Read only buffer
     StorageImage,   // RW image
     StorageBuffer,  // RW Buffer
-    StaticSampler,  // EXT_descriptor_buffer
     Count,
 };
 
@@ -51,4 +50,23 @@ struct DescriptorBindingInfo : VkDescriptorBufferBindingInfoEXT
     DescriptorBindingInfo(
         DescriptorBindingPushDescriptor *pPushDescriptorInfo, Buffer *pBuffer, BufferUsage bufferUsage);
 };
+
+struct DescriptorGetInfo
+{
+    DescriptorGetInfo(
+        u32 binding, DescriptorType type, Buffer *pBuffer, ImageFormat texelFormat = ImageFormat::Unknown);
+    DescriptorGetInfo(u32 binding, DescriptorType type, Image *pImage);
+    DescriptorGetInfo(u32 binding, DescriptorType type, Sampler *pSampler);
+
+    u32 m_Binding = 0;
+    DescriptorType m_Type = DescriptorType::Count;
+
+    union
+    {
+        VkDescriptorAddressInfoEXT m_BufferInfo = {};
+        VkDescriptorImageInfo m_ImageInfo;
+        Sampler *m_pSampler;
+    };
+};
+
 }  // namespace lr::Graphics

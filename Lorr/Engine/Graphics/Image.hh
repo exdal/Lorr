@@ -62,7 +62,7 @@ struct ImageDesc
     u16 m_ArraySize = 1;
     u32 m_MipMapLevels = 1;
 
-    u32 m_DataLen = 0;
+    u64 m_DataLen = 0;
 };
 
 struct Image : APIObject<VK_OBJECT_TYPE_IMAGE>
@@ -88,9 +88,9 @@ struct Image : APIObject<VK_OBJECT_TYPE_IMAGE>
     u32 m_MipMapLevels = 1;
     VkImageAspectFlags m_ImageAspect = 0;
 
-    u32 m_DataLen = 0;
-    u32 m_AllocatorOffset = 0;
-    u32 m_DeviceDataLen = 0;
+    u64 m_DataLen = 0;
+    u64 m_AllocatorOffset = 0;
+    u64 m_DeviceDataLen = 0;
 
     VkImage m_pHandle = nullptr;
     VkImageView m_pViewHandle = nullptr;

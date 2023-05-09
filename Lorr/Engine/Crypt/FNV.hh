@@ -22,7 +22,7 @@ namespace lr::Hash
     template<typename T>
     constexpr u32 FNV32(const T &val)
     {
-        return FNV32(&val, sizeof(val));
+        return FNV32(&val, sizeof(T));
     }
 
     constexpr u32 FNV32String(eastl::string_view str)
@@ -46,7 +46,7 @@ namespace lr::Hash
     template<typename T>
     constexpr u64 FNV64(const T &val)
     {
-        return FNV64(&val, sizeof(val));
+        return FNV64(&val, sizeof(T));
     }
 
     constexpr u64 FNV64String(eastl::string_view str)

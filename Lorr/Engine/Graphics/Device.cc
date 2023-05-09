@@ -30,6 +30,7 @@ static VkPhysicalDeviceDescriptorBufferFeaturesEXT kDesciptorBufferFeatures = {
     .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT,
     .pNext = &kBufferDeviceAddressFeatures,
     .descriptorBuffer = true,
+    .descriptorBufferImageLayoutIgnored = true,
     .descriptorBufferPushDescriptors = true,
 };
 

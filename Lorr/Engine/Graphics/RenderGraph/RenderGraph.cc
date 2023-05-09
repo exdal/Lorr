@@ -1,5 +1,7 @@
 #include "RenderGraph.hh"
 
+#include "STL/Vector.hh"
+
 namespace lr::Graphics
 {
 static MemoryAccess ToImageMemoryAccess(ImageLayout layout, bool write)
@@ -102,44 +104,36 @@ void RenderGraph::Prepare()
 {
     ZoneScoped;
 
+    RenderPassBuilder builder(this);
+
     CommandAllocator *pAllocator = GetCommandAllocator(CommandType::Graphics);
     m_pSetupList = m_pContext->CreateCommandList(CommandType::Graphics, pAllocator);
 
     for (RenderPass *pPass : m_Passes)
     {
-        if (pPass->m_Flags & LR_RENDER_PASS_FLAG_ALLOW_SETUP)
-        {
-            if (pPass->m_PassType == CommandType::Graphics)
-            {
-                GraphicsRenderPass *pGraphicsPass = (GraphicsRenderPass *)pPass;
-                GraphicsPipelineBuildInfo pipelineInfo = {};
-
-                pGraphicsPass->SetPipelineInfo(pipelineInfo);
-                pGraphicsPass->Setup(m_pContext);
-
-                FinalizeGraphicsPass(pGraphicsPass, &pipelineInfo);
-            }
-        }
-
-        BuildPassBarriers(pPass);
+        builder.BuildPass(pPass);
     }
 
-    u32 bufferSize = 0;
-    for (DescriptorSetLayout *pLayout : m_DescriptorLayouts)
-        bufferSize += m_pContext->GetDescriptorSetLayoutSize(pLayout);
-
-    BufferDesc bufferDesc = {
-        .m_UsageFlags = BufferUsage::ResourceDescriptor,
+    BufferDesc resourceBufferDesc = {
+        .m_UsageFlags =
+            BufferUsage::ResourceDescriptor | BufferUsage::PushDescriptor | BufferUsage::TransferDst,
         .m_TargetAllocator = ResourceAllocator::BufferTLSF,
-        .m_DataLen = bufferSize,
+        .m_DataLen = builder.GetResourceDescriptorOffset(),
     };
-    m_pDescriptorBuffer = m_pContext->CreateBuffer(&bufferDesc);
+    m_pResourceDescriptorBuffer = m_pContext->CreateBuffer(&resourceBufferDesc);
+
+    BufferDesc samplerBufferDesc = {
+        .m_UsageFlags = BufferUsage::SamplerDescriptor | BufferUsage::PushDescriptor | BufferUsage::TransferDst,
+        .m_TargetAllocator = ResourceAllocator::BufferTLSF,
+        .m_DataLen = builder.GetSamplerDescriptorOffset(),
+    };
+    m_pSamplerDescriptorBuffer = m_pContext->CreateBuffer(&samplerBufferDesc);
 
     m_pContext->BeginCommandList(m_pSetupList);
-
-    DescriptorBindingInfo bindingInfo(nullptr, m_pDescriptorBuffer, BufferUsage::ResourceDescriptor);
-    m_pSetupList->SetDescriptorBuffers(bindingInfo);
-
+    m_pSetupList->CopyBuffer(
+        builder.GetResourceDescriptorBuffer(), m_pResourceDescriptorBuffer, resourceBufferDesc.m_DataLen);
+    m_pSetupList->CopyBuffer(
+        builder.GetSamplerDescriptorBuffer(), m_pSamplerDescriptorBuffer, samplerBufferDesc.m_DataLen);
     m_pContext->EndCommandList(m_pSetupList);
     SubmitList(m_pSetupList, PipelineStage::AllCommands, PipelineStage::AllCommands);
 }
@@ -180,15 +174,15 @@ void RenderGraph::Draw()
     m_pContext->EndFrame();
 }
 
-Image *RenderGraph::GetAttachmentImage(const RenderPassAttachment &attachment)
+Image *RenderGraph::GetInputImage(const RenderPassInput &input)
 {
     ZoneScoped;
 
-    if (attachment.m_Hash == FNV64HashOf("$backbuffer"))
+    if (input.m_Hash == FNV64HashOf("$backbuffer"))
         return m_pContext->GetSwapChain()->GetCurrentFrame()->m_pImage;
 
     for (auto &[hash, resource] : m_Images)
-        if (hash == attachment.m_Hash)
+        if (hash == input.m_Hash)
             return resource;
 
     return nullptr;
@@ -210,7 +204,6 @@ Image *RenderGraph::CreateImage(NameID name, Image *pImage, MemoryAccess initial
 
     ResourceView<Image> view = { name, pImage };
     m_Images.push_back(view);
-    m_LastAccessInfos.push_back({ .m_Access = MemoryAccess::None });
 
     return pImage;
 }
@@ -236,8 +229,7 @@ void RenderGraph::SubmitList(CommandList *pList, PipelineStage waitStage, Pipeli
     m_pContext->ResetCommandAllocator(GetCommandAllocator(pList->m_Type));
 }
 
-void RenderGraph::SetImageBarrier(
-    CommandList *pList, Image *pImage, MemoryAccess srcAccess, MemoryAccess dstAccess)
+void RenderGraph::SetImageBarrier(CommandList *pList, Image *pImage, ImageBarrier &barrier)
 {
     auto SelectQueue = [this](ImageLayout layout) -> u32
     {
@@ -258,99 +250,8 @@ void RenderGraph::SetImageBarrier(
         }
     };
 
-    ImageLayout lastLayout = ToImageLayout(srcAccess);
-    ImageLayout nextLayout = ToImageLayout(dstAccess);
-
-    ImageBarrier barrier = {
-        pImage,
-        {
-            .m_SrcLayout = lastLayout,
-            .m_DstLayout = nextLayout,
-            .m_SrcStage = ToImagePipelineStage(lastLayout),
-            .m_DstStage = ToImagePipelineStage(nextLayout),
-            .m_SrcAccess = srcAccess,
-            .m_DstAccess = dstAccess,
-        },
-    };
     DependencyInfo depInfo = { barrier };
     pList->SetPipelineBarrier(&depInfo);
-}
-
-void RenderGraph::UploadImageData(Image *pImage, MemoryAccess resultAccess, void *pData, u32 dataSize)
-{
-    ZoneScoped;
-
-    BufferDesc bufferDesc = {
-        .m_UsageFlags = BufferUsage::TransferSrc,
-        .m_TargetAllocator = ResourceAllocator::BufferFrametime,
-        .m_DataLen = dataSize,
-    };
-    Buffer *pBuffer = m_pContext->CreateBuffer(&bufferDesc);
-
-    void *pMapData = nullptr;
-    m_pContext->MapMemory(pBuffer, pMapData);
-    memcpy(pMapData, pData, bufferDesc.m_DataLen);
-    m_pContext->UnmapMemory(pBuffer);
-
-    m_pContext->BeginCommandList(m_pSetupList);
-
-    SetImageBarrier(m_pSetupList, pImage, MemoryAccess::None, MemoryAccess::TransferWrite);
-    m_pSetupList->CopyBuffer(pBuffer, pImage, ImageLayout::TransferDst);
-    SetImageBarrier(m_pSetupList, pImage, MemoryAccess::TransferWrite, resultAccess);
-
-    m_pContext->EndCommandList(m_pSetupList);
-    SubmitList(m_pSetupList, PipelineStage::AllCommands, PipelineStage::AllCommands);
-
-    m_pContext->DeleteBuffer(pBuffer);
-}
-
-void RenderGraph::BuildPassBarriers(RenderPass *pPass)
-{
-    ZoneScoped;
-
-    pPass->m_BarrierIndex = m_Barriers.size();
-
-    for (RenderPassAttachment &colorAttachment : pPass->m_InputAttachments)
-    {
-        Image *pAttachment = GetAttachmentImage(colorAttachment);
-
-        PipelineAccessInfo accessInfo = GetResourceAccessInfo(colorAttachment.m_Hash);
-        ImageLayout lastLayout = ToImageLayout(accessInfo.m_Access);
-        ImageLayout nextLayout = ToImageLayout(colorAttachment.m_Access);
-        MemoryAccess nextAccess = ToImageMemoryAccess(nextLayout, colorAttachment.HasClear());
-
-        ImageBarrier barrier = {
-            pAttachment,
-            {
-                .m_SrcLayout = lastLayout,
-                .m_DstLayout = nextLayout,
-                .m_SrcStage = ToImagePipelineStage(lastLayout),
-                .m_DstStage = ToImagePipelineStage(nextLayout),
-                .m_SrcAccess = accessInfo.m_Access,
-                .m_DstAccess = nextAccess,
-            },
-        };
-
-        m_Barriers.push_back(barrier);
-        SetMemoryAccess(colorAttachment.m_Hash, { .m_Access = nextAccess });
-    }
-}
-
-void RenderGraph::FinalizeGraphicsPass(GraphicsRenderPass *pPass, GraphicsPipelineBuildInfo *pPipelineInfo)
-{
-    ZoneScoped;
-
-    for (RenderPassAttachment &colorAttachment : pPass->m_InputAttachments)
-    {
-        Image *pAttachment = GetAttachmentImage(colorAttachment);
-        pPipelineInfo->m_ColorAttachmentFormats.push_back(pAttachment->m_Format);
-    }
-
-    for (auto &pLayout : pPipelineInfo->m_Layouts)
-        m_DescriptorLayouts.push_back(pLayout);
-
-    pPipelineInfo->m_BlendAttachments = pPass->m_BlendAttachments;
-    pPass->m_pPipeline = m_pContext->CreateGraphicsPipeline(pPipelineInfo);
 }
 
 void RenderGraph::RecordGraphicsPass(GraphicsRenderPass *pPass, CommandList *pList)
@@ -360,73 +261,78 @@ void RenderGraph::RecordGraphicsPass(GraphicsRenderPass *pPass, CommandList *pLi
     SwapChain *pSwapChain = m_pContext->GetSwapChain();
 
     /// PREPARE ATTACHMENTS ///
-    eastl::span<RenderPassAttachment> passColorAttachments = pPass->m_InputAttachments;
-    eastl::span<ImageBarrier> barriers(m_Barriers.begin() + pPass->m_BarrierIndex, passColorAttachments.size());
+    eastl::span<RenderPassInput> inputResources = GetPassResources(pPass);
+    eastl::vector<RenderingColorAttachment> colorAttachments;
+    eastl::vector<ImageBarrier> barriers;
 
-    eastl::vector<RenderingColorAttachment> renderingColorAttachments(passColorAttachments.size());
+    colorAttachments.reserve(pPass->m_ResourceCount);
+    barriers.reserve(pPass->m_ResourceCount);
 
-    for (u32 i = 0; i < passColorAttachments.size(); i++)
+    for (RenderPassInput &inputResource : inputResources)
     {
-        RenderPassAttachment &attachment = passColorAttachments[i];
-        Image *pImage = GetAttachmentImage(attachment);
+        Image *pImage = GetInputImage(inputResource);
 
-        renderingColorAttachments[i] = {
-            .m_pImage = pImage,
-            .m_Layout = ImageLayout::ColorAttachment,
-            .m_LoadOp = attachment.HasClear() ? AttachmentOp::Clear : AttachmentOp::Load,
-            .m_StoreOp = attachment.IsWrite() ? AttachmentOp::Store : AttachmentOp::DontCare,
-            .m_ClearValue = attachment.m_ColorClearVal,
-        };
+        if (inputResource.m_Flags & InputResourceFlag::ColorAttachment)
+        {
+            RenderingColorAttachment attachment = {
+                .m_pImage = pImage,
+                .m_Layout = ImageLayout::ColorAttachment,
+                .m_LoadOp = inputResource.m_AttachmentOp.m_LoadOp,
+                .m_StoreOp = inputResource.m_AttachmentOp.m_Store,
+                .m_ClearValue = inputResource.m_ColorClearVal,
+            };
+            colorAttachments.push_back(attachment);
+
+            continue;
+        }
+
+        PipelineBarrier barrier = {};
+        barrier.m_SrcLayout = ToImageLayout(inputResource.m_Access.m_SrcAccess);
+        barrier.m_DstLayout = ToImageLayout(inputResource.m_Access.m_DstAccess);
+        barrier.m_SrcStage = ToImagePipelineStage(barrier.m_SrcLayout);
+        barrier.m_DstStage = ToImagePipelineStage(barrier.m_DstLayout);
+        barrier.m_SrcAccess = inputResource.m_Access.m_SrcAccess;
+        barrier.m_DstAccess = inputResource.m_Access.m_DstAccess;
+        barriers.push_back({ pImage, barrier });
     }
 
-    DependencyInfo depInfo = barriers;
+    DependencyInfo depInfo(barriers);
     pList->SetPipelineBarrier(&depInfo);
 
-    if (pPass->m_Flags & LR_RENDER_PASS_FLAG_SKIP_RENDERING)
+    if (pPass->m_Flags & RenderPassFlag::SkipRendering)
         return;
 
     RenderingBeginDesc renderingDesc = {
         .m_RenderArea = { 0, 0, pSwapChain->m_Width, pSwapChain->m_Height },
-        .m_ColorAttachments = renderingColorAttachments,
+        .m_ColorAttachments = colorAttachments,
     };
 
     pList->BeginRendering(&renderingDesc);
 
-    if (pPass->m_Flags & LR_RENDER_PASS_FLAG_ALLOW_EXECUTE)
+    if (pPass->m_Flags & RenderPassFlag::AllowExecute)
     {
         pList->SetPipeline(pPass->m_pPipeline);
+
+        DescriptorBindingPushDescriptor resourcePushDescriptor(m_pResourceDescriptorBuffer);
+        DescriptorBindingPushDescriptor samplerPushDescriptor(m_pSamplerDescriptorBuffer);
+
+        bool bufferlessPushDescriptors =
+            m_pContext->m_pPhysicalDevice->m_FeatureDescriptorBufferProps.bufferlessPushDescriptors;
+
+        DescriptorBindingInfo pBindingInfos[] = {
+            { bufferlessPushDescriptors ? nullptr : &resourcePushDescriptor,
+              m_pResourceDescriptorBuffer,
+              BufferUsage::ResourceDescriptor },
+            { bufferlessPushDescriptors ? nullptr : &samplerPushDescriptor,
+              m_pSamplerDescriptorBuffer,
+              BufferUsage::SamplerDescriptor },
+        };
+        pList->SetDescriptorBuffers(pBindingInfos);
+
         pPass->Execute(m_pContext, pList);
     }
 
     pList->EndRendering();
-}
-
-void RenderGraph::SetMemoryAccess(Hash64 resource, PipelineAccessInfo info)
-{
-    ZoneScoped;
-
-    u32 idx = 0;
-    for (auto &v : m_Images)
-        if (v.Hash() == resource)
-            break;
-        else
-            idx++;
-
-    m_LastAccessInfos[idx] = info;
-}
-
-PipelineAccessInfo RenderGraph::GetResourceAccessInfo(Hash64 resource)
-{
-    ZoneScoped;
-
-    u32 idx = 0;
-    for (auto &v : m_Images)
-        if (v.Hash() == resource)
-            break;
-        else
-            idx++;
-
-    return m_LastAccessInfos[idx];
 }
 
 void RenderGraph::AllocateCommandLists(CommandType type)

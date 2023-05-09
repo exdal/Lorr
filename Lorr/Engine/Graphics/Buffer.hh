@@ -28,7 +28,7 @@ struct BufferDesc
     ResourceAllocator m_TargetAllocator = ResourceAllocator::None;
 
     u32 m_Stride = 1;
-    u32 m_DataLen = 0;
+    u64 m_DataLen = 0;
 };
 
 struct Buffer : APIObject<VK_OBJECT_TYPE_BUFFER>
@@ -44,10 +44,10 @@ struct Buffer : APIObject<VK_OBJECT_TYPE_BUFFER>
     void *m_pAllocatorData = nullptr;
 
     u32 m_Stride = 1;
-    u32 m_DataLen = 0;
+    u64 m_DataLen = 0;
 
-    u32 m_AllocatorOffset = 0;
-    u32 m_DeviceDataLen = 0;
+    u64 m_AllocatorOffset = 0;
+    u64 m_DeviceDataLen = 0;
     u64 m_DeviceAddress = 0;
 
     VkBuffer m_pHandle = nullptr;

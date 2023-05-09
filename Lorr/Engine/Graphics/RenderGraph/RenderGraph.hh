@@ -8,31 +8,6 @@
 
 namespace lr::Graphics
 {
-template<typename _Resource, typename _Desc>
-struct ResourceCache
-{
-    _Resource *Get(eastl::span<_Desc> elements, u64 &hashOut)
-    {
-        ZoneScoped;
-
-        hashOut = Hash::FNV64((char *)elements.data(), elements.size_bytes());
-        for (auto &[hash, pHandle] : m_Resources)
-            if (hashOut == hash)
-                return pHandle;
-
-        return nullptr;
-    }
-
-    void Add(_Resource *pResource, u64 hash)
-    {
-        ZoneScoped;
-
-        m_Resources.push_back({ hash, pResource });
-    }
-
-    eastl::vector<ResourceView<_Resource>> m_Resources = {};
-};
-
 struct PipelineAccessInfo
 {
     MemoryAccess m_Access = MemoryAccess::None;
@@ -56,18 +31,12 @@ struct RenderGraph
     template<typename _Pass>
     _Pass *AllocateRenderPassCallback()
     {
-        Memory::AllocationInfo info = {
-            .m_Size = sizeof(_Pass),
-            .m_Alignment = 8,
-        };
-        m_PassAllocator.Allocate(info);
-
-        return new (info.m_pData) _Pass;
+        void *pData = m_PassAllocator.Allocate(sizeof(_Pass));
+        return new (pData) _Pass;
     }
 
     template<typename _Data>
-    GraphicsRenderPass *CreateGraphicsPass(
-        eastl::string_view name, RenderPassFlags flags = LR_RENDER_PASS_FLAG_NONE)
+    GraphicsRenderPass *CreateGraphicsPass(eastl::string_view name, RenderPassFlag flags = RenderPassFlag::None)
     {
         ZoneScoped;
 
@@ -84,6 +53,19 @@ struct RenderGraph
     }
 
     template<typename _Data>
+    GraphicsRenderPass *CreateGraphicsPassCb(eastl::string_view name, const RenderPassSetupFn<_Data> &fSetup)
+    {
+        ZoneScoped;
+
+        auto *pPass = (GraphicsRenderPassCallback<_Data> *)CreateGraphicsPass<_Data>(name);
+
+        pPass->m_Flags |= RenderPassFlag::AllowSetup;
+        pPass->m_fSetup = fSetup;
+
+        return pPass;
+    }
+
+    template<typename _Data>
     GraphicsRenderPass *CreateGraphicsPassCb(
         eastl::string_view name,
         const RenderPassSetupFn<_Data> &fSetup,
@@ -94,8 +76,8 @@ struct RenderGraph
 
         auto *pPass = (GraphicsRenderPassCallback<_Data> *)CreateGraphicsPass<_Data>(name);
 
-        pPass->m_Flags |= LR_RENDER_PASS_FLAG_ALLOW_SETUP | LR_RENDER_PASS_FLAG_ALLOW_EXECUTE
-                          | LR_RENDER_PASS_FLAG_ALLOW_SHUTDOWN;
+        pPass->m_Flags |=
+            RenderPassFlag::AllowSetup | RenderPassFlag::AllowExecute | RenderPassFlag::AllowShutdown;
         pPass->m_fSetup = fSetup;
         pPass->m_fExecute = fExecute;
         pPass->m_fShutdown = fShutdown;
@@ -118,21 +100,15 @@ struct RenderGraph
 
     /// RESOURCES ///
 
-    Image *GetAttachmentImage(const RenderPassAttachment &attachment);
+    Image *GetInputImage(const RenderPassInput &input);
     Image *CreateImage(NameID name, ImageDesc &desc, MemoryAccess initialAccess = MemoryAccess::None);
     Image *CreateImage(NameID name, Image *pImage, MemoryAccess initialAccess = MemoryAccess::None);
 
     //! THIS PERFORMS CPU WAIT!!!
     void SubmitList(CommandList *pList, PipelineStage waitStage, PipelineStage signalStage);
-    void SetImageBarrier(CommandList *pList, Image *pImage, MemoryAccess srcAccess, MemoryAccess dstAccess);
-    void UploadImageData(Image *pImage, MemoryAccess resultAccess, void *pData, u32 dataSize);
+    void SetImageBarrier(CommandList *pList, Image *pImage, ImageBarrier &barrier);
 
-    void BuildPassBarriers(RenderPass *pPass);
-    void FinalizeGraphicsPass(GraphicsRenderPass *pPass, GraphicsPipelineBuildInfo *pPipelineInfo);
     void RecordGraphicsPass(GraphicsRenderPass *pPass, CommandList *pList);
-
-    void SetMemoryAccess(Hash64 resource, PipelineAccessInfo info);
-    PipelineAccessInfo GetResourceAccessInfo(Hash64 resource);
 
     /// SUBMISSION ///
 
@@ -153,14 +129,21 @@ struct RenderGraph
 
     /// RESOURCES ///
 
+    eastl::span<RenderPassInput> GetPassResources(RenderPass *pPass)
+    {
+        return eastl::span(m_InputResources.begin() + pPass->m_ResourceIndex, pPass->m_ResourceCount);
+    }
+
     Memory::LinearAllocator m_PassAllocator = {};
     eastl::vector<RenderPass *> m_Passes;
 
     eastl::vector<ResourceView<Image>> m_Images;
-    eastl::vector<ImageBarrier> m_Barriers;
-    eastl::vector<PipelineAccessInfo> m_LastAccessInfos;  // Latest access info of each image
+    eastl::vector<RenderPassInput> m_InputResources;
 
     eastl::vector<DescriptorSetLayout *> m_DescriptorLayouts;
-    Buffer *m_pDescriptorBuffer = nullptr;
+
+    Buffer *m_pResourceDescriptorBuffer = nullptr;
+    Buffer *m_pSamplerDescriptorBuffer = nullptr;
 };
+
 }  // namespace lr::Graphics

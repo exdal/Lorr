@@ -206,7 +206,7 @@ struct CommandList : APIObject<VK_OBJECT_TYPE_COMMAND_BUFFER>
     /// Buffer Commands
     void SetVertexBuffer(Buffer *pBuffer);
     void SetIndexBuffer(Buffer *pBuffer, bool type32 = true);
-    void CopyBuffer(Buffer *pSource, Buffer *pDest, u32 size);
+    void CopyBuffer(Buffer *pSource, Buffer *pDest, u64 size);
     void CopyBuffer(Buffer *pSource, Image *pDest, ImageLayout layout);
 
     /// Draw Commands
@@ -223,6 +223,8 @@ struct CommandList : APIObject<VK_OBJECT_TYPE_COMMAND_BUFFER>
     void SetPipeline(Pipeline *pPipeline);
     void SetPushConstants(ShaderStage stage, u32 offset, void *pData, u32 dataSize);
     void SetDescriptorBuffers(eastl::span<DescriptorBindingInfo> bindingInfos);
+    void SetDescriptorBufferOffsets(
+        u32 firstSet, u32 setCount, eastl::span<u32> indices, eastl::span<u64> offsets);
 
     CommandType m_Type = CommandType::Count;
     VkCommandBuffer m_pHandle = VK_NULL_HANDLE;

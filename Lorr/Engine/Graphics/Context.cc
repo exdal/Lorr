@@ -70,25 +70,25 @@ void Context::InitAllocators(APIAllocatorInitDesc *pDesc)
     ZoneScoped;
 
     m_MADescriptor.Allocator.Init(pDesc->m_DescriptorMem);
-    m_MADescriptor.pHeap = CreateHeap(pDesc->m_DescriptorMem, true);
+    m_MADescriptor.pHeap = CreateHeap(pDesc->m_DescriptorMem, MemoryFlag::HostVisibleCoherent);
 
     m_MABufferLinear.Allocator.Init(pDesc->m_BufferLinearMem);
-    m_MABufferLinear.pHeap = CreateHeap(pDesc->m_BufferLinearMem, true);
+    m_MABufferLinear.pHeap = CreateHeap(pDesc->m_BufferLinearMem, MemoryFlag::HostVisibleCoherent);
 
     for (u32 i = 0; i < m_pSwapChain->m_FrameCount; i++)
     {
         m_MABufferFrametime[i].Allocator.Init(pDesc->m_BufferFrametimeMem);
-        m_MABufferFrametime[i].pHeap = CreateHeap(pDesc->m_BufferFrametimeMem, true);
+        m_MABufferFrametime[i].pHeap = CreateHeap(pDesc->m_BufferFrametimeMem, MemoryFlag::HostVisibleCoherent);
     }
 
     m_MABufferTLSF.Allocator.Init(pDesc->m_BufferTLSFMem, pDesc->m_MaxTLSFAllocations);
-    m_MABufferTLSF.pHeap = CreateHeap(pDesc->m_BufferTLSFMem, false);
+    m_MABufferTLSF.pHeap = CreateHeap(pDesc->m_BufferTLSFMem, MemoryFlag::Device);
 
     m_MABufferTLSFHost.Allocator.Init(pDesc->m_BufferTLSFHostMem, pDesc->m_MaxTLSFAllocations);
-    m_MABufferTLSFHost.pHeap = CreateHeap(pDesc->m_BufferTLSFHostMem, true);
+    m_MABufferTLSFHost.pHeap = CreateHeap(pDesc->m_BufferTLSFHostMem, MemoryFlag::HostVisibleCoherent);
 
     m_MAImageTLSF.Allocator.Init(pDesc->m_ImageTLSFMem, pDesc->m_MaxTLSFAllocations);
-    m_MAImageTLSF.pHeap = CreateHeap(pDesc->m_ImageTLSFMem, false);
+    m_MAImageTLSF.pHeap = CreateHeap(pDesc->m_ImageTLSFMem, MemoryFlag::Device);
 }
 
 u32 Context::GetQueueIndex(CommandType type)
@@ -344,26 +344,6 @@ Pipeline *Context::CreateGraphicsPipeline(GraphicsPipelineBuildInfo *pBuildInfo)
     Pipeline *pPipeline = new Pipeline;
     pPipeline->m_BindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
 
-    constexpr VkBlendFactor kBlendFactorLUT[] = {
-        VK_BLEND_FACTOR_ZERO,                      // Zero
-        VK_BLEND_FACTOR_ONE,                       // One
-        VK_BLEND_FACTOR_SRC_COLOR,                 // SrcColor
-        VK_BLEND_FACTOR_ONE_MINUS_SRC_COLOR,       // InvSrcColor
-        VK_BLEND_FACTOR_SRC_ALPHA,                 // SrcAlpha
-        VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,       // InvSrcAlpha
-        VK_BLEND_FACTOR_DST_ALPHA,                 // DestAlpha
-        VK_BLEND_FACTOR_ONE_MINUS_DST_ALPHA,       // InvDestAlpha
-        VK_BLEND_FACTOR_DST_COLOR,                 // DestColor
-        VK_BLEND_FACTOR_ONE_MINUS_DST_COLOR,       // InvDestColor
-        VK_BLEND_FACTOR_SRC_ALPHA_SATURATE,        // SrcAlphaSat
-        VK_BLEND_FACTOR_CONSTANT_COLOR,            // ConstantColor
-        VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_COLOR,  // InvConstantColor
-        VK_BLEND_FACTOR_SRC1_COLOR,                // Src1Color
-        VK_BLEND_FACTOR_ONE_MINUS_SRC1_COLOR,      // InvSrc1Color
-        VK_BLEND_FACTOR_SRC1_ALPHA,                // Src1Alpha
-        VK_BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA,      // InvSrc1Alpha
-    };
-
     /// PIPELINE LAYOUT ----------------------------------------------------------
 
     PipelineLayoutSerializeDesc layoutDesc = {
@@ -508,29 +488,13 @@ Pipeline *Context::CreateGraphicsPipeline(GraphicsPipelineBuildInfo *pBuildInfo)
 
     /// COLOR BLEND --------------------------------------------------------------
 
-    VkPipelineColorBlendAttachmentState pBlendAttachmentInfos[LR_MAX_COLOR_ATTACHMENT_PER_PASS] = {};
-
-    VkPipelineColorBlendStateCreateInfo colorBlendInfo = {};
-    colorBlendInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-    colorBlendInfo.pNext = nullptr;
-    colorBlendInfo.logicOpEnable = false;
-    colorBlendInfo.attachmentCount = pBuildInfo->m_ColorAttachmentFormats.size();
-    colorBlendInfo.pAttachments = pBlendAttachmentInfos;
-
-    for (u32 i = 0; i < pBuildInfo->m_ColorAttachmentFormats.size(); i++)
-    {
-        ColorBlendAttachment &attachment = pBuildInfo->m_BlendAttachments[i];
-        VkPipelineColorBlendAttachmentState &renderTarget = pBlendAttachmentInfos[i];
-
-        renderTarget.blendEnable = attachment.m_BlendEnable;
-        renderTarget.colorWriteMask = (VkColorComponentFlags)attachment.m_WriteMask;
-        renderTarget.srcColorBlendFactor = kBlendFactorLUT[(u32)attachment.m_SrcBlend];
-        renderTarget.dstColorBlendFactor = kBlendFactorLUT[(u32)attachment.m_DstBlend];
-        renderTarget.srcAlphaBlendFactor = kBlendFactorLUT[(u32)attachment.m_SrcBlendAlpha];
-        renderTarget.dstAlphaBlendFactor = kBlendFactorLUT[(u32)attachment.m_DstBlendAlpha];
-        renderTarget.colorBlendOp = (VkBlendOp)attachment.m_ColorBlendOp;
-        renderTarget.alphaBlendOp = (VkBlendOp)attachment.m_AlphaBlendOp;
-    }
+    VkPipelineColorBlendStateCreateInfo colorBlendInfo = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+        .pNext = nullptr,
+        .logicOpEnable = false,
+        .attachmentCount = (u32)pBuildInfo->m_BlendAttachments.size(),
+        .pAttachments = pBuildInfo->m_BlendAttachments.data(),
+    };
 
     /// DYNAMIC STATE ------------------------------------------------------------
 
@@ -929,24 +893,56 @@ u64 Context::GetDescriptorSetLayoutBindingOffset(DescriptorSetLayout *pLayout, u
     return offset;
 }
 
-void Context::GetDescriptor()
+u64 Context::GetDescriptorSize(DescriptorType type)
 {
     ZoneScoped;
-    
+
+    VkPhysicalDeviceDescriptorBufferPropertiesEXT &props = m_pPhysicalDevice->m_FeatureDescriptorBufferProps;
+    u64 sizeArray[] = {
+        props.samplerDescriptorSize,        // Sampler,
+        props.sampledImageDescriptorSize,   // SampledImage,
+        props.uniformBufferDescriptorSize,  // UniformBuffer,
+        props.storageImageDescriptorSize,   // StorageImage,
+        props.storageBufferDescriptorSize,  // StorageBuffer,
+    };
+
+    return sizeArray[(u32)type];
 }
 
-VkDeviceMemory Context::CreateHeap(u64 heapSize, bool cpuWrite)
+void Context::GetDescriptorData(const DescriptorGetInfo &info, u64 dataSize, void *pDataOut)
 {
     ZoneScoped;
 
-    VkMemoryPropertyFlags memProps =
-        cpuWrite ? VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
-                 : VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+    VkDescriptorDataEXT descriptorData = { .pUniformTexelBuffer = &info.m_BufferInfo };
+    VkDescriptorGetInfoEXT vkInfo = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT,
+        .pNext = nullptr,
+        .type = VK::ToDescriptorType(info.m_Type),
+        .data = descriptorData,
+    };
 
-    VkMemoryAllocateInfo memoryAllocInfo = {};
-    memoryAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    memoryAllocInfo.allocationSize = heapSize;
-    memoryAllocInfo.memoryTypeIndex = m_pPhysicalDevice->GetHeapIndex(memProps);
+    vkGetDescriptorEXT(m_pDevice, &vkInfo, dataSize, pDataOut);
+}
+
+VkDeviceMemory Context::CreateHeap(u64 heapSize, MemoryFlag flags)
+{
+    ZoneScoped;
+
+    VkMemoryPropertyFlags memoryProps = 0;
+    if (flags & MemoryFlag::Device)
+        memoryProps |= VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+    if (flags & MemoryFlag::HostVisible)
+        memoryProps |= VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+    if (flags & MemoryFlag::HostCoherent)
+        memoryProps |= VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+    if (flags & MemoryFlag::HostCached)
+        memoryProps |= VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+
+    VkMemoryAllocateInfo memoryAllocInfo = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize = heapSize,
+        .memoryTypeIndex = m_pPhysicalDevice->GetHeapIndex(memoryProps),
+    };
 
     VkDeviceMemory pHandle = nullptr;
     vkAllocateMemory(m_pDevice, &memoryAllocInfo, nullptr, &pHandle);
@@ -960,6 +956,9 @@ Buffer *Context::CreateBuffer(BufferDesc *pDesc)
 
     Buffer *pBuffer = new Buffer;
     pBuffer->Init(pDesc);
+
+    if (m_pPhysicalDevice->m_FeatureDescriptorBufferProps.bufferlessPushDescriptors)
+        pDesc->m_UsageFlags &= ~BufferUsage::PushDescriptor;
 
     VkBufferCreateInfo createInfo = {
         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
@@ -1012,12 +1011,11 @@ void Context::DeleteBuffer(Buffer *pBuffer, bool waitForWork)
         vkDestroyBuffer(m_pDevice, pBuffer->m_pHandle, nullptr);
 }
 
-void Context::MapMemory(Buffer *pBuffer, void *&pData)
+void Context::MapMemory(Buffer *pBuffer, void *&pData, u64 offset, u64 size)
 {
     ZoneScoped;
 
-    vkMapMemory(
-        m_pDevice, pBuffer->m_pMemoryHandle, pBuffer->m_AllocatorOffset, pBuffer->m_DeviceDataLen, 0, &pData);
+    vkMapMemory(m_pDevice, pBuffer->m_pMemoryHandle, pBuffer->m_AllocatorOffset + offset, size, 0, &pData);
 }
 
 void Context::UnmapMemory(Buffer *pBuffer)
@@ -1275,8 +1273,8 @@ void Context::SetAllocator(Image *pImage, ResourceAllocator targetAllocator)
     {
         case ResourceAllocator::None:
         {
-            pImage->m_pMemoryHandle =
-                CreateHeap(Memory::AlignUp(memoryRequirements.size, memoryRequirements.alignment), false);
+            pImage->m_pMemoryHandle = CreateHeap(
+                Memory::AlignUp(memoryRequirements.size, memoryRequirements.alignment), MemoryFlag::Device);
 
             break;
         }

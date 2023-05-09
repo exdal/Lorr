@@ -248,15 +248,10 @@ bool ShaderCompiler::CompileShader(
     }
 
     ShaderAllocator.Free(nullptr, false);
-    Memory::AllocationInfo allocInfo = {
-        .m_Size = dataSize,
-        .m_Alignment = alignof(u32),
-    };
-    ShaderAllocator.Allocate(allocInfo);
+    void *pAllocData = ShaderAllocator.Allocate(dataSize, alignof(u32));
+    memcpy(pAllocData, pData, dataSize);
 
-    memcpy(allocInfo.m_pData, pData, dataSize);
-
-    pDataOut = (u32 *)allocInfo.m_pData;
+    pDataOut = (u32 *)pAllocData;
     dataSizeOut = dataSize;
 
     glslang_program_delete(pProgram);

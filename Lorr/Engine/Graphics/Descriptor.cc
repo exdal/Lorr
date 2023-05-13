@@ -14,27 +14,18 @@ DescriptorLayoutElement::DescriptorLayoutElement(
     this->pImmutableSamplers = nullptr;  // TODO: static samplers
 }
 
-DescriptorBindingPushDescriptor::DescriptorBindingPushDescriptor(Buffer *pBuffer)
-{
-    this->sType = VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_PUSH_DESCRIPTOR_BUFFER_HANDLE_EXT;
-    this->pNext = nullptr;
-    this->buffer = pBuffer->m_pHandle;
-}
-
-DescriptorBindingInfo::DescriptorBindingInfo(
-    DescriptorBindingPushDescriptor *pPushDescriptorInfo, Buffer *pBuffer, BufferUsage bufferUsage)
+DescriptorBindingInfo::DescriptorBindingInfo(Buffer *pBuffer, BufferUsage bufferUsage)
 {
     this->sType = VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT;
-    this->pNext = pPushDescriptorInfo;
+    this->pNext = nullptr;
     this->address = pBuffer->m_DeviceAddress;
     this->usage = VK::ToBufferUsage(bufferUsage);
 }
 
 /// `VkDescriptorDataEXT` is an union so var names such as `data.pUniformTexelBuffer`
 /// do not matter, only thing that matters is type
-DescriptorGetInfo::DescriptorGetInfo(u32 binding, DescriptorType type, Buffer *pBuffer, ImageFormat texelFormat)
-    : m_Binding(binding),
-      m_Type(type)
+DescriptorGetInfo::DescriptorGetInfo(Buffer *pBuffer, ImageFormat texelFormat)
+    : m_DescriptorIndex(pBuffer->m_DescriptorIndex)
 {
     m_BufferInfo = {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_ADDRESS_INFO_EXT,
@@ -45,9 +36,8 @@ DescriptorGetInfo::DescriptorGetInfo(u32 binding, DescriptorType type, Buffer *p
     };
 }
 
-DescriptorGetInfo::DescriptorGetInfo(u32 binding, DescriptorType type, Image *pImage)
-    : m_Binding(binding),
-      m_Type(type)
+DescriptorGetInfo::DescriptorGetInfo(Image *pImage)
+    : m_DescriptorIndex(pImage->m_DescriptorIndex)
 {
     m_ImageInfo = {
         .imageView = pImage->m_pViewHandle,
@@ -55,10 +45,8 @@ DescriptorGetInfo::DescriptorGetInfo(u32 binding, DescriptorType type, Image *pI
     };
 }
 
-DescriptorGetInfo::DescriptorGetInfo(u32 binding, DescriptorType type, Sampler *pSampler)
-    : m_Binding(binding),
-      m_Type(DescriptorType::Sampler),
-      m_pSampler(pSampler)
+DescriptorGetInfo::DescriptorGetInfo(Sampler *pSampler)
+    : m_DescriptorIndex(pSampler->m_DescriptorIndex)
 {
 }
 

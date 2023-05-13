@@ -4,31 +4,32 @@
 
 namespace lr
 {
-using namespace Graphics;
 
 void Engine::Init(EngineDesc &engineDesc)
 {
     ZoneScoped;
 
     Logger::Init();
+    Config::Init();
+
     m_EventMan.Init();
     m_Window.Init(engineDesc.m_WindowDesc);
     m_ImGui.Init(m_Window.m_Width, m_Window.m_Height);
 
+    Graphics::APIAllocatorInitDesc gpAllocators = {
+        .m_MaxTLSFAllocations = CONFIG_GET_VAR(gpm_tlsf_allocations),
+        .m_DescriptorMem = CONFIG_GET_VAR(gpm_descriptor),
+        .m_BufferLinearMem = CONFIG_GET_VAR(gpm_buffer_linear),
+        .m_BufferTLSFMem = CONFIG_GET_VAR(gpm_buffer_tlsf),
+        .m_BufferTLSFHostMem = CONFIG_GET_VAR(gpm_buffer_tlsf_host),
+        .m_BufferFrametimeMem = CONFIG_GET_VAR(gpm_frametime),
+        .m_ImageTLSFMem = CONFIG_GET_VAR(gpm_image_tlsf),
+    };
+
     Graphics::APIDesc apiDesc = {
-            .m_Flags = LR_API_FLAG_NONE,
-            .m_SwapChainFlags = SwapChainFlag::TripleBuffering,
-            .m_pTargetWindow = &m_Window,
-            .m_AllocatorDesc = {
-                .m_MaxTLSFAllocations = 0x2000,
-                .m_DescriptorMem = Memory::MiBToBytes(1),
-                .m_BufferLinearMem = Memory::MiBToBytes(64),
-                .m_BufferTLSFMem = Memory::MiBToBytes(256),
-                .m_BufferTLSFHostMem = Memory::MiBToBytes(64),
-                .m_BufferFrametimeMem = Memory::MiBToBytes(64),
-                .m_ImageTLSFMem = Memory::MiBToBytes(1024),
-            },
-        };
+        .m_pTargetWindow = &m_Window,
+        .m_AllocatorDesc = gpAllocators,
+    };
 
     Graphics::RenderGraphDesc renderGraphDesc = {
         .m_APIDesc = apiDesc,

@@ -143,17 +143,21 @@ struct DepthStencilOpDesc
     CompareOp m_CompareFunc : 3;
 };
 
-struct PushConstantDesc
+struct PushConstantDesc : VkPushConstantRange
 {
-    ShaderStage m_Stage = ShaderStage::None;
-    u32 m_Offset : 16 = 0;
-    u32 m_Size : 16 = 0;
+    PushConstantDesc(ShaderStage stage, u32 offset, u32 size);
 };
 
-struct PipelineLayoutSerializeDesc
+struct PipelineLayout : APIObject<VK_OBJECT_TYPE_PIPELINE_LAYOUT>
 {
-    eastl::vector<DescriptorSetLayout *> m_Layouts;
-    eastl::vector<PushConstantDesc> m_PushConstants;
+    VkPipelineLayout m_pHandle = nullptr;
+};
+
+struct Pipeline : APIObject<VK_OBJECT_TYPE_PIPELINE>
+{
+    VkPipelineBindPoint m_BindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    VkPipeline m_pHandle = nullptr;
+    PipelineLayout *m_pLayout = nullptr;
 };
 
 // TODO: Indirect drawing.
@@ -165,8 +169,7 @@ struct GraphicsPipelineBuildInfo
     ImageFormat m_DepthAttachmentFormat = ImageFormat::Unknown;
     eastl::vector<ColorBlendAttachment> m_BlendAttachments = {};
     eastl::vector<Shader *> m_Shaders = {};
-    eastl::vector<DescriptorSetLayout *> m_Layouts = {};
-    eastl::vector<PushConstantDesc> m_PushConstants = {};
+    PipelineLayout *m_pLayout = nullptr;
     InputLayout m_InputLayout = {};
     f32 m_DepthBiasFactor = 0.0;
     f32 m_DepthBiasClamp = 0.0;
@@ -189,15 +192,7 @@ struct GraphicsPipelineBuildInfo
 struct ComputePipelineBuildInfo
 {
     Shader *m_pShader = nullptr;
-    eastl::vector<DescriptorSetLayout *> m_Layouts;
-    eastl::vector<PushConstantDesc> m_PushConstants;
-};
-
-struct Pipeline : APIObject<VK_OBJECT_TYPE_PIPELINE>
-{
-    VkPipelineBindPoint m_BindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    VkPipeline m_pHandle = nullptr;
-    VkPipelineLayout m_pLayout = nullptr;
+    PipelineLayout *m_pLayout = nullptr;
 };
 
 }  // namespace lr::Graphics

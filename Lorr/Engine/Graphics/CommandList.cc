@@ -347,7 +347,8 @@ void CommandList::SetPushConstants(ShaderStage stage, u32 offset, void *pData, u
 {
     ZoneScoped;
 
-    vkCmdPushConstants(m_pHandle, m_pPipeline->m_pLayout, VK::ToShaderType(stage), offset, dataSize, pData);
+    vkCmdPushConstants(
+        m_pHandle, m_pPipeline->m_pLayout->m_pHandle, VK::ToShaderType(stage), offset, dataSize, pData);
 }
 
 void CommandList::SetDescriptorBuffers(eastl::span<DescriptorBindingInfo> bindingInfos)
@@ -365,7 +366,7 @@ void CommandList::SetDescriptorBufferOffsets(
     vkCmdSetDescriptorBufferOffsetsEXT(
         m_pHandle,
         m_pPipeline->m_BindPoint,
-        m_pPipeline->m_pLayout,
+        m_pPipeline->m_pLayout->m_pHandle,
         firstSet,
         setCount,
         indices.data(),

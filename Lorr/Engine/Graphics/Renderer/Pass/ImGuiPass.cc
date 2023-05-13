@@ -1,7 +1,5 @@
+#include "Graphics/Descriptor.hh"
 #include "Graphics/Renderer/Pass.hh"
-
-#include "Resources/imgui.v.hh"
-#include "Resources/imgui.p.hh"
 
 #include <imgui.h>
 
@@ -21,8 +19,6 @@ void AddImguiPass(RenderGraph *pGraph, eastl::string_view name)
         Sampler *m_pSampler;
         Buffer *m_pVertexBuffer;
         Buffer *m_pIndexBuffer;
-        DescriptorSetLayout *m_pResorceLayout;
-        DescriptorSetLayout *m_pSamplerLayout;
         u32 m_VertexCount;
         u32 m_IndexCount;
     };
@@ -62,28 +58,19 @@ void AddImguiPass(RenderGraph *pGraph, eastl::string_view name)
             };
             data.m_pSampler = pContext->CreateSampler(&samplerDesc);
 
-            DescriptorLayoutElement imageLayoutElement(0, DescriptorType::SampledImage, ShaderStage::Pixel);
-            DescriptorLayoutElement samplerLayoutElement(0, DescriptorType::Sampler, ShaderStage::Pixel);
+            DescriptorGetInfo imageDescriptorInfo(data.m_pFontImage);
+            DescriptorGetInfo samplerDescriptorInfo(data.m_pSampler);
 
-            data.m_pResorceLayout = pContext->CreateDescriptorSetLayout(imageLayoutElement);
-            data.m_pSamplerLayout = pContext->CreateDescriptorSetLayout(samplerLayoutElement);
+            builder.SetDescriptorSet(DescriptorType::SampledImage, imageDescriptorInfo);
+            builder.SetDescriptorSet(DescriptorType::Sampler, samplerDescriptorInfo);
 
-            DescriptorGetInfo imageDescriptorInfo(0, DescriptorType::SampledImage, data.m_pFontImage);
-            DescriptorGetInfo samplerDescriptorInfo(0, DescriptorType::Sampler, data.m_pSampler);
-
-            builder.SetResourceDescriptorSet(data.m_pResorceLayout, imageDescriptorInfo);
-            builder.SetSamplerDescriptorSet(data.m_pSamplerLayout, samplerDescriptorInfo);
-
-            BufferReadStream vertexShaderData((void *)kShader_imgui_v, kShader_imgui_v_length);
-            BufferReadStream pixelShaderData((void *)kShader_imgui_p, kShader_imgui_p_length);
+            FileStream vertexShaderData("imgui.v.glsl", false);
+            FileStream pixelShaderData("imgui.p.glsl", false);
 
             builder.SetColorAttachment("$backbuffer", { AttachmentOp::Load, AttachmentOp::Store });
             builder.SetBlendAttachment({ true });
-            builder.SetShader(pContext->CreateShader(ShaderStage::Vertex, vertexShaderData));
-            builder.SetShader(pContext->CreateShader(ShaderStage::Pixel, pixelShaderData));
-            builder.SetDescriptorSetLayout(data.m_pResorceLayout);
-            builder.SetDescriptorSetLayout(data.m_pSamplerLayout);
-            builder.SetPushConstant({ .m_Stage = ShaderStage::Vertex, .m_Size = sizeof(PushConstant) });
+            // builder.SetShader(pContext->CreateShader(ShaderStage::Vertex, vertexShaderData));
+            // builder.SetShader(pContext->CreateShader(ShaderStage::Pixel, pixelShaderData));
             builder.SetInputLayout({
                 LR_VERTEX_ATTRIB_SFLOAT2,
                 LR_VERTEX_ATTRIB_SFLOAT2,
@@ -186,9 +173,8 @@ void AddImguiPass(RenderGraph *pGraph, eastl::string_view name)
             u32 indexOffset = 0;
             for (u32 i = 0; i < pDrawData->CmdListsCount; i++)
             {
-                const ImDrawList *pDrawList = pDrawData->CmdLists[i];
-
-                for (auto &cmd : pDrawList->CmdBuffer)
+                ImDrawList *pDrawList = pDrawData->CmdLists[i];
+                for (ImDrawCmd &cmd : pDrawList->CmdBuffer)
                 {
                     ImVec2 clipMin(cmd.ClipRect.x - clipOffset.x, cmd.ClipRect.y - clipOffset.y);
                     ImVec2 clipMax(cmd.ClipRect.z - clipOffset.x, cmd.ClipRect.w - clipOffset.y);

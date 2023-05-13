@@ -163,16 +163,9 @@ struct RenderPassBuilder
         NameID resource, InputResourceAccess access, InputResourceFlag flags = InputResourceFlag::None);
     void SetBlendAttachment(const ColorBlendAttachment &attachment);
     void SetPushConstant(const PushConstantDesc &pushConstant);
-    void SetResourceDescriptorSet(DescriptorSetLayout *pLayout, eastl::span<DescriptorGetInfo> elements);
-    void SetSamplerDescriptorSet(DescriptorSetLayout *pLayout, eastl::span<DescriptorGetInfo> elements);
-    void SetDescriptorSetLayout(DescriptorSetLayout *pLayout);
+    void SetDescriptorSet(DescriptorType type, eastl::span<DescriptorGetInfo> elements);
     void SetShader(Shader *pShader);
     void SetInputLayout(const InputLayout &layout);
-
-    Buffer *GetResourceDescriptorBuffer() { return m_ResourceDescriptorInfo.m_pBuffer; }
-    u64 GetResourceDescriptorOffset() { return m_ResourceDescriptorInfo.m_BufferOffset; }
-    Buffer *GetSamplerDescriptorBuffer() { return m_SamplerDescriptorInfo.m_pBuffer; }
-    u64 GetSamplerDescriptorOffset() { return m_SamplerDescriptorInfo.m_BufferOffset; }
 
     union
     {
@@ -189,8 +182,9 @@ struct RenderPassBuilder
         u64 m_BufferOffset = 0;
     };
 
-    DescriptorBufferInfo m_ResourceDescriptorInfo = {};
-    DescriptorBufferInfo m_SamplerDescriptorInfo = {};
+    eastl::array<DescriptorBufferInfo, (u32)DescriptorType::Count> m_DescriptorBufferInfos = {};
+    DescriptorSetLayout *m_pDescriptorLayout = nullptr;
+    PipelineLayout *m_pPipelineLayout = nullptr;
 
     Context *m_pContext = nullptr;
     RenderGraph *m_pGraph = nullptr;

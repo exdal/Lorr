@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include "Config.hh"
+
 #include "Window/Win32/Win32Window.hh"
 #include "Graphics/RenderGraph/RenderGraph.hh"
 

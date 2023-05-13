@@ -1,0 +1,31 @@
+# Comment
+# Comment
+# Comment
+# Comment 
+
+GlobalVar = "Yes"
+Category
+{   
+    Hello      = "Hello World"
+
+    HexVal     = 0xa5be8
+
+    Num1       = 12
+    NegNum     = -16
+
+    Float      = 13.37
+    NegFloat   = -73.31
+
+    Bool_true  = true
+    Bool_false = false
+
+    SubCategory
+    {
+        SubWord = "Hey"
+        SubArray = [ 1, 2, 3, 4 ]
+        SubSubCategory
+        {
+            SubSubWord = "Deep"
+        }
+    }
+}

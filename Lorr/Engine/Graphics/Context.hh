@@ -36,13 +36,13 @@ EnumFlags(MemoryFlag);
 
 struct APIAllocatorInitDesc
 {
-    u32 m_MaxTLSFAllocations = 0x20000;
-    u32 m_DescriptorMem = Memory::MiBToBytes(32);
-    u32 m_BufferLinearMem = Memory::MiBToBytes(128);
-    u32 m_BufferTLSFMem = Memory::MiBToBytes(1024);
-    u32 m_BufferTLSFHostMem = Memory::MiBToBytes(128);
-    u32 m_BufferFrametimeMem = Memory::MiBToBytes(128);
-    u32 m_ImageTLSFMem = Memory::MiBToBytes(1024);
+    u32 m_MaxTLSFAllocations;
+    u32 m_DescriptorMem;
+    u32 m_BufferLinearMem;
+    u32 m_BufferTLSFMem;
+    u32 m_BufferTLSFHostMem;
+    u32 m_BufferFrametimeMem;
+    u32 m_ImageTLSFMem;
 };
 
 struct APIDesc
@@ -89,7 +89,8 @@ struct Context
 
     /// PIPELINE ///
     VkPipelineCache CreatePipelineCache(u32 initialDataSize = 0, void *pInitialData = nullptr);
-    VkPipelineLayout SerializePipelineLayout(PipelineLayoutSerializeDesc *pDesc, Pipeline *pPipeline);
+    PipelineLayout *CreatePipelineLayout(
+        eastl::span<DescriptorSetLayout *> layouts, eastl::span<PushConstantDesc> pushConstants);
 
     Pipeline *CreateGraphicsPipeline(GraphicsPipelineBuildInfo *pBuildInfo);
     Pipeline *CreateComputePipeline(ComputePipelineBuildInfo *pBuildInfo);
@@ -114,11 +115,11 @@ struct Context
 
     DescriptorSetLayout *CreateDescriptorSetLayout(
         eastl::span<DescriptorLayoutElement> elements,
-        DescriptorSetLayoutType type = DescriptorSetLayoutType::None);
+        DescriptorSetLayoutFlag flags = DescriptorSetLayoutFlag::DescriptorBuffer);
     u64 GetDescriptorSetLayoutSize(DescriptorSetLayout *pLayout);  // ALIGNED!!!
     u64 GetDescriptorSetLayoutBindingOffset(DescriptorSetLayout *pLayout, u32 bindingID);
     u64 GetDescriptorSize(DescriptorType type);
-    void GetDescriptorData(const DescriptorGetInfo &info, u64 dataSize, void *pDataOut);
+    void GetDescriptorData(DescriptorType type, const DescriptorGetInfo &info, u64 dataSize, void *pDataOut);
 
     // * Buffers * //
     VkDeviceMemory CreateHeap(u64 heapSize, MemoryFlag flags);

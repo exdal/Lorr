@@ -253,14 +253,16 @@ Semaphore *Context::CreateSemaphore(u32 initialValue, bool binary)
     Semaphore *pSemaphore = new Semaphore;
     pSemaphore->m_Value = initialValue;
 
-    VkSemaphoreTypeCreateInfo semaphoreTypeInfo = {};
-    semaphoreTypeInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO;
-    semaphoreTypeInfo.semaphoreType = binary ? VK_SEMAPHORE_TYPE_BINARY : VK_SEMAPHORE_TYPE_TIMELINE;
-    semaphoreTypeInfo.initialValue = pSemaphore->m_Value;
+    VkSemaphoreTypeCreateInfo semaphoreTypeInfo = {
+        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO,
+        .semaphoreType = binary ? VK_SEMAPHORE_TYPE_BINARY : VK_SEMAPHORE_TYPE_TIMELINE,
+        .initialValue = pSemaphore->m_Value,
+    };
 
-    VkSemaphoreCreateInfo semaphoreInfo = {};
-    semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-    semaphoreInfo.pNext = &semaphoreTypeInfo;
+    VkSemaphoreCreateInfo semaphoreInfo = {
+        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+        .pNext = &semaphoreTypeInfo,
+    };
 
     vkCreateSemaphore(m_pDevice, &semaphoreInfo, nullptr, &pSemaphore->m_pHandle);
 
@@ -279,11 +281,12 @@ void Context::WaitForSemaphore(Semaphore *pSemaphore, u64 desiredValue, u64 time
 {
     ZoneScoped;
 
-    VkSemaphoreWaitInfo waitInfo = {};
-    waitInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO;
-    waitInfo.semaphoreCount = 1;
-    waitInfo.pSemaphores = &pSemaphore->m_pHandle;
-    waitInfo.pValues = &desiredValue;
+    VkSemaphoreWaitInfo waitInfo = {
+        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
+        .semaphoreCount = 1,
+        .pSemaphores = &pSemaphore->m_pHandle,
+        .pValues = &desiredValue,
+    };
 
     vkWaitSemaphores(m_pDevice, &waitInfo, timeout);
 }
@@ -292,47 +295,40 @@ VkPipelineCache Context::CreatePipelineCache(u32 initialDataSize, void *pInitial
 {
     ZoneScoped;
 
+    VkPipelineCacheCreateInfo createInfo = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO,
+        .initialDataSize = initialDataSize,
+        .pInitialData = pInitialData,
+    };
+
     VkPipelineCache pHandle = nullptr;
-
-    VkPipelineCacheCreateInfo createInfo = {};
-    createInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
-    createInfo.initialDataSize = initialDataSize;
-    createInfo.pInitialData = pInitialData;
-
     vkCreatePipelineCache(m_pDevice, &createInfo, nullptr, &pHandle);
 
     return pHandle;
 }
 
-VkPipelineLayout Context::SerializePipelineLayout(PipelineLayoutSerializeDesc *pDesc, Pipeline *pPipeline)
+PipelineLayout *Context::CreatePipelineLayout(
+    eastl::span<DescriptorSetLayout *> layouts, eastl::span<PushConstantDesc> pushConstants)
 {
     ZoneScoped;
 
-    VkDescriptorSetLayout pSetLayouts[LR_MAX_DESCRIPTOR_SETS_PER_PIPELINE] = {};
+    eastl::vector<VkDescriptorSetLayout> layoutHandles(layouts.size());
 
-    for (u32 i = 0; i < pDesc->m_Layouts.size(); i++)
-        pSetLayouts[i] = pDesc->m_Layouts[i]->m_pHandle;
+    u32 idx = 0;
+    for (DescriptorSetLayout *pLayout : layouts)
+        layoutHandles[idx++] = pLayout->m_pHandle;
 
-    VkPushConstantRange pPushConstants[LR_MAX_PUSH_CONSTANTS_PER_PIPELINE] = {};
+    VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+        .pNext = nullptr,
+        .setLayoutCount = (u32)layouts.size(),
+        .pSetLayouts = layoutHandles.data(),
+        .pushConstantRangeCount = (u32)pushConstants.size(),
+        .pPushConstantRanges = pushConstants.data(),
+    };
 
-    for (u32 i = 0; i < pDesc->m_PushConstants.size(); i++)
-    {
-        PushConstantDesc &pushConstant = pDesc->m_PushConstants[i];
-
-        pPushConstants[i].stageFlags = VK::ToShaderType(pushConstant.m_Stage);
-        pPushConstants[i].offset = pushConstant.m_Offset;
-        pPushConstants[i].size = pushConstant.m_Size;
-    }
-
-    VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo = {};
-    pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipelineLayoutCreateInfo.setLayoutCount = pDesc->m_Layouts.size();
-    pipelineLayoutCreateInfo.pSetLayouts = pSetLayouts;
-    pipelineLayoutCreateInfo.pushConstantRangeCount = pDesc->m_PushConstants.size();
-    pipelineLayoutCreateInfo.pPushConstantRanges = pPushConstants;
-
-    VkPipelineLayout pLayout = nullptr;
-    vkCreatePipelineLayout(m_pDevice, &pipelineLayoutCreateInfo, nullptr, &pLayout);
+    PipelineLayout *pLayout = new PipelineLayout;
+    vkCreatePipelineLayout(m_pDevice, &pipelineLayoutCreateInfo, nullptr, &pLayout->m_pHandle);
 
     return pLayout;
 }
@@ -343,16 +339,7 @@ Pipeline *Context::CreateGraphicsPipeline(GraphicsPipelineBuildInfo *pBuildInfo)
 
     Pipeline *pPipeline = new Pipeline;
     pPipeline->m_BindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-
-    /// PIPELINE LAYOUT ----------------------------------------------------------
-
-    PipelineLayoutSerializeDesc layoutDesc = {
-        .m_Layouts = pBuildInfo->m_Layouts,
-        .m_PushConstants = pBuildInfo->m_PushConstants,
-    };
-
-    VkPipelineLayout pLayout = SerializePipelineLayout(&layoutDesc, pPipeline);
-    pPipeline->m_pLayout = pLayout;
+    pPipeline->m_pLayout = pBuildInfo->m_pLayout;
 
     /// BOUND RENDER TARGETS -----------------------------------------------------
 
@@ -504,30 +491,32 @@ Pipeline *Context::CreateGraphicsPipeline(GraphicsPipelineBuildInfo *pBuildInfo)
         VK_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY,
     };
 
-    VkPipelineDynamicStateCreateInfo dynamicStateInfo = {};
-    dynamicStateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-    dynamicStateInfo.pNext = nullptr;
-    dynamicStateInfo.dynamicStateCount = kDynamicStates.count;
-    dynamicStateInfo.pDynamicStates = kDynamicStates.data();
+    VkPipelineDynamicStateCreateInfo dynamicStateInfo = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+        .pNext = nullptr,
+        .dynamicStateCount = kDynamicStates.count,
+        .pDynamicStates = kDynamicStates.data(),
+    };
 
     /// GRAPHICS PIPELINE --------------------------------------------------------
 
-    VkGraphicsPipelineCreateInfo createInfo = {};
-    createInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-    createInfo.pNext = &renderingInfo;
-    createInfo.flags = VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
-    createInfo.stageCount = pBuildInfo->m_Shaders.size();
-    createInfo.pStages = pShaderStageInfos;
-    createInfo.pVertexInputState = &inputLayoutInfo;
-    createInfo.pInputAssemblyState = &inputAssemblyInfo;
-    createInfo.pTessellationState = &tessellationInfo;
-    createInfo.pViewportState = &viewportInfo;
-    createInfo.pRasterizationState = &rasterizerInfo;
-    createInfo.pMultisampleState = &multisampleInfo;
-    createInfo.pDepthStencilState = &depthStencilInfo;
-    createInfo.pColorBlendState = &colorBlendInfo;
-    createInfo.pDynamicState = &dynamicStateInfo;
-    createInfo.layout = pLayout;
+    VkGraphicsPipelineCreateInfo createInfo = {
+        .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+        .pNext = &renderingInfo,
+        .flags = VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT,
+        .stageCount = (u32)pBuildInfo->m_Shaders.size(),
+        .pStages = pShaderStageInfos,
+        .pVertexInputState = &inputLayoutInfo,
+        .pInputAssemblyState = &inputAssemblyInfo,
+        .pTessellationState = &tessellationInfo,
+        .pViewportState = &viewportInfo,
+        .pRasterizationState = &rasterizerInfo,
+        .pMultisampleState = &multisampleInfo,
+        .pDepthStencilState = &depthStencilInfo,
+        .pColorBlendState = &colorBlendInfo,
+        .pDynamicState = &dynamicStateInfo,
+        .layout = pBuildInfo->m_pLayout->m_pHandle,
+    };
 
     vkCreateGraphicsPipelines(m_pDevice, m_pPipelineCache, 1, &createInfo, nullptr, &pPipeline->m_pHandle);
 
@@ -540,28 +529,24 @@ Pipeline *Context::CreateComputePipeline(ComputePipelineBuildInfo *pBuildInfo)
 
     Pipeline *pPipeline = new Pipeline;
     pPipeline->m_BindPoint = VK_PIPELINE_BIND_POINT_COMPUTE;
+    pPipeline->m_pLayout = pBuildInfo->m_pLayout;
 
-    PipelineLayoutSerializeDesc layoutDesc = {
-        .m_Layouts = pBuildInfo->m_Layouts,
-        .m_PushConstants = pBuildInfo->m_PushConstants,
+    VkPipelineShaderStageCreateInfo shaderStage = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = 0,
+        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
+        .module = pBuildInfo->m_pShader->m_pHandle,
+        .pName = "main",
+        .pSpecializationInfo = nullptr,
     };
 
-    VkPipelineLayout pLayout = SerializePipelineLayout(&layoutDesc, pPipeline);
-    pPipeline->m_pLayout = pLayout;
-
-    VkComputePipelineCreateInfo createInfo = {};
-    createInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
-    createInfo.pNext = nullptr;
-    createInfo.layout = pLayout;
-
-    VkPipelineShaderStageCreateInfo &shaderStage = createInfo.stage;
-    shaderStage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    shaderStage.pNext = nullptr;
-    shaderStage.flags = 0;
-    shaderStage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
-    shaderStage.pName = "main";
-    shaderStage.module = pBuildInfo->m_pShader->m_pHandle;
-    shaderStage.pSpecializationInfo = nullptr;
+    VkComputePipelineCreateInfo createInfo = {
+        .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+        .pNext = nullptr,
+        .stage = shaderStage,
+        .layout = pBuildInfo->m_pLayout->m_pHandle,
+    };
 
     vkCreateComputePipelines(m_pDevice, m_pPipelineCache, 1, &createInfo, nullptr, &pPipeline->m_pHandle);
 
@@ -632,7 +617,7 @@ SwapChain *Context::CreateSwapChain(BaseWindow *pWindow, SwapChainFlag flags, Sw
 
     for (u32 i = 0; i < pSwapChain->m_FrameCount; i++)
     {
-        SwapChainFrame &frame = pSwapChain->m_pFrames[i];
+        SwapChainFrame &frame = pSwapChain->m_Frames[i];
         Image *&pImage = frame.m_pImage;
 
         pImage = new Image;
@@ -662,7 +647,7 @@ void Context::DeleteSwapChain(SwapChain *pSwapChain, bool keepSelf)
 
     for (u32 i = 0; i < pSwapChain->m_FrameCount; i++)
     {
-        SwapChainFrame &frame = pSwapChain->m_pFrames[i];
+        SwapChainFrame &frame = pSwapChain->m_Frames[i];
         DeleteSemaphore(frame.m_pPresentSemp);
 
         auto &bufferQueue = frame.m_BufferDeleteQueue;
@@ -848,22 +833,21 @@ void Context::DeleteShader(Shader *pShader)
 }
 
 DescriptorSetLayout *Context::CreateDescriptorSetLayout(
-    eastl::span<DescriptorLayoutElement> elements, DescriptorSetLayoutType type)
+    eastl::span<DescriptorLayoutElement> elements, DescriptorSetLayoutFlag flags)
 {
     ZoneScoped;
 
-    static constexpr VkDescriptorSetLayoutCreateFlags kCreateFlags[] = {
-        VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT,
-        VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR,
-        VK_DESCRIPTOR_SET_LAYOUT_CREATE_EMBEDDED_IMMUTABLE_SAMPLERS_BIT_EXT,
-    };
-
     DescriptorSetLayout *pLayout = new DescriptorSetLayout;
-    pLayout->m_Type = type;
+
+    VkDescriptorSetLayoutCreateFlags createFlags = 0;
+    if (flags & DescriptorSetLayoutFlag::DescriptorBuffer)
+        createFlags |= VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
+    if (flags & DescriptorSetLayoutFlag::EmbeddedSamplers)
+        createFlags |= VK_DESCRIPTOR_SET_LAYOUT_CREATE_EMBEDDED_IMMUTABLE_SAMPLERS_BIT_EXT;
 
     VkDescriptorSetLayoutCreateInfo layoutCreateInfo = {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-        .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT | kCreateFlags[(u32)type],
+        .flags = createFlags,
         .bindingCount = (u32)elements.size(),
         .pBindings = elements.data(),
     };
@@ -909,7 +893,8 @@ u64 Context::GetDescriptorSize(DescriptorType type)
     return sizeArray[(u32)type];
 }
 
-void Context::GetDescriptorData(const DescriptorGetInfo &info, u64 dataSize, void *pDataOut)
+void Context::GetDescriptorData(
+    DescriptorType type, const DescriptorGetInfo &info, u64 dataSize, void *pDataOut)
 {
     ZoneScoped;
 
@@ -917,7 +902,7 @@ void Context::GetDescriptorData(const DescriptorGetInfo &info, u64 dataSize, voi
     VkDescriptorGetInfoEXT vkInfo = {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT,
         .pNext = nullptr,
-        .type = VK::ToDescriptorType(info.m_Type),
+        .type = VK::ToDescriptorType(type),
         .data = descriptorData,
     };
 
@@ -956,9 +941,6 @@ Buffer *Context::CreateBuffer(BufferDesc *pDesc)
 
     Buffer *pBuffer = new Buffer;
     pBuffer->Init(pDesc);
-
-    if (m_pPhysicalDevice->m_FeatureDescriptorBufferProps.bufferlessPushDescriptors)
-        pDesc->m_UsageFlags &= ~BufferUsage::PushDescriptor;
 
     VkBufferCreateInfo createInfo = {
         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,

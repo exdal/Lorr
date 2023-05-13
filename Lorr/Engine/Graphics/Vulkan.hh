@@ -122,7 +122,7 @@
     _VK_DEFINE_FUNCTION(vkGetDescriptorSetLayoutSizeEXT);              \
     _VK_DEFINE_FUNCTION(vkGetImageOpaqueCaptureDescriptorDataEXT);     \
     _VK_DEFINE_FUNCTION(vkGetImageViewOpaqueCaptureDescriptorDataEXT); \
-    _VK_DEFINE_FUNCTION(vkGetSamplerOpaqueCaptureDescriptorDataEXT);
+    _VK_DEFINE_FUNCTION(vkGetSamplerOpaqueCaptureDescriptorDataEXT);   
 
 #define _VK_IMPORT_INSTANCE_SYMBOLS _VK_DEFINE_FUNCTION(vkSetDebugUtilsObjectNameEXT);
 

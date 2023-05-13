@@ -18,7 +18,6 @@ enum class BufferUsage : u32
     Storage = 1 << 5,
     SamplerDescriptor = 1 << 6,
     ResourceDescriptor = 1 << 7,
-    PushDescriptor = 1 << 8,
 };
 EnumFlags(BufferUsage);
 
@@ -43,6 +42,7 @@ struct Buffer : APIObject<VK_OBJECT_TYPE_BUFFER>
     ResourceAllocator m_TargetAllocator = ResourceAllocator::None;
     void *m_pAllocatorData = nullptr;
 
+    u32 m_DescriptorIndex = -1;
     u32 m_Stride = 1;
     u64 m_DataLen = 0;
 

@@ -1,7 +1,16 @@
 #include "Pipeline.hh"
 
+#include "VulkanType.hh"
+
 namespace lr::Graphics
 {
+PushConstantDesc::PushConstantDesc(ShaderStage stage, u32 offset, u32 size)
+{
+    this->stageFlags = VK::ToShaderType(stage);
+    this->offset = offset;
+    this->size = size;
+}
+
 constexpr VkBlendFactor kBlendFactorLUT[] = {
     VK_BLEND_FACTOR_ZERO,                      // Zero
     VK_BLEND_FACTOR_ONE,                       // One

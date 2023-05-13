@@ -13,10 +13,10 @@
 
 namespace lr::Graphics
 {
-enum class SwapChainFlag : u8
+enum class SwapChainFlag : u8  // Reserved for future use
 {
-    None,                       // Buffer count = 2
-    VSync = 1 << 0,             // Buffer count = 1
+    None,                      // Buffer count = 2
+    VSync = 1 << 0,            // Buffer count = 1
     TripleBuffering = 1 << 2,  // Buffer count = 3
 };
 EnumFlags(SwapChainFlag);
@@ -45,7 +45,7 @@ struct SwapChain : APIObject<VK_OBJECT_TYPE_SWAPCHAIN_KHR>
     u32 m_Width = 0;
     u32 m_Height = 0;
     bool m_vSync = false;
-    SwapChainFrame m_pFrames[LR_MAX_FRAME_COUNT] = {};
+    eastl::fixed_vector<SwapChainFrame, 6, false> m_Frames = {};
 
     ImageFormat m_ImageFormat = ImageFormat::BGRA8F;
     VkColorSpaceKHR m_ColorSpace = VK_COLOR_SPACE_MAX_ENUM_KHR;

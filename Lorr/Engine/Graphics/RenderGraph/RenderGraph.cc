@@ -114,28 +114,27 @@ void RenderGraph::Prepare()
         builder.BuildPass(pPass);
     }
 
-    BufferDesc resourceBufferDesc = {
-        .m_UsageFlags =
-            BufferUsage::ResourceDescriptor | BufferUsage::PushDescriptor | BufferUsage::TransferDst,
-        .m_TargetAllocator = ResourceAllocator::BufferTLSF,
-        .m_DataLen = builder.GetResourceDescriptorOffset(),
-    };
-    m_pResourceDescriptorBuffer = m_pContext->CreateBuffer(&resourceBufferDesc);
+    // BufferDesc resourceBufferDesc = {
+    //     .m_UsageFlags = BufferUsage::ResourceDescriptor | BufferUsage::TransferDst,
+    //     .m_TargetAllocator = ResourceAllocator::BufferTLSF,
+    //     .m_DataLen = builder.GetResourceDescriptorOffset(),
+    // };
+    // m_pResourceDescriptorBuffer = m_pContext->CreateBuffer(&resourceBufferDesc);
 
-    BufferDesc samplerBufferDesc = {
-        .m_UsageFlags = BufferUsage::SamplerDescriptor | BufferUsage::PushDescriptor | BufferUsage::TransferDst,
-        .m_TargetAllocator = ResourceAllocator::BufferTLSF,
-        .m_DataLen = builder.GetSamplerDescriptorOffset(),
-    };
-    m_pSamplerDescriptorBuffer = m_pContext->CreateBuffer(&samplerBufferDesc);
+    // BufferDesc samplerBufferDesc = {
+    //     .m_UsageFlags = BufferUsage::SamplerDescriptor | BufferUsage::TransferDst,
+    //     .m_TargetAllocator = ResourceAllocator::BufferTLSF,
+    //     .m_DataLen = builder.GetSamplerDescriptorOffset(),
+    // };
+    // m_pSamplerDescriptorBuffer = m_pContext->CreateBuffer(&samplerBufferDesc);
 
-    m_pContext->BeginCommandList(m_pSetupList);
-    m_pSetupList->CopyBuffer(
-        builder.GetResourceDescriptorBuffer(), m_pResourceDescriptorBuffer, resourceBufferDesc.m_DataLen);
-    m_pSetupList->CopyBuffer(
-        builder.GetSamplerDescriptorBuffer(), m_pSamplerDescriptorBuffer, samplerBufferDesc.m_DataLen);
-    m_pContext->EndCommandList(m_pSetupList);
-    SubmitList(m_pSetupList, PipelineStage::AllCommands, PipelineStage::AllCommands);
+    // m_pContext->BeginCommandList(m_pSetupList);
+    // m_pSetupList->CopyBuffer(
+    //     builder.GetResourceDescriptorBuffer(), m_pResourceDescriptorBuffer, resourceBufferDesc.m_DataLen);
+    // m_pSetupList->CopyBuffer(
+    //     builder.GetSamplerDescriptorBuffer(), m_pSamplerDescriptorBuffer, samplerBufferDesc.m_DataLen);
+    // m_pContext->EndCommandList(m_pSetupList);
+    // SubmitList(m_pSetupList, PipelineStage::AllCommands, PipelineStage::AllCommands);
 }
 
 void RenderGraph::Draw()
@@ -313,19 +312,9 @@ void RenderGraph::RecordGraphicsPass(GraphicsRenderPass *pPass, CommandList *pLi
     {
         pList->SetPipeline(pPass->m_pPipeline);
 
-        DescriptorBindingPushDescriptor resourcePushDescriptor(m_pResourceDescriptorBuffer);
-        DescriptorBindingPushDescriptor samplerPushDescriptor(m_pSamplerDescriptorBuffer);
-
-        bool bufferlessPushDescriptors =
-            m_pContext->m_pPhysicalDevice->m_FeatureDescriptorBufferProps.bufferlessPushDescriptors;
-
         DescriptorBindingInfo pBindingInfos[] = {
-            { bufferlessPushDescriptors ? nullptr : &resourcePushDescriptor,
-              m_pResourceDescriptorBuffer,
-              BufferUsage::ResourceDescriptor },
-            { bufferlessPushDescriptors ? nullptr : &samplerPushDescriptor,
-              m_pSamplerDescriptorBuffer,
-              BufferUsage::SamplerDescriptor },
+            { m_pResourceDescriptorBuffer, BufferUsage::ResourceDescriptor },
+            { m_pSamplerDescriptorBuffer, BufferUsage::SamplerDescriptor },
         };
         pList->SetDescriptorBuffers(pBindingInfos);
 

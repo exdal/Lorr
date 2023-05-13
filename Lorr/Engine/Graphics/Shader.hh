@@ -18,6 +18,7 @@ enum class ShaderStage : u32
     Compute = 1 << 2,
     TessellationControl = 1 << 3,
     TessellationEvaluation = 1 << 4,
+    All = Vertex | Pixel | Compute | TessellationControl | TessellationEvaluation,
     Count = 5,
 };
 

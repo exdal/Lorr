@@ -87,6 +87,7 @@ struct Image : APIObject<VK_OBJECT_TYPE_IMAGE>
     u32 m_ArraySize = 1;
     u32 m_MipMapLevels = 1;
     VkImageAspectFlags m_ImageAspect = 0;
+    u32 m_DescriptorIndex = -1;
 
     u64 m_DataLen = 0;
     u64 m_AllocatorOffset = 0;
@@ -164,6 +165,7 @@ struct SamplerDesc
 struct Sampler : APIObject<VK_OBJECT_TYPE_SAMPLER>
 {
     VkSampler m_pHandle = nullptr;
+    u32 m_DescriptorIndex = -1;
 };
 
 }  // namespace lr::Graphics

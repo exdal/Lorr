@@ -33,6 +33,8 @@ struct RingBuffer
         return true;
     }
 
+    bool empty() { return m_Size == 0; }
+
     u32 m_Size = 0;
     u32 m_Head = 0;
     u32 m_Tail = 0;
@@ -82,6 +84,8 @@ struct RingBufferAtomic
 
         return true;
     }
+
+    bool empty() { return m_Size.load(eastl::memory_order_acquire) == 0; }
 
     eastl::atomic<u32> m_Size = 0;
     eastl::atomic<u32> m_Head = 0;

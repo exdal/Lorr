@@ -82,7 +82,7 @@ namespace lr
         void BeginFrame();
         void EndFrame();
 
-        EventManager<EngineEventData> m_EventMan;
+        EventManager<EngineEventData, 64> m_EventMan;
         Win32Window m_Window;
         Graphics::RenderGraph m_RenderGraph;
         UI::ImGuiHandler m_ImGui;

@@ -16,7 +16,6 @@ void Engine::Init(EngineDesc &engineDesc)
     Config::Init();
     Job::JobManager::Init(CONFIG_GET_VAR(jm_worker_count));
 
-    m_EventMan.Init();
     m_Window.Init(engineDesc.m_WindowDesc);
     // m_ImGui.Init(m_Window.m_Width, m_Window.m_Height);
 
@@ -55,11 +54,10 @@ void Engine::DispatchEvents()
 {
     ZoneScoped;
 
-    u32 eventID = LR_INVALID_EVENT_ID;
-    while (m_EventMan.Peek(eventID))
+    while (m_EventMan.Peek())
     {
         EngineEventData data = {};
-        Event event = m_EventMan.Dispatch(eventID, data);
+        Event event = m_EventMan.Dispatch(data);
 
         switch (event)
         {
@@ -87,7 +85,7 @@ void Engine::DispatchEvents()
             case ENGINE_EVENT_CURSOR_STATE:
                 m_Window.SetCursor(data.m_WindowCursor);
                 break;
-                
+
             default:
                 break;
         }

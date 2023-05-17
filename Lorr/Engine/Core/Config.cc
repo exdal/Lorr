@@ -1,5 +1,7 @@
-#include "Config.hh"
+// Created on Saturday May 13th 2023 by exdal
+// Last modified on Wednesday May 17th 2023 by exdal
 
+#include "Config.hh"
 #include "LM/Parser.hh"
 
 #define CONFIG_ASSIGN_VAL(type, name)                                        \
@@ -45,6 +47,8 @@ bool Config::Init()
     CONFIG_ASSIGN_VAL(u32, gpm_image_tlsf);
     
     CONFIG_ASSIGN_VAL(u32, api_swapchain_frames);
+
+    CONFIG_ASSIGN_VAL(u32, jm_worker_count);
 
     return true;
 }

@@ -1,10 +1,9 @@
-//
-// Created on Wednesday 4th May 2022 by exdal
-//
+// Created on Wednesday May 4th 2022 by exdal
+// Last modified on Wednesday May 17th 2023 by exdal
 
 #pragma once
 
-#include "Config.hh"
+#include "Core/Config.hh"
 
 #include "Window/Win32/Win32Window.hh"
 #include "Graphics/RenderGraph/RenderGraph.hh"

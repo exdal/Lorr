@@ -1,12 +1,10 @@
 // Created on Saturday May 13th 2023 by exdal
-// Last modified on Tuesday May 16th 2023 by exdal
+// Last modified on Wednesday May 17th 2023 by exdal
 
 #pragma once
 
 #include "Crypt/FNV.hh"
-
 #include "Graphics/SwapChain.hh"
-
 #include "Memory/MemoryUtils.hh"
 
 #define CONFIG_GET_VAR(name) Config::Get().name.Val
@@ -47,6 +45,8 @@ struct Config
     CONFIG_DEFINE_VAR_DEFAULT(u32, gpm_image_tlsf, (Memory::MiBToBytes(1024)));
 
     CONFIG_DEFINE_VAR_DEFAULT(u32, api_swapchain_frames, (3));
+    
+    CONFIG_DEFINE_VAR_DEFAULT(u32, jm_worker_count, (4));
 };
 }  // namespace lr
 

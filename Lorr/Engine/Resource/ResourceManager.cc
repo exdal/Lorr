@@ -1,9 +1,9 @@
 // Created on Monday May 15th 2023 by exdal
-// Last modified on Tuesday May 16th 2023 by exdal
+// Last modified on Wednesday May 17th 2023 by exdal
 
 #include "ResourceManager.hh"
 
-#include "Config.hh"
+#include "Core/Config.hh"
 
 namespace lr::Resource
 {

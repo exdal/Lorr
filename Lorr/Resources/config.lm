@@ -25,3 +25,6 @@ gpm_image_tlsf = 0
 
 # Graphics - API
 api_swapchain_frames = 3
+
+# Job Manager
+jm_worker_count = 6

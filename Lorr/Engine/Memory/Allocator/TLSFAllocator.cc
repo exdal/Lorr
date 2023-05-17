@@ -1,5 +1,5 @@
 // Created on Friday November 18th 2022 by exdal
-// Last modified on Monday May 15th 2023 by exdal
+// Last modified on Wednesday May 17th 2023 by exdal
 
 #include "TLSFAllocator.hh"
 
@@ -302,16 +302,12 @@ void TLSFAllocatorView::FreeInternalBlock(TLSFBlock *pBlock)
     }
 }
 
-void TLSFAllocator::Init(const AllocatorDesc &desc)
+void TLSFAllocator::Init(const TLSFAllocatorDesc &desc)
 {
     ZoneScoped;
 
     m_View.Init(desc.m_DataSize, desc.m_BlockCount);
-    m_pData = (u8 *)desc.m_pInitialData;
-    m_SelfAllocated = !(bool)m_pData;
-
-    if (!m_pData)
-        m_pData = Memory::Allocate<u8>(desc.m_DataSize);
+    m_pData = Memory::Allocate<u8>(desc.m_DataSize);
 }
 
 void TLSFAllocator::Delete()
@@ -319,9 +315,7 @@ void TLSFAllocator::Delete()
     ZoneScoped;
 
     m_View.Delete();
-
-    if (m_SelfAllocated)
-        Memory::Release(m_pData);
+    Memory::Release(m_pData);
 }
 
 bool TLSFAllocator::CanAllocate(u64 size, u32 alignment)

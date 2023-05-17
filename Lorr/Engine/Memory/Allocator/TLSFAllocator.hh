@@ -1,9 +1,7 @@
 // Created on Friday November 18th 2022 by exdal
-// Last modified on Monday May 15th 2023 by exdal
+// Last modified on Wednesday May 17th 2023 by exdal
 
 #pragma once
-
-#include "BaseAllocator.hh"
 
 namespace lr::Memory
 {
@@ -72,13 +70,21 @@ struct TLSFAllocatorView
     TLSFBlock *m_pBackBlock = nullptr;
 };
 
-struct TLSFAllocator : Allocator<TLSFAllocatorView>
+struct TLSFAllocatorDesc
 {
-    void Init(const AllocatorDesc &desc) override;
-    void Delete() override;
-    bool CanAllocate(u64 size, u32 alignment = 1) override;
-    void *Allocate(u64 size, u32 alignment = 1, void **ppAllocatorData = nullptr) override;
-    void Free(void *pData, bool freeData) override;
+    u64 m_DataSize = 0;
+    u32 m_BlockCount = 0;
+};
+struct TLSFAllocator
+{
+    void Init(const TLSFAllocatorDesc &desc);
+    void Delete();
+    bool CanAllocate(u64 size, u32 alignment = 1);
+    void *Allocate(u64 size, u32 alignment = 1, void **ppAllocatorData = nullptr);
+    void Free(void *pData, bool freeData);
+
+    TLSFAllocatorView m_View;
+    u8 *m_pData = nullptr;
 };
 
 }  // namespace lr::Memory

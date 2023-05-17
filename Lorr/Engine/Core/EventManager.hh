@@ -24,13 +24,15 @@ struct EventManager
     {
         ZoneScoped;
 
-        Memory::AllocatorDesc allocDesc = {};
-        allocDesc.m_DataSize = memSize;
-
-        m_Allocator.Init(allocDesc);
+        m_Allocator.Init({ .m_DataSize = memSize });
     }
 
-    void Shutdown() { m_Allocator.Free(nullptr, true); }
+    void Shutdown()
+    {
+        ZoneScoped;
+        
+        m_Allocator.Free(true);
+    }
 
     bool Peek(u32 &eventID)
     {
@@ -40,7 +42,7 @@ struct EventManager
 
         if (!completed)
         {
-            m_Allocator.Free(nullptr, false);
+            m_Allocator.Free(false);
             m_Eventcount = 0;
         }
 

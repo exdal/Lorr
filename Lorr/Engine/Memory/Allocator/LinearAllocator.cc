@@ -1,5 +1,5 @@
 // Created on Friday November 18th 2022 by exdal
-// Last modified on Tuesday May 16th 2023 by exdal
+// Last modified on Wednesday May 17th 2023 by exdal
 
 #include "LinearAllocator.hh"
 
@@ -47,6 +47,13 @@ u64 LinearAllocatorView::Allocate(u64 size, u32 alignment)
     return off;
 }
 
+void LinearAllocatorView::Grow(u64 size)
+{
+    ZoneScoped;
+
+    m_Size += size;
+}
+
 void LinearAllocatorView::Free()
 {
     ZoneScoped;
@@ -54,70 +61,56 @@ void LinearAllocatorView::Free()
     m_Offset = 0;
 }
 
-void LinearAllocator::Init(const AllocatorDesc &desc)
+/// THREAD SAFE ALLOCATORS ///
+
+void LinearAllocatorViewAtomic::Init(u64 size)
 {
     ZoneScoped;
 
-    m_View.Init(desc.m_DataSize);
-    m_pData = (u8 *)desc.m_pInitialData;
-    m_SelfAllocated = !(bool)m_pData;
-
-    if (!m_pData)
-        m_pData = Memory::Allocate<u8>(desc.m_DataSize);
+    m_Size.store(size, eastl::memory_order_release);
 }
 
-void LinearAllocator::Delete()
+bool LinearAllocatorViewAtomic::CanAllocate(u64 requestedSize, u32 alignment)
 {
     ZoneScoped;
 
-    if (m_SelfAllocated)
-        Memory::Release(m_pData);
+    u64 alignedSize = Memory::AlignUp(requestedSize, alignment);
+    u64 offset = m_Offset.load(eastl::memory_order_acquire);
+    u64 size = m_Size.load(eastl::memory_order_acquire);
+
+    if (offset + alignedSize > size)
+        return false;
+
+    return true;
 }
 
-bool LinearAllocator::CanAllocate(u64 size, u32 alignment)
+u64 LinearAllocatorViewAtomic::Allocate(u64 size, u32 alignment)
 {
     ZoneScoped;
 
-    return m_View.CanAllocate(size, alignment);
-}
-
-void *LinearAllocator::Allocate(u64 size, u32 alignment, void **ppAllocatorData)
-{
-    ZoneScoped;
-
-    u64 offset = m_View.Allocate(size, alignment);
-    if (offset == -1)
+    if (!CanAllocate(size, alignment))
     {
-        if (m_AutoGrowSize != 0)
-        {
-            m_View.m_Size += m_AutoGrowSize;
-            Reserve(m_View.m_Size);
-            offset = m_View.Allocate(size, alignment);
-        }
-        else
-        {
-            return nullptr;
-        }
+        LOG_ERROR("Out of memory! Cannot allocate more. Req: {}", size);
+        return -1;
     }
 
-    return m_pData + offset;
+    u32 alignedSize = Memory::AlignUp(size, alignment);
+    return m_Offset.fetch_add(alignedSize, eastl::memory_order_acq_rel);
 }
 
-void LinearAllocator::Free(void *pData, bool freeData)
+void LinearAllocatorViewAtomic::Grow(u64 size)
 {
     ZoneScoped;
 
-    m_View.Free();
-
-    if (freeData)
-        Memory::Release(m_pData);
+    m_Size.add_fetch(size, eastl::memory_order_acq_rel);
 }
 
-void LinearAllocator::Reserve(u64 size)
+void LinearAllocatorViewAtomic::Free()
 {
     ZoneScoped;
 
-    Memory::Reallocate(m_pData, size);
+    m_Offset.store(0, eastl::memory_order_release);
 }
+
 
 }  // namespace lr::Memory

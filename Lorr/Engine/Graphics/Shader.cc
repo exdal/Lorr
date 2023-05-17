@@ -1,3 +1,6 @@
+// Created on Sunday March 12th 2023 by exdal
+// Last modified on Wednesday May 17th 2023 by exdal
+
 #include "Shader.hh"
 
 #include <glslang/Include/Common.h>
@@ -240,14 +243,14 @@ bool ShaderCompiler::CompileShader(
 
     if (ShaderAllocator.m_pData == nullptr)
     {
-        Memory::AllocatorDesc allocatorDesc = {
+        Memory::LinearAllocatorDesc allocatorDesc = {
             .m_DataSize = dataSize + 0x200,
             .m_AutoGrowSize = 0x500,
         };
         ShaderAllocator.Init(allocatorDesc);
     }
 
-    ShaderAllocator.Free(nullptr, false);
+    ShaderAllocator.Free(false);
     void *pAllocData = ShaderAllocator.Allocate(dataSize, alignof(u32));
     memcpy(pAllocData, pData, dataSize);
 

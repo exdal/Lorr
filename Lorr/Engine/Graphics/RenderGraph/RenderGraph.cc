@@ -1,3 +1,6 @@
+// Created on Friday February 24th 2023 by exdal
+// Last modified on Wednesday May 17th 2023 by exdal
+
 #include "RenderGraph.hh"
 
 #include "STL/Vector.hh"
@@ -71,7 +74,7 @@ void RenderGraph::Init(RenderGraphDesc *pDesc)
 
     /// INIT RESOURCES ///
 
-    Memory::AllocatorDesc allocatorDesc = {
+    Memory::LinearAllocatorDesc allocatorDesc = {
         .m_DataSize = Memory::KiBToBytes(64),
         .m_AutoGrowSize = Memory::KiBToBytes(6),
     };

@@ -1,3 +1,6 @@
+// Created on Monday March 20th 2023 by exdal
+// Last modified on Tuesday May 16th 2023 by exdal
+
 #include "Device.hh"
 
 #include "Window/Win32/Win32Window.hh"
@@ -288,7 +291,7 @@ void Surface::Init(BaseWindow *pWindow, VkInstance pInstance, PhysicalDevice *pP
     VkWin32SurfaceCreateInfoKHR surfaceInfo = {
         .sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR,
         .pNext = nullptr,
-        .hinstance = pOSWindow->m_Instance,
+        .hinstance = (HINSTANCE)pOSWindow->m_pInstance,
         .hwnd = (HWND)pOSWindow->m_pHandle,
     };
     vkCreateWin32SurfaceKHR(pInstance, &surfaceInfo, nullptr, &m_pHandle);

@@ -1,3 +1,5 @@
+// Created on Friday May 12th 2023 by exdal
+// Last modified on Wednesday May 17th 2023 by exdal
 /* A Bison parser, made by GNU Bison 3.8.2.  */
 
 /* Bison implementation for Yacc-like parsers in C
@@ -894,7 +896,7 @@ do {                                    \
 
 /* Nonzero means print parse trace.  It is left uninitialized so that
    multiple parsers can coexist.  */
-int yydebug;
+int yydebug = 1;
 #else /* !LM_DEBUG */
 # define YYDPRINTF(Args) ((void) 0)
 # define YY_SYMBOL_PRINT(Title, Kind, Value, Location)
@@ -1294,8 +1296,6 @@ YYLTYPE yylloc = yyloc_default;
   /* The number of symbols on the RHS of the reduced rule.
      Keep to zero when no symbol should be popped.  */
   int yylen = 0;
-
-  YYDPRINTF ((stderr, "Starting parse\n"));
 
   yychar = LM_LM_EMPTY; /* Cause a token to be read.  */
 

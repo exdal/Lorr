@@ -1,8 +1,12 @@
-//
-// Created on Tuesday 19th July 2022 by exdal
-//
+// Created on Tuesday July 19th 2022 by exdal
+// Last modified on Tuesday May 16th 2023 by exdal
 
 #pragma once
+
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <Windows.h>
 
 #define VK_NO_STDINT_H
 #define VK_NO_PROTOTYPES
@@ -122,7 +126,7 @@
     _VK_DEFINE_FUNCTION(vkGetDescriptorSetLayoutSizeEXT);              \
     _VK_DEFINE_FUNCTION(vkGetImageOpaqueCaptureDescriptorDataEXT);     \
     _VK_DEFINE_FUNCTION(vkGetImageViewOpaqueCaptureDescriptorDataEXT); \
-    _VK_DEFINE_FUNCTION(vkGetSamplerOpaqueCaptureDescriptorDataEXT);   
+    _VK_DEFINE_FUNCTION(vkGetSamplerOpaqueCaptureDescriptorDataEXT);
 
 #define _VK_IMPORT_INSTANCE_SYMBOLS _VK_DEFINE_FUNCTION(vkSetDebugUtilsObjectNameEXT);
 

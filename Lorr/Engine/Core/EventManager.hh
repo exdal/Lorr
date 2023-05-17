@@ -1,6 +1,5 @@
-//
-// Created on Friday 18th November 2022 by exdal
-//
+// Created on Friday November 18th 2022 by exdal
+// Last modified on Wednesday May 17th 2023 by exdal
 
 #pragma once
 
@@ -66,7 +65,7 @@ struct EventManager
         ZoneScoped;
 
         void *pData = m_Allocator.Allocate(kMaxDataSize + sizeof(Event));
-        if (pData)
+        if (!pData)
             return;
 
         u64 offset = 0;

@@ -1,21 +1,22 @@
-//
-// Created on Thursday 10th November 2022 by exdal
-//
+// Created on Thursday November 10th 2022 by exdal
+// Last modified on Tuesday May 16th 2023 by exdal
 
 #pragma once
 
 namespace lr::Resource
 {
-    enum ResourceType : u32
-    {
-        LR_RESOURCE_TYPE_UNKNOWN = 0,
-        LR_RESOURCE_TYPE_SHADER,
-        LR_RESOURCE_TYPE_TEXTURE,
-        LR_RESOURCE_TYPE_MODEL,
-    };
+enum class ResourceType : u32
+{
+    Data,  // Any data that is not fitting for anything under, for example world save, etc...
+    Shader,
+    Texture,
+    Model,
+};
 
-    struct ResourceMeta
-    {
-    };
+struct ResourceData
+{
+    ResourceType m_Type = ResourceType::Data;
+    u32 m_Size = 0;
+};
 
 }  // namespace lr::Resource

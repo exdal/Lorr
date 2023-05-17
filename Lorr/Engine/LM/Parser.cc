@@ -1,3 +1,5 @@
+// Created on Thursday May 11th 2023 by exdal
+// Last modified on Wednesday May 17th 2023 by exdal
 #include "Parser.hh"
 
 #include "Crypt/FNV.hh"
@@ -133,7 +135,7 @@ void Result::PushError(u32 line, u32 column, const char *pMessage)
 {
     ZoneScoped;
 
-    free((void *)pMessage);
+    LOG_ERROR("Failed to real LM: ({}:{}): {}", line, column, pMessage);
 }
 
 char *Result::AllocateString(const char *pSrc)
@@ -187,7 +189,7 @@ i32 lm::ParseFromMemory(Result *pResult, eastl::string_view code)
         return -1;
     }
 
-    state = lm__scan_string((char *)code.data(), scanner);
+    state = lm__scan_bytes((char *)code.data(), code.size(), scanner);
     if (lm_parse(pResult, scanner) != 0)
     {
         LOG_ERROR("LM: Failed to parse LM buffer!");

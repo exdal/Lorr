@@ -1,6 +1,5 @@
-//
-// Created on Friday 18th November 2022 by exdal
-//
+// Created on Friday November 18th 2022 by exdal
+// Last modified on Tuesday May 16th 2023 by exdal
 
 #pragma once
 
@@ -27,7 +26,7 @@ struct LinearAllocator : Allocator<LinearAllocatorView>
     bool CanAllocate(u64 size, u32 alignment = 1) override;
     void *Allocate(u64 size, u32 alignment = 1, void **ppAllocatorData = nullptr) override;
     void Free(void *pData, bool freeData) override;
-    void Reserve(u64 size) override;
+    void Reserve(u64 size);
 };
 
 }  // namespace lr::Memory

@@ -1,6 +1,5 @@
-//
-// Created on Thursday 5th May 2022 by exdal
-//
+// Created on Thursday May 5th 2022 by exdal
+// Last modified on Tuesday May 16th 2023 by exdal
 
 #pragma once
 
@@ -8,18 +7,16 @@
 
 namespace lr
 {
-    struct Win32Window : public BaseWindow
-    {
-        void Init(const WindowDesc &desc);
-        void Poll() override;
+struct Win32Window : public BaseWindow
+{
+    void Init(const WindowDesc &desc);
+    void Poll() override;
 
-        void InitDisplays() override;
+    void InitDisplays() override;
 
-        void SetCursor(WindowCursor cursor) override;
+    void SetCursor(WindowCursor cursor) override;
 
-        static LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
-
-        HINSTANCE m_Instance = 0;
-    };
+    void *m_pInstance = 0;
+};
 
 }  // namespace lr

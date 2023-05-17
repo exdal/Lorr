@@ -1,3 +1,6 @@
+// Created on Friday November 18th 2022 by exdal
+// Last modified on Tuesday May 16th 2023 by exdal
+
 #include "LinearAllocator.hh"
 
 #include "Memory/MemoryUtils.hh"

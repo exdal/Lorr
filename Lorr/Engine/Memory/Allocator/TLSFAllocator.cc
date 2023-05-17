@@ -1,3 +1,6 @@
+// Created on Friday November 18th 2022 by exdal
+// Last modified on Monday May 15th 2023 by exdal
+
 #include "TLSFAllocator.hh"
 
 #include "Memory/MemoryUtils.hh"
@@ -265,7 +268,7 @@ u32 TLSFAllocatorView::GetPhysicalSize(TLSFBlock *pBlock)
 
 //! THIS IS SO BAD THIS IS SO BAD THIS IS SO BAD THIS IS SO BAD THIS IS SO BAD THIS IS SO BAD THIS IS SO BAD
 //! THIS IS SO BAD THIS IS SO BAD THIS IS SO BAD THIS IS SO BAD THIS IS SO BAD THIS IS SO BAD THIS IS SO BAD
-//! THIS IS SO BAD THIS IS SO BAD THIS IS SO BAD THIS IS SO BAD THIS IS SO BAD THIS IS SO BAD THIS IS SO BAD
+// why? do we really need to decrement block pointer like this? i still cant think of a better way of doing this
 //! THIS IS SO BAD THIS IS SO BAD THIS IS SO BAD THIS IS SO BAD THIS IS SO BAD THIS IS SO BAD THIS IS SO BAD
 //! THIS IS SO BAD THIS IS SO BAD THIS IS SO BAD THIS IS SO BAD THIS IS SO BAD THIS IS SO BAD THIS IS SO BAD
 //! THIS IS SO BAD THIS IS SO BAD THIS IS SO BAD THIS IS SO BAD THIS IS SO BAD THIS IS SO BAD THIS IS SO BAD

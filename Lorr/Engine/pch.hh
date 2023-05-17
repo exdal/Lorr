@@ -1,9 +1,7 @@
-#pragma once
+// Created on Wednesday May 4th 2022 by exdal
+// Last modified on Wednesday May 17th 2023 by exdal
 
-#ifdef PTR_SIZE
-#undef PTR_SIZE
-#endif
-#define PTR_SIZE sizeof(void *)
+#pragma once
 
 typedef double f64;
 typedef float f32;
@@ -19,12 +17,6 @@ typedef signed short i16;
 
 typedef unsigned char u8;
 typedef signed char i8;
-
-#include <stdio.h>
-#include <stdint.h>
-
-#include <Windows.h>
-#undef CreateSemaphore
 
 #include <Tracy.hpp>
 
@@ -44,10 +36,18 @@ typedef signed char i8;
 #include <DirectXMath.h>
 #include <DirectXPackedVector.h>
 
-template<typename _Type>
-using cinitl = const std::initializer_list<_Type>;
-template<typename _Type>
-using initl = std::initializer_list<_Type>;
+#ifdef PTR_SIZE
+#undef PTR_SIZE
+#endif
+#define PTR_SIZE EA_PLATFORM_PTR_SIZE
+
+#if EA_PLATFORM_PTR_SIZE == 8
+typedef unsigned long long uptr;
+typedef signed long long iptr;
+#else
+typedef unsigned int uptr;
+typedef signed int iptr;
+#endif
 
 using namespace DirectX;
 using namespace PackedVector;

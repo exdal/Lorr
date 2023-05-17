@@ -1,6 +1,5 @@
 Resource_Meta 
 {
-    Signature = "LR"
     Version = 1
 
     Shaders
@@ -9,13 +8,9 @@ Resource_Meta
             "",
         ]
 
-        Extensions = [
-            "",
-        ]
-
         Files = [
-            "imgui.v.glsl",
-            "imgui.p.glsl",
+            "imgui.vs",
+            "imgui.fs",
         ]
     }
 }

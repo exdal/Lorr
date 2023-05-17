@@ -2,6 +2,10 @@
 # Sample config file to override variables quickly on startup
 #
 
+# Resource Manager
+rm_max_allocs = 0x20000
+rm_memory_mb = 1024
+
 # Resource Meta File - Raw files
 resource_meta_dir = "../../Lorr/Resources"
 resource_meta_file = "resmeta.lm"

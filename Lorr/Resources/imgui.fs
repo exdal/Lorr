@@ -1,4 +1,5 @@
 #version 460 core
+#extension GL_EXT_buffer_reference2 : require
 
 struct PixelInput 
 {

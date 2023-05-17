@@ -1,6 +1,5 @@
-//
-// Created on Friday 18th November 2022 by exdal
-//
+// Created on Friday November 18th 2022 by exdal
+// Last modified on Tuesday May 16th 2023 by exdal
 
 #pragma once
 
@@ -27,7 +26,6 @@ struct Allocator
     virtual bool CanAllocate(u64 size, u32 alignment = 1) = 0;
     virtual void *Allocate(u64 size, u32 alignment = 1, void **ppAllocatorData = nullptr) = 0;
     virtual void Free(void *pData = nullptr, bool freeData = false) = 0;
-    virtual void Reserve(u64 size) = 0;
 
     _View m_View;
     u8 *m_pData = nullptr;

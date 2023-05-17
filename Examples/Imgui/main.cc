@@ -1,3 +1,6 @@
+// Created on Thursday January 26th 2023 by exdal
+// Last modified on Wednesday May 17th 2023 by exdal
+
 #include "ImguiApp.hh"
 
 ImguiApp *pApp = nullptr;
@@ -26,7 +29,7 @@ int main()
         .m_CurrentMonitor = 1,
         .m_Width = 1280,
         .m_Height = 780,
-        .m_Flags = LR_WINDOW_FLAG_RESIZABLE | LR_WINDOW_FLAG_CENTERED,
+        .m_Flags = WindowFlag::Resizable | WindowFlag::Centered,
     };
 
     pApp = new ImguiApp;

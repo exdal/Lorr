@@ -19,6 +19,7 @@ void Win32Window::Init(const WindowDesc &desc)
     ZoneScoped;
 
     m_UsingMonitor = desc.m_CurrentMonitor;
+    m_pInstance = GetModuleHandleA(NULL);
 
     InitDisplays();
 
@@ -30,8 +31,6 @@ void Win32Window::Init(const WindowDesc &desc)
     }
 
     LOG_TRACE("Creating WIN32 window \"{}\"<{}, {}>", desc.m_Title, desc.m_Width, desc.m_Height);
-
-    m_pInstance = GetModuleHandleA(NULL);
 
     WNDCLASSEX wc;
     ZeroMemory(&wc, sizeof(WNDCLASSEX));
@@ -59,7 +58,7 @@ void Win32Window::Init(const WindowDesc &desc)
     i32 adjustedWidth = windowWidth;
     i32 adjustedHeight = windowHeight;
 
-    if (desc.m_Flags & LR_WINDOW_FLAG_FULLSCREEN)
+    if (desc.m_Flags & WindowFlag::FullScreen)
     {
         style = WS_POPUP | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
 
@@ -70,10 +69,10 @@ void Win32Window::Init(const WindowDesc &desc)
     }
     else
     {
-        if (desc.m_Flags & LR_WINDOW_FLAG_BORDERLESS)
+        if (desc.m_Flags & WindowFlag::Borderless)
             style = WS_POPUP;
 
-        if (desc.m_Flags & LR_WINDOW_FLAG_RESIZABLE)
+        if (desc.m_Flags & WindowFlag::Resizable)
             style |= WS_MAXIMIZEBOX | WS_THICKFRAME;
 
         RECT rc = { 0, 0, windowWidth, windowHeight };
@@ -81,7 +80,7 @@ void Win32Window::Init(const WindowDesc &desc)
         adjustedWidth = rc.right - rc.left;
         adjustedHeight = rc.bottom - rc.top;
 
-        if (desc.m_Flags & LR_WINDOW_FLAG_CENTERED)
+        if (desc.m_Flags & WindowFlag::Centered)
         {
             windowPosX += (pCurrentDisplay->m_ResW / 2) - (adjustedWidth / 2);
             windowPosY += (pCurrentDisplay->m_ResH / 2) - (adjustedHeight / 2);
@@ -102,15 +101,14 @@ void Win32Window::Init(const WindowDesc &desc)
         (HINSTANCE)m_pInstance,
         this);
 
+    SetWindowLongPtrA((HWND)m_pHandle, 0, (LONG_PTR)this);
+
     i32 swFlags = SW_SHOW;
-    if (desc.m_Flags & LR_WINDOW_FLAG_MAXIMIZED)
+    if (desc.m_Flags & WindowFlag::Maximized)
         swFlags = SW_SHOWMAXIMIZED;
 
     ShowWindow((HWND)m_pHandle, swFlags);
     UpdateWindow((HWND)m_pHandle);  // call WM_PAINT
-
-    // Set user data
-    SetWindowLongPtrA((HWND)m_pHandle, 0, (LONG_PTR)this);
 
     m_Width = windowWidth;
     m_Height = windowHeight;
@@ -135,13 +133,14 @@ void Win32Window::InitDisplays()
         EnumDisplaySettings(displayDevice.DeviceName, ENUM_CURRENT_SETTINGS, &devMode);
         EnumDisplayDevices(displayDevice.DeviceName, 0, &monitorName, 0);
 
-        SystemMetrics::Display display;
-        display.m_Name = monitorName.DeviceString;
-        display.m_RefreshRate = devMode.dmDisplayFrequency;
-        display.m_ResW = devMode.dmPelsWidth;
-        display.m_ResH = devMode.dmPelsHeight;
-        display.m_PosX = devMode.dmPosition.x;
-        display.m_PosY = devMode.dmPosition.y;
+        SystemMetrics::Display display = {
+            .m_Name = monitorName.DeviceString,
+            .m_ResW = devMode.dmPelsWidth,
+            .m_ResH = devMode.dmPelsHeight,
+            .m_PosX = devMode.dmPosition.x,
+            .m_PosY = devMode.dmPosition.y,
+            .m_RefreshRate = devMode.dmDisplayFrequency,
+        };
 
         m_SystemMetrics.m_Displays[currentDevice] = display;
     }
@@ -151,54 +150,30 @@ void Win32Window::SetCursor(WindowCursor cursor)
 {
     ZoneScoped;
 
-    if (m_CurrentCursor == LR_WINDOW_CURSOR_HIDDEN && cursor != LR_WINDOW_CURSOR_HIDDEN)
-        ::ShowCursor(TRUE);
+    if (m_CurrentCursor == WindowCursor::Hidden && cursor != WindowCursor::Hidden)
+        ::ShowCursor(true);
 
     m_CurrentCursor = cursor;
 
-    const static HCURSOR arrowCursor = LoadCursor(NULL, IDC_ARROW);
-    const static HCURSOR ibeamCursor = LoadCursor(NULL, IDC_IBEAM);
-    const static HCURSOR handCursor = LoadCursor(NULL, IDC_HAND);
-    const static HCURSOR sizeAllCursor = LoadCursor(NULL, IDC_SIZEALL);
-    const static HCURSOR sizeWECursor = LoadCursor(NULL, IDC_SIZEWE);
-    const static HCURSOR sizeNSCursor = LoadCursor(NULL, IDC_SIZENS);
-    const static HCURSOR sizeNESWCursor = LoadCursor(NULL, IDC_SIZENESW);
-    const static HCURSOR sizeNWSECursor = LoadCursor(NULL, IDC_SIZENWSE);
-    const static HCURSOR noCursor = LoadCursor(NULL, IDC_NO);
-
-    switch (cursor)
+    if (cursor == WindowCursor::Hidden)
     {
-        case LR_WINDOW_CURSOR_ARROW:
-            ::SetCursor(arrowCursor);
-            break;
-        case LR_WINDOW_CURSOR_TEXT_INPUT:
-            ::SetCursor(ibeamCursor);
-            break;
-        case LR_WINDOW_CURSOR_RESIZE_ALL:
-            ::SetCursor(sizeAllCursor);
-            break;
-        case LR_WINDOW_CURSOR_RESIZE_NS:
-            ::SetCursor(sizeNSCursor);
-            break;
-        case LR_WINDOW_CURSOR_RESIZE_EW:
-            ::SetCursor(sizeWECursor);
-            break;
-        case LR_WINDOW_CURSOR_RESIZE_NESW:
-            ::SetCursor(sizeNESWCursor);
-            break;
-        case LR_WINDOW_CURSOR_RESIZE_NWSE:
-            ::SetCursor(sizeNWSECursor);
-            break;
-        case LR_WINDOW_CURSOR_HAND:
-            ::SetCursor(handCursor);
-            break;
-        case LR_WINDOW_CURSOR_NOT_ALLOWED:
-            ::SetCursor(noCursor);
-            break;
-        case LR_WINDOW_CURSOR_HIDDEN:
-            ::ShowCursor(FALSE);
-            break;
+        ::ShowCursor(false);
+        return;
     }
+
+    static const HCURSOR kCursors[] = {
+        LoadCursor(NULL, IDC_ARROW),     // Arrow
+        LoadCursor(NULL, IDC_IBEAM),     // TextInput
+        LoadCursor(NULL, IDC_SIZEALL),   // ResizeAll
+        LoadCursor(NULL, IDC_SIZEWE),    // ResizeEW
+        LoadCursor(NULL, IDC_SIZENS),    // ResizeNS
+        LoadCursor(NULL, IDC_SIZENESW),  // ResizeNESW
+        LoadCursor(NULL, IDC_SIZENWSE),  // ResizeNWSE
+        LoadCursor(NULL, IDC_HAND),      // Hand
+        LoadCursor(NULL, IDC_NO),        // NotAllowed
+    };
+
+    ::SetCursor(kCursors[(u32)cursor]);
 }
 
 LRESULT CALLBACK LRWindowProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
@@ -214,8 +189,6 @@ LRESULT CALLBACK LRWindowProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
     switch (msg)
     {
-        // Those terminate messages are different but we will leave it like that for now
-        // Go to the end of file to see more info
         case WM_CLOSE:
         case WM_DESTROY:
         case WM_QUIT:

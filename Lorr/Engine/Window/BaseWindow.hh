@@ -1,6 +1,5 @@
-//
-// Created on Thursday 5th May 2022 by exdal
-//
+// Created on Thursday May 5th 2022 by exdal
+// Last modified on Wednesday May 17th 2023 by exdal
 
 #pragma once
 
@@ -10,31 +9,31 @@
 
 namespace lr
 {
-    enum WindowCursor : u8
+    enum class WindowCursor
     {
-        LR_WINDOW_CURSOR_ARROW,
-        LR_WINDOW_CURSOR_TEXT_INPUT,
-        LR_WINDOW_CURSOR_RESIZE_ALL,
-        LR_WINDOW_CURSOR_RESIZE_NS,
-        LR_WINDOW_CURSOR_RESIZE_EW,
-        LR_WINDOW_CURSOR_RESIZE_NESW,
-        LR_WINDOW_CURSOR_RESIZE_NWSE,
-        LR_WINDOW_CURSOR_HAND,
-        LR_WINDOW_CURSOR_NOT_ALLOWED,
-        LR_WINDOW_CURSOR_HIDDEN,
+        Arrow,
+        TextInput,
+        ResizeAll,
+        ResizeNS,
+        ResizeEW,
+        ResizeNESW,
+        ResizeNWSE,
+        Hand,
+        NotAllowed,
+        Hidden,
     };
 
-    enum WindowFlags : u8
+    enum class WindowFlag : u32
     {
-        LR_WINDOW_FLAG_NONE,
-        LR_WINDOW_FLAG_FULLSCREEN = 1 << 0,
-        LR_WINDOW_FLAG_CENTERED = 1 << 1,
-        LR_WINDOW_FLAG_RESIZABLE = 1 << 2,
-        LR_WINDOW_FLAG_BORDERLESS = 1 << 3,
-        LR_WINDOW_FLAG_MAXIMIZED = 1 << 4,
+        None = 0,
+        FullScreen = 1 << 0,
+        Centered = 1 << 1,
+        Resizable = 1 << 2,
+        Borderless = 1 << 3,
+        Maximized = 1 << 4,
     };
 
-    EnumFlags(WindowFlags);
+    EnumFlags(WindowFlag);
 
     struct SystemMetrics
     {
@@ -44,8 +43,8 @@ namespace lr
 
             u32 m_ResW;
             u32 m_ResH;
-            u32 m_PosX;
-            u32 m_PosY;
+            i32 m_PosX;
+            i32 m_PosY;
 
             u32 m_RefreshRate;
         };
@@ -53,7 +52,7 @@ namespace lr
         u8 m_DisplaySize = 0;
 
         static constexpr u32 kMaxSupportedDisplay = 4;
-        eastl::array<Display, kMaxSupportedDisplay> m_Displays;
+        eastl::array<Display, kMaxSupportedDisplay> m_Displays = {};
     };
 
     struct WindowDesc
@@ -66,7 +65,7 @@ namespace lr
         u32 m_Width;
         u32 m_Height;
 
-        WindowFlags m_Flags;
+        WindowFlag m_Flags = WindowFlag::None;
     };
 
     struct BaseWindow
@@ -90,7 +89,7 @@ namespace lr
         bool m_IsFullscreen = false;
         bool m_SizeEnded = true;
 
-        WindowCursor m_CurrentCursor = LR_WINDOW_CURSOR_ARROW;
+        WindowCursor m_CurrentCursor = WindowCursor::Arrow;
         XMUINT2 m_CursorPosition = XMUINT2(0, 0);
 
         SystemMetrics m_SystemMetrics;

@@ -29,7 +29,7 @@ int main()
         .m_CurrentMonitor = 1,
         .m_Width = 1280,
         .m_Height = 780,
-        .m_Flags = LR_WINDOW_FLAG_RESIZABLE | LR_WINDOW_FLAG_CENTERED,
+        .m_Flags = WindowFlag::Resizable | WindowFlag::Centered,
     };
 
     pApp = new LorrApp;

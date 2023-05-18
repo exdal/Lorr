@@ -1,7 +1,9 @@
 // Created on Thursday November 10th 2022 by exdal
-// Last modified on Tuesday May 16th 2023 by exdal
+// Last modified on Thursday May 18th 2023 by exdal
 
 #pragma once
+
+#include "Graphics/Shader.hh"
 
 namespace lr::Resource
 {
@@ -13,10 +15,20 @@ enum class ResourceType : u32
     Model,
 };
 
+template<typename _Data, ResourceType _Type>
 struct ResourceData
 {
-    ResourceType m_Type = ResourceType::Data;
-    u32 m_Size = 0;
+    typedef _Data type;
+
+    _Data &get() { return m_Data; }
+    u64 &size() { return m_Size; }
+    ResourceType resourceType() { return m_Type; }
+
+    ResourceType m_Type = _Type;
+    u64 m_Size = 0;
+    _Data m_Data = nullptr;
 };
+
+using ShaderResource = Resource::ResourceData<Graphics::ShaderCompileOutput, Resource::ResourceType::Shader>;
 
 }  // namespace lr::Resource

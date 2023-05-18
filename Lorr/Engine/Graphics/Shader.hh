@@ -1,12 +1,11 @@
-//
-// Created on Friday 28th October 2022 by exdal
-//
+// Created on Friday October 28th 2022 by exdal
+// Last modified on Thursday May 18th 2023 by exdal
 
 #pragma once
 
-#include "IO/BufferStream.hh"
-
 #include "APIAllocator.hh"
+
+#include "IO/BufferStream.hh"
 
 namespace lr::Graphics
 {
@@ -41,25 +40,25 @@ struct Shader : APIObject<VK_OBJECT_TYPE_SHADER_MODULE>
 
 struct ShaderCompileDesc
 {
-    static constexpr u32 kMaxDefineCount = 16;
-
-    eastl::string_view m_PathOpt;
-
+    eastl::string_view m_Code;
     ShaderStage m_Type = ShaderStage::None;
     ShaderFlag m_Flags = ShaderFlag::None;
+};
 
-    u32 m_DefineCount = 0;
-    struct
-    {
-        eastl::string_view m_Name;
-        eastl::string_view m_Value;
-    } m_Defines[kMaxDefineCount] = {};
+struct ShaderCompileOutput
+{
+    bool IsValid() { return !m_DataSpv.empty(); }
+    eastl::span<u32> m_DataSpv = {};
+
+    void *m_pProgram = nullptr;
+    void *m_pShader = nullptr;
 };
 
 namespace ShaderCompiler
 {
     void Init();
-    bool CompileShader(ShaderCompileDesc *pDesc, BufferReadStream &buffer, u32 *&pDataOut, u32 &dataSizeOut);
+    ShaderCompileOutput CompileShader(ShaderCompileDesc *pDesc);
+    void FreeProgram(ShaderCompileOutput &output);
 }  // namespace ShaderCompiler
 
 }  // namespace lr::Graphics

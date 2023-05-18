@@ -1,3 +1,6 @@
+// Created on Monday July 18th 2022 by exdal
+// Last modified on Thursday May 18th 2023 by exdal
+
 #include "Context.hh"
 
 #include "Window/Win32/Win32Window.hh"
@@ -795,14 +798,12 @@ Shader *Context::CreateShader(ShaderStage stage, BufferReadStream &buf)
     compileDesc.m_Flags = ShaderFlag::SkipValidation;
 #endif
 
-    u32 *pModuleData = nullptr;
-    u32 moduleSize = 0;
-    ShaderCompiler::CompileShader(&compileDesc, buf, pModuleData, moduleSize);
-
-    VkShaderModuleCreateInfo createInfo = {};
-    createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-    createInfo.pCode = pModuleData;
-    createInfo.codeSize = moduleSize;
+    ShaderCompileOutput shaderOutput = ShaderCompiler::CompileShader(&compileDesc);
+    VkShaderModuleCreateInfo createInfo = {
+        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize = shaderOutput.m_DataSpv.size(),
+        .pCode = shaderOutput.m_DataSpv.data(),
+    };
     vkCreateShaderModule(m_pDevice, &createInfo, nullptr, &pShader->m_pHandle);
 
     return pShader;

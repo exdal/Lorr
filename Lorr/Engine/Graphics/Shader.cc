@@ -1,5 +1,5 @@
 // Created on Sunday March 12th 2023 by exdal
-// Last modified on Wednesday May 17th 2023 by exdal
+// Last modified on Thursday May 18th 2023 by exdal
 
 #include "Shader.hh"
 
@@ -129,8 +129,6 @@ static constexpr TBuiltInResource glslang_DefaultTBuiltInResource = {
 
 namespace lr::Graphics
 {
-static Memory::LinearAllocator ShaderAllocator;
-
 constexpr glslang_stage_t ToGLSLStage(ShaderStage stage)
 {
     switch (stage)
@@ -162,8 +160,7 @@ void ShaderCompiler::Init()
     glslang::InitializeProcess();
 }
 
-bool ShaderCompiler::CompileShader(
-    ShaderCompileDesc *pDesc, BufferReadStream &buffer, u32 *&pDataOut, u32 &dataSizeOut)
+ShaderCompileOutput ShaderCompiler::CompileShader(ShaderCompileDesc *pDesc)
 {
     ZoneScoped;
 
@@ -178,6 +175,8 @@ bool ShaderCompiler::CompileShader(
         glslang_shader_delete(pShader);
     };
 
+    ShaderCompileOutput output = {};
+
     const glslang_input_t input = {
         .language = GLSLANG_SOURCE_GLSL,
         .stage = ToGLSLStage(pDesc->m_Type),
@@ -185,7 +184,7 @@ bool ShaderCompiler::CompileShader(
         .client_version = GLSLANG_TARGET_VULKAN_1_3,
         .target_language = GLSLANG_TARGET_SPV,
         .target_language_version = GLSLANG_TARGET_SPV_1_6,
-        .code = (const char *)buffer.GetData(),
+        .code = pDesc->m_Code.data(),
         .default_version = 100,
         .default_profile = GLSLANG_NO_PROFILE,
         .force_default_version_and_profile = false,
@@ -195,23 +194,16 @@ bool ShaderCompiler::CompileShader(
     };
 
     glslang_shader_t *pShader = glslang_shader_create(&input);
-
     if (!glslang_shader_preprocess(pShader, &input))
     {
-        pDataOut = nullptr;
-        dataSizeOut = ~0;
         PrintError(pShader);
-
-        return false;
+        return output;
     }
 
     if (!glslang_shader_parse(pShader, &input))
     {
-        pDataOut = nullptr;
-        dataSizeOut = ~0;
         PrintError(pShader);
-
-        return false;
+        return output;
     }
 
     glslang_program_t *pProgram = glslang_program_create();
@@ -219,11 +211,8 @@ bool ShaderCompiler::CompileShader(
 
     if (!glslang_program_link(pProgram, GLSLANG_MSG_SPV_RULES_BIT | GLSLANG_MSG_VULKAN_RULES_BIT))
     {
-        pDataOut = nullptr;
-        dataSizeOut = ~0;
         PrintError(pShader);
-
-        return false;
+        return output;
     }
 
     glslang_spv_options_t spvOptions = {
@@ -233,34 +222,27 @@ bool ShaderCompiler::CompileShader(
         .validate = !ENABLE_IF_HAS(ShaderFlag::SkipValidation),
     };
     glslang_program_SPIRV_generate_with_options(pProgram, input.stage, &spvOptions);
-
     u32 dataSize = glslang_program_SPIRV_get_size(pProgram) * sizeof(u32);
     u32 *pData = glslang_program_SPIRV_get_ptr(pProgram);
+    output = {
+        .m_DataSpv = { pData, dataSize },
+        .m_pProgram = pProgram,
+        .m_pShader = pShader,
+    };
+
     eastl::string_view spvMessage = glslang_program_SPIRV_get_messages(pProgram);
-
     if (!spvMessage.empty())
-        LOG_TRACE("SPV: {}", spvMessage);
+        LOG_WARN("Shader Compiler - SPIR-V message: {}", spvMessage);
 
-    if (ShaderAllocator.m_pData == nullptr)
-    {
-        Memory::LinearAllocatorDesc allocatorDesc = {
-            .m_DataSize = dataSize + 0x200,
-            .m_AutoGrowSize = 0x500,
-        };
-        ShaderAllocator.Init(allocatorDesc);
-    }
+    return output;
+}
 
-    ShaderAllocator.Free(false);
-    void *pAllocData = ShaderAllocator.Allocate(dataSize, alignof(u32));
-    memcpy(pAllocData, pData, dataSize);
+void ShaderCompiler::FreeProgram(ShaderCompileOutput &output)
+{
+    ZoneScoped;
 
-    pDataOut = (u32 *)pAllocData;
-    dataSizeOut = dataSize;
-
-    glslang_program_delete(pProgram);
-    glslang_shader_delete(pShader);
-
-    return true;
+    glslang_program_delete((glslang_program_t *)output.m_pProgram);
+    glslang_shader_delete((glslang_shader_t *)output.m_pShader);
 }
 
 }  // namespace lr::Graphics

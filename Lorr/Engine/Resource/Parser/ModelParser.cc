@@ -1,10 +1,13 @@
-#include "ModelParser.hh"
+// Created on Saturday April 22nd 2023 by exdal
+// Last modified on Thursday May 18th 2023 by exdal
+
+#include "Resource/Parser.hh"
 
 #include <tiny_gltf.h>
 
 namespace lr::Resource
 {
-bool ModelParser::ParseGLTF(BufferReadStream fileData, BufferWriteStream &data)
+bool Parser::ParseGLTF(BufferReadStream fileData, BufferWriteStream &data)
 {
     tinygltf::Model model = {};
     tinygltf::TinyGLTF loader = {};

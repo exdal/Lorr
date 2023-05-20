@@ -1,5 +1,5 @@
 // Created on Friday November 18th 2022 by exdal
-// Last modified on Wednesday May 17th 2023 by exdal
+// Last modified on Sunday May 21st 2023 by exdal
 
 #pragma once
 
@@ -21,7 +21,7 @@ struct EventManager
 
     using _RingBuffer = eastl::conditional<
         _AtomicRingBuffer,
-        Memory::RingBufferAtomic<EventIdentifier, _Count>,
+        Memory::QueueAtomic<EventIdentifier, _Count>,
         Memory::RingBuffer<EventIdentifier, _Count>>::type;
 
     bool Peek()

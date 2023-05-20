@@ -10,7 +10,7 @@ Meta
 
         Files = [
             "Shaders/imgui.vs",
-            "Shaders/imgui.fs"
+            "Shaders/imgui.fs",
         ]
     }
 }

@@ -1,3 +1,6 @@
+// Created on Wednesday November 23rd 2022 by exdal
+// Last modified on Saturday May 20th 2023 by exdal
+
 #include "Graphics/Descriptor.hh"
 #include "Graphics/Renderer/Pass.hh"
 
@@ -63,9 +66,6 @@ void AddImguiPass(RenderGraph *pGraph, eastl::string_view name)
 
             builder.SetDescriptorSet(DescriptorType::SampledImage, imageDescriptorInfo);
             builder.SetDescriptorSet(DescriptorType::Sampler, samplerDescriptorInfo);
-
-            FileStream vertexShaderData("imgui.v.glsl", false);
-            FileStream pixelShaderData("imgui.p.glsl", false);
 
             builder.SetColorAttachment("$backbuffer", { AttachmentOp::Load, AttachmentOp::Store });
             builder.SetBlendAttachment({ true });

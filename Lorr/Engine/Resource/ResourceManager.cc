@@ -1,5 +1,5 @@
 // Created on Monday May 15th 2023 by exdal
-// Last modified on Saturday May 20th 2023 by exdal
+// Last modified on Sunday May 21st 2023 by exdal
 
 #include "ResourceManager.hh"
 #include "Resource/Parser.hh"
@@ -12,6 +12,8 @@ namespace lr::Resource
 void ResourceManager::Init()
 {
     ZoneScoped;
+
+    LOG_TRACE("Initializing resources...");
 
     m_Allocator.Init({
         .m_DataSize = CONFIG_GET_VAR(rm_memory_mb),
@@ -34,20 +36,28 @@ void ResourceManager::Init()
     lm::Category &meta = result.GetCategory("Meta");
 
     /// SHADERS ///
+    LOG_TRACE("Loading Shaders...");
+
     lm::Category &shaders = result.GetCategory("Meta.Shaders");
     eastl::span<char *> shaderVals;
     shaders.GetArray<char *>("Files", shaderVals);
 
-    for (char *pShaderPath : shaderVals)
+    u32 shaderID = 0;
+    for (char *&pShaderPath : shaderVals)
     {
-        FileStream fs(Format("{}/{}", workingDir, pShaderPath), false);
-        const char *pScript = fs.ReadAll<char>();
-        u32 size = fs.Size();
-        fs.Close();
-
-        ShaderResource outResource = {};
-        Parser::ParseGLSL(BufferReadStream((u8 *)pScript, size), outResource);
+        Job::JobManager::Schedule(
+            [=]()
+            {
+                LOG_TRACE("Compiling shader '{}'...", pShaderPath);
+                FileView file(Format("{}/{}", workingDir, pShaderPath));
+                ShaderResource outResource = {};
+                Parser::ParseGLSL(BufferReadStream(file), outResource);
+                LOG_TRACE(
+                    "Compiled shader '{}', SPIR-V module: '{}'", pShaderPath, outResource.get().m_pShader);
+            });
     }
+
+    Job::JobManager::WaitForAll();
 }
 
 }  // namespace lr::Resource

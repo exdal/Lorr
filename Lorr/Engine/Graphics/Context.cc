@@ -781,44 +781,19 @@ void Context::EndFrame()
     vkQueuePresentKHR(pQueue, &presentInfo);
 }
 
-Shader *Context::CreateShader(ShaderStage stage, BufferReadStream &buf)
+Shader *Context::CreateShader(ShaderStage stage, Resource::ShaderResource *pResource)
 {
     ZoneScoped;
 
     Shader *pShader = new Shader;
     pShader->m_Type = stage;
 
-    ShaderCompileDesc compileDesc = {};
-    compileDesc.m_Type = stage;
-#if _DEBUG
-    compileDesc.m_Flags = ShaderFlag::GenerateDebugInfo | ShaderFlag::SkipOptimization;
-#else
-    compileDesc.m_Flags = ShaderFlag::SkipValidation;
-#endif
-
-    ShaderCompileOutput shaderOutput = ShaderCompiler::CompileShader(&compileDesc);
     VkShaderModuleCreateInfo createInfo = {
         .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-        .codeSize = shaderOutput.m_DataSpv.size(),
-        .pCode = shaderOutput.m_DataSpv.data(),
+        .codeSize = pResource->get().m_DataSpv.size(),
+        .pCode = pResource->get().m_DataSpv.data(),
     };
     vkCreateShaderModule(m_pDevice, &createInfo, nullptr, &pShader->m_pHandle);
-
-    return pShader;
-}
-
-Shader *Context::CreateShader(ShaderStage stage, eastl::string_view path)
-{
-    ZoneScoped;
-
-    FileStream fs(path, false);
-    void *pData = fs.ReadAll<void>();
-    fs.Close();
-
-    BufferReadStream buf(pData, fs.Size());
-    Shader *pShader = CreateShader(stage, buf);
-
-    free(pData);
 
     return pShader;
 }

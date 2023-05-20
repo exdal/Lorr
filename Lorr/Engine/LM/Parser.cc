@@ -4,7 +4,7 @@
 
 #include "Crypt/FNV.hh"
 #include "STL/String.hh"
-#include "IO/FileStream.hh"
+#include "IO/File.hh"
 
 #include "lm_bison.hh"
 #include "lm_flex.hh"
@@ -240,20 +240,14 @@ i32 lm::ParseFromFile(Result *pResult, eastl::string_view pathToFile)
 {
     ZoneScoped;
 
-    lr::FileStream scriptFile(pathToFile, false);
+    lr::FileView scriptFile(pathToFile);
     if (!scriptFile.IsOK())
     {
         LOG_ERROR("Failed to load '{}'.", pathToFile);
         return -2;
     }
 
-    const char *pScript = scriptFile.ReadAll<char>();
-    u32 size = scriptFile.Size();
-    scriptFile.Close();
-
-    i32 result = lm::ParseFromMemory(pResult, eastl::string_view(pScript, size));
-
-    free((void *)pScript);
+    i32 result = lm::ParseFromMemory(pResult, scriptFile.GetString());
 
     return result;
 }

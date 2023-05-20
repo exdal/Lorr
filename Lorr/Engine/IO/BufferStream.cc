@@ -1,235 +1,245 @@
+// Created on Wednesday July 6th 2022 by exdal
+// Last modified on Saturday May 20th 2023 by exdal
+
 #include "BufferStream.hh"
 
 #include "Memory/MemoryUtils.hh"
 
 namespace lr
 {
-    void BaseBufferStream::Seek(u8 seekFlag, u32 position)
+void BaseBufferStream::Seek(u8 seekFlag, u32 position)
+{
+    ZoneScoped;
+
+    switch (seekFlag)
     {
-        ZoneScoped;
-
-        switch (seekFlag)
-        {
-            case SEEK_END: m_DataOffset = m_DataLen - position; break;
-            case SEEK_SET: m_DataOffset = position; break;
-            case SEEK_CUR: m_DataOffset += position; break;
-            default: break;
-        }
-
-        if (m_DataOffset < 0)
-            m_DataOffset = 0;
-        else if (m_DataOffset > m_DataLen)
-            m_DataOffset = m_DataLen;
+        case SEEK_END:
+            m_DataOffset = m_DataLen - position;
+            break;
+        case SEEK_SET:
+            m_DataOffset = position;
+            break;
+        case SEEK_CUR:
+            m_DataOffset += position;
+            break;
+        default:
+            break;
     }
 
-    void BaseBufferStream::StartOver()
-    {
-        ZoneScoped;
-
+    if (m_DataOffset < 0)
         m_DataOffset = 0;
-    }
+    else if (m_DataOffset > m_DataLen)
+        m_DataOffset = m_DataLen;
+}
 
-    void *BaseBufferStream::Get(u32 dataLen, u32 count)
-    {
-        ZoneScoped;
+void BaseBufferStream::StartOver()
+{
+    ZoneScoped;
 
-        void *pData = m_pData + m_DataOffset;
-        m_DataOffset += dataLen * count;
+    m_DataOffset = 0;
+}
 
-        return pData;
-    }
+void *BaseBufferStream::Get(u32 dataLen, u32 count)
+{
+    ZoneScoped;
 
-    void *BaseBufferStream::GetNew(u32 dataLen, u32 count)
-    {
-        ZoneScoped;
+    void *pData = m_pData + m_DataOffset;
+    m_DataOffset += dataLen * count;
 
-        void *pData = malloc(dataLen * count);
-        memcpy(pData, m_pData + m_DataOffset, dataLen * count);
-        m_DataOffset += dataLen * count;
+    return pData;
+}
 
-        return pData;
-    }
+void *BaseBufferStream::GetNew(u32 dataLen, u32 count)
+{
+    ZoneScoped;
 
-    eastl::string_view BaseBufferStream::GetString(u32 dataSize)
-    {
-        ZoneScoped;
+    void *pData = malloc(dataLen * count);
+    memcpy(pData, m_pData + m_DataOffset, dataLen * count);
+    m_DataOffset += dataLen * count;
 
-        char *data = (char *)(m_pData + m_DataOffset);
-        m_DataOffset += dataSize;
+    return pData;
+}
 
-        return eastl::string_view(data, dataSize);
-    }
+eastl::string_view BaseBufferStream::GetString(u32 dataSize)
+{
+    ZoneScoped;
 
-    const u8 *BaseBufferStream::GetData()
-    {
-        ZoneScoped;
+    char *data = (char *)(m_pData + m_DataOffset);
+    m_DataOffset += dataSize;
 
-        return m_pData;
-    }
+    return eastl::string_view(data, dataSize);
+}
 
-    const u8 *BaseBufferStream::GetOffsetPtr()
-    {
-        ZoneScoped;
+const u8 *BaseBufferStream::GetData()
+{
+    ZoneScoped;
 
-        return m_pData + m_DataOffset;
-    }
+    return m_pData;
+}
 
-    const u32 BaseBufferStream::GetLength()
-    {
-        ZoneScoped;
+const u8 *BaseBufferStream::GetOffsetPtr()
+{
+    ZoneScoped;
 
-        return m_DataLen;
-    }
+    return m_pData + m_DataOffset;
+}
 
-    const u32 BaseBufferStream::GetOffset()
-    {
-        ZoneScoped;
+const u32 BaseBufferStream::GetLength()
+{
+    ZoneScoped;
 
-        return m_DataOffset;
-    }
+    return m_DataLen;
+}
 
-    ////////////////////////////////
+const u32 BaseBufferStream::GetOffset()
+{
+    ZoneScoped;
 
-    BufferReadStream::BufferReadStream(void *pData, u32 dataLen)
-    {
-        ZoneScoped;
+    return m_DataOffset;
+}
 
-        m_pData = (u8 *)pData;
-        m_DataLen = dataLen;
-    }
+////////////////////////////////
 
-    BufferReadStream::BufferReadStream(FileStream &fileStream)
-    {
-        ZoneScoped;
+BufferReadStream::BufferReadStream(void *pData, u32 dataLen)
+{
+    ZoneScoped;
 
-        m_DataLen = fileStream.Size();
-        m_pData = fileStream.ReadPtr<u8>(m_DataLen);
-    }
+    m_pData = (u8 *)pData;
+    m_DataLen = dataLen;
+}
 
-    ////////////////////////////////
+BufferReadStream::BufferReadStream(FileView &file)
+{
+    ZoneScoped;
 
-    BufferWriteStream::BufferWriteStream(u32 allocLen)
-    {
-        ZoneScoped;
+    m_pData = file.GetPtr();
+    m_DataLen = file.Size();
+}
 
-        Reset(allocLen);
-    }
+////////////////////////////////
 
-    BufferWriteStream::BufferWriteStream(void *pData, u32 dataLen)
-    {
-        ZoneScoped;
+BufferWriteStream::BufferWriteStream(u32 allocLen)
+{
+    ZoneScoped;
 
-        Reset((u8 *)pData, dataLen);
-    }
+    Reset(allocLen);
+}
 
-    BufferWriteStream::~BufferWriteStream()
-    {
-        ZoneScoped;
+BufferWriteStream::BufferWriteStream(void *pData, u32 dataLen)
+{
+    ZoneScoped;
 
-        SAFE_FREE(m_pData);
-    }
+    Reset((u8 *)pData, dataLen);
+}
 
-    void BufferWriteStream::Reset()
-    {
-        ZoneScoped;
+BufferWriteStream::~BufferWriteStream()
+{
+    ZoneScoped;
 
-        SAFE_FREE(m_pData);
-        m_DataLen = 0;
+    SAFE_FREE(m_pData);
+}
 
-        StartOver();
-    }
+void BufferWriteStream::Reset()
+{
+    ZoneScoped;
 
-    void BufferWriteStream::Reset(u32 dataLen)
-    {
-        ZoneScoped;
+    SAFE_FREE(m_pData);
+    m_DataLen = 0;
 
-        SAFE_FREE(m_pData);
-        m_DataLen = 0;
+    StartOver();
+}
 
-        AssignZero(dataLen);
-        StartOver();
-    }
+void BufferWriteStream::Reset(u32 dataLen)
+{
+    ZoneScoped;
 
-    void BufferWriteStream::Reset(u8 *pData, u32 dataLen)
-    {
-        ZoneScoped;
+    SAFE_FREE(m_pData);
+    m_DataLen = 0;
 
-        SAFE_FREE(m_pData);
-        m_DataLen = 0;
+    AssignZero(dataLen);
+    StartOver();
+}
 
-        Expand(dataLen);
-        Assign(pData, dataLen);
-        StartOver();
-    }
+void BufferWriteStream::Reset(u8 *pData, u32 dataLen)
+{
+    ZoneScoped;
 
-    void BufferWriteStream::Reset(BufferReadStream &stream)
-    {
-        ZoneScoped;
+    SAFE_FREE(m_pData);
+    m_DataLen = 0;
 
-        SAFE_FREE(m_pData);
-        m_DataLen = 0;
+    Expand(dataLen);
+    Assign(pData, dataLen);
+    StartOver();
+}
 
-        Expand(stream.GetLength());
-        Assign((u8 *)stream.GetData(), m_DataLen);
+void BufferWriteStream::Reset(BufferReadStream &stream)
+{
+    ZoneScoped;
 
-        StartOver();
-    }
+    SAFE_FREE(m_pData);
+    m_DataLen = 0;
 
-    void BufferWriteStream::Expand(u32 len)
-    {
-        ZoneScoped;
+    Expand(stream.GetLength());
+    Assign((u8 *)stream.GetData(), m_DataLen);
 
-        m_DataLen += len;
-        m_pData = (u8 *)realloc(m_pData, m_DataLen);
-        Memory::ZeroMem((m_pData + m_DataOffset), len);
-    }
+    StartOver();
+}
 
-    void BufferWriteStream::Assign(void *pData, u32 dataLen, u32 count)
-    {
-        ZoneScoped;
+void BufferWriteStream::Expand(u32 len)
+{
+    ZoneScoped;
 
-        SmartAlloc(dataLen * count);
+    m_DataLen += len;
+    m_pData = (u8 *)realloc(m_pData, m_DataLen);
+    Memory::ZeroMem((m_pData + m_DataOffset), len);
+}
 
-        assert(m_pData != nullptr);            // Our data has to be valid
-        assert(m_DataLen > 0);                 // Our data has to be allocated
-        assert(pData != nullptr);              // Data has to be vaild
-        assert(m_DataLen >= dataLen * count);  // Input data cannot be larger than data we have
+void BufferWriteStream::Assign(void *pData, u32 dataLen, u32 count)
+{
+    ZoneScoped;
 
-        memcpy(m_pData + m_DataOffset, pData, dataLen * count);
-        m_DataOffset += dataLen * count;
-    }
+    SmartAlloc(dataLen * count);
 
-    void BufferWriteStream::AssignZero(u32 dataSize)
-    {
-        ZoneScoped;
+    assert(m_pData != nullptr);            // Our data has to be valid
+    assert(m_DataLen > 0);                 // Our data has to be allocated
+    assert(pData != nullptr);              // Data has to be vaild
+    assert(m_DataLen >= dataLen * count);  // Input data cannot be larger than data we have
 
-        SmartAlloc(dataSize);
+    memcpy(m_pData + m_DataOffset, pData, dataLen * count);
+    m_DataOffset += dataLen * count;
+}
 
-        memset(m_pData + m_DataOffset, 0, dataSize);
-        m_DataOffset += dataSize;
-    }
+void BufferWriteStream::AssignZero(u32 dataSize)
+{
+    ZoneScoped;
 
-    void BufferWriteStream::AssignString(const eastl::string &val)
-    {
-        ZoneScoped;
+    SmartAlloc(dataSize);
 
-        Assign((void *)val.data(), val.length());
-    }
+    memset(m_pData + m_DataOffset, 0, dataSize);
+    m_DataOffset += dataSize;
+}
 
-    void BufferWriteStream::AssignString(eastl::string_view val)
-    {
-        ZoneScoped;
+void BufferWriteStream::AssignString(const eastl::string &val)
+{
+    ZoneScoped;
 
-        Assign((void *)val.data(), val.length());
-    }
+    Assign((void *)val.data(), val.length());
+}
 
-    void BufferWriteStream::SmartAlloc(u32 insertedSize)
-    {
-        ZoneScoped;
+void BufferWriteStream::AssignString(eastl::string_view val)
+{
+    ZoneScoped;
 
-        u32 expectedSize = m_DataOffset + insertedSize;
-        if (expectedSize > m_DataLen)
-            Expand(expectedSize - m_DataLen);
-    }
+    Assign((void *)val.data(), val.length());
+}
+
+void BufferWriteStream::SmartAlloc(u32 insertedSize)
+{
+    ZoneScoped;
+
+    u32 expectedSize = m_DataOffset + insertedSize;
+    if (expectedSize > m_DataLen)
+        Expand(expectedSize - m_DataLen);
+}
 
 }  // namespace lr

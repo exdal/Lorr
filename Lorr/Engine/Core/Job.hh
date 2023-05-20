@@ -1,5 +1,5 @@
 // Created on Tuesday May 16th 2023 by exdal
-// Last modified on Wednesday May 17th 2023 by exdal
+// Last modified on Sunday May 21st 2023 by exdal
 
 #pragma once
 
@@ -30,7 +30,7 @@ struct JobManager
     static JobManager &Get();
 
     eastl::fixed_vector<Worker, 16, false> m_Workers = {};
-    Memory::RingBufferAtomic<JobFn, 64> m_Jobs = {};
+    Memory::QueueAtomic<JobFn, 64> m_Jobs = {};
     eastl::atomic<u64> m_StatusMask = 0;
 };
 }  // namespace lr::Job

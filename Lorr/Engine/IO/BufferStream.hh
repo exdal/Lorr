@@ -1,12 +1,9 @@
-//
-// Created on Wednesday 6th July 2022 by exdal
-//
-// Reworked version of original implementation
-//
+// Created on Wednesday July 6th 2022 by exdal
+// Last modified on Saturday May 20th 2023 by exdal
 
 #pragma once
 
-#include "FileStream.hh"
+#include "File.hh"
 
 namespace lr
 {
@@ -59,7 +56,7 @@ namespace lr
     {
     public:
         BufferReadStream(void *pData, u32 dataLen = -1);
-        BufferReadStream(FileStream &fileStream);
+        BufferReadStream(FileView &file);
     };
 
     ////////////////////////////////

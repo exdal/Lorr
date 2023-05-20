@@ -1,12 +1,12 @@
-//
-// Created on Tuesday 10th May 2022 by exdal
-//
+// Created on Monday July 18th 2022 by exdal
+// Last modified on Saturday May 20th 2023 by exdal
 
 #pragma once
 
 #include "IO/BufferStream.hh"
 #include "Memory/Allocator/LinearAllocator.hh"
 #include "Memory/Allocator/TLSFAllocator.hh"
+#include "Resource/Resource.hh"
 
 #include "Device.hh"
 #include "CommandQueue.hh"
@@ -107,8 +107,7 @@ struct Context
 
     /// RESOURCE ///
     // * Shaders * //
-    Shader *CreateShader(ShaderStage stage, BufferReadStream &buf);
-    Shader *CreateShader(ShaderStage stage, eastl::string_view path);
+    Shader *CreateShader(ShaderStage stage, Resource::ShaderResource *pResource);
     void DeleteShader(Shader *pShader);
 
     // * Descriptor * //

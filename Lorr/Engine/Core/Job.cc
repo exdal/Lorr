@@ -1,5 +1,5 @@
 // Created on Wednesday May 17th 2023 by exdal
-// Last modified on Wednesday May 17th 2023 by exdal
+// Last modified on Sunday May 21st 2023 by exdal
 
 #include "Job.hh"
 #include "Utils/Timer.hh"
@@ -11,6 +11,7 @@ static JobManager _man;
 static iptr WorkerFn(void *pData)
 {
     Worker *pThis = (Worker *)pData;
+    fmtlog::setThreadName(Format("WORKER{}", pThis->m_ID).c_str());
 
     while (true)
     {
@@ -19,10 +20,11 @@ static iptr WorkerFn(void *pData)
         {
             pThis->SetBusy();
             func();
-            pThis->SetIdle();
 
             continue;
         }
+
+        pThis->SetIdle();
 
         EAProcessorPause();  // maximize the throughput
     }
@@ -36,9 +38,13 @@ void Worker::Init(u32 id, u32 processor)
 
     m_ID = id;
     m_Processor = processor;
-    m_Thread.SetDefaultProcessorMask(processor);
 
-    m_Thread.Begin(WorkerFn, this);
+    EA::Thread::ThreadParameters threadParams = {};
+    threadParams.mbDisablePriorityBoost = false;
+    threadParams.mnProcessor = processor;
+    threadParams.mpName = Format("WORKER {}", id).c_str();
+
+    m_Thread.Begin(WorkerFn, this, &threadParams);
 }
 
 void Worker::SetBusy()
@@ -79,7 +85,7 @@ void JobManager::Schedule(JobFn fn)
 
 void JobManager::WaitForAll()
 {
-    while (!_man.m_StatusMask.load(eastl::memory_order_acquire) || _man.m_Jobs.m_Size != 0)
+    while (_man.m_StatusMask.load(eastl::memory_order_acquire) != 0)
         ;
 }
 

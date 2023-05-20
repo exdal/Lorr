@@ -10,8 +10,6 @@
 	#pragma once
 #endif
 
-template <typename>
-constexpr bool eastl_atomic_always_false = false;
 
 #define EASTL_ATOMIC_INTERNAL_COMPILER_AVAILABLE(op)					\
 	EA_PREPROCESSOR_JOIN(EA_PREPROCESSOR_JOIN(EASTL_COMPILER_, op), _AVAILABLE)
@@ -19,8 +17,13 @@ constexpr bool eastl_atomic_always_false = false;
 #define EASTL_ATOMIC_INTERNAL_ARCH_AVAILABLE(op)						\
 	EA_PREPROCESSOR_JOIN(EA_PREPROCESSOR_JOIN(EASTL_ARCH_, op), _AVAILABLE)
 
+
+// We can't just use static_assert(false, ...) here, since on MSVC 17.10 
+// the /Zc:static_assert flag makes non-dependent static_asserts in the body of a template 
+// be evaluated at template-parse time, rather than at template instantion time.
+// So instead we just make the assert dependent on the type.
 #define EASTL_ATOMIC_INTERNAL_NOT_IMPLEMENTED_ERROR(...)				\
-	static_assert(eastl_atomic_always_false<T>, "eastl::atomic<T> atomic macro not implemented!")
+	static_assert(!eastl::is_same_v<T,T>, "eastl::atomic<T> atomic macro not implemented!")
 
 
 /* Compiler && Arch Not Implemented */

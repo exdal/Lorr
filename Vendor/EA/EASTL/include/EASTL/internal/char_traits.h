@@ -251,7 +251,7 @@ namespace eastl
 
 
 	template<typename T>
-	inline EA_CPP14_CONSTEXPR const T* Find(const T* p, T c, size_t n)
+	inline const T* Find(const T* p, T c, size_t n)
 	{
 		for(; n > 0; --n, ++p)
 		{
@@ -279,7 +279,7 @@ namespace eastl
 
 
 	template <typename T>
-	inline EA_CPP14_CONSTEXPR T* CharStringUninitializedCopy(const T* pSource, const T* pSourceEnd, T* pDestination)
+	inline T* CharStringUninitializedCopy(const T* pSource, const T* pSourceEnd, T* pDestination)
 	{
 		memmove(pDestination, pSource, (size_t)(pSourceEnd - pSource) * sizeof(T));
 		return pDestination + (pSourceEnd - pSource);
@@ -347,7 +347,7 @@ namespace eastl
 
 
 	template <typename T>
-	inline EA_CPP14_CONSTEXPR const T* CharTypeStringFindFirstOf(const T* p1Begin, const T* p1End, const T* p2Begin, const T* p2End)
+	inline const T* CharTypeStringFindFirstOf(const T* p1Begin, const T* p1End, const T* p2Begin, const T* p2End)
 	{
 		for (; p1Begin != p1End; ++p1Begin)
 		{

@@ -1,14 +1,14 @@
 // Created on Wednesday May 4th 2022 by exdal
-// Last modified on Wednesday May 17th 2023 by exdal
+// Last modified on Saturday May 20th 2023 by exdal
 
 #pragma once
 
 #include "Core/Config.hh"
 
-#include "Window/Win32/Win32Window.hh"
 #include "Graphics/RenderGraph/RenderGraph.hh"
-
+#include "Resource/ResourceManager.hh"
 #include "UI/ImGui.hh"
+#include "Window/Win32/Win32Window.hh"
 
 namespace lr
 {
@@ -86,6 +86,7 @@ namespace lr
         Win32Window m_Window;
         Graphics::RenderGraph m_RenderGraph;
         UI::ImGuiHandler m_ImGui;
+        Resource::ResourceManager m_ResourceMan;
 
         bool m_ShuttingDown = false;
 

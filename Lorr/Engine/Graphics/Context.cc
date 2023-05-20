@@ -1,5 +1,5 @@
 // Created on Monday July 18th 2022 by exdal
-// Last modified on Thursday May 18th 2023 by exdal
+// Last modified on Saturday May 20th 2023 by exdal
 
 #include "Context.hh"
 
@@ -60,8 +60,6 @@ bool Context::Init(APIDesc *pDesc)
     SetObjectName(m_pComputeQueue, "Compute Queue");
     m_pTransferQueue = CreateCommandQueue(CommandType::Transfer);
     SetObjectName(m_pTransferQueue, "Transfer Queue");
-
-    ShaderCompiler::Init();
 
     LOG_TRACE("Successfully initialized Vulkan API.");
 

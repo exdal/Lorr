@@ -1,5 +1,8 @@
 #version 460 core
 
+#pragma $extensions
+#pragma $stage_vertex
+
 struct PixelInput
 {
     vec2 TexCoord;

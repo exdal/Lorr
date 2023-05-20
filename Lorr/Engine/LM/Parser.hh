@@ -1,3 +1,5 @@
+// Created on Thursday May 11th 2023 by exdal
+// Last modified on Saturday May 20th 2023 by exdal
 #pragma once
 
 #include "Crypt/FNV.hh"
@@ -31,10 +33,13 @@ struct Variable
     VariableData m_Data = {};
 };
 
+struct Result;
 struct Category
 {
     eastl::string_view GetString(eastl::string_view name)
     {
+        ZoneScoped;
+
         VariableData *pData = FindVariable(lr::Hash::FNV64String(name));
         if (pData)
             return pData->pString;
@@ -44,15 +49,34 @@ struct Category
     template<typename _Type>
     _Type Get(eastl::string_view name)
     {
+        ZoneScoped;
+
         VariableData *pData = FindVariable(lr::Hash::FNV64String(name));
         if (pData)
             return (_Type)pData->NumberI;
         return _Type{};
     }
 
+    template<typename _Type>
+    bool GetArray(eastl::string_view name, eastl::span<_Type> &array)
+    {
+        ZoneScoped;
+
+        VariableData *pData = FindVariable(lr::Hash::FNV64String(name));
+        if (!pData || !pData->IsArray)
+            return false;
+
+        VariableData *pVarData = (m_ArrayValues.begin() + pData->ArrayOffset);
+        array = eastl::span<_Type>((_Type *)&pVarData->NumberI, (uptr)pData->ArrayElementCount);
+
+        return true;
+    }
+
     Variable &GetVariable(u32 id) { return m_Vars[id]; }
     VariableData *FindVariable(u64 hash)
     {
+        ZoneScoped;
+
         for (auto &[curHash, data] : m_Vars)
             if (curHash == hash)
                 return &data;
@@ -62,6 +86,8 @@ struct Category
 
     VariableData operator[](eastl::string_view varName)
     {
+        ZoneScoped;
+
         VariableData *pData = FindVariable(lr::Hash::FNV64String(varName));
         return pData ? *pData : VariableData{};
     }
@@ -72,6 +98,7 @@ struct Category
 
     eastl::vector<u32> m_SubCategories = {};
     eastl::vector<Variable> m_Vars = {};
+    eastl::vector<VariableData> m_ArrayValues = {};
 };
 
 struct Result
@@ -91,9 +118,10 @@ struct Result
 
     void PushError(u32 line, u32 column, const char *pMessage);
 
-    char *AllocateString(const char *pSrc);
+    char *AllocateString(eastl::string_view var);
     u32 AllocateCategory(const char *pName, u32 parent);
     Category &GetCategory(u32 id);
+    Category &GetCategory(eastl::string_view categorySet);
 
     // Only valid for Global Category
     VariableData operator[](eastl::string_view varName)
@@ -103,7 +131,6 @@ struct Result
     }
 
     lr::Memory::LinearAllocator m_StringAllocator = {};
-    eastl::vector<VariableData> m_ArrayAllocator = {};
     eastl::vector<Category> m_Categories = {};
 
     Category m_GlobalCategory = {};

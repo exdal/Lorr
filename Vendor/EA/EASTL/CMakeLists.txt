@@ -9,6 +9,7 @@ project(EASTL CXX)
 #-------------------------------------------------------------------------------------------
 option(EASTL_BUILD_BENCHMARK "Enable generation of build files for benchmark" OFF)
 option(EASTL_BUILD_TESTS "Enable generation of build files for tests" OFF)
+option(EASTL_STD_ITERATOR_CATEGORY_ENABLED "Enable compatibility with std:: iterator categories" OFF)
 
 #-------------------------------------------------------------------------------------------
 # Compiler Flags
@@ -21,6 +22,15 @@ include(CommonCppFlags)
 #-------------------------------------------------------------------------------------------
 file(GLOB EASTL_SOURCES "source/*.cpp")
 add_library(EASTL ${EASTL_SOURCES})
+
+if (MSVC)
+    set(EASTL_NATVIS_DIR "doc")
+    set(EASTL_NATVIS_FILE "${EASTL_NATVIS_DIR}/EASTL.natvis")
+    target_sources(EASTL INTERFACE
+        $<INSTALL_INTERFACE:${EASTL_NATVIS_FILE}>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/${EASTL_NATVIS_FILE}>
+    )
+endif()
 
 if(EASTL_BUILD_BENCHMARK)
     add_subdirectory(benchmark)
@@ -37,6 +47,9 @@ add_definitions(-D_CHAR16T)
 add_definitions(-D_CRT_SECURE_NO_WARNINGS)
 add_definitions(-D_SCL_SECURE_NO_WARNINGS)
 add_definitions(-DEASTL_OPENSOURCE=1)
+if (EASTL_STD_ITERATOR_CATEGORY_ENABLED)
+  add_definitions(-DEASTL_STD_ITERATOR_CATEGORY_ENABLED=1)
+endif()
 
 #-------------------------------------------------------------------------------------------
 # Include dirs
@@ -52,3 +65,12 @@ endif()
 
 target_link_libraries(EASTL EABase)
 
+#-------------------------------------------------------------------------------------------
+# Installation
+#-------------------------------------------------------------------------------------------
+install(TARGETS EASTL DESTINATION lib)
+install(DIRECTORY include/EASTL DESTINATION include)
+
+if (MSVC)
+    install(FILES ${EASTL_NATVIS_FILE} DESTINATION ${EASTL_NATVIS_DIR})
+endif()

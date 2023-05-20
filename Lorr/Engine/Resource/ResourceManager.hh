@@ -1,5 +1,5 @@
 // Created on Monday May 15th 2023 by exdal
-// Last modified on Thursday May 18th 2023 by exdal
+// Last modified on Saturday May 20th 2023 by exdal
 
 #pragma once
 
@@ -12,7 +12,7 @@ namespace lr::Resource
 {
 struct ResourceManager
 {
-    void Init(eastl::string_view metaPath);
+    void Init();
 
     template<typename _Resource>
     _Resource *Get(eastl::string_view name)

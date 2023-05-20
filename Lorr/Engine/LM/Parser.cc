@@ -1,8 +1,9 @@
 // Created on Thursday May 11th 2023 by exdal
-// Last modified on Wednesday May 17th 2023 by exdal
+// Last modified on Saturday May 20th 2023 by exdal
 #include "Parser.hh"
 
 #include "Crypt/FNV.hh"
+#include "STL/String.hh"
 #include "IO/FileStream.hh"
 
 #include "lm_bison.hh"
@@ -39,7 +40,7 @@ void Result::PushArray(const char *pName)
     ZoneScoped;
 
     Category &category = GetCategory(m_CurrentCategory);
-    u32 offset = m_ArrayAllocator.size();
+    u32 offset = category.m_ArrayValues.size();
     category.m_CurrentVar = category.m_Vars.size();
     category.m_Vars.push_back({
         .m_Hash = lr::Hash::FNV64String(pName),
@@ -76,11 +77,11 @@ void Result::PushString(const char *pVar)
 
     Category &category = GetCategory(m_CurrentCategory);
     VariableData &data = category.GetVariable(category.m_CurrentVar).m_Data;
-    char *pString = AllocateString(pVar);
+    char *pString = AllocateString(ls::TrimQuotes(pVar));
     if (data.IsArray)
     {
         data.ArrayElementCount++;
-        m_ArrayAllocator.push_back({ .pString = pString });
+        category.m_ArrayValues.push_back({ .pString = pString });
     }
     else
     {
@@ -99,7 +100,7 @@ void Result::PushNumber(i64 var)
     if (data.IsArray)
     {
         data.ArrayElementCount++;
-        m_ArrayAllocator.push_back({ .NumberI = var });
+        category.m_ArrayValues.push_back({ .NumberI = var });
     }
     else
     {
@@ -116,7 +117,7 @@ void Result::PushDouble(double var)
     if (data.IsArray)
     {
         data.ArrayElementCount++;
-        m_ArrayAllocator.push_back({ .NumberF = var });
+        category.m_ArrayValues.push_back({ .NumberF = var });
     }
     else
     {
@@ -138,12 +139,13 @@ void Result::PushError(u32 line, u32 column, const char *pMessage)
     LOG_ERROR("Failed to real LM: ({}:{}): {}", line, column, pMessage);
 }
 
-char *Result::AllocateString(const char *pSrc)
+char *Result::AllocateString(eastl::string_view var)
 {
     ZoneScoped;
 
-    char *pAllocated = (char *)m_StringAllocator.Allocate(strlen(pSrc) + 1);
-    strcpy(pAllocated, pSrc);
+    char *pAllocated = (char *)m_StringAllocator.Allocate(var.length() + 1);
+    memcpy(pAllocated, var.data(), var.length());
+    pAllocated[var.length() + 1] = '\0';
 
     return pAllocated;
 }
@@ -165,6 +167,38 @@ Category &Result::GetCategory(u32 id)
         return m_GlobalCategory;
 
     return m_Categories[id - 1];
+}
+
+Category &Result::GetCategory(eastl::string_view categorySet)
+{
+    ZoneScoped;
+
+    uptr namePos = -1;
+    uptr lastPos = 0;
+    Category *pFoundCategory = &m_GlobalCategory;
+    eastl::string_view currentCategory = categorySet;
+
+    do
+    {
+        namePos = categorySet.find('.', lastPos);
+        currentCategory = categorySet.substr(lastPos, namePos - lastPos);
+
+        if (namePos != -1)
+            lastPos = namePos + 1;
+
+        u64 hash = lr::Hash::FNV64String(currentCategory);
+        for (u32 &categoryID : pFoundCategory->m_SubCategories)
+        {
+            Category &category = GetCategory(categoryID);
+            if (category.m_Hash == hash)
+            {
+                pFoundCategory = &category;
+            }
+        }
+
+    } while (namePos != -1);
+
+    return *pFoundCategory;
 }
 
 }  // namespace lm

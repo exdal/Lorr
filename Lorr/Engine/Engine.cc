@@ -1,10 +1,12 @@
 // Created on Wednesday May 4th 2022 by exdal
-// Last modified on Wednesday May 17th 2023 by exdal
+// Last modified on Saturday May 20th 2023 by exdal
 
 #include "Engine.hh"
 
 #include "Core/Job.hh"
 #include "Graphics/Renderer/Pass.hh"
+
+#include "STL/String.hh"
 
 namespace lr
 {
@@ -15,6 +17,7 @@ void Engine::Init(EngineDesc &engineDesc)
     Logger::Init();
     Config::Init();
     Job::JobManager::Init(CONFIG_GET_VAR(jm_worker_count));
+    m_ResourceMan.Init();
 
     m_Window.Init(engineDesc.m_WindowDesc);
     // m_ImGui.Init(m_Window.m_Width, m_Window.m_Height);

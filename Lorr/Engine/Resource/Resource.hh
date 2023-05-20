@@ -1,5 +1,5 @@
 // Created on Thursday November 10th 2022 by exdal
-// Last modified on Thursday May 18th 2023 by exdal
+// Last modified on Saturday May 20th 2023 by exdal
 
 #pragma once
 
@@ -26,7 +26,7 @@ struct ResourceData
 
     ResourceType m_Type = _Type;
     u64 m_Size = 0;
-    _Data m_Data = nullptr;
+    _Data m_Data = {};
 };
 
 using ShaderResource = Resource::ResourceData<Graphics::ShaderCompileOutput, Resource::ResourceType::Shader>;

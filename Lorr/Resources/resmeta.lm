@@ -1,4 +1,4 @@
-Resource_Meta 
+Meta 
 {
     Version = 1
 
@@ -9,8 +9,8 @@ Resource_Meta
         ]
 
         Files = [
-            "imgui.vs",
-            "imgui.fs",
+            "Shaders/imgui.vs",
+            "Shaders/imgui.fs"
         ]
     }
 }

@@ -3,6 +3,9 @@
 
 #pragma once
 
+/// THIS IS A VERY WIP STACKWALKER ///
+/// AND PLANNED FOR FUTURE USE ///
+
 namespace lr
 {
 struct BackTrace

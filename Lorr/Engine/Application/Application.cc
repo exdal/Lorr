@@ -13,8 +13,6 @@ void Application::PreInit(BaseApplicationDesc &desc)
 
     m_Name = desc.m_Name;
     m_Engine.Init(desc.m_EngineDesc);
-
-    m_Engine.m_RenderGraph.Init(nullptr);
 }
 
 void Application::Run()

@@ -8,47 +8,43 @@ namespace lr::Memory
 template<typename _Type, u32 _Count>
 struct RingBuffer
 {
-    static constexpr u32 count = _Count;
+    static_assert(!(_Count & 1), "_Count must be power of 2.");
+    static constexpr u32 MASK = _Count - 1;
 
     void push(const _Type &val)
     {
-        m_Data[m_Head] = val;
-        m_Head = (m_Head + 1) % count;
+        ZoneScoped;
 
-        if (m_Size == count)
-            m_Tail = (m_Tail + 1) % count;
-        else
-            m_Size++;
+        m_Data[m_Tail++ & MASK] = val;
     }
 
     bool pop(_Type &val)
     {
-        if (m_Size == 0)
-            return false;
+        if (m_Tail > m_Head)
+        {
+            val = m_Data[m_Head++ & MASK];
+            return true;
+        }
 
-        m_Size--;
-        val = m_Data[m_Tail];
-        m_Tail = (m_Tail + 1) % count;
-
-        return true;
+        return false;
     }
 
-    bool empty() { return m_Size == 0; }
+    bool empty() { return m_Head == m_Tail; }
 
-    u32 m_Size = 0;
     u32 m_Head = 0;
     u32 m_Tail = 0;
-    _Type m_Data[count] = {};
+    _Type m_Data[_Count] = {};
 };
 
 template<typename _Type, u32 _Count>
-struct QueueAtomic
+struct RingBufferAtomic
 {
     static_assert(!(_Count & 1), "_Count must be power of 2.");
     static constexpr u32 MASK = _Count - 1;
 
-    // Produced by one(producer) thread
-    // TODO: This should give a feedback to user if val is pushed or not, so it won't drop other valuables
+    // Produced by one(producer) thread.
+    // TODO: This should give a feedback to user if val is pushed or not, so it won't drop other valuables.
+    /// This function does not push head forward when tail reaches head.
     void push(const _Type &val)
     {
         u32 tail = m_Tail.load(eastl::memory_order_acquire);

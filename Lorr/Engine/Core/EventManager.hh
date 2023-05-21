@@ -21,7 +21,7 @@ struct EventManager
 
     using _RingBuffer = eastl::conditional<
         _AtomicRingBuffer,
-        Memory::QueueAtomic<EventIdentifier, _Count>,
+        Memory::RingBufferAtomic<EventIdentifier, _Count>,
         Memory::RingBuffer<EventIdentifier, _Count>>::type;
 
     bool Peek()

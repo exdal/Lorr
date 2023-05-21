@@ -30,7 +30,7 @@ struct JobManager
     static JobManager &Get();
 
     eastl::fixed_vector<Worker, 16, false> m_Workers = {};
-    Memory::QueueAtomic<JobFn, 64> m_Jobs = {};
+    Memory::RingBufferAtomic<JobFn, 64> m_Jobs = {};
     eastl::atomic<u64> m_StatusMask = 0;
 };
 }  // namespace lr::Job

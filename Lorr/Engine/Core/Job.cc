@@ -11,7 +11,7 @@ static JobManager _man;
 static iptr WorkerFn(void *pData)
 {
     Worker *pThis = (Worker *)pData;
-    fmtlog::setThreadName(Format("WORKER{}", pThis->m_ID).c_str());
+    fmtlog::setThreadName(Format("WRKR{}", pThis->m_ID).c_str());
 
     while (true)
     {
@@ -42,7 +42,7 @@ void Worker::Init(u32 id, u32 processor)
     EA::Thread::ThreadParameters threadParams = {};
     threadParams.mbDisablePriorityBoost = false;
     threadParams.mnProcessor = processor;
-    threadParams.mpName = Format("WORKER {}", id).c_str();
+    threadParams.mpName = Format("WRKR{}", id).c_str();
 
     m_Thread.Begin(WorkerFn, this, &threadParams);
 }
@@ -85,7 +85,8 @@ void JobManager::Schedule(JobFn fn)
 
 void JobManager::WaitForAll()
 {
-    while (_man.m_StatusMask.load(eastl::memory_order_acquire) != 0)
+    u64 mask = _man.m_StatusMask.load(eastl::memory_order_acquire);
+    while (_man.m_StatusMask.load(eastl::memory_order_acquire) != 0 || !_man.m_Jobs.empty())
         ;
 }
 

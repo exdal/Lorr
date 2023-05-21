@@ -54,7 +54,8 @@ void ResourceManager::Init()
                 Parser::ParseGLSL(BufferReadStream(file), outResource);
                 LOG_TRACE(
                     "Compiled shader '{}', SPIR-V module: '{}'", pShaderPath, outResource.get().m_pShader);
-                
+
+                Add(pShaderPath, outResource);
             });
     }
 

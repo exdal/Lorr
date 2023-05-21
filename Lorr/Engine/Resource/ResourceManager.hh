@@ -1,5 +1,5 @@
 // Created on Monday May 15th 2023 by exdal
-// Last modified on Saturday May 20th 2023 by exdal
+// Last modified on Sunday May 21st 2023 by exdal
 
 #pragma once
 
@@ -41,7 +41,7 @@ struct ResourceManager
         u8 *pResourceData = (u8 *)m_Allocator.Allocate(sizeof(_Resource) + PTR_SIZE, 1, &pBlock);
         if (!pResourceData)
         {
-            LOG_ERROR("Failed to allocate space for Resource<{}>. Out of memory.", _Resource::type);
+            LOG_ERROR("Failed to allocate space for Resource<{}>. Out of memory.", (u32)resource.m_Type);
             return nullptr;
         }
 

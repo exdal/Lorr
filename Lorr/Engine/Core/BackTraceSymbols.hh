@@ -1,11 +1,7 @@
-// Created on Sunday May 21st 2023 by exdal
-// Last modified on Sunday May 21st 2023 by exdal
-
-#pragma once
-
+// Created on Monday May 22nd 2023 by exdal
+// Last modified on Monday May 22nd 2023 by exdal
 #include <Windows.h>
 #include <DbgHelp.h>
-#pragma comment(lib, "dbghelp.lib")
 
 #ifdef SearchPath
 #undef SearchPath

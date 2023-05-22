@@ -1,5 +1,5 @@
 // Created on Wednesday May 4th 2022 by exdal
-// Last modified on Wednesday May 17th 2023 by exdal
+// Last modified on Monday May 22nd 2023 by exdal
 
 #pragma once
 
@@ -42,8 +42,8 @@ typedef signed char i8;
 #define PTR_SIZE EA_PLATFORM_PTR_SIZE
 
 #if EA_PLATFORM_PTR_SIZE == 8
-typedef unsigned long long uptr;
-typedef signed long long iptr;
+typedef unsigned __int64 uptr;
+typedef signed __int64 iptr;
 #else
 typedef unsigned int uptr;
 typedef signed int iptr;

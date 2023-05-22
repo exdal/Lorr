@@ -1,8 +1,10 @@
 // Created on Friday December 9th 2022 by exdal
-// Last modified on Sunday May 21st 2023 by exdal
+// Last modified on Monday May 22nd 2023 by exdal
 #include "Application.hh"
+#include <stdarg.h>
 
 #include "Core/BackTrace.hh"
+#include "OS/Directory.hh"
 #include "Utils/Timer.hh"
 
 namespace lr
@@ -10,6 +12,13 @@ namespace lr
 void Application::PreInit(BaseApplicationDesc &desc)
 {
     ZoneScoped;
+
+    eastl::string currentPath;
+    OS::GetCurrentDir(currentPath);
+    currentPath += "\\bin";
+    OS::SetLibraryDirectory(currentPath);
+
+    BackTrace::Init();
 
     m_Name = desc.m_Name;
     m_Engine.Init(desc.m_EngineDesc);

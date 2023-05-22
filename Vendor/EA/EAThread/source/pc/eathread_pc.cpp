@@ -689,7 +689,7 @@ namespace Internal {
 
 	void SetThreadName(EAThreadDynamicData* pTDD, const char* pName)
 	{
-		strncpy(pTDD->mName, pName, EATHREAD_NAME_SIZE);
+		memcpy(pTDD->mName, pName, EATHREAD_NAME_SIZE);
 		pTDD->mName[EATHREAD_NAME_SIZE - 1] = 0;
 
 	#if defined(EA_PLATFORM_WINDOWS) && defined(EA_COMPILER_MSVC) || (defined(EA_PLATFORM_XBOXONE))

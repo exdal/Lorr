@@ -1,5 +1,5 @@
 // Created on Monday July 18th 2022 by exdal
-// Last modified on Saturday May 20th 2023 by exdal
+// Last modified on Monday May 22nd 2023 by exdal
 
 #include "Context.hh"
 
@@ -633,10 +633,10 @@ SwapChain *Context::CreateSwapChain(BaseWindow *pWindow, SwapChainFlag flags, Sw
         pImage->m_TargetAllocator = ResourceAllocator::Count;
         CreateImageView(pImage);
 
-        SetObjectName(pImage, Format("Swap Chain Image {}", i));
+        SetObjectName(pImage, _FMT("Swap Chain Image {}", i));
 
         frame.m_pPresentSemp = CreateSemaphore();
-        SetObjectName(frame.m_pPresentSemp, Format("Present Semaphore {}", i));
+        SetObjectName(frame.m_pPresentSemp, _FMT("Present Semaphore {}", i));
     }
 
     return pSwapChain;
@@ -1261,7 +1261,7 @@ Semaphore *Context::GetAvailableAcquireSemaphore(Semaphore *pOldSemaphore)
             Semaphore *pSemaphore = CreateSemaphore();
             pSemaphore->m_Value = i;  // not timeline value
 
-            SetObjectName(pSemaphore, Format("Cached Acquire Sem. {}", m_AcquireSempPool.size()));
+            SetObjectName(pSemaphore, _FMT("Cached Acquire Sem. {}", m_AcquireSempPool.size()));
             m_AcquireSempPool.push_back(pSemaphore);
         }
 

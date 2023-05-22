@@ -1,5 +1,5 @@
 // Created on Friday February 24th 2023 by exdal
-// Last modified on Wednesday May 17th 2023 by exdal
+// Last modified on Monday May 22nd 2023 by exdal
 
 #include "RenderGraph.hh"
 
@@ -86,12 +86,12 @@ void RenderGraph::Init(RenderGraphDesc *pDesc)
         for (u32 t = 0; t < (u32)CommandType::Count; t++)
         {
             CommandAllocator *pAllocator = m_pContext->CreateCommandAllocator((CommandType)t, true);
-            m_pContext->SetObjectName(pAllocator, Format("RG Command Allocator {}:{}", t, i));
+            m_pContext->SetObjectName(pAllocator, _FMT("RG Command Allocator {}:{}", t, i));
             m_CommandAllocators.push_back(pAllocator);
         }
 
         Semaphore *pSema = m_pContext->CreateSemaphore(0, false);
-        m_pContext->SetObjectName(pSema, Format("RG Semaphore {}", i));
+        m_pContext->SetObjectName(pSema, _FMT("RG Semaphore {}", i));
         m_Semaphores.push_back(pSema);
     }
 
@@ -336,7 +336,7 @@ void RenderGraph::AllocateCommandLists(CommandType type)
     {
         CommandAllocator *pAllocator = m_CommandAllocators[i * pSwapChain->m_FrameCount + (u32)type];
         CommandList *pList = m_pContext->CreateCommandList(type, pAllocator);
-        m_pContext->SetObjectName(pList, Format("List {}", m_CommandLists.size()));
+        m_pContext->SetObjectName(pList, _FMT("List {}", m_CommandLists.size()));
         m_CommandLists.push_back(pList);
     }
 }

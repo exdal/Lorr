@@ -1,11 +1,12 @@
 // Created on Monday May 15th 2023 by exdal
-// Last modified on Sunday May 21st 2023 by exdal
+// Last modified on Monday May 22nd 2023 by exdal
 
 #include "ResourceManager.hh"
 #include "Resource/Parser.hh"
 
 #include "Core/Config.hh"
 #include "LM/Parser.hh"
+#include "STL/String.hh"
 
 namespace lr::Resource
 {
@@ -26,7 +27,7 @@ void ResourceManager::Init()
 
     lm::Result result = {};
     lm::Init(&result);
-    if (!lm::ParseFromFile(&result, Format("{}/{}", workingDir, CONFIG_GET_VAR(resource_meta_file))))
+    if (!lm::ParseFromFile(&result, _FMT("{}/{}", workingDir, CONFIG_GET_VAR(resource_meta_file))))
     {
         LOG_CRITICAL("ResourceMeta file not found!");
         return;
@@ -48,14 +49,17 @@ void ResourceManager::Init()
         Job::JobManager::Schedule(
             [=]()
             {
-                LOG_TRACE("Compiling shader '{}'...", pShaderPath);
-                FileView file(Format("{}/{}", workingDir, pShaderPath));
+                eastl::string resourceName = _FMT("shader://{}", ls::TrimFileName(pShaderPath));
+                LOG_TRACE("Compiling shader '{}'...", resourceName);
+
+                FileView file(_FMT("{}/{}", workingDir, pShaderPath));
                 ShaderResource outResource = {};
                 Parser::ParseGLSL(BufferReadStream(file), outResource);
-                LOG_TRACE(
-                    "Compiled shader '{}', SPIR-V module: '{}'", pShaderPath, outResource.get().m_pShader);
 
-                Add(pShaderPath, outResource);
+                LOG_TRACE(
+                    "Compiled shader '{}', SPIR-V module: '{}'", resourceName, outResource.get().m_pShader);
+
+                Add(resourceName, outResource);
             });
     }
 

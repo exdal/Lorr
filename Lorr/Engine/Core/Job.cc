@@ -1,5 +1,5 @@
 // Created on Wednesday May 17th 2023 by exdal
-// Last modified on Sunday May 21st 2023 by exdal
+// Last modified on Monday May 22nd 2023 by exdal
 
 #include "Job.hh"
 #include "Utils/Timer.hh"
@@ -11,7 +11,7 @@ static JobManager _man;
 static iptr WorkerFn(void *pData)
 {
     Worker *pThis = (Worker *)pData;
-    fmtlog::setThreadName(Format("WRKR{}", pThis->m_ID).c_str());
+    fmtlog::setThreadName(_FMT("WRKR{}", pThis->m_ID).c_str());
 
     while (true)
     {
@@ -39,10 +39,11 @@ void Worker::Init(u32 id, u32 processor)
     m_ID = id;
     m_Processor = processor;
 
+    eastl::string threadName = _FMT("WRKR{}", id);
     EA::Thread::ThreadParameters threadParams = {};
     threadParams.mbDisablePriorityBoost = false;
     threadParams.mnProcessor = processor;
-    threadParams.mpName = Format("WRKR{}", id).c_str();
+    threadParams.mpName = threadName.c_str();
 
     m_Thread.Begin(WorkerFn, this, &threadParams);
 }

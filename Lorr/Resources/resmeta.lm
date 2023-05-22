@@ -9,8 +9,8 @@ Meta
         ]
 
         Files = [
-            "Shaders/imgui.vs",
-            "Shaders/imgui.fs",
+            "shaders/imgui.vs",
+            "shaders/imgui.fs",
         ]
     }
 }

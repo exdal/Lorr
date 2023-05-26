@@ -1,5 +1,5 @@
 // Created on Sunday May 21st 2023 by exdal
-// Last modified on Monday May 22nd 2023 by exdal
+// Last modified on Wednesday May 24th 2023 by exdal
 
 #include "BackTrace.hh"
 #include "BackTraceSymbols.hh"
@@ -94,7 +94,11 @@ void BackTrace::PrintTrace(iptr threadID)
         IMAGEHLP_LINE64 line;
         line.SizeOfStruct = sizeof(IMAGEHLP_LINE64);
         if (!lrSymGetLineFromAddr64(_bt.m_pProcess, address, &lineOff, &line))
-            _snprintf(pSymGetLineFromAddrMsg, 64, "SymGetLineFromAddr64-%lu", GetLastError());
+        {
+            u32 err = GetLastError();
+            if (err != 487)
+                _snprintf(pSymGetLineFromAddrMsg, 64, "SymGetLineFromAddr64-%lu", err);
+        }
 
         IMAGEHLP_MODULE64 module;
         module.SizeOfStruct = sizeof(IMAGEHLP_MODULE64);

@@ -1,5 +1,5 @@
 // Created on Thursday November 10th 2022 by exdal
-// Last modified on Saturday May 20th 2023 by exdal
+// Last modified on Tuesday May 23rd 2023 by exdal
 
 #pragma once
 
@@ -30,5 +30,19 @@ struct ResourceData
 };
 
 using ShaderResource = Resource::ResourceData<Graphics::ShaderCompileOutput, Resource::ResourceType::Shader>;
+
+template<typename _Resource>
+struct ResourceWrapper;
+
+template<>
+struct ResourceWrapper<ShaderResource>
+{
+    static void Destroy(ShaderResource &resource)
+    {
+        ZoneScoped;
+
+        Graphics::ShaderCompiler::FreeProgram(resource.get());
+    }
+};
 
 }  // namespace lr::Resource

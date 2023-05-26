@@ -1,6 +1,5 @@
-//
-// Created on Friday 24th February 2023 by exdal
-//
+// Created on Friday February 24th 2023 by exdal
+// Last modified on Thursday May 25th 2023 by exdal
 
 #pragma once
 
@@ -139,8 +138,6 @@ struct RenderGraph
 
     eastl::vector<ResourceView<Image>> m_Images;
     eastl::vector<RenderPassInput> m_InputResources;
-
-    eastl::vector<DescriptorSetLayout *> m_DescriptorLayouts;
 
     Buffer *m_pResourceDescriptorBuffer = nullptr;
     Buffer *m_pSamplerDescriptorBuffer = nullptr;

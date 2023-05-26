@@ -1,5 +1,5 @@
 // Created on Sunday March 12th 2023 by exdal
-// Last modified on Thursday May 18th 2023 by exdal
+// Last modified on Tuesday May 23rd 2023 by exdal
 
 #include "Shader.hh"
 
@@ -225,6 +225,7 @@ ShaderCompileOutput ShaderCompiler::CompileShader(ShaderCompileDesc *pDesc)
     u32 dataSize = glslang_program_SPIRV_get_size(pProgram) * sizeof(u32);
     u32 *pData = glslang_program_SPIRV_get_ptr(pProgram);
     output = {
+        .m_Stage = pDesc->m_Type,
         .m_DataSpv = { pData, dataSize },
         .m_pProgram = pProgram,
         .m_pShader = pShader,

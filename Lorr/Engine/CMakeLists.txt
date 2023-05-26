@@ -6,6 +6,7 @@ set(LORR_VENDOR
     tracy
 
     fmt
+    spdlog
 
     glslang 
     OGLCompiler 

@@ -15,7 +15,7 @@ layout(location = 2) in vec4 vColor;
 
 layout(location = 0) out PixelInput pOutput;
 
-layout(push_constant) uniform _Constants
+layout(push_constant, scalar) uniform _Constants
 {
     vec2 Scale; 
     vec2 Translate;

@@ -1,3 +1,6 @@
+// Created on Monday July 18th 2022 by exdal
+// Last modified on Friday May 26th 2023 by exdal
+
 #include "CommandList.hh"
 
 #include "Buffer.hh"
@@ -244,11 +247,11 @@ void CommandList::SetIndexBuffer(Buffer *pBuffer, bool type32)
         m_pHandle, pBuffer->m_pHandle, 0, type32 ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16);
 }
 
-void CommandList::CopyBuffer(Buffer *pSource, Buffer *pDest, u64 size)
+void CommandList::CopyBuffer(Buffer *pSource, Buffer *pDest, u64 srcOff, u64 dstOff, u64 size)
 {
     ZoneScoped;
 
-    VkBufferCopy copyRegion = { .size = size };
+    VkBufferCopy copyRegion = { .srcOffset = srcOff, .dstOffset = dstOff, .size = size };
     vkCmdCopyBuffer(m_pHandle, pSource->m_pHandle, pDest->m_pHandle, 1, &copyRegion);
 }
 
@@ -362,7 +365,7 @@ void CommandList::SetDescriptorBufferOffsets(
     u32 firstSet, u32 setCount, eastl::span<u32> indices, eastl::span<u64> offsets)
 {
     ZoneScoped;
-
+    
     vkCmdSetDescriptorBufferOffsetsEXT(
         m_pHandle,
         m_pPipeline->m_BindPoint,

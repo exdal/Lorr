@@ -1,6 +1,5 @@
-//
-// Created on Monday 9th May 2022 by exdal
-//
+// Created on Monday July 18th 2022 by exdal
+// Last modified on Tuesday May 23rd 2023 by exdal
 
 #pragma once
 
@@ -45,7 +44,7 @@ struct SwapChain : APIObject<VK_OBJECT_TYPE_SWAPCHAIN_KHR>
     u32 m_Width = 0;
     u32 m_Height = 0;
     bool m_vSync = false;
-    eastl::fixed_vector<SwapChainFrame, 6, false> m_Frames = {};
+    eastl::array<SwapChainFrame, LR_MAX_FRAME_COUNT> m_Frames = {};
 
     ImageFormat m_ImageFormat = ImageFormat::BGRA8F;
     VkColorSpaceKHR m_ColorSpace = VK_COLOR_SPACE_MAX_ENUM_KHR;

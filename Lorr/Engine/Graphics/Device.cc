@@ -1,5 +1,5 @@
 // Created on Monday March 20th 2023 by exdal
-// Last modified on Tuesday May 16th 2023 by exdal
+// Last modified on Friday May 26th 2023 by exdal
 
 #include "Device.hh"
 
@@ -15,7 +15,7 @@ namespace lr::Graphics
 static constexpr eastl::array<const char *, 9> kRequiredExtensions = {
     "VK_KHR_swapchain",         "VK_KHR_depth_stencil_resolve",   "VK_KHR_dynamic_rendering",
     "VK_KHR_synchronization2",  "VK_EXT_extended_dynamic_state2", "VK_KHR_timeline_semaphore",
-    "VK_EXT_descriptor_buffer", "VK_EXT_descriptor_indexing",     "VK_KHR_push_descriptor",
+    "VK_EXT_descriptor_buffer", "VK_EXT_descriptor_indexing",     "VK_EXT_robustness2",
 };
 
 ////////////////////////////////////
@@ -23,9 +23,14 @@ static constexpr eastl::array<const char *, 9> kRequiredExtensions = {
 ////////////////////////////////////
 
 // * Extensions
+static VkPhysicalDeviceRobustness2FeaturesEXT kRobustness2Features = {
+    .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT,
+    .pNext = nullptr,
+    .nullDescriptor = true,
+};
 static VkPhysicalDeviceBufferDeviceAddressFeaturesEXT kBufferDeviceAddressFeatures = {
     .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES_EXT,
-    .pNext = nullptr,
+    .pNext = &kRobustness2Features,
     .bufferDeviceAddress = true,
 };
 
@@ -52,6 +57,11 @@ static VkPhysicalDeviceVulkan12Features kDeviceFeatures_12 = {
     .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
     .pNext = &kDeviceFeatures_13,
     .descriptorIndexing = true,
+    .shaderSampledImageArrayNonUniformIndexing = true,
+    .descriptorBindingUpdateUnusedWhilePending = true,
+    .descriptorBindingPartiallyBound = true,
+    .descriptorBindingVariableDescriptorCount = true,
+    .runtimeDescriptorArray = true,
     .timelineSemaphore = true,
 };
 
@@ -60,6 +70,13 @@ static VkPhysicalDeviceVulkan12Features kDeviceFeatures_12 = {
 static VkPhysicalDeviceVulkan11Features kDeviceFeatures_11 = {
     .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
     .pNext = &kDeviceFeatures_12,
+};
+
+// * Vulkan 1.0
+static VkPhysicalDeviceFeatures kDeviceFeatures_10 = {
+    .vertexPipelineStoresAndAtomics = true,
+    .fragmentStoresAndAtomics = true,
+    .shaderInt64 = true,
 };
 
 void PhysicalDevice::Init(eastl::span<VkPhysicalDevice> devices)
@@ -200,6 +217,7 @@ VkDevice PhysicalDevice::GetLogicalDevice()
         .pQueueCreateInfos = m_QueueInfos.data(),
         .enabledExtensionCount = kRequiredExtensions.count,
         .ppEnabledExtensionNames = kRequiredExtensions.data(),
+        .pEnabledFeatures = &kDeviceFeatures_10,
     };
 
     VkDevice pDevice = nullptr;

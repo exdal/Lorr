@@ -1,8 +1,9 @@
 // Created on Friday November 18th 2022 by exdal
-// Last modified on Wednesday May 17th 2023 by exdal
+// Last modified on Wednesday May 24th 2023 by exdal
 
 #include "LinearAllocator.hh"
 
+#include "Core/BackTrace.hh"
 #include "Memory/MemoryUtils.hh"
 
 namespace lr::Memory
@@ -111,6 +112,5 @@ void LinearAllocatorViewAtomic::Free()
 
     m_Offset.store(0, eastl::memory_order_release);
 }
-
 
 }  // namespace lr::Memory

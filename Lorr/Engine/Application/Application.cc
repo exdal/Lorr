@@ -1,5 +1,5 @@
 // Created on Friday December 9th 2022 by exdal
-// Last modified on Monday May 22nd 2023 by exdal
+// Last modified on Wednesday May 24th 2023 by exdal
 #include "Application.hh"
 #include <stdarg.h>
 
@@ -18,7 +18,9 @@ void Application::PreInit(BaseApplicationDesc &desc)
     currentPath += "\\bin";
     OS::SetLibraryDirectory(currentPath);
 
+#if 1
     BackTrace::Init();
+#endif 
 
     m_Name = desc.m_Name;
     m_Engine.Init(desc.m_EngineDesc);

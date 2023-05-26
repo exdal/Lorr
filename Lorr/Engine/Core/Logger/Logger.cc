@@ -1,31 +1,28 @@
+// Created on Thursday May 5th 2022 by exdal
+// Last modified on Wednesday May 24th 2023 by exdal
+
 #include "Logger.hh"
 
-#include "fmtlog-inl.hh"
+#include <spdlog/sinks/basic_file_sink.h>
+#include <spdlog/sinks/stdout_color_sinks.h>
 
 namespace lr
 {
-    void logcb(
-        int64_t ns,
-        fmtlog::LogLevel level,
-        fmt::string_view location,
-        size_t basePos,
-        fmt::string_view threadName,
-        fmt::string_view msg,
-        size_t bodyPos,
-        size_t logFilePos)
-    {
-        msg.remove_prefix(bodyPos);
-        fmt::print("{}\n", msg);
-    }
+void Logger::Init()
+{
+    eastl::vector<spdlog::sink_ptr> logSinks;
 
-    void Logger::Init()
-    {
-        fmtlog::setLogCB(logcb, fmtlog::DBG);
-        fmtlog::setLogFile("lorr.log", true);
-        fmtlog::setHeaderPattern("{HMSf} | {t:<6} | {l} | ");
-        fmtlog::flushOn(fmtlog::DBG);
-        fmtlog::setThreadName("MAIN");
-        fmtlog::startPollingThread(10000);
-    }
+    logSinks.emplace_back(std::make_shared<spdlog::sinks::stdout_color_sink_mt>());
+    logSinks.emplace_back(std::make_shared<spdlog::sinks::basic_file_sink_mt>("lorr.log", true));
+
+    logSinks[0]->set_pattern("%Y-%m-%d_%T.%e | %5^%L%$ | %v");
+    logSinks[1]->set_pattern("%Y-%m-%d_%T.%e | %L | %v");
+
+    s_pCoreLogger = std::make_shared<spdlog::logger>("LR", logSinks.begin(), logSinks.end());
+    spdlog::register_logger(s_pCoreLogger);
+
+    s_pCoreLogger->set_level(spdlog::level::trace);
+    s_pCoreLogger->flush_on(spdlog::level::err);
+}
 
 }  // namespace lr

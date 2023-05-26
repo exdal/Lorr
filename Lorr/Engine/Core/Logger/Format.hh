@@ -1,5 +1,5 @@
 // Created on Friday May 6th 2022 by exdal
-// Last modified on Monday May 22nd 2023 by exdal
+// Last modified on Tuesday May 23rd 2023 by exdal
 //
 // Created on Friday 6th May 2022 by exdal
 //
@@ -42,11 +42,6 @@ struct formatter<eastl::string>
     }
 };
 
-}  // namespace fmt
-
-
-namespace fmt
-{
 template<typename... T>
 FMT_INLINE eastl::string format_eastl(string_view fmt, T &&...args)
 {

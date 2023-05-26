@@ -1,5 +1,5 @@
 // Created on Thursday May 18th 2023 by exdal
-// Last modified on Saturday May 20th 2023 by exdal
+// Last modified on Thursday May 25th 2023 by exdal
 
 #include "Resource/Parser.hh"
 
@@ -20,7 +20,7 @@ bool Parser::ParseGLSL(BufferReadStream fileData, ShaderResource &resource)
     ZoneScoped;
 
     Graphics::ShaderStage stage;
-    Graphics::ShaderFlag flags = Graphics::ShaderFlag::None;
+    Graphics::ShaderFlag flags = Graphics::ShaderFlag::GenerateDebugInfo;
     eastl::string_view code((const char *)fileData.GetData(), fileData.GetLength());
     eastl::string processedCode;
     processedCode.reserve(code.length());
@@ -31,6 +31,14 @@ bool Parser::ParseGLSL(BufferReadStream fileData, ShaderResource &resource)
         switch (lr::Hash::FNV64String(line))
         {
             case LR_SHADER_PRAGMA_EXTENSIONS:
+                processedCode += "#extension GL_ARB_gpu_shader_int64 : require\n";
+                processedCode += "#extension GL_EXT_buffer_reference : enable\n";
+                processedCode += "#extension GL_EXT_buffer_reference2 : enable\n";
+                processedCode += "#extension GL_EXT_shader_explicit_arithmetic_types_int64 : enable\n";
+                processedCode += "#extension GL_EXT_shader_image_int64 : require\n";
+                processedCode += "#extension GL_EXT_shader_atomic_int64 : require\n";
+                processedCode += "#extension GL_EXT_scalar_block_layout : require\n";
+                processedCode += "#extension GL_EXT_samplerless_texture_functions : require\n";
                 break;
 
             case LR_SHADER_PRAGMA_STAGE_VERTEX:
@@ -60,6 +68,6 @@ bool Parser::ParseGLSL(BufferReadStream fileData, ShaderResource &resource)
 
     resource.get() = Graphics::ShaderCompiler::CompileShader(&compileDesc);
 
-    return true;
+    return resource.get().IsValid();
 }
 }  // namespace lr::Resource

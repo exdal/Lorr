@@ -1,3 +1,6 @@
+// Created on Tuesday April 25th 2023 by exdal
+// Last modified on Friday May 26th 2023 by exdal
+
 #include "Descriptor.hh"
 
 #include "VulkanType.hh"
@@ -24,8 +27,11 @@ DescriptorBindingInfo::DescriptorBindingInfo(Buffer *pBuffer, BufferUsage buffer
 
 /// `VkDescriptorDataEXT` is an union so var names such as `data.pUniformTexelBuffer`
 /// do not matter, only thing that matters is type
+DescriptorGetInfo::DescriptorGetInfo()
+{
+}
+
 DescriptorGetInfo::DescriptorGetInfo(Buffer *pBuffer, ImageFormat texelFormat)
-    : m_DescriptorIndex(pBuffer->m_DescriptorIndex)
 {
     m_BufferInfo = {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_ADDRESS_INFO_EXT,
@@ -37,7 +43,6 @@ DescriptorGetInfo::DescriptorGetInfo(Buffer *pBuffer, ImageFormat texelFormat)
 }
 
 DescriptorGetInfo::DescriptorGetInfo(Image *pImage)
-    : m_DescriptorIndex(pImage->m_DescriptorIndex)
 {
     m_ImageInfo = {
         .imageView = pImage->m_pViewHandle,
@@ -46,8 +51,8 @@ DescriptorGetInfo::DescriptorGetInfo(Image *pImage)
 }
 
 DescriptorGetInfo::DescriptorGetInfo(Sampler *pSampler)
-    : m_DescriptorIndex(pSampler->m_DescriptorIndex)
 {
+    m_pSampler = pSampler->m_pHandle;
 }
 
 }  // namespace lr::Graphics

@@ -1,5 +1,5 @@
 // Created on Monday May 15th 2023 by exdal
-// Last modified on Monday May 22nd 2023 by exdal
+// Last modified on Wednesday May 24th 2023 by exdal
 
 #include "ResourceManager.hh"
 #include "Resource/Parser.hh"
@@ -43,7 +43,6 @@ void ResourceManager::Init()
     eastl::span<char *> shaderVals;
     shaders.GetArray<char *>("Files", shaderVals);
 
-    u32 shaderID = 0;
     for (char *&pShaderPath : shaderVals)
     {
         Job::JobManager::Schedule(
@@ -54,7 +53,10 @@ void ResourceManager::Init()
 
                 FileView file(_FMT("{}/{}", workingDir, pShaderPath));
                 ShaderResource outResource = {};
-                Parser::ParseGLSL(BufferReadStream(file), outResource);
+                if (!Parser::ParseGLSL(BufferReadStream(file), outResource))
+                {
+                    return;
+                }
 
                 LOG_TRACE(
                     "Compiled shader '{}', SPIR-V module: '{}'", resourceName, outResource.get().m_pShader);

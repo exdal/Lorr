@@ -1,5 +1,5 @@
 // Created on Wednesday May 4th 2022 by exdal
-// Last modified on Saturday May 20th 2023 by exdal
+// Last modified on Tuesday May 23rd 2023 by exdal
 
 #pragma once
 
@@ -12,85 +12,88 @@
 
 namespace lr
 {
-    // Or OS level events
-    enum EngineEvent : Event
+// Or OS level events
+enum EngineEvent : Event
+{
+    ENGINE_EVENT_QUIT,
+    ENGINE_EVENT_RESIZE,
+    ENGINE_EVENT_MOUSE_POSITION,
+    ENGINE_EVENT_MOUSE_STATE,
+    ENGINE_EVENT_MOUSE_WHEEL,
+    ENGINE_EVENT_KEYBOARD_STATE,
+    ENGINE_EVENT_CURSOR_STATE,
+};
+
+union EngineEventData
+{
+    u32 __data[4] = {};
+
+    struct  // ENGINE_EVENT_RESIZE
     {
-        ENGINE_EVENT_QUIT,
-        ENGINE_EVENT_RESIZE,
-        ENGINE_EVENT_MOUSE_POSITION,
-        ENGINE_EVENT_MOUSE_STATE,
-        ENGINE_EVENT_MOUSE_WHEEL,
-        ENGINE_EVENT_KEYBOARD_STATE,
-        ENGINE_EVENT_CURSOR_STATE,
+        u32 m_SizeWidth;
+        u32 m_SizeHeight;
     };
 
-    union EngineEventData
+    struct  // ENGINE_EVENT_MOUSE_POSITION
     {
-        u32 __data[4] = {};
-
-        struct  // ENGINE_EVENT_RESIZE
-        {
-            u32 m_SizeWidth;
-            u32 m_SizeHeight;
-        };
-
-        struct  // ENGINE_EVENT_MOUSE_POSITION
-        {
-            u32 m_MouseX;
-            u32 m_MouseY;
-        };
-
-        struct  // ENGINE_EVENT_MOUSE_STATE
-        {
-            Key m_Mouse;
-            MouseState m_MouseState;
-        };
-
-        struct  // ENGINE_EVENT_MOUSE_WHEEL
-        {
-            float m_Offset;
-        };
-
-        struct  // ENGINE_EVENT_KEYBOARD_STATE
-        {
-            Key m_Key;
-            KeyState m_KeyState;
-        };
-
-        struct  // ENGINE_EVENT_CURSOR_STATE
-        {
-            WindowCursor m_WindowCursor;
-        };
+        u32 m_MouseX;
+        u32 m_MouseY;
     };
 
-    struct EngineDesc
+    struct  // ENGINE_EVENT_MOUSE_STATE
     {
-        Graphics::APIFlags m_TargetAPIFlags;
-
-        WindowDesc m_WindowDesc;
+        Key m_Mouse;
+        MouseState m_MouseState;
     };
 
-    struct Engine
+    struct  // ENGINE_EVENT_MOUSE_WHEEL
     {
-        void Init(EngineDesc &engineDesc);
-
-        /// EVENTS ///
-        void PushEvent(Event event, EngineEventData &data);
-        void DispatchEvents();
-
-        void Prepare();
-        void BeginFrame();
-        void EndFrame();
-
-        EventManager<EngineEventData, 64> m_EventMan;
-        Win32Window m_Window;
-        Graphics::RenderGraph m_RenderGraph;
-        UI::ImGuiHandler m_ImGui;
-        Resource::ResourceManager m_ResourceMan;
-
-        bool m_ShuttingDown = false;
-
-        static Engine *Get();
+        float m_Offset;
     };
+
+    struct  // ENGINE_EVENT_KEYBOARD_STATE
+    {
+        Key m_Key;
+        KeyState m_KeyState;
+    };
+
+    struct  // ENGINE_EVENT_CURSOR_STATE
+    {
+        WindowCursor m_WindowCursor;
+    };
+};
+
+struct EngineDesc
+{
+    Graphics::APIFlags m_TargetAPIFlags;
+
+    WindowDesc m_WindowDesc;
+};
+
+struct Engine
+{
+    void Init(EngineDesc &engineDesc);
+
+    /// EVENTS ///
+    void PushEvent(Event event, EngineEventData &data);
+    void DispatchEvents();
+
+    void Prepare();
+    void BeginFrame();
+    void EndFrame();
+
+    EventManager<EngineEventData, 64> m_EventMan;
+    Win32Window m_Window;
+    Graphics::RenderGraph m_RenderGraph;
+    UI::ImGuiHandler m_ImGui;
+    Resource::ResourceManager m_ResourceMan;
+
+    bool m_ShuttingDown = false;
+
+    static auto GetResourceMan() { return &Get()->m_ResourceMan; }
+    static auto GetWindow() { return &Get()->m_Window; }
+    static auto GetRenderGraph() { return &Get()->m_RenderGraph; }
+    static Engine *Get();
+};
 
 }  // namespace lr

@@ -1,6 +1,5 @@
-//
-// Created on Tuesday 10th May 2022 by exdal
-//
+// Created on Monday July 18th 2022 by exdal
+// Last modified on Wednesday May 24th 2023 by exdal
 
 #pragma once
 
@@ -206,7 +205,7 @@ struct CommandList : APIObject<VK_OBJECT_TYPE_COMMAND_BUFFER>
     /// Buffer Commands
     void SetVertexBuffer(Buffer *pBuffer);
     void SetIndexBuffer(Buffer *pBuffer, bool type32 = true);
-    void CopyBuffer(Buffer *pSource, Buffer *pDest, u64 size);
+    void CopyBuffer(Buffer *pSource, Buffer *pDest, u64 srcOff, u64 dstOff, u64 size);
     void CopyBuffer(Buffer *pSource, Image *pDest, ImageLayout layout);
 
     /// Draw Commands

@@ -1,5 +1,5 @@
 // Created on Friday February 24th 2023 by exdal
-// Last modified on Monday May 22nd 2023 by exdal
+// Last modified on Friday May 26th 2023 by exdal
 
 #include "RenderGraph.hh"
 
@@ -117,27 +117,24 @@ void RenderGraph::Prepare()
         builder.BuildPass(pPass);
     }
 
-    // BufferDesc resourceBufferDesc = {
-    //     .m_UsageFlags = BufferUsage::ResourceDescriptor | BufferUsage::TransferDst,
-    //     .m_TargetAllocator = ResourceAllocator::BufferTLSF,
-    //     .m_DataLen = builder.GetResourceDescriptorOffset(),
-    // };
-    // m_pResourceDescriptorBuffer = m_pContext->CreateBuffer(&resourceBufferDesc);
+    BufferDesc resourceBufferDesc = {
+        .m_UsageFlags = BufferUsage::ResourceDescriptor | BufferUsage::TransferDst,
+        .m_TargetAllocator = ResourceAllocator::BufferTLSF,
+        .m_DataLen = builder.GetResourceBufferSize(),
+    };
+    m_pResourceDescriptorBuffer = m_pContext->CreateBuffer(&resourceBufferDesc);
 
     // BufferDesc samplerBufferDesc = {
     //     .m_UsageFlags = BufferUsage::SamplerDescriptor | BufferUsage::TransferDst,
     //     .m_TargetAllocator = ResourceAllocator::BufferTLSF,
-    //     .m_DataLen = builder.GetSamplerDescriptorOffset(),
+    //     .m_DataLen = builder.GetSamplerBufferSize(),
     // };
     // m_pSamplerDescriptorBuffer = m_pContext->CreateBuffer(&samplerBufferDesc);
 
-    // m_pContext->BeginCommandList(m_pSetupList);
-    // m_pSetupList->CopyBuffer(
-    //     builder.GetResourceDescriptorBuffer(), m_pResourceDescriptorBuffer, resourceBufferDesc.m_DataLen);
-    // m_pSetupList->CopyBuffer(
-    //     builder.GetSamplerDescriptorBuffer(), m_pSamplerDescriptorBuffer, samplerBufferDesc.m_DataLen);
-    // m_pContext->EndCommandList(m_pSetupList);
-    // SubmitList(m_pSetupList, PipelineStage::AllCommands, PipelineStage::AllCommands);
+    m_pContext->BeginCommandList(m_pSetupList);
+    builder.GetResourceDescriptors(m_pResourceDescriptorBuffer, m_pSetupList);
+    m_pContext->EndCommandList(m_pSetupList);
+    SubmitList(m_pSetupList, PipelineStage::AllCommands, PipelineStage::AllCommands);
 }
 
 void RenderGraph::Draw()
@@ -315,11 +312,12 @@ void RenderGraph::RecordGraphicsPass(GraphicsRenderPass *pPass, CommandList *pLi
     {
         pList->SetPipeline(pPass->m_pPipeline);
 
-        DescriptorBindingInfo pBindingInfos[] = {
-            { m_pResourceDescriptorBuffer, BufferUsage::ResourceDescriptor },
-            { m_pSamplerDescriptorBuffer, BufferUsage::SamplerDescriptor },
-        };
-        pList->SetDescriptorBuffers(pBindingInfos);
+        u32 pBufferIndexes[] = { 0 };
+        u64 pBufferOffsets[] = { 0 };
+
+        DescriptorBindingInfo bindingInfo(m_pResourceDescriptorBuffer, BufferUsage::ResourceDescriptor);
+        pList->SetDescriptorBuffers(bindingInfo);
+        pList->SetDescriptorBufferOffsets(0, 1, pBufferIndexes, pBufferOffsets);
 
         pPass->Execute(m_pContext, pList);
     }

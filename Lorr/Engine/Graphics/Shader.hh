@@ -1,5 +1,5 @@
 // Created on Friday October 28th 2022 by exdal
-// Last modified on Thursday May 18th 2023 by exdal
+// Last modified on Tuesday May 23rd 2023 by exdal
 
 #pragma once
 
@@ -48,6 +48,7 @@ struct ShaderCompileDesc
 struct ShaderCompileOutput
 {
     bool IsValid() { return !m_DataSpv.empty(); }
+    ShaderStage m_Stage = ShaderStage::None;
     eastl::span<u32> m_DataSpv = {};
 
     void *m_pProgram = nullptr;

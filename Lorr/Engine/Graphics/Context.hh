@@ -1,5 +1,5 @@
 // Created on Monday July 18th 2022 by exdal
-// Last modified on Saturday May 20th 2023 by exdal
+// Last modified on Wednesday May 24th 2023 by exdal
 
 #pragma once
 
@@ -107,7 +107,7 @@ struct Context
 
     /// RESOURCE ///
     // * Shaders * //
-    Shader *CreateShader(ShaderStage stage, Resource::ShaderResource *pResource);
+    Shader *CreateShader(Resource::ShaderResource *pResource);
     void DeleteShader(Shader *pShader);
 
     // * Descriptor * //
@@ -118,6 +118,8 @@ struct Context
     u64 GetDescriptorSetLayoutSize(DescriptorSetLayout *pLayout);  // ALIGNED!!!
     u64 GetDescriptorSetLayoutBindingOffset(DescriptorSetLayout *pLayout, u32 bindingID);
     u64 GetDescriptorSize(DescriptorType type);
+    u64 GetDescriptorSizeAligned(DescriptorType type);
+    u64 AlignUpDescriptorOffset(u64 offset);
     void GetDescriptorData(DescriptorType type, const DescriptorGetInfo &info, u64 dataSize, void *pDataOut);
 
     // * Buffers * //

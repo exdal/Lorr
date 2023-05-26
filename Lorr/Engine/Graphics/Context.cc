@@ -1,5 +1,5 @@
 // Created on Monday July 18th 2022 by exdal
-// Last modified on Monday May 22nd 2023 by exdal
+// Last modified on Friday May 26th 2023 by exdal
 
 #include "Context.hh"
 
@@ -781,12 +781,12 @@ void Context::EndFrame()
     vkQueuePresentKHR(pQueue, &presentInfo);
 }
 
-Shader *Context::CreateShader(ShaderStage stage, Resource::ShaderResource *pResource)
+Shader *Context::CreateShader(Resource::ShaderResource *pResource)
 {
     ZoneScoped;
 
     Shader *pShader = new Shader;
-    pShader->m_Type = stage;
+    pShader->m_Type = pResource->get().m_Stage;
 
     VkShaderModuleCreateInfo createInfo = {
         .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
@@ -867,6 +867,21 @@ u64 Context::GetDescriptorSize(DescriptorType type)
     return sizeArray[(u32)type];
 }
 
+u64 Context::GetDescriptorSizeAligned(DescriptorType type)
+{
+    ZoneScoped;
+
+    return AlignUpDescriptorOffset(GetDescriptorSize(type));
+}
+
+u64 Context::AlignUpDescriptorOffset(u64 offset)
+{
+    ZoneScoped;
+
+    VkPhysicalDeviceDescriptorBufferPropertiesEXT &props = m_pPhysicalDevice->m_FeatureDescriptorBufferProps;
+    return Memory::AlignUp(offset, props.descriptorBufferOffsetAlignment);
+}
+
 void Context::GetDescriptorData(
     DescriptorType type, const DescriptorGetInfo &info, u64 dataSize, void *pDataOut)
 {
@@ -912,6 +927,10 @@ VkDeviceMemory Context::CreateHeap(u64 heapSize, MemoryFlag flags)
 Buffer *Context::CreateBuffer(BufferDesc *pDesc)
 {
     ZoneScoped;
+
+    /// Some buffer types, such as descriptor buffers, require explicit alignment
+    if (pDesc->m_UsageFlags & (BufferUsage::ResourceDescriptor | BufferUsage::SamplerDescriptor))
+        pDesc->m_DataLen = Memory::AlignUp(pDesc->m_DataLen, m_pPhysicalDevice->GetDescriptorBufferAlignment());
 
     Buffer *pBuffer = new Buffer;
     pBuffer->Init(pDesc);

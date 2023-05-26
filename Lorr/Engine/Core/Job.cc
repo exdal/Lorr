@@ -1,5 +1,5 @@
 // Created on Wednesday May 17th 2023 by exdal
-// Last modified on Monday May 22nd 2023 by exdal
+// Last modified on Wednesday May 24th 2023 by exdal
 
 #include "Job.hh"
 #include "Utils/Timer.hh"
@@ -11,7 +11,6 @@ static JobManager _man;
 static iptr WorkerFn(void *pData)
 {
     Worker *pThis = (Worker *)pData;
-    fmtlog::setThreadName(_FMT("WRKR{}", pThis->m_ID).c_str());
 
     while (true)
     {

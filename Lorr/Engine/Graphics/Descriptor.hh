@@ -1,6 +1,5 @@
-//
-// Created on Saturday 22nd April 2023 by exdal
-//
+// Created on Saturday April 22nd 2023 by exdal
+// Last modified on Friday May 26th 2023 by exdal
 
 #pragma once
 
@@ -46,6 +45,7 @@ struct DescriptorBindingInfo : VkDescriptorBufferBindingInfoEXT
 
 struct DescriptorGetInfo
 {
+    DescriptorGetInfo();
     DescriptorGetInfo(Buffer *pBuffer, ImageFormat texelFormat = ImageFormat::Unknown);
     DescriptorGetInfo(Image *pImage);
     DescriptorGetInfo(Sampler *pSampler);
@@ -54,9 +54,8 @@ struct DescriptorGetInfo
     {
         VkDescriptorAddressInfoEXT m_BufferInfo = {};
         VkDescriptorImageInfo m_ImageInfo;
+        VkSampler m_pSampler;
     };
-
-    u32 &m_DescriptorIndex;
 };
 
 struct WriteDescriptorSet : private VkWriteDescriptorSet

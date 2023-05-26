@@ -1,8 +1,11 @@
 // Created on Wednesday November 23rd 2022 by exdal
-// Last modified on Saturday May 20th 2023 by exdal
+// Last modified on Thursday May 25th 2023 by exdal
+
+#include "Graphics/Renderer/Pass.hh"
+
+#include "Engine.hh"
 
 #include "Graphics/Descriptor.hh"
-#include "Graphics/Renderer/Pass.hh"
 
 #include <imgui.h>
 
@@ -64,13 +67,21 @@ void AddImguiPass(RenderGraph *pGraph, eastl::string_view name)
             DescriptorGetInfo imageDescriptorInfo(data.m_pFontImage);
             DescriptorGetInfo samplerDescriptorInfo(data.m_pSampler);
 
-            builder.SetDescriptorSet(DescriptorType::SampledImage, imageDescriptorInfo);
-            builder.SetDescriptorSet(DescriptorType::Sampler, samplerDescriptorInfo);
+            // builder.SetDescriptor(DescriptorType::SampledImage, imageDescriptorInfo);
+            // builder.SetDescriptor(DescriptorType::Sampler, samplerDescriptorInfo);
+
+            auto *pVertexShaderData =
+                Engine::GetResourceMan()->Get<Resource::ShaderResource>("shader://imgui.vs");
+            auto *pPixelShaderData =
+                Engine::GetResourceMan()->Get<Resource::ShaderResource>("shader://imgui.fs");
+
+            Shader *pVertexShader = pContext->CreateShader(pVertexShaderData);
+            Shader *pPixelShader = pContext->CreateShader(pPixelShaderData);
 
             builder.SetColorAttachment("$backbuffer", { AttachmentOp::Load, AttachmentOp::Store });
             builder.SetBlendAttachment({ true });
-            // builder.SetShader(pContext->CreateShader(ShaderStage::Vertex, vertexShaderData));
-            // builder.SetShader(pContext->CreateShader(ShaderStage::Pixel, pixelShaderData));
+            builder.SetShader(pVertexShader);
+            builder.SetShader(pPixelShader);
             builder.SetInputLayout({
                 LR_VERTEX_ATTRIB_SFLOAT2,
                 LR_VERTEX_ATTRIB_SFLOAT2,

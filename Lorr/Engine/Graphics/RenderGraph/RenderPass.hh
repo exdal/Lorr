@@ -1,6 +1,5 @@
-//
-// Created on Friday 24th February 2023 by exdal
-//
+// Created on Friday February 24th 2023 by exdal
+// Last modified on Friday May 26th 2023 by exdal
 
 #pragma once
 
@@ -148,11 +147,27 @@ struct GraphicsRenderPassCallback : GraphicsRenderPass, _Data
     RenderPassShutdownFn m_fShutdown = nullptr;
 };
 
+struct DescriptorBufferInfo
+{
+    DescriptorSetLayout *m_pLayout = nullptr;
+    u32 m_BindingID = 0;
+
+    union
+    {
+        u8 *m_pData = nullptr;
+        Buffer *m_pBuffer;
+    };
+    u64 m_Offset = 0;
+};
+
 struct RenderGraph;
 struct RenderPassBuilder
 {
     RenderPassBuilder(RenderGraph *pGraph);
     ~RenderPassBuilder();
+
+    void InitDescriptorType(u32 binding, BufferUsage usage, DescriptorSetLayout *pLayout, u64 memSize);
+    DescriptorBufferInfo *GetDescriptorBuffer(u32 binding);
 
     void BuildPass(RenderPass *pPass);
     void SetupGraphicsPass();
@@ -163,9 +178,15 @@ struct RenderPassBuilder
         NameID resource, InputResourceAccess access, InputResourceFlag flags = InputResourceFlag::None);
     void SetBlendAttachment(const ColorBlendAttachment &attachment);
     void SetPushConstant(const PushConstantDesc &pushConstant);
-    void SetDescriptorSet(DescriptorType type, eastl::span<DescriptorGetInfo> elements);
+    void SetBufferDescriptor(eastl::span<DescriptorGetInfo> elements);
     void SetShader(Shader *pShader);
     void SetInputLayout(const InputLayout &layout);
+
+    void WriteDescriptorAddress(eastl::span<DescriptorGetInfo> elements);
+
+    u64 GetResourceBufferSize();
+    u64 GetSamplerBufferSize();
+    void GetResourceDescriptors(Buffer *pDst, CommandList *pList);
 
     union
     {
@@ -176,14 +197,10 @@ struct RenderPassBuilder
     GraphicsPipelineBuildInfo m_GraphicsPipelineInfo = {};
     ComputePipelineBuildInfo m_ComputePipelineInfo = {};
 
-    struct DescriptorBufferInfo
-    {
-        Buffer *m_pBuffer = nullptr;
-        u64 m_BufferOffset = 0;
-    };
+    Memory::LinearAllocator m_DescriptorAllocator = {};
+    eastl::vector<DescriptorBufferInfo> m_ResourceDescriptors = {};
+    DescriptorBufferInfo m_SamplerDescriptor = {};
 
-    eastl::array<DescriptorBufferInfo, (u32)DescriptorType::Count> m_DescriptorBufferInfos = {};
-    DescriptorSetLayout *m_pDescriptorLayout = nullptr;
     PipelineLayout *m_pPipelineLayout = nullptr;
 
     Context *m_pContext = nullptr;

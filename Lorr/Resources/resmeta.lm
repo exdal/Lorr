@@ -11,6 +11,8 @@ Meta
         Files = [
             "shaders/imgui.vs",
             "shaders/imgui.fs",
+            "shaders/bindless_test.vs",
+            "shaders/bindless_test.fs",
         ]
     }
 }

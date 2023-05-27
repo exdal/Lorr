@@ -27,32 +27,19 @@ DescriptorBindingInfo::DescriptorBindingInfo(Buffer *pBuffer, BufferUsage buffer
 
 /// `VkDescriptorDataEXT` is an union so var names such as `data.pUniformTexelBuffer`
 /// do not matter, only thing that matters is type
-DescriptorGetInfo::DescriptorGetInfo()
+DescriptorGetInfo::DescriptorGetInfo(Buffer *pBuffer)
+    : m_pBuffer(pBuffer)
 {
-}
-
-DescriptorGetInfo::DescriptorGetInfo(Buffer *pBuffer, ImageFormat texelFormat)
-{
-    m_BufferInfo = {
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_ADDRESS_INFO_EXT,
-        .pNext = nullptr,
-        .address = pBuffer->m_DeviceAddress,
-        .range = pBuffer->m_DeviceDataLen,
-        .format = VK::ToFormat(texelFormat),
-    };
 }
 
 DescriptorGetInfo::DescriptorGetInfo(Image *pImage)
+    : m_pImage(pImage)
 {
-    m_ImageInfo = {
-        .imageView = pImage->m_pViewHandle,
-        // .imageLayout  /// is ignored if `descriptorBufferImageLayoutIgnored` is enabled
-    };
 }
 
 DescriptorGetInfo::DescriptorGetInfo(Sampler *pSampler)
+    : m_pSampler(pSampler)
 {
-    m_pSampler = pSampler->m_pHandle;
 }
 
 }  // namespace lr::Graphics

@@ -1,5 +1,5 @@
 // Created on Monday July 18th 2022 by exdal
-// Last modified on Wednesday May 24th 2023 by exdal
+// Last modified on Sunday May 28th 2023 by exdal
 
 #pragma once
 
@@ -50,6 +50,7 @@ enum class PipelineStage : u32
 
     /// OTHER STAGES
     AllCommands = 1 << 18,
+    BottomOfPipe = 1 << 19,
 };
 EnumFlags(PipelineStage);
 

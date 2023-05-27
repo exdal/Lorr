@@ -1,5 +1,5 @@
 // Created on Saturday April 22nd 2023 by exdal
-// Last modified on Friday May 26th 2023 by exdal
+// Last modified on Saturday May 27th 2023 by exdal
 
 #pragma once
 
@@ -45,21 +45,17 @@ struct DescriptorBindingInfo : VkDescriptorBufferBindingInfoEXT
 
 struct DescriptorGetInfo
 {
-    DescriptorGetInfo();
-    DescriptorGetInfo(Buffer *pBuffer, ImageFormat texelFormat = ImageFormat::Unknown);
+    DescriptorGetInfo(){};
+    DescriptorGetInfo(Buffer *pBuffer);
     DescriptorGetInfo(Image *pImage);
     DescriptorGetInfo(Sampler *pSampler);
 
     union
     {
-        VkDescriptorAddressInfoEXT m_BufferInfo = {};
-        VkDescriptorImageInfo m_ImageInfo;
-        VkSampler m_pSampler;
+        Buffer *m_pBuffer = nullptr;
+        Image *m_pImage;
+        Sampler *m_pSampler;
     };
-};
-
-struct WriteDescriptorSet : private VkWriteDescriptorSet
-{
 };
 
 }  // namespace lr::Graphics

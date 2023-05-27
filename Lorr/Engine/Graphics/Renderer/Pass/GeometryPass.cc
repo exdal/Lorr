@@ -1,5 +1,5 @@
 // Created on Saturday April 22nd 2023 by exdal
-// Last modified on Friday May 26th 2023 by exdal
+// Last modified on Saturday May 27th 2023 by exdal
 
 #include "Graphics/Renderer/Pass.hh"
 
@@ -21,22 +21,34 @@ void AddGeometryPass(RenderGraph *pGraph, eastl::string_view name)
             BufferDesc bufferDesc = {
                 .m_UsageFlags = BufferUsage::Storage,
                 .m_TargetAllocator = ResourceAllocator::BufferLinear,
-                .m_Stride = sizeof(u64),
+                .m_Stride = sizeof(u32),
                 .m_DataLen = 256,
             };
             Buffer *pDummyBuffer = pContext->CreateBuffer(&bufferDesc);
-            Buffer *pDummyBuffer2 = pContext->CreateBuffer(&bufferDesc);
 
             void *pMapData = nullptr;
-            pContext->MapMemory(pDummyBuffer, pMapData, 0, 16);
-            u64 test = 31;
-            memcpy(pMapData, &test, 8);
+            pContext->MapMemory(pDummyBuffer, pMapData, 0, 8);
+            u32 test = 31;
+            memcpy(pMapData, &test, 4);
             test = 32;
-            memcpy((u8 *)pMapData + 8, &test, 8);
+            memcpy((u8 *)pMapData + 4, &test, 4);
             pContext->UnmapMemory(pDummyBuffer);
 
-            DescriptorGetInfo bufferInfo[] = { pDummyBuffer, pDummyBuffer2 };
+            ImageDesc imageDesc = {
+                .m_UsageFlags = ImageUsage::Sampled | ImageUsage::TransferDst,
+                .m_Format = ImageFormat::RGBA8F,
+                .m_TargetAllocator = ResourceAllocator::ImageTLSF,
+                .m_Width = 128,
+                .m_Height = 128,
+                .m_ArraySize = 1,
+                .m_MipMapLevels = 1,
+            };
+            Image *pImage = pGraph->CreateImage("bindless_test", imageDesc);
+
+            DescriptorGetInfo bufferInfo[] = { pDummyBuffer };
             builder.SetBufferDescriptor(bufferInfo);
+            DescriptorGetInfo imageInfo[] = { pImage };
+            builder.SetImageDescriptor(DescriptorType::SampledImage, imageInfo);
 
             auto *pVertexShaderData =
                 Engine::GetResourceMan()->Get<Resource::ShaderResource>("shader://bindless_test.vs");
@@ -52,7 +64,6 @@ void AddGeometryPass(RenderGraph *pGraph, eastl::string_view name)
             builder.SetShader(pPixelShader);
 
             LOG_TRACE("Device Address: {}", pDummyBuffer->m_DeviceAddress);
-            LOG_TRACE("Device Address: {}", pDummyBuffer2->m_DeviceAddress);
         },
         [](Context *pContext, EmptyPassData &data, CommandList *pList)
         {

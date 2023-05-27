@@ -1,5 +1,5 @@
 // Created on Friday February 24th 2023 by exdal
-// Last modified on Friday May 26th 2023 by exdal
+// Last modified on Sunday May 28th 2023 by exdal
 
 #include "RenderGraph.hh"
 
@@ -52,7 +52,7 @@ static PipelineStage ToImagePipelineStage(ImageLayout layout)
 
     constexpr static PipelineStage kColorStages[] = {
         PipelineStage::None,                   // LR_IMAGE_LAYOUT_UNDEFINED
-        PipelineStage::None,                   // LR_IMAGE_LAYOUT_PRESENT
+        PipelineStage::BottomOfPipe,           // LR_IMAGE_LAYOUT_PRESENT
         PipelineStage::ColorAttachmentOutput,  // LR_IMAGE_LAYOUT_COLOR_ATTACHMENT
         PipelineStage::EarlyPixelTests,        // LR_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT
         PipelineStage::PixelShader,            // LR_IMAGE_LAYOUT_COLOR_READ_ONLY
@@ -80,22 +80,24 @@ void RenderGraph::Init(RenderGraphDesc *pDesc)
     };
     m_PassAllocator.Init(allocatorDesc);
 
-    u32 frameCount = m_pContext->m_pSwapChain->m_FrameCount;
-    for (u32 i = 0; i < frameCount; i++)
+    for (u32 frameIdx = 0; frameIdx < LR_MAX_FRAME_COUNT; frameIdx++)
     {
-        for (u32 t = 0; t < (u32)CommandType::Count; t++)
+        u32 offset = frameIdx * LR_MAX_FRAME_COUNT;
+        for (u32 i = 0; i < (u32)CommandType::Count; i++)
         {
-            CommandAllocator *pAllocator = m_pContext->CreateCommandAllocator((CommandType)t, true);
-            m_pContext->SetObjectName(pAllocator, _FMT("RG Command Allocator {}:{}", t, i));
-            m_CommandAllocators.push_back(pAllocator);
+            CommandAllocator *pAllocator = m_pContext->CreateCommandAllocator((CommandType)i, true);
+            m_pContext->SetObjectName(pAllocator, _FMT("RG Command Allocator {}:{}", frameIdx, i));
+            m_CommandAllocators[offset + i] = pAllocator;
+
+            CommandList *pList = m_pContext->CreateCommandList((CommandType)i, pAllocator);
+            m_pContext->SetObjectName(pList, _FMT("RG Command List {}:{}", frameIdx, i));
+            m_CommandLists[offset + i] = pList;
+
+            Semaphore *pSema = m_pContext->CreateSemaphore(0, false);
+            m_pContext->SetObjectName(pSema, _FMT("RG Semaphore {}:{}", frameIdx, i));
+            m_Semaphores[offset + i] = pSema;
         }
-
-        Semaphore *pSema = m_pContext->CreateSemaphore(0, false);
-        m_pContext->SetObjectName(pSema, _FMT("RG Semaphore {}", i));
-        m_Semaphores.push_back(pSema);
     }
-
-    AllocateCommandLists(CommandType::Graphics);
 }
 
 void RenderGraph::Shutdown()
@@ -110,7 +112,7 @@ void RenderGraph::Prepare()
     RenderPassBuilder builder(this);
 
     CommandAllocator *pAllocator = GetCommandAllocator(CommandType::Graphics);
-    m_pSetupList = m_pContext->CreateCommandList(CommandType::Graphics, pAllocator);
+    CommandList *pSetupList = GetCommandList(CommandType::Graphics);
 
     for (RenderPass *pPass : m_Passes)
     {
@@ -131,10 +133,10 @@ void RenderGraph::Prepare()
     // };
     // m_pSamplerDescriptorBuffer = m_pContext->CreateBuffer(&samplerBufferDesc);
 
-    m_pContext->BeginCommandList(m_pSetupList);
-    builder.GetResourceDescriptors(m_pResourceDescriptorBuffer, m_pSetupList);
-    m_pContext->EndCommandList(m_pSetupList);
-    SubmitList(m_pSetupList, PipelineStage::AllCommands, PipelineStage::AllCommands);
+    m_pContext->BeginCommandList(pSetupList);
+    builder.GetResourceDescriptors(m_pResourceDescriptorBuffer, pSetupList);
+    m_pContext->EndCommandList(pSetupList);
+    SubmitList(pSetupList, PipelineStage::AllCommands, PipelineStage::AllCommands);
 }
 
 void RenderGraph::Draw()
@@ -149,7 +151,7 @@ void RenderGraph::Draw()
     m_pContext->WaitForSemaphore(pCurrentSemp, pCurrentSemp->m_Value);
     m_pContext->ResetCommandAllocator(GetCommandAllocator(CommandType::Graphics));
 
-    CommandList *pList = GetCommandList(0);
+    CommandList *pList = GetCommandList(CommandType::Graphics);
     m_pContext->BeginCommandList(pList);
 
     for (RenderPass *pPass : m_Passes)
@@ -312,31 +314,16 @@ void RenderGraph::RecordGraphicsPass(GraphicsRenderPass *pPass, CommandList *pLi
     {
         pList->SetPipeline(pPass->m_pPipeline);
 
-        u32 pBufferIndexes[] = { 0 };
-        u64 pBufferOffsets[] = { 0 };
+        u32 setCount = m_DescriptorSetOffsets.size();
 
         DescriptorBindingInfo bindingInfo(m_pResourceDescriptorBuffer, BufferUsage::ResourceDescriptor);
         pList->SetDescriptorBuffers(bindingInfo);
-        pList->SetDescriptorBufferOffsets(0, 1, pBufferIndexes, pBufferOffsets);
+        pList->SetDescriptorBufferOffsets(0, setCount, m_DescriptorSetIndices, m_DescriptorSetOffsets);
 
         pPass->Execute(m_pContext, pList);
     }
 
     pList->EndRendering();
-}
-
-void RenderGraph::AllocateCommandLists(CommandType type)
-{
-    ZoneScoped;
-
-    SwapChain *pSwapChain = m_pContext->GetSwapChain();
-    for (u32 i = 0; i < pSwapChain->m_FrameCount; i++)
-    {
-        CommandAllocator *pAllocator = m_CommandAllocators[i * pSwapChain->m_FrameCount + (u32)type];
-        CommandList *pList = m_pContext->CreateCommandList(type, pAllocator);
-        m_pContext->SetObjectName(pList, _FMT("List {}", m_CommandLists.size()));
-        m_CommandLists.push_back(pList);
-    }
 }
 
 Semaphore *RenderGraph::GetSemaphore()
@@ -353,20 +340,18 @@ CommandAllocator *RenderGraph::GetCommandAllocator(CommandType type)
 
     SwapChain *pSwapChain = m_pContext->GetSwapChain();
     u32 frameIdx = pSwapChain->m_CurrentFrame;
-    u32 frameCount = pSwapChain->m_FrameCount;
 
-    return m_CommandAllocators[frameIdx * frameCount + (u32)type];
+    return m_CommandAllocators[(u32)type + (frameIdx * LR_MAX_FRAME_COUNT)];
 }
 
-CommandList *RenderGraph::GetCommandList(u32 submitID)
+CommandList *RenderGraph::GetCommandList(CommandType type)
 {
     ZoneScoped;
 
     SwapChain *pSwapChain = m_pContext->GetSwapChain();
     u32 frameIdx = pSwapChain->m_CurrentFrame;
-    u32 frameCount = pSwapChain->m_FrameCount;
 
-    return m_CommandLists[(submitID * frameCount) + frameIdx];
+    return m_CommandLists[(u32)type + (frameIdx * LR_MAX_FRAME_COUNT)];
 }
 
 }  // namespace lr::Graphics

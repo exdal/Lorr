@@ -1,5 +1,5 @@
 // Created on Tuesday March 14th 2023 by exdal
-// Last modified on Friday May 26th 2023 by exdal
+// Last modified on Sunday May 28th 2023 by exdal
 
 #include "RenderPass.hh"
 
@@ -7,17 +7,18 @@
 
 #include "RenderGraph.hh"
 
-#define LR_DESCRIPTOR_INDEX_SAMPLER 0
+// These indexes are SET indexes
 #define LR_DESCRIPTOR_INDEX_BUFFER 0
 #define LR_DESCRIPTOR_INDEX_SAMPLED_IMAGE 1
 #define LR_DESCRIPTOR_INDEX_STORAGE_IMAGE 2
+#define LR_DESCRIPTOR_INDEX_SAMPLER 3
 
 namespace lr::Graphics
 {
-constexpr u32 DescriptorTypeToResourceBinding(DescriptorType type)
+constexpr u32 DescriptorTypeToBinding(DescriptorType type)
 {
     constexpr u32 kBindings[] = {
-        LR_DESCRIPTOR_INDEX_BUFFER,         // Sampler
+        LR_DESCRIPTOR_INDEX_SAMPLER,        // Sampler
         LR_DESCRIPTOR_INDEX_SAMPLED_IMAGE,  // SampledImage
         LR_DESCRIPTOR_INDEX_BUFFER,         // UniformBuffer
         LR_DESCRIPTOR_INDEX_STORAGE_IMAGE,  // StorageImage
@@ -27,12 +28,13 @@ constexpr u32 DescriptorTypeToResourceBinding(DescriptorType type)
     return kBindings[(u32)type];
 }
 
-constexpr DescriptorType ResourceBindingToDescriptorType(u32 binding)
+constexpr DescriptorType BindingToDescriptorType(u32 binding)
 {
     constexpr DescriptorType kBindings[] = {
         DescriptorType::StorageBuffer,  // LR_DESCRIPTOR_INDEX_BUFFER
         DescriptorType::SampledImage,   // LR_DESCRIPTOR_INDEX_SAMPLED_IMAGE
         DescriptorType::StorageImage,   // LR_DESCRIPTOR_INDEX_STORAGE_IMAGE
+        DescriptorType::Sampler,        // LR_DESCRIPTOR_INDEX_SAMPLER
     };
 
     return kBindings[binding];
@@ -46,12 +48,14 @@ RenderPassBuilder::RenderPassBuilder(RenderGraph *pGraph)
 
     m_DescriptorAllocator.Init({ .m_DataSize = CONFIG_GET_VAR(gpm_descriptor) });
 
-    DescriptorLayoutElement pResourceLayoutElements[] = {
-        { LR_DESCRIPTOR_INDEX_BUFFER, DescriptorType::StorageBuffer, ShaderStage::All },
-        { LR_DESCRIPTOR_INDEX_SAMPLED_IMAGE, DescriptorType::SampledImage, ShaderStage::All },
-        { LR_DESCRIPTOR_INDEX_STORAGE_IMAGE, DescriptorType::SampledImage, ShaderStage::All },
-    };
-    DescriptorSetLayout *pResourceLayout = m_pContext->CreateDescriptorSetLayout(pResourceLayoutElements);
+    DescriptorLayoutElement bufferDescriptorElement(0, DescriptorType::StorageBuffer, ShaderStage::All);
+    DescriptorLayoutElement imageDescriptorElement(0, DescriptorType::SampledImage, ShaderStage::All);
+    DescriptorLayoutElement storageImageDescriptorElement(0, DescriptorType::StorageImage, ShaderStage::All);
+
+    DescriptorSetLayout *pBufferLayout = m_pContext->CreateDescriptorSetLayout(bufferDescriptorElement);
+    DescriptorSetLayout *pImageLayout = m_pContext->CreateDescriptorSetLayout(imageDescriptorElement);
+    DescriptorSetLayout *pStorageImageLayout =
+        m_pContext->CreateDescriptorSetLayout(storageImageDescriptorElement);
 
     DescriptorLayoutElement samplerLayoutElement(
         LR_DESCRIPTOR_INDEX_SAMPLER, DescriptorType::Sampler, ShaderStage::All);
@@ -63,22 +67,20 @@ RenderPassBuilder::RenderPassBuilder(RenderGraph *pGraph)
     /// at each type. THEY ARE NOT THE RESOURCE ITSELF, THEY ARE DESCRIPTORS OF IT'S RESOURCE TYPE
     /// Also don't forget that descriptors are technically pointers so, these memory blocks are
     /// literally arrays of pointers, which point to the actual resource itself
-    ///
-    /// `LR_DESCRIPTOR_INDEX_DEVICE_ADDRESS_TABLE` buffer is special binding
 
     // clang-format off
     u64 size = m_pContext->AlignUpDescriptorOffset(1);  // TODO: Proper memory management...    
-    InitDescriptorType(LR_DESCRIPTOR_INDEX_SAMPLER, BufferUsage::SamplerDescriptor, pSamplerLayout, size);
+    InitDescriptorType(LR_DESCRIPTOR_INDEX_BUFFER, BufferUsage::ResourceDescriptor, pBufferLayout, size);
+    InitDescriptorType(LR_DESCRIPTOR_INDEX_SAMPLED_IMAGE, BufferUsage::ResourceDescriptor, pImageLayout, size);
+    InitDescriptorType(LR_DESCRIPTOR_INDEX_STORAGE_IMAGE, BufferUsage::ResourceDescriptor, pStorageImageLayout, size);
     
-    InitDescriptorType(LR_DESCRIPTOR_INDEX_BUFFER, BufferUsage::ResourceDescriptor, pResourceLayout, size);
-    InitDescriptorType(LR_DESCRIPTOR_INDEX_SAMPLED_IMAGE, BufferUsage::ResourceDescriptor, pResourceLayout, size);
-    InitDescriptorType(LR_DESCRIPTOR_INDEX_STORAGE_IMAGE, BufferUsage::ResourceDescriptor, pResourceLayout, size);
+    InitDescriptorType(LR_DESCRIPTOR_INDEX_SAMPLER, BufferUsage::SamplerDescriptor, pSamplerLayout, size);
     // clang-format on
 
     /// Now after we complete the allocation of blocks, we init our pipeline layout, this is just
     /// straight forward and obvious so no explanation
 
-    DescriptorSetLayout *pLayouts[] = { pResourceLayout, pSamplerLayout };
+    DescriptorSetLayout *pLayouts[] = { pBufferLayout, pImageLayout, pStorageImageLayout, pSamplerLayout };
     PushConstantDesc pushConstantDesc(ShaderStage::All, 0, 256);
     m_pPipelineLayout = m_pContext->CreatePipelineLayout(pLayouts, pushConstantDesc);
 
@@ -207,10 +209,7 @@ void RenderPassBuilder::SetBufferDescriptor(eastl::span<DescriptorGetInfo> eleme
     u64 &offset = pBufferInfo->m_Offset;
 
     u64 typeSize = sizeof(u64);
-    u64 dataSize = typeSize * elements.size();
     u32 descriptorIndex = offset / typeSize;
-
-    u64 mapOffset = 0;
 
     for (DescriptorGetInfo &element : elements)
     {
@@ -218,13 +217,37 @@ void RenderPassBuilder::SetBufferDescriptor(eastl::span<DescriptorGetInfo> eleme
         /// by their indexes to their descriptor buffers. So instead of pushing into the binding offset
         /// we push into the buffer offset.
 
-        memcpy((u8 *)pData + mapOffset, &element.m_BufferInfo.address, typeSize);
+        memcpy((u8 *)pData + offset, &element.m_pBuffer->m_DeviceAddress, typeSize);
 
-        mapOffset += typeSize;
-        // element.m_DescriptorIndex = descriptorIndex++;
+        offset += typeSize;
+        element.m_pBuffer->m_DescriptorIndex = descriptorIndex++;
     }
+}
 
-    offset += dataSize;
+void RenderPassBuilder::SetImageDescriptor(DescriptorType type, eastl::span<DescriptorGetInfo> elements)
+{
+    ZoneScoped;
+
+    DescriptorBufferInfo *pDescriptorInfo = nullptr;
+    if (type == DescriptorType::SampledImage)
+        pDescriptorInfo = GetDescriptorBuffer(LR_DESCRIPTOR_INDEX_SAMPLED_IMAGE);
+    else if (type == DescriptorType::StorageImage)
+        pDescriptorInfo = GetDescriptorBuffer(LR_DESCRIPTOR_INDEX_STORAGE_IMAGE);
+
+    void *pData = pDescriptorInfo->m_pData;
+    u64 &offset = pDescriptorInfo->m_Offset;
+
+    u64 typeSize = m_pContext->GetDescriptorSize(type);
+    u32 descriptorIndex = offset / typeSize;
+
+    for (DescriptorGetInfo &element : elements)
+    {
+        DescriptorGetInfo bufferInfo(element.m_pImage);
+        m_pContext->GetDescriptorData(type, bufferInfo, typeSize, (u8 *)pData + offset);
+
+        offset += typeSize;
+        element.m_pBuffer->m_DescriptorIndex = descriptorIndex++;
+    }
 }
 
 void RenderPassBuilder::SetShader(Shader *pShader)
@@ -239,31 +262,6 @@ void RenderPassBuilder::SetInputLayout(const InputLayout &layout)
     ZoneScoped;
 
     m_GraphicsPipelineInfo.m_InputLayout = layout;
-}
-
-void RenderPassBuilder::WriteDescriptorAddress(eastl::span<DescriptorGetInfo> elements)
-{
-    ZoneScoped;
-
-    // DescriptorBufferInfo *pInfo = GetDescriptorBuffer(LR_DESCRIPTOR_INDEX_DEVICE_ADDRESS_TABLE);
-    // if (!pInfo)
-    //     return;
-
-    // Buffer *pBuffer = pInfo->m_pBuffer;
-    // u64 &offset = pInfo->m_BufferOffset;
-    // u64 dataSize = elements.size() * pBuffer->m_Stride;
-
-    // void *pMapData = nullptr;
-    // m_pContext->MapMemory(pBuffer, pMapData, offset, dataSize);
-
-    // u64 mapOffset = 0;
-    // for (DescriptorGetInfo &element : elements)
-    // {
-    //     memcpy((u8 *)pMapData + mapOffset, &element.m_BufferInfo.address, pBuffer->m_Stride);
-    // }
-
-    // m_pContext->UnmapMemory(pBuffer);
-    // offset += mapOffset;
 }
 
 u64 RenderPassBuilder::GetResourceBufferSize()
@@ -292,13 +290,16 @@ void RenderPassBuilder::GetResourceDescriptors(Buffer *pDst, CommandList *pList)
 {
     ZoneScoped;
 
+    /// Create CPU buffer that we will map all descriptor datas into
+
     BufferDesc bufferDesc = {
         .m_UsageFlags = BufferUsage::ResourceDescriptor | BufferUsage::TransferSrc,
-        .m_TargetAllocator = ResourceAllocator::BufferFrametime,
+        .m_TargetAllocator = ResourceAllocator::Descriptor,
         .m_DataLen = GetResourceBufferSize(),
     };
     Buffer *pResourceDescriptor = m_pContext->CreateBuffer(&bufferDesc);
 
+    u64 mapOffset = 0;
     void *pMapData = nullptr;
     m_pContext->MapMemory(pResourceDescriptor, pMapData, 0, bufferDesc.m_DataLen);
 
@@ -307,30 +308,54 @@ void RenderPassBuilder::GetResourceDescriptors(Buffer *pDst, CommandList *pList)
         if (info.m_Offset == 0)
             continue;
 
-        BufferDesc descriptorBufferDesc = {
-            .m_UsageFlags = BufferUsage::ResourceDescriptor | BufferUsage::TransferSrc,
-            .m_TargetAllocator = ResourceAllocator::Descriptor,
-            .m_DataLen = info.m_Offset,
-        };
-        Buffer *pDescriptorBuffer = m_pContext->CreateBuffer(&descriptorBufferDesc);
+        /// RenderGraph stuff
+        m_pGraph->m_DescriptorSetIndices.push_back(0);
+        m_pGraph->m_DescriptorSetOffsets.push_back(mapOffset);
 
-        void *pDescriptorData = nullptr;
-        m_pContext->MapMemory(pDescriptorBuffer, pDescriptorData, 0, descriptorBufferDesc.m_DataLen);
-        memcpy(pDescriptorData, info.m_pData, info.m_Offset);
-        m_pContext->UnmapMemory(pDescriptorBuffer);
-
-        DescriptorType elementType = ResourceBindingToDescriptorType(info.m_BindingID);
-
-        u64 bindingOffset = m_pContext->GetDescriptorSetLayoutBindingOffset(info.m_pLayout, info.m_BindingID);
+        DescriptorType elementType = BindingToDescriptorType(info.m_BindingID);
         u64 bindingSize = m_pContext->GetDescriptorSize(elementType);
 
-        DescriptorGetInfo bufferInfo(pDescriptorBuffer);
-        m_pContext->GetDescriptorData(elementType, bufferInfo, bindingSize, (u8 *)pMapData + bindingOffset);
+        if (info.m_BindingID == LR_DESCRIPTOR_INDEX_BUFFER)
+        {
+            /// Create temp buffer to get descriptor data and map into resource descriptor buffer
+
+            BufferDesc descriptorBufferDesc = {
+                .m_UsageFlags = BufferUsage::ResourceDescriptor | BufferUsage::TransferSrc,
+                .m_TargetAllocator = ResourceAllocator::BufferTLSF_Host,
+                .m_DataLen = info.m_Offset,
+            };
+            Buffer *pDescriptorBuffer = m_pContext->CreateBuffer(&descriptorBufferDesc);
+
+            /// Map it's contents into temp buffer
+
+            void *pDescriptorData = nullptr;
+            m_pContext->MapMemory(pDescriptorBuffer, pDescriptorData, 0, descriptorBufferDesc.m_DataLen);
+            memcpy(pDescriptorData, info.m_pData, info.m_Offset);
+            m_pContext->UnmapMemory(pDescriptorBuffer);
+
+            DescriptorGetInfo bufferInfo(pDescriptorBuffer);
+            m_pContext->GetDescriptorData(elementType, bufferInfo, bindingSize, (u8 *)pMapData + mapOffset);
+
+            m_pContext->DeleteBuffer(pDescriptorBuffer, false);
+
+            mapOffset += m_pContext->AlignUpDescriptorOffset(bindingSize);
+        }
+        else
+        {
+            /// Non-buffer descriptors are different, we already get their descriptors unlike buffers
+            /// so it's safe to just copy their memory into resource descriptor
+
+            // TODO: Currently it's only one element is bound, which is the first element
+            // TODO: we will see how this goes, we can convert this to another set if not possible
+            memcpy((u8 *)pMapData + mapOffset, info.m_pData, bindingSize);
+
+            mapOffset += m_pContext->AlignUpDescriptorOffset(info.m_Offset);
+        }
     }
 
     m_pContext->UnmapMemory(pResourceDescriptor);
 
     pList->CopyBuffer(pResourceDescriptor, pDst, 0, 0, bufferDesc.m_DataLen);
+    m_pContext->DeleteBuffer(pResourceDescriptor);
 }
-
 }  // namespace lr::Graphics

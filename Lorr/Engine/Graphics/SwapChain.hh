@@ -1,5 +1,5 @@
 // Created on Monday July 18th 2022 by exdal
-// Last modified on Tuesday May 23rd 2023 by exdal
+// Last modified on Sunday May 28th 2023 by exdal
 
 #pragma once
 
@@ -12,14 +12,6 @@
 
 namespace lr::Graphics
 {
-enum class SwapChainFlag : u8  // Reserved for future use
-{
-    None,                      // Buffer count = 2
-    VSync = 1 << 0,            // Buffer count = 1
-    TripleBuffering = 1 << 2,  // Buffer count = 3
-};
-EnumFlags(SwapChainFlag);
-
 struct SwapChainFrame
 {
     eastl::queue<Buffer *> m_BufferDeleteQueue;

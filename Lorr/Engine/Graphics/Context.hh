@@ -1,5 +1,5 @@
 // Created on Monday July 18th 2022 by exdal
-// Last modified on Wednesday May 24th 2023 by exdal
+// Last modified on Sunday May 28th 2023 by exdal
 
 #pragma once
 
@@ -13,6 +13,10 @@
 #include "CommandList.hh"
 #include "Pipeline.hh"
 #include "SwapChain.hh"
+
+#ifdef CreateSemaphore
+#undef CreateSemaphore
+#endif
 
 namespace lr::Graphics
 {
@@ -48,7 +52,7 @@ struct APIAllocatorInitDesc
 struct APIDesc
 {
     APIFlags m_Flags = LR_API_FLAG_NONE;
-    SwapChainFlag m_SwapChainFlags = SwapChainFlag::None;
+    u32 m_ImageCount = 1;
     BaseWindow *m_pTargetWindow = nullptr;
     APIAllocatorInitDesc m_AllocatorDesc = {};
 };
@@ -96,7 +100,7 @@ struct Context
     Pipeline *CreateComputePipeline(ComputePipelineBuildInfo *pBuildInfo);
 
     /// SWAPCHAIN ///
-    SwapChain *CreateSwapChain(BaseWindow *pWindow, SwapChainFlag flags, SwapChain *pOldSwapChain);
+    SwapChain *CreateSwapChain(BaseWindow *pWindow, u32 imageCount, SwapChain *pOldSwapChain);
     void DeleteSwapChain(SwapChain *pSwapChain, bool keepSelf);
     void ResizeSwapChain(BaseWindow *pWindow);
     SwapChain *GetSwapChain();
@@ -115,7 +119,7 @@ struct Context
     DescriptorSetLayout *CreateDescriptorSetLayout(
         eastl::span<DescriptorLayoutElement> elements,
         DescriptorSetLayoutFlag flags = DescriptorSetLayoutFlag::DescriptorBuffer);
-    u64 GetDescriptorSetLayoutSize(DescriptorSetLayout *pLayout);  // ALIGNED!!!
+    u64 GetDescriptorSetLayoutSize(DescriptorSetLayout *pLayout);
     u64 GetDescriptorSetLayoutBindingOffset(DescriptorSetLayout *pLayout, u32 bindingID);
     u64 GetDescriptorSize(DescriptorType type);
     u64 GetDescriptorSizeAligned(DescriptorType type);

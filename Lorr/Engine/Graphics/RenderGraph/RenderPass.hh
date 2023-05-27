@@ -179,10 +179,9 @@ struct RenderPassBuilder
     void SetBlendAttachment(const ColorBlendAttachment &attachment);
     void SetPushConstant(const PushConstantDesc &pushConstant);
     void SetBufferDescriptor(eastl::span<DescriptorGetInfo> elements);
+    void SetImageDescriptor(DescriptorType type, eastl::span<DescriptorGetInfo> elements);
     void SetShader(Shader *pShader);
     void SetInputLayout(const InputLayout &layout);
-
-    void WriteDescriptorAddress(eastl::span<DescriptorGetInfo> elements);
 
     u64 GetResourceBufferSize();
     u64 GetSamplerBufferSize();

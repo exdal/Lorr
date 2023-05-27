@@ -1,5 +1,5 @@
 // Created on Monday July 18th 2022 by exdal
-// Last modified on Friday May 26th 2023 by exdal
+// Last modified on Sunday May 28th 2023 by exdal
 
 #include "Context.hh"
 
@@ -45,7 +45,7 @@ bool Context::Init(APIDesc *pDesc)
     if (!SetupDevice())
         return false;
 
-    m_pSwapChain = CreateSwapChain(pDesc->m_pTargetWindow, pDesc->m_SwapChainFlags, nullptr);
+    m_pSwapChain = CreateSwapChain(pDesc->m_pTargetWindow, pDesc->m_ImageCount, nullptr);
     SetObjectName(m_pPhysicalDevice, "Physical Device");
     SetObjectName(m_pSurface, "Default Surface");
     SetObjectName(m_pSwapChain, "Swap Chain");
@@ -554,7 +554,7 @@ Pipeline *Context::CreateComputePipeline(ComputePipelineBuildInfo *pBuildInfo)
     return pPipeline;
 }
 
-SwapChain *Context::CreateSwapChain(BaseWindow *pWindow, SwapChainFlag flags, SwapChain *pOldSwapChain)
+SwapChain *Context::CreateSwapChain(BaseWindow *pWindow, u32 imageCount, SwapChain *pOldSwapChain)
 {
     ZoneScoped;
 
@@ -567,16 +567,16 @@ SwapChain *Context::CreateSwapChain(BaseWindow *pWindow, SwapChainFlag flags, Sw
         VkFormat format = VK::ToFormat(pSwapChain->m_ImageFormat);
 
         if (!m_pSurface->IsPresentModeSupported(pSwapChain->m_PresentMode))
-            flags |= SwapChainFlag::VSync;
+            imageCount = 1;
 
-        if (flags & SwapChainFlag::VSync)
+        if (imageCount == 1)
         {
             pSwapChain->m_PresentMode = VK_PRESENT_MODE_FIFO_KHR;
             pSwapChain->m_FrameCount = 1;
         }
-        else if (flags & SwapChainFlag::TripleBuffering)
+        else
         {
-            pSwapChain->m_FrameCount = 3;
+            pSwapChain->m_FrameCount = imageCount;
         }
 
         pSwapChain->m_FrameCount =
@@ -688,7 +688,7 @@ void Context::ResizeSwapChain(BaseWindow *pWindow)
     WaitForWork();
 
     DeleteSwapChain(m_pSwapChain, true);
-    m_pSwapChain = CreateSwapChain(pWindow, SwapChainFlag::None, m_pSwapChain);
+    m_pSwapChain = CreateSwapChain(pWindow, m_pSwapChain->m_FrameCount, m_pSwapChain);
 }
 
 SwapChain *Context::GetSwapChain()
@@ -761,7 +761,7 @@ void Context::EndFrame()
     VkSemaphoreSubmitInfo presentSemaphoreInfo = {};
     presentSemaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
     presentSemaphoreInfo.semaphore = presentSem;
-    presentSemaphoreInfo.stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+    presentSemaphoreInfo.stageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT;
 
     VkSubmitInfo2 submitInfo = {};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
@@ -812,6 +812,8 @@ DescriptorSetLayout *Context::CreateDescriptorSetLayout(
     ZoneScoped;
 
     DescriptorSetLayout *pLayout = new DescriptorSetLayout;
+
+    // VkDescriptorBindingFlags
 
     VkDescriptorSetLayoutCreateFlags createFlags = 0;
     if (flags & DescriptorSetLayoutFlag::DescriptorBuffer)
@@ -887,7 +889,39 @@ void Context::GetDescriptorData(
 {
     ZoneScoped;
 
-    VkDescriptorDataEXT descriptorData = { .pUniformTexelBuffer = &info.m_BufferInfo };
+    VkDescriptorAddressInfoEXT bufferInfo = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_ADDRESS_INFO_EXT,
+        .pNext = nullptr,
+    };
+    VkDescriptorImageInfo imageInfo = {};
+    VkDescriptorDataEXT descriptorData = {};
+
+    if (info.m_pBuffer)  // Allow null descriptors
+    {
+        switch (type)
+        {
+            case DescriptorType::StorageBuffer:
+            case DescriptorType::UniformBuffer:
+                bufferInfo.address = info.m_pBuffer->m_DeviceAddress;
+                bufferInfo.range = info.m_pBuffer->m_DeviceDataLen;
+                descriptorData = { .pUniformBuffer = &bufferInfo };
+                break;
+
+            case DescriptorType::StorageImage:
+            case DescriptorType::SampledImage:
+                imageInfo.imageView = info.m_pImage->m_pViewHandle;
+                descriptorData = { .pSampledImage = &imageInfo };
+                break;
+
+            case DescriptorType::Sampler:
+                descriptorData.pSampler = &info.m_pSampler->m_pHandle;
+                break;
+
+            default:
+                break;
+        }
+    }
+
     VkDescriptorGetInfoEXT vkInfo = {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT,
         .pNext = nullptr,

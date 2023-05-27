@@ -1,3 +1,6 @@
+// Created on Saturday April 22nd 2023 by exdal
+// Last modified on Sunday May 28th 2023 by exdal
+
 #include "VulkanType.hh"
 
 namespace lr::Graphics
@@ -232,6 +235,9 @@ VkPipelineStageFlags2 VK::ToPipelineStage(PipelineStage stage)
 
     if (stage & PipelineStage::AllCommands)
         v |= VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+
+    if (stage & PipelineStage::BottomOfPipe)
+        v |= VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT;
 
     return v;
 }

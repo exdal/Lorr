@@ -1,5 +1,5 @@
 // Created on Wednesday May 4th 2022 by exdal
-// Last modified on Wednesday May 24th 2023 by exdal
+// Last modified on Sunday May 28th 2023 by exdal
 
 #include "Engine.hh"
 
@@ -31,6 +31,7 @@ void Engine::Init(EngineDesc &engineDesc)
     };
 
     Graphics::APIDesc apiDesc = {
+        .m_ImageCount = CONFIG_GET_VAR(api_swapchain_frames),
         .m_pTargetWindow = &m_Window,
         .m_AllocatorDesc = gpAllocators,
     };

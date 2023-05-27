@@ -1,5 +1,5 @@
 // Created on Friday February 24th 2023 by exdal
-// Last modified on Thursday May 25th 2023 by exdal
+// Last modified on Sunday May 28th 2023 by exdal
 
 #pragma once
 
@@ -111,20 +111,18 @@ struct RenderGraph
 
     /// SUBMISSION ///
 
-    void AllocateCommandLists(CommandType type);
-
     Semaphore *GetSemaphore();
     CommandAllocator *GetCommandAllocator(CommandType type);
-    CommandList *GetCommandList(u32 submitID);
-    CommandList *GetCommandList(RenderPass *&pPass) { return GetCommandList(pPass->m_SubmitID); }
+    CommandList *GetCommandList(CommandType type);
 
     /// API CONTEXT ///
 
     Context *m_pContext = nullptr;
-    eastl::vector<Semaphore *> m_Semaphores;
-    eastl::vector<CommandAllocator *> m_CommandAllocators;
-    eastl::vector<CommandList *> m_CommandLists;
-    CommandList *m_pSetupList = nullptr;
+
+    static constexpr u32 kCommandCountPerFrame = (u32)CommandType::Count * LR_MAX_FRAME_COUNT;
+    eastl::array<Semaphore *, kCommandCountPerFrame> m_Semaphores;
+    eastl::array<CommandAllocator *, kCommandCountPerFrame> m_CommandAllocators;
+    eastl::array<CommandList *, kCommandCountPerFrame> m_CommandLists;
 
     /// RESOURCES ///
 
@@ -141,6 +139,9 @@ struct RenderGraph
 
     Buffer *m_pResourceDescriptorBuffer = nullptr;
     Buffer *m_pSamplerDescriptorBuffer = nullptr;
+
+    eastl::fixed_vector<u32, LR_MAX_DESCRIPTOR_SETS_PER_PIPELINE, false> m_DescriptorSetIndices;
+    eastl::fixed_vector<u64, LR_MAX_DESCRIPTOR_SETS_PER_PIPELINE, false> m_DescriptorSetOffsets;
 };
 
 }  // namespace lr::Graphics

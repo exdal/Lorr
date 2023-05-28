@@ -199,16 +199,17 @@ void RenderPassBuilder::SetBlendAttachment(const ColorBlendAttachment &attachmen
     m_GraphicsPipelineInfo.m_BlendAttachments.push_back(attachment);
 }
 
-void RenderPassBuilder::SetBufferDescriptor(eastl::span<DescriptorGetInfo> elements)
+void RenderPassBuilder::SetDescriptor(DescriptorType type, eastl::span<DescriptorGetInfo> elements)
 {
     ZoneScoped;
 
-    DescriptorBufferInfo *pBufferInfo = GetDescriptorBuffer(LR_DESCRIPTOR_INDEX_BUFFER);
+    u32 targetSet = DescriptorTypeToBinding(type);
+    DescriptorBufferInfo *pDescriptorInfo = GetDescriptorBuffer(targetSet);
 
-    u8 *pData = pBufferInfo->m_pData;
-    u64 &offset = pBufferInfo->m_Offset;
+    u8 *pData = pDescriptorInfo->m_pData;
+    u64 &offset = pDescriptorInfo->m_Offset;
 
-    u64 typeSize = sizeof(u64);
+    u64 typeSize = targetSet == LR_DESCRIPTOR_INDEX_BUFFER ? sizeof(u64) : m_pContext->GetDescriptorSize(type);
     u32 descriptorIndex = offset / typeSize;
 
     for (DescriptorGetInfo &element : elements)
@@ -217,33 +218,15 @@ void RenderPassBuilder::SetBufferDescriptor(eastl::span<DescriptorGetInfo> eleme
         /// by their indexes to their descriptor buffers. So instead of pushing into the binding offset
         /// we push into the buffer offset.
 
-        memcpy((u8 *)pData + offset, &element.m_pBuffer->m_DeviceAddress, typeSize);
-
-        offset += typeSize;
-        element.m_pBuffer->m_DescriptorIndex = descriptorIndex++;
-    }
-}
-
-void RenderPassBuilder::SetImageDescriptor(DescriptorType type, eastl::span<DescriptorGetInfo> elements)
-{
-    ZoneScoped;
-
-    DescriptorBufferInfo *pDescriptorInfo = nullptr;
-    if (type == DescriptorType::SampledImage)
-        pDescriptorInfo = GetDescriptorBuffer(LR_DESCRIPTOR_INDEX_SAMPLED_IMAGE);
-    else if (type == DescriptorType::StorageImage)
-        pDescriptorInfo = GetDescriptorBuffer(LR_DESCRIPTOR_INDEX_STORAGE_IMAGE);
-
-    void *pData = pDescriptorInfo->m_pData;
-    u64 &offset = pDescriptorInfo->m_Offset;
-
-    u64 typeSize = m_pContext->GetDescriptorSize(type);
-    u32 descriptorIndex = offset / typeSize;
-
-    for (DescriptorGetInfo &element : elements)
-    {
-        DescriptorGetInfo bufferInfo(element.m_pImage);
-        m_pContext->GetDescriptorData(type, bufferInfo, typeSize, (u8 *)pData + offset);
+        if (targetSet != LR_DESCRIPTOR_INDEX_BUFFER)
+        {
+            DescriptorGetInfo descriptorInfo(element.m_pImage);
+            m_pContext->GetDescriptorData(type, descriptorInfo, typeSize, pData + offset);
+        }
+        else
+        {
+            memcpy(pData + offset, &element.m_pBuffer->m_DeviceAddress, typeSize);
+        }
 
         offset += typeSize;
         element.m_pBuffer->m_DescriptorIndex = descriptorIndex++;
@@ -279,11 +262,27 @@ u64 RenderPassBuilder::GetSamplerBufferSize()
 {
     ZoneScoped;
 
-    DescriptorBufferInfo *pInfo = GetDescriptorBuffer(LR_DESCRIPTOR_INDEX_SAMPLER);
-    if (!pInfo)
-        return 0;
+    return m_pContext->AlignUpDescriptorOffset(m_SamplerDescriptor.m_Offset);
+}
 
-    return m_pContext->AlignUpDescriptorOffset(pInfo->m_Offset);
+void RenderPassBuilder::GetResourceDescriptorOffsets(u64 *pOffsetsOut, u32 *pDescriptorSizeOut)
+{
+    ZoneScoped;
+
+    u64 descriptorOffset = 0;
+    u32 descriptorCount = 0;
+    u64 *pOffsets = pOffsetsOut;
+    for (DescriptorBufferInfo &info : m_ResourceDescriptors)
+    {
+        if (info.m_Offset == 0)
+            continue;
+
+        *pDescriptorSizeOut = ++descriptorCount;
+        if (pOffsetsOut)
+            *(pOffsets++) = descriptorOffset;
+
+        descriptorOffset += m_pContext->AlignUpDescriptorOffset(info.m_Offset);
+    }
 }
 
 void RenderPassBuilder::GetResourceDescriptors(Buffer *pDst, CommandList *pList)
@@ -308,13 +307,6 @@ void RenderPassBuilder::GetResourceDescriptors(Buffer *pDst, CommandList *pList)
         if (info.m_Offset == 0)
             continue;
 
-        /// RenderGraph stuff
-        m_pGraph->m_DescriptorSetIndices.push_back(0);
-        m_pGraph->m_DescriptorSetOffsets.push_back(mapOffset);
-
-        DescriptorType elementType = BindingToDescriptorType(info.m_BindingID);
-        u64 bindingSize = m_pContext->GetDescriptorSize(elementType);
-
         if (info.m_BindingID == LR_DESCRIPTOR_INDEX_BUFFER)
         {
             /// Create temp buffer to get descriptor data and map into resource descriptor buffer
@@ -333,6 +325,9 @@ void RenderPassBuilder::GetResourceDescriptors(Buffer *pDst, CommandList *pList)
             memcpy(pDescriptorData, info.m_pData, info.m_Offset);
             m_pContext->UnmapMemory(pDescriptorBuffer);
 
+            DescriptorType elementType = BindingToDescriptorType(info.m_BindingID);
+            u64 bindingSize = m_pContext->GetDescriptorSize(elementType);
+
             DescriptorGetInfo bufferInfo(pDescriptorBuffer);
             m_pContext->GetDescriptorData(elementType, bufferInfo, bindingSize, (u8 *)pMapData + mapOffset);
 
@@ -347,7 +342,7 @@ void RenderPassBuilder::GetResourceDescriptors(Buffer *pDst, CommandList *pList)
 
             // TODO: Currently it's only one element is bound, which is the first element
             // TODO: we will see how this goes, we can convert this to another set if not possible
-            memcpy((u8 *)pMapData + mapOffset, info.m_pData, bindingSize);
+            memcpy((u8 *)pMapData + mapOffset, info.m_pData, info.m_Offset);
 
             mapOffset += m_pContext->AlignUpDescriptorOffset(info.m_Offset);
         }
@@ -358,4 +353,28 @@ void RenderPassBuilder::GetResourceDescriptors(Buffer *pDst, CommandList *pList)
     pList->CopyBuffer(pResourceDescriptor, pDst, 0, 0, bufferDesc.m_DataLen);
     m_pContext->DeleteBuffer(pResourceDescriptor);
 }
+
+void RenderPassBuilder::GetSamplerDescriptors(Buffer *pDst, CommandList *pList)
+{
+    ZoneScoped;
+
+    BufferDesc bufferDesc = {
+        .m_UsageFlags = BufferUsage::SamplerDescriptor | BufferUsage::TransferSrc,
+        .m_TargetAllocator = ResourceAllocator::Descriptor,
+        .m_DataLen = GetResourceBufferSize(),
+    };
+    Buffer *pSamplerDescriptor = m_pContext->CreateBuffer(&bufferDesc);
+
+    u64 mapOffset = 0;
+    void *pMapData = nullptr;
+    m_pContext->MapMemory(pSamplerDescriptor, pMapData, 0, bufferDesc.m_DataLen);
+
+    memcpy((u8 *)pMapData, m_SamplerDescriptor.m_pData, m_SamplerDescriptor.m_Offset);
+
+    m_pContext->UnmapMemory(pSamplerDescriptor);
+
+    pList->CopyBuffer(pSamplerDescriptor, pDst, 0, 0, bufferDesc.m_DataLen);
+    m_pContext->DeleteBuffer(pSamplerDescriptor);
+}
+
 }  // namespace lr::Graphics

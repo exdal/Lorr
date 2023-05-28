@@ -1,5 +1,5 @@
 // Created on Saturday April 22nd 2023 by exdal
-// Last modified on Saturday May 27th 2023 by exdal
+// Last modified on Sunday May 28th 2023 by exdal
 
 #include "Graphics/Renderer/Pass.hh"
 
@@ -45,10 +45,10 @@ void AddGeometryPass(RenderGraph *pGraph, eastl::string_view name)
             };
             Image *pImage = pGraph->CreateImage("bindless_test", imageDesc);
 
-            DescriptorGetInfo bufferInfo[] = { pDummyBuffer };
-            builder.SetBufferDescriptor(bufferInfo);
-            DescriptorGetInfo imageInfo[] = { pImage };
-            builder.SetImageDescriptor(DescriptorType::SampledImage, imageInfo);
+            DescriptorGetInfo bufferInfo(pDummyBuffer);
+            builder.SetDescriptor(DescriptorType::UniformBuffer, bufferInfo);
+            DescriptorGetInfo imageInfo(pImage);
+            builder.SetDescriptor(DescriptorType::SampledImage, imageInfo);
 
             auto *pVertexShaderData =
                 Engine::GetResourceMan()->Get<Resource::ShaderResource>("shader://bindless_test.vs");

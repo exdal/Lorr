@@ -119,22 +119,49 @@ void RenderGraph::Prepare()
         builder.BuildPass(pPass);
     }
 
-    BufferDesc resourceBufferDesc = {
-        .m_UsageFlags = BufferUsage::ResourceDescriptor | BufferUsage::TransferDst,
-        .m_TargetAllocator = ResourceAllocator::BufferTLSF,
-        .m_DataLen = builder.GetResourceBufferSize(),
-    };
-    m_pResourceDescriptorBuffer = m_pContext->CreateBuffer(&resourceBufferDesc);
-
-    // BufferDesc samplerBufferDesc = {
-    //     .m_UsageFlags = BufferUsage::SamplerDescriptor | BufferUsage::TransferDst,
-    //     .m_TargetAllocator = ResourceAllocator::BufferTLSF,
-    //     .m_DataLen = builder.GetSamplerBufferSize(),
-    // };
-    // m_pSamplerDescriptorBuffer = m_pContext->CreateBuffer(&samplerBufferDesc);
-
     m_pContext->BeginCommandList(pSetupList);
-    builder.GetResourceDescriptors(m_pResourceDescriptorBuffer, pSetupList);
+
+    /// RESOURCE DESCRIPTORS ///
+
+    u64 descriptorBufferSize = builder.GetResourceBufferSize();
+    if (descriptorBufferSize != 0)
+    {
+        BufferDesc resourceBufferDesc = {
+            .m_UsageFlags = BufferUsage::ResourceDescriptor | BufferUsage::TransferDst,
+            .m_TargetAllocator = ResourceAllocator::BufferTLSF,
+            .m_DataLen = descriptorBufferSize,
+        };
+        m_pResourceDescriptorBuffer = m_pContext->CreateBuffer(&resourceBufferDesc);
+
+        builder.GetResourceDescriptors(m_pResourceDescriptorBuffer, pSetupList);
+
+        u32 resourceDescriptorCount = 0;
+        builder.GetResourceDescriptorOffsets(nullptr, &resourceDescriptorCount);
+        m_DescriptorSetOffsets.resize(resourceDescriptorCount);
+        builder.GetResourceDescriptorOffsets(&m_DescriptorSetOffsets[0], &resourceDescriptorCount);
+
+        m_DescriptorSetIndices.resize(resourceDescriptorCount);
+        memset(&m_DescriptorSetIndices[0], 0, m_DescriptorSetIndices.size() * sizeof(u32));
+    }
+
+    /// SAMPLER DESCRIPTORS ///
+
+    u64 samplerBufferSize = builder.GetSamplerBufferSize();
+    if (samplerBufferSize != 0)
+    {
+        BufferDesc samplerBufferDesc = {
+            .m_UsageFlags = BufferUsage::SamplerDescriptor | BufferUsage::TransferDst,
+            .m_TargetAllocator = ResourceAllocator::BufferTLSF,
+            .m_DataLen = samplerBufferSize,
+        };
+        m_pSamplerDescriptorBuffer = m_pContext->CreateBuffer(&samplerBufferDesc);
+
+        builder.GetSamplerDescriptors(m_pSamplerDescriptorBuffer, pSetupList);
+
+        m_DescriptorSetOffsets.push_back(0);  // It's only one buffer, does not matter
+        m_DescriptorSetIndices.push_back(1);  // Again, we have 2 buffers
+    }
+
     m_pContext->EndCommandList(pSetupList);
     SubmitList(pSetupList, PipelineStage::AllCommands, PipelineStage::AllCommands);
 }

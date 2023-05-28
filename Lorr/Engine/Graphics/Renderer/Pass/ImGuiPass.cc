@@ -1,5 +1,5 @@
 // Created on Wednesday November 23rd 2022 by exdal
-// Last modified on Thursday May 25th 2023 by exdal
+// Last modified on Sunday May 28th 2023 by exdal
 
 #include "Graphics/Renderer/Pass.hh"
 
@@ -49,7 +49,6 @@ void AddImguiPass(RenderGraph *pGraph, eastl::string_view name)
                 .m_MipMapLevels = 1,
             };
             data.m_pFontImage = pGraph->CreateImage("imgui_font", imageDesc);
-
             // pGraph->UploadImageData(
             //     data.m_pFontImage, MemoryAccess::SampledRead, pFontData, data.m_pFontImage->m_DataLen);
             free(pFontData);
@@ -65,10 +64,10 @@ void AddImguiPass(RenderGraph *pGraph, eastl::string_view name)
             data.m_pSampler = pContext->CreateSampler(&samplerDesc);
 
             DescriptorGetInfo imageDescriptorInfo(data.m_pFontImage);
+            builder.SetDescriptor(DescriptorType::SampledImage, imageDescriptorInfo);
+            
             DescriptorGetInfo samplerDescriptorInfo(data.m_pSampler);
-
-            // builder.SetDescriptor(DescriptorType::SampledImage, imageDescriptorInfo);
-            // builder.SetDescriptor(DescriptorType::Sampler, samplerDescriptorInfo);
+            builder.SetDescriptor(DescriptorType::Sampler, samplerDescriptorInfo);
 
             auto *pVertexShaderData =
                 Engine::GetResourceMan()->Get<Resource::ShaderResource>("shader://imgui.vs");

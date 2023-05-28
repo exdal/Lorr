@@ -1,5 +1,5 @@
 // Created on Friday February 24th 2023 by exdal
-// Last modified on Friday May 26th 2023 by exdal
+// Last modified on Sunday May 28th 2023 by exdal
 
 #pragma once
 
@@ -178,14 +178,16 @@ struct RenderPassBuilder
         NameID resource, InputResourceAccess access, InputResourceFlag flags = InputResourceFlag::None);
     void SetBlendAttachment(const ColorBlendAttachment &attachment);
     void SetPushConstant(const PushConstantDesc &pushConstant);
-    void SetBufferDescriptor(eastl::span<DescriptorGetInfo> elements);
-    void SetImageDescriptor(DescriptorType type, eastl::span<DescriptorGetInfo> elements);
+    void SetDescriptor(DescriptorType type, eastl::span<DescriptorGetInfo> elements);
     void SetShader(Shader *pShader);
     void SetInputLayout(const InputLayout &layout);
 
     u64 GetResourceBufferSize();
     u64 GetSamplerBufferSize();
+    void GetResourceDescriptorOffsets(u64 *pOffsetsOut, u32 *pDescriptorSizeOut);
+
     void GetResourceDescriptors(Buffer *pDst, CommandList *pList);
+    void GetSamplerDescriptors(Buffer *pDst, CommandList *pList);
 
     union
     {

@@ -1,5 +1,5 @@
 // Created on Wednesday May 4th 2022 by exdal
-// Last modified on Sunday May 28th 2023 by exdal
+// Last modified on Wednesday May 31st 2023 by exdal
 
 #include "Engine.hh"
 
@@ -106,14 +106,14 @@ void Engine::BeginFrame()
     m_Window.Poll();
     DispatchEvents();
 
-    // m_ImGui.NewFrame(m_Window.m_Width, m_Window.m_Height);
+    m_ImGui.NewFrame(m_Window.m_Width, m_Window.m_Height);
 }
 
 void Engine::EndFrame()
 {
     ZoneScoped;
 
-    // m_ImGui.EndFrame();
+    m_ImGui.EndFrame();
 
     m_RenderGraph.Draw();
 }

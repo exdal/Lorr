@@ -1,5 +1,5 @@
 // Created on Sunday March 12th 2023 by exdal
-// Last modified on Tuesday May 23rd 2023 by exdal
+// Last modified on Wednesday May 31st 2023 by exdal
 
 #include "Shader.hh"
 
@@ -153,6 +153,54 @@ constexpr glslang_stage_t ToGLSLStage(ShaderStage stage)
 EnumFlags(glslang_messages_t);
 #define ENABLE_IF_HAS(flag) (bool)(pDesc->m_Flags & flag)
 
+glsl_include_result_t *IncludeLocalCb(
+    void *pContext, const char *pHeaderName, const char *pIncluderName, uptr indcludeDepth)
+{
+    ZoneScoped;
+
+    ShaderCompileDesc *pDesc = (ShaderCompileDesc *)pContext;
+    eastl::string fullPath = _FMT("{}/{}", pDesc->m_WorkingDir, pHeaderName);
+    FileView fv(fullPath);
+    if (!fv.IsOK())
+    {
+        LOG_ERROR("ShaderCompiler: Failed to include file '{}'!", fullPath);
+        return nullptr;
+    }
+
+    u64 allocSize = sizeof(glsl_include_result_t) + fv.Size();
+
+    glsl_include_result_t *pResult = (glsl_include_result_t *)malloc(allocSize);
+    memset(pResult, 0, allocSize);
+
+    u8 *pCode = (u8 *)pResult + sizeof(glsl_include_result_t);
+    memcpy(pCode, fv.GetPtr(), fv.Size());
+
+    pResult->header_name = pHeaderName;
+    pResult->header_data = (const char *)pCode;
+    pResult->header_length = fv.Size();
+
+    return pResult;
+}
+
+glsl_include_result_t *IncludeSystemCb(
+    void *pContext, const char *pHeaderName, const char *pIncluderName, uptr indcludeDepth)
+{
+    ZoneScoped;
+
+    return IncludeLocalCb(pContext, pHeaderName, pIncluderName, indcludeDepth);
+}
+
+int IncludeResultCb(void *pContext, glsl_include_result_t *pResult)
+{
+    ZoneScoped;
+
+    ShaderCompileDesc *pDesc = (ShaderCompileDesc *)pContext;
+
+    free(pResult);
+
+    return 1;
+}
+
 void ShaderCompiler::Init()
 {
     ZoneScoped;
@@ -177,6 +225,11 @@ ShaderCompileOutput ShaderCompiler::CompileShader(ShaderCompileDesc *pDesc)
 
     ShaderCompileOutput output = {};
 
+    glsl_include_callbacks_t includeCallbacks = {
+        .include_system = IncludeSystemCb,
+        .include_local = IncludeLocalCb,
+        .free_include_result = IncludeResultCb,
+    };
     const glslang_input_t input = {
         .language = GLSLANG_SOURCE_GLSL,
         .stage = ToGLSLStage(pDesc->m_Type),
@@ -191,6 +244,8 @@ ShaderCompileOutput ShaderCompiler::CompileShader(ShaderCompileDesc *pDesc)
         .forward_compatible = false,
         .messages = GLSLANG_MSG_DEFAULT_BIT | GLSLANG_MSG_SPV_RULES_BIT | GLSLANG_MSG_VULKAN_RULES_BIT,
         .resource = (glslang_resource_t *)&glslang_DefaultTBuiltInResource,
+        .callbacks = includeCallbacks,
+        .callbacks_ctx = pDesc,
     };
 
     glslang_shader_t *pShader = glslang_shader_create(&input);

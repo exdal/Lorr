@@ -1,19 +1,16 @@
-//
-// Created on Saturday 22nd April 2023 by exdal
-//
+// Created on Saturday April 22nd 2023 by exdal
+// Last modified on Sunday May 28th 2023 by exdal
 
 #pragma once
 
 #include "Buffer.hh"
 #include "CommandList.hh"
-#include "InputLayout.hh"
 #include "Pipeline.hh"
 #include "Image.hh"
 
 namespace lr::Graphics::VK
 {
 VkFormat ToFormat(ImageFormat format);
-VkFormat ToFormat(VertexAttribType format);
 VkPrimitiveTopology ToTopology(PrimitiveType type);
 VkCullModeFlags ToCullMode(CullMode mode);
 VkDescriptorType ToDescriptorType(DescriptorType type);

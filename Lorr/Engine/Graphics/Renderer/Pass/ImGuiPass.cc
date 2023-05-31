@@ -1,5 +1,5 @@
 // Created on Wednesday November 23rd 2022 by exdal
-// Last modified on Sunday May 28th 2023 by exdal
+// Last modified on Thursday June 1st 2023 by exdal
 
 #include "Graphics/Renderer/Pass.hh"
 
@@ -17,6 +17,7 @@ void AddImguiPass(RenderGraph *pGraph, eastl::string_view name)
     {
         XMFLOAT2 m_Scale;
         XMFLOAT2 m_Translate;
+        u32 m_StartIndex;
     };
 
     struct ImguiPassData
@@ -25,8 +26,6 @@ void AddImguiPass(RenderGraph *pGraph, eastl::string_view name)
         Sampler *m_pSampler;
         Buffer *m_pVertexBuffer;
         Buffer *m_pIndexBuffer;
-        u32 m_VertexCount;
-        u32 m_IndexCount;
     };
 
     auto *pPass = pGraph->CreateGraphicsPassCb<ImguiPassData>(
@@ -49,8 +48,7 @@ void AddImguiPass(RenderGraph *pGraph, eastl::string_view name)
                 .m_MipMapLevels = 1,
             };
             data.m_pFontImage = pGraph->CreateImage("imgui_font", imageDesc);
-            // pGraph->UploadImageData(
-            //     data.m_pFontImage, MemoryAccess::SampledRead, pFontData, data.m_pFontImage->m_DataLen);
+            pGraph->FillImageData(data.m_pFontImage, eastl::span<u8>(pFontData, data.m_pFontImage->m_DataLen));
             free(pFontData);
 
             SamplerDesc samplerDesc = {
@@ -63,11 +61,30 @@ void AddImguiPass(RenderGraph *pGraph, eastl::string_view name)
             };
             data.m_pSampler = pContext->CreateSampler(&samplerDesc);
 
+            // just change `ImDrawVert` to `... struct alignas(8) ImDrawVert...`
+            static_assert(eastl::alignment_of<ImDrawVert>() == 8, "ImDrawVert must be aligned to 8!");
+            BufferDesc vertexBufferDesc = {
+                .m_UsageFlags = BufferUsage::Storage,
+                .m_TargetAllocator = ResourceAllocator::BufferTLSF_Host,
+                .m_Stride = sizeof(ImDrawVert),
+                .m_DataLen = sizeof(ImDrawVert) * 0xffff,
+            };
+            data.m_pVertexBuffer = pContext->CreateBuffer(&vertexBufferDesc);
+
+            BufferDesc indexBufferDesc = {
+                .m_UsageFlags = BufferUsage::Storage,
+                .m_TargetAllocator = ResourceAllocator::BufferTLSF_Host,
+                .m_Stride = sizeof(ImDrawIdx),
+                .m_DataLen = sizeof(ImDrawIdx) * 0xffff,
+            };
+            data.m_pIndexBuffer = pContext->CreateBuffer(&indexBufferDesc);
+
             DescriptorGetInfo imageDescriptorInfo(data.m_pFontImage);
-            builder.SetDescriptor(DescriptorType::SampledImage, imageDescriptorInfo);
-            
             DescriptorGetInfo samplerDescriptorInfo(data.m_pSampler);
+            DescriptorGetInfo pBufferInfos[] = { data.m_pVertexBuffer, data.m_pIndexBuffer };
+            builder.SetDescriptor(DescriptorType::SampledImage, imageDescriptorInfo);
             builder.SetDescriptor(DescriptorType::Sampler, samplerDescriptorInfo);
+            builder.SetDescriptor(DescriptorType::StorageBuffer, pBufferInfos);
 
             auto *pVertexShaderData =
                 Engine::GetResourceMan()->Get<Resource::ShaderResource>("shader://imgui.vs");
@@ -81,11 +98,6 @@ void AddImguiPass(RenderGraph *pGraph, eastl::string_view name)
             builder.SetBlendAttachment({ true });
             builder.SetShader(pVertexShader);
             builder.SetShader(pPixelShader);
-            builder.SetInputLayout({
-                LR_VERTEX_ATTRIB_SFLOAT2,
-                LR_VERTEX_ATTRIB_SFLOAT2,
-                LR_VERTEX_ATTRIB_UINT_4N,
-            });
         },
         [](Context *pContext, ImguiPassData &passData, CommandList *pList)
         {
@@ -96,69 +108,34 @@ void AddImguiPass(RenderGraph *pGraph, eastl::string_view name)
             if (pDrawData->TotalIdxCount == 0)
                 return;
 
-            u64 vertexBufferSize = 0;
-            u64 indexBufferSize = 0;
-
-            if (passData.m_VertexCount < pDrawData->TotalVtxCount
-                || passData.m_IndexCount < pDrawData->TotalIdxCount)
+            u32 mapDataOffset = 0;
+            void *pMapData = nullptr;
+            pContext->MapMemory(passData.m_pVertexBuffer, pMapData, 0, pDrawData->TotalVtxCount);
+            for (u32 i = 0; i < pDrawData->CmdListsCount; i++)
             {
-                passData.m_VertexCount = pDrawData->TotalVtxCount + 1500;
-                passData.m_IndexCount = pDrawData->TotalIdxCount + 1500;
+                const ImDrawList *pDrawList = pDrawData->CmdLists[i];
+                memcpy(
+                    (ImDrawVert *)pMapData + mapDataOffset,
+                    pDrawList->VtxBuffer.Data,
+                    pDrawList->VtxBuffer.Size * sizeof(ImDrawVert));
 
-                if (passData.m_pVertexBuffer)
-                    pContext->DeleteBuffer(passData.m_pVertexBuffer);
-                if (passData.m_pIndexBuffer)
-                    pContext->DeleteBuffer(passData.m_pIndexBuffer);
-
-                vertexBufferSize = passData.m_VertexCount * sizeof(ImDrawVert);
-                indexBufferSize = passData.m_IndexCount * sizeof(ImDrawIdx);
-
-                BufferDesc bufferDesc = {};
-                bufferDesc.m_TargetAllocator = ResourceAllocator::BufferTLSF_Host;
-
-                bufferDesc.m_UsageFlags = BufferUsage::Vertex;
-                bufferDesc.m_Stride = sizeof(ImDrawVert);
-                bufferDesc.m_DataLen = vertexBufferSize;
-                passData.m_pVertexBuffer = pContext->CreateBuffer(&bufferDesc);
-
-                bufferDesc.m_UsageFlags = BufferUsage::Index;
-                bufferDesc.m_Stride = sizeof(ImDrawIdx);
-                bufferDesc.m_DataLen = indexBufferSize;
-                passData.m_pIndexBuffer = pContext->CreateBuffer(&bufferDesc);
-
-                u32 mapDataOffset = 0;
-                void *pMapData = nullptr;
-
-                pContext->MapMemory(passData.m_pVertexBuffer, pMapData, 0, vertexBufferSize);
-                for (u32 i = 0; i < pDrawData->CmdListsCount; i++)
-                {
-                    const ImDrawList *pDrawList = pDrawData->CmdLists[i];
-                    memcpy(
-                        (ImDrawVert *)pMapData + mapDataOffset,
-                        pDrawList->VtxBuffer.Data,
-                        pDrawList->VtxBuffer.Size * sizeof(ImDrawVert));
-
-                    mapDataOffset += pDrawList->VtxBuffer.Size;
-                }
-
-                pContext->UnmapMemory(passData.m_pVertexBuffer);
-                mapDataOffset = 0;
-
-                pContext->MapMemory(passData.m_pIndexBuffer, pMapData, 0, indexBufferSize);
-                for (u32 i = 0; i < pDrawData->CmdListsCount; i++)
-                {
-                    const ImDrawList *pDrawList = pDrawData->CmdLists[i];
-                    memcpy(
-                        (ImDrawIdx *)pMapData + mapDataOffset,
-                        pDrawList->IdxBuffer.Data,
-                        pDrawList->IdxBuffer.Size * sizeof(ImDrawIdx));
-
-                    mapDataOffset += pDrawList->IdxBuffer.Size;
-                }
-
-                pContext->UnmapMemory(passData.m_pIndexBuffer);
-                mapDataOffset = 0;
+                mapDataOffset += pDrawList->VtxBuffer.Size;
             }
+            pContext->UnmapMemory(passData.m_pVertexBuffer);
+
+            mapDataOffset = 0;
+            pContext->MapMemory(passData.m_pIndexBuffer, pMapData, 0, pDrawData->TotalIdxCount);
+            for (u32 i = 0; i < pDrawData->CmdListsCount; i++)
+            {
+                const ImDrawList *pDrawList = pDrawData->CmdLists[i];
+                memcpy(
+                    (ImDrawIdx *)pMapData + mapDataOffset,
+                    pDrawList->IdxBuffer.Data,
+                    pDrawList->IdxBuffer.Size * sizeof(ImDrawIdx));
+
+                mapDataOffset += pDrawList->IdxBuffer.Size;
+            }
+            pContext->UnmapMemory(passData.m_pIndexBuffer);
 
             PushConstant pushConstantData = {};
             pushConstantData.m_Scale.x = 2.0 / pDrawData->DisplaySize.x;
@@ -166,14 +143,6 @@ void AddImguiPass(RenderGraph *pGraph, eastl::string_view name)
             pushConstantData.m_Translate.x = -1.0 - pDrawData->DisplayPos.x * pushConstantData.m_Scale.x;
             pushConstantData.m_Translate.y = -1.0 - pDrawData->DisplayPos.y * pushConstantData.m_Scale.y;
 
-            pList->SetPushConstants(ShaderStage::Vertex, 0, &pushConstantData, sizeof(PushConstant));
-
-            u32 pBufferIndices[] = { 0, 1 };
-            u64 pBufferOffsets[] = { 0, 0 };  // binding_count * set * size
-            pList->SetDescriptorBufferOffsets(0, 2, pBufferIndices, pBufferOffsets);
-
-            pList->SetVertexBuffer(passData.m_pVertexBuffer);
-            pList->SetIndexBuffer(passData.m_pIndexBuffer, false);
             pList->SetViewport(0, 0, 0, pDrawData->DisplaySize.x, pDrawData->DisplaySize.y);
 
             XMFLOAT2 clipOffset = { pDrawData->DisplayPos.x, pDrawData->DisplayPos.y };
@@ -193,14 +162,24 @@ void AddImguiPass(RenderGraph *pGraph, eastl::string_view name)
 
                     pList->SetScissors(0, clipMin.x, clipMin.y, clipMax.x, clipMax.y);
 
-                    // DescriptorSet *pSet = (DescriptorSet *)cmd.TextureId;
-                    // if (!pSet)
-                    //     pSet = passData.m_pFontDescriptor;
+                    Image *pImage = (Image *)cmd.TextureId;
+                    if (!pImage)
+                        pImage = passData.m_pFontImage;
 
-                    // pList->SetDescriptorSets({ pSet, passData.m_pSamplerDescriptor });
+                    BindlessLayout::Binding pBindings[] = {
+                        { 0, passData.m_pVertexBuffer },
+                        { 1, passData.m_pIndexBuffer },
+                        { 2, pImage },
+                        { 3, passData.m_pSampler },
+                    };
+
+                    BindlessLayout bindlessLayout(pBindings);
+                    pList->SetBindlessLayout(bindlessLayout);
+
+                    pushConstantData.m_StartIndex = cmd.IdxOffset + indexOffset;
+                    pList->SetPushConstants(&pushConstantData, sizeof(PushConstant));
                     pList->SetPrimitiveType(PrimitiveType::TriangleList);
-                    pList->DrawIndexed(
-                        cmd.ElemCount, cmd.IdxOffset + indexOffset, cmd.VtxOffset + vertexOffset);
+                    pList->Draw(cmd.ElemCount, cmd.VtxOffset + vertexOffset);
                 }
 
                 vertexOffset += pDrawList->VtxBuffer.Size;

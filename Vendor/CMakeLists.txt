@@ -12,6 +12,10 @@ add_subdirectory(Utility/lw)
 add_subdirectory(Utility/tracy)
 add_subdirectory(Utility/tinygltf)
 
+set(SPIRV_SKIP_TESTS ON)
+
+# add_subdirectory(Graphics/SPIRV-Headers)
+# add_subdirectory(Graphics/SPIRV-Tools)
 add_subdirectory(Graphics/glslang)
 add_subdirectory(Graphics/imgui)
 add_subdirectory(Graphics/Vulkan-Headers)

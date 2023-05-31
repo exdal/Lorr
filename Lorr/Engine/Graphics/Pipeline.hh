@@ -1,10 +1,9 @@
 // Created on Wednesday September 21st 2022 by exdal
-// Last modified on Monday May 15th 2023 by exdal
+// Last modified on Sunday May 28th 2023 by exdal
 
 #pragma once
 
 #include "APIAllocator.hh"
-#include "InputLayout.hh"
 #include "Config.hh"
 
 #include "Descriptor.hh"
@@ -169,7 +168,6 @@ struct GraphicsPipelineBuildInfo
     eastl::vector<ColorBlendAttachment> m_BlendAttachments = {};
     eastl::vector<Shader *> m_Shaders = {};
     PipelineLayout *m_pLayout = nullptr;
-    InputLayout m_InputLayout = {};
     f32 m_DepthBiasFactor = 0.0;
     f32 m_DepthBiasClamp = 0.0;
     f32 m_DepthSlopeFactor = 0.0;

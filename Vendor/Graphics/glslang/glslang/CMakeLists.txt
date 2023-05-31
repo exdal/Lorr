@@ -110,6 +110,27 @@ set(MACHINEINDEPENDENT_HEADERS
     MachineIndependent/preprocessor/PpTokens.h
 )
 
+if(ENABLE_HLSL)
+    list(APPEND MACHINEINDEPENDENT_SOURCES
+        HLSL/hlslAttributes.cpp
+        HLSL/hlslParseHelper.cpp
+        HLSL/hlslScanContext.cpp
+        HLSL/hlslOpMap.cpp
+        HLSL/hlslTokenStream.cpp
+        HLSL/hlslGrammar.cpp
+        HLSL/hlslParseables.cpp)
+
+    list(APPEND MACHINEINDEPENDENT_HEADERS
+        HLSL/hlslAttributes.h
+        HLSL/hlslParseHelper.h
+        HLSL/hlslTokens.h
+        HLSL/hlslScanContext.h
+        HLSL/hlslOpMap.h
+        HLSL/hlslTokenStream.h
+        HLSL/hlslGrammar.h
+        HLSL/hlslParseables.h)
+endif()
+
 add_library(MachineIndependent STATIC ${MACHINEINDEPENDENT_SOURCES} ${MACHINEINDEPENDENT_HEADERS})
 set_property(TARGET MachineIndependent PROPERTY POSITION_INDEPENDENT_CODE ON)
 set_property(TARGET MachineIndependent PROPERTY FOLDER glslang)
@@ -175,7 +196,7 @@ set(RESOURCELIMITS_HEADERS
   Public/resource_limits_c.h
 )
 
-add_library(glslang-default-resource-limits ${RESOURCELIMITS_SOURCES} ${RESOURCELIMITS_HEADERS})
+add_library(glslang-default-resource-limits STATIC ${RESOURCELIMITS_SOURCES} ${RESOURCELIMITS_HEADERS})
 set_target_properties(glslang-default-resource-limits PROPERTIES
     VERSION "${GLSLANG_VERSION}"
     SOVERSION "${GLSLANG_VERSION_MAJOR}"
@@ -213,7 +234,7 @@ if(ENABLE_GLSLANG_INSTALL)
             message(WARNING \"Using `glslangTargets.cmake` is deprecated: use `find_package(glslang)` to find glslang CMake targets.\")
 
             if (NOT TARGET glslang::glslang)
-                include(\"\${CMAKE_CURRENT_LIST_DIR}/../../${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}/glslang-targets.cmake\")
+                include(\"${CMAKE_INSTALL_FULL_LIBDIR}/cmake/${PROJECT_NAME}/glslang-targets.cmake\")
             endif()
 
             if(${BUILD_SHARED_LIBS})
@@ -246,7 +267,7 @@ if(ENABLE_GLSLANG_INSTALL)
         message(WARNING \"Using `glslang-default-resource-limitsTargets.cmake` is deprecated: use `find_package(glslang)` to find glslang CMake targets.\")
 
         if (NOT TARGET glslang::glslang-default-resource-limits)
-            include(\"\${CMAKE_CURRENT_LIST_DIR}/../../${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}/glslang-targets.cmake\")
+            include(\"\${CMAKE_INSTALL_FULL_LIBDIR}/cmake/${PROJECT_NAME}/glslang-targets.cmake\")
         endif()
 
         add_library(glslang-default-resource-limits ALIAS glslang::glslang-default-resource-limits)

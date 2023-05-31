@@ -1,5 +1,5 @@
 // Created on Tuesday March 14th 2023 by exdal
-// Last modified on Sunday May 28th 2023 by exdal
+// Last modified on Thursday June 1st 2023 by exdal
 
 #include "RenderPass.hh"
 
@@ -57,8 +57,7 @@ RenderPassBuilder::RenderPassBuilder(RenderGraph *pGraph)
     DescriptorSetLayout *pStorageImageLayout =
         m_pContext->CreateDescriptorSetLayout(storageImageDescriptorElement);
 
-    DescriptorLayoutElement samplerLayoutElement(
-        LR_DESCRIPTOR_INDEX_SAMPLER, DescriptorType::Sampler, ShaderStage::All);
+    DescriptorLayoutElement samplerLayoutElement(0, DescriptorType::Sampler, ShaderStage::All);
     DescriptorSetLayout *pSamplerLayout = m_pContext->CreateDescriptorSetLayout(samplerLayoutElement);
 
     /// This shit is actually complex and debugging is ~~non-existent~~ pain, so here is the quick rundown:
@@ -118,6 +117,9 @@ void RenderPassBuilder::InitDescriptorType(
 DescriptorBufferInfo *RenderPassBuilder::GetDescriptorBuffer(u32 binding)
 {
     ZoneScoped;
+
+    if (binding == LR_DESCRIPTOR_INDEX_SAMPLER)
+        return &m_SamplerDescriptor;
 
     for (DescriptorBufferInfo &info : m_ResourceDescriptors)
         if (info.m_BindingID == binding)
@@ -229,7 +231,7 @@ void RenderPassBuilder::SetDescriptor(DescriptorType type, eastl::span<Descripto
         }
 
         offset += typeSize;
-        element.m_pBuffer->m_DescriptorIndex = descriptorIndex++;
+        element.m_DescriptorIndex = descriptorIndex++;
     }
 }
 
@@ -238,13 +240,6 @@ void RenderPassBuilder::SetShader(Shader *pShader)
     ZoneScoped;
 
     m_GraphicsPipelineInfo.m_Shaders.push_back(pShader);
-}
-
-void RenderPassBuilder::SetInputLayout(const InputLayout &layout)
-{
-    ZoneScoped;
-
-    m_GraphicsPipelineInfo.m_InputLayout = layout;
 }
 
 u64 RenderPassBuilder::GetResourceBufferSize()
@@ -309,6 +304,8 @@ void RenderPassBuilder::GetResourceDescriptors(Buffer *pDst, CommandList *pList)
 
         if (info.m_BindingID == LR_DESCRIPTOR_INDEX_BUFFER)
         {
+            // THIS IS WRONG
+
             /// Create temp buffer to get descriptor data and map into resource descriptor buffer
 
             BufferDesc descriptorBufferDesc = {
@@ -331,7 +328,7 @@ void RenderPassBuilder::GetResourceDescriptors(Buffer *pDst, CommandList *pList)
             DescriptorGetInfo bufferInfo(pDescriptorBuffer);
             m_pContext->GetDescriptorData(elementType, bufferInfo, bindingSize, (u8 *)pMapData + mapOffset);
 
-            m_pContext->DeleteBuffer(pDescriptorBuffer, false);
+            // m_pContext->DeleteBuffer(pDescriptorBuffer, false);
 
             mapOffset += m_pContext->AlignUpDescriptorOffset(bindingSize);
         }
@@ -361,7 +358,7 @@ void RenderPassBuilder::GetSamplerDescriptors(Buffer *pDst, CommandList *pList)
     BufferDesc bufferDesc = {
         .m_UsageFlags = BufferUsage::SamplerDescriptor | BufferUsage::TransferSrc,
         .m_TargetAllocator = ResourceAllocator::Descriptor,
-        .m_DataLen = GetResourceBufferSize(),
+        .m_DataLen = GetSamplerBufferSize(),
     };
     Buffer *pSamplerDescriptor = m_pContext->CreateBuffer(&bufferDesc);
 

@@ -18,16 +18,6 @@ constexpr VkFormat kFormatLUT[] = {
     VK_FORMAT_D32_SFLOAT_S8_UINT,   // D32FS8U
 };
 
-constexpr VkFormat kAttribFormatLUT[] = {
-    VK_FORMAT_UNDEFINED,            // LR_VERTEX_ATTRIB_NONE
-    VK_FORMAT_R32_SFLOAT,           // LR_VERTEX_ATTRIB_SFLOAT
-    VK_FORMAT_R32G32_SFLOAT,        // LR_VERTEX_ATTRIB_SFLOAT2
-    VK_FORMAT_R32G32B32_SFLOAT,     // LR_VERTEX_ATTRIB_SFLOAT3
-    VK_FORMAT_R32G32B32A32_SFLOAT,  // LR_VERTEX_ATTRIB_SFLOAT4
-    VK_FORMAT_R32_UINT,             // LR_VERTEX_ATTRIB_UINT
-    VK_FORMAT_R8G8B8A8_UNORM,       // LR_VERTEX_ATTRIB_UINT_4N
-};
-
 constexpr VkPrimitiveTopology kPrimitiveLUT[] = {
     VK_PRIMITIVE_TOPOLOGY_POINT_LIST,      // PointList
     VK_PRIMITIVE_TOPOLOGY_LINE_LIST,       // LineList
@@ -67,11 +57,6 @@ constexpr VkImageLayout kImageLayoutLUT[] = {
 VkFormat VK::ToFormat(ImageFormat format)
 {
     return kFormatLUT[(u32)format];
-}
-
-VkFormat VK::ToFormat(VertexAttribType format)
-{
-    return kAttribFormatLUT[(u32)format];
 }
 
 VkPrimitiveTopology VK::ToTopology(PrimitiveType type)

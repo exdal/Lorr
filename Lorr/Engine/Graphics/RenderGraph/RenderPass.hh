@@ -1,5 +1,5 @@
 // Created on Friday February 24th 2023 by exdal
-// Last modified on Sunday May 28th 2023 by exdal
+// Last modified on Monday May 29th 2023 by exdal
 
 #pragma once
 
@@ -99,8 +99,6 @@ struct RenderPass
     RenderPassFlag m_Flags = RenderPassFlag::None;
     CommandType m_PassType = CommandType::Count;
 
-    /// GROUP METADATA ///
-    u32 m_SubmitID = 0;
     u32 m_PassID = 0;
     u32 m_ResourceIndex = 0;
     u32 m_ResourceCount = 0;
@@ -177,10 +175,8 @@ struct RenderPassBuilder
     void SetInputResource(
         NameID resource, InputResourceAccess access, InputResourceFlag flags = InputResourceFlag::None);
     void SetBlendAttachment(const ColorBlendAttachment &attachment);
-    void SetPushConstant(const PushConstantDesc &pushConstant);
     void SetDescriptor(DescriptorType type, eastl::span<DescriptorGetInfo> elements);
     void SetShader(Shader *pShader);
-    void SetInputLayout(const InputLayout &layout);
 
     u64 GetResourceBufferSize();
     u64 GetSamplerBufferSize();

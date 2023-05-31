@@ -1,5 +1,5 @@
 // Created on Monday July 18th 2022 by exdal
-// Last modified on Sunday May 28th 2023 by exdal
+// Last modified on Wednesday May 31st 2023 by exdal
 
 #pragma once
 
@@ -155,6 +155,20 @@ struct Context
         objectNameInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
         objectNameInfo.objectType = _Type::kObjectType;
         objectNameInfo.objectHandle = (u64)pType->m_pHandle;
+        objectNameInfo.pObjectName = name.data();
+
+        vkSetDebugUtilsObjectNameEXT(m_pDevice, &objectNameInfo);
+#endif
+    }
+
+    template<VkObjectType _ObjectType, typename _Type>
+    void SetObjectNameRaw(_Type object, eastl::string_view name)
+    {
+#if _DEBUG
+        VkDebugUtilsObjectNameInfoEXT objectNameInfo = {};
+        objectNameInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
+        objectNameInfo.objectType = _ObjectType;
+        objectNameInfo.objectHandle = (u64)object;
         objectNameInfo.pObjectName = name.data();
 
         vkSetDebugUtilsObjectNameEXT(m_pDevice, &objectNameInfo);

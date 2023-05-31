@@ -1,5 +1,5 @@
 // Created on Thursday May 18th 2023 by exdal
-// Last modified on Saturday May 20th 2023 by exdal
+// Last modified on Wednesday May 31st 2023 by exdal
 
 #pragma once
 
@@ -12,7 +12,7 @@ namespace lr::Resource
 {
 namespace Parser
 {
-    bool ParseGLTF(BufferReadStream fileData, BufferWriteStream &data);
-    bool ParseGLSL(BufferReadStream fileData, ShaderResource &resource);
+    bool ParseGLTF(BufferReadStream fileData, BufferWriteStream &data, eastl::string_view workingDir);
+    bool ParseGLSL(BufferReadStream fileData, ShaderResource &resource, eastl::string_view workingDir);
 }
 }  // namespace lr::Resource

@@ -1,5 +1,5 @@
 // Created on Friday October 28th 2022 by exdal
-// Last modified on Tuesday May 23rd 2023 by exdal
+// Last modified on Wednesday May 31st 2023 by exdal
 
 #pragma once
 
@@ -40,6 +40,7 @@ struct Shader : APIObject<VK_OBJECT_TYPE_SHADER_MODULE>
 
 struct ShaderCompileDesc
 {
+    eastl::string_view m_WorkingDir;
     eastl::string_view m_Code;
     ShaderStage m_Type = ShaderStage::None;
     ShaderFlag m_Flags = ShaderFlag::None;

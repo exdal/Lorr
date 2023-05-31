@@ -102,6 +102,8 @@ struct RenderGraph
     Image *GetInputImage(const RenderPassInput &input);
     Image *CreateImage(NameID name, ImageDesc &desc, MemoryAccess initialAccess = MemoryAccess::None);
     Image *CreateImage(NameID name, Image *pImage, MemoryAccess initialAccess = MemoryAccess::None);
+    
+    void FillImageData(Image *pImage, eastl::span<u8> imageData);
 
     //! THIS PERFORMS CPU WAIT!!!
     void SubmitList(CommandList *pList, PipelineStage waitStage, PipelineStage signalStage);

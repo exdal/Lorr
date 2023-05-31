@@ -1,5 +1,5 @@
 // Created on Tuesday April 25th 2023 by exdal
-// Last modified on Friday May 26th 2023 by exdal
+// Last modified on Thursday June 1st 2023 by exdal
 
 #include "Descriptor.hh"
 
@@ -28,17 +28,20 @@ DescriptorBindingInfo::DescriptorBindingInfo(Buffer *pBuffer, BufferUsage buffer
 /// `VkDescriptorDataEXT` is an union so var names such as `data.pUniformTexelBuffer`
 /// do not matter, only thing that matters is type
 DescriptorGetInfo::DescriptorGetInfo(Buffer *pBuffer)
-    : m_pBuffer(pBuffer)
+    : m_pBuffer(pBuffer),
+      m_DescriptorIndex(pBuffer->m_DescriptorIndex)
 {
 }
 
 DescriptorGetInfo::DescriptorGetInfo(Image *pImage)
-    : m_pImage(pImage)
+    : m_pImage(pImage),
+      m_DescriptorIndex(pImage->m_DescriptorIndex)
 {
 }
 
 DescriptorGetInfo::DescriptorGetInfo(Sampler *pSampler)
-    : m_pSampler(pSampler)
+    : m_pSampler(pSampler),
+      m_DescriptorIndex(pSampler->m_DescriptorIndex)
 {
 }
 

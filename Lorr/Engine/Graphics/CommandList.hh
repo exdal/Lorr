@@ -1,5 +1,5 @@
 // Created on Monday July 18th 2022 by exdal
-// Last modified on Sunday May 28th 2023 by exdal
+// Last modified on Thursday June 1st 2023 by exdal
 
 #pragma once
 
@@ -10,6 +10,51 @@
 
 namespace lr::Graphics
 {
+struct BindlessLayout
+{
+    using DescriptorIDType = u32;
+    static constexpr u32 kDescriptorIDSize = sizeof(DescriptorIDType);
+    static constexpr u32 kDescriptorIDCount = 8;
+    static constexpr u32 kConstantDataOffset = kDescriptorIDCount * kDescriptorIDSize;
+
+    struct Binding
+    {
+        Binding(u32 index, Buffer *pBuffer)
+            : m_Index(index),
+              m_DescriptorIndex(pBuffer->m_DescriptorIndex){};
+        Binding(u32 index, Image *pImage)
+            : m_Index(index),
+              m_DescriptorIndex(pImage->m_DescriptorIndex){};
+        Binding(u32 index, Sampler *pSampler)
+            : m_Index(index),
+              m_DescriptorIndex(pSampler->m_DescriptorIndex){};
+
+        u32 m_Index = 0;
+        u32 m_DescriptorIndex = 0;
+    };
+
+    constexpr BindlessLayout(eastl::span<Binding> bindings)
+    {
+        u32 lastBinding = ~0;
+        for (const Binding &binding : bindings)
+        {
+            m_Count++;
+            lastBinding = eastl::min(lastBinding, binding.m_Index);
+            m_Data[binding.m_Index] = binding.m_DescriptorIndex;
+        }
+
+        m_Offset = Memory::AlignUp(lastBinding * kDescriptorIDSize, 4);
+    }
+
+    u32 size() { return m_Count * kDescriptorIDSize; };
+    const u32 size() const { return m_Count * kDescriptorIDSize; };
+    const DescriptorIDType *data() const { return m_Data.data(); };
+
+    u16 m_Offset = 0;
+    u16 m_Count = 0;
+    eastl::array<DescriptorIDType, kDescriptorIDCount> m_Data = {};
+};
+
 enum class CommandType : u32
 {
     Graphics = 0,
@@ -204,8 +249,6 @@ struct CommandList : APIObject<VK_OBJECT_TYPE_COMMAND_BUFFER>
     void SetPipelineBarrier(DependencyInfo *pDependencyInfo);
 
     /// Buffer Commands
-    void SetVertexBuffer(Buffer *pBuffer);
-    void SetIndexBuffer(Buffer *pBuffer, bool type32 = true);
     void CopyBuffer(Buffer *pSource, Buffer *pDest, u64 srcOff, u64 dstOff, u64 size);
     void CopyBuffer(Buffer *pSource, Image *pDest, ImageLayout layout);
 
@@ -221,7 +264,12 @@ struct CommandList : APIObject<VK_OBJECT_TYPE_COMMAND_BUFFER>
     void SetPrimitiveType(PrimitiveType type);
 
     void SetPipeline(Pipeline *pPipeline);
-    void SetPushConstants(ShaderStage stage, u32 offset, void *pData, u32 dataSize);
+    void SetPushConstants(
+        void *pData,
+        u32 dataSize,
+        u32 offset = BindlessLayout::kConstantDataOffset,
+        ShaderStage stage = ShaderStage::All);
+    void SetBindlessLayout(BindlessLayout &layout);
     void SetDescriptorBuffers(eastl::span<DescriptorBindingInfo> bindingInfos);
     void SetDescriptorBufferOffsets(
         u32 firstSet, u32 setCount, eastl::span<u32> indices, eastl::span<u64> offsets);

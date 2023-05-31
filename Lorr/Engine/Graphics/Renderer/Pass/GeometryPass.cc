@@ -1,5 +1,5 @@
 // Created on Saturday April 22nd 2023 by exdal
-// Last modified on Sunday May 28th 2023 by exdal
+// Last modified on Thursday June 1st 2023 by exdal
 
 #include "Graphics/Renderer/Pass.hh"
 
@@ -9,13 +9,14 @@ namespace lr::Graphics
 {
 void AddGeometryPass(RenderGraph *pGraph, eastl::string_view name)
 {
-    struct EmptyPassData
+    struct GeometryPassData
     {
+        Buffer *m_pBuffer;
     };
 
-    auto *pPass = pGraph->CreateGraphicsPassCb<EmptyPassData>(
+    auto *pPass = pGraph->CreateGraphicsPassCb<GeometryPassData>(
         name,
-        [pGraph](Context *pContext, EmptyPassData &data, RenderPassBuilder &builder)
+        [pGraph](Context *pContext, GeometryPassData &data, RenderPassBuilder &builder)
         {
             /// STORAGE BUFFER ///
             BufferDesc bufferDesc = {
@@ -24,7 +25,7 @@ void AddGeometryPass(RenderGraph *pGraph, eastl::string_view name)
                 .m_Stride = sizeof(u32),
                 .m_DataLen = 256,
             };
-            Buffer *pDummyBuffer = pContext->CreateBuffer(&bufferDesc);
+            Buffer *pDummyBuffer = data.m_pBuffer = pContext->CreateBuffer(&bufferDesc);
 
             void *pMapData = nullptr;
             pContext->MapMemory(pDummyBuffer, pMapData, 0, 8);
@@ -62,14 +63,13 @@ void AddGeometryPass(RenderGraph *pGraph, eastl::string_view name)
             builder.SetBlendAttachment({ true });
             builder.SetShader(pVertexShader);
             builder.SetShader(pPixelShader);
-
-            LOG_TRACE("Device Address: {}", pDummyBuffer->m_DeviceAddress);
         },
-        [](Context *pContext, EmptyPassData &data, CommandList *pList)
+        [](Context *pContext, GeometryPassData &data, CommandList *pList)
         {
             pList->SetViewport(0, 0, 0, 1, 1);
             pList->SetScissors(0, 0, 0, 1, 1);
             pList->SetPrimitiveType(PrimitiveType::TriangleList);
+            // pList->SetBindlessLayout({ { 0, data.m_pBuffer } });
             pList->Draw(3);
         },
         [](Context *pContext)

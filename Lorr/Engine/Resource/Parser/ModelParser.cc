@@ -1,5 +1,5 @@
 // Created on Saturday April 22nd 2023 by exdal
-// Last modified on Thursday May 18th 2023 by exdal
+// Last modified on Wednesday May 31st 2023 by exdal
 
 #include "Resource/Parser.hh"
 
@@ -7,7 +7,7 @@
 
 namespace lr::Resource
 {
-bool Parser::ParseGLTF(BufferReadStream fileData, BufferWriteStream &data)
+bool Parser::ParseGLTF(BufferReadStream fileData, BufferWriteStream &data, eastl::string_view workingDir)
 {
     tinygltf::Model model = {};
     tinygltf::TinyGLTF loader = {};

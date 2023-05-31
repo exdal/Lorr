@@ -1,5 +1,5 @@
 // Created on Monday May 15th 2023 by exdal
-// Last modified on Wednesday May 24th 2023 by exdal
+// Last modified on Wednesday May 31st 2023 by exdal
 
 #include "ResourceManager.hh"
 #include "Resource/Parser.hh"
@@ -53,7 +53,7 @@ void ResourceManager::Init()
 
                 FileView file(_FMT("{}/{}", workingDir, pShaderPath));
                 ShaderResource outResource = {};
-                if (!Parser::ParseGLSL(BufferReadStream(file), outResource))
+                if (!Parser::ParseGLSL(BufferReadStream(file), outResource, workingDir))
                 {
                     return;
                 }

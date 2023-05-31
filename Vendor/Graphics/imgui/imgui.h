@@ -2518,7 +2518,7 @@ struct ImDrawCmd
 
 // Vertex layout
 #ifndef IMGUI_OVERRIDE_DRAWVERT_STRUCT_LAYOUT
-struct ImDrawVert
+struct alignas(8) ImDrawVert
 {
     ImVec2  pos;
     ImVec2  uv;

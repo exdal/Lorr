@@ -1,5 +1,5 @@
 // Created on Friday February 24th 2023 by exdal
-// Last modified on Sunday May 28th 2023 by exdal
+// Last modified on Wednesday May 31st 2023 by exdal
 
 #include "RenderGraph.hh"
 
@@ -236,6 +236,45 @@ Image *RenderGraph::CreateImage(NameID name, Image *pImage, MemoryAccess initial
     return pImage;
 }
 
+void RenderGraph::FillImageData(Image *pImage, eastl::span<u8> imageData)
+{
+    ZoneScoped;
+
+    BufferDesc bufferDesc = {
+        .m_UsageFlags = BufferUsage::TransferSrc,
+        .m_TargetAllocator = ResourceAllocator::BufferFrametime,
+        .m_DataLen = imageData.size_bytes(),
+    };
+    Buffer *pImageBuffer = m_pContext->CreateBuffer(&bufferDesc);
+
+    void *pMapData = nullptr;
+    m_pContext->MapMemory(pImageBuffer, pMapData, 0, bufferDesc.m_DataLen);
+    memcpy(pMapData, imageData.data(), bufferDesc.m_DataLen);
+    m_pContext->UnmapMemory(pImageBuffer);
+
+    CommandList *pList = GetCommandList(CommandType::Graphics);
+    m_pContext->BeginCommandList(pList);
+
+    PipelineBarrier barrier = {
+        .m_SrcLayout = ImageLayout::Undefined,
+        .m_DstLayout = ImageLayout::TransferDst,
+        .m_SrcStage = PipelineStage::None,
+        .m_DstStage = PipelineStage::Copy,
+        .m_SrcAccess = MemoryAccess::None,
+        .m_DstAccess = MemoryAccess::TransferWrite,
+    };
+    ImageBarrier imageBarrier(pImage, barrier);
+    DependencyInfo depInfo(imageBarrier);
+    pList->SetPipelineBarrier(&depInfo);
+
+    pList->CopyBuffer(pImageBuffer, pImage, ImageLayout::TransferDst);
+
+    m_pContext->EndCommandList(pList);
+    SubmitList(pList, PipelineStage::AllCommands, PipelineStage::AllCommands);
+
+    m_pContext->DeleteBuffer(pImageBuffer, false);
+}
+
 void RenderGraph::SubmitList(CommandList *pList, PipelineStage waitStage, PipelineStage signalStage)
 {
     ZoneScoped;
@@ -343,8 +382,11 @@ void RenderGraph::RecordGraphicsPass(GraphicsRenderPass *pPass, CommandList *pLi
 
         u32 setCount = m_DescriptorSetOffsets.size();
 
-        DescriptorBindingInfo bindingInfo(m_pResourceDescriptorBuffer, BufferUsage::ResourceDescriptor);
-        pList->SetDescriptorBuffers(bindingInfo);
+        DescriptorBindingInfo pBindingInfos[] = {
+            { m_pResourceDescriptorBuffer, BufferUsage::ResourceDescriptor },
+            { m_pSamplerDescriptorBuffer, BufferUsage::SamplerDescriptor },
+        };
+        pList->SetDescriptorBuffers(pBindingInfos);
         pList->SetDescriptorBufferOffsets(0, setCount, m_DescriptorSetIndices, m_DescriptorSetOffsets);
 
         pPass->Execute(m_pContext, pList);

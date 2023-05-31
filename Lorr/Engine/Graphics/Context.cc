@@ -1,5 +1,5 @@
 // Created on Monday July 18th 2022 by exdal
-// Last modified on Sunday May 28th 2023 by exdal
+// Last modified on Wednesday May 31st 2023 by exdal
 
 #include "Context.hh"
 
@@ -72,24 +72,31 @@ void Context::InitAllocators(APIAllocatorInitDesc *pDesc)
 
     m_MADescriptor.Allocator.Init(pDesc->m_DescriptorMem);
     m_MADescriptor.pHeap = CreateHeap(pDesc->m_DescriptorMem, MemoryFlag::HostVisibleCoherent);
+    SetObjectNameRaw<VK_OBJECT_TYPE_DEVICE_MEMORY>(m_MADescriptor.pHeap, "Descriptor");
 
     m_MABufferLinear.Allocator.Init(pDesc->m_BufferLinearMem);
     m_MABufferLinear.pHeap = CreateHeap(pDesc->m_BufferLinearMem, MemoryFlag::HostVisibleCoherent);
+    SetObjectNameRaw<VK_OBJECT_TYPE_DEVICE_MEMORY>(m_MABufferLinear.pHeap, "Buffer-Linear");
 
     for (u32 i = 0; i < m_pSwapChain->m_FrameCount; i++)
     {
         m_MABufferFrametime[i].Allocator.Init(pDesc->m_BufferFrametimeMem);
         m_MABufferFrametime[i].pHeap = CreateHeap(pDesc->m_BufferFrametimeMem, MemoryFlag::HostVisibleCoherent);
+        SetObjectNameRaw<VK_OBJECT_TYPE_DEVICE_MEMORY>(
+            m_MABufferFrametime[i].pHeap, _FMT("Buffer-Frametime-{}", i));
     }
 
     m_MABufferTLSF.Allocator.Init(pDesc->m_BufferTLSFMem, pDesc->m_MaxTLSFAllocations);
     m_MABufferTLSF.pHeap = CreateHeap(pDesc->m_BufferTLSFMem, MemoryFlag::Device);
+    SetObjectNameRaw<VK_OBJECT_TYPE_DEVICE_MEMORY>(m_MABufferTLSF.pHeap, "Buffer-TLSF");
 
     m_MABufferTLSFHost.Allocator.Init(pDesc->m_BufferTLSFHostMem, pDesc->m_MaxTLSFAllocations);
     m_MABufferTLSFHost.pHeap = CreateHeap(pDesc->m_BufferTLSFHostMem, MemoryFlag::HostVisibleCoherent);
+    SetObjectNameRaw<VK_OBJECT_TYPE_DEVICE_MEMORY>(m_MABufferTLSFHost.pHeap, "Buffer-TLSF-Host");
 
     m_MAImageTLSF.Allocator.Init(pDesc->m_ImageTLSFMem, pDesc->m_MaxTLSFAllocations);
     m_MAImageTLSF.pHeap = CreateHeap(pDesc->m_ImageTLSFMem, MemoryFlag::Device);
+    SetObjectNameRaw<VK_OBJECT_TYPE_DEVICE_MEMORY>(m_MAImageTLSF.pHeap, "Image-TLSF");
 }
 
 u32 Context::GetQueueIndex(CommandType type)
@@ -379,30 +386,6 @@ Pipeline *Context::CreateGraphicsPipeline(GraphicsPipelineBuildInfo *pBuildInfo)
 
     VkVertexInputBindingDescription inputBindingInfo = {};
     VkVertexInputAttributeDescription pAttribInfos[LR_MAX_VERTEX_ATTRIBS_PER_PIPELINE] = {};
-
-    InputLayout &inputLayout = pBuildInfo->m_InputLayout;
-    if (inputLayout.m_Count != 0)
-    {
-        inputBindingInfo.binding = 0;
-        inputBindingInfo.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-        inputBindingInfo.stride = inputLayout.m_Stride;
-
-        for (u32 i = 0; i < inputLayout.m_Count; i++)
-        {
-            VertexAttrib &element = inputLayout.m_Elements[i];
-            VkVertexInputAttributeDescription &attribInfo = pAttribInfos[i];
-
-            attribInfo.binding = 0;
-            attribInfo.location = i;
-            attribInfo.offset = element.m_Offset;
-            attribInfo.format = VK::ToFormat(element.m_Type);
-        }
-
-        inputLayoutInfo.vertexAttributeDescriptionCount = inputLayout.m_Count;
-        inputLayoutInfo.pVertexAttributeDescriptions = pAttribInfos;
-        inputLayoutInfo.vertexBindingDescriptionCount = 1;
-        inputLayoutInfo.pVertexBindingDescriptions = &inputBindingInfo;
-    }
 
     /// INPUT ASSEMBLY -----------------------------------------------------------
 
@@ -1209,17 +1192,16 @@ void Context::SetAllocator(Buffer *pBuffer, ResourceAllocator targetAllocator)
 {
     ZoneScoped;
 
-    VkMemoryRequirements memoryRequirements = {};
-    vkGetBufferMemoryRequirements(m_pDevice, pBuffer->m_pHandle, &memoryRequirements);
-
-    pBuffer->m_DeviceDataLen = memoryRequirements.size;
+    VkMemoryRequirements memReq = {};
+    vkGetBufferMemoryRequirements(m_pDevice, pBuffer->m_pHandle, &memReq);
+    pBuffer->m_DeviceDataLen = memReq.size;
 
     switch (targetAllocator)
     {
         case ResourceAllocator::Descriptor:
         {
             pBuffer->m_AllocatorOffset =
-                m_MADescriptor.Allocator.Allocate(pBuffer->m_DeviceDataLen, memoryRequirements.alignment);
+                m_MADescriptor.Allocator.Allocate(pBuffer->m_DeviceDataLen, memReq.alignment);
             pBuffer->m_pMemoryHandle = m_MADescriptor.pHeap;
 
             break;
@@ -1227,7 +1209,7 @@ void Context::SetAllocator(Buffer *pBuffer, ResourceAllocator targetAllocator)
         case ResourceAllocator::BufferLinear:
         {
             pBuffer->m_AllocatorOffset =
-                m_MABufferLinear.Allocator.Allocate(pBuffer->m_DeviceDataLen, memoryRequirements.alignment);
+                m_MABufferLinear.Allocator.Allocate(pBuffer->m_DeviceDataLen, memReq.alignment);
             pBuffer->m_pMemoryHandle = m_MABufferLinear.pHeap;
 
             break;
@@ -1235,10 +1217,10 @@ void Context::SetAllocator(Buffer *pBuffer, ResourceAllocator targetAllocator)
         case ResourceAllocator::BufferTLSF:
         {
             Memory::TLSFBlock *pBlock =
-                m_MABufferTLSF.Allocator.Allocate(pBuffer->m_DeviceDataLen, memoryRequirements.alignment);
+                m_MABufferTLSF.Allocator.Allocate(pBuffer->m_DeviceDataLen, memReq.alignment);
 
             pBuffer->m_pAllocatorData = pBlock;
-            pBuffer->m_AllocatorOffset = pBlock->m_Offset;
+            pBuffer->m_AllocatorOffset = Memory::AlignUp(pBlock->m_Offset, memReq.alignment);
             pBuffer->m_pMemoryHandle = m_MABufferTLSF.pHeap;
 
             break;
@@ -1246,10 +1228,10 @@ void Context::SetAllocator(Buffer *pBuffer, ResourceAllocator targetAllocator)
         case ResourceAllocator::BufferTLSF_Host:
         {
             Memory::TLSFBlock *pBlock =
-                m_MABufferTLSFHost.Allocator.Allocate(pBuffer->m_DeviceDataLen, memoryRequirements.alignment);
+                m_MABufferTLSFHost.Allocator.Allocate(pBuffer->m_DeviceDataLen, memReq.alignment);
 
             pBuffer->m_pAllocatorData = pBlock;
-            pBuffer->m_AllocatorOffset = pBlock->m_Offset;
+            pBuffer->m_AllocatorOffset = Memory::AlignUp(pBlock->m_Offset, memReq.alignment);
             pBuffer->m_pMemoryHandle = m_MABufferTLSFHost.pHeap;
 
             break;
@@ -1258,7 +1240,7 @@ void Context::SetAllocator(Buffer *pBuffer, ResourceAllocator targetAllocator)
         {
             u32 currentFrame = m_pSwapChain->m_CurrentFrame;
             pBuffer->m_AllocatorOffset = m_MABufferFrametime[currentFrame].Allocator.Allocate(
-                pBuffer->m_DeviceDataLen, memoryRequirements.alignment);
+                pBuffer->m_DeviceDataLen, memReq.alignment);
             pBuffer->m_pMemoryHandle = m_MABufferFrametime[currentFrame].pHeap;
 
             break;
@@ -1273,27 +1255,25 @@ void Context::SetAllocator(Image *pImage, ResourceAllocator targetAllocator)
 {
     ZoneScoped;
 
-    VkMemoryRequirements memoryRequirements = {};
-    vkGetImageMemoryRequirements(m_pDevice, pImage->m_pHandle, &memoryRequirements);
-
-    pImage->m_DeviceDataLen = memoryRequirements.size;
+    VkMemoryRequirements memReq = {};
+    vkGetImageMemoryRequirements(m_pDevice, pImage->m_pHandle, &memReq);
+    pImage->m_DeviceDataLen = memReq.size;
 
     switch (targetAllocator)
     {
         case ResourceAllocator::None:
         {
-            pImage->m_pMemoryHandle = CreateHeap(
-                Memory::AlignUp(memoryRequirements.size, memoryRequirements.alignment), MemoryFlag::Device);
+            pImage->m_pMemoryHandle =
+                CreateHeap(Memory::AlignUp(memReq.size, memReq.alignment), MemoryFlag::Device);
 
             break;
         }
         case ResourceAllocator::ImageTLSF:
         {
-            Memory::TLSFBlock *pBlock =
-                m_MAImageTLSF.Allocator.Allocate(pImage->m_DataLen, memoryRequirements.alignment);
+            Memory::TLSFBlock *pBlock = m_MAImageTLSF.Allocator.Allocate(pImage->m_DataLen, memReq.alignment);
 
             pImage->m_pAllocatorData = pBlock;
-            pImage->m_AllocatorOffset = pBlock->m_Offset;
+            pImage->m_AllocatorOffset = Memory::AlignUp(pBlock->m_Offset, memReq.alignment);
             pImage->m_pMemoryHandle = m_MAImageTLSF.pHeap;
 
             break;

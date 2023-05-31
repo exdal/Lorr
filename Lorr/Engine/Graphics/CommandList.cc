@@ -1,5 +1,5 @@
 // Created on Monday July 18th 2022 by exdal
-// Last modified on Friday May 26th 2023 by exdal
+// Last modified on Thursday June 1st 2023 by exdal
 
 #include "CommandList.hh"
 
@@ -231,22 +231,6 @@ void CommandList::SetPipelineBarrier(DependencyInfo *pDependencyInfo)
     vkCmdPipelineBarrier2(m_pHandle, pDependencyInfo);
 }
 
-void CommandList::SetVertexBuffer(Buffer *pBuffer)
-{
-    ZoneScoped;
-
-    VkDeviceSize pOffsets[1] = { 0 };
-    vkCmdBindVertexBuffers(m_pHandle, 0, 1, &pBuffer->m_pHandle, pOffsets);
-}
-
-void CommandList::SetIndexBuffer(Buffer *pBuffer, bool type32)
-{
-    ZoneScoped;
-
-    vkCmdBindIndexBuffer(
-        m_pHandle, pBuffer->m_pHandle, 0, type32 ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16);
-}
-
 void CommandList::CopyBuffer(Buffer *pSource, Buffer *pDest, u64 srcOff, u64 dstOff, u64 size)
 {
     ZoneScoped;
@@ -346,12 +330,19 @@ void CommandList::SetPipeline(Pipeline *pPipeline)
     vkCmdBindPipeline(m_pHandle, m_pPipeline->m_BindPoint, pPipeline->m_pHandle);
 }
 
-void CommandList::SetPushConstants(ShaderStage stage, u32 offset, void *pData, u32 dataSize)
+void CommandList::SetPushConstants(void *pData, u32 dataSize, u32 offset, ShaderStage stage)
 {
     ZoneScoped;
 
     vkCmdPushConstants(
         m_pHandle, m_pPipeline->m_pLayout->m_pHandle, VK::ToShaderType(stage), offset, dataSize, pData);
+}
+
+void CommandList::SetBindlessLayout(BindlessLayout &layout)
+{
+    ZoneScoped;
+
+    SetPushConstants((void *)layout.data(), layout.size(), layout.m_Offset);
 }
 
 void CommandList::SetDescriptorBuffers(eastl::span<DescriptorBindingInfo> bindingInfos)
@@ -365,7 +356,7 @@ void CommandList::SetDescriptorBufferOffsets(
     u32 firstSet, u32 setCount, eastl::span<u32> indices, eastl::span<u64> offsets)
 {
     ZoneScoped;
-    
+
     vkCmdSetDescriptorBufferOffsetsEXT(
         m_pHandle,
         m_pPipeline->m_BindPoint,

@@ -1,5 +1,5 @@
 // Created on Thursday May 18th 2023 by exdal
-// Last modified on Thursday May 25th 2023 by exdal
+// Last modified on Thursday June 1st 2023 by exdal
 
 #include "Resource/Parser.hh"
 
@@ -15,7 +15,7 @@
 
 namespace lr::Resource
 {
-bool Parser::ParseGLSL(BufferReadStream fileData, ShaderResource &resource)
+bool Parser::ParseGLSL(BufferReadStream fileData, ShaderResource &resource, eastl::string_view workingDir)
 {
     ZoneScoped;
 
@@ -31,6 +31,7 @@ bool Parser::ParseGLSL(BufferReadStream fileData, ShaderResource &resource)
         switch (lr::Hash::FNV64String(line))
         {
             case LR_SHADER_PRAGMA_EXTENSIONS:
+                processedCode += "#extension GL_GOOGLE_include_directive : enable\n";
                 processedCode += "#extension GL_ARB_gpu_shader_int64 : require\n";
                 processedCode += "#extension GL_EXT_buffer_reference : enable\n";
                 processedCode += "#extension GL_EXT_buffer_reference2 : enable\n";
@@ -39,6 +40,7 @@ bool Parser::ParseGLSL(BufferReadStream fileData, ShaderResource &resource)
                 processedCode += "#extension GL_EXT_shader_atomic_int64 : require\n";
                 processedCode += "#extension GL_EXT_scalar_block_layout : require\n";
                 processedCode += "#extension GL_EXT_samplerless_texture_functions : require\n";
+                processedCode += "#extension GL_EXT_nonuniform_qualifier : require\n";
                 break;
 
             case LR_SHADER_PRAGMA_STAGE_VERTEX:
@@ -61,6 +63,7 @@ bool Parser::ParseGLSL(BufferReadStream fileData, ShaderResource &resource)
     }
 
     Graphics::ShaderCompileDesc compileDesc = {
+        .m_WorkingDir = workingDir,
         .m_Code = processedCode,
         .m_Type = stage,
         .m_Flags = flags,

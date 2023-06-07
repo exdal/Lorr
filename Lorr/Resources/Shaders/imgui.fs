@@ -18,5 +18,5 @@ layout(location = 0) out vec4 fragColor;
 
 void main()
 {
-    fragColor = texture(sampler2D(LR_GET_IMAGE(2), LR_GET_SAMPLER(3)), pInput.TexCoord) * pInput.Color;
+    fragColor = texture(sampler2D(LR_GET_IMAGE(1), LR_GET_SAMPLER(2)), pInput.TexCoord) * pInput.Color;
 }

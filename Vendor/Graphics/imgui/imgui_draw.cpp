@@ -399,13 +399,11 @@ void ImDrawList::_ResetForNewFrame()
         _Splitter.Merge(this);
 
     CmdBuffer.resize(0);
-    IdxBuffer.resize(0);
     VtxBuffer.resize(0);
     Flags = _Data->InitialFlags;
     memset(&_CmdHeader, 0, sizeof(_CmdHeader));
     _VtxCurrentIdx = 0;
     _VtxWritePtr = NULL;
-    _IdxWritePtr = NULL;
     _ClipRectStack.resize(0);
     _TextureIdStack.resize(0);
     _Path.resize(0);
@@ -417,12 +415,10 @@ void ImDrawList::_ResetForNewFrame()
 void ImDrawList::_ClearFreeMemory()
 {
     CmdBuffer.clear();
-    IdxBuffer.clear();
     VtxBuffer.clear();
     Flags = ImDrawListFlags_None;
     _VtxCurrentIdx = 0;
     _VtxWritePtr = NULL;
-    _IdxWritePtr = NULL;
     _ClipRectStack.clear();
     _TextureIdStack.clear();
     _Path.clear();
@@ -433,7 +429,6 @@ ImDrawList* ImDrawList::CloneOutput() const
 {
     ImDrawList* dst = IM_NEW(ImDrawList(_Data));
     dst->CmdBuffer = CmdBuffer;
-    dst->IdxBuffer = IdxBuffer;
     dst->VtxBuffer = VtxBuffer;
     dst->Flags = Flags;
     return dst;
@@ -444,8 +439,7 @@ void ImDrawList::AddDrawCmd()
     ImDrawCmd draw_cmd;
     draw_cmd.ClipRect = _CmdHeader.ClipRect;    // Same as calling ImDrawCmd_HeaderCopy()
     draw_cmd.TextureId = _CmdHeader.TextureId;
-    draw_cmd.VtxOffset = _CmdHeader.VtxOffset;
-    draw_cmd.IdxOffset = IdxBuffer.Size;
+    draw_cmd.VtxOffset = VtxBuffer.Size;
 
     IM_ASSERT(draw_cmd.ClipRect.x <= draw_cmd.ClipRect.z && draw_cmd.ClipRect.y <= draw_cmd.ClipRect.w);
     CmdBuffer.push_back(draw_cmd);
@@ -458,7 +452,7 @@ void ImDrawList::_PopUnusedDrawCmd()
     while (CmdBuffer.Size > 0)
     {
         ImDrawCmd* curr_cmd = &CmdBuffer.Data[CmdBuffer.Size - 1];
-        if (curr_cmd->ElemCount != 0 || curr_cmd->UserCallback != NULL)
+        if (curr_cmd->VertexCount != 0 || curr_cmd->UserCallback != NULL)
             return;// break;
         CmdBuffer.pop_back();
     }
@@ -469,7 +463,7 @@ void ImDrawList::AddCallback(ImDrawCallback callback, void* callback_data)
     IM_ASSERT_PARANOID(CmdBuffer.Size > 0);
     ImDrawCmd* curr_cmd = &CmdBuffer.Data[CmdBuffer.Size - 1];
     IM_ASSERT(curr_cmd->UserCallback == NULL);
-    if (curr_cmd->ElemCount != 0)
+    if (curr_cmd->VertexCount != 0)
     {
         AddDrawCmd();
         curr_cmd = &CmdBuffer.Data[CmdBuffer.Size - 1];
@@ -484,7 +478,7 @@ void ImDrawList::AddCallback(ImDrawCallback callback, void* callback_data)
 #define ImDrawCmd_HeaderSize                            (IM_OFFSETOF(ImDrawCmd, VtxOffset) + sizeof(unsigned int))
 #define ImDrawCmd_HeaderCompare(CMD_LHS, CMD_RHS)       (memcmp(CMD_LHS, CMD_RHS, ImDrawCmd_HeaderSize))    // Compare ClipRect, TextureId, VtxOffset
 #define ImDrawCmd_HeaderCopy(CMD_DST, CMD_SRC)          (memcpy(CMD_DST, CMD_SRC, ImDrawCmd_HeaderSize))    // Copy ClipRect, TextureId, VtxOffset
-#define ImDrawCmd_AreSequentialIdxOffset(CMD_0, CMD_1)  (CMD_0->IdxOffset + CMD_0->ElemCount == CMD_1->IdxOffset)
+#define ImDrawCmd_AreSequentialIdxOffset(CMD_0, CMD_1)  (CMD_0->VtxOffset + CMD_0->VertexCount == CMD_1->VtxOffset)
 
 // Try to merge two last draw commands
 void ImDrawList::_TryMergeDrawCmds()
@@ -494,7 +488,7 @@ void ImDrawList::_TryMergeDrawCmds()
     ImDrawCmd* prev_cmd = curr_cmd - 1;
     if (ImDrawCmd_HeaderCompare(curr_cmd, prev_cmd) == 0 && ImDrawCmd_AreSequentialIdxOffset(prev_cmd, curr_cmd) && curr_cmd->UserCallback == NULL && prev_cmd->UserCallback == NULL)
     {
-        prev_cmd->ElemCount += curr_cmd->ElemCount;
+        prev_cmd->VertexCount += curr_cmd->VertexCount;
         CmdBuffer.pop_back();
     }
 }
@@ -506,7 +500,7 @@ void ImDrawList::_OnChangedClipRect()
     // If current command is used with different settings we need to add a new command
     IM_ASSERT_PARANOID(CmdBuffer.Size > 0);
     ImDrawCmd* curr_cmd = &CmdBuffer.Data[CmdBuffer.Size - 1];
-    if (curr_cmd->ElemCount != 0 && memcmp(&curr_cmd->ClipRect, &_CmdHeader.ClipRect, sizeof(ImVec4)) != 0)
+    if (curr_cmd->VertexCount != 0 && memcmp(&curr_cmd->ClipRect, &_CmdHeader.ClipRect, sizeof(ImVec4)) != 0)
     {
         AddDrawCmd();
         return;
@@ -515,7 +509,7 @@ void ImDrawList::_OnChangedClipRect()
 
     // Try to merge with previous command if it matches, else use current command
     ImDrawCmd* prev_cmd = curr_cmd - 1;
-    if (curr_cmd->ElemCount == 0 && CmdBuffer.Size > 1 && ImDrawCmd_HeaderCompare(&_CmdHeader, prev_cmd) == 0 && ImDrawCmd_AreSequentialIdxOffset(prev_cmd, curr_cmd) && prev_cmd->UserCallback == NULL)
+    if (curr_cmd->VertexCount == 0 && CmdBuffer.Size > 1 && ImDrawCmd_HeaderCompare(&_CmdHeader, prev_cmd) == 0 && ImDrawCmd_AreSequentialIdxOffset(prev_cmd, curr_cmd) && prev_cmd->UserCallback == NULL)
     {
         CmdBuffer.pop_back();
         return;
@@ -529,7 +523,7 @@ void ImDrawList::_OnChangedTextureID()
     // If current command is used with different settings we need to add a new command
     IM_ASSERT_PARANOID(CmdBuffer.Size > 0);
     ImDrawCmd* curr_cmd = &CmdBuffer.Data[CmdBuffer.Size - 1];
-    if (curr_cmd->ElemCount != 0 && curr_cmd->TextureId != _CmdHeader.TextureId)
+    if (curr_cmd->VertexCount != 0 && curr_cmd->TextureId != _CmdHeader.TextureId)
     {
         AddDrawCmd();
         return;
@@ -538,7 +532,7 @@ void ImDrawList::_OnChangedTextureID()
 
     // Try to merge with previous command if it matches, else use current command
     ImDrawCmd* prev_cmd = curr_cmd - 1;
-    if (curr_cmd->ElemCount == 0 && CmdBuffer.Size > 1 && ImDrawCmd_HeaderCompare(&_CmdHeader, prev_cmd) == 0 && ImDrawCmd_AreSequentialIdxOffset(prev_cmd, curr_cmd) && prev_cmd->UserCallback == NULL)
+    if (curr_cmd->VertexCount == 0 && CmdBuffer.Size > 1 && ImDrawCmd_HeaderCompare(&_CmdHeader, prev_cmd) == 0 && ImDrawCmd_AreSequentialIdxOffset(prev_cmd, curr_cmd) && prev_cmd->UserCallback == NULL)
     {
         CmdBuffer.pop_back();
         return;
@@ -554,7 +548,7 @@ void ImDrawList::_OnChangedVtxOffset()
     IM_ASSERT_PARANOID(CmdBuffer.Size > 0);
     ImDrawCmd* curr_cmd = &CmdBuffer.Data[CmdBuffer.Size - 1];
     //IM_ASSERT(curr_cmd->VtxOffset != _CmdHeader.VtxOffset); // See #3349
-    if (curr_cmd->ElemCount != 0)
+    if (curr_cmd->VertexCount != 0)
     {
         AddDrawCmd();
         return;
@@ -622,11 +616,11 @@ void ImDrawList::PopTextureID()
 // Reserve space for a number of vertices and indices.
 // You must finish filling your reserved data before calling PrimReserve() again, as it may reallocate or
 // submit the intermediate results. PrimUnreserve() can be used to release unused allocations.
-void ImDrawList::PrimReserve(int idx_count, int vtx_count)
+void ImDrawList::PrimReserve(int vtx_count)
 {
     // Large mesh support (when enabled)
-    IM_ASSERT_PARANOID(idx_count >= 0 && vtx_count >= 0);
-    if (sizeof(ImDrawIdx) == 2 && (_VtxCurrentIdx + vtx_count >= (1 << 16)) && (Flags & ImDrawListFlags_AllowVtxOffset))
+    IM_ASSERT_PARANOID(vtx_count >= 0);
+    if ((_VtxCurrentIdx + vtx_count >= (1 << 16)) && (Flags & ImDrawListFlags_AllowVtxOffset))
     {
         // FIXME: In theory we should be testing that vtx_count <64k here.
         // In practice, RenderText() relies on reserving ahead for a worst case scenario so it is currently useful for us
@@ -636,71 +630,63 @@ void ImDrawList::PrimReserve(int idx_count, int vtx_count)
     }
 
     ImDrawCmd* draw_cmd = &CmdBuffer.Data[CmdBuffer.Size - 1];
-    draw_cmd->ElemCount += idx_count;
+    draw_cmd->VertexCount += vtx_count;
 
     int vtx_buffer_old_size = VtxBuffer.Size;
     VtxBuffer.resize(vtx_buffer_old_size + vtx_count);
     _VtxWritePtr = VtxBuffer.Data + vtx_buffer_old_size;
-
-    int idx_buffer_old_size = IdxBuffer.Size;
-    IdxBuffer.resize(idx_buffer_old_size + idx_count);
-    _IdxWritePtr = IdxBuffer.Data + idx_buffer_old_size;
 }
 
 // Release the a number of reserved vertices/indices from the end of the last reservation made with PrimReserve().
-void ImDrawList::PrimUnreserve(int idx_count, int vtx_count)
+void ImDrawList::PrimUnreserve(int vtx_count)
 {
-    IM_ASSERT_PARANOID(idx_count >= 0 && vtx_count >= 0);
+    IM_ASSERT_PARANOID(vtx_count >= 0);
 
     ImDrawCmd* draw_cmd = &CmdBuffer.Data[CmdBuffer.Size - 1];
-    draw_cmd->ElemCount -= idx_count;
+    draw_cmd->VertexCount -= vtx_count;
     VtxBuffer.shrink(VtxBuffer.Size - vtx_count);
-    IdxBuffer.shrink(IdxBuffer.Size - idx_count);
 }
 
 // Fully unrolled with inline call to keep our debug builds decently fast.
 void ImDrawList::PrimRect(const ImVec2& a, const ImVec2& c, ImU32 col)
 {
     ImVec2 b(c.x, a.y), d(a.x, c.y), uv(_Data->TexUvWhitePixel);
-    ImDrawIdx idx = (ImDrawIdx)_VtxCurrentIdx;
-    _IdxWritePtr[0] = idx; _IdxWritePtr[1] = (ImDrawIdx)(idx+1); _IdxWritePtr[2] = (ImDrawIdx)(idx+2);
-    _IdxWritePtr[3] = idx; _IdxWritePtr[4] = (ImDrawIdx)(idx+2); _IdxWritePtr[5] = (ImDrawIdx)(idx+3);
     _VtxWritePtr[0].pos = a; _VtxWritePtr[0].uv = uv; _VtxWritePtr[0].col = col;
     _VtxWritePtr[1].pos = b; _VtxWritePtr[1].uv = uv; _VtxWritePtr[1].col = col;
     _VtxWritePtr[2].pos = c; _VtxWritePtr[2].uv = uv; _VtxWritePtr[2].col = col;
-    _VtxWritePtr[3].pos = d; _VtxWritePtr[3].uv = uv; _VtxWritePtr[3].col = col;
-    _VtxWritePtr += 4;
-    _VtxCurrentIdx += 4;
-    _IdxWritePtr += 6;
+
+    _VtxWritePtr[3].pos = a; _VtxWritePtr[3].uv = uv; _VtxWritePtr[3].col = col;
+    _VtxWritePtr[4].pos = c; _VtxWritePtr[4].uv = uv; _VtxWritePtr[4].col = col;
+    _VtxWritePtr[5].pos = d; _VtxWritePtr[5].uv = uv; _VtxWritePtr[5].col = col;
+    _VtxWritePtr += 6;
+    _VtxCurrentIdx += 6;
 }
 
 void ImDrawList::PrimRectUV(const ImVec2& a, const ImVec2& c, const ImVec2& uv_a, const ImVec2& uv_c, ImU32 col)
 {
     ImVec2 b(c.x, a.y), d(a.x, c.y), uv_b(uv_c.x, uv_a.y), uv_d(uv_a.x, uv_c.y);
-    ImDrawIdx idx = (ImDrawIdx)_VtxCurrentIdx;
-    _IdxWritePtr[0] = idx; _IdxWritePtr[1] = (ImDrawIdx)(idx+1); _IdxWritePtr[2] = (ImDrawIdx)(idx+2);
-    _IdxWritePtr[3] = idx; _IdxWritePtr[4] = (ImDrawIdx)(idx+2); _IdxWritePtr[5] = (ImDrawIdx)(idx+3);
     _VtxWritePtr[0].pos = a; _VtxWritePtr[0].uv = uv_a; _VtxWritePtr[0].col = col;
     _VtxWritePtr[1].pos = b; _VtxWritePtr[1].uv = uv_b; _VtxWritePtr[1].col = col;
     _VtxWritePtr[2].pos = c; _VtxWritePtr[2].uv = uv_c; _VtxWritePtr[2].col = col;
-    _VtxWritePtr[3].pos = d; _VtxWritePtr[3].uv = uv_d; _VtxWritePtr[3].col = col;
-    _VtxWritePtr += 4;
-    _VtxCurrentIdx += 4;
-    _IdxWritePtr += 6;
+
+    _VtxWritePtr[3].pos = a; _VtxWritePtr[3].uv = uv_a; _VtxWritePtr[3].col = col;
+    _VtxWritePtr[4].pos = c; _VtxWritePtr[4].uv = uv_c; _VtxWritePtr[4].col = col;
+    _VtxWritePtr[5].pos = d; _VtxWritePtr[5].uv = uv_d; _VtxWritePtr[5].col = col;
+    _VtxWritePtr += 6;
+    _VtxCurrentIdx += 6;
 }
 
 void ImDrawList::PrimQuadUV(const ImVec2& a, const ImVec2& b, const ImVec2& c, const ImVec2& d, const ImVec2& uv_a, const ImVec2& uv_b, const ImVec2& uv_c, const ImVec2& uv_d, ImU32 col)
 {
-    ImDrawIdx idx = (ImDrawIdx)_VtxCurrentIdx;
-    _IdxWritePtr[0] = idx; _IdxWritePtr[1] = (ImDrawIdx)(idx+1); _IdxWritePtr[2] = (ImDrawIdx)(idx+2);
-    _IdxWritePtr[3] = idx; _IdxWritePtr[4] = (ImDrawIdx)(idx+2); _IdxWritePtr[5] = (ImDrawIdx)(idx+3);
     _VtxWritePtr[0].pos = a; _VtxWritePtr[0].uv = uv_a; _VtxWritePtr[0].col = col;
     _VtxWritePtr[1].pos = b; _VtxWritePtr[1].uv = uv_b; _VtxWritePtr[1].col = col;
     _VtxWritePtr[2].pos = c; _VtxWritePtr[2].uv = uv_c; _VtxWritePtr[2].col = col;
-    _VtxWritePtr[3].pos = d; _VtxWritePtr[3].uv = uv_d; _VtxWritePtr[3].col = col;
-    _VtxWritePtr += 4;
-    _VtxCurrentIdx += 4;
-    _IdxWritePtr += 6;
+
+    _VtxWritePtr[3].pos = a; _VtxWritePtr[3].uv = uv_a; _VtxWritePtr[3].col = col;
+    _VtxWritePtr[4].pos = c; _VtxWritePtr[4].uv = uv_c; _VtxWritePtr[4].col = col;
+    _VtxWritePtr[5].pos = d; _VtxWritePtr[5].uv = uv_d; _VtxWritePtr[5].col = col;
+    _VtxWritePtr += 6;
+    _VtxCurrentIdx += 6;
 }
 
 // On AddPolyline() and AddConvexPolyFilled() we intentionally avoid using ImVec2 and superfluous function calls to optimize debug/non-inlined builds.
@@ -714,7 +700,7 @@ void ImDrawList::PrimQuadUV(const ImVec2& a, const ImVec2& b, const ImVec2& c, c
 // We avoid using the ImVec2 math operators here to reduce cost to a minimum for debug/non-inlined builds.
 void ImDrawList::AddPolyline(const ImVec2* points, const int points_count, ImU32 col, ImDrawFlags flags, float thickness)
 {
-    if (points_count < 2)
+    if (points_count < 2 || (col & IM_COL32_A_MASK) == 0)
         return;
 
     const bool closed = (flags & ImDrawFlags_Closed) != 0;
@@ -741,9 +727,8 @@ void ImDrawList::AddPolyline(const ImVec2* points, const int points_count, ImU32
         // We should never hit this, because NewFrame() doesn't set ImDrawListFlags_AntiAliasedLinesUseTex unless ImFontAtlasFlags_NoBakedLines is off
         IM_ASSERT_PARANOID(!use_texture || !(_Data->Font->ContainerAtlas->Flags & ImFontAtlasFlags_NoBakedLines));
 
-        const int idx_count = use_texture ? (count * 6) : (thick_line ? count * 18 : count * 12);
-        const int vtx_count = use_texture ? (points_count * 2) : (thick_line ? points_count * 4 : points_count * 3);
-        PrimReserve(idx_count, vtx_count);
+        const int vtx_count = use_texture ? (count * 6) : (thick_line ? count * 18 : count * 12);
+        PrimReserve(vtx_count);
 
         // Temporary buffer
         // The first <points_count> items are normals at each line point, then after that there are either 2 or 4 temp points for each line point
@@ -809,57 +794,58 @@ void ImDrawList::AddPolyline(const ImVec2* points, const int points_count, ImU32
                 out_vtx[1].x = points[i2].x - dm_x;
                 out_vtx[1].y = points[i2].y - dm_y;
 
-                if (use_texture)
-                {
-                    // Add indices for two triangles
-                    _IdxWritePtr[0] = (ImDrawIdx)(idx2 + 0); _IdxWritePtr[1] = (ImDrawIdx)(idx1 + 0); _IdxWritePtr[2] = (ImDrawIdx)(idx1 + 1); // Right tri
-                    _IdxWritePtr[3] = (ImDrawIdx)(idx2 + 1); _IdxWritePtr[4] = (ImDrawIdx)(idx1 + 1); _IdxWritePtr[5] = (ImDrawIdx)(idx2 + 0); // Left tri
-                    _IdxWritePtr += 6;
-                }
-                else
-                {
-                    // Add indexes for four triangles
-                    _IdxWritePtr[0] = (ImDrawIdx)(idx2 + 0); _IdxWritePtr[1] = (ImDrawIdx)(idx1 + 0); _IdxWritePtr[2] = (ImDrawIdx)(idx1 + 2); // Right tri 1
-                    _IdxWritePtr[3] = (ImDrawIdx)(idx1 + 2); _IdxWritePtr[4] = (ImDrawIdx)(idx2 + 2); _IdxWritePtr[5] = (ImDrawIdx)(idx2 + 0); // Right tri 2
-                    _IdxWritePtr[6] = (ImDrawIdx)(idx2 + 1); _IdxWritePtr[7] = (ImDrawIdx)(idx1 + 1); _IdxWritePtr[8] = (ImDrawIdx)(idx1 + 0); // Left tri 1
-                    _IdxWritePtr[9] = (ImDrawIdx)(idx1 + 0); _IdxWritePtr[10] = (ImDrawIdx)(idx2 + 0); _IdxWritePtr[11] = (ImDrawIdx)(idx2 + 1); // Left tri 2
-                    _IdxWritePtr += 12;
-                }
-
                 idx1 = idx2;
             }
 
-            // Add vertexes for each point on the line
             if (use_texture)
             {
                 // If we're using textures we only need to emit the left/right edge vertices
                 ImVec4 tex_uvs = _Data->TexUvLines[integer_thickness];
-                /*if (fractional_thickness != 0.0f) // Currently always zero when use_texture==false!
-                {
-                    const ImVec4 tex_uvs_1 = _Data->TexUvLines[integer_thickness + 1];
-                    tex_uvs.x = tex_uvs.x + (tex_uvs_1.x - tex_uvs.x) * fractional_thickness; // inlined ImLerp()
-                    tex_uvs.y = tex_uvs.y + (tex_uvs_1.y - tex_uvs.y) * fractional_thickness;
-                    tex_uvs.z = tex_uvs.z + (tex_uvs_1.z - tex_uvs.z) * fractional_thickness;
-                    tex_uvs.w = tex_uvs.w + (tex_uvs_1.w - tex_uvs.w) * fractional_thickness;
-                }*/
+
                 ImVec2 tex_uv0(tex_uvs.x, tex_uvs.y);
                 ImVec2 tex_uv1(tex_uvs.z, tex_uvs.w);
-                for (int i = 0; i < points_count; i++)
+
+                for (int i = 0; i < count; i++)
                 {
-                    _VtxWritePtr[0].pos = temp_points[i * 2 + 0]; _VtxWritePtr[0].uv = tex_uv0; _VtxWritePtr[0].col = col; // Left-side outer edge
-                    _VtxWritePtr[1].pos = temp_points[i * 2 + 1]; _VtxWritePtr[1].uv = tex_uv1; _VtxWritePtr[1].col = col; // Right-side outer edge
-                    _VtxWritePtr += 2;
+                    const int i2 = (i + 1) == points_count ? 0 : i * 2 + 2;
+                    const int i3 = (i + 1) == points_count ? 1 : i * 2 + 3;
+
+                    _VtxWritePtr[0].pos = temp_points[       i2]; _VtxWritePtr[0].uv = tex_uv0; _VtxWritePtr[0].col = col;
+                    _VtxWritePtr[1].pos = temp_points[i * 2 + 0]; _VtxWritePtr[1].uv = tex_uv0; _VtxWritePtr[1].col = col;
+                    _VtxWritePtr[2].pos = temp_points[i * 2 + 1]; _VtxWritePtr[2].uv = tex_uv1; _VtxWritePtr[2].col = col;
+                    
+                    _VtxWritePtr[3].pos = temp_points[       i3]; _VtxWritePtr[3].uv = tex_uv1; _VtxWritePtr[3].col = col;
+                    _VtxWritePtr[4].pos = temp_points[i * 2 + 1]; _VtxWritePtr[4].uv = tex_uv1; _VtxWritePtr[4].col = col;
+                    _VtxWritePtr[5].pos = temp_points[       i2]; _VtxWritePtr[5].uv = tex_uv0; _VtxWritePtr[5].col = col;
+
+                    _VtxWritePtr += 6;
                 }
             }
             else
             {
-                // If we're not using a texture, we need the center vertex as well
-                for (int i = 0; i < points_count; i++)
+                for (int i = 0; i < count; i++)
                 {
-                    _VtxWritePtr[0].pos = points[i];              _VtxWritePtr[0].uv = opaque_uv; _VtxWritePtr[0].col = col;       // Center of line
-                    _VtxWritePtr[1].pos = temp_points[i * 2 + 0]; _VtxWritePtr[1].uv = opaque_uv; _VtxWritePtr[1].col = col_trans; // Left-side outer edge
-                    _VtxWritePtr[2].pos = temp_points[i * 2 + 1]; _VtxWritePtr[2].uv = opaque_uv; _VtxWritePtr[2].col = col_trans; // Right-side outer edge
-                    _VtxWritePtr += 3;
+                    const int p2 = (i + 1) == points_count ? 0 : i + 1;
+                    const int i2 = (i + 1) == points_count ? 0 : i * 2 + 2;
+                    const int i3 = (i + 1) == points_count ? 1 : i * 2 + 3;
+
+                    _VtxWritePtr[0].pos =      points[       p2]; _VtxWritePtr[0].uv = opaque_uv; _VtxWritePtr[0].col = col;
+                    _VtxWritePtr[1].pos =      points[        i]; _VtxWritePtr[1].uv = opaque_uv; _VtxWritePtr[1].col = col;
+                    _VtxWritePtr[2].pos = temp_points[i * 2 + 1]; _VtxWritePtr[2].uv = opaque_uv; _VtxWritePtr[2].col = col_trans;
+
+                    _VtxWritePtr[3].pos = temp_points[i * 2 + 1]; _VtxWritePtr[3].uv = opaque_uv; _VtxWritePtr[3].col = col_trans;
+                    _VtxWritePtr[4].pos = temp_points[       i3]; _VtxWritePtr[4].uv = opaque_uv; _VtxWritePtr[4].col = col_trans;
+                    _VtxWritePtr[5].pos =      points[       p2]; _VtxWritePtr[5].uv = opaque_uv; _VtxWritePtr[5].col = col;
+                    _VtxWritePtr += 6;
+
+                    _VtxWritePtr[0].pos = temp_points[       i2]; _VtxWritePtr[0].uv = opaque_uv; _VtxWritePtr[0].col = col_trans;
+                    _VtxWritePtr[1].pos = temp_points[i * 2 + 0]; _VtxWritePtr[1].uv = opaque_uv; _VtxWritePtr[1].col = col_trans;
+                    _VtxWritePtr[2].pos =      points[        i]; _VtxWritePtr[2].uv = opaque_uv; _VtxWritePtr[2].col = col;
+
+                    _VtxWritePtr[3].pos =      points[        i]; _VtxWritePtr[3].uv = opaque_uv; _VtxWritePtr[3].col = col;
+                    _VtxWritePtr[4].pos =      points[       p2]; _VtxWritePtr[4].uv = opaque_uv; _VtxWritePtr[4].col = col;
+                    _VtxWritePtr[5].pos = temp_points[       i2]; _VtxWritePtr[5].uv = opaque_uv; _VtxWritePtr[5].col = col_trans;
+                    _VtxWritePtr += 6;
                 }
             }
         }
@@ -911,36 +897,55 @@ void ImDrawList::AddPolyline(const ImVec2* points, const int points_count, ImU32
                 out_vtx[3].x = points[i2].x - dm_out_x;
                 out_vtx[3].y = points[i2].y - dm_out_y;
 
-                // Add indexes
-                _IdxWritePtr[0]  = (ImDrawIdx)(idx2 + 1); _IdxWritePtr[1]  = (ImDrawIdx)(idx1 + 1); _IdxWritePtr[2]  = (ImDrawIdx)(idx1 + 2);
-                _IdxWritePtr[3]  = (ImDrawIdx)(idx1 + 2); _IdxWritePtr[4]  = (ImDrawIdx)(idx2 + 2); _IdxWritePtr[5]  = (ImDrawIdx)(idx2 + 1);
-                _IdxWritePtr[6]  = (ImDrawIdx)(idx2 + 1); _IdxWritePtr[7]  = (ImDrawIdx)(idx1 + 1); _IdxWritePtr[8]  = (ImDrawIdx)(idx1 + 0);
-                _IdxWritePtr[9]  = (ImDrawIdx)(idx1 + 0); _IdxWritePtr[10] = (ImDrawIdx)(idx2 + 0); _IdxWritePtr[11] = (ImDrawIdx)(idx2 + 1);
-                _IdxWritePtr[12] = (ImDrawIdx)(idx2 + 2); _IdxWritePtr[13] = (ImDrawIdx)(idx1 + 2); _IdxWritePtr[14] = (ImDrawIdx)(idx1 + 3);
-                _IdxWritePtr[15] = (ImDrawIdx)(idx1 + 3); _IdxWritePtr[16] = (ImDrawIdx)(idx2 + 3); _IdxWritePtr[17] = (ImDrawIdx)(idx2 + 2);
-                _IdxWritePtr += 18;
-
                 idx1 = idx2;
             }
 
-            // Add vertices
-            for (int i = 0; i < points_count; i++)
+            for (int i = 0; i < count; i++)
             {
-                _VtxWritePtr[0].pos = temp_points[i * 4 + 0]; _VtxWritePtr[0].uv = opaque_uv; _VtxWritePtr[0].col = col_trans;
-                _VtxWritePtr[1].pos = temp_points[i * 4 + 1]; _VtxWritePtr[1].uv = opaque_uv; _VtxWritePtr[1].col = col;
+                const int points_last = points_count - 1;
+                const int i4 = (i + 1) == points_count ? 0 : i * 4 + 4;
+                const int i5 = (i + 1) == points_count ? 1 : i * 4 + 5;
+                const int i6 = (i + 1) == points_count ? 2 : i * 4 + 6;
+                const int i7 = (i + 1) == points_count ? 3 : i * 4 + 7;
+
+                // Innter rect
+                _VtxWritePtr[0].pos = temp_points[       i6]; _VtxWritePtr[0].uv = opaque_uv; _VtxWritePtr[0].col = col;
+                _VtxWritePtr[1].pos = temp_points[i * 4 + 2]; _VtxWritePtr[1].uv = opaque_uv; _VtxWritePtr[1].col = col;
+                _VtxWritePtr[2].pos = temp_points[i * 4 + 1]; _VtxWritePtr[2].uv = opaque_uv; _VtxWritePtr[2].col = col;
+
+                _VtxWritePtr[3].pos = temp_points[i * 4 + 1]; _VtxWritePtr[3].uv = opaque_uv; _VtxWritePtr[3].col = col;
+                _VtxWritePtr[4].pos = temp_points[       i5]; _VtxWritePtr[4].uv = opaque_uv; _VtxWritePtr[4].col = col;
+                _VtxWritePtr[5].pos = temp_points[       i6]; _VtxWritePtr[5].uv = opaque_uv; _VtxWritePtr[5].col = col;
+                _VtxWritePtr += 6;
+
+                // Left fading
+                _VtxWritePtr[0].pos = temp_points[       i7]; _VtxWritePtr[0].uv = opaque_uv; _VtxWritePtr[0].col = col_trans;
+                _VtxWritePtr[1].pos = temp_points[i * 4 + 3]; _VtxWritePtr[1].uv = opaque_uv; _VtxWritePtr[1].col = col_trans;
                 _VtxWritePtr[2].pos = temp_points[i * 4 + 2]; _VtxWritePtr[2].uv = opaque_uv; _VtxWritePtr[2].col = col;
-                _VtxWritePtr[3].pos = temp_points[i * 4 + 3]; _VtxWritePtr[3].uv = opaque_uv; _VtxWritePtr[3].col = col_trans;
-                _VtxWritePtr += 4;
+
+                _VtxWritePtr[3].pos = temp_points[i * 4 + 2]; _VtxWritePtr[3].uv = opaque_uv; _VtxWritePtr[3].col = col;
+                _VtxWritePtr[4].pos = temp_points[       i6]; _VtxWritePtr[4].uv = opaque_uv; _VtxWritePtr[4].col = col;
+                _VtxWritePtr[5].pos = temp_points[       i7]; _VtxWritePtr[5].uv = opaque_uv; _VtxWritePtr[5].col = col_trans;
+                _VtxWritePtr += 6;
+
+                // Right fading
+                _VtxWritePtr[0].pos = temp_points[       i5]; _VtxWritePtr[0].uv = opaque_uv; _VtxWritePtr[0].col = col;
+                _VtxWritePtr[1].pos = temp_points[i * 4 + 1]; _VtxWritePtr[1].uv = opaque_uv; _VtxWritePtr[1].col = col;
+                _VtxWritePtr[2].pos = temp_points[i * 4 + 0]; _VtxWritePtr[2].uv = opaque_uv; _VtxWritePtr[2].col = col_trans;
+
+                _VtxWritePtr[3].pos = temp_points[i * 4 + 0]; _VtxWritePtr[3].uv = opaque_uv; _VtxWritePtr[3].col = col_trans;
+                _VtxWritePtr[4].pos = temp_points[       i4]; _VtxWritePtr[4].uv = opaque_uv; _VtxWritePtr[4].col = col_trans;
+                _VtxWritePtr[5].pos = temp_points[       i5]; _VtxWritePtr[5].uv = opaque_uv; _VtxWritePtr[5].col = col;
+                _VtxWritePtr += 6;
             }
         }
-        _VtxCurrentIdx += (ImDrawIdx)vtx_count;
+        _VtxCurrentIdx += vtx_count;
     }
     else
     {
         // [PATH 4] Non texture-based, Non anti-aliased lines
-        const int idx_count = count * 6;
-        const int vtx_count = count * 4;    // FIXME-OPT: Not sharing edges
-        PrimReserve(idx_count, vtx_count);
+        const int vtx_count = count * 6;
+        PrimReserve(vtx_count);
 
         for (int i1 = 0; i1 < count; i1++)
         {
@@ -957,13 +962,12 @@ void ImDrawList::AddPolyline(const ImVec2* points, const int points_count, ImU32
             _VtxWritePtr[0].pos.x = p1.x + dy; _VtxWritePtr[0].pos.y = p1.y - dx; _VtxWritePtr[0].uv = opaque_uv; _VtxWritePtr[0].col = col;
             _VtxWritePtr[1].pos.x = p2.x + dy; _VtxWritePtr[1].pos.y = p2.y - dx; _VtxWritePtr[1].uv = opaque_uv; _VtxWritePtr[1].col = col;
             _VtxWritePtr[2].pos.x = p2.x - dy; _VtxWritePtr[2].pos.y = p2.y + dx; _VtxWritePtr[2].uv = opaque_uv; _VtxWritePtr[2].col = col;
-            _VtxWritePtr[3].pos.x = p1.x - dy; _VtxWritePtr[3].pos.y = p1.y + dx; _VtxWritePtr[3].uv = opaque_uv; _VtxWritePtr[3].col = col;
-            _VtxWritePtr += 4;
 
-            _IdxWritePtr[0] = (ImDrawIdx)(_VtxCurrentIdx); _IdxWritePtr[1] = (ImDrawIdx)(_VtxCurrentIdx + 1); _IdxWritePtr[2] = (ImDrawIdx)(_VtxCurrentIdx + 2);
-            _IdxWritePtr[3] = (ImDrawIdx)(_VtxCurrentIdx); _IdxWritePtr[4] = (ImDrawIdx)(_VtxCurrentIdx + 2); _IdxWritePtr[5] = (ImDrawIdx)(_VtxCurrentIdx + 3);
-            _IdxWritePtr += 6;
-            _VtxCurrentIdx += 4;
+            _VtxWritePtr[3].pos.x = p1.x + dy; _VtxWritePtr[3].pos.y = p1.y - dx; _VtxWritePtr[3].uv = opaque_uv; _VtxWritePtr[3].col = col;
+            _VtxWritePtr[4].pos.x = p2.x - dy; _VtxWritePtr[4].pos.y = p2.y + dx; _VtxWritePtr[4].uv = opaque_uv; _VtxWritePtr[4].col = col;
+            _VtxWritePtr[5].pos.x = p1.x - dy; _VtxWritePtr[5].pos.y = p1.y + dx; _VtxWritePtr[5].uv = opaque_uv; _VtxWritePtr[5].col = col;
+            _VtxWritePtr += 6;
+            _VtxCurrentIdx += 6;
         }
     }
 }
@@ -982,22 +986,13 @@ void ImDrawList::AddConvexPolyFilled(const ImVec2* points, const int points_coun
         // Anti-aliased Fill
         const float AA_SIZE = _FringeScale;
         const ImU32 col_trans = col & ~IM_COL32_A_MASK;
-        const int idx_count = (points_count - 2)*3 + points_count * 6;
-        const int vtx_count = (points_count * 2);
-        PrimReserve(idx_count, vtx_count);
-
-        // Add indexes for fill
-        unsigned int vtx_inner_idx = _VtxCurrentIdx;
-        unsigned int vtx_outer_idx = _VtxCurrentIdx + 1;
-        for (int i = 2; i < points_count; i++)
-        {
-            _IdxWritePtr[0] = (ImDrawIdx)(vtx_inner_idx); _IdxWritePtr[1] = (ImDrawIdx)(vtx_inner_idx + ((i - 1) << 1)); _IdxWritePtr[2] = (ImDrawIdx)(vtx_inner_idx + (i << 1));
-            _IdxWritePtr += 3;
-        }
+        const int vtx_count = (points_count - 2)*3 + points_count * 6;
+        PrimReserve(vtx_count);
 
         // Compute normals
-        _Data->TempBuffer.reserve_discard(points_count);
+        _Data->TempBuffer.reserve_discard(points_count * 3);
         ImVec2* temp_normals = _Data->TempBuffer.Data;
+        ImVec2* temp_points = temp_normals + points_count;
         for (int i0 = points_count - 1, i1 = 0; i1 < points_count; i0 = i1++)
         {
             const ImVec2& p0 = points[i0];
@@ -1020,35 +1015,61 @@ void ImDrawList::AddConvexPolyFilled(const ImVec2* points, const int points_coun
             dm_x *= AA_SIZE * 0.5f;
             dm_y *= AA_SIZE * 0.5f;
 
-            // Add vertices
-            _VtxWritePtr[0].pos.x = (points[i1].x - dm_x); _VtxWritePtr[0].pos.y = (points[i1].y - dm_y); _VtxWritePtr[0].uv = uv; _VtxWritePtr[0].col = col;        // Inner
-            _VtxWritePtr[1].pos.x = (points[i1].x + dm_x); _VtxWritePtr[1].pos.y = (points[i1].y + dm_y); _VtxWritePtr[1].uv = uv; _VtxWritePtr[1].col = col_trans;  // Outer
-            _VtxWritePtr += 2;
-
-            // Add indexes for fringes
-            _IdxWritePtr[0] = (ImDrawIdx)(vtx_inner_idx + (i1 << 1)); _IdxWritePtr[1] = (ImDrawIdx)(vtx_inner_idx + (i0 << 1)); _IdxWritePtr[2] = (ImDrawIdx)(vtx_outer_idx + (i0 << 1));
-            _IdxWritePtr[3] = (ImDrawIdx)(vtx_outer_idx + (i0 << 1)); _IdxWritePtr[4] = (ImDrawIdx)(vtx_outer_idx + (i1 << 1)); _IdxWritePtr[5] = (ImDrawIdx)(vtx_inner_idx + (i1 << 1));
-            _IdxWritePtr += 6;
+            ImVec2& v0 = temp_points[i1 * 2];
+            ImVec2& v1 = temp_points[i1 * 2 + 1];
+            v0.x = points[i1].x - dm_x;
+            v0.y = points[i1].y - dm_y;
+            v1.x = points[i1].x + dm_x;
+            v1.y = points[i1].y + dm_y;
         }
-        _VtxCurrentIdx += (ImDrawIdx)vtx_count;
+
+        // Inner shape
+        for (int i = 0; i < points_count - 2; i++)
+        {
+            _VtxWritePtr[0].pos = temp_points[0];         _VtxWritePtr[0].uv = uv; _VtxWritePtr[0].col = col;
+            _VtxWritePtr[1].pos = temp_points[i * 2 + 2]; _VtxWritePtr[1].uv = uv; _VtxWritePtr[1].col = col;
+            _VtxWritePtr[2].pos = temp_points[i * 2 + 4]; _VtxWritePtr[2].uv = uv; _VtxWritePtr[2].col = col;
+
+            _VtxWritePtr += 3;
+            _VtxCurrentIdx += 3;
+        }
+
+        // Outer edge
+        for (int i = 0; i < points_count; i++)
+        {
+            const int i2 = (i + 1) == points_count ? 0 : i * 2 + 2;
+            const int i3 = (i + 1) == points_count ? 1 : i * 2 + 3;
+
+            // Inner triangle
+            _VtxWritePtr[0].pos = temp_points[i2];        _VtxWritePtr[0].uv = uv; _VtxWritePtr[0].col = col;
+            _VtxWritePtr[1].pos = temp_points[i * 2 + 0]; _VtxWritePtr[1].uv = uv; _VtxWritePtr[1].col = col;
+            _VtxWritePtr[2].pos = temp_points[i * 2 + 1]; _VtxWritePtr[2].uv = uv; _VtxWritePtr[2].col = col_trans;
+
+            // Outer triangle
+            _VtxWritePtr[3].pos = temp_points[i3];        _VtxWritePtr[3].uv = uv; _VtxWritePtr[3].col = col_trans;
+            _VtxWritePtr[4].pos = temp_points[i * 2 + 1]; _VtxWritePtr[4].uv = uv; _VtxWritePtr[4].col = col_trans;
+            _VtxWritePtr[5].pos = temp_points[i2];        _VtxWritePtr[5].uv = uv; _VtxWritePtr[5].col = col;
+
+            _VtxWritePtr += 6;
+            _VtxCurrentIdx += 6;
+        }
     }
     else
     {
         // Non Anti-aliased Fill
-        const int idx_count = (points_count - 2)*3;
-        const int vtx_count = points_count;
-        PrimReserve(idx_count, vtx_count);
-        for (int i = 0; i < vtx_count; i++)
-        {
-            _VtxWritePtr[0].pos = points[i]; _VtxWritePtr[0].uv = uv; _VtxWritePtr[0].col = col;
-            _VtxWritePtr++;
-        }
+        const int vtx_count = (points_count - 2)*3;
+        PrimReserve(vtx_count);
+
         for (int i = 2; i < points_count; i++)
         {
-            _IdxWritePtr[0] = (ImDrawIdx)(_VtxCurrentIdx); _IdxWritePtr[1] = (ImDrawIdx)(_VtxCurrentIdx + i - 1); _IdxWritePtr[2] = (ImDrawIdx)(_VtxCurrentIdx + i);
-            _IdxWritePtr += 3;
+            _VtxWritePtr[0].pos = points[    0]; _VtxWritePtr[0].uv = uv; _VtxWritePtr[0].col = col;
+            _VtxWritePtr[1].pos = points[i - 1]; _VtxWritePtr[1].uv = uv; _VtxWritePtr[1].col = col;
+            _VtxWritePtr[2].pos = points[    i]; _VtxWritePtr[2].uv = uv; _VtxWritePtr[2].col = col;
+
+            _VtxWritePtr += 3;
         }
-        _VtxCurrentIdx += (ImDrawIdx)vtx_count;
+
+        _VtxCurrentIdx += vtx_count;
     }
 }
 
@@ -1407,7 +1428,7 @@ void ImDrawList::AddRectFilled(const ImVec2& p_min, const ImVec2& p_max, ImU32 c
         return;
     if (rounding < 0.5f || (flags & ImDrawFlags_RoundCornersMask_) == ImDrawFlags_RoundCornersNone)
     {
-        PrimReserve(6, 4);
+        PrimReserve(6);
         PrimRect(p_min, p_max, col);
     }
     else
@@ -1424,11 +1445,13 @@ void ImDrawList::AddRectFilledMultiColor(const ImVec2& p_min, const ImVec2& p_ma
         return;
 
     const ImVec2 uv = _Data->TexUvWhitePixel;
-    PrimReserve(6, 4);
-    PrimWriteIdx((ImDrawIdx)(_VtxCurrentIdx)); PrimWriteIdx((ImDrawIdx)(_VtxCurrentIdx + 1)); PrimWriteIdx((ImDrawIdx)(_VtxCurrentIdx + 2));
-    PrimWriteIdx((ImDrawIdx)(_VtxCurrentIdx)); PrimWriteIdx((ImDrawIdx)(_VtxCurrentIdx + 2)); PrimWriteIdx((ImDrawIdx)(_VtxCurrentIdx + 3));
+    PrimReserve(6);
+
     PrimWriteVtx(p_min, uv, col_upr_left);
     PrimWriteVtx(ImVec2(p_max.x, p_min.y), uv, col_upr_right);
+    PrimWriteVtx(p_max, uv, col_bot_right);
+
+    PrimWriteVtx(p_min, uv, col_upr_left);
     PrimWriteVtx(p_max, uv, col_bot_right);
     PrimWriteVtx(ImVec2(p_min.x, p_max.y), uv, col_bot_left);
 }
@@ -1616,7 +1639,7 @@ void ImDrawList::AddImage(ImTextureID user_texture_id, const ImVec2& p_min, cons
     if (push_texture_id)
         PushTextureID(user_texture_id);
 
-    PrimReserve(6, 4);
+    PrimReserve(6);
     PrimRectUV(p_min, p_max, uv_min, uv_max, col);
 
     if (push_texture_id)
@@ -1632,7 +1655,7 @@ void ImDrawList::AddImageQuad(ImTextureID user_texture_id, const ImVec2& p1, con
     if (push_texture_id)
         PushTextureID(user_texture_id);
 
-    PrimReserve(6, 4);
+    PrimReserve(6);
     PrimQuadUV(p1, p2, p3, p4, uv1, uv2, uv3, uv4, col);
 
     if (push_texture_id)
@@ -1679,7 +1702,7 @@ void ImDrawListSplitter::ClearFreeMemory()
         if (i == _Current)
             memset(&_Channels[i], 0, sizeof(_Channels[i]));  // Current channel is a copy of CmdBuffer/IdxBuffer, don't destruct again
         _Channels[i]._CmdBuffer.clear();
-        _Channels[i]._IdxBuffer.clear();
+        _Channels[i]._VtxBuffer.clear();
     }
     _Current = 0;
     _Count = 1;
@@ -1711,7 +1734,7 @@ void ImDrawListSplitter::Split(ImDrawList* draw_list, int channels_count)
         else
         {
             _Channels[i]._CmdBuffer.resize(0);
-            _Channels[i]._IdxBuffer.resize(0);
+            _Channels[i]._VtxBuffer.resize(0);
         }
     }
 }
@@ -1727,13 +1750,13 @@ void ImDrawListSplitter::Merge(ImDrawList* draw_list)
 
     // Calculate our final buffer sizes. Also fix the incorrect IdxOffset values in each command.
     int new_cmd_buffer_count = 0;
-    int new_idx_buffer_count = 0;
+    int new_vtx_buffer_count = 0;
     ImDrawCmd* last_cmd = (_Count > 0 && draw_list->CmdBuffer.Size > 0) ? &draw_list->CmdBuffer.back() : NULL;
-    int idx_offset = last_cmd ? last_cmd->IdxOffset + last_cmd->ElemCount : 0;
+    int vtx_offset = last_cmd ? last_cmd->VtxOffset + last_cmd->VertexCount : 0;
     for (int i = 1; i < _Count; i++)
     {
         ImDrawChannel& ch = _Channels[i];
-        if (ch._CmdBuffer.Size > 0 && ch._CmdBuffer.back().ElemCount == 0 && ch._CmdBuffer.back().UserCallback == NULL) // Equivalent of PopUnusedDrawCmd()
+        if (ch._CmdBuffer.Size > 0 && ch._CmdBuffer.back().VertexCount == 0 && ch._CmdBuffer.back().UserCallback == NULL) // Equivalent of PopUnusedDrawCmd()
             ch._CmdBuffer.pop_back();
 
         if (ch._CmdBuffer.Size > 0 && last_cmd != NULL)
@@ -1744,34 +1767,33 @@ void ImDrawListSplitter::Merge(ImDrawList* draw_list)
             if (ImDrawCmd_HeaderCompare(last_cmd, next_cmd) == 0 && last_cmd->UserCallback == NULL && next_cmd->UserCallback == NULL)
             {
                 // Merge previous channel last draw command with current channel first draw command if matching.
-                last_cmd->ElemCount += next_cmd->ElemCount;
-                idx_offset += next_cmd->ElemCount;
+                last_cmd->VertexCount += next_cmd->VertexCount;
+                vtx_offset += next_cmd->VertexCount;
                 ch._CmdBuffer.erase(ch._CmdBuffer.Data); // FIXME-OPT: Improve for multiple merges.
             }
         }
         if (ch._CmdBuffer.Size > 0)
             last_cmd = &ch._CmdBuffer.back();
         new_cmd_buffer_count += ch._CmdBuffer.Size;
-        new_idx_buffer_count += ch._IdxBuffer.Size;
+        new_vtx_buffer_count += ch._VtxBuffer.Size;
         for (int cmd_n = 0; cmd_n < ch._CmdBuffer.Size; cmd_n++)
         {
-            ch._CmdBuffer.Data[cmd_n].IdxOffset = idx_offset;
-            idx_offset += ch._CmdBuffer.Data[cmd_n].ElemCount;
+            ch._CmdBuffer.Data[cmd_n].VtxOffset = vtx_offset;
+            vtx_offset += ch._CmdBuffer.Data[cmd_n].VertexCount;
         }
     }
     draw_list->CmdBuffer.resize(draw_list->CmdBuffer.Size + new_cmd_buffer_count);
-    draw_list->IdxBuffer.resize(draw_list->IdxBuffer.Size + new_idx_buffer_count);
+    draw_list->VtxBuffer.resize(draw_list->VtxBuffer.Size + new_vtx_buffer_count);
 
-    // Write commands and indices in order (they are fairly small structures, we don't copy vertices only indices)
-    ImDrawCmd* cmd_write = draw_list->CmdBuffer.Data + draw_list->CmdBuffer.Size - new_cmd_buffer_count;
-    ImDrawIdx* idx_write = draw_list->IdxBuffer.Data + draw_list->IdxBuffer.Size - new_idx_buffer_count;
+    ImDrawCmd*  cmd_write = draw_list->CmdBuffer.Data + draw_list->CmdBuffer.Size - new_cmd_buffer_count;
+    ImDrawVert* vtx_write = draw_list->VtxBuffer.Data + draw_list->VtxBuffer.Size - new_vtx_buffer_count;
     for (int i = 1; i < _Count; i++)
     {
         ImDrawChannel& ch = _Channels[i];
         if (int sz = ch._CmdBuffer.Size) { memcpy(cmd_write, ch._CmdBuffer.Data, sz * sizeof(ImDrawCmd)); cmd_write += sz; }
-        if (int sz = ch._IdxBuffer.Size) { memcpy(idx_write, ch._IdxBuffer.Data, sz * sizeof(ImDrawIdx)); idx_write += sz; }
+        if (int sz = ch._VtxBuffer.Size) { memcpy(vtx_write, ch._VtxBuffer.Data, sz * sizeof(ImDrawVert)); vtx_write += sz; }
     }
-    draw_list->_IdxWritePtr = idx_write;
+    draw_list->_VtxWritePtr = vtx_write;
 
     // Ensure there's always a non-callback draw command trailing the command-buffer
     if (draw_list->CmdBuffer.Size == 0 || draw_list->CmdBuffer.back().UserCallback != NULL)
@@ -1779,7 +1801,7 @@ void ImDrawListSplitter::Merge(ImDrawList* draw_list)
 
     // If current command is used with different settings we need to add a new command
     ImDrawCmd* curr_cmd = &draw_list->CmdBuffer.Data[draw_list->CmdBuffer.Size - 1];
-    if (curr_cmd->ElemCount == 0)
+    if (curr_cmd->VertexCount == 0)
         ImDrawCmd_HeaderCopy(curr_cmd, &draw_list->_CmdHeader); // Copy ClipRect, TextureId, VtxOffset
     else if (ImDrawCmd_HeaderCompare(curr_cmd, &draw_list->_CmdHeader) != 0)
         draw_list->AddDrawCmd();
@@ -1795,17 +1817,17 @@ void ImDrawListSplitter::SetCurrentChannel(ImDrawList* draw_list, int idx)
 
     // Overwrite ImVector (12/16 bytes), four times. This is merely a silly optimization instead of doing .swap()
     memcpy(&_Channels.Data[_Current]._CmdBuffer, &draw_list->CmdBuffer, sizeof(draw_list->CmdBuffer));
-    memcpy(&_Channels.Data[_Current]._IdxBuffer, &draw_list->IdxBuffer, sizeof(draw_list->IdxBuffer));
+    memcpy(&_Channels.Data[_Current]._VtxBuffer, &draw_list->VtxBuffer, sizeof(draw_list->VtxBuffer));
     _Current = idx;
     memcpy(&draw_list->CmdBuffer, &_Channels.Data[idx]._CmdBuffer, sizeof(draw_list->CmdBuffer));
-    memcpy(&draw_list->IdxBuffer, &_Channels.Data[idx]._IdxBuffer, sizeof(draw_list->IdxBuffer));
-    draw_list->_IdxWritePtr = draw_list->IdxBuffer.Data + draw_list->IdxBuffer.Size;
+    memcpy(&draw_list->VtxBuffer, &_Channels.Data[idx]._VtxBuffer, sizeof(draw_list->VtxBuffer));
+    draw_list->_VtxWritePtr = draw_list->VtxBuffer.Data + draw_list->VtxBuffer.Size;
 
     // If current command is used with different settings we need to add a new command
     ImDrawCmd* curr_cmd = (draw_list->CmdBuffer.Size == 0) ? NULL : &draw_list->CmdBuffer.Data[draw_list->CmdBuffer.Size - 1];
     if (curr_cmd == NULL)
         draw_list->AddDrawCmd();
-    else if (curr_cmd->ElemCount == 0)
+    else if (curr_cmd->VertexCount == 0)
         ImDrawCmd_HeaderCopy(curr_cmd, &draw_list->_CmdHeader); // Copy ClipRect, TextureId, VtxOffset
     else if (ImDrawCmd_HeaderCompare(curr_cmd, &draw_list->_CmdHeader) != 0)
         draw_list->AddDrawCmd();
@@ -1814,25 +1836,6 @@ void ImDrawListSplitter::SetCurrentChannel(ImDrawList* draw_list, int idx)
 //-----------------------------------------------------------------------------
 // [SECTION] ImDrawData
 //-----------------------------------------------------------------------------
-
-// For backward compatibility: convert all buffers from indexed to de-indexed, in case you cannot render indexed. Note: this is slow and most likely a waste of resources. Always prefer indexed rendering!
-void ImDrawData::DeIndexAllBuffers()
-{
-    ImVector<ImDrawVert> new_vtx_buffer;
-    TotalVtxCount = TotalIdxCount = 0;
-    for (int i = 0; i < CmdListsCount; i++)
-    {
-        ImDrawList* cmd_list = CmdLists[i];
-        if (cmd_list->IdxBuffer.empty())
-            continue;
-        new_vtx_buffer.resize(cmd_list->IdxBuffer.Size);
-        for (int j = 0; j < cmd_list->IdxBuffer.Size; j++)
-            new_vtx_buffer[j] = cmd_list->VtxBuffer[cmd_list->IdxBuffer[j]];
-        cmd_list->VtxBuffer.swap(new_vtx_buffer);
-        cmd_list->IdxBuffer.resize(0);
-        TotalVtxCount += cmd_list->VtxBuffer.Size;
-    }
-}
 
 // Helper to scale the ClipRect field of each ImDrawCmd.
 // Use if your final output buffer is at a different scale than draw_data->DisplaySize,
@@ -3548,7 +3551,7 @@ void ImFont::RenderChar(ImDrawList* draw_list, float size, const ImVec2& pos, Im
     float scale = (size >= 0.0f) ? (size / FontSize) : 1.0f;
     float x = IM_FLOOR(pos.x);
     float y = IM_FLOOR(pos.y);
-    draw_list->PrimReserve(6, 4);
+    draw_list->PrimReserve(6);
     draw_list->PrimRectUV(ImVec2(x + glyph->X0 * scale, y + glyph->Y0 * scale), ImVec2(x + glyph->X1 * scale, y + glyph->Y1 * scale), ImVec2(glyph->U0, glyph->V0), ImVec2(glyph->U1, glyph->V1), col);
 }
 
@@ -3609,13 +3612,11 @@ void ImFont::RenderText(ImDrawList* draw_list, float size, const ImVec2& pos, Im
         return;
 
     // Reserve vertices for remaining worse case (over-reserving is useful and easily amortized)
-    const int vtx_count_max = (int)(text_end - s) * 4;
-    const int idx_count_max = (int)(text_end - s) * 6;
-    const int idx_expected_size = draw_list->IdxBuffer.Size + idx_count_max;
-    draw_list->PrimReserve(idx_count_max, vtx_count_max);
+    const int vtx_count_max = (int)(text_end - s) * 6;
+    const int vtx_expected_size = draw_list->VtxBuffer.Size + vtx_count_max;
+    draw_list->PrimReserve(vtx_count_max);
 
     ImDrawVert* vtx_write = draw_list->_VtxWritePtr;
-    ImDrawIdx* idx_write = draw_list->_IdxWritePtr;
     unsigned int vtx_current_idx = draw_list->_VtxCurrentIdx;
 
     const ImU32 col_untinted = col | ~IM_COL32_A_MASK;
@@ -3721,15 +3722,15 @@ void ImFont::RenderText(ImDrawList* draw_list, float size, const ImVec2& pos, Im
 
                 // We are NOT calling PrimRectUV() here because non-inlined causes too much overhead in a debug builds. Inlined here:
                 {
-                    idx_write[0] = (ImDrawIdx)(vtx_current_idx); idx_write[1] = (ImDrawIdx)(vtx_current_idx+1); idx_write[2] = (ImDrawIdx)(vtx_current_idx+2);
-                    idx_write[3] = (ImDrawIdx)(vtx_current_idx); idx_write[4] = (ImDrawIdx)(vtx_current_idx+2); idx_write[5] = (ImDrawIdx)(vtx_current_idx+3);
                     vtx_write[0].pos.x = x1; vtx_write[0].pos.y = y1; vtx_write[0].col = glyph_col; vtx_write[0].uv.x = u1; vtx_write[0].uv.y = v1;
                     vtx_write[1].pos.x = x2; vtx_write[1].pos.y = y1; vtx_write[1].col = glyph_col; vtx_write[1].uv.x = u2; vtx_write[1].uv.y = v1;
                     vtx_write[2].pos.x = x2; vtx_write[2].pos.y = y2; vtx_write[2].col = glyph_col; vtx_write[2].uv.x = u2; vtx_write[2].uv.y = v2;
-                    vtx_write[3].pos.x = x1; vtx_write[3].pos.y = y2; vtx_write[3].col = glyph_col; vtx_write[3].uv.x = u1; vtx_write[3].uv.y = v2;
-                    vtx_write += 4;
-                    vtx_current_idx += 4;
-                    idx_write += 6;
+                    
+                    vtx_write[3].pos.x = x1; vtx_write[3].pos.y = y1; vtx_write[3].col = glyph_col; vtx_write[3].uv.x = u1; vtx_write[3].uv.y = v1;
+                    vtx_write[4].pos.x = x2; vtx_write[4].pos.y = y2; vtx_write[4].col = glyph_col; vtx_write[4].uv.x = u2; vtx_write[4].uv.y = v2;
+                    vtx_write[5].pos.x = x1; vtx_write[5].pos.y = y2; vtx_write[5].col = glyph_col; vtx_write[5].uv.x = u1; vtx_write[5].uv.y = v2;
+                    vtx_write += 6;
+                    vtx_current_idx += 6;
                 }
             }
         }
@@ -3738,11 +3739,11 @@ void ImFont::RenderText(ImDrawList* draw_list, float size, const ImVec2& pos, Im
 
     // Give back unused vertices (clipped ones, blanks) ~ this is essentially a PrimUnreserve() action.
     draw_list->VtxBuffer.Size = (int)(vtx_write - draw_list->VtxBuffer.Data); // Same as calling shrink()
-    draw_list->IdxBuffer.Size = (int)(idx_write - draw_list->IdxBuffer.Data);
-    draw_list->CmdBuffer[draw_list->CmdBuffer.Size - 1].ElemCount -= (idx_expected_size - draw_list->IdxBuffer.Size);
+    draw_list->CmdBuffer[draw_list->CmdBuffer.Size - 1].VertexCount -= (vtx_expected_size - draw_list->VtxBuffer.Size);
     draw_list->_VtxWritePtr = vtx_write;
-    draw_list->_IdxWritePtr = idx_write;
     draw_list->_VtxCurrentIdx = vtx_current_idx;
+    
+    IM_ASSERT(draw_list->VtxBuffer.end() == draw_list->_VtxWritePtr);
 }
 
 //-----------------------------------------------------------------------------

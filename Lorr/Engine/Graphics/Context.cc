@@ -1,5 +1,5 @@
 // Created on Monday July 18th 2022 by exdal
-// Last modified on Wednesday May 31st 2023 by exdal
+// Last modified on Wednesday June 7th 2023 by exdal
 
 #include "Context.hh"
 
@@ -14,6 +14,7 @@
 _VK_IMPORT_SYMBOLS
 _VK_IMPORT_DEVICE_SYMBOLS
 _VK_IMPORT_INSTANCE_SYMBOLS
+_VK_IMPORT_INSTANCE_SYMBOLS_DEBUG
 #undef _VK_DEFINE_FUNCTION
 
 namespace lr::Graphics
@@ -469,11 +470,8 @@ Pipeline *Context::CreateGraphicsPipeline(GraphicsPipelineBuildInfo *pBuildInfo)
 
     /// DYNAMIC STATE ------------------------------------------------------------
 
-    constexpr static eastl::array<VkDynamicState, 3> kDynamicStates = {
-        VK_DYNAMIC_STATE_VIEWPORT,
-        VK_DYNAMIC_STATE_SCISSOR,
-        VK_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY,
-    };
+    constexpr static eastl::array<VkDynamicState, 2> kDynamicStates = { VK_DYNAMIC_STATE_VIEWPORT,
+                                                                        VK_DYNAMIC_STATE_SCISSOR };
 
     VkPipelineDynamicStateCreateInfo dynamicStateInfo = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
@@ -796,8 +794,6 @@ DescriptorSetLayout *Context::CreateDescriptorSetLayout(
 
     DescriptorSetLayout *pLayout = new DescriptorSetLayout;
 
-    // VkDescriptorBindingFlags
-
     VkDescriptorSetLayoutCreateFlags createFlags = 0;
     if (flags & DescriptorSetLayoutFlag::DescriptorBuffer)
         createFlags |= VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
@@ -806,6 +802,7 @@ DescriptorSetLayout *Context::CreateDescriptorSetLayout(
 
     VkDescriptorSetLayoutCreateInfo layoutCreateInfo = {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .pNext = nullptr,
         .flags = createFlags,
         .bindingCount = (u32)elements.size(),
         .pBindings = elements.data(),
@@ -1422,7 +1419,9 @@ bool Context::SetupInstance(BaseWindow *pWindow)
         LOG_CRITICAL("Cannot load Vulkan Instance function '{}'!", #_name); \
         return false;                                                       \
     }
-
+#if _DEBUG
+    _VK_IMPORT_INSTANCE_SYMBOLS_DEBUG
+#endif
     _VK_IMPORT_INSTANCE_SYMBOLS
 #undef _VK_DEFINE_FUNCTION
 

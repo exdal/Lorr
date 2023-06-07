@@ -1,5 +1,5 @@
 // Created on Monday March 20th 2023 by exdal
-// Last modified on Friday May 26th 2023 by exdal
+// Last modified on Tuesday June 6th 2023 by exdal
 
 #include "Device.hh"
 
@@ -28,6 +28,7 @@ static VkPhysicalDeviceRobustness2FeaturesEXT kRobustness2Features = {
     .pNext = nullptr,
     .nullDescriptor = true,
 };
+
 static VkPhysicalDeviceBufferDeviceAddressFeaturesEXT kBufferDeviceAddressFeatures = {
     .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES_EXT,
     .pNext = &kRobustness2Features,
@@ -58,9 +59,10 @@ static VkPhysicalDeviceVulkan12Features kDeviceFeatures_12 = {
     .pNext = &kDeviceFeatures_13,
     .descriptorIndexing = true,
     .shaderSampledImageArrayNonUniformIndexing = true,
+    .shaderStorageBufferArrayNonUniformIndexing = true,
     .descriptorBindingUpdateUnusedWhilePending = true,
     .descriptorBindingPartiallyBound = true,
-    .descriptorBindingVariableDescriptorCount = true,
+    .descriptorBindingVariableDescriptorCount = false,
     .runtimeDescriptorArray = true,
     .timelineSemaphore = true,
 };

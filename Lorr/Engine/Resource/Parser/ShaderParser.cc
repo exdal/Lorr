@@ -1,5 +1,5 @@
 // Created on Thursday May 18th 2023 by exdal
-// Last modified on Thursday June 1st 2023 by exdal
+// Last modified on Tuesday June 6th 2023 by exdal
 
 #include "Resource/Parser.hh"
 
@@ -31,16 +31,16 @@ bool Parser::ParseGLSL(BufferReadStream fileData, ShaderResource &resource, east
         switch (lr::Hash::FNV64String(line))
         {
             case LR_SHADER_PRAGMA_EXTENSIONS:
-                processedCode += "#extension GL_GOOGLE_include_directive : enable\n";
                 processedCode += "#extension GL_ARB_gpu_shader_int64 : require\n";
                 processedCode += "#extension GL_EXT_buffer_reference : enable\n";
                 processedCode += "#extension GL_EXT_buffer_reference2 : enable\n";
-                processedCode += "#extension GL_EXT_shader_explicit_arithmetic_types_int64 : enable\n";
                 processedCode += "#extension GL_EXT_shader_image_int64 : require\n";
+                processedCode += "#extension GL_GOOGLE_include_directive : enable\n";
                 processedCode += "#extension GL_EXT_shader_atomic_int64 : require\n";
                 processedCode += "#extension GL_EXT_scalar_block_layout : require\n";
-                processedCode += "#extension GL_EXT_samplerless_texture_functions : require\n";
                 processedCode += "#extension GL_EXT_nonuniform_qualifier : require\n";
+                processedCode += "#extension GL_EXT_samplerless_texture_functions : require\n";
+                processedCode += "#extension GL_EXT_shader_explicit_arithmetic_types_int64 : enable\n";
                 break;
 
             case LR_SHADER_PRAGMA_STAGE_VERTEX:

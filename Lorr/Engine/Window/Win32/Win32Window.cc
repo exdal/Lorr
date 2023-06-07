@@ -1,5 +1,5 @@
 // Created on Thursday May 5th 2022 by exdal
-// Last modified on Wednesday May 17th 2023 by exdal
+// Last modified on Friday June 2nd 2023 by exdal
 
 #include "Win32Window.hh"
 
@@ -165,8 +165,8 @@ void Win32Window::SetCursor(WindowCursor cursor)
         LoadCursor(NULL, IDC_ARROW),     // Arrow
         LoadCursor(NULL, IDC_IBEAM),     // TextInput
         LoadCursor(NULL, IDC_SIZEALL),   // ResizeAll
-        LoadCursor(NULL, IDC_SIZEWE),    // ResizeEW
         LoadCursor(NULL, IDC_SIZENS),    // ResizeNS
+        LoadCursor(NULL, IDC_SIZEWE),    // ResizeEW
         LoadCursor(NULL, IDC_SIZENESW),  // ResizeNESW
         LoadCursor(NULL, IDC_SIZENWSE),  // ResizeNWSE
         LoadCursor(NULL, IDC_HAND),      // Hand

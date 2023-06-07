@@ -1,5 +1,5 @@
 // Created on Wednesday May 4th 2022 by exdal
-// Last modified on Wednesday May 31st 2023 by exdal
+// Last modified on Thursday June 1st 2023 by exdal
 
 #include "Engine.hh"
 
@@ -64,30 +64,35 @@ void Engine::DispatchEvents()
         switch (event)
         {
             case ENGINE_EVENT_QUIT:
+            {
                 m_ShuttingDown = true;
                 break;
-
+            }
             case ENGINE_EVENT_RESIZE:
+            {
                 m_Window.m_Width = data.m_SizeWidth;
                 m_Window.m_Height = data.m_SizeHeight;
                 // m_API.ResizeSwapChain(data.m_SizeWidth, data.m_SizeHeight);
                 break;
-
+            }
             case ENGINE_EVENT_MOUSE_POSITION:
-                // ImGuiIO &io = ImGui::GetIO();
-                // io.MousePos.x = data.m_MouseX;
-                // io.MousePos.y = data.m_MouseY;
+            {
+                ImGuiIO &io = ImGui::GetIO();
+                io.MousePos.x = data.m_MouseX;
+                io.MousePos.y = data.m_MouseY;
                 break;
-
+            }
             case ENGINE_EVENT_MOUSE_STATE:
-                // ImGuiIO &io = ImGui::GetIO();
-                // io.MouseDown[data.m_Mouse - 1] = !(bool)data.m_MouseState;
+            {
+                ImGuiIO &io = ImGui::GetIO();
+                io.MouseDown[data.m_Mouse - 1] = !(bool)data.m_MouseState;
                 break;
-
+            }
             case ENGINE_EVENT_CURSOR_STATE:
+            {
                 m_Window.SetCursor(data.m_WindowCursor);
                 break;
-
+            }
             default:
                 break;
         }

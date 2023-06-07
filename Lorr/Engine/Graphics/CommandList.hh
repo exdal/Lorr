@@ -1,5 +1,5 @@
 // Created on Monday July 18th 2022 by exdal
-// Last modified on Thursday June 1st 2023 by exdal
+// Last modified on Tuesday June 6th 2023 by exdal
 
 #pragma once
 
@@ -35,6 +35,8 @@ struct BindlessLayout
 
     constexpr BindlessLayout(eastl::span<Binding> bindings)
     {
+        memset(&m_Data[0], ~0, m_Data.count * kDescriptorIDSize); // Debugging purposes
+
         u32 lastBinding = ~0;
         for (const Binding &binding : bindings)
         {
@@ -253,7 +255,7 @@ struct CommandList : APIObject<VK_OBJECT_TYPE_COMMAND_BUFFER>
     void CopyBuffer(Buffer *pSource, Image *pDest, ImageLayout layout);
 
     /// Draw Commands
-    void Draw(u32 vertexCount, u32 firstVertex = 0, u32 instanceCount = 1, u32 firstInstance = 1);
+    void Draw(u32 vertexCount, u32 firstVertex = 0, u32 instanceCount = 1, u32 firstInstance = 0);
     void DrawIndexed(
         u32 indexCount, u32 firstIndex = 0, u32 vertexOffset = 0, u32 instanceCount = 1, u32 firstInstance = 0);
     void Dispatch(u32 groupX, u32 groupY, u32 groupZ);

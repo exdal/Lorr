@@ -1,5 +1,5 @@
 // Created on Wednesday September 21st 2022 by exdal
-// Last modified on Sunday May 28th 2023 by exdal
+// Last modified on Tuesday June 6th 2023 by exdal
 
 #pragma once
 
@@ -129,7 +129,7 @@ struct ColorBlendAttachment : VkPipelineColorBlendAttachmentState
         BlendFactor dstBlend = BlendFactor::InvSrcAlpha,
         BlendOp blendOp = BlendOp::Add,
         BlendFactor srcBlendAlpha = BlendFactor::One,
-        BlendFactor dstBlendAlpha = BlendFactor::SrcAlpha,
+        BlendFactor dstBlendAlpha = BlendFactor::InvSrcAlpha,
         BlendOp blendOpAlpha = BlendOp::Add);
 };
 

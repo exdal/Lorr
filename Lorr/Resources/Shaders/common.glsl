@@ -33,11 +33,6 @@ layout(set = 1, binding = 0) uniform texture2D u_Images[];
 // TODO: storage images
 layout(set = 3, binding = 0) uniform sampler u_Samplers[];
 
-u32 lr_get_descriptor_id(in _lr_bindless_layout bindlessLayout, u32 layoutID)
-{
-    return bindlessLayout.Data[layoutID];
-}
-
-#define LR_GET_BUFFER(struct_name, id) struct_name(lr_buffer_ref.Address[lr_get_descriptor_id(lr_bindless_layout, id)])
-#define LR_GET_IMAGE(id) u_Images[lr_get_descriptor_id(lr_bindless_layout, id)]
-#define LR_GET_SAMPLER(id) u_Samplers[lr_get_descriptor_id(lr_bindless_layout, id)]
+#define LR_GET_BUFFER(struct_name, id) struct_name(lr_buffer_ref.Address[nonuniformEXT(lr_bindless_layout.Data[id])])
+#define LR_GET_IMAGE(id) u_Images[nonuniformEXT(lr_bindless_layout.Data[id])]
+#define LR_GET_SAMPLER(id) u_Samplers[nonuniformEXT(lr_bindless_layout.Data[id])]

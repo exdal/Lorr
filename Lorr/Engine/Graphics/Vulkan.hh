@@ -1,5 +1,5 @@
 // Created on Tuesday July 19th 2022 by exdal
-// Last modified on Tuesday May 16th 2023 by exdal
+// Last modified on Saturday June 3rd 2023 by exdal
 
 #pragma once
 
@@ -128,10 +128,12 @@
     _VK_DEFINE_FUNCTION(vkGetImageViewOpaqueCaptureDescriptorDataEXT); \
     _VK_DEFINE_FUNCTION(vkGetSamplerOpaqueCaptureDescriptorDataEXT);
 
-#define _VK_IMPORT_INSTANCE_SYMBOLS _VK_DEFINE_FUNCTION(vkSetDebugUtilsObjectNameEXT);
+#define _VK_IMPORT_INSTANCE_SYMBOLS 
+#define _VK_IMPORT_INSTANCE_SYMBOLS_DEBUG _VK_DEFINE_FUNCTION(vkSetDebugUtilsObjectNameEXT);
 
 _VK_IMPORT_SYMBOLS
 _VK_IMPORT_DEVICE_SYMBOLS
 _VK_IMPORT_INSTANCE_SYMBOLS
+_VK_IMPORT_INSTANCE_SYMBOLS_DEBUG
 
 #undef _VK_DEFINE_FUNCTION

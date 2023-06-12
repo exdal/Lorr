@@ -1,0 +1,24 @@
+[submodule "Vendor/Utility/DirectXMath"]
+	path = Vendor/Utility/DirectXMath
+	url = https://github.com/microsoft/DirectXMath.git
+[submodule "Vendor/Utility/tracy"]
+	path = Vendor/Utility/tracy
+	url = https://github.com/wolfpld/tracy.git
+[submodule "Vendor/Utility/fastgltf"]
+	path = Vendor/Utility/fastgltf
+	url = https://github.com/spnda/fastgltf.git
+[submodule "Vendor/Utility/fmt"]
+	path = Vendor/Utility/fmt
+	url = https://github.com/fmtlib/fmt.git
+[submodule "Vendor/Utility/spdlog"]
+	path = Vendor/Utility/spdlog
+	url = https://github.com/gabime/spdlog.git
+[submodule "Vendor/Graphics/imgui-v"]
+	path = Vendor/Graphics/imgui-v
+	url = https://github.com/exdal/imgui-v.git
+[submodule "Vendor/Graphics/glslang"]
+	path = Vendor/Graphics/glslang
+	url = https://github.com/KhronosGroup/glslang.git
+[submodule "Vendor/Graphics/Vulkan-Headers"]
+	path = Vendor/Graphics/Vulkan-Headers
+	url = https://github.com/KhronosGroup/Vulkan-Headers.git

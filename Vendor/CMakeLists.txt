@@ -1,8 +1,9 @@
+set (CMAKE_MODULE_PATH "${CMAKE_MODULE_PATH};${CMAKE_CURRENT_SOURCE_DIR}/EA/EASTL/scripts/CMake")
 add_subdirectory(EA/EABase)
 add_subdirectory(EA/EAAssert)
 add_subdirectory(EA/EAStdC)
-add_subdirectory(EA/EASTL)
 add_subdirectory(EA/EAThread)
+add_subdirectory(EA/EASTL)
 
 add_subdirectory(Utility/fmt)
 

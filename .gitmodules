@@ -22,3 +22,18 @@
 [submodule "Vendor/Graphics/Vulkan-Headers"]
 	path = Vendor/Graphics/Vulkan-Headers
 	url = https://github.com/KhronosGroup/Vulkan-Headers.git
+[submodule "Vendor/EA/EASTL"]
+	path = Vendor/EA/EASTL
+	url = https://github.com/exdal/EASTL.git
+[submodule "Vendor/EA/EAAssert"]
+	path = Vendor/EA/EAAssert
+	url = https://github.com/electronicarts/EAAssert.git
+[submodule "Vendor/EA/EABase"]
+	path = Vendor/EA/EABase
+	url = https://github.com/electronicarts/EABase.git
+[submodule "Vendor/EA/EAStdC"]
+	path = Vendor/EA/EAStdC
+	url = https://github.com/electronicarts/EAStdC.git
+[submodule "Vendor/EA/EAThread"]
+	path = Vendor/EA/EAThread
+	url = https://github.com/electronicarts/EAThread.git

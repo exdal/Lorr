@@ -1,5 +1,5 @@
 // Created on Tuesday March 14th 2023 by exdal
-// Last modified on Wednesday June 7th 2023 by exdal
+// Last modified on Monday June 12th 2023 by exdal
 
 #include "RenderPass.hh"
 
@@ -107,6 +107,7 @@ void RenderPassBuilder::InitDescriptorType(
     };
 
     info.m_pData = (u8 *)m_DescriptorAllocator.Allocate(memSize);
+    info.m_DataSize = memSize;
 
     if (usage & BufferUsage::ResourceDescriptor)
         m_ResourceDescriptors.push_back(info);
@@ -248,7 +249,7 @@ u64 RenderPassBuilder::GetResourceBufferSize()
 
     u64 size = 0;
     for (DescriptorBufferInfo &info : m_ResourceDescriptors)
-        size += m_pContext->AlignUpDescriptorOffset(info.m_Offset);
+        size += info.m_DataSize;
 
     return size;
 }
@@ -257,7 +258,7 @@ u64 RenderPassBuilder::GetSamplerBufferSize()
 {
     ZoneScoped;
 
-    return m_pContext->AlignUpDescriptorOffset(m_SamplerDescriptor.m_Offset);
+    return m_SamplerDescriptor.m_DataSize;
 }
 
 void RenderPassBuilder::GetResourceDescriptorOffsets(u64 *pOffsetsOut, u32 *pDescriptorSizeOut)
@@ -266,17 +267,13 @@ void RenderPassBuilder::GetResourceDescriptorOffsets(u64 *pOffsetsOut, u32 *pDes
 
     u64 descriptorOffset = 0;
     u32 descriptorCount = 0;
-    u64 *pOffsets = pOffsetsOut;
     for (DescriptorBufferInfo &info : m_ResourceDescriptors)
     {
-        if (info.m_Offset == 0)
-            continue;
-
         *pDescriptorSizeOut = ++descriptorCount;
         if (pOffsetsOut)
-            *(pOffsets++) = descriptorOffset;
+            *(pOffsetsOut++) = descriptorOffset;
 
-        descriptorOffset += m_pContext->AlignUpDescriptorOffset(info.m_Offset);
+        descriptorOffset += m_pContext->AlignUpDescriptorOffset(info.m_DataSize);
     }
 }
 
@@ -299,9 +296,6 @@ void RenderPassBuilder::GetResourceDescriptors(Buffer *pDst, CommandList *pList)
 
     for (DescriptorBufferInfo &info : m_ResourceDescriptors)
     {
-        if (info.m_Offset == 0)
-            continue;
-
         if (info.m_BindingID == LR_DESCRIPTOR_INDEX_BUFFER)
         {
             // THIS IS WRONG
@@ -311,7 +305,7 @@ void RenderPassBuilder::GetResourceDescriptors(Buffer *pDst, CommandList *pList)
             BufferDesc descriptorBufferDesc = {
                 .m_UsageFlags = BufferUsage::ResourceDescriptor | BufferUsage::TransferSrc,
                 .m_TargetAllocator = ResourceAllocator::BufferTLSF_Host,
-                .m_DataLen = info.m_Offset,
+                .m_DataLen = info.m_DataSize,
             };
             Buffer *pDescriptorBuffer = m_pContext->CreateBuffer(&descriptorBufferDesc);
 
@@ -319,7 +313,7 @@ void RenderPassBuilder::GetResourceDescriptors(Buffer *pDst, CommandList *pList)
 
             void *pDescriptorData = nullptr;
             m_pContext->MapMemory(pDescriptorBuffer, pDescriptorData, 0, descriptorBufferDesc.m_DataLen);
-            memcpy(pDescriptorData, info.m_pData, info.m_Offset);
+            memcpy(pDescriptorData, info.m_pData, info.m_DataSize);
             m_pContext->UnmapMemory(pDescriptorBuffer);
 
             DescriptorType elementType = BindingToDescriptorType(info.m_BindingID);

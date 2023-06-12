@@ -1,5 +1,5 @@
 // Created on Wednesday November 23rd 2022 by exdal
-// Last modified on Tuesday June 6th 2023 by exdal
+// Last modified on Monday June 12th 2023 by exdal
 
 #include "Graphics/Renderer/Pass.hh"
 
@@ -49,6 +49,8 @@ void AddImguiPass(RenderGraph *pGraph, eastl::string_view name)
             pGraph->FillImageData(data.m_pFontImage, eastl::span<u8>(pFontData, data.m_pFontImage->m_DataLen));
             free(pFontData);
 
+            io.Fonts->SetTexID(data.m_pFontImage);
+
             SamplerDesc samplerDesc = {
                 .m_MinFilter = Filtering::Linear,
                 .m_MagFilter = Filtering::Linear,
@@ -56,9 +58,9 @@ void AddImguiPass(RenderGraph *pGraph, eastl::string_view name)
                 .m_AddressU = TextureAddressMode::Mirror,
                 .m_AddressV = TextureAddressMode::Mirror,
                 .m_AddressW = TextureAddressMode::Mirror,
-                .m_MaxAnisotropy = 1,
-                .m_MinLOD = -1000,
-                .m_MaxLOD = 1000,
+                .m_MaxAnisotropy = 1.0f,
+                .m_MinLOD = -1000.0f,
+                .m_MaxLOD = 1000.0f,
             };
             data.m_pSampler = pContext->CreateSampler(&samplerDesc);
 

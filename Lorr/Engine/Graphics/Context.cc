@@ -1,5 +1,5 @@
 // Created on Monday July 18th 2022 by exdal
-// Last modified on Wednesday June 7th 2023 by exdal
+// Last modified on Monday June 12th 2023 by exdal
 
 #include "Context.hh"
 
@@ -894,7 +894,8 @@ void Context::GetDescriptorData(
                 break;
 
             case DescriptorType::Sampler:
-                descriptorData.pSampler = &info.m_pSampler->m_pHandle;
+                imageInfo.sampler = info.m_pSampler->m_pHandle;
+                descriptorData = { .pSampledImage = &imageInfo };
                 break;
 
             default:

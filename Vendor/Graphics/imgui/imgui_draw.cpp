@@ -1,4 +1,4 @@
-// dear imgui, v1.89.2 WIP
+// dear imgui, v1.89.6
 // (drawing and font code)
 
 /*
@@ -26,13 +26,12 @@ Index of this file:
 #define _CRT_SECURE_NO_WARNINGS
 #endif
 
-#include "imgui.h"
-#ifndef IMGUI_DISABLE
-
 #ifndef IMGUI_DEFINE_MATH_OPERATORS
 #define IMGUI_DEFINE_MATH_OPERATORS
 #endif
 
+#include "imgui.h"
+#ifndef IMGUI_DISABLE
 #include "imgui_internal.h"
 #ifdef IMGUI_ENABLE_FREETYPE
 #include "misc/freetype/imgui_freetype.h"
@@ -939,7 +938,9 @@ void ImDrawList::AddPolyline(const ImVec2* points, const int points_count, ImU32
                 _VtxWritePtr += 6;
             }
         }
+
         _VtxCurrentIdx += vtx_count;
+        IM_ASSERT(_VtxWritePtr == VtxBuffer.Data + _VtxCurrentIdx);
     }
     else
     {
@@ -976,7 +977,7 @@ void ImDrawList::AddPolyline(const ImVec2* points, const int points_count, ImU32
 // - Filled shapes must always use clockwise winding order. The anti-aliasing fringe depends on it. Counter-clockwise shapes will have "inward" anti-aliasing.
 void ImDrawList::AddConvexPolyFilled(const ImVec2* points, const int points_count, ImU32 col)
 {
-    if (points_count < 3)
+    if (points_count < 3 || (col & IM_COL32_A_MASK) == 0)
         return;
 
     const ImVec2 uv = _Data->TexUvWhitePixel;
@@ -1053,6 +1054,8 @@ void ImDrawList::AddConvexPolyFilled(const ImVec2* points, const int points_coun
             _VtxWritePtr += 6;
             _VtxCurrentIdx += 6;
         }
+
+        IM_ASSERT(_VtxWritePtr == VtxBuffer.Data + _VtxCurrentIdx);
     }
     else
     {
@@ -2393,7 +2396,12 @@ static bool ImFontAtlasBuildWithStbTruetype(ImFontAtlas* atlas)
         ImFontBuildDstData& dst_tmp = dst_tmp_array[src_tmp.DstIndex];
         src_tmp.SrcRanges = cfg.GlyphRanges ? cfg.GlyphRanges : atlas->GetGlyphRangesDefault();
         for (const ImWchar* src_range = src_tmp.SrcRanges; src_range[0] && src_range[1]; src_range += 2)
+        {
+            // Check for valid range. This may also help detect *some* dangling pointers, because a common
+            // user error is to setup ImFontConfig::GlyphRanges with a pointer to data that isn't persistent.
+            IM_ASSERT(src_range[0] <= src_range[1]);
             src_tmp.GlyphsHighest = ImMax(src_tmp.GlyphsHighest, (int)src_range[1]);
+        }
         dst_tmp.SrcCount++;
         dst_tmp.GlyphsHighest = ImMax(dst_tmp.GlyphsHighest, src_tmp.GlyphsHighest);
     }
@@ -2558,13 +2566,10 @@ static bool ImFontAtlasBuildWithStbTruetype(ImFontAtlas* atlas)
     // 9. Setup ImFont and glyphs for runtime
     for (int src_i = 0; src_i < src_tmp_array.Size; src_i++)
     {
-        ImFontBuildSrcData& src_tmp = src_tmp_array[src_i];
-        if (src_tmp.GlyphsCount == 0)
-            continue;
-
         // When merging fonts with MergeMode=true:
         // - We can have multiple input fonts writing into a same destination font.
         // - dst_font->ConfigData is != from cfg which is our source configuration.
+        ImFontBuildSrcData& src_tmp = src_tmp_array[src_i];
         ImFontConfig& cfg = atlas->ConfigData[src_i];
         ImFont* dst_font = cfg.DstFont;
 
@@ -2628,6 +2633,9 @@ void ImFontAtlasBuildPackCustomRects(ImFontAtlas* atlas, void* stbrp_context_opa
 
     ImVector<ImFontAtlasCustomRect>& user_rects = atlas->CustomRects;
     IM_ASSERT(user_rects.Size >= 1); // We expect at least the default custom rects to be registered, else something went wrong.
+#ifdef __GNUC__
+    if (user_rects.Size < 1) { __builtin_unreachable(); } // Workaround for GCC bug if IM_ASSERT() is defined to conditionally throw (see #5343)
+#endif
 
     ImVector<stbrp_rect> pack_rects;
     pack_rects.resize(user_rects.Size);
@@ -2948,19 +2956,19 @@ const ImWchar*  ImFontAtlas::GetGlyphRangesJapanese()
     // 2999 ideograms code points for Japanese
     // - 2136 Joyo (meaning "for regular use" or "for common use") Kanji code points
     // - 863 Jinmeiyo (meaning "for personal name") Kanji code points
-    // - Sourced from the character information database of the Information-technology Promotion Agency, Japan
-    //   - https://mojikiban.ipa.go.jp/mji/
-    //   - Available under the terms of the Creative Commons Attribution-ShareAlike 2.1 Japan (CC BY-SA 2.1 JP).
-    //     - https://creativecommons.org/licenses/by-sa/2.1/jp/deed.en
-    //     - https://creativecommons.org/licenses/by-sa/2.1/jp/legalcode
-    //   - You can generate this code by the script at:
-    //     - https://github.com/vaiorabbit/everyday_use_kanji
+    // - Sourced from official information provided by the government agencies of Japan:
+    //   - List of Joyo Kanji by the Agency for Cultural Affairs
+    //     - https://www.bunka.go.jp/kokugo_nihongo/sisaku/joho/joho/kijun/naikaku/kanji/
+    //   - List of Jinmeiyo Kanji by the Ministry of Justice
+    //     - http://www.moj.go.jp/MINJI/minji86.html
+    //   - Available under the terms of the Creative Commons Attribution 4.0 International (CC BY 4.0).
+    //     - https://creativecommons.org/licenses/by/4.0/legalcode
+    // - You can generate this code by the script at:
+    //   - https://github.com/vaiorabbit/everyday_use_kanji
     // - References:
     //   - List of Joyo Kanji
-    //     - (Official list by the Agency for Cultural Affairs) https://www.bunka.go.jp/kokugo_nihongo/sisaku/joho/joho/kakuki/14/tosin02/index.html
     //     - (Wikipedia) https://en.wikipedia.org/wiki/List_of_j%C5%8Dy%C5%8D_kanji
     //   - List of Jinmeiyo Kanji
-    //     - (Official list by the Ministry of Justice) http://www.moj.go.jp/MINJI/minji86.html
     //     - (Wikipedia) https://en.wikipedia.org/wiki/Jinmeiy%C5%8D_kanji
     // - Missing 1 Joyo Kanji: U+20B9F (Kun'yomi: Shikaru, On'yomi: Shitsu,shichi), see https://github.com/ocornut/imgui/pull/3627 for details.
     // You can use ImFontGlyphRangesBuilder to create your own ranges derived from this, by merging existing ranges or adding new characters.
@@ -3123,7 +3131,8 @@ ImFont::ImFont()
     FallbackAdvanceX = 0.0f;
     FallbackChar = (ImWchar)-1;
     EllipsisChar = (ImWchar)-1;
-    DotChar = (ImWchar)-1;
+    EllipsisWidth = EllipsisCharStep = 0.0f;
+    EllipsisCharCount = 0;
     FallbackGlyph = NULL;
     ContainerAtlas = NULL;
     ConfigData = NULL;
@@ -3204,17 +3213,7 @@ void ImFont::BuildLookupTable()
     SetGlyphVisible((ImWchar)' ', false);
     SetGlyphVisible((ImWchar)'\t', false);
 
-    // Ellipsis character is required for rendering elided text. We prefer using U+2026 (horizontal ellipsis).
-    // However some old fonts may contain ellipsis at U+0085. Here we auto-detect most suitable ellipsis character.
-    // FIXME: Note that 0x2026 is rarely included in our font ranges. Because of this we are more likely to use three individual dots.
-    const ImWchar ellipsis_chars[] = { (ImWchar)0x2026, (ImWchar)0x0085 };
-    const ImWchar dots_chars[] = { (ImWchar)'.', (ImWchar)0xFF0E };
-    if (EllipsisChar == (ImWchar)-1)
-        EllipsisChar = FindFirstExistingGlyph(this, ellipsis_chars, IM_ARRAYSIZE(ellipsis_chars));
-    if (DotChar == (ImWchar)-1)
-        DotChar = FindFirstExistingGlyph(this, dots_chars, IM_ARRAYSIZE(dots_chars));
-
-    // Setup fallback character
+    // Setup Fallback character
     const ImWchar fallback_chars[] = { (ImWchar)IM_UNICODE_CODEPOINT_INVALID, (ImWchar)'?', (ImWchar)' ' };
     FallbackGlyph = FindGlyphNoFallback(FallbackChar);
     if (FallbackGlyph == NULL)
@@ -3227,11 +3226,32 @@ void ImFont::BuildLookupTable()
             FallbackChar = (ImWchar)FallbackGlyph->Codepoint;
         }
     }
-
     FallbackAdvanceX = FallbackGlyph->AdvanceX;
     for (int i = 0; i < max_codepoint + 1; i++)
         if (IndexAdvanceX[i] < 0.0f)
             IndexAdvanceX[i] = FallbackAdvanceX;
+
+    // Setup Ellipsis character. It is required for rendering elided text. We prefer using U+2026 (horizontal ellipsis).
+    // However some old fonts may contain ellipsis at U+0085. Here we auto-detect most suitable ellipsis character.
+    // FIXME: Note that 0x2026 is rarely included in our font ranges. Because of this we are more likely to use three individual dots.
+    const ImWchar ellipsis_chars[] = { (ImWchar)0x2026, (ImWchar)0x0085 };
+    const ImWchar dots_chars[] = { (ImWchar)'.', (ImWchar)0xFF0E };
+    if (EllipsisChar == (ImWchar)-1)
+        EllipsisChar = FindFirstExistingGlyph(this, ellipsis_chars, IM_ARRAYSIZE(ellipsis_chars));
+    const ImWchar dot_char = FindFirstExistingGlyph(this, dots_chars, IM_ARRAYSIZE(dots_chars));
+    if (EllipsisChar != (ImWchar)-1)
+    {
+        EllipsisCharCount = 1;
+        EllipsisWidth = EllipsisCharStep = FindGlyph(EllipsisChar)->X1;
+    }
+    else if (dot_char != (ImWchar)-1)
+    {
+        const ImFontGlyph* glyph = FindGlyph(dot_char);
+        EllipsisChar = dot_char;
+        EllipsisCharCount = 3;
+        EllipsisCharStep = (glyph->X1 - glyph->X0) + 1.0f;
+        EllipsisWidth = EllipsisCharStep * 3.0f - 1.0f;
+    }
 }
 
 // API is designed this way to avoid exposing the 4K page size
@@ -3380,6 +3400,7 @@ const char* ImFont::CalcWordWrapPositionA(float scale, const char* text, const c
     bool inside_word = true;
 
     const char* s = text;
+    IM_ASSERT(text_end != NULL);
     while (s < text_end)
     {
         unsigned int c = (unsigned int)*s;
@@ -3388,8 +3409,6 @@ const char* ImFont::CalcWordWrapPositionA(float scale, const char* text, const c
             next_s = s + 1;
         else
             next_s = s + ImTextCharFromUtf8(&c, s, text_end);
-        if (c == 0)
-            break;
 
         if (c < 32)
         {
@@ -3495,15 +3514,9 @@ ImVec2 ImFont::CalcTextSizeA(float size, float max_width, float wrap_width, cons
         const char* prev_s = s;
         unsigned int c = (unsigned int)*s;
         if (c < 0x80)
-        {
             s += 1;
-        }
         else
-        {
             s += ImTextCharFromUtf8(&c, s, text_end);
-            if (c == 0) // Malformed UTF-8?
-                break;
-        }
 
         if (c < 32)
         {
@@ -3578,18 +3591,17 @@ void ImFont::RenderText(ImDrawList* draw_list, float size, const ImVec2& pos, Im
         while (y + line_height < clip_rect.y && s < text_end)
         {
             const char* line_end = (const char*)memchr(s, '\n', text_end - s);
-            const char* line_next = line_end ? line_end + 1 : text_end;
             if (word_wrap_enabled)
             {
                 // FIXME-OPT: This is not optimal as do first do a search for \n before calling CalcWordWrapPositionA().
                 // If the specs for CalcWordWrapPositionA() were reworked to optionally return on \n we could combine both.
                 // However it is still better than nothing performing the fast-forward!
-                s = CalcWordWrapPositionA(scale, s, line_next, wrap_width);
+                s = CalcWordWrapPositionA(scale, s, line_end ? line_end : text_end, wrap_width);
                 s = CalcWordWrapNextLineStartA(s, text_end);
             }
             else
             {
-                s = line_next;
+                s = line_end ? line_end + 1 : text_end;
             }
             y += line_height;
         }
@@ -3643,15 +3655,9 @@ void ImFont::RenderText(ImDrawList* draw_list, float size, const ImVec2& pos, Im
         // Decode and advance source
         unsigned int c = (unsigned int)*s;
         if (c < 0x80)
-        {
             s += 1;
-        }
         else
-        {
             s += ImTextCharFromUtf8(&c, s, text_end);
-            if (c == 0) // Malformed UTF-8?
-                break;
-        }
 
         if (c < 32)
         {
@@ -3796,6 +3802,7 @@ void ImGui::RenderArrow(ImDrawList* draw_list, ImVec2 pos, ImU32 col, ImGuiDir d
 
 void ImGui::RenderBullet(ImDrawList* draw_list, ImVec2 pos, ImU32 col)
 {
+    // FIXME-OPT: This should be baked in font.
     draw_list->AddCircleFilled(pos, draw_list->_Data->FontSize * 0.20f, col, 8);
 }
 

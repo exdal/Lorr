@@ -1,5 +1,5 @@
 // Created on Friday February 24th 2023 by exdal
-// Last modified on Monday May 29th 2023 by exdal
+// Last modified on Monday June 12th 2023 by exdal
 
 #pragma once
 
@@ -156,6 +156,7 @@ struct DescriptorBufferInfo
         Buffer *m_pBuffer;
     };
     u64 m_Offset = 0;
+    u64 m_DataSize = 0;
 };
 
 struct RenderGraph;

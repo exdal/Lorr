@@ -1,5 +1,3 @@
-// Created on Thursday December 8th 2022 by exdal
-// Last modified on Wednesday May 31st 2023 by exdal
 //-----------------------------------------------------------------------------
 // COMPILE-TIME OPTIONS FOR DEAR IMGUI
 // Runtime options (clipboard callbacks, enabling various features, etc.) can generally be set via the ImGuiIO structure.
@@ -92,12 +90,14 @@
         constexpr ImVec4(const MyVec4& f) : x(f.x), y(f.y), z(f.z), w(f.w) {}   \
         operator MyVec4() const { return MyVec4(x,y,z,w); }
 */
+//---- ...Or use Dear ImGui's own very basic math operators.
+//#define IMGUI_DEFINE_MATH_OPERATORS
 
 //---- Use 32-bit vertex indices (default is 16-bit) is one way to allow large meshes with more than 64K vertices.
 // Your renderer backend will need to support it (most example renderer backends support both 16/32-bit indices).
 // Another way to allow large meshes while keeping 16-bit indices is to handle ImDrawCmd::VtxOffset in your renderer.
 // Read about ImGuiBackendFlags_RendererHasVtxOffset for details.
-#define ImDrawIdx unsigned int
+//#define ImDrawIdx unsigned int
 
 //---- Override ImDrawCallback signature (will need to modify renderer backends accordingly)
 //struct ImDrawList;

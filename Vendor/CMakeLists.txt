@@ -5,6 +5,8 @@ add_subdirectory(EA/EASTL)
 add_subdirectory(EA/EAThread)
 
 add_subdirectory(Utility/fmt)
+
+set(SPDLOG_FMT_EXTERNAL ON)
 add_subdirectory(Utility/spdlog)
 
 add_subdirectory(Utility/DirectXMath)
@@ -13,9 +15,9 @@ add_subdirectory(Utility/tracy)
 add_subdirectory(Utility/fastgltf)
 
 set(SPIRV_SKIP_TESTS ON)
-
-# add_subdirectory(Graphics/SPIRV-Headers)
-# add_subdirectory(Graphics/SPIRV-Tools)
+set(BUILD_EXTERNAL OFF)
+set(ENABLE_GLSLANG_BINARIES OFF)
+set(ENABLE_HLSL OFF)
 add_subdirectory(Graphics/glslang)
 add_subdirectory(Graphics/imgui-v)
 add_subdirectory(Graphics/Vulkan-Headers)

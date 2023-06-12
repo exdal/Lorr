@@ -19,4 +19,3 @@ endfunction()
 
 add_example(BareBones PATH BareBones/*.cc)
 add_example(Imgui PATH Imgui/*.cc)
-add_example(GI PATH GI/*.cc)

@@ -1,5 +1,5 @@
 // Created on Wednesday May 4th 2022 by exdal
-// Last modified on Monday May 22nd 2023 by exdal
+// Last modified on Monday June 12th 2023 by exdal
 
 #pragma once
 
@@ -18,19 +18,14 @@ typedef signed short i16;
 typedef unsigned char u8;
 typedef signed char i8;
 
-#include <Tracy.hpp>
+#include <tracy/Tracy.hpp>
 
-#include <EASTL/string.h>
-#include <EASTL/string_view.h>
-#include <EASTL/algorithm.h>
+#include <EASTL/atomic.h>
+#include <EASTL/array.h>
 #include <EASTL/vector.h>
 #include <EASTL/fixed_vector.h>
-#include <EASTL/unordered_map.h>
-#include <EASTL/map.h>
-#include <EASTL/array.h>
-#include <EASTL/atomic.h>
-#include <EASTL/iterator.h>
-#include <EASTL/queue.h>
+#include <EASTL/string.h>
+#include <EASTL/string_view.h>
 #include <EASTL/span.h>
 
 #include <DirectXMath.h>

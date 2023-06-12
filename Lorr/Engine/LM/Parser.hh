@@ -1,5 +1,5 @@
 // Created on Thursday May 11th 2023 by exdal
-// Last modified on Saturday May 20th 2023 by exdal
+// Last modified on Monday June 12th 2023 by exdal
 #pragma once
 
 #include "Crypt/FNV.hh"

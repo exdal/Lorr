@@ -565,7 +565,7 @@ SwapChain *Context::CreateSwapChain(BaseWindow *pWindow, u32 imageCount, SwapCha
 
         if (!m_pSurface->IsFormatSupported(format, pSwapChain->m_ColorSpace))
         {
-            LOG_CRITICAL("SwapChain does not support format {}!", format);
+            LOG_CRITICAL("SwapChain does not support format {}!", (u32)format);
             return nullptr;
         }
     }

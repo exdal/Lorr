@@ -1,7 +1,9 @@
 // Created on Friday November 18th 2022 by exdal
-// Last modified on Wednesday May 17th 2023 by exdal
+// Last modified on Monday June 12th 2023 by exdal
 
 #pragma once
+
+#include <EASTL/atomic.h>
 
 #include "Memory/MemoryUtils.hh"
 

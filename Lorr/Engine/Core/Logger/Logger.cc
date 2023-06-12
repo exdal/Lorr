@@ -1,7 +1,9 @@
 // Created on Thursday May 5th 2022 by exdal
-// Last modified on Wednesday May 24th 2023 by exdal
+// Last modified on Monday June 12th 2023 by exdal
 
 #include "Logger.hh"
+
+#include <EASTL/vector.h>
 
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/sinks/stdout_color_sinks.h>

@@ -3,7 +3,7 @@ set(LORR_VENDOR
     EAThread
     DirectXMath
     lw
-    tracy
+    TracyClient
 
     fmt
     spdlog
@@ -14,7 +14,7 @@ set(LORR_VENDOR
     SPIRV 
     Vulkan-Headers
     imgui
-    tinygltf
+    fastgltf
 )
 
 # Core

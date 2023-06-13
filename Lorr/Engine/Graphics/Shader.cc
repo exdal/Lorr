@@ -1,5 +1,5 @@
 // Created on Sunday March 12th 2023 by exdal
-// Last modified on Wednesday May 31st 2023 by exdal
+// Last modified on Monday June 12th 2023 by exdal
 
 #include "Shader.hh"
 
@@ -169,7 +169,7 @@ glsl_include_result_t *IncludeLocalCb(
 
     u64 allocSize = sizeof(glsl_include_result_t) + fv.Size();
 
-    glsl_include_result_t *pResult = (glsl_include_result_t *)malloc(allocSize);
+    glsl_include_result_t *pResult = Memory::Allocate<glsl_include_result_t>(allocSize);
     memset(pResult, 0, allocSize);
 
     u8 *pCode = (u8 *)pResult + sizeof(glsl_include_result_t);

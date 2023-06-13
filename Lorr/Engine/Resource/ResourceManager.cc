@@ -1,5 +1,5 @@
 // Created on Monday May 15th 2023 by exdal
-// Last modified on Wednesday May 31st 2023 by exdal
+// Last modified on Monday June 12th 2023 by exdal
 
 #include "ResourceManager.hh"
 #include "Resource/Parser.hh"
@@ -65,7 +65,7 @@ void ResourceManager::Init()
             });
     }
 
-    Job::JobManager::WaitForAll();
+    Job::JobManager::WaitForAll(); // This does not work properly
 }
 
 }  // namespace lr::Resource

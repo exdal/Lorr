@@ -1,5 +1,5 @@
 // Created on Monday July 18th 2022 by exdal
-// Last modified on Tuesday June 6th 2023 by exdal
+// Last modified on Monday June 12th 2023 by exdal
 
 #pragma once
 
@@ -35,7 +35,7 @@ struct BindlessLayout
 
     constexpr BindlessLayout(eastl::span<Binding> bindings)
     {
-        memset(&m_Data[0], ~0, m_Data.count * kDescriptorIDSize); // Debugging purposes
+        memset(&m_Data[0], ~0, m_Data.size() * kDescriptorIDSize); // Debugging purposes
 
         u32 lastBinding = ~0;
         for (const Binding &binding : bindings)

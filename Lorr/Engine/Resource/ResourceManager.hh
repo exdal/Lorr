@@ -1,5 +1,5 @@
 // Created on Monday May 15th 2023 by exdal
-// Last modified on Wednesday May 24th 2023 by exdal
+// Last modified on Monday June 12th 2023 by exdal
 
 #pragma once
 
@@ -64,9 +64,9 @@ struct ResourceManager
         ScopedSpinLock _(m_AllocatorLock);
 
         _Resource *pResource = Get<_Resource>(name);
-        ResourceWrapper<_Resource>::Destroy(pResource);
+        ResourceWrapper<_Resource>::Destroy(*pResource);
 
-        Memory::TLSFBlock *pBlock = (Memory::TLSFBlock *)(((u8 *)pResource) - PTR_SIZE);
+        Memory::TLSFBlock *pBlock = *(Memory::TLSFBlock **)((u8 *)pResource - PTR_SIZE);
         m_Allocator.Free(pBlock, false);
 
         // Let's keep the data inside map, it's a pointer anyway, not a big deal to hold

@@ -1,5 +1,5 @@
 // Created on Wednesday May 17th 2023 by exdal
-// Last modified on Wednesday May 24th 2023 by exdal
+// Last modified on Monday June 12th 2023 by exdal
 
 #include "Job.hh"
 #include "Utils/Timer.hh"
@@ -17,6 +17,8 @@ static iptr WorkerFn(void *pData)
         JobFn func;
         if (_man.m_Jobs.pop(func))
         {
+            ZoneScoped;
+
             pThis->SetBusy();
             func();
 
@@ -24,8 +26,7 @@ static iptr WorkerFn(void *pData)
         }
 
         pThis->SetIdle();
-
-        EAProcessorPause();  // maximize the throughput
+        EAProcessorPause();
     }
 
     return 1;
@@ -49,8 +50,6 @@ void Worker::Init(u32 id, u32 processor)
 
 void Worker::SetBusy()
 {
-    ZoneScoped;
-
     u64 mask = _man.m_StatusMask.load(eastl::memory_order_acquire);
     mask |= 1 << m_ID;
     _man.m_StatusMask.store(mask, eastl::memory_order_release);
@@ -58,8 +57,6 @@ void Worker::SetBusy()
 
 void Worker::SetIdle()
 {
-    ZoneScoped;
-
     u64 mask = _man.m_StatusMask.load(eastl::memory_order_acquire);
     mask &= ~(1 << m_ID);
     _man.m_StatusMask.store(mask, eastl::memory_order_release);

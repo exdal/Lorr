@@ -1,6 +1,5 @@
-//
-// Created on Monday 26th September 2022 by exdal
-//
+// Created on Monday September 26th 2022 by exdal
+// Last modified on Monday June 12th 2023 by exdal
 
 #pragma once
 
@@ -15,6 +14,8 @@ namespace lr::Memory
         u64 size = count * sizeof(T);
 
         T *pData = (T *)malloc(size);
+        TracyAlloc(pData, size);
+
         assert(pData && "Failed to allocate memory.");
         memset(pData, 0, size);
 
@@ -26,8 +27,12 @@ namespace lr::Memory
     template<typename T>
     void Reallocate(T *&pData, u64 newCount)
     {
+        TracyFree(pData);
+
         u64 size = newCount * sizeof(T);
         pData = (T *)realloc(pData, size);
+
+        TracyAlloc(pData, size);
         assert(pData && "Failed to allocate memory.");
         memset(pData, 0, size);
     }
@@ -35,6 +40,8 @@ namespace lr::Memory
     template<typename T>
     void Release(T *pData)
     {
+        TracyFree(pData);
+        
         free(pData);
     }
 

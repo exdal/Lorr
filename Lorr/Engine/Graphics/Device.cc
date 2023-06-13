@@ -1,5 +1,5 @@
 // Created on Monday March 20th 2023 by exdal
-// Last modified on Tuesday June 6th 2023 by exdal
+// Last modified on Monday June 12th 2023 by exdal
 
 #include "Device.hh"
 
@@ -12,11 +12,14 @@ namespace lr::Graphics
 
 /// These extensions are REQUIRED to be available on selected device.
 
-static constexpr eastl::array<const char *, 9> kRequiredExtensions = {
+static const char *kppRequiredExtensions[] = {
     "VK_KHR_swapchain",         "VK_KHR_depth_stencil_resolve",   "VK_KHR_dynamic_rendering",
     "VK_KHR_synchronization2",  "VK_EXT_extended_dynamic_state2", "VK_KHR_timeline_semaphore",
     "VK_EXT_descriptor_buffer", "VK_EXT_descriptor_indexing",     "VK_EXT_robustness2",
+    "VK_EXT_host_query_reset",  "VK_EXT_calibrated_timestamps",
 };
+
+static constexpr eastl::span<const char *> kRequiredExtensions(kppRequiredExtensions);
 
 ////////////////////////////////////
 /// Device Feature Configuration ///
@@ -215,9 +218,9 @@ VkDevice PhysicalDevice::GetLogicalDevice()
     VkDeviceCreateInfo deviceCreateInfo = {
         .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
         .pNext = &kDeviceFeatures_11,
-        .queueCreateInfoCount = m_QueueInfos.count,
+        .queueCreateInfoCount = (u32)m_QueueInfos.size(),
         .pQueueCreateInfos = m_QueueInfos.data(),
-        .enabledExtensionCount = kRequiredExtensions.count,
+        .enabledExtensionCount = kRequiredExtensions.size(),
         .ppEnabledExtensionNames = kRequiredExtensions.data(),
         .pEnabledFeatures = &kDeviceFeatures_10,
     };
@@ -346,7 +349,7 @@ void Surface::Init(BaseWindow *pWindow, VkInstance pInstance, PhysicalDevice *pP
     m_SupportedTransforms = capabilities.supportedTransforms;
     m_CurrentTransform = capabilities.currentTransform;
     m_SupportedCompositeAlpha = capabilities.supportedCompositeAlpha;
-}  // namespace lr::Graphics
+}
 
 bool Surface::IsFormatSupported(VkFormat format, VkColorSpaceKHR &colorSpaceOut)
 {

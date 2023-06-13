@@ -1,5 +1,5 @@
 // Created on Wednesday May 4th 2022 by exdal
-// Last modified on Thursday June 1st 2023 by exdal
+// Last modified on Monday June 12th 2023 by exdal
 
 #include "Engine.hh"
 
@@ -31,7 +31,11 @@ void Engine::Init(EngineDesc &engineDesc)
     };
 
     Graphics::APIDesc apiDesc = {
+#ifdef TRACY_ENABLE
+        .m_ImageCount = 1,
+#else
         .m_ImageCount = CONFIG_GET_VAR(api_swapchain_frames),
+#endif
         .m_pTargetWindow = &m_Window,
         .m_AllocatorDesc = gpAllocators,
     };
@@ -54,7 +58,7 @@ void Engine::PushEvent(Event event, EngineEventData &data)
 
 void Engine::DispatchEvents()
 {
-    ZoneScoped;
+    ZoneScopedN("Dispatch Engine Events");
 
     while (m_EventMan.Peek())
     {
@@ -106,7 +110,7 @@ void Engine::Prepare()
 
 void Engine::BeginFrame()
 {
-    ZoneScoped;
+    ZoneScopedN("Engine Begin Frame");
 
     m_Window.Poll();
     DispatchEvents();
@@ -116,7 +120,7 @@ void Engine::BeginFrame()
 
 void Engine::EndFrame()
 {
-    ZoneScoped;
+    ZoneScopedN("Engine End Frame");
 
     m_ImGui.EndFrame();
 

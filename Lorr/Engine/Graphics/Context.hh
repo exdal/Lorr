@@ -1,5 +1,5 @@
 // Created on Monday July 18th 2022 by exdal
-// Last modified on Wednesday June 7th 2023 by exdal
+// Last modified on Tuesday June 13th 2023 by exdal
 
 #pragma once
 
@@ -13,6 +13,8 @@
 #include "CommandList.hh"
 #include "Pipeline.hh"
 #include "SwapChain.hh"
+
+#include "TracyVK.hh"
 
 #ifdef CreateSemaphore
 #undef CreateSemaphore
@@ -224,6 +226,7 @@ struct Context
     VKTLSFAllocator m_MAImageTLSF;
 
     HMODULE m_VulkanLib;
-};
 
+    tracy::VkCtx *m_pTracyCtx = nullptr;
+};
 }  // namespace lr::Graphics

@@ -1,5 +1,5 @@
 // Created on Saturday April 22nd 2023 by exdal
-// Last modified on Thursday June 1st 2023 by exdal
+// Last modified on Monday June 12th 2023 by exdal
 
 #include "Graphics/Renderer/Pass.hh"
 
@@ -58,6 +58,9 @@ void AddGeometryPass(RenderGraph *pGraph, eastl::string_view name)
 
             Shader *pVertexShader = pContext->CreateShader(pVertexShaderData);
             Shader *pPixelShader = pContext->CreateShader(pPixelShaderData);
+
+            Engine::GetResourceMan()->Delete<Resource::ShaderResource>("shader://bindless_test.vs");
+            Engine::GetResourceMan()->Delete<Resource::ShaderResource>("shader://bindless_test.fs");
 
             builder.SetColorAttachment("$backbuffer", { AttachmentOp::Load, AttachmentOp::Store });
             builder.SetBlendAttachment({ true });

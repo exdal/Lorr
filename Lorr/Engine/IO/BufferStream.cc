@@ -1,5 +1,5 @@
 // Created on Wednesday July 6th 2022 by exdal
-// Last modified on Saturday May 20th 2023 by exdal
+// Last modified on Monday June 12th 2023 by exdal
 
 #include "BufferStream.hh"
 
@@ -53,7 +53,7 @@ void *BaseBufferStream::GetNew(u32 dataLen, u32 count)
 {
     ZoneScoped;
 
-    void *pData = malloc(dataLen * count);
+    void *pData = Memory::Allocate<u8>(dataLen * count);
     memcpy(pData, m_pData + m_DataOffset, dataLen * count);
     m_DataOffset += dataLen * count;
 

@@ -1,5 +1,5 @@
 // Created on Monday July 18th 2022 by exdal
-// Last modified on Monday June 12th 2023 by exdal
+// Last modified on Tuesday June 13th 2023 by exdal
 
 #include "Context.hh"
 
@@ -15,6 +15,7 @@ _VK_IMPORT_SYMBOLS
 _VK_IMPORT_DEVICE_SYMBOLS
 _VK_IMPORT_INSTANCE_SYMBOLS
 _VK_IMPORT_INSTANCE_SYMBOLS_DEBUG
+
 #undef _VK_DEFINE_FUNCTION
 
 namespace lr::Graphics
@@ -45,6 +46,8 @@ bool Context::Init(APIDesc *pDesc)
 
     if (!SetupDevice())
         return false;
+        
+    m_pTracyCtx = TracyVkContextHostCalibrated(m_pPhysicalDevice->m_pHandle, m_pDevice);
 
     m_pSwapChain = CreateSwapChain(pDesc->m_pTargetWindow, pDesc->m_ImageCount, nullptr);
     SetObjectName(m_pPhysicalDevice, "Physical Device");
@@ -175,6 +178,7 @@ void Context::EndCommandList(CommandList *pList)
 {
     ZoneScoped;
 
+    TracyVkCollect(m_pTracyCtx, pList->m_pHandle);
     vkEndCommandBuffer(pList->m_pHandle);
 }
 
@@ -476,7 +480,7 @@ Pipeline *Context::CreateGraphicsPipeline(GraphicsPipelineBuildInfo *pBuildInfo)
     VkPipelineDynamicStateCreateInfo dynamicStateInfo = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
         .pNext = nullptr,
-        .dynamicStateCount = kDynamicStates.count,
+        .dynamicStateCount = kDynamicStates.size(),
         .pDynamicStates = kDynamicStates.data(),
     };
 
@@ -696,8 +700,7 @@ void Context::BeginFrame()
         m_pDevice, m_pSwapChain->m_pHandle, UINT64_MAX, pSemaphore->m_pHandle, nullptr, &imageIdx);
     if (res != VK_SUCCESS)
     {
-        assert(!"Uhh please implement swapchain resizing, thanks");
-        WaitForWork();  // FUCK
+        WaitForWork();
     }
 
     m_pSwapChain->Advance(imageIdx, pSemaphore);
@@ -1352,7 +1355,7 @@ bool Context::SetupInstance(BaseWindow *pWindow)
     constexpr u32 debugExtensionCount = 0;
 #endif
 
-    constexpr eastl::array<const char *, 3 + debugExtensionCount> ppRequiredExtensions = {
+    constexpr const char *ppRequiredExtensions[] = {
         "VK_KHR_surface",
         "VK_KHR_get_physical_device_properties2",
         "VK_KHR_win32_surface",
@@ -1362,6 +1365,7 @@ bool Context::SetupInstance(BaseWindow *pWindow)
         "VK_EXT_debug_report",
 #endif
     };
+    eastl::span<const char *const> requiredExtensions = ppRequiredExtensions;
 
     for (auto &pExtensionName : ppRequiredExtensions)
     {
@@ -1405,8 +1409,8 @@ bool Context::SetupInstance(BaseWindow *pWindow)
     VkInstanceCreateInfo createInfo = {};
     createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     createInfo.pApplicationInfo = &appInfo;
-    createInfo.enabledExtensionCount = ppRequiredExtensions.count;
-    createInfo.ppEnabledExtensionNames = ppRequiredExtensions.data();
+    createInfo.enabledExtensionCount = requiredExtensions.size();
+    createInfo.ppEnabledExtensionNames = requiredExtensions.data();
     createInfo.enabledLayerCount = 0;  //! WE USE VULKAN CONFIGURATOR FOR LAYERS
     createInfo.ppEnabledLayerNames = nullptr;
     vkCreateInstance(&createInfo, nullptr, &m_pInstance);
@@ -1469,12 +1473,12 @@ bool Context::SetupDevice()
 
     /// LOAD DEVICE EXCLUSIVE FUNCTIONS ///
 
-#define _VK_DEFINE_FUNCTION(_name)                                          \
-    _name = (PFN_##_name)vkGetDeviceProcAddr(m_pDevice, #_name);            \
-    if (_name == nullptr)                                                   \
-    {                                                                       \
-        LOG_CRITICAL("Cannot load Vulkan Instance function '{}'!", #_name); \
-        return false;                                                       \
+#define _VK_DEFINE_FUNCTION(_name)                                        \
+    _name = (PFN_##_name)vkGetDeviceProcAddr(m_pDevice, #_name);          \
+    if (_name == nullptr)                                                 \
+    {                                                                     \
+        LOG_CRITICAL("Cannot load Vulkan Device function '{}'!", #_name); \
+        return false;                                                     \
     }
 
     _VK_IMPORT_DEVICE_SYMBOLS

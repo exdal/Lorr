@@ -1,5 +1,5 @@
 // Created on Tuesday July 19th 2022 by exdal
-// Last modified on Saturday June 3rd 2023 by exdal
+// Last modified on Monday June 12th 2023 by exdal
 
 #pragma once
 
@@ -114,7 +114,13 @@
     _VK_DEFINE_FUNCTION(vkDestroyDescriptorSetLayout);              \
     _VK_DEFINE_FUNCTION(vkGetSemaphoreCounterValue);                \
     _VK_DEFINE_FUNCTION(vkGetPhysicalDeviceProperties2);            \
-    _VK_DEFINE_FUNCTION(vkGetBufferDeviceAddress);
+    _VK_DEFINE_FUNCTION(vkGetBufferDeviceAddress);                  \
+    _VK_DEFINE_FUNCTION(vkCreateQueryPool);                         \
+    _VK_DEFINE_FUNCTION(vkResetQueryPool);                          \
+    _VK_DEFINE_FUNCTION(vkDestroyQueryPool);                        \
+    _VK_DEFINE_FUNCTION(vkCmdWriteTimestamp);                       \
+    _VK_DEFINE_FUNCTION(vkCmdResetQueryPool);                       \
+    _VK_DEFINE_FUNCTION(vkGetQueryPoolResults);
 
 #define _VK_IMPORT_DEVICE_SYMBOLS                                      \
     _VK_DEFINE_FUNCTION(vkCmdBindDescriptorBufferEmbeddedSamplersEXT); \
@@ -126,9 +132,10 @@
     _VK_DEFINE_FUNCTION(vkGetDescriptorSetLayoutSizeEXT);              \
     _VK_DEFINE_FUNCTION(vkGetImageOpaqueCaptureDescriptorDataEXT);     \
     _VK_DEFINE_FUNCTION(vkGetImageViewOpaqueCaptureDescriptorDataEXT); \
-    _VK_DEFINE_FUNCTION(vkGetSamplerOpaqueCaptureDescriptorDataEXT);
+    _VK_DEFINE_FUNCTION(vkGetSamplerOpaqueCaptureDescriptorDataEXT);   \
+    _VK_DEFINE_FUNCTION(vkGetCalibratedTimestampsEXT);
 
-#define _VK_IMPORT_INSTANCE_SYMBOLS 
+#define _VK_IMPORT_INSTANCE_SYMBOLS _VK_DEFINE_FUNCTION(vkGetPhysicalDeviceCalibrateableTimeDomainsEXT);
 #define _VK_IMPORT_INSTANCE_SYMBOLS_DEBUG _VK_DEFINE_FUNCTION(vkSetDebugUtilsObjectNameEXT);
 
 _VK_IMPORT_SYMBOLS

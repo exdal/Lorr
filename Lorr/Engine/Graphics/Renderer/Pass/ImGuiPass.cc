@@ -1,5 +1,5 @@
 // Created on Wednesday November 23rd 2022 by exdal
-// Last modified on Monday June 12th 2023 by exdal
+// Last modified on Tuesday June 13th 2023 by exdal
 
 #include "Graphics/Renderer/Pass.hh"
 
@@ -89,6 +89,9 @@ void AddImguiPass(RenderGraph *pGraph, eastl::string_view name)
             Shader *pVertexShader = pContext->CreateShader(pVertexShaderData);
             Shader *pPixelShader = pContext->CreateShader(pPixelShaderData);
 
+            Engine::GetResourceMan()->Delete<Resource::ShaderResource>("shader://imgui.vs");
+            Engine::GetResourceMan()->Delete<Resource::ShaderResource>("shader://imgui.fs");
+
             builder.SetColorAttachment("$backbuffer", { AttachmentOp::Load, AttachmentOp::Store });
             builder.SetBlendAttachment({ true });
             builder.SetShader(pVertexShader);
@@ -136,6 +139,7 @@ void AddImguiPass(RenderGraph *pGraph, eastl::string_view name)
                 ImDrawList *pDrawList = pDrawData->CmdLists[i];
                 for (ImDrawCmd &cmd : pDrawList->CmdBuffer)
                 {
+                    TracyVkZone(pContext->m_pTracyCtx, pList->m_pHandle, "ImGui Draw");
                     ImVec2 clipMin(cmd.ClipRect.x - clipOffset.x, cmd.ClipRect.y - clipOffset.y);
                     ImVec2 clipMax(cmd.ClipRect.z - clipOffset.x, cmd.ClipRect.w - clipOffset.y);
                     if (clipMax.x <= clipMin.x || clipMax.y <= clipMin.y)

@@ -1,5 +1,5 @@
 // Created on Friday December 9th 2022 by exdal
-// Last modified on Wednesday May 24th 2023 by exdal
+// Last modified on Monday June 12th 2023 by exdal
 #include "Application.hh"
 #include <stdarg.h>
 
@@ -12,7 +12,7 @@ namespace lr
 void Application::PreInit(BaseApplicationDesc &desc)
 {
     ZoneScoped;
-
+    
     eastl::string currentPath;
     OS::GetCurrentDir(currentPath);
     currentPath += "\\bin";
@@ -41,6 +41,8 @@ void Application::Run()
         m_Engine.BeginFrame();
         Poll(deltaTime);
         m_Engine.EndFrame();
+
+        FrameMark;
     }
 }
 

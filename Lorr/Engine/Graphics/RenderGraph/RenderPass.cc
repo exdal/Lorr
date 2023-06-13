@@ -1,5 +1,5 @@
 // Created on Tuesday March 14th 2023 by exdal
-// Last modified on Monday June 12th 2023 by exdal
+// Last modified on Tuesday June 13th 2023 by exdal
 
 #include "RenderPass.hh"
 
@@ -298,31 +298,36 @@ void RenderPassBuilder::GetResourceDescriptors(Buffer *pDst, CommandList *pList)
     {
         if (info.m_BindingID == LR_DESCRIPTOR_INDEX_BUFFER)
         {
-            // THIS IS WRONG
-
-            /// Create temp buffer to get descriptor data and map into resource descriptor buffer
-
             BufferDesc descriptorBufferDesc = {
-                .m_UsageFlags = BufferUsage::ResourceDescriptor | BufferUsage::TransferSrc,
-                .m_TargetAllocator = ResourceAllocator::BufferTLSF_Host,
+                .m_UsageFlags = BufferUsage::ResourceDescriptor | BufferUsage::TransferDst,
+                .m_TargetAllocator = ResourceAllocator::BufferTLSF,
                 .m_DataLen = info.m_DataSize,
             };
             Buffer *pDescriptorBuffer = m_pContext->CreateBuffer(&descriptorBufferDesc);
 
-            /// Map it's contents into temp buffer
+            {
+                BufferDesc tempBufferDesc = {
+                    .m_UsageFlags = BufferUsage::TransferSrc,
+                    .m_TargetAllocator = ResourceAllocator::BufferFrametime,
+                    .m_DataLen = info.m_DataSize,
+                };
+                Buffer *pTempBuffer = m_pContext->CreateBuffer(&tempBufferDesc);
 
-            void *pDescriptorData = nullptr;
-            m_pContext->MapMemory(pDescriptorBuffer, pDescriptorData, 0, descriptorBufferDesc.m_DataLen);
-            memcpy(pDescriptorData, info.m_pData, info.m_DataSize);
-            m_pContext->UnmapMemory(pDescriptorBuffer);
+                void *pTempMapData = nullptr;
+                m_pContext->MapMemory(pTempBuffer, pTempMapData, 0, descriptorBufferDesc.m_DataLen);
+                memcpy(pTempMapData, info.m_pData, info.m_DataSize);
+                m_pContext->UnmapMemory(pTempBuffer);
+
+                pList->CopyBuffer(pTempBuffer, pDescriptorBuffer, 0, 0, pTempBuffer->m_DeviceDataLen);
+
+                m_pContext->DeleteBuffer(pTempBuffer);
+            }
 
             DescriptorType elementType = BindingToDescriptorType(info.m_BindingID);
             u64 bindingSize = m_pContext->GetDescriptorSize(elementType);
 
             DescriptorGetInfo bufferInfo(pDescriptorBuffer);
             m_pContext->GetDescriptorData(elementType, bufferInfo, bindingSize, (u8 *)pMapData + mapOffset);
-
-            // m_pContext->DeleteBuffer(pDescriptorBuffer, false);
 
             mapOffset += m_pContext->AlignUpDescriptorOffset(bindingSize);
         }
@@ -331,11 +336,8 @@ void RenderPassBuilder::GetResourceDescriptors(Buffer *pDst, CommandList *pList)
             /// Non-buffer descriptors are different, we already get their descriptors unlike buffers
             /// so it's safe to just copy their memory into resource descriptor
 
-            // TODO: Currently it's only one element is bound, which is the first element
-            // TODO: we will see how this goes, we can convert this to another set if not possible
-            memcpy((u8 *)pMapData + mapOffset, info.m_pData, info.m_Offset);
-
-            mapOffset += m_pContext->AlignUpDescriptorOffset(info.m_Offset);
+            memcpy((u8 *)pMapData + mapOffset, info.m_pData, info.m_DataSize);
+            mapOffset += m_pContext->AlignUpDescriptorOffset(info.m_DataSize);
         }
     }
 

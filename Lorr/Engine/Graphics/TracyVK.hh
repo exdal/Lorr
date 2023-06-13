@@ -5,7 +5,7 @@
 #if !defined TRACY_ENABLE
 
 #if defined VK_EXT_host_query_reset
-#define TracyVkContextHostCalibrated(x, y, z, w, a) nullptr
+#define TracyVkContextHostCalibrated(x, y) nullptr
 #endif
 #define TracyVkDestroy(x)
 #define TracyVkContextName(c, x, y)
@@ -490,7 +490,6 @@ static inline VkCtx *CreateVkContext(VkPhysicalDevice physdev, VkDevice device)
     new (ctx) VkCtx(physdev, device);
     return ctx;
 }
-#endif
 
 static inline void DestroyVkContext(VkCtx *ctx)
 {
@@ -585,4 +584,6 @@ using TracyVkCtx = tracy::VkCtx *;
 #define TracyVkZoneCS(ctx, cmdbuf, name, color, depth) TracyVkZoneC(ctx, cmdbuf, name, color)
 #define TracyVkZoneTransientS(ctx, varname, cmdbuf, name, depth, active) \
     TracyVkZoneTransient(ctx, varname, cmdbuf, name, active)
+#endif
+
 #endif

@@ -227,6 +227,6 @@ struct Context
 
     HMODULE m_VulkanLib;
 
-    tracy::VkCtx *m_pTracyCtx = nullptr;
+    TracyVkCtx m_pTracyCtx = nullptr;
 };
 }  // namespace lr::Graphics

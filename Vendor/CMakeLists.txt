@@ -12,6 +12,9 @@ add_subdirectory(Utility/spdlog)
 
 add_subdirectory(Utility/DirectXMath)
 add_subdirectory(Utility/lw)
+
+set(TRACY_ENABLE OFF)
+set(TRACY_NO_CALLSTACK OFF)
 add_subdirectory(Utility/tracy)
 add_subdirectory(Utility/fastgltf)
 

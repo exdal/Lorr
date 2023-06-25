@@ -1,5 +1,5 @@
 // Created on Monday July 18th 2022 by exdal
-// Last modified on Tuesday June 13th 2023 by exdal
+// Last modified on Sunday June 25th 2023 by exdal
 
 #pragma once
 
@@ -40,23 +40,12 @@ enum class MemoryFlag
 };
 EnumFlags(MemoryFlag);
 
-struct APIAllocatorInitDesc
-{
-    u32 m_MaxTLSFAllocations;
-    u32 m_DescriptorMem;
-    u32 m_BufferLinearMem;
-    u32 m_BufferTLSFMem;
-    u32 m_BufferTLSFHostMem;
-    u32 m_BufferFrametimeMem;
-    u32 m_ImageTLSFMem;
-};
-
 struct APIDesc
 {
     APIFlags m_Flags = LR_API_FLAG_NONE;
     u32 m_ImageCount = 1;
     BaseWindow *m_pTargetWindow = nullptr;
-    APIAllocatorInitDesc m_AllocatorDesc = {};
+    ResourceAllocatorDesc m_AllocatorDesc = {};
 };
 
 struct SubmitDesc
@@ -70,7 +59,6 @@ struct SubmitDesc
 struct Context
 {
     bool Init(APIDesc *pDesc);
-    void InitAllocators(APIAllocatorInitDesc *pDesc);
 
     /// COMMAND ///
     u32 GetQueueIndex(CommandType type);
@@ -112,6 +100,15 @@ struct Context
     void EndFrame();
 
     /// RESOURCE ///
+    u64 GetBufferMemorySize(Buffer *pBuffer, u64 *pAlignmentOut = nullptr);
+    u64 GetImageMemorySize(Image *pImage, u64 *pAlignmentOut = nullptr);
+
+    LinearDeviceMemory *CreateLinearAllocator(MemoryFlag memoryFlags, u64 memSize);
+    TLSFDeviceMemory *CreateTLSFAllocator(MemoryFlag memoryFlags, u64 memSize, u32 maxAllocs);
+    void DeleteAllocator(DeviceMemory *pDeviceMemory);
+    void AllocateBufferMemory(ResourceAllocator allocator, Buffer *pBuffer, u64 memSize);
+    void AllocateImageMemory(ResourceAllocator allocator, Image *pImage, u64 memSize);
+
     // * Shaders * //
     Shader *CreateShader(Resource::ShaderResource *pResource);
     void DeleteShader(Shader *pShader);
@@ -134,24 +131,26 @@ struct Context
     Buffer *CreateBuffer(BufferDesc *pDesc);
     void DeleteBuffer(Buffer *pHandle, bool waitForWork = true);
 
-    void MapMemory(Buffer *pBuffer, void *&pData, u64 offset, u64 size);
-    void UnmapMemory(Buffer *pBuffer);
+    void MapMemory(ResourceAllocator allocator, void *&pData, u64 offset, u64 size);
+    void UnmapMemory(ResourceAllocator allocator);
+    void MapBuffer(Buffer *pBuffer, void *&pData, u64 offset, u64 size);
+    void UnmapBuffer(Buffer *pBuffer);
 
     // * Images * //
     Image *CreateImage(ImageDesc *pDesc);
     void DeleteImage(Image *pImage, bool waitForWork = true);
-    void CreateImageView(Image *pImage);
+    void CreateImageView(Image *pImage, ImageUsage aspectUsage);
 
     Sampler *CreateSampler(SamplerDesc *pDesc);
     void DeleteSampler(VkSampler pSampler);
-
-    void SetAllocator(Buffer *pBuffer, ResourceAllocator targetAllocator);
-    void SetAllocator(Image *pImage, ResourceAllocator targetAllocator);
 
     /// UTILITY ///
     template<typename _Type>
     void SetObjectName(_Type *pType, eastl::string_view name)
     {
+        static_assert(
+            eastl::is_base_of<APIObject<_Type::kObjectType>, _Type>(), "_Type is not base of APIObject");
+
 #if _DEBUG
         VkDebugUtilsObjectNameInfoEXT objectNameInfo = {};
         objectNameInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
@@ -214,18 +213,8 @@ struct Context
     VkPipelineCache m_pPipelineCache = nullptr;
     eastl::fixed_vector<Semaphore *, 8, false> m_AcquireSempPool;
 
-    using VKLinearAllocator = BufferedAllocator<Memory::LinearAllocatorView>;
-    using VKTLSFAllocator = BufferedAllocator<Memory::TLSFAllocatorView>;
-
-    VKLinearAllocator m_MADescriptor;
-    VKLinearAllocator m_MABufferLinear;
-    VKLinearAllocator m_MABufferFrametime[LR_MAX_FRAME_COUNT] = {};
-
-    VKTLSFAllocator m_MABufferTLSF;
-    VKTLSFAllocator m_MABufferTLSFHost;
-    VKTLSFAllocator m_MAImageTLSF;
-
-    HMODULE m_VulkanLib;
+    ResourceAllocators m_Allocators = {};
+    HMODULE m_VulkanLib = NULL;
 
     TracyVkCtx m_pTracyCtx = nullptr;
 };

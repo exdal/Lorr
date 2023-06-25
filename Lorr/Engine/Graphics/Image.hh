@@ -1,6 +1,5 @@
-//
-// Created on Saturday 22nd April 2023 by exdal
-//
+// Created on Saturday April 22nd 2023 by exdal
+// Last modified on Monday June 19th 2023 by exdal
 
 #pragma once
 
@@ -15,7 +14,7 @@ enum class ImageUsage : u32
     DepthStencilAttachment = 1 << 3,
     TransferSrc = 1 << 4,
     TransferDst = 1 << 5,
-    Storage = 1 << 6,     // RWA(Read-Write-Atomic) image
+    Storage = 1 << 6,
     Present = 1 << 7,     // Virtual flag
     Concurrent = 1 << 8,  // Vulkan's sharing flag
 
@@ -59,25 +58,14 @@ struct ImageDesc
 
     u32 m_Width = 0;
     u32 m_Height = 0;
-    u16 m_ArraySize = 1;
+    u32 m_ArraySize = 1;
     u32 m_MipMapLevels = 1;
 
-    u64 m_DataLen = 0;
+    u64 m_DataSize = 0;
 };
 
 struct Image : APIObject<VK_OBJECT_TYPE_IMAGE>
 {
-    void Init(ImageDesc *pDesc)
-    {
-        m_Format = pDesc->m_Format;
-        m_TargetAllocator = pDesc->m_TargetAllocator;
-        m_Width = pDesc->m_Width;
-        m_Height = pDesc->m_Height;
-        m_ArraySize = pDesc->m_ArraySize;
-        m_MipMapLevels = pDesc->m_MipMapLevels;
-        m_DataLen = pDesc->m_DataLen;
-    }
-
     ImageFormat m_Format = ImageFormat::Unknown;
     ResourceAllocator m_TargetAllocator = ResourceAllocator::None;
     void *m_pAllocatorData = nullptr;
@@ -86,16 +74,13 @@ struct Image : APIObject<VK_OBJECT_TYPE_IMAGE>
     u32 m_Height = 0;
     u32 m_ArraySize = 1;
     u32 m_MipMapLevels = 1;
-    VkImageAspectFlags m_ImageAspect = 0;
     u32 m_DescriptorIndex = -1;
 
-    u64 m_DataLen = 0;
-    u64 m_AllocatorOffset = 0;
-    u64 m_DeviceDataLen = 0;
+    u64 m_DataSize = 0;    // Aligned data offset
+    u64 m_DataOffset = 0;  // Allocator offset
 
     VkImage m_pHandle = nullptr;
     VkImageView m_pViewHandle = nullptr;
-    VkDeviceMemory m_pMemoryHandle = nullptr;
 };
 
 constexpr u32 kImageFormatSizeLUT[] = {

@@ -1,5 +1,5 @@
 // Created on Monday July 18th 2022 by exdal
-// Last modified on Friday June 2nd 2023 by exdal
+// Last modified on Monday June 19th 2023 by exdal
 
 #include "CommandList.hh"
 
@@ -9,12 +9,18 @@
 
 namespace lr::Graphics
 {
-ImageBarrier::ImageBarrier(Image *pImage, const PipelineBarrier &barrier)
+ImageBarrier::ImageBarrier(Image *pImage, ImageUsage aspectUsage, const PipelineBarrier &barrier)
 {
     ZoneScoped;
 
+    VkImageAspectFlags aspectFlags = 0;
+    if (aspectUsage & ImageUsage::AspectColor)
+        aspectFlags |= VK_IMAGE_ASPECT_COLOR_BIT;
+    if (aspectUsage & ImageUsage::AspectDepthStencil)
+        aspectFlags |= VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+
     VkImageSubresourceRange subresRange = {
-        .aspectMask = pImage->m_ImageAspect,
+        .aspectMask = aspectFlags,
         .baseMipLevel = 0,
         .levelCount = pImage->m_MipMapLevels,
         .baseArrayLayer = 0,
@@ -50,7 +56,7 @@ BufferBarrier::BufferBarrier(Buffer *pBuffer, const PipelineBarrier &barrier)
     this->dstQueueFamilyIndex = barrier.m_DstQueue;
 
     this->buffer = pBuffer->m_pHandle;
-    this->offset = pBuffer->m_AllocatorOffset;
+    this->offset = pBuffer->m_DataOffset;
     this->size = VK_WHOLE_SIZE;  // TODO
 }
 
@@ -231,7 +237,7 @@ void CommandList::SetPipelineBarrier(DependencyInfo *pDependencyInfo)
     vkCmdPipelineBarrier2(m_pHandle, pDependencyInfo);
 }
 
-void CommandList::CopyBuffer(Buffer *pSource, Buffer *pDest, u64 srcOff, u64 dstOff, u64 size)
+void CommandList::CopyBufferToBuffer(Buffer *pSource, Buffer *pDest, u64 srcOff, u64 dstOff, u64 size)
 {
     ZoneScoped;
 
@@ -239,9 +245,15 @@ void CommandList::CopyBuffer(Buffer *pSource, Buffer *pDest, u64 srcOff, u64 dst
     vkCmdCopyBuffer(m_pHandle, pSource->m_pHandle, pDest->m_pHandle, 1, &copyRegion);
 }
 
-void CommandList::CopyBuffer(Buffer *pSource, Image *pDest, ImageLayout layout)
+void CommandList::CopyBufferToImage(Buffer *pSource, Image *pDest, ImageUsage aspectUsage, ImageLayout layout)
 {
     ZoneScoped;
+
+    VkImageAspectFlags aspectFlags = 0;
+    if (aspectUsage & ImageUsage::AspectColor)
+        aspectFlags |= VK_IMAGE_ASPECT_COLOR_BIT;
+    if (aspectUsage & ImageUsage::AspectDepthStencil)
+        aspectFlags |= VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
 
     // TODO: Multiple mip levels
     VkBufferImageCopy imageCopyInfo = {};
@@ -255,7 +267,7 @@ void CommandList::CopyBuffer(Buffer *pSource, Image *pDest, ImageLayout layout)
     imageCopyInfo.imageExtent.height = pDest->m_Height;
     imageCopyInfo.imageExtent.depth = 1;
 
-    imageCopyInfo.imageSubresource.aspectMask = pDest->m_ImageAspect;
+    imageCopyInfo.imageSubresource.aspectMask = aspectFlags;
     imageCopyInfo.imageSubresource.baseArrayLayer = 0;
     imageCopyInfo.imageSubresource.layerCount = 1;
     imageCopyInfo.imageSubresource.mipLevel = 0;

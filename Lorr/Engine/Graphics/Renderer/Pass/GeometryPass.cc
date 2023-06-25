@@ -1,5 +1,5 @@
 // Created on Saturday April 22nd 2023 by exdal
-// Last modified on Monday June 12th 2023 by exdal
+// Last modified on Sunday June 25th 2023 by exdal
 
 #include "Graphics/Renderer/Pass.hh"
 
@@ -23,17 +23,17 @@ void AddGeometryPass(RenderGraph *pGraph, eastl::string_view name)
                 .m_UsageFlags = BufferUsage::Storage,
                 .m_TargetAllocator = ResourceAllocator::BufferLinear,
                 .m_Stride = sizeof(u32),
-                .m_DataLen = 256,
+                .m_DataSize = 256,
             };
             Buffer *pDummyBuffer = data.m_pBuffer = pContext->CreateBuffer(&bufferDesc);
 
             void *pMapData = nullptr;
-            pContext->MapMemory(pDummyBuffer, pMapData, 0, 8);
+            pContext->MapBuffer(pDummyBuffer, pMapData, 0, 8);
             u32 test = 31;
             memcpy(pMapData, &test, 4);
             test = 32;
             memcpy((u8 *)pMapData + 4, &test, 4);
-            pContext->UnmapMemory(pDummyBuffer);
+            pContext->UnmapBuffer(pDummyBuffer);
 
             ImageDesc imageDesc = {
                 .m_UsageFlags = ImageUsage::Sampled | ImageUsage::TransferDst,

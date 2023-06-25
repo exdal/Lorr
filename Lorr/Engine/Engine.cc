@@ -1,5 +1,5 @@
 // Created on Wednesday May 4th 2022 by exdal
-// Last modified on Tuesday June 13th 2023 by exdal
+// Last modified on Tuesday June 20th 2023 by exdal
 
 #include "Engine.hh"
 
@@ -20,7 +20,7 @@ void Engine::Init(EngineDesc &engineDesc)
     m_Window.Init(engineDesc.m_WindowDesc);
     m_ImGui.Init(m_Window.m_Width, m_Window.m_Height);
 
-    Graphics::APIAllocatorInitDesc gpAllocators = {
+    Graphics::ResourceAllocatorDesc gpAllocators = {
         .m_MaxTLSFAllocations = CONFIG_GET_VAR(gpm_tlsf_allocations),
         .m_DescriptorMem = CONFIG_GET_VAR(gpm_descriptor),
         .m_BufferLinearMem = CONFIG_GET_VAR(gpm_buffer_linear),

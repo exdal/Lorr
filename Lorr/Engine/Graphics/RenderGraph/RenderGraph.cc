@@ -1,5 +1,5 @@
 // Created on Friday February 24th 2023 by exdal
-// Last modified on Monday June 12th 2023 by exdal
+// Last modified on Sunday June 25th 2023 by exdal
 
 #include "RenderGraph.hh"
 
@@ -129,7 +129,7 @@ void RenderGraph::Prepare()
         BufferDesc resourceBufferDesc = {
             .m_UsageFlags = BufferUsage::ResourceDescriptor | BufferUsage::TransferDst,
             .m_TargetAllocator = ResourceAllocator::BufferTLSF,
-            .m_DataLen = descriptorBufferSize,
+            .m_DataSize = descriptorBufferSize,
         };
         m_pResourceDescriptorBuffer = m_pContext->CreateBuffer(&resourceBufferDesc);
 
@@ -152,7 +152,7 @@ void RenderGraph::Prepare()
         BufferDesc samplerBufferDesc = {
             .m_UsageFlags = BufferUsage::SamplerDescriptor | BufferUsage::TransferDst,
             .m_TargetAllocator = ResourceAllocator::BufferTLSF,
-            .m_DataLen = samplerBufferSize,
+            .m_DataSize = samplerBufferSize,
         };
         m_pSamplerDescriptorBuffer = m_pContext->CreateBuffer(&samplerBufferDesc);
 
@@ -243,14 +243,14 @@ void RenderGraph::FillImageData(Image *pImage, eastl::span<u8> imageData)
     BufferDesc bufferDesc = {
         .m_UsageFlags = BufferUsage::TransferSrc,
         .m_TargetAllocator = ResourceAllocator::BufferFrametime,
-        .m_DataLen = imageData.size_bytes(),
+        .m_DataSize = imageData.size_bytes(),
     };
     Buffer *pImageBuffer = m_pContext->CreateBuffer(&bufferDesc);
 
     void *pMapData = nullptr;
-    m_pContext->MapMemory(pImageBuffer, pMapData, 0, bufferDesc.m_DataLen);
-    memcpy(pMapData, imageData.data(), bufferDesc.m_DataLen);
-    m_pContext->UnmapMemory(pImageBuffer);
+    m_pContext->MapBuffer(pImageBuffer, pMapData, 0, bufferDesc.m_DataSize);
+    memcpy(pMapData, imageData.data(), bufferDesc.m_DataSize);
+    m_pContext->UnmapBuffer(pImageBuffer);
 
     CommandList *pList = GetCommandList(CommandType::Graphics);
     m_pContext->BeginCommandList(pList);
@@ -263,11 +263,11 @@ void RenderGraph::FillImageData(Image *pImage, eastl::span<u8> imageData)
         .m_SrcAccess = MemoryAccess::None,
         .m_DstAccess = MemoryAccess::TransferWrite,
     };
-    ImageBarrier imageBarrier(pImage, barrier);
+    ImageBarrier imageBarrier(pImage, ImageUsage::AspectColor, barrier);
     DependencyInfo depInfo(imageBarrier);
     pList->SetPipelineBarrier(&depInfo);
 
-    pList->CopyBuffer(pImageBuffer, pImage, ImageLayout::TransferDst);
+    pList->CopyBufferToImage(pImageBuffer, pImage, ImageUsage::AspectColor, ImageLayout::TransferDst);
 
     m_pContext->EndCommandList(pList);
     SubmitList(pList, PipelineStage::AllCommands, PipelineStage::AllCommands);
@@ -360,7 +360,7 @@ void RenderGraph::RecordGraphicsPass(GraphicsRenderPass *pPass, CommandList *pLi
         barrier.m_DstStage = ToImagePipelineStage(barrier.m_DstLayout);
         barrier.m_SrcAccess = inputResource.m_Access.m_SrcAccess;
         barrier.m_DstAccess = inputResource.m_Access.m_DstAccess;
-        barriers.push_back({ pImage, barrier });
+        barriers.push_back({ pImage, ImageUsage::AspectColor, barrier });
     }
 
     DependencyInfo depInfo(barriers);
@@ -381,7 +381,6 @@ void RenderGraph::RecordGraphicsPass(GraphicsRenderPass *pPass, CommandList *pLi
         pList->SetPipeline(pPass->m_pPipeline);
 
         u32 setCount = m_DescriptorSetOffsets.size();
-
         DescriptorBindingInfo pBindingInfos[] = {
             { m_pResourceDescriptorBuffer, BufferUsage::ResourceDescriptor },
             { m_pSamplerDescriptorBuffer, BufferUsage::SamplerDescriptor },

@@ -1,5 +1,5 @@
 // Created on Monday July 18th 2022 by exdal
-// Last modified on Monday June 12th 2023 by exdal
+// Last modified on Monday June 19th 2023 by exdal
 
 #pragma once
 
@@ -193,7 +193,7 @@ struct PipelineBarrier
 struct ImageBarrier : VkImageMemoryBarrier2
 {
     ImageBarrier() = default;
-    ImageBarrier(Image *pImage, const PipelineBarrier &barrier);
+    ImageBarrier(Image *pImage, ImageUsage aspectUsage, const PipelineBarrier &barrier);
 };
 
 struct BufferBarrier : VkBufferMemoryBarrier2
@@ -251,8 +251,8 @@ struct CommandList : APIObject<VK_OBJECT_TYPE_COMMAND_BUFFER>
     void SetPipelineBarrier(DependencyInfo *pDependencyInfo);
 
     /// Buffer Commands
-    void CopyBuffer(Buffer *pSource, Buffer *pDest, u64 srcOff, u64 dstOff, u64 size);
-    void CopyBuffer(Buffer *pSource, Image *pDest, ImageLayout layout);
+    void CopyBufferToBuffer(Buffer *pSource, Buffer *pDest, u64 srcOff, u64 dstOff, u64 size);
+    void CopyBufferToImage(Buffer *pSource, Image *pDest, ImageUsage aspectUsage, ImageLayout layout);
 
     /// Draw Commands
     void Draw(u32 vertexCount, u32 firstVertex = 0, u32 instanceCount = 1, u32 firstInstance = 0);

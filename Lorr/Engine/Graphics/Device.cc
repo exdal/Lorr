@@ -1,5 +1,5 @@
 // Created on Monday March 20th 2023 by exdal
-// Last modified on Monday June 12th 2023 by exdal
+// Last modified on Wednesday June 21st 2023 by exdal
 
 #include "Device.hh"
 
@@ -13,10 +13,16 @@ namespace lr::Graphics
 /// These extensions are REQUIRED to be available on selected device.
 
 static const char *kppRequiredExtensions[] = {
-    "VK_KHR_swapchain",         "VK_KHR_depth_stencil_resolve",   "VK_KHR_dynamic_rendering",
-    "VK_KHR_synchronization2",  "VK_EXT_extended_dynamic_state2", "VK_KHR_timeline_semaphore",
-    "VK_EXT_descriptor_buffer", "VK_EXT_descriptor_indexing",     "VK_EXT_robustness2",
-    "VK_EXT_host_query_reset",  "VK_EXT_calibrated_timestamps",
+    "VK_KHR_swapchain",
+    "VK_KHR_depth_stencil_resolve",
+    "VK_KHR_dynamic_rendering",
+    "VK_KHR_synchronization2",
+    "VK_EXT_extended_dynamic_state2",
+    "VK_KHR_timeline_semaphore",
+    "VK_EXT_descriptor_buffer",
+    "VK_EXT_descriptor_indexing",
+    "VK_EXT_host_query_reset",
+    "VK_EXT_calibrated_timestamps",
 };
 
 static constexpr eastl::span<const char *> kRequiredExtensions(kppRequiredExtensions);
@@ -26,15 +32,9 @@ static constexpr eastl::span<const char *> kRequiredExtensions(kppRequiredExtens
 ////////////////////////////////////
 
 // * Extensions
-static VkPhysicalDeviceRobustness2FeaturesEXT kRobustness2Features = {
-    .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT,
-    .pNext = nullptr,
-    .nullDescriptor = true,
-};
-
 static VkPhysicalDeviceBufferDeviceAddressFeaturesEXT kBufferDeviceAddressFeatures = {
     .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES_EXT,
-    .pNext = &kRobustness2Features,
+    .pNext = nullptr,
     .bufferDeviceAddress = true,
 };
 
@@ -376,6 +376,25 @@ bool Surface::IsPresentModeSupported(VkPresentModeKHR mode)
             return true;
 
     return false;
+}
+
+// we are maybe over complicating stuff...
+DeviceMemory *ResourceAllocators::GetDeviceMemory(ResourceAllocator allocator)
+{
+    ZoneScoped;
+
+    static DeviceMemory *kResourceAllocatorsCrazyShit[] = {
+        nullptr,               // None
+        m_pDescriptor,         // Descriptor
+        m_pBufferLinear,       // BufferLinear
+        m_pBufferTLSF,         // BufferTLSF
+        m_pBufferTLSFHost,     // BufferTLSF_Host
+        *m_ppBufferFrametime,  // BufferFrametime
+        m_pImageTLSF,          // ImageTLSF
+        nullptr,               // Count
+    };
+
+    return kResourceAllocatorsCrazyShit[(u32)allocator];
 }
 
 }  // namespace lr::Graphics

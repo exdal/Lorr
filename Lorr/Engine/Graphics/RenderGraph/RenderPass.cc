@@ -1,5 +1,5 @@
 // Created on Tuesday March 14th 2023 by exdal
-// Last modified on Tuesday June 13th 2023 by exdal
+// Last modified on Sunday June 25th 2023 by exdal
 
 #include "RenderPass.hh"
 
@@ -286,13 +286,13 @@ void RenderPassBuilder::GetResourceDescriptors(Buffer *pDst, CommandList *pList)
     BufferDesc bufferDesc = {
         .m_UsageFlags = BufferUsage::ResourceDescriptor | BufferUsage::TransferSrc,
         .m_TargetAllocator = ResourceAllocator::Descriptor,
-        .m_DataLen = GetResourceBufferSize(),
+        .m_DataSize = GetResourceBufferSize(),
     };
     Buffer *pResourceDescriptor = m_pContext->CreateBuffer(&bufferDesc);
 
     u64 mapOffset = 0;
     void *pMapData = nullptr;
-    m_pContext->MapMemory(pResourceDescriptor, pMapData, 0, bufferDesc.m_DataLen);
+    m_pContext->MapBuffer(pResourceDescriptor, pMapData, 0, bufferDesc.m_DataSize);
 
     for (DescriptorBufferInfo &info : m_ResourceDescriptors)
     {
@@ -301,7 +301,7 @@ void RenderPassBuilder::GetResourceDescriptors(Buffer *pDst, CommandList *pList)
             BufferDesc descriptorBufferDesc = {
                 .m_UsageFlags = BufferUsage::ResourceDescriptor | BufferUsage::TransferDst,
                 .m_TargetAllocator = ResourceAllocator::BufferTLSF,
-                .m_DataLen = info.m_DataSize,
+                .m_DataSize = info.m_DataSize,
             };
             Buffer *pDescriptorBuffer = m_pContext->CreateBuffer(&descriptorBufferDesc);
 
@@ -309,16 +309,16 @@ void RenderPassBuilder::GetResourceDescriptors(Buffer *pDst, CommandList *pList)
                 BufferDesc tempBufferDesc = {
                     .m_UsageFlags = BufferUsage::TransferSrc,
                     .m_TargetAllocator = ResourceAllocator::BufferFrametime,
-                    .m_DataLen = info.m_DataSize,
+                    .m_DataSize = info.m_DataSize,
                 };
                 Buffer *pTempBuffer = m_pContext->CreateBuffer(&tempBufferDesc);
 
                 void *pTempMapData = nullptr;
-                m_pContext->MapMemory(pTempBuffer, pTempMapData, 0, descriptorBufferDesc.m_DataLen);
+                m_pContext->MapBuffer(pTempBuffer, pTempMapData, 0, descriptorBufferDesc.m_DataSize);
                 memcpy(pTempMapData, info.m_pData, info.m_DataSize);
-                m_pContext->UnmapMemory(pTempBuffer);
+                m_pContext->UnmapBuffer(pTempBuffer);
 
-                pList->CopyBuffer(pTempBuffer, pDescriptorBuffer, 0, 0, pTempBuffer->m_DeviceDataLen);
+                pList->CopyBufferToBuffer(pTempBuffer, pDescriptorBuffer, 0, 0, pTempBuffer->m_DataSize);
 
                 m_pContext->DeleteBuffer(pTempBuffer);
             }
@@ -341,9 +341,9 @@ void RenderPassBuilder::GetResourceDescriptors(Buffer *pDst, CommandList *pList)
         }
     }
 
-    m_pContext->UnmapMemory(pResourceDescriptor);
+    m_pContext->UnmapBuffer(pResourceDescriptor);
 
-    pList->CopyBuffer(pResourceDescriptor, pDst, 0, 0, bufferDesc.m_DataLen);
+    pList->CopyBufferToBuffer(pResourceDescriptor, pDst, 0, 0, bufferDesc.m_DataSize);
     m_pContext->DeleteBuffer(pResourceDescriptor);
 }
 
@@ -354,19 +354,19 @@ void RenderPassBuilder::GetSamplerDescriptors(Buffer *pDst, CommandList *pList)
     BufferDesc bufferDesc = {
         .m_UsageFlags = BufferUsage::SamplerDescriptor | BufferUsage::TransferSrc,
         .m_TargetAllocator = ResourceAllocator::Descriptor,
-        .m_DataLen = GetSamplerBufferSize(),
+        .m_DataSize = GetSamplerBufferSize(),
     };
     Buffer *pSamplerDescriptor = m_pContext->CreateBuffer(&bufferDesc);
 
     u64 mapOffset = 0;
     void *pMapData = nullptr;
-    m_pContext->MapMemory(pSamplerDescriptor, pMapData, 0, bufferDesc.m_DataLen);
+    m_pContext->MapBuffer(pSamplerDescriptor, pMapData, 0, bufferDesc.m_DataSize);
 
     memcpy((u8 *)pMapData, m_SamplerDescriptor.m_pData, m_SamplerDescriptor.m_Offset);
 
-    m_pContext->UnmapMemory(pSamplerDescriptor);
+    m_pContext->UnmapBuffer(pSamplerDescriptor);
 
-    pList->CopyBuffer(pSamplerDescriptor, pDst, 0, 0, bufferDesc.m_DataLen);
+    pList->CopyBufferToBuffer(pSamplerDescriptor, pDst, 0, 0, bufferDesc.m_DataSize);
     m_pContext->DeleteBuffer(pSamplerDescriptor);
 }
 

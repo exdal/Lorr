@@ -1,5 +1,5 @@
 // Created on Sunday March 19th 2023 by exdal
-// Last modified on Monday June 12th 2023 by exdal
+// Last modified on Wednesday June 21st 2023 by exdal
 
 #pragma once
 
@@ -59,6 +59,77 @@ struct Surface : APIObject<VK_OBJECT_TYPE_SURFACE_KHR>
     XMUINT2 m_MaxImageSize = {};
 
     VkSurfaceKHR m_pHandle = VK_NULL_HANDLE;
+};
+
+struct DeviceMemory : APIObject<VK_OBJECT_TYPE_DEVICE_MEMORY>
+{
+    virtual u64 Allocate(u64 dataSize, u64 alignment, void *pAllocatorData) = 0;
+    virtual void Free(void *pAllocatorData) = 0;
+
+    VkDeviceMemory m_pHandle = VK_NULL_HANDLE;
+};
+
+struct TLSFDeviceMemory : DeviceMemory
+{
+    u64 Allocate(u64 dataSize, u64 alignment, void *pAllocatorData) override
+    {
+        ZoneScoped;
+
+        Memory::TLSFBlockID blockID = m_Allocator.Allocate(dataSize, alignment);
+        pAllocatorData = &blockID;
+        return m_Allocator.GetBlockData(blockID)->m_Offset;
+    }
+
+    void Free(void *pAllocatorData) override
+    {
+        ZoneScoped;
+
+        m_Allocator.Free(*(Memory::TLSFBlockID *)pAllocatorData);
+    }
+
+    Memory::TLSFAllocatorView m_Allocator = {};
+};
+
+struct LinearDeviceMemory : DeviceMemory
+{
+    u64 Allocate(u64 dataSize, u64 alignment, void *pAllocatorData) override
+    {
+        ZoneScoped;
+
+        return m_Allocator.Allocate(dataSize, alignment);
+    }
+
+    void Free(void *pAllocatorData) override
+    {
+        ZoneScoped;
+
+        m_Allocator.Free();
+    }
+
+    Memory::LinearAllocatorView m_Allocator = {};
+};
+
+struct ResourceAllocatorDesc
+{
+    u32 m_MaxTLSFAllocations = 0;
+    u32 m_DescriptorMem = 0;
+    u32 m_BufferLinearMem = 0;
+    u32 m_BufferTLSFMem = 0;
+    u32 m_BufferTLSFHostMem = 0;
+    u32 m_BufferFrametimeMem = 0;
+    u32 m_ImageTLSFMem = 0;
+};
+
+struct ResourceAllocators
+{
+    LinearDeviceMemory *m_pDescriptor = nullptr;
+    LinearDeviceMemory *m_pBufferLinear = nullptr;
+    TLSFDeviceMemory *m_pBufferTLSF = nullptr;
+    TLSFDeviceMemory *m_pBufferTLSFHost = nullptr;
+    LinearDeviceMemory *m_ppBufferFrametime[LR_MAX_FRAME_COUNT] = {};
+    TLSFDeviceMemory *m_pImageTLSF = nullptr;
+
+    DeviceMemory *GetDeviceMemory(ResourceAllocator allocator);
 };
 
 }  // namespace lr::Graphics

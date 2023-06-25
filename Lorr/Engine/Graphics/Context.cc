@@ -1,5 +1,5 @@
 // Created on Monday July 18th 2022 by exdal
-// Last modified on Tuesday June 13th 2023 by exdal
+// Last modified on Sunday June 25th 2023 by exdal
 
 #include "Context.hh"
 
@@ -46,7 +46,7 @@ bool Context::Init(APIDesc *pDesc)
 
     if (!SetupDevice())
         return false;
-        
+
     m_pTracyCtx = TracyVkContextHostCalibrated(m_pPhysicalDevice->m_pHandle, m_pDevice);
 
     m_pSwapChain = CreateSwapChain(pDesc->m_pTargetWindow, pDesc->m_ImageCount, nullptr);
@@ -54,9 +54,7 @@ bool Context::Init(APIDesc *pDesc)
     SetObjectName(m_pSurface, "Default Surface");
     SetObjectName(m_pSwapChain, "Swap Chain");
 
-    InitAllocators(&pDesc->m_AllocatorDesc);
-
-    m_pPipelineCache = CreatePipelineCache();
+    /// CREATE QUEUES ///
 
     m_pDirectQueue = CreateCommandQueue(CommandType::Graphics);
     SetObjectName(m_pDirectQueue, "Direct Queue");
@@ -65,42 +63,44 @@ bool Context::Init(APIDesc *pDesc)
     m_pTransferQueue = CreateCommandQueue(CommandType::Transfer);
     SetObjectName(m_pTransferQueue, "Transfer Queue");
 
-    LOG_TRACE("Successfully initialized Vulkan API.");
+    /// CREATE ALLOCATORS ///
 
-    return true;
-}
+    m_Allocators.m_pDescriptor =
+        CreateLinearAllocator(MemoryFlag::HostVisibleCoherent, pDesc->m_AllocatorDesc.m_DescriptorMem);
+    SetObjectName(m_Allocators.m_pDescriptor, "Descriptor");
 
-void Context::InitAllocators(APIAllocatorInitDesc *pDesc)
-{
-    ZoneScoped;
-
-    m_MADescriptor.Allocator.Init(pDesc->m_DescriptorMem);
-    m_MADescriptor.pHeap = CreateHeap(pDesc->m_DescriptorMem, MemoryFlag::HostVisibleCoherent);
-    SetObjectNameRaw<VK_OBJECT_TYPE_DEVICE_MEMORY>(m_MADescriptor.pHeap, "Descriptor");
-
-    m_MABufferLinear.Allocator.Init(pDesc->m_BufferLinearMem);
-    m_MABufferLinear.pHeap = CreateHeap(pDesc->m_BufferLinearMem, MemoryFlag::HostVisibleCoherent);
-    SetObjectNameRaw<VK_OBJECT_TYPE_DEVICE_MEMORY>(m_MABufferLinear.pHeap, "Buffer-Linear");
+    m_Allocators.m_pBufferLinear =
+        CreateLinearAllocator(MemoryFlag::HostVisibleCoherent, pDesc->m_AllocatorDesc.m_BufferLinearMem);
+    SetObjectName(m_Allocators.m_pBufferLinear, "Buffer-Linear");
 
     for (u32 i = 0; i < m_pSwapChain->m_FrameCount; i++)
     {
-        m_MABufferFrametime[i].Allocator.Init(pDesc->m_BufferFrametimeMem);
-        m_MABufferFrametime[i].pHeap = CreateHeap(pDesc->m_BufferFrametimeMem, MemoryFlag::HostVisibleCoherent);
-        SetObjectNameRaw<VK_OBJECT_TYPE_DEVICE_MEMORY>(
-            m_MABufferFrametime[i].pHeap, _FMT("Buffer-Frametime-{}", i));
+        m_Allocators.m_ppBufferFrametime[i] =
+            CreateLinearAllocator(MemoryFlag::HostVisibleCoherent, pDesc->m_AllocatorDesc.m_BufferFrametimeMem);
+        SetObjectName(m_Allocators.m_ppBufferFrametime[i], _FMT("Buffer-Frametime-{}", i));
     }
 
-    m_MABufferTLSF.Allocator.Init(pDesc->m_BufferTLSFMem, pDesc->m_MaxTLSFAllocations);
-    m_MABufferTLSF.pHeap = CreateHeap(pDesc->m_BufferTLSFMem, MemoryFlag::Device);
-    SetObjectNameRaw<VK_OBJECT_TYPE_DEVICE_MEMORY>(m_MABufferTLSF.pHeap, "Buffer-TLSF");
+    m_Allocators.m_pBufferTLSF = CreateTLSFAllocator(
+        MemoryFlag::Device,
+        pDesc->m_AllocatorDesc.m_BufferTLSFMem,
+        pDesc->m_AllocatorDesc.m_MaxTLSFAllocations);
+    SetObjectName(m_Allocators.m_pBufferTLSF, "Buffer-TLSF");
 
-    m_MABufferTLSFHost.Allocator.Init(pDesc->m_BufferTLSFHostMem, pDesc->m_MaxTLSFAllocations);
-    m_MABufferTLSFHost.pHeap = CreateHeap(pDesc->m_BufferTLSFHostMem, MemoryFlag::HostVisibleCoherent);
-    SetObjectNameRaw<VK_OBJECT_TYPE_DEVICE_MEMORY>(m_MABufferTLSFHost.pHeap, "Buffer-TLSF-Host");
+    m_Allocators.m_pBufferTLSFHost = CreateTLSFAllocator(
+        MemoryFlag::HostVisibleCoherent,
+        pDesc->m_AllocatorDesc.m_BufferTLSFHostMem,
+        pDesc->m_AllocatorDesc.m_MaxTLSFAllocations);
+    SetObjectName(m_Allocators.m_pBufferTLSFHost, "Buffer-TLSF-Host");
 
-    m_MAImageTLSF.Allocator.Init(pDesc->m_ImageTLSFMem, pDesc->m_MaxTLSFAllocations);
-    m_MAImageTLSF.pHeap = CreateHeap(pDesc->m_ImageTLSFMem, MemoryFlag::Device);
-    SetObjectNameRaw<VK_OBJECT_TYPE_DEVICE_MEMORY>(m_MAImageTLSF.pHeap, "Image-TLSF");
+    m_Allocators.m_pImageTLSF = CreateTLSFAllocator(
+        MemoryFlag::Device, pDesc->m_AllocatorDesc.m_ImageTLSFMem, pDesc->m_AllocatorDesc.m_MaxTLSFAllocations);
+    SetObjectName(m_Allocators.m_pImageTLSF, "Image-TLSF");
+
+    m_pPipelineCache = CreatePipelineCache();
+
+    LOG_TRACE("Successfully initialized Vulkan API.");
+
+    return true;
 }
 
 u32 Context::GetQueueIndex(CommandType type)
@@ -608,15 +608,14 @@ SwapChain *Context::CreateSwapChain(BaseWindow *pWindow, u32 imageCount, SwapCha
 
         pImage = new Image;
         pImage->m_pHandle = ppSwapChainImages[i];
-        pImage->m_ImageAspect = VK_IMAGE_ASPECT_COLOR_BIT;
         pImage->m_Width = pSwapChain->m_Width;
         pImage->m_Height = pSwapChain->m_Height;
-        pImage->m_DataLen = ~0;
+        pImage->m_DataSize = ~0;
+        pImage->m_DataOffset = ~0;
         pImage->m_MipMapLevels = 1;
         pImage->m_Format = pSwapChain->m_ImageFormat;
-        pImage->m_DeviceDataLen = ~0;
         pImage->m_TargetAllocator = ResourceAllocator::Count;
-        CreateImageView(pImage);
+        CreateImageView(pImage, ImageUsage::ColorAttachment);
 
         SetObjectName(pImage, _FMT("Swap Chain Image {}", i));
 
@@ -724,7 +723,7 @@ void Context::BeginFrame()
         imageQueue.pop();
     }
 
-    m_MABufferFrametime[m_pSwapChain->m_CurrentFrame].Allocator.Free();
+    m_Allocators.m_ppBufferFrametime[m_pSwapChain->m_CurrentFrame]->Free(nullptr);
 }
 
 void Context::EndFrame()
@@ -763,6 +762,128 @@ void Context::EndFrame()
     presentInfo.pSwapchains = &m_pSwapChain->m_pHandle;
     presentInfo.pImageIndices = &m_pSwapChain->m_CurrentFrame;
     vkQueuePresentKHR(pQueue, &presentInfo);
+}
+
+u64 Context::GetBufferMemorySize(Buffer *pBuffer, u64 *pAlignmentOut)
+{
+    ZoneScoped;
+
+    VkMemoryRequirements memoryRequirements = {};
+    vkGetBufferMemoryRequirements(m_pDevice, pBuffer->m_pHandle, &memoryRequirements);
+
+    if (pAlignmentOut)
+        *pAlignmentOut = memoryRequirements.alignment;
+
+    return memoryRequirements.size;
+}
+
+u64 Context::GetImageMemorySize(Image *pImage, u64 *pAlignmentOut)
+{
+    ZoneScoped;
+
+    VkMemoryRequirements memoryRequirements = {};
+    vkGetImageMemoryRequirements(m_pDevice, pImage->m_pHandle, &memoryRequirements);
+
+    if (pAlignmentOut)
+        *pAlignmentOut = memoryRequirements.alignment;
+
+    return memoryRequirements.size;
+}
+
+LinearDeviceMemory *Context::CreateLinearAllocator(MemoryFlag memoryFlags, u64 memSize)
+{
+    ZoneScoped;
+
+    VkMemoryPropertyFlags memoryProps = 0;
+    if (memoryFlags & MemoryFlag::Device)
+        memoryProps |= VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+    if (memoryFlags & MemoryFlag::HostVisible)
+        memoryProps |= VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+    if (memoryFlags & MemoryFlag::HostCoherent)
+        memoryProps |= VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+    if (memoryFlags & MemoryFlag::HostCached)
+        memoryProps |= VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+
+    LinearDeviceMemory *pDeviceMem = new LinearDeviceMemory;
+    pDeviceMem->m_Allocator.Init(memSize);
+
+    VkMemoryAllocateInfo allocInfo = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .pNext = nullptr,
+        .allocationSize = memSize,
+        .memoryTypeIndex = m_pPhysicalDevice->GetHeapIndex(memoryProps),
+    };
+    vkAllocateMemory(m_pDevice, &allocInfo, nullptr, &pDeviceMem->m_pHandle);
+
+    return pDeviceMem;
+}
+
+TLSFDeviceMemory *Context::CreateTLSFAllocator(MemoryFlag memoryFlags, u64 memSize, u32 maxAllocs)
+{
+    ZoneScoped;
+
+    VkMemoryPropertyFlags memoryProps = 0;
+    if (memoryFlags & MemoryFlag::Device)
+        memoryProps |= VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+    if (memoryFlags & MemoryFlag::HostVisible)
+        memoryProps |= VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+    if (memoryFlags & MemoryFlag::HostCoherent)
+        memoryProps |= VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+    if (memoryFlags & MemoryFlag::HostCached)
+        memoryProps |= VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+
+    TLSFDeviceMemory *pDeviceMem = new TLSFDeviceMemory;
+    pDeviceMem->m_Allocator.Init(memSize, maxAllocs);
+
+    VkMemoryAllocateInfo allocInfo = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .pNext = nullptr,
+        .allocationSize = memSize,
+        .memoryTypeIndex = m_pPhysicalDevice->GetHeapIndex(memoryProps),
+    };
+    vkAllocateMemory(m_pDevice, &allocInfo, nullptr, &pDeviceMem->m_pHandle);
+
+    return pDeviceMem;
+}
+
+void Context::DeleteAllocator(DeviceMemory *pDeviceMemory)
+{
+    ZoneScoped;
+
+    vkFreeMemory(m_pDevice, pDeviceMemory->m_pHandle, nullptr);
+}
+
+void Context::AllocateBufferMemory(ResourceAllocator allocator, Buffer *pBuffer, u64 memSize)
+{
+    ZoneScoped;
+    assert(allocator != ResourceAllocator::None);
+
+    u64 alignment = 0;
+    u64 alignedSize = GetBufferMemorySize(pBuffer, &alignment);
+    DeviceMemory *pMemory = m_Allocators.GetDeviceMemory(allocator);
+    u64 memoryOffset = pMemory->Allocate(alignedSize, alignment, pBuffer->m_pAllocatorData);
+
+    vkBindBufferMemory(m_pDevice, pBuffer->m_pHandle, pMemory->m_pHandle, memoryOffset);
+
+    pBuffer->m_DataSize = alignedSize;
+    pBuffer->m_DataOffset = memoryOffset;
+}
+
+void Context::AllocateImageMemory(ResourceAllocator allocator, Image *pImage, u64 memSize)
+{
+    ZoneScoped;
+
+    assert(allocator != ResourceAllocator::None);
+
+    u64 alignment = 0;
+    u64 alignedSize = GetImageMemorySize(pImage, &alignment);
+    DeviceMemory *pMemory = m_Allocators.GetDeviceMemory(allocator);
+    u64 memoryOffset = pMemory->Allocate(alignedSize, alignment, pImage->m_pAllocatorData);
+
+    vkBindImageMemory(m_pDevice, pImage->m_pHandle, pMemory->m_pHandle, memoryOffset);
+
+    pImage->m_DataSize = alignedSize;
+    pImage->m_DataOffset = memoryOffset;
 }
 
 Shader *Context::CreateShader(Resource::ShaderResource *pResource)
@@ -886,7 +1007,7 @@ void Context::GetDescriptorData(
             case DescriptorType::StorageBuffer:
             case DescriptorType::UniformBuffer:
                 bufferInfo.address = info.m_pBuffer->m_DeviceAddress;
-                bufferInfo.range = info.m_pBuffer->m_DeviceDataLen;
+                bufferInfo.range = info.m_pBuffer->m_DataSize;
                 descriptorData = { .pUniformBuffer = &bufferInfo };
                 break;
 
@@ -946,29 +1067,32 @@ Buffer *Context::CreateBuffer(BufferDesc *pDesc)
 {
     ZoneScoped;
 
-    /// Some buffer types, such as descriptor buffers, require explicit alignment
-    if (pDesc->m_UsageFlags & (BufferUsage::ResourceDescriptor | BufferUsage::SamplerDescriptor))
-        pDesc->m_DataLen = Memory::AlignUp(pDesc->m_DataLen, m_pPhysicalDevice->GetDescriptorBufferAlignment());
-
     Buffer *pBuffer = new Buffer;
-    pBuffer->Init(pDesc);
+
+    /// Some buffer types, such as descriptor buffers, require explicit alignment
+    u64 alignedBufferSize = pDesc->m_DataSize;
+    if (pDesc->m_UsageFlags & (BufferUsage::ResourceDescriptor | BufferUsage::SamplerDescriptor))
+        alignedBufferSize =
+            Memory::AlignUp(pDesc->m_DataSize, m_pPhysicalDevice->GetDescriptorBufferAlignment());
 
     VkBufferCreateInfo createInfo = {
         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
         .pNext = nullptr,
-        .size = pBuffer->m_DataLen,
+        .size = alignedBufferSize,
         .usage = VK::ToBufferUsage(pDesc->m_UsageFlags) | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
     };
     vkCreateBuffer(m_pDevice, &createInfo, nullptr, &pBuffer->m_pHandle);
-
-    SetAllocator(pBuffer, pBuffer->m_TargetAllocator);
-    vkBindBufferMemory(m_pDevice, pBuffer->m_pHandle, pBuffer->m_pMemoryHandle, pBuffer->m_AllocatorOffset);
+    AllocateBufferMemory(pDesc->m_TargetAllocator, pBuffer, pDesc->m_DataSize);
 
     VkBufferDeviceAddressInfo deviceAddressInfo = {
         .sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
         .pNext = nullptr,
         .buffer = pBuffer->m_pHandle,
     };
+
+    /// INIT BUFFER ///
+    pBuffer->m_TargetAllocator = pDesc->m_TargetAllocator;
+    pBuffer->m_Stride = pDesc->m_Stride;
     pBuffer->m_DeviceAddress = vkGetBufferDeviceAddress(m_pDevice, &deviceAddressInfo);
 
     return pBuffer;
@@ -978,6 +1102,8 @@ void Context::DeleteBuffer(Buffer *pBuffer, bool waitForWork)
 {
     ZoneScoped;
 
+    assert(pBuffer->m_TargetAllocator != ResourceAllocator::None);
+
     if (waitForWork)
     {
         SwapChainFrame *pCurrentFrame = m_pSwapChain->GetCurrentFrame();
@@ -985,37 +1111,44 @@ void Context::DeleteBuffer(Buffer *pBuffer, bool waitForWork)
         return;
     }
 
-    if (pBuffer->m_pMemoryHandle)
-    {
-        if (pBuffer->m_TargetAllocator == ResourceAllocator::BufferTLSF)
-        {
-            Memory::TLSFBlock *pBlock = (Memory::TLSFBlock *)pBuffer->m_pAllocatorData;
-            assert(pBlock != nullptr);
-
-            m_MABufferTLSF.Allocator.Free(pBlock);
-        }
-        else if (pBuffer->m_TargetAllocator == ResourceAllocator::None)
-        {
-            vkFreeMemory(m_pDevice, pBuffer->m_pMemoryHandle, nullptr);
-        }
-    }
+    DeviceMemory *pMemory = m_Allocators.GetDeviceMemory(pBuffer->m_TargetAllocator);
+    if (pMemory)
+        pMemory->Free(pBuffer->m_pAllocatorData);
 
     if (pBuffer->m_pHandle)
         vkDestroyBuffer(m_pDevice, pBuffer->m_pHandle, nullptr);
 }
 
-void Context::MapMemory(Buffer *pBuffer, void *&pData, u64 offset, u64 size)
+void Context::MapMemory(ResourceAllocator allocator, void *&pData, u64 offset, u64 size)
 {
     ZoneScoped;
 
-    vkMapMemory(m_pDevice, pBuffer->m_pMemoryHandle, pBuffer->m_AllocatorOffset + offset, size, 0, &pData);
+    assert(allocator != ResourceAllocator::None);
+    DeviceMemory *pMemory = m_Allocators.GetDeviceMemory(allocator);
+    vkMapMemory(m_pDevice, pMemory->m_pHandle, offset, size, 0, &pData);
 }
 
-void Context::UnmapMemory(Buffer *pBuffer)
+void Context::UnmapMemory(ResourceAllocator allocator)
 {
     ZoneScoped;
 
-    vkUnmapMemory(m_pDevice, pBuffer->m_pMemoryHandle);
+    assert(allocator != ResourceAllocator::None);
+    DeviceMemory *pMemory = m_Allocators.GetDeviceMemory(allocator);
+    vkUnmapMemory(m_pDevice, pMemory->m_pHandle);
+}
+
+void Context::MapBuffer(Buffer *pBuffer, void *&pData, u64 offset, u64 size)
+{
+    ZoneScoped;
+
+    MapMemory(pBuffer->m_TargetAllocator, pData, offset, size);
+}
+
+void Context::UnmapBuffer(Buffer *pBuffer)
+{
+    ZoneScoped;
+
+    UnmapMemory(pBuffer->m_TargetAllocator);
 }
 
 Image *Context::CreateImage(ImageDesc *pDesc)
@@ -1023,26 +1156,25 @@ Image *Context::CreateImage(ImageDesc *pDesc)
     ZoneScoped;
 
     Image *pImage = new Image;
-    pImage->Init(pDesc);
 
-    if (pImage->m_DataLen == 0)
-        pImage->m_DataLen = pImage->m_Width * pImage->m_Height * GetImageFormatSize(pImage->m_Format);
+    if (pDesc->m_DataSize == 0)
+        pDesc->m_DataSize = pDesc->m_Width * pDesc->m_Height * GetImageFormatSize(pDesc->m_Format);
 
     /// ---------------------------------------------- //
 
     VkImageCreateInfo imageCreateInfo = {};
     imageCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-    imageCreateInfo.format = VK::ToFormat(pImage->m_Format);
+    imageCreateInfo.format = VK::ToFormat(pDesc->m_Format);
     imageCreateInfo.usage = VK::ToImageUsage(pDesc->m_UsageFlags);
     imageCreateInfo.imageType = VK_IMAGE_TYPE_2D;
 
-    imageCreateInfo.extent.width = pImage->m_Width;
-    imageCreateInfo.extent.height = pImage->m_Height;
+    imageCreateInfo.extent.width = pDesc->m_Width;
+    imageCreateInfo.extent.height = pDesc->m_Height;
     imageCreateInfo.extent.depth = 1;
 
     imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    imageCreateInfo.mipLevels = pImage->m_MipMapLevels;
-    imageCreateInfo.arrayLayers = pImage->m_ArraySize;
+    imageCreateInfo.mipLevels = pDesc->m_MipMapLevels;
+    imageCreateInfo.arrayLayers = pDesc->m_ArraySize;
     imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
 
     if (pDesc->m_UsageFlags & ImageUsage::Concurrent)
@@ -1059,23 +1191,17 @@ Image *Context::CreateImage(ImageDesc *pDesc)
     }
 
     vkCreateImage(m_pDevice, &imageCreateInfo, nullptr, &pImage->m_pHandle);
+    AllocateImageMemory(pDesc->m_TargetAllocator, pImage, pDesc->m_DataSize);
 
-    if (pDesc->m_UsageFlags & ImageUsage::AspectColor)
-    {
-        pImage->m_ImageAspect |= VK_IMAGE_ASPECT_COLOR_BIT;
-    }
-    else if (pDesc->m_UsageFlags & ImageUsage::AspectDepthStencil)
-    {
-        pImage->m_ImageAspect |= VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
-    }
+    /// INIT BUFFER ///
+    pImage->m_Format = pDesc->m_Format;
+    pImage->m_TargetAllocator = pDesc->m_TargetAllocator;
+    pImage->m_Width = pDesc->m_Width;
+    pImage->m_Height = pDesc->m_Height;
+    pImage->m_ArraySize = pDesc->m_ArraySize;
+    pImage->m_MipMapLevels = pDesc->m_MipMapLevels;
 
-    /// ---------------------------------------------- //
-
-    SetAllocator(pImage, pImage->m_TargetAllocator);
-
-    vkBindImageMemory(m_pDevice, pImage->m_pHandle, pImage->m_pMemoryHandle, pImage->m_AllocatorOffset);
-
-    CreateImageView(pImage);
+    CreateImageView(pImage, pDesc->m_UsageFlags);
 
     return pImage;
 }
@@ -1084,6 +1210,8 @@ void Context::DeleteImage(Image *pImage, bool waitForWork)
 {
     ZoneScoped;
 
+    assert(pImage->m_TargetAllocator != ResourceAllocator::None);
+
     if (waitForWork)
     {
         SwapChainFrame *pCurrentFrame = m_pSwapChain->GetCurrentFrame();
@@ -1091,20 +1219,9 @@ void Context::DeleteImage(Image *pImage, bool waitForWork)
         return;
     }
 
-    if (pImage->m_pMemoryHandle)
-    {
-        if (pImage->m_TargetAllocator == ResourceAllocator::ImageTLSF)
-        {
-            Memory::TLSFBlock *pBlock = (Memory::TLSFBlock *)pImage->m_pAllocatorData;
-            assert(pBlock != nullptr);
-
-            m_MAImageTLSF.Allocator.Free(pBlock);
-        }
-        else if (pImage->m_TargetAllocator == ResourceAllocator::None)
-        {
-            vkFreeMemory(m_pDevice, pImage->m_pMemoryHandle, nullptr);
-        }
-    }
+    DeviceMemory *pMemory = m_Allocators.GetDeviceMemory(pImage->m_TargetAllocator);
+    if (pMemory)
+        pMemory->Free(pImage->m_pAllocatorData);
 
     if (pImage->m_pViewHandle)
         vkDestroyImageView(m_pDevice, pImage->m_pViewHandle, nullptr);
@@ -1113,9 +1230,15 @@ void Context::DeleteImage(Image *pImage, bool waitForWork)
         vkDestroyImage(m_pDevice, pImage->m_pHandle, nullptr);
 }
 
-void Context::CreateImageView(Image *pImage)
+void Context::CreateImageView(Image *pImage, ImageUsage aspectUsage)
 {
     ZoneScoped;
+
+    VkImageAspectFlags aspectFlags = 0;
+    if (aspectUsage & ImageUsage::AspectColor)
+        aspectFlags |= VK_IMAGE_ASPECT_COLOR_BIT;
+    if (aspectUsage & ImageUsage::AspectDepthStencil)
+        aspectFlags |= VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
 
     VkImageViewCreateInfo imageViewCreateInfo = {};
     imageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -1129,7 +1252,7 @@ void Context::CreateImageView(Image *pImage)
     imageViewCreateInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
     imageViewCreateInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
 
-    imageViewCreateInfo.subresourceRange.aspectMask = pImage->m_ImageAspect;
+    imageViewCreateInfo.subresourceRange.aspectMask = aspectFlags;
     imageViewCreateInfo.subresourceRange.baseMipLevel = 0;
     imageViewCreateInfo.subresourceRange.levelCount = pImage->m_MipMapLevels;
     imageViewCreateInfo.subresourceRange.baseArrayLayer = 0;
@@ -1187,101 +1310,6 @@ void Context::DeleteSampler(VkSampler pSampler)
     ZoneScoped;
 
     vkDestroySampler(m_pDevice, pSampler, nullptr);
-}
-
-void Context::SetAllocator(Buffer *pBuffer, ResourceAllocator targetAllocator)
-{
-    ZoneScoped;
-
-    VkMemoryRequirements memReq = {};
-    vkGetBufferMemoryRequirements(m_pDevice, pBuffer->m_pHandle, &memReq);
-    pBuffer->m_DeviceDataLen = memReq.size;
-
-    switch (targetAllocator)
-    {
-        case ResourceAllocator::Descriptor:
-        {
-            pBuffer->m_AllocatorOffset =
-                m_MADescriptor.Allocator.Allocate(pBuffer->m_DeviceDataLen, memReq.alignment);
-            pBuffer->m_pMemoryHandle = m_MADescriptor.pHeap;
-
-            break;
-        }
-        case ResourceAllocator::BufferLinear:
-        {
-            pBuffer->m_AllocatorOffset =
-                m_MABufferLinear.Allocator.Allocate(pBuffer->m_DeviceDataLen, memReq.alignment);
-            pBuffer->m_pMemoryHandle = m_MABufferLinear.pHeap;
-
-            break;
-        }
-        case ResourceAllocator::BufferTLSF:
-        {
-            Memory::TLSFBlock *pBlock =
-                m_MABufferTLSF.Allocator.Allocate(pBuffer->m_DeviceDataLen, memReq.alignment);
-
-            pBuffer->m_pAllocatorData = pBlock;
-            pBuffer->m_AllocatorOffset = Memory::AlignUp(pBlock->m_Offset, memReq.alignment);
-            pBuffer->m_pMemoryHandle = m_MABufferTLSF.pHeap;
-
-            break;
-        }
-        case ResourceAllocator::BufferTLSF_Host:
-        {
-            Memory::TLSFBlock *pBlock =
-                m_MABufferTLSFHost.Allocator.Allocate(pBuffer->m_DeviceDataLen, memReq.alignment);
-
-            pBuffer->m_pAllocatorData = pBlock;
-            pBuffer->m_AllocatorOffset = Memory::AlignUp(pBlock->m_Offset, memReq.alignment);
-            pBuffer->m_pMemoryHandle = m_MABufferTLSFHost.pHeap;
-
-            break;
-        }
-        case ResourceAllocator::BufferFrametime:
-        {
-            u32 currentFrame = m_pSwapChain->m_CurrentFrame;
-            pBuffer->m_AllocatorOffset = m_MABufferFrametime[currentFrame].Allocator.Allocate(
-                pBuffer->m_DeviceDataLen, memReq.alignment);
-            pBuffer->m_pMemoryHandle = m_MABufferFrametime[currentFrame].pHeap;
-
-            break;
-        }
-        default:
-            LOG_CRITICAL("Trying to allocate VKBuffer resource from invalid allocator.");
-            break;
-    }
-}
-
-void Context::SetAllocator(Image *pImage, ResourceAllocator targetAllocator)
-{
-    ZoneScoped;
-
-    VkMemoryRequirements memReq = {};
-    vkGetImageMemoryRequirements(m_pDevice, pImage->m_pHandle, &memReq);
-    pImage->m_DeviceDataLen = memReq.size;
-
-    switch (targetAllocator)
-    {
-        case ResourceAllocator::None:
-        {
-            pImage->m_pMemoryHandle =
-                CreateHeap(Memory::AlignUp(memReq.size, memReq.alignment), MemoryFlag::Device);
-
-            break;
-        }
-        case ResourceAllocator::ImageTLSF:
-        {
-            Memory::TLSFBlock *pBlock = m_MAImageTLSF.Allocator.Allocate(pImage->m_DataLen, memReq.alignment);
-
-            pImage->m_pAllocatorData = pBlock;
-            pImage->m_AllocatorOffset = Memory::AlignUp(pBlock->m_Offset, memReq.alignment);
-            pImage->m_pMemoryHandle = m_MAImageTLSF.pHeap;
-
-            break;
-        }
-        default:
-            break;
-    }
 }
 
 Semaphore *Context::GetAvailableAcquireSemaphore(Semaphore *pOldSemaphore)

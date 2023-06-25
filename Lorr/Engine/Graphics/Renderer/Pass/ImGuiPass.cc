@@ -1,5 +1,5 @@
 // Created on Wednesday November 23rd 2022 by exdal
-// Last modified on Tuesday June 13th 2023 by exdal
+// Last modified on Sunday June 25th 2023 by exdal
 
 #include "Graphics/Renderer/Pass.hh"
 
@@ -46,7 +46,7 @@ void AddImguiPass(RenderGraph *pGraph, eastl::string_view name)
                 .m_MipMapLevels = 1,
             };
             data.m_pFontImage = pGraph->CreateImage("imgui_font", imageDesc);
-            pGraph->FillImageData(data.m_pFontImage, eastl::span<u8>(pFontData, data.m_pFontImage->m_DataLen));
+            pGraph->FillImageData(data.m_pFontImage, eastl::span<u8>(pFontData, data.m_pFontImage->m_DataSize));
             free(pFontData);
 
             io.Fonts->SetTexID(data.m_pFontImage);
@@ -70,7 +70,7 @@ void AddImguiPass(RenderGraph *pGraph, eastl::string_view name)
                 .m_UsageFlags = BufferUsage::Storage,
                 .m_TargetAllocator = ResourceAllocator::BufferTLSF_Host,
                 .m_Stride = sizeof(ImDrawVert),
-                .m_DataLen = sizeof(ImDrawVert) * 0xffff,
+                .m_DataSize = sizeof(ImDrawVert) * 0xffff,
             };
             data.m_pVertexBuffer = pContext->CreateBuffer(&vertexBufferDesc);
 
@@ -108,7 +108,7 @@ void AddImguiPass(RenderGraph *pGraph, eastl::string_view name)
 
             u32 mapDataOffset = 0;
             void *pMapData = nullptr;
-            pContext->MapMemory(passData.m_pVertexBuffer, pMapData, 0, passData.m_pVertexBuffer->m_DataLen);
+            pContext->MapBuffer(passData.m_pVertexBuffer, pMapData, 0, passData.m_pVertexBuffer->m_DataSize);
             for (u32 i = 0; i < pDrawData->CmdListsCount; i++)
             {
                 const ImDrawList *pDrawList = pDrawData->CmdLists[i];
@@ -119,7 +119,7 @@ void AddImguiPass(RenderGraph *pGraph, eastl::string_view name)
 
                 mapDataOffset += pDrawList->VtxBuffer.Size;
             }
-            pContext->UnmapMemory(passData.m_pVertexBuffer);
+            pContext->UnmapBuffer(passData.m_pVertexBuffer);
 
             PushConstant pushConstantData = {};
             pushConstantData.m_Scale.x = 2.0 / pDrawData->DisplaySize.x;

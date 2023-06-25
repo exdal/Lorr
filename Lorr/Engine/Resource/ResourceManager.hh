@@ -38,9 +38,9 @@ struct ResourceManager
 
         ScopedSpinLock _(m_AllocatorLock);
 
-        void *pBlock = nullptr;
+        Memory::TLSFBlockID blockID;
         u8 *pResourceData =
-            (u8 *)m_Allocator.Allocate(sizeof(_Resource) + Memory::TLSFAllocatorView::ALIGN_SIZE, 1, &pBlock);
+            (u8 *)m_Allocator.Allocate(blockID, sizeof(_Resource) + Memory::TLSFAllocatorView::ALIGN_SIZE, 1);
         if (!pResourceData)
         {
             LOG_ERROR("Failed to allocate space for Resource<{}>. Out of memory.", (u32)resource.m_Type);
@@ -49,7 +49,7 @@ struct ResourceManager
 
         _Resource *pResource = new (pResourceData + Memory::TLSFAllocatorView::ALIGN_SIZE) _Resource;
 
-        memcpy(pResourceData, &pBlock, Memory::TLSFAllocatorView::ALIGN_SIZE);
+        memcpy(pResourceData, &blockID, Memory::TLSFAllocatorView::ALIGN_SIZE);
         memcpy(pResource, &resource, sizeof(_Resource));
 
         m_Resources.push_back(eastl::make_pair(Hash::FNV64String(name), (void *)pResource));
@@ -70,8 +70,6 @@ struct ResourceManager
         Memory::TLSFBlockID blockID =
             *(Memory::TLSFBlockID *)((u8 *)pResource - Memory::TLSFAllocatorView::ALIGN_SIZE);
         m_Allocator.Free(blockID, false);
-
-        // Let's keep the data inside map, it's a pointer anyway, not a big deal to hold
     }
 
     eastl::vector<eastl::pair<u64, void *>> m_Resources;

@@ -76,7 +76,7 @@ struct TLSFAllocator
     void Init(const TLSFAllocatorDesc &desc);
     void Delete();
     bool CanAllocate(u64 size, u32 alignment = 1);
-    void *Allocate(u64 size, u32 alignment = 1, void **ppAllocatorData = nullptr);
+    void *Allocate(TLSFBlockID &blockIDOut, u64 size, u32 alignment = 1);
     void Free(TLSFBlockID blockID, bool freeData);
 
     TLSFAllocatorView m_View;

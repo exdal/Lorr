@@ -77,10 +77,10 @@ void AddImguiPass(RenderGraph *pGraph, eastl::string_view name)
 
             DescriptorGetInfo imageDescriptorInfo(data.m_pFontImage);
             DescriptorGetInfo samplerDescriptorInfo(data.m_pSampler);
-            DescriptorGetInfo pBufferInfos[] = { data.m_pVertexBuffer };
+            DescriptorGetInfo bufferDescriptorInfo(data.m_pVertexBuffer);
             builder.SetDescriptor(DescriptorType::SampledImage, imageDescriptorInfo);
             builder.SetDescriptor(DescriptorType::Sampler, samplerDescriptorInfo);
-            builder.SetDescriptor(DescriptorType::StorageBuffer, pBufferInfos);
+            builder.SetDescriptor(DescriptorType::StorageBuffer, bufferDescriptorInfo);
 
             auto *pVertexShaderData =
                 Engine::GetResourceMan()->Get<Resource::ShaderResource>("shader://imgui.vs");

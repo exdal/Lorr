@@ -1,5 +1,5 @@
 // Created on Monday July 18th 2022 by exdal
-// Last modified on Sunday June 25th 2023 by exdal
+// Last modified on Monday June 26th 2023 by exdal
 
 #pragma once
 
@@ -184,17 +184,6 @@ struct Context
     bool SetupPhysicalDevice();
     bool SetupSurface(BaseWindow *pWindow);
     bool SetupDevice();
-
-    /// ----------------------------------------------------------- ///
-
-    template<typename _Allocator>
-    struct BufferedAllocator
-    {
-        _Allocator Allocator;
-        VkDeviceMemory pHeap;
-    };
-
-    /// ----------------------------------------------------------- ///
 
     /// API Context
     VkInstance m_pInstance = nullptr;

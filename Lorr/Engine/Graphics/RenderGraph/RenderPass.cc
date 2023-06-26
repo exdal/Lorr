@@ -1,5 +1,5 @@
 // Created on Tuesday March 14th 2023 by exdal
-// Last modified on Monday June 26th 2023 by exdal
+// Last modified on Tuesday June 27th 2023 by exdal
 
 #include "RenderPass.hh"
 
@@ -316,7 +316,7 @@ void RenderPassBuilder::GetResourceDescriptors(Buffer *pDst, CommandList *pList)
 
             m_pContext->GetDescriptorData(
                 elementType, bdaBufferDescriptor, bindingSize, (u8 *)pMapData + mapOffset);
-            memcpy((u8 *)pMapData + pBDABuffer->m_DataOffset, info.m_pData, info.m_DataSize);
+            memcpy((u8 *)pMapData + pBDABuffer->m_DataOffset, info.m_pData, info.m_Offset);
         }
         else
         {
@@ -355,7 +355,7 @@ void RenderPassBuilder::GetSamplerDescriptors(Buffer *pDst, CommandList *pList)
     m_pContext->UnmapBuffer(pSamplerDescriptor);
 
     pList->CopyBufferToBuffer(pSamplerDescriptor, pDst, 0, 0, bufferDesc.m_DataSize);
-    m_pContext->DeleteBuffer(pSamplerDescriptor);
+    // m_pContext->DeleteBuffer(pSamplerDescriptor);
 }
 
 }  // namespace lr::Graphics

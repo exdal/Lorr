@@ -1,5 +1,5 @@
 // Created on Monday July 18th 2022 by exdal
-// Last modified on Monday June 26th 2023 by exdal
+// Last modified on Tuesday June 27th 2023 by exdal
 
 #include "Context.hh"
 
@@ -1141,7 +1141,9 @@ void Context::MapBuffer(Buffer *pBuffer, void *&pData, u64 offset, u64 size)
 {
     ZoneScoped;
 
-    MapMemory(pBuffer->m_TargetAllocator, pData, offset, size);
+    // Holy shit... That was the fix for Buffer + Device Mem rework commit...
+    // offset -> pBuffer->m_DataOffset + offset, i fucking hate myself...................................
+    MapMemory(pBuffer->m_TargetAllocator, pData, pBuffer->m_DataOffset + offset, size);
 }
 
 void Context::UnmapBuffer(Buffer *pBuffer)

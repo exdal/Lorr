@@ -1,5 +1,5 @@
 // Created on Friday February 24th 2023 by exdal
-// Last modified on Monday June 12th 2023 by exdal
+// Last modified on Monday June 26th 2023 by exdal
 
 #pragma once
 
@@ -150,11 +150,7 @@ struct DescriptorBufferInfo
     DescriptorSetLayout *m_pLayout = nullptr;
     u32 m_BindingID = 0;
 
-    union
-    {
-        u8 *m_pData = nullptr;
-        Buffer *m_pBuffer;
-    };
+    u8 *m_pData = nullptr;
     u64 m_Offset = 0;
     u64 m_DataSize = 0;
 };

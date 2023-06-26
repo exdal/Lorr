@@ -1,5 +1,5 @@
 // Created on Friday February 24th 2023 by exdal
-// Last modified on Sunday June 25th 2023 by exdal
+// Last modified on Monday June 26th 2023 by exdal
 
 #include "RenderGraph.hh"
 
@@ -130,6 +130,7 @@ void RenderGraph::Prepare()
             .m_DataSize = descriptorBufferSize,
         };
         m_pResourceDescriptorBuffer = m_pContext->CreateBuffer(&resourceBufferDesc);
+        m_pContext->SetObjectName(m_pResourceDescriptorBuffer, "ResourceDescriptor");
 
         builder.GetResourceDescriptors(m_pResourceDescriptorBuffer, pSetupList);
 

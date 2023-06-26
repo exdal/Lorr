@@ -161,7 +161,7 @@ void AddImguiPass(RenderGraph *pGraph, eastl::string_view name)
                     BindlessLayout bindlessLayout(pBindings);
                     pList->SetBindlessLayout(bindlessLayout);
 
-                    // pList->Draw(cmd.VertexCount, cmd.VtxOffset + vertexOffset);
+                    pList->Draw(cmd.VertexCount, cmd.VtxOffset + vertexOffset);
                 }
 
                 vertexOffset += pDrawList->VtxBuffer.Size;

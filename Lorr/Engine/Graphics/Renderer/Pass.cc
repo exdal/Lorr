@@ -10,7 +10,7 @@ void Graphics::InitPasses(RenderGraph *pGraph)
 
     AddSwapChainAcquirePass(pGraph, "$acquire");
 
-    AddGeometryPass(pGraph, "geometry");
+    // AddGeometryPass(pGraph, "geometry");
     AddImguiPass(pGraph, "imgui");
 
     AddSwapChainPresentPass(pGraph, "$present");

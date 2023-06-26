@@ -33,7 +33,7 @@ struct BindlessLayout
         u32 m_DescriptorIndex = 0;
     };
 
-    constexpr BindlessLayout(eastl::span<Binding> bindings)
+    BindlessLayout(eastl::span<Binding> bindings)
     {
         memset(&m_Data[0], ~0, m_Data.size() * kDescriptorIDSize); // Debugging purposes
 
@@ -180,8 +180,8 @@ struct PipelineBarrier
     PipelineStage m_DstStage = PipelineStage::None;
     MemoryAccess m_SrcAccess = MemoryAccess::None;
     MemoryAccess m_DstAccess = MemoryAccess::None;
-    u32 m_SrcQueue = ~0;
-    u32 m_DstQueue = ~0;
+    u32 m_SrcQueue = -1u;
+    u32 m_DstQueue = -1u;
 };
 
 // Utility classes to help us batch the barriers

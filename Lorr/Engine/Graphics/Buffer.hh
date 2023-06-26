@@ -1,5 +1,5 @@
 // Created on Saturday April 22nd 2023 by exdal
-// Last modified on Wednesday June 14th 2023 by exdal
+// Last modified on Sunday June 25th 2023 by exdal
 
 #pragma once
 
@@ -32,7 +32,7 @@ struct BufferDesc
 struct Buffer : APIObject<VK_OBJECT_TYPE_BUFFER>
 {
     ResourceAllocator m_TargetAllocator = ResourceAllocator::None;
-    void *m_pAllocatorData = nullptr;
+    u64 m_AllocatorData = ~0;
 
     u32 m_DescriptorIndex = -1;
     

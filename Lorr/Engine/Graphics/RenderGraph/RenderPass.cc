@@ -1,5 +1,5 @@
 // Created on Tuesday March 14th 2023 by exdal
-// Last modified on Sunday June 25th 2023 by exdal
+// Last modified on Monday June 26th 2023 by exdal
 
 #include "RenderPass.hh"
 
@@ -304,6 +304,7 @@ void RenderPassBuilder::GetResourceDescriptors(Buffer *pDst, CommandList *pList)
                 .m_DataSize = info.m_DataSize,
             };
             Buffer *pDescriptorBuffer = m_pContext->CreateBuffer(&descriptorBufferDesc);
+            m_pContext->SetObjectName(pDescriptorBuffer, "DescriptorBuffer-BDALUT");
 
             {
                 BufferDesc tempBufferDesc = {
@@ -320,7 +321,7 @@ void RenderPassBuilder::GetResourceDescriptors(Buffer *pDst, CommandList *pList)
 
                 pList->CopyBufferToBuffer(pTempBuffer, pDescriptorBuffer, 0, 0, pTempBuffer->m_DataSize);
 
-                m_pContext->DeleteBuffer(pTempBuffer);
+                //m_pContext->DeleteBuffer(pTempBuffer);
             }
 
             DescriptorType elementType = BindingToDescriptorType(info.m_BindingID);
@@ -344,7 +345,7 @@ void RenderPassBuilder::GetResourceDescriptors(Buffer *pDst, CommandList *pList)
     m_pContext->UnmapBuffer(pResourceDescriptor);
 
     pList->CopyBufferToBuffer(pResourceDescriptor, pDst, 0, 0, bufferDesc.m_DataSize);
-    m_pContext->DeleteBuffer(pResourceDescriptor);
+    //m_pContext->DeleteBuffer(pResourceDescriptor);
 }
 
 void RenderPassBuilder::GetSamplerDescriptors(Buffer *pDst, CommandList *pList)

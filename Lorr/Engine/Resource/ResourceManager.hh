@@ -39,17 +39,18 @@ struct ResourceManager
         ScopedSpinLock _(m_AllocatorLock);
 
         Memory::TLSFBlockID blockID;
-        u8 *pResourceData =
-            (u8 *)m_Allocator.Allocate(blockID, sizeof(_Resource) + Memory::TLSFAllocatorView::ALIGN_SIZE, 1);
+        u8 *pResourceData = (u8 *)m_Allocator.Allocate(
+            blockID,
+            sizeof(_Resource) + Memory::TLSFAllocatorView::ALIGN_SIZE,
+            Memory::TLSFAllocatorView::ALIGN_SIZE);
         if (!pResourceData)
         {
             LOG_ERROR("Failed to allocate space for Resource<{}>. Out of memory.", (u32)resource.m_Type);
             return nullptr;
         }
 
+        memcpy(pResourceData, &blockID, sizeof(Memory::TLSFBlockID)); 
         _Resource *pResource = new (pResourceData + Memory::TLSFAllocatorView::ALIGN_SIZE) _Resource;
-
-        memcpy(pResourceData, &blockID, Memory::TLSFAllocatorView::ALIGN_SIZE);
         memcpy(pResource, &resource, sizeof(_Resource));
 
         m_Resources.push_back(eastl::make_pair(Hash::FNV64String(name), (void *)pResource));

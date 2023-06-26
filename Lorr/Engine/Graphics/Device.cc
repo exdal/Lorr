@@ -273,7 +273,7 @@ u32 PhysicalDevice::SelectQueue(
         if (selectBest)
         {
             queueFlags ^= desiredQueue;
-            u32 setBitCount = _popcnt32(queueFlags);
+            u32 setBitCount = __popcnt(queueFlags);
             if (setBitCount < bestCount)
             {
                 bestCount = setBitCount;

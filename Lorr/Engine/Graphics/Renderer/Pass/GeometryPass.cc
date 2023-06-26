@@ -1,5 +1,5 @@
 // Created on Saturday April 22nd 2023 by exdal
-// Last modified on Sunday June 25th 2023 by exdal
+// Last modified on Monday June 26th 2023 by exdal
 
 #include "Graphics/Renderer/Pass.hh"
 
@@ -34,6 +34,7 @@ void AddGeometryPass(RenderGraph *pGraph, eastl::string_view name)
             test = 32;
             memcpy((u8 *)pMapData + 4, &test, 4);
             pContext->UnmapBuffer(pDummyBuffer);
+            pContext->SetObjectName(pDummyBuffer, "DummyBuffer");
 
             ImageDesc imageDesc = {
                 .m_UsageFlags = ImageUsage::Sampled | ImageUsage::TransferDst,
@@ -69,11 +70,11 @@ void AddGeometryPass(RenderGraph *pGraph, eastl::string_view name)
         },
         [](Context *pContext, GeometryPassData &data, CommandList *pList)
         {
-            pList->SetViewport(0, 0, 0, 1, 1);
-            pList->SetScissors(0, 0, 0, 1, 1);
-            pList->SetPrimitiveType(PrimitiveType::TriangleList);
+            // pList->SetViewport(0, 0, 0, 1, 1);
+            // pList->SetScissors(0, 0, 0, 1, 1);
+            // pList->SetPrimitiveType(PrimitiveType::TriangleList);
             // pList->SetBindlessLayout({ { 0, data.m_pBuffer } });
-            pList->Draw(3);
+            // pList->Draw(3);
         },
         [](Context *pContext)
         {

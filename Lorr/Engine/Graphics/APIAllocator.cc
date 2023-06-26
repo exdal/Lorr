@@ -13,7 +13,7 @@ void *APIAllocator::Allocate(u64 size)
         size + Memory::TLSFAllocatorView::ALIGN_SIZE, Memory::TLSFAllocatorView::ALIGN_SIZE);
 
     u64 offset = m_TypeAllocator.GetBlockData(blockID)->m_Offset;
-    memcpy(m_pTypeData + offset, &blockID, Memory::TLSFAllocatorView::ALIGN_SIZE);
+    memcpy(m_pTypeData + offset, &blockID, sizeof(Memory::TLSFBlockID));
     return (m_pTypeData + offset + Memory::TLSFAllocatorView::ALIGN_SIZE);
 }
 

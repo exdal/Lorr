@@ -1,5 +1,5 @@
 // Created on Sunday March 19th 2023 by exdal
-// Last modified on Wednesday June 21st 2023 by exdal
+// Last modified on Sunday June 25th 2023 by exdal
 
 #pragma once
 
@@ -63,28 +63,28 @@ struct Surface : APIObject<VK_OBJECT_TYPE_SURFACE_KHR>
 
 struct DeviceMemory : APIObject<VK_OBJECT_TYPE_DEVICE_MEMORY>
 {
-    virtual u64 Allocate(u64 dataSize, u64 alignment, void *pAllocatorData) = 0;
-    virtual void Free(void *pAllocatorData) = 0;
+    virtual u64 Allocate(u64 dataSize, u64 alignment, u64 &allocatorData) = 0;
+    virtual void Free(u64 allocatorData) = 0;
 
     VkDeviceMemory m_pHandle = VK_NULL_HANDLE;
 };
 
 struct TLSFDeviceMemory : DeviceMemory
 {
-    u64 Allocate(u64 dataSize, u64 alignment, void *pAllocatorData) override
+    u64 Allocate(u64 dataSize, u64 alignment, u64 &allocatorData) override
     {
         ZoneScoped;
 
         Memory::TLSFBlockID blockID = m_Allocator.Allocate(dataSize, alignment);
-        pAllocatorData = &blockID;
+        allocatorData = blockID;
         return m_Allocator.GetBlockData(blockID)->m_Offset;
     }
 
-    void Free(void *pAllocatorData) override
+    void Free(u64 allocatorData) override
     {
         ZoneScoped;
 
-        m_Allocator.Free(*(Memory::TLSFBlockID *)pAllocatorData);
+        m_Allocator.Free(allocatorData);
     }
 
     Memory::TLSFAllocatorView m_Allocator = {};
@@ -92,14 +92,14 @@ struct TLSFDeviceMemory : DeviceMemory
 
 struct LinearDeviceMemory : DeviceMemory
 {
-    u64 Allocate(u64 dataSize, u64 alignment, void *pAllocatorData) override
+    u64 Allocate(u64 dataSize, u64 alignment, u64 &allocatorData) override
     {
         ZoneScoped;
 
         return m_Allocator.Allocate(dataSize, alignment);
     }
 
-    void Free(void *pAllocatorData) override
+    void Free(u64 allocatorData) override
     {
         ZoneScoped;
 

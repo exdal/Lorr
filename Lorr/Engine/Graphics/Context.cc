@@ -1,5 +1,5 @@
 // Created on Monday July 18th 2022 by exdal
-// Last modified on Sunday June 25th 2023 by exdal
+// Last modified on Monday June 26th 2023 by exdal
 
 #include "Context.hh"
 
@@ -723,7 +723,7 @@ void Context::BeginFrame()
         imageQueue.pop();
     }
 
-    m_Allocators.m_ppBufferFrametime[m_pSwapChain->m_CurrentFrame]->Free(nullptr);
+    m_Allocators.m_ppBufferFrametime[m_pSwapChain->m_CurrentFrame]->Free(0);
 }
 
 void Context::EndFrame()
@@ -861,7 +861,7 @@ void Context::AllocateBufferMemory(ResourceAllocator allocator, Buffer *pBuffer,
     u64 alignment = 0;
     u64 alignedSize = GetBufferMemorySize(pBuffer, &alignment);
     DeviceMemory *pMemory = m_Allocators.GetDeviceMemory(allocator);
-    u64 memoryOffset = pMemory->Allocate(alignedSize, alignment, pBuffer->m_pAllocatorData);
+    u64 memoryOffset = pMemory->Allocate(alignedSize, alignment, pBuffer->m_AllocatorData);
 
     vkBindBufferMemory(m_pDevice, pBuffer->m_pHandle, pMemory->m_pHandle, memoryOffset);
 
@@ -878,7 +878,7 @@ void Context::AllocateImageMemory(ResourceAllocator allocator, Image *pImage, u6
     u64 alignment = 0;
     u64 alignedSize = GetImageMemorySize(pImage, &alignment);
     DeviceMemory *pMemory = m_Allocators.GetDeviceMemory(allocator);
-    u64 memoryOffset = pMemory->Allocate(alignedSize, alignment, pImage->m_pAllocatorData);
+    u64 memoryOffset = pMemory->Allocate(alignedSize, alignment, pImage->m_AllocatorData);
 
     vkBindImageMemory(m_pDevice, pImage->m_pHandle, pMemory->m_pHandle, memoryOffset);
 
@@ -1113,7 +1113,7 @@ void Context::DeleteBuffer(Buffer *pBuffer, bool waitForWork)
 
     DeviceMemory *pMemory = m_Allocators.GetDeviceMemory(pBuffer->m_TargetAllocator);
     if (pMemory)
-        pMemory->Free(pBuffer->m_pAllocatorData);
+        pMemory->Free(pBuffer->m_AllocatorData);
 
     if (pBuffer->m_pHandle)
         vkDestroyBuffer(m_pDevice, pBuffer->m_pHandle, nullptr);
@@ -1221,7 +1221,7 @@ void Context::DeleteImage(Image *pImage, bool waitForWork)
 
     DeviceMemory *pMemory = m_Allocators.GetDeviceMemory(pImage->m_TargetAllocator);
     if (pMemory)
-        pMemory->Free(pImage->m_pAllocatorData);
+        pMemory->Free(pImage->m_AllocatorData);
 
     if (pImage->m_pViewHandle)
         vkDestroyImageView(m_pDevice, pImage->m_pViewHandle, nullptr);

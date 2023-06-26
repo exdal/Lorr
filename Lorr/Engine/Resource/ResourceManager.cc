@@ -45,27 +45,20 @@ void ResourceManager::Init()
 
     for (char *&pShaderPath : shaderVals)
     {
-        Job::JobManager::Schedule(
-            [=]()
-            {
-                eastl::string resourceName = _FMT("shader://{}", ls::TrimFileName(pShaderPath));
-                LOG_TRACE("Compiling shader '{}'...", resourceName);
+        eastl::string resourceName = _FMT("shader://{}", ls::TrimFileName(pShaderPath));
+        LOG_TRACE("Compiling shader '{}'...", resourceName);
 
-                FileView file(_FMT("{}/{}", workingDir, pShaderPath));
-                ShaderResource outResource = {};
-                if (!Parser::ParseGLSL(BufferReadStream(file), outResource, workingDir))
-                {
-                    return;
-                }
+        FileView file(_FMT("{}/{}", workingDir, pShaderPath));
+        ShaderResource outResource = {};
+        if (!Parser::ParseGLSL(BufferReadStream(file), outResource, workingDir))
+        {
+            return;
+        }
 
-                LOG_TRACE(
-                    "Compiled shader '{}', SPIR-V module: '{}'", resourceName, outResource.get().m_pShader);
+        LOG_TRACE("Compiled shader '{}', SPIR-V module: '{}'", resourceName, outResource.get().m_pShader);
 
-                Add(resourceName, outResource);
-            });
+        Add(resourceName, outResource);
     }
-
-    Job::JobManager::WaitForAll(); // This does not work properly
 }
 
 }  // namespace lr::Resource

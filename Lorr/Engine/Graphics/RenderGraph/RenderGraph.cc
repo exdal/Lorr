@@ -3,8 +3,6 @@
 
 #include "RenderGraph.hh"
 
-#include "STL/Vector.hh"
-
 namespace lr::Graphics
 {
 static MemoryAccess ToImageMemoryAccess(ImageLayout layout, bool write)

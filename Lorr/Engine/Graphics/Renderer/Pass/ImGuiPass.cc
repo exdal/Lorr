@@ -1,5 +1,5 @@
 // Created on Wednesday November 23rd 2022 by exdal
-// Last modified on Sunday June 25th 2023 by exdal
+// Last modified on Monday June 26th 2023 by exdal
 
 #include "Graphics/Renderer/Pass.hh"
 
@@ -28,7 +28,7 @@ void AddImguiPass(RenderGraph *pGraph, eastl::string_view name)
 
     auto *pPass = pGraph->CreateGraphicsPassCb<ImguiPassData>(
         name,
-        [pGraph](Context *pContext, ImguiPassData &data, RenderPassBuilder &builder)
+        [pGraph](Context *pContext, ImguiPassData &data, RenderPassBuilder &builder) EA_NO_INLINE
         {
             ImGuiIO &io = ImGui::GetIO();
 
@@ -73,6 +73,7 @@ void AddImguiPass(RenderGraph *pGraph, eastl::string_view name)
                 .m_DataSize = sizeof(ImDrawVert) * 0xffff,
             };
             data.m_pVertexBuffer = pContext->CreateBuffer(&vertexBufferDesc);
+            pContext->SetObjectName(data.m_pVertexBuffer, "VertexBuffer");
 
             DescriptorGetInfo imageDescriptorInfo(data.m_pFontImage);
             DescriptorGetInfo samplerDescriptorInfo(data.m_pSampler);
@@ -97,7 +98,7 @@ void AddImguiPass(RenderGraph *pGraph, eastl::string_view name)
             builder.SetShader(pVertexShader);
             builder.SetShader(pPixelShader);
         },
-        [](Context *pContext, ImguiPassData &passData, CommandList *pList)
+        [](Context *pContext, ImguiPassData &passData, CommandList *pList) EA_NO_INLINE
         {
             ImDrawData *pDrawData = ImGui::GetDrawData();
             if (pDrawData->DisplaySize.x <= 0.0f || pDrawData->DisplaySize.y <= 0.0f)
@@ -160,7 +161,7 @@ void AddImguiPass(RenderGraph *pGraph, eastl::string_view name)
                     BindlessLayout bindlessLayout(pBindings);
                     pList->SetBindlessLayout(bindlessLayout);
 
-                    pList->Draw(cmd.VertexCount, cmd.VtxOffset + vertexOffset);
+                    // pList->Draw(cmd.VertexCount, cmd.VtxOffset + vertexOffset);
                 }
 
                 vertexOffset += pDrawList->VtxBuffer.Size;

@@ -5,8 +5,6 @@
 
 #include "shaders/common.glsl"
 
-#extension GL_EXT_debug_printf : enable
-
 struct Constants
 {
     vec2 Scale; 

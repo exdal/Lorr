@@ -1,5 +1,5 @@
 // Created on Sunday May 21st 2023 by exdal
-// Last modified on Monday May 22nd 2023 by exdal
+// Last modified on Tuesday June 27th 2023 by exdal
 
 #pragma once
 
@@ -11,7 +11,7 @@ namespace lr
 struct BackTrace
 {
     static void Init();
-    static void PrintTrace(iptr threadID);
+    static void PrintTrace(iptr threadID, FILE *pFile);
 
     void *m_pDbgHelpDll = nullptr;
     void *m_pProcess = nullptr;

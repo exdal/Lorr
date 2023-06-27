@@ -1,5 +1,5 @@
 // Created on Friday February 24th 2023 by exdal
-// Last modified on Monday June 26th 2023 by exdal
+// Last modified on Tuesday June 27th 2023 by exdal
 
 #include "RenderGraph.hh"
 
@@ -158,7 +158,7 @@ void RenderGraph::Prepare()
         builder.GetSamplerDescriptors(m_pSamplerDescriptorBuffer, pSetupList);
 
         m_DescriptorSetOffsets.push_back(0);  // It's only one buffer, does not matter
-        m_DescriptorSetIndices.push_back(1);  // Again, we have 2 buffers
+        m_DescriptorSetIndices.push_back(1);
     }
 
     m_pContext->EndCommandList(pSetupList);

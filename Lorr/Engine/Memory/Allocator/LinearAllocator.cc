@@ -1,5 +1,5 @@
 // Created on Friday November 18th 2022 by exdal
-// Last modified on Wednesday May 24th 2023 by exdal
+// Last modified on Friday June 30th 2023 by exdal
 
 #include "LinearAllocator.hh"
 
@@ -8,109 +8,107 @@
 
 namespace lr::Memory
 {
-void LinearAllocatorView::Init(u64 size)
-{
-    ZoneScoped;
-
-    m_Size = size;
-}
-
 bool LinearAllocatorView::CanAllocate(u64 size, u32 alignment)
 {
     ZoneScoped;
 
-    u32 alignedSize = Memory::AlignUp(size, alignment);
-
-    if (m_Offset + alignedSize > m_Size)
-        return false;
-
-    return true;
+    u64 alignedSize = Memory::AlignUp(size, alignment);
+    return FindFreeRegion(alignedSize) != nullptr;
 }
 
-u64 LinearAllocatorView::Allocate(u64 size, u32 alignment)
+void LinearAllocatorView::Reset()
 {
     ZoneScoped;
 
-    if (!CanAllocate(size, alignment))
+    AllocationRegion *pCurrentRegion = m_pFirstRegion;
+    while (pCurrentRegion != nullptr)
     {
-        LOG_ERROR(
-            "Linear memory allocator reached it's limit. Allocated {} in total and requested {}.",
-            m_Size,
-            size);
-        return -1;
+        pCurrentRegion->m_Size = 0;
+        pCurrentRegion = pCurrentRegion->m_pNext;
+    }
+}
+
+AllocationRegion *LinearAllocatorView::FindFreeRegion(u64 size)
+{
+    ZoneScoped;
+
+    AllocationRegion *pCurrentRegion = m_pFirstRegion;
+    while (pCurrentRegion != nullptr)
+    {
+        if (pCurrentRegion->m_Capacity - pCurrentRegion->m_Size >= size)
+            break;
+
+        pCurrentRegion = pCurrentRegion->m_pNext;
     }
 
-    u32 alignedSize = Memory::AlignUp(size, alignment);
-
-    u64 off = m_Offset;
-    m_Offset += alignedSize;
-
-    return off;
+    return pCurrentRegion;
 }
 
-void LinearAllocatorView::Grow(u64 size)
+void LinearAllocator::Init(const LinearAllocatorDesc &desc)
 {
     ZoneScoped;
 
-    m_Size += size;
+    m_RegionSize = desc.m_DataSize;
+    m_View.m_pFirstRegion = AllocateRegion();
 }
 
-void LinearAllocatorView::Free()
+AllocationRegion *LinearAllocator::AllocateRegion()
 {
     ZoneScoped;
 
-    m_Offset = 0;
+    u8 *pData = Memory::Allocate<u8>(sizeof(AllocationRegion) + m_RegionSize);
+
+    AllocationRegion *pLastRegion = m_View.m_pFirstRegion;
+    while (pLastRegion != nullptr && pLastRegion->m_pNext)
+        pLastRegion = pLastRegion->m_pNext;
+
+    AllocationRegion *pRegion = (AllocationRegion *)pData;
+    pRegion->m_pNext = pLastRegion;
+    pRegion->m_Capacity = m_RegionSize;
+    pRegion->m_Size = 0;
+    pRegion->m_pData = pData + sizeof(AllocationRegion);
+
+    return pRegion;
 }
 
-/// THREAD SAFE ALLOCATORS ///
-
-void LinearAllocatorViewAtomic::Init(u64 size)
+void LinearAllocator::Delete()
 {
     ZoneScoped;
 
-    m_Size.store(size, eastl::memory_order_release);
-}
-
-bool LinearAllocatorViewAtomic::CanAllocate(u64 requestedSize, u32 alignment)
-{
-    ZoneScoped;
-
-    u64 alignedSize = Memory::AlignUp(requestedSize, alignment);
-    u64 offset = m_Offset.load(eastl::memory_order_acquire);
-    u64 size = m_Size.load(eastl::memory_order_acquire);
-
-    if (offset + alignedSize > size)
-        return false;
-
-    return true;
-}
-
-u64 LinearAllocatorViewAtomic::Allocate(u64 size, u32 alignment)
-{
-    ZoneScoped;
-
-    if (!CanAllocate(size, alignment))
+    AllocationRegion *pCurrentRegion = m_View.m_pFirstRegion;
+    while (pCurrentRegion != nullptr)
     {
-        LOG_ERROR("Out of memory! Cannot allocate more. Req: {}", size);
-        return -1;
+        AllocationRegion *pNextRegion = pCurrentRegion->m_pNext;
+        Memory::Release(pCurrentRegion);
+        pCurrentRegion = pNextRegion;
     }
-
-    u32 alignedSize = Memory::AlignUp(size, alignment);
-    return m_Offset.fetch_add(alignedSize, eastl::memory_order_acq_rel);
 }
 
-void LinearAllocatorViewAtomic::Grow(u64 size)
+bool LinearAllocator::CanAllocate(u64 size, u32 alignment)
 {
     ZoneScoped;
 
-    m_Size.add_fetch(size, eastl::memory_order_acq_rel);
+    return m_View.CanAllocate(size, alignment);
 }
 
-void LinearAllocatorViewAtomic::Free()
+void *LinearAllocator::Allocate(u64 size, u32 alignment)
 {
     ZoneScoped;
 
-    m_Offset.store(0, eastl::memory_order_release);
+    u64 alignedSize = Memory::AlignUp(size, alignment);
+    AllocationRegion *pAvailRegion = m_View.FindFreeRegion(alignedSize);
+    if (!pAvailRegion)
+        pAvailRegion = AllocateRegion();
+
+    void *pData = pAvailRegion->m_pData + pAvailRegion->m_Size;
+    pAvailRegion->m_Size += alignedSize;
+    return pData;
 }
 
+void LinearAllocator::Reset()
+{
+    ZoneScoped;
+
+    m_View.Reset();
+}
 }  // namespace lr::Memory

@@ -1,22 +1,36 @@
 // Created on Saturday April 22nd 2023 by exdal
-// Last modified on Monday June 12th 2023 by exdal
+// Last modified on Wednesday June 28th 2023 by exdal
 
 #include "Resource/Parser.hh"
+
+#include <fastgltf/parser.hpp>
+#include <fastgltf/types.hpp>
 
 namespace lr::Resource
 {
 bool Parser::ParseGLTF(BufferReadStream fileData, BufferWriteStream &data, eastl::string_view workingDir)
 {
-    // tinygltf::Model model = {};
-    // tinygltf::TinyGLTF loader = {};
-    // std::string error;
-    // std::string warning;
+    fastgltf::Parser parser;
+    fastgltf::GltfDataBuffer gltfBuffer;
+    gltfBuffer.copyBytes(fileData.GetData(), fileData.GetLength());
 
-    // if (!loader.LoadBinaryFromMemory(&model, &error, &warning, fileData.GetData(), fileData.GetLength()))
-    // {
-    //     LOG_ERROR("Cannot load GLTF Model! Error: {}. Warning: {}", error, warning);
-    //     return false;
-    // }
+    auto gltf = parser.loadGLTF(
+        &gltfBuffer, std::string_view(workingDir.data(), workingDir.length()), fastgltf::Options::None);
+
+    if (parser.getError() != fastgltf::Error::None)
+    {
+        LOG_ERROR("Failed to load GLTF! Parser error: {}", (u32)parser.getError());
+        return false;
+    }
+
+    fastgltf::Error parserResult = gltf->parse();
+    if (parserResult != fastgltf::Error::None)
+    {
+        LOG_ERROR("Failed to parse GLTF! Parser error: {}", (u32)parser.getError());
+        return false;
+    }
+
+    std::unique_ptr<fastgltf::Asset> asset = gltf->getParsedAsset();
 
     return true;
 }

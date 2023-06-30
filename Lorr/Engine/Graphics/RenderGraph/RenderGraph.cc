@@ -1,5 +1,5 @@
 // Created on Friday February 24th 2023 by exdal
-// Last modified on Tuesday June 27th 2023 by exdal
+// Last modified on Friday June 30th 2023 by exdal
 
 #include "RenderGraph.hh"
 
@@ -74,7 +74,6 @@ void RenderGraph::Init(RenderGraphDesc *pDesc)
 
     Memory::LinearAllocatorDesc allocatorDesc = {
         .m_DataSize = Memory::KiBToBytes(64),
-        .m_AutoGrowSize = Memory::KiBToBytes(6),
     };
     m_PassAllocator.Init(allocatorDesc);
 

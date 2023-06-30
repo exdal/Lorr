@@ -1,5 +1,5 @@
 // Created on Thursday September 22nd 2022 by exdal
-// Last modified on Saturday May 20th 2023 by exdal
+// Last modified on Friday June 30th 2023 by exdal
 #include "File.hh"
 
 // #include "BufferStream.hh"
@@ -15,12 +15,11 @@ FileView::FileView(eastl::string_view path)
         return;
 
     fseek(pFile, 0, SEEK_END);
-    u32 fileSize = ftell(pFile);
+    m_Size = ftell(pFile);
     rewind(pFile);
 
-    m_Allocator.Init({ .m_DataSize = fileSize });
-    fread(m_Allocator.m_pData, fileSize, 1, pFile);
-
+    m_Allocator.Init({ m_Size });
+    fread(m_Allocator.Allocate(m_Size), m_Size, 1, pFile);
     fclose(pFile);
 }
 
@@ -28,17 +27,20 @@ FileView::~FileView()
 {
     ZoneScoped;
 
-    m_Allocator.Free(true);
+    m_Allocator.Delete();
 }
 
-eastl::string_view FileView::GetString(u64 length)
+eastl::string_view FileView::GetAsString(u64 length)
 {
     ZoneScoped;
 
-    length = eastl::min(length, m_Allocator.m_View.m_Size);
+    length = eastl::min(length, m_Size);
+    return eastl::string_view((const char *)m_Allocator.GetFirstRegion()->m_pData, length);
+}
 
-    const char *pString = (const char *)m_Allocator.Allocate(length);
-    return eastl::string_view(pString, length);
+u8 *FileView::GetPtr()
+{
+    return m_Allocator.GetFirstRegion()->m_pData;
 }
 
 }  // namespace lr

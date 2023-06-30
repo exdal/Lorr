@@ -1,5 +1,5 @@
 // Created on Sunday March 19th 2023 by exdal
-// Last modified on Sunday June 25th 2023 by exdal
+// Last modified on Friday June 30th 2023 by exdal
 
 #pragma once
 
@@ -92,21 +92,36 @@ struct TLSFDeviceMemory : DeviceMemory
 
 struct LinearDeviceMemory : DeviceMemory
 {
+    void Init(u64 memSize)
+    {
+        ZoneScoped;
+
+        m_AllocatorView.m_pFirstRegion = new Memory::AllocationRegion;
+        m_AllocatorView.m_pFirstRegion->m_Capacity = memSize;
+    }
+
     u64 Allocate(u64 dataSize, u64 alignment, u64 &allocatorData) override
     {
         ZoneScoped;
 
-        return m_Allocator.Allocate(dataSize, alignment);
+        u64 alignedSize = Memory::AlignUp(dataSize, alignment);
+        Memory::AllocationRegion *pAvailRegion = m_AllocatorView.FindFreeRegion(alignedSize);
+        if (!pAvailRegion)
+            return ~0;
+
+        u64 offset = pAvailRegion->m_Size;
+        pAvailRegion->m_Size += alignedSize;
+        return offset;
     }
 
     void Free(u64 allocatorData) override
     {
         ZoneScoped;
 
-        m_Allocator.Free();
+        m_AllocatorView.Reset();
     }
 
-    Memory::LinearAllocatorView m_Allocator = {};
+    Memory::LinearAllocatorView m_AllocatorView = {};
 };
 
 struct ResourceAllocatorDesc

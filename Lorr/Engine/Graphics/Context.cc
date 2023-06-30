@@ -1,5 +1,5 @@
 // Created on Monday July 18th 2022 by exdal
-// Last modified on Tuesday June 27th 2023 by exdal
+// Last modified on Friday June 30th 2023 by exdal
 
 #include "Context.hh"
 
@@ -805,7 +805,7 @@ LinearDeviceMemory *Context::CreateLinearAllocator(MemoryFlag memoryFlags, u64 m
         memoryProps |= VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
 
     LinearDeviceMemory *pDeviceMem = new LinearDeviceMemory;
-    pDeviceMem->m_Allocator.Init(memSize);
+    pDeviceMem->Init(memSize);
 
     VkMemoryAllocateInfo allocInfo = {
         .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,

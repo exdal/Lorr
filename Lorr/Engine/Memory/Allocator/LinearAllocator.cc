@@ -1,5 +1,5 @@
 // Created on Friday November 18th 2022 by exdal
-// Last modified on Friday June 30th 2023 by exdal
+// Last modified on Saturday July 8th 2023 by exdal
 
 #include "LinearAllocator.hh"
 
@@ -8,6 +8,26 @@
 
 namespace lr::Memory
 {
+u64 AllocationRegion::ConsumeAsOffset(u64 size)
+{
+    ZoneScoped;
+
+    assert(size < m_Capacity - m_Size);
+    if (size > m_Capacity - m_Size)
+        return ~0;
+
+    u64 offset = m_Size;
+    m_Size += size;
+    return offset; 
+}
+
+u8 *AllocationRegion::ConsumeAsData(u64 size)
+{
+    ZoneScoped;
+
+    return m_pData + ConsumeAsOffset(size);
+}
+
 bool LinearAllocatorView::CanAllocate(u64 size, u32 alignment)
 {
     ZoneScoped;
@@ -29,7 +49,7 @@ void LinearAllocatorView::Reset()
 }
 
 AllocationRegion *LinearAllocatorView::FindFreeRegion(u64 size)
-{
+{ 
     ZoneScoped;
 
     AllocationRegion *pCurrentRegion = m_pFirstRegion;
@@ -98,11 +118,14 @@ void *LinearAllocator::Allocate(u64 size, u32 alignment)
     u64 alignedSize = Memory::AlignUp(size, alignment);
     AllocationRegion *pAvailRegion = m_View.FindFreeRegion(alignedSize);
     if (!pAvailRegion)
-        pAvailRegion = AllocateRegion();
+    {
+        if (!m_AllowMultipleBlocks)
+            return nullptr;
 
-    void *pData = pAvailRegion->m_pData + pAvailRegion->m_Size;
-    pAvailRegion->m_Size += alignedSize;
-    return pData;
+        pAvailRegion = AllocateRegion();
+    }
+
+    return pAvailRegion->ConsumeAsData(alignedSize);
 }
 
 void LinearAllocator::Reset()

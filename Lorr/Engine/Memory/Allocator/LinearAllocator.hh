@@ -1,5 +1,5 @@
 // Created on Friday November 18th 2022 by exdal
-// Last modified on Friday June 30th 2023 by exdal
+// Last modified on Friday July 7th 2023 by exdal
 
 #pragma once
 
@@ -11,6 +11,9 @@ namespace lr::Memory
 {
 struct AllocationRegion
 {
+    u64 ConsumeAsOffset(u64 size);
+    u8 *ConsumeAsData(u64 size);
+
     AllocationRegion *m_pNext = nullptr;
     u64 m_Capacity = 0;
     u64 m_Size = 0;
@@ -28,7 +31,8 @@ struct LinearAllocatorView
 
 struct LinearAllocatorDesc
 {
-    u64 m_DataSize = 0;
+    u64 m_DataSize : 63 = 0;
+    u64 m_AllowMultipleBlocks : 1 = 0;
 };
 
 struct LinearAllocator
@@ -43,7 +47,8 @@ struct LinearAllocator
     void Reset();
 
     LinearAllocatorView m_View = {};
-    u64 m_RegionSize = 0;
+    u64 m_RegionSize : 63 = 0;
+    u64 m_AllowMultipleBlocks : 1 = 0;
 };
 
 }  // namespace lr::Memory

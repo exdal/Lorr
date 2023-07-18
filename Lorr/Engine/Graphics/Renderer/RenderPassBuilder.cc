@@ -1,11 +1,12 @@
-// Created on Tuesday March 14th 2023 by exdal
-// Last modified on Tuesday June 27th 2023 by exdal
+// Created on Friday July 14th 2023 by exdal
+// Last modified on Sunday July 16th 2023 by exdal
 
-#include "RenderPass.hh"
+#include "RenderPassBuilder.hh"
 
 #include "Core/Config.hh"
 
-#include "RenderGraph.hh"
+#include "Graphics/Descriptor.hh"
+#include "Graphics/Pipeline.hh"
 
 // These indexes are SET indexes
 #define LR_DESCRIPTOR_BDA_LUT_BUFFER 0
@@ -40,9 +41,8 @@ constexpr DescriptorType BindingToDescriptorType(u32 binding)
     return kBindings[binding];
 }
 
-RenderPassBuilder::RenderPassBuilder(RenderGraph *pGraph)
-    : m_pContext(pGraph->m_pContext),
-      m_pGraph(pGraph)
+RenderPassBuilder::RenderPassBuilder(APIContext *pContext)
+    : m_pContext(pContext)
 {
     ZoneScoped;
 
@@ -129,79 +129,6 @@ DescriptorBufferInfo *RenderPassBuilder::GetDescriptorBuffer(u32 binding)
     return nullptr;
 }
 
-void RenderPassBuilder::BuildPass(RenderPass *pPass)
-{
-    ZoneScoped;
-
-    m_pRenderPass = pPass;
-    m_GraphicsPipelineInfo = {};
-    m_ComputePipelineInfo = {};
-
-    if (pPass->m_Flags & RenderPassFlag::AllowSetup)
-    {
-        if (pPass->m_PassType == CommandType::Graphics)
-        {
-            SetupGraphicsPass();
-        }
-
-        m_pRenderPass->m_ResourceIndex -= m_pRenderPass->m_ResourceCount;
-    }
-}
-
-void RenderPassBuilder::SetupGraphicsPass()
-{
-    ZoneScoped;
-
-    m_pGraphicsPass->Setup(m_pContext, this);
-
-    if (!(m_pGraphicsPass->m_Flags & RenderPassFlag::SkipRendering))
-    {
-        m_GraphicsPipelineInfo.m_pLayout = m_pPipelineLayout;
-        m_pGraphicsPass->m_pPipeline = m_pContext->CreateGraphicsPipeline(&m_GraphicsPipelineInfo);
-    }
-}
-
-void RenderPassBuilder::SetColorAttachment(
-    NameID resource, InputAttachmentOp attachmentOp, InputResourceFlag flags)
-{
-    ZoneScoped;
-
-    m_pRenderPass->m_ResourceCount++;
-
-    RenderPassInput attachment = {
-        .m_Hash = Hash::FNV64String(resource),
-        .m_Flags = flags | InputResourceFlag::ColorAttachment,
-        .m_AttachmentOp = attachmentOp,
-    };
-    m_pGraph->m_InputResources.push_back(attachment);
-    m_pRenderPass->m_ResourceIndex = m_pGraph->m_InputResources.size();  // we will deal with this at the end
-
-    Image *pImageHandle = m_pGraph->GetInputImage(attachment);
-    m_GraphicsPipelineInfo.m_ColorAttachmentFormats.push_back(pImageHandle->m_Format);
-}
-
-void RenderPassBuilder::SetInputResource(NameID resource, InputResourceAccess access, InputResourceFlag flags)
-{
-    ZoneScoped;
-
-    m_pRenderPass->m_ResourceCount++;
-
-    RenderPassInput attachment = {
-        .m_Hash = Hash::FNV64String(resource),
-        .m_Flags = flags,
-        .m_Access = access,
-    };
-    m_pGraph->m_InputResources.push_back(attachment);
-    m_pRenderPass->m_ResourceIndex = m_pGraph->m_InputResources.size();
-}
-
-void RenderPassBuilder::SetBlendAttachment(const ColorBlendAttachment &attachment)
-{
-    ZoneScoped;
-
-    m_GraphicsPipelineInfo.m_BlendAttachments.push_back(attachment);
-}
-
 void RenderPassBuilder::SetDescriptor(DescriptorType type, eastl::span<DescriptorGetInfo> elements)
 {
     ZoneScoped;
@@ -235,13 +162,6 @@ void RenderPassBuilder::SetDescriptor(DescriptorType type, eastl::span<Descripto
         offset += typeSize;
         element.m_DescriptorIndex = descriptorIndex++;
     }
-}
-
-void RenderPassBuilder::SetShader(Shader *pShader)
-{
-    ZoneScoped;
-
-    m_GraphicsPipelineInfo.m_Shaders.push_back(pShader);
 }
 
 u64 RenderPassBuilder::GetResourceBufferSize()
@@ -282,7 +202,7 @@ void RenderPassBuilder::GetResourceDescriptorOffsets(u64 *pOffsetsOut, u32 *pDes
     }
 }
 
-void RenderPassBuilder::GetResourceDescriptors(Buffer *pDst, CommandList *pList)
+Buffer *RenderPassBuilder::CreateResourceDescriptorBuffer()
 {
     ZoneScoped;
 
@@ -292,7 +212,7 @@ void RenderPassBuilder::GetResourceDescriptors(Buffer *pDst, CommandList *pList)
         .m_DataSize = GetResourceBufferSize(),
     };
     Buffer *pResourceDescriptor = m_pContext->CreateBuffer(&resourceDescriptorBufferDesc);
-    m_pContext->SetObjectName(pResourceDescriptor, "Temp-ResourceDescriptor");
+    m_pContext->SetObjectName(pResourceDescriptor, "ResourceDescriptor");
 
     u64 mapOffset = 0;
     void *pMapData = nullptr;
@@ -331,11 +251,10 @@ void RenderPassBuilder::GetResourceDescriptors(Buffer *pDst, CommandList *pList)
 
     m_pContext->UnmapMemory(ResourceAllocator::Descriptor);
 
-    pList->CopyBufferToBuffer(pResourceDescriptor, pDst, 0, 0, resourceDescriptorBufferDesc.m_DataSize);
-    // m_pContext->DeleteBuffer(pResourceDescriptor);
+    return pResourceDescriptor;
 }
 
-void RenderPassBuilder::GetSamplerDescriptors(Buffer *pDst, CommandList *pList)
+Buffer *RenderPassBuilder::CreateSamplerDescriptorBuffer()
 {
     ZoneScoped;
 
@@ -354,8 +273,7 @@ void RenderPassBuilder::GetSamplerDescriptors(Buffer *pDst, CommandList *pList)
 
     m_pContext->UnmapBuffer(pSamplerDescriptor);
 
-    pList->CopyBufferToBuffer(pSamplerDescriptor, pDst, 0, 0, bufferDesc.m_DataSize);
-    // m_pContext->DeleteBuffer(pSamplerDescriptor);
+    return pSamplerDescriptor;
 }
 
 }  // namespace lr::Graphics

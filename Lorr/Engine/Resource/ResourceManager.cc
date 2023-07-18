@@ -1,5 +1,5 @@
 // Created on Monday May 15th 2023 by exdal
-// Last modified on Monday June 12th 2023 by exdal
+// Last modified on Sunday July 16th 2023 by exdal
 
 #include "ResourceManager.hh"
 #include "Resource/Parser.hh"
@@ -40,17 +40,20 @@ void ResourceManager::Init()
     LOG_TRACE("Loading Shaders...");
 
     lm::Category &shaders = result.GetCategory("Meta.Shaders");
-    eastl::span<char *> shaderVals;
-    shaders.GetArray<char *>("Files", shaderVals);
+    eastl::span<char *> shaderFiles;
+    shaders.GetArray<char *>("Files", shaderFiles);
 
-    for (char *&pShaderPath : shaderVals)
+    for (char *&pShaderPath : shaderFiles)
     {
         eastl::string resourceName = _FMT("shader://{}", ls::TrimFileName(pShaderPath));
         LOG_TRACE("Compiling shader '{}'...", resourceName);
 
         FileView file(_FMT("{}/{}", workingDir, pShaderPath));
+        eastl::string code;
+        file.Read(code, file.Size());
+
         ShaderResource outResource = {};
-        if (!Parser::ParseGLSL(BufferReadStream(file), outResource, workingDir))
+        if (!Parser::ParseGLSL(code, outResource, workingDir))
         {
             return;
         }

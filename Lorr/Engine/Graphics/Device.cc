@@ -1,11 +1,9 @@
 // Created on Monday March 20th 2023 by exdal
-// Last modified on Wednesday June 21st 2023 by exdal
+// Last modified on Sunday July 16th 2023 by exdal
 
 #include "Device.hh"
 
 #include "Window/Win32/Win32Window.hh"
-
-#include "Context.hh"
 
 namespace lr::Graphics
 {

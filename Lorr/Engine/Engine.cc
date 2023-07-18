@@ -1,10 +1,9 @@
 // Created on Wednesday May 4th 2022 by exdal
-// Last modified on Sunday June 25th 2023 by exdal
+// Last modified on Sunday July 16th 2023 by exdal
 
 #include "Engine.hh"
 
 #include "Core/Job.hh"
-#include "Graphics/Renderer/Pass.hh"
 
 namespace lr
 {
@@ -20,33 +19,31 @@ void Engine::Init(EngineDesc &engineDesc)
     m_Window.Init(engineDesc.m_WindowDesc);
     m_ImGui.Init(m_Window.m_Width, m_Window.m_Height);
 
-    Graphics::ResourceAllocatorDesc gpAllocators = {
-        .m_MaxTLSFAllocations = CONFIG_GET_VAR(gpm_tlsf_allocations),
-        .m_DescriptorMem = CONFIG_GET_VAR(gpm_descriptor),
-        .m_BufferLinearMem = CONFIG_GET_VAR(gpm_buffer_linear),
-        .m_BufferTLSFMem = CONFIG_GET_VAR(gpm_buffer_tlsf),
-        .m_BufferTLSFHostMem = CONFIG_GET_VAR(gpm_buffer_tlsf_host),
-        .m_BufferFrametimeMem = CONFIG_GET_VAR(gpm_frametime),
-        .m_ImageTLSFMem = CONFIG_GET_VAR(gpm_image_tlsf),
-    };
+    // Graphics::ResourceAllocatorDesc gpAllocators = {
+    //     .m_MaxTLSFAllocations = CONFIG_GET_VAR(gpm_tlsf_allocations),
+    //     .m_DescriptorMem = CONFIG_GET_VAR(gpm_descriptor),
+    //     .m_BufferLinearMem = CONFIG_GET_VAR(gpm_buffer_linear),
+    //     .m_BufferTLSFMem = CONFIG_GET_VAR(gpm_buffer_tlsf),
+    //     .m_BufferTLSFHostMem = CONFIG_GET_VAR(gpm_buffer_tlsf_host),
+    //     .m_BufferFrametimeMem = CONFIG_GET_VAR(gpm_frametime),
+    //     .m_ImageTLSFMem = CONFIG_GET_VAR(gpm_image_tlsf),
+    // };
 
-    Graphics::APIDesc apiDesc = {
-#ifdef TRACY_ENABLE
-        .m_ImageCount = 1,
-#else
-        .m_ImageCount = CONFIG_GET_VAR(api_swapchain_frames),
-#endif
-        .m_pTargetWindow = &m_Window,
-        .m_AllocatorDesc = gpAllocators,
-    };
+//     Graphics::APIDesc apiDesc = {
+// #ifdef TRACY_ENABLE
+//         .m_ImageCount = 1,
+// #else
+//         .m_ImageCount = CONFIG_GET_VAR(api_swapchain_frames),
+// #endif
+//         .m_pTargetWindow = &m_Window,
+//         .m_AllocatorDesc = gpAllocators,
+//     };
 
-    Graphics::RenderGraphDesc renderGraphDesc = {
-        .m_APIDesc = apiDesc,
-    };
-    m_RenderGraph.Init(&renderGraphDesc);
-
-    Graphics::InitPasses(&m_RenderGraph);
-    m_RenderGraph.Prepare();
+    // Graphics::RenderGraphDesc renderGraphDesc = {
+    //     .m_APIDesc = apiDesc,
+    // };
+    // m_RenderGraph.Init(&renderGraphDesc);
+    // m_RenderGraph.Prepare();
 }
 
 void Engine::PushEvent(Event event, EngineEventData &data)
@@ -114,17 +111,11 @@ void Engine::BeginFrame()
 
     m_Window.Poll();
     DispatchEvents();
-
-    m_ImGui.NewFrame(m_Window.m_Width, m_Window.m_Height);
 }
 
 void Engine::EndFrame()
 {
     ZoneScopedN("Engine End Frame");
-
-    m_ImGui.EndFrame();
-
-    m_RenderGraph.Draw();
 }
 
 }  // namespace lr

@@ -1,5 +1,5 @@
 // Created on Wednesday July 6th 2022 by exdal
-// Last modified on Saturday May 20th 2023 by exdal
+// Last modified on Sunday July 16th 2023 by exdal
 
 #pragma once
 
@@ -56,7 +56,6 @@ namespace lr
     {
     public:
         BufferReadStream(void *pData, u32 dataLen = -1);
-        BufferReadStream(FileView &file);
     };
 
     ////////////////////////////////

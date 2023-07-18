@@ -1,5 +1,5 @@
 // Created on Monday July 18th 2022 by exdal
-// Last modified on Monday June 26th 2023 by exdal
+// Last modified on Sunday July 16th 2023 by exdal
 
 #pragma once
 
@@ -40,7 +40,7 @@ enum class MemoryFlag
 };
 EnumFlags(MemoryFlag);
 
-struct APIDesc
+struct APIContextDesc
 {
     APIFlags m_Flags = LR_API_FLAG_NONE;
     u32 m_ImageCount = 1;
@@ -56,9 +56,9 @@ struct SubmitDesc
     eastl::span<SemaphoreSubmitDesc> m_SignalSemas;
 };
 
-struct Context
+struct APIContext
 {
-    bool Init(APIDesc *pDesc);
+    bool Init(APIContextDesc *pDesc);
 
     /// COMMAND ///
     u32 GetQueueIndex(CommandType type);

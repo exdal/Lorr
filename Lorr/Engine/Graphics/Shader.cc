@@ -1,5 +1,5 @@
 // Created on Sunday March 12th 2023 by exdal
-// Last modified on Monday June 12th 2023 by exdal
+// Last modified on Sunday July 16th 2023 by exdal
 
 #include "Shader.hh"
 
@@ -173,7 +173,7 @@ glsl_include_result_t *IncludeLocalCb(
     memset(pResult, 0, allocSize);
 
     u8 *pCode = (u8 *)pResult + sizeof(glsl_include_result_t);
-    memcpy(pCode, fv.GetPtr(), fv.Size());
+    fv.Read(pCode, fv.Size());
 
     pResult->header_name = pHeaderName;
     pResult->header_data = (const char *)pCode;

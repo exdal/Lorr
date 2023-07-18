@@ -1,5 +1,5 @@
 // Created on Thursday September 22nd 2022 by exdal
-// Last modified on Friday June 30th 2023 by exdal
+// Last modified on Sunday July 16th 2023 by exdal
 #include "File.hh"
 
 // #include "BufferStream.hh"
@@ -10,37 +10,64 @@ FileView::FileView(eastl::string_view path)
 {
     ZoneScoped;
 
-    FILE *pFile = fopen(path.data(), "rb");
-    if (!pFile)
+    m_pFile = fopen(path.data(), "rb");
+    if (!IsOK())
         return;
 
-    fseek(pFile, 0, SEEK_END);
-    m_Size = ftell(pFile);
-    rewind(pFile);
-
-    m_Allocator.Init({ m_Size });
-    fread(m_Allocator.Allocate(m_Size), m_Size, 1, pFile);
-    fclose(pFile);
+    fseek(m_pFile, 0, SEEK_END);
+    m_Size = ftell(m_pFile);
+    rewind(m_pFile);
 }
 
 FileView::~FileView()
 {
     ZoneScoped;
 
-    m_Allocator.Delete();
+    Close();
 }
 
-eastl::string_view FileView::GetAsString(u64 length)
+void FileView::Close()
 {
     ZoneScoped;
 
-    length = eastl::min(length, m_Size);
-    return eastl::string_view((const char *)m_Allocator.GetFirstRegion()->m_pData, length);
+    if (IsOK())
+        fclose(m_pFile);
 }
 
-u8 *FileView::GetPtr()
+void FileView::SetOffset(u64 offset)
 {
-    return m_Allocator.GetFirstRegion()->m_pData;
+    ZoneScoped;
+
+    fseek(m_pFile, offset, SEEK_SET);
+    m_Offset = offset;
+}
+
+template<typename _T>
+bool FileView::Read(_T &data)
+{
+    ZoneScoped;
+
+    return Read((u8 *)&data, sizeof(_T));
+}
+
+bool FileView::Read(eastl::string &str, u64 length)
+{
+    ZoneScoped;
+
+    str.reserve(length);
+    return Read((u8 *)str.data(), length);
+}
+
+bool FileView::Read(u8 *pData, u64 dataSize)
+{
+    ZoneScoped;
+
+    if (m_Offset + dataSize >= m_Size)
+        return false;
+
+    fread(pData, dataSize, 1, m_pFile);
+
+    return true;
 }
 
 }  // namespace lr

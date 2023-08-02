@@ -1,5 +1,5 @@
 // Created on Friday July 14th 2023 by exdal
-// Last modified on Tuesday July 18th 2023 by exdal
+// Last modified on Monday July 31st 2023 by exdal
 
 #pragma once
 
@@ -27,7 +27,7 @@ struct DescriptorBufferInfo
 //
 // ...Prepare()...
 // {
-//     data.m_pBackBuffer = renderGraph.ImageIn("backbuffer") 
+//     data.m_pBackBuffer = renderGraph.ImageIn("backbuffer")
 //
 //     ... do stuff ...
 //
@@ -39,17 +39,15 @@ struct DescriptorBufferInfo
 // }
 //
 
-struct RenderPassBuildWrapper
+template<typename _PassData>
+struct GraphicsRenderPassBuilder
 {
-    RenderPassBuildWrapper(RenderPass *pPass);
+    using RenderPassCb = GraphicsRenderPassCallback<_PassData>;
 
-    union
-    {
-        GraphicsPipelineBuildInfo m_GraphicsPipelineInfo = {};
-        ComputePipelineBuildInfo m_ComputePipelineInfo;
-    };
+    GraphicsRenderPassBuilder(RenderPassCb *pPass);
 
-    RenderPass *m_pPass = nullptr;
+    GraphicsPipelineBuildInfo m_PipelineInfo = {};
+    RenderPassCb *m_pPass = nullptr;
 };
 
 struct RenderPassBuilder
@@ -59,8 +57,9 @@ struct RenderPassBuilder
 
     void InitDescriptorType(u32 binding, BufferUsage usage, DescriptorSetLayout *pLayout, u64 memSize);
     DescriptorBufferInfo *GetDescriptorBuffer(u32 binding);
+    u64 GetDescriptorSize(DescriptorType type);
 
-    void SetDescriptor(DescriptorType type, eastl::span<DescriptorGetInfo> elements);
+    void SetDescriptors(eastl::span<DescriptorGetInfo> elements);
 
     u64 GetResourceBufferSize();
     u64 GetSamplerBufferSize();

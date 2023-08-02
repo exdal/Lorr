@@ -1,5 +1,5 @@
 // Created on Friday February 24th 2023 by exdal
-// Last modified on Monday July 17th 2023 by exdal
+// Last modified on Tuesday July 18th 2023 by exdal
 
 #pragma once
 
@@ -93,6 +93,9 @@ using RenderPassShutdownFn = eastl::function<void(APIContext *)>;
 template<typename _Data>
 struct GraphicsRenderPassCallback : RenderPass, _Data
 {
+    using PipelineBuildInfo_t = GraphicsPipelineBuildInfo;
+    using PassData_t = _Data;
+
     void Setup(APIContext *pContext, RenderPassBuilder *pBuilder) override
     {
         ZoneScoped;

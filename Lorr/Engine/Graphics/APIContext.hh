@@ -1,5 +1,5 @@
 // Created on Monday July 18th 2022 by exdal
-// Last modified on Sunday July 16th 2023 by exdal
+// Last modified on Wednesday August 2nd 2023 by exdal
 
 #pragma once
 
@@ -106,6 +106,7 @@ struct APIContext
     LinearDeviceMemory *CreateLinearAllocator(MemoryFlag memoryFlags, u64 memSize);
     TLSFDeviceMemory *CreateTLSFAllocator(MemoryFlag memoryFlags, u64 memSize, u32 maxAllocs);
     void DeleteAllocator(DeviceMemory *pDeviceMemory);
+    u64 OffsetFrametimeMemory(u64 offset);
     void AllocateBufferMemory(ResourceAllocator allocator, Buffer *pBuffer, u64 memSize);
     void AllocateImageMemory(ResourceAllocator allocator, Image *pImage, u64 memSize);
 
@@ -123,7 +124,7 @@ struct APIContext
     u64 GetDescriptorSize(DescriptorType type);
     u64 GetDescriptorSizeAligned(DescriptorType type);
     u64 AlignUpDescriptorOffset(u64 offset);
-    void GetDescriptorData(DescriptorType type, const DescriptorGetInfo &info, u64 dataSize, void *pDataOut);
+    void GetDescriptorData(const DescriptorGetInfo &info, u64 dataSize, void *pDataOut, u32 descriptorIdx);
 
     // * Buffers * //
     VkDeviceMemory CreateHeap(u64 heapSize, MemoryFlag flags);

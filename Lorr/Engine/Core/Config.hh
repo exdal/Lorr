@@ -1,5 +1,5 @@
 // Created on Saturday May 13th 2023 by exdal
-// Last modified on Saturday June 3rd 2023 by exdal
+// Last modified on Tuesday August 1st 2023 by exdal
 
 #pragma once
 
@@ -37,11 +37,11 @@ struct Config
     CONFIG_DEFINE_VAR_DEFAULT(u32, rm_memory_mb, (1024));
 
     CONFIG_DEFINE_VAR_DEFAULT(u32, gpm_tlsf_allocations, (0x20000));
-    CONFIG_DEFINE_VAR_DEFAULT(u32, gpm_descriptor, (Memory::MiBToBytes(16)));
+    CONFIG_DEFINE_VAR_DEFAULT(u32, gpm_descriptor, (Memory::MiBToBytes(8)));
     CONFIG_DEFINE_VAR_DEFAULT(u32, gpm_buffer_linear, (Memory::MiBToBytes(128)));
     CONFIG_DEFINE_VAR_DEFAULT(u32, gpm_buffer_tlsf, (Memory::MiBToBytes(1024)));
     CONFIG_DEFINE_VAR_DEFAULT(u32, gpm_buffer_tlsf_host, (Memory::MiBToBytes(128)));
-    CONFIG_DEFINE_VAR_DEFAULT(u32, gpm_frametime, (Memory::MiBToBytes(128)));
+    CONFIG_DEFINE_VAR_DEFAULT(u32, gpm_frametime, (Memory::MiBToBytes(32)));
     CONFIG_DEFINE_VAR_DEFAULT(u32, gpm_image_tlsf, (Memory::MiBToBytes(1024)));
 
     CONFIG_DEFINE_VAR_DEFAULT(u32, api_swapchain_frames, (3));

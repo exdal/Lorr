@@ -1,5 +1,5 @@
 // Created on Wednesday May 4th 2022 by exdal
-// Last modified on Sunday July 16th 2023 by exdal
+// Last modified on Wednesday August 2nd 2023 by exdal
 
 #include "Engine.hh"
 
@@ -19,25 +19,28 @@ void Engine::Init(EngineDesc &engineDesc)
     m_Window.Init(engineDesc.m_WindowDesc);
     m_ImGui.Init(m_Window.m_Width, m_Window.m_Height);
 
-    // Graphics::ResourceAllocatorDesc gpAllocators = {
-    //     .m_MaxTLSFAllocations = CONFIG_GET_VAR(gpm_tlsf_allocations),
-    //     .m_DescriptorMem = CONFIG_GET_VAR(gpm_descriptor),
-    //     .m_BufferLinearMem = CONFIG_GET_VAR(gpm_buffer_linear),
-    //     .m_BufferTLSFMem = CONFIG_GET_VAR(gpm_buffer_tlsf),
-    //     .m_BufferTLSFHostMem = CONFIG_GET_VAR(gpm_buffer_tlsf_host),
-    //     .m_BufferFrametimeMem = CONFIG_GET_VAR(gpm_frametime),
-    //     .m_ImageTLSFMem = CONFIG_GET_VAR(gpm_image_tlsf),
-    // };
+    Graphics::ResourceAllocatorDesc gpAllocators = {
+        .m_MaxTLSFAllocations = CONFIG_GET_VAR(gpm_tlsf_allocations),
+        .m_DescriptorMem = CONFIG_GET_VAR(gpm_descriptor),
+        .m_BufferLinearMem = CONFIG_GET_VAR(gpm_buffer_linear),
+        .m_BufferTLSFMem = CONFIG_GET_VAR(gpm_buffer_tlsf),
+        .m_BufferTLSFHostMem = CONFIG_GET_VAR(gpm_buffer_tlsf_host),
+        .m_BufferFrametimeMem = CONFIG_GET_VAR(gpm_frametime),
+        .m_ImageTLSFMem = CONFIG_GET_VAR(gpm_image_tlsf),
+    };
 
-//     Graphics::APIDesc apiDesc = {
-// #ifdef TRACY_ENABLE
-//         .m_ImageCount = 1,
-// #else
-//         .m_ImageCount = CONFIG_GET_VAR(api_swapchain_frames),
-// #endif
-//         .m_pTargetWindow = &m_Window,
-//         .m_AllocatorDesc = gpAllocators,
-//     };
+    Graphics::APIContextDesc apiDesc = {
+#ifdef TRACY_ENABLE
+        .m_ImageCount = 1,
+#else
+        .m_ImageCount = CONFIG_GET_VAR(api_swapchain_frames),
+#endif
+        .m_pTargetWindow = &m_Window,
+        .m_AllocatorDesc = gpAllocators,
+    };
+
+    Graphics::APIContext *pContext = new Graphics::APIContext;
+    pContext->Init(&apiDesc);
 
     // Graphics::RenderGraphDesc renderGraphDesc = {
     //     .m_APIDesc = apiDesc,

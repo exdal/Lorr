@@ -1,5 +1,5 @@
 // Created on Monday July 18th 2022 by exdal
-// Last modified on Sunday July 16th 2023 by exdal
+// Last modified on Wednesday August 2nd 2023 by exdal
 
 #include "APIContext.hh"
 
@@ -73,12 +73,10 @@ bool APIContext::Init(APIContextDesc *pDesc)
         CreateLinearAllocator(MemoryFlag::HostVisibleCoherent, pDesc->m_AllocatorDesc.m_BufferLinearMem);
     SetObjectName(m_Allocators.m_pBufferLinear, "Buffer-Linear");
 
-    for (u32 i = 0; i < m_pSwapChain->m_FrameCount; i++)
-    {
-        m_Allocators.m_ppBufferFrametime[i] =
-            CreateLinearAllocator(MemoryFlag::HostVisibleCoherent, pDesc->m_AllocatorDesc.m_BufferFrametimeMem);
-        SetObjectName(m_Allocators.m_ppBufferFrametime[i], _FMT("Buffer-Frametime-{}", i));
-    }
+    m_Allocators.m_pBufferFrametime = CreateLinearAllocator(
+        MemoryFlag::HostVisibleCoherent,
+        pDesc->m_AllocatorDesc.m_BufferFrametimeMem * m_pSwapChain->m_FrameCount);
+    SetObjectName(m_Allocators.m_pBufferFrametime, "Buffer-Frametime");
 
     m_Allocators.m_pBufferTLSF = CreateTLSFAllocator(
         MemoryFlag::Device,
@@ -723,7 +721,7 @@ void APIContext::BeginFrame()
         imageQueue.pop();
     }
 
-    m_Allocators.m_ppBufferFrametime[m_pSwapChain->m_CurrentFrame]->Free(0);
+    m_Allocators.m_pBufferFrametime->Free(0);
 }
 
 void APIContext::EndFrame()
@@ -853,6 +851,13 @@ void APIContext::DeleteAllocator(DeviceMemory *pDeviceMemory)
     vkFreeMemory(m_pDevice, pDeviceMemory->m_pHandle, nullptr);
 }
 
+u64 APIContext::OffsetFrametimeMemory(u64 offset)
+{
+    ZoneScoped;
+
+    return offset * m_pSwapChain->m_CurrentFrame;
+}
+
 void APIContext::AllocateBufferMemory(ResourceAllocator allocator, Buffer *pBuffer, u64 memSize)
 {
     ZoneScoped;
@@ -862,6 +867,9 @@ void APIContext::AllocateBufferMemory(ResourceAllocator allocator, Buffer *pBuff
     u64 alignedSize = GetBufferMemorySize(pBuffer, &alignment);
     DeviceMemory *pMemory = m_Allocators.GetDeviceMemory(allocator);
     u64 memoryOffset = pMemory->Allocate(alignedSize, alignment, pBuffer->m_AllocatorData);
+
+    if (allocator == ResourceAllocator::BufferFrametime)
+        memoryOffset = OffsetFrametimeMemory(memoryOffset);
 
     vkBindBufferMemory(m_pDevice, pBuffer->m_pHandle, pMemory->m_pHandle, memoryOffset);
 
@@ -989,7 +997,7 @@ u64 APIContext::AlignUpDescriptorOffset(u64 offset)
 }
 
 void APIContext::GetDescriptorData(
-    DescriptorType type, const DescriptorGetInfo &info, u64 dataSize, void *pDataOut)
+    const DescriptorGetInfo &info, u64 dataSize, void *pDataOut, u32 descriptorIdx)
 {
     ZoneScoped;
 
@@ -1002,10 +1010,11 @@ void APIContext::GetDescriptorData(
 
     if (info.m_pBuffer)  // Allow null descriptors
     {
-        switch (type)
+        switch (info.m_Type)
         {
             case DescriptorType::StorageBuffer:
             case DescriptorType::UniformBuffer:
+                info.m_pBuffer->m_DescriptorIndex = descriptorIdx;
                 bufferInfo.address = info.m_pBuffer->m_DeviceAddress;
                 bufferInfo.range = info.m_pBuffer->m_DataSize;
                 descriptorData = { .pUniformBuffer = &bufferInfo };
@@ -1013,11 +1022,13 @@ void APIContext::GetDescriptorData(
 
             case DescriptorType::StorageImage:
             case DescriptorType::SampledImage:
+                info.m_pImage->m_DescriptorIndex = descriptorIdx;
                 imageInfo.imageView = info.m_pImage->m_pViewHandle;
                 descriptorData = { .pSampledImage = &imageInfo };
                 break;
 
             case DescriptorType::Sampler:
+                info.m_pSampler->m_DescriptorIndex = descriptorIdx;
                 imageInfo.sampler = info.m_pSampler->m_pHandle;
                 descriptorData = { .pSampledImage = &imageInfo };
                 break;
@@ -1030,7 +1041,7 @@ void APIContext::GetDescriptorData(
     VkDescriptorGetInfoEXT vkInfo = {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT,
         .pNext = nullptr,
-        .type = VK::ToDescriptorType(type),
+        .type = VK::ToDescriptorType(info.m_Type),
         .data = descriptorData,
     };
 
@@ -1125,6 +1136,10 @@ void APIContext::MapMemory(ResourceAllocator allocator, void *&pData, u64 offset
 
     assert(allocator != ResourceAllocator::None);
     DeviceMemory *pMemory = m_Allocators.GetDeviceMemory(allocator);
+
+    if (allocator == ResourceAllocator::BufferFrametime)
+        offset = OffsetFrametimeMemory(offset);
+
     vkMapMemory(m_pDevice, pMemory->m_pHandle, offset, size, 0, &pData);
 }
 

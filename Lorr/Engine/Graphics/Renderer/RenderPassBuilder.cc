@@ -1,5 +1,5 @@
 // Created on Friday July 14th 2023 by exdal
-// Last modified on Sunday July 16th 2023 by exdal
+// Last modified on Tuesday August 1st 2023 by exdal
 
 #include "RenderPassBuilder.hh"
 
@@ -9,21 +9,21 @@
 #include "Graphics/Pipeline.hh"
 
 // These indexes are SET indexes
-#define LR_DESCRIPTOR_BDA_LUT_BUFFER 0
+#define LR_DESCRIPTOR_BDA_BUFFER 0
 #define LR_DESCRIPTOR_INDEX_SAMPLED_IMAGE 1
 #define LR_DESCRIPTOR_INDEX_STORAGE_IMAGE 2
 #define LR_DESCRIPTOR_INDEX_SAMPLER 3
 
 namespace lr::Graphics
 {
-constexpr u32 DescriptorTypeToBinding(DescriptorType type)
+constexpr u32 DescriptorTypeToSet(DescriptorType type)
 {
     constexpr u32 kBindings[] = {
         LR_DESCRIPTOR_INDEX_SAMPLER,        // Sampler
         LR_DESCRIPTOR_INDEX_SAMPLED_IMAGE,  // SampledImage
-        LR_DESCRIPTOR_BDA_LUT_BUFFER,       // UniformBuffer
+        LR_DESCRIPTOR_BDA_BUFFER,           // UniformBuffer
         LR_DESCRIPTOR_INDEX_STORAGE_IMAGE,  // StorageImage
-        LR_DESCRIPTOR_BDA_LUT_BUFFER,       // StorageBuffer
+        LR_DESCRIPTOR_BDA_BUFFER,           // StorageBuffer
     };
 
     return kBindings[(u32)type];
@@ -32,7 +32,7 @@ constexpr u32 DescriptorTypeToBinding(DescriptorType type)
 constexpr DescriptorType BindingToDescriptorType(u32 binding)
 {
     constexpr DescriptorType kBindings[] = {
-        DescriptorType::StorageBuffer,  // LR_DESCRIPTOR_BDA_LUT_BUFFER
+        DescriptorType::StorageBuffer,  // LR_DESCRIPTOR_BDA_BUFFER
         DescriptorType::SampledImage,   // LR_DESCRIPTOR_INDEX_SAMPLED_IMAGE
         DescriptorType::StorageImage,   // LR_DESCRIPTOR_INDEX_STORAGE_IMAGE
         DescriptorType::Sampler,        // LR_DESCRIPTOR_INDEX_SAMPLER
@@ -69,7 +69,7 @@ RenderPassBuilder::RenderPassBuilder(APIContext *pContext)
 
     // clang-format off
     u64 size = m_pContext->AlignUpDescriptorOffset(1);  // TODO: Proper memory management...    
-    InitDescriptorType(LR_DESCRIPTOR_BDA_LUT_BUFFER, BufferUsage::ResourceDescriptor, pBufferLayout, size);
+    InitDescriptorType(LR_DESCRIPTOR_BDA_BUFFER, BufferUsage::ResourceDescriptor, pBufferLayout, size);
     InitDescriptorType(LR_DESCRIPTOR_INDEX_SAMPLED_IMAGE, BufferUsage::ResourceDescriptor, pImageLayout, size);
     InitDescriptorType(LR_DESCRIPTOR_INDEX_STORAGE_IMAGE, BufferUsage::ResourceDescriptor, pStorageImageLayout, size);
     
@@ -129,38 +129,41 @@ DescriptorBufferInfo *RenderPassBuilder::GetDescriptorBuffer(u32 binding)
     return nullptr;
 }
 
-void RenderPassBuilder::SetDescriptor(DescriptorType type, eastl::span<DescriptorGetInfo> elements)
+u64 RenderPassBuilder::GetDescriptorSize(DescriptorType type)
 {
     ZoneScoped;
 
-    u32 targetSet = DescriptorTypeToBinding(type);
-    DescriptorBufferInfo *pDescriptorInfo = GetDescriptorBuffer(targetSet);
+    // clang-format off
+    return DescriptorTypeToSet(type) == LR_DESCRIPTOR_BDA_BUFFER 
+            ? sizeof(u64) : m_pContext->GetDescriptorSize(type);
+    // clang-format on
+}
 
-    u8 *pData = pDescriptorInfo->m_pData;
-    u64 &offset = pDescriptorInfo->m_Offset;
+void RenderPassBuilder::SetDescriptors(eastl::span<DescriptorGetInfo> elements)
+{
+    ZoneScoped;
 
-    u64 typeSize =
-        targetSet == LR_DESCRIPTOR_BDA_LUT_BUFFER ? sizeof(u64) : m_pContext->GetDescriptorSize(type);
-    u32 descriptorIndex = offset / typeSize;
-
-    for (DescriptorGetInfo &element : elements)
+    for (DescriptorGetInfo &descriptorInfo : elements)
     {
-        /// We don't use binding offset here because we simply don't need it. Resources are accessed
-        /// by their indexes to their descriptor buffers. So instead of pushing into the binding offset
-        /// we push into the buffer offset.
+        u32 targetSet = DescriptorTypeToSet(descriptorInfo.m_Type);
+        DescriptorBufferInfo *pDescriptorInfo = GetDescriptorBuffer(targetSet);
+        u8 *pData = pDescriptorInfo->m_pData;
+        u64 &offset = pDescriptorInfo->m_Offset;
 
-        if (targetSet != LR_DESCRIPTOR_BDA_LUT_BUFFER)
+        u64 descriptorSize = GetDescriptorSize(descriptorInfo.m_Type);
+        u32 descriptorIndex = offset / descriptorSize;
+
+        if (targetSet == LR_DESCRIPTOR_BDA_BUFFER)
         {
-            DescriptorGetInfo descriptorInfo(element.m_pImage);
-            m_pContext->GetDescriptorData(type, descriptorInfo, typeSize, pData + offset);
+            memcpy(pData + offset, &descriptorInfo.m_pBuffer->m_DeviceAddress, descriptorSize);
+            descriptorInfo.m_pBuffer->m_DescriptorIndex = descriptorIndex;
         }
         else
         {
-            memcpy(pData + offset, &element.m_pBuffer->m_DeviceAddress, typeSize);
+            m_pContext->GetDescriptorData(descriptorInfo, descriptorSize, pData + offset, descriptorIndex);
         }
 
-        offset += typeSize;
-        element.m_DescriptorIndex = descriptorIndex++;
+        offset += descriptorSize;
     }
 }
 
@@ -170,9 +173,9 @@ u64 RenderPassBuilder::GetResourceBufferSize()
 
     u64 size = 0;
     for (DescriptorBufferInfo &info : m_ResourceDescriptors)
-        if (info.m_BindingID == LR_DESCRIPTOR_BDA_LUT_BUFFER)
+        if (info.m_BindingID == LR_DESCRIPTOR_BDA_BUFFER)
             size += m_pContext->AlignUpDescriptorOffset(
-                m_pContext->GetDescriptorSize(BindingToDescriptorType(LR_DESCRIPTOR_BDA_LUT_BUFFER)));
+                m_pContext->GetDescriptorSize(BindingToDescriptorType(LR_DESCRIPTOR_BDA_BUFFER)));
         else
             size += m_pContext->AlignUpDescriptorOffset(info.m_DataSize);
 
@@ -220,7 +223,7 @@ Buffer *RenderPassBuilder::CreateResourceDescriptorBuffer()
 
     for (DescriptorBufferInfo &info : m_ResourceDescriptors)
     {
-        if (info.m_BindingID == LR_DESCRIPTOR_BDA_LUT_BUFFER)
+        if (info.m_BindingID == LR_DESCRIPTOR_BDA_BUFFER)
         {
             BufferDesc bdaBufferDesc = {
                 .m_UsageFlags = BufferUsage::ResourceDescriptor | BufferUsage::Storage,
@@ -230,12 +233,10 @@ Buffer *RenderPassBuilder::CreateResourceDescriptorBuffer()
             Buffer *pBDABuffer = m_pContext->CreateBuffer(&bdaBufferDesc);
             m_pContext->SetObjectName(pBDABuffer, "DescriptorBuffer-BDALUT");
 
-            DescriptorGetInfo bdaBufferDescriptor(pBDABuffer);
-            DescriptorType elementType = BindingToDescriptorType(info.m_BindingID);
-            u64 bindingSize = m_pContext->GetDescriptorSize(elementType);
+            DescriptorGetInfo bdaBufferDescriptor(pBDABuffer, DescriptorType::StorageBuffer);
+            u64 bindingSize = m_pContext->GetDescriptorSize(DescriptorType::StorageBuffer);
 
-            m_pContext->GetDescriptorData(
-                elementType, bdaBufferDescriptor, bindingSize, (u8 *)pMapData + mapOffset);
+            m_pContext->GetDescriptorData(bdaBufferDescriptor, bindingSize, (u8 *)pMapData + mapOffset, 0);
             memcpy((u8 *)pMapData + pBDABuffer->m_DataOffset, info.m_pData, info.m_Offset);
         }
         else

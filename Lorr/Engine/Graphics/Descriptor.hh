@@ -1,5 +1,5 @@
 // Created on Saturday April 22nd 2023 by exdal
-// Last modified on Wednesday June 7th 2023 by exdal
+// Last modified on Monday July 31st 2023 by exdal
 
 #pragma once
 
@@ -45,8 +45,9 @@ struct DescriptorBindingInfo : VkDescriptorBufferBindingInfoEXT
 
 struct DescriptorGetInfo
 {
-    DescriptorGetInfo(Buffer *pBuffer);
-    DescriptorGetInfo(Image *pImage);
+    DescriptorGetInfo() = default;
+    DescriptorGetInfo(Buffer *pBuffer, DescriptorType type);
+    DescriptorGetInfo(Image *pImage, DescriptorType type);
     DescriptorGetInfo(Sampler *pSampler);
 
     union
@@ -56,7 +57,7 @@ struct DescriptorGetInfo
         Sampler *m_pSampler;
     };
 
-    u32 &m_DescriptorIndex;
+    DescriptorType m_Type = DescriptorType::Count;
 };
 
 }  // namespace lr::Graphics

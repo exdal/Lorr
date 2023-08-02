@@ -1,5 +1,5 @@
 // Created on Sunday March 19th 2023 by exdal
-// Last modified on Friday June 30th 2023 by exdal
+// Last modified on Wednesday August 2nd 2023 by exdal
 
 #pragma once
 
@@ -141,7 +141,7 @@ struct ResourceAllocators
     LinearDeviceMemory *m_pBufferLinear = nullptr;
     TLSFDeviceMemory *m_pBufferTLSF = nullptr;
     TLSFDeviceMemory *m_pBufferTLSFHost = nullptr;
-    LinearDeviceMemory *m_ppBufferFrametime[LR_MAX_FRAME_COUNT] = {};
+    LinearDeviceMemory *m_pBufferFrametime = nullptr;
     TLSFDeviceMemory *m_pImageTLSF = nullptr;
 
     DeviceMemory *GetDeviceMemory(ResourceAllocator allocator);

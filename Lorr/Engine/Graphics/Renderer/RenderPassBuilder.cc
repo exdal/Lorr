@@ -1,5 +1,5 @@
 // Created on Friday July 14th 2023 by exdal
-// Last modified on Tuesday August 1st 2023 by exdal
+// Last modified on Friday August 11th 2023 by exdal
 
 #include "RenderPassBuilder.hh"
 
@@ -29,7 +29,7 @@ constexpr u32 DescriptorTypeToSet(DescriptorType type)
     return kBindings[(u32)type];
 }
 
-constexpr DescriptorType BindingToDescriptorType(u32 binding)
+constexpr DescriptorType SetToDescriptorType(u32 binding)
 {
     constexpr DescriptorType kBindings[] = {
         DescriptorType::StorageBuffer,  // LR_DESCRIPTOR_BDA_BUFFER
@@ -41,95 +41,53 @@ constexpr DescriptorType BindingToDescriptorType(u32 binding)
     return kBindings[binding];
 }
 
-RenderPassBuilder::RenderPassBuilder(APIContext *pContext)
+DescriptorBuilder::DescriptorBuilder(APIContext *pContext)
     : m_pContext(pContext)
 {
     ZoneScoped;
 
-    m_DescriptorAllocator.Init({ .m_DataSize = CONFIG_GET_VAR(gpm_descriptor) });
+    eastl::vector<DescriptorSetLayout *> layouts = {};
+    auto InitDescriptorInfo = [&, this](u32 binding, DescriptorInfoType infoType)
+    {
+        DescriptorType type = SetToDescriptorType(binding);
+        DescriptorLayoutElement layoutElement(0, type, ShaderStage::All);
+        layouts.push_back(m_pContext->CreateDescriptorSetLayout(layoutElement));
 
-    DescriptorLayoutElement bufferDescriptorElement(0, DescriptorType::StorageBuffer, ShaderStage::All);
-    DescriptorLayoutElement imageDescriptorElement(0, DescriptorType::SampledImage, ShaderStage::All);
-    DescriptorLayoutElement storageImageDescriptorElement(0, DescriptorType::StorageImage, ShaderStage::All);
-
-    DescriptorSetLayout *pBufferLayout = m_pContext->CreateDescriptorSetLayout(bufferDescriptorElement);
-    DescriptorSetLayout *pImageLayout = m_pContext->CreateDescriptorSetLayout(imageDescriptorElement);
-    DescriptorSetLayout *pStorageImageLayout =
-        m_pContext->CreateDescriptorSetLayout(storageImageDescriptorElement);
-
-    DescriptorLayoutElement samplerLayoutElement(0, DescriptorType::Sampler, ShaderStage::All);
-    DescriptorSetLayout *pSamplerLayout = m_pContext->CreateDescriptorSetLayout(samplerLayoutElement);
-
-    /// This shit is actually complex and debugging is ~~non-existent~~ pain, so here is the quick rundown:
-    ///
-    /// First we allocate small blocks of memory, which is responsible for holding descriptor data
-    /// at each type. THEY ARE NOT THE RESOURCE ITSELF, THEY ARE DESCRIPTORS OF IT'S RESOURCE TYPE
-    /// Also don't forget that descriptors are technically pointers so, these memory blocks are
-    /// literally arrays of pointers, which point to the actual resource itself
-
-    // clang-format off
-    u64 size = m_pContext->AlignUpDescriptorOffset(1);  // TODO: Proper memory management...    
-    InitDescriptorType(LR_DESCRIPTOR_BDA_BUFFER, BufferUsage::ResourceDescriptor, pBufferLayout, size);
-    InitDescriptorType(LR_DESCRIPTOR_INDEX_SAMPLED_IMAGE, BufferUsage::ResourceDescriptor, pImageLayout, size);
-    InitDescriptorType(LR_DESCRIPTOR_INDEX_STORAGE_IMAGE, BufferUsage::ResourceDescriptor, pStorageImageLayout, size);
-    
-    InitDescriptorType(LR_DESCRIPTOR_INDEX_SAMPLER, BufferUsage::SamplerDescriptor, pSamplerLayout, size);
-    // clang-format on
-
-    /// Now after we complete the allocation of blocks, we init our pipeline layout, this is just
-    /// straight forward and obvious so no explanation
-
-    DescriptorSetLayout *pLayouts[] = { pBufferLayout, pImageLayout, pStorageImageLayout, pSamplerLayout };
-    PushConstantDesc pushConstantDesc(ShaderStage::All, 0, 256);
-    m_pPipelineLayout = m_pContext->CreatePipelineLayout(pLayouts, pushConstantDesc);
-
-    /// So how are resources going to be accessed? It's simple, descriptor indexing!
-    /// We can just map the descriptor data into the descriptor buffer, its THAT simple.
-    /// Is this safe? FUCK NO, but it's funny when my gpu crashes and i have a reason to
-    /// get up and walk a bit
-    ///
-    /// See `SetDescriptor` for more info.
-}
-
-RenderPassBuilder::~RenderPassBuilder()
-{
-    ZoneScoped;
-}
-
-void RenderPassBuilder::InitDescriptorType(
-    u32 binding, BufferUsage usage, DescriptorSetLayout *pLayout, u64 memSize)
-{
-    ZoneScoped;
-
-    DescriptorBufferInfo info = {
-        .m_pLayout = pLayout,
-        .m_BindingID = binding,
+        DescriptorInfo &info = m_DescriptorInfos.push_back();
+        info.m_Type = infoType;
+        info.m_SetID = binding;
+        info.m_Allocator.Init({ .m_DataSize = m_pContext->GetDescriptorSize(type) * 256 });
     };
 
-    info.m_pData = (u8 *)m_DescriptorAllocator.Allocate(memSize);
-    info.m_DataSize = memSize;
+    InitDescriptorInfo(LR_DESCRIPTOR_BDA_BUFFER, DescriptorInfoType::BDA);
+    InitDescriptorInfo(LR_DESCRIPTOR_INDEX_SAMPLED_IMAGE, DescriptorInfoType::Resource);
+    InitDescriptorInfo(LR_DESCRIPTOR_INDEX_STORAGE_IMAGE, DescriptorInfoType::Resource);
+    InitDescriptorInfo(LR_DESCRIPTOR_INDEX_SAMPLER, DescriptorInfoType::Sampler);
 
-    if (usage & BufferUsage::ResourceDescriptor)
-        m_ResourceDescriptors.push_back(info);
-    else
-        m_SamplerDescriptor = info;
+    PushConstantDesc pushConstantDesc(ShaderStage::All, 0, 256);
+    m_pPipelineLayout = m_pContext->CreatePipelineLayout(layouts, pushConstantDesc);
+
+    for (DescriptorSetLayout *pLayout : layouts)
+        m_pContext->DeleteDescriptorSetLayout(pLayout);
 }
 
-DescriptorBufferInfo *RenderPassBuilder::GetDescriptorBuffer(u32 binding)
+DescriptorBuilder::~DescriptorBuilder()
+{
+    ZoneScoped;
+}
+
+DescriptorBuilder::DescriptorInfo *DescriptorBuilder::GetDescriptorInfo(u32 set)
 {
     ZoneScoped;
 
-    if (binding == LR_DESCRIPTOR_INDEX_SAMPLER)
-        return &m_SamplerDescriptor;
-
-    for (DescriptorBufferInfo &info : m_ResourceDescriptors)
-        if (info.m_BindingID == binding)
+    for (DescriptorInfo &info : m_DescriptorInfos)
+        if (info.m_SetID == set)
             return &info;
 
     return nullptr;
 }
 
-u64 RenderPassBuilder::GetDescriptorSize(DescriptorType type)
+u64 DescriptorBuilder::GetDescriptorSize(DescriptorType type)
 {
     ZoneScoped;
 
@@ -139,142 +97,67 @@ u64 RenderPassBuilder::GetDescriptorSize(DescriptorType type)
     // clang-format on
 }
 
-void RenderPassBuilder::SetDescriptors(eastl::span<DescriptorGetInfo> elements)
+void DescriptorBuilder::SetDescriptors(eastl::span<DescriptorGetInfo> elements)
 {
     ZoneScoped;
 
     for (DescriptorGetInfo &descriptorInfo : elements)
     {
         u32 targetSet = DescriptorTypeToSet(descriptorInfo.m_Type);
-        DescriptorBufferInfo *pDescriptorInfo = GetDescriptorBuffer(targetSet);
-        u8 *pData = pDescriptorInfo->m_pData;
-        u64 &offset = pDescriptorInfo->m_Offset;
-
+        DescriptorInfo *pDescriptorInfo = GetDescriptorInfo(targetSet);
         u64 descriptorSize = GetDescriptorSize(descriptorInfo.m_Type);
-        u32 descriptorIndex = offset / descriptorSize;
+        u64 allocatorOffset = pDescriptorInfo->m_Allocator.Size();
+        u8 *pData = pDescriptorInfo->m_Allocator.Allocate(descriptorSize);
+        u32 descriptorIndex = allocatorOffset / descriptorSize;
 
-        if (targetSet == LR_DESCRIPTOR_BDA_BUFFER)
+        if (pDescriptorInfo->m_Type == DescriptorInfoType::BDA)
         {
-            memcpy(pData + offset, &descriptorInfo.m_pBuffer->m_DeviceAddress, descriptorSize);
+            memcpy(pData, &descriptorInfo.m_pBuffer->m_DeviceAddress, descriptorSize);
             descriptorInfo.m_pBuffer->m_DescriptorIndex = descriptorIndex;
         }
         else
         {
-            m_pContext->GetDescriptorData(descriptorInfo, descriptorSize, pData + offset, descriptorIndex);
+            m_pContext->GetDescriptorData(descriptorInfo, descriptorSize, pData, descriptorIndex);
         }
-
-        offset += descriptorSize;
     }
 }
 
-u64 RenderPassBuilder::GetResourceBufferSize()
+u64 DescriptorBuilder::GetBufferSize(DescriptorInfoType type)
 {
     ZoneScoped;
 
     u64 size = 0;
-    for (DescriptorBufferInfo &info : m_ResourceDescriptors)
-        if (info.m_BindingID == LR_DESCRIPTOR_BDA_BUFFER)
-            size += m_pContext->AlignUpDescriptorOffset(
-                m_pContext->GetDescriptorSize(BindingToDescriptorType(LR_DESCRIPTOR_BDA_BUFFER)));
+    for (DescriptorInfo &info : m_DescriptorInfos)
+    {
+        if (info.m_Type != type)
+            continue;
+
+        if (info.m_Type == DescriptorInfoType::BDA)
+            size += m_pContext->GetDescriptorSizeAligned(DescriptorType::StorageBuffer);
         else
-            size += m_pContext->AlignUpDescriptorOffset(info.m_DataSize);
+            size += m_pContext->AlignUpDescriptorOffset(info.m_Allocator.Size());
+    }
 
     return size;
 }
 
-u64 RenderPassBuilder::GetSamplerBufferSize()
-{
-    ZoneScoped;
-
-    return m_pContext->AlignUpDescriptorOffset(m_SamplerDescriptor.m_DataSize);
-}
-
-void RenderPassBuilder::GetResourceDescriptorOffsets(u64 *pOffsetsOut, u32 *pDescriptorSizeOut)
+void DescriptorBuilder::GetDescriptorOffsets(DescriptorInfoType type, u64 *pOffsetsOut, u32 *pDescriptorSizeOut)
 {
     ZoneScoped;
 
     u64 descriptorOffset = 0;
     u32 descriptorCount = 0;
-    for (DescriptorBufferInfo &info : m_ResourceDescriptors)
+    for (DescriptorInfo &info : m_DescriptorInfos)
     {
+        if (info.m_Type != type)
+            continue;
+
         *pDescriptorSizeOut = ++descriptorCount;
         if (pOffsetsOut)
             *(pOffsetsOut++) = descriptorOffset;
 
-        descriptorOffset += m_pContext->AlignUpDescriptorOffset(info.m_DataSize);
+        descriptorOffset += m_pContext->AlignUpDescriptorOffset(info.m_Allocator.Size());
     }
-}
-
-Buffer *RenderPassBuilder::CreateResourceDescriptorBuffer()
-{
-    ZoneScoped;
-
-    BufferDesc resourceDescriptorBufferDesc = {
-        .m_UsageFlags = BufferUsage::ResourceDescriptor | BufferUsage::TransferSrc,
-        .m_TargetAllocator = ResourceAllocator::Descriptor,
-        .m_DataSize = GetResourceBufferSize(),
-    };
-    Buffer *pResourceDescriptor = m_pContext->CreateBuffer(&resourceDescriptorBufferDesc);
-    m_pContext->SetObjectName(pResourceDescriptor, "ResourceDescriptor");
-
-    u64 mapOffset = 0;
-    void *pMapData = nullptr;
-    m_pContext->MapMemory(ResourceAllocator::Descriptor, pMapData, 0, ~0);
-
-    for (DescriptorBufferInfo &info : m_ResourceDescriptors)
-    {
-        if (info.m_BindingID == LR_DESCRIPTOR_BDA_BUFFER)
-        {
-            BufferDesc bdaBufferDesc = {
-                .m_UsageFlags = BufferUsage::ResourceDescriptor | BufferUsage::Storage,
-                .m_TargetAllocator = ResourceAllocator::Descriptor,
-                .m_DataSize = info.m_DataSize,
-            };
-            Buffer *pBDABuffer = m_pContext->CreateBuffer(&bdaBufferDesc);
-            m_pContext->SetObjectName(pBDABuffer, "DescriptorBuffer-BDALUT");
-
-            DescriptorGetInfo bdaBufferDescriptor(pBDABuffer, DescriptorType::StorageBuffer);
-            u64 bindingSize = m_pContext->GetDescriptorSize(DescriptorType::StorageBuffer);
-
-            m_pContext->GetDescriptorData(bdaBufferDescriptor, bindingSize, (u8 *)pMapData + mapOffset, 0);
-            memcpy((u8 *)pMapData + pBDABuffer->m_DataOffset, info.m_pData, info.m_Offset);
-        }
-        else
-        {
-            /// Non-buffer descriptors are different, we already get their descriptors unlike buffers
-            /// so it's safe to just copy their memory into resource descriptor
-
-            memcpy((u8 *)pMapData + mapOffset, info.m_pData, info.m_DataSize);
-        }
-
-        mapOffset += info.m_DataSize;
-    }
-
-    m_pContext->UnmapMemory(ResourceAllocator::Descriptor);
-
-    return pResourceDescriptor;
-}
-
-Buffer *RenderPassBuilder::CreateSamplerDescriptorBuffer()
-{
-    ZoneScoped;
-
-    BufferDesc bufferDesc = {
-        .m_UsageFlags = BufferUsage::SamplerDescriptor | BufferUsage::TransferSrc,
-        .m_TargetAllocator = ResourceAllocator::Descriptor,
-        .m_DataSize = GetSamplerBufferSize(),
-    };
-    Buffer *pSamplerDescriptor = m_pContext->CreateBuffer(&bufferDesc);
-
-    u64 mapOffset = 0;
-    void *pMapData = nullptr;
-    m_pContext->MapBuffer(pSamplerDescriptor, pMapData, 0, bufferDesc.m_DataSize);
-
-    memcpy((u8 *)pMapData, m_SamplerDescriptor.m_pData, m_SamplerDescriptor.m_Offset);
-
-    m_pContext->UnmapBuffer(pSamplerDescriptor);
-
-    return pSamplerDescriptor;
 }
 
 }  // namespace lr::Graphics

@@ -1,5 +1,5 @@
 // Created on Friday July 14th 2023 by exdal
-// Last modified on Monday July 31st 2023 by exdal
+// Last modified on Wednesday August 9th 2023 by exdal
 
 #pragma once
 
@@ -8,16 +8,6 @@
 
 namespace lr::Graphics
 {
-struct DescriptorBufferInfo
-{
-    DescriptorSetLayout *m_pLayout = nullptr;
-    u32 m_BindingID = 0;
-
-    u8 *m_pData = nullptr;
-    u64 m_Offset = 0;
-    u64 m_DataSize = 0;
-};
-
 //
 // struct PassData
 // {
@@ -44,35 +34,71 @@ struct GraphicsRenderPassBuilder
 {
     using RenderPassCb = GraphicsRenderPassCallback<_PassData>;
 
-    GraphicsRenderPassBuilder(RenderPassCb *pPass);
+    GraphicsRenderPassBuilder(RenderPassCb *pPass) {}
 
     GraphicsPipelineBuildInfo m_PipelineInfo = {};
     RenderPassCb *m_pPass = nullptr;
 };
 
-struct RenderPassBuilder
+struct DescriptorBuilder
 {
-    RenderPassBuilder(APIContext *pContext);
-    ~RenderPassBuilder();
+    enum class DescriptorInfoType
+    {
+        Resource,
+        Sampler,
+        BDA,
+    };
 
-    void InitDescriptorType(u32 binding, BufferUsage usage, DescriptorSetLayout *pLayout, u64 memSize);
-    DescriptorBufferInfo *GetDescriptorBuffer(u32 binding);
+    struct DescriptorInfo
+    {
+        DescriptorInfoType m_Type = DescriptorInfoType::Resource;
+        u32 m_SetID = 0;
+        Memory::LinearAllocator m_Allocator = {};
+    };
+
+    DescriptorBuilder(APIContext *pContext);
+    ~DescriptorBuilder();
+
+    DescriptorInfo *GetDescriptorInfo(u32 set);
     u64 GetDescriptorSize(DescriptorType type);
 
     void SetDescriptors(eastl::span<DescriptorGetInfo> elements);
 
-    u64 GetResourceBufferSize();
-    u64 GetSamplerBufferSize();
-    void GetResourceDescriptorOffsets(u64 *pOffsetsOut, u32 *pDescriptorSizeOut);
+    /// Returns size of descriptor buffer, not the actual buffer. Ex: BDA returns size of stroage buffer
+    u64 GetBufferSize(DescriptorInfoType type);
+    /// Returns offset of descriptor buffer, not the actual buffer. Ex: BDA returns size of stroage buffer
+    void GetDescriptorOffsets(DescriptorInfoType type, u64 *pOffsetsOut, u32 *pDescriptorSizeOut);
 
-    Buffer *CreateResourceDescriptorBuffer();
-    Buffer *CreateSamplerDescriptorBuffer();
+    eastl::vector<DescriptorInfo> m_DescriptorInfos = {};
 
-    Memory::LinearAllocator m_DescriptorAllocator = {};
-    eastl::vector<DescriptorBufferInfo> m_ResourceDescriptors = {};
-    DescriptorBufferInfo m_SamplerDescriptor = {};
     PipelineLayout *m_pPipelineLayout = nullptr;
-
     APIContext *m_pContext = nullptr;
 };
+
+//         // ------------------------ //
+// al(u64) //      BDA Mem    (F0)     // Array of u64's
+//         // - - - - - - - - - - - -  //
+// al(u64) //      BDA Mem    (F1)     //
+//         // - - - - - - - - - - - -  //
+// al(u64) //      BDA Mem    (Fn)     //
+//         // ------------------------ //
+// al(256) // BDA Desc. |              //
+//         //    Resource Mem (F0)     // Address of BDA(Fn) + other resources
+//         //                          //
+//         // - - - - - - - - - - - -  //
+// al(256) // BDA Desc. |              //
+//         //    Resource Mem (F1)     //
+//         //                          //
+//         // - - - - - - - - - - - -  //
+// al(256) // BDA Desc. |              //
+//         //    Resource Mem (Fn)     //
+//         //                          //
+//         // ------------------------ //
+// al(256) //    Sampler Mem  (F0)     // Samplers
+//         // - - - - - - - - - - - -  //
+// al(256) //    Sampler Mem  (F1)     //
+//         // - - - - - - - - - - - -  //
+// al(256) //    Sampler Mem  (Fn)     //
+//         // ------------------------ //
+
 }  // namespace lr::Graphics

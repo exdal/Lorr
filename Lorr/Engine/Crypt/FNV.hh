@@ -1,6 +1,5 @@
-//
-// Created on Saturday 16th July 2022 by exdal
-//
+// Created on Saturday July 16th 2022 by exdal
+// Last modified on Friday August 18th 2023 by exdal
 
 #pragma once
 

@@ -1,5 +1,5 @@
 // Created on Monday July 18th 2022 by exdal
-// Last modified on Wednesday August 2nd 2023 by exdal
+// Last modified on Wednesday August 9th 2023 by exdal
 
 #pragma once
 
@@ -103,12 +103,13 @@ struct APIContext
     u64 GetBufferMemorySize(Buffer *pBuffer, u64 *pAlignmentOut = nullptr);
     u64 GetImageMemorySize(Image *pImage, u64 *pAlignmentOut = nullptr);
 
-    LinearDeviceMemory *CreateLinearAllocator(MemoryFlag memoryFlags, u64 memSize);
-    TLSFDeviceMemory *CreateTLSFAllocator(MemoryFlag memoryFlags, u64 memSize, u32 maxAllocs);
+    VkDeviceMemory CreateDeviceMemory(MemoryFlag memoryFlags, u64 memorySize);
+    LinearDeviceMemory *CreateLinearAllocator(MemoryFlag memoryFlags, u64 memorySize);
+    TLSFDeviceMemory *CreateTLSFAllocator(MemoryFlag memoryFlags, u64 memorySize, u32 maxAllocs);
     void DeleteAllocator(DeviceMemory *pDeviceMemory);
-    u64 OffsetFrametimeMemory(u64 offset);
-    void AllocateBufferMemory(ResourceAllocator allocator, Buffer *pBuffer, u64 memSize);
-    void AllocateImageMemory(ResourceAllocator allocator, Image *pImage, u64 memSize);
+    u64 OffsetFrametimeMemory(u64 size, u64 offset);
+    void AllocateBufferMemory(ResourceAllocator allocator, Buffer *pBuffer, u64 memorySize);
+    void AllocateImageMemory(ResourceAllocator allocator, Image *pImage, u64 memorySize);
 
     // * Shaders * //
     Shader *CreateShader(Resource::ShaderResource *pResource);
@@ -119,6 +120,7 @@ struct APIContext
     DescriptorSetLayout *CreateDescriptorSetLayout(
         eastl::span<DescriptorLayoutElement> elements,
         DescriptorSetLayoutFlag flags = DescriptorSetLayoutFlag::DescriptorBuffer);
+    void DeleteDescriptorSetLayout(DescriptorSetLayout *pLayout);
     u64 GetDescriptorSetLayoutSize(DescriptorSetLayout *pLayout);
     u64 GetDescriptorSetLayoutBindingOffset(DescriptorSetLayout *pLayout, u32 bindingID);
     u64 GetDescriptorSize(DescriptorType type);
@@ -127,15 +129,11 @@ struct APIContext
     void GetDescriptorData(const DescriptorGetInfo &info, u64 dataSize, void *pDataOut, u32 descriptorIdx);
 
     // * Buffers * //
-    VkDeviceMemory CreateHeap(u64 heapSize, MemoryFlag flags);
-
     Buffer *CreateBuffer(BufferDesc *pDesc);
     void DeleteBuffer(Buffer *pHandle, bool waitForWork = true);
 
-    void MapMemory(ResourceAllocator allocator, void *&pData, u64 offset, u64 size);
-    void UnmapMemory(ResourceAllocator allocator);
-    void MapBuffer(Buffer *pBuffer, void *&pData, u64 offset, u64 size);
-    void UnmapBuffer(Buffer *pBuffer);
+    u8 *GetMemoryData(ResourceAllocator allocator);
+    u8 *GetBufferMemoryData(Buffer *pBuffer);
 
     // * Images * //
     Image *CreateImage(ImageDesc *pDesc);

@@ -16,8 +16,8 @@ resource_meta_compiled_file = "meta0"
 
 # Graphics - Memory pools
 gpm_tlsf_allocations = 0x20000
-gpm_descriptor = 0
-gpm_buffer_linear = false
+gpm_descriptor = 0  # Descriptor allocator is also frametime
+gpm_buffer_linear = 0
 gpm_buffer_tlsf = 0
 gpm_buffer_tlsf_host = 0
 gpm_frametime = 0

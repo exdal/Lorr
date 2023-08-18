@@ -1,5 +1,5 @@
 // Created on Monday July 18th 2022 by exdal
-// Last modified on Wednesday August 2nd 2023 by exdal
+// Last modified on Wednesday August 9th 2023 by exdal
 
 #include "APIContext.hh"
 
@@ -65,8 +65,8 @@ bool APIContext::Init(APIContextDesc *pDesc)
 
     /// CREATE ALLOCATORS ///
 
-    m_Allocators.m_pDescriptor =
-        CreateLinearAllocator(MemoryFlag::HostVisibleCoherent, pDesc->m_AllocatorDesc.m_DescriptorMem);
+    m_Allocators.m_pDescriptor = CreateLinearAllocator(
+        MemoryFlag::HostVisibleCoherent, pDesc->m_AllocatorDesc.m_DescriptorMem * m_pSwapChain->m_FrameCount);
     SetObjectName(m_Allocators.m_pDescriptor, "Descriptor");
 
     m_Allocators.m_pBufferLinear =
@@ -612,7 +612,7 @@ SwapChain *APIContext::CreateSwapChain(BaseWindow *pWindow, u32 imageCount, Swap
         pImage->m_DataOffset = ~0;
         pImage->m_MipMapLevels = 1;
         pImage->m_Format = pSwapChain->m_ImageFormat;
-        pImage->m_TargetAllocator = ResourceAllocator::Count;
+        pImage->m_Allocator = ResourceAllocator::Count;
         CreateImageView(pImage, ImageUsage::ColorAttachment);
 
         SetObjectName(pImage, _FMT("Swap Chain Image {}", i));
@@ -788,7 +788,7 @@ u64 APIContext::GetImageMemorySize(Image *pImage, u64 *pAlignmentOut)
     return memoryRequirements.size;
 }
 
-LinearDeviceMemory *APIContext::CreateLinearAllocator(MemoryFlag memoryFlags, u64 memSize)
+VkDeviceMemory APIContext::CreateDeviceMemory(MemoryFlag memoryFlags, u64 memorySize)
 {
     ZoneScoped;
 
@@ -802,44 +802,42 @@ LinearDeviceMemory *APIContext::CreateLinearAllocator(MemoryFlag memoryFlags, u6
     if (memoryFlags & MemoryFlag::HostCached)
         memoryProps |= VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
 
-    LinearDeviceMemory *pDeviceMem = new LinearDeviceMemory;
-    pDeviceMem->Init(memSize);
-
+    VkDeviceMemory pDeviceMem = VK_NULL_HANDLE;
     VkMemoryAllocateInfo allocInfo = {
         .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
         .pNext = nullptr,
-        .allocationSize = memSize,
+        .allocationSize = memorySize,
         .memoryTypeIndex = m_pPhysicalDevice->GetHeapIndex(memoryProps),
     };
-    vkAllocateMemory(m_pDevice, &allocInfo, nullptr, &pDeviceMem->m_pHandle);
+    vkAllocateMemory(m_pDevice, &allocInfo, nullptr, &pDeviceMem);
 
     return pDeviceMem;
 }
 
-TLSFDeviceMemory *APIContext::CreateTLSFAllocator(MemoryFlag memoryFlags, u64 memSize, u32 maxAllocs)
+LinearDeviceMemory *APIContext::CreateLinearAllocator(MemoryFlag memoryFlags, u64 memorySize)
 {
     ZoneScoped;
 
-    VkMemoryPropertyFlags memoryProps = 0;
-    if (memoryFlags & MemoryFlag::Device)
-        memoryProps |= VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+    LinearDeviceMemory *pDeviceMem = new LinearDeviceMemory;
+    pDeviceMem->Init(memorySize);
+    pDeviceMem->m_pHandle = CreateDeviceMemory(memoryFlags, memorySize);
+
     if (memoryFlags & MemoryFlag::HostVisible)
-        memoryProps |= VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
-    if (memoryFlags & MemoryFlag::HostCoherent)
-        memoryProps |= VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-    if (memoryFlags & MemoryFlag::HostCached)
-        memoryProps |= VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+        vkMapMemory(m_pDevice, pDeviceMem->m_pHandle, 0, VK_WHOLE_SIZE, 0, &pDeviceMem->m_pMappedMemory);
+
+    return pDeviceMem;
+}
+
+TLSFDeviceMemory *APIContext::CreateTLSFAllocator(MemoryFlag memoryFlags, u64 memorySize, u32 maxAllocs)
+{
+    ZoneScoped;
 
     TLSFDeviceMemory *pDeviceMem = new TLSFDeviceMemory;
-    pDeviceMem->m_Allocator.Init(memSize, maxAllocs);
+    pDeviceMem->m_Allocator.Init(memorySize, maxAllocs);
+    pDeviceMem->m_pHandle = CreateDeviceMemory(memoryFlags, memorySize);
 
-    VkMemoryAllocateInfo allocInfo = {
-        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-        .pNext = nullptr,
-        .allocationSize = memSize,
-        .memoryTypeIndex = m_pPhysicalDevice->GetHeapIndex(memoryProps),
-    };
-    vkAllocateMemory(m_pDevice, &allocInfo, nullptr, &pDeviceMem->m_pHandle);
+    if (memoryFlags & MemoryFlag::HostVisible)
+        vkMapMemory(m_pDevice, pDeviceMem->m_pHandle, 0, VK_WHOLE_SIZE, 0, &pDeviceMem->m_pMappedMemory);
 
     return pDeviceMem;
 }
@@ -851,14 +849,14 @@ void APIContext::DeleteAllocator(DeviceMemory *pDeviceMemory)
     vkFreeMemory(m_pDevice, pDeviceMemory->m_pHandle, nullptr);
 }
 
-u64 APIContext::OffsetFrametimeMemory(u64 offset)
+u64 APIContext::OffsetFrametimeMemory(u64 size, u64 offset)
 {
     ZoneScoped;
 
-    return offset * m_pSwapChain->m_CurrentFrame;
+    return offset + (m_pSwapChain->m_CurrentFrame * size);
 }
 
-void APIContext::AllocateBufferMemory(ResourceAllocator allocator, Buffer *pBuffer, u64 memSize)
+void APIContext::AllocateBufferMemory(ResourceAllocator allocator, Buffer *pBuffer, u64 memorySize)
 {
     ZoneScoped;
     assert(allocator != ResourceAllocator::None);
@@ -868,16 +866,13 @@ void APIContext::AllocateBufferMemory(ResourceAllocator allocator, Buffer *pBuff
     DeviceMemory *pMemory = m_Allocators.GetDeviceMemory(allocator);
     u64 memoryOffset = pMemory->Allocate(alignedSize, alignment, pBuffer->m_AllocatorData);
 
-    if (allocator == ResourceAllocator::BufferFrametime)
-        memoryOffset = OffsetFrametimeMemory(memoryOffset);
-
     vkBindBufferMemory(m_pDevice, pBuffer->m_pHandle, pMemory->m_pHandle, memoryOffset);
 
     pBuffer->m_DataSize = alignedSize;
     pBuffer->m_DataOffset = memoryOffset;
 }
 
-void APIContext::AllocateImageMemory(ResourceAllocator allocator, Image *pImage, u64 memSize)
+void APIContext::AllocateImageMemory(ResourceAllocator allocator, Image *pImage, u64 memorySize)
 {
     ZoneScoped;
 
@@ -943,6 +938,15 @@ DescriptorSetLayout *APIContext::CreateDescriptorSetLayout(
     vkCreateDescriptorSetLayout(m_pDevice, &layoutCreateInfo, nullptr, &pLayout->m_pHandle);
 
     return pLayout;
+}
+
+void APIContext::DeleteDescriptorSetLayout(DescriptorSetLayout *pLayout)
+{
+    ZoneScoped;
+
+    vkDestroyDescriptorSetLayout(m_pDevice, pLayout->m_pHandle, nullptr);
+
+    delete pLayout;
 }
 
 u64 APIContext::GetDescriptorSetLayoutSize(DescriptorSetLayout *pLayout)
@@ -1048,32 +1052,6 @@ void APIContext::GetDescriptorData(
     vkGetDescriptorEXT(m_pDevice, &vkInfo, dataSize, pDataOut);
 }
 
-VkDeviceMemory APIContext::CreateHeap(u64 heapSize, MemoryFlag flags)
-{
-    ZoneScoped;
-
-    VkMemoryPropertyFlags memoryProps = 0;
-    if (flags & MemoryFlag::Device)
-        memoryProps |= VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-    if (flags & MemoryFlag::HostVisible)
-        memoryProps |= VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
-    if (flags & MemoryFlag::HostCoherent)
-        memoryProps |= VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-    if (flags & MemoryFlag::HostCached)
-        memoryProps |= VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
-
-    VkMemoryAllocateInfo memoryAllocInfo = {
-        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-        .allocationSize = heapSize,
-        .memoryTypeIndex = m_pPhysicalDevice->GetHeapIndex(memoryProps),
-    };
-
-    VkDeviceMemory pHandle = nullptr;
-    vkAllocateMemory(m_pDevice, &memoryAllocInfo, nullptr, &pHandle);
-
-    return pHandle;
-}
-
 Buffer *APIContext::CreateBuffer(BufferDesc *pDesc)
 {
     ZoneScoped;
@@ -1102,7 +1080,7 @@ Buffer *APIContext::CreateBuffer(BufferDesc *pDesc)
     };
 
     /// INIT BUFFER ///
-    pBuffer->m_TargetAllocator = pDesc->m_TargetAllocator;
+    pBuffer->m_Allocator = pDesc->m_TargetAllocator;
     pBuffer->m_Stride = pDesc->m_Stride;
     pBuffer->m_DeviceAddress = vkGetBufferDeviceAddress(m_pDevice, &deviceAddressInfo);
 
@@ -1113,7 +1091,7 @@ void APIContext::DeleteBuffer(Buffer *pBuffer, bool waitForWork)
 {
     ZoneScoped;
 
-    assert(pBuffer->m_TargetAllocator != ResourceAllocator::None);
+    assert(pBuffer->m_Allocator != ResourceAllocator::None);
 
     if (waitForWork)
     {
@@ -1122,7 +1100,7 @@ void APIContext::DeleteBuffer(Buffer *pBuffer, bool waitForWork)
         return;
     }
 
-    DeviceMemory *pMemory = m_Allocators.GetDeviceMemory(pBuffer->m_TargetAllocator);
+    DeviceMemory *pMemory = m_Allocators.GetDeviceMemory(pBuffer->m_Allocator);
     if (pMemory)
         pMemory->Free(pBuffer->m_AllocatorData);
 
@@ -1130,42 +1108,20 @@ void APIContext::DeleteBuffer(Buffer *pBuffer, bool waitForWork)
         vkDestroyBuffer(m_pDevice, pBuffer->m_pHandle, nullptr);
 }
 
-void APIContext::MapMemory(ResourceAllocator allocator, void *&pData, u64 offset, u64 size)
+u8 *APIContext::GetMemoryData(ResourceAllocator allocator)
 {
     ZoneScoped;
 
     assert(allocator != ResourceAllocator::None);
     DeviceMemory *pMemory = m_Allocators.GetDeviceMemory(allocator);
-
-    if (allocator == ResourceAllocator::BufferFrametime)
-        offset = OffsetFrametimeMemory(offset);
-
-    vkMapMemory(m_pDevice, pMemory->m_pHandle, offset, size, 0, &pData);
+    return (u8 *)pMemory->m_pMappedMemory;
 }
 
-void APIContext::UnmapMemory(ResourceAllocator allocator)
+u8 *APIContext::GetBufferMemoryData(Buffer *pBuffer)
 {
     ZoneScoped;
 
-    assert(allocator != ResourceAllocator::None);
-    DeviceMemory *pMemory = m_Allocators.GetDeviceMemory(allocator);
-    vkUnmapMemory(m_pDevice, pMemory->m_pHandle);
-}
-
-void APIContext::MapBuffer(Buffer *pBuffer, void *&pData, u64 offset, u64 size)
-{
-    ZoneScoped;
-
-    // Holy shit... That was the fix for Buffer + Device Mem rework commit...
-    // offset -> pBuffer->m_DataOffset + offset, i fucking hate myself...................................
-    MapMemory(pBuffer->m_TargetAllocator, pData, pBuffer->m_DataOffset + offset, size);
-}
-
-void APIContext::UnmapBuffer(Buffer *pBuffer)
-{
-    ZoneScoped;
-
-    UnmapMemory(pBuffer->m_TargetAllocator);
+    return GetMemoryData(pBuffer->m_Allocator) + pBuffer->m_DataOffset;
 }
 
 Image *APIContext::CreateImage(ImageDesc *pDesc)
@@ -1212,7 +1168,7 @@ Image *APIContext::CreateImage(ImageDesc *pDesc)
 
     /// INIT BUFFER ///
     pImage->m_Format = pDesc->m_Format;
-    pImage->m_TargetAllocator = pDesc->m_TargetAllocator;
+    pImage->m_Allocator = pDesc->m_TargetAllocator;
     pImage->m_Width = pDesc->m_Width;
     pImage->m_Height = pDesc->m_Height;
     pImage->m_ArraySize = pDesc->m_ArraySize;
@@ -1227,7 +1183,7 @@ void APIContext::DeleteImage(Image *pImage, bool waitForWork)
 {
     ZoneScoped;
 
-    assert(pImage->m_TargetAllocator != ResourceAllocator::None);
+    assert(pImage->m_Allocator != ResourceAllocator::None);
 
     if (waitForWork)
     {
@@ -1236,7 +1192,7 @@ void APIContext::DeleteImage(Image *pImage, bool waitForWork)
         return;
     }
 
-    DeviceMemory *pMemory = m_Allocators.GetDeviceMemory(pImage->m_TargetAllocator);
+    DeviceMemory *pMemory = m_Allocators.GetDeviceMemory(pImage->m_Allocator);
     if (pMemory)
         pMemory->Free(pImage->m_AllocatorData);
 

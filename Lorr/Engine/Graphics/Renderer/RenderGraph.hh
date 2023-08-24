@@ -1,9 +1,10 @@
 // Created on Friday February 24th 2023 by exdal
-// Last modified on Friday August 18th 2023 by exdal
+// Last modified on Thursday August 24th 2023 by exdal
 
 #pragma once
 
 #include "RenderPass.hh"
+#include "Crypt/CRC.hh"
 
 #include "Graphics/APIContext.hh"
 
@@ -25,10 +26,12 @@ struct RenderGraph
     {
         ZoneScoped;
 
-        auto *pPass = AllocateRenderPassCallback<GraphicsRenderPassCallback<_PassData>>();
-        pPass->m_NameHash = Hash::FNV64String(name);
+        RenderPass *pPass = AllocateRenderPassCallback<GraphicsRenderPassCallback<_PassData>>();
+        pPass->m_Name = name;
+        pPass->m_Hash = Hash::CRC32String(Hash::CRC32Data_SW, name);
         pPass->m_Flags = flags;
-        pPass->m_PassType = CommandType::Graphics;
+
+        return pPass;
     }
 
     void Prepare();

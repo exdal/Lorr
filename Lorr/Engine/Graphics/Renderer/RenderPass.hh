@@ -1,15 +1,15 @@
 // Created on Friday February 24th 2023 by exdal
-// Last modified on Tuesday July 18th 2023 by exdal
+// Last modified on Wednesday August 23rd 2023 by exdal
 
 #pragma once
+
+#include <EASTL/fixed_string.h>
 
 #include "Crypt/FNV.hh"
 #include "Graphics/APIContext.hh"
 
 namespace lr::Graphics
 {
-using Hash64 = u64;
-using NameID = eastl::string_view;
 enum InputResourceFlag : u32
 {
     None = 0,
@@ -20,40 +20,6 @@ enum InputResourceFlag : u32
     DepthAttachment = 1 << 4,
 };
 EnumFlags(InputResourceFlag);
-
-struct RenderPassResource
-{
-    RenderPassResource *m_pPrev = nullptr;
-    RenderPassResource *m_pNext = nullptr;
-
-    Hash64 m_Hash = ~0;
-    InputResourceFlag m_Flags = InputResourceFlag::None;
-
-    union
-    {
-        u64 __u_data = 0;
-
-        /// For Render Attachments
-        struct
-        {
-            AttachmentOp m_LoadOp;
-            AttachmentOp m_Store;
-        };
-
-        /// For Input Resources
-        struct
-        {
-            MemoryAccess m_SrcAccess;
-            MemoryAccess m_DstAccess;
-        };
-    };
-
-    union
-    {
-        ColorClearValue m_ColorClearVal = {};
-        DepthClearValue m_DepthClearVal;
-    };
-};
 
 enum class RenderPassFlag : u32
 {
@@ -77,11 +43,12 @@ struct RenderPass
 
     Pipeline *m_pPipeline = nullptr;
 
-    Hash64 m_NameHash = ~0;
     RenderPassFlag m_Flags = RenderPassFlag::None;
+    u32 m_Hash = 0;
 
-    u32 m_ResourceCount = 0;
-    RenderPassResource *m_pInputs = nullptr;
+#if _DEBUG
+    eastl::string m_Name;
+#endif
 };
 
 template<typename _Data>

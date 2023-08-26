@@ -1,10 +1,11 @@
 // Created on Saturday April 22nd 2023 by exdal
-// Last modified on Sunday May 28th 2023 by exdal
+// Last modified on Saturday August 26th 2023 by exdal
 
 #pragma once
 
 #include "Buffer.hh"
 #include "CommandList.hh"
+#include "Descriptor.hh"
 #include "Pipeline.hh"
 #include "Image.hh"
 

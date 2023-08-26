@@ -1,11 +1,11 @@
 // Created on Wednesday May 4th 2022 by exdal
-// Last modified on Tuesday May 23rd 2023 by exdal
+// Last modified on Sunday July 16th 2023 by exdal
 
 #pragma once
 
 #include "Core/Config.hh"
 
-#include "Graphics/RenderGraph/RenderGraph.hh"
+#include "Graphics/Renderer/RenderGraph.hh"
 #include "Resource/ResourceManager.hh"
 #include "UI/ImGui.hh"
 #include "Window/Win32/Win32Window.hh"
@@ -65,7 +65,7 @@ union EngineEventData
 
 struct EngineDesc
 {
-    Graphics::APIFlags m_TargetAPIFlags;
+    // Graphics::APIFlags m_TargetAPIFlags;
 
     WindowDesc m_WindowDesc;
 };
@@ -84,7 +84,6 @@ struct Engine
 
     EventManager<EngineEventData, 64> m_EventMan;
     Win32Window m_Window;
-    Graphics::RenderGraph m_RenderGraph;
     UI::ImGuiHandler m_ImGui;
     Resource::ResourceManager m_ResourceMan;
 
@@ -92,7 +91,7 @@ struct Engine
 
     static auto GetResourceMan() { return &Get()->m_ResourceMan; }
     static auto GetWindow() { return &Get()->m_Window; }
-    static auto GetRenderGraph() { return &Get()->m_RenderGraph; }
+    // static auto GetRenderGraph() { return &Get()->m_RenderGraph; }
     static Engine *Get();
 };
 

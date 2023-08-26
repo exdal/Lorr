@@ -1,14 +1,12 @@
 // Created on Monday July 18th 2022 by exdal
-// Last modified on Monday June 26th 2023 by exdal
+// Last modified on Saturday August 26th 2023 by exdal
 
 #pragma once
 
-#include "IO/BufferStream.hh"
-#include "Memory/Allocator/LinearAllocator.hh"
-#include "Memory/Allocator/TLSFAllocator.hh"
 #include "Resource/Resource.hh"
 
 #include "Device.hh"
+#include "Descriptor.hh"
 #include "CommandQueue.hh"
 #include "CommandList.hh"
 #include "Pipeline.hh"
@@ -40,7 +38,7 @@ enum class MemoryFlag
 };
 EnumFlags(MemoryFlag);
 
-struct APIDesc
+struct APIContextDesc
 {
     APIFlags m_Flags = LR_API_FLAG_NONE;
     u32 m_ImageCount = 1;
@@ -56,9 +54,9 @@ struct SubmitDesc
     eastl::span<SemaphoreSubmitDesc> m_SignalSemas;
 };
 
-struct Context
+struct APIContext
 {
-    bool Init(APIDesc *pDesc);
+    bool Init(APIContextDesc *pDesc);
 
     /// COMMAND ///
     u32 GetQueueIndex(CommandType type);
@@ -103,11 +101,13 @@ struct Context
     u64 GetBufferMemorySize(Buffer *pBuffer, u64 *pAlignmentOut = nullptr);
     u64 GetImageMemorySize(Image *pImage, u64 *pAlignmentOut = nullptr);
 
-    LinearDeviceMemory *CreateLinearAllocator(MemoryFlag memoryFlags, u64 memSize);
-    TLSFDeviceMemory *CreateTLSFAllocator(MemoryFlag memoryFlags, u64 memSize, u32 maxAllocs);
+    VkDeviceMemory CreateDeviceMemory(MemoryFlag memoryFlags, u64 memorySize);
+    LinearDeviceMemory *CreateLinearAllocator(MemoryFlag memoryFlags, u64 memorySize);
+    TLSFDeviceMemory *CreateTLSFAllocator(MemoryFlag memoryFlags, u64 memorySize, u32 maxAllocs);
     void DeleteAllocator(DeviceMemory *pDeviceMemory);
-    void AllocateBufferMemory(ResourceAllocator allocator, Buffer *pBuffer, u64 memSize);
-    void AllocateImageMemory(ResourceAllocator allocator, Image *pImage, u64 memSize);
+    u64 OffsetFrametimeMemory(u64 size, u64 offset);
+    void AllocateBufferMemory(ResourceAllocator allocator, Buffer *pBuffer, u64 memorySize);
+    void AllocateImageMemory(ResourceAllocator allocator, Image *pImage, u64 memorySize);
 
     // * Shaders * //
     Shader *CreateShader(Resource::ShaderResource *pResource);
@@ -118,23 +118,20 @@ struct Context
     DescriptorSetLayout *CreateDescriptorSetLayout(
         eastl::span<DescriptorLayoutElement> elements,
         DescriptorSetLayoutFlag flags = DescriptorSetLayoutFlag::DescriptorBuffer);
+    void DeleteDescriptorSetLayout(DescriptorSetLayout *pLayout);
     u64 GetDescriptorSetLayoutSize(DescriptorSetLayout *pLayout);
     u64 GetDescriptorSetLayoutBindingOffset(DescriptorSetLayout *pLayout, u32 bindingID);
     u64 GetDescriptorSize(DescriptorType type);
     u64 GetDescriptorSizeAligned(DescriptorType type);
     u64 AlignUpDescriptorOffset(u64 offset);
-    void GetDescriptorData(DescriptorType type, const DescriptorGetInfo &info, u64 dataSize, void *pDataOut);
+    void GetDescriptorData(const DescriptorGetInfo &info, u64 dataSize, void *pDataOut, u32 descriptorIdx);
 
     // * Buffers * //
-    VkDeviceMemory CreateHeap(u64 heapSize, MemoryFlag flags);
-
     Buffer *CreateBuffer(BufferDesc *pDesc);
     void DeleteBuffer(Buffer *pHandle, bool waitForWork = true);
 
-    void MapMemory(ResourceAllocator allocator, void *&pData, u64 offset, u64 size);
-    void UnmapMemory(ResourceAllocator allocator);
-    void MapBuffer(Buffer *pBuffer, void *&pData, u64 offset, u64 size);
-    void UnmapBuffer(Buffer *pBuffer);
+    u8 *GetMemoryData(ResourceAllocator allocator);
+    u8 *GetBufferMemoryData(Buffer *pBuffer);
 
     // * Images * //
     Image *CreateImage(ImageDesc *pDesc);

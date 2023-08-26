@@ -1,5 +1,5 @@
 // Created on Saturday April 22nd 2023 by exdal
-// Last modified on Wednesday June 7th 2023 by exdal
+// Last modified on Friday August 25th 2023 by exdal
 
 #pragma once
 
@@ -38,15 +38,11 @@ struct DescriptorSetLayout : APIObject<VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT>
     VkDescriptorSetLayout m_pHandle = VK_NULL_HANDLE;
 };
 
-struct DescriptorBindingInfo : VkDescriptorBufferBindingInfoEXT
-{
-    DescriptorBindingInfo(Buffer *pBuffer, BufferUsage bufferUsage);
-};
-
 struct DescriptorGetInfo
 {
-    DescriptorGetInfo(Buffer *pBuffer);
-    DescriptorGetInfo(Image *pImage);
+    DescriptorGetInfo() = default;
+    DescriptorGetInfo(Buffer *pBuffer, DescriptorType type);
+    DescriptorGetInfo(Image *pImage, DescriptorType type);
     DescriptorGetInfo(Sampler *pSampler);
 
     union
@@ -56,7 +52,7 @@ struct DescriptorGetInfo
         Sampler *m_pSampler;
     };
 
-    u32 &m_DescriptorIndex;
+    DescriptorType m_Type = DescriptorType::Count;
 };
 
 }  // namespace lr::Graphics

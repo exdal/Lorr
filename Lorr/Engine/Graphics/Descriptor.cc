@@ -1,5 +1,5 @@
 // Created on Tuesday April 25th 2023 by exdal
-// Last modified on Wednesday June 7th 2023 by exdal
+// Last modified on Friday August 25th 2023 by exdal
 
 #include "Descriptor.hh"
 
@@ -17,31 +17,23 @@ DescriptorLayoutElement::DescriptorLayoutElement(
     this->pImmutableSamplers = nullptr;  // TODO: static samplers
 }
 
-DescriptorBindingInfo::DescriptorBindingInfo(Buffer *pBuffer, BufferUsage bufferUsage)
-{
-    this->sType = VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT;
-    this->pNext = nullptr;
-    this->address = pBuffer->m_DeviceAddress;
-    this->usage = VK::ToBufferUsage(bufferUsage);
-}
-
 /// `VkDescriptorDataEXT` is an union so var names such as `data.pUniformTexelBuffer`
 /// do not matter, only thing that matters is type
-DescriptorGetInfo::DescriptorGetInfo(Buffer *pBuffer)
+DescriptorGetInfo::DescriptorGetInfo(Buffer *pBuffer, DescriptorType type)
     : m_pBuffer(pBuffer),
-      m_DescriptorIndex(pBuffer->m_DescriptorIndex)
+      m_Type(type)
 {
 }
 
-DescriptorGetInfo::DescriptorGetInfo(Image *pImage)
+DescriptorGetInfo::DescriptorGetInfo(Image *pImage, DescriptorType type)
     : m_pImage(pImage),
-      m_DescriptorIndex(pImage->m_DescriptorIndex)
+      m_Type(type)
 {
 }
 
 DescriptorGetInfo::DescriptorGetInfo(Sampler *pSampler)
     : m_pSampler(pSampler),
-      m_DescriptorIndex(pSampler->m_DescriptorIndex)
+      m_Type(DescriptorType::Sampler)
 {
 }
 

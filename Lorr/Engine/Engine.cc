@@ -1,10 +1,9 @@
 // Created on Wednesday May 4th 2022 by exdal
-// Last modified on Sunday June 25th 2023 by exdal
+// Last modified on Wednesday August 2nd 2023 by exdal
 
 #include "Engine.hh"
 
 #include "Core/Job.hh"
-#include "Graphics/Renderer/Pass.hh"
 
 namespace lr
 {
@@ -30,7 +29,7 @@ void Engine::Init(EngineDesc &engineDesc)
         .m_ImageTLSFMem = CONFIG_GET_VAR(gpm_image_tlsf),
     };
 
-    Graphics::APIDesc apiDesc = {
+    Graphics::APIContextDesc apiDesc = {
 #ifdef TRACY_ENABLE
         .m_ImageCount = 1,
 #else
@@ -40,13 +39,14 @@ void Engine::Init(EngineDesc &engineDesc)
         .m_AllocatorDesc = gpAllocators,
     };
 
-    Graphics::RenderGraphDesc renderGraphDesc = {
-        .m_APIDesc = apiDesc,
-    };
-    m_RenderGraph.Init(&renderGraphDesc);
+    Graphics::APIContext *pContext = new Graphics::APIContext;
+    pContext->Init(&apiDesc);
 
-    Graphics::InitPasses(&m_RenderGraph);
-    m_RenderGraph.Prepare();
+    // Graphics::RenderGraphDesc renderGraphDesc = {
+    //     .m_APIDesc = apiDesc,
+    // };
+    // m_RenderGraph.Init(&renderGraphDesc);
+    // m_RenderGraph.Prepare();
 }
 
 void Engine::PushEvent(Event event, EngineEventData &data)
@@ -114,17 +114,11 @@ void Engine::BeginFrame()
 
     m_Window.Poll();
     DispatchEvents();
-
-    m_ImGui.NewFrame(m_Window.m_Width, m_Window.m_Height);
 }
 
 void Engine::EndFrame()
 {
     ZoneScopedN("Engine End Frame");
-
-    m_ImGui.EndFrame();
-
-    m_RenderGraph.Draw();
 }
 
 }  // namespace lr

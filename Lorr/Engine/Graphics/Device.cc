@@ -1,11 +1,9 @@
 // Created on Monday March 20th 2023 by exdal
-// Last modified on Wednesday June 21st 2023 by exdal
+// Last modified on Wednesday August 2nd 2023 by exdal
 
 #include "Device.hh"
 
 #include "Window/Win32/Win32Window.hh"
-
-#include "Context.hh"
 
 namespace lr::Graphics
 {
@@ -384,14 +382,14 @@ DeviceMemory *ResourceAllocators::GetDeviceMemory(ResourceAllocator allocator)
     ZoneScoped;
 
     static DeviceMemory *kResourceAllocatorsCrazyShit[] = {
-        nullptr,               // None
-        m_pDescriptor,         // Descriptor
-        m_pBufferLinear,       // BufferLinear
-        m_pBufferTLSF,         // BufferTLSF
-        m_pBufferTLSFHost,     // BufferTLSF_Host
-        *m_ppBufferFrametime,  // BufferFrametime
-        m_pImageTLSF,          // ImageTLSF
-        nullptr,               // Count
+        nullptr,             // None
+        m_pDescriptor,       // Descriptor
+        m_pBufferLinear,     // BufferLinear
+        m_pBufferTLSF,       // BufferTLSF
+        m_pBufferTLSFHost,   // BufferTLSF_Host
+        m_pBufferFrametime,  // BufferFrametime
+        m_pImageTLSF,        // ImageTLSF
+        nullptr,             // Count
     };
 
     return kResourceAllocatorsCrazyShit[(u32)allocator];

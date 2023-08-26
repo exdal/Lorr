@@ -1,5 +1,5 @@
 // Created on Thursday May 18th 2023 by exdal
-// Last modified on Tuesday June 6th 2023 by exdal
+// Last modified on Sunday July 16th 2023 by exdal
 
 #include "Resource/Parser.hh"
 
@@ -15,13 +15,12 @@
 
 namespace lr::Resource
 {
-bool Parser::ParseGLSL(BufferReadStream fileData, ShaderResource &resource, eastl::string_view workingDir)
+bool Parser::ParseGLSL(eastl::string_view code, ShaderResource &resource, eastl::string_view workingDir)
 {
     ZoneScoped;
 
     Graphics::ShaderStage stage;
     Graphics::ShaderFlag flags = Graphics::ShaderFlag::GenerateDebugInfo;
-    eastl::string_view code((const char *)fileData.GetData(), fileData.GetLength());
     eastl::string processedCode;
     processedCode.reserve(code.length());
 

@@ -1,5 +1,5 @@
 // Created on Thursday May 11th 2023 by exdal
-// Last modified on Friday June 30th 2023 by exdal
+// Last modified on Sunday July 16th 2023 by exdal
 #include "Parser.hh"
 
 #include "Crypt/FNV.hh"
@@ -247,7 +247,10 @@ i32 lm::ParseFromFile(Result *pResult, eastl::string_view pathToFile)
         return -2;
     }
 
-    i32 result = lm::ParseFromMemory(pResult, scriptFile.GetAsString());
+    eastl::string code;
+    scriptFile.Read(code, scriptFile.Size());
+    
+    i32 result = lm::ParseFromMemory(pResult, code);
 
     return result;
 }

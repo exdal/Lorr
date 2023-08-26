@@ -1,5 +1,5 @@
 // Created on Sunday March 19th 2023 by exdal
-// Last modified on Friday June 30th 2023 by exdal
+// Last modified on Saturday August 5th 2023 by exdal
 
 #pragma once
 
@@ -66,6 +66,7 @@ struct DeviceMemory : APIObject<VK_OBJECT_TYPE_DEVICE_MEMORY>
     virtual u64 Allocate(u64 dataSize, u64 alignment, u64 &allocatorData) = 0;
     virtual void Free(u64 allocatorData) = 0;
 
+    void *m_pMappedMemory = nullptr;
     VkDeviceMemory m_pHandle = VK_NULL_HANDLE;
 };
 
@@ -141,7 +142,7 @@ struct ResourceAllocators
     LinearDeviceMemory *m_pBufferLinear = nullptr;
     TLSFDeviceMemory *m_pBufferTLSF = nullptr;
     TLSFDeviceMemory *m_pBufferTLSFHost = nullptr;
-    LinearDeviceMemory *m_ppBufferFrametime[LR_MAX_FRAME_COUNT] = {};
+    LinearDeviceMemory *m_pBufferFrametime = nullptr;
     TLSFDeviceMemory *m_pImageTLSF = nullptr;
 
     DeviceMemory *GetDeviceMemory(ResourceAllocator allocator);

@@ -1,9 +1,7 @@
 // Created on Monday July 18th 2022 by exdal
-// Last modified on Friday June 30th 2023 by exdal
+// Last modified on Saturday August 26th 2023 by exdal
 
-#include "Context.hh"
-
-#include "Window/Win32/Win32Window.hh"
+#include "APIContext.hh"
 
 #include "APIAllocator.hh"
 #include "Shader.hh"
@@ -20,7 +18,7 @@ _VK_IMPORT_INSTANCE_SYMBOLS_DEBUG
 
 namespace lr::Graphics
 {
-bool Context::Init(APIDesc *pDesc)
+bool APIContext::Init(APIContextDesc *pDesc)
 {
     ZoneScoped;
 
@@ -65,20 +63,18 @@ bool Context::Init(APIDesc *pDesc)
 
     /// CREATE ALLOCATORS ///
 
-    m_Allocators.m_pDescriptor =
-        CreateLinearAllocator(MemoryFlag::HostVisibleCoherent, pDesc->m_AllocatorDesc.m_DescriptorMem);
+    m_Allocators.m_pDescriptor = CreateLinearAllocator(
+        MemoryFlag::HostVisibleCoherent, pDesc->m_AllocatorDesc.m_DescriptorMem * m_pSwapChain->m_FrameCount);
     SetObjectName(m_Allocators.m_pDescriptor, "Descriptor");
 
     m_Allocators.m_pBufferLinear =
         CreateLinearAllocator(MemoryFlag::HostVisibleCoherent, pDesc->m_AllocatorDesc.m_BufferLinearMem);
     SetObjectName(m_Allocators.m_pBufferLinear, "Buffer-Linear");
 
-    for (u32 i = 0; i < m_pSwapChain->m_FrameCount; i++)
-    {
-        m_Allocators.m_ppBufferFrametime[i] =
-            CreateLinearAllocator(MemoryFlag::HostVisibleCoherent, pDesc->m_AllocatorDesc.m_BufferFrametimeMem);
-        SetObjectName(m_Allocators.m_ppBufferFrametime[i], _FMT("Buffer-Frametime-{}", i));
-    }
+    m_Allocators.m_pBufferFrametime = CreateLinearAllocator(
+        MemoryFlag::HostVisibleCoherent,
+        pDesc->m_AllocatorDesc.m_BufferFrametimeMem * m_pSwapChain->m_FrameCount);
+    SetObjectName(m_Allocators.m_pBufferFrametime, "Buffer-Frametime");
 
     m_Allocators.m_pBufferTLSF = CreateTLSFAllocator(
         MemoryFlag::Device,
@@ -103,14 +99,14 @@ bool Context::Init(APIDesc *pDesc)
     return true;
 }
 
-u32 Context::GetQueueIndex(CommandType type)
+u32 APIContext::GetQueueIndex(CommandType type)
 {
     ZoneScoped;
 
     return m_pPhysicalDevice->GetQueueIndex(type);
 }
 
-CommandQueue *Context::CreateCommandQueue(CommandType type)
+CommandQueue *APIContext::CreateCommandQueue(CommandType type)
 {
     ZoneScoped;
 
@@ -120,7 +116,7 @@ CommandQueue *Context::CreateCommandQueue(CommandType type)
     return pQueue;
 }
 
-CommandAllocator *Context::CreateCommandAllocator(CommandType type, bool resetLists)
+CommandAllocator *APIContext::CreateCommandAllocator(CommandType type, bool resetLists)
 {
     ZoneScoped;
 
@@ -136,7 +132,7 @@ CommandAllocator *Context::CreateCommandAllocator(CommandType type, bool resetLi
     return pAllocator;
 }
 
-CommandList *Context::CreateCommandList(CommandType type, CommandAllocator *pAllocator)
+CommandList *APIContext::CreateCommandList(CommandType type, CommandAllocator *pAllocator)
 {
     ZoneScoped;
 
@@ -149,7 +145,7 @@ CommandList *Context::CreateCommandList(CommandType type, CommandAllocator *pAll
     return pList;
 }
 
-void Context::AllocateCommandList(CommandList *pList, CommandAllocator *pAllocator)
+void APIContext::AllocateCommandList(CommandList *pList, CommandAllocator *pAllocator)
 {
     ZoneScoped;
 
@@ -163,7 +159,7 @@ void Context::AllocateCommandList(CommandList *pList, CommandAllocator *pAllocat
     vkAllocateCommandBuffers(m_pDevice, &listInfo, &pList->m_pHandle);
 }
 
-void Context::BeginCommandList(CommandList *pList)
+void APIContext::BeginCommandList(CommandList *pList)
 {
     ZoneScoped;
 
@@ -174,7 +170,7 @@ void Context::BeginCommandList(CommandList *pList)
     vkBeginCommandBuffer(pList->m_pHandle, &beginInfo);
 }
 
-void Context::EndCommandList(CommandList *pList)
+void APIContext::EndCommandList(CommandList *pList)
 {
     ZoneScoped;
 
@@ -182,14 +178,14 @@ void Context::EndCommandList(CommandList *pList)
     vkEndCommandBuffer(pList->m_pHandle);
 }
 
-void Context::ResetCommandAllocator(CommandAllocator *pAllocator)
+void APIContext::ResetCommandAllocator(CommandAllocator *pAllocator)
 {
     ZoneScoped;
 
     vkResetCommandPool(m_pDevice, pAllocator->m_pHandle, VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT);
 }
 
-void Context::Submit(SubmitDesc *pDesc)
+void APIContext::Submit(SubmitDesc *pDesc)
 {
     ZoneScoped;
 
@@ -221,7 +217,7 @@ void Context::Submit(SubmitDesc *pDesc)
     vkQueueSubmit2(pQueueHandle, 1, &submitInfo, nullptr);
 }
 
-Fence *Context::CreateFence(bool signaled)
+Fence *APIContext::CreateFence(bool signaled)
 {
     ZoneScoped;
 
@@ -236,7 +232,7 @@ Fence *Context::CreateFence(bool signaled)
     return pFence;
 }
 
-void Context::DeleteFence(Fence *pFence)
+void APIContext::DeleteFence(Fence *pFence)
 {
     ZoneScoped;
 
@@ -245,21 +241,21 @@ void Context::DeleteFence(Fence *pFence)
     delete pFence;
 }
 
-bool Context::IsFenceSignaled(Fence *pFence)
+bool APIContext::IsFenceSignaled(Fence *pFence)
 {
     ZoneScoped;
 
     return vkGetFenceStatus(m_pDevice, pFence->m_pHandle) == VK_SUCCESS;
 }
 
-void Context::ResetFence(Fence *pFence)
+void APIContext::ResetFence(Fence *pFence)
 {
     ZoneScoped;
 
     vkResetFences(m_pDevice, 1, &pFence->m_pHandle);
 }
 
-Semaphore *Context::CreateSemaphore(u32 initialValue, bool binary)
+Semaphore *APIContext::CreateSemaphore(u32 initialValue, bool binary)
 {
     ZoneScoped;
 
@@ -282,7 +278,7 @@ Semaphore *Context::CreateSemaphore(u32 initialValue, bool binary)
     return pSemaphore;
 }
 
-void Context::DeleteSemaphore(Semaphore *pSemaphore)
+void APIContext::DeleteSemaphore(Semaphore *pSemaphore)
 {
     ZoneScoped;
 
@@ -290,7 +286,7 @@ void Context::DeleteSemaphore(Semaphore *pSemaphore)
     delete pSemaphore;
 }
 
-void Context::WaitForSemaphore(Semaphore *pSemaphore, u64 desiredValue, u64 timeout)
+void APIContext::WaitForSemaphore(Semaphore *pSemaphore, u64 desiredValue, u64 timeout)
 {
     ZoneScoped;
 
@@ -304,7 +300,7 @@ void Context::WaitForSemaphore(Semaphore *pSemaphore, u64 desiredValue, u64 time
     vkWaitSemaphores(m_pDevice, &waitInfo, timeout);
 }
 
-VkPipelineCache Context::CreatePipelineCache(u32 initialDataSize, void *pInitialData)
+VkPipelineCache APIContext::CreatePipelineCache(u32 initialDataSize, void *pInitialData)
 {
     ZoneScoped;
 
@@ -320,7 +316,7 @@ VkPipelineCache Context::CreatePipelineCache(u32 initialDataSize, void *pInitial
     return pHandle;
 }
 
-PipelineLayout *Context::CreatePipelineLayout(
+PipelineLayout *APIContext::CreatePipelineLayout(
     eastl::span<DescriptorSetLayout *> layouts, eastl::span<PushConstantDesc> pushConstants)
 {
     ZoneScoped;
@@ -346,7 +342,7 @@ PipelineLayout *Context::CreatePipelineLayout(
     return pLayout;
 }
 
-Pipeline *Context::CreateGraphicsPipeline(GraphicsPipelineBuildInfo *pBuildInfo)
+Pipeline *APIContext::CreateGraphicsPipeline(GraphicsPipelineBuildInfo *pBuildInfo)
 {
     ZoneScoped;
 
@@ -356,7 +352,7 @@ Pipeline *Context::CreateGraphicsPipeline(GraphicsPipelineBuildInfo *pBuildInfo)
 
     /// BOUND RENDER TARGETS -----------------------------------------------------
 
-    VkFormat pRenderTargetFormats[LR_MAX_COLOR_ATTACHMENT_PER_PASS] = {};
+    VkFormat pRenderTargetFormats[Limits::MaxColorAttachments] = {};
 
     VkPipelineRenderingCreateInfo renderingInfo = {};
     renderingInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
@@ -390,7 +386,7 @@ Pipeline *Context::CreateGraphicsPipeline(GraphicsPipelineBuildInfo *pBuildInfo)
     inputLayoutInfo.pNext = nullptr;
 
     VkVertexInputBindingDescription inputBindingInfo = {};
-    VkVertexInputAttributeDescription pAttribInfos[LR_MAX_VERTEX_ATTRIBS_PER_PIPELINE] = {};
+    VkVertexInputAttributeDescription pAttribInfos[Limits::MaxVertexAttribs] = {};
 
     /// INPUT ASSEMBLY -----------------------------------------------------------
 
@@ -509,7 +505,7 @@ Pipeline *Context::CreateGraphicsPipeline(GraphicsPipelineBuildInfo *pBuildInfo)
     return pPipeline;
 }
 
-Pipeline *Context::CreateComputePipeline(ComputePipelineBuildInfo *pBuildInfo)
+Pipeline *APIContext::CreateComputePipeline(ComputePipelineBuildInfo *pBuildInfo)
 {
     ZoneScoped;
 
@@ -539,7 +535,7 @@ Pipeline *Context::CreateComputePipeline(ComputePipelineBuildInfo *pBuildInfo)
     return pPipeline;
 }
 
-SwapChain *Context::CreateSwapChain(BaseWindow *pWindow, u32 imageCount, SwapChain *pOldSwapChain)
+SwapChain *APIContext::CreateSwapChain(BaseWindow *pWindow, u32 imageCount, SwapChain *pOldSwapChain)
 {
     ZoneScoped;
 
@@ -598,7 +594,7 @@ SwapChain *Context::CreateSwapChain(BaseWindow *pWindow, u32 imageCount, SwapCha
 
     VkResult result = vkCreateSwapchainKHR(m_pDevice, &swapChainInfo, nullptr, &pSwapChain->m_pHandle);
 
-    VkImage ppSwapChainImages[LR_MAX_FRAME_COUNT] = {};
+    VkImage ppSwapChainImages[Limits::MaxFrameCount] = {};
     vkGetSwapchainImagesKHR(m_pDevice, pSwapChain->m_pHandle, &pSwapChain->m_FrameCount, &ppSwapChainImages[0]);
 
     for (u32 i = 0; i < pSwapChain->m_FrameCount; i++)
@@ -614,7 +610,7 @@ SwapChain *Context::CreateSwapChain(BaseWindow *pWindow, u32 imageCount, SwapCha
         pImage->m_DataOffset = ~0;
         pImage->m_MipMapLevels = 1;
         pImage->m_Format = pSwapChain->m_ImageFormat;
-        pImage->m_TargetAllocator = ResourceAllocator::Count;
+        pImage->m_Allocator = ResourceAllocator::Count;
         CreateImageView(pImage, ImageUsage::ColorAttachment);
 
         SetObjectName(pImage, _FMT("Swap Chain Image {}", i));
@@ -626,7 +622,7 @@ SwapChain *Context::CreateSwapChain(BaseWindow *pWindow, u32 imageCount, SwapCha
     return pSwapChain;
 }
 
-void Context::DeleteSwapChain(SwapChain *pSwapChain, bool keepSelf)
+void APIContext::DeleteSwapChain(SwapChain *pSwapChain, bool keepSelf)
 {
     ZoneScoped;
 
@@ -665,7 +661,7 @@ void Context::DeleteSwapChain(SwapChain *pSwapChain, bool keepSelf)
         delete pSwapChain;
 }
 
-void Context::ResizeSwapChain(BaseWindow *pWindow)
+void APIContext::ResizeSwapChain(BaseWindow *pWindow)
 {
     ZoneScoped;
 
@@ -675,19 +671,19 @@ void Context::ResizeSwapChain(BaseWindow *pWindow)
     m_pSwapChain = CreateSwapChain(pWindow, m_pSwapChain->m_FrameCount, m_pSwapChain);
 }
 
-SwapChain *Context::GetSwapChain()
+SwapChain *APIContext::GetSwapChain()
 {
     return m_pSwapChain;
 }
 
-void Context::WaitForWork()
+void APIContext::WaitForWork()
 {
     ZoneScoped;
 
     vkDeviceWaitIdle(m_pDevice);
 }
 
-void Context::BeginFrame()
+void APIContext::BeginFrame()
 {
     ZoneScoped;
 
@@ -723,10 +719,10 @@ void Context::BeginFrame()
         imageQueue.pop();
     }
 
-    m_Allocators.m_ppBufferFrametime[m_pSwapChain->m_CurrentFrame]->Free(0);
+    m_Allocators.m_pBufferFrametime->Free(0);
 }
 
-void Context::EndFrame()
+void APIContext::EndFrame()
 {
     ZoneScoped;
 
@@ -764,7 +760,7 @@ void Context::EndFrame()
     vkQueuePresentKHR(pQueue, &presentInfo);
 }
 
-u64 Context::GetBufferMemorySize(Buffer *pBuffer, u64 *pAlignmentOut)
+u64 APIContext::GetBufferMemorySize(Buffer *pBuffer, u64 *pAlignmentOut)
 {
     ZoneScoped;
 
@@ -777,7 +773,7 @@ u64 Context::GetBufferMemorySize(Buffer *pBuffer, u64 *pAlignmentOut)
     return memoryRequirements.size;
 }
 
-u64 Context::GetImageMemorySize(Image *pImage, u64 *pAlignmentOut)
+u64 APIContext::GetImageMemorySize(Image *pImage, u64 *pAlignmentOut)
 {
     ZoneScoped;
 
@@ -790,7 +786,7 @@ u64 Context::GetImageMemorySize(Image *pImage, u64 *pAlignmentOut)
     return memoryRequirements.size;
 }
 
-LinearDeviceMemory *Context::CreateLinearAllocator(MemoryFlag memoryFlags, u64 memSize)
+VkDeviceMemory APIContext::CreateDeviceMemory(MemoryFlag memoryFlags, u64 memorySize)
 {
     ZoneScoped;
 
@@ -803,57 +799,62 @@ LinearDeviceMemory *Context::CreateLinearAllocator(MemoryFlag memoryFlags, u64 m
         memoryProps |= VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
     if (memoryFlags & MemoryFlag::HostCached)
         memoryProps |= VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+
+    VkDeviceMemory pDeviceMem = VK_NULL_HANDLE;
+    VkMemoryAllocateInfo allocInfo = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .pNext = nullptr,
+        .allocationSize = memorySize,
+        .memoryTypeIndex = m_pPhysicalDevice->GetHeapIndex(memoryProps),
+    };
+    vkAllocateMemory(m_pDevice, &allocInfo, nullptr, &pDeviceMem);
+
+    return pDeviceMem;
+}
+
+LinearDeviceMemory *APIContext::CreateLinearAllocator(MemoryFlag memoryFlags, u64 memorySize)
+{
+    ZoneScoped;
 
     LinearDeviceMemory *pDeviceMem = new LinearDeviceMemory;
-    pDeviceMem->Init(memSize);
+    pDeviceMem->Init(memorySize);
+    pDeviceMem->m_pHandle = CreateDeviceMemory(memoryFlags, memorySize);
 
-    VkMemoryAllocateInfo allocInfo = {
-        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-        .pNext = nullptr,
-        .allocationSize = memSize,
-        .memoryTypeIndex = m_pPhysicalDevice->GetHeapIndex(memoryProps),
-    };
-    vkAllocateMemory(m_pDevice, &allocInfo, nullptr, &pDeviceMem->m_pHandle);
+    if (memoryFlags & MemoryFlag::HostVisible)
+        vkMapMemory(m_pDevice, pDeviceMem->m_pHandle, 0, VK_WHOLE_SIZE, 0, &pDeviceMem->m_pMappedMemory);
 
     return pDeviceMem;
 }
 
-TLSFDeviceMemory *Context::CreateTLSFAllocator(MemoryFlag memoryFlags, u64 memSize, u32 maxAllocs)
+TLSFDeviceMemory *APIContext::CreateTLSFAllocator(MemoryFlag memoryFlags, u64 memorySize, u32 maxAllocs)
 {
     ZoneScoped;
 
-    VkMemoryPropertyFlags memoryProps = 0;
-    if (memoryFlags & MemoryFlag::Device)
-        memoryProps |= VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-    if (memoryFlags & MemoryFlag::HostVisible)
-        memoryProps |= VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
-    if (memoryFlags & MemoryFlag::HostCoherent)
-        memoryProps |= VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-    if (memoryFlags & MemoryFlag::HostCached)
-        memoryProps |= VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
-
     TLSFDeviceMemory *pDeviceMem = new TLSFDeviceMemory;
-    pDeviceMem->m_Allocator.Init(memSize, maxAllocs);
+    pDeviceMem->m_Allocator.Init(memorySize, maxAllocs);
+    pDeviceMem->m_pHandle = CreateDeviceMemory(memoryFlags, memorySize);
 
-    VkMemoryAllocateInfo allocInfo = {
-        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-        .pNext = nullptr,
-        .allocationSize = memSize,
-        .memoryTypeIndex = m_pPhysicalDevice->GetHeapIndex(memoryProps),
-    };
-    vkAllocateMemory(m_pDevice, &allocInfo, nullptr, &pDeviceMem->m_pHandle);
+    if (memoryFlags & MemoryFlag::HostVisible)
+        vkMapMemory(m_pDevice, pDeviceMem->m_pHandle, 0, VK_WHOLE_SIZE, 0, &pDeviceMem->m_pMappedMemory);
 
     return pDeviceMem;
 }
 
-void Context::DeleteAllocator(DeviceMemory *pDeviceMemory)
+void APIContext::DeleteAllocator(DeviceMemory *pDeviceMemory)
 {
     ZoneScoped;
 
     vkFreeMemory(m_pDevice, pDeviceMemory->m_pHandle, nullptr);
 }
 
-void Context::AllocateBufferMemory(ResourceAllocator allocator, Buffer *pBuffer, u64 memSize)
+u64 APIContext::OffsetFrametimeMemory(u64 size, u64 offset)
+{
+    ZoneScoped;
+
+    return offset + (m_pSwapChain->m_CurrentFrame * size);
+}
+
+void APIContext::AllocateBufferMemory(ResourceAllocator allocator, Buffer *pBuffer, u64 memorySize)
 {
     ZoneScoped;
     assert(allocator != ResourceAllocator::None);
@@ -869,7 +870,7 @@ void Context::AllocateBufferMemory(ResourceAllocator allocator, Buffer *pBuffer,
     pBuffer->m_DataOffset = memoryOffset;
 }
 
-void Context::AllocateImageMemory(ResourceAllocator allocator, Image *pImage, u64 memSize)
+void APIContext::AllocateImageMemory(ResourceAllocator allocator, Image *pImage, u64 memorySize)
 {
     ZoneScoped;
 
@@ -886,7 +887,7 @@ void Context::AllocateImageMemory(ResourceAllocator allocator, Image *pImage, u6
     pImage->m_DataOffset = memoryOffset;
 }
 
-Shader *Context::CreateShader(Resource::ShaderResource *pResource)
+Shader *APIContext::CreateShader(Resource::ShaderResource *pResource)
 {
     ZoneScoped;
 
@@ -903,7 +904,7 @@ Shader *Context::CreateShader(Resource::ShaderResource *pResource)
     return pShader;
 }
 
-void Context::DeleteShader(Shader *pShader)
+void APIContext::DeleteShader(Shader *pShader)
 {
     ZoneScoped;
 
@@ -911,7 +912,7 @@ void Context::DeleteShader(Shader *pShader)
     delete pShader;
 }
 
-DescriptorSetLayout *Context::CreateDescriptorSetLayout(
+DescriptorSetLayout *APIContext::CreateDescriptorSetLayout(
     eastl::span<DescriptorLayoutElement> elements, DescriptorSetLayoutFlag flags)
 {
     ZoneScoped;
@@ -937,7 +938,16 @@ DescriptorSetLayout *Context::CreateDescriptorSetLayout(
     return pLayout;
 }
 
-u64 Context::GetDescriptorSetLayoutSize(DescriptorSetLayout *pLayout)
+void APIContext::DeleteDescriptorSetLayout(DescriptorSetLayout *pLayout)
+{
+    ZoneScoped;
+
+    vkDestroyDescriptorSetLayout(m_pDevice, pLayout->m_pHandle, nullptr);
+
+    delete pLayout;
+}
+
+u64 APIContext::GetDescriptorSetLayoutSize(DescriptorSetLayout *pLayout)
 {
     ZoneScoped;
 
@@ -947,7 +957,7 @@ u64 Context::GetDescriptorSetLayoutSize(DescriptorSetLayout *pLayout)
     return Memory::AlignUp(size, m_pPhysicalDevice->GetDescriptorBufferAlignment());
 }
 
-u64 Context::GetDescriptorSetLayoutBindingOffset(DescriptorSetLayout *pLayout, u32 bindingID)
+u64 APIContext::GetDescriptorSetLayoutBindingOffset(DescriptorSetLayout *pLayout, u32 bindingID)
 {
     ZoneScoped;
 
@@ -957,7 +967,7 @@ u64 Context::GetDescriptorSetLayoutBindingOffset(DescriptorSetLayout *pLayout, u
     return offset;
 }
 
-u64 Context::GetDescriptorSize(DescriptorType type)
+u64 APIContext::GetDescriptorSize(DescriptorType type)
 {
     ZoneScoped;
 
@@ -973,14 +983,14 @@ u64 Context::GetDescriptorSize(DescriptorType type)
     return sizeArray[(u32)type];
 }
 
-u64 Context::GetDescriptorSizeAligned(DescriptorType type)
+u64 APIContext::GetDescriptorSizeAligned(DescriptorType type)
 {
     ZoneScoped;
 
     return AlignUpDescriptorOffset(GetDescriptorSize(type));
 }
 
-u64 Context::AlignUpDescriptorOffset(u64 offset)
+u64 APIContext::AlignUpDescriptorOffset(u64 offset)
 {
     ZoneScoped;
 
@@ -988,8 +998,8 @@ u64 Context::AlignUpDescriptorOffset(u64 offset)
     return Memory::AlignUp(offset, props.descriptorBufferOffsetAlignment);
 }
 
-void Context::GetDescriptorData(
-    DescriptorType type, const DescriptorGetInfo &info, u64 dataSize, void *pDataOut)
+void APIContext::GetDescriptorData(
+    const DescriptorGetInfo &info, u64 dataSize, void *pDataOut, u32 descriptorIdx)
 {
     ZoneScoped;
 
@@ -1002,10 +1012,11 @@ void Context::GetDescriptorData(
 
     if (info.m_pBuffer)  // Allow null descriptors
     {
-        switch (type)
+        switch (info.m_Type)
         {
             case DescriptorType::StorageBuffer:
             case DescriptorType::UniformBuffer:
+                info.m_pBuffer->m_DescriptorIndex = descriptorIdx;
                 bufferInfo.address = info.m_pBuffer->m_DeviceAddress;
                 bufferInfo.range = info.m_pBuffer->m_DataSize;
                 descriptorData = { .pUniformBuffer = &bufferInfo };
@@ -1013,11 +1024,13 @@ void Context::GetDescriptorData(
 
             case DescriptorType::StorageImage:
             case DescriptorType::SampledImage:
+                info.m_pImage->m_DescriptorIndex = descriptorIdx;
                 imageInfo.imageView = info.m_pImage->m_pViewHandle;
                 descriptorData = { .pSampledImage = &imageInfo };
                 break;
 
             case DescriptorType::Sampler:
+                info.m_pSampler->m_DescriptorIndex = descriptorIdx;
                 imageInfo.sampler = info.m_pSampler->m_pHandle;
                 descriptorData = { .pSampledImage = &imageInfo };
                 break;
@@ -1030,40 +1043,14 @@ void Context::GetDescriptorData(
     VkDescriptorGetInfoEXT vkInfo = {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT,
         .pNext = nullptr,
-        .type = VK::ToDescriptorType(type),
+        .type = VK::ToDescriptorType(info.m_Type),
         .data = descriptorData,
     };
 
     vkGetDescriptorEXT(m_pDevice, &vkInfo, dataSize, pDataOut);
 }
 
-VkDeviceMemory Context::CreateHeap(u64 heapSize, MemoryFlag flags)
-{
-    ZoneScoped;
-
-    VkMemoryPropertyFlags memoryProps = 0;
-    if (flags & MemoryFlag::Device)
-        memoryProps |= VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-    if (flags & MemoryFlag::HostVisible)
-        memoryProps |= VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
-    if (flags & MemoryFlag::HostCoherent)
-        memoryProps |= VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-    if (flags & MemoryFlag::HostCached)
-        memoryProps |= VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
-
-    VkMemoryAllocateInfo memoryAllocInfo = {
-        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-        .allocationSize = heapSize,
-        .memoryTypeIndex = m_pPhysicalDevice->GetHeapIndex(memoryProps),
-    };
-
-    VkDeviceMemory pHandle = nullptr;
-    vkAllocateMemory(m_pDevice, &memoryAllocInfo, nullptr, &pHandle);
-
-    return pHandle;
-}
-
-Buffer *Context::CreateBuffer(BufferDesc *pDesc)
+Buffer *APIContext::CreateBuffer(BufferDesc *pDesc)
 {
     ZoneScoped;
 
@@ -1091,18 +1078,18 @@ Buffer *Context::CreateBuffer(BufferDesc *pDesc)
     };
 
     /// INIT BUFFER ///
-    pBuffer->m_TargetAllocator = pDesc->m_TargetAllocator;
+    pBuffer->m_Allocator = pDesc->m_TargetAllocator;
     pBuffer->m_Stride = pDesc->m_Stride;
     pBuffer->m_DeviceAddress = vkGetBufferDeviceAddress(m_pDevice, &deviceAddressInfo);
 
     return pBuffer;
 }
 
-void Context::DeleteBuffer(Buffer *pBuffer, bool waitForWork)
+void APIContext::DeleteBuffer(Buffer *pBuffer, bool waitForWork)
 {
     ZoneScoped;
 
-    assert(pBuffer->m_TargetAllocator != ResourceAllocator::None);
+    assert(pBuffer->m_Allocator != ResourceAllocator::None);
 
     if (waitForWork)
     {
@@ -1111,7 +1098,7 @@ void Context::DeleteBuffer(Buffer *pBuffer, bool waitForWork)
         return;
     }
 
-    DeviceMemory *pMemory = m_Allocators.GetDeviceMemory(pBuffer->m_TargetAllocator);
+    DeviceMemory *pMemory = m_Allocators.GetDeviceMemory(pBuffer->m_Allocator);
     if (pMemory)
         pMemory->Free(pBuffer->m_AllocatorData);
 
@@ -1119,41 +1106,23 @@ void Context::DeleteBuffer(Buffer *pBuffer, bool waitForWork)
         vkDestroyBuffer(m_pDevice, pBuffer->m_pHandle, nullptr);
 }
 
-void Context::MapMemory(ResourceAllocator allocator, void *&pData, u64 offset, u64 size)
+u8 *APIContext::GetMemoryData(ResourceAllocator allocator)
 {
     ZoneScoped;
 
     assert(allocator != ResourceAllocator::None);
     DeviceMemory *pMemory = m_Allocators.GetDeviceMemory(allocator);
-    vkMapMemory(m_pDevice, pMemory->m_pHandle, offset, size, 0, &pData);
+    return (u8 *)pMemory->m_pMappedMemory;
 }
 
-void Context::UnmapMemory(ResourceAllocator allocator)
+u8 *APIContext::GetBufferMemoryData(Buffer *pBuffer)
 {
     ZoneScoped;
 
-    assert(allocator != ResourceAllocator::None);
-    DeviceMemory *pMemory = m_Allocators.GetDeviceMemory(allocator);
-    vkUnmapMemory(m_pDevice, pMemory->m_pHandle);
+    return GetMemoryData(pBuffer->m_Allocator) + pBuffer->m_DataOffset;
 }
 
-void Context::MapBuffer(Buffer *pBuffer, void *&pData, u64 offset, u64 size)
-{
-    ZoneScoped;
-
-    // Holy shit... That was the fix for Buffer + Device Mem rework commit...
-    // offset -> pBuffer->m_DataOffset + offset, i fucking hate myself...................................
-    MapMemory(pBuffer->m_TargetAllocator, pData, pBuffer->m_DataOffset + offset, size);
-}
-
-void Context::UnmapBuffer(Buffer *pBuffer)
-{
-    ZoneScoped;
-
-    UnmapMemory(pBuffer->m_TargetAllocator);
-}
-
-Image *Context::CreateImage(ImageDesc *pDesc)
+Image *APIContext::CreateImage(ImageDesc *pDesc)
 {
     ZoneScoped;
 
@@ -1197,7 +1166,7 @@ Image *Context::CreateImage(ImageDesc *pDesc)
 
     /// INIT BUFFER ///
     pImage->m_Format = pDesc->m_Format;
-    pImage->m_TargetAllocator = pDesc->m_TargetAllocator;
+    pImage->m_Allocator = pDesc->m_TargetAllocator;
     pImage->m_Width = pDesc->m_Width;
     pImage->m_Height = pDesc->m_Height;
     pImage->m_ArraySize = pDesc->m_ArraySize;
@@ -1208,11 +1177,11 @@ Image *Context::CreateImage(ImageDesc *pDesc)
     return pImage;
 }
 
-void Context::DeleteImage(Image *pImage, bool waitForWork)
+void APIContext::DeleteImage(Image *pImage, bool waitForWork)
 {
     ZoneScoped;
 
-    assert(pImage->m_TargetAllocator != ResourceAllocator::None);
+    assert(pImage->m_Allocator != ResourceAllocator::None);
 
     if (waitForWork)
     {
@@ -1221,7 +1190,7 @@ void Context::DeleteImage(Image *pImage, bool waitForWork)
         return;
     }
 
-    DeviceMemory *pMemory = m_Allocators.GetDeviceMemory(pImage->m_TargetAllocator);
+    DeviceMemory *pMemory = m_Allocators.GetDeviceMemory(pImage->m_Allocator);
     if (pMemory)
         pMemory->Free(pImage->m_AllocatorData);
 
@@ -1232,7 +1201,7 @@ void Context::DeleteImage(Image *pImage, bool waitForWork)
         vkDestroyImage(m_pDevice, pImage->m_pHandle, nullptr);
 }
 
-void Context::CreateImageView(Image *pImage, ImageUsage aspectUsage)
+void APIContext::CreateImageView(Image *pImage, ImageUsage aspectUsage)
 {
     ZoneScoped;
 
@@ -1263,7 +1232,7 @@ void Context::CreateImageView(Image *pImage, ImageUsage aspectUsage)
     vkCreateImageView(m_pDevice, &imageViewCreateInfo, nullptr, &pImage->m_pViewHandle);
 }
 
-Sampler *Context::CreateSampler(SamplerDesc *pDesc)
+Sampler *APIContext::CreateSampler(SamplerDesc *pDesc)
 {
     ZoneScoped;
 
@@ -1307,14 +1276,14 @@ Sampler *Context::CreateSampler(SamplerDesc *pDesc)
     return pSampler;
 }
 
-void Context::DeleteSampler(VkSampler pSampler)
+void APIContext::DeleteSampler(VkSampler pSampler)
 {
     ZoneScoped;
 
     vkDestroySampler(m_pDevice, pSampler, nullptr);
 }
 
-Semaphore *Context::GetAvailableAcquireSemaphore(Semaphore *pOldSemaphore)
+Semaphore *APIContext::GetAvailableAcquireSemaphore(Semaphore *pOldSemaphore)
 {
     ZoneScoped;
 
@@ -1339,7 +1308,7 @@ Semaphore *Context::GetAvailableAcquireSemaphore(Semaphore *pOldSemaphore)
     return m_AcquireSempPool[idx];
 }
 
-bool Context::LoadVulkan()
+bool APIContext::LoadVulkan()
 {
     m_VulkanLib = LoadLibraryA("vulkan-1.dll");
 
@@ -1363,7 +1332,7 @@ bool Context::LoadVulkan()
     return true;
 }
 
-bool Context::SetupInstance(BaseWindow *pWindow)
+bool APIContext::SetupInstance(BaseWindow *pWindow)
 {
     ZoneScoped;
 
@@ -1463,7 +1432,7 @@ bool Context::SetupInstance(BaseWindow *pWindow)
     return true;
 }
 
-bool Context::SetupPhysicalDevice()
+bool APIContext::SetupPhysicalDevice()
 {
     ZoneScoped;
 
@@ -1486,7 +1455,7 @@ bool Context::SetupPhysicalDevice()
     return true;
 }
 
-bool Context::SetupSurface(BaseWindow *pWindow)
+bool APIContext::SetupSurface(BaseWindow *pWindow)
 {
     ZoneScoped;
 
@@ -1495,7 +1464,7 @@ bool Context::SetupSurface(BaseWindow *pWindow)
     return true;
 }
 
-bool Context::SetupDevice()
+bool APIContext::SetupDevice()
 {
     ZoneScoped;
 

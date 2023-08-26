@@ -1,5 +1,5 @@
 // Created on Friday November 18th 2022 by exdal
-// Last modified on Friday July 7th 2023 by exdal
+// Last modified on Monday August 7th 2023 by exdal
 
 #pragma once
 
@@ -24,6 +24,7 @@ struct LinearAllocatorView
 {
     bool CanAllocate(u64 size, u32 alignment);
     void Reset();
+    u64 Size();
 
     AllocationRegion *FindFreeRegion(u64 size);
     AllocationRegion *m_pFirstRegion = nullptr;
@@ -35,7 +36,7 @@ struct LinearAllocatorDesc
     u64 m_AllowMultipleBlocks : 1 = 0;
 };
 
-struct LinearAllocator
+struct LinearAllocator : LinearAllocatorView
 {
     void Init(const LinearAllocatorDesc &desc);
     AllocationRegion *AllocateRegion();
@@ -43,8 +44,7 @@ struct LinearAllocator
 
     void Delete();
     bool CanAllocate(u64 size, u32 alignment = 1);
-    void *Allocate(u64 size, u32 alignment = 1);
-    void Reset();
+    u8 *Allocate(u64 size, u32 alignment = 1);
 
     LinearAllocatorView m_View = {};
     u64 m_RegionSize : 63 = 0;

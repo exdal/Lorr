@@ -1,5 +1,5 @@
 // Created on Thursday January 26th 2023 by exdal
-// Last modified on Wednesday May 17th 2023 by exdal
+// Last modified on Sunday July 16th 2023 by exdal
 
 #include "ImguiApp.hh"
 
@@ -22,7 +22,7 @@ int main()
 
     BaseApplicationDesc appDesc = {};
     appDesc.m_Name = "ImGui Demo";
-    appDesc.m_EngineDesc.m_TargetAPIFlags = LR_API_FLAG_NONE;
+    // appDesc.m_EngineDesc.m_TargetAPIFlags = LR_API_FLAG_NONE;
 
     appDesc.m_EngineDesc.m_WindowDesc = {
         .m_Title = "ImGui Demo",

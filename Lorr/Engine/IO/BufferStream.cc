@@ -1,5 +1,5 @@
 // Created on Wednesday July 6th 2022 by exdal
-// Last modified on Monday June 12th 2023 by exdal
+// Last modified on Sunday July 16th 2023 by exdal
 
 #include "BufferStream.hh"
 
@@ -106,14 +106,6 @@ BufferReadStream::BufferReadStream(void *pData, u32 dataLen)
 
     m_pData = (u8 *)pData;
     m_DataLen = dataLen;
-}
-
-BufferReadStream::BufferReadStream(FileView &file)
-{
-    ZoneScoped;
-
-    m_pData = file.GetPtr();
-    m_DataLen = file.Size();
 }
 
 ////////////////////////////////

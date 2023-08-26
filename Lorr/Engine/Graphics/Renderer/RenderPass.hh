@@ -1,11 +1,10 @@
 // Created on Friday February 24th 2023 by exdal
-// Last modified on Wednesday August 23rd 2023 by exdal
+// Last modified on Friday August 25th 2023 by exdal
 
 #pragma once
 
 #include <EASTL/fixed_string.h>
 
-#include "Crypt/FNV.hh"
 #include "Graphics/APIContext.hh"
 
 namespace lr::Graphics
@@ -39,14 +38,12 @@ struct RenderPass
     virtual void Shutdown(APIContext *pContext) = 0;
 
     RenderPass *m_pPrev = nullptr;
-    RenderPass *m_pNext = nullptr;
 
     Pipeline *m_pPipeline = nullptr;
-
     RenderPassFlag m_Flags = RenderPassFlag::None;
-    u32 m_Hash = 0;
 
-#if _DEBUG
+    u32 m_Hash = 0;
+#if _DEBUG && 1
     eastl::string m_Name;
 #endif
 };

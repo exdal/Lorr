@@ -1,9 +1,7 @@
 // Created on Monday July 18th 2022 by exdal
-// Last modified on Wednesday August 9th 2023 by exdal
+// Last modified on Saturday August 26th 2023 by exdal
 
 #include "APIContext.hh"
-
-#include "Window/Win32/Win32Window.hh"
 
 #include "APIAllocator.hh"
 #include "Shader.hh"
@@ -354,7 +352,7 @@ Pipeline *APIContext::CreateGraphicsPipeline(GraphicsPipelineBuildInfo *pBuildIn
 
     /// BOUND RENDER TARGETS -----------------------------------------------------
 
-    VkFormat pRenderTargetFormats[LR_MAX_COLOR_ATTACHMENT_PER_PASS] = {};
+    VkFormat pRenderTargetFormats[Limits::MaxColorAttachments] = {};
 
     VkPipelineRenderingCreateInfo renderingInfo = {};
     renderingInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
@@ -388,7 +386,7 @@ Pipeline *APIContext::CreateGraphicsPipeline(GraphicsPipelineBuildInfo *pBuildIn
     inputLayoutInfo.pNext = nullptr;
 
     VkVertexInputBindingDescription inputBindingInfo = {};
-    VkVertexInputAttributeDescription pAttribInfos[LR_MAX_VERTEX_ATTRIBS_PER_PIPELINE] = {};
+    VkVertexInputAttributeDescription pAttribInfos[Limits::MaxVertexAttribs] = {};
 
     /// INPUT ASSEMBLY -----------------------------------------------------------
 
@@ -596,7 +594,7 @@ SwapChain *APIContext::CreateSwapChain(BaseWindow *pWindow, u32 imageCount, Swap
 
     VkResult result = vkCreateSwapchainKHR(m_pDevice, &swapChainInfo, nullptr, &pSwapChain->m_pHandle);
 
-    VkImage ppSwapChainImages[LR_MAX_FRAME_COUNT] = {};
+    VkImage ppSwapChainImages[Limits::MaxFrameCount] = {};
     vkGetSwapchainImagesKHR(m_pDevice, pSwapChain->m_pHandle, &pSwapChain->m_FrameCount, &ppSwapChainImages[0]);
 
     for (u32 i = 0; i < pSwapChain->m_FrameCount; i++)

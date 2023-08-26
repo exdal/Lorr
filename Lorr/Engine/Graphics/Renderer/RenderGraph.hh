@@ -1,5 +1,5 @@
 // Created on Friday February 24th 2023 by exdal
-// Last modified on Thursday August 24th 2023 by exdal
+// Last modified on Saturday August 26th 2023 by exdal
 
 #pragma once
 
@@ -40,7 +40,7 @@ struct RenderGraph
 
     Buffer *m_pResourceBuffer = nullptr;  // memSize * n
     Buffer *m_pSamplerBuffer = nullptr;   // memSize * n
-    eastl::fixed_vector<Buffer *, LR_MAX_FRAME_COUNT, false> m_BDABuffers = {};
+    eastl::fixed_vector<Buffer *, Limits::MaxFrameCount, false> m_BDABuffers = {};
 
     Memory::LinearAllocator m_PassAllocator = {};
 

@@ -1,11 +1,11 @@
 // Created on Monday July 18th 2022 by exdal
-// Last modified on Monday June 19th 2023 by exdal
+// Last modified on Saturday August 26th 2023 by exdal
 
 #pragma once
 
 #include "APIAllocator.hh"
 
-#include "CommandQueue.hh"
+#include "Buffer.hh"
 #include "Pipeline.hh"
 
 namespace lr::Graphics
@@ -35,7 +35,7 @@ struct BindlessLayout
 
     BindlessLayout(eastl::span<Binding> bindings)
     {
-        memset(&m_Data[0], ~0, m_Data.size() * kDescriptorIDSize); // Debugging purposes
+        memset(&m_Data[0], ~0, m_Data.size() * kDescriptorIDSize);  // Debugging purposes
 
         u32 lastBinding = ~0;
         for (const Binding &binding : bindings)
@@ -138,6 +138,11 @@ enum class MemoryAccess : u32
 };
 EnumFlags(MemoryAccess);
 
+struct DescriptorBufferBindInfo : VkDescriptorBufferBindingInfoEXT
+{
+    DescriptorBufferBindInfo(Buffer *pBuffer, BufferUsage bufferUsage);
+};
+
 enum class AttachmentOp : u32
 {
     DontCare = 0,
@@ -146,30 +151,23 @@ enum class AttachmentOp : u32
     Clear,
 };
 
-struct RenderingColorAttachment
+struct RenderingAttachment : VkRenderingAttachmentInfo
 {
-    Image *m_pImage = nullptr;
-    ImageLayout m_Layout = ImageLayout::Undefined;
-    AttachmentOp m_LoadOp : 3;
-    AttachmentOp m_StoreOp : 3;
-    ColorClearValue m_ClearValue = {};
-};
+    RenderingAttachment(
+        Image *pImage, ImageLayout layout, AttachmentOp loadOp, AttachmentOp storeOp, ColorClearValue clearVal);
+    RenderingAttachment(
+        Image *pImage, ImageLayout layout, AttachmentOp loadOp, AttachmentOp storeOp, DepthClearValue clearVal);
 
-struct RenderingDepthAttachment
-{
-    Image *m_pImage = nullptr;
-    ImageLayout m_Layout = ImageLayout::Undefined;
-    AttachmentOp m_LoadOp : 3;
-    AttachmentOp m_StoreOp : 3;
-    DepthClearValue m_ClearValue = {};
+private:
+    void InitImage(Image *pImage, ImageLayout layout, AttachmentOp loadOp, AttachmentOp storeOp);
 };
 
 struct RenderingBeginDesc
 {
     XMUINT4 m_RenderArea = { 0, 0, UINT32_MAX, UINT32_MAX };
 
-    eastl::span<RenderingColorAttachment> m_ColorAttachments;
-    RenderingDepthAttachment *m_pDepthAttachment = nullptr;
+    eastl::span<RenderingAttachment> m_ColorAttachments;
+    RenderingAttachment *m_pDepthAttachment = nullptr;
 };
 
 struct PipelineBarrier
@@ -272,7 +270,7 @@ struct CommandList : APIObject<VK_OBJECT_TYPE_COMMAND_BUFFER>
         u32 offset = BindlessLayout::kConstantDataOffset,
         ShaderStage stage = ShaderStage::All);
     void SetBindlessLayout(BindlessLayout &layout);
-    void SetDescriptorBuffers(eastl::span<DescriptorBindingInfo> bindingInfos);
+    void SetDescriptorBuffers(eastl::span<DescriptorBufferBindInfo> bindingInfos);
     void SetDescriptorBufferOffsets(
         u32 firstSet, u32 setCount, eastl::span<u32> indices, eastl::span<u64> offsets);
 

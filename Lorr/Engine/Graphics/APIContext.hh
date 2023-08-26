@@ -1,14 +1,12 @@
 // Created on Monday July 18th 2022 by exdal
-// Last modified on Wednesday August 9th 2023 by exdal
+// Last modified on Saturday August 26th 2023 by exdal
 
 #pragma once
 
-#include "IO/BufferStream.hh"
-#include "Memory/Allocator/LinearAllocator.hh"
-#include "Memory/Allocator/TLSFAllocator.hh"
 #include "Resource/Resource.hh"
 
 #include "Device.hh"
+#include "Descriptor.hh"
 #include "CommandQueue.hh"
 #include "CommandList.hh"
 #include "Pipeline.hh"

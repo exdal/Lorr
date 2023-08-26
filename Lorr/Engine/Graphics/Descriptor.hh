@@ -1,5 +1,5 @@
 // Created on Saturday April 22nd 2023 by exdal
-// Last modified on Monday July 31st 2023 by exdal
+// Last modified on Friday August 25th 2023 by exdal
 
 #pragma once
 
@@ -36,11 +36,6 @@ struct DescriptorLayoutElement : VkDescriptorSetLayoutBinding
 struct DescriptorSetLayout : APIObject<VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT>
 {
     VkDescriptorSetLayout m_pHandle = VK_NULL_HANDLE;
-};
-
-struct DescriptorBindingInfo : VkDescriptorBufferBindingInfoEXT
-{
-    DescriptorBindingInfo(Buffer *pBuffer, BufferUsage bufferUsage);
 };
 
 struct DescriptorGetInfo

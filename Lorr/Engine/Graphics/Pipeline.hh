@@ -1,12 +1,10 @@
 // Created on Wednesday September 21st 2022 by exdal
-// Last modified on Tuesday June 6th 2023 by exdal
+// Last modified on Friday August 25th 2023 by exdal
 
 #pragma once
 
 #include "APIAllocator.hh"
-#include "Config.hh"
-
-#include "Descriptor.hh"
+#include "Image.hh"
 #include "Shader.hh"
 
 namespace lr::Graphics

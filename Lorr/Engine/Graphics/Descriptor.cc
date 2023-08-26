@@ -1,5 +1,5 @@
 // Created on Tuesday April 25th 2023 by exdal
-// Last modified on Monday July 31st 2023 by exdal
+// Last modified on Friday August 25th 2023 by exdal
 
 #include "Descriptor.hh"
 
@@ -15,14 +15,6 @@ DescriptorLayoutElement::DescriptorLayoutElement(
     this->stageFlags = VK::ToShaderType(stage);
     this->descriptorCount = arraySize;
     this->pImmutableSamplers = nullptr;  // TODO: static samplers
-}
-
-DescriptorBindingInfo::DescriptorBindingInfo(Buffer *pBuffer, BufferUsage bufferUsage)
-{
-    this->sType = VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT;
-    this->pNext = nullptr;
-    this->address = pBuffer->m_DeviceAddress;
-    this->usage = VK::ToBufferUsage(bufferUsage);
 }
 
 /// `VkDescriptorDataEXT` is an union so var names such as `data.pUniformTexelBuffer`

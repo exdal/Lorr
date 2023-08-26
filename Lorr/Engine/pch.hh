@@ -1,5 +1,5 @@
 // Created on Wednesday May 4th 2022 by exdal
-// Last modified on Monday June 12th 2023 by exdal
+// Last modified on Saturday August 26th 2023 by exdal
 
 #pragma once
 
@@ -39,9 +39,11 @@ typedef signed char i8;
 #if EA_PLATFORM_PTR_SIZE == 8
 typedef unsigned __int64 uptr;
 typedef signed __int64 iptr;
+typedef u64 usize;
 #else
 typedef unsigned int uptr;
 typedef signed int iptr;
+typedef u32 usize;
 #endif
 
 using namespace DirectX;

@@ -1,5 +1,5 @@
 // Created on Monday July 18th 2022 by exdal
-// Last modified on Monday June 19th 2023 by exdal
+// Last modified on Saturday August 26th 2023 by exdal
 
 #include "CommandList.hh"
 
@@ -9,6 +9,52 @@
 
 namespace lr::Graphics
 {
+static constexpr VkAttachmentLoadOp kLoadOpLUT[] = {
+    VK_ATTACHMENT_LOAD_OP_DONT_CARE,  // DontCare
+    VK_ATTACHMENT_LOAD_OP_LOAD,       // Load
+    VK_ATTACHMENT_LOAD_OP_MAX_ENUM,   // Store
+    VK_ATTACHMENT_LOAD_OP_CLEAR,      // Clear
+};
+static constexpr VkAttachmentStoreOp kStoreOpLUT[] = {
+    VK_ATTACHMENT_STORE_OP_DONT_CARE,  // DontCare
+    VK_ATTACHMENT_STORE_OP_MAX_ENUM,   // Load
+    VK_ATTACHMENT_STORE_OP_STORE,      // Store
+    VK_ATTACHMENT_STORE_OP_MAX_ENUM,   // Clear
+};
+
+DescriptorBufferBindInfo::DescriptorBufferBindInfo(Buffer *pBuffer, BufferUsage bufferUsage)
+{
+    this->sType = VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT;
+    this->pNext = nullptr;
+    this->address = pBuffer->m_DeviceAddress;
+    this->usage = VK::ToBufferUsage(bufferUsage);
+}
+
+RenderingAttachment::RenderingAttachment(
+    Image *pImage, ImageLayout layout, AttachmentOp loadOp, AttachmentOp storeOp, ColorClearValue clearVal)
+{
+    InitImage(pImage, layout, loadOp, storeOp);
+    memcpy(&this->clearValue.color, &clearVal, sizeof(ColorClearValue));
+}
+
+RenderingAttachment::RenderingAttachment(
+    Image *pImage, ImageLayout layout, AttachmentOp loadOp, AttachmentOp storeOp, DepthClearValue clearVal)
+{
+    InitImage(pImage, layout, loadOp, storeOp);
+    memcpy(&this->clearValue.color, &clearVal, sizeof(ColorClearValue));
+}
+
+void RenderingAttachment::InitImage(
+    Image *pImage, ImageLayout layout, AttachmentOp loadOp, AttachmentOp storeOp)
+{
+    this->sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+    this->pNext = nullptr;
+    this->imageView = pImage->m_pViewHandle;
+    this->imageLayout = VK::ToImageLayout(layout);
+    this->loadOp = kLoadOpLUT[(u32)loadOp];
+    this->storeOp = kStoreOpLUT[(u32)storeOp];
+}
+
 ImageBarrier::ImageBarrier(Image *pImage, ImageUsage aspectUsage, const PipelineBarrier &barrier)
 {
     ZoneScoped;
@@ -157,64 +203,15 @@ void CommandList::BeginRendering(RenderingBeginDesc *pDesc)
 {
     ZoneScoped;
 
-    static constexpr VkAttachmentLoadOp kLoadOpLUT[] = {
-        VK_ATTACHMENT_LOAD_OP_DONT_CARE,  // DontCare
-        VK_ATTACHMENT_LOAD_OP_LOAD,       // Load
-        VK_ATTACHMENT_LOAD_OP_MAX_ENUM,   // Store
-        VK_ATTACHMENT_LOAD_OP_CLEAR,      // Clear
+    VkRenderingInfo beginInfo = {
+        .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
+        .pNext = nullptr,
+        .layerCount = 1,
+        .viewMask = 0,  // TODO: Multiviews
+        .colorAttachmentCount = (u32)pDesc->m_ColorAttachments.size(),
+        .pColorAttachments = pDesc->m_ColorAttachments.data(),
+        .pDepthAttachment = pDesc->m_pDepthAttachment,
     };
-    static constexpr VkAttachmentStoreOp kStoreOpLUT[] = {
-        VK_ATTACHMENT_STORE_OP_DONT_CARE,  // DontCare
-        VK_ATTACHMENT_STORE_OP_MAX_ENUM,   // Load
-        VK_ATTACHMENT_STORE_OP_STORE,      // Store
-        VK_ATTACHMENT_STORE_OP_MAX_ENUM,   // Clear
-    };
-
-    VkRenderingInfo beginInfo = {};
-    beginInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
-    beginInfo.pNext = nullptr;
-    beginInfo.viewMask = 0;  // we don't support multi views yet
-    beginInfo.layerCount = 1;
-    beginInfo.pDepthAttachment = nullptr;
-
-    VkRenderingAttachmentInfo pColorAttachments[LR_MAX_COLOR_ATTACHMENT_PER_PASS] = {};
-    VkRenderingAttachmentInfo depthAttachment = {};
-
-    for (u32 i = 0; i < pDesc->m_ColorAttachments.size(); i++)
-    {
-        VkRenderingAttachmentInfo &colorAttachment = pColorAttachments[i];
-        RenderingColorAttachment &attachment = pDesc->m_ColorAttachments[i];
-        Image *pImage = attachment.m_pImage;
-
-        colorAttachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-        colorAttachment.pNext = nullptr;
-        colorAttachment.imageView = pImage->m_pViewHandle;
-        colorAttachment.imageLayout = VK::ToImageLayout(attachment.m_Layout);
-        colorAttachment.loadOp = kLoadOpLUT[(u32)attachment.m_LoadOp];
-        colorAttachment.storeOp = kStoreOpLUT[(u32)attachment.m_StoreOp];
-
-        memcpy(&colorAttachment.clearValue.color, &attachment.m_ClearValue, sizeof(ColorClearValue));
-    }
-
-    if (pDesc->m_pDepthAttachment)
-    {
-        beginInfo.pDepthAttachment = &depthAttachment;
-
-        RenderingDepthAttachment &attachment = *pDesc->m_pDepthAttachment;
-        Image *pImage = attachment.m_pImage;
-
-        depthAttachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-        depthAttachment.pNext = nullptr;
-        depthAttachment.imageView = pImage->m_pViewHandle;
-        depthAttachment.imageLayout = VK::ToImageLayout(attachment.m_Layout);
-        depthAttachment.loadOp = kLoadOpLUT[(u32)attachment.m_LoadOp];
-        depthAttachment.storeOp = kStoreOpLUT[(u32)attachment.m_StoreOp];
-
-        memcpy(&depthAttachment.clearValue.depthStencil, &attachment.m_ClearValue, sizeof(DepthClearValue));
-    }
-
-    beginInfo.colorAttachmentCount = pDesc->m_ColorAttachments.size();
-    beginInfo.pColorAttachments = pColorAttachments;
     beginInfo.renderArea.offset.x = (i32)pDesc->m_RenderArea.x;
     beginInfo.renderArea.offset.y = (i32)pDesc->m_RenderArea.y;
     beginInfo.renderArea.extent.width = pDesc->m_RenderArea.z;
@@ -357,7 +354,7 @@ void CommandList::SetBindlessLayout(BindlessLayout &layout)
     SetPushConstants((void *)layout.data(), layout.size(), layout.m_Offset);
 }
 
-void CommandList::SetDescriptorBuffers(eastl::span<DescriptorBindingInfo> bindingInfos)
+void CommandList::SetDescriptorBuffers(eastl::span<DescriptorBufferBindInfo> bindingInfos)
 {
     ZoneScoped;
 

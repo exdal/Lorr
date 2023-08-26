@@ -1,5 +1,5 @@
 // Created on Friday August 18th 2023 by exdal
-// Last modified on Sunday August 20th 2023 by exdal
+// Last modified on Thursday August 24th 2023 by exdal
 
 #include "CRC.hh"
 

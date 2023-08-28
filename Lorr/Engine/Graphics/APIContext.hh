@@ -1,9 +1,7 @@
 // Created on Monday July 18th 2022 by exdal
-// Last modified on Saturday August 26th 2023 by exdal
+// Last modified on Monday August 28th 2023 by exdal
 
 #pragma once
-
-#include "Resource/Resource.hh"
 
 #include "Device.hh"
 #include "Descriptor.hh"
@@ -14,18 +12,14 @@
 
 #include "TracyVK.hh"
 
-#ifdef CreateSemaphore
-#undef CreateSemaphore
-#endif
-
 namespace lr::Graphics
 {
-enum APIFlags : u32
+enum class APIFlag : u32
 {
-    LR_API_FLAG_NONE = 0,
-    LR_API_FLAG_VSYNC = 1 << 0,
+    None = 0,
+    VSync = 1 << 0,
 };
-EnumFlags(APIFlags);
+LR_TYPEOP_ARITHMETIC_INT(APIFlag, APIFlag, &);
 
 enum class MemoryFlag
 {
@@ -36,11 +30,12 @@ enum class MemoryFlag
 
     HostVisibleCoherent = HostVisible | HostCoherent,
 };
-EnumFlags(MemoryFlag);
+LR_TYPEOP_ARITHMETIC_INT(MemoryFlag, MemoryFlag, &);
+LR_TYPEOP_ARITHMETIC(MemoryFlag, MemoryFlag, |);
 
 struct APIContextDesc
 {
-    APIFlags m_Flags = LR_API_FLAG_NONE;
+    APIFlag m_Flags = APIFlag::None;
     u32 m_ImageCount = 1;
     BaseWindow *m_pTargetWindow = nullptr;
     ResourceAllocatorDesc m_AllocatorDesc = {};
@@ -110,7 +105,7 @@ struct APIContext
     void AllocateImageMemory(ResourceAllocator allocator, Image *pImage, u64 memorySize);
 
     // * Shaders * //
-    Shader *CreateShader(Resource::ShaderResource *pResource);
+    Shader *CreateShader(ShaderStage stage, u32 *pData, u64 dataSize);
     void DeleteShader(Shader *pShader);
 
     // * Descriptor * //
@@ -151,7 +146,7 @@ struct APIContext
 #if _DEBUG
         VkDebugUtilsObjectNameInfoEXT objectNameInfo = {};
         objectNameInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
-        objectNameInfo.objectType = _Type::kObjectType;
+        objectNameInfo.objectType = (VkObjectType)_Type::kObjectType;
         objectNameInfo.objectHandle = (u64)pType->m_pHandle;
         objectNameInfo.pObjectName = name.data();
 
@@ -176,7 +171,6 @@ struct APIContext
     Semaphore *GetAvailableAcquireSemaphore(Semaphore *pOldSemaphore);
 
     // * API Instance * //
-    bool LoadVulkan();
     bool SetupInstance(BaseWindow *pWindow);
     bool SetupPhysicalDevice();
     bool SetupSurface(BaseWindow *pWindow);
@@ -200,8 +194,9 @@ struct APIContext
     eastl::fixed_vector<Semaphore *, 8, false> m_AcquireSempPool;
 
     ResourceAllocators m_Allocators = {};
-    HMODULE m_VulkanLib = NULL;
+    void *m_VulkanLib = NULL;
 
     TracyVkCtx m_pTracyCtx = nullptr;
 };
+
 }  // namespace lr::Graphics

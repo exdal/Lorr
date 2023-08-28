@@ -1,9 +1,7 @@
 // Created on Tuesday April 25th 2023 by exdal
-// Last modified on Friday August 25th 2023 by exdal
+// Last modified on Monday August 28th 2023 by exdal
 
 #include "Descriptor.hh"
-
-#include "VulkanType.hh"
 
 namespace lr::Graphics
 {
@@ -11,8 +9,8 @@ DescriptorLayoutElement::DescriptorLayoutElement(
     u32 binding, DescriptorType type, ShaderStage stage, u32 arraySize)
 {
     this->binding = binding;
-    this->descriptorType = VK::ToDescriptorType(type);
-    this->stageFlags = VK::ToShaderType(stage);
+    this->descriptorType = (VkDescriptorType)type;
+    this->stageFlags = (VkShaderStageFlags)stage;
     this->descriptorCount = arraySize;
     this->pImmutableSamplers = nullptr;  // TODO: static samplers
 }

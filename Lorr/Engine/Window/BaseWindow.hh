@@ -1,11 +1,7 @@
 // Created on Thursday May 5th 2022 by exdal
-// Last modified on Monday June 12th 2023 by exdal
+// Last modified on Monday August 28th 2023 by exdal
 
 #pragma once
-
-#include "Core/EventManager.hh"
-
-#include "Input/Key.hh"
 
 namespace lr
 {
@@ -32,8 +28,8 @@ namespace lr
         Borderless = 1 << 3,
         Maximized = 1 << 4,
     };
-
-    EnumFlags(WindowFlag);
+    LR_TYPEOP_ARITHMETIC(WindowFlag, WindowFlag, |);
+    LR_TYPEOP_ARITHMETIC_INT(WindowFlag, WindowFlag, &);
 
     struct SystemMetrics
     {

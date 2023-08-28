@@ -1,12 +1,13 @@
-#include "Pipeline.hh"
+// Created on Tuesday May 9th 2023 by exdal
+// Last modified on Monday August 28th 2023 by exdal
 
-#include "VulkanType.hh"
+#include "Pipeline.hh"
 
 namespace lr::Graphics
 {
 PushConstantDesc::PushConstantDesc(ShaderStage stage, u32 offset, u32 size)
 {
-    this->stageFlags = VK::ToShaderType(stage);
+    this->stageFlags = (VkShaderStageFlags)stage;
     this->offset = offset;
     this->size = size;
 }

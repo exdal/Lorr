@@ -1,11 +1,10 @@
 // Created on Wednesday May 4th 2022 by exdal
-// Last modified on Sunday July 16th 2023 by exdal
+// Last modified on Monday August 28th 2023 by exdal
 
 #pragma once
 
-#include "Core/Config.hh"
-
-#include "Graphics/Renderer/RenderGraph.hh"
+#include "Core/EventManager.hh"
+#include "Input/Key.hh"
 #include "Resource/ResourceManager.hh"
 #include "UI/ImGui.hh"
 #include "Window/Win32/Win32Window.hh"

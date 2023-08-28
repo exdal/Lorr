@@ -1,5 +1,5 @@
 // Created on Thursday May 5th 2022 by exdal
-// Last modified on Friday June 2nd 2023 by exdal
+// Last modified on Monday August 28th 2023 by exdal
 
 #include "Win32Window.hh"
 
@@ -9,6 +9,7 @@
 #include <Windows.h>
 
 #include "Engine.hh"
+#include "Input/Key.hh"
 
 namespace lr
 {

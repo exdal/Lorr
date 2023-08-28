@@ -1,11 +1,14 @@
 // Created on Monday July 18th 2022 by exdal
-// Last modified on Saturday August 26th 2023 by exdal
+// Last modified on Monday August 28th 2023 by exdal
 
 #pragma once
+
+#include "Memory/MemoryUtils.hh"
 
 #include "APIAllocator.hh"
 
 #include "Buffer.hh"
+#include "Image.hh"
 #include "Pipeline.hh"
 
 namespace lr::Graphics
@@ -57,86 +60,7 @@ struct BindlessLayout
     eastl::array<DescriptorIDType, kDescriptorIDCount> m_Data = {};
 };
 
-enum class CommandType : u32
-{
-    Graphics = 0,
-    Compute,
-    Transfer,
-    Count,
-};
 
-enum class PipelineStage : u32
-{
-    None = 0,
-
-    /// ---- IN ORDER ----
-    DrawIndirect = 1 << 0,
-
-    /// GRAPHICS PIPELINE
-    VertexAttribInput = 1 << 1,
-    IndexAttribInput = 1 << 2,
-    VertexShader = 1 << 3,
-    TessellationControl = 1 << 4,
-    TessellationEvaluation = 1 << 5,
-    PixelShader = 1 << 6,
-    EarlyPixelTests = 1 << 7,
-    LatePixelTests = 1 << 8,
-    ColorAttachmentOutput = 1 << 9,
-    AllGraphics = 1 << 10,
-
-    /// COMPUTE PIPELINE
-    ComputeShader = 1 << 11,
-
-    /// TRANSFER PIPELINE
-    Host = 1 << 12,  // not really in transfer but eh
-    Copy = 1 << 13,
-    Bilt = 1 << 14,
-    Resolve = 1 << 15,
-    Clear = 1 << 16,
-    AllTransfer = 1 << 17,
-
-    /// OTHER STAGES
-    AllCommands = 1 << 18,
-    BottomOfPipe = 1 << 19,
-};
-EnumFlags(PipelineStage);
-
-enum class MemoryAccess : u32
-{
-    None = 0,
-    IndirectRead = 1 << 0,
-    VertexAttribRead = 1 << 1,
-    IndexAttribRead = 1 << 2,
-    InputAttachmentRead = 1 << 3,
-    UniformRead = 1 << 4,
-    SampledRead = 1 << 5,
-    StorageRead = 1 << 6,
-    StorageWrite = 1 << 7,
-    ColorAttachmentRead = 1 << 8,
-    ColorAttachmentWrite = 1 << 9,
-    DepthStencilRead = 1 << 10,
-    DepthStencilWrite = 1 << 11,
-    TransferRead = 1 << 12,
-    TransferWrite = 1 << 13,
-    HostRead = 1 << 14,
-    HostWrite = 1 << 15,
-    MemoryRead = 1 << 16,  // MEMORY_# flags are more general version of specific flags above
-    MemoryWrite = 1 << 17,
-
-    /// VIRTUAL FLAGS
-    Present = 1 << 30,
-
-    /// UTILITY FLAGS
-    ColorAttachmentAll = ColorAttachmentRead | ColorAttachmentWrite,
-    DepthStencilAttachmentAll = DepthStencilRead | DepthStencilWrite,
-    TransferAll = TransferRead | TransferWrite,
-    HostAll = HostRead | HostWrite,
-
-    ImageReadUTL = SampledRead | StorageRead | ColorAttachmentRead | DepthStencilRead | MemoryRead,
-    ImageWriteUTL = StorageWrite | ColorAttachmentWrite | DepthStencilWrite | MemoryWrite,
-
-};
-EnumFlags(MemoryAccess);
 
 struct DescriptorBufferBindInfo : VkDescriptorBufferBindingInfoEXT
 {
@@ -184,10 +108,6 @@ struct PipelineBarrier
 
 // Utility classes to help us batch the barriers
 
-#ifdef MemoryBarrier  // fuck you
-#undef MemoryBarrier
-#endif
-
 struct ImageBarrier : VkImageMemoryBarrier2
 {
     ImageBarrier() = default;
@@ -224,8 +144,8 @@ struct Fence : APIObject<VK_OBJECT_TYPE_FENCE>
 
 struct Semaphore : APIObject<VK_OBJECT_TYPE_SEMAPHORE>
 {
-    VkSemaphore m_pHandle = VK_NULL_HANDLE;
     u64 m_Value = 0;
+    VkSemaphore m_pHandle = VK_NULL_HANDLE;
 };
 
 struct SemaphoreSubmitDesc : VkSemaphoreSubmitInfo

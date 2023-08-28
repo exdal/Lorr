@@ -1,5 +1,5 @@
 // Created on Friday February 24th 2023 by exdal
-// Last modified on Friday August 25th 2023 by exdal
+// Last modified on Monday August 28th 2023 by exdal
 
 #pragma once
 
@@ -18,7 +18,6 @@ enum InputResourceFlag : u32
     ColorAttachment = 1 << 3,
     DepthAttachment = 1 << 4,
 };
-EnumFlags(InputResourceFlag);
 
 enum class RenderPassFlag : u32
 {
@@ -28,7 +27,6 @@ enum class RenderPassFlag : u32
     AllowSetup = 1 << 2,
     SkipRendering = 1 << 3,
 };
-EnumFlags(RenderPassFlag);
 
 struct RenderPassBuilder;
 struct RenderPass

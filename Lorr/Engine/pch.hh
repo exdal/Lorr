@@ -49,7 +49,7 @@ typedef u32 usize;
 using namespace DirectX;
 using namespace PackedVector;
 
-#include "Utils/EnumFlags.hh"
+#include "Utils/TypeOperators.hh"
 #include "Core/Logger/Format.hh"
 #include "Core/Logger/Logger.hh"
 

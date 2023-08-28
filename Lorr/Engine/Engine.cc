@@ -1,9 +1,11 @@
 // Created on Wednesday May 4th 2022 by exdal
-// Last modified on Wednesday August 2nd 2023 by exdal
+// Last modified on Monday August 28th 2023 by exdal
 
 #include "Engine.hh"
 
+#include "Core/Config.hh"
 #include "Core/Job.hh"
+#include "Graphics/APIContext.hh"
 
 namespace lr
 {

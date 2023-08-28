@@ -1,20 +1,12 @@
 // Created on Monday July 18th 2022 by exdal
-// Last modified on Saturday August 26th 2023 by exdal
+// Last modified on Monday August 28th 2023 by exdal
 
 #include "APIContext.hh"
 
+#include "Memory/MemoryUtils.hh"
+
 #include "APIAllocator.hh"
 #include "Shader.hh"
-#include "VulkanType.hh"
-
-/// DEFINE VULKAN FUNCTIONS
-#define _VK_DEFINE_FUNCTION(_name) PFN_##_name _name
-_VK_IMPORT_SYMBOLS
-_VK_IMPORT_DEVICE_SYMBOLS
-_VK_IMPORT_INSTANCE_SYMBOLS
-_VK_IMPORT_INSTANCE_SYMBOLS_DEBUG
-
-#undef _VK_DEFINE_FUNCTION
 
 namespace lr::Graphics
 {
@@ -28,7 +20,8 @@ bool APIContext::Init(APIContextDesc *pDesc)
     APIAllocator::g_Handle.m_TypeAllocator.Init(kTypeMem, 0x2000);
     APIAllocator::g_Handle.m_pTypeData = Memory::Allocate<u8>(kTypeMem);
 
-    if (!LoadVulkan())
+    m_VulkanLib = VK::LoadVulkan();
+    if (!m_VulkanLib)
         return false;
 
     if (!SetupInstance(pDesc->m_pTargetWindow))
@@ -360,9 +353,9 @@ Pipeline *APIContext::CreateGraphicsPipeline(GraphicsPipelineBuildInfo *pBuildIn
     renderingInfo.viewMask = 0;
     renderingInfo.colorAttachmentCount = pBuildInfo->m_ColorAttachmentFormats.size();
     renderingInfo.pColorAttachmentFormats = pRenderTargetFormats;
-    renderingInfo.depthAttachmentFormat = VK::ToFormat(pBuildInfo->m_DepthAttachmentFormat);
+    renderingInfo.depthAttachmentFormat = (VkFormat)pBuildInfo->m_DepthAttachmentFormat;
     for (u32 i = 0; i < pBuildInfo->m_ColorAttachmentFormats.size(); i++)
-        pRenderTargetFormats[i] = VK::ToFormat(pBuildInfo->m_ColorAttachmentFormats[i]);
+        pRenderTargetFormats[i] = (VkFormat)pBuildInfo->m_ColorAttachmentFormats[i];
 
     /// BOUND SHADER STAGES ------------------------------------------------------
 
@@ -374,7 +367,7 @@ Pipeline *APIContext::CreateGraphicsPipeline(GraphicsPipelineBuildInfo *pBuildIn
         VkPipelineShaderStageCreateInfo &info = pShaderStageInfos[i];
         info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
         info.pName = nullptr;
-        info.stage = VK::ToShaderType(pShader->m_Type);
+        info.stage = (VkShaderStageFlagBits)pShader->m_Type;
         info.module = pShader->m_pHandle;
         info.pName = "main";
     }
@@ -419,7 +412,7 @@ Pipeline *APIContext::CreateGraphicsPipeline(GraphicsPipelineBuildInfo *pBuildIn
     rasterizerInfo.pNext = nullptr;
     rasterizerInfo.depthClampEnable = pBuildInfo->m_EnableDepthClamp;
     rasterizerInfo.polygonMode = (VkPolygonMode)pBuildInfo->m_SetFillMode;
-    rasterizerInfo.cullMode = VK::ToCullMode(pBuildInfo->m_SetCullMode);
+    rasterizerInfo.cullMode = (VkCullModeFlags)pBuildInfo->m_SetCullMode;
     rasterizerInfo.frontFace = (VkFrontFace)!pBuildInfo->m_FrontFaceCCW;
     rasterizerInfo.depthBiasEnable = pBuildInfo->m_EnableDepthBias;
     rasterizerInfo.depthBiasConstantFactor = pBuildInfo->m_DepthBiasFactor;
@@ -545,7 +538,7 @@ SwapChain *APIContext::CreateSwapChain(BaseWindow *pWindow, u32 imageCount, Swap
     {
         pSwapChain = new SwapChain;
 
-        VkFormat format = VK::ToFormat(pSwapChain->m_ImageFormat);
+        VkFormat format = (VkFormat)pSwapChain->m_ImageFormat;
 
         if (!m_pSurface->IsPresentModeSupported(pSwapChain->m_PresentMode))
             imageCount = 1;
@@ -578,7 +571,7 @@ SwapChain *APIContext::CreateSwapChain(BaseWindow *pWindow, u32 imageCount, Swap
         .pNext = nullptr,
         .surface = m_pSurface->m_pHandle,
         .minImageCount = pSwapChain->m_FrameCount,
-        .imageFormat = VK::ToFormat(pSwapChain->m_ImageFormat),
+        .imageFormat = (VkFormat)pSwapChain->m_ImageFormat,
         .imageColorSpace = pSwapChain->m_ColorSpace,
         .imageExtent = { pSwapChain->m_Width, pSwapChain->m_Height },
         .imageArrayLayers = 1,
@@ -887,17 +880,17 @@ void APIContext::AllocateImageMemory(ResourceAllocator allocator, Image *pImage,
     pImage->m_DataOffset = memoryOffset;
 }
 
-Shader *APIContext::CreateShader(Resource::ShaderResource *pResource)
+Shader *APIContext::CreateShader(ShaderStage stage, u32 *pData, u64 dataSize)
 {
     ZoneScoped;
 
     Shader *pShader = new Shader;
-    pShader->m_Type = pResource->get().m_Stage;
+    pShader->m_Type = stage;
 
     VkShaderModuleCreateInfo createInfo = {
         .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-        .codeSize = pResource->get().m_DataSpv.size(),
-        .pCode = pResource->get().m_DataSpv.data(),
+        .codeSize = dataSize,
+        .pCode = pData,
     };
     vkCreateShaderModule(m_pDevice, &createInfo, nullptr, &pShader->m_pHandle);
 
@@ -1043,7 +1036,7 @@ void APIContext::GetDescriptorData(
     VkDescriptorGetInfoEXT vkInfo = {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT,
         .pNext = nullptr,
-        .type = VK::ToDescriptorType(info.m_Type),
+        .type = (VkDescriptorType)info.m_Type,
         .data = descriptorData,
     };
 
@@ -1066,7 +1059,7 @@ Buffer *APIContext::CreateBuffer(BufferDesc *pDesc)
         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
         .pNext = nullptr,
         .size = alignedBufferSize,
-        .usage = VK::ToBufferUsage(pDesc->m_UsageFlags) | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+        .usage = (VkBufferUsageFlags)pDesc->m_UsageFlags | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
     };
     vkCreateBuffer(m_pDevice, &createInfo, nullptr, &pBuffer->m_pHandle);
     AllocateBufferMemory(pDesc->m_TargetAllocator, pBuffer, pDesc->m_DataSize);
@@ -1129,14 +1122,14 @@ Image *APIContext::CreateImage(ImageDesc *pDesc)
     Image *pImage = new Image;
 
     if (pDesc->m_DataSize == 0)
-        pDesc->m_DataSize = pDesc->m_Width * pDesc->m_Height * GetImageFormatSize(pDesc->m_Format);
+        pDesc->m_DataSize = pDesc->m_Width * pDesc->m_Height * FormatToSize(pDesc->m_Format);
 
     /// ---------------------------------------------- //
 
     VkImageCreateInfo imageCreateInfo = {};
     imageCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-    imageCreateInfo.format = VK::ToFormat(pDesc->m_Format);
-    imageCreateInfo.usage = VK::ToImageUsage(pDesc->m_UsageFlags);
+    imageCreateInfo.format = (VkFormat)pDesc->m_Format;
+    imageCreateInfo.usage = (VkImageUsageFlags)pDesc->m_UsageFlags;
     imageCreateInfo.imageType = VK_IMAGE_TYPE_2D;
 
     imageCreateInfo.extent.width = pDesc->m_Width;
@@ -1216,7 +1209,7 @@ void APIContext::CreateImageView(Image *pImage, ImageUsage aspectUsage)
 
     imageViewCreateInfo.image = pImage->m_pHandle;
     imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    imageViewCreateInfo.format = VK::ToFormat(pImage->m_Format);
+    imageViewCreateInfo.format = (VkFormat)pImage->m_Format;
 
     imageViewCreateInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
     imageViewCreateInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
@@ -1308,30 +1301,6 @@ Semaphore *APIContext::GetAvailableAcquireSemaphore(Semaphore *pOldSemaphore)
     return m_AcquireSempPool[idx];
 }
 
-bool APIContext::LoadVulkan()
-{
-    m_VulkanLib = LoadLibraryA("vulkan-1.dll");
-
-    if (m_VulkanLib == NULL)
-    {
-        LOG_CRITICAL("Failed to find Vulkan dynamic library.");
-        return false;
-    }
-
-#define _VK_DEFINE_FUNCTION(_name)                                 \
-    _name = (PFN_##_name)GetProcAddress(m_VulkanLib, #_name);      \
-    if (_name == nullptr)                                          \
-    {                                                              \
-        LOG_CRITICAL("Cannot load Vulkan function '{}'!", #_name); \
-        return false;                                              \
-    }
-
-    _VK_IMPORT_SYMBOLS
-#undef _VK_DEFINE_FUNCTION
-
-    return true;
-}
-
 bool APIContext::SetupInstance(BaseWindow *pWindow)
 {
     ZoneScoped;
@@ -1414,22 +1383,7 @@ bool APIContext::SetupInstance(BaseWindow *pWindow)
     createInfo.ppEnabledLayerNames = nullptr;
     vkCreateInstance(&createInfo, nullptr, &m_pInstance);
 
-    /// LOAD INSTANCE EXCLUSIVE FUNCTIONS ///
-
-#define _VK_DEFINE_FUNCTION(_name)                                          \
-    _name = (PFN_##_name)vkGetInstanceProcAddr(m_pInstance, #_name);        \
-    if (_name == nullptr)                                                   \
-    {                                                                       \
-        LOG_CRITICAL("Cannot load Vulkan Instance function '{}'!", #_name); \
-        return false;                                                       \
-    }
-#if _DEBUG
-    _VK_IMPORT_INSTANCE_SYMBOLS_DEBUG
-#endif
-    _VK_IMPORT_INSTANCE_SYMBOLS
-#undef _VK_DEFINE_FUNCTION
-
-    return true;
+    return VK::LoadVulkanInstance(m_pInstance);
 }
 
 bool APIContext::SetupPhysicalDevice()
@@ -1470,20 +1424,7 @@ bool APIContext::SetupDevice()
 
     m_pDevice = m_pPhysicalDevice->GetLogicalDevice();
 
-    /// LOAD DEVICE EXCLUSIVE FUNCTIONS ///
-
-#define _VK_DEFINE_FUNCTION(_name)                                        \
-    _name = (PFN_##_name)vkGetDeviceProcAddr(m_pDevice, #_name);          \
-    if (_name == nullptr)                                                 \
-    {                                                                     \
-        LOG_CRITICAL("Cannot load Vulkan Device function '{}'!", #_name); \
-        return false;                                                     \
-    }
-
-    _VK_IMPORT_DEVICE_SYMBOLS
-#undef _VK_DEFINE_FUNCTION
-
-    return true;
+    return VK::LoadVulkanDevice(m_pDevice);
 }
 
 }  // namespace lr::Graphics

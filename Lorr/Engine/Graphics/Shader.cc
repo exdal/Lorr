@@ -1,5 +1,5 @@
 // Created on Sunday March 12th 2023 by exdal
-// Last modified on Sunday July 16th 2023 by exdal
+// Last modified on Monday August 28th 2023 by exdal
 
 #include "Shader.hh"
 
@@ -7,7 +7,8 @@
 #include <glslang/Include/glslang_c_interface.h>
 #include <glslang/Public/ShaderLang.h>
 
-#include "Memory/Allocator/LinearAllocator.hh"
+#include "IO/File.hh"
+#include "Memory/MemoryUtils.hh"
 
 static constexpr TBuiltInResource glslang_DefaultTBuiltInResource = {
     /* .MaxLights = */ 32,
@@ -149,8 +150,7 @@ constexpr glslang_stage_t ToGLSLStage(ShaderStage stage)
 
     return GLSLANG_STAGE_COUNT;
 }
-
-EnumFlags(glslang_messages_t);
+LR_TYPEOP_ARITHMETIC(glslang_messages_t, glslang_messages_t, |);
 #define ENABLE_IF_HAS(flag) (bool)(pDesc->m_Flags & flag)
 
 glsl_include_result_t *IncludeLocalCb(
@@ -271,10 +271,10 @@ ShaderCompileOutput ShaderCompiler::CompileShader(ShaderCompileDesc *pDesc)
     }
 
     glslang_spv_options_t spvOptions = {
-        .generate_debug_info = ENABLE_IF_HAS(ShaderFlag::GenerateDebugInfo),
-        .strip_debug_info = !ENABLE_IF_HAS(ShaderFlag::SkipOptimization),
-        .disable_optimizer = ENABLE_IF_HAS(ShaderFlag::SkipOptimization),
-        .validate = !ENABLE_IF_HAS(ShaderFlag::SkipValidation),
+        .generate_debug_info = ENABLE_IF_HAS(ShaderCompileFlag::GenerateDebugInfo),
+        .strip_debug_info = !ENABLE_IF_HAS(ShaderCompileFlag::SkipOptimization),
+        .disable_optimizer = ENABLE_IF_HAS(ShaderCompileFlag::SkipOptimization),
+        .validate = !ENABLE_IF_HAS(ShaderCompileFlag::SkipValidation),
     };
     glslang_program_SPIRV_generate_with_options(pProgram, input.stage, &spvOptions);
     u32 dataSize = glslang_program_SPIRV_get_size(pProgram) * sizeof(u32);

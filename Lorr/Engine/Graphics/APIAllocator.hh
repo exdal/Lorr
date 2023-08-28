@@ -1,11 +1,9 @@
 // Created on Tuesday February 28th 2023 by exdal
-// Last modified on Monday June 19th 2023 by exdal
+// Last modified on Monday August 28th 2023 by exdal
 
 #pragma once
 
 #include "Memory/Allocator/TLSFAllocator.hh"
-
-#include "Vulkan.hh"
 
 namespace lr::Graphics
 {
@@ -32,10 +30,10 @@ struct APIAllocator
     static APIAllocator g_Handle;
 };
 
-template<VkObjectType _ObjType>
+template<u32 _ObjType>
 struct APIObject
 {
-    static constexpr VkObjectType kObjectType = _ObjType;
+    constexpr static u32 kObjectType = _ObjType;
 
     void *operator new(size_t size) { return APIAllocator::g_Handle.Allocate(size); }
     void operator delete(void *pData) { APIAllocator::g_Handle.Free(pData); }

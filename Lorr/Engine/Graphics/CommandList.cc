@@ -1,11 +1,10 @@
 // Created on Monday July 18th 2022 by exdal
-// Last modified on Saturday August 26th 2023 by exdal
+// Last modified on Monday August 28th 2023 by exdal
 
 #include "CommandList.hh"
 
 #include "Buffer.hh"
 #include "Image.hh"
-#include "VulkanType.hh"
 
 namespace lr::Graphics
 {
@@ -27,7 +26,7 @@ DescriptorBufferBindInfo::DescriptorBufferBindInfo(Buffer *pBuffer, BufferUsage 
     this->sType = VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT;
     this->pNext = nullptr;
     this->address = pBuffer->m_DeviceAddress;
-    this->usage = VK::ToBufferUsage(bufferUsage);
+    this->usage = (VkBufferUsageFlags)bufferUsage;
 }
 
 RenderingAttachment::RenderingAttachment(
@@ -50,7 +49,7 @@ void RenderingAttachment::InitImage(
     this->sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
     this->pNext = nullptr;
     this->imageView = pImage->m_pViewHandle;
-    this->imageLayout = VK::ToImageLayout(layout);
+    this->imageLayout = (VkImageLayout)layout;
     this->loadOp = kLoadOpLUT[(u32)loadOp];
     this->storeOp = kStoreOpLUT[(u32)storeOp];
 }
@@ -75,12 +74,12 @@ ImageBarrier::ImageBarrier(Image *pImage, ImageUsage aspectUsage, const Pipeline
 
     this->sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
     this->pNext = nullptr;
-    this->srcStageMask = VK::ToPipelineStage(barrier.m_SrcStage);
-    this->srcAccessMask = VK::ToAccessFlags(barrier.m_SrcAccess);
-    this->dstStageMask = VK::ToPipelineStage(barrier.m_DstStage);
-    this->dstAccessMask = VK::ToAccessFlags(barrier.m_DstAccess);
-    this->oldLayout = VK::ToImageLayout(barrier.m_SrcLayout);
-    this->newLayout = VK::ToImageLayout(barrier.m_DstLayout);
+    this->srcStageMask = (VkPipelineStageFlags2)barrier.m_SrcStage;
+    this->srcAccessMask = (VkAccessFlags2)barrier.m_SrcAccess;
+    this->dstStageMask = (VkPipelineStageFlags2)barrier.m_DstStage;
+    this->dstAccessMask = (VkAccessFlags2)barrier.m_DstAccess;
+    this->oldLayout = (VkImageLayout)barrier.m_SrcLayout;
+    this->newLayout = (VkImageLayout)barrier.m_DstLayout;
     this->srcQueueFamilyIndex = barrier.m_SrcQueue;
     this->dstQueueFamilyIndex = barrier.m_DstQueue;
 
@@ -94,10 +93,10 @@ BufferBarrier::BufferBarrier(Buffer *pBuffer, const PipelineBarrier &barrier)
 
     this->sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
     this->pNext = nullptr;
-    this->srcStageMask = VK::ToPipelineStage(barrier.m_SrcStage);
-    this->dstStageMask = VK::ToPipelineStage(barrier.m_DstStage);
-    this->srcAccessMask = VK::ToAccessFlags(barrier.m_SrcAccess);
-    this->dstAccessMask = VK::ToAccessFlags(barrier.m_DstAccess);
+    this->srcStageMask = (VkPipelineStageFlags2)barrier.m_SrcStage;
+    this->dstStageMask = (VkPipelineStageFlags2)barrier.m_DstStage;
+    this->srcAccessMask = (VkAccessFlags2)barrier.m_SrcAccess;
+    this->dstAccessMask = (VkAccessFlags2)barrier.m_DstAccess;
     this->srcQueueFamilyIndex = barrier.m_SrcQueue;
     this->dstQueueFamilyIndex = barrier.m_DstQueue;
 
@@ -112,10 +111,10 @@ MemoryBarrier::MemoryBarrier(const PipelineBarrier &barrier)
 
     this->sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2;
     this->pNext = nullptr;
-    this->srcStageMask = VK::ToPipelineStage(barrier.m_SrcStage);
-    this->dstStageMask = VK::ToPipelineStage(barrier.m_DstStage);
-    this->srcAccessMask = VK::ToAccessFlags(barrier.m_SrcAccess);
-    this->dstAccessMask = VK::ToAccessFlags(barrier.m_DstAccess);
+    this->srcStageMask = (VkPipelineStageFlags2)barrier.m_SrcStage;
+    this->dstStageMask = (VkPipelineStageFlags2)barrier.m_DstStage;
+    this->srcAccessMask = (VkAccessFlags2)barrier.m_SrcAccess;
+    this->dstAccessMask = (VkAccessFlags2)barrier.m_DstAccess;
 }
 
 DependencyInfo::DependencyInfo()
@@ -185,7 +184,7 @@ SemaphoreSubmitDesc::SemaphoreSubmitDesc(Semaphore *pSemaphore, u64 value, Pipel
     this->pNext = nullptr;
     this->semaphore = pSemaphore->m_pHandle;
     this->value = value;
-    this->stageMask = VK::ToPipelineStage(stage);
+    this->stageMask = (VkPipelineStageFlags2)stage;
     this->deviceIndex = 0;
 }
 
@@ -270,7 +269,7 @@ void CommandList::CopyBufferToImage(Buffer *pSource, Image *pDest, ImageUsage as
     imageCopyInfo.imageSubresource.mipLevel = 0;
 
     vkCmdCopyBufferToImage(
-        m_pHandle, pSource->m_pHandle, pDest->m_pHandle, VK::ToImageLayout(layout), 1, &imageCopyInfo);
+        m_pHandle, pSource->m_pHandle, pDest->m_pHandle, (VkImageLayout)layout, 1, &imageCopyInfo);
 }
 
 void CommandList::Draw(u32 vertexCount, u32 firstVertex, u32 instanceCount, u32 firstInstance)
@@ -327,7 +326,7 @@ void CommandList::SetPrimitiveType(PrimitiveType type)
 {
     ZoneScoped;
 
-    vkCmdSetPrimitiveTopology(m_pHandle, VK::ToTopology(type));
+    vkCmdSetPrimitiveTopology(m_pHandle, (VkPrimitiveTopology)type);
 }
 
 void CommandList::SetPipeline(Pipeline *pPipeline)
@@ -344,7 +343,7 @@ void CommandList::SetPushConstants(void *pData, u32 dataSize, u32 offset, Shader
     ZoneScoped;
 
     vkCmdPushConstants(
-        m_pHandle, m_pPipeline->m_pLayout->m_pHandle, VK::ToShaderType(stage), offset, dataSize, pData);
+        m_pHandle, m_pPipeline->m_pLayout->m_pHandle, (VkShaderStageFlags)stage, offset, dataSize, pData);
 }
 
 void CommandList::SetBindlessLayout(BindlessLayout &layout)

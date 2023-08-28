@@ -1,5 +1,5 @@
 // Created on Thursday May 18th 2023 by exdal
-// Last modified on Sunday July 16th 2023 by exdal
+// Last modified on Monday August 28th 2023 by exdal
 
 #include "Resource/Parser.hh"
 
@@ -20,7 +20,6 @@ bool Parser::ParseGLSL(eastl::string_view code, ShaderResource &resource, eastl:
     ZoneScoped;
 
     Graphics::ShaderStage stage;
-    Graphics::ShaderFlag flags = Graphics::ShaderFlag::GenerateDebugInfo;
     eastl::string processedCode;
     processedCode.reserve(code.length());
 
@@ -65,7 +64,7 @@ bool Parser::ParseGLSL(eastl::string_view code, ShaderResource &resource, eastl:
         .m_WorkingDir = workingDir,
         .m_Code = processedCode,
         .m_Type = stage,
-        .m_Flags = flags,
+        .m_Flags = Graphics::ShaderCompileFlag::GenerateDebugInfo,
     };
 
     resource.get() = Graphics::ShaderCompiler::CompileShader(&compileDesc);

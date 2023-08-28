@@ -1,21 +1,24 @@
 // Created on Tuesday July 19th 2022 by exdal
-// Last modified on Monday June 12th 2023 by exdal
+// Last modified on Monday August 28th 2023 by exdal
 
 #pragma once
 
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <Windows.h>
-
 #define VK_NO_STDINT_H
 #define VK_NO_PROTOTYPES
+#include <vulkan/vk_platform.h>
 #include <vulkan/vulkan.h>
+
+typedef unsigned long DWORD;
+typedef const wchar_t *LPCWSTR;
+typedef void *HANDLE;
+typedef struct HINSTANCE__ *HINSTANCE;
+typedef struct HWND__ *HWND;
+typedef struct HMONITOR__ *HMONITOR;
+typedef struct _SECURITY_ATTRIBUTES SECURITY_ATTRIBUTES;
+
 #include <vulkan/vulkan_win32.h>
 
-#define _VK_DEFINE_FUNCTION(_name) extern PFN_##_name _name;
-
-#define _VK_IMPORT_SYMBOLS                                          \
+#define _VK_FUNCTION_NAMES                                          \
     _VK_DEFINE_FUNCTION(vkCreateInstance);                          \
     _VK_DEFINE_FUNCTION(vkGetInstanceProcAddr);                     \
     _VK_DEFINE_FUNCTION(vkGetDeviceProcAddr);                       \
@@ -122,7 +125,7 @@
     _VK_DEFINE_FUNCTION(vkCmdResetQueryPool);                       \
     _VK_DEFINE_FUNCTION(vkGetQueryPoolResults);
 
-#define _VK_IMPORT_DEVICE_SYMBOLS                                      \
+#define _VK_FUNCTION_NAMES_DEVICE                                      \
     _VK_DEFINE_FUNCTION(vkCmdBindDescriptorBufferEmbeddedSamplersEXT); \
     _VK_DEFINE_FUNCTION(vkCmdBindDescriptorBuffersEXT);                \
     _VK_DEFINE_FUNCTION(vkCmdSetDescriptorBufferOffsetsEXT);           \
@@ -135,12 +138,19 @@
     _VK_DEFINE_FUNCTION(vkGetSamplerOpaqueCaptureDescriptorDataEXT);   \
     _VK_DEFINE_FUNCTION(vkGetCalibratedTimestampsEXT);
 
-#define _VK_IMPORT_INSTANCE_SYMBOLS _VK_DEFINE_FUNCTION(vkGetPhysicalDeviceCalibrateableTimeDomainsEXT);
-#define _VK_IMPORT_INSTANCE_SYMBOLS_DEBUG _VK_DEFINE_FUNCTION(vkSetDebugUtilsObjectNameEXT);
+#define _VK_FUNCTION_NAMES_INSTANCE _VK_DEFINE_FUNCTION(vkGetPhysicalDeviceCalibrateableTimeDomainsEXT);
+#define _VK_FUNCTION_NAMES_INSTANCE_DEBUG _VK_DEFINE_FUNCTION(vkSetDebugUtilsObjectNameEXT);
 
-_VK_IMPORT_SYMBOLS
-_VK_IMPORT_DEVICE_SYMBOLS
-_VK_IMPORT_INSTANCE_SYMBOLS
-_VK_IMPORT_INSTANCE_SYMBOLS_DEBUG
-
+#define _VK_DEFINE_FUNCTION(_name) extern PFN_##_name _name;
+_VK_FUNCTION_NAMES
+_VK_FUNCTION_NAMES_DEVICE
+_VK_FUNCTION_NAMES_INSTANCE
+_VK_FUNCTION_NAMES_INSTANCE_DEBUG
 #undef _VK_DEFINE_FUNCTION
+
+namespace lr::Graphics::VK
+{
+void *LoadVulkan();
+bool LoadVulkanInstance(VkInstance pInstance);
+bool LoadVulkanDevice(VkDevice pDevice);
+}

@@ -1,12 +1,13 @@
 // Created on Sunday March 19th 2023 by exdal
-// Last modified on Saturday August 5th 2023 by exdal
+// Last modified on Monday August 28th 2023 by exdal
 
 #pragma once
 
+#include "Memory/Allocator/LinearAllocator.hh"
 #include "Window/BaseWindow.hh"
 
 #include "APIAllocator.hh"
-#include "CommandList.hh"
+#include "Common.hh"
 
 namespace lr::Graphics
 {
@@ -123,17 +124,6 @@ struct LinearDeviceMemory : DeviceMemory
     }
 
     Memory::LinearAllocatorView m_AllocatorView = {};
-};
-
-struct ResourceAllocatorDesc
-{
-    u32 m_MaxTLSFAllocations = 0;
-    u32 m_DescriptorMem = 0;
-    u32 m_BufferLinearMem = 0;
-    u32 m_BufferTLSFMem = 0;
-    u32 m_BufferTLSFHostMem = 0;
-    u32 m_BufferFrametimeMem = 0;
-    u32 m_ImageTLSFMem = 0;
 };
 
 struct ResourceAllocators

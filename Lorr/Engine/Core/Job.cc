@@ -26,7 +26,7 @@ static iptr WorkerFn(void *pData)
             continue;
         }
 
-        EAProcessorPause();
+        EA::Thread::ThreadSleep(1);
     }
 
     return 1;
@@ -67,7 +67,7 @@ void JobManager::Schedule(JobFn fn)
     u64 mask = _man.m_JobsMask.load(eastl::memory_order_acquire);
     u64 i = _tzcnt_u64(~mask);
     _man.m_pJobs[i] = fn;
-    mask |= 1 << i;
+    mask |= 1i64 << i;
     _man.m_JobsMask.store(mask, eastl::memory_order_release);
 }
 
@@ -75,7 +75,7 @@ usize JobManager::PopJob()
 {
     u64 mask = _man.m_JobsMask.load(eastl::memory_order_acquire);
     usize jobID = _tzcnt_u64(mask);
-    mask &= ~(1 << jobID);
+    mask &= ~(1i64 << jobID);
     _man.m_JobsMask.store(mask, eastl::memory_order_release);
 
     return jobID;

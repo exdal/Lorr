@@ -4,6 +4,8 @@
 #include "Job.hh"
 #include "Utils/Timer.hh"
 
+#include <x86intrin.h>
+
 namespace lr::Job
 {
 static JobManager _man;
@@ -14,18 +16,16 @@ static iptr WorkerFn(void *pData)
 
     while (true)
     {
-        JobFn func;
-        if (_man.m_Jobs.pop(func))
+        if (_man.JobAvailable())
         {
             ZoneScoped;
 
-            pThis->SetBusy();
-            func();
+            usize jobID = _man.PopJob();
+            _man.m_pJobs[jobID]();
 
             continue;
         }
 
-        pThis->SetIdle();
         EAProcessorPause();
     }
 
@@ -48,20 +48,6 @@ void Worker::Init(u32 id, u32 processor)
     m_Thread.Begin(WorkerFn, this, &threadParams);
 }
 
-void Worker::SetBusy()
-{
-    u64 mask = _man.m_StatusMask.load(eastl::memory_order_acquire);
-    mask |= 1 << m_ID;
-    _man.m_StatusMask.store(mask, eastl::memory_order_release);
-}
-
-void Worker::SetIdle()
-{
-    u64 mask = _man.m_StatusMask.load(eastl::memory_order_acquire);
-    mask &= ~(1 << m_ID);
-    _man.m_StatusMask.store(mask, eastl::memory_order_release);
-}
-
 void JobManager::Init(u32 threadCount)
 {
     ZoneScoped;
@@ -78,14 +64,32 @@ void JobManager::Schedule(JobFn fn)
 {
     ZoneScoped;
 
-    _man.m_Jobs.push(fn);
+    u64 mask = _man.m_JobsMask.load(eastl::memory_order_acquire);
+    u64 i = _tzcnt_u64(~mask);
+    _man.m_pJobs[i] = fn;
+    mask |= 1 << i;
+    _man.m_JobsMask.store(mask, eastl::memory_order_release);
+}
+
+usize JobManager::PopJob()
+{
+    u64 mask = _man.m_JobsMask.load(eastl::memory_order_acquire);
+    usize jobID = _tzcnt_u64(mask);
+    mask &= ~(1 << jobID);
+    _man.m_JobsMask.store(mask, eastl::memory_order_release);
+
+    return jobID;
 }
 
 void JobManager::WaitForAll()
 {
-    u64 mask = _man.m_StatusMask.load(eastl::memory_order_acquire);
-    while (_man.m_StatusMask.load(eastl::memory_order_acquire) != 0 || !_man.m_Jobs.empty())
+    while (_man.m_JobsMask.load(eastl::memory_order_relaxed) != 0)
         ;
+}
+
+bool JobManager::JobAvailable()
+{
+    return __builtin_popcountll(_man.m_JobsMask.load(eastl::memory_order_relaxed));
 }
 
 JobManager &JobManager::Get()

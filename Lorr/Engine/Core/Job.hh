@@ -5,8 +5,6 @@
 
 #include <eathread/eathread_thread.h>
 
-#include "Memory/RingBuffer.hh"
-
 namespace lr::Job
 {
 using JobFn = eastl::function<void()>;
@@ -14,8 +12,6 @@ using JobFn = eastl::function<void()>;
 struct Worker
 {
     void Init(u32 id, u32 processor);
-    void SetBusy();
-    void SetIdle();
 
     u32 m_ID = 0;
     u32 m_Processor = 0;
@@ -26,11 +22,15 @@ struct JobManager
 {
     static void Init(u32 threadCount);
     static void Schedule(JobFn fn);
+    static usize PopJob();
     static void WaitForAll();
+    static bool JobAvailable();
     static JobManager &Get();
 
     eastl::fixed_vector<Worker, 16, false> m_Workers = {};
-    Memory::RingBufferAtomic<JobFn, 64> m_Jobs = {};
-    eastl::atomic<u64> m_StatusMask = 0;
+    
+    constexpr static usize kMaxJobSize = 64;
+    JobFn m_pJobs[kMaxJobSize] = {};
+    eastl::atomic<u64> m_JobsMask = 0;
 };
 }  // namespace lr::Job

@@ -6,11 +6,10 @@
 #include <EASTL/queue.h>
 
 #include "APIAllocator.hh"
+#include "APIResource.hh"
 #include "Common.hh"
 
 #include "CommandList.hh"
-#include "Buffer.hh"
-#include "Image.hh"
 
 namespace lr::Graphics
 {

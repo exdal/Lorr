@@ -3,9 +3,6 @@
 
 #include "CommandList.hh"
 
-#include "Buffer.hh"
-#include "Image.hh"
-
 namespace lr::Graphics
 {
 static constexpr VkAttachmentLoadOp kLoadOpLUT[] = {

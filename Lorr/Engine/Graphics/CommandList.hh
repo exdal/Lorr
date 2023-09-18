@@ -6,9 +6,7 @@
 #include "Memory/MemoryUtils.hh"
 
 #include "APIAllocator.hh"
-
-#include "Buffer.hh"
-#include "Image.hh"
+#include "APIResource.hh"
 #include "Pipeline.hh"
 
 namespace lr::Graphics

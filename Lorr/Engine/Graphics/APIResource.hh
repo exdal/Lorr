@@ -1,6 +1,3 @@
-// Created on Saturday April 22nd 2023 by exdal
-// Last modified on Monday August 28th 2023 by exdal
-
 #pragma once
 
 #include "APIAllocator.hh"
@@ -8,6 +5,36 @@
 
 namespace lr::Graphics
 {
+/////////////////////////////////
+// BUFFERS
+
+struct BufferDesc
+{
+    BufferUsage m_UsageFlags = BufferUsage::Vertex;
+    ResourceAllocator m_TargetAllocator = ResourceAllocator::None;
+
+    u32 m_Stride = 1;
+    u64 m_DataSize = 0;
+};
+
+struct Buffer : APIObject<VK_OBJECT_TYPE_BUFFER>
+{
+    ResourceAllocator m_Allocator = ResourceAllocator::None;
+    u64 m_AllocatorData = ~0;
+
+    u32 m_DescriptorIndex = -1;
+
+    u32 m_Stride = 1;
+    u64 m_DataSize = 0;
+    u64 m_DataOffset = 0;
+    u64 m_DeviceAddress = 0;
+
+    VkBuffer m_pHandle = nullptr;
+};
+
+/////////////////////////////////
+// IMAGES
+
 struct ImageDesc
 {
     ImageUsage m_UsageFlags = ImageUsage::Sampled;
@@ -41,6 +68,9 @@ struct Image : APIObject<VK_OBJECT_TYPE_IMAGE>
     VkImageView m_pViewHandle = nullptr;
 };
 
+/////////////////////////////////
+// SAMPLERS
+
 struct SamplerDesc
 {
     struct
@@ -65,6 +95,37 @@ struct Sampler : APIObject<VK_OBJECT_TYPE_SAMPLER>
 {
     VkSampler m_pHandle = nullptr;
     u32 m_DescriptorIndex = -1;
+};
+
+/////////////////////////////////
+// DESCRIPTORS
+
+struct DescriptorLayoutElement : VkDescriptorSetLayoutBinding
+{
+    DescriptorLayoutElement(
+        u32 binding, DescriptorType type, ShaderStage stage, u32 arraySize = 1);
+};
+
+struct DescriptorSetLayout : APIObject<VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT>
+{
+    VkDescriptorSetLayout m_pHandle = VK_NULL_HANDLE;
+};
+
+struct DescriptorGetInfo
+{
+    DescriptorGetInfo() = default;
+    DescriptorGetInfo(Buffer *pBuffer, DescriptorType type);
+    DescriptorGetInfo(Image *pImage, DescriptorType type);
+    DescriptorGetInfo(Sampler *pSampler);
+
+    union
+    {
+        Buffer *m_pBuffer = nullptr;
+        Image *m_pImage;
+        Sampler *m_pSampler;
+    };
+
+    DescriptorType m_Type = DescriptorType::Sampler;
 };
 
 }  // namespace lr::Graphics

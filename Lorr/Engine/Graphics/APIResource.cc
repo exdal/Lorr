@@ -1,7 +1,4 @@
-// Created on Tuesday April 25th 2023 by exdal
-// Last modified on Monday August 28th 2023 by exdal
-
-#include "Descriptor.hh"
+#include "APIResource.hh"
 
 namespace lr::Graphics
 {

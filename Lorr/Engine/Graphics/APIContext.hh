@@ -3,8 +3,8 @@
 
 #pragma once
 
+#include "APIResource.hh"
 #include "Device.hh"
-#include "Descriptor.hh"
 #include "CommandQueue.hh"
 #include "CommandList.hh"
 #include "Pipeline.hh"

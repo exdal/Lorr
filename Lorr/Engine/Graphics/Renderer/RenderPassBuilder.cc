@@ -5,7 +5,7 @@
 
 #include "Core/Config.hh"
 
-#include "Graphics/Descriptor.hh"
+#include "Graphics/APIResource.hh"
 #include "Graphics/Pipeline.hh"
 
 // These indexes are SET indexes

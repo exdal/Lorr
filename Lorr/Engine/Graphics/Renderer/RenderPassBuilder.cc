@@ -8,37 +8,31 @@
 #include "Graphics/APIResource.hh"
 #include "Graphics/Pipeline.hh"
 
-// These indexes are SET indexes
-#define LR_DESCRIPTOR_BDA_BUFFER 0
-#define LR_DESCRIPTOR_INDEX_SAMPLED_IMAGE 1
-#define LR_DESCRIPTOR_INDEX_STORAGE_IMAGE 2
-#define LR_DESCRIPTOR_INDEX_SAMPLER 3
-
 namespace lr::Graphics
 {
-constexpr u32 DescriptorTypeToSet(DescriptorType type)
+constexpr DescriptorSetIndex DescriptorTypeToSet(DescriptorType type)
 {
-    constexpr u32 kBindings[] = {
-        LR_DESCRIPTOR_INDEX_SAMPLER,        // Sampler
-        LR_DESCRIPTOR_INDEX_SAMPLED_IMAGE,  // SampledImage
-        LR_DESCRIPTOR_BDA_BUFFER,           // UniformBuffer
-        LR_DESCRIPTOR_INDEX_STORAGE_IMAGE,  // StorageImage
-        LR_DESCRIPTOR_BDA_BUFFER,           // StorageBuffer
+    constexpr DescriptorSetIndex kBindings[] = {
+        DescriptorSetIndex::Sampler,       // Sampler
+        DescriptorSetIndex::Image,         // SampledImage
+        DescriptorSetIndex::Buffer,        // UniformBuffer
+        DescriptorSetIndex::StorageImage,  // StorageImage
+        DescriptorSetIndex::Buffer         // StorageBuffer
     };
 
     return kBindings[(u32)type];
 }
 
-constexpr DescriptorType SetToDescriptorType(u32 binding)
+constexpr DescriptorType SetToDescriptorType(DescriptorSetIndex set)
 {
     constexpr DescriptorType kBindings[] = {
-        DescriptorType::StorageBuffer,  // LR_DESCRIPTOR_BDA_BUFFER
-        DescriptorType::SampledImage,   // LR_DESCRIPTOR_INDEX_SAMPLED_IMAGE
-        DescriptorType::StorageImage,   // LR_DESCRIPTOR_INDEX_STORAGE_IMAGE
-        DescriptorType::Sampler,        // LR_DESCRIPTOR_INDEX_SAMPLER
+        DescriptorType::StorageBuffer,  // DescriptorSetIndex::Buffer
+        DescriptorType::SampledImage,   // DescriptorSetIndex::Image
+        DescriptorType::StorageImage,   // DescriptorSetIndex::StorageImage
+        DescriptorType::Sampler         // DescriptorSetIndex::Sampler
     };
 
-    return kBindings[binding];
+    return kBindings[(u32)set];
 }
 
 DescriptorBuilder::DescriptorBuilder(APIContext *pContext)
@@ -47,22 +41,24 @@ DescriptorBuilder::DescriptorBuilder(APIContext *pContext)
     ZoneScoped;
 
     eastl::vector<DescriptorSetLayout *> layouts = {};
-    auto InitDescriptorInfo = [&, this](u32 binding, DescriptorInfoType infoType)
+    auto InitDescriptorInfo =
+        [&, this](DescriptorSetIndex set, DescriptorInfoType infoType)
     {
-        DescriptorType type = SetToDescriptorType(binding);
+        DescriptorType type = SetToDescriptorType(set);
         DescriptorLayoutElement layoutElement(0, type, ShaderStage::All);
         layouts.push_back(m_pContext->CreateDescriptorSetLayout(layoutElement));
 
         DescriptorInfo &info = m_DescriptorInfos.push_back();
         info.m_Type = infoType;
-        info.m_SetID = binding;
-        info.m_Allocator.Init({ .m_DataSize = m_pContext->GetDescriptorSize(type) * 256 });
+        info.m_Set = set;
+        info.m_Allocator.Init(
+            { .m_DataSize = m_pContext->GetDescriptorSize(type) * 256 });
     };
 
-    InitDescriptorInfo(LR_DESCRIPTOR_BDA_BUFFER, DescriptorInfoType::BDA);
-    InitDescriptorInfo(LR_DESCRIPTOR_INDEX_SAMPLED_IMAGE, DescriptorInfoType::Resource);
-    InitDescriptorInfo(LR_DESCRIPTOR_INDEX_STORAGE_IMAGE, DescriptorInfoType::Resource);
-    InitDescriptorInfo(LR_DESCRIPTOR_INDEX_SAMPLER, DescriptorInfoType::Sampler);
+    InitDescriptorInfo(DescriptorSetIndex::Buffer, DescriptorInfoType::BDA);
+    InitDescriptorInfo(DescriptorSetIndex::Image, DescriptorInfoType::Resource);
+    InitDescriptorInfo(DescriptorSetIndex::StorageImage, DescriptorInfoType::Resource);
+    InitDescriptorInfo(DescriptorSetIndex::Sampler, DescriptorInfoType::Sampler);
 
     PushConstantDesc pushConstantDesc(ShaderStage::All, 0, 256);
     m_pPipelineLayout = m_pContext->CreatePipelineLayout(layouts, pushConstantDesc);
@@ -76,12 +72,13 @@ DescriptorBuilder::~DescriptorBuilder()
     ZoneScoped;
 }
 
-DescriptorBuilder::DescriptorInfo *DescriptorBuilder::GetDescriptorInfo(u32 set)
+DescriptorBuilder::DescriptorInfo *DescriptorBuilder::GetDescriptorInfo(
+    DescriptorSetIndex set)
 {
     ZoneScoped;
 
     for (DescriptorInfo &info : m_DescriptorInfos)
-        if (info.m_SetID == set)
+        if (info.m_Set == set)
             return &info;
 
     return nullptr;
@@ -92,7 +89,7 @@ u64 DescriptorBuilder::GetDescriptorSize(DescriptorType type)
     ZoneScoped;
 
     // clang-format off
-    return DescriptorTypeToSet(type) == LR_DESCRIPTOR_BDA_BUFFER 
+    return DescriptorTypeToSet(type) == DescriptorSetIndex::Buffer 
             ? sizeof(u64) : m_pContext->GetDescriptorSize(type);
     // clang-format on
 }
@@ -103,7 +100,7 @@ void DescriptorBuilder::SetDescriptors(eastl::span<DescriptorGetInfo> elements)
 
     for (DescriptorGetInfo &descriptorInfo : elements)
     {
-        u32 targetSet = DescriptorTypeToSet(descriptorInfo.m_Type);
+        DescriptorSetIndex targetSet = DescriptorTypeToSet(descriptorInfo.m_Type);
         DescriptorInfo *pDescriptorInfo = GetDescriptorInfo(targetSet);
         u64 descriptorSize = GetDescriptorSize(descriptorInfo.m_Type);
         u64 allocatorOffset = pDescriptorInfo->m_Allocator.Size();
@@ -117,7 +114,8 @@ void DescriptorBuilder::SetDescriptors(eastl::span<DescriptorGetInfo> elements)
         }
         else
         {
-            m_pContext->GetDescriptorData(descriptorInfo, descriptorSize, pData, descriptorIndex);
+            m_pContext->GetDescriptorData(
+                descriptorInfo, descriptorSize, pData, descriptorIndex);
         }
     }
 }
@@ -141,7 +139,8 @@ u64 DescriptorBuilder::GetBufferSize(DescriptorInfoType type)
     return size;
 }
 
-void DescriptorBuilder::GetDescriptorOffsets(DescriptorInfoType type, u64 *pOffsetsOut, u32 *pDescriptorSizeOut)
+void DescriptorBuilder::GetDescriptorOffsets(
+    DescriptorInfoType type, u64 *pOffsetsOut, u32 *pDescriptorSizeOut)
 {
     ZoneScoped;
 

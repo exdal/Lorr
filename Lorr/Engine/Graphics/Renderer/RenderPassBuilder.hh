@@ -40,6 +40,15 @@ struct GraphicsRenderPassBuilder
     RenderPassCb *m_pPass = nullptr;
 };
 
+// Note: Please also set the indexes of enum to help debugging.
+enum class DescriptorSetIndex : u32
+{
+    Buffer = 0,
+    Image = 1,
+    StorageImage = 2,
+    Sampler = 3,
+};
+
 struct DescriptorBuilder
 {
     enum class DescriptorInfoType
@@ -52,22 +61,25 @@ struct DescriptorBuilder
     struct DescriptorInfo
     {
         DescriptorInfoType m_Type = DescriptorInfoType::Resource;
-        u32 m_SetID = 0;
+        DescriptorSetIndex m_Set = DescriptorSetIndex::Buffer;
         Memory::LinearAllocator m_Allocator = {};
     };
 
     DescriptorBuilder(APIContext *pContext);
     ~DescriptorBuilder();
 
-    DescriptorInfo *GetDescriptorInfo(u32 set);
+    DescriptorInfo *GetDescriptorInfo(DescriptorSetIndex set);
     u64 GetDescriptorSize(DescriptorType type);
 
     void SetDescriptors(eastl::span<DescriptorGetInfo> elements);
 
-    /// Returns size of descriptor buffer, not the actual buffer. Ex: BDA returns size of stroage buffer
+    /// Returns size of descriptor buffer, not the actual buffer. Ex: BDA returns size of
+    /// stroage buffer
     u64 GetBufferSize(DescriptorInfoType type);
-    /// Returns offset of descriptor buffer, not the actual buffer. Ex: BDA returns size of stroage buffer
-    void GetDescriptorOffsets(DescriptorInfoType type, u64 *pOffsetsOut, u32 *pDescriptorSizeOut);
+    /// Returns offset of descriptor buffer, not the actual buffer. Ex: BDA returns size
+    /// of stroage buffer
+    void GetDescriptorOffsets(
+        DescriptorInfoType type, u64 *pOffsetsOut, u32 *pDescriptorSizeOut);
 
     eastl::vector<DescriptorInfo> m_DescriptorInfos = {};
 

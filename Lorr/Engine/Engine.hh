@@ -1,9 +1,10 @@
 // Created on Wednesday May 4th 2022 by exdal
-// Last modified on Monday August 28th 2023 by exdal
+// Last modified on Tuesday August 29th 2023 by exdal
 
 #pragma once
 
 #include "Core/EventManager.hh"
+#include "Graphics/APIContext.hh"
 #include "Input/Key.hh"
 #include "Resource/ResourceManager.hh"
 #include "UI/ImGui.hh"
@@ -83,6 +84,7 @@ struct Engine
 
     EventManager<EngineEventData, 64> m_EventMan;
     Win32Window m_Window;
+    Graphics::APIContext m_APIContext;
     UI::ImGuiHandler m_ImGui;
     Resource::ResourceManager m_ResourceMan;
 

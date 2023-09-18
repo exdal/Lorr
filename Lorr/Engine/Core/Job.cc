@@ -66,6 +66,7 @@ void JobManager::Init(u32 threadCount)
 {
     ZoneScoped;
 
+    LOG_TRACE("Initializing {} worker threads.", threadCount);
     for (u32 i = 0; i < threadCount; i++)
     {
         Worker *pWorker = (Worker *)_man.m_Workers.push_back_uninitialized();

@@ -3,6 +3,7 @@
 
 #include "APIContext.hh"
 
+#include "Core/Config.hh"
 #include "Memory/MemoryUtils.hh"
 
 #include "APIAllocator.hh"
@@ -10,7 +11,7 @@
 
 namespace lr::Graphics
 {
-bool APIContext::Init(APIContextDesc *pDesc)
+bool APIContext::Init(APIContextDesc &desc, AllocatorDesc *pAllocatorOverrides)
 {
     ZoneScoped;
 
@@ -20,17 +21,30 @@ bool APIContext::Init(APIContextDesc *pDesc)
     APIAllocator::g_Handle.m_TypeAllocator.Init(kTypeMem, 0x2000);
     APIAllocator::g_Handle.m_pTypeData = Memory::Allocate<u8>(kTypeMem);
 
+    AllocatorDesc allocatorDesc = {
+        .m_MaxTLSFAllocations = CONFIG_GET_VAR(GPM_MAX_TLSF_ALLOCS),
+        .m_DescriptorMem = CONFIG_GET_VAR(GPM_DESCRIPTOR),
+        .m_BufferLinearMem = CONFIG_GET_VAR(GPM_BUFFER_LINEAR),
+        .m_BufferTLSFMem = CONFIG_GET_VAR(GPM_BUFFER_TLSF),
+        .m_BufferTLSFHostMem = CONFIG_GET_VAR(GPM_BUFFER_TLSF_HOST),
+        .m_BufferFrametimeMem = CONFIG_GET_VAR(GPM_FRAMETIME),
+        .m_ImageTLSFMem = CONFIG_GET_VAR(GPM_IMAGE_TLSF),
+    };
+
+    if (!pAllocatorOverrides)
+        pAllocatorOverrides = &allocatorDesc;
+
     m_VulkanLib = VK::LoadVulkan();
     if (!m_VulkanLib)
         return false;
 
-    if (!SetupInstance(pDesc->m_pTargetWindow))
+    if (!SetupInstance(desc.m_pTargetWindow))
         return false;
 
     if (!SetupPhysicalDevice())
         return false;
 
-    if (!SetupSurface(pDesc->m_pTargetWindow))
+    if (!SetupSurface(desc.m_pTargetWindow))
         return false;
 
     m_pPhysicalDevice->InitQueueFamilies(m_pSurface);
@@ -40,7 +54,7 @@ bool APIContext::Init(APIContextDesc *pDesc)
 
     m_pTracyCtx = TracyVkContextHostCalibrated(m_pPhysicalDevice->m_pHandle, m_pDevice);
 
-    m_pSwapChain = CreateSwapChain(pDesc->m_pTargetWindow, pDesc->m_ImageCount, nullptr);
+    m_pSwapChain = CreateSwapChain(desc.m_pTargetWindow, desc.m_ImageCount, nullptr);
     SetObjectName(m_pPhysicalDevice, "Physical Device");
     SetObjectName(m_pSurface, "Default Surface");
     SetObjectName(m_pSwapChain, "Swap Chain");
@@ -57,32 +71,30 @@ bool APIContext::Init(APIContextDesc *pDesc)
     /// CREATE ALLOCATORS ///
 
     m_Allocators.m_pDescriptor = CreateLinearAllocator(
-        MemoryFlag::HostVisibleCoherent, pDesc->m_AllocatorDesc.m_DescriptorMem * m_pSwapChain->m_FrameCount);
+        MemoryFlag::HostVisibleCoherent, pAllocatorOverrides->m_DescriptorMem * m_pSwapChain->m_FrameCount);
     SetObjectName(m_Allocators.m_pDescriptor, "Descriptor");
 
     m_Allocators.m_pBufferLinear =
-        CreateLinearAllocator(MemoryFlag::HostVisibleCoherent, pDesc->m_AllocatorDesc.m_BufferLinearMem);
+        CreateLinearAllocator(MemoryFlag::HostVisibleCoherent, pAllocatorOverrides->m_BufferLinearMem);
     SetObjectName(m_Allocators.m_pBufferLinear, "Buffer-Linear");
 
     m_Allocators.m_pBufferFrametime = CreateLinearAllocator(
         MemoryFlag::HostVisibleCoherent,
-        pDesc->m_AllocatorDesc.m_BufferFrametimeMem * m_pSwapChain->m_FrameCount);
+        pAllocatorOverrides->m_BufferFrametimeMem * m_pSwapChain->m_FrameCount);
     SetObjectName(m_Allocators.m_pBufferFrametime, "Buffer-Frametime");
 
     m_Allocators.m_pBufferTLSF = CreateTLSFAllocator(
-        MemoryFlag::Device,
-        pDesc->m_AllocatorDesc.m_BufferTLSFMem,
-        pDesc->m_AllocatorDesc.m_MaxTLSFAllocations);
+        MemoryFlag::Device, pAllocatorOverrides->m_BufferTLSFMem, pAllocatorOverrides->m_MaxTLSFAllocations);
     SetObjectName(m_Allocators.m_pBufferTLSF, "Buffer-TLSF");
 
     m_Allocators.m_pBufferTLSFHost = CreateTLSFAllocator(
         MemoryFlag::HostVisibleCoherent,
-        pDesc->m_AllocatorDesc.m_BufferTLSFHostMem,
-        pDesc->m_AllocatorDesc.m_MaxTLSFAllocations);
+        pAllocatorOverrides->m_BufferTLSFHostMem,
+        pAllocatorOverrides->m_MaxTLSFAllocations);
     SetObjectName(m_Allocators.m_pBufferTLSFHost, "Buffer-TLSF-Host");
 
     m_Allocators.m_pImageTLSF = CreateTLSFAllocator(
-        MemoryFlag::Device, pDesc->m_AllocatorDesc.m_ImageTLSFMem, pDesc->m_AllocatorDesc.m_MaxTLSFAllocations);
+        MemoryFlag::Device, pAllocatorOverrides->m_ImageTLSFMem, pAllocatorOverrides->m_MaxTLSFAllocations);
     SetObjectName(m_Allocators.m_pImageTLSF, "Image-TLSF");
 
     m_pPipelineCache = CreatePipelineCache();

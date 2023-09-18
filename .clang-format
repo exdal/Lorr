@@ -6,7 +6,7 @@ Language: Cpp
 DerivePointerAlignment: false
 PointerAlignment: Right
 
-ColumnLimit: '112'
+ColumnLimit: '90'
 
 AlignAfterOpenBracket: AlwaysBreak
 AlignEscapedNewlines: Left

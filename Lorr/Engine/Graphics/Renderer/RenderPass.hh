@@ -1,5 +1,5 @@
 // Created on Friday February 24th 2023 by exdal
-// Last modified on Monday August 28th 2023 by exdal
+// Last modified on Tuesday August 29th 2023 by exdal
 
 #pragma once
 
@@ -36,6 +36,7 @@ struct RenderPass
     virtual void Shutdown(APIContext *pContext) = 0;
 
     RenderPass *m_pPrev = nullptr;
+    RenderPass *m_pNext = nullptr;
 
     Pipeline *m_pPipeline = nullptr;
     RenderPassFlag m_Flags = RenderPassFlag::None;

@@ -1,5 +1,5 @@
 // Created on Wednesday May 4th 2022 by exdal
-// Last modified on Monday August 28th 2023 by exdal
+// Last modified on Thursday September 14th 2023 by exdal
 
 #include "Engine.hh"
 
@@ -15,34 +15,22 @@ void Engine::Init(EngineDesc &engineDesc)
 
     Logger::Init();
     Config::Init();
-    Job::JobManager::Init(CONFIG_GET_VAR(jm_worker_count));
+    Job::JobManager::Init(CONFIG_GET_VAR(JM_WORKER_COUNT));
 
     m_ResourceMan.Init();
     m_Window.Init(engineDesc.m_WindowDesc);
     m_ImGui.Init(m_Window.m_Width, m_Window.m_Height);
 
-    Graphics::ResourceAllocatorDesc gpAllocators = {
-        .m_MaxTLSFAllocations = CONFIG_GET_VAR(gpm_tlsf_allocations),
-        .m_DescriptorMem = CONFIG_GET_VAR(gpm_descriptor),
-        .m_BufferLinearMem = CONFIG_GET_VAR(gpm_buffer_linear),
-        .m_BufferTLSFMem = CONFIG_GET_VAR(gpm_buffer_tlsf),
-        .m_BufferTLSFHostMem = CONFIG_GET_VAR(gpm_buffer_tlsf_host),
-        .m_BufferFrametimeMem = CONFIG_GET_VAR(gpm_frametime),
-        .m_ImageTLSFMem = CONFIG_GET_VAR(gpm_image_tlsf),
-    };
-
     Graphics::APIContextDesc apiDesc = {
 #ifdef TRACY_ENABLE
         .m_ImageCount = 1,
 #else
-        .m_ImageCount = CONFIG_GET_VAR(api_swapchain_frames),
+        .m_ImageCount = CONFIG_GET_VAR(API_SWAPCHAIN_FRAMES),
 #endif
-        .m_pTargetWindow = &m_Window,
-        .m_AllocatorDesc = gpAllocators,
+        .m_pTargetWindow = &m_Window
     };
 
-    Graphics::APIContext *pContext = new Graphics::APIContext;
-    pContext->Init(&apiDesc);
+    m_APIContext.Init(apiDesc, nullptr);
 
     // Graphics::RenderGraphDesc renderGraphDesc = {
     //     .m_APIDesc = apiDesc,

@@ -1,23 +1,46 @@
 // Created on Saturday May 13th 2023 by exdal
-// Last modified on Tuesday August 1st 2023 by exdal
+// Last modified on Friday September 15th 2023 by exdal
 
 #pragma once
 
-#include "Crypt/FNV.hh"
-#include "Graphics/SwapChain.hh"
+#include "Crypt/CRC.hh"
 #include "Memory/MemoryUtils.hh"
 
-#define CONFIG_GET_VAR(name) Config::Get().name.Val
-#define CONFIG_DEFINE_VAR(type, name) ConfigVar<FNV64HashOf(#name), type> name
-#define CONFIG_DEFINE_VAR_DEFAULT(type, name, defVal) \
-    ConfigVar<FNV64HashOf(#name), type> name = ConfigVar<FNV64HashOf(#name), type>(defVal)
+#define _CONFIG_VAR_LIST                                                     \
+    CONFIG_DEFINE_VAR(eastl::string, RESOURCE_META_DIR, ("."));              \
+    CONFIG_DEFINE_VAR(eastl::string, RESOURCE_META_FILE, ("resmeta.lm"));    \
+    CONFIG_DEFINE_VAR(eastl::string, RESOURCE_META_COMPILED_DIR, ("meta0")); \
+    CONFIG_DEFINE_VAR(u32, RM_MAX_ALLOCS, (0x20000));                        \
+    CONFIG_DEFINE_VAR(u32, RM_MAX_MEMORY, (1024));                           \
+    CONFIG_DEFINE_VAR(u32, GPM_MAX_TLSF_ALLOCS, (0x20000));                  \
+    CONFIG_DEFINE_VAR(u32, GPM_DESCRIPTOR, (Memory::MiBToBytes(8)));         \
+    CONFIG_DEFINE_VAR(u32, GPM_BUFFER_LINEAR, (Memory::MiBToBytes(128)));    \
+    CONFIG_DEFINE_VAR(u32, GPM_BUFFER_TLSF, (Memory::MiBToBytes(1024)));     \
+    CONFIG_DEFINE_VAR(u32, GPM_BUFFER_TLSF_HOST, (Memory::MiBToBytes(128))); \
+    CONFIG_DEFINE_VAR(u32, GPM_FRAMETIME, (Memory::MiBToBytes(32)));         \
+    CONFIG_DEFINE_VAR(u32, GPM_IMAGE_TLSF, (Memory::MiBToBytes(1024)));      \
+    CONFIG_DEFINE_VAR(u32, API_SWAPCHAIN_FRAMES, (3));                       \
+    CONFIG_DEFINE_VAR(u32, JM_WORKER_COUNT, (4));
+
+#define CONFIG_DEFINE_VAR(type, name, defVal) \
+    ConfigVar<CRC32HashOf(#name), type> cfg_##name = ConfigVar<CRC32HashOf(#name), type>(defVal)
+
+#define CONFIG_GET_VAR(name) Config::Get().cfg_##name.Val
 
 namespace lr
 {
+// A simple parser for config files
+// Simple usage:
+// # This is how comments work
+// THIS_IS_A_FLAG # This comment will also work
+// THIS_IS_A_VAL_WITH_NUMBER 2
+// THIS_IS_A_VAL_WITH_STRING "This will def. \"work\""
 struct Config
 {
     static Config &Get();
     static bool Init();
+
+    bool ParseLine(eastl::string_view line);
 
     template<u64 _Hash, typename _Type>
     struct ConfigVar
@@ -28,27 +51,8 @@ struct Config
         _Type Val;
     };
 
-    CONFIG_DEFINE_VAR_DEFAULT(eastl::string_view, resource_meta_dir, (""));
-    CONFIG_DEFINE_VAR_DEFAULT(eastl::string_view, resource_meta_file, ("resmeta.lm"));
-    CONFIG_DEFINE_VAR_DEFAULT(eastl::string_view, resource_meta_compiled_dir, (""));
-    CONFIG_DEFINE_VAR_DEFAULT(eastl::string_view, resource_meta_compiled_file, ("meta0"));
-
-    CONFIG_DEFINE_VAR_DEFAULT(u32, rm_max_allocs, (0x20000));
-    CONFIG_DEFINE_VAR_DEFAULT(u32, rm_memory_mb, (1024));
-
-    CONFIG_DEFINE_VAR_DEFAULT(u32, gpm_tlsf_allocations, (0x20000));
-    CONFIG_DEFINE_VAR_DEFAULT(u32, gpm_descriptor, (Memory::MiBToBytes(8)));
-    CONFIG_DEFINE_VAR_DEFAULT(u32, gpm_buffer_linear, (Memory::MiBToBytes(128)));
-    CONFIG_DEFINE_VAR_DEFAULT(u32, gpm_buffer_tlsf, (Memory::MiBToBytes(1024)));
-    CONFIG_DEFINE_VAR_DEFAULT(u32, gpm_buffer_tlsf_host, (Memory::MiBToBytes(128)));
-    CONFIG_DEFINE_VAR_DEFAULT(u32, gpm_frametime, (Memory::MiBToBytes(32)));
-    CONFIG_DEFINE_VAR_DEFAULT(u32, gpm_image_tlsf, (Memory::MiBToBytes(1024)));
-
-    CONFIG_DEFINE_VAR_DEFAULT(u32, api_swapchain_frames, (3));
-    
-    CONFIG_DEFINE_VAR_DEFAULT(u32, jm_worker_count, (4));
+    _CONFIG_VAR_LIST
 };
 }  // namespace lr
 
-#undef CONFIG_DEFINE_VAR_DEFAULT
 #undef CONFIG_DEFINE_VAR

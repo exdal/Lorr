@@ -37,7 +37,7 @@ cmake_parse_arguments(
     if (COMPONENT_INCLUDE_PUB)
         target_include_directories(${COMPONENT_NAME} PUBLIC ${COMPONENT_INCLUDE_PUB})
     endif()
-    
-    target_compile_definitions(${COMPONENT_NAME} PUBLIC "LR_BUILD_SHARED=$<CONFIG:Debug>")
+
+    target_compile_definitions(${COMPONENT_NAME} PUBLIC "$<$<CONFIG:DEBUG>:LR_DEBUG>")
 
 endfunction(LorrComponent)

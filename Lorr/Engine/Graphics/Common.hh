@@ -337,7 +337,7 @@ enum class ShaderStage : u32
 };
 LR_TYPEOP_ARITHMETIC_INT(ShaderStage, ShaderStage, &);
 
-struct ResourceAllocatorDesc
+struct AllocatorDesc
 {
     u32 m_MaxTLSFAllocations = 0;
     u32 m_DescriptorMem = 0;

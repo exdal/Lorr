@@ -5,3 +5,5 @@ build/
 out/
 .obsidian/
 .vault/
+*.rdbg
+*.10x

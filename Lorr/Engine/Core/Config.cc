@@ -1,18 +1,121 @@
 // Created on Saturday May 13th 2023 by exdal
-// Last modified on Monday May 29th 2023 by exdal
+// Last modified on Friday September 15th 2023 by exdal
+
+#include <charconv>
 
 #include "Config.hh"
-#include "LM/Parser.hh"
+#include "IO/File.hh"
+#include "STL/String.hh"
 
-#define CONFIG_ASSIGN_VAL(type, name)                                        \
-    {                                                                        \
-        lm::VariableData *pData = category.FindVariable(FNV64HashOf(#name)); \
-        if (pData)                                                           \
-            Config::Get().name.Val = pData->As<type>();                      \
-    }
+static ls::CharRange kVarRanges[] = { { 0x41, 0x5a }, { 0x30, 0x39 }, { 0x5f, 0x5f } };
 
 namespace lr
 {
+
+constexpr static eastl::string_view kWhitespaces = " \t";
+
+template<typename _T>
+struct DataParser;
+
+template<>
+struct DataParser<eastl::string>
+{
+    eastl::string Parse(eastl::string_view str, eastl::string defaultVal)
+    {
+        ZoneScoped;
+
+        str = ls::TrimString(str, kWhitespaces);
+        for (usize i = 0; i < str.length(); i++)
+        {
+            i8 c = str[i];
+            i8 lastC = str[i - 1];
+
+            if (c == '"' && lastC != '\\')
+            {
+                if (i == 0)
+                {
+                    str.remove_prefix(1);
+                }
+                else
+                {
+                    str.remove_suffix(str.length() - i);
+                    break;
+                }
+            }
+        }
+
+        return eastl::string(str);
+    }
+};
+
+template<>
+struct DataParser<u32>
+{
+    u32 Parse(eastl::string_view str, u32 defaultVal)
+    {
+        ZoneScoped;
+
+        str = ls::TrimString(str, kWhitespaces);
+        u32 result = 0;
+        auto fc = std::from_chars(str.begin(), str.end(), result);
+        if (fc.ec != std::errc())
+            return defaultVal;
+
+        return result;
+    }
+};
+
+template<>
+struct DataParser<u64>
+{
+    u64 Parse(eastl::string_view str, u64 defaultVal)
+    {
+        ZoneScoped;
+
+        str = ls::TrimString(str, kWhitespaces);
+        u64 result = 0;
+        auto fc = std::from_chars(str.begin(), str.end(), result);
+        if (fc.ec != std::errc())
+            return defaultVal;
+
+        return result;
+    }
+};
+
+template<>
+struct DataParser<f32>
+{
+    f32 Parse(eastl::string_view str, f32 defaultVal)
+    {
+        ZoneScoped;
+
+        str = ls::TrimString(str, kWhitespaces);
+        f32 result = 0.0;
+        auto fc = std::from_chars(str.begin(), str.end(), result);
+        if (fc.ec != std::errc())
+            return defaultVal;
+
+        return result;
+    }
+};
+
+template<>
+struct DataParser<f64>
+{
+    f64 Parse(eastl::string_view str, f64 defaultVal)
+    {
+        ZoneScoped;
+
+        str = ls::TrimString(str, kWhitespaces);
+        f64 result = 0.0;
+        auto fc = std::from_chars(str.begin(), str.end(), result);
+        if (fc.ec != std::errc())
+            return defaultVal;
+
+        return result;
+    }
+};
+
 Config &Config::Get()
 {
     static Config g_Config;
@@ -23,33 +126,43 @@ bool Config::Init()
 {
     ZoneScoped;
 
-    lm::Result result = {};
-    lm::Init(&result);
-    if (!lm::ParseFromFile(&result, "config.lm"))
+    FileView f("config.cfg");
+    if (!f.IsOK())
     {
-        LOG_CRITICAL("Config file not found!");
+        LOG_WARN("Config file not found, overriding defaults.");
         return false;
     }
 
-    lm::Category &category = result.m_GlobalCategory;
+    eastl::string data;
+    f.Read(data, f.Size());
 
-    CONFIG_ASSIGN_VAL(char *, resource_meta_dir);
-    CONFIG_ASSIGN_VAL(char *, resource_meta_file);
-    CONFIG_ASSIGN_VAL(char *, resource_meta_compiled_dir);
-    CONFIG_ASSIGN_VAL(char *, resource_meta_compiled_file);
-    
-    CONFIG_ASSIGN_VAL(u32, gpm_tlsf_allocations);
-    CONFIG_ASSIGN_VAL(u32, gpm_descriptor);
-    CONFIG_ASSIGN_VAL(u32, gpm_buffer_linear);
-    CONFIG_ASSIGN_VAL(u32, gpm_buffer_tlsf);
-    CONFIG_ASSIGN_VAL(u32, gpm_buffer_tlsf_host);
-    CONFIG_ASSIGN_VAL(u32, gpm_frametime);
-    CONFIG_ASSIGN_VAL(u32, gpm_image_tlsf);
-    
-    CONFIG_ASSIGN_VAL(u32, api_swapchain_frames);
-    
-    CONFIG_ASSIGN_VAL(u32, jm_worker_count);
+    eastl::string_view line;
+    while (ls::GetLine(eastl::string_view(data), line))
+        Config::Get().ParseLine(line);
 
     return true;
 }
+
+#define CONFIG_DEFINE_VAR(type, name, defVal)                                         \
+    case CRC32HashOf(#name):                                                          \
+        cfg_##name.Val = DataParser<type>().Parse(line.substr(var.length()), defVal); \
+        break;
+
+bool Config::ParseLine(eastl::string_view line)
+{
+    ZoneScoped;
+
+    line = ls::TrimString(line, kWhitespaces);
+
+    eastl::string_view var = ls::TrimForwardRanged(line, kVarRanges);
+    switch (Hash::CRC32String(Hash::CRC32DataAligned, var))
+    {
+        _CONFIG_VAR_LIST;
+        default:
+            break;
+    }
+
+    return true;
+}
+
 }  // namespace lr

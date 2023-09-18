@@ -38,7 +38,6 @@ struct APIContextDesc
     APIFlag m_Flags = APIFlag::None;
     u32 m_ImageCount = 1;
     BaseWindow *m_pTargetWindow = nullptr;
-    ResourceAllocatorDesc m_AllocatorDesc = {};
 };
 
 struct SubmitDesc
@@ -51,7 +50,7 @@ struct SubmitDesc
 
 struct APIContext
 {
-    bool Init(APIContextDesc *pDesc);
+    bool Init(APIContextDesc &desc, AllocatorDesc *pAllocatorOverrides);
 
     /// COMMAND ///
     u32 GetQueueIndex(CommandType type);

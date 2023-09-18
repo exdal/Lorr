@@ -37,3 +37,6 @@
 [submodule "Vendor/EA/EAThread"]
 	path = Vendor/EA/EAThread
 	url = https://github.com/exdal/EAThread.git
+[submodule "Vendor/Utility/simdjson"]
+	path = Vendor/Utility/simdjson
+	url = https://github.com/simdjson/simdjson.git

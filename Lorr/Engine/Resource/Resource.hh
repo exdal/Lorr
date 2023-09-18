@@ -1,7 +1,7 @@
 // Created on Thursday November 10th 2022 by exdal
-// Last modified on Tuesday May 23rd 2023 by exdal
-
 #pragma once
+
+#include "Identifier.hh"
 
 #include "Graphics/Shader.hh"
 
@@ -9,27 +9,27 @@ namespace lr::Resource
 {
 enum class ResourceType : u32
 {
-    Data,  // Any data that is not fitting for anything under, for example world save, etc...
+    Data,  // Any data that is not fitting for anything under, ie, world
     Shader,
     Texture,
     Model,
 };
 
 template<typename _Data, ResourceType _Type>
-struct ResourceData
+struct Resource
 {
-    typedef _Data type;
+    static constexpr ResourceType kType = _Type;
+    using DataType_t = _Data;
 
     _Data &get() { return m_Data; }
     u64 &size() { return m_Size; }
-    ResourceType resourceType() { return m_Type; }
 
-    ResourceType m_Type = _Type;
+    Identifier m_Identifier;
     u64 m_Size = 0;
     _Data m_Data = {};
 };
 
-using ShaderResource = Resource::ResourceData<Graphics::ShaderCompileOutput, Resource::ResourceType::Shader>;
+using ShaderResource = Resource<Graphics::ShaderCompileOutput, ResourceType::Shader>;
 
 template<typename _Resource>
 struct ResourceWrapper;

@@ -1,9 +1,8 @@
 // Created on Friday November 18th 2022 by exdal
-// Last modified on Monday August 7th 2023 by exdal
+// Last modified on Tuesday August 29th 2023 by exdal
 
 #include "LinearAllocator.hh"
 
-#include "Core/BackTrace.hh"
 #include "Memory/MemoryUtils.hh"
 
 namespace lr::Memory
@@ -94,14 +93,16 @@ AllocationRegion *LinearAllocator::AllocateRegion()
     u8 *pData = Memory::Allocate<u8>(sizeof(AllocationRegion) + m_RegionSize);
 
     AllocationRegion *pLastRegion = m_View.m_pFirstRegion;
-    while (pLastRegion != nullptr && pLastRegion->m_pNext)
+    while (pLastRegion != nullptr && pLastRegion->m_pNext != nullptr)
         pLastRegion = pLastRegion->m_pNext;
 
     AllocationRegion *pRegion = (AllocationRegion *)pData;
-    pRegion->m_pNext = pLastRegion;
+    pRegion->m_pNext = nullptr;
     pRegion->m_Capacity = m_RegionSize;
     pRegion->m_Size = 0;
     pRegion->m_pData = pData + sizeof(AllocationRegion);
+    if (pLastRegion)
+        pLastRegion->m_pNext = pRegion;
 
     return pRegion;
 }

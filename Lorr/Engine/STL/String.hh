@@ -1,10 +1,33 @@
 // Created on Friday May 19th 2023 by exdal
-// Last modified on Monday May 22nd 2023 by exdal
+// Last modified on Sunday September 10th 2023 by exdal
 
 #pragma once
 
 namespace ls
 {
+struct CharRange
+{
+    u32 min;
+    u32 max;
+};
+
+constexpr eastl::string_view TrimForwardRanged(eastl::string_view str, eastl::span<CharRange> ranges)
+{
+    for (usize i = 0; i < str.length(); i++)
+    {
+        i8 c = str[i];
+        bool inRange = false;
+        for (CharRange &range : ranges)
+            if (c >= range.min && c <= range.max)
+                inRange = true;
+
+        if (!inRange)
+            return str.substr(0, i);
+    }
+
+    return str;
+}
+
 constexpr eastl::string_view TrimFileName(eastl::string_view directory)
 {
     uptr namePos = directory.find_last_of("\\/");
@@ -40,7 +63,7 @@ constexpr bool GetLine(eastl::string_view str, eastl::string_view &line)
 
     u64 offset = 0;
     if (!line.empty())
-        offset = line.end() - str.begin();
+        offset = (u64)line.data() + line.length() - (u64)str.data();
 
     u64 beginOff = str.find_first_not_of(kTrimChars, offset);
     if (beginOff != -1)
@@ -50,7 +73,7 @@ constexpr bool GetLine(eastl::string_view str, eastl::string_view &line)
         line = TrimString(line, kTrimChars);
 
         return true;
-    }
+    } 
 
     return false;
 }

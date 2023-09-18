@@ -1,9 +1,10 @@
 // Created on Sunday March 19th 2023 by exdal
-// Last modified on Monday August 28th 2023 by exdal
+// Last modified on Tuesday August 29th 2023 by exdal
 
 #pragma once
 
 #include "Memory/Allocator/LinearAllocator.hh"
+#include "Memory/MemoryUtils.hh"
 #include "Window/BaseWindow.hh"
 
 #include "APIAllocator.hh"

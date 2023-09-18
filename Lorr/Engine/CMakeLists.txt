@@ -14,7 +14,10 @@ set(LORR_VENDOR
     SPIRV 
     Vulkan-Headers
     imgui
+    simdjson::simdjson
     fastgltf
+
+    xxhash
 )
 
 # Core

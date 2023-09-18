@@ -14,7 +14,10 @@ add_subdirectory(Utility/DirectXMath)
 add_subdirectory(Utility/lw)
 
 option(TRACY_ENABLE "Enable profiling" OFF)
+set(FASTGLTF_DOWNLOAD_SIMDJSON OFF)
+
 add_subdirectory(Utility/tracy)
+add_subdirectory(Utility/simdjson)
 add_subdirectory(Utility/fastgltf)
 
 set(SPIRV_SKIP_TESTS ON)
@@ -24,3 +27,5 @@ set(ENABLE_HLSL OFF)
 add_subdirectory(Graphics/glslang)
 add_subdirectory(Graphics/imgui-v)
 add_subdirectory(Graphics/Vulkan-Headers)
+
+add_subdirectory(xxh)

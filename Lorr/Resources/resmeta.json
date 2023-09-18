@@ -1,0 +1,16 @@
+{
+    "version": 1,
+    "shaders": {
+        "files": [
+            "shaders/imgui.vs",
+            "shaders/imgui.fs",
+            "shaders/bindless_test.vs",
+            "shaders/bindless_test.fs"
+        ]
+    },
+    "models": {
+        "files": [
+            "scenes/box.glb"
+        ]
+    }
+}

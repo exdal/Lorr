@@ -1,15 +1,19 @@
 // Created on Monday May 15th 2023 by exdal
-// Last modified on Sunday July 16th 2023 by exdal
+// Last modified on Friday September 15th 2023 by exdal
 
 #include "ResourceManager.hh"
-#include "Resource/Parser.hh"
+
+#include <simdjson.h>
+
+#include "Parser.hh"
 
 #include "Core/Config.hh"
-#include "LM/Parser.hh"
 #include "STL/String.hh"
 
 namespace lr::Resource
 {
+constexpr static u32 kMinVersion = 1;
+
 void ResourceManager::Init()
 {
     ZoneScoped;
@@ -17,50 +21,37 @@ void ResourceManager::Init()
     LOG_TRACE("Initializing resources...");
 
     m_Allocator.Init({
-        .m_DataSize = CONFIG_GET_VAR(rm_memory_mb),
-        .m_BlockCount = CONFIG_GET_VAR(rm_max_allocs),
+        .m_DataSize = CONFIG_GET_VAR(RM_MAX_MEMORY),
+        .m_BlockCount = CONFIG_GET_VAR(RM_MAX_ALLOCS),
     });
 
     Graphics::ShaderCompiler::Init();
 
-    eastl::string_view workingDir = CONFIG_GET_VAR(resource_meta_dir);
+    eastl::string_view workingDir = CONFIG_GET_VAR(RESOURCE_META_DIR);
+    eastl::string jsonFile =
+        _FMT("{}/{}", workingDir, CONFIG_GET_VAR(RESOURCE_META_FILE));
 
-    lm::Result result = {};
-    lm::Init(&result);
-    if (!lm::ParseFromFile(&result, _FMT("{}/{}", workingDir, CONFIG_GET_VAR(resource_meta_file))))
+    simdjson::dom::parser parser;
+    simdjson::dom::element elements;
+    auto error = parser.load(jsonFile.c_str()).get(elements);
+    if (error)
     {
-        LOG_CRITICAL("ResourceMeta file not found!");
+        LOG_ERROR(
+            "Failed to open resource meta file, {}.", simdjson::error_message(error));
         return;
     }
 
-    /// META ///
-    lm::Category &meta = result.GetCategory("Meta");
-
     /// SHADERS ///
     LOG_TRACE("Loading Shaders...");
-
-    lm::Category &shaders = result.GetCategory("Meta.Shaders");
-    eastl::span<char *> shaderFiles;
-    shaders.GetArray<char *>("Files", shaderFiles);
-
-    for (char *&pShaderPath : shaderFiles)
+    simdjson::dom::array files = elements["shaders"]["files"].get_array();
+    for (auto file : files)
     {
-        eastl::string resourceName = _FMT("shader://{}", ls::TrimFileName(pShaderPath));
-        LOG_TRACE("Compiling shader '{}'...", resourceName);
+        eastl::string_view path(file.get_c_str(), file.get_string_length());
+        Identifier id(_FMT("shader://{}", path));
 
-        FileView file(_FMT("{}/{}", workingDir, pShaderPath));
-        eastl::string code;
-        file.Read(code, file.Size());
+        LOG_TRACE("Shader file: {}", id.m_NameHash);
 
-        ShaderResource outResource = {};
-        if (!Parser::ParseGLSL(code, outResource, workingDir))
-        {
-            return;
-        }
-
-        LOG_TRACE("Compiled shader '{}', SPIR-V module: '{}'", resourceName, outResource.get().m_pShader);
-
-        Add(resourceName, outResource);
+        // TODO: Better parsing for resources.
     }
 }
 

@@ -1,11 +1,9 @@
 // Created on Friday November 18th 2022 by exdal
-// Last modified on Monday August 7th 2023 by exdal
+// Last modified on Tuesday August 29th 2023 by exdal
 
 #pragma once
 
 #include <EASTL/atomic.h>
-
-#include "Memory/MemoryUtils.hh"
 
 namespace lr::Memory
 {

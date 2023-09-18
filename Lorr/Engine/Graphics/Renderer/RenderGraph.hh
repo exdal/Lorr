@@ -1,5 +1,5 @@
 // Created on Friday February 24th 2023 by exdal
-// Last modified on Saturday August 26th 2023 by exdal
+// Last modified on Tuesday August 29th 2023 by exdal
 
 #pragma once
 
@@ -31,12 +31,27 @@ struct RenderGraph
         pPass->m_Hash = Hash::CRC32String(Hash::CRC32Data_SW, name);
         pPass->m_Flags = flags;
 
+        if (m_pHeadPass == nullptr)
+        {
+            pPass = m_pHeadPass;
+            pPass->m_pPrev = nullptr;
+        }
+        else
+        {
+            RenderPass *pLastPass = m_pHeadPass;
+            while (pLastPass != nullptr && pLastPass->m_pNext != nullptr)
+                pLastPass = pLastPass->m_pNext;
+
+            pLastPass->m_pNext = pPass;
+            pPass->m_pPrev = pLastPass;
+        }
+
         return pPass;
     }
 
     void Prepare();
 
-    RenderPass *m_pHeadRenderPass = nullptr;
+    RenderPass *m_pHeadPass = nullptr;
 
     Buffer *m_pResourceBuffer = nullptr;  // memSize * n
     Buffer *m_pSamplerBuffer = nullptr;   // memSize * n

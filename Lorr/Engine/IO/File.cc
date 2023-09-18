@@ -1,5 +1,5 @@
 // Created on Thursday September 22nd 2022 by exdal
-// Last modified on Sunday July 16th 2023 by exdal
+// Last modified on Thursday September 14th 2023 by exdal
 #include "File.hh"
 
 // #include "BufferStream.hh"
@@ -54,7 +54,7 @@ bool FileView::Read(eastl::string &str, u64 length)
 {
     ZoneScoped;
 
-    str.reserve(length);
+    str.resize(length);
     return Read((u8 *)str.data(), length);
 }
 

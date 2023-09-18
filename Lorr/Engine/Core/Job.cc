@@ -21,7 +21,9 @@ static iptr WorkerFn(void *pData)
             ZoneScoped;
 
             usize jobID = _man.PopJob();
+            _man.SetBusy(pThis);
             _man.m_pJobs[jobID]();
+            _man.SetIdle(pThis);
 
             continue;
         }
@@ -73,6 +75,8 @@ void JobManager::Schedule(JobFn fn)
 
 usize JobManager::PopJob()
 {
+    ZoneScoped;
+
     u64 mask = _man.m_JobsMask.load(eastl::memory_order_acquire);
     usize jobID = _tzcnt_u64(mask);
     mask &= ~(1i64 << jobID);
@@ -83,13 +87,32 @@ usize JobManager::PopJob()
 
 void JobManager::WaitForAll()
 {
-    while (_man.m_JobsMask.load(eastl::memory_order_relaxed) != 0)
+    while (_man.m_JobsMask.load(eastl::memory_order_relaxed) != 0
+           || _man.m_StatusMask.load(eastl::memory_order_relaxed) != 0)
         ;
 }
 
 bool JobManager::JobAvailable()
 {
     return __builtin_popcountll(_man.m_JobsMask.load(eastl::memory_order_relaxed));
+}
+
+void JobManager::SetBusy(Worker *pWorker)
+{
+    ZoneScoped;
+
+    u64 mask = _man.m_StatusMask.load(eastl::memory_order_acquire);
+    mask |= 1i64 << pWorker->m_ID;
+    _man.m_StatusMask.store(mask, eastl::memory_order_release);
+}
+
+void JobManager::SetIdle(Worker *pWorker)
+{
+    ZoneScoped;
+
+    u64 mask = _man.m_StatusMask.load(eastl::memory_order_acquire);
+    mask &= ~(1i64 << pWorker->m_ID);
+    _man.m_StatusMask.store(mask, eastl::memory_order_release);
 }
 
 JobManager &JobManager::Get()

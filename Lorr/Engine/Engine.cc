@@ -15,32 +15,21 @@ void Engine::Init(EngineDesc &engineDesc)
 
     Logger::Init();
     Config::Init();
-
-    for (u32 i = 0; i < 63; i++)
-    {
-        Job::JobManager::Schedule(
-            [i]()
-            {
-                LOG_TRACE("Processing {}", i);
-            });
-    }
-
     Job::JobManager::Init(CONFIG_GET_VAR(JM_WORKER_COUNT));
+    m_ResourceMan.Init();
+    m_Window.Init(engineDesc.m_WindowDesc);
+    m_ImGui.Init(m_Window.m_Width, m_Window.m_Height);
 
-    // m_ResourceMan.Init();
-    // m_Window.Init(engineDesc.m_WindowDesc);
-    // m_ImGui.Init(m_Window.m_Width, m_Window.m_Height);
-    //
-    // Graphics::APIContextDesc apiDesc = {
-    // #ifdef TRACY_ENABLE
-    //     .m_ImageCount = 1,
-    // #else
-    //     .m_ImageCount = CONFIG_GET_VAR(API_SWAPCHAIN_FRAMES),
-    // #endif
-    //     .m_pTargetWindow = &m_Window
-    // };
-    //
-    // m_APIContext.Init(apiDesc, nullptr);
+    Graphics::APIContextDesc apiDesc = {
+#ifdef TRACY_ENABLE
+        .m_ImageCount = 1,
+#else
+        .m_ImageCount = CONFIG_GET_VAR(API_SWAPCHAIN_FRAMES),
+#endif
+        .m_pTargetWindow = &m_Window
+    };
+
+    m_APIContext.Init(apiDesc, nullptr);
 
     // Graphics::RenderGraphDesc renderGraphDesc = {
     //     .m_APIDesc = apiDesc,

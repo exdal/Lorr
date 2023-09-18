@@ -25,6 +25,8 @@ struct JobManager
     static usize PopJob();
     static void WaitForAll();
     static bool JobAvailable();
+    static void SetBusy(Worker *pWorker);
+    static void SetIdle(Worker *pWorker);
     static JobManager &Get();
 
     eastl::fixed_vector<Worker, 16, false> m_Workers = {};
@@ -32,5 +34,6 @@ struct JobManager
     constexpr static usize kMaxJobSize = 64;
     JobFn m_pJobs[kMaxJobSize] = {};
     eastl::atomic<u64> m_JobsMask = 0;
+    eastl::atomic<u64> m_StatusMask = 0;
 };
 }  // namespace lr::Job

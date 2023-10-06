@@ -6,7 +6,6 @@
 #include "Core/EventManager.hh"
 #include "Graphics/APIContext.hh"
 #include "Input/Key.hh"
-#include "Resource/ResourceManager.hh"
 #include "UI/ImGui.hh"
 #include "Window/Win32/Win32Window.hh"
 
@@ -86,11 +85,9 @@ struct Engine
     Win32Window m_Window;
     Graphics::APIContext m_APIContext;
     UI::ImGuiHandler m_ImGui;
-    Resource::ResourceManager m_ResourceMan;
 
     bool m_ShuttingDown = false;
 
-    static auto GetResourceMan() { return &Get()->m_ResourceMan; }
     static auto GetWindow() { return &Get()->m_Window; }
     // static auto GetRenderGraph() { return &Get()->m_RenderGraph; }
     static Engine *Get();

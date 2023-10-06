@@ -20,16 +20,11 @@ typedef signed char i8;
 
 #include <tracy/Tracy.hpp>
 
-#include <EASTL/atomic.h>
-#include <EASTL/array.h>
-#include <EASTL/vector.h>
-#include <EASTL/fixed_vector.h>
-#include <EASTL/string.h>
 #include <EASTL/string_view.h>
 #include <EASTL/span.h>
+#include <EASTL/array.h>
 
 #include <DirectXMath.h>
-#include <DirectXPackedVector.h>
 
 #ifdef PTR_SIZE
 #undef PTR_SIZE
@@ -47,7 +42,6 @@ typedef u32 usize;
 #endif
 
 using namespace DirectX;
-using namespace PackedVector;
 
 #include "Utils/TypeOperators.hh"
 #include "Core/Logger/Format.hh"

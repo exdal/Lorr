@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <EASTL/atomic.h>
+
 namespace lr::Memory
 {
 template<typename _Type, u32 _Count>

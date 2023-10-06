@@ -5,6 +5,7 @@
 
 #include <EASTL/fixed_string.h>
 
+#include "RenderPassResource.hh"
 #include "Graphics/APIContext.hh"
 
 namespace lr::Graphics
@@ -28,10 +29,10 @@ enum class RenderPassFlag : u32
     SkipRendering = 1 << 3,
 };
 
-struct RenderPassBuilder;
+struct RenderGraph;
 struct RenderPass
 {
-    virtual void Setup(APIContext *pContext, RenderPassBuilder *pBuilder) = 0;
+    virtual void Setup(APIContext *pContext, RenderGraph *pGraph) = 0;
     virtual void Execute(APIContext *pContext, CommandList *pList) = 0;
     virtual void Shutdown(APIContext *pContext) = 0;
 
@@ -41,14 +42,17 @@ struct RenderPass
     Pipeline *m_pPipeline = nullptr;
     RenderPassFlag m_Flags = RenderPassFlag::None;
 
-    u32 m_Hash = 0;
-#if _DEBUG && 1
+    u64 m_Hash = 0;
+#if LR_DEBUG
     eastl::string m_Name;
 #endif
+
+    // Keep it on bottom
+    eastl::span<RenderPassResource> m_Resources;
 };
 
 template<typename _Data>
-using RenderPassSetupFn = eastl::function<void(APIContext *, _Data &, RenderPassBuilder &)>;
+using RenderPassSetupFn = eastl::function<void(APIContext *, _Data &, RenderGraph &)>;
 template<typename _Data>
 using RenderPassExecuteFn = eastl::function<void(APIContext *, _Data &, CommandList *)>;
 using RenderPassShutdownFn = eastl::function<void(APIContext *)>;
@@ -59,11 +63,11 @@ struct GraphicsRenderPassCallback : RenderPass, _Data
     using PipelineBuildInfo_t = GraphicsPipelineBuildInfo;
     using PassData_t = _Data;
 
-    void Setup(APIContext *pContext, RenderPassBuilder *pBuilder) override
+    void Setup(APIContext *pContext, RenderGraph *pGraph) override
     {
         ZoneScoped;
 
-        m_fSetup(pContext, (_Data &)(*this), (*pBuilder));
+        m_fSetup(pContext, (_Data &)(*this), (*pGraph));
     }
 
     void Execute(APIContext *pContext, CommandList *pList) override

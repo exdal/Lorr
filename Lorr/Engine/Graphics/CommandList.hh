@@ -11,55 +11,6 @@
 
 namespace lr::Graphics
 {
-struct BindlessLayout
-{
-    using DescriptorIDType = u32;
-    static constexpr u32 kDescriptorIDSize = sizeof(DescriptorIDType);
-    static constexpr u32 kDescriptorIDCount = 8;
-    static constexpr u32 kConstantDataOffset = kDescriptorIDCount * kDescriptorIDSize;
-
-    struct Binding
-    {
-        Binding(u32 index, Buffer *pBuffer)
-            : m_Index(index),
-              m_DescriptorIndex(pBuffer->m_DescriptorIndex){};
-        Binding(u32 index, Image *pImage)
-            : m_Index(index),
-              m_DescriptorIndex(pImage->m_DescriptorIndex){};
-        Binding(u32 index, Sampler *pSampler)
-            : m_Index(index),
-              m_DescriptorIndex(pSampler->m_DescriptorIndex){};
-
-        u32 m_Index = 0;
-        u32 m_DescriptorIndex = 0;
-    };
-
-    BindlessLayout(eastl::span<Binding> bindings)
-    {
-        memset(&m_Data[0], ~0, m_Data.size() * kDescriptorIDSize);  // Debugging purposes
-
-        u32 lastBinding = ~0;
-        for (const Binding &binding : bindings)
-        {
-            m_Count++;
-            lastBinding = eastl::min(lastBinding, binding.m_Index);
-            m_Data[binding.m_Index] = binding.m_DescriptorIndex;
-        }
-
-        m_Offset = Memory::AlignUp(lastBinding * kDescriptorIDSize, 4);
-    }
-
-    u32 size() { return m_Count * kDescriptorIDSize; };
-    const u32 size() const { return m_Count * kDescriptorIDSize; };
-    const DescriptorIDType *data() const { return m_Data.data(); };
-
-    u16 m_Offset = 0;
-    u16 m_Count = 0;
-    eastl::array<DescriptorIDType, kDescriptorIDCount> m_Data = {};
-};
-
-
-
 struct DescriptorBufferBindInfo : VkDescriptorBufferBindingInfoEXT
 {
     DescriptorBufferBindInfo(Buffer *pBuffer, BufferUsage bufferUsage);
@@ -76,12 +27,21 @@ enum class AttachmentOp : u32
 struct RenderingAttachment : VkRenderingAttachmentInfo
 {
     RenderingAttachment(
-        Image *pImage, ImageLayout layout, AttachmentOp loadOp, AttachmentOp storeOp, ColorClearValue clearVal);
+        Image *pImage,
+        ImageLayout layout,
+        AttachmentOp loadOp,
+        AttachmentOp storeOp,
+        ColorClearValue clearVal);
     RenderingAttachment(
-        Image *pImage, ImageLayout layout, AttachmentOp loadOp, AttachmentOp storeOp, DepthClearValue clearVal);
+        Image *pImage,
+        ImageLayout layout,
+        AttachmentOp loadOp,
+        AttachmentOp storeOp,
+        DepthClearValue clearVal);
 
 private:
-    void InitImage(Image *pImage, ImageLayout layout, AttachmentOp loadOp, AttachmentOp storeOp);
+    void InitImage(
+        Image *pImage, ImageLayout layout, AttachmentOp loadOp, AttachmentOp storeOp);
 };
 
 struct RenderingBeginDesc
@@ -167,13 +127,23 @@ struct CommandList : APIObject<VK_OBJECT_TYPE_COMMAND_BUFFER>
     void SetPipelineBarrier(DependencyInfo *pDependencyInfo);
 
     /// Buffer Commands
-    void CopyBufferToBuffer(Buffer *pSource, Buffer *pDest, u64 srcOff, u64 dstOff, u64 size);
-    void CopyBufferToImage(Buffer *pSource, Image *pDest, ImageUsage aspectUsage, ImageLayout layout);
+    void CopyBufferToBuffer(
+        Buffer *pSource, Buffer *pDest, u64 srcOff, u64 dstOff, u64 size);
+    void CopyBufferToImage(
+        Buffer *pSource, Image *pDest, ImageUsage aspectUsage, ImageLayout layout);
 
     /// Draw Commands
-    void Draw(u32 vertexCount, u32 firstVertex = 0, u32 instanceCount = 1, u32 firstInstance = 0);
+    void Draw(
+        u32 vertexCount,
+        u32 firstVertex = 0,
+        u32 instanceCount = 1,
+        u32 firstInstance = 0);
     void DrawIndexed(
-        u32 indexCount, u32 firstIndex = 0, u32 vertexOffset = 0, u32 instanceCount = 1, u32 firstInstance = 0);
+        u32 indexCount,
+        u32 firstIndex = 0,
+        u32 vertexOffset = 0,
+        u32 instanceCount = 1,
+        u32 firstInstance = 0);
     void Dispatch(u32 groupX, u32 groupY, u32 groupZ);
 
     /// Pipeline States
@@ -183,11 +153,7 @@ struct CommandList : APIObject<VK_OBJECT_TYPE_COMMAND_BUFFER>
 
     void SetPipeline(Pipeline *pPipeline);
     void SetPushConstants(
-        void *pData,
-        u32 dataSize,
-        u32 offset = BindlessLayout::kConstantDataOffset,
-        ShaderStage stage = ShaderStage::All);
-    void SetBindlessLayout(BindlessLayout &layout);
+        void *pData, u32 dataSize, u32 offset, ShaderStage stage = ShaderStage::All);
     void SetDescriptorBuffers(eastl::span<DescriptorBufferBindInfo> bindingInfos);
     void SetDescriptorBufferOffsets(
         u32 firstSet, u32 setCount, eastl::span<u32> indices, eastl::span<u64> offsets);

@@ -6,6 +6,7 @@
 #include "Core/Config.hh"
 #include "Core/Job.hh"
 #include "Graphics/APIContext.hh"
+#include "Graphics/Renderer/RenderGraph.hh"
 
 namespace lr
 {
@@ -16,7 +17,6 @@ void Engine::Init(EngineDesc &engineDesc)
     Logger::Init();
     Config::Init();
     Job::JobManager::Init(CONFIG_GET_VAR(JM_WORKER_COUNT));
-    m_ResourceMan.Init();
     m_Window.Init(engineDesc.m_WindowDesc);
     m_ImGui.Init(m_Window.m_Width, m_Window.m_Height);
 
@@ -30,12 +30,16 @@ void Engine::Init(EngineDesc &engineDesc)
     };
 
     m_APIContext.Init(apiDesc, nullptr);
+    Graphics::RenderGraph graph = {};
+    graph.Init(&m_APIContext);
 
-    // Graphics::RenderGraphDesc renderGraphDesc = {
-    //     .m_APIDesc = apiDesc,
-    // };
-    // m_RenderGraph.Init(&renderGraphDesc);
-    // m_RenderGraph.Prepare();
+    struct PassData
+    {
+        u32 _empty;
+    };
+    graph.CreateGraphicsPass<PassData>("sample");
+    graph.CreateGraphicsPass<PassData>("sample2");
+    graph.CreateGraphicsPass<PassData>("sample3");
 }
 
 void Engine::PushEvent(Event event, EngineEventData &data)

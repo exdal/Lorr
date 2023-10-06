@@ -343,13 +343,6 @@ void CommandList::SetPushConstants(void *pData, u32 dataSize, u32 offset, Shader
         m_pHandle, m_pPipeline->m_pLayout->m_pHandle, (VkShaderStageFlags)stage, offset, dataSize, pData);
 }
 
-void CommandList::SetBindlessLayout(BindlessLayout &layout)
-{
-    ZoneScoped;
-
-    SetPushConstants((void *)layout.data(), layout.size(), layout.m_Offset);
-}
-
 void CommandList::SetDescriptorBuffers(eastl::span<DescriptorBufferBindInfo> bindingInfos)
 {
     ZoneScoped;

@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <EASTL/fixed_vector.h>
+
 #include "APIResource.hh"
 #include "Device.hh"
 #include "CommandQueue.hh"
@@ -56,7 +58,8 @@ struct APIContext
     u32 GetQueueIndex(CommandType type);
     CommandQueue *CreateCommandQueue(CommandType type);
     CommandAllocator *CreateCommandAllocator(CommandType type, bool resetLists);
-    CommandList *CreateCommandList(CommandType type, CommandAllocator *pAllocator = nullptr);
+    CommandList *CreateCommandList(
+        CommandType type, CommandAllocator *pAllocator = nullptr);
 
     void AllocateCommandList(CommandList *pList, CommandAllocator *pAllocator);
     void BeginCommandList(CommandList *pList);
@@ -71,20 +74,26 @@ struct APIContext
 
     Semaphore *CreateSemaphore(u32 initialValue = 0, bool binary = true);
     void DeleteSemaphore(Semaphore *pSemaphore);
-    void WaitForSemaphore(Semaphore *pSemaphore, u64 desiredValue, u64 timeout = UINT64_MAX);
+    void WaitForSemaphore(
+        Semaphore *pSemaphore, u64 desiredValue, u64 timeout = UINT64_MAX);
 
     /// PIPELINE ///
-    VkPipelineCache CreatePipelineCache(u32 initialDataSize = 0, void *pInitialData = nullptr);
+    VkPipelineCache CreatePipelineCache(
+        u32 initialDataSize = 0, void *pInitialData = nullptr);
     PipelineLayout *CreatePipelineLayout(
-        eastl::span<DescriptorSetLayout *> layouts, eastl::span<PushConstantDesc> pushConstants);
+        eastl::span<DescriptorSetLayout *> layouts,
+        eastl::span<PushConstantDesc> pushConstants);
 
     Pipeline *CreateGraphicsPipeline(GraphicsPipelineBuildInfo *pBuildInfo);
     Pipeline *CreateComputePipeline(ComputePipelineBuildInfo *pBuildInfo);
 
     /// SWAPCHAIN ///
-    SwapChain *CreateSwapChain(BaseWindow *pWindow, u32 imageCount, SwapChain *pOldSwapChain);
+    SwapChain *CreateSwapChain(
+        BaseWindow *pWindow, u32 imageCount, SwapChain *pOldSwapChain);
     void DeleteSwapChain(SwapChain *pSwapChain, bool keepSelf);
     void ResizeSwapChain(BaseWindow *pWindow);
+    // GetSwapChain is required since we can use headless rendering
+    // If required
     SwapChain *GetSwapChain();
 
     void WaitForWork();
@@ -97,10 +106,12 @@ struct APIContext
 
     VkDeviceMemory CreateDeviceMemory(MemoryFlag memoryFlags, u64 memorySize);
     LinearDeviceMemory *CreateLinearAllocator(MemoryFlag memoryFlags, u64 memorySize);
-    TLSFDeviceMemory *CreateTLSFAllocator(MemoryFlag memoryFlags, u64 memorySize, u32 maxAllocs);
+    TLSFDeviceMemory *CreateTLSFAllocator(
+        MemoryFlag memoryFlags, u64 memorySize, u32 maxAllocs);
     void DeleteAllocator(DeviceMemory *pDeviceMemory);
     u64 OffsetFrametimeMemory(u64 size, u64 offset);
-    void AllocateBufferMemory(ResourceAllocator allocator, Buffer *pBuffer, u64 memorySize);
+    void AllocateBufferMemory(
+        ResourceAllocator allocator, Buffer *pBuffer, u64 memorySize);
     void AllocateImageMemory(ResourceAllocator allocator, Image *pImage, u64 memorySize);
 
     // * Shaders * //
@@ -118,7 +129,7 @@ struct APIContext
     u64 GetDescriptorSize(DescriptorType type);
     u64 GetDescriptorSizeAligned(DescriptorType type);
     u64 AlignUpDescriptorOffset(u64 offset);
-    void GetDescriptorData(const DescriptorGetInfo &info, u64 dataSize, void *pDataOut, u32 descriptorIdx);
+    void GetDescriptorData(const DescriptorGetInfo &info, u64 dataSize, void *pDataOut);
 
     // * Buffers * //
     Buffer *CreateBuffer(BufferDesc *pDesc);
@@ -140,7 +151,8 @@ struct APIContext
     void SetObjectName(_Type *pType, eastl::string_view name)
     {
         static_assert(
-            eastl::is_base_of<APIObject<_Type::kObjectType>, _Type>(), "_Type is not base of APIObject");
+            eastl::is_base_of<APIObject<_Type::kObjectType>, _Type>(),
+            "_Type is not base of APIObject");
 
 #if _DEBUG
         VkDebugUtilsObjectNameInfoEXT objectNameInfo = {};

@@ -7,6 +7,8 @@
 #include "Memory/MemoryUtils.hh"
 #include "Window/BaseWindow.hh"
 
+#include <EASTL/vector.h>
+
 #include "APIAllocator.hh"
 #include "Common.hh"
 

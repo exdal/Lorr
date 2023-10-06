@@ -11,6 +11,7 @@ namespace lr::Graphics
 
 enum class BufferUsage : u64
 {
+    None = 0,
     Vertex = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
     Index = VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
     Uniform = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
@@ -22,6 +23,7 @@ enum class BufferUsage : u64
 };
 LR_TYPEOP_ARITHMETIC_INT(BufferUsage, BufferUsage, &);
 LR_TYPEOP_ARITHMETIC(BufferUsage, BufferUsage, |);
+LR_TYPEOP_ASSIGNMENT(BufferUsage, BufferUsage, |);
 
 /// COMMAND ---------------------------- ///
 

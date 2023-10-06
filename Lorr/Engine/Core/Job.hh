@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <EASTL/atomic.h>
+#include <EASTL/fixed_vector.h>
 #include <eathread/eathread_thread.h>
 
 namespace lr::Job

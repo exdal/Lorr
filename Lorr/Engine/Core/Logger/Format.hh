@@ -7,6 +7,7 @@
 #pragma once
 
 #include <fmt/format.h>
+#include <EASTL/string.h>
 
 namespace fmt
 {

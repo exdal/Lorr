@@ -6,6 +6,8 @@
 #include "APIAllocator.hh"
 #include "Common.hh"
 
+#include <EASTL/vector.h>
+
 #include "Shader.hh"
 
 namespace lr::Graphics

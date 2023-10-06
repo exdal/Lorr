@@ -71,11 +71,12 @@ bool APIContext::Init(APIContextDesc &desc, AllocatorDesc *pAllocatorOverrides)
     /// CREATE ALLOCATORS ///
 
     m_Allocators.m_pDescriptor = CreateLinearAllocator(
-        MemoryFlag::HostVisibleCoherent, pAllocatorOverrides->m_DescriptorMem * m_pSwapChain->m_FrameCount);
+        MemoryFlag::HostVisibleCoherent,
+        pAllocatorOverrides->m_DescriptorMem * m_pSwapChain->m_FrameCount);
     SetObjectName(m_Allocators.m_pDescriptor, "Descriptor");
 
-    m_Allocators.m_pBufferLinear =
-        CreateLinearAllocator(MemoryFlag::HostVisibleCoherent, pAllocatorOverrides->m_BufferLinearMem);
+    m_Allocators.m_pBufferLinear = CreateLinearAllocator(
+        MemoryFlag::HostVisibleCoherent, pAllocatorOverrides->m_BufferLinearMem);
     SetObjectName(m_Allocators.m_pBufferLinear, "Buffer-Linear");
 
     m_Allocators.m_pBufferFrametime = CreateLinearAllocator(
@@ -84,7 +85,9 @@ bool APIContext::Init(APIContextDesc &desc, AllocatorDesc *pAllocatorOverrides)
     SetObjectName(m_Allocators.m_pBufferFrametime, "Buffer-Frametime");
 
     m_Allocators.m_pBufferTLSF = CreateTLSFAllocator(
-        MemoryFlag::Device, pAllocatorOverrides->m_BufferTLSFMem, pAllocatorOverrides->m_MaxTLSFAllocations);
+        MemoryFlag::Device,
+        pAllocatorOverrides->m_BufferTLSFMem,
+        pAllocatorOverrides->m_MaxTLSFAllocations);
     SetObjectName(m_Allocators.m_pBufferTLSF, "Buffer-TLSF");
 
     m_Allocators.m_pBufferTLSFHost = CreateTLSFAllocator(
@@ -94,7 +97,9 @@ bool APIContext::Init(APIContextDesc &desc, AllocatorDesc *pAllocatorOverrides)
     SetObjectName(m_Allocators.m_pBufferTLSFHost, "Buffer-TLSF-Host");
 
     m_Allocators.m_pImageTLSF = CreateTLSFAllocator(
-        MemoryFlag::Device, pAllocatorOverrides->m_ImageTLSFMem, pAllocatorOverrides->m_MaxTLSFAllocations);
+        MemoryFlag::Device,
+        pAllocatorOverrides->m_ImageTLSFMem,
+        pAllocatorOverrides->m_MaxTLSFAllocations);
     SetObjectName(m_Allocators.m_pImageTLSF, "Image-TLSF");
 
     m_pPipelineCache = CreatePipelineCache();
@@ -116,7 +121,8 @@ CommandQueue *APIContext::CreateCommandQueue(CommandType type)
     ZoneScoped;
 
     CommandQueue *pQueue = new CommandQueue;
-    vkGetDeviceQueue(m_pDevice, m_pPhysicalDevice->GetQueueIndex(type), 0, &pQueue->m_pHandle);
+    vkGetDeviceQueue(
+        m_pDevice, m_pPhysicalDevice->GetQueueIndex(type), 0, &pQueue->m_pHandle);
 
     return pQueue;
 }
@@ -129,7 +135,8 @@ CommandAllocator *APIContext::CreateCommandAllocator(CommandType type, bool rese
 
     VkCommandPoolCreateInfo allocatorInfo = {};
     allocatorInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-    allocatorInfo.flags = resetLists ? VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT : 0;
+    allocatorInfo.flags =
+        resetLists ? VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT : 0;
     allocatorInfo.queueFamilyIndex = m_pPhysicalDevice->GetQueueIndex(type);
 
     vkCreateCommandPool(m_pDevice, &allocatorInfo, nullptr, &pAllocator->m_pHandle);
@@ -187,7 +194,8 @@ void APIContext::ResetCommandAllocator(CommandAllocator *pAllocator)
 {
     ZoneScoped;
 
-    vkResetCommandPool(m_pDevice, pAllocator->m_pHandle, VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT);
+    vkResetCommandPool(
+        m_pDevice, pAllocator->m_pHandle, VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT);
 }
 
 void APIContext::Submit(SubmitDesc *pDesc)
@@ -322,7 +330,8 @@ VkPipelineCache APIContext::CreatePipelineCache(u32 initialDataSize, void *pInit
 }
 
 PipelineLayout *APIContext::CreatePipelineLayout(
-    eastl::span<DescriptorSetLayout *> layouts, eastl::span<PushConstantDesc> pushConstants)
+    eastl::span<DescriptorSetLayout *> layouts,
+    eastl::span<PushConstantDesc> pushConstants)
 {
     ZoneScoped;
 
@@ -342,7 +351,8 @@ PipelineLayout *APIContext::CreatePipelineLayout(
     };
 
     PipelineLayout *pLayout = new PipelineLayout;
-    vkCreatePipelineLayout(m_pDevice, &pipelineLayoutCreateInfo, nullptr, &pLayout->m_pHandle);
+    vkCreatePipelineLayout(
+        m_pDevice, &pipelineLayoutCreateInfo, nullptr, &pLayout->m_pHandle);
 
     return pLayout;
 }
@@ -453,13 +463,17 @@ Pipeline *APIContext::CreateGraphicsPipeline(GraphicsPipelineBuildInfo *pBuildIn
     depthStencilInfo.depthBoundsTestEnable = false;
     depthStencilInfo.stencilTestEnable = pBuildInfo->m_EnableStencilTest;
 
-    depthStencilInfo.front.compareOp = (VkCompareOp)pBuildInfo->m_StencilFrontFaceOp.m_CompareFunc;
-    depthStencilInfo.front.depthFailOp = (VkStencilOp)pBuildInfo->m_StencilFrontFaceOp.m_DepthFail;
+    depthStencilInfo.front.compareOp =
+        (VkCompareOp)pBuildInfo->m_StencilFrontFaceOp.m_CompareFunc;
+    depthStencilInfo.front.depthFailOp =
+        (VkStencilOp)pBuildInfo->m_StencilFrontFaceOp.m_DepthFail;
     depthStencilInfo.front.failOp = (VkStencilOp)pBuildInfo->m_StencilFrontFaceOp.m_Fail;
     depthStencilInfo.front.passOp = (VkStencilOp)pBuildInfo->m_StencilFrontFaceOp.m_Pass;
 
-    depthStencilInfo.back.compareOp = (VkCompareOp)pBuildInfo->m_StencilBackFaceOp.m_CompareFunc;
-    depthStencilInfo.back.depthFailOp = (VkStencilOp)pBuildInfo->m_StencilBackFaceOp.m_DepthFail;
+    depthStencilInfo.back.compareOp =
+        (VkCompareOp)pBuildInfo->m_StencilBackFaceOp.m_CompareFunc;
+    depthStencilInfo.back.depthFailOp =
+        (VkStencilOp)pBuildInfo->m_StencilBackFaceOp.m_DepthFail;
     depthStencilInfo.back.failOp = (VkStencilOp)pBuildInfo->m_StencilBackFaceOp.m_Fail;
     depthStencilInfo.back.passOp = (VkStencilOp)pBuildInfo->m_StencilBackFaceOp.m_Pass;
 
@@ -475,8 +489,9 @@ Pipeline *APIContext::CreateGraphicsPipeline(GraphicsPipelineBuildInfo *pBuildIn
 
     /// DYNAMIC STATE ------------------------------------------------------------
 
-    constexpr static eastl::array<VkDynamicState, 2> kDynamicStates = { VK_DYNAMIC_STATE_VIEWPORT,
-                                                                        VK_DYNAMIC_STATE_SCISSOR };
+    constexpr static eastl::array<VkDynamicState, 2> kDynamicStates = {
+        VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR
+    };
 
     VkPipelineDynamicStateCreateInfo dynamicStateInfo = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
@@ -505,7 +520,8 @@ Pipeline *APIContext::CreateGraphicsPipeline(GraphicsPipelineBuildInfo *pBuildIn
         .layout = pBuildInfo->m_pLayout->m_pHandle,
     };
 
-    vkCreateGraphicsPipelines(m_pDevice, m_pPipelineCache, 1, &createInfo, nullptr, &pPipeline->m_pHandle);
+    vkCreateGraphicsPipelines(
+        m_pDevice, m_pPipelineCache, 1, &createInfo, nullptr, &pPipeline->m_pHandle);
 
     return pPipeline;
 }
@@ -535,12 +551,14 @@ Pipeline *APIContext::CreateComputePipeline(ComputePipelineBuildInfo *pBuildInfo
         .layout = pBuildInfo->m_pLayout->m_pHandle,
     };
 
-    vkCreateComputePipelines(m_pDevice, m_pPipelineCache, 1, &createInfo, nullptr, &pPipeline->m_pHandle);
+    vkCreateComputePipelines(
+        m_pDevice, m_pPipelineCache, 1, &createInfo, nullptr, &pPipeline->m_pHandle);
 
     return pPipeline;
 }
 
-SwapChain *APIContext::CreateSwapChain(BaseWindow *pWindow, u32 imageCount, SwapChain *pOldSwapChain)
+SwapChain *APIContext::CreateSwapChain(
+    BaseWindow *pWindow, u32 imageCount, SwapChain *pOldSwapChain)
 {
     ZoneScoped;
 
@@ -565,8 +583,8 @@ SwapChain *APIContext::CreateSwapChain(BaseWindow *pWindow, u32 imageCount, Swap
             pSwapChain->m_FrameCount = imageCount;
         }
 
-        pSwapChain->m_FrameCount =
-            eastl::min(pSwapChain->m_FrameCount, m_pSurface->m_MaxImageCount);  // just to make sure
+        pSwapChain->m_FrameCount = eastl::min(
+            pSwapChain->m_FrameCount, m_pSurface->m_MaxImageCount);  // just to make sure
 
         if (!m_pSurface->IsFormatSupported(format, pSwapChain->m_ColorSpace))
         {
@@ -597,10 +615,15 @@ SwapChain *APIContext::CreateSwapChain(BaseWindow *pWindow, u32 imageCount, Swap
         .clipped = VK_TRUE,
     };
 
-    VkResult result = vkCreateSwapchainKHR(m_pDevice, &swapChainInfo, nullptr, &pSwapChain->m_pHandle);
+    VkResult result =
+        vkCreateSwapchainKHR(m_pDevice, &swapChainInfo, nullptr, &pSwapChain->m_pHandle);
 
     VkImage ppSwapChainImages[Limits::MaxFrameCount] = {};
-    vkGetSwapchainImagesKHR(m_pDevice, pSwapChain->m_pHandle, &pSwapChain->m_FrameCount, &ppSwapChainImages[0]);
+    vkGetSwapchainImagesKHR(
+        m_pDevice,
+        pSwapChain->m_pHandle,
+        &pSwapChain->m_FrameCount,
+        &ppSwapChainImages[0]);
 
     for (u32 i = 0; i < pSwapChain->m_FrameCount; i++)
     {
@@ -697,7 +720,12 @@ void APIContext::BeginFrame()
 
     u32 imageIdx = 0;
     VkResult res = vkAcquireNextImageKHR(
-        m_pDevice, m_pSwapChain->m_pHandle, UINT64_MAX, pSemaphore->m_pHandle, nullptr, &imageIdx);
+        m_pDevice,
+        m_pSwapChain->m_pHandle,
+        UINT64_MAX,
+        pSemaphore->m_pHandle,
+        nullptr,
+        &imageIdx);
     if (res != VK_SUCCESS)
     {
         WaitForWork();
@@ -817,7 +845,8 @@ VkDeviceMemory APIContext::CreateDeviceMemory(MemoryFlag memoryFlags, u64 memory
     return pDeviceMem;
 }
 
-LinearDeviceMemory *APIContext::CreateLinearAllocator(MemoryFlag memoryFlags, u64 memorySize)
+LinearDeviceMemory *APIContext::CreateLinearAllocator(
+    MemoryFlag memoryFlags, u64 memorySize)
 {
     ZoneScoped;
 
@@ -826,12 +855,19 @@ LinearDeviceMemory *APIContext::CreateLinearAllocator(MemoryFlag memoryFlags, u6
     pDeviceMem->m_pHandle = CreateDeviceMemory(memoryFlags, memorySize);
 
     if (memoryFlags & MemoryFlag::HostVisible)
-        vkMapMemory(m_pDevice, pDeviceMem->m_pHandle, 0, VK_WHOLE_SIZE, 0, &pDeviceMem->m_pMappedMemory);
+        vkMapMemory(
+            m_pDevice,
+            pDeviceMem->m_pHandle,
+            0,
+            VK_WHOLE_SIZE,
+            0,
+            &pDeviceMem->m_pMappedMemory);
 
     return pDeviceMem;
 }
 
-TLSFDeviceMemory *APIContext::CreateTLSFAllocator(MemoryFlag memoryFlags, u64 memorySize, u32 maxAllocs)
+TLSFDeviceMemory *APIContext::CreateTLSFAllocator(
+    MemoryFlag memoryFlags, u64 memorySize, u32 maxAllocs)
 {
     ZoneScoped;
 
@@ -840,7 +876,13 @@ TLSFDeviceMemory *APIContext::CreateTLSFAllocator(MemoryFlag memoryFlags, u64 me
     pDeviceMem->m_pHandle = CreateDeviceMemory(memoryFlags, memorySize);
 
     if (memoryFlags & MemoryFlag::HostVisible)
-        vkMapMemory(m_pDevice, pDeviceMem->m_pHandle, 0, VK_WHOLE_SIZE, 0, &pDeviceMem->m_pMappedMemory);
+        vkMapMemory(
+            m_pDevice,
+            pDeviceMem->m_pHandle,
+            0,
+            VK_WHOLE_SIZE,
+            0,
+            &pDeviceMem->m_pMappedMemory);
 
     return pDeviceMem;
 }
@@ -859,7 +901,8 @@ u64 APIContext::OffsetFrametimeMemory(u64 size, u64 offset)
     return offset + (m_pSwapChain->m_CurrentFrame * size);
 }
 
-void APIContext::AllocateBufferMemory(ResourceAllocator allocator, Buffer *pBuffer, u64 memorySize)
+void APIContext::AllocateBufferMemory(
+    ResourceAllocator allocator, Buffer *pBuffer, u64 memorySize)
 {
     ZoneScoped;
     assert(allocator != ResourceAllocator::None);
@@ -867,7 +910,8 @@ void APIContext::AllocateBufferMemory(ResourceAllocator allocator, Buffer *pBuff
     u64 alignment = 0;
     u64 alignedSize = GetBufferMemorySize(pBuffer, &alignment);
     DeviceMemory *pMemory = m_Allocators.GetDeviceMemory(allocator);
-    u64 memoryOffset = pMemory->Allocate(alignedSize, alignment, pBuffer->m_AllocatorData);
+    u64 memoryOffset =
+        pMemory->Allocate(alignedSize, alignment, pBuffer->m_AllocatorData);
 
     vkBindBufferMemory(m_pDevice, pBuffer->m_pHandle, pMemory->m_pHandle, memoryOffset);
 
@@ -875,7 +919,8 @@ void APIContext::AllocateBufferMemory(ResourceAllocator allocator, Buffer *pBuff
     pBuffer->m_DataOffset = memoryOffset;
 }
 
-void APIContext::AllocateImageMemory(ResourceAllocator allocator, Image *pImage, u64 memorySize)
+void APIContext::AllocateImageMemory(
+    ResourceAllocator allocator, Image *pImage, u64 memorySize)
 {
     ZoneScoped;
 
@@ -928,7 +973,8 @@ DescriptorSetLayout *APIContext::CreateDescriptorSetLayout(
     if (flags & DescriptorSetLayoutFlag::DescriptorBuffer)
         createFlags |= VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
     if (flags & DescriptorSetLayoutFlag::EmbeddedSamplers)
-        createFlags |= VK_DESCRIPTOR_SET_LAYOUT_CREATE_EMBEDDED_IMMUTABLE_SAMPLERS_BIT_EXT;
+        createFlags |=
+            VK_DESCRIPTOR_SET_LAYOUT_CREATE_EMBEDDED_IMMUTABLE_SAMPLERS_BIT_EXT;
 
     VkDescriptorSetLayoutCreateInfo layoutCreateInfo = {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
@@ -938,7 +984,8 @@ DescriptorSetLayout *APIContext::CreateDescriptorSetLayout(
         .pBindings = elements.data(),
     };
 
-    vkCreateDescriptorSetLayout(m_pDevice, &layoutCreateInfo, nullptr, &pLayout->m_pHandle);
+    vkCreateDescriptorSetLayout(
+        m_pDevice, &layoutCreateInfo, nullptr, &pLayout->m_pHandle);
 
     return pLayout;
 }
@@ -962,12 +1009,14 @@ u64 APIContext::GetDescriptorSetLayoutSize(DescriptorSetLayout *pLayout)
     return Memory::AlignUp(size, m_pPhysicalDevice->GetDescriptorBufferAlignment());
 }
 
-u64 APIContext::GetDescriptorSetLayoutBindingOffset(DescriptorSetLayout *pLayout, u32 bindingID)
+u64 APIContext::GetDescriptorSetLayoutBindingOffset(
+    DescriptorSetLayout *pLayout, u32 bindingID)
 {
     ZoneScoped;
 
     u64 offset = 0;
-    vkGetDescriptorSetLayoutBindingOffsetEXT(m_pDevice, pLayout->m_pHandle, bindingID, &offset);
+    vkGetDescriptorSetLayoutBindingOffsetEXT(
+        m_pDevice, pLayout->m_pHandle, bindingID, &offset);
 
     return offset;
 }
@@ -976,13 +1025,14 @@ u64 APIContext::GetDescriptorSize(DescriptorType type)
 {
     ZoneScoped;
 
-    VkPhysicalDeviceDescriptorBufferPropertiesEXT &props = m_pPhysicalDevice->m_FeatureDescriptorBufferProps;
+    VkPhysicalDeviceDescriptorBufferPropertiesEXT &props =
+        m_pPhysicalDevice->m_FeatureDescriptorBufferProps;
     u64 sizeArray[] = {
-        props.samplerDescriptorSize,        // Sampler,
-        props.sampledImageDescriptorSize,   // SampledImage,
-        props.uniformBufferDescriptorSize,  // UniformBuffer,
-        props.storageImageDescriptorSize,   // StorageImage,
-        props.storageBufferDescriptorSize,  // StorageBuffer,
+        [(u32)DescriptorType::Sampler] = props.samplerDescriptorSize,
+        [(u32)DescriptorType::SampledImage] = props.sampledImageDescriptorSize,
+        [(u32)DescriptorType::UniformBuffer] = props.uniformBufferDescriptorSize,
+        [(u32)DescriptorType::StorageImage] = props.storageImageDescriptorSize,
+        [(u32)DescriptorType::StorageBuffer] = props.storageBufferDescriptorSize,
     };
 
     return sizeArray[(u32)type];
@@ -999,12 +1049,13 @@ u64 APIContext::AlignUpDescriptorOffset(u64 offset)
 {
     ZoneScoped;
 
-    VkPhysicalDeviceDescriptorBufferPropertiesEXT &props = m_pPhysicalDevice->m_FeatureDescriptorBufferProps;
+    VkPhysicalDeviceDescriptorBufferPropertiesEXT &props =
+        m_pPhysicalDevice->m_FeatureDescriptorBufferProps;
     return Memory::AlignUp(offset, props.descriptorBufferOffsetAlignment);
 }
 
 void APIContext::GetDescriptorData(
-    const DescriptorGetInfo &info, u64 dataSize, void *pDataOut, u32 descriptorIdx)
+    const DescriptorGetInfo &info, u64 dataSize, void *pDataOut)
 {
     ZoneScoped;
 
@@ -1021,7 +1072,6 @@ void APIContext::GetDescriptorData(
         {
             case DescriptorType::StorageBuffer:
             case DescriptorType::UniformBuffer:
-                info.m_pBuffer->m_DescriptorIndex = descriptorIdx;
                 bufferInfo.address = info.m_pBuffer->m_DeviceAddress;
                 bufferInfo.range = info.m_pBuffer->m_DataSize;
                 descriptorData = { .pUniformBuffer = &bufferInfo };
@@ -1029,13 +1079,11 @@ void APIContext::GetDescriptorData(
 
             case DescriptorType::StorageImage:
             case DescriptorType::SampledImage:
-                info.m_pImage->m_DescriptorIndex = descriptorIdx;
                 imageInfo.imageView = info.m_pImage->m_pViewHandle;
                 descriptorData = { .pSampledImage = &imageInfo };
                 break;
 
             case DescriptorType::Sampler:
-                info.m_pSampler->m_DescriptorIndex = descriptorIdx;
                 imageInfo.sampler = info.m_pSampler->m_pHandle;
                 descriptorData = { .pSampledImage = &imageInfo };
                 break;
@@ -1063,15 +1111,17 @@ Buffer *APIContext::CreateBuffer(BufferDesc *pDesc)
 
     /// Some buffer types, such as descriptor buffers, require explicit alignment
     u64 alignedBufferSize = pDesc->m_DataSize;
-    if (pDesc->m_UsageFlags & (BufferUsage::ResourceDescriptor | BufferUsage::SamplerDescriptor))
-        alignedBufferSize =
-            Memory::AlignUp(pDesc->m_DataSize, m_pPhysicalDevice->GetDescriptorBufferAlignment());
+    if (pDesc->m_UsageFlags
+        & (BufferUsage::ResourceDescriptor | BufferUsage::SamplerDescriptor))
+        alignedBufferSize = Memory::AlignUp(
+            pDesc->m_DataSize, m_pPhysicalDevice->GetDescriptorBufferAlignment());
 
     VkBufferCreateInfo createInfo = {
         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
         .pNext = nullptr,
         .size = alignedBufferSize,
-        .usage = (VkBufferUsageFlags)pDesc->m_UsageFlags | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+        .usage = (VkBufferUsageFlags)pDesc->m_UsageFlags
+                 | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
     };
     vkCreateBuffer(m_pDevice, &createInfo, nullptr, &pBuffer->m_pHandle);
     AllocateBufferMemory(pDesc->m_TargetAllocator, pBuffer, pDesc->m_DataSize);
@@ -1134,7 +1184,8 @@ Image *APIContext::CreateImage(ImageDesc *pDesc)
     Image *pImage = new Image;
 
     if (pDesc->m_DataSize == 0)
-        pDesc->m_DataSize = pDesc->m_Width * pDesc->m_Height * FormatToSize(pDesc->m_Format);
+        pDesc->m_DataSize =
+            pDesc->m_Width * pDesc->m_Height * FormatToSize(pDesc->m_Format);
 
     /// ---------------------------------------------- //
 
@@ -1156,8 +1207,10 @@ Image *APIContext::CreateImage(ImageDesc *pDesc)
     if (pDesc->m_UsageFlags & ImageUsage::Concurrent)
     {
         imageCreateInfo.sharingMode = VK_SHARING_MODE_CONCURRENT;
-        imageCreateInfo.queueFamilyIndexCount = m_pPhysicalDevice->m_SelectedQueueIndices.size();
-        imageCreateInfo.pQueueFamilyIndices = &m_pPhysicalDevice->m_SelectedQueueIndices[0];
+        imageCreateInfo.queueFamilyIndexCount =
+            m_pPhysicalDevice->m_SelectedQueueIndices.size();
+        imageCreateInfo.pQueueFamilyIndices =
+            &m_pPhysicalDevice->m_SelectedQueueIndices[0];
     }
     else
     {
@@ -1299,7 +1352,8 @@ Semaphore *APIContext::GetAvailableAcquireSemaphore(Semaphore *pOldSemaphore)
             Semaphore *pSemaphore = CreateSemaphore();
             pSemaphore->m_Value = i;  // not timeline value
 
-            SetObjectName(pSemaphore, _FMT("Cached Acquire Sem. {}", m_AcquireSempPool.size()));
+            SetObjectName(
+                pSemaphore, _FMT("Cached Acquire Sem. {}", m_AcquireSempPool.size()));
             m_AcquireSempPool.push_back(pSemaphore);
         }
 
@@ -1326,8 +1380,10 @@ bool APIContext::SetupInstance(BaseWindow *pWindow)
     u32 instanceExtensionCount = 0;
     vkEnumerateInstanceExtensionProperties(nullptr, &instanceExtensionCount, nullptr);
 
-    VkExtensionProperties *ppExtensionProp = new VkExtensionProperties[instanceExtensionCount];
-    vkEnumerateInstanceExtensionProperties(nullptr, &instanceExtensionCount, ppExtensionProp);
+    VkExtensionProperties *ppExtensionProp =
+        new VkExtensionProperties[instanceExtensionCount];
+    vkEnumerateInstanceExtensionProperties(
+        nullptr, &instanceExtensionCount, ppExtensionProp);
 
 #if _DEBUG
     constexpr u32 debugExtensionCount = 2;

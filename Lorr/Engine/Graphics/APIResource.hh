@@ -22,8 +22,6 @@ struct Buffer : APIObject<VK_OBJECT_TYPE_BUFFER>
     ResourceAllocator m_Allocator = ResourceAllocator::None;
     u64 m_AllocatorData = ~0;
 
-    u32 m_DescriptorIndex = -1;
-
     u32 m_Stride = 1;
     u64 m_DataSize = 0;
     u64 m_DataOffset = 0;
@@ -59,7 +57,6 @@ struct Image : APIObject<VK_OBJECT_TYPE_IMAGE>
     u32 m_Height = 0;
     u32 m_ArraySize = 1;
     u32 m_MipMapLevels = 1;
-    u32 m_DescriptorIndex = -1;
 
     u64 m_DataSize = 0;    // Aligned data offset
     u64 m_DataOffset = 0;  // Allocator offset
@@ -94,7 +91,6 @@ struct SamplerDesc
 struct Sampler : APIObject<VK_OBJECT_TYPE_SAMPLER>
 {
     VkSampler m_pHandle = nullptr;
-    u32 m_DescriptorIndex = -1;
 };
 
 /////////////////////////////////

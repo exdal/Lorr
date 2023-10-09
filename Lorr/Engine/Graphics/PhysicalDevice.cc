@@ -406,4 +406,72 @@ bool Surface::IsPresentModeSupported(VkPresentModeKHR mode)
 
     return false;
 }
+
+u64 DeviceMemory::AlignBufferMemory(BufferUsage usage, u64 initialSize)
+{
+    ZoneScoped;
+
+    constexpr static BufferUsage kDescriptors =
+        BufferUsage::ResourceDescriptor | BufferUsage::SamplerDescriptor;
+
+    u64 result = initialSize;
+    if (usage & kDescriptors)
+        result =
+            Memory::AlignUp(result, m_pPhysicalDevice->GetDescriptorBufferAlignment());
+
+    return result;
+}
+
+void TLSFDeviceMemory::Init(u64 memSize)
+{
+    ZoneScoped;
+
+    m_Allocator.Init(memSize, 0x8000);
+}
+
+u64 TLSFDeviceMemory::Allocate(u64 dataSize, u64 alignment, u64 &allocatorData)
+{
+    ZoneScoped;
+
+    Memory::TLSFBlockID blockID = m_Allocator.Allocate(dataSize, alignment);
+    allocatorData = blockID;
+    return m_Allocator.GetBlockData(blockID)->m_Offset;
+}
+
+void TLSFDeviceMemory::Free(u64 allocatorData)
+{
+    ZoneScoped;
+
+    m_Allocator.Free(allocatorData);
+}
+
+void LinearDeviceMemory::Init(u64 memSize)
+{
+    ZoneScoped;
+
+    m_AllocatorView.m_pFirstRegion = new Memory::AllocationRegion;
+    m_AllocatorView.m_pFirstRegion->m_Capacity = memSize;
+}
+
+u64 LinearDeviceMemory::Allocate(u64 dataSize, u64 alignment, u64 &allocatorData)
+{
+    ZoneScoped;
+
+    u64 alignedSize = Memory::AlignUp(dataSize, alignment);
+    Memory::AllocationRegion *pAvailRegion = m_AllocatorView.FindFreeRegion(alignedSize);
+    if (!pAvailRegion)
+        return ~0;
+
+    u64 offset = pAvailRegion->m_Size;
+    pAvailRegion->m_Size += alignedSize;
+    return offset;
+}
+
+void LinearDeviceMemory::Free(u64 allocatorData)
+{
+    ZoneScoped;
+
+    m_AllocatorView.Reset();
+}
+
 }  // namespace lr::Graphics

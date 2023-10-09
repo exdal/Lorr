@@ -22,18 +22,6 @@ enum class APIFlag : u32
 };
 LR_TYPEOP_ARITHMETIC_INT(APIFlag, APIFlag, &);
 
-enum class MemoryFlag
-{
-    Device = 1 << 0,
-    HostVisible = 1 << 1,
-    HostCoherent = 1 << 2,
-    HostCached = 1 << 3,
-
-    HostVisibleCoherent = HostVisible | HostCoherent,
-};
-LR_TYPEOP_ARITHMETIC_INT(MemoryFlag, MemoryFlag, &);
-LR_TYPEOP_ARITHMETIC(MemoryFlag, MemoryFlag, |);
-
 struct SubmitDesc
 {
     CommandType m_Type = CommandType::Count;
@@ -95,11 +83,9 @@ struct Device
     u64 GetBufferMemorySize(Buffer *pBuffer, u64 *pAlignmentOut = nullptr);
     u64 GetImageMemorySize(Image *pImage, u64 *pAlignmentOut = nullptr);
 
-    VkDeviceMemory CreateDeviceMemory(MemoryFlag memoryFlags, u64 memorySize);
-    LinearDeviceMemory *CreateLinearAllocator(MemoryFlag memoryFlags, u64 memorySize);
-    TLSFDeviceMemory *CreateTLSFAllocator(
-        MemoryFlag memoryFlags, u64 memorySize, u32 maxAllocs);
-    void DeleteAllocator(DeviceMemory *pDeviceMemory);
+    DeviceMemory *CreateDeviceMemory(
+        DeviceMemoryDesc *pDesc, PhysicalDevice *pPhysicalDevice);
+    void DeleteDeviceMemory(DeviceMemory *pDeviceMemory);
     void AllocateBufferMemory(DeviceMemory *pMemory, Buffer *pBuffer, u64 memorySize);
     void AllocateImageMemory(DeviceMemory *pMemory, Image *pImage, u64 memorySize);
 

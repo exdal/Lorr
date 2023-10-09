@@ -561,78 +561,51 @@ u64 Device::GetImageMemorySize(Image *pImage, u64 *pAlignmentOut)
     return memoryRequirements.size;
 }
 
-VkDeviceMemory Device::CreateDeviceMemory(MemoryFlag memoryFlags, u64 memorySize)
+DeviceMemory *Device::CreateDeviceMemory(
+    DeviceMemoryDesc *pDesc, PhysicalDevice *pPhysicalDevice)
 {
     ZoneScoped;
 
-    VkMemoryPropertyFlags memoryProps = 0;
-    if (memoryFlags & MemoryFlag::Device)
-        memoryProps |= VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-    if (memoryFlags & MemoryFlag::HostVisible)
-        memoryProps |= VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
-    if (memoryFlags & MemoryFlag::HostCoherent)
-        memoryProps |= VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-    if (memoryFlags & MemoryFlag::HostCached)
-        memoryProps |= VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+    u32 heapIndex = pPhysicalDevice->GetHeapIndex((VkMemoryPropertyFlags)pDesc->m_Flags);
+    DeviceMemory *pDeviceMemory = nullptr;
+    switch (pDesc->m_Type)
+    {
+        case AllocatorType::Linear:
+            pDeviceMemory = new LinearDeviceMemory;
+            break;
+        case AllocatorType::TLSF:
+            pDeviceMemory = new TLSFDeviceMemory;
+            break;
+    }
 
-    VkDeviceMemory pDeviceMem = VK_NULL_HANDLE;
+    pDeviceMemory->m_pPhysicalDevice = pPhysicalDevice;
     VkMemoryAllocateInfo allocInfo = {
         .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
         .pNext = nullptr,
-        .allocationSize = memorySize,
-        .memoryTypeIndex = m_pPhysicalDevice->GetHeapIndex(memoryProps),
+        .allocationSize = pDesc->m_Size,
+        .memoryTypeIndex = heapIndex,
     };
-    vkAllocateMemory(m_pHandle, &allocInfo, nullptr, &pDeviceMem);
+    vkAllocateMemory(m_pHandle, &allocInfo, nullptr, &pDeviceMemory->m_pHandle);
 
-    return pDeviceMem;
-}
-
-LinearDeviceMemory *Device::CreateLinearAllocator(MemoryFlag memoryFlags, u64 memorySize)
-{
-    ZoneScoped;
-
-    LinearDeviceMemory *pDeviceMem = new LinearDeviceMemory;
-    pDeviceMem->Init(memorySize);
-    pDeviceMem->m_pHandle = CreateDeviceMemory(memoryFlags, memorySize);
-
-    if (memoryFlags & MemoryFlag::HostVisible)
+    pDeviceMemory->Init(pDesc->m_Size);
+    if (pDesc->m_Flags & MemoryFlag::HostVisible)
         vkMapMemory(
             m_pHandle,
-            pDeviceMem->m_pHandle,
+            pDeviceMemory->m_pHandle,
             0,
             VK_WHOLE_SIZE,
             0,
-            &pDeviceMem->m_pMappedMemory);
+            &pDeviceMemory->m_pMappedMemory);
 
-    return pDeviceMem;
+    return pDeviceMemory;
 }
 
-TLSFDeviceMemory *Device::CreateTLSFAllocator(
-    MemoryFlag memoryFlags, u64 memorySize, u32 maxAllocs)
-{
-    ZoneScoped;
-
-    TLSFDeviceMemory *pDeviceMem = new TLSFDeviceMemory;
-    pDeviceMem->m_Allocator.Init(memorySize, maxAllocs);
-    pDeviceMem->m_pHandle = CreateDeviceMemory(memoryFlags, memorySize);
-
-    if (memoryFlags & MemoryFlag::HostVisible)
-        vkMapMemory(
-            m_pHandle,
-            pDeviceMem->m_pHandle,
-            0,
-            VK_WHOLE_SIZE,
-            0,
-            &pDeviceMem->m_pMappedMemory);
-
-    return pDeviceMem;
-}
-
-void Device::DeleteAllocator(DeviceMemory *pDeviceMemory)
+void Device::DeleteDeviceMemory(DeviceMemory *pDeviceMemory)
 {
     ZoneScoped;
 
     vkFreeMemory(m_pHandle, pDeviceMemory->m_pHandle, nullptr);
+    delete pDeviceMemory;
 }
 
 void Device::AllocateBufferMemory(DeviceMemory *pMemory, Buffer *pBuffer, u64 memorySize)
@@ -798,23 +771,18 @@ Buffer *Device::CreateBuffer(BufferDesc *pDesc, DeviceMemory *pAllocator)
     ZoneScoped;
 
     Buffer *pBuffer = new Buffer;
-
-    /// Some buffer types, such as descriptor buffers, require explicit alignment
-    u64 alignedBufferSize = pDesc->m_DataSize;
-    if (pDesc->m_UsageFlags
-        & (BufferUsage::ResourceDescriptor | BufferUsage::SamplerDescriptor))
-        alignedBufferSize = Memory::AlignUp(
-            pDesc->m_DataSize, m_pPhysicalDevice->GetDescriptorBufferAlignment());
+    u64 alignedSize =
+        pAllocator->AlignBufferMemory(pDesc->m_UsageFlags, pDesc->m_DataSize);
 
     VkBufferCreateInfo createInfo = {
         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
         .pNext = nullptr,
-        .size = alignedBufferSize,
+        .size = alignedSize,
         .usage = (VkBufferUsageFlags)pDesc->m_UsageFlags
                  | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
     };
     vkCreateBuffer(m_pHandle, &createInfo, nullptr, &pBuffer->m_pHandle);
-    AllocateBufferMemory(pAllocator, pBuffer, pDesc->m_DataSize);
+    AllocateBufferMemory(pAllocator, pBuffer, alignedSize);
 
     VkBufferDeviceAddressInfo deviceAddressInfo = {
         .sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,

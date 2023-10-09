@@ -76,68 +76,58 @@ struct Surface : APIObject
 };
 LR_ASSIGN_OBJECT_TYPE(Surface, VK_OBJECT_TYPE_SURFACE_KHR);
 
+enum class AllocatorType : u32
+{
+    Linear = 0,
+    TLSF,
+};
+
+enum class MemoryFlag : u32
+{
+    Device = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+    HostVisible = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
+    HostCoherent = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+    HostCached = VK_MEMORY_PROPERTY_HOST_CACHED_BIT,
+
+    HostVisibleCoherent = HostVisible | HostCoherent,
+};
+LR_TYPEOP_ARITHMETIC_INT(MemoryFlag, MemoryFlag, &);
+LR_TYPEOP_ARITHMETIC(MemoryFlag, MemoryFlag, |);
+
+struct DeviceMemoryDesc
+{
+    AllocatorType m_Type = AllocatorType::Linear;
+    MemoryFlag m_Flags = MemoryFlag::Device;
+    u64 m_Size = 0;
+};
+
 struct DeviceMemory : APIObject
 {
+    u64 AlignBufferMemory(BufferUsage usage, u64 initialSize);
+    virtual void Init(u64 memSize) = 0;
     virtual u64 Allocate(u64 dataSize, u64 alignment, u64 &allocatorData) = 0;
     virtual void Free(u64 allocatorData) = 0;
 
     void *m_pMappedMemory = nullptr;
+    PhysicalDevice *m_pPhysicalDevice = nullptr;  // Device where it's allocated from
     VkDeviceMemory m_pHandle = VK_NULL_HANDLE;
 };
 LR_ASSIGN_OBJECT_TYPE(DeviceMemory, VK_OBJECT_TYPE_DEVICE_MEMORY);
 
 struct TLSFDeviceMemory : DeviceMemory
 {
-    u64 Allocate(u64 dataSize, u64 alignment, u64 &allocatorData) override
-    {
-        ZoneScoped;
-
-        Memory::TLSFBlockID blockID = m_Allocator.Allocate(dataSize, alignment);
-        allocatorData = blockID;
-        return m_Allocator.GetBlockData(blockID)->m_Offset;
-    }
-
-    void Free(u64 allocatorData) override
-    {
-        ZoneScoped;
-
-        m_Allocator.Free(allocatorData);
-    }
+    void Init(u64 memSize) override;
+    u64 Allocate(u64 dataSize, u64 alignment, u64 &allocatorData) override;
+    void Free(u64 allocatorData) override;
 
     Memory::TLSFAllocatorView m_Allocator = {};
 };
 
 struct LinearDeviceMemory : DeviceMemory
 {
-    void Init(u64 memSize)
-    {
-        ZoneScoped;
-
-        m_AllocatorView.m_pFirstRegion = new Memory::AllocationRegion;
-        m_AllocatorView.m_pFirstRegion->m_Capacity = memSize;
-    }
-
-    u64 Allocate(u64 dataSize, u64 alignment, u64 &allocatorData) override
-    {
-        ZoneScoped;
-
-        u64 alignedSize = Memory::AlignUp(dataSize, alignment);
-        Memory::AllocationRegion *pAvailRegion =
-            m_AllocatorView.FindFreeRegion(alignedSize);
-        if (!pAvailRegion)
-            return ~0;
-
-        u64 offset = pAvailRegion->m_Size;
-        pAvailRegion->m_Size += alignedSize;
-        return offset;
-    }
-
-    void Free(u64 allocatorData) override
-    {
-        ZoneScoped;
-
-        m_AllocatorView.Reset();
-    }
+    void Init(u64 memSize) override;
+    u64 Allocate(u64 dataSize, u64 alignment, u64 &allocatorData) override;
+    void Free(u64 allocatorData) override;
 
     Memory::LinearAllocatorView m_AllocatorView = {};
 };

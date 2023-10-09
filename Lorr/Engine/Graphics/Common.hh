@@ -339,17 +339,6 @@ enum class ShaderStage : u32
 };
 LR_TYPEOP_ARITHMETIC_INT(ShaderStage, ShaderStage, &);
 
-struct AllocatorDesc
-{
-    u32 m_MaxTLSFAllocations = 0;
-    u32 m_DescriptorMem = 0;
-    u32 m_BufferLinearMem = 0;
-    u32 m_BufferTLSFMem = 0;
-    u32 m_BufferTLSFHostMem = 0;
-    u32 m_BufferFrametimeMem = 0;
-    u32 m_ImageTLSFMem = 0;
-};
-
 namespace Limits
 {
     constexpr usize MaxPushConstants = 8;

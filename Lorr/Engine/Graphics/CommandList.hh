@@ -5,8 +5,8 @@
 
 #include "Memory/MemoryUtils.hh"
 
-#include "APIAllocator.hh"
-#include "APIResource.hh"
+#include "APIObject.hh"
+#include "Resource.hh"
 #include "Pipeline.hh"
 
 namespace lr::Graphics
@@ -95,16 +95,15 @@ struct DependencyInfo : VkDependencyInfo
     void SetMemoryBarriers(eastl::span<MemoryBarrier> memoryBarriers);
 };
 
-struct Fence : APIObject<VK_OBJECT_TYPE_FENCE>
-{
-    VkFence m_pHandle = VK_NULL_HANDLE;
-};
+using Fence = VkFence;
+LR_ASSIGN_OBJECT_TYPE(Fence, VK_OBJECT_TYPE_FENCE);
 
-struct Semaphore : APIObject<VK_OBJECT_TYPE_SEMAPHORE>
+struct Semaphore : APIObject
 {
     u64 m_Value = 0;
     VkSemaphore m_pHandle = VK_NULL_HANDLE;
 };
+LR_ASSIGN_OBJECT_TYPE(Semaphore, VK_OBJECT_TYPE_SEMAPHORE);
 
 struct SemaphoreSubmitDesc : VkSemaphoreSubmitInfo
 {
@@ -113,12 +112,24 @@ struct SemaphoreSubmitDesc : VkSemaphoreSubmitInfo
     SemaphoreSubmitDesc() = default;
 };
 
-struct CommandAllocator : APIObject<VK_OBJECT_TYPE_COMMAND_POOL>
+struct CommandQueue : APIObject
 {
+    CommandType m_Type = CommandType::Count;
+    u32 m_QueueIndex = 0;
+    VkQueue m_pHandle = nullptr;
+};
+LR_ASSIGN_OBJECT_TYPE(CommandQueue, VK_OBJECT_TYPE_QUEUE);
+
+struct CommandAllocator : APIObject
+{
+    CommandType m_Type = CommandType::Count;
+    CommandQueue *m_pQueue = nullptr;
+
     VkCommandPool m_pHandle = VK_NULL_HANDLE;
 };
+LR_ASSIGN_OBJECT_TYPE(CommandAllocator, VK_OBJECT_TYPE_COMMAND_POOL);
 
-struct CommandList : APIObject<VK_OBJECT_TYPE_COMMAND_BUFFER>
+struct CommandList : APIObject
 {
     void BeginRendering(RenderingBeginDesc *pDesc);
     void EndRendering();
@@ -164,6 +175,7 @@ struct CommandList : APIObject<VK_OBJECT_TYPE_COMMAND_BUFFER>
 
     Pipeline *m_pPipeline = nullptr;
 };
+LR_ASSIGN_OBJECT_TYPE(CommandList, VK_OBJECT_TYPE_COMMAND_BUFFER);
 
 struct CommandListSubmitDesc : VkCommandBufferSubmitInfo
 {

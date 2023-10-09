@@ -5,7 +5,7 @@
 #include "DescriptorManager.hh"
 
 #include "Crypt/xx.hh"
-#include "Graphics/APIContext.hh"
+#include "Graphics/Device.hh"
 
 namespace lr::Graphics
 {
@@ -32,7 +32,7 @@ namespace lr::Graphics
 
 struct RenderGraph
 {
-    void Init(APIContext *pContext);
+    void Init();
 
     template<typename _Pass>
     _Pass *AllocateRenderPass()
@@ -102,8 +102,8 @@ struct RenderGraph
 
     Memory::LinearAllocator m_PassAllocator = {};
 
-    DescriptorManager m_DescriptorMan = {};
-    APIContext *m_pContext = nullptr;
+    //DescriptorManager m_DescriptorMan = {};
+    //APIContext *m_pContext = nullptr;
 };
 
 }  // namespace lr::Graphics

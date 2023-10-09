@@ -5,8 +5,7 @@
 
 #include "Core/Config.hh"
 #include "Core/Job.hh"
-#include "Graphics/APIContext.hh"
-#include "Graphics/Renderer/RenderGraph.hh"
+#include "Renderer/Renderer.hh"
 
 namespace lr
 {
@@ -19,27 +18,6 @@ void Engine::Init(EngineDesc &engineDesc)
     Job::JobManager::Init(CONFIG_GET_VAR(JM_WORKER_COUNT));
     m_Window.Init(engineDesc.m_WindowDesc);
     m_ImGui.Init(m_Window.m_Width, m_Window.m_Height);
-
-    Graphics::APIContextDesc apiDesc = {
-#ifdef TRACY_ENABLE
-        .m_ImageCount = 1,
-#else
-        .m_ImageCount = CONFIG_GET_VAR(API_SWAPCHAIN_FRAMES),
-#endif
-        .m_pTargetWindow = &m_Window
-    };
-
-    m_APIContext.Init(apiDesc, nullptr);
-    Graphics::RenderGraph graph = {};
-    graph.Init(&m_APIContext);
-
-    struct PassData
-    {
-        u32 _empty;
-    };
-    graph.CreateGraphicsPass<PassData>("sample");
-    graph.CreateGraphicsPass<PassData>("sample2");
-    graph.CreateGraphicsPass<PassData>("sample3");
 }
 
 void Engine::PushEvent(Event event, EngineEventData &data)

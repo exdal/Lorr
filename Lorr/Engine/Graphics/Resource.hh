@@ -1,6 +1,6 @@
 #pragma once
 
-#include "APIAllocator.hh"
+#include "APIObject.hh"
 #include "Common.hh"
 
 namespace lr::Graphics
@@ -11,15 +11,13 @@ namespace lr::Graphics
 struct BufferDesc
 {
     BufferUsage m_UsageFlags = BufferUsage::Vertex;
-    ResourceAllocator m_TargetAllocator = ResourceAllocator::None;
 
     u32 m_Stride = 1;
     u64 m_DataSize = 0;
 };
 
-struct Buffer : APIObject<VK_OBJECT_TYPE_BUFFER>
+struct Buffer : APIObject
 {
-    ResourceAllocator m_Allocator = ResourceAllocator::None;
     u64 m_AllocatorData = ~0;
 
     u32 m_Stride = 1;
@@ -29,6 +27,7 @@ struct Buffer : APIObject<VK_OBJECT_TYPE_BUFFER>
 
     VkBuffer m_pHandle = nullptr;
 };
+LR_ASSIGN_OBJECT_TYPE(Buffer, VK_OBJECT_TYPE_BUFFER);
 
 /////////////////////////////////
 // IMAGES
@@ -37,20 +36,19 @@ struct ImageDesc
 {
     ImageUsage m_UsageFlags = ImageUsage::Sampled;
     Format m_Format = Format::Unknown;
-    ResourceAllocator m_TargetAllocator = ResourceAllocator::None;
 
     u32 m_Width = 0;
     u32 m_Height = 0;
     u32 m_ArraySize = 1;
     u32 m_MipMapLevels = 1;
+    eastl::span<u32> m_QueueIndices = {};
 
     u64 m_DataSize = 0;
 };
 
-struct Image : APIObject<VK_OBJECT_TYPE_IMAGE>
+struct Image : APIObject
 {
     Format m_Format = Format::Unknown;
-    ResourceAllocator m_Allocator = ResourceAllocator::None;
     u64 m_AllocatorData = ~0;
 
     u32 m_Width = 0;
@@ -64,6 +62,7 @@ struct Image : APIObject<VK_OBJECT_TYPE_IMAGE>
     VkImage m_pHandle = nullptr;
     VkImageView m_pViewHandle = nullptr;
 };
+LR_ASSIGN_OBJECT_TYPE(Image, VK_OBJECT_TYPE_IMAGE);
 
 /////////////////////////////////
 // SAMPLERS
@@ -88,10 +87,11 @@ struct SamplerDesc
     float m_MaxLOD = 0;
 };
 
-struct Sampler : APIObject<VK_OBJECT_TYPE_SAMPLER>
+struct Sampler : APIObject
 {
     VkSampler m_pHandle = nullptr;
 };
+LR_ASSIGN_OBJECT_TYPE(Sampler, VK_OBJECT_TYPE_SAMPLER);
 
 /////////////////////////////////
 // DESCRIPTORS
@@ -102,10 +102,8 @@ struct DescriptorLayoutElement : VkDescriptorSetLayoutBinding
         u32 binding, DescriptorType type, ShaderStage stage, u32 arraySize = 1);
 };
 
-struct DescriptorSetLayout : APIObject<VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT>
-{
-    VkDescriptorSetLayout m_pHandle = VK_NULL_HANDLE;
-};
+using DescriptorSetLayout = VkDescriptorSetLayout;
+LR_ASSIGN_OBJECT_TYPE(DescriptorSetLayout, VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT);
 
 struct DescriptorGetInfo
 {

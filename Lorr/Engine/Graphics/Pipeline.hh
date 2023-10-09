@@ -1,9 +1,6 @@
-// Created on Wednesday September 21st 2022 by exdal
-// Last modified on Monday August 28th 2023 by exdal
-
 #pragma once
 
-#include "APIAllocator.hh"
+#include "APIObject.hh"
 #include "Common.hh"
 
 #include <EASTL/vector.h>
@@ -38,17 +35,16 @@ struct PushConstantDesc : VkPushConstantRange
     PushConstantDesc(ShaderStage stage, u32 offset, u32 size);
 };
 
-struct PipelineLayout : APIObject<VK_OBJECT_TYPE_PIPELINE_LAYOUT>
-{
-    VkPipelineLayout m_pHandle = nullptr;
-};
+using PipelineLayout = VkPipelineLayout;
+LR_ASSIGN_OBJECT_TYPE(PipelineLayout, VK_OBJECT_TYPE_PIPELINE_LAYOUT);
 
-struct Pipeline : APIObject<VK_OBJECT_TYPE_PIPELINE>
+struct Pipeline : APIObject
 {
     VkPipelineBindPoint m_BindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
     VkPipeline m_pHandle = nullptr;
-    PipelineLayout *m_pLayout = nullptr;
+    PipelineLayout m_pLayout = nullptr;
 };
+LR_ASSIGN_OBJECT_TYPE(Pipeline, VK_OBJECT_TYPE_PIPELINE);
 
 // TODO: Indirect drawing.
 // TODO: Instances.
@@ -59,7 +55,7 @@ struct GraphicsPipelineBuildInfo
     Format m_DepthAttachmentFormat = Format::Unknown;
     eastl::vector<ColorBlendAttachment> m_BlendAttachments = {};
     eastl::vector<Shader *> m_Shaders = {};
-    PipelineLayout *m_pLayout = nullptr;
+    PipelineLayout m_pLayout = nullptr;
     f32 m_DepthBiasFactor = 0.0;
     f32 m_DepthBiasClamp = 0.0;
     f32 m_DepthSlopeFactor = 0.0;
@@ -81,7 +77,7 @@ struct GraphicsPipelineBuildInfo
 struct ComputePipelineBuildInfo
 {
     Shader *m_pShader = nullptr;
-    PipelineLayout *m_pLayout = nullptr;
+    PipelineLayout m_pLayout = nullptr;
 };
 
 }  // namespace lr::Graphics

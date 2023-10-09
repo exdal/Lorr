@@ -3,7 +3,7 @@
 
 #include "DescriptorManager.hh"
 
-#include "Graphics/APIResource.hh"
+#include "Graphics/Resource.hh"
 #include "Graphics/Pipeline.hh"
 
 namespace lr::Graphics
@@ -70,11 +70,10 @@ void DescriptorManager::Init(DescriptorManagerDesc *pDesc)
     {
         BufferDesc bufferDesc = {
             .m_UsageFlags = MapBufferUsage((DescriptorPoolType)i),
-            .m_TargetAllocator = ResourceAllocator::Descriptor,
             .m_DataSize = bufferSizes[i],
         };
 
-        m_Buffers[i] = m_pContext->CreateBuffer(&bufferDesc);
+        m_Buffers[i] = m_pContext->CreateBuffer(&bufferDesc, nullptr);
     }
 
     PushConstantDesc pushConstantDesc(ShaderStage::All, 0, 256);
@@ -97,8 +96,6 @@ void DescriptorManager::InitBDAPool(usize count)
 void DescriptorManager::SetDescriptors(eastl::span<DescriptorGetInfo> elements)
 {
     ZoneScoped;
-
-
 }
 
 Buffer *DescriptorManager::GetBuffer(DescriptorPoolType type)

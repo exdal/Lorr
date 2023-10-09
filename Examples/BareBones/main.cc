@@ -18,7 +18,6 @@ lr::Engine *lr::Engine::Get()
 int main()
 {
     using namespace lr;
-    using namespace lr::Graphics;
 
     BaseApplicationDesc appDesc = {};
     appDesc.m_Name = "BareBones";

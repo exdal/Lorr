@@ -18,7 +18,8 @@ static constexpr VkAttachmentStoreOp kStoreOpLUT[] = {
     VK_ATTACHMENT_STORE_OP_MAX_ENUM,   // Clear
 };
 
-DescriptorBufferBindInfo::DescriptorBufferBindInfo(Buffer *pBuffer, BufferUsage bufferUsage)
+DescriptorBufferBindInfo::DescriptorBufferBindInfo(
+    Buffer *pBuffer, BufferUsage bufferUsage)
 {
     this->sType = VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT;
     this->pNext = nullptr;
@@ -27,14 +28,22 @@ DescriptorBufferBindInfo::DescriptorBufferBindInfo(Buffer *pBuffer, BufferUsage 
 }
 
 RenderingAttachment::RenderingAttachment(
-    Image *pImage, ImageLayout layout, AttachmentOp loadOp, AttachmentOp storeOp, ColorClearValue clearVal)
+    Image *pImage,
+    ImageLayout layout,
+    AttachmentOp loadOp,
+    AttachmentOp storeOp,
+    ColorClearValue clearVal)
 {
     InitImage(pImage, layout, loadOp, storeOp);
     memcpy(&this->clearValue.color, &clearVal, sizeof(ColorClearValue));
 }
 
 RenderingAttachment::RenderingAttachment(
-    Image *pImage, ImageLayout layout, AttachmentOp loadOp, AttachmentOp storeOp, DepthClearValue clearVal)
+    Image *pImage,
+    ImageLayout layout,
+    AttachmentOp loadOp,
+    AttachmentOp storeOp,
+    DepthClearValue clearVal)
 {
     InitImage(pImage, layout, loadOp, storeOp);
     memcpy(&this->clearValue.color, &clearVal, sizeof(ColorClearValue));
@@ -51,7 +60,8 @@ void RenderingAttachment::InitImage(
     this->storeOp = kStoreOpLUT[(u32)storeOp];
 }
 
-ImageBarrier::ImageBarrier(Image *pImage, ImageUsage aspectUsage, const PipelineBarrier &barrier)
+ImageBarrier::ImageBarrier(
+    Image *pImage, ImageUsage aspectUsage, const PipelineBarrier &barrier)
 {
     ZoneScoped;
 
@@ -175,7 +185,8 @@ void DependencyInfo::SetMemoryBarriers(eastl::span<MemoryBarrier> memoryBarriers
     this->pMemoryBarriers = memoryBarriers.data();
 }
 
-SemaphoreSubmitDesc::SemaphoreSubmitDesc(Semaphore *pSemaphore, u64 value, PipelineStage stage)
+SemaphoreSubmitDesc::SemaphoreSubmitDesc(
+    Semaphore *pSemaphore, u64 value, PipelineStage stage)
 {
     this->sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
     this->pNext = nullptr;
@@ -230,7 +241,8 @@ void CommandList::SetPipelineBarrier(DependencyInfo *pDependencyInfo)
     vkCmdPipelineBarrier2(m_pHandle, pDependencyInfo);
 }
 
-void CommandList::CopyBufferToBuffer(Buffer *pSource, Buffer *pDest, u64 srcOff, u64 dstOff, u64 size)
+void CommandList::CopyBufferToBuffer(
+    Buffer *pSource, Buffer *pDest, u64 srcOff, u64 dstOff, u64 size)
 {
     ZoneScoped;
 
@@ -238,7 +250,8 @@ void CommandList::CopyBufferToBuffer(Buffer *pSource, Buffer *pDest, u64 srcOff,
     vkCmdCopyBuffer(m_pHandle, pSource->m_pHandle, pDest->m_pHandle, 1, &copyRegion);
 }
 
-void CommandList::CopyBufferToImage(Buffer *pSource, Image *pDest, ImageUsage aspectUsage, ImageLayout layout)
+void CommandList::CopyBufferToImage(
+    Buffer *pSource, Image *pDest, ImageUsage aspectUsage, ImageLayout layout)
 {
     ZoneScoped;
 
@@ -266,10 +279,16 @@ void CommandList::CopyBufferToImage(Buffer *pSource, Image *pDest, ImageUsage as
     imageCopyInfo.imageSubresource.mipLevel = 0;
 
     vkCmdCopyBufferToImage(
-        m_pHandle, pSource->m_pHandle, pDest->m_pHandle, (VkImageLayout)layout, 1, &imageCopyInfo);
+        m_pHandle,
+        pSource->m_pHandle,
+        pDest->m_pHandle,
+        (VkImageLayout)layout,
+        1,
+        &imageCopyInfo);
 }
 
-void CommandList::Draw(u32 vertexCount, u32 firstVertex, u32 instanceCount, u32 firstInstance)
+void CommandList::Draw(
+    u32 vertexCount, u32 firstVertex, u32 instanceCount, u32 firstInstance)
 {
     ZoneScoped;
 
@@ -277,11 +296,16 @@ void CommandList::Draw(u32 vertexCount, u32 firstVertex, u32 instanceCount, u32 
 }
 
 void CommandList::DrawIndexed(
-    u32 indexCount, u32 firstIndex, u32 vertexOffset, u32 instanceCount, u32 firstInstance)
+    u32 indexCount,
+    u32 firstIndex,
+    u32 vertexOffset,
+    u32 instanceCount,
+    u32 firstInstance)
 {
     ZoneScoped;
 
-    vkCmdDrawIndexed(m_pHandle, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
+    vkCmdDrawIndexed(
+        m_pHandle, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
 }
 
 void CommandList::Dispatch(u32 groupX, u32 groupY, u32 groupZ)
@@ -335,12 +359,18 @@ void CommandList::SetPipeline(Pipeline *pPipeline)
     vkCmdBindPipeline(m_pHandle, m_pPipeline->m_BindPoint, pPipeline->m_pHandle);
 }
 
-void CommandList::SetPushConstants(void *pData, u32 dataSize, u32 offset, ShaderStage stage)
+void CommandList::SetPushConstants(
+    void *pData, u32 dataSize, u32 offset, ShaderStage stage)
 {
     ZoneScoped;
 
     vkCmdPushConstants(
-        m_pHandle, m_pPipeline->m_pLayout->m_pHandle, (VkShaderStageFlags)stage, offset, dataSize, pData);
+        m_pHandle,
+        m_pPipeline->m_pLayout,
+        (VkShaderStageFlags)stage,
+        offset,
+        dataSize,
+        pData);
 }
 
 void CommandList::SetDescriptorBuffers(eastl::span<DescriptorBufferBindInfo> bindingInfos)
@@ -358,7 +388,7 @@ void CommandList::SetDescriptorBufferOffsets(
     vkCmdSetDescriptorBufferOffsetsEXT(
         m_pHandle,
         m_pPipeline->m_BindPoint,
-        m_pPipeline->m_pLayout->m_pHandle,
+        m_pPipeline->m_pLayout,
         firstSet,
         setCount,
         indices.data(),

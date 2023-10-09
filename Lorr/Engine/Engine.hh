@@ -4,7 +4,6 @@
 #pragma once
 
 #include "Core/EventManager.hh"
-#include "Graphics/APIContext.hh"
 #include "Input/Key.hh"
 #include "UI/ImGui.hh"
 #include "Window/Win32/Win32Window.hh"
@@ -64,8 +63,6 @@ union EngineEventData
 
 struct EngineDesc
 {
-    // Graphics::APIFlags m_TargetAPIFlags;
-
     WindowDesc m_WindowDesc;
 };
 
@@ -83,7 +80,6 @@ struct Engine
 
     EventManager<EngineEventData, 64> m_EventMan;
     Win32Window m_Window;
-    Graphics::APIContext m_APIContext;
     UI::ImGuiHandler m_ImGui;
 
     bool m_ShuttingDown = false;

@@ -1,4 +1,4 @@
-#include "APIResource.hh"
+#include "Resource.hh"
 
 namespace lr::Graphics
 {

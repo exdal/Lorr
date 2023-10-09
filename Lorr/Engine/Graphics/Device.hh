@@ -1,144 +1,175 @@
-// Created on Sunday March 19th 2023 by exdal
-// Last modified on Tuesday August 29th 2023 by exdal
+// Created on Monday July 18th 2022 by exdal
+// Last modified on Monday August 28th 2023 by exdal
 
 #pragma once
 
-#include "Memory/Allocator/LinearAllocator.hh"
-#include "Memory/MemoryUtils.hh"
-#include "Window/BaseWindow.hh"
+#include <EASTL/fixed_vector.h>
 
-#include <EASTL/vector.h>
-
-#include "APIAllocator.hh"
-#include "Common.hh"
+#include "APIObject.hh"
+#include "Resource.hh"
+#include "PhysicalDevice.hh"
+#include "CommandList.hh"
+#include "Pipeline.hh"
+#include "SwapChain.hh"
+#include "TracyVK.hh"
 
 namespace lr::Graphics
 {
-struct Surface;
-struct PhysicalDevice : APIObject<VK_OBJECT_TYPE_PHYSICAL_DEVICE>
+enum class APIFlag : u32
 {
-    void Init(eastl::span<VkPhysicalDevice> devices);
-    void InitQueueFamilies(Surface *pSurface);
-    VkDevice GetLogicalDevice();
-    u32 GetHeapIndex(VkMemoryPropertyFlags flags);
-    u32 GetQueueIndex(CommandType type);
-    u64 GetDescriptorBufferAlignment()
-    {
-        return m_FeatureDescriptorBufferProps.descriptorBufferOffsetAlignment;
-    }
+    None = 0,
+    VSync = 1 << 0,
+};
+LR_TYPEOP_ARITHMETIC_INT(APIFlag, APIFlag, &);
 
-    u32 SelectQueue(Surface *pSurface, VkQueueFlags desiredQueue, bool requirePresent, bool selectBest);
+enum class MemoryFlag
+{
+    Device = 1 << 0,
+    HostVisible = 1 << 1,
+    HostCoherent = 1 << 2,
+    HostCached = 1 << 3,
 
-    u32 m_PresentQueueIndex = 0;
-    eastl::array<VkDeviceQueueCreateInfo, (u32)CommandType::Count> m_QueueInfos;
-    eastl::vector<VkQueueFamilyProperties> m_QueueProperties;
-    eastl::vector<u32> m_SelectedQueueIndices;
-    eastl::vector<VkExtensionProperties> m_DeviceExtensions;
+    HostVisibleCoherent = HostVisible | HostCoherent,
+};
+LR_TYPEOP_ARITHMETIC_INT(MemoryFlag, MemoryFlag, &);
+LR_TYPEOP_ARITHMETIC(MemoryFlag, MemoryFlag, |);
 
-    /// DEVICE FEATURES ///
-    VkPhysicalDeviceProperties m_FeatureDeviceProps = {};
-    VkPhysicalDeviceMemoryProperties m_FeatureMemoryProps = {};
-    // VK_EXT_descriptor_buffer
-    VkPhysicalDeviceDescriptorBufferPropertiesEXT m_FeatureDescriptorBufferProps = {};
-
-    VkPhysicalDevice m_pHandle = VK_NULL_HANDLE;
+struct SubmitDesc
+{
+    CommandType m_Type = CommandType::Count;
+    eastl::span<SemaphoreSubmitDesc> m_WaitSemas;
+    eastl::span<CommandListSubmitDesc> m_Lists;
+    eastl::span<SemaphoreSubmitDesc> m_SignalSemas;
 };
 
-struct Surface : APIObject<VK_OBJECT_TYPE_SURFACE_KHR>
+struct DeviceDesc
 {
-    void Init(BaseWindow *pWindow, VkInstance pInstance, PhysicalDevice *pPhysicalDevice);
-    bool IsFormatSupported(VkFormat format, VkColorSpaceKHR &colorSpaceOut);
-    bool IsPresentModeSupported(VkPresentModeKHR mode);
-
-    eastl::vector<VkSurfaceFormatKHR> m_SurfaceFormats;
-    eastl::vector<VkPresentModeKHR> m_PresentModes;
-
-    VkCompositeAlphaFlagsKHR m_SupportedCompositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-    VkSurfaceTransformFlagsKHR m_SupportedTransforms = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
-    VkSurfaceTransformFlagBitsKHR m_CurrentTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
-
-    u32 m_MinImageCount = 0;
-    u32 m_MaxImageCount = 0;
-    XMUINT2 m_MinImageSize = {};
-    XMUINT2 m_MaxImageSize = {};
-
-    VkSurfaceKHR m_pHandle = VK_NULL_HANDLE;
+    APIFlag m_Flags = APIFlag::None;
+    u32 m_ImageCount = 1;
+    BaseWindow *m_pTargetWindow = nullptr;
 };
 
-struct DeviceMemory : APIObject<VK_OBJECT_TYPE_DEVICE_MEMORY>
+struct Device
 {
-    virtual u64 Allocate(u64 dataSize, u64 alignment, u64 &allocatorData) = 0;
-    virtual void Free(u64 allocatorData) = 0;
+    bool Init(DeviceDesc *pDesc);
 
-    void *m_pMappedMemory = nullptr;
-    VkDeviceMemory m_pHandle = VK_NULL_HANDLE;
-};
+    /// COMMAND ///
+    CommandQueue *CreateCommandQueue(CommandType type, u32 queueIndex);
+    CommandAllocator *CreateCommandAllocator(CommandQueue *pQueue, bool resetLists);
+    CommandList *CreateCommandList(CommandAllocator *pAllocator);
 
-struct TLSFDeviceMemory : DeviceMemory
-{
-    u64 Allocate(u64 dataSize, u64 alignment, u64 &allocatorData) override
+    void BeginCommandList(CommandList *pList);
+    void EndCommandList(CommandList *pList);
+    void ResetCommandAllocator(CommandAllocator *pAllocator);
+    void Submit(CommandQueue *pQueue, SubmitDesc *pDesc);
+
+    Fence CreateFence(bool signaled);
+    void DeleteFence(Fence pFence);
+    bool IsFenceSignaled(Fence pFence);
+    void ResetFence(Fence pFence);
+
+    Semaphore *CreateSemaphore(u32 initialValue = 0, bool binary = true);
+    void DeleteSemaphore(Semaphore *pSemaphore);
+    void WaitForSemaphore(
+        Semaphore *pSemaphore, u64 desiredValue, u64 timeout = UINT64_MAX);
+
+    /// PIPELINE ///
+    VkPipelineCache CreatePipelineCache(
+        u32 initialDataSize = 0, void *pInitialData = nullptr);
+    PipelineLayout CreatePipelineLayout(
+        eastl::span<DescriptorSetLayout> layouts,
+        eastl::span<PushConstantDesc> pushConstants);
+
+    Pipeline *CreateGraphicsPipeline(GraphicsPipelineBuildInfo *pBuildInfo);
+    Pipeline *CreateComputePipeline(ComputePipelineBuildInfo *pBuildInfo);
+
+    /// SWAPCHAIN ///
+    SwapChain *CreateSwapChain(SwapChainDesc *pDesc);
+    void DeleteSwapChain(SwapChain *pSwapChain, bool keepSelf);
+
+    void WaitForWork();
+    u32 AcquireImage(SwapChain *pSwapChain, Semaphore *pSemaphore);
+    void Present(SwapChain *pSwapChain, Semaphore *pSemaphore, CommandQueue *pQueue);
+
+    /// RESOURCE ///
+    u64 GetBufferMemorySize(Buffer *pBuffer, u64 *pAlignmentOut = nullptr);
+    u64 GetImageMemorySize(Image *pImage, u64 *pAlignmentOut = nullptr);
+
+    VkDeviceMemory CreateDeviceMemory(MemoryFlag memoryFlags, u64 memorySize);
+    LinearDeviceMemory *CreateLinearAllocator(MemoryFlag memoryFlags, u64 memorySize);
+    TLSFDeviceMemory *CreateTLSFAllocator(
+        MemoryFlag memoryFlags, u64 memorySize, u32 maxAllocs);
+    void DeleteAllocator(DeviceMemory *pDeviceMemory);
+    void AllocateBufferMemory(DeviceMemory *pMemory, Buffer *pBuffer, u64 memorySize);
+    void AllocateImageMemory(DeviceMemory *pMemory, Image *pImage, u64 memorySize);
+
+    // * Shaders * //
+    Shader *CreateShader(ShaderStage stage, u32 *pData, u64 dataSize);
+    void DeleteShader(Shader *pShader);
+
+    // * Descriptor * //
+
+    DescriptorSetLayout CreateDescriptorSetLayout(
+        eastl::span<DescriptorLayoutElement> elements,
+        DescriptorSetLayoutFlag flags = DescriptorSetLayoutFlag::DescriptorBuffer);
+    void DeleteDescriptorSetLayout(DescriptorSetLayout pLayout);
+    u64 GetDescriptorSetLayoutSize(DescriptorSetLayout pLayout);
+    u64 GetDescriptorSetLayoutBindingOffset(DescriptorSetLayout pLayout, u32 bindingID);
+    void GetDescriptorData(const DescriptorGetInfo &info, u64 dataSize, void *pDataOut);
+
+    // * Buffers * //
+    Buffer *CreateBuffer(BufferDesc *pDesc, DeviceMemory *pAllocator);
+    void DeleteBuffer(Buffer *pHandle, DeviceMemory *pAllocator);
+
+    u8 *GetMemoryData(DeviceMemory *pMemory);
+    u8 *GetBufferMemoryData(DeviceMemory *pMemory, Buffer *pBuffer);
+
+    // * Images * //
+    Image *CreateImage(ImageDesc *pDesc, DeviceMemory *pAllocator);
+    void DeleteImage(Image *pImage, DeviceMemory *pAllocator);
+    void CreateImageView(Image *pImage, ImageUsage aspectUsage);
+
+    Sampler *CreateSampler(SamplerDesc *pDesc);
+    void DeleteSampler(VkSampler pSampler);
+
+    /// UTILITY ///
+    template<typename _Type>
+    void SetObjectName(_Type *pType, eastl::string_view name)
     {
-        ZoneScoped;
+        static_assert(
+            eastl::is_base_of<APIObject<_Type::kObjectType>, _Type>(),
+            "_Type is not base of APIObject");
 
-        Memory::TLSFBlockID blockID = m_Allocator.Allocate(dataSize, alignment);
-        allocatorData = blockID;
-        return m_Allocator.GetBlockData(blockID)->m_Offset;
+#if LR_DEBUG
+        VkDebugUtilsObjectNameInfoEXT objectNameInfo = {};
+        objectNameInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
+        objectNameInfo.objectType = (VkObjectType)_Type::kObjectType;
+        objectNameInfo.objectHandle = (u64)pType->m_pHandle;
+        objectNameInfo.pObjectName = name.data();
+
+        vkSetDebugUtilsObjectNameEXT(m_pHandle, &objectNameInfo);
+#endif
     }
 
-    void Free(u64 allocatorData) override
+    template<VkObjectType _ObjectType, typename _Type>
+    void SetObjectNameRaw(_Type object, eastl::string_view name)
     {
-        ZoneScoped;
+#if LR_DEBUG
+        VkDebugUtilsObjectNameInfoEXT objectNameInfo = {};
+        objectNameInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
+        objectNameInfo.objectType = _ObjectType;
+        objectNameInfo.objectHandle = (u64)object;
+        objectNameInfo.pObjectName = name.data();
 
-        m_Allocator.Free(allocatorData);
+        vkSetDebugUtilsObjectNameEXT(m_pHandle, &objectNameInfo);
+#endif
     }
 
-    Memory::TLSFAllocatorView m_Allocator = {};
-};
+    VkDevice m_pHandle = nullptr;
 
-struct LinearDeviceMemory : DeviceMemory
-{
-    void Init(u64 memSize)
-    {
-        ZoneScoped;
-
-        m_AllocatorView.m_pFirstRegion = new Memory::AllocationRegion;
-        m_AllocatorView.m_pFirstRegion->m_Capacity = memSize;
-    }
-
-    u64 Allocate(u64 dataSize, u64 alignment, u64 &allocatorData) override
-    {
-        ZoneScoped;
-
-        u64 alignedSize = Memory::AlignUp(dataSize, alignment);
-        Memory::AllocationRegion *pAvailRegion = m_AllocatorView.FindFreeRegion(alignedSize);
-        if (!pAvailRegion)
-            return ~0;
-
-        u64 offset = pAvailRegion->m_Size;
-        pAvailRegion->m_Size += alignedSize;
-        return offset;
-    }
-
-    void Free(u64 allocatorData) override
-    {
-        ZoneScoped;
-
-        m_AllocatorView.Reset();
-    }
-
-    Memory::LinearAllocatorView m_AllocatorView = {};
-};
-
-struct ResourceAllocators
-{
-    LinearDeviceMemory *m_pDescriptor = nullptr;
-    LinearDeviceMemory *m_pBufferLinear = nullptr;
-    TLSFDeviceMemory *m_pBufferTLSF = nullptr;
-    TLSFDeviceMemory *m_pBufferTLSFHost = nullptr;
-    LinearDeviceMemory *m_pBufferFrametime = nullptr;
-    TLSFDeviceMemory *m_pImageTLSF = nullptr;
-
-    DeviceMemory *GetDeviceMemory(ResourceAllocator allocator);
+    /// Pools/Caches
+    VkPipelineCache m_pPipelineCache = nullptr;
+    TracyVkCtx m_pTracyCtx = nullptr;
 };
 
 }  // namespace lr::Graphics

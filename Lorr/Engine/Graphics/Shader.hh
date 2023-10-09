@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "APIAllocator.hh"
+#include "APIObject.hh"
 #include "Common.hh"
 
 namespace lr::Graphics
@@ -18,11 +18,12 @@ enum class ShaderCompileFlag : u32
 LR_TYPEOP_ARITHMETIC(ShaderCompileFlag, ShaderCompileFlag, |);
 LR_TYPEOP_ARITHMETIC_INT(ShaderCompileFlag, ShaderCompileFlag, &);
 
-struct Shader : APIObject<VK_OBJECT_TYPE_SHADER_MODULE>
+struct Shader : APIObject
 {
     ShaderStage m_Type = ShaderStage::Vertex;
     VkShaderModule m_pHandle;
 };
+LR_ASSIGN_OBJECT_TYPE(Shader, VK_OBJECT_TYPE_SHADER_MODULE);
 
 struct ShaderCompileDesc
 {

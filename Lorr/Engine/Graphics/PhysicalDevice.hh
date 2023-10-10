@@ -34,6 +34,17 @@ struct Surface : APIObject
 };
 LR_ASSIGN_OBJECT_TYPE(Surface, VK_OBJECT_TYPE_SURFACE_KHR);
 
+struct PhysicalDevicePropertySet
+{
+    PhysicalDevicePropertySet();
+    
+    VkPhysicalDeviceMemoryProperties m_Memory = {};
+
+    /// CHAINED ///
+    VkPhysicalDeviceProperties2 m_Properties = {};
+    VkPhysicalDeviceDescriptorBufferPropertiesEXT m_DescriptorBuffer = {};
+};
+
 struct Device;
 struct PhysicalDevice : APIObject
 {
@@ -60,12 +71,7 @@ struct PhysicalDevice : APIObject
     eastl::vector<VkQueueFamilyProperties> m_QueueProperties;
     eastl::vector<u32> m_SelectedQueueIndices;
 
-    /// DEVICE FEATURES ///
-    VkPhysicalDeviceProperties m_FeatureDeviceProps = {};
-    VkPhysicalDeviceMemoryProperties m_FeatureMemoryProps = {};
-    // VK_EXT_descriptor_buffer
-    VkPhysicalDeviceDescriptorBufferPropertiesEXT m_FeatureDescriptorBufferProps = {};
-
+    PhysicalDevicePropertySet m_PropertySet = {};
     VkPhysicalDevice m_pHandle = VK_NULL_HANDLE;
 };
 LR_ASSIGN_OBJECT_TYPE(PhysicalDevice, VK_OBJECT_TYPE_PHYSICAL_DEVICE);

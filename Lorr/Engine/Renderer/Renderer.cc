@@ -37,6 +37,8 @@ void Renderer::Init(BaseWindow *pWindow)
         return;
 
     m_pPhysicalDevice->SetSurfaceCapabilities(m_pSurface);
+    m_pPhysicalDevice->GetSurfaceFormats(m_pSurface, m_pSurface->m_SurfaceFormats);
+    m_pPhysicalDevice->GetPresentModes(m_pSurface, m_pSurface->m_PresentModes);
     m_pPhysicalDevice->InitQueueFamilies(m_pSurface);
     m_pDevice = m_pPhysicalDevice->GetLogicalDevice();
     if (!m_pDevice)

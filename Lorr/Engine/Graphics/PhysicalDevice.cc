@@ -124,6 +124,19 @@ VkSurfaceTransformFlagBitsKHR Surface::GetTransform()
     return m_Capabilities.currentTransform;
 }
 
+PhysicalDevicePropertySet::PhysicalDevicePropertySet()
+{
+    m_DescriptorBuffer = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_PROPERTIES_EXT,
+        .pNext = nullptr,
+    };
+
+    m_Properties = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
+        .pNext = &m_DescriptorBuffer,
+    };
+}
+
 bool PhysicalDevice::Init(VkPhysicalDevice pDevice)
 {
     ZoneScoped;
@@ -164,19 +177,8 @@ bool PhysicalDevice::Init(VkPhysicalDevice pDevice)
 
     delete[] pExtensions;
 
-    m_FeatureDescriptorBufferProps = {
-        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_PROPERTIES_EXT,
-        .pNext = nullptr,
-    };
-
-    VkPhysicalDeviceProperties2 deviceProps2 = {
-        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
-        .pNext = &m_FeatureDescriptorBufferProps,
-    };
-    vkGetPhysicalDeviceProperties2(m_pHandle, &deviceProps2);
-    m_FeatureDeviceProps = deviceProps2.properties;
-
-    vkGetPhysicalDeviceMemoryProperties(m_pHandle, &m_FeatureMemoryProps);
+    vkGetPhysicalDeviceProperties2(m_pHandle, &m_PropertySet.m_Properties);
+    vkGetPhysicalDeviceMemoryProperties(m_pHandle, &m_PropertySet.m_Memory);
 
     LOG_TRACE("Initialized physical device!");
 
@@ -269,9 +271,9 @@ u32 PhysicalDevice::GetHeapIndex(VkMemoryPropertyFlags flags)
 {
     ZoneScoped;
 
-    for (u32 i = 0; i < m_FeatureMemoryProps.memoryTypeCount; i++)
+    for (u32 i = 0; i < m_PropertySet.m_Memory.memoryTypeCount; i++)
     {
-        if ((m_FeatureMemoryProps.memoryTypes[i].propertyFlags & flags) == flags)
+        if ((m_PropertySet.m_Memory.memoryTypes[i].propertyFlags & flags) == flags)
             return i;
     }
 
@@ -289,14 +291,14 @@ u32 PhysicalDevice::GetQueueIndex(CommandType type)
 
 u64 PhysicalDevice::GetDescriptorBufferAlignment()
 {
-    return m_FeatureDescriptorBufferProps.descriptorBufferOffsetAlignment;
+    return m_PropertySet.m_DescriptorBuffer.descriptorBufferOffsetAlignment;
 }
 
 u64 PhysicalDevice::GetDescriptorSize(DescriptorType type)
 {
     ZoneScoped;
 
-    VkPhysicalDeviceDescriptorBufferPropertiesEXT &props = m_FeatureDescriptorBufferProps;
+    auto &props = m_PropertySet.m_DescriptorBuffer;
     u64 sizeArray[] = {
         [(u32)DescriptorType::Sampler] = props.samplerDescriptorSize,
         [(u32)DescriptorType::SampledImage] = props.sampledImageDescriptorSize,

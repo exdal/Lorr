@@ -494,6 +494,14 @@ void Device::DeleteSwapChain(SwapChain *pSwapChain, bool keepSelf)
         delete pSwapChain;
 }
 
+ls::ref_array<Image *> Device::GetSwapChainImages(SwapChain *pSwapChain)
+{
+    ZoneScoped;
+
+    ls::ref_array<Image *> ppImages(new Image *[pSwapChain->m_FrameCount]);
+    Image *pImage = ppImages[0];
+}
+
 void Device::WaitForWork()
 {
     ZoneScoped;

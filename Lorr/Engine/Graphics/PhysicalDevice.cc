@@ -1,5 +1,7 @@
 #include "PhysicalDevice.hh"
 
+#include <EASTL/scoped_array.h>
+
 #include "Window/Win32/Win32Window.hh"
 
 #include "Device.hh"
@@ -147,9 +149,10 @@ bool PhysicalDevice::Init(VkPhysicalDevice pDevice)
 
     u32 availExtensions = 0;
     vkEnumerateDeviceExtensionProperties(m_pHandle, nullptr, &availExtensions, nullptr);
-    VkExtensionProperties *pExtensions = new VkExtensionProperties[availExtensions];
+    eastl::scoped_array<VkExtensionProperties> pExtensions(
+        new VkExtensionProperties[availExtensions]);
     vkEnumerateDeviceExtensionProperties(
-        m_pHandle, nullptr, &availExtensions, pExtensions);
+        m_pHandle, nullptr, &availExtensions, pExtensions.get());
 
     LOG_INFO("Checking device extensions:");
     for (eastl::string_view extension : kRequiredExtensions)
@@ -174,8 +177,6 @@ bool PhysicalDevice::Init(VkPhysicalDevice pDevice)
 
         return false;
     }
-
-    delete[] pExtensions;
 
     vkGetPhysicalDeviceProperties2(m_pHandle, &m_PropertySet.m_Properties);
     vkGetPhysicalDeviceMemoryProperties(m_pHandle, &m_PropertySet.m_Memory);
@@ -393,8 +394,6 @@ u32 PhysicalDevice::SelectQueue(
 
         m_PresentQueueIndex = foundIdx;
     }
-
-    m_SelectedQueueIndices.push_back(foundIdx);
 
     return foundIdx;
 }

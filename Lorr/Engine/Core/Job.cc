@@ -4,8 +4,6 @@
 #include "Job.hh"
 #include "Utils/Timer.hh"
 
-#include <x86intrin.h>
-
 namespace lr::Job
 {
 static JobManager _man;

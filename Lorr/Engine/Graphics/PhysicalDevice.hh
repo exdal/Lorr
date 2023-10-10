@@ -69,7 +69,6 @@ struct PhysicalDevice : APIObject
     u32 m_PresentQueueIndex = 0;
     eastl::array<VkDeviceQueueCreateInfo, (u32)CommandType::Count> m_QueueInfos;
     eastl::vector<VkQueueFamilyProperties> m_QueueProperties;
-    eastl::vector<u32> m_SelectedQueueIndices;
 
     PhysicalDevicePropertySet m_PropertySet = {};
     VkPhysicalDevice m_pHandle = VK_NULL_HANDLE;

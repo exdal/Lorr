@@ -4,6 +4,7 @@
 #pragma once
 
 #include <EASTL/fixed_vector.h>
+#include "STL/RefPtr.hh"
 
 #include "APIObject.hh"
 #include "Resource.hh"
@@ -60,6 +61,7 @@ struct Device
     /// SWAPCHAIN ///
     SwapChain *CreateSwapChain(Surface *pSurface, SwapChainDesc *pDesc);
     void DeleteSwapChain(SwapChain *pSwapChain, bool keepSelf);
+    ls::ref_array<Image *> GetSwapChainImages(SwapChain *pSwapChain);
 
     void WaitForWork();
     u32 AcquireImage(SwapChain *pSwapChain, Semaphore *pSemaphore);

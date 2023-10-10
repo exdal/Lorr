@@ -3,20 +3,7 @@
 
 #pragma once
 
-typedef double f64;
-typedef float f32;
-
-typedef unsigned long long u64;
-typedef signed long long i64;
-
-typedef unsigned int u32;
-typedef signed int i32;
-
-typedef unsigned short u16;
-typedef signed short i16;
-
-typedef unsigned char u8;
-typedef signed char i8;
+#include "STL/Types.hh"
 
 #include <tracy/Tracy.hpp>
 
@@ -25,22 +12,6 @@ typedef signed char i8;
 #include <EASTL/array.h>
 
 #include <DirectXMath.h>
-
-#ifdef PTR_SIZE
-#undef PTR_SIZE
-#endif
-#define PTR_SIZE EA_PLATFORM_PTR_SIZE
-
-#if EA_PLATFORM_PTR_SIZE == 8
-typedef unsigned __int64 uptr;
-typedef signed __int64 iptr;
-typedef u64 usize;
-#else
-typedef unsigned int uptr;
-typedef signed int iptr;
-typedef u32 usize;
-#endif
-
 using namespace DirectX;
 
 #include "Utils/TypeOperators.hh"

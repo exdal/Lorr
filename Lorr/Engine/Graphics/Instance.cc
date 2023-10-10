@@ -1,5 +1,7 @@
 #include "Instance.hh"
 
+#include <EASTL/scoped_array.h>
+
 #include "Window/Win32/Win32Window.hh"
 
 #include "PhysicalDevice.hh"
@@ -35,8 +37,9 @@ bool Instance::Init(InstanceDesc *pDesc)
 
     u32 availExtensions = 0;
     vkEnumerateInstanceExtensionProperties(nullptr, &availExtensions, nullptr);
-    VkExtensionProperties *pExtensions = new VkExtensionProperties[availExtensions];
-    vkEnumerateInstanceExtensionProperties(nullptr, &availExtensions, pExtensions);
+    eastl::scoped_array<VkExtensionProperties> pExtensions(
+        new VkExtensionProperties[availExtensions]);
+    vkEnumerateInstanceExtensionProperties(nullptr, &availExtensions, pExtensions.get());
 
     for (eastl::string_view extension : kRequiredExtensions)
     {
@@ -60,8 +63,6 @@ bool Instance::Init(InstanceDesc *pDesc)
 
         return false;
     }
-
-    delete[] pExtensions;
 
     VkApplicationInfo appInfo = {
         .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,

@@ -1,6 +1,3 @@
-// Created on Wednesday May 4th 2022 by exdal
-// Last modified on Thursday September 14th 2023 by exdal
-
 #include "Engine.hh"
 
 #include "Core/Config.hh"
@@ -18,6 +15,8 @@ void Engine::Init(EngineDesc &engineDesc)
     Job::JobManager::Init(CONFIG_GET_VAR(JM_WORKER_COUNT));
     m_Window.Init(engineDesc.m_WindowDesc);
     m_ImGui.Init(m_Window.m_Width, m_Window.m_Height);
+    Renderer::Renderer renderer;
+    renderer.Init(&m_Window);
 }
 
 void Engine::PushEvent(Event event, EngineEventData &data)

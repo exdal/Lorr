@@ -7,21 +7,22 @@
 
 namespace lr::Graphics
 {
-bool Device::Init(DeviceDesc *pDesc)
+bool Device::Init(PhysicalDevice *pPhysicalDevice, VkDevice pHandle)
 {
     ZoneScoped;
 
     LOG_TRACE("Initializing device...");
 
-    if (!VK::LoadVulkanDevice(m_pHandle))
-        return false;
+    m_pHandle = pHandle;
 
-    constexpr u32 kTypeMem = Memory::MiBToBytes(16);
-    APIAllocator::g_Handle.m_TypeAllocator.Init(kTypeMem, 0x2000);
-    APIAllocator::g_Handle.m_pTypeData = Memory::Allocate<u8>(kTypeMem);
+    if (!VK::LoadVulkanDevice(m_pHandle))
+    {
+        LOG_ERROR("Failed to initialize device!");
+        return false;
+    }
 
     m_pPipelineCache = CreatePipelineCache();
-    m_pTracyCtx = TracyVkContextHostCalibrated(m_pPhysicalDevice->m_pHandle, m_pHandle);
+    m_pTracyCtx = TracyVkContextHostCalibrated(pPhysicalDevice->m_pHandle, m_pHandle);
 
     LOG_TRACE("Successfully initialized device.");
 
@@ -441,11 +442,10 @@ Pipeline *Device::CreateComputePipeline(ComputePipelineBuildInfo *pBuildInfo)
     return pPipeline;
 }
 
-SwapChain *Device::CreateSwapChain(SwapChainDesc *pDesc)
+SwapChain *Device::CreateSwapChain(Surface *pSurface, SwapChainDesc *pDesc)
 {
     ZoneScoped;
 
-    Surface *pSurface = pDesc->m_pSurface;
     SwapChain *pSwapChain = new SwapChain;
     pSwapChain->m_FrameCount = pSwapChain->m_FrameCount;
     pSwapChain->m_Width = pDesc->m_Width;
@@ -467,7 +467,7 @@ SwapChain *Device::CreateSwapChain(SwapChainDesc *pDesc)
         .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE,
         .queueFamilyIndexCount = 0,
         .pQueueFamilyIndices = nullptr,
-        .preTransform = pSurface->m_CurrentTransform,
+        .preTransform = pSurface->GetTransform(),
         .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
         .presentMode = pSwapChain->m_PresentMode,
         .clipped = VK_TRUE,
@@ -920,39 +920,25 @@ Sampler *Device::CreateSampler(SamplerDesc *pDesc)
 
     Sampler *pSampler = new Sampler;
 
-    constexpr static VkSamplerAddressMode kAddresModeLUT[] = {
-        VK_SAMPLER_ADDRESS_MODE_REPEAT,
-        VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT,
-        VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-        VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
+    VkSamplerCreateInfo samplerInfo = {
+        .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = 0,
+        .magFilter = (VkFilter)pDesc->m_MinFilter,
+        .minFilter = (VkFilter)pDesc->m_MinFilter,
+        .mipmapMode = (VkSamplerMipmapMode)pDesc->m_MipFilter,
+        .addressModeU = (VkSamplerAddressMode)pDesc->m_AddressU,
+        .addressModeV = (VkSamplerAddressMode)pDesc->m_AddressV,
+        .addressModeW = (VkSamplerAddressMode)pDesc->m_AddressW,
+        .mipLodBias = pDesc->m_MipLODBias,
+        .anisotropyEnable = pDesc->m_UseAnisotropy,
+        .maxAnisotropy = pDesc->m_MaxAnisotropy,
+        .compareEnable = pDesc->m_CompareOp != CompareOp::Never,
+        .compareOp = (VkCompareOp)pDesc->m_CompareOp,
+        .minLod = pDesc->m_MinLOD,
+        .maxLod = pDesc->m_MaxLOD,
+        .borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK,
     };
-
-    VkSamplerCreateInfo samplerInfo = {};
-    samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-    samplerInfo.pNext = nullptr;
-
-    samplerInfo.flags = 0;
-
-    samplerInfo.magFilter = (VkFilter)pDesc->m_MinFilter;
-    samplerInfo.minFilter = (VkFilter)pDesc->m_MinFilter;
-
-    samplerInfo.addressModeU = kAddresModeLUT[(u32)pDesc->m_AddressU];
-    samplerInfo.addressModeV = kAddresModeLUT[(u32)pDesc->m_AddressV];
-    samplerInfo.addressModeW = kAddresModeLUT[(u32)pDesc->m_AddressW];
-
-    samplerInfo.anisotropyEnable = pDesc->m_UseAnisotropy;
-    samplerInfo.maxAnisotropy = pDesc->m_MaxAnisotropy;
-
-    samplerInfo.mipmapMode = (VkSamplerMipmapMode)pDesc->m_MipFilter;
-    samplerInfo.mipLodBias = pDesc->m_MipLODBias;
-    samplerInfo.maxLod = pDesc->m_MaxLOD;
-    samplerInfo.minLod = pDesc->m_MinLOD;
-
-    samplerInfo.compareEnable = pDesc->m_CompareOp != CompareOp::Never;
-    samplerInfo.compareOp = (VkCompareOp)pDesc->m_CompareOp;
-
-    samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK;
-
     vkCreateSampler(m_pHandle, &samplerInfo, nullptr, &pSampler->m_pHandle);
 
     return pSampler;

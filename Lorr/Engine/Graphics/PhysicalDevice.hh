@@ -8,6 +8,7 @@
 
 #include "APIObject.hh"
 #include "Common.hh"
+#include "SwapChain.hh"
 
 namespace lr::Graphics
 {
@@ -18,12 +19,27 @@ struct AvailableQueueInfo
     u32 m_Index : 16;
 };
 
-struct Surface;
+struct Surface : APIObject
+{
+    bool Init(VkSurfaceKHR pHandle);
+    bool IsFormatSupported(VkFormat format, VkColorSpaceKHR &colorSpaceOut);
+    bool IsPresentModeSupported(VkPresentModeKHR mode);
+    VkSurfaceTransformFlagBitsKHR GetTransform();
+
+    eastl::vector<VkSurfaceFormatKHR> m_SurfaceFormats;
+    eastl::vector<VkPresentModeKHR> m_PresentModes;
+
+    VkSurfaceCapabilitiesKHR m_Capabilities = {};
+    VkSurfaceKHR m_pHandle = VK_NULL_HANDLE;
+};
+LR_ASSIGN_OBJECT_TYPE(Surface, VK_OBJECT_TYPE_SURFACE_KHR);
+
+struct Device;
 struct PhysicalDevice : APIObject
 {
-    void Init(eastl::span<VkPhysicalDevice> devices);
+    bool Init(VkPhysicalDevice pDevice);
     void InitQueueFamilies(Surface *pSurface);
-    VkDevice GetLogicalDevice();
+    Device *GetLogicalDevice();
     u32 GetHeapIndex(VkMemoryPropertyFlags flags);
     u32 GetQueueIndex(CommandType type);
     u32 SelectQueue(
@@ -35,11 +51,14 @@ struct PhysicalDevice : APIObject
     u64 GetDescriptorBufferAlignment();
     u64 GetDescriptorSize(DescriptorType type);
 
+    void GetSurfaceFormats(Surface *pSurface, eastl::vector<VkSurfaceFormatKHR> &formats);
+    void GetPresentModes(Surface *pSurface, eastl::vector<VkPresentModeKHR> &modes);
+    void SetSurfaceCapabilities(Surface *pSurface);
+
     u32 m_PresentQueueIndex = 0;
     eastl::array<VkDeviceQueueCreateInfo, (u32)CommandType::Count> m_QueueInfos;
     eastl::vector<VkQueueFamilyProperties> m_QueueProperties;
     eastl::vector<u32> m_SelectedQueueIndices;
-    eastl::vector<VkExtensionProperties> m_DeviceExtensions;
 
     /// DEVICE FEATURES ///
     VkPhysicalDeviceProperties m_FeatureDeviceProps = {};
@@ -50,31 +69,6 @@ struct PhysicalDevice : APIObject
     VkPhysicalDevice m_pHandle = VK_NULL_HANDLE;
 };
 LR_ASSIGN_OBJECT_TYPE(PhysicalDevice, VK_OBJECT_TYPE_PHYSICAL_DEVICE);
-
-struct Surface : APIObject
-{
-    void Init(BaseWindow *pWindow, VkInstance pInstance, PhysicalDevice *pPhysicalDevice);
-    bool IsFormatSupported(VkFormat format, VkColorSpaceKHR &colorSpaceOut);
-    bool IsPresentModeSupported(VkPresentModeKHR mode);
-
-    eastl::vector<VkSurfaceFormatKHR> m_SurfaceFormats;
-    eastl::vector<VkPresentModeKHR> m_PresentModes;
-
-    VkCompositeAlphaFlagsKHR m_SupportedCompositeAlpha =
-        VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-    VkSurfaceTransformFlagsKHR m_SupportedTransforms =
-        VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
-    VkSurfaceTransformFlagBitsKHR m_CurrentTransform =
-        VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
-
-    u32 m_MinImageCount = 0;
-    u32 m_MaxImageCount = 0;
-    XMUINT2 m_MinImageSize = {};
-    XMUINT2 m_MaxImageSize = {};
-
-    VkSurfaceKHR m_pHandle = VK_NULL_HANDLE;
-};
-LR_ASSIGN_OBJECT_TYPE(Surface, VK_OBJECT_TYPE_SURFACE_KHR);
 
 enum class AllocatorType : u32
 {
@@ -104,6 +98,8 @@ struct DeviceMemoryDesc
 struct DeviceMemory : APIObject
 {
     u64 AlignBufferMemory(BufferUsage usage, u64 initialSize);
+
+    virtual ~DeviceMemory() = default;
     virtual void Init(u64 memSize) = 0;
     virtual u64 Allocate(u64 dataSize, u64 alignment, u64 &allocatorData) = 0;
     virtual void Free(u64 allocatorData) = 0;

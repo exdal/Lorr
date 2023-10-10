@@ -7,13 +7,11 @@
 
 namespace lr
 {
-struct Win32Window : public BaseWindow
+struct Win32Window : BaseWindow
 {
     void Init(const WindowDesc &desc);
     void Poll() override;
-
     void InitDisplays() override;
-
     void SetCursor(WindowCursor cursor) override;
 
     void *m_pInstance = 0;

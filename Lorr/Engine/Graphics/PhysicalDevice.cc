@@ -2,6 +2,8 @@
 
 #include "Window/Win32/Win32Window.hh"
 
+#include "Device.hh"
+
 namespace lr::Graphics
 {
 
@@ -79,76 +81,92 @@ static VkPhysicalDeviceFeatures kDeviceFeatures_10 = {
     .shaderInt64 = true,
 };
 
-void PhysicalDevice::Init(eastl::span<VkPhysicalDevice> devices)
+bool Surface::Init(VkSurfaceKHR pHandle)
 {
     ZoneScoped;
 
-    /// FIND SUITABLE DEVICE ///
+    m_pHandle = pHandle;
 
-    auto IsSuitable = [](eastl::span<VkPhysicalDevice> devices,
-                         VkPhysicalDeviceType type,
-                         bool &featuresSupported) -> VkPhysicalDevice
+    return true;
+}
+
+bool Surface::IsFormatSupported(VkFormat format, VkColorSpaceKHR &colorSpaceOut)
+{
+    ZoneScoped;
+
+    for (VkSurfaceFormatKHR &surfaceFormat : m_SurfaceFormats)
     {
-        for (VkPhysicalDevice pDevice : devices)
+        if (format == surfaceFormat.format)
         {
-            VkPhysicalDeviceProperties properties = {};
-            vkGetPhysicalDeviceProperties(pDevice, &properties);
-
-            VkPhysicalDeviceFeatures features = {};
-            vkGetPhysicalDeviceFeatures(pDevice, &features);
-
-            if (properties.deviceType == type)
-                return pDevice;
+            colorSpaceOut = surfaceFormat.colorSpace;
+            return true;
         }
+    }
 
-        return VK_NULL_HANDLE;
-    };
+    return false;
+}
 
-    bool featureSupport = false;
-    VkPhysicalDevice pDevice = VK_NULL_HANDLE;
+bool Surface::IsPresentModeSupported(VkPresentModeKHR mode)
+{
+    ZoneScoped;
 
-    pDevice = IsSuitable(devices, VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU, featureSupport);
-    if (!pDevice)
-        pDevice =
-            IsSuitable(devices, VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU, featureSupport);
-    if (!pDevice)
-        pDevice = IsSuitable(devices, VK_PHYSICAL_DEVICE_TYPE_CPU, featureSupport);
-    if (!pDevice)
-        LOG_CRITICAL("What?");
+    for (VkPresentModeKHR presentMode : m_PresentModes)
+        if (presentMode == mode)
+            return true;
+
+    return false;
+}
+
+VkSurfaceTransformFlagBitsKHR Surface::GetTransform()
+{
+    ZoneScoped;
+
+    return m_Capabilities.currentTransform;
+}
+
+bool PhysicalDevice::Init(VkPhysicalDevice pDevice)
+{
+    ZoneScoped;
+
+    LOG_TRACE("Initializing physical device...");
 
     m_pHandle = pDevice;
 
-    /// GET AVAILABLE DEVICE EXTENSIONS ///
-
-    u32 deviceExtensionCount = 0;
+    u32 availExtensions = 0;
+    vkEnumerateDeviceExtensionProperties(m_pHandle, nullptr, &availExtensions, nullptr);
+    VkExtensionProperties *pExtensions = new VkExtensionProperties[availExtensions];
     vkEnumerateDeviceExtensionProperties(
-        m_pHandle, nullptr, &deviceExtensionCount, nullptr);
-
-    m_DeviceExtensions.resize(deviceExtensionCount);
-    vkEnumerateDeviceExtensionProperties(
-        m_pHandle, nullptr, &deviceExtensionCount, m_DeviceExtensions.data());
+        m_pHandle, nullptr, &availExtensions, pExtensions);
 
     LOG_INFO("Checking device extensions:");
-    for (eastl::string_view required : kRequiredExtensions)
+    for (eastl::string_view extension : kRequiredExtensions)
     {
-        bool foundExtension = false;
-        for (VkExtensionProperties &properties : m_DeviceExtensions)
+        bool found = false;
+        for (u32 i = 0; i < availExtensions; i++)
         {
-            if (required != properties.extensionName)
-                continue;
-
-            foundExtension = true;
+            VkExtensionProperties &properties = pExtensions[i];
+            if (properties.extensionName == extension)
+            {
+                found = true;
+                break;
+            }
         }
 
-        LOG_INFO("\t{}, {}", required, foundExtension);
+        LOG_INFO("\t{}, {}", extension, found);
 
-        assert(foundExtension);
+        if (found)
+            continue;
+
+        LOG_ERROR("Following extension is not found in this device: {}", extension);
+
+        return false;
     }
 
-    /// GET DEVICE FEATURES/INFOS ///
+    delete[] pExtensions;
 
     m_FeatureDescriptorBufferProps = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_PROPERTIES_EXT,
+        .pNext = nullptr,
     };
 
     VkPhysicalDeviceProperties2 deviceProps2 = {
@@ -159,6 +177,10 @@ void PhysicalDevice::Init(eastl::span<VkPhysicalDevice> devices)
     m_FeatureDeviceProps = deviceProps2.properties;
 
     vkGetPhysicalDeviceMemoryProperties(m_pHandle, &m_FeatureMemoryProps);
+
+    LOG_TRACE("Initialized physical device!");
+
+    return true;
 }
 
 void PhysicalDevice::InitQueueFamilies(Surface *pSurface)
@@ -210,7 +232,7 @@ void PhysicalDevice::InitQueueFamilies(Surface *pSurface)
     }
 }
 
-VkDevice PhysicalDevice::GetLogicalDevice()
+Device *PhysicalDevice::GetLogicalDevice()
 {
     ZoneScoped;
 
@@ -224,8 +246,21 @@ VkDevice PhysicalDevice::GetLogicalDevice()
         .pEnabledFeatures = &kDeviceFeatures_10,
     };
 
-    VkDevice pDevice = nullptr;
-    VkResult result = vkCreateDevice(m_pHandle, &deviceCreateInfo, nullptr, &pDevice);
+    VkDevice pDeviceHandle = nullptr;
+    VkResult result =
+        vkCreateDevice(m_pHandle, &deviceCreateInfo, nullptr, &pDeviceHandle);
+    if (result != VK_SUCCESS)
+    {
+        LOG_ERROR("Failed to create Device! {}", (u32)result);
+        return nullptr;
+    }
+
+    Device *pDevice = new Device;
+    if (!pDevice->Init(this, pDeviceHandle))
+    {
+        delete pDevice;
+        return nullptr;
+    }
 
     return pDevice;
 }
@@ -271,6 +306,39 @@ u64 PhysicalDevice::GetDescriptorSize(DescriptorType type)
     };
 
     return sizeArray[(u32)type];
+}
+
+void PhysicalDevice::GetSurfaceFormats(
+    Surface *pSurface, eastl::vector<VkSurfaceFormatKHR> &formats)
+{
+    ZoneScoped;
+
+    u32 count = 0;
+    vkGetPhysicalDeviceSurfaceFormatsKHR(m_pHandle, pSurface->m_pHandle, &count, nullptr);
+    formats.resize(count);
+    vkGetPhysicalDeviceSurfaceFormatsKHR(
+        m_pHandle, pSurface->m_pHandle, &count, formats.data());
+}
+
+void PhysicalDevice::GetPresentModes(
+    Surface *pSurface, eastl::vector<VkPresentModeKHR> &modes)
+{
+    ZoneScoped;
+
+    u32 count = 0;
+    vkGetPhysicalDeviceSurfacePresentModesKHR(
+        m_pHandle, pSurface->m_pHandle, &count, nullptr);
+    modes.resize(count);
+    vkGetPhysicalDeviceSurfacePresentModesKHR(
+        m_pHandle, pSurface->m_pHandle, &count, modes.data());
+}
+
+void PhysicalDevice::SetSurfaceCapabilities(Surface *pSurface)
+{
+    ZoneScoped;
+
+    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
+        m_pHandle, pSurface->m_pHandle, &pSurface->m_Capabilities);
 }
 
 u32 PhysicalDevice::SelectQueue(
@@ -327,84 +395,6 @@ u32 PhysicalDevice::SelectQueue(
     m_SelectedQueueIndices.push_back(foundIdx);
 
     return foundIdx;
-}
-
-void Surface::Init(
-    BaseWindow *pWindow, VkInstance pInstance, PhysicalDevice *pPhysicalDevice)
-{
-    ZoneScoped;
-
-    Win32Window *pOSWindow = (Win32Window *)pWindow;
-    VkWin32SurfaceCreateInfoKHR surfaceInfo = {
-        .sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR,
-        .pNext = nullptr,
-        .hinstance = (HINSTANCE)pOSWindow->m_pInstance,
-        .hwnd = (HWND)pOSWindow->m_pHandle,
-    };
-    vkCreateWin32SurfaceKHR(pInstance, &surfaceInfo, nullptr, &m_pHandle);
-
-    VkPhysicalDevice pDeviceHandle = pPhysicalDevice->m_pHandle;
-
-    /// GET SUPPORTED SURFACE FORMATS ///
-
-    u32 formatCount = 0;
-    vkGetPhysicalDeviceSurfaceFormatsKHR(pDeviceHandle, m_pHandle, &formatCount, nullptr);
-
-    m_SurfaceFormats.resize(formatCount);
-    vkGetPhysicalDeviceSurfaceFormatsKHR(
-        pDeviceHandle, m_pHandle, &formatCount, m_SurfaceFormats.data());
-
-    /// GET SUPPORTED PRESENT MODES ///
-
-    u32 presentCount = 0;
-    vkGetPhysicalDeviceSurfacePresentModesKHR(
-        pDeviceHandle, m_pHandle, &presentCount, nullptr);
-
-    m_PresentModes.resize(presentCount);
-    vkGetPhysicalDeviceSurfacePresentModesKHR(
-        pDeviceHandle, m_pHandle, &presentCount, m_PresentModes.data());
-
-    /// GET SURFACE CAPABILITIES ///
-
-    VkSurfaceCapabilitiesKHR capabilities = {};
-    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(pDeviceHandle, m_pHandle, &capabilities);
-
-    m_MinImageCount = capabilities.minImageCount;
-    m_MaxImageCount = capabilities.maxImageCount;
-    m_MinImageSize = { capabilities.minImageExtent.width,
-                       capabilities.minImageExtent.width };
-    m_MaxImageSize = { capabilities.maxImageExtent.width,
-                       capabilities.maxImageExtent.width };
-    m_SupportedTransforms = capabilities.supportedTransforms;
-    m_CurrentTransform = capabilities.currentTransform;
-    m_SupportedCompositeAlpha = capabilities.supportedCompositeAlpha;
-}
-
-bool Surface::IsFormatSupported(VkFormat format, VkColorSpaceKHR &colorSpaceOut)
-{
-    ZoneScoped;
-
-    for (VkSurfaceFormatKHR &surfaceFormat : m_SurfaceFormats)
-    {
-        if (format == surfaceFormat.format)
-        {
-            colorSpaceOut = surfaceFormat.colorSpace;
-            return true;
-        }
-    }
-
-    return false;
-}
-
-bool Surface::IsPresentModeSupported(VkPresentModeKHR mode)
-{
-    ZoneScoped;
-
-    for (VkPresentModeKHR presentMode : m_PresentModes)
-        if (presentMode == mode)
-            return true;
-
-    return false;
 }
 
 u64 DeviceMemory::AlignBufferMemory(BufferUsage usage, u64 initialSize)

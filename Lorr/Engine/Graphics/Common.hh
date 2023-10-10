@@ -186,7 +186,8 @@ enum class MemoryAccess : u64
     TransferAll = TransferRead | TransferWrite,
     HostAll = HostRead | HostWrite,
 
-    ImageReadUTL = SampledRead | StorageRead | ColorAttachmentRead | DepthStencilRead | MemoryRead,
+    ImageReadUTL =
+        SampledRead | StorageRead | ColorAttachmentRead | DepthStencilRead | MemoryRead,
     ImageWriteUTL = StorageWrite | ColorAttachmentWrite | DepthStencilWrite | MemoryWrite,
 
 };
@@ -217,28 +218,28 @@ enum class FillMode : u32
 
 enum class Filtering : u32
 {
-    Nearest = 0,
-    Linear,
+    Nearest = VK_FILTER_NEAREST,
+    Linear = VK_FILTER_LINEAR,
 };
 
 enum class TextureAddressMode : u32
 {
-    Wrap = 0,
-    Mirror,
-    ClampToEdge,
-    ClampToBorder,
+    Repeat = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+    MirroredRepeat = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT,
+    ClampToEdge = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+    ClampToBorder = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
 };
 
 enum class CompareOp : u32
 {
-    Never = 0,
-    Less,
-    Equal,
-    LessEqual,
-    Greater,
-    NotEqual,
-    GreaterEqual,
-    Always,
+    Never = VK_COMPARE_OP_NEVER,
+    Less = VK_COMPARE_OP_LESS,
+    Equal = VK_COMPARE_OP_EQUAL,
+    LessEqual = VK_COMPARE_OP_LESS_OR_EQUAL,
+    Greater = VK_COMPARE_OP_GREATER,
+    NotEqual = VK_COMPARE_OP_NOT_EQUAL,
+    GreaterEqual = VK_COMPARE_OP_GREATER_OR_EQUAL,
+    Always = VK_COMPARE_OP_ALWAYS,
 };
 
 union ColorClearValue

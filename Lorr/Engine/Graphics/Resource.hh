@@ -69,18 +69,14 @@ LR_ASSIGN_OBJECT_TYPE(Image, VK_OBJECT_TYPE_IMAGE);
 
 struct SamplerDesc
 {
-    struct
-    {
-        Filtering m_MinFilter : 1;
-        Filtering m_MagFilter : 1;
-        Filtering m_MipFilter : 1;
-        TextureAddressMode m_AddressU : 2;
-        TextureAddressMode m_AddressV : 2;
-        TextureAddressMode m_AddressW : 2;
-        u32 m_UseAnisotropy : 1;
-        CompareOp m_CompareOp : 3;
-    };
-
+    Filtering m_MinFilter : 1;
+    Filtering m_MagFilter : 1;
+    Filtering m_MipFilter : 1;
+    TextureAddressMode m_AddressU : 2;
+    TextureAddressMode m_AddressV : 2;
+    TextureAddressMode m_AddressW : 2;
+    u32 m_UseAnisotropy : 1;
+    CompareOp m_CompareOp : 3;
     float m_MaxAnisotropy = 0;
     float m_MipLODBias = 0;
     float m_MinLOD = 0;

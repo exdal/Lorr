@@ -15,13 +15,6 @@
 
 namespace lr::Graphics
 {
-enum class APIFlag : u32
-{
-    None = 0,
-    VSync = 1 << 0,
-};
-LR_TYPEOP_ARITHMETIC_INT(APIFlag, APIFlag, &);
-
 struct SubmitDesc
 {
     CommandType m_Type = CommandType::Count;
@@ -30,16 +23,9 @@ struct SubmitDesc
     eastl::span<SemaphoreSubmitDesc> m_SignalSemas;
 };
 
-struct DeviceDesc
-{
-    APIFlag m_Flags = APIFlag::None;
-    u32 m_ImageCount = 1;
-    BaseWindow *m_pTargetWindow = nullptr;
-};
-
 struct Device
 {
-    bool Init(DeviceDesc *pDesc);
+    bool Init(PhysicalDevice *pPhysicalDevice, VkDevice pHandle);
 
     /// COMMAND ///
     CommandQueue *CreateCommandQueue(CommandType type, u32 queueIndex);
@@ -72,7 +58,7 @@ struct Device
     Pipeline *CreateComputePipeline(ComputePipelineBuildInfo *pBuildInfo);
 
     /// SWAPCHAIN ///
-    SwapChain *CreateSwapChain(SwapChainDesc *pDesc);
+    SwapChain *CreateSwapChain(Surface *pSurface, SwapChainDesc *pDesc);
     void DeleteSwapChain(SwapChain *pSwapChain, bool keepSelf);
 
     void WaitForWork();

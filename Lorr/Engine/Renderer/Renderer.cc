@@ -47,6 +47,8 @@ void Renderer::Init(BaseWindow *pWindow)
     m_pSwapChain = m_pDevice->CreateSwapChain(m_pSurface, &swapChainDesc);
     if (!m_pSwapChain)
         return;
+
+    auto ptr = m_pDevice->GetSwapChainImages(m_pSwapChain);
 }
 
 }  // namespace lr::Renderer

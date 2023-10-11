@@ -110,17 +110,13 @@ struct Device
     template<typename _Type>
     void SetObjectName(_Type *pType, eastl::string_view name)
     {
-        static_assert(
-            eastl::is_base_of<APIObject<_Type::kObjectType>, _Type>(),
-            "_Type is not base of APIObject");
-
 #if LR_DEBUG
-        VkDebugUtilsObjectNameInfoEXT objectNameInfo = {};
-        objectNameInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
-        objectNameInfo.objectType = (VkObjectType)_Type::kObjectType;
-        objectNameInfo.objectHandle = (u64)pType->m_pHandle;
-        objectNameInfo.pObjectName = name.data();
-
+        VkDebugUtilsObjectNameInfoEXT objectNameInfo = {
+            .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+            .objectType = (VkObjectType)ToVKObjectType<_Type>::type,
+            .objectHandle = (u64)pType->m_pHandle,
+            .pObjectName = name.data(),
+        };
         vkSetDebugUtilsObjectNameEXT(m_pHandle, &objectNameInfo);
 #endif
     }
@@ -129,12 +125,12 @@ struct Device
     void SetObjectNameRaw(_Type object, eastl::string_view name)
     {
 #if LR_DEBUG
-        VkDebugUtilsObjectNameInfoEXT objectNameInfo = {};
-        objectNameInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
-        objectNameInfo.objectType = _ObjectType;
-        objectNameInfo.objectHandle = (u64)object;
-        objectNameInfo.pObjectName = name.data();
-
+        VkDebugUtilsObjectNameInfoEXT objectNameInfo = {
+            .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+            .objectType = _ObjectType,
+            .objectHandle = (u64)object,
+            .pObjectName = name.data(),
+        };
         vkSetDebugUtilsObjectNameEXT(m_pHandle, &objectNameInfo);
 #endif
     }

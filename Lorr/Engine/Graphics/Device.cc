@@ -498,8 +498,29 @@ ls::ref_array<Image *> Device::GetSwapChainImages(SwapChain *pSwapChain)
 {
     ZoneScoped;
 
-    ls::ref_array<Image *> ppImages(new Image *[pSwapChain->m_FrameCount]);
-    Image *pImage = ppImages[0];
+    u32 imageCount = pSwapChain->m_FrameCount;
+    ls::ref_array<Image *> ppImages(new Image *[imageCount]);
+    ls::ref_array<VkImage> ppImageHandles(new VkImage[imageCount]);
+    vkGetSwapchainImagesKHR(
+        m_pHandle, pSwapChain->m_pHandle, &imageCount, ppImageHandles.get());
+
+    for (u32 i = 0; i < imageCount; i++)
+    {
+        Image *&pImage = ppImages[i];
+        pImage = new Image;
+        pImage->m_pHandle = ppImageHandles[i];
+        pImage->m_Width = pSwapChain->m_Width;
+        pImage->m_Height = pSwapChain->m_Height;
+        pImage->m_DataSize = ~0;
+        pImage->m_DataOffset = ~0;
+        pImage->m_MipMapLevels = 1;
+        pImage->m_Format = pSwapChain->m_ImageFormat;
+        CreateImageView(pImage, ImageUsage::ColorAttachment);
+
+        SetObjectName(pImage, _FMT("Swap Chain Image {}", i));
+    }
+
+    return ppImages;
 }
 
 void Device::WaitForWork()

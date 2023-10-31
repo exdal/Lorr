@@ -124,7 +124,7 @@ void TriangleApp::Poll(f32 deltaTime)
         Graphics::PipelineBarrier pipelineInfo = {
             .m_SrcLayout = Graphics::ImageLayout::Undefined,
             .m_DstLayout = Graphics::ImageLayout::ColorReadOnly,
-            .m_SrcStage = Graphics::PipelineStage::TopOfPiple,
+            .m_SrcStage = Graphics::PipelineStage::TopOfPipe,
             .m_DstStage = Graphics::PipelineStage::VertexShader,
             .m_SrcAccess = Graphics::MemoryAccess::None,
             .m_DstAccess = Graphics::MemoryAccess::ShaderRead,
@@ -164,7 +164,7 @@ void TriangleApp::Poll(f32 deltaTime)
     renderer.m_pDevice->EndCommandList(pList);
 
     Graphics::SemaphoreSubmitDesc waitSema(
-        curFrame.m_pAcquireSema, Graphics::PipelineStage::TopOfPiple);
+        curFrame.m_pAcquireSema, Graphics::PipelineStage::TopOfPipe);
     Graphics::CommandListSubmitDesc listsDesc(pList);
     Graphics::SemaphoreSubmitDesc pSignalSemas[] = {
         Graphics::SemaphoreSubmitDesc(

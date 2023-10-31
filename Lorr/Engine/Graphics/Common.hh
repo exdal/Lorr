@@ -151,7 +151,7 @@ enum class PipelineStage : u64
 
     /// OTHER STAGES
     AllCommands = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
-    TopOfPiple = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
+    TopOfPipe = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
     BottomOfPipe = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
 };
 LR_TYPEOP_ARITHMETIC_INT(PipelineStage, PipelineStage, &);

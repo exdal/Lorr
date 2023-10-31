@@ -70,17 +70,20 @@ void TaskGraph::CompileTask(Task *pTask, TaskGroup *pGroup)
     for (GenericResource &resource : pTask->m_GenericResources)
     {
         GenericResource *pLastResource = pGroup->GetLastAccess(resource);
-
-        Graphics::MemoryAccess srcAccess =
-            pLastResource ? pLastResource->m_Access : Graphics::MemoryAccess::None;
-        Graphics::PipelineStage srcStage =
-            pLastResource ? pLastResource->m_Stage : Graphics::PipelineStage::TopOfPiple;
         Graphics::PipelineBarrier barrier = {
-            .m_SrcStage = srcStage,
+            .m_SrcLayout = Graphics::ImageLayout::Undefined,
+            .m_SrcStage = Graphics::PipelineStage::TopOfPipe,
             .m_DstStage = resource.m_Stage,
-            .m_SrcAccess = srcAccess,
+            .m_SrcAccess = Graphics::MemoryAccess::None,
             .m_DstAccess = resource.m_Access,
         };
+
+        if (pLastResource)
+        {
+            barrier.m_SrcLayout = pLastResource->m_ImageLayout;
+            barrier.m_SrcAccess = pLastResource->m_Access;
+            barrier.m_SrcStage = pLastResource->m_Stage;
+        }
 
         switch (resource.m_Type)
         {
@@ -88,8 +91,6 @@ void TaskGraph::CompileTask(Task *pTask, TaskGroup *pGroup)
                 pGroup->m_BufferBarriers.push_back({ resource.m_pBuffer, barrier });
                 break;
             case ResourceType::Image:
-                barrier.m_SrcLayout = pLastResource ? pLastResource->m_ImageLayout
-                                                    : Graphics::ImageLayout::Undefined;
                 barrier.m_DstLayout = resource.m_ImageLayout;
                 pGroup->m_ImageBarriers.push_back({ resource.m_pImage, barrier });
                 break;

@@ -26,11 +26,12 @@ struct TaskGroup
 
     TaskGroup *m_pPrev = nullptr;
     TaskGroup *m_pNext = nullptr;
-
+    
+    Graphics::MemoryBarrier m_MemoryBarrier = {};
+    // TODO: PLEASE MAKE THEM SPAN POINTING TO TLSF ALLOCATOR
     eastl::vector<Graphics::ImageBarrier> m_ImageBarriers;
     eastl::vector<Graphics::BufferBarrier> m_BufferBarriers;
     eastl::vector<Graphics::SemaphoreSubmitDesc> m_SplitBarriers;
-    Graphics::MemoryBarrier m_MemoryBarrier = {};
 
     eastl::vector<Task *> m_Tasks;
 };

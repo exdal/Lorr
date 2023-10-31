@@ -26,6 +26,8 @@ struct Buffer : APIObject
     u64 m_DeviceAddress = 0;
 
     VkBuffer m_pHandle = nullptr;
+
+    operator VkBuffer &() { return m_pHandle; }
 };
 LR_ASSIGN_OBJECT_TYPE(Buffer, VK_OBJECT_TYPE_BUFFER);
 
@@ -60,9 +62,50 @@ struct Image : APIObject
     u64 m_DataOffset = 0;  // Allocator offset
 
     VkImage m_pHandle = nullptr;
-    VkImageView m_pViewHandle = nullptr;
+
+    operator VkImage &() { return m_pHandle; }
 };
 LR_ASSIGN_OBJECT_TYPE(Image, VK_OBJECT_TYPE_IMAGE);
+
+struct ImageViewDesc
+{
+    Image *m_pImage = nullptr;
+    ImageViewType m_Type = ImageViewType::View2D;
+    // Component mapping
+    ImageComponentSwizzle m_SwizzleR = ImageComponentSwizzle::Identity;
+    ImageComponentSwizzle m_SwizzleG = ImageComponentSwizzle::Identity;
+    ImageComponentSwizzle m_SwizzleB = ImageComponentSwizzle::Identity;
+    ImageComponentSwizzle m_SwizzleA = ImageComponentSwizzle::Identity;
+    // Subres range
+    ImageAspect m_Aspect = ImageAspect::Color;
+    u32 m_BaseMip = 0;
+    u32 m_MipCount = 0;
+    u32 m_BaseLayer = 0;
+    u32 m_LayerCount = 0;
+};
+
+// Image views can have different formats depending on the creation flags
+// Currently, we do not support it so view's format is automatically parent
+// image format. See:
+// https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VkImageViewCreateInfo.html
+
+struct ImageView : APIObject
+{
+    Format m_Format = Format::Unknown;
+    ImageViewType m_Type = ImageViewType::View2D;
+    ImageAspect m_Aspect = ImageAspect::Color;
+    u32 m_BaseMip = 0;
+    u32 m_MipCount = 0;
+    u32 m_BaseLayer = 0;
+    u32 m_LayerCount = 0;
+
+    VkImageView m_pHandle = nullptr;
+
+    VkImageSubresourceRange GetSubresourceRange();
+    VkImageSubresourceLayers GetSubresourceLayers();
+    operator VkImageView &() { return m_pHandle; }
+};
+LR_ASSIGN_OBJECT_TYPE(ImageView, VK_OBJECT_TYPE_IMAGE_VIEW);
 
 /////////////////////////////////
 // SAMPLERS
@@ -86,6 +129,8 @@ struct SamplerDesc
 struct Sampler : APIObject
 {
     VkSampler m_pHandle = nullptr;
+
+    operator VkSampler &() { return m_pHandle; }
 };
 LR_ASSIGN_OBJECT_TYPE(Sampler, VK_OBJECT_TYPE_SAMPLER);
 
@@ -104,15 +149,20 @@ LR_ASSIGN_OBJECT_TYPE(DescriptorSetLayout, VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT)
 struct DescriptorGetInfo
 {
     DescriptorGetInfo() = default;
-    DescriptorGetInfo(Buffer *pBuffer, DescriptorType type);
-    DescriptorGetInfo(Image *pImage, DescriptorType type);
+    DescriptorGetInfo(Buffer *pBuffer, u64 dataSize, DescriptorType type);
+    DescriptorGetInfo(ImageView *pImageView, DescriptorType type);
     DescriptorGetInfo(Sampler *pSampler);
 
     union
     {
-        Buffer *m_pBuffer = nullptr;
-        Image *m_pImage;
+        struct
+        {
+            u64 m_BufferAddress = 0;
+            u64 m_DataSize = 0;
+        };
+        ImageView *m_pImageView;
         Sampler *m_pSampler;
+        bool m_HasDescriptor;
     };
 
     DescriptorType m_Type = DescriptorType::Sampler;

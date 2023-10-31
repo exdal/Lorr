@@ -98,9 +98,6 @@ enum class ImageUsage : u32
     Storage = VK_IMAGE_USAGE_STORAGE_BIT,
     Present = 1 << 29,     // Virtual flag
     Concurrent = 1 << 30,  // Vulkan's sharing flag
-
-    AspectColor = Sampled | ColorAttachment | Storage,
-    AspectDepthStencil = DepthStencilAttachment,
 };
 LR_TYPEOP_ARITHMETIC_INT(ImageUsage, ImageUsage, &);
 
@@ -117,7 +114,43 @@ enum class ImageLayout : u32
     General = VK_IMAGE_LAYOUT_GENERAL,
 };
 
+enum class ImageViewType : u32
+{
+    View1D = VK_IMAGE_VIEW_TYPE_1D,
+    View2D = VK_IMAGE_VIEW_TYPE_2D,
+    View3D = VK_IMAGE_VIEW_TYPE_3D,
+    Cube = VK_IMAGE_VIEW_TYPE_CUBE,
+    Array1D = VK_IMAGE_VIEW_TYPE_1D_ARRAY,
+    Array2D = VK_IMAGE_VIEW_TYPE_2D_ARRAY,
+    CubeArray = VK_IMAGE_VIEW_TYPE_CUBE_ARRAY,
+};
+
+enum class ImageAspect : u32
+{
+    Color = VK_IMAGE_ASPECT_COLOR_BIT,
+    Depth = VK_IMAGE_ASPECT_DEPTH_BIT,
+    Stencil = VK_IMAGE_ASPECT_STENCIL_BIT,
+    DepthStencil = Depth | Stencil,
+};
+
+enum class ImageComponentSwizzle : u32
+{
+    Identity = VK_COMPONENT_SWIZZLE_IDENTITY,
+    Zero = VK_COMPONENT_SWIZZLE_ZERO,
+    One = VK_COMPONENT_SWIZZLE_ONE,
+    R = VK_COMPONENT_SWIZZLE_R,
+    G = VK_COMPONENT_SWIZZLE_G,
+    B = VK_COMPONENT_SWIZZLE_B,
+    A = VK_COMPONENT_SWIZZLE_A,
+};
+
 /// PIPELINE ---------------------------- ///
+
+enum class PipelineBindPoint : u32
+{
+    Graphics = VK_PIPELINE_BIND_POINT_GRAPHICS,
+    Compute = VK_PIPELINE_BIND_POINT_COMPUTE,
+};
 
 enum class PipelineStage : u64
 {

@@ -4,6 +4,7 @@
 #pragma once
 
 #include <EASTL/fixed_vector.h>
+
 #include "STL/RefPtr.hh"
 
 #include "APIObject.hh"
@@ -61,7 +62,9 @@ struct Device
     /// SWAPCHAIN ///
     SwapChain *CreateSwapChain(Surface *pSurface, SwapChainDesc *pDesc);
     void DeleteSwapChain(SwapChain *pSwapChain, bool keepSelf);
-    ls::ref_array<Image *> GetSwapChainImages(SwapChain *pSwapChain);
+    using SCGetImagesRes =
+        eastl::pair<ls::ref_array<Image *>, ls::ref_array<ImageView *>>;
+    SCGetImagesRes GetSwapChainImages(SwapChain *pSwapChain);
 
     void WaitForWork();
     u32 AcquireImage(SwapChain *pSwapChain, Semaphore *pSemaphore);
@@ -102,7 +105,8 @@ struct Device
     // * Images * //
     Image *CreateImage(ImageDesc *pDesc, DeviceMemory *pAllocator);
     void DeleteImage(Image *pImage, DeviceMemory *pAllocator);
-    void CreateImageView(Image *pImage, ImageUsage aspectUsage);
+    ImageView *CreateImageView(ImageViewDesc *pDesc);
+    void DeleteImageView(ImageView *pImageView);
 
     Sampler *CreateSampler(SamplerDesc *pDesc);
     void DeleteSampler(VkSampler pSampler);

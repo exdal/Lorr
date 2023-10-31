@@ -24,21 +24,22 @@ enum class AttachmentOp : u32
 struct RenderingAttachment : VkRenderingAttachmentInfo
 {
     RenderingAttachment(
-        Image *pImage,
+        ImageView *pImageView,
+        ImageLayout layout,
+        AttachmentOp loadOp,
+        AttachmentOp storeOp);
+    RenderingAttachment(
+        ImageView *pImageView,
         ImageLayout layout,
         AttachmentOp loadOp,
         AttachmentOp storeOp,
         ColorClearValue clearVal);
     RenderingAttachment(
-        Image *pImage,
+        ImageView *pImageView,
         ImageLayout layout,
         AttachmentOp loadOp,
         AttachmentOp storeOp,
         DepthClearValue clearVal);
-
-private:
-    void InitImage(
-        Image *pImage, ImageLayout layout, AttachmentOp loadOp, AttachmentOp storeOp);
 };
 
 struct RenderingBeginDesc
@@ -99,7 +100,10 @@ LR_ASSIGN_OBJECT_TYPE(Fence, VK_OBJECT_TYPE_FENCE);
 struct Semaphore : APIObject
 {
     u64 m_Value = 0;
+
     VkSemaphore m_pHandle = VK_NULL_HANDLE;
+
+    operator VkSemaphore &() { return m_pHandle; }
 };
 LR_ASSIGN_OBJECT_TYPE(Semaphore, VK_OBJECT_TYPE_SEMAPHORE);
 
@@ -115,7 +119,10 @@ struct CommandQueue : APIObject
 {
     CommandType m_Type = CommandType::Count;
     u32 m_QueueIndex = 0;
+
     VkQueue m_pHandle = nullptr;
+
+    operator VkQueue &() { return m_pHandle; }
 };
 LR_ASSIGN_OBJECT_TYPE(CommandQueue, VK_OBJECT_TYPE_QUEUE);
 
@@ -124,9 +131,22 @@ struct CommandAllocator : APIObject
     CommandType m_Type = CommandType::Count;
     CommandQueue *m_pQueue = nullptr;
 
-    VkCommandPool m_pHandle = VK_NULL_HANDLE;
+    VkCommandPool m_pHandle = nullptr;
+
+    operator VkCommandPool &() { return m_pHandle; }
 };
 LR_ASSIGN_OBJECT_TYPE(CommandAllocator, VK_OBJECT_TYPE_COMMAND_POOL);
+
+struct BufferCopyRegion : VkBufferCopy
+{
+    BufferCopyRegion(u64 srcOffset, u64 dstOffset, u64 size);
+};
+
+struct ImageCopyRegion : VkBufferImageCopy
+{
+    ImageCopyRegion(const VkBufferImageCopy &lazy);
+    ImageCopyRegion(ImageView *pView, u32 width, u32 height, u64 bufferOffset);
+};
 
 struct CommandList : APIObject
 {
@@ -138,11 +158,14 @@ struct CommandList : APIObject
     /// Memory Barriers
     void SetPipelineBarrier(DependencyInfo *pDependencyInfo);
 
-    /// Buffer Commands
+    /// Copy Commands
     void CopyBufferToBuffer(
-        Buffer *pSource, Buffer *pDest, u64 srcOff, u64 dstOff, u64 size);
+        Buffer *pSrc, Buffer *pDst, eastl::span<BufferCopyRegion> regions);
     void CopyBufferToImage(
-        Buffer *pSource, Image *pDest, ImageUsage aspectUsage, ImageLayout layout);
+        Buffer *pSrc,
+        Image *pDst,
+        ImageLayout layout,
+        eastl::span<ImageCopyRegion> regions);
 
     /// Draw Commands
     void Draw(
@@ -165,16 +188,22 @@ struct CommandList : APIObject
 
     void SetPipeline(Pipeline *pPipeline);
     void SetPushConstants(
-        void *pData, u32 dataSize, u32 offset, ShaderStage stage = ShaderStage::All);
+        void *pData,
+        u32 dataSize,
+        u32 offset,
+        PipelineLayout layout,
+        ShaderStage stageFlags = ShaderStage::All);
     void SetDescriptorBuffers(eastl::span<DescriptorBufferBindInfo> bindingInfos);
     void SetDescriptorBufferOffsets(
-        u32 firstSet, u32 setCount, eastl::span<u32> indices, eastl::span<u64> offsets);
+        PipelineBindPoint bindPoint,
+        PipelineLayout layout,
+        u32 firstSet,
+        eastl::span<u32> indices,
+        eastl::span<u64> offsets);
 
-    CommandType m_Type = CommandType::Count;
-    VkCommandBuffer m_pHandle = VK_NULL_HANDLE;
-    CommandAllocator *m_pAllocator = nullptr;
+    VkCommandBuffer m_pHandle = nullptr;
 
-    Pipeline *m_pPipeline = nullptr;
+    operator VkCommandBuffer &() { return m_pHandle; }
 };
 LR_ASSIGN_OBJECT_TYPE(CommandList, VK_OBJECT_TYPE_COMMAND_BUFFER);
 

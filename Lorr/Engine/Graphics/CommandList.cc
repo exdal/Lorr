@@ -25,39 +25,39 @@ DescriptorBufferBindInfo::DescriptorBufferBindInfo(
 }
 
 RenderingAttachment::RenderingAttachment(
-    Image *pImage,
-    ImageLayout layout,
-    AttachmentOp loadOp,
-    AttachmentOp storeOp,
-    ColorClearValue clearVal)
-{
-    InitImage(pImage, layout, loadOp, storeOp);
-    memcpy(&this->clearValue.color, &clearVal, sizeof(ColorClearValue));
-}
-
-RenderingAttachment::RenderingAttachment(
-    Image *pImage,
-    ImageLayout layout,
-    AttachmentOp loadOp,
-    AttachmentOp storeOp,
-    DepthClearValue clearVal)
-{
-    InitImage(pImage, layout, loadOp, storeOp);
-    memcpy(&this->clearValue.color, &clearVal, sizeof(ColorClearValue));
-}
-
-void RenderingAttachment::InitImage(
-    Image *pImage, ImageLayout layout, AttachmentOp loadOp, AttachmentOp storeOp)
+    ImageView *pImageView, ImageLayout layout, AttachmentOp loadOp, AttachmentOp storeOp)
 {
     this->sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
     this->pNext = nullptr;
-    this->imageView = pImage->m_pViewHandle;
+    this->imageView = *pImageView;
     this->imageLayout = (VkImageLayout)layout;
     this->resolveMode = VK_RESOLVE_MODE_NONE;
     this->resolveImageView = nullptr;
     this->resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     this->loadOp = kLoadOpLUT[(u32)loadOp];
     this->storeOp = kStoreOpLUT[(u32)storeOp];
+}
+
+RenderingAttachment::RenderingAttachment(
+    ImageView *pImageView,
+    ImageLayout layout,
+    AttachmentOp loadOp,
+    AttachmentOp storeOp,
+    ColorClearValue clearVal)
+    : RenderingAttachment(pImageView, layout, loadOp, storeOp)
+{
+    memcpy(&this->clearValue.color, &clearVal, sizeof(ColorClearValue));
+}
+
+RenderingAttachment::RenderingAttachment(
+    ImageView *pImageView,
+    ImageLayout layout,
+    AttachmentOp loadOp,
+    AttachmentOp storeOp,
+    DepthClearValue clearVal)
+    : RenderingAttachment(pImageView, layout, loadOp, storeOp)
+{
+    memcpy(&this->clearValue.color, &clearVal, sizeof(DepthClearValue));
 }
 
 ImageBarrier::ImageBarrier(Image *pImage, const PipelineBarrier &barrier)
@@ -219,6 +219,29 @@ SemaphoreSubmitDesc::SemaphoreSubmitDesc(Semaphore *pSemaphore, u64 value)
     this->deviceIndex = 0;
 }
 
+BufferCopyRegion::BufferCopyRegion(u64 srcOffset, u64 dstOffset, u64 size)
+{
+    this->srcOffset = srcOffset;
+    this->dstOffset = dstOffset;
+    this->size = size;
+}
+
+ImageCopyRegion::ImageCopyRegion(const VkBufferImageCopy &lazy)
+{
+    *this = lazy;
+}
+
+ImageCopyRegion::ImageCopyRegion(
+    ImageView *pView, u32 width, u32 height, u64 bufferOffset)
+    : ImageCopyRegion({})
+{
+    this->bufferOffset = bufferOffset;
+    this->imageSubresource = pView->GetSubresourceLayers();
+    this->imageExtent.width = width;
+    this->imageExtent.height = height;
+    this->imageExtent.depth = 1;
+}
+
 void CommandList::BeginRendering(RenderingBeginDesc *pDesc)
 {
     ZoneScoped;
@@ -276,49 +299,25 @@ void CommandList::SetPipelineBarrier(DependencyInfo *pDependencyInfo)
 }
 
 void CommandList::CopyBufferToBuffer(
-    Buffer *pSource, Buffer *pDest, u64 srcOff, u64 dstOff, u64 size)
+    Buffer *pSrc, Buffer *pDst, eastl::span<BufferCopyRegion> regions)
 {
     ZoneScoped;
 
-    VkBufferCopy copyRegion = { .srcOffset = srcOff, .dstOffset = dstOff, .size = size };
-    vkCmdCopyBuffer(m_pHandle, pSource->m_pHandle, pDest->m_pHandle, 1, &copyRegion);
+    vkCmdCopyBuffer(m_pHandle, *pSrc, *pDst, regions.size(), regions.data());
 }
 
 void CommandList::CopyBufferToImage(
-    Buffer *pSource, Image *pDest, ImageUsage aspectUsage, ImageLayout layout)
+    Buffer *pSrc, Image *pDst, ImageLayout layout, eastl::span<ImageCopyRegion> regions)
 {
     ZoneScoped;
 
-    VkImageAspectFlags aspectFlags = 0;
-    if (aspectUsage & ImageUsage::AspectColor)
-        aspectFlags |= VK_IMAGE_ASPECT_COLOR_BIT;
-    if (aspectUsage & ImageUsage::AspectDepthStencil)
-        aspectFlags |= VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
-
-    // TODO: Multiple mip levels
-    VkBufferImageCopy imageCopyInfo = {};
-    imageCopyInfo.bufferOffset = 0;
-
-    imageCopyInfo.imageOffset.x = 0;
-    imageCopyInfo.imageOffset.y = 0;
-    imageCopyInfo.imageOffset.z = 0;
-
-    imageCopyInfo.imageExtent.width = pDest->m_Width;
-    imageCopyInfo.imageExtent.height = pDest->m_Height;
-    imageCopyInfo.imageExtent.depth = 1;
-
-    imageCopyInfo.imageSubresource.aspectMask = aspectFlags;
-    imageCopyInfo.imageSubresource.baseArrayLayer = 0;
-    imageCopyInfo.imageSubresource.layerCount = 1;
-    imageCopyInfo.imageSubresource.mipLevel = 0;
-
     vkCmdCopyBufferToImage(
         m_pHandle,
-        pSource->m_pHandle,
-        pDest->m_pHandle,
-        (VkImageLayout)layout,
-        1,
-        &imageCopyInfo);
+        *pSrc,
+        *pDst,
+        static_cast<VkImageLayout>(layout),
+        regions.size(),
+        regions.data());
 }
 
 void CommandList::Draw(
@@ -388,20 +387,18 @@ void CommandList::SetPipeline(Pipeline *pPipeline)
 {
     ZoneScoped;
 
-    m_pPipeline = pPipeline;
-
-    vkCmdBindPipeline(m_pHandle, m_pPipeline->m_BindPoint, pPipeline->m_pHandle);
+    vkCmdBindPipeline(m_pHandle, pPipeline->m_BindPoint, *pPipeline);
 }
 
 void CommandList::SetPushConstants(
-    void *pData, u32 dataSize, u32 offset, ShaderStage stage)
+    void *pData, u32 dataSize, u32 offset, PipelineLayout layout, ShaderStage stageFlags)
 {
     ZoneScoped;
 
     vkCmdPushConstants(
         m_pHandle,
-        m_pPipeline->m_pLayout,
-        (VkShaderStageFlags)stage,
+        layout,
+        static_cast<VkShaderStageFlags>(stageFlags),
         offset,
         dataSize,
         pData);
@@ -415,16 +412,20 @@ void CommandList::SetDescriptorBuffers(eastl::span<DescriptorBufferBindInfo> bin
 }
 
 void CommandList::SetDescriptorBufferOffsets(
-    u32 firstSet, u32 setCount, eastl::span<u32> indices, eastl::span<u64> offsets)
+    PipelineBindPoint bindPoint,
+    PipelineLayout layout,
+    u32 firstSet,
+    eastl::span<u32> indices,
+    eastl::span<u64> offsets)
 {
     ZoneScoped;
 
     vkCmdSetDescriptorBufferOffsetsEXT(
         m_pHandle,
-        m_pPipeline->m_BindPoint,
-        m_pPipeline->m_pLayout,
+        static_cast<VkPipelineBindPoint>(bindPoint),
+        layout,
         firstSet,
-        setCount,
+        indices.size(),
         indices.data(),
         offsets.data());
 }

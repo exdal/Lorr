@@ -42,7 +42,8 @@ struct Pipeline : APIObject
 {
     VkPipelineBindPoint m_BindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
     VkPipeline m_pHandle = nullptr;
-    PipelineLayout m_pLayout = nullptr;
+
+    operator VkPipeline &() { return m_pHandle; }
 };
 LR_ASSIGN_OBJECT_TYPE(Pipeline, VK_OBJECT_TYPE_PIPELINE);
 

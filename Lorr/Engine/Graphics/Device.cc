@@ -68,8 +68,6 @@ CommandList *Device::CreateCommandList(CommandAllocator *pAllocator)
     ZoneScoped;
 
     CommandList *pList = new CommandList;
-    pList->m_Type = pAllocator->m_Type;
-    pList->m_pAllocator = pAllocator;
 
     VkCommandBufferAllocateInfo listInfo = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
@@ -268,8 +266,6 @@ Pipeline *Device::CreateGraphicsPipeline(GraphicsPipelineBuildInfo *pBuildInfo)
     ZoneScoped;
 
     Pipeline *pPipeline = new Pipeline;
-    pPipeline->m_BindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    pPipeline->m_pLayout = pBuildInfo->m_pLayout;
 
     /// BOUND RENDER TARGETS -----------------------------------------------------
 
@@ -438,8 +434,6 @@ Pipeline *Device::CreateComputePipeline(ComputePipelineBuildInfo *pBuildInfo)
     ZoneScoped;
 
     Pipeline *pPipeline = new Pipeline;
-    pPipeline->m_BindPoint = VK_PIPELINE_BIND_POINT_COMPUTE;
-    pPipeline->m_pLayout = pBuildInfo->m_pLayout;
 
     VkPipelineShaderStageCreateInfo shaderStage = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
@@ -516,12 +510,13 @@ void Device::DeleteSwapChain(SwapChain *pSwapChain, bool keepSelf)
         delete pSwapChain;
 }
 
-ls::ref_array<Image *> Device::GetSwapChainImages(SwapChain *pSwapChain)
+Device::SCGetImagesRes Device::GetSwapChainImages(SwapChain *pSwapChain)
 {
     ZoneScoped;
 
     u32 imageCount = pSwapChain->m_FrameCount;
     ls::ref_array<Image *> ppImages(new Image *[imageCount]);
+    ls::ref_array<ImageView *> ppImageViews(new ImageView *[imageCount]);
     ls::ref_array<VkImage> ppImageHandles(new VkImage[imageCount]);
     vkGetSwapchainImagesKHR(
         m_pHandle, pSwapChain->m_pHandle, &imageCount, ppImageHandles.get());
@@ -537,12 +532,15 @@ ls::ref_array<Image *> Device::GetSwapChainImages(SwapChain *pSwapChain)
         pImage->m_DataOffset = ~0;
         pImage->m_MipMapLevels = 1;
         pImage->m_Format = pSwapChain->m_ImageFormat;
-        CreateImageView(pImage, ImageUsage::ColorAttachment);
+
+        ImageViewDesc viewDesc = {};
+        ppImageViews[i] = CreateImageView(&viewDesc);
 
         SetObjectName(pImage, _FMT("Swap Chain Image {}", i));
+        SetObjectName(pImage, _FMT("Swap Chain Image View {}", i));
     }
 
-    return ppImages;
+    return eastl::make_pair(ppImages, ppImageViews);
 }
 
 void Device::WaitForWork()
@@ -781,28 +779,25 @@ void Device::GetDescriptorData(
     VkDescriptorImageInfo imageInfo = {};
     VkDescriptorDataEXT descriptorData = {};
 
-    if (info.m_pBuffer)  // Allow null descriptors
+    if (info.m_HasDescriptor)  // Allow null descriptors
     {
         switch (info.m_Type)
         {
             case DescriptorType::StorageBuffer:
             case DescriptorType::UniformBuffer:
-                bufferInfo.address = info.m_pBuffer->m_DeviceAddress;
-                bufferInfo.range = info.m_pBuffer->m_DataSize;
+                bufferInfo.address = info.m_BufferAddress;
+                bufferInfo.range = info.m_DataSize;
                 descriptorData = { .pUniformBuffer = &bufferInfo };
                 break;
-
             case DescriptorType::StorageImage:
             case DescriptorType::SampledImage:
-                imageInfo.imageView = info.m_pImage->m_pViewHandle;
+                imageInfo.imageView = *info.m_pImageView;
                 descriptorData = { .pSampledImage = &imageInfo };
                 break;
-
             case DescriptorType::Sampler:
-                imageInfo.sampler = info.m_pSampler->m_pHandle;
+                imageInfo.sampler = *info.m_pSampler;
                 descriptorData = { .pSampledImage = &imageInfo };
                 break;
-
             default:
                 break;
         }
@@ -916,8 +911,6 @@ Image *Device::CreateImage(ImageDesc *pDesc, DeviceMemory *pAllocator)
     pImage->m_ArraySize = pDesc->m_ArraySize;
     pImage->m_MipMapLevels = pDesc->m_MipMapLevels;
 
-    CreateImageView(pImage, pDesc->m_UsageFlags);
-
     return pImage;
 }
 
@@ -928,42 +921,52 @@ void Device::DeleteImage(Image *pImage, DeviceMemory *pAllocator)
     if (pAllocator)
         pAllocator->Free(pImage->m_AllocatorData);
 
-    if (pImage->m_pViewHandle)
-        vkDestroyImageView(m_pHandle, pImage->m_pViewHandle, nullptr);
-
-    if (pImage->m_pHandle)
-        vkDestroyImage(m_pHandle, pImage->m_pHandle, nullptr);
+    vkDestroyImage(m_pHandle, *pImage, nullptr);
+    delete pImage;
 }
 
-void Device::CreateImageView(Image *pImage, ImageUsage aspectUsage)
+ImageView *Device::CreateImageView(ImageViewDesc *pDesc)
 {
     ZoneScoped;
 
-    VkImageAspectFlags aspectFlags = 0;
-    if (aspectUsage & ImageUsage::AspectColor)
-        aspectFlags |= VK_IMAGE_ASPECT_COLOR_BIT;
-    if (aspectUsage & ImageUsage::AspectDepthStencil)
-        aspectFlags |= VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+    ImageView *pImageView = new ImageView;
 
-    VkImageViewCreateInfo imageViewCreateInfo = {};
-    imageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    VkImageViewCreateInfo imageViewCreateInfo = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .pNext = nullptr,
+        .image = *pDesc->m_pImage,
+        .viewType = static_cast<VkImageViewType>(pDesc->m_Type),
+        .format = static_cast<VkFormat>(pDesc->m_pImage->m_Format),
+        .components.r = static_cast<VkComponentSwizzle>(pDesc->m_SwizzleR),
+        .components.g = static_cast<VkComponentSwizzle>(pDesc->m_SwizzleG),
+        .components.b = static_cast<VkComponentSwizzle>(pDesc->m_SwizzleB),
+        .components.a = static_cast<VkComponentSwizzle>(pDesc->m_SwizzleA),
+        .subresourceRange.aspectMask = static_cast<VkImageAspectFlags>(pDesc->m_Aspect),
+        .subresourceRange.baseMipLevel = pDesc->m_BaseMip,
+        .subresourceRange.levelCount = pDesc->m_MipCount,
+        .subresourceRange.baseArrayLayer = pDesc->m_BaseLayer,
+        .subresourceRange.layerCount = pDesc->m_LayerCount,
+    };
 
-    imageViewCreateInfo.image = pImage->m_pHandle;
-    imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    imageViewCreateInfo.format = (VkFormat)pImage->m_Format;
+    vkCreateImageView(m_pHandle, &imageViewCreateInfo, nullptr, &pImageView->m_pHandle);
 
-    imageViewCreateInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
-    imageViewCreateInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-    imageViewCreateInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
-    imageViewCreateInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+    pImageView->m_Format = pDesc->m_pImage->m_Format;
+    pImageView->m_Type = pDesc->m_Type;
+    pImageView->m_Aspect = pDesc->m_Aspect;
+    pImageView->m_BaseMip = pDesc->m_BaseMip;
+    pImageView->m_MipCount = pDesc->m_MipCount;
+    pImageView->m_BaseLayer = pDesc->m_BaseLayer;
+    pImageView->m_LayerCount = pDesc->m_LayerCount;
 
-    imageViewCreateInfo.subresourceRange.aspectMask = aspectFlags;
-    imageViewCreateInfo.subresourceRange.baseMipLevel = 0;
-    imageViewCreateInfo.subresourceRange.levelCount = pImage->m_MipMapLevels;
-    imageViewCreateInfo.subresourceRange.baseArrayLayer = 0;
-    imageViewCreateInfo.subresourceRange.layerCount = 1;
+    return pImageView;
+}
 
-    vkCreateImageView(m_pHandle, &imageViewCreateInfo, nullptr, &pImage->m_pViewHandle);
+void Device::DeleteImageView(ImageView *pImageView)
+{
+    ZoneScoped;
+
+    vkDestroyImageView(m_pHandle, *pImageView, nullptr);
+    delete pImageView;
 }
 
 Sampler *Device::CreateSampler(SamplerDesc *pDesc)

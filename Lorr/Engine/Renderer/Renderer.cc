@@ -73,7 +73,7 @@ void Renderer::Init(BaseWindow *pWindow)
     if (!m_pSwapChain)
         return;
 
-    ls::ref_array<Graphics::Image *> images = m_pDevice->GetSwapChainImages(m_pSwapChain);
+    auto [ppImages, ppImageViews] = m_pDevice->GetSwapChainImages(m_pSwapChain);
     m_Frames.resize(m_pSwapChain->m_FrameCount);
 
     TaskGraph graph;

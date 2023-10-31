@@ -32,7 +32,6 @@ struct TaskGroup
     eastl::vector<Graphics::ImageBarrier> m_ImageBarriers;
     eastl::vector<Graphics::BufferBarrier> m_BufferBarriers;
     eastl::vector<Graphics::SemaphoreSubmitDesc> m_SplitBarriers;
-
     eastl::vector<Task *> m_Tasks;
 };
 

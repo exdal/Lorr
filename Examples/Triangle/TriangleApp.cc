@@ -23,6 +23,7 @@ struct RendererCtx
         Graphics::Semaphore *m_pPresentSema = nullptr;
         Graphics::Semaphore *m_pSyncSema = nullptr;
         Graphics::Image *m_pImage = nullptr;
+        Graphics::ImageView *m_pImageView = nullptr;
     };
     eastl::vector<Frame> m_Frames = {};
 
@@ -84,7 +85,8 @@ void TriangleApp::Init(lr::BaseApplicationDesc &desc)
     renderer.m_pQueue = renderer.m_pDevice->CreateCommandQueue(
         Graphics::CommandType::Graphics, graphicsIdx);
 
-    auto swapChainImages = renderer.m_pDevice->GetSwapChainImages(renderer.m_pSwapChain);
+    auto [images, imageViews] =
+        renderer.m_pDevice->GetSwapChainImages(renderer.m_pSwapChain);
     renderer.m_Frames.resize(swapChainDesc.m_FrameCount);
     for (u32 i = 0; i < swapChainDesc.m_FrameCount; i++)
     {
@@ -96,7 +98,8 @@ void TriangleApp::Init(lr::BaseApplicationDesc &desc)
         frame.m_pAcquireSema = renderer.m_pDevice->CreateBinarySemaphore();
         frame.m_pPresentSema = renderer.m_pDevice->CreateBinarySemaphore();
         frame.m_pSyncSema = renderer.m_pDevice->CreateTimelineSemaphore(0);
-        frame.m_pImage = swapChainImages[i];
+        frame.m_pImage = images[i];
+        frame.m_pImageView = imageViews[i];
     }
 }
 
@@ -135,7 +138,7 @@ void TriangleApp::Poll(f32 deltaTime)
     }
 
     Graphics::RenderingAttachment attachment(
-        curFrame.m_pImage,
+        curFrame.m_pImageView,
         Graphics::ImageLayout::ColorAttachment,
         Graphics::AttachmentOp::Clear,
         Graphics::AttachmentOp::Store,

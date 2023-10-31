@@ -1,6 +1,6 @@
 #pragma once
 
-#include "RenderResource.hh"
+#include "TaskResource.hh"
 
 #include "Graphics/CommandList.hh"
 #include "Memory/Allocator/LinearAllocator.hh"

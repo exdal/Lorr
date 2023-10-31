@@ -1,6 +1,3 @@
-// Created on Monday July 18th 2022 by exdal
-// Last modified on Monday August 28th 2023 by exdal
-
 #pragma once
 
 #include "Memory/MemoryUtils.hh"
@@ -52,6 +49,7 @@ struct RenderingBeginDesc
     RenderingAttachment *m_pDepthAttachment = nullptr;
 };
 
+struct CommandQueue;
 struct PipelineBarrier
 {
     ImageLayout m_SrcLayout = ImageLayout::Undefined;
@@ -60,8 +58,8 @@ struct PipelineBarrier
     PipelineStage m_DstStage = PipelineStage::None;
     MemoryAccess m_SrcAccess = MemoryAccess::None;
     MemoryAccess m_DstAccess = MemoryAccess::None;
-    u32 m_SrcQueue = -1u;
-    u32 m_DstQueue = -1u;
+    CommandQueue *m_pSrcQueue = nullptr;
+    CommandQueue *m_pDstQueue = nullptr;
 };
 
 // Utility classes to help us batch the barriers
@@ -69,7 +67,7 @@ struct PipelineBarrier
 struct ImageBarrier : VkImageMemoryBarrier2
 {
     ImageBarrier() = default;
-    ImageBarrier(Image *pImage, ImageUsage aspectUsage, const PipelineBarrier &barrier);
+    ImageBarrier(Image *pImage, const PipelineBarrier &barrier);
 };
 
 struct BufferBarrier : VkBufferMemoryBarrier2
@@ -107,6 +105,7 @@ LR_ASSIGN_OBJECT_TYPE(Semaphore, VK_OBJECT_TYPE_SEMAPHORE);
 
 struct SemaphoreSubmitDesc : VkSemaphoreSubmitInfo
 {
+    SemaphoreSubmitDesc(Semaphore *pSemaphore, PipelineStage stage);
     SemaphoreSubmitDesc(Semaphore *pSemaphore, u64 value, PipelineStage stage);
     SemaphoreSubmitDesc(Semaphore *pSemaphore, u64 value);
     SemaphoreSubmitDesc() = default;
@@ -133,6 +132,8 @@ struct CommandList : APIObject
 {
     void BeginRendering(RenderingBeginDesc *pDesc);
     void EndRendering();
+
+    void ClearImage(Image *pImage, ImageLayout layout, ColorClearValue clearVal);
 
     /// Memory Barriers
     void SetPipelineBarrier(DependencyInfo *pDependencyInfo);

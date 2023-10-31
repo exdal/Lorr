@@ -151,6 +151,7 @@ enum class PipelineStage : u64
 
     /// OTHER STAGES
     AllCommands = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+    TopOfPiple = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
     BottomOfPipe = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
 };
 LR_TYPEOP_ARITHMETIC_INT(PipelineStage, PipelineStage, &);
@@ -162,6 +163,7 @@ enum class MemoryAccess : u64
     VertexAttribRead = VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT,
     IndexAttribRead = VK_ACCESS_2_INDEX_READ_BIT,
     InputAttachmentRead = VK_ACCESS_2_INPUT_ATTACHMENT_READ_BIT,
+    ShaderRead = VK_ACCESS_2_SHADER_READ_BIT,
     UniformRead = VK_ACCESS_2_UNIFORM_READ_BIT,
     SampledRead = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
     StorageRead = VK_ACCESS_2_SHADER_STORAGE_READ_BIT,
@@ -176,9 +178,6 @@ enum class MemoryAccess : u64
     HostWrite = VK_ACCESS_2_HOST_WRITE_BIT,
     MemoryRead = VK_ACCESS_2_MEMORY_READ_BIT,
     MemoryWrite = VK_ACCESS_2_MEMORY_WRITE_BIT,
-
-    /// VIRTUAL FLAGS
-    Present = VK_ACCESS_2_NONE,
 
     /// UTILITY FLAGS
     ColorAttachmentAll = ColorAttachmentRead | ColorAttachmentWrite,

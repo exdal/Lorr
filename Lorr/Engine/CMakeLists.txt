@@ -20,19 +20,11 @@ set(LORR_VENDOR
     xxhash
 )
 
-# Core
-LorrComponent(
-    NAME
-        Lorr
-    SOURCE
-        ./*.cc
-    VENDOR
-        ${LORR_VENDOR}
-    PCH
-        pch.hh
-    INCLUDE_PUB
-        ./
-        ../../
-    LIBTYPE
-        STATIC
+file(GLOB_RECURSE LORR_SOURCE
+    *.cc
 )
+
+add_library(Lorr STATIC ${LORR_SOURCE})
+target_include_directories(Lorr PUBLIC ./ ../../)
+target_link_libraries(Lorr PUBLIC ${LORR_VENDOR})
+target_precompile_headers(Lorr PUBLIC pch.hh)

@@ -1,6 +1,4 @@
-cmake_minimum_required(VERSION 3.20)
-
-include(CMake/LorrComponent.cmake)
+cmake_minimum_required(VERSION 3.27)
 
 project(Lorr VERSION 1.0.0 LANGUAGES CXX C)
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
@@ -14,12 +12,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_definitions(-DNOMINMAX)
 add_definitions(-D_CRT_SECURE_NO_WARNINGS)
-
-if(MSVC)
-    add_compile_options(/arch:AVX-512)
-else()
-    add_compile_options(-march=native)
-endif()
+add_compile_options(-march=native)
 
 # ASAN SETTINGS
 # add_definitions(-D_DISABLE_STRING_ANNOTATION)

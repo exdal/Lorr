@@ -37,7 +37,7 @@ LR_ASSIGN_OBJECT_TYPE(Surface, VK_OBJECT_TYPE_SURFACE_KHR);
 struct PhysicalDevicePropertySet
 {
     PhysicalDevicePropertySet();
-    
+
     VkPhysicalDeviceMemoryProperties m_Memory = {};
 
     /// CHAINED ///

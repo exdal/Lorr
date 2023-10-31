@@ -12,16 +12,16 @@ namespace lr::Graphics
 /// These extensions are REQUIRED to be available on selected device.
 
 static const char *kppRequiredExtensions[] = {
-    "VK_KHR_swapchain",
-    "VK_KHR_depth_stencil_resolve",
-    "VK_KHR_dynamic_rendering",
-    "VK_KHR_synchronization2",
-    "VK_EXT_extended_dynamic_state2",
-    "VK_KHR_timeline_semaphore",
-    "VK_EXT_descriptor_buffer",
-    "VK_EXT_descriptor_indexing",
-    "VK_EXT_host_query_reset",
-    "VK_EXT_calibrated_timestamps",
+    "VK_KHR_swapchain",                // Win32 or use DXGI
+    "VK_KHR_depth_stencil_resolve",    // Core 1.2
+    "VK_KHR_dynamic_rendering",        // Core 1.3
+    "VK_KHR_synchronization2",         // Core 1.3
+    "VK_EXT_extended_dynamic_state2",  // Core 1.3
+    "VK_KHR_timeline_semaphore",       // Core 1.2
+    "VK_EXT_descriptor_buffer",        //
+    "VK_EXT_descriptor_indexing",      // Core 1.2
+    "VK_EXT_host_query_reset",         // Core 1.2
+    "VK_EXT_calibrated_timestamps",    //
 };
 
 static constexpr eastl::span<const char *> kRequiredExtensions(kppRequiredExtensions);

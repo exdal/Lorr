@@ -21,7 +21,6 @@ struct SwapChain : APIObject
 
     VkSwapchainKHR m_pHandle = nullptr;
 
-    u32 m_CurrentFrame = 0;
     u32 m_FrameCount = 2;
     u32 m_Width = 0;
     u32 m_Height = 0;

@@ -82,15 +82,15 @@ void LinearAllocator::Init(const LinearAllocatorDesc &desc)
 {
     ZoneScoped;
 
-    m_RegionSize = desc.m_DataSize;
-    m_View.m_pFirstRegion = AllocateRegion();
+    m_MinRegionSize = desc.m_DataSize;
+    m_View.m_pFirstRegion = AllocateRegion(m_MinRegionSize);
 }
 
-AllocationRegion *LinearAllocator::AllocateRegion()
+AllocationRegion *LinearAllocator::AllocateRegion(usize size)
 {
     ZoneScoped;
 
-    u8 *pData = Memory::Allocate<u8>(sizeof(AllocationRegion) + m_RegionSize);
+    u8 *pData = Memory::Allocate<u8>(sizeof(AllocationRegion) + size);
 
     AllocationRegion *pLastRegion = m_View.m_pFirstRegion;
     while (pLastRegion != nullptr && pLastRegion->m_pNext != nullptr)
@@ -98,7 +98,7 @@ AllocationRegion *LinearAllocator::AllocateRegion()
 
     AllocationRegion *pRegion = (AllocationRegion *)pData;
     pRegion->m_pNext = nullptr;
-    pRegion->m_Capacity = m_RegionSize;
+    pRegion->m_Capacity = size;
     pRegion->m_Size = 0;
     pRegion->m_pData = pData + sizeof(AllocationRegion);
     if (pLastRegion)
@@ -138,7 +138,8 @@ u8 *LinearAllocator::Allocate(u64 size, u32 alignment)
         if (!m_AllowMultipleBlocks)
             return nullptr;
 
-        pAvailRegion = AllocateRegion();
+        m_MinRegionSize = eastl::max(m_MinRegionSize, alignedSize);
+        pAvailRegion = AllocateRegion(m_MinRegionSize);
     }
 
     return pAvailRegion->ConsumeAsData(alignedSize);

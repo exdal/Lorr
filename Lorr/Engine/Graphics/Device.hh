@@ -18,7 +18,6 @@ namespace lr::Graphics
 {
 struct SubmitDesc
 {
-    CommandType m_Type = CommandType::Count;
     eastl::span<SemaphoreSubmitDesc> m_WaitSemas;
     eastl::span<CommandListSubmitDesc> m_Lists;
     eastl::span<SemaphoreSubmitDesc> m_SignalSemas;
@@ -43,7 +42,8 @@ struct Device
     bool IsFenceSignaled(Fence pFence);
     void ResetFence(Fence pFence);
 
-    Semaphore *CreateSemaphore(u32 initialValue = 0, bool binary = true);
+    Semaphore *CreateBinarySemaphore();
+    Semaphore *CreateTimelineSemaphore(u64 initialValue);
     void DeleteSemaphore(Semaphore *pSemaphore);
     void WaitForSemaphore(
         Semaphore *pSemaphore, u64 desiredValue, u64 timeout = UINT64_MAX);
@@ -65,7 +65,8 @@ struct Device
 
     void WaitForWork();
     u32 AcquireImage(SwapChain *pSwapChain, Semaphore *pSemaphore);
-    void Present(SwapChain *pSwapChain, Semaphore *pSemaphore, CommandQueue *pQueue);
+    void Present(
+        SwapChain *pSwapChain, u32 imageIdx, Semaphore *pSemaphore, CommandQueue *pQueue);
 
     /// RESOURCE ///
     u64 GetBufferMemorySize(Buffer *pBuffer, u64 *pAlignmentOut = nullptr);

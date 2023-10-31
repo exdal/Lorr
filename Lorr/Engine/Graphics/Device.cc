@@ -162,7 +162,29 @@ void Device::ResetFence(Fence pFence)
     vkResetFences(m_pHandle, 1, &pFence);
 }
 
-Semaphore *Device::CreateSemaphore(u32 initialValue, bool binary)
+Semaphore *Device::CreateBinarySemaphore()
+{
+    ZoneScoped;
+
+    Semaphore *pSemaphore = new Semaphore;
+    pSemaphore->m_Value = 0;
+
+    VkSemaphoreTypeCreateInfo semaphoreTypeInfo = {
+        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO,
+        .semaphoreType = VK_SEMAPHORE_TYPE_BINARY,
+        .initialValue = pSemaphore->m_Value,
+    };
+
+    VkSemaphoreCreateInfo semaphoreInfo = {
+        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+        .pNext = &semaphoreTypeInfo,
+    };
+    vkCreateSemaphore(m_pHandle, &semaphoreInfo, nullptr, &pSemaphore->m_pHandle);
+
+    return pSemaphore;
+}
+
+Semaphore *Device::CreateTimelineSemaphore(u64 initialValue)
 {
     ZoneScoped;
 
@@ -171,7 +193,7 @@ Semaphore *Device::CreateSemaphore(u32 initialValue, bool binary)
 
     VkSemaphoreTypeCreateInfo semaphoreTypeInfo = {
         .sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO,
-        .semaphoreType = binary ? VK_SEMAPHORE_TYPE_BINARY : VK_SEMAPHORE_TYPE_TIMELINE,
+        .semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE,
         .initialValue = pSemaphore->m_Value,
     };
 
@@ -447,7 +469,7 @@ SwapChain *Device::CreateSwapChain(Surface *pSurface, SwapChainDesc *pDesc)
     ZoneScoped;
 
     SwapChain *pSwapChain = new SwapChain;
-    pSwapChain->m_FrameCount = pSwapChain->m_FrameCount;
+    pSwapChain->m_FrameCount = pDesc->m_FrameCount;
     pSwapChain->m_Width = pDesc->m_Width;
     pSwapChain->m_Height = pDesc->m_Height;
     pSwapChain->m_ImageFormat = pDesc->m_Format;
@@ -549,7 +571,8 @@ u32 Device::AcquireImage(SwapChain *pSwapChain, Semaphore *pSemaphore)
     return imageIdx;
 }
 
-void Device::Present(SwapChain *pSwapChain, Semaphore *pSemaphore, CommandQueue *pQueue)
+void Device::Present(
+    SwapChain *pSwapChain, u32 imageIdx, Semaphore *pSemaphore, CommandQueue *pQueue)
 {
     ZoneScoped;
 
@@ -559,7 +582,7 @@ void Device::Present(SwapChain *pSwapChain, Semaphore *pSemaphore, CommandQueue 
         .pWaitSemaphores = &pSemaphore->m_pHandle,
         .swapchainCount = 1,
         .pSwapchains = &pSwapChain->m_pHandle,
-        .pImageIndices = &pSwapChain->m_CurrentFrame,
+        .pImageIndices = &imageIdx,
     };
     vkQueuePresentKHR(pQueue->m_pHandle, &presentInfo);
 }

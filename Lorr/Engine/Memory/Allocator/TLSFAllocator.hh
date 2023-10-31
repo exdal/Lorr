@@ -83,4 +83,33 @@ struct TLSFAllocator
     u8 *m_pData = nullptr;
 };
 
+// TODO
+class STLAllocatorTLSF
+{
+public:
+    EASTL_ALLOCATOR_EXPLICIT STLAllocatorTLSF(
+        const char *pName = EASTL_NAME_VAL(EASTL_ALLOCATOR_DEFAULT_NAME));
+    STLAllocatorTLSF(const STLAllocatorTLSF &x);
+    STLAllocatorTLSF(const STLAllocatorTLSF &x, const char *pName);
+
+    STLAllocatorTLSF &operator=(const STLAllocatorTLSF &x);
+
+    void *allocate(size_t n, int flags = 0);
+    void *allocate(size_t n, size_t alignment, size_t offset, int flags = 0);
+    void deallocate(void *p, size_t n);
+
+    const char *get_name() const;
+    void set_name(const char *pName);
+
+protected:
+#if EASTL_NAME_ENABLED
+    const char *mpName;  // Debug name, used to track memory.
+#endif
+};
+
+bool operator==(const STLAllocatorTLSF &a, const STLAllocatorTLSF &b);
+#if !defined(EA_COMPILER_HAS_THREE_WAY_COMPARISON)
+bool operator!=(const STLAllocatorTLSF &a, const STLAllocatorTLSF &b);
+#endif
+
 }  // namespace lr::Memory

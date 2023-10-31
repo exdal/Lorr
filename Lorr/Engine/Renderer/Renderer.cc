@@ -2,8 +2,33 @@
 
 #include "Window/Win32/Win32Window.hh"
 
+#include "RenderGraph.hh"
+
 namespace lr::Renderer
 {
+struct ClearSwapChain : Task
+{
+    constexpr static eastl::string_view kName = "ClearSwapChain";
+
+    struct Uses
+    {
+        Preset::SwapChainImage m_RenderTarget;
+    } m_Uses;
+
+    void Execute(TaskContext &ctx)
+    {
+        Graphics::CommandList *pList = ctx.GetCommandList();
+
+        // Graphics::RenderingBeginDesc renderingDesc = {
+        //    .m_RenderArea = ctx.GetSwapChainArea(),
+        //    .m_ColorAttachments = ctx.GetColorAttachments(),
+        // };
+
+        // pList->BeginRendering(&renderingDesc);
+        // pList->EndRendering();
+    }
+};
+
 void Renderer::Init(BaseWindow *pWindow)
 {
     ZoneScoped;
@@ -48,7 +73,15 @@ void Renderer::Init(BaseWindow *pWindow)
     if (!m_pSwapChain)
         return;
 
-    auto ptr = m_pDevice->GetSwapChainImages(m_pSwapChain);
+    ls::ref_array<Graphics::Image *> images = m_pDevice->GetSwapChainImages(m_pSwapChain);
+    m_Frames.resize(m_pSwapChain->m_FrameCount);
+
+    TaskGraph graph;
+    TaskGraphDesc tgDesc = {};
+    graph.Init(&tgDesc);
+
+    graph.AddTask<ClearSwapChain>({}, nullptr);
+    graph.CompileGraph();
 }
 
 }  // namespace lr::Renderer

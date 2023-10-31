@@ -1,6 +1,3 @@
-// Created on Monday July 18th 2022 by exdal
-// Last modified on Monday August 28th 2023 by exdal
-
 #include "CommandList.hh"
 
 namespace lr::Graphics
@@ -56,20 +53,22 @@ void RenderingAttachment::InitImage(
     this->pNext = nullptr;
     this->imageView = pImage->m_pViewHandle;
     this->imageLayout = (VkImageLayout)layout;
+    this->resolveMode = VK_RESOLVE_MODE_NONE;
+    this->resolveImageView = nullptr;
+    this->resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     this->loadOp = kLoadOpLUT[(u32)loadOp];
     this->storeOp = kStoreOpLUT[(u32)storeOp];
 }
 
-ImageBarrier::ImageBarrier(
-    Image *pImage, ImageUsage aspectUsage, const PipelineBarrier &barrier)
+ImageBarrier::ImageBarrier(Image *pImage, const PipelineBarrier &barrier)
 {
     ZoneScoped;
 
     VkImageAspectFlags aspectFlags = 0;
-    if (aspectUsage & ImageUsage::AspectColor)
-        aspectFlags |= VK_IMAGE_ASPECT_COLOR_BIT;
-    if (aspectUsage & ImageUsage::AspectDepthStencil)
+    if (barrier.m_DstLayout == ImageLayout::DepthStencilReadOnly)
         aspectFlags |= VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+    else
+        aspectFlags |= VK_IMAGE_ASPECT_COLOR_BIT;
 
     VkImageSubresourceRange subresRange = {
         .aspectMask = aspectFlags,
@@ -87,8 +86,10 @@ ImageBarrier::ImageBarrier(
     this->dstAccessMask = (VkAccessFlags2)barrier.m_DstAccess;
     this->oldLayout = (VkImageLayout)barrier.m_SrcLayout;
     this->newLayout = (VkImageLayout)barrier.m_DstLayout;
-    this->srcQueueFamilyIndex = barrier.m_SrcQueue;
-    this->dstQueueFamilyIndex = barrier.m_DstQueue;
+    this->srcQueueFamilyIndex =
+        barrier.m_pSrcQueue ? barrier.m_pSrcQueue->m_QueueIndex : ~0;
+    this->dstQueueFamilyIndex =
+        barrier.m_pDstQueue ? barrier.m_pDstQueue->m_QueueIndex : ~0;
 
     this->image = pImage->m_pHandle;
     this->subresourceRange = subresRange;
@@ -104,8 +105,10 @@ BufferBarrier::BufferBarrier(Buffer *pBuffer, const PipelineBarrier &barrier)
     this->dstStageMask = (VkPipelineStageFlags2)barrier.m_DstStage;
     this->srcAccessMask = (VkAccessFlags2)barrier.m_SrcAccess;
     this->dstAccessMask = (VkAccessFlags2)barrier.m_DstAccess;
-    this->srcQueueFamilyIndex = barrier.m_SrcQueue;
-    this->dstQueueFamilyIndex = barrier.m_DstQueue;
+    this->srcQueueFamilyIndex =
+        barrier.m_pSrcQueue ? barrier.m_pSrcQueue->m_QueueIndex : ~0;
+    this->dstQueueFamilyIndex =
+        barrier.m_pDstQueue ? barrier.m_pDstQueue->m_QueueIndex : ~0;
 
     this->buffer = pBuffer->m_pHandle;
     this->offset = pBuffer->m_DataOffset;
@@ -185,6 +188,16 @@ void DependencyInfo::SetMemoryBarriers(eastl::span<MemoryBarrier> memoryBarriers
     this->pMemoryBarriers = memoryBarriers.data();
 }
 
+SemaphoreSubmitDesc::SemaphoreSubmitDesc(Semaphore *pSemaphore, PipelineStage stage)
+{
+    this->sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+    this->pNext = nullptr;
+    this->semaphore = pSemaphore->m_pHandle;
+    this->value = 0;
+    this->stageMask = (VkPipelineStageFlags2)stage;
+    this->deviceIndex = 0;
+}
+
 SemaphoreSubmitDesc::SemaphoreSubmitDesc(
     Semaphore *pSemaphore, u64 value, PipelineStage stage)
 {
@@ -232,6 +245,27 @@ void CommandList::EndRendering()
     ZoneScoped;
 
     vkCmdEndRendering(m_pHandle);
+}
+
+void CommandList::ClearImage(Image *pImage, ImageLayout layout, ColorClearValue clearVal)
+{
+    ZoneScoped;
+
+    VkImageSubresourceRange subRange = {
+        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+        .baseMipLevel = 0,
+        .levelCount = pImage->m_MipMapLevels,
+        .baseArrayLayer = 0,
+        .layerCount = 1,
+    };
+
+    vkCmdClearColorImage(
+        m_pHandle,
+        pImage->m_pHandle,
+        (VkImageLayout)layout,
+        (VkClearColorValue *)&clearVal,
+        1,
+        &subRange);
 }
 
 void CommandList::SetPipelineBarrier(DependencyInfo *pDependencyInfo)

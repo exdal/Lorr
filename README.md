@@ -1,4 +1,4 @@
 # Lorr
 My personal game engine.
 
-100% documentation free!
+Documentation is currently WIP.

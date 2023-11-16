@@ -1,5 +1,6 @@
 #pragma once
 
+#include "CommandBatcher.hh"
 #include "Task.hh"
 #include "TaskResource.hh"
 
@@ -7,7 +8,6 @@
 #include "Graphics/Device.hh"
 #include "Memory/Allocator/LinearAllocator.hh"
 
-#include <EASTL/functional.h>
 #include <EASTL/vector.h>
 
 namespace lr::Renderer
@@ -41,6 +41,8 @@ struct TaskGraph
     void PresentTask(ImageID backBufferID);
 
     void Execute(const TaskGraphExecuteDesc &desc);
+
+    void InsertBarrier(CommandBatcher &batcher, const TaskBarrier &barrier);
 
     Graphics::Device *m_pDevice = nullptr;
     Graphics::CommandQueue *m_pGraphicsQueue = nullptr;

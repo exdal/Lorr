@@ -43,6 +43,8 @@ ImageID TaskGraph::UsePersistentImage(const PersistentImageInfo &persistentInfo)
     ZoneScoped;
 
     ImageID id = m_ImageInfos.size();
+    // For some reason, having Access::None for layout Undefined causes sync hazard
+    // This might be exclusive to my GTX 1050 Ti --- sync2 error
     m_ImageInfos.push_back({ .m_LastAccess = TaskAccess::TopOfPipe });
     SetImage(id, persistentInfo.m_pImage, persistentInfo.m_pImageView);
 
@@ -132,26 +134,17 @@ void TaskGraph::Execute(const TaskGraphExecuteDesc &desc)
 
     for (auto &batch : m_Batches)
     {
+        CommandBatcher batcher(pList);
         for (auto barrierID : batch.m_WaitBarriers)
         {
             auto &barrier = m_Barriers[barrierID];
             if (barrier.m_ImageID == ImageNull)
                 continue;  // TODO: Handle memory barriers
 
-            auto &imageInfo = m_ImageInfos[barrier.m_ImageID];
-            PipelineBarrier pipelineInfo = {
-                .m_SrcLayout = barrier.m_SrcLayout,
-                .m_DstLayout = barrier.m_DstLayout,
-                .m_SrcStage = barrier.m_SrcAccess.m_Stage,
-                .m_DstStage = barrier.m_DstAccess.m_Stage,
-                .m_SrcAccess = barrier.m_SrcAccess.m_Access,
-                .m_DstAccess = barrier.m_DstAccess.m_Access,
-            };
-            ImageBarrier imgDependency(imageInfo.m_pImage, {}, pipelineInfo);
-            DependencyInfo dependencyInfo(imgDependency, {});
-            pList->SetPipelineBarrier(&dependencyInfo);
+            InsertBarrier(batcher, barrier);
         }
 
+        batcher.FlushBarriers();
         for (auto &pTask : m_Tasks)
         {
             TaskContext ctx(this, pList);
@@ -164,19 +157,9 @@ void TaskGraph::Execute(const TaskGraphExecuteDesc &desc)
             if (barrier.m_ImageID == ImageNull)
                 continue;  // TODO: Handle memory barriers
 
-            auto &imageInfo = m_ImageInfos[barrier.m_ImageID];
-            PipelineBarrier pipelineInfo = {
-                .m_SrcLayout = barrier.m_SrcLayout,
-                .m_DstLayout = barrier.m_DstLayout,
-                .m_SrcStage = barrier.m_SrcAccess.m_Stage,
-                .m_DstStage = barrier.m_DstAccess.m_Stage,
-                .m_SrcAccess = barrier.m_SrcAccess.m_Access,
-                .m_DstAccess = barrier.m_DstAccess.m_Access,
-            };
-            ImageBarrier imgDependency(imageInfo.m_pImage, {}, pipelineInfo);
-            DependencyInfo dependencyInfo(imgDependency, {});
-            pList->SetPipelineBarrier(&dependencyInfo);
+            InsertBarrier(batcher, barrier);
         }
+        batcher.FlushBarriers();
     }
 
     m_pDevice->EndCommandList(pList);
@@ -199,6 +182,31 @@ void TaskGraph::Execute(const TaskGraphExecuteDesc &desc)
     };
 
     m_pDevice->Submit(m_pGraphicsQueue, &submitDesc);
+}
+void TaskGraph::InsertBarrier(CommandBatcher &batcher, const TaskBarrier &barrier)
+{
+    ZoneScoped;
+
+    PipelineBarrier pipelineInfo = {
+        .m_SrcLayout = barrier.m_SrcLayout,
+        .m_DstLayout = barrier.m_DstLayout,
+        .m_SrcStage = barrier.m_SrcAccess.m_Stage,
+        .m_DstStage = barrier.m_DstAccess.m_Stage,
+        .m_SrcAccess = barrier.m_SrcAccess.m_Access,
+        .m_DstAccess = barrier.m_DstAccess.m_Access,
+    };
+
+    if (barrier.m_ImageID == ImageNull)
+    {
+        MemoryBarrier barrierInfo(pipelineInfo);
+        batcher.InsertMemoryBarrier(barrierInfo);
+    }
+    else
+    {
+        auto &imageInfo = m_ImageInfos[barrier.m_ImageID];
+        ImageBarrier barrierInfo(imageInfo.m_pImage, {}, pipelineInfo);
+        batcher.InsertImageBarrier(barrierInfo);
+    }
 }
 
 }  // namespace lr::Renderer

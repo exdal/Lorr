@@ -4,6 +4,7 @@
 #pragma once
 
 #include <EASTL/fixed_vector.h>
+#include <EASTL/tuple.h>
 
 #include "STL/RefPtr.hh"
 
@@ -30,7 +31,7 @@ struct Device
 
     /// COMMAND ///
     CommandQueue *CreateCommandQueue(CommandType type, u32 queueIndex);
-    CommandAllocator *CreateCommandAllocator(CommandQueue *pQueue, bool resetLists);
+    CommandAllocator *CreateCommandAllocator(u32 queueIdx, CommandAllocatorFlag flags);
     CommandList *CreateCommandList(CommandAllocator *pAllocator);
 
     void BeginCommandList(CommandList *pList);
@@ -62,9 +63,7 @@ struct Device
     /// SWAPCHAIN ///
     SwapChain *CreateSwapChain(Surface *pSurface, SwapChainDesc *pDesc);
     void DeleteSwapChain(SwapChain *pSwapChain, bool keepSelf);
-    using SCGetImagesRes =
-        eastl::pair<ls::ref_array<Image *>, ls::ref_array<ImageView *>>;
-    SCGetImagesRes GetSwapChainImages(SwapChain *pSwapChain);
+    ls::ref_array<Image *> GetSwapChainImages(SwapChain *pSwapChain);
 
     void WaitForWork();
     u32 AcquireImage(SwapChain *pSwapChain, Semaphore *pSemaphore);

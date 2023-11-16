@@ -15,8 +15,7 @@ void Engine::Init(EngineDesc &engineDesc)
     Job::JobManager::Init(CONFIG_GET_VAR(JM_WORKER_COUNT));
     m_Window.Init(engineDesc.m_WindowDesc);
     m_ImGui.Init(m_Window.m_Width, m_Window.m_Height);
-    Renderer::Renderer renderer;
-    renderer.Init(&m_Window);
+    m_Renderer.Init(&m_Window);
 }
 
 void Engine::PushEvent(Event event, EngineEventData &data)
@@ -82,13 +81,15 @@ void Engine::BeginFrame()
 {
     ZoneScopedN("Engine Begin Frame");
 
-    m_Window.Poll();
     DispatchEvents();
+    m_Renderer.Draw();
 }
 
 void Engine::EndFrame()
 {
     ZoneScopedN("Engine End Frame");
+
+    m_Window.Poll();
 }
 
 }  // namespace lr

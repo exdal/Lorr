@@ -1,73 +1,61 @@
 #pragma once
 
 #include "Graphics/Resource.hh"
+#include "TaskTypes.hh"
 
 #include <EASTL/vector.h>
 
 namespace lr::Renderer
 {
-enum class ResourceType : u32
+using ImageID = u32;
+constexpr static ImageID ImageNull = ~0;
+
+struct PersistentImageInfo
 {
-    Buffer,
-    Image,
+    Graphics::Image *m_pImage = nullptr;
+    Graphics::ImageView *m_pImageView = nullptr;
+    TaskAccess::Access m_InitialAccess = TaskAccess::None;
 };
 
-enum class ResourceFlag : u32
+struct TaskImageInfo
 {
-    None = 0,
-    SwapChainImage = 1 << 0,
-    SwapChainRelative = 1 << 1,  // for scaling
-};
-LR_TYPEOP_ARITHMETIC_INT(ResourceFlag, ResourceFlag, &);
-
-template<typename _T>
-struct ToResourceType;
-
-template<>
-struct ToResourceType<Graphics::Image>
-{
-    constexpr static ResourceType kType = ResourceType::Image;
-};
-
-template<>
-struct ToResourceType<Graphics::Buffer>
-{
-    constexpr static ResourceType kType = ResourceType::Buffer;
+    Graphics::Image *m_pImage = nullptr;
+    Graphics::ImageView *m_pImageView = nullptr;
+    Graphics::ImageLayout m_LastLayout = Graphics::ImageLayout::Undefined;
+    TaskAccess::Access m_LastAccess = TaskAccess::None;
+    usize m_LastBatchIndex = 0;
 };
 
 struct GenericResource
 {
     ResourceType m_Type = ResourceType::Buffer;
     ResourceFlag m_Flags = ResourceFlag::None;
+    Graphics::ImageLayout m_ImageLayout = Graphics::ImageLayout::Undefined;
+    TaskAccess::Access m_Access = TaskAccess::None;
     union
     {
-        Graphics::Buffer *m_pBuffer = nullptr;
-        Graphics::Image *m_pImage;
+        ImageID m_ImageID = ImageNull;
     };
-    Graphics::ImageLayout m_ImageLayout = Graphics::ImageLayout::Undefined;
-    Graphics::MemoryAccess m_Access = Graphics::MemoryAccess::None;
-    Graphics::PipelineStage m_Stage = Graphics::PipelineStage::None;
 };
 
 template<
-    Graphics::MemoryAccess _Access,
-    Graphics::PipelineStage _Stage,
-    Graphics::ImageLayout _Layout,
+    TaskAccess::Access _Access = TaskAccess::None,
+    Graphics::ImageLayout _Layout = Graphics::ImageLayout::Undefined,
     ResourceFlag _Flags = ResourceFlag::None>
-struct PresetImage : GenericResource
+struct TaskImageUse : GenericResource
 {
-    constexpr PresetImage()
+    constexpr TaskImageUse()
     {
         m_Type = ToResourceType<Graphics::Image>::kType;
         m_Flags = _Flags;
-        m_Access = _Access;
-        m_Stage = _Stage;
         m_ImageLayout = _Layout;
+        m_Access = _Access;
     }
-    constexpr PresetImage(Graphics::Image *pImage)
-        : PresetImage()
+
+    constexpr TaskImageUse(ImageID image)
+        : TaskImageUse()
     {
-        m_pImage = pImage;
+        m_ImageID = image;
     }
 };
 
@@ -77,9 +65,9 @@ namespace Preset
 using namespace lr::Graphics;
 
 // Common types
-using SwapChainImage = PresetImage<MemoryAccess::ColorAttachmentAll, PipelineStage::ColorAttachmentOutput, ImageLayout::ColorAttachment, ResourceFlag::SwapChainImage>;
-using ColorAttachment = PresetImage<MemoryAccess::ColorAttachmentRead, PipelineStage::ColorAttachmentOutput, ImageLayout::ColorAttachment>;
-using Present = PresetImage<MemoryAccess::None, PipelineStage::ColorAttachmentOutput, ImageLayout::ColorAttachment>;
+using SwapChainImage = TaskImageUse<TaskAccess::ColorAttachmentReadWrite, ImageLayout::ColorAttachment, ResourceFlag::SwapChainImage>;
+using ColorAttachment = TaskImageUse<TaskAccess::ColorAttachmentReadWrite, ImageLayout::ColorAttachment>;
+using Present = TaskImageUse<TaskAccess::BottomOfPipe, ImageLayout::Present>;
 
 }  // namespace Preset
 // clang-format on

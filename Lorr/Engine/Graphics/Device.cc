@@ -41,22 +41,17 @@ CommandQueue *Device::CreateCommandQueue(CommandType type, u32 queueIndex)
     return pQueue;
 }
 
-CommandAllocator *Device::CreateCommandAllocator(CommandQueue *pQueue, bool resetLists)
+CommandAllocator *Device::CreateCommandAllocator(
+    u32 queueIdx, CommandAllocatorFlag flags)
 {
     ZoneScoped;
 
     CommandAllocator *pAllocator = new CommandAllocator;
-    pAllocator->m_Type = pQueue->m_Type;
-    pAllocator->m_pQueue = pQueue;
-
-    VkCommandPoolCreateFlags flags = 0;
-    if (resetLists)
-        flags |= VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
 
     VkCommandPoolCreateInfo createInfo = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-        .flags = flags,
-        .queueFamilyIndex = pQueue->m_QueueIndex,
+        .flags = static_cast<VkCommandPoolCreateFlags>(flags),
+        .queueFamilyIndex = queueIdx,
     };
     vkCreateCommandPool(m_pHandle, &createInfo, nullptr, &pAllocator->m_pHandle);
 
@@ -510,13 +505,12 @@ void Device::DeleteSwapChain(SwapChain *pSwapChain, bool keepSelf)
         delete pSwapChain;
 }
 
-Device::SCGetImagesRes Device::GetSwapChainImages(SwapChain *pSwapChain)
+ls::ref_array<Image *> Device::GetSwapChainImages(SwapChain *pSwapChain)
 {
     ZoneScoped;
 
     u32 imageCount = pSwapChain->m_FrameCount;
     ls::ref_array<Image *> ppImages(new Image *[imageCount]);
-    ls::ref_array<ImageView *> ppImageViews(new ImageView *[imageCount]);
     ls::ref_array<VkImage> ppImageHandles(new VkImage[imageCount]);
     vkGetSwapchainImagesKHR(
         m_pHandle, pSwapChain->m_pHandle, &imageCount, ppImageHandles.get());
@@ -533,14 +527,10 @@ Device::SCGetImagesRes Device::GetSwapChainImages(SwapChain *pSwapChain)
         pImage->m_MipMapLevels = 1;
         pImage->m_Format = pSwapChain->m_ImageFormat;
 
-        ImageViewDesc viewDesc = {};
-        ppImageViews[i] = CreateImageView(&viewDesc);
-
         SetObjectName(pImage, _FMT("Swap Chain Image {}", i));
-        SetObjectName(pImage, _FMT("Swap Chain Image View {}", i));
     }
 
-    return eastl::make_pair(ppImages, ppImageViews);
+    return ppImages;
 }
 
 void Device::WaitForWork()
@@ -941,22 +931,19 @@ ImageView *Device::CreateImageView(ImageViewDesc *pDesc)
         .components.g = static_cast<VkComponentSwizzle>(pDesc->m_SwizzleG),
         .components.b = static_cast<VkComponentSwizzle>(pDesc->m_SwizzleB),
         .components.a = static_cast<VkComponentSwizzle>(pDesc->m_SwizzleA),
-        .subresourceRange.aspectMask = static_cast<VkImageAspectFlags>(pDesc->m_Aspect),
-        .subresourceRange.baseMipLevel = pDesc->m_BaseMip,
-        .subresourceRange.levelCount = pDesc->m_MipCount,
-        .subresourceRange.baseArrayLayer = pDesc->m_BaseLayer,
-        .subresourceRange.layerCount = pDesc->m_LayerCount,
+        .subresourceRange.aspectMask =
+            static_cast<VkImageAspectFlags>(pDesc->m_SubresourceInfo.m_AspectMask),
+        .subresourceRange.baseMipLevel = pDesc->m_SubresourceInfo.m_BaseMip,
+        .subresourceRange.levelCount = pDesc->m_SubresourceInfo.m_MipCount,
+        .subresourceRange.baseArrayLayer = pDesc->m_SubresourceInfo.m_BaseSlice,
+        .subresourceRange.layerCount = pDesc->m_SubresourceInfo.m_SliceCount,
     };
 
     vkCreateImageView(m_pHandle, &imageViewCreateInfo, nullptr, &pImageView->m_pHandle);
 
     pImageView->m_Format = pDesc->m_pImage->m_Format;
     pImageView->m_Type = pDesc->m_Type;
-    pImageView->m_Aspect = pDesc->m_Aspect;
-    pImageView->m_BaseMip = pDesc->m_BaseMip;
-    pImageView->m_MipCount = pDesc->m_MipCount;
-    pImageView->m_BaseLayer = pDesc->m_BaseLayer;
-    pImageView->m_LayerCount = pDesc->m_LayerCount;
+    pImageView->m_SubresourceInfo = pDesc->m_SubresourceInfo;
 
     return pImageView;
 }

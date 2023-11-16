@@ -2,25 +2,14 @@
 
 namespace lr::Graphics
 {
-VkImageSubresourceRange ImageView::GetSubresourceRange()
-{
-    return (VkImageSubresourceRange){
-        .aspectMask = static_cast<VkImageAspectFlags>(m_Aspect),
-        .baseMipLevel = m_BaseMip,
-        .levelCount = m_MipCount,
-        .baseArrayLayer = m_BaseLayer,
-        .layerCount = m_LayerCount,
-    };
-}
 
-VkImageSubresourceLayers ImageView::GetSubresourceLayers()
+ImageSubresourceRange::ImageSubresourceRange(ImageSubresourceInfo info)
 {
-    return (VkImageSubresourceLayers){
-        .aspectMask = static_cast<VkImageAspectFlags>(m_Aspect),
-        .mipLevel = m_BaseMip,
-        .baseArrayLayer = m_BaseLayer,
-        .layerCount = m_LayerCount,
-    };
+    this->aspectMask = static_cast<VkImageAspectFlags>(info.m_AspectMask);
+    this->baseMipLevel = info.m_BaseMip;
+    this->levelCount = info.m_MipCount;
+    this->baseArrayLayer = info.m_BaseSlice;
+    this->layerCount = info.m_SliceCount;
 }
 
 DescriptorLayoutElement::DescriptorLayoutElement(

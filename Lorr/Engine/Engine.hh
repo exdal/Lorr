@@ -7,6 +7,7 @@
 #include "Input/Key.hh"
 #include "UI/ImGui.hh"
 #include "Window/Win32/Win32Window.hh"
+#include "Renderer/Renderer.hh"
 
 namespace lr
 {
@@ -81,6 +82,7 @@ struct Engine
     EventManager<EngineEventData, 64> m_EventMan;
     Win32Window m_Window;
     UI::ImGuiHandler m_ImGui;
+    Renderer::Renderer m_Renderer = {};
 
     bool m_ShuttingDown = false;
 

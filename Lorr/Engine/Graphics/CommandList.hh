@@ -59,8 +59,8 @@ struct PipelineBarrier
     PipelineStage m_DstStage = PipelineStage::None;
     MemoryAccess m_SrcAccess = MemoryAccess::None;
     MemoryAccess m_DstAccess = MemoryAccess::None;
-    CommandQueue *m_pSrcQueue = nullptr;
-    CommandQueue *m_pDstQueue = nullptr;
+    u32 m_SrcQueueIndex = ~0;
+    u32 m_DstQueueIndex = ~0;
 };
 
 // Utility classes to help us batch the barriers
@@ -68,14 +68,14 @@ struct PipelineBarrier
 struct ImageBarrier : VkImageMemoryBarrier2
 {
     ImageBarrier() = default;
-    ImageBarrier(Image *pImage, const PipelineBarrier &barrier);
+    ImageBarrier(
+        Image *pImage, ImageSubresourceInfo sliceInfo, const PipelineBarrier &barrier);
 };
 
-struct BufferBarrier : VkBufferMemoryBarrier2
-{
-    BufferBarrier() = default;
-    BufferBarrier(Buffer *pBuffer, const PipelineBarrier &barrier);
-};
+// fuck yourself holy shit
+#ifdef MemoryBarrier
+#undef MemoryBarrier
+#endif
 
 struct MemoryBarrier : VkMemoryBarrier2
 {
@@ -86,12 +86,9 @@ struct MemoryBarrier : VkMemoryBarrier2
 struct DependencyInfo : VkDependencyInfo
 {
     DependencyInfo();
-    DependencyInfo(eastl::span<ImageBarrier> imageBarriers);
-    DependencyInfo(eastl::span<BufferBarrier> bufferBarriers);
-    DependencyInfo(eastl::span<MemoryBarrier> memoryBarriers);
-    void SetImageBarriers(eastl::span<ImageBarrier> imageBarriers);
-    void SetBufferBarriers(eastl::span<BufferBarrier> bufferBarriers);
-    void SetMemoryBarriers(eastl::span<MemoryBarrier> memoryBarriers);
+    DependencyInfo(
+        eastl::span<ImageBarrier> imageBarriers,
+        eastl::span<MemoryBarrier> memoryBarriers);
 };
 
 using Fence = VkFence;
@@ -128,9 +125,6 @@ LR_ASSIGN_OBJECT_TYPE(CommandQueue, VK_OBJECT_TYPE_QUEUE);
 
 struct CommandAllocator : APIObject
 {
-    CommandType m_Type = CommandType::Count;
-    CommandQueue *m_pQueue = nullptr;
-
     VkCommandPool m_pHandle = nullptr;
 
     operator VkCommandPool &() { return m_pHandle; }
@@ -145,15 +139,14 @@ struct BufferCopyRegion : VkBufferCopy
 struct ImageCopyRegion : VkBufferImageCopy
 {
     ImageCopyRegion(const VkBufferImageCopy &lazy);
-    ImageCopyRegion(ImageView *pView, u32 width, u32 height, u64 bufferOffset);
+    ImageCopyRegion(
+        ImageSubresourceInfo sliceInfo, u32 width, u32 height, u64 bufferOffset);
 };
 
 struct CommandList : APIObject
 {
     void BeginRendering(RenderingBeginDesc *pDesc);
     void EndRendering();
-
-    void ClearImage(Image *pImage, ImageLayout layout, ColorClearValue clearVal);
 
     /// Memory Barriers
     void SetPipelineBarrier(DependencyInfo *pDependencyInfo);

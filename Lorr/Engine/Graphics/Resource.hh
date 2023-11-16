@@ -67,6 +67,20 @@ struct Image : APIObject
 };
 LR_ASSIGN_OBJECT_TYPE(Image, VK_OBJECT_TYPE_IMAGE);
 
+// Image views can have different formats depending on the creation flags
+// Currently, we do not support it so view's format is automatically parent
+// image format. See:
+// https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VkImageViewCreateInfo.html
+
+struct ImageSubresourceInfo
+{
+    ImageAspect m_AspectMask = ImageAspect::Color;
+    u32 m_BaseMip : 8 = 0;
+    u32 m_MipCount : 8 = 1;
+    u32 m_BaseSlice : 8 = 0;
+    u32 m_SliceCount : 8 = 1;
+};
+
 struct ImageViewDesc
 {
     Image *m_pImage = nullptr;
@@ -76,33 +90,22 @@ struct ImageViewDesc
     ImageComponentSwizzle m_SwizzleG = ImageComponentSwizzle::Identity;
     ImageComponentSwizzle m_SwizzleB = ImageComponentSwizzle::Identity;
     ImageComponentSwizzle m_SwizzleA = ImageComponentSwizzle::Identity;
-    // Subres range
-    ImageAspect m_Aspect = ImageAspect::Color;
-    u32 m_BaseMip = 0;
-    u32 m_MipCount = 0;
-    u32 m_BaseLayer = 0;
-    u32 m_LayerCount = 0;
+    ImageSubresourceInfo m_SubresourceInfo = {};
 };
 
-// Image views can have different formats depending on the creation flags
-// Currently, we do not support it so view's format is automatically parent
-// image format. See:
-// https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VkImageViewCreateInfo.html
+struct ImageSubresourceRange : VkImageSubresourceRange
+{
+    ImageSubresourceRange(ImageSubresourceInfo info);
+};
 
 struct ImageView : APIObject
 {
     Format m_Format = Format::Unknown;
     ImageViewType m_Type = ImageViewType::View2D;
-    ImageAspect m_Aspect = ImageAspect::Color;
-    u32 m_BaseMip = 0;
-    u32 m_MipCount = 0;
-    u32 m_BaseLayer = 0;
-    u32 m_LayerCount = 0;
+    ImageSubresourceInfo m_SubresourceInfo = {};
 
     VkImageView m_pHandle = nullptr;
 
-    VkImageSubresourceRange GetSubresourceRange();
-    VkImageSubresourceLayers GetSubresourceLayers();
     operator VkImageView &() { return m_pHandle; }
 };
 LR_ASSIGN_OBJECT_TYPE(ImageView, VK_OBJECT_TYPE_IMAGE_VIEW);

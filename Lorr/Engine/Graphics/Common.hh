@@ -35,6 +35,24 @@ enum class CommandType : u32
     Count,
 };
 
+enum class CommandTypeMask : u32
+{
+    Graphics = 1 << 0,
+    Compute = 1 << 1,
+    Transfer = 1 << 2,
+};
+LR_TYPEOP_ARITHMETIC(CommandTypeMask, CommandTypeMask, |);
+LR_TYPEOP_ARITHMETIC_INT(CommandTypeMask, CommandTypeMask, &);
+
+enum class CommandAllocatorFlag : u32
+{
+    Transient = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
+    ResetCommandBuffer = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+    Protected = VK_COMMAND_POOL_CREATE_PROTECTED_BIT,
+};
+LR_TYPEOP_ARITHMETIC(CommandAllocatorFlag, CommandAllocatorFlag, |);
+LR_TYPEOP_ARITHMETIC_INT(CommandAllocatorFlag, CommandAllocatorFlag, &);
+
 /// DESCRIPTOR ---------------------------- ///
 
 enum class DescriptorType : u32
@@ -155,6 +173,7 @@ enum class PipelineBindPoint : u32
 enum class PipelineStage : u64
 {
     None = VK_PIPELINE_STAGE_2_NONE,
+    TopOfPipe = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
 
     /// ---- IN ORDER ----
     DrawIndirect = VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT,
@@ -175,7 +194,7 @@ enum class PipelineStage : u64
     ComputeShader = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
 
     /// TRANSFER PIPELINE
-    Host = VK_PIPELINE_STAGE_2_HOST_BIT,  // not really in transfer but eh
+    Host = VK_PIPELINE_STAGE_2_HOST_BIT,
     Copy = VK_PIPELINE_STAGE_2_COPY_BIT,
     Bilt = VK_PIPELINE_STAGE_2_BLIT_BIT,
     Resolve = VK_PIPELINE_STAGE_2_RESOLVE_BIT,
@@ -184,7 +203,6 @@ enum class PipelineStage : u64
 
     /// OTHER STAGES
     AllCommands = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
-    TopOfPipe = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
     BottomOfPipe = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
 };
 LR_TYPEOP_ARITHMETIC_INT(PipelineStage, PipelineStage, &);
@@ -209,19 +227,9 @@ enum class MemoryAccess : u64
     TransferWrite = VK_ACCESS_2_TRANSFER_WRITE_BIT,
     HostRead = VK_ACCESS_2_HOST_READ_BIT,
     HostWrite = VK_ACCESS_2_HOST_WRITE_BIT,
-    MemoryRead = VK_ACCESS_2_MEMORY_READ_BIT,
-    MemoryWrite = VK_ACCESS_2_MEMORY_WRITE_BIT,
-
-    /// UTILITY FLAGS
-    ColorAttachmentAll = ColorAttachmentRead | ColorAttachmentWrite,
-    DepthStencilAttachmentAll = DepthStencilRead | DepthStencilWrite,
-    TransferAll = TransferRead | TransferWrite,
-    HostAll = HostRead | HostWrite,
-
-    ImageReadUTL =
-        SampledRead | StorageRead | ColorAttachmentRead | DepthStencilRead | MemoryRead,
-    ImageWriteUTL = StorageWrite | ColorAttachmentWrite | DepthStencilWrite | MemoryWrite,
-
+    Read = VK_ACCESS_2_MEMORY_READ_BIT,
+    Write = VK_ACCESS_2_MEMORY_WRITE_BIT,
+    ReadWrite = Read | Write,
 };
 LR_TYPEOP_ARITHMETIC_INT(MemoryAccess, MemoryAccess, &);
 

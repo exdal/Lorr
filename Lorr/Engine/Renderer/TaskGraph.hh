@@ -1,8 +1,10 @@
 #pragma once
 
+#include "Task.hh"
 #include "TaskResource.hh"
 
 #include "Graphics/CommandList.hh"
+#include "Graphics/Device.hh"
 #include "Memory/Allocator/LinearAllocator.hh"
 
 #include <EASTL/functional.h>
@@ -10,76 +12,63 @@
 
 namespace lr::Renderer
 {
-struct TaskContext;
-using TaskExecuteCb = eastl::function<void(TaskContext &)>;
-struct Task
+struct TaskGraphExecuteDesc
 {
-    virtual void Execute(TaskContext &ctx) = 0;
-
-    eastl::string_view m_Name;
-    eastl::span<GenericResource> m_GenericResources;
-};
-
-struct TaskGroup
-{
-    GenericResource *GetLastAccess(GenericResource &resource);
-
-    TaskGroup *m_pPrev = nullptr;
-    TaskGroup *m_pNext = nullptr;
-    
-    Graphics::MemoryBarrier m_MemoryBarrier = {};
-    // TODO: PLEASE MAKE THEM SPAN POINTING TO TLSF ALLOCATOR
-    eastl::vector<Graphics::ImageBarrier> m_ImageBarriers;
-    eastl::vector<Graphics::BufferBarrier> m_BufferBarriers;
-    eastl::vector<Graphics::SemaphoreSubmitDesc> m_SplitBarriers;
-    eastl::vector<Task *> m_Tasks;
-};
-
-struct TaskContext
-{
-    TaskContext(Graphics::CommandList *pList);
-    Graphics::CommandList *GetCommandList();
-
-private:
-    Graphics::CommandList *m_pList = nullptr;
+    u32 m_FrameIndex = 0;
+    Graphics::Semaphore *m_pAcquireSema = nullptr;
+    Graphics::Semaphore *m_pPresentSema = nullptr;
 };
 
 struct TaskGraphDesc
 {
+    u32 m_FrameCount = 0;
     usize m_InitialAlloc = 0xffff;
-    usize m_InitialNodes = 16;
+    Graphics::PhysicalDevice *m_pPhysDevice = nullptr;
+    Graphics::Device *m_pDevice = nullptr;
 };
 
 struct TaskGraph
 {
     void Init(TaskGraphDesc *pDesc);
-    void CompileGraph();
-    void CompileTask(Task *pTask, TaskGroup *pGroup);
 
-    TaskGroup *AllocateGroup(TaskGroup *pParent);
-    TaskGroup *FindOptimalGroup(Task *pTask, TaskGroup *pDepGroup);
+    ImageID UsePersistentImage(const PersistentImageInfo &imageInfo);
+    void SetImage(ImageID imageID, Graphics::Image *pImage, Graphics::ImageView *pView);
+
+    TaskBatchID ScheduleTask(Task &task);
     template<typename _T>
-    TaskGroup *AddTask(const _T::Uses &uses, TaskGroup *pDepGroup);
+    void AddTask(const _T &taskInfo);
+    void AddTask(Task &task, TaskID id);
+    void PresentTask(ImageID backBufferID);
 
-    TaskGroup *m_pHeadGroup = nullptr;
+    void Execute(const TaskGraphExecuteDesc &desc);
+
+    Graphics::Device *m_pDevice = nullptr;
+    Graphics::CommandQueue *m_pGraphicsQueue = nullptr;
+    Graphics::DeviceMemory *m_pImageMemory = nullptr;
+
+    // TODO(Batching): These gotta go...
+    eastl::vector<Graphics::CommandAllocator *> m_CommandAllocators = {};
+    eastl::vector<Graphics::CommandList *> m_CommandLists = {};
+
+    eastl::vector<Graphics::Semaphore *> m_Semaphores = {};
+    eastl::vector<TaskImageInfo> m_ImageInfos = {};
+    eastl::vector<TaskBarrier> m_Barriers = {};
+    eastl::vector<TaskBatch> m_Batches = {};
+    eastl::vector<Task *> m_Tasks = {};
     Memory::LinearAllocator m_TaskAllocator = {};
-    Memory::LinearAllocator m_GroupAllocator = {};
 };
 
 template<typename _T>
-inline TaskGroup *TaskGraph::AddTask(const _T::Uses &uses, TaskGroup *pDepGroup)
+void TaskGraph::AddTask(const _T &taskInfo)
 {
     ZoneScoped;
 
-    usize resourceCount = sizeof(uses) / sizeof(GenericResource);
-    _T *pTaskData = m_TaskAllocator.New<_T>();
-    Task *pTask = (Task *)pTaskData;
+    auto wrapper = m_TaskAllocator.New<TaskWrapper<_T>>(taskInfo);
+    Task *pTask = static_cast<Task *>(wrapper);
+    TaskID id = m_Tasks.size();
+    m_Tasks.push_back(pTask);
 
-    pTaskData->m_Uses = uses;
-    pTask->m_GenericResources = { (GenericResource *)&pTaskData->m_Uses, resourceCount };
-    pTask->m_Name = _T::kName;
-
-    return FindOptimalGroup(pTask, pDepGroup);
+    AddTask(*pTask, id);
 }
 
 }  // namespace lr::Renderer

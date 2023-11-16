@@ -30,7 +30,7 @@ RenderingAttachment::RenderingAttachment(
     this->sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
     this->pNext = nullptr;
     this->imageView = *pImageView;
-    this->imageLayout = (VkImageLayout)layout;
+    this->imageLayout = static_cast<VkImageLayout>(layout);
     this->resolveMode = VK_RESOLVE_MODE_NONE;
     this->resolveImageView = nullptr;
     this->resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -60,23 +60,10 @@ RenderingAttachment::RenderingAttachment(
     memcpy(&this->clearValue.color, &clearVal, sizeof(DepthClearValue));
 }
 
-ImageBarrier::ImageBarrier(Image *pImage, const PipelineBarrier &barrier)
+ImageBarrier::ImageBarrier(
+    Image *pImage, ImageSubresourceInfo sliceInfo, const PipelineBarrier &barrier)
 {
     ZoneScoped;
-
-    VkImageAspectFlags aspectFlags = 0;
-    if (barrier.m_DstLayout == ImageLayout::DepthStencilReadOnly)
-        aspectFlags |= VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
-    else
-        aspectFlags |= VK_IMAGE_ASPECT_COLOR_BIT;
-
-    VkImageSubresourceRange subresRange = {
-        .aspectMask = aspectFlags,
-        .baseMipLevel = 0,
-        .levelCount = pImage->m_MipMapLevels,
-        .baseArrayLayer = 0,
-        .layerCount = 1,
-    };
 
     this->sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
     this->pNext = nullptr;
@@ -86,33 +73,10 @@ ImageBarrier::ImageBarrier(Image *pImage, const PipelineBarrier &barrier)
     this->dstAccessMask = (VkAccessFlags2)barrier.m_DstAccess;
     this->oldLayout = (VkImageLayout)barrier.m_SrcLayout;
     this->newLayout = (VkImageLayout)barrier.m_DstLayout;
-    this->srcQueueFamilyIndex =
-        barrier.m_pSrcQueue ? barrier.m_pSrcQueue->m_QueueIndex : ~0;
-    this->dstQueueFamilyIndex =
-        barrier.m_pDstQueue ? barrier.m_pDstQueue->m_QueueIndex : ~0;
-
-    this->image = pImage->m_pHandle;
-    this->subresourceRange = subresRange;
-}
-
-BufferBarrier::BufferBarrier(Buffer *pBuffer, const PipelineBarrier &barrier)
-{
-    ZoneScoped;
-
-    this->sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
-    this->pNext = nullptr;
-    this->srcStageMask = (VkPipelineStageFlags2)barrier.m_SrcStage;
-    this->dstStageMask = (VkPipelineStageFlags2)barrier.m_DstStage;
-    this->srcAccessMask = (VkAccessFlags2)barrier.m_SrcAccess;
-    this->dstAccessMask = (VkAccessFlags2)barrier.m_DstAccess;
-    this->srcQueueFamilyIndex =
-        barrier.m_pSrcQueue ? barrier.m_pSrcQueue->m_QueueIndex : ~0;
-    this->dstQueueFamilyIndex =
-        barrier.m_pDstQueue ? barrier.m_pDstQueue->m_QueueIndex : ~0;
-
-    this->buffer = pBuffer->m_pHandle;
-    this->offset = pBuffer->m_DataOffset;
-    this->size = VK_WHOLE_SIZE;  // TODO
+    this->srcQueueFamilyIndex = barrier.m_SrcQueueIndex;
+    this->dstQueueFamilyIndex = barrier.m_DstQueueIndex;
+    this->image = *pImage;
+    this->subresourceRange = ImageSubresourceRange(sliceInfo);
 }
 
 MemoryBarrier::MemoryBarrier(const PipelineBarrier &barrier)
@@ -140,50 +104,14 @@ DependencyInfo::DependencyInfo()
     this->pImageMemoryBarriers = nullptr;
 }
 
-DependencyInfo::DependencyInfo(eastl::span<ImageBarrier> imageBarriers)
+DependencyInfo::DependencyInfo(
+    eastl::span<ImageBarrier> imageBarriers, eastl::span<MemoryBarrier> memoryBarriers)
     : DependencyInfo()
-{
-    ZoneScoped;
-
-    SetImageBarriers(imageBarriers);
-}
-
-DependencyInfo::DependencyInfo(eastl::span<BufferBarrier> bufferBarriers)
-    : DependencyInfo()
-{
-    ZoneScoped;
-
-    SetBufferBarriers(bufferBarriers);
-}
-
-DependencyInfo::DependencyInfo(eastl::span<MemoryBarrier> memoryBarriers)
-    : DependencyInfo()
-{
-    ZoneScoped;
-
-    SetMemoryBarriers(memoryBarriers);
-}
-
-void DependencyInfo::SetImageBarriers(eastl::span<ImageBarrier> imageBarriers)
 {
     ZoneScoped;
 
     this->imageMemoryBarrierCount = imageBarriers.size();
     this->pImageMemoryBarriers = imageBarriers.data();
-}
-
-void DependencyInfo::SetBufferBarriers(eastl::span<BufferBarrier> bufferBarriers)
-{
-    ZoneScoped;
-
-    this->bufferMemoryBarrierCount = bufferBarriers.size();
-    this->pBufferMemoryBarriers = bufferBarriers.data();
-}
-
-void DependencyInfo::SetMemoryBarriers(eastl::span<MemoryBarrier> memoryBarriers)
-{
-    ZoneScoped;
-
     this->memoryBarrierCount = memoryBarriers.size();
     this->pMemoryBarriers = memoryBarriers.data();
 }
@@ -232,11 +160,18 @@ ImageCopyRegion::ImageCopyRegion(const VkBufferImageCopy &lazy)
 }
 
 ImageCopyRegion::ImageCopyRegion(
-    ImageView *pView, u32 width, u32 height, u64 bufferOffset)
+    ImageSubresourceInfo sliceInfo, u32 width, u32 height, u64 bufferOffset)
     : ImageCopyRegion({})
 {
+    VkImageSubresourceLayers layerInfo = {
+        .aspectMask = static_cast<VkImageAspectFlags>(sliceInfo.m_AspectMask),
+        .mipLevel = sliceInfo.m_BaseMip,
+        .baseArrayLayer = sliceInfo.m_BaseSlice,
+        .layerCount = sliceInfo.m_SliceCount,
+    };
+
     this->bufferOffset = bufferOffset;
-    this->imageSubresource = pView->GetSubresourceLayers();
+    this->imageSubresource = layerInfo;
     this->imageExtent.width = width;
     this->imageExtent.height = height;
     this->imageExtent.depth = 1;
@@ -268,27 +203,6 @@ void CommandList::EndRendering()
     ZoneScoped;
 
     vkCmdEndRendering(m_pHandle);
-}
-
-void CommandList::ClearImage(Image *pImage, ImageLayout layout, ColorClearValue clearVal)
-{
-    ZoneScoped;
-
-    VkImageSubresourceRange subRange = {
-        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-        .baseMipLevel = 0,
-        .levelCount = pImage->m_MipMapLevels,
-        .baseArrayLayer = 0,
-        .layerCount = 1,
-    };
-
-    vkCmdClearColorImage(
-        m_pHandle,
-        pImage->m_pHandle,
-        (VkImageLayout)layout,
-        (VkClearColorValue *)&clearVal,
-        1,
-        &subRange);
 }
 
 void CommandList::SetPipelineBarrier(DependencyInfo *pDependencyInfo)

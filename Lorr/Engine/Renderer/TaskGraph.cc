@@ -43,7 +43,7 @@ ImageID TaskGraph::UsePersistentImage(const PersistentImageInfo &persistentInfo)
     ZoneScoped;
 
     ImageID id = m_ImageInfos.size();
-    m_ImageInfos.push_back({});
+    m_ImageInfos.push_back({ .m_LastAccess = TaskAccess::TopOfPipe });
     SetImage(id, persistentInfo.m_pImage, persistentInfo.m_pImageView);
 
     return id;

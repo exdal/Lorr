@@ -3,8 +3,6 @@
 #include "Graphics/Resource.hh"
 #include "TaskTypes.hh"
 
-#include <EASTL/vector.h>
-
 namespace lr::Renderer
 {
 using ImageID = u32;
@@ -23,7 +21,7 @@ struct TaskImageInfo
     Graphics::ImageView *m_pImageView = nullptr;
     Graphics::ImageLayout m_LastLayout = Graphics::ImageLayout::Undefined;
     TaskAccess::Access m_LastAccess = TaskAccess::None;
-    usize m_LastBatchIndex = 0;
+    u32 m_LastBatchIndex = 0;
 };
 
 struct GenericResource

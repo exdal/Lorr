@@ -6,13 +6,13 @@ namespace lr::Renderer
 {
 // Simple command batcher were commands like barriers
 // can be stored and submitted at once
-struct CommandBatcher
+struct TaskCommandList
 {
     constexpr static usize kMaxMemoryBarriers = 16;
     constexpr static usize kMaxImageBarriers = 16;
 
-    CommandBatcher(Graphics::CommandList *pList);
-    ~CommandBatcher();
+    TaskCommandList(Graphics::CommandList *pList);
+    ~TaskCommandList();
     void InsertMemoryBarrier(Graphics::MemoryBarrier &barrier);
     void InsertImageBarrier(Graphics::ImageBarrier &barrier);
     void FlushBarriers();

@@ -79,7 +79,7 @@ struct TaskBarrier
 using TaskBatchID = u32;
 struct TaskBatch
 {
-    Graphics::PipelineStage m_WaitStages = Graphics::PipelineStage::TopOfPipe;
+    TaskAccess::Access m_ExecutionAccess = TaskAccess::None;
     eastl::vector<usize> m_WaitBarriers = {};
     eastl::vector<TaskID> m_Tasks = {};
 

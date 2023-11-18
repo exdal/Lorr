@@ -1,20 +1,20 @@
-#include "CommandBatcher.hh"
+#include "TaskCommandList.hh"
 
 namespace lr::Renderer
 {
 using namespace Graphics;
 
-CommandBatcher::CommandBatcher(CommandList *pList)
+TaskCommandList::TaskCommandList(CommandList *pList)
     : m_pList(pList)
 {
 }
 
-CommandBatcher::~CommandBatcher()
+TaskCommandList::~TaskCommandList()
 {
     FlushBarriers();
 }
 
-void CommandBatcher::InsertMemoryBarrier(MemoryBarrier &barrier)
+void TaskCommandList::InsertMemoryBarrier(MemoryBarrier &barrier)
 {
     ZoneScoped;
 
@@ -24,7 +24,7 @@ void CommandBatcher::InsertMemoryBarrier(MemoryBarrier &barrier)
     m_MemoryBarriers[m_MemoryBarrierCount++] = barrier;
 }
 
-void CommandBatcher::InsertImageBarrier(ImageBarrier &barrier)
+void TaskCommandList::InsertImageBarrier(ImageBarrier &barrier)
 {
     ZoneScoped;
 
@@ -34,8 +34,11 @@ void CommandBatcher::InsertImageBarrier(ImageBarrier &barrier)
     m_ImageBarriers[m_ImageBarrierCount++] = barrier;
 }
 
-void CommandBatcher::FlushBarriers()
+void TaskCommandList::FlushBarriers()
 {
+    if (m_ImageBarrierCount == 0 && m_MemoryBarrierCount == 0)
+        return;
+
     DependencyInfo depInfo(
         { m_ImageBarriers.data(), m_ImageBarrierCount },
         { m_MemoryBarriers.data(), m_MemoryBarrierCount });

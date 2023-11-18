@@ -205,6 +205,7 @@ enum class PipelineStage : u64
     AllCommands = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
     BottomOfPipe = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
 };
+LR_TYPEOP_ARITHMETIC(PipelineStage, PipelineStage, |);
 LR_TYPEOP_ARITHMETIC_INT(PipelineStage, PipelineStage, &);
 
 enum class MemoryAccess : u64
@@ -231,6 +232,7 @@ enum class MemoryAccess : u64
     Write = VK_ACCESS_2_MEMORY_WRITE_BIT,
     ReadWrite = Read | Write,
 };
+LR_TYPEOP_ARITHMETIC(MemoryAccess, MemoryAccess, |);
 LR_TYPEOP_ARITHMETIC_INT(MemoryAccess, MemoryAccess, &);
 
 enum class PrimitiveType : u32

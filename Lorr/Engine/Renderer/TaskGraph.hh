@@ -1,7 +1,7 @@
 #pragma once
 
-#include "CommandBatcher.hh"
 #include "Task.hh"
+#include "TaskCommandList.hh"
 #include "TaskResource.hh"
 
 #include "Graphics/CommandList.hh"
@@ -42,7 +42,7 @@ struct TaskGraph
 
     void Execute(const TaskGraphExecuteDesc &desc);
 
-    void InsertBarrier(CommandBatcher &batcher, const TaskBarrier &barrier);
+    void InsertBarrier(TaskCommandList &cmdList, const TaskBarrier &barrier);
 
     Graphics::Device *m_pDevice = nullptr;
     Graphics::CommandQueue *m_pGraphicsQueue = nullptr;

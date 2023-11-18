@@ -64,10 +64,24 @@ TaskBatchID TaskGraph::ScheduleTask(Task &task)
 {
     ZoneScoped;
 
-    // TODO(Batching): The dream must come true...
-    TaskBatchID batchID = m_Batches.size();
-    m_Batches.push_back({});
-    return batchID;
+    TaskBatchID latestBatch = 0;
+    task.ForEachRes(
+        [&](GenericResource &image)
+        {
+            auto &imageInfo = m_ImageInfos[image.m_ImageID];
+            bool isLastRead = imageInfo.m_LastAccess.m_Access == MemoryAccess::Read;
+            bool isCurrentRead = image.m_Access.m_Access == MemoryAccess::Read;
+            bool isSameLayout = imageInfo.m_LastLayout == image.m_ImageLayout;
+
+            if (!(isLastRead && isCurrentRead && isSameLayout))
+                latestBatch = eastl::max(latestBatch, imageInfo.m_LastBatchIndex);
+        },
+        [&](GenericResource &buffer) {});
+
+    if (latestBatch >= m_Batches.size())
+        m_Batches.resize(latestBatch + 1);
+
+    return latestBatch;
 }
 
 void TaskGraph::AddTask(Task &task, TaskID id)
@@ -79,22 +93,32 @@ void TaskGraph::AddTask(Task &task, TaskID id)
     task.ForEachRes(
         [&](GenericResource &image)
         {
-            // TODO(Batching): This has to go, we can use normal memory barriers when
-            // there are no image transition happening...
             auto &imageInfo = m_ImageInfos[image.m_ImageID];
-            usize barrierID = m_Barriers.size();
-            m_Barriers.push_back({
-                .m_ImageID = image.m_ImageID,
-                .m_SrcLayout = imageInfo.m_LastLayout,
-                .m_DstLayout = image.m_ImageLayout,
-                .m_SrcAccess = imageInfo.m_LastAccess,
-                .m_DstAccess = image.m_Access,
-            });
-            batch.m_WaitBarriers.push_back(barrierID);
+            bool isLastRead = imageInfo.m_LastAccess.m_Access == MemoryAccess::Read;
+            bool isCurrentRead = image.m_Access.m_Access == MemoryAccess::Read;
+            bool isSameLayout = imageInfo.m_LastLayout == image.m_ImageLayout;
+
+            if (isLastRead && isCurrentRead && isSameLayout)  // Memory barrier
+            {
+                batch.m_ExecutionAccess = batch.m_ExecutionAccess | image.m_Access;
+            }
+            else  // Transition barrier
+            {
+                usize barrierID = m_Barriers.size();
+                m_Barriers.push_back({
+                    .m_ImageID = image.m_ImageID,
+                    .m_SrcLayout = imageInfo.m_LastLayout,
+                    .m_DstLayout = image.m_ImageLayout,
+                    .m_SrcAccess = imageInfo.m_LastAccess,
+                    .m_DstAccess = image.m_Access,
+                });
+                batch.m_WaitBarriers.push_back(barrierID);
+            }
 
             // Update last image info
             imageInfo.m_LastLayout = image.m_ImageLayout;
             imageInfo.m_LastAccess = image.m_Access;
+            imageInfo.m_LastBatchIndex = batchID;
         },
         [&](GenericResource &buffer) {});
 }
@@ -132,19 +156,25 @@ void TaskGraph::Execute(const TaskGraphExecuteDesc &desc)
     m_pDevice->ResetCommandAllocator(pCmdAllocator);
     m_pDevice->BeginCommandList(pList);
 
+    TaskAccess::Access lastExecutionAccess = {};
     for (auto &batch : m_Batches)
     {
-        CommandBatcher batcher(pList);
-        for (auto barrierID : batch.m_WaitBarriers)
-        {
-            auto &barrier = m_Barriers[barrierID];
-            if (barrier.m_ImageID == ImageNull)
-                continue;  // TODO: Handle memory barriers
+        TaskCommandList taskList(pList);
 
-            InsertBarrier(batcher, barrier);
+        if (batch.m_ExecutionAccess != TaskAccess::None)
+        {
+            TaskBarrier executionBarrier = {
+                .m_SrcAccess = lastExecutionAccess,
+                .m_DstAccess = batch.m_ExecutionAccess,
+            };
+
+            InsertBarrier(taskList, executionBarrier);
         }
 
-        batcher.FlushBarriers();
+        for (auto barrierID : batch.m_WaitBarriers)
+            InsertBarrier(taskList, m_Barriers[barrierID]);
+
+        taskList.FlushBarriers();
         for (auto &pTask : m_Tasks)
         {
             TaskContext ctx(this, pList);
@@ -152,14 +182,10 @@ void TaskGraph::Execute(const TaskGraphExecuteDesc &desc)
         }
 
         for (auto &barrierID : batch.m_EndBarriers)
-        {
-            auto &barrier = m_Barriers[barrierID];
-            if (barrier.m_ImageID == ImageNull)
-                continue;  // TODO: Handle memory barriers
+            InsertBarrier(taskList, m_Barriers[barrierID]);
 
-            InsertBarrier(batcher, barrier);
-        }
-        batcher.FlushBarriers();
+        taskList.FlushBarriers();
+        lastExecutionAccess = batch.m_ExecutionAccess;
     }
 
     m_pDevice->EndCommandList(pList);
@@ -183,13 +209,11 @@ void TaskGraph::Execute(const TaskGraphExecuteDesc &desc)
 
     m_pDevice->Submit(m_pGraphicsQueue, &submitDesc);
 }
-void TaskGraph::InsertBarrier(CommandBatcher &batcher, const TaskBarrier &barrier)
+void TaskGraph::InsertBarrier(TaskCommandList &cmdList, const TaskBarrier &barrier)
 {
     ZoneScoped;
 
     PipelineBarrier pipelineInfo = {
-        .m_SrcLayout = barrier.m_SrcLayout,
-        .m_DstLayout = barrier.m_DstLayout,
         .m_SrcStage = barrier.m_SrcAccess.m_Stage,
         .m_DstStage = barrier.m_DstAccess.m_Stage,
         .m_SrcAccess = barrier.m_SrcAccess.m_Access,
@@ -199,13 +223,16 @@ void TaskGraph::InsertBarrier(CommandBatcher &batcher, const TaskBarrier &barrie
     if (barrier.m_ImageID == ImageNull)
     {
         MemoryBarrier barrierInfo(pipelineInfo);
-        batcher.InsertMemoryBarrier(barrierInfo);
+        cmdList.InsertMemoryBarrier(barrierInfo);
     }
     else
     {
+        pipelineInfo.m_SrcLayout = barrier.m_SrcLayout;
+        pipelineInfo.m_DstLayout = barrier.m_DstLayout;
+
         auto &imageInfo = m_ImageInfos[barrier.m_ImageID];
         ImageBarrier barrierInfo(imageInfo.m_pImage, {}, pipelineInfo);
-        batcher.InsertImageBarrier(barrierInfo);
+        cmdList.InsertImageBarrier(barrierInfo);
     }
 }
 

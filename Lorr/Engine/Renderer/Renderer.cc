@@ -17,7 +17,6 @@ struct ClearSwapChain
 
     void Execute(TaskContext &tc)
     {
-        // TODO(Batching): Command lists will be replaced with command batchers
         auto pList = tc.GetCommandList();
         auto pView = tc.View(m_Uses.m_RenderTarget);
 
@@ -26,7 +25,7 @@ struct ClearSwapChain
             m_Uses.m_RenderTarget.m_ImageLayout,
             Graphics::AttachmentOp::Clear,
             Graphics::AttachmentOp::Store,
-            Graphics::ColorClearValue(1.0f, 0.0f, 0.0f, 1.0f));
+            Graphics::ColorClearValue(0.1f, 0.1f, 0.1f, 1.0f));
         Graphics::RenderingBeginDesc renderingDesc = {
             .m_RenderArea = { 0, 0, 1280, 780 },
             .m_ColorAttachments = attachment,

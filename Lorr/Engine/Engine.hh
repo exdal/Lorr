@@ -29,66 +29,65 @@ union EngineEventData
 
     struct  // ENGINE_EVENT_RESIZE
     {
-        u32 m_SizeWidth;
-        u32 m_SizeHeight;
+        u32 m_size_width;
+        u32 m_size_height;
     };
 
     struct  // ENGINE_EVENT_MOUSE_POSITION
     {
-        u32 m_MouseX;
-        u32 m_MouseY;
+        u32 m_mouse_x;
+        u32 m_mouse_y;
     };
 
     struct  // ENGINE_EVENT_MOUSE_STATE
     {
-        Key m_Mouse;
-        MouseState m_MouseState;
+        Key m_mouse;
+        MouseState m_mouse_state;
     };
 
     struct  // ENGINE_EVENT_MOUSE_WHEEL
     {
-        float m_Offset;
+        float m_offset;
     };
 
     struct  // ENGINE_EVENT_KEYBOARD_STATE
     {
-        Key m_Key;
-        KeyState m_KeyState;
+        Key m_key;
+        KeyState m_key_state;
     };
 
     struct  // ENGINE_EVENT_CURSOR_STATE
     {
-        WindowCursor m_WindowCursor;
+        WindowCursor m_window_cursor;
     };
 };
 
 struct EngineDesc
 {
-    WindowDesc m_WindowDesc;
+    WindowDesc m_window_desc;
 };
 
 struct Engine
 {
-    void Init(EngineDesc &engineDesc);
+    void create(EngineDesc &engineDesc);
 
     /// EVENTS ///
-    void PushEvent(Event event, EngineEventData &data);
-    void DispatchEvents();
+    void push_event(Event event, EngineEventData &data);
+    void dispatch_events();
 
-    void Prepare();
-    void BeginFrame();
-    void EndFrame();
+    void prepare();
+    void begin_frame();
+    void end_frame();
 
-    EventManager<EngineEventData, 64> m_EventMan;
-    Win32Window m_Window;
-    UI::ImGuiHandler m_ImGui;
-    Renderer::Renderer m_Renderer = {};
+    EventManager<EngineEventData, 64> m_event_man;
+    Win32Window m_window;
+    UI::ImGuiHandler m_imgui;
+    Renderer::Renderer m_renderer = {};
 
-    bool m_ShuttingDown = false;
+    bool m_shutting_down = false;
 
-    static auto GetWindow() { return &Get()->m_Window; }
-    // static auto GetRenderGraph() { return &Get()->m_RenderGraph; }
-    static Engine *Get();
+    static auto get_window() { return &get()->m_window; }
+    static Engine *get();
 };
 
 }  // namespace lr

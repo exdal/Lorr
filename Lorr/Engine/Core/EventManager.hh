@@ -10,50 +10,47 @@
 namespace lr
 {
 using Event = u32;
-template<typename _Data, u64 _Count, bool _AtomicRingBuffer = false>
+template<typename TData, u64 TCount, bool TAtomicRingBuffer = false>
 struct EventManager
 {
     struct EventIdentifier
     {
-        Event m_Event;
-        _Data m_Data;
+        Event m_event;
+        TData m_data;
     };
 
-    using _RingBuffer = eastl::conditional<
-        _AtomicRingBuffer,
-        Memory::RingBufferAtomic<EventIdentifier, _Count>,
-        Memory::RingBuffer<EventIdentifier, _Count>>::type;
+    using ring_buffer = typename eastl::conditional<
+        TAtomicRingBuffer,
+        Memory::RingBufferAtomic<EventIdentifier, TCount>,
+        Memory::RingBuffer<EventIdentifier, TCount>>::type;
 
-    bool Peek()
+    bool peek()
     {
-        return !m_RingBuffer.empty();
+        return !m_ring_buffer.empty();
     }
 
-    Event Dispatch(_Data &dataOut)
-    {
-        ZoneScoped;
-
-        EventIdentifier ident;
-        if (m_RingBuffer.pop(ident))
-        {
-            dataOut = ident.m_Data;
-            return ident.m_Event;
-        }
-        else
-        {
-            return LR_INVALID_EVENT;
-        }
-    }
-
-    void Push(Event event, _Data &data)
+    Event dispatch(TData &data_out)
     {
         ZoneScoped;
 
-        EventIdentifier ident{ .m_Event = event, .m_Data = data };
-        m_RingBuffer.push(ident);
+        if (EventIdentifier ident; m_ring_buffer.pop(ident))
+        {
+            data_out = ident.m_data;
+            return ident.m_event;
+        }
+
+        return LR_INVALID_EVENT;
     }
 
-    _RingBuffer m_RingBuffer;
+    void push(Event event, TData &data)
+    {
+        ZoneScoped;
+
+        EventIdentifier ident{ .m_event = event, .m_data = data };
+        m_ring_buffer.push(ident);
+    }
+
+    ring_buffer m_ring_buffer;
 };
 
 }  // namespace lr

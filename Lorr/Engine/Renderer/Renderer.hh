@@ -13,49 +13,50 @@ struct BaseWindow;
 
 namespace lr::Renderer
 {
+struct Renderer;
 struct FrameManagerDesc
 {
-    u32 m_FrameCount = 0;
-    Graphics::CommandTypeMask m_Types = {};
-    Graphics::PhysicalDevice *m_pPhysicalDevice = nullptr;
-    Graphics::Device *m_pDevice = nullptr;
-    Graphics::SwapChain *m_pSwapChain = nullptr;
+    u32 frame_count = 0;
+    Graphics::CommandTypeMask command_type_mask = {};
+    Renderer *renderer = nullptr;
 };
 
 struct FrameManager
 {
-    void Init(const FrameManagerDesc &desc);
-    void NextFrame();  // Advance to the next frame
-    u32 CurrentFrame() { return m_CurrentFrame; }
-    eastl::pair<Graphics::Image *, Graphics::ImageView *> GetImages(u32 idx = 0);
-    eastl::pair<Graphics::Semaphore *, Graphics::Semaphore *> GetSemaphores(u32 idx = 0);
+    void create(const FrameManagerDesc &desc);
+    void destroy();
+    void next_frame();  // Advance to the next frame
+    eastl::pair<Graphics::Image *, Graphics::ImageView *> get_image(u32 idx = 0);
+    eastl::pair<Graphics::Semaphore *, Graphics::Semaphore *> get_semaphores(u32 idx = 0);
 
-    u32 m_FrameCount = 0;
-    u32 m_CurrentFrame = 0;
-    Graphics::CommandTypeMask m_CommandTypes = {};
-    Graphics::Device *m_pDevice = nullptr;
+    u32 m_frame_count = 0;
+    u32 m_current_frame = 0;
+    Graphics::CommandTypeMask m_command_type_mask = {};
+    Renderer *m_renderer = nullptr;
 
     // Prsentation Engine
-    eastl::vector<Graphics::Semaphore *> m_AcquireSemas = {};
-    eastl::vector<Graphics::Semaphore *> m_PresentSemas = {};
-    eastl::vector<Graphics::Image *> m_Images = {};
-    eastl::vector<Graphics::ImageView *> m_Views = {};
+    eastl::vector<Graphics::Semaphore *> m_acquire_semas = {};
+    eastl::vector<Graphics::Semaphore *> m_present_semas = {};
+    eastl::vector<Graphics::Image *> m_images = {};
+    eastl::vector<Graphics::ImageView *> m_views = {};
 };
 
 struct Renderer
 {
-    void Init(BaseWindow *pWindow);
-    void Draw();
+    void create(BaseWindow *window);
+    void refresh_frame(u32 width, u32 height);
+    void on_resize(u32 width, u32 height);
+    void draw();
 
-    Graphics::Instance m_Instance = {};
-    Graphics::PhysicalDevice *m_pPhysicalDevice = nullptr;
-    Graphics::Surface *m_pSurface = nullptr;
-    Graphics::Device *m_pDevice = nullptr;
-    Graphics::SwapChain *m_pSwapChain = nullptr;
+    Graphics::Instance m_instance = {};
+    Graphics::PhysicalDevice *m_physical_device = nullptr;
+    Graphics::Surface *m_surface = nullptr;
+    Graphics::Device *m_device = nullptr;
+    Graphics::SwapChain *m_swap_chain = nullptr;
 
-    FrameManager m_FrameMan = {};
-    TaskGraph m_TaskGraph = {};
+    FrameManager m_frame_manager = {};
+    TaskGraph m_task_graph = {};
 
-    ImageID m_SwapChainImage = ImageNull;
+    ImageID m_swap_chain_image = ImageNull;
 };
 }  // namespace lr::Renderer

@@ -34,22 +34,22 @@ constexpr VkBlendFactor kBlendFactorLUT[] = {
 
 ColorBlendAttachment::ColorBlendAttachment(
     bool enabled,
-    ColorMask writeMask,
-    BlendFactor srcBlend,
-    BlendFactor dstBlend,
-    BlendOp blendOp,
-    BlendFactor srcBlendAlpha,
-    BlendFactor dstBlendAlpha,
-    BlendOp blendOpAlpha)
+    ColorMask write_mask,
+    BlendFactor src_blend,
+    BlendFactor dst_blend,
+    BlendOp blend_op,
+    BlendFactor src_blend_alpha,
+    BlendFactor dst_blend_alpha,
+    BlendOp blend_op_alpha)
 {
     this->blendEnable = enabled;
-    this->colorWriteMask = (VkColorComponentFlags)writeMask;
-    this->srcColorBlendFactor = kBlendFactorLUT[(u32)srcBlend];
-    this->dstColorBlendFactor = kBlendFactorLUT[(u32)dstBlend];
-    this->colorBlendOp = (VkBlendOp)blendOp;
-    this->srcAlphaBlendFactor = kBlendFactorLUT[(u32)srcBlendAlpha];
-    this->dstAlphaBlendFactor = kBlendFactorLUT[(u32)dstBlendAlpha];
-    this->alphaBlendOp = (VkBlendOp)blendOpAlpha;
+    this->colorWriteMask = (VkColorComponentFlags)write_mask;
+    this->srcColorBlendFactor = kBlendFactorLUT[(u32)src_blend];
+    this->dstColorBlendFactor = kBlendFactorLUT[(u32)dst_blend];
+    this->colorBlendOp = (VkBlendOp)blend_op;
+    this->srcAlphaBlendFactor = kBlendFactorLUT[(u32)src_blend_alpha];
+    this->dstAlphaBlendFactor = kBlendFactorLUT[(u32)dst_blend_alpha];
+    this->alphaBlendOp = (VkBlendOp)blend_op_alpha;
 }
 
 }  // namespace lr::Graphics

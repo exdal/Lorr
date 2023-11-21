@@ -6,64 +6,64 @@
 
 namespace lr
 {
-void Engine::Init(EngineDesc &engineDesc)
+void Engine::create(EngineDesc &engineDesc)
 {
     ZoneScoped;
 
     Logger::Init();
     Config::Init();
     Job::JobManager::Init(CONFIG_GET_VAR(JM_WORKER_COUNT));
-    m_Window.Init(engineDesc.m_WindowDesc);
-    m_ImGui.Init(m_Window.m_Width, m_Window.m_Height);
-    m_Renderer.Init(&m_Window);
+    m_window.init(engineDesc.m_window_desc);
+    m_imgui.Init(m_window.m_width, m_window.m_height);
+    m_renderer.create(&m_window);
 }
 
-void Engine::PushEvent(Event event, EngineEventData &data)
+void Engine::push_event(Event event, EngineEventData &data)
 {
     ZoneScoped;
 
-    m_EventMan.Push(event, data);
+    m_event_man.push(event, data);
 }
 
-void Engine::DispatchEvents()
+void Engine::dispatch_events()
 {
     ZoneScopedN("Dispatch Engine Events");
 
-    while (m_EventMan.Peek())
+    while (m_event_man.peek())
     {
         EngineEventData data = {};
-        Event event = m_EventMan.Dispatch(data);
+        Event event = m_event_man.dispatch(data);
 
         switch (event)
         {
             case ENGINE_EVENT_QUIT:
             {
-                m_ShuttingDown = true;
+                m_shutting_down = true;
                 break;
             }
             case ENGINE_EVENT_RESIZE:
             {
-                m_Window.m_Width = data.m_SizeWidth;
-                m_Window.m_Height = data.m_SizeHeight;
-                // m_API.ResizeSwapChain(data.m_SizeWidth, data.m_SizeHeight);
+                m_window.m_width = data.m_size_width;
+                m_window.m_height = data.m_size_height;
+                m_renderer.on_resize(data.m_size_width, data.m_size_height);
                 break;
             }
             case ENGINE_EVENT_MOUSE_POSITION:
             {
                 ImGuiIO &io = ImGui::GetIO();
-                io.MousePos.x = data.m_MouseX;
-                io.MousePos.y = data.m_MouseY;
+                io.MousePos.x = data.m_mouse_x;
+                io.MousePos.y = data.m_mouse_y;
                 break;
             }
             case ENGINE_EVENT_MOUSE_STATE:
             {
                 ImGuiIO &io = ImGui::GetIO();
-                io.MouseDown[data.m_Mouse - 1] = !(bool)data.m_MouseState;
+                io.MouseDown[data.m_mouse - 1] = !(bool)data.m_mouse_state;
                 break;
             }
             case ENGINE_EVENT_CURSOR_STATE:
             {
-                m_Window.SetCursor(data.m_WindowCursor);
+                m_window.set_cursor(data.m_window_cursor);
                 break;
             }
             default:
@@ -72,24 +72,23 @@ void Engine::DispatchEvents()
     }
 }
 
-void Engine::Prepare()
+void Engine::prepare()
 {
     ZoneScoped;
 }
 
-void Engine::BeginFrame()
+void Engine::begin_frame()
 {
     ZoneScopedN("Engine Begin Frame");
 
-    DispatchEvents();
-    m_Renderer.Draw();
+    m_renderer.draw();
 }
 
-void Engine::EndFrame()
+void Engine::end_frame()
 {
     ZoneScopedN("Engine End Frame");
 
-    m_Window.Poll();
+    m_window.poll();
+    dispatch_events();
 }
-
 }  // namespace lr

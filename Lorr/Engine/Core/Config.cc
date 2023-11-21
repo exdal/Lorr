@@ -24,7 +24,7 @@ struct DataParser<eastl::string>
     {
         ZoneScoped;
 
-        str = ls::TrimString(str, kWhitespaces);
+        str = ls::trim_string(str, kWhitespaces);
         for (usize i = 0; i < str.length(); i++)
         {
             i8 c = str[i];
@@ -55,7 +55,7 @@ struct DataParser<u32>
     {
         ZoneScoped;
 
-        str = ls::TrimString(str, kWhitespaces);
+        str = ls::trim_string(str, kWhitespaces);
         u32 result = 0;
         auto fc = std::from_chars(str.begin(), str.end(), result);
         if (fc.ec != std::errc())
@@ -72,7 +72,7 @@ struct DataParser<u64>
     {
         ZoneScoped;
 
-        str = ls::TrimString(str, kWhitespaces);
+        str = ls::trim_string(str, kWhitespaces);
         u64 result = 0;
         auto fc = std::from_chars(str.begin(), str.end(), result);
         if (fc.ec != std::errc())
@@ -89,7 +89,7 @@ struct DataParser<f32>
     {
         ZoneScoped;
 
-        str = ls::TrimString(str, kWhitespaces);
+        str = ls::trim_string(str, kWhitespaces);
         f32 result = 0.0;
         auto fc = std::from_chars(str.begin(), str.end(), result);
         if (fc.ec != std::errc())
@@ -106,7 +106,7 @@ struct DataParser<f64>
     {
         ZoneScoped;
 
-        str = ls::TrimString(str, kWhitespaces);
+        str = ls::trim_string(str, kWhitespaces);
         f64 result = 0.0;
         auto fc = std::from_chars(str.begin(), str.end(), result);
         if (fc.ec != std::errc())
@@ -137,7 +137,7 @@ bool Config::Init()
     f.Read(data, f.Size());
 
     eastl::string_view line;
-    while (ls::GetLine(eastl::string_view(data), line))
+    while (ls::get_line(eastl::string_view(data), line))
         Config::Get().ParseLine(line);
 
     return true;
@@ -152,9 +152,9 @@ bool Config::ParseLine(eastl::string_view line)
 {
     ZoneScoped;
 
-    line = ls::TrimString(line, kWhitespaces);
+    line = ls::trim_string(line, kWhitespaces);
 
-    eastl::string_view var = ls::TrimForwardRanged(line, kVarRanges);
+    eastl::string_view var = ls::trim_forward_ranged(line, kVarRanges);
     switch (Hash::CRC32String(Hash::CRC32DataAligned, var))
     {
         _CONFIG_VAR_LIST;

@@ -10,24 +10,23 @@ namespace lr::Graphics
 
 struct BufferDesc
 {
-    BufferUsage m_UsageFlags = BufferUsage::Vertex;
-
-    u32 m_Stride = 1;
-    u64 m_DataSize = 0;
+    BufferUsage m_usage_flags = BufferUsage::Vertex;
+    u32 m_stride = 1;
+    u64 m_data_size = 0;
 };
 
 struct Buffer : APIObject
 {
-    u64 m_AllocatorData = ~0;
+    u64 m_allocator_data = ~0;
 
-    u32 m_Stride = 1;
-    u64 m_DataSize = 0;
-    u64 m_DataOffset = 0;
-    u64 m_DeviceAddress = 0;
+    u32 m_stride = 1;
+    u64 m_data_size = 0;
+    u64 m_data_offset = 0;
+    u64 m_device_address = 0;
 
-    VkBuffer m_pHandle = nullptr;
+    VkBuffer m_handle = nullptr;
 
-    operator VkBuffer &() { return m_pHandle; }
+    operator VkBuffer &() { return m_handle; }
 };
 LR_ASSIGN_OBJECT_TYPE(Buffer, VK_OBJECT_TYPE_BUFFER);
 
@@ -36,34 +35,34 @@ LR_ASSIGN_OBJECT_TYPE(Buffer, VK_OBJECT_TYPE_BUFFER);
 
 struct ImageDesc
 {
-    ImageUsage m_UsageFlags = ImageUsage::Sampled;
-    Format m_Format = Format::Unknown;
+    ImageUsage m_usage_flags = ImageUsage::Sampled;
+    Format m_format = Format::Unknown;
 
-    u32 m_Width = 0;
-    u32 m_Height = 0;
-    u32 m_ArraySize = 1;
-    u32 m_MipMapLevels = 1;
-    eastl::span<u32> m_QueueIndices = {};
+    u32 m_width = 0;
+    u32 m_height = 0;
+    u32 m_array_size = 1;
+    u32 m_mip_map_levels = 1;
+    eastl::span<u32> m_queue_indices = {};
 
-    u64 m_DataSize = 0;
+    u64 m_data_size = 0;
 };
 
 struct Image : APIObject
 {
-    Format m_Format = Format::Unknown;
-    u64 m_AllocatorData = ~0;
+    Format m_format = Format::Unknown;
+    u64 m_allocator_data = ~0;
 
-    u32 m_Width = 0;
-    u32 m_Height = 0;
-    u32 m_ArraySize = 1;
-    u32 m_MipMapLevels = 1;
+    u32 m_width = 0;
+    u32 m_height = 0;
+    u32 m_array_size = 1;
+    u32 m_mip_map_levels = 1;
 
-    u64 m_DataSize = 0;    // Aligned data offset
-    u64 m_DataOffset = 0;  // Allocator offset
+    u64 m_data_size = 0;
+    u64 m_data_offset = 0;
 
-    VkImage m_pHandle = nullptr;
+    VkImage m_handle = nullptr;
 
-    operator VkImage &() { return m_pHandle; }
+    operator VkImage &() { return m_handle; }
 };
 LR_ASSIGN_OBJECT_TYPE(Image, VK_OBJECT_TYPE_IMAGE);
 
@@ -74,23 +73,23 @@ LR_ASSIGN_OBJECT_TYPE(Image, VK_OBJECT_TYPE_IMAGE);
 
 struct ImageSubresourceInfo
 {
-    ImageAspect m_AspectMask = ImageAspect::Color;
-    u32 m_BaseMip : 8 = 0;
-    u32 m_MipCount : 8 = 1;
-    u32 m_BaseSlice : 8 = 0;
-    u32 m_SliceCount : 8 = 1;
+    ImageAspect m_aspect_mask = ImageAspect::Color;
+    u32 m_base_mip : 8 = 0;
+    u32 m_mip_count : 8 = 1;
+    u32 m_base_slice : 8 = 0;
+    u32 m_slice_count : 8 = 1;
 };
 
 struct ImageViewDesc
 {
-    Image *m_pImage = nullptr;
-    ImageViewType m_Type = ImageViewType::View2D;
+    Image *m_image = nullptr;
+    ImageViewType m_type = ImageViewType::View2D;
     // Component mapping
-    ImageComponentSwizzle m_SwizzleR = ImageComponentSwizzle::Identity;
-    ImageComponentSwizzle m_SwizzleG = ImageComponentSwizzle::Identity;
-    ImageComponentSwizzle m_SwizzleB = ImageComponentSwizzle::Identity;
-    ImageComponentSwizzle m_SwizzleA = ImageComponentSwizzle::Identity;
-    ImageSubresourceInfo m_SubresourceInfo = {};
+    ImageComponentSwizzle m_swizzle_r = ImageComponentSwizzle::Identity;
+    ImageComponentSwizzle m_swizzle_g = ImageComponentSwizzle::Identity;
+    ImageComponentSwizzle m_swizzle_b = ImageComponentSwizzle::Identity;
+    ImageComponentSwizzle m_swizzle_a = ImageComponentSwizzle::Identity;
+    ImageSubresourceInfo m_subresource_info = {};
 };
 
 struct ImageSubresourceRange : VkImageSubresourceRange
@@ -100,13 +99,13 @@ struct ImageSubresourceRange : VkImageSubresourceRange
 
 struct ImageView : APIObject
 {
-    Format m_Format = Format::Unknown;
-    ImageViewType m_Type = ImageViewType::View2D;
-    ImageSubresourceInfo m_SubresourceInfo = {};
+    Format m_format = Format::Unknown;
+    ImageViewType m_type = ImageViewType::View2D;
+    ImageSubresourceInfo m_subresource_info = {};
 
-    VkImageView m_pHandle = nullptr;
+    VkImageView m_handle = nullptr;
 
-    operator VkImageView &() { return m_pHandle; }
+    operator VkImageView &() { return m_handle; }
 };
 LR_ASSIGN_OBJECT_TYPE(ImageView, VK_OBJECT_TYPE_IMAGE_VIEW);
 
@@ -115,25 +114,25 @@ LR_ASSIGN_OBJECT_TYPE(ImageView, VK_OBJECT_TYPE_IMAGE_VIEW);
 
 struct SamplerDesc
 {
-    Filtering m_MinFilter : 1;
-    Filtering m_MagFilter : 1;
-    Filtering m_MipFilter : 1;
-    TextureAddressMode m_AddressU : 2;
-    TextureAddressMode m_AddressV : 2;
-    TextureAddressMode m_AddressW : 2;
-    u32 m_UseAnisotropy : 1;
-    CompareOp m_CompareOp : 3;
-    float m_MaxAnisotropy = 0;
-    float m_MipLODBias = 0;
-    float m_MinLOD = 0;
-    float m_MaxLOD = 0;
+    Filtering m_min_filter : 1;
+    Filtering m_mag_filter : 1;
+    Filtering m_mip_filter : 1;
+    TextureAddressMode m_address_u : 2;
+    TextureAddressMode m_address_v : 2;
+    TextureAddressMode m_address_w : 2;
+    u32 m_use_anisotropy : 1;
+    CompareOp m_compare_op : 3;
+    float m_max_anisotropy = 0;
+    float m_mip_lod_bias = 0;
+    float m_min_lod = 0;
+    float m_max_lod = 0;
 };
 
 struct Sampler : APIObject
 {
-    VkSampler m_pHandle = nullptr;
+    VkSampler m_handle = nullptr;
 
-    operator VkSampler &() { return m_pHandle; }
+    operator VkSampler &() { return m_handle; }
 };
 LR_ASSIGN_OBJECT_TYPE(Sampler, VK_OBJECT_TYPE_SAMPLER);
 
@@ -142,8 +141,7 @@ LR_ASSIGN_OBJECT_TYPE(Sampler, VK_OBJECT_TYPE_SAMPLER);
 
 struct DescriptorLayoutElement : VkDescriptorSetLayoutBinding
 {
-    DescriptorLayoutElement(
-        u32 binding, DescriptorType type, ShaderStage stage, u32 arraySize = 1);
+    DescriptorLayoutElement(u32 binding, DescriptorType type, ShaderStage stage, u32 array_size = 1);
 };
 
 using DescriptorSetLayout = VkDescriptorSetLayout;
@@ -152,23 +150,23 @@ LR_ASSIGN_OBJECT_TYPE(DescriptorSetLayout, VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT)
 struct DescriptorGetInfo
 {
     DescriptorGetInfo() = default;
-    DescriptorGetInfo(Buffer *pBuffer, u64 dataSize, DescriptorType type);
-    DescriptorGetInfo(ImageView *pImageView, DescriptorType type);
-    DescriptorGetInfo(Sampler *pSampler);
+    DescriptorGetInfo(Buffer *buffer, u64 data_size, DescriptorType type);
+    DescriptorGetInfo(ImageView *image_view, DescriptorType type);
+    DescriptorGetInfo(Sampler *sampler);
 
     union
     {
         struct
         {
-            u64 m_BufferAddress = 0;
-            u64 m_DataSize = 0;
+            u64 m_buffer_address = 0;
+            u64 m_data_size = 0;
         };
-        ImageView *m_pImageView;
-        Sampler *m_pSampler;
-        bool m_HasDescriptor;
+        ImageView *m_image_view;
+        Sampler *m_sampler;
+        bool m_has_descriptor;
     };
 
-    DescriptorType m_Type = DescriptorType::Sampler;
+    DescriptorType m_type = DescriptorType::Sampler;
 };
 
 }  // namespace lr::Graphics

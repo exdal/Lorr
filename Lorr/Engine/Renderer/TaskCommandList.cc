@@ -4,47 +4,49 @@ namespace lr::Renderer
 {
 using namespace Graphics;
 
-TaskCommandList::TaskCommandList(CommandList *pList)
-    : m_pList(pList)
+TaskCommandList::TaskCommandList(CommandList *list)
+    : m_list(list)
 {
 }
 
 TaskCommandList::~TaskCommandList()
 {
-    FlushBarriers();
+    flush_barriers();
 }
 
-void TaskCommandList::InsertMemoryBarrier(MemoryBarrier &barrier)
+void TaskCommandList::insert_memory_barrier(MemoryBarrier &barrier)
 {
     ZoneScoped;
 
-    if (m_MemoryBarrierCount == m_MemoryBarriers.max_size())
-        FlushBarriers();
+    if (m_memory_barrier_count == m_memory_barriers.max_size())
+        flush_barriers();
 
-    m_MemoryBarriers[m_MemoryBarrierCount++] = barrier;
+    m_memory_barriers[m_memory_barrier_count++] = barrier;
 }
 
-void TaskCommandList::InsertImageBarrier(ImageBarrier &barrier)
+void TaskCommandList::insert_image_barrier(ImageBarrier &barrier)
 {
     ZoneScoped;
 
-    if (m_ImageBarrierCount == m_ImageBarriers.max_size())
-        FlushBarriers();
+    if (m_image_barrier_count == m_image_barriers.max_size())
+        flush_barriers();
 
-    m_ImageBarriers[m_ImageBarrierCount++] = barrier;
+    m_image_barriers[m_image_barrier_count++] = barrier;
 }
 
-void TaskCommandList::FlushBarriers()
+void TaskCommandList::flush_barriers()
 {
-    if (m_ImageBarrierCount == 0 && m_MemoryBarrierCount == 0)
+    ZoneScoped;
+
+    if (m_image_barrier_count == 0 && m_memory_barrier_count == 0)
         return;
 
     DependencyInfo depInfo(
-        { m_ImageBarriers.data(), m_ImageBarrierCount },
-        { m_MemoryBarriers.data(), m_MemoryBarrierCount });
-    m_pList->SetPipelineBarrier(&depInfo);
+        { m_image_barriers.data(), m_image_barrier_count },
+        { m_memory_barriers.data(), m_memory_barrier_count });
+    m_list->set_pipeline_barrier(&depInfo);
 
-    m_MemoryBarrierCount = 0;
-    m_ImageBarrierCount = 0;
+    m_memory_barrier_count = 0;
+    m_image_barrier_count = 0;
 }
-}  // namespace lr::Renderer
+} // namespace lr::Renderer

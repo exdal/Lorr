@@ -9,12 +9,12 @@ namespace lr
 {
 struct Win32Window : BaseWindow
 {
-    void Init(const WindowDesc &desc);
-    void Poll() override;
-    void InitDisplays() override;
-    void SetCursor(WindowCursor cursor) override;
+    void init(const WindowDesc &desc);
+    void poll() override;
+    void init_displays() override;
+    void set_cursor(WindowCursor cursor) override;
 
-    void *m_pInstance = 0;
+    void *m_instance = nullptr;
 };
 
 }  // namespace lr

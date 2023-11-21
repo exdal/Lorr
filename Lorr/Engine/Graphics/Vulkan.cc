@@ -57,7 +57,7 @@ bool VK::LoadVulkanInstance(VkInstance pInstance)
         LOG_CRITICAL("Cannot load Vulkan Instance function '{}'!", #_name); \
         return false;                                                       \
     }
-#if LR_DEBUG
+#if _DEBUG
     _VK_FUNCTION_NAMES_INSTANCE_DEBUG
 #endif
     _VK_FUNCTION_NAMES_INSTANCE

@@ -7,6 +7,32 @@
 
 namespace lr::Graphics
 {
+enum class APIResult : i32
+{
+    Success = VK_SUCCESS,
+    NotReady = VK_NOT_READY,
+    TimeOut = VK_TIMEOUT,
+    Incomplete = VK_INCOMPLETE,
+    OutOfHostMem = VK_ERROR_OUT_OF_HOST_MEMORY,
+    OutOfDeviceMem = VK_ERROR_OUT_OF_DEVICE_MEMORY,
+    InitFailed = VK_ERROR_INITIALIZATION_FAILED,
+    DeviceLost = VK_ERROR_DEVICE_LOST,
+    MemMapFailed = VK_ERROR_MEMORY_MAP_FAILED,
+    LayerNotPresent = VK_ERROR_LAYER_NOT_PRESENT,
+    ExtNotPresent = VK_ERROR_EXTENSION_NOT_PRESENT,
+    FeatureNotPresent = VK_ERROR_FEATURE_NOT_PRESENT,
+    IncompatibleDriver = VK_ERROR_INCOMPATIBLE_DRIVER,
+    TooManyObjects = VK_ERROR_TOO_MANY_OBJECTS,
+    FormatNotSupported = VK_ERROR_FORMAT_NOT_SUPPORTED,
+    FragmentedPool = VK_ERROR_FRAGMENTED_POOL,
+    Unknown = VK_ERROR_UNKNOWN,
+    Fragmentation = VK_ERROR_FRAGMENTATION,
+    SurfaceLost = VK_ERROR_SURFACE_LOST_KHR,
+    WindowInUse = VK_ERROR_NATIVE_WINDOW_IN_USE_KHR,
+    Suboptimal = VK_SUBOPTIMAL_KHR,
+    OutOfDate = VK_ERROR_OUT_OF_DATE_KHR,
+};
+
 /// BUFFER ---------------------------- ///
 
 enum class BufferUsage : u64
@@ -288,32 +314,32 @@ union ColorClearValue
 {
     ColorClearValue(){};
     ColorClearValue(f32 r, f32 g, f32 b, f32 a)
-        : m_ValFloat({ r, g, b, a }){};
+        : m_val_float({ r, g, b, a }){};
     ColorClearValue(u32 r, u32 g, u32 b, u32 a)
-        : m_ValUInt({ r, g, b, a }){};
+        : m_val_uint({ r, g, b, a }){};
     ColorClearValue(i32 r, i32 g, i32 b, i32 a)
-        : m_ValInt({ r, g, b, a }){};
+        : m_val_int({ r, g, b, a }){};
     ColorClearValue(const XMFLOAT4 &val)
-        : m_ValFloat(val){};
+        : m_val_float(val){};
     ColorClearValue(const XMUINT4 &val)
-        : m_ValUInt(val){};
+        : m_val_uint(val){};
     ColorClearValue(const XMINT4 &val)
-        : m_ValInt(val){};
+        : m_val_int(val){};
 
-    XMFLOAT4 m_ValFloat = {};
-    XMUINT4 m_ValUInt;
-    XMINT4 m_ValInt;
+    XMFLOAT4 m_val_float = {};
+    XMUINT4 m_val_uint;
+    XMINT4 m_val_int;
 };
 
 struct DepthClearValue
 {
     DepthClearValue(){};
     DepthClearValue(float depth, u8 stencil)
-        : m_Depth(depth),
-          m_Stencil(stencil){};
+        : m_depth(depth),
+          m_stencil(stencil){};
 
-    float m_Depth;
-    u8 m_Stencil;
+    float m_depth;
+    u8 m_stencil;
 };
 
 enum class BlendFactor : u32

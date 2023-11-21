@@ -13,21 +13,21 @@ struct ColorBlendAttachment : VkPipelineColorBlendAttachmentState
 {
     ColorBlendAttachment(
         bool enabled,
-        ColorMask writeMask = ColorMask::RGBA,
-        BlendFactor srcBlend = BlendFactor::SrcAlpha,
-        BlendFactor dstBlend = BlendFactor::InvSrcAlpha,
-        BlendOp blendOp = BlendOp::Add,
-        BlendFactor srcBlendAlpha = BlendFactor::One,
-        BlendFactor dstBlendAlpha = BlendFactor::InvSrcAlpha,
-        BlendOp blendOpAlpha = BlendOp::Add);
+        ColorMask write_mask = ColorMask::RGBA,
+        BlendFactor src_blend = BlendFactor::SrcAlpha,
+        BlendFactor dst_blend = BlendFactor::InvSrcAlpha,
+        BlendOp blend_op = BlendOp::Add,
+        BlendFactor src_blend_alpha = BlendFactor::One,
+        BlendFactor dst_blend_alpha = BlendFactor::InvSrcAlpha,
+        BlendOp blend_op_alpha = BlendOp::Add);
 };
 
 struct DepthStencilOpDesc
 {
-    StencilOp m_Pass : 3;
-    StencilOp m_Fail : 3;
-    CompareOp m_DepthFail : 3;
-    CompareOp m_CompareFunc : 3;
+    StencilOp m_pass : 3;
+    StencilOp m_fail : 3;
+    CompareOp m_depth_fail : 3;
+    CompareOp m_compare_func : 3;
 };
 
 struct PushConstantDesc : VkPushConstantRange
@@ -40,10 +40,10 @@ LR_ASSIGN_OBJECT_TYPE(PipelineLayout, VK_OBJECT_TYPE_PIPELINE_LAYOUT);
 
 struct Pipeline : APIObject
 {
-    VkPipelineBindPoint m_BindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    VkPipeline m_pHandle = nullptr;
+    VkPipelineBindPoint m_bind_point = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    VkPipeline m_handle = nullptr;
 
-    operator VkPipeline &() { return m_pHandle; }
+    operator VkPipeline &() { return m_handle; }
 };
 LR_ASSIGN_OBJECT_TYPE(Pipeline, VK_OBJECT_TYPE_PIPELINE);
 
@@ -52,33 +52,33 @@ LR_ASSIGN_OBJECT_TYPE(Pipeline, VK_OBJECT_TYPE_PIPELINE);
 // TODO: MSAA.
 struct GraphicsPipelineBuildInfo
 {
-    eastl::vector<Format> m_ColorAttachmentFormats = {};
-    Format m_DepthAttachmentFormat = Format::Unknown;
-    eastl::vector<ColorBlendAttachment> m_BlendAttachments = {};
-    eastl::vector<Shader *> m_Shaders = {};
-    PipelineLayout m_pLayout = nullptr;
-    f32 m_DepthBiasFactor = 0.0;
-    f32 m_DepthBiasClamp = 0.0;
-    f32 m_DepthSlopeFactor = 0.0;
-    DepthStencilOpDesc m_StencilFrontFaceOp = {};
-    DepthStencilOpDesc m_StencilBackFaceOp = {};
-    u32 m_EnableDepthClamp : 1;
-    u32 m_EnableDepthBias : 1;
-    u32 m_EnableDepthTest : 1;
-    u32 m_EnableDepthWrite : 1;
-    u32 m_EnableStencilTest : 1;
-    CompareOp m_DepthCompareOp : 3;
-    CullMode m_SetCullMode : 2;
-    FillMode m_SetFillMode : 1;
-    u32 m_FrontFaceCCW : 1;
-    u32 m_EnableAlphaToCoverage : 1;
-    u32 m_MultiSampleBitCount : 3 = 1;
+    eastl::span<Format> m_color_attachment_formats = {};
+    Format m_depth_attachment_format = Format::Unknown;
+    eastl::span<ColorBlendAttachment> m_blend_attachments = {};
+    eastl::span<Shader *> m_shaders = {};
+    PipelineLayout m_layout = nullptr;
+    f32 m_depth_bias_factor = 0.0;
+    f32 m_depth_bias_clamp = 0.0;
+    f32 m_depth_slope_factor = 0.0;
+    DepthStencilOpDesc m_stencil_front_face_op = {};
+    DepthStencilOpDesc m_stencil_back_face_op = {};
+    u32 m_enable_depth_clamp : 1;
+    u32 m_enable_depth_bias : 1;
+    u32 m_enable_depth_test : 1;
+    u32 m_enable_depth_write : 1;
+    u32 m_enable_stencil_test : 1;
+    CompareOp m_depth_compare_op : 3;
+    CullMode m_set_cull_mode : 2;
+    FillMode m_set_fill_mode : 1;
+    u32 m_front_face_ccw : 1;
+    u32 m_enable_alpha_to_coverage : 1;
+    u32 m_multi_sample_bit_count : 3 = 1;
 };
 
 struct ComputePipelineBuildInfo
 {
-    Shader *m_pShader = nullptr;
-    PipelineLayout m_pLayout = nullptr;
+    Shader *m_shader = nullptr;
+    PipelineLayout m_layout = nullptr;
 };
 
 }  // namespace lr::Graphics

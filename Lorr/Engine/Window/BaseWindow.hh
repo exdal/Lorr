@@ -1,95 +1,89 @@
-// Created on Thursday May 5th 2022 by exdal
-// Last modified on Monday August 28th 2023 by exdal
-
 #pragma once
 
 namespace lr
 {
-    enum class WindowCursor
+enum class WindowCursor
+{
+    Arrow,
+    TextInput,
+    ResizeAll,
+    ResizeNS,
+    ResizeEW,
+    ResizeNESW,
+    ResizeNWSE,
+    Hand,
+    NotAllowed,
+    Hidden,
+};
+
+enum class WindowFlag : u32
+{
+    None = 0,
+    FullScreen = 1 << 0,
+    Centered = 1 << 1,
+    Resizable = 1 << 2,
+    Borderless = 1 << 3,
+    Maximized = 1 << 4,
+};
+LR_TYPEOP_ARITHMETIC(WindowFlag, WindowFlag, |);
+LR_TYPEOP_ARITHMETIC_INT(WindowFlag, WindowFlag, &);
+
+struct SystemMetrics
+{
+    struct Display
     {
-        Arrow,
-        TextInput,
-        ResizeAll,
-        ResizeNS,
-        ResizeEW,
-        ResizeNESW,
-        ResizeNWSE,
-        Hand,
-        NotAllowed,
-        Hidden,
+        eastl::string m_name;
+
+        u32 m_res_w;
+        u32 m_res_h;
+        i32 m_pos_x;
+        i32 m_pos_y;
+
+        u32 m_refresh_rate;
     };
 
-    enum class WindowFlag : u32
-    {
-        None = 0,
-        FullScreen = 1 << 0,
-        Centered = 1 << 1,
-        Resizable = 1 << 2,
-        Borderless = 1 << 3,
-        Maximized = 1 << 4,
-    };
-    LR_TYPEOP_ARITHMETIC(WindowFlag, WindowFlag, |);
-    LR_TYPEOP_ARITHMETIC_INT(WindowFlag, WindowFlag, &);
+    u8 m_display_size = 0;
 
-    struct SystemMetrics
-    {
-        struct Display
-        {
-            eastl::string m_Name;
+    static constexpr u32 k_max_supported_display = 4;
+    eastl::array<Display, k_max_supported_display> m_displays = {};
+};
 
-            u32 m_ResW;
-            u32 m_ResH;
-            i32 m_PosX;
-            i32 m_PosY;
+struct WindowDesc
+{
+    eastl::string_view m_title = "";
+    eastl::string_view m_icon = "";
+    u32 m_current_monitor = 0;
+    u32 m_width = 0;
+    u32 m_height = 0;
+    WindowFlag m_Flags = WindowFlag::None;
+};
 
-            u32 m_RefreshRate;
-        };
+struct BaseWindow
+{
+    virtual void poll() = 0;
 
-        u8 m_DisplaySize = 0;
+    virtual void init_displays() = 0;
+    SystemMetrics::Display *get_display(u32 monitor);
 
-        static constexpr u32 kMaxSupportedDisplay = 4;
-        eastl::array<Display, kMaxSupportedDisplay> m_Displays = {};
-    };
+    virtual void set_cursor(WindowCursor cursor) = 0;
 
-    struct WindowDesc
-    {
-        eastl::string_view m_Title = "";
-        eastl::string_view m_Icon = "";
+    bool should_close();
+    void on_size_changed(u32 width, u32 height);
 
-        u32 m_CurrentMonitor = 0;
+    void *m_handle = nullptr;
 
-        u32 m_Width;
-        u32 m_Height;
+    u32 m_width = 0;
+    u32 m_height = 0;
 
-        WindowFlag m_Flags = WindowFlag::None;
-    };
+    bool m_should_close = false;
+    bool m_is_fullscreen = false;
+    bool m_size_ended = true;
 
-    struct BaseWindow
-    {
-        virtual void Poll() = 0;
+    WindowCursor m_current_cursor = WindowCursor::Arrow;
+    XMUINT2 m_cursor_position = XMUINT2(0, 0);
 
-        virtual void InitDisplays() = 0;
-        SystemMetrics::Display *GetDisplay(u32 monitor);
-
-        virtual void SetCursor(WindowCursor cursor) = 0;
-
-        bool ShouldClose();
-        void OnSizeChanged(u32 width, u32 height);
-
-        void *m_pHandle = nullptr;
-
-        u32 m_Width = 0;
-        u32 m_Height = 0;
-
-        bool m_ShouldClose = false;
-        bool m_IsFullscreen = false;
-        bool m_SizeEnded = true;
-
-        WindowCursor m_CurrentCursor = WindowCursor::Arrow;
-        XMUINT2 m_CursorPosition = XMUINT2(0, 0);
-
-        SystemMetrics m_SystemMetrics;
-        u32 m_UsingMonitor = 0;
-    };
+    SystemMetrics m_system_metrics = {};
+    u32 m_using_monitor = 0;
+};
 
 }  // namespace lr

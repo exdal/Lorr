@@ -7,15 +7,15 @@ void LorrApp::Init(lr::BaseApplicationDesc &desc)
 {
     ZoneScoped;
 
-    PreInit(desc);
+    create(desc);
 }
 
-void LorrApp::Shutdown()
+void LorrApp::shutdown()
 {
     ZoneScoped;
 }
 
-void LorrApp::Poll(f32 deltaTime)
+void LorrApp::poll(f32 deltaTime)
 {
     ZoneScoped;
 }

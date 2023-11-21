@@ -45,8 +45,8 @@ namespace lr::UI
         {
             m_Cursor = imguiCursor;
             
-            EngineEventData data = { .m_WindowCursor = (WindowCursor)imguiCursor };
-            Engine::Get()->PushEvent(ENGINE_EVENT_CURSOR_STATE, data);
+            EngineEventData data = { .m_window_cursor = (WindowCursor)imguiCursor };
+            Engine::get()->push_event(ENGINE_EVENT_CURSOR_STATE, data);
         }
 
         ImGui::NewFrame();

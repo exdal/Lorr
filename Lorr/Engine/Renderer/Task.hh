@@ -7,87 +7,97 @@
 namespace lr::Renderer
 {
 struct TaskGraph;
+
 struct TaskContext
 {
-    TaskContext(TaskGraph *pGraph, Graphics::CommandList *pList)
-        : m_pGraph(pGraph),
-          m_pList(pList){};
-    Graphics::CommandList *GetCommandList() { return m_pList; }
-    Graphics::ImageView *View(const GenericResource &use);
+    TaskContext(TaskGraph &task_graph, Graphics::CommandList *command_list)
+        : m_task_graph(task_graph),
+          m_command_list(command_list)
+    {
+    }
+
+    Graphics::CommandList *get_command_list() { return m_command_list; }
+    Graphics::ImageView *get_image_view(GenericResource &use);
+    Graphics::RenderingAttachment as_color_attachment(
+        GenericResource &use, const Graphics::ColorClearValue &clearVal);
+    XMUINT2 get_image_size(GenericResource &use);
 
 private:
-    TaskGraph *m_pGraph = nullptr;
-    Graphics::CommandList *m_pList = nullptr;
+    TaskGraph &m_task_graph;
+    Graphics::CommandList *m_command_list = nullptr;
 };
 
 using TaskID = u32;
 struct Task
 {
-    virtual void Execute(TaskContext &ctx) = 0;
+    virtual void execute(TaskContext &ctx) = 0;
 
-    template<typename _ImageFn, typename _BufferFn>
-    void ForEachRes(const _ImageFn &fImg, const _BufferFn &fBuf)
+    template<typename ImageFn, typename BufferFn>
+    void for_each_res(const ImageFn &image_cb, const BufferFn &buffer_cb)
     {
-        for (GenericResource &resource : m_GenericResources)
+        for (GenericResource &resource : m_generic_resources)
         {
-            switch (resource.m_Type)
+            switch (resource.m_type)
             {
-                case ResourceType::Buffer:
-                    fBuf(resource);
+                case TaskResourceType::Image:
+                    image_cb(resource);
                     break;
-                case ResourceType::Image:
-                    fImg(resource);
+                case TaskResourceType::Buffer:
+                    buffer_cb(resource);
                     break;
             }
         }
     }
 
-    eastl::string_view m_Name;
-    eastl::span<GenericResource> m_GenericResources;
+    eastl::string_view m_name;
+    eastl::span<GenericResource> m_generic_resources;
 };
 
-template<typename _T>
+template<typename TTask>
 concept TaskConcept =
-    requires { _T{}.m_Uses; } and requires(TaskContext tc) { _T{}.Execute(tc); };
+    requires { TTask{}.m_uses; } and requires(TaskContext tc) { TTask{}.execute(tc); };
 
-template<TaskConcept _Task>
+template<TaskConcept TTask>
 struct TaskWrapper : Task
 {
-    TaskWrapper(const _Task &task)
-        : m_Task(task)
+    TaskWrapper(const TTask &task)
+        : m_task(task)
     {
-        m_Name = _Task::kName;
-        m_GenericResources = { (GenericResource *)&task.m_Uses, kResourceSize };
+        m_name = TTask::task_name;
+        m_generic_resources = { (GenericResource *)&task.m_uses, resource_count };
+#if _DEBUG
+        for (auto &resource : m_generic_resources)
+            assert(resource.m_buffer_id != BufferNull);
+#endif
     }
 
-    void Execute(TaskContext &ctx) override { m_Task.Execute(ctx); };
+    void execute(TaskContext &ctx) override { m_task.execute(ctx); }
 
-    _Task m_Task;
-    constexpr static usize kResourceSize =
-        sizeof(typename _Task::Uses) / sizeof(GenericResource);
+    TTask m_task;
+    constexpr static usize resource_count =
+        sizeof(typename TTask::Uses) / sizeof(GenericResource);
 };
 
 struct TaskBarrier
 {
-    ImageID m_ImageID = ImageNull;
-    Graphics::ImageLayout m_SrcLayout = {};
-    Graphics::ImageLayout m_DstLayout = {};
-    TaskAccess::Access m_SrcAccess = {};
-    TaskAccess::Access m_DstAccess = {};
+    ImageID m_image_id = ImageNull;
+    Graphics::ImageLayout m_src_layout = {};
+    Graphics::ImageLayout m_dst_layout = {};
+    TaskAccess::Access m_src_access = {};
+    TaskAccess::Access m_dst_access = {};
 };
 
 using TaskBatchID = u32;
+constexpr static TaskBatchID kTaskBatchNull = ~0;
 struct TaskBatch
 {
-    TaskAccess::Access m_ExecutionAccess = TaskAccess::None;
-    eastl::vector<usize> m_WaitBarriers = {};
-    eastl::vector<TaskID> m_Tasks = {};
+    TaskAccess::Access m_execution_access = TaskAccess::None;
+    eastl::vector<usize> m_wait_barriers = {};
+    eastl::vector<TaskID> m_tasks = {};
 
     // For resources are not connected to any other passes but still need a barrier
     // For example, SwapChain image needs to be in present layout at the end of execution
-    eastl::vector<usize> m_EndBarriers = {};
+    eastl::vector<usize> m_end_barriers = {};
 };
-
-constexpr static TaskBatchID kTaskBatchNull = ~0;
 
 }  // namespace lr::Renderer

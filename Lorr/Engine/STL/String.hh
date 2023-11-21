@@ -1,6 +1,3 @@
-// Created on Friday May 19th 2023 by exdal
-// Last modified on Sunday September 10th 2023 by exdal
-
 #pragma once
 
 namespace ls
@@ -11,7 +8,7 @@ struct CharRange
     u32 max;
 };
 
-constexpr eastl::string_view TrimForwardRanged(eastl::string_view str, eastl::span<CharRange> ranges)
+constexpr eastl::string_view trim_forward_ranged(eastl::string_view str, eastl::span<CharRange> ranges)
 {
     for (usize i = 0; i < str.length(); i++)
     {
@@ -28,7 +25,7 @@ constexpr eastl::string_view TrimForwardRanged(eastl::string_view str, eastl::sp
     return str;
 }
 
-constexpr eastl::string_view TrimFileName(eastl::string_view directory)
+constexpr eastl::string_view trim_file_name(eastl::string_view directory)
 {
     uptr namePos = directory.find_last_of("\\/");
     if (namePos == -1)
@@ -37,7 +34,7 @@ constexpr eastl::string_view TrimFileName(eastl::string_view directory)
     return directory.substr(namePos + 1, directory.length() - namePos);
 }
 
-constexpr eastl::string_view TrimString(eastl::string_view str, eastl::string_view chars)
+constexpr eastl::string_view trim_string(eastl::string_view str, eastl::string_view chars)
 {
     u64 begin = str.find_first_not_of(chars);
     if (begin != -1)
@@ -46,7 +43,7 @@ constexpr eastl::string_view TrimString(eastl::string_view str, eastl::string_vi
     return "";
 }
 
-constexpr eastl::string_view TrimQuotes(eastl::string_view str)
+constexpr eastl::string_view trim_quotes(eastl::string_view str)
 {
     if (str.empty())
         return str;
@@ -57,7 +54,7 @@ constexpr eastl::string_view TrimQuotes(eastl::string_view str)
     return str;
 }
 
-constexpr bool GetLine(eastl::string_view str, eastl::string_view &line)
+constexpr bool get_line(eastl::string_view str, eastl::string_view &line)
 {
     constexpr eastl::string_view kTrimChars = "\n\r";
 
@@ -65,15 +62,15 @@ constexpr bool GetLine(eastl::string_view str, eastl::string_view &line)
     if (!line.empty())
         offset = (u64)line.data() + line.length() - (u64)str.data();
 
-    u64 beginOff = str.find_first_not_of(kTrimChars, offset);
-    if (beginOff != -1)
+    u64 begin_off = str.find_first_not_of(kTrimChars, offset);
+    if (begin_off != -1)
     {
-        u64 endOff = str.find_first_of(kTrimChars, beginOff);
-        line = str.substr(beginOff, endOff - offset - (beginOff - offset));
-        line = TrimString(line, kTrimChars);
+        u64 end_off = str.find_first_of(kTrimChars, begin_off);
+        line = str.substr(begin_off, end_off - offset - (begin_off - offset));
+        line = trim_string(line, kTrimChars);
 
         return true;
-    } 
+    }
 
     return false;
 }

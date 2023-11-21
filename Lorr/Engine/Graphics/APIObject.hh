@@ -1,9 +1,4 @@
-// Created on Tuesday February 28th 2023 by exdal
-// Last modified on Monday August 28th 2023 by exdal
-
 #pragma once
-
-#include <EASTL/type_traits.h>
 
 #include "Memory/Allocator/TLSFAllocator.hh"
 
@@ -11,22 +6,22 @@ namespace lr::Graphics
 {
 struct APIAllocator
 {
-    void *Allocate(u64 size);
-    void Free(void *pBlockAddr);
+    void *allocate_type(u64 size);
+    void free_type(void *pBlockAddr);
 
-    Memory::TLSFAllocatorView m_TypeAllocator;
-    u8 *m_pTypeData = nullptr;
+    Memory::TLSFAllocatorView m_type_allocator;
+    u8 *m_type_data = nullptr;
 
-    static APIAllocator g_Handle;
+    static APIAllocator m_g_handle;
 };
 
 struct APIObject
 {
-    void *operator new(size_t size) { return APIAllocator::g_Handle.Allocate(size); }
-    void operator delete(void *pData) { APIAllocator::g_Handle.Free(pData); }
+    void *operator new(usize size) { return APIAllocator::m_g_handle.allocate_type(size); }
+    void operator delete(void *pData) { APIAllocator::m_g_handle.free_type(pData); }
 };
 
-template<typename _T>
+template<typename T>
 struct ToVKObjectType
 {
 };

@@ -8,6 +8,6 @@
 struct LorrApp : lr::Application
 {
     void Init(lr::BaseApplicationDesc &desc);
-    void Shutdown() override;
-    void Poll(f32 deltaTime) override;
+    void shutdown() override;
+    void poll(f32 deltaTime) override;
 };

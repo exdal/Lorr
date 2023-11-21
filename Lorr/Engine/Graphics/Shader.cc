@@ -130,7 +130,7 @@ static constexpr TBuiltInResource glslang_DefaultTBuiltInResource = {
 
 namespace lr::Graphics
 {
-constexpr glslang_stage_t ToGLSLStage(ShaderStage stage)
+constexpr glslang_stage_t to_glsl_stage(ShaderStage stage)
 {
     switch (stage)
     {
@@ -151,15 +151,14 @@ constexpr glslang_stage_t ToGLSLStage(ShaderStage stage)
     return GLSLANG_STAGE_COUNT;
 }
 LR_TYPEOP_ARITHMETIC(glslang_messages_t, glslang_messages_t, |);
-#define ENABLE_IF_HAS(flag) (bool)(pDesc->m_Flags & flag)
+#define ENABLE_IF_HAS(flag) (bool)(desc->m_flags & flag)
 
-glsl_include_result_t *IncludeLocalCb(
-    void *pContext, const char *pHeaderName, const char *pIncluderName, uptr indcludeDepth)
+glsl_include_result_t *include_local_cb(void *context, const char *header_name, const char *includer_name, uptr indclude_depth)
 {
     ZoneScoped;
 
-    ShaderCompileDesc *pDesc = (ShaderCompileDesc *)pContext;
-    eastl::string fullPath = _FMT("{}/{}", pDesc->m_WorkingDir, pHeaderName);
+    ShaderCompileDesc *compile_desc = static_cast<ShaderCompileDesc *>(context);
+    eastl::string fullPath = _FMT("{}/{}", compile_desc->m_working_dir, header_name);
     FileView fv(fullPath);
     if (!fv.IsOK())
     {
@@ -167,48 +166,45 @@ glsl_include_result_t *IncludeLocalCb(
         return nullptr;
     }
 
-    u64 allocSize = sizeof(glsl_include_result_t) + fv.Size();
+    u64 alloc_size = sizeof(glsl_include_result_t) + fv.Size();
 
-    glsl_include_result_t *pResult = Memory::Allocate<glsl_include_result_t>(allocSize);
-    memset(pResult, 0, allocSize);
+    glsl_include_result_t *include_result = Memory::Allocate<glsl_include_result_t>(alloc_size);
+    memset(include_result, 0, alloc_size);
 
-    u8 *pCode = (u8 *)pResult + sizeof(glsl_include_result_t);
+    u8 *pCode = (u8 *)include_result + sizeof(glsl_include_result_t);
     fv.Read(pCode, fv.Size());
 
-    pResult->header_name = pHeaderName;
-    pResult->header_data = (const char *)pCode;
-    pResult->header_length = fv.Size();
+    include_result->header_name = header_name;
+    include_result->header_data = (const char *)pCode;
+    include_result->header_length = fv.Size();
 
-    return pResult;
+    return include_result;
 }
 
-glsl_include_result_t *IncludeSystemCb(
-    void *pContext, const char *pHeaderName, const char *pIncluderName, uptr indcludeDepth)
+glsl_include_result_t *include_system_cb(void *pContext, const char *pHeaderName, const char *pIncluderName, uptr indcludeDepth)
 {
     ZoneScoped;
 
-    return IncludeLocalCb(pContext, pHeaderName, pIncluderName, indcludeDepth);
+    return include_local_cb(pContext, pHeaderName, pIncluderName, indcludeDepth);
 }
 
-int IncludeResultCb(void *pContext, glsl_include_result_t *pResult)
+int include_result_cb(void *pContext, glsl_include_result_t *pResult)
 {
     ZoneScoped;
-
-    ShaderCompileDesc *pDesc = (ShaderCompileDesc *)pContext;
 
     free(pResult);
 
     return 1;
 }
 
-void ShaderCompiler::Init()
+void ShaderCompiler::init()
 {
     ZoneScoped;
 
     glslang::InitializeProcess();
 }
 
-ShaderCompileOutput ShaderCompiler::CompileShader(ShaderCompileDesc *pDesc)
+ShaderCompileOutput ShaderCompiler::compile_shader(ShaderCompileDesc *desc)
 {
     ZoneScoped;
 
@@ -225,27 +221,27 @@ ShaderCompileOutput ShaderCompiler::CompileShader(ShaderCompileDesc *pDesc)
 
     ShaderCompileOutput output = {};
 
-    glsl_include_callbacks_t includeCallbacks = {
-        .include_system = IncludeSystemCb,
-        .include_local = IncludeLocalCb,
-        .free_include_result = IncludeResultCb,
+    glsl_include_callbacks_t include_callbacks = {
+        .include_system = include_system_cb,
+        .include_local = include_local_cb,
+        .free_include_result = include_result_cb,
     };
     const glslang_input_t input = {
         .language = GLSLANG_SOURCE_GLSL,
-        .stage = ToGLSLStage(pDesc->m_Type),
+        .stage = to_glsl_stage(desc->m_type),
         .client = GLSLANG_CLIENT_VULKAN,
         .client_version = GLSLANG_TARGET_VULKAN_1_3,
         .target_language = GLSLANG_TARGET_SPV,
         .target_language_version = GLSLANG_TARGET_SPV_1_6,
-        .code = pDesc->m_Code.data(),
+        .code = desc->m_code.data(),
         .default_version = 100,
         .default_profile = GLSLANG_NO_PROFILE,
         .force_default_version_and_profile = false,
         .forward_compatible = false,
         .messages = GLSLANG_MSG_DEFAULT_BIT | GLSLANG_MSG_SPV_RULES_BIT | GLSLANG_MSG_VULKAN_RULES_BIT,
         .resource = (glslang_resource_t *)&glslang_DefaultTBuiltInResource,
-        .callbacks = includeCallbacks,
-        .callbacks_ctx = pDesc,
+        .callbacks = include_callbacks,
+        .callbacks_ctx = desc,
     };
 
     glslang_shader_t *pShader = glslang_shader_create(&input);
@@ -280,10 +276,10 @@ ShaderCompileOutput ShaderCompiler::CompileShader(ShaderCompileDesc *pDesc)
     u32 dataSize = glslang_program_SPIRV_get_size(pProgram) * sizeof(u32);
     u32 *pData = glslang_program_SPIRV_get_ptr(pProgram);
     output = {
-        .m_Stage = pDesc->m_Type,
-        .m_DataSpv = { pData, dataSize },
-        .m_pProgram = pProgram,
-        .m_pShader = pShader,
+        .m_stage = desc->m_type,
+        .m_data_spv = { pData, dataSize },
+        .m_program = pProgram,
+        .m_shader = pShader,
     };
 
     eastl::string_view spvMessage = glslang_program_SPIRV_get_messages(pProgram);
@@ -293,12 +289,12 @@ ShaderCompileOutput ShaderCompiler::CompileShader(ShaderCompileDesc *pDesc)
     return output;
 }
 
-void ShaderCompiler::FreeProgram(ShaderCompileOutput &output)
+void ShaderCompiler::free_program(ShaderCompileOutput &output)
 {
     ZoneScoped;
 
-    glslang_program_delete((glslang_program_t *)output.m_pProgram);
-    glslang_shader_delete((glslang_shader_t *)output.m_pShader);
+    glslang_program_delete((glslang_program_t *)output.m_program);
+    glslang_shader_delete((glslang_shader_t *)output.m_shader);
 }
 
 }  // namespace lr::Graphics

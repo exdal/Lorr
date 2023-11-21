@@ -7,27 +7,27 @@ namespace lr::Graphics
 {
 struct SwapChainDesc
 {
-    u32 m_Width = 0;
-    u32 m_Height = 0;
-    u32 m_FrameCount = 0;
-    Format m_Format = Format::Unknown;
-    VkColorSpaceKHR m_ColorSpace = VK_COLOR_SPACE_MAX_ENUM_KHR;
-    VkPresentModeKHR m_PresentMode = VK_PRESENT_MODE_MAX_ENUM_KHR;
+    u32 m_width = 0;
+    u32 m_height = 0;
+    u32 m_frame_count = 0;
+    Format m_format = Format::Unknown;
+    VkColorSpaceKHR m_color_space = VK_COLOR_SPACE_MAX_ENUM_KHR;
+    VkPresentModeKHR m_present_mode = VK_PRESENT_MODE_MAX_ENUM_KHR;
 };
 
 struct SwapChain : APIObject
 {
-    bool VSynced() { return m_FrameCount == 1; }
+    VkSwapchainKHR m_handle = nullptr;
 
-    VkSwapchainKHR m_pHandle = nullptr;
+    u32 m_frame_count = 2;
+    u32 m_width = 0;
+    u32 m_height = 0;
 
-    u32 m_FrameCount = 2;
-    u32 m_Width = 0;
-    u32 m_Height = 0;
+    Format m_image_format = Format::BGRA8_UNORM;
+    VkColorSpaceKHR m_color_space = VK_COLOR_SPACE_MAX_ENUM_KHR;
+    VkPresentModeKHR m_present_mode = VK_PRESENT_MODE_MAX_ENUM_KHR;
 
-    Format m_ImageFormat = Format::BGRA8_UNORM;
-    VkColorSpaceKHR m_ColorSpace = VK_COLOR_SPACE_MAX_ENUM_KHR;
-    VkPresentModeKHR m_PresentMode = VK_PRESENT_MODE_MAX_ENUM_KHR;
+    operator VkSwapchainKHR &() { return m_handle; }
 };
 LR_ASSIGN_OBJECT_TYPE(SwapChain, VK_OBJECT_TYPE_SWAPCHAIN_KHR);
 

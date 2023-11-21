@@ -4,25 +4,25 @@
 
 namespace lr
 {
-    SystemMetrics::Display *BaseWindow::GetDisplay(u32 monitor)
+    SystemMetrics::Display *BaseWindow::get_display(u32 monitor)
     {
-        if (monitor >= SystemMetrics::kMaxSupportedDisplay)
+        if (monitor >= SystemMetrics::k_max_supported_display)
             return nullptr;
 
-        return &m_SystemMetrics.m_Displays[monitor];
+        return &m_system_metrics.m_displays[monitor];
     }
 
-    bool BaseWindow::ShouldClose()
+    bool BaseWindow::should_close()
     {
-        return m_ShouldClose;
+        return m_should_close;
     }
 
-    void BaseWindow::OnSizeChanged(u32 width, u32 height)
+    void BaseWindow::on_size_changed(u32 width, u32 height)
     {
         LOG_TRACE("Window size changed to W: {}, H: {}.", width, height);
 
-        m_Width = width;
-        m_Height = height;
+        m_width = width;
+        m_height = height;
     }
 
 }  // namespace lr

@@ -11,17 +11,19 @@ namespace TaskAccess
     {
         constexpr Access() = default;
         constexpr Access(MemoryAccess access, PipelineStage stage)
-            : m_Access(access),
-              m_Stage(stage){};
-        MemoryAccess m_Access = MemoryAccess::None;
-        PipelineStage m_Stage = PipelineStage::None;
+            : m_access(access),
+              m_stage(stage)
+        {
+        }
+        MemoryAccess m_access = MemoryAccess::None;
+        PipelineStage m_stage = PipelineStage::None;
 
         auto operator<=>(const Access &) const = default;
     };
 
     constexpr Access operator|(const Access &lhs, const Access &rhs)
     {
-        return (Access){ lhs.m_Access | rhs.m_Access, lhs.m_Stage | rhs.m_Stage };
+        return (Access){ lhs.m_access | rhs.m_access, lhs.m_stage | rhs.m_stage };
     }
 
     // clang-format off
@@ -74,33 +76,4 @@ namespace TaskAccess
 #undef DECLARE_ACCESS
     // clang-format on
 }  // namespace TaskAccess
-
-enum class ResourceType : u32
-{
-    Buffer,
-    Image,
-};
-
-enum class ResourceFlag : u32
-{
-    None = 0,
-    SwapChainImage = 1 << 0,
-    SwapChainRelative = 1 << 1,  // for scaling
-};
-LR_TYPEOP_ARITHMETIC_INT(ResourceFlag, ResourceFlag, &);
-
-template<typename _T>
-struct ToResourceType;
-
-template<>
-struct ToResourceType<Graphics::Image>
-{
-    constexpr static ResourceType kType = ResourceType::Image;
-};
-
-template<>
-struct ToResourceType<Graphics::Buffer>
-{
-    constexpr static ResourceType kType = ResourceType::Buffer;
-};
 }  // namespace lr::Renderer

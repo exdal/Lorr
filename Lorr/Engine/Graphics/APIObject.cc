@@ -2,22 +2,22 @@
 
 namespace lr::Graphics
 {
-APIAllocator APIAllocator::g_Handle;
+APIAllocator APIAllocator::m_g_handle;
 
-void *APIAllocator::Allocate(u64 size)
+void *APIAllocator::allocate_type(u64 size)
 {
-    Memory::TLSFBlockID blockID = m_TypeAllocator.Allocate(
+    Memory::TLSFBlockID blockID = m_type_allocator.Allocate(
         size + Memory::TLSFAllocatorView::ALIGN_SIZE, Memory::TLSFAllocatorView::ALIGN_SIZE);
 
-    u64 offset = m_TypeAllocator.GetBlockData(blockID)->m_Offset;
-    memcpy(m_pTypeData + offset, &blockID, sizeof(Memory::TLSFBlockID));
-    return (m_pTypeData + offset + Memory::TLSFAllocatorView::ALIGN_SIZE);
+    u64 offset = m_type_allocator.GetBlockData(blockID)->m_Offset;
+    memcpy(m_type_data + offset, &blockID, sizeof(Memory::TLSFBlockID));
+    return (m_type_data + offset + Memory::TLSFAllocatorView::ALIGN_SIZE);
 }
 
-void APIAllocator::Free(void *pBlockAddr)
+void APIAllocator::free_type(void *pBlockAddr)
 {
     Memory::TLSFBlockID blockID =
         *(Memory::TLSFBlockID *)((u8 *)pBlockAddr - Memory::TLSFAllocatorView::ALIGN_SIZE);
-    m_TypeAllocator.Free(blockID);
+    m_type_allocator.Free(blockID);
 }
 }  // namespace lr::Graphics

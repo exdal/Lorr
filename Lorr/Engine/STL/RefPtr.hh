@@ -5,67 +5,67 @@
 
 namespace ls
 {
-template<typename _T, typename _Deleter = ptr_deleter<_T>>
+template<typename T, typename TDeleter = ptr_deleter<T>>
 struct ref_ptr
 {
-    typedef ref_ptr<_T, _Deleter> this_type;
+    typedef ref_ptr this_type;
 
-    u64 IncRef() { return ++m_Ref; }
-    u64 DecRef() { return --m_Ref; }
+    u64 inc_ref() { return ++m_ref; }
+    u64 dec_ref() { return --m_ref; }
 
-    ref_ptr(_T *pObj)
-        : m_pObj(pObj)
+    explicit ref_ptr(T *obj)
+        : m_obj(obj)
     {
-        IncRef();
+        inc_ref();
     }
 
     ref_ptr(const this_type &other)
-        : m_pObj(other.m_pObj),
-          m_Ref(other.m_Ref)
+        : m_obj(other.m_obj),
+          m_ref(other.m_ref)
     {
-        IncRef();
+        inc_ref();
     }
 
-    ref_ptr(this_type &&other)
-        : m_pObj(nullptr)
+    ref_ptr(this_type &&other) noexcept
+        : m_obj(nullptr)
     {
         swap(other);
     }
 
-    template<typename _U>
-    ref_ptr(const ref_ptr<_U> &other)
-        : m_pObj(other.m_pObj)
+    template<typename TU>
+    explicit ref_ptr(const ref_ptr<TU> &other)
+        : m_obj(other.m_obj)
     {
-        IncRef();
+        inc_ref();
     }
 
     ~ref_ptr()
     {
-        if (DecRef() == 0)
+        if (dec_ref() == 0)
         {
-            _Deleter del;
-            del(m_pObj);
-            m_pObj = nullptr;
+            TDeleter del;
+            del(m_obj);
+            m_obj = nullptr;
         }
     }
 
-    void swap(this_type &other)
+    void swap(this_type &other) noexcept
     {
-        _T *pTemp = m_pObj;
-        m_pObj = other.m_pObj;
-        other.m_pObject = pTemp;
+        T *pTemp = m_obj;
+        m_obj = other.m_obj;
+        other.m_obj = pTemp;
     }
 
     this_type &operator=(this_type &other)
     {
-        if (other.m_pObj != m_pObj)
+        if (other.m_obj != m_obj)
         {
-            _T *pTemp = m_pObj;
-            if (other.m_pObj)
-                other.IncRef();
-            m_pObj = other.m_pObj;
-            if (pTemp)
-                DecRef();
+            const T *temp = m_obj;
+            if (other.m_obj)
+                other.inc_ref();
+            m_obj = other.m_obj;
+            if (temp)
+                dec_ref();
         }
 
         return *this;
@@ -83,76 +83,76 @@ struct ref_ptr
         return operator=(other);
     }
 
-    _T *get() const { return m_pObj; }
-    _T &operator*() const { return *m_pObj; }
-    _T *operator->() const { return m_pObj; }
-    bool operator!() const { return (m_pObj == nullptr); }
+    T *get() const { return m_obj; }
+    T &operator*() const { return *m_obj; }
+    T *operator->() const { return m_obj; }
+    bool operator!() const { return (m_obj == nullptr); }
 
-    u64 m_Ref = 0;
-    _T *m_pObj = nullptr;
+    u64 m_ref = 0;
+    T *m_obj = nullptr;
 };
 
-template<typename _T, typename _Deleter = array_deleter<_T>>
+template<typename T, typename TDeleter = array_deleter<T>>
 struct ref_array
 {
-    typedef ref_array<_T, _Deleter> this_type;
+    typedef ref_array this_type;
 
-    u64 IncRef() { return ++m_Ref; }
-    u64 DecRef() { return --m_Ref; }
+    u64 inc_ref() { return ++m_ref; }
+    u64 dec_ref() { return --m_ref; }
 
-    ref_array(_T *pObj)
-        : m_pObj(pObj)
+    explicit ref_array(T *obj)
+        : m_obj(obj)
     {
-        IncRef();
+        inc_ref();
     }
 
     ref_array(const this_type &other)
-        : m_pObj(other.m_pObj),
-          m_Ref(other.m_Ref)
+        : m_obj(other.m_obj),
+          m_ref(other.m_ref)
     {
-        IncRef();
+        inc_ref();
     }
 
-    ref_array(this_type &&other)
-        : m_pObj(nullptr)
+    ref_array(this_type &&other) noexcept
+        : m_obj(nullptr)
     {
         swap(other);
     }
 
     template<typename _U>
-    ref_array(const ref_ptr<_U> &other)
-        : m_pObj(other.m_pObj)
+    explicit ref_array(const ref_ptr<_U> &other)
+        : m_obj(other.m_obj)
     {
-        IncRef();
+        inc_ref();
     }
 
     ~ref_array()
     {
-        if (DecRef() == 0)
+        if (dec_ref() == 0)
         {
-            _Deleter del;
-            del(m_pObj);
-            m_pObj = nullptr;
+            TDeleter del;
+            del(m_obj);
+            m_obj = nullptr;
         }
     }
 
-    void swap(this_type &other)
+    void swap(this_type &other) noexcept
     {
-        _T *pTemp = m_pObj;
-        m_pObj = other.m_pObj;
-        other.m_pObj = pTemp;
+        T *pTemp = m_obj;
+        m_obj = other.m_obj;
+        other.m_obj = pTemp;
     }
 
     this_type &operator=(this_type &other)
     {
-        if (other.m_pObj != m_pObj)
+        if (other.m_obj != m_obj)
         {
-            _T *pTemp = m_pObj;
-            if (other.m_pObj)
-                other.IncRef();
-            m_pObj = other.m_pObj;
-            if (pTemp)
-                DecRef();
+            const T *temp = m_obj;
+            if (other.m_obj)
+                other.inc_ref();
+            m_obj = other.m_obj;
+            if (temp)
+                dec_ref();
         }
 
         return *this;
@@ -170,12 +170,12 @@ struct ref_array
         return operator=(other);
     }
 
-    _T *get() const { return m_pObj; }
-    bool operator!() const { return (m_pObj == nullptr); }
-    _T &operator[](usize i) const { return m_pObj[i]; }
+    T *get() const { return m_obj; }
+    bool operator!() const { return (m_obj == nullptr); }
+    T &operator[](usize i) const { return m_obj[i]; }
 
-    u64 m_Ref = 0;
-    _T *m_pObj = nullptr;
+    u64 m_ref = 0;
+    T *m_obj = nullptr;
 };
 
 }  // namespace ls

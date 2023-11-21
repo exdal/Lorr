@@ -1,5 +1,6 @@
 #include "Renderer.hh"
 
+#include "Core/Config.hh"
 #include "Window/Win32/Win32Window.hh"
 
 #include "TaskGraph.hh"
@@ -8,154 +9,205 @@ namespace lr::Renderer
 {
 struct ClearSwapChain
 {
-    constexpr static eastl::string_view kName = "ClearSwapChain";
+    constexpr static eastl::string_view task_name = "ClearSwapChain";
 
     struct Uses
     {
-        Preset::ColorAttachment m_RenderTarget;
-    } m_Uses = {};
+        Preset::ClearColorAttachment m_color_attachment;
+    } m_uses = {};
 
-    void Execute(TaskContext &tc)
+    void execute(TaskContext &tc)
     {
-        auto pList = tc.GetCommandList();
-        auto pView = tc.View(m_Uses.m_RenderTarget);
+        auto list = tc.get_command_list();
 
-        Graphics::RenderingAttachment attachment(
-            pView,
-            m_Uses.m_RenderTarget.m_ImageLayout,
-            Graphics::AttachmentOp::Clear,
-            Graphics::AttachmentOp::Store,
-            Graphics::ColorClearValue(0.1f, 0.1f, 0.1f, 1.0f));
+        auto attachment = tc.as_color_attachment(
+            m_uses.m_color_attachment, Graphics::ColorClearValue(0.1f, 0.1f, 0.1f, 1.0f));
+        auto render_size = tc.get_image_size(m_uses.m_color_attachment);
         Graphics::RenderingBeginDesc renderingDesc = {
-            .m_RenderArea = { 0, 0, 1280, 780 },
-            .m_ColorAttachments = attachment,
+            .m_render_area = { 0, 0, render_size.x, render_size.y },
+            .m_color_attachments = attachment,
         };
 
-        pList->BeginRendering(&renderingDesc);
+        list->begin_rendering(&renderingDesc);
         // Le epic pbr rendering
-        pList->EndRendering();
+        list->end_rendering();
     }
 };
 
-void FrameManager::Init(const FrameManagerDesc &desc)
+void FrameManager::create(const FrameManagerDesc &desc)
 {
     ZoneScoped;
 
-    m_FrameCount = desc.m_FrameCount;
-    m_CommandTypes = desc.m_Types;
-    m_pDevice = desc.m_pDevice;
+    m_frame_count = desc.frame_count;
+    m_command_type_mask = desc.command_type_mask;
+    m_renderer = desc.renderer;
 
-    auto scImages = m_pDevice->GetSwapChainImages(desc.m_pSwapChain);
-    for (int i = 0; i < desc.m_FrameCount; ++i)
+    auto device = m_renderer->m_device;
+    auto scImages = device->get_swap_chain_images(m_renderer->m_swap_chain);
+    for (int i = 0; i < m_frame_count; ++i)
     {
-        m_AcquireSemas.push_back(m_pDevice->CreateBinarySemaphore());
-        m_PresentSemas.push_back(m_pDevice->CreateBinarySemaphore());
-        m_Images.push_back(scImages[i]);
-        Graphics::ImageViewDesc viewDesc = { .m_pImage = scImages[i] };
-        m_Views.push_back(m_pDevice->CreateImageView(&viewDesc));
+        m_acquire_semas.push_back(device->create_binary_semaphore());
+        m_present_semas.push_back(device->create_binary_semaphore());
+        m_images.push_back(scImages[i]);
+        Graphics::ImageViewDesc viewDesc = { .m_image = scImages[i] };
+        m_views.push_back(device->create_image_view(&viewDesc));
     }
 }
 
-void FrameManager::NextFrame()
+void FrameManager::destroy()
 {
-    m_CurrentFrame = (m_CurrentFrame + 1) % m_FrameCount;
+    ZoneScoped;
+
+    auto device = m_renderer->m_device;
+    for (auto view : m_views)
+        device->delete_image_view(view);
+
+    for (auto sema : m_acquire_semas)
+        device->delete_semaphore(sema);
+
+    for (auto sema : m_present_semas)
+        device->delete_semaphore(sema);
+
+    m_images.clear();
+    m_views.clear();
+    m_acquire_semas.clear();
+    m_present_semas.clear();
 }
 
-eastl::pair<Graphics::Image *, Graphics::ImageView *> FrameManager::GetImages(u32 idx)
+void FrameManager::next_frame()
 {
-    return { m_Images[idx], m_Views[idx] };
+    m_current_frame = (m_current_frame + 1) % m_frame_count;
 }
 
-eastl::pair<Graphics::Semaphore *, Graphics::Semaphore *> FrameManager::GetSemaphores(
+eastl::pair<Graphics::Image *, Graphics::ImageView *> FrameManager::get_image(u32 idx)
+{
+    return { m_images[idx], m_views[idx] };
+}
+
+eastl::pair<Graphics::Semaphore *, Graphics::Semaphore *> FrameManager::get_semaphores(
     u32 idx)
 {
-    return { m_AcquireSemas[idx], m_PresentSemas[idx] };
+    return { m_acquire_semas[idx], m_present_semas[idx] };
 }
 
-void Renderer::Init(BaseWindow *pWindow)
+void Renderer::create(BaseWindow *window)
 {
     ZoneScoped;
+
+    /// CONFIG ///
+    /// TODO: Change them later
+    u32 frame_count = 3;
 
     Graphics::InstanceDesc instanceDesc = {
-        .m_AppName = "Lorr",
-        .m_AppVersion = 1,
-        .m_EngineName = "Lorr",
-        .m_APIVersion = VK_API_VERSION_1_3,
+        .m_app_name = "Lorr",
+        .m_app_version = 1,
+        .m_engine_name = "Lorr",
+        .m_api_version = VK_API_VERSION_1_3,
     };
 
-    if (!m_Instance.Init(&instanceDesc))
+    if (!m_instance.create(&instanceDesc))
         return;
 
-    m_pPhysicalDevice = m_Instance.GetPhysicalDevice();
-    if (!m_pPhysicalDevice)
+    m_physical_device = m_instance.get_physical_device();
+    if (!m_physical_device)
         return;
 
-    m_pSurface = m_Instance.GetWin32Surface(static_cast<Win32Window *>(pWindow));
-    if (!m_pSurface)
+    m_surface = m_instance.get_win32_surface(static_cast<Win32Window *>(window));
+    if (!m_surface)
         return;
 
-    m_pPhysicalDevice->SetSurfaceCapabilities(m_pSurface);
-    m_pPhysicalDevice->GetSurfaceFormats(m_pSurface, m_pSurface->m_SurfaceFormats);
-    m_pPhysicalDevice->GetPresentModes(m_pSurface, m_pSurface->m_PresentModes);
-    m_pPhysicalDevice->InitQueueFamilies(m_pSurface);
-    m_pDevice = m_pPhysicalDevice->GetLogicalDevice();
-    if (!m_pDevice)
+    m_physical_device->get_surface_formats(m_surface, m_surface->m_surface_formats);
+    m_physical_device->get_present_modes(m_surface, m_surface->m_present_modes);
+    m_physical_device->init_queue_families(m_surface);
+    m_device = m_physical_device->get_logical_device();
+    if (!m_device)
         return;
 
-    // TODO: Properly handle swapchain frames
-    Graphics::SwapChainDesc swapChainDesc = {
-        .m_Width = pWindow->m_Width,
-        .m_Height = pWindow->m_Height,
-        .m_FrameCount = 3,
-        .m_Format = Graphics::Format::BGRA8_UNORM,
-        .m_ColorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR,
-        .m_PresentMode = VK_PRESENT_MODE_MAILBOX_KHR,
+    refresh_frame(window->m_width, window->m_height);
+
+    TaskGraphDesc task_graph_desc = {
+        .m_frame_count = frame_count,
+        .m_physical_device = m_physical_device,
+        .m_device = m_device,
     };
-    m_pSwapChain = m_pDevice->CreateSwapChain(m_pSurface, &swapChainDesc);
+    m_task_graph.create(&task_graph_desc);
 
-    FrameManagerDesc frameManDesc = {
-        .m_FrameCount = m_pSwapChain->m_FrameCount,
-        .m_Types = Graphics::CommandTypeMask::Graphics,
-        .m_pPhysicalDevice = m_pPhysicalDevice,
-        .m_pDevice = m_pDevice,
-        .m_pSwapChain = m_pSwapChain,
-    };
-    m_FrameMan.Init(frameManDesc);
+    m_swap_chain_image = m_task_graph.use_persistent_image({});
 
-    TaskGraphDesc graphDesc = {
-        .m_FrameCount = m_pSwapChain->m_FrameCount,
-        .m_pPhysDevice = m_pPhysicalDevice,
-        .m_pDevice = m_pDevice,
-    };
-    m_TaskGraph.Init(&graphDesc);
-
-    auto [swapChainImg, swapChainView] = m_FrameMan.GetImages();
-    m_SwapChainImage = m_TaskGraph.UsePersistentImage(
-        { .m_pImage = swapChainImg, .m_pImageView = swapChainView });
-
-    m_TaskGraph.AddTask<ClearSwapChain>({
-        .m_Uses = { .m_RenderTarget = m_SwapChainImage },
+    m_task_graph.add_task<ClearSwapChain>({
+        .m_uses = { .m_color_attachment = m_swap_chain_image },
     });
-    m_TaskGraph.PresentTask(m_SwapChainImage);
+    m_task_graph.present_task(m_swap_chain_image);
 }
 
-void Renderer::Draw()
+void Renderer::refresh_frame(u32 width, u32 height)
 {
     ZoneScoped;
 
-    auto [acquireSema, presentSema] = m_FrameMan.GetSemaphores(m_FrameMan.CurrentFrame());
-    auto [swapChainImg, swapChainView] = m_FrameMan.GetImages(m_FrameMan.CurrentFrame());
-    m_pDevice->AcquireImage(m_pSwapChain, acquireSema);
+    // only way to let vulkan context know about new
+    // window state is to query surface capabilities
+    m_physical_device->set_surface_capabilities(m_surface);
 
-    m_TaskGraph.SetImage(m_SwapChainImage, swapChainImg, swapChainView);
-    m_TaskGraph.Execute({
-        .m_FrameIndex = m_FrameMan.CurrentFrame(),
-        .m_pAcquireSema = acquireSema,
-        .m_pPresentSema = presentSema,
+    if (m_swap_chain)
+    {
+        m_device->delete_swap_chain(m_swap_chain);
+        m_frame_manager.destroy();
+        m_frame_manager = {};
+    }
+
+    // TODO: please properly handle this
+    Graphics::SwapChainDesc swap_chain_desc = {
+        .m_width = width,
+        .m_height = height,
+        .m_frame_count = 3,
+        .m_format = Graphics::Format::RGBA8_UNORM,
+        .m_color_space = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR,
+        .m_present_mode = VK_PRESENT_MODE_MAILBOX_KHR,
+    };
+    m_swap_chain = m_device->create_swap_chain(m_surface, &swap_chain_desc);
+
+    FrameManagerDesc frame_manager_desc = {
+        .frame_count = 3,
+        .command_type_mask = Graphics::CommandTypeMask::Graphics,
+        .renderer = this,
+    };
+    m_frame_manager.create(frame_manager_desc);
+}
+
+void Renderer::on_resize(u32 width, u32 height)
+{
+    ZoneScoped;
+
+    refresh_frame(width, height);
+}
+
+void Renderer::draw()
+{
+    ZoneScoped;
+
+    auto [acquire_sema, present_sema] =
+        m_frame_manager.get_semaphores(m_frame_manager.m_current_frame);
+    auto [current_frame_image, current_frame_view] =
+        m_frame_manager.get_image(m_frame_manager.m_current_frame);
+
+    u32 acquired_index = 0;
+    auto result = m_device->acquire_image(m_swap_chain, acquire_sema, acquired_index);
+    if (result != Graphics::APIResult::Success)
+        return;
+
+    m_task_graph.set_image(m_swap_chain_image, current_frame_image, current_frame_view);
+    m_task_graph.execute({
+        .m_FrameIndex = m_frame_manager.m_current_frame,
+        .m_pAcquireSema = acquire_sema,
+        .m_pPresentSema = present_sema,
     });
 
-    m_pDevice->Present(m_pSwapChain, m_FrameMan.CurrentFrame(), presentSema, m_TaskGraph.m_pGraphicsQueue);
-    m_FrameMan.NextFrame();
+    m_device->Present(
+        m_swap_chain,
+        m_frame_manager.m_current_frame,
+        present_sema,
+        m_task_graph.m_graphics_queue);
+    m_frame_manager.next_frame();
 }
 
 }  // namespace lr::Renderer

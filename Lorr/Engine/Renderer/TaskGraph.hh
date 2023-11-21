@@ -21,56 +21,58 @@ struct TaskGraphExecuteDesc
 
 struct TaskGraphDesc
 {
-    u32 m_FrameCount = 0;
-    usize m_InitialAlloc = 0xffff;
-    Graphics::PhysicalDevice *m_pPhysDevice = nullptr;
-    Graphics::Device *m_pDevice = nullptr;
+    u32 m_frame_count = 0;
+    usize m_initial_alloc = 0xffff;
+    Graphics::PhysicalDevice *m_physical_device = nullptr;
+    Graphics::Device *m_device = nullptr;
 };
 
 struct TaskGraph
 {
-    void Init(TaskGraphDesc *pDesc);
+    void create(TaskGraphDesc *desc);
 
-    ImageID UsePersistentImage(const PersistentImageInfo &imageInfo);
-    void SetImage(ImageID imageID, Graphics::Image *pImage, Graphics::ImageView *pView);
+    ImageID use_persistent_image(const PersistentImageInfo &image_info);
+    void set_image(ImageID image_id, Graphics::Image *image, Graphics::ImageView *view);
+    BufferID use_persistent_buffer(const PersistentBufferInfo &buffer_info);
 
-    TaskBatchID ScheduleTask(Task &task);
-    template<typename _T>
-    void AddTask(const _T &taskInfo);
-    void AddTask(Task &task, TaskID id);
-    void PresentTask(ImageID backBufferID);
+    TaskBatchID schedule_task(Task &task);
+    template<typename TTask>
+    void add_task(const TTask &task_info);
+    void add_task(Task &task, TaskID id);
+    void present_task(ImageID back_buffer_id);
 
-    void Execute(const TaskGraphExecuteDesc &desc);
+    void execute(const TaskGraphExecuteDesc &desc);
 
-    void InsertBarrier(TaskCommandList &cmdList, const TaskBarrier &barrier);
+    void insert_barrier(TaskCommandList &cmd_list, const TaskBarrier &barrier);
 
-    Graphics::Device *m_pDevice = nullptr;
-    Graphics::CommandQueue *m_pGraphicsQueue = nullptr;
-    Graphics::DeviceMemory *m_pImageMemory = nullptr;
+    Graphics::Device *m_device = nullptr;
+    Graphics::CommandQueue *m_graphics_queue = nullptr;
+    Graphics::DeviceMemory *m_image_memory = nullptr;
 
     // TODO(Batching): These gotta go...
-    eastl::vector<Graphics::CommandAllocator *> m_CommandAllocators = {};
-    eastl::vector<Graphics::CommandList *> m_CommandLists = {};
+    eastl::vector<Graphics::CommandAllocator *> m_command_allocators = {};
+    eastl::vector<Graphics::CommandList *> m_command_lists = {};
 
-    eastl::vector<Graphics::Semaphore *> m_Semaphores = {};
-    eastl::vector<TaskImageInfo> m_ImageInfos = {};
-    eastl::vector<TaskBarrier> m_Barriers = {};
-    eastl::vector<TaskBatch> m_Batches = {};
-    eastl::vector<Task *> m_Tasks = {};
-    Memory::LinearAllocator m_TaskAllocator = {};
+    eastl::vector<Graphics::Semaphore *> m_semaphores = {};
+    eastl::vector<TaskImageInfo> m_image_infos = {};
+    eastl::vector<TaskBufferInfo> m_buffer_infos = {};
+    eastl::vector<TaskBarrier> m_barriers = {};
+    eastl::vector<TaskBatch> m_batches = {};
+    eastl::vector<Task *> m_tasks = {};
+    Memory::LinearAllocator m_task_allocator = {};
 };
 
-template<typename _T>
-void TaskGraph::AddTask(const _T &taskInfo)
+template<typename TTask>
+void TaskGraph::add_task(const TTask &task_info)
 {
     ZoneScoped;
 
-    auto wrapper = m_TaskAllocator.New<TaskWrapper<_T>>(taskInfo);
+    auto wrapper = m_task_allocator.New<TaskWrapper<TTask>>(task_info);
     Task *pTask = static_cast<Task *>(wrapper);
-    TaskID id = m_Tasks.size();
-    m_Tasks.push_back(pTask);
+    TaskID id = m_tasks.size();
+    m_tasks.push_back(pTask);
 
-    AddTask(*pTask, id);
+    add_task(*pTask, id);
 }
 
 }  // namespace lr::Renderer

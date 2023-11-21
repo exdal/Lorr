@@ -20,130 +20,124 @@ namespace lr::Graphics
 {
 struct SubmitDesc
 {
-    eastl::span<SemaphoreSubmitDesc> m_WaitSemas;
-    eastl::span<CommandListSubmitDesc> m_Lists;
-    eastl::span<SemaphoreSubmitDesc> m_SignalSemas;
+    eastl::span<SemaphoreSubmitDesc> m_wait_semas;
+    eastl::span<CommandListSubmitDesc> m_lists;
+    eastl::span<SemaphoreSubmitDesc> m_signal_semas;
 };
 
 struct Device
 {
-    bool Init(PhysicalDevice *pPhysicalDevice, VkDevice pHandle);
+    Device(PhysicalDevice *physical_device, VkDevice handle);
 
     /// COMMAND ///
-    CommandQueue *CreateCommandQueue(CommandType type, u32 queueIndex);
-    CommandAllocator *CreateCommandAllocator(u32 queueIdx, CommandAllocatorFlag flags);
-    CommandList *CreateCommandList(CommandAllocator *pAllocator);
+    CommandQueue *create_command_queue(CommandType type, u32 queue_index);
+    CommandAllocator *create_command_allocator(u32 queue_idx, CommandAllocatorFlag flags);
+    CommandList *create_command_list(CommandAllocator *command_allocator);
 
-    void BeginCommandList(CommandList *pList);
-    void EndCommandList(CommandList *pList);
-    void ResetCommandAllocator(CommandAllocator *pAllocator);
-    void Submit(CommandQueue *pQueue, SubmitDesc *pDesc);
+    void begin_command_list(CommandList *list);
+    void end_command_list(CommandList *list);
+    void reset_command_allocator(CommandAllocator *allocator);
+    void submit(CommandQueue *queue, SubmitDesc *desc);
 
-    Fence CreateFence(bool signaled);
-    void DeleteFence(Fence pFence);
-    bool IsFenceSignaled(Fence pFence);
-    void ResetFence(Fence pFence);
+    Fence create_fence(bool signaled);
+    void delete_fence(Fence fence);
+    bool is_fence_signaled(Fence fence);
+    void reset_fence(Fence fence);
 
-    Semaphore *CreateBinarySemaphore();
-    Semaphore *CreateTimelineSemaphore(u64 initialValue);
-    void DeleteSemaphore(Semaphore *pSemaphore);
-    void WaitForSemaphore(
-        Semaphore *pSemaphore, u64 desiredValue, u64 timeout = UINT64_MAX);
+    Semaphore *create_binary_semaphore();
+    Semaphore *create_timeline_semaphore(u64 initial_value);
+    void delete_semaphore(Semaphore *semaphore);
+    void wait_for_semaphore(Semaphore *semaphore, u64 desired_value, u64 timeout = UINT64_MAX);
 
     /// PIPELINE ///
-    VkPipelineCache CreatePipelineCache(
-        u32 initialDataSize = 0, void *pInitialData = nullptr);
-    PipelineLayout CreatePipelineLayout(
-        eastl::span<DescriptorSetLayout> layouts,
-        eastl::span<PushConstantDesc> pushConstants);
+    VkPipelineCache create_pipeline_cache(u32 initial_data_size = 0, void *initial_data = nullptr);
+    PipelineLayout create_pipeline_layout(eastl::span<DescriptorSetLayout> layouts, eastl::span<PushConstantDesc> push_constants);
 
-    Pipeline *CreateGraphicsPipeline(GraphicsPipelineBuildInfo *pBuildInfo);
-    Pipeline *CreateComputePipeline(ComputePipelineBuildInfo *pBuildInfo);
+    Pipeline *create_graphics_pipeline(GraphicsPipelineBuildInfo *build_info);
+    Pipeline *create_compute_pipeline(ComputePipelineBuildInfo *build_info);
 
     /// SWAPCHAIN ///
-    SwapChain *CreateSwapChain(Surface *pSurface, SwapChainDesc *pDesc);
-    void DeleteSwapChain(SwapChain *pSwapChain, bool keepSelf);
-    ls::ref_array<Image *> GetSwapChainImages(SwapChain *pSwapChain);
+    SwapChain *create_swap_chain(Surface *surface, SwapChainDesc *desc);
+    void delete_swap_chain(SwapChain *swap_chain);
+    ls::ref_array<Image *> get_swap_chain_images(SwapChain *swap_chain);
 
-    void WaitForWork();
-    u32 AcquireImage(SwapChain *pSwapChain, Semaphore *pSemaphore);
-    void Present(
-        SwapChain *pSwapChain, u32 imageIdx, Semaphore *pSemaphore, CommandQueue *pQueue);
+    void wait_for_work();
+    APIResult acquire_image(SwapChain *swap_chain, Semaphore *semaphore, u32 &image_idx);
+    void Present(SwapChain *swap_chain, u32 image_idx, Semaphore *semaphore, CommandQueue *queue);
 
     /// RESOURCE ///
-    u64 GetBufferMemorySize(Buffer *pBuffer, u64 *pAlignmentOut = nullptr);
-    u64 GetImageMemorySize(Image *pImage, u64 *pAlignmentOut = nullptr);
+    u64 get_buffer_memory_size(Buffer *buffer, u64 *alignment_out = nullptr);
+    u64 get_image_memory_size(Image *image, u64 *alignment_out = nullptr);
 
-    DeviceMemory *CreateDeviceMemory(
-        DeviceMemoryDesc *pDesc, PhysicalDevice *pPhysicalDevice);
-    void DeleteDeviceMemory(DeviceMemory *pDeviceMemory);
-    void AllocateBufferMemory(DeviceMemory *pMemory, Buffer *pBuffer, u64 memorySize);
-    void AllocateImageMemory(DeviceMemory *pMemory, Image *pImage, u64 memorySize);
+    DeviceMemory *create_device_memory(DeviceMemoryDesc *desc, PhysicalDevice *physical_device);
+    void delete_device_memory(DeviceMemory *device_memory);
+    void allocate_buffer_memory(DeviceMemory *device_memory, Buffer *buffer, u64 memory_size);
+    void allocate_image_memory(DeviceMemory *device_memory, Image *image, u64 memory_size);
 
     // * Shaders * //
-    Shader *CreateShader(ShaderStage stage, u32 *pData, u64 dataSize);
-    void DeleteShader(Shader *pShader);
+    Shader *create_shader(ShaderStage stage, u32 *data, u64 data_size);
+    void delete_shader(Shader *shader);
 
     // * Descriptor * //
 
-    DescriptorSetLayout CreateDescriptorSetLayout(
-        eastl::span<DescriptorLayoutElement> elements,
-        DescriptorSetLayoutFlag flags = DescriptorSetLayoutFlag::DescriptorBuffer);
-    void DeleteDescriptorSetLayout(DescriptorSetLayout pLayout);
-    u64 GetDescriptorSetLayoutSize(DescriptorSetLayout pLayout);
-    u64 GetDescriptorSetLayoutBindingOffset(DescriptorSetLayout pLayout, u32 bindingID);
-    void GetDescriptorData(const DescriptorGetInfo &info, u64 dataSize, void *pDataOut);
+    DescriptorSetLayout create_descriptor_set_layout(
+        eastl::span<DescriptorLayoutElement> elements, DescriptorSetLayoutFlag flags = DescriptorSetLayoutFlag::DescriptorBuffer);
+    void delete_descriptor_set_layout(DescriptorSetLayout layout);
+    u64 get_descriptor_set_layout_size(DescriptorSetLayout layout);
+    u64 get_descriptor_set_layout_binding_offset(DescriptorSetLayout layout, u32 binding_id);
+    void get_descriptor_data(const DescriptorGetInfo &info, u64 data_size, void *data_out);
 
     // * Buffers * //
-    Buffer *CreateBuffer(BufferDesc *pDesc, DeviceMemory *pAllocator);
-    void DeleteBuffer(Buffer *pHandle, DeviceMemory *pAllocator);
+    Buffer *create_buffer(BufferDesc *desc, DeviceMemory *device_memory);
+    void delete_buffer(Buffer *handle, DeviceMemory *device_memory);
 
-    u8 *GetMemoryData(DeviceMemory *pMemory);
-    u8 *GetBufferMemoryData(DeviceMemory *pMemory, Buffer *pBuffer);
+    u8 *get_memory_data(DeviceMemory *device_memory);
+    u8 *get_buffer_memory_data(DeviceMemory *device_memory, Buffer *buffer);
 
     // * Images * //
-    Image *CreateImage(ImageDesc *pDesc, DeviceMemory *pAllocator);
-    void DeleteImage(Image *pImage, DeviceMemory *pAllocator);
-    ImageView *CreateImageView(ImageViewDesc *pDesc);
-    void DeleteImageView(ImageView *pImageView);
+    Image *create_image(ImageDesc *desc, DeviceMemory *device_memory);
+    void delete_image(Image *image, DeviceMemory *device_memory);
+    ImageView *create_image_view(ImageViewDesc *desc);
+    void delete_image_view(ImageView *image_view);
 
-    Sampler *CreateSampler(SamplerDesc *pDesc);
-    void DeleteSampler(VkSampler pSampler);
+    Sampler *create_sampler(SamplerDesc *desc);
+    void delete_sampler(VkSampler sampler);
 
     /// UTILITY ///
-    template<typename _Type>
-    void SetObjectName(_Type *pType, eastl::string_view name)
+    template<typename TType>
+    void SetObjectName(TType *obj, eastl::string_view name)
     {
-#if LR_DEBUG
-        VkDebugUtilsObjectNameInfoEXT objectNameInfo = {
+#if _DEBUG
+        VkDebugUtilsObjectNameInfoEXT object_name_info = {
             .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
-            .objectType = (VkObjectType)ToVKObjectType<_Type>::type,
-            .objectHandle = (u64)pType->m_pHandle,
+            .objectType = static_cast<VkObjectType>(ToVKObjectType<TType>::type),
+            .objectHandle = (u64)obj->m_handle,
             .pObjectName = name.data(),
         };
-        vkSetDebugUtilsObjectNameEXT(m_pHandle, &objectNameInfo);
+        vkSetDebugUtilsObjectNameEXT(m_handle, &object_name_info);
 #endif
     }
 
-    template<VkObjectType _ObjectType, typename _Type>
-    void SetObjectNameRaw(_Type object, eastl::string_view name)
+    template<VkObjectType TObjectType, typename TType>
+    void SetObjectNameRaw(TType object, eastl::string_view name)
     {
-#if LR_DEBUG
-        VkDebugUtilsObjectNameInfoEXT objectNameInfo = {
+#if _DEBUG
+        VkDebugUtilsObjectNameInfoEXT object_name_info = {
             .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
-            .objectType = _ObjectType,
+            .objectType = TObjectType,
             .objectHandle = (u64)object,
             .pObjectName = name.data(),
         };
-        vkSetDebugUtilsObjectNameEXT(m_pHandle, &objectNameInfo);
+        vkSetDebugUtilsObjectNameEXT(m_handle, &object_name_info);
 #endif
     }
 
-    VkDevice m_pHandle = nullptr;
+    VkDevice m_handle = nullptr;
+    PhysicalDevice *m_physical_device = nullptr;
+    TracyVkCtx m_tracy_ctx = nullptr;
 
     /// Pools/Caches
-    VkPipelineCache m_pPipelineCache = nullptr;
-    TracyVkCtx m_pTracyCtx = nullptr;
+    VkPipelineCache m_pipeline_cache = nullptr;
 };
 
 }  // namespace lr::Graphics

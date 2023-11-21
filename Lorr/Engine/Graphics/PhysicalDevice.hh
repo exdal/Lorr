@@ -14,23 +14,24 @@ namespace lr::Graphics
 {
 struct AvailableQueueInfo
 {
-    u32 m_Present : 1;
-    u32 m_QueueCount : 15;
-    u32 m_Index : 16;
+    u32 m_present : 1;
+    u32 m_queue_count : 15;
+    u32 m_index : 16;
 };
 
 struct Surface : APIObject
 {
-    bool Init(VkSurfaceKHR pHandle);
-    bool IsFormatSupported(VkFormat format, VkColorSpaceKHR &colorSpaceOut);
-    bool IsPresentModeSupported(VkPresentModeKHR mode);
-    VkSurfaceTransformFlagBitsKHR GetTransform();
+    Surface(VkSurfaceKHR handle);
 
-    eastl::vector<VkSurfaceFormatKHR> m_SurfaceFormats;
-    eastl::vector<VkPresentModeKHR> m_PresentModes;
+    bool is_format_supported(VkFormat format, VkColorSpaceKHR &color_space_out);
+    bool is_present_mode_supported(VkPresentModeKHR mode);
+    VkSurfaceTransformFlagBitsKHR get_transform();
 
-    VkSurfaceCapabilitiesKHR m_Capabilities = {};
-    VkSurfaceKHR m_pHandle = VK_NULL_HANDLE;
+    eastl::vector<VkSurfaceFormatKHR> m_surface_formats;
+    eastl::vector<VkPresentModeKHR> m_present_modes;
+
+    VkSurfaceCapabilitiesKHR m_capabilities = {};
+    VkSurfaceKHR m_handle = VK_NULL_HANDLE;
 };
 LR_ASSIGN_OBJECT_TYPE(Surface, VK_OBJECT_TYPE_SURFACE_KHR);
 
@@ -38,40 +39,38 @@ struct PhysicalDevicePropertySet
 {
     PhysicalDevicePropertySet();
 
-    VkPhysicalDeviceMemoryProperties m_Memory = {};
+    VkPhysicalDeviceMemoryProperties m_memory = {};
 
     /// CHAINED ///
-    VkPhysicalDeviceProperties2 m_Properties = {};
-    VkPhysicalDeviceDescriptorBufferPropertiesEXT m_DescriptorBuffer = {};
+    VkPhysicalDeviceProperties2 m_properties = {};
+    VkPhysicalDeviceDescriptorBufferPropertiesEXT m_descriptor_buffer = {};
 };
 
 struct Device;
 struct PhysicalDevice : APIObject
 {
-    bool Init(VkPhysicalDevice pDevice);
-    void InitQueueFamilies(Surface *pSurface);
-    Device *GetLogicalDevice();
-    u32 GetHeapIndex(VkMemoryPropertyFlags flags);
-    u32 GetQueueIndex(CommandType type);
-    u32 SelectQueue(
-        Surface *pSurface,
-        VkQueueFlags desiredQueue,
-        bool requirePresent,
-        bool selectBest);
+    PhysicalDevice(VkPhysicalDevice handle);
+    void init_queue_families(Surface *surface);
+    Device *get_logical_device();
+    u32 get_heap_index(VkMemoryPropertyFlags flags);
+    u32 get_queue_index(CommandType type);
+    u32 select_queue(Surface *surface, VkQueueFlags desired_queue, bool require_present, bool select_best);
 
-    u64 GetDescriptorBufferAlignment();
-    u64 GetDescriptorSize(DescriptorType type);
+    u64 get_descriptor_buffer_alignment();
+    u64 get_descriptor_size(DescriptorType type);
 
-    void GetSurfaceFormats(Surface *pSurface, eastl::vector<VkSurfaceFormatKHR> &formats);
-    void GetPresentModes(Surface *pSurface, eastl::vector<VkPresentModeKHR> &modes);
-    void SetSurfaceCapabilities(Surface *pSurface);
+    u64 get_aligned_buffer_memory(BufferUsage buffer_usage, u64 unaligned_size);
 
-    u32 m_PresentQueueIndex = 0;
-    eastl::array<VkDeviceQueueCreateInfo, (u32)CommandType::Count> m_QueueInfos;
-    eastl::vector<VkQueueFamilyProperties> m_QueueProperties;
+    void get_surface_formats(Surface *surface, eastl::vector<VkSurfaceFormatKHR> &formats);
+    void get_present_modes(Surface *surface, eastl::vector<VkPresentModeKHR> &modes);
+    void set_surface_capabilities(Surface *surface);
 
-    PhysicalDevicePropertySet m_PropertySet = {};
-    VkPhysicalDevice m_pHandle = VK_NULL_HANDLE;
+    u32 m_present_queue_index = 0;
+    eastl::array<VkDeviceQueueCreateInfo, (u32)CommandType::Count> m_queue_infos = {};
+    eastl::vector<VkQueueFamilyProperties> m_queue_properties = {};
+
+    PhysicalDevicePropertySet m_property_set = {};
+    VkPhysicalDevice m_handle = VK_NULL_HANDLE;
 };
 LR_ASSIGN_OBJECT_TYPE(PhysicalDevice, VK_OBJECT_TYPE_PHYSICAL_DEVICE);
 
@@ -95,42 +94,40 @@ LR_TYPEOP_ARITHMETIC(MemoryFlag, MemoryFlag, |);
 
 struct DeviceMemoryDesc
 {
-    AllocatorType m_Type = AllocatorType::Linear;
-    MemoryFlag m_Flags = MemoryFlag::Device;
-    u64 m_Size = 0;
+    AllocatorType m_type = AllocatorType::Linear;
+    MemoryFlag m_flags = MemoryFlag::Device;
+    u64 m_size = 0;
+    u32 m_max_allocations = 0;
 };
 
 struct DeviceMemory : APIObject
 {
-    u64 AlignBufferMemory(BufferUsage usage, u64 initialSize);
-
     virtual ~DeviceMemory() = default;
-    virtual void Init(u64 memSize) = 0;
-    virtual u64 Allocate(u64 dataSize, u64 alignment, u64 &allocatorData) = 0;
-    virtual void Free(u64 allocatorData) = 0;
+    virtual void create(u64 mem_size, u32 max_allocations) = 0;
+    virtual u64 allocate_memory(u64 data_size, u64 alignment, u64 &allocator_data) = 0;
+    virtual void free_memory(u64 allocator_data) = 0;
 
-    void *m_pMappedMemory = nullptr;
-    PhysicalDevice *m_pPhysicalDevice = nullptr;  // Device where it's allocated from
-    VkDeviceMemory m_pHandle = VK_NULL_HANDLE;
+    void *m_mapped_memory = nullptr;
+    VkDeviceMemory m_handle = VK_NULL_HANDLE;
 };
 LR_ASSIGN_OBJECT_TYPE(DeviceMemory, VK_OBJECT_TYPE_DEVICE_MEMORY);
 
 struct TLSFDeviceMemory : DeviceMemory
 {
-    void Init(u64 memSize) override;
-    u64 Allocate(u64 dataSize, u64 alignment, u64 &allocatorData) override;
-    void Free(u64 allocatorData) override;
+    void create(u64 mem_size, u32 max_allocations) override;
+    u64 allocate_memory(u64 dataSize, u64 alignment, u64 &allocator_data) override;
+    void free_memory(u64 allocatorData) override;
 
-    Memory::TLSFAllocatorView m_Allocator = {};
+    Memory::TLSFAllocatorView m_allocator_view = {};
 };
 
 struct LinearDeviceMemory : DeviceMemory
 {
-    void Init(u64 memSize) override;
-    u64 Allocate(u64 dataSize, u64 alignment, u64 &allocatorData) override;
-    void Free(u64 allocatorData) override;
+    void create(u64 mem_size, u32 max_allocations = 0) override;
+    u64 allocate_memory(u64 dataSize, u64 alignment, u64 &allocator_data) override;
+    void free_memory(u64 allocatorData) override;
 
-    Memory::LinearAllocatorView m_AllocatorView = {};
+    Memory::LinearAllocatorView m_allocator_view = {};
 };
 
 }  // namespace lr::Graphics

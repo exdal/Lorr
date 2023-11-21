@@ -5,68 +5,110 @@
 
 namespace lr::Renderer
 {
+/// IMAGES ///
+
 using ImageID = u32;
 constexpr static ImageID ImageNull = ~0;
 
 struct PersistentImageInfo
 {
-    Graphics::Image *m_pImage = nullptr;
-    Graphics::ImageView *m_pImageView = nullptr;
-    TaskAccess::Access m_InitialAccess = TaskAccess::None;
+    Graphics::Image *m_image = nullptr;
+    Graphics::ImageView *m_view = nullptr;
+    TaskAccess::Access m_access = TaskAccess::None;
 };
 
 struct TaskImageInfo
 {
-    Graphics::Image *m_pImage = nullptr;
-    Graphics::ImageView *m_pImageView = nullptr;
-    Graphics::ImageLayout m_LastLayout = Graphics::ImageLayout::Undefined;
-    TaskAccess::Access m_LastAccess = TaskAccess::None;
-    u32 m_LastBatchIndex = 0;
+    Graphics::Image *m_image = nullptr;
+    Graphics::ImageView *m_view = nullptr;
+    Graphics::ImageLayout m_last_layout = Graphics::ImageLayout::Undefined;
+    TaskAccess::Access m_last_access = TaskAccess::None;
+    u32 m_last_batch_index = 0;
+};
+
+/// BUFFERS ///
+
+using BufferID = u32;
+constexpr static BufferID BufferNull = ~0;
+
+struct PersistentBufferInfo
+{
+    Graphics::Buffer *m_buffer = nullptr;
+    TaskAccess::Access m_initial_access = TaskAccess::None;
+};
+
+struct TaskBufferInfo
+{
+    Graphics::Buffer *m_buffer = nullptr;
+    TaskAccess::Access m_last_access = TaskAccess::None;
+    u32 m_last_batch_index = 0;
+};
+
+enum class TaskResourceType
+{
+    Image,
+    Buffer,
 };
 
 struct GenericResource
 {
-    ResourceType m_Type = ResourceType::Buffer;
-    ResourceFlag m_Flags = ResourceFlag::None;
-    Graphics::ImageLayout m_ImageLayout = Graphics::ImageLayout::Undefined;
-    TaskAccess::Access m_Access = TaskAccess::None;
+    TaskResourceType m_type = TaskResourceType::Image;
+    Graphics::ImageLayout m_image_layout = Graphics::ImageLayout::Undefined;
+    TaskAccess::Access m_access = TaskAccess::None;
+
     union
     {
-        ImageID m_ImageID = ImageNull;
+        ImageID m_image_id = ImageNull;
+        BufferID m_buffer_id;
     };
 };
 
 template<
-    TaskAccess::Access _Access = TaskAccess::None,
-    Graphics::ImageLayout _Layout = Graphics::ImageLayout::Undefined,
-    ResourceFlag _Flags = ResourceFlag::None>
+    TaskAccess::Access TAccess = TaskAccess::None,
+    Graphics::ImageLayout TLayout = Graphics::ImageLayout::Undefined>
 struct TaskImageUse : GenericResource
 {
     constexpr TaskImageUse()
     {
-        m_Type = ToResourceType<Graphics::Image>::kType;
-        m_Flags = _Flags;
-        m_ImageLayout = _Layout;
-        m_Access = _Access;
+        m_type = TaskResourceType::Image;
+        m_image_layout = TLayout;
+        m_access = TAccess;
     }
 
     constexpr TaskImageUse(ImageID image)
         : TaskImageUse()
     {
-        m_ImageID = image;
+        m_image_id = image;
     }
 };
 
-// clang-format off
+template<TaskAccess::Access TAccess>
+struct TaskBufferUse : GenericResource
+{
+    constexpr TaskBufferUse()
+    {
+        m_type = TaskResourceType::Buffer;
+        m_access = TAccess;
+    }
+
+    constexpr TaskBufferUse(BufferID buffer)
+        : TaskBufferUse()
+    {
+        m_buffer_id = buffer;
+    }
+};
+
 namespace Preset
 {
-using namespace lr::Graphics;
+    using namespace lr::Graphics;
 
-// Common types
-using SwapChainImage = TaskImageUse<TaskAccess::ColorAttachmentReadWrite, ImageLayout::ColorAttachment, ResourceFlag::SwapChainImage>;
-using ColorAttachment = TaskImageUse<TaskAccess::ColorAttachmentReadWrite, ImageLayout::ColorAttachment>;
-using Present = TaskImageUse<TaskAccess::BottomOfPipe, ImageLayout::Present>;
+    // Common image types
+    using ColorAttachment =
+        TaskImageUse<TaskAccess::ColorAttachmentReadWrite, ImageLayout::ColorAttachment>;
+    using ClearColorAttachment =
+        TaskImageUse<TaskAccess::ColorAttachmentWrite, ImageLayout::ColorAttachment>;
 
+    // Common buffer types
+    using VertexBuffer = TaskBufferUse<TaskAccess::VertexShaderRead>;
 }  // namespace Preset
-// clang-format on
 }  // namespace lr::Renderer

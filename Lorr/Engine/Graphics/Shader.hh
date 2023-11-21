@@ -20,34 +20,34 @@ LR_TYPEOP_ARITHMETIC_INT(ShaderCompileFlag, ShaderCompileFlag, &);
 
 struct Shader : APIObject
 {
-    ShaderStage m_Type = ShaderStage::Vertex;
-    VkShaderModule m_pHandle;
+    ShaderStage m_type = ShaderStage::Vertex;
+    VkShaderModule m_handle;
 };
 LR_ASSIGN_OBJECT_TYPE(Shader, VK_OBJECT_TYPE_SHADER_MODULE);
 
 struct ShaderCompileDesc
 {
-    eastl::string_view m_WorkingDir;
-    eastl::string_view m_Code;
-    ShaderStage m_Type = ShaderStage::Vertex;
-    ShaderCompileFlag m_Flags = ShaderCompileFlag::None;
+    eastl::string_view m_working_dir;
+    eastl::string_view m_code;
+    ShaderStage m_type = ShaderStage::Vertex;
+    ShaderCompileFlag m_flags = ShaderCompileFlag::None;
 };
 
 struct ShaderCompileOutput
 {
-    bool IsValid() { return !m_DataSpv.empty(); }
-    ShaderStage m_Stage = ShaderStage::Vertex;
-    eastl::span<u32> m_DataSpv = {};
+    bool is_valid() { return !m_data_spv.empty(); }
+    ShaderStage m_stage = ShaderStage::Vertex;
+    eastl::span<u32> m_data_spv = {};
 
-    void *m_pProgram = nullptr;
-    void *m_pShader = nullptr;
+    void *m_program = nullptr;
+    void *m_shader = nullptr;
 };
 
 namespace ShaderCompiler
 {
-    void Init();
-    ShaderCompileOutput CompileShader(ShaderCompileDesc *pDesc);
-    void FreeProgram(ShaderCompileOutput &output);
+    void init();
+    ShaderCompileOutput compile_shader(ShaderCompileDesc *desc);
+    void free_program(ShaderCompileOutput &output);
 }  // namespace ShaderCompiler
 
 }  // namespace lr::Graphics

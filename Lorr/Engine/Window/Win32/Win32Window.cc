@@ -15,23 +15,23 @@ namespace lr
 {
 
 static LRESULT CALLBACK LRWindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
-void Win32Window::Init(const WindowDesc &desc)
+void Win32Window::init(const WindowDesc &desc)
 {
     ZoneScoped;
 
-    m_UsingMonitor = desc.m_CurrentMonitor;
-    m_pInstance = GetModuleHandleA(NULL);
+    m_using_monitor = desc.m_current_monitor;
+    m_instance = GetModuleHandleA(NULL);
 
-    InitDisplays();
+    init_displays();
 
-    SystemMetrics::Display *pCurrentDisplay = GetDisplay(m_UsingMonitor);
-    if (!pCurrentDisplay)
+    SystemMetrics::Display *current_display = get_display(m_using_monitor);
+    if (!current_display)
     {
-        LOG_CRITICAL("DISPLAY{} is not available?", m_UsingMonitor + 1);
+        LOG_CRITICAL("DISPLAY{} is not available?", m_using_monitor + 1);
         return;
     }
 
-    LOG_TRACE("Creating WIN32 window \"{}\"<{}, {}>", desc.m_Title, desc.m_Width, desc.m_Height);
+    LOG_TRACE("Creating WIN32 window \"{}\"<{}, {}>", desc.m_title, desc.m_width, desc.m_height);
 
     WNDCLASSEX wc;
     ZeroMemory(&wc, sizeof(WNDCLASSEX));
@@ -40,7 +40,7 @@ void Win32Window::Init(const WindowDesc &desc)
     wc.lpfnWndProc = LRWindowProc;
     wc.cbClsExtra = 0;
     wc.cbWndExtra = 0;
-    wc.hInstance = (HINSTANCE)m_pInstance;
+    wc.hInstance = (HINSTANCE)m_instance;
     wc.hIcon = LoadIcon(0, IDI_APPLICATION);
     wc.hCursor = LoadCursor(0, IDC_ARROW);
     wc.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);
@@ -52,10 +52,10 @@ void Win32Window::Init(const WindowDesc &desc)
     RegisterClassEx(&wc);
 
     DWORD style = (WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_POPUP | WS_VISIBLE);
-    i32 windowPosX = pCurrentDisplay->m_PosX;
-    i32 windowPosY = pCurrentDisplay->m_PosY;
-    i32 windowWidth = desc.m_Width;
-    i32 windowHeight = desc.m_Height;
+    i32 windowPosX = current_display->m_pos_x;
+    i32 windowPosY = current_display->m_pos_y;
+    i32 windowWidth = desc.m_width;
+    i32 windowHeight = desc.m_height;
     i32 adjustedWidth = windowWidth;
     i32 adjustedHeight = windowHeight;
 
@@ -63,10 +63,10 @@ void Win32Window::Init(const WindowDesc &desc)
     {
         style = WS_POPUP | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
 
-        windowWidth = pCurrentDisplay->m_ResW;
-        windowHeight = pCurrentDisplay->m_ResH;
+        windowWidth = current_display->m_res_w;
+        windowHeight = current_display->m_res_h;
 
-        m_IsFullscreen = true;
+        m_is_fullscreen = true;
     }
     else
     {
@@ -83,15 +83,15 @@ void Win32Window::Init(const WindowDesc &desc)
 
         if (desc.m_Flags & WindowFlag::Centered)
         {
-            windowPosX += (pCurrentDisplay->m_ResW / 2) - (adjustedWidth / 2);
-            windowPosY += (pCurrentDisplay->m_ResH / 2) - (adjustedHeight / 2);
+            windowPosX += (current_display->m_res_w / 2) - (adjustedWidth / 2);
+            windowPosY += (current_display->m_res_h / 2) - (adjustedHeight / 2);
         }
     }
 
-    m_pHandle = CreateWindowExA(
+    m_handle = CreateWindowExA(
         0,
         wc.lpszClassName,
-        desc.m_Title.data(),
+        desc.m_title.data(),
         style,
         windowPosX,
         windowPosY,
@@ -99,23 +99,23 @@ void Win32Window::Init(const WindowDesc &desc)
         adjustedHeight,
         nullptr,
         nullptr,
-        (HINSTANCE)m_pInstance,
+        (HINSTANCE)m_instance,
         this);
 
-    SetWindowLongPtrA((HWND)m_pHandle, 0, (LONG_PTR)this);
+    SetWindowLongPtrA((HWND)m_handle, 0, (LONG_PTR)this);
 
     i32 swFlags = SW_SHOW;
     if (desc.m_Flags & WindowFlag::Maximized)
         swFlags = SW_SHOWMAXIMIZED;
 
-    ShowWindow((HWND)m_pHandle, swFlags);
-    UpdateWindow((HWND)m_pHandle);  // call WM_PAINT
+    ShowWindow((HWND)m_handle, swFlags);
+    UpdateWindow((HWND)m_handle);  // call WM_PAINT
 
-    m_Width = windowWidth;
-    m_Height = windowHeight;
+    m_width = windowWidth;
+    m_height = windowHeight;
 }
 
-void Win32Window::InitDisplays()
+void Win32Window::init_displays()
 {
     ZoneScoped;
 
@@ -135,26 +135,26 @@ void Win32Window::InitDisplays()
         EnumDisplayDevices(displayDevice.DeviceName, 0, &monitorName, 0);
 
         SystemMetrics::Display display = {
-            .m_Name = monitorName.DeviceString,
-            .m_ResW = devMode.dmPelsWidth,
-            .m_ResH = devMode.dmPelsHeight,
-            .m_PosX = devMode.dmPosition.x,
-            .m_PosY = devMode.dmPosition.y,
-            .m_RefreshRate = devMode.dmDisplayFrequency,
+            .m_name = monitorName.DeviceString,
+            .m_res_w = devMode.dmPelsWidth,
+            .m_res_h = devMode.dmPelsHeight,
+            .m_pos_x = devMode.dmPosition.x,
+            .m_pos_y = devMode.dmPosition.y,
+            .m_refresh_rate = devMode.dmDisplayFrequency,
         };
 
-        m_SystemMetrics.m_Displays[currentDevice] = display;
+        m_system_metrics.m_displays[currentDevice] = display;
     }
 }
 
-void Win32Window::SetCursor(WindowCursor cursor)
+void Win32Window::set_cursor(WindowCursor cursor)
 {
     ZoneScoped;
 
-    if (m_CurrentCursor == WindowCursor::Hidden && cursor != WindowCursor::Hidden)
+    if (m_current_cursor == WindowCursor::Hidden && cursor != WindowCursor::Hidden)
         ::ShowCursor(true);
 
-    m_CurrentCursor = cursor;
+    m_current_cursor = cursor;
 
     if (cursor == WindowCursor::Hidden)
     {
@@ -181,119 +181,119 @@ LRESULT CALLBACK LRWindowProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
     ZoneScoped;
 
-    Win32Window *pWindow = (Win32Window *)GetWindowLongPtrA(hWnd, 0);
-    if (!pWindow)  // User data is not set yet, return default proc
+    Win32Window *window = (Win32Window *)GetWindowLongPtrA(hWnd, 0);
+    if (!window)  // User data is not set yet, return default proc
         return DefWindowProcA(hWnd, msg, wParam, lParam);
 
-    Engine *pEngine = Engine::Get();
-    EngineEventData eventData = {};
+    Engine *engine = Engine::get();
+    EngineEventData event_data = {};
 
     switch (msg)
     {
         case WM_CLOSE:
         case WM_DESTROY:
         case WM_QUIT:
-            pWindow->m_ShouldClose = true;
-            pEngine->PushEvent(ENGINE_EVENT_QUIT, eventData);
+            window->m_should_close = true;
+            engine->push_event(ENGINE_EVENT_QUIT, event_data);
             break;
 
         case WM_LBUTTONDOWN:
-            eventData.m_Mouse = LR_KEY_LMOUSE;
-            eventData.m_MouseState = LR_MOUSE_STATE_DOWN;
-            pEngine->PushEvent(ENGINE_EVENT_MOUSE_STATE, eventData);
+            event_data.m_mouse = LR_KEY_LMOUSE;
+            event_data.m_mouse_state = LR_MOUSE_STATE_DOWN;
+            engine->push_event(ENGINE_EVENT_MOUSE_STATE, event_data);
             break;
 
         case WM_LBUTTONUP:
-            eventData.m_Mouse = LR_KEY_LMOUSE;
-            eventData.m_MouseState = LR_MOUSE_STATE_UP;
-            pEngine->PushEvent(ENGINE_EVENT_MOUSE_STATE, eventData);
+            event_data.m_mouse = LR_KEY_LMOUSE;
+            event_data.m_mouse_state = LR_MOUSE_STATE_UP;
+            engine->push_event(ENGINE_EVENT_MOUSE_STATE, event_data);
             break;
 
         case WM_LBUTTONDBLCLK:
-            eventData.m_Mouse = LR_KEY_LMOUSE;
-            eventData.m_MouseState = LR_MOUSE_STATE_DOUBLE_CLICK;
-            pEngine->PushEvent(ENGINE_EVENT_MOUSE_STATE, eventData);
+            event_data.m_mouse = LR_KEY_LMOUSE;
+            event_data.m_mouse_state = LR_MOUSE_STATE_DOUBLE_CLICK;
+            engine->push_event(ENGINE_EVENT_MOUSE_STATE, event_data);
             break;
 
         case WM_RBUTTONDOWN:
-            eventData.m_Mouse = LR_KEY_RMOUSE;
-            eventData.m_MouseState = LR_MOUSE_STATE_DOWN;
-            pEngine->PushEvent(ENGINE_EVENT_MOUSE_STATE, eventData);
+            event_data.m_mouse = LR_KEY_RMOUSE;
+            event_data.m_mouse_state = LR_MOUSE_STATE_DOWN;
+            engine->push_event(ENGINE_EVENT_MOUSE_STATE, event_data);
             break;
 
         case WM_RBUTTONUP:
-            eventData.m_Mouse = LR_KEY_RMOUSE;
-            eventData.m_MouseState = LR_MOUSE_STATE_UP;
-            pEngine->PushEvent(ENGINE_EVENT_MOUSE_STATE, eventData);
+            event_data.m_mouse = LR_KEY_RMOUSE;
+            event_data.m_mouse_state = LR_MOUSE_STATE_UP;
+            engine->push_event(ENGINE_EVENT_MOUSE_STATE, event_data);
             break;
 
         case WM_RBUTTONDBLCLK:
-            eventData.m_Mouse = LR_KEY_RMOUSE;
-            eventData.m_MouseState = LR_MOUSE_STATE_DOUBLE_CLICK;
-            pEngine->PushEvent(ENGINE_EVENT_MOUSE_STATE, eventData);
+            event_data.m_mouse = LR_KEY_RMOUSE;
+            event_data.m_mouse_state = LR_MOUSE_STATE_DOUBLE_CLICK;
+            engine->push_event(ENGINE_EVENT_MOUSE_STATE, event_data);
             break;
 
         case WM_MBUTTONDOWN:
-            eventData.m_Mouse = LR_KEY_MMOUSE;
-            eventData.m_MouseState = LR_MOUSE_STATE_DOWN;
-            pEngine->PushEvent(ENGINE_EVENT_MOUSE_STATE, eventData);
+            event_data.m_mouse = LR_KEY_MMOUSE;
+            event_data.m_mouse_state = LR_MOUSE_STATE_DOWN;
+            engine->push_event(ENGINE_EVENT_MOUSE_STATE, event_data);
             break;
 
         case WM_MBUTTONUP:
-            eventData.m_Mouse = LR_KEY_MMOUSE;
-            eventData.m_MouseState = LR_MOUSE_STATE_UP;
-            pEngine->PushEvent(ENGINE_EVENT_MOUSE_STATE, eventData);
+            event_data.m_mouse = LR_KEY_MMOUSE;
+            event_data.m_mouse_state = LR_MOUSE_STATE_UP;
+            engine->push_event(ENGINE_EVENT_MOUSE_STATE, event_data);
             break;
 
         case WM_MBUTTONDBLCLK:
-            eventData.m_Mouse = LR_KEY_MMOUSE;
-            eventData.m_MouseState = LR_MOUSE_STATE_DOUBLE_CLICK;
-            pEngine->PushEvent(ENGINE_EVENT_MOUSE_STATE, eventData);
+            event_data.m_mouse = LR_KEY_MMOUSE;
+            event_data.m_mouse_state = LR_MOUSE_STATE_DOUBLE_CLICK;
+            engine->push_event(ENGINE_EVENT_MOUSE_STATE, event_data);
             break;
 
         case WM_MOUSEMOVE:
-            eventData.m_MouseX = LOWORD(lParam);
-            eventData.m_MouseY = HIWORD(lParam);
-            pEngine->PushEvent(ENGINE_EVENT_MOUSE_POSITION, eventData);
+            event_data.m_mouse_x = LOWORD(lParam);
+            event_data.m_mouse_y = HIWORD(lParam);
+            engine->push_event(ENGINE_EVENT_MOUSE_POSITION, event_data);
             break;
 
         case WM_KEYDOWN:
-            eventData.m_Key = LR_KEY_NONE;
-            eventData.m_KeyState = LR_KEY_STATE_DOWN;
-            pEngine->PushEvent(ENGINE_EVENT_KEYBOARD_STATE, eventData);
+            event_data.m_key = LR_KEY_NONE;
+            event_data.m_key_state = LR_KEY_STATE_DOWN;
+            engine->push_event(ENGINE_EVENT_KEYBOARD_STATE, event_data);
             break;
 
         case WM_KEYUP:
-            eventData.m_Key = LR_KEY_NONE;
-            eventData.m_KeyState = LR_KEY_STATE_UP;
-            pEngine->PushEvent(ENGINE_EVENT_KEYBOARD_STATE, eventData);
+            event_data.m_key = LR_KEY_NONE;
+            event_data.m_key_state = LR_KEY_STATE_UP;
+            engine->push_event(ENGINE_EVENT_KEYBOARD_STATE, event_data);
             break;
 
         case WM_ENTERSIZEMOVE:
-            pWindow->m_SizeEnded = false;
+            window->m_size_ended = false;
             break;
 
         case WM_EXITSIZEMOVE:
         {
             RECT rc;
-            GetClientRect((HWND)pWindow->m_pHandle, &rc);
+            GetClientRect((HWND)window->m_handle, &rc);
 
-            pWindow->m_SizeEnded = true;
+            window->m_size_ended = true;
 
-            eventData.m_SizeWidth = rc.right;
-            eventData.m_SizeHeight = rc.bottom;
-            pEngine->PushEvent(ENGINE_EVENT_RESIZE, eventData);
+            event_data.m_size_width = rc.right;
+            event_data.m_size_height = rc.bottom;
+            engine->push_event(ENGINE_EVENT_RESIZE, event_data);
 
             break;
         }
 
         case WM_SIZE:
         {
-            if (pWindow->m_SizeEnded && wParam != SIZE_MINIMIZED)
+            if (window->m_size_ended && wParam != SIZE_MINIMIZED)
             {
-                eventData.m_SizeWidth = (u32)LOWORD(lParam);
-                eventData.m_SizeHeight = (u32)HIWORD(lParam);
-                pEngine->PushEvent(ENGINE_EVENT_RESIZE, eventData);
+                event_data.m_size_width = (u32)LOWORD(lParam);
+                event_data.m_size_height = (u32)HIWORD(lParam);
+                engine->push_event(ENGINE_EVENT_RESIZE, event_data);
             }
 
             break;
@@ -303,7 +303,7 @@ LRESULT CALLBACK LRWindowProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
         {
             if (LOWORD(lParam) == 1)
             {
-                pWindow->SetCursor(pWindow->m_CurrentCursor);
+                window->set_cursor(window->m_current_cursor);
                 break;
             }
 
@@ -317,7 +317,7 @@ LRESULT CALLBACK LRWindowProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
     return false;
 }
 
-void Win32Window::Poll()
+void Win32Window::poll()
 {
     ZoneScoped;
 

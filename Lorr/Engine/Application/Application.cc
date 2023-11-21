@@ -9,7 +9,7 @@
 
 namespace lr
 {
-void Application::PreInit(BaseApplicationDesc &desc)
+void Application::create(BaseApplicationDesc &desc)
 {
     ZoneScoped;
     
@@ -22,25 +22,25 @@ void Application::PreInit(BaseApplicationDesc &desc)
     BackTrace::Init();
 #endif 
 
-    m_Name = desc.m_Name;
-    m_Engine.Init(desc.m_EngineDesc);
+    m_name = desc.m_name;
+    m_engine.create(desc.m_engine_desc);
 }
 
-void Application::Run()
+void Application::run()
 {
     ZoneScoped;
 
-    m_Engine.Prepare();
+    m_engine.prepare();
 
     Timer timer;
-    while (!m_Engine.m_ShuttingDown)
+    while (!m_engine.m_shutting_down)
     {
         f32 deltaTime = timer.elapsed();
         timer.reset();
 
-        m_Engine.BeginFrame();
-        Poll(deltaTime);
-        m_Engine.EndFrame();
+        m_engine.begin_frame();
+        poll(deltaTime);
+        m_engine.end_frame();
 
         FrameMark;
     }

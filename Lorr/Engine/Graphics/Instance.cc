@@ -9,44 +9,43 @@
 
 namespace lr::Graphics
 {
-static const char *kppRequiredExtensions[] = {
+static const char *kpp_required_extensions[] = {
     "VK_KHR_surface",
     "VK_KHR_get_physical_device_properties2",
     "VK_KHR_win32_surface",
-#if LR_DEBUG
+#if _DEBUG
     //! Debug extensions, always put it to bottom
     "VK_EXT_debug_utils",
     "VK_EXT_debug_report",
 #endif
 };
 
-static constexpr eastl::span<const char *> kRequiredExtensions(kppRequiredExtensions);
+static constexpr eastl::span<const char *> k_required_extensions(kpp_required_extensions);
 
-bool Instance::Init(InstanceDesc *pDesc)
+bool Instance::create(InstanceDesc *desc)
 {
     constexpr u32 kTypeMem = Memory::MiBToBytes(16);
-    APIAllocator::g_Handle.m_TypeAllocator.Init(kTypeMem, 0x2000);
-    APIAllocator::g_Handle.m_pTypeData = Memory::Allocate<u8>(kTypeMem);
+    APIAllocator::m_g_handle.m_type_allocator.Init(kTypeMem, 0x2000);
+    APIAllocator::m_g_handle.m_type_data = Memory::Allocate<u8>(kTypeMem);
 
-    m_pVulkanLib = VK::LoadVulkan();
-    if (!m_pVulkanLib)
+    m_vulkan_lib = VK::LoadVulkan();
+    if (!m_vulkan_lib)
     {
         LOG_ERROR("Failed to load Vulkan.");
         return false;
     }
 
-    u32 availExtensions = 0;
-    vkEnumerateInstanceExtensionProperties(nullptr, &availExtensions, nullptr);
-    eastl::scoped_array<VkExtensionProperties> pExtensions(
-        new VkExtensionProperties[availExtensions]);
-    vkEnumerateInstanceExtensionProperties(nullptr, &availExtensions, pExtensions.get());
+    u32 avail_extensions = 0;
+    vkEnumerateInstanceExtensionProperties(nullptr, &avail_extensions, nullptr);
+    eastl::scoped_array extensions(new VkExtensionProperties[avail_extensions]);
+    vkEnumerateInstanceExtensionProperties(nullptr, &avail_extensions, extensions.get());
 
-    for (eastl::string_view extension : kRequiredExtensions)
+    for (eastl::string_view extension : k_required_extensions)
     {
         bool found = false;
-        for (u32 i = 0; i < availExtensions; i++)
+        for (u32 i = 0; i < avail_extensions; i++)
         {
-            VkExtensionProperties &properties = pExtensions[i];
+            VkExtensionProperties &properties = extensions[i];
             if (properties.extensionName == extension)
             {
                 found = true;
@@ -67,11 +66,11 @@ bool Instance::Init(InstanceDesc *pDesc)
     VkApplicationInfo appInfo = {
         .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
         .pNext = nullptr,
-        .pApplicationName = pDesc->m_AppName.data(),
-        .applicationVersion = pDesc->m_AppVersion,
-        .pEngineName = pDesc->m_EngineName.data(),
-        .engineVersion = pDesc->m_EngineVersion,
-        .apiVersion = pDesc->m_APIVersion,
+        .pApplicationName = desc->m_app_name.data(),
+        .applicationVersion = desc->m_app_version,
+        .pEngineName = desc->m_engine_name.data(),
+        .engineVersion = desc->m_engine_version,
+        .apiVersion = desc->m_api_version,
     };
 
     VkInstanceCreateInfo createInfo = {
@@ -80,44 +79,43 @@ bool Instance::Init(InstanceDesc *pDesc)
         .pApplicationInfo = &appInfo,
         .enabledLayerCount = 0,
         .ppEnabledLayerNames = nullptr,
-        .enabledExtensionCount = (u32)kRequiredExtensions.size(),
-        .ppEnabledExtensionNames = kRequiredExtensions.data(),
+        .enabledExtensionCount = static_cast<u32>(k_required_extensions.size()),
+        .ppEnabledExtensionNames = k_required_extensions.data(),
     };
-    vkCreateInstance(&createInfo, nullptr, &m_pHandle);
+    vkCreateInstance(&createInfo, nullptr, &m_handle);
 
-    if (!VK::LoadVulkanInstance(m_pHandle))
+    if (!VK::LoadVulkanInstance(m_handle))
         return false;
 
     return true;
 }
 
-PhysicalDevice *Instance::GetPhysicalDevice()
+PhysicalDevice *Instance::get_physical_device()
 {
     ZoneScoped;
 
-    u32 availDeviceCount = 0;
-    vkEnumeratePhysicalDevices(m_pHandle, &availDeviceCount, nullptr);
+    u32 avail_device_count = 0;
+    vkEnumeratePhysicalDevices(m_handle, &avail_device_count, nullptr);
 
-    if (availDeviceCount == 0)
+    if (avail_device_count == 0)
     {
         LOG_ERROR("No GPU with Vulkan support.");
         return nullptr;
     }
 
-    VkPhysicalDevice *ppAvailableDevices = new VkPhysicalDevice[availDeviceCount];
-    vkEnumeratePhysicalDevices(m_pHandle, &availDeviceCount, ppAvailableDevices);
+    VkPhysicalDevice *available_devices = new VkPhysicalDevice[avail_device_count];
+    vkEnumeratePhysicalDevices(m_handle, &avail_device_count, available_devices);
 
-    VkPhysicalDevice pFoundDevice = nullptr;
-    for (u32 i = 0; i < availDeviceCount; i++)
+    VkPhysicalDevice found_device = nullptr;
+    for (u32 i = 0; i < avail_device_count; i++)
     {
-        VkPhysicalDevice &pDevice = ppAvailableDevices[i];
+        VkPhysicalDevice &device = available_devices[i];
         VkPhysicalDeviceProperties properties = {};
-        vkGetPhysicalDeviceProperties(pDevice, &properties);
+        vkGetPhysicalDeviceProperties(device, &properties);
 
-        if (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU
-            && properties.apiVersion >= VK_API_VERSION_1_3)
+        if (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU && properties.apiVersion >= VK_API_VERSION_1_3)
         {
-            pFoundDevice = pDevice;
+            found_device = device;
             LOG_INFO(
                 "GPU: {}(DRIVER: {}, VENDOR: {}, ID: {}) - Vulkan {}",
                 properties.deviceName,
@@ -130,39 +128,57 @@ PhysicalDevice *Instance::GetPhysicalDevice()
         }
     }
 
-    if (!pFoundDevice)
+    if (!found_device && !check_physical_device_extensions(found_device, k_required_extensions))
     {
         LOG_ERROR("No GPU with proper Vulkan feature support.");
         return nullptr;
     }
 
-    PhysicalDevice *pPhysicalDevice = new PhysicalDevice;
-    if (!pPhysicalDevice->Init(pFoundDevice))
+    return new PhysicalDevice(found_device);
+}
+bool Instance::check_physical_device_extensions(VkPhysicalDevice physical_device, eastl::span<const char *> required_extensions)
+{
+    u32 avail_extensions = 0;
+    vkEnumerateDeviceExtensionProperties(physical_device, nullptr, &avail_extensions, nullptr);
+    eastl::scoped_array extension_properties(new VkExtensionProperties[avail_extensions]);
+    vkEnumerateDeviceExtensionProperties(physical_device, nullptr, &avail_extensions, extension_properties.get());
+
+    for (eastl::string_view extension : required_extensions)
     {
-        delete pPhysicalDevice;
-        return nullptr;
+        bool found = false;
+        for (u32 i = 0; i < avail_extensions; i++)
+        {
+            VkExtensionProperties &properties = extension_properties[i];
+            if (properties.extensionName == extension)
+            {
+                found = true;
+                break;
+            }
+        }
+
+        if (found)
+            continue;
+
+        return false;
     }
 
-    return pPhysicalDevice;
+    return true;
 }
 
-Surface *Instance::GetWin32Surface(Win32Window *pWindow)
+Surface *Instance::get_win32_surface(Win32Window *window)
 {
     ZoneScoped;
 
-    VkSurfaceKHR pSurfaceHandle = nullptr;
+    VkSurfaceKHR surface_handle = nullptr;
     VkWin32SurfaceCreateInfoKHR surfaceInfo = {
         .sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR,
         .pNext = nullptr,
-        .hinstance = (HINSTANCE)pWindow->m_pInstance,
-        .hwnd = (HWND)pWindow->m_pHandle,
+        .hinstance = static_cast<HINSTANCE>(window->m_instance),
+        .hwnd = static_cast<HWND>(window->m_handle),
     };
-    vkCreateWin32SurfaceKHR(m_pHandle, &surfaceInfo, nullptr, &pSurfaceHandle);
+    vkCreateWin32SurfaceKHR(m_handle, &surfaceInfo, nullptr, &surface_handle);
 
-    Surface *pSurface = new Surface;
-    pSurface->Init(pSurfaceHandle);
-
-    return pSurface;
+    return new Surface(surface_handle);
 }
 
 }  // namespace lr::Graphics

@@ -53,8 +53,8 @@ struct Device
     VkPipelineCache create_pipeline_cache(u32 initial_data_size = 0, void *initial_data = nullptr);
     PipelineLayout create_pipeline_layout(eastl::span<DescriptorSetLayout> layouts, eastl::span<PushConstantDesc> push_constants);
 
-    Pipeline *create_graphics_pipeline(GraphicsPipelineBuildInfo *build_info);
-    Pipeline *create_compute_pipeline(ComputePipelineBuildInfo *build_info);
+    Pipeline *create_graphics_pipeline(GraphicsPipelineInfo *pipeline_info, PipelineAttachmentInfo *pipeline_attachment_info);
+    Pipeline *create_compute_pipeline(ComputePipelineInfo *pipeline_info);
 
     /// SWAPCHAIN ///
     SwapChain *create_swap_chain(Surface *surface, SwapChainDesc *desc);

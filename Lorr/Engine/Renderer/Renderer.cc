@@ -1,6 +1,5 @@
 #include "Renderer.hh"
 
-#include "Core/Config.hh"
 #include "Window/Win32/Win32Window.hh"
 
 #include "TaskGraph.hh"
@@ -20,8 +19,7 @@ struct ClearSwapChain
     {
         auto list = tc.get_command_list();
 
-        auto attachment = tc.as_color_attachment(
-            m_uses.m_color_attachment, Graphics::ColorClearValue(0.1f, 0.1f, 0.1f, 1.0f));
+        auto attachment = tc.as_color_attachment(m_uses.m_color_attachment, Graphics::ColorClearValue(0.1f, 0.1f, 0.1f, 1.0f));
         auto render_size = tc.get_image_size(m_uses.m_color_attachment);
         Graphics::RenderingBeginDesc renderingDesc = {
             .m_render_area = { 0, 0, render_size.x, render_size.y },
@@ -43,13 +41,13 @@ void FrameManager::create(const FrameManagerDesc &desc)
     m_renderer = desc.renderer;
 
     auto device = m_renderer->m_device;
-    auto scImages = device->get_swap_chain_images(m_renderer->m_swap_chain);
-    for (int i = 0; i < m_frame_count; ++i)
+    auto sc_images = device->get_swap_chain_images(m_renderer->m_swap_chain);
+    for (int i = 0; i < m_frame_count; i++)
     {
         m_acquire_semas.push_back(device->create_binary_semaphore());
         m_present_semas.push_back(device->create_binary_semaphore());
-        m_images.push_back(scImages[i]);
-        Graphics::ImageViewDesc viewDesc = { .m_image = scImages[i] };
+        m_images.push_back(sc_images[i]);
+        Graphics::ImageViewDesc viewDesc = { .m_image = sc_images[i] };
         m_views.push_back(device->create_image_view(&viewDesc));
     }
 }
@@ -84,8 +82,7 @@ eastl::pair<Graphics::Image *, Graphics::ImageView *> FrameManager::get_image(u3
     return { m_images[idx], m_views[idx] };
 }
 
-eastl::pair<Graphics::Semaphore *, Graphics::Semaphore *> FrameManager::get_semaphores(
-    u32 idx)
+eastl::pair<Graphics::Semaphore *, Graphics::Semaphore *> FrameManager::get_semaphores(u32 idx)
 {
     return { m_acquire_semas[idx], m_present_semas[idx] };
 }
@@ -98,14 +95,14 @@ void Renderer::create(BaseWindow *window)
     /// TODO: Change them later
     u32 frame_count = 3;
 
-    Graphics::InstanceDesc instanceDesc = {
+    Graphics::InstanceDesc instance_desc = {
         .m_app_name = "Lorr",
         .m_app_version = 1,
         .m_engine_name = "Lorr",
         .m_api_version = VK_API_VERSION_1_3,
     };
 
-    if (!m_instance.create(&instanceDesc))
+    if (!m_instance.create(&instance_desc))
         return;
 
     m_physical_device = m_instance.get_physical_device();
@@ -185,10 +182,8 @@ void Renderer::draw()
 {
     ZoneScoped;
 
-    auto [acquire_sema, present_sema] =
-        m_frame_manager.get_semaphores(m_frame_manager.m_current_frame);
-    auto [current_frame_image, current_frame_view] =
-        m_frame_manager.get_image(m_frame_manager.m_current_frame);
+    auto [acquire_sema, present_sema] = m_frame_manager.get_semaphores(m_frame_manager.m_current_frame);
+    auto [current_frame_image, current_frame_view] = m_frame_manager.get_image(m_frame_manager.m_current_frame);
 
     u32 acquired_index = 0;
     auto result = m_device->acquire_image(m_swap_chain, acquire_sema, acquired_index);
@@ -202,11 +197,7 @@ void Renderer::draw()
         .m_pPresentSema = present_sema,
     });
 
-    m_device->Present(
-        m_swap_chain,
-        m_frame_manager.m_current_frame,
-        present_sema,
-        m_task_graph.m_graphics_queue);
+    m_device->Present(m_swap_chain, m_frame_manager.m_current_frame, present_sema, m_task_graph.m_graphics_queue);
     m_frame_manager.next_frame();
 }
 

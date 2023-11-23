@@ -1,36 +1,46 @@
-// Created on Tuesday May 9th 2023 by exdal
-// Last modified on Monday August 28th 2023 by exdal
-
 #include "Pipeline.hh"
 
 namespace lr::Graphics
 {
 PushConstantDesc::PushConstantDesc(ShaderStage stage, u32 offset, u32 size)
+    : VkPushConstantRange()
 {
-    this->stageFlags = (VkShaderStageFlags)stage;
+    this->stageFlags = static_cast<VkShaderStageFlags>(stage);
     this->offset = offset;
     this->size = size;
 }
+PipelineShaderStageInfo::PipelineShaderStageInfo(Shader *shader, eastl::string_view entry_point)
+    : VkPipelineShaderStageCreateInfo(VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO)
+{
+    this->stage = static_cast<VkShaderStageFlagBits>(shader->m_type);
+    this->module = shader->m_handle;
+    this->pName = entry_point.data();
+}
 
-constexpr VkBlendFactor kBlendFactorLUT[] = {
-    VK_BLEND_FACTOR_ZERO,                      // Zero
-    VK_BLEND_FACTOR_ONE,                       // One
-    VK_BLEND_FACTOR_SRC_COLOR,                 // SrcColor
-    VK_BLEND_FACTOR_ONE_MINUS_SRC_COLOR,       // InvSrcColor
-    VK_BLEND_FACTOR_SRC_ALPHA,                 // SrcAlpha
-    VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,       // InvSrcAlpha
-    VK_BLEND_FACTOR_DST_ALPHA,                 // DestAlpha
-    VK_BLEND_FACTOR_ONE_MINUS_DST_ALPHA,       // InvDestAlpha
-    VK_BLEND_FACTOR_DST_COLOR,                 // DestColor
-    VK_BLEND_FACTOR_ONE_MINUS_DST_COLOR,       // InvDestColor
-    VK_BLEND_FACTOR_SRC_ALPHA_SATURATE,        // SrcAlphaSat
-    VK_BLEND_FACTOR_CONSTANT_COLOR,            // ConstantColor
-    VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_COLOR,  // InvConstantColor
-    VK_BLEND_FACTOR_SRC1_COLOR,                // Src1Color
-    VK_BLEND_FACTOR_ONE_MINUS_SRC1_COLOR,      // InvSrc1Color
-    VK_BLEND_FACTOR_SRC1_ALPHA,                // Src1Alpha
-    VK_BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA,      // InvSrc1Alpha
-};
+PipelineAttachmentInfo::PipelineAttachmentInfo(eastl::span<Format> color_attachment_formats, Format depth_attachment_format)
+    : VkPipelineRenderingCreateInfo(VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO)
+{
+    this->colorAttachmentCount = color_attachment_formats.size();
+    this->pColorAttachmentFormats = reinterpret_cast<VkFormat *>(color_attachment_formats.data());
+    this->depthAttachmentFormat = static_cast<VkFormat>(depth_attachment_format);
+}
+
+PipelineVertexLayoutBindingInfo::PipelineVertexLayoutBindingInfo(u32 binding_id, u32 stride, bool is_instanced)
+    : VkVertexInputBindingDescription()
+{
+    this->binding = binding_id;
+    this->stride = stride;
+    this->inputRate = !is_instanced ? VK_VERTEX_INPUT_RATE_VERTEX : VK_VERTEX_INPUT_RATE_INSTANCE;
+}
+
+PipelineVertexAttribInfo::PipelineVertexAttribInfo(u32 target_binding, u32 index, Format format, u32 offset)
+    : VkVertexInputAttributeDescription()
+{
+    this->binding = target_binding;
+    this->location = index;
+    this->format = static_cast<VkFormat>(format);
+    this->offset = offset;
+}
 
 ColorBlendAttachment::ColorBlendAttachment(
     bool enabled,
@@ -41,15 +51,16 @@ ColorBlendAttachment::ColorBlendAttachment(
     BlendFactor src_blend_alpha,
     BlendFactor dst_blend_alpha,
     BlendOp blend_op_alpha)
+    : VkPipelineColorBlendAttachmentState()
 {
     this->blendEnable = enabled;
-    this->colorWriteMask = (VkColorComponentFlags)write_mask;
-    this->srcColorBlendFactor = kBlendFactorLUT[(u32)src_blend];
-    this->dstColorBlendFactor = kBlendFactorLUT[(u32)dst_blend];
-    this->colorBlendOp = (VkBlendOp)blend_op;
-    this->srcAlphaBlendFactor = kBlendFactorLUT[(u32)src_blend_alpha];
-    this->dstAlphaBlendFactor = kBlendFactorLUT[(u32)dst_blend_alpha];
-    this->alphaBlendOp = (VkBlendOp)blend_op_alpha;
+    this->colorWriteMask = static_cast<VkColorComponentFlags>(write_mask);
+    this->srcColorBlendFactor = static_cast<VkBlendFactor>(src_blend);
+    this->dstColorBlendFactor = static_cast<VkBlendFactor>(dst_blend);
+    this->colorBlendOp = static_cast<VkBlendOp>(blend_op);
+    this->srcAlphaBlendFactor = static_cast<VkBlendFactor>(src_blend_alpha);
+    this->dstAlphaBlendFactor = static_cast<VkBlendFactor>(dst_blend_alpha);
+    this->alphaBlendOp = static_cast<VkBlendOp>(blend_op_alpha);
 }
 
 }  // namespace lr::Graphics

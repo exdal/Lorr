@@ -344,44 +344,45 @@ struct DepthClearValue
 
 enum class BlendFactor : u32
 {
-    Zero = 0,
-    One,
-    SrcColor,
-    InvSrcColor,
-    SrcAlpha,
-    InvSrcAlpha,
-    DstAlpha,
-    InvDstAlpha,
-    DstColor,
-    InvDstColor,
-    SrcAlphaSat,
-    ConstantFactor,
-    InvConstantFactor,
-    Src1MinusColor,
-    InvSrc1MinusColor,
-    Src1MinusAlpha,
-    InvSrc1MinusAlpha,
+
+    Zero = VK_BLEND_FACTOR_ZERO,
+    One = VK_BLEND_FACTOR_ONE,
+    SrcColor = VK_BLEND_FACTOR_SRC_COLOR,
+    InvSrcColor = VK_BLEND_FACTOR_ONE_MINUS_SRC_COLOR,
+    SrcAlpha = VK_BLEND_FACTOR_SRC_ALPHA,
+    InvSrcAlpha = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+    DstAlpha = VK_BLEND_FACTOR_DST_ALPHA,
+    InvDstAlpha = VK_BLEND_FACTOR_ONE_MINUS_DST_ALPHA,
+    DstColor = VK_BLEND_FACTOR_DST_COLOR,
+    InvDstColor = VK_BLEND_FACTOR_ONE_MINUS_DST_COLOR,
+    SrcAlphaSat = VK_BLEND_FACTOR_SRC_ALPHA_SATURATE,
+    ConstantColor = VK_BLEND_FACTOR_CONSTANT_COLOR,
+    InvConstantColor = VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_COLOR,
+    Src1Color = VK_BLEND_FACTOR_SRC1_COLOR,
+    InvSrc1Color = VK_BLEND_FACTOR_ONE_MINUS_SRC1_COLOR,
+    Src1Alpha = VK_BLEND_FACTOR_SRC1_ALPHA,
+    InvSrc1Alpha = VK_BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA,
 };
 
 enum class BlendOp : u32
 {
-    Add = 0,
-    Subtract,
-    ReverseSubtract,
-    Min,
-    Max,
+    Add = VK_BLEND_OP_ADD,
+    Subtract = VK_BLEND_OP_SUBTRACT,
+    ReverseSubtract = VK_BLEND_OP_REVERSE_SUBTRACT,
+    Min = VK_BLEND_OP_MIN,
+    Max = VK_BLEND_OP_MAX,
 };
 
 enum class StencilOp : u32
 {
-    Keep = 0,
-    Zero,
-    Replace,
-    IncrAndClamp,
-    DecrAndClamp,
-    Invert,
-    IncrAndWrap,
-    DecrAndWrap,
+    Keep = VK_STENCIL_OP_KEEP,
+    Zero = VK_STENCIL_OP_ZERO,
+    Replace = VK_STENCIL_OP_REPLACE,
+    IncrAndClamp = VK_STENCIL_OP_INCREMENT_AND_CLAMP,
+    DecrAndClamp = VK_STENCIL_OP_DECREMENT_AND_CLAMP,
+    Invert = VK_STENCIL_OP_INVERT,
+    IncrAndWrap = VK_STENCIL_OP_INCREMENT_AND_WRAP,
+    DecrAndWrap = VK_STENCIL_OP_DECREMENT_AND_WRAP,
 };
 
 enum class ColorMask : u32
@@ -395,6 +396,34 @@ enum class ColorMask : u32
     RGBA = R | G | B | A,
 };
 LR_TYPEOP_ARITHMETIC(ColorMask, ColorMask, |);
+
+enum class PipelineDynamicState : u32
+{
+    Viewport = VK_DYNAMIC_STATE_VIEWPORT,
+    Scissor = VK_DYNAMIC_STATE_SCISSOR,
+    LineWidth = VK_DYNAMIC_STATE_LINE_WIDTH,
+    DepthBias = VK_DYNAMIC_STATE_DEPTH_BIAS,
+    BlendConstants = VK_DYNAMIC_STATE_BLEND_CONSTANTS,
+    DepthBounds = VK_DYNAMIC_STATE_DEPTH_BOUNDS,
+    StencilCompareMask = VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK,
+    StencilWriteMask = VK_DYNAMIC_STATE_STENCIL_WRITE_MASK,
+    StencilReference = VK_DYNAMIC_STATE_STENCIL_REFERENCE,
+    CullMode = VK_DYNAMIC_STATE_CULL_MODE,
+    FrontFace = VK_DYNAMIC_STATE_FRONT_FACE,
+    PrimitiveType = VK_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY,
+    ViewportAndCount = VK_DYNAMIC_STATE_VIEWPORT_WITH_COUNT,
+    ScissorAndCount = VK_DYNAMIC_STATE_SCISSOR_WITH_COUNT,
+    InputBindingStride = VK_DYNAMIC_STATE_VERTEX_INPUT_BINDING_STRIDE,
+    DepthTestEnable = VK_DYNAMIC_STATE_DEPTH_TEST_ENABLE,
+    DepthWriteEnable = VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE,
+    DepthCompareOp = VK_DYNAMIC_STATE_DEPTH_COMPARE_OP,
+    DepthBoundsTestEnable = VK_DYNAMIC_STATE_DEPTH_BOUNDS_TEST_ENABLE,
+    StencilTestEnable = VK_DYNAMIC_STATE_STENCIL_TEST_ENABLE,
+    StencilOp = VK_DYNAMIC_STATE_STENCIL_OP,
+    RasterDiscardEnable = VK_DYNAMIC_STATE_RASTERIZER_DISCARD_ENABLE,
+    DepthBiasEnable = VK_DYNAMIC_STATE_DEPTH_BIAS_ENABLE,
+    PrimitiveRestartEnable = VK_DYNAMIC_STATE_PRIMITIVE_RESTART_ENABLE,
+};
 
 enum class ShaderStage : u32
 {

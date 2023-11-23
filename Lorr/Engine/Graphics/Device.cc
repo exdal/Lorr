@@ -224,9 +224,7 @@ PipelineLayout Device::create_pipeline_layout(eastl::span<DescriptorSetLayout> l
 {
     ZoneScoped;
 
-    PipelineLayout pLayout = nullptr;
-
-    VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo = {
+    VkPipelineLayoutCreateInfo pipeline_layout_create_info = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
         .pNext = nullptr,
         .setLayoutCount = (u32)layouts.size(),
@@ -234,64 +232,39 @@ PipelineLayout Device::create_pipeline_layout(eastl::span<DescriptorSetLayout> l
         .pushConstantRangeCount = (u32)push_constants.size(),
         .pPushConstantRanges = push_constants.data(),
     };
-    vkCreatePipelineLayout(m_handle, &pipelineLayoutCreateInfo, nullptr, &pLayout);
+
+    PipelineLayout pLayout = nullptr;
+    vkCreatePipelineLayout(m_handle, &pipeline_layout_create_info, nullptr, &pLayout);
 
     return pLayout;
 }
 
-Pipeline *Device::create_graphics_pipeline(GraphicsPipelineBuildInfo *build_info)
+Pipeline *Device::create_graphics_pipeline(GraphicsPipelineInfo *pipeline_info, PipelineAttachmentInfo *pipeline_attachment_info)
 {
     ZoneScoped;
 
-    Pipeline *pPipeline = new Pipeline;
-
-    /// BOUND RENDER TARGETS -----------------------------------------------------
-
-    VkPipelineRenderingCreateInfo renderingInfo = {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
-        .pNext = nullptr,
-        .viewMask = 0,
-        .colorAttachmentCount = (u32)build_info->m_color_attachment_formats.size(),
-        .pColorAttachmentFormats = (VkFormat *)build_info->m_color_attachment_formats.data(),
-        .depthAttachmentFormat = (VkFormat)build_info->m_depth_attachment_format,
-    };
-
-    /// BOUND SHADER STAGES ------------------------------------------------------
-
-    VkPipelineShaderStageCreateInfo pShaderStageInfos[(u32)ShaderStage::Count] = {};
-    for (u32 i = 0; i < build_info->m_shaders.size(); i++)
-    {
-        Shader *pShader = build_info->m_shaders[i];
-
-        VkPipelineShaderStageCreateInfo &info = pShaderStageInfos[i];
-        info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        info.pNext = nullptr;
-        info.stage = (VkShaderStageFlagBits)pShader->m_type;
-        info.module = pShader->m_handle;
-        info.pName = "main";
-    }
-
     /// INPUT LAYOUT  ------------------------------------------------------------
 
-    VkPipelineVertexInputStateCreateInfo inputLayoutInfo = {
+    VkPipelineVertexInputStateCreateInfo input_layout_info = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
         .pNext = nullptr,
+        .vertexBindingDescriptionCount = static_cast<u32>(pipeline_info->m_vertex_binding_infos.size()),
+        .pVertexBindingDescriptions = pipeline_info->m_vertex_binding_infos.data(),
+        .vertexAttributeDescriptionCount = static_cast<u32>(pipeline_info->m_vertex_attrib_infos.size()),
+        .pVertexAttributeDescriptions = pipeline_info->m_vertex_attrib_infos.data(),
     };
-
-    // VkVertexInputBindingDescription inputBindingInfo = {};
-    // VkVertexInputAttributeDescription pAttribInfos[Limits::MaxVertexAttribs] = {};
 
     /// INPUT ASSEMBLY -----------------------------------------------------------
 
-    VkPipelineInputAssemblyStateCreateInfo inputAssemblyInfo = {
+    VkPipelineInputAssemblyStateCreateInfo input_assembly_info = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
         .pNext = nullptr,
-        .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        .topology = static_cast<VkPrimitiveTopology>(pipeline_info->m_primitive_type),
     };
 
     /// TESSELLATION -------------------------------------------------------------
 
-    VkPipelineTessellationStateCreateInfo tessellationInfo = {
+    VkPipelineTessellationStateCreateInfo tessellation_info = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO,
         .pNext = nullptr,
         .patchControlPoints = 0,  // TODO
@@ -299,7 +272,7 @@ Pipeline *Device::create_graphics_pipeline(GraphicsPipelineBuildInfo *build_info
 
     /// VIEWPORT -----------------------------------------------------------------
 
-    VkPipelineViewportStateCreateInfo viewportInfo = {
+    VkPipelineViewportStateCreateInfo viewport_info = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
         .pNext = nullptr,
         .viewportCount = 1,
@@ -310,124 +283,112 @@ Pipeline *Device::create_graphics_pipeline(GraphicsPipelineBuildInfo *build_info
 
     /// RASTERIZER ---------------------------------------------------------------
 
-    VkPipelineRasterizationStateCreateInfo rasterizerInfo = {
+    VkPipelineRasterizationStateCreateInfo rasterizer_info = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
         .pNext = nullptr,
-        .depthClampEnable = build_info->m_enable_depth_clamp,
-        .polygonMode = (VkPolygonMode)build_info->m_set_fill_mode,
-        .cullMode = (VkCullModeFlags)build_info->m_set_cull_mode,
-        .frontFace = (VkFrontFace)!build_info->m_front_face_ccw,
-        .depthBiasEnable = build_info->m_enable_depth_bias,
-        .depthBiasConstantFactor = build_info->m_depth_bias_factor,
-        .depthBiasClamp = build_info->m_depth_bias_clamp,
-        .depthBiasSlopeFactor = build_info->m_depth_slope_factor,
+        .depthClampEnable = pipeline_info->m_enable_depth_clamp,
+        .polygonMode = static_cast<VkPolygonMode>(pipeline_info->m_fill_mode),
+        .cullMode = static_cast<VkCullModeFlags>(pipeline_info->m_cull_mode),
+        .frontFace = static_cast<VkFrontFace>(!pipeline_info->m_front_face_ccw),
+        .depthBiasEnable = pipeline_info->m_enable_depth_bias,
+        .depthBiasConstantFactor = pipeline_info->m_depth_bias_factor,
+        .depthBiasClamp = pipeline_info->m_depth_bias_clamp,
+        .depthBiasSlopeFactor = pipeline_info->m_depth_slope_factor,
         .lineWidth = 1.0,
     };
 
     /// MULTISAMPLE --------------------------------------------------------------
 
-    VkPipelineMultisampleStateCreateInfo multisampleInfo = {
+    VkPipelineMultisampleStateCreateInfo multisample_info = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
         .pNext = nullptr,
-        .rasterizationSamples = (VkSampleCountFlagBits)(1 << (build_info->m_multi_sample_bit_count - 1)),
-        .alphaToCoverageEnable = build_info->m_enable_alpha_to_coverage,
-        .alphaToOneEnable = false,
+        .rasterizationSamples = static_cast<VkSampleCountFlagBits>(1 << (pipeline_info->m_multisample_bit_count - 1)),
+        .alphaToCoverageEnable = pipeline_info->m_enable_alpha_to_coverage,
+        .alphaToOneEnable = pipeline_info->m_enable_alpha_to_one,
     };
 
     /// DEPTH STENCIL ------------------------------------------------------------
 
-    VkPipelineDepthStencilStateCreateInfo depthStencilInfo = {
+    VkPipelineDepthStencilStateCreateInfo depth_stencil_info = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
         .pNext = nullptr,
-        .depthTestEnable = build_info->m_enable_depth_test,
-        .depthWriteEnable = build_info->m_enable_depth_write,
-        .depthCompareOp = (VkCompareOp)build_info->m_depth_compare_op,
-        .depthBoundsTestEnable = false,
-        .stencilTestEnable = build_info->m_enable_stencil_test,
+        .depthTestEnable = pipeline_info->m_enable_depth_test,
+        .depthWriteEnable = pipeline_info->m_enable_depth_write,
+        .depthCompareOp = static_cast<VkCompareOp>(pipeline_info->m_depth_compare_op),
+        .depthBoundsTestEnable = pipeline_info->m_enable_depth_bounds_test,
+        .stencilTestEnable = pipeline_info->m_enable_stencil_test,
 
-        .front.compareOp = (VkCompareOp)build_info->m_stencil_front_face_op.m_compare_func,
-        .front.depthFailOp = (VkStencilOp)build_info->m_stencil_front_face_op.m_depth_fail,
-        .front.failOp = (VkStencilOp)build_info->m_stencil_front_face_op.m_fail,
-        .front.passOp = (VkStencilOp)build_info->m_stencil_front_face_op.m_pass,
+        .front.compareOp = static_cast<VkCompareOp>(pipeline_info->m_stencil_front_face_op.m_compare_func),
+        .front.depthFailOp = static_cast<VkStencilOp>(pipeline_info->m_stencil_front_face_op.m_depth_fail),
+        .front.failOp = static_cast<VkStencilOp>(pipeline_info->m_stencil_front_face_op.m_fail),
+        .front.passOp = static_cast<VkStencilOp>(pipeline_info->m_stencil_front_face_op.m_pass),
 
-        .back.compareOp = (VkCompareOp)build_info->m_stencil_back_face_op.m_compare_func,
-        .back.depthFailOp = (VkStencilOp)build_info->m_stencil_back_face_op.m_depth_fail,
-        .back.failOp = (VkStencilOp)build_info->m_stencil_back_face_op.m_fail,
-        .back.passOp = (VkStencilOp)build_info->m_stencil_back_face_op.m_pass,
+        .back.compareOp = static_cast<VkCompareOp>(pipeline_info->m_stencil_back_face_op.m_compare_func),
+        .back.depthFailOp = static_cast<VkStencilOp>(pipeline_info->m_stencil_back_face_op.m_depth_fail),
+        .back.failOp = static_cast<VkStencilOp>(pipeline_info->m_stencil_back_face_op.m_fail),
+        .back.passOp = static_cast<VkStencilOp>(pipeline_info->m_stencil_back_face_op.m_pass),
     };
 
     /// COLOR BLEND --------------------------------------------------------------
 
-    VkPipelineColorBlendStateCreateInfo colorBlendInfo = {
+    VkPipelineColorBlendStateCreateInfo color_blend_info = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
         .pNext = nullptr,
         .logicOpEnable = false,
-        .attachmentCount = (u32)build_info->m_blend_attachments.size(),
-        .pAttachments = build_info->m_blend_attachments.data(),
+        .attachmentCount = (u32)pipeline_info->m_blend_attachments.size(),
+        .pAttachments = pipeline_info->m_blend_attachments.data(),
     };
 
     /// DYNAMIC STATE ------------------------------------------------------------
 
-    constexpr static eastl::array<VkDynamicState, 2> kDynamicStates = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
-
-    VkPipelineDynamicStateCreateInfo dynamicStateInfo = {
+    VkPipelineDynamicStateCreateInfo dynamic_state_info = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
         .pNext = nullptr,
-        .dynamicStateCount = kDynamicStates.size(),
-        .pDynamicStates = kDynamicStates.data(),
+        .dynamicStateCount = static_cast<u32>(pipeline_info->m_dynamic_states.size()),
+        .pDynamicStates = reinterpret_cast<VkDynamicState *>(pipeline_info->m_dynamic_states.data()),
     };
 
     /// GRAPHICS PIPELINE --------------------------------------------------------
 
     VkGraphicsPipelineCreateInfo createInfo = {
         .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-        .pNext = &renderingInfo,
+        .pNext = pipeline_attachment_info,
         .flags = VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT,
-        .stageCount = (u32)build_info->m_shaders.size(),
-        .pStages = pShaderStageInfos,
-        .pVertexInputState = &inputLayoutInfo,
-        .pInputAssemblyState = &inputAssemblyInfo,
-        .pTessellationState = &tessellationInfo,
-        .pViewportState = &viewportInfo,
-        .pRasterizationState = &rasterizerInfo,
-        .pMultisampleState = &multisampleInfo,
-        .pDepthStencilState = &depthStencilInfo,
-        .pColorBlendState = &colorBlendInfo,
-        .pDynamicState = &dynamicStateInfo,
-        .layout = build_info->m_layout,
+        .stageCount = static_cast<u32>(pipeline_info->m_shader_stages.size()),
+        .pStages = pipeline_info->m_shader_stages.data(),
+        .pVertexInputState = &input_layout_info,
+        .pInputAssemblyState = &input_assembly_info,
+        .pTessellationState = &tessellation_info,
+        .pViewportState = &viewport_info,
+        .pRasterizationState = &rasterizer_info,
+        .pMultisampleState = &multisample_info,
+        .pDepthStencilState = &depth_stencil_info,
+        .pColorBlendState = &color_blend_info,
+        .pDynamicState = &dynamic_state_info,
+        .layout = pipeline_info->m_layout,
     };
 
-    vkCreateGraphicsPipelines(m_handle, m_pipeline_cache, 1, &createInfo, nullptr, &pPipeline->m_handle);
+    VkPipeline pipeline_handle = nullptr;
+    vkCreateGraphicsPipelines(m_handle, m_pipeline_cache, 1, &createInfo, nullptr, &pipeline_handle);
 
-    return pPipeline;
+    return new Pipeline(pipeline_handle);
 }
 
-Pipeline *Device::create_compute_pipeline(ComputePipelineBuildInfo *build_info)
+Pipeline *Device::create_compute_pipeline(ComputePipelineInfo *pipeline_info)
 {
     ZoneScoped;
 
-    Pipeline *pPipeline = new Pipeline;
-
-    VkPipelineShaderStageCreateInfo shaderStage = {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-        .pNext = nullptr,
-        .flags = 0,
-        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
-        .module = build_info->m_shader->m_handle,
-        .pName = "main",
-        .pSpecializationInfo = nullptr,
-    };
-
-    VkComputePipelineCreateInfo createInfo = {
+    VkComputePipelineCreateInfo pipeline_create_info = {
         .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
         .pNext = nullptr,
-        .stage = shaderStage,
-        .layout = build_info->m_layout,
+        .stage = pipeline_info->m_shader_stage,
+        .layout = pipeline_info->m_layout,
     };
 
-    vkCreateComputePipelines(m_handle, m_pipeline_cache, 1, &createInfo, nullptr, &pPipeline->m_handle);
+    VkPipeline pipeline_handle = nullptr;
+    vkCreateComputePipelines(m_handle, m_pipeline_cache, 1, &pipeline_create_info, nullptr, &pipeline_handle);
 
-    return pPipeline;
+    return new Pipeline(pipeline_handle);
 }
 
 SwapChain *Device::create_swap_chain(Surface *surface, SwapChainDesc *desc)
@@ -462,7 +423,7 @@ SwapChain *Device::create_swap_chain(Surface *surface, SwapChainDesc *desc)
     };
 
     wait_for_work();
-    auto result = (APIResult)vkCreateSwapchainKHR(m_handle, &swapChainInfo, nullptr, &pSwapChain->m_handle);
+    auto result = static_cast<APIResult>(vkCreateSwapchainKHR(m_handle, &swapChainInfo, nullptr, &pSwapChain->m_handle));
     if (result != APIResult::Success)
     {
         LOG_ERROR("Failed to create SwapChain! {}", static_cast<i32>(result));

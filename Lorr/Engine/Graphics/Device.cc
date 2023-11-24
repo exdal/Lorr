@@ -208,16 +208,16 @@ VkPipelineCache Device::create_pipeline_cache(u32 initial_data_size, void *initi
 {
     ZoneScoped;
 
-    VkPipelineCache pHandle = nullptr;
-
-    VkPipelineCacheCreateInfo createInfo = {
+    VkPipelineCacheCreateInfo create_info = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO,
         .initialDataSize = initial_data_size,
         .pInitialData = initial_data,
     };
-    vkCreatePipelineCache(m_handle, &createInfo, nullptr, &pHandle);
 
-    return pHandle;
+    VkPipelineCache handle = nullptr;
+    vkCreatePipelineCache(m_handle, &create_info, nullptr, &handle);
+
+    return handle;
 }
 
 PipelineLayout Device::create_pipeline_layout(eastl::span<DescriptorSetLayout> layouts, eastl::span<PushConstantDesc> push_constants)
@@ -227,9 +227,9 @@ PipelineLayout Device::create_pipeline_layout(eastl::span<DescriptorSetLayout> l
     VkPipelineLayoutCreateInfo pipeline_layout_create_info = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
         .pNext = nullptr,
-        .setLayoutCount = (u32)layouts.size(),
+        .setLayoutCount = static_cast<u32>(layouts.size()),
         .pSetLayouts = layouts.data(),
-        .pushConstantRangeCount = (u32)push_constants.size(),
+        .pushConstantRangeCount = static_cast<u32>(push_constants.size()),
         .pPushConstantRanges = push_constants.data(),
     };
 
@@ -350,7 +350,7 @@ Pipeline *Device::create_graphics_pipeline(GraphicsPipelineInfo *pipeline_info, 
 
     /// GRAPHICS PIPELINE --------------------------------------------------------
 
-    VkGraphicsPipelineCreateInfo createInfo = {
+    VkGraphicsPipelineCreateInfo pipeline_create_info = {
         .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
         .pNext = pipeline_attachment_info,
         .flags = VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT,
@@ -369,7 +369,7 @@ Pipeline *Device::create_graphics_pipeline(GraphicsPipelineInfo *pipeline_info, 
     };
 
     VkPipeline pipeline_handle = nullptr;
-    vkCreateGraphicsPipelines(m_handle, m_pipeline_cache, 1, &createInfo, nullptr, &pipeline_handle);
+    vkCreateGraphicsPipelines(m_handle, m_pipeline_cache, 1, &pipeline_create_info, nullptr, &pipeline_handle);
 
     return new Pipeline(pipeline_handle);
 }
@@ -403,12 +403,12 @@ SwapChain *Device::create_swap_chain(Surface *surface, SwapChainDesc *desc)
     pSwapChain->m_color_space = desc->m_color_space;
     pSwapChain->m_present_mode = desc->m_present_mode;
 
-    VkSwapchainCreateInfoKHR swapChainInfo = {
+    VkSwapchainCreateInfoKHR swap_chain_info = {
         .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
         .pNext = nullptr,
         .surface = surface->m_handle,
         .minImageCount = pSwapChain->m_frame_count,
-        .imageFormat = (VkFormat)pSwapChain->m_image_format,
+        .imageFormat = static_cast<VkFormat>(pSwapChain->m_image_format),
         .imageColorSpace = pSwapChain->m_color_space,
         .imageExtent = { pSwapChain->m_width, pSwapChain->m_height },
         .imageArrayLayers = 1,
@@ -423,7 +423,7 @@ SwapChain *Device::create_swap_chain(Surface *surface, SwapChainDesc *desc)
     };
 
     wait_for_work();
-    auto result = static_cast<APIResult>(vkCreateSwapchainKHR(m_handle, &swapChainInfo, nullptr, &pSwapChain->m_handle));
+    auto result = static_cast<APIResult>(vkCreateSwapchainKHR(m_handle, &swap_chain_info, nullptr, &pSwapChain->m_handle));
     if (result != APIResult::Success)
     {
         LOG_ERROR("Failed to create SwapChain! {}", static_cast<i32>(result));
@@ -440,6 +440,7 @@ void Device::delete_swap_chain(SwapChain *swap_chain)
 
     wait_for_work();
     vkDestroySwapchainKHR(m_handle, swap_chain->m_handle, nullptr);
+
     delete swap_chain;
 }
 
@@ -447,16 +448,16 @@ ls::ref_array<Image *> Device::get_swap_chain_images(SwapChain *swap_chain)
 {
     ZoneScoped;
 
-    u32 imageCount = swap_chain->m_frame_count;
-    ls::ref_array ppImages(new Image *[imageCount]);
-    ls::ref_array ppImageHandles(new VkImage[imageCount]);
-    vkGetSwapchainImagesKHR(m_handle, swap_chain->m_handle, &imageCount, ppImageHandles.get());
+    u32 image_count = swap_chain->m_frame_count;
+    ls::ref_array images(new Image *[image_count]);
+    ls::ref_array image_handles(new VkImage[image_count]);
+    vkGetSwapchainImagesKHR(m_handle, swap_chain->m_handle, &image_count, image_handles.get());
 
-    for (u32 i = 0; i < imageCount; i++)
+    for (u32 i = 0; i < image_count; i++)
     {
-        Image *&pImage = ppImages[i];
+        Image *&pImage = images[i];
         pImage = new Image;
-        pImage->m_handle = ppImageHandles[i];
+        pImage->m_handle = image_handles[i];
         pImage->m_width = swap_chain->m_width;
         pImage->m_height = swap_chain->m_height;
         pImage->m_data_size = ~0;
@@ -467,7 +468,7 @@ ls::ref_array<Image *> Device::get_swap_chain_images(SwapChain *swap_chain)
         SetObjectName(pImage, _FMT("Swap Chain Image {}", i));
     }
 
-    return ppImages;
+    return images;
 }
 
 void Device::wait_for_work()

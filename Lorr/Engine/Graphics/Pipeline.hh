@@ -62,9 +62,6 @@ struct PipelineVertexAttribInfo : VkVertexInputAttributeDescription
 using PipelineLayout = VkPipelineLayout;
 LR_ASSIGN_OBJECT_TYPE(PipelineLayout, VK_OBJECT_TYPE_PIPELINE_LAYOUT);
 
-// TODO: Indirect drawing.
-// TODO: Instances.
-// TODO: MSAA.
 struct GraphicsPipelineInfo
 {
     // Vertex input state

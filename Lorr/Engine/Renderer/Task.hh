@@ -63,7 +63,7 @@ struct TaskWrapper : Task
     TaskWrapper(const TTask &task)
         : m_task(task)
     {
-        m_name = TTask::task_name;
+        m_name = TTask::m_task_name;
         m_generic_resources = { (GenericResource *)&task.m_uses, resource_count };
 #if _DEBUG
         for (auto &resource : m_generic_resources)

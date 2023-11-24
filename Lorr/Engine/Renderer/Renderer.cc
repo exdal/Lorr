@@ -6,9 +6,10 @@
 
 namespace lr::Renderer
 {
-struct ClearSwapChain
+using namespace Graphics;
+struct Triangle
 {
-    constexpr static eastl::string_view task_name = "ClearSwapChain";
+    constexpr static eastl::string_view m_task_name = "Triangle";
 
     struct Uses
     {
@@ -19,14 +20,14 @@ struct ClearSwapChain
     {
         auto list = tc.get_command_list();
 
-        auto attachment = tc.as_color_attachment(m_uses.m_color_attachment, Graphics::ColorClearValue(0.1f, 0.1f, 0.1f, 1.0f));
+        auto attachment = tc.as_color_attachment(m_uses.m_color_attachment, ColorClearValue(0.1f, 0.1f, 0.1f, 1.0f));
         auto render_size = tc.get_image_size(m_uses.m_color_attachment);
-        Graphics::RenderingBeginDesc renderingDesc = {
+        RenderingBeginDesc rendering_desc = {
             .m_render_area = { 0, 0, render_size.x, render_size.y },
             .m_color_attachments = attachment,
         };
 
-        list->begin_rendering(&renderingDesc);
+        list->begin_rendering(&rendering_desc);
         // Le epic pbr rendering
         list->end_rendering();
     }
@@ -131,7 +132,7 @@ void Renderer::create(BaseWindow *window)
 
     m_swap_chain_image = m_task_graph.use_persistent_image({});
 
-    m_task_graph.add_task<ClearSwapChain>({
+    m_task_graph.add_task<Triangle>({
         .m_uses = { .m_color_attachment = m_swap_chain_image },
     });
     m_task_graph.present_task(m_swap_chain_image);

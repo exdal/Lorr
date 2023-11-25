@@ -171,7 +171,7 @@ void TaskGraph::present_task(ImageID back_buffer_id)
 {
     ZoneScoped;
 
-    if (m_batches.size() == 0)
+    if (m_batches.empty())
         return;
 
     auto &last_batch = m_batches.back();
@@ -204,7 +204,7 @@ void TaskGraph::execute(const TaskGraphExecuteDesc &desc)
     TaskAccess::Access last_execution_access = {};
     for (auto &batch : m_batches)
     {
-        TaskCommandList task_list(list);
+        TaskCommandList task_list = list;
 
         if (batch.m_execution_access != TaskAccess::None)
         {

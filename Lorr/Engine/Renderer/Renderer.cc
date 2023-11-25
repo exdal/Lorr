@@ -6,7 +6,6 @@
 
 namespace lr::Renderer
 {
-using namespace Graphics;
 struct Triangle
 {
     constexpr static eastl::string_view m_task_name = "Triangle";
@@ -20,9 +19,9 @@ struct Triangle
     {
         auto list = tc.get_command_list();
 
-        auto attachment = tc.as_color_attachment(m_uses.m_color_attachment, ColorClearValue(0.1f, 0.1f, 0.1f, 1.0f));
+        auto attachment = tc.as_color_attachment(m_uses.m_color_attachment, { 0.1f, 0.1f, 0.1f, 1.0f });
         auto render_size = tc.get_image_size(m_uses.m_color_attachment);
-        RenderingBeginDesc rendering_desc = {
+        Graphics::RenderingBeginDesc rendering_desc = {
             .m_render_area = { 0, 0, render_size.x, render_size.y },
             .m_color_attachments = attachment,
         };
@@ -158,7 +157,7 @@ void Renderer::refresh_frame(u32 width, u32 height)
         .m_width = width,
         .m_height = height,
         .m_frame_count = 3,
-        .m_format = Graphics::Format::RGBA8_UNORM,
+        .m_format = Graphics::Format::R8G8B8A8_UNORM,
         .m_color_space = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR,
         .m_present_mode = VK_PRESENT_MODE_MAILBOX_KHR,
     };

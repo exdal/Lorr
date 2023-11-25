@@ -102,34 +102,92 @@ LR_TYPEOP_ARITHMETIC_INT(DescriptorSetLayoutFlag, DescriptorSetLayoutFlag, &);
 
 enum class Format : u32
 {
+    // Format: CB_T
+    // C = Component, B = bit count, T = type
+
+    // Generic types -- component dependant types
     Unknown = VK_FORMAT_UNDEFINED,
-    RGBA8_UNORM = VK_FORMAT_R8G8B8A8_UNORM,
-    RGBA8_SRGBF = VK_FORMAT_R8G8B8A8_SRGB,
-    BGRA8_UNORM = VK_FORMAT_B8G8R8A8_UNORM,
-    RGBA16_SFLOAT = VK_FORMAT_R16G16B16A16_SFLOAT,
-    RGBA32_SFLOAD = VK_FORMAT_R32G32B32A32_SFLOAT,
-    R32_UINT = VK_FORMAT_R32_UINT,
+
     R32_SFLOAT = VK_FORMAT_R32_SFLOAT,
+    R32_SINT = VK_FORMAT_R32_SINT,
+    R32_UINT = VK_FORMAT_R32_UINT,
+
+    R32G32_SFLOAT = VK_FORMAT_R32G32_SFLOAT,
+    R32G32_SINT = VK_FORMAT_R32G32_SINT,
+    R32G32_UINT = VK_FORMAT_R32G32_UINT,
+
+    R32G32B32_SFLOAT = VK_FORMAT_R32G32B32_SFLOAT,
+    R32G32B32_SINT = VK_FORMAT_R32G32B32_SINT,
+    R32G32B32_UINT = VK_FORMAT_R32G32B32_UINT,
+
+    R8G8B8A8_UNORM = VK_FORMAT_R8G8B8A8_UNORM,
+    R8G8B8A8_INT = VK_FORMAT_R8G8B8A8_SINT,
+    R8G8B8A8_UINT = VK_FORMAT_R8G8B8A8_UINT,
+    R8G8B8A8_SRGB = VK_FORMAT_R8G8B8A8_SRGB,
+
+    R16G16B16A16_SFLOAT = VK_FORMAT_R16G16B16A16_SFLOAT,
+    R16G16B16A16_SINT = VK_FORMAT_R16G16B16A16_SINT,
+    R16G16B16A16_UINT = VK_FORMAT_R16G16B16A16_UINT,
+
+    R32G32B32A32_SFLOAT = VK_FORMAT_R32G32B32A32_SFLOAT,
+    R32G32B32A32_SINT = VK_FORMAT_R32G32B32A32_SINT,
+    R32G32B32A32_UINT = VK_FORMAT_R32G32B32A32_UINT,
+
+    B8G8R8A8_UNORM = VK_FORMAT_B8G8R8A8_UNORM,
+    B8G8R8A8_INT = VK_FORMAT_B8G8R8A8_SINT,
+    B8G8R8A8_UINT = VK_FORMAT_B8G8R8A8_UINT,
+    B8G8R8A8_SRGB = VK_FORMAT_B8G8R8A8_SRGB,
+
     D32_SFLOAT = VK_FORMAT_D32_SFLOAT,
-    D32_SFLOAT_S8_UINT = VK_FORMAT_D32_SFLOAT_S8_UINT,
+    D24_SFLOAT_S8_UINT = VK_FORMAT_D24_UNORM_S8_UINT,
+
+    // Vector types -- must index to generic types
+    Float = R32_SFLOAT,
+    Int = R32_SINT,
+    UInt = R32_UINT,
+    Vec2 = R32G32_SFLOAT,
+    Vec2I = R32G32_SINT,
+    Vec2U = R32G32_UINT,
+    Vec3 = R32G32B32_SFLOAT,
+    Vec3I = R32G32B32_SINT,
+    Vec3U = R32G32B32_UINT,
+    Vec4 = R32G32B32A32_SFLOAT,
+    Vec4I = R32G32B32A32_SINT,
+    Vec4U = R32G32B32A32_SINT,
 };
 
-constexpr u32 FormatToSize(Format format)
+constexpr static u32 format_to_size(Format format)
 {
-    constexpr u32 kFormatSizeLUT[] = {
-        0,                // UNKNOWN
-        sizeof(u8) * 4,   // RGBA8F
-        sizeof(u8) * 4,   // RGBA8_SRGBF
-        sizeof(u8) * 4,   // BGRA8F
-        sizeof(u16) * 4,  // RGBA16F
-        sizeof(u32) * 4,  // RGBA32F
-        sizeof(u32),      // R32U
-        sizeof(u32),      // R32F
-        sizeof(u32),      // D32F
-        sizeof(u32),      // D32FS8U
+    constexpr u32 format_size_lut[] = {
+        [(u32)Format::Unknown] = 0,
+        [(u32)Format::R32_SFLOAT] = sizeof(u32),
+        [(u32)Format::R32_SINT] = sizeof(u32),
+        [(u32)Format::R32_UINT] = sizeof(u32),
+        [(u32)Format::R32G32_SFLOAT] = sizeof(u32) * 2,
+        [(u32)Format::R32G32_SINT] = sizeof(u32) * 2,
+        [(u32)Format::R32G32_UINT] = sizeof(u32) * 2,
+        [(u32)Format::R32G32B32_SFLOAT] = sizeof(u32) * 3,
+        [(u32)Format::R32G32B32_SINT] = sizeof(u32) * 3,
+        [(u32)Format::R32G32B32_UINT] = sizeof(u32) * 3,
+        [(u32)Format::R8G8B8A8_UNORM] = sizeof(u8) * 4,
+        [(u32)Format::R8G8B8A8_INT] = sizeof(u8) * 4,
+        [(u32)Format::R8G8B8A8_UINT] = sizeof(u8) * 4,
+        [(u32)Format::R8G8B8A8_SRGB] = sizeof(u8) * 4,
+        [(u32)Format::R16G16B16A16_SFLOAT] = sizeof(u16) * 4,
+        [(u32)Format::R16G16B16A16_SINT] = sizeof(u16) * 4,
+        [(u32)Format::R16G16B16A16_UINT] = sizeof(u16) * 4,
+        [(u32)Format::R32G32B32A32_SFLOAT] = sizeof(u32) * 4,
+        [(u32)Format::R32G32B32A32_SINT] = sizeof(u32) * 4,
+        [(u32)Format::R32G32B32A32_UINT] = sizeof(u32) * 4,
+        [(u32)Format::B8G8R8A8_UNORM] = sizeof(u8) * 4,
+        [(u32)Format::B8G8R8A8_INT] = sizeof(u8) * 4,
+        [(u32)Format::B8G8R8A8_UINT] = sizeof(u8) * 4,
+        [(u32)Format::B8G8R8A8_SRGB] = sizeof(u8) * 4,
+        [(u32)Format::D32_SFLOAT] = sizeof(u32),
+        [(u32)Format::D24_SFLOAT_S8_UINT] = sizeof(u32),
     };
 
-    return kFormatSizeLUT[(u32)format];
+    return format_size_lut[(u32)format];
 }
 
 enum class ImageUsage : u32

@@ -773,7 +773,7 @@ Image *Device::create_image(ImageDesc *desc, DeviceMemory *device_memory)
     Image *pImage = new Image;
 
     if (desc->m_data_size == 0)
-        desc->m_data_size = desc->m_width * desc->m_height * FormatToSize(desc->m_format);
+        desc->m_data_size = desc->m_width * desc->m_height * format_to_size(desc->m_format);
 
     /// ---------------------------------------------- //
 

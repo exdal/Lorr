@@ -4,6 +4,7 @@
 
 #include "APIObject.hh"
 #include "Common.hh"
+#include "Pipeline.hh"
 
 namespace lr::Graphics
 {
@@ -34,6 +35,7 @@ struct ShaderCompileDesc
 
 struct ShaderReflectionDesc
 {
+    bool m_reflect_vertex_layout = false;
     eastl::string_view m_descriptors_start_name = "__lr_descriptors";  //!< Identifier for offset of bindless descriptors
 };
 
@@ -42,6 +44,7 @@ struct ShaderReflectionData
     ShaderStage m_compiled_stage = {};
     u32 m_push_constant_size = 0;       //!< Total size of constant used by user, useful for bindless
     u32 m_descriptor_start_offset = 0;  //!< Reflected bindless start offset
+    eastl::vector<PipelineVertexAttribInfo> m_vertex_attribs = {};
 };
 
 namespace ShaderCompiler

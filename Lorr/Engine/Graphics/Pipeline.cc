@@ -1,5 +1,7 @@
 #include "Pipeline.hh"
 
+#include "Shader.hh"
+
 namespace lr::Graphics
 {
 PushConstantDesc::PushConstantDesc(ShaderStage stage, u32 offset, u32 size)

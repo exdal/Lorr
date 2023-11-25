@@ -6,16 +6,31 @@
 
 namespace lr::Graphics
 {
-constexpr static eastl::wstring_view kHLSLStageMap[] = {
-    [(u32)ShaderStage::Vertex] = L"vs_6_7",
-    [(u32)ShaderStage::Pixel] = L"ps_6_7",
-    [(u32)ShaderStage::Compute] = L"cs_6_7",
-    [(u32)ShaderStage::TessellationControl] = L"hs_6_7",
-    [(u32)ShaderStage::TessellationEvaluation] = L"ds_6_7",
-};
+Format to_vk_format(const spirv_cross::SPIRType &type)
+{
+    using namespace spirv_cross;
+    constexpr static Format float_formats[] = { [0] = Format::Float, [1] = Format::Vec2, [2] = Format::Vec3, [3] = Format::Vec4 };
+    constexpr static Format int_formats[] = { [0] = Format::Int, [1] = Format::Vec2I, [2] = Format::Vec3I, [3] = Format::Vec4I };
+    constexpr static Format uint_formats[] = { [0] = Format::UInt, [1] = Format::Vec2U, [2] = Format::Vec3U, [3] = Format::Vec4U };
+    constexpr static auto format_map[] = { [SPIRType::Float] = float_formats, [SPIRType::Int] = int_formats, [SPIRType::UInt] = uint_formats };
+
+    if (type.columns != 1)
+        return Format::Unknown;  // Skip matrix types
+
+    return format_map[type.basetype][type.vecsize];
+}
+
 eastl::vector<u32> ShaderCompiler::compile_shader(ShaderCompileDesc *desc)
 {
     ZoneScoped;
+
+    constexpr static eastl::wstring_view kHLSLStageMap[] = {
+        [(u32)ShaderStage::Vertex] = L"vs_6_7",
+        [(u32)ShaderStage::Pixel] = L"ps_6_7",
+        [(u32)ShaderStage::Compute] = L"cs_6_7",
+        [(u32)ShaderStage::TessellationControl] = L"hs_6_7",
+        [(u32)ShaderStage::TessellationEvaluation] = L"ds_6_7",
+    };
 
     DxcBuffer shader_buffer = {
         .Ptr = desc->m_code.data(),
@@ -92,13 +107,28 @@ ShaderReflectionData ShaderCompiler::reflect_spirv(ShaderReflectionDesc *desc, e
 
     ShaderReflectionData result = {};
     result.m_compiled_stage = kStageMap[entry_point.model];
-    for (auto range : push_constant_ranges)
+    for (auto &range : push_constant_ranges)
     {
         auto &name = compiler.get_member_name(push_constants_type_id, range.index);
         if (name == desc->m_descriptors_start_name.data())
             result.m_descriptor_start_offset = range.offset;
 
         result.m_push_constant_size += range.range;
+    }
+
+    if (result.m_compiled_stage == ShaderStage::Vertex && desc->m_reflect_vertex_layout)
+    {
+        u32 offset = 0;
+        for (auto &input : resources.stage_inputs)
+        {
+            auto id = input.id;
+            auto &type = compiler.get_type(input.type_id);
+            u32 location = compiler.get_decoration(id, spv::DecorationLocation);
+
+            Format format = to_vk_format(type);
+            result.m_vertex_attribs.push_back(PipelineVertexAttribInfo(0, location, format, offset));
+            offset += format_to_size(format);
+        }
     }
 
     return result;

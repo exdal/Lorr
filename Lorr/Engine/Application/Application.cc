@@ -1,7 +1,4 @@
-// Created on Friday December 9th 2022 by exdal
-// Last modified on Sunday June 25th 2023 by exdal
 #include "Application.hh"
-#include <stdarg.h>
 
 #include "Core/BackTrace.hh"
 #include "OS/Directory.hh"

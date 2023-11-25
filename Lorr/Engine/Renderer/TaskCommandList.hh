@@ -6,7 +6,7 @@ namespace lr::Renderer
 {
 // Simple command batcher were commands like barriers
 // can be stored and submitted at once
-struct TaskCommandList : Graphics::CommandList
+struct TaskCommandList
 {
     // Memory barrier config
     constexpr static usize kMaxMemoryBarriers = 16;

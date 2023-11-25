@@ -5,8 +5,6 @@
 
 #include <EASTL/vector.h>
 
-#include "Shader.hh"
-
 namespace lr::Graphics
 {
 struct ColorBlendAttachment : VkPipelineColorBlendAttachmentState
@@ -35,6 +33,7 @@ struct PushConstantDesc : VkPushConstantRange
     PushConstantDesc(ShaderStage stage, u32 offset, u32 size);
 };
 
+struct Shader;
 struct PipelineShaderStageInfo : VkPipelineShaderStageCreateInfo
 {
     PipelineShaderStageInfo() = default;

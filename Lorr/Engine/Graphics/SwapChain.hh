@@ -23,7 +23,7 @@ struct SwapChain : APIObject
     u32 m_width = 0;
     u32 m_height = 0;
 
-    Format m_image_format = Format::BGRA8_UNORM;
+    Format m_image_format = Format::R8G8B8A8_UNORM;
     VkColorSpaceKHR m_color_space = VK_COLOR_SPACE_MAX_ENUM_KHR;
     VkPresentModeKHR m_present_mode = VK_PRESENT_MODE_MAX_ENUM_KHR;
 

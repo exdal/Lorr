@@ -1,24 +1,3 @@
-[submodule "Vendor/tracy"]
-	path = Vendor/tracy
-	url = https://github.com/wolfpld/tracy.git
-[submodule "Vendor/fastgltf"]
-	path = Vendor/fastgltf
-	url = https://github.com/spnda/fastgltf.git
-[submodule "Vendor/fmt"]
-	path = Vendor/fmt
-	url = https://github.com/fmtlib/fmt.git
-[submodule "Vendor/spdlog"]
-	path = Vendor/spdlog
-	url = https://github.com/gabime/spdlog.git
-[submodule "Vendor/imgui-v"]
-	path = Vendor/imgui-v
-	url = https://github.com/exdal/imgui-v.git
-[submodule "Vendor/glslang"]
-	path = Vendor/glslang
-	url = https://github.com/KhronosGroup/glslang.git
-[submodule "Vendor/Vulkan-Headers"]
-	path = Vendor/Vulkan-Headers
-	url = https://github.com/KhronosGroup/Vulkan-Headers.git
 [submodule "Vendor/EA/EASTL"]
 	path = Vendor/EA/EASTL
 	url = https://github.com/exdal/EASTL.git
@@ -36,10 +15,28 @@
 	url = https://github.com/exdal/EAThread.git
 [submodule "Vendor/simdjson"]
 	path = Vendor/simdjson
-	url = https://github.com/simdjson/simdjson.git
+	url = https://github.com/exdal/simdjson.git
 [submodule "Vendor/glm"]
 	path = Vendor/glm
 	url = https://github.com/g-truc/glm.git
 [submodule "Vendor/SPIRV-Cross"]
 	path = Vendor/SPIRV-Cross
 	url = https://github.com/KhronosGroup/SPIRV-Cross.git
+[submodule "Vendor/fastgltf"]
+	path = Vendor/fastgltf
+	url = https://github.com/exdal/fastgltf.git
+[submodule "Vendor/Vulkan-Headers"]
+	path = Vendor/Vulkan-Headers
+	url = https://github.com/KhronosGroup/Vulkan-Headers.git
+[submodule "Vendor/fmt"]
+	path = Vendor/fmt
+	url = https://github.com/fmtlib/fmt.git
+[submodule "Vendor/spdlog"]
+	path = Vendor/spdlog
+	url = https://github.com/gabime/spdlog.git
+[submodule "Vendor/tracy"]
+	path = Vendor/tracy
+	url = https://github.com/wolfpld/tracy.git
+[submodule "Vendor/imgui-v"]
+	path = Vendor/imgui-v
+	url = https://github.com/exdal/imgui-v.git

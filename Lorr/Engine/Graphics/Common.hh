@@ -319,16 +319,16 @@ union ColorClearValue
         : m_val_uint({ r, g, b, a }){};
     ColorClearValue(i32 r, i32 g, i32 b, i32 a)
         : m_val_int({ r, g, b, a }){};
-    ColorClearValue(const XMFLOAT4 &val)
+    ColorClearValue(const glm::vec4 &val)
         : m_val_float(val){};
-    ColorClearValue(const XMUINT4 &val)
+    ColorClearValue(const glm::uvec4 &val)
         : m_val_uint(val){};
-    ColorClearValue(const XMINT4 &val)
+    ColorClearValue(const glm::ivec4 &val)
         : m_val_int(val){};
 
-    XMFLOAT4 m_val_float = {};
-    XMUINT4 m_val_uint;
-    XMINT4 m_val_int;
+    glm::vec4 m_val_float = {};
+    glm::uvec4 m_val_uint;
+    glm::ivec4 m_val_int;
 };
 
 struct DepthClearValue

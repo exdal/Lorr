@@ -80,7 +80,7 @@ struct BaseWindow
     bool m_size_ended = true;
 
     WindowCursor m_current_cursor = WindowCursor::Arrow;
-    XMUINT2 m_cursor_position = XMUINT2(0, 0);
+    glm::uvec2 m_cursor_position = {};
 
     SystemMetrics m_system_metrics = {};
     u32 m_using_monitor = 0;

@@ -20,7 +20,7 @@
     CONFIG_DEFINE_VAR(u32, GPM_FRAMETIME, (Memory::MiBToBytes(32)));         \
     CONFIG_DEFINE_VAR(u32, GPM_IMAGE_TLSF, (Memory::MiBToBytes(1024)));      \
     CONFIG_DEFINE_VAR(u32, API_SWAPCHAIN_FRAMES, (3));                       \
-    CONFIG_DEFINE_VAR(u32, JM_WORKER_COUNT, (4));
+    CONFIG_DEFINE_VAR(u32, JM_WORKER_COUNT, (1));
 
 #define CONFIG_DEFINE_VAR(type, name, defVal) \
     ConfigVar<CRC32HashOf(#name), type> cfg_##name = ConfigVar<CRC32HashOf(#name), type>(defVal)

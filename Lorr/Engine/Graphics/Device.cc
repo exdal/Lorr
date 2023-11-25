@@ -1,8 +1,5 @@
 #include "Device.hh"
 
-#include "Core/Config.hh"
-#include "Memory/MemoryUtils.hh"
-
 #include "Shader.hh"
 
 namespace lr::Graphics
@@ -204,6 +201,115 @@ void Device::wait_for_semaphore(Semaphore *semaphore, u64 desired_value, u64 tim
     vkWaitSemaphores(m_handle, &waitInfo, timeout);
 }
 
+SwapChain *Device::create_swap_chain(Surface *surface, SwapChainDesc *desc)
+{
+    ZoneScoped;
+
+    SwapChain *pSwapChain = new SwapChain;
+    pSwapChain->m_frame_count = desc->m_frame_count;
+    pSwapChain->m_width = desc->m_width;
+    pSwapChain->m_height = desc->m_height;
+    pSwapChain->m_image_format = desc->m_format;
+    pSwapChain->m_color_space = desc->m_color_space;
+    pSwapChain->m_present_mode = desc->m_present_mode;
+
+    VkSwapchainCreateInfoKHR swap_chain_info = {
+        .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
+        .pNext = nullptr,
+        .surface = surface->m_handle,
+        .minImageCount = pSwapChain->m_frame_count,
+        .imageFormat = static_cast<VkFormat>(pSwapChain->m_image_format),
+        .imageColorSpace = pSwapChain->m_color_space,
+        .imageExtent = { pSwapChain->m_width, pSwapChain->m_height },
+        .imageArrayLayers = 1,
+        .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+        .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE,
+        .queueFamilyIndexCount = 0,
+        .pQueueFamilyIndices = nullptr,
+        .preTransform = surface->get_transform(),
+        .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
+        .presentMode = pSwapChain->m_present_mode,
+        .clipped = VK_TRUE,
+    };
+
+    wait_for_work();
+    auto result = static_cast<APIResult>(vkCreateSwapchainKHR(m_handle, &swap_chain_info, nullptr, &pSwapChain->m_handle));
+    if (result != APIResult::Success)
+    {
+        LOG_ERROR("Failed to create SwapChain! {}", static_cast<i32>(result));
+        delete pSwapChain;
+        return nullptr;
+    }
+
+    return pSwapChain;
+}
+
+void Device::delete_swap_chain(SwapChain *swap_chain)
+{
+    ZoneScoped;
+
+    wait_for_work();
+    vkDestroySwapchainKHR(m_handle, swap_chain->m_handle, nullptr);
+
+    delete swap_chain;
+}
+
+ls::ref_array<Image *> Device::get_swap_chain_images(SwapChain *swap_chain)
+{
+    ZoneScoped;
+
+    u32 image_count = swap_chain->m_frame_count;
+    ls::ref_array images(new Image *[image_count]);
+    ls::ref_array image_handles(new VkImage[image_count]);
+    vkGetSwapchainImagesKHR(m_handle, swap_chain->m_handle, &image_count, image_handles.get());
+
+    for (u32 i = 0; i < image_count; i++)
+    {
+        Image *&pImage = images[i];
+        pImage = new Image;
+        pImage->m_handle = image_handles[i];
+        pImage->m_width = swap_chain->m_width;
+        pImage->m_height = swap_chain->m_height;
+        pImage->m_data_size = ~0;
+        pImage->m_data_offset = ~0;
+        pImage->m_mip_map_levels = 1;
+        pImage->m_format = swap_chain->m_image_format;
+
+        SetObjectName(pImage, _FMT("Swap Chain Image {}", i));
+    }
+
+    return images;
+}
+
+void Device::wait_for_work()
+{
+    ZoneScoped;
+
+    vkDeviceWaitIdle(m_handle);
+}
+
+APIResult Device::acquire_image(SwapChain *swap_chain, Semaphore *semaphore, u32 &image_idx)
+{
+    ZoneScoped;
+
+    return static_cast<APIResult>(vkAcquireNextImageKHR(m_handle, *swap_chain, UINT64_MAX, *semaphore, nullptr, &image_idx));
+}
+
+void Device::present(SwapChain *swap_chain, u32 image_idx, Semaphore *semaphore, CommandQueue *queue)
+{
+    ZoneScoped;
+
+    VkPresentInfoKHR presentInfo = {
+        .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+        .waitSemaphoreCount = 1,
+        .pWaitSemaphores = &semaphore->m_handle,
+        .swapchainCount = 1,
+        .pSwapchains = &swap_chain->m_handle,
+        .pImageIndices = &image_idx,
+    };
+    vkQueuePresentKHR(queue->m_handle, &presentInfo);
+}
+
 VkPipelineCache Device::create_pipeline_cache(u32 initial_data_size, void *initial_data)
 {
     ZoneScoped;
@@ -391,221 +497,19 @@ Pipeline *Device::create_compute_pipeline(ComputePipelineInfo *pipeline_info)
     return new Pipeline(pipeline_handle);
 }
 
-SwapChain *Device::create_swap_chain(Surface *surface, SwapChainDesc *desc)
-{
-    ZoneScoped;
-
-    SwapChain *pSwapChain = new SwapChain;
-    pSwapChain->m_frame_count = desc->m_frame_count;
-    pSwapChain->m_width = desc->m_width;
-    pSwapChain->m_height = desc->m_height;
-    pSwapChain->m_image_format = desc->m_format;
-    pSwapChain->m_color_space = desc->m_color_space;
-    pSwapChain->m_present_mode = desc->m_present_mode;
-
-    VkSwapchainCreateInfoKHR swap_chain_info = {
-        .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
-        .pNext = nullptr,
-        .surface = surface->m_handle,
-        .minImageCount = pSwapChain->m_frame_count,
-        .imageFormat = static_cast<VkFormat>(pSwapChain->m_image_format),
-        .imageColorSpace = pSwapChain->m_color_space,
-        .imageExtent = { pSwapChain->m_width, pSwapChain->m_height },
-        .imageArrayLayers = 1,
-        .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
-        .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE,
-        .queueFamilyIndexCount = 0,
-        .pQueueFamilyIndices = nullptr,
-        .preTransform = surface->get_transform(),
-        .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
-        .presentMode = pSwapChain->m_present_mode,
-        .clipped = VK_TRUE,
-    };
-
-    wait_for_work();
-    auto result = static_cast<APIResult>(vkCreateSwapchainKHR(m_handle, &swap_chain_info, nullptr, &pSwapChain->m_handle));
-    if (result != APIResult::Success)
-    {
-        LOG_ERROR("Failed to create SwapChain! {}", static_cast<i32>(result));
-        delete pSwapChain;
-        return nullptr;
-    }
-
-    return pSwapChain;
-}
-
-void Device::delete_swap_chain(SwapChain *swap_chain)
-{
-    ZoneScoped;
-
-    wait_for_work();
-    vkDestroySwapchainKHR(m_handle, swap_chain->m_handle, nullptr);
-
-    delete swap_chain;
-}
-
-ls::ref_array<Image *> Device::get_swap_chain_images(SwapChain *swap_chain)
-{
-    ZoneScoped;
-
-    u32 image_count = swap_chain->m_frame_count;
-    ls::ref_array images(new Image *[image_count]);
-    ls::ref_array image_handles(new VkImage[image_count]);
-    vkGetSwapchainImagesKHR(m_handle, swap_chain->m_handle, &image_count, image_handles.get());
-
-    for (u32 i = 0; i < image_count; i++)
-    {
-        Image *&pImage = images[i];
-        pImage = new Image;
-        pImage->m_handle = image_handles[i];
-        pImage->m_width = swap_chain->m_width;
-        pImage->m_height = swap_chain->m_height;
-        pImage->m_data_size = ~0;
-        pImage->m_data_offset = ~0;
-        pImage->m_mip_map_levels = 1;
-        pImage->m_format = swap_chain->m_image_format;
-
-        SetObjectName(pImage, _FMT("Swap Chain Image {}", i));
-    }
-
-    return images;
-}
-
-void Device::wait_for_work()
-{
-    ZoneScoped;
-
-    vkDeviceWaitIdle(m_handle);
-}
-
-APIResult Device::acquire_image(SwapChain *swap_chain, Semaphore *semaphore, u32 &image_idx)
-{
-    ZoneScoped;
-
-    return static_cast<APIResult>(vkAcquireNextImageKHR(m_handle, *swap_chain, UINT64_MAX, *semaphore, nullptr, &image_idx));
-}
-
-void Device::Present(SwapChain *swap_chain, u32 image_idx, Semaphore *semaphore, CommandQueue *queue)
-{
-    ZoneScoped;
-
-    VkPresentInfoKHR presentInfo = {
-        .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
-        .waitSemaphoreCount = 1,
-        .pWaitSemaphores = &semaphore->m_handle,
-        .swapchainCount = 1,
-        .pSwapchains = &swap_chain->m_handle,
-        .pImageIndices = &image_idx,
-    };
-    vkQueuePresentKHR(queue->m_handle, &presentInfo);
-}
-
-u64 Device::get_buffer_memory_size(Buffer *buffer, u64 *alignment_out)
-{
-    ZoneScoped;
-
-    VkMemoryRequirements memoryRequirements = {};
-    vkGetBufferMemoryRequirements(m_handle, buffer->m_handle, &memoryRequirements);
-
-    if (alignment_out)
-        *alignment_out = memoryRequirements.alignment;
-
-    return memoryRequirements.size;
-}
-
-u64 Device::get_image_memory_size(Image *image, u64 *alignment_out)
-{
-    ZoneScoped;
-
-    VkMemoryRequirements memoryRequirements = {};
-    vkGetImageMemoryRequirements(m_handle, image->m_handle, &memoryRequirements);
-
-    if (alignment_out)
-        *alignment_out = memoryRequirements.alignment;
-
-    return memoryRequirements.size;
-}
-
-DeviceMemory *Device::create_device_memory(DeviceMemoryDesc *desc, PhysicalDevice *physical_device)
-{
-    ZoneScoped;
-
-    u32 heapIndex = physical_device->get_heap_index((VkMemoryPropertyFlags)desc->m_flags);
-    DeviceMemory *pDeviceMemory = nullptr;
-    switch (desc->m_type)
-    {
-        case AllocatorType::Linear:
-            pDeviceMemory = new LinearDeviceMemory;
-            break;
-        case AllocatorType::TLSF:
-            pDeviceMemory = new TLSFDeviceMemory;
-            break;
-    }
-
-    VkMemoryAllocateInfo allocInfo = {
-        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-        .pNext = nullptr,
-        .allocationSize = desc->m_size,
-        .memoryTypeIndex = heapIndex,
-    };
-    vkAllocateMemory(m_handle, &allocInfo, nullptr, &pDeviceMemory->m_handle);
-
-    pDeviceMemory->create(desc->m_size, desc->m_max_allocations);
-    if (desc->m_flags & MemoryFlag::HostVisible)
-        vkMapMemory(m_handle, pDeviceMemory->m_handle, 0, VK_WHOLE_SIZE, 0, &pDeviceMemory->m_mapped_memory);
-
-    return pDeviceMemory;
-}
-
-void Device::delete_device_memory(DeviceMemory *device_memory)
-{
-    ZoneScoped;
-
-    vkFreeMemory(m_handle, device_memory->m_handle, nullptr);
-    delete device_memory;
-}
-
-void Device::allocate_buffer_memory(DeviceMemory *device_memory, Buffer *buffer, u64 memory_size)
-{
-    ZoneScoped;
-
-    u64 alignment = 0;
-    u64 alignedSize = get_buffer_memory_size(buffer, &alignment);
-    u64 memoryOffset = device_memory->allocate_memory(alignedSize, alignment, buffer->m_allocator_data);
-
-    vkBindBufferMemory(m_handle, buffer->m_handle, device_memory->m_handle, memoryOffset);
-
-    buffer->m_data_size = alignedSize;
-    buffer->m_data_offset = memoryOffset;
-}
-
-void Device::allocate_image_memory(DeviceMemory *device_memory, Image *image, u64 memory_size)
-{
-    ZoneScoped;
-
-    u64 alignment = 0;
-    u64 alignedSize = get_image_memory_size(image, &alignment);
-    u64 memoryOffset = device_memory->allocate_memory(alignedSize, alignment, image->m_allocator_data);
-
-    vkBindImageMemory(m_handle, image->m_handle, device_memory->m_handle, memoryOffset);
-
-    image->m_data_size = alignedSize;
-    image->m_data_offset = memoryOffset;
-}
-
-Shader *Device::create_shader(ShaderStage stage, u32 *data, u64 data_size)
+Shader *Device::create_shader(ShaderStage stage, eastl::span<u32> ir)
 {
     ZoneScoped;
 
     Shader *pShader = new Shader;
     pShader->m_type = stage;
 
-    VkShaderModuleCreateInfo createInfo = {
+    VkShaderModuleCreateInfo create_info = {
         .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-        .codeSize = data_size,
-        .pCode = data,
+        .codeSize = ir.size_bytes(),
+        .pCode = ir.data(),
     };
-    vkCreateShaderModule(m_handle, &createInfo, nullptr, &pShader->m_handle);
+    vkCreateShaderModule(m_handle, &create_info, nullptr, &pShader->m_handle);
 
     return pShader;
 }
@@ -713,6 +617,99 @@ void Device::get_descriptor_data(const DescriptorGetInfo &info, u64 data_size, v
     };
 
     vkGetDescriptorEXT(m_handle, &vkInfo, data_size, data_out);
+}
+
+u64 Device::get_buffer_memory_size(Buffer *buffer, u64 *alignment_out)
+{
+    ZoneScoped;
+
+    VkMemoryRequirements memoryRequirements = {};
+    vkGetBufferMemoryRequirements(m_handle, buffer->m_handle, &memoryRequirements);
+
+    if (alignment_out)
+        *alignment_out = memoryRequirements.alignment;
+
+    return memoryRequirements.size;
+}
+
+u64 Device::get_image_memory_size(Image *image, u64 *alignment_out)
+{
+    ZoneScoped;
+
+    VkMemoryRequirements memoryRequirements = {};
+    vkGetImageMemoryRequirements(m_handle, image->m_handle, &memoryRequirements);
+
+    if (alignment_out)
+        *alignment_out = memoryRequirements.alignment;
+
+    return memoryRequirements.size;
+}
+
+DeviceMemory *Device::create_device_memory(DeviceMemoryDesc *desc, PhysicalDevice *physical_device)
+{
+    ZoneScoped;
+
+    u32 heapIndex = physical_device->get_heap_index((VkMemoryPropertyFlags)desc->m_flags);
+    DeviceMemory *pDeviceMemory = nullptr;
+    switch (desc->m_type)
+    {
+        case AllocatorType::Linear:
+            pDeviceMemory = new LinearDeviceMemory;
+            break;
+        case AllocatorType::TLSF:
+            pDeviceMemory = new TLSFDeviceMemory;
+            break;
+    }
+
+    VkMemoryAllocateInfo allocInfo = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .pNext = nullptr,
+        .allocationSize = desc->m_size,
+        .memoryTypeIndex = heapIndex,
+    };
+    vkAllocateMemory(m_handle, &allocInfo, nullptr, &pDeviceMemory->m_handle);
+
+    pDeviceMemory->create(desc->m_size, desc->m_max_allocations);
+    if (desc->m_flags & MemoryFlag::HostVisible)
+        vkMapMemory(m_handle, pDeviceMemory->m_handle, 0, VK_WHOLE_SIZE, 0, &pDeviceMemory->m_mapped_memory);
+
+    return pDeviceMemory;
+}
+
+void Device::delete_device_memory(DeviceMemory *device_memory)
+{
+    ZoneScoped;
+
+    vkFreeMemory(m_handle, device_memory->m_handle, nullptr);
+    delete device_memory;
+}
+
+void Device::allocate_buffer_memory(DeviceMemory *device_memory, Buffer *buffer, u64 memory_size)
+{
+    ZoneScoped;
+
+    u64 alignment = 0;
+    u64 alignedSize = get_buffer_memory_size(buffer, &alignment);
+    u64 memoryOffset = device_memory->allocate_memory(alignedSize, alignment, buffer->m_allocator_data);
+
+    vkBindBufferMemory(m_handle, buffer->m_handle, device_memory->m_handle, memoryOffset);
+
+    buffer->m_data_size = alignedSize;
+    buffer->m_data_offset = memoryOffset;
+}
+
+void Device::allocate_image_memory(DeviceMemory *device_memory, Image *image, u64 memory_size)
+{
+    ZoneScoped;
+
+    u64 alignment = 0;
+    u64 alignedSize = get_image_memory_size(image, &alignment);
+    u64 memoryOffset = device_memory->allocate_memory(alignedSize, alignment, image->m_allocator_data);
+
+    vkBindImageMemory(m_handle, image->m_handle, device_memory->m_handle, memoryOffset);
+
+    image->m_data_size = alignedSize;
+    image->m_data_offset = memoryOffset;
 }
 
 Buffer *Device::create_buffer(BufferDesc *desc, DeviceMemory *device_memory)

@@ -5,27 +5,31 @@ add_subdirectory(EA/EAStdC)
 add_subdirectory(EA/EAThread)
 add_subdirectory(EA/EASTL)
 
-add_subdirectory(Utility/fmt)
+add_subdirectory(fmt)
 
 set(SPDLOG_FMT_EXTERNAL ON)
-add_subdirectory(Utility/spdlog)
-
-add_subdirectory(Utility/DirectXMath)
-add_subdirectory(Utility/lw)
+add_subdirectory(spdlog)
 
 option(TRACY_ENABLE "Enable profiling" OFF)
 set(FASTGLTF_DOWNLOAD_SIMDJSON OFF)
 
-add_subdirectory(Utility/tracy)
-add_subdirectory(Utility/simdjson)
-add_subdirectory(Utility/fastgltf)
-
-set(SPIRV_SKIP_TESTS ON)
-set(BUILD_EXTERNAL OFF)
-set(ENABLE_GLSLANG_BINARIES OFF)
-set(ENABLE_HLSL OFF)
-add_subdirectory(Graphics/glslang)
-add_subdirectory(Graphics/imgui-v)
-add_subdirectory(Graphics/Vulkan-Headers)
-
+add_subdirectory(tracy)
+add_subdirectory(simdjson)
+add_subdirectory(fastgltf)
+add_subdirectory(imgui-v)
+add_subdirectory(Vulkan-Headers)
 add_subdirectory(xxh)
+
+add_definitions(-DGLM_FORCE_CXX2A)
+add_subdirectory(glm)
+
+set(SPIRV_CROSS_CLI OFF)
+set(SPIRV_CROSS_ENABLE_TESTS OFF)
+set(SPIRV_CROSS_ENABLE_HLSL ON)
+set(SPIRV_CROSS_ENABLE_GLSL ON)
+set(SPIRV_CROSS_ENABLE_MSL OFF)
+set(SPIRV_CROSS_ENABLE_CPP OFF)
+set(SPIRV_CROSS_ENABLE_REFLECT OFF)
+set(SPIRV_CROSS_ENABLE_C_API OFF)
+set(SPIRV_CROSS_ENABLE_UTIL OFF)
+add_subdirectory(SPIRV-Cross)

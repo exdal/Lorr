@@ -1,9 +1,4 @@
-// Created on Thursday September 22nd 2022 by exdal
-// Last modified on Sunday July 16th 2023 by exdal
-
 #pragma once
-
-#include "Memory/Allocator/LinearAllocator.hh"
 
 namespace lr
 {

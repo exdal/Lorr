@@ -198,7 +198,7 @@ void Renderer::draw()
         .m_pPresentSema = present_sema,
     });
 
-    m_device->Present(m_swap_chain, m_frame_manager.m_current_frame, present_sema, m_task_graph.m_graphics_queue);
+    m_device->present(m_swap_chain, m_frame_manager.m_current_frame, present_sema, m_task_graph.m_graphics_queue);
     m_frame_manager.next_frame();
 }
 

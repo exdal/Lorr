@@ -44,7 +44,7 @@ struct RenderingAttachment : VkRenderingAttachmentInfo
 
 struct RenderingBeginDesc
 {
-    XMUINT4 m_render_area = {};
+    glm::uvec4 m_render_area = {};
 
     eastl::span<RenderingAttachment> m_color_attachments;
     RenderingAttachment *m_depth_attachment = nullptr;

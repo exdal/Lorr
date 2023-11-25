@@ -1,7 +1,6 @@
-// Created on Friday October 28th 2022 by exdal
-// Last modified on Monday August 28th 2023 by exdal
-
 #pragma once
+
+#include <EASTL/vector.h>
 
 #include "APIObject.hh"
 #include "Common.hh"
@@ -29,25 +28,25 @@ struct ShaderCompileDesc
 {
     eastl::string_view m_working_dir;
     eastl::string_view m_code;
-    ShaderStage m_type = ShaderStage::Vertex;
+    ShaderStage m_target_stage = ShaderStage::All;
     ShaderCompileFlag m_flags = ShaderCompileFlag::None;
 };
 
-struct ShaderCompileOutput
+struct ShaderReflectionDesc
 {
-    bool is_valid() { return !m_data_spv.empty(); }
-    ShaderStage m_stage = ShaderStage::Vertex;
-    eastl::span<u32> m_data_spv = {};
+    eastl::string_view m_descriptors_start_name = "__lr_descriptors";  //!< Identifier for offset of bindless descriptors
+};
 
-    void *m_program = nullptr;
-    void *m_shader = nullptr;
+struct ShaderReflectionData
+{
+    ShaderStage m_compiled_stage = {};
+    u32 m_push_constant_size = 0;       //!< Total size of constant used by user, useful for bindless
+    u32 m_descriptor_start_offset = 0;  //!< Reflected bindless start offset
 };
 
 namespace ShaderCompiler
 {
-    void init();
-    ShaderCompileOutput compile_shader(ShaderCompileDesc *desc);
-    void free_program(ShaderCompileOutput &output);
+    eastl::vector<u32> compile_shader(ShaderCompileDesc *desc);
+    ShaderReflectionData reflect_spirv(ShaderReflectionDesc *desc, eastl::span<u32> ir);
 }  // namespace ShaderCompiler
-
 }  // namespace lr::Graphics

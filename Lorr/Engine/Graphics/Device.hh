@@ -1,10 +1,4 @@
-// Created on Monday July 18th 2022 by exdal
-// Last modified on Monday August 28th 2023 by exdal
-
 #pragma once
-
-#include <EASTL/fixed_vector.h>
-#include <EASTL/tuple.h>
 
 #include "STL/RefPtr.hh"
 
@@ -49,13 +43,6 @@ struct Device
     void delete_semaphore(Semaphore *semaphore);
     void wait_for_semaphore(Semaphore *semaphore, u64 desired_value, u64 timeout = UINT64_MAX);
 
-    /// PIPELINE ///
-    VkPipelineCache create_pipeline_cache(u32 initial_data_size = 0, void *initial_data = nullptr);
-    PipelineLayout create_pipeline_layout(eastl::span<DescriptorSetLayout> layouts, eastl::span<PushConstantDesc> push_constants);
-
-    Pipeline *create_graphics_pipeline(GraphicsPipelineInfo *pipeline_info, PipelineAttachmentInfo *pipeline_attachment_info);
-    Pipeline *create_compute_pipeline(ComputePipelineInfo *pipeline_info);
-
     /// SWAPCHAIN ///
     SwapChain *create_swap_chain(Surface *surface, SwapChainDesc *desc);
     void delete_swap_chain(SwapChain *swap_chain);
@@ -63,7 +50,25 @@ struct Device
 
     void wait_for_work();
     APIResult acquire_image(SwapChain *swap_chain, Semaphore *semaphore, u32 &image_idx);
-    void Present(SwapChain *swap_chain, u32 image_idx, Semaphore *semaphore, CommandQueue *queue);
+    void present(SwapChain *swap_chain, u32 image_idx, Semaphore *semaphore, CommandQueue *queue);
+
+    /// PIPELINE ///
+    VkPipelineCache create_pipeline_cache(u32 initial_data_size = 0, void *initial_data = nullptr);
+    PipelineLayout create_pipeline_layout(eastl::span<DescriptorSetLayout> layouts, eastl::span<PushConstantDesc> push_constants);
+    Pipeline *create_graphics_pipeline(GraphicsPipelineInfo *pipeline_info, PipelineAttachmentInfo *pipeline_attachment_info);
+    Pipeline *create_compute_pipeline(ComputePipelineInfo *pipeline_info);
+
+    // * Shaders * //
+    Shader *create_shader(ShaderStage stage, eastl::span<u32> ir);
+    void delete_shader(Shader *shader);
+
+    // * Descriptor * //
+    DescriptorSetLayout create_descriptor_set_layout(
+        eastl::span<DescriptorLayoutElement> elements, DescriptorSetLayoutFlag flags = DescriptorSetLayoutFlag::DescriptorBuffer);
+    void delete_descriptor_set_layout(DescriptorSetLayout layout);
+    u64 get_descriptor_set_layout_size(DescriptorSetLayout layout);
+    u64 get_descriptor_set_layout_binding_offset(DescriptorSetLayout layout, u32 binding_id);
+    void get_descriptor_data(const DescriptorGetInfo &info, u64 data_size, void *data_out);
 
     /// RESOURCE ///
     u64 get_buffer_memory_size(Buffer *buffer, u64 *alignment_out = nullptr);
@@ -73,19 +78,6 @@ struct Device
     void delete_device_memory(DeviceMemory *device_memory);
     void allocate_buffer_memory(DeviceMemory *device_memory, Buffer *buffer, u64 memory_size);
     void allocate_image_memory(DeviceMemory *device_memory, Image *image, u64 memory_size);
-
-    // * Shaders * //
-    Shader *create_shader(ShaderStage stage, u32 *data, u64 data_size);
-    void delete_shader(Shader *shader);
-
-    // * Descriptor * //
-
-    DescriptorSetLayout create_descriptor_set_layout(
-        eastl::span<DescriptorLayoutElement> elements, DescriptorSetLayoutFlag flags = DescriptorSetLayoutFlag::DescriptorBuffer);
-    void delete_descriptor_set_layout(DescriptorSetLayout layout);
-    u64 get_descriptor_set_layout_size(DescriptorSetLayout layout);
-    u64 get_descriptor_set_layout_binding_offset(DescriptorSetLayout layout, u32 binding_id);
-    void get_descriptor_data(const DescriptorGetInfo &info, u64 data_size, void *data_out);
 
     // * Buffers * //
     Buffer *create_buffer(BufferDesc *desc, DeviceMemory *device_memory);

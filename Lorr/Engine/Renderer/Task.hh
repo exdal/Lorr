@@ -20,7 +20,7 @@ struct TaskContext
     Graphics::ImageView *get_image_view(GenericResource &use);
     Graphics::RenderingAttachment as_color_attachment(
         GenericResource &use, const Graphics::ColorClearValue &clearVal);
-    XMUINT2 get_image_size(GenericResource &use);
+    glm::uvec2 get_image_size(GenericResource &use);
 
 private:
     TaskGraph &m_task_graph;

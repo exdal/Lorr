@@ -1,26 +1,23 @@
-[submodule "Vendor/Utility/DirectXMath"]
-	path = Vendor/Utility/DirectXMath
-	url = https://github.com/microsoft/DirectXMath.git
-[submodule "Vendor/Utility/tracy"]
-	path = Vendor/Utility/tracy
+[submodule "Vendor/tracy"]
+	path = Vendor/tracy
 	url = https://github.com/wolfpld/tracy.git
-[submodule "Vendor/Utility/fastgltf"]
-	path = Vendor/Utility/fastgltf
+[submodule "Vendor/fastgltf"]
+	path = Vendor/fastgltf
 	url = https://github.com/spnda/fastgltf.git
-[submodule "Vendor/Utility/fmt"]
-	path = Vendor/Utility/fmt
+[submodule "Vendor/fmt"]
+	path = Vendor/fmt
 	url = https://github.com/fmtlib/fmt.git
-[submodule "Vendor/Utility/spdlog"]
-	path = Vendor/Utility/spdlog
+[submodule "Vendor/spdlog"]
+	path = Vendor/spdlog
 	url = https://github.com/gabime/spdlog.git
-[submodule "Vendor/Graphics/imgui-v"]
-	path = Vendor/Graphics/imgui-v
+[submodule "Vendor/imgui-v"]
+	path = Vendor/imgui-v
 	url = https://github.com/exdal/imgui-v.git
-[submodule "Vendor/Graphics/glslang"]
-	path = Vendor/Graphics/glslang
+[submodule "Vendor/glslang"]
+	path = Vendor/glslang
 	url = https://github.com/KhronosGroup/glslang.git
-[submodule "Vendor/Graphics/Vulkan-Headers"]
-	path = Vendor/Graphics/Vulkan-Headers
+[submodule "Vendor/Vulkan-Headers"]
+	path = Vendor/Vulkan-Headers
 	url = https://github.com/KhronosGroup/Vulkan-Headers.git
 [submodule "Vendor/EA/EASTL"]
 	path = Vendor/EA/EASTL
@@ -37,6 +34,12 @@
 [submodule "Vendor/EA/EAThread"]
 	path = Vendor/EA/EAThread
 	url = https://github.com/exdal/EAThread.git
-[submodule "Vendor/Utility/simdjson"]
-	path = Vendor/Utility/simdjson
+[submodule "Vendor/simdjson"]
+	path = Vendor/simdjson
 	url = https://github.com/simdjson/simdjson.git
+[submodule "Vendor/glm"]
+	path = Vendor/glm
+	url = https://github.com/g-truc/glm.git
+[submodule "Vendor/SPIRV-Cross"]
+	path = Vendor/SPIRV-Cross
+	url = https://github.com/KhronosGroup/SPIRV-Cross.git

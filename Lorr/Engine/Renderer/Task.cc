@@ -26,7 +26,7 @@ Graphics::RenderingAttachment TaskContext::as_color_attachment(
         get_image_view(use), use.m_image_layout, load_op, store_op, clearVal);
 }
 
-XMUINT2 TaskContext::get_image_size(GenericResource &use)
+glm::uvec2 TaskContext::get_image_size(GenericResource &use)
 {
     ZoneScoped;
 

@@ -1,23 +1,23 @@
+find_package(Vulkan REQUIRED)
+add_library(dxc UNKNOWN IMPORTED)
+set_target_properties(dxc PROPERTIES IMPORTED_LOCATION $ENV{VULKAN_SDK}/Lib/dxcompiler.lib)
+set_property(TARGET dxc PROPERTY INTERFACE_INCLUDE_DIRECTORIES $ENV{VULKAN_SDK}/Include)
+
 set(LORR_VENDOR
     EASTL
     EAThread
-    DirectXMath
-    lw
     TracyClient
-
     fmt
     spdlog
-
-    glslang 
-    OGLCompiler 
-    OSDependent 
-    SPIRV 
     Vulkan-Headers
     imgui
     simdjson::simdjson
     fastgltf
-
     xxhash
+    glm::glm
+    dxc
+    spirv-cross-core
+    spirv-cross-hlsl
 )
 
 file(GLOB_RECURSE LORR_SOURCE

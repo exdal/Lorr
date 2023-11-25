@@ -1,6 +1,7 @@
 {
     "version": 1,
     "shaders": {
+        "include_dir": "shaders",
         "files": [
             "shaders/imgui.vs",
             "shaders/imgui.fs",

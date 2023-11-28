@@ -7,9 +7,6 @@ add_subdirectory(EA/EASTL)
 
 add_subdirectory(fmt)
 
-set(SPDLOG_FMT_EXTERNAL ON)
-add_subdirectory(spdlog)
-
 option(TRACY_ENABLE "Enable profiling" OFF)
 set(FASTGLTF_DOWNLOAD_SIMDJSON OFF)
 

@@ -31,9 +31,6 @@
 [submodule "Vendor/fmt"]
 	path = Vendor/fmt
 	url = https://github.com/fmtlib/fmt.git
-[submodule "Vendor/spdlog"]
-	path = Vendor/spdlog
-	url = https://github.com/gabime/spdlog.git
 [submodule "Vendor/tracy"]
 	path = Vendor/tracy
 	url = https://github.com/wolfpld/tracy.git

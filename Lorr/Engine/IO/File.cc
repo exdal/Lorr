@@ -1,8 +1,4 @@
-// Created on Thursday September 22nd 2022 by exdal
-// Last modified on Thursday September 14th 2023 by exdal
 #include "File.hh"
-
-// #include "BufferStream.hh"
 
 namespace lr
 {
@@ -11,7 +7,7 @@ FileView::FileView(eastl::string_view path)
     ZoneScoped;
 
     m_pFile = fopen(path.data(), "rb");
-    if (!IsOK())
+    if (!is_ok())
         return;
 
     fseek(m_pFile, 0, SEEK_END);
@@ -23,18 +19,18 @@ FileView::~FileView()
 {
     ZoneScoped;
 
-    Close();
+    close();
 }
 
-void FileView::Close()
+void FileView::close()
 {
     ZoneScoped;
 
-    if (IsOK())
+    if (is_ok())
         fclose(m_pFile);
 }
 
-void FileView::SetOffset(u64 offset)
+void FileView::set_offset(u64 offset)
 {
     ZoneScoped;
 
@@ -43,22 +39,22 @@ void FileView::SetOffset(u64 offset)
 }
 
 template<typename _T>
-bool FileView::Read(_T &data)
+bool FileView::read(_T &data)
 {
     ZoneScoped;
 
-    return Read((u8 *)&data, sizeof(_T));
+    return read((u8 *)&data, sizeof(_T));
 }
 
-bool FileView::Read(eastl::string &str, u64 length)
+bool FileView::read(eastl::string &str, u64 length)
 {
     ZoneScoped;
 
     str.resize(length);
-    return Read((u8 *)str.data(), length);
+    return read((u8 *)str.data(), length);
 }
 
-bool FileView::Read(u8 *pData, u64 dataSize)
+bool FileView::read(u8 *pData, u64 dataSize)
 {
     ZoneScoped;
 
@@ -68,6 +64,16 @@ bool FileView::Read(u8 *pData, u64 dataSize)
     fread(pData, dataSize, 1, m_pFile);
 
     return true;
+}
+
+eastl::string FileUtils::read_file(eastl::string_view path)
+{
+    ZoneScoped;
+
+    FileView file(path);
+    eastl::string result;
+    file.read(result, file.size());
+    return result;
 }
 
 }  // namespace lr

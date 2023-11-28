@@ -29,7 +29,7 @@ struct ShaderCompileDesc
 {
     eastl::string_view m_working_dir;
     eastl::string_view m_code;
-    ShaderStage m_target_stage = ShaderStage::All;
+    ShaderStage m_target_stage = ShaderStage::Count;
     ShaderCompileFlag m_flags = ShaderCompileFlag::None;
 };
 
@@ -45,6 +45,7 @@ struct ShaderReflectionData
     u32 m_push_constant_size = 0;       //!< Total size of constant used by user, useful for bindless
     u32 m_descriptor_start_offset = 0;  //!< Reflected bindless start offset
     eastl::vector<PipelineVertexAttribInfo> m_vertex_attribs = {};
+    eastl::string m_entry_point;
 };
 
 namespace ShaderCompiler

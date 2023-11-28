@@ -43,12 +43,12 @@ constexpr eastl::string_view trim_string(eastl::string_view str, eastl::string_v
     return "";
 }
 
-constexpr eastl::string_view trim_quotes(eastl::string_view str)
+constexpr eastl::string_view trim_quotes(eastl::string_view str, char quote_begin = '\"', char quote_end = '\"')
 {
     if (str.empty())
         return str;
 
-    if (*str.begin() == '\"' && *str.rbegin() == '\"')
+    if (*str.begin() == quote_begin && *str.rbegin() == quote_end)
         return str.substr(1, str.length() - 2);
 
     return str;

@@ -1,30 +1,112 @@
 #include "Shader.hh"
 
+#include "STL/String.hh"
+
 #include <atlbase.h>
 #include <dxc/dxcapi.h>
 #include <spirv_hlsl.hpp>
+#include <Crypt/CRC.hh>
 
 namespace lr::Graphics
 {
+struct PragmaOptions
+{
+    enum PragmaOption : u32
+    {
+        Stage = 0,
+        Count,
+    };
+
+    union PragmaOptionsData
+    {
+        ShaderStage m_stage = ShaderStage::Count;
+    };
+
+    PragmaOptionsData &operator[](PragmaOption i) { return m_vars[static_cast<usize>(i)]; }
+    const PragmaOptionsData &at(PragmaOption i) const { return m_vars[static_cast<usize>(i)]; }
+
+    PragmaOptionsData m_vars[Count] = {
+        [Stage] = ShaderStage::Count,
+    };
+};
+
+PragmaOptions parse_pragma_options(eastl::string_view shader)
+{
+    constexpr static eastl::string_view k_pragma_ident = "#pragma ";
+
+    PragmaOptions options = {};
+
+    eastl::string_view line;
+    while (ls::get_line(shader, line))
+    {
+        if (!line.starts_with(k_pragma_ident))
+            continue;
+
+        line.remove_prefix(k_pragma_ident.length());
+        usize lbracket = line.find('(');
+        usize rbracket = line.find(')');
+        if (lbracket == -1 && rbracket == -1)
+            continue;
+
+        eastl::string_view option = line.substr(0, lbracket);
+        eastl::string_view value = line.substr(lbracket + 1, rbracket - option.length() - 1);
+
+        switch (Hash::CRC32DataSV(option))
+        {
+            case CRC32HashOf("stage"):
+            {
+                auto get_stage = [value]() -> ShaderStage
+                {
+                    switch (Hash::CRC32DataSV(value))
+                    {
+                        case CRC32HashOf("vertex"):
+                            return ShaderStage::Vertex;
+                        case CRC32HashOf("pixel"):
+                            return ShaderStage::Pixel;
+                        case CRC32HashOf("compute"):
+                            return ShaderStage::Compute;
+                        case CRC32HashOf("tess_eval"):
+                            return ShaderStage::TessellationEvaluation;
+                        case CRC32HashOf("tess_control"):
+                            return ShaderStage::TessellationControl;
+                        default:
+                            return ShaderStage::Count;
+                    }
+                };
+                options[PragmaOptions::Stage].m_stage = get_stage();
+                break;
+            }
+            default:
+                LOG_ERROR("Unknown pragma '{}{}'!", k_pragma_ident, line);
+        }
+    }
+
+    return options;
+}
+
 Format to_vk_format(const spirv_cross::SPIRType &type)
 {
     using namespace spirv_cross;
     constexpr static Format float_formats[] = { [0] = Format::Float, [1] = Format::Vec2, [2] = Format::Vec3, [3] = Format::Vec4 };
     constexpr static Format int_formats[] = { [0] = Format::Int, [1] = Format::Vec2I, [2] = Format::Vec3I, [3] = Format::Vec4I };
     constexpr static Format uint_formats[] = { [0] = Format::UInt, [1] = Format::Vec2U, [2] = Format::Vec3U, [3] = Format::Vec4U };
-    constexpr static auto format_map[] = { [SPIRType::Float] = float_formats, [SPIRType::Int] = int_formats, [SPIRType::UInt] = uint_formats };
+    static Format *format_map[] = {
+        [SPIRType::Float] = (Format *)float_formats,
+        [SPIRType::Int] = (Format *)int_formats,
+        [SPIRType::UInt] = (Format *)uint_formats,
+    };
 
     if (type.columns != 1)
         return Format::Unknown;  // Skip matrix types
 
-    return format_map[type.basetype][type.vecsize];
+    return format_map[type.basetype][type.vecsize - 1];
 }
 
 eastl::vector<u32> ShaderCompiler::compile_shader(ShaderCompileDesc *desc)
 {
     ZoneScoped;
 
-    constexpr static eastl::wstring_view kHLSLStageMap[] = {
+    constexpr static LPCWSTR kHLSLStageMap[] = {
         [(u32)ShaderStage::Vertex] = L"vs_6_7",
         [(u32)ShaderStage::Pixel] = L"ps_6_7",
         [(u32)ShaderStage::Compute] = L"cs_6_7",
@@ -47,6 +129,7 @@ eastl::vector<u32> ShaderCompiler::compile_shader(ShaderCompileDesc *desc)
     CComPtr<IDxcIncludeHandler> include_handler = nullptr;
     utils->CreateDefaultIncludeHandler(&include_handler);
 
+    auto options = parse_pragma_options(desc->m_code);
     eastl::vector<LPCWSTR> args = {};
     args.push_back(L"-E");
     args.push_back(L"main");
@@ -57,7 +140,7 @@ eastl::vector<u32> ShaderCompiler::compile_shader(ShaderCompileDesc *desc)
     // args.push_back(L"-I");
     // args.push_back(L"path/to/working/dir");
     args.push_back(L"-T");
-    args.push_back(kHLSLStageMap[(u32)desc->m_target_stage].data());
+    args.push_back(kHLSLStageMap[(u32)options[PragmaOptions::Stage].m_stage]);
 
     if (desc->m_flags & ShaderCompileFlag::GenerateDebugInfo)
         args.push_back(L"-Zi");
@@ -97,7 +180,7 @@ ShaderReflectionData ShaderCompiler::reflect_spirv(ShaderReflectionDesc *desc, e
         [spv::ExecutionModel::ExecutionModelTessellationEvaluation] = ShaderStage::TessellationEvaluation,
     };
 
-    spirv_cross::CompilerHLSL compiler(ir.data(), ir.size_bytes());
+    spirv_cross::CompilerHLSL compiler(ir.data(), ir.size());
     auto first_entry = compiler.get_entry_points_and_stages()[0];
     auto resources = compiler.get_shader_resources();
     auto &entry_point = compiler.get_entry_point(first_entry.name, first_entry.execution_model);
@@ -107,6 +190,7 @@ ShaderReflectionData ShaderCompiler::reflect_spirv(ShaderReflectionDesc *desc, e
 
     ShaderReflectionData result = {};
     result.m_compiled_stage = kStageMap[entry_point.model];
+    result.m_entry_point = first_entry.name.data();
     for (auto &range : push_constant_ranges)
     {
         auto &name = compiler.get_member_name(push_constants_type_id, range.index);

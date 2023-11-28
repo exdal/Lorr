@@ -39,7 +39,7 @@ void Worker::Init(u32 id, u32 processor)
     m_ID = id;
     m_Processor = processor;
 
-    eastl::string threadName = _FMT("WRKR{}", id);
+    eastl::string threadName = eastl::format("WRKR{}", id);
     EA::Thread::ThreadParameters threadParams = {};
     threadParams.mbDisablePriorityBoost = false;
     threadParams.mnProcessor = processor;

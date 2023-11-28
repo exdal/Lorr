@@ -15,21 +15,26 @@ public:
     FileView(eastl::string_view path);
     ~FileView();
 
-    void Close();
-    void SetOffset(u64 offset);
+    void close();
+    void set_offset(u64 offset);
 
     template<typename _T>
-    bool Read(_T &data);
-    bool Read(eastl::string &str, u64 length);
-    bool Read(u8 *pData, u64 dataSize);
+    bool read(_T &data);
+    bool read(eastl::string &str, u64 length);
+    bool read(u8 *pData, u64 dataSize);
 
-    size_t Size() { return m_Size; }
-    bool IsOK() { return m_pFile != nullptr; }
+    usize size() { return m_Size; }
+    bool is_ok() { return m_pFile != nullptr; }
 
 private:
     u64 m_Offset = ~0;
     u64 m_Size = ~0;
     FILE *m_pFile = nullptr;
 };
+
+namespace FileUtils
+{
+    eastl::string read_file(eastl::string_view path);
+}
 
 }  // namespace lr

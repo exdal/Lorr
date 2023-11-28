@@ -1,9 +1,3 @@
-// Created on Friday May 6th 2022 by exdal
-// Last modified on Monday June 12th 2023 by exdal
-//
-// Created on Friday 6th May 2022 by exdal
-//
-
 #pragma once
 
 #include <fmt/format.h>
@@ -12,48 +6,34 @@
 namespace fmt
 {
 template<>
-struct formatter<eastl::string_view>
+struct formatter<eastl::string_view> : formatter<string_view>
 {
-    template<typename ParseContext>
-    constexpr auto parse(ParseContext &ctx)
-    {
-        return ctx.begin();
-    }
-
     template<typename FormatContext>
-    constexpr auto format(eastl::string_view p, FormatContext &ctx) -> decltype(ctx.out())
+    constexpr auto format(eastl::string_view p, FormatContext &ctx) const
     {
-        return fmt::format_to(ctx.out(), "{:{}}", p.data(), p.length());
+        return formatter<string_view>::format({ p.data(), p.length() }, ctx);
     }
 };
 
 template<>
-struct formatter<eastl::string>
+struct formatter<eastl::string> : formatter<string_view>
 {
-    template<typename ParseContext>
-    constexpr auto parse(ParseContext &ctx)
-    {
-        return ctx.begin();
-    }
-
     template<typename FormatContext>
-    constexpr auto format(const eastl::string &p, FormatContext &ctx) -> decltype(ctx.out())
+    constexpr auto format(const eastl::string &p, FormatContext &ctx) const
     {
-        return fmt::format_to(ctx.out(), "{:{}}", p.c_str(), p.length());
+        return formatter<string_view>::format(p.c_str(), ctx);
     }
 };
-
-template<typename... T>
-FMT_INLINE eastl::string format_eastl(string_view fmt, T &&...args)
-{
-    auto buffer = memory_buffer();
-    detail::vformat_to(buffer, fmt, fmt::make_format_args(args...));
-
-    auto size = buffer.size();
-    detail::assume(size < eastl::basic_string<char>().max_size());
-    return eastl::string(buffer.data(), buffer.size());
-}
-
-#define _FMT fmt::format_eastl
-
 }  // namespace fmt
+
+namespace eastl
+{
+template<typename... T>
+string format(fmt::string_view sv, T &&...args)
+{
+    auto buffer = fmt::memory_buffer();
+    fmt::detail::vformat_to(buffer, sv, fmt::make_format_args(args...));
+    fmt::detail::assume(buffer.size() < basic_string<char>().max_size());
+    return { buffer.data(), buffer.size() };
+}
+}  // namespace eastl

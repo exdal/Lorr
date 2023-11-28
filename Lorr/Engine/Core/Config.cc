@@ -127,14 +127,14 @@ bool Config::Init()
     ZoneScoped;
 
     FileView f("config.cfg");
-    if (!f.IsOK())
+    if (!f.is_ok())
     {
         LOG_WARN("Config file not found, overriding defaults.");
         return false;
     }
 
     eastl::string data;
-    f.Read(data, f.Size());
+    f.read(data, f.size());
 
     eastl::string_view line;
     while (ls::get_line(eastl::string_view(data), line))

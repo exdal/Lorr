@@ -4,6 +4,9 @@
 
 #include "TaskGraph.hh"
 
+#include <Graphics/Shader.hh>
+#include <IO/File.hh>
+
 namespace lr::Renderer
 {
 struct Triangle
@@ -135,6 +138,12 @@ void Renderer::create(BaseWindow *window)
         .m_uses = { .m_color_attachment = m_swap_chain_image },
     });
     m_task_graph.present_task(m_swap_chain_image);
+
+    auto shader_src = FileUtils::read_file("triangle.vs.hlsl");
+    Graphics::ShaderCompileDesc compile_desc = {
+        .m_code = shader_src,
+    };
+    Graphics::ShaderCompiler::compile_shader(&compile_desc);
 }
 
 void Renderer::refresh_frame(u32 width, u32 height)

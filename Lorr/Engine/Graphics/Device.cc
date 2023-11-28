@@ -275,7 +275,7 @@ ls::ref_array<Image *> Device::get_swap_chain_images(SwapChain *swap_chain)
         pImage->m_mip_map_levels = 1;
         pImage->m_format = swap_chain->m_image_format;
 
-        SetObjectName(pImage, _FMT("Swap Chain Image {}", i));
+        SetObjectName(pImage, eastl::format("Swap Chain Image {}", i));
     }
 
     return images;

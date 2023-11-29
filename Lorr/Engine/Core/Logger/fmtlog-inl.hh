@@ -479,9 +479,7 @@ struct fmtlogDetailWrapper
 template<int _>
 fmtlogDetailT<> fmtlogDetailWrapper<_>::impl;
 
-template<int __>
-int64_t fmtlogT<__>::TSCNS::rdsysns()
-{
+template <int __> int64_t fmtlogT<__>::TSCNS::rdsysns() {
     using namespace eastl::chrono;
     return duration_cast<nanoseconds>(system_clock::now().time_since_epoch()).count();
 }

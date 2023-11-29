@@ -383,8 +383,8 @@ void LinearDeviceMemory::create(u64 mem_size, u32 max_allocations)
 {
     ZoneScoped;
 
-    m_allocator_view.m_pFirstRegion = new Memory::AllocationRegion;
-    m_allocator_view.m_pFirstRegion->m_Capacity = mem_size;
+    m_allocator_view.m_first_area = new Memory::AllocationArea;
+    m_allocator_view.m_first_area->m_capacity = mem_size;
 }
 
 u64 LinearDeviceMemory::allocate_memory(u64 dataSize, u64 alignment, u64 &allocator_data)
@@ -392,12 +392,12 @@ u64 LinearDeviceMemory::allocate_memory(u64 dataSize, u64 alignment, u64 &alloca
     ZoneScoped;
 
     u64 alignedSize = Memory::AlignUp(dataSize, alignment);
-    Memory::AllocationRegion *pAvailRegion = m_allocator_view.FindFreeRegion(alignedSize);
+    Memory::AllocationArea *pAvailRegion = m_allocator_view.find_free_area(alignedSize);
     if (!pAvailRegion)
         return ~0;
 
-    u64 offset = pAvailRegion->m_Size;
-    pAvailRegion->m_Size += alignedSize;
+    u64 offset = pAvailRegion->m_size;
+    pAvailRegion->m_size += alignedSize;
     return offset;
 }
 
@@ -405,7 +405,7 @@ void LinearDeviceMemory::free_memory(u64 allocatorData)
 {
     ZoneScoped;
 
-    m_allocator_view.Reset();
+    m_allocator_view.reset();
 }
 
 }  // namespace lr::Graphics

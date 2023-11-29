@@ -6,7 +6,7 @@
 
 #include "Graphics/CommandList.hh"
 #include "Graphics/Device.hh"
-#include "Memory/Allocator/LinearAllocator.hh"
+#include "Memory/Allocator/AreaAllocator.hh"
 
 #include <EASTL/vector.h>
 
@@ -59,7 +59,7 @@ struct TaskGraph
     eastl::vector<TaskBarrier> m_barriers = {};
     eastl::vector<TaskBatch> m_batches = {};
     eastl::vector<Task *> m_tasks = {};
-    Memory::LinearAllocator m_task_allocator = {};
+    Memory::AreaAllocator m_task_allocator = {};
 };
 
 template<typename TTask>
@@ -67,7 +67,7 @@ void TaskGraph::add_task(const TTask &task_info)
 {
     ZoneScoped;
 
-    auto wrapper = m_task_allocator.New<TaskWrapper<TTask>>(task_info);
+    auto wrapper = m_task_allocator.allocate_obj<TaskWrapper<TTask>>(task_info);
     Task *pTask = static_cast<Task *>(wrapper);
     TaskID id = m_tasks.size();
     m_tasks.push_back(pTask);

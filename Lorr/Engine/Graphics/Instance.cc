@@ -2,6 +2,7 @@
 
 #include <EASTL/scoped_array.h>
 
+#include "Memory/MemoryUtils.hh"
 #include "Window/Win32/Win32Window.hh"
 
 #include "PhysicalDevice.hh"

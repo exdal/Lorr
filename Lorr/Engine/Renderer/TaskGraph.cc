@@ -17,8 +17,7 @@ void TaskGraph::create(TaskGraphDesc *desc)
     {
         m_semaphores.push_back(m_device->create_timeline_semaphore(0));
         // TODO: Split barriers
-        CommandAllocator *pAllocator = m_device->create_command_allocator(
-            graphicsIndex, CommandAllocatorFlag::ResetCommandBuffer);
+        CommandAllocator *pAllocator = m_device->create_command_allocator(graphicsIndex, CommandAllocatorFlag::ResetCommandBuffer);
         m_command_allocators.push_back(pAllocator);
         m_command_lists.push_back(m_device->create_command_list(pAllocator));
     }
@@ -32,10 +31,7 @@ void TaskGraph::create(TaskGraphDesc *desc)
     };
     m_image_memory = m_device->create_device_memory(&imageMem, desc->m_physical_device);
 
-    m_task_allocator.Init({
-        .m_DataSize = desc->m_initial_alloc,
-        .m_AllowMultipleBlocks = true,
-    });
+    m_task_allocator = { desc->m_initial_alloc };
 }
 
 ImageID TaskGraph::use_persistent_image(const PersistentImageInfo &persistentInfo)

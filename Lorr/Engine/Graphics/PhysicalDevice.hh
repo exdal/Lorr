@@ -1,8 +1,6 @@
 #pragma once
 
-#include "Memory/Allocator/LinearAllocator.hh"
-#include "Memory/MemoryUtils.hh"
-#include "Window/BaseWindow.hh"
+#include "Memory/Allocator/AreaAllocator.hh"
 
 #include <EASTL/vector.h>
 
@@ -127,7 +125,7 @@ struct LinearDeviceMemory : DeviceMemory
     u64 allocate_memory(u64 dataSize, u64 alignment, u64 &allocator_data) override;
     void free_memory(u64 allocatorData) override;
 
-    Memory::LinearAllocatorView m_allocator_view = {};
+    Memory::AreaAllocatorView m_allocator_view = {};
 };
 
 }  // namespace lr::Graphics

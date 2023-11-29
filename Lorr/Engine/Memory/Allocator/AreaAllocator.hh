@@ -25,8 +25,7 @@ struct AreaAllocatorView
 
 struct AreaAllocator : AreaAllocatorView
 {
-    AreaAllocator() = default;
-    AreaAllocator(u64 data_size);
+    void init(u64 data_size);
     ~AreaAllocator();
 
     AllocationArea *allocate_area(usize size);

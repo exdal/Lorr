@@ -7,208 +7,204 @@
 
 namespace lr::Memory
 {
-void TLSFAllocatorView::Init(u64 memSize, u32 maxAllocs)
+void TLSFAllocatorView::init(u64 mem_size, u32 max_allocs)
 {
-    ZoneScoped;
+    m_max_size = mem_size;
+    u32 firstIndex = get_first_index(mem_size);
+    u32 blockCount = firstIndex * SL_INDEX_COUNT + get_second_index(firstIndex, mem_size);
 
-    m_MaxSize = memSize;
-    u32 firstIndex = GetFirstIndex(memSize);
-    u32 blockCount = firstIndex * SL_INDEX_COUNT + GetSecondIndex(firstIndex, memSize);
+    m_blocks = new TLSFBlock[max_allocs];
+    m_free_blocks = new TLSFBlockID[max_allocs];
+    m_block_indices = new TLSFBlockID[blockCount];
+    memset(m_block_indices, TLSFBlock::k_invalid, sizeof(TLSFBlockID) * blockCount);
 
-    m_pBlocks = new TLSFBlock[maxAllocs];
-    m_pFreeBlocks = new TLSFBlockID[maxAllocs];
-    m_pBlockIndices = new TLSFBlockID[blockCount];
-    memset(m_pBlockIndices, TLSFBlock::kInvalid, sizeof(TLSFBlockID) * blockCount);
+    for (u32 i = 0; i < max_allocs; i++)
+        m_free_blocks[i] = max_allocs - i - 1;
 
-    for (u32 i = 0; i < maxAllocs; i++)
-        m_pFreeBlocks[i] = maxAllocs - i - 1;
+    m_free_list_offset = max_allocs - 1;
 
-    m_FreeListOffset = maxAllocs - 1;
-
-    AddFreeBlock(memSize, 0);
+    add_free_block(mem_size, 0);
 }
 
-void TLSFAllocatorView::Delete()
+TLSFAllocatorView::~TLSFAllocatorView()
 {
-    ZoneScoped;
-
-    delete[] m_pFreeBlocks;
-    delete[] m_pBlocks;
-    delete[] m_pBlockIndices;
+    delete[] m_free_blocks;
+    delete[] m_blocks;
+    delete[] m_block_indices;
 }
 
-TLSFBlockID TLSFAllocatorView::Allocate(u64 size, u64 alignment)
+TLSFBlockID TLSFAllocatorView::allocate(u64 size, u64 alignment)
 {
     ZoneScoped;
 
-    TLSFBlockID foundBlock = FindFreeBlock(size);
-    if (foundBlock != TLSFBlock::kInvalid)
+    TLSFBlockID foundBlock = find_free_block(size);
+    if (foundBlock != TLSFBlock::k_invalid)
     {
-        RemoveFreeBlock(foundBlock, false);
+        remove_free_block(foundBlock, false);
 
-        u64 blockSize = GetPhysicalSize(foundBlock);
+        u64 blockSize = get_physical_size(foundBlock);
         u64 sizeDiff = blockSize - size;
         if (sizeDiff != 0)
         {
-            TLSFBlock &block = m_pBlocks[foundBlock];
-            TLSFBlockID newBlockID = AddFreeBlock(sizeDiff, block.m_Offset + size);
+            TLSFBlock &block = m_blocks[foundBlock];
+            TLSFBlockID newBlockID = add_free_block(sizeDiff, block.m_offset + size);
 
-            m_pBlocks[newBlockID].m_PrevPhysical = foundBlock;
-            m_pBlocks[newBlockID].m_NextPhysical = block.m_NextPhysical;
+            m_blocks[newBlockID].m_prev_physical = foundBlock;
+            m_blocks[newBlockID].m_next_physical = block.m_next_physical;
 
-            if (block.m_NextPhysical != TLSFBlock::kInvalid)
-                m_pBlocks[block.m_NextPhysical].m_PrevPhysical = newBlockID;
-            block.m_NextPhysical = newBlockID;
+            if (block.m_next_physical != TLSFBlock::k_invalid)
+                m_blocks[block.m_next_physical].m_prev_physical = newBlockID;
+            block.m_next_physical = newBlockID;
         }
     }
 
     return foundBlock;
 }
 
-void TLSFAllocatorView::Free(TLSFBlockID blockID)
+void TLSFAllocatorView::free(TLSFBlockID blockID)
 {
     ZoneScoped;
 
-    TLSFBlock &block = m_pBlocks[blockID];
+    TLSFBlock &block = m_blocks[blockID];
 
-    u64 size = GetPhysicalSize(blockID);
-    u64 offset = block.m_Offset;
+    u64 size = get_physical_size(blockID);
+    u64 offset = block.m_offset;
 
     // Merge prev/next physical blocks together
-    if (block.m_PrevPhysical != TLSFBlock::kInvalid && m_pBlocks[block.m_PrevPhysical].m_IsFree)
+    if (block.m_prev_physical != TLSFBlock::k_invalid && m_blocks[block.m_prev_physical].m_is_free)
     {
-        TLSFBlock &prevBlock = m_pBlocks[block.m_PrevPhysical];
-        offset = prevBlock.m_Offset;
-        size += GetPhysicalSize(block.m_PrevPhysical);
+        TLSFBlock &prevBlock = m_blocks[block.m_prev_physical];
+        offset = prevBlock.m_offset;
+        size += get_physical_size(block.m_prev_physical);
 
-        RemoveFreeBlock(block.m_PrevPhysical);
-        block.m_PrevPhysical = prevBlock.m_PrevPhysical;
+        remove_free_block(block.m_prev_physical);
+        block.m_prev_physical = prevBlock.m_prev_physical;
     }
 
-    if (block.m_NextPhysical != TLSFBlock::kInvalid && m_pBlocks[block.m_NextPhysical].m_IsFree)
+    if (block.m_next_physical != TLSFBlock::k_invalid && m_blocks[block.m_next_physical].m_is_free)
     {
-        TLSFBlock &nextBlock = m_pBlocks[block.m_NextPhysical];
-        size += GetPhysicalSize(block.m_NextPhysical);
+        TLSFBlock &nextBlock = m_blocks[block.m_next_physical];
+        size += get_physical_size(block.m_next_physical);
 
-        RemoveFreeBlock(block.m_NextPhysical);
-        block.m_NextPhysical = nextBlock.m_NextPhysical;
+        remove_free_block(block.m_next_physical);
+        block.m_next_physical = nextBlock.m_next_physical;
     }
 
-    m_pFreeBlocks[++m_FreeListOffset] = blockID;
+    m_free_blocks[++m_free_list_offset] = blockID;
 
-    TLSFBlockID newBlockID = AddFreeBlock(size, offset);
-    TLSFBlock &newBlock = m_pBlocks[newBlockID];
+    TLSFBlockID newBlockID = add_free_block(size, offset);
+    TLSFBlock &newBlock = m_blocks[newBlockID];
 
-    if (block.m_PrevPhysical != TLSFBlock::kInvalid)
+    if (block.m_prev_physical != TLSFBlock::k_invalid)
     {
-        newBlock.m_PrevPhysical = block.m_PrevPhysical;
-        m_pBlocks[block.m_PrevPhysical].m_NextPhysical = newBlockID;
+        newBlock.m_prev_physical = block.m_prev_physical;
+        m_blocks[block.m_prev_physical].m_next_physical = newBlockID;
     }
 
-    if (block.m_NextPhysical != TLSFBlock::kInvalid)
+    if (block.m_next_physical != TLSFBlock::k_invalid)
     {
-        newBlock.m_NextPhysical = block.m_NextPhysical;
-        m_pBlocks[block.m_NextPhysical].m_PrevPhysical = newBlockID;
+        newBlock.m_next_physical = block.m_next_physical;
+        m_blocks[block.m_next_physical].m_prev_physical = newBlockID;
     }
 }
 
-TLSFBlockID TLSFAllocatorView::FindFreeBlock(u64 size)
+TLSFBlockID TLSFAllocatorView::find_free_block(u64 size)
 {
     ZoneScoped;
 
-    u32 firstIndex = GetFirstIndex(size);
-    u32 secondIndex = GetSecondIndex(firstIndex, size);
+    u32 firstIndex = get_first_index(size);
+    u32 secondIndex = get_second_index(firstIndex, size);
 
-    u32 secondListMap = m_pSecondListBitmap[firstIndex] & (~0U << secondIndex);
+    u32 secondListMap = m_second_list_bitmap[firstIndex] & (~0U << secondIndex);
     if (secondListMap == 0)
     {
         // Could not find any available block in that index, so go higher
-        u32 firstListMap = m_FirstListBitmap & (~0U << (firstIndex + 1));
+        u32 firstListMap = m_first_list_bitmap & (~0U << (firstIndex + 1));
         if (firstListMap == 0)
         {
-            return TLSFBlock::kInvalid;
+            return TLSFBlock::k_invalid;
         }
 
         firstIndex = GetLSB(firstListMap);
-        secondListMap = m_pSecondListBitmap[firstIndex];
+        secondListMap = m_second_list_bitmap[firstIndex];
     }
 
     secondIndex = GetLSB(secondListMap);
 
-    return m_pBlockIndices[GetFreeListIndex(firstIndex, secondIndex)];
+    return m_block_indices[get_free_list_index(firstIndex, secondIndex)];
 }
 
-TLSFBlockID TLSFAllocatorView::AddFreeBlock(u64 size, u64 offset)
+TLSFBlockID TLSFAllocatorView::add_free_block(u64 size, u64 offset)
 {
     ZoneScoped;
 
-    u32 firstIndex = GetFirstIndex(size);
-    u32 secondIndex = GetSecondIndex(firstIndex, size);
-    u32 freeListIdx = GetFreeListIndex(firstIndex, secondIndex);
-    TLSFBlockID freeListBlockID = m_pBlockIndices[freeListIdx];
-    TLSFBlockID newBlockID = m_pFreeBlocks[m_FreeListOffset--];
-    TLSFBlock &block = m_pBlocks[newBlockID];
+    u32 firstIndex = get_first_index(size);
+    u32 secondIndex = get_second_index(firstIndex, size);
+    u32 freeListIdx = get_free_list_index(firstIndex, secondIndex);
+    TLSFBlockID freeListBlockID = m_block_indices[freeListIdx];
+    TLSFBlockID newBlockID = m_free_blocks[m_free_list_offset--];
+    TLSFBlock &block = m_blocks[newBlockID];
 
-    block.m_Offset = offset;
-    block.m_PrevFree = TLSFBlock::kInvalid;
-    block.m_NextFree = freeListBlockID;
-    block.m_IsFree = true;
+    block.m_offset = offset;
+    block.m_prev_free = TLSFBlock::k_invalid;
+    block.m_next_free = freeListBlockID;
+    block.m_is_free = true;
 
-    if (freeListBlockID != TLSFBlock::kInvalid)
-        m_pBlocks[freeListBlockID].m_PrevFree = newBlockID;
+    if (freeListBlockID != TLSFBlock::k_invalid)
+        m_blocks[freeListBlockID].m_prev_free = newBlockID;
     else
     {
-        m_FirstListBitmap |= 1 << firstIndex;
-        m_pSecondListBitmap[firstIndex] |= 1 << secondIndex;
+        m_first_list_bitmap |= 1 << firstIndex;
+        m_second_list_bitmap[firstIndex] |= 1 << secondIndex;
     }
 
-    m_pBlockIndices[freeListIdx] = newBlockID;
+    m_block_indices[freeListIdx] = newBlockID;
 
     return newBlockID;
 }
 
-void TLSFAllocatorView::RemoveFreeBlock(TLSFBlockID blockID, bool removeBlock)
+void TLSFAllocatorView::remove_free_block(TLSFBlockID blockID, bool removeBlock)
 {
     ZoneScoped;
 
-    TLSFBlock &block = m_pBlocks[blockID];
-    u64 blockSize = GetPhysicalSize(blockID);
+    TLSFBlock &block = m_blocks[blockID];
+    u64 blockSize = get_physical_size(blockID);
 
-    if (block.m_PrevFree != TLSFBlock::kInvalid)
+    if (block.m_prev_free != TLSFBlock::k_invalid)
     {
         // This is head of the chain, since we already know it, no need to calculate entire freelist index
 
-        m_pBlocks[block.m_PrevFree].m_NextFree = block.m_NextFree;
-        if (block.m_NextFree != TLSFBlock::kInvalid)
-            m_pBlocks[block.m_NextFree].m_PrevFree = block.m_PrevFree;
+        m_blocks[block.m_prev_free].m_next_free = block.m_next_free;
+        if (block.m_next_free != TLSFBlock::k_invalid)
+            m_blocks[block.m_next_free].m_prev_free = block.m_prev_free;
     }
     else
     {
-        u32 firstIndex = GetFirstIndex(blockSize);
-        u32 secondIndex = GetSecondIndex(firstIndex, blockSize);
-        u32 freeListIndex = GetFreeListIndex(firstIndex, secondIndex);
+        u32 firstIndex = get_first_index(blockSize);
+        u32 secondIndex = get_second_index(firstIndex, blockSize);
+        u32 freeListIndex = get_free_list_index(firstIndex, secondIndex);
 
-        m_pBlockIndices[freeListIndex] = block.m_NextFree;
+        m_block_indices[freeListIndex] = block.m_next_free;
 
-        if (block.m_NextFree != TLSFBlock::kInvalid)
-            m_pBlocks[block.m_NextFree].m_PrevFree = TLSFBlock::kInvalid;
+        if (block.m_next_free != TLSFBlock::k_invalid)
+            m_blocks[block.m_next_free].m_prev_free = TLSFBlock::k_invalid;
         else
         {
-            m_pSecondListBitmap[firstIndex] &= ~(1 << secondIndex);
-            if (m_pSecondListBitmap[firstIndex] == 0)
+            m_second_list_bitmap[firstIndex] &= ~(1 << secondIndex);
+            if (m_second_list_bitmap[firstIndex] == 0)
             {
-                m_FirstListBitmap &= ~(1 << firstIndex);
+                m_first_list_bitmap &= ~(1 << firstIndex);
             }
         }
     }
 
-    block.m_IsFree = false;
+    block.m_is_free = false;
 
     if (removeBlock)
-        m_pFreeBlocks[++m_FreeListOffset] = blockID;
+        m_free_blocks[++m_free_list_offset] = blockID;
 }
 
-u32 TLSFAllocatorView::GetFirstIndex(u64 size)
+u32 TLSFAllocatorView::get_first_index(u64 size)
 {
     ZoneScoped;
 
@@ -218,89 +214,84 @@ u32 TLSFAllocatorView::GetFirstIndex(u64 size)
     return GetMSB(size) - (FL_INDEX_SHIFT - 1);
 }
 
-u32 TLSFAllocatorView::GetSecondIndex(u32 firstIndex, u64 size)
+u32 TLSFAllocatorView::get_second_index(u32 first_index, u64 size)
 {
     ZoneScoped;
 
     if (size < MIN_BLOCK_SIZE)
         return size / (MIN_BLOCK_SIZE / SL_INDEX_COUNT);
 
-    return (size >> ((firstIndex + (FL_INDEX_SHIFT - 1)) - SL_INDEX_COUNT_LOG2)) ^ SL_INDEX_COUNT;
+    return (size >> ((first_index + (FL_INDEX_SHIFT - 1)) - SL_INDEX_COUNT_LOG2)) ^ SL_INDEX_COUNT;
 }
 
-u32 TLSFAllocatorView::GetFreeListIndex(u32 firstIndex, u32 secondIndex)
+u32 TLSFAllocatorView::get_free_list_index(u32 first_index, u32 second_index)
 {
     ZoneScoped;
 
-    if (firstIndex == 0)
-        return secondIndex;
+    if (first_index == 0)
+        return second_index;
 
-    return (firstIndex * SL_INDEX_COUNT + secondIndex) - 1;
+    return (first_index * SL_INDEX_COUNT + second_index) - 1;
 }
 
-u64 TLSFAllocatorView::GetPhysicalSize(TLSFBlockID blockID)
+u64 TLSFAllocatorView::get_physical_size(TLSFBlockID block_id)
 {
     ZoneScoped;
 
-    assert(blockID != TLSFBlock::kInvalid);
-    TLSFBlock &block = m_pBlocks[blockID];
+    assert(block_id != TLSFBlock::k_invalid);
+    TLSFBlock &block = m_blocks[block_id];
 
-    if (block.m_NextPhysical != TLSFBlock::kInvalid)
-        return m_pBlocks[block.m_NextPhysical].m_Offset - block.m_Offset;
-    else
-        return m_MaxSize - block.m_Offset;
+    if (block.m_next_physical != TLSFBlock::k_invalid)
+        return m_blocks[block.m_next_physical].m_offset - block.m_offset;
+
+    return m_max_size - block.m_offset;
 }
 
-TLSFBlock *TLSFAllocatorView::GetBlockData(TLSFBlockID blockID)
+TLSFBlock *TLSFAllocatorView::get_block_data(TLSFBlockID block_id)
 {
     ZoneScoped;
 
-    assert(blockID != TLSFBlock::kInvalid);
+    assert(block_id != TLSFBlock::k_invalid);
 
-    return &m_pBlocks[blockID];
+    return &m_blocks[block_id];
 }
 
-void TLSFAllocator::Init(const TLSFAllocatorDesc &desc)
+void TLSFAllocator::init(u64 mem_size, u32 max_allocs)
 {
-    ZoneScoped;
-
-    m_View.Init(desc.m_DataSize, desc.m_BlockCount);
-    m_pData = Memory::Allocate<u8>(desc.m_DataSize);
+    m_view.init(mem_size, max_allocs);
+    m_data = Memory::Allocate<u8>(mem_size);
 }
 
-void TLSFAllocator::Delete()
+TLSFAllocator::~TLSFAllocator()
 {
-    ZoneScoped;
-
-    m_View.Delete();
-    Memory::Release(m_pData);
+    Memory::Release(m_data);
 }
 
-bool TLSFAllocator::CanAllocate(u64 size, u32 alignment)
+bool TLSFAllocator::can_allocate(u64 size, u32 alignment)
 {
     ZoneScoped;
 
     return false;  // TODO
 }
 
-void *TLSFAllocator::Allocate(TLSFBlockID &blockIDOut, u64 size, u32 alignment)
+void *TLSFAllocator::allocate(TLSFBlockID &blockIDOut, u64 size, u32 alignment)
 {
     ZoneScoped;
 
-    blockIDOut = m_View.Allocate(size, alignment);
-    if (blockIDOut == TLSFBlock::kInvalid)
+    blockIDOut = m_view.allocate(size, alignment);
+    if (blockIDOut == TLSFBlock::k_invalid)
         return nullptr;
 
-    return m_pData + m_View.GetBlockData(blockIDOut)->m_Offset;
+    return m_data + m_view.get_block_data(blockIDOut)->m_offset;
 }
 
-void TLSFAllocator::Free(TLSFBlockID blockID, bool freeData)
+void TLSFAllocator::free(TLSFBlockID block_id, bool free_data)
 {
     ZoneScoped;
 
-    m_View.Free(blockID);
-    if (freeData)
-        Memory::Release(m_pData);
+    m_view.free(block_id);
+    if (free_data)
+        Memory::Release(m_data);
 }
 
 }  // namespace lr::Memory

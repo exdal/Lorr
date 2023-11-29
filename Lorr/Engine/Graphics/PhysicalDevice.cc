@@ -360,23 +360,23 @@ void TLSFDeviceMemory::create(u64 mem_size, u32 max_allocations)
 {
     ZoneScoped;
 
-    m_allocator_view.Init(mem_size, max_allocations);
+    m_allocator_view.init(mem_size, max_allocations);
 }
 
 u64 TLSFDeviceMemory::allocate_memory(u64 dataSize, u64 alignment, u64 &allocator_data)
 {
     ZoneScoped;
 
-    Memory::TLSFBlockID block_id = m_allocator_view.Allocate(dataSize, alignment);
+    Memory::TLSFBlockID block_id = m_allocator_view.allocate(dataSize, alignment);
     allocator_data = block_id;
-    return m_allocator_view.GetBlockData(block_id)->m_Offset;
+    return m_allocator_view.get_block_data(block_id)->m_offset;
 }
 
 void TLSFDeviceMemory::free_memory(u64 allocatorData)
 {
     ZoneScoped;
 
-    m_allocator_view.Free(allocatorData);
+    m_allocator_view.free(allocatorData);
 }
 
 void LinearDeviceMemory::create(u64 mem_size, u32 max_allocations)

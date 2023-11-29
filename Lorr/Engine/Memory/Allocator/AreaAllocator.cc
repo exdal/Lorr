@@ -75,7 +75,7 @@ AllocationArea *AreaAllocatorView::find_free_area(u64 size)
     return pCurrentRegion;
 }
 
-AreaAllocator::AreaAllocator(u64 data_size)
+void AreaAllocator::init(u64 data_size)
 {
     m_region_size = data_size;
     m_view.m_first_area = allocate_area(m_region_size);

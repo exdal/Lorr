@@ -31,7 +31,7 @@ void TaskGraph::create(TaskGraphDesc *desc)
     };
     m_image_memory = m_device->create_device_memory(&imageMem, desc->m_physical_device);
 
-    m_task_allocator = { desc->m_initial_alloc };
+    m_task_allocator.init(desc->m_initial_alloc);
 }
 
 ImageID TaskGraph::use_persistent_image(const PersistentImageInfo &persistentInfo)

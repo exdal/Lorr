@@ -26,7 +26,7 @@ static constexpr eastl::span<const char *> k_required_extensions(kpp_required_ex
 bool Instance::create(InstanceDesc *desc)
 {
     constexpr u32 kTypeMem = Memory::MiBToBytes(16);
-    APIAllocator::m_g_handle.m_type_allocator.Init(kTypeMem, 0x2000);
+    APIAllocator::m_g_handle.m_type_allocator.init(kTypeMem, 0x2000);
     APIAllocator::m_g_handle.m_type_data = Memory::Allocate<u8>(kTypeMem);
 
     m_vulkan_lib = VK::LoadVulkan();

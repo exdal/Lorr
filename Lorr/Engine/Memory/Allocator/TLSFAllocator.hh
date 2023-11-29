@@ -1,6 +1,3 @@
-// Created on Friday November 18th 2022 by exdal
-// Last modified on Sunday June 25th 2023 by exdal
-
 #pragma once
 
 namespace lr::Memory
@@ -8,16 +5,16 @@ namespace lr::Memory
 using TLSFBlockID = u32;
 struct TLSFBlock
 {
-    static constexpr TLSFBlockID kInvalid = ~0;
+    static constexpr TLSFBlockID k_invalid = ~0;
 
-    u64 m_Offset : 63 = ~0;
-    u64 m_IsFree : 1 = false;
+    u64 m_offset : 63 = ~0;
+    u64 m_is_free : 1 = false;
 
-    TLSFBlockID m_NextPhysical = kInvalid;
-    TLSFBlockID m_PrevPhysical = kInvalid;
+    TLSFBlockID m_next_physical = k_invalid;
+    TLSFBlockID m_prev_physical = k_invalid;
 
-    TLSFBlockID m_PrevFree = kInvalid;
-    TLSFBlockID m_NextFree = kInvalid;
+    TLSFBlockID m_prev_free = k_invalid;
+    TLSFBlockID m_next_free = k_invalid;
 };
 
 struct TLSFAllocatorView
@@ -37,79 +34,44 @@ struct TLSFAllocatorView
 
     /// ------------------------------------------------------------ ///
 
-    void Init(u64 memSize, u32 maxAllocs);
-    void Delete();
+    void init(u64 mem_size, u32 max_allocs);
+    ~TLSFAllocatorView();
 
-    TLSFBlockID Allocate(u64 size, u64 alignment = ALIGN_SIZE);
-    void Free(TLSFBlockID blockID);
+    TLSFBlockID allocate(u64 size, u64 alignment = ALIGN_SIZE);
+    void free(TLSFBlockID blockID);
 
-    TLSFBlockID FindFreeBlock(u64 size);
-    TLSFBlockID AddFreeBlock(u64 size, u64 offset);
-    void RemoveFreeBlock(TLSFBlockID blockID, bool removeBlock = true);
+    TLSFBlockID find_free_block(u64 size);
+    TLSFBlockID add_free_block(u64 size, u64 offset);
+    void remove_free_block(TLSFBlockID blockID, bool removeBlock = true);
 
     // Bitmap utils
-    u32 GetFirstIndex(u64 size);
-    u32 GetSecondIndex(u32 firstIndex, u64 size);
-    u32 GetFreeListIndex(u32 firstIndex, u32 secondIndex);
-    u64 GetPhysicalSize(TLSFBlockID blockID);
-    TLSFBlock *GetBlockData(TLSFBlockID blockID);
+    u32 get_first_index(u64 size);
+    u32 get_second_index(u32 first_index, u64 size);
+    u32 get_free_list_index(u32 first_index, u32 second_index);
+    u64 get_physical_size(TLSFBlockID block_id);
+    TLSFBlock *get_block_data(TLSFBlockID block_id);
 
-    u32 m_FirstListBitmap = 0;
-    u32 m_pSecondListBitmap[FL_INDEX_COUNT] = {};
+    u32 m_first_list_bitmap = 0;
+    u32 m_second_list_bitmap[FL_INDEX_COUNT] = {};
 
-    TLSFBlock *m_pBlocks = nullptr;
-    TLSFBlockID *m_pBlockIndices = nullptr;
-    TLSFBlockID *m_pFreeBlocks = nullptr;
-    u32 m_FreeListOffset = 0;
+    TLSFBlock *m_blocks = nullptr;
+    TLSFBlockID *m_block_indices = nullptr;
+    TLSFBlockID *m_free_blocks = nullptr;
+    u32 m_free_list_offset = 0;
 
-    u64 m_MaxSize = 0;
-    u64 m_UsedSize = 0;
+    u64 m_max_size = 0;
+    u64 m_used_size = 0;
 };
 
-struct TLSFAllocatorDesc
-{
-    u64 m_DataSize = 0;
-    u32 m_BlockCount = 0;
-};
 struct TLSFAllocator
 {
-    void Init(const TLSFAllocatorDesc &desc);
-    void Delete();
-    bool CanAllocate(u64 size, u32 alignment = 1);
-    void *Allocate(TLSFBlockID &blockIDOut, u64 size, u32 alignment = 1);
-    void Free(TLSFBlockID blockID, bool freeData);
+    void init(u64 mem_size, u32 max_allocs);
+    ~TLSFAllocator();
+    bool can_allocate(u64 size, u32 alignment = 1);
+    void *allocate(TLSFBlockID &blockIDOut, u64 size, u32 alignment = 1);
+    void free(TLSFBlockID block_id, bool free_data);
 
-    TLSFAllocatorView m_View;
-    u8 *m_pData = nullptr;
+    TLSFAllocatorView m_view;
+    u8 *m_data = nullptr;
 };
-
-// TODO
-class STLAllocatorTLSF
-{
-public:
-    EASTL_ALLOCATOR_EXPLICIT STLAllocatorTLSF(
-        const char *pName = EASTL_NAME_VAL(EASTL_ALLOCATOR_DEFAULT_NAME));
-    STLAllocatorTLSF(const STLAllocatorTLSF &x);
-    STLAllocatorTLSF(const STLAllocatorTLSF &x, const char *pName);
-
-    STLAllocatorTLSF &operator=(const STLAllocatorTLSF &x);
-
-    void *allocate(size_t n, int flags = 0);
-    void *allocate(size_t n, size_t alignment, size_t offset, int flags = 0);
-    void deallocate(void *p, size_t n);
-
-    const char *get_name() const;
-    void set_name(const char *pName);
-
-protected:
-#if EASTL_NAME_ENABLED
-    const char *mpName;  // Debug name, used to track memory.
-#endif
-};
-
-bool operator==(const STLAllocatorTLSF &a, const STLAllocatorTLSF &b);
-#if !defined(EA_COMPILER_HAS_THREE_WAY_COMPARISON)
-bool operator!=(const STLAllocatorTLSF &a, const STLAllocatorTLSF &b);
-#endif
-
 }  // namespace lr::Memory

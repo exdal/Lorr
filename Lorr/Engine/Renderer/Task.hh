@@ -36,6 +36,7 @@ private:
 using TaskID = u32;
 struct Task
 {
+    virtual ~Task() = default;
     virtual void execute(TaskContext &ctx) = 0;
 
     template<typename ImageFn, typename BufferFn>

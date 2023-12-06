@@ -22,6 +22,7 @@ struct Triangle
 
         list.set_dynamic_state(DynamicState::Viewport | DynamicState::Scissor);
         list.set_pipeline("triangle");
+        list.set_blend_state_all({ false });
 
         auto attachment = tc.as_color_attachment(m_uses.m_color_attachment);
         list.begin_rendering({ .m_color_attachments = attachment });

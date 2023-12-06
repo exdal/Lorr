@@ -7,6 +7,7 @@ namespace lr::Graphics
 {
 struct ColorBlendAttachment : VkPipelineColorBlendAttachmentState
 {
+    ColorBlendAttachment() = default;
     ColorBlendAttachment(
         bool enabled,
         ColorMask write_mask = ColorMask::RGBA,

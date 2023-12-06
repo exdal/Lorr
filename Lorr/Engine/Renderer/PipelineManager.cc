@@ -86,13 +86,17 @@ void PipelineManager::compile_pipeline(eastl::string_view name, PipelineAttachme
     {
         auto &reflection = pipeline_info->m_reflections[i];
         auto &shader = pipeline_info->m_bound_shaders[i];
-        if (reflection.m_compiled_stage == ShaderStage::Vertex)
-            compile_info.m_vertex_attrib_infos.insert(
-                compile_info.m_vertex_attrib_infos.end(), reflection.m_vertex_attribs.begin(), reflection.m_vertex_attribs.end());
+        compile_info.m_vertex_attrib_infos.insert(
+            compile_info.m_vertex_attrib_infos.end(), reflection.m_vertex_attribs.begin(), reflection.m_vertex_attribs.end());
 
         compile_info.m_shader_stages.push_back(PipelineShaderStageInfo(shader, reflection.m_entry_point));
     }
+
+    if (!compile_info.m_vertex_attrib_infos.empty())
+        compile_info.m_vertex_binding_infos.push_back(PipelineVertexLayoutBindingInfo(0, 0, false));
+
     compile_info.m_layout = m_bindless_layout;
+
     pipeline = m_device->create_graphics_pipeline(&compile_info, &attachment_info);
 }
 

@@ -108,6 +108,14 @@ TaskCommandList &TaskCommandList::set_pipeline(eastl::string_view pipeline_name)
     m_bound_pipeline_name = pipeline_name;
     m_pipeline = pipeline_man.get_graphics_pipeline(pipeline_name);
 
+    // Preinit stuff here
+    if (!m_pipeline)
+    {
+        auto [color_formats, _] = m_context->get_attachment_formats();
+        auto compile_info = pipeline_man.get_graphics_pipeline_info(m_bound_pipeline_name);
+        compile_info->m_blend_attachments.resize(color_formats.size());
+    }
+
     return *this;
 }
 
@@ -165,6 +173,39 @@ TaskCommandList &TaskCommandList::set_scissors(u32 id, const glm::uvec4 &rect)
 
     if (is_dynamic)
         vkCmdSetScissor(m_handle, id, 1, &scissor);
+
+    return *this;
+}
+
+TaskCommandList &TaskCommandList::set_blend_state(u32 id, const ColorBlendAttachment &state)
+{
+    ZoneScoped;
+
+    if (m_pipeline != nullptr)
+        return *this;
+
+    auto &pipeline_man = m_task_graph.m_pipeline_manager;
+    auto compile_info = pipeline_man.get_graphics_pipeline_info(m_bound_pipeline_name);
+    auto &attachments = compile_info->m_blend_attachments;
+
+    attachments[id] = state;
+
+    return *this;
+}
+
+TaskCommandList &TaskCommandList::set_blend_state_all(const Graphics::ColorBlendAttachment &state)
+{
+    ZoneScoped;
+
+    if (m_pipeline != nullptr)
+        return *this;
+
+    auto &pipeline_man = m_task_graph.m_pipeline_manager;
+    auto compile_info = pipeline_man.get_graphics_pipeline_info(m_bound_pipeline_name);
+    auto &attachments = compile_info->m_blend_attachments;
+
+    for (auto &attachment : attachments)
+        attachment = state;
 
     return *this;
 }
@@ -228,8 +269,6 @@ void TaskCommandList::compile_and_bind_pipeline()
         ADD_DYNAMIC_STATE(DepthBias);
         ADD_DYNAMIC_STATE(BlendConstants);
         compile_info->m_dynamic_states = dynamic_states;
-        //compile_info->m_vertex_binding_infos.push_back(PipelineVertexLayoutBindingInfo(0, 0, false));
-        compile_info->m_blend_attachments.push_back(ColorBlendAttachment(false));
 
         auto [color_formats, depth_formats] = m_context->get_attachment_formats();
         PipelineAttachmentInfo attachment_info = PipelineAttachmentInfo(color_formats, depth_formats);

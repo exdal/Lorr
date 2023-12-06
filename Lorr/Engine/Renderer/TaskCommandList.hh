@@ -31,6 +31,8 @@ struct TaskCommandList
     TaskCommandList &set_pipeline(eastl::string_view pipeline_name);
     TaskCommandList &set_viewport(u32 id, const glm::vec4 &viewport, const glm::vec2 &depth = { 1.0, 0.01 });
     TaskCommandList &set_scissors(u32 id, const glm::uvec4 &rect);
+    TaskCommandList &set_blend_state(u32 id, const Graphics::ColorBlendAttachment &state);
+    TaskCommandList &set_blend_state_all(const Graphics::ColorBlendAttachment &state);
     void draw(u32 vertex_count, u32 first_vertex = 0, u32 instance_count = 1, u32 first_instance = 0);
     void draw_indexed(u32 index_count, u32 first_index = 0, u32 vertex_offset = 0, u32 instance_count = 1, u32 first_instance = 0);
     void dispatch(u32 group_x, u32 group_y, u32 group_z);

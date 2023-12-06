@@ -1,6 +1,14 @@
-#include "File.hh"
+#include "FileSystem.hh"
 
-namespace lr
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <direct.h>
+#include <Windows.h>
+
+#include <EASTL/finally.h>
+
+namespace lr::fs
 {
 FileView::FileView(eastl::string_view path)
 {
@@ -66,14 +74,53 @@ bool FileView::read(u8 *pData, u64 dataSize)
     return true;
 }
 
-eastl::string FileUtils::read_file(eastl::string_view path)
+eastl::string read_file(eastl::string_view path)
 {
     ZoneScoped;
 
     FileView file(path);
+    if (!file.is_ok())
+        return {};
+
     eastl::string result;
     file.read(result, file.size());
     return result;
 }
 
-}  // namespace lr
+eastl::string get_current_dir()
+{
+    ZoneScoped;
+
+    char *buffer = _getcwd(nullptr, 0);
+    auto _ = eastl::make_finally([&] { free(buffer); });
+    return buffer;
+}
+
+bool set_library_dir(eastl::string_view path)
+{
+    ZoneScoped;
+
+    return SetDllDirectoryA(path.data());
+}
+
+void *load_lib(eastl::string_view path)
+{
+    ZoneScoped;
+
+    return LoadLibraryA(path.data());
+}
+
+void free_lib(void *lib)
+{
+    ZoneScoped;
+
+    FreeLibrary(static_cast<HMODULE>(lib));
+}
+
+void *get_lib_func(void *lib, eastl::string_view func_name)
+{
+    ZoneScoped;
+
+    return GetProcAddress(static_cast<HMODULE>(lib), func_name.data());
+}
+}  // namespace lr::fs

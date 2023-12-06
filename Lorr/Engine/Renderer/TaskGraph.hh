@@ -1,5 +1,6 @@
 #pragma once
 
+#include "PipelineManager.hh"
 #include "Task.hh"
 #include "TaskCommandList.hh"
 #include "TaskResource.hh"
@@ -29,7 +30,7 @@ struct TaskGraphDesc
 
 struct TaskGraph
 {
-    void create(TaskGraphDesc *desc);
+    void init(TaskGraphDesc *desc);
 
     ImageID use_persistent_image(const PersistentImageInfo &image_info);
     void set_image(ImageID image_id, Graphics::Image *image, Graphics::ImageView *view);
@@ -49,11 +50,12 @@ struct TaskGraph
     Graphics::CommandQueue *m_graphics_queue = nullptr;
     Graphics::DeviceMemory *m_image_memory = nullptr;
 
-    // TODO(Batching): These gotta go...
+    PipelineManager m_pipeline_manager = {};
+
     eastl::vector<Graphics::CommandAllocator *> m_command_allocators = {};
     eastl::vector<Graphics::CommandList *> m_command_lists = {};
-
     eastl::vector<Graphics::Semaphore *> m_semaphores = {};
+
     eastl::vector<TaskImageInfo> m_image_infos = {};
     eastl::vector<TaskBufferInfo> m_buffer_infos = {};
     eastl::vector<TaskBarrier> m_barriers = {};

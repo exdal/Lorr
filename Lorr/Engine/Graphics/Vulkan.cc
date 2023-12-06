@@ -1,12 +1,6 @@
-// Created on Monday August 28th 2023 by exdal
-// Last modified on Monday August 28th 2023 by exdal
-
 #include "Vulkan.hh"
 
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <Windows.h>
+#include "Core/FileSystem.hh"
 
 /// DEFINE VULKAN FUNCTIONS
 #define _VK_DEFINE_FUNCTION(_name) PFN_##_name _name
@@ -22,28 +16,28 @@ void *VK::LoadVulkan()
 {
     ZoneScoped;
 
-    HMODULE libVulkan = LoadLibraryA("vulkan-1.dll");
+    auto vulkan_lib = fs::load_lib("vulkan-1.dll");
 
-    if (libVulkan == NULL)
+    if (vulkan_lib == nullptr)
     {
         LOG_CRITICAL("Failed to find Vulkan dynamic library.");
-        FreeLibrary(libVulkan);
+        fs::free_lib(vulkan_lib);
         return nullptr;
     }
 
-#define _VK_DEFINE_FUNCTION(_name)                                 \
-    _name = (PFN_##_name)GetProcAddress(libVulkan, #_name);        \
-    if (_name == nullptr)                                          \
-    {                                                              \
-        LOG_CRITICAL("Cannot load Vulkan function '{}'!", #_name); \
-        FreeLibrary(libVulkan);                                    \
-        return nullptr;                                            \
+#define _VK_DEFINE_FUNCTION(_name)                                    \
+    _name = (PFN_##_name)fs::get_lib_func(vulkan_lib, #_name); \
+    if (_name == nullptr)                                             \
+    {                                                                 \
+        LOG_CRITICAL("Cannot load Vulkan function '{}'!", #_name);    \
+        fs::free_lib(vulkan_lib);                                     \
+        return nullptr;                                               \
     }
 
     _VK_FUNCTION_NAMES
 #undef _VK_DEFINE_FUNCTION
 
-    return libVulkan;
+    return vulkan_lib;
 }
 
 bool VK::LoadVulkanInstance(VkInstance pInstance)

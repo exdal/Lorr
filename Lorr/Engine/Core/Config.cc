@@ -1,10 +1,7 @@
-// Created on Saturday May 13th 2023 by exdal
-// Last modified on Friday September 15th 2023 by exdal
-
 #include <charconv>
 
 #include "Config.hh"
-#include "IO/File.hh"
+#include "FileSystem.hh"
 #include "STL/String.hh"
 
 static ls::CharRange kVarRanges[] = { { 0x41, 0x5a }, { 0x30, 0x39 }, { 0x5f, 0x5f } };
@@ -126,16 +123,7 @@ bool Config::Init()
 {
     ZoneScoped;
 
-    FileView f("config.cfg");
-    if (!f.is_ok())
-    {
-        LOG_WARN("Config file not found, overriding defaults.");
-        return false;
-    }
-
-    eastl::string data;
-    f.read(data, f.size());
-
+    eastl::string data = fs::read_file("config.cfg");
     eastl::string_view line;
     while (ls::get_line(eastl::string_view(data), line))
         Config::Get().ParseLine(line);

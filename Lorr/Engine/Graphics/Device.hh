@@ -27,6 +27,7 @@ struct Device
     CommandQueue *create_command_queue(CommandType type, u32 queue_index);
     CommandAllocator *create_command_allocator(u32 queue_idx, CommandAllocatorFlag flags);
     CommandList *create_command_list(CommandAllocator *command_allocator);
+    VkCommandBuffer allocate_command_list(CommandAllocator *command_allocator);
 
     void begin_command_list(CommandList *list);
     void end_command_list(CommandList *list);

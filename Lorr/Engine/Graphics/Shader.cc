@@ -130,6 +130,7 @@ eastl::vector<u32> ShaderCompiler::compile_shader(ShaderCompileDesc *desc)
     utils->CreateDefaultIncludeHandler(&include_handler);
 
     auto options = parse_pragma_options(desc->m_code);
+    auto working_dir = ls::to_wstring(desc->m_working_dir);
     eastl::vector<LPCWSTR> args = {};
     args.push_back(L"-E");
     args.push_back(L"main");
@@ -137,10 +138,15 @@ eastl::vector<u32> ShaderCompiler::compile_shader(ShaderCompileDesc *desc)
     args.push_back(L"-fspv-target-env=vulkan1.3");
     args.push_back(L"-fvk-use-gl-layout");
     args.push_back(L"-no-warnings");
-    // args.push_back(L"-I");
-    // args.push_back(L"path/to/working/dir");
+    args.push_back(L"-I");
+    args.push_back(working_dir.data());
     args.push_back(L"-T");
     args.push_back(kHLSLStageMap[(u32)options[PragmaOptions::Stage].m_stage]);
+    for (auto &definition : desc->m_definitions)
+    {
+        eastl::string def_str = eastl::format("-D{}", definition);
+        args.push_back(ls::to_wstring(def_str).data());
+    }
 
     if (desc->m_flags & ShaderCompileFlag::GenerateDebugInfo)
         args.push_back(L"-Zi");

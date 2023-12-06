@@ -1,14 +1,7 @@
 #pragma once
 
-namespace lr
+namespace lr::fs
 {
-enum FileOperation
-{
-    Write,
-    Read,
-    Append,
-};
-
 class FileView
 {
 public:
@@ -32,9 +25,11 @@ private:
     FILE *m_pFile = nullptr;
 };
 
-namespace FileUtils
-{
-    eastl::string read_file(eastl::string_view path);
-}
+eastl::string read_file(eastl::string_view path);
+eastl::string get_current_dir();
 
-}  // namespace lr
+bool set_library_dir(eastl::string_view path);
+void *load_lib(eastl::string_view path);
+void free_lib(void *lib);
+void *get_lib_func(void *lib, eastl::string_view func_name);
+}  // namespace lr::fs

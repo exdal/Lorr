@@ -44,17 +44,26 @@ CommandList *Device::create_command_list(CommandAllocator *command_allocator)
 {
     ZoneScoped;
 
-    CommandList *pList = new CommandList;
+    CommandList *list = new CommandList;
+    list->m_handle = allocate_command_list(command_allocator);
+    return list;
+}
 
-    VkCommandBufferAllocateInfo listInfo = {
+VkCommandBuffer Device::allocate_command_list(CommandAllocator *command_allocator)
+{
+    ZoneScoped;
+
+    VkCommandBufferAllocateInfo allocate_info = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
         .commandPool = command_allocator->m_handle,
         .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
         .commandBufferCount = 1,
     };
-    vkAllocateCommandBuffers(m_handle, &listInfo, &pList->m_handle);
 
-    return pList;
+    VkCommandBuffer handle = nullptr;
+    vkAllocateCommandBuffers(m_handle, &allocate_info, &handle);
+
+    return handle;
 }
 
 void Device::begin_command_list(CommandList *list)
@@ -376,31 +385,20 @@ Pipeline *Device::create_graphics_pipeline(GraphicsPipelineInfo *pipeline_info, 
         .patchControlPoints = 0,  // TODO
     };
 
-    /// VIEWPORT -----------------------------------------------------------------
-
-    VkPipelineViewportStateCreateInfo viewport_info = {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
-        .pNext = nullptr,
-        .viewportCount = 1,
-        .pViewports = nullptr,
-        .scissorCount = 1,
-        .pScissors = nullptr,
-    };
-
     /// RASTERIZER ---------------------------------------------------------------
 
     VkPipelineRasterizationStateCreateInfo rasterizer_info = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
         .pNext = nullptr,
         .depthClampEnable = pipeline_info->m_enable_depth_clamp,
-        .polygonMode = static_cast<VkPolygonMode>(pipeline_info->m_fill_mode),
+        .polygonMode = pipeline_info->m_wireframe ? VK_POLYGON_MODE_LINE : VK_POLYGON_MODE_FILL,
         .cullMode = static_cast<VkCullModeFlags>(pipeline_info->m_cull_mode),
         .frontFace = static_cast<VkFrontFace>(!pipeline_info->m_front_face_ccw),
         .depthBiasEnable = pipeline_info->m_enable_depth_bias,
         .depthBiasConstantFactor = pipeline_info->m_depth_bias_factor,
         .depthBiasClamp = pipeline_info->m_depth_bias_clamp,
         .depthBiasSlopeFactor = pipeline_info->m_depth_slope_factor,
-        .lineWidth = 1.0,
+        .lineWidth = pipeline_info->m_line_width,
     };
 
     /// MULTISAMPLE --------------------------------------------------------------
@@ -456,6 +454,7 @@ Pipeline *Device::create_graphics_pipeline(GraphicsPipelineInfo *pipeline_info, 
 
     /// GRAPHICS PIPELINE --------------------------------------------------------
 
+    PipelineViewportStateInfo viewport_state_info(pipeline_info->m_viewports, pipeline_info->m_scissors);
     VkGraphicsPipelineCreateInfo pipeline_create_info = {
         .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
         .pNext = pipeline_attachment_info,
@@ -465,7 +464,7 @@ Pipeline *Device::create_graphics_pipeline(GraphicsPipelineInfo *pipeline_info, 
         .pVertexInputState = &input_layout_info,
         .pInputAssemblyState = &input_assembly_info,
         .pTessellationState = &tessellation_info,
-        .pViewportState = &viewport_info,
+        .pViewportState = &viewport_state_info,
         .pRasterizationState = &rasterizer_info,
         .pMultisampleState = &multisample_info,
         .pDepthStencilState = &depth_stencil_info,
@@ -501,17 +500,16 @@ Shader *Device::create_shader(ShaderStage stage, eastl::span<u32> ir)
 {
     ZoneScoped;
 
-    Shader *pShader = new Shader;
-    pShader->m_type = stage;
-
     VkShaderModuleCreateInfo create_info = {
         .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
         .codeSize = ir.size_bytes(),
         .pCode = ir.data(),
     };
-    vkCreateShaderModule(m_handle, &create_info, nullptr, &pShader->m_handle);
 
-    return pShader;
+    VkShaderModule shader_handle = nullptr;
+    vkCreateShaderModule(m_handle, &create_info, nullptr, &shader_handle);
+
+    return new Shader(shader_handle, stage);
 }
 
 void Device::delete_shader(Shader *shader)

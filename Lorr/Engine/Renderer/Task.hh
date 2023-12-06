@@ -1,30 +1,36 @@
 #pragma once
 
+#include "Task.hh"
+#include "TaskCommandList.hh"
 #include "TaskResource.hh"
-
-#include "Graphics/CommandList.hh"
 
 namespace lr::Renderer
 {
 struct TaskGraph;
-
 struct TaskContext
 {
-    TaskContext(TaskGraph &task_graph, Graphics::CommandList *command_list)
-        : m_task_graph(task_graph),
+    TaskContext(Task *task, TaskGraph &task_graph, TaskCommandList &command_list)
+        : m_task(task),
+          m_task_graph(task_graph),
           m_command_list(command_list)
     {
     }
 
-    Graphics::CommandList *get_command_list() { return m_command_list; }
+    TaskCommandList &get_command_list();
     Graphics::ImageView *get_image_view(GenericResource &use);
-    Graphics::RenderingAttachment as_color_attachment(
-        GenericResource &use, const Graphics::ColorClearValue &clearVal);
     glm::uvec2 get_image_size(GenericResource &use);
+    glm::uvec4 get_pass_size();
+    using attachment_pair = eastl::pair<eastl::vector<Graphics::Format>, Graphics::Format>;
+    attachment_pair get_attachment_formats();
+    eastl::span<GenericResource> get_resources();
+
+    Graphics::RenderingAttachment as_color_attachment(
+        GenericResource &use, const Graphics::ColorClearValue &clear_value = { 0.0f, 0.0f, 0.0f, 1.0f });
 
 private:
+    Task *m_task;
     TaskGraph &m_task_graph;
-    Graphics::CommandList *m_command_list = nullptr;
+    TaskCommandList &m_command_list;
 };
 
 using TaskID = u32;
@@ -54,8 +60,7 @@ struct Task
 };
 
 template<typename TTask>
-concept TaskConcept =
-    requires { TTask{}.m_uses; } and requires(TaskContext tc) { TTask{}.execute(tc); };
+concept TaskConcept = requires { TTask{}.m_uses; } and requires(TaskContext tc) { TTask{}.execute(tc); };
 
 template<TaskConcept TTask>
 struct TaskWrapper : Task
@@ -64,7 +69,7 @@ struct TaskWrapper : Task
         : m_task(task)
     {
         m_name = TTask::m_task_name;
-        m_generic_resources = { (GenericResource *)&task.m_uses, resource_count };
+        m_generic_resources = { (GenericResource *)&m_task.m_uses, resource_count };
 #if _DEBUG
         for (auto &resource : m_generic_resources)
             assert(resource.m_buffer_id != BufferNull);
@@ -74,8 +79,7 @@ struct TaskWrapper : Task
     void execute(TaskContext &ctx) override { m_task.execute(ctx); }
 
     TTask m_task;
-    constexpr static usize resource_count =
-        sizeof(typename TTask::Uses) / sizeof(GenericResource);
+    constexpr static usize resource_count = sizeof(typename TTask::Uses) / sizeof(GenericResource);
 };
 
 struct TaskBarrier

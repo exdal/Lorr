@@ -23,7 +23,7 @@ struct FrameManagerDesc
 
 struct FrameManager
 {
-    void create(const FrameManagerDesc &desc);
+    void init(const FrameManagerDesc &desc);
     void destroy();
     void next_frame();  // Advance to the next frame
     eastl::pair<Graphics::Image *, Graphics::ImageView *> get_image(u32 idx = 0);
@@ -43,10 +43,14 @@ struct FrameManager
 
 struct Renderer
 {
-    void create(BaseWindow *window);
+    void init(BaseWindow *window);
     void refresh_frame(u32 width, u32 height);
     void on_resize(u32 width, u32 height);
     void draw();
+
+    void load_pipelines();
+
+    auto &get_pipeline_manager() { return m_task_graph.m_pipeline_manager; }
 
     Graphics::Instance m_instance = {};
     Graphics::PhysicalDevice *m_physical_device = nullptr;

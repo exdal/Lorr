@@ -336,12 +336,6 @@ enum class CullMode : u32
     Back = VK_CULL_MODE_BACK_BIT,
 };
 
-enum class FillMode : u32
-{
-    Fill = 0,
-    Wireframe,
-};
-
 enum class Filtering : u32
 {
     Nearest = VK_FILTER_NEAREST,
@@ -455,33 +449,46 @@ enum class ColorMask : u32
 };
 LR_TYPEOP_ARITHMETIC(ColorMask, ColorMask, |);
 
-enum class PipelineDynamicState : u32
+enum class DynamicState : u32
 {
-    Viewport = VK_DYNAMIC_STATE_VIEWPORT,
-    Scissor = VK_DYNAMIC_STATE_SCISSOR,
-    LineWidth = VK_DYNAMIC_STATE_LINE_WIDTH,
-    DepthBias = VK_DYNAMIC_STATE_DEPTH_BIAS,
-    BlendConstants = VK_DYNAMIC_STATE_BLEND_CONSTANTS,
-    DepthBounds = VK_DYNAMIC_STATE_DEPTH_BOUNDS,
-    StencilCompareMask = VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK,
-    StencilWriteMask = VK_DYNAMIC_STATE_STENCIL_WRITE_MASK,
-    StencilReference = VK_DYNAMIC_STATE_STENCIL_REFERENCE,
-    CullMode = VK_DYNAMIC_STATE_CULL_MODE,
-    FrontFace = VK_DYNAMIC_STATE_FRONT_FACE,
-    PrimitiveType = VK_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY,
-    ViewportAndCount = VK_DYNAMIC_STATE_VIEWPORT_WITH_COUNT,
-    ScissorAndCount = VK_DYNAMIC_STATE_SCISSOR_WITH_COUNT,
-    InputBindingStride = VK_DYNAMIC_STATE_VERTEX_INPUT_BINDING_STRIDE,
-    DepthTestEnable = VK_DYNAMIC_STATE_DEPTH_TEST_ENABLE,
-    DepthWriteEnable = VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE,
-    DepthCompareOp = VK_DYNAMIC_STATE_DEPTH_COMPARE_OP,
-    DepthBoundsTestEnable = VK_DYNAMIC_STATE_DEPTH_BOUNDS_TEST_ENABLE,
-    StencilTestEnable = VK_DYNAMIC_STATE_STENCIL_TEST_ENABLE,
-    StencilOp = VK_DYNAMIC_STATE_STENCIL_OP,
-    RasterDiscardEnable = VK_DYNAMIC_STATE_RASTERIZER_DISCARD_ENABLE,
-    DepthBiasEnable = VK_DYNAMIC_STATE_DEPTH_BIAS_ENABLE,
-    PrimitiveRestartEnable = VK_DYNAMIC_STATE_PRIMITIVE_RESTART_ENABLE,
+    Viewport = 1 << 0,          // VK_DYNAMIC_STATE_VIEWPORT,
+    Scissor = 1 << 1,           // VK_DYNAMIC_STATE_SCISSOR,
+    ViewportAndCount = 1 << 2,  // VK_DYNAMIC_STATE_VIEWPORT_WITH_COUNT,
+    ScissorAndCount = 1 << 3,   // VK_DYNAMIC_STATE_SCISSOR_WITH_COUNT,
+    DepthTestEnable = 1 << 4,   // VK_DYNAMIC_STATE_DEPTH_TEST_ENABLE,
+    DepthWriteEnable = 1 << 5,  // VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE,
+    LineWidth = 1 << 6,         // VK_DYNAMIC_STATE_LINE_WIDTH,
+    DepthBias = 1 << 7,         // VK_DYNAMIC_STATE_DEPTH_BIAS,
+    BlendConstants = 1 << 8,    // VK_DYNAMIC_STATE_BLEND_CONSTANTS,
+
+    VK_Viewport = VK_DYNAMIC_STATE_VIEWPORT,
+    VK_Scissor = VK_DYNAMIC_STATE_SCISSOR,
+    VK_ViewportAndCount = VK_DYNAMIC_STATE_VIEWPORT_WITH_COUNT,
+    VK_ScissorAndCount = VK_DYNAMIC_STATE_SCISSOR_WITH_COUNT,
+    VK_DepthTestEnable = VK_DYNAMIC_STATE_DEPTH_TEST_ENABLE,
+    VK_DepthWriteEnable = VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE,
+    VK_LineWidth = VK_DYNAMIC_STATE_LINE_WIDTH,
+    VK_DepthBias = VK_DYNAMIC_STATE_DEPTH_BIAS,
+    VK_BlendConstants = VK_DYNAMIC_STATE_BLEND_CONSTANTS,
+
+    // DepthBounds = VK_DYNAMIC_STATE_DEPTH_BOUNDS,
+    // StencilCompareMask = VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK,
+    // StencilWriteMask = VK_DYNAMIC_STATE_STENCIL_WRITE_MASK,
+    // StencilReference = VK_DYNAMIC_STATE_STENCIL_REFERENCE,
+    // CullMode = VK_DYNAMIC_STATE_CULL_MODE,
+    // FrontFace = VK_DYNAMIC_STATE_FRONT_FACE,
+    // PrimitiveType = VK_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY,
+    // InputBindingStride = VK_DYNAMIC_STATE_VERTEX_INPUT_BINDING_STRIDE,
+    // DepthCompareOp = VK_DYNAMIC_STATE_DEPTH_COMPARE_OP,
+    // DepthBoundsTestEnable = VK_DYNAMIC_STATE_DEPTH_BOUNDS_TEST_ENABLE,
+    // StencilTestEnable = VK_DYNAMIC_STATE_STENCIL_TEST_ENABLE,
+    // StencilOp = VK_DYNAMIC_STATE_STENCIL_OP,
+    // RasterDiscardEnable = VK_DYNAMIC_STATE_RASTERIZER_DISCARD_ENABLE,
+    // DepthBiasEnable = VK_DYNAMIC_STATE_DEPTH_BIAS_ENABLE,
+    // PrimitiveRestartEnable = VK_DYNAMIC_STATE_PRIMITIVE_RESTART_ENABLE,
 };
+LR_TYPEOP_ARITHMETIC(DynamicState, DynamicState, |);
+LR_TYPEOP_ARITHMETIC_INT(DynamicState, DynamicState, &);
 
 enum class ShaderStage : u32
 {

@@ -11,7 +11,7 @@ namespace lr
 struct BackTrace
 {
     static void Init();
-    static void PrintTrace(iptr threadID, FILE *pFile);
+    static void PrintTrace(iptr threadID);
 
     void *m_pDbgHelpDll = nullptr;
     void *m_pProcess = nullptr;

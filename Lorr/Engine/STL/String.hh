@@ -27,11 +27,20 @@ constexpr eastl::string_view trim_forward_ranged(eastl::string_view str, eastl::
 
 constexpr eastl::string_view trim_file_name(eastl::string_view directory)
 {
-    uptr namePos = directory.find_last_of("\\/");
+    usize namePos = directory.find_last_of("\\/");
     if (namePos == -1)
         return directory;
 
     return directory.substr(namePos + 1, directory.length() - namePos);
+}
+
+constexpr eastl::string_view trim_file_directory(eastl::string_view directory)
+{
+    usize namePos = directory.find_last_of("\\/");
+    if (namePos == -1)
+        return directory;
+
+    return directory.substr(0, namePos);
 }
 
 constexpr eastl::string_view trim_string(eastl::string_view str, eastl::string_view chars)
@@ -74,4 +83,6 @@ constexpr bool get_line(eastl::string_view str, eastl::string_view &line)
 
     return false;
 }
+
+eastl::wstring to_wstring(eastl::string_view str);
 }  // namespace ls

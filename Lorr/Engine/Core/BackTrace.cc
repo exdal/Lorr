@@ -1,14 +1,11 @@
-// Created on Sunday May 21st 2023 by exdal
-// Last modified on Tuesday June 27th 2023 by exdal
-
 #include "BackTrace.hh"
 #include "BackTraceSymbols.hh"
+
+#include "FileSystem.hh"
 
 #include <tlhelp32.h>
 #include <eathread/eathread_callstack.h>
 #include <eathread/eathread_callstack_context.h>
-
-#include "OS/Directory.hh"
 
 /// DEFINE SYMBOLS
 #define _BT_DEFINE_FUNCTION(_name) PFN_##_name lr##_name
@@ -30,7 +27,7 @@ namespace lr
 {
 static BackTrace _bt;
 
-static void PrintSymbol(u32 frameIdx, uptr address, FILE *pFile)
+static void PrintSymbol(u32 frameIdx, uptr address)
 {
     char pSymFromAddrMsg[64] = {};
     char pSymGetLineFromAddrMsg[64] = {};
@@ -61,15 +58,10 @@ static void PrintSymbol(u32 frameIdx, uptr address, FILE *pFile)
     if (!lrSymGetModuleInfo64(_bt.m_pProcess, address, &module))
         _snprintf(pGetModuleInfoMsg, 64, "lrSymGetModuleInfo64-%lu", GetLastError());
 
-    fprintf(pFile, "#%d: %.8I64x %s!%s+0x%lx ", frameIdx, address, module.ModuleName, pSymbolName, lineOff);
-
-    if (line.LineNumber)
-        fprintf(pFile, "(%s:%lu) ", line.FileName, line.LineNumber);
+    LOG_TRACE("#{}: {} {}!{}+0x{} ({}:{})", frameIdx, address, module.ModuleName, pSymbolName, lineOff, line.FileName, line.LineNumber);
 
     if (strlen(pGetModuleInfoMsg) || strlen(pSymFromAddrMsg) || strlen(pSymGetLineFromAddrMsg))
-        fprintf(pFile, "%s %s %s", pGetModuleInfoMsg, pSymFromAddrMsg, pSymGetLineFromAddrMsg);
-
-    fprintf(pFile, "\n");
+        LOG_TRACE("{} {} {}", pGetModuleInfoMsg, pSymFromAddrMsg, pSymGetLineFromAddrMsg);
 
     SetLastError(0);
 }
@@ -90,16 +82,10 @@ static LONG UnhandledExceptionHandler(LPEXCEPTION_POINTERS exceptions)
         return EXCEPTION_CONTINUE_SEARCH;
     }
 
-    FILE *pFile = fopen("LRCrashLog.txt", "wb");
     PEXCEPTION_RECORD pRecord = exceptions->ExceptionRecord;
-    fprintf(pFile, "***** Unhandled Exception Record *****\n");
-    fprintf(
-        pFile,
-        "- Access Violation (0x%08lx) at address 0x%.12llx",
-        pRecord->ExceptionCode,
-        pRecord->ExceptionInformation[1]);
-    PrintSymbol(0, (uptr)pRecord->ExceptionAddress, pFile);
-    fprintf(pFile, "\n");
+    LOG_TRACE("***** Unhandled Exception Record *****");
+    LOG_TRACE("- Access Violation (0x{}) at address 0x{}", pRecord->ExceptionCode, pRecord->ExceptionInformation[1]);
+    PrintSymbol(0, (uptr)pRecord->ExceptionAddress);
 
     uptr thisProc = GetCurrentProcessId();
     do
@@ -109,15 +95,13 @@ static LONG UnhandledExceptionHandler(LPEXCEPTION_POINTERS exceptions)
             HANDLE th = OpenThread(THREAD_SUSPEND_RESUME, FALSE, threadEntry.th32ThreadID);
             if (th != INVALID_HANDLE_VALUE)
             {
-                BackTrace::PrintTrace(threadEntry.th32ThreadID, pFile);
+                BackTrace::PrintTrace(threadEntry.th32ThreadID);
                 SuspendThread(th);
                 CloseHandle(th);
             }
         }
     } while (Thread32Next(pSnapshot, &threadEntry));
     CloseHandle(pSnapshot);
-
-    fclose(pFile);
     return 1;
 }
 
@@ -128,7 +112,7 @@ void BackTrace::Init()
     ::SetUnhandledExceptionFilter(UnhandledExceptionHandler);
     _bt.m_pProcess = GetCurrentProcess();
 
-    _bt.m_pDbgHelpDll = OS::LoadDll("dbghelp.dll");
+    _bt.m_pDbgHelpDll = fs::load_lib("dbghelp.dll");
     if (_bt.m_pDbgHelpDll == nullptr)
     {
         LOG_WARN("Could not load dbghelp.dll, crash report will not function properly.");
@@ -138,12 +122,12 @@ void BackTrace::Init()
     _BT_IMPORT_DBGHELP_SYMBOLS
 
     lrSymSetOptions(
-        SYMOPT_CASE_INSENSITIVE | SYMOPT_LOAD_LINES | SYMOPT_OMAP_FIND_NEAREST | SYMOPT_FAIL_CRITICAL_ERRORS
-        | SYMOPT_AUTO_PUBLICS | SYMOPT_NO_IMAGE_SEARCH | SYMOPT_NO_PROMPTS | SYMOPT_DEBUG);
+        SYMOPT_CASE_INSENSITIVE | SYMOPT_LOAD_LINES | SYMOPT_OMAP_FIND_NEAREST | SYMOPT_FAIL_CRITICAL_ERRORS | SYMOPT_AUTO_PUBLICS
+        | SYMOPT_NO_IMAGE_SEARCH | SYMOPT_NO_PROMPTS | SYMOPT_DEBUG);
     lrSymInitialize(_bt.m_pProcess, NULL, TRUE);
 }
 
-void BackTrace::PrintTrace(iptr threadID, FILE *pFile)
+void BackTrace::PrintTrace(iptr threadID)
 {
     ZoneScoped;
 
@@ -153,10 +137,8 @@ void BackTrace::PrintTrace(iptr threadID, FILE *pFile)
     EA::Thread::CallstackContext context = {};
     EA::Thread::GetCallstackContext(context, threadID);
 
-    fprintf(
-        pFile, "\n### Trace for Thread %llu, named %s ###\n", threadID, EA::Thread::GetThreadName(&threadID));
-
-    fprintf(pFile, "\n--- Callstack Begin ---\n");
+    LOG_TRACE("\n### Trace for Thread {}, named {} ###\n", threadID, EA::Thread::GetThreadName(&threadID));
+    LOG_TRACE("\n--- Callstack Begin ---\n");
 
     void *pCallstack[32] = {};
     u32 frameCount = EA::Thread::GetCallstack(pCallstack, 32, nullptr);
@@ -166,10 +148,10 @@ void BackTrace::PrintTrace(iptr threadID, FILE *pFile)
         void *pCurrentFrame = pCallstack[i];
         uptr address = (uptr)pCurrentFrame;
 
-        PrintSymbol(i, address, pFile);
+        PrintSymbol(i, address);
     }
 
-    fprintf(pFile, "\n--- Callstack End ---\n");
+    LOG_TRACE("\n--- Callstack End ---\n");
 }
 
 }  // namespace lr

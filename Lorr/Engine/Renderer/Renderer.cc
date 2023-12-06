@@ -4,11 +4,9 @@
 
 #include "TaskGraph.hh"
 
-#include <Graphics/Shader.hh>
-#include <IO/File.hh>
-
 namespace lr::Renderer
 {
+using namespace Graphics;
 struct Triangle
 {
     constexpr static eastl::string_view m_task_name = "Triangle";
@@ -22,20 +20,19 @@ struct Triangle
     {
         auto list = tc.get_command_list();
 
-        auto attachment = tc.as_color_attachment(m_uses.m_color_attachment, { 0.1f, 0.1f, 0.1f, 1.0f });
-        auto render_size = tc.get_image_size(m_uses.m_color_attachment);
-        Graphics::RenderingBeginDesc rendering_desc = {
-            .m_render_area = { 0, 0, render_size.x, render_size.y },
-            .m_color_attachments = attachment,
-        };
+        list.set_dynamic_state(DynamicState::Viewport | DynamicState::Scissor);
+        list.set_pipeline("triangle");
 
-        list->begin_rendering(&rendering_desc);
-        // Le epic pbr rendering
-        list->end_rendering();
+        auto attachment = tc.as_color_attachment(m_uses.m_color_attachment);
+        list.begin_rendering({ .m_color_attachments = attachment });
+        list.set_viewport(0, tc.get_pass_size());
+        list.set_scissors(0, tc.get_pass_size());
+        list.draw(3);
+        list.end_rendering();
     }
 };
 
-void FrameManager::create(const FrameManagerDesc &desc)
+void FrameManager::init(const FrameManagerDesc &desc)
 {
     ZoneScoped;
 
@@ -90,7 +87,7 @@ eastl::pair<Graphics::Semaphore *, Graphics::Semaphore *> FrameManager::get_sema
     return { m_acquire_semas[idx], m_present_semas[idx] };
 }
 
-void Renderer::create(BaseWindow *window)
+void Renderer::init(BaseWindow *window)
 {
     ZoneScoped;
 
@@ -130,7 +127,7 @@ void Renderer::create(BaseWindow *window)
         .m_physical_device = m_physical_device,
         .m_device = m_device,
     };
-    m_task_graph.create(&task_graph_desc);
+    m_task_graph.init(&task_graph_desc);
 
     m_swap_chain_image = m_task_graph.use_persistent_image({});
 
@@ -139,11 +136,7 @@ void Renderer::create(BaseWindow *window)
     });
     m_task_graph.present_task(m_swap_chain_image);
 
-    auto shader_src = FileUtils::read_file("triangle.vs.hlsl");
-    Graphics::ShaderCompileDesc compile_desc = {
-        .m_code = shader_src,
-    };
-    Graphics::ShaderCompiler::compile_shader(&compile_desc);
+    load_pipelines();
 }
 
 void Renderer::refresh_frame(u32 width, u32 height)
@@ -177,7 +170,7 @@ void Renderer::refresh_frame(u32 width, u32 height)
         .command_type_mask = Graphics::CommandTypeMask::Graphics,
         .renderer = this,
     };
-    m_frame_manager.create(frame_manager_desc);
+    m_frame_manager.init(frame_manager_desc);
 }
 
 void Renderer::on_resize(u32 width, u32 height)
@@ -208,6 +201,18 @@ void Renderer::draw()
 
     m_device->present(m_swap_chain, m_frame_manager.m_current_frame, present_sema, m_task_graph.m_graphics_queue);
     m_frame_manager.next_frame();
+}
+
+void Renderer::load_pipelines()
+{
+    ZoneScoped;
+
+    {
+        PipelineCompileInfo compile_info = {};
+        compile_info.add_shader("triangle.vs.hlsl");
+        compile_info.add_shader("triangle.ps.hlsl");
+        get_pipeline_manager().create_pipeline("triangle", compile_info);
+    }
 }
 
 }  // namespace lr::Renderer

@@ -23,28 +23,15 @@ enum class AttachmentOp : u32
 
 struct RenderingAttachment : VkRenderingAttachmentInfo
 {
-    RenderingAttachment(
-        ImageView *image_view,
-        ImageLayout layout,
-        AttachmentOp load_op,
-        AttachmentOp store_op);
-    RenderingAttachment(
-        ImageView *image_view,
-        ImageLayout layout,
-        AttachmentOp load_op,
-        AttachmentOp store_op,
-        ColorClearValue clear_val);
-    RenderingAttachment(
-        ImageView *image_view,
-        ImageLayout layout,
-        AttachmentOp load_op,
-        AttachmentOp store_op,
-        DepthClearValue clear_val);
+    RenderingAttachment(ImageView *image_view, ImageLayout layout, AttachmentOp load_op, AttachmentOp store_op);
+    RenderingAttachment(ImageView *image_view, ImageLayout layout, AttachmentOp load_op, AttachmentOp store_op, ColorClearValue clear_val);
+    RenderingAttachment(ImageView *image_view, ImageLayout layout, AttachmentOp load_op, AttachmentOp store_op, DepthClearValue clear_val);
 };
 
+constexpr static glm::uvec4 render_area_whole = { 0, 0, -1, -1 };
 struct RenderingBeginDesc
 {
-    glm::uvec4 m_render_area = {};
+    glm::uvec4 m_render_area = render_area_whole;
 
     eastl::span<RenderingAttachment> m_color_attachments;
     RenderingAttachment *m_depth_attachment = nullptr;
@@ -68,8 +55,7 @@ struct PipelineBarrier
 struct ImageBarrier : VkImageMemoryBarrier2
 {
     ImageBarrier() = default;
-    ImageBarrier(
-        Image *image, ImageSubresourceInfo slice_info, const PipelineBarrier &barrier);
+    ImageBarrier(Image *image, ImageSubresourceInfo slice_info, const PipelineBarrier &barrier);
 };
 
 // fuck yourself holy shit
@@ -86,9 +72,7 @@ struct MemoryBarrier : VkMemoryBarrier2
 struct DependencyInfo : VkDependencyInfo
 {
     DependencyInfo();
-    DependencyInfo(
-        eastl::span<ImageBarrier> image_barriers,
-        eastl::span<MemoryBarrier> memory_barriers);
+    DependencyInfo(eastl::span<ImageBarrier> image_barriers, eastl::span<MemoryBarrier> memory_barriers);
 };
 
 using Fence = VkFence;
@@ -139,8 +123,7 @@ struct BufferCopyRegion : VkBufferCopy
 struct ImageCopyRegion : VkBufferImageCopy
 {
     ImageCopyRegion(const VkBufferImageCopy &lazy);
-    ImageCopyRegion(
-        ImageSubresourceInfo slice_info, u32 width, u32 height, u64 buffer_offset);
+    ImageCopyRegion(ImageSubresourceInfo slice_info, u32 width, u32 height, u64 buffer_offset);
 };
 
 struct CommandList : APIObject
@@ -152,26 +135,12 @@ struct CommandList : APIObject
     void set_pipeline_barrier(DependencyInfo *dependency_info);
 
     /// Copy Commands
-    void copy_buffer_to_buffer(
-        Buffer *src, Buffer *dst, eastl::span<BufferCopyRegion> regions);
-    void copy_buffer_to_image(
-        Buffer *src,
-        Image *dst,
-        ImageLayout layout,
-        eastl::span<ImageCopyRegion> regions);
+    void copy_buffer_to_buffer(Buffer *src, Buffer *dst, eastl::span<BufferCopyRegion> regions);
+    void copy_buffer_to_image(Buffer *src, Image *dst, ImageLayout layout, eastl::span<ImageCopyRegion> regions);
 
     /// Draw Commands
-    void draw(
-        u32 vertex_count,
-        u32 first_vertex = 0,
-        u32 instance_count = 1,
-        u32 first_instance = 0);
-    void draw_indexed(
-        u32 index_count,
-        u32 first_index = 0,
-        u32 vertex_offset = 0,
-        u32 instance_count = 1,
-        u32 first_instance = 0);
+    void draw(u32 vertex_count, u32 first_vertex = 0, u32 instance_count = 1, u32 first_instance = 0);
+    void draw_indexed(u32 index_count, u32 first_index = 0, u32 vertex_offset = 0, u32 instance_count = 1, u32 first_instance = 0);
     void dispatch(u32 group_x, u32 group_y, u32 group_z);
 
     /// Pipeline States
@@ -180,19 +149,10 @@ struct CommandList : APIObject
     void set_primitive_type(PrimitiveType type);
 
     void set_pipeline(Pipeline *pipeline);
-    void set_push_constants(
-        void *data,
-        u32 data_size,
-        u32 offset,
-        PipelineLayout layout,
-        ShaderStage stage_flags = ShaderStage::All);
+    void set_push_constants(void *data, u32 data_size, u32 offset, PipelineLayout layout, ShaderStage stage_flags = ShaderStage::All);
     void set_descriptor_buffers(eastl::span<DescriptorBufferBindInfo> binding_infos);
     void set_descriptor_buffer_offsets(
-        PipelineBindPoint bind_point,
-        PipelineLayout layout,
-        u32 first_set,
-        eastl::span<u32> indices,
-        eastl::span<u64> offsets);
+        PipelineBindPoint bind_point, PipelineLayout layout, u32 first_set, eastl::span<u32> indices, eastl::span<u64> offsets);
 
     VkCommandBuffer m_handle = nullptr;
 

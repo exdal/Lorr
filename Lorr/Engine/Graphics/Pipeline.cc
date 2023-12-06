@@ -44,6 +44,15 @@ PipelineVertexAttribInfo::PipelineVertexAttribInfo(u32 target_binding, u32 index
     this->offset = offset;
 }
 
+PipelineViewportStateInfo::PipelineViewportStateInfo(eastl::span<VkViewport> viewports, eastl::span<VkRect2D> scissors)
+    : VkPipelineViewportStateCreateInfo(VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO)
+{
+    this->viewportCount = viewports.size();
+    this->pViewports = viewports.data();
+    this->scissorCount = scissors.size();
+    this->pScissors = scissors.data();
+}
+
 ColorBlendAttachment::ColorBlendAttachment(
     bool enabled,
     ColorMask write_mask,

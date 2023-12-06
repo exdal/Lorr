@@ -26,6 +26,12 @@ namespace TaskAccess
         return (Access){ lhs.m_access | rhs.m_access, lhs.m_stage | rhs.m_stage };
     }
 
+    constexpr Access operator|=(Access &lhs, const Access &rhs)
+    {
+        Access lhsn = { lhs.m_access | rhs.m_access, lhs.m_stage | rhs.m_stage };
+        return lhs = lhsn | rhs;
+    }
+
     // clang-format off
 #define DECLARE_ACCESS(name, access, stages) constexpr static Access name(access, stages)
     DECLARE_ACCESS(None, MemoryAccess::None, PipelineStage::None);

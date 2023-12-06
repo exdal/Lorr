@@ -15,7 +15,7 @@ void Engine::create(EngineDesc &engineDesc)
     Job::JobManager::Init(CONFIG_GET_VAR(JM_WORKER_COUNT));
     m_window.init(engineDesc.m_window_desc);
     m_imgui.Init(m_window.m_width, m_window.m_height);
-    m_renderer.create(&m_window);
+    m_renderer.init(&m_window);
 }
 
 void Engine::push_event(Event event, EngineEventData &data)

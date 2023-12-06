@@ -3,8 +3,6 @@
 #include "APIObject.hh"
 #include "Common.hh"
 
-#include <EASTL/vector.h>
-
 namespace lr::Graphics
 {
 struct ColorBlendAttachment : VkPipelineColorBlendAttachmentState
@@ -33,17 +31,17 @@ struct PushConstantDesc : VkPushConstantRange
     PushConstantDesc(ShaderStage stage, u32 offset, u32 size);
 };
 
+struct PipelineAttachmentInfo : VkPipelineRenderingCreateInfo
+{
+    PipelineAttachmentInfo() = default;
+    PipelineAttachmentInfo(eastl::span<Format> color_attachment_formats, Format depth_attachment_format);
+};
+
 struct Shader;
 struct PipelineShaderStageInfo : VkPipelineShaderStageCreateInfo
 {
     PipelineShaderStageInfo() = default;
     PipelineShaderStageInfo(Shader *shader, eastl::string_view entry_point);
-};
-
-struct PipelineAttachmentInfo : VkPipelineRenderingCreateInfo
-{
-    PipelineAttachmentInfo() = default;
-    PipelineAttachmentInfo(eastl::span<Format> color_attachment_formats, Format depth_attachment_format);
 };
 
 struct PipelineVertexLayoutBindingInfo : VkVertexInputBindingDescription
@@ -58,41 +56,50 @@ struct PipelineVertexAttribInfo : VkVertexInputAttributeDescription
     PipelineVertexAttribInfo(u32 target_binding, u32 index, Format format, u32 offset);
 };
 
+struct PipelineViewportStateInfo : VkPipelineViewportStateCreateInfo
+{
+    PipelineViewportStateInfo() = default;
+    PipelineViewportStateInfo(eastl::span<VkViewport> viewports, eastl::span<VkRect2D> scissors);
+};
+
 using PipelineLayout = VkPipelineLayout;
 LR_ASSIGN_OBJECT_TYPE(PipelineLayout, VK_OBJECT_TYPE_PIPELINE_LAYOUT);
 
 struct GraphicsPipelineInfo
 {
     // Vertex input state
-    eastl::span<PipelineShaderStageInfo> m_shader_stages = {};
-    eastl::span<PipelineVertexLayoutBindingInfo> m_vertex_binding_infos = {};
-    eastl::span<PipelineVertexAttribInfo> m_vertex_attrib_infos = {};
+    eastl::vector<PipelineShaderStageInfo> m_shader_stages = {};
+    eastl::vector<PipelineVertexLayoutBindingInfo> m_vertex_binding_infos = {};
+    eastl::vector<PipelineVertexAttribInfo> m_vertex_attrib_infos = {};
+    eastl::vector<VkViewport> m_viewports = {};
+    eastl::vector<VkRect2D> m_scissors = {};
     // Rasterizer state
-    PrimitiveType m_primitive_type = PrimitiveType::TriangleList;
-    bool m_enable_depth_clamp = false;
-    FillMode m_fill_mode = {};
-    CullMode m_cull_mode = {};
-    bool m_front_face_ccw = false;
-    bool m_enable_depth_bias = false;
+    PrimitiveType m_primitive_type : 8 = PrimitiveType::TriangleList;
+    bool m_enable_depth_clamp : 1 = false;
+    bool m_wireframe : 1 = false;
+    CullMode m_cull_mode : 2 = {};
+    bool m_front_face_ccw : 1 = false;
+    bool m_enable_depth_bias : 1 = false;
     f32 m_depth_slope_factor = 0.0;
     f32 m_depth_bias_clamp = 0.0;
     f32 m_depth_bias_factor = 0.0;
+    f32 m_line_width = 1.0;
     // Multisample state
     u32 m_multisample_bit_count = 1;
-    bool m_enable_alpha_to_coverage = false;
-    bool m_enable_alpha_to_one = false;
+    bool m_enable_alpha_to_coverage : 1 = false;
+    bool m_enable_alpha_to_one : 1 = false;
     // Depth stencil state
-    bool m_enable_depth_test = false;
-    bool m_enable_depth_write = false;
-    CompareOp m_depth_compare_op = {};
-    bool m_enable_depth_bounds_test = false;
-    bool m_enable_stencil_test = false;
+    bool m_enable_depth_test : 1 = false;
+    bool m_enable_depth_write : 1 = false;
+    bool m_enable_depth_bounds_test : 1 = false;
+    bool m_enable_stencil_test : 1 = false;
+    CompareOp m_depth_compare_op : 8 = {};
     DepthStencilOpDesc m_stencil_front_face_op = {};
     DepthStencilOpDesc m_stencil_back_face_op = {};
     // Color blend state
-    eastl::span<ColorBlendAttachment> m_blend_attachments = {};
+    eastl::vector<ColorBlendAttachment> m_blend_attachments = {};
     // Dynamic state
-    eastl::span<PipelineDynamicState> m_dynamic_states = {};
+    eastl::vector<DynamicState> m_dynamic_states = {};
 
     PipelineLayout m_layout = nullptr;
 };

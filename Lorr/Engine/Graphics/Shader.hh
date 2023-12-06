@@ -20,6 +20,10 @@ LR_TYPEOP_ARITHMETIC_INT(ShaderCompileFlag, ShaderCompileFlag, &);
 
 struct Shader : APIObject
 {
+    Shader(VkShaderModule handle, ShaderStage stage)
+        : m_handle(handle),
+          m_type(stage){};
+
     ShaderStage m_type = ShaderStage::Vertex;
     VkShaderModule m_handle;
 };
@@ -27,9 +31,9 @@ LR_ASSIGN_OBJECT_TYPE(Shader, VK_OBJECT_TYPE_SHADER_MODULE);
 
 struct ShaderCompileDesc
 {
-    eastl::string_view m_working_dir;
-    eastl::string_view m_code;
-    ShaderStage m_target_stage = ShaderStage::Count;
+    eastl::string m_working_dir;
+    eastl::string m_code;
+    eastl::span<eastl::string> m_definitions = {};
     ShaderCompileFlag m_flags = ShaderCompileFlag::None;
 };
 
@@ -44,8 +48,8 @@ struct ShaderReflectionData
     ShaderStage m_compiled_stage = {};
     u32 m_push_constant_size = 0;       //!< Total size of constant used by user, useful for bindless
     u32 m_descriptor_start_offset = 0;  //!< Reflected bindless start offset
-    eastl::vector<PipelineVertexAttribInfo> m_vertex_attribs = {};
     eastl::string m_entry_point;
+    eastl::vector<PipelineVertexAttribInfo> m_vertex_attribs = {};
 };
 
 namespace ShaderCompiler

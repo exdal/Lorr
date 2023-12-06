@@ -1,7 +1,7 @@
 #include "Application.hh"
 
 #include "Core/BackTrace.hh"
-#include "OS/Directory.hh"
+#include "Core/FileSystem.hh"
 #include "Utils/Timer.hh"
 
 namespace lr
@@ -9,16 +9,12 @@ namespace lr
 void Application::create(BaseApplicationDesc &desc)
 {
     ZoneScoped;
-    
-    eastl::string currentPath;
-    OS::GetCurrentDir(currentPath);
-    currentPath += "\\bin";
-    OS::SetLibraryDirectory(currentPath);
+
+    fs::set_library_dir(fs::get_current_dir() + "\\bin");
 
 #if !_DEBUG
     BackTrace::Init();
-#endif 
-
+#endif
     m_name = desc.m_name;
     m_engine.create(desc.m_engine_desc);
 }

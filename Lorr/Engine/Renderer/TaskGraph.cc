@@ -6,7 +6,7 @@ namespace lr::Renderer
 {
 using namespace Graphics;
 
-void TaskGraph::create(TaskGraphDesc *desc)
+void TaskGraph::init(TaskGraphDesc *desc)
 {
     ZoneScoped;
 
@@ -17,9 +17,9 @@ void TaskGraph::create(TaskGraphDesc *desc)
     {
         m_semaphores.push_back(m_device->create_timeline_semaphore(0));
         // TODO: Split barriers
-        CommandAllocator *pAllocator = m_device->create_command_allocator(graphicsIndex, CommandAllocatorFlag::ResetCommandBuffer);
-        m_command_allocators.push_back(pAllocator);
-        m_command_lists.push_back(m_device->create_command_list(pAllocator));
+        CommandAllocator *allocator = m_device->create_command_allocator(graphicsIndex, CommandAllocatorFlag::ResetCommandBuffer);
+        m_command_allocators.push_back(allocator);
+        m_command_lists.push_back(m_device->create_command_list(allocator));
     }
 
     m_graphics_queue = m_device->create_command_queue(CommandType::Graphics, graphicsIndex);
@@ -32,6 +32,7 @@ void TaskGraph::create(TaskGraphDesc *desc)
     m_image_memory = m_device->create_device_memory(&imageMem, desc->m_physical_device);
 
     m_task_allocator.init(desc->m_initial_alloc);
+    m_pipeline_manager.init(m_device);
 }
 
 ImageID TaskGraph::use_persistent_image(const PersistentImageInfo &persistentInfo)
@@ -117,7 +118,7 @@ void TaskGraph::add_task(Task &task, TaskID id)
 
             if (is_last_read && is_current_read && is_same_layout)  // Memory barrier
             {
-                batch.m_execution_access = batch.m_execution_access | image.m_access;
+                batch.m_execution_access |= image.m_access;
             }
             else  // Transition barrier
             {
@@ -145,7 +146,7 @@ void TaskGraph::add_task(Task &task, TaskID id)
 
             if (is_last_read && is_current_read)  // Memory barrier
             {
-                batch.m_execution_access = batch.m_execution_access | buffer.m_access;
+                batch.m_execution_access |= buffer.m_access;
             }
             else  // Transition barrier
             {
@@ -200,7 +201,7 @@ void TaskGraph::execute(const TaskGraphExecuteDesc &desc)
     TaskAccess::Access last_execution_access = {};
     for (auto &batch : m_batches)
     {
-        TaskCommandList task_list = list;
+        TaskCommandList task_list(list->m_handle, *this);
 
         if (batch.m_execution_access != TaskAccess::None)
         {
@@ -216,10 +217,10 @@ void TaskGraph::execute(const TaskGraphExecuteDesc &desc)
             insert_barrier(task_list, m_barriers[barrierID]);
 
         task_list.flush_barriers();
-        for (auto &pTask : m_tasks)
+        for (auto &task : m_tasks)
         {
-            TaskContext ctx(*this, list);
-            pTask->execute(ctx);
+            TaskContext ctx(task, *this, task_list);
+            task->execute(ctx);
         }
 
         for (auto &barrierID : batch.m_end_barriers)

@@ -1,15 +1,16 @@
-// Created on Saturday May 13th 2023 by exdal
-// Last modified on Friday September 15th 2023 by exdal
-
 #pragma once
+
+#include <EASTL/string.h>
 
 #include "Crypt/CRC.hh"
 #include "Memory/MemoryUtils.hh"
 
+// TODO: Remove `SHADER_WORKING_DIR` after we get working resource manager
 #define _CONFIG_VAR_LIST                                                     \
     CONFIG_DEFINE_VAR(eastl::string, RESOURCE_META_DIR, ("."));              \
     CONFIG_DEFINE_VAR(eastl::string, RESOURCE_META_FILE, ("resmeta.lm"));    \
     CONFIG_DEFINE_VAR(eastl::string, RESOURCE_META_COMPILED_DIR, ("meta0")); \
+    CONFIG_DEFINE_VAR(eastl::string, SHADER_WORKING_DIR, ("shaders"));       \
     CONFIG_DEFINE_VAR(u32, RM_MAX_ALLOCS, (0x20000));                        \
     CONFIG_DEFINE_VAR(u32, RM_MAX_MEMORY, (1024));                           \
     CONFIG_DEFINE_VAR(u32, GPM_MAX_TLSF_ALLOCS, (0x20000));                  \
@@ -22,9 +23,7 @@
     CONFIG_DEFINE_VAR(u32, API_SWAPCHAIN_FRAMES, (3));                       \
     CONFIG_DEFINE_VAR(u32, JM_WORKER_COUNT, (1));
 
-#define CONFIG_DEFINE_VAR(type, name, defVal) \
-    ConfigVar<CRC32HashOf(#name), type> cfg_##name = ConfigVar<CRC32HashOf(#name), type>(defVal)
-
+#define CONFIG_DEFINE_VAR(type, name, defVal) ConfigVar<CRC32HashOf(#name), type> cfg_##name = ConfigVar<CRC32HashOf(#name), type>(defVal)
 #define CONFIG_GET_VAR(name) Config::Get().cfg_##name.Val
 
 namespace lr

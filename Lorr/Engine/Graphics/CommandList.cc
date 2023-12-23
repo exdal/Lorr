@@ -156,7 +156,7 @@ ImageCopyRegion::ImageCopyRegion(ImageSubresourceInfo slice_info, u32 width, u32
     this->imageExtent.depth = 1;
 }
 
-void CommandList::begin_rendering(RenderingBeginDesc *desc)
+void CommandList::begin_rendering(const RenderingBeginDesc &desc)
 {
     ZoneScoped;
 
@@ -165,14 +165,14 @@ void CommandList::begin_rendering(RenderingBeginDesc *desc)
         .pNext = nullptr,
         .layerCount = 1,
         .viewMask = 0,  // TODO: Multiviews
-        .colorAttachmentCount = static_cast<u32>(desc->m_color_attachments.size()),
-        .pColorAttachments = desc->m_color_attachments.data(),
-        .pDepthAttachment = desc->m_depth_attachment,
+        .colorAttachmentCount = static_cast<u32>(desc.m_color_attachments.size()),
+        .pColorAttachments = desc.m_color_attachments.data(),
+        .pDepthAttachment = desc.m_depth_attachment,
     };
-    beginInfo.renderArea.offset.x = static_cast<i32>(desc->m_render_area.x);
-    beginInfo.renderArea.offset.y = static_cast<i32>(desc->m_render_area.y);
-    beginInfo.renderArea.extent.width = desc->m_render_area.z;
-    beginInfo.renderArea.extent.height = desc->m_render_area.w;
+    beginInfo.renderArea.offset.x = static_cast<i32>(desc.m_render_area.x);
+    beginInfo.renderArea.offset.y = static_cast<i32>(desc.m_render_area.y);
+    beginInfo.renderArea.extent.width = desc.m_render_area.z;
+    beginInfo.renderArea.extent.height = desc.m_render_area.w;
 
     vkCmdBeginRendering(m_handle, &beginInfo);
 }
@@ -226,30 +226,30 @@ void CommandList::dispatch(u32 group_x, u32 group_y, u32 group_z)
     vkCmdDispatch(m_handle, group_x, group_y, group_z);
 }
 
-void CommandList::set_viewport(u32 id, u32 x, u32 y, u32 width, u32 height)
+void CommandList::set_viewport(u32 id, const glm::uvec4 &xyzw, const glm::vec2 &depth)
 {
     ZoneScoped;
 
-    VkViewport vp;
-    vp.x = x;
-    vp.y = y;
-    vp.width = width;
-    vp.height = height;
-    vp.minDepth = 0.0;
-    vp.maxDepth = 1.0;
+    VkViewport vp = {};
+    vp.x = xyzw.x;
+    vp.y = xyzw.y;
+    vp.width = xyzw.z;
+    vp.height = xyzw.w;
+    vp.minDepth = depth.x;
+    vp.maxDepth = depth.y;
 
     vkCmdSetViewport(m_handle, id, 1, &vp);
 }
 
-void CommandList::set_scissors(u32 id, u32 x, u32 y, u32 width, u32 height)
+void CommandList::set_scissors(u32 id, const glm::ivec4 &xyzw)
 {
     ZoneScoped;
 
-    VkRect2D rect;
-    rect.offset.x = x;
-    rect.offset.y = y;
-    rect.extent.width = width - x;
-    rect.extent.height = height - y;
+    VkRect2D rect = {};
+    rect.offset.x = xyzw.x;
+    rect.offset.y = xyzw.y;
+    rect.extent.width = xyzw.z;
+    rect.extent.height = xyzw.w;
 
     vkCmdSetScissor(m_handle, id, 1, &rect);
 }

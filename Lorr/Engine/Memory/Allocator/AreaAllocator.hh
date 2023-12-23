@@ -15,7 +15,7 @@ struct AllocationArea
 
 struct AreaAllocatorView
 {
-    bool can_allocate(u64 size, u32 alignment);
+    bool can_allocate(u64 size, u64 alignment);
     void reset();
     u64 size();
 
@@ -31,8 +31,8 @@ struct AreaAllocator : AreaAllocatorView
     AllocationArea *allocate_area(usize size);
     AllocationArea *first_area() { return m_view.m_first_area; }
 
-    bool can_allocate(u64 size, u32 alignment = 1);
-    u8 *allocate(u64 size, u32 alignment = 1);
+    bool can_allocate(u64 size, u64 alignment = 1);
+    u8 *allocate(u64 size, u64 alignment = 1);
     template<typename _T, typename... _Args>
     _T *allocate_obj(_Args &&...args);
 

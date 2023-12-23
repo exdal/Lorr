@@ -2,17 +2,16 @@
 
 #include "TaskGraph.hh"
 
-namespace lr::Renderer
+namespace lr::Graphics
 {
-TaskCommandList &TaskContext::get_command_list()
+CommandList &TaskContext::get_command_list()
 {
     ZoneScoped;
 
-    m_command_list.set_context(this);
     return m_command_list;
 }
 
-Graphics::ImageView *TaskContext::get_image_view(GenericResource &use)
+ImageView *TaskContext::get_image_view(GenericResource &use)
 {
     ZoneScoped;
 
@@ -32,7 +31,7 @@ glm::uvec4 TaskContext::get_pass_size()
     ZoneScoped;
 
     glm::uvec2 max_size = {};
-    for (auto &use : m_task->m_generic_resources)
+    for (auto &use : m_task.m_generic_resources)
     {
         auto size = get_image_size(use);
         if (max_size.x < size.x && max_size.y < size.y)
@@ -47,15 +46,15 @@ TaskContext::attachment_pair TaskContext::get_attachment_formats()
     ZoneScoped;
 
     attachment_pair formats = {};
-    for (auto &resource : m_task->m_generic_resources)
+    for (auto &resource : m_task.m_generic_resources)
     {
-        if (resource.m_image_id == ImageNull)
+        if (resource.m_image_id == LR_NULL_ID)
             continue;
 
         TaskImageInfo &imageInfo = m_task_graph.m_image_infos[resource.m_image_id];
-        if (resource.m_image_layout == Graphics::ImageLayout::ColorAttachment)
+        if (resource.m_image_layout == ImageLayout::ColorAttachment)
             formats.first.push_back(imageInfo.m_view->m_format);
-        else if (resource.m_image_layout == Graphics::ImageLayout::DepthStencilAttachment)
+        else if (resource.m_image_layout == ImageLayout::DepthStencilAttachment)
             formats.second = imageInfo.m_view->m_format;
     }
 
@@ -64,10 +63,10 @@ TaskContext::attachment_pair TaskContext::get_attachment_formats()
 
 eastl::span<GenericResource> TaskContext::get_resources()
 {
-    return m_task->m_generic_resources;
+    return m_task.m_generic_resources;
 }
 
-Graphics::RenderingAttachment TaskContext::as_color_attachment(GenericResource &use, const Graphics::ColorClearValue &clear_value)
+RenderingAttachment TaskContext::as_color_attachment(GenericResource &use, const ColorClearValue &clear_value)
 {
     ZoneScoped;
 

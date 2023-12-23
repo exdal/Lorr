@@ -23,17 +23,13 @@ static const char *kpp_required_extensions[] = {
 
 static constexpr eastl::span<const char *> k_required_extensions(kpp_required_extensions);
 
-bool Instance::create(InstanceDesc *desc)
+APIResult Instance::init(InstanceDesc *desc)
 {
-    constexpr u32 kTypeMem = Memory::MiBToBytes(16);
-    APIAllocator::m_g_handle.m_type_allocator.init(kTypeMem, 0x2000);
-    APIAllocator::m_g_handle.m_type_data = Memory::Allocate<u8>(kTypeMem);
-
     m_vulkan_lib = VK::LoadVulkan();
     if (!m_vulkan_lib)
     {
-        LOG_ERROR("Failed to load Vulkan.");
-        return false;
+        LOG_ERROR("Failed to load Vulkan library.");
+        return APIResult::Unknown;
     }
 
     u32 avail_extensions = 0;
@@ -61,7 +57,7 @@ bool Instance::create(InstanceDesc *desc)
 
         LOG_ERROR("Following extension is not found in this instance: {}", extension);
 
-        return false;
+        return APIResult::ExtNotPresent;
     }
 
     VkApplicationInfo appInfo = {
@@ -83,73 +79,37 @@ bool Instance::create(InstanceDesc *desc)
         .enabledExtensionCount = static_cast<u32>(k_required_extensions.size()),
         .ppEnabledExtensionNames = k_required_extensions.data(),
     };
-    vkCreateInstance(&createInfo, nullptr, &m_handle);
+    auto result = static_cast<APIResult>(vkCreateInstance(&createInfo, nullptr, &m_handle));
+    if (result != APIResult::Success)
+        return result;
 
     if (!VK::LoadVulkanInstance(m_handle))
-        return false;
-
-    return true;
-}
-
-PhysicalDevice *Instance::get_physical_device()
-{
-    ZoneScoped;
+    {
+        LOG_ERROR("Cannot load Vulkan instance functions.");
+        return APIResult::Unknown;
+    }
 
     u32 avail_device_count = 0;
     vkEnumeratePhysicalDevices(m_handle, &avail_device_count, nullptr);
-
     if (avail_device_count == 0)
     {
-        LOG_ERROR("No GPU with Vulkan support.");
-        return nullptr;
+        LOG_ERROR("No Vulkan compatible physical device detected.");
+        return APIResult::DeviceLost;
     }
 
-    VkPhysicalDevice *available_devices = new VkPhysicalDevice[avail_device_count];
-    vkEnumeratePhysicalDevices(m_handle, &avail_device_count, available_devices);
+    m_physical_devices.resize(avail_device_count);
+    vkEnumeratePhysicalDevices(m_handle, &avail_device_count, m_physical_devices.data());
 
-    VkPhysicalDevice found_device = nullptr;
-    for (u32 i = 0; i < avail_device_count; i++)
-    {
-        VkPhysicalDevice &device = available_devices[i];
-        VkPhysicalDeviceProperties properties = {};
-        vkGetPhysicalDeviceProperties(device, &properties);
-
-        if (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU && properties.apiVersion >= VK_API_VERSION_1_3)
-        {
-            found_device = device;
-            LOG_INFO(
-                "GPU: {}(DRIVER: {}, VENDOR: {}, ID: {}) - Vulkan {}",
-                properties.deviceName,
-                properties.driverVersion,
-                properties.vendorID,
-                properties.deviceID,
-                properties.apiVersion);
-
-            break;
-        }
-    }
-
-    if (!found_device && !check_physical_device_extensions(found_device, k_required_extensions))
-    {
-        LOG_ERROR("No GPU with proper Vulkan feature support.");
-        return nullptr;
-    }
-
-    return new PhysicalDevice(found_device);
+    return APIResult::Success;
 }
-bool Instance::check_physical_device_extensions(VkPhysicalDevice physical_device, eastl::span<const char *> required_extensions)
-{
-    u32 avail_extensions = 0;
-    vkEnumerateDeviceExtensionProperties(physical_device, nullptr, &avail_extensions, nullptr);
-    eastl::scoped_array extension_properties(new VkExtensionProperties[avail_extensions]);
-    vkEnumerateDeviceExtensionProperties(physical_device, nullptr, &avail_extensions, extension_properties.get());
 
+static bool check_extensions(eastl::span<VkExtensionProperties> avail_extensions, eastl::span<const char *> required_extensions)
+{
     for (eastl::string_view extension : required_extensions)
     {
         bool found = false;
-        for (u32 i = 0; i < avail_extensions; i++)
+        for (auto &properties : avail_extensions)
         {
-            VkExtensionProperties &properties = extension_properties[i];
             if (properties.extensionName == extension)
             {
                 found = true;
@@ -160,26 +120,161 @@ bool Instance::check_physical_device_extensions(VkPhysicalDevice physical_device
         if (found)
             continue;
 
+        LOG_WARN("Device extension {} is not found in this device.", extension);
+
         return false;
     }
 
     return true;
 }
 
-Surface *Instance::get_win32_surface(Win32Window *window)
+static eastl::vector<QueueFamilyInfo> select_queues(eastl::span<QueueSelectType> select_types, eastl::span<VkQueueFamilyProperties> propertieses)
 {
     ZoneScoped;
 
-    VkSurfaceKHR surface_handle = nullptr;
+    constexpr static VkQueueFlags type_to_flags[]{
+        [(u32)CommandType::Graphics] = VK_QUEUE_GRAPHICS_BIT,
+        [(u32)CommandType::Compute] = VK_QUEUE_COMPUTE_BIT,
+        [(u32)CommandType::Transfer] = VK_QUEUE_TRANSFER_BIT,
+    };
+
+    auto select_queue = [](CommandType type, QueueSelectType select_type, eastl::span<VkQueueFamilyProperties> propertieses) -> u32
+    {
+        auto flags = type_to_flags[static_cast<u32>(type)];
+        switch (select_type)
+        {
+            case QueueSelectType::DoNotSelect:
+                return ~0;
+            case QueueSelectType::PreferDedicated:
+            {
+                u32 best_bit_count = 0;
+                u32 best_idx = ~0;
+                for (u32 i = 0; i < propertieses.size(); i++)
+                {
+                    auto &properties = propertieses[i];
+                    u32 bit_count = _popcnt32(properties.queueFlags);
+                    if (properties.queueFlags & flags && best_bit_count > bit_count)
+                    {
+                        best_bit_count = bit_count;
+                        best_idx = i;
+                    }
+                }
+                return best_idx;
+            }
+            case QueueSelectType::RequireDedicated:
+            {
+                for (u32 i = 0; i < propertieses.size(); i++)
+                {
+                    auto &properties = propertieses[i];
+                    if (properties.queueFlags == flags)
+                        return i;
+                }
+                return ~0;
+            }
+        }
+
+        return ~0;
+    };
+
+    eastl::vector<QueueFamilyInfo> selected_families = {};
+
+    for (u32 i = 0; i < select_types.size(); i++)
+    {
+        QueueSelectType select_type = select_types[i];
+        if (select_type == QueueSelectType::DoNotSelect)
+            continue;
+
+        u32 queue_index = select_queue(static_cast<CommandType>(i), select_type, propertieses);
+        if (queue_index == ~0)
+            break;
+
+        auto &properties = propertieses[queue_index];
+        CommandTypeMask supported_types = {};
+        if (properties.queueFlags & VK_QUEUE_GRAPHICS_BIT)
+            supported_types |= CommandTypeMask::Graphics;
+        if (properties.queueFlags & VK_QUEUE_COMPUTE_BIT)
+            supported_types |= CommandTypeMask::Compute;
+        if (properties.queueFlags & VK_QUEUE_TRANSFER_BIT)
+            supported_types |= CommandTypeMask::Transfer;
+
+        selected_families.push_back({ .m_supported_types = supported_types, .m_queue_count = properties.queueCount, .m_index = queue_index });
+    }
+
+    return selected_families;
+}
+
+APIResult Instance::select_physical_device(PhysicalDevice *physical_device, PhysicalDeviceSelectInfo *select_info)
+{
+    ZoneScoped;
+
+    u32 selected_device_id = ~0;
+    eastl::vector<QueueFamilyInfo> queue_family_infos = {};
+    for (u32 k = 0; k < m_physical_devices.size(); k++)
+    {
+        VkPhysicalDevice &device = m_physical_devices[k];
+
+        u32 device_extension_count = 0;
+        vkEnumerateDeviceExtensionProperties(device, nullptr, &device_extension_count, nullptr);
+        eastl::vector<VkExtensionProperties> extension_propertieses(device_extension_count);
+        vkEnumerateDeviceExtensionProperties(device, nullptr, &device_extension_count, extension_propertieses.data());
+
+        if (!check_extensions(extension_propertieses, select_info->m_required_extensions))
+            continue;
+
+        u32 queue_family_count = 0;
+        vkGetPhysicalDeviceQueueFamilyProperties(device, &queue_family_count, nullptr);
+        eastl::vector<VkQueueFamilyProperties> queue_family_propertieses(queue_family_count);
+        vkGetPhysicalDeviceQueueFamilyProperties(device, &queue_family_count, queue_family_propertieses.data());
+
+        // There is a chance that `select_queues` can return same
+        // type more than once, so we need to reorder it per type
+        eastl::vector<QueueFamilyInfo> current_families = select_queues(select_info->m_queue_select_types, queue_family_propertieses);
+        eastl::vector<QueueFamilyInfo> ordered_families = {};
+        for (u32 i = 0; i < select_info->m_queue_select_types.size(); i++)
+        {
+            QueueSelectType select_type = select_info->m_queue_select_types[i];
+            if (select_type == QueueSelectType::DoNotSelect)
+                continue;
+
+            CommandTypeMask type_mask = static_cast<CommandTypeMask>(1 << i);
+            QueueFamilyInfo *best_family = nullptr;
+
+            for (auto &queue_family : current_families)
+            {
+                if (queue_family.m_supported_types & type_mask
+                    && (!best_family || _popcnt32((u32)best_family->m_supported_types) > _popcnt32((u32)queue_family.m_supported_types)))
+                {
+                    best_family = &queue_family;
+                }
+            }
+
+            if (!best_family)
+                return APIResult::DeviceLost;
+
+            ordered_families.push_back(*best_family);
+        }
+
+        selected_device_id = k;
+        queue_family_infos = eastl::move(ordered_families);
+    }
+
+    VkPhysicalDevice physical_device_raw = m_physical_devices[selected_device_id];
+    return physical_device->init(physical_device_raw, queue_family_infos);
+}
+
+APIResult Instance::get_win32_surface(Surface *surface, Win32Window *window)
+{
+    ZoneScoped;
+
+    validate_handle(surface);
+
     VkWin32SurfaceCreateInfoKHR surfaceInfo = {
         .sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR,
         .pNext = nullptr,
         .hinstance = static_cast<HINSTANCE>(window->m_instance),
         .hwnd = static_cast<HWND>(window->m_handle),
     };
-    vkCreateWin32SurfaceKHR(m_handle, &surfaceInfo, nullptr, &surface_handle);
-
-    return new Surface(surface_handle);
+    return static_cast<APIResult>(vkCreateWin32SurfaceKHR(m_handle, &surfaceInfo, nullptr, &surface->m_handle));
 }
 
 }  // namespace lr::Graphics

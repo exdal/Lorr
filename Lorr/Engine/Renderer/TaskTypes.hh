@@ -2,7 +2,7 @@
 
 #include "Graphics/Common.hh"
 
-namespace lr::Renderer
+namespace lr::Graphics
 {
 namespace TaskAccess
 {

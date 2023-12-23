@@ -35,7 +35,7 @@ struct TLSFAllocatorView
     /// ------------------------------------------------------------ ///
 
     void init(u64 mem_size, u32 max_allocs);
-    ~TLSFAllocatorView();
+    virtual ~TLSFAllocatorView() = default;
 
     TLSFBlockID allocate(u64 size, u64 alignment = ALIGN_SIZE);
     void free(TLSFBlockID blockID);
@@ -54,9 +54,9 @@ struct TLSFAllocatorView
     u32 m_first_list_bitmap = 0;
     u32 m_second_list_bitmap[FL_INDEX_COUNT] = {};
 
-    TLSFBlock *m_blocks = nullptr;
-    TLSFBlockID *m_block_indices = nullptr;
-    TLSFBlockID *m_free_blocks = nullptr;
+    eastl::vector<TLSFBlock> m_blocks = {};
+    eastl::vector<TLSFBlockID> m_block_indices = {};
+    eastl::vector<TLSFBlockID> m_free_blocks = {};
     u32 m_free_list_offset = 0;
 
     u64 m_max_size = 0;

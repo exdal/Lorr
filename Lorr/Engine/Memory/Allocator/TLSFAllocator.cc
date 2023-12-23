@@ -13,10 +13,10 @@ void TLSFAllocatorView::init(u64 mem_size, u32 max_allocs)
     u32 firstIndex = get_first_index(mem_size);
     u32 blockCount = firstIndex * SL_INDEX_COUNT + get_second_index(firstIndex, mem_size);
 
-    m_blocks = new TLSFBlock[max_allocs];
-    m_free_blocks = new TLSFBlockID[max_allocs];
-    m_block_indices = new TLSFBlockID[blockCount];
-    memset(m_block_indices, TLSFBlock::k_invalid, sizeof(TLSFBlockID) * blockCount);
+    m_blocks.resize(blockCount);
+    m_free_blocks.resize(max_allocs);
+    m_block_indices.resize(blockCount);
+    memset(m_block_indices.data(), TLSFBlock::k_invalid, sizeof(TLSFBlockID) * blockCount);
 
     for (u32 i = 0; i < max_allocs; i++)
         m_free_blocks[i] = max_allocs - i - 1;
@@ -26,30 +26,24 @@ void TLSFAllocatorView::init(u64 mem_size, u32 max_allocs)
     add_free_block(mem_size, 0);
 }
 
-TLSFAllocatorView::~TLSFAllocatorView()
-{
-    delete[] m_free_blocks;
-    delete[] m_blocks;
-    delete[] m_block_indices;
-}
-
 TLSFBlockID TLSFAllocatorView::allocate(u64 size, u64 alignment)
 {
     ZoneScoped;
 
-    TLSFBlockID foundBlock = find_free_block(size);
-    if (foundBlock != TLSFBlock::k_invalid)
+    u64 aligned_size = align_up(size, alignment);
+    TLSFBlockID found_block = find_free_block(aligned_size);
+    if (found_block != TLSFBlock::k_invalid)
     {
-        remove_free_block(foundBlock, false);
+        remove_free_block(found_block, false);
 
-        u64 blockSize = get_physical_size(foundBlock);
-        u64 sizeDiff = blockSize - size;
-        if (sizeDiff != 0)
+        u64 block_size = get_physical_size(found_block);
+        u64 size_diff = block_size - aligned_size;
+        if (size_diff != 0)
         {
-            TLSFBlock &block = m_blocks[foundBlock];
-            TLSFBlockID newBlockID = add_free_block(sizeDiff, block.m_offset + size);
+            TLSFBlock &block = m_blocks[found_block];
+            TLSFBlockID newBlockID = add_free_block(size_diff, block.m_offset + aligned_size);
 
-            m_blocks[newBlockID].m_prev_physical = foundBlock;
+            m_blocks[newBlockID].m_prev_physical = found_block;
             m_blocks[newBlockID].m_next_physical = block.m_next_physical;
 
             if (block.m_next_physical != TLSFBlock::k_invalid)
@@ -58,7 +52,7 @@ TLSFBlockID TLSFAllocatorView::allocate(u64 size, u64 alignment)
         }
     }
 
-    return foundBlock;
+    return found_block;
 }
 
 void TLSFAllocatorView::free(TLSFBlockID blockID)
@@ -125,11 +119,11 @@ TLSFBlockID TLSFAllocatorView::find_free_block(u64 size)
             return TLSFBlock::k_invalid;
         }
 
-        firstIndex = GetLSB(firstListMap);
+        firstIndex = find_lsb(firstListMap);
         secondListMap = m_second_list_bitmap[firstIndex];
     }
 
-    secondIndex = GetLSB(secondListMap);
+    secondIndex = find_lsb(secondListMap);
 
     return m_block_indices[get_free_list_index(firstIndex, secondIndex)];
 }
@@ -211,7 +205,7 @@ u32 TLSFAllocatorView::get_first_index(u64 size)
     if (size < MIN_BLOCK_SIZE)
         return 0;
 
-    return GetMSB(size) - (FL_INDEX_SHIFT - 1);
+    return find_msb(size) - (FL_INDEX_SHIFT - 1);
 }
 
 u32 TLSFAllocatorView::get_second_index(u32 first_index, u64 size)

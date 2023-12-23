@@ -82,7 +82,7 @@ struct Engine
     EventManager<EngineEventData, 64> m_event_man;
     Win32Window m_window;
     UI::ImGuiHandler m_imgui;
-    Renderer::Renderer m_renderer = {};
+    Graphics::Renderer m_renderer = {};
 
     bool m_shutting_down = false;
 

@@ -21,89 +21,113 @@ struct SubmitDesc
 
 struct Device
 {
-    Device(PhysicalDevice *physical_device, VkDevice handle);
+    void init(VkDevice handle, PhysicalDevice *physical_device);
 
     /// COMMAND ///
-    CommandQueue *create_command_queue(CommandType type, u32 queue_index);
-    CommandAllocator *create_command_allocator(u32 queue_idx, CommandAllocatorFlag flags);
-    CommandList *create_command_list(CommandAllocator *command_allocator);
-    VkCommandBuffer allocate_command_list(CommandAllocator *command_allocator);
+    APIResult create_command_queue(CommandQueue *queue, CommandType type);
+    /// @returns - Success: APIResult::Success
+    /// @returns - Failure: APIResult::[OutOfHostMem, OutOfDeviceMem]
+    APIResult create_command_allocator(CommandAllocator *allocator, CommandType type, CommandAllocatorFlag flags);
+    /// @returns - Success: APIResult::Success
+    /// @returns - Failure: APIResult::[OutOfHostMem, OutOfDeviceMem]
+    APIResult create_command_list(CommandList *list, CommandAllocator *command_allocator);
 
     void begin_command_list(CommandList *list);
     void end_command_list(CommandList *list);
     void reset_command_allocator(CommandAllocator *allocator);
     void submit(CommandQueue *queue, SubmitDesc *desc);
 
-    Fence create_fence(bool signaled);
-    void delete_fence(Fence fence);
-    bool is_fence_signaled(Fence fence);
-    void reset_fence(Fence fence);
-
-    Semaphore *create_binary_semaphore();
-    Semaphore *create_timeline_semaphore(u64 initial_value);
+    /// @returns - Success: APIResult::Success
+    /// @returns - Failure: APIResult::[OutOfHostMem, OutOfDeviceMem]
+    APIResult create_binary_semaphore(Semaphore *semaphore);
+    /// @returns - Success: APIResult::Success
+    /// @returns - Failure: APIResult::[OutOfHostMem, OutOfDeviceMem]
+    APIResult create_timeline_semaphore(Semaphore *semaphore, u64 initial_value);
     void delete_semaphore(Semaphore *semaphore);
-    void wait_for_semaphore(Semaphore *semaphore, u64 desired_value, u64 timeout = UINT64_MAX);
+    /// @returns - Success: APIResult::Success
+    /// @returns - Failure: APIResult::[OutOfHostMem, OutOfDeviceMem, DeviceLost]
+    APIResult wait_for_semaphore(Semaphore *semaphore, u64 desired_value, u64 timeout = UINT64_MAX);
 
     /// SWAPCHAIN ///
-    SwapChain *create_swap_chain(Surface *surface, SwapChainDesc *desc);
+    /// @returns - Success: APIResult::Success
+    /// @returns - Failure: APIResult::[OutOfHostMem, OutOfDeviceMem, DeviceLost, SurfaceLost, WindowInUse, InitFailed]
+    APIResult create_swap_chain(SwapChain *swap_chain, SwapChainDesc *desc, Surface *surface);
     void delete_swap_chain(SwapChain *swap_chain);
-    ls::ref_array<Image *> get_swap_chain_images(SwapChain *swap_chain);
+    /// @returns - Success: APIResult::[Success, Incomplete]
+    /// @returns - Failure: APIResult::[OutOfHostMem, OutOfDeviceMem]
+    APIResult get_swap_chain_images(SwapChain *swap_chain, Format format, glm::uvec2 image_size, eastl::span<Image> images);
 
     void wait_for_work();
-    APIResult acquire_image(SwapChain *swap_chain, Semaphore *semaphore, u32 &image_idx);
-    void present(SwapChain *swap_chain, u32 image_idx, Semaphore *semaphore, CommandQueue *queue);
+    /// @returns - Success: APIResult::[Success, Timeout, NotReady, Suboptimal]
+    /// @returns - Failure: APIResult::[OutOfHostMem, OutOfDeviceMem, DeviceLost, OutOfDate, SurfaceLost]
+    APIResult acquire_next_image(SwapChain *swap_chain, u32 &image_id);
+    /// @returns - Success: APIResult::[Success, Timeout, Suboptimal]
+    /// @returns - Failure: APIResult::[OutOfHostMem, OutOfDeviceMem, DeviceLost, OutOfDate, SurfaceLost]
+    APIResult present(SwapChain *swap_chain, CommandQueue *queue);
 
     /// PIPELINE ///
-    VkPipelineCache create_pipeline_cache(u32 initial_data_size = 0, void *initial_data = nullptr);
     PipelineLayout create_pipeline_layout(eastl::span<DescriptorSetLayout> layouts, eastl::span<PushConstantDesc> push_constants);
-    Pipeline *create_graphics_pipeline(GraphicsPipelineInfo *pipeline_info, PipelineAttachmentInfo *pipeline_attachment_info);
-    Pipeline *create_compute_pipeline(ComputePipelineInfo *pipeline_info);
+    /// @returns - Success: APIResult::Success
+    /// @returns - Failure: APIResult::[OutOfHostMem, OutOfDeviceMem]
+    APIResult create_graphics_pipeline(Pipeline *pipeline, GraphicsPipelineInfo *pipeline_info, PipelineAttachmentInfo *pipeline_attachment_info);
+    /// @returns - Success: APIResult::Success
+    /// @returns - Failure: APIResult::[OutOfHostMem, OutOfDeviceMem]
+    APIResult create_compute_pipeline(Pipeline *pipeline, ComputePipelineInfo *pipeline_info);
 
     // * Shaders * //
-    Shader *create_shader(ShaderStage stage, eastl::span<u32> ir);
+    /// @returns - Success: APIResult::Success
+    /// @returns - Failure: APIResult::[OutOfHostMem, OutOfDeviceMem]
+    APIResult create_shader(Shader *shader, ShaderStage stage, eastl::span<u32> ir);
     void delete_shader(Shader *shader);
 
     // * Descriptor * //
-    DescriptorSetLayout create_descriptor_set_layout(
-        eastl::span<DescriptorLayoutElement> elements, DescriptorSetLayoutFlag flags = DescriptorSetLayoutFlag::DescriptorBuffer);
+    DescriptorSetLayout create_descriptor_set_layout(eastl::span<DescriptorLayoutElement> elements, DescriptorSetLayoutFlag flags);
     void delete_descriptor_set_layout(DescriptorSetLayout layout);
     u64 get_descriptor_set_layout_size(DescriptorSetLayout layout);
     u64 get_descriptor_set_layout_binding_offset(DescriptorSetLayout layout, u32 binding_id);
     void get_descriptor_data(const DescriptorGetInfo &info, u64 data_size, void *data_out);
 
     /// RESOURCE ///
-    u64 get_buffer_memory_size(Buffer *buffer, u64 *alignment_out = nullptr);
-    u64 get_image_memory_size(Image *image, u64 *alignment_out = nullptr);
+    eastl::tuple<u64, u64> get_buffer_memory_size(Buffer *buffer);
+    eastl::tuple<u64, u64> get_image_memory_size(Image *image);
 
-    DeviceMemory *create_device_memory(DeviceMemoryDesc *desc, PhysicalDevice *physical_device);
+    /// @returns - Success: APIResult::Success
+    /// @returns - Failure: APIResult::[OutOfHostMem, OutOfDeviceMem, InvalidExternalHandle]
+    APIResult create_device_memory(DeviceMemory *device_memory, DeviceMemoryDesc *desc);
     void delete_device_memory(DeviceMemory *device_memory);
-    void allocate_buffer_memory(DeviceMemory *device_memory, Buffer *buffer, u64 memory_size);
-    void allocate_image_memory(DeviceMemory *device_memory, Image *image, u64 memory_size);
+    void bind_memory(DeviceMemory *device_memory, Buffer *buffer, u64 memory_offset);
+    void bind_memory(DeviceMemory *device_memory, Image *image, u64 memory_offset);
 
     // * Buffers * //
-    Buffer *create_buffer(BufferDesc *desc, DeviceMemory *device_memory);
-    void delete_buffer(Buffer *handle, DeviceMemory *device_memory);
-
-    u8 *get_memory_data(DeviceMemory *device_memory);
-    u8 *get_buffer_memory_data(DeviceMemory *device_memory, Buffer *buffer);
+    /// @returns - Success: APIResult::Success
+    /// @returns - Failure: APIResult::[OutOfHostMem, OutOfDeviceMem]
+    APIResult create_buffer(Buffer *buffer, BufferDesc *desc);
+    void delete_buffer(Buffer *handle);
 
     // * Images * //
-    Image *create_image(ImageDesc *desc, DeviceMemory *device_memory);
-    void delete_image(Image *image, DeviceMemory *device_memory);
-    ImageView *create_image_view(ImageViewDesc *desc);
+    /// @returns - Success: APIResult::Success
+    /// @returns - Failure: APIResult::[OutOfHostMem, OutOfDeviceMem]
+    APIResult create_image(Image *image, ImageDesc *desc);
+    void delete_image(Image *image);
+    /// @returns - Success: APIResult::Success
+    /// @returns - Failure: APIResult::[OutOfHostMem, OutOfDeviceMem]
+    APIResult create_image_view(ImageView *image_view, ImageViewDesc *desc);
     void delete_image_view(ImageView *image_view);
 
-    Sampler *create_sampler(SamplerDesc *desc);
-    void delete_sampler(VkSampler sampler);
+    /// @returns - Success: APIResult::Success
+    /// @returns - Failure: APIResult::[OutOfHostMem, OutOfDeviceMem]
+    APIResult create_sampler(Sampler *sampler, SamplerDesc *desc);
+    void delete_sampler(Sampler *sampler);
 
     /// UTILITY ///
+
     template<typename TType>
-    void SetObjectName(TType *obj, eastl::string_view name)
+    void set_object_name(TType *obj, eastl::string_view name)
     {
 #if _DEBUG
         VkDebugUtilsObjectNameInfoEXT object_name_info = {
             .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
-            .objectType = static_cast<VkObjectType>(ToVKObjectType<TType>::type),
+            .objectType = (VkObjectType)ToVKObjectType<TType>::type,
             .objectHandle = (u64)obj->m_handle,
             .pObjectName = name.data(),
         };
@@ -112,7 +136,7 @@ struct Device
     }
 
     template<VkObjectType TObjectType, typename TType>
-    void SetObjectNameRaw(TType object, eastl::string_view name)
+    void set_object_name_raw(TType object, eastl::string_view name)
     {
 #if _DEBUG
         VkDebugUtilsObjectNameInfoEXT object_name_info = {
@@ -125,12 +149,18 @@ struct Device
 #endif
     }
 
+    u32 get_queue_family(CommandType type)
+    {
+        return m_queue_indexes[static_cast<usize>(type)];
+    }
+
+    eastl::array<u32, static_cast<usize>(CommandType::Count)> m_queue_indexes = {};
+
     VkDevice m_handle = nullptr;
     PhysicalDevice *m_physical_device = nullptr;
     TracyVkCtx m_tracy_ctx = nullptr;
 
-    /// Pools/Caches
-    VkPipelineCache m_pipeline_cache = nullptr;
+    explicit operator bool() { return m_handle != nullptr; }
 };
 
 }  // namespace lr::Graphics

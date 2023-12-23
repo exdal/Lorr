@@ -2,36 +2,30 @@
 
 #include "TaskTypes.hh"
 
-namespace lr::Renderer
+namespace lr::Graphics
 {
-using namespace Graphics;
-
 void TaskGraph::init(TaskGraphDesc *desc)
 {
     ZoneScoped;
 
     m_device = desc->m_device;
 
-    u32 graphicsIndex = desc->m_physical_device->get_queue_index(CommandType::Graphics);
-    for (int i = 0; i < desc->m_frame_count; ++i)
+    m_frames.resize(desc->m_swap_chain->m_frame_count);
+    for (auto &frame : m_frames)
     {
-        m_semaphores.push_back(m_device->create_timeline_semaphore(0));
-        // TODO: Split barriers
-        CommandAllocator *allocator = m_device->create_command_allocator(graphicsIndex, CommandAllocatorFlag::ResetCommandBuffer);
-        m_command_allocators.push_back(allocator);
-        m_command_lists.push_back(m_device->create_command_list(allocator));
+        m_device->create_timeline_semaphore(&frame.m_timeline_sema, 0);
+
+        for (u32 i = 0; i < frame.m_allocators.max_size(); i++)
+        {
+            constexpr static auto k_allocator_flags = CommandAllocatorFlag::ResetCommandBuffer;
+            CommandAllocator &allocator = frame.m_allocators[i];
+            CommandList &list = frame.m_lists[i];
+
+            m_device->create_command_allocator(&allocator, static_cast<CommandType>(i), k_allocator_flags);
+            m_device->create_command_list(&list, &allocator);
+        }
     }
-
-    m_graphics_queue = m_device->create_command_queue(CommandType::Graphics, graphicsIndex);
-    DeviceMemoryDesc imageMem = {
-        .m_type = AllocatorType::TLSF,
-        .m_flags = MemoryFlag::Device,
-        .m_size = 0xffffff,
-        .m_max_allocations = 4096,
-    };
-    m_image_memory = m_device->create_device_memory(&imageMem, desc->m_physical_device);
-
-    m_task_allocator.init(desc->m_initial_alloc);
+    m_device->create_command_queue(&m_graphics_queue, CommandType::Graphics);
     m_pipeline_manager.init(m_device);
 }
 
@@ -164,44 +158,28 @@ void TaskGraph::add_task(Task &task, TaskID id)
         });
 }
 
-void TaskGraph::present_task(ImageID back_buffer_id)
+void TaskGraph::execute(SwapChain *swap_chain)
 {
     ZoneScoped;
 
-    if (m_batches.empty())
-        return;
+    u32 frame_id = swap_chain->m_current_frame_id;
+    TaskFrame &frame = m_frames[frame_id];
+    Semaphore &sync_sema = frame.m_timeline_sema;
+    Semaphore &acquire_sema = swap_chain->m_acquire_semas[frame_id];
+    Semaphore &present_sema = swap_chain->m_present_semas[frame_id];
 
-    auto &last_batch = m_batches.back();
-    auto &image_info = m_image_infos[back_buffer_id];
+    m_device->wait_for_semaphore(&sync_sema, sync_sema.m_value);
+    for (auto &cmd_allocator : frame.m_allocators)
+        m_device->reset_command_allocator(&cmd_allocator);
 
-    usize barrierID = m_barriers.size();
-    m_barriers.push_back({
-        .m_image_id = back_buffer_id,
-        .m_src_layout = image_info.m_last_layout,
-        .m_dst_layout = ImageLayout::Present,
-        .m_src_access = image_info.m_last_access,
-        .m_dst_access = TaskAccess::BottomOfPipe,
-    });
-
-    last_batch.m_end_barriers.push_back(barrierID);
-}
-
-void TaskGraph::execute(const TaskGraphExecuteDesc &desc)
-{
-    ZoneScoped;
-
-    auto semaphore = m_semaphores[desc.m_FrameIndex];
-    auto command_allocator = m_command_allocators[desc.m_FrameIndex];
-    auto list = m_command_lists[desc.m_FrameIndex];
-
-    m_device->wait_for_semaphore(semaphore, semaphore->m_value);
-    m_device->reset_command_allocator(command_allocator);
-    m_device->begin_command_list(list);
+    for (auto &cmd_list : frame.m_lists)
+        m_device->begin_command_list(&cmd_list);
 
     TaskAccess::Access last_execution_access = {};
     for (auto &batch : m_batches)
     {
-        TaskCommandList task_list(list->m_handle, *this);
+        CommandList &cmd_list = frame.m_lists[0];  // uhh, split barriers when?
+        CommandBatcher batcher = &cmd_list;
 
         if (batch.m_execution_access != TaskAccess::None)
         {
@@ -210,49 +188,68 @@ void TaskGraph::execute(const TaskGraphExecuteDesc &desc)
                 .m_dst_access = batch.m_execution_access,
             };
 
-            insert_barrier(task_list, executionBarrier);
+            insert_barrier(batcher, executionBarrier);
         }
 
         for (auto barrierID : batch.m_wait_barriers)
-            insert_barrier(task_list, m_barriers[barrierID]);
+            insert_barrier(batcher, m_barriers[barrierID]);
 
-        task_list.flush_barriers();
+        batcher.flush_barriers();
         for (auto &task : m_tasks)
         {
-            TaskContext ctx(task, *this, task_list);
+            TaskContext ctx(*task, *this, cmd_list);
             task->execute(ctx);
         }
 
         for (auto &barrierID : batch.m_end_barriers)
-            insert_barrier(task_list, m_barriers[barrierID]);
+            insert_barrier(batcher, m_barriers[barrierID]);
 
-        task_list.flush_barriers();
+        batcher.flush_barriers();
         last_execution_access = batch.m_execution_access;
     }
 
-    m_device->end_command_list(list);
+    for (auto &cmd_list : frame.m_lists)
+        m_device->end_command_list(&cmd_list);
 
-    /// END OF RENDERING --- SUBMIT ///
+    eastl::array<CommandListSubmitDesc, 3> list_submits = {};
+    for (u32 i = 0; i < frame.m_lists.max_size(); i++)
+        list_submits[i] = &frame.m_lists[i];
 
-    SemaphoreSubmitDesc pWaitSubmits[] = {
-        { desc.m_pAcquireSema, PipelineStage::TopOfPipe },
-    };
-    CommandListSubmitDesc pListSubmits[] = { list };
-    SemaphoreSubmitDesc pSignalSubmits[] = {
-        { desc.m_pPresentSema, PipelineStage::AllCommands },
-        { semaphore, ++semaphore->m_value, PipelineStage::AllCommands },
-    };
-
-    SubmitDesc submitDesc = {
-        .m_wait_semas = pWaitSubmits,
-        .m_lists = pListSubmits,
-        .m_signal_semas = pSignalSubmits,
+    SemaphoreSubmitDesc wait_submits[] = { { &acquire_sema, PipelineStage::TopOfPipe } };
+    SemaphoreSubmitDesc signal_submits[] = {
+        { &present_sema, PipelineStage::AllCommands },
+        { &sync_sema, ++sync_sema.m_value, PipelineStage::AllCommands },
     };
 
-    m_device->submit(m_graphics_queue, &submitDesc);
+    SubmitDesc submit_desc = {
+        .m_wait_semas = wait_submits,
+        .m_lists = list_submits,
+        .m_signal_semas = signal_submits,
+    };
+    m_device->submit(&m_graphics_queue, &submit_desc);
+    m_device->present(swap_chain, &m_graphics_queue);
 }
 
-void TaskGraph::insert_barrier(TaskCommandList &cmd_list, const TaskBarrier &barrier)
+void TaskGraph::insert_present_barrier(CommandBatcher &batcher, ImageID back_buffer_id)
+{
+    ZoneScoped;
+
+    if (m_batches.empty())
+        return;
+
+    auto &image_info = m_image_infos[back_buffer_id];
+    insert_barrier(
+        batcher,
+        {
+            .m_image_id = back_buffer_id,
+            .m_src_layout = image_info.m_last_layout,
+            .m_dst_layout = ImageLayout::Present,
+            .m_src_access = image_info.m_last_access,
+            .m_dst_access = TaskAccess::BottomOfPipe,
+        });
+}
+
+void TaskGraph::insert_barrier(CommandBatcher &batcher, const TaskBarrier &barrier)
 {
     ZoneScoped;
 
@@ -263,10 +260,10 @@ void TaskGraph::insert_barrier(TaskCommandList &cmd_list, const TaskBarrier &bar
         .m_dst_access = barrier.m_dst_access.m_access,
     };
 
-    if (barrier.m_image_id == ImageNull)
+    if (barrier.m_image_id == LR_NULL_ID)
     {
         MemoryBarrier barrierInfo(pipelineInfo);
-        cmd_list.insert_memory_barrier(barrierInfo);
+        batcher.insert_memory_barrier(barrierInfo);
     }
     else
     {
@@ -275,7 +272,7 @@ void TaskGraph::insert_barrier(TaskCommandList &cmd_list, const TaskBarrier &bar
 
         auto &image_info = m_image_infos[barrier.m_image_id];
         ImageBarrier barrier_info(image_info.m_image, {}, pipelineInfo);
-        cmd_list.insert_image_barrier(barrier_info);
+        batcher.insert_image_barrier(barrier_info);
     }
 }
-}  // namespace lr::Renderer
+}  // namespace lr::Graphics

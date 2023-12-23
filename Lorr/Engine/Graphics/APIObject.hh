@@ -1,26 +1,7 @@
 #pragma once
 
-#include "Memory/Allocator/TLSFAllocator.hh"
-
 namespace lr::Graphics
 {
-struct APIAllocator
-{
-    void *allocate_type(u64 size);
-    void free_type(void *pBlockAddr);
-
-    Memory::TLSFAllocatorView m_type_allocator;
-    u8 *m_type_data = nullptr;
-
-    static APIAllocator m_g_handle;
-};
-
-struct APIObject
-{
-    void *operator new(usize size) { return APIAllocator::m_g_handle.allocate_type(size); }
-    void operator delete(void *pData) { APIAllocator::m_g_handle.free_type(pData); }
-};
-
 template<typename T>
 struct ToVKObjectType
 {
@@ -32,5 +13,17 @@ struct ToVKObjectType
     {                                                     \
         constexpr static u32 type = _val;                 \
     };
+
+template<typename T>
+static bool validate_handle(T *var)
+{
+    assert(var);
+
+    if (var)
+        return true;
+
+    LOG_CRITICAL("Passing null {} in Graphics::Device.", ToVKObjectType<T>::type);
+    return false;
+}
 
 }  // namespace lr::Graphics

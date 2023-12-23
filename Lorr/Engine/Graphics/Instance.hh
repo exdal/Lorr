@@ -21,18 +21,33 @@ struct InstanceDesc
     u32 m_api_version = {};
 };
 
+enum class QueueSelectType : u64
+{
+    DoNotSelect = 0,
+    PreferDedicated,
+    RequireDedicated,
+};
+
+struct PhysicalDeviceSelectInfo
+{
+    eastl::array<QueueSelectType, (u32)CommandType::Count> m_queue_select_types = {};
+    eastl::span<const char *> m_required_extensions = {};
+};
+
 struct PhysicalDevice;
 struct Surface;
-// No APIObject for Instance, it's the head of all Graphics class
 struct Instance
 {
-    bool create(InstanceDesc *desc);
-    PhysicalDevice *get_physical_device();
-    bool check_physical_device_extensions(VkPhysicalDevice physical_device, eastl::span<const char *> required_extensions);
-    Surface *get_win32_surface(Win32Window *window);
+    APIResult init(InstanceDesc *desc);
+    APIResult select_physical_device(PhysicalDevice *physical_device, PhysicalDeviceSelectInfo *select_info);
+    APIResult get_win32_surface(Surface *surface, Win32Window *window);
+
+    eastl::vector<VkPhysicalDevice> m_physical_devices = {};
 
     void *m_vulkan_lib = nullptr;
     VkInstance m_handle = nullptr;
+
+    explicit operator bool() { return m_handle != nullptr; }
 };
 LR_ASSIGN_OBJECT_TYPE(Instance, VK_OBJECT_TYPE_INSTANCE);
 

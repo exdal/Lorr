@@ -75,10 +75,7 @@ struct DependencyInfo : VkDependencyInfo
     DependencyInfo(eastl::span<ImageBarrier> image_barriers, eastl::span<MemoryBarrier> memory_barriers);
 };
 
-using Fence = VkFence;
-LR_ASSIGN_OBJECT_TYPE(Fence, VK_OBJECT_TYPE_FENCE);
-
-struct Semaphore : APIObject
+struct Semaphore
 {
     u64 m_value = 0;
 
@@ -96,18 +93,15 @@ struct SemaphoreSubmitDesc : VkSemaphoreSubmitInfo
     SemaphoreSubmitDesc() = default;
 };
 
-struct CommandQueue : APIObject
+struct CommandQueue
 {
-    CommandType m_type = CommandType::Count;
-    u32 m_queue_index = 0;
-
     VkQueue m_handle = nullptr;
 
     operator VkQueue &() { return m_handle; }
 };
 LR_ASSIGN_OBJECT_TYPE(CommandQueue, VK_OBJECT_TYPE_QUEUE);
 
-struct CommandAllocator : APIObject
+struct CommandAllocator
 {
     VkCommandPool m_handle = nullptr;
 
@@ -126,9 +120,9 @@ struct ImageCopyRegion : VkBufferImageCopy
     ImageCopyRegion(ImageSubresourceInfo slice_info, u32 width, u32 height, u64 buffer_offset);
 };
 
-struct CommandList : APIObject
+struct CommandList
 {
-    void begin_rendering(RenderingBeginDesc *desc);
+    void begin_rendering(const RenderingBeginDesc &desc);
     void end_rendering();
 
     /// Memory Barriers
@@ -144,8 +138,8 @@ struct CommandList : APIObject
     void dispatch(u32 group_x, u32 group_y, u32 group_z);
 
     /// Pipeline States
-    void set_viewport(u32 id, u32 x, u32 y, u32 width, u32 height);
-    void set_scissors(u32 id, u32 x, u32 y, u32 width, u32 height);
+    void set_viewport(u32 id, const glm::uvec4 &xywh, const glm::vec2 &depth = { 0.01, 1.0 });
+    void set_scissors(u32 id, const glm::ivec4 &xywh);
     void set_primitive_type(PrimitiveType type);
 
     void set_pipeline(Pipeline *pipeline);
@@ -156,12 +150,14 @@ struct CommandList : APIObject
 
     VkCommandBuffer m_handle = nullptr;
 
-    operator VkCommandBuffer &() { return m_handle; }
+    explicit operator VkCommandBuffer &() { return m_handle; }
+    explicit operator bool() { return m_handle != nullptr; }
 };
 LR_ASSIGN_OBJECT_TYPE(CommandList, VK_OBJECT_TYPE_COMMAND_BUFFER);
 
 struct CommandListSubmitDesc : VkCommandBufferSubmitInfo
 {
+    CommandListSubmitDesc() = default;
     CommandListSubmitDesc(CommandList *list);
 };
 

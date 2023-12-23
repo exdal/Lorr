@@ -15,18 +15,16 @@ struct BufferDesc
     u64 m_data_size = 0;
 };
 
-struct Buffer : APIObject
+struct Buffer
 {
-    u64 m_allocator_data = ~0;
-
     u32 m_stride = 1;
-    u64 m_data_size = 0;
-    u64 m_data_offset = 0;
     u64 m_device_address = 0;
 
+    u64 m_allocator_data = ~0;
     VkBuffer m_handle = nullptr;
 
     operator VkBuffer &() { return m_handle; }
+    explicit operator bool() { return m_handle != nullptr; }
 };
 LR_ASSIGN_OBJECT_TYPE(Buffer, VK_OBJECT_TYPE_BUFFER);
 
@@ -37,6 +35,7 @@ struct ImageDesc
 {
     ImageUsage m_usage_flags = ImageUsage::Sampled;
     Format m_format = Format::Unknown;
+    ImageType m_type = ImageType::View2D;
 
     u32 m_width = 0;
     u32 m_height = 0;
@@ -47,22 +46,19 @@ struct ImageDesc
     u64 m_data_size = 0;
 };
 
-struct Image : APIObject
+struct Image
 {
     Format m_format = Format::Unknown;
-    u64 m_allocator_data = ~0;
-
     u32 m_width = 0;
     u32 m_height = 0;
-    u32 m_array_size = 1;
+    u32 m_slice_count = 1;
     u32 m_mip_map_levels = 1;
 
-    u64 m_data_size = 0;
-    u64 m_data_offset = 0;
-
+    u64 m_allocator_data = ~0;
     VkImage m_handle = nullptr;
 
     operator VkImage &() { return m_handle; }
+    explicit operator bool() { return m_handle != nullptr; }
 };
 LR_ASSIGN_OBJECT_TYPE(Image, VK_OBJECT_TYPE_IMAGE);
 
@@ -97,7 +93,7 @@ struct ImageSubresourceRange : VkImageSubresourceRange
     ImageSubresourceRange(ImageSubresourceInfo info);
 };
 
-struct ImageView : APIObject
+struct ImageView
 {
     Format m_format = Format::Unknown;
     ImageViewType m_type = ImageViewType::View2D;
@@ -106,6 +102,7 @@ struct ImageView : APIObject
     VkImageView m_handle = nullptr;
 
     operator VkImageView &() { return m_handle; }
+    explicit operator bool() { return m_handle != nullptr; }
 };
 LR_ASSIGN_OBJECT_TYPE(ImageView, VK_OBJECT_TYPE_IMAGE_VIEW);
 
@@ -128,11 +125,12 @@ struct SamplerDesc
     float m_max_lod = 0;
 };
 
-struct Sampler : APIObject
+struct Sampler
 {
     VkSampler m_handle = nullptr;
 
     operator VkSampler &() { return m_handle; }
+    explicit operator bool() { return m_handle != nullptr; }
 };
 LR_ASSIGN_OBJECT_TYPE(Sampler, VK_OBJECT_TYPE_SAMPLER);
 

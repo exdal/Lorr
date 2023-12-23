@@ -2,8 +2,6 @@
 
 #include <EASTL/scoped_array.h>
 
-#include "Window/Win32/Win32Window.hh"
-
 #include "Device.hh"
 
 namespace lr::Graphics
@@ -11,20 +9,13 @@ namespace lr::Graphics
 
 /// These extensions are REQUIRED to be available on selected device.
 
-static const char *kpp_required_extensions[] = {
-    "VK_KHR_swapchain",                // Win32 or use DXGI
-    "VK_KHR_depth_stencil_resolve",    // Core 1.2
-    "VK_KHR_dynamic_rendering",        // Core 1.3
-    "VK_KHR_synchronization2",         // Core 1.3
-    "VK_EXT_extended_dynamic_state2",  // Core 1.3
-    "VK_KHR_timeline_semaphore",       // Core 1.2
-    "VK_EXT_descriptor_buffer",        //
-    "VK_EXT_descriptor_indexing",      // Core 1.2
-    "VK_EXT_host_query_reset",         // Core 1.2
-    "VK_EXT_calibrated_timestamps",    //
+static const char *k_required_extensions_str[] = {
+    "VK_KHR_swapchain",
+    "VK_EXT_descriptor_buffer",
+    "VK_EXT_calibrated_timestamps",
 };
 
-static constexpr eastl::span<const char *> k_required_extensions(kpp_required_extensions);
+static constexpr eastl::span<const char *> k_required_extensions(k_required_extensions_str);
 
 ////////////////////////////////////
 /// Device Feature Configuration ///
@@ -77,15 +68,38 @@ static VkPhysicalDeviceVulkan11Features kDeviceFeatures_11 = {
 };
 
 // * Vulkan 1.0
+
 static VkPhysicalDeviceFeatures kDeviceFeatures_10 = {
     .vertexPipelineStoresAndAtomics = true,
     .fragmentStoresAndAtomics = true,
     .shaderInt64 = true,
 };
 
-Surface::Surface(VkSurfaceKHR handle)
-    : m_handle(handle)
+APIResult Surface::init(PhysicalDevice *physical_device)
 {
+    {
+        u32 count = 0;
+        vkGetPhysicalDeviceSurfaceFormatsKHR(*physical_device, m_handle, &count, nullptr);
+        m_surface_formats.resize(count);
+        vkGetPhysicalDeviceSurfaceFormatsKHR(*physical_device, m_handle, &count, m_surface_formats.data());
+    }
+    {
+        u32 count = 0;
+        vkGetPhysicalDeviceSurfacePresentModesKHR(*physical_device, m_handle, &count, nullptr);
+        m_present_modes.resize(count);
+        vkGetPhysicalDeviceSurfacePresentModesKHR(*physical_device, m_handle, &count, m_present_modes.data());
+    }
+
+    refresh_surface_capabilities(physical_device);
+
+    return APIResult::Success;
+}
+
+void Surface::refresh_surface_capabilities(PhysicalDevice *physical_device)
+{
+    ZoneScoped;
+
+    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(*physical_device, m_handle, &m_capabilities);
 }
 
 bool Surface::is_format_supported(VkFormat format, VkColorSpaceKHR &color_space_out)
@@ -135,90 +149,62 @@ PhysicalDevicePropertySet::PhysicalDevicePropertySet()
     };
 }
 
-PhysicalDevice::PhysicalDevice(VkPhysicalDevice handle)
-    : m_handle(handle)
+APIResult PhysicalDevice::init(VkPhysicalDevice physical_device, eastl::span<QueueFamilyInfo> queue_family_infos)
 {
-    vkGetPhysicalDeviceProperties2(m_handle, &m_property_set.m_properties);
-    vkGetPhysicalDeviceMemoryProperties(m_handle, &m_property_set.m_memory);
+    m_handle = physical_device;
+    m_queue_family_infos.assign(queue_family_infos.begin(), queue_family_infos.end());
+
+    return APIResult::Success;
 }
 
-void PhysicalDevice::init_queue_families(Surface *surface)
+APIResult PhysicalDevice::get_logical_device(Device *device)
 {
     ZoneScoped;
 
-    u32 familyProperyCount = 0;
-    vkGetPhysicalDeviceQueueFamilyProperties(m_handle, &familyProperyCount, nullptr);
+    constexpr static f32 top_priority = 1.0;
 
-    m_queue_properties.resize(familyProperyCount);
-    vkGetPhysicalDeviceQueueFamilyProperties(m_handle, &familyProperyCount, m_queue_properties.data());
-
-    static float topPrior = 1.0;
-    u32 queueIdx = select_queue(surface, VK_QUEUE_GRAPHICS_BIT, true, true);
-    if (queueIdx != VK_QUEUE_FAMILY_IGNORED)
+    eastl::vector<VkDeviceQueueCreateInfo> queue_create_infos = {};
+    for (auto &queue_family_info : m_queue_family_infos)
     {
-        m_queue_infos[(u32)CommandType::Graphics] = {
+        queue_create_infos.push_back(VkDeviceQueueCreateInfo{
             .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
             .pNext = nullptr,
-            .queueFamilyIndex = queueIdx,
+            .flags = 0,
+            .queueFamilyIndex = queue_family_info.m_index,
             .queueCount = 1,
-            .pQueuePriorities = &topPrior,
-        };
+            .pQueuePriorities = &top_priority,
+        });
     }
 
-    queueIdx = select_queue(surface, VK_QUEUE_COMPUTE_BIT, false, true);
-    if (queueIdx != VK_QUEUE_FAMILY_IGNORED)
-    {
-        m_queue_infos[(u32)CommandType::Compute] = {
-            .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-            .pNext = nullptr,
-            .queueFamilyIndex = queueIdx,
-            .queueCount = 1,
-            .pQueuePriorities = &topPrior,
-        };
-    }
-
-    queueIdx = select_queue(surface, VK_QUEUE_TRANSFER_BIT, false, true);
-    if (queueIdx != VK_QUEUE_FAMILY_IGNORED)
-    {
-        m_queue_infos[(u32)CommandType::Transfer] = {
-            .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-            .pNext = nullptr,
-            .queueFamilyIndex = queueIdx,
-            .queueCount = 1,
-            .pQueuePriorities = &topPrior,
-        };
-    }
-}
-
-Device *PhysicalDevice::get_logical_device()
-{
-    ZoneScoped;
-
-    VkDeviceCreateInfo deviceCreateInfo = {
+    VkDeviceCreateInfo device_create_info = {
         .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
         .pNext = &kDeviceFeatures_11,
-        .queueCreateInfoCount = static_cast<u32>(m_queue_infos.size()),
-        .pQueueCreateInfos = m_queue_infos.data(),
+        .queueCreateInfoCount = static_cast<u32>(queue_create_infos.size()),
+        .pQueueCreateInfos = queue_create_infos.data(),
+        .enabledLayerCount = 0,
+        .ppEnabledLayerNames = nullptr,
         .enabledExtensionCount = k_required_extensions.size(),
         .ppEnabledExtensionNames = k_required_extensions.data(),
         .pEnabledFeatures = &kDeviceFeatures_10,
     };
 
     VkDevice device_handle = nullptr;
-    auto result = static_cast<APIResult>(vkCreateDevice(m_handle, &deviceCreateInfo, nullptr, &device_handle));
+    auto result = static_cast<APIResult>(vkCreateDevice(m_handle, &device_create_info, nullptr, &device_handle));
     if (result != APIResult::Success)
     {
         LOG_ERROR("Failed to create Device! {}", static_cast<u32>(result));
-        return nullptr;
+        return result;
     }
 
     if (!VK::LoadVulkanDevice(device_handle))
     {
         LOG_ERROR("Failed to initialize device!");
-        return nullptr;
+        return APIResult::ExtNotPresent;
     }
 
-    return new Device(this, device_handle);
+    device->init(device_handle, this);
+
+    return APIResult::Success;
 }
 
 u32 PhysicalDevice::get_heap_index(VkMemoryPropertyFlags flags)
@@ -234,13 +220,6 @@ u32 PhysicalDevice::get_heap_index(VkMemoryPropertyFlags flags)
     LOG_ERROR("Memory type index is not found.");
 
     return -1;
-}
-
-u32 PhysicalDevice::get_queue_index(CommandType type)
-{
-    ZoneScoped;
-
-    return m_queue_infos[(u32)type].queueFamilyIndex;
 }
 
 u64 PhysicalDevice::get_descriptor_buffer_alignment()
@@ -270,142 +249,14 @@ u64 PhysicalDevice::get_aligned_buffer_memory(BufferUsage buffer_usage, u64 unal
 
     u64 result = unaligned_size;
     if (buffer_usage & k_descriptors)
-        result = Memory::AlignUp(result, get_descriptor_buffer_alignment());
+        result = Memory::align_up(result, get_descriptor_buffer_alignment());
 
     return result;
 }
 
-void PhysicalDevice::get_surface_formats(Surface *surface, eastl::vector<VkSurfaceFormatKHR> &formats)
+eastl::span<const char *> PhysicalDevice::get_extensions()
 {
-    ZoneScoped;
-
-    formats.clear();
-
-    u32 count = 0;
-    vkGetPhysicalDeviceSurfaceFormatsKHR(m_handle, surface->m_handle, &count, nullptr);
-    formats.resize(count);
-    vkGetPhysicalDeviceSurfaceFormatsKHR(m_handle, surface->m_handle, &count, formats.data());
-}
-
-void PhysicalDevice::get_present_modes(Surface *surface, eastl::vector<VkPresentModeKHR> &modes)
-{
-    ZoneScoped;
-
-    modes.clear();
-
-    u32 count = 0;
-    vkGetPhysicalDeviceSurfacePresentModesKHR(m_handle, surface->m_handle, &count, nullptr);
-    modes.resize(count);
-    vkGetPhysicalDeviceSurfacePresentModesKHR(m_handle, surface->m_handle, &count, modes.data());
-}
-
-void PhysicalDevice::set_surface_capabilities(Surface *surface)
-{
-    ZoneScoped;
-
-    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(m_handle, surface->m_handle, &surface->m_capabilities);
-}
-
-u32 PhysicalDevice::select_queue(Surface *surface, VkQueueFlags desired_queue, bool require_present, bool select_best)
-{
-    ZoneScoped;
-
-    constexpr VkQueueFlags flagsAll = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT;
-    u32 foundIdx = VK_QUEUE_FAMILY_IGNORED;
-    u32 bestCount = ~0;
-
-    for (u32 i = 0; i < m_queue_properties.size(); i++)
-    {
-        VkQueueFamilyProperties &properties = m_queue_properties[i];
-        VkQueueFlags queueFlags = properties.queueFlags & flagsAll;  // filter other/not available flags
-
-        if (!(queueFlags & desired_queue))
-            continue;
-
-        if (select_best)
-        {
-            queueFlags ^= desired_queue;
-            u32 setBitCount = __popcnt(queueFlags);
-            if (setBitCount < bestCount)
-            {
-                bestCount = setBitCount;
-                foundIdx = i;
-            }
-        }
-        else
-        {
-            foundIdx = i;
-            break;
-        }
-    }
-
-    if (require_present)
-    {
-        VkBool32 presentSupported = false;
-        vkGetPhysicalDeviceSurfaceSupportKHR(m_handle, foundIdx, surface->m_handle, &presentSupported);
-
-        if (!presentSupported)
-        {
-            LOG_ERROR("Present mode not supported on queue {}!", foundIdx);
-            return VK_QUEUE_FAMILY_IGNORED;
-        }
-
-        m_present_queue_index = foundIdx;
-    }
-
-    return foundIdx;
-}
-
-void TLSFDeviceMemory::create(u64 mem_size, u32 max_allocations)
-{
-    ZoneScoped;
-
-    m_allocator_view.init(mem_size, max_allocations);
-}
-
-u64 TLSFDeviceMemory::allocate_memory(u64 dataSize, u64 alignment, u64 &allocator_data)
-{
-    ZoneScoped;
-
-    Memory::TLSFBlockID block_id = m_allocator_view.allocate(dataSize, alignment);
-    allocator_data = block_id;
-    return m_allocator_view.get_block_data(block_id)->m_offset;
-}
-
-void TLSFDeviceMemory::free_memory(u64 allocatorData)
-{
-    ZoneScoped;
-
-    m_allocator_view.free(allocatorData);
-}
-
-void LinearDeviceMemory::create(u64 mem_size, u32 max_allocations)
-{
-    ZoneScoped;
-
-    m_allocator_view.m_first_area = new Memory::AllocationArea;
-    m_allocator_view.m_first_area->m_capacity = mem_size;
-}
-
-u64 LinearDeviceMemory::allocate_memory(u64 dataSize, u64 alignment, u64 &allocator_data)
-{
-    ZoneScoped;
-
-    u64 alignedSize = Memory::AlignUp(dataSize, alignment);
-    Memory::AllocationArea *pAvailRegion = m_allocator_view.find_free_area(alignedSize);
-    if (!pAvailRegion)
-        return ~0;
-
-    u64 offset = pAvailRegion->m_size;
-    pAvailRegion->m_size += alignedSize;
-    return offset;
-}
-
-void LinearDeviceMemory::free_memory(u64 allocatorData)
-{
-    ZoneScoped;
-
-    m_allocator_view.reset();
+    return k_required_extensions;
 }
 
 }  // namespace lr::Graphics

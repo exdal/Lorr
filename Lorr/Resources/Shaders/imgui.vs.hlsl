@@ -1,4 +1,4 @@
-#include "common.hlsl"
+//#include <lorr.hlsl>
 
 struct VertexInput
 {
@@ -13,11 +13,6 @@ struct PixelInput
     float2 TexCoord : TEXCOORD;
     float4 Color    : COLOR;
 };
-
-PUSH_CONSTANT(CameraInfo,
-{
-    matrix VPMatrix;
-});
 
 PixelInput main(VertexInput input)
 {

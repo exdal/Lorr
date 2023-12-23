@@ -130,24 +130,31 @@ eastl::vector<u32> ShaderCompiler::compile_shader(ShaderCompileDesc *desc)
     utils->CreateDefaultIncludeHandler(&include_handler);
 
     auto options = parse_pragma_options(desc->m_code);
-    auto working_dir = ls::to_wstring(desc->m_working_dir);
+    if (options[PragmaOptions::Stage].m_stage == ShaderStage::Count)
+    {
+        LOG_ERROR("Shader stage(#pragma stage(...)) is not set");
+        return {};
+    }
     eastl::vector<LPCWSTR> args = {};
+    eastl::vector<eastl::wstring> temp_wstr = {};
     args.push_back(L"-E");
     args.push_back(L"main");
+    for (auto &dir : desc->m_include_dirs)
+    {
+        eastl::string include_str = eastl::format("-I {}", dir);
+        args.push_back(temp_wstr.emplace_back(ls::to_wstring(include_str)).data());
+    }
     args.push_back(L"-spirv");
     args.push_back(L"-fspv-target-env=vulkan1.3");
     args.push_back(L"-fvk-use-gl-layout");
     args.push_back(L"-no-warnings");
-    args.push_back(L"-I");
-    args.push_back(working_dir.data());
     args.push_back(L"-T");
     args.push_back(kHLSLStageMap[(u32)options[PragmaOptions::Stage].m_stage]);
     for (auto &definition : desc->m_definitions)
     {
         eastl::string def_str = eastl::format("-D{}", definition);
-        args.push_back(ls::to_wstring(def_str).data());
+        args.push_back(temp_wstr.emplace_back(ls::to_wstring(def_str)).data());
     }
-
     if (desc->m_flags & ShaderCompileFlag::GenerateDebugInfo)
         args.push_back(L"-Zi");
     if (desc->m_flags & ShaderCompileFlag::SkipOptimization)
@@ -190,20 +197,23 @@ ShaderReflectionData ShaderCompiler::reflect_spirv(ShaderReflectionDesc *desc, e
     auto first_entry = compiler.get_entry_points_and_stages()[0];
     auto resources = compiler.get_shader_resources();
     auto &entry_point = compiler.get_entry_point(first_entry.name, first_entry.execution_model);
+
     auto push_constants_id = resources.push_constant_buffers[0].id;
     auto push_constants_type_id = resources.push_constant_buffers[0].base_type_id;
     auto push_constant_ranges = compiler.get_active_buffer_ranges(push_constants_id);
+    auto uniforms = resources.uniform_buffers;
 
     ShaderReflectionData result = {};
     result.m_compiled_stage = kStageMap[entry_point.model];
     result.m_entry_point = first_entry.name.data();
-    for (auto &range : push_constant_ranges)
-    {
-        auto &name = compiler.get_member_name(push_constants_type_id, range.index);
-        if (name == desc->m_descriptors_start_name.data())
-            result.m_descriptor_start_offset = range.offset;
 
-        result.m_push_constant_size += range.range;
+    for (auto &r : push_constant_ranges)
+    {
+        auto &name = compiler.get_member_name(push_constants_type_id, r.index);
+        if (name == desc->m_descriptors_start_name.data())
+            result.m_descriptor_start_offset = r.offset;
+
+        result.m_push_constant_size += r.range;
     }
 
     if (result.m_compiled_stage == ShaderStage::Vertex && desc->m_reflect_vertex_layout)

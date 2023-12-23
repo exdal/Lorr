@@ -2,7 +2,6 @@
 
 #include "PipelineManager.hh"
 #include "Task.hh"
-#include "TaskCommandList.hh"
 #include "TaskResource.hh"
 
 #include "Graphics/CommandList.hh"
@@ -11,21 +10,21 @@
 
 #include <EASTL/vector.h>
 
-namespace lr::Renderer
+namespace lr::Graphics
 {
-struct TaskGraphExecuteDesc
+struct TaskFrame
 {
-    u32 m_FrameIndex = 0;
-    Graphics::Semaphore *m_pAcquireSema = nullptr;
-    Graphics::Semaphore *m_pPresentSema = nullptr;
+    constexpr static usize k_type_count = static_cast<usize>(CommandType::Count);
+
+    Semaphore m_timeline_sema = {};
+    fixed_vector<CommandAllocator, k_type_count> m_allocators = {};
+    fixed_vector<CommandList, k_type_count> m_lists = {};
 };
 
 struct TaskGraphDesc
 {
-    u32 m_frame_count = 0;
-    usize m_initial_alloc = 0xffff;
-    Graphics::PhysicalDevice *m_physical_device = nullptr;
-    Graphics::Device *m_device = nullptr;
+    Device *m_device = nullptr;
+    SwapChain *m_swap_chain = nullptr;
 };
 
 struct TaskGraph
@@ -33,28 +32,25 @@ struct TaskGraph
     void init(TaskGraphDesc *desc);
 
     ImageID use_persistent_image(const PersistentImageInfo &image_info);
-    void set_image(ImageID image_id, Graphics::Image *image, Graphics::ImageView *view);
+    void set_image(ImageID image_id, Image *image, ImageView *view);
     BufferID use_persistent_buffer(const PersistentBufferInfo &buffer_info);
 
     TaskBatchID schedule_task(Task &task);
-    template<typename TTask>
-    void add_task(const TTask &task_info);
+    template<typename TaskT>
+    void add_task(const TaskT &task_info);
     void add_task(Task &task, TaskID id);
-    void present_task(ImageID back_buffer_id);
 
-    void execute(const TaskGraphExecuteDesc &desc);
+    void execute(SwapChain *swap_chain);
 
-    void insert_barrier(TaskCommandList &cmd_list, const TaskBarrier &barrier);
+    void insert_present_barrier(CommandBatcher &batcher, ImageID image_id);
+    void insert_barrier(CommandBatcher &batcher, const TaskBarrier &barrier);
 
-    Graphics::Device *m_device = nullptr;
-    Graphics::CommandQueue *m_graphics_queue = nullptr;
-    Graphics::DeviceMemory *m_image_memory = nullptr;
-
+    Device *m_device = nullptr;
+    CommandQueue m_graphics_queue = {};
+    DeviceMemory m_image_memory = {};
     PipelineManager m_pipeline_manager = {};
 
-    eastl::vector<Graphics::CommandAllocator *> m_command_allocators = {};
-    eastl::vector<Graphics::CommandList *> m_command_lists = {};
-    eastl::vector<Graphics::Semaphore *> m_semaphores = {};
+    eastl::vector<TaskFrame> m_frames = {};
 
     eastl::vector<TaskImageInfo> m_image_infos = {};
     eastl::vector<TaskBufferInfo> m_buffer_infos = {};
@@ -64,17 +60,17 @@ struct TaskGraph
     Memory::AreaAllocator m_task_allocator = {};
 };
 
-template<typename TTask>
-void TaskGraph::add_task(const TTask &task_info)
+template<typename TaskT>
+void TaskGraph::add_task(const TaskT &task_info)
 {
     ZoneScoped;
 
-    auto wrapper = m_task_allocator.allocate_obj<TaskWrapper<TTask>>(task_info);
-    Task *pTask = static_cast<Task *>(wrapper);
+    auto wrapper = m_task_allocator.allocate_obj<TaskWrapper<TaskT>>(task_info);
+    auto task = static_cast<Task *>(wrapper);
     TaskID id = m_tasks.size();
-    m_tasks.push_back(pTask);
+    m_tasks.push_back(task);
 
-    add_task(*pTask, id);
+    add_task(*task, id);
 }
 
-}  // namespace lr::Renderer
+}  // namespace lr::Graphics

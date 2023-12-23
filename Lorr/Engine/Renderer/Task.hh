@@ -4,33 +4,31 @@
 #include "TaskCommandList.hh"
 #include "TaskResource.hh"
 
-namespace lr::Renderer
+namespace lr::Graphics
 {
+struct Task;
 struct TaskGraph;
 struct TaskContext
 {
-    TaskContext(Task *task, TaskGraph &task_graph, TaskCommandList &command_list)
+    TaskContext(Task &task, TaskGraph &task_graph, CommandList &command_list)
         : m_task(task),
           m_task_graph(task_graph),
-          m_command_list(command_list)
-    {
-    }
+          m_command_list(command_list){};
 
-    TaskCommandList &get_command_list();
-    Graphics::ImageView *get_image_view(GenericResource &use);
+    CommandList &get_command_list();
+    ImageView *get_image_view(GenericResource &use);
     glm::uvec2 get_image_size(GenericResource &use);
     glm::uvec4 get_pass_size();
-    using attachment_pair = eastl::pair<eastl::vector<Graphics::Format>, Graphics::Format>;
+    using attachment_pair = eastl::pair<eastl::vector<Format>, Format>;
     attachment_pair get_attachment_formats();
     eastl::span<GenericResource> get_resources();
 
-    Graphics::RenderingAttachment as_color_attachment(
-        GenericResource &use, const Graphics::ColorClearValue &clear_value = { 0.0f, 0.0f, 0.0f, 1.0f });
+    RenderingAttachment as_color_attachment(GenericResource &use, const ColorClearValue &clear_value = { 0.0f, 0.0f, 0.0f, 1.0f });
 
 private:
-    Task *m_task;
+    Task &m_task;
     TaskGraph &m_task_graph;
-    TaskCommandList &m_command_list;
+    CommandList &m_command_list;
 };
 
 using TaskID = u32;
@@ -60,34 +58,42 @@ struct Task
     eastl::span<GenericResource> m_generic_resources;
 };
 
-template<typename TTask>
-concept TaskConcept = requires { TTask{}.m_uses; } and requires(TaskContext tc) { TTask{}.execute(tc); };
+template<typename TaskT>
+concept TaskConcept = requires { TaskT{}.m_uses; } and requires(TaskContext &tc) { TaskT{}.execute(tc); };
 
-template<TaskConcept TTask>
+template<TaskConcept TaskT>
 struct TaskWrapper : Task
 {
-    TaskWrapper(const TTask &task)
+    TaskWrapper(const TaskT &task)
         : m_task(task)
     {
-        m_name = TTask::m_task_name;
+        m_name = TaskT::m_task_name;
         m_generic_resources = { (GenericResource *)&m_task.m_uses, resource_count };
 #if _DEBUG
         for (auto &resource : m_generic_resources)
-            assert(resource.m_buffer_id != BufferNull);
+            assert(resource.m_buffer_id != LR_NULL_ID);
 #endif
     }
 
     void execute(TaskContext &ctx) override { m_task.execute(ctx); }
+    bool compile_pipeline(PipelineCompileInfo &compile_info)
+    {
+        constexpr bool has_pipeline = requires(PipelineCompileInfo &pci) { TaskT{}.compile_pipeline(pci); };
+        if constexpr (has_pipeline)
+            m_task.compile_pipeline(compile_info);
 
-    TTask m_task;
-    constexpr static usize resource_count = sizeof(typename TTask::Uses) / sizeof(GenericResource);
+        return has_pipeline;
+    }
+
+    TaskT m_task;
+    constexpr static usize resource_count = sizeof(typename TaskT::Uses) / sizeof(GenericResource);
 };
 
 struct TaskBarrier
 {
-    ImageID m_image_id = ImageNull;
-    Graphics::ImageLayout m_src_layout = {};
-    Graphics::ImageLayout m_dst_layout = {};
+    ImageID m_image_id = LR_NULL_ID;
+    ImageLayout m_src_layout = {};
+    ImageLayout m_dst_layout = {};
     TaskAccess::Access m_src_access = {};
     TaskAccess::Access m_dst_access = {};
 };
@@ -105,4 +111,4 @@ struct TaskBatch
     eastl::vector<usize> m_end_barriers = {};
 };
 
-}  // namespace lr::Renderer
+}  // namespace lr::Graphics

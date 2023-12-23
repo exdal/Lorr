@@ -1,6 +1,3 @@
-// Created on Sunday October 9th 2022 by exdal
-// Last modified on Monday August 28th 2023 by exdal
-
 #pragma once
 
 #include "Vulkan.hh"  // IWYU pragma: export
@@ -31,6 +28,9 @@ enum class APIResult : i32
     WindowInUse = VK_ERROR_NATIVE_WINDOW_IN_USE_KHR,
     Suboptimal = VK_SUBOPTIMAL_KHR,
     OutOfDate = VK_ERROR_OUT_OF_DATE_KHR,
+    InvalidExternalHandle = VK_ERROR_INVALID_EXTERNAL_HANDLE,
+
+    HanldeNotInitialized = VK_RESULT_MAX_ENUM,
 };
 
 /// BUFFER ---------------------------- ///
@@ -46,6 +46,7 @@ enum class BufferUsage : u64
     Storage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
     SamplerDescriptor = VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT,
     ResourceDescriptor = VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT,
+    BufferDeviceAddress = VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
 };
 LR_TYPEOP_ARITHMETIC_INT(BufferUsage, BufferUsage, &);
 LR_TYPEOP_ARITHMETIC(BufferUsage, BufferUsage, |);
@@ -63,12 +64,13 @@ enum class CommandType : u32
 
 enum class CommandTypeMask : u32
 {
-    Graphics = 1 << 0,
-    Compute = 1 << 1,
-    Transfer = 1 << 2,
+    Graphics = 1 << static_cast<u32>(CommandType::Graphics),
+    Compute = 1 << static_cast<u32>(CommandType::Compute),
+    Transfer = 1 << static_cast<u32>(CommandType::Transfer),
 };
 LR_TYPEOP_ARITHMETIC(CommandTypeMask, CommandTypeMask, |);
 LR_TYPEOP_ARITHMETIC_INT(CommandTypeMask, CommandTypeMask, &);
+LR_TYPEOP_ASSIGNMENT(CommandTypeMask, CommandTypeMask, |);
 
 enum class CommandAllocatorFlag : u32
 {
@@ -78,6 +80,14 @@ enum class CommandAllocatorFlag : u32
 };
 LR_TYPEOP_ARITHMETIC(CommandAllocatorFlag, CommandAllocatorFlag, |);
 LR_TYPEOP_ARITHMETIC_INT(CommandAllocatorFlag, CommandAllocatorFlag, &);
+
+struct QueueFamilyInfo
+{
+    CommandTypeMask m_supported_types = {};
+    u32 m_present : 1 = false;
+    u32 m_queue_count : 15 = 0;
+    u32 m_index : 16 = ~0;
+};
 
 /// DESCRIPTOR ---------------------------- ///
 
@@ -199,7 +209,6 @@ enum class ImageUsage : u32
     TransferDst = VK_IMAGE_USAGE_TRANSFER_DST_BIT,
     Storage = VK_IMAGE_USAGE_STORAGE_BIT,
     Present = 1 << 29,     // Virtual flag
-    Concurrent = 1 << 30,  // Vulkan's sharing flag
 };
 LR_TYPEOP_ARITHMETIC_INT(ImageUsage, ImageUsage, &);
 
@@ -214,6 +223,13 @@ enum class ImageLayout : u32
     TransferSrc = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
     TransferDst = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
     General = VK_IMAGE_LAYOUT_GENERAL,
+};
+
+enum class ImageType : u32
+{
+    View1D = VK_IMAGE_TYPE_1D,
+    View2D = VK_IMAGE_TYPE_2D,
+    View3D = VK_IMAGE_TYPE_3D,
 };
 
 enum class ImageViewType : u32
@@ -501,6 +517,19 @@ enum class ShaderStage : u32
     Count = 5,
 };
 LR_TYPEOP_ARITHMETIC_INT(ShaderStage, ShaderStage, &);
+
+/// MEMORY ---------------------------- ///
+enum class MemoryFlag : u32
+{
+    Device = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+    HostVisible = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
+    HostCoherent = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+    HostCached = VK_MEMORY_PROPERTY_HOST_CACHED_BIT,
+
+    HostVisibleCoherent = HostVisible | HostCoherent,
+};
+LR_TYPEOP_ARITHMETIC_INT(MemoryFlag, MemoryFlag, &);
+LR_TYPEOP_ARITHMETIC(MemoryFlag, MemoryFlag, |);
 
 namespace Limits
 {

@@ -24,11 +24,11 @@ u8 *AllocationArea::consume_as_data(u64 size)
     return m_data + consume_as_offset(size);
 }
 
-bool AreaAllocatorView::can_allocate(u64 size, u32 alignment)
+bool AreaAllocatorView::can_allocate(u64 size, u64 alignment)
 {
     ZoneScoped;
 
-    u64 alignedSize = Memory::AlignUp(size, alignment);
+    u64 alignedSize = align_up(size, alignment);
     return find_free_area(alignedSize) != nullptr;
 }
 
@@ -113,18 +113,18 @@ AllocationArea *AreaAllocator::allocate_area(usize size)
     return pRegion;
 }
 
-bool AreaAllocator::can_allocate(u64 size, u32 alignment)
+bool AreaAllocator::can_allocate(u64 size, u64 alignment)
 {
     ZoneScoped;
 
     return m_view.can_allocate(size, alignment);
 }
 
-u8 *AreaAllocator::allocate(u64 size, u32 alignment)
+u8 *AreaAllocator::allocate(u64 size, u64 alignment)
 {
     ZoneScoped;
 
-    u64 alignedSize = Memory::AlignUp(size, alignment);
+    u64 alignedSize = align_up(size, alignment);
     AllocationArea *pAvailRegion = m_view.find_free_area(alignedSize);
     if (!pAvailRegion)
     {

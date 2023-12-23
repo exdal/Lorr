@@ -1,6 +1,3 @@
-// Created on Monday September 26th 2022 by exdal
-// Last modified on Monday June 12th 2023 by exdal
-
 #pragma once
 
 #include <intrin.h>
@@ -79,7 +76,7 @@ namespace lr::Memory
     /// Bitwise Operations ///
 
     template<typename T>
-    u8 GetMSB(T mask)
+    T find_msb(T mask)
     {
 #if defined(EA_COMPILER_CLANG) || defined(EA_COMPILER_GNUC)
         return eastl::numeric_limits<T>::digits - (u8)__builtin_clzll(mask);
@@ -97,13 +94,13 @@ namespace lr::Memory
     }
 
     template<typename T>
-    u8 GetLSB(T mask)
+    T find_lsb(T mask)
     {
 #if defined(EA_COMPILER_CLANG) || defined(EA_COMPILER_GNUC)
         return (u8)__builtin_ffs(mask) - 1;
 #elif defined(EA_COMPILER_MSVC)
         unsigned long pos;
-        if (_BitScanForward(&pos, mask))
+        if (_BitScanForward64(&pos, mask))
             return pos;
 #else
         return (u8)log2(mask);
@@ -114,16 +111,8 @@ namespace lr::Memory
         return 0;
     }
 
-    template<typename _Type>
-    constexpr _Type FillBits(u32 count)
-    {
-        assert(count != 64 && "Mask is 0");
-
-        return ((u64)~0) << count ^ ((u64)~0);
-    }
-
-    template<typename T, typename U>
-    T AlignUp(T size, U alignment)
+    template<typename T>
+    T align_up(T size, T alignment)
     {
         return (size + (alignment - 1)) & ~(alignment - 1);
     }

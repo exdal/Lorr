@@ -138,7 +138,7 @@ static eastl::vector<QueueFamilyInfo> select_queues(eastl::span<QueueSelectType>
         [(u32)CommandType::Transfer] = VK_QUEUE_TRANSFER_BIT,
     };
 
-    auto select_queue = [](CommandType type, QueueSelectType select_type, eastl::span<VkQueueFamilyProperties> propertieses) -> u32
+    auto select_queue = [=](CommandType type, QueueSelectType select_type, eastl::span<VkQueueFamilyProperties> properties) -> u32
     {
         auto flags = type_to_flags[static_cast<u32>(type)];
         switch (select_type)
@@ -147,13 +147,13 @@ static eastl::vector<QueueFamilyInfo> select_queues(eastl::span<QueueSelectType>
                 return ~0;
             case QueueSelectType::PreferDedicated:
             {
-                u32 best_bit_count = 0;
+                u32 best_bit_count = ~0;
                 u32 best_idx = ~0;
-                for (u32 i = 0; i < propertieses.size(); i++)
+                for (u32 i = 0; i < properties.size(); i++)
                 {
-                    auto &properties = propertieses[i];
-                    u32 bit_count = _popcnt32(properties.queueFlags);
-                    if (properties.queueFlags & flags && best_bit_count > bit_count)
+                    auto &v = properties[i];
+                    u32 bit_count = _popcnt32(v.queueFlags);
+                    if (v.queueFlags & flags && best_bit_count > bit_count)
                     {
                         best_bit_count = bit_count;
                         best_idx = i;
@@ -163,10 +163,10 @@ static eastl::vector<QueueFamilyInfo> select_queues(eastl::span<QueueSelectType>
             }
             case QueueSelectType::RequireDedicated:
             {
-                for (u32 i = 0; i < propertieses.size(); i++)
+                for (u32 i = 0; i < properties.size(); i++)
                 {
-                    auto &properties = propertieses[i];
-                    if (properties.queueFlags == flags)
+                    auto &v = properties[i];
+                    if (v.queueFlags == flags)
                         return i;
                 }
                 return ~0;

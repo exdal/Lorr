@@ -30,25 +30,24 @@ struct MemoryAllocator
 };
 
 using ResourceID = u64;
-constexpr static ResourceID resource_null = ~0;
-
 template<typename ResourceT>
 struct ResourcePool
 {
-    static constexpr u64 FL_SIZE = 63;
-    static constexpr u64 SL_SIZE = 63;
+    static constexpr u64 FL_SIZE = 63u;
+    static constexpr u64 SL_SIZE = 63u;
     static constexpr u64 SL_SHIFT = static_cast<u64>(1u) << SL_SIZE;
     static constexpr u64 SL_MASK = SL_SHIFT - 1u;
     static constexpr u64 RESOURCE_COUNT = FL_SIZE * SL_SIZE;
 
     ResourcePool() { m_resources.resize(RESOURCE_COUNT); }
+    ~ResourcePool() = default;
 
-    ResourceID add_resource()
+    eastl::tuple<ResourceID, ResourceT *> add_resource()
     {
         ZoneScoped;
 
         if (m_first_list == eastl::numeric_limits<decltype(m_first_list)>::max())
-            return resource_null;
+            return { LR_NULL_ID, nullptr };
 
         u64 first_index = Memory::find_lsb(~m_first_list);
         u64 second_list = m_second_list[first_index];
@@ -59,7 +58,8 @@ struct ResourcePool
             m_first_list |= 1u << first_index;
 
         m_second_list[first_index] = second_list;
-        return get_index(first_index, second_index);
+        ResourceID resource_id = get_index(first_index, second_index);
+        return { resource_id, &get_resource(resource_id) };
     }
 
     void remove_resource(ResourceID id)
@@ -81,7 +81,7 @@ struct ResourcePool
     {
         ZoneScoped;
 
-        if (id == resource_null)
+        if (id == LR_NULL_ID)
             return false;
 
         u64 first_index = id >> SL_SIZE;
@@ -92,7 +92,7 @@ struct ResourcePool
     }
 
     static u64 get_index(u64 fi, u64 si) { return fi == 0 ? si : fi * SL_SIZE + si; }
-    ResourceT &get_resource(ResourceID id) const { return m_resources[id]; }
+    ResourceT &get_resource(ResourceID id) { return m_resources[id]; }
 
     u64 m_first_list = 0;  // This bitmap indicates that SL[bit(i)] is full or not
     u64 m_second_list[FL_SIZE] = {};

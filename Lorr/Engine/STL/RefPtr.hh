@@ -71,7 +71,7 @@ struct ref_ptr
         return *this;
     }
 
-    this_type &operator=(this_type &&other)
+    this_type &operator=(this_type &&other) noexcept
     {
         swap(other);
         return *this;
@@ -158,7 +158,7 @@ struct ref_array
         return *this;
     }
 
-    this_type &operator=(this_type &&other)
+    this_type &operator=(this_type &&other) noexcept
     {
         swap(other);
         return *this;

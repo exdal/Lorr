@@ -23,8 +23,7 @@ file(GLOB_RECURSE LORR_SOURCE
     *.cc
 )
 
-add_library(Lorr STATIC ${LORR_SOURCE}
-        Memory/Allocator/LinearAllocator.hh)
+add_library(Lorr STATIC ${LORR_SOURCE})
 target_include_directories(Lorr PUBLIC ./ ../../)
 target_link_libraries(Lorr PUBLIC ${LORR_VENDOR})
 target_precompile_headers(Lorr PUBLIC pch.hh)

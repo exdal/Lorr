@@ -9,7 +9,7 @@
 namespace lr::Graphics
 {
 struct PhysicalDevice;
-struct Surface
+struct Surface : Tracked<VkSurfaceKHR>
 {
     APIResult init(PhysicalDevice *physical_device);
 
@@ -21,10 +21,6 @@ struct Surface
     eastl::vector<VkSurfaceFormatKHR> m_surface_formats = {};
     eastl::vector<VkPresentModeKHR> m_present_modes = {};
     VkSurfaceCapabilitiesKHR m_capabilities = {};
-
-    VkSurfaceKHR m_handle = VK_NULL_HANDLE;
-    explicit operator bool() { return m_handle != nullptr; }
-    operator VkSurfaceKHR &() { return m_handle; }
 };
 LR_ASSIGN_OBJECT_TYPE(Surface, VK_OBJECT_TYPE_SURFACE_KHR);
 
@@ -40,12 +36,13 @@ struct PhysicalDevicePropertySet
 };
 
 struct Device;
-struct PhysicalDevice
+struct PhysicalDevice : Tracked<VkPhysicalDevice>
 {
     APIResult init(VkPhysicalDevice physical_device, eastl::span<QueueFamilyInfo> queue_family_infos);
 
     APIResult get_logical_device(Device *device);
     u32 get_heap_index(VkMemoryPropertyFlags flags);
+    QueueFamilyInfo get_queue_info(CommandTypeMask type_mask);
 
     u64 get_descriptor_buffer_alignment();
     u64 get_descriptor_size(DescriptorType type);
@@ -56,10 +53,6 @@ struct PhysicalDevice
 
     eastl::vector<QueueFamilyInfo> m_queue_family_infos = {};
     PhysicalDevicePropertySet m_property_set = {};
-
-    VkPhysicalDevice m_handle = VK_NULL_HANDLE;
-    operator VkPhysicalDevice &() { return m_handle; }
-    explicit operator bool() { return m_handle != nullptr; }
 };
 LR_ASSIGN_OBJECT_TYPE(PhysicalDevice, VK_OBJECT_TYPE_PHYSICAL_DEVICE);
 
@@ -70,13 +63,9 @@ struct DeviceMemoryDesc
 };
 
 using DeviceMemoryID = usize;
-struct DeviceMemory
+struct DeviceMemory : Tracked<VkDeviceMemory>
 {
     void *m_mapped_memory = nullptr;
-
-    VkDeviceMemory m_handle = VK_NULL_HANDLE;
-    explicit operator bool() { return m_handle != nullptr; }
-    operator VkDeviceMemory &() { return m_handle; }
 };
 LR_ASSIGN_OBJECT_TYPE(DeviceMemory, VK_OBJECT_TYPE_DEVICE_MEMORY);
 

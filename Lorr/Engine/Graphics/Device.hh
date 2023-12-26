@@ -19,18 +19,23 @@ struct SubmitDesc
     eastl::span<SemaphoreSubmitDesc> m_signal_semas;
 };
 
-struct Device
+struct Device : Tracked<VkDevice>
 {
     void init(VkDevice handle, PhysicalDevice *physical_device);
 
     /// COMMAND ///
-    APIResult create_command_queue(CommandQueue *queue, CommandType type);
     /// @returns - Success: APIResult::Success
     /// @returns - Failure: APIResult::[OutOfHostMem, OutOfDeviceMem]
-    APIResult create_command_allocator(CommandAllocator *allocator, CommandType type, CommandAllocatorFlag flags);
+    APIResult create_command_queue(CommandQueue *queue, CommandTypeMask type_mask);
+    CommandQueue *get_queue(CommandType type);
+    /// @returns - Success: APIResult::Success
+    /// @returns - Failure: APIResult::[OutOfHostMem, OutOfDeviceMem]
+    APIResult create_command_allocator(CommandAllocator *allocator, CommandTypeMask type_mask, CommandAllocatorFlag flags);
+    void delete_command_allocator(CommandAllocator *allocator);
     /// @returns - Success: APIResult::Success
     /// @returns - Failure: APIResult::[OutOfHostMem, OutOfDeviceMem]
     APIResult create_command_list(CommandList *list, CommandAllocator *command_allocator);
+    void delete_command_list(CommandList *list, CommandAllocator *command_allocator);
 
     void begin_command_list(CommandList *list);
     void end_command_list(CommandList *list);
@@ -53,9 +58,7 @@ struct Device
     /// @returns - Failure: APIResult::[OutOfHostMem, OutOfDeviceMem, DeviceLost, SurfaceLost, WindowInUse, InitFailed]
     APIResult create_swap_chain(SwapChain *swap_chain, SwapChainDesc *desc, Surface *surface);
     void delete_swap_chain(SwapChain *swap_chain);
-    /// @returns - Success: APIResult::[Success, Incomplete]
-    /// @returns - Failure: APIResult::[OutOfHostMem, OutOfDeviceMem]
-    APIResult get_swap_chain_images(SwapChain *swap_chain, Format format, glm::uvec2 image_size, eastl::span<Image> images);
+    APIResult get_swap_chain_images(SwapChain *swap_chain, eastl::span<Image *> images);
 
     void wait_for_work();
     /// @returns - Success: APIResult::[Success, Timeout, NotReady, Suboptimal]
@@ -73,6 +76,7 @@ struct Device
     /// @returns - Success: APIResult::Success
     /// @returns - Failure: APIResult::[OutOfHostMem, OutOfDeviceMem]
     APIResult create_compute_pipeline(Pipeline *pipeline, ComputePipelineInfo *pipeline_info);
+    void delete_pipeline(Pipeline *pipeline);
 
     // * Shaders * //
     /// @returns - Success: APIResult::Success
@@ -149,18 +153,10 @@ struct Device
 #endif
     }
 
-    u32 get_queue_family(CommandType type)
-    {
-        return m_queue_indexes[static_cast<usize>(type)];
-    }
+    eastl::array<CommandQueue, static_cast<usize>(CommandType::Count)> m_queues = {};
 
-    eastl::array<u32, static_cast<usize>(CommandType::Count)> m_queue_indexes = {};
-
-    VkDevice m_handle = nullptr;
     PhysicalDevice *m_physical_device = nullptr;
     TracyVkCtx m_tracy_ctx = nullptr;
-
-    explicit operator bool() { return m_handle != nullptr; }
 };
 
 }  // namespace lr::Graphics

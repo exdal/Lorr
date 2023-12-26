@@ -39,26 +39,32 @@ struct ImageDesc
 
     u32 m_width = 0;
     u32 m_height = 0;
-    u32 m_array_size = 1;
-    u32 m_mip_map_levels = 1;
+    u32 m_slice_count = 1;
+    u32 m_mip_levels = 1;
     eastl::span<u32> m_queue_indices = {};
 
     u64 m_data_size = 0;
 };
 
-struct Image
+struct Image : Tracked<VkImage>
 {
+    void init(Format format, u32 width, u32 height, u32 slice_count, u32 mip_levels)
+    {
+        m_format = format;
+        m_width = width;
+        m_height = height;
+        m_slice_count = slice_count;
+        m_mip_levels = mip_levels;
+    }
+
     Format m_format = Format::Unknown;
     u32 m_width = 0;
     u32 m_height = 0;
     u32 m_slice_count = 1;
-    u32 m_mip_map_levels = 1;
+    u32 m_mip_levels = 1;
 
+    bool m_swap_chain_image = false;
     u64 m_allocator_data = ~0;
-    VkImage m_handle = nullptr;
-
-    operator VkImage &() { return m_handle; }
-    explicit operator bool() { return m_handle != nullptr; }
 };
 LR_ASSIGN_OBJECT_TYPE(Image, VK_OBJECT_TYPE_IMAGE);
 
@@ -93,16 +99,11 @@ struct ImageSubresourceRange : VkImageSubresourceRange
     ImageSubresourceRange(ImageSubresourceInfo info);
 };
 
-struct ImageView
+struct ImageView : Tracked<VkImageView>
 {
     Format m_format = Format::Unknown;
     ImageViewType m_type = ImageViewType::View2D;
     ImageSubresourceInfo m_subresource_info = {};
-
-    VkImageView m_handle = nullptr;
-
-    operator VkImageView &() { return m_handle; }
-    explicit operator bool() { return m_handle != nullptr; }
 };
 LR_ASSIGN_OBJECT_TYPE(ImageView, VK_OBJECT_TYPE_IMAGE_VIEW);
 
@@ -125,12 +126,8 @@ struct SamplerDesc
     float m_max_lod = 0;
 };
 
-struct Sampler
+struct Sampler : Tracked<VkSampler>
 {
-    VkSampler m_handle = nullptr;
-
-    operator VkSampler &() { return m_handle; }
-    explicit operator bool() { return m_handle != nullptr; }
 };
 LR_ASSIGN_OBJECT_TYPE(Sampler, VK_OBJECT_TYPE_SAMPLER);
 

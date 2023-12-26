@@ -1,7 +1,5 @@
 #include "PhysicalDevice.hh"
 
-#include <EASTL/scoped_array.h>
-
 #include "Device.hh"
 
 namespace lr::Graphics
@@ -11,7 +9,7 @@ namespace lr::Graphics
 
 static const char *k_required_extensions_str[] = {
     "VK_KHR_swapchain",
-    "VK_EXT_descriptor_buffer",
+    // "VK_EXT_descriptor_buffer",
     "VK_EXT_calibrated_timestamps",
 };
 
@@ -220,6 +218,15 @@ u32 PhysicalDevice::get_heap_index(VkMemoryPropertyFlags flags)
     LOG_ERROR("Memory type index is not found.");
 
     return -1;
+}
+
+QueueFamilyInfo PhysicalDevice::get_queue_info(CommandTypeMask type_mask)
+{
+    for (auto &info : m_queue_family_infos)
+        if (info.m_supported_types & type_mask)
+            return info;
+
+    return {};
 }
 
 u64 PhysicalDevice::get_descriptor_buffer_alignment()

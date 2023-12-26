@@ -18,13 +18,9 @@ enum class ShaderCompileFlag : u32
 LR_TYPEOP_ARITHMETIC(ShaderCompileFlag, ShaderCompileFlag, |);
 LR_TYPEOP_ARITHMETIC_INT(ShaderCompileFlag, ShaderCompileFlag, &);
 
-struct Shader
+struct Shader : Tracked<VkShaderModule>
 {
     ShaderStage m_type = ShaderStage::Vertex;
-    VkShaderModule m_handle = nullptr;
-
-    operator VkShaderModule &() { return m_handle; }
-    explicit operator bool() { return m_handle != nullptr; }
 };
 LR_ASSIGN_OBJECT_TYPE(Shader, VK_OBJECT_TYPE_SHADER_MODULE);
 

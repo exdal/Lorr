@@ -9,21 +9,29 @@ void Device::init(VkDevice handle, PhysicalDevice *physical_device)
     m_handle = handle;
     m_physical_device = physical_device;
     m_tracy_ctx = TracyVkContextHostCalibrated(physical_device->m_handle, m_handle);
+
+    for (u32 i = 0; i < m_queues.max_size(); i++)
+        create_command_queue(&m_queues[i], static_cast<CommandTypeMask>(1 << i));
 }
 
-APIResult Device::create_command_queue(CommandQueue *queue, CommandType type)
+APIResult Device::create_command_queue(CommandQueue *queue, CommandTypeMask type_mask)
 {
     ZoneScoped;
 
     if (!validate_handle(queue))
         return APIResult::HanldeNotInitialized;
 
-    vkGetDeviceQueue(m_handle, get_queue_family(type), 0, &queue->m_handle);
+    vkGetDeviceQueue(m_handle, m_physical_device->get_queue_info(type_mask).m_index, 0, &queue->m_handle);
 
     return APIResult::Success;
 }
 
-APIResult Device::create_command_allocator(CommandAllocator *allocator, CommandType type, CommandAllocatorFlag flags)
+CommandQueue *Device::get_queue(CommandType type)
+{
+    return &m_queues[static_cast<usize>(type)];
+}
+
+APIResult Device::create_command_allocator(CommandAllocator *allocator, CommandTypeMask type_mask, CommandAllocatorFlag flags)
 {
     ZoneScoped;
 
@@ -33,9 +41,17 @@ APIResult Device::create_command_allocator(CommandAllocator *allocator, CommandT
     VkCommandPoolCreateInfo create_info = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
         .flags = static_cast<VkCommandPoolCreateFlags>(flags),
-        .queueFamilyIndex = get_queue_family(type),
+        .queueFamilyIndex = m_physical_device->get_queue_info(type_mask).m_index,
     };
     return static_cast<APIResult>(vkCreateCommandPool(m_handle, &create_info, nullptr, &allocator->m_handle));
+}
+
+void Device::delete_command_allocator(CommandAllocator *allocator)
+{
+    ZoneScoped;
+
+    vkDestroyCommandPool(m_handle, *allocator, nullptr);
+    allocator->m_handle = nullptr;
 }
 
 APIResult Device::create_command_list(CommandList *list, CommandAllocator *command_allocator)
@@ -55,6 +71,14 @@ APIResult Device::create_command_list(CommandList *list, CommandAllocator *comma
     return static_cast<APIResult>(vkAllocateCommandBuffers(m_handle, &allocate_info, &list->m_handle));
 }
 
+void Device::delete_command_list(CommandList *list, CommandAllocator *command_allocator)
+{
+    ZoneScoped;
+
+    vkFreeCommandBuffers(m_handle, *command_allocator, 1, &list->m_handle);
+    list->m_handle = VK_NULL_HANDLE;
+}
+
 void Device::begin_command_list(CommandList *list)
 {
     ZoneScoped;
@@ -71,7 +95,7 @@ void Device::end_command_list(CommandList *list)
 {
     ZoneScoped;
 
-    TracyVkCollect(m_pTracyCtx, pList->m_pHandle);
+    TracyVkCollect(m_pTracyCtx, list->m_handle);
     vkEndCommandBuffer(static_cast<VkCommandBuffer>(*list));
 }
 
@@ -145,6 +169,7 @@ void Device::delete_semaphore(Semaphore *semaphore)
     ZoneScoped;
 
     vkDestroySemaphore(m_handle, semaphore->m_handle, nullptr);
+    semaphore->m_handle = VK_NULL_HANDLE;
 }
 
 APIResult Device::wait_for_semaphore(Semaphore *semaphore, u64 desired_value, u64 timeout)
@@ -191,19 +216,14 @@ APIResult Device::create_swap_chain(SwapChain *swap_chain, SwapChainDesc *desc, 
     if (result != APIResult::Success)
         return result;
 
-    swap_chain->m_frame_count = desc->m_frame_count;
-    swap_chain->m_acquire_semas.resize(desc->m_frame_count);
-    swap_chain->m_present_semas.resize(desc->m_frame_count);
-    swap_chain->m_color_space = desc->m_color_space;
-    swap_chain->m_present_mode = desc->m_present_mode;
-
+    swap_chain->init(desc->m_width, desc->m_height, desc->m_frame_count, desc->m_format, desc->m_color_space, desc->m_present_mode);
     for (u32 i = 0; i < desc->m_frame_count; i++)
     {
         create_binary_semaphore(&swap_chain->m_acquire_semas[i]);
         create_binary_semaphore(&swap_chain->m_present_semas[i]);
     }
 
-    return APIResult::Success;
+    return result;
 }
 
 void Device::delete_swap_chain(SwapChain *swap_chain)
@@ -212,6 +232,8 @@ void Device::delete_swap_chain(SwapChain *swap_chain)
 
     wait_for_work();
     vkDestroySwapchainKHR(m_handle, swap_chain->m_handle, nullptr);
+    swap_chain->m_handle = VK_NULL_HANDLE;
+
     for (u32 i = 0; i < swap_chain->m_frame_count; i++)
     {
         delete_semaphore(&swap_chain->m_acquire_semas[i]);
@@ -219,26 +241,21 @@ void Device::delete_swap_chain(SwapChain *swap_chain)
     }
 }
 
-APIResult Device::get_swap_chain_images(SwapChain *swap_chain, Format format, glm::uvec2 image_size, eastl::span<Image> images)
+APIResult Device::get_swap_chain_images(SwapChain *swap_chain, eastl::span<Image *> images)
 {
-    ZoneScoped;
+    eastl::vector<VkImage> raw_images(swap_chain->m_frame_count);
+    auto result = static_cast<APIResult>(vkGetSwapchainImagesKHR(m_handle, swap_chain->m_handle, &swap_chain->m_frame_count, raw_images.data()));
+    if (result != APIResult::Success)
+        return result;
 
-    u32 image_count = images.size();
-    eastl::vector<VkImage> raw_images(image_count);
-    auto api_result = static_cast<APIResult>(vkGetSwapchainImagesKHR(m_handle, swap_chain->m_handle, &image_count, raw_images.data()));
-    if (api_result != APIResult::Success && api_result != APIResult::Incomplete)
-        return api_result;
-
-    for (u32 i = 0; i < image_count; i++)
+    for (u32 i = 0; i < swap_chain->m_frame_count; i++)
     {
-        Image &image = images[i];
-        image.m_handle = raw_images[i];
-        image.m_width = image_size.x;
-        image.m_height = image_size.y;
-        image.m_mip_map_levels = 1;
-        image.m_format = format;
+        Image *image = images[i];
+        image->m_handle = raw_images[i];
+        image->m_swap_chain_image = true;
+        image->init(swap_chain->m_format, swap_chain->m_width, swap_chain->m_height, 1, 1);
 
-        set_object_name(&image, eastl::format("SC Image {}", i));
+        set_object_name(image, eastl::format("SwapChain Image {}", i));
     }
 
     return APIResult::Success;
@@ -255,9 +272,7 @@ APIResult Device::acquire_next_image(SwapChain *swap_chain, u32 &image_id)
 {
     ZoneScoped;
 
-    u32 sema_id = (swap_chain->m_current_frame_id + 1) % swap_chain->m_frame_count;
-    auto &acquire_sema = swap_chain->m_acquire_semas[sema_id];
-
+    auto &acquire_sema = swap_chain->m_acquire_semas[swap_chain->m_current_frame_id];
     auto result = static_cast<APIResult>(vkAcquireNextImageKHR(m_handle, *swap_chain, UINT64_MAX, acquire_sema, nullptr, &image_id));
     swap_chain->m_current_frame_id = image_id;
 
@@ -278,7 +293,13 @@ APIResult Device::present(SwapChain *swap_chain, CommandQueue *queue)
         .pSwapchains = &swap_chain->m_handle,
         .pImageIndices = &swap_chain->m_current_frame_id,
     };
-    return static_cast<APIResult>(vkQueuePresentKHR(*queue, &present_info));
+    auto result = static_cast<APIResult>(vkQueuePresentKHR(*queue, &present_info));
+    if (result != APIResult::Success)
+        return result;
+
+    swap_chain->m_current_frame_id = swap_chain->get_next_frame();
+
+    return APIResult::Success;
 }
 
 PipelineLayout Device::create_pipeline_layout(eastl::span<DescriptorSetLayout> layouts, eastl::span<PushConstantDesc> push_constants)
@@ -444,6 +465,14 @@ APIResult Device::create_compute_pipeline(Pipeline *pipeline, ComputePipelineInf
     return static_cast<APIResult>(vkCreateComputePipelines(m_handle, nullptr, 1, &pipeline_create_info, nullptr, &pipeline->m_handle));
 }
 
+void Device::delete_pipeline(Pipeline *pipeline)
+{
+    ZoneScoped;
+
+    vkDestroyPipeline(m_handle, *pipeline, nullptr);
+    pipeline->m_handle = VK_NULL_HANDLE;
+}
+
 APIResult Device::create_shader(Shader *shader, ShaderStage stage, eastl::span<u32> ir)
 {
     ZoneScoped;
@@ -466,6 +495,7 @@ void Device::delete_shader(Shader *shader)
     ZoneScoped;
 
     vkDestroyShaderModule(m_handle, shader->m_handle, nullptr);
+    shader->m_handle = VK_NULL_HANDLE;
 }
 
 DescriptorSetLayout Device::create_descriptor_set_layout(eastl::span<DescriptorLayoutElement> elements, DescriptorSetLayoutFlag flags)
@@ -498,6 +528,7 @@ void Device::delete_descriptor_set_layout(DescriptorSetLayout layout)
     ZoneScoped;
 
     vkDestroyDescriptorSetLayout(m_handle, layout, nullptr);
+    layout = VK_NULL_HANDLE;
 }
 
 u64 Device::get_descriptor_set_layout_size(DescriptorSetLayout layout)
@@ -664,6 +695,7 @@ void Device::delete_buffer(Buffer *buffer)
         return;
 
     vkDestroyBuffer(m_handle, *buffer, nullptr);
+    buffer->m_handle = VK_NULL_HANDLE;
 }
 
 APIResult Device::create_image(Image *image, ImageDesc *desc)
@@ -681,8 +713,8 @@ APIResult Device::create_image(Image *image, ImageDesc *desc)
         .extent.width = desc->m_width,
         .extent.height = desc->m_height,
         .extent.depth = 1,
-        .mipLevels = desc->m_mip_map_levels,
-        .arrayLayers = desc->m_array_size,
+        .mipLevels = desc->m_mip_levels,
+        .arrayLayers = desc->m_slice_count,
         .samples = VK_SAMPLE_COUNT_1_BIT,
         .usage = static_cast<VkImageUsageFlags>(desc->m_usage_flags),
         .sharingMode = VK_SHARING_MODE_CONCURRENT,
@@ -691,13 +723,12 @@ APIResult Device::create_image(Image *image, ImageDesc *desc)
         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
     };
 
-    image->m_format = desc->m_format;
-    image->m_width = desc->m_width;
-    image->m_height = desc->m_height;
-    image->m_slice_count = desc->m_array_size;
-    image->m_mip_map_levels = desc->m_mip_map_levels;
+    auto result = static_cast<APIResult>(vkCreateImage(m_handle, &create_info, nullptr, &image->m_handle));
+    if (result != APIResult::Success)
+        return result;
 
-    return static_cast<APIResult>(vkCreateImage(m_handle, &create_info, nullptr, &image->m_handle));
+    image->init(desc->m_format, desc->m_width, desc->m_height, desc->m_slice_count, desc->m_mip_levels);
+    return APIResult::Success;
 }
 
 void Device::delete_image(Image *image)
@@ -707,7 +738,10 @@ void Device::delete_image(Image *image)
     if (!validate_handle(image))
         return;
 
-    vkDestroyImage(m_handle, *image, nullptr);
+    if (!image->m_swap_chain_image)
+        vkDestroyImage(m_handle, *image, nullptr);
+
+    image->m_handle = VK_NULL_HANDLE;
 }
 
 APIResult Device::create_image_view(ImageView *view, ImageViewDesc *desc)
@@ -746,6 +780,7 @@ void Device::delete_image_view(ImageView *image_view)
         return;
 
     vkDestroyImageView(m_handle, *image_view, nullptr);
+    image_view->m_handle = VK_NULL_HANDLE;
 }
 
 APIResult Device::create_sampler(Sampler *sampler, SamplerDesc *desc)
@@ -786,6 +821,7 @@ void Device::delete_sampler(Sampler *sampler)
         return;
 
     vkDestroySampler(m_handle, *sampler, nullptr);
+    sampler->m_handle = VK_NULL_HANDLE;
 }
 
 }  // namespace lr::Graphics

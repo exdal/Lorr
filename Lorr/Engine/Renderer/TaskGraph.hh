@@ -1,11 +1,13 @@
 #pragma once
 
+#include "CommandBatcher.hh"
 #include "PipelineManager.hh"
 #include "Task.hh"
 #include "TaskResource.hh"
 
 #include "Graphics/CommandList.hh"
 #include "Graphics/Device.hh"
+#include "Graphics/MemoryAllocator.hh"
 #include "Memory/Allocator/AreaAllocator.hh"
 
 #include <EASTL/vector.h>
@@ -17,45 +19,74 @@ struct TaskFrame
     constexpr static usize k_type_count = static_cast<usize>(CommandType::Count);
 
     Semaphore m_timeline_sema = {};
-    fixed_vector<CommandAllocator, k_type_count> m_allocators = {};
-    fixed_vector<CommandList, k_type_count> m_lists = {};
+    eastl::array<CommandAllocator, k_type_count> m_allocators = {};
+    eastl::array<CommandList, k_type_count> m_lists = {};
+};
+
+struct TaskPresentDesc
+{
+    ImageID m_swap_chain_image_id = ~0;
+};
+
+struct TaskExecuteDesc
+{
+    SwapChain *m_swap_chain = nullptr;
+    eastl::span<Semaphore *> m_wait_semas = {};
+    eastl::span<Semaphore *> m_signal_semas = {};
 };
 
 struct TaskGraphDesc
 {
     Device *m_device = nullptr;
-    SwapChain *m_swap_chain = nullptr;
+    u32 m_frame_count = 1;
 };
 
 struct TaskGraph
 {
     void init(TaskGraphDesc *desc);
+    ~TaskGraph();
 
-    ImageID use_persistent_image(const PersistentImageInfo &image_info);
-    void set_image(ImageID image_id, Image *image, ImageView *view);
+    eastl::tuple<ImageID, Image *> add_new_image();
+    eastl::tuple<ImageID, ImageView *> add_new_image_view();
+
+    Image *get_image(ImageID id);
+    ImageView *get_image_view(ImageID id);
+
+    ImageID use_persistent_image(const PersistentImageInfo &persistent_image_info);
+    void set_image(ImageID image_info_id, ImageID image_id, ImageID image_view_id);
+
     BufferID use_persistent_buffer(const PersistentBufferInfo &buffer_info);
+    BufferID create_buffer(const BufferDesc &desc);
 
     TaskBatchID schedule_task(Task &task);
     template<typename TaskT>
     void add_task(const TaskT &task_info);
     void add_task(Task &task, TaskID id);
+    void compile_task_pipeline(Task &task);
 
-    void execute(SwapChain *swap_chain);
+    void present(const TaskPresentDesc &present_desc);
+    void execute(const TaskExecuteDesc &execute_desc);
 
-    void insert_present_barrier(CommandBatcher &batcher, ImageID image_id);
     void insert_barrier(CommandBatcher &batcher, const TaskBarrier &barrier);
 
     Device *m_device = nullptr;
-    CommandQueue m_graphics_queue = {};
-    DeviceMemory m_image_memory = {};
     PipelineManager m_pipeline_manager = {};
+
+    // vectors move memories on de/allocation, so using raw pointer is not safe
+    // instead we have ResourcePool that is fixed size and does not do allocations
+    ResourcePool<Image> m_images = {};
+    ResourcePool<ImageView> m_image_views = {};
+    ResourcePool<Buffer> m_buffers = {};
 
     eastl::vector<TaskFrame> m_frames = {};
 
     eastl::vector<TaskImageInfo> m_image_infos = {};
     eastl::vector<TaskBufferInfo> m_buffer_infos = {};
+
     eastl::vector<TaskBarrier> m_barriers = {};
     eastl::vector<TaskBatch> m_batches = {};
+    eastl::vector<TaskSubmitScope> m_submit_scopes = {};
+
     eastl::vector<Task *> m_tasks = {};
     Memory::AreaAllocator m_task_allocator = {};
 };

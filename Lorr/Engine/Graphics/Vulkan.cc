@@ -25,13 +25,13 @@ void *VK::LoadVulkan()
         return nullptr;
     }
 
-#define _VK_DEFINE_FUNCTION(_name)                                    \
-    _name = (PFN_##_name)fs::get_lib_func(vulkan_lib, #_name); \
-    if (_name == nullptr)                                             \
-    {                                                                 \
-        LOG_CRITICAL("Cannot load Vulkan function '{}'!", #_name);    \
-        fs::free_lib(vulkan_lib);                                     \
-        return nullptr;                                               \
+#define _VK_DEFINE_FUNCTION(_name)                                 \
+    _name = (PFN_##_name)fs::get_lib_func(vulkan_lib, #_name);     \
+    if (_name == nullptr)                                          \
+    {                                                              \
+        LOG_CRITICAL("Cannot load Vulkan function '{}'!", #_name); \
+        fs::free_lib(vulkan_lib);                                  \
+        return nullptr;                                            \
     }
 
     _VK_FUNCTION_NAMES
@@ -64,12 +64,11 @@ bool VK::LoadVulkanDevice(VkDevice pDevice)
 {
     ZoneScoped;
 
-#define _VK_DEFINE_FUNCTION(_name)                                        \
-    _name = (PFN_##_name)vkGetDeviceProcAddr(pDevice, #_name);            \
-    if (_name == nullptr)                                                 \
-    {                                                                     \
-        LOG_CRITICAL("Cannot load Vulkan Device function '{}'!", #_name); \
-        return false;                                                     \
+#define _VK_DEFINE_FUNCTION(_name)                                    \
+    _name = (PFN_##_name)vkGetDeviceProcAddr(pDevice, #_name);        \
+    if (_name == nullptr)                                             \
+    {                                                                 \
+        LOG_WARN("Cannot load Vulkan Device function '{}'!", #_name); \
     }
 
     _VK_FUNCTION_NAMES_DEVICE

@@ -56,6 +56,7 @@ typedef struct _SECURITY_ATTRIBUTES SECURITY_ATTRIBUTES;
     _VK_DEFINE_FUNCTION(vkQueueSubmit);                             \
     _VK_DEFINE_FUNCTION(vkQueuePresentKHR);                         \
     _VK_DEFINE_FUNCTION(vkCreateCommandPool);                       \
+    _VK_DEFINE_FUNCTION(vkDestroyCommandPool);                      \
     _VK_DEFINE_FUNCTION(vkAllocateCommandBuffers);                  \
     _VK_DEFINE_FUNCTION(vkBeginCommandBuffer);                      \
     _VK_DEFINE_FUNCTION(vkEndCommandBuffer);                        \
@@ -71,6 +72,7 @@ typedef struct _SECURITY_ATTRIBUTES SECURITY_ATTRIBUTES;
     _VK_DEFINE_FUNCTION(vkQueueSubmit2);                            \
     _VK_DEFINE_FUNCTION(vkCreatePipelineCache);                     \
     _VK_DEFINE_FUNCTION(vkCreateGraphicsPipelines);                 \
+    _VK_DEFINE_FUNCTION(vkDestroyPipeline);                         \
     _VK_DEFINE_FUNCTION(vkCreateShaderModule);                      \
     _VK_DEFINE_FUNCTION(vkCreateDescriptorSetLayout);               \
     _VK_DEFINE_FUNCTION(vkCreatePipelineLayout);                    \
@@ -153,4 +155,4 @@ namespace lr::Graphics::VK
 void *LoadVulkan();
 bool LoadVulkanInstance(VkInstance pInstance);
 bool LoadVulkanDevice(VkDevice pDevice);
-}
+}  // namespace lr::Graphics::VK

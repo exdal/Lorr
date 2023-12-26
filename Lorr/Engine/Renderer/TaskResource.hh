@@ -1,6 +1,5 @@
 #pragma once
 
-#include "Graphics/Resource.hh"
 #include "TaskTypes.hh"
 
 namespace lr::Graphics
@@ -10,15 +9,16 @@ namespace lr::Graphics
 using ImageID = u32;
 struct PersistentImageInfo
 {
-    Image *m_image = nullptr;
-    ImageView *m_view = nullptr;
+    ImageID m_image_id = LR_NULL_ID;
+    ImageID m_image_view_id = LR_NULL_ID;
     TaskAccess::Access m_access = TaskAccess::None;
 };
 
 struct TaskImageInfo
 {
-    Image *m_image = nullptr;
-    ImageView *m_view = nullptr;
+    ImageID m_image_id = LR_NULL_ID;
+    ImageID m_image_view_id = LR_NULL_ID;
+
     ImageLayout m_last_layout = ImageLayout::Undefined;
     TaskAccess::Access m_last_access = TaskAccess::None;
     u32 m_last_batch_index = 0;
@@ -29,13 +29,13 @@ struct TaskImageInfo
 using BufferID = u32;
 struct PersistentBufferInfo
 {
-    Buffer *m_buffer = nullptr;
+    BufferID m_buffer_id = LR_NULL_ID;
     TaskAccess::Access m_initial_access = TaskAccess::None;
 };
 
 struct TaskBufferInfo
 {
-    Buffer *m_buffer = nullptr;
+    BufferID m_buffer_id = LR_NULL_ID;
     TaskAccess::Access m_last_access = TaskAccess::None;
     u32 m_last_batch_index = 0;
 };
@@ -54,25 +54,25 @@ struct GenericResource
 
     union
     {
-        ImageID m_image_id = LR_NULL_ID;
-        BufferID m_buffer_id;
+        ImageID m_task_image_id = LR_NULL_ID;
+        BufferID m_task_buffer_id;
     };
 };
 
-template<TaskAccess::Access TAccess = TaskAccess::None, ImageLayout TLayout = ImageLayout::Undefined>
+template<TaskAccess::Access TAccess = TaskAccess::None, ImageLayout LayoutT = ImageLayout::Undefined>
 struct TaskImageUse : GenericResource
 {
     constexpr TaskImageUse()
     {
         m_type = TaskResourceType::Image;
-        m_image_layout = TLayout;
+        m_image_layout = LayoutT;
         m_access = TAccess;
     }
 
     constexpr TaskImageUse(ImageID image)
         : TaskImageUse()
     {
-        m_image_id = image;
+        m_task_image_id = image;
     }
 };
 
@@ -88,7 +88,7 @@ struct TaskBufferUse : GenericResource
     constexpr TaskBufferUse(BufferID buffer)
         : TaskBufferUse()
     {
-        m_buffer_id = buffer;
+        m_task_buffer_id = buffer;
     }
 };
 

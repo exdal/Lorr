@@ -1,7 +1,5 @@
 #pragma once
 
-#include "PipelineManager.hh"
-
 #include "Graphics/CommandList.hh"
 
 namespace lr::Graphics

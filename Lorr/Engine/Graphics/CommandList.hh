@@ -75,13 +75,9 @@ struct DependencyInfo : VkDependencyInfo
     DependencyInfo(eastl::span<ImageBarrier> image_barriers, eastl::span<MemoryBarrier> memory_barriers);
 };
 
-struct Semaphore
+struct Semaphore : Tracked<VkSemaphore>
 {
     u64 m_value = 0;
-
-    VkSemaphore m_handle = VK_NULL_HANDLE;
-
-    operator VkSemaphore &() { return m_handle; }
 };
 LR_ASSIGN_OBJECT_TYPE(Semaphore, VK_OBJECT_TYPE_SEMAPHORE);
 
@@ -93,19 +89,13 @@ struct SemaphoreSubmitDesc : VkSemaphoreSubmitInfo
     SemaphoreSubmitDesc() = default;
 };
 
-struct CommandQueue
+struct CommandQueue : Tracked<VkQueue>
 {
-    VkQueue m_handle = nullptr;
-
-    operator VkQueue &() { return m_handle; }
 };
 LR_ASSIGN_OBJECT_TYPE(CommandQueue, VK_OBJECT_TYPE_QUEUE);
 
-struct CommandAllocator
+struct CommandAllocator : Tracked<VkCommandPool>
 {
-    VkCommandPool m_handle = nullptr;
-
-    operator VkCommandPool &() { return m_handle; }
 };
 LR_ASSIGN_OBJECT_TYPE(CommandAllocator, VK_OBJECT_TYPE_COMMAND_POOL);
 
@@ -120,7 +110,7 @@ struct ImageCopyRegion : VkBufferImageCopy
     ImageCopyRegion(ImageSubresourceInfo slice_info, u32 width, u32 height, u64 buffer_offset);
 };
 
-struct CommandList
+struct CommandList : Tracked<VkCommandBuffer>
 {
     void begin_rendering(const RenderingBeginDesc &desc);
     void end_rendering();
@@ -147,11 +137,6 @@ struct CommandList
     void set_descriptor_buffers(eastl::span<DescriptorBufferBindInfo> binding_infos);
     void set_descriptor_buffer_offsets(
         PipelineBindPoint bind_point, PipelineLayout layout, u32 first_set, eastl::span<u32> indices, eastl::span<u64> offsets);
-
-    VkCommandBuffer m_handle = nullptr;
-
-    explicit operator VkCommandBuffer &() { return m_handle; }
-    explicit operator bool() { return m_handle != nullptr; }
 };
 LR_ASSIGN_OBJECT_TYPE(CommandList, VK_OBJECT_TYPE_COMMAND_BUFFER);
 

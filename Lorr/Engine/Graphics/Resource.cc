@@ -2,7 +2,6 @@
 
 namespace lr::Graphics
 {
-
 ImageSubresourceRange::ImageSubresourceRange(ImageSubresourceInfo info)
 {
     this->aspectMask = static_cast<VkImageAspectFlags>(info.m_aspect_mask);

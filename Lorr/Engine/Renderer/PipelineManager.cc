@@ -17,6 +17,13 @@ void PipelineCompileInfo::add_shader(eastl::string_view path)
     m_compile_descs.push_back(compile_desc);
 }
 
+void PipelineCompileInfo::init(usize color_attachment_count)
+{
+    ZoneScoped;
+
+    m_graphics_pipeline_info.m_blend_attachments.resize(color_attachment_count);
+}
+
 void PipelineCompileInfo::add_include_dir(eastl::string_view path)
 {
     ZoneScoped;
@@ -40,7 +47,7 @@ void PipelineCompileInfo::set_dynamic_state(DynamicState dynamic_state)
 
 #define ADD_DYNAMIC_STATE(state)             \
     if (dynamic_state & DynamicState::state) \
-    m_pipeline_info.m_dynamic_states.push_back(DynamicState::VK_##state)
+    m_graphics_pipeline_info.m_dynamic_states.push_back(DynamicState::VK_##state)
 
     ADD_DYNAMIC_STATE(Viewport);
     ADD_DYNAMIC_STATE(Scissor);
@@ -57,10 +64,10 @@ void PipelineCompileInfo::set_viewport(u32 id, const glm::vec4 &viewport, const 
 {
     ZoneScoped;
 
-    if (id + 1 > m_pipeline_info.m_viewports.size())
-        m_pipeline_info.m_viewports.resize(id + 1);
+    if (id + 1 > m_graphics_pipeline_info.m_viewports.size())
+        m_graphics_pipeline_info.m_viewports.resize(id + 1);
 
-    m_pipeline_info.m_viewports[id] = {
+    m_graphics_pipeline_info.m_viewports[id] = {
         .x = viewport.x,
         .y = viewport.y,
         .width = viewport.z,
@@ -74,10 +81,10 @@ void PipelineCompileInfo::set_scissors(u32 id, const glm::uvec4 &rect)
 {
     ZoneScoped;
 
-    if (id + 1 > m_pipeline_info.m_scissors.size())
-        m_pipeline_info.m_scissors.resize(id + 1);
+    if (id + 1 > m_graphics_pipeline_info.m_scissors.size())
+        m_graphics_pipeline_info.m_scissors.resize(id + 1);
 
-    m_pipeline_info.m_scissors[id] = {
+    m_graphics_pipeline_info.m_scissors[id] = {
         .offset.x = static_cast<i32>(rect.x),
         .offset.y = static_cast<i32>(rect.y),
         .extent.width = rect.z,
@@ -89,16 +96,16 @@ void PipelineCompileInfo::set_blend_state(u32 id, const ColorBlendAttachment &st
 {
     ZoneScoped;
 
-    if (id + 1 > m_pipeline_info.m_blend_attachments.size())
-        m_pipeline_info.m_blend_attachments.resize(id + 1);
+    if (id + 1 > m_graphics_pipeline_info.m_blend_attachments.size())
+        m_graphics_pipeline_info.m_blend_attachments.resize(id + 1);
 }
 
 void PipelineCompileInfo::set_blend_state_all(const ColorBlendAttachment &state)
 {
     ZoneScoped;
 
-    assert(m_pipeline_info.m_blend_attachments.size() != 0);
-    for (auto &attachment : m_pipeline_info.m_blend_attachments)
+    assert(m_graphics_pipeline_info.m_blend_attachments.size() != 0);
+    for (auto &attachment : m_graphics_pipeline_info.m_blend_attachments)
         attachment = state;
 }
 
@@ -122,11 +129,28 @@ void PipelineManager::init(Device *device)
     m_bindless_layout = m_device->create_pipeline_layout(layouts, push_constant_desc);
 }
 
-void PipelineManager::create_pipeline(eastl::string_view name, PipelineCompileInfo &compile_info)
+PipelineManager::~PipelineManager()
 {
     ZoneScoped;
 
-    PipelineInfo pipeline_info = {};
+    for (auto &shader : m_shaders.m_resources)
+        m_device->delete_shader(&shader);
+    for (auto &pipeline : m_pipelines.m_resources)
+        m_device->delete_pipeline(&pipeline);
+}
+
+usize PipelineManager::compile_pipeline(PipelineCompileInfo &compile_info, PipelineAttachmentInfo &attachment_info)
+{
+    ZoneScoped;
+
+    auto [pipeline_info_id, pipeline_info] = m_pipeline_infos.add_resource();
+    if (pipeline_info_id == LR_NULL_ID)
+    {
+        LOG_ERROR("Cannot compile pipeline info! Resource pool is full.");
+        return LR_NULL_ID;
+    }
+
+    auto &graphics_pipeline_info = compile_info.m_graphics_pipeline_info;
 
     for (auto &compile_desc : compile_info.m_compile_descs)
     {
@@ -135,85 +159,52 @@ void PipelineManager::create_pipeline(eastl::string_view name, PipelineCompileIn
 
         ShaderReflectionDesc reflection_desc = { .m_reflect_vertex_layout = true };
         auto reflection_data = ShaderCompiler::reflect_spirv(&reflection_desc, ir);
-        auto shader_id = m_shaders.size();
-        m_device->create_shader(&m_shaders.push_back(), reflection_data.m_compiled_stage, ir);
+        auto [shader_id, shader] = m_shaders.add_resource();
+        if (shader_id == LR_NULL_ID)
+        {
+            LOG_ERROR("Cannot create shader! Resource pool is full.");
+            return LR_NULL_ID;
+        }
 
-        pipeline_info.m_bound_shaders.push_back(shader_id);
-        pipeline_info.m_reflections.push_back(reflection_data);
+        m_device->create_shader(shader, reflection_data.m_compiled_stage, ir);
+        graphics_pipeline_info.m_shader_stages.push_back(PipelineShaderStageInfo(shader, reflection_data.m_entry_point));
+
+        auto &attrib_infos = graphics_pipeline_info.m_vertex_attrib_infos;
+        attrib_infos.insert(attrib_infos.end(), reflection_data.m_vertex_attribs.begin(), reflection_data.m_vertex_attribs.end());
+
+        pipeline_info->m_bound_shaders.push_back(shader_id);
+        pipeline_info->m_reflections.push_back(reflection_data);
     }
 
-    pipeline_info.m_pipeline_id = m_graphics_pipeline_infos.size();
-    m_graphics_pipeline_infos.push_back({});
+    if (!graphics_pipeline_info.m_vertex_attrib_infos.empty())
+        graphics_pipeline_info.m_vertex_binding_infos.push_back(PipelineVertexLayoutBindingInfo(0, 0, false));
 
-    m_pipeline_infos.emplace(name, pipeline_info);
-}
+    graphics_pipeline_info.m_layout = m_bindless_layout;
 
-void PipelineManager::compile_pipeline(eastl::string_view name, PipelineAttachmentInfo &attachment_info)
-{
-    ZoneScoped;
-
-    auto pipeline_info = get_pipeline_info(name);
-    if (!pipeline_info)
+    auto [pipeline_id, pipeline] = m_pipelines.add_resource();
+    if (pipeline_id == LR_NULL_ID)
     {
-        LOG_ERROR("Trying to build null pipeline<{}>.", name);
-        return;
+        LOG_ERROR("Cannot create pipelines. Resource pool is full.");
+        return LR_NULL_ID;
     }
 
-    assert(pipeline_info->m_pipeline_id == LR_NULL_ID);
-    pipeline_info->m_pipeline_id = m_pipelines.size();
+    m_device->create_graphics_pipeline(pipeline, &graphics_pipeline_info, &attachment_info);
 
-    auto &compile_info = m_graphics_pipeline_infos[pipeline_info->m_pipeline_id];
-    for (u32 i = 0; i < pipeline_info->m_bound_shaders.size(); i++)
-    {
-        auto shader_id = pipeline_info->m_bound_shaders[i];
-        assert(shader_id != LR_NULL_ID);
-        auto &shader = m_shaders[shader_id];
-        auto &reflection = pipeline_info->m_reflections[i];
-
-        compile_info.m_vertex_attrib_infos.insert(
-            compile_info.m_vertex_attrib_infos.end(), reflection.m_vertex_attribs.begin(), reflection.m_vertex_attribs.end());
-
-        compile_info.m_shader_stages.push_back(PipelineShaderStageInfo(&shader, reflection.m_entry_point));
-    }
-
-    if (!compile_info.m_vertex_attrib_infos.empty())
-        compile_info.m_vertex_binding_infos.push_back(PipelineVertexLayoutBindingInfo(0, 0, false));
-
-    compile_info.m_layout = m_bindless_layout;
-
-    m_device->create_graphics_pipeline(&m_pipelines.push_back(), &compile_info, &attachment_info);
+    return pipeline_info_id;
 }
 
-PipelineManager::PipelineInfo *PipelineManager::get_pipeline_info(eastl::string_view name)
+PipelineManager::PipelineInfo *PipelineManager::get_pipeline_info(usize pipeline_id)
 {
     ZoneScoped;
 
-    auto iterator = m_pipeline_infos.find(name);
-    if (iterator == m_pipeline_infos.end())
-        return nullptr;
-
-    return &iterator->second;
+    return &m_pipeline_infos.get_resource(pipeline_id);
 }
 
-Pipeline *PipelineManager::get_pipeline(eastl::string_view name)
+Pipeline *PipelineManager::get_pipeline(usize pipeline_id)
 {
     ZoneScoped;
 
-    auto info = get_pipeline_info(name);
-    if (info == nullptr)
-        return nullptr;
-
-    return &m_pipelines[info->m_pipeline_id];
+    return &m_pipelines.get_resource(pipeline_id);
 }
 
-GraphicsPipelineInfo *PipelineManager::get_graphics_pipeline_info(eastl::string_view name)
-{
-    ZoneScoped;
-
-    auto info = get_pipeline_info(name);
-    if (info == nullptr)
-        return nullptr;
-
-    return &m_graphics_pipeline_infos[info->m_pipeline_id];
-}
 }  // namespace lr::Graphics

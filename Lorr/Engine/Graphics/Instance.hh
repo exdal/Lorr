@@ -36,7 +36,7 @@ struct PhysicalDeviceSelectInfo
 
 struct PhysicalDevice;
 struct Surface;
-struct Instance
+struct Instance : Tracked<VkInstance>
 {
     APIResult init(InstanceDesc *desc);
     APIResult select_physical_device(PhysicalDevice *physical_device, PhysicalDeviceSelectInfo *select_info);
@@ -45,9 +45,6 @@ struct Instance
     eastl::vector<VkPhysicalDevice> m_physical_devices = {};
 
     void *m_vulkan_lib = nullptr;
-    VkInstance m_handle = nullptr;
-
-    explicit operator bool() { return m_handle != nullptr; }
 };
 LR_ASSIGN_OBJECT_TYPE(Instance, VK_OBJECT_TYPE_INSTANCE);
 

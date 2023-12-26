@@ -1,6 +1,5 @@
-#include "TaskCommandList.hh"
+#include "CommandBatcher.hh"
 
-#include "Task.hh"
 #include "TaskGraph.hh"
 
 namespace lr::Graphics

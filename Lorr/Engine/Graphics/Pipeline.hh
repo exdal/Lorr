@@ -112,13 +112,9 @@ struct ComputePipelineInfo
     PipelineLayout m_layout = nullptr;
 };
 
-struct Pipeline
+struct Pipeline : Tracked<VkPipeline>
 {
     VkPipelineBindPoint m_bind_point = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    VkPipeline m_handle = nullptr;
-
-    operator VkPipeline &() { return m_handle; }
-    explicit operator bool() { return m_handle != nullptr; }
 };
 LR_ASSIGN_OBJECT_TYPE(Pipeline, VK_OBJECT_TYPE_PIPELINE);
 

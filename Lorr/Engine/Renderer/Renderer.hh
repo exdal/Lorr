@@ -16,19 +16,25 @@ namespace lr::Graphics
 struct Renderer
 {
     void init(BaseWindow *window);
-    void refresh_frame(u32 width, u32 height);
+    void record_tasks();
+    void refresh_frame(u32 width, u32 height, u32 frame_count);
     void on_resize(u32 width, u32 height);
     void draw();
-
-    auto &get_pipeline_manager() { return m_task_graph.m_pipeline_manager; }
 
     Instance m_instance = {};
     PhysicalDevice m_physical_device = {};
     Surface m_surface = {};
     Device m_device = {};
     SwapChain m_swap_chain = {};
-    TaskGraph m_task_graph = {};
+    TaskGraph *m_task_graph = nullptr;
 
-    ImageID m_swap_chain_image = LR_NULL_ID;
+    ImageID m_swap_chain_attachment = LR_NULL_ID;
+    eastl::vector<ImageID> m_swap_chain_images = {};
+    eastl::vector<ImageID> m_swap_chain_image_views = {};
+    eastl::tuple<ImageID, ImageID> get_frame_images()
+    {
+        u32 frame_id = m_swap_chain.m_current_frame_id;
+        return { m_swap_chain_images[frame_id], m_swap_chain_image_views[frame_id] };
+    }
 };
-}  // namespace lr::Renderer
+}  // namespace lr::Graphics

@@ -9,20 +9,14 @@ env:
   VULKAN_VERSION: 1.3.261.1
 
 jobs:
-  build:
-    runs-on: ${{ matrix.os }}
+  windows-clang:
+    runs-on: windows-latest
     strategy:
       fail-fast: false
       matrix:
-        os: [ windows-latest ]
         build_type: [ Release, Debug ]
-        include:
-          - os: windows-latest
-            c_compiler: cl
-            cpp_compiler: cl
-          - os: windows-latest
-            c_compiler: clang
-            cpp_compiler: clang++
+        c_compiler: [ clang ]
+        cpp_compiler: [ clang++ ]
 
     steps:
       - uses: actions/checkout@v3

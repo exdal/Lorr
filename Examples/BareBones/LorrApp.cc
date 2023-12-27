@@ -3,7 +3,7 @@
 
 #include "LorrApp.hh"
 
-void LorrApp::Init(lr::BaseApplicationDesc &desc)
+void LorrApp::init(lr::BaseApplicationDesc &desc)
 {
     ZoneScoped;
 

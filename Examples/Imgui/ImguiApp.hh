@@ -8,7 +8,7 @@
 
 struct ImguiApp : lr::Application
 {
-    void Init(lr::BaseApplicationDesc &desc);
-    void Shutdown() override;
-    void Poll(f32 deltaTime) override;
+    void init(lr::BaseApplicationDesc &desc);
+    void shutdown() override;
+    void poll(f32 deltaTime) override;
 };

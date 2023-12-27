@@ -3,7 +3,7 @@
 
 #include "ImguiApp.hh"
 
-void ImguiApp::Init(lr::BaseApplicationDesc &desc)
+void ImguiApp::init(lr::BaseApplicationDesc &desc)
 {
     ZoneScoped;
 

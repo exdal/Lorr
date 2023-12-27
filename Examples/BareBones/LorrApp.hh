@@ -7,7 +7,7 @@
 
 struct LorrApp : lr::Application
 {
-    void Init(lr::BaseApplicationDesc &desc);
+    void init(lr::BaseApplicationDesc &desc);
     void shutdown() override;
     void poll(f32 deltaTime) override;
 };

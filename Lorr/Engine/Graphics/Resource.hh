@@ -147,7 +147,6 @@ LR_ASSIGN_OBJECT_TYPE(DescriptorSetLayout, VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT)
 
 struct DescriptorGetInfo
 {
-    DescriptorGetInfo() = default;
     DescriptorGetInfo(Buffer *buffer, u64 data_size, DescriptorType type);
     DescriptorGetInfo(ImageView *image_view, DescriptorType type);
     DescriptorGetInfo(Sampler *sampler);

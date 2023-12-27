@@ -31,7 +31,7 @@ int main()
     };
 
     pApp = new ImguiApp;
-    pApp->Init(appDesc);
+    pApp->init(appDesc);
     pApp->run();
 
     return 0;

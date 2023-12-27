@@ -32,7 +32,7 @@ int main()
     };
 
     pApp = new LorrApp;
-    pApp->Init(appDesc);
+    pApp->init(appDesc);
     pApp->run();
 
     return 0;

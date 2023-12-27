@@ -23,6 +23,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
+        with:
+          submodules: 'true'
+
       - name: Setup Ninja
         uses: turtlesec-no/get-ninja@1.1.0
 

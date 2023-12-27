@@ -1,6 +1,6 @@
 # Lorr
 
-[![License](https://img.shields.io/badge/license-AGPL%20v3-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 A toy Vulkan-based renderer for high-performance graphics rendering in lower-end machines. This project aims to provide a flexible and efficient rendering engine with support for advanced features like a render graph, descriptor buffers, descriptor indexing, and more.
 
@@ -37,4 +37,4 @@ Contributions are always welcomed. To contribute:
 
 ## License
 
-This project is licensed under the GNU Affero General Public License v3.0 - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

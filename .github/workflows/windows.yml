@@ -5,6 +5,9 @@ on:
   pull_request:
     branches: [ master ]
 
+env:
+  VULKAN_VERSION: 1.3.261.1
+
 jobs:
   build:
     runs-on: ${{ matrix.os }}
@@ -28,6 +31,12 @@ jobs:
 
       - name: Setup Ninja
         uses: turtlesec-no/get-ninja@1.1.0
+
+      - name: Install Vulkan SDK
+        uses: humbletim/install-vulkan-sdk@v1.1.1
+        with:
+          version: ${{env.VULKAN_VERSION}}
+          cache: true
 
       - name: Set reusable strings
         # Turn repeated input strings (such as the build output directory) into step outputs. These step outputs can be used throughout the workflow file.

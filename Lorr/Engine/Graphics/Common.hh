@@ -29,6 +29,7 @@ enum class APIResult : i32
     Suboptimal = VK_SUBOPTIMAL_KHR,
     OutOfDate = VK_ERROR_OUT_OF_DATE_KHR,
     InvalidExternalHandle = VK_ERROR_INVALID_EXTERNAL_HANDLE,
+    OutOfPoolMem = VK_ERROR_OUT_OF_POOL_MEMORY,
 
     HanldeNotInitialized = VK_RESULT_MAX_ENUM,
 };
@@ -100,13 +101,22 @@ enum class DescriptorType : u32
     StorageBuffer = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,  // RW Buffer
 };
 
-enum class DescriptorSetLayoutFlag
+enum class DescriptorSetLayoutFlag : u32
 {
     DescriptorBuffer = 1 << 0,
     EmbeddedSamplers = 1 << 1,
 };
 LR_TYPEOP_ARITHMETIC(DescriptorSetLayoutFlag, DescriptorSetLayoutFlag, |);
 LR_TYPEOP_ARITHMETIC_INT(DescriptorSetLayoutFlag, DescriptorSetLayoutFlag, &);
+
+enum class DescriptorBindingFlag : u32
+{
+    None = 0,
+    UpdateAfterBind = VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT,
+    UpdateUnusedWhilePending = VK_DESCRIPTOR_BINDING_UPDATE_UNUSED_WHILE_PENDING_BIT,
+    PartiallyBound = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT,
+    VariableDescriptorCount = VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT,
+};
 
 /// IMAGE ---------------------------- ///
 
@@ -208,7 +218,7 @@ enum class ImageUsage : u32
     TransferSrc = VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
     TransferDst = VK_IMAGE_USAGE_TRANSFER_DST_BIT,
     Storage = VK_IMAGE_USAGE_STORAGE_BIT,
-    Present = 1 << 29,     // Virtual flag
+    Present = 1 << 29,  // Virtual flag
 };
 LR_TYPEOP_ARITHMETIC_INT(ImageUsage, ImageUsage, &);
 

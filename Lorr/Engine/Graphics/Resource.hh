@@ -134,9 +134,12 @@ LR_ASSIGN_OBJECT_TYPE(Sampler, VK_OBJECT_TYPE_SAMPLER);
 /////////////////////////////////
 // DESCRIPTORS
 
-struct DescriptorLayoutElement : VkDescriptorSetLayoutBinding
+struct DescriptorLayoutElement
 {
-    DescriptorLayoutElement(u32 binding, DescriptorType type, ShaderStage stage, u32 array_size = 1);
+    DescriptorLayoutElement(
+        u32 binding, DescriptorType type, ShaderStage stage, u32 array_size = 1, DescriptorBindingFlag flags = DescriptorBindingFlag::None);
+    VkDescriptorSetLayoutBinding m_binding_info = {};
+    DescriptorBindingFlag m_binding_flag = {};
 };
 
 using DescriptorSetLayout = VkDescriptorSetLayout;
@@ -162,6 +165,20 @@ struct DescriptorGetInfo
     };
 
     DescriptorType m_type = DescriptorType::Sampler;
+};
+
+struct DescriptorPoolSize : VkDescriptorPoolSize
+{
+    DescriptorPoolSize() = default;
+    DescriptorPoolSize(DescriptorType type, u32 count);
+};
+
+struct DescriptorSet : Tracked<VkDescriptorSet>
+{
+};
+
+struct DescriptorPool : Tracked<VkDescriptorPool>
+{
 };
 
 }  // namespace lr::Graphics

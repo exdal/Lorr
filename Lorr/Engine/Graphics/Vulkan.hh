@@ -125,7 +125,8 @@ typedef struct _SECURITY_ATTRIBUTES SECURITY_ATTRIBUTES;
     _VK_DEFINE_FUNCTION(vkDestroyQueryPool);                        \
     _VK_DEFINE_FUNCTION(vkCmdWriteTimestamp);                       \
     _VK_DEFINE_FUNCTION(vkCmdResetQueryPool);                       \
-    _VK_DEFINE_FUNCTION(vkGetQueryPoolResults);
+    _VK_DEFINE_FUNCTION(vkGetQueryPoolResults);                     \
+    _VK_DEFINE_FUNCTION(vkDestroyDescriptorPool);
 
 #define _VK_FUNCTION_NAMES_DEVICE                                      \
     _VK_DEFINE_FUNCTION(vkCmdBindDescriptorBufferEmbeddedSamplersEXT); \

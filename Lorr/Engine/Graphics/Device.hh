@@ -87,9 +87,20 @@ struct Device : Tracked<VkDevice>
     // * Descriptor * //
     DescriptorSetLayout create_descriptor_set_layout(eastl::span<DescriptorLayoutElement> elements, DescriptorSetLayoutFlag flags);
     void delete_descriptor_set_layout(DescriptorSetLayout layout);
+    // DESCRIPTOR BUFFER
     u64 get_descriptor_set_layout_size(DescriptorSetLayout layout);
     u64 get_descriptor_set_layout_binding_offset(DescriptorSetLayout layout, u32 binding_id);
     void get_descriptor_data(const DescriptorGetInfo &info, u64 data_size, void *data_out);
+    // DESCRIPTOR POOL
+    // For compat. reasons, i want to keep the legacy descriptor pools
+    /// @returns - Success: APIResult::Success
+    /// @returns - Failure: APIResult::[OutOfHostMem, OutOfDeviceMem]
+    APIResult create_descriptor_pool(DescriptorPool *descriptor_pool, u32 max_sets, eastl::span<DescriptorPoolSize> pool_sizes);
+    void delete_descriptor_pool(DescriptorPool *descriptor_pool);
+    /// @returns - Success: APIResult::Success
+    /// @returns - Failure: APIResult::[OutOfHostMem, OutOfDeviceMem, FragmentedPool, OutOfPoolMem]
+    APIResult create_descriptor_set(DescriptorSet *descriptor_set, eastl::span<DescriptorSetLayout> layouts, DescriptorPool *descriptor_pool);
+    void delete_descriptor_set(DescriptorSet *descriptor_set, DescriptorPool *descriptor_pool);
 
     /// RESOURCE ///
     eastl::tuple<u64, u64> get_buffer_memory_size(Buffer *buffer);

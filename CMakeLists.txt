@@ -12,7 +12,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_definitions(-DNOMINMAX)
 add_definitions(-D_CRT_SECURE_NO_WARNINGS)
-add_compile_options(-march=native)
 
 # ASAN SETTINGS
 # add_definitions(-D_DISABLE_STRING_ANNOTATION)

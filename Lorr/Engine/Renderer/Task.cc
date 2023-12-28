@@ -56,7 +56,7 @@ eastl::tuple<eastl::vector<Format>, Format> TaskContext::get_attachment_formats(
     Format depth_format = {};
     for (auto &resource : m_task.m_generic_resources)
     {
-        if (resource.m_task_image_id == LR_NULL_ID)
+        if (!is_handle_valid(resource.m_task_image_id))
             continue;
 
         ImageView *image_view = m_task_graph.get_image_view(resource.m_task_image_id);

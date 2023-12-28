@@ -216,4 +216,74 @@ struct CopyDescriptorSet : VkCopyDescriptorSet
 {
     CopyDescriptorSet(DescriptorSet *src, u32 src_binding, u32 src_element, DescriptorSet *dst, u32 dst_binding, u32 dst_element, u32 count);
 };
+
+template<typename ResourceT, typename ResourceID>
+struct ResourcePool
+{
+    static constexpr u64 FL_SIZE = 63u;
+    static constexpr u64 SL_SIZE = 63u;
+    static constexpr u64 SL_SHIFT = static_cast<u64>(1u) << SL_SIZE;
+    static constexpr u64 SL_MASK = SL_SHIFT - 1u;
+    static constexpr u64 RESOURCE_COUNT = FL_SIZE * SL_SIZE;
+
+    ResourcePool() { m_resources.resize(RESOURCE_COUNT); }
+    ~ResourcePool() = default;
+
+    eastl::tuple<ResourceID, ResourceT *> add_resource()
+    {
+        ZoneScoped;
+
+        if (m_first_list == eastl::numeric_limits<decltype(m_first_list)>::max())
+            return { ResourceID::Invalid, nullptr };
+
+        u64 first_index = Memory::find_lsb(~m_first_list);
+        u64 second_list = m_second_list[first_index];
+        u64 second_index = Memory::find_lsb(~second_list);
+
+        second_list |= 1u << second_index;
+        if (_popcnt64(second_list) == SL_SIZE)
+            m_first_list |= 1u << first_index;
+
+        m_second_list[first_index] = second_list;
+        auto resource_id = set_handle_val<ResourceID>(get_index(first_index, second_index));
+        return { resource_id, &get_resource(resource_id) };
+    }
+
+    void remove_resource(const ResourceID &id)
+    {
+        ZoneScoped;
+
+        u64 first_index = id.val() >> SL_SIZE;
+        u64 second_index = id.val() & SL_MASK;
+        u64 second_list = m_second_list[first_index];
+
+        second_list &= ~(1 << second_index);
+        if (_popcnt64(second_list) != SL_SIZE)
+            m_first_list &= ~(1 << first_index);
+
+        m_second_list[first_index] = second_list;
+    }
+
+    bool validate_id(const ResourceID &id)
+    {
+        ZoneScoped;
+
+        if (!id)
+            return false;
+
+        u64 first_index = id.val() >> SL_SIZE;
+        u64 second_index = id.val() & SL_MASK;
+        u64 second_list = m_second_list[first_index];
+
+        return (second_list >> second_index) & 0x1;
+    }
+
+    static u64 get_index(u64 fi, u64 si) { return fi == 0 ? si : fi * SL_SIZE + si; }
+    ResourceT &get_resource(ResourceID id) { return m_resources[get_handle_val(id)]; }
+
+    u64 m_first_list = 0;  // This bitmap indicates that SL[bit(i)] is full or not
+    u64 m_second_list[FL_SIZE] = {};
+    eastl::vector<ResourceT> m_resources = {};
+};
+
 }  // namespace lr::Graphics

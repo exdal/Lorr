@@ -67,13 +67,13 @@ eastl::tuple<ImageID, ImageView *> TaskGraph::add_new_image_view()
 
 Image *TaskGraph::get_image(ImageID id)
 {
-    auto &image_info = m_image_infos[id];
+    auto &image_info = m_image_infos[get_handle_val(id)];
     return &m_images.get_resource(image_info.m_image_id);
 }
 
 ImageView *TaskGraph::get_image_view(ImageID id)
 {
-    auto &image_info = m_image_infos[id];
+    auto &image_info = m_image_infos[get_handle_val(id)];
     return &m_image_views.get_resource(image_info.m_image_view_id);
 }
 
@@ -81,7 +81,7 @@ ImageID TaskGraph::use_persistent_image(const PersistentImageInfo &persistent_im
 {
     ZoneScoped;
 
-    ImageID id = m_image_infos.size();
+    auto id = set_handle_val<ImageID>(m_image_infos.size());
     m_image_infos.push_back({
         .m_image_id = persistent_image_info.m_image_id,
         .m_image_view_id = persistent_image_info.m_image_view_id,
@@ -96,7 +96,7 @@ void TaskGraph::set_image(ImageID image_info_id, ImageID image_id, ImageID image
 {
     ZoneScoped;
 
-    TaskImageInfo &imageInfo = m_image_infos[image_info_id];
+    TaskImageInfo &imageInfo = m_image_infos[get_handle_val(image_info_id)];
     imageInfo.m_image_id = image_id;
     imageInfo.m_image_view_id = image_view_id;
 }
@@ -105,7 +105,7 @@ BufferID TaskGraph::use_persistent_buffer(const PersistentBufferInfo &buffer_inf
 {
     ZoneScoped;
 
-    BufferID id = m_buffer_infos.size();
+    auto id = set_handle_val<BufferID>(m_buffer_infos.size());
     m_buffer_infos.push_back({
         .m_buffer_id = buffer_info.m_buffer_id,
         .m_last_access = buffer_info.m_initial_access,
@@ -122,7 +122,7 @@ TaskBatchID TaskGraph::schedule_task(Task &task)
     task.for_each_res(
         [&](GenericResource &image)
         {
-            auto &image_info = m_image_infos[image.m_task_image_id];
+            auto &image_info = m_image_infos[get_handle_val(image.m_task_image_id)];
             bool is_last_read = image_info.m_last_access.m_access == MemoryAccess::Read;
             bool is_current_read = image.m_access.m_access == MemoryAccess::Read;
             bool is_same_layout = image_info.m_last_layout == image.m_image_layout;
@@ -132,7 +132,7 @@ TaskBatchID TaskGraph::schedule_task(Task &task)
         },
         [&](GenericResource &buffer)
         {
-            auto &buffer_info = m_buffer_infos[buffer.m_task_image_id];
+            auto &buffer_info = m_buffer_infos[get_handle_val(buffer.m_task_image_id)];
             bool is_last_read = buffer_info.m_last_access.m_access == MemoryAccess::Read;
             bool is_current_read = buffer.m_access.m_access == MemoryAccess::Read;
 
@@ -157,7 +157,7 @@ void TaskGraph::add_task(Task &task, TaskID id)
     task.for_each_res(
         [&](GenericResource &image)
         {
-            auto &image_info = m_image_infos[image.m_task_image_id];
+            auto &image_info = m_image_infos[get_handle_val(image.m_task_image_id)];
             bool is_last_read = image_info.m_last_access.m_access == MemoryAccess::Read;
             bool is_current_read = image.m_access.m_access == MemoryAccess::Read;
             bool is_same_layout = image_info.m_last_layout == image.m_image_layout;
@@ -186,7 +186,7 @@ void TaskGraph::add_task(Task &task, TaskID id)
         },
         [&](GenericResource &buffer)
         {
-            auto &buffer_info = m_buffer_infos[buffer.m_task_buffer_id];
+            auto &buffer_info = m_buffer_infos[get_handle_val(buffer.m_task_buffer_id)];
             bool is_last_read = buffer_info.m_last_access.m_access == MemoryAccess::Read;
             bool is_current_read = buffer.m_access.m_access == MemoryAccess::Read;
 
@@ -218,7 +218,7 @@ void TaskGraph::compile_task_pipeline(Task &task)
     Format depth_format = {};
     for (auto &resource : task.m_generic_resources)
     {
-        if (resource.m_task_image_id == LR_NULL_ID)
+        if (!is_handle_valid(resource.m_task_image_id))
             continue;
 
         ImageView *image_view = get_image_view(resource.m_task_image_id);
@@ -240,7 +240,7 @@ void TaskGraph::present(const TaskPresentDesc &present_desc)
 {
     ZoneScoped;
 
-    auto &image_info = m_image_infos[present_desc.m_swap_chain_image_id];
+    auto &image_info = m_image_infos[get_handle_val(present_desc.m_swap_chain_image_id)];
 
     auto &latest_batch = m_batches.back();
     usize barrier_id = m_barriers.size();
@@ -330,7 +330,7 @@ void TaskGraph::insert_barrier(CommandBatcher &batcher, const TaskBarrier &barri
         .m_dst_access = barrier.m_dst_access.m_access,
     };
 
-    if (barrier.m_image_id == LR_NULL_ID)
+    if (!is_handle_valid(barrier.m_image_id))
     {
         MemoryBarrier barrierInfo(pipelineInfo);
         batcher.insert_memory_barrier(barrierInfo);

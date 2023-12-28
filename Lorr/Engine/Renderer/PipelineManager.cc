@@ -145,19 +145,18 @@ PipelineManager::~PipelineManager()
         m_device->delete_pipeline(&pipeline);
 }
 
-usize PipelineManager::compile_pipeline(PipelineCompileInfo &compile_info, PipelineAttachmentInfo &attachment_info)
+PipelineID PipelineManager::compile_pipeline(PipelineCompileInfo &compile_info, PipelineAttachmentInfo &attachment_info)
 {
     ZoneScoped;
 
     auto [pipeline_info_id, pipeline_info] = m_pipeline_infos.add_resource();
-    if (pipeline_info_id == LR_NULL_ID)
+    if (!is_handle_valid(pipeline_info_id))
     {
         LOG_ERROR("Cannot compile pipeline info! Resource pool is full.");
-        return LR_NULL_ID;
+        return PipelineID::Invalid;
     }
 
     auto &graphics_pipeline_info = compile_info.m_graphics_pipeline_info;
-
     for (auto &compile_desc : compile_info.m_compile_descs)
     {
         compile_desc.m_include_dirs = compile_info.m_include_dirs;
@@ -166,10 +165,10 @@ usize PipelineManager::compile_pipeline(PipelineCompileInfo &compile_info, Pipel
         ShaderReflectionDesc reflection_desc = { .m_reflect_vertex_layout = true };
         auto reflection_data = ShaderCompiler::reflect_spirv(&reflection_desc, ir);
         auto [shader_id, shader] = m_shaders.add_resource();
-        if (shader_id == LR_NULL_ID)
+        if (!is_handle_valid(shader_id))
         {
             LOG_ERROR("Cannot create shader! Resource pool is full.");
-            return LR_NULL_ID;
+            return PipelineID::Invalid;
         }
 
         m_device->create_shader(shader, reflection_data.m_compiled_stage, ir);
@@ -188,25 +187,25 @@ usize PipelineManager::compile_pipeline(PipelineCompileInfo &compile_info, Pipel
     graphics_pipeline_info.m_layout = m_bindless_layout;
 
     auto [pipeline_id, pipeline] = m_pipelines.add_resource();
-    if (pipeline_id == LR_NULL_ID)
+    if (!is_handle_valid(pipeline_id))
     {
         LOG_ERROR("Cannot create pipelines. Resource pool is full.");
-        return LR_NULL_ID;
+        return PipelineID::Invalid;
     }
 
     m_device->create_graphics_pipeline(pipeline, &graphics_pipeline_info, &attachment_info);
 
-    return pipeline_info_id;
+    return pipeline_id;
 }
 
-PipelineManager::PipelineInfo *PipelineManager::get_pipeline_info(usize pipeline_id)
+PipelineManager::PipelineInfo *PipelineManager::get_pipeline_info(PipelineInfoID pipeline_id)
 {
     ZoneScoped;
 
     return &m_pipeline_infos.get_resource(pipeline_id);
 }
 
-Pipeline *PipelineManager::get_pipeline(usize pipeline_id)
+Pipeline *PipelineManager::get_pipeline(PipelineID pipeline_id)
 {
     ZoneScoped;
 

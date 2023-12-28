@@ -28,7 +28,7 @@ struct Renderer
     SwapChain m_swap_chain = {};
     TaskGraph *m_task_graph = nullptr;
 
-    ImageID m_swap_chain_attachment = LR_NULL_ID;
+    ImageID m_swap_chain_attachment = {};
     eastl::vector<ImageID> m_swap_chain_images = {};
     eastl::vector<ImageID> m_swap_chain_image_views = {};
     eastl::tuple<ImageID, ImageID> get_frame_images()

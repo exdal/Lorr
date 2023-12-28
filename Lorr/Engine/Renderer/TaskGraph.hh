@@ -25,7 +25,7 @@ struct TaskFrame
 
 struct TaskPresentDesc
 {
-    ImageID m_swap_chain_image_id = ~0;
+    ImageID m_swap_chain_image_id = {};
 };
 
 struct TaskExecuteDesc
@@ -74,9 +74,9 @@ struct TaskGraph
 
     // vectors move memories on de/allocation, so using raw pointer is not safe
     // instead we have ResourcePool that is fixed size and does not do allocations
-    ResourcePool<Image> m_images = {};
-    ResourcePool<ImageView> m_image_views = {};
-    ResourcePool<Buffer> m_buffers = {};
+    ResourcePool<Image, ImageID> m_images = {};
+    ResourcePool<ImageView, ImageID> m_image_views = {};
+    ResourcePool<Buffer, BufferID> m_buffers = {};
 
     eastl::vector<TaskFrame> m_frames = {};
 

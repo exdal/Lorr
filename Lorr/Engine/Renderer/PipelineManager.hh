@@ -1,7 +1,6 @@
 #pragma once
 
 #include "Graphics/Device.hh"
-#include "Graphics/MemoryAllocator.hh"
 #include "Graphics/Pipeline.hh"
 #include "Graphics/Shader.hh"
 
@@ -29,6 +28,10 @@ struct PipelineCompileInfo
     eastl::vector<eastl::string> m_include_dirs = {};
 };
 
+LR_HANDLE(ShaderID, usize);
+LR_HANDLE(PipelineID, usize);
+LR_HANDLE(PipelineInfoID, usize);
+
 struct PipelineManager
 {
     void init(Device *device);
@@ -37,18 +40,18 @@ struct PipelineManager
     struct PipelineInfo
     {
         eastl::vector<ShaderReflectionData> m_reflections = {};
-        eastl::vector<usize> m_bound_shaders = {};
-        u32 m_pipeline_id = LR_NULL_ID;
+        eastl::vector<ShaderID> m_bound_shaders = {};
+        PipelineID m_pipeline_id = {};
     };
 
-    usize compile_pipeline(PipelineCompileInfo &compile_info, PipelineAttachmentInfo &attachment_info);
+    PipelineID compile_pipeline(PipelineCompileInfo &compile_info, PipelineAttachmentInfo &attachment_info);
 
-    PipelineInfo *get_pipeline_info(usize pipeline_id);
-    Pipeline *get_pipeline(usize pipeline_id);
+    PipelineInfo *get_pipeline_info(PipelineInfoID pipeline_id);
+    Pipeline *get_pipeline(PipelineID pipeline_id);
 
-    ResourcePool<Shader> m_shaders = {};
-    ResourcePool<Pipeline> m_pipelines = {};
-    ResourcePool<PipelineInfo> m_pipeline_infos = {};
+    ResourcePool<Shader, ShaderID> m_shaders = {};
+    ResourcePool<Pipeline, PipelineID> m_pipelines = {};
+    ResourcePool<PipelineInfo, PipelineInfoID> m_pipeline_infos = {};
 
     PipelineLayout m_bindless_layout = nullptr;
     Device *m_device = nullptr;

@@ -17,9 +17,8 @@
 #include "Core/Config.hh"
 #include "Core/Logger/Format.hh"
 #include "Core/Logger/Logger.hh"
+#include "Utils/Handle.hh"
 #include "Utils/TypeOperators.hh"
 
 template<typename T, usize SizeT>
 using fixed_vector = eastl::fixed_vector<T, SizeT, false>;
-
-#define LR_NULL_ID ~0

@@ -57,7 +57,7 @@ struct Task
 
     eastl::string_view m_name;
     eastl::span<GenericResource> m_generic_resources;
-    usize m_pipeline_id = LR_NULL_ID;
+    PipelineID m_pipeline_id = {};
 };
 
 template<typename TaskT>
@@ -73,7 +73,7 @@ struct TaskWrapper : Task
         m_generic_resources = { (GenericResource *)&m_task.m_uses, resource_count };
 #if _DEBUG
         for (auto &resource : m_generic_resources)
-            assert(resource.m_task_buffer_id != LR_NULL_ID);
+            assert(is_handle_valid(resource.m_task_buffer_id));
 #endif
     }
 
@@ -93,7 +93,7 @@ struct TaskWrapper : Task
 
 struct TaskBarrier
 {
-    ImageID m_image_id = LR_NULL_ID;
+    ImageID m_image_id = {};
     ImageLayout m_src_layout = {};
     ImageLayout m_dst_layout = {};
     TaskAccess::Access m_src_access = {};

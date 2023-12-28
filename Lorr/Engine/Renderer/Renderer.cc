@@ -47,6 +47,7 @@ void Renderer::init(BaseWindow *window)
     ZoneScoped;
 
     InstanceDesc instance_desc = {
+        .m_window = static_cast<Win32Window *>(window),
         .m_app_name = "Lorr",
         .m_app_version = 1,
         .m_engine_name = "Lorr",
@@ -56,19 +57,16 @@ void Renderer::init(BaseWindow *window)
     if (m_instance.init(&instance_desc) != APIResult::Success)
         return;
 
-    PhysicalDeviceSelectInfo physical_device_select_info = { .m_required_extensions = PhysicalDevice::get_extensions() };
-    physical_device_select_info.m_queue_select_types[0] = QueueSelectType::PreferDedicated;
-
-    if (m_instance.select_physical_device(&m_physical_device, &physical_device_select_info) != APIResult::Success)
+    if (m_instance.get_win32_surface(&m_surface) != APIResult::Success)
         return;
 
-    if (m_instance.get_win32_surface(&m_surface, static_cast<Win32Window *>(window)) != APIResult::Success)
+    if (m_instance.get_physical_device(&m_physical_device) != APIResult::Success)
         return;
 
     if (m_surface.init(&m_physical_device) != APIResult::Success)
         return;
 
-    if (m_physical_device.get_logical_device(&m_device) != APIResult::Success)
+    if (m_instance.get_logical_device(&m_device, &m_physical_device) != APIResult::Success)
         return;
 
     refresh_frame(window->m_width, window->m_height, 3);
@@ -96,7 +94,6 @@ void Renderer::refresh_frame(u32 width, u32 height, u32 frame_count)
     delete m_task_graph;
     if (m_swap_chain)
         m_device.delete_swap_chain(&m_swap_chain);
-
 
     // TODO: please properly handle this
     SwapChainDesc swap_chain_desc = {

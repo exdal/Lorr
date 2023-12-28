@@ -17,6 +17,7 @@ set(LORR_VENDOR
     dxc
     spirv-cross-core
     spirv-cross-hlsl
+    vk-bootstrap
 )
 
 file(GLOB_RECURSE LORR_SOURCE

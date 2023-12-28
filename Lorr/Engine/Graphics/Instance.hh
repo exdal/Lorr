@@ -14,6 +14,7 @@ namespace lr::Graphics
 // Vulkan Configurator to manage layers. Please use it.
 struct InstanceDesc
 {
+    Win32Window *m_window = nullptr;
     eastl::string_view m_app_name = {};
     u32 m_app_version = {};
     eastl::string_view m_engine_name = {};
@@ -21,28 +22,23 @@ struct InstanceDesc
     u32 m_api_version = {};
 };
 
-enum class QueueSelectType : u64
-{
-    DoNotSelect = 0,
-    PreferDedicated,
-    RequireDedicated,
-};
-
-struct PhysicalDeviceSelectInfo
-{
-    eastl::array<QueueSelectType, (u32)CommandType::Count> m_queue_select_types = {};
-    eastl::span<const char *> m_required_extensions = {};
-};
-
-struct PhysicalDevice;
 struct Surface;
+struct PhysicalDevice;
+struct Device;
 struct Instance : Tracked<VkInstance>
 {
     APIResult init(InstanceDesc *desc);
-    APIResult select_physical_device(PhysicalDevice *physical_device, PhysicalDeviceSelectInfo *select_info);
-    APIResult get_win32_surface(Surface *surface, Win32Window *window);
+    APIResult get_win32_surface(Surface *surface);
+    APIResult get_physical_device(PhysicalDevice *physical_device);
+    APIResult get_logical_device(Device *device, PhysicalDevice *physical_device);
 
-    eastl::vector<VkPhysicalDevice> m_physical_devices = {};
+    VkSurfaceKHR m_surface = VK_NULL_HANDLE;
+    VkPhysicalDevice m_physical_device = VK_NULL_HANDLE;
+    VkDevice m_device = VK_NULL_HANDLE;
+    DeviceFeature m_supported_features = {};
+
+    u32 m_present_queue_index = 0;
+    eastl::array<u32, (u32)CommandType::Count> m_queue_indexes = {};
 
     void *m_vulkan_lib = nullptr;
 };

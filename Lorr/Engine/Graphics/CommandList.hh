@@ -1,7 +1,5 @@
 #pragma once
 
-#include "Memory/MemoryUtils.hh"
-
 #include "APIObject.hh"
 #include "Resource.hh"
 #include "Pipeline.hh"

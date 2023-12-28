@@ -4,6 +4,30 @@
 
 namespace lr::Graphics
 {
+template<typename StartT>
+struct chained_struct
+{
+    chained_struct(StartT &start) { m_cur = reinterpret_cast<VkBaseOutStructure *>(&start); }
+
+    template<typename T>
+    chained_struct set_next(T &next)
+    {
+        m_cur->pNext = reinterpret_cast<VkBaseOutStructure *>(&next);
+        return *this;
+    }
+
+    VkBaseOutStructure *m_cur = nullptr;
+};
+
+enum class DeviceFeature : u64
+{
+    None = 0,
+    DescriptorBuffer = 1 << 0,
+};
+LR_TYPEOP_ARITHMETIC_INT(DeviceFeature, DeviceFeature, &);
+LR_TYPEOP_ARITHMETIC(DeviceFeature, DeviceFeature, |);
+LR_TYPEOP_ASSIGNMENT(DeviceFeature, DeviceFeature, |);
+
 enum class APIResult : i32
 {
     Success = VK_SUCCESS,
@@ -81,14 +105,6 @@ enum class CommandAllocatorFlag : u32
 };
 LR_TYPEOP_ARITHMETIC(CommandAllocatorFlag, CommandAllocatorFlag, |);
 LR_TYPEOP_ARITHMETIC_INT(CommandAllocatorFlag, CommandAllocatorFlag, &);
-
-struct QueueFamilyInfo
-{
-    CommandTypeMask m_supported_types = {};
-    u32 m_present : 1 = false;
-    u32 m_queue_count : 15 = 0;
-    u32 m_index : 16 = ~0;
-};
 
 /// DESCRIPTOR ---------------------------- ///
 
@@ -411,13 +427,13 @@ union ColorClearValue
 
 struct DepthClearValue
 {
-    DepthClearValue(){};
+    DepthClearValue() = default;
     DepthClearValue(float depth, u8 stencil)
         : m_depth(depth),
           m_stencil(stencil){};
 
-    float m_depth;
-    u8 m_stencil;
+    float m_depth = 0.0f;
+    u8 m_stencil = 0;
 };
 
 enum class BlendFactor : u32

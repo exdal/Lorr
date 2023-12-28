@@ -4,24 +4,29 @@
 
 namespace lr::Graphics
 {
-void Device::init(VkDevice handle, PhysicalDevice *physical_device)
+void Device::init(VkDevice handle, PhysicalDevice *physical_device, eastl::span<u32> queue_indexes)
 {
     m_handle = handle;
     m_physical_device = physical_device;
     m_tracy_ctx = TracyVkContextHostCalibrated(physical_device->m_handle, m_handle);
 
+    assert(queue_indexes.size() == m_queue_indexes.size());
+
     for (u32 i = 0; i < m_queues.max_size(); i++)
-        create_command_queue(&m_queues[i], static_cast<CommandTypeMask>(1 << i));
+    {
+        m_queue_indexes[i] = queue_indexes[i];
+        create_command_queue(&m_queues[i], static_cast<CommandType>(i));
+    }
 }
 
-APIResult Device::create_command_queue(CommandQueue *queue, CommandTypeMask type_mask)
+APIResult Device::create_command_queue(CommandQueue *queue, CommandType type)
 {
     ZoneScoped;
 
     if (!validate_handle(queue))
         return APIResult::HanldeNotInitialized;
 
-    vkGetDeviceQueue(m_handle, m_physical_device->get_queue_info(type_mask).m_index, 0, &queue->m_handle);
+    vkGetDeviceQueue(m_handle, get_queue_index(type), 0, &queue->m_handle);
 
     return APIResult::Success;
 }
@@ -31,7 +36,12 @@ CommandQueue *Device::get_queue(CommandType type)
     return &m_queues[static_cast<usize>(type)];
 }
 
-APIResult Device::create_command_allocator(CommandAllocator *allocator, CommandTypeMask type_mask, CommandAllocatorFlag flags)
+u32 Device::get_queue_index(CommandType type)
+{
+    return m_queue_indexes[static_cast<usize>(type)];
+}
+
+APIResult Device::create_command_allocator(CommandAllocator *allocator, CommandType type, CommandAllocatorFlag flags)
 {
     ZoneScoped;
 
@@ -41,7 +51,7 @@ APIResult Device::create_command_allocator(CommandAllocator *allocator, CommandT
     VkCommandPoolCreateInfo create_info = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
         .flags = static_cast<VkCommandPoolCreateFlags>(flags),
-        .queueFamilyIndex = m_physical_device->get_queue_info(type_mask).m_index,
+        .queueFamilyIndex = get_queue_index(type),
     };
     return static_cast<APIResult>(vkCreateCommandPool(m_handle, &create_info, nullptr, &allocator->m_handle));
 }
@@ -637,7 +647,7 @@ APIResult Device::create_descriptor_set(DescriptorSet *descriptor_set, eastl::sp
 {
     ZoneScoped;
 
-    VkDescriptorSetVariableDescriptorCountAllocateInfo set_count_info ={
+    VkDescriptorSetVariableDescriptorCountAllocateInfo set_count_info = {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO,
         .pNext = nullptr,
 

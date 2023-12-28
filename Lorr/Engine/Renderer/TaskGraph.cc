@@ -21,7 +21,7 @@ void TaskGraph::init(TaskGraphDesc *desc)
             CommandAllocator &allocator = frame.m_allocators[i];
             CommandList &list = frame.m_lists[i];
 
-            m_device->create_command_allocator(&allocator, static_cast<CommandTypeMask>(1 << i), k_allocator_flags);
+            m_device->create_command_allocator(&allocator, static_cast<CommandType>(i), k_allocator_flags);
             m_device->create_command_list(&list, &allocator);
         }
     }

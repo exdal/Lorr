@@ -24,35 +24,22 @@ struct Surface : Tracked<VkSurfaceKHR>
 };
 LR_ASSIGN_OBJECT_TYPE(Surface, VK_OBJECT_TYPE_SURFACE_KHR);
 
-struct PhysicalDevicePropertySet
-{
-    PhysicalDevicePropertySet();
-
-    VkPhysicalDeviceMemoryProperties m_memory = {};
-
-    /// CHAINED ///
-    VkPhysicalDeviceProperties2 m_properties = {};
-    VkPhysicalDeviceDescriptorBufferPropertiesEXT m_descriptor_buffer = {};
-};
-
 struct Device;
 struct PhysicalDevice : Tracked<VkPhysicalDevice>
 {
-    APIResult init(VkPhysicalDevice physical_device, eastl::span<QueueFamilyInfo> queue_family_infos);
+    APIResult init(VkPhysicalDevice physical_device, DeviceFeature features);
 
-    APIResult get_logical_device(Device *device);
     u32 get_heap_index(VkMemoryPropertyFlags flags);
-    QueueFamilyInfo get_queue_info(CommandTypeMask type_mask);
-
     u64 get_descriptor_buffer_alignment();
     u64 get_descriptor_size(DescriptorType type);
-
     u64 get_aligned_buffer_memory(BufferUsage buffer_usage, u64 unaligned_size);
 
-    static eastl::span<const char *> get_extensions();
+    bool is_feature_supported(DeviceFeature feature);
 
-    eastl::vector<QueueFamilyInfo> m_queue_family_infos = {};
-    PhysicalDevicePropertySet m_property_set = {};
+    VkPhysicalDeviceMemoryProperties m_memory_props = {};
+    VkPhysicalDeviceProperties2 m_properties = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2 };
+    VkPhysicalDeviceDescriptorBufferPropertiesEXT m_descriptor_buffer_props = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_PROPERTIES_EXT };
+    DeviceFeature m_supported_features = {};
 };
 LR_ASSIGN_OBJECT_TYPE(PhysicalDevice, VK_OBJECT_TYPE_PHYSICAL_DEVICE);
 

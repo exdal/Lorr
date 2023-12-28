@@ -21,16 +21,17 @@ struct SubmitDesc
 
 struct Device : Tracked<VkDevice>
 {
-    void init(VkDevice handle, PhysicalDevice *physical_device);
+    void init(VkDevice handle, PhysicalDevice *physical_device, eastl::span<u32> queue_indexes);
 
     /// COMMAND ///
     /// @returns - Success: APIResult::Success
     /// @returns - Failure: APIResult::[OutOfHostMem, OutOfDeviceMem]
-    APIResult create_command_queue(CommandQueue *queue, CommandTypeMask type_mask);
+    APIResult create_command_queue(CommandQueue *queue, CommandType type);
     CommandQueue *get_queue(CommandType type);
+    u32 get_queue_index(CommandType type);
     /// @returns - Success: APIResult::Success
     /// @returns - Failure: APIResult::[OutOfHostMem, OutOfDeviceMem]
-    APIResult create_command_allocator(CommandAllocator *allocator, CommandTypeMask type_mask, CommandAllocatorFlag flags);
+    APIResult create_command_allocator(CommandAllocator *allocator, CommandType type, CommandAllocatorFlag flags);
     void delete_command_allocator(CommandAllocator *allocator);
     /// @returns - Success: APIResult::Success
     /// @returns - Failure: APIResult::[OutOfHostMem, OutOfDeviceMem]
@@ -164,7 +165,10 @@ struct Device : Tracked<VkDevice>
 #endif
     }
 
+
+
     eastl::array<CommandQueue, static_cast<usize>(CommandType::Count)> m_queues = {};
+    eastl::array<u32, static_cast<usize>(CommandType::Count)> m_queue_indexes = {};
 
     PhysicalDevice *m_physical_device = nullptr;
     TracyVkCtx m_tracy_ctx = nullptr;

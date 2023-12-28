@@ -44,13 +44,13 @@ constexpr auto type_name()
 template<typename HandleT>
 struct Tracked
 {
-    constexpr static eastl::string_view handle_name = type_name<HandleT>();
+    constexpr static eastl::string_view __handle_name = type_name<HandleT>();
 
     Tracked() = default;
     ~Tracked()
     {
         if (m_handle != 0)
-            LOG_TRACE("Tracked object'{}' destoryed but native handle is still alive!", handle_name);
+            LOG_TRACE("Tracked object'{}' destoryed but native handle is still alive!", __handle_name);
     }
 
     HandleT m_handle = 0;

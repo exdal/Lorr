@@ -86,8 +86,8 @@ struct Device : Tracked<VkDevice>
     void delete_shader(Shader *shader);
 
     // * Descriptor * //
-    DescriptorSetLayout create_descriptor_set_layout(eastl::span<DescriptorLayoutElement> elements, DescriptorSetLayoutFlag flags);
-    void delete_descriptor_set_layout(DescriptorSetLayout layout);
+    APIResult create_descriptor_set_layout(DescriptorSetLayout *layout, eastl::span<DescriptorLayoutElement> elements, DescriptorSetLayoutFlag flags);
+    void delete_descriptor_set_layout(DescriptorSetLayout *layout);
     // DESCRIPTOR BUFFER
     u64 get_descriptor_set_layout_size(DescriptorSetLayout layout);
     u64 get_descriptor_set_layout_binding_offset(DescriptorSetLayout layout, u32 binding_id);
@@ -100,8 +100,9 @@ struct Device : Tracked<VkDevice>
     void delete_descriptor_pool(DescriptorPool *descriptor_pool);
     /// @returns - Success: APIResult::Success
     /// @returns - Failure: APIResult::[OutOfHostMem, OutOfDeviceMem, FragmentedPool, OutOfPoolMem]
-    APIResult create_descriptor_set(DescriptorSet *descriptor_set, eastl::span<DescriptorSetLayout> layouts, DescriptorPool *descriptor_pool);
+    APIResult create_descriptor_set(DescriptorSet *descriptor_set, DescriptorSetLayout *layout, DescriptorPool *descriptor_pool);
     void delete_descriptor_set(DescriptorSet *descriptor_set, DescriptorPool *descriptor_pool);
+    void update_descriptor_set(eastl::span<WriteDescriptorSet> writes, eastl::span<CopyDescriptorSet> copies);
 
     /// RESOURCE ///
     eastl::tuple<u64, u64> get_buffer_memory_size(Buffer *buffer);
@@ -164,8 +165,6 @@ struct Device : Tracked<VkDevice>
         vkSetDebugUtilsObjectNameEXT(m_handle, &object_name_info);
 #endif
     }
-
-
 
     eastl::array<CommandQueue, static_cast<usize>(CommandType::Count)> m_queues = {};
     eastl::array<u32, static_cast<usize>(CommandType::Count)> m_queue_indexes = {};

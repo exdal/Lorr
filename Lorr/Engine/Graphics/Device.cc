@@ -316,11 +316,15 @@ PipelineLayout Device::create_pipeline_layout(eastl::span<DescriptorSetLayout> l
 {
     ZoneScoped;
 
+    eastl::vector<VkDescriptorSetLayout> layout_handles(layouts.size());
+    for (u32 i = 0; i < layout_handles.size(); i++)
+        layout_handles[i] = layouts[i].m_handle;
+
     VkPipelineLayoutCreateInfo pipeline_layout_create_info = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
         .pNext = nullptr,
-        .setLayoutCount = static_cast<u32>(layouts.size()),
-        .pSetLayouts = layouts.data(),
+        .setLayoutCount = static_cast<u32>(layout_handles.size()),
+        .pSetLayouts = layout_handles.data(),
         .pushConstantRangeCount = static_cast<u32>(push_constants.size()),
         .pPushConstantRanges = push_constants.data(),
     };
@@ -508,15 +512,20 @@ void Device::delete_shader(Shader *shader)
     shader->m_handle = VK_NULL_HANDLE;
 }
 
-DescriptorSetLayout Device::create_descriptor_set_layout(eastl::span<DescriptorLayoutElement> elements, DescriptorSetLayoutFlag flags)
+APIResult Device::create_descriptor_set_layout(
+    DescriptorSetLayout *layout, eastl::span<DescriptorLayoutElement> elements, DescriptorSetLayoutFlag flags)
 {
     ZoneScoped;
+
+    if (!validate_handle(layout))
+        return APIResult::HanldeNotInitialized;
 
     eastl::vector<VkDescriptorSetLayoutBinding> bindings(elements.size());
     eastl::vector<VkDescriptorBindingFlags> binding_flags(elements.size());
     for (u32 i = 0; i < elements.size(); i++)
     {
         auto &element = elements[i];
+        layout->m_max_descriptor_elements += element.m_binding_info.descriptorCount;
         bindings[i] = element.m_binding_info;
         binding_flags[i] = static_cast<VkDescriptorBindingFlags>(element.m_binding_flag);
     }
@@ -542,18 +551,17 @@ DescriptorSetLayout Device::create_descriptor_set_layout(eastl::span<DescriptorL
         .pBindings = bindings.data(),
     };
 
-    DescriptorSetLayout layout = nullptr;
-    vkCreateDescriptorSetLayout(m_handle, &create_info, nullptr, &layout);
-
-    return layout;
+    return static_cast<APIResult>(vkCreateDescriptorSetLayout(m_handle, &create_info, nullptr, &layout->m_handle));
 }
 
-void Device::delete_descriptor_set_layout(DescriptorSetLayout layout)
+void Device::delete_descriptor_set_layout(DescriptorSetLayout *layout)
 {
     ZoneScoped;
 
-    vkDestroyDescriptorSetLayout(m_handle, layout, nullptr);
-    layout = VK_NULL_HANDLE;
+    validate_handle(layout);
+
+    vkDestroyDescriptorSetLayout(m_handle, *layout, nullptr);
+    layout->m_handle = VK_NULL_HANDLE;
 }
 
 u64 Device::get_descriptor_set_layout_size(DescriptorSetLayout layout)
@@ -614,7 +622,7 @@ void Device::get_descriptor_data(const DescriptorGetInfo &info, u64 data_size, v
     VkDescriptorGetInfoEXT vkInfo = {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT,
         .pNext = nullptr,
-        .type = (VkDescriptorType)info.m_type,
+        .type = static_cast<VkDescriptorType>(info.m_type),
         .data = descriptorData,
     };
 
@@ -643,22 +651,23 @@ void Device::delete_descriptor_pool(DescriptorPool *descriptor_pool)
     descriptor_pool->m_handle = VK_NULL_HANDLE;
 }
 
-APIResult Device::create_descriptor_set(DescriptorSet *descriptor_set, eastl::span<DescriptorSetLayout> layouts, DescriptorPool *descriptor_pool)
+APIResult Device::create_descriptor_set(DescriptorSet *descriptor_set, DescriptorSetLayout *layout, DescriptorPool *descriptor_pool)
 {
     ZoneScoped;
 
     VkDescriptorSetVariableDescriptorCountAllocateInfo set_count_info = {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO,
         .pNext = nullptr,
-
+        .descriptorSetCount = 1,
+        .pDescriptorCounts = &layout->m_max_descriptor_elements,
     };
 
     VkDescriptorSetAllocateInfo allocate_info = {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-        .pNext = nullptr,
+        .pNext = &set_count_info,
         .descriptorPool = *descriptor_pool,
-        .descriptorSetCount = static_cast<u32>(layouts.size()),
-        .pSetLayouts = layouts.data(),
+        .descriptorSetCount = 1,
+        .pSetLayouts = &layout->m_handle,
     };
     return static_cast<APIResult>(vkAllocateDescriptorSets(m_handle, &allocate_info, &descriptor_set->m_handle));
 }
@@ -669,6 +678,13 @@ void Device::delete_descriptor_set(DescriptorSet *descriptor_set, DescriptorPool
 
     vkFreeDescriptorSets(m_handle, *descriptor_pool, 1, &descriptor_set->m_handle);
     descriptor_set->m_handle = VK_NULL_HANDLE;
+}
+
+void Device::update_descriptor_set(eastl::span<WriteDescriptorSet> writes, eastl::span<CopyDescriptorSet> copies)
+{
+    ZoneScoped;
+
+    vkUpdateDescriptorSets(m_handle, writes.size(), writes.data(), copies.size(), copies.data());
 }
 
 eastl::tuple<u64, u64> Device::get_buffer_memory_size(Buffer *buffer)

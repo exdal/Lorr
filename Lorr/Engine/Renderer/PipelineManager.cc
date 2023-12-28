@@ -113,11 +113,14 @@ void PipelineManager::init(Device *device)
 {
     m_device = device;
 
-    eastl::vector<DescriptorSetLayout> layouts;
+    u32 layout_count = 0;
+    eastl::array<DescriptorSetLayout, 4> layouts = {};
     auto add_layout = [&](DescriptorType type)
     {
         DescriptorLayoutElement elem(0, type, ShaderStage::All, 1);
-        layouts.push_back(device->create_descriptor_set_layout(elem, DescriptorSetLayoutFlag::DescriptorBuffer));
+        auto &layout = layouts[layout_count++];
+
+        device->create_descriptor_set_layout(&layout, elem, DescriptorSetLayoutFlag::DescriptorBuffer);
     };
 
     add_layout(DescriptorType::StorageBuffer);
@@ -127,6 +130,9 @@ void PipelineManager::init(Device *device)
 
     PushConstantDesc push_constant_desc(ShaderStage::All, 0, 128);
     m_bindless_layout = m_device->create_pipeline_layout(layouts, push_constant_desc);
+
+    for (auto &layout : layouts)
+        m_device->delete_descriptor_set_layout(&layout);
 }
 
 PipelineManager::~PipelineManager()

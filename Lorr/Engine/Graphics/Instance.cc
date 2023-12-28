@@ -28,7 +28,8 @@ APIResult Instance::init(InstanceDesc *desc)
     instance_builder.set_app_name(desc->m_app_name.data());
     instance_builder.set_engine_name(desc->m_engine_name.data());
     instance_builder.set_engine_version(desc->m_engine_version);
-    instance_builder.enable_validation_layers(false);
+    instance_builder.enable_validation_layers(false);  // use vkconfig ui...
+    instance_builder.request_validation_layers(false);
     instance_builder.enable_extensions({
         "VK_KHR_surface",
         "VK_KHR_get_physical_device_properties2",
@@ -125,7 +126,10 @@ APIResult Instance::init(InstanceDesc *desc)
 #define VKFN_FUNCTION(_name)                                                \
     _name = (PFN_##_name)instance.fp_vkGetDeviceProcAddr(m_device, #_name); \
     if (_name == nullptr)                                                   \
-        LOG_TRACE("Failed to load Vulkan function '{}'.", #_name);
+    {                                                                       \
+        LOG_ERROR("Failed to load Vulkan function '{}'.", #_name);          \
+        return APIResult::ExtNotPresent;                                    \
+    }
 
     VKFN_LOGICAL_DEVICE_FUNCTIONS
     VKFN_COMMAND_BUFFER_FUNCTIONS
@@ -137,7 +141,7 @@ APIResult Instance::init(InstanceDesc *desc)
 #endif
 #undef VKFN_FUNCTION
 
-    // OPTIONAL FUNCTIONS, MAINLY THERE IS AN ALTERNATIVE VERSION(EXTENSION) FOR THEM
+    // OPTIONAL FUNCTIONS, MAINLY THERE IS AN ALTERNATIVE VERSION(EXTENSION) FOR THEM.
     // EXTENSIONS MUST BE CHECKED BEFORE LOADING
 #define VKFN_FUNCTION(_name) _name = (PFN_##_name)instance.fp_vkGetDeviceProcAddr(m_device, #_name);
     VKFN_DESCRIPTOR_BUFFER_EXT_FUNCTIONS

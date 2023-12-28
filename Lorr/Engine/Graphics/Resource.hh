@@ -137,13 +137,31 @@ LR_ASSIGN_OBJECT_TYPE(Sampler, VK_OBJECT_TYPE_SAMPLER);
 struct DescriptorLayoutElement
 {
     DescriptorLayoutElement(
-        u32 binding, DescriptorType type, ShaderStage stage, u32 array_size = 1, DescriptorBindingFlag flags = DescriptorBindingFlag::None);
+        u32 binding, DescriptorType type, ShaderStage stage, u32 max_descriptors, DescriptorBindingFlag flags = DescriptorBindingFlag::None);
     VkDescriptorSetLayoutBinding m_binding_info = {};
     DescriptorBindingFlag m_binding_flag = {};
 };
 
-using DescriptorSetLayout = VkDescriptorSetLayout;
+struct DescriptorSetLayout : Tracked<VkDescriptorSetLayout>
+{
+    u32 m_max_descriptor_elements = 0;
+};
 LR_ASSIGN_OBJECT_TYPE(DescriptorSetLayout, VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT);
+
+struct ImageDescriptorInfo : VkDescriptorImageInfo
+{
+    ImageDescriptorInfo(ImageView *image_view, ImageLayout layout);
+};
+
+struct BufferDescriptorInfo : VkDescriptorBufferInfo
+{
+    BufferDescriptorInfo(Buffer *buffer, u64 size = ~0, u64 offset = 0);
+};
+
+struct SamplerDescriptorInfo : VkDescriptorImageInfo
+{
+    SamplerDescriptorInfo(Sampler *sampler);
+};
 
 struct DescriptorGetInfo
 {
@@ -180,4 +198,22 @@ struct DescriptorPool : Tracked<VkDescriptorPool>
 {
 };
 
+struct WriteDescriptorSet : VkWriteDescriptorSet
+{
+    WriteDescriptorSet() = default;
+    WriteDescriptorSet(
+        DescriptorSet *descriptor_set, ImageDescriptorInfo &image_info, DescriptorType dst_type, u32 dst_binding, u32 dst_element, u32 dst_count);
+    WriteDescriptorSet(
+        DescriptorSet *descriptor_set, BufferDescriptorInfo &buffer_info, DescriptorType dst_type, u32 dst_binding, u32 dst_element, u32 dst_count);
+    WriteDescriptorSet(
+        DescriptorSet *descriptor_set, SamplerDescriptorInfo &sampler_info, DescriptorType dst_type, u32 dst_binding, u32 dst_element, u32 dst_count);
+
+private:
+    WriteDescriptorSet(DescriptorSet *descriptor_set, DescriptorType dst_type, u32 dst_binding, u32 dst_element, u32 dst_count);
+};
+
+struct CopyDescriptorSet : VkCopyDescriptorSet
+{
+    CopyDescriptorSet(DescriptorSet *src, u32 src_binding, u32 src_element, DescriptorSet *dst, u32 dst_binding, u32 dst_element, u32 count);
+};
 }  // namespace lr::Graphics

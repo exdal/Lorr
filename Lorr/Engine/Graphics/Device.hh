@@ -96,7 +96,11 @@ struct Device : Tracked<VkDevice>
     // For compat. reasons, i want to keep the legacy descriptor pools
     /// @returns - Success: APIResult::Success
     /// @returns - Failure: APIResult::[OutOfHostMem, OutOfDeviceMem]
-    APIResult create_descriptor_pool(DescriptorPool *descriptor_pool, u32 max_sets, eastl::span<DescriptorPoolSize> pool_sizes);
+    APIResult create_descriptor_pool(
+        DescriptorPool *descriptor_pool,
+        u32 max_sets,
+        eastl::span<DescriptorPoolSize> pool_sizes,
+        DescriptorPoolFlag flags = DescriptorPoolFlag::None);
     void delete_descriptor_pool(DescriptorPool *descriptor_pool);
     /// @returns - Success: APIResult::Success
     /// @returns - Failure: APIResult::[OutOfHostMem, OutOfDeviceMem, FragmentedPool, OutOfPoolMem]
@@ -112,6 +116,7 @@ struct Device : Tracked<VkDevice>
     /// @returns - Failure: APIResult::[OutOfHostMem, OutOfDeviceMem, InvalidExternalHandle]
     APIResult create_device_memory(DeviceMemory *device_memory, DeviceMemoryDesc *desc);
     void delete_device_memory(DeviceMemory *device_memory);
+    auto get_heap_budget(MemoryFlag flags) { return m_physical_device->get_heap_budget(flags); }
     void bind_memory(DeviceMemory *device_memory, Buffer *buffer, u64 memory_offset);
     void bind_memory(DeviceMemory *device_memory, Image *image, u64 memory_offset);
 
@@ -137,6 +142,7 @@ struct Device : Tracked<VkDevice>
     void delete_sampler(Sampler *sampler);
 
     /// UTILITY ///
+    bool is_feature_supported(DeviceFeature feature) { return m_physical_device->is_feature_supported(feature); }
 
     template<typename TType>
     void set_object_name(TType *obj, eastl::string_view name)

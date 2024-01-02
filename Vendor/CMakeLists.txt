@@ -13,7 +13,7 @@ set(FASTGLTF_DOWNLOAD_SIMDJSON OFF CACHE BOOL "" FORCE)
 add_subdirectory(tracy)
 add_subdirectory(simdjson)
 add_subdirectory(fastgltf)
-add_subdirectory(imgui-v)
+add_subdirectory(imgui)
 add_subdirectory(Vulkan-Headers)
 add_subdirectory(xxh)
 

@@ -53,7 +53,7 @@ APIResult Device::create_command_allocator(CommandAllocator *allocator, CommandT
         .flags = static_cast<VkCommandPoolCreateFlags>(flags),
         .queueFamilyIndex = get_queue_index(type),
     };
-    return static_cast<APIResult>(vkCreateCommandPool(m_handle, &create_info, nullptr, &allocator->m_handle));
+    return CHECK(vkCreateCommandPool(m_handle, &create_info, nullptr, &allocator->m_handle));
 }
 
 void Device::delete_command_allocator(CommandAllocator *allocator)
@@ -78,7 +78,7 @@ APIResult Device::create_command_list(CommandList *list, CommandAllocator *comma
         .commandBufferCount = 1,
     };
 
-    return static_cast<APIResult>(vkAllocateCommandBuffers(m_handle, &allocate_info, &list->m_handle));
+    return CHECK(vkAllocateCommandBuffers(m_handle, &allocate_info, &list->m_handle));
 }
 
 void Device::delete_command_list(CommandList *list, CommandAllocator *command_allocator)
@@ -150,7 +150,7 @@ APIResult Device::create_binary_semaphore(Semaphore *semaphore)
         .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
         .pNext = &semaphore_type_info,
     };
-    return static_cast<APIResult>(vkCreateSemaphore(m_handle, &semaphore_info, nullptr, &semaphore->m_handle));
+    return CHECK(vkCreateSemaphore(m_handle, &semaphore_info, nullptr, &semaphore->m_handle));
 }
 
 APIResult Device::create_timeline_semaphore(Semaphore *semaphore, u64 initial_value)
@@ -171,7 +171,7 @@ APIResult Device::create_timeline_semaphore(Semaphore *semaphore, u64 initial_va
         .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
         .pNext = &semaphore_type_info,
     };
-    return static_cast<APIResult>(vkCreateSemaphore(m_handle, &semaphore_info, nullptr, &semaphore->m_handle));
+    return CHECK(vkCreateSemaphore(m_handle, &semaphore_info, nullptr, &semaphore->m_handle));
 }
 
 void Device::delete_semaphore(Semaphore *semaphore)
@@ -192,7 +192,7 @@ APIResult Device::wait_for_semaphore(Semaphore *semaphore, u64 desired_value, u6
         .pSemaphores = &semaphore->m_handle,
         .pValues = &desired_value,
     };
-    return static_cast<APIResult>(vkWaitSemaphores(m_handle, &wait_info, timeout));
+    return CHECK(vkWaitSemaphores(m_handle, &wait_info, timeout));
 }
 
 APIResult Device::create_swap_chain(SwapChain *swap_chain, SwapChainDesc *desc, Surface *surface)
@@ -222,7 +222,7 @@ APIResult Device::create_swap_chain(SwapChain *swap_chain, SwapChainDesc *desc, 
     };
 
     wait_for_work();
-    auto result = static_cast<APIResult>(vkCreateSwapchainKHR(m_handle, &swap_chain_info, nullptr, &swap_chain->m_handle));
+    auto result = CHECK(vkCreateSwapchainKHR(m_handle, &swap_chain_info, nullptr, &swap_chain->m_handle));
     if (result != APIResult::Success)
         return result;
 
@@ -254,7 +254,7 @@ void Device::delete_swap_chain(SwapChain *swap_chain)
 APIResult Device::get_swap_chain_images(SwapChain *swap_chain, eastl::span<Image *> images)
 {
     eastl::vector<VkImage> raw_images(swap_chain->m_frame_count);
-    auto result = static_cast<APIResult>(vkGetSwapchainImagesKHR(m_handle, swap_chain->m_handle, &swap_chain->m_frame_count, raw_images.data()));
+    auto result = CHECK(vkGetSwapchainImagesKHR(m_handle, swap_chain->m_handle, &swap_chain->m_frame_count, raw_images.data()));
     if (result != APIResult::Success)
         return result;
 
@@ -283,7 +283,7 @@ APIResult Device::acquire_next_image(SwapChain *swap_chain, u32 &image_id)
     ZoneScoped;
 
     auto &acquire_sema = swap_chain->m_acquire_semas[swap_chain->m_current_frame_id];
-    auto result = static_cast<APIResult>(vkAcquireNextImageKHR(m_handle, *swap_chain, UINT64_MAX, acquire_sema, nullptr, &image_id));
+    auto result = CHECK(vkAcquireNextImageKHR(m_handle, *swap_chain, UINT64_MAX, acquire_sema, nullptr, &image_id));
     swap_chain->m_current_frame_id = image_id;
 
     return result;
@@ -303,7 +303,7 @@ APIResult Device::present(SwapChain *swap_chain, CommandQueue *queue)
         .pSwapchains = &swap_chain->m_handle,
         .pImageIndices = &swap_chain->m_current_frame_id,
     };
-    auto result = static_cast<APIResult>(vkQueuePresentKHR(*queue, &present_info));
+    auto result = CHECK(vkQueuePresentKHR(*queue, &present_info));
     if (result != APIResult::Success)
         return result;
 
@@ -438,11 +438,15 @@ APIResult Device::create_graphics_pipeline(Pipeline *pipeline, GraphicsPipelineI
 
     /// GRAPHICS PIPELINE --------------------------------------------------------
 
+    VkPipelineCreateFlags pipeline_create_flags = 0;
+    if (is_feature_supported(DeviceFeature::DescriptorBuffer))
+        pipeline_create_flags |= VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
+
     PipelineViewportStateInfo viewport_state_info(pipeline_info->m_viewports, pipeline_info->m_scissors);
     VkGraphicsPipelineCreateInfo pipeline_create_info = {
         .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
         .pNext = pipeline_attachment_info,
-        .flags = VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT,
+        .flags = pipeline_create_flags,
         .stageCount = static_cast<u32>(pipeline_info->m_shader_stages.size()),
         .pStages = pipeline_info->m_shader_stages.data(),
         .pVertexInputState = &input_layout_info,
@@ -457,8 +461,9 @@ APIResult Device::create_graphics_pipeline(Pipeline *pipeline, GraphicsPipelineI
         .layout = pipeline_info->m_layout,
     };
 
-    pipeline->m_bind_point = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    return static_cast<APIResult>(vkCreateGraphicsPipelines(m_handle, nullptr, 1, &pipeline_create_info, nullptr, &pipeline->m_handle));
+    pipeline->m_layout = pipeline_info->m_layout;
+    pipeline->m_bind_point = PipelineBindPoint::Graphics;
+    return CHECK(vkCreateGraphicsPipelines(m_handle, nullptr, 1, &pipeline_create_info, nullptr, &pipeline->m_handle));
 }
 
 APIResult Device::create_compute_pipeline(Pipeline *pipeline, ComputePipelineInfo *pipeline_info)
@@ -475,8 +480,9 @@ APIResult Device::create_compute_pipeline(Pipeline *pipeline, ComputePipelineInf
         .layout = pipeline_info->m_layout,
     };
 
-    pipeline->m_bind_point = VK_PIPELINE_BIND_POINT_COMPUTE;
-    return static_cast<APIResult>(vkCreateComputePipelines(m_handle, nullptr, 1, &pipeline_create_info, nullptr, &pipeline->m_handle));
+    pipeline->m_layout = pipeline_info->m_layout;
+    pipeline->m_bind_point = PipelineBindPoint::Compute;
+    return CHECK(vkCreateComputePipelines(m_handle, nullptr, 1, &pipeline_create_info, nullptr, &pipeline->m_handle));
 }
 
 void Device::delete_pipeline(Pipeline *pipeline)
@@ -501,7 +507,7 @@ APIResult Device::create_shader(Shader *shader, ShaderStage stage, eastl::span<u
     };
 
     shader->m_type = stage;
-    return static_cast<APIResult>(vkCreateShaderModule(m_handle, &create_info, nullptr, &shader->m_handle));
+    return CHECK(vkCreateShaderModule(m_handle, &create_info, nullptr, &shader->m_handle));
 }
 
 void Device::delete_shader(Shader *shader)
@@ -551,7 +557,7 @@ APIResult Device::create_descriptor_set_layout(
         .pBindings = bindings.data(),
     };
 
-    return static_cast<APIResult>(vkCreateDescriptorSetLayout(m_handle, &create_info, nullptr, &layout->m_handle));
+    return CHECK(vkCreateDescriptorSetLayout(m_handle, &create_info, nullptr, &layout->m_handle));
 }
 
 void Device::delete_descriptor_set_layout(DescriptorSetLayout *layout)
@@ -629,18 +635,24 @@ void Device::get_descriptor_data(const DescriptorGetInfo &info, u64 data_size, v
     vkGetDescriptorEXT(m_handle, &vkInfo, data_size, data_out);
 }
 
-APIResult Device::create_descriptor_pool(DescriptorPool *descriptor_pool, u32 max_sets, eastl::span<DescriptorPoolSize> pool_sizes)
+APIResult Device::create_descriptor_pool(
+    DescriptorPool *descriptor_pool, u32 max_sets, eastl::span<DescriptorPoolSize> pool_sizes, DescriptorPoolFlag flags)
 {
     ZoneScoped;
+
+    validate_handle(descriptor_pool);
+
+    descriptor_pool->m_flags = flags;
 
     VkDescriptorPoolCreateInfo create_info = {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
         .pNext = nullptr,
+        .flags = static_cast<VkDescriptorPoolCreateFlags>(flags),
         .maxSets = max_sets,
         .poolSizeCount = static_cast<u32>(pool_sizes.size()),
         .pPoolSizes = pool_sizes.data(),
     };
-    return static_cast<APIResult>(vkCreateDescriptorPool(m_handle, &create_info, nullptr, &descriptor_pool->m_handle));
+    return CHECK(vkCreateDescriptorPool(m_handle, &create_info, nullptr, &descriptor_pool->m_handle));
 }
 
 void Device::delete_descriptor_pool(DescriptorPool *descriptor_pool)
@@ -669,14 +681,16 @@ APIResult Device::create_descriptor_set(DescriptorSet *descriptor_set, Descripto
         .descriptorSetCount = 1,
         .pSetLayouts = &layout->m_handle,
     };
-    return static_cast<APIResult>(vkAllocateDescriptorSets(m_handle, &allocate_info, &descriptor_set->m_handle));
+    return CHECK(vkAllocateDescriptorSets(m_handle, &allocate_info, &descriptor_set->m_handle));
 }
 
 void Device::delete_descriptor_set(DescriptorSet *descriptor_set, DescriptorPool *descriptor_pool)
 {
     ZoneScoped;
 
-    vkFreeDescriptorSets(m_handle, *descriptor_pool, 1, &descriptor_set->m_handle);
+    if (descriptor_pool->m_flags & DescriptorPoolFlag::FreeDescriptorSet)
+        vkFreeDescriptorSets(m_handle, *descriptor_pool, 1, &descriptor_set->m_handle);
+
     descriptor_set->m_handle = VK_NULL_HANDLE;
 }
 
@@ -714,20 +728,42 @@ APIResult Device::create_device_memory(DeviceMemory *device_memory, DeviceMemory
     if (!validate_handle(device_memory))
         return APIResult::HanldeNotInitialized;
 
-    u32 heap_index = m_physical_device->get_heap_index(static_cast<VkMemoryPropertyFlags>(desc->m_flags));
+    u32 memory_type_index = m_physical_device->get_memory_type_index(desc->m_flags);
+    u64 available_space = ~0;
+
+    if (is_feature_supported(DeviceFeature::MemoryBudget))
+        available_space = m_physical_device->get_heap_budget(desc->m_flags);
+
+    if (desc->m_size > available_space)
+    {
+        LOG_ERROR("Trying to allocate more than available gpu memory budget.");
+        return desc->m_flags & MemoryFlag::Device ? APIResult::OutOfDeviceMem : APIResult::OutOfHostMem;
+    }
+
+    device_memory->m_flags = desc->m_flags;
     VkMemoryAllocateInfo allocate_info = {
         .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
         .pNext = nullptr,
         .allocationSize = desc->m_size,
-        .memoryTypeIndex = heap_index,
+        .memoryTypeIndex = memory_type_index,
     };
 
-    return static_cast<APIResult>(vkAllocateMemory(m_handle, &allocate_info, nullptr, &device_memory->m_handle));
+    auto result = CHECK(vkAllocateMemory(m_handle, &allocate_info, nullptr, &device_memory->m_handle));
+    if (result != APIResult::Success)
+        return result;
+
+    if (desc->m_flags & MemoryFlag::HostVisible)
+        vkMapMemory(m_handle, device_memory->m_handle, 0, VK_WHOLE_SIZE, 0, &device_memory->m_mapped_memory);
+
+    return APIResult::Success;
 }
 
 void Device::delete_device_memory(DeviceMemory *device_memory)
 {
     ZoneScoped;
+
+    if (device_memory->m_flags & MemoryFlag::HostVisible)
+        vkUnmapMemory(m_handle, device_memory->m_handle);
 
     vkFreeMemory(m_handle, device_memory->m_handle, nullptr);
 }
@@ -761,7 +797,7 @@ APIResult Device::create_buffer(Buffer *buffer, BufferDesc *desc)
         .size = aligned_size,
         .usage = static_cast<VkBufferUsageFlags>(buffer_usage),
     };
-    auto result = static_cast<APIResult>(vkCreateBuffer(m_handle, &create_info, nullptr, &buffer->m_handle));
+    auto result = CHECK(vkCreateBuffer(m_handle, &create_info, nullptr, &buffer->m_handle));
     if (result != APIResult::Success)
         return result;
 
@@ -814,7 +850,7 @@ APIResult Device::create_image(Image *image, ImageDesc *desc)
         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
     };
 
-    auto result = static_cast<APIResult>(vkCreateImage(m_handle, &create_info, nullptr, &image->m_handle));
+    auto result = CHECK(vkCreateImage(m_handle, &create_info, nullptr, &image->m_handle));
     if (result != APIResult::Success)
         return result;
 
@@ -860,7 +896,7 @@ APIResult Device::create_image_view(ImageView *view, ImageViewDesc *desc)
     view->m_type = desc->m_type;
     view->m_subresource_info = desc->m_subresource_info;
 
-    return static_cast<APIResult>(vkCreateImageView(m_handle, &create_info, nullptr, &view->m_handle));
+    return CHECK(vkCreateImageView(m_handle, &create_info, nullptr, &view->m_handle));
 }
 
 void Device::delete_image_view(ImageView *image_view)
@@ -901,7 +937,7 @@ APIResult Device::create_sampler(Sampler *sampler, SamplerDesc *desc)
         .borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK,
     };
 
-    return static_cast<APIResult>(vkCreateSampler(m_handle, &create_info, nullptr, &sampler->m_handle));
+    return CHECK(vkCreateSampler(m_handle, &create_info, nullptr, &sampler->m_handle));
 }
 
 void Device::delete_sampler(Sampler *sampler)

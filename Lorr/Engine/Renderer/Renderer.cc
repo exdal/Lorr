@@ -4,6 +4,8 @@
 
 #include "TaskGraph.hh"
 
+#include <imgui.h>
+
 namespace lr::Graphics
 {
 struct Triangle
@@ -19,8 +21,8 @@ struct Triangle
     {
         auto &working_dir = CONFIG_GET_VAR(SHADER_WORKING_DIR);
         compile_info.add_include_dir(working_dir);
-        compile_info.add_shader("triangle.vs.hlsl");
-        compile_info.add_shader("triangle.ps.hlsl");
+        compile_info.add_shader(working_dir + "/triangle.vs.hlsl");
+        compile_info.add_shader(working_dir + "/triangle.ps.hlsl");
 
         compile_info.set_dynamic_state(DynamicState::Viewport | DynamicState::Scissor);
         compile_info.set_viewport(0, {});
@@ -38,6 +40,80 @@ struct Triangle
         list.set_viewport(0, tc.get_pass_size());
         list.set_scissors(0, tc.get_pass_size());
         list.draw(3);
+        list.end_rendering();
+    }
+};
+
+struct Imgui
+{
+    constexpr static eastl::string_view m_task_name = "Imgui";
+
+    struct Uses
+    {
+        Preset::ColorAttachment m_color_attachment;
+        Preset::PixelReadOnly m_font_image;
+    } m_uses = {};
+
+    struct PushConstant
+    {
+        glm::vec2 m_translate = {};
+        glm::vec2 m_scale = {};
+    } m_push_constant = {};
+
+    void compile_pipeline(PipelineCompileInfo &compile_info)
+    {
+        auto &working_dir = CONFIG_GET_VAR(SHADER_WORKING_DIR);
+        compile_info.add_include_dir(working_dir);
+        compile_info.add_shader(working_dir + "/imgui.vs.hlsl");
+        compile_info.add_shader(working_dir + "/imgui.ps.hlsl");
+
+        compile_info.set_dynamic_state(DynamicState::Viewport | DynamicState::Scissor);
+        compile_info.set_viewport(0, {});
+        compile_info.set_scissors(0, {});
+        compile_info.set_blend_state_all({ true });
+    }
+
+    void execute(TaskContext &tc)
+    {
+        auto &list = tc.get_command_list();
+        auto attachment = tc.as_color_attachment(m_uses.m_color_attachment);
+
+        ImDrawData *draw_data = ImGui::GetDrawData();
+        if (draw_data->DisplaySize.x <= 0.0f || draw_data->DisplaySize.y <= 0.0f || draw_data->TotalVtxCount == 0)
+            return;
+
+        list.begin_rendering({ .m_render_area = tc.get_pass_size(), .m_color_attachments = attachment });
+        list.set_pipeline(tc.get_pipeline());
+
+        list.set_viewport(0, { 0, 0, draw_data->DisplaySize.x, draw_data->DisplaySize.y });
+        glm::vec2 clip_offset = { draw_data->DisplayPos.x, draw_data->DisplayPos.y };
+
+        m_push_constant.m_scale = { 2.0f / draw_data->DisplaySize.x, 2.0f / draw_data->DisplaySize.y };
+        m_push_constant.m_translate = { -1.0f - draw_data->DisplayPos.x, -1.0f - draw_data->DisplayPos.y };
+        m_push_constant.m_translate *= m_push_constant.m_scale;
+        list.set_push_constants(&m_push_constant, sizeof(PushConstant), 4);
+
+        u32 vertex_offset = 0;
+        u32 index_offset = 0;
+        for (auto &draw_list : draw_data->CmdLists)
+        {
+            for (auto &cmd : draw_list->CmdBuffer)
+            {
+                ImVec2 clip_min(cmd.ClipRect.x - clip_offset.x, cmd.ClipRect.y - clip_offset.y);
+                ImVec2 clip_max(cmd.ClipRect.z - clip_offset.x, cmd.ClipRect.w - clip_offset.y);
+                if (clip_max.x <= clip_min.x || clip_max.y <= clip_min.y)
+                    continue;
+
+                list.set_scissors(0, { clip_min.x, clip_min.y, clip_max.x, clip_max.y });
+
+                list.draw_indexed(cmd.ElemCount, cmd.IdxOffset + index_offset, cmd.VtxOffset + vertex_offset);
+            }
+
+            vertex_offset += draw_list->VtxBuffer.Size;
+            index_offset += draw_list->IdxBuffer.Size;
+        }
+
+        list.set_scissors(0, { 0, 0, draw_data->DisplaySize.x, draw_data->DisplaySize.y });
         list.end_rendering();
     }
 };
@@ -77,6 +153,9 @@ void Renderer::record_tasks()
     ZoneScoped;
 
     m_task_graph->add_task<Triangle>({
+        .m_uses = { .m_color_attachment = m_swap_chain_attachment },
+    });
+    m_task_graph->add_task<Imgui>({
         .m_uses = { .m_color_attachment = m_swap_chain_attachment },
     });
     m_task_graph->present({ .m_swap_chain_image_id = m_swap_chain_attachment });
@@ -144,7 +223,7 @@ void Renderer::on_resize(u32 width, u32 height)
 {
     ZoneScoped;
 
-    refresh_frame(width, height, 3);
+    refresh_frame(width, height, m_swap_chain.m_frame_count);
 }
 
 void Renderer::draw()

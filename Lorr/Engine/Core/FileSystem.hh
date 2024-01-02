@@ -30,6 +30,4 @@ eastl::string get_current_dir();
 
 bool set_library_dir(eastl::string_view path);
 void *load_lib(eastl::string_view path);
-void free_lib(void *lib);
-void *get_lib_func(void *lib, eastl::string_view func_name);
 }  // namespace lr::fs

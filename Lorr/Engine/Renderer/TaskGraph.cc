@@ -4,16 +4,44 @@
 
 namespace lr::Graphics
 {
+constexpr static DescriptorBindingFlag k_non_uniform_flags = DescriptorBindingFlag::PartiallyBound | DescriptorBindingFlag::VariableDescriptorCount;
+static DescriptorLayoutElement k_persistent_sets[] = {
+    { 0, DescriptorType::Sampler, ShaderStage::All, 4096, k_non_uniform_flags },
+    { 0, DescriptorType::SampledImage, ShaderStage::All, 4096, k_non_uniform_flags },
+    { 0, DescriptorType::StorageImage, ShaderStage::All, 4096, k_non_uniform_flags },
+};
+constexpr static u32 k_sampler_descriptor_id = 0;
+constexpr static u32 k_image_descriptor_id = 1;
+constexpr static u32 k_storage_image_descriptor_id = 2;
+static DescriptorLayoutElement k_dynamic_sets[] = {
+    { 0, DescriptorType::StorageBuffer, ShaderStage::All, 1 },  // u_descriptor_indexes
+    { 0, DescriptorType::StorageBuffer, ShaderStage::All, 1 },  // u_buffer_address
+};
+constexpr static u32 k_indexes_descriptor_id = 1;
+constexpr static u32 k_bda_descriptor_id = 2;
+
 void TaskGraph::init(TaskGraphDesc *desc)
 {
     ZoneScoped;
 
     m_device = desc->m_device;
 
+    m_pipeline_manager.init(m_device);
+    DescriptorManagerDesc descriptor_manager_desc = {
+        .m_device = m_device,
+        .m_persistent_descriptors = k_persistent_sets,
+        .m_frame_count = desc->m_frame_count,
+        .m_dynamic_descriptors = k_dynamic_sets,
+    };
+    m_descriptor_manager.init(&descriptor_manager_desc);
+    m_memory_allocator.init(m_device);
+    m_task_allocator.init(0xffffa);
+
     m_frames.resize(desc->m_frame_count);
     for (auto &frame : m_frames)
     {
         m_device->create_timeline_semaphore(&frame.m_timeline_sema, 0);
+        frame.m_frametime_memory = m_memory_allocator.create_linear_memory_pool(MemoryPoolLocation::CPU, Memory::MiBToBytes(32));
 
         for (u32 i = 0; i < frame.m_allocators.max_size(); i++)
         {
@@ -25,9 +53,6 @@ void TaskGraph::init(TaskGraphDesc *desc)
             m_device->create_command_list(&list, &allocator);
         }
     }
-
-    m_pipeline_manager.init(m_device);
-    m_task_allocator.init(0xffffa);
 }
 
 TaskGraph::~TaskGraph()
@@ -233,7 +258,7 @@ void TaskGraph::compile_task_pipeline(Task &task)
     pipeline_compile_info.init(color_formats.size());
 
     if (task.compile_pipeline(pipeline_compile_info))
-        task.m_pipeline_id = m_pipeline_manager.compile_pipeline(pipeline_compile_info, pipeline_attachment_info);
+        task.m_pipeline_id = m_pipeline_manager.compile_pipeline(pipeline_compile_info, pipeline_attachment_info, m_descriptor_manager.get_layout());
 }
 
 void TaskGraph::present(const TaskPresentDesc &present_desc)
@@ -264,11 +289,16 @@ void TaskGraph::execute(const TaskExecuteDesc &execute_desc)
     Semaphore &sync_sema = frame.m_timeline_sema;
 
     m_device->wait_for_semaphore(&sync_sema, sync_sema.m_value);
-    for (auto &cmd_allocator : frame.m_allocators)
-        m_device->reset_command_allocator(&cmd_allocator);
 
+    CommandAllocator &cmd_allocator = frame.m_allocators[0];
     CommandList &cmd_list = frame.m_lists[0];  // uhh, split barriers when?
+
+    m_device->reset_command_allocator(&cmd_allocator);
     m_device->begin_command_list(&cmd_list);
+    for (auto &buffer : frame.m_zombie_buffers)
+        m_device->delete_buffer(&buffer);
+
+    m_descriptor_manager.bind_all(&cmd_list, CommandType::Graphics, frame_id);
 
     TaskAccess::Access last_execution_access = {};
     for (auto &batch : m_batches)

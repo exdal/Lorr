@@ -44,7 +44,7 @@ struct PipelineManager
         PipelineID m_pipeline_id = {};
     };
 
-    PipelineID compile_pipeline(PipelineCompileInfo &compile_info, PipelineAttachmentInfo &attachment_info);
+    PipelineID compile_pipeline(PipelineCompileInfo &compile_info, PipelineAttachmentInfo &attachment_info, PipelineLayout &layout);
 
     PipelineInfo *get_pipeline_info(PipelineInfoID pipeline_id);
     Pipeline *get_pipeline(PipelineID pipeline_id);
@@ -53,7 +53,38 @@ struct PipelineManager
     ResourcePool<Pipeline, PipelineID> m_pipelines = {};
     ResourcePool<PipelineInfo, PipelineInfoID> m_pipeline_infos = {};
 
-    PipelineLayout m_bindless_layout = nullptr;
+    Device *m_device = nullptr;
+};
+
+struct DescriptorManagerDesc
+{
+    Device *m_device = nullptr;
+    eastl::span<DescriptorLayoutElement> m_persistent_descriptors = {};
+    u32 m_frame_count = 0;
+    eastl::span<DescriptorLayoutElement> m_dynamic_descriptors = {};
+};
+
+struct DescriptorManager
+{
+    void init(DescriptorManagerDesc *desc);
+    ~DescriptorManager();
+
+    void update_descriptor_set(u32 target_set, u32 target_slot, ImageView *image_view, ImageLayout layout, DescriptorType descriptor_type);
+    void bind_all(CommandList *list, CommandType type, u32 frame_idx);
+
+    auto is_buffered() { return m_device->is_feature_supported(DeviceFeature::DescriptorBuffer); }
+    auto &get_layout() { return m_pipeline_layout; }
+    DescriptorSet &get_descriptor_set(u32 layout_idx);
+
+    eastl::array<u32, (usize)DescriptorType::Count> m_persistent_set_indexes = {};
+    u32 m_dynamic_sets_stride = 0;
+    eastl::vector<DescriptorSet> m_dynamic_sets = {};
+    eastl::vector<DescriptorSet> m_persistent_sets = {};
+    DescriptorPool m_descriptor_pool = {};
+    Buffer m_dynamic_buffer = {};
+    Buffer m_persistent_buffer = {};
+    PipelineLayout m_pipeline_layout = nullptr;
+
     Device *m_device = nullptr;
 };
 

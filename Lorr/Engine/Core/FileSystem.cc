@@ -109,18 +109,4 @@ void *load_lib(eastl::string_view path)
 
     return LoadLibraryA(path.data());
 }
-
-void free_lib(void *lib)
-{
-    ZoneScoped;
-
-    FreeLibrary(static_cast<HMODULE>(lib));
-}
-
-void *get_lib_func(void *lib, eastl::string_view func_name)
-{
-    ZoneScoped;
-
-    return GetProcAddress(static_cast<HMODULE>(lib), func_name.data());
-}
 }  // namespace lr::fs

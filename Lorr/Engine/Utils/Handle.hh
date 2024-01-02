@@ -5,6 +5,7 @@
 namespace lr
 {
 #define LR_HANDLE(name, type) enum class name : type { Invalid = eastl::numeric_limits<type>::max() }
+
 template<typename T>
 bool is_handle_valid(T t)
 {

@@ -56,12 +56,6 @@ struct Tracked
     HandleT m_handle = 0;
     operator HandleT &() { return m_handle; }
     explicit operator bool() { return m_handle != 0; }
-
-private:
-    u64 inc_ref() { return ++m_ref; }
-    u64 dec_ref() { return --m_ref; }
-
-    u64 m_ref = 0;
 };
 
 }  // namespace lr::Graphics

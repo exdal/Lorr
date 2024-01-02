@@ -275,6 +275,17 @@ void CommandList::set_push_constants(void *data, u32 data_size, u32 offset, Pipe
     vkCmdPushConstants(m_handle, layout, static_cast<VkShaderStageFlags>(stage_flags), offset, data_size, data);
 }
 
+void CommandList::set_descriptor_sets(PipelineLayout &layout, PipelineBindPoint bind_point, u32 first_set, eastl::span<DescriptorSet> sets)
+{
+    ZoneScoped;
+
+    fixed_vector<VkDescriptorSet, 16> handles = {};
+    for (auto &set : sets)
+        handles.push_back(set);
+
+    vkCmdBindDescriptorSets(m_handle, static_cast<VkPipelineBindPoint>(bind_point), layout, first_set, sets.size(), handles.data(), 0, nullptr);
+}
+
 void CommandList::set_descriptor_buffers(eastl::span<DescriptorBufferBindInfo> binding_infos)
 {
     ZoneScoped;

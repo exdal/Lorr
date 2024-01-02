@@ -114,7 +114,8 @@ struct ComputePipelineInfo
 
 struct Pipeline : Tracked<VkPipeline>
 {
-    VkPipelineBindPoint m_bind_point = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    PipelineLayout m_layout = {};
+    PipelineBindPoint m_bind_point = PipelineBindPoint::Graphics;
 };
 LR_ASSIGN_OBJECT_TYPE(Pipeline, VK_OBJECT_TYPE_PIPELINE);
 

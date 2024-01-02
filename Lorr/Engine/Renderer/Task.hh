@@ -23,6 +23,13 @@ struct TaskContext
     eastl::tuple<eastl::vector<Format>, Format> get_attachment_formats();
     eastl::span<GenericResource> get_resources();
 
+    template<typename T>
+    void set_push_constant(const T &v, u32 offset = 0)
+    {
+        offset += 4;
+        m_command_list.set_push_constants(&v, sizeof(T), offset, get_pipeline()->m_layout);
+    }
+
     RenderingAttachment as_color_attachment(GenericResource &use, const ColorClearValue &clear_value = { 0.0f, 0.0f, 0.0f, 1.0f });
 
 private:

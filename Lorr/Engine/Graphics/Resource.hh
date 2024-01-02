@@ -140,6 +140,9 @@ struct DescriptorLayoutElement
         u32 binding, DescriptorType type, ShaderStage stage, u32 max_descriptors, DescriptorBindingFlag flags = DescriptorBindingFlag::None);
     VkDescriptorSetLayoutBinding m_binding_info = {};
     DescriptorBindingFlag m_binding_flag = {};
+
+    auto get_type() { return static_cast<DescriptorType>(m_binding_info.descriptorType); }
+    auto get_count() { return m_binding_info.descriptorCount; }
 };
 
 struct DescriptorSetLayout : Tracked<VkDescriptorSetLayout>
@@ -193,10 +196,13 @@ struct DescriptorPoolSize : VkDescriptorPoolSize
 struct DescriptorSet : Tracked<VkDescriptorSet>
 {
 };
+LR_ASSIGN_OBJECT_TYPE(DescriptorSet, VK_OBJECT_TYPE_DESCRIPTOR_SET);
 
 struct DescriptorPool : Tracked<VkDescriptorPool>
 {
+    DescriptorPoolFlag m_flags = DescriptorPoolFlag::None;
 };
+LR_ASSIGN_OBJECT_TYPE(DescriptorPool, VK_OBJECT_TYPE_DESCRIPTOR_POOL);
 
 struct WriteDescriptorSet : VkWriteDescriptorSet
 {

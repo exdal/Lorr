@@ -88,7 +88,7 @@ APIResult Instance::init(InstanceDesc *desc)
         .shaderStorageBufferArrayNonUniformIndexing = true,
         .descriptorBindingUpdateUnusedWhilePending = true,
         .descriptorBindingPartiallyBound = true,
-        .descriptorBindingVariableDescriptorCount = false,
+        .descriptorBindingVariableDescriptorCount = true,
         .runtimeDescriptorArray = true,
         .timelineSemaphore = true,
     });
@@ -107,10 +107,23 @@ APIResult Instance::init(InstanceDesc *desc)
     m_physical_device = physical_device_result->physical_device;
     auto &selected_physical_device = physical_device_result.value();
 
-    if (selected_physical_device.enable_extension_if_present("VK_EXT_descriptor_buffer"))
-        m_supported_features |= DeviceFeature::DescriptorBuffer;
+    // if (selected_physical_device.enable_extension_if_present("VK_EXT_descriptor_buffer"))
+    //     m_supported_features |= DeviceFeature::DescriptorBuffer;
+    if (selected_physical_device.enable_extension_if_present("VK_EXT_memory_budget"))
+        m_supported_features |= DeviceFeature::MemoryBudget;
 
     vkb::DeviceBuilder device_builder(selected_physical_device);
+
+     VkPhysicalDeviceDescriptorBufferFeaturesEXT kDesciptorBufferFeatures = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT,
+        .pNext = nullptr,
+        .descriptorBuffer = true,
+        .descriptorBufferImageLayoutIgnored = true,
+        .descriptorBufferPushDescriptors = true,
+    };
+    if (m_supported_features & DeviceFeature::DescriptorBuffer)
+        device_builder.add_pNext(&kDesciptorBufferFeatures);
+
     auto device_result = device_builder.build();
     if (!device_result)
     {

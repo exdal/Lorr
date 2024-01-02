@@ -14,12 +14,12 @@ typedef struct _SECURITY_ATTRIBUTES SECURITY_ATTRIBUTES;
 
 #include <vulkan/vulkan_win32.h>
 
-#define VKFN_INSTANCE_FUNCTIONS                            \
-    VKFN_FUNCTION(vkGetDeviceProcAddr);                    \
-    VKFN_FUNCTION(vkGetInstanceProcAddr);                  \
-    VKFN_FUNCTION(vkEnumeratePhysicalDevices);             \
-    VKFN_FUNCTION(vkCreateWin32SurfaceKHR);                \
-    VKFN_FUNCTION(vkGetPhysicalDeviceProperties);          \
+#define VKFN_INSTANCE_FUNCTIONS                   \
+    VKFN_FUNCTION(vkGetDeviceProcAddr);           \
+    VKFN_FUNCTION(vkGetInstanceProcAddr);         \
+    VKFN_FUNCTION(vkEnumeratePhysicalDevices);    \
+    VKFN_FUNCTION(vkCreateWin32SurfaceKHR);       \
+    VKFN_FUNCTION(vkGetPhysicalDeviceProperties); \
     VKFN_FUNCTION(vkGetPhysicalDeviceProperties2);
 
 #define VKFN_PHYSICAL_DEVICE_FUNCTIONS                        \
@@ -31,6 +31,7 @@ typedef struct _SECURITY_ATTRIBUTES SECURITY_ATTRIBUTES;
     VKFN_FUNCTION(vkGetPhysicalDeviceSurfacePresentModesKHR); \
     VKFN_FUNCTION(vkEnumerateDeviceExtensionProperties);      \
     VKFN_FUNCTION(vkGetPhysicalDeviceMemoryProperties);       \
+    VKFN_FUNCTION(vkGetPhysicalDeviceMemoryProperties2);      \
     VKFN_FUNCTION(vkCreateDevice);
 
 #define VKFN_LOGICAL_DEVICE_FUNCTIONS             \

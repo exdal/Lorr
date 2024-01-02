@@ -97,6 +97,7 @@ namespace Preset
     // Common image types
     using ColorAttachment = TaskImageUse<TaskAccess::ColorAttachmentReadWrite, ImageLayout::ColorAttachment>;
     using ClearColorAttachment = TaskImageUse<TaskAccess::ColorAttachmentWrite, ImageLayout::ColorAttachment>;
+    using PixelReadOnly = TaskImageUse<TaskAccess::PixelShaderRead, ImageLayout::ColorReadOnly>;
 
     // Common buffer types
     using VertexBuffer = TaskBufferUse<TaskAccess::VertexShaderRead>;

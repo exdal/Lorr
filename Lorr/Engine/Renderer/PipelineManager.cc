@@ -112,27 +112,6 @@ void PipelineCompileInfo::set_blend_state_all(const ColorBlendAttachment &state)
 void PipelineManager::init(Device *device)
 {
     m_device = device;
-
-    u32 layout_count = 0;
-    eastl::array<DescriptorSetLayout, 4> layouts = {};
-    auto add_layout = [&](DescriptorType type)
-    {
-        DescriptorLayoutElement elem(0, type, ShaderStage::All, 1);
-        auto &layout = layouts[layout_count++];
-
-        device->create_descriptor_set_layout(&layout, elem, DescriptorSetLayoutFlag::DescriptorBuffer);
-    };
-
-    add_layout(DescriptorType::StorageBuffer);
-    add_layout(DescriptorType::StorageBuffer);
-    add_layout(DescriptorType::Sampler);
-    add_layout(DescriptorType::SampledImage);
-
-    PushConstantDesc push_constant_desc(ShaderStage::All, 0, 128);
-    m_bindless_layout = m_device->create_pipeline_layout(layouts, push_constant_desc);
-
-    for (auto &layout : layouts)
-        m_device->delete_descriptor_set_layout(&layout);
 }
 
 PipelineManager::~PipelineManager()
@@ -145,7 +124,7 @@ PipelineManager::~PipelineManager()
         m_device->delete_pipeline(&pipeline);
 }
 
-PipelineID PipelineManager::compile_pipeline(PipelineCompileInfo &compile_info, PipelineAttachmentInfo &attachment_info)
+PipelineID PipelineManager::compile_pipeline(PipelineCompileInfo &compile_info, PipelineAttachmentInfo &attachment_info, PipelineLayout &layout)
 {
     ZoneScoped;
 
@@ -184,7 +163,7 @@ PipelineID PipelineManager::compile_pipeline(PipelineCompileInfo &compile_info, 
     if (!graphics_pipeline_info.m_vertex_attrib_infos.empty())
         graphics_pipeline_info.m_vertex_binding_infos.push_back(PipelineVertexLayoutBindingInfo(0, 0, false));
 
-    graphics_pipeline_info.m_layout = m_bindless_layout;
+    graphics_pipeline_info.m_layout = layout;
 
     auto [pipeline_id, pipeline] = m_pipelines.add_resource();
     if (!is_handle_valid(pipeline_id))
@@ -210,6 +189,113 @@ Pipeline *PipelineManager::get_pipeline(PipelineID pipeline_id)
     ZoneScoped;
 
     return &m_pipelines.get_resource(pipeline_id);
+}
+
+void DescriptorManager::init(DescriptorManagerDesc *desc)
+{
+    ZoneScoped;
+
+    m_device = desc->m_device;
+    m_dynamic_sets_stride = desc->m_dynamic_descriptors.size();
+
+    DescriptorSetLayoutFlag layout_flag = is_buffered() ? DescriptorSetLayoutFlag::DescriptorBuffer : DescriptorSetLayoutFlag::None;
+
+    eastl::vector<DescriptorLayoutElement> all_elements = {};
+    all_elements.insert(all_elements.end(), desc->m_persistent_descriptors.begin(), desc->m_persistent_descriptors.end());
+    all_elements.insert(all_elements.end(), desc->m_dynamic_descriptors.begin(), desc->m_dynamic_descriptors.end());
+
+    for (u32 i = 0; i < desc->m_persistent_descriptors.size(); i++)
+    {
+        auto &element = desc->m_persistent_descriptors[i];
+        m_persistent_set_indexes[(usize)element.get_type()] = i;
+    }
+
+    eastl::vector<DescriptorSetLayout> all_layouts(all_elements.size());
+    for (u32 i = 0; i < all_elements.size(); i++)
+        m_device->create_descriptor_set_layout(&all_layouts[i], all_elements[i], layout_flag);
+
+    eastl::span persistent_layouts(all_layouts.begin(), desc->m_persistent_descriptors.size());
+    eastl::span dynamic_layouts(all_layouts.begin() + desc->m_persistent_descriptors.size(), desc->m_dynamic_descriptors.size());
+
+    PushConstantDesc push_constant_desc(ShaderStage::All, 0, 128);
+    m_pipeline_layout = m_device->create_pipeline_layout(all_layouts, push_constant_desc);
+
+    if (!is_buffered())
+    {
+        m_dynamic_sets.resize(desc->m_dynamic_descriptors.size() * desc->m_frame_count);
+        m_persistent_sets.resize(desc->m_persistent_descriptors.size());
+
+        eastl::vector<DescriptorPoolSize> pool_sizes = {};
+        for (auto &element : desc->m_dynamic_descriptors)
+            pool_sizes.push_back({ element.get_type(), element.get_count() * desc->m_frame_count });
+        for (auto &element : desc->m_persistent_descriptors)
+            pool_sizes.push_back({ element.get_type(), element.get_count() });
+
+        u32 max_set_count = m_dynamic_sets.size() + m_persistent_sets.size();
+        m_device->create_descriptor_pool(&m_descriptor_pool, max_set_count, pool_sizes);
+
+        for (u32 i = 0; i < m_dynamic_sets.size(); i++)
+        {
+            auto &descriptor_set = m_dynamic_sets[i];
+            auto &descriptor_layout = dynamic_layouts[i % dynamic_layouts.size()];
+            m_device->create_descriptor_set(&descriptor_set, &descriptor_layout, &m_descriptor_pool);
+        }
+
+        for (u32 i = 0; i < m_persistent_sets.size(); i++)
+        {
+            auto &descriptor_set = m_persistent_sets[i];
+            auto &descriptor_layout = persistent_layouts[i];
+            m_device->create_descriptor_set(&descriptor_set, &descriptor_layout, &m_descriptor_pool);
+        }
+    }
+
+    for (auto &layout : all_layouts)
+        m_device->delete_descriptor_set_layout(&layout);
+}
+
+DescriptorManager::~DescriptorManager()
+{
+    ZoneScoped;
+
+    for (auto &set : m_dynamic_sets)
+        m_device->delete_descriptor_set(&set, &m_descriptor_pool);
+
+    for (auto &set : m_persistent_sets)
+        m_device->delete_descriptor_set(&set, &m_descriptor_pool);
+
+    m_device->delete_descriptor_pool(&m_descriptor_pool);
+}
+
+void DescriptorManager::update_descriptor_set(
+    u32 target_set, u32 target_slot, ImageView *image_view, ImageLayout layout, DescriptorType descriptor_type)
+{
+    auto &descriptor_set = get_descriptor_set(target_set);
+    ImageDescriptorInfo image_descriptor_info = { image_view, layout };
+    WriteDescriptorSet write(&descriptor_set, image_descriptor_info, descriptor_type, 0, target_slot, 1);
+    m_device->update_descriptor_set(write, {});
+}
+
+void DescriptorManager::bind_all(CommandList *list, CommandType type, u32 frame_idx)
+{
+    ZoneScoped;
+
+    PipelineBindPoint bind_point = type == CommandType::Graphics ? PipelineBindPoint::Graphics : PipelineBindPoint::Compute;
+
+    auto dynamic_sets_begin = m_dynamic_sets.begin() + (frame_idx * m_dynamic_sets_stride);
+    eastl::span dynamic_sets(dynamic_sets_begin, m_dynamic_sets_stride);
+
+    list->set_descriptor_sets(m_pipeline_layout, bind_point, 0, m_persistent_sets);
+    list->set_descriptor_sets(m_pipeline_layout, bind_point, m_persistent_sets.size(), dynamic_sets);
+}
+
+DescriptorSet &DescriptorManager::get_descriptor_set(u32 layout_idx)
+{
+    ZoneScoped;
+
+    if (layout_idx < m_persistent_sets.size())
+        return m_persistent_sets[layout_idx];
+
+    return m_dynamic_sets[layout_idx - m_persistent_sets.size()];
 }
 
 }  // namespace lr::Graphics

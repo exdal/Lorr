@@ -11,6 +11,7 @@
 #include "Memory/Allocator/AreaAllocator.hh"
 
 #include <EASTL/vector.h>
+#include <EASTL/queue.h>
 
 namespace lr::Graphics
 {
@@ -21,6 +22,10 @@ struct TaskFrame
     Semaphore m_timeline_sema = {};
     eastl::array<CommandAllocator, k_type_count> m_allocators = {};
     eastl::array<CommandList, k_type_count> m_lists = {};
+    LinearMemoryPool *m_frametime_memory = nullptr;
+    eastl::queue<Buffer> m_zombie_buffers = {};
+
+    DescriptorSet m_descriptor_set = {};
 };
 
 struct TaskPresentDesc
@@ -71,6 +76,8 @@ struct TaskGraph
 
     Device *m_device = nullptr;
     PipelineManager m_pipeline_manager = {};
+    DescriptorManager m_descriptor_manager = {};
+    MemoryAllocator m_memory_allocator = {};
 
     // vectors move memories on de/allocation, so using raw pointer is not safe
     // instead we have ResourcePool that is fixed size and does not do allocations

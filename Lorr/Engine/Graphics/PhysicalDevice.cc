@@ -65,33 +65,67 @@ VkSurfaceTransformFlagBitsKHR Surface::get_transform()
     return m_capabilities.currentTransform;
 }
 
-APIResult PhysicalDevice::init(VkPhysicalDevice physical_device, DeviceFeature features)
+APIResult PhysicalDevice::init(VkPhysicalDevice handle, DeviceFeature features)
 {
-    m_handle = physical_device;
+    m_handle = handle;
     m_supported_features = features;
 
     chained_struct cs(m_properties);
     cs.set_next(m_descriptor_buffer_props);
 
-    vkGetPhysicalDeviceProperties2(physical_device, &m_properties);
-    vkGetPhysicalDeviceMemoryProperties(physical_device, &m_memory_props);
+    vkGetPhysicalDeviceProperties2(m_handle, &m_properties);
+    vkGetPhysicalDeviceMemoryProperties2(m_handle, &m_memory_props2);
 
     return APIResult::Success;
 }
 
-u32 PhysicalDevice::get_heap_index(VkMemoryPropertyFlags flags)
+u32 PhysicalDevice::get_memory_type_index(MemoryFlag flags)
 {
     ZoneScoped;
 
-    for (u32 i = 0; i < m_memory_props.memoryTypeCount; i++)
-    {
-        if ((m_memory_props.memoryTypes[i].propertyFlags & flags) == flags)
+    auto vk_flags = (VkMemoryPropertyFlags)flags;
+    auto &mem_props = m_memory_props2.memoryProperties;
+    for (u32 i = 0; i < mem_props.memoryTypeCount; i++)
+        if ((mem_props.memoryTypes[i].propertyFlags & vk_flags) == vk_flags)
             return i;
-    }
 
     LOG_ERROR("Memory type index is not found.");
 
     return -1;
+}
+
+u32 PhysicalDevice::get_heap_index(MemoryFlag flags)
+{
+    ZoneScoped;
+
+    u32 i = get_memory_type_index(flags);
+    return m_memory_props2.memoryProperties.memoryTypes[i].heapIndex;
+}
+
+u64 PhysicalDevice::get_heap_budget(MemoryFlag flags)
+{
+    ZoneScoped;
+
+    if (!is_feature_supported(DeviceFeature::MemoryBudget))
+        return ~0;
+
+    m_memory_props2.pNext = &m_memory_budget;
+    vkGetPhysicalDeviceMemoryProperties2(m_handle, &m_memory_props2);
+
+    return m_memory_budget.heapBudget[get_heap_index(flags)];
+}
+
+u64 PhysicalDevice::get_heap_usage(MemoryFlag flags)
+{
+    ZoneScoped;
+
+    if (!is_feature_supported(DeviceFeature::MemoryBudget))
+        return ~0;
+
+    m_memory_props2.pNext = &m_memory_budget;
+    vkGetPhysicalDeviceMemoryProperties2(m_handle, &m_memory_props2);
+
+    return m_memory_budget.heapUsage[get_heap_index(flags)];
 }
 
 u64 PhysicalDevice::get_descriptor_buffer_alignment()

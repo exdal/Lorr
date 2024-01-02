@@ -23,6 +23,7 @@ enum class DeviceFeature : u64
 {
     None = 0,
     DescriptorBuffer = 1 << 0,
+    MemoryBudget = 1 << 1,
 };
 LR_TYPEOP_ARITHMETIC_INT(DeviceFeature, DeviceFeature, &);
 LR_TYPEOP_ARITHMETIC(DeviceFeature, DeviceFeature, |);
@@ -57,6 +58,21 @@ enum class APIResult : i32
 
     HanldeNotInitialized = VK_RESULT_MAX_ENUM,
 };
+
+constexpr static APIResult CHECK(VkResult vkr, [[maybe_unused]] std::initializer_list<APIResult> allowed_checks = {})
+{
+    auto result = static_cast<APIResult>(vkr);
+#if _DEBUG
+    if (result != APIResult::Success)
+        for (auto &a : allowed_checks)
+            if (a == result)
+                return result;
+
+    assert(result == APIResult::Success);
+#endif
+
+    return result;
+}
 
 /// BUFFER ---------------------------- ///
 
@@ -115,10 +131,13 @@ enum class DescriptorType : u32
     UniformBuffer = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,  // Read only buffer
     StorageImage = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,    // RW image
     StorageBuffer = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,  // RW Buffer
+
+    Count = 5,
 };
 
 enum class DescriptorSetLayoutFlag : u32
 {
+    None = 0,
     DescriptorBuffer = 1 << 0,
     EmbeddedSamplers = 1 << 1,
 };
@@ -133,6 +152,17 @@ enum class DescriptorBindingFlag : u32
     PartiallyBound = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT,
     VariableDescriptorCount = VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT,
 };
+LR_TYPEOP_ARITHMETIC(DescriptorBindingFlag, DescriptorBindingFlag, |);
+LR_TYPEOP_ARITHMETIC_INT(DescriptorBindingFlag, DescriptorBindingFlag, &);
+
+enum class DescriptorPoolFlag : u32
+{
+    None = 0,
+    FreeDescriptorSet = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT,
+    UpdateAfterBind = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT,
+};
+LR_TYPEOP_ARITHMETIC(DescriptorPoolFlag, DescriptorPoolFlag, |);
+LR_TYPEOP_ARITHMETIC_INT(DescriptorPoolFlag, DescriptorPoolFlag, &);
 
 /// IMAGE ---------------------------- ///
 

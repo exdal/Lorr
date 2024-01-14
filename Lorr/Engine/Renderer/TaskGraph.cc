@@ -4,40 +4,25 @@
 
 namespace lr::Graphics
 {
-constexpr static DescriptorBindingFlag k_non_uniform_flags = DescriptorBindingFlag::PartiallyBound | DescriptorBindingFlag::VariableDescriptorCount;
-static DescriptorLayoutElement k_persistent_sets[] = {
-    { 0, DescriptorType::Sampler, ShaderStage::All, 4096, k_non_uniform_flags },
-    { 0, DescriptorType::SampledImage, ShaderStage::All, 4096, k_non_uniform_flags },
-    { 0, DescriptorType::StorageImage, ShaderStage::All, 4096, k_non_uniform_flags },
-};
-constexpr static u32 k_sampler_descriptor_id = 0;
-constexpr static u32 k_image_descriptor_id = 1;
-constexpr static u32 k_storage_image_descriptor_id = 2;
-static DescriptorLayoutElement k_dynamic_sets[] = {
-    { 0, DescriptorType::StorageBuffer, ShaderStage::All, 1 },  // u_descriptor_indexes
-    { 0, DescriptorType::StorageBuffer, ShaderStage::All, 1 },  // u_buffer_address
-};
-constexpr static u32 k_indexes_descriptor_id = 1;
-constexpr static u32 k_bda_descriptor_id = 2;
-
 void TaskGraph::init(TaskGraphDesc *desc)
 {
     ZoneScoped;
 
     m_device = desc->m_device;
+    m_swap_chain = desc->m_swap_chain;
 
     m_pipeline_manager.init(m_device);
     DescriptorManagerDesc descriptor_manager_desc = {
         .m_device = m_device,
         .m_persistent_descriptors = k_persistent_sets,
-        .m_frame_count = desc->m_frame_count,
+        .m_frame_count = m_swap_chain->m_frame_count,
         .m_dynamic_descriptors = k_dynamic_sets,
     };
     m_descriptor_manager.init(&descriptor_manager_desc);
     m_memory_allocator.init(m_device);
     m_task_allocator.init(0xffffa);
 
-    m_frames.resize(desc->m_frame_count);
+    m_frames.resize(m_swap_chain->m_frame_count);
     for (auto &frame : m_frames)
     {
         m_device->create_timeline_semaphore(&frame.m_timeline_sema, 0);
@@ -47,10 +32,8 @@ void TaskGraph::init(TaskGraphDesc *desc)
         {
             constexpr static auto k_allocator_flags = CommandAllocatorFlag::ResetCommandBuffer;
             CommandAllocator &allocator = frame.m_allocators[i];
-            CommandList &list = frame.m_lists[i];
 
             m_device->create_command_allocator(&allocator, static_cast<CommandType>(i), k_allocator_flags);
-            m_device->create_command_list(&list, &allocator);
         }
     }
 }
@@ -62,51 +45,16 @@ TaskGraph::~TaskGraph()
         m_device->delete_semaphore(&frame.m_timeline_sema);
         for (u32 i = 0; i < frame.m_allocators.size(); i++)
         {
-            m_device->delete_command_list(&frame.m_lists[i], &frame.m_allocators[i]);
             m_device->delete_command_allocator(&frame.m_allocators[i]);
         }
     }
-
-    for (auto &image : m_images.m_resources)
-        m_device->delete_image(&image);
-    for (auto &image_view : m_image_views.m_resources)
-        m_device->delete_image_view(&image_view);
-
-    for (auto &buffer : m_buffers.m_resources)
-        m_device->delete_buffer(&buffer);
 }
 
-eastl::tuple<ImageID, Image *> TaskGraph::add_new_image()
+TaskImageID TaskGraph::use_persistent_image(const PersistentImageInfo &persistent_image_info)
 {
     ZoneScoped;
 
-    return m_images.add_resource();
-}
-
-eastl::tuple<ImageID, ImageView *> TaskGraph::add_new_image_view()
-{
-    ZoneScoped;
-
-    return m_image_views.add_resource();
-}
-
-Image *TaskGraph::get_image(ImageID id)
-{
-    auto &image_info = m_image_infos[get_handle_val(id)];
-    return &m_images.get_resource(image_info.m_image_id);
-}
-
-ImageView *TaskGraph::get_image_view(ImageID id)
-{
-    auto &image_info = m_image_infos[get_handle_val(id)];
-    return &m_image_views.get_resource(image_info.m_image_view_id);
-}
-
-ImageID TaskGraph::use_persistent_image(const PersistentImageInfo &persistent_image_info)
-{
-    ZoneScoped;
-
-    auto id = set_handle_val<ImageID>(m_image_infos.size());
+    auto id = set_handle_val<TaskImageID>(m_image_infos.size());
     m_image_infos.push_back({
         .m_image_id = persistent_image_info.m_image_id,
         .m_image_view_id = persistent_image_info.m_image_view_id,
@@ -117,20 +65,20 @@ ImageID TaskGraph::use_persistent_image(const PersistentImageInfo &persistent_im
     return id;
 }
 
-void TaskGraph::set_image(ImageID image_info_id, ImageID image_id, ImageID image_view_id)
+void TaskGraph::set_image(TaskImageID task_image_id, ImageID image_id, ImageViewID image_view_id)
 {
     ZoneScoped;
 
-    TaskImageInfo &imageInfo = m_image_infos[get_handle_val(image_info_id)];
+    TaskImageInfo &imageInfo = m_image_infos[get_handle_val(task_image_id)];
     imageInfo.m_image_id = image_id;
     imageInfo.m_image_view_id = image_view_id;
 }
 
-BufferID TaskGraph::use_persistent_buffer(const PersistentBufferInfo &buffer_info)
+TaskBufferID TaskGraph::use_persistent_buffer(const PersistentBufferInfo &buffer_info)
 {
     ZoneScoped;
 
-    auto id = set_handle_val<BufferID>(m_buffer_infos.size());
+    auto id = set_handle_val<TaskBufferID>(m_buffer_infos.size());
     m_buffer_infos.push_back({
         .m_buffer_id = buffer_info.m_buffer_id,
         .m_last_access = buffer_info.m_initial_access,
@@ -157,7 +105,7 @@ TaskBatchID TaskGraph::schedule_task(Task &task)
         },
         [&](GenericResource &buffer)
         {
-            auto &buffer_info = m_buffer_infos[get_handle_val(buffer.m_task_image_id)];
+            auto &buffer_info = m_buffer_infos[get_handle_val(buffer.m_task_buffer_id)];
             bool is_last_read = buffer_info.m_last_access.m_access == MemoryAccess::Read;
             bool is_current_read = buffer.m_access.m_access == MemoryAccess::Read;
 
@@ -195,7 +143,7 @@ void TaskGraph::add_task(Task &task, TaskID id)
             {
                 usize barrierID = m_barriers.size();
                 m_barriers.push_back({
-                    .m_image_id = image.m_task_image_id,
+                    .m_task_image_id = image.m_task_image_id,
                     .m_src_layout = image_info.m_last_layout,
                     .m_dst_layout = image.m_image_layout,
                     .m_src_access = image_info.m_last_access,
@@ -243,10 +191,8 @@ void TaskGraph::compile_task_pipeline(Task &task)
     Format depth_format = {};
     for (auto &resource : task.m_generic_resources)
     {
-        if (!is_handle_valid(resource.m_task_image_id))
-            continue;
-
-        ImageView *image_view = get_image_view(resource.m_task_image_id);
+        auto &image_info = m_image_infos[get_handle_val(resource.m_task_image_id)];
+        ImageView *image_view = m_device->get_image_view(image_info.m_image_view_id);
         if (resource.m_image_layout == ImageLayout::ColorAttachment)
             color_formats.push_back(image_view->m_format);
         else if (resource.m_image_layout == ImageLayout::DepthStencilAttachment)
@@ -258,95 +204,121 @@ void TaskGraph::compile_task_pipeline(Task &task)
     pipeline_compile_info.init(color_formats.size());
 
     if (task.compile_pipeline(pipeline_compile_info))
-        task.m_pipeline_id = m_pipeline_manager.compile_pipeline(pipeline_compile_info, pipeline_attachment_info, m_descriptor_manager.get_layout());
+        task.m_pipeline_info_id =
+            m_pipeline_manager.compile_pipeline(pipeline_compile_info, pipeline_attachment_info, m_descriptor_manager.get_layout());
+}
+
+void TaskGraph::submit()
+{
+    ZoneScoped;
+
+    usize submit_scope_id = m_submit_scopes.size();
+    m_submit_scopes.push_back({});
+    m_command_lists.resize(m_command_lists.size() + m_frames.size());
+
+    for (u32 i = 0; i < m_frames.size(); i++)
+    {
+        CommandList &command_list = m_command_lists[submit_scope_id + i];
+        m_device->create_command_list(&command_list, &m_frames[i].m_allocators[0]);  // TODO: Multi stage submit scopes
+    }
 }
 
 void TaskGraph::present(const TaskPresentDesc &present_desc)
 {
     ZoneScoped;
 
-    auto &image_info = m_image_infos[get_handle_val(present_desc.m_swap_chain_image_id)];
+    TaskImageInfo &image_info = get_image_info(present_desc.m_swap_chain_image_id);
 
-    auto &latest_batch = m_batches.back();
+    TaskSubmitScope &submit_scope = m_submit_scopes[image_info.m_last_batch_index];
     usize barrier_id = m_barriers.size();
     m_barriers.push_back({
-        .m_image_id = present_desc.m_swap_chain_image_id,
+        .m_task_image_id = present_desc.m_swap_chain_image_id,
         .m_src_layout = image_info.m_last_layout,
         .m_dst_layout = ImageLayout::Present,
         .m_src_access = image_info.m_last_access,
         .m_dst_access = TaskAccess::BottomOfPipe,
     });
-    latest_batch.m_end_barriers.push_back(barrier_id);
+    submit_scope.m_end_barriers.push_back(barrier_id);
 }
 
 void TaskGraph::execute(const TaskExecuteDesc &execute_desc)
 {
     ZoneScoped;
 
-    u32 frame_id = execute_desc.m_swap_chain ? execute_desc.m_swap_chain->m_current_frame_id : 0;
+    u32 frame_id = m_swap_chain ? m_swap_chain->m_current_frame_id : 0;
 
     TaskFrame &frame = m_frames[frame_id];
     Semaphore &sync_sema = frame.m_timeline_sema;
+    TaskImageID swap_chain_image = execute_desc.m_swap_chain_image_id;
+    CommandAllocator &cmd_allocator = frame.m_allocators[0];
 
     m_device->wait_for_semaphore(&sync_sema, sync_sema.m_value);
-
-    CommandAllocator &cmd_allocator = frame.m_allocators[0];
-    CommandList &cmd_list = frame.m_lists[0];  // uhh, split barriers when?
-
     m_device->reset_command_allocator(&cmd_allocator);
-    m_device->begin_command_list(&cmd_list);
-    for (auto &buffer : frame.m_zombie_buffers)
-        m_device->delete_buffer(&buffer);
 
-    m_descriptor_manager.bind_all(&cmd_list, CommandType::Graphics, frame_id);
-
-    TaskAccess::Access last_execution_access = {};
-    for (auto &batch : m_batches)
+    while (!frame.m_zombie_buffers.empty())
     {
-        CommandBatcher batcher = &cmd_list;
-
-        if (batch.m_execution_access != TaskAccess::None)
-        {
-            TaskBarrier executionBarrier = {
-                .m_src_access = last_execution_access,
-                .m_dst_access = batch.m_execution_access,
-            };
-
-            insert_barrier(batcher, executionBarrier);
-        }
-
-        for (auto barrierID : batch.m_wait_barriers)
-            insert_barrier(batcher, m_barriers[barrierID]);
-
-        batcher.flush_barriers();
-        for (auto &task : m_tasks)
-        {
-            TaskContext ctx(*task, *this, cmd_list);
-            task->execute(ctx);
-        }
-
-        for (auto &barrierID : batch.m_end_barriers)
-            insert_barrier(batcher, m_barriers[barrierID]);
-
-        batcher.flush_barriers();
-        last_execution_access = batch.m_execution_access;
+        m_device->delete_buffer(frame.m_zombie_buffers.front());
+        frame.m_zombie_buffers.pop();
     }
-    m_device->end_command_list(&cmd_list);
 
-    SemaphoreSubmitDesc wait_submits[] = { { execute_desc.m_wait_semas[0], PipelineStage::TopOfPipe } };
-    CommandListSubmitDesc list_submit_desc[] = { &cmd_list };
-    SemaphoreSubmitDesc signal_submits[] = {
-        { execute_desc.m_signal_semas[0], PipelineStage::AllCommands },
-        { &sync_sema, ++sync_sema.m_value, PipelineStage::AllCommands },
-    };
+    usize curr_scope_idx = 0;
+    for (TaskSubmitScope &submit_scope : m_submit_scopes)
+    {
+        CommandList &scope_cmd_list = m_command_lists[curr_scope_idx + frame_id];
+        m_device->begin_command_list(&scope_cmd_list);
+        m_descriptor_manager.bind_all(&scope_cmd_list, CommandType::Graphics, frame_id);
 
-    SubmitDesc submit_desc = {
-        .m_wait_semas = wait_submits,
-        .m_lists = list_submit_desc,
-        .m_signal_semas = signal_submits,
-    };
-    m_device->submit(m_device->get_queue(CommandType::Graphics), &submit_desc);
-    m_device->present(execute_desc.m_swap_chain, m_device->get_queue(CommandType::Graphics));
+        CommandBatcher batcher = &scope_cmd_list;
+        for (TaskBatch &batch : m_batches)
+        {
+            for (auto barrierID : batch.m_wait_barriers)
+                insert_barrier(batcher, m_barriers[barrierID]);
+
+            batcher.flush_barriers();
+            for (auto &task : m_tasks)
+            {
+                TaskContext ctx(*task, *this, scope_cmd_list);
+                task->execute(ctx);
+            }
+        }
+
+        for (u32 barrier_id : submit_scope.m_end_barriers)
+            insert_barrier(batcher, m_barriers[barrier_id]);
+
+        batcher.flush_barriers();
+        m_device->end_command_list(&scope_cmd_list);
+
+        CommandListSubmitDesc list_submit_desc[] = { &scope_cmd_list };
+        eastl::vector<SemaphoreSubmitDesc> wait_semas = {};
+        eastl::vector<SemaphoreSubmitDesc> signal_semas = {};
+        if (m_swap_chain && swap_chain_image != TaskImageID::Invalid)
+        {
+            TaskImageInfo &image_info = get_image_info(swap_chain_image);
+            if (image_info.m_first_submit_scope_index == curr_scope_idx)
+            {
+                Semaphore &acquire_sema = m_swap_chain->m_acquire_semas[frame_id];
+                wait_semas.push_back({ &acquire_sema, PipelineStage::TopOfPipe });
+            }
+            if (image_info.m_last_submit_scope_index == curr_scope_idx)
+            {
+                Semaphore &present_sema = m_swap_chain->m_present_semas[frame_id];
+                signal_semas.push_back({ &present_sema, PipelineStage::AllCommands });
+            }
+        }
+
+        signal_semas.push_back({ &sync_sema, ++sync_sema.m_value, PipelineStage::AllCommands });
+
+        SubmitDesc submit_desc = {
+            .m_wait_semas = wait_semas,
+            .m_lists = list_submit_desc,
+            .m_signal_semas = signal_semas,
+        };
+        m_device->submit(m_device->get_queue(CommandType::Graphics), &submit_desc);
+
+        curr_scope_idx++;
+    }
+
+    m_device->present(m_swap_chain, m_device->get_queue(CommandType::Graphics));
 }
 
 void TaskGraph::insert_barrier(CommandBatcher &batcher, const TaskBarrier &barrier)
@@ -360,7 +332,7 @@ void TaskGraph::insert_barrier(CommandBatcher &batcher, const TaskBarrier &barri
         .m_dst_access = barrier.m_dst_access.m_access,
     };
 
-    if (!is_handle_valid(barrier.m_image_id))
+    if (barrier.m_task_image_id == TaskImageID::Invalid)
     {
         MemoryBarrier barrierInfo(pipelineInfo);
         batcher.insert_memory_barrier(barrierInfo);
@@ -370,7 +342,8 @@ void TaskGraph::insert_barrier(CommandBatcher &batcher, const TaskBarrier &barri
         pipelineInfo.m_src_layout = barrier.m_src_layout;
         pipelineInfo.m_dst_layout = barrier.m_dst_layout;
 
-        ImageBarrier barrier_info(get_image(barrier.m_image_id), {}, pipelineInfo);
+        TaskImageInfo &image_info = get_image_info(barrier.m_task_image_id);
+        ImageBarrier barrier_info(m_device->get_image(image_info.m_image_id), {}, pipelineInfo);
         batcher.insert_image_barrier(barrier_info);
     }
 }

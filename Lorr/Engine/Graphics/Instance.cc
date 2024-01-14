@@ -6,7 +6,6 @@
 #include "Window/Win32/Win32Window.hh"
 
 #include "Device.hh"
-#include "PhysicalDevice.hh"
 #include "Vulkan.hh"
 
 #define VKFN_FUNCTION(_name) PFN_##_name _name
@@ -22,12 +21,14 @@ VKFN_DEBUG_UTILS_EXT_DEVICE_FUNCTIONS
 
 namespace lr::Graphics
 {
-APIResult Instance::init(InstanceDesc *desc)
+static vkb::Instance vkb_instance = {};
+
+APIResult Instance::init(const InstanceDesc &desc)
 {
     vkb::InstanceBuilder instance_builder;
-    instance_builder.set_app_name(desc->m_app_name.data());
-    instance_builder.set_engine_name(desc->m_engine_name.data());
-    instance_builder.set_engine_version(desc->m_engine_version);
+    instance_builder.set_app_name(desc.m_app_name.data());
+    instance_builder.set_engine_name(desc.m_engine_name.data());
+    instance_builder.set_engine_version(desc.m_engine_version);
     instance_builder.enable_validation_layers(false);  // use vkconfig ui...
     instance_builder.request_validation_layers(false);
     instance_builder.enable_extensions({
@@ -45,14 +46,14 @@ APIResult Instance::init(InstanceDesc *desc)
     if (!build_result)
     {
         LOG_ERROR("Failed to create Vulkan Instance!");
-        return static_cast<APIResult>(build_result.vk_result());
+        return APIResult::InitFailed;
     }
-    auto &instance = build_result.value();
-    m_handle = instance.instance;
+    vkb_instance = build_result.value();
+    m_handle = vkb_instance.instance;
 
-#define VKFN_FUNCTION(_name)                                                  \
-    _name = (PFN_##_name)instance.fp_vkGetInstanceProcAddr(m_handle, #_name); \
-    if (_name == nullptr)                                                     \
+#define VKFN_FUNCTION(_name)                                                      \
+    _name = (PFN_##_name)vkb_instance.fp_vkGetInstanceProcAddr(m_handle, #_name); \
+    if (_name == nullptr)                                                         \
         LOG_TRACE("Failed to load Vulkan function '{}'.", #_name);
 
     VKFN_INSTANCE_FUNCTIONS
@@ -62,21 +63,15 @@ APIResult Instance::init(InstanceDesc *desc)
 #endif
 #undef VKFN_FUNCTION
 
-    VkWin32SurfaceCreateInfoKHR surface_info = {
-        .sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR,
-        .pNext = nullptr,
-        .hinstance = static_cast<HINSTANCE>(desc->m_window->m_instance),
-        .hwnd = static_cast<HWND>(desc->m_window->m_handle),
-    };
-    auto result = static_cast<APIResult>(vkCreateWin32SurfaceKHR(m_handle, &surface_info, nullptr, &m_surface));
-    if (result != APIResult::Success)
-    {
-        LOG_ERROR("Failed to create Win32 Surface.");
-        return result;
-    }
+    return APIResult::Success;
+}
 
-    vkb::PhysicalDeviceSelector physical_device_selector(instance);
-    physical_device_selector.set_surface(m_surface);
+APIResult Instance::create_devce(Device *device)
+{
+    ZoneScoped;
+
+    vkb::PhysicalDeviceSelector physical_device_selector(vkb_instance);
+    physical_device_selector.defer_surface_initialization();
     physical_device_selector.set_minimum_version(1, 3);
     physical_device_selector.set_required_features_13({
         .synchronization2 = true,
@@ -104,24 +99,24 @@ APIResult Instance::init(InstanceDesc *desc)
         LOG_ERROR("Failed to select Vulkan Physical Device!");
         return static_cast<APIResult>(physical_device_result.vk_result());
     }
-    m_physical_device = physical_device_result->physical_device;
     auto &selected_physical_device = physical_device_result.value();
+    DeviceFeature features = {};
 
     // if (selected_physical_device.enable_extension_if_present("VK_EXT_descriptor_buffer"))
-    //     m_supported_features |= DeviceFeature::DescriptorBuffer;
+    //     features |= DeviceFeature::DescriptorBuffer;
     if (selected_physical_device.enable_extension_if_present("VK_EXT_memory_budget"))
-        m_supported_features |= DeviceFeature::MemoryBudget;
+        features |= DeviceFeature::MemoryBudget;
 
     vkb::DeviceBuilder device_builder(selected_physical_device);
 
-     VkPhysicalDeviceDescriptorBufferFeaturesEXT kDesciptorBufferFeatures = {
+    VkPhysicalDeviceDescriptorBufferFeaturesEXT kDesciptorBufferFeatures = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT,
         .pNext = nullptr,
         .descriptorBuffer = true,
         .descriptorBufferImageLayoutIgnored = true,
         .descriptorBufferPushDescriptors = true,
     };
-    if (m_supported_features & DeviceFeature::DescriptorBuffer)
+    if (features & DeviceFeature::DescriptorBuffer)
         device_builder.add_pNext(&kDesciptorBufferFeatures);
 
     auto device_result = device_builder.build();
@@ -130,18 +125,17 @@ APIResult Instance::init(InstanceDesc *desc)
         LOG_ERROR("Failed to select Vulkan Device!");
         return static_cast<APIResult>(device_result.vk_result());
     }
-    m_device = device_result.value();
-    m_present_queue_index = device_result->get_queue_index(vkb::QueueType::present).value();
-    for (u32 i = 0; i < m_queue_indexes.size(); i++)
-        m_queue_indexes[i] = device_result->get_queue_index(static_cast<vkb::QueueType>(i + 1)).value();
 
-        // THESE ARE REQUIRED FUNCTIONS, THESE MUST BE AVAILABLE!!!
-#define VKFN_FUNCTION(_name)                                                \
-    _name = (PFN_##_name)instance.fp_vkGetDeviceProcAddr(m_device, #_name); \
-    if (_name == nullptr)                                                   \
-    {                                                                       \
-        LOG_ERROR("Failed to load Vulkan function '{}'.", #_name);          \
-        return APIResult::ExtNotPresent;                                    \
+    VkPhysicalDevice physical_device = selected_physical_device.physical_device;
+    VkDevice logical_device = device_result.value();
+
+    // THESE ARE REQUIRED FUNCTIONS, THESE MUST BE AVAILABLE!!!
+#define VKFN_FUNCTION(_name)                                                          \
+    _name = (PFN_##_name)vkb_instance.fp_vkGetDeviceProcAddr(logical_device, #_name); \
+    if (_name == nullptr)                                                             \
+    {                                                                                 \
+        LOG_ERROR("Failed to load Vulkan function '{}'.", #_name);                    \
+        return APIResult::ExtNotPresent;                                              \
     }
 
     VKFN_LOGICAL_DEVICE_FUNCTIONS
@@ -156,34 +150,17 @@ APIResult Instance::init(InstanceDesc *desc)
 
     // OPTIONAL FUNCTIONS, MAINLY THERE IS AN ALTERNATIVE VERSION(EXTENSION) FOR THEM.
     // EXTENSIONS MUST BE CHECKED BEFORE LOADING
-#define VKFN_FUNCTION(_name) _name = (PFN_##_name)instance.fp_vkGetDeviceProcAddr(m_device, #_name);
+#define VKFN_FUNCTION(_name) _name = (PFN_##_name)vkb_instance.fp_vkGetDeviceProcAddr(logical_device, #_name);
     VKFN_DESCRIPTOR_BUFFER_EXT_FUNCTIONS
 #undef VKFN_FUNCTION
 
+    eastl::array<u32, (usize)CommandType::Count> queue_indexes = {};
+    for (u32 i = 0; i < queue_indexes.size(); i++)
+        queue_indexes[i] = device_result->get_queue_index(static_cast<vkb::QueueType>(i + 1)).value();
+
+    device->init(logical_device, physical_device, m_handle, queue_indexes);
+
     return APIResult::Success;
-}
-
-APIResult Instance::get_win32_surface(Surface *surface)
-{
-    validate_handle(surface);
-
-    surface->m_handle = m_surface;
-    return m_surface ? APIResult::Success : APIResult::InitFailed;
-}
-
-APIResult Instance::get_physical_device(PhysicalDevice *physical_device)
-{
-    validate_handle(physical_device);
-
-    physical_device->init(m_physical_device, m_supported_features);
-    return m_physical_device ? APIResult::Success : APIResult::InitFailed;
-}
-
-APIResult Instance::get_logical_device(Device *device, PhysicalDevice *physical_device)
-{
-    device->init(m_device, physical_device, m_queue_indexes);
-
-    return m_device ? APIResult::Success : APIResult::InitFailed;
 }
 
 }  // namespace lr::Graphics

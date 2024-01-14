@@ -4,12 +4,29 @@
 
 namespace lr::Graphics
 {
-void Device::init(VkDevice handle, PhysicalDevice *physical_device, eastl::span<u32> queue_indexes)
+template<typename T>
+T get_properties_next(VkPhysicalDevice physical_device)
+{
+    T ret = T{ VKStruct<T>::type };
+    VkPhysicalDeviceProperties2 props = { VKStruct<VkPhysicalDeviceProperties2>::type, &ret };
+    vkGetPhysicalDeviceProperties2(physical_device, &props);
+
+    return ret;
+}
+
+VkPhysicalDeviceProperties2 get_properties(VkPhysicalDevice physical_device)
+{
+    VkPhysicalDeviceProperties2 props = { VKStruct<VkPhysicalDeviceProperties2>::type };
+    vkGetPhysicalDeviceProperties2(physical_device, &props);
+    return props;
+}
+
+void Device::init(VkDevice handle, VkPhysicalDevice physical_device, VkInstance instance, eastl::span<u32> queue_indexes)
 {
     m_handle = handle;
     m_physical_device = physical_device;
+    m_instance = instance;
     m_tracy_ctx = TracyVkContextHostCalibrated(physical_device->m_handle, m_handle);
-
     assert(queue_indexes.size() == m_queue_indexes.size());
 
     for (u32 i = 0; i < m_queues.max_size(); i++)
@@ -195,17 +212,43 @@ APIResult Device::wait_for_semaphore(Semaphore *semaphore, u64 desired_value, u6
     return CHECK(vkWaitSemaphores(m_handle, &wait_info, timeout));
 }
 
-APIResult Device::create_swap_chain(SwapChain *swap_chain, SwapChainDesc *desc, Surface *surface)
+APIResult Device::create_swap_chain(SwapChain *swap_chain, SwapChainDesc *desc)
 {
     ZoneScoped;
 
-    if (!validate_handle(swap_chain))
-        return APIResult::HanldeNotInitialized;
+    VkSurfaceKHR surface_handle = nullptr;
+    VkSwapchainKHR swap_chain_handle = nullptr;
+
+    VkWin32SurfaceCreateInfoKHR surface_info = {
+        .sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR,
+        .pNext = nullptr,
+        .hinstance = static_cast<HINSTANCE>(desc->m_window_instance),
+        .hwnd = static_cast<HWND>(desc->m_window_handle),
+    };
+    APIResult result = CHECK(vkCreateWin32SurfaceKHR(m_instance, &surface_info, nullptr, &surface_handle));
+    if (result != APIResult::Success)
+    {
+        LOG_ERROR("Failed to create Win32 Surface.");
+        return result;
+    }
+
+    VkSurfaceCapabilitiesKHR surface_capabilities = {};
+    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(m_physical_device, surface_handle, &surface_capabilities);
+
+    u32 surface_count = 0;
+    vkGetPhysicalDeviceSurfaceFormatsKHR(m_physical_device, surface_handle, &surface_count, nullptr);
+    eastl::vector<VkSurfaceFormatKHR> surface_formats(surface_count);
+    vkGetPhysicalDeviceSurfaceFormatsKHR(m_physical_device, surface_handle, &surface_count, surface_formats.data());
+
+    u32 presents_count = 0;
+    vkGetPhysicalDeviceSurfacePresentModesKHR(m_physical_device, surface_handle, &presents_count, nullptr);
+    eastl::vector<VkPresentModeKHR> present_modes(presents_count);
+    vkGetPhysicalDeviceSurfacePresentModesKHR(m_physical_device, surface_handle, &presents_count, present_modes.data());
 
     VkSwapchainCreateInfoKHR swap_chain_info = {
         .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
         .pNext = nullptr,
-        .surface = surface->m_handle,
+        .surface = surface_handle,
         .minImageCount = desc->m_frame_count,
         .imageFormat = static_cast<VkFormat>(desc->m_format),
         .imageColorSpace = desc->m_color_space,
@@ -215,25 +258,61 @@ APIResult Device::create_swap_chain(SwapChain *swap_chain, SwapChainDesc *desc, 
         .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE,
         .queueFamilyIndexCount = 0,
         .pQueueFamilyIndices = nullptr,
-        .preTransform = surface->get_transform(),
+        .preTransform = surface_capabilities.currentTransform,
         .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
-        .presentMode = desc->m_present_mode,
+        .presentMode = static_cast<VkPresentModeKHR>(desc->m_present_mode),
         .clipped = VK_TRUE,
     };
 
     wait_for_work();
-    auto result = CHECK(vkCreateSwapchainKHR(m_handle, &swap_chain_info, nullptr, &swap_chain->m_handle));
+    result = CHECK(vkCreateSwapchainKHR(m_handle, &swap_chain_info, nullptr, &swap_chain_handle));
     if (result != APIResult::Success)
-        return result;
-
-    swap_chain->init(desc->m_width, desc->m_height, desc->m_frame_count, desc->m_format, desc->m_color_space, desc->m_present_mode);
-    for (u32 i = 0; i < desc->m_frame_count; i++)
     {
-        create_binary_semaphore(&swap_chain->m_acquire_semas[i]);
-        create_binary_semaphore(&swap_chain->m_present_semas[i]);
+        LOG_ERROR("Failed to create Win32 Swap Chain.");
+        return result;
     }
 
-    return result;
+    eastl::vector<ImageID> images(desc->m_frame_count);
+    eastl::vector<ImageViewID> image_views(desc->m_frame_count);
+    eastl::vector<Semaphore> acquire_semas(desc->m_frame_count);
+    eastl::vector<Semaphore> present_semas(desc->m_frame_count);
+
+    eastl::vector<VkImage> raw_images(desc->m_frame_count);
+    result = CHECK(vkGetSwapchainImagesKHR(m_handle, swap_chain_handle, &desc->m_frame_count, raw_images.data()));
+    if (result != APIResult::Success)
+        return {};
+
+    for (u32 i = 0; i < desc->m_frame_count; i++)
+    {
+        auto [image_id, image] = m_resources.m_images.add_resource();
+
+        image->m_swap_chain_image = true;
+        image->init(raw_images[i], desc->m_format, desc->m_width, desc->m_height, 1, 1);
+
+        ImageViewDesc view_desc = { .m_image = image };
+        ImageViewID image_view_id = create_image_view(&view_desc);
+
+        set_object_name(image, eastl::format("SwapChain Image {}", i));
+
+        images[i] = image_id;
+        image_views[i] = image_view_id;
+        create_binary_semaphore(&acquire_semas[i]);
+        create_binary_semaphore(&present_semas[i]);
+    }
+
+    swap_chain->init(
+        swap_chain_handle,
+        desc->m_width,
+        desc->m_height,
+        desc->m_frame_count,
+        desc->m_format,
+        eastl::move(images),
+        eastl::move(image_views),
+        eastl::move(acquire_semas),
+        eastl::move(present_semas),
+        surface_handle);
+
+    return APIResult::Success;
 }
 
 void Device::delete_swap_chain(SwapChain *swap_chain)
@@ -246,29 +325,11 @@ void Device::delete_swap_chain(SwapChain *swap_chain)
 
     for (u32 i = 0; i < swap_chain->m_frame_count; i++)
     {
+        delete_image(swap_chain->m_images[i]);
+        delete_image_view(swap_chain->m_image_views[i]);
         delete_semaphore(&swap_chain->m_acquire_semas[i]);
         delete_semaphore(&swap_chain->m_present_semas[i]);
     }
-}
-
-APIResult Device::get_swap_chain_images(SwapChain *swap_chain, eastl::span<Image *> images)
-{
-    eastl::vector<VkImage> raw_images(swap_chain->m_frame_count);
-    auto result = CHECK(vkGetSwapchainImagesKHR(m_handle, swap_chain->m_handle, &swap_chain->m_frame_count, raw_images.data()));
-    if (result != APIResult::Success)
-        return result;
-
-    for (u32 i = 0; i < swap_chain->m_frame_count; i++)
-    {
-        Image *image = images[i];
-        image->m_handle = raw_images[i];
-        image->m_swap_chain_image = true;
-        image->init(swap_chain->m_format, swap_chain->m_width, swap_chain->m_height, 1, 1);
-
-        set_object_name(image, eastl::format("SwapChain Image {}", i));
-    }
-
-    return APIResult::Success;
 }
 
 void Device::wait_for_work()
@@ -283,7 +344,7 @@ APIResult Device::acquire_next_image(SwapChain *swap_chain, u32 &image_id)
     ZoneScoped;
 
     auto &acquire_sema = swap_chain->m_acquire_semas[swap_chain->m_current_frame_id];
-    auto result = CHECK(vkAcquireNextImageKHR(m_handle, *swap_chain, UINT64_MAX, acquire_sema, nullptr, &image_id));
+    auto result = CHECK(vkAcquireNextImageKHR(m_handle, swap_chain->m_handle, UINT64_MAX, acquire_sema, nullptr, &image_id));
     swap_chain->m_current_frame_id = image_id;
 
     return result;
@@ -570,6 +631,43 @@ void Device::delete_descriptor_set_layout(DescriptorSetLayout *layout)
     layout->m_handle = VK_NULL_HANDLE;
 }
 
+u64 Device::get_descriptor_buffer_alignment()
+{
+    ZoneScoped;
+
+    auto info = get_properties_next<VkPhysicalDeviceDescriptorBufferPropertiesEXT>(m_physical_device);
+    return info.descriptorBufferOffsetAlignment;
+}
+
+u64 Device::get_descriptor_size(DescriptorType type)
+{
+    ZoneScoped;
+
+    auto info = get_properties_next<VkPhysicalDeviceDescriptorBufferPropertiesEXT>(m_physical_device);
+    u64 sizes[] = {
+        [(u32)DescriptorType::Sampler] = info.samplerDescriptorSize,
+        [(u32)DescriptorType::SampledImage] = info.sampledImageDescriptorSize,
+        [(u32)DescriptorType::UniformBuffer] = info.uniformBufferDescriptorSize,
+        [(u32)DescriptorType::StorageImage] = info.storageImageDescriptorSize,
+        [(u32)DescriptorType::StorageBuffer] = info.storageBufferDescriptorSize,
+    };
+
+    return sizes[(u32)type];
+}
+
+u64 Device::get_aligned_buffer_memory(BufferUsage buffer_usage, u64 unaligned_size)
+{
+    ZoneScoped;
+
+    constexpr static BufferUsage k_descriptors = BufferUsage::ResourceDescriptor | BufferUsage::SamplerDescriptor;
+
+    u64 result = unaligned_size;
+    if (buffer_usage & k_descriptors)
+        result = Memory::align_up(result, get_descriptor_buffer_alignment());
+
+    return result;
+}
+
 u64 Device::get_descriptor_set_layout_size(DescriptorSetLayout layout)
 {
     ZoneScoped;
@@ -701,22 +799,22 @@ void Device::update_descriptor_set(eastl::span<WriteDescriptorSet> writes, eastl
     vkUpdateDescriptorSets(m_handle, writes.size(), writes.data(), copies.size(), copies.data());
 }
 
-eastl::tuple<u64, u64> Device::get_buffer_memory_size(Buffer *buffer)
+eastl::tuple<u64, u64> Device::get_buffer_memory_size(BufferID buffer_id)
 {
     ZoneScoped;
 
     VkMemoryRequirements memory_requirements = {};
-    vkGetBufferMemoryRequirements(m_handle, buffer->m_handle, &memory_requirements);
+    vkGetBufferMemoryRequirements(m_handle, *get_buffer(buffer_id), &memory_requirements);
 
     return { memory_requirements.size, memory_requirements.alignment };
 }
 
-eastl::tuple<u64, u64> Device::get_image_memory_size(Image *image)
+eastl::tuple<u64, u64> Device::get_image_memory_size(ImageID image_id)
 {
     ZoneScoped;
 
     VkMemoryRequirements memory_requirements = {};
-    vkGetImageMemoryRequirements(m_handle, image->m_handle, &memory_requirements);
+    vkGetImageMemoryRequirements(m_handle, *get_image(image_id), &memory_requirements);
 
     return { memory_requirements.size, memory_requirements.alignment };
 }
@@ -728,11 +826,11 @@ APIResult Device::create_device_memory(DeviceMemory *device_memory, DeviceMemory
     if (!validate_handle(device_memory))
         return APIResult::HanldeNotInitialized;
 
-    u32 memory_type_index = m_physical_device->get_memory_type_index(desc->m_flags);
+    u32 memory_type_index = get_memory_type_index(desc->m_flags);
     u64 available_space = ~0;
 
     if (is_feature_supported(DeviceFeature::MemoryBudget))
-        available_space = m_physical_device->get_heap_budget(desc->m_flags);
+        available_space = get_heap_budget(desc->m_flags);
 
     if (desc->m_size > available_space)
     {
@@ -768,28 +866,67 @@ void Device::delete_device_memory(DeviceMemory *device_memory)
     vkFreeMemory(m_handle, device_memory->m_handle, nullptr);
 }
 
-void Device::bind_memory(DeviceMemory *device_memory, Buffer *buffer, u64 memory_offset)
+u32 Device::get_memory_type_index(MemoryFlag flags)
 {
     ZoneScoped;
 
-    vkBindBufferMemory(m_handle, buffer->m_handle, device_memory->m_handle, memory_offset);
+    VkPhysicalDeviceMemoryProperties2 device_memory_properties = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2 };
+    vkGetPhysicalDeviceMemoryProperties2(m_physical_device, &device_memory_properties);
+
+    auto vk_flags = (VkMemoryPropertyFlags)flags;
+    auto &mem_props = device_memory_properties.memoryProperties;
+    for (u32 i = 0; i < mem_props.memoryTypeCount; i++)
+        if ((mem_props.memoryTypes[i].propertyFlags & vk_flags) == vk_flags)
+            return i;
+
+    LOG_ERROR("Memory type index is not found.");
+
+    return -1;
 }
 
-void Device::bind_memory(DeviceMemory *device_memory, Image *image, u64 memory_offset)
+u32 Device::get_heap_index(MemoryFlag flags)
 {
     ZoneScoped;
 
-    vkBindImageMemory(m_handle, image->m_handle, device_memory->m_handle, memory_offset);
+    VkPhysicalDeviceMemoryProperties2 device_memory_properties = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2 };
+    vkGetPhysicalDeviceMemoryProperties2(m_physical_device, &device_memory_properties);
+
+    u32 i = get_memory_type_index(flags);
+    return device_memory_properties.memoryProperties.memoryTypes[i].heapIndex;
+}
+u64 Device::get_heap_budget(MemoryFlag flags)
+{
+    ZoneScoped;
+
+    if (!is_feature_supported(DeviceFeature::MemoryBudget))
+        return ~0;
+
+    VkPhysicalDeviceMemoryBudgetPropertiesEXT memory_budget = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_BUDGET_PROPERTIES_EXT };
+    VkPhysicalDeviceMemoryProperties2 device_memory_properties = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2, &memory_budget };
+    vkGetPhysicalDeviceMemoryProperties2(m_physical_device, &device_memory_properties);
+
+    return memory_budget.heapUsage[get_heap_index(flags)];
 }
 
-APIResult Device::create_buffer(Buffer *buffer, BufferDesc *desc)
+void Device::bind_memory(DeviceMemory *device_memory, BufferID buffer_id, u64 memory_offset)
 {
     ZoneScoped;
 
-    if (!validate_handle(buffer))
-        return APIResult::HanldeNotInitialized;
+    vkBindBufferMemory(m_handle, *get_buffer(buffer_id), device_memory->m_handle, memory_offset);
+}
 
-    u64 aligned_size = m_physical_device->get_aligned_buffer_memory(desc->m_usage_flags, desc->m_data_size);
+void Device::bind_memory(DeviceMemory *device_memory, ImageID image_id, u64 memory_offset)
+{
+    ZoneScoped;
+
+    vkBindImageMemory(m_handle, *get_image(image_id), device_memory->m_handle, memory_offset);
+}
+
+BufferID Device::create_buffer(BufferDesc *desc)
+{
+    ZoneScoped;
+
+    u64 aligned_size = get_aligned_buffer_memory(desc->m_usage_flags, desc->m_data_size);
     BufferUsage buffer_usage = desc->m_usage_flags | BufferUsage::BufferDeviceAddress;
     VkBufferCreateInfo create_info = {
         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
@@ -797,40 +934,45 @@ APIResult Device::create_buffer(Buffer *buffer, BufferDesc *desc)
         .size = aligned_size,
         .usage = static_cast<VkBufferUsageFlags>(buffer_usage),
     };
-    auto result = CHECK(vkCreateBuffer(m_handle, &create_info, nullptr, &buffer->m_handle));
+    VkBuffer buffer_handle = nullptr;
+    auto result = CHECK(vkCreateBuffer(m_handle, &create_info, nullptr, &buffer_handle));
     if (result != APIResult::Success)
-        return result;
+        return BufferID::Invalid;
 
     VkBufferDeviceAddressInfo device_address_info = {
         .sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
         .pNext = nullptr,
-        .buffer = *buffer,
+        .buffer = buffer_handle,
     };
+    u64 device_address = vkGetBufferDeviceAddress(m_handle, &device_address_info);
+    auto [buffer_id, buffer] = m_resources.m_buffers.add_resource();
+    buffer->init(buffer_handle, desc->m_stride, device_address);
 
-    /// INIT BUFFER ///
-    buffer->m_stride = desc->m_stride;
-    buffer->m_device_address = vkGetBufferDeviceAddress(m_handle, &device_address_info);
-
-    return APIResult::Success;
+    return buffer_id;
 }
 
-void Device::delete_buffer(Buffer *buffer)
+void Device::delete_buffer(BufferID buffer_id)
 {
     ZoneScoped;
 
-    if (!validate_handle(buffer))
+    Buffer *buffer = get_buffer(buffer_id);
+    if (buffer_id == BufferID::Invalid && buffer == nullptr)
         return;
 
     vkDestroyBuffer(m_handle, *buffer, nullptr);
     buffer->m_handle = VK_NULL_HANDLE;
 }
 
-APIResult Device::create_image(Image *image, ImageDesc *desc)
+Buffer *Device::get_buffer(BufferID buffer_id)
 {
     ZoneScoped;
 
-    if (!validate_handle(image))
-        return APIResult::HanldeNotInitialized;
+    return &m_resources.m_buffers.get_resource(buffer_id);
+}
+
+ImageID Device::create_image(ImageDesc *desc)
+{
+    ZoneScoped;
 
     VkImageCreateInfo create_info = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
@@ -850,19 +992,22 @@ APIResult Device::create_image(Image *image, ImageDesc *desc)
         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
     };
 
-    auto result = CHECK(vkCreateImage(m_handle, &create_info, nullptr, &image->m_handle));
+    VkImage image_handle = nullptr;
+    auto result = CHECK(vkCreateImage(m_handle, &create_info, nullptr, &image_handle));
     if (result != APIResult::Success)
-        return result;
+        return ImageID::Invalid;
 
-    image->init(desc->m_format, desc->m_width, desc->m_height, desc->m_slice_count, desc->m_mip_levels);
-    return APIResult::Success;
+    auto [image_id, image] = m_resources.m_images.add_resource();
+    image->init(image_handle, desc->m_format, desc->m_width, desc->m_height, desc->m_slice_count, desc->m_mip_levels);
+    return image_id;
 }
 
-void Device::delete_image(Image *image)
+void Device::delete_image(ImageID image_id)
 {
     ZoneScoped;
 
-    if (!validate_handle(image))
+    Image *image = get_image(image_id);
+    if (image_id == ImageID::Invalid && image == nullptr)
         return;
 
     if (!image->m_swap_chain_image)
@@ -871,7 +1016,12 @@ void Device::delete_image(Image *image)
     image->m_handle = VK_NULL_HANDLE;
 }
 
-APIResult Device::create_image_view(ImageView *view, ImageViewDesc *desc)
+Image *Device::get_image(ImageID image_id)
+{
+    return &m_resources.m_images.get_resource(image_id);
+}
+
+ImageViewID Device::create_image_view(ImageViewDesc *desc)
 {
     ZoneScoped;
 
@@ -892,30 +1042,37 @@ APIResult Device::create_image_view(ImageView *view, ImageViewDesc *desc)
         .subresourceRange.layerCount = desc->m_subresource_info.m_slice_count,
     };
 
-    view->m_format = desc->m_image->m_format;
-    view->m_type = desc->m_type;
-    view->m_subresource_info = desc->m_subresource_info;
+    VkImageView image_view_handle = nullptr;
+    auto result = CHECK(vkCreateImageView(m_handle, &create_info, nullptr, &image_view_handle));
+    if (result != APIResult::Success)
+        return ImageViewID::Invalid;
 
-    return CHECK(vkCreateImageView(m_handle, &create_info, nullptr, &view->m_handle));
+    auto [image_view_id, image_view] = m_resources.m_image_views.add_resource();
+    image_view->init(image_view_handle, desc->m_image->m_format, desc->m_type, desc->m_subresource_info);
+
+    return image_view_id;
 }
 
-void Device::delete_image_view(ImageView *image_view)
+void Device::delete_image_view(ImageViewID image_view_id)
 {
     ZoneScoped;
 
-    if (!validate_handle(image_view))
+    ImageView *image_view = get_image_view(image_view_id);
+    if (image_view_id == ImageViewID::Invalid && image_view == nullptr)
         return;
 
     vkDestroyImageView(m_handle, *image_view, nullptr);
     image_view->m_handle = VK_NULL_HANDLE;
 }
 
-APIResult Device::create_sampler(Sampler *sampler, SamplerDesc *desc)
+ImageView *Device::get_image_view(ImageViewID image_view_id)
+{
+    return &m_resources.m_image_views.get_resource(image_view_id);
+}
+
+SamplerID Device::create_sampler(SamplerDesc *desc)
 {
     ZoneScoped;
-
-    if (!validate_handle(sampler))
-        return APIResult::HanldeNotInitialized;
 
     VkSamplerCreateInfo create_info = {
         .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
@@ -937,18 +1094,32 @@ APIResult Device::create_sampler(Sampler *sampler, SamplerDesc *desc)
         .borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK,
     };
 
-    return CHECK(vkCreateSampler(m_handle, &create_info, nullptr, &sampler->m_handle));
+    VkSampler sampler_handle = nullptr;
+    auto result = CHECK(vkCreateSampler(m_handle, &create_info, nullptr, &sampler_handle));
+    if (result != APIResult::Success)
+        return SamplerID::Invalid;
+
+    auto [sampler_id, sampler] = m_resources.m_samplers.add_resource();
+    sampler->init(sampler_handle);
+
+    return sampler_id;
 }
 
-void Device::delete_sampler(Sampler *sampler)
+void Device::delete_sampler(SamplerID sampler_id)
 {
     ZoneScoped;
 
-    if (!validate_handle(sampler))
+    Sampler *sampler = get_sampler(sampler_id);
+    if (sampler_id == SamplerID::Invalid && sampler == nullptr)
         return;
 
     vkDestroySampler(m_handle, *sampler, nullptr);
     sampler->m_handle = VK_NULL_HANDLE;
+}
+
+Sampler *Device::get_sampler(SamplerID sampler_id)
+{
+    return &m_resources.m_samplers.get_resource(sampler_id);
 }
 
 }  // namespace lr::Graphics

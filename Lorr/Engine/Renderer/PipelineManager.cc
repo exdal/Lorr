@@ -124,7 +124,7 @@ PipelineManager::~PipelineManager()
         m_device->delete_pipeline(&pipeline);
 }
 
-PipelineID PipelineManager::compile_pipeline(PipelineCompileInfo &compile_info, PipelineAttachmentInfo &attachment_info, PipelineLayout &layout)
+PipelineInfoID PipelineManager::compile_pipeline(PipelineCompileInfo &compile_info, PipelineAttachmentInfo &attachment_info, PipelineLayout &layout)
 {
     ZoneScoped;
 
@@ -132,7 +132,7 @@ PipelineID PipelineManager::compile_pipeline(PipelineCompileInfo &compile_info, 
     if (!is_handle_valid(pipeline_info_id))
     {
         LOG_ERROR("Cannot compile pipeline info! Resource pool is full.");
-        return PipelineID::Invalid;
+        return PipelineInfoID::Invalid;
     }
 
     auto &graphics_pipeline_info = compile_info.m_graphics_pipeline_info;
@@ -147,7 +147,7 @@ PipelineID PipelineManager::compile_pipeline(PipelineCompileInfo &compile_info, 
         if (!is_handle_valid(shader_id))
         {
             LOG_ERROR("Cannot create shader! Resource pool is full.");
-            return PipelineID::Invalid;
+            return PipelineInfoID::Invalid;
         }
 
         m_device->create_shader(shader, reflection_data.m_compiled_stage, ir);
@@ -169,12 +169,12 @@ PipelineID PipelineManager::compile_pipeline(PipelineCompileInfo &compile_info, 
     if (!is_handle_valid(pipeline_id))
     {
         LOG_ERROR("Cannot create pipelines. Resource pool is full.");
-        return PipelineID::Invalid;
+        return PipelineInfoID::Invalid;
     }
 
     m_device->create_graphics_pipeline(pipeline, &graphics_pipeline_info, &attachment_info);
 
-    return pipeline_id;
+    return pipeline_info_id;
 }
 
 PipelineManager::PipelineInfo *PipelineManager::get_pipeline_info(PipelineInfoID pipeline_id)
@@ -284,8 +284,8 @@ void DescriptorManager::bind_all(CommandList *list, CommandType type, u32 frame_
     auto dynamic_sets_begin = m_dynamic_sets.begin() + (frame_idx * m_dynamic_sets_stride);
     eastl::span dynamic_sets(dynamic_sets_begin, m_dynamic_sets_stride);
 
-    list->set_descriptor_sets(m_pipeline_layout, bind_point, 0, m_persistent_sets);
-    list->set_descriptor_sets(m_pipeline_layout, bind_point, m_persistent_sets.size(), dynamic_sets);
+    list->set_descriptor_sets(bind_point, &m_pipeline_layout, 0, m_persistent_sets);
+    list->set_descriptor_sets(bind_point, &m_pipeline_layout, m_persistent_sets.size(), dynamic_sets);
 }
 
 DescriptorSet &DescriptorManager::get_descriptor_set(u32 layout_idx)

@@ -1,7 +1,7 @@
 #pragma once
 
+#include "Graphics/CommandList.hh"
 #include "PipelineManager.hh"
-#include "Task.hh"
 #include "TaskResource.hh"
 
 namespace lr::Graphics
@@ -17,17 +17,18 @@ struct TaskContext
 
     CommandList &get_command_list();
     Pipeline *get_pipeline();
-    ImageView *get_image_view(GenericResource &use);
+    ShaderStructRange *get_descriptor_range(ShaderStage shader_stage);
+    void set_descriptors(ShaderStage shader_stage, std::initializer_list<GenericResource> resources);
+
     glm::uvec2 get_image_size(GenericResource &use);
     glm::uvec4 get_pass_size();
     eastl::tuple<eastl::vector<Format>, Format> get_attachment_formats();
     eastl::span<GenericResource> get_resources();
 
     template<typename T>
-    void set_push_constant(const T &v, u32 offset = 0)
+    void set_push_constant(ShaderStage shader_stage, T &v, u32 offset = 0)
     {
-        offset += 4;
-        m_command_list.set_push_constants(&v, sizeof(T), offset, get_pipeline()->m_layout);
+        m_command_list.set_push_constants(&v, sizeof(T), offset, &get_pipeline()->m_layout, shader_stage);
     }
 
     RenderingAttachment as_color_attachment(GenericResource &use, const ColorClearValue &clear_value = { 0.0f, 0.0f, 0.0f, 1.0f });
@@ -64,7 +65,7 @@ struct Task
 
     eastl::string_view m_name;
     eastl::span<GenericResource> m_generic_resources;
-    PipelineID m_pipeline_id = {};
+    PipelineInfoID m_pipeline_info_id = {};
 };
 
 template<typename TaskT>
@@ -100,7 +101,7 @@ struct TaskWrapper : Task
 
 struct TaskBarrier
 {
-    ImageID m_image_id = {};
+    TaskImageID m_task_image_id = TaskImageID::Invalid;
     ImageLayout m_src_layout = {};
     ImageLayout m_dst_layout = {};
     TaskAccess::Access m_src_access = {};
@@ -114,17 +115,15 @@ struct TaskBatch
     TaskAccess::Access m_execution_access = TaskAccess::None;
     eastl::vector<usize> m_wait_barriers = {};
     eastl::vector<TaskID> m_tasks = {};
-
-    // For resources are not connected to any other passes but still need a barrier
-    // For example, SwapChain image needs to be in present layout at the end of execution
-    eastl::vector<usize> m_end_barriers = {};
 };
 
 struct TaskSubmitScope
 {
-    eastl::vector<Semaphore *> m_wait_semas = {};
     eastl::vector<TaskBatchID> m_batches = {};
-    eastl::vector<Semaphore *> m_signal_semas = {};
+
+    // For resources are not connected to any other passes but still need a barrier
+    // For example, SwapChain image needs to be in present layout at the end of execution
+    eastl::vector<usize> m_end_barriers = {};
 };
 
 }  // namespace lr::Graphics

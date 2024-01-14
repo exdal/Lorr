@@ -15,8 +15,8 @@ struct EventManager
 {
     struct EventIdentifier
     {
-        Event m_event;
-        TData m_data;
+        Event m_event = {};
+        TData m_data = {};
     };
 
     using ring_buffer = typename eastl::conditional<

@@ -1,6 +1,3 @@
-// Created on Thursday May 5th 2022 by exdal
-// Last modified on Monday August 28th 2023 by exdal
-
 #include "Win32Window.hh"
 
 #ifndef WIN32_LEAN_AND_MEAN
@@ -8,7 +5,6 @@
 #endif
 #include <Windows.h>
 
-#include "Engine.hh"
 #include "Input/Key.hh"
 
 namespace lr
@@ -59,7 +55,7 @@ void Win32Window::init(const WindowDesc &desc)
     i32 adjustedWidth = windowWidth;
     i32 adjustedHeight = windowHeight;
 
-    if (desc.m_Flags & WindowFlag::FullScreen)
+    if (desc.m_flags & WindowFlag::FullScreen)
     {
         style = WS_POPUP | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
 
@@ -70,10 +66,10 @@ void Win32Window::init(const WindowDesc &desc)
     }
     else
     {
-        if (desc.m_Flags & WindowFlag::Borderless)
+        if (desc.m_flags & WindowFlag::Borderless)
             style = WS_POPUP;
 
-        if (desc.m_Flags & WindowFlag::Resizable)
+        if (desc.m_flags & WindowFlag::Resizable)
             style |= WS_MAXIMIZEBOX | WS_THICKFRAME;
 
         RECT rc = { 0, 0, windowWidth, windowHeight };
@@ -81,7 +77,7 @@ void Win32Window::init(const WindowDesc &desc)
         adjustedWidth = rc.right - rc.left;
         adjustedHeight = rc.bottom - rc.top;
 
-        if (desc.m_Flags & WindowFlag::Centered)
+        if (desc.m_flags & WindowFlag::Centered)
         {
             windowPosX += (current_display->m_res_w / 2) - (adjustedWidth / 2);
             windowPosY += (current_display->m_res_h / 2) - (adjustedHeight / 2);
@@ -105,7 +101,7 @@ void Win32Window::init(const WindowDesc &desc)
     SetWindowLongPtrA((HWND)m_handle, 0, (LONG_PTR)this);
 
     i32 swFlags = SW_SHOW;
-    if (desc.m_Flags & WindowFlag::Maximized)
+    if (desc.m_flags & WindowFlag::Maximized)
         swFlags = SW_SHOWMAXIMIZED;
 
     ShowWindow((HWND)m_handle, swFlags);
@@ -185,8 +181,7 @@ LRESULT CALLBACK LRWindowProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
     if (!window)  // User data is not set yet, return default proc
         return DefWindowProcA(hWnd, msg, wParam, lParam);
 
-    Engine *engine = Engine::get();
-    EngineEventData event_data = {};
+    WindowEventData event_data = {};
 
     switch (msg)
     {
@@ -194,79 +189,79 @@ LRESULT CALLBACK LRWindowProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
         case WM_DESTROY:
         case WM_QUIT:
             window->m_should_close = true;
-            engine->push_event(ENGINE_EVENT_QUIT, event_data);
+            window->push_event(LR_WINDOW_EVENT_QUIT, event_data);
             break;
 
         case WM_LBUTTONDOWN:
             event_data.m_mouse = LR_KEY_LMOUSE;
             event_data.m_mouse_state = LR_MOUSE_STATE_DOWN;
-            engine->push_event(ENGINE_EVENT_MOUSE_STATE, event_data);
+            window->push_event(LR_WINDOW_EVENT_MOUSE_STATE, event_data);
             break;
 
         case WM_LBUTTONUP:
             event_data.m_mouse = LR_KEY_LMOUSE;
             event_data.m_mouse_state = LR_MOUSE_STATE_UP;
-            engine->push_event(ENGINE_EVENT_MOUSE_STATE, event_data);
+            window->push_event(LR_WINDOW_EVENT_MOUSE_STATE, event_data);
             break;
 
         case WM_LBUTTONDBLCLK:
             event_data.m_mouse = LR_KEY_LMOUSE;
             event_data.m_mouse_state = LR_MOUSE_STATE_DOUBLE_CLICK;
-            engine->push_event(ENGINE_EVENT_MOUSE_STATE, event_data);
+            window->push_event(LR_WINDOW_EVENT_MOUSE_STATE, event_data);
             break;
 
         case WM_RBUTTONDOWN:
             event_data.m_mouse = LR_KEY_RMOUSE;
             event_data.m_mouse_state = LR_MOUSE_STATE_DOWN;
-            engine->push_event(ENGINE_EVENT_MOUSE_STATE, event_data);
+            window->push_event(LR_WINDOW_EVENT_MOUSE_STATE, event_data);
             break;
 
         case WM_RBUTTONUP:
             event_data.m_mouse = LR_KEY_RMOUSE;
             event_data.m_mouse_state = LR_MOUSE_STATE_UP;
-            engine->push_event(ENGINE_EVENT_MOUSE_STATE, event_data);
+            window->push_event(LR_WINDOW_EVENT_MOUSE_STATE, event_data);
             break;
 
         case WM_RBUTTONDBLCLK:
             event_data.m_mouse = LR_KEY_RMOUSE;
             event_data.m_mouse_state = LR_MOUSE_STATE_DOUBLE_CLICK;
-            engine->push_event(ENGINE_EVENT_MOUSE_STATE, event_data);
+            window->push_event(LR_WINDOW_EVENT_MOUSE_STATE, event_data);
             break;
 
         case WM_MBUTTONDOWN:
             event_data.m_mouse = LR_KEY_MMOUSE;
             event_data.m_mouse_state = LR_MOUSE_STATE_DOWN;
-            engine->push_event(ENGINE_EVENT_MOUSE_STATE, event_data);
+            window->push_event(LR_WINDOW_EVENT_MOUSE_STATE, event_data);
             break;
 
         case WM_MBUTTONUP:
             event_data.m_mouse = LR_KEY_MMOUSE;
             event_data.m_mouse_state = LR_MOUSE_STATE_UP;
-            engine->push_event(ENGINE_EVENT_MOUSE_STATE, event_data);
+            window->push_event(LR_WINDOW_EVENT_MOUSE_STATE, event_data);
             break;
 
         case WM_MBUTTONDBLCLK:
             event_data.m_mouse = LR_KEY_MMOUSE;
             event_data.m_mouse_state = LR_MOUSE_STATE_DOUBLE_CLICK;
-            engine->push_event(ENGINE_EVENT_MOUSE_STATE, event_data);
+            window->push_event(LR_WINDOW_EVENT_MOUSE_STATE, event_data);
             break;
 
         case WM_MOUSEMOVE:
             event_data.m_mouse_x = LOWORD(lParam);
             event_data.m_mouse_y = HIWORD(lParam);
-            engine->push_event(ENGINE_EVENT_MOUSE_POSITION, event_data);
+            window->push_event(LR_WINDOW_EVENT_MOUSE_POSITION, event_data);
             break;
 
         case WM_KEYDOWN:
             event_data.m_key = LR_KEY_NONE;
             event_data.m_key_state = LR_KEY_STATE_DOWN;
-            engine->push_event(ENGINE_EVENT_KEYBOARD_STATE, event_data);
+            window->push_event(LR_WINDOW_EVENT_KEYBOARD_STATE, event_data);
             break;
 
         case WM_KEYUP:
             event_data.m_key = LR_KEY_NONE;
             event_data.m_key_state = LR_KEY_STATE_UP;
-            engine->push_event(ENGINE_EVENT_KEYBOARD_STATE, event_data);
+            window->push_event(LR_WINDOW_EVENT_KEYBOARD_STATE, event_data);
             break;
 
         case WM_ENTERSIZEMOVE:
@@ -282,7 +277,7 @@ LRESULT CALLBACK LRWindowProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
             event_data.m_size_width = rc.right;
             event_data.m_size_height = rc.bottom;
-            engine->push_event(ENGINE_EVENT_RESIZE, event_data);
+            window->push_event(LR_WINDOW_EVENT_RESIZE, event_data);
 
             break;
         }
@@ -293,7 +288,7 @@ LRESULT CALLBACK LRWindowProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             {
                 event_data.m_size_width = (u32)LOWORD(lParam);
                 event_data.m_size_height = (u32)HIWORD(lParam);
-                engine->push_event(ENGINE_EVENT_RESIZE, event_data);
+                window->push_event(LR_WINDOW_EVENT_RESIZE, event_data);
             }
 
             break;

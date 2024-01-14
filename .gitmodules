@@ -34,9 +34,6 @@
 [submodule "Vendor/tracy"]
 	path = Vendor/tracy
 	url = https://github.com/wolfpld/tracy.git
-[submodule "Vendor/imgui-v"]
-	path = Vendor/imgui-v
-	url = https://github.com/exdal/imgui-v.git
 [submodule "Vendor/vk-bootstrap"]
 	path = Vendor/vk-bootstrap
 	url = https://github.com/charles-lunarg/vk-bootstrap.git

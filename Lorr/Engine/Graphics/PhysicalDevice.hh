@@ -29,21 +29,7 @@ struct PhysicalDevice : Tracked<VkPhysicalDevice>
 {
     APIResult init(VkPhysicalDevice handle, DeviceFeature features);
 
-    u32 get_memory_type_index(MemoryFlag flags);
-    u32 get_heap_index(MemoryFlag flags);
-    u64 get_heap_budget(MemoryFlag flags);
-    u64 get_heap_usage(MemoryFlag flags);
-    u64 get_descriptor_buffer_alignment();
-    u64 get_descriptor_size(DescriptorType type);
-    u64 get_aligned_buffer_memory(BufferUsage buffer_usage, u64 unaligned_size);
 
-    bool is_feature_supported(DeviceFeature feature);
-
-    VkPhysicalDeviceMemoryBudgetPropertiesEXT m_memory_budget = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_BUDGET_PROPERTIES_EXT };
-    VkPhysicalDeviceMemoryProperties2 m_memory_props2 = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2 };
-    VkPhysicalDeviceProperties2 m_properties = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2 };
-    VkPhysicalDeviceDescriptorBufferPropertiesEXT m_descriptor_buffer_props = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_PROPERTIES_EXT };
-    DeviceFeature m_supported_features = {};
 };
 LR_ASSIGN_OBJECT_TYPE(PhysicalDevice, VK_OBJECT_TYPE_PHYSICAL_DEVICE);
 

@@ -1,28 +1,51 @@
 #include "BaseWindow.hh"
 
-#include "Engine.hh"
-
 namespace lr
 {
-    SystemMetrics::Display *BaseWindow::get_display(u32 monitor)
+void BaseWindow::poll()
+{
+    ZoneScoped;
+    while (m_event_manager.peek())
     {
-        if (monitor >= SystemMetrics::k_max_supported_display)
-            return nullptr;
+        WindowEventData data = {};
+        Event event = m_event_manager.dispatch(data);
 
-        return &m_system_metrics.m_displays[monitor];
+        switch (event)
+        {
+            case LR_WINDOW_EVENT_QUIT:
+            {
+                m_should_close = true;
+                break;
+            }
+            case LR_WINDOW_EVENT_RESIZE:
+            {
+                m_width = data.m_size_width;
+                m_height = data.m_size_height;
+                break;
+            }
+            default:
+                break;
+        }
     }
+}
 
-    bool BaseWindow::should_close()
-    {
-        return m_should_close;
-    }
+void BaseWindow::push_event(Event event, WindowEventData &data)
+{
+    ZoneScoped;
 
-    void BaseWindow::on_size_changed(u32 width, u32 height)
-    {
-        LOG_TRACE("Window size changed to W: {}, H: {}.", width, height);
+    m_event_manager.push(event, data);
+}
 
-        m_width = width;
-        m_height = height;
-    }
+SystemMetrics::Display *BaseWindow::get_display(u32 monitor)
+{
+    if (monitor >= SystemMetrics::k_max_supported_display)
+        return nullptr;
 
+    return &m_system_metrics.m_displays[monitor];
+}
+
+bool BaseWindow::should_close()
+{
+    return m_should_close;
+}
 }  // namespace lr

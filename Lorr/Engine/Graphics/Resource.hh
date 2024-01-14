@@ -8,6 +8,7 @@ namespace lr::Graphics
 /////////////////////////////////
 // BUFFERS
 
+LR_HANDLE(BufferID, u32);
 struct BufferDesc
 {
     BufferUsage m_usage_flags = BufferUsage::Vertex;
@@ -17,6 +18,13 @@ struct BufferDesc
 
 struct Buffer
 {
+    void init(VkBuffer buffer, u32 stride, u64 device_address)
+    {
+        m_handle = buffer;
+        m_stride = stride;
+        m_device_address = device_address;
+    }
+
     u32 m_stride = 1;
     u64 m_device_address = 0;
 
@@ -31,6 +39,7 @@ LR_ASSIGN_OBJECT_TYPE(Buffer, VK_OBJECT_TYPE_BUFFER);
 /////////////////////////////////
 // IMAGES
 
+LR_HANDLE(ImageID, u32);
 struct ImageDesc
 {
     ImageUsage m_usage_flags = ImageUsage::Sampled;
@@ -48,8 +57,9 @@ struct ImageDesc
 
 struct Image : Tracked<VkImage>
 {
-    void init(Format format, u32 width, u32 height, u32 slice_count, u32 mip_levels)
+    void init(VkImage image, Format format, u32 width, u32 height, u32 slice_count, u32 mip_levels)
     {
+        m_handle = image;
         m_format = format;
         m_width = width;
         m_height = height;
@@ -73,6 +83,7 @@ LR_ASSIGN_OBJECT_TYPE(Image, VK_OBJECT_TYPE_IMAGE);
 // image format. See:
 // https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VkImageViewCreateInfo.html
 
+LR_HANDLE(ImageViewID, u32);
 struct ImageSubresourceInfo
 {
     ImageAspect m_aspect_mask = ImageAspect::Color;
@@ -101,6 +112,14 @@ struct ImageSubresourceRange : VkImageSubresourceRange
 
 struct ImageView : Tracked<VkImageView>
 {
+    void init(VkImageView image_view_handle, Format format, ImageViewType type, const ImageSubresourceInfo &subresource_info)
+    {
+        m_handle = image_view_handle;
+        m_format = format;
+        m_type = type;
+        m_subresource_info = subresource_info;
+    }
+
     Format m_format = Format::Unknown;
     ImageViewType m_type = ImageViewType::View2D;
     ImageSubresourceInfo m_subresource_info = {};
@@ -110,16 +129,17 @@ LR_ASSIGN_OBJECT_TYPE(ImageView, VK_OBJECT_TYPE_IMAGE_VIEW);
 /////////////////////////////////
 // SAMPLERS
 
+LR_HANDLE(SamplerID, u32);
 struct SamplerDesc
 {
-    Filtering m_min_filter : 1;
-    Filtering m_mag_filter : 1;
-    Filtering m_mip_filter : 1;
-    TextureAddressMode m_address_u : 2;
-    TextureAddressMode m_address_v : 2;
-    TextureAddressMode m_address_w : 2;
-    u32 m_use_anisotropy : 1;
-    CompareOp m_compare_op : 3;
+    Filtering m_min_filter : 1 = {};
+    Filtering m_mag_filter : 1 = {};
+    Filtering m_mip_filter : 1 = {};
+    TextureAddressMode m_address_u : 2 = {};
+    TextureAddressMode m_address_v : 2 = {};
+    TextureAddressMode m_address_w : 2 = {};
+    u32 m_use_anisotropy : 1 = {};
+    CompareOp m_compare_op : 3 = {};
     float m_max_anisotropy = 0;
     float m_mip_lod_bias = 0;
     float m_min_lod = 0;
@@ -128,6 +148,7 @@ struct SamplerDesc
 
 struct Sampler : Tracked<VkSampler>
 {
+    void init(VkSampler sampler_handle) { m_handle = sampler_handle; }
 };
 LR_ASSIGN_OBJECT_TYPE(Sampler, VK_OBJECT_TYPE_SAMPLER);
 
@@ -290,6 +311,16 @@ struct ResourcePool
     u64 m_first_list = 0;  // This bitmap indicates that SL[bit(i)] is full or not
     u64 m_second_list[FL_SIZE] = {};
     eastl::vector<ResourceT> m_resources = {};
+};
+
+struct ResourcePools
+{
+    // vectors move memories on de/allocation, so using raw pointer is not safe
+    // instead we have ResourcePool that is fixed size and does not do allocations
+    ResourcePool<Buffer, BufferID> m_buffers = {};
+    ResourcePool<Image, ImageID> m_images = {};
+    ResourcePool<ImageView, ImageViewID> m_image_views = {};
+    ResourcePool<Sampler, SamplerID> m_samplers = {};
 };
 
 }  // namespace lr::Graphics

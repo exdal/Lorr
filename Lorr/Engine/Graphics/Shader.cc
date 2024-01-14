@@ -147,6 +147,7 @@ eastl::vector<u32> ShaderCompiler::compile_shader(ShaderCompileDesc *desc)
     args.push_back(L"-spirv");
     args.push_back(L"-fspv-target-env=vulkan1.3");
     args.push_back(L"-fvk-use-gl-layout");
+    // args.push_back(L"-fspv-reflect");
     args.push_back(L"-no-warnings");
     args.push_back(L"-T");
     args.push_back(kHLSLStageMap[(u32)options[PragmaOptions::Stage].m_stage]);
@@ -187,10 +188,10 @@ ShaderReflectionData ShaderCompiler::reflect_spirv(ShaderReflectionDesc *desc, e
 
     constexpr static ShaderStage kStageMap[] = {
         [spv::ExecutionModel::ExecutionModelVertex] = ShaderStage::Vertex,
-        [spv::ExecutionModel::ExecutionModelFragment] = ShaderStage::Pixel,
-        [spv::ExecutionModel::ExecutionModelGLCompute] = ShaderStage::Compute,
         [spv::ExecutionModel::ExecutionModelTessellationControl] = ShaderStage::TessellationControl,
         [spv::ExecutionModel::ExecutionModelTessellationEvaluation] = ShaderStage::TessellationEvaluation,
+        [spv::ExecutionModel::ExecutionModelFragment] = ShaderStage::Pixel,
+        [spv::ExecutionModel::ExecutionModelGLCompute] = ShaderStage::Compute,
     };
 
     spirv_cross::CompilerHLSL compiler(ir.data(), ir.size());
@@ -198,22 +199,30 @@ ShaderReflectionData ShaderCompiler::reflect_spirv(ShaderReflectionDesc *desc, e
     auto resources = compiler.get_shader_resources();
     auto &entry_point = compiler.get_entry_point(first_entry.name, first_entry.execution_model);
 
-    auto push_constants_id = resources.push_constant_buffers[0].id;
-    auto push_constants_type_id = resources.push_constant_buffers[0].base_type_id;
-    auto push_constant_ranges = compiler.get_active_buffer_ranges(push_constants_id);
-    auto uniforms = resources.uniform_buffers;
-
     ShaderReflectionData result = {};
     result.m_compiled_stage = kStageMap[entry_point.model];
     result.m_entry_point = first_entry.name.data();
 
-    for (auto &r : push_constant_ranges)
+    for (const auto &push_constant_buffer : resources.push_constant_buffers)
     {
-        auto &name = compiler.get_member_name(push_constants_type_id, r.index);
-        if (name == desc->m_descriptors_start_name.data())
-            result.m_descriptor_start_offset = r.offset;
+        auto &type = compiler.get_type(push_constant_buffer.base_type_id);
+        for (u32 i = 0; i < type.member_types.size(); i++)
+        {
+            usize size = compiler.get_declared_struct_member_size(type, i);
+            usize offset = compiler.type_struct_member_offset(type, i);
 
-        result.m_push_constant_size += r.range;
+            for (const auto &type_member : type.member_types)
+            {
+                const auto &name = compiler.get_name(type_member);
+                if (desc->m_descriptors_struct_name == eastl::string_view(name.data(), name.size()))
+                {
+                    result.m_descriptors_struct.offset = offset;
+                    result.m_descriptors_struct.size = size;
+                }
+            }
+
+            result.m_push_constant_size += size;
+        }
     }
 
     if (result.m_compiled_stage == ShaderStage::Vertex && desc->m_reflect_vertex_layout)

@@ -26,7 +26,7 @@ LR_ASSIGN_OBJECT_TYPE(Shader, VK_OBJECT_TYPE_SHADER_MODULE);
 
 struct ShaderCompileDesc
 {
-    eastl::string m_code;
+    eastl::string m_code = {};
     eastl::span<eastl::string> m_include_dirs = {};
     eastl::span<eastl::string> m_definitions = {};
     ShaderCompileFlag m_flags = ShaderCompileFlag::None;
@@ -35,14 +35,25 @@ struct ShaderCompileDesc
 struct ShaderReflectionDesc
 {
     bool m_reflect_vertex_layout = false;
-    eastl::string_view m_descriptors_start_name = "descripotors";  //!< Identifier for offset of bindless descriptors
+    eastl::string_view m_descriptors_struct_name = "Descriptors";  //!< Identifier for offset of bindless descriptors
+};
+
+struct ShaderDescriptors
+{
+    u16 m_indexes[16] = {};
+};
+
+struct ShaderStructRange
+{
+    u32 offset = 0;
+    u32 size = 0;
 };
 
 struct ShaderReflectionData
 {
     ShaderStage m_compiled_stage = {};
-    u32 m_push_constant_size = 0;       //!< Total size of constant used by user, useful for bindless
-    u32 m_descriptor_start_offset = 0;  //!< Reflected bindless start offset
+    u32 m_push_constant_size = 0;                 //!< Total size of constant used by user, useful for bindless
+    ShaderStructRange m_descriptors_struct = {};  //!< Reflected bindless start offset
     eastl::string m_entry_point;
     eastl::vector<PipelineVertexAttribInfo> m_vertex_attribs = {};
 };

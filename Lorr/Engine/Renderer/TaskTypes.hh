@@ -82,4 +82,20 @@ namespace TaskAccess
 #undef DECLARE_ACCESS
     // clang-format on
 }  // namespace TaskAccess
+
+constexpr static DescriptorBindingFlag k_non_uniform_flags = DescriptorBindingFlag::PartiallyBound | DescriptorBindingFlag::VariableDescriptorCount;
+static DescriptorLayoutElement k_persistent_sets[] = {
+    { 0, DescriptorType::Sampler, ShaderStage::All, 4096, k_non_uniform_flags },
+    { 0, DescriptorType::SampledImage, ShaderStage::All, 4096, k_non_uniform_flags },
+    { 0, DescriptorType::StorageImage, ShaderStage::All, 4096, k_non_uniform_flags },
+};
+constexpr static u32 k_sampler_descriptor_id = 0;
+constexpr static u32 k_image_descriptor_id = 1;
+constexpr static u32 k_storage_image_descriptor_id = 2;
+static DescriptorLayoutElement k_dynamic_sets[] = {
+    { 0, DescriptorType::StorageBuffer, ShaderStage::All, 1 },  // u_buffer_address
+    { 0, DescriptorType::StorageBuffer, ShaderStage::All, 1 },  // u_descriptor_indexes
+};
+constexpr static u32 k_bda_descriptor_id = 3;
+constexpr static u32 k_indexes_descriptor_id = 4;
 }  // namespace lr::Renderer

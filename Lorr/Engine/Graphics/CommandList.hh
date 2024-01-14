@@ -131,11 +131,11 @@ struct CommandList : Tracked<VkCommandBuffer>
     void set_primitive_type(PrimitiveType type);
 
     void set_pipeline(Pipeline *pipeline);
-    void set_push_constants(void *data, u32 data_size, u32 offset, PipelineLayout layout, ShaderStage stage_flags = ShaderStage::All);
-    void set_descriptor_sets(PipelineLayout &layout, PipelineBindPoint bind_point, u32 first_set, eastl::span<DescriptorSet> sets);
+    void set_push_constants(void *data, u32 data_size, u32 offset, PipelineLayout *layout, ShaderStage stage_flags = ShaderStage::All);
+    void set_descriptor_sets(PipelineBindPoint bind_point, PipelineLayout *layout, u32 first_set, eastl::span<DescriptorSet> sets);
     void set_descriptor_buffers(eastl::span<DescriptorBufferBindInfo> binding_infos);
     void set_descriptor_buffer_offsets(
-        PipelineBindPoint bind_point, PipelineLayout layout, u32 first_set, eastl::span<u32> indices, eastl::span<u64> offsets);
+        PipelineLayout *layout, PipelineBindPoint bind_point, u32 first_set, eastl::span<u32> indices, eastl::span<u64> offsets);
 };
 LR_ASSIGN_OBJECT_TYPE(CommandList, VK_OBJECT_TYPE_COMMAND_BUFFER);
 

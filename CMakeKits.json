@@ -1,0 +1,11 @@
+[
+    {
+        "name": "clang",
+        "generator": "Ninja",
+        "compilers": {
+            "C": "clang",
+            "CXX": "clang++"
+        },
+        "linker": "lld"
+    }
+]

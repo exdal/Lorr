@@ -4,32 +4,23 @@
 
 namespace lr
 {
-    class Timer
+template<typename T>
+class Timer
+{
+public:
+    Timer()
+        : beg_(clock_::now())
     {
-    public:
-        Timer() : beg_(clock_::now())
-        {
-        }
+    }
 
-        void start()
-        {
-            beg_ = clock_::now();
-        }
+    void start() { beg_ = clock_::now(); }
+    void reset() { beg_ = clock_::now(); }
+    auto elapsed() const { return eastl::chrono::duration_cast<second_>(clock_::now() - beg_).count(); }
 
-        void reset()
-        {
-            beg_ = clock_::now();
-        }
-
-        double elapsed() const
-        {
-            return eastl::chrono::duration_cast<second_>(clock_::now() - beg_).count();
-        }
-
-    private:
-        typedef eastl::chrono::high_resolution_clock clock_;
-        typedef eastl::chrono::duration<double, eastl::ratio<1>> second_;
-        eastl::chrono::time_point<clock_> beg_;
-    };
+private:
+    typedef eastl::chrono::high_resolution_clock clock_;
+    typedef eastl::chrono::duration<T, eastl::ratio<1>> second_;
+    eastl::chrono::time_point<clock_> beg_;
+};
 
 }  // namespace lr

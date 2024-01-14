@@ -18,4 +18,3 @@ cmake_parse_arguments(
 endfunction()
 
 add_example(BareBones PATH BareBones/*.cc)
-add_example(Imgui PATH Imgui/*.cc)

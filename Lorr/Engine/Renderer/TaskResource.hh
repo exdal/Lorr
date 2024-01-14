@@ -1,43 +1,47 @@
 #pragma once
 
+#include "Graphics/Resource.hh"
 #include "TaskTypes.hh"
 
 namespace lr::Graphics
 {
 /// IMAGES ///
 
-LR_HANDLE(ImageID, u32);
 struct PersistentImageInfo
 {
-    ImageID m_image_id = {};
-    ImageID m_image_view_id = {};
+    ImageID m_image_id = ImageID::Invalid;
+    ImageViewID m_image_view_id = ImageViewID::Invalid;
     TaskAccess::Access m_access = TaskAccess::None;
 };
 
+LR_HANDLE(TaskImageID, u32);
 struct TaskImageInfo
 {
-    ImageID m_image_id = {};
-    ImageID m_image_view_id = {};
+    ImageID m_image_id = ImageID::Invalid;
+    ImageViewID m_image_view_id = ImageViewID::Invalid;
 
     ImageLayout m_last_layout = ImageLayout::Undefined;
     TaskAccess::Access m_last_access = TaskAccess::None;
+    u32 m_first_submit_scope_index = 0;
     u32 m_last_batch_index = 0;
+    u32 m_last_submit_scope_index = 0;
 };
 
 /// BUFFERS ///
 
-LR_HANDLE(BufferID, u32);
 struct PersistentBufferInfo
 {
-    BufferID m_buffer_id = {};
+    BufferID m_buffer_id = BufferID::Invalid;
     TaskAccess::Access m_initial_access = TaskAccess::None;
 };
 
+LR_HANDLE(TaskBufferID, u32);
 struct TaskBufferInfo
 {
-    BufferID m_buffer_id = {};
+    BufferID m_buffer_id = BufferID::Invalid;
     TaskAccess::Access m_last_access = TaskAccess::None;
     u32 m_last_batch_index = 0;
+    u32 m_last_submit_scope_index = 0;
 };
 
 enum class TaskResourceType
@@ -54,8 +58,8 @@ struct GenericResource
 
     union
     {
-        ImageID m_task_image_id = {};
-        BufferID m_task_buffer_id;
+        TaskImageID m_task_image_id = TaskImageID::Invalid;
+        TaskBufferID m_task_buffer_id;
     };
 };
 
@@ -69,10 +73,10 @@ struct TaskImageUse : GenericResource
         m_access = TAccess;
     }
 
-    constexpr TaskImageUse(const ImageID& image)
+    constexpr TaskImageUse(TaskImageID task_image_id)
         : TaskImageUse()
     {
-        m_task_image_id = image;
+        m_task_image_id = task_image_id;
     }
 };
 
@@ -85,10 +89,10 @@ struct TaskBufferUse : GenericResource
         m_access = TAccess;
     }
 
-    constexpr TaskBufferUse(const BufferID& buffer)
+    constexpr TaskBufferUse(TaskBufferID task_buffer_id)
         : TaskBufferUse()
     {
-        m_task_buffer_id = buffer;
+        m_task_buffer_id = task_buffer_id;
     }
 };
 

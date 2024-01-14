@@ -44,7 +44,7 @@ struct PipelineManager
         PipelineID m_pipeline_id = {};
     };
 
-    PipelineID compile_pipeline(PipelineCompileInfo &compile_info, PipelineAttachmentInfo &attachment_info, PipelineLayout &layout);
+    PipelineInfoID compile_pipeline(PipelineCompileInfo &compile_info, PipelineAttachmentInfo &attachment_info, PipelineLayout &layout);
 
     PipelineInfo *get_pipeline_info(PipelineInfoID pipeline_id);
     Pipeline *get_pipeline(PipelineID pipeline_id);

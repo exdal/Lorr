@@ -1,5 +1,8 @@
 #pragma once
 
+#include "Core/EventManager.hh"
+#include "Input/Key.hh"
+
 namespace lr
 {
 enum class WindowCursor
@@ -28,6 +31,58 @@ enum class WindowFlag : u32
 LR_TYPEOP_ARITHMETIC(WindowFlag, WindowFlag, |);
 LR_TYPEOP_ARITHMETIC_INT(WindowFlag, WindowFlag, &);
 
+enum WindowEvent : Event
+{
+    LR_WINDOW_EVENT_QUIT,
+    LR_WINDOW_EVENT_RESIZE,
+    LR_WINDOW_EVENT_MOUSE_POSITION,
+    LR_WINDOW_EVENT_MOUSE_STATE,
+    LR_WINDOW_EVENT_MOUSE_SCROLL,
+    LR_WINDOW_EVENT_KEYBOARD_STATE,
+    LR_WINDOW_EVENT_CURSOR_STATE,
+};
+
+union WindowEventData
+{
+    u32 __data[4] = {};
+
+    struct
+    {
+        u32 m_size_width;
+        u32 m_size_height;
+    };
+
+    struct
+    {
+        u32 m_mouse_x;
+        u32 m_mouse_y;
+    };
+
+    struct
+    {
+        Key m_mouse;
+        MouseState m_mouse_state;
+    };
+
+    struct
+    {
+        float m_offset;
+    };
+
+    struct
+    {
+        Key m_key;
+        KeyState m_key_state;
+    };
+
+    struct
+    {
+        WindowCursor m_window_cursor;
+    };
+};
+
+using WindowEventManager = EventManager<WindowEventData, 64>;
+
 struct SystemMetrics
 {
     struct Display
@@ -55,12 +110,15 @@ struct WindowDesc
     u32 m_current_monitor = 0;
     u32 m_width = 0;
     u32 m_height = 0;
-    WindowFlag m_Flags = WindowFlag::None;
+    WindowFlag m_flags = WindowFlag::None;
 };
 
 struct BaseWindow
 {
-    virtual void poll() = 0;
+    virtual ~BaseWindow() = default;
+
+    void push_event(Event event, WindowEventData &data);
+    virtual void poll();
 
     virtual void init_displays() = 0;
     SystemMetrics::Display *get_display(u32 monitor);
@@ -68,7 +126,6 @@ struct BaseWindow
     virtual void set_cursor(WindowCursor cursor) = 0;
 
     bool should_close();
-    void on_size_changed(u32 width, u32 height);
 
     void *m_handle = nullptr;
 
@@ -81,6 +138,7 @@ struct BaseWindow
 
     WindowCursor m_current_cursor = WindowCursor::Arrow;
     glm::uvec2 m_cursor_position = {};
+    WindowEventManager m_event_manager = {};
 
     SystemMetrics m_system_metrics = {};
     u32 m_using_monitor = 0;

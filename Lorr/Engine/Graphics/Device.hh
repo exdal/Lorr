@@ -1,7 +1,5 @@
 #pragma once
 
-#include "STL/RefPtr.hh"
-
 #include "APIObject.hh"
 #include "Resource.hh"
 #include "PhysicalDevice.hh"
@@ -14,14 +12,14 @@ namespace lr::Graphics
 {
 struct SubmitDesc
 {
-    eastl::span<SemaphoreSubmitDesc> m_wait_semas;
-    eastl::span<CommandListSubmitDesc> m_lists;
-    eastl::span<SemaphoreSubmitDesc> m_signal_semas;
+    eastl::span<SemaphoreSubmitDesc> m_wait_semas = {};
+    eastl::span<CommandListSubmitDesc> m_lists = {};
+    eastl::span<SemaphoreSubmitDesc> m_signal_semas = {};
 };
 
 struct Device : Tracked<VkDevice>
 {
-    void init(VkDevice handle, PhysicalDevice *physical_device, eastl::span<u32> queue_indexes);
+    void init(VkDevice handle, VkPhysicalDevice physical_device, VkInstance instance, eastl::span<u32> queue_indexes);
 
     /// COMMAND ///
     /// @returns - Success: APIResult::Success
@@ -57,9 +55,8 @@ struct Device : Tracked<VkDevice>
     /// SWAPCHAIN ///
     /// @returns - Success: APIResult::Success
     /// @returns - Failure: APIResult::[OutOfHostMem, OutOfDeviceMem, DeviceLost, SurfaceLost, WindowInUse, InitFailed]
-    APIResult create_swap_chain(SwapChain *swap_chain, SwapChainDesc *desc, Surface *surface);
+    APIResult create_swap_chain(SwapChain *swap_chain, SwapChainDesc *desc);
     void delete_swap_chain(SwapChain *swap_chain);
-    APIResult get_swap_chain_images(SwapChain *swap_chain, eastl::span<Image *> images);
 
     void wait_for_work();
     /// @returns - Success: APIResult::[Success, Timeout, NotReady, Suboptimal]
@@ -89,6 +86,9 @@ struct Device : Tracked<VkDevice>
     APIResult create_descriptor_set_layout(DescriptorSetLayout *layout, eastl::span<DescriptorLayoutElement> elements, DescriptorSetLayoutFlag flags);
     void delete_descriptor_set_layout(DescriptorSetLayout *layout);
     // DESCRIPTOR BUFFER
+    u64 get_descriptor_buffer_alignment();
+    u64 get_descriptor_size(DescriptorType type);
+    u64 get_aligned_buffer_memory(BufferUsage buffer_usage, u64 unaligned_size);
     u64 get_descriptor_set_layout_size(DescriptorSetLayout layout);
     u64 get_descriptor_set_layout_binding_offset(DescriptorSetLayout layout, u32 binding_id);
     void get_descriptor_data(const DescriptorGetInfo &info, u64 data_size, void *data_out);
@@ -109,48 +109,55 @@ struct Device : Tracked<VkDevice>
     void update_descriptor_set(eastl::span<WriteDescriptorSet> writes, eastl::span<CopyDescriptorSet> copies);
 
     /// RESOURCE ///
-    eastl::tuple<u64, u64> get_buffer_memory_size(Buffer *buffer);
-    eastl::tuple<u64, u64> get_image_memory_size(Image *image);
+    eastl::tuple<u64, u64> get_buffer_memory_size(BufferID buffer_id);
+    eastl::tuple<u64, u64> get_image_memory_size(ImageID image_id);
 
     /// @returns - Success: APIResult::Success
     /// @returns - Failure: APIResult::[OutOfHostMem, OutOfDeviceMem, InvalidExternalHandle]
     APIResult create_device_memory(DeviceMemory *device_memory, DeviceMemoryDesc *desc);
     void delete_device_memory(DeviceMemory *device_memory);
-    auto get_heap_budget(MemoryFlag flags) { return m_physical_device->get_heap_budget(flags); }
-    void bind_memory(DeviceMemory *device_memory, Buffer *buffer, u64 memory_offset);
-    void bind_memory(DeviceMemory *device_memory, Image *image, u64 memory_offset);
+    u32 get_memory_type_index(MemoryFlag flags);
+    u32 get_heap_index(MemoryFlag flags);
+    u64 get_heap_budget(MemoryFlag flags);
+    void bind_memory(DeviceMemory *device_memory, BufferID buffer_id, u64 memory_offset);
+    void bind_memory(DeviceMemory *device_memory, ImageID image_id, u64 memory_offset);
 
     // * Buffers * //
     /// @returns - Success: APIResult::Success
     /// @returns - Failure: APIResult::[OutOfHostMem, OutOfDeviceMem]
-    APIResult create_buffer(Buffer *buffer, BufferDesc *desc);
-    void delete_buffer(Buffer *handle);
+    BufferID create_buffer(BufferDesc *desc);
+    void delete_buffer(BufferID buffer_id);
+    Buffer *get_buffer(BufferID buffer_id);
 
     // * Images * //
     /// @returns - Success: APIResult::Success
     /// @returns - Failure: APIResult::[OutOfHostMem, OutOfDeviceMem]
-    APIResult create_image(Image *image, ImageDesc *desc);
-    void delete_image(Image *image);
-    /// @returns - Success: APIResult::Success
-    /// @returns - Failure: APIResult::[OutOfHostMem, OutOfDeviceMem]
-    APIResult create_image_view(ImageView *image_view, ImageViewDesc *desc);
-    void delete_image_view(ImageView *image_view);
+    ImageID create_image(ImageDesc *desc);
+    void delete_image(ImageID image_id);
+    Image *get_image(ImageID image_id);
 
     /// @returns - Success: APIResult::Success
     /// @returns - Failure: APIResult::[OutOfHostMem, OutOfDeviceMem]
-    APIResult create_sampler(Sampler *sampler, SamplerDesc *desc);
-    void delete_sampler(Sampler *sampler);
+    ImageViewID create_image_view(ImageViewDesc *desc);
+    void delete_image_view(ImageViewID image_view_id);
+    ImageView *get_image_view(ImageViewID image_view_id);
+
+    /// @returns - Success: APIResult::Success
+    /// @returns - Failure: APIResult::[OutOfHostMem, OutOfDeviceMem]
+    SamplerID create_sampler(SamplerDesc *desc);
+    void delete_sampler(SamplerID sampler_id);
+    Sampler *get_sampler(SamplerID sampler_id);
 
     /// UTILITY ///
-    bool is_feature_supported(DeviceFeature feature) { return m_physical_device->is_feature_supported(feature); }
+    bool is_feature_supported(DeviceFeature feature) { return m_supported_features & feature; }
 
-    template<typename TType>
-    void set_object_name(TType *obj, eastl::string_view name)
+    template<typename TypeT>
+    void set_object_name(TypeT *obj, eastl::string_view name)
     {
 #if _DEBUG
         VkDebugUtilsObjectNameInfoEXT object_name_info = {
             .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
-            .objectType = (VkObjectType)ToVKObjectType<TType>::type,
+            .objectType = (VkObjectType)ToVKObjectType<TypeT>::type,
             .objectHandle = (u64)obj->m_handle,
             .pObjectName = name.data(),
         };
@@ -158,8 +165,8 @@ struct Device : Tracked<VkDevice>
 #endif
     }
 
-    template<VkObjectType TObjectType, typename TType>
-    void set_object_name_raw(TType object, eastl::string_view name)
+    template<VkObjectType TObjectType, typename TypeT>
+    void set_object_name_raw(TypeT object, eastl::string_view name)
     {
 #if _DEBUG
         VkDebugUtilsObjectNameInfoEXT object_name_info = {
@@ -174,9 +181,12 @@ struct Device : Tracked<VkDevice>
 
     eastl::array<CommandQueue, static_cast<usize>(CommandType::Count)> m_queues = {};
     eastl::array<u32, static_cast<usize>(CommandType::Count)> m_queue_indexes = {};
+    DeviceFeature m_supported_features = {};
+    ResourcePools m_resources = {};
 
-    PhysicalDevice *m_physical_device = nullptr;
     TracyVkCtx m_tracy_ctx = nullptr;
+    VkPhysicalDevice m_physical_device = nullptr;
+    VkInstance m_instance = nullptr;
 };
 
 }  // namespace lr::Graphics

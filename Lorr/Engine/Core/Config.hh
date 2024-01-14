@@ -24,7 +24,7 @@
     CONFIG_DEFINE_VAR(u32, JM_WORKER_COUNT, (1));
 
 #define CONFIG_DEFINE_VAR(type, name, defVal) ConfigVar<CRC32HashOf(#name), type> cfg_##name = ConfigVar<CRC32HashOf(#name), type>(defVal)
-#define CONFIG_GET_VAR(name) Config::Get().cfg_##name.Val
+#define CONFIG_GET_VAR(name) lr::Config::Get().cfg_##name.Val
 
 namespace lr
 {

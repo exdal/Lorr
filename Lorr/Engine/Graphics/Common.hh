@@ -74,6 +74,14 @@ constexpr static APIResult CHECK(VkResult vkr, [[maybe_unused]] std::initializer
     return result;
 }
 
+enum class PresentMode : u32
+{
+    Immediate = VK_PRESENT_MODE_IMMEDIATE_KHR,
+    Mailbox = VK_PRESENT_MODE_MAILBOX_KHR,
+    Fifo = VK_PRESENT_MODE_FIFO_KHR,
+    FifoRelazed = VK_PRESENT_MODE_FIFO_RELAXED_KHR,
+};
+
 /// BUFFER ---------------------------- ///
 
 enum class BufferUsage : u64

@@ -3,8 +3,6 @@
 #include <EASTL/scoped_array.h>
 #include <VkBootstrap.h>
 
-#include "Window/Win32/Win32Window.hh"
-
 #include "Device.hh"
 #include "Vulkan.hh"
 
@@ -32,13 +30,10 @@ APIResult Instance::init(const InstanceDesc &desc)
     instance_builder.enable_validation_layers(false);  // use vkconfig ui...
     instance_builder.request_validation_layers(false);
     instance_builder.enable_extensions({
-        "VK_KHR_surface",
-        "VK_KHR_get_physical_device_properties2",
-        "VK_KHR_win32_surface",
+        "VK_KHR_surface", "VK_KHR_get_physical_device_properties2", "VK_KHR_win32_surface",
 #if _DEBUG
-        //! Debug extensions, always put it to bottom
-        "VK_EXT_debug_utils",
-        "VK_EXT_debug_report",
+            //! Debug extensions, always put it to bottom
+            "VK_EXT_debug_utils", "VK_EXT_debug_report",
 #endif
     });
     instance_builder.require_api_version(1, 3, 0);
@@ -86,13 +81,19 @@ APIResult Instance::create_devce(Device *device)
         .descriptorBindingVariableDescriptorCount = true,
         .runtimeDescriptorArray = true,
         .timelineSemaphore = true,
+        .bufferDeviceAddress = true,
     });
     physical_device_selector.set_required_features({
         .vertexPipelineStoresAndAtomics = true,
         .fragmentStoresAndAtomics = true,
         .shaderInt64 = true,
     });
-    physical_device_selector.add_required_extensions({ "VK_KHR_swapchain" });
+    physical_device_selector.add_required_extensions({
+        "VK_KHR_swapchain",
+#if TRACY_ENABLE
+            "VK_EXT_calibrated_timestamps",
+#endif
+    });
     auto physical_device_result = physical_device_selector.select();
     if (!physical_device_result)
     {

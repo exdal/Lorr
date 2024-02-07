@@ -7,34 +7,25 @@
 
 #define LR_INVALID_EVENT ~0
 
-namespace lr
-{
+namespace lr {
 using Event = u32;
 template<typename TData, u64 TCount, bool TAtomicRingBuffer = false>
-struct EventManager
-{
-    struct EventIdentifier
-    {
+struct EventManager {
+    struct EventIdentifier {
         Event m_event = {};
         TData m_data = {};
     };
 
-    using ring_buffer = typename eastl::conditional<
-        TAtomicRingBuffer,
-        Memory::RingBufferAtomic<EventIdentifier, TCount>,
-        Memory::RingBuffer<EventIdentifier, TCount>>::type;
+    using ring_buffer = typename eastl::
+        conditional<TAtomicRingBuffer, Memory::RingBufferAtomic<EventIdentifier, TCount>, Memory::RingBuffer<EventIdentifier, TCount>>::type;
 
-    bool peek()
-    {
-        return !m_ring_buffer.empty();
-    }
+    bool peek() { return !m_ring_buffer.empty(); }
 
     Event dispatch(TData &data_out)
     {
         ZoneScoped;
 
-        if (EventIdentifier ident; m_ring_buffer.pop(ident))
-        {
+        if (EventIdentifier ident; m_ring_buffer.pop(ident)) {
             data_out = ident.m_data;
             return ident.m_event;
         }

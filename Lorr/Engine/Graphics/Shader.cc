@@ -130,7 +130,8 @@ eastl::vector<u32> ShaderCompiler::compile_shader(ShaderCompileDesc *desc)
     utils->CreateDefaultIncludeHandler(&include_handler);
 
     auto options = parse_pragma_options(desc->m_code);
-    if (options[PragmaOptions::Stage].m_stage == ShaderStage::Count)
+    ShaderStage shader_stage = options[PragmaOptions::Stage].m_stage;
+    if (shader_stage == ShaderStage::Count)
     {
         LOG_ERROR("Shader stage(#pragma stage(...)) is not set");
         return {};
@@ -147,10 +148,9 @@ eastl::vector<u32> ShaderCompiler::compile_shader(ShaderCompileDesc *desc)
     args.push_back(L"-spirv");
     args.push_back(L"-fspv-target-env=vulkan1.3");
     args.push_back(L"-fvk-use-gl-layout");
-    // args.push_back(L"-fspv-reflect");
     args.push_back(L"-no-warnings");
     args.push_back(L"-T");
-    args.push_back(kHLSLStageMap[(u32)options[PragmaOptions::Stage].m_stage]);
+    args.push_back(kHLSLStageMap[(u32)shader_stage]);
     for (auto &definition : desc->m_definitions)
     {
         eastl::string def_str = eastl::format("-D{}", definition);
@@ -222,21 +222,6 @@ ShaderReflectionData ShaderCompiler::reflect_spirv(ShaderReflectionDesc *desc, e
             }
 
             result.m_push_constant_size += size;
-        }
-    }
-
-    if (result.m_compiled_stage == ShaderStage::Vertex && desc->m_reflect_vertex_layout)
-    {
-        u32 offset = 0;
-        for (auto &input : resources.stage_inputs)
-        {
-            auto id = input.id;
-            auto &type = compiler.get_type(input.type_id);
-            u32 location = compiler.get_decoration(id, spv::DecorationLocation);
-
-            Format format = to_vk_format(type);
-            result.m_vertex_attribs.push_back(PipelineVertexAttribInfo(0, location, format, offset));
-            offset += format_to_size(format);
         }
     }
 

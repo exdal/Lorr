@@ -19,6 +19,6 @@ float4 main(PixelInput input) : SV_TARGET
     const Texture2D font_texture = c.descriptors.get_texture(0);
     const SamplerState linear_sampler = c.descriptors.get_sampler(1);
 
-    return font_texture.Sample(linear_sampler, input.tex_coord) * input.color;
+    return /*font_texture.Sample(linear_sampler, input.tex_coord) **/ input.color;
 }
 

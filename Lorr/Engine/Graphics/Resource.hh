@@ -3,32 +3,34 @@
 #include "APIObject.hh"
 #include "Common.hh"
 
-namespace lr::Graphics
-{
+namespace lr::Graphics {
 /////////////////////////////////
 // BUFFERS
 
-LR_HANDLE(BufferID, u32);
-struct BufferDesc
-{
+LR_HANDLE(BufferID, u64);
+struct BufferDesc {
     BufferUsage m_usage_flags = BufferUsage::Vertex;
-    u32 m_stride = 1;
     u64 m_data_size = 0;
 };
 
-struct Buffer
-{
-    void init(VkBuffer buffer, u32 stride, u64 device_address)
+struct Buffer {
+    void init(VkBuffer buffer, u64 size, u64 device_address)
     {
         m_handle = buffer;
-        m_stride = stride;
+        m_size = size;
         m_device_address = device_address;
     }
 
-    u32 m_stride = 1;
+    u64 m_alignment = 0;
+    u64 m_size = 0;
     u64 m_device_address = 0;
-
-    u64 m_allocator_data = ~0;
+    union {
+        u64 m_allocator_data = ~0;
+        struct {
+            u32 m_pool_id;
+            u32 m_memory_id;
+        };
+    };
     VkBuffer m_handle = nullptr;
 
     operator VkBuffer &() { return m_handle; }
@@ -39,9 +41,8 @@ LR_ASSIGN_OBJECT_TYPE(Buffer, VK_OBJECT_TYPE_BUFFER);
 /////////////////////////////////
 // IMAGES
 
-LR_HANDLE(ImageID, u32);
-struct ImageDesc
-{
+LR_HANDLE(ImageID, u64);
+struct ImageDesc {
     ImageUsage m_usage_flags = ImageUsage::Sampled;
     Format m_format = Format::Unknown;
     ImageType m_type = ImageType::View2D;
@@ -55,8 +56,7 @@ struct ImageDesc
     u64 m_data_size = 0;
 };
 
-struct Image : Tracked<VkImage>
-{
+struct Image {
     void init(VkImage image, Format format, u32 width, u32 height, u32 slice_count, u32 mip_levels)
     {
         m_handle = image;
@@ -75,6 +75,8 @@ struct Image : Tracked<VkImage>
 
     bool m_swap_chain_image = false;
     u64 m_allocator_data = ~0;
+
+    VkImage m_handle = VK_NULL_HANDLE;
 };
 LR_ASSIGN_OBJECT_TYPE(Image, VK_OBJECT_TYPE_IMAGE);
 
@@ -83,9 +85,8 @@ LR_ASSIGN_OBJECT_TYPE(Image, VK_OBJECT_TYPE_IMAGE);
 // image format. See:
 // https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VkImageViewCreateInfo.html
 
-LR_HANDLE(ImageViewID, u32);
-struct ImageSubresourceInfo
-{
+LR_HANDLE(ImageViewID, u64);
+struct ImageSubresourceInfo {
     ImageAspect m_aspect_mask = ImageAspect::Color;
     u32 m_base_mip : 8 = 0;
     u32 m_mip_count : 8 = 1;
@@ -93,8 +94,7 @@ struct ImageSubresourceInfo
     u32 m_slice_count : 8 = 1;
 };
 
-struct ImageViewDesc
-{
+struct ImageViewDesc {
     Image *m_image = nullptr;
     ImageViewType m_type = ImageViewType::View2D;
     // Component mapping
@@ -105,13 +105,11 @@ struct ImageViewDesc
     ImageSubresourceInfo m_subresource_info = {};
 };
 
-struct ImageSubresourceRange : VkImageSubresourceRange
-{
+struct ImageSubresourceRange : VkImageSubresourceRange {
     ImageSubresourceRange(ImageSubresourceInfo info);
 };
 
-struct ImageView : Tracked<VkImageView>
-{
+struct ImageView {
     void init(VkImageView image_view_handle, Format format, ImageViewType type, const ImageSubresourceInfo &subresource_info)
     {
         m_handle = image_view_handle;
@@ -123,15 +121,16 @@ struct ImageView : Tracked<VkImageView>
     Format m_format = Format::Unknown;
     ImageViewType m_type = ImageViewType::View2D;
     ImageSubresourceInfo m_subresource_info = {};
+
+    VkImageView m_handle = VK_NULL_HANDLE;
 };
 LR_ASSIGN_OBJECT_TYPE(ImageView, VK_OBJECT_TYPE_IMAGE_VIEW);
 
 /////////////////////////////////
 // SAMPLERS
 
-LR_HANDLE(SamplerID, u32);
-struct SamplerDesc
-{
+LR_HANDLE(SamplerID, u64);
+struct SamplerDesc {
     Filtering m_min_filter : 1 = {};
     Filtering m_mag_filter : 1 = {};
     Filtering m_mip_filter : 1 = {};
@@ -146,111 +145,19 @@ struct SamplerDesc
     float m_max_lod = 0;
 };
 
-struct Sampler : Tracked<VkSampler>
-{
+struct Sampler {
     void init(VkSampler sampler_handle) { m_handle = sampler_handle; }
+
+    VkSampler m_handle = VK_NULL_HANDLE;
 };
 LR_ASSIGN_OBJECT_TYPE(Sampler, VK_OBJECT_TYPE_SAMPLER);
 
-/////////////////////////////////
-// DESCRIPTORS
-
-struct DescriptorLayoutElement
-{
-    DescriptorLayoutElement(
-        u32 binding, DescriptorType type, ShaderStage stage, u32 max_descriptors, DescriptorBindingFlag flags = DescriptorBindingFlag::None);
-    VkDescriptorSetLayoutBinding m_binding_info = {};
-    DescriptorBindingFlag m_binding_flag = {};
-
-    auto get_type() { return static_cast<DescriptorType>(m_binding_info.descriptorType); }
-    auto get_count() { return m_binding_info.descriptorCount; }
-};
-
-struct DescriptorSetLayout : Tracked<VkDescriptorSetLayout>
-{
-    u32 m_max_descriptor_elements = 0;
-};
-LR_ASSIGN_OBJECT_TYPE(DescriptorSetLayout, VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT);
-
-struct ImageDescriptorInfo : VkDescriptorImageInfo
-{
-    ImageDescriptorInfo(ImageView *image_view, ImageLayout layout);
-};
-
-struct BufferDescriptorInfo : VkDescriptorBufferInfo
-{
-    BufferDescriptorInfo(Buffer *buffer, u64 size = ~0, u64 offset = 0);
-};
-
-struct SamplerDescriptorInfo : VkDescriptorImageInfo
-{
-    SamplerDescriptorInfo(Sampler *sampler);
-};
-
-struct DescriptorGetInfo
-{
-    DescriptorGetInfo(Buffer *buffer, u64 data_size, DescriptorType type);
-    DescriptorGetInfo(ImageView *image_view, DescriptorType type);
-    DescriptorGetInfo(Sampler *sampler);
-
-    union
-    {
-        struct
-        {
-            u64 m_buffer_address = 0;
-            u64 m_data_size = 0;
-        };
-        ImageView *m_image_view;
-        Sampler *m_sampler;
-        bool m_has_descriptor;
-    };
-
-    DescriptorType m_type = DescriptorType::Sampler;
-};
-
-struct DescriptorPoolSize : VkDescriptorPoolSize
-{
-    DescriptorPoolSize() = default;
-    DescriptorPoolSize(DescriptorType type, u32 count);
-};
-
-struct DescriptorSet : Tracked<VkDescriptorSet>
-{
-};
-LR_ASSIGN_OBJECT_TYPE(DescriptorSet, VK_OBJECT_TYPE_DESCRIPTOR_SET);
-
-struct DescriptorPool : Tracked<VkDescriptorPool>
-{
-    DescriptorPoolFlag m_flags = DescriptorPoolFlag::None;
-};
-LR_ASSIGN_OBJECT_TYPE(DescriptorPool, VK_OBJECT_TYPE_DESCRIPTOR_POOL);
-
-struct WriteDescriptorSet : VkWriteDescriptorSet
-{
-    WriteDescriptorSet() = default;
-    WriteDescriptorSet(
-        DescriptorSet *descriptor_set, ImageDescriptorInfo &image_info, DescriptorType dst_type, u32 dst_binding, u32 dst_element, u32 dst_count);
-    WriteDescriptorSet(
-        DescriptorSet *descriptor_set, BufferDescriptorInfo &buffer_info, DescriptorType dst_type, u32 dst_binding, u32 dst_element, u32 dst_count);
-    WriteDescriptorSet(
-        DescriptorSet *descriptor_set, SamplerDescriptorInfo &sampler_info, DescriptorType dst_type, u32 dst_binding, u32 dst_element, u32 dst_count);
-
-private:
-    WriteDescriptorSet(DescriptorSet *descriptor_set, DescriptorType dst_type, u32 dst_binding, u32 dst_element, u32 dst_count);
-};
-
-struct CopyDescriptorSet : VkCopyDescriptorSet
-{
-    CopyDescriptorSet(DescriptorSet *src, u32 src_binding, u32 src_element, DescriptorSet *dst, u32 dst_binding, u32 dst_element, u32 count);
-};
-
 template<typename ResourceT, typename ResourceID>
-struct ResourcePool
-{
-    static constexpr u64 FL_SIZE = 63u;
-    static constexpr u64 SL_SIZE = 63u;
-    static constexpr u64 SL_SHIFT = static_cast<u64>(1u) << SL_SIZE;
-    static constexpr u64 SL_MASK = SL_SHIFT - 1u;
+struct ResourcePool {
+    static constexpr u64 FL_SIZE = 64u;
+    static constexpr u64 SL_SIZE = 64u;
+    static constexpr u64 SL_MASK = ~SL_SIZE;
+    static constexpr u64 SL_SHIFT = SL_SIZE - 1;
     static constexpr u64 RESOURCE_COUNT = FL_SIZE * SL_SIZE;
 
     ResourcePool() { m_resources.resize(RESOURCE_COUNT); }
@@ -260,46 +167,50 @@ struct ResourcePool
     {
         ZoneScoped;
 
-        if (m_first_list == eastl::numeric_limits<decltype(m_first_list)>::max())
+        if (m_first_list == eastl::numeric_limits<decltype(m_first_list)>::max()) {
+            LOG_ERROR("Resource pool overflow");
             return { ResourceID::Invalid, nullptr };
+        }
 
         u64 first_index = Memory::find_lsb(~m_first_list);
         u64 second_list = m_second_list[first_index];
         u64 second_index = Memory::find_lsb(~second_list);
 
-        second_list |= 1u << second_index;
+        second_list |= (u64)1 << second_index;
         if (_popcnt64(second_list) == SL_SIZE)
-            m_first_list |= 1u << first_index;
+            m_first_list |= (u64)1 << first_index;
 
         m_second_list[first_index] = second_list;
         auto resource_id = set_handle_val<ResourceID>(get_index(first_index, second_index));
         return { resource_id, &get_resource(resource_id) };
     }
 
-    void remove_resource(const ResourceID &id)
+    void remove_resource(ResourceID id)
     {
         ZoneScoped;
 
-        u64 first_index = id.val() >> SL_SIZE;
-        u64 second_index = id.val() & SL_MASK;
+        auto val = get_handle_val(id);
+        u64 first_index = val >> SL_SHIFT;
+        u64 second_index = val & SL_MASK;
         u64 second_list = m_second_list[first_index];
 
-        second_list &= ~(1 << second_index);
+        second_list &= ~((u64)1 << second_index);
         if (_popcnt64(second_list) != SL_SIZE)
-            m_first_list &= ~(1 << first_index);
+            m_first_list &= ~((u64)1 << first_index);
 
         m_second_list[first_index] = second_list;
     }
 
-    bool validate_id(const ResourceID &id)
+    bool validate_id(ResourceID id)
     {
         ZoneScoped;
 
         if (!id)
             return false;
 
-        u64 first_index = id.val() >> SL_SIZE;
-        u64 second_index = id.val() & SL_MASK;
+        auto val = get_handle_val(id);
+        u64 first_index = val >> SL_SHIFT;
+        u64 second_index = val & SL_MASK;
         u64 second_list = m_second_list[first_index];
 
         return (second_list >> second_index) & 0x1;
@@ -313,8 +224,7 @@ struct ResourcePool
     eastl::vector<ResourceT> m_resources = {};
 };
 
-struct ResourcePools
-{
+struct ResourcePools {
     // vectors move memories on de/allocation, so using raw pointer is not safe
     // instead we have ResourcePool that is fixed size and does not do allocations
     ResourcePool<Buffer, BufferID> m_buffers = {};

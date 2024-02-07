@@ -1,6 +1,7 @@
 .cache/
 build/
-build-release/
+build-Release/
+build-Debug/
 .vs/
 .vscode/
 out/

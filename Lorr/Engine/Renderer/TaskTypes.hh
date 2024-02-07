@@ -2,13 +2,10 @@
 
 #include "Graphics/Common.hh"
 
-namespace lr::Graphics
-{
-namespace TaskAccess
-{
+namespace lr::Graphics {
+namespace TaskAccess {
     using namespace Graphics;
-    struct Access
-    {
+    struct Access {
         constexpr Access() = default;
         constexpr Access(MemoryAccess access, PipelineStage stage)
             : m_access(access),
@@ -98,4 +95,4 @@ static DescriptorLayoutElement k_dynamic_sets[] = {
 };
 constexpr static u32 k_bda_descriptor_id = 3;
 constexpr static u32 k_indexes_descriptor_id = 4;
-}  // namespace lr::Renderer
+}  // namespace lr::Graphics

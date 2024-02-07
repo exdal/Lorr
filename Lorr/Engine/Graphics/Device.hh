@@ -1,24 +1,22 @@
 #pragma once
 
 #include "APIObject.hh"
-#include "Resource.hh"
-#include "PhysicalDevice.hh"
 #include "CommandList.hh"
+#include "Descriptor.hh"
+#include "MemoryAllocator.hh"
 #include "Pipeline.hh"
+#include "Resource.hh"
 #include "SwapChain.hh"
 #include "TracyVK.hh"
 
-namespace lr::Graphics
-{
-struct SubmitDesc
-{
+namespace lr::Graphics {
+struct SubmitDesc {
     eastl::span<SemaphoreSubmitDesc> m_wait_semas = {};
     eastl::span<CommandListSubmitDesc> m_lists = {};
     eastl::span<SemaphoreSubmitDesc> m_signal_semas = {};
 };
 
-struct Device : Tracked<VkDevice>
-{
+struct Device {
     void init(VkDevice handle, VkPhysicalDevice physical_device, VkInstance instance, eastl::span<u32> queue_indexes);
 
     /// COMMAND ///
@@ -67,7 +65,7 @@ struct Device : Tracked<VkDevice>
     APIResult present(SwapChain *swap_chain, CommandQueue *queue);
 
     /// PIPELINE ///
-    PipelineLayout create_pipeline_layout(eastl::span<DescriptorSetLayout> layouts, eastl::span<PushConstantDesc> push_constants);
+    APIResult create_pipeline_layout(PipelineLayout *layout, eastl::span<DescriptorSetLayout> layouts, eastl::span<PushConstantDesc> push_constants);
     /// @returns - Success: APIResult::Success
     /// @returns - Failure: APIResult::[OutOfHostMem, OutOfDeviceMem]
     APIResult create_graphics_pipeline(Pipeline *pipeline, GraphicsPipelineInfo *pipeline_info, PipelineAttachmentInfo *pipeline_attachment_info);
@@ -88,9 +86,8 @@ struct Device : Tracked<VkDevice>
     // DESCRIPTOR BUFFER
     u64 get_descriptor_buffer_alignment();
     u64 get_descriptor_size(DescriptorType type);
-    u64 get_aligned_buffer_memory(BufferUsage buffer_usage, u64 unaligned_size);
-    u64 get_descriptor_set_layout_size(DescriptorSetLayout layout);
-    u64 get_descriptor_set_layout_binding_offset(DescriptorSetLayout layout, u32 binding_id);
+    u64 get_descriptor_set_layout_size(DescriptorSetLayout *layout);
+    u64 get_descriptor_set_layout_binding_offset(DescriptorSetLayout *layout, u32 binding_id);
     void get_descriptor_data(const DescriptorGetInfo &info, u64 data_size, void *data_out);
     // DESCRIPTOR POOL
     // For compat. reasons, i want to keep the legacy descriptor pools
@@ -111,6 +108,8 @@ struct Device : Tracked<VkDevice>
     /// RESOURCE ///
     eastl::tuple<u64, u64> get_buffer_memory_size(BufferID buffer_id);
     eastl::tuple<u64, u64> get_image_memory_size(ImageID image_id);
+    eastl::tuple<u64, u64> get_buffer_memory_size(Buffer *buffer);
+    eastl::tuple<u64, u64> get_image_memory_size(Image *image);
 
     /// @returns - Success: APIResult::Success
     /// @returns - Failure: APIResult::[OutOfHostMem, OutOfDeviceMem, InvalidExternalHandle]
@@ -121,13 +120,18 @@ struct Device : Tracked<VkDevice>
     u64 get_heap_budget(MemoryFlag flags);
     void bind_memory(DeviceMemory *device_memory, BufferID buffer_id, u64 memory_offset);
     void bind_memory(DeviceMemory *device_memory, ImageID image_id, u64 memory_offset);
-
+    void bind_memory_ex(DeviceMemory *device_memory, Buffer *buffer, u64 memory_offset);
     // * Buffers * //
+    u64 get_buffer_alignment(BufferUsage usage, u64 size);
     /// @returns - Success: APIResult::Success
     /// @returns - Failure: APIResult::[OutOfHostMem, OutOfDeviceMem]
     BufferID create_buffer(BufferDesc *desc);
     void delete_buffer(BufferID buffer_id);
     Buffer *get_buffer(BufferID buffer_id);
+    // Same as `create_buffer`, handle is externally handled.
+    // good for transient buffer allocations.
+    APIResult create_buffer_ex(Buffer &buffer, BufferDesc *desc);
+    void delete_buffer_ex(Buffer &buffer);
 
     // * Images * //
     /// @returns - Success: APIResult::Success
@@ -187,6 +191,8 @@ struct Device : Tracked<VkDevice>
     TracyVkCtx m_tracy_ctx = nullptr;
     VkPhysicalDevice m_physical_device = nullptr;
     VkInstance m_instance = nullptr;
+
+    VkDevice m_handle = VK_NULL_HANDLE;
 };
 
 }  // namespace lr::Graphics

@@ -3,10 +3,8 @@
 #include "APIObject.hh"
 #include "Common.hh"
 
-namespace lr::Graphics
-{
-struct ColorBlendAttachment : VkPipelineColorBlendAttachmentState
-{
+namespace lr::Graphics {
+struct ColorBlendAttachment : VkPipelineColorBlendAttachmentState {
     ColorBlendAttachment() = default;
     ColorBlendAttachment(
         bool enabled,
@@ -19,55 +17,49 @@ struct ColorBlendAttachment : VkPipelineColorBlendAttachmentState
         BlendOp blend_op_alpha = BlendOp::Add);
 };
 
-struct DepthStencilOpDesc
-{
+struct DepthStencilOpDesc {
     StencilOp m_pass : 3;
     StencilOp m_fail : 3;
     CompareOp m_depth_fail : 3;
     CompareOp m_compare_func : 3;
 };
 
-struct PushConstantDesc : VkPushConstantRange
-{
+struct PushConstantDesc : VkPushConstantRange {
     PushConstantDesc(ShaderStage stage, u32 offset, u32 size);
 };
 
-struct PipelineAttachmentInfo : VkPipelineRenderingCreateInfo
-{
+struct PipelineAttachmentInfo : VkPipelineRenderingCreateInfo {
     PipelineAttachmentInfo() = default;
     PipelineAttachmentInfo(eastl::span<Format> color_attachment_formats, Format depth_attachment_format);
 };
 
 struct Shader;
-struct PipelineShaderStageInfo : VkPipelineShaderStageCreateInfo
-{
+struct PipelineShaderStageInfo : VkPipelineShaderStageCreateInfo {
     PipelineShaderStageInfo() = default;
     PipelineShaderStageInfo(Shader *shader, eastl::string_view entry_point);
 };
 
-struct PipelineVertexLayoutBindingInfo : VkVertexInputBindingDescription
-{
+struct PipelineVertexLayoutBindingInfo : VkVertexInputBindingDescription {
     PipelineVertexLayoutBindingInfo() = default;
     PipelineVertexLayoutBindingInfo(u32 binding_id, u32 stride, bool is_instanced = false);
 };
 
-struct PipelineVertexAttribInfo : VkVertexInputAttributeDescription
-{
+struct PipelineVertexAttribInfo : VkVertexInputAttributeDescription {
     PipelineVertexAttribInfo() = default;
     PipelineVertexAttribInfo(u32 target_binding, u32 index, Format format, u32 offset);
 };
 
-struct PipelineViewportStateInfo : VkPipelineViewportStateCreateInfo
-{
+struct PipelineViewportStateInfo : VkPipelineViewportStateCreateInfo {
     PipelineViewportStateInfo() = default;
     PipelineViewportStateInfo(eastl::span<VkViewport> viewports, eastl::span<VkRect2D> scissors);
 };
 
-using PipelineLayout = VkPipelineLayout;
+struct PipelineLayout {
+    VkPipelineLayout m_handle = nullptr;
+};
 LR_ASSIGN_OBJECT_TYPE(PipelineLayout, VK_OBJECT_TYPE_PIPELINE_LAYOUT);
 
-struct GraphicsPipelineInfo
-{
+struct GraphicsPipelineInfo {
     // Vertex input state
     eastl::vector<PipelineShaderStageInfo> m_shader_stages = {};
     eastl::vector<PipelineVertexLayoutBindingInfo> m_vertex_binding_infos = {};
@@ -102,20 +94,19 @@ struct GraphicsPipelineInfo
     // Dynamic state
     eastl::vector<DynamicState> m_dynamic_states = {};
 
-    PipelineLayout m_layout = nullptr;
+    PipelineLayout *m_layout = nullptr;
 };
 
-struct ComputePipelineInfo
-{
+struct ComputePipelineInfo {
     PipelineShaderStageInfo m_shader_stage = {};
 
-    PipelineLayout m_layout = nullptr;
+    PipelineLayout *m_layout = nullptr;
 };
 
-struct Pipeline : Tracked<VkPipeline>
-{
-    PipelineLayout m_layout = {};
+struct Pipeline {
     PipelineBindPoint m_bind_point = PipelineBindPoint::Graphics;
+
+    VkPipeline m_handle = VK_NULL_HANDLE;
 };
 LR_ASSIGN_OBJECT_TYPE(Pipeline, VK_OBJECT_TYPE_PIPELINE);
 

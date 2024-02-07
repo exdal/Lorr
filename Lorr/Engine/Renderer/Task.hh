@@ -4,12 +4,10 @@
 #include "PipelineManager.hh"
 #include "TaskResource.hh"
 
-namespace lr::Graphics
-{
+namespace lr::Graphics {
 struct Task;
 struct TaskGraph;
-struct TaskContext
-{
+struct TaskContext {
     TaskContext(Task &task, TaskGraph &task_graph, CommandList &command_list)
         : m_task(task),
           m_task_graph(task_graph),
@@ -20,15 +18,19 @@ struct TaskContext
     ShaderStructRange *get_descriptor_range(ShaderStage shader_stage);
     void set_descriptors(ShaderStage shader_stage, std::initializer_list<GenericResource> resources);
 
-    glm::uvec2 get_image_size(GenericResource &use);
+    glm::uvec2 get_image_size(GenericResource &resource);
     glm::uvec4 get_pass_size();
     eastl::tuple<eastl::vector<Format>, Format> get_attachment_formats();
     eastl::span<GenericResource> get_resources();
 
+    Buffer *get_buffer(BufferID buffer_id);
+    eastl::tuple<BufferID, void *> allocate_transient_buffer(const BufferDesc &buf_desc);
+
+    void set_push_constants(ShaderStage shader_stage, void *data, usize data_size, u32 offset);
     template<typename T>
-    void set_push_constant(ShaderStage shader_stage, T &v, u32 offset = 0)
+    void set_push_constants(ShaderStage shader_stage, T &v, u32 offset = 0)
     {
-        m_command_list.set_push_constants(&v, sizeof(T), offset, &get_pipeline()->m_layout, shader_stage);
+        set_push_constants(shader_stage, &v, sizeof(T), offset);
     }
 
     RenderingAttachment as_color_attachment(GenericResource &use, const ColorClearValue &clear_value = { 0.0f, 0.0f, 0.0f, 1.0f });
@@ -40,8 +42,7 @@ private:
 };
 
 using TaskID = u32;
-struct Task
-{
+struct Task {
     virtual ~Task() = default;
     virtual void execute(TaskContext &ctx) = 0;
     virtual bool compile_pipeline(PipelineCompileInfo &compile_info) = 0;
@@ -49,10 +50,8 @@ struct Task
     template<typename ImageFn, typename BufferFn>
     void for_each_res(const ImageFn &image_cb, const BufferFn &buffer_cb)
     {
-        for (GenericResource &resource : m_generic_resources)
-        {
-            switch (resource.m_type)
-            {
+        for (GenericResource &resource : m_generic_resources) {
+            switch (resource.m_type) {
                 case TaskResourceType::Image:
                     image_cb(resource);
                     break;
@@ -72,8 +71,7 @@ template<typename TaskT>
 concept TaskConcept = requires { TaskT{}.m_uses; } and requires(TaskContext &tc) { TaskT{}.execute(tc); };
 
 template<TaskConcept TaskT>
-struct TaskWrapper : Task
-{
+struct TaskWrapper : Task {
     TaskWrapper(const TaskT &task)
         : m_task(task)
     {
@@ -99,8 +97,7 @@ struct TaskWrapper : Task
     constexpr static usize resource_count = sizeof(typename TaskT::Uses) / sizeof(GenericResource);
 };
 
-struct TaskBarrier
-{
+struct TaskBarrier {
     TaskImageID m_task_image_id = TaskImageID::Invalid;
     ImageLayout m_src_layout = {};
     ImageLayout m_dst_layout = {};
@@ -110,15 +107,13 @@ struct TaskBarrier
 
 using TaskBatchID = u32;
 constexpr static TaskBatchID kTaskBatchNull = ~0;
-struct TaskBatch
-{
+struct TaskBatch {
     TaskAccess::Access m_execution_access = TaskAccess::None;
     eastl::vector<usize> m_wait_barriers = {};
     eastl::vector<TaskID> m_tasks = {};
 };
 
-struct TaskSubmitScope
-{
+struct TaskSubmitScope {
     eastl::vector<TaskBatchID> m_batches = {};
 
     // For resources are not connected to any other passes but still need a barrier

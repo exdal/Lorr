@@ -1,6 +1,5 @@
 #pragma once
 
-#include "CommandBatcher.hh"
 #include "Graphics/SwapChain.hh"
 #include "PipelineManager.hh"
 #include "Task.hh"
@@ -11,41 +10,35 @@
 #include "Graphics/MemoryAllocator.hh"
 #include "Memory/Allocator/AreaAllocator.hh"
 
-#include <EASTL/vector.h>
 #include <EASTL/queue.h>
+#include <EASTL/vector.h>
 
-namespace lr::Graphics
-{
-struct TaskFrame
-{
+namespace lr::Graphics {
+struct TaskFrame {
     constexpr static usize k_type_count = static_cast<usize>(CommandType::Count);
 
     Semaphore m_timeline_sema = {};
     eastl::array<CommandAllocator, k_type_count> m_allocators = {};
-    LinearMemoryPool *m_frametime_memory = nullptr;
-    eastl::queue<BufferID> m_zombie_buffers = {};
+    PoolID m_frametime_memory = PoolID::Invalid;
+    eastl::queue<BufferID> m_transient_buffers = {};
 
     DescriptorSet m_descriptor_set = {};
 };
 
-struct TaskPresentDesc
-{
+struct TaskPresentDesc {
     TaskImageID m_swap_chain_image_id = TaskImageID::Invalid;
 };
 
-struct TaskExecuteDesc
-{
+struct TaskExecuteDesc {
     TaskImageID m_swap_chain_image_id = TaskImageID::Invalid;
 };
 
-struct TaskGraphDesc
-{
+struct TaskGraphDesc {
     Device *m_device = nullptr;
     SwapChain *m_swap_chain = nullptr;
 };
 
-struct TaskGraph
-{
+struct TaskGraph {
     void init(TaskGraphDesc *desc);
     ~TaskGraph();
 
@@ -68,7 +61,9 @@ struct TaskGraph
     void execute(const TaskExecuteDesc &execute_desc);
 
     void insert_barrier(CommandBatcher &batcher, const TaskBarrier &barrier);
+    void set_scope_descriptors(u32 frame_id, TaskSubmitScope &scope, CommandList &cmd_list);
 
+    eastl::tuple<BufferID, void *> allocate_transient_buffer(const BufferDesc &buf_desc);
     auto &get_image_info(TaskImageID image_id) { return m_image_infos[get_handle_val(image_id)]; }
     auto &get_buffer_info(TaskBufferID buffer_id) { return m_buffer_infos[get_handle_val(buffer_id)]; }
 
@@ -90,6 +85,11 @@ struct TaskGraph
 
     eastl::vector<Task *> m_tasks = {};
     Memory::AreaAllocator m_task_allocator = {};
+
+    DescriptorSetID m_sampler_descriptor_id = DescriptorSetID::Invalid;
+    DescriptorSetID m_image_descriptor_id = DescriptorSetID::Invalid;
+    DescriptorSetID m_rw_image_descriptor_id = DescriptorSetID::Invalid;
+    DescriptorSetID m_buffer_address_descriptor_id = DescriptorSetID::Invalid;
 };
 
 template<typename TaskT>

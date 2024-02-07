@@ -2,8 +2,7 @@
 
 #include "TaskGraph.hh"
 
-namespace lr::Graphics
-{
+namespace lr::Graphics {
 CommandList &TaskContext::get_command_list()
 {
     ZoneScoped;
@@ -28,8 +27,7 @@ ShaderStructRange *TaskContext::get_descriptor_range(ShaderStage shader_stage)
     auto pipeline_info = pipeline_man.get_pipeline_info(m_task.m_pipeline_info_id);
     ShaderStructRange *range = nullptr;
 
-    for (ShaderReflectionData &reflection_data : pipeline_info->m_reflections)
-    {
+    for (ShaderReflectionData &reflection_data : pipeline_info->m_reflections) {
         if (reflection_data.m_compiled_stage != shader_stage)
             continue;
 
@@ -47,7 +45,7 @@ void TaskContext::set_descriptors(ShaderStage shader_stage, std::initializer_lis
     assert(shader_descriptor_range != nullptr && shader_descriptor_range->size == sizeof(ShaderDescriptors));
 
     ShaderDescriptors descriptors = {};
-    set_push_constant(shader_stage, descriptors);
+    set_push_constants(shader_stage, descriptors);
 }
 
 glm::uvec2 TaskContext::get_image_size(GenericResource &resource)
@@ -63,8 +61,7 @@ glm::uvec4 TaskContext::get_pass_size()
     ZoneScoped;
 
     glm::uvec2 max_size = {};
-    for (auto &use : m_task.m_generic_resources)
-    {
+    for (auto &use : m_task.m_generic_resources) {
         auto size = get_image_size(use);
         if (max_size.x < size.x && max_size.y < size.y)
             max_size = size;
@@ -79,8 +76,7 @@ eastl::tuple<eastl::vector<Format>, Format> TaskContext::get_attachment_formats(
 
     eastl::vector<Format> color_formats = {};
     Format depth_format = {};
-    for (auto &resource : m_task.m_generic_resources)
-    {
+    for (auto &resource : m_task.m_generic_resources) {
         auto &image_info = m_task_graph.m_image_infos[get_handle_val(resource.m_task_image_id)];
         ImageView *image_view = m_task_graph.m_device->get_image_view(image_info.m_image_view_id);
         if (resource.m_image_layout == ImageLayout::ColorAttachment)
@@ -95,6 +91,22 @@ eastl::tuple<eastl::vector<Format>, Format> TaskContext::get_attachment_formats(
 eastl::span<GenericResource> TaskContext::get_resources()
 {
     return m_task.m_generic_resources;
+}
+
+Buffer *TaskContext::get_buffer(BufferID buffer_id)
+{
+    return m_task_graph.m_device->get_buffer(buffer_id);
+}
+
+eastl::tuple<BufferID, void *> TaskContext::allocate_transient_buffer(const BufferDesc &buf_desc)
+{
+    return m_task_graph.allocate_transient_buffer(buf_desc);
+}
+
+void TaskContext::set_push_constants(ShaderStage shader_stage, void *data, usize data_size, u32 offset)
+{
+    DescriptorManager &descriptor_man = m_task_graph.m_descriptor_manager;
+    m_command_list.set_push_constants(data, data_size, offset, descriptor_man.get_layout(data_size));
 }
 
 RenderingAttachment TaskContext::as_color_attachment(GenericResource &use, const ColorClearValue &clear_value)

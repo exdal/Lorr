@@ -26,23 +26,7 @@ AlwaysBreakBeforeMultilineStrings: false
 AlwaysBreakTemplateDeclarations: Yes
 BinPackArguments: false
 BinPackParameters: false
-BreakBeforeBraces: Custom
-BraceWrapping:
-  AfterStruct: true
-  AfterClass: true
-  AfterNamespace: true
-  AfterFunction: true
-  AfterCaseLabel: true
-  AfterControlStatement: Always
-  AfterEnum: true
-  AfterUnion: true
-  AfterExternBlock: true
-  BeforeCatch: true
-  BeforeElse: true
-  SplitEmptyFunction: true
-  SplitEmptyRecord: true
-  SplitEmptyNamespace: true
-  BeforeLambdaBody: true
+BreakBeforeBraces: Stroustrup
 
 SortIncludes: false
 

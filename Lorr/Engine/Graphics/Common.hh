@@ -1,26 +1,10 @@
 #pragma once
 
 #include "Vulkan.hh"  // IWYU pragma: export
+#include "zfwd.hh"
 
-namespace lr::Graphics
-{
-template<typename StartT>
-struct chained_struct
-{
-    chained_struct(StartT &start) { m_cur = reinterpret_cast<VkBaseOutStructure *>(&start); }
-
-    template<typename T>
-    chained_struct set_next(T &next)
-    {
-        m_cur->pNext = reinterpret_cast<VkBaseOutStructure *>(&next);
-        return *this;
-    }
-
-    VkBaseOutStructure *m_cur = nullptr;
-};
-
-enum class DeviceFeature : u64
-{
+namespace lr::graphics {
+enum class DeviceFeature : u64 {
     None = 0,
     DescriptorBuffer = 1 << 0,
     MemoryBudget = 1 << 1,
@@ -29,11 +13,12 @@ LR_TYPEOP_ARITHMETIC_INT(DeviceFeature, DeviceFeature, &);
 LR_TYPEOP_ARITHMETIC(DeviceFeature, DeviceFeature, |);
 LR_TYPEOP_ASSIGNMENT(DeviceFeature, DeviceFeature, |);
 
-enum class APIResult : i32
-{
+enum class VKResult : i32 {
     Success = VK_SUCCESS,
     NotReady = VK_NOT_READY,
     TimeOut = VK_TIMEOUT,
+    EventSet = VK_EVENT_SET,
+    EventReset = VK_EVENT_RESET,
     Incomplete = VK_INCOMPLETE,
     OutOfHostMem = VK_ERROR_OUT_OF_HOST_MEMORY,
     OutOfDeviceMem = VK_ERROR_OUT_OF_DEVICE_MEMORY,
@@ -48,34 +33,122 @@ enum class APIResult : i32
     FormatNotSupported = VK_ERROR_FORMAT_NOT_SUPPORTED,
     FragmentedPool = VK_ERROR_FRAGMENTED_POOL,
     Unknown = VK_ERROR_UNKNOWN,
+    OutOfPoolMem = VK_ERROR_OUT_OF_POOL_MEMORY,
+    InvalidExternalHandle = VK_ERROR_INVALID_EXTERNAL_HANDLE,
     Fragmentation = VK_ERROR_FRAGMENTATION,
+    InvalidOpaqueCaptureAddress = VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS,
+    PipelineCompileRequired = VK_PIPELINE_COMPILE_REQUIRED,
     SurfaceLost = VK_ERROR_SURFACE_LOST_KHR,
     WindowInUse = VK_ERROR_NATIVE_WINDOW_IN_USE_KHR,
     Suboptimal = VK_SUBOPTIMAL_KHR,
     OutOfDate = VK_ERROR_OUT_OF_DATE_KHR,
-    InvalidExternalHandle = VK_ERROR_INVALID_EXTERNAL_HANDLE,
-    OutOfPoolMem = VK_ERROR_OUT_OF_POOL_MEMORY,
+    IncompatibleDisplay = VK_ERROR_INCOMPATIBLE_DISPLAY_KHR,
+    ValidationFailed_EXT = VK_ERROR_VALIDATION_FAILED_EXT,
+    InvalidShader_NV = VK_ERROR_INVALID_SHADER_NV,
+    ImageUsageNotSupported = VK_ERROR_IMAGE_USAGE_NOT_SUPPORTED_KHR,
+    VideoPictureLayoutNotSupported = VK_ERROR_VIDEO_PICTURE_LAYOUT_NOT_SUPPORTED_KHR,
+    VideoProfileOperationNotSupported = VK_ERROR_VIDEO_PROFILE_OPERATION_NOT_SUPPORTED_KHR,
+    VideoProfileCodecNotSupported = VK_ERROR_VIDEO_PROFILE_CODEC_NOT_SUPPORTED_KHR,
+    VideoSTDVersionNotSupported = VK_ERROR_VIDEO_STD_VERSION_NOT_SUPPORTED_KHR,
+    InvalidDRMFormatModifierPlaneLayout_EXT = VK_ERROR_INVALID_DRM_FORMAT_MODIFIER_PLANE_LAYOUT_EXT,
+    NotPermitted = VK_ERROR_NOT_PERMITTED_KHR,
+    FullScreenExclusiveLost_EXT = VK_ERROR_FULL_SCREEN_EXCLUSIVE_MODE_LOST_EXT,
+    ThreadIdle = VK_THREAD_IDLE_KHR,
+    ThreadDone = VK_THREAD_DONE_KHR,
+    OperationDeferred = VK_OPERATION_DEFERRED_KHR,
+    OperationNotDeferred = VK_OPERATION_NOT_DEFERRED_KHR,
+#ifdef VK_ENABLE_BETA_EXTENSONS
+    InvalidVideoSTDParams = VK_ERROR_INVALID_VIDEO_STD_PARAMETERS_EXT,
+#endif
+    CompressionExhausted_EXT = VK_ERROR_COMPRESSION_EXHAUSTED_EXT,
+    IncompatibleShaderBinary_EXT = VK_ERROR_INCOMPATIBLE_SHADER_BINARY_EXT,
 
-    HanldeNotInitialized = VK_RESULT_MAX_ENUM,
+    ResultMax = VK_RESULT_MAX_ENUM,
 };
 
-constexpr static APIResult CHECK(VkResult vkr, [[maybe_unused]] std::initializer_list<APIResult> allowed_checks = {})
+constexpr bool operator!(VKResult r)
 {
-    auto result = static_cast<APIResult>(vkr);
+    return r != VKResult::Success;
+}
+
+constexpr static std::string_view vkresult_to_string(VKResult result)
+{
+#define CASE(x)       \
+    case VKResult::x: \
+        return #x;
+
+    switch (result) {
+        CASE(Success);
+        CASE(NotReady);
+        CASE(TimeOut);
+        CASE(Incomplete);
+        CASE(OutOfHostMem);
+        CASE(OutOfDeviceMem);
+        CASE(InitFailed);
+        CASE(DeviceLost);
+        CASE(MemMapFailed);
+        CASE(LayerNotPresent);
+        CASE(ExtNotPresent);
+        CASE(FeatureNotPresent);
+        CASE(IncompatibleDriver);
+        CASE(TooManyObjects);
+        CASE(FormatNotSupported);
+        CASE(FragmentedPool);
+        CASE(Unknown);
+        CASE(Fragmentation);
+        CASE(SurfaceLost);
+        CASE(WindowInUse);
+        CASE(Suboptimal);
+        CASE(OutOfDate);
+        CASE(OutOfPoolMem);
+        CASE(InvalidExternalHandle);
+        CASE(InvalidOpaqueCaptureAddress);
+        CASE(PipelineCompileRequired);
+        CASE(IncompatibleDisplay);
+        CASE(ValidationFailed_EXT);
+        CASE(InvalidShader_NV);
+        CASE(ImageUsageNotSupported);
+        CASE(VideoPictureLayoutNotSupported);
+        CASE(VideoProfileOperationNotSupported);
+        CASE(VideoProfileCodecNotSupported);
+        CASE(VideoSTDVersionNotSupported);
+        CASE(InvalidDRMFormatModifierPlaneLayout_EXT);
+        CASE(NotPermitted);
+        CASE(FullScreenExclusiveLost_EXT);
+        CASE(ThreadIdle);
+        CASE(ThreadDone);
+        CASE(OperationDeferred);
+        CASE(OperationNotDeferred);
+#ifdef VK_ENABLE_BETA_EXTENSONS
+        CASE(InvalidVideoSTDParams);
+#endif
+        CASE(CompressionExhausted_EXT);
+        CASE(IncompatibleShaderBinary_EXT);
+        CASE(ResultMax);
+        default:
+            return "Unknown Error";
+    }
+
+#undef CASE
+}
+
+constexpr static VKResult CHECK(
+    VkResult vkr, [[maybe_unused]] std::initializer_list<VKResult> allowed_checks = {})
+{
+    auto result = static_cast<VKResult>(vkr);
 #if _DEBUG
-    if (result != APIResult::Success)
+    if (result != VKResult::Success)
         for (auto &a : allowed_checks)
             if (a == result)
                 return result;
 
-    assert(result == APIResult::Success);
+    assert(result == VKResult::Success);
 #endif
 
     return result;
 }
 
-enum class PresentMode : u32
-{
+enum class PresentMode : u32 {
     Immediate = VK_PRESENT_MODE_IMMEDIATE_KHR,
     Mailbox = VK_PRESENT_MODE_MAILBOX_KHR,
     Fifo = VK_PRESENT_MODE_FIFO_KHR,
@@ -84,8 +157,7 @@ enum class PresentMode : u32
 
 /// BUFFER ---------------------------- ///
 
-enum class BufferUsage : u64
-{
+enum class BufferUsage : u64 {
     None = 0,
     Vertex = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
     Index = VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
@@ -103,16 +175,14 @@ LR_TYPEOP_ASSIGNMENT(BufferUsage, BufferUsage, |);
 
 /// COMMAND ---------------------------- ///
 
-enum class CommandType : u32
-{
+enum class CommandType : u32 {
     Graphics = 0,
     Compute,
     Transfer,
     Count,
 };
 
-enum class CommandTypeMask : u32
-{
+enum class CommandTypeMask : u32 {
     Graphics = 1 << static_cast<u32>(CommandType::Graphics),
     Compute = 1 << static_cast<u32>(CommandType::Compute),
     Transfer = 1 << static_cast<u32>(CommandType::Transfer),
@@ -121,8 +191,8 @@ LR_TYPEOP_ARITHMETIC(CommandTypeMask, CommandTypeMask, |);
 LR_TYPEOP_ARITHMETIC_INT(CommandTypeMask, CommandTypeMask, &);
 LR_TYPEOP_ASSIGNMENT(CommandTypeMask, CommandTypeMask, |);
 
-enum class CommandAllocatorFlag : u32
-{
+enum class CommandAllocatorFlag : u32 {
+    None = 0,
     Transient = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
     ResetCommandBuffer = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
     Protected = VK_COMMAND_POOL_CREATE_PROTECTED_BIT,
@@ -132,8 +202,7 @@ LR_TYPEOP_ARITHMETIC_INT(CommandAllocatorFlag, CommandAllocatorFlag, &);
 
 /// DESCRIPTOR ---------------------------- ///
 
-enum class DescriptorType : u32
-{
+enum class DescriptorType : u32 {
     Sampler = VK_DESCRIPTOR_TYPE_SAMPLER,
     SampledImage = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,    // Read only image
     UniformBuffer = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,  // Read only buffer
@@ -143,17 +212,16 @@ enum class DescriptorType : u32
     Count = 5,
 };
 
-enum class DescriptorSetLayoutFlag : u32
-{
+enum class DescriptorSetLayoutFlag : u32 {
     None = 0,
-    DescriptorBuffer = 1 << 0,
-    EmbeddedSamplers = 1 << 1,
+    UpdateAfterBindPool = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT,
+    DescriptorBuffer = VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT,
+    EmbeddedSamplers = VK_DESCRIPTOR_SET_LAYOUT_CREATE_EMBEDDED_IMMUTABLE_SAMPLERS_BIT_EXT,
 };
 LR_TYPEOP_ARITHMETIC(DescriptorSetLayoutFlag, DescriptorSetLayoutFlag, |);
 LR_TYPEOP_ARITHMETIC_INT(DescriptorSetLayoutFlag, DescriptorSetLayoutFlag, &);
 
-enum class DescriptorBindingFlag : u32
-{
+enum class DescriptorBindingFlag : u32 {
     None = 0,
     UpdateAfterBind = VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT,
     UpdateUnusedWhilePending = VK_DESCRIPTOR_BINDING_UPDATE_UNUSED_WHILE_PENDING_BIT,
@@ -163,9 +231,10 @@ enum class DescriptorBindingFlag : u32
 LR_TYPEOP_ARITHMETIC(DescriptorBindingFlag, DescriptorBindingFlag, |);
 LR_TYPEOP_ARITHMETIC_INT(DescriptorBindingFlag, DescriptorBindingFlag, &);
 
-enum class DescriptorPoolFlag : u32
-{
+enum class DescriptorPoolFlag : u32 {
     None = 0,
+    // This flag allows individual frees for Descriptor Sets.
+    // However comes with a cost, do not use it if not really needed.
     FreeDescriptorSet = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT,
     UpdateAfterBind = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT,
 };
@@ -174,8 +243,7 @@ LR_TYPEOP_ARITHMETIC_INT(DescriptorPoolFlag, DescriptorPoolFlag, &);
 
 /// IMAGE ---------------------------- ///
 
-enum class Format : u32
-{
+enum class Format : u32 {
     // Format: CB_T
     // C = Component, B = bit count, T = type
 
@@ -232,52 +300,58 @@ enum class Format : u32
 
 constexpr static u32 format_to_size(Format format)
 {
-    constexpr u32 format_size_lut[] = {
-        [(u32)Format::Unknown] = 0,
-        [(u32)Format::R32_SFLOAT] = sizeof(u32),
-        [(u32)Format::R32_SINT] = sizeof(u32),
-        [(u32)Format::R32_UINT] = sizeof(u32),
-        [(u32)Format::R32G32_SFLOAT] = sizeof(u32) * 2,
-        [(u32)Format::R32G32_SINT] = sizeof(u32) * 2,
-        [(u32)Format::R32G32_UINT] = sizeof(u32) * 2,
-        [(u32)Format::R32G32B32_SFLOAT] = sizeof(u32) * 3,
-        [(u32)Format::R32G32B32_SINT] = sizeof(u32) * 3,
-        [(u32)Format::R32G32B32_UINT] = sizeof(u32) * 3,
-        [(u32)Format::R8G8B8A8_UNORM] = sizeof(u8) * 4,
-        [(u32)Format::R8G8B8A8_INT] = sizeof(u8) * 4,
-        [(u32)Format::R8G8B8A8_UINT] = sizeof(u8) * 4,
-        [(u32)Format::R8G8B8A8_SRGB] = sizeof(u8) * 4,
-        [(u32)Format::R16G16B16A16_SFLOAT] = sizeof(u16) * 4,
-        [(u32)Format::R16G16B16A16_SINT] = sizeof(u16) * 4,
-        [(u32)Format::R16G16B16A16_UINT] = sizeof(u16) * 4,
-        [(u32)Format::R32G32B32A32_SFLOAT] = sizeof(u32) * 4,
-        [(u32)Format::R32G32B32A32_SINT] = sizeof(u32) * 4,
-        [(u32)Format::R32G32B32A32_UINT] = sizeof(u32) * 4,
-        [(u32)Format::B8G8R8A8_UNORM] = sizeof(u8) * 4,
-        [(u32)Format::B8G8R8A8_INT] = sizeof(u8) * 4,
-        [(u32)Format::B8G8R8A8_UINT] = sizeof(u8) * 4,
-        [(u32)Format::B8G8R8A8_SRGB] = sizeof(u8) * 4,
-        [(u32)Format::D32_SFLOAT] = sizeof(u32),
-        [(u32)Format::D24_SFLOAT_S8_UINT] = sizeof(u32),
-    };
+    switch (format) {
+        case Format::R32_SFLOAT:
+        case Format::R32_SINT:
+        case Format::R32_UINT:
+            return sizeof(u32);
+        case Format::R32G32_SFLOAT:
+        case Format::R32G32_SINT:
+        case Format::R32G32_UINT:
+            return sizeof(u32) * 2;
+        case Format::R32G32B32_SFLOAT:
+        case Format::R32G32B32_SINT:
+        case Format::R32G32B32_UINT:
+            return sizeof(u32) * 3;
+        case Format::R8G8B8A8_UNORM:
+        case Format::R8G8B8A8_INT:
+        case Format::R8G8B8A8_UINT:
+        case Format::R8G8B8A8_SRGB:
+            return sizeof(u8) * 4;
+        case Format::R16G16B16A16_SFLOAT:
+        case Format::R16G16B16A16_SINT:
+        case Format::R16G16B16A16_UINT:
+            return sizeof(u16) * 4;
+        case Format::R32G32B32A32_SFLOAT:
+        case Format::R32G32B32A32_SINT:
+        case Format::R32G32B32A32_UINT:
+            return sizeof(u32) * 4;
+        case Format::B8G8R8A8_UNORM:
+        case Format::B8G8R8A8_INT:
+        case Format::B8G8R8A8_UINT:
+        case Format::B8G8R8A8_SRGB:
+            return sizeof(u8) * 4;
+        case Format::D32_SFLOAT:
+        case Format::D24_SFLOAT_S8_UINT:
+            return sizeof(u32);
+        default:
+            break;
+    }
 
-    return format_size_lut[(u32)format];
+    return 0;
 }
 
-enum class ImageUsage : u32
-{
+enum class ImageUsage : u32 {
     Sampled = VK_IMAGE_USAGE_SAMPLED_BIT,
     ColorAttachment = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
     DepthStencilAttachment = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
     TransferSrc = VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
     TransferDst = VK_IMAGE_USAGE_TRANSFER_DST_BIT,
     Storage = VK_IMAGE_USAGE_STORAGE_BIT,
-    Present = 1 << 29,  // Virtual flag
 };
 LR_TYPEOP_ARITHMETIC_INT(ImageUsage, ImageUsage, &);
 
-enum class ImageLayout : u32
-{
+enum class ImageLayout : u32 {
     Undefined = VK_IMAGE_LAYOUT_UNDEFINED,
     Present = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
     ColorAttachment = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
@@ -289,15 +363,13 @@ enum class ImageLayout : u32
     General = VK_IMAGE_LAYOUT_GENERAL,
 };
 
-enum class ImageType : u32
-{
+enum class ImageType : u32 {
     View1D = VK_IMAGE_TYPE_1D,
     View2D = VK_IMAGE_TYPE_2D,
     View3D = VK_IMAGE_TYPE_3D,
 };
 
-enum class ImageViewType : u32
-{
+enum class ImageViewType : u32 {
     View1D = VK_IMAGE_VIEW_TYPE_1D,
     View2D = VK_IMAGE_VIEW_TYPE_2D,
     View3D = VK_IMAGE_VIEW_TYPE_3D,
@@ -307,16 +379,14 @@ enum class ImageViewType : u32
     CubeArray = VK_IMAGE_VIEW_TYPE_CUBE_ARRAY,
 };
 
-enum class ImageAspect : u32
-{
+enum class ImageAspect : u32 {
     Color = VK_IMAGE_ASPECT_COLOR_BIT,
     Depth = VK_IMAGE_ASPECT_DEPTH_BIT,
     Stencil = VK_IMAGE_ASPECT_STENCIL_BIT,
     DepthStencil = Depth | Stencil,
 };
 
-enum class ImageComponentSwizzle : u32
-{
+enum class ImageComponentSwizzle : u32 {
     Identity = VK_COMPONENT_SWIZZLE_IDENTITY,
     Zero = VK_COMPONENT_SWIZZLE_ZERO,
     One = VK_COMPONENT_SWIZZLE_ONE,
@@ -328,14 +398,12 @@ enum class ImageComponentSwizzle : u32
 
 /// PIPELINE ---------------------------- ///
 
-enum class PipelineBindPoint : u32
-{
+enum class PipelineBindPoint : u32 {
     Graphics = VK_PIPELINE_BIND_POINT_GRAPHICS,
     Compute = VK_PIPELINE_BIND_POINT_COMPUTE,
 };
 
-enum class PipelineStage : u64
-{
+enum class PipelineStage : u64 {
     None = VK_PIPELINE_STAGE_2_NONE,
     TopOfPipe = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
 
@@ -372,8 +440,7 @@ enum class PipelineStage : u64
 LR_TYPEOP_ARITHMETIC(PipelineStage, PipelineStage, |);
 LR_TYPEOP_ARITHMETIC_INT(PipelineStage, PipelineStage, &);
 
-enum class MemoryAccess : u64
-{
+enum class MemoryAccess : u64 {
     None = VK_ACCESS_2_NONE,
     IndirectRead = VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT,
     VertexAttribRead = VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT,
@@ -399,8 +466,7 @@ enum class MemoryAccess : u64
 LR_TYPEOP_ARITHMETIC(MemoryAccess, MemoryAccess, |);
 LR_TYPEOP_ARITHMETIC_INT(MemoryAccess, MemoryAccess, &);
 
-enum class PrimitiveType : u32
-{
+enum class PrimitiveType : u32 {
     PointList = VK_PRIMITIVE_TOPOLOGY_POINT_LIST,
     LineList = VK_PRIMITIVE_TOPOLOGY_LINE_LIST,
     LineStrip = VK_PRIMITIVE_TOPOLOGY_LINE_STRIP,
@@ -409,29 +475,25 @@ enum class PrimitiveType : u32
     Patch = VK_PRIMITIVE_TOPOLOGY_PATCH_LIST,
 };
 
-enum class CullMode : u32
-{
+enum class CullMode : u32 {
     None = VK_CULL_MODE_NONE,
     Front = VK_CULL_MODE_FRONT_BIT,
     Back = VK_CULL_MODE_BACK_BIT,
 };
 
-enum class Filtering : u32
-{
+enum class Filtering : u32 {
     Nearest = VK_FILTER_NEAREST,
     Linear = VK_FILTER_LINEAR,
 };
 
-enum class TextureAddressMode : u32
-{
+enum class TextureAddressMode : u32 {
     Repeat = VK_SAMPLER_ADDRESS_MODE_REPEAT,
     MirroredRepeat = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT,
     ClampToEdge = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
     ClampToBorder = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
 };
 
-enum class CompareOp : u32
-{
+enum class CompareOp : u32 {
     Never = VK_COMPARE_OP_NEVER,
     Less = VK_COMPARE_OP_LESS,
     Equal = VK_COMPARE_OP_EQUAL,
@@ -442,8 +504,18 @@ enum class CompareOp : u32
     Always = VK_COMPARE_OP_ALWAYS,
 };
 
-union ColorClearValue
-{
+enum class AttachmentLoadOp : u32 {
+    Load = VK_ATTACHMENT_LOAD_OP_LOAD,
+    Clear = VK_ATTACHMENT_LOAD_OP_CLEAR,
+    DontCare = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+};
+
+enum class AttachmentStoreOp : u32 {
+    Store = VK_ATTACHMENT_STORE_OP_STORE,
+    DontCare = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+};
+
+union ColorClearValue {
     ColorClearValue(){};
     ColorClearValue(f32 r, f32 g, f32 b, f32 a)
         : m_val_float({ r, g, b, a }){};
@@ -463,8 +535,7 @@ union ColorClearValue
     glm::ivec4 m_val_int;
 };
 
-struct DepthClearValue
-{
+struct DepthClearValue {
     DepthClearValue() = default;
     DepthClearValue(float depth, u8 stencil)
         : m_depth(depth),
@@ -474,9 +545,7 @@ struct DepthClearValue
     u8 m_stencil = 0;
 };
 
-enum class BlendFactor : u32
-{
-
+enum class BlendFactor : u32 {
     Zero = VK_BLEND_FACTOR_ZERO,
     One = VK_BLEND_FACTOR_ONE,
     SrcColor = VK_BLEND_FACTOR_SRC_COLOR,
@@ -496,8 +565,7 @@ enum class BlendFactor : u32
     InvSrc1Alpha = VK_BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA,
 };
 
-enum class BlendOp : u32
-{
+enum class BlendOp : u32 {
     Add = VK_BLEND_OP_ADD,
     Subtract = VK_BLEND_OP_SUBTRACT,
     ReverseSubtract = VK_BLEND_OP_REVERSE_SUBTRACT,
@@ -505,8 +573,7 @@ enum class BlendOp : u32
     Max = VK_BLEND_OP_MAX,
 };
 
-enum class StencilOp : u32
-{
+enum class StencilOp : u32 {
     Keep = VK_STENCIL_OP_KEEP,
     Zero = VK_STENCIL_OP_ZERO,
     Replace = VK_STENCIL_OP_REPLACE,
@@ -517,8 +584,7 @@ enum class StencilOp : u32
     DecrAndWrap = VK_STENCIL_OP_DECREMENT_AND_WRAP,
 };
 
-enum class ColorMask : u32
-{
+enum class ColorMask : u32 {
     None = 0,
     R = 1 << 0,
     G = 1 << 1,
@@ -529,8 +595,7 @@ enum class ColorMask : u32
 };
 LR_TYPEOP_ARITHMETIC(ColorMask, ColorMask, |);
 
-enum class DynamicState : u32
-{
+enum class DynamicState : u32 {
     Viewport = 1 << 0,          // VK_DYNAMIC_STATE_VIEWPORT,
     Scissor = 1 << 1,           // VK_DYNAMIC_STATE_SCISSOR,
     ViewportAndCount = 1 << 2,  // VK_DYNAMIC_STATE_VIEWPORT_WITH_COUNT,
@@ -570,8 +635,7 @@ enum class DynamicState : u32
 LR_TYPEOP_ARITHMETIC(DynamicState, DynamicState, |);
 LR_TYPEOP_ARITHMETIC_INT(DynamicState, DynamicState, &);
 
-enum class ShaderStage : u32
-{
+enum class ShaderStageFlag : u32 {
     Vertex = VK_SHADER_STAGE_VERTEX_BIT,
     Pixel = VK_SHADER_STAGE_FRAGMENT_BIT,
     Compute = VK_SHADER_STAGE_COMPUTE_BIT,
@@ -580,11 +644,10 @@ enum class ShaderStage : u32
     All = Vertex | Pixel | Compute | TessellationControl | TessellationEvaluation,
     Count = 5,
 };
-LR_TYPEOP_ARITHMETIC_INT(ShaderStage, ShaderStage, &);
+LR_TYPEOP_ARITHMETIC_INT(ShaderStageFlag, ShaderStageFlag, &);
 
 /// MEMORY ---------------------------- ///
-enum class MemoryFlag : u32
-{
+enum class MemoryFlag : u32 {
     Device = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
     HostVisible = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
     HostCoherent = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
@@ -595,12 +658,604 @@ enum class MemoryFlag : u32
 LR_TYPEOP_ARITHMETIC_INT(MemoryFlag, MemoryFlag, &);
 LR_TYPEOP_ARITHMETIC(MemoryFlag, MemoryFlag, |);
 
-namespace Limits
-{
-    constexpr usize MaxPushConstants = 8;
+namespace Limits {
     constexpr usize MaxVertexAttribs = 8;
-    constexpr usize MaxColorAttachments = 8;
-    constexpr usize MaxFrameCount = 8;
+    constexpr usize ColorAttachments = 8;
+    constexpr usize FrameCount = 3;
 
 }  // namespace Limits
-}  // namespace lr::Graphics
+
+// Vulkan Structs
+struct Offset2D {
+    i32 x = 0;
+    i32 y = 0;
+
+    bool operator==(const Offset2D &) const = default;
+    bool operator!=(const Offset2D &) const = default;
+    operator auto const &() const { return *reinterpret_cast<const VkOffset2D *>(this); }
+    operator auto &() { return *reinterpret_cast<VkOffset2D *>(this); }
+};
+
+struct Offset3D {
+    i32 x = 0;
+    i32 y = 0;
+    i32 z = 0;
+
+    bool operator==(const Offset3D &) const = default;
+    bool operator!=(const Offset3D &) const = default;
+    operator auto const &() const { return *reinterpret_cast<const VkOffset3D *>(this); }
+    operator auto &() { return *reinterpret_cast<VkOffset3D *>(this); }
+};
+
+struct Extent2D {
+    u32 width = 0;
+    u32 height = 0;
+
+    bool operator==(const Extent2D &) const = default;
+    bool operator!=(const Extent2D &) const = default;
+    operator auto const &() const { return *reinterpret_cast<const VkExtent2D *>(this); }
+    operator auto &() { return *reinterpret_cast<VkExtent2D *>(this); }
+};
+
+struct Extent3D {
+    u32 width = 0;
+    u32 height = 0;
+    u32 depth = 0;
+
+    bool operator==(const Extent3D &) const = default;
+    bool operator!=(const Extent3D &) const = default;
+    operator auto const &() const { return *reinterpret_cast<const VkExtent3D *>(this); }
+    operator auto &() { return *reinterpret_cast<VkExtent3D *>(this); }
+};
+
+struct Viewport {
+    f32 x = 0.0f;
+    f32 y = 0.0f;
+    f32 width = 0.0f;
+    f32 height = 0.0f;
+    float depth_min = 0.0f;
+    float depth_max = 1.0f;
+
+    bool operator==(const Viewport &) const = default;
+    bool operator!=(const Viewport &) const = default;
+    operator auto const &() const { return *reinterpret_cast<const VkViewport *>(this); }
+    operator auto &() { return *reinterpret_cast<VkViewport *>(this); }
+};
+
+struct Rect2D {
+    Offset2D offset = {};
+    Extent2D extent = {};
+
+    bool operator==(const Rect2D &) const = default;
+    bool operator!=(const Rect2D &) const = default;
+    operator auto const &() const { return *reinterpret_cast<const VkRect2D *>(this); }
+    operator auto &() { return *reinterpret_cast<VkRect2D *>(this); }
+};
+
+// Subresource range, it's in the name
+struct ImageSubresourceRange {
+    using VkType = VkImageSubresourceRange;
+
+    ImageAspect aspect_mask = ImageAspect::Color;
+    u32 base_mip = 0;
+    u32 mip_count = 1;
+    u32 base_slice = 0;
+    u32 slice_count = 1;
+
+    operator auto &() { return *reinterpret_cast<VkType *>(this); }
+    operator const auto &() const { return *reinterpret_cast<const VkType *>(this); }
+};
+static_assert(sizeof(ImageSubresourceRange::VkType) == sizeof(ImageSubresourceRange));
+
+// Subresource info used for layers(slices)
+struct ImageSubresourceLayers {
+    using VkType = VkImageSubresourceLayers;
+
+    ImageAspect aspect_mask = ImageAspect::Color;
+    u32 target_mip = 0;
+    u32 base_slice = 0;
+    u32 slice_count = 1;
+
+    operator auto &() { return *reinterpret_cast<VkType *>(this); }
+};
+static_assert(sizeof(ImageSubresourceLayers::VkType) == sizeof(ImageSubresourceLayers));
+
+struct PushConstantRange {
+    using VkType = VkPushConstantRange;
+
+    ShaderStageFlag stage = ShaderStageFlag::All;
+    u32 offset = 0;
+    u32 size = 0;
+
+    operator auto &() { return *reinterpret_cast<VkType *>(this); }
+};
+static_assert(sizeof(PushConstantRange::VkType) == sizeof(PushConstantRange));
+
+struct PipelineShaderStageInfo {
+    using VkType = VkPipelineShaderStageCreateInfo;
+
+    VkStructureType struct_type = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    void *next = nullptr;
+    VkPipelineShaderStageCreateFlags create_flags = {};
+    ShaderStageFlag shader_stage = ShaderStageFlag::All;
+    VkShaderModule module = VK_NULL_HANDLE;
+    const char *entry_point = nullptr;
+    VkSpecializationInfo *specialization_info = nullptr;
+
+    operator auto &() { return *reinterpret_cast<VkType *>(this); }
+    operator const auto &() const { return *reinterpret_cast<const VkType *>(this); }
+};
+static_assert(sizeof(PipelineShaderStageInfo::VkType) == sizeof(PipelineShaderStageInfo));
+
+struct PipelineVertexLayoutBindingInfo {
+    using VkType = VkVertexInputBindingDescription;
+
+    u32 binding = 0;
+    u32 stride = 0;
+    VkVertexInputRate input_rate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+    operator auto &() { return *reinterpret_cast<VkType *>(this); }
+};
+static_assert(sizeof(PipelineVertexLayoutBindingInfo::VkType) == sizeof(PipelineVertexLayoutBindingInfo));
+
+struct PipelineVertexAttribInfo {
+    using VkType = VkVertexInputAttributeDescription;
+
+    u32 location = 0;
+    u32 binding = 0;
+    Format format = Format::Unknown;
+    u32 offset = 0;
+
+    operator auto &() { return *reinterpret_cast<VkType *>(this); }
+};
+static_assert(sizeof(PipelineVertexAttribInfo::VkType) == sizeof(PipelineVertexAttribInfo));
+
+struct PipelineViewportStateInfo {
+    using VkType = VkPipelineViewportStateCreateInfo;
+
+    VkStructureType struct_type = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+    const void *next = nullptr;
+    VkPipelineViewportStateCreateFlags create_flags = 0;
+    u32 viewport_count = 0;
+    const Viewport *viewports = nullptr;
+    u32 scissor_count = 0;
+    const Rect2D *scissors = nullptr;
+
+    operator auto &() { return *reinterpret_cast<VkType *>(this); }
+    operator const auto &() const { return *reinterpret_cast<const VkType *>(this); }
+};
+
+static_assert(sizeof(PipelineViewportStateInfo::VkType) == sizeof(PipelineViewportStateInfo));
+
+struct StencilFaceOp {
+    using VkType = VkStencilOpState;
+
+    StencilOp pass = {};
+    StencilOp fail = {};
+    CompareOp depth_fail = {};
+    CompareOp compare_func = {};
+    ColorMask compare_mask = ColorMask::None;
+    ColorMask write_mask = ColorMask::None;
+    u32 reference = 0;
+
+    operator auto &() { return *reinterpret_cast<VkType *>(this); }
+    operator const auto &() const { return *reinterpret_cast<const VkType *>(this); }
+};
+static_assert(sizeof(StencilFaceOp::VkType) == sizeof(StencilFaceOp));
+
+struct PipelineColorBlendAttachment {
+    using VkType = VkPipelineColorBlendAttachmentState;
+
+    b32 blend_enabled = false;
+    BlendFactor src_blend = BlendFactor::SrcAlpha;
+    BlendFactor dst_blend = BlendFactor::InvSrcAlpha;
+    BlendOp blend_op = BlendOp::Add;
+    BlendFactor src_blend_alpha = BlendFactor::One;
+    BlendFactor dst_blend_alpha = BlendFactor::InvSrcAlpha;
+    BlendOp blend_op_alpha = BlendOp::Add;
+    ColorMask write_mask = ColorMask::RGBA;
+
+    operator auto &() { return *reinterpret_cast<VkType *>(this); }
+};
+static_assert(sizeof(PipelineColorBlendAttachment::VkType) == sizeof(PipelineColorBlendAttachment));
+
+struct RenderingAttachmentInfo {
+    using VkType = VkRenderingAttachmentInfo;
+
+    VkStructureType structure_type = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+    void *next = nullptr;
+    VkImageView image_view = VK_NULL_HANDLE;
+    ImageLayout image_layout = ImageLayout::Undefined;
+    // TODO: MSAA is a requirement
+    VkResolveModeFlagBits resolve_flags_unused = {};
+    VkImageView resolve_image_view_unused = VK_NULL_HANDLE;
+    ImageLayout resolve_image_layout_unused = ImageLayout::Undefined;
+
+    AttachmentLoadOp load_op = AttachmentLoadOp::DontCare;
+    AttachmentStoreOp store_op = AttachmentStoreOp::DontCare;
+    union {
+        ColorClearValue color_clear = {};
+        DepthClearValue depth_clear;
+    };
+
+    operator auto &() { return *reinterpret_cast<VkType *>(this); }
+};
+static_assert(sizeof(RenderingAttachmentInfo::VkType) == sizeof(RenderingAttachmentInfo));
+
+#ifdef MemoryBarrier
+#undef MemoryBarrier
+#endif
+
+struct ImageBarrier {
+    using VkType = VkImageMemoryBarrier2;
+
+    VkStructureType struct_type = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+    void *next = nullptr;
+    PipelineStage src_stage_mask = {};
+    MemoryAccess src_access_mask = {};
+    PipelineStage dst_stage_mask = {};
+    MemoryAccess dst_access_mask = {};
+    ImageLayout old_layout = ImageLayout::Undefined;
+    ImageLayout new_layout = ImageLayout::Undefined;
+    u32 src_queue_family_id = ~0;
+    u32 dst_queue_family_id = ~0;
+    union {
+        ImageID image_id = ImageID::Invalid;
+        VkImage image;
+    };
+    ImageSubresourceRange subresource_range = {};
+
+    operator auto &() { return *reinterpret_cast<VkType *>(this); }
+};
+static_assert(sizeof(ImageBarrier::VkType) == sizeof(ImageBarrier));
+
+struct MemoryBarrier {
+    using VkType = VkMemoryBarrier2;
+
+    VkStructureType struct_type = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2;
+    void *next = nullptr;
+    PipelineStage src_stage_mask = {};
+    MemoryAccess src_access_mask = {};
+    PipelineStage dst_stage_mask = {};
+    MemoryAccess dst_access_mask = {};
+
+    operator auto &() { return *reinterpret_cast<VkType *>(this); }
+};
+static_assert(sizeof(MemoryBarrier::VkType) == sizeof(MemoryBarrier));
+
+struct DependencyInfo {
+    using VkType = VkDependencyInfo;
+
+    VkStructureType struct_type = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+    void *next = nullptr;
+    VkDependencyFlags dependency_flags = 0;
+    u32 memory_barrier_count = 0;
+    MemoryBarrier *memory_barriers = nullptr;
+    // do not use buffer barriers, it's not worth to exchange queue ownership
+    // use memory barriers instead
+    u32 buffer_barrier_count_unused = 0;
+    VkBufferMemoryBarrier2 *buffer_barriers_unusued = nullptr;
+    u32 image_barrier_count = 0;
+    ImageBarrier *image_barriers = nullptr;
+
+    operator auto &() { return *reinterpret_cast<VkType *>(this); }
+};
+static_assert(sizeof(DependencyInfo::VkType) == sizeof(DependencyInfo));
+
+struct BufferCopyRegion {
+    using VkType = VkBufferCopy;
+
+    u64 src_offset = 0;
+    u64 dst_offset = 0;
+    u64 size = 0;
+
+    operator auto &() { return *reinterpret_cast<VkType *>(this); }
+};
+static_assert(sizeof(BufferCopyRegion::VkType) == sizeof(BufferCopyRegion));
+
+struct ImageCopyRegion {
+    using VkType = VkBufferImageCopy;
+
+    u64 buffer_offset = 0;
+    u64 buffer_row_length = 0;
+    ImageSubresourceLayers image_subresource_layer = {};
+    Offset3D image_offset = {};
+    Extent3D image_extent = {};
+
+    operator auto &() { return *reinterpret_cast<VkType *>(this); }
+};
+static_assert(sizeof(ImageCopyRegion::VkType) == sizeof(ImageCopyRegion));
+
+struct CommandListSubmitInfo {
+    CommandListSubmitInfo() = default;
+    CommandListSubmitInfo(VkCommandBuffer command_list_)
+        : command_list(command_list_)
+    {
+    }
+
+    using VkType = VkCommandBufferSubmitInfo;
+
+    VkStructureType structure_type = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO;
+    void *next = nullptr;
+    VkCommandBuffer command_list = VK_NULL_HANDLE;
+    // TODO: Multidevices
+    u32 device_mask = 0;
+
+    operator auto &() { return *reinterpret_cast<VkType *>(this); }
+};
+static_assert(sizeof(CommandListSubmitInfo::VkType) == sizeof(CommandListSubmitInfo));
+
+struct SemaphoreSubmitInfo {
+    SemaphoreSubmitInfo() = default;
+    SemaphoreSubmitInfo(VkSemaphore semaphore_, u64 value_, PipelineStage stages_)
+        : semaphore(semaphore_),
+          value(value_),
+          stage_mask(stages_)
+    {
+    }
+
+    using VkType = VkSemaphoreSubmitInfo;
+
+    VkStructureType structure_type = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+    void *next = nullptr;
+    VkSemaphore semaphore = VK_NULL_HANDLE;
+    u64 value = 0;
+    PipelineStage stage_mask = PipelineStage::None;
+    u32 device_index = 0;
+
+    operator auto &() { return *reinterpret_cast<VkType *>(this); }
+};
+static_assert(sizeof(SemaphoreSubmitInfo::VkType) == sizeof(SemaphoreSubmitInfo));
+
+struct QueueSubmitInfo {
+    using VkType = VkSubmitInfo2;
+
+    VkStructureType structure_type = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
+    void *next = nullptr;
+    VkSubmitFlags submit_flags = 0;
+
+    u32 wait_sema_count = 0;
+    SemaphoreSubmitInfo *wait_sema_infos = nullptr;
+
+    u32 command_list_count = 0;
+    CommandListSubmitInfo *command_list_infos = nullptr;
+
+    u32 signal_sema_count = 0;
+    SemaphoreSubmitInfo *singal_sema_infos = nullptr;
+
+    operator auto &() { return *reinterpret_cast<VkType *>(this); }
+};
+static_assert(sizeof(QueueSubmitInfo::VkType) == sizeof(QueueSubmitInfo));
+
+struct QueueSubmitInfoDyn {
+    std::vector<SemaphoreSubmitInfo> wait_sema_infos = {};
+    std::vector<CommandListSubmitInfo> command_lists = {};
+    std::vector<SemaphoreSubmitInfo> signal_sema_infos = {};
+};
+
+struct RenderingBeginInfo {
+    using VkType = VkRenderingInfo;
+
+    VkStructureType structure_type = VK_STRUCTURE_TYPE_RENDERING_INFO;
+    void *next = nullptr;
+    VkRenderingFlags rendering_flags = 0;
+    Rect2D render_area = {};
+    u32 layer_count = 0;
+    u32 view_mask = 0;
+    u32 color_attachment_count = 0;
+    RenderingAttachmentInfo *color_attachments = nullptr;
+    RenderingAttachmentInfo *depth_attachment = nullptr;
+    RenderingAttachmentInfo *stencil_attachment = nullptr;
+
+    operator auto &() { return *reinterpret_cast<VkType *>(this); }
+};
+static_assert(sizeof(RenderingBeginInfo::VkType) == sizeof(RenderingBeginInfo));
+
+struct DescriptorSetLayoutElement {
+    using VkType = VkDescriptorSetLayoutBinding;
+
+    u32 binding = ~0;
+    DescriptorType descriptor_type = DescriptorType::Count;
+    u32 descriptor_count = 0;
+    ShaderStageFlag stage = ShaderStageFlag::Count;
+    VkSampler *immutable_samplers_unused = nullptr;
+
+    operator auto &() { return *reinterpret_cast<VkType *>(this); }
+    operator const auto &() const { return *reinterpret_cast<const VkType *>(this); }
+};
+static_assert(sizeof(DescriptorSetLayoutElement::VkType) == sizeof(DescriptorSetLayoutElement));
+
+struct ImageDescriptorInfo {
+    using VkType = VkDescriptorImageInfo;
+
+    VkSampler sampler_unused = VK_NULL_HANDLE;
+    VkImageView image_view = VK_NULL_HANDLE;
+    ImageLayout image_layout = ImageLayout::Undefined;
+
+    operator auto &() { return *reinterpret_cast<VkType *>(this); }
+};
+static_assert(sizeof(ImageDescriptorInfo::VkType) == sizeof(ImageDescriptorInfo));
+
+struct BufferDescriptorInfo {
+    using VkType = VkDescriptorBufferInfo;
+
+    VkBuffer buffer = VK_NULL_HANDLE;
+    u64 offset = 0;
+    u64 range = ~0;
+
+    operator auto &() { return *reinterpret_cast<VkType *>(this); }
+};
+static_assert(sizeof(BufferDescriptorInfo::VkType) == sizeof(BufferDescriptorInfo));
+
+struct SamplerDescriptorInfo {
+    using VkType = VkDescriptorImageInfo;
+
+    VkSampler sampler = VK_NULL_HANDLE;
+    VkImageView image_view_unused = VK_NULL_HANDLE;
+    ImageLayout image_layout_unused = ImageLayout::Undefined;
+
+    operator auto &() { return *reinterpret_cast<VkType *>(this); }
+};
+static_assert(sizeof(SamplerDescriptorInfo::VkType) == sizeof(SamplerDescriptorInfo));
+
+struct WriteDescriptorSet {
+    using VkType = VkWriteDescriptorSet;
+
+    VkStructureType structure_type = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    void *next = nullptr;
+    VkDescriptorSet dst_descriptor_set = VK_NULL_HANDLE;
+    u32 dst_binding = 0;
+    u32 dst_element = 0;
+    u32 count = 0;
+    DescriptorType type = DescriptorType::Count;
+    union {
+        ImageDescriptorInfo *image_info = nullptr;
+        SamplerDescriptorInfo *sampler_info;
+    };
+    BufferDescriptorInfo *buffer_info = nullptr;
+    VkBufferView *texel_buffer_info_unused = nullptr;
+
+    operator auto &() { return *reinterpret_cast<VkType *>(this); }
+};
+static_assert(sizeof(WriteDescriptorSet::VkType) == sizeof(WriteDescriptorSet));
+
+struct CopyDescriptorSet {
+    using VkType = VkCopyDescriptorSet;
+
+    VkStructureType structure_type = VK_STRUCTURE_TYPE_COPY_DESCRIPTOR_SET;
+    void *next = nullptr;
+    VkDescriptorSet src_descriptor_set = VK_NULL_HANDLE;
+    u32 src_binding = 0;
+    u32 src_element = 0;
+    VkDescriptorSet dst_descriptor_set = VK_NULL_HANDLE;
+    u32 dst_binding = 0;
+    u32 dst_element = 0;
+    u32 count = 0;
+
+    operator auto &() { return *reinterpret_cast<VkType *>(this); }
+};
+static_assert(sizeof(CopyDescriptorSet::VkType) == sizeof(CopyDescriptorSet));
+
+struct DescriptorPoolSize {
+    using VkType = VkDescriptorPoolSize;
+
+    DescriptorType type = DescriptorType::Count;
+    u32 count = 0;
+
+    operator auto &() { return *reinterpret_cast<VkType *>(this); }
+};
+static_assert(sizeof(DescriptorPoolSize::VkType) == sizeof(DescriptorPoolSize));
+
+template<typename T>
+struct Unique {
+    using this_type = Unique<T>;
+    using val_type = T;
+
+    explicit Unique() = default;
+    explicit Unique(const Unique &) = delete;
+    Unique(Unique &&other) noexcept
+        : m_device(other.m_device),
+          m_val(other.release())
+    {
+    }
+
+    explicit Unique(Device *device)
+        : m_device(device),
+          m_val({})
+    {
+    }
+
+    explicit Unique(Device *device, val_type val)
+        : m_device(device),
+          m_val(std::move(val))
+    {
+    }
+
+    ~Unique() noexcept { reset(); }
+
+    val_type &get() noexcept { return m_val; }
+    const val_type &get() const noexcept { return m_val; }
+    val_type release() noexcept
+    {
+        m_device = nullptr;
+        return std::move(m_val);
+    }
+
+    void reset(val_type val = {}) noexcept;
+    void swap(this_type &other) noexcept
+    {
+        std::swap(m_device, other.m_device);
+        std::swap(m_val, other.m_val);
+    }
+
+    explicit operator bool() const noexcept { return m_val; }
+    val_type *operator->() noexcept { return &m_val; }
+    const val_type *operator->() const noexcept { return &m_val; }
+    val_type &operator*() noexcept { return m_val; }
+    const val_type &operator*() const noexcept { return m_val; }
+
+    this_type &operator=(const this_type &) = delete;
+    this_type &operator=(this_type &&other) noexcept
+    {
+        Device *temp = other.m_device;
+        reset(other.release());
+        m_device = temp;
+        return *this;
+    }
+
+    this_type &operator=(std::nullptr_t) noexcept
+    {
+        reset();
+        return *this;
+    }
+
+    Device *m_device = nullptr;
+    val_type m_val = {};
+};
+
+template<typename T>
+constexpr void swap(Unique<T> &lhs, Unique<T> &rhs) noexcept
+{
+    lhs.swap(rhs);
+}
+
+template<typename T>
+struct UniqueResult {
+    UniqueResult() = delete;
+    UniqueResult(Unique<T> &&v_)
+        : v(std::move(v_))
+    {
+    }
+
+    UniqueResult(Unique<T> &&v_, VKResult result_)
+        : v(std::move(v_)),
+          result(result_)
+    {
+    }
+
+    UniqueResult(VKResult result_)
+        : result(result_)
+    {
+    }
+
+    Unique<T> v;
+    VKResult result = VKResult::Success;
+};
+namespace DescriptorID {
+    constexpr u32 samplers = 0;
+    constexpr u32 images = 1;
+    constexpr u32 storage_images = 2;
+    constexpr u32 bda = 3;
+}  // namespace DescriptorID
+}  // namespace lr::graphics
+
+namespace fmt {
+template<>
+struct formatter<lr::graphics::VKResult> : formatter<string_view> {
+    template<typename FormatContext>
+    constexpr auto format(lr::graphics::VKResult v, FormatContext &ctx) const
+    {
+        return fmt::format_to(ctx.out(), "{}({})", lr::graphics::vkresult_to_string(v), static_cast<i32>(v));
+    }
+};
+}  // namespace fmt

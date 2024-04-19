@@ -1,198 +1,219 @@
 #pragma once
 
-#include "APIObject.hh"
 #include "CommandList.hh"
 #include "Descriptor.hh"
-#include "MemoryAllocator.hh"
 #include "Pipeline.hh"
 #include "Resource.hh"
+#include "ResourcePool.hh"
 #include "SwapChain.hh"
-#include "TracyVK.hh"
 
-namespace lr::Graphics {
-struct SubmitDesc {
-    eastl::span<SemaphoreSubmitDesc> m_wait_semas = {};
-    eastl::span<CommandListSubmitDesc> m_lists = {};
-    eastl::span<SemaphoreSubmitDesc> m_signal_semas = {};
-};
-
+namespace lr::graphics {
 struct Device {
-    void init(VkDevice handle, VkPhysicalDevice physical_device, VkInstance instance, eastl::span<u32> queue_indexes);
+    Device() = default;
+    Device(vkb::Device &&device, vkb::Instance *instance, DeviceFeature features)
+        : m_handle(std::move(device)),
+          m_physical_device(device.physical_device),
+          m_instance(instance),
+          m_supported_features(features)
+    {
+    }
+
+    VKResult init();
 
     /// COMMAND ///
-    /// @returns - Success: APIResult::Success
-    /// @returns - Failure: APIResult::[OutOfHostMem, OutOfDeviceMem]
-    APIResult create_command_queue(CommandQueue *queue, CommandType type);
-    CommandQueue *get_queue(CommandType type);
     u32 get_queue_index(CommandType type);
-    /// @returns - Success: APIResult::Success
-    /// @returns - Failure: APIResult::[OutOfHostMem, OutOfDeviceMem]
-    APIResult create_command_allocator(CommandAllocator *allocator, CommandType type, CommandAllocatorFlag flags);
-    void delete_command_allocator(CommandAllocator *allocator);
-    /// @returns - Success: APIResult::Success
-    /// @returns - Failure: APIResult::[OutOfHostMem, OutOfDeviceMem]
-    APIResult create_command_list(CommandList *list, CommandAllocator *command_allocator);
-    void delete_command_list(CommandList *list, CommandAllocator *command_allocator);
+    VKResult create_command_allocators(
+        std::span<CommandAllocator> allocators, const CommandAllocatorInfo &info);
+    void delete_command_allocators(std::span<CommandAllocator> allocators);
+    VKResult create_command_lists(std::span<CommandList> lists, CommandAllocator &command_allocator);
+    void delete_command_lists(std::span<CommandList> lists);
 
-    void begin_command_list(CommandList *list);
-    void end_command_list(CommandList *list);
-    void reset_command_allocator(CommandAllocator *allocator);
-    void submit(CommandQueue *queue, SubmitDesc *desc);
+    void begin_command_list(CommandList &list);
+    void end_command_list(CommandList &list);
+    void reset_command_allocator(CommandAllocator &allocator);
+    void submit(CommandType queue_type, QueueSubmitInfoDyn &submit_info);
 
-    /// @returns - Success: APIResult::Success
-    /// @returns - Failure: APIResult::[OutOfHostMem, OutOfDeviceMem]
-    APIResult create_binary_semaphore(Semaphore *semaphore);
-    /// @returns - Success: APIResult::Success
-    /// @returns - Failure: APIResult::[OutOfHostMem, OutOfDeviceMem]
-    APIResult create_timeline_semaphore(Semaphore *semaphore, u64 initial_value);
-    void delete_semaphore(Semaphore *semaphore);
-    /// @returns - Success: APIResult::Success
-    /// @returns - Failure: APIResult::[OutOfHostMem, OutOfDeviceMem, DeviceLost]
-    APIResult wait_for_semaphore(Semaphore *semaphore, u64 desired_value, u64 timeout = UINT64_MAX);
+    VKResult create_binary_semaphores(std::span<Semaphore> semaphores);
+    VKResult create_timeline_semaphores(std::span<Semaphore> semaphores, u64 initial_value);
+    void delete_semaphores(std::span<Semaphore> semaphores);
+    VKResult wait_for_semaphore(Semaphore &semaphore, u64 desired_value, u64 timeout = UINT64_MAX);
+    Result<u64, VKResult> get_semaphore_counter(Semaphore &semaphore);
 
-    /// SWAPCHAIN ///
-    /// @returns - Success: APIResult::Success
-    /// @returns - Failure: APIResult::[OutOfHostMem, OutOfDeviceMem, DeviceLost, SurfaceLost, WindowInUse, InitFailed]
-    APIResult create_swap_chain(SwapChain *swap_chain, SwapChainDesc *desc);
-    void delete_swap_chain(SwapChain *swap_chain);
+    /// Presentation ///
+    UniqueResult<SwapChain> create_swap_chain(const SwapChainInfo &info);
+    void delete_swap_chains(std::span<SwapChain> swap_chain);
+    Result<ls::static_vector<ImageID, Limits::FrameCount>, VKResult> get_swapchain_images(
+        SwapChain &swap_chain);
 
     void wait_for_work();
-    /// @returns - Success: APIResult::[Success, Timeout, NotReady, Suboptimal]
-    /// @returns - Failure: APIResult::[OutOfHostMem, OutOfDeviceMem, DeviceLost, OutOfDate, SurfaceLost]
-    APIResult acquire_next_image(SwapChain *swap_chain, u32 &image_id);
-    /// @returns - Success: APIResult::[Success, Timeout, Suboptimal]
-    /// @returns - Failure: APIResult::[OutOfHostMem, OutOfDeviceMem, DeviceLost, OutOfDate, SurfaceLost]
-    APIResult present(SwapChain *swap_chain, CommandQueue *queue);
+    Result<u32, VKResult> acquire_next_image(SwapChain &swap_chain, Semaphore &acquire_sema);
+    VKResult present(SwapChain &swap_chain, Semaphore &present_sema, u32 image_id);
+    void collect_garbage();
 
-    /// PIPELINE ///
-    APIResult create_pipeline_layout(PipelineLayout *layout, eastl::span<DescriptorSetLayout> layouts, eastl::span<PushConstantDesc> push_constants);
-    /// @returns - Success: APIResult::Success
-    /// @returns - Failure: APIResult::[OutOfHostMem, OutOfDeviceMem]
-    APIResult create_graphics_pipeline(Pipeline *pipeline, GraphicsPipelineInfo *pipeline_info, PipelineAttachmentInfo *pipeline_attachment_info);
-    /// @returns - Success: APIResult::Success
-    /// @returns - Failure: APIResult::[OutOfHostMem, OutOfDeviceMem]
-    APIResult create_compute_pipeline(Pipeline *pipeline, ComputePipelineInfo *pipeline_info);
-    void delete_pipeline(Pipeline *pipeline);
+    /// Input Assembly ///
+    UniqueResult<PipelineLayout> create_pipeline_layout(const PipelineLayoutInfo &info);
+    void delete_pipeline_layouts(std::span<PipelineLayout> pipeline_layouts);
+    Result<PipelineID, VKResult> create_graphics_pipeline(const GraphicsPipelineInfo &info);
+    Result<PipelineID, VKResult> create_compute_pipeline(const ComputePipelineInfo &info);
+    void delete_pipelines(std::span<PipelineID> pipelines);
 
-    // * Shaders * //
-    /// @returns - Success: APIResult::Success
-    /// @returns - Failure: APIResult::[OutOfHostMem, OutOfDeviceMem]
-    APIResult create_shader(Shader *shader, ShaderStage stage, eastl::span<u32> ir);
-    void delete_shader(Shader *shader);
+    /// Shaders ///
+    Result<ShaderID, VKResult> create_shader(ShaderStageFlag stage, std::span<u32> ir);
+    void delete_shaders(std::span<ShaderID> shaders);
 
-    // * Descriptor * //
-    APIResult create_descriptor_set_layout(DescriptorSetLayout *layout, eastl::span<DescriptorLayoutElement> elements, DescriptorSetLayoutFlag flags);
-    void delete_descriptor_set_layout(DescriptorSetLayout *layout);
-    // DESCRIPTOR BUFFER
-    u64 get_descriptor_buffer_alignment();
-    u64 get_descriptor_size(DescriptorType type);
-    u64 get_descriptor_set_layout_size(DescriptorSetLayout *layout);
-    u64 get_descriptor_set_layout_binding_offset(DescriptorSetLayout *layout, u32 binding_id);
-    void get_descriptor_data(const DescriptorGetInfo &info, u64 data_size, void *data_out);
-    // DESCRIPTOR POOL
-    // For compat. reasons, i want to keep the legacy descriptor pools
-    /// @returns - Success: APIResult::Success
-    /// @returns - Failure: APIResult::[OutOfHostMem, OutOfDeviceMem]
-    APIResult create_descriptor_pool(
-        DescriptorPool *descriptor_pool,
-        u32 max_sets,
-        eastl::span<DescriptorPoolSize> pool_sizes,
-        DescriptorPoolFlag flags = DescriptorPoolFlag::None);
-    void delete_descriptor_pool(DescriptorPool *descriptor_pool);
-    /// @returns - Success: APIResult::Success
-    /// @returns - Failure: APIResult::[OutOfHostMem, OutOfDeviceMem, FragmentedPool, OutOfPoolMem]
-    APIResult create_descriptor_set(DescriptorSet *descriptor_set, DescriptorSetLayout *layout, DescriptorPool *descriptor_pool);
-    void delete_descriptor_set(DescriptorSet *descriptor_set, DescriptorPool *descriptor_pool);
-    void update_descriptor_set(eastl::span<WriteDescriptorSet> writes, eastl::span<CopyDescriptorSet> copies);
+    /// Descriptor ///
+    UniqueResult<DescriptorPool> create_descriptor_pool(const DescriptorPoolInfo &info);
+    void delete_descriptor_pools(std::span<DescriptorPool> descriptor_pools);
 
-    /// RESOURCE ///
-    eastl::tuple<u64, u64> get_buffer_memory_size(BufferID buffer_id);
-    eastl::tuple<u64, u64> get_image_memory_size(ImageID image_id);
-    eastl::tuple<u64, u64> get_buffer_memory_size(Buffer *buffer);
-    eastl::tuple<u64, u64> get_image_memory_size(Image *image);
+    UniqueResult<DescriptorSetLayout> create_descriptor_set_layout(const DescriptorSetLayoutInfo &info);
+    void delete_descriptor_set_layouts(std::span<DescriptorSetLayout> layouts);
 
-    /// @returns - Success: APIResult::Success
-    /// @returns - Failure: APIResult::[OutOfHostMem, OutOfDeviceMem, InvalidExternalHandle]
-    APIResult create_device_memory(DeviceMemory *device_memory, DeviceMemoryDesc *desc);
-    void delete_device_memory(DeviceMemory *device_memory);
-    u32 get_memory_type_index(MemoryFlag flags);
-    u32 get_heap_index(MemoryFlag flags);
-    u64 get_heap_budget(MemoryFlag flags);
-    void bind_memory(DeviceMemory *device_memory, BufferID buffer_id, u64 memory_offset);
-    void bind_memory(DeviceMemory *device_memory, ImageID image_id, u64 memory_offset);
-    void bind_memory_ex(DeviceMemory *device_memory, Buffer *buffer, u64 memory_offset);
-    // * Buffers * //
-    u64 get_buffer_alignment(BufferUsage usage, u64 size);
-    /// @returns - Success: APIResult::Success
-    /// @returns - Failure: APIResult::[OutOfHostMem, OutOfDeviceMem]
-    BufferID create_buffer(BufferDesc *desc);
-    void delete_buffer(BufferID buffer_id);
-    Buffer *get_buffer(BufferID buffer_id);
-    // Same as `create_buffer`, handle is externally handled.
-    // good for transient buffer allocations.
-    APIResult create_buffer_ex(Buffer &buffer, BufferDesc *desc);
-    void delete_buffer_ex(Buffer &buffer);
+    UniqueResult<DescriptorSet> create_descriptor_set(const DescriptorSetInfo &info);
+    void delete_descriptor_sets(std::span<DescriptorSet> descriptor_sets);
+    void update_descriptor_set(std::span<WriteDescriptorSet> writes, std::span<CopyDescriptorSet> copies);
 
-    // * Images * //
-    /// @returns - Success: APIResult::Success
-    /// @returns - Failure: APIResult::[OutOfHostMem, OutOfDeviceMem]
-    ImageID create_image(ImageDesc *desc);
-    void delete_image(ImageID image_id);
-    Image *get_image(ImageID image_id);
+    /// Buffers ///
+    Result<BufferID, VKResult> create_buffer(const BufferInfo &info);
+    void delete_buffers(std::span<BufferID> buffers);
 
-    /// @returns - Success: APIResult::Success
-    /// @returns - Failure: APIResult::[OutOfHostMem, OutOfDeviceMem]
-    ImageViewID create_image_view(ImageViewDesc *desc);
-    void delete_image_view(ImageViewID image_view_id);
-    ImageView *get_image_view(ImageViewID image_view_id);
+    /// Images ///
+    Result<ImageID, VKResult> create_image(const ImageInfo &info);
+    void delete_images(std::span<ImageID> images);
 
-    /// @returns - Success: APIResult::Success
-    /// @returns - Failure: APIResult::[OutOfHostMem, OutOfDeviceMem]
-    SamplerID create_sampler(SamplerDesc *desc);
-    void delete_sampler(SamplerID sampler_id);
-    Sampler *get_sampler(SamplerID sampler_id);
+    Result<ImageViewID, VKResult> create_image_view(const ImageViewInfo &info);
+    void delete_image_views(std::span<ImageViewID> image_views);
 
-    /// UTILITY ///
+    Result<SamplerID, VKResult> create_sampler(const SamplerInfo &info);
+    void delete_samplers(std::span<SamplerID> samplers);
+
+    /// Utils ///
     bool is_feature_supported(DeviceFeature feature) { return m_supported_features & feature; }
 
-    template<typename TypeT>
-    void set_object_name(TypeT *obj, eastl::string_view name)
+    template<typename T>
+    void set_object_name(T &v, std::string_view name)
     {
 #if _DEBUG
         VkDebugUtilsObjectNameInfoEXT object_name_info = {
             .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
-            .objectType = (VkObjectType)ToVKObjectType<TypeT>::type,
-            .objectHandle = (u64)obj->m_handle,
+            .objectType = T::OBJECT_TYPE,
+            .objectHandle = (u64)v.m_handle,
             .pObjectName = name.data(),
         };
         vkSetDebugUtilsObjectNameEXT(m_handle, &object_name_info);
 #endif
     }
 
-    template<VkObjectType TObjectType, typename TypeT>
-    void set_object_name_raw(TypeT object, eastl::string_view name)
+    template<VkObjectType ObjectType, typename T>
+    void set_object_name_raw(T v, std::string_view name)
     {
 #if _DEBUG
         VkDebugUtilsObjectNameInfoEXT object_name_info = {
             .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
-            .objectType = TObjectType,
-            .objectHandle = (u64)object,
+            .objectType = ObjectType,
+            .objectHandle = (u64)v,
             .pObjectName = name.data(),
         };
         vkSetDebugUtilsObjectNameEXT(m_handle, &object_name_info);
 #endif
     }
 
-    eastl::array<CommandQueue, static_cast<usize>(CommandType::Count)> m_queues = {};
-    eastl::array<u32, static_cast<usize>(CommandType::Count)> m_queue_indexes = {};
-    DeviceFeature m_supported_features = {};
+    u64 get_garbage_sema_counter() { return get_semaphore_counter(*m_garbage_collector_sema); }
+    auto get_image(ImageID id) { return m_resources.images.get(id); }
+    auto get_image_view(ImageViewID id) { return m_resources.image_views.get(id); }
+    auto get_sampler(SamplerID id) { return m_resources.samplers.get(id); }
+    auto get_buffer(BufferID id) { return m_resources.buffers.get(id); }
+    auto get_pipeline(PipelineID id) { return m_resources.pipelines.get(id); }
+    auto get_shader(ShaderID id) { return m_resources.shaders.get(id); }
+
+    u64 m_garbage_collector_counter = 0;
+    Unique<Semaphore> m_garbage_collector_sema;
+    plf::colony<std::pair<CommandAllocator, u64>> m_garbage_command_allocators = {};
+    plf::colony<std::pair<CommandList, u64>> m_garbage_command_lists = {};
+    plf::colony<std::pair<Semaphore, u64>> m_garbage_semaphores = {};
+    plf::colony<std::pair<ShaderID, u64>> m_garbage_shaders = {};
+    plf::colony<std::pair<BufferID, u64>> m_garbage_buffers = {};
+    plf::colony<std::pair<ImageID, u64>> m_garbage_images = {};
+    plf::colony<std::pair<ImageViewID, u64>> m_garbage_image_views = {};
+    plf::colony<std::pair<SamplerID, u64>> m_garbage_samplers = {};
+
+    Unique<DescriptorPool> m_descriptor_pool;
+    Unique<DescriptorSetLayout> m_descriptor_set_layout;
+    Unique<DescriptorSet> m_descriptor_set;
+
+    DeviceFeature m_supported_features = DeviceFeature::None;
+    constexpr static usize queue_count = static_cast<usize>(CommandType::Count);
+    std::array<VkQueue, queue_count> m_queues = {};
+    std::array<u32, queue_count> m_queue_indexes = {};
+    usize m_present_queue_id = 0;
+
     ResourcePools m_resources = {};
+    VmaAllocator m_allocator = {};
+    vkb::PhysicalDevice m_physical_device = {};
+    vkb::Instance *m_instance = nullptr;
+    vkb::Device m_handle = {};
 
-    TracyVkCtx m_tracy_ctx = nullptr;
-    VkPhysicalDevice m_physical_device = nullptr;
-    VkInstance m_instance = nullptr;
-
-    VkDevice m_handle = VK_NULL_HANDLE;
+    constexpr static auto OBJECT_TYPE = VK_OBJECT_TYPE_DEVICE;
+    operator auto &() { return m_handle.device; }
+    explicit operator bool() { return m_handle != nullptr; }
 };
 
-}  // namespace lr::Graphics
+struct DeviceDeleter {
+    // clang-format off
+    DeviceDeleter(Device *device, u64 c, std::span<CommandAllocator> s) { for (auto &v : s) device->m_garbage_command_allocators.emplace(v, c); }
+    DeviceDeleter(Device *device, u64 c, std::span<CommandList> s) { for (auto &v : s) device->m_garbage_command_lists.emplace(v, c); }
+    DeviceDeleter(Device *device, u64 c, std::span<Semaphore> s) { for (auto &v : s) device->m_garbage_semaphores.emplace(v, c); }
+    DeviceDeleter(Device *device, u64 c, std::span<SwapChain> s) { device->delete_swap_chains(s); }
+    DeviceDeleter(Device *device, u64 c, std::span<PipelineLayout> s) { device->delete_pipeline_layouts(s); }
+    DeviceDeleter(Device *device, u64 c, std::span<PipelineID> s) { device->delete_pipelines(s); }
+    DeviceDeleter(Device *device, u64 c, std::span<ShaderID> s) { for (auto &v : s) device->m_garbage_shaders.emplace(v, c); }
+    DeviceDeleter(Device *device, u64 c, std::span<DescriptorPool> s) { device->delete_descriptor_pools(s); }
+    DeviceDeleter(Device *device, u64 c, std::span<DescriptorSetLayout> s) { device->delete_descriptor_set_layouts(s); }
+    DeviceDeleter(Device *device, u64 c, std::span<DescriptorSet> s) { device->delete_descriptor_sets(s); }
+    DeviceDeleter(Device *device, u64 c, std::span<BufferID> s) { for (auto &v : s) device->m_garbage_buffers.emplace(v, c); }
+    DeviceDeleter(Device *device, u64 c, std::span<ImageID> s) { for (auto &v : s) device->m_garbage_images.emplace(v, c); }
+    DeviceDeleter(Device *device, u64 c, std::span<ImageViewID> s) { for (auto &v : s) device->m_garbage_image_views.emplace(v, c); }
+    DeviceDeleter(Device *device, u64 c, std::span<SamplerID> s) { for (auto &v : s) device->m_garbage_samplers.emplace(v, c); }
+    // clang-format on
+};
+
+template<class T>
+concept is_container = requires(T v) {
+    std::begin(v);
+    std::end(v);
+};
+
+template<typename T, usize N>
+void device_deleter_helper(Device *device, u64 c, T (&arr)[N])
+{
+    DeviceDeleter(device, c, std::span<T>{ arr, N });
+}
+
+template<typename T>
+void device_deleter_helper(Device *device, u64 c, T &v)
+    requires(!is_container<T>)
+{
+    DeviceDeleter(device, c, std::span<T>{ &v, 1 });
+}
+
+template<typename T>
+void device_deleter_helper(Device *device, u64 c, T &v)
+    requires(is_container<T>)
+{
+    DeviceDeleter(device, c, v);
+}
+
+template<typename T>
+void Unique<T>::reset(Unique<T>::val_type val) noexcept
+{
+    if (m_val == val) {
+        return;
+    }
+
+    if (m_device && m_val != val_type{}) {
+        u64 counter_val = m_device->get_garbage_sema_counter();
+        device_deleter_helper(m_device, counter_val, m_val);
+    }
+
+    m_val = std::move(val);
+}
+}  // namespace lr::graphics

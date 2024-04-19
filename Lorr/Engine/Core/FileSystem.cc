@@ -6,11 +6,8 @@
 #include <direct.h>
 #include <Windows.h>
 
-#include <EASTL/finally.h>
-
-namespace lr::fs
-{
-FileView::FileView(eastl::string_view path)
+namespace lr::fs {
+FileView::FileView(std::string_view path)
 {
     ZoneScoped;
 
@@ -46,15 +43,15 @@ void FileView::set_offset(u64 offset)
     m_Offset = offset;
 }
 
-template<typename _T>
-bool FileView::read(_T &data)
+template<typename T>
+bool FileView::read(T &data)
 {
     ZoneScoped;
 
-    return read((u8 *)&data, sizeof(_T));
+    return read((u8 *)&data, sizeof(T));
 }
 
-bool FileView::read(eastl::string &str, u64 length)
+bool FileView::read(std::string &str, u64 length)
 {
     ZoneScoped;
 
@@ -74,7 +71,7 @@ bool FileView::read(u8 *pData, u64 dataSize)
     return true;
 }
 
-eastl::string read_file(eastl::string_view path)
+std::string read_file(std::string_view path)
 {
     ZoneScoped;
 
@@ -82,28 +79,30 @@ eastl::string read_file(eastl::string_view path)
     if (!file.is_ok())
         return {};
 
-    eastl::string result;
+    std::string result;
     file.read(result, file.size());
     return result;
 }
 
-eastl::string get_current_dir()
+std::string get_current_dir()
 {
     ZoneScoped;
 
     char *buffer = _getcwd(nullptr, 0);
-    auto _ = eastl::make_finally([&] { free(buffer); });
-    return buffer;
+    std::string str = buffer;
+    free(buffer);
+
+    return std::move(str);
 }
 
-bool set_library_dir(eastl::string_view path)
+bool set_library_dir(std::string_view path)
 {
     ZoneScoped;
 
     return SetDllDirectoryA(path.data());
 }
 
-void *load_lib(eastl::string_view path)
+void *load_lib(std::string_view path)
 {
     ZoneScoped;
 

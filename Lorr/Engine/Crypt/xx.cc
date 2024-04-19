@@ -2,8 +2,7 @@
 
 #include <xxhash.h>
 
-namespace lr
-{
+namespace lr {
 u64 Hash::XXH3Data(const u8 *pData, usize dataSize)
 {
     ZoneScoped;
@@ -11,7 +10,7 @@ u64 Hash::XXH3Data(const u8 *pData, usize dataSize)
     return XXH3_64bits(pData, dataSize);
 }
 
-u64 Hash::XXH3String(eastl::string_view str)
+u64 Hash::XXH3String(std::string_view str)
 {
     ZoneScoped;
 

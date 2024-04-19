@@ -1,6 +1,5 @@
 #pragma once
 
-#define VK_NO_STDINT_H
 #define VK_NO_PROTOTYPES
 #include <vulkan/vulkan.h>
 
@@ -13,6 +12,7 @@ typedef struct HMONITOR__ *HMONITOR;
 typedef struct _SECURITY_ATTRIBUTES SECURITY_ATTRIBUTES;
 
 #include <vulkan/vulkan_win32.h>
+#include <VkBootstrap.h>
 
 #define VKFN_INSTANCE_FUNCTIONS                   \
     VKFN_FUNCTION(vkGetDeviceProcAddr);           \
@@ -76,6 +76,7 @@ typedef struct _SECURITY_ATTRIBUTES SECURITY_ATTRIBUTES;
     VKFN_FUNCTION(vkCreateComputePipelines);      \
     VKFN_FUNCTION(vkDestroyPipeline);             \
     VKFN_FUNCTION(vkCreatePipelineLayout);        \
+    VKFN_FUNCTION(vkDestroyPipelineLayout);       \
     VKFN_FUNCTION(vkCreateShaderModule);          \
     VKFN_FUNCTION(vkDestroyShaderModule);         \
     VKFN_FUNCTION(vkCreateCommandPool);           \
@@ -132,7 +133,8 @@ typedef struct _SECURITY_ATTRIBUTES SECURITY_ATTRIBUTES;
 
 #define VKFN_CALIBRATED_TIMESTAMPS_EXT_DEVICE_FUNCTIONS VKFN_FUNCTION(vkGetCalibratedTimestampsEXT);
 
-#define VKFN_CALIBRATED_TIMESTAMPS_EXT_INSTANCE_FUNCTIONS VKFN_FUNCTION(vkGetPhysicalDeviceCalibrateableTimeDomainsEXT);
+#define VKFN_CALIBRATED_TIMESTAMPS_EXT_INSTANCE_FUNCTIONS \
+    VKFN_FUNCTION(vkGetPhysicalDeviceCalibrateableTimeDomainsEXT);
 
 #define VKFN_DEBUG_UTILS_EXT_DEVICE_FUNCTIONS VKFN_FUNCTION(vkSetDebugUtilsObjectNameEXT);
 
@@ -146,3 +148,13 @@ VKFN_CALIBRATED_TIMESTAMPS_EXT_DEVICE_FUNCTIONS
 VKFN_CALIBRATED_TIMESTAMPS_EXT_INSTANCE_FUNCTIONS
 VKFN_DEBUG_UTILS_EXT_DEVICE_FUNCTIONS
 #undef VKFN_FUNCTION
+
+#define VMA_STATIC_VULKAN_FUNCTIONS 0
+#define VMA_DYNAMIC_VULKAN_FUNCTIONS 1
+#define VMA_VULKAN_VERSION 1003000
+#include <vk_mem_alloc.h>
+
+namespace lr::graphics::vulkan {
+bool load_instance(VkInstance instance, PFN_vkGetInstanceProcAddr get_instance_proc_addr);
+bool load_device(VkDevice device, PFN_vkGetDeviceProcAddr get_device_proc_addr);
+}  // namespace lr::graphics::vulkan

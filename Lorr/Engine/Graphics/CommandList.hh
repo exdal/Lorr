@@ -1,157 +1,100 @@
 #pragma once
 
-#include "APIObject.hh"
-#include "Descriptor.hh"
-#include "Pipeline.hh"
-#include "Resource.hh"
+#include "Common.hh"
+#include "zfwd.hh"
 
-namespace lr::Graphics {
-struct DescriptorBufferBindInfo : VkDescriptorBufferBindingInfoEXT {
-    DescriptorBufferBindInfo(Buffer *buffer, BufferUsage buffer_usage);
+namespace lr::graphics {
+/// COMMAND ALLOCATOR ///
+struct CommandAllocatorInfo {
+    CommandType type = CommandType::Count;
+    CommandAllocatorFlag flags = CommandAllocatorFlag::None;
 };
-
-enum class AttachmentOp : u32 {
-    DontCare = 0,
-    Load,
-    Store,
-    Clear,
-};
-
-struct RenderingAttachment : VkRenderingAttachmentInfo {
-    RenderingAttachment(ImageView *image_view, ImageLayout layout, AttachmentOp load_op, AttachmentOp store_op);
-    RenderingAttachment(ImageView *image_view, ImageLayout layout, AttachmentOp load_op, AttachmentOp store_op, ColorClearValue clear_val);
-    RenderingAttachment(ImageView *image_view, ImageLayout layout, AttachmentOp load_op, AttachmentOp store_op, DepthClearValue clear_val);
-};
-
-constexpr static glm::uvec4 render_area_whole = { 0, 0, -1, -1 };
-struct RenderingBeginDesc {
-    glm::uvec4 m_render_area = render_area_whole;
-
-    eastl::span<RenderingAttachment> m_color_attachments;
-    RenderingAttachment *m_depth_attachment = nullptr;
-};
-
-struct CommandQueue;
-struct PipelineBarrier {
-    ImageLayout m_src_layout = ImageLayout::Undefined;
-    ImageLayout m_dst_layout = ImageLayout::Undefined;
-    PipelineStage m_src_stage = PipelineStage::None;
-    PipelineStage m_dst_stage = PipelineStage::None;
-    MemoryAccess m_src_access = MemoryAccess::None;
-    MemoryAccess m_dst_access = MemoryAccess::None;
-    u32 m_src_queue_index = ~0;
-    u32 m_dst_queue_index = ~0;
-};
-
-// Utility classes to help us batch the barriers
-
-struct ImageBarrier : VkImageMemoryBarrier2 {
-    ImageBarrier() = default;
-    ImageBarrier(Image *image, ImageSubresourceInfo slice_info, const PipelineBarrier &barrier);
-};
-
-// fuck yourself holy shit
-#ifdef MemoryBarrier
-#undef MemoryBarrier
-#endif
-
-struct MemoryBarrier : VkMemoryBarrier2 {
-    MemoryBarrier() = default;
-    MemoryBarrier(const PipelineBarrier &barrier);
-};
-
-struct DependencyInfo : VkDependencyInfo {
-    DependencyInfo();
-    DependencyInfo(eastl::span<ImageBarrier> image_barriers, eastl::span<MemoryBarrier> memory_barriers);
-};
-
-struct Semaphore {
-    u64 m_value = 0;
-    VkSemaphore m_handle = VK_NULL_HANDLE;
-};
-LR_ASSIGN_OBJECT_TYPE(Semaphore, VK_OBJECT_TYPE_SEMAPHORE);
-
-struct SemaphoreSubmitDesc : VkSemaphoreSubmitInfo {
-    SemaphoreSubmitDesc(Semaphore *semaphore, PipelineStage stage);
-    SemaphoreSubmitDesc(Semaphore *semaphore, u64 value, PipelineStage stage);
-    SemaphoreSubmitDesc(Semaphore *semaphore, u64 value);
-    SemaphoreSubmitDesc() = default;
-};
-
-struct CommandQueue {
-    VkQueue m_handle = VK_NULL_HANDLE;
-};
-LR_ASSIGN_OBJECT_TYPE(CommandQueue, VK_OBJECT_TYPE_QUEUE);
 
 struct CommandAllocator {
     VkCommandPool m_handle = VK_NULL_HANDLE;
-};
-LR_ASSIGN_OBJECT_TYPE(CommandAllocator, VK_OBJECT_TYPE_COMMAND_POOL);
 
-struct BufferCopyRegion : VkBufferCopy {
-    BufferCopyRegion(u64 src_offset, u64 dst_offset, u64 size);
-};
-
-struct ImageCopyRegion : VkBufferImageCopy {
-    ImageCopyRegion(const VkBufferImageCopy &lazy);
-    ImageCopyRegion(ImageSubresourceInfo slice_info, u32 width, u32 height, u64 buffer_offset);
+    constexpr static auto OBJECT_TYPE = VK_OBJECT_TYPE_COMMAND_POOL;
+    operator auto &() { return m_handle; }
+    operator const auto &() const { return m_handle; }
+    explicit operator bool() { return m_handle != VK_NULL_HANDLE; }
 };
 
+/// COMMAND LIST ///
 struct CommandList {
-    void begin_rendering(const RenderingBeginDesc &desc);
+    // Memory Barriers
+    void set_pipeline_barrier(DependencyInfo &dependency_info);
+
+    // Copy Commands
+    void copy_buffer_to_buffer(Buffer *src, Buffer *dst, std::span<BufferCopyRegion> regions);
+    void copy_buffer_to_image(
+        Buffer *src, Image *dst, ImageLayout layout, std::span<ImageCopyRegion> regions);
+
+    // Pipeline State
+    void begin_rendering(const RenderingBeginInfo &info);
     void end_rendering();
-
-    /// Memory Barriers
-    void set_pipeline_barrier(DependencyInfo *dependency_info);
-
-    /// Copy Commands
-    void copy_buffer_to_buffer(Buffer *src, Buffer *dst, eastl::span<BufferCopyRegion> regions);
-    void copy_buffer_to_image(Buffer *src, Image *dst, ImageLayout layout, eastl::span<ImageCopyRegion> regions);
-
-    /// Draw Commands
-    void draw(u32 vertex_count, u32 first_vertex = 0, u32 instance_count = 1, u32 first_instance = 0);
-    void draw_indexed(u32 index_count, u32 first_index = 0, i32 vertex_offset = 0, u32 instance_count = 1, u32 first_instance = 0);
-    void dispatch(u32 group_x, u32 group_y, u32 group_z);
-
-    /// Pipeline States
-    void set_viewport(u32 id, const glm::vec2 &pos, const glm::vec2 &size, const glm::vec2 &depth = { 0.01, 1.0 });
-    void set_scissors(u32 id, const glm::ivec2 &pos, const glm::uvec2 &size);
-    void set_primitive_type(PrimitiveType type);
-
+    void set_pipeline(Pipeline *pipeline);
+    void set_push_constants(
+        PipelineLayout *layout,
+        void *data,
+        u32 data_size,
+        u32 offset,
+        ShaderStageFlag stage_flags = ShaderStageFlag::All);
+    void set_descriptor_sets(
+        PipelineLayout *layout,
+        PipelineBindPoint bind_point,
+        u32 first_set,
+        const ls::static_vector<VkDescriptorSet, 16> &sets);
     void set_vertex_buffer(Buffer *buffer, u64 offset = 0, u32 first_binding = 0, u32 binding_count = 1);
     void set_index_buffer(Buffer *buffer, u64 offset = 0, bool use_u16 = false);
 
-    void set_pipeline(Pipeline *pipeline);
-    void set_push_constants(void *data, u32 data_size, u32 offset, PipelineLayout *layout, ShaderStage stage_flags = ShaderStage::All);
-    void set_descriptor_sets(PipelineBindPoint bind_point, PipelineLayout *layout, u32 first_set, eastl::span<DescriptorSet> sets);
-    void set_descriptor_buffers(eastl::span<DescriptorBufferBindInfo> binding_infos);
-    void set_descriptor_buffer_offsets(
-        PipelineLayout *layout, PipelineBindPoint bind_point, u32 first_set, eastl::span<u32> indices, eastl::span<u64> offsets);
+    void set_viewport(u32 id, const Viewport &viewport);
+    void set_scissors(u32 id, const Rect2D &rect);
+
+    /// Draw Commands
+    void draw(u32 vertex_count, u32 first_vertex = 0, u32 instance_count = 1, u32 first_instance = 0);
+    void draw_indexed(
+        u32 index_count,
+        u32 first_index = 0,
+        i32 vertex_offset = 0,
+        u32 instance_count = 1,
+        u32 first_instance = 0);
+    void dispatch(u32 group_x, u32 group_y, u32 group_z);
 
     VkCommandBuffer m_handle = VK_NULL_HANDLE;
+    CommandAllocator *m_allocator = nullptr;
+
+    constexpr static auto OBJECT_TYPE = VK_OBJECT_TYPE_COMMAND_BUFFER;
+    operator auto &() { return m_handle; }
+    operator const auto &() const { return m_handle; }
+    explicit operator bool() { return m_handle != nullptr; }
 };
-LR_ASSIGN_OBJECT_TYPE(CommandList, VK_OBJECT_TYPE_COMMAND_BUFFER);
 
 struct CommandBatcher {
     constexpr static usize kMaxMemoryBarriers = 16;
     constexpr static usize kMaxImageBarriers = 16;
 
-    CommandBatcher(CommandList *command_list);
+    CommandBatcher(Device *device, CommandList &command_list);
     ~CommandBatcher();
 
     void insert_memory_barrier(MemoryBarrier &barrier);
     void insert_image_barrier(ImageBarrier &barrier);
     void flush_barriers();
 
-    fixed_vector<MemoryBarrier, kMaxMemoryBarriers> m_memory_barriers = {};
-    fixed_vector<ImageBarrier, kMaxImageBarriers> m_image_barriers = {};
+    ls::static_vector<MemoryBarrier, kMaxMemoryBarriers> m_memory_barriers = {};
+    ls::static_vector<ImageBarrier, kMaxImageBarriers> m_image_barriers = {};
 
-    CommandList *m_command_list = nullptr;
+    Device *m_device;
+    CommandList &m_command_list;
 };
 
-struct CommandListSubmitDesc : VkCommandBufferSubmitInfo {
-    CommandListSubmitDesc() = default;
-    CommandListSubmitDesc(CommandList *list);
+/// SYNC ///
+struct Semaphore {
+    VkSemaphore m_handle = VK_NULL_HANDLE;
+
+    constexpr static auto OBJECT_TYPE = VK_OBJECT_TYPE_SEMAPHORE;
+    operator auto &() { return m_handle; }
+    operator const auto &() const { return m_handle; }
+    explicit operator bool() { return m_handle != nullptr; }
 };
 
-}  // namespace lr::Graphics
+}  // namespace lr::graphics

@@ -1,7 +1,3 @@
-[[vk::binding(0, 0)]] SamplerState  u_samplers[];
-[[vk::binding(0, 1)]] Texture2D     u_textures[];
-[[vk::binding(0, 2)]] Texture2D<>   u_rwtextures[];
-[[vk::binding(0, 3)]] RWStructuredBuffer<uint64_t> u_buffer_address;
 
 template<uint32_t CountT>
 struct Descriptors
@@ -16,9 +12,9 @@ struct Descriptors
         return indexes[id] & 0xFFFF;
     }
 
-    Texture2D get_texture(uint32_t id)
+    Texture2D get_image(uint32_t id)
     {
-        return u_textures[get_id(id)];
+        return u_images[get_id(id)];
     }
 
     SamplerState get_sampler(uint32_t id)

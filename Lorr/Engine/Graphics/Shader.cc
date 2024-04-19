@@ -1,203 +1,150 @@
 #include "Shader.hh"
 
-#include "STL/String.hh"
+#include <slang-com-ptr.h>
+#include <slang.h>
 
-#include <atlbase.h>
-#include <dxc/dxcapi.h>
-#include <spirv_hlsl.hpp>
-#include <Crypt/CRC.hh>
+namespace lr::graphics {
+struct CompilerContext {
+    Slang::ComPtr<slang::IGlobalSession> global_session;
+} compiler_ctx;
 
-namespace lr::Graphics
+std::vector<slang::CompilerOptionEntry> get_slang_entries(ShaderCompileFlag flags)
 {
-struct PragmaOptions
-{
-    enum PragmaOption : u32
-    {
-        Stage = 0,
-        Count,
-    };
+    std::vector<slang::CompilerOptionEntry> entries = {};
+    entries.emplace_back(
+        slang::CompilerOptionName::VulkanUseEntryPointName, slang::CompilerOptionValue{ .intValue0 = true });
 
-    union PragmaOptionsData
-    {
-        ShaderStage m_stage = ShaderStage::Count;
-    };
-
-    PragmaOptionsData &operator[](PragmaOption i) { return m_vars[static_cast<usize>(i)]; }
-    const PragmaOptionsData &at(PragmaOption i) const { return m_vars[static_cast<usize>(i)]; }
-
-    PragmaOptionsData m_vars[Count] = {
-        [Stage] = ShaderStage::Count,
-    };
-};
-
-PragmaOptions parse_pragma_options(eastl::string_view shader)
-{
-    constexpr static eastl::string_view k_pragma_ident = "#pragma ";
-
-    PragmaOptions options = {};
-
-    eastl::string_view line;
-    while (ls::get_line(shader, line))
-    {
-        if (!line.starts_with(k_pragma_ident))
-            continue;
-
-        line.remove_prefix(k_pragma_ident.length());
-        usize lbracket = line.find('(');
-        usize rbracket = line.find(')');
-        if (lbracket == -1 && rbracket == -1)
-            continue;
-
-        eastl::string_view option = line.substr(0, lbracket);
-        eastl::string_view value = line.substr(lbracket + 1, rbracket - option.length() - 1);
-
-        switch (Hash::CRC32DataSV(option))
-        {
-            case CRC32HashOf("stage"):
-            {
-                auto get_stage = [value]() -> ShaderStage
-                {
-                    switch (Hash::CRC32DataSV(value))
-                    {
-                        case CRC32HashOf("vertex"):
-                            return ShaderStage::Vertex;
-                        case CRC32HashOf("pixel"):
-                            return ShaderStage::Pixel;
-                        case CRC32HashOf("compute"):
-                            return ShaderStage::Compute;
-                        case CRC32HashOf("tess_eval"):
-                            return ShaderStage::TessellationEvaluation;
-                        case CRC32HashOf("tess_control"):
-                            return ShaderStage::TessellationControl;
-                        default:
-                            return ShaderStage::Count;
-                    }
-                };
-                options[PragmaOptions::Stage].m_stage = get_stage();
-                break;
-            }
-            default:
-                LOG_ERROR("Unknown pragma '{}{}'!", k_pragma_ident, line);
-        }
+    if (flags & ShaderCompileFlag::GenerateDebugInfo) {
+        entries.emplace_back(
+            slang::CompilerOptionName::DebugInformation,
+            slang::CompilerOptionValue({ .intValue0 = SLANG_DEBUG_INFO_FORMAT_PDB }));
     }
 
-    return options;
+    if (flags & ShaderCompileFlag::SkipOptimization) {
+        entries.emplace_back(
+            slang::CompilerOptionName::Optimization,
+            slang::CompilerOptionValue{ .intValue0 = SLANG_OPTIMIZATION_LEVEL_NONE });
+    }
+    else {
+        entries.emplace_back(
+            slang::CompilerOptionName::Optimization,
+            slang::CompilerOptionValue{ .intValue0 = SLANG_OPTIMIZATION_LEVEL_MAXIMAL });
+    }
+
+    if (flags & ShaderCompileFlag::SkipValidation) {
+        entries.emplace_back(
+            slang::CompilerOptionName::SkipSPIRVValidation,
+            slang::CompilerOptionValue({ .intValue0 = true }));
+    }
+
+    if (flags & ShaderCompileFlag::MatrixRowMajor) {
+        entries.emplace_back(
+            slang::CompilerOptionName::MatrixLayoutRow, slang::CompilerOptionValue{ .intValue0 = true });
+    }
+    else if (flags & ShaderCompileFlag::MatrixColumnMajor) {
+        entries.emplace_back(
+            slang::CompilerOptionName::MatrixLayoutColumn, slang::CompilerOptionValue{ .intValue0 = true });
+    }
+
+    if (flags & ShaderCompileFlag::InvertY) {
+        entries.emplace_back(
+            slang::CompilerOptionName::VulkanInvertY, slang::CompilerOptionValue{ .intValue0 = true });
+    }
+
+    if (flags & ShaderCompileFlag::DXPositionW) {
+        entries.emplace_back(
+            slang::CompilerOptionName::VulkanUseDxPositionW, slang::CompilerOptionValue{ .intValue0 = true });
+    }
+
+    if (flags & ShaderCompileFlag::UseGLLayout) {
+        entries.emplace_back(
+            slang::CompilerOptionName::VulkanUseGLLayout, slang::CompilerOptionValue{ .intValue0 = true });
+    }
+    else if (flags & ShaderCompileFlag::UseScalarLayout) {
+        entries.emplace_back(
+            slang::CompilerOptionName::GLSLForceScalarLayout,
+            slang::CompilerOptionValue{ .intValue0 = true });
+    }
+
+    return std::move(entries);
 }
 
-Format to_vk_format(const spirv_cross::SPIRType &type)
+bool ShaderCompiler::init()
 {
-    using namespace spirv_cross;
-    constexpr static Format float_formats[] = { [0] = Format::Float, [1] = Format::Vec2, [2] = Format::Vec3, [3] = Format::Vec4 };
-    constexpr static Format int_formats[] = { [0] = Format::Int, [1] = Format::Vec2I, [2] = Format::Vec3I, [3] = Format::Vec4I };
-    constexpr static Format uint_formats[] = { [0] = Format::UInt, [1] = Format::Vec2U, [2] = Format::Vec3U, [3] = Format::Vec4U };
-    static Format *format_map[] = {
-        [SPIRType::Float] = (Format *)float_formats,
-        [SPIRType::Int] = (Format *)int_formats,
-        [SPIRType::UInt] = (Format *)uint_formats,
-    };
-
-    if (type.columns != 1)
-        return Format::Unknown;  // Skip matrix types
-
-    return format_map[type.basetype][type.vecsize - 1];
+    slang::createGlobalSession(compiler_ctx.global_session.writeRef());
+    return true;
 }
 
-eastl::vector<u32> ShaderCompiler::compile_shader(ShaderCompileDesc *desc)
+Result<std::vector<u32>, VKResult> ShaderCompiler::compile_shader(const ShaderCompileInfo &info)
 {
     ZoneScoped;
 
-    constexpr static LPCWSTR kHLSLStageMap[] = {
-        [(u32)ShaderStage::Vertex] = L"vs_6_7",
-        [(u32)ShaderStage::Pixel] = L"ps_6_7",
-        [(u32)ShaderStage::Compute] = L"cs_6_7",
-        [(u32)ShaderStage::TessellationControl] = L"hs_6_7",
-        [(u32)ShaderStage::TessellationEvaluation] = L"ds_6_7",
+    std::vector<slang::PreprocessorMacroDesc> macros;
+    for (ShaderPreprocessorMacroInfo &v : info.definitions) {
+        macros.emplace_back(v.name.data(), v.value.data());
+    }
+
+    slang::TargetDesc target_desc = {
+        .format = SLANG_SPIRV,
+        .profile = compiler_ctx.global_session->findProfile("spirv_1_4"),
+        .flags = SLANG_TARGET_FLAG_GENERATE_SPIRV_DIRECTLY,
+        //   .compilerOptionEntries = entries.data(),
+        //   .compilerOptionEntryCount = static_cast<u32>(entries.size()),
     };
 
-    DxcBuffer shader_buffer = {
-        .Ptr = desc->m_code.data(),
-        .Size = desc->m_code.size(),
-        .Encoding = 0,
+    std::vector<const char *> include_dirs;
+    // for (std::string_view dir : info.include_dirs) {
+    //     include_dirs.push_back(dir.data());
+    // }
+
+    slang::SessionDesc session_desc = {
+        .targets = &target_desc,
+        .targetCount = 1,
+        .searchPaths = include_dirs.data(),
+        .searchPathCount = static_cast<u32>(include_dirs.size()),
+        .preprocessorMacros = macros.data(),
+        .preprocessorMacroCount = static_cast<u32>(macros.size()),
     };
+    Slang::ComPtr<slang::ISession> session;
+    compiler_ctx.global_session->createSession(session_desc, session.writeRef());
 
-    CComPtr<IDxcCompiler3> compiler = nullptr;
-    DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&compiler));
-
-    CComPtr<IDxcUtils> utils = nullptr;
-    DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(&utils));
-
-    CComPtr<IDxcIncludeHandler> include_handler = nullptr;
-    utils->CreateDefaultIncludeHandler(&include_handler);
-
-    auto options = parse_pragma_options(desc->m_code);
-    ShaderStage shader_stage = options[PragmaOptions::Stage].m_stage;
-    if (shader_stage == ShaderStage::Count)
-    {
-        LOG_ERROR("Shader stage(#pragma stage(...)) is not set");
-        return {};
-    }
-    eastl::vector<LPCWSTR> args = {};
-    eastl::vector<eastl::wstring> temp_wstr = {};
-    args.push_back(L"-E");
-    args.push_back(L"main");
-    for (auto &dir : desc->m_include_dirs)
-    {
-        eastl::string include_str = eastl::format("-I {}", dir);
-        args.push_back(temp_wstr.emplace_back(ls::to_wstring(include_str)).data());
-    }
-    args.push_back(L"-spirv");
-    args.push_back(L"-fspv-target-env=vulkan1.3");
-    args.push_back(L"-fvk-use-gl-layout");
-    args.push_back(L"-no-warnings");
-    args.push_back(L"-T");
-    args.push_back(kHLSLStageMap[(u32)shader_stage]);
-    for (auto &definition : desc->m_definitions)
-    {
-        eastl::string def_str = eastl::format("-D{}", definition);
-        args.push_back(temp_wstr.emplace_back(ls::to_wstring(def_str)).data());
-    }
-    if (desc->m_flags & ShaderCompileFlag::GenerateDebugInfo)
-        args.push_back(L"-Zi");
-    if (desc->m_flags & ShaderCompileFlag::SkipOptimization)
-        args.push_back(L"-O0");
-    if (desc->m_flags & ShaderCompileFlag::SkipValidation)
-        args.push_back(L"-Vd");
-
-    CComPtr<IDxcResult> result = nullptr;
-    compiler->Compile(&shader_buffer, args.data(), args.size(), &*include_handler, IID_PPV_ARGS(&result));
-
-    CComPtr<IDxcBlobUtf8> error = nullptr;
-    result->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(&error), nullptr);
-    if (error && error->GetStringLength() > 0)
-    {
-        LOG_ERROR("Failed to compile shader!\n{}", error->GetStringPointer());
-        return {};
+    Slang::ComPtr<slang::IBlob> diagnostics_blob;
+    slang::IModule *module = session->loadModule(info.file_path.data(), diagnostics_blob.writeRef());
+    if (diagnostics_blob != nullptr) {
+        LOG_ERROR("Shader error: {}", reinterpret_cast<const char *>(diagnostics_blob->getBufferPointer()));
     }
 
-    CComPtr<IDxcBlob> output = nullptr;
-    result->GetOutput(DXC_OUT_OBJECT, IID_PPV_ARGS(&output), nullptr);
-    assert(output);
+    if (!module) {
+        LOG_ERROR("Failed to load shader module!");
+        return VKResult::Unknown;
+    }
 
-    u32 *data = static_cast<u32 *>(output->GetBufferPointer());
-    return { data, data + (output->GetBufferSize() / 4) };
+    Slang::ComPtr<slang::IEntryPoint> entry_point;
+    module->findEntryPointByName(info.entry_point.data(), entry_point.writeRef());
+
+    return {};
 }
 
-ShaderReflectionData ShaderCompiler::reflect_spirv(ShaderReflectionDesc *desc, eastl::span<u32> ir)
+/*
+ShaderReflectionData ShaderCompiler::reflect_spirv(ShaderReflectionDesc *desc,
+eastl::span<u32> ir)
 {
     ZoneScoped;
 
     constexpr static ShaderStage kStageMap[] = {
         [spv::ExecutionModel::ExecutionModelVertex] = ShaderStage::Vertex,
-        [spv::ExecutionModel::ExecutionModelTessellationControl] = ShaderStage::TessellationControl,
-        [spv::ExecutionModel::ExecutionModelTessellationEvaluation] = ShaderStage::TessellationEvaluation,
-        [spv::ExecutionModel::ExecutionModelFragment] = ShaderStage::Pixel,
-        [spv::ExecutionModel::ExecutionModelGLCompute] = ShaderStage::Compute,
+        [spv::ExecutionModel::ExecutionModelTessellationControl] =
+ShaderStage::TessellationControl,
+        [spv::ExecutionModel::ExecutionModelTessellationEvaluation] =
+ShaderStage::TessellationEvaluation, [spv::ExecutionModel::ExecutionModelFragment] =
+ShaderStage::Pixel, [spv::ExecutionModel::ExecutionModelGLCompute] = ShaderStage::Compute,
     };
 
     spirv_cross::CompilerHLSL compiler(ir.data(), ir.size());
     auto first_entry = compiler.get_entry_points_and_stages()[0];
     auto resources = compiler.get_shader_resources();
-    auto &entry_point = compiler.get_entry_point(first_entry.name, first_entry.execution_model);
+    auto &entry_point = compiler.get_entry_point(first_entry.name,
+first_entry.execution_model);
 
     ShaderReflectionData result = {};
     result.m_compiled_stage = kStageMap[entry_point.model];
@@ -214,7 +161,8 @@ ShaderReflectionData ShaderCompiler::reflect_spirv(ShaderReflectionDesc *desc, e
             for (const auto &type_member : type.member_types)
             {
                 const auto &name = compiler.get_name(type_member);
-                if (desc->m_descriptors_struct_name == eastl::string_view(name.data(), name.size()))
+                if (desc->m_descriptors_struct_name == eastl::string_view(name.data(),
+name.size()))
                 {
                     result.m_descriptors_struct.offset = offset;
                     result.m_descriptors_struct.size = size;
@@ -227,5 +175,5 @@ ShaderReflectionData ShaderCompiler::reflect_spirv(ShaderReflectionDesc *desc, e
 
     return result;
 }
-
-}  // namespace lr::Graphics
+*/
+}  // namespace lr::graphics

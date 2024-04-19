@@ -1,19 +1,17 @@
 #pragma once
 
-namespace lr::fs
-{
-class FileView
-{
+namespace lr::fs {
+class FileView {
 public:
-    FileView(eastl::string_view path);
+    FileView(std::string_view path);
     ~FileView();
 
     void close();
     void set_offset(u64 offset);
 
-    template<typename _T>
-    bool read(_T &data);
-    bool read(eastl::string &str, u64 length);
+    template<typename T>
+    bool read(T &data);
+    bool read(std::string &str, u64 length);
     bool read(u8 *pData, u64 dataSize);
 
     usize size() { return m_Size; }
@@ -25,9 +23,9 @@ private:
     FILE *m_pFile = nullptr;
 };
 
-eastl::string read_file(eastl::string_view path);
-eastl::string get_current_dir();
+std::string read_file(std::string_view path);
+std::string get_current_dir();
 
-bool set_library_dir(eastl::string_view path);
-void *load_lib(eastl::string_view path);
+bool set_library_dir(std::string_view path);
+void *load_lib(std::string_view path);
 }  // namespace lr::fs

@@ -10,3 +10,5 @@ out/
 .idea/
 *.rdbg
 *.10x
+.xmake/
+.clangd/

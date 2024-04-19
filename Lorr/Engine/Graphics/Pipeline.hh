@@ -1,113 +1,100 @@
 #pragma once
 
-#include "APIObject.hh"
 #include "Common.hh"
 
-namespace lr::Graphics {
-struct ColorBlendAttachment : VkPipelineColorBlendAttachmentState {
-    ColorBlendAttachment() = default;
-    ColorBlendAttachment(
-        bool enabled,
-        ColorMask write_mask = ColorMask::RGBA,
-        BlendFactor src_blend = BlendFactor::SrcAlpha,
-        BlendFactor dst_blend = BlendFactor::InvSrcAlpha,
-        BlendOp blend_op = BlendOp::Add,
-        BlendFactor src_blend_alpha = BlendFactor::One,
-        BlendFactor dst_blend_alpha = BlendFactor::InvSrcAlpha,
-        BlendOp blend_op_alpha = BlendOp::Add);
-};
-
-struct DepthStencilOpDesc {
-    StencilOp m_pass : 3;
-    StencilOp m_fail : 3;
-    CompareOp m_depth_fail : 3;
-    CompareOp m_compare_func : 3;
-};
-
-struct PushConstantDesc : VkPushConstantRange {
-    PushConstantDesc(ShaderStage stage, u32 offset, u32 size);
-};
-
-struct PipelineAttachmentInfo : VkPipelineRenderingCreateInfo {
-    PipelineAttachmentInfo() = default;
-    PipelineAttachmentInfo(eastl::span<Format> color_attachment_formats, Format depth_attachment_format);
-};
-
-struct Shader;
-struct PipelineShaderStageInfo : VkPipelineShaderStageCreateInfo {
-    PipelineShaderStageInfo() = default;
-    PipelineShaderStageInfo(Shader *shader, eastl::string_view entry_point);
-};
-
-struct PipelineVertexLayoutBindingInfo : VkVertexInputBindingDescription {
-    PipelineVertexLayoutBindingInfo() = default;
-    PipelineVertexLayoutBindingInfo(u32 binding_id, u32 stride, bool is_instanced = false);
-};
-
-struct PipelineVertexAttribInfo : VkVertexInputAttributeDescription {
-    PipelineVertexAttribInfo() = default;
-    PipelineVertexAttribInfo(u32 target_binding, u32 index, Format format, u32 offset);
-};
-
-struct PipelineViewportStateInfo : VkPipelineViewportStateCreateInfo {
-    PipelineViewportStateInfo() = default;
-    PipelineViewportStateInfo(eastl::span<VkViewport> viewports, eastl::span<VkRect2D> scissors);
+namespace lr::graphics {
+struct PipelineLayoutInfo {
+    ls::static_vector<VkDescriptorSetLayout, 8> layouts = {};
+    ls::static_vector<PushConstantRange, 8> push_constants = {};
 };
 
 struct PipelineLayout {
+    PipelineLayout() = default;
+    PipelineLayout(VkPipelineLayout layout)
+        : m_handle(layout)
+    {
+    }
+
     VkPipelineLayout m_handle = nullptr;
+
+    operator auto &() { return m_handle; }
+    explicit operator bool() { return m_handle != nullptr; }
 };
-LR_ASSIGN_OBJECT_TYPE(PipelineLayout, VK_OBJECT_TYPE_PIPELINE_LAYOUT);
 
-struct GraphicsPipelineInfo {
-    // Vertex input state
-    eastl::vector<PipelineShaderStageInfo> m_shader_stages = {};
-    eastl::vector<PipelineVertexLayoutBindingInfo> m_vertex_binding_infos = {};
-    eastl::vector<PipelineVertexAttribInfo> m_vertex_attrib_infos = {};
-    eastl::vector<VkViewport> m_viewports = {};
-    eastl::vector<VkRect2D> m_scissors = {};
-    // Rasterizer state
-    PrimitiveType m_primitive_type : 8 = PrimitiveType::TriangleList;
-    bool m_enable_depth_clamp : 1 = false;
-    bool m_wireframe : 1 = false;
-    CullMode m_cull_mode : 2 = {};
-    bool m_front_face_ccw : 1 = false;
-    bool m_enable_depth_bias : 1 = false;
-    f32 m_depth_slope_factor = 0.0;
-    f32 m_depth_bias_clamp = 0.0;
-    f32 m_depth_bias_factor = 0.0;
-    f32 m_line_width = 1.0;
-    // Multisample state
-    u32 m_multisample_bit_count = 1;
-    bool m_enable_alpha_to_coverage : 1 = false;
-    bool m_enable_alpha_to_one : 1 = false;
-    // Depth stencil state
-    bool m_enable_depth_test : 1 = false;
-    bool m_enable_depth_write : 1 = false;
-    bool m_enable_depth_bounds_test : 1 = false;
-    bool m_enable_stencil_test : 1 = false;
-    CompareOp m_depth_compare_op : 8 = {};
-    DepthStencilOpDesc m_stencil_front_face_op = {};
-    DepthStencilOpDesc m_stencil_back_face_op = {};
-    // Color blend state
-    eastl::vector<ColorBlendAttachment> m_blend_attachments = {};
-    // Dynamic state
-    eastl::vector<DynamicState> m_dynamic_states = {};
+enum class PipelineEnableFlag : u32 {
+    None = 0,
+    // Rasterizer State
+    DepthClamp = 1 << 0,
+    Wireframe = 1 << 1,
+    FrontFaceCCW = 1 << 2,
+    DepthBias = 1 << 2,
 
-    PipelineLayout *m_layout = nullptr;
+    // Multisample State
+    AlphaToCoverage = 1 << 3,
+    AlphatoOne = 1 << 4,
+
+    // Depth Stencil State
+    DepthTest = 1 << 5,
+    DepthWrite = 1 << 6,
+    DepthBoundsTest = 1 << 7,
+    StencilTest = 1 << 8,
+};
+LR_TYPEOP_ARITHMETIC(PipelineEnableFlag, PipelineEnableFlag, |);
+LR_TYPEOP_ARITHMETIC_INT(PipelineEnableFlag, PipelineEnableFlag, &);
+
+struct alignas(64) GraphicsPipelineInfo {
+    RenderingAttachmentInfo attachment_info = {};
+    ls::static_vector<Viewport, Limits::ColorAttachments> viewports = {};
+    ls::static_vector<Rect2D, Limits::ColorAttachments> scissors = {};
+
+    // Vertex Input State
+    ls::static_vector<PipelineShaderStageInfo::VkType, 4> shader_stages = {};
+    ls::static_vector<PipelineVertexLayoutBindingInfo::VkType, 4> vertex_binding_infos = {};
+    ls::static_vector<PipelineVertexAttribInfo::VkType, 16> vertex_attrib_infos = {};
+
+    // Rasterizer State
+    f32 depth_slope_factor = 0.0;
+    f32 depth_bias_clamp = 0.0;
+    f32 depth_bias_factor = 0.0;
+    f32 line_width = 1.0;
+    CullMode cull_mode = {};
+    PrimitiveType primitive_type = PrimitiveType::TriangleList;
+    // Multisample State
+    u32 multisample_bit_count = 1;
+    // Depth Stencil State
+    CompareOp depth_compare_op = {};
+    StencilFaceOp stencil_front_face_op = {};
+    StencilFaceOp stencil_back_face_op = {};
+    // Color Blend Attachment State
+    ls::static_vector<PipelineColorBlendAttachment::VkType, Limits::ColorAttachments> blend_attachments = {};
+    glm::vec4 blend_constants = {};
+
+    // Dynamic State
+    DynamicState dynamic_state = {};
+    PipelineEnableFlag enable_flags = PipelineEnableFlag::None;
+
+    PipelineLayout &layout;
 };
 
 struct ComputePipelineInfo {
-    PipelineShaderStageInfo m_shader_stage = {};
-
-    PipelineLayout *m_layout = nullptr;
+    PipelineShaderStageInfo compute_shader_info = {};
+    PipelineLayout &layout;
 };
 
 struct Pipeline {
+    Pipeline() = default;
+    Pipeline(VkPipeline pipeline, PipelineBindPoint bind_point)
+        : m_handle(pipeline),
+          m_bind_point(bind_point)
+    {
+    }
+
     PipelineBindPoint m_bind_point = PipelineBindPoint::Graphics;
+    VkPipeline m_handle = nullptr;
 
-    VkPipeline m_handle = VK_NULL_HANDLE;
+    constexpr static auto OBJECT_TYPE = VK_OBJECT_TYPE_PIPELINE;
+    operator auto &() { return m_handle; }
+    explicit operator bool() { return m_handle != nullptr; }
 };
-LR_ASSIGN_OBJECT_TYPE(Pipeline, VK_OBJECT_TYPE_PIPELINE);
 
-}  // namespace lr::Graphics
+}  // namespace lr::graphics

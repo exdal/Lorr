@@ -1,4 +1,6 @@
 Checks: "
+        clang-diagnostic-*,
+        clang-analyzer-*,
         -*,
         mpi-*,
         bugprone-*,

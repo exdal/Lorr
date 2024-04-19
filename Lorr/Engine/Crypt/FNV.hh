@@ -1,10 +1,6 @@
-// Created on Saturday July 16th 2022 by exdal
-// Last modified on Friday August 18th 2023 by exdal
-
 #pragma once
 
-namespace lr::Hash
-{
+namespace lr::Hash {
 constexpr u32 kFNV32Value = 2166136261U;
 constexpr u32 kFNV32Prime = 16777619U;
 
@@ -24,7 +20,7 @@ constexpr u32 FNV32(const T &val)
     return FNV32(&val, sizeof(T));
 }
 
-constexpr u32 FNV32String(eastl::string_view str)
+constexpr u32 FNV32String(std::string_view str)
 {
     return FNV32(str.data(), str.length());
 }
@@ -48,12 +44,12 @@ constexpr u64 FNV64(const T &val)
     return FNV64(&val, sizeof(T));
 }
 
-constexpr u64 FNV64String(eastl::string_view str)
+constexpr u64 FNV64String(std::string_view str)
 {
     return FNV64(str.data(), str.length());
 }
 
 }  // namespace lr::Hash
 
-#define FNV32HashOf(x) (eastl::integral_constant<u32, lr::Hash::FNV32String(x)>::value)
-#define FNV64HashOf(x) (eastl::integral_constant<u64, lr::Hash::FNV64String(x)>::value)
+#define FNV32HashOf(x) (std::integral_constant<u32, lr::Hash::FNV32String(x)>::value)
+#define FNV64HashOf(x) (std::integral_constant<u64, lr::Hash::FNV64String(x)>::value)

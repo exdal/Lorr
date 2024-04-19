@@ -1,73 +1,59 @@
 #pragma once
 
-#include "APIObject.hh"
-#include "CommandList.hh"
 #include "Common.hh"
+#include "CommandList.hh"
 
-namespace lr::Graphics {
-struct SwapChainDesc {
-    void *m_window_handle = nullptr;
-    void *m_window_instance = nullptr;
-    u32 m_width = 0;
-    u32 m_height = 0;
-    u32 m_frame_count = 0;
-    Format m_format = Format::Unknown;
-    VkColorSpaceKHR m_color_space = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
-    PresentMode m_present_mode = PresentMode::Mailbox;
+namespace lr::graphics {
+enum class SwapChainBuffering {
+    Single = 1,
+    Double = 2,
+    Triple = 3,
+};
+
+struct SwapChainInfo {
+    VkSurfaceKHR surface = nullptr;
+    Extent2D extent = {};
+    SwapChainBuffering buffering = SwapChainBuffering::Triple;
 };
 
 struct SwapChain {
-    void init(
-        VkSwapchainKHR swapchain_handle,
-        u32 width,
-        u32 height,
-        u32 frame_count,
-        Format format,
-        eastl::vector<ImageID> &&images,
-        eastl::vector<ImageViewID> &&image_views,
-        eastl::vector<Semaphore> &&acquire_semas,
-        eastl::vector<Semaphore> &&present_semas,
-        VkSurfaceKHR surface)
+    SwapChain() = default;
+
+    usize image_count() { return m_image_count; }
+    usize sema_index() { return m_frame_timeline_counter % m_image_count; }
+    std::pair<Semaphore &, u64 &> frame_sema()
     {
-        m_handle = swapchain_handle;
-        m_width = width;
-        m_height = height;
-        m_format = format;
-        m_images = images;
-        m_image_views = image_views;
-        m_acquire_semas = acquire_semas;
-        m_present_semas = present_semas;
-        m_surface = surface;
+        return { *m_frame_timeline_sema, m_frame_timeline_counter };
     }
 
-    u32 next_semaphore() { return (m_current_semaphore_id + 1) % m_present_semas.size(); }
-    u32 frame_count() { return m_images.size(); }
-    u32 semaphore_count() { return m_present_semas.size(); }
-    eastl::tuple<ImageID, ImageViewID> get_frame_image(u32 frame_id = ~0)
+    std::pair<Semaphore &, Semaphore &> get_binary_semas()
     {
-        if (frame_id == ~0)
-            frame_id = m_current_frame_id;
-        return { m_images[frame_id], m_image_views[frame_id] };
-    }
-    eastl::tuple<Semaphore *, Semaphore *> get_semaphores()
-    {
-        return { &m_acquire_semas[m_current_semaphore_id], &m_present_semas[m_current_semaphore_id] };
+        return { m_acquire_semas->at(sema_index()), m_present_semas->at(sema_index()) };
     }
 
-    u32 m_width = 0;
-    u32 m_height = 0;
-    u32 m_current_frame_id = 0;
-    u32 m_current_semaphore_id = 0;
+    u64 frame_wait_val()
+    {
+        return static_cast<u64>(std::max<i64>(
+            0, static_cast<i64>(m_frame_timeline_counter) - static_cast<i64>(m_image_count - 1)));
+    }
+
+    void inc_frame() { m_frame_timeline_counter++; }
+
     Format m_format = Format::Unknown;
+    Extent2D m_extent = {};
+    u32 m_image_count = 0;
 
-    eastl::vector<ImageID> m_images = {};
-    eastl::vector<ImageViewID> m_image_views = {};
-    eastl::vector<Semaphore> m_acquire_semas = {};
-    eastl::vector<Semaphore> m_present_semas = {};
+    u64 m_frame_timeline_counter = 0;
+    Unique<Semaphore> m_frame_timeline_sema;
+    Unique<ls::static_vector<Semaphore, Limits::FrameCount>> m_acquire_semas;
+    Unique<ls::static_vector<Semaphore, Limits::FrameCount>> m_present_semas;
 
-    VkSurfaceKHR m_surface = nullptr;
-    VkSwapchainKHR m_handle = VK_NULL_HANDLE;
+    vkb::Swapchain m_handle = {};
+    VkSurfaceKHR m_surface = VK_NULL_HANDLE;
+
+    constexpr static auto OBJECT_TYPE = VK_OBJECT_TYPE_SWAPCHAIN_KHR;
+    operator auto &() { return m_handle; }
+    operator bool() { return m_handle != VK_NULL_HANDLE; }
 };
-LR_ASSIGN_OBJECT_TYPE(SwapChain, VK_OBJECT_TYPE_SWAPCHAIN_KHR);
 
-}  // namespace lr::Graphics
+}  // namespace lr::graphics

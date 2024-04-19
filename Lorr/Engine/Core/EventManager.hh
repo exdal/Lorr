@@ -16,8 +16,10 @@ struct EventManager {
         TData m_data = {};
     };
 
-    using ring_buffer = typename eastl::
-        conditional<TAtomicRingBuffer, Memory::RingBufferAtomic<EventIdentifier, TCount>, Memory::RingBuffer<EventIdentifier, TCount>>::type;
+    using ring_buffer = typename std::conditional<
+        TAtomicRingBuffer,
+        Memory::RingBufferAtomic<EventIdentifier, TCount>,
+        Memory::RingBuffer<EventIdentifier, TCount>>::type;
 
     bool peek() { return !m_ring_buffer.empty(); }
 

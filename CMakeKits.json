@@ -7,5 +7,15 @@
             "CXX": "clang++"
         },
         "linker": "lld"
+    },
+    {
+        "name": "clang-cl",
+        "generator": "Ninja",
+        "compilers": {
+            "C": "clang-cl",
+            "CXX": "clang-cl"
+        },
+        "linker": "lld-link"
     }
+
 ]

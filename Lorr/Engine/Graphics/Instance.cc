@@ -1,71 +1,56 @@
 #include "Instance.hh"
 
-#include <EASTL/scoped_array.h>
-#include <VkBootstrap.h>
-
 #include "Device.hh"
-#include "Vulkan.hh"
 
-#define VKFN_FUNCTION(_name) PFN_##_name _name
-VKFN_INSTANCE_FUNCTIONS
-VKFN_PHYSICAL_DEVICE_FUNCTIONS
-VKFN_LOGICAL_DEVICE_FUNCTIONS
-VKFN_COMMAND_BUFFER_FUNCTIONS
-VKFN_DESCRIPTOR_BUFFER_EXT_FUNCTIONS
-VKFN_CALIBRATED_TIMESTAMPS_EXT_DEVICE_FUNCTIONS
-VKFN_CALIBRATED_TIMESTAMPS_EXT_INSTANCE_FUNCTIONS
-VKFN_DEBUG_UTILS_EXT_DEVICE_FUNCTIONS
-#undef VKFN_FUNCTION
-
-namespace lr::Graphics
-{
-static vkb::Instance vkb_instance = {};
-
-APIResult Instance::init(const InstanceDesc &desc)
+namespace lr::graphics {
+VKResult Instance::init(const InstanceInfo &info)
 {
     vkb::InstanceBuilder instance_builder;
-    instance_builder.set_app_name(desc.m_app_name.data());
-    instance_builder.set_engine_name(desc.m_engine_name.data());
-    instance_builder.set_engine_version(desc.m_engine_version);
+    instance_builder.set_app_name(info.app_name.data());
+    instance_builder.set_engine_name(info.engine_name.data());
+    instance_builder.set_engine_version(1, 0, 0);
     instance_builder.enable_validation_layers(false);  // use vkconfig ui...
     instance_builder.request_validation_layers(false);
+    instance_builder.set_debug_callback(
+        [](VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+           VkDebugUtilsMessageTypeFlagsEXT messageType,
+           const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData,
+           void *pUserData) -> VkBool32 {
+            auto severity = vkb::to_string_message_severity(messageSeverity);
+            auto type = vkb::to_string_message_type(messageType);
+            LOG_TRACE("[{}: {}] {}\n", severity, type, pCallbackData->pMessage);
+            return VK_FALSE;
+        });
+
     instance_builder.enable_extensions({
-        "VK_KHR_surface", "VK_KHR_get_physical_device_properties2", "VK_KHR_win32_surface",
+        "VK_KHR_surface",
+        "VK_KHR_get_physical_device_properties2",
+        "VK_KHR_win32_surface",
 #if _DEBUG
-            //! Debug extensions, always put it to bottom
-            "VK_EXT_debug_utils", "VK_EXT_debug_report",
+        //! Debug extensions, always put it to bottom
+        "VK_EXT_debug_utils",
+        "VK_EXT_debug_report",
 #endif
     });
     instance_builder.require_api_version(1, 3, 0);
-    auto build_result = instance_builder.build();
-    if (!build_result)
-    {
+    auto instance_result = instance_builder.build();
+    if (!instance_result) {
         LOG_ERROR("Failed to create Vulkan Instance!");
-        return APIResult::InitFailed;
+        return (VKResult)instance_result.vk_result();
     }
-    vkb_instance = build_result.value();
-    m_handle = vkb_instance.instance;
+    m_handle = instance_result.value();
 
-#define VKFN_FUNCTION(_name)                                                      \
-    _name = (PFN_##_name)vkb_instance.fp_vkGetInstanceProcAddr(m_handle, #_name); \
-    if (_name == nullptr)                                                         \
-        LOG_TRACE("Failed to load Vulkan function '{}'.", #_name);
+    if (!vulkan::load_instance(m_handle, m_handle.fp_vkGetInstanceProcAddr)) {
+        LOG_ERROR("Failed to create Vulkan Instance! Extension not found.");
+        return VKResult::ExtNotPresent;
+    }
 
-    VKFN_INSTANCE_FUNCTIONS
-    VKFN_PHYSICAL_DEVICE_FUNCTIONS
-#if TRACY_ENABLE
-    VKFN_CALIBRATED_TIMESTAMPS_EXT_INSTANCE_FUNCTIONS
-#endif
-#undef VKFN_FUNCTION
-
-    return APIResult::Success;
+    return VKResult::Success;
 }
 
-APIResult Instance::create_devce(Device *device)
+Result<Device, VKResult> Instance::create_device()
 {
-    ZoneScoped;
-
-    vkb::PhysicalDeviceSelector physical_device_selector(vkb_instance);
+    vkb::PhysicalDeviceSelector physical_device_selector(m_handle);
     physical_device_selector.defer_surface_initialization();
     physical_device_selector.set_minimum_version(1, 3);
     physical_device_selector.set_required_features_13({
@@ -76,6 +61,9 @@ APIResult Instance::create_devce(Device *device)
         .descriptorIndexing = true,
         .shaderSampledImageArrayNonUniformIndexing = true,
         .shaderStorageBufferArrayNonUniformIndexing = true,
+        .descriptorBindingSampledImageUpdateAfterBind = true,
+        .descriptorBindingStorageImageUpdateAfterBind = true,
+        .descriptorBindingStorageBufferUpdateAfterBind = true,
         .descriptorBindingUpdateUnusedWhilePending = true,
         .descriptorBindingPartiallyBound = true,
         .descriptorBindingVariableDescriptorCount = true,
@@ -91,26 +79,29 @@ APIResult Instance::create_devce(Device *device)
     physical_device_selector.add_required_extensions({
         "VK_KHR_swapchain",
 #if TRACY_ENABLE
-            "VK_EXT_calibrated_timestamps",
+        "VK_EXT_calibrated_timestamps",
 #endif
     });
     auto physical_device_result = physical_device_selector.select();
-    if (!physical_device_result)
-    {
+    if (!physical_device_result) {
         LOG_ERROR("Failed to select Vulkan Physical Device!");
-        return static_cast<APIResult>(physical_device_result.vk_result());
+        return static_cast<VKResult>(physical_device_result.vk_result());
     }
-    auto &selected_physical_device = physical_device_result.value();
+
+    vkb::PhysicalDevice &physical_device = physical_device_result.value();
+
+    /// DEVICE INITIALIZATION ///
     DeviceFeature features = {};
 
-    // if (selected_physical_device.enable_extension_if_present("VK_EXT_descriptor_buffer"))
+    // if
+    // (selected_physical_device.enable_extension_if_present("VK_EXT_descriptor_buffer"))
     //     features |= DeviceFeature::DescriptorBuffer;
-    if (selected_physical_device.enable_extension_if_present("VK_EXT_memory_budget"))
+    if (physical_device.enable_extension_if_present("VK_EXT_memory_budget"))
         features |= DeviceFeature::MemoryBudget;
 
-    vkb::DeviceBuilder device_builder(selected_physical_device);
+    vkb::DeviceBuilder device_builder(physical_device);
 
-    VkPhysicalDeviceDescriptorBufferFeaturesEXT kDesciptorBufferFeatures = {
+    VkPhysicalDeviceDescriptorBufferFeaturesEXT desciptor_buffer_features = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT,
         .pNext = nullptr,
         .descriptorBuffer = true,
@@ -118,50 +109,22 @@ APIResult Instance::create_devce(Device *device)
         .descriptorBufferPushDescriptors = true,
     };
     if (features & DeviceFeature::DescriptorBuffer)
-        device_builder.add_pNext(&kDesciptorBufferFeatures);
+        device_builder.add_pNext(&desciptor_buffer_features);
 
     auto device_result = device_builder.build();
-    if (!device_result)
-    {
+    if (!device_result) {
         LOG_ERROR("Failed to select Vulkan Device!");
-        return static_cast<APIResult>(device_result.vk_result());
+        return static_cast<VKResult>(device_result.vk_result());
     }
 
-    VkPhysicalDevice physical_device = selected_physical_device.physical_device;
-    VkDevice logical_device = device_result.value();
+    vkb::Device &device = device_result.value();
 
-    // THESE ARE REQUIRED FUNCTIONS, THESE MUST BE AVAILABLE!!!
-#define VKFN_FUNCTION(_name)                                                          \
-    _name = (PFN_##_name)vkb_instance.fp_vkGetDeviceProcAddr(logical_device, #_name); \
-    if (_name == nullptr)                                                             \
-    {                                                                                 \
-        LOG_ERROR("Failed to load Vulkan function '{}'.", #_name);                    \
-        return APIResult::ExtNotPresent;                                              \
+    if (!vulkan::load_device(device, m_handle.fp_vkGetDeviceProcAddr)) {
+        LOG_ERROR("Failed to create Vulkan Device! Extension not found.");
+        return VKResult::ExtNotPresent;
     }
 
-    VKFN_LOGICAL_DEVICE_FUNCTIONS
-    VKFN_COMMAND_BUFFER_FUNCTIONS
-#if _DEBUG
-    VKFN_DEBUG_UTILS_EXT_DEVICE_FUNCTIONS
-#endif
-#if TRACY_ENABLE
-    VKFN_CALIBRATED_TIMESTAMPS_EXT_DEVICE_FUNCTIONS
-#endif
-#undef VKFN_FUNCTION
-
-    // OPTIONAL FUNCTIONS, MAINLY THERE IS AN ALTERNATIVE VERSION(EXTENSION) FOR THEM.
-    // EXTENSIONS MUST BE CHECKED BEFORE LOADING
-#define VKFN_FUNCTION(_name) _name = (PFN_##_name)vkb_instance.fp_vkGetDeviceProcAddr(logical_device, #_name);
-    VKFN_DESCRIPTOR_BUFFER_EXT_FUNCTIONS
-#undef VKFN_FUNCTION
-
-    eastl::array<u32, (usize)CommandType::Count> queue_indexes = {};
-    for (u32 i = 0; i < queue_indexes.size(); i++)
-        queue_indexes[i] = device_result->get_queue_index(static_cast<vkb::QueueType>(i + 1)).value();
-
-    device->init(logical_device, physical_device, m_handle, queue_indexes);
-
-    return APIResult::Success;
+    return Device(std::move(device), &m_handle, features);
 }
 
-}  // namespace lr::Graphics
+}  // namespace lr::graphics

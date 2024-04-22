@@ -11,11 +11,10 @@ env:
 jobs:
   windows-clang-cl:
     name: (clang-cl) Windows
-    runs-on: [ windows, x64 ]
+    runs-on: windows-latest
     strategy:
       fail-fast: false
       matrix:
-        os: [ windows-2022 ]
         mode: [ release, debug ]
         toolchain: [ clang-cl ]
         arch: [ x64 ]
@@ -53,7 +52,7 @@ jobs:
         uses: actions/cache@v2
         with:
           path: xmake-cache
-          key: ${{ matrix.os }}-${{ matrix.arch }}
+          key: ${{ runner.os }}-${{ matrix.arch }}
 
       - name: Build
         run: |

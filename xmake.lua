@@ -8,7 +8,7 @@ elseif is_mode("release") then
   set_optimize("aggressive")
 end
 
-add_requires("slang")
+add_cxxflags("clang::-stdlib=libc++")
 
 add_requires(
     "fmt",
@@ -19,6 +19,7 @@ add_requires(
     "vulkan-headers",
     "vulkan-memory-allocator",
     "vk-bootstrap",
+    "slang",
     "unordered_dense",
     "plf_colony",
     "sol2"

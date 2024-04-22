@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 
 typedef double f64;
@@ -34,6 +35,6 @@ typedef u32 b32;
 #endif
 #endif
 
-typedef std::size_t uptr;
-typedef std::ptrdiff_t iptr;
+typedef std::intptr_t uptr;
+typedef std::uintptr_t iptr;
 typedef std::size_t usize;

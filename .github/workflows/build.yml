@@ -9,6 +9,8 @@ on:
 
 env:
   VULKAN_VERSION: 1.3.261.1
+  CC: clang-18
+  CXX: clang++-18
 
 jobs:
   build:

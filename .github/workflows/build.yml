@@ -41,6 +41,13 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Install LLVM (Unix)
+        if: ${{ matrix.platform.os != 'windows' }}
+        run: |
+          wget https://apt.llvm.org/llvm.sh
+          chmod +x ./llvm.sh
+          sudo ./llvm.sh 18
+
       - name: Setup Ninja
         uses: turtlesec-no/get-ninja@1.1.0
 

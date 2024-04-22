@@ -8,8 +8,6 @@ elseif is_mode("release") then
   set_optimize("aggressive")
 end
 
-add_cxxflags("clang::-stdlib=libc++")
-
 add_requires(
     "fmt",
     "tracy",

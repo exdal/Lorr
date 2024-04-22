@@ -2,6 +2,8 @@
 #include "Graphics/Device.hh"
 #include "OS/Window.hh"
 
+#include "Asset/VirtualDirectory.hh"
+
 using namespace lr;
 using namespace lr::graphics;
 

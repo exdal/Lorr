@@ -10,7 +10,7 @@ struct VirtualFile {
 
 struct VirtualDirectory {
     void mkdir(std::string_view name);
-    ankerl::unordered_dense::set<std::filesystem::path, VirtualFile> m_files = {};
+    ankerl::unordered_dense::set<std::string, VirtualFile> m_files = {};
 };
 
 }  // namespace lr::asset

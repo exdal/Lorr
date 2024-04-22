@@ -4,7 +4,10 @@
 #include "Graphics/Vulkan.hh"
 #include "Input/Key.hh"
 
-namespace lr::window {
+#define GLFW_INCLUDE_NONE
+#include <GLFW/glfw3.h>
+
+namespace lr::os {
 enum class WindowCursor {
     Arrow,
     TextInput,
@@ -76,49 +79,44 @@ using WindowEventManager = EventManager<WindowEventData, 64>;
 struct SystemDisplay {
     std::string name;
 
-    u32 res_w;
-    u32 res_h;
+    i32 res_w;
+    i32 res_h;
     i32 pos_x;
     i32 pos_y;
 
-    u32 refresh_rate;
+    i32 refresh_rate;
 };
 
 struct WindowInfo {
+    constexpr static u32 USE_PRIMARY_MONITOR = ~0;
+
     std::string_view title = {};
     std::string_view icon = {};
-    i32 current_monitor = 0;
+    u32 monitor = USE_PRIMARY_MONITOR;
     i32 width = 0;
     i32 height = 0;
     WindowFlag flags = WindowFlag::None;
 };
 
 struct Window {
-    virtual ~Window() = default;
+    ~Window();
+    bool init(const WindowInfo &info);
+    void poll();
+    void set_cursor(WindowCursor cursor);
 
-    virtual bool init(const WindowInfo &info) = 0;
-    virtual void poll() = 0;
-    virtual void set_cursor(WindowCursor cursor) = 0;
-
-    SystemDisplay *get_display(u32 monitor);
+    SystemDisplay get_display(u32 monitor_id = WindowInfo::USE_PRIMARY_MONITOR);
+    Result<VkSurfaceKHR, VkResult> get_surface(VkInstance instance);
     bool should_close();
-
-    virtual VkSurfaceKHR get_surface(VkInstance instance) = 0;
-
-    void *m_handle = nullptr;
 
     u32 m_width = 0;
     u32 m_height = 0;
-
-    bool m_should_close = false;
 
     WindowCursor m_current_cursor = WindowCursor::Arrow;
     glm::uvec2 m_cursor_position = {};
     WindowEventManager m_event_manager = {};
 
-    static constexpr u32 MAX_DISPLAYS = 4;
-    ls::static_vector<SystemDisplay, MAX_DISPLAYS> m_displays = {};
-    u32 m_using_display = 0;
+    GLFWwindow *m_handle = nullptr;
+    u32 m_monitor_id = WindowInfo::USE_PRIMARY_MONITOR;
 };
 
-}  // namespace lr::window
+}  // namespace lr::os

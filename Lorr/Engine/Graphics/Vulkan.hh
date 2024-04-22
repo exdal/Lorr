@@ -3,22 +3,12 @@
 #define VK_NO_PROTOTYPES
 #include <vulkan/vulkan.h>
 
-typedef unsigned long DWORD;
-typedef const wchar_t *LPCWSTR;
-typedef void *HANDLE;
-typedef struct HINSTANCE__ *HINSTANCE;
-typedef struct HWND__ *HWND;
-typedef struct HMONITOR__ *HMONITOR;
-typedef struct _SECURITY_ATTRIBUTES SECURITY_ATTRIBUTES;
-
-#include <vulkan/vulkan_win32.h>
 #include <VkBootstrap.h>
 
 #define VKFN_INSTANCE_FUNCTIONS                   \
     VKFN_FUNCTION(vkGetDeviceProcAddr);           \
     VKFN_FUNCTION(vkGetInstanceProcAddr);         \
     VKFN_FUNCTION(vkEnumeratePhysicalDevices);    \
-    VKFN_FUNCTION(vkCreateWin32SurfaceKHR);       \
     VKFN_FUNCTION(vkGetPhysicalDeviceProperties); \
     VKFN_FUNCTION(vkGetPhysicalDeviceProperties2);
 

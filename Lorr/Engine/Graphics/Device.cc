@@ -20,17 +20,21 @@ VKResult Device::init()
 
     /// ALLOCATOR INITIALIZATION ///
 
-    VmaVulkanFunctions vulkan_functions = {
-        .vkGetInstanceProcAddr = vkGetInstanceProcAddr,
-        .vkGetDeviceProcAddr = vkGetDeviceProcAddr,
-    };
+    VmaVulkanFunctions vulkan_functions = {};
+    vulkan_functions.vkGetInstanceProcAddr = vkGetInstanceProcAddr;
+    vulkan_functions.vkGetDeviceProcAddr = vkGetDeviceProcAddr;
 
     VmaAllocatorCreateInfo allocator_create_info = {
         .flags = VMA_ALLOCATOR_CREATE_EXT_MEMORY_BUDGET_BIT,
         .physicalDevice = m_physical_device,
         .device = m_handle,
+        .preferredLargeHeapBlockSize = 0,
+        .pAllocationCallbacks = nullptr,
+        .pDeviceMemoryCallbacks = nullptr,
+        .pHeapSizeLimit = nullptr,
         .pVulkanFunctions = &vulkan_functions,
         .instance = *m_instance,
+        .pTypeExternalMemoryHandleTypes = nullptr,
         .vulkanApiVersion = VK_API_VERSION_1_3,
     };
 
@@ -155,6 +159,7 @@ VKResult Device::create_command_allocators(
 
     VkCommandPoolCreateInfo create_info = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+        .pNext = nullptr,
         .flags = static_cast<VkCommandPoolCreateFlags>(info.flags),
         .queueFamilyIndex = get_queue_index(info.type),
     };
@@ -186,6 +191,7 @@ VKResult Device::create_command_lists(std::span<CommandList> lists, CommandAlloc
 
     VkCommandBufferAllocateInfo allocate_info = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .pNext = nullptr,
         .commandPool = command_allocator,
         .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
         .commandBufferCount = 1,
@@ -222,6 +228,7 @@ void Device::begin_command_list(CommandList &list)
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
         .pNext = nullptr,
         .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+        .pInheritanceInfo = nullptr,
     };
     vkBeginCommandBuffer(list, &begin_info);
 }
@@ -265,6 +272,7 @@ VKResult Device::create_binary_semaphores(std::span<Semaphore> semaphores)
 
     VkSemaphoreTypeCreateInfo semaphore_type_info = {
         .sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO,
+        .pNext = nullptr,
         .semaphoreType = VK_SEMAPHORE_TYPE_BINARY,
         .initialValue = 0,
     };
@@ -272,6 +280,7 @@ VKResult Device::create_binary_semaphores(std::span<Semaphore> semaphores)
     VkSemaphoreCreateInfo semaphore_info = {
         .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
         .pNext = &semaphore_type_info,
+        .flags = 0,
     };
 
     VKResult result = VKResult::Success;
@@ -292,6 +301,7 @@ VKResult Device::create_timeline_semaphores(std::span<Semaphore> semaphores, u64
 
     VkSemaphoreTypeCreateInfo semaphore_type_info = {
         .sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO,
+        .pNext = nullptr,
         .semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE,
         .initialValue = initial_value,
     };
@@ -299,6 +309,7 @@ VKResult Device::create_timeline_semaphores(std::span<Semaphore> semaphores, u64
     VkSemaphoreCreateInfo semaphore_info = {
         .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
         .pNext = &semaphore_type_info,
+        .flags = 0,
     };
 
     VKResult result = VKResult::Success;
@@ -328,6 +339,8 @@ VKResult Device::wait_for_semaphore(Semaphore &semaphore, u64 desired_value, u64
 
     VkSemaphoreWaitInfo wait_info = {
         .sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
+        .pNext = nullptr,
+        .flags = 0,
         .semaphoreCount = 1,
         .pSemaphores = &semaphore.m_handle,
         .pValues = &desired_value,
@@ -460,11 +473,13 @@ VKResult Device::present(SwapChain &swap_chain, Semaphore &present_sema, u32 ima
     VkQueue present_queue = m_queues[m_present_queue_id];
     VkPresentInfoKHR present_info = {
         .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+        .pNext = nullptr,
         .waitSemaphoreCount = 1,
         .pWaitSemaphores = &present_sema.m_handle,
         .swapchainCount = 1,
         .pSwapchains = &swap_chain.m_handle.swapchain,
         .pImageIndices = &image_id,
+        .pResults = nullptr,
     };
     VKResult result = CHECK(vkQueuePresentKHR(present_queue, &present_info));
     if (result != VKResult::Success)
@@ -502,6 +517,7 @@ UniqueResult<PipelineLayout> Device::create_pipeline_layout(const PipelineLayout
     VkPipelineLayoutCreateInfo pipeline_layout_create_info = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
         .pNext = nullptr,
+        .flags = 0,
         .setLayoutCount = static_cast<u32>(info.layouts.size()),
         .pSetLayouts = info.layouts.data(),
         .pushConstantRangeCount = static_cast<u32>(info.push_constants.size()),
@@ -538,6 +554,7 @@ Result<PipelineID, VKResult> Device::create_graphics_pipeline(const GraphicsPipe
     VkPipelineVertexInputStateCreateInfo input_layout_info = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
         .pNext = nullptr,
+        .flags = 0,
         .vertexBindingDescriptionCount = static_cast<u32>(info.vertex_binding_infos.size()),
         .pVertexBindingDescriptions = info.vertex_binding_infos.data(),
         .vertexAttributeDescriptionCount = static_cast<u32>(info.vertex_attrib_infos.size()),
@@ -549,7 +566,9 @@ Result<PipelineID, VKResult> Device::create_graphics_pipeline(const GraphicsPipe
     VkPipelineInputAssemblyStateCreateInfo input_assembly_info = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
         .pNext = nullptr,
+        .flags = 0,
         .topology = static_cast<VkPrimitiveTopology>(info.primitive_type),
+        .primitiveRestartEnable = false,
     };
 
     /// TESSELLATION -------------------------------------------------------------
@@ -557,6 +576,7 @@ Result<PipelineID, VKResult> Device::create_graphics_pipeline(const GraphicsPipe
     VkPipelineTessellationStateCreateInfo tessellation_info = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO,
         .pNext = nullptr,
+        .flags = 0,
         .patchControlPoints = 0,  // TODO
     };
 
@@ -570,7 +590,9 @@ Result<PipelineID, VKResult> Device::create_graphics_pipeline(const GraphicsPipe
     VkPipelineRasterizationStateCreateInfo rasterizer_info = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
         .pNext = nullptr,
+        .flags = 0,
         .depthClampEnable = enable_depth_clamp,
+        .rasterizerDiscardEnable = false,
         .polygonMode = wireframe ? VK_POLYGON_MODE_LINE : VK_POLYGON_MODE_FILL,
         .cullMode = static_cast<VkCullModeFlags>(info.cull_mode),
         .frontFace = static_cast<VkFrontFace>(!front_face_ccw),
@@ -589,7 +611,11 @@ Result<PipelineID, VKResult> Device::create_graphics_pipeline(const GraphicsPipe
     VkPipelineMultisampleStateCreateInfo multisample_info = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
         .pNext = nullptr,
+        .flags = 0,
         .rasterizationSamples = static_cast<VkSampleCountFlagBits>(1 << (info.multisample_bit_count - 1)),
+        .sampleShadingEnable = false,
+        .minSampleShading = 0,
+        .pSampleMask = nullptr,
         .alphaToCoverageEnable = enable_alpha_to_coverage,
         .alphaToOneEnable = enable_alpha_to_one,
     };
@@ -604,6 +630,7 @@ Result<PipelineID, VKResult> Device::create_graphics_pipeline(const GraphicsPipe
     VkPipelineDepthStencilStateCreateInfo depth_stencil_info = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
         .pNext = nullptr,
+        .flags = 0,
         .depthTestEnable = enable_depth_test,
         .depthWriteEnable = enable_depth_write,
         .depthCompareOp = static_cast<VkCompareOp>(info.depth_compare_op),
@@ -611,6 +638,8 @@ Result<PipelineID, VKResult> Device::create_graphics_pipeline(const GraphicsPipe
         .stencilTestEnable = enable_stencil_test,
         .front = info.stencil_front_face_op,
         .back = info.stencil_back_face_op,
+        .minDepthBounds = 0,
+        .maxDepthBounds = 0,
     };
 
     /// COLOR BLEND --------------------------------------------------------------
@@ -618,7 +647,9 @@ Result<PipelineID, VKResult> Device::create_graphics_pipeline(const GraphicsPipe
     VkPipelineColorBlendStateCreateInfo color_blend_info = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
         .pNext = nullptr,
+        .flags = 0,
         .logicOpEnable = false,
+        .logicOp = {},
         .attachmentCount = static_cast<u32>(info.blend_attachments.size()),
         .pAttachments = info.blend_attachments.data(),
         .blendConstants = { info.blend_constants.x,
@@ -647,6 +678,7 @@ Result<PipelineID, VKResult> Device::create_graphics_pipeline(const GraphicsPipe
     VkPipelineDynamicStateCreateInfo dynamic_state_info = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
         .pNext = nullptr,
+        .flags = 0,
         .dynamicStateCount = static_cast<u32>(dynamic_states.size()),
         .pDynamicStates = dynamic_states.data(),
     };
@@ -680,6 +712,10 @@ Result<PipelineID, VKResult> Device::create_graphics_pipeline(const GraphicsPipe
         .pColorBlendState = &color_blend_info,
         .pDynamicState = &dynamic_state_info,
         .layout = info.layout,
+        .renderPass = nullptr,
+        .subpass = 0,
+        .basePipelineHandle = VK_NULL_HANDLE,
+        .basePipelineIndex = 0,
     };
 
     VkPipeline pipeline_handle = VK_NULL_HANDLE;
@@ -706,8 +742,11 @@ Result<PipelineID, VKResult> Device::create_compute_pipeline(const ComputePipeli
     VkComputePipelineCreateInfo pipeline_create_info = {
         .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
         .pNext = nullptr,
+        .flags = 0,
         .stage = info.compute_shader_info,
         .layout = info.layout,
+        .basePipelineHandle = VK_NULL_HANDLE,
+        .basePipelineIndex = 0,
     };
 
     VkPipeline pipeline_handle = VK_NULL_HANDLE;
@@ -749,6 +788,8 @@ Result<ShaderID, VKResult> Device::create_shader(ShaderStageFlag stage, std::spa
 
     VkShaderModuleCreateInfo create_info = {
         .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = 0,
         .codeSize = ir.size_bytes(),
         .pCode = ir.data(),
     };
@@ -929,12 +970,23 @@ Result<BufferID, VKResult> Device::create_buffer(const BufferInfo &info)
     VkBufferCreateInfo create_info = {
         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
         .pNext = nullptr,
+        .flags = 0,
         .size = info.data_size,
         .usage = static_cast<VkBufferUsageFlags>(buffer_usage),
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+        .queueFamilyIndexCount = 0,
+        .pQueueFamilyIndices = nullptr,
     };
 
     VmaAllocationCreateInfo allocation_info = {
+        .flags = 0,
         .usage = VMA_MEMORY_USAGE_AUTO,
+        .requiredFlags = 0,
+        .preferredFlags = 0,
+        .memoryTypeBits = 0,
+        .pool = nullptr,
+        .pUserData = nullptr,
+        .priority = 0.0f,
     };
 
     VkBuffer buffer_handle = nullptr;
@@ -978,12 +1030,14 @@ Result<ImageID, VKResult> Device::create_image(const ImageInfo &info)
     VkImageCreateInfo create_info = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
         .pNext = nullptr,
+        .flags = 0,
         .imageType = static_cast<VkImageType>(info.type),
         .format = static_cast<VkFormat>(info.format),
         .extent = info.extent,
         .mipLevels = info.mip_levels,
         .arrayLayers = info.slice_count,
         .samples = VK_SAMPLE_COUNT_1_BIT,
+        .tiling = VK_IMAGE_TILING_OPTIMAL,
         .usage = static_cast<VkImageUsageFlags>(info.usage_flags),
         .sharingMode = VK_SHARING_MODE_CONCURRENT,
         .queueFamilyIndexCount = static_cast<u32>(info.queue_indices.size()),
@@ -992,7 +1046,14 @@ Result<ImageID, VKResult> Device::create_image(const ImageInfo &info)
     };
 
     VmaAllocationCreateInfo allocation_info = {
+        .flags = 0,
         .usage = VMA_MEMORY_USAGE_AUTO,
+        .requiredFlags = 0,
+        .preferredFlags = 0,
+        .memoryTypeBits = 0,
+        .pool = nullptr,
+        .pUserData = nullptr,
+        .priority = 0.0f,
     };
 
     VkImage image_handle = nullptr;
@@ -1031,14 +1092,14 @@ void Device::delete_images(std::span<ImageID> images)
     }
 }
 
-Result<ImageViewID, VKResult> Device::create_image_view(const ImageViewInfo &info2)
+Result<ImageViewID, VKResult> Device::create_image_view(const ImageViewInfo &info)
 {
     ZoneScoped;
 
-    ImageViewInfo info;
     VkImageViewCreateInfo create_info = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
         .pNext = nullptr,
+        .flags = 0,
         .image = *info.image,
         .viewType = static_cast<VkImageViewType>(info.type),
         .format = static_cast<VkFormat>(info.image->m_format),
@@ -1103,6 +1164,7 @@ Result<SamplerID, VKResult> Device::create_sampler(const SamplerInfo &info)
         .minLod = info.min_lod,
         .maxLod = info.max_lod,
         .borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK,
+        .unnormalizedCoordinates = 0,
     };
 
     VkSampler sampler_handle = nullptr;

@@ -1,11 +1,5 @@
 #include "FileSystem.hh"
 
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <direct.h>
-#include <Windows.h>
-
 namespace lr::fs {
 FileView::FileView(std::string_view path)
 {
@@ -35,7 +29,7 @@ void FileView::close()
         fclose(m_pFile);
 }
 
-void FileView::set_offset(u64 offset)
+void FileView::set_offset(u32 offset)
 {
     ZoneScoped;
 
@@ -82,30 +76,5 @@ std::string read_file(std::string_view path)
     std::string result;
     file.read(result, file.size());
     return result;
-}
-
-std::string get_current_dir()
-{
-    ZoneScoped;
-
-    char *buffer = _getcwd(nullptr, 0);
-    std::string str = buffer;
-    free(buffer);
-
-    return std::move(str);
-}
-
-bool set_library_dir(std::string_view path)
-{
-    ZoneScoped;
-
-    return SetDllDirectoryA(path.data());
-}
-
-void *load_lib(std::string_view path)
-{
-    ZoneScoped;
-
-    return LoadLibraryA(path.data());
 }
 }  // namespace lr::fs

@@ -7,7 +7,7 @@ public:
     ~FileView();
 
     void close();
-    void set_offset(u64 offset);
+    void set_offset(u32 offset);
 
     template<typename T>
     bool read(T &data);
@@ -23,9 +23,4 @@ private:
     FILE *m_pFile = nullptr;
 };
 
-std::string read_file(std::string_view path);
-std::string get_current_dir();
-
-bool set_library_dir(std::string_view path);
-void *load_lib(std::string_view path);
 }  // namespace lr::fs

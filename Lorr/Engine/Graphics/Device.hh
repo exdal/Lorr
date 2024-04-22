@@ -90,7 +90,7 @@ struct Device {
     bool is_feature_supported(DeviceFeature feature) { return m_supported_features & feature; }
 
     template<typename T>
-    void set_object_name(T &v, std::string_view name)
+    void set_object_name([[maybe_unused]] T &v, [[maybe_unused]] std::string_view name)
     {
 #if _DEBUG
         VkDebugUtilsObjectNameInfoEXT object_name_info = {
@@ -104,7 +104,7 @@ struct Device {
     }
 
     template<VkObjectType ObjectType, typename T>
-    void set_object_name_raw(T v, std::string_view name)
+    void set_object_name_raw([[maybe_unused]] T v, [[maybe_unused]] std::string_view name)
     {
 #if _DEBUG
         VkDebugUtilsObjectNameInfoEXT object_name_info = {
@@ -159,20 +159,20 @@ struct Device {
 
 struct DeviceDeleter {
     // clang-format off
-    DeviceDeleter(Device *device, u64 c, std::span<CommandAllocator> s) { for (auto &v : s) device->m_garbage_command_allocators.emplace(v, c); }
-    DeviceDeleter(Device *device, u64 c, std::span<CommandList> s) { for (auto &v : s) device->m_garbage_command_lists.emplace(v, c); }
-    DeviceDeleter(Device *device, u64 c, std::span<Semaphore> s) { for (auto &v : s) device->m_garbage_semaphores.emplace(v, c); }
-    DeviceDeleter(Device *device, u64 c, std::span<SwapChain> s) { device->delete_swap_chains(s); }
-    DeviceDeleter(Device *device, u64 c, std::span<PipelineLayout> s) { device->delete_pipeline_layouts(s); }
-    DeviceDeleter(Device *device, u64 c, std::span<PipelineID> s) { device->delete_pipelines(s); }
-    DeviceDeleter(Device *device, u64 c, std::span<ShaderID> s) { for (auto &v : s) device->m_garbage_shaders.emplace(v, c); }
-    DeviceDeleter(Device *device, u64 c, std::span<DescriptorPool> s) { device->delete_descriptor_pools(s); }
-    DeviceDeleter(Device *device, u64 c, std::span<DescriptorSetLayout> s) { device->delete_descriptor_set_layouts(s); }
-    DeviceDeleter(Device *device, u64 c, std::span<DescriptorSet> s) { device->delete_descriptor_sets(s); }
-    DeviceDeleter(Device *device, u64 c, std::span<BufferID> s) { for (auto &v : s) device->m_garbage_buffers.emplace(v, c); }
-    DeviceDeleter(Device *device, u64 c, std::span<ImageID> s) { for (auto &v : s) device->m_garbage_images.emplace(v, c); }
-    DeviceDeleter(Device *device, u64 c, std::span<ImageViewID> s) { for (auto &v : s) device->m_garbage_image_views.emplace(v, c); }
-    DeviceDeleter(Device *device, u64 c, std::span<SamplerID> s) { for (auto &v : s) device->m_garbage_samplers.emplace(v, c); }
+    DeviceDeleter(Device *device, [[maybe_unused]] u64 c, std::span<CommandAllocator> s) { for (auto &v : s) device->m_garbage_command_allocators.emplace(v, c); }
+    DeviceDeleter(Device *device, [[maybe_unused]] u64 c, std::span<CommandList> s) { for (auto &v : s) device->m_garbage_command_lists.emplace(v, c); }
+    DeviceDeleter(Device *device, [[maybe_unused]] u64 c, std::span<Semaphore> s) { for (auto &v : s) device->m_garbage_semaphores.emplace(v, c); }
+    DeviceDeleter(Device *device, [[maybe_unused]] u64 c, std::span<SwapChain> s) { device->delete_swap_chains(s); }
+    DeviceDeleter(Device *device, [[maybe_unused]] u64 c, std::span<PipelineLayout> s) { device->delete_pipeline_layouts(s); }
+    DeviceDeleter(Device *device, [[maybe_unused]] u64 c, std::span<PipelineID> s) { device->delete_pipelines(s); }
+    DeviceDeleter(Device *device, [[maybe_unused]] u64 c, std::span<ShaderID> s) { for (auto &v : s) device->m_garbage_shaders.emplace(v, c); }
+    DeviceDeleter(Device *device, [[maybe_unused]] u64 c, std::span<DescriptorPool> s) { device->delete_descriptor_pools(s); }
+    DeviceDeleter(Device *device, [[maybe_unused]] u64 c, std::span<DescriptorSetLayout> s) { device->delete_descriptor_set_layouts(s); }
+    DeviceDeleter(Device *device, [[maybe_unused]] u64 c, std::span<DescriptorSet> s) { device->delete_descriptor_sets(s); }
+    DeviceDeleter(Device *device, [[maybe_unused]] u64 c, std::span<BufferID> s) { for (auto &v : s) device->m_garbage_buffers.emplace(v, c); }
+    DeviceDeleter(Device *device, [[maybe_unused]] u64 c, std::span<ImageID> s) { for (auto &v : s) device->m_garbage_images.emplace(v, c); }
+    DeviceDeleter(Device *device, [[maybe_unused]] u64 c, std::span<ImageViewID> s) { for (auto &v : s) device->m_garbage_image_views.emplace(v, c); }
+    DeviceDeleter(Device *device, [[maybe_unused]] u64 c, std::span<SamplerID> s) { for (auto &v : s) device->m_garbage_samplers.emplace(v, c); }
     // clang-format on
 };
 

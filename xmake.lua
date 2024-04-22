@@ -3,6 +3,7 @@ set_version("1.0.0")
 
 if is_mode("debug") then
   set_optimize("none")
+  set_symbols("debug")
 elseif is_mode("release") then
   set_optimize("aggressive")
 end
@@ -14,6 +15,7 @@ add_requires(
     "tracy",
     "xxhash",
     "glm",
+    "glfw",
     "vulkan-headers",
     "vulkan-memory-allocator",
     "vk-bootstrap",

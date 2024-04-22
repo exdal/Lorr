@@ -1,6 +1,6 @@
 #include "Graphics/Instance.hh"
 #include "Graphics/Device.hh"
-#include "Window/Win32Window.hh"
+#include "OS/Window.hh"
 
 using namespace lr;
 using namespace lr::graphics;
@@ -11,12 +11,12 @@ int main(int argc, char *argv[])
     Instance instance;
     VKResult result = instance.init({});
 
-    window::Win32Window window;
+    os::Window window;
     window.init({
         .title = "BareBones",
         .width = 1280,
         .height = 780,
-        .flags = window::WindowFlag::Centered,
+        .flags = os::WindowFlag::Centered,
     });
 
     auto [device, result_device] = instance.create_device();
@@ -25,7 +25,7 @@ int main(int argc, char *argv[])
 
     auto [swap_chain, result_swap_chain] = device.create_swap_chain({
         .surface = window.get_surface(instance.m_handle),
-        .extent = { 1280, 780 },
+        .extent = { window.m_width, window.m_height },
     });
 
     auto [images, result_images] = device.get_swapchain_images(*swap_chain);

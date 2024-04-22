@@ -15,7 +15,7 @@ VKResult Instance::init(const InstanceInfo &info)
         [](VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
            VkDebugUtilsMessageTypeFlagsEXT messageType,
            const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData,
-           void *pUserData) -> VkBool32 {
+           [[maybe_unused]] void *pUserData) -> VkBool32 {
             auto severity = vkb::to_string_message_severity(messageSeverity);
             auto type = vkb::to_string_message_type(messageType);
             LOG_TRACE("[{}: {}] {}\n", severity, type, pCallbackData->pMessage);
@@ -25,7 +25,11 @@ VKResult Instance::init(const InstanceInfo &info)
     instance_builder.enable_extensions({
         "VK_KHR_surface",
         "VK_KHR_get_physical_device_properties2",
+#if defined(LR_WIN32)
         "VK_KHR_win32_surface",
+#elif defined(LR_LINUX)
+        "VK_KHR_xcb_surface",
+#endif
 #if _DEBUG
         //! Debug extensions, always put it to bottom
         "VK_EXT_debug_utils",
@@ -35,9 +39,11 @@ VKResult Instance::init(const InstanceInfo &info)
     instance_builder.require_api_version(1, 3, 0);
     auto instance_result = instance_builder.build();
     if (!instance_result) {
-        LOG_ERROR("Failed to create Vulkan Instance!");
-        return (VKResult)instance_result.vk_result();
+        auto error = static_cast<VKResult>(instance_result.vk_result());
+        LOG_ERROR("Failed to create Vulkan Instance! {}", error);
+        return error;
     }
+
     m_handle = instance_result.value();
 
     if (!vulkan::load_instance(m_handle, m_handle.fp_vkGetInstanceProcAddr)) {
@@ -105,6 +111,7 @@ Result<Device, VKResult> Instance::create_device()
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT,
         .pNext = nullptr,
         .descriptorBuffer = true,
+        .descriptorBufferCaptureReplay = false,
         .descriptorBufferImageLayoutIgnored = true,
         .descriptorBufferPushDescriptors = true,
     };

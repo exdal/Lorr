@@ -12,3 +12,4 @@ out/
 *.10x
 .xmake/
 .clangd/
+.luarc.json

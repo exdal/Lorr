@@ -19,8 +19,7 @@ template<typename HandleT, ResultConcept ResultT>
 struct Result {
     Result() = default;
     Result(HandleT handle)
-        : m_handle(std::move(handle)),
-          m_result({})
+        : m_handle(std::move(handle))
     {
     }
 

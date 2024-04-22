@@ -62,5 +62,6 @@ jobs:
 
       - name: Build
         run: |
+          xrepo add-repo exdal-repo https://github.com/exdal/xmake-repo
           xmake f -vD --toolchain=${{ matrix.toolchain }} --mode=${{ matrix.mode }} -a ${{ matrix.arch }}
           xmake -vD

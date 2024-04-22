@@ -26,7 +26,7 @@ bool Window::init(const WindowInfo &info)
     ZoneScoped;
 
     if (!glfwInit()) {
-        LOG_ERROR("Failed to initialize GLFW!");
+        LR_LOG_ERROR("Failed to initialize GLFW!");
         return false;
     }
 
@@ -132,7 +132,7 @@ Result<VkSurfaceKHR, VkResult> Window::get_surface(VkInstance instance)
 #endif
 
     if (result != VK_SUCCESS) {
-        LOG_ERROR("Failed to create window surface! {}", static_cast<i32>(result));
+        LR_LOG_ERROR("Failed to create window surface! {}", static_cast<i32>(result));
         return result;
     }
 

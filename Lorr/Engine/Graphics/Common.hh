@@ -142,7 +142,7 @@ constexpr static VKResult CHECK(
             if (a == result)
                 return result;
 
-    assert(result == VKResult::Success);
+    LR_ASSERT(result == VKResult::Success);
 #endif
 
     return result;
@@ -516,19 +516,19 @@ enum class AttachmentStoreOp : u32 {
 };
 
 union ColorClearValue {
-    ColorClearValue(){};
+    ColorClearValue() {};
     ColorClearValue(f32 r, f32 g, f32 b, f32 a)
-        : m_val_float({ r, g, b, a }){};
+        : m_val_float({ r, g, b, a }) {};
     ColorClearValue(u32 r, u32 g, u32 b, u32 a)
-        : m_val_uint({ r, g, b, a }){};
+        : m_val_uint({ r, g, b, a }) {};
     ColorClearValue(i32 r, i32 g, i32 b, i32 a)
-        : m_val_int({ r, g, b, a }){};
+        : m_val_int({ r, g, b, a }) {};
     ColorClearValue(const glm::vec4 &val)
-        : m_val_float(val){};
+        : m_val_float(val) {};
     ColorClearValue(const glm::uvec4 &val)
-        : m_val_uint(val){};
+        : m_val_uint(val) {};
     ColorClearValue(const glm::ivec4 &val)
-        : m_val_int(val){};
+        : m_val_int(val) {};
 
     glm::vec4 m_val_float = {};
     glm::uvec4 m_val_uint;
@@ -539,7 +539,7 @@ struct DepthClearValue {
     DepthClearValue() = default;
     DepthClearValue(float depth, u8 stencil)
         : m_depth(depth),
-          m_stencil(stencil){};
+          m_stencil(stencil) {};
 
     float m_depth = 0.0f;
     u8 m_stencil = 0;

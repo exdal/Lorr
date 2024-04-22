@@ -59,7 +59,6 @@ struct DescriptorSet {
         : m_handle(descriptor_set),
           m_pool(pool)
     {
-        assert(pool);
     }
 
     DescriptorPool *m_pool = nullptr;

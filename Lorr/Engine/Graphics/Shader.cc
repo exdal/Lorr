@@ -111,11 +111,12 @@ Result<std::vector<u32>, VKResult> ShaderCompiler::compile_shader(const ShaderCo
     Slang::ComPtr<slang::IBlob> diagnostics_blob;
     slang::IModule *module = session->loadModule(info.file_path.data(), diagnostics_blob.writeRef());
     if (diagnostics_blob != nullptr) {
-        LOG_ERROR("Shader error: {}", reinterpret_cast<const char *>(diagnostics_blob->getBufferPointer()));
+        LR_LOG_ERROR(
+            "Shader error: {}", reinterpret_cast<const char *>(diagnostics_blob->getBufferPointer()));
     }
 
     if (!module) {
-        LOG_ERROR("Failed to load shader module!");
+        LR_LOG_ERROR("Failed to load shader module!");
         return VKResult::Unknown;
     }
 

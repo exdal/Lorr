@@ -22,6 +22,7 @@ add_requires(
     "plf_colony",
     "sol2"
 )
+add_requires("loguru", { configs = { fmt = true } })
 
 includes("Lorr")
 includes("Examples")

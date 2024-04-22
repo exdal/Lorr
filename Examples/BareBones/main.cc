@@ -7,7 +7,7 @@ using namespace lr::graphics;
 
 int main(int argc, char *argv[])
 {
-    Logger::Init();
+    Log::init(argc, argv);
     Instance instance;
     VKResult result = instance.init({});
 

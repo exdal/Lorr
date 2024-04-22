@@ -18,7 +18,7 @@ VKResult Instance::init(const InstanceInfo &info)
            [[maybe_unused]] void *pUserData) -> VkBool32 {
             auto severity = vkb::to_string_message_severity(messageSeverity);
             auto type = vkb::to_string_message_type(messageType);
-            LOG_TRACE("[{}: {}] {}\n", severity, type, pCallbackData->pMessage);
+            LR_LOG_TRACE("[{}: {}] {}\n", severity, type, pCallbackData->pMessage);
             return VK_FALSE;
         });
 
@@ -40,14 +40,14 @@ VKResult Instance::init(const InstanceInfo &info)
     auto instance_result = instance_builder.build();
     if (!instance_result) {
         auto error = static_cast<VKResult>(instance_result.vk_result());
-        LOG_ERROR("Failed to create Vulkan Instance! {}", error);
+        LR_LOG_ERROR("Failed to create Vulkan Instance! {}", error);
         return error;
     }
 
     m_handle = instance_result.value();
 
     if (!vulkan::load_instance(m_handle, m_handle.fp_vkGetInstanceProcAddr)) {
-        LOG_ERROR("Failed to create Vulkan Instance! Extension not found.");
+        LR_LOG_ERROR("Failed to create Vulkan Instance! Extension not found.");
         return VKResult::ExtNotPresent;
     }
 
@@ -90,7 +90,7 @@ Result<Device, VKResult> Instance::create_device()
     });
     auto physical_device_result = physical_device_selector.select();
     if (!physical_device_result) {
-        LOG_ERROR("Failed to select Vulkan Physical Device!");
+        LR_LOG_ERROR("Failed to select Vulkan Physical Device!");
         return static_cast<VKResult>(physical_device_result.vk_result());
     }
 
@@ -120,14 +120,14 @@ Result<Device, VKResult> Instance::create_device()
 
     auto device_result = device_builder.build();
     if (!device_result) {
-        LOG_ERROR("Failed to select Vulkan Device!");
+        LR_LOG_ERROR("Failed to select Vulkan Device!");
         return static_cast<VKResult>(device_result.vk_result());
     }
 
     vkb::Device &device = device_result.value();
 
     if (!vulkan::load_device(device, m_handle.fp_vkGetDeviceProcAddr)) {
-        LOG_ERROR("Failed to create Vulkan Device! Extension not found.");
+        LR_LOG_ERROR("Failed to create Vulkan Device! Extension not found.");
         return VKResult::ExtNotPresent;
     }
 

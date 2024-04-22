@@ -38,6 +38,7 @@ target("Lorr")
     "unordered_dense",
     "plf_colony",
     "sol2",
+    "loguru",
     { public = true })
 
 target_end()

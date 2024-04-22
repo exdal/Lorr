@@ -32,14 +32,14 @@ struct static_vector {
     explicit constexpr static_vector(const_iterator begin_it, const_iterator end_it)
     {
         m_size = std::distance(begin_it, end_it);
-        assert(m_size <= capacity());
+        LR_ASSERT(m_size <= capacity());
         std::uninitialized_copy(begin_it, end_it, begin());
     }
 
     explicit constexpr static_vector(iterator begin_it, iterator end_it)
     {
         m_size = std::distance(begin_it, end_it);
-        assert(m_size <= capacity());
+        LR_ASSERT(m_size <= capacity());
         std::uninitialized_copy(begin_it, end_it, begin());
     }
 
@@ -109,7 +109,7 @@ struct static_vector {
     constexpr const_reference back() const { return back(); }
     constexpr reference at(size_type i)
     {
-        assert(i < size());
+        LR_ASSERT(i < size());
         return m_data[i];
     }
     constexpr const_reference at(size_type i) const { return at(i); }
@@ -129,7 +129,7 @@ struct static_vector {
     // Modifiers
     constexpr iterator erase(const_iterator pos)
     {
-        assert(pos >= begin() && pos <= end());
+        LR_ASSERT(pos >= begin() && pos <= end());
         iterator i = const_cast<iterator>(pos);
         std::destroy_at(i);
         std::move(i + 1, end(), i);
@@ -151,7 +151,7 @@ struct static_vector {
 
     constexpr void resize(size_type count)
     {
-        assert(count <= capacity());
+        LR_ASSERT(count <= capacity());
         if (count < size()) {
             erase(begin() + count, end());
         }
@@ -165,14 +165,14 @@ struct static_vector {
 
     constexpr void push_back(const T &v)
     {
-        assert(!full());
+        LR_ASSERT(!full());
         std::construct_at(end(), v);
         m_size++;
     }
 
     constexpr void push_back(T &&v)
     {
-        assert(!full());
+        LR_ASSERT(!full());
         std::construct_at(end(), std::move(v));
         m_size++;
     }
@@ -180,7 +180,7 @@ struct static_vector {
     template<typename... Args>
     constexpr reference emplace_back(Args &&...args)
     {
-        assert(!full());
+        LR_ASSERT(!full());
         auto pos = end();
         std::construct_at(pos, std::forward<Args>(args)...);
         m_size++;
@@ -196,13 +196,13 @@ struct static_vector {
     // Operators
     constexpr reference operator[](size_type i)
     {
-        assert(i <= m_size);
+        LR_ASSERT(i <= m_size);
         return m_data[i];
     }
 
     constexpr reference operator()(size_type i) const
     {
-        assert(i <= m_size);
+        LR_ASSERT(i <= m_size);
         return m_data[i];
     }
 
@@ -232,7 +232,7 @@ struct static_vector {
 
     constexpr this_type &operator=(std::initializer_list<value_type> initl) noexcept
     {
-        assert(initl.size() <= capacity());
+        LR_ASSERT(initl.size() <= capacity());
 
         clear();
         m_size = initl.size();

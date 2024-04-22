@@ -12,7 +12,7 @@
 #include <glm/vec3.hpp>
 #include <glm/vec4.hpp>
 
-#include "Core/Logger/Logger.hh"
+#include "Core/Log.hh"
 #include "Util/Handle.hh"
 #include "Util/Result.hh"
 #include "Util/TypeOperators.hh"

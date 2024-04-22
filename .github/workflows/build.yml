@@ -18,7 +18,7 @@ jobs:
       fail-fast: false
       matrix:
         platform:
-          - { runner: windows-latest, os: windows, arch: x64,    runtime: MT,          toolchain: clang-cl, archive_ext: .zip }
+          - { runner: windows-latest, os: windows, arch: x64,    runtime: MT,          toolchain: cl,       archive_ext: .zip }
           - { runner: ubuntu-latest,  os: linux,   arch: x86_64, runtime: c++_static,  toolchain: clang,    archive_ext: .tar.gz }
         mode: [ debug, release ]
 
@@ -55,7 +55,7 @@ jobs:
 
       # Install xmake
       - name: Setup xmake
-        uses: xmake-io/github-action-setup-xmake@v1.2.2
+        uses: xmake-io/github-action-setup-xmake@v1
         with:
           xmake-version: latest
           actions-cache-folder: .xmake-cache-W${{ steps.cache_key.outputs.key }}
@@ -84,11 +84,11 @@ jobs:
 
       - name: Configure xmake and install dependencies (Unix)
         if: ${{ matrix.platform.os != 'windows' }}
-        run: xmake config -vD --arch=${{ matrix.platform.arch }} --toolchain=${{ matrix.platform.toolchain }}  --mode=${{ matrix.mode }} --yes --policies=package.precompiled:n
+        run: xmake config -vD --cxx=$CXX --cc=$CC --arch=${{ matrix.platform.arch }} --toolchain=${{ matrix.platform.toolchain }}  --mode=${{ matrix.mode }} --yes --policies=package.precompiled:n
 
       - name: Configure xmake and install dependencies (Windows)
         if: ${{ matrix.platform.os == 'windows' }}
-        run: xmake config --arch=${{ matrix.platform.arch }} --toolchain=${{ matrix.platform.toolchain }} --mode=${{ matrix.mode }} --vs_runtime=${{ matrix.platform.runtime }} --yes --policies=package.precompiled:n
+        run: xmake f -vD --cxxflags="-fexceptions" --arch=${{ matrix.platform.arch }} --toolchain=${{ matrix.platform.toolchain }} --mode=${{ matrix.mode }} --vs_runtime=${{ matrix.platform.runtime }} --yes --policies=package.precompiled:n
 
       # Save dependencies
       - name: Save cached xmake dependencies

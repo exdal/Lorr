@@ -27,3 +27,14 @@ constexpr usize count_of(T (&_)[N])
     return N;
 }
 }  // namespace lr
+
+template<>
+struct ankerl::unordered_dense::hash<std::string> {
+    using is_transparent = void;
+    using is_avalanching = void;
+
+    [[nodiscard]] auto operator()(const std::string &x) const noexcept -> uint64_t
+    {
+        return ankerl::unordered_dense::hash<std::string_view>{}(x);
+    }
+};

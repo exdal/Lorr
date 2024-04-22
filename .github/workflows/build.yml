@@ -17,7 +17,7 @@ jobs:
       matrix:
         platform:
           - { runner: windows-latest, os: windows, arch: x64, runtime: MT,          toolchain: clang-cl, archive_ext: .zip }
-          - { runner: ubuntu-lates,   os: linux,   arch: x64, runtime: c++_static,  toolchain: clang,    archive_ext: .tar.gz }
+          - { runner: ubuntu-latest,  os: linux,   arch: x64, runtime: c++_static,  toolchain: clang,    archive_ext: .tar.gz }
         mode: [ debug, release ]
 
     runs-on: ${{ matrix.platform.runner }}

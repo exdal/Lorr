@@ -15,8 +15,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        os: [ windows-2022 ]
         mode: [ release, debug ]
         toolchain: [ clang-cl ]
+        arch: [ x64 ]
 
     steps:
       - uses: actions/checkout@v3

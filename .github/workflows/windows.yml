@@ -9,9 +9,9 @@ env:
   VULKAN_VERSION: 1.3.261.1
 
 jobs:
-  windows-clang:
+  windows-clang-cl:
     name: (clang-cl) Windows
-    runs-on: windows-latest
+    runs-on: [ self-hosted, windows, x64 ]
     strategy:
       fail-fast: false
       matrix:
@@ -21,9 +21,12 @@ jobs:
         arch: [ x64 ]
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           submodules: 'true'
+
+      - name: Setup Ninja
+        uses: turtlesec-no/get-ninja@1.1.0
 
       - name: Setup xmake
         uses: xmake-io/github-action-setup-xmake@v1
@@ -63,5 +66,5 @@ jobs:
       - name: Build
         run: |
           xrepo add-repo exdal-repo https://github.com/exdal/xmake-repo
-          xmake f -vD --toolchain=${{ matrix.toolchain }} --mode=${{ matrix.mode }} -a ${{ matrix.arch }}
+          xmake f -vD --toolchain=${{ matrix.toolchain }} --mode=${{ matrix.mode }} -a ${{ matrix.arch }} -p windows
           xmake -vD

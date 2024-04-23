@@ -9,8 +9,6 @@ on:
 
 env:
   VULKAN_VERSION: 1.3.261.1
-  CC: clang-18
-  CXX: clang++-18
 
 jobs:
   build:
@@ -18,8 +16,8 @@ jobs:
       fail-fast: false
       matrix:
         platform:
-          - { runner: windows-latest, os: windows, arch: x64,    runtime: MT,          toolchain: vs,       archive_ext: .zip }
-          - { runner: ubuntu-latest,  os: linux,   arch: x86_64, runtime: c++_static,  toolchain: clang,    archive_ext: .tar.gz }
+          - { runner: windows-latest, os: windows, arch: x64,    runtime: MT,          archive_ext: .zip }
+          - { runner: ubuntu-latest,  os: linux,   arch: x86_64, runtime: c++_static,  archive_ext: .tar.gz }
         mode: [ debug, release ]
 
     runs-on: ${{ matrix.platform.runner }}
@@ -49,9 +47,6 @@ jobs:
           wget https://apt.llvm.org/llvm.sh
           chmod +x ./llvm.sh
           sudo ./llvm.sh 18
-
-      - name: Setup Ninja
-        uses: turtlesec-no/get-ninja@1.1.0
 
       # Install xmake
       - name: Setup xmake
@@ -84,11 +79,11 @@ jobs:
 
       - name: Configure xmake and install dependencies (Unix)
         if: ${{ matrix.platform.os != 'windows' }}
-        run: xmake config -vD --cxx=$CXX --cc=$CC --arch=${{ matrix.platform.arch }} --toolchain=${{ matrix.platform.toolchain }}  --mode=${{ matrix.mode }} --yes --policies=package.precompiled:n
+        run: xmake config -vD --cxx=clang++-18 --cc=clang-18 --arch=${{ matrix.platform.arch }} --toolchain=clang  --mode=${{ matrix.mode }} --yes --policies=package.precompiled:n
 
       - name: Configure xmake and install dependencies (Windows)
         if: ${{ matrix.platform.os == 'windows' }}
-        run: xmake config -vD --arch=${{ matrix.platform.arch }} --toolchain=${{ matrix.platform.toolchain }} --mode=${{ matrix.mode }} --vs_runtime=${{ matrix.platform.runtime }} --yes --policies=package.precompiled:n
+        run: xmake config -vD --arch=${{ matrix.platform.arch }} --mode=${{ matrix.mode }} --vs_runtime=${{ matrix.platform.runtime }} --yes --policies=package.precompiled:n
 
       # Save dependencies
       - name: Save cached xmake dependencies

@@ -34,8 +34,8 @@ VKResult Device::init()
         .pHeapSizeLimit = nullptr,
         .pVulkanFunctions = &vulkan_functions,
         .instance = *m_instance,
-        .pTypeExternalMemoryHandleTypes = nullptr,
         .vulkanApiVersion = VK_API_VERSION_1_3,
+        .pTypeExternalMemoryHandleTypes = nullptr,
     };
 
     auto result = CHECK(vmaCreateAllocator(&allocator_create_info, &m_allocator));

@@ -9,6 +9,10 @@ target("Lorr")
   add_files("**.cc")
   add_rpathdirs("@executable_path")
 
+  if is_mode("debug") then
+    add_defines("LR_DEBUG")
+  end
+
   if is_os("windows") then
     add_defines("LR_WIN32=1", { public = true })
     add_syslinks("gdi32", "msimg32", "user32")

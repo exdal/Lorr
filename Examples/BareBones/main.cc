@@ -8,6 +8,7 @@ using namespace lr::graphics;
 int main(int argc, char *argv[])
 {
     Log::init(argc, argv);
+
     Instance instance;
     VKResult result = instance.init({});
 

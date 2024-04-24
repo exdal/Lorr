@@ -1,0 +1,6 @@
+arguments: /home/ee/repos/Lorr/build/linux/x86_64/debug/BareBones
+Current dir: /home/ee/repos/Lorr
+File verbosity level: 9
+date       time         ( uptime  ) [ thread name/id ]                   file:line     v| 
+2024-04-23 21:40:31.898 (   6.910s) [main thread     ]             loguru.cpp:770   INFO| Logging to 'engine.log', mode: 'w', verbosity: 9
+2024-04-23 21:40:41.913 (  16.924s) [main thread     ]                main.cc:16    INFO| File: ''

@@ -9,7 +9,7 @@ out/
 .vault/
 .idea/
 *.rdbg
-*.10x
+*.log
 .xmake/
 .clangd/
 .luarc.json

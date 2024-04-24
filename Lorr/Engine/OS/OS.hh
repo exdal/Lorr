@@ -21,7 +21,7 @@ enum class FileResult : i32 {
 };
 constexpr bool operator!(FileResult v)
 {
-    return v == FileResult::Success;
+    return v != FileResult::Success;
 }
 
 Result<File, FileResult> open_file(std::string_view path, FileAccess access);

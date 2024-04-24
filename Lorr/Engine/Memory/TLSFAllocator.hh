@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Memory/Bit.hh"
+
 namespace lr::memory {
 template<bool IS_64_BIT = true>
 struct TLSFAllocator {
@@ -33,8 +35,7 @@ struct TLSFAllocator {
         m_capacity = mem_size;
         m_blocks.resize(max_allocs);
         m_block_ids.resize(block_count);
-        std::memset(
-            m_block_ids.data(), MemoryBlock::INVALID, sizeof(BlockID) * block_count);
+        std::memset(m_block_ids.data(), MemoryBlock::INVALID, sizeof(BlockID) * block_count);
 
         m_free_block_ids.resize(max_allocs);
         for (u32 i = 0; i < max_allocs; i++) {
@@ -67,8 +68,7 @@ struct TLSFAllocator {
         u64 block_offset = block.offset;
 
         // Merge 2 neighbor physical blocks together
-        if (block.prev_physical != MemoryBlock::INVALID
-            && m_blocks[block.prev_physical].is_free) {
+        if (block.prev_physical != MemoryBlock::INVALID && m_blocks[block.prev_physical].is_free) {
             MemoryBlock &prev_block = m_blocks[block.prev_physical];
 
             block_offset = prev_block.offset;
@@ -78,8 +78,7 @@ struct TLSFAllocator {
             block.prev_physical = prev_block.prev_physical;
         }
 
-        if (block.next_physical != MemoryBlock::INVALID
-            && m_blocks[block.next_physical].is_free) {
+        if (block.next_physical != MemoryBlock::INVALID && m_blocks[block.next_physical].is_free) {
             MemoryBlock &next_block = m_blocks[block.next_physical];
 
             block_size += get_physical_size(block.next_physical);
@@ -191,8 +190,7 @@ struct TLSFAllocator {
         u64 size_diff = block_size - split_size;
         if (size_diff > 0) {
             MemoryBlock &block = m_blocks[block_id];
-            BlockID tailing_block_id =
-                add_free_block(size_diff, block.offset + split_size);
+            BlockID tailing_block_id = add_free_block(size_diff, block.offset + split_size);
             MemoryBlock &tailing_block = m_blocks[tailing_block_id];
 
             tailing_block.prev_physical = block_id;
@@ -241,8 +239,7 @@ struct TLSFAllocator {
     u32 m_second_list_mask[FL_INDEX_COUNT] = {};
 
     std::vector<MemoryBlock> m_blocks = {};
-    std::vector<BlockID>
-        m_block_ids = {};  // LOGICAL FREE-LIST indexes, dont confuse them
+    std::vector<BlockID> m_block_ids = {};  // LOGICAL FREE-LIST indexes, dont confuse them
     std::vector<BlockID> m_free_block_ids = {};
 
     usize m_last_free_list_id = 0;

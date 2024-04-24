@@ -1,4 +1,4 @@
-#include "MemoryUtils.hh"
+#include "Bit.hh"
 
 namespace lr {
 /// FIND LEAST SET ///
@@ -24,7 +24,5 @@ u32 memory::find_first_set64(u64 v)
 {
     return __builtin_ffsll((i64)v) - 1;
 }
-
-/// VIRTUALALLOC ///
 
 }  // namespace lr

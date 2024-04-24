@@ -5,6 +5,7 @@
 #include <sys/stat.h>
 #include <sys/syscall.h>
 #include <sys/sysinfo.h>
+#include <unistd.h>
 
 namespace lr {
 

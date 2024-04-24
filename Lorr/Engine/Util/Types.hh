@@ -84,4 +84,26 @@ using i64range = range_t<i64>;
 
 using f32range = range_t<f32>;
 using f64range = range_t<f64>;
+
+template<typename T>
+T align_up(T size, T alignment)
+{
+    return (size + (alignment - 1)) & ~(alignment - 1);
+}
+
+template<typename T>
+T align_down(T size, T alignment)
+{
+    return size & ~(alignment - 1);
+}
+
+constexpr u32 kib_to_bytes(const u32 x)
+{
+    return x << 10;
+}
+
+constexpr u32 mib_to_bytes(const u32 x)
+{
+    return x << 20;
+}
 }  // namespace lr

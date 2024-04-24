@@ -3,6 +3,23 @@
 #include "Device.hh"
 
 namespace lr::graphics {
+constexpr loguru::Verbosity to_loguru_severity(VkDebugUtilsMessageSeverityFlagBitsEXT severity)
+{
+    switch (severity) {
+        case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
+        case VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT:
+            return loguru::Verbosity_INFO;
+        case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT:
+            return loguru::Verbosity_WARNING;
+        case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
+            return loguru::Verbosity_ERROR;
+        default:
+            break;
+    }
+
+    return loguru::Verbosity_0;
+}
+
 VKResult Instance::init(const InstanceInfo &info)
 {
     vkb::InstanceBuilder instance_builder;
@@ -16,9 +33,8 @@ VKResult Instance::init(const InstanceInfo &info)
            VkDebugUtilsMessageTypeFlagsEXT messageType,
            const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData,
            [[maybe_unused]] void *pUserData) -> VkBool32 {
-            auto severity = vkb::to_string_message_severity(messageSeverity);
             auto type = vkb::to_string_message_type(messageType);
-            LR_LOG_TRACE("[{}: {}] {}\n", severity, type, pCallbackData->pMessage);
+            VLOG_F(to_loguru_severity(messageSeverity), "[VK] {}: {}\n", type, pCallbackData->pMessage);
             return VK_FALSE;
         });
 

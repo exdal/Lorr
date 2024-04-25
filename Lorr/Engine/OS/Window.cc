@@ -52,6 +52,80 @@ bool Window::init(const WindowInfo &info)
     glfwWindowHint(GLFW_POSITION_Y, pos_y);
     m_handle = glfwCreateWindow(info.width, info.height, info.title.data(), nullptr, nullptr);
 
+    /// Initialize callbacks
+    glfwSetWindowUserPointer(m_handle, this);
+
+    // LR_WINDOW_EVENT_RESIZE
+    glfwSetWindowSizeCallback(m_handle, [](GLFWwindow *window, i32 width, i32 height) {
+        Window *this_handle = reinterpret_cast<Window *>(glfwGetWindowUserPointer(window));
+        WindowEventManager &event_man = this_handle->m_event_manager;
+
+        WindowEventData event_data = {
+            .size_width = static_cast<u32>(width),
+            .size_height = static_cast<u32>(height),
+        };
+        event_man.push(LR_WINDOW_EVENT_RESIZE, event_data);
+    });
+
+    // LR_WINDOW_EVENT_MOUSE_POSITION
+    glfwSetCursorPosCallback(m_handle, [](GLFWwindow *window, f64 pos_x, f64 pos_y) {
+        Window *this_handle = reinterpret_cast<Window *>(glfwGetWindowUserPointer(window));
+        WindowEventManager &event_man = this_handle->m_event_manager;
+
+        WindowEventData event_data = {
+            .mouse_x = static_cast<f32>(pos_x),
+            .mouse_y = static_cast<f32>(pos_y),
+        };
+        event_man.push(LR_WINDOW_EVENT_MOUSE_POSITION, event_data);
+    });
+
+    // LR_WINDOW_EVENT_MOUSE_STATE
+    glfwSetMouseButtonCallback(m_handle, [](GLFWwindow *window, i32 button, i32 action, i32 mods) {
+        Window *this_handle = reinterpret_cast<Window *>(glfwGetWindowUserPointer(window));
+        WindowEventManager &event_man = this_handle->m_event_manager;
+
+        WindowEventData event_data = {
+            .mouse = static_cast<Key>(button),
+            .mouse_state = static_cast<KeyState>(action),
+            .mouse_mods = static_cast<KeyMod>(mods),
+        };
+        event_man.push(LR_WINDOW_EVENT_MOUSE_STATE, event_data);
+    });
+
+    // LR_WINDOW_EVENT_KEYBOARD_STATE
+    glfwSetKeyCallback(m_handle, [](GLFWwindow *window, i32 key, i32 scancode, i32 action, i32 mods) {
+        Window *this_handle = reinterpret_cast<Window *>(glfwGetWindowUserPointer(window));
+        WindowEventManager &event_man = this_handle->m_event_manager;
+
+        WindowEventData event_data = {
+            .key = static_cast<Key>(key),
+            .key_state = static_cast<KeyState>(action),
+            .key_mods = static_cast<KeyMod>(mods),
+            .key_scancode = scancode,
+        };
+        event_man.push(LR_WINDOW_EVENT_KEYBOARD_STATE, event_data);
+    });
+
+    glfwSetCharCallback(m_handle, [](GLFWwindow *window, u32 codepoint) {
+        Window *this_handle = reinterpret_cast<Window *>(glfwGetWindowUserPointer(window));
+        WindowEventManager &event_man = this_handle->m_event_manager;
+
+        WindowEventData event_data = {
+            .char_val = static_cast<char32_t>(codepoint),
+        };
+        event_man.push(LR_WINDOW_EVENT_CHAR, event_data);
+    });
+
+    /// Initialize standard cursors, should be available across all platforms
+    /// hopefully...
+    m_cursors = {
+        glfwCreateStandardCursor(GLFW_CURSOR_NORMAL),      glfwCreateStandardCursor(GLFW_IBEAM_CURSOR),
+        glfwCreateStandardCursor(GLFW_RESIZE_ALL_CURSOR),  glfwCreateStandardCursor(GLFW_RESIZE_NS_CURSOR),
+        glfwCreateStandardCursor(GLFW_RESIZE_EW_CURSOR),   glfwCreateStandardCursor(GLFW_RESIZE_NESW_CURSOR),
+        glfwCreateStandardCursor(GLFW_RESIZE_NWSE_CURSOR), glfwCreateStandardCursor(GLFW_HAND_CURSOR),
+        glfwCreateStandardCursor(GLFW_NOT_ALLOWED_CURSOR), glfwCreateStandardCursor(GLFW_CURSOR_HIDDEN),
+    };
+
     return true;
 }
 
@@ -64,6 +138,7 @@ void Window::poll()
 
 void Window::set_cursor(WindowCursor cursor)
 {
+    glfwSetCursor(m_handle, m_cursors[usize(cursor)]);
 }
 
 SystemDisplay Window::get_display(u32 monitor_id)

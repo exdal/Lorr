@@ -75,29 +75,32 @@ Result<Device, VKResult> Instance::create_device()
     vkb::PhysicalDeviceSelector physical_device_selector(m_handle);
     physical_device_selector.defer_surface_initialization();
     physical_device_selector.set_minimum_version(1, 3);
-    physical_device_selector.set_required_features_13({
-        .synchronization2 = true,
-        .dynamicRendering = true,
-    });
-    physical_device_selector.set_required_features_12({
-        .descriptorIndexing = true,
-        .shaderSampledImageArrayNonUniformIndexing = true,
-        .shaderStorageBufferArrayNonUniformIndexing = true,
-        .descriptorBindingSampledImageUpdateAfterBind = true,
-        .descriptorBindingStorageImageUpdateAfterBind = true,
-        .descriptorBindingStorageBufferUpdateAfterBind = true,
-        .descriptorBindingUpdateUnusedWhilePending = true,
-        .descriptorBindingPartiallyBound = true,
-        .descriptorBindingVariableDescriptorCount = true,
-        .runtimeDescriptorArray = true,
-        .timelineSemaphore = true,
-        .bufferDeviceAddress = true,
-    });
-    physical_device_selector.set_required_features({
-        .vertexPipelineStoresAndAtomics = true,
-        .fragmentStoresAndAtomics = true,
-        .shaderInt64 = true,
-    });
+
+    VkPhysicalDeviceVulkan13Features vk13_features = {};
+    vk13_features.synchronization2 = true;
+    vk13_features.dynamicRendering = true;
+    physical_device_selector.set_required_features_13(vk13_features);
+
+    VkPhysicalDeviceVulkan12Features vk12_features = {};
+    vk12_features.descriptorIndexing = true;
+    vk12_features.shaderSampledImageArrayNonUniformIndexing = true;
+    vk12_features.shaderStorageBufferArrayNonUniformIndexing = true;
+    vk12_features.descriptorBindingSampledImageUpdateAfterBind = true;
+    vk12_features.descriptorBindingStorageImageUpdateAfterBind = true;
+    vk12_features.descriptorBindingStorageBufferUpdateAfterBind = true;
+    vk12_features.descriptorBindingUpdateUnusedWhilePending = true;
+    vk12_features.descriptorBindingPartiallyBound = true;
+    vk12_features.descriptorBindingVariableDescriptorCount = true;
+    vk12_features.runtimeDescriptorArray = true;
+    vk12_features.timelineSemaphore = true;
+    vk12_features.bufferDeviceAddress = true;
+    physical_device_selector.set_required_features_12(vk12_features);
+
+    VkPhysicalDeviceFeatures vk10_features = {};
+    vk10_features.vertexPipelineStoresAndAtomics = true;
+    vk10_features.fragmentStoresAndAtomics = true;
+    vk10_features.shaderInt64 = true;
+    physical_device_selector.set_required_features(vk10_features);
     physical_device_selector.add_required_extensions({
         "VK_KHR_swapchain",
 #if TRACY_ENABLE

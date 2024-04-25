@@ -1,8 +1,8 @@
 #pragma once
 
+#include "Key.hh"
 #include "Core/EventManager.hh"
 #include "Graphics/Vulkan.hh"
-#include "Input/Key.hh"
 
 #ifndef GLFW_INCLUDE_NONE
 #define GLFW_INCLUDE_NONE
@@ -21,6 +21,8 @@ enum class WindowCursor {
     Hand,
     NotAllowed,
     Hidden,
+
+    Count,
 };
 
 enum class WindowFlag : u32 {
@@ -34,18 +36,16 @@ LR_TYPEOP_ARITHMETIC(WindowFlag, WindowFlag, |);
 LR_TYPEOP_ARITHMETIC_INT(WindowFlag, WindowFlag, &);
 
 enum WindowEvent : Event {
-    LR_WINDOW_EVENT_INIT,
-    LR_WINDOW_EVENT_QUIT,
     LR_WINDOW_EVENT_RESIZE,
     LR_WINDOW_EVENT_MOUSE_POSITION,
     LR_WINDOW_EVENT_MOUSE_STATE,
     LR_WINDOW_EVENT_MOUSE_SCROLL,
     LR_WINDOW_EVENT_KEYBOARD_STATE,
-    LR_WINDOW_EVENT_CURSOR_STATE,
+    LR_WINDOW_EVENT_CHAR,
 };
 
 union WindowEventData {
-    u32 reserved_data[4] = {};
+    u8 data;
 
     struct {
         u32 size_width;
@@ -53,26 +53,29 @@ union WindowEventData {
     };
 
     struct {
-        u32 mouse_x;
-        u32 mouse_y;
+        f32 mouse_x;
+        f32 mouse_y;
     };
 
     struct {
         Key mouse;
-        MouseState mouse_state;
+        KeyState mouse_state;
+        KeyMod mouse_mods;
     };
 
     struct {
-        float offset;
+        f32 offset;
     };
 
     struct {
         Key key;
         KeyState key_state;
+        KeyMod key_mods;
+        i32 key_scancode;
     };
 
     struct {
-        WindowCursor window_cursor;
+        char32_t char_val;
     };
 };
 
@@ -119,6 +122,7 @@ struct Window {
 
     GLFWwindow *m_handle = nullptr;
     u32 m_monitor_id = WindowInfo::USE_PRIMARY_MONITOR;
+    std::array<GLFWcursor *, usize(WindowCursor::Count)> m_cursors = {};
 };
 
 }  // namespace lr::os

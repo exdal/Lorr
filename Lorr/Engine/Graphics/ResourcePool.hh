@@ -37,7 +37,7 @@ struct PagedResourcePool {
     template<typename... Args>
     allocation_result<ResourceT, ResourceID> create(Args &&...args)
     {
-        index_type index = ~0;
+        index_type index = static_cast<index_type>(~0);
         if (m_free_indexes.empty()) {
             index = m_latest_index++;
             if (index >= MAX_RESOURCE_COUNT) {

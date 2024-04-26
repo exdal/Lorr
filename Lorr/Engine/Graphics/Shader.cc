@@ -10,9 +10,11 @@ struct CompilerContext {
 
 std::vector<slang::CompilerOptionEntry> get_slang_entries(ShaderCompileFlag flags)
 {
+    // clang-format off
     std::vector<slang::CompilerOptionEntry> entries = {};
     entries.emplace_back(
-        slang::CompilerOptionName::VulkanUseEntryPointName, slang::CompilerOptionValue{ .intValue0 = true });
+        slang::CompilerOptionName::VulkanUseEntryPointName, 
+        slang::CompilerOptionValue{ .intValue0 = true });
 
     if (flags & ShaderCompileFlag::GenerateDebugInfo) {
         entries.emplace_back(
@@ -39,32 +41,39 @@ std::vector<slang::CompilerOptionEntry> get_slang_entries(ShaderCompileFlag flag
 
     if (flags & ShaderCompileFlag::MatrixRowMajor) {
         entries.emplace_back(
-            slang::CompilerOptionName::MatrixLayoutRow, slang::CompilerOptionValue{ .intValue0 = true });
+            slang::CompilerOptionName::MatrixLayoutRow,
+            slang::CompilerOptionValue{ .intValue0 = true });
     }
     else if (flags & ShaderCompileFlag::MatrixColumnMajor) {
         entries.emplace_back(
-            slang::CompilerOptionName::MatrixLayoutColumn, slang::CompilerOptionValue{ .intValue0 = true });
+            slang::CompilerOptionName::MatrixLayoutColumn,
+            slang::CompilerOptionValue{ .intValue0 = true });
     }
 
     if (flags & ShaderCompileFlag::InvertY) {
         entries.emplace_back(
-            slang::CompilerOptionName::VulkanInvertY, slang::CompilerOptionValue{ .intValue0 = true });
+            slang::CompilerOptionName::VulkanInvertY,
+            slang::CompilerOptionValue{ .intValue0 = true });
     }
 
     if (flags & ShaderCompileFlag::DXPositionW) {
         entries.emplace_back(
-            slang::CompilerOptionName::VulkanUseDxPositionW, slang::CompilerOptionValue{ .intValue0 = true });
+            slang::CompilerOptionName::VulkanUseDxPositionW,
+            slang::CompilerOptionValue{ .intValue0 = true });
     }
 
     if (flags & ShaderCompileFlag::UseGLLayout) {
         entries.emplace_back(
-            slang::CompilerOptionName::VulkanUseGLLayout, slang::CompilerOptionValue{ .intValue0 = true });
+            slang::CompilerOptionName::VulkanUseGLLayout,
+            slang::CompilerOptionValue{ .intValue0 = true });
     }
     else if (flags & ShaderCompileFlag::UseScalarLayout) {
         entries.emplace_back(
             slang::CompilerOptionName::GLSLForceScalarLayout,
             slang::CompilerOptionValue{ .intValue0 = true });
     }
+
+    // clang-format on
 
     return std::move(entries);
 }
@@ -133,8 +142,9 @@ Result<std::vector<u32>, VKResult> ShaderCompiler::compile_shader(const ShaderCo
     }
 
     i32 main_shader_id = compile_request->addTranslationUnit(SLANG_SOURCE_LANGUAGE_SLANG, nullptr);
+    const char *source_data = info.code.data();
     compile_request->addTranslationUnitSourceStringSpan(
-        main_shader_id, "lr_shader_target", info.code.begin(), info.code.end());
+        main_shader_id, "lr_shader_target", source_data, source_data + info.code.length());
     const SlangResult compile_result = compile_request->compile();
     const char *diagnostics = compile_request->getDiagnosticOutput();
     if (SLANG_FAILED(compile_result)) {
@@ -156,7 +166,7 @@ Result<std::vector<u32>, VKResult> ShaderCompiler::compile_shader(const ShaderCo
 
     SlangReflection *reflection = compile_request->getReflection();
     u32 entry_point_count = spReflection_getEntryPointCount(reflection);
-    u32 found_entry_point_id = ~0;
+    u32 found_entry_point_id = ~0u;
     for (u32 i = 0; i < entry_point_count; i++) {
         SlangReflectionEntryPoint *entry_point = spReflection_getEntryPointByIndex(reflection, i);
         std::string_view entry_point_name = spReflectionEntryPoint_getName(entry_point);

@@ -93,7 +93,7 @@ struct SystemDisplay {
 };
 
 struct WindowInfo {
-    constexpr static u32 USE_PRIMARY_MONITOR = ~0;
+    constexpr static u32 USE_PRIMARY_MONITOR = ~0u;
 
     std::string_view title = {};
     std::string_view icon = {};

@@ -1,12 +1,6 @@
+add_rules("mode.debug", "mode.release", "mode.releasedbg")
 set_project("Lorr")
 set_version("1.0.0")
-
-if is_mode("debug") then
-  set_optimize("none")
-  set_symbols("debug")
-elseif is_mode("release") then
-  set_optimize("aggressive")
-end
 
 add_requires(
     "fmt",
@@ -22,7 +16,10 @@ add_requires(
     "sol2"
 )
 add_requires("loguru", { configs = { fmt = true } })
-add_requires("slang", { configs = { ["enable-slang-glslang"] = true } })
+add_requires("slang", { configs = {
+    ["enable-slang-glslang"] = true,
+    ["embed-stdlib"] = true
+} })
 
 includes("Lorr")
 includes("Examples")

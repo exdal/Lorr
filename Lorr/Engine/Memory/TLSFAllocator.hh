@@ -16,13 +16,13 @@ struct TLSFAllocator {
 
     using BlockID = u32;
     struct MemoryBlock {
-        constexpr static BlockID INVALID = ~0;
+        constexpr static BlockID INVALID = ~0u;
         BlockID next_physical = INVALID;
         BlockID prev_physical = INVALID;
         BlockID next_logical = INVALID;
         BlockID prev_logical = INVALID;
 
-        u64 offset : 63 = ~0;
+        u64 offset : 63 = ~0u;
         bool is_free : 1 = false;
     };
 

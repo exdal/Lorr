@@ -897,8 +897,8 @@ struct ImageBarrier {
     MemoryAccess dst_access_mask = {};
     ImageLayout old_layout = ImageLayout::Undefined;
     ImageLayout new_layout = ImageLayout::Undefined;
-    u32 src_queue_family_id = ~0;
-    u32 dst_queue_family_id = ~0;
+    u32 src_queue_family_id = ~0u;
+    u32 dst_queue_family_id = ~0u;
     union {
         ImageID image_id = ImageID::Invalid;
         VkImage image;
@@ -1054,7 +1054,7 @@ static_assert(sizeof(RenderingBeginInfo::VkType) == sizeof(RenderingBeginInfo));
 struct DescriptorSetLayoutElement {
     using VkType = VkDescriptorSetLayoutBinding;
 
-    u32 binding = ~0;
+    u32 binding = ~0u;
     DescriptorType descriptor_type = DescriptorType::Count;
     u32 descriptor_count = 0;
     ShaderStageFlag stage = ShaderStageFlag::Count;
@@ -1081,7 +1081,7 @@ struct BufferDescriptorInfo {
 
     VkBuffer buffer = VK_NULL_HANDLE;
     u64 offset = 0;
-    u64 range = ~0;
+    u64 range = ~0u;
 
     operator auto &() { return *reinterpret_cast<VkType *>(this); }
 };

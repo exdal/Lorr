@@ -1,11 +1,8 @@
-// Created on Friday November 18th 2022 by exdal
-// Last modified on Sunday May 21st 2023 by exdal
-
 #pragma once
 
 #include "Memory/RingBuffer.hh"
 
-#define LR_INVALID_EVENT ~0
+#define LR_INVALID_EVENT ~0u
 
 namespace lr {
 using Event = u32;

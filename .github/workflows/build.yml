@@ -100,11 +100,11 @@ jobs:
         run: xmake run -vD --group=EXES
 
       - name: Install
-        run: xmake install -vDo dest/ --group=EXES
+        run: xmake install -vDo dest/
       
       - name: Archive production artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.platform.os }}-${{ matrix.platform.arch }}-${{ matrix.mode }}-${{ matrix.platform.runtime }}
           path: |
-            build
+            dest

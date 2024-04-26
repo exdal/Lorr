@@ -6,6 +6,37 @@
 #include <Windows.h>
 
 namespace lr {
+/// FILE SYSTEM ///
+Result<os::File, os::FileResult> os::open_file(std::string_view path, FileAccess access)
+{
+    ZoneScoped;
+    return {};
+}
+
+void os::close_file(File &file)
+{
+    ZoneScoped;
+}
+
+Result<u64, os::FileResult> os::file_size(File file)
+{
+    ZoneScoped;
+    return {};
+}
+
+// https://pubs.opengroup.org/onlinepubs/7908799/xsh/read.html
+u64 os::read_file(File file, void *data, u64range range)
+{
+    ZoneScoped;
+    return {};
+}
+
+void os::write_file(File file, const void *data, u64range range)
+{
+    ZoneScoped;
+}
+
+/// MEMORY ///
 u64 os::page_size()
 {
     SYSTEM_INFO sys_info = {};

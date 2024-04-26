@@ -17,12 +17,12 @@ add_requires(
     "vulkan-headers",
     "vulkan-memory-allocator",
     "vk-bootstrap",
-    "slang",
     "unordered_dense",
     "plf_colony",
     "sol2"
 )
 add_requires("loguru", { configs = { fmt = true } })
+add_requires("slang", { configs = { ["enable-slang-glslang"] = true } })
 
 includes("Lorr")
 includes("Examples")

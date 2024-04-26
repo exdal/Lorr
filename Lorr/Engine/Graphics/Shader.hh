@@ -1,8 +1,7 @@
 #pragma once
 
 #include "Common.hh"
-
-#include <filesystem>
+#include "Util/VirtualDir.hh"
 
 namespace lr::graphics {
 struct Shader {
@@ -43,11 +42,12 @@ struct ShaderPreprocessorMacroInfo {
 };
 
 struct ShaderCompileInfo {
-    std::string_view entry_point = "main";
-    std::string_view file_path = {};
-    std::span<std::filesystem::path> search_paths = {};
-    std::span<ShaderPreprocessorMacroInfo> definitions = {};
     ShaderCompileFlag compile_flags = ShaderCompileFlag::None;
+    std::string_view entry_point = "main";
+    std::string_view code = {};
+    VirtualDir virtual_env = {};
+    std::span<std::string> include_dirs = {};
+    std::span<ShaderPreprocessorMacroInfo> definitions = {};
 };
 
 namespace ShaderCompiler {

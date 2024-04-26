@@ -71,6 +71,8 @@ std::vector<slang::CompilerOptionEntry> get_slang_entries(ShaderCompileFlag flag
 
 bool ShaderCompiler::init()
 {
+    ZoneScoped;
+
     slang::createGlobalSession(compiler_ctx.global_session.writeRef());
     return true;
 }
@@ -79,23 +81,27 @@ Result<std::vector<u32>, VKResult> ShaderCompiler::compile_shader(const ShaderCo
 {
     ZoneScoped;
 
+    /////////////////////////////////////////
+    /// SESSION INITIALIZATION
+
+    std::vector<slang::CompilerOptionEntry> entries = get_slang_entries(info.compile_flags);
     std::vector<slang::PreprocessorMacroDesc> macros;
     for (ShaderPreprocessorMacroInfo &v : info.definitions) {
         macros.emplace_back(v.name.data(), v.value.data());
+    }
+
+    std::vector<const char *> include_dirs;
+    for (std::string_view dir : info.include_dirs) {
+        include_dirs.push_back(dir.data());
     }
 
     slang::TargetDesc target_desc = {
         .format = SLANG_SPIRV,
         .profile = compiler_ctx.global_session->findProfile("spirv_1_4"),
         .flags = SLANG_TARGET_FLAG_GENERATE_SPIRV_DIRECTLY,
-        //   .compilerOptionEntries = entries.data(),
-        //   .compilerOptionEntryCount = static_cast<u32>(entries.size()),
+        .compilerOptionEntries = entries.data(),
+        .compilerOptionEntryCount = static_cast<u32>(entries.size()),
     };
-
-    std::vector<const char *> include_dirs;
-    // for (std::string_view dir : info.include_dirs) {
-    //     include_dirs.push_back(dir.data());
-    // }
 
     slang::SessionDesc session_desc = {
         .targets = &target_desc,
@@ -106,75 +112,79 @@ Result<std::vector<u32>, VKResult> ShaderCompiler::compile_shader(const ShaderCo
         .preprocessorMacroCount = static_cast<u32>(macros.size()),
     };
     Slang::ComPtr<slang::ISession> session;
-    compiler_ctx.global_session->createSession(session_desc, session.writeRef());
-
-    Slang::ComPtr<slang::IBlob> diagnostics_blob;
-    slang::IModule *module = session->loadModule(info.file_path.data(), diagnostics_blob.writeRef());
-    if (diagnostics_blob != nullptr) {
-        LR_LOG_ERROR(
-            "Shader error: {}", reinterpret_cast<const char *>(diagnostics_blob->getBufferPointer()));
-    }
-
-    if (!module) {
-        LR_LOG_ERROR("Failed to load shader module!");
+    if (SLANG_FAILED(compiler_ctx.global_session->createSession(session_desc, session.writeRef()))) {
+        LR_LOG_ERROR("Failed to create compiler session!");
         return VKResult::Unknown;
     }
 
-    Slang::ComPtr<slang::IEntryPoint> entry_point;
-    module->findEntryPointByName(info.entry_point.data(), entry_point.writeRef());
+    /////////////////////////////////////////
+    /////////////////////////////////////////
 
-    return {};
-}
+    // https://github.com/shader-slang/slang/blob/ed0681164d78591148781d08934676bfec63f9da/examples/cpu-com-example/main.cpp
+    Slang::ComPtr<SlangCompileRequest> compile_request;
+    if (SLANG_FAILED(session->createCompileRequest(compile_request.writeRef()))) {
+        LR_LOG_ERROR("Failed to create compile request!");
+        return VKResult::Unknown;
+    }
 
-/*
-ShaderReflectionData ShaderCompiler::reflect_spirv(ShaderReflectionDesc *desc,
-eastl::span<u32> ir)
-{
-    ZoneScoped;
+    for (const auto &[vfile_path, vfile] : info.virtual_env.files()) {
+        i32 file_id = compile_request->addTranslationUnit(SLANG_SOURCE_LANGUAGE_SLANG, vfile_path.c_str());
+        compile_request->addTranslationUnitSourceString(file_id, vfile_path.c_str(), vfile.c_str());
+    }
 
-    constexpr static ShaderStage kStageMap[] = {
-        [spv::ExecutionModel::ExecutionModelVertex] = ShaderStage::Vertex,
-        [spv::ExecutionModel::ExecutionModelTessellationControl] =
-ShaderStage::TessellationControl,
-        [spv::ExecutionModel::ExecutionModelTessellationEvaluation] =
-ShaderStage::TessellationEvaluation, [spv::ExecutionModel::ExecutionModelFragment] =
-ShaderStage::Pixel, [spv::ExecutionModel::ExecutionModelGLCompute] = ShaderStage::Compute,
-    };
+    i32 main_shader_id = compile_request->addTranslationUnit(SLANG_SOURCE_LANGUAGE_SLANG, nullptr);
+    compile_request->addTranslationUnitSourceStringSpan(
+        main_shader_id, "lr_shader_target", info.code.begin(), info.code.end());
+    const SlangResult compile_result = compile_request->compile();
+    const char *diagnostics = compile_request->getDiagnosticOutput();
+    if (SLANG_FAILED(compile_result)) {
+        LR_LOG_ERROR("Failed to compile shader!");
+        LR_LOG_ERROR("{}", diagnostics);
 
-    spirv_cross::CompilerHLSL compiler(ir.data(), ir.size());
-    auto first_entry = compiler.get_entry_points_and_stages()[0];
-    auto resources = compiler.get_shader_resources();
-    auto &entry_point = compiler.get_entry_point(first_entry.name,
-first_entry.execution_model);
+        return VKResult::Unknown;
+    }
 
-    ShaderReflectionData result = {};
-    result.m_compiled_stage = kStageMap[entry_point.model];
-    result.m_entry_point = first_entry.name.data();
+    Slang::ComPtr<slang::IModule> shader_module;
+    if (SLANG_FAILED(compile_request->getModule(main_shader_id, shader_module.writeRef()))) {
+        // if this gets hit, something is def wrong
+        LR_LOG_ERROR("Failed to get shader module!");
+        return VKResult::Unknown;
+    }
 
-    for (const auto &push_constant_buffer : resources.push_constant_buffers)
-    {
-        auto &type = compiler.get_type(push_constant_buffer.base_type_id);
-        for (u32 i = 0; i < type.member_types.size(); i++)
-        {
-            usize size = compiler.get_declared_struct_member_size(type, i);
-            usize offset = compiler.type_struct_member_offset(type, i);
+    /////////////////////////////////////////
+    /// REFLECTION
 
-            for (const auto &type_member : type.member_types)
-            {
-                const auto &name = compiler.get_name(type_member);
-                if (desc->m_descriptors_struct_name == eastl::string_view(name.data(),
-name.size()))
-                {
-                    result.m_descriptors_struct.offset = offset;
-                    result.m_descriptors_struct.size = size;
-                }
-            }
-
-            result.m_push_constant_size += size;
+    SlangReflection *reflection = compile_request->getReflection();
+    u32 entry_point_count = spReflection_getEntryPointCount(reflection);
+    u32 found_entry_point_id = ~0;
+    for (u32 i = 0; i < entry_point_count; i++) {
+        SlangReflectionEntryPoint *entry_point = spReflection_getEntryPointByIndex(reflection, i);
+        std::string_view entry_point_name = spReflectionEntryPoint_getName(entry_point);
+        if (entry_point_name == info.entry_point) {
+            found_entry_point_id = i;
+            break;
         }
     }
 
-    return result;
+    if (found_entry_point_id == ~0u) {
+        LR_LOG_ERROR("Failed to find given entry point ''!", info.entry_point);
+        return VKResult::Unknown;
+    }
+
+    /////////////////////////////////////////
+    /// RESULT BLOB/CLEAN UP
+
+    Slang::ComPtr<slang::IBlob> spirv_blob;
+    if (SLANG_FAILED(
+            compile_request->getEntryPointCodeBlob(found_entry_point_id, 0, spirv_blob.writeRef()))) {
+        LR_LOG_ERROR("Failed to get entrypoint assembly!");
+        return VKResult::Unknown;
+    }
+
+    std::span<const u32> spirv_data_view(
+        static_cast<const u32 *>(spirv_blob->getBufferPointer()), spirv_blob->getBufferSize() / sizeof(u32));
+    std::vector<u32> spirv_data(spirv_data_view.begin(), spirv_data_view.end());
+    return std::move(spirv_data);
 }
-*/
+
 }  // namespace lr::graphics

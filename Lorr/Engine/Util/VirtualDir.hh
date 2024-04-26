@@ -5,6 +5,10 @@
 namespace lr {
 struct VirtualFile {
     std::vector<u8> contents = {};
+
+    const u8 *data() const { return contents.data(); }
+    const char *c_str() const { return reinterpret_cast<const char *>(contents.data()); }
+    usize size() const { return contents.size(); }
 };
 
 struct VirtualDir {
@@ -24,6 +28,8 @@ struct VirtualDir {
         m_files.emplace(virtual_path, std::move(file_contents));
         return true;
     }
+
+    const auto &files() const { return m_files; }
 
     ankerl::unordered_dense::map<std::string, VirtualFile> m_files = {};
 };

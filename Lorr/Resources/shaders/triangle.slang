@@ -23,10 +23,11 @@ typedef float2 f32vec2;
 
 namespace lr {
 [[vk::binding(LR_DESCRIPTOR_INDEX_DEVICE_ADDRESSES, 0)]]
-ByteAddressBuffer _device_addresses[];
+ByteAddressBuffer __device_addresses[];
 extension ByteAddressBuffer {
-  static ByteAddressBuffer get(u32 i) { return _device_addresses[i]; };
+  static ByteAddressBuffer get(u32 i) { return __device_addresses[i]; };
 };
+
 }
 
 [[vk::binding(0, 0)]] SamplerState  u_samplers[];
@@ -40,8 +41,3 @@ extension ByteAddressBuffer {
 /// TODO: About storage images, RWTexture2D can have multiple formats
 /// while staying at the same binding index.
 
-
-[shader("vertex")]
-void main_vs() {
-
-}

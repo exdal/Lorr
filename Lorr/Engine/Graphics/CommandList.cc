@@ -137,6 +137,12 @@ CommandBatcher::CommandBatcher(Device *device, CommandList &command_list)
 {
 }
 
+CommandBatcher::CommandBatcher(Unique<CommandList> &command_list)
+    : m_device(command_list.m_device),
+      m_command_list(command_list.m_val)
+{
+}
+
 CommandBatcher::~CommandBatcher()
 {
     flush_barriers();

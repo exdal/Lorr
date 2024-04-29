@@ -5,26 +5,26 @@
 namespace lr::graphics::TaskAccess {
 struct Access {
     constexpr Access() = default;
-    constexpr Access(MemoryAccess access, PipelineStage stage)
-        : m_access(access),
-          m_stage(stage)
+    constexpr Access(MemoryAccess access_, PipelineStage stage_)
+        : access(access_),
+          stage(stage_)
     {
     }
 
-    MemoryAccess m_access = MemoryAccess::None;
-    PipelineStage m_stage = PipelineStage::None;
+    MemoryAccess access = MemoryAccess::None;
+    PipelineStage stage = PipelineStage::None;
 
     auto operator<=>(const Access &) const = default;
 };
 
 constexpr Access operator|(const Access &lhs, const Access &rhs)
 {
-    return (Access){ lhs.m_access | rhs.m_access, lhs.m_stage | rhs.m_stage };
+    return (Access){ lhs.access | rhs.access, lhs.stage | rhs.stage };
 }
 
 constexpr Access operator|=(Access &lhs, const Access &rhs)
 {
-    Access lhsn = { lhs.m_access | rhs.m_access, lhs.m_stage | rhs.m_stage };
+    Access lhsn = { lhs.access | rhs.access, lhs.stage | rhs.stage };
     return lhs = lhsn | rhs;
 }
 

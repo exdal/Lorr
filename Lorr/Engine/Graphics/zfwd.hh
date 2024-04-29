@@ -2,10 +2,11 @@
 
 namespace lr::graphics {
 // CommandList.hh
+struct Semaphore;
+struct CommandQueue;
 struct CommandAllocator;
 struct CommandList;
 struct CommandBatcher;
-struct Semaphore;
 
 // Descriptor.hh
 struct DescriptorPool;

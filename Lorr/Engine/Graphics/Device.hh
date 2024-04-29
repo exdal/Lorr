@@ -7,23 +7,15 @@
 #include "ResourcePool.hh"
 #include "SwapChain.hh"
 
+#include <deque>
+
 namespace lr::graphics {
 struct Device {
     Device() = default;
-    Device(vkb::Device &&device, vkb::Instance *instance, DeviceFeature features)
-        : m_handle(std::move(device)),
-          m_physical_device(device.physical_device),
-          m_instance(instance),
-          m_supported_features(features)
-    {
-    }
-
-    VKResult init();
+    VKResult init(vkb::Instance *instance);
 
     /// COMMAND ///
-    u32 get_queue_index(CommandType type);
-    VKResult create_command_allocators(
-        std::span<CommandAllocator> allocators, const CommandAllocatorInfo &info);
+    VKResult create_command_allocators(std::span<CommandAllocator> allocators, const CommandAllocatorInfo &info);
     void delete_command_allocators(std::span<CommandAllocator> allocators);
     VKResult create_command_lists(std::span<CommandList> lists, CommandAllocator &command_allocator);
     void delete_command_lists(std::span<CommandList> lists);
@@ -31,7 +23,7 @@ struct Device {
     void begin_command_list(CommandList &list);
     void end_command_list(CommandList &list);
     void reset_command_allocator(CommandAllocator &allocator);
-    void submit(CommandType queue_type, QueueSubmitInfoDyn &submit_info);
+    void submit(CommandType queue_type, QueueSubmitInfo &submit_info);
 
     VKResult create_binary_semaphores(std::span<Semaphore> semaphores);
     VKResult create_timeline_semaphores(std::span<Semaphore> semaphores, u64 initial_value);
@@ -42,8 +34,7 @@ struct Device {
     /// Presentation ///
     UniqueResult<SwapChain> create_swap_chain(const SwapChainInfo &info);
     void delete_swap_chains(std::span<SwapChain> swap_chain);
-    Result<ls::static_vector<ImageID, Limits::FrameCount>, VKResult> get_swapchain_images(
-        SwapChain &swap_chain);
+    Result<ls::static_vector<ImageID, Limits::FrameCount>, VKResult> get_swapchain_images(SwapChain &swap_chain);
 
     void wait_for_work();
     Result<u32, VKResult> acquire_next_image(SwapChain &swap_chain, Semaphore &acquire_sema);
@@ -92,9 +83,10 @@ struct Device {
     template<typename T>
     void set_object_name([[maybe_unused]] T &v, [[maybe_unused]] std::string_view name)
     {
-#if _DEBUG
+#if LR_DEBUG
         VkDebugUtilsObjectNameInfoEXT object_name_info = {
             .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+            .pNext = nullptr,
             .objectType = T::OBJECT_TYPE,
             .objectHandle = (u64)v.m_handle,
             .pObjectName = name.data(),
@@ -106,9 +98,10 @@ struct Device {
     template<VkObjectType ObjectType, typename T>
     void set_object_name_raw([[maybe_unused]] T v, [[maybe_unused]] std::string_view name)
     {
-#if _DEBUG
+#if LR_DEBUG
         VkDebugUtilsObjectNameInfoEXT object_name_info = {
             .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+            .pNext = nullptr,
             .objectType = ObjectType,
             .objectHandle = (u64)v,
             .pObjectName = name.data(),
@@ -117,7 +110,7 @@ struct Device {
 #endif
     }
 
-    u64 get_garbage_sema_counter() { return get_semaphore_counter(*m_garbage_collector_sema); }
+    CommandQueue &get_queue(CommandType type) { return m_queues->at(usize(type)); }
     auto get_image(ImageID id) { return m_resources.images.get(id); }
     auto get_image_view(ImageViewID id) { return m_resources.image_views.get(id); }
     auto get_sampler(SamplerID id) { return m_resources.samplers.get(id); }
@@ -125,8 +118,6 @@ struct Device {
     auto get_pipeline(PipelineID id) { return m_resources.pipelines.get(id); }
     auto get_shader(ShaderID id) { return m_resources.shaders.get(id); }
 
-    u64 m_garbage_collector_counter = 0;
-    Unique<Semaphore> m_garbage_collector_sema;
     plf::colony<std::pair<CommandAllocator, u64>> m_garbage_command_allocators = {};
     plf::colony<std::pair<CommandList, u64>> m_garbage_command_lists = {};
     plf::colony<std::pair<Semaphore, u64>> m_garbage_semaphores = {};
@@ -141,10 +132,7 @@ struct Device {
     Unique<DescriptorSet> m_descriptor_set;
 
     DeviceFeature m_supported_features = DeviceFeature::None;
-    constexpr static usize queue_count = static_cast<usize>(CommandType::Count);
-    std::array<VkQueue, queue_count> m_queues = {};
-    std::array<u32, queue_count> m_queue_indexes = {};
-    usize m_present_queue_id = 0;
+    Unique<std::array<CommandQueue, usize(CommandType::Count)>> m_queues;
 
     ResourcePools m_resources = {};
     VmaAllocator m_allocator = {};
@@ -159,6 +147,7 @@ struct Device {
 
 struct DeviceDeleter {
     // clang-format off
+    DeviceDeleter(Device *device, [[maybe_unused]] u64 c, std::span<CommandQueue> s) { for (auto &v : s) DeviceDeleter(device, c, { &v.m_semaphore, 1 }); }
     DeviceDeleter(Device *device, [[maybe_unused]] u64 c, std::span<CommandAllocator> s) { for (auto &v : s) device->m_garbage_command_allocators.emplace(v, c); }
     DeviceDeleter(Device *device, [[maybe_unused]] u64 c, std::span<CommandList> s) { for (auto &v : s) device->m_garbage_command_lists.emplace(v, c); }
     DeviceDeleter(Device *device, [[maybe_unused]] u64 c, std::span<Semaphore> s) { for (auto &v : s) device->m_garbage_semaphores.emplace(v, c); }
@@ -203,6 +192,12 @@ void device_deleter_helper(Device *device, u64 c, T &v)
 }
 
 template<typename T>
+void Unique<T>::set_name(std::string_view name)
+{
+    m_device->set_object_name(m_val, name);
+}
+
+template<typename T>
 void Unique<T>::reset(Unique<T>::val_type val) noexcept
 {
     if (m_val == val) {
@@ -210,8 +205,8 @@ void Unique<T>::reset(Unique<T>::val_type val) noexcept
     }
 
     if (m_device && m_val != val_type{}) {
-        u64 counter_val = m_device->get_garbage_sema_counter();
-        device_deleter_helper(m_device, counter_val, m_val);
+        Semaphore &sema = m_device->get_queue(CommandType::Graphics).semaphore();
+        device_deleter_helper(m_device, sema.counter(), m_val);
     }
 
     m_val = std::move(val);

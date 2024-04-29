@@ -2,6 +2,9 @@ add_rules("mode.debug", "mode.release", "mode.releasedbg")
 set_project("Lorr")
 set_version("1.0.0")
 
+add_cxxflags("clang::-Wshadow-all")
+set_warnings("extra")
+
 add_requires(
     "fmt",
     "tracy",

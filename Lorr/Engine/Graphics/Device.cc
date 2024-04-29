@@ -3,20 +3,108 @@
 #include "Shader.hh"
 
 namespace lr::graphics {
-VKResult Device::init()
+VKResult Device::init(vkb::Instance *instance)
 {
+    ZoneScoped;
+
+    m_instance = instance;
+
+    {
+        vkb::PhysicalDeviceSelector physical_device_selector(*instance);
+        physical_device_selector.defer_surface_initialization();
+        physical_device_selector.set_minimum_version(1, 3);
+
+        VkPhysicalDeviceVulkan13Features vk13_features = {};
+        vk13_features.synchronization2 = true;
+        vk13_features.dynamicRendering = true;
+        physical_device_selector.set_required_features_13(vk13_features);
+
+        VkPhysicalDeviceVulkan12Features vk12_features = {};
+        vk12_features.descriptorIndexing = true;
+        vk12_features.shaderSampledImageArrayNonUniformIndexing = true;
+        vk12_features.shaderStorageBufferArrayNonUniformIndexing = true;
+        vk12_features.descriptorBindingSampledImageUpdateAfterBind = true;
+        vk12_features.descriptorBindingStorageImageUpdateAfterBind = true;
+        vk12_features.descriptorBindingStorageBufferUpdateAfterBind = true;
+        vk12_features.descriptorBindingUpdateUnusedWhilePending = true;
+        vk12_features.descriptorBindingPartiallyBound = true;
+        vk12_features.descriptorBindingVariableDescriptorCount = true;
+        vk12_features.runtimeDescriptorArray = true;
+        vk12_features.timelineSemaphore = true;
+        vk12_features.bufferDeviceAddress = true;
+        physical_device_selector.set_required_features_12(vk12_features);
+
+        VkPhysicalDeviceFeatures vk10_features = {};
+        vk10_features.vertexPipelineStoresAndAtomics = true;
+        vk10_features.fragmentStoresAndAtomics = true;
+        vk10_features.shaderInt64 = true;
+        physical_device_selector.set_required_features(vk10_features);
+        physical_device_selector.add_required_extensions({
+            "VK_KHR_swapchain",
+#if TRACY_ENABLE
+            "VK_EXT_calibrated_timestamps",
+#endif
+        });
+        auto physical_device_result = physical_device_selector.select();
+        if (!physical_device_result) {
+            LR_LOG_ERROR("Failed to select Vulkan Physical Device!");
+            return static_cast<VKResult>(physical_device_result.vk_result());
+        }
+
+        m_physical_device = physical_device_result.value();
+    }
+
+    {
+        /// DEVICE INITIALIZATION ///
+        // if
+        // (selected_physical_device.enable_extension_if_present("VK_EXT_descriptor_buffer"))
+        //     features |= DeviceFeature::DescriptorBuffer;
+        if (m_physical_device.enable_extension_if_present("VK_EXT_memory_budget"))
+            m_supported_features |= DeviceFeature::MemoryBudget;
+
+        vkb::DeviceBuilder device_builder(m_physical_device);
+
+        VkPhysicalDeviceDescriptorBufferFeaturesEXT desciptor_buffer_features = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT,
+            .pNext = nullptr,
+            .descriptorBuffer = true,
+            .descriptorBufferCaptureReplay = false,
+            .descriptorBufferImageLayoutIgnored = true,
+            .descriptorBufferPushDescriptors = true,
+        };
+        if (m_supported_features & DeviceFeature::DescriptorBuffer)
+            device_builder.add_pNext(&desciptor_buffer_features);
+
+        auto device_result = device_builder.build();
+        if (!device_result) {
+            LR_LOG_ERROR("Failed to select Vulkan Device!");
+            return static_cast<VKResult>(device_result.vk_result());
+        }
+
+        m_handle = device_result.value();
+    }
+
+    if (!vulkan::load_device(m_handle, instance->fp_vkGetDeviceProcAddr)) {
+        LR_LOG_ERROR("Failed to create Vulkan Device! Extension not found.");
+        return VKResult::ExtNotPresent;
+    }
+
     set_object_name_raw<VK_OBJECT_TYPE_INSTANCE>(m_instance->instance, "Instance");
     set_object_name_raw<VK_OBJECT_TYPE_DEVICE>(m_handle.device, "Device");
     set_object_name_raw<VK_OBJECT_TYPE_PHYSICAL_DEVICE>(m_physical_device.physical_device, "Physical Device");
 
-    for (u32 i = 0; i < m_queues.size(); i++) {
-        auto type = static_cast<vkb::QueueType>(i + 1);
-        m_queues[i] = m_handle.get_queue(type).value();
-        m_queue_indexes[i] = m_handle.get_queue_index(type).value();
+    auto create_queue_impl = [this](CommandQueue &target, vkb::QueueType type, std::string_view name) {
+        create_timeline_semaphores({ &target.m_semaphore, 1 }, 0);
+        target.m_handle = m_handle.get_queue(type).value();
+        target.m_index = m_handle.get_queue_index(type).value();
 
-        set_object_name_raw<VK_OBJECT_TYPE_QUEUE>(
-            m_queues[i], fmt::format("Submit Queue {}", static_cast<u32>(type)));
-    }
+        set_object_name(target, name);
+    };
+
+    m_queues = Unique<std::array<CommandQueue, usize(CommandType::Count)>>(this);
+    create_queue_impl(m_queues->at(usize(CommandType::Graphics)), vkb::QueueType::graphics, "Graphics Queue");
+    create_queue_impl(m_queues->at(usize(CommandType::Compute)), vkb::QueueType::compute, "Compute Queue");
+    create_queue_impl(m_queues->at(usize(CommandType::Transfer)), vkb::QueueType::transfer, "Transfer Queue");
 
     /// ALLOCATOR INITIALIZATION ///
 
@@ -45,11 +133,7 @@ VKResult Device::init()
     }
 
     /// DEVICE CONTEXT ///
-    m_garbage_collector_sema = Unique<Semaphore>(this);
-    create_timeline_semaphores({ &*m_garbage_collector_sema, 1 }, 0);
-
-    DescriptorBindingFlag bindless_flags =
-        DescriptorBindingFlag::UpdateAfterBind | DescriptorBindingFlag::PartiallyBound;
+    DescriptorBindingFlag bindless_flags = DescriptorBindingFlag::UpdateAfterBind | DescriptorBindingFlag::PartiallyBound;
     ls::static_vector<DescriptorPoolSize, 4> pool_sizes;
     ls::static_vector<DescriptorSetLayoutElement, 4> layout_elements;
     ls::static_vector<DescriptorBindingFlag, 4> binding_flags;
@@ -147,13 +231,7 @@ VKResult Device::init()
     return VKResult::Success;
 }
 
-u32 Device::get_queue_index(CommandType type)
-{
-    return m_queue_indexes[static_cast<usize>(type)];
-}
-
-VKResult Device::create_command_allocators(
-    std::span<CommandAllocator> allocators, const CommandAllocatorInfo &info)
+VKResult Device::create_command_allocators(std::span<CommandAllocator> allocators, const CommandAllocatorInfo &info)
 {
     ZoneScoped;
 
@@ -161,7 +239,7 @@ VKResult Device::create_command_allocators(
         .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
         .pNext = nullptr,
         .flags = static_cast<VkCommandPoolCreateFlags>(info.flags),
-        .queueFamilyIndex = get_queue_index(info.type),
+        .queueFamilyIndex = m_queues->at(usize(info.type)).m_index,
     };
 
     VKResult result = VKResult::Success;
@@ -247,23 +325,11 @@ void Device::reset_command_allocator(CommandAllocator &allocator)
     vkResetCommandPool(m_handle, allocator, VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT);
 }
 
-void Device::submit(CommandType queue_type, QueueSubmitInfoDyn &submit_info)
+void Device::submit(CommandType queue_type, QueueSubmitInfo &submit_info)
 {
     ZoneScoped;
 
-    submit_info.signal_sema_infos.emplace_back(
-        *m_garbage_collector_sema, ++m_garbage_collector_counter, PipelineStage::AllCommands);
-
-    QueueSubmitInfo vk_info = {
-        .wait_sema_count = static_cast<u32>(submit_info.wait_sema_infos.size()),
-        .wait_sema_infos = submit_info.wait_sema_infos.data(),
-        .command_list_count = static_cast<u32>(submit_info.command_lists.size()),
-        .command_list_infos = submit_info.command_lists.data(),
-        .signal_sema_count = static_cast<u32>(submit_info.signal_sema_infos.size()),
-        .singal_sema_infos = submit_info.signal_sema_infos.data(),
-    };
-
-    vkQueueSubmit2(m_queues[(usize)queue_type], 1, reinterpret_cast<VkSubmitInfo2 *>(&vk_info), nullptr);
+    vkQueueSubmit2(m_queues->at(usize(queue_type)), 1, reinterpret_cast<VkSubmitInfo2 *>(&submit_info), nullptr);
 }
 
 VKResult Device::create_binary_semaphores(std::span<Semaphore> semaphores)
@@ -314,6 +380,7 @@ VKResult Device::create_timeline_semaphores(std::span<Semaphore> semaphores, u64
 
     VKResult result = VKResult::Success;
     for (Semaphore &semaphore : semaphores) {
+        semaphore.m_counter = initial_value;
         result = CHECK(vkCreateSemaphore(m_handle, &semaphore_info, nullptr, &semaphore.m_handle));
 
         if (result != VKResult::Success) {
@@ -377,18 +444,18 @@ UniqueResult<SwapChain> Device::create_swap_chain(const SwapChainInfo &info)
     swap_chain->m_extent = { result->extent.width, result->extent.height };
     swap_chain->m_image_count = result->image_count;
 
-    swap_chain->m_frame_timeline_sema = Unique<Semaphore>(this);
+    swap_chain->m_frame_sema = Unique<Semaphore>(this);
     swap_chain->m_acquire_semas = Unique<ls::static_vector<Semaphore, Limits::FrameCount>>(this);
     swap_chain->m_present_semas = Unique<ls::static_vector<Semaphore, Limits::FrameCount>>(this);
     swap_chain->m_acquire_semas->resize(swap_chain->m_image_count);
     swap_chain->m_present_semas->resize(swap_chain->m_image_count);
-    create_timeline_semaphores({ &*swap_chain->m_frame_timeline_sema, 1 }, 0);
+    create_timeline_semaphores({ &*swap_chain->m_frame_sema, 1 }, 0);
     create_binary_semaphores(*swap_chain->m_acquire_semas);
     create_binary_semaphores(*swap_chain->m_present_semas);
     swap_chain->m_handle = result.value();
     swap_chain->m_surface = info.surface;
+    swap_chain->m_frame_sema.set_name("SwapChain frame counter Semaphore");
 
-    set_object_name(*swap_chain->m_frame_timeline_sema, "SwapChain Frame Timeline Sema");
     u32 i = 0;
     for (Semaphore &v : *swap_chain->m_acquire_semas) {
         set_object_name(v, fmt::format("SwapChain Acquire Sema {}", i++));
@@ -414,15 +481,13 @@ void Device::delete_swap_chains(std::span<SwapChain> swap_chains)
     }
 }
 
-Result<ls::static_vector<ImageID, Limits::FrameCount>, VKResult> Device::get_swapchain_images(
-    SwapChain &swap_chain)
+Result<ls::static_vector<ImageID, Limits::FrameCount>, VKResult> Device::get_swapchain_images(SwapChain &swap_chain)
 {
     ls::static_vector<ImageID, Limits::FrameCount> images(swap_chain.image_count());
     ls::static_vector<VkImage, Limits::FrameCount> image_handles(swap_chain.image_count());
 
     u32 image_count = image_handles.size();
-    auto result =
-        CHECK(vkGetSwapchainImagesKHR(m_handle, swap_chain.m_handle, &image_count, image_handles.data()));
+    auto result = CHECK(vkGetSwapchainImagesKHR(m_handle, swap_chain.m_handle, &image_count, image_handles.data()));
     if (!result) {
         LR_LOG_ERROR("Failed to get SwapChain images! {}", result);
         return result;
@@ -431,8 +496,7 @@ Result<ls::static_vector<ImageID, Limits::FrameCount>, VKResult> Device::get_swa
     for (u32 i = 0; i < images.size(); i++) {
         VkImage &image_handle = image_handles[i];
         Extent3D extent = { swap_chain.m_extent.width, swap_chain.m_extent.height, 1 };
-        auto [image, image_id] =
-            m_resources.images.create(image_handle, nullptr, swap_chain.m_format, extent, 1, 1);
+        auto [image, image_id] = m_resources.images.create(image_handle, nullptr, swap_chain.m_format, extent, 1, 1);
 
         images[i] = image_id;
     }
@@ -451,18 +515,15 @@ Result<u32, VKResult> Device::acquire_next_image(SwapChain &swap_chain, Semaphor
 {
     ZoneScoped;
 
-    auto [frame_sema, frame_sema_counter] = swap_chain.frame_sema();
-    wait_for_semaphore(frame_sema, frame_sema_counter);
+    auto &frame_sema = swap_chain.frame_sema();
+    wait_for_semaphore(frame_sema, frame_sema.counter());
 
     u32 image_id = 0;
-    auto result = CHECK(
-        vkAcquireNextImageKHR(m_handle, swap_chain.m_handle, UINT64_MAX, acquire_sema, nullptr, &image_id));
+    auto result = CHECK(vkAcquireNextImageKHR(m_handle, swap_chain.m_handle, UINT64_MAX, acquire_sema, nullptr, &image_id));
     if (result != VKResult::Success && result != VKResult::Suboptimal) {
-        // do not increment frame if acquire is unsuccessful
         return result;
     }
 
-    swap_chain.inc_frame();
     return Result(image_id, result);
 }
 
@@ -470,7 +531,6 @@ VKResult Device::present(SwapChain &swap_chain, Semaphore &present_sema, u32 ima
 {
     ZoneScoped;
 
-    VkQueue present_queue = m_queues[m_present_queue_id];
     VkPresentInfoKHR present_info = {
         .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
         .pNext = nullptr,
@@ -481,7 +541,7 @@ VKResult Device::present(SwapChain &swap_chain, Semaphore &present_sema, u32 ima
         .pImageIndices = &image_id,
         .pResults = nullptr,
     };
-    VKResult result = CHECK(vkQueuePresentKHR(present_queue, &present_info));
+    VKResult result = CHECK(vkQueuePresentKHR(m_queues->at(usize(CommandType::Graphics)), &present_info));
     if (result != VKResult::Success)
         return result;
 
@@ -492,16 +552,17 @@ void Device::collect_garbage()
 {
     ZoneScoped;
 
-    u64 current_garbage_counter = get_semaphore_counter(*m_garbage_collector_sema);
+    u64 current_garbage_counter = get_semaphore_counter(get_queue(CommandType::Graphics).semaphore());
     auto checker_fn = [&](auto &queue, const auto &deleter_fn) {
-        for (auto it = queue.begin(); it != queue.end(); it++) {
-            auto &[v, snapshot_val] = *it;
-            if (snapshot_val > current_garbage_counter) {
-                break;
+        for (auto i = queue.begin(); i != queue.end();) {
+            auto &[v, timeline_val] = *i;
+            if (current_garbage_counter > timeline_val) {
+                deleter_fn({ &v, 1 });
+                i = queue.erase(i);
             }
-
-            deleter_fn({ &v, 1 });
-            queue.erase(it);
+            else {
+                i++;
+            }
         }
     };
 
@@ -525,8 +586,7 @@ UniqueResult<PipelineLayout> Device::create_pipeline_layout(const PipelineLayout
     };
 
     VkPipelineLayout layout_handle = VK_NULL_HANDLE;
-    auto result =
-        CHECK(vkCreatePipelineLayout(m_handle, &pipeline_layout_create_info, nullptr, &layout_handle));
+    auto result = CHECK(vkCreatePipelineLayout(m_handle, &pipeline_layout_create_info, nullptr, &layout_handle));
     if (result != VKResult::Success) {
         LR_LOG_ERROR("Failed to create Pipeline Layout! {}", result);
         return result;
@@ -652,10 +712,7 @@ Result<PipelineID, VKResult> Device::create_graphics_pipeline(const GraphicsPipe
         .logicOp = {},
         .attachmentCount = static_cast<u32>(info.blend_attachments.size()),
         .pAttachments = info.blend_attachments.data(),
-        .blendConstants = { info.blend_constants.x,
-                            info.blend_constants.y,
-                            info.blend_constants.z,
-                            info.blend_constants.w },
+        .blendConstants = { info.blend_constants.x, info.blend_constants.y, info.blend_constants.z, info.blend_constants.w },
     };
 
     /// DYNAMIC STATE ------------------------------------------------------------
@@ -719,8 +776,7 @@ Result<PipelineID, VKResult> Device::create_graphics_pipeline(const GraphicsPipe
     };
 
     VkPipeline pipeline_handle = VK_NULL_HANDLE;
-    auto result = CHECK(
-        vkCreateGraphicsPipelines(m_handle, nullptr, 1, &pipeline_create_info, nullptr, &pipeline_handle));
+    auto result = CHECK(vkCreateGraphicsPipelines(m_handle, nullptr, 1, &pipeline_create_info, nullptr, &pipeline_handle));
     if (result != VKResult::Success) {
         LR_LOG_ERROR("Failed to create Graphics Pipeline! {}", result);
         return result;
@@ -750,8 +806,7 @@ Result<PipelineID, VKResult> Device::create_compute_pipeline(const ComputePipeli
     };
 
     VkPipeline pipeline_handle = VK_NULL_HANDLE;
-    auto result = CHECK(
-        vkCreateComputePipelines(m_handle, nullptr, 1, &pipeline_create_info, nullptr, &pipeline_handle));
+    auto result = CHECK(vkCreateComputePipelines(m_handle, nullptr, 1, &pipeline_create_info, nullptr, &pipeline_handle));
     if (result != VKResult::Success) {
         LR_LOG_ERROR("Failed to create Compute Pipeline! {}", result);
         return result;
@@ -988,8 +1043,7 @@ Result<BufferID, VKResult> Device::create_buffer(const BufferInfo &info)
 
     VkBuffer buffer_handle = nullptr;
     VmaAllocation allocation = nullptr;
-    auto result = CHECK(
-        vmaCreateBuffer(m_allocator, &create_info, &allocation_info, &buffer_handle, &allocation, nullptr));
+    auto result = CHECK(vmaCreateBuffer(m_allocator, &create_info, &allocation_info, &buffer_handle, &allocation, nullptr));
     if (result != VKResult::Success) {
         LR_LOG_ERROR("Failed to create Buffer! {}", result);
         return result;
@@ -1056,15 +1110,13 @@ Result<ImageID, VKResult> Device::create_image(const ImageInfo &info)
     VkImage image_handle = nullptr;
     VmaAllocation allocation = nullptr;
 
-    auto result = CHECK(
-        vmaCreateImage(m_allocator, &create_info, &allocation_info, &image_handle, &allocation, nullptr));
+    auto result = CHECK(vmaCreateImage(m_allocator, &create_info, &allocation_info, &image_handle, &allocation, nullptr));
     if (result != VKResult::Success) {
         LR_LOG_ERROR("Failed to create Image! {}", result);
         return result;
     }
 
-    auto image = m_resources.images.create(
-        image_handle, allocation, info.format, info.extent, info.slice_count, info.mip_levels);
+    auto image = m_resources.images.create(image_handle, allocation, info.format, info.extent, info.slice_count, info.mip_levels);
     if (!image) {
         LR_LOG_ERROR("Failed to allocate Image!");
         return VKResult::OutOfPoolMem;
@@ -1093,13 +1145,14 @@ Result<ImageViewID, VKResult> Device::create_image_view(const ImageViewInfo &inf
 {
     ZoneScoped;
 
+    Image *image = get_image(info.image_id);
     VkImageViewCreateInfo create_info = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
         .pNext = nullptr,
         .flags = 0,
-        .image = *info.image,
+        .image = *image,
         .viewType = static_cast<VkImageViewType>(info.type),
-        .format = static_cast<VkFormat>(info.image->m_format),
+        .format = static_cast<VkFormat>(image->m_format),
         .components = { static_cast<VkComponentSwizzle>(info.swizzle_r),
                         static_cast<VkComponentSwizzle>(info.swizzle_g),
                         static_cast<VkComponentSwizzle>(info.swizzle_b),
@@ -1114,8 +1167,7 @@ Result<ImageViewID, VKResult> Device::create_image_view(const ImageViewInfo &inf
         return result;
     }
 
-    auto image_view = m_resources.image_views.create(
-        image_view_handle, info.image->m_format, info.type, info.subresource_range);
+    auto image_view = m_resources.image_views.create(image_view_handle, image->m_format, info.type, info.subresource_range);
     if (!image_view) {
         LR_LOG_ERROR("Failed to allocate Image View!");
         return VKResult::OutOfPoolMem;

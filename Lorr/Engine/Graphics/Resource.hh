@@ -80,7 +80,7 @@ struct Image {
 // https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VkImageViewCreateInfo.html
 
 struct ImageViewInfo {
-    Image *image = nullptr;
+    ImageID image_id = ImageID::Invalid;
     ImageViewType type = ImageViewType::View2D;
     // Component mapping
     ImageComponentSwizzle swizzle_r = ImageComponentSwizzle::Identity;

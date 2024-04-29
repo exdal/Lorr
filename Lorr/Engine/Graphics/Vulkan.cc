@@ -49,7 +49,7 @@ bool vulkan::load_device(VkDevice device, PFN_vkGetDeviceProcAddr get_device_pro
 
     VKFN_LOGICAL_DEVICE_FUNCTIONS
     VKFN_COMMAND_BUFFER_FUNCTIONS
-#if _DEBUG
+#if LR_DEBUG
     VKFN_DEBUG_UTILS_EXT_DEVICE_FUNCTIONS
 #endif
 #if TRACY_ENABLE

@@ -8,10 +8,8 @@ struct InstanceInfo {
     std::string_view engine_name = "Lorr";
 };
 
-struct Device;
 struct Instance {
     VKResult init(const InstanceInfo &info);
-    Result<Device, VKResult> create_device();
 
     vkb::Instance m_handle;
 };

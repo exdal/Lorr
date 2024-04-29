@@ -31,8 +31,8 @@ bool Window::init(const WindowInfo &info)
     }
 
     m_monitor_id = info.monitor;
-    i32 pos_x = 25;
-    i32 pos_y = 25;
+    i32 new_pos_x = 25;
+    i32 new_pos_y = 25;
 
     if (info.flags & WindowFlag::Centered) {
         SystemDisplay display = get_display(m_monitor_id);
@@ -40,16 +40,16 @@ bool Window::init(const WindowInfo &info)
         i32 dc_x = static_cast<i32>(display.res_w / 2);
         i32 dc_y = static_cast<i32>(display.res_h / 2);
 
-        pos_x += dc_x - static_cast<i32>(info.width / 2);
-        pos_y += dc_y - static_cast<i32>(info.height / 2);
+        new_pos_x += dc_x - static_cast<i32>(info.width / 2);
+        new_pos_y += dc_y - static_cast<i32>(info.height / 2);
     }
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     glfwWindowHint(GLFW_RESIZABLE, !!(info.flags & WindowFlag::Resizable));
     glfwWindowHint(GLFW_DECORATED, !(info.flags & WindowFlag::Borderless));
     glfwWindowHint(GLFW_MAXIMIZED, !!(info.flags & WindowFlag::Maximized));
-    glfwWindowHint(GLFW_POSITION_X, pos_x);
-    glfwWindowHint(GLFW_POSITION_Y, pos_y);
+    glfwWindowHint(GLFW_POSITION_X, new_pos_x);
+    glfwWindowHint(GLFW_POSITION_Y, new_pos_y);
     m_handle = glfwCreateWindow(info.width, info.height, info.title.data(), nullptr, nullptr);
 
     /// Initialize callbacks
@@ -126,6 +126,9 @@ bool Window::init(const WindowInfo &info)
         glfwCreateStandardCursor(GLFW_NOT_ALLOWED_CURSOR), glfwCreateStandardCursor(GLFW_CURSOR_HIDDEN),
     };
 
+    m_width = info.width;
+    m_height = info.height;
+
     return true;
 }
 
@@ -179,8 +182,7 @@ Result<VkSurfaceKHR, VkResult> Window::get_surface(VkInstance instance)
     VkSurfaceKHR surface = nullptr;
 
 #if defined(LR_WIN32)
-    auto vkCreateWin32SurfaceKHR =
-        (PFN_vkCreateWin32SurfaceKHR)vkGetInstanceProcAddr(instance, "vkCreateWin32SurfaceKHR");
+    auto vkCreateWin32SurfaceKHR = (PFN_vkCreateWin32SurfaceKHR)vkGetInstanceProcAddr(instance, "vkCreateWin32SurfaceKHR");
 
     VkWin32SurfaceCreateInfoKHR create_info = {
         .sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR,
@@ -192,8 +194,7 @@ Result<VkSurfaceKHR, VkResult> Window::get_surface(VkInstance instance)
     auto result = vkCreateWin32SurfaceKHR(instance, &create_info, nullptr, &surface);
 #elif defined(LR_LINUX)
 
-    auto vkCreateXlibSurfaceKHR =
-        (PFN_vkCreateXlibSurfaceKHR)vkGetInstanceProcAddr(instance, "vkCreateXlibSurfaceKHR");
+    auto vkCreateXlibSurfaceKHR = (PFN_vkCreateXlibSurfaceKHR)vkGetInstanceProcAddr(instance, "vkCreateXlibSurfaceKHR");
 
     VkXlibSurfaceCreateInfoKHR create_info = {
         .sType = VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR,

@@ -1,80 +1,57 @@
-#include "Graphics/Instance.hh"
-#include "Graphics/Device.hh"
-#include "OS/Window.hh"
+#include "ExampleBase.hh"
 
-using namespace lr;
-using namespace lr::graphics;
+struct BareBones : lr::ExampleBase {
+    BareBones(i32 argc, char *argv[])
+        : lr::ExampleBase(argc, argv)
+    {
+    }
+
+    void update(CommandAllocator &command_allocator, ImageID image_id, ImageViewID image_view_id) override
+    {
+        Unique<CommandList> command_list(&m_device);
+        m_device.create_command_lists({ &*command_list, 1 }, command_allocator);
+        command_list.set_name(fmt::format("Transient list = {}", (u32)image_id));
+        m_device.begin_command_list(*command_list);
+
+        CommandBatcher batcher(command_list);
+        auto attachment_barrier = make_barrier(
+            image_id, ImageLayout::Undefined, TaskAccess::TopOfPipe, ImageLayout::ColorAttachment, TaskAccess::ColorAttachmentWrite);
+        batcher.insert_image_barrier(attachment_barrier);
+        batcher.flush_barriers();
+
+        RenderingAttachmentInfo attachment = {
+            .image_view = *m_device.get_image_view(image_view_id),
+            .image_layout = ImageLayout::ColorAttachment,
+            .load_op = AttachmentLoadOp::Clear,
+            .store_op = AttachmentStoreOp::Store,
+            .color_clear = { 1.0f, 0.0f, 0.0f, 1.0f },
+        };
+        RenderingBeginInfo render_info = {
+            .render_area = { 0, 0, m_window.m_width, m_window.m_height },
+            .layer_count = 1,
+            .color_attachment_count = 1,
+            .color_attachments = &attachment,
+        };
+        command_list->begin_rendering(render_info);
+        command_list->end_rendering();
+
+        auto present_barrier = make_barrier(
+            image_id, ImageLayout::ColorAttachment, TaskAccess::ColorAttachmentWrite, ImageLayout::Present, TaskAccess::BottomOfPipe);
+        batcher.insert_image_barrier(present_barrier);
+        batcher.flush_barriers();
+        m_device.end_command_list(*command_list);
+
+        std::vector<SemaphoreSubmitInfo> wait_semas;
+        std::vector<CommandListSubmitInfo> command_lists = { { *command_list } };
+        std::vector<SemaphoreSubmitInfo> signal_semas;
+        command_list.reset();
+        submit(CommandType::Graphics, wait_semas, command_lists, signal_semas, true);
+    }
+};
 
 int main(int argc, char *argv[])
 {
-    Log::init(argc, argv);
-
-    Instance instance;
-    VKResult result = instance.init({});
-
-    os::Window window;
-    window.init({
-        .title = "BareBones",
-        .width = 1280,
-        .height = 780,
-        .flags = os::WindowFlag::Centered,
-    });
-
-    auto [device, result_device] = instance.create_device();
-    device.init();
-    ShaderCompiler::init();
-
-    auto [swap_chain, result_swap_chain] = device.create_swap_chain({
-        .surface = window.get_surface(instance.m_handle),
-        .extent = { window.m_width, window.m_height },
-    });
-
-    auto [images, result_images] = device.get_swapchain_images(*swap_chain);
-    Unique<std::array<CommandAllocator, 3>> command_allocators(&device);
-    device.create_command_allocators(
-        *command_allocators, { .type = CommandType::Graphics, .flags = CommandAllocatorFlag::Transient });
-
-    while (!window.should_close()) {
-        window.poll();
-
-        auto [frame_counter_sema, frame_counter_val] = swap_chain->frame_sema();
-        auto [acquire_sema, present_sema] = swap_chain->get_binary_semas();
-        auto [image_id, acq_result] = device.acquire_next_image(*swap_chain, acquire_sema);
-
-        ImageID current_image = images.at(image_id);
-        CommandAllocator &command_allocator = command_allocators->at(image_id);
-        device.reset_command_allocator(command_allocator);
-
-        Unique<CommandList> command_list(&device);
-        device.create_command_lists({ &*command_list, 1 }, command_allocator);
-        device.begin_command_list(*command_list);
-
-        CommandBatcher batcher(&device, *command_list);
-        ImageBarrier barrier = {
-            .src_stage_mask = PipelineStage::TopOfPipe,
-            .src_access_mask = MemoryAccess::None,
-            .dst_stage_mask = PipelineStage::BottomOfPipe,
-            .dst_access_mask = MemoryAccess::None,
-            .old_layout = ImageLayout::Undefined,
-            .new_layout = ImageLayout::Present,
-            .image_id = current_image,
-            .subresource_range = {},
-        };
-        batcher.insert_image_barrier(barrier);
-        batcher.flush_barriers();
-        device.end_command_list(*command_list);
-
-        QueueSubmitInfoDyn submit_info = {};
-        submit_info.wait_sema_infos.emplace_back(acquire_sema, 0, PipelineStage::TopOfPipe);
-        submit_info.command_lists.emplace_back(*command_list);
-        submit_info.signal_sema_infos.emplace_back(present_sema, 0, PipelineStage::AllCommands);
-        submit_info.signal_sema_infos.emplace_back(
-            frame_counter_sema, frame_counter_val, PipelineStage::AllCommands);
-
-        device.submit(CommandType::Graphics, submit_info);
-        device.present(*swap_chain, present_sema, image_id);
-        device.collect_garbage();
-    }
-
+    BareBones example(argc, argv);
+    example.init();
     return 0;
 }

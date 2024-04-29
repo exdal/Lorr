@@ -132,11 +132,10 @@ constexpr static std::string_view vkresult_to_string(VKResult result)
 #undef CASE
 }
 
-constexpr static VKResult CHECK(
-    VkResult vkr, [[maybe_unused]] std::initializer_list<VKResult> allowed_checks = {})
+constexpr static VKResult CHECK(VkResult vkr, [[maybe_unused]] std::initializer_list<VKResult> allowed_checks = {})
 {
     auto result = static_cast<VKResult>(vkr);
-#if _DEBUG
+#if LR_DEBUG
     if (result != VKResult::Success)
         for (auto &a : allowed_checks)
             if (a == result)
@@ -1021,17 +1020,11 @@ struct QueueSubmitInfo {
     CommandListSubmitInfo *command_list_infos = nullptr;
 
     u32 signal_sema_count = 0;
-    SemaphoreSubmitInfo *singal_sema_infos = nullptr;
+    SemaphoreSubmitInfo *signal_sema_infos = nullptr;
 
     operator auto &() { return *reinterpret_cast<VkType *>(this); }
 };
 static_assert(sizeof(QueueSubmitInfo::VkType) == sizeof(QueueSubmitInfo));
-
-struct QueueSubmitInfoDyn {
-    std::vector<SemaphoreSubmitInfo> wait_sema_infos = {};
-    std::vector<CommandListSubmitInfo> command_lists = {};
-    std::vector<SemaphoreSubmitInfo> signal_sema_infos = {};
-};
 
 struct RenderingBeginInfo {
     using VkType = VkRenderingInfo;
@@ -1181,6 +1174,7 @@ struct Unique {
         return std::move(m_val);
     }
 
+    void set_name(std::string_view name);
     void reset(val_type val = {}) noexcept;
     void swap(this_type &other) noexcept
     {

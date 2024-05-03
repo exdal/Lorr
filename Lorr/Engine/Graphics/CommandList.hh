@@ -20,7 +20,9 @@ struct Semaphore {
 struct CommandQueue {
     u32 family_index() { return m_index; }
     Semaphore &semaphore() { return m_semaphore; }
-    void submit();
+
+    VKResult submit(QueueSubmitInfo &submit_info);
+    VKResult present(SwapChain &swap_chain, Semaphore &present_sema, u32 image_id);
 
     u32 m_index = 0;  // Physical device queue family index
     Semaphore m_semaphore = {};

@@ -124,10 +124,10 @@ int main(int argc, char *argv[])
                 .signal_sema_count = static_cast<u32>(signal_semas.size()),
                 .signal_sema_infos = signal_semas.data(),
             };
-            device.submit(CommandType::Graphics, submit_info);
+            queue.submit(submit_info);
         }
 
-        device.present(*swap_chain, present_sema, acq_index);
+        queue.present(*swap_chain, present_sema, acq_index);
         device.collect_garbage();
         window.poll();
     }

@@ -327,13 +327,6 @@ void Device::reset_command_allocator(CommandAllocator &allocator)
     vkResetCommandPool(m_handle, allocator, VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT);
 }
 
-void Device::submit(CommandType queue_type, QueueSubmitInfo &submit_info)
-{
-    ZoneScoped;
-
-    vkQueueSubmit2(m_queues->at(usize(queue_type)), 1, reinterpret_cast<VkSubmitInfo2 *>(&submit_info), nullptr);
-}
-
 VKResult Device::create_binary_semaphores(std::span<Semaphore> semaphores)
 {
     ZoneScoped;
@@ -529,27 +522,6 @@ Result<u32, VKResult> Device::acquire_next_image(SwapChain &swap_chain, Semaphor
     }
 
     return Result(image_id, result);
-}
-
-VKResult Device::present(SwapChain &swap_chain, Semaphore &present_sema, u32 image_id)
-{
-    ZoneScoped;
-
-    VkPresentInfoKHR present_info = {
-        .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
-        .pNext = nullptr,
-        .waitSemaphoreCount = 1,
-        .pWaitSemaphores = &present_sema.m_handle,
-        .swapchainCount = 1,
-        .pSwapchains = &swap_chain.m_handle.swapchain,
-        .pImageIndices = &image_id,
-        .pResults = nullptr,
-    };
-    VKResult result = CHECK(vkQueuePresentKHR(m_queues->at(usize(CommandType::Graphics)), &present_info));
-    if (result != VKResult::Success)
-        return result;
-
-    return VKResult::Success;
 }
 
 void Device::collect_garbage()

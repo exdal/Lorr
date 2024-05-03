@@ -23,7 +23,6 @@ struct Device {
     void begin_command_list(CommandList &list);
     void end_command_list(CommandList &list);
     void reset_command_allocator(CommandAllocator &allocator);
-    void submit(CommandType queue_type, QueueSubmitInfo &submit_info);
 
     VKResult create_binary_semaphores(std::span<Semaphore> semaphores);
     VKResult create_timeline_semaphores(std::span<Semaphore> semaphores, u64 initial_value);
@@ -38,7 +37,6 @@ struct Device {
 
     void wait_for_work();
     Result<u32, VKResult> acquire_next_image(SwapChain &swap_chain, Semaphore &acquire_sema);
-    VKResult present(SwapChain &swap_chain, Semaphore &present_sema, u32 image_id);
     void collect_garbage();
 
     /// Input Assembly ///

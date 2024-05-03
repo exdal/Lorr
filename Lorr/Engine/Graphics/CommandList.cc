@@ -3,6 +3,30 @@
 #include "Device.hh"
 
 namespace lr::graphics {
+VKResult CommandQueue::submit(QueueSubmitInfo &submit_info)
+{
+    ZoneScoped;
+
+    return CHECK(vkQueueSubmit2(m_handle, 1, reinterpret_cast<VkSubmitInfo2 *>(&submit_info), nullptr));
+}
+
+VKResult CommandQueue::present(SwapChain &swap_chain, Semaphore &present_sema, u32 image_id)
+{
+    ZoneScoped;
+
+    VkPresentInfoKHR present_info = {
+        .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+        .pNext = nullptr,
+        .waitSemaphoreCount = 1,
+        .pWaitSemaphores = &present_sema.m_handle,
+        .swapchainCount = 1,
+        .pSwapchains = &swap_chain.m_handle.swapchain,
+        .pImageIndices = &image_id,
+        .pResults = nullptr,
+    };
+    return CHECK(vkQueuePresentKHR(m_handle, &present_info));
+}
+
 void CommandList::set_pipeline_barrier(DependencyInfo &dependency_info)
 {
     ZoneScoped;

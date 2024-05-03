@@ -32,9 +32,9 @@ struct Device {
     Result<u64, VKResult> get_semaphore_counter(Semaphore &semaphore);
 
     /// Presentation ///
-    UniqueResult<SwapChain> create_swap_chain(const SwapChainInfo &info);
+    VKResult create_swap_chain(SwapChain &swap_chain, const SwapChainInfo &info);
     void delete_swap_chains(std::span<SwapChain> swap_chain);
-    Result<ls::static_vector<ImageID, Limits::FrameCount>, VKResult> get_swapchain_images(SwapChain &swap_chain);
+    VKResult get_swapchain_images(SwapChain &swap_chain, std::span<ImageID> images);
 
     void wait_for_work();
     Result<u32, VKResult> acquire_next_image(SwapChain &swap_chain, Semaphore &acquire_sema);

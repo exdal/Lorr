@@ -19,7 +19,7 @@ struct Access {
 
 constexpr Access operator|(const Access &lhs, const Access &rhs)
 {
-    return (Access){ lhs.access | rhs.access, lhs.stage | rhs.stage };
+    return { lhs.access | rhs.access, lhs.stage | rhs.stage };
 }
 
 constexpr Access operator|=(Access &lhs, const Access &rhs)

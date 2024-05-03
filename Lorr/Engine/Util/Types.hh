@@ -21,9 +21,8 @@ typedef int8_t i8;
 typedef u32 b32;
 
 #ifndef LS_PTR_SIZE
-#if defined(_WIN64) || defined(__LP64__) || defined(_LP64) || defined(_M_IA64) || defined(__ia64__) \
-    || defined(__arch64__) || defined(__aarch64__) || defined(__mips64__) || defined(__64BIT__)     \
-    || defined(__Ptr_Is_64)
+#if defined(_WIN64) || defined(__LP64__) || defined(_LP64) || defined(_M_IA64) || defined(__ia64__) || defined(__arch64__) \
+    || defined(__aarch64__) || defined(__mips64__) || defined(__64BIT__) || defined(__Ptr_Is_64)
 #define LS_PTR_SIZE 8
 #define LS_PTR_SIZE_64
 #elif defined(__CC_ARM) && (__sizeof_ptr == 8)
@@ -86,15 +85,15 @@ using f32range = range_t<f32>;
 using f64range = range_t<f64>;
 
 template<typename T>
-T align_up(T size, T alignment)
+T align_up(T size, u64 alignment)
 {
-    return (size + (alignment - 1)) & ~(alignment - 1);
+    return T((u64(size) + (alignment - 1)) & ~(alignment - 1));
 }
 
 template<typename T>
-T align_down(T size, T alignment)
+T align_down(T size, u64 alignment)
 {
-    return size & ~(alignment - 1);
+    return T(u64(size) & ~(alignment - 1));
 }
 
 constexpr u32 kib_to_bytes(const u32 x)

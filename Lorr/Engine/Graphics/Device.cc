@@ -2,6 +2,8 @@
 
 #include "Shader.hh"
 
+#include "Memory/Stack.hh"
+
 namespace lr::graphics {
 VKResult Device::init(vkb::Instance *instance)
 {
@@ -423,11 +425,10 @@ Result<u64, VKResult> Device::get_semaphore_counter(Semaphore &semaphore)
     return Result(value, result);
 }
 
-UniqueResult<SwapChain> Device::create_swap_chain(const SwapChainInfo &info)
+VKResult Device::create_swap_chain(SwapChain &swap_chain, const SwapChainInfo &info)
 {
     ZoneScoped;
 
-    Unique<SwapChain> swap_chain(this);
     // make sure all work on sc images finish before destroying it
     wait_for_work();
 
@@ -440,34 +441,34 @@ UniqueResult<SwapChain> Device::create_swap_chain(const SwapChainInfo &info)
         return static_cast<VKResult>(result.vk_result());
     }
 
-    swap_chain->m_format = static_cast<Format>(result->image_format);
-    swap_chain->m_extent = { result->extent.width, result->extent.height };
-    swap_chain->m_image_count = result->image_count;
+    swap_chain.m_format = static_cast<Format>(result->image_format);
+    swap_chain.m_extent = { result->extent.width, result->extent.height };
+    swap_chain.m_image_count = result->image_count;
 
-    swap_chain->m_frame_sema = Unique<Semaphore>(this);
-    swap_chain->m_acquire_semas = Unique<ls::static_vector<Semaphore, Limits::FrameCount>>(this);
-    swap_chain->m_present_semas = Unique<ls::static_vector<Semaphore, Limits::FrameCount>>(this);
-    swap_chain->m_acquire_semas->resize(swap_chain->m_image_count);
-    swap_chain->m_present_semas->resize(swap_chain->m_image_count);
-    create_timeline_semaphores({ &*swap_chain->m_frame_sema, 1 }, 0);
-    create_binary_semaphores(*swap_chain->m_acquire_semas);
-    create_binary_semaphores(*swap_chain->m_present_semas);
-    swap_chain->m_handle = result.value();
-    swap_chain->m_surface = info.surface;
-    swap_chain->m_frame_sema.set_name("SwapChain frame counter Semaphore");
+    swap_chain.m_frame_sema = Unique<Semaphore>(this);
+    swap_chain.m_acquire_semas = Unique<ls::static_vector<Semaphore, Limits::FrameCount>>(this);
+    swap_chain.m_present_semas = Unique<ls::static_vector<Semaphore, Limits::FrameCount>>(this);
+    swap_chain.m_acquire_semas->resize(swap_chain.m_image_count);
+    swap_chain.m_present_semas->resize(swap_chain.m_image_count);
+    create_timeline_semaphores({ &*swap_chain.m_frame_sema, 1 }, 0);
+    create_binary_semaphores(*swap_chain.m_acquire_semas);
+    create_binary_semaphores(*swap_chain.m_present_semas);
+    swap_chain.m_handle = result.value();
+    swap_chain.m_surface = info.surface;
+    swap_chain.m_frame_sema.set_name("SwapChain frame counter Semaphore");
 
     u32 i = 0;
-    for (Semaphore &v : *swap_chain->m_acquire_semas) {
+    for (Semaphore &v : *swap_chain.m_acquire_semas) {
         set_object_name(v, fmt::format("SwapChain Acquire Sema {}", i++));
     }
 
     i = 0;
-    for (Semaphore &v : *swap_chain->m_present_semas) {
+    for (Semaphore &v : *swap_chain.m_present_semas) {
         set_object_name(v, fmt::format("SwapChain Present Sema {}", i++));
     }
 
-    set_object_name_raw<VK_OBJECT_TYPE_SWAPCHAIN_KHR>(swap_chain->m_handle.swapchain, "SwapChain");
-    return swap_chain;
+    set_object_name_raw<VK_OBJECT_TYPE_SWAPCHAIN_KHR>(swap_chain.m_handle.swapchain, "SwapChain");
+    return VKResult::Success;
 }
 
 void Device::delete_swap_chains(std::span<SwapChain> swap_chains)
@@ -481,27 +482,30 @@ void Device::delete_swap_chains(std::span<SwapChain> swap_chains)
     }
 }
 
-Result<ls::static_vector<ImageID, Limits::FrameCount>, VKResult> Device::get_swapchain_images(SwapChain &swap_chain)
+VKResult Device::get_swapchain_images(SwapChain &swap_chain, std::span<ImageID> images)
 {
-    ls::static_vector<ImageID, Limits::FrameCount> images(swap_chain.image_count());
-    ls::static_vector<VkImage, Limits::FrameCount> image_handles(swap_chain.image_count());
+    ZoneScoped;
+    memory::ScopedStack stack;
 
-    u32 image_count = image_handles.size();
-    auto result = CHECK(vkGetSwapchainImagesKHR(m_handle, swap_chain.m_handle, &image_count, image_handles.data()));
+    u32 image_count = images.size();
+    auto image_ids = stack.alloc<ImageID>(image_count);
+    auto images_raw = stack.alloc<VkImage>(image_count);
+
+    auto result = CHECK(vkGetSwapchainImagesKHR(m_handle, swap_chain.m_handle, &image_count, images_raw.data()));
     if (!result) {
         LR_LOG_ERROR("Failed to get SwapChain images! {}", result);
         return result;
     }
 
     for (u32 i = 0; i < images.size(); i++) {
-        VkImage &image_handle = image_handles[i];
+        VkImage &image_handle = images_raw[i];
         Extent3D extent = { swap_chain.m_extent.width, swap_chain.m_extent.height, 1 };
         auto [image, image_id] = m_resources.images.create(image_handle, nullptr, swap_chain.m_format, extent, 1, 1);
 
         images[i] = image_id;
     }
 
-    return images;
+    return VKResult::Success;
 }
 
 void Device::wait_for_work()

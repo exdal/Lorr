@@ -20,6 +20,7 @@ struct Semaphore {
 struct CommandQueue {
     u32 family_index() { return m_index; }
     Semaphore &semaphore() { return m_semaphore; }
+    void submit();
 
     u32 m_index = 0;  // Physical device queue family index
     Semaphore m_semaphore = {};
@@ -91,8 +92,8 @@ struct CommandBatcher {
     CommandBatcher(Unique<CommandList> &command_list);
     ~CommandBatcher();
 
-    void insert_memory_barrier(MemoryBarrier &barrier);
-    void insert_image_barrier(ImageBarrier &barrier);
+    void insert_memory_barrier(const MemoryBarrier &barrier);
+    void insert_image_barrier(const ImageBarrier &barrier);
     void flush_barriers();
 
     ls::static_vector<MemoryBarrier, kMaxMemoryBarriers> m_memory_barriers = {};

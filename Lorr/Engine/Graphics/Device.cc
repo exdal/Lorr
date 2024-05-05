@@ -2,6 +2,7 @@
 
 #include "Shader.hh"
 
+#include "Memory/Bit.hh"
 #include "Memory/Stack.hh"
 
 namespace lr::graphics {
@@ -147,7 +148,7 @@ VKResult Device::init(vkb::Instance *instance)
         .count = descriptor_count_sampler,
     });
     layout_elements.push_back({
-        .binding = DescriptorID::samplers,
+        .binding = LR_DESCRIPTOR_INDEX_SAMPLER,
         .descriptor_type = DescriptorType::Sampler,
         .descriptor_count = descriptor_count_sampler,
         .stage = ShaderStageFlag::All,
@@ -161,7 +162,7 @@ VKResult Device::init(vkb::Instance *instance)
         .count = descriptor_count_image,
     });
     layout_elements.push_back({
-        .binding = DescriptorID::images,
+        .binding = LR_DESCRIPTOR_INDEX_IMAGES,
         .descriptor_type = DescriptorType::SampledImage,
         .descriptor_count = descriptor_count_image,
         .stage = ShaderStageFlag::All,
@@ -174,7 +175,7 @@ VKResult Device::init(vkb::Instance *instance)
         .count = descriptor_count_image,
     });
     layout_elements.push_back({
-        .binding = DescriptorID::storage_images,
+        .binding = LR_DESCRIPTOR_INDEX_STORAGE_IMAGES,
         .descriptor_type = DescriptorType::StorageImage,
         .descriptor_count = descriptor_count_image,
         .stage = ShaderStageFlag::All,
@@ -182,13 +183,13 @@ VKResult Device::init(vkb::Instance *instance)
     binding_flags.push_back(bindless_flags);
 
     /// STORAGE BUFFER - BDA ///
-    u32 descriptor_count_buffer = 1;
+    u32 descriptor_count_buffer = m_resources.buffers.max_resources();
     pool_sizes.push_back({
         .type = DescriptorType::StorageBuffer,
         .count = descriptor_count_buffer,
     });
     layout_elements.push_back({
-        .binding = DescriptorID::bda,
+        .binding = LR_DESCRIPTOR_INDEX_BUFFERS,
         .descriptor_type = DescriptorType::StorageBuffer,
         .descriptor_count = descriptor_count_buffer,
         .stage = ShaderStageFlag::All,
@@ -229,6 +230,25 @@ VKResult Device::init(vkb::Instance *instance)
         return result_set;
     }
     set_object_name(*m_descriptor_set, "Bindless Descriptor Set");
+
+    auto &pipeline_layouts = m_resources.pipeline_layouts;
+    for (u32 i = 0; i < pipeline_layouts.size(); i++) {
+        PushConstantRange push_constant_range = {
+            .stage = ShaderStageFlag::All,
+            .offset = 0,
+            .size = static_cast<u32>(i * sizeof(u32)),
+        };
+        PipelineLayoutInfo pipeline_layout_info = {
+            .layouts = { &*m_descriptor_set_layout, 1 },
+            .push_constants = { &push_constant_range, 1 },
+        };
+
+        if (i == 0) {
+            pipeline_layout_info.push_constants = {};
+        }
+
+        create_pipeline_layouts({ &pipeline_layouts[i], 1 }, pipeline_layout_info);
+    }
 
     return VKResult::Success;
 }
@@ -428,6 +448,8 @@ VKResult Device::create_swap_chain(SwapChain &swap_chain, const SwapChainInfo &i
     vkb::SwapchainBuilder builder(m_handle, info.surface);
     builder.set_desired_min_image_count((u32)info.buffering);
     builder.set_desired_extent(info.extent.width, info.extent.height);
+    builder.set_image_usage_flags(
+        static_cast<VkImageUsageFlags>(ImageUsage::ColorAttachment | ImageUsage::Sampled | ImageUsage::TransferSrc));
     auto result = builder.build();
     if (!result) {
         LR_LOG_ERROR("Failed to create SwapChain!");
@@ -545,31 +567,40 @@ void Device::collect_garbage()
     checker_fn(m_garbage_command_lists, [this](std::span<CommandList> s) { delete_command_lists(s); });
 }
 
-UniqueResult<PipelineLayout> Device::create_pipeline_layout(const PipelineLayoutInfo &info)
+VKResult Device::create_pipeline_layouts(std::span<PipelineLayout> pipeline_layouts, const PipelineLayoutInfo &info)
 {
     ZoneScoped;
+    memory::ScopedStack stack;
 
-    Unique<PipelineLayout> pipeline_layout(this);
-
-    VkPipelineLayoutCreateInfo pipeline_layout_create_info = {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-        .pNext = nullptr,
-        .flags = 0,
-        .setLayoutCount = static_cast<u32>(info.layouts.size()),
-        .pSetLayouts = info.layouts.data(),
-        .pushConstantRangeCount = static_cast<u32>(info.push_constants.size()),
-        .pPushConstantRanges = reinterpret_cast<const VkPushConstantRange *>(info.push_constants.data()),
-    };
-
-    VkPipelineLayout layout_handle = VK_NULL_HANDLE;
-    auto result = CHECK(vkCreatePipelineLayout(m_handle, &pipeline_layout_create_info, nullptr, &layout_handle));
-    if (result != VKResult::Success) {
-        LR_LOG_ERROR("Failed to create Pipeline Layout! {}", result);
-        return result;
+    auto vk_pipeline_layouts = stack.alloc<VkDescriptorSetLayout>(info.layouts.size());
+    for (u32 i = 0; i < vk_pipeline_layouts.size(); i++) {
+        vk_pipeline_layouts[i] = info.layouts[i];
     }
 
-    pipeline_layout.reset(PipelineLayout(layout_handle));
-    return pipeline_layout;
+    for (auto &pipeline_layout : pipeline_layouts) {
+        VkPipelineLayoutCreateInfo pipeline_layout_create_info = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .setLayoutCount = static_cast<u32>(info.layouts.size()),
+            .pSetLayouts = vk_pipeline_layouts.data(),
+            .pushConstantRangeCount = static_cast<u32>(info.push_constants.size()),
+            .pPushConstantRanges = reinterpret_cast<const VkPushConstantRange *>(info.push_constants.data()),
+        };
+
+        for (auto &layout : pipeline_layouts) {
+            VkPipelineLayout layout_handle = VK_NULL_HANDLE;
+            auto result = CHECK(vkCreatePipelineLayout(m_handle, &pipeline_layout_create_info, nullptr, &layout_handle));
+            if (result != VKResult::Success) {
+                LR_LOG_ERROR("Failed to create Pipeline Layout! {}", result);
+                return result;
+            }
+
+            layout.m_handle = layout_handle;
+        }
+    }
+
+    return VKResult::Success;
 }
 
 void Device::delete_pipeline_layouts(std::span<PipelineLayout> pipeline_layout)
@@ -592,9 +623,9 @@ Result<PipelineID, VKResult> Device::create_graphics_pipeline(const GraphicsPipe
         .pNext = nullptr,
         .flags = 0,
         .vertexBindingDescriptionCount = static_cast<u32>(info.vertex_binding_infos.size()),
-        .pVertexBindingDescriptions = info.vertex_binding_infos.data(),
+        .pVertexBindingDescriptions = reinterpret_cast<const VkVertexInputBindingDescription *>(info.vertex_binding_infos.data()),
         .vertexAttributeDescriptionCount = static_cast<u32>(info.vertex_attrib_infos.size()),
-        .pVertexAttributeDescriptions = info.vertex_attrib_infos.data(),
+        .pVertexAttributeDescriptions = reinterpret_cast<const VkVertexInputAttributeDescription *>(info.vertex_attrib_infos.data()),
     };
 
     /// INPUT ASSEMBLY -----------------------------------------------------------
@@ -613,26 +644,20 @@ Result<PipelineID, VKResult> Device::create_graphics_pipeline(const GraphicsPipe
         .sType = VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO,
         .pNext = nullptr,
         .flags = 0,
-        .patchControlPoints = 0,  // TODO
+        .patchControlPoints = 0,  // TODO: Tessellation
     };
 
     /// RASTERIZER ---------------------------------------------------------------
-
-    const b32 enable_depth_clamp = info.enable_flags & PipelineEnableFlag::DepthClamp;
-    const b32 wireframe = info.enable_flags & PipelineEnableFlag::Wireframe;
-    const b32 front_face_ccw = info.enable_flags & PipelineEnableFlag::FrontFaceCCW;
-    const b32 enable_depth_bias = info.enable_flags & PipelineEnableFlag::DepthBias;
-
     VkPipelineRasterizationStateCreateInfo rasterizer_info = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
         .pNext = nullptr,
         .flags = 0,
-        .depthClampEnable = enable_depth_clamp,
+        .depthClampEnable = info.enable_depth_clamp,
         .rasterizerDiscardEnable = false,
-        .polygonMode = wireframe ? VK_POLYGON_MODE_LINE : VK_POLYGON_MODE_FILL,
+        .polygonMode = info.enable_wireframe ? VK_POLYGON_MODE_LINE : VK_POLYGON_MODE_FILL,
         .cullMode = static_cast<VkCullModeFlags>(info.cull_mode),
-        .frontFace = static_cast<VkFrontFace>(!front_face_ccw),
-        .depthBiasEnable = enable_depth_bias,
+        .frontFace = static_cast<VkFrontFace>(!info.front_face_ccw),
+        .depthBiasEnable = info.enable_depth_bias,
         .depthBiasConstantFactor = info.depth_bias_factor,
         .depthBiasClamp = info.depth_bias_clamp,
         .depthBiasSlopeFactor = info.depth_slope_factor,
@@ -640,9 +665,6 @@ Result<PipelineID, VKResult> Device::create_graphics_pipeline(const GraphicsPipe
     };
 
     /// MULTISAMPLE --------------------------------------------------------------
-
-    const b32 enable_alpha_to_coverage = info.enable_flags & PipelineEnableFlag::AlphaToCoverage;
-    const b32 enable_alpha_to_one = info.enable_flags & PipelineEnableFlag::AlphatoOne;
 
     VkPipelineMultisampleStateCreateInfo multisample_info = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
@@ -652,26 +674,21 @@ Result<PipelineID, VKResult> Device::create_graphics_pipeline(const GraphicsPipe
         .sampleShadingEnable = false,
         .minSampleShading = 0,
         .pSampleMask = nullptr,
-        .alphaToCoverageEnable = enable_alpha_to_coverage,
-        .alphaToOneEnable = enable_alpha_to_one,
+        .alphaToCoverageEnable = info.enable_alpha_to_coverage,
+        .alphaToOneEnable = info.enable_alpha_to_one,
     };
 
     /// DEPTH STENCIL ------------------------------------------------------------
-
-    const b32 enable_depth_test = info.enable_flags & PipelineEnableFlag::DepthTest;
-    const b32 enable_depth_write = info.enable_flags & PipelineEnableFlag::DepthWrite;
-    const b32 enable_depth_bounds = info.enable_flags & PipelineEnableFlag::DepthBoundsTest;
-    const b32 enable_stencil_test = info.enable_flags & PipelineEnableFlag::StencilTest;
 
     VkPipelineDepthStencilStateCreateInfo depth_stencil_info = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
         .pNext = nullptr,
         .flags = 0,
-        .depthTestEnable = enable_depth_test,
-        .depthWriteEnable = enable_depth_write,
+        .depthTestEnable = info.enable_depth_test,
+        .depthWriteEnable = info.enable_depth_write,
         .depthCompareOp = static_cast<VkCompareOp>(info.depth_compare_op),
-        .depthBoundsTestEnable = enable_depth_bounds,
-        .stencilTestEnable = enable_stencil_test,
+        .depthBoundsTestEnable = info.enable_depth_bounds_test,
+        .stencilTestEnable = info.enable_stencil_test,
         .front = info.stencil_front_face_op,
         .back = info.stencil_back_face_op,
         .minDepthBounds = 0,
@@ -687,26 +704,48 @@ Result<PipelineID, VKResult> Device::create_graphics_pipeline(const GraphicsPipe
         .logicOpEnable = false,
         .logicOp = {},
         .attachmentCount = static_cast<u32>(info.blend_attachments.size()),
-        .pAttachments = info.blend_attachments.data(),
+        .pAttachments = reinterpret_cast<const VkPipelineColorBlendAttachmentState *>(info.blend_attachments.data()),
         .blendConstants = { info.blend_constants.x, info.blend_constants.y, info.blend_constants.z, info.blend_constants.w },
     };
 
     /// DYNAMIC STATE ------------------------------------------------------------
 
-#define CHECK_DYNAMIC_STATE(x)                \
-    if (info.dynamic_state & DynamicState::x) \
-    dynamic_states.push_back(static_cast<VkDynamicState>(DynamicState::VK_##x))
+    constexpr static VkDynamicState k_dynamic_states[] = {
+        VK_DYNAMIC_STATE_VIEWPORT,
+        VK_DYNAMIC_STATE_SCISSOR,
+        VK_DYNAMIC_STATE_LINE_WIDTH,
+        VK_DYNAMIC_STATE_DEPTH_BIAS,
+        VK_DYNAMIC_STATE_BLEND_CONSTANTS,
+        VK_DYNAMIC_STATE_DEPTH_BOUNDS,
+        VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK,
+        VK_DYNAMIC_STATE_STENCIL_WRITE_MASK,
+        VK_DYNAMIC_STATE_STENCIL_REFERENCE,
+        VK_DYNAMIC_STATE_CULL_MODE,
+        VK_DYNAMIC_STATE_FRONT_FACE,
+        VK_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY,
+        VK_DYNAMIC_STATE_VIEWPORT_WITH_COUNT,
+        VK_DYNAMIC_STATE_SCISSOR_WITH_COUNT,
+        VK_DYNAMIC_STATE_VERTEX_INPUT_BINDING_STRIDE,
+        VK_DYNAMIC_STATE_DEPTH_TEST_ENABLE,
+        VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE,
+        VK_DYNAMIC_STATE_DEPTH_COMPARE_OP,
+        VK_DYNAMIC_STATE_DEPTH_BOUNDS_TEST_ENABLE,
+        VK_DYNAMIC_STATE_STENCIL_TEST_ENABLE,
+        VK_DYNAMIC_STATE_STENCIL_OP,
+        VK_DYNAMIC_STATE_RASTERIZER_DISCARD_ENABLE,
+        VK_DYNAMIC_STATE_DEPTH_BIAS_ENABLE,
+        VK_DYNAMIC_STATE_PRIMITIVE_RESTART_ENABLE,
+    };
+    static_assert(count_of(k_dynamic_states) == usize(DynamicState::Count));
 
-    std::vector<VkDynamicState> dynamic_states = {};
-    CHECK_DYNAMIC_STATE(Viewport);
-    CHECK_DYNAMIC_STATE(Scissor);
-    CHECK_DYNAMIC_STATE(ViewportAndCount);
-    CHECK_DYNAMIC_STATE(ScissorAndCount);
-    CHECK_DYNAMIC_STATE(DepthTestEnable);
-    CHECK_DYNAMIC_STATE(DepthWriteEnable);
-    CHECK_DYNAMIC_STATE(LineWidth);
-    CHECK_DYNAMIC_STATE(DepthBias);
-    CHECK_DYNAMIC_STATE(BlendConstants);
+    u32 dynamic_state_mask = static_cast<u32>(info.dynamic_state);
+    usize state_count = memory::set_bit_count(dynamic_state_mask);
+    ls::static_vector<VkDynamicState, usize(DynamicState::Count)> dynamic_states;
+    for (usize i = 0; i < state_count; i++) {
+        u32 shift = memory::find_first_set32(dynamic_state_mask);
+        dynamic_states.push_back(k_dynamic_states[shift]);
+        dynamic_state_mask ^= 1 << shift;
+    }
 
     VkPipelineDynamicStateCreateInfo dynamic_state_info = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
@@ -734,7 +773,7 @@ Result<PipelineID, VKResult> Device::create_graphics_pipeline(const GraphicsPipe
         .pNext = &info.attachment_info,
         .flags = pipeline_create_flags,
         .stageCount = static_cast<u32>(info.shader_stages.size()),
-        .pStages = info.shader_stages.data(),
+        .pStages = reinterpret_cast<const VkPipelineShaderStageCreateInfo *>(info.shader_stages.data()),
         .pVertexInputState = &input_layout_info,
         .pInputAssemblyState = &input_assembly_info,
         .pTessellationState = &tessellation_info,
@@ -744,7 +783,7 @@ Result<PipelineID, VKResult> Device::create_graphics_pipeline(const GraphicsPipe
         .pDepthStencilState = &depth_stencil_info,
         .pColorBlendState = &color_blend_info,
         .pDynamicState = &dynamic_state_info,
-        .layout = info.layout,
+        .layout = *info.layout,
         .renderPass = nullptr,
         .subpass = 0,
         .basePipelineHandle = VK_NULL_HANDLE,
@@ -1031,6 +1070,17 @@ Result<BufferID, VKResult> Device::create_buffer(const BufferInfo &info)
         return VKResult::OutOfPoolMem;
     }
 
+    BufferDescriptorInfo descriptor_info = { .buffer = *buffer.resource };
+    WriteDescriptorSet write_set_info = {
+        .dst_descriptor_set = *m_descriptor_set,
+        .dst_binding = LR_DESCRIPTOR_INDEX_BUFFERS,
+        .dst_element = static_cast<u32>(buffer.id),
+        .count = 1,
+        .type = DescriptorType::Sampler,
+        .buffer_info = &descriptor_info,
+    };
+    update_descriptor_set({ &write_set_info, 1 }, {});
+
     return buffer.id;
 }
 
@@ -1149,6 +1199,22 @@ Result<ImageViewID, VKResult> Device::create_image_view(const ImageViewInfo &inf
         return VKResult::OutOfPoolMem;
     }
 
+    // TODO: Copy paste this once again for storage images
+    // but with layout is set to GENERAL and type as StorageImage
+    ImageDescriptorInfo descriptor_info = {
+        .image_view = *image_view.resource,
+        .image_layout = ImageLayout::ColorReadOnly,
+    };
+    WriteDescriptorSet write_set_info = {
+        .dst_descriptor_set = *m_descriptor_set,
+        .dst_binding = LR_DESCRIPTOR_INDEX_IMAGES,
+        .dst_element = static_cast<u32>(image_view.id),
+        .count = 1,
+        .type = DescriptorType::SampledImage,
+        .image_info = &descriptor_info,
+    };
+    update_descriptor_set({ &write_set_info, 1 }, {});
+
     return image_view.id;
 }
 
@@ -1204,6 +1270,17 @@ Result<SamplerID, VKResult> Device::create_sampler(const SamplerInfo &info)
         LR_LOG_ERROR("Failed to allocate Sampler!");
         return VKResult::OutOfPoolMem;
     }
+
+    ImageDescriptorInfo descriptor_info = { .sampler = *sampler.resource };
+    WriteDescriptorSet write_set_info = {
+        .dst_descriptor_set = *m_descriptor_set,
+        .dst_binding = LR_DESCRIPTOR_INDEX_SAMPLER,
+        .dst_element = static_cast<u32>(sampler.id),
+        .count = 1,
+        .type = DescriptorType::Sampler,
+        .image_info = &descriptor_info,
+    };
+    update_descriptor_set({ &write_set_info, 1 }, {});
 
     return sampler.id;
 }

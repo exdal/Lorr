@@ -9,6 +9,7 @@ target("Lorr")
   add_files("**.cc")
   add_rpathdirs("@executable_path")
 
+  add_defines("LR_PROJECT_DIR=\"$(projectdir)\"", { public = true })
   if is_mode("debug") then
     add_defines("LR_DEBUG", { public = true })
   end

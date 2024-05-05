@@ -15,11 +15,11 @@ concept ResultConcept = requires(ResultT v) {
     !v;
 };
 
-template<typename HandleT, ResultConcept ResultT>
+template<typename ValT, ResultConcept ResultT>
 struct Result {
     Result() = default;
-    Result(HandleT handle)
-        : m_handle(std::move(handle))
+    Result(ValT handle)
+        : m_val(std::move(handle))
     {
     }
 
@@ -28,28 +28,28 @@ struct Result {
     {
     }
 
-    Result(HandleT &&handle, ResultT result)
-        : m_handle(handle),
+    Result(ValT &&val, ResultT result)
+        : m_val(val),
           m_result(result)
     {
     }
 
-    explicit Result(HandleT handle, ResultT result)
-        : m_handle(handle),
+    explicit Result(ValT val, ResultT result)
+        : m_val(val),
           m_result(result)
     {
     }
 
     Result &operator=(const Result &) = default;
     Result &operator=(Result &&) = default;
-    operator HandleT &() { return m_handle; }
+    operator ValT &() { return m_val; }
     operator ResultT() { return m_result; }
     operator bool() { return m_result; }
 
-    HandleT &handle() { return m_handle; }
+    ValT &val() { return m_val; }
     ResultT &result() { return m_result; }
 
-    HandleT m_handle = {};
+    ValT m_val = {};
     ResultT m_result = {};
 };
 

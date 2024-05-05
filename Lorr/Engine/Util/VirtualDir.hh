@@ -11,10 +11,25 @@ struct VirtualFile {
     usize size() const { return contents.size(); }
 };
 
+struct VirtualFileInfo {
+    std::string_view real_path;
+    std::string_view virtual_path;
+};
+
 struct VirtualDir {
-    bool read_file(std::string_view real_path, const std::string &virtual_path)
+    VirtualDir() = default;
+    VirtualDir(std::span<VirtualFileInfo> infos)
     {
-        auto [file, file_result] = os::open_file(real_path, os::FileAccess::Read);
+        for (auto &info : infos) {
+            if (!read_file(info)) {
+                LR_LOG_ERROR("Failed to load file '{}' for VFile '{}'!", info.real_path, info.virtual_path);
+            }
+        }
+    }
+
+    bool read_file(const VirtualFileInfo &info)
+    {
+        auto [file, file_result] = os::open_file(info.real_path, os::FileAccess::Read);
         if (!file_result) {
             LR_LOG_ERROR("Failed to read file!");
             return false;
@@ -25,7 +40,7 @@ struct VirtualDir {
         os::read_file(file, file_contents.data(), { 0, file_size });
         os::close_file(file);
 
-        m_files.emplace(virtual_path, std::move(file_contents));
+        m_files.emplace(std::string(info.virtual_path), std::move(file_contents));
         return true;
     }
 

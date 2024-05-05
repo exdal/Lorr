@@ -86,7 +86,7 @@ bool ShaderCompiler::init()
     return true;
 }
 
-Result<std::vector<u32>, VKResult> ShaderCompiler::compile_shader(const ShaderCompileInfo &info)
+Result<std::vector<u32>, VKResult> ShaderCompiler::compile(const ShaderCompileInfo &info)
 {
     ZoneScoped;
 
@@ -136,15 +136,17 @@ Result<std::vector<u32>, VKResult> ShaderCompiler::compile_shader(const ShaderCo
         return VKResult::Unknown;
     }
 
-    for (const auto &[vfile_path, vfile] : info.virtual_env.files()) {
-        i32 file_id = compile_request->addTranslationUnit(SLANG_SOURCE_LANGUAGE_SLANG, vfile_path.c_str());
-        compile_request->addTranslationUnitSourceString(file_id, vfile_path.c_str(), vfile.c_str());
+    for (auto &vdir : info.virtual_env) {
+        for (const auto &[vfile_path, vfile] : vdir.files()) {
+            i32 file_id = compile_request->addTranslationUnit(SLANG_SOURCE_LANGUAGE_SLANG, vfile_path.c_str());
+            compile_request->addTranslationUnitSourceString(file_id, vfile_path.c_str(), vfile.c_str());
+        }
     }
 
     i32 main_shader_id = compile_request->addTranslationUnit(SLANG_SOURCE_LANGUAGE_SLANG, nullptr);
     const char *source_data = info.code.data();
-    compile_request->addTranslationUnitSourceStringSpan(
-        main_shader_id, "lr_shader_target", source_data, source_data + info.code.length());
+    const char *source_path = info.real_path.data();
+    compile_request->addTranslationUnitSourceStringSpan(main_shader_id, source_path, source_data, source_data + info.code.length());
     const SlangResult compile_result = compile_request->compile();
     const char *diagnostics = compile_request->getDiagnosticOutput();
     if (SLANG_FAILED(compile_result)) {
@@ -185,8 +187,7 @@ Result<std::vector<u32>, VKResult> ShaderCompiler::compile_shader(const ShaderCo
     /// RESULT BLOB/CLEAN UP
 
     Slang::ComPtr<slang::IBlob> spirv_blob;
-    if (SLANG_FAILED(
-            compile_request->getEntryPointCodeBlob(found_entry_point_id, 0, spirv_blob.writeRef()))) {
+    if (SLANG_FAILED(compile_request->getEntryPointCodeBlob(found_entry_point_id, 0, spirv_blob.writeRef()))) {
         LR_LOG_ERROR("Failed to get entrypoint assembly!");
         return VKResult::Unknown;
     }

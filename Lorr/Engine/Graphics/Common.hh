@@ -1,6 +1,7 @@
 #pragma once
 
-#include "Vulkan.hh"  // IWYU pragma: export
+#include "lorr.slang"  // IWYU pragma: export
+#include "Vulkan.hh"   // IWYU pragma: export
 #include "zfwd.hh"
 
 namespace lr::graphics {
@@ -348,6 +349,7 @@ enum class ImageUsage : u32 {
     TransferDst = VK_IMAGE_USAGE_TRANSFER_DST_BIT,
     Storage = VK_IMAGE_USAGE_STORAGE_BIT,
 };
+LR_TYPEOP_ARITHMETIC(ImageUsage, ImageUsage, |);
 LR_TYPEOP_ARITHMETIC_INT(ImageUsage, ImageUsage, &);
 
 enum class ImageLayout : u32 {
@@ -595,41 +597,34 @@ enum class ColorMask : u32 {
 LR_TYPEOP_ARITHMETIC(ColorMask, ColorMask, |);
 
 enum class DynamicState : u32 {
-    Viewport = 1 << 0,          // VK_DYNAMIC_STATE_VIEWPORT,
-    Scissor = 1 << 1,           // VK_DYNAMIC_STATE_SCISSOR,
-    ViewportAndCount = 1 << 2,  // VK_DYNAMIC_STATE_VIEWPORT_WITH_COUNT,
-    ScissorAndCount = 1 << 3,   // VK_DYNAMIC_STATE_SCISSOR_WITH_COUNT,
-    DepthTestEnable = 1 << 4,   // VK_DYNAMIC_STATE_DEPTH_TEST_ENABLE,
-    DepthWriteEnable = 1 << 5,  // VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE,
-    LineWidth = 1 << 6,         // VK_DYNAMIC_STATE_LINE_WIDTH,
-    DepthBias = 1 << 7,         // VK_DYNAMIC_STATE_DEPTH_BIAS,
-    BlendConstants = 1 << 8,    // VK_DYNAMIC_STATE_BLEND_CONSTANTS,
+    Viewport = 1 << 0,                 // VK_DYNAMIC_STATE_VIEWPORT,
+    Scissor = 1 << 1,                  // VK_DYNAMIC_STATE_SCISSOR,
+    LineWidth = 1 << 2,                // VK_DYNAMIC_STATE_LINE_WIDTH,
+    DepthBias = 1 << 3,                // VK_DYNAMIC_STATE_DEPTH_BIAS,
+    BlendConstants = 1 << 4,           // VK_DYNAMIC_STATE_BLEND_CONSTANTS,
+    DepthBounds = 1 << 5,              // VK_DYNAMIC_STATE_DEPTH_BOUNDS,
+    StencilCompareMask = 1 << 6,       // VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK,
+    StencilWriteMask = 1 << 7,         // VK_DYNAMIC_STATE_STENCIL_WRITE_MASK,
+    StencilReference = 1 << 8,         // VK_DYNAMIC_STATE_STENCIL_REFERENCE,
+    CullMode = 1 << 9,                 // VK_DYNAMIC_STATE_CULL_MODE,
+    FrontFace = 1 << 10,               // VK_DYNAMIC_STATE_FRONT_FACE,
+    PrimitiveType = 1 << 11,           // VK_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY,
+    ViewportAndCount = 1 << 12,        // VK_DYNAMIC_STATE_VIEWPORT_WITH_COUNT,
+    ScissorAndCount = 1 << 13,         // VK_DYNAMIC_STATE_SCISSOR_WITH_COUNT,
+    InputBindingStride = 1 << 14,      // VK_DYNAMIC_STATE_VERTEX_INPUT_BINDING_STRIDE,
+    DepthTestEnable = 1 << 15,         // VK_DYNAMIC_STATE_DEPTH_TEST_ENABLE,
+    DepthWriteEnable = 1 << 16,        // VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE,
+    DepthCompareOp = 1 << 17,          // VK_DYNAMIC_STATE_DEPTH_COMPARE_OP,
+    DepthBoundsTestEnable = 1 << 18,   // VK_DYNAMIC_STATE_DEPTH_BOUNDS_TEST_ENABLE,
+    StencilTestEnable = 1 << 19,       // VK_DYNAMIC_STATE_STENCIL_TEST_ENABLE,
+    StencilOp = 1 << 20,               // VK_DYNAMIC_STATE_STENCIL_OP,
+    RasterDiscardEnable = 1 << 21,     // VK_DYNAMIC_STATE_RASTERIZER_DISCARD_ENABLE,
+    DepthBiasEnable = 1 << 22,         // VK_DYNAMIC_STATE_DEPTH_BIAS_ENABLE,
+    PrimitiveRestartEnable = 1 << 23,  // VK_DYNAMIC_STATE_PRIMITIVE_RESTART_ENABLE,
 
-    VK_Viewport = VK_DYNAMIC_STATE_VIEWPORT,
-    VK_Scissor = VK_DYNAMIC_STATE_SCISSOR,
-    VK_ViewportAndCount = VK_DYNAMIC_STATE_VIEWPORT_WITH_COUNT,
-    VK_ScissorAndCount = VK_DYNAMIC_STATE_SCISSOR_WITH_COUNT,
-    VK_DepthTestEnable = VK_DYNAMIC_STATE_DEPTH_TEST_ENABLE,
-    VK_DepthWriteEnable = VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE,
-    VK_LineWidth = VK_DYNAMIC_STATE_LINE_WIDTH,
-    VK_DepthBias = VK_DYNAMIC_STATE_DEPTH_BIAS,
-    VK_BlendConstants = VK_DYNAMIC_STATE_BLEND_CONSTANTS,
-
-    // DepthBounds = VK_DYNAMIC_STATE_DEPTH_BOUNDS,
-    // StencilCompareMask = VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK,
-    // StencilWriteMask = VK_DYNAMIC_STATE_STENCIL_WRITE_MASK,
-    // StencilReference = VK_DYNAMIC_STATE_STENCIL_REFERENCE,
-    // CullMode = VK_DYNAMIC_STATE_CULL_MODE,
-    // FrontFace = VK_DYNAMIC_STATE_FRONT_FACE,
-    // PrimitiveType = VK_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY,
-    // InputBindingStride = VK_DYNAMIC_STATE_VERTEX_INPUT_BINDING_STRIDE,
-    // DepthCompareOp = VK_DYNAMIC_STATE_DEPTH_COMPARE_OP,
-    // DepthBoundsTestEnable = VK_DYNAMIC_STATE_DEPTH_BOUNDS_TEST_ENABLE,
-    // StencilTestEnable = VK_DYNAMIC_STATE_STENCIL_TEST_ENABLE,
-    // StencilOp = VK_DYNAMIC_STATE_STENCIL_OP,
-    // RasterDiscardEnable = VK_DYNAMIC_STATE_RASTERIZER_DISCARD_ENABLE,
-    // DepthBiasEnable = VK_DYNAMIC_STATE_DEPTH_BIAS_ENABLE,
-    // PrimitiveRestartEnable = VK_DYNAMIC_STATE_PRIMITIVE_RESTART_ENABLE,
+    // YOU MUST UPDATE THESE!!!
+    Last = PrimitiveRestartEnable,
+    Count = 24,  // Always Last + 1 because bitwise
 };
 LR_TYPEOP_ARITHMETIC(DynamicState, DynamicState, |);
 LR_TYPEOP_ARITHMETIC_INT(DynamicState, DynamicState, &);
@@ -756,6 +751,7 @@ struct ImageSubresourceLayers {
     u32 slice_count = 1;
 
     operator auto &() { return *reinterpret_cast<VkType *>(this); }
+    operator const auto &() const { return *reinterpret_cast<const VkType *>(this); }
 };
 static_assert(sizeof(ImageSubresourceLayers::VkType) == sizeof(ImageSubresourceLayers));
 
@@ -767,6 +763,7 @@ struct PushConstantRange {
     u32 size = 0;
 
     operator auto &() { return *reinterpret_cast<VkType *>(this); }
+    operator const auto &() const { return *reinterpret_cast<const VkType *>(this); }
 };
 static_assert(sizeof(PushConstantRange::VkType) == sizeof(PushConstantRange));
 
@@ -794,6 +791,7 @@ struct PipelineVertexLayoutBindingInfo {
     VkVertexInputRate input_rate = VK_VERTEX_INPUT_RATE_VERTEX;
 
     operator auto &() { return *reinterpret_cast<VkType *>(this); }
+    operator const auto &() const { return *reinterpret_cast<const VkType *>(this); }
 };
 static_assert(sizeof(PipelineVertexLayoutBindingInfo::VkType) == sizeof(PipelineVertexLayoutBindingInfo));
 
@@ -806,6 +804,7 @@ struct PipelineVertexAttribInfo {
     u32 offset = 0;
 
     operator auto &() { return *reinterpret_cast<VkType *>(this); }
+    operator const auto &() const { return *reinterpret_cast<const VkType *>(this); }
 };
 static_assert(sizeof(PipelineVertexAttribInfo::VkType) == sizeof(PipelineVertexAttribInfo));
 
@@ -855,6 +854,7 @@ struct PipelineColorBlendAttachment {
     ColorMask write_mask = ColorMask::RGBA;
 
     operator auto &() { return *reinterpret_cast<VkType *>(this); }
+    operator const auto &() const { return *reinterpret_cast<const VkType *>(this); }
 };
 static_assert(sizeof(PipelineColorBlendAttachment::VkType) == sizeof(PipelineColorBlendAttachment));
 
@@ -878,6 +878,7 @@ struct RenderingAttachmentInfo {
     };
 
     operator auto &() { return *reinterpret_cast<VkType *>(this); }
+    operator const auto &() const { return *reinterpret_cast<const VkType *>(this); }
 };
 static_assert(sizeof(RenderingAttachmentInfo::VkType) == sizeof(RenderingAttachmentInfo));
 
@@ -905,6 +906,7 @@ struct ImageBarrier {
     ImageSubresourceRange subresource_range = {};
 
     operator auto &() { return *reinterpret_cast<VkType *>(this); }
+    operator const auto &() const { return *reinterpret_cast<const VkType *>(this); }
 };
 static_assert(sizeof(ImageBarrier::VkType) == sizeof(ImageBarrier));
 
@@ -919,6 +921,7 @@ struct MemoryBarrier {
     MemoryAccess dst_access_mask = {};
 
     operator auto &() { return *reinterpret_cast<VkType *>(this); }
+    operator const auto &() const { return *reinterpret_cast<const VkType *>(this); }
 };
 static_assert(sizeof(MemoryBarrier::VkType) == sizeof(MemoryBarrier));
 
@@ -938,6 +941,7 @@ struct DependencyInfo {
     ImageBarrier *image_barriers = nullptr;
 
     operator auto &() { return *reinterpret_cast<VkType *>(this); }
+    operator const auto &() const { return *reinterpret_cast<const VkType *>(this); }
 };
 static_assert(sizeof(DependencyInfo::VkType) == sizeof(DependencyInfo));
 
@@ -949,6 +953,7 @@ struct BufferCopyRegion {
     u64 size = 0;
 
     operator auto &() { return *reinterpret_cast<VkType *>(this); }
+    operator const auto &() const { return *reinterpret_cast<const VkType *>(this); }
 };
 static_assert(sizeof(BufferCopyRegion::VkType) == sizeof(BufferCopyRegion));
 
@@ -962,6 +967,7 @@ struct ImageCopyRegion {
     Extent3D image_extent = {};
 
     operator auto &() { return *reinterpret_cast<VkType *>(this); }
+    operator const auto &() const { return *reinterpret_cast<const VkType *>(this); }
 };
 static_assert(sizeof(ImageCopyRegion::VkType) == sizeof(ImageCopyRegion));
 
@@ -981,6 +987,7 @@ struct CommandListSubmitInfo {
     u32 device_mask = 0;
 
     operator auto &() { return *reinterpret_cast<VkType *>(this); }
+    operator const auto &() const { return *reinterpret_cast<const VkType *>(this); }
 };
 static_assert(sizeof(CommandListSubmitInfo::VkType) == sizeof(CommandListSubmitInfo));
 
@@ -1003,6 +1010,7 @@ struct SemaphoreSubmitInfo {
     u32 device_index = 0;
 
     operator auto &() { return *reinterpret_cast<VkType *>(this); }
+    operator const auto &() const { return *reinterpret_cast<const VkType *>(this); }
 };
 static_assert(sizeof(SemaphoreSubmitInfo::VkType) == sizeof(SemaphoreSubmitInfo));
 
@@ -1023,6 +1031,7 @@ struct QueueSubmitInfo {
     SemaphoreSubmitInfo *signal_sema_infos = nullptr;
 
     operator auto &() { return *reinterpret_cast<VkType *>(this); }
+    operator const auto &() const { return *reinterpret_cast<const VkType *>(this); }
 };
 static_assert(sizeof(QueueSubmitInfo::VkType) == sizeof(QueueSubmitInfo));
 
@@ -1041,6 +1050,7 @@ struct RenderingBeginInfo {
     RenderingAttachmentInfo *stencil_attachment = nullptr;
 
     operator auto &() { return *reinterpret_cast<VkType *>(this); }
+    operator const auto &() const { return *reinterpret_cast<const VkType *>(this); }
 };
 static_assert(sizeof(RenderingBeginInfo::VkType) == sizeof(RenderingBeginInfo));
 
@@ -1061,11 +1071,12 @@ static_assert(sizeof(DescriptorSetLayoutElement::VkType) == sizeof(DescriptorSet
 struct ImageDescriptorInfo {
     using VkType = VkDescriptorImageInfo;
 
-    VkSampler sampler_unused = VK_NULL_HANDLE;
+    VkSampler sampler = VK_NULL_HANDLE;
     VkImageView image_view = VK_NULL_HANDLE;
     ImageLayout image_layout = ImageLayout::Undefined;
 
     operator auto &() { return *reinterpret_cast<VkType *>(this); }
+    operator const auto &() const { return *reinterpret_cast<const VkType *>(this); }
 };
 static_assert(sizeof(ImageDescriptorInfo::VkType) == sizeof(ImageDescriptorInfo));
 
@@ -1077,19 +1088,9 @@ struct BufferDescriptorInfo {
     u64 range = ~0u;
 
     operator auto &() { return *reinterpret_cast<VkType *>(this); }
+    operator const auto &() const { return *reinterpret_cast<const VkType *>(this); }
 };
 static_assert(sizeof(BufferDescriptorInfo::VkType) == sizeof(BufferDescriptorInfo));
-
-struct SamplerDescriptorInfo {
-    using VkType = VkDescriptorImageInfo;
-
-    VkSampler sampler = VK_NULL_HANDLE;
-    VkImageView image_view_unused = VK_NULL_HANDLE;
-    ImageLayout image_layout_unused = ImageLayout::Undefined;
-
-    operator auto &() { return *reinterpret_cast<VkType *>(this); }
-};
-static_assert(sizeof(SamplerDescriptorInfo::VkType) == sizeof(SamplerDescriptorInfo));
 
 struct WriteDescriptorSet {
     using VkType = VkWriteDescriptorSet;
@@ -1101,14 +1102,12 @@ struct WriteDescriptorSet {
     u32 dst_element = 0;
     u32 count = 0;
     DescriptorType type = DescriptorType::Count;
-    union {
-        ImageDescriptorInfo *image_info = nullptr;
-        SamplerDescriptorInfo *sampler_info;
-    };
+    ImageDescriptorInfo *image_info = nullptr;
     BufferDescriptorInfo *buffer_info = nullptr;
     VkBufferView *texel_buffer_info_unused = nullptr;
 
     operator auto &() { return *reinterpret_cast<VkType *>(this); }
+    operator const auto &() const { return *reinterpret_cast<const VkType *>(this); }
 };
 static_assert(sizeof(WriteDescriptorSet::VkType) == sizeof(WriteDescriptorSet));
 
@@ -1126,6 +1125,7 @@ struct CopyDescriptorSet {
     u32 count = 0;
 
     operator auto &() { return *reinterpret_cast<VkType *>(this); }
+    operator const auto &() const { return *reinterpret_cast<const VkType *>(this); }
 };
 static_assert(sizeof(CopyDescriptorSet::VkType) == sizeof(CopyDescriptorSet));
 
@@ -1136,6 +1136,7 @@ struct DescriptorPoolSize {
     u32 count = 0;
 
     operator auto &() { return *reinterpret_cast<VkType *>(this); }
+    operator const auto &() const { return *reinterpret_cast<const VkType *>(this); }
 };
 static_assert(sizeof(DescriptorPoolSize::VkType) == sizeof(DescriptorPoolSize));
 
@@ -1235,12 +1236,6 @@ struct UniqueResult {
     Unique<T> v;
     VKResult result = VKResult::Success;
 };
-namespace DescriptorID {
-    constexpr u32 samplers = 0;
-    constexpr u32 images = 1;
-    constexpr u32 storage_images = 2;
-    constexpr u32 bda = 3;
-}  // namespace DescriptorID
 }  // namespace lr::graphics
 
 namespace fmt {

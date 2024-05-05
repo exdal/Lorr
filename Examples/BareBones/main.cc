@@ -6,8 +6,15 @@
 
 #include "OS/Window.hh"
 
+#define EXAMPLE_DIR (LR_PROJECT_DIR "/Examples/BareBones")
+
 using namespace lr;
 using namespace lr::graphics;
+
+struct App {
+    ShaderID triangle_vs;
+    ShaderID triangle_fs;
+} app;
 
 ImageBarrier make_barrier(
     ImageID image_id,
@@ -25,6 +32,61 @@ ImageBarrier make_barrier(
         .new_layout = new_layout,
         .image_id = image_id,
     };
+}
+
+Result<std::string, os::FileResult> load_shader_file(std::string_view path)
+{
+    std::string code;
+    auto [file, result] = os::open_file(path, os::FileAccess::Read);
+    if (!result) {
+        LR_LOG_ERROR("Failed to load shader file {}!", path);
+        return result;
+    }
+
+    code.resize(os::file_size(file));
+    os::read_file(file, code.data(), { 0, ~0u });
+    os::close_file(file);
+
+    return std::move(code);
+}
+
+bool load_shaders(Device &device)
+{
+    ZoneScoped;
+
+    VirtualFileInfo vfile_infos[] = {
+        { LR_SHADER_STD_FILE_PATH, "lorr" },
+    };
+    VirtualDir vdir(std::span{ vfile_infos });
+
+    ShaderPreprocessorMacroInfo macros[] = {
+        { "LR_EDITOR", "1" },
+#if LR_DEBUG
+        { "LR_DEBUG", "1" },
+#endif
+    };
+
+    ShaderCompileInfo info = {
+        .virtual_env = { &vdir, 1 },
+        .definitions = macros,
+    };
+
+    {
+        memory::ScopedStack stack;
+        std::string_view path = stack.format("{}/triangle.slang", EXAMPLE_DIR);
+        auto [code, result] = load_shader_file(path);
+        info.code = code;
+        info.real_path = path;
+        info.entry_point = "vs_main";
+        auto [vs_data, vs_result] = ShaderCompiler::compile(info);
+        info.entry_point = "fs_main";
+        auto [fs_data, fs_result] = ShaderCompiler::compile(info);
+
+        app.triangle_vs = device.create_shader(ShaderStageFlag::Vertex, vs_data);
+        app.triangle_fs = device.create_shader(ShaderStageFlag::Pixel, fs_data);
+    }
+
+    return true;
 }
 
 int main(int argc, char *argv[])
@@ -56,6 +118,8 @@ int main(int argc, char *argv[])
     }
 
     device.create_command_allocators(*command_allocators, { CommandType::Graphics });
+
+    load_shaders(device);
 
     while (!window.should_close()) {
         memory::ScopedStack stack;

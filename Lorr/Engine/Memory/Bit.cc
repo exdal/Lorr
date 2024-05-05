@@ -1,7 +1,28 @@
 #include "Bit.hh"
 
+#if defined(_MSC_VER)
+#include <intrin.h>
+#endif
+
 namespace lr {
-/// FIND LEAST SET ///
+usize memory::set_bit_count(u32 v)
+{
+#if defined(_MSC_VER) && (_MSC_VER >= 1400)
+    return __popcnt(v);
+#else
+    return __builtin_popcount(v);
+#endif
+}
+
+usize memory::set_bit_count(u64 v)
+{
+#if defined(_MSC_VER) && (_MSC_VER >= 1400)
+    return __popcnt64(v);
+#else
+    return __builtin_popcountll(v);
+#endif
+}
+
 u32 memory::find_least_set32(u32 v)
 {
 #if defined(_MSC_VER) && (_MSC_VER >= 1400)
@@ -24,7 +45,6 @@ u32 memory::find_least_set64(u64 v)
 #endif
 }
 
-/// FIND FIRST SET ///
 u32 memory::find_first_set32(u32 v)
 {
 #if defined(_MSC_VER) && (_MSC_VER >= 1400)

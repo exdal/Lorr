@@ -44,15 +44,16 @@ struct ShaderPreprocessorMacroInfo {
 struct ShaderCompileInfo {
     ShaderCompileFlag compile_flags = ShaderCompileFlag::None;
     std::string_view entry_point = "main";
+    std::string_view real_path = {};  // for shader debugging
     std::string_view code = {};
-    VirtualDir virtual_env = {};
+    std::span<VirtualDir> virtual_env = {};
     std::span<std::string> include_dirs = {};
     std::span<ShaderPreprocessorMacroInfo> definitions = {};
 };
 
 namespace ShaderCompiler {
     bool init();
-    Result<std::vector<u32>, VKResult> compile_shader(const ShaderCompileInfo &info);
+    Result<std::vector<u32>, VKResult> compile(const ShaderCompileInfo &info);
 }  // namespace ShaderCompiler
 
 }  // namespace lr::graphics

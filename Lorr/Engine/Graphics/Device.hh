@@ -7,8 +7,6 @@
 #include "ResourcePool.hh"
 #include "SwapChain.hh"
 
-#include <deque>
-
 namespace lr::graphics {
 struct Device {
     Device() = default;
@@ -40,7 +38,7 @@ struct Device {
     void collect_garbage();
 
     /// Input Assembly ///
-    UniqueResult<PipelineLayout> create_pipeline_layout(const PipelineLayoutInfo &info);
+    VKResult create_pipeline_layouts(std::span<PipelineLayout> pipeline_layouts, const PipelineLayoutInfo &info);
     void delete_pipeline_layouts(std::span<PipelineLayout> pipeline_layouts);
     Result<PipelineID, VKResult> create_graphics_pipeline(const GraphicsPipelineInfo &info);
     Result<PipelineID, VKResult> create_compute_pipeline(const ComputePipelineInfo &info);
@@ -108,6 +106,12 @@ struct Device {
 #endif
     }
 
+    template<typename T, usize IndexT = sizeof(T) / sizeof(u32)>
+    PipelineLayout &get_layout()
+    {
+        static_assert(sizeof(T) >= 4);
+        return m_resources.pipeline_layouts[IndexT];
+    }
     CommandQueue &get_queue(CommandType type) { return m_queues->at(usize(type)); }
     auto get_image(ImageID id) { return m_resources.images.get(id); }
     auto get_image_view(ImageViewID id) { return m_resources.image_views.get(id); }

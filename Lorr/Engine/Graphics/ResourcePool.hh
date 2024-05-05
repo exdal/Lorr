@@ -102,10 +102,12 @@ struct ResourcePools {
     PagedResourcePool<Buffer, BufferID> buffers = {};
     PagedResourcePool<Image, ImageID> images = {};
     PagedResourcePool<ImageView, ImageViewID> image_views = {};
-    // Should probably implement a sampler cache
-    PagedResourcePool<Sampler, SamplerID, 64> samplers = {};
-    PagedResourcePool<Shader, ShaderID, 256> shaders = {};
-    PagedResourcePool<Pipeline, PipelineID, 256> pipelines = {};
+    PagedResourcePool<Sampler, SamplerID> samplers = {};
+    PagedResourcePool<Shader, ShaderID> shaders = {};
+    PagedResourcePool<Pipeline, PipelineID> pipelines = {};
+
+    constexpr static usize max_push_constant_size = 128;
+    std::array<PipelineLayout, (max_push_constant_size / sizeof(u32)) + 1> pipeline_layouts = {};
 };
 
 /*

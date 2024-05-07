@@ -51,23 +51,21 @@ struct CommandAllocator {
 
 /// COMMAND LIST ///
 struct CommandList {
-    // Memory Barriers
-    void set_pipeline_barrier(DependencyInfo &dependency_info);
+    void set_barriers(std::span<MemoryBarrier> memory, std::span<ImageBarrier> image);
 
     // Copy Commands
-    void copy_buffer_to_buffer(Buffer *src, Buffer *dst, std::span<BufferCopyRegion> regions);
-    void copy_buffer_to_image(Buffer *src, Image *dst, ImageLayout layout, std::span<ImageCopyRegion> regions);
+    void copy_buffer_to_buffer(BufferID src, BufferID dst, std::span<BufferCopyRegion> regions);
+    void copy_buffer_to_image(BufferID src, ImageID dst, ImageLayout layout, std::span<ImageCopyRegion> regions);
 
     // Pipeline State
     void begin_rendering(const RenderingBeginInfo &info);
     void end_rendering();
-    void set_pipeline(Pipeline *pipeline);
+    void set_pipeline(PipelineID pipeline_id);
     void set_push_constants(
-        PipelineLayout *layout, void *data, u32 data_size, u32 offset, ShaderStageFlag stage_flags = ShaderStageFlag::All);
-    void set_descriptor_sets(
-        PipelineLayout *layout, PipelineBindPoint bind_point, u32 first_set, const ls::static_vector<VkDescriptorSet, 16> &sets);
-    void set_vertex_buffer(Buffer *buffer, u64 offset = 0, u32 first_binding = 0, u32 binding_count = 1);
-    void set_index_buffer(Buffer *buffer, u64 offset = 0, bool use_u16 = false);
+        PipelineLayout &layout, void *data, u32 data_size, u32 offset, ShaderStageFlag stage_flags = ShaderStageFlag::All);
+    void set_descriptor_sets(PipelineLayout &layout, PipelineBindPoint bind_point, u32 first_set, std::span<DescriptorSet> sets);
+    void set_vertex_buffer(BufferID buffer_id, u64 offset = 0, u32 first_binding = 0, u32 binding_count = 1);
+    void set_index_buffer(BufferID buffer_id, u64 offset = 0, bool use_u16 = false);
 
     void set_viewport(u32 id, const Viewport &viewport);
     void set_scissors(u32 id, const Rect2D &rect);
@@ -79,6 +77,7 @@ struct CommandList {
 
     VkCommandBuffer m_handle = VK_NULL_HANDLE;
     CommandAllocator *m_allocator = nullptr;
+    Device *m_device = nullptr;
 
     constexpr static auto OBJECT_TYPE = VK_OBJECT_TYPE_COMMAND_BUFFER;
     operator auto &() { return m_handle; }
@@ -90,7 +89,7 @@ struct CommandBatcher {
     constexpr static usize kMaxMemoryBarriers = 16;
     constexpr static usize kMaxImageBarriers = 16;
 
-    CommandBatcher(Device *device, CommandList &command_list);
+    CommandBatcher(CommandList &command_list);
     CommandBatcher(Unique<CommandList> &command_list);
     ~CommandBatcher();
 
@@ -101,7 +100,6 @@ struct CommandBatcher {
     ls::static_vector<MemoryBarrier, kMaxMemoryBarriers> m_memory_barriers = {};
     ls::static_vector<ImageBarrier, kMaxImageBarriers> m_image_barriers = {};
 
-    Device *m_device;
     CommandList &m_command_list;
 };
 }  // namespace lr::graphics

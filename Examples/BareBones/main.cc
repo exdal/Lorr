@@ -1,6 +1,5 @@
 #include "Graphics/Device.hh"
 #include "Graphics/Instance.hh"
-#include "Graphics/Task/TaskAccess.hh"
 
 #include "Memory/Stack.hh"
 
@@ -14,25 +13,8 @@ using namespace lr::graphics;
 struct App {
     ShaderID triangle_vs;
     ShaderID triangle_fs;
+    PipelineID triangle_pipeline;
 } app;
-
-ImageBarrier make_barrier(
-    ImageID image_id,
-    ImageLayout cur_layout,
-    const TaskAccess::Access &src_access,
-    ImageLayout new_layout,
-    const TaskAccess::Access &dst_access)
-{
-    return ImageBarrier{
-        .src_stage_mask = src_access.stage,
-        .src_access_mask = src_access.access,
-        .dst_stage_mask = dst_access.stage,
-        .dst_access_mask = dst_access.access,
-        .old_layout = cur_layout,
-        .new_layout = new_layout,
-        .image_id = image_id,
-    };
-}
 
 Result<std::string, os::FileResult> load_shader_file(std::string_view path)
 {
@@ -121,72 +103,92 @@ int main(int argc, char *argv[])
 
     load_shaders(device);
 
+    {
+        std::array shader_ids = { app.triangle_vs, app.triangle_fs };
+        Viewport viewport = { 0.0f, 0.0f, f32(window.m_width), f32(window.m_height) };
+        Rect2D scissors = { 0, 0, window.m_width, window.m_height };
+        PipelineColorBlendAttachment blend_attachment = {};
+
+        GraphicsPipelineInfo triangle_pipeline_info = {
+            .color_attachment_formats = { &swap_chain->m_format, 1 },
+            .viewports = { &viewport, 1 },
+            .scissors = { &scissors, 1 },
+            .shader_ids = shader_ids,
+            .blend_attachments = { &blend_attachment, 1 },
+        };
+        app.triangle_pipeline = device.create_graphics_pipeline(triangle_pipeline_info);
+    }
+
     while (!window.should_close()) {
         memory::ScopedStack stack;
 
         auto [acquire_sema, present_sema] = swap_chain->binary_semas();
         auto [acq_index, acq_result] = device.acquire_next_image(*swap_chain, acquire_sema);
         Semaphore &frame_sema = swap_chain->frame_sema();
-
         CommandQueue &queue = device.get_queue(CommandType::Graphics);
-
         ImageID image_id = images->at(acq_index);
         ImageViewID image_view_id = image_views->at(acq_index);
-
         CommandAllocator &command_allocator = command_allocators->at(acq_index);
-        device.reset_command_allocator(command_allocator);
 
+        device.reset_command_allocator(command_allocator);
         {
             Unique<CommandList> command_list(&device);
             device.create_command_lists({ &*command_list, 1 }, command_allocator);
             command_list.set_name(stack.format("Transient list = {}", acq_index));
             device.begin_command_list(*command_list);
 
-            CommandBatcher batcher(command_list);
-            batcher.insert_image_barrier(make_barrier(
-                image_id, ImageLayout::Undefined, TaskAccess::TopOfPipe, ImageLayout::ColorAttachment, TaskAccess::ColorAttachmentWrite));
-            batcher.flush_barriers();
+            ImageBarrier attachment_barrier = {
+                .src_access = PipelineAccess::TopOfPipe,
+                .dst_access = PipelineAccess::ColorAttachmentWrite,
+                .old_layout = ImageLayout::Undefined,
+                .new_layout = ImageLayout::ColorAttachment,
+                .image_id = image_id,
+            };
+            command_list->set_barriers({}, { &attachment_barrier, 1 });
 
             const glm::vec3 half = glm::vec3(0.5f);
             glm::vec3 color = half + half * glm::cos(glm::vec3(float(glfwGetTime())) + glm::vec3(0, 2, 4));
             RenderingAttachmentInfo attachment = {
-                .image_view = *device.get_image_view(image_view_id),
+                .image_view_id = image_view_id,
                 .image_layout = ImageLayout::ColorAttachment,
                 .load_op = AttachmentLoadOp::Clear,
                 .store_op = AttachmentStoreOp::Store,
-                .color_clear = { color.x, color.y, color.z, 1.0f },
+                .clear_value = { ColorClearValue(color.x, color.y, color.z, 1.0f) },
             };
             RenderingBeginInfo render_info = {
                 .render_area = { 0, 0, window.m_width, window.m_height },
-                .layer_count = 1,
-                .color_attachment_count = 1,
-                .color_attachments = &attachment,
+                .color_attachments = { &attachment, 1 },
             };
             command_list->begin_rendering(render_info);
+            command_list->set_pipeline(app.triangle_pipeline);
+            command_list->draw(3);
             command_list->end_rendering();
 
-            auto present_barrier = make_barrier(
-                image_id, ImageLayout::ColorAttachment, TaskAccess::ColorAttachmentWrite, ImageLayout::Present, TaskAccess::BottomOfPipe);
-            batcher.insert_image_barrier(present_barrier);
-            batcher.flush_barriers();
+            ImageBarrier present_barrier = {
+                .src_access = PipelineAccess::ColorAttachmentWrite,
+                .dst_access = PipelineAccess::BottomOfPipe,
+                .old_layout = ImageLayout::ColorAttachment,
+                .new_layout = ImageLayout::Present,
+                .image_id = image_id,
+            };
+            command_list->set_barriers({}, { &present_barrier, 1 });
             device.end_command_list(*command_list);
 
-            auto wait_semas = stack.alloc<SemaphoreSubmitInfo>(1);
-            auto signal_semas = stack.alloc<SemaphoreSubmitInfo>(3);
-            auto command_lists = stack.alloc_n<CommandListSubmitInfo>(*command_list);
-
-            wait_semas[0] = { acquire_sema, 0, PipelineStage::TopOfPipe };
-            signal_semas[0] = { present_sema, 0, PipelineStage::BottomOfPipe };
-            signal_semas[1] = { frame_sema, frame_sema.advance(), PipelineStage::AllCommands };
-            signal_semas[2] = { queue.semaphore(), queue.semaphore().advance(), PipelineStage::AllCommands };
+            SemaphoreSubmitInfo wait_semas[] = { { acquire_sema, 0, PipelineStage::TopOfPipe } };
+            CommandListSubmitInfo command_list_infos[] = { { *command_list } };
+            SemaphoreSubmitInfo signal_semas[] = {
+                { present_sema, 0, PipelineStage::BottomOfPipe },
+                { frame_sema, frame_sema.advance(), PipelineStage::AllCommands },
+                { queue.semaphore(), queue.semaphore().advance(), PipelineStage::AllCommands },
+            };
 
             QueueSubmitInfo submit_info = {
-                .wait_sema_count = static_cast<u32>(wait_semas.size()),
-                .wait_sema_infos = wait_semas.data(),
-                .command_list_count = static_cast<u32>(command_lists.size()),
-                .command_list_infos = command_lists.data(),
-                .signal_sema_count = static_cast<u32>(signal_semas.size()),
-                .signal_sema_infos = signal_semas.data(),
+                .wait_sema_count = static_cast<u32>(count_of(wait_semas)),
+                .wait_sema_infos = wait_semas,
+                .command_list_count = static_cast<u32>(count_of(command_list_infos)),
+                .command_list_infos = command_list_infos,
+                .signal_sema_count = static_cast<u32>(count_of(signal_semas)),
+                .signal_sema_infos = signal_semas,
             };
             queue.submit(submit_info);
         }

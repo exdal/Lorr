@@ -2,6 +2,8 @@
 
 #include "Device.hh"
 
+#include "Memory/Stack.hh"
+
 namespace lr::graphics {
 VKResult CommandQueue::submit(QueueSubmitInfo &submit_info)
 {
@@ -27,33 +29,93 @@ VKResult CommandQueue::present(SwapChain &swap_chain, Semaphore &present_sema, u
     return CHECK(vkQueuePresentKHR(m_handle, &present_info));
 }
 
-void CommandList::set_pipeline_barrier(DependencyInfo &dependency_info)
+void CommandList::set_barriers(std::span<MemoryBarrier> memory, std::span<ImageBarrier> image)
+{
+    ZoneScoped;
+    memory::ScopedStack stack;
+
+    auto memory_barriers = stack.alloc<VkMemoryBarrier2>(memory.size());
+    auto image_barriers = stack.alloc<VkImageMemoryBarrier2>(image.size());
+
+    for (u32 i = 0; i < memory.size(); i++) {
+        memory_barriers[i] = memory[i].vk_type();
+    }
+
+    for (u32 i = 0; i < image.size(); i++) {
+        image_barriers[i] = image[i].vk_type(*m_device->get_image(image[i].image_id));
+    }
+
+    VkDependencyInfo dependency_info = {
+        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .pNext = nullptr,
+        .dependencyFlags = 0,
+        .memoryBarrierCount = static_cast<u32>(memory_barriers.size()),
+        .pMemoryBarriers = memory_barriers.data(),
+        .bufferMemoryBarrierCount = 0,
+        .pBufferMemoryBarriers = nullptr,
+        .imageMemoryBarrierCount = static_cast<u32>(image_barriers.size()),
+        .pImageMemoryBarriers = image_barriers.data(),
+    };
+    vkCmdPipelineBarrier2(m_handle, &dependency_info);
+}
+
+void CommandList::copy_buffer_to_buffer(BufferID src, BufferID dst, std::span<BufferCopyRegion> regions)
 {
     ZoneScoped;
 
-    vkCmdPipelineBarrier2(m_handle, reinterpret_cast<const VkDependencyInfo *>(&dependency_info));
+    vkCmdCopyBuffer(m_handle, *m_device->get_buffer(src), *m_device->get_buffer(dst), regions.size(), (VkBufferCopy *)regions.data());
 }
 
-void CommandList::copy_buffer_to_buffer(Buffer *src, Buffer *dst, std::span<BufferCopyRegion> regions)
-{
-    ZoneScoped;
-
-    vkCmdCopyBuffer(m_handle, *src, *dst, regions.size(), (VkBufferCopy *)regions.data());
-}
-
-void CommandList::copy_buffer_to_image(Buffer *src, Image *dst, ImageLayout layout, std::span<ImageCopyRegion> regions)
+void CommandList::copy_buffer_to_image(BufferID src, ImageID dst, ImageLayout layout, std::span<ImageCopyRegion> regions)
 {
     ZoneScoped;
 
     vkCmdCopyBufferToImage(
-        m_handle, src->m_handle, dst->m_handle, static_cast<VkImageLayout>(layout), regions.size(), (VkBufferImageCopy *)regions.data());
+        m_handle,
+        *m_device->get_buffer(src),
+        *m_device->get_image(dst),
+        static_cast<VkImageLayout>(layout),
+        regions.size(),
+        (VkBufferImageCopy *)regions.data());
 }
 
 void CommandList::begin_rendering(const RenderingBeginInfo &info)
 {
     ZoneScoped;
+    memory::ScopedStack stack;
 
-    vkCmdBeginRendering(m_handle, (VkRenderingInfo *)&info);
+    auto color_attachments = stack.alloc<VkRenderingAttachmentInfo>(info.color_attachments.size());
+    VkRenderingAttachmentInfo depth_attachment = {};
+    VkRenderingAttachmentInfo stencil_attachment = {};
+
+    for (u32 i = 0; i < info.color_attachments.size(); i++) {
+        ImageView *image_view = m_device->get_image_view(info.color_attachments[i].image_view_id);
+        color_attachments[i] = info.color_attachments[i].vk_info(*image_view);
+    }
+
+    if (info.depth_attachment) {
+        ImageView *image_view = m_device->get_image_view(info.depth_attachment->image_view_id);
+        depth_attachment = info.depth_attachment->vk_info(*image_view);
+    }
+
+    if (info.stencil_attachment) {
+        ImageView *image_view = m_device->get_image_view(info.stencil_attachment->image_view_id);
+        stencil_attachment = info.stencil_attachment->vk_info(*image_view);
+    }
+
+    VkRenderingInfo rendering_info = {
+        .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
+        .pNext = nullptr,
+        .flags = 0,
+        .renderArea = info.render_area,
+        .layerCount = 1,
+        .viewMask = 0,
+        .colorAttachmentCount = static_cast<u32>(color_attachments.size()),
+        .pColorAttachments = color_attachments.data(),
+        .pDepthAttachment = info.depth_attachment ? &depth_attachment : nullptr,
+        .pStencilAttachment = info.stencil_attachment ? &stencil_attachment : nullptr,
+    };
+    vkCmdBeginRendering(m_handle, &rendering_info);
 }
 
 void CommandList::end_rendering()
@@ -63,41 +125,49 @@ void CommandList::end_rendering()
     vkCmdEndRendering(m_handle);
 }
 
-void CommandList::set_pipeline(Pipeline *pipeline)
+void CommandList::set_pipeline(PipelineID pipeline_id)
 {
     ZoneScoped;
 
+    Pipeline *pipeline = m_device->get_pipeline(pipeline_id);
     vkCmdBindPipeline(m_handle, static_cast<VkPipelineBindPoint>(pipeline->m_bind_point), pipeline->m_handle);
 }
 
-void CommandList::set_push_constants(PipelineLayout *layout, void *data, u32 data_size, u32 offset, ShaderStageFlag stage_flags)
+void CommandList::set_push_constants(PipelineLayout &layout, void *data, u32 data_size, u32 offset, ShaderStageFlag stage_flags)
 {
     ZoneScoped;
 
-    vkCmdPushConstants(m_handle, layout->m_handle, static_cast<VkShaderStageFlags>(stage_flags), offset, data_size, data);
+    vkCmdPushConstants(m_handle, layout, static_cast<VkShaderStageFlags>(stage_flags), offset, data_size, data);
 }
 
-void CommandList::set_descriptor_sets(
-    PipelineLayout *layout, PipelineBindPoint bind_point, u32 first_set, const ls::static_vector<VkDescriptorSet, 16> &sets)
+void CommandList::set_descriptor_sets(PipelineLayout &layout, PipelineBindPoint bind_point, u32 first_set, std::span<DescriptorSet> sets)
 {
     ZoneScoped;
+    memory::ScopedStack stack;
+
+    auto descriptor_sets = stack.alloc<VkDescriptorSet>(sets.size());
+    for (u32 i = 0; i < sets.size(); i++) {
+        descriptor_sets[i] = sets[i];
+    }
 
     vkCmdBindDescriptorSets(
-        m_handle, static_cast<VkPipelineBindPoint>(bind_point), layout->m_handle, first_set, sets.size(), sets.data(), 0, nullptr);
+        m_handle, static_cast<VkPipelineBindPoint>(bind_point), layout, first_set, sets.size(), descriptor_sets.data(), 0, nullptr);
 }
 
-void CommandList::set_vertex_buffer(Buffer *buffer, u64 offset, u32 first_binding, u32 binding_count)
+void CommandList::set_vertex_buffer(BufferID buffer_id, u64 offset, u32 first_binding, u32 binding_count)
 {
     ZoneScoped;
 
+    Buffer *buffer = m_device->get_buffer(buffer_id);
     vkCmdBindVertexBuffers(m_handle, first_binding, binding_count, &buffer->m_handle, &offset);
 }
 
-void CommandList::set_index_buffer(Buffer *buffer, u64 offset, bool use_u16)
+void CommandList::set_index_buffer(BufferID buffer_id, u64 offset, bool use_u16)
 {
     ZoneScoped;
 
-    vkCmdBindIndexBuffer(m_handle, buffer->m_handle, offset, use_u16 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32);
+    Buffer *buffer = m_device->get_buffer(buffer_id);
+    vkCmdBindIndexBuffer(m_handle, *buffer, offset, use_u16 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32);
 }
 
 void CommandList::set_viewport(u32 id, const Viewport &viewport)
@@ -135,15 +205,13 @@ void CommandList::dispatch(u32 group_x, u32 group_y, u32 group_z)
     vkCmdDispatch(m_handle, group_x, group_y, group_z);
 }
 
-CommandBatcher::CommandBatcher(Device *device, CommandList &command_list)
-    : m_device(device),
-      m_command_list(command_list)
+CommandBatcher::CommandBatcher(CommandList &command_list)
+    : m_command_list(command_list)
 {
 }
 
 CommandBatcher::CommandBatcher(Unique<CommandList> &command_list)
-    : m_device(command_list.m_device),
-      m_command_list(command_list.m_val)
+    : m_command_list(command_list.m_val)
 {
 }
 
@@ -169,7 +237,6 @@ void CommandBatcher::insert_image_barrier(const ImageBarrier &barrier)
 
     ImageID image_id = barrier.image_id;
     ImageBarrier &raw_barrier = m_image_barriers.emplace_back(barrier);
-    raw_barrier.image = *m_device->get_image(image_id);
 }
 
 void CommandBatcher::flush_barriers()
@@ -178,15 +245,7 @@ void CommandBatcher::flush_barriers()
         return;
     }
 
-    DependencyInfo dependency_info = {
-        .memory_barrier_count = static_cast<u32>(m_memory_barriers.size()),
-        .memory_barriers = m_memory_barriers.data(),
-        .image_barrier_count = static_cast<u32>(m_image_barriers.size()),
-        .image_barriers = m_image_barriers.data(),
-    };
-
-    m_command_list.set_pipeline_barrier(dependency_info);
-
+    m_command_list.set_barriers(m_memory_barriers, m_image_barriers);
     m_image_barriers.clear();
     m_memory_barriers.clear();
 }

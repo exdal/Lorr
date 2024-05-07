@@ -15,15 +15,31 @@ struct PipelineLayout {
     explicit operator bool() { return m_handle != nullptr; }
 };
 
-struct alignas(64) GraphicsPipelineInfo {
-    RenderingAttachmentInfo attachment_info = {};
-    ls::static_vector<Viewport, Limits::ColorAttachments> viewports = {};
-    ls::static_vector<Rect2D, Limits::ColorAttachments> scissors = {};
+struct VertexLayoutBindingInfo {
+    u32 binding = 0;
+    u32 stride = 0;
+    VertexInputRate input_rate = VertexInputRate::Vertex;
+};
+
+struct VertexAttribInfo {
+    Format format = Format::Unknown;
+    u32 location = 0;
+    u32 binding = 0;
+    u32 offset = 0;
+};
+
+struct GraphicsPipelineInfo {
+    std::span<Format> color_attachment_formats = {};
+    Format depth_attachment_format = Format::Unknown;
+    Format stencil_attachment_format = Format::Unknown;
+
+    std::span<Viewport> viewports = {};
+    std::span<Rect2D> scissors = {};
 
     // Vertex Input State
-    ls::static_vector<PipelineShaderStageInfo, 4> shader_stages = {};
-    ls::static_vector<PipelineVertexLayoutBindingInfo, 4> vertex_binding_infos = {};
-    ls::static_vector<PipelineVertexAttribInfo, 16> vertex_attrib_infos = {};
+    std::span<ShaderID> shader_ids = {};
+    std::span<VertexLayoutBindingInfo> vertex_binding_infos = {};
+    std::span<VertexAttribInfo> vertex_attrib_infos = {};
 
     // Rasterizer State
     bool enable_depth_clamp = false;
@@ -49,12 +65,13 @@ struct alignas(64) GraphicsPipelineInfo {
     StencilFaceOp stencil_front_face_op = {};
     StencilFaceOp stencil_back_face_op = {};
     // Color Blend Attachment State
-    ls::static_vector<PipelineColorBlendAttachment, Limits::ColorAttachments> blend_attachments = {};
+    std::span<PipelineColorBlendAttachment> blend_attachments = {};
     glm::vec4 blend_constants = {};
     // Dynamic State
     DynamicState dynamic_state = {};
 
-    // always get the layout from device
+    // If left as `nullptr`, device will automatically select
+    // size-0 push constant layout
     PipelineLayout *layout = nullptr;
 };
 

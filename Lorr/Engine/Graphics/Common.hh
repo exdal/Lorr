@@ -4,6 +4,8 @@
 #include "Vulkan.hh"   // IWYU pragma: export
 #include "zfwd.hh"
 
+#include <source_location>
+
 namespace lr::graphics {
 enum class DeviceFeature : u64 {
     None = 0,
@@ -133,7 +135,10 @@ constexpr static std::string_view vkresult_to_string(VKResult result)
 #undef CASE
 }
 
-constexpr static VKResult CHECK(VkResult vkr, [[maybe_unused]] std::initializer_list<VKResult> allowed_checks = {})
+constexpr static VKResult CHECK(
+    VkResult vkr,
+    [[maybe_unused]] std::initializer_list<VKResult> allowed_checks = {},
+    std::source_location LOC = std::source_location::current())
 {
     auto result = static_cast<VKResult>(vkr);
 #if LR_DEBUG
@@ -142,7 +147,7 @@ constexpr static VKResult CHECK(VkResult vkr, [[maybe_unused]] std::initializer_
             if (a == result)
                 return result;
 
-    LR_ASSERT(result == VKResult::Success);
+    LR_ASSERT(result == VKResult::Success, "Vulkan check failed at {}:{} - {}", LOC.file_name(), LOC.line(), LOC.function_name());
 #endif
 
     return result;
@@ -467,6 +472,119 @@ enum class MemoryAccess : u64 {
 LR_TYPEOP_ARITHMETIC(MemoryAccess, MemoryAccess, |);
 LR_TYPEOP_ARITHMETIC_INT(MemoryAccess, MemoryAccess, &);
 
+struct PipelineAccess {
+    constexpr PipelineAccess(MemoryAccess mem_access, PipelineStage pipeline_stage)
+        : access(mem_access),
+          stage(pipeline_stage) {};
+
+    MemoryAccess access = MemoryAccess::None;
+    PipelineStage stage = PipelineStage::None;
+
+    auto operator<=>(const PipelineAccess &) const = default;
+
+    static PipelineAccess None;
+    static PipelineAccess TopOfPipe;
+    static PipelineAccess BottomOfPipe;
+    static PipelineAccess VertexAttrib;
+    static PipelineAccess IndexAttrib;
+
+    static PipelineAccess IndirectRead;
+    static PipelineAccess VertexShaderRead;
+    static PipelineAccess TessControlRead;
+    static PipelineAccess TessEvalRead;
+    static PipelineAccess PixelShaderRead;
+    static PipelineAccess EarlyPixelTestsRead;
+    static PipelineAccess LatePixelTestsRead;
+    static PipelineAccess ColorAttachmentRead;
+    static PipelineAccess GraphicsRead;
+    static PipelineAccess ComputeRead;
+    static PipelineAccess TransferRead;
+    static PipelineAccess HostRead;
+
+    static PipelineAccess IndirectWrite;
+    static PipelineAccess VertexShaderWrite;
+    static PipelineAccess TessControlWrite;
+    static PipelineAccess TessEvalWrite;
+    static PipelineAccess PixelShaderWrite;
+    static PipelineAccess EarlyPixelTestsWrite;
+    static PipelineAccess LatePixelTestsWrite;
+    static PipelineAccess ColorAttachmentWrite;
+    static PipelineAccess GraphicsWrite;
+    static PipelineAccess ComputeWrite;
+    static PipelineAccess TransferWrite;
+    static PipelineAccess HostWrite;
+
+    static PipelineAccess IndirectReadWrite;
+    static PipelineAccess VertexShaderReadWrite;
+    static PipelineAccess TessControlReadWrite;
+    static PipelineAccess TessEvalReadWrite;
+    static PipelineAccess PixelShaderReadWrite;
+    static PipelineAccess EarlyPixelTestsReadWrite;
+    static PipelineAccess LatePixelTestsReadWrite;
+    static PipelineAccess ColorAttachmentReadWrite;
+    static PipelineAccess GraphicsReadWrite;
+    static PipelineAccess ComputeReadWrite;
+    static PipelineAccess TransferReadWrite;
+    static PipelineAccess HostReadWrite;
+};
+
+constexpr PipelineAccess operator|(const PipelineAccess &lhs, const PipelineAccess &rhs)
+{
+    return { lhs.access | rhs.access, lhs.stage | rhs.stage };
+}
+
+constexpr PipelineAccess operator|=(PipelineAccess &lhs, const PipelineAccess &rhs)
+{
+    PipelineAccess lhsn = { lhs.access | rhs.access, lhs.stage | rhs.stage };
+    return lhs = lhsn | rhs;
+}
+
+#define LRX(name, access, stage) inline PipelineAccess PipelineAccess::name(access, stage)
+LRX(None, MemoryAccess::None, PipelineStage::None);
+LRX(TopOfPipe, MemoryAccess::None, PipelineStage::TopOfPipe);
+LRX(BottomOfPipe, MemoryAccess::None, PipelineStage::BottomOfPipe);
+LRX(VertexAttrib, MemoryAccess::Read, PipelineStage::VertexAttribInput);
+LRX(IndexAttrib, MemoryAccess::Read, PipelineStage::IndexAttribInput);
+
+LRX(IndirectRead, MemoryAccess::Read, PipelineStage::DrawIndirect);
+LRX(VertexShaderRead, MemoryAccess::Read, PipelineStage::VertexShader);
+LRX(TessControlRead, MemoryAccess::Read, PipelineStage::TessellationControl);
+LRX(TessEvalRead, MemoryAccess::Read, PipelineStage::TessellationEvaluation);
+LRX(PixelShaderRead, MemoryAccess::Read, PipelineStage::PixelShader);
+LRX(EarlyPixelTestsRead, MemoryAccess::Read, PipelineStage::EarlyPixelTests);
+LRX(LatePixelTestsRead, MemoryAccess::Read, PipelineStage::LatePixelTests);
+LRX(ColorAttachmentRead, MemoryAccess::Read, PipelineStage::ColorAttachmentOutput);
+LRX(GraphicsRead, MemoryAccess::Read, PipelineStage::AllGraphics);
+LRX(ComputeRead, MemoryAccess::Read, PipelineStage::ComputeShader);
+LRX(TransferRead, MemoryAccess::Read, PipelineStage::AllTransfer);
+LRX(HostRead, MemoryAccess::Read, PipelineStage::Host);
+
+LRX(IndirectWrite, MemoryAccess::Write, PipelineStage::DrawIndirect);
+LRX(VertexShaderWrite, MemoryAccess::Write, PipelineStage::VertexShader);
+LRX(TessControlWrite, MemoryAccess::Write, PipelineStage::TessellationControl);
+LRX(TessEvalWrite, MemoryAccess::Write, PipelineStage::TessellationEvaluation);
+LRX(PixelShaderWrite, MemoryAccess::Write, PipelineStage::PixelShader);
+LRX(EarlyPixelTestsWrite, MemoryAccess::Write, PipelineStage::EarlyPixelTests);
+LRX(LatePixelTestsWrite, MemoryAccess::Write, PipelineStage::LatePixelTests);
+LRX(ColorAttachmentWrite, MemoryAccess::Write, PipelineStage::ColorAttachmentOutput);
+LRX(GraphicsWrite, MemoryAccess::Write, PipelineStage::AllGraphics);
+LRX(ComputeWrite, MemoryAccess::Write, PipelineStage::ComputeShader);
+LRX(TransferWrite, MemoryAccess::Write, PipelineStage::AllTransfer);
+LRX(HostWrite, MemoryAccess::Write, PipelineStage::Host);
+
+LRX(IndirectReadWrite, MemoryAccess::ReadWrite, PipelineStage::DrawIndirect);
+LRX(VertexShaderReadWrite, MemoryAccess::ReadWrite, PipelineStage::VertexShader);
+LRX(TessControlReadWrite, MemoryAccess::ReadWrite, PipelineStage::TessellationControl);
+LRX(TessEvalReadWrite, MemoryAccess::ReadWrite, PipelineStage::TessellationEvaluation);
+LRX(PixelShaderReadWrite, MemoryAccess::ReadWrite, PipelineStage::PixelShader);
+LRX(EarlyPixelTestsReadWrite, MemoryAccess::ReadWrite, PipelineStage::EarlyPixelTests);
+LRX(LatePixelTestsReadWrite, MemoryAccess::ReadWrite, PipelineStage::LatePixelTests);
+LRX(ColorAttachmentReadWrite, MemoryAccess::ReadWrite, PipelineStage::ColorAttachmentOutput);
+LRX(GraphicsReadWrite, MemoryAccess::ReadWrite, PipelineStage::AllGraphics);
+LRX(ComputeReadWrite, MemoryAccess::ReadWrite, PipelineStage::ComputeShader);
+LRX(TransferReadWrite, MemoryAccess::ReadWrite, PipelineStage::AllTransfer);
+LRX(HostReadWrite, MemoryAccess::ReadWrite, PipelineStage::Host);
+#undef LRX
 enum class PrimitiveType : u32 {
     PointList = VK_PRIMITIVE_TOPOLOGY_POINT_LIST,
     LineList = VK_PRIMITIVE_TOPOLOGY_LINE_LIST,
@@ -474,6 +592,11 @@ enum class PrimitiveType : u32 {
     TriangleList = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
     TriangleStrip = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP,
     Patch = VK_PRIMITIVE_TOPOLOGY_PATCH_LIST,
+};
+
+enum class VertexInputRate {
+    Vertex = 0,
+    Instanced = 1,
 };
 
 enum class CullMode : u32 {
@@ -783,31 +906,6 @@ struct PipelineShaderStageInfo {
 };
 static_assert(sizeof(PipelineShaderStageInfo::VkType) == sizeof(PipelineShaderStageInfo));
 
-struct PipelineVertexLayoutBindingInfo {
-    using VkType = VkVertexInputBindingDescription;
-
-    u32 binding = 0;
-    u32 stride = 0;
-    VkVertexInputRate input_rate = VK_VERTEX_INPUT_RATE_VERTEX;
-
-    operator auto &() { return *reinterpret_cast<VkType *>(this); }
-    operator const auto &() const { return *reinterpret_cast<const VkType *>(this); }
-};
-static_assert(sizeof(PipelineVertexLayoutBindingInfo::VkType) == sizeof(PipelineVertexLayoutBindingInfo));
-
-struct PipelineVertexAttribInfo {
-    using VkType = VkVertexInputAttributeDescription;
-
-    u32 location = 0;
-    u32 binding = 0;
-    Format format = Format::Unknown;
-    u32 offset = 0;
-
-    operator auto &() { return *reinterpret_cast<VkType *>(this); }
-    operator const auto &() const { return *reinterpret_cast<const VkType *>(this); }
-};
-static_assert(sizeof(PipelineVertexAttribInfo::VkType) == sizeof(PipelineVertexAttribInfo));
-
 struct PipelineViewportStateInfo {
     using VkType = VkPipelineViewportStateCreateInfo;
 
@@ -815,9 +913,9 @@ struct PipelineViewportStateInfo {
     const void *next = nullptr;
     VkPipelineViewportStateCreateFlags create_flags = 0;
     u32 viewport_count = 0;
-    const Viewport *viewports = nullptr;
+    Viewport *viewports = nullptr;
     u32 scissor_count = 0;
-    const Rect2D *scissors = nullptr;
+    Rect2D *scissors = nullptr;
 
     operator auto &() { return *reinterpret_cast<VkType *>(this); }
     operator const auto &() const { return *reinterpret_cast<const VkType *>(this); }
@@ -858,92 +956,51 @@ struct PipelineColorBlendAttachment {
 };
 static_assert(sizeof(PipelineColorBlendAttachment::VkType) == sizeof(PipelineColorBlendAttachment));
 
-struct RenderingAttachmentInfo {
-    using VkType = VkRenderingAttachmentInfo;
-
-    VkStructureType structure_type = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-    void *next = nullptr;
-    VkImageView image_view = VK_NULL_HANDLE;
-    ImageLayout image_layout = ImageLayout::Undefined;
-    // TODO: MSAA is a requirement
-    VkResolveModeFlagBits resolve_flags_unused = {};
-    VkImageView resolve_image_view_unused = VK_NULL_HANDLE;
-    ImageLayout resolve_image_layout_unused = ImageLayout::Undefined;
-
-    AttachmentLoadOp load_op = AttachmentLoadOp::DontCare;
-    AttachmentStoreOp store_op = AttachmentStoreOp::DontCare;
-    union {
-        ColorClearValue color_clear = {};
-        DepthClearValue depth_clear;
-    };
-
-    operator auto &() { return *reinterpret_cast<VkType *>(this); }
-    operator const auto &() const { return *reinterpret_cast<const VkType *>(this); }
-};
-static_assert(sizeof(RenderingAttachmentInfo::VkType) == sizeof(RenderingAttachmentInfo));
-
 #ifdef MemoryBarrier
 #undef MemoryBarrier
 #endif
 
 struct ImageBarrier {
-    using VkType = VkImageMemoryBarrier2;
-
-    VkStructureType struct_type = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
-    void *next = nullptr;
-    PipelineStage src_stage_mask = {};
-    MemoryAccess src_access_mask = {};
-    PipelineStage dst_stage_mask = {};
-    MemoryAccess dst_access_mask = {};
+    PipelineAccess src_access = PipelineAccess::None;
+    PipelineAccess dst_access = PipelineAccess::None;
     ImageLayout old_layout = ImageLayout::Undefined;
     ImageLayout new_layout = ImageLayout::Undefined;
     u32 src_queue_family_id = ~0u;
     u32 dst_queue_family_id = ~0u;
-    union {
-        ImageID image_id = ImageID::Invalid;
-        VkImage image;
-    };
+    ImageID image_id = ImageID::Invalid;
     ImageSubresourceRange subresource_range = {};
 
-    operator auto &() { return *reinterpret_cast<VkType *>(this); }
-    operator const auto &() const { return *reinterpret_cast<const VkType *>(this); }
+    VkImageMemoryBarrier2 vk_type(VkImage image)
+    {
+        return { .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                 .pNext = nullptr,
+                 .srcStageMask = VkPipelineStageFlags2(src_access.stage),
+                 .srcAccessMask = VkAccessFlags2(src_access.access),
+                 .dstStageMask = VkPipelineStageFlags2(dst_access.stage),
+                 .dstAccessMask = VkAccessFlags2(dst_access.access),
+                 .oldLayout = VkImageLayout(old_layout),
+                 .newLayout = VkImageLayout(new_layout),
+                 .srcQueueFamilyIndex = src_queue_family_id,
+                 .dstQueueFamilyIndex = dst_queue_family_id,
+                 .image = image,
+                 .subresourceRange = subresource_range };
+    }
 };
-static_assert(sizeof(ImageBarrier::VkType) == sizeof(ImageBarrier));
 
 struct MemoryBarrier {
-    using VkType = VkMemoryBarrier2;
+    PipelineAccess src_access = PipelineAccess::None;
+    PipelineAccess dst_access = PipelineAccess::None;
 
-    VkStructureType struct_type = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2;
-    void *next = nullptr;
-    PipelineStage src_stage_mask = {};
-    MemoryAccess src_access_mask = {};
-    PipelineStage dst_stage_mask = {};
-    MemoryAccess dst_access_mask = {};
-
-    operator auto &() { return *reinterpret_cast<VkType *>(this); }
-    operator const auto &() const { return *reinterpret_cast<const VkType *>(this); }
+    VkMemoryBarrier2 vk_type()
+    {
+        return { .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2,
+                 .pNext = nullptr,
+                 .srcStageMask = VkPipelineStageFlags2(src_access.stage),
+                 .srcAccessMask = VkAccessFlags2(src_access.access),
+                 .dstStageMask = VkPipelineStageFlags2(dst_access.stage),
+                 .dstAccessMask = VkAccessFlags2(dst_access.access) };
+    }
 };
-static_assert(sizeof(MemoryBarrier::VkType) == sizeof(MemoryBarrier));
-
-struct DependencyInfo {
-    using VkType = VkDependencyInfo;
-
-    VkStructureType struct_type = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
-    void *next = nullptr;
-    VkDependencyFlags dependency_flags = 0;
-    u32 memory_barrier_count = 0;
-    MemoryBarrier *memory_barriers = nullptr;
-    // do not use buffer barriers, it's not worth to exchange queue ownership
-    // use memory barriers instead
-    u32 buffer_barrier_count_unused = 0;
-    VkBufferMemoryBarrier2 *buffer_barriers_unusued = nullptr;
-    u32 image_barrier_count = 0;
-    ImageBarrier *image_barriers = nullptr;
-
-    operator auto &() { return *reinterpret_cast<VkType *>(this); }
-    operator const auto &() const { return *reinterpret_cast<const VkType *>(this); }
-};
-static_assert(sizeof(DependencyInfo::VkType) == sizeof(DependencyInfo));
 
 struct BufferCopyRegion {
     using VkType = VkBufferCopy;
@@ -1035,24 +1092,39 @@ struct QueueSubmitInfo {
 };
 static_assert(sizeof(QueueSubmitInfo::VkType) == sizeof(QueueSubmitInfo));
 
-struct RenderingBeginInfo {
-    using VkType = VkRenderingInfo;
+struct RenderingAttachmentInfo {
+    ImageViewID image_view_id = ImageViewID::Invalid;
+    ImageLayout image_layout = ImageLayout::Undefined;
+    AttachmentLoadOp load_op = AttachmentLoadOp::DontCare;
+    AttachmentStoreOp store_op = AttachmentStoreOp::DontCare;
+    union {
+        ColorClearValue color_clear = {};
+        DepthClearValue depth_clear;
+    } clear_value;
 
-    VkStructureType structure_type = VK_STRUCTURE_TYPE_RENDERING_INFO;
-    void *next = nullptr;
-    VkRenderingFlags rendering_flags = 0;
+    VkRenderingAttachmentInfo vk_info(VkImageView image_view)
+    {
+        return {
+            .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+            .pNext = nullptr,
+            .imageView = image_view,
+            .imageLayout = VkImageLayout(image_layout),
+            .resolveMode = {},
+            .resolveImageView = VK_NULL_HANDLE,
+            .resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+            .loadOp = VkAttachmentLoadOp(load_op),
+            .storeOp = VkAttachmentStoreOp(store_op),
+            .clearValue = *reinterpret_cast<VkClearValue *>(&clear_value),
+        };
+    }
+};
+
+struct RenderingBeginInfo {
     Rect2D render_area = {};
-    u32 layer_count = 0;
-    u32 view_mask = 0;
-    u32 color_attachment_count = 0;
-    RenderingAttachmentInfo *color_attachments = nullptr;
+    std::span<RenderingAttachmentInfo> color_attachments = {};
     RenderingAttachmentInfo *depth_attachment = nullptr;
     RenderingAttachmentInfo *stencil_attachment = nullptr;
-
-    operator auto &() { return *reinterpret_cast<VkType *>(this); }
-    operator const auto &() const { return *reinterpret_cast<const VkType *>(this); }
 };
-static_assert(sizeof(RenderingBeginInfo::VkType) == sizeof(RenderingBeginInfo));
 
 struct DescriptorSetLayoutElement {
     using VkType = VkDescriptorSetLayoutBinding;

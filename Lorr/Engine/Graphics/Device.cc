@@ -306,6 +306,7 @@ VKResult Device::create_command_lists(std::span<CommandList> lists, CommandAlloc
         }
 
         list.m_allocator = &command_allocator;
+        list.m_device = this;
     }
 
     return VKResult::Success;
@@ -448,6 +449,7 @@ VKResult Device::create_swap_chain(SwapChain &swap_chain, const SwapChainInfo &i
     vkb::SwapchainBuilder builder(m_handle, info.surface);
     builder.set_desired_min_image_count((u32)info.buffering);
     builder.set_desired_extent(info.extent.width, info.extent.height);
+    builder.set_desired_format({ VK_FORMAT_R8G8B8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR });
     builder.set_image_usage_flags(
         static_cast<VkImageUsageFlags>(ImageUsage::ColorAttachment | ImageUsage::Sampled | ImageUsage::TransferSrc));
     auto result = builder.build();
@@ -615,20 +617,81 @@ void Device::delete_pipeline_layouts(std::span<PipelineLayout> pipeline_layout)
 Result<PipelineID, VKResult> Device::create_graphics_pipeline(const GraphicsPipelineInfo &info)
 {
     ZoneScoped;
+    memory::ScopedStack stack;
 
-    /// INPUT LAYOUT  ------------------------------------------------------------
+    VkPipelineRenderingCreateInfo rendering_info = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
+        .pNext = nullptr,
+        .viewMask = 0,
+        .colorAttachmentCount = static_cast<u32>(info.color_attachment_formats.size()),
+        .pColorAttachmentFormats = reinterpret_cast<const VkFormat *>(info.color_attachment_formats.data()),
+        .depthAttachmentFormat = static_cast<VkFormat>(info.depth_attachment_format),
+        .stencilAttachmentFormat = static_cast<VkFormat>(info.stencil_attachment_format),
+    };
+
+    // Viewport State
+
+    VkPipelineViewportStateCreateInfo viewport_state_info = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = 0,
+        .viewportCount = static_cast<u32>(info.viewports.size()),
+        .pViewports = reinterpret_cast<const VkViewport *>(info.viewports.data()),
+        .scissorCount = static_cast<u32>(info.scissors.size()),
+        .pScissors = reinterpret_cast<const VkRect2D *>(info.scissors.data()),
+    };
+
+    // Shaders
+
+    auto vk_shader_stage_infos = stack.alloc<VkPipelineShaderStageCreateInfo>(info.shader_ids.size());
+    for (u32 i = 0; i < vk_shader_stage_infos.size(); i++) {
+        auto &vk_info = vk_shader_stage_infos[i];
+        auto &v = info.shader_ids[i];
+        Shader *shader = get_shader(v);
+
+        vk_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        vk_info.pNext = nullptr;
+        vk_info.flags = 0;
+        vk_info.stage = static_cast<VkShaderStageFlagBits>(shader->m_stage);
+        vk_info.module = shader->m_handle;
+        vk_info.pName = "main";
+        vk_info.pSpecializationInfo = nullptr;
+    }
+
+    // Input Layout
+
+    auto vk_vertex_binding_infos = stack.alloc<VkVertexInputBindingDescription>(info.vertex_binding_infos.size());
+    for (u32 i = 0; i < vk_vertex_binding_infos.size(); i++) {
+        auto &vk_info = vk_vertex_binding_infos[i];
+        auto &v = info.vertex_binding_infos[i];
+
+        vk_info.binding = v.binding;
+        vk_info.stride = v.stride;
+        vk_info.inputRate = static_cast<VkVertexInputRate>(v.input_rate);
+    }
+
+    auto vk_vertex_attrib_infos = stack.alloc<VkVertexInputAttributeDescription>(info.vertex_attrib_infos.size());
+    for (u32 i = 0; i < vk_vertex_attrib_infos.size(); i++) {
+        auto &vk_info = vk_vertex_attrib_infos[i];
+        auto &v = info.vertex_attrib_infos[i];
+
+        vk_info.format = static_cast<VkFormat>(v.format);
+        vk_info.location = v.location;
+        vk_info.binding = v.binding;
+        vk_info.offset = v.offset;
+    }
 
     VkPipelineVertexInputStateCreateInfo input_layout_info = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
         .pNext = nullptr,
         .flags = 0,
-        .vertexBindingDescriptionCount = static_cast<u32>(info.vertex_binding_infos.size()),
-        .pVertexBindingDescriptions = reinterpret_cast<const VkVertexInputBindingDescription *>(info.vertex_binding_infos.data()),
-        .vertexAttributeDescriptionCount = static_cast<u32>(info.vertex_attrib_infos.size()),
-        .pVertexAttributeDescriptions = reinterpret_cast<const VkVertexInputAttributeDescription *>(info.vertex_attrib_infos.data()),
+        .vertexBindingDescriptionCount = static_cast<u32>(vk_vertex_binding_infos.size()),
+        .pVertexBindingDescriptions = vk_vertex_binding_infos.data(),
+        .vertexAttributeDescriptionCount = static_cast<u32>(vk_vertex_attrib_infos.size()),
+        .pVertexAttributeDescriptions = vk_vertex_attrib_infos.data(),
     };
 
-    /// INPUT ASSEMBLY -----------------------------------------------------------
+    // Input Assembly
 
     VkPipelineInputAssemblyStateCreateInfo input_assembly_info = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
@@ -638,7 +701,7 @@ Result<PipelineID, VKResult> Device::create_graphics_pipeline(const GraphicsPipe
         .primitiveRestartEnable = false,
     };
 
-    /// TESSELLATION -------------------------------------------------------------
+    // Tessellation
 
     VkPipelineTessellationStateCreateInfo tessellation_info = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO,
@@ -647,7 +710,8 @@ Result<PipelineID, VKResult> Device::create_graphics_pipeline(const GraphicsPipe
         .patchControlPoints = 0,  // TODO: Tessellation
     };
 
-    /// RASTERIZER ---------------------------------------------------------------
+    // Rasterizer
+
     VkPipelineRasterizationStateCreateInfo rasterizer_info = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
         .pNext = nullptr,
@@ -664,7 +728,7 @@ Result<PipelineID, VKResult> Device::create_graphics_pipeline(const GraphicsPipe
         .lineWidth = info.line_width,
     };
 
-    /// MULTISAMPLE --------------------------------------------------------------
+    // Multisampling
 
     VkPipelineMultisampleStateCreateInfo multisample_info = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
@@ -678,7 +742,7 @@ Result<PipelineID, VKResult> Device::create_graphics_pipeline(const GraphicsPipe
         .alphaToOneEnable = info.enable_alpha_to_one,
     };
 
-    /// DEPTH STENCIL ------------------------------------------------------------
+    // Depth Stencil
 
     VkPipelineDepthStencilStateCreateInfo depth_stencil_info = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
@@ -695,7 +759,7 @@ Result<PipelineID, VKResult> Device::create_graphics_pipeline(const GraphicsPipe
         .maxDepthBounds = 0,
     };
 
-    /// COLOR BLEND --------------------------------------------------------------
+    // Color Blending
 
     VkPipelineColorBlendStateCreateInfo color_blend_info = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
@@ -761,19 +825,17 @@ Result<PipelineID, VKResult> Device::create_graphics_pipeline(const GraphicsPipe
     if (is_feature_supported(DeviceFeature::DescriptorBuffer))
         pipeline_create_flags |= VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
 
-    PipelineViewportStateInfo viewport_state_info = {
-        .viewport_count = static_cast<u32>(info.viewports.size()),
-        .viewports = info.viewports.data(),
-        .scissor_count = static_cast<u32>(info.scissors.size()),
-        .scissors = info.scissors.data(),
-    };
+    PipelineLayout *pipeline_layout = info.layout;
+    if (pipeline_layout == nullptr) {
+        pipeline_layout = &m_resources.pipeline_layouts[0];
+    }
 
     VkGraphicsPipelineCreateInfo pipeline_create_info = {
         .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-        .pNext = &info.attachment_info,
+        .pNext = &rendering_info,
         .flags = pipeline_create_flags,
-        .stageCount = static_cast<u32>(info.shader_stages.size()),
-        .pStages = reinterpret_cast<const VkPipelineShaderStageCreateInfo *>(info.shader_stages.data()),
+        .stageCount = static_cast<u32>(vk_shader_stage_infos.size()),
+        .pStages = vk_shader_stage_infos.data(),
         .pVertexInputState = &input_layout_info,
         .pInputAssemblyState = &input_assembly_info,
         .pTessellationState = &tessellation_info,
@@ -783,7 +845,7 @@ Result<PipelineID, VKResult> Device::create_graphics_pipeline(const GraphicsPipe
         .pDepthStencilState = &depth_stencil_info,
         .pColorBlendState = &color_blend_info,
         .pDynamicState = &dynamic_state_info,
-        .layout = *info.layout,
+        .layout = *pipeline_layout,
         .renderPass = nullptr,
         .subpass = 0,
         .basePipelineHandle = VK_NULL_HANDLE,

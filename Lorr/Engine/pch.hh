@@ -27,6 +27,13 @@ constexpr usize count_of(T (&_)[N])
 {
     return N;
 }
+
+template<typename T>
+T *temp_v(T &&v)
+{
+    return &v;
+}
+
 }  // namespace lr
 
 template<>

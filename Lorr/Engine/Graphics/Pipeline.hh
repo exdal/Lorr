@@ -11,6 +11,7 @@ struct PipelineLayoutInfo {
 struct PipelineLayout {
     VkPipelineLayout m_handle = nullptr;
 
+    constexpr static auto OBJECT_TYPE = VK_OBJECT_TYPE_PIPELINE_LAYOUT;
     operator auto &() { return m_handle; }
     explicit operator bool() { return m_handle != nullptr; }
 };

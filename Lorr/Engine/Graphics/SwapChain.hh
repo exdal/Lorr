@@ -24,10 +24,7 @@ struct SwapChain {
     Semaphore &frame_sema() { return *m_frame_sema; }
     std::pair<Semaphore &, Semaphore &> binary_semas() { return { m_acquire_semas->at(sema_index()), m_present_semas->at(sema_index()) }; }
 
-    u64 frame_wait_val()
-    {
-        return static_cast<u64>(std::max<i64>(0, static_cast<i64>(m_frame_sema->counter()) - static_cast<i64>(m_image_count - 1)));
-    }
+    u64 frame_wait_val() { return static_cast<u64>(std::max<i64>(0, static_cast<i64>(m_frame_sema->counter()) - static_cast<i64>(m_image_count - 1))); }
 
     Format m_format = Format::Unknown;
     Extent2D m_extent = {};

@@ -6,7 +6,7 @@ struct CoarseVertex {
 
 struct VertexOutput {
     float4 position     : SV_Position;
-    CoarseVertex cv  : CoarseVertex;
+    CoarseVertex cv     : CoarseVertex;
 };
 
 [shader("vertex")]

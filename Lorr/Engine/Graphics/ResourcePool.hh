@@ -22,13 +22,14 @@ struct allocation_result {
 
 // Paged resource pool, a bit cleaner implementation to linked lists.
 // is from Daxa
-template<typename ResourceT, typename ResourceID, usize MAX_RESOURCE_COUNT = 1 << 20u>
+template<typename ResourceT, typename ResourceID>
 struct PagedResourcePool {
     static_assert(std::is_default_constructible_v<ResourceT>, "ResourceT must have default constructor.");
 
     using index_type = std::underlying_type_t<ResourceID>;
 
-    constexpr static index_type PAGE_BITS = 10u;
+    constexpr static index_type MAX_RESOURCE_COUNT = 1 << 19u;
+    constexpr static index_type PAGE_BITS = 9u;
     constexpr static index_type PAGE_SIZE = 1 << PAGE_BITS;
     constexpr static index_type PAGE_MASK = PAGE_SIZE - 1u;
     constexpr static index_type PAGE_COUNT = MAX_RESOURCE_COUNT / PAGE_SIZE;
@@ -98,13 +99,66 @@ struct PagedResourcePool {
     std::array<std::unique_ptr<Page>, PAGE_COUNT> m_pages = {};
 };
 
+template<typename ResourceT, typename ResourceID, usize size>
+struct LinearResourcePool {
+    static_assert(std::is_default_constructible_v<ResourceT>, "ResourceT must have default constructor.");
+
+    using index_type = std::underlying_type_t<ResourceID>;
+
+    template<typename... Args>
+    allocation_result<ResourceT, ResourceID> create(Args &&...args)
+    {
+        index_type index = static_cast<index_type>(~0);
+        if (m_free_indexes.empty()) {
+            index = m_latest_index++;
+            if (index >= m_resources.max_size()) {
+                return {};
+            }
+        }
+        else {
+            index = m_free_indexes.back();
+            m_free_indexes.pop_back();
+        }
+
+        ResourceT *resource = &m_resources[index];
+        std::construct_at(reinterpret_cast<ResourceT *>(resource), std::forward<Args>(args)...);
+        return { resource, static_cast<ResourceID>(index) };
+    }
+
+    void destroy(ResourceID id)
+    {
+        index_type index = get_handle_val(id);
+
+        m_resources[index] = {};
+        m_free_indexes.push_back(index);
+    }
+
+    ResourceT *get(ResourceID id)
+    {
+        index_type index = get_handle_val(id);
+        return &m_resources[index];
+    }
+
+    void reset()
+    {
+        m_free_indexes.clear();
+        m_latest_index = 0;
+    }
+
+    usize max_resources() { return m_resources.max_size(); }
+
+    index_type m_latest_index = 0;
+    std::vector<index_type> m_free_indexes = {};
+    std::array<ResourceT, size> m_resources = {};
+};
+
 struct ResourcePools {
     PagedResourcePool<Buffer, BufferID> buffers = {};
     PagedResourcePool<Image, ImageID> images = {};
     PagedResourcePool<ImageView, ImageViewID> image_views = {};
-    PagedResourcePool<Sampler, SamplerID> samplers = {};
-    PagedResourcePool<Shader, ShaderID> shaders = {};
-    PagedResourcePool<Pipeline, PipelineID> pipelines = {};
+    LinearResourcePool<Sampler, SamplerID, 64> samplers = {};
+    LinearResourcePool<Shader, ShaderID, 1024> shaders = {};
+    LinearResourcePool<Pipeline, PipelineID, 512> pipelines = {};
 
     constexpr static usize max_push_constant_size = 128;
     std::array<PipelineLayout, (max_push_constant_size / sizeof(u32)) + 1> pipeline_layouts = {};

@@ -20,7 +20,7 @@ Result<os::File, os::FileResult> os::open_file(std::string_view path, FileAccess
     if (access & FileAccess::Read)
         flags &= ~O_WRONLY;
 
-    i32 file = open(path.data(), flags);
+    i32 file = open(path.data(), flags, S_IRUSR | S_IWUSR);
     if (file < 0) {
         LR_LOG_ERROR("Failed to open file {}! {}", path, file);
         return static_cast<FileResult>(file);

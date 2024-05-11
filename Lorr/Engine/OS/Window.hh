@@ -64,7 +64,8 @@ union WindowEventData {
     };
 
     struct {
-        f32 offset;
+        f64 mouse_offset_x;
+        f64 mouse_offset_y;
     };
 
     struct {
@@ -79,7 +80,7 @@ union WindowEventData {
     };
 };
 
-using WindowEventManager = EventManager<WindowEventData, 64>;
+using WindowEventManager = EventManager<WindowEventData>;
 
 struct SystemDisplay {
     std::string name;

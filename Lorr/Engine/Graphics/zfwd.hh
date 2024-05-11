@@ -45,7 +45,4 @@ LR_HANDLE(PipelineID, u32);
 template<typename T>
 struct Unique;
 
-template<typename T>
-struct UniqueResult;
-
 }  // namespace lr::graphics

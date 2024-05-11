@@ -21,11 +21,22 @@ struct CommandQueue {
     u32 family_index() { return m_index; }
     Semaphore &semaphore() { return m_semaphore; }
 
+    void defer(std::span<const BufferID> buffer_ids);
+    void defer(std::span<const ImageID> image_ids);
+    void defer(std::span<const ImageViewID> image_view_ids);
+    void defer(std::span<const SamplerID> sampler_ids);
+
     VKResult submit(QueueSubmitInfo &submit_info);
     VKResult present(SwapChain &swap_chain, Semaphore &present_sema, u32 image_id);
 
     u32 m_index = 0;  // Physical device queue family index
     Semaphore m_semaphore = {};
+
+    plf::colony<std::pair<BufferID, u64>> m_garbage_buffers = {};
+    plf::colony<std::pair<ImageID, u64>> m_garbage_images = {};
+    plf::colony<std::pair<ImageViewID, u64>> m_garbage_image_views = {};
+    plf::colony<std::pair<SamplerID, u64>> m_garbage_samplers = {};
+
     VkQueue m_handle = VK_NULL_HANDLE;
 
     constexpr static auto OBJECT_TYPE = VK_OBJECT_TYPE_QUEUE;
@@ -51,18 +62,20 @@ struct CommandAllocator {
 
 /// COMMAND LIST ///
 struct CommandList {
-    void set_barriers(std::span<MemoryBarrier> memory, std::span<ImageBarrier> image);
+    // Barrier utils
+    void image_transition(const ImageBarrier &barrier);
+    void memory_barrier(const MemoryBarrier &barrier);
+    void set_barriers(std::span<const MemoryBarrier> memory, std::span<const ImageBarrier> image);
 
     // Copy Commands
-    void copy_buffer_to_buffer(BufferID src, BufferID dst, std::span<BufferCopyRegion> regions);
-    void copy_buffer_to_image(BufferID src, ImageID dst, ImageLayout layout, std::span<ImageCopyRegion> regions);
+    void copy_buffer_to_buffer(BufferID src, BufferID dst, std::span<const BufferCopyRegion> regions);
+    void copy_buffer_to_image(BufferID src, ImageID dst, ImageLayout layout, std::span<const ImageCopyRegion> regions);
 
     // Pipeline State
     void begin_rendering(const RenderingBeginInfo &info);
     void end_rendering();
     void set_pipeline(PipelineID pipeline_id);
-    void set_push_constants(
-        PipelineLayout &layout, void *data, u32 data_size, u32 offset, ShaderStageFlag stage_flags = ShaderStageFlag::All);
+    void set_push_constants(PipelineLayout &layout, void *data, u32 data_size, u32 offset, ShaderStageFlag stage_flags = ShaderStageFlag::All);
     void set_descriptor_sets(PipelineLayout &layout, PipelineBindPoint bind_point, u32 first_set, std::span<DescriptorSet> sets);
     void set_vertex_buffer(BufferID buffer_id, u64 offset = 0, u32 first_binding = 0, u32 binding_count = 1);
     void set_index_buffer(BufferID buffer_id, u64 offset = 0, bool use_u16 = false);

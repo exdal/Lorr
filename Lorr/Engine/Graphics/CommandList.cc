@@ -5,6 +5,42 @@
 #include "Memory/Stack.hh"
 
 namespace lr::graphics {
+void CommandQueue::defer(std::span<const BufferID> buffer_ids)
+{
+    ZoneScoped;
+
+    for (BufferID v : buffer_ids) {
+        m_garbage_buffers.emplace(v, m_semaphore.counter());
+    }
+}
+
+void CommandQueue::defer(std::span<const ImageID> image_ids)
+{
+    ZoneScoped;
+
+    for (ImageID v : image_ids) {
+        m_garbage_images.emplace(v, m_semaphore.counter());
+    }
+}
+
+void CommandQueue::defer(std::span<const ImageViewID> image_view_ids)
+{
+    ZoneScoped;
+
+    for (ImageViewID v : image_view_ids) {
+        m_garbage_image_views.emplace(v, m_semaphore.counter());
+    }
+}
+
+void CommandQueue::defer(std::span<const SamplerID> sampler_ids)
+{
+    ZoneScoped;
+
+    for (SamplerID v : sampler_ids) {
+        m_garbage_samplers.emplace(v, m_semaphore.counter());
+    }
+}
+
 VKResult CommandQueue::submit(QueueSubmitInfo &submit_info)
 {
     ZoneScoped;
@@ -26,10 +62,51 @@ VKResult CommandQueue::present(SwapChain &swap_chain, Semaphore &present_sema, u
         .pImageIndices = &image_id,
         .pResults = nullptr,
     };
-    return CHECK(vkQueuePresentKHR(m_handle, &present_info));
+    return static_cast<VKResult>(vkQueuePresentKHR(m_handle, &present_info));
 }
 
-void CommandList::set_barriers(std::span<MemoryBarrier> memory, std::span<ImageBarrier> image)
+void CommandList::image_transition(const ImageBarrier &barrier)
+{
+    ZoneScoped;
+
+    Image *image = m_device->get_image(barrier.image_id);
+    VkImageMemoryBarrier2 vk_barrier = static_cast<ImageBarrier>(barrier).vk_type(*image);
+
+    VkDependencyInfo dependency_info = {
+        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .pNext = nullptr,
+        .dependencyFlags = 0,
+        .memoryBarrierCount = 0,
+        .pMemoryBarriers = nullptr,
+        .bufferMemoryBarrierCount = 0,
+        .pBufferMemoryBarriers = nullptr,
+        .imageMemoryBarrierCount = 1,
+        .pImageMemoryBarriers = &vk_barrier,
+    };
+    vkCmdPipelineBarrier2(m_handle, &dependency_info);
+}
+
+void CommandList::memory_barrier(const MemoryBarrier &barrier)
+{
+    ZoneScoped;
+
+    VkMemoryBarrier2 vk_barrier = static_cast<MemoryBarrier>(barrier).vk_type();
+
+    VkDependencyInfo dependency_info = {
+        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .pNext = nullptr,
+        .dependencyFlags = 0,
+        .memoryBarrierCount = 1,
+        .pMemoryBarriers = &vk_barrier,
+        .bufferMemoryBarrierCount = 0,
+        .pBufferMemoryBarriers = nullptr,
+        .imageMemoryBarrierCount = 0,
+        .pImageMemoryBarriers = nullptr,
+    };
+    vkCmdPipelineBarrier2(m_handle, &dependency_info);
+}
+
+void CommandList::set_barriers(std::span<const MemoryBarrier> memory, std::span<const ImageBarrier> image)
 {
     ZoneScoped;
     memory::ScopedStack stack;
@@ -38,11 +115,11 @@ void CommandList::set_barriers(std::span<MemoryBarrier> memory, std::span<ImageB
     auto image_barriers = stack.alloc<VkImageMemoryBarrier2>(image.size());
 
     for (u32 i = 0; i < memory.size(); i++) {
-        memory_barriers[i] = memory[i].vk_type();
+        memory_barriers[i] = static_cast<MemoryBarrier>(memory[i]).vk_type();
     }
 
     for (u32 i = 0; i < image.size(); i++) {
-        image_barriers[i] = image[i].vk_type(*m_device->get_image(image[i].image_id));
+        image_barriers[i] = static_cast<ImageBarrier>(image[i]).vk_type(*m_device->get_image(image[i].image_id));
     }
 
     VkDependencyInfo dependency_info = {
@@ -59,24 +136,19 @@ void CommandList::set_barriers(std::span<MemoryBarrier> memory, std::span<ImageB
     vkCmdPipelineBarrier2(m_handle, &dependency_info);
 }
 
-void CommandList::copy_buffer_to_buffer(BufferID src, BufferID dst, std::span<BufferCopyRegion> regions)
+void CommandList::copy_buffer_to_buffer(BufferID src, BufferID dst, std::span<const BufferCopyRegion> regions)
 {
     ZoneScoped;
 
     vkCmdCopyBuffer(m_handle, *m_device->get_buffer(src), *m_device->get_buffer(dst), regions.size(), (VkBufferCopy *)regions.data());
 }
 
-void CommandList::copy_buffer_to_image(BufferID src, ImageID dst, ImageLayout layout, std::span<ImageCopyRegion> regions)
+void CommandList::copy_buffer_to_image(BufferID src, ImageID dst, ImageLayout layout, std::span<const ImageCopyRegion> regions)
 {
     ZoneScoped;
 
     vkCmdCopyBufferToImage(
-        m_handle,
-        *m_device->get_buffer(src),
-        *m_device->get_image(dst),
-        static_cast<VkImageLayout>(layout),
-        regions.size(),
-        (VkBufferImageCopy *)regions.data());
+        m_handle, *m_device->get_buffer(src), *m_device->get_image(dst), static_cast<VkImageLayout>(layout), regions.size(), (VkBufferImageCopy *)regions.data());
 }
 
 void CommandList::begin_rendering(const RenderingBeginInfo &info)
@@ -150,8 +222,7 @@ void CommandList::set_descriptor_sets(PipelineLayout &layout, PipelineBindPoint 
         descriptor_sets[i] = sets[i];
     }
 
-    vkCmdBindDescriptorSets(
-        m_handle, static_cast<VkPipelineBindPoint>(bind_point), layout, first_set, sets.size(), descriptor_sets.data(), 0, nullptr);
+    vkCmdBindDescriptorSets(m_handle, static_cast<VkPipelineBindPoint>(bind_point), layout, first_set, sets.size(), descriptor_sets.data(), 0, nullptr);
 }
 
 void CommandList::set_vertex_buffer(BufferID buffer_id, u64 offset, u32 first_binding, u32 binding_count)

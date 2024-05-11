@@ -4,6 +4,7 @@ set_version("1.0.0")
 
 add_cxxflags("clang::-Wshadow-all")
 set_warnings("extra")
+set_runtimes("MT", "c++_static")
 
 add_requires(
     "fmt",
@@ -16,7 +17,8 @@ add_requires(
     "vk-bootstrap",
     "unordered_dense",
     "plf_colony",
-    "sol2"
+    "sol2",
+    "imgui v1.90.5-docking"
 )
 add_requires("loguru", { configs = { fmt = true } })
 add_requires("slang", { configs = {

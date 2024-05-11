@@ -139,7 +139,10 @@ Result<std::vector<u32>, VKResult> ShaderCompiler::compile(const ShaderCompileIn
     for (auto &vdir : info.virtual_env) {
         for (const auto &[vfile_path, vfile] : vdir.files()) {
             i32 file_id = compile_request->addTranslationUnit(SLANG_SOURCE_LANGUAGE_SLANG, vfile_path.c_str());
-            compile_request->addTranslationUnitSourceString(file_id, vfile_path.c_str(), vfile.c_str());
+            const char *file_data_begin = reinterpret_cast<const char *>(vfile.data());
+            const char *file_data_end = reinterpret_cast<const char *>(vfile.data() + vfile.size());
+
+            compile_request->addTranslationUnitSourceStringSpan(file_id, vfile_path.c_str(), file_data_begin, file_data_end);
         }
     }
 
@@ -192,8 +195,7 @@ Result<std::vector<u32>, VKResult> ShaderCompiler::compile(const ShaderCompileIn
         return VKResult::Unknown;
     }
 
-    std::span<const u32> spirv_data_view(
-        static_cast<const u32 *>(spirv_blob->getBufferPointer()), spirv_blob->getBufferSize() / sizeof(u32));
+    std::span<const u32> spirv_data_view(static_cast<const u32 *>(spirv_blob->getBufferPointer()), spirv_blob->getBufferSize() / sizeof(u32));
     std::vector<u32> spirv_data(spirv_data_view.begin(), spirv_data_view.end());
     return std::move(spirv_data);
 }

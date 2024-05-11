@@ -8,17 +8,25 @@ namespace lr::graphics {
 
 struct BufferInfo {
     BufferUsage usage_flags = BufferUsage::Vertex;
+    MemoryFlag flags = MemoryFlag::None;
+    MemoryPreference preference = MemoryPreference::Auto;
     u64 data_size = 0;
 };
 
 struct Buffer {
     Buffer() = default;
-    Buffer(VkBuffer buffer, VmaAllocation allocation)
+    Buffer(VkBuffer buffer, u64 data_size, void *host_data, u64 device_address, VmaAllocation allocation)
         : m_handle(buffer),
+          m_data_size(data_size),
+          m_host_data(host_data),
+          m_device_address(device_address),
           m_allocation(allocation)
     {
     }
 
+    u64 m_data_size = 0;
+    void *m_host_data = nullptr;
+    u64 m_device_address = 0;
     VmaAllocation m_allocation = {};
     VkBuffer m_handle = nullptr;
 
@@ -39,19 +47,11 @@ struct ImageInfo {
     u32 slice_count = 1;
     u32 mip_levels = 1;
     std::span<u32> queue_indices = {};
-
-    u64 data_size = 0;
 };
 
 struct Image {
     Image() = default;
-    Image(
-        VkImage image,
-        VmaAllocation allocation,
-        Format format,
-        Extent3D extent,
-        u32 slice_count,
-        u32 mip_count)
+    Image(VkImage image, VmaAllocation allocation, Format format, Extent3D extent, u32 slice_count, u32 mip_count)
         : m_handle(image),
           m_allocation(allocation),
           m_format(format),
@@ -92,8 +92,7 @@ struct ImageViewInfo {
 
 struct ImageView {
     ImageView() = default;
-    ImageView(
-        VkImageView image_view, Format format, ImageViewType type, const ImageSubresourceRange &subres_range)
+    ImageView(VkImageView image_view, Format format, ImageViewType type, const ImageSubresourceRange &subres_range)
         : m_handle(image_view),
           m_format(format),
           m_type(type),

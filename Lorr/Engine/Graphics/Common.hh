@@ -136,9 +136,7 @@ constexpr static std::string_view vkresult_to_string(VKResult result)
 }
 
 constexpr static VKResult CHECK(
-    VkResult vkr,
-    [[maybe_unused]] std::initializer_list<VKResult> allowed_checks = {},
-    std::source_location LOC = std::source_location::current())
+    VkResult vkr, [[maybe_unused]] std::initializer_list<VKResult> allowed_checks = {}, [[maybe_unused]] std::source_location LOC = std::source_location::current())
 {
     auto result = static_cast<VKResult>(vkr);
 #if LR_DEBUG
@@ -765,21 +763,22 @@ LR_TYPEOP_ARITHMETIC_INT(ShaderStageFlag, ShaderStageFlag, &);
 
 /// MEMORY ---------------------------- ///
 enum class MemoryFlag : u32 {
-    Device = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-    HostVisible = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
-    HostCoherent = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-    HostCached = VK_MEMORY_PROPERTY_HOST_CACHED_BIT,
-
-    HostVisibleCoherent = HostVisible | HostCoherent,
+    None = 0,
+    Dedicated = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,  //< Require dedicated MEMORY POOL.
+    HostSeqWrite = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+    HostReadWrite = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT,
 };
-LR_TYPEOP_ARITHMETIC_INT(MemoryFlag, MemoryFlag, &);
 LR_TYPEOP_ARITHMETIC(MemoryFlag, MemoryFlag, |);
+LR_TYPEOP_ARITHMETIC_INT(MemoryFlag, MemoryFlag, &);
+
+enum class MemoryPreference : u32 {
+    Auto = VMA_MEMORY_USAGE_AUTO,
+    Host = VMA_MEMORY_USAGE_AUTO_PREFER_HOST,
+    Device = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
+};
 
 namespace Limits {
-    constexpr usize MaxVertexAttribs = 8;
-    constexpr usize ColorAttachments = 8;
     constexpr usize FrameCount = 3;
-
 }  // namespace Limits
 
 // Vulkan Structs
@@ -1157,7 +1156,7 @@ struct BufferDescriptorInfo {
 
     VkBuffer buffer = VK_NULL_HANDLE;
     u64 offset = 0;
-    u64 range = ~0u;
+    u64 range = ~0ULL;
 
     operator auto &() { return *reinterpret_cast<VkType *>(this); }
     operator const auto &() const { return *reinterpret_cast<const VkType *>(this); }
@@ -1285,29 +1284,6 @@ constexpr void swap(Unique<T> &lhs, Unique<T> &rhs) noexcept
 {
     lhs.swap(rhs);
 }
-
-template<typename T>
-struct UniqueResult {
-    UniqueResult() = delete;
-    UniqueResult(Unique<T> &&v_)
-        : v(std::move(v_))
-    {
-    }
-
-    UniqueResult(Unique<T> &&v_, VKResult result_)
-        : v(std::move(v_)),
-          result(result_)
-    {
-    }
-
-    UniqueResult(VKResult result_)
-        : result(result_)
-    {
-    }
-
-    Unique<T> v;
-    VKResult result = VKResult::Success;
-};
 }  // namespace lr::graphics
 
 namespace fmt {

@@ -7,7 +7,6 @@ struct VirtualFile {
     std::vector<u8> contents = {};
 
     const u8 *data() const { return contents.data(); }
-    const char *c_str() const { return reinterpret_cast<const char *>(contents.data()); }
     usize size() const { return contents.size(); }
 };
 

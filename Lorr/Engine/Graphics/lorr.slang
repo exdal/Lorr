@@ -5,7 +5,8 @@
 #define LR_DESCRIPTOR_INDEX_SAMPLER 0
 #define LR_DESCRIPTOR_INDEX_IMAGES 1
 #define LR_DESCRIPTOR_INDEX_STORAGE_IMAGES 2
-#define LR_DESCRIPTOR_INDEX_BUFFERS 3
+#define LR_DESCRIPTOR_INDEX_STORAGE_BUFFERS 3
+#define LR_DESCRIPTOR_INDEX_BDA_ARRAY 4
 
 #ifdef __cplusplus
 constexpr static const char *LR_SHADER_STD_FILE_PATH = LR_PROJECT_DIR "/Lorr/Engine/Graphics/lorr.slang";
@@ -25,33 +26,44 @@ typedef uint8_t u8;
 typedef int8_t i8;
 typedef u32 b32;
 
+// resource types
+typedef u32 BufferID;
+typedef u32 ImageID;
+typedef u32 ImageViewID;
+typedef u32 SamplerID;
+
 /// TODO: About storage images, RWTexture2D can have multiple formats
 /// while staying at the same binding index.
 namespace lr {
 [[vk::binding(LR_DESCRIPTOR_INDEX_SAMPLER, 0)]]
-Sampler2D __samplers[];
-extension Sampler2D {
-  static Sampler2D get(u32 i) { return __samplers[i]; }
+SamplerState __samplers[];
+extension SamplerState {
+  static SamplerState get(SamplerID i) { return __samplers[i]; }
 }
 
 [[vk::binding(LR_DESCRIPTOR_INDEX_IMAGES, 0)]]
-Texture2D __textures[];
-extension Texture2D {
-  static Texture2D get(u32 i) { return __textures[i]; }
+Texture2D<float4> __textures[];
+extension Texture2D<float4> {
+  static Texture2D get(ImageViewID i) { return __textures[i]; }
 };
 
 [[vk::binding(LR_DESCRIPTOR_INDEX_STORAGE_IMAGES, 0)]]
 RWTexture2D<float4> __storage_images[];
 extension RWTexture2D<float4> {
-  static RWTexture2D<float4> get(u32 i) { return __storage_images[i]; }
+  static RWTexture2D<float4> get(ImageID i) { return __storage_images[i]; }
 };
 
-[[vk::binding(LR_DESCRIPTOR_INDEX_BUFFERS, 0)]]
-ByteAddressBuffer __buffers[];
+[[vk::binding(LR_DESCRIPTOR_INDEX_STORAGE_BUFFERS, 0)]]
+ByteAddressBuffer __storage_buffers[];
 extension ByteAddressBuffer {
-  static ByteAddressBuffer get(u32 i) { return __buffers[i]; };
+  static ByteAddressBuffer get(BufferID i) { return __storage_buffers[i]; };
 };
 
+[[vk::binding(LR_DESCRIPTOR_INDEX_BDA_ARRAY, 0)]]
+StructuredBuffer<u64> __bda_array;
+func load_buffer<T>(BufferID buffer_id) -> T * {
+    return (T *)(__bda_array[buffer_id]);
+}
 }
 
 

@@ -56,9 +56,12 @@ bool Window::init(const WindowInfo &info)
     glfwSetWindowUserPointer(m_handle, this);
 
     // LR_WINDOW_EVENT_RESIZE
-    glfwSetWindowSizeCallback(m_handle, [](GLFWwindow *window, i32 width, i32 height) {
-        Window *this_handle = reinterpret_cast<Window *>(glfwGetWindowUserPointer(window));
-        WindowEventManager &event_man = this_handle->m_event_manager;
+    glfwSetFramebufferSizeCallback(m_handle, [](GLFWwindow *window, i32 width, i32 height) {
+        Window *self = reinterpret_cast<Window *>(glfwGetWindowUserPointer(window));
+        WindowEventManager &event_man = self->m_event_manager;
+
+        self->m_width = width;
+        self->m_height = height;
 
         WindowEventData event_data = {
             .size_width = static_cast<u32>(width),
@@ -69,8 +72,8 @@ bool Window::init(const WindowInfo &info)
 
     // LR_WINDOW_EVENT_MOUSE_POSITION
     glfwSetCursorPosCallback(m_handle, [](GLFWwindow *window, f64 pos_x, f64 pos_y) {
-        Window *this_handle = reinterpret_cast<Window *>(glfwGetWindowUserPointer(window));
-        WindowEventManager &event_man = this_handle->m_event_manager;
+        Window *self = reinterpret_cast<Window *>(glfwGetWindowUserPointer(window));
+        WindowEventManager &event_man = self->m_event_manager;
 
         WindowEventData event_data = {
             .mouse_x = static_cast<f32>(pos_x),
@@ -81,8 +84,8 @@ bool Window::init(const WindowInfo &info)
 
     // LR_WINDOW_EVENT_MOUSE_STATE
     glfwSetMouseButtonCallback(m_handle, [](GLFWwindow *window, i32 button, i32 action, i32 mods) {
-        Window *this_handle = reinterpret_cast<Window *>(glfwGetWindowUserPointer(window));
-        WindowEventManager &event_man = this_handle->m_event_manager;
+        Window *self = reinterpret_cast<Window *>(glfwGetWindowUserPointer(window));
+        WindowEventManager &event_man = self->m_event_manager;
 
         WindowEventData event_data = {
             .mouse = static_cast<Key>(button),
@@ -94,8 +97,8 @@ bool Window::init(const WindowInfo &info)
 
     // LR_WINDOW_EVENT_KEYBOARD_STATE
     glfwSetKeyCallback(m_handle, [](GLFWwindow *window, i32 key, i32 scancode, i32 action, i32 mods) {
-        Window *this_handle = reinterpret_cast<Window *>(glfwGetWindowUserPointer(window));
-        WindowEventManager &event_man = this_handle->m_event_manager;
+        Window *self = reinterpret_cast<Window *>(glfwGetWindowUserPointer(window));
+        WindowEventManager &event_man = self->m_event_manager;
 
         WindowEventData event_data = {
             .key = static_cast<Key>(key),
@@ -106,9 +109,21 @@ bool Window::init(const WindowInfo &info)
         event_man.push(LR_WINDOW_EVENT_KEYBOARD_STATE, event_data);
     });
 
+    glfwSetScrollCallback(m_handle, [](GLFWwindow *window, f64 off_x, f64 off_y) {
+        Window *self = reinterpret_cast<Window *>(glfwGetWindowUserPointer(window));
+        WindowEventManager &event_man = self->m_event_manager;
+
+        WindowEventData event_data = {
+            .mouse_offset_x = off_x,
+            .mouse_offset_y = off_y,
+        };
+        event_man.push(LR_WINDOW_EVENT_MOUSE_SCROLL, event_data);
+    });
+
+    // LR_WINDOW_EVENT_CHAR
     glfwSetCharCallback(m_handle, [](GLFWwindow *window, u32 codepoint) {
-        Window *this_handle = reinterpret_cast<Window *>(glfwGetWindowUserPointer(window));
-        WindowEventManager &event_man = this_handle->m_event_manager;
+        Window *self = reinterpret_cast<Window *>(glfwGetWindowUserPointer(window));
+        WindowEventManager &event_man = self->m_event_manager;
 
         WindowEventData event_data = {
             .char_val = static_cast<char32_t>(codepoint),
@@ -119,15 +134,18 @@ bool Window::init(const WindowInfo &info)
     /// Initialize standard cursors, should be available across all platforms
     /// hopefully...
     m_cursors = {
-        glfwCreateStandardCursor(GLFW_CURSOR_NORMAL),      glfwCreateStandardCursor(GLFW_IBEAM_CURSOR),
-        glfwCreateStandardCursor(GLFW_RESIZE_ALL_CURSOR),  glfwCreateStandardCursor(GLFW_RESIZE_NS_CURSOR),
-        glfwCreateStandardCursor(GLFW_RESIZE_EW_CURSOR),   glfwCreateStandardCursor(GLFW_RESIZE_NESW_CURSOR),
-        glfwCreateStandardCursor(GLFW_RESIZE_NWSE_CURSOR), glfwCreateStandardCursor(GLFW_HAND_CURSOR),
-        glfwCreateStandardCursor(GLFW_NOT_ALLOWED_CURSOR), glfwCreateStandardCursor(GLFW_CURSOR_HIDDEN),
+        glfwCreateStandardCursor(GLFW_CURSOR_NORMAL),      glfwCreateStandardCursor(GLFW_IBEAM_CURSOR),     glfwCreateStandardCursor(GLFW_RESIZE_ALL_CURSOR),
+        glfwCreateStandardCursor(GLFW_RESIZE_NS_CURSOR),   glfwCreateStandardCursor(GLFW_RESIZE_EW_CURSOR), glfwCreateStandardCursor(GLFW_RESIZE_NESW_CURSOR),
+        glfwCreateStandardCursor(GLFW_RESIZE_NWSE_CURSOR), glfwCreateStandardCursor(GLFW_HAND_CURSOR),      glfwCreateStandardCursor(GLFW_NOT_ALLOWED_CURSOR),
+        glfwCreateStandardCursor(GLFW_CURSOR_HIDDEN),
     };
 
-    m_width = info.width;
-    m_height = info.height;
+    i32 real_width;
+    i32 real_height;
+    glfwGetWindowSize(m_handle, &real_width, &real_height);
+
+    m_width = real_width;
+    m_height = real_height;
 
     return true;
 }

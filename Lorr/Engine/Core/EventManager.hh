@@ -1,46 +1,44 @@
 #pragma once
 
-#include "Memory/RingBuffer.hh"
+#include <deque>
 
 #define LR_INVALID_EVENT ~0u
 
 namespace lr {
 using Event = u32;
-template<typename TData, u64 TCount, bool TAtomicRingBuffer = false>
+template<typename DataT>
 struct EventManager {
-    struct EventIdentifier {
-        Event m_event = {};
-        TData m_data = {};
+    struct EventMetadata {
+        Event event = {};
+        DataT data = {};
     };
 
-    using ring_buffer = typename std::conditional<
-        TAtomicRingBuffer,
-        Memory::RingBufferAtomic<EventIdentifier, TCount>,
-        Memory::RingBuffer<EventIdentifier, TCount>>::type;
+    bool peek() { return !m_queue.empty(); }
 
-    bool peek() { return !m_ring_buffer.empty(); }
-
-    Event dispatch(TData &data_out)
+    Event dispatch(DataT &data_out)
     {
         ZoneScoped;
 
-        if (EventIdentifier ident; m_ring_buffer.pop(ident)) {
-            data_out = ident.m_data;
-            return ident.m_event;
+        if (!m_queue.empty()) {
+            EventMetadata &v = m_queue.front();
+            data_out = v.data;
+
+            m_queue.pop_front();
+
+            return v.event;
         }
 
         return LR_INVALID_EVENT;
     }
 
-    void push(Event event, TData &data)
+    void push(Event event, DataT &data)
     {
         ZoneScoped;
 
-        EventIdentifier ident{ .m_event = event, .m_data = data };
-        m_ring_buffer.push(ident);
+        m_queue.emplace_back(event, data);
     }
 
-    ring_buffer m_ring_buffer;
+    std::deque<EventMetadata> m_queue = {};
 };
 
 }  // namespace lr

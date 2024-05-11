@@ -22,7 +22,7 @@ struct TLSFAllocator {
         BlockID next_logical = INVALID;
         BlockID prev_logical = INVALID;
 
-        u64 offset : 63 = ~0u;
+        u64 offset : 63 = ~0ULL;
         bool is_free : 1 = false;
     };
 

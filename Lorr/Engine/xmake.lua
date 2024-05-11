@@ -44,6 +44,7 @@ target("Lorr")
     "plf_colony",
     "sol2",
     "loguru",
+    "imgui",
     { public = true })
 
 target_end()

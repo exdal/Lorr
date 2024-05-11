@@ -52,5 +52,4 @@ struct Result {
     ValT m_val = {};
     ResultT m_result = {};
 };
-
 }  // namespace lr

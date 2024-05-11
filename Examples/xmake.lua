@@ -4,7 +4,8 @@ local add_example = function(example_name, srcs)
       set_languages("cxx20")
       add_deps("Lorr")
       add_files(srcs)
+      add_includedirs("Base")
     target_end()
 end
 
-add_example("BareBones", "BareBones/main.cc")
+add_example("Triangle", "Triangle/main.cc")

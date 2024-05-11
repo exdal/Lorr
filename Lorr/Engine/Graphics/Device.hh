@@ -159,39 +159,33 @@ T *Device::buffer_host_data(BufferID buffer_id)
     return reinterpret_cast<T *>(get_buffer(buffer_id)->m_host_data);
 }
 
-struct DeviceDeleter {
-    // clang-format off
-    DeviceDeleter(Device *device, [[maybe_unused]] u64 c, std::span<CommandAllocator> s) { for (auto &v : s) device->m_garbage_command_allocators.emplace(v, c); }
-    DeviceDeleter(Device *device, [[maybe_unused]] u64 c, std::span<CommandList> s) { for (auto &v : s) device->m_garbage_command_lists.emplace(v, c); }
-    DeviceDeleter(Device *device, [[maybe_unused]] u64 c, std::span<Semaphore> s) { for (auto &v : s) device->m_garbage_semaphores.emplace(v, c); }
-    // clang-format on
-};
+namespace unique_impl {
+    template<class T>
+    concept is_container = requires(T v) {
+        std::begin(v);
+        std::end(v);
+    };
 
-template<class T>
-concept is_container = requires(T v) {
-    std::begin(v);
-    std::end(v);
-};
+    template<typename T, usize N>
+    void device_defer_helper(Device *device, T (&arr)[N])
+    {
+        device->defer(std::span<T>{ arr, N });
+    }
 
-template<typename T, usize N>
-void device_deleter_helper(Device *device, u64 c, T (&arr)[N])
-{
-    DeviceDeleter(device, c, std::span<T>{ arr, N });
-}
+    template<typename T>
+    void device_defer_helper(Device *device, T &v)
+        requires(!is_container<T>)
+    {
+        device->defer(std::span<T>{ &v, 1 });
+    }
 
-template<typename T>
-void device_deleter_helper(Device *device, u64 c, T &v)
-    requires(!is_container<T>)
-{
-    DeviceDeleter(device, c, std::span<T>{ &v, 1 });
-}
-
-template<typename T>
-void device_deleter_helper(Device *device, u64 c, T &v)
-    requires(is_container<T>)
-{
-    DeviceDeleter(device, c, v);
-}
+    template<typename T>
+    void device_defer_helper(Device *device, T &v)
+        requires(is_container<T>)
+    {
+        device->defer(v);
+    }
+}  // namespace unique_impl
 
 template<typename T>
 void Unique<T>::set_name(std::string_view name)
@@ -207,8 +201,7 @@ void Unique<T>::reset(Unique<T>::val_type val) noexcept
     }
 
     if (m_device && m_val != val_type{}) {
-        Semaphore &sema = m_device->get_queue(CommandType::Graphics).semaphore();
-        device_deleter_helper(m_device, sema.counter(), m_val);
+        unique_impl::device_defer_helper(m_device, m_val);
     }
 
     m_val = std::move(val);

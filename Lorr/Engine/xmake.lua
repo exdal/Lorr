@@ -4,6 +4,7 @@ target("Lorr")
   add_forceincludes("pch.hh", { public = true })
   set_pcheader("pch.hh", { public = true })
   add_cxxflags("clang::-march=native", "clang_cl::/arch:AVX2")
+  set_runtimes("MT", "c++_static")
 
   add_includedirs("./", { public = true })
   add_files("**.cc")

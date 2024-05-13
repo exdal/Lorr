@@ -19,20 +19,9 @@ typedef uint8_t u8;
 typedef int8_t i8;
 
 typedef u32 b32;
-
-#ifndef LS_PTR_SIZE
-#if defined(_WIN64) || defined(__LP64__) || defined(_LP64) || defined(_M_IA64) || defined(__ia64__) || defined(__arch64__) \
-    || defined(__aarch64__) || defined(__mips64__) || defined(__64BIT__) || defined(__Ptr_Is_64)
-#define LS_PTR_SIZE 8
-#define LS_PTR_SIZE_64
-#elif defined(__CC_ARM) && (__sizeof_ptr == 8)
-#define LS_PTR_SIZE 8
-#define LS_PTR_SIZE_64
-#else
-#define LS_PTR_SIZE 4
-#define LS_PTR_SIZE_32
-#endif
-#endif
+typedef char c8;
+typedef char16_t c16;
+typedef char32_t c32;
 
 typedef std::intptr_t uptr;
 typedef std::uintptr_t iptr;

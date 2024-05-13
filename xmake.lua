@@ -15,10 +15,11 @@ add_requires(
     "vulkan-headers",
     "vulkan-memory-allocator",
     "vk-bootstrap",
-    "unordered_dense",
     "plf_colony",
     "sol2",
-    "imgui v1.90.5-docking"
+    "imgui v1.90.5-docking",
+    "simdutf",
+    "unordered_dense"
 )
 add_requires("loguru", { configs = { fmt = true } })
 add_requires("slang", { configs = {

@@ -20,9 +20,8 @@ Result<os::File, os::FileResult> os::open_file(std::string_view path, FileAccess
     if (access & FileAccess::Read)
         flags &= ~O_WRONLY;
 
-    i32 file = open(path.data(), flags, S_IRUSR | S_IWUSR);
+    i32 file = open64(path.data(), flags, S_IRUSR | S_IWUSR);
     if (file < 0) {
-        LR_LOG_ERROR("Failed to open file {}! {}", path, file);
         return static_cast<FileResult>(file);
     }
 
@@ -33,7 +32,7 @@ void os::close_file(File &file)
 {
     ZoneScoped;
 
-    close(static_cast<int>(file));
+    close(static_cast<i32>(file));
     file = File::Invalid;
 }
 

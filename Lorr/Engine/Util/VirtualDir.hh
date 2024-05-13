@@ -2,6 +2,8 @@
 
 #include "OS/OS.hh"
 
+#include <ankerl/unordered_dense.h>
+
 namespace lr {
 struct VirtualFile {
     std::vector<u8> contents = {};

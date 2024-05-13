@@ -18,7 +18,6 @@
 #include "Util/Result.hh"
 #include "Util/TypeOperators.hh"
 #include "Util/static_vector.hh"
-#include <ankerl/unordered_dense.h>
 #include <plf_colony.h>
 
 namespace lr {
@@ -35,14 +34,3 @@ T *temp_v(T &&v)
 }
 
 }  // namespace lr
-
-template<>
-struct ankerl::unordered_dense::hash<std::string> {
-    using is_transparent = void;
-    using is_avalanching = void;
-
-    [[nodiscard]] auto operator()(const std::string &x) const noexcept -> uint64_t
-    {
-        return ankerl::unordered_dense::hash<std::string_view>{}(x);
-    }
-};

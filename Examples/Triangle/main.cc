@@ -41,6 +41,10 @@ bool load_shaders(Device &device)
         memory::ScopedStack stack;
         std::string_view path = stack.format("{}/triangle.slang", EXAMPLE_DIR);
         auto [code, result] = example::load_file(path);
+        if (!result) {
+            LR_LOG_ERROR("Failed to open file '{}'!", path);
+            return false;
+        }
         info.code = code;
         info.real_path = path;
         info.entry_point = "vs_main";

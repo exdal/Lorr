@@ -1,5 +1,7 @@
 #pragma once
 
+#include <simdutf.h>
+
 namespace lr::memory {
 struct ThreadStack {
     ThreadStack();
@@ -54,11 +56,31 @@ struct ScopedStack {
     std::string_view format(const fmt::format_string<ArgsT...> fmt, ArgsT &&...args)
     {
         auto &stack = GetThreadStack();
-        char *begin = reinterpret_cast<char *>(stack.ptr);
-        char *end = fmt::vformat_to(begin, fmt.get(), fmt::make_format_args(args...));
+        c8 *begin = reinterpret_cast<c8 *>(stack.ptr);
+        c8 *end = fmt::vformat_to(begin, fmt.get(), fmt::make_format_args(args...));
         *end = '\0';
         stack.ptr = align_up(reinterpret_cast<u8 *>(end + 1), 8);
         return { begin, end };
+    }
+
+    std::wstring_view to_utf16(std::string_view str)
+    {
+        auto &stack = GetThreadStack();
+        c16 *begin = reinterpret_cast<c16 *>(stack.ptr);
+        usize size = simdutf::convert_utf8_to_utf16(str.data(), str.length(), begin);
+        begin[size] = L'\0';
+        stack.ptr = align_up(stack.ptr + (size + 1) * sizeof(c16), 8);
+        return { reinterpret_cast<wchar_t *>(begin), size };
+    }
+
+    std::string_view to_utf8(std::wstring_view str)
+    {
+        auto &stack = GetThreadStack();
+        c8 *begin = reinterpret_cast<c8 *>(stack.ptr);
+        usize size = simdutf::convert_utf16_to_utf8(reinterpret_cast<const c16 *>(str.data()), str.length(), begin);
+        begin[size] = '\0';
+        stack.ptr = align_up(stack.ptr + size + 1, 8);
+        return { begin, size };
     }
 
     u8 *ptr = nullptr;

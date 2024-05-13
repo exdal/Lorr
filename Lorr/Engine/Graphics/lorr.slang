@@ -9,7 +9,7 @@
 #define LR_DESCRIPTOR_INDEX_BDA_ARRAY 4
 
 #ifdef __cplusplus
-constexpr static const char *LR_SHADER_STD_FILE_PATH = LR_PROJECT_DIR "/Lorr/Engine/Graphics/lorr.slang";
+constexpr static std::string_view LR_SHADER_STD_FILE_PATH = (LR_PROJECT_DIR "/Lorr/Engine/Graphics/lorr.slang");
 
 #else
 

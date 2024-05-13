@@ -40,12 +40,12 @@ target("Lorr")
     "vulkan-headers",
     "vulkan-memory-allocator",
     "vk-bootstrap",
-    "compiler-core",
-    "unordered_dense",
     "plf_colony",
     "sol2",
     "loguru",
     "imgui",
+    "simdutf",
+    "unordered_dense",
     { public = true })
 
 target_end()

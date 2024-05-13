@@ -1,7 +1,6 @@
 #pragma once
 
 #include "Graphics/Common.hh"
-#include "Graphics/Device.hh"
 
 #include "OS/OS.hh"
 
@@ -23,7 +22,6 @@ static inline Result<std::string, os::FileResult> load_file(std::string_view pat
     std::string code;
     auto [file, result] = os::open_file(path, os::FileAccess::Read);
     if (!result) {
-        LR_LOG_ERROR("Failed to load file {}!", path);
         return result;
     }
 

@@ -1,7 +1,5 @@
 #pragma once
 
-#include "Graphics/Common.hh"
-
 #include "OS/OS.hh"
 
 #include "Util/VirtualDir.hh"

@@ -10,8 +10,6 @@
 #include "ExampleBase.hh"
 #include "ImGuiBackend.hh"
 
-#define EXAMPLE_DIR (LR_PROJECT_DIR "/Examples/Triangle")
-
 using namespace lr;
 using namespace lr::graphics;
 
@@ -38,8 +36,7 @@ bool load_shaders(Device &device)
     };
 
     {
-        memory::ScopedStack stack;
-        std::string_view path = stack.format("{}/triangle.slang", EXAMPLE_DIR);
+        std::string_view path = TRIANGLE_SHADER_PATH;
         auto [code, result] = example::load_file(path);
         if (!result) {
             LR_LOG_ERROR("Failed to open file '{}'!", path);

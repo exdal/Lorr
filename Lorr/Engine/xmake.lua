@@ -10,7 +10,6 @@ target("Lorr")
   add_files("**.cc")
   add_rpathdirs("@executable_path")
 
-  add_defines("LR_PROJECT_DIR=\"$(projectdir)\"", { public = true })
   if is_mode("debug") then
     add_defines("LR_DEBUG", { public = true })
   end
@@ -29,8 +28,13 @@ target("Lorr")
     remove_files("OS/Win32*")
   end
 
-  add_packages("slang", { public = true })
+  on_load(function (target)
+    import("lib.detect.find_file")
+    local shader_std = find_file("lorr.slang", {"$(projectdir)/**"})
+    target:add("defines", "LR_SHADER_STD_FILE_PATH=\"" .. shader_std .. "\"", { public = true })
+  end)
 
+  add_packages("slang", { public = true })
   add_packages(
     "fmt",
     "tracy",

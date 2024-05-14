@@ -9,9 +9,9 @@
 #define LR_DESCRIPTOR_INDEX_BDA_ARRAY 4
 
 #ifdef __cplusplus
-constexpr static std::string_view LR_SHADER_STD_FILE_PATH = (LR_PROJECT_DIR "/Lorr/Engine/Graphics/lorr.slang");
-
+// C++ stuff goes here
 #else
+// Slang stuff goes here
 
 // arithmetic types
 typedef double f64;

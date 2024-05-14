@@ -2,14 +2,13 @@
 
 #include "ExampleBase.hh"
 
-#include "Graphics/CommandList.hh"
 #include "Graphics/Common.hh"
-#include "Memory/Stack.hh"
+#include "Graphics/CommandList.hh"
+#include "Graphics/Device.hh"
+
 #include "OS/Key.hh"
 
 #include <imgui.h>
-
-#define IMGUI_SOURCE_DIR (LR_PROJECT_DIR "/Examples/Base")
 
 namespace lr::example {
 struct ImGuiBackend {
@@ -38,7 +37,6 @@ struct ImGuiBackend {
     bool init(graphics::Device &device, graphics::SwapChain &swap_chain)
     {
         using namespace lr::graphics;
-        memory::ScopedStack stack;
 
         ImGui::CreateContext();
         auto &io = ImGui::GetIO();
@@ -52,7 +50,7 @@ struct ImGuiBackend {
                 .virtual_env = { &example::default_vdir(), 1 },
             };
 
-            std::string_view path = stack.format("{}/imgui.slang", IMGUI_SOURCE_DIR);
+            std::string_view path = IMGUI_SHADER_PATH;
             auto [code, result] = example::load_file(path);
             if (!result) {
                 LR_LOG_ERROR("Failed to load imgui shader.");

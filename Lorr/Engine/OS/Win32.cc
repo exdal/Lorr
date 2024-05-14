@@ -68,7 +68,7 @@ u64 os::read_file(File file, void *data, u64range range)
     while (read_bytes_size < target_size) {
         u64 remainder_size = target_size - read_bytes_size;
         u8 *cur_data = reinterpret_cast<u8 *>(data) + read_bytes_size;
-        iptr cur_read_size = 0;
+        DWORD cur_read_size = 0;
         OVERLAPPED overlapped = {};
         overlapped.Offset = offset & 0x00000000ffffffffull;
         overlapped.OffsetHigh = (offset & 0xffffffff00000000ull) >> 32;
@@ -83,8 +83,6 @@ u64 os::read_file(File file, void *data, u64range range)
     }
 
     return read_bytes_size;
-
-    return {};
 }
 
 void os::write_file(File file, const void *data, u64range range)
@@ -93,25 +91,25 @@ void os::write_file(File file, const void *data, u64range range)
 
     LR_CHECK(file != File::Invalid, "Trying to write invalid file");
 
-    HANDLE file_handle = static_cast<HANDLE>(file);
+    HANDLE file_handle = reinterpret_cast<HANDLE>(file);
     u64 offset = range.min;
     u64 written_bytes_size = 0;
     u64 target_size = range.length();
     while (written_bytes_size < target_size) {
         u64 remainder_size = target_size - written_bytes_size;
         const u8 *cur_data = reinterpret_cast<const u8 *>(data) + offset;
-        iptr cur_written_size = 0;
+        DWORD cur_written_size = 0;
         OVERLAPPED overlapped = {};
         overlapped.Offset = offset & 0x00000000ffffffffull;
         overlapped.OffsetHigh = (offset & 0xffffffff00000000ull) >> 32;
         if (WriteFile(file_handle, cur_data, remainder_size, &cur_written_size, &overlapped) == 0) {
             LR_LOG_TRACE("File write interrupted! {}", cur_written_size);
+            break;
         }
-        break;
-    }
 
-    offset += cur_written_size;
-    written_bytes_size += cur_written_size;
+        offset += cur_written_size;
+        written_bytes_size += cur_written_size;
+    }
 }
 
 /// MEMORY ///

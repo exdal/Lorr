@@ -11,6 +11,8 @@ struct BufferInfo {
     MemoryFlag flags = MemoryFlag::None;
     MemoryPreference preference = MemoryPreference::Auto;
     u64 data_size = 0;
+
+    std::string_view debug_name = {};
 };
 
 struct Buffer {
@@ -42,11 +44,14 @@ struct ImageInfo {
     ImageUsage usage_flags = ImageUsage::Sampled;
     Format format = Format::Unknown;
     ImageType type = ImageType::View2D;
+    ImageLayout initial_layout = ImageLayout::Undefined;
 
     Extent3D extent = {};
     u32 slice_count = 1;
     u32 mip_levels = 1;
     std::span<u32> queue_indices = {};
+
+    std::string_view debug_name = {};
 };
 
 struct Image {
@@ -81,13 +86,14 @@ struct Image {
 
 struct ImageViewInfo {
     ImageID image_id = ImageID::Invalid;
+    ImageUsage usage_flags = ImageUsage::Sampled;
     ImageViewType type = ImageViewType::View2D;
-    // Component mapping
+    ImageSubresourceRange subresource_range = {};
     ImageComponentSwizzle swizzle_r = ImageComponentSwizzle::Identity;
     ImageComponentSwizzle swizzle_g = ImageComponentSwizzle::Identity;
     ImageComponentSwizzle swizzle_b = ImageComponentSwizzle::Identity;
     ImageComponentSwizzle swizzle_a = ImageComponentSwizzle::Identity;
-    ImageSubresourceRange subresource_range = {};
+    std::string_view debug_name = {};
 };
 
 struct ImageView {
@@ -127,6 +133,7 @@ struct SamplerInfo {
     float min_lod = 0;
     float max_lod = 0;
     bool use_anisotropy = false;
+    std::string_view debug_name = {};
 };
 
 struct Sampler {

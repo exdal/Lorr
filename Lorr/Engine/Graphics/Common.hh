@@ -1027,6 +1027,21 @@ struct ImageCopyRegion {
 };
 static_assert(sizeof(ImageCopyRegion::VkType) == sizeof(ImageCopyRegion));
 
+struct ImageBlit {
+    using VkType = VkImageBlit2;
+
+    VkStructureType structure_type = VK_STRUCTURE_TYPE_IMAGE_BLIT_2;
+    void *next = nullptr;
+    ImageSubresourceLayers src_subresource = {};
+    Offset3D src_offsets[2] = {};
+    ImageSubresourceLayers dst_subresource = {};
+    Offset3D dst_offsets[2] = {};
+
+    operator auto &() { return *reinterpret_cast<VkType *>(this); }
+    operator const auto &() const { return *reinterpret_cast<const VkType *>(this); }
+};
+static_assert(sizeof(ImageBlit::VkType) == sizeof(ImageBlit));
+
 struct CommandListSubmitInfo {
     CommandListSubmitInfo() = default;
     CommandListSubmitInfo(VkCommandBuffer command_list_)

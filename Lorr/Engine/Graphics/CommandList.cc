@@ -151,6 +151,24 @@ void CommandList::copy_buffer_to_image(BufferID src, ImageID dst, ImageLayout la
         m_handle, *m_device->get_buffer(src), *m_device->get_image(dst), static_cast<VkImageLayout>(layout), regions.size(), (VkBufferImageCopy *)regions.data());
 }
 
+void CommandList::blit_image(ImageID src, ImageLayout src_layout, ImageID dst, ImageLayout dst_layout, Filtering filter, std::span<const ImageBlit> blits)
+{
+    ZoneScoped;
+
+    VkBlitImageInfo2 blit_info = {
+        .sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2,
+        .pNext = nullptr,
+        .srcImage = *m_device->get_image(src),
+        .srcImageLayout = static_cast<VkImageLayout>(src_layout),
+        .dstImage = *m_device->get_image(dst),
+        .dstImageLayout = static_cast<VkImageLayout>(dst_layout),
+        .regionCount = static_cast<u32>(blits.size()),
+        .pRegions = reinterpret_cast<const VkImageBlit2 *>(blits.data()),
+        .filter = static_cast<VkFilter>(filter),
+    };
+    vkCmdBlitImage2(m_handle, &blit_info);
+}
+
 void CommandList::begin_rendering(const RenderingBeginInfo &info)
 {
     ZoneScoped;

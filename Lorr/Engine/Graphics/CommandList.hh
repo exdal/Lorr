@@ -70,6 +70,7 @@ struct CommandList {
     // Copy Commands
     void copy_buffer_to_buffer(BufferID src, BufferID dst, std::span<const BufferCopyRegion> regions);
     void copy_buffer_to_image(BufferID src, ImageID dst, ImageLayout layout, std::span<const ImageCopyRegion> regions);
+    void blit_image(ImageID src, ImageLayout src_layout, ImageID dst, ImageLayout dst_layout, Filtering filter, std::span<const ImageBlit> blits);
 
     // Pipeline State
     void begin_rendering(const RenderingBeginInfo &info);

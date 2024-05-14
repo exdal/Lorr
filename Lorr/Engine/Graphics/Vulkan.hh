@@ -107,7 +107,8 @@
     VKFN_FUNCTION(vkCmdPushConstants);        \
     VKFN_FUNCTION(vkCmdPipelineBarrier2);     \
     VKFN_FUNCTION(vkCmdWriteTimestamp);       \
-    VKFN_FUNCTION(vkCmdResetQueryPool);
+    VKFN_FUNCTION(vkCmdResetQueryPool);       \
+    VKFN_FUNCTION(vkCmdBlitImage2);
 
 #define VKFN_DESCRIPTOR_BUFFER_EXT_FUNCTIONS                     \
     VKFN_FUNCTION(vkCmdBindDescriptorBufferEmbeddedSamplersEXT); \
@@ -123,8 +124,7 @@
 
 #define VKFN_CALIBRATED_TIMESTAMPS_EXT_DEVICE_FUNCTIONS VKFN_FUNCTION(vkGetCalibratedTimestampsEXT);
 
-#define VKFN_CALIBRATED_TIMESTAMPS_EXT_INSTANCE_FUNCTIONS \
-    VKFN_FUNCTION(vkGetPhysicalDeviceCalibrateableTimeDomainsEXT);
+#define VKFN_CALIBRATED_TIMESTAMPS_EXT_INSTANCE_FUNCTIONS VKFN_FUNCTION(vkGetPhysicalDeviceCalibrateableTimeDomainsEXT);
 
 #define VKFN_DEBUG_UTILS_EXT_DEVICE_FUNCTIONS VKFN_FUNCTION(vkSetDebugUtilsObjectNameEXT);
 

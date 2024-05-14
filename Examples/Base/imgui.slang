@@ -13,7 +13,7 @@ struct VertexOutput {
     float4 color        : COLOR;
 };
 
-[[vk::push_constant]] struct PushConstants
+[[vk::push_constant]] struct
 {
     float2 translate;
     float2 scale;

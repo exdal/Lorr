@@ -1,5 +1,6 @@
 #include "Device.hh"
 
+#include "Graphics/Resource.hh"
 #include "Shader.hh"
 
 #include "Memory/Bit.hh"
@@ -453,7 +454,7 @@ VKResult Device::create_swap_chain(SwapChain &swap_chain, const SwapChainInfo &i
     builder.set_desired_extent(info.extent.width, info.extent.height);
     builder.set_desired_format({ VK_FORMAT_R8G8B8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR });
     builder.set_desired_present_mode(VK_PRESENT_MODE_IMMEDIATE_KHR);
-    builder.set_image_usage_flags(static_cast<VkImageUsageFlags>(ImageUsage::ColorAttachment | ImageUsage::Sampled | ImageUsage::TransferSrc));
+    builder.set_image_usage_flags(static_cast<VkImageUsageFlags>(ImageUsage::ColorAttachment | ImageUsage::Sampled | ImageUsage::TransferSrc | ImageUsage::TransferDst));
     auto result = builder.build();
 
     if (!result) {
@@ -886,12 +887,24 @@ Result<PipelineID, VKResult> Device::create_compute_pipeline(const ComputePipeli
 {
     ZoneScoped;
 
+    Shader *shader = get_shader(info.shader_id);
+    PipelineShaderStageInfo shader_info = {
+        .shader_stage = shader->m_stage,
+        .module = shader->m_handle,
+        .entry_point = "main",
+    };
+
+    PipelineLayout *pipeline_layout = info.layout;
+    if (pipeline_layout == nullptr) {
+        pipeline_layout = &m_resources.pipeline_layouts[0];
+    }
+
     VkComputePipelineCreateInfo pipeline_create_info = {
         .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
         .pNext = nullptr,
         .flags = 0,
-        .stage = info.compute_shader_info,
-        .layout = info.layout,
+        .stage = shader_info,
+        .layout = *pipeline_layout,
         .basePipelineHandle = VK_NULL_HANDLE,
         .basePipelineIndex = 0,
     };
@@ -1171,6 +1184,10 @@ Result<BufferID, VKResult> Device::create_buffer(const BufferInfo &info)
         m_bda_array_host_addr[usize(buffer.id)] = device_address;
     }
 
+    if (!info.debug_name.empty()) {
+        set_object_name(*buffer.resource, info.debug_name);
+    }
+
     return buffer.id;
 }
 
@@ -1215,12 +1232,12 @@ Result<ImageID, VKResult> Device::create_image(const ImageInfo &info)
         .sharingMode = sharing_mode,
         .queueFamilyIndexCount = static_cast<u32>(info.queue_indices.size()),
         .pQueueFamilyIndices = info.queue_indices.data(),
-        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .initialLayout = static_cast<VkImageLayout>(info.initial_layout),
     };
 
     VmaAllocationCreateInfo allocation_info = {
         .flags = 0,
-        .usage = VMA_MEMORY_USAGE_AUTO,
+        .usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
         .requiredFlags = 0,
         .preferredFlags = 0,
         .memoryTypeBits = 0,
@@ -1242,6 +1259,10 @@ Result<ImageID, VKResult> Device::create_image(const ImageInfo &info)
     if (!image) {
         LR_LOG_ERROR("Failed to allocate Image!");
         return VKResult::OutOfPoolMem;
+    }
+
+    if (!info.debug_name.empty()) {
+        set_object_name(*image.resource, info.debug_name);
     }
 
     return image.id;
@@ -1299,21 +1320,38 @@ Result<ImageViewID, VKResult> Device::create_image_view(const ImageViewInfo &inf
         return VKResult::OutOfPoolMem;
     }
 
-    // TODO: Copy paste this once again for storage images
-    // but with layout is set to GENERAL and type as StorageImage
-    ImageDescriptorInfo descriptor_info = {
-        .image_view = *image_view.resource,
-        .image_layout = ImageLayout::ColorReadOnly,
-    };
-    WriteDescriptorSet write_set_info = {
+    ls::static_vector<WriteDescriptorSet, 2> descriptor_writes = {};
+    ImageDescriptorInfo sampled_descriptor_info = { .image_view = *image_view.resource, .image_layout = ImageLayout::ColorReadOnly };
+    ImageDescriptorInfo storage_descriptor_info = { .image_view = *image_view.resource, .image_layout = ImageLayout::General };
+
+    WriteDescriptorSet sampled_write_set_info = {
         .dst_descriptor_set = m_descriptor_set,
         .dst_binding = LR_DESCRIPTOR_INDEX_IMAGES,
         .dst_element = static_cast<u32>(image_view.id),
         .count = 1,
         .type = DescriptorType::SampledImage,
-        .image_info = &descriptor_info,
+        .image_info = &sampled_descriptor_info,
     };
-    update_descriptor_sets({ &write_set_info, 1 }, {});
+    WriteDescriptorSet storage_write_set_info = {
+        .dst_descriptor_set = m_descriptor_set,
+        .dst_binding = LR_DESCRIPTOR_INDEX_STORAGE_IMAGES,
+        .dst_element = static_cast<u32>(image_view.id),
+        .count = 1,
+        .type = DescriptorType::StorageImage,
+        .image_info = &storage_descriptor_info,
+    };
+    if (info.usage_flags & ImageUsage::Sampled) {
+        descriptor_writes.push_back(sampled_write_set_info);
+    }
+    if (info.usage_flags & ImageUsage::Storage) {
+        descriptor_writes.push_back(storage_write_set_info);
+    }
+
+    update_descriptor_sets(descriptor_writes, {});
+
+    if (!info.debug_name.empty()) {
+        set_object_name(*image_view.resource, info.debug_name);
+    }
 
     return image_view.id;
 }
@@ -1383,6 +1421,10 @@ Result<SamplerID, VKResult> Device::create_sampler(const SamplerInfo &info)
         .image_info = &descriptor_info,
     };
     update_descriptor_sets({ &write_set_info, 1 }, {});
+
+    if (!info.debug_name.empty()) {
+        set_object_name(*sampler.resource, info.debug_name);
+    }
 
     return sampler.id;
 }

@@ -16,3 +16,4 @@ local add_example = function(example_name, srcs, shaders)
 end
 
 add_example("Triangle", "Triangle/main.cc", { { "TRIANGLE_SHADER_PATH", "Triangle/triangle.slang" } })
+add_example("Compute", "Compute/main.cc", { { "COMPUTE_SHADER_PATH", "Compute/compute.slang" } })

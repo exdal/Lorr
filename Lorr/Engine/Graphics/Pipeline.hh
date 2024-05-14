@@ -77,8 +77,8 @@ struct GraphicsPipelineInfo {
 };
 
 struct ComputePipelineInfo {
-    PipelineShaderStageInfo compute_shader_info = {};
-    PipelineLayout &layout;
+    ShaderID shader_id = ShaderID::Invalid;
+    PipelineLayout *layout = nullptr;
 };
 
 struct Pipeline {

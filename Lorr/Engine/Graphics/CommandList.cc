@@ -324,8 +324,7 @@ void CommandBatcher::insert_image_barrier(const ImageBarrier &barrier)
         flush_barriers();
     }
 
-    ImageID image_id = barrier.image_id;
-    ImageBarrier &raw_barrier = m_image_barriers.emplace_back(barrier);
+    m_image_barriers.emplace_back(barrier);
 }
 
 void CommandBatcher::flush_barriers()

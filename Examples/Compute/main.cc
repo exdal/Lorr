@@ -204,7 +204,6 @@ i32 main(i32 argc, c8 **argv)
             SemaphoreSubmitInfo wait_semas[] = {
                 { acquire_sema, 0, PipelineStage::TopOfPipe },
                 { graphics_queue.semaphore(), graphics_queue.semaphore().counter(), PipelineStage::AllCommands },
-                { compute_queue.semaphore(), compute_queue.semaphore().counter(), PipelineStage::AllCommands },
             };
             SemaphoreSubmitInfo signal_semas[] = {
                 { compute_queue.semaphore(), compute_queue.semaphore().advance(), PipelineStage::AllCommands },

@@ -593,6 +593,7 @@ enum class AttachmentLoadOp : u32 {
 enum class AttachmentStoreOp : u32 {
     Store = VK_ATTACHMENT_STORE_OP_STORE,
     DontCare = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+    None = VK_ATTACHMENT_STORE_OP_NONE,
 };
 
 union ColorClearValue {

@@ -116,7 +116,7 @@ i32 main(i32 argc, c8 **argv)
         .usage_flags = ImageUsage::Storage | ImageUsage::TransferSrc,
         .format = Format::R32G32B32A32_SFLOAT,
         .type = ImageType::View2D,
-        .extent = { 128, 128, 1 },
+        .extent = { 1024, 512, 1 },
         .debug_name = "Compute image",
     });
 
@@ -187,7 +187,7 @@ i32 main(i32 argc, c8 **argv)
             command_list.set_pipeline(app.compute_pipeline);
             command_list.set_push_constants(pipeline_layout, &pc, sizeof(PushConstant), 0);
             command_list.set_descriptor_sets(pipeline_layout, graphics::PipelineBindPoint::Compute, 0, { &device.m_descriptor_set, 1 });
-            command_list.dispatch(129, 129, 1);
+            command_list.dispatch(1024 / 16 + 1, 512 / 16 + 1, 1);
 
             command_list.image_transition({
                 .src_access = PipelineAccess::ComputeWrite,
@@ -237,11 +237,11 @@ i32 main(i32 argc, c8 **argv)
             ImageBlit blit = { 
                 .src_offsets = {
                     { 0, 0, 0 },
-                    { 128, 128, 1 },
+                    { 1024, 512, 1 },
                 }, 
                 .dst_offsets = {
                     { 0, 0, 0 },
-                    { 128, 128, 1 },
+                    { 1024, 512, 1 },
                 },
             };
             command_list.blit_image(app.storage_image, ImageLayout::TransferSrc, image_id, ImageLayout::TransferDst, Filtering::Nearest, { &blit, 1 });

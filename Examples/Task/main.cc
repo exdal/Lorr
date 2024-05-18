@@ -4,27 +4,84 @@
 
 #include "OS/Window.hh"
 
+#include "ExampleBase.hh"
+
 using namespace lr;
 using namespace lr::graphics;
 
-struct BasicTask {
+struct ComputeTask {
     struct Uses {
-        Preset::ColorAttachmentWrite attachment = {};
+        Preset::ComputeWrite storage_image = {};
+    } uses = {};
+
+    struct PushConstants {
+        ImageViewID image_view_id = ImageViewID::Invalid;
+        f32 time = 0.0f;
+    } push_constants = {};
+
+    PipelineID pipeline_id = PipelineID::Invalid;
+
+    void execute(TaskContext &tc)
+    {
+        auto &cmd_list = tc.command_list();
+        auto &storage_image_data = tc.task_image_data(uses.storage_image);
+
+        push_constants.image_view_id = storage_image_data.image_view_id;
+        push_constants.time = static_cast<f32>(glfwGetTime());
+        tc.set_push_constants(push_constants);
+
+        cmd_list.set_pipeline(pipeline_id);
+        cmd_list.dispatch(1024 / 8 + 1, 512 / 8 + 1, 1);
+    }
+};
+
+struct BlitTask {
+    struct Uses {
+        Preset::TransferRead blit_source = {};
+        Preset::TransferWrite blit_target = {};
     } uses = {};
 
     void execute(TaskContext &tc)
     {
         auto &cmd_list = tc.command_list();
+        auto &blit_source_data = tc.task_image_data(uses.blit_source);
+        auto &blit_target_data = tc.task_image_data(uses.blit_target);
 
-        RenderingAttachmentInfo attachment = tc.as_color_attachment(uses.attachment, ColorClearValue(0.1f, 0.1f, 0.1f, 1.0f));
-        RenderingBeginInfo render_info = {
-            .render_area = { 0, 0, 1280, 780 },
-            .color_attachments = { &attachment, 1 },
-        };
-        cmd_list.begin_rendering(render_info);
-        cmd_list.end_rendering();
+        ImageBlit blit = { .src_offsets = { { 0, 0, 0 }, { 1024, 512, 1 } }, .dst_offsets = { { 0, 0, 0 }, { 1024, 512, 1 } } };
+        cmd_list.blit_image(blit_source_data.image_id, ImageLayout::TransferSrc, blit_target_data.image_id, ImageLayout::TransferDst, Filtering::Nearest, { &blit, 1 });
     }
 };
+
+ShaderID load_shaders(Device &device)
+{
+    ZoneScoped;
+
+    ShaderPreprocessorMacroInfo macros[] = {
+        { "LR_EDITOR", "1" },
+#if LR_DEBUG
+        { "LR_DEBUG", "1" },
+#endif
+    };
+
+    ShaderCompileInfo info = {
+        .virtual_env = { &example::default_vdir(), 1 },
+        .definitions = macros,
+    };
+
+    std::string_view path = TASK_COMPUTE_SHADER_PATH;
+    auto [code, result] = example::load_file(path);
+    if (!result) {
+        LR_LOG_ERROR("Failed to open file '{}'!", path);
+        return ShaderID::Invalid;
+    }
+    info.code = code;
+    info.real_path = path;
+    info.entry_point = "cs_main";
+    info.compile_flags = ShaderCompileFlag::SkipOptimization | ShaderCompileFlag::GenerateDebugInfo;
+    auto [cs_data, cs_result] = ShaderCompiler::compile(info);
+
+    return device.create_shader(ShaderStageFlag::Compute, cs_data);
+}
 
 i32 main(i32 argc, c8 **argv)
 {
@@ -59,13 +116,33 @@ i32 main(i32 argc, c8 **argv)
     device.init(&instance.m_handle);
     create_swap_chain(window.m_width, window.m_height);
 
+    PipelineID compute_pipeline_id = device.create_compute_pipeline({
+        .shader_id = load_shaders(device),
+        .layout = device.get_layout<ComputeTask::PushConstants>(),
+    });
+
+    ImageID storage_image_id = device.create_image({
+        .usage_flags = ImageUsage::Storage | ImageUsage::TransferSrc,
+        .format = Format::R32G32B32A32_SFLOAT,
+        .type = ImageType::View2D,
+        .extent = { 1024, 512, 1 },
+        .debug_name = "Compute image",
+    });
+
+    ImageViewID storage_image_view_id = device.create_image_view({
+        .image_id = storage_image_id,
+        .usage_flags = ImageUsage::Storage | ImageUsage::TransferSrc,
+        .type = ImageViewType::View2D,
+        .debug_name = "Compute image view",
+    });
+
     TaskGraph task_graph;
     task_graph.init({ .device = &device });
     TaskImageID swap_chain_image = task_graph.add_image({ .image_id = images[0], .image_view_id = image_views[0] });
+    TaskImageID task_storage_image = task_graph.add_image({ .image_id = storage_image_id, .image_view_id = storage_image_view_id });
 
-    task_graph.add_task<BasicTask>({
-        .uses = { .attachment = swap_chain_image },
-    });
+    task_graph.add_task<ComputeTask>({ .uses = { .storage_image = task_storage_image }, .pipeline_id = compute_pipeline_id });
+    task_graph.add_task<BlitTask>({ .uses = { .blit_source = task_storage_image, .blit_target = swap_chain_image } });
     task_graph.present(swap_chain_image);
 
     while (!window.should_close()) {
@@ -90,6 +167,8 @@ i32 main(i32 argc, c8 **argv)
 
         present_queue.present(swap_chain, present_sema, acquired_index);
         device.collect_garbage();
+
+        window.poll();
     }
 
     return 1;

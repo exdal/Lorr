@@ -113,11 +113,16 @@ struct Device {
 #endif
     }
 
-    template<typename T, usize IndexT = sizeof(T) / sizeof(u32)>
+    template<typename T = void>
     PipelineLayout *get_layout()
     {
-        static_assert(sizeof(T) >= 4);
-        return &m_resources.pipeline_layouts[IndexT];
+        if constexpr (std::is_same_v<T, void>) {
+            return &m_resources.pipeline_layouts[0];
+        }
+        else {
+            usize index = sizeof(T) / sizeof(u32);
+            return &m_resources.pipeline_layouts[index];
+        }
     }
     CommandQueue &get_queue(CommandType type) { return m_queues[usize(type)]; }
     auto get_image(ImageID id) { return m_resources.images.get(id); }

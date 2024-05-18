@@ -454,7 +454,7 @@ VKResult Device::create_swap_chain(SwapChain &swap_chain, const SwapChainInfo &i
     builder.set_desired_extent(info.extent.width, info.extent.height);
     builder.set_desired_format({ VK_FORMAT_R8G8B8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR });
     builder.set_desired_present_mode(VK_PRESENT_MODE_IMMEDIATE_KHR);
-    builder.set_image_usage_flags(static_cast<VkImageUsageFlags>(ImageUsage::ColorAttachment | ImageUsage::Sampled | ImageUsage::TransferSrc | ImageUsage::TransferDst));
+    builder.set_image_usage_flags(static_cast<VkImageUsageFlags>(ImageUsage::ColorAttachment | ImageUsage::TransferDst));
     auto result = builder.build();
 
     if (!result) {

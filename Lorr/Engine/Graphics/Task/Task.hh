@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Graphics/Common.hh"
+#include "Graphics/Device.hh"
 
 namespace lr::graphics {
 struct TaskPersistentImageInfo {
@@ -75,50 +76,68 @@ struct TaskImageUse : TaskUse {
 
 // Task Use Presets
 namespace Preset {
-    using ColorAttachmentRead = TaskImageUse<ImageLayout::ColorAttachment, PipelineAccess::ColorAttachmentRead>;
     using ColorAttachmentWrite = TaskImageUse<ImageLayout::ColorAttachment, PipelineAccess::ColorAttachmentWrite>;
+    using ColorAttachmentRead = TaskImageUse<ImageLayout::ColorAttachment, PipelineAccess::ColorAttachmentRead>;
     using PixelReadOnly = TaskImageUse<ImageLayout::ColorReadOnly, PipelineAccess::PixelShaderRead>;
-    using ComputeReadOnly = TaskImageUse<ImageLayout::General, PipelineAccess::ComputeRead>;
+    using ComputeWrite = TaskImageUse<ImageLayout::General, PipelineAccess::ComputeWrite>;
+    using ComputeRead = TaskImageUse<ImageLayout::General, PipelineAccess::ComputeRead>;
+    using TransferRead = TaskImageUse<ImageLayout::TransferSrc, PipelineAccess::TransferRead>;
+    using TransferWrite = TaskImageUse<ImageLayout::TransferDst, PipelineAccess::TransferWrite>;
 };  // namespace Preset
 
 LR_HANDLE(TaskID, u32);
 struct TaskContext {
-    TaskContext(std::span<TaskImage> task_images, CommandList &cmd_list)
+    TaskContext(std::span<TaskImage> task_images, CommandList &cmd_list, Device *device)
         : m_task_images(task_images),
-          m_cmd_list(cmd_list)
+          m_cmd_list(cmd_list),
+          m_device(device)
     {
     }
 
     CommandList &command_list() { return m_cmd_list; }
 
     template<typename T>
-    RenderingAttachmentInfo as_color_attachment(T &use, std::optional<ColorClearValue> clear_val)
+    RenderingAttachmentInfo as_color_attachment(T &use, std::optional<ColorClearValue> clear_val = std::nullopt)
     {
         ZoneScoped;
 
         LR_ASSERT(use.image_layout == ImageLayout::ColorAttachment, "Rendering Attachment must have ColorAttachment layout!");
-        LR_ASSERT(clear_val && use.access == PipelineAccess::ColorAttachmentWrite, "Cannot clear an attachment with read access");
 
         RenderingAttachmentInfo info = {
-            .load_op = clear_val ? AttachmentLoadOp::Clear : AttachmentLoadOp::Load,
-            .store_op = use.access == PipelineAccess::ColorAttachmentWrite ? AttachmentStoreOp::Store : AttachmentStoreOp::DontCare,
-            .image_layout = ImageLayout::ColorAttachment,
             .image_view_id = m_task_images[static_cast<usize>(use.task_image_id)].image_view_id,
-            .clear_value = clear_val.value_or(ColorClearValue{}),
+            .image_layout = ImageLayout::ColorAttachment,
+            .load_op = clear_val ? AttachmentLoadOp::Clear : AttachmentLoadOp::Load,
+            .store_op = use.access == PipelineAccess::ColorAttachmentWrite ? AttachmentStoreOp::Store : AttachmentStoreOp::None,
+            .clear_value = { clear_val.value_or(ColorClearValue{}) },
         };
 
         return info;
     }
 
+    template<typename T>
+    TaskImage &task_image_data(T &use)
+    {
+        return m_task_images[static_cast<usize>(use.task_image_id)];
+    }
+
+    template<typename T>
+    void set_push_constants(T &v)
+    {
+        PipelineLayout &pipeline_layout = *m_device->get_layout<T>();
+        m_cmd_list.set_push_constants(pipeline_layout, &v, sizeof(T), 0);
+    }
+
 private:
     std::span<TaskImage> m_task_images;
     CommandList &m_cmd_list;
+    Device *m_device;
 };
 
 struct Task {
     virtual ~Task() = default;
     virtual void execute(TaskContext &tc) = 0;
 
+    usize m_pipeline_layout_index = 0;
     std::span<TaskUse> m_task_uses = {};
 };
 
@@ -130,6 +149,11 @@ struct TaskWrapper : Task {
     TaskWrapper(const TaskT &task)
         : m_task(task)
     {
+        constexpr static bool has_push_constants = requires { TaskT{}.push_constants; };
+        if constexpr (has_push_constants) {
+            m_pipeline_layout_index = sizeof(typename TaskT::PushConstants) / sizeof(u32);
+        }
+
         m_task_uses = { reinterpret_cast<TaskUse *>(&m_task.uses), m_task_use_count };
     }
 

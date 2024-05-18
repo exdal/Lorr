@@ -98,8 +98,9 @@ TaskID TaskGraph::add_task(std::unique_ptr<Task> &&task)
         [&](TaskImageID id, const PipelineAccessImpl &access, ImageLayout layout) {
             TaskImage &task_image = m_images[static_cast<usize>(id)];
             bool is_same_layout = layout == task_image.last_layout;
+            bool is_read_on_read = access.access == MemoryAccess::Read && task_image.last_access.access == MemoryAccess::Read;
 
-            if (!is_same_layout) {
+            if (!is_same_layout || !is_read_on_read) {
                 u32 barrier_id = m_barriers.size();
                 m_barriers.push_back(TaskBarrier{
                     .src_layout = task_image.last_layout,
@@ -147,6 +148,10 @@ void TaskGraph::execute(const TaskExecuteInfo &info)
     ZoneScoped;
     memory::ScopedStack stack;
 
+    for (auto &m_command_allocator : m_command_allocators) {
+        m_device->reset_command_allocator(m_command_allocator[info.image_index]);
+    }
+
     for (u32 submit_index = 0; submit_index < m_submits.size(); submit_index++) {
         TaskSubmit &task_submit = m_submits[submit_index];
         CommandQueue &cmd_queue = m_device->get_queue(task_submit.type);
@@ -179,7 +184,10 @@ void TaskGraph::execute(const TaskExecuteInfo &info)
 
             for (TaskID task_id : task_batch.tasks) {
                 Task *task = &*m_tasks[static_cast<usize>(task_id)];
-                TaskContext tc(m_images, *cmd_list);
+                PipelineLayout &pipeline_layout = m_device->m_resources.pipeline_layouts[task->m_pipeline_layout_index];
+                cmd_list->set_descriptor_sets(pipeline_layout, PipelineBindPoint::Compute, 0, { &m_device->m_descriptor_set, 1 });
+
+                TaskContext tc(m_images, *cmd_list, m_device);
                 task->execute(tc);
             }
 

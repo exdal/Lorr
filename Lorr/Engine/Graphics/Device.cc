@@ -1,10 +1,10 @@
 #include "Device.hh"
 
-#include "Graphics/Resource.hh"
+#include "Resource.hh"
 #include "Shader.hh"
 
-#include "Memory/Bit.hh"
-#include "Memory/Stack.hh"
+#include "Engine/Memory/Bit.hh"
+#include "Engine/Memory/Stack.hh"
 
 namespace lr::graphics {
 VKResult Device::init(vkb::Instance *instance)
@@ -36,6 +36,7 @@ VKResult Device::init(vkb::Instance *instance)
         vk12_features.runtimeDescriptorArray = true;
         vk12_features.timelineSemaphore = true;
         vk12_features.bufferDeviceAddress = true;
+        vk12_features.hostQueryReset = true;
         physical_device_selector.set_required_features_12(vk12_features);
 
         VkPhysicalDeviceFeatures vk10_features = {};
@@ -46,7 +47,7 @@ VKResult Device::init(vkb::Instance *instance)
         physical_device_selector.add_required_extensions({
             "VK_KHR_swapchain",
 #if TRACY_ENABLE
-            "VK_EXT_calibrated_timestamps",
+            "VK_KHR_calibrated_timestamps",
 #endif
         });
         auto physical_device_result = physical_device_selector.select();
@@ -65,9 +66,11 @@ VKResult Device::init(vkb::Instance *instance)
         //     features |= DeviceFeature::DescriptorBuffer;
         if (m_physical_device.enable_extension_if_present("VK_EXT_memory_budget"))
             m_supported_features |= DeviceFeature::MemoryBudget;
+        if (m_physical_device.properties.limits.timestampPeriod != 0) {
+            m_supported_features |= DeviceFeature::QueryTimestamp;
+        }
 
         vkb::DeviceBuilder device_builder(m_physical_device);
-
         VkPhysicalDeviceDescriptorBufferFeaturesEXT desciptor_buffer_features = {
             .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT,
             .pNext = nullptr,
@@ -230,6 +233,66 @@ VKResult Device::init(vkb::Instance *instance)
     return VKResult::Success;
 }
 
+VKResult Device::create_timestamp_query_pools(std::span<TimestampQueryPool> query_pools, const TimestampQueryPoolInfo &info)
+{
+    ZoneScoped;
+
+    VkQueryPoolCreateInfo create_info = {
+        .sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = 0,
+        .queryType = VK_QUERY_TYPE_TIMESTAMP,
+        .queryCount = info.query_count,
+        .pipelineStatistics = {},
+    };
+
+    for (TimestampQueryPool &query_pool : query_pools) {
+        VKResult result = CHECK(vkCreateQueryPool(m_handle, &create_info, nullptr, &query_pool.m_handle));
+        if (result != VKResult::Success) {
+            LR_LOG_ERROR("Failed to create timestamp query pool! {}", result);
+            return result;
+        }
+
+        // This is literally just memset to zero, cmd version is same but happens when queue is on execute state
+        vkResetQueryPool(m_handle, query_pool, 0, info.query_count);
+    }
+
+    return VKResult::Success;
+}
+
+void Device::delete_timestamp_query_pools(std::span<const TimestampQueryPool> query_pools)
+{
+    ZoneScoped;
+
+    for (const TimestampQueryPool &query_pool : query_pools) {
+        vkDestroyQueryPool(m_handle, query_pool, nullptr);
+    }
+}
+
+void Device::defer(std::span<const TimestampQueryPool> query_pools)
+{
+    ZoneScoped;
+
+    for (const TimestampQueryPool &query_pool : query_pools) {
+        m_garbage_query_pools.emplace(query_pool, m_garbage_timeline_sema.counter());
+    }
+}
+
+void Device::get_timestamp_query_pool_results(TimestampQueryPool &query_pool, u32 first_query, u32 count, std::span<u64> time_stamps)
+{
+    ZoneScoped;
+
+    vkGetQueryPoolResults(
+        m_handle,
+        query_pool,
+        first_query,
+        count,
+        time_stamps.size() * sizeof(u64),
+        time_stamps.data(),
+        2 * sizeof(u64),
+        VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT);
+}
+
 VKResult Device::create_command_allocators(std::span<CommandAllocator> command_allocators, const CommandAllocatorInfo &info)
 {
     ZoneScoped;
@@ -241,13 +304,16 @@ VKResult Device::create_command_allocators(std::span<CommandAllocator> command_a
         .queueFamilyIndex = get_queue(info.type).family_index(),
     };
 
-    VKResult result = VKResult::Success;
     for (CommandAllocator &allocator : command_allocators) {
-        result = CHECK(vkCreateCommandPool(m_handle, &create_info, nullptr, &allocator.m_handle));
+        VKResult result = CHECK(vkCreateCommandPool(m_handle, &create_info, nullptr, &allocator.m_handle));
         if (result != VKResult::Success) {
             LR_LOG_ERROR("Failed to create Command Allocator! {}", result);
             return result;
         }
+
+        allocator.m_type = info.type;
+        allocator.m_queue = &get_queue(info.type);
+        set_object_name(allocator, info.debug_name);
     }
 
     return VKResult::Success;
@@ -267,7 +333,7 @@ void Device::defer(std::span<const CommandAllocator> command_allocators)
     ZoneScoped;
 
     for (const CommandAllocator &command_allocator : command_allocators) {
-        m_garbage_command_allocators.emplace(command_allocator, m_garbage_timeline_sema.counter());
+        command_allocator.m_queue->defer({ { command_allocator } });
     }
 }
 
@@ -283,15 +349,15 @@ VKResult Device::create_command_lists(std::span<CommandList> command_lists, Comm
         .commandBufferCount = 1,
     };
 
-    VKResult result = VKResult::Success;
     for (CommandList &list : command_lists) {
-        result = CHECK(vkAllocateCommandBuffers(m_handle, &allocate_info, &list.m_handle));
+        VKResult result = CHECK(vkAllocateCommandBuffers(m_handle, &allocate_info, &list.m_handle));
         if (result != VKResult::Success) {
             LR_LOG_ERROR("Failed to create Command List! {}", result);
             return result;
         }
 
-        list.m_allocator = &command_allocator;
+        list.m_type = command_allocator.m_type;
+        list.m_allocator = command_allocator.m_handle;
         list.m_device = this;
     }
 
@@ -303,7 +369,7 @@ void Device::delete_command_lists(std::span<const CommandList> command_lists)
     ZoneScoped;
 
     for (const CommandList &list : command_lists) {
-        vkFreeCommandBuffers(m_handle, *list.m_allocator, 1, &list.m_handle);
+        vkFreeCommandBuffers(m_handle, list.m_allocator, 1, &list.m_handle);
     }
 }
 
@@ -312,7 +378,8 @@ void Device::defer(std::span<const CommandList> command_lists)
     ZoneScoped;
 
     for (const CommandList &command_list : command_lists) {
-        m_garbage_command_lists.emplace(command_list, m_garbage_timeline_sema.counter());
+        CommandQueue &queue = get_queue(command_list.m_type);
+        queue.defer({ { command_list } });
     }
 }
 
@@ -360,16 +427,15 @@ VKResult Device::create_binary_semaphores(std::span<Semaphore> semaphores)
         .flags = 0,
     };
 
-    VKResult result = VKResult::Success;
     for (Semaphore &semaphore : semaphores) {
-        result = CHECK(vkCreateSemaphore(m_handle, &semaphore_info, nullptr, &semaphore.m_handle));
-
+        VKResult result = CHECK(vkCreateSemaphore(m_handle, &semaphore_info, nullptr, &semaphore.m_handle));
         if (result != VKResult::Success) {
+            LR_LOG_ERROR("Failed to create binary semaphore! {}", result);
             return result;
         }
     }
 
-    return result;
+    return VKResult::Success;
 }
 
 VKResult Device::create_timeline_semaphores(std::span<Semaphore> semaphores, u64 initial_value)
@@ -389,17 +455,16 @@ VKResult Device::create_timeline_semaphores(std::span<Semaphore> semaphores, u64
         .flags = 0,
     };
 
-    VKResult result = VKResult::Success;
     for (Semaphore &semaphore : semaphores) {
         semaphore.m_counter = initial_value;
-        result = CHECK(vkCreateSemaphore(m_handle, &semaphore_info, nullptr, &semaphore.m_handle));
-
+        VKResult result = CHECK(vkCreateSemaphore(m_handle, &semaphore_info, nullptr, &semaphore.m_handle));
         if (result != VKResult::Success) {
+            LR_LOG_ERROR("Failed to create timeline semaphore! {}", result);
             return result;
         }
     }
 
-    return result;
+    return VKResult::Success;
 }
 
 void Device::delete_semaphores(std::span<const Semaphore> semaphores)
@@ -576,12 +641,13 @@ void Device::collect_garbage()
         checkndelete_fn(v.m_garbage_image_views, queue_counter, [this](std::span<ImageViewID> s) { delete_image_views(s); });
         checkndelete_fn(v.m_garbage_images, queue_counter, [this](std::span<ImageID> s) { delete_images(s); });
         checkndelete_fn(v.m_garbage_buffers, queue_counter, [this](std::span<BufferID> s) { delete_buffers(s); });
+        checkndelete_fn(v.m_garbage_command_lists, queue_counter, [this](std::span<CommandList> s) { delete_command_lists(s); });
+        checkndelete_fn(v.m_garbage_command_allocators, queue_counter, [this](std::span<CommandAllocator> s) { delete_command_allocators(s); });
     }
 
     u64 device_counter = get_semaphore_counter(m_garbage_timeline_sema);
     checkndelete_fn(m_garbage_semaphores, device_counter, [this](std::span<Semaphore> s) { delete_semaphores(s); });
-    checkndelete_fn(m_garbage_command_lists, device_counter, [this](std::span<CommandList> s) { delete_command_lists(s); });
-    checkndelete_fn(m_garbage_command_allocators, device_counter, [this](std::span<CommandAllocator> s) { delete_command_allocators(s); });
+    checkndelete_fn(m_garbage_query_pools, device_counter, [this](std::span<TimestampQueryPool> s) { delete_timestamp_query_pools(s); });
 }
 
 VKResult Device::create_pipeline_layouts(std::span<PipelineLayout> pipeline_layouts, const PipelineLayoutInfo &info)
@@ -1237,13 +1303,13 @@ Result<ImageID, VKResult> Device::create_image(const ImageInfo &info)
 
     VmaAllocationCreateInfo allocation_info = {
         .flags = 0,
-        .usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
-        .requiredFlags = 0,
-        .preferredFlags = 0,
+        .usage = VMA_MEMORY_USAGE_GPU_ONLY,
+        .requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        .preferredFlags = {},
         .memoryTypeBits = 0,
         .pool = nullptr,
         .pUserData = nullptr,
-        .priority = 0.0f,
+        .priority = 0.5f,
     };
 
     VkImage image_handle = nullptr;
@@ -1291,6 +1357,8 @@ void Device::delete_images(std::span<const ImageID> images)
 Result<ImageViewID, VKResult> Device::create_image_view(const ImageViewInfo &info)
 {
     ZoneScoped;
+
+    LR_ASSERT(info.usage_flags != ImageUsage::None);
 
     Image *image = get_image(info.image_id);
     VkImageViewCreateInfo create_info = {

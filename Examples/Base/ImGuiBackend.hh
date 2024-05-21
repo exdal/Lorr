@@ -2,11 +2,12 @@
 
 #include "ExampleBase.hh"
 
-#include "Graphics/Common.hh"
-#include "Graphics/CommandList.hh"
-#include "Graphics/Device.hh"
+#include "Engine/Graphics/Common.hh"
 
-#include "OS/Key.hh"
+#include "Engine/Graphics/CommandList.hh"
+#include "Engine/Graphics/Device.hh"
+
+#include "Engine/OS/Key.hh"
 
 #include <imgui.h>
 
@@ -29,12 +30,12 @@ struct ImGuiBackend {
 
     f64 m_last_time;
 
-    graphics::BufferID recreate_buffer(graphics::Device &device, graphics::BufferUsage usage, u64 data_size)
+    graphics::BufferID recreate_buffer(graphics::Device *device, graphics::BufferUsage usage, u64 data_size)
     {
-        return device.create_buffer({ .usage_flags = usage | graphics::BufferUsage::TransferDst, .data_size = data_size });
+        return device->create_buffer({ .usage_flags = usage | graphics::BufferUsage::TransferDst, .data_size = data_size });
     }
 
-    bool init(graphics::Device &device, graphics::SwapChain &swap_chain)
+    bool init(graphics::Device *device, graphics::SwapChain &swap_chain)
     {
         using namespace lr::graphics;
 
@@ -73,8 +74,8 @@ struct ImGuiBackend {
                 return false;
             }
 
-            ShaderID vs_shader = device.create_shader(ShaderStageFlag::Vertex, vs_data);
-            ShaderID fs_shader = device.create_shader(ShaderStageFlag::Pixel, fs_data);
+            ShaderID vs_shader = device->create_shader(ShaderStageFlag::Vertex, vs_data);
+            ShaderID fs_shader = device->create_shader(ShaderStageFlag::Pixel, fs_data);
 
             std::array shader_ids = { vs_shader, fs_shader };
             Viewport viewport = {
@@ -110,65 +111,65 @@ struct ImGuiBackend {
                 .vertex_attrib_infos = vertex_attrib_infos,
                 .blend_attachments = { &blend_attachment, 1 },
                 .dynamic_state = DynamicState::Viewport | DynamicState::Scissor,
-                .layout = device.get_layout<PushConstant>(),
+                .layout = device->get_layout<PushConstant>(),
             };
-            m_pipeline_id = device.create_graphics_pipeline(imgui_pipeline_info);
+            m_pipeline_id = device->create_graphics_pipeline(imgui_pipeline_info);
         }
 
         {
-            CommandQueue &queue = device.get_queue(CommandType::Graphics);
-            Unique<CommandAllocator> temp_callocator(&device);
-            CommandList temp_cmd_list;
+            CommandQueue &queue = device->get_queue(CommandType::Graphics);
+            Unique<CommandAllocator> temp_callocator(device);
+            Unique<CommandList> temp_cmd_list(device);
 
-            device.create_command_allocators({ &*temp_callocator, 1 }, { .type = CommandType::Graphics, .flags = graphics::CommandAllocatorFlag::Transient });
-            device.create_command_lists({ &temp_cmd_list, 1 }, *temp_callocator);
+            device->create_command_allocators({ &*temp_callocator, 1 }, { .type = CommandType::Graphics, .flags = graphics::CommandAllocatorFlag::Transient });
+            device->create_command_lists({ &*temp_cmd_list, 1 }, *temp_callocator);
 
             u8 *font_data = nullptr;
             i32 font_width, font_height;
             io.Fonts->GetTexDataAsRGBA32(&font_data, &font_width, &font_height);
             usize upload_size = font_width * font_height * 4 * sizeof(u8);
 
-            BufferID upload_buffer = device.create_buffer({
+            BufferID upload_buffer = device->create_buffer({
                 .usage_flags = BufferUsage::TransferSrc,
                 .flags = MemoryFlag::HostSeqWrite,
                 .data_size = upload_size,
             });
-            u8 *upload_data = device.buffer_host_data<u8>(upload_buffer);
+            u8 *upload_data = device->buffer_host_data<u8>(upload_buffer);
             memcpy(upload_data, font_data, upload_size);
 
-            m_font_image_id = device.create_image({
+            m_font_image_id = device->create_image({
                 .usage_flags = ImageUsage::TransferDst | ImageUsage::Sampled,
                 .format = Format::R8G8B8A8_UNORM,
                 .extent = { u32(font_width), u32(font_height), 1 },
             });
 
-            m_font_image_view_id = device.create_image_view({ .image_id = m_font_image_id });
+            m_font_image_view_id = device->create_image_view({ .image_id = m_font_image_id, .usage_flags = ImageUsage::Sampled });
 
             ImageCopyRegion copy_region = {
                 .image_subresource_layer = { .aspect_mask = ImageAspect::Color },
                 .image_extent = { u32(font_width), u32(font_height), 1 },
             };
 
-            device.begin_command_list(temp_cmd_list);
-            temp_cmd_list.image_transition({
+            device->begin_command_list(*temp_cmd_list);
+            temp_cmd_list->image_transition({
                 .src_access = PipelineAccess::None,
                 .dst_access = PipelineAccess::TransferWrite,
                 .old_layout = ImageLayout::Undefined,
                 .new_layout = ImageLayout::TransferDst,
                 .image_id = m_font_image_id,
             });
-            temp_cmd_list.copy_buffer_to_image(upload_buffer, m_font_image_id, ImageLayout::TransferDst, { &copy_region, 1 });
-            temp_cmd_list.image_transition({
+            temp_cmd_list->copy_buffer_to_image(upload_buffer, m_font_image_id, ImageLayout::TransferDst, { &copy_region, 1 });
+            temp_cmd_list->image_transition({
                 .src_access = PipelineAccess::TransferWrite,
                 .dst_access = PipelineAccess::PixelShaderRead,
                 .old_layout = ImageLayout::TransferDst,
                 .new_layout = ImageLayout::ColorReadOnly,
                 .image_id = m_font_image_id,
             });
-            device.end_command_list(temp_cmd_list);
+            device->end_command_list(*temp_cmd_list);
 
             SemaphoreSubmitInfo wait_sema_info(queue.semaphore(), queue.semaphore().counter(), PipelineStage::AllCommands);
-            CommandListSubmitInfo cmd_list_info = { temp_cmd_list };
+            CommandListSubmitInfo cmd_list_info = { *temp_cmd_list };
             SemaphoreSubmitInfo signal_sema_info(queue.semaphore(), queue.semaphore().advance(), PipelineStage::PixelShader);
             QueueSubmitInfo submit_info = {
                 .wait_sema_count = 1,
@@ -179,10 +180,11 @@ struct ImGuiBackend {
                 .signal_sema_infos = &signal_sema_info,
             };
             queue.submit(submit_info);
+            device->wait_for_work();
 
             IM_FREE(font_data);
 
-            m_font_sampler_id = device.create_sampler({
+            m_font_sampler_id = device->create_sampler({
                 .min_filter = graphics::Filtering::Linear,
                 .mag_filter = graphics::Filtering::Linear,
                 .mip_filter = graphics::Filtering::Linear,
@@ -193,6 +195,18 @@ struct ImGuiBackend {
             });
             m_vertex_buffer_id = recreate_buffer(device, BufferUsage::Vertex, 0xfff);
             m_index_buffer_id = recreate_buffer(device, BufferUsage::Index, 0xfff);
+        }
+
+        return true;
+    }
+
+    bool can_render()
+    {
+        ImDrawData *draw_data = ImGui::GetDrawData();
+        u64 vertex_size_bytes = draw_data->TotalVtxCount * sizeof(ImDrawVert);
+
+        if (!draw_data || vertex_size_bytes == 0) {
+            return false;
         }
 
         return true;
@@ -210,56 +224,45 @@ struct ImGuiBackend {
         m_last_time = time;
     }
 
-    Result<graphics::CommandList, graphics::VKResult> end_frame(graphics::Device &device, graphics::CommandAllocator &cmd_allocator, graphics::ImageViewID target_view_id)
+    void end_frame() { ImGui::Render(); }
+
+    void render(graphics::Device *device, graphics::CommandList &cmd_list, graphics::ImageViewID target_view_id)
     {
         using namespace lr::graphics;
 
-        ImGui::Render();
-
         auto &io = ImGui::GetIO();
-        CommandQueue &cmd_queue = device.get_queue(CommandType::Graphics);
         ImDrawData *draw_data = ImGui::GetDrawData();
-
-        if (!draw_data) {
-            return VKResult::Unknown;
-        }
-
+        CommandQueue &cmd_queue = device->get_queue(CommandType::Graphics);
         u64 vertex_size_bytes = draw_data->TotalVtxCount * sizeof(ImDrawVert);
         u64 index_size_bytes = draw_data->TotalIdxCount * sizeof(ImDrawIdx);
 
-        if (vertex_size_bytes == 0) {
-            return VKResult::Unknown;
-        }
+        device->set_object_name(cmd_list, "ImGui Command List");
 
-        CommandList cmd_list = {};
-        device.create_command_lists({ &cmd_list, 1 }, cmd_allocator);
-        device.set_object_name(cmd_list, "ImGui Command List");
-
-        Buffer *vertex_buffer = device.get_buffer(m_vertex_buffer_id);
-        Buffer *index_buffer = device.get_buffer(m_index_buffer_id);
+        Buffer *vertex_buffer = device->get_buffer(m_vertex_buffer_id);
+        Buffer *index_buffer = device->get_buffer(m_index_buffer_id);
         if (vertex_size_bytes > vertex_buffer->m_data_size) {
-            device.delete_buffers({ &m_vertex_buffer_id, 1 });
+            device->delete_buffers({ &m_vertex_buffer_id, 1 });
             m_vertex_buffer_id = recreate_buffer(device, BufferUsage::Vertex, vertex_size_bytes + 0xfff);
         }
 
         if (index_size_bytes > index_buffer->m_data_size) {
-            device.delete_buffers({ &m_index_buffer_id, 1 });
+            device->delete_buffers({ &m_index_buffer_id, 1 });
             m_index_buffer_id = recreate_buffer(device, BufferUsage::Index, index_size_bytes + 0xfff);
         }
 
-        BufferID temp_vbuffer = device.create_buffer({
+        BufferID temp_vbuffer = device->create_buffer({
             .usage_flags = BufferUsage::Vertex | BufferUsage::TransferSrc,
             .flags = MemoryFlag::HostSeqWrite,
             .data_size = vertex_size_bytes,
         });
-        BufferID temp_ibuffer = device.create_buffer({
+        BufferID temp_ibuffer = device->create_buffer({
             .usage_flags = BufferUsage::Index | BufferUsage::TransferSrc,
             .flags = MemoryFlag::HostSeqWrite,
             .data_size = index_size_bytes,
         });
 
-        ImDrawVert *vertex_data = device.buffer_host_data<ImDrawVert>(temp_vbuffer);
-        ImDrawIdx *index_data = device.buffer_host_data<ImDrawIdx>(temp_ibuffer);
+        ImDrawVert *vertex_data = device->buffer_host_data<ImDrawVert>(temp_vbuffer);
+        ImDrawIdx *index_data = device->buffer_host_data<ImDrawIdx>(temp_ibuffer);
 
         for (i32 i = 0; i < draw_data->CmdListsCount; i++) {
             const ImDrawList *im_cmd_list = draw_data->CmdLists[i];
@@ -268,8 +271,6 @@ struct ImGuiBackend {
             vertex_data += im_cmd_list->VtxBuffer.Size;
             index_data += im_cmd_list->IdxBuffer.Size;
         }
-
-        device.begin_command_list(cmd_list);
 
         cmd_list.memory_barrier({
             .src_access = PipelineAccess::HostWrite,
@@ -312,9 +313,9 @@ struct ImGuiBackend {
         pc.image_view_id = m_font_image_view_id;
         pc.sampler_id = m_font_sampler_id;
 
-        PipelineLayout &pipeline_layout = *device.get_layout<PushConstant>();
-        cmd_list.set_push_constants(pipeline_layout, &pc, sizeof(PushConstant), 0);
-        cmd_list.set_descriptor_sets(pipeline_layout, graphics::PipelineBindPoint::Graphics, 0, { &device.m_descriptor_set, 1 });
+        PipelineLayout *pipeline_layout = device->get_layout<PushConstant>();
+        cmd_list.set_push_constants(*pipeline_layout, &pc, sizeof(PushConstant), 0);
+        cmd_list.set_descriptor_sets(*pipeline_layout, graphics::PipelineBindPoint::Graphics, 0, { &device->m_descriptor_set, 1 });
         cmd_list.set_viewport(0, { .x = 0, .y = 0, .width = io.DisplaySize.x, .height = io.DisplaySize.y, .depth_min = 0.01, .depth_max = 1.0 });
 
         ImVec2 clip_off = draw_data->DisplayPos;
@@ -347,9 +348,6 @@ struct ImGuiBackend {
         }
 
         cmd_list.end_rendering();
-        device.end_command_list(cmd_list);
-
-        return cmd_list;
     }
 
     static ImGuiKey lr_key_to_imgui(int key)

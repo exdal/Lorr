@@ -1,14 +1,13 @@
-#include "Core/Log.hh"
-#include "Graphics/Common.hh"
-#include "Graphics/Device.hh"
-#include "Graphics/Instance.hh"
+#include "Engine/Core/Log.hh"
+#include "Engine/Graphics/Common.hh"
+#include "Engine/Graphics/Device.hh"
+#include "Engine/Graphics/Instance.hh"
 
-#include "Memory/Stack.hh"
+#include "Engine/Memory/Stack.hh"
 
-#include "OS/Window.hh"
+#include "Engine/OS/Window.hh"
 
 #include "ExampleBase.hh"
-#include "ImGuiBackend.hh"
 
 using namespace lr;
 using namespace lr::graphics;
@@ -70,7 +69,6 @@ i32 main(i32 argc, c8 **argv)
     Instance instance;
     Device device;
     SwapChain swap_chain;
-    example::ImGuiBackend imgui = {};
     std::array<ImageID, 3> images = {};
     std::array<ImageViewID, 3> image_views = {};
     std::array<CommandAllocator, 3> graphics_callocators = {};
@@ -104,7 +102,6 @@ i32 main(i32 argc, c8 **argv)
     CommandQueue &graphics_queue = device.get_queue(CommandType::Graphics);
     CommandQueue &compute_queue = device.get_queue(CommandType::Compute);
 
-    imgui.init(device, swap_chain);
     load_shaders(device);
 
     app.compute_pipeline = device.create_compute_pipeline({

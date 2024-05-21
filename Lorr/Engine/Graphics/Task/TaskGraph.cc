@@ -1,8 +1,10 @@
 #include "TaskGraph.hh"
 
-#include "Graphics/Device.hh"
+#include "Engine/Graphics/Device.hh"
 
-#include "Memory/Stack.hh"
+#include "Engine/Memory/Stack.hh"
+
+#include <sstream>
 
 namespace lr::graphics {
 void for_each_use(std::span<TaskUse> uses, const auto &buffer_fn, const auto &image_fn)
@@ -28,6 +30,7 @@ bool TaskGraph::init(const TaskGraphInfo &info)
     m_device->create_command_allocators(m_command_allocators[0], { .type = CommandType::Graphics });
     m_device->create_command_allocators(m_command_allocators[1], { .type = CommandType::Compute });
     m_device->create_command_allocators(m_command_allocators[2], { .type = CommandType::Transfer });
+    m_device->create_timestamp_query_pools(m_timestamp_query_pools, { .query_count = 0xfff, .debug_name = "Timeline Query Pool" });
 
     m_submits.push_back({});
 
@@ -68,7 +71,7 @@ u32 TaskGraph::schedule_task(Task *task, TaskSubmit &submit)
             bool is_last_none = task_image.last_access == PipelineAccess::None;
             bool is_read_on_read = access.access == MemoryAccess::Read && task_image.last_access.access == MemoryAccess::Read;
 
-            if ((!is_same_layout && !is_read_on_read) && !is_last_none) {
+            if ((!is_same_layout || !is_read_on_read) && !is_last_none) {
                 cur_batch_index++;
             }
 
@@ -143,6 +146,65 @@ void TaskGraph::present(TaskImageID task_image_id)
     task_submit.additional_signal_barrier_indices.push_back(barrier_id);
 }
 
+std::string TaskGraph::generate_graphviz()
+{
+    ZoneScoped;
+
+    u32 batch_id = 0;
+
+    std::stringstream ss;
+    ss << "digraph task_graph {\n";
+    ss << "graph [rankdir = \"LR\" compound = true];\n";
+    ss << "node [fontsize = \"16\" shape = \"ellipse\"]\n";
+    ss << "edge [];\n";
+    for (u32 task_id = 0; task_id < m_tasks.size(); task_id++) {
+        std::string_view name = m_tasks[task_id]->m_name;
+        auto uses = m_tasks[task_id]->m_task_uses;
+
+        ss << fmt::format(R"(task{} [)", task_id) << "\n";
+        ss << fmt::format(R"(label = "<name> {}({}))", name, task_id);
+        for (auto &use : uses) {
+            ss << fmt::format(R"(|<i{}> image {})", use.index, use.index);
+        }
+        ss << "\"\n";
+        ss << R"(shape = "record")" << "\n";
+        ss << "];\n";
+    }
+
+    // mfw dot doesnt have proper subgraph connectors
+    for (TaskSubmit &submit : m_submits) {
+        for (u32 i = 0; i < submit.batches.size(); i++) {
+            TaskBatch &batch = submit.batches[i];
+            TaskID mid_task_id = batch.tasks[batch.tasks.size() / 2];
+
+            ss << fmt::format(R"(subgraph cluster_{})", batch_id) << " {\n";
+            ss << fmt::format(R"(label = "Batch {}\n{} barriers";)", batch_id, batch.barrier_indices.size()) << "\n";
+            if (i != 0) {
+                TaskBatch &last_batch = submit.batches[i - 1];
+                TaskID last_mid_task_id = last_batch.tasks[last_batch.tasks.size() / 2];
+                u32 lmtidx = static_cast<u32>(last_mid_task_id);
+                u32 mtidx = static_cast<u32>(mid_task_id);
+                ss << fmt::format("task{} -> task{} [ltail = cluster_{} lhead = cluster_{} label=\"todo barrier info\"];\n", lmtidx, mtidx, i - 1, i);
+            }
+            for (TaskID task_id : batch.tasks) {
+                if (task_id == mid_task_id && i != 0) {
+                    continue;
+                }
+
+                u32 task_index = static_cast<u32>(task_id);
+                ss << fmt::format("task{} ", task_index);
+            }
+
+            ss << "\n}\n";
+            batch_id++;
+        }
+    }
+
+    ss << "}\n";
+
+    return ss.str();
+}
+
 void TaskGraph::execute(const TaskExecuteInfo &info)
 {
     ZoneScoped;
@@ -154,9 +216,24 @@ void TaskGraph::execute(const TaskExecuteInfo &info)
 
     for (u32 submit_index = 0; submit_index < m_submits.size(); submit_index++) {
         TaskSubmit &task_submit = m_submits[submit_index];
+        usize submit_type_index = static_cast<usize>(task_submit.type);
         CommandQueue &cmd_queue = m_device->get_queue(task_submit.type);
         Semaphore &queue_sema = cmd_queue.semaphore();
-        CommandAllocator &cmd_allocator = m_command_allocators[static_cast<usize>(task_submit.type)][info.image_index];
+        CommandAllocator &cmd_allocator = m_command_allocators[submit_type_index][info.image_index];
+
+        TimestampQueryPool &query_pool = m_timestamp_query_pools[info.image_index];
+        std::span<u64> query_results = stack.alloc<u64>(task_submit.batches.size() * 4);
+        m_device->get_timestamp_query_pool_results(query_pool, 0, task_submit.batches.size() * 2, query_results);
+        for (u32 i = 0; i < query_results.size(); i += 4) {
+            u32 batch_index = i / 4;
+            if (query_results[i + 1] == 0 && query_results[i + 3] == 0) {
+                continue;
+            }
+
+            u64 start = query_results[i + 0];
+            u64 end = query_results[i + 2];
+            task_submit.batches[batch_index].execution_time = static_cast<f64>(end - start) / 1000000.0;
+        }
 
         bool has_additional_barriers = !task_submit.additional_signal_barrier_indices.empty();
         auto cmd_list_submit_infos = stack.alloc<CommandListSubmitInfo>(task_submit.batches.size() + !!has_additional_barriers);
@@ -168,6 +245,8 @@ void TaskGraph::execute(const TaskExecuteInfo &info)
 
             m_device->create_command_lists({ &*cmd_list, 1 }, cmd_allocator);
             m_device->begin_command_list(*cmd_list);
+            cmd_list->reset_query_pool(query_pool, batch_index * 2, 2);
+            cmd_list->write_timestamp(query_pool, PipelineStage::TopOfPipe, batch_index * 2);
 
             for (u32 barrier_index : task_batch.barrier_indices) {
                 TaskBarrier &barrier = m_barriers[barrier_index];
@@ -191,6 +270,7 @@ void TaskGraph::execute(const TaskExecuteInfo &info)
                 task->execute(tc);
             }
 
+            cmd_list->write_timestamp(query_pool, PipelineStage::BottomOfPipe, batch_index * 2 + 1);
             m_device->end_command_list(*cmd_list);
             cmd_list_submit_infos[batch_index] = { *cmd_list };
 

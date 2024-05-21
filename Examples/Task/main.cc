@@ -1,15 +1,37 @@
-#include "Graphics/Device.hh"
-#include "Graphics/Instance.hh"
-#include "Graphics/Task/TaskGraph.hh"
+#include "Engine/Graphics/Device.hh"
+#include "Engine/Graphics/Instance.hh"
+#include "Engine/Graphics/Task/TaskGraph.hh"
 
-#include "OS/Window.hh"
+#include "Engine/OS/Window.hh"
 
 #include "ExampleBase.hh"
+#include "ImGuiBackend.hh"
 
 using namespace lr;
 using namespace lr::graphics;
+example::ImGuiBackend imgui = {};
+
+struct ImguiTask {
+    std::string_view name = "ImGui Task";
+
+    struct Uses {
+        Preset::ColorAttachmentWrite attachment = {};
+    } uses = {};
+
+    void execute(TaskContext &tc)
+    {
+        if (!imgui.can_render()) {
+            return;
+        }
+
+        auto &cmd_list = tc.command_list();
+        imgui.render(tc.device(), cmd_list, tc.task_image_data(uses.attachment).image_view_id);
+    }
+};
 
 struct ComputeTask {
+    std::string_view name = "Compute Task";
+
     struct Uses {
         Preset::ComputeWrite storage_image = {};
     } uses = {};
@@ -36,6 +58,8 @@ struct ComputeTask {
 };
 
 struct BlitTask {
+    std::string_view name = "Blit Task";
+
     struct Uses {
         Preset::TransferRead blit_source = {};
         Preset::TransferWrite blit_target = {};
@@ -105,7 +129,12 @@ i32 main(i32 argc, c8 **argv)
         device.create_swap_chain(swap_chain, { window.get_surface(instance.m_handle), { width, height } });
         device.get_swapchain_images(swap_chain, images);
         for (u32 i = 0; i < images.size(); i++) {
-            ImageViewInfo image_view_info = { .image_id = images[i] };
+            std::string name = fmt::format("SwapChain ImageView {}", i);
+            ImageViewInfo image_view_info = {
+                .image_id = images[i],
+                .usage_flags = ImageUsage::TransferDst,
+                .debug_name = name,
+            };
             auto [image_view_id, r_image_view] = device.create_image_view(image_view_info);
             image_views[i] = image_view_id;
         }
@@ -115,6 +144,7 @@ i32 main(i32 argc, c8 **argv)
     window.init({ .title = "Task Graph", .width = 1280, .height = 780, .flags = os::WindowFlag::Centered });
     device.init(&instance.m_handle);
     create_swap_chain(window.m_width, window.m_height);
+    imgui.init(&device, swap_chain);
 
     PipelineID compute_pipeline_id = device.create_compute_pipeline({
         .shader_id = load_shaders(device),
@@ -123,7 +153,7 @@ i32 main(i32 argc, c8 **argv)
 
     ImageID storage_image_id = device.create_image({
         .usage_flags = ImageUsage::Storage | ImageUsage::TransferSrc,
-        .format = Format::R32G32B32A32_SFLOAT,
+        .format = Format::R8G8B8A8_UNORM,
         .type = ImageType::View2D,
         .extent = { 1024, 512, 1 },
         .debug_name = "Compute image",
@@ -143,11 +173,42 @@ i32 main(i32 argc, c8 **argv)
 
     task_graph.add_task<ComputeTask>({ .uses = { .storage_image = task_storage_image }, .pipeline_id = compute_pipeline_id });
     task_graph.add_task<BlitTask>({ .uses = { .blit_source = task_storage_image, .blit_target = swap_chain_image } });
+    task_graph.add_task<ImguiTask>({ .uses = { .attachment = swap_chain_image } });
     task_graph.present(swap_chain_image);
 
     while (!window.should_close()) {
         auto [acquire_sema, present_sema] = swap_chain.binary_semas();
         auto [acquired_index, acq_result] = device.acquire_next_image(swap_chain, acquire_sema);
+
+        while (window.m_event_manager.peek()) {
+            auto &io = ImGui::GetIO();
+
+            os::WindowEventData event_data = {};
+            switch (window.m_event_manager.dispatch(event_data)) {
+                case os::LR_WINDOW_EVENT_MOUSE_POSITION: {
+                    io.AddMousePosEvent(event_data.mouse_x, event_data.mouse_y);
+                    break;
+                }
+                case os::LR_WINDOW_EVENT_MOUSE_STATE: {
+                    io.AddMouseButtonEvent(event_data.mouse, event_data.mouse_state == KeyState::Down);
+                    break;
+                }
+                case os::LR_WINDOW_EVENT_MOUSE_SCROLL: {
+                    io.AddMouseWheelEvent(f32(event_data.mouse_offset_x), f32(event_data.mouse_offset_y));
+                    break;
+                }
+                case os::LR_WINDOW_EVENT_CHAR: {
+                    io.AddInputCharacterUTF16(event_data.char_val);
+                    break;
+                }
+                case os::LR_WINDOW_EVENT_KEYBOARD_STATE: {
+                    io.AddKeyEvent(example::ImGuiBackend::lr_key_to_imgui(event_data.key), event_data.key_state != KeyState::Up);
+                    break;
+                }
+                default:
+                    break;
+            }
+        }
 
         ImageID image_id = images[acquired_index];
         ImageViewID image_view_id = image_views[acquired_index];
@@ -161,6 +222,23 @@ i32 main(i32 argc, c8 **argv)
             { frame_sema, frame_sema.advance(), PipelineStage::AllCommands },
             { garbage_collector_sema, garbage_collector_sema.advance(), PipelineStage::AllCommands },
         };
+
+        imgui.new_frame(static_cast<f32>(swap_chain.m_extent.width), static_cast<f32>(swap_chain.m_extent.height), glfwGetTime());
+        {
+            auto &io = ImGui::GetIO();
+            ImGui::Begin("Task Graph", nullptr);
+            ImGui::Text("Frametime: %f", io.Framerate);
+            ImGui::Text("Submit scopes (ms):");
+            for (auto &submit : task_graph.m_submits) {
+                u32 batch_id = 0;
+                for (auto &batch : submit.batches) {
+                    ImGui::Text("\tBatch %d: %lf", batch_id++, batch.execution_time);
+                }
+            }
+            ImGui::End();
+            ImGui::ShowDemoWindow();
+        }
+        imgui.end_frame();
 
         task_graph.set_image(swap_chain_image, { .image_id = image_id, .image_view_id = image_view_id });
         task_graph.execute({ .image_index = acquired_index, .wait_semas = wait_semas, .signal_semas = signal_semas });

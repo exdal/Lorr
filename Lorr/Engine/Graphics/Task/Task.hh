@@ -1,7 +1,7 @@
 #pragma once
 
-#include "Graphics/Common.hh"
-#include "Graphics/Device.hh"
+#include "Engine/Graphics/Common.hh"
+#include "Engine/Graphics/Device.hh"
 
 namespace lr::graphics {
 struct TaskPersistentImageInfo {
@@ -37,6 +37,7 @@ struct TaskUse {
     union {
         TaskBufferID task_buffer_id = TaskBufferID::Invalid;
         TaskImageID task_image_id;
+        u32 index;
     };
 };
 
@@ -76,7 +77,7 @@ struct TaskImageUse : TaskUse {
 
 // Task Use Presets
 namespace Preset {
-    using ColorAttachmentWrite = TaskImageUse<ImageLayout::ColorAttachment, PipelineAccess::ColorAttachmentWrite>;
+    using ColorAttachmentWrite = TaskImageUse<ImageLayout::ColorAttachment, PipelineAccess::ColorAttachmentReadWrite>;
     using ColorAttachmentRead = TaskImageUse<ImageLayout::ColorAttachment, PipelineAccess::ColorAttachmentRead>;
     using PixelReadOnly = TaskImageUse<ImageLayout::ColorReadOnly, PipelineAccess::PixelShaderRead>;
     using ComputeWrite = TaskImageUse<ImageLayout::General, PipelineAccess::ComputeWrite>;
@@ -95,6 +96,7 @@ struct TaskContext {
     }
 
     CommandList &command_list() { return m_cmd_list; }
+    Device *device() { return m_device; }
 
     template<typename T>
     RenderingAttachmentInfo as_color_attachment(T &use, std::optional<ColorClearValue> clear_val = std::nullopt)
@@ -139,10 +141,15 @@ struct Task {
 
     usize m_pipeline_layout_index = 0;
     std::span<TaskUse> m_task_uses = {};
+    std::string_view m_name = {};
+    f64 m_execution_time = 0.0f;
 };
 
 template<typename TaskT>
-concept TaskConcept = requires { TaskT{}.uses; } and requires(TaskContext &tc) { TaskT{}.execute(tc); };
+concept TaskConcept = requires {
+    TaskT{}.uses;
+    TaskT{}.name;
+} and requires(TaskContext &tc) { TaskT{}.execute(tc); };
 
 template<TaskConcept TaskT>
 struct TaskWrapper : Task {
@@ -155,6 +162,7 @@ struct TaskWrapper : Task {
         }
 
         m_task_uses = { reinterpret_cast<TaskUse *>(&m_task.uses), m_task_use_count };
+        m_name = m_task.name;
     }
 
     void execute(TaskContext &tc) override { m_task.execute(tc); }
@@ -177,6 +185,7 @@ struct TaskBatch {
     PipelineAccessImpl execution_access = PipelineAccess::None;
     std::vector<u32> barrier_indices = {};
     std::vector<TaskID> tasks = {};
+    f64 execution_time = 0.0;
 };
 
 struct TaskSubmit {

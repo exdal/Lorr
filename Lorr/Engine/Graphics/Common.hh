@@ -11,6 +11,7 @@ enum class DeviceFeature : u64 {
     None = 0,
     DescriptorBuffer = 1 << 0,
     MemoryBudget = 1 << 1,
+    QueryTimestamp = 1 << 2,
 };
 LR_TYPEOP_ARITHMETIC_INT(DeviceFeature, DeviceFeature, &);
 LR_TYPEOP_ARITHMETIC(DeviceFeature, DeviceFeature, |);
@@ -345,6 +346,7 @@ constexpr static u32 format_to_size(Format format)
 }
 
 enum class ImageUsage : u32 {
+    None = 0,
     Sampled = VK_IMAGE_USAGE_SAMPLED_BIT,
     ColorAttachment = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
     DepthStencilAttachment = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,

@@ -2,7 +2,7 @@
 
 #include "Task.hh"
 
-#include "Graphics/CommandList.hh"
+#include "Engine/Graphics/CommandList.hh"
 
 namespace lr::graphics {
 struct TaskExecuteInfo {
@@ -26,8 +26,9 @@ struct TaskGraph {
     template<typename TaskT>
     TaskID add_task(const TaskT &task_info);
     TaskID add_task(std::unique_ptr<Task> &&task);
-
     void present(TaskImageID task_image_id);
+    std::string generate_graphviz();
+
     void execute(const TaskExecuteInfo &info);
 
     std::vector<std::unique_ptr<Task>> m_tasks = {};
@@ -37,6 +38,8 @@ struct TaskGraph {
     std::vector<TaskBuffer> m_buffers = {};
 
     std::array<std::array<CommandAllocator, 3>, Limits::FrameCount> m_command_allocators = {};
+    // TODO: Multiple submits
+    std::array<TimestampQueryPool, Limits::FrameCount> m_timestamp_query_pools = {};
 
     Device *m_device = nullptr;
 };

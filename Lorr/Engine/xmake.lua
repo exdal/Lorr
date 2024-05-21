@@ -1,12 +1,12 @@
 target("Lorr")
   set_kind("static")
   set_languages("cxx20")
-  add_forceincludes("pch.hh", { public = true })
-  set_pcheader("pch.hh", { public = true })
+  add_forceincludes("Engine/pch.hh", { public = true })
+  set_pcheader("Engine/pch.hh", { public = true })
   add_cxxflags("clang::-march=native", "clang_cl::/arch:AVX2")
   set_runtimes("MT", "c++_static")
 
-  add_includedirs("./", { public = true })
+  add_includedirs("../", { public = true });
   add_files("**.cc")
   add_rpathdirs("@executable_path")
 

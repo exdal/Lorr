@@ -142,7 +142,10 @@ struct Task {
     usize m_pipeline_layout_index = 0;
     std::span<TaskUse> m_task_uses = {};
     std::string_view m_name = {};
-    f64 m_execution_time = 0.0f;
+    f64 m_start_ts = 0.0f;
+    f64 m_end_ts = 0.0f;
+
+    f64 execution_time() { return (m_end_ts - m_start_ts) / 1000000.f; }
 };
 
 template<typename TaskT>
@@ -185,16 +188,24 @@ struct TaskBatch {
     PipelineAccessImpl execution_access = PipelineAccess::None;
     std::vector<u32> barrier_indices = {};
     std::vector<TaskID> tasks = {};
-    f64 execution_time = 0.0;
+    f64 start_ts = 0.0f;
+    f64 end_ts = 0.0f;
+
+    f64 execution_time() { return (end_ts - start_ts) / 1000000.f; }
 };
 
 struct TaskSubmit {
     CommandType type = CommandType::Graphics;
 
     std::vector<TaskBatch> batches = {};
+    std::array<CommandAllocator, Limits::FrameCount> command_allocators = {};
+    std::array<TimestampQueryPool, Limits::FrameCount> query_pools = {};
 
     // Additional pipeline barriers that will be executed after
     std::vector<u32> additional_signal_barrier_indices = {};
+
+    auto &frame_cmd_allocator(u32 frame_index) { return command_allocators[frame_index]; }
+    auto &frame_query_pool(u32 frame_index) { return query_pools[frame_index]; }
 };
 
 }  // namespace lr::graphics

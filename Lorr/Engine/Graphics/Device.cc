@@ -517,7 +517,7 @@ VKResult Device::create_swap_chain(SwapChain &swap_chain, const SwapChainInfo &i
     vkb::SwapchainBuilder builder(m_handle, info.surface);
     builder.set_desired_min_image_count((u32)info.buffering);
     builder.set_desired_extent(info.extent.width, info.extent.height);
-    builder.set_desired_format({ VK_FORMAT_R8G8B8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR });
+    builder.set_desired_format({ VK_FORMAT_B8G8R8A8_SRGB, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR });
     builder.set_desired_present_mode(VK_PRESENT_MODE_IMMEDIATE_KHR);
     builder.set_image_usage_flags(static_cast<VkImageUsageFlags>(ImageUsage::ColorAttachment | ImageUsage::TransferDst));
     auto result = builder.build();
@@ -1305,7 +1305,7 @@ Result<ImageID, VKResult> Device::create_image(const ImageInfo &info)
         .flags = 0,
         .usage = VMA_MEMORY_USAGE_GPU_ONLY,
         .requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        .preferredFlags = {},
+        .preferredFlags = 0,
         .memoryTypeBits = 0,
         .pool = nullptr,
         .pUserData = nullptr,

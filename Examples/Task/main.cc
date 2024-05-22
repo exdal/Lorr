@@ -38,7 +38,7 @@ struct ComputeTask {
 
     struct PushConstants {
         ImageViewID image_view_id = ImageViewID::Invalid;
-        f32 time = 0.0f;
+        f32 time = 0;
     } push_constants = {};
 
     PipelineID pipeline_id = PipelineID::Invalid;
@@ -47,6 +47,7 @@ struct ComputeTask {
     {
         auto &cmd_list = tc.command_list();
         auto &storage_image_data = tc.task_image_data(uses.storage_image);
+        auto &io = ImGui::GetIO();
 
         push_constants.image_view_id = storage_image_data.image_view_id;
         push_constants.time = static_cast<f32>(glfwGetTime());
@@ -216,31 +217,20 @@ i32 main(i32 argc, c8 **argv)
         Semaphore &garbage_collector_sema = device.m_garbage_timeline_sema;
         CommandQueue &present_queue = device.get_queue(CommandType::Graphics);
 
+        imgui.new_frame(static_cast<f32>(swap_chain.m_extent.width), static_cast<f32>(swap_chain.m_extent.height), glfwGetTime());
+        {
+            task_graph.draw_profiler_ui();
+        }
+        imgui.end_frame();
+
+        task_graph.set_image(swap_chain_image, { .image_id = image_id, .image_view_id = image_view_id });
+
         SemaphoreSubmitInfo wait_semas[] = { { acquire_sema, 0, PipelineStage::TopOfPipe } };
         SemaphoreSubmitInfo signal_semas[] = {
             { present_sema, 0, PipelineStage::BottomOfPipe },
             { frame_sema, frame_sema.advance(), PipelineStage::AllCommands },
             { garbage_collector_sema, garbage_collector_sema.advance(), PipelineStage::AllCommands },
         };
-
-        imgui.new_frame(static_cast<f32>(swap_chain.m_extent.width), static_cast<f32>(swap_chain.m_extent.height), glfwGetTime());
-        {
-            auto &io = ImGui::GetIO();
-            ImGui::Begin("Task Graph", nullptr);
-            ImGui::Text("Frametime: %f", io.Framerate);
-            ImGui::Text("Submit scopes (ms):");
-            for (auto &submit : task_graph.m_submits) {
-                u32 batch_id = 0;
-                for (auto &batch : submit.batches) {
-                    ImGui::Text("\tBatch %d: %lf", batch_id++, batch.execution_time);
-                }
-            }
-            ImGui::End();
-            ImGui::ShowDemoWindow();
-        }
-        imgui.end_frame();
-
-        task_graph.set_image(swap_chain_image, { .image_id = image_id, .image_view_id = image_view_id });
         task_graph.execute({ .image_index = acquired_index, .wait_semas = wait_semas, .signal_semas = signal_semas });
 
         present_queue.present(swap_chain, present_sema, acquired_index);

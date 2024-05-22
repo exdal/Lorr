@@ -2,7 +2,7 @@
 
 #include "Task.hh"
 
-#include "Engine/Graphics/CommandList.hh"
+#include "Engine/Util/LegitProfiler.hh"
 
 namespace lr::graphics {
 struct TaskExecuteInfo {
@@ -16,6 +16,19 @@ struct TaskGraphInfo {
 };
 
 struct TaskGraph {
+    std::vector<std::unique_ptr<Task>> m_tasks = {};
+    std::vector<TaskSubmit> m_submits = {};
+    std::vector<TaskBarrier> m_barriers = {};
+    std::vector<TaskImage> m_images = {};
+    std::vector<TaskBuffer> m_buffers = {};
+
+    // Profilers
+    std::array<TimestampQueryPool, Limits::FrameCount> m_task_query_pools = {};
+    std::vector<legit::ProfilerTask> m_task_gpu_profiler_tasks = {};
+    legit::ProfilerGraph m_task_gpu_profiler_graph = { 400 };
+
+    Device *m_device = nullptr;
+
     bool init(const TaskGraphInfo &info);
 
     TaskImageID add_image(const TaskPersistentImageInfo &info);
@@ -27,21 +40,14 @@ struct TaskGraph {
     TaskID add_task(const TaskT &task_info);
     TaskID add_task(std::unique_ptr<Task> &&task);
     void present(TaskImageID task_image_id);
+
     std::string generate_graphviz();
+    void draw_profiler_ui();
 
     void execute(const TaskExecuteInfo &info);
 
-    std::vector<std::unique_ptr<Task>> m_tasks = {};
-    std::vector<TaskSubmit> m_submits = {};
-    std::vector<TaskBarrier> m_barriers = {};
-    std::vector<TaskImage> m_images = {};
-    std::vector<TaskBuffer> m_buffers = {};
-
-    std::array<std::array<CommandAllocator, 3>, Limits::FrameCount> m_command_allocators = {};
-    // TODO: Multiple submits
-    std::array<TimestampQueryPool, Limits::FrameCount> m_timestamp_query_pools = {};
-
-    Device *m_device = nullptr;
+private:
+    TaskSubmit &new_submit(CommandType type);
 };
 
 template<typename TaskT>

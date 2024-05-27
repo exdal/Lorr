@@ -86,7 +86,7 @@ struct Image {
 
 struct ImageViewInfo {
     ImageID image_id = ImageID::Invalid;
-    ImageUsage usage_flags = ImageUsage::Sampled;
+    ImageUsage usage_flags = ImageUsage::None;
     ImageViewType type = ImageViewType::View2D;
     ImageSubresourceRange subresource_range = {};
     ImageComponentSwizzle swizzle_r = ImageComponentSwizzle::Identity;

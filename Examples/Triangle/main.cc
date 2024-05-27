@@ -1,11 +1,11 @@
-#include "Core/Log.hh"
-#include "Graphics/Common.hh"
-#include "Graphics/Device.hh"
-#include "Graphics/Instance.hh"
+#include "Engine/Core/Log.hh"
+#include "Engine/Graphics/Common.hh"
+#include "Engine/Graphics/Device.hh"
+#include "Engine/Graphics/Instance.hh"
 
-#include "Memory/Stack.hh"
+#include "Engine/Memory/Stack.hh"
 
-#include "OS/Window.hh"
+#include "Engine/OS/Window.hh"
 
 #include "ExampleBase.hh"
 #include "ImGuiBackend.hh"
@@ -58,6 +58,8 @@ bool load_shaders(Device &device)
 
 int main(int argc, char *argv[])
 {
+    ZoneScoped;
+
     lr::Log::init(argc, argv);
 
     ShaderCompiler::init();
@@ -88,13 +90,13 @@ int main(int argc, char *argv[])
     };
 
     instance.init({});
-    window.init({ .title = "Triangle", .width = 1280, .height = 780, .flags = os::WindowFlag::Centered | os::WindowFlag::Resizable });
+    window.init({ .title = "Triangle", .width = 1280, .height = 780, .flags = os::WindowFlag::Centered });
     device.init(&instance.m_handle);
     create_swap_chain(window.m_width, window.m_height);
 
-    device.create_command_allocators(*command_allocators, { CommandType::Graphics });
+    device.create_command_allocators(*command_allocators, { .type = CommandType::Graphics, .debug_name = "Command Allocator" });
 
-    imgui.init(device, swap_chain);
+    imgui.init(&device, swap_chain);
     load_shaders(device);
 
     {
@@ -169,7 +171,7 @@ int main(int argc, char *argv[])
         device.reset_command_allocator(command_allocator);
 
         static glm::vec3 clear_color = {};
-        imgui.new_frame(static_cast<f32>(swap_chain.m_extent.width), static_cast<f32>(swap_chain.m_extent.height), glfwGetTime());
+        imgui.new_frame(swap_chain.m_extent, glfwGetTime());
         {
             auto &io = ImGui::GetIO();
             ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings
@@ -181,6 +183,7 @@ int main(int argc, char *argv[])
             ImGui::End();
             ImGui::ShowDemoWindow();
         }
+        imgui.end_frame();
 
         {
             ls::static_vector<CommandListSubmitInfo, 8> command_list_infos;
@@ -220,10 +223,13 @@ int main(int argc, char *argv[])
                 command_list_infos.push_back({ *command_list });
             }
 
-            auto [imgui_list, imgui_rendered] = imgui.end_frame(device, command_allocator, image_view_id);
-            if (imgui_rendered == VKResult::Success) {
-                device.defer({ { imgui_list } });
-                command_list_infos.push_back({ imgui_list });
+            if (imgui.can_render()) {
+                Unique<CommandList> imgui_command_list(&device);
+                device.create_command_lists({ &*imgui_command_list, 1 }, command_allocator);
+                device.begin_command_list(*imgui_command_list);
+                imgui.render(&device, *imgui_command_list, image_view_id);
+                device.end_command_list(*imgui_command_list);
+                command_list_infos.push_back({ *imgui_command_list });
             }
 
             {

@@ -117,11 +117,13 @@ void *os::reserve(u64 size)
 
 void os::release(void *data, u64 size)
 {
+    TracyFree(data);
     munmap(data, size);
 }
 
 bool os::commit(void *data, u64 size)
 {
+    TracyAllocN(data, size, "Virtual Alloc");
     return mprotect(data, size, PROT_READ | PROT_WRITE);
 }
 

@@ -106,7 +106,7 @@
     VKFN_FUNCTION(vkCmdSetPrimitiveTopology); \
     VKFN_FUNCTION(vkCmdPushConstants);        \
     VKFN_FUNCTION(vkCmdPipelineBarrier2);     \
-    VKFN_FUNCTION(vkCmdWriteTimestamp);       \
+    VKFN_FUNCTION(vkCmdWriteTimestamp2);      \
     VKFN_FUNCTION(vkCmdResetQueryPool);       \
     VKFN_FUNCTION(vkCmdBlitImage2);
 

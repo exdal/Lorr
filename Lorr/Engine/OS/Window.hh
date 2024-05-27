@@ -1,8 +1,8 @@
 #pragma once
 
 #include "Key.hh"
-#include "Core/EventManager.hh"
-#include "Graphics/Vulkan.hh"
+#include "Engine/Core/EventManager.hh"
+#include "Engine/Graphics/Vulkan.hh"
 
 #ifndef GLFW_INCLUDE_NONE
 #define GLFW_INCLUDE_NONE

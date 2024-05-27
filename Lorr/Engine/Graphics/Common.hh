@@ -11,6 +11,7 @@ enum class DeviceFeature : u64 {
     None = 0,
     DescriptorBuffer = 1 << 0,
     MemoryBudget = 1 << 1,
+    QueryTimestamp = 1 << 2,
 };
 LR_TYPEOP_ARITHMETIC_INT(DeviceFeature, DeviceFeature, &);
 LR_TYPEOP_ARITHMETIC(DeviceFeature, DeviceFeature, |);
@@ -345,6 +346,7 @@ constexpr static u32 format_to_size(Format format)
 }
 
 enum class ImageUsage : u32 {
+    None = 0,
     Sampled = VK_IMAGE_USAGE_SAMPLED_BIT,
     ColorAttachment = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
     DepthStencilAttachment = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
@@ -470,119 +472,77 @@ enum class MemoryAccess : u64 {
 LR_TYPEOP_ARITHMETIC(MemoryAccess, MemoryAccess, |);
 LR_TYPEOP_ARITHMETIC_INT(MemoryAccess, MemoryAccess, &);
 
-struct PipelineAccess {
-    constexpr PipelineAccess(MemoryAccess mem_access, PipelineStage pipeline_stage)
+struct PipelineAccessImpl {
+    constexpr PipelineAccessImpl(MemoryAccess mem_access, PipelineStage pipeline_stage)
         : access(mem_access),
           stage(pipeline_stage) {};
 
     MemoryAccess access = MemoryAccess::None;
     PipelineStage stage = PipelineStage::None;
 
-    auto operator<=>(const PipelineAccess &) const = default;
-
-    static PipelineAccess None;
-    static PipelineAccess TopOfPipe;
-    static PipelineAccess BottomOfPipe;
-    static PipelineAccess VertexAttrib;
-    static PipelineAccess IndexAttrib;
-
-    static PipelineAccess IndirectRead;
-    static PipelineAccess VertexShaderRead;
-    static PipelineAccess TessControlRead;
-    static PipelineAccess TessEvalRead;
-    static PipelineAccess PixelShaderRead;
-    static PipelineAccess EarlyPixelTestsRead;
-    static PipelineAccess LatePixelTestsRead;
-    static PipelineAccess ColorAttachmentRead;
-    static PipelineAccess GraphicsRead;
-    static PipelineAccess ComputeRead;
-    static PipelineAccess TransferRead;
-    static PipelineAccess HostRead;
-
-    static PipelineAccess IndirectWrite;
-    static PipelineAccess VertexShaderWrite;
-    static PipelineAccess TessControlWrite;
-    static PipelineAccess TessEvalWrite;
-    static PipelineAccess PixelShaderWrite;
-    static PipelineAccess EarlyPixelTestsWrite;
-    static PipelineAccess LatePixelTestsWrite;
-    static PipelineAccess ColorAttachmentWrite;
-    static PipelineAccess GraphicsWrite;
-    static PipelineAccess ComputeWrite;
-    static PipelineAccess TransferWrite;
-    static PipelineAccess HostWrite;
-
-    static PipelineAccess IndirectReadWrite;
-    static PipelineAccess VertexShaderReadWrite;
-    static PipelineAccess TessControlReadWrite;
-    static PipelineAccess TessEvalReadWrite;
-    static PipelineAccess PixelShaderReadWrite;
-    static PipelineAccess EarlyPixelTestsReadWrite;
-    static PipelineAccess LatePixelTestsReadWrite;
-    static PipelineAccess ColorAttachmentReadWrite;
-    static PipelineAccess GraphicsReadWrite;
-    static PipelineAccess ComputeReadWrite;
-    static PipelineAccess TransferReadWrite;
-    static PipelineAccess HostReadWrite;
+    auto operator<=>(const PipelineAccessImpl &) const = default;
 };
 
-constexpr PipelineAccess operator|(const PipelineAccess &lhs, const PipelineAccess &rhs)
+constexpr PipelineAccessImpl operator|(const PipelineAccessImpl &lhs, const PipelineAccessImpl &rhs)
 {
     return { lhs.access | rhs.access, lhs.stage | rhs.stage };
 }
 
-constexpr PipelineAccess operator|=(PipelineAccess &lhs, const PipelineAccess &rhs)
+constexpr PipelineAccessImpl operator|=(PipelineAccessImpl &lhs, const PipelineAccessImpl &rhs)
 {
-    PipelineAccess lhsn = { lhs.access | rhs.access, lhs.stage | rhs.stage };
+    PipelineAccessImpl lhsn = { lhs.access | rhs.access, lhs.stage | rhs.stage };
     return lhs = lhsn | rhs;
 }
 
-#define LRX(name, access, stage) inline PipelineAccess PipelineAccess::name(access, stage)
-LRX(None, MemoryAccess::None, PipelineStage::None);
-LRX(TopOfPipe, MemoryAccess::None, PipelineStage::TopOfPipe);
-LRX(BottomOfPipe, MemoryAccess::None, PipelineStage::BottomOfPipe);
-LRX(VertexAttrib, MemoryAccess::Read, PipelineStage::VertexAttribInput);
-LRX(IndexAttrib, MemoryAccess::Read, PipelineStage::IndexAttribInput);
+namespace PipelineAccess {
+#define LRX(name, access, stage) constexpr static PipelineAccessImpl name(access, stage)
+    LRX(None, MemoryAccess::None, PipelineStage::None);
+    LRX(TopOfPipe, MemoryAccess::None, PipelineStage::TopOfPipe);
+    LRX(BottomOfPipe, MemoryAccess::None, PipelineStage::BottomOfPipe);
+    LRX(VertexAttrib, MemoryAccess::Read, PipelineStage::VertexAttribInput);
+    LRX(IndexAttrib, MemoryAccess::Read, PipelineStage::IndexAttribInput);
 
-LRX(IndirectRead, MemoryAccess::Read, PipelineStage::DrawIndirect);
-LRX(VertexShaderRead, MemoryAccess::Read, PipelineStage::VertexShader);
-LRX(TessControlRead, MemoryAccess::Read, PipelineStage::TessellationControl);
-LRX(TessEvalRead, MemoryAccess::Read, PipelineStage::TessellationEvaluation);
-LRX(PixelShaderRead, MemoryAccess::Read, PipelineStage::PixelShader);
-LRX(EarlyPixelTestsRead, MemoryAccess::Read, PipelineStage::EarlyPixelTests);
-LRX(LatePixelTestsRead, MemoryAccess::Read, PipelineStage::LatePixelTests);
-LRX(ColorAttachmentRead, MemoryAccess::Read, PipelineStage::ColorAttachmentOutput);
-LRX(GraphicsRead, MemoryAccess::Read, PipelineStage::AllGraphics);
-LRX(ComputeRead, MemoryAccess::Read, PipelineStage::ComputeShader);
-LRX(TransferRead, MemoryAccess::Read, PipelineStage::AllTransfer);
-LRX(HostRead, MemoryAccess::Read, PipelineStage::Host);
+    LRX(IndirectRead, MemoryAccess::Read, PipelineStage::DrawIndirect);
+    LRX(VertexShaderRead, MemoryAccess::Read, PipelineStage::VertexShader);
+    LRX(TessControlRead, MemoryAccess::Read, PipelineStage::TessellationControl);
+    LRX(TessEvalRead, MemoryAccess::Read, PipelineStage::TessellationEvaluation);
+    LRX(PixelShaderRead, MemoryAccess::Read, PipelineStage::PixelShader);
+    LRX(EarlyPixelTestsRead, MemoryAccess::Read, PipelineStage::EarlyPixelTests);
+    LRX(LatePixelTestsRead, MemoryAccess::Read, PipelineStage::LatePixelTests);
+    LRX(ColorAttachmentRead, MemoryAccess::Read, PipelineStage::ColorAttachmentOutput);
+    LRX(GraphicsRead, MemoryAccess::Read, PipelineStage::AllGraphics);
+    LRX(ComputeRead, MemoryAccess::Read, PipelineStage::ComputeShader);
+    LRX(TransferRead, MemoryAccess::Read, PipelineStage::AllTransfer);
+    LRX(HostRead, MemoryAccess::Read, PipelineStage::Host);
 
-LRX(IndirectWrite, MemoryAccess::Write, PipelineStage::DrawIndirect);
-LRX(VertexShaderWrite, MemoryAccess::Write, PipelineStage::VertexShader);
-LRX(TessControlWrite, MemoryAccess::Write, PipelineStage::TessellationControl);
-LRX(TessEvalWrite, MemoryAccess::Write, PipelineStage::TessellationEvaluation);
-LRX(PixelShaderWrite, MemoryAccess::Write, PipelineStage::PixelShader);
-LRX(EarlyPixelTestsWrite, MemoryAccess::Write, PipelineStage::EarlyPixelTests);
-LRX(LatePixelTestsWrite, MemoryAccess::Write, PipelineStage::LatePixelTests);
-LRX(ColorAttachmentWrite, MemoryAccess::Write, PipelineStage::ColorAttachmentOutput);
-LRX(GraphicsWrite, MemoryAccess::Write, PipelineStage::AllGraphics);
-LRX(ComputeWrite, MemoryAccess::Write, PipelineStage::ComputeShader);
-LRX(TransferWrite, MemoryAccess::Write, PipelineStage::AllTransfer);
-LRX(HostWrite, MemoryAccess::Write, PipelineStage::Host);
+    LRX(IndirectWrite, MemoryAccess::Write, PipelineStage::DrawIndirect);
+    LRX(VertexShaderWrite, MemoryAccess::Write, PipelineStage::VertexShader);
+    LRX(TessControlWrite, MemoryAccess::Write, PipelineStage::TessellationControl);
+    LRX(TessEvalWrite, MemoryAccess::Write, PipelineStage::TessellationEvaluation);
+    LRX(PixelShaderWrite, MemoryAccess::Write, PipelineStage::PixelShader);
+    LRX(EarlyPixelTestsWrite, MemoryAccess::Write, PipelineStage::EarlyPixelTests);
+    LRX(LatePixelTestsWrite, MemoryAccess::Write, PipelineStage::LatePixelTests);
+    LRX(ColorAttachmentWrite, MemoryAccess::Write, PipelineStage::ColorAttachmentOutput);
+    LRX(GraphicsWrite, MemoryAccess::Write, PipelineStage::AllGraphics);
+    LRX(ComputeWrite, MemoryAccess::Write, PipelineStage::ComputeShader);
+    LRX(TransferWrite, MemoryAccess::Write, PipelineStage::AllTransfer);
+    LRX(HostWrite, MemoryAccess::Write, PipelineStage::Host);
 
-LRX(IndirectReadWrite, MemoryAccess::ReadWrite, PipelineStage::DrawIndirect);
-LRX(VertexShaderReadWrite, MemoryAccess::ReadWrite, PipelineStage::VertexShader);
-LRX(TessControlReadWrite, MemoryAccess::ReadWrite, PipelineStage::TessellationControl);
-LRX(TessEvalReadWrite, MemoryAccess::ReadWrite, PipelineStage::TessellationEvaluation);
-LRX(PixelShaderReadWrite, MemoryAccess::ReadWrite, PipelineStage::PixelShader);
-LRX(EarlyPixelTestsReadWrite, MemoryAccess::ReadWrite, PipelineStage::EarlyPixelTests);
-LRX(LatePixelTestsReadWrite, MemoryAccess::ReadWrite, PipelineStage::LatePixelTests);
-LRX(ColorAttachmentReadWrite, MemoryAccess::ReadWrite, PipelineStage::ColorAttachmentOutput);
-LRX(GraphicsReadWrite, MemoryAccess::ReadWrite, PipelineStage::AllGraphics);
-LRX(ComputeReadWrite, MemoryAccess::ReadWrite, PipelineStage::ComputeShader);
-LRX(TransferReadWrite, MemoryAccess::ReadWrite, PipelineStage::AllTransfer);
-LRX(HostReadWrite, MemoryAccess::ReadWrite, PipelineStage::Host);
+    LRX(IndirectReadWrite, MemoryAccess::ReadWrite, PipelineStage::DrawIndirect);
+    LRX(VertexShaderReadWrite, MemoryAccess::ReadWrite, PipelineStage::VertexShader);
+    LRX(TessControlReadWrite, MemoryAccess::ReadWrite, PipelineStage::TessellationControl);
+    LRX(TessEvalReadWrite, MemoryAccess::ReadWrite, PipelineStage::TessellationEvaluation);
+    LRX(PixelShaderReadWrite, MemoryAccess::ReadWrite, PipelineStage::PixelShader);
+    LRX(EarlyPixelTestsReadWrite, MemoryAccess::ReadWrite, PipelineStage::EarlyPixelTests);
+    LRX(LatePixelTestsReadWrite, MemoryAccess::ReadWrite, PipelineStage::LatePixelTests);
+    LRX(ColorAttachmentReadWrite, MemoryAccess::ReadWrite, PipelineStage::ColorAttachmentOutput);
+    LRX(GraphicsReadWrite, MemoryAccess::ReadWrite, PipelineStage::AllGraphics);
+    LRX(ComputeReadWrite, MemoryAccess::ReadWrite, PipelineStage::ComputeShader);
+    LRX(TransferReadWrite, MemoryAccess::ReadWrite, PipelineStage::AllTransfer);
+    LRX(HostReadWrite, MemoryAccess::ReadWrite, PipelineStage::Host);
 #undef LRX
+}  // namespace PipelineAccess
+
 enum class PrimitiveType : u32 {
     PointList = VK_PRIMITIVE_TOPOLOGY_POINT_LIST,
     LineList = VK_PRIMITIVE_TOPOLOGY_LINE_LIST,
@@ -635,6 +595,7 @@ enum class AttachmentLoadOp : u32 {
 enum class AttachmentStoreOp : u32 {
     Store = VK_ATTACHMENT_STORE_OP_STORE,
     DontCare = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+    None = VK_ATTACHMENT_STORE_OP_NONE,
 };
 
 union ColorClearValue {
@@ -960,8 +921,8 @@ static_assert(sizeof(PipelineColorBlendAttachment::VkType) == sizeof(PipelineCol
 #endif
 
 struct ImageBarrier {
-    PipelineAccess src_access = PipelineAccess::None;
-    PipelineAccess dst_access = PipelineAccess::None;
+    PipelineAccessImpl src_access = PipelineAccess::None;
+    PipelineAccessImpl dst_access = PipelineAccess::None;
     ImageLayout old_layout = ImageLayout::Undefined;
     ImageLayout new_layout = ImageLayout::Undefined;
     u32 src_queue_family_id = ~0u;
@@ -987,8 +948,8 @@ struct ImageBarrier {
 };
 
 struct MemoryBarrier {
-    PipelineAccess src_access = PipelineAccess::None;
-    PipelineAccess dst_access = PipelineAccess::None;
+    PipelineAccessImpl src_access = PipelineAccess::None;
+    PipelineAccessImpl dst_access = PipelineAccess::None;
 
     VkMemoryBarrier2 vk_type()
     {

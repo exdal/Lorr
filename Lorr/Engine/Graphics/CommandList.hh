@@ -17,29 +17,15 @@ struct Semaphore {
     explicit operator bool() { return m_handle != nullptr; }
 };
 
-struct CommandQueue {
-    u32 family_index() { return m_index; }
-    Semaphore &semaphore() { return m_semaphore; }
+struct TimestampQueryPoolInfo {
+    u32 query_count = 0;
+    std::string_view debug_name = {};
+};
 
-    void defer(std::span<const BufferID> buffer_ids);
-    void defer(std::span<const ImageID> image_ids);
-    void defer(std::span<const ImageViewID> image_view_ids);
-    void defer(std::span<const SamplerID> sampler_ids);
+struct TimestampQueryPool {
+    VkQueryPool m_handle = VK_NULL_HANDLE;
 
-    VKResult submit(QueueSubmitInfo &submit_info);
-    VKResult present(SwapChain &swap_chain, Semaphore &present_sema, u32 image_id);
-
-    u32 m_index = 0;  // Physical device queue family index
-    Semaphore m_semaphore = {};
-
-    plf::colony<std::pair<BufferID, u64>> m_garbage_buffers = {};
-    plf::colony<std::pair<ImageID, u64>> m_garbage_images = {};
-    plf::colony<std::pair<ImageViewID, u64>> m_garbage_image_views = {};
-    plf::colony<std::pair<SamplerID, u64>> m_garbage_samplers = {};
-
-    VkQueue m_handle = VK_NULL_HANDLE;
-
-    constexpr static auto OBJECT_TYPE = VK_OBJECT_TYPE_QUEUE;
+    constexpr static auto OBJECT_TYPE = VK_OBJECT_TYPE_QUERY_POOL;
     operator auto &() { return m_handle; }
     operator const auto &() const { return m_handle; }
     explicit operator bool() { return m_handle != VK_NULL_HANDLE; }
@@ -49,9 +35,12 @@ struct CommandQueue {
 struct CommandAllocatorInfo {
     CommandType type = CommandType::Count;
     CommandAllocatorFlag flags = CommandAllocatorFlag::None;
+    std::string_view debug_name = {};
 };
 
 struct CommandAllocator {
+    CommandType m_type = CommandType::Count;
+    CommandQueue *m_queue = nullptr;
     VkCommandPool m_handle = VK_NULL_HANDLE;
 
     constexpr static auto OBJECT_TYPE = VK_OBJECT_TYPE_COMMAND_POOL;
@@ -62,6 +51,10 @@ struct CommandAllocator {
 
 /// COMMAND LIST ///
 struct CommandList {
+    // Debugging
+    void reset_query_pool(TimestampQueryPool &query_pool, u32 first_query, u32 query_count);
+    void write_timestamp(TimestampQueryPool &query_pool, PipelineStage pipeline_stage, u32 query_index);
+
     // Barrier utils
     void image_transition(const ImageBarrier &barrier);
     void memory_barrier(const MemoryBarrier &barrier);
@@ -89,9 +82,12 @@ struct CommandList {
     void draw_indexed(u32 index_count, u32 first_index = 0, i32 vertex_offset = 0, u32 instance_count = 1, u32 first_instance = 0);
     void dispatch(u32 group_x, u32 group_y, u32 group_z);
 
-    VkCommandBuffer m_handle = VK_NULL_HANDLE;
-    CommandAllocator *m_allocator = nullptr;
+    // Using VkCommandPool is intentional, Unique command allocators get invalidated
+    CommandType m_type = CommandType::Count;
+    VkCommandPool m_allocator = VK_NULL_HANDLE;
     Device *m_device = nullptr;
+
+    VkCommandBuffer m_handle = VK_NULL_HANDLE;
 
     constexpr static auto OBJECT_TYPE = VK_OBJECT_TYPE_COMMAND_BUFFER;
     operator auto &() { return m_handle; }
@@ -116,4 +112,37 @@ struct CommandBatcher {
 
     CommandList &m_command_list;
 };
+
+struct CommandQueue {
+    u32 family_index() { return m_index; }
+    Semaphore &semaphore() { return m_semaphore; }
+
+    void defer(std::span<const BufferID> buffer_ids);
+    void defer(std::span<const ImageID> image_ids);
+    void defer(std::span<const ImageViewID> image_view_ids);
+    void defer(std::span<const SamplerID> sampler_ids);
+    void defer(std::span<const CommandList> command_lists);
+    void defer(std::span<const CommandAllocator> command_allocators);
+
+    VKResult submit(QueueSubmitInfo &submit_info);
+    VKResult present(SwapChain &swap_chain, Semaphore &present_sema, u32 image_id);
+
+    u32 m_index = 0;  // Physical device queue family index
+    Semaphore m_semaphore = {};
+
+    plf::colony<std::pair<BufferID, u64>> m_garbage_buffers = {};
+    plf::colony<std::pair<ImageID, u64>> m_garbage_images = {};
+    plf::colony<std::pair<ImageViewID, u64>> m_garbage_image_views = {};
+    plf::colony<std::pair<SamplerID, u64>> m_garbage_samplers = {};
+    plf::colony<std::pair<CommandAllocator, u64>> m_garbage_command_allocators = {};
+    plf::colony<std::pair<CommandList, u64>> m_garbage_command_lists = {};
+
+    VkQueue m_handle = VK_NULL_HANDLE;
+
+    constexpr static auto OBJECT_TYPE = VK_OBJECT_TYPE_QUEUE;
+    operator auto &() { return m_handle; }
+    operator const auto &() const { return m_handle; }
+    explicit operator bool() { return m_handle != VK_NULL_HANDLE; }
+};
+
 }  // namespace lr::graphics

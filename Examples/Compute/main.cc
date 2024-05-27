@@ -1,14 +1,13 @@
-#include "Core/Log.hh"
-#include "Graphics/Common.hh"
-#include "Graphics/Device.hh"
-#include "Graphics/Instance.hh"
+#include "Engine/Core/Log.hh"
+#include "Engine/Graphics/Common.hh"
+#include "Engine/Graphics/Device.hh"
+#include "Engine/Graphics/Instance.hh"
 
-#include "Memory/Stack.hh"
+#include "Engine/Memory/Stack.hh"
 
-#include "OS/Window.hh"
+#include "Engine/OS/Window.hh"
 
 #include "ExampleBase.hh"
-#include "ImGuiBackend.hh"
 
 using namespace lr;
 using namespace lr::graphics;
@@ -70,7 +69,6 @@ i32 main(i32 argc, c8 **argv)
     Instance instance;
     Device device;
     SwapChain swap_chain;
-    example::ImGuiBackend imgui = {};
     std::array<ImageID, 3> images = {};
     std::array<ImageViewID, 3> image_views = {};
     std::array<CommandAllocator, 3> graphics_callocators = {};
@@ -104,7 +102,6 @@ i32 main(i32 argc, c8 **argv)
     CommandQueue &graphics_queue = device.get_queue(CommandType::Graphics);
     CommandQueue &compute_queue = device.get_queue(CommandType::Compute);
 
-    imgui.init(device, swap_chain);
     load_shaders(device);
 
     app.compute_pipeline = device.create_compute_pipeline({
@@ -116,7 +113,7 @@ i32 main(i32 argc, c8 **argv)
         .usage_flags = ImageUsage::Storage | ImageUsage::TransferSrc,
         .format = Format::R32G32B32A32_SFLOAT,
         .type = ImageType::View2D,
-        .extent = { 128, 128, 1 },
+        .extent = { 1024, 512, 1 },
         .debug_name = "Compute image",
     });
 
@@ -187,7 +184,7 @@ i32 main(i32 argc, c8 **argv)
             command_list.set_pipeline(app.compute_pipeline);
             command_list.set_push_constants(pipeline_layout, &pc, sizeof(PushConstant), 0);
             command_list.set_descriptor_sets(pipeline_layout, graphics::PipelineBindPoint::Compute, 0, { &device.m_descriptor_set, 1 });
-            command_list.dispatch(129, 129, 1);
+            command_list.dispatch(1024 / 16 + 1, 512 / 16 + 1, 1);
 
             command_list.image_transition({
                 .src_access = PipelineAccess::ComputeWrite,
@@ -204,7 +201,6 @@ i32 main(i32 argc, c8 **argv)
             SemaphoreSubmitInfo wait_semas[] = {
                 { acquire_sema, 0, PipelineStage::TopOfPipe },
                 { graphics_queue.semaphore(), graphics_queue.semaphore().counter(), PipelineStage::AllCommands },
-                { compute_queue.semaphore(), compute_queue.semaphore().counter(), PipelineStage::AllCommands },
             };
             SemaphoreSubmitInfo signal_semas[] = {
                 { compute_queue.semaphore(), compute_queue.semaphore().advance(), PipelineStage::AllCommands },
@@ -238,11 +234,11 @@ i32 main(i32 argc, c8 **argv)
             ImageBlit blit = { 
                 .src_offsets = {
                     { 0, 0, 0 },
-                    { 128, 128, 1 },
+                    { 1024, 512, 1 },
                 }, 
                 .dst_offsets = {
                     { 0, 0, 0 },
-                    { 128, 128, 1 },
+                    { 1024, 512, 1 },
                 },
             };
             command_list.blit_image(app.storage_image, ImageLayout::TransferSrc, image_id, ImageLayout::TransferDst, Filtering::Nearest, { &blit, 1 });

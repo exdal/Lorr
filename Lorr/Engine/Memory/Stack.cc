@@ -1,6 +1,6 @@
 #include "Stack.hh"
 
-#include "OS/OS.hh"
+#include "Engine/OS/OS.hh"
 
 namespace lr::memory {
 ThreadStack::ThreadStack()
@@ -24,6 +24,8 @@ ScopedStack::ScopedStack()
 ScopedStack::~ScopedStack()
 {
     auto &stack = GetThreadStack();
+
+    TracyFreeN(ptr, "Thread Stack");
     stack.ptr = ptr;
 }
 

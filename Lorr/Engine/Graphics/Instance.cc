@@ -20,6 +20,8 @@ constexpr loguru::Verbosity to_loguru_severity(VkDebugUtilsMessageSeverityFlagBi
 
 VKResult Instance::init(const InstanceInfo &info)
 {
+    ZoneScoped;
+
     vkb::InstanceBuilder instance_builder;
     instance_builder.set_app_name(info.app_name.data());
     instance_builder.set_engine_name(info.engine_name.data());
@@ -50,7 +52,7 @@ VKResult Instance::init(const InstanceInfo &info)
         "VK_EXT_debug_report",
 #endif
     });
-    instance_builder.require_api_version(1, 3, 0);
+    instance_builder.require_api_version(1, 3, VK_HEADER_VERSION);
     auto instance_result = instance_builder.build();
     if (!instance_result) {
         auto error = static_cast<VKResult>(instance_result.vk_result());

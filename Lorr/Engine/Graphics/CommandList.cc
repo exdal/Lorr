@@ -2,45 +2,9 @@
 
 #include "Device.hh"
 
-#include "Memory/Stack.hh"
+#include "Engine/Memory/Stack.hh"
 
 namespace lr::graphics {
-void CommandQueue::defer(std::span<const BufferID> buffer_ids)
-{
-    ZoneScoped;
-
-    for (BufferID v : buffer_ids) {
-        m_garbage_buffers.emplace(v, m_semaphore.counter());
-    }
-}
-
-void CommandQueue::defer(std::span<const ImageID> image_ids)
-{
-    ZoneScoped;
-
-    for (ImageID v : image_ids) {
-        m_garbage_images.emplace(v, m_semaphore.counter());
-    }
-}
-
-void CommandQueue::defer(std::span<const ImageViewID> image_view_ids)
-{
-    ZoneScoped;
-
-    for (ImageViewID v : image_view_ids) {
-        m_garbage_image_views.emplace(v, m_semaphore.counter());
-    }
-}
-
-void CommandQueue::defer(std::span<const SamplerID> sampler_ids)
-{
-    ZoneScoped;
-
-    for (SamplerID v : sampler_ids) {
-        m_garbage_samplers.emplace(v, m_semaphore.counter());
-    }
-}
-
 VKResult CommandQueue::submit(QueueSubmitInfo &submit_info)
 {
     ZoneScoped;
@@ -63,6 +27,20 @@ VKResult CommandQueue::present(SwapChain &swap_chain, Semaphore &present_sema, u
         .pResults = nullptr,
     };
     return static_cast<VKResult>(vkQueuePresentKHR(m_handle, &present_info));
+}
+
+void CommandList::reset_query_pool(TimestampQueryPool &query_pool, u32 first_query, u32 query_count)
+{
+    ZoneScoped;
+
+    vkCmdResetQueryPool(m_handle, query_pool, first_query, query_count);
+}
+
+void CommandList::write_timestamp(TimestampQueryPool &query_pool, PipelineStage pipeline_stage, u32 query_index)
+{
+    ZoneScoped;
+
+    vkCmdWriteTimestamp2(m_handle, static_cast<VkPipelineStageFlags2>(pipeline_stage), query_pool, query_index);
 }
 
 void CommandList::image_transition(const ImageBarrier &barrier)
@@ -306,11 +284,15 @@ CommandBatcher::CommandBatcher(Unique<CommandList> &command_list)
 
 CommandBatcher::~CommandBatcher()
 {
+    ZoneScoped;
+
     flush_barriers();
 }
 
 void CommandBatcher::insert_memory_barrier(const MemoryBarrier &barrier)
 {
+    ZoneScoped;
+
     if (m_memory_barriers.full()) {
         flush_barriers();
     }
@@ -320,16 +302,19 @@ void CommandBatcher::insert_memory_barrier(const MemoryBarrier &barrier)
 
 void CommandBatcher::insert_image_barrier(const ImageBarrier &barrier)
 {
+    ZoneScoped;
+
     if (m_image_barriers.full()) {
         flush_barriers();
     }
 
-    ImageID image_id = barrier.image_id;
-    ImageBarrier &raw_barrier = m_image_barriers.emplace_back(barrier);
+    m_image_barriers.emplace_back(barrier);
 }
 
 void CommandBatcher::flush_barriers()
 {
+    ZoneScoped;
+
     if (m_image_barriers.empty() && m_memory_barriers.empty()) {
         return;
     }
@@ -337,6 +322,60 @@ void CommandBatcher::flush_barriers()
     m_command_list.set_barriers(m_memory_barriers, m_image_barriers);
     m_image_barriers.clear();
     m_memory_barriers.clear();
+}
+
+void CommandQueue::defer(std::span<const BufferID> buffer_ids)
+{
+    ZoneScoped;
+
+    for (BufferID v : buffer_ids) {
+        m_garbage_buffers.emplace(v, m_semaphore.counter());
+    }
+}
+
+void CommandQueue::defer(std::span<const ImageID> image_ids)
+{
+    ZoneScoped;
+
+    for (ImageID v : image_ids) {
+        m_garbage_images.emplace(v, m_semaphore.counter());
+    }
+}
+
+void CommandQueue::defer(std::span<const ImageViewID> image_view_ids)
+{
+    ZoneScoped;
+
+    for (ImageViewID v : image_view_ids) {
+        m_garbage_image_views.emplace(v, m_semaphore.counter());
+    }
+}
+
+void CommandQueue::defer(std::span<const SamplerID> sampler_ids)
+{
+    ZoneScoped;
+
+    for (SamplerID v : sampler_ids) {
+        m_garbage_samplers.emplace(v, m_semaphore.counter());
+    }
+}
+
+void CommandQueue::defer(std::span<const CommandList> command_lists)
+{
+    ZoneScoped;
+
+    for (const CommandList &command_list : command_lists) {
+        m_garbage_command_lists.emplace(command_list, m_semaphore.counter());
+    }
+}
+
+void CommandQueue::defer(std::span<const CommandAllocator> command_allocators)
+{
+    ZoneScoped;
+
+    for (const CommandAllocator &command_allocator : command_allocators) {
+        m_garbage_command_allocators.emplace(command_allocator, m_semaphore.counter());
+    }
 }
 
 }  // namespace lr::graphics

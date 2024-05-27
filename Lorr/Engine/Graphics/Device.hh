@@ -12,7 +12,13 @@ struct Device {
     Device() = default;
     VKResult init(vkb::Instance *instance);
 
-    /// COMMAND ///
+    /// Commands ///
+    VKResult create_timestamp_query_pools(std::span<TimestampQueryPool> query_pools, const TimestampQueryPoolInfo &info);
+    void delete_timestamp_query_pools(std::span<const TimestampQueryPool> query_pools);
+    void defer(std::span<const TimestampQueryPool> query_pools);
+
+    void get_timestamp_query_pool_results(TimestampQueryPool &query_pool, u32 first_query, u32 count, std::span<u64> time_stamps);
+
     VKResult create_command_allocators(std::span<CommandAllocator> command_allocators, const CommandAllocatorInfo &info);
     void delete_command_allocators(std::span<const CommandAllocator> command_allocators);
     void defer(std::span<const CommandAllocator> command_allocators);
@@ -113,11 +119,16 @@ struct Device {
 #endif
     }
 
-    template<typename T, usize IndexT = sizeof(T) / sizeof(u32)>
+    template<typename T = void>
     PipelineLayout *get_layout()
     {
-        static_assert(sizeof(T) >= 4);
-        return &m_resources.pipeline_layouts[IndexT];
+        if constexpr (std::is_same_v<T, void>) {
+            return &m_resources.pipeline_layouts[0];
+        }
+        else {
+            usize index = sizeof(T) / sizeof(u32);
+            return &m_resources.pipeline_layouts[index];
+        }
     }
     CommandQueue &get_queue(CommandType type) { return m_queues[usize(type)]; }
     auto get_image(ImageID id) { return m_resources.images.get(id); }
@@ -128,8 +139,7 @@ struct Device {
     auto get_shader(ShaderID id) { return m_resources.shaders.get(id); }
 
     Semaphore m_garbage_timeline_sema = {};
-    plf::colony<std::pair<CommandAllocator, u64>> m_garbage_command_allocators = {};
-    plf::colony<std::pair<CommandList, u64>> m_garbage_command_lists = {};
+    plf::colony<std::pair<TimestampQueryPool, u64>> m_garbage_query_pools = {};
     plf::colony<std::pair<Semaphore, u64>> m_garbage_semaphores = {};
 
     std::array<CommandQueue, usize(CommandType::Count)> m_queues = {};

@@ -17,3 +17,4 @@ end
 
 add_example("Triangle", "Triangle/main.cc", { { "TRIANGLE_SHADER_PATH", "Triangle/triangle.slang" } })
 add_example("Compute", "Compute/main.cc", { { "COMPUTE_SHADER_PATH", "Compute/compute.slang" } })
+add_example("Task", "Task/main.cc", { { "TASK_COMPUTE_SHADER_PATH", "Task/task_compute.slang" } })

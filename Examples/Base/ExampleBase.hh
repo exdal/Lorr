@@ -1,8 +1,8 @@
 #pragma once
 
-#include "OS/OS.hh"
+#include "Engine/OS/OS.hh"
 
-#include "Util/VirtualDir.hh"
+#include "Engine/Util/VirtualDir.hh"
 
 namespace lr::example {
 static inline VirtualDir &default_vdir()

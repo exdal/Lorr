@@ -7,6 +7,7 @@
 #include <array>
 #include <span>
 #include <string_view>
+#include <optional>
 
 #include <glm/trigonometric.hpp>
 #include <glm/vec2.hpp>

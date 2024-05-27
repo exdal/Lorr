@@ -34,7 +34,6 @@ target("Lorr")
     target:add("defines", "LR_SHADER_STD_FILE_PATH=\"" .. shader_std .. "\"", { public = true })
   end)
 
-  add_packages("slang", { public = true })
   add_packages(
     "fmt",
     "tracy",
@@ -49,6 +48,7 @@ target("Lorr")
     "loguru",
     "imgui",
     "simdutf",
+    "slang",
     "unordered_dense",
     { public = true })
 

@@ -47,13 +47,14 @@ VKResult Device::init(vkb::Instance *instance)
         physical_device_selector.add_required_extensions({
             "VK_KHR_swapchain",
 #if TRACY_ENABLE
-            "VK_KHR_calibrated_timestamps",
+            "VK_EXT_calibrated_timestamps",
 #endif
         });
         auto physical_device_result = physical_device_selector.select();
         if (!physical_device_result) {
-            LR_LOG_ERROR("Failed to select Vulkan Physical Device!");
-            return static_cast<VKResult>(physical_device_result.vk_result());
+            auto r = static_cast<VKResult>(physical_device_result.vk_result());
+            LR_LOG_ERROR("Failed to select Vulkan Physical Device! {}", r);
+            return r;
         }
 
         m_physical_device = physical_device_result.value();
@@ -502,6 +503,8 @@ VKResult Device::wait_for_semaphore(Semaphore &semaphore, u64 desired_value, u64
 
 Result<u64, VKResult> Device::get_semaphore_counter(Semaphore &semaphore)
 {
+    ZoneScoped;
+    
     u64 value = 0;
     auto result = CHECK(vkGetSemaphoreCounterValue(m_handle, semaphore, &value));
 

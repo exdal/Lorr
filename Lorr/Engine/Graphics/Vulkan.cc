@@ -21,6 +21,8 @@ VKFN_DEBUG_UTILS_EXT_DEVICE_FUNCTIONS
 namespace lr::graphics {
 bool vulkan::load_instance(VkInstance instance, PFN_vkGetInstanceProcAddr get_instance_proc_addr)
 {
+    ZoneScoped;
+
 #define VKFN_FUNCTION(_name)                                                   \
     _name = (PFN_##_name)get_instance_proc_addr(instance, #_name);             \
     if ((_name) == nullptr) {                                                  \
@@ -40,6 +42,8 @@ bool vulkan::load_instance(VkInstance instance, PFN_vkGetInstanceProcAddr get_in
 
 bool vulkan::load_device(VkDevice device, PFN_vkGetDeviceProcAddr get_device_proc_addr)
 {
+    ZoneScoped;
+
 #define VKFN_FUNCTION(_name)                                                 \
     _name = (PFN_##_name)get_device_proc_addr(device, #_name);               \
     if ((_name) == nullptr) {                                                \

@@ -57,7 +57,17 @@ u32 TaskGraph::schedule_task(Task *task, TaskSubmit &submit)
     u32 first_batch_index = 0;
     for_each_use(
         task->m_task_uses,
-        [&](TaskBufferID id, const PipelineAccessImpl &access) { TaskBuffer &task_buffer = m_buffers[static_cast<usize>(id)]; },
+        [&](TaskBufferID id, const PipelineAccessImpl &access) {
+            TaskBuffer &task_buffer = m_buffers[static_cast<usize>(id)];
+            u32 cur_batch_index = task_buffer.last_batch_index;
+
+            bool is_read_on_read = access.access == MemoryAccess::Read && task_buffer.last_access.access == MemoryAccess::Read;
+            if (!is_read_on_read) {
+                cur_batch_index++;
+            }
+
+            first_batch_index = std::max(first_batch_index, cur_batch_index);
+        },
         [&](TaskImageID id, const PipelineAccessImpl &access, ImageLayout layout) {
             TaskImage &task_image = m_images[static_cast<usize>(id)];
             u32 cur_batch_index = task_image.last_batch_index;
@@ -92,7 +102,17 @@ TaskID TaskGraph::add_task(std::unique_ptr<Task> &&task)
 
     for_each_use(
         task->m_task_uses,
-        [&](TaskBufferID id, const PipelineAccessImpl &access) { TaskBuffer &task_buffer = m_buffers[static_cast<usize>(id)]; },
+        [&](TaskBufferID id, const PipelineAccessImpl &access) {
+            TaskBuffer &task_buffer = m_buffers[static_cast<usize>(id)];
+            bool is_read_on_read = access.access == MemoryAccess::Read && task_buffer.last_access.access == MemoryAccess::Read;
+            if (!is_read_on_read) {
+                batch.execution_access |= access;
+            }
+
+            task_buffer.last_access = access;
+            task_buffer.last_batch_index = batch_index;
+            task_buffer.last_submit_index = submit_index;
+        },
         [&](TaskImageID id, const PipelineAccessImpl &access, ImageLayout layout) {
             TaskImage &task_image = m_images[static_cast<usize>(id)];
             bool is_same_layout = layout == task_image.last_layout;
@@ -207,11 +227,11 @@ void TaskGraph::draw_profiler_ui()
     auto &io = ImGui::GetIO();
     ImGui::SetNextWindowSizeConstraints(ImVec2(750, 450), ImVec2(FLT_MAX, FLT_MAX));
     ImGui::Begin("Legit Profiler", nullptr);
+    ImGui::Text("Frametime: %.4fms (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
 
     m_task_gpu_profiler_graph.LoadFrameData(m_task_gpu_profiler_tasks.data(), m_task_gpu_profiler_tasks.size());
     m_task_gpu_profiler_graph.RenderTimings(500, 20, 200, 0);
-
-    ImGui::Text("Frametime: %.4fms (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
+    ImGui::SliderFloat("Graph detail", &m_task_gpu_profiler_graph.maxFrameTime, 1.0f, 10000.f);
 
     ImGui::Separator();
 
@@ -298,6 +318,7 @@ void TaskGraph::execute(const TaskExecuteInfo &info)
         bool has_additional_barriers = !task_submit.additional_signal_barrier_indices.empty();
         auto cmd_list_submit_infos = stack.alloc<CommandListSubmitInfo>(task_submit.batches.size() + !!has_additional_barriers);
 
+        PipelineAccessImpl last_batch_access = PipelineAccess::TopOfPipe;
         usize batch_index = 0;
         for (TaskBatch &task_batch : task_submit.batches) {
             Unique<CommandList> cmd_list(m_device);
@@ -307,6 +328,11 @@ void TaskGraph::execute(const TaskExecuteInfo &info)
             m_device->begin_command_list(*cmd_list);
             cmd_list->reset_query_pool(batch_query_pool, batch_index * 2, 2);
             cmd_list->write_timestamp(batch_query_pool, PipelineStage::TopOfPipe, batch_index * 2);
+
+            cmd_batcher.insert_memory_barrier({
+                .src_access = last_batch_access,
+                .dst_access = task_batch.execution_access,
+            });
 
             for (u32 barrier_index : task_batch.barrier_indices) {
                 TaskBarrier &barrier = m_barriers[barrier_index];
@@ -340,6 +366,7 @@ void TaskGraph::execute(const TaskExecuteInfo &info)
             cmd_list_submit_infos[batch_index] = { *cmd_list };
 
             batch_index++;
+            last_batch_access = task_batch.execution_access;
         }
 
         if (!task_submit.additional_signal_barrier_indices.empty()) {

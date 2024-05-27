@@ -32,11 +32,15 @@ struct ImGuiBackend {
 
     graphics::BufferID recreate_buffer(graphics::Device *device, graphics::BufferUsage usage, u64 data_size)
     {
+        ZoneScoped;
+
         return device->create_buffer({ .usage_flags = usage | graphics::BufferUsage::TransferDst, .data_size = data_size });
     }
 
     bool init(graphics::Device *device, graphics::SwapChain &swap_chain)
     {
+        ZoneScoped;
+
         using namespace lr::graphics;
 
         ImGui::CreateContext();
@@ -202,6 +206,8 @@ struct ImGuiBackend {
 
     bool can_render()
     {
+        ZoneScoped;
+
         ImDrawData *draw_data = ImGui::GetDrawData();
         u64 vertex_size_bytes = draw_data->TotalVtxCount * sizeof(ImDrawVert);
 
@@ -212,22 +218,30 @@ struct ImGuiBackend {
         return true;
     }
 
-    void new_frame(f32 width, f32 height, f64 time)
+    void new_frame(const graphics::Extent2D &display_size, f64 time)
     {
+        ZoneScoped;
+
         auto &io = ImGui::GetIO();
         ImGui::NewFrame();
 
-        io.DisplaySize = ImVec2(width, height);
+        io.DisplaySize = { static_cast<f32>(display_size.width), static_cast<f32>(display_size.height) };
         if (time <= m_last_time)
             time = m_last_time + 0.00001f;
         io.DeltaTime = m_last_time > 0.0 ? (float)(time - m_last_time) : (float)(1.0f / 60.0f);
         m_last_time = time;
     }
 
-    void end_frame() { ImGui::Render(); }
+    void end_frame()
+    {
+        ZoneScoped;
+        ImGui::Render();
+    }
 
     void render(graphics::Device *device, graphics::CommandList &cmd_list, graphics::ImageViewID target_view_id)
     {
+        ZoneScoped;
+
         using namespace lr::graphics;
 
         auto &io = ImGui::GetIO();

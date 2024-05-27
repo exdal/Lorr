@@ -17,6 +17,8 @@ struct RingBuffer {
 
     bool pop(T &val)
     {
+        ZoneScoped;
+
         if (m_Tail > m_Head) {
             val = m_Data[m_Head++ & MASK];
             return true;
@@ -43,6 +45,8 @@ struct RingBufferAtomic {
     /// This function does not push head forward when tail reaches head.
     void push(const T &val)
     {
+        ZoneScoped;
+
         u32 tail = m_Tail.load(std::memory_order_acquire);
         m_Data[tail & MASK] = val;
         m_Tail.store(tail + 1, std::memory_order_release);
@@ -51,6 +55,8 @@ struct RingBufferAtomic {
     // Consumed by worker threads
     bool pop(T &val)
     {
+        ZoneScoped;
+
         if (empty())
             return false;
 
@@ -70,6 +76,8 @@ struct RingBufferAtomic {
 
     bool empty()
     {
+        ZoneScoped;
+        
         return m_Head.load(std::memory_order_acquire)
                == m_Tail.load(std::memory_order_acquire);
     }

@@ -69,7 +69,7 @@ public:
     int frameWidth;
     int frameSpacing;
     bool useColoredLegendText = true;
-    float maxFrameTime = 1.0f / 1000.0f;
+    float maxFrameTime = 1000.0f;
 
     ProfilerGraph(size_t framesCount)
     {
@@ -156,8 +156,11 @@ private:
 
     void RenderGraph(ImDrawList *drawList, glm::vec2 graphPos, glm::vec2 graphSize, size_t frameIndexOffset)
     {
-        Rect(drawList, graphPos, graphPos + graphSize, 0xffffffff, false);
+        glm::vec2 area_size = graphPos + graphSize;
+        Rect(drawList, graphPos, area_size, 0xffffffff, false);
         float heightThreshold = 1.0f;
+
+        ImGui::PushClipRect({ graphPos.x, graphPos.y }, { area_size.x, area_size.y }, true);
 
         for (size_t frameNumber = 0; frameNumber < frames.size(); frameNumber++) {
             size_t frameIndex = (currFrameIndex - frameIndexOffset - 1 - frameNumber + 2 * frames.size()) % frames.size();
@@ -168,13 +171,15 @@ private:
             glm::vec2 taskPos = framePos + glm::vec2(0.0f, 0.0f);
             auto &frame = frames[frameIndex];
             for (const auto &task : frame.tasks) {
-                float taskStartHeight = (float(task.startTime) / maxFrameTime) * graphSize.y;
-                float taskEndHeight = (float(task.endTime) / maxFrameTime) * graphSize.y;
+                float taskStartHeight = (float(task.startTime) / (1.0f / maxFrameTime)) * graphSize.y;
+                float taskEndHeight = (float(task.endTime) / (1.0f / maxFrameTime)) * graphSize.y;
                 // taskMaxCosts[task.name] = std::max(taskMaxCosts[task.name], task.endTime - task.startTime);
                 if (abs(taskEndHeight - taskStartHeight) > heightThreshold)
                     Rect(drawList, taskPos + glm::vec2(0.0f, -taskStartHeight), taskPos + glm::vec2(frameWidth, -taskEndHeight), task.color, true);
             }
         }
+
+        ImGui::PopClipRect();
     }
     void RenderLegend(ImDrawList *drawList, glm::vec2 legendPos, glm::vec2 legendSize, size_t frameIndexOffset)
     {
@@ -187,6 +192,8 @@ private:
         float markerRightRectSpacing = 4.0f;
         float nameOffset = 50.0f;
         glm::vec2 textMargin = glm::vec2(5.0f, -3.0f);
+
+        ImGui::PushClipRect({ legendPos.x, legendPos.y }, { FLT_MAX, legendPos.y + legendSize.y }, true);
 
         auto &currFrame = frames[(currFrameIndex - frameIndexOffset - 1 + 2 * frames.size()) % frames.size()];
         size_t maxTasksCount = size_t(legendSize.y / (markerRightRectHeight + markerRightRectSpacing));
@@ -209,8 +216,8 @@ private:
             }
             else
                 continue;
-            float taskStartHeight = (float(task.startTime) / maxFrameTime) * legendSize.y;
-            float taskEndHeight = (float(task.endTime) / maxFrameTime) * legendSize.y;
+            float taskStartHeight = (float(task.startTime) / (1.0f / maxFrameTime)) * legendSize.y;
+            float taskEndHeight = (float(task.endTime) / (1.0f / maxFrameTime)) * legendSize.y;
 
             glm::vec2 markerLeftRectMin = legendPos + glm::vec2(markerLeftRectMargin, legendSize.y);
             glm::vec2 markerLeftRectMax = markerLeftRectMin + glm::vec2(markerLeftRectWidth, 0.0f);
@@ -234,6 +241,8 @@ private:
             Text(drawList, markerRightRectMax + textMargin, textColor, timeText.str().c_str());
             Text(drawList, markerRightRectMax + textMargin + glm::vec2(nameOffset, 0.0f), textColor, (std::string("ms] ") + task.name).c_str());
         }
+
+        ImGui::PopClipRect();
     }
 
     static void Rect(ImDrawList *drawList, glm::vec2 minPoint, glm::vec2 maxPoint, uint32_t col, bool filled = true)

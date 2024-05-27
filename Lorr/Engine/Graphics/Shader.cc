@@ -10,6 +10,8 @@ struct CompilerContext {
 
 std::vector<slang::CompilerOptionEntry> get_slang_entries(ShaderCompileFlag flags)
 {
+    ZoneScoped;
+    
     // clang-format off
     std::vector<slang::CompilerOptionEntry> entries = {};
     entries.emplace_back(

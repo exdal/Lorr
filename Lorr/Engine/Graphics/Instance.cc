@@ -20,6 +20,8 @@ constexpr loguru::Verbosity to_loguru_severity(VkDebugUtilsMessageSeverityFlagBi
 
 VKResult Instance::init(const InstanceInfo &info)
 {
+    ZoneScoped;
+
     vkb::InstanceBuilder instance_builder;
     instance_builder.set_app_name(info.app_name.data());
     instance_builder.set_engine_name(info.engine_name.data());

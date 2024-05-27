@@ -58,6 +58,8 @@ bool load_shaders(Device &device)
 
 int main(int argc, char *argv[])
 {
+    ZoneScoped;
+
     lr::Log::init(argc, argv);
 
     ShaderCompiler::init();
@@ -169,7 +171,7 @@ int main(int argc, char *argv[])
         device.reset_command_allocator(command_allocator);
 
         static glm::vec3 clear_color = {};
-        imgui.new_frame(static_cast<f32>(swap_chain.m_extent.width), static_cast<f32>(swap_chain.m_extent.height), glfwGetTime());
+        imgui.new_frame(swap_chain.m_extent, glfwGetTime());
         {
             auto &io = ImGui::GetIO();
             ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings

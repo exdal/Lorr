@@ -12,7 +12,7 @@ using namespace lr::graphics;
 example::ImGuiBackend imgui = {};
 
 struct ImguiTask {
-    std::string_view name = "ImGui Task";
+    std::string_view name = "ImGui";
 
     struct Uses {
         Preset::ColorAttachmentWrite attachment = {};
@@ -30,15 +30,16 @@ struct ImguiTask {
 };
 
 struct ComputeTask {
-    std::string_view name = "Compute Task";
+    std::string_view name = "Compute";
 
     struct Uses {
         Preset::ComputeWrite storage_image = {};
     } uses = {};
 
     struct PushConstants {
+        glm::vec2 image_size = {};
         ImageViewID image_view_id = ImageViewID::Invalid;
-        f32 time = 0;
+        f32 time = 0.0f;
     } push_constants = {};
 
     PipelineID pipeline_id = PipelineID::Invalid;
@@ -47,19 +48,21 @@ struct ComputeTask {
     {
         auto &cmd_list = tc.command_list();
         auto &storage_image_data = tc.task_image_data(uses.storage_image);
+        Image *storage_image = tc.device()->get_image(storage_image_data.image_id);
         auto &io = ImGui::GetIO();
 
+        push_constants.image_size = { storage_image->m_extent.width, storage_image->m_extent.height };
         push_constants.image_view_id = storage_image_data.image_view_id;
         push_constants.time = static_cast<f32>(glfwGetTime());
         tc.set_push_constants(push_constants);
 
         cmd_list.set_pipeline(pipeline_id);
-        cmd_list.dispatch(1024 / 8 + 1, 512 / 8 + 1, 1);
+        cmd_list.dispatch(storage_image->m_extent.width / 8 + 1, storage_image->m_extent.height / 8 + 1, 1);
     }
 };
 
 struct BlitTask {
-    std::string_view name = "Blit Task";
+    std::string_view name = "Blit";
 
     struct Uses {
         Preset::TransferRead blit_source = {};
@@ -71,8 +74,12 @@ struct BlitTask {
         auto &cmd_list = tc.command_list();
         auto &blit_source_data = tc.task_image_data(uses.blit_source);
         auto &blit_target_data = tc.task_image_data(uses.blit_target);
+        Image *blit_source = tc.device()->get_image(blit_source_data.image_id);
+        Offset3D src_offset = { static_cast<i32>(blit_source->m_extent.width),
+                                static_cast<i32>(blit_source->m_extent.height),
+                                static_cast<i32>(blit_source->m_extent.depth) };
 
-        ImageBlit blit = { .src_offsets = { { 0, 0, 0 }, { 1024, 512, 1 } }, .dst_offsets = { { 0, 0, 0 }, { 1024, 512, 1 } } };
+        ImageBlit blit = { .src_offsets = { { 0, 0, 0 }, src_offset }, .dst_offsets = { { 0, 0, 0 }, src_offset } };
         cmd_list.blit_image(blit_source_data.image_id, ImageLayout::TransferSrc, blit_target_data.image_id, ImageLayout::TransferDst, Filtering::Nearest, { &blit, 1 });
     }
 };
@@ -108,8 +115,43 @@ ShaderID load_shaders(Device &device)
     return device.create_shader(ShaderStageFlag::Compute, cs_data);
 }
 
+void poll_events(os::Window &window)
+{
+    auto &io = ImGui::GetIO();
+
+    while (window.m_event_manager.peek()) {
+        os::WindowEventData event_data = {};
+        switch (window.m_event_manager.dispatch(event_data)) {
+            case os::LR_WINDOW_EVENT_MOUSE_POSITION: {
+                io.AddMousePosEvent(event_data.mouse_x, event_data.mouse_y);
+                break;
+            }
+            case os::LR_WINDOW_EVENT_MOUSE_STATE: {
+                io.AddMouseButtonEvent(event_data.mouse, event_data.mouse_state == KeyState::Down);
+                break;
+            }
+            case os::LR_WINDOW_EVENT_MOUSE_SCROLL: {
+                io.AddMouseWheelEvent(f32(event_data.mouse_offset_x), f32(event_data.mouse_offset_y));
+                break;
+            }
+            case os::LR_WINDOW_EVENT_CHAR: {
+                io.AddInputCharacterUTF16(event_data.char_val);
+                break;
+            }
+            case os::LR_WINDOW_EVENT_KEYBOARD_STATE: {
+                io.AddKeyEvent(example::ImGuiBackend::lr_key_to_imgui(event_data.key), event_data.key_state != KeyState::Up);
+                break;
+            }
+            default:
+                break;
+        }
+    }
+}
+
 i32 main(i32 argc, c8 **argv)
 {
+    ZoneScoped;
+
     Log::init(argc, argv);
 
     ShaderCompiler::init();
@@ -145,6 +187,7 @@ i32 main(i32 argc, c8 **argv)
     window.init({ .title = "Task Graph", .width = 1280, .height = 780, .flags = os::WindowFlag::Centered });
     device.init(&instance.m_handle);
     create_swap_chain(window.m_width, window.m_height);
+
     imgui.init(&device, swap_chain);
 
     PipelineID compute_pipeline_id = device.create_compute_pipeline({
@@ -156,7 +199,7 @@ i32 main(i32 argc, c8 **argv)
         .usage_flags = ImageUsage::Storage | ImageUsage::TransferSrc,
         .format = Format::R8G8B8A8_UNORM,
         .type = ImageType::View2D,
-        .extent = { 1024, 512, 1 },
+        .extent = { 1280, 780, 1 },
         .debug_name = "Compute image",
     });
 
@@ -181,46 +224,14 @@ i32 main(i32 argc, c8 **argv)
         auto [acquire_sema, present_sema] = swap_chain.binary_semas();
         auto [acquired_index, acq_result] = device.acquire_next_image(swap_chain, acquire_sema);
 
-        while (window.m_event_manager.peek()) {
-            auto &io = ImGui::GetIO();
-
-            os::WindowEventData event_data = {};
-            switch (window.m_event_manager.dispatch(event_data)) {
-                case os::LR_WINDOW_EVENT_MOUSE_POSITION: {
-                    io.AddMousePosEvent(event_data.mouse_x, event_data.mouse_y);
-                    break;
-                }
-                case os::LR_WINDOW_EVENT_MOUSE_STATE: {
-                    io.AddMouseButtonEvent(event_data.mouse, event_data.mouse_state == KeyState::Down);
-                    break;
-                }
-                case os::LR_WINDOW_EVENT_MOUSE_SCROLL: {
-                    io.AddMouseWheelEvent(f32(event_data.mouse_offset_x), f32(event_data.mouse_offset_y));
-                    break;
-                }
-                case os::LR_WINDOW_EVENT_CHAR: {
-                    io.AddInputCharacterUTF16(event_data.char_val);
-                    break;
-                }
-                case os::LR_WINDOW_EVENT_KEYBOARD_STATE: {
-                    io.AddKeyEvent(example::ImGuiBackend::lr_key_to_imgui(event_data.key), event_data.key_state != KeyState::Up);
-                    break;
-                }
-                default:
-                    break;
-            }
-        }
-
         ImageID image_id = images[acquired_index];
         ImageViewID image_view_id = image_views[acquired_index];
         Semaphore &frame_sema = swap_chain.frame_sema();
         Semaphore &garbage_collector_sema = device.m_garbage_timeline_sema;
         CommandQueue &present_queue = device.get_queue(CommandType::Graphics);
 
-        imgui.new_frame(static_cast<f32>(swap_chain.m_extent.width), static_cast<f32>(swap_chain.m_extent.height), glfwGetTime());
-        {
-            task_graph.draw_profiler_ui();
-        }
+        imgui.new_frame(swap_chain.m_extent, glfwGetTime());
+        task_graph.draw_profiler_ui();
         imgui.end_frame();
 
         task_graph.set_image(swap_chain_image, { .image_id = image_id, .image_view_id = image_view_id });
@@ -237,6 +248,9 @@ i32 main(i32 argc, c8 **argv)
         device.collect_garbage();
 
         window.poll();
+        poll_events(window);
+
+        FrameMark;
     }
 
     return 1;

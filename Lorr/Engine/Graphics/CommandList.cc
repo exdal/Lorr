@@ -284,11 +284,15 @@ CommandBatcher::CommandBatcher(Unique<CommandList> &command_list)
 
 CommandBatcher::~CommandBatcher()
 {
+    ZoneScoped;
+
     flush_barriers();
 }
 
 void CommandBatcher::insert_memory_barrier(const MemoryBarrier &barrier)
 {
+    ZoneScoped;
+
     if (m_memory_barriers.full()) {
         flush_barriers();
     }
@@ -298,6 +302,8 @@ void CommandBatcher::insert_memory_barrier(const MemoryBarrier &barrier)
 
 void CommandBatcher::insert_image_barrier(const ImageBarrier &barrier)
 {
+    ZoneScoped;
+
     if (m_image_barriers.full()) {
         flush_barriers();
     }
@@ -307,6 +313,8 @@ void CommandBatcher::insert_image_barrier(const ImageBarrier &barrier)
 
 void CommandBatcher::flush_barriers()
 {
+    ZoneScoped;
+
     if (m_image_barriers.empty() && m_memory_barriers.empty()) {
         return;
     }

@@ -24,6 +24,8 @@ ScopedStack::ScopedStack()
 ScopedStack::~ScopedStack()
 {
     auto &stack = GetThreadStack();
+
+    TracyFreeN(ptr, "Thread Stack");
     stack.ptr = ptr;
 }
 

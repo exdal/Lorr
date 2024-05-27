@@ -127,11 +127,13 @@ void *os::reserve(u64 size)
 
 void os::release(void *data, u64 size)
 {
+    TracyFree(data);
     VirtualFree(data, size, MEM_RELEASE);
 }
 
 bool os::commit(void *data, u64 size)
 {
+    TracyAllocN(data, size, "Virtual Alloc");
     return VirtualAlloc(data, size, MEM_COMMIT, PAGE_READWRITE) != nullptr;
 }
 

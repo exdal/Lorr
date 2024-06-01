@@ -201,14 +201,15 @@ void CommandList::set_pipeline(PipelineID pipeline_id)
     vkCmdBindPipeline(m_handle, static_cast<VkPipelineBindPoint>(pipeline->m_bind_point), pipeline->m_handle);
 }
 
-void CommandList::set_push_constants(PipelineLayout &layout, void *data, u32 data_size, u32 offset, ShaderStageFlag stage_flags)
+void CommandList::set_push_constants(PipelineLayoutID layout_id, void *data, u32 data_size, u32 offset, ShaderStageFlag stage_flags)
 {
     ZoneScoped;
 
+    PipelineLayout &layout = *m_device->get_pipeline_layout(layout_id);
     vkCmdPushConstants(m_handle, layout, static_cast<VkShaderStageFlags>(stage_flags), offset, data_size, data);
 }
 
-void CommandList::set_descriptor_sets(PipelineLayout &layout, PipelineBindPoint bind_point, u32 first_set, std::span<DescriptorSet> sets)
+void CommandList::set_descriptor_sets(PipelineLayoutID layout_id, PipelineBindPoint bind_point, u32 first_set, std::span<DescriptorSet> sets)
 {
     ZoneScoped;
     memory::ScopedStack stack;
@@ -218,6 +219,7 @@ void CommandList::set_descriptor_sets(PipelineLayout &layout, PipelineBindPoint 
         descriptor_sets[i] = sets[i];
     }
 
+    PipelineLayout &layout = *m_device->get_pipeline_layout(layout_id);
     vkCmdBindDescriptorSets(m_handle, static_cast<VkPipelineBindPoint>(bind_point), layout, first_set, sets.size(), descriptor_sets.data(), 0, nullptr);
 }
 

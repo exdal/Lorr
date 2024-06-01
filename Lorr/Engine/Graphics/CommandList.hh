@@ -69,8 +69,8 @@ struct CommandList {
     void begin_rendering(const RenderingBeginInfo &info);
     void end_rendering();
     void set_pipeline(PipelineID pipeline_id);
-    void set_push_constants(PipelineLayout &layout, void *data, u32 data_size, u32 offset, ShaderStageFlag stage_flags = ShaderStageFlag::All);
-    void set_descriptor_sets(PipelineLayout &layout, PipelineBindPoint bind_point, u32 first_set, std::span<DescriptorSet> sets);
+    void set_push_constants(PipelineLayoutID layout_id, void *data, u32 data_size, u32 offset, ShaderStageFlag stage_flags = ShaderStageFlag::All);
+    void set_descriptor_sets(PipelineLayoutID layout_id, PipelineBindPoint bind_point, u32 first_set, std::span<DescriptorSet> sets);
     void set_vertex_buffer(BufferID buffer_id, u64 offset = 0, u32 first_binding = 0, u32 binding_count = 1);
     void set_index_buffer(BufferID buffer_id, u64 offset = 0, bool use_u16 = false);
 

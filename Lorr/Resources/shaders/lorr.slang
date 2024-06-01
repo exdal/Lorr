@@ -66,5 +66,5 @@ func load_buffer<T>(BufferID buffer_id) -> T * {
 }
 }
 
-
 #endif
+

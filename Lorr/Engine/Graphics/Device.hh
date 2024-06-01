@@ -9,7 +9,25 @@
 
 namespace lr::graphics {
 struct Device {
-    Device() = default;
+    Semaphore m_garbage_timeline_sema = {};
+    std::array<CommandQueue, usize(CommandType::Count)> m_queues = {};
+    plf::colony<std::pair<TimestampQueryPool, u64>> m_garbage_query_pools = {};
+    plf::colony<std::pair<Semaphore, u64>> m_garbage_semaphores = {};
+
+    DescriptorPool m_descriptor_pool = {};
+    DescriptorSetLayout m_descriptor_set_layout = {};
+    DescriptorSet m_descriptor_set = {};
+
+    BufferID m_bda_array_buffer = BufferID::Invalid;
+    u64 *m_bda_array_host_addr = nullptr;
+
+    DeviceFeature m_supported_features = DeviceFeature::None;
+    ResourcePools m_resources = {};
+    VmaAllocator m_allocator = {};
+    vkb::PhysicalDevice m_physical_device = {};
+    vkb::Instance *m_instance = nullptr;
+    vkb::Device m_handle = {};
+
     VKResult init(vkb::Instance *instance);
 
     /// Commands ///
@@ -120,14 +138,14 @@ struct Device {
     }
 
     template<typename T = void>
-    PipelineLayout *get_layout()
+    PipelineLayoutID get_pipeline_layout()
     {
         if constexpr (std::is_same_v<T, void>) {
-            return &m_resources.pipeline_layouts[0];
+            return static_cast<PipelineLayoutID>(0);
         }
         else {
             usize index = sizeof(T) / sizeof(u32);
-            return &m_resources.pipeline_layouts[index];
+            return static_cast<PipelineLayoutID>(index);
         }
     }
     CommandQueue &get_queue(CommandType type) { return m_queues[usize(type)]; }
@@ -137,26 +155,7 @@ struct Device {
     auto get_buffer(BufferID id) { return m_resources.buffers.get(id); }
     auto get_pipeline(PipelineID id) { return m_resources.pipelines.get(id); }
     auto get_shader(ShaderID id) { return m_resources.shaders.get(id); }
-
-    Semaphore m_garbage_timeline_sema = {};
-    plf::colony<std::pair<TimestampQueryPool, u64>> m_garbage_query_pools = {};
-    plf::colony<std::pair<Semaphore, u64>> m_garbage_semaphores = {};
-
-    std::array<CommandQueue, usize(CommandType::Count)> m_queues = {};
-    DescriptorPool m_descriptor_pool = {};
-    DescriptorSetLayout m_descriptor_set_layout = {};
-    DescriptorSet m_descriptor_set = {};
-
-    BufferID m_bda_array_buffer = BufferID::Invalid;
-    u64 *m_bda_array_host_addr = nullptr;
-
-    DeviceFeature m_supported_features = DeviceFeature::None;
-
-    ResourcePools m_resources = {};
-    VmaAllocator m_allocator = {};
-    vkb::PhysicalDevice m_physical_device = {};
-    vkb::Instance *m_instance = nullptr;
-    vkb::Device m_handle = {};
+    auto get_pipeline_layout(PipelineLayoutID id) { return &m_resources.pipeline_layouts[static_cast<usize>(id)]; }
 
     constexpr static auto OBJECT_TYPE = VK_OBJECT_TYPE_DEVICE;
     operator auto &() { return m_handle.device; }

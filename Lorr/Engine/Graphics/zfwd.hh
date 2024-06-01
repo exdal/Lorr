@@ -39,8 +39,11 @@ LR_HANDLE(BufferID, u32);
 LR_HANDLE(ImageID, u32);
 LR_HANDLE(ImageViewID, u32);
 LR_HANDLE(SamplerID, u32);
+LR_HANDLE(SamplerHash, u64);
 LR_HANDLE(ShaderID, u32);
+enum class PipelineLayoutID : usize { None = 0 };
 LR_HANDLE(PipelineID, u32);
+LR_HANDLE(PipelineHash, u64);
 
 template<typename T>
 struct Unique;

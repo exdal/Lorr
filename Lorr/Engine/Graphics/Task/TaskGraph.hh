@@ -36,17 +36,21 @@ struct TaskGraph {
 
     u32 schedule_task(Task *task, TaskSubmit &submit);
 
+    // Recording
     template<typename TaskT>
     TaskID add_task(const TaskT &task_info);
     TaskID add_task(std::unique_ptr<Task> &&task);
     void present(TaskImageID task_image_id);
 
+    // Debug tools
     std::string generate_graphviz();
     void draw_profiler_ui();
 
+    // Rendering
     void execute(const TaskExecuteInfo &info);
 
 private:
+    bool prepare_task(Task &task);
     TaskSubmit &new_submit(CommandType type);
 };
 

@@ -13,24 +13,23 @@ struct VirtualFile {
 };
 
 struct VirtualFileInfo {
-    std::string_view real_path;
-    std::string_view virtual_path;
+    std::string_view path = {};
+    std::span<const u8> data = {};
 };
 
 struct VirtualDir {
     VirtualDir() = default;
-    VirtualDir(std::span<VirtualFileInfo> infos)
+    VirtualDir(std::span<const VirtualFileInfo> infos)
     {
-        for (auto &info : infos) {
-            if (!read_file(info)) {
-                LR_LOG_ERROR("Failed to load file '{}' for VFile '{}'!", info.real_path, info.virtual_path);
-            }
+        for (const VirtualFileInfo &info : infos) {
+            std::vector<u8> data = { info.data.begin(), info.data.end() };
+            m_files.emplace(std::string(info.path), std::move(data));
         }
     }
 
-    bool read_file(const VirtualFileInfo &info)
+    bool read_file(std::string_view virtual_path, std::string_view real_path)
     {
-        auto [file, file_result] = os::open_file(info.real_path, os::FileAccess::Read);
+        auto [file, file_result] = os::open_file(real_path, os::FileAccess::Read);
         if (!file_result) {
             LR_LOG_ERROR("Failed to read file!");
             return false;
@@ -41,7 +40,7 @@ struct VirtualDir {
         os::read_file(file, file_contents.data(), { 0, file_size });
         os::close_file(file);
 
-        m_files.emplace(std::string(info.virtual_path), std::move(file_contents));
+        m_files.emplace(std::string(virtual_path), std::move(file_contents));
         return true;
     }
 
@@ -49,4 +48,5 @@ struct VirtualDir {
 
     ankerl::unordered_dense::map<std::string, VirtualFile> m_files = {};
 };
+
 }  // namespace lr

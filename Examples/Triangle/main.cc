@@ -7,7 +7,6 @@
 
 #include "Engine/OS/Window.hh"
 
-#include "ExampleBase.hh"
 #include "ImGuiBackend.hh"
 
 using namespace lr;
@@ -19,50 +18,11 @@ struct App {
     PipelineID triangle_pipeline;
 } app;
 
-bool load_shaders(Device &device)
-{
-    ZoneScoped;
-
-    ShaderPreprocessorMacroInfo macros[] = {
-        { "LR_EDITOR", "1" },
-#if LR_DEBUG
-        { "LR_DEBUG", "1" },
-#endif
-    };
-
-    ShaderCompileInfo info = {
-        .virtual_env = { &example::default_vdir(), 1 },
-        .definitions = macros,
-    };
-
-    {
-        std::string_view path = TRIANGLE_SHADER_PATH;
-        auto [code, result] = example::load_file(path);
-        if (!result) {
-            LR_LOG_ERROR("Failed to open file '{}'!", path);
-            return false;
-        }
-        info.code = code;
-        info.real_path = path;
-        info.entry_point = "vs_main";
-        auto [vs_data, vs_result] = ShaderCompiler::compile(info);
-        info.entry_point = "fs_main";
-        auto [fs_data, fs_result] = ShaderCompiler::compile(info);
-
-        app.triangle_vs = device.create_shader(ShaderStageFlag::Vertex, vs_data);
-        app.triangle_fs = device.create_shader(ShaderStageFlag::Pixel, fs_data);
-    }
-
-    return true;
-}
-
 int main(int argc, char *argv[])
 {
     ZoneScoped;
 
     lr::Log::init(argc, argv);
-
-    ShaderCompiler::init();
 
     os::Window window;
     Instance instance;
@@ -97,8 +57,6 @@ int main(int argc, char *argv[])
     device.create_command_allocators(*command_allocators, { .type = CommandType::Graphics, .debug_name = "Command Allocator" });
 
     imgui.init(&device, swap_chain);
-    load_shaders(device);
-
     {
         std::array shader_ids = { app.triangle_vs, app.triangle_fs };
         Viewport viewport = {};

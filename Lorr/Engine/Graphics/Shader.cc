@@ -11,7 +11,7 @@ struct CompilerContext {
 std::vector<slang::CompilerOptionEntry> get_slang_entries(ShaderCompileFlag flags)
 {
     ZoneScoped;
-    
+
     // clang-format off
     std::vector<slang::CompilerOptionEntry> entries = {};
     entries.emplace_back(
@@ -84,6 +84,10 @@ bool ShaderCompiler::init()
 {
     ZoneScoped;
 
+    if (compiler_ctx.global_session) {
+        return true;
+    }
+
     slang::createGlobalSession(compiler_ctx.global_session.writeRef());
     return true;
 }
@@ -101,11 +105,6 @@ Result<std::vector<u32>, VKResult> ShaderCompiler::compile(const ShaderCompileIn
         macros.emplace_back(v.name.data(), v.value.data());
     }
 
-    std::vector<const char *> include_dirs;
-    for (std::string_view dir : info.include_dirs) {
-        include_dirs.push_back(dir.data());
-    }
-
     slang::TargetDesc target_desc = {
         .format = SLANG_SPIRV,
         .profile = compiler_ctx.global_session->findProfile("spirv_1_4"),
@@ -117,8 +116,8 @@ Result<std::vector<u32>, VKResult> ShaderCompiler::compile(const ShaderCompileIn
     slang::SessionDesc session_desc = {
         .targets = &target_desc,
         .targetCount = 1,
-        .searchPaths = include_dirs.data(),
-        .searchPathCount = static_cast<u32>(include_dirs.size()),
+        .searchPaths = nullptr,
+        .searchPathCount = 0,
         .preprocessorMacros = macros.data(),
         .preprocessorMacroCount = static_cast<u32>(macros.size()),
     };

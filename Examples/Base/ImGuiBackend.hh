@@ -1,7 +1,5 @@
 #pragma once
 
-#include "ExampleBase.hh"
-
 #include "Engine/Graphics/Common.hh"
 
 #include "Engine/Graphics/CommandList.hh"
@@ -79,7 +77,7 @@ struct ImGuiBackend {
             }
 
             ShaderID vs_shader = device->create_shader(ShaderStageFlag::Vertex, vs_data);
-            ShaderID fs_shader = device->create_shader(ShaderStageFlag::Pixel, fs_data);
+            ShaderID fs_shader = device->create_shader(ShaderStageFlag::Fragment, fs_data);
 
             std::array shader_ids = { vs_shader, fs_shader };
             Viewport viewport = {
@@ -165,7 +163,7 @@ struct ImGuiBackend {
             temp_cmd_list->copy_buffer_to_image(upload_buffer, m_font_image_id, ImageLayout::TransferDst, { &copy_region, 1 });
             temp_cmd_list->image_transition({
                 .src_access = PipelineAccess::TransferWrite,
-                .dst_access = PipelineAccess::PixelShaderRead,
+                .dst_access = PipelineAccess::FragmentShaderRead,
                 .old_layout = ImageLayout::TransferDst,
                 .new_layout = ImageLayout::ColorReadOnly,
                 .image_id = m_font_image_id,
@@ -174,7 +172,7 @@ struct ImGuiBackend {
 
             SemaphoreSubmitInfo wait_sema_info(queue.semaphore(), queue.semaphore().counter(), PipelineStage::AllCommands);
             CommandListSubmitInfo cmd_list_info = { *temp_cmd_list };
-            SemaphoreSubmitInfo signal_sema_info(queue.semaphore(), queue.semaphore().advance(), PipelineStage::PixelShader);
+            SemaphoreSubmitInfo signal_sema_info(queue.semaphore(), queue.semaphore().advance(), PipelineStage::FragmentShader);
             QueueSubmitInfo submit_info = {
                 .wait_sema_count = 1,
                 .wait_sema_infos = &wait_sema_info,

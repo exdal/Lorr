@@ -1,7 +1,8 @@
 #pragma once
 
-#include "lorr.slang"  // IWYU pragma: export
-#include "Vulkan.hh"   // IWYU pragma: export
+#include <Resources/shaders/lorr.slang>  // IWYU pragma: export
+
+#include "Vulkan.hh"  // IWYU pragma: export
 #include "zfwd.hh"
 
 #include <source_location>
@@ -367,6 +368,10 @@ enum class ImageLayout : u32 {
     TransferSrc = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
     TransferDst = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
     General = VK_IMAGE_LAYOUT_GENERAL,
+    DepthAttachment = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+    StencilAttachment = VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL,
+    DepthReadOnly = VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL,
+    StencilReadOnly = VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL,
 };
 
 enum class ImageType : u32 {
@@ -422,9 +427,9 @@ enum class PipelineStage : u64 {
     VertexShader = VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT,
     TessellationControl = VK_PIPELINE_STAGE_2_TESSELLATION_CONTROL_SHADER_BIT,
     TessellationEvaluation = VK_PIPELINE_STAGE_2_TESSELLATION_EVALUATION_SHADER_BIT,
-    PixelShader = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
-    EarlyPixelTests = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT,
-    LatePixelTests = VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+    FragmentShader = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+    EarlyFragmentTests = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT,
+    LateFragmentTests = VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
     ColorAttachmentOutput = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
     AllGraphics = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT,
 
@@ -506,9 +511,9 @@ namespace PipelineAccess {
     LRX(VertexShaderRead, MemoryAccess::Read, PipelineStage::VertexShader);
     LRX(TessControlRead, MemoryAccess::Read, PipelineStage::TessellationControl);
     LRX(TessEvalRead, MemoryAccess::Read, PipelineStage::TessellationEvaluation);
-    LRX(PixelShaderRead, MemoryAccess::Read, PipelineStage::PixelShader);
-    LRX(EarlyPixelTestsRead, MemoryAccess::Read, PipelineStage::EarlyPixelTests);
-    LRX(LatePixelTestsRead, MemoryAccess::Read, PipelineStage::LatePixelTests);
+    LRX(FragmentShaderRead, MemoryAccess::Read, PipelineStage::FragmentShader);
+    LRX(EarlyFragmentTestsRead, MemoryAccess::Read, PipelineStage::EarlyFragmentTests);
+    LRX(LateFragmentTestsRead, MemoryAccess::Read, PipelineStage::LateFragmentTests);
     LRX(ColorAttachmentRead, MemoryAccess::Read, PipelineStage::ColorAttachmentOutput);
     LRX(GraphicsRead, MemoryAccess::Read, PipelineStage::AllGraphics);
     LRX(ComputeRead, MemoryAccess::Read, PipelineStage::ComputeShader);
@@ -519,9 +524,9 @@ namespace PipelineAccess {
     LRX(VertexShaderWrite, MemoryAccess::Write, PipelineStage::VertexShader);
     LRX(TessControlWrite, MemoryAccess::Write, PipelineStage::TessellationControl);
     LRX(TessEvalWrite, MemoryAccess::Write, PipelineStage::TessellationEvaluation);
-    LRX(PixelShaderWrite, MemoryAccess::Write, PipelineStage::PixelShader);
-    LRX(EarlyPixelTestsWrite, MemoryAccess::Write, PipelineStage::EarlyPixelTests);
-    LRX(LatePixelTestsWrite, MemoryAccess::Write, PipelineStage::LatePixelTests);
+    LRX(FragmentShaderWrite, MemoryAccess::Write, PipelineStage::FragmentShader);
+    LRX(EarlyFragmentTestsWrite, MemoryAccess::Write, PipelineStage::EarlyFragmentTests);
+    LRX(LateFragmentTestsWrite, MemoryAccess::Write, PipelineStage::LateFragmentTests);
     LRX(ColorAttachmentWrite, MemoryAccess::Write, PipelineStage::ColorAttachmentOutput);
     LRX(GraphicsWrite, MemoryAccess::Write, PipelineStage::AllGraphics);
     LRX(ComputeWrite, MemoryAccess::Write, PipelineStage::ComputeShader);
@@ -532,9 +537,9 @@ namespace PipelineAccess {
     LRX(VertexShaderReadWrite, MemoryAccess::ReadWrite, PipelineStage::VertexShader);
     LRX(TessControlReadWrite, MemoryAccess::ReadWrite, PipelineStage::TessellationControl);
     LRX(TessEvalReadWrite, MemoryAccess::ReadWrite, PipelineStage::TessellationEvaluation);
-    LRX(PixelShaderReadWrite, MemoryAccess::ReadWrite, PipelineStage::PixelShader);
-    LRX(EarlyPixelTestsReadWrite, MemoryAccess::ReadWrite, PipelineStage::EarlyPixelTests);
-    LRX(LatePixelTestsReadWrite, MemoryAccess::ReadWrite, PipelineStage::LatePixelTests);
+    LRX(FragmentShaderReadWrite, MemoryAccess::ReadWrite, PipelineStage::FragmentShader);
+    LRX(EarlyFragmentTestsReadWrite, MemoryAccess::ReadWrite, PipelineStage::EarlyFragmentTests);
+    LRX(LateFragmentTestsReadWrite, MemoryAccess::ReadWrite, PipelineStage::LateFragmentTests);
     LRX(ColorAttachmentReadWrite, MemoryAccess::ReadWrite, PipelineStage::ColorAttachmentOutput);
     LRX(GraphicsReadWrite, MemoryAccess::ReadWrite, PipelineStage::AllGraphics);
     LRX(ComputeReadWrite, MemoryAccess::ReadWrite, PipelineStage::ComputeShader);
@@ -713,11 +718,11 @@ LR_TYPEOP_ARITHMETIC_INT(DynamicState, DynamicState, &);
 
 enum class ShaderStageFlag : u32 {
     Vertex = VK_SHADER_STAGE_VERTEX_BIT,
-    Pixel = VK_SHADER_STAGE_FRAGMENT_BIT,
+    Fragment = VK_SHADER_STAGE_FRAGMENT_BIT,
     Compute = VK_SHADER_STAGE_COMPUTE_BIT,
     TessellationControl = VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT,
     TessellationEvaluation = VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT,
-    All = Vertex | Pixel | Compute | TessellationControl | TessellationEvaluation,
+    All = Vertex | Fragment | Compute | TessellationControl | TessellationEvaluation,
     Count = 5,
 };
 LR_TYPEOP_ARITHMETIC_INT(ShaderStageFlag, ShaderStageFlag, &);

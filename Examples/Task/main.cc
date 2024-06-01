@@ -1,33 +1,24 @@
 #include "Engine/Graphics/Device.hh"
 #include "Engine/Graphics/Instance.hh"
+
+#include "Engine/Graphics/Task/BuiltinTasks.hh"
 #include "Engine/Graphics/Task/TaskGraph.hh"
 
 #include "Engine/OS/Window.hh"
 
-#include "ExampleBase.hh"
 #include "ImGuiBackend.hh"
 
 using namespace lr;
 using namespace lr::graphics;
 example::ImGuiBackend imgui = {};
 
-struct ImguiTask {
-    std::string_view name = "ImGui";
-
-    struct Uses {
-        Preset::ColorAttachmentWrite attachment = {};
-    } uses = {};
-
-    void execute(TaskContext &tc)
-    {
-        if (!imgui.can_render()) {
-            return;
-        }
-
-        auto &cmd_list = tc.command_list();
-        imgui.render(tc.device(), cmd_list, tc.task_image_data(uses.attachment).image_view_id);
-    }
+namespace lr::embedded::shaders {
+constexpr static _data_t example_compute[] = {
+#include <imgui.slang.h>
 };
+constexpr static std::span example_compute_sp = { &example_compute->as_u8, count_of(example_compute) };
+constexpr static std::string_view example_compute_str = { &example_compute->as_c8, count_of(example_compute) };
+}  // namespace lr::embedded::shaders
 
 struct ComputeTask {
     std::string_view name = "Compute";
@@ -42,7 +33,28 @@ struct ComputeTask {
         f32 time = 0.0f;
     } push_constants = {};
 
-    PipelineID pipeline_id = PipelineID::Invalid;
+    bool prepare(TaskPrepareInfo &info)
+    {
+        auto &pipeline_info = info.pipeline_info;
+
+        VirtualFileInfo virtual_files[] = { { "lorr", embedded::shaders::lorr_sp } };
+        VirtualDir virtual_dir = { virtual_files };
+        ShaderCompileInfo shader_compile_info = {
+            .real_path = "example_compute.slang",
+            .code = embedded::shaders::example_compute_str,
+            .virtual_env = { { virtual_dir } },
+        };
+
+        shader_compile_info.entry_point = "cs_main";
+        auto [vs_ir, cs_result] = ShaderCompiler::compile(shader_compile_info);
+        if (!cs_result) {
+            return false;
+        }
+
+        pipeline_info.set_shader(info.device->create_shader(ShaderStageFlag::Compute, vs_ir));
+
+        return true;
+    }
 
     void execute(TaskContext &tc)
     {
@@ -56,7 +68,6 @@ struct ComputeTask {
         push_constants.time = static_cast<f32>(glfwGetTime());
         tc.set_push_constants(push_constants);
 
-        cmd_list.set_pipeline(pipeline_id);
         cmd_list.dispatch(storage_image->m_extent.width / 8 + 1, storage_image->m_extent.height / 8 + 1, 1);
     }
 };
@@ -83,37 +94,6 @@ struct BlitTask {
         cmd_list.blit_image(blit_source_data.image_id, ImageLayout::TransferSrc, blit_target_data.image_id, ImageLayout::TransferDst, Filtering::Nearest, { &blit, 1 });
     }
 };
-
-ShaderID load_shaders(Device &device)
-{
-    ZoneScoped;
-
-    ShaderPreprocessorMacroInfo macros[] = {
-        { "LR_EDITOR", "1" },
-#if LR_DEBUG
-        { "LR_DEBUG", "1" },
-#endif
-    };
-
-    ShaderCompileInfo info = {
-        .virtual_env = { &example::default_vdir(), 1 },
-        .definitions = macros,
-    };
-
-    std::string_view path = TASK_COMPUTE_SHADER_PATH;
-    auto [code, result] = example::load_file(path);
-    if (!result) {
-        LR_LOG_ERROR("Failed to open file '{}'!", path);
-        return ShaderID::Invalid;
-    }
-    info.code = code;
-    info.real_path = path;
-    info.entry_point = "cs_main";
-    info.compile_flags = ShaderCompileFlag::SkipOptimization | ShaderCompileFlag::GenerateDebugInfo;
-    auto [cs_data, cs_result] = ShaderCompiler::compile(info);
-
-    return device.create_shader(ShaderStageFlag::Compute, cs_data);
-}
 
 void poll_events(os::Window &window)
 {
@@ -154,7 +134,6 @@ i32 main(i32 argc, c8 **argv)
 
     Log::init(argc, argv);
 
-    ShaderCompiler::init();
     os::Window window;
     Instance instance;
     Device device;
@@ -190,11 +169,6 @@ i32 main(i32 argc, c8 **argv)
 
     imgui.init(&device, swap_chain);
 
-    PipelineID compute_pipeline_id = device.create_compute_pipeline({
-        .shader_id = load_shaders(device),
-        .layout = device.get_layout<ComputeTask::PushConstants>(),
-    });
-
     ImageID storage_image_id = device.create_image({
         .usage_flags = ImageUsage::Storage | ImageUsage::TransferSrc,
         .format = Format::R8G8B8A8_UNORM,
@@ -215,9 +189,9 @@ i32 main(i32 argc, c8 **argv)
     TaskImageID swap_chain_image = task_graph.add_image({ .image_id = images[0], .image_view_id = image_views[0] });
     TaskImageID task_storage_image = task_graph.add_image({ .image_id = storage_image_id, .image_view_id = storage_image_view_id });
 
-    task_graph.add_task<ComputeTask>({ .uses = { .storage_image = task_storage_image }, .pipeline_id = compute_pipeline_id });
+    task_graph.add_task<ComputeTask>({ .uses = { .storage_image = task_storage_image } });
     task_graph.add_task<BlitTask>({ .uses = { .blit_source = task_storage_image, .blit_target = swap_chain_image } });
-    task_graph.add_task<ImguiTask>({ .uses = { .attachment = swap_chain_image } });
+    task_graph.add_task<BuiltinTask::ImGuiTask>({ .uses = { .attachment = swap_chain_image } });
     task_graph.present(swap_chain_image);
 
     while (!window.should_close()) {

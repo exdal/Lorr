@@ -46,8 +46,7 @@ struct ShaderCompileInfo {
     std::string_view entry_point = "main";
     std::string_view real_path = {};  // for shader debugging
     std::string_view code = {};
-    std::span<VirtualDir> virtual_env = {};
-    std::span<std::string> include_dirs = {};
+    std::span<const VirtualDir> virtual_env = {};
     std::span<ShaderPreprocessorMacroInfo> definitions = {};
 };
 

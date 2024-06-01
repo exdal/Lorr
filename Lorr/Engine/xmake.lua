@@ -3,12 +3,15 @@ target("Lorr")
   set_languages("cxx20")
   add_forceincludes("Engine/pch.hh", { public = true })
   set_pcheader("Engine/pch.hh", { public = true })
-  add_cxxflags("clang::-march=native", "clang_cl::/arch:AVX2")
+  add_cxxflags("clang::-march=native", "clang_cl::/arch:AVX2", "cl::/arch:AVX2")
   set_runtimes("MT", "c++_static")
 
   add_includedirs("../", { public = true });
   add_files("**.cc")
   add_rpathdirs("@executable_path")
+
+-- Embedded resources --
+  add_files("../Resources/shaders/**.slang", { rules = "utils.bin2c" })
 
   if is_mode("debug") then
     add_defines("LR_DEBUG", { public = true })
@@ -28,12 +31,6 @@ target("Lorr")
     remove_files("OS/Win32*")
   end
 
-  on_load(function (target)
-    import("lib.detect.find_file")
-    local shader_std = find_file("lorr.slang", {"$(projectdir)/**"})
-    target:add("defines", "LR_SHADER_STD_FILE_PATH=\"" .. shader_std .. "\"", { public = true })
-  end)
-
   add_packages(
     "fmt",
     "tracy",
@@ -51,5 +48,10 @@ target("Lorr")
     "slang",
     "unordered_dense",
     { public = true })
+
+    on_load(function (target)
+        local headerdir = path.join(target:autogendir(), "rules", "utils", "bin2c")
+        target:add("includedirs", headerdir, { public = true })
+    end)
 
 target_end()

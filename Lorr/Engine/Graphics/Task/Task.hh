@@ -79,12 +79,65 @@ struct TaskImageUse : TaskUse {
 namespace Preset {
     using ColorAttachmentWrite = TaskImageUse<ImageLayout::ColorAttachment, PipelineAccess::ColorAttachmentReadWrite>;
     using ColorAttachmentRead = TaskImageUse<ImageLayout::ColorAttachment, PipelineAccess::ColorAttachmentRead>;
-    using PixelReadOnly = TaskImageUse<ImageLayout::ColorReadOnly, PipelineAccess::PixelShaderRead>;
+    using ColorReadOnly = TaskImageUse<ImageLayout::ColorReadOnly, PipelineAccess::FragmentShaderRead>;
     using ComputeWrite = TaskImageUse<ImageLayout::General, PipelineAccess::ComputeWrite>;
     using ComputeRead = TaskImageUse<ImageLayout::General, PipelineAccess::ComputeRead>;
     using TransferRead = TaskImageUse<ImageLayout::TransferSrc, PipelineAccess::TransferRead>;
     using TransferWrite = TaskImageUse<ImageLayout::TransferDst, PipelineAccess::TransferWrite>;
+
+    using VertexBuffer = TaskBufferUse<PipelineAccess::VertexAttrib>;
+    using IndexBuffer = TaskBufferUse<PipelineAccess::IndexAttrib>;
 };  // namespace Preset
+
+struct TaskPipelineInfo {
+    union {
+        GraphicsPipelineInfo m_graphics_info = {};
+        ComputePipelineInfo m_compute_info;
+    };
+
+    std::vector<Viewport> m_viewports = {};
+    std::vector<Rect2D> m_scissors = {};
+    std::vector<VertexLayoutBindingInfo> m_vertex_binding_infos = {};
+    std::vector<VertexAttribInfo> m_vertex_attrib_infos = {};
+    std::vector<PipelineColorBlendAttachment> m_blend_attachments = {};
+    std::vector<ShaderID> m_shader_ids = {};
+
+    void set_dynamic_states(DynamicState states) { m_graphics_info.dynamic_state = states; }
+    void set_viewport(const Viewport &viewport) { m_viewports.push_back(viewport); }
+    void set_scissors(const Rect2D &rect) { m_scissors.push_back(rect); }
+    void set_shader(ShaderID shader_id) { m_shader_ids.push_back(shader_id); }
+    void set_rasterizer_state(const RasterizerStateInfo &info) { m_graphics_info.rasterizer_state = info; }
+    void set_multisample_state(const MultisampleStateInfo &info) { m_graphics_info.multisample_state = info; }
+    void set_depth_stencil_state(const DepthStencilStateInfo &info) { m_graphics_info.depth_stencil_state = info; }
+    void set_blend_constants(const glm::vec4 &constants) { m_graphics_info.blend_constants = constants; }
+    void set_blend_attachments(const std::vector<PipelineColorBlendAttachment> &infos) { m_blend_attachments = infos; }
+    void set_blend_attachment_all(const PipelineColorBlendAttachment &info)
+    {
+        for (auto &v : m_blend_attachments) {
+            v = info;
+        }
+    }
+    void set_vertex_layout(const std::vector<VertexAttribInfo> &attribs)
+    {
+        u32 stride = 0;
+        for (const VertexAttribInfo &attrib : attribs) {
+            stride += format_to_size(attrib.format);
+        }
+
+        m_vertex_binding_infos.push_back({
+            .binding = static_cast<u32>(m_vertex_binding_infos.size()),
+            .stride = stride,
+            .input_rate = VertexInputRate::Vertex,
+        });
+
+        m_vertex_attrib_infos.insert(m_vertex_attrib_infos.end(), attribs.begin(), attribs.end());
+    }
+};
+
+struct TaskPrepareInfo {
+    Device *device = nullptr;
+    TaskPipelineInfo pipeline_info = {};
+};
 
 LR_HANDLE(TaskID, u32);
 struct TaskContext {
@@ -125,7 +178,7 @@ struct TaskContext {
     template<typename T>
     void set_push_constants(T &v)
     {
-        PipelineLayout &pipeline_layout = *m_device->get_layout<T>();
+        PipelineLayoutID pipeline_layout = m_device->get_pipeline_layout<T>();
         m_cmd_list.set_push_constants(pipeline_layout, &v, sizeof(T), 0);
     }
 
@@ -137,9 +190,11 @@ private:
 
 struct Task {
     virtual ~Task() = default;
+    virtual bool prepare(TaskPrepareInfo &info) = 0;
     virtual void execute(TaskContext &tc) = 0;
 
-    usize m_pipeline_layout_index = 0;
+    PipelineID m_pipeline_id = PipelineID::Invalid;
+    PipelineLayoutID m_pipeline_layout_id = PipelineLayoutID::None;
     std::span<TaskUse> m_task_uses = {};
     std::string_view m_name = {};
     f64 m_start_ts = 0.0f;
@@ -159,19 +214,29 @@ struct TaskWrapper : Task {
     TaskWrapper(const TaskT &task)
         : m_task(task)
     {
-        constexpr static bool has_push_constants = requires { TaskT{}.push_constants; };
+        constexpr bool has_push_constants = requires { TaskT{}.push_constants; };
         if constexpr (has_push_constants) {
-            m_pipeline_layout_index = sizeof(typename TaskT::PushConstants) / sizeof(u32);
+            m_pipeline_layout_id = static_cast<PipelineLayoutID>(sizeof(typename TaskT::PushConstants) / sizeof(u32));
         }
 
-        m_task_uses = { reinterpret_cast<TaskUse *>(&m_task.uses), m_task_use_count };
+        m_task_uses = { reinterpret_cast<TaskUse *>(&m_task.uses), TASK_USE_COUNT };
         m_name = m_task.name;
+    }
+
+    bool prepare(TaskPrepareInfo &info) override
+    {
+        constexpr bool has_prepare = requires { TaskT{}.prepare(info); };
+        if constexpr (has_prepare) {
+            return m_task.prepare(info);
+        }
+
+        return true;
     }
 
     void execute(TaskContext &tc) override { m_task.execute(tc); }
 
     TaskT m_task = {};
-    constexpr static usize m_task_use_count = sizeof(typename TaskT::Uses) / sizeof(TaskUse);
+    constexpr static usize TASK_USE_COUNT = sizeof(typename TaskT::Uses) / sizeof(TaskUse);
 };
 
 struct TaskBarrier {

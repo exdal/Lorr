@@ -34,3 +34,4 @@ VertexOutput vs_main(u32 vertex_id : SV_VertexID) {
 float4 fs_main(CoarseVertex input : CoarseVertex) : SV_Target {
     return input.color;
 }
+

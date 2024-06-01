@@ -143,6 +143,9 @@ VKResult Device::init(vkb::Instance *instance)
     }
 
     /// DEVICE CONTEXT ///
+
+    ShaderCompiler::init();
+
     {
         DescriptorBindingFlag bindless_flags = DescriptorBindingFlag::UpdateAfterBind | DescriptorBindingFlag::PartiallyBound;
         std::vector<DescriptorPoolSize> pool_sizes;
@@ -504,7 +507,7 @@ VKResult Device::wait_for_semaphore(Semaphore &semaphore, u64 desired_value, u64
 Result<u64, VKResult> Device::get_semaphore_counter(Semaphore &semaphore)
 {
     ZoneScoped;
-    
+
     u64 value = 0;
     auto result = CHECK(vkGetSemaphoreCounterValue(m_handle, semaphore, &value));
 
@@ -781,7 +784,7 @@ Result<PipelineID, VKResult> Device::create_graphics_pipeline(const GraphicsPipe
         .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
         .pNext = nullptr,
         .flags = 0,
-        .topology = static_cast<VkPrimitiveTopology>(info.primitive_type),
+        .topology = static_cast<VkPrimitiveTopology>(info.rasterizer_state.primitive_type),
         .primitiveRestartEnable = false,
     };
 
@@ -800,16 +803,16 @@ Result<PipelineID, VKResult> Device::create_graphics_pipeline(const GraphicsPipe
         .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
         .pNext = nullptr,
         .flags = 0,
-        .depthClampEnable = info.enable_depth_clamp,
+        .depthClampEnable = info.rasterizer_state.enable_depth_clamp,
         .rasterizerDiscardEnable = false,
-        .polygonMode = info.enable_wireframe ? VK_POLYGON_MODE_LINE : VK_POLYGON_MODE_FILL,
-        .cullMode = static_cast<VkCullModeFlags>(info.cull_mode),
-        .frontFace = static_cast<VkFrontFace>(!info.front_face_ccw),
-        .depthBiasEnable = info.enable_depth_bias,
-        .depthBiasConstantFactor = info.depth_bias_factor,
-        .depthBiasClamp = info.depth_bias_clamp,
-        .depthBiasSlopeFactor = info.depth_slope_factor,
-        .lineWidth = info.line_width,
+        .polygonMode = info.rasterizer_state.enable_wireframe ? VK_POLYGON_MODE_LINE : VK_POLYGON_MODE_FILL,
+        .cullMode = static_cast<VkCullModeFlags>(info.rasterizer_state.cull_mode),
+        .frontFace = static_cast<VkFrontFace>(!info.rasterizer_state.front_face_ccw),
+        .depthBiasEnable = info.rasterizer_state.enable_depth_bias,
+        .depthBiasConstantFactor = info.rasterizer_state.depth_bias_factor,
+        .depthBiasClamp = info.rasterizer_state.depth_bias_clamp,
+        .depthBiasSlopeFactor = info.rasterizer_state.depth_slope_factor,
+        .lineWidth = info.rasterizer_state.line_width,
     };
 
     // Multisampling
@@ -818,12 +821,12 @@ Result<PipelineID, VKResult> Device::create_graphics_pipeline(const GraphicsPipe
         .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
         .pNext = nullptr,
         .flags = 0,
-        .rasterizationSamples = static_cast<VkSampleCountFlagBits>(1 << (info.multisample_bit_count - 1)),
+        .rasterizationSamples = static_cast<VkSampleCountFlagBits>(1 << (info.multisample_state.multisample_bit_count - 1)),
         .sampleShadingEnable = false,
         .minSampleShading = 0,
         .pSampleMask = nullptr,
-        .alphaToCoverageEnable = info.enable_alpha_to_coverage,
-        .alphaToOneEnable = info.enable_alpha_to_one,
+        .alphaToCoverageEnable = info.multisample_state.enable_alpha_to_coverage,
+        .alphaToOneEnable = info.multisample_state.enable_alpha_to_one,
     };
 
     // Depth Stencil
@@ -832,13 +835,13 @@ Result<PipelineID, VKResult> Device::create_graphics_pipeline(const GraphicsPipe
         .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
         .pNext = nullptr,
         .flags = 0,
-        .depthTestEnable = info.enable_depth_test,
-        .depthWriteEnable = info.enable_depth_write,
-        .depthCompareOp = static_cast<VkCompareOp>(info.depth_compare_op),
-        .depthBoundsTestEnable = info.enable_depth_bounds_test,
-        .stencilTestEnable = info.enable_stencil_test,
-        .front = info.stencil_front_face_op,
-        .back = info.stencil_back_face_op,
+        .depthTestEnable = info.depth_stencil_state.enable_depth_test,
+        .depthWriteEnable = info.depth_stencil_state.enable_depth_write,
+        .depthCompareOp = static_cast<VkCompareOp>(info.depth_stencil_state.depth_compare_op),
+        .depthBoundsTestEnable = info.depth_stencil_state.enable_depth_bounds_test,
+        .stencilTestEnable = info.depth_stencil_state.enable_stencil_test,
+        .front = info.depth_stencil_state.stencil_front_face_op,
+        .back = info.depth_stencil_state.stencil_back_face_op,
         .minDepthBounds = 0,
         .maxDepthBounds = 0,
     };
@@ -909,10 +912,7 @@ Result<PipelineID, VKResult> Device::create_graphics_pipeline(const GraphicsPipe
     if (is_feature_supported(DeviceFeature::DescriptorBuffer))
         pipeline_create_flags |= VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
 
-    PipelineLayout *pipeline_layout = info.layout;
-    if (pipeline_layout == nullptr) {
-        pipeline_layout = &m_resources.pipeline_layouts[0];
-    }
+    PipelineLayout *pipeline_layout = get_pipeline_layout(info.layout_id);
 
     VkGraphicsPipelineCreateInfo pipeline_create_info = {
         .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
@@ -963,10 +963,7 @@ Result<PipelineID, VKResult> Device::create_compute_pipeline(const ComputePipeli
         .entry_point = "main",
     };
 
-    PipelineLayout *pipeline_layout = info.layout;
-    if (pipeline_layout == nullptr) {
-        pipeline_layout = &m_resources.pipeline_layouts[0];
-    }
+    PipelineLayout *pipeline_layout = get_pipeline_layout(info.layout_id);
 
     VkComputePipelineCreateInfo pipeline_create_info = {
         .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,

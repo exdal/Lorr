@@ -21,6 +21,19 @@ void for_each_use(std::span<TaskUse> uses, const auto &buffer_fn, const auto &im
     }
 }
 
+void for_each_image_use(std::span<TaskUse> uses, const auto &image_fn)
+{
+    for (TaskUse &use : uses) {
+        switch (use.type) {
+            case TaskUseType::Image:
+                image_fn(use.task_image_id, use.access, use.image_layout);
+                break;
+            default:
+                break;
+        }
+    }
+}
+
 bool TaskGraph::init(const TaskGraphInfo &info)
 {
     ZoneScoped;
@@ -93,6 +106,11 @@ u32 TaskGraph::schedule_task(Task *task, TaskSubmit &submit)
 TaskID TaskGraph::add_task(std::unique_ptr<Task> &&task)
 {
     ZoneScoped;
+
+    if (!prepare_task(*task)) {
+        LR_LOG_ERROR("Failed to prepare task '{}'!", task->m_name);
+        return TaskID::Invalid;
+    }
 
     TaskID task_id = static_cast<TaskID>(m_tasks.size());
     u32 submit_index = m_submits.size() - 1;
@@ -350,14 +368,19 @@ void TaskGraph::execute(const TaskExecuteInfo &info)
             for (TaskID task_id : task_batch.tasks) {
                 u32 task_index = static_cast<u32>(task_id);
                 Task *task = &*m_tasks[task_index];
-                PipelineLayout &pipeline_layout = m_device->m_resources.pipeline_layouts[task->m_pipeline_layout_index];
-                cmd_list->set_descriptor_sets(pipeline_layout, PipelineBindPoint::Compute, 0, { &m_device->m_descriptor_set, 1 });
+
+                cmd_list->set_descriptor_sets(task->m_pipeline_layout_id, PipelineBindPoint::Compute, 0, { &m_device->m_descriptor_set, 1 });
                 cmd_list->reset_query_pool(task_query_pool, task_index * 2, 2);
                 cmd_list->write_timestamp(task_query_pool, PipelineStage::TopOfPipe, task_index * 2);
+                if (task->m_pipeline_id != PipelineID::Invalid) {
+                    cmd_list->set_pipeline(task->m_pipeline_id);
+                }
 
                 TaskContext tc(m_images, *cmd_list, m_device);
-                task->execute(tc);
-
+                {
+                    ZoneScopedN(task->name);
+                    task->execute(tc);
+                }
                 cmd_list->write_timestamp(task_query_pool, PipelineStage::BottomOfPipe, task_index * 2 + 1);
             }
 
@@ -426,6 +449,79 @@ void TaskGraph::execute(const TaskExecuteInfo &info)
         };
         cmd_queue.submit(submit_info);
     }
+}
+
+bool TaskGraph::prepare_task(Task &task)
+{
+    ZoneScoped;
+
+    TaskPrepareInfo prepare_info = {
+        .device = m_device,
+    };
+
+    // it is okay to resize to uses size despite Task::Uses contains buffers
+    // as long as GraphicsPipelineInfo::Formats is less than/eqals to resize size
+    prepare_info.pipeline_info.m_blend_attachments.resize(task.m_task_uses.size());
+
+    if (task.prepare(prepare_info)) {
+        std::vector<Format> color_attachment_formats = {};
+
+        auto &pipeline_info = prepare_info.pipeline_info;
+        auto &graphics_info = pipeline_info.m_graphics_info;
+        auto &compute_info = pipeline_info.m_compute_info;
+
+        for_each_image_use(task.m_task_uses, [&](TaskImageID id, [[maybe_unused]] const PipelineAccessImpl &access, ImageLayout layout) {
+            TaskImage &task_image = m_images[static_cast<usize>(id)];
+            Image &image = *m_device->get_image(task_image.image_id);
+
+            switch (layout) {
+                case ImageLayout::ColorAttachment:
+                    color_attachment_formats.push_back(image.m_format);
+                    break;
+                case ImageLayout::DepthStencilAttachment:
+                    graphics_info.depth_attachment_format = image.m_format;
+                    graphics_info.stencil_attachment_format = image.m_format;
+                    break;
+                case ImageLayout::DepthAttachment:
+                    graphics_info.depth_attachment_format = image.m_format;
+                    break;
+                case ImageLayout::StencilAttachment:
+                    graphics_info.stencil_attachment_format = image.m_format;
+                    break;
+                default:
+                    return;
+            }
+        });
+
+        bool is_graphics_pipeline =
+            !color_attachment_formats.empty() || graphics_info.depth_attachment_format != Format::Unknown || graphics_info.stencil_attachment_format != Format::Unknown;
+
+        if (is_graphics_pipeline) {
+            LR_ASSERT(pipeline_info.m_shader_ids.size() != 0, "Graphics pipeline requires at least one shader");
+
+            graphics_info.color_attachment_formats = color_attachment_formats;
+            graphics_info.viewports = pipeline_info.m_viewports;
+            graphics_info.scissors = pipeline_info.m_scissors;
+            graphics_info.vertex_binding_infos = pipeline_info.m_vertex_binding_infos;
+            graphics_info.vertex_attrib_infos = pipeline_info.m_vertex_attrib_infos;
+            graphics_info.blend_attachments = pipeline_info.m_blend_attachments;
+            graphics_info.shader_ids = pipeline_info.m_shader_ids;
+            graphics_info.layout_id = task.m_pipeline_layout_id;
+
+            task.m_pipeline_id = m_device->create_graphics_pipeline(graphics_info);
+        }
+        else {
+            LR_ASSERT(pipeline_info.m_shader_ids.size() == 1, "Compute pipelines require a shader");
+            compute_info.shader_id = pipeline_info.m_shader_ids[0];
+            compute_info.layout_id = task.m_pipeline_layout_id;
+
+            task.m_pipeline_id = m_device->create_compute_pipeline(compute_info);
+        }
+
+        return true;
+    }
+
+    return false;
 }
 
 TaskSubmit &TaskGraph::new_submit(CommandType type)

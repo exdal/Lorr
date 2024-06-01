@@ -38,6 +38,8 @@ struct PagedResourcePool {
     template<typename... Args>
     allocation_result<ResourceT, ResourceID> create(Args &&...args)
     {
+        ZoneScoped;
+
         index_type index = static_cast<index_type>(~0);
         if (m_free_indexes.empty()) {
             index = m_latest_index++;
@@ -69,6 +71,8 @@ struct PagedResourcePool {
 
     void destroy(ResourceID id)
     {
+        ZoneScoped;
+
         index_type index = get_handle_val(id);
         index_type page_id = index >> PAGE_BITS;
         index_type page_offset = index & PAGE_MASK;
@@ -79,6 +83,8 @@ struct PagedResourcePool {
 
     ResourceT *get(ResourceID id)
     {
+        ZoneScoped;
+
         index_type index = get_handle_val(id);
         index_type page_id = index >> PAGE_BITS;
         index_type page_offset = index & PAGE_MASK;
@@ -88,6 +94,8 @@ struct PagedResourcePool {
 
     void reset()
     {
+        ZoneScoped;
+
         m_latest_index = 0;
         m_free_indexes.clear();
     }
@@ -108,6 +116,8 @@ struct LinearResourcePool {
     template<typename... Args>
     allocation_result<ResourceT, ResourceID> create(Args &&...args)
     {
+        ZoneScoped;
+
         index_type index = static_cast<index_type>(~0);
         if (m_free_indexes.empty()) {
             index = m_latest_index++;
@@ -127,6 +137,8 @@ struct LinearResourcePool {
 
     void destroy(ResourceID id)
     {
+        ZoneScoped;
+
         index_type index = get_handle_val(id);
 
         m_resources[index] = {};
@@ -135,6 +147,8 @@ struct LinearResourcePool {
 
     ResourceT *get(ResourceID id)
     {
+        ZoneScoped;
+
         index_type index = get_handle_val(id);
         return &m_resources[index];
     }
@@ -156,9 +170,12 @@ struct ResourcePools {
     PagedResourcePool<Buffer, BufferID> buffers = {};
     PagedResourcePool<Image, ImageID> images = {};
     PagedResourcePool<ImageView, ImageViewID> image_views = {};
-    LinearResourcePool<Sampler, SamplerID, 64> samplers = {};
-    LinearResourcePool<Shader, ShaderID, 1024> shaders = {};
-    LinearResourcePool<Pipeline, PipelineID, 512> pipelines = {};
+    PagedResourcePool<Sampler, SamplerID> samplers = {};
+    PagedResourcePool<Shader, ShaderID> shaders = {};
+    PagedResourcePool<Pipeline, PipelineID> pipelines = {};
+
+    ankerl::unordered_dense::map<SamplerHash, SamplerID> cached_samplers = {};
+    ankerl::unordered_dense::map<PipelineHash, PipelineID> cached_pipelines = {};
 
     constexpr static usize max_push_constant_size = 128;
     std::array<PipelineLayout, (max_push_constant_size / sizeof(u32)) + 1> pipeline_layouts = {};

@@ -2,6 +2,8 @@
 
 #include "Common.hh"
 
+#include "Engine/Crypt/FNV.hh"
+
 namespace lr::graphics {
 /////////////////////////////////
 // BUFFERS
@@ -149,5 +151,13 @@ struct Sampler {
     operator auto &() { return m_handle; }
     explicit operator bool() { return m_handle != nullptr; }
 };
+
+// Helper hash function for 'cached samplers'
+consteval SamplerHash HSAMPLER(SamplerInfo info)
+{
+    constexpr usize size = sizeof(SamplerInfo);
+    auto v = std::bit_cast<std::array<const char, size>>(info);
+    return static_cast<SamplerHash>(Hash::FNV64(v.data(), size));
+}
 
 }  // namespace lr::graphics

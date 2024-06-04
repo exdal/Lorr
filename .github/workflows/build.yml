@@ -59,7 +59,7 @@ jobs:
 
       # Add my package repository
       - name: Add third party package repo
-        run: xrepo add-repo exdal-repo https://github.com/exdal/xmake-repo
+        run: xrepo add-repo exdal-repo https://github.com/exdal/xmake-repo slang
 
       # Update xmake repository (in order to have the file that will be cached)
       - name: Update xmake repository

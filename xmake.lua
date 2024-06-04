@@ -46,10 +46,15 @@ add_requires("slang v2024.1.18", { configs = {
     slang_glslang = true,
     embed_stdlib = true
 } })
-add_requires("glfw 3.4", { configs = {
-    x11 = true,
-    wayland = false
-} })
+
+if is_plat("linux") then
+    add_requires("glfw 3.4", { configs = {
+        x11 = not has_config("wayland"),
+        wayland = has_config("wayland")
+    } })
+else
+    add_requires("glfw 3.4")
+end
 
 includes("Lorr")
 includes("Examples")

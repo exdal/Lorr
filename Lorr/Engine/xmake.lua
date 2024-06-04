@@ -20,14 +20,13 @@ target("Lorr")
     add_defines("LR_DEBUG", { public = true })
   end
 
-  if is_os("windows") then
+  if is_plat("windows") then
     add_defines("LR_WIN32=1", { public = true })
     add_syslinks("gdi32", "msimg32", "user32")
     remove_files("OS/Linux*")
-  elseif is_os("linux") then
+  elseif is_plat("linux") then
     add_defines("LR_LINUX=1", { public = true })
-    if has_config("wayland") then
-    else
+    if not has_config("wayland") then
         add_syslinks("xcb")
     end
     remove_files("OS/Win32*")

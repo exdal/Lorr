@@ -1051,27 +1051,6 @@ struct SemaphoreSubmitInfo {
 };
 static_assert(sizeof(SemaphoreSubmitInfo::VkType) == sizeof(SemaphoreSubmitInfo));
 
-struct QueueSubmitInfo {
-    using VkType = VkSubmitInfo2;
-
-    VkStructureType structure_type = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
-    void *next = nullptr;
-    VkSubmitFlags submit_flags = 0;
-
-    u32 wait_sema_count = 0;
-    SemaphoreSubmitInfo *wait_sema_infos = nullptr;
-
-    u32 command_list_count = 0;
-    CommandListSubmitInfo *command_list_infos = nullptr;
-
-    u32 signal_sema_count = 0;
-    SemaphoreSubmitInfo *signal_sema_infos = nullptr;
-
-    operator auto &() { return *reinterpret_cast<VkType *>(this); }
-    operator const auto &() const { return *reinterpret_cast<const VkType *>(this); }
-};
-static_assert(sizeof(QueueSubmitInfo::VkType) == sizeof(QueueSubmitInfo));
-
 struct RenderingAttachmentInfo {
     ImageViewID image_view_id = ImageViewID::Invalid;
     ImageLayout image_layout = ImageLayout::Undefined;
@@ -1191,80 +1170,6 @@ struct DescriptorPoolSize {
     operator const auto &() const { return *reinterpret_cast<const VkType *>(this); }
 };
 static_assert(sizeof(DescriptorPoolSize::VkType) == sizeof(DescriptorPoolSize));
-
-template<typename T>
-struct Unique {
-    using this_type = Unique<T>;
-    using val_type = T;
-
-    explicit Unique() = default;
-    explicit Unique(const Unique &) = delete;
-    Unique(Unique &&other) noexcept
-        : m_device(other.m_device),
-          m_val(other.release())
-    {
-    }
-
-    explicit Unique(Device *device)
-        : m_device(device),
-          m_val({})
-    {
-    }
-
-    explicit Unique(Device *device, val_type val)
-        : m_device(device),
-          m_val(std::move(val))
-    {
-    }
-
-    ~Unique() noexcept { reset(); }
-
-    val_type &get() noexcept { return m_val; }
-    const val_type &get() const noexcept { return m_val; }
-    val_type release() noexcept
-    {
-        m_device = nullptr;
-        return std::move(m_val);
-    }
-
-    void set_name(std::string_view name);
-    void reset(val_type val = {}) noexcept;
-    void swap(this_type &other) noexcept
-    {
-        std::swap(m_device, other.m_device);
-        std::swap(m_val, other.m_val);
-    }
-
-    explicit operator bool() const noexcept { return m_val; }
-    val_type *operator->() noexcept { return &m_val; }
-    const val_type *operator->() const noexcept { return &m_val; }
-    val_type &operator*() noexcept { return m_val; }
-    const val_type &operator*() const noexcept { return m_val; }
-
-    this_type &operator=(const this_type &) = delete;
-    this_type &operator=(this_type &&other) noexcept
-    {
-        Device *temp = other.m_device;
-        reset(other.release());
-        m_device = temp;
-        return *this;
-    }
-
-    this_type &operator=(std::nullptr_t) noexcept
-    {
-        reset();
-        return *this;
-    }
-
-    Device *m_device = nullptr;
-    val_type m_val = {};
-};
-
-template<typename T>
-constexpr void swap(Unique<T> &lhs, Unique<T> &rhs) noexcept
-{
-    lhs.swap(rhs);
-}
 }  // namespace lr::graphics
 
 namespace fmt {

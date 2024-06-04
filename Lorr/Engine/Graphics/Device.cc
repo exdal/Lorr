@@ -7,14 +7,15 @@
 #include "Engine/Memory/Stack.hh"
 
 namespace lr::graphics {
-VKResult Device::init(vkb::Instance *instance)
+VKResult Device::init(const DeviceInfo &info)
 {
     ZoneScoped;
 
-    m_instance = instance;
+    m_instance = info.instance;
+    m_frame_count = info.frame_count;
 
     {
-        vkb::PhysicalDeviceSelector physical_device_selector(*instance);
+        vkb::PhysicalDeviceSelector physical_device_selector(*m_instance);
         physical_device_selector.defer_surface_initialization();
         physical_device_selector.set_minimum_version(1, 3);
 
@@ -83,17 +84,17 @@ VKResult Device::init(vkb::Instance *instance)
         if (m_supported_features & DeviceFeature::DescriptorBuffer)
             device_builder.add_pNext(&desciptor_buffer_features);
 
-        auto device_result = device_builder.build();
-        if (!device_result) {
+        auto device = device_builder.build();
+        if (!device) {
             LR_LOG_ERROR("Failed to select Vulkan Device!");
-            return static_cast<VKResult>(device_result.vk_result());
+            return static_cast<VKResult>(device.vk_result());
         }
 
-        m_handle = device_result.value();
+        m_handle = device.value();
     }
 
     {
-        if (!vulkan::load_device(m_handle, instance->fp_vkGetDeviceProcAddr)) {
+        if (!vulkan::load_device(m_handle, m_instance->fp_vkGetDeviceProcAddr)) {
             LR_LOG_ERROR("Failed to create Vulkan Device! Extension not found.");
             return VKResult::ExtNotPresent;
         }
@@ -102,17 +103,11 @@ VKResult Device::init(vkb::Instance *instance)
         set_object_name_raw<VK_OBJECT_TYPE_DEVICE>(m_handle.device, "Device");
         set_object_name_raw<VK_OBJECT_TYPE_PHYSICAL_DEVICE>(m_physical_device.physical_device, "Physical Device");
 
-        auto create_queue_impl = [this](CommandQueue &target, vkb::QueueType type, std::string_view name) {
-            create_timeline_semaphores({ &target.m_semaphore, 1 }, 0);
-            target.m_handle = m_handle.get_queue(type).value();
-            target.m_index = m_handle.get_queue_index(type).value();
+        create_command_queue(m_queues[0], CommandType::Graphics, "Graphics Command Queue");
+        create_command_queue(m_queues[1], CommandType::Compute, "Compute Command Queue");
+        create_command_queue(m_queues[2], CommandType::Transfer, "Transfer Command Queue");
 
-            set_object_name(target, name);
-        };
-
-        create_queue_impl(get_queue(CommandType::Graphics), vkb::QueueType::graphics, "Graphics Queue");
-        create_queue_impl(get_queue(CommandType::Compute), vkb::QueueType::compute, "Compute Queue");
-        create_queue_impl(get_queue(CommandType::Transfer), vkb::QueueType::transfer, "Transfer Queue");
+        create_timeline_semaphores({ &m_frame_timeline_sema, 1 }, 0);
     }
 
     /// ALLOCATOR INITIALIZATION ///
@@ -232,8 +227,6 @@ VKResult Device::init(vkb::Instance *instance)
         update_descriptor_sets({ &write_info, 1 }, {});
     }
 
-    create_timeline_semaphores({ &m_garbage_timeline_sema, 1 }, 0);
-
     return VKResult::Success;
 }
 
@@ -273,15 +266,6 @@ void Device::delete_timestamp_query_pools(std::span<const TimestampQueryPool> qu
     }
 }
 
-void Device::defer(std::span<const TimestampQueryPool> query_pools)
-{
-    ZoneScoped;
-
-    for (const TimestampQueryPool &query_pool : query_pools) {
-        m_garbage_query_pools.emplace(query_pool, m_garbage_timeline_sema.counter());
-    }
-}
-
 void Device::get_timestamp_query_pool_results(TimestampQueryPool &query_pool, u32 first_query, u32 count, std::span<u64> time_stamps)
 {
     ZoneScoped;
@@ -297,58 +281,14 @@ void Device::get_timestamp_query_pool_results(TimestampQueryPool &query_pool, u3
         VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT);
 }
 
-VKResult Device::create_command_allocators(std::span<CommandAllocator> command_allocators, const CommandAllocatorInfo &info)
-{
-    ZoneScoped;
-
-    VkCommandPoolCreateInfo create_info = {
-        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-        .pNext = nullptr,
-        .flags = static_cast<VkCommandPoolCreateFlags>(info.flags),
-        .queueFamilyIndex = get_queue(info.type).family_index(),
-    };
-
-    for (CommandAllocator &allocator : command_allocators) {
-        VKResult result = CHECK(vkCreateCommandPool(m_handle, &create_info, nullptr, &allocator.m_handle));
-        if (result != VKResult::Success) {
-            LR_LOG_ERROR("Failed to create Command Allocator! {}", result);
-            return result;
-        }
-
-        allocator.m_type = info.type;
-        allocator.m_queue = &get_queue(info.type);
-        set_object_name(allocator, info.debug_name);
-    }
-
-    return VKResult::Success;
-}
-
-void Device::delete_command_allocators(std::span<const CommandAllocator> command_allocators)
-{
-    ZoneScoped;
-
-    for (const CommandAllocator &allocator : command_allocators) {
-        vkDestroyCommandPool(m_handle, allocator, nullptr);
-    }
-}
-
-void Device::defer(std::span<const CommandAllocator> command_allocators)
-{
-    ZoneScoped;
-
-    for (const CommandAllocator &command_allocator : command_allocators) {
-        command_allocator.m_queue->defer({ { command_allocator } });
-    }
-}
-
-VKResult Device::create_command_lists(std::span<CommandList> command_lists, CommandAllocator &command_allocator)
+VKResult Device::create_command_lists(std::span<CommandList> command_lists, CommandAllocator &allocator)
 {
     ZoneScoped;
 
     VkCommandBufferAllocateInfo allocate_info = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
         .pNext = nullptr,
-        .commandPool = command_allocator,
+        .commandPool = allocator,
         .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
         .commandBufferCount = 1,
     };
@@ -360,8 +300,8 @@ VKResult Device::create_command_lists(std::span<CommandList> command_lists, Comm
             return result;
         }
 
-        list.m_type = command_allocator.m_type;
-        list.m_allocator = command_allocator.m_handle;
+        list.m_type = allocator.m_type;
+        list.m_frame_index = frame_index();
         list.m_device = this;
     }
 
@@ -373,17 +313,9 @@ void Device::delete_command_lists(std::span<const CommandList> command_lists)
     ZoneScoped;
 
     for (const CommandList &list : command_lists) {
-        vkFreeCommandBuffers(m_handle, list.m_allocator, 1, &list.m_handle);
-    }
-}
-
-void Device::defer(std::span<const CommandList> command_lists)
-{
-    ZoneScoped;
-
-    for (const CommandList &command_list : command_lists) {
-        CommandQueue &queue = get_queue(command_list.m_type);
-        queue.defer({ { command_list } });
+        CommandQueue &queue = get_queue(list.m_type);
+        CommandAllocator &allocator = queue.command_allocator(list.m_frame_index);
+        vkFreeCommandBuffers(m_handle, allocator, 1, &list.m_handle);
     }
 }
 
@@ -480,15 +412,6 @@ void Device::delete_semaphores(std::span<const Semaphore> semaphores)
     }
 }
 
-void Device::defer(std::span<const Semaphore> semaphores)
-{
-    ZoneScoped;
-
-    for (const Semaphore &semaphore : semaphores) {
-        m_garbage_semaphores.emplace(semaphore, m_garbage_timeline_sema.counter());
-    }
-}
-
 VKResult Device::wait_for_semaphore(Semaphore &semaphore, u64 desired_value, u64 timeout)
 {
     ZoneScoped;
@@ -521,7 +444,7 @@ VKResult Device::create_swap_chain(SwapChain &swap_chain, const SwapChainInfo &i
     wait_for_work();
 
     vkb::SwapchainBuilder builder(m_handle, info.surface);
-    builder.set_desired_min_image_count((u32)info.buffering);
+    builder.set_desired_min_image_count(m_frame_count);
     builder.set_desired_extent(info.extent.width, info.extent.height);
     builder.set_desired_format({ VK_FORMAT_B8G8R8A8_SRGB, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR });
     builder.set_desired_present_mode(VK_PRESENT_MODE_IMMEDIATE_KHR);
@@ -536,27 +459,21 @@ VKResult Device::create_swap_chain(SwapChain &swap_chain, const SwapChainInfo &i
     swap_chain = {};
     swap_chain.m_format = static_cast<Format>(result->image_format);
     swap_chain.m_extent = { result->extent.width, result->extent.height };
-    swap_chain.m_image_count = result->image_count;
 
-    swap_chain.m_frame_sema = Unique<Semaphore>(this);
-    swap_chain.m_acquire_semas = Unique<ls::static_vector<Semaphore, Limits::FrameCount>>(this);
-    swap_chain.m_present_semas = Unique<ls::static_vector<Semaphore, Limits::FrameCount>>(this);
-    swap_chain.m_acquire_semas->resize(swap_chain.m_image_count);
-    swap_chain.m_present_semas->resize(swap_chain.m_image_count);
-    create_timeline_semaphores({ &*swap_chain.m_frame_sema, 1 }, 0);
-    create_binary_semaphores(*swap_chain.m_acquire_semas);
-    create_binary_semaphores(*swap_chain.m_present_semas);
+    swap_chain.m_acquire_semas.resize(m_frame_count);
+    swap_chain.m_present_semas.resize(m_frame_count);
+    create_binary_semaphores(swap_chain.m_acquire_semas);
+    create_binary_semaphores(swap_chain.m_present_semas);
     swap_chain.m_handle = result.value();
     swap_chain.m_surface = info.surface;
-    swap_chain.m_frame_sema.set_name("SwapChain frame counter Semaphore");
 
     u32 i = 0;
-    for (Semaphore &v : *swap_chain.m_acquire_semas) {
+    for (Semaphore &v : swap_chain.m_acquire_semas) {
         set_object_name(v, fmt::format("SwapChain Acquire Sema {}", i++));
     }
 
     i = 0;
-    for (Semaphore &v : *swap_chain.m_present_semas) {
+    for (Semaphore &v : swap_chain.m_present_semas) {
         set_object_name(v, fmt::format("SwapChain Present Sema {}", i++));
     }
 
@@ -608,12 +525,27 @@ void Device::wait_for_work()
     vkDeviceWaitIdle(m_handle);
 }
 
-Result<u32, VKResult> Device::acquire_next_image(SwapChain &swap_chain, Semaphore &acquire_sema)
+usize Device::new_frame()
 {
     ZoneScoped;
 
-    auto &frame_sema = swap_chain.frame_sema();
-    wait_for_semaphore(frame_sema, frame_sema.counter());
+    i64 sema_counter = static_cast<i64>(m_frame_timeline_sema.counter());
+    u64 wait_val = static_cast<u64>(std::max<i64>(0, sema_counter - static_cast<i64>(m_frame_count - 1)));
+
+    wait_for_semaphore(m_frame_timeline_sema, wait_val);
+
+    u64 frame_idx = frame_index();
+    for (CommandQueue &queue : m_queues) {
+        CommandAllocator &allocator = queue.command_allocator(frame_idx);
+        reset_command_allocator(allocator);
+    }
+
+    return frame_idx;
+}
+
+Result<u32, VKResult> Device::acquire_next_image(SwapChain &swap_chain, Semaphore &acquire_sema)
+{
+    ZoneScoped;
 
     u32 image_id = 0;
     auto result = static_cast<VKResult>(vkAcquireNextImageKHR(m_handle, swap_chain.m_handle, UINT64_MAX, acquire_sema, nullptr, &image_id));
@@ -624,7 +556,7 @@ Result<u32, VKResult> Device::acquire_next_image(SwapChain &swap_chain, Semaphor
     return Result(image_id, result);
 }
 
-void Device::collect_garbage()
+void Device::end_frame()
 {
     ZoneScoped;
 
@@ -648,12 +580,9 @@ void Device::collect_garbage()
         checkndelete_fn(v.m_garbage_images, queue_counter, [this](std::span<ImageID> s) { delete_images(s); });
         checkndelete_fn(v.m_garbage_buffers, queue_counter, [this](std::span<BufferID> s) { delete_buffers(s); });
         checkndelete_fn(v.m_garbage_command_lists, queue_counter, [this](std::span<CommandList> s) { delete_command_lists(s); });
-        checkndelete_fn(v.m_garbage_command_allocators, queue_counter, [this](std::span<CommandAllocator> s) { delete_command_allocators(s); });
     }
 
-    u64 device_counter = get_semaphore_counter(m_garbage_timeline_sema);
-    checkndelete_fn(m_garbage_semaphores, device_counter, [this](std::span<Semaphore> s) { delete_semaphores(s); });
-    checkndelete_fn(m_garbage_query_pools, device_counter, [this](std::span<TimestampQueryPool> s) { delete_timestamp_query_pools(s); });
+    m_frame_timeline_sema.advance();
 }
 
 VKResult Device::create_pipeline_layouts(std::span<PipelineLayout> pipeline_layouts, const PipelineLayoutInfo &info)
@@ -1279,7 +1208,7 @@ Result<ImageID, VKResult> Device::create_image(const ImageInfo &info)
     ZoneScoped;
 
     VkSharingMode sharing_mode = VK_SHARING_MODE_EXCLUSIVE;
-    if (info.queue_indices.size() > 0) {
+    if (!info.queue_indices.empty()) {
         sharing_mode = VK_SHARING_MODE_CONCURRENT;
     }
 
@@ -1512,6 +1441,71 @@ void Device::delete_samplers(std::span<const SamplerID> samplers)
         m_resources.samplers.destroy(sampler_id);
         sampler->m_handle = VK_NULL_HANDLE;
     }
+}
+
+VKResult Device::create_command_queue(CommandQueue &command_queue, CommandType type, std::string_view debug_name)
+{
+    ZoneScoped;
+    memory::ScopedStack stack;
+
+    vkb::QueueType vkb_types[] = {
+        vkb::QueueType::graphics,  // CommandType::Graphics,
+        vkb::QueueType::compute,   // CommandType::Compute,
+        vkb::QueueType::transfer,  // CommandType::Transfer,
+    };
+    vkb::QueueType vkb_type = vkb_types[static_cast<usize>(type)];
+
+    auto queue_handle = m_handle.get_queue(vkb_type);
+    if (!queue_handle) {
+        auto r = static_cast<VKResult>(queue_handle.vk_result());
+        LR_LOG_ERROR("Failed to create Device Queue! {}", r);
+        return r;
+    }
+
+    u32 queue_index = m_handle.get_queue_index(vkb_type).value();
+
+    std::string_view callocator_name = stack.format("{} Command Allocator", debug_name);
+    std::string_view timeline_sema_name = stack.format("{} Semaphore", debug_name);
+
+    command_queue.m_type = type;
+    command_queue.m_index = queue_index;
+    command_queue.m_device = this;
+    command_queue.m_handle = queue_handle.value();
+    command_queue.m_frame_cmd_submits.resize(m_frame_count);
+    command_queue.m_command_lists.resize(m_frame_count);
+    create_timeline_semaphores({ &command_queue.semaphore(), 1 }, 0);
+    command_queue.m_allocators.resize(m_frame_count);
+    create_command_allocators(command_queue.m_allocators, { .type = type, .debug_name = callocator_name });
+    set_object_name(command_queue, debug_name);
+    set_object_name(command_queue.semaphore(), timeline_sema_name);
+
+    return VKResult::Success;
+}
+
+VKResult Device::create_command_allocators(std::span<CommandAllocator> command_allocators, const CommandAllocatorInfo &info)
+{
+    ZoneScoped;
+
+    VkCommandPoolCreateInfo create_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = static_cast<VkCommandPoolCreateFlags>(info.flags),
+        .queueFamilyIndex = get_queue(info.type).family_index(),
+    };
+
+    for (CommandAllocator &allocator : command_allocators) {
+        VKResult result = CHECK(vkCreateCommandPool(m_handle, &create_info, nullptr, &allocator.m_handle));
+        if (result != VKResult::Success) {
+            LR_LOG_ERROR("Failed to create Command Allocator! {}", result);
+            return result;
+        }
+
+        allocator.m_type = info.type;
+        allocator.m_queue = &get_queue(info.type);
+        set_object_name(allocator, info.debug_name);
+    }
+
+    return VKResult::Success;
 }
 
 }  // namespace lr::graphics

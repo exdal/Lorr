@@ -24,12 +24,8 @@ void for_each_use(std::span<TaskUse> uses, const auto &buffer_fn, const auto &im
 void for_each_image_use(std::span<TaskUse> uses, const auto &image_fn)
 {
     for (TaskUse &use : uses) {
-        switch (use.type) {
-            case TaskUseType::Image:
-                image_fn(use.task_image_id, use.access, use.image_layout);
-                break;
-            default:
-                break;
+        if (use.type == TaskUseType::Image) {
+            image_fn(use.task_image_id, use.access, use.image_layout);
         }
     }
 }
@@ -200,7 +196,8 @@ std::string TaskGraph::generate_graphviz()
             ss << fmt::format(R"(|<i{}> image {})", use.index, use.index);
         }
         ss << "\"\n";
-        ss << R"(shape = "record")" << "\n";
+        ss << R"(shape = "record")"
+           << "\n";
         ss << "];\n";
     }
 
@@ -312,11 +309,8 @@ void TaskGraph::execute(const TaskExecuteInfo &info)
         task_query_offset_ts += delta;
     }
 
-    for (u32 submit_index = 0; submit_index < m_submits.size(); submit_index++) {
-        TaskSubmit &task_submit = m_submits[submit_index];
-        CommandQueue &cmd_queue = m_device->get_queue(task_submit.type);
-        Semaphore &queue_sema = cmd_queue.semaphore();
-        CommandAllocator &cmd_allocator = task_submit.frame_cmd_allocator(info.image_index);
+    for (TaskSubmit &task_submit : m_submits) {
+        CommandQueue &queue = m_device->get_queue(task_submit.type);
         TimestampQueryPool &batch_query_pool = task_submit.frame_query_pool(info.image_index);
 
         std::span<u64> batch_query_results = stack.alloc<u64>(task_submit.batches.size() * 4);
@@ -333,19 +327,14 @@ void TaskGraph::execute(const TaskExecuteInfo &info)
             batch.end_ts = static_cast<f64>(batch_query_results[i + 2]);
         }
 
-        bool has_additional_barriers = !task_submit.additional_signal_barrier_indices.empty();
-        auto cmd_list_submit_infos = stack.alloc<CommandListSubmitInfo>(task_submit.batches.size() + !!has_additional_barriers);
-
         PipelineAccessImpl last_batch_access = PipelineAccess::TopOfPipe;
         usize batch_index = 0;
         for (TaskBatch &task_batch : task_submit.batches) {
-            Unique<CommandList> cmd_list(m_device);
+            CommandList &cmd_list = queue.begin_command_list();
             CommandBatcher cmd_batcher(cmd_list);
 
-            m_device->create_command_lists({ &*cmd_list, 1 }, cmd_allocator);
-            m_device->begin_command_list(*cmd_list);
-            cmd_list->reset_query_pool(batch_query_pool, batch_index * 2, 2);
-            cmd_list->write_timestamp(batch_query_pool, PipelineStage::TopOfPipe, batch_index * 2);
+            cmd_list.reset_query_pool(batch_query_pool, batch_index * 2, 2);
+            cmd_list.write_timestamp(batch_query_pool, PipelineStage::TopOfPipe, batch_index * 2);
 
             cmd_batcher.insert_memory_barrier({
                 .src_access = last_batch_access,
@@ -369,35 +358,32 @@ void TaskGraph::execute(const TaskExecuteInfo &info)
                 u32 task_index = static_cast<u32>(task_id);
                 Task *task = &*m_tasks[task_index];
 
-                cmd_list->set_descriptor_sets(task->m_pipeline_layout_id, PipelineBindPoint::Compute, 0, { &m_device->m_descriptor_set, 1 });
-                cmd_list->reset_query_pool(task_query_pool, task_index * 2, 2);
-                cmd_list->write_timestamp(task_query_pool, PipelineStage::TopOfPipe, task_index * 2);
+                cmd_list.set_descriptor_sets(task->m_pipeline_layout_id, PipelineBindPoint::Compute, 0, { &m_device->m_descriptor_set, 1 });
+                cmd_list.reset_query_pool(task_query_pool, task_index * 2, 2);
+                cmd_list.write_timestamp(task_query_pool, PipelineStage::TopOfPipe, task_index * 2);
                 if (task->m_pipeline_id != PipelineID::Invalid) {
-                    cmd_list->set_pipeline(task->m_pipeline_id);
+                    cmd_list.set_pipeline(task->m_pipeline_id);
                 }
 
-                TaskContext tc(m_images, *cmd_list, m_device);
                 {
                     ZoneScopedN(task->name);
+                    TaskContext tc(m_images, cmd_list, m_device);
                     task->execute(tc);
                 }
-                cmd_list->write_timestamp(task_query_pool, PipelineStage::BottomOfPipe, task_index * 2 + 1);
+                cmd_list.write_timestamp(task_query_pool, PipelineStage::BottomOfPipe, task_index * 2 + 1);
             }
 
-            cmd_list->write_timestamp(batch_query_pool, PipelineStage::BottomOfPipe, batch_index * 2 + 1);
-            m_device->end_command_list(*cmd_list);
-            cmd_list_submit_infos[batch_index] = { *cmd_list };
+            cmd_list.write_timestamp(batch_query_pool, PipelineStage::BottomOfPipe, batch_index * 2 + 1);
+            queue.end_command_list(cmd_list);
 
             batch_index++;
             last_batch_access = task_batch.execution_access;
         }
 
-        if (!task_submit.additional_signal_barrier_indices.empty()) {
-            Unique<CommandList> cmd_list(m_device);
+        bool has_additional_barriers = !task_submit.additional_signal_barrier_indices.empty();
+        if (has_additional_barriers) {
+            CommandList &cmd_list = queue.begin_command_list();
             CommandBatcher cmd_batcher(cmd_list);
-
-            m_device->create_command_lists({ &*cmd_list, 1 }, cmd_allocator);
-            m_device->begin_command_list(*cmd_list);
 
             for (u32 barrier_index : task_submit.additional_signal_barrier_indices) {
                 TaskBarrier &barrier = m_barriers[barrier_index];
@@ -412,42 +398,10 @@ void TaskGraph::execute(const TaskExecuteInfo &info)
             }
             cmd_batcher.flush_barriers();
 
-            m_device->end_command_list(*cmd_list);
-            cmd_list_submit_infos.back() = { *cmd_list };
+            queue.end_command_list(cmd_list);
         }
 
-        SemaphoreSubmitInfo queue_wait_semas[] = { { queue_sema, queue_sema.counter(), PipelineStage::AllCommands } };
-        SemaphoreSubmitInfo queue_signal_semas[] = { { queue_sema, queue_sema.advance(), PipelineStage::AllCommands } };
-
-        std::span<SemaphoreSubmitInfo> all_wait_semas = queue_wait_semas;
-        std::span<SemaphoreSubmitInfo> all_signal_semas = queue_signal_semas;
-        if (submit_index == 0) {
-            all_wait_semas = stack.alloc<SemaphoreSubmitInfo>(info.wait_semas.size() + count_of(queue_wait_semas));
-            usize i = 0;
-            for (SemaphoreSubmitInfo &sema : info.wait_semas)
-                all_wait_semas[i++] = sema;
-            for (SemaphoreSubmitInfo &sema : queue_wait_semas)
-                all_wait_semas[i++] = sema;
-        }
-
-        if (submit_index == m_submits.size() - 1) {
-            all_signal_semas = stack.alloc<SemaphoreSubmitInfo>(info.signal_semas.size() + count_of(queue_signal_semas));
-            usize i = 0;
-            for (SemaphoreSubmitInfo &sema : info.signal_semas)
-                all_signal_semas[i++] = sema;
-            for (SemaphoreSubmitInfo &sema : queue_signal_semas)
-                all_signal_semas[i++] = sema;
-        }
-
-        QueueSubmitInfo submit_info = {
-            .wait_sema_count = static_cast<u32>(all_wait_semas.size()),
-            .wait_sema_infos = all_wait_semas.data(),
-            .command_list_count = static_cast<u32>(cmd_list_submit_infos.size()),
-            .command_list_infos = cmd_list_submit_infos.data(),
-            .signal_sema_count = static_cast<u32>(all_signal_semas.size()),
-            .signal_sema_infos = all_signal_semas.data(),
-        };
-        cmd_queue.submit(submit_info);
+        queue.submit({ .additional_wait_semas = info.wait_semas, .additional_signal_semas = info.signal_semas });
     }
 }
 
@@ -497,7 +451,7 @@ bool TaskGraph::prepare_task(Task &task)
             !color_attachment_formats.empty() || graphics_info.depth_attachment_format != Format::Unknown || graphics_info.stencil_attachment_format != Format::Unknown;
 
         if (is_graphics_pipeline) {
-            LR_ASSERT(pipeline_info.m_shader_ids.size() != 0, "Graphics pipeline requires at least one shader");
+            LR_ASSERT(!pipeline_info.m_shader_ids.empty(), "Graphics pipeline requires at least one shader");
 
             graphics_info.color_attachment_formats = color_attachment_formats;
             graphics_info.viewports = pipeline_info.m_viewports;
@@ -533,7 +487,6 @@ TaskSubmit &TaskGraph::new_submit(CommandType type)
 
     std::string name = fmt::format("TG Submit {}", submit_id);
     submit.type = type;
-    m_device->create_command_allocators(submit.command_allocators, { .type = type, .debug_name = name });
     m_device->create_timestamp_query_pools(submit.query_pools, { .query_count = 128, .debug_name = name });
 
     return submit;

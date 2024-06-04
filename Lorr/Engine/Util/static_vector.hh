@@ -140,8 +140,7 @@ struct static_vector {
     constexpr iterator erase(const_iterator first, const_iterator last)
     {
         if (first != last) {
-            iterator pos = const_cast<value_type *>(
-                std::move(const_cast<value_type *>(last), end(), const_cast<value_type *>(first)));
+            iterator pos = const_cast<value_type *>(std::move(const_cast<value_type *>(last), end(), const_cast<value_type *>(first)));
             std::destroy(pos, end());
             m_size -= (last - first);
         }
@@ -195,6 +194,12 @@ struct static_vector {
 
     // Operators
     constexpr reference operator[](size_type i)
+    {
+        LR_ASSERT(i <= m_size);
+        return m_data[i];
+    }
+
+    constexpr const_reference operator[](size_type i) const
     {
         LR_ASSERT(i <= m_size);
         return m_data[i];

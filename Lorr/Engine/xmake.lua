@@ -10,6 +10,9 @@ target("Lorr")
   add_files("**.cc")
   add_rpathdirs("@executable_path")
 
+  add_options("profile")
+  add_options("wayland")
+
 -- Embedded resources --
   add_files("../Resources/shaders/**.slang", { rules = "utils.bin2c" })
 
@@ -20,14 +23,13 @@ target("Lorr")
   if is_os("windows") then
     add_defines("LR_WIN32=1", { public = true })
     add_syslinks("gdi32", "msimg32", "user32")
-
-    remove_files("Window/X11*")
     remove_files("OS/Linux*")
   elseif is_os("linux") then
     add_defines("LR_LINUX=1", { public = true })
-    add_syslinks("xcb")
-
-    remove_files("Window/Win32*")
+    if has_config("wayland") then
+    else
+        add_syslinks("xcb")
+    end
     remove_files("OS/Win32*")
   end
 

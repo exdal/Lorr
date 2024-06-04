@@ -52,6 +52,9 @@ struct TaskGraph {
 private:
     bool prepare_task(Task &task);
     TaskSubmit &new_submit(CommandType type);
+
+    TaskImage &get_task_image(TaskImageID id) { return m_images[static_cast<usize>(id)]; }
+    TaskBuffer &get_task_buffer(TaskBufferID id) { return m_buffers[static_cast<usize>(id)]; }
 };
 
 template<typename TaskT>

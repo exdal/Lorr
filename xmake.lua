@@ -9,20 +9,22 @@ set_runtimes("MT", "c++_static")
 option("profile")
     set_default(false)
     set_description("Enable application wide profiling.")
-option_end()
-
-if has_config("profile") then
     add_defines("TRACY_ENABLE=1", { public = true })
     if is_plat("windows") then
-        add_defines("TRACY_IMPORTS")
+        add_defines("TRACY_IMPORTS=1", { public = true })
     end
-end
+option_end()
 
+option("wayland")
+    set_default(false)
+    set_description("Enable wayland windowing for Linux.")
+    add_defines("LR_WAYLAND=1", { public = true })
+option_end()
+
+add_requires("fmt 10.2.1")
 add_requires(
-    "fmt",
     "xxhash",
     "glm",
-    "glfw 3.4",
     "vulkan-memory-allocator",
     "vk-bootstrap v1.3.283",
     "plf_colony",
@@ -31,7 +33,7 @@ add_requires(
     "simdutf",
     "unordered_dense"
 )
-add_requires("tracy 005d0929035bdc13f877da97c6631c0f2c98673e", { configs = {
+add_requires("tracy", { configs = {
     on_demand = true,
     callstack = true,
     callstack_inlines = false,
@@ -40,9 +42,13 @@ add_requires("tracy 005d0929035bdc13f877da97c6631c0f2c98673e", { configs = {
     system_tracing = true,
 } })
 add_requires("loguru", { configs = { fmt = true } })
-add_requires("slang", { configs = {
+add_requires("slang v2024.1.18", { configs = {
     slang_glslang = true,
     embed_stdlib = true
+} })
+add_requires("glfw 3.4", { configs = {
+    x11 = true,
+    wayland = false
 } })
 
 includes("Lorr")

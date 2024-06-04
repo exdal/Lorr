@@ -8,11 +8,18 @@
 #include "SwapChain.hh"
 
 namespace lr::graphics {
+struct DeviceInfo {
+    vkb::Instance *instance = nullptr;
+    usize frame_count = 3;
+};
+
 struct Device {
-    Semaphore m_garbage_timeline_sema = {};
-    std::array<CommandQueue, usize(CommandType::Count)> m_queues = {};
-    plf::colony<std::pair<TimestampQueryPool, u64>> m_garbage_query_pools = {};
-    plf::colony<std::pair<Semaphore, u64>> m_garbage_semaphores = {};
+    // frame info
+    constexpr static usize queue_count = static_cast<usize>(CommandType::Count);
+    using callocator_t = ls::static_vector<CommandAllocator, Limits::FrameCount>;
+    std::array<CommandQueue, queue_count> m_queues = {};
+    Semaphore m_frame_timeline_sema = {};
+    usize m_frame_count = 0;  // global frame count, same across all swap chains
 
     DescriptorPool m_descriptor_pool = {};
     DescriptorSetLayout m_descriptor_set_layout = {};
@@ -28,22 +35,16 @@ struct Device {
     vkb::Instance *m_instance = nullptr;
     vkb::Device m_handle = {};
 
-    VKResult init(vkb::Instance *instance);
+    VKResult init(const DeviceInfo &info);
 
     /// Commands ///
     VKResult create_timestamp_query_pools(std::span<TimestampQueryPool> query_pools, const TimestampQueryPoolInfo &info);
     void delete_timestamp_query_pools(std::span<const TimestampQueryPool> query_pools);
-    void defer(std::span<const TimestampQueryPool> query_pools);
 
     void get_timestamp_query_pool_results(TimestampQueryPool &query_pool, u32 first_query, u32 count, std::span<u64> time_stamps);
 
-    VKResult create_command_allocators(std::span<CommandAllocator> command_allocators, const CommandAllocatorInfo &info);
-    void delete_command_allocators(std::span<const CommandAllocator> command_allocators);
-    void defer(std::span<const CommandAllocator> command_allocators);
-
-    VKResult create_command_lists(std::span<CommandList> command_lists, CommandAllocator &command_allocator);
+    VKResult create_command_lists(std::span<CommandList> command_lists, CommandAllocator &allocator);
     void delete_command_lists(std::span<const CommandList> command_lists);
-    void defer(std::span<const CommandList> command_lists);
 
     void begin_command_list(CommandList &list);
     void end_command_list(CommandList &list);
@@ -52,7 +53,6 @@ struct Device {
     VKResult create_binary_semaphores(std::span<Semaphore> semaphores);
     VKResult create_timeline_semaphores(std::span<Semaphore> semaphores, u64 initial_value);
     void delete_semaphores(std::span<const Semaphore> semaphores);
-    void defer(std::span<const Semaphore> semaphores);
 
     VKResult wait_for_semaphore(Semaphore &semaphore, u64 desired_value, u64 timeout = UINT64_MAX);
     Result<u64, VKResult> get_semaphore_counter(Semaphore &semaphore);
@@ -63,8 +63,9 @@ struct Device {
     VKResult get_swapchain_images(SwapChain &swap_chain, std::span<ImageID> images);
 
     void wait_for_work();
+    usize new_frame();
     Result<u32, VKResult> acquire_next_image(SwapChain &swap_chain, Semaphore &acquire_sema);
-    void collect_garbage();
+    void end_frame();
 
     /// Input Assembly ///
     VKResult create_pipeline_layouts(std::span<PipelineLayout> pipeline_layouts, const PipelineLayoutInfo &info);
@@ -148,6 +149,7 @@ struct Device {
             return static_cast<PipelineLayoutID>(index);
         }
     }
+
     CommandQueue &get_queue(CommandType type) { return m_queues[usize(type)]; }
     auto get_image(ImageID id) { return m_resources.images.get(id); }
     auto get_image_view(ImageViewID id) { return m_resources.image_views.get(id); }
@@ -157,62 +159,21 @@ struct Device {
     auto get_shader(ShaderID id) { return m_resources.shaders.get(id); }
     auto get_pipeline_layout(PipelineLayoutID id) { return &m_resources.pipeline_layouts[static_cast<usize>(id)]; }
 
+    Semaphore &frame_sema() { return m_frame_timeline_sema; }
+    usize frame_index() { return m_frame_timeline_sema.counter() % m_frame_count; }
+
     constexpr static auto OBJECT_TYPE = VK_OBJECT_TYPE_DEVICE;
     operator auto &() { return m_handle.device; }
     explicit operator bool() { return m_handle != nullptr; }
+
+private:
+    VKResult create_command_queue(CommandQueue &command_queue, CommandType type, std::string_view name = {});
+    VKResult create_command_allocators(std::span<CommandAllocator> command_allocators, const CommandAllocatorInfo &info);
 };
 
 template<typename T>
 T *Device::buffer_host_data(BufferID buffer_id)
 {
     return reinterpret_cast<T *>(get_buffer(buffer_id)->m_host_data);
-}
-
-namespace unique_impl {
-    template<class T>
-    concept is_container = requires(T v) {
-        std::begin(v);
-        std::end(v);
-    };
-
-    template<typename T, usize N>
-    void device_defer_helper(Device *device, T (&arr)[N])
-    {
-        device->defer(std::span<T>{ arr, N });
-    }
-
-    template<typename T>
-    void device_defer_helper(Device *device, T &v)
-        requires(!is_container<T>)
-    {
-        device->defer(std::span<T>{ &v, 1 });
-    }
-
-    template<typename T>
-    void device_defer_helper(Device *device, T &v)
-        requires(is_container<T>)
-    {
-        device->defer(v);
-    }
-}  // namespace unique_impl
-
-template<typename T>
-void Unique<T>::set_name(std::string_view name)
-{
-    m_device->set_object_name(m_val, name);
-}
-
-template<typename T>
-void Unique<T>::reset(Unique<T>::val_type val) noexcept
-{
-    if (m_val == val) {
-        return;
-    }
-
-    if (m_device && m_val != val_type{}) {
-        unique_impl::device_defer_helper(m_device, m_val);
-    }
-
-    m_val = std::move(val);
 }
 }  // namespace lr::graphics

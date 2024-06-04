@@ -23,7 +23,7 @@
 
 namespace lr {
 template<typename T, usize N>
-constexpr usize count_of(T (&_)[N])
+constexpr usize count_of(T (&)[N])
 {
     return N;
 }

@@ -45,7 +45,4 @@ enum class PipelineLayoutID : usize { None = 0 };
 LR_HANDLE(PipelineID, u32);
 LR_HANDLE(PipelineHash, u64);
 
-template<typename T>
-struct Unique;
-
 }  // namespace lr::graphics

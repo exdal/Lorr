@@ -5,30 +5,6 @@
 #include "Engine/Memory/Stack.hh"
 
 namespace lr::graphics {
-VKResult CommandQueue::submit(QueueSubmitInfo &submit_info)
-{
-    ZoneScoped;
-
-    return CHECK(vkQueueSubmit2(m_handle, 1, reinterpret_cast<VkSubmitInfo2 *>(&submit_info), nullptr));
-}
-
-VKResult CommandQueue::present(SwapChain &swap_chain, Semaphore &present_sema, u32 image_id)
-{
-    ZoneScoped;
-
-    VkPresentInfoKHR present_info = {
-        .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
-        .pNext = nullptr,
-        .waitSemaphoreCount = 1,
-        .pWaitSemaphores = &present_sema.m_handle,
-        .swapchainCount = 1,
-        .pSwapchains = &swap_chain.m_handle.swapchain,
-        .pImageIndices = &image_id,
-        .pResults = nullptr,
-    };
-    return static_cast<VKResult>(vkQueuePresentKHR(m_handle, &present_info));
-}
-
 void CommandList::reset_query_pool(TimestampQueryPool &query_pool, u32 first_query, u32 query_count)
 {
     ZoneScoped;
@@ -279,11 +255,6 @@ CommandBatcher::CommandBatcher(CommandList &command_list)
 {
 }
 
-CommandBatcher::CommandBatcher(Unique<CommandList> &command_list)
-    : m_command_list(command_list.m_val)
-{
-}
-
 CommandBatcher::~CommandBatcher()
 {
     ZoneScoped;
@@ -371,13 +342,95 @@ void CommandQueue::defer(std::span<const CommandList> command_lists)
     }
 }
 
-void CommandQueue::defer(std::span<const CommandAllocator> command_allocators)
+CommandList &CommandQueue::begin_command_list()
 {
     ZoneScoped;
 
-    for (const CommandAllocator &command_allocator : command_allocators) {
-        m_garbage_command_allocators.emplace(command_allocator, m_semaphore.counter());
-    }
+    usize frame_index = m_device->frame_index();
+    auto &v = m_command_lists[frame_index];
+    auto it = v.emplace();
+    CommandAllocator &command_allocator = m_allocators[frame_index];
+    CommandList &command_list = *it;
+
+    m_device->create_command_lists({ &command_list, 1 }, command_allocator);
+    m_device->begin_command_list(command_list);
+
+    return command_list;
+}
+
+void CommandQueue::end_command_list(CommandList &cmd_list)
+{
+    ZoneScoped;
+
+    usize frame_index = m_device->frame_index();
+    auto &frame_lists = m_frame_cmd_submits[frame_index];
+    frame_lists.emplace_back(cmd_list);
+
+    m_device->end_command_list(cmd_list);
+
+    defer({ { cmd_list } });
+}
+
+VKResult CommandQueue::submit(const QueueSubmitInfo &info)
+{
+    ZoneScoped;
+    memory::ScopedStack stack;
+
+    usize frame_index = m_device->frame_index();
+    auto &cmd_lists = m_command_lists[frame_index];
+    auto &cmd_submits = m_frame_cmd_submits[frame_index];
+
+    SemaphoreSubmitInfo self_waits[] = { { m_semaphore, m_semaphore.counter(), PipelineStage::AllCommands } };
+    SemaphoreSubmitInfo self_signals[] = { { m_semaphore, m_semaphore.advance(), PipelineStage::AllCommands } };
+
+    usize all_waits_i = 0;
+    auto all_waits = stack.alloc<SemaphoreSubmitInfo>(info.additional_wait_semas.size() + count_of(self_waits));
+    for (const SemaphoreSubmitInfo &v : info.additional_wait_semas)
+        all_waits[all_waits_i++] = v;
+    for (const SemaphoreSubmitInfo &v : self_waits)
+        all_waits[all_waits_i++] = v;
+
+    usize all_signals_i = 0;
+    auto all_signals = stack.alloc<SemaphoreSubmitInfo>(info.additional_signal_semas.size() + count_of(self_signals));
+    for (const SemaphoreSubmitInfo &v : info.additional_signal_semas)
+        all_signals[all_signals_i++] = v;
+    for (const SemaphoreSubmitInfo &v : self_signals)
+        all_signals[all_signals_i++] = v;
+
+    VkSubmitInfo2 submit_info = {
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+        .pNext = nullptr,
+        .waitSemaphoreInfoCount = static_cast<u32>(all_waits.size()),
+        .pWaitSemaphoreInfos = reinterpret_cast<VkSemaphoreSubmitInfo *>(all_waits.data()),
+        .commandBufferInfoCount = static_cast<u32>(cmd_submits.size()),
+        .pCommandBufferInfos = reinterpret_cast<VkCommandBufferSubmitInfo *>(cmd_submits.data()),
+        .signalSemaphoreInfoCount = static_cast<u32>(all_signals.size()),
+        .pSignalSemaphoreInfos = reinterpret_cast<VkSemaphoreSubmitInfo *>(all_signals.data()),
+    };
+    auto result = CHECK(vkQueueSubmit2(m_handle, 1, &submit_info, nullptr));
+
+    // POST CLEANUP //
+    cmd_lists.clear();
+    cmd_submits.clear();
+
+    return result;
+}
+
+VKResult CommandQueue::present(SwapChain &swap_chain, Semaphore &present_sema, u32 image_id)
+{
+    ZoneScoped;
+
+    VkPresentInfoKHR present_info = {
+        .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+        .pNext = nullptr,
+        .waitSemaphoreCount = 1,
+        .pWaitSemaphores = &present_sema.m_handle,
+        .swapchainCount = 1,
+        .pSwapchains = &swap_chain.m_handle.swapchain,
+        .pImageIndices = &image_id,
+        .pResults = nullptr,
+    };
+    return static_cast<VKResult>(vkQueuePresentKHR(m_handle, &present_info));
 }
 
 }  // namespace lr::graphics

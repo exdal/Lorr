@@ -263,13 +263,11 @@ struct TaskSubmit {
     CommandType type = CommandType::Graphics;
 
     std::vector<TaskBatch> batches = {};
-    std::array<CommandAllocator, Limits::FrameCount> command_allocators = {};
     std::array<TimestampQueryPool, Limits::FrameCount> query_pools = {};
 
     // Additional pipeline barriers that will be executed after
     std::vector<u32> additional_signal_barrier_indices = {};
 
-    auto &frame_cmd_allocator(u32 frame_index) { return command_allocators[frame_index]; }
     auto &frame_query_pool(u32 frame_index) { return query_pools[frame_index]; }
 };
 

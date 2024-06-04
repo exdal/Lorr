@@ -6,11 +6,8 @@
 
 #include "Engine/OS/Window.hh"
 
-#include "ImGuiBackend.hh"
-
 using namespace lr;
 using namespace lr::graphics;
-example::ImGuiBackend imgui = {};
 
 namespace lr::embedded::shaders {
 constexpr static _data_t example_compute[] = {
@@ -119,7 +116,7 @@ void poll_events(os::Window &window)
                 break;
             }
             case os::LR_WINDOW_EVENT_KEYBOARD_STATE: {
-                io.AddKeyEvent(example::ImGuiBackend::lr_key_to_imgui(event_data.key), event_data.key_state != KeyState::Up);
+                // io.AddKeyEvent(example::ImGuiBackend::lr_key_to_imgui(event_data.key), event_data.key_state != KeyState::Up);
                 break;
             }
             default:
@@ -164,10 +161,8 @@ i32 main(i32 argc, c8 **argv)
 
     instance.init({});
     window.init({ .title = "Task Graph", .width = 1280, .height = 780, .flags = os::WindowFlag::Centered });
-    device.init(&instance.m_handle);
+    device.init({ .instance = &instance.m_handle, .frame_count = 3 });
     create_swap_chain(window.m_width, window.m_height);
-
-    imgui.init(&device, swap_chain);
 
     ImageID storage_image_id = device.create_image({
         .usage_flags = ImageUsage::Storage | ImageUsage::TransferSrc,
@@ -195,31 +190,7 @@ i32 main(i32 argc, c8 **argv)
     task_graph.present(swap_chain_image);
 
     while (!window.should_close()) {
-        auto [acquire_sema, present_sema] = swap_chain.binary_semas();
-        auto [acquired_index, acq_result] = device.acquire_next_image(swap_chain, acquire_sema);
-
-        ImageID image_id = images[acquired_index];
-        ImageViewID image_view_id = image_views[acquired_index];
-        Semaphore &frame_sema = swap_chain.frame_sema();
-        Semaphore &garbage_collector_sema = device.m_garbage_timeline_sema;
-        CommandQueue &present_queue = device.get_queue(CommandType::Graphics);
-
-        imgui.new_frame(swap_chain.m_extent, glfwGetTime());
-        task_graph.draw_profiler_ui();
-        imgui.end_frame();
-
-        task_graph.set_image(swap_chain_image, { .image_id = image_id, .image_view_id = image_view_id });
-
-        SemaphoreSubmitInfo wait_semas[] = { { acquire_sema, 0, PipelineStage::TopOfPipe } };
-        SemaphoreSubmitInfo signal_semas[] = {
-            { present_sema, 0, PipelineStage::BottomOfPipe },
-            { frame_sema, frame_sema.advance(), PipelineStage::AllCommands },
-            { garbage_collector_sema, garbage_collector_sema.advance(), PipelineStage::AllCommands },
-        };
-        task_graph.execute({ .image_index = acquired_index, .wait_semas = wait_semas, .signal_semas = signal_semas });
-
-        present_queue.present(swap_chain, present_sema, acquired_index);
-        device.collect_garbage();
+        device.end_frame();
 
         window.poll();
         poll_events(window);

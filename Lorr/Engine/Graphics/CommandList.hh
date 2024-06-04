@@ -82,9 +82,8 @@ struct CommandList {
     void draw_indexed(u32 index_count, u32 first_index = 0, i32 vertex_offset = 0, u32 instance_count = 1, u32 first_instance = 0);
     void dispatch(u32 group_x, u32 group_y, u32 group_z);
 
-    // Using VkCommandPool is intentional, Unique command allocators get invalidated
     CommandType m_type = CommandType::Count;
-    VkCommandPool m_allocator = VK_NULL_HANDLE;
+    usize m_frame_index = 0;
     Device *m_device = nullptr;
 
     VkCommandBuffer m_handle = VK_NULL_HANDLE;
@@ -100,7 +99,6 @@ struct CommandBatcher {
     constexpr static usize kMaxImageBarriers = 16;
 
     CommandBatcher(CommandList &command_list);
-    CommandBatcher(Unique<CommandList> &command_list);
     ~CommandBatcher();
 
     void insert_memory_barrier(const MemoryBarrier &barrier);
@@ -113,31 +111,43 @@ struct CommandBatcher {
     CommandList &m_command_list;
 };
 
-struct CommandQueue {
-    u32 family_index() { return m_index; }
-    Semaphore &semaphore() { return m_semaphore; }
+struct QueueSubmitInfo {
+    std::span<const SemaphoreSubmitInfo> additional_wait_semas = {};
+    std::span<const SemaphoreSubmitInfo> additional_signal_semas = {};
+};
 
+struct CommandQueue {
     void defer(std::span<const BufferID> buffer_ids);
     void defer(std::span<const ImageID> image_ids);
     void defer(std::span<const ImageViewID> image_view_ids);
     void defer(std::span<const SamplerID> sampler_ids);
     void defer(std::span<const CommandList> command_lists);
-    void defer(std::span<const CommandAllocator> command_allocators);
 
-    VKResult submit(QueueSubmitInfo &submit_info);
+    [[nodiscard]] CommandList &begin_command_list();
+    void end_command_list(CommandList &cmd_list);
+
+    VKResult submit(const QueueSubmitInfo &info);
     VKResult present(SwapChain &swap_chain, Semaphore &present_sema, u32 image_id);
 
+    CommandType m_type = CommandType::Count;
     u32 m_index = 0;  // Physical device queue family index
     Semaphore m_semaphore = {};
+    ls::static_vector<CommandAllocator, Limits::FrameCount> m_allocators = {};
+    ls::static_vector<plf::colony<CommandList>, Limits::FrameCount> m_command_lists = {};
+    ls::static_vector<std::vector<CommandListSubmitInfo>, Limits::FrameCount> m_frame_cmd_submits = {};
 
     plf::colony<std::pair<BufferID, u64>> m_garbage_buffers = {};
     plf::colony<std::pair<ImageID, u64>> m_garbage_images = {};
     plf::colony<std::pair<ImageViewID, u64>> m_garbage_image_views = {};
     plf::colony<std::pair<SamplerID, u64>> m_garbage_samplers = {};
-    plf::colony<std::pair<CommandAllocator, u64>> m_garbage_command_allocators = {};
     plf::colony<std::pair<CommandList, u64>> m_garbage_command_lists = {};
 
+    Device *m_device = nullptr;
     VkQueue m_handle = VK_NULL_HANDLE;
+
+    u32 family_index() { return m_index; }
+    Semaphore &semaphore() { return m_semaphore; }
+    CommandAllocator &command_allocator(usize frame_index) { return m_allocators[frame_index]; }
 
     constexpr static auto OBJECT_TYPE = VK_OBJECT_TYPE_QUEUE;
     operator auto &() { return m_handle; }

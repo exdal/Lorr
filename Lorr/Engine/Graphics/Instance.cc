@@ -34,7 +34,11 @@ VKResult Instance::init(const InstanceInfo &info)
            const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData,
            [[maybe_unused]] void *pUserData) -> VkBool32 {
             auto type = vkb::to_string_message_type(messageType);
-            VLOG_F(to_loguru_severity(messageSeverity), "[VK] {}: {}\n", type, pCallbackData->pMessage);
+            VLOG_F(
+                to_loguru_severity(messageSeverity),
+                "[VK] {}:\n===========================================================\n{}\n===========================================================",
+                type,
+                pCallbackData->pMessage);
             return VK_FALSE;
         });
 

@@ -112,23 +112,12 @@ struct CommandBatcher {
 };
 
 struct QueueSubmitInfo {
+    bool self_wait = true;
     std::span<const SemaphoreSubmitInfo> additional_wait_semas = {};
     std::span<const SemaphoreSubmitInfo> additional_signal_semas = {};
 };
 
 struct CommandQueue {
-    void defer(std::span<const BufferID> buffer_ids);
-    void defer(std::span<const ImageID> image_ids);
-    void defer(std::span<const ImageViewID> image_view_ids);
-    void defer(std::span<const SamplerID> sampler_ids);
-    void defer(std::span<const CommandList> command_lists);
-
-    [[nodiscard]] CommandList &begin_command_list();
-    void end_command_list(CommandList &cmd_list);
-
-    VKResult submit(const QueueSubmitInfo &info);
-    VKResult present(SwapChain &swap_chain, Semaphore &present_sema, u32 image_id);
-
     CommandType m_type = CommandType::Count;
     u32 m_index = 0;  // Physical device queue family index
     Semaphore m_semaphore = {};
@@ -144,6 +133,24 @@ struct CommandQueue {
 
     Device *m_device = nullptr;
     VkQueue m_handle = VK_NULL_HANDLE;
+
+    void defer(std::span<const BufferID> buffer_ids);
+    void defer(std::span<const ImageID> image_ids);
+    void defer(std::span<const ImageViewID> image_view_ids);
+    void defer(std::span<const SamplerID> sampler_ids);
+    void defer(std::span<const CommandList> command_lists);
+    void defer(BufferID buffer_id) { defer({ { buffer_id } }); }
+    void defer(ImageID image_id) { defer({ { image_id } }); }
+    void defer(ImageViewID image_view_id) { defer({ { image_view_id } }); }
+    void defer(SamplerID sampler_id) { defer({ { sampler_id } }); }
+    void defer(CommandList command_list) { defer({ &command_list, 1 }); }
+
+    [[nodiscard]] CommandList &begin_command_list();
+    void end_command_list(CommandList &cmd_list);
+
+    VKResult submit(const QueueSubmitInfo &info);
+    VKResult present(SwapChain &swap_chain, Semaphore &present_sema, u32 image_id);
+    void wait_for_work();
 
     u32 family_index() { return m_index; }
     Semaphore &semaphore() { return m_semaphore; }

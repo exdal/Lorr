@@ -153,7 +153,7 @@ struct Sampler {
 };
 
 // Helper hash function for 'cached samplers'
-consteval SamplerHash HSAMPLER(SamplerInfo info)
+constexpr SamplerHash HSAMPLER(SamplerInfo info)
 {
     constexpr usize size = sizeof(SamplerInfo);
     auto v = std::bit_cast<std::array<const char, size>>(info);

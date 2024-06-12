@@ -85,13 +85,15 @@ T align_down(T size, u64 alignment)
     return T(u64(size) & ~(alignment - 1));
 }
 
-constexpr u32 kib_to_bytes(const u32 x)
+template<typename T>
+constexpr T kib_to_bytes(const T x)
 {
-    return x << 10;
+    return x << static_cast<T>(10);
 }
 
-constexpr u32 mib_to_bytes(const u32 x)
+template<typename T>
+constexpr T mib_to_bytes(const T x)
 {
-    return x << 20;
+    return x << static_cast<T>(20);
 }
 }  // namespace lr

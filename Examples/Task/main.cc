@@ -11,10 +11,10 @@ using namespace lr::graphics;
 
 namespace lr::embedded::shaders {
 constexpr static _data_t example_compute[] = {
-#include <imgui.slang.h>
+#include <example_compute.slang.h>
 };
-constexpr static std::span example_compute_sp = { &example_compute->as_u8, count_of(example_compute) };
-constexpr static std::string_view example_compute_str = { &example_compute->as_c8, count_of(example_compute) };
+constexpr static std::span example_compute_sp = { &example_compute->as_u8, count_of(example_compute) - 1 };
+constexpr static std::string_view example_compute_str = { &example_compute->as_c8, count_of(example_compute) - 1 };
 }  // namespace lr::embedded::shaders
 
 struct ComputeTask {
@@ -39,7 +39,7 @@ struct ComputeTask {
         ShaderCompileInfo shader_compile_info = {
             .real_path = "example_compute.slang",
             .code = embedded::shaders::example_compute_str,
-            .virtual_env = { { virtual_dir } },
+            .virtual_env = { &virtual_dir, 1 },
         };
 
         shader_compile_info.entry_point = "cs_main";
@@ -73,8 +73,8 @@ struct BlitTask {
     std::string_view name = "Blit";
 
     struct Uses {
-        Preset::TransferRead blit_source = {};
-        Preset::TransferWrite blit_target = {};
+        Preset::BlitRead blit_source = {};
+        Preset::BlitWrite blit_target = {};
     } uses = {};
 
     void execute(TaskContext &tc)
@@ -156,13 +156,22 @@ i32 main(i32 argc, c8 **argv)
             };
             auto [image_view_id, r_image_view] = device.create_image_view(image_view_info);
             image_views[i] = image_view_id;
+            device.set_object_name(*device.get_image(images[i]), fmt::format("SwapChain Image {}", i));
         }
     };
 
     instance.init({});
     window.init({ .title = "Task Graph", .width = 1280, .height = 780, .flags = os::WindowFlag::Centered });
     device.init({ .instance = &instance.m_handle, .frame_count = 3 });
+    CommandQueue &present_queue = device.get_queue(CommandType::Graphics);
     create_swap_chain(window.m_width, window.m_height);
+
+    ImGui::CreateContext();
+    auto &io = ImGui::GetIO();
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+    io.IniFilename = nullptr;
+    ImGui::StyleColorsDark();
 
     ImageID storage_image_id = device.create_image({
         .usage_flags = ImageUsage::Storage | ImageUsage::TransferSrc,
@@ -179,17 +188,85 @@ i32 main(i32 argc, c8 **argv)
         .debug_name = "Compute image view",
     });
 
+    u8 *font_data = nullptr;  // imgui context frees this itself
+    i32 font_width, font_height;
+    io.Fonts->GetTexDataAsRGBA32(&font_data, &font_width, &font_height);
+
+    ImageID imgui_font_id = device.create_image({
+        .usage_flags = ImageUsage::Sampled | ImageUsage::TransferDst,
+        .format = Format::R8G8B8A8_UNORM,
+        .type = ImageType::View2D,
+        .extent = { static_cast<u32>(font_width), static_cast<u32>(font_height), 1u },
+        .debug_name = "ImGui Font Atlas",
+    });
+    device.set_image_data(imgui_font_id, font_data, ImageLayout::ColorReadOnly);
+
+    ImageViewID imgui_font_view_id = device.create_image_view({
+        .image_id = imgui_font_id,
+        .usage_flags = ImageUsage::Sampled | ImageUsage::TransferDst,
+        .debug_name = "ImGui Font Atlas View",
+    });
+    io.Fonts->SetTexID(&imgui_font_view_id);
+
     TaskGraph task_graph;
     task_graph.init({ .device = &device });
     TaskImageID swap_chain_image = task_graph.add_image({ .image_id = images[0], .image_view_id = image_views[0] });
     TaskImageID task_storage_image = task_graph.add_image({ .image_id = storage_image_id, .image_view_id = storage_image_view_id });
+    TaskImageID imgui_font_atlas_image = task_graph.add_image(
+        { .image_id = imgui_font_id, .image_view_id = imgui_font_view_id, .layout = ImageLayout::ColorReadOnly, .access = PipelineAccess::FragmentShaderRead });
 
     task_graph.add_task<ComputeTask>({ .uses = { .storage_image = task_storage_image } });
     task_graph.add_task<BlitTask>({ .uses = { .blit_source = task_storage_image, .blit_target = swap_chain_image } });
-    task_graph.add_task<BuiltinTask::ImGuiTask>({ .uses = { .attachment = swap_chain_image } });
+    task_graph.add_task<BuiltinTask::ImGuiTask>({ .uses = { .attachment = swap_chain_image, .font = imgui_font_atlas_image } });
     task_graph.present(swap_chain_image);
 
+    f64 last_time = 0.0;
+    bool swap_chain_dead = false;
     while (!window.should_close()) {
+        usize frame_index = device.new_frame();
+        Semaphore &frame_sema = device.frame_sema();
+
+        f64 time = glfwGetTime();
+        if (time <= last_time)
+            time = last_time + 0.00001f;
+        io.DeltaTime = last_time > 0.0 ? (float)(time - last_time) : (float)(1.0f / 60.0f);
+        last_time = time;
+
+        if (swap_chain_dead) {
+            create_swap_chain(window.m_width, window.m_height);
+            swap_chain_dead = false;
+        }
+
+        auto [acquire_sema, present_sema] = swap_chain.binary_semas(frame_index);
+        auto [acq_index, acq_result] = device.acquire_next_image(swap_chain, acquire_sema);
+        if (acq_result != VKResult::Success) {
+            swap_chain_dead = true;
+            continue;
+        }
+
+        ImageID image_id = images[acq_index];
+        ImageViewID image_view_id = image_views[acq_index];
+
+        ImGui::NewFrame();
+        io.DisplaySize = ImVec2(static_cast<f32>(swap_chain.m_extent.width), static_cast<f32>(swap_chain.m_extent.height));
+        task_graph.draw_profiler_ui();
+        ImGui::Render();
+
+        task_graph.set_image(swap_chain_image, { .image_id = image_id, .image_view_id = image_view_id });
+
+        SemaphoreSubmitInfo wait_semas[] = {
+            { acquire_sema, 0, PipelineStage::TopOfPipe },
+        };
+        SemaphoreSubmitInfo signal_semas[] = {
+            { present_sema, 0, PipelineStage::BottomOfPipe },
+            { frame_sema, frame_sema.counter() + 1, PipelineStage::AllCommands },
+        };
+        task_graph.execute({ .image_index = acq_index, .wait_semas = wait_semas, .signal_semas = signal_semas });
+
+        if (present_queue.present(swap_chain, present_sema, acq_index) == VKResult::OutOfDate) {
+            swap_chain_dead = true;
+        }
+
         device.end_frame();
 
         window.poll();

@@ -3,8 +3,6 @@
 #include "Engine/Graphics/Device.hh"
 #include "Engine/Graphics/Instance.hh"
 
-#include "Engine/Memory/Stack.hh"
-
 #include "Engine/OS/Window.hh"
 
 using namespace lr;
@@ -46,8 +44,6 @@ int main(int argc, char *argv[])
 
     bool swap_chain_dead = false;
     while (!window.should_close()) {
-        memory::ScopedStack stack;
-
         usize frame_index = device.new_frame();
         Semaphore &frame_sema = device.frame_sema();
 
@@ -76,16 +72,15 @@ int main(int argc, char *argv[])
             .image_id = image_id,
         });
 
-        RenderingAttachmentInfo attachment = {
-            .image_view_id = image_view_id,
-            .image_layout = ImageLayout::ColorAttachment,
-            .load_op = AttachmentLoadOp::Clear,
-            .store_op = AttachmentStoreOp::Store,
-            .clear_value = { ColorClearValue(0.1f, 0.1f, 0.1f, 1.0f) },
-        };
         RenderingBeginInfo render_info = {
             .render_area = { 0, 0, swap_chain.m_extent.width, swap_chain.m_extent.height },
-            .color_attachments = { &attachment, 1 },
+            .color_attachments = { { {
+                .image_view_id = image_view_id,
+                .image_layout = ImageLayout::ColorAttachment,
+                .load_op = AttachmentLoadOp::Clear,
+                .store_op = AttachmentStoreOp::Store,
+                .clear_value = { ColorClearValue(0.1f, 0.1f, 0.1f, 1.0f) },
+            } } },
         };
         cmd_list.begin_rendering(render_info);
         cmd_list.end_rendering();
@@ -114,6 +109,8 @@ int main(int argc, char *argv[])
 
         device.end_frame();
         window.poll();
+
+        FrameMark;
     }
 
     return 0;

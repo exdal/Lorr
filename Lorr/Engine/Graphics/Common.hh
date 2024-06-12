@@ -147,7 +147,7 @@ constexpr static VKResult CHECK(
             if (a == result)
                 return result;
 
-    LR_ASSERT(result == VKResult::Success, "Vulkan check failed at {}:{} - {}", LOC.file_name(), LOC.line(), LOC.function_name());
+    LR_ASSERT(result == VKResult::Success, "Vulkan check failed '{}' at {}:{} - {}", result, LOC.file_name(), LOC.line(), LOC.function_name());
 #endif
 
     return result;
@@ -439,7 +439,7 @@ enum class PipelineStage : u64 {
     /// TRANSFER PIPELINE
     Host = VK_PIPELINE_STAGE_2_HOST_BIT,
     Copy = VK_PIPELINE_STAGE_2_COPY_BIT,
-    Bilt = VK_PIPELINE_STAGE_2_BLIT_BIT,
+    Blit = VK_PIPELINE_STAGE_2_BLIT_BIT,
     Resolve = VK_PIPELINE_STAGE_2_RESOLVE_BIT,
     Clear = VK_PIPELINE_STAGE_2_CLEAR_BIT,
     AllTransfer = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
@@ -506,6 +506,7 @@ namespace PipelineAccess {
     LRX(BottomOfPipe, MemoryAccess::None, PipelineStage::BottomOfPipe);
     LRX(VertexAttrib, MemoryAccess::Read, PipelineStage::VertexAttribInput);
     LRX(IndexAttrib, MemoryAccess::Read, PipelineStage::IndexAttribInput);
+    LRX(All, MemoryAccess::ReadWrite, PipelineStage::AllCommands);
 
     LRX(IndirectRead, MemoryAccess::Read, PipelineStage::DrawIndirect);
     LRX(VertexShaderRead, MemoryAccess::Read, PipelineStage::VertexShader);
@@ -518,6 +519,7 @@ namespace PipelineAccess {
     LRX(GraphicsRead, MemoryAccess::Read, PipelineStage::AllGraphics);
     LRX(ComputeRead, MemoryAccess::Read, PipelineStage::ComputeShader);
     LRX(TransferRead, MemoryAccess::Read, PipelineStage::AllTransfer);
+    LRX(BlitRead, MemoryAccess::Read, PipelineStage::Blit);
     LRX(HostRead, MemoryAccess::Read, PipelineStage::Host);
 
     LRX(IndirectWrite, MemoryAccess::Write, PipelineStage::DrawIndirect);
@@ -530,6 +532,7 @@ namespace PipelineAccess {
     LRX(ColorAttachmentWrite, MemoryAccess::Write, PipelineStage::ColorAttachmentOutput);
     LRX(GraphicsWrite, MemoryAccess::Write, PipelineStage::AllGraphics);
     LRX(ComputeWrite, MemoryAccess::Write, PipelineStage::ComputeShader);
+    LRX(BlitWrite, MemoryAccess::Write, PipelineStage::Blit);
     LRX(TransferWrite, MemoryAccess::Write, PipelineStage::AllTransfer);
     LRX(HostWrite, MemoryAccess::Write, PipelineStage::Host);
 
@@ -544,6 +547,7 @@ namespace PipelineAccess {
     LRX(GraphicsReadWrite, MemoryAccess::ReadWrite, PipelineStage::AllGraphics);
     LRX(ComputeReadWrite, MemoryAccess::ReadWrite, PipelineStage::ComputeShader);
     LRX(TransferReadWrite, MemoryAccess::ReadWrite, PipelineStage::AllTransfer);
+    LRX(BlitReadWrite, MemoryAccess::ReadWrite, PipelineStage::Blit);
     LRX(HostReadWrite, MemoryAccess::ReadWrite, PipelineStage::Host);
 #undef LRX
 }  // namespace PipelineAccess
@@ -777,6 +781,8 @@ struct Extent2D {
     bool operator!=(const Extent2D &) const = default;
     operator auto const &() const { return *reinterpret_cast<const VkExtent2D *>(this); }
     operator auto &() { return *reinterpret_cast<VkExtent2D *>(this); }
+
+    bool is_zero() const { return width == 0 && height == 0; }
 };
 
 struct Extent3D {
@@ -788,6 +794,8 @@ struct Extent3D {
     bool operator!=(const Extent3D &) const = default;
     operator auto const &() const { return *reinterpret_cast<const VkExtent3D *>(this); }
     operator auto &() { return *reinterpret_cast<VkExtent3D *>(this); }
+
+    bool is_zero() const { return width == 0 && height == 0 && depth == 0; }
 };
 
 struct Viewport {
@@ -1061,7 +1069,7 @@ struct RenderingAttachmentInfo {
         DepthClearValue depth_clear;
     } clear_value;
 
-    VkRenderingAttachmentInfo vk_info(VkImageView image_view)
+    const VkRenderingAttachmentInfo vk_info(VkImageView image_view) const
     {
         return {
             .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
@@ -1073,16 +1081,16 @@ struct RenderingAttachmentInfo {
             .resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED,
             .loadOp = VkAttachmentLoadOp(load_op),
             .storeOp = VkAttachmentStoreOp(store_op),
-            .clearValue = *reinterpret_cast<VkClearValue *>(&clear_value),
+            .clearValue = *reinterpret_cast<const VkClearValue *>(&clear_value),
         };
     }
 };
 
 struct RenderingBeginInfo {
     Rect2D render_area = {};
-    std::span<RenderingAttachmentInfo> color_attachments = {};
-    RenderingAttachmentInfo *depth_attachment = nullptr;
-    RenderingAttachmentInfo *stencil_attachment = nullptr;
+    std::span<const RenderingAttachmentInfo> color_attachments = {};
+    std::optional<RenderingAttachmentInfo> depth_attachment = std::nullopt;
+    std::optional<RenderingAttachmentInfo> stencil_attachment = std::nullopt;
 };
 
 struct DescriptorSetLayoutElement {
@@ -1170,6 +1178,13 @@ struct DescriptorPoolSize {
     operator const auto &() const { return *reinterpret_cast<const VkType *>(this); }
 };
 static_assert(sizeof(DescriptorPoolSize::VkType) == sizeof(DescriptorPoolSize));
+
+struct MemoryRequirements {
+    u64 size = 0;
+    u64 alignment = 0;
+    u32 memory_type_bits = 0;
+};
+
 }  // namespace lr::graphics
 
 namespace fmt {

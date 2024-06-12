@@ -23,7 +23,7 @@ struct TaskGraph {
     std::vector<TaskBuffer> m_buffers = {};
 
     // Profilers
-    std::array<TimestampQueryPool, Limits::FrameCount> m_task_query_pools = {};
+    ls::static_vector<TimestampQueryPool, Limits::FrameCount> m_task_query_pools = {};
     std::vector<legit::ProfilerTask> m_task_gpu_profiler_tasks = {};
     legit::ProfilerGraph m_task_gpu_profiler_graph = { 400 };
 

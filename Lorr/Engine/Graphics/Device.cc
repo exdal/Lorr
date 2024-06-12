@@ -7,6 +7,26 @@
 #include "Engine/Memory/Stack.hh"
 
 namespace lr::graphics {
+StagingAllocResult StagingBuffer::alloc(usize size, u64 alignment)
+{
+    ZoneScoped;
+
+    u8 *ptr = m_buffer_ptr + m_buffer_offset;
+    u64 offset = m_buffer_offset;
+    u64 aligned_offset = align_up(m_buffer_offset + size, alignment);
+    u64 clamped_offset = lr::min(aligned_offset, MAX_SIZE) - m_buffer_offset;
+    m_buffer_offset += clamped_offset;
+
+    return { .buffer_id = m_buffer_id, .ptr = ptr, .size = clamped_offset, .offset = offset };
+}
+
+void StagingBuffer::reset()
+{
+    ZoneScoped;
+
+    m_buffer_offset = 0;
+}
+
 VKResult Device::init(const DeviceInfo &info)
 {
     ZoneScoped;
@@ -140,6 +160,19 @@ VKResult Device::init(const DeviceInfo &info)
     /// DEVICE CONTEXT ///
 
     ShaderCompiler::init();
+
+    m_staging_buffers.resize(m_frame_count);
+    for (auto &staging_buffer : m_staging_buffers) {
+        staging_buffer.m_buffer_id = create_buffer({
+            .usage_flags = BufferUsage::TransferSrc,
+            .flags = MemoryFlag::HostSeqWrite,
+            .preference = MemoryPreference::Host,
+            .data_size = staging_buffer.capacity(),
+            .debug_name = "Staging Buffer",
+        });
+        staging_buffer.m_buffer_ptr = buffer_host_data(staging_buffer.m_buffer_id);
+        staging_buffer.m_buffer_offset = 0;
+    }
 
     {
         DescriptorBindingFlag bindless_flags = DescriptorBindingFlag::UpdateAfterBind | DescriptorBindingFlag::PartiallyBound;
@@ -443,11 +476,13 @@ VKResult Device::create_swap_chain(SwapChain &swap_chain, const SwapChainInfo &i
 
     wait_for_work();
 
+    VkPresentModeKHR present_mode = m_frame_count == 1 ? VK_PRESENT_MODE_FIFO_KHR : VK_PRESENT_MODE_IMMEDIATE_KHR;
+
     vkb::SwapchainBuilder builder(m_handle, info.surface);
     builder.set_desired_min_image_count(m_frame_count);
     builder.set_desired_extent(info.extent.width, info.extent.height);
     builder.set_desired_format({ VK_FORMAT_B8G8R8A8_SRGB, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR });
-    builder.set_desired_present_mode(VK_PRESENT_MODE_IMMEDIATE_KHR);
+    builder.set_desired_present_mode(present_mode);
     builder.set_image_usage_flags(static_cast<VkImageUsageFlags>(ImageUsage::ColorAttachment | ImageUsage::TransferDst));
     auto result = builder.build();
 
@@ -539,6 +574,8 @@ usize Device::new_frame()
         CommandAllocator &allocator = queue.command_allocator(frame_idx);
         reset_command_allocator(allocator);
     }
+
+    frame_staging_buffer().reset();
 
     return frame_idx;
 }
@@ -1203,9 +1240,21 @@ void Device::delete_buffers(std::span<const BufferID> buffers)
     }
 }
 
+MemoryRequirements Device::memory_requirements(BufferID buffer_id)
+{
+    ZoneScoped;
+
+    VkMemoryRequirements vk_info = {};
+    vkGetBufferMemoryRequirements(m_handle, *get_buffer(buffer_id), &vk_info);
+
+    return { .size = vk_info.size, .alignment = vk_info.alignment, .memory_type_bits = vk_info.memoryTypeBits };
+}
+
 Result<ImageID, VKResult> Device::create_image(const ImageInfo &info)
 {
     ZoneScoped;
+
+    LR_ASSERT(!info.extent.is_zero(), "Cannot create zero extent image.");
 
     VkSharingMode sharing_mode = VK_SHARING_MODE_EXCLUSIVE;
     if (!info.queue_indices.empty()) {
@@ -1281,6 +1330,16 @@ void Device::delete_images(std::span<const ImageID> images)
         m_resources.images.destroy(image_id);
         image->m_handle = VK_NULL_HANDLE;
     }
+}
+
+MemoryRequirements Device::memory_requirements(ImageID image_id)
+{
+    ZoneScoped;
+
+    VkMemoryRequirements vk_info = {};
+    vkGetImageMemoryRequirements(m_handle, *get_image(image_id), &vk_info);
+
+    return { .size = vk_info.size, .alignment = vk_info.alignment, .memory_type_bits = vk_info.memoryTypeBits };
 }
 
 Result<ImageViewID, VKResult> Device::create_image_view(const ImageViewInfo &info)
@@ -1441,6 +1500,113 @@ void Device::delete_samplers(std::span<const SamplerID> samplers)
         m_resources.samplers.destroy(sampler_id);
         sampler->m_handle = VK_NULL_HANDLE;
     }
+}
+
+Result<SamplerID, VKResult> Device::create_cached_sampler(const SamplerInfo &info)
+{
+    ZoneScoped;
+
+    auto hash = HSAMPLER(info);
+    auto it = m_resources.cached_samplers.find(hash);
+    if (it != m_resources.cached_samplers.end()) {
+        return it->second;
+    }
+
+    auto [sampler_id, result] = create_sampler(info);
+    if (!result) {
+        return result;
+    }
+
+    m_resources.cached_samplers.emplace(hash, sampler_id);
+    return sampler_id;
+}
+
+void Device::set_image_data(ImageID image_id, const void *data, ImageLayout new_layout, ImageLayout old_layout)
+{
+    ZoneScoped;
+
+    Image *image = get_image(image_id);
+    StagingBuffer &staging_buffer = frame_staging_buffer();
+    CommandQueue &transfer_queue = get_queue(CommandType::Transfer);
+    MemoryRequirements image_mem = memory_requirements(image_id);
+
+    StagingAllocResult alloc_result = {};
+    if (image_mem.size <= staging_buffer.size()) {
+        alloc_result = staging_buffer.alloc(image_mem.size);
+    }
+    else if (image_mem.size <= staging_buffer.capacity()) {
+        transfer_queue.submit({});
+        transfer_queue.wait_for_work();
+        staging_buffer.reset();
+
+        alloc_result = staging_buffer.alloc(image_mem.size);
+    }
+    else {
+        auto [buffer_id, buffer_result] = create_buffer({
+            .usage_flags = BufferUsage::TransferSrc,
+            .flags = MemoryFlag::HostSeqWrite,
+            .preference = MemoryPreference::Host,
+            .data_size = image_mem.size,
+        });
+        if (!buffer_result) {
+            LR_LOG_ERROR("Failed to allocate image buffer. {}", buffer_result);
+            return;
+        }
+
+        alloc_result.buffer_id = buffer_id;
+        alloc_result.ptr = buffer_host_data(buffer_id);
+        transfer_queue.defer(buffer_id);
+    }
+
+    memcpy(alloc_result.ptr, data, image_mem.size);
+
+    auto &cmd_list = transfer_queue.begin_command_list();
+    cmd_list.image_transition({
+        .src_access = PipelineAccess::All,
+        .dst_access = PipelineAccess::TransferWrite,
+        .old_layout = old_layout,
+        .new_layout = ImageLayout::TransferDst,
+        .image_id = image_id,
+    });
+
+    ImageCopyRegion copy_region = {
+        .buffer_offset = alloc_result.offset,
+        .image_subresource_layer = {},
+        .image_offset = {},
+        .image_extent = image->m_extent,
+    };
+    cmd_list.copy_buffer_to_image(alloc_result.buffer_id, image_id, ImageLayout::TransferDst, { &copy_region, 1 });
+
+    cmd_list.image_transition({
+        .src_access = PipelineAccess::TransferWrite,
+        .dst_access = PipelineAccess::All,
+        .old_layout = ImageLayout::TransferDst,
+        .new_layout = new_layout,
+        .image_id = image_id,
+    });
+
+    transfer_queue.end_command_list(cmd_list);
+    transfer_queue.submit({});
+    transfer_queue.wait_for_work();
+}
+
+void Device::upload_staging(StagingAllocResult &alloc_result, BufferID gpu_buffer)
+{
+    ZoneScoped;
+
+    CommandQueue &transfer_queue = get_queue(CommandType::Transfer);
+    CommandList &cmd_list = transfer_queue.begin_command_list();
+    cmd_list.memory_barrier({ .src_access = PipelineAccess::HostReadWrite, .dst_access = PipelineAccess::TransferReadWrite });
+    BufferCopyRegion buffer_region = {
+        .src_offset = alloc_result.offset,
+        .dst_offset = 0,
+        .size = alloc_result.size,
+    };
+    cmd_list.copy_buffer_to_buffer(alloc_result.buffer_id, gpu_buffer, { &buffer_region, 1 });
+    transfer_queue.end_command_list(cmd_list);
+
+    // Sync is done in CPU, no need to wait on GPU
+    transfer_queue.submit({ .self_wait = false });
 }
 
 VKResult Device::create_command_queue(CommandQueue &command_queue, CommandType type, std::string_view debug_name)

@@ -9,3 +9,4 @@ end
 
 add_example("Triangle", "Triangle/main.cc")
 add_example("Task", "Task/main.cc")
+add_example("Testbed", "Testbed/main.cc")

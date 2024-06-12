@@ -383,31 +383,34 @@ VKResult CommandQueue::submit(const QueueSubmitInfo &info)
     SemaphoreSubmitInfo self_waits[] = { { m_semaphore, m_semaphore.counter(), PipelineStage::AllCommands } };
     SemaphoreSubmitInfo self_signals[] = { { m_semaphore, m_semaphore.advance(), PipelineStage::AllCommands } };
 
-    usize all_waits_i = 0;
+    u32 all_waits_size = 0;
     auto all_waits = stack.alloc<SemaphoreSubmitInfo>(info.additional_wait_semas.size() + count_of(self_waits));
     for (const SemaphoreSubmitInfo &v : info.additional_wait_semas)
-        all_waits[all_waits_i++] = v;
-    for (const SemaphoreSubmitInfo &v : self_waits)
-        all_waits[all_waits_i++] = v;
+        all_waits[all_waits_size++] = v;
 
-    usize all_signals_i = 0;
+    if (info.self_wait) {
+        for (const SemaphoreSubmitInfo &v : self_waits)
+            all_waits[all_waits_size++] = v;
+    }
+
+    u32 all_signals_size = 0;
     auto all_signals = stack.alloc<SemaphoreSubmitInfo>(info.additional_signal_semas.size() + count_of(self_signals));
     for (const SemaphoreSubmitInfo &v : info.additional_signal_semas)
-        all_signals[all_signals_i++] = v;
+        all_signals[all_signals_size++] = v;
     for (const SemaphoreSubmitInfo &v : self_signals)
-        all_signals[all_signals_i++] = v;
+        all_signals[all_signals_size++] = v;
 
     VkSubmitInfo2 submit_info = {
         .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
         .pNext = nullptr,
-        .waitSemaphoreInfoCount = static_cast<u32>(all_waits.size()),
-        .pWaitSemaphoreInfos = reinterpret_cast<VkSemaphoreSubmitInfo *>(all_waits.data()),
+        .waitSemaphoreInfoCount = all_waits_size,
+        .pWaitSemaphoreInfos = reinterpret_cast<const VkSemaphoreSubmitInfo *>(all_waits.data()),
         .commandBufferInfoCount = static_cast<u32>(cmd_submits.size()),
         .pCommandBufferInfos = reinterpret_cast<VkCommandBufferSubmitInfo *>(cmd_submits.data()),
-        .signalSemaphoreInfoCount = static_cast<u32>(all_signals.size()),
-        .pSignalSemaphoreInfos = reinterpret_cast<VkSemaphoreSubmitInfo *>(all_signals.data()),
+        .signalSemaphoreInfoCount = all_signals_size,
+        .pSignalSemaphoreInfos = reinterpret_cast<const VkSemaphoreSubmitInfo *>(all_signals.data()),
     };
-    auto result = CHECK(vkQueueSubmit2(m_handle, 1, &submit_info, nullptr));
+    auto result = static_cast<VKResult>(vkQueueSubmit2(m_handle, 1, &submit_info, nullptr));
 
     // POST CLEANUP //
     cmd_lists.clear();
@@ -431,6 +434,13 @@ VKResult CommandQueue::present(SwapChain &swap_chain, Semaphore &present_sema, u
         .pResults = nullptr,
     };
     return static_cast<VKResult>(vkQueuePresentKHR(m_handle, &present_info));
+}
+
+void CommandQueue::wait_for_work()
+{
+    ZoneScoped;
+
+    vkQueueWaitIdle(m_handle);
 }
 
 }  // namespace lr::graphics

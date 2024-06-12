@@ -8,6 +8,30 @@
 #include "SwapChain.hh"
 
 namespace lr::graphics {
+struct StagingAllocResult {
+    BufferID buffer_id = BufferID::Invalid;
+    u8 *ptr = nullptr;
+    u64 size = 0;
+    u64 offset = 0;
+};
+
+// NOTE: If this becomes a sync problem, we can move it to per-queue.
+// Of course it must have lesser memory but we can get around it with streaming.
+struct StagingBuffer {
+    constexpr static u64 MAX_SIZE = mib_to_bytes(32);
+
+    BufferID m_buffer_id = BufferID::Invalid;
+    u8 *m_buffer_ptr = nullptr;
+    u64 m_buffer_offset = 0;
+
+    // Returns a pointer to data and remaining size on allocator
+    StagingAllocResult alloc(usize size, u64 alignment = 8);
+    void reset();
+    u64 offset() { return m_buffer_offset; }
+    u64 size() { return capacity() - m_buffer_offset; }
+    u64 capacity() { return MAX_SIZE; }
+};
+
 struct DeviceInfo {
     vkb::Instance *instance = nullptr;
     usize frame_count = 3;
@@ -16,8 +40,8 @@ struct DeviceInfo {
 struct Device {
     // frame info
     constexpr static usize queue_count = static_cast<usize>(CommandType::Count);
-    using callocator_t = ls::static_vector<CommandAllocator, Limits::FrameCount>;
     std::array<CommandQueue, queue_count> m_queues = {};
+    ls::static_vector<StagingBuffer, Limits::FrameCount> m_staging_buffers = {};
     Semaphore m_frame_timeline_sema = {};
     usize m_frame_count = 0;  // global frame count, same across all swap chains
 
@@ -95,15 +119,24 @@ struct Device {
     template<typename T>
     T *buffer_host_data(BufferID buffer_id);
 
+    MemoryRequirements memory_requirements(BufferID buffer_id);
+
     /// Images ///
     Result<ImageID, VKResult> create_image(const ImageInfo &info);
     void delete_images(std::span<const ImageID> images);
+
+    MemoryRequirements memory_requirements(ImageID image_id);
 
     Result<ImageViewID, VKResult> create_image_view(const ImageViewInfo &info);
     void delete_image_views(std::span<const ImageViewID> image_views);
 
     Result<SamplerID, VKResult> create_sampler(const SamplerInfo &info);
     void delete_samplers(std::span<const SamplerID> samplers);
+
+    Result<SamplerID, VKResult> create_cached_sampler(const SamplerInfo &info);
+
+    void set_image_data(ImageID image_id, const void *data, ImageLayout new_layout, ImageLayout old_layout = ImageLayout::Undefined);
+    void upload_staging(StagingAllocResult &alloc_result, BufferID gpu_buffer);
 
     /// Utils ///
     bool is_feature_supported(DeviceFeature feature) { return m_supported_features & feature; }
@@ -161,6 +194,7 @@ struct Device {
 
     Semaphore &frame_sema() { return m_frame_timeline_sema; }
     usize frame_index() { return m_frame_timeline_sema.counter() % m_frame_count; }
+    StagingBuffer &frame_staging_buffer() { return m_staging_buffers[frame_index()]; }
 
     constexpr static auto OBJECT_TYPE = VK_OBJECT_TYPE_DEVICE;
     operator auto &() { return m_handle.device; }
@@ -171,7 +205,7 @@ private:
     VKResult create_command_allocators(std::span<CommandAllocator> command_allocators, const CommandAllocatorInfo &info);
 };
 
-template<typename T>
+template<typename T = u8>
 T *Device::buffer_host_data(BufferID buffer_id)
 {
     return reinterpret_cast<T *>(get_buffer(buffer_id)->m_host_data);

@@ -35,7 +35,11 @@ bool TaskGraph::init(const TaskGraphInfo &info)
     ZoneScoped;
 
     m_device = info.device;
+    u32 frame_count = m_device->m_frame_count;
+
+    m_task_query_pools.resize(frame_count);
     m_device->create_timestamp_query_pools(m_task_query_pools, { .query_count = 512, .debug_name = "TG Task Query Pool" });
+
     new_submit(CommandType::Graphics);
 
     return true;
@@ -79,11 +83,12 @@ u32 TaskGraph::schedule_task(Task *task, TaskSubmit &submit)
         },
         [&](TaskImageID id, const PipelineAccessImpl &access, ImageLayout layout) {
             TaskImage &task_image = m_images[static_cast<usize>(id)];
+            auto &last_access = task_image.last_access;
             u32 cur_batch_index = task_image.last_batch_index;
 
             bool is_same_layout = layout == task_image.last_layout;
-            bool is_last_none = task_image.last_access == PipelineAccess::None;
-            bool is_read_on_read = access.access == MemoryAccess::Read && task_image.last_access.access == MemoryAccess::Read;
+            bool is_last_none = last_access.access == MemoryAccess::None;
+            bool is_read_on_read = access.access == MemoryAccess::Read && last_access.access == MemoryAccess::Read;
 
             if ((!is_same_layout || !is_read_on_read) && !is_last_none) {
                 cur_batch_index++;
@@ -309,9 +314,14 @@ void TaskGraph::execute(const TaskExecuteInfo &info)
         task_query_offset_ts += delta;
     }
 
+    u32 submit_index = 0;
     for (TaskSubmit &task_submit : m_submits) {
-        CommandQueue &queue = m_device->get_queue(task_submit.type);
+        CommandQueue &transfer_queue = m_device->get_queue(CommandType::Transfer);
+        Semaphore &transfer_sema = transfer_queue.semaphore();
+        CommandQueue &submit_queue = m_device->get_queue(task_submit.type);
         TimestampQueryPool &batch_query_pool = task_submit.frame_query_pool(info.image_index);
+        bool is_first_submit = submit_index == 0;
+        bool is_last_submit = submit_index == m_submits.size() - 1;
 
         std::span<u64> batch_query_results = stack.alloc<u64>(task_submit.batches.size() * 4);
         m_device->get_timestamp_query_pool_results(batch_query_pool, 0, task_submit.batches.size() * 2, batch_query_results);
@@ -330,7 +340,7 @@ void TaskGraph::execute(const TaskExecuteInfo &info)
         PipelineAccessImpl last_batch_access = PipelineAccess::TopOfPipe;
         usize batch_index = 0;
         for (TaskBatch &task_batch : task_submit.batches) {
-            CommandList &cmd_list = queue.begin_command_list();
+            CommandList &cmd_list = submit_queue.begin_command_list();
             CommandBatcher cmd_batcher(cmd_list);
 
             cmd_list.reset_query_pool(batch_query_pool, batch_index * 2, 2);
@@ -357,8 +367,11 @@ void TaskGraph::execute(const TaskExecuteInfo &info)
             for (TaskID task_id : task_batch.tasks) {
                 u32 task_index = static_cast<u32>(task_id);
                 Task *task = &*m_tasks[task_index];
+                if (task->m_pipeline_id != PipelineID::Invalid) {
+                    Pipeline *pipeline = m_device->get_pipeline(task->m_pipeline_id);
+                    cmd_list.set_descriptor_sets(task->m_pipeline_layout_id, pipeline->m_bind_point, 0, { &m_device->m_descriptor_set, 1 });
+                }
 
-                cmd_list.set_descriptor_sets(task->m_pipeline_layout_id, PipelineBindPoint::Compute, 0, { &m_device->m_descriptor_set, 1 });
                 cmd_list.reset_query_pool(task_query_pool, task_index * 2, 2);
                 cmd_list.write_timestamp(task_query_pool, PipelineStage::TopOfPipe, task_index * 2);
                 if (task->m_pipeline_id != PipelineID::Invalid) {
@@ -366,7 +379,7 @@ void TaskGraph::execute(const TaskExecuteInfo &info)
                 }
 
                 {
-                    ZoneScopedN(task->name);
+                    ZoneScopedN(task->name.data());
                     TaskContext tc(m_images, cmd_list, m_device);
                     task->execute(tc);
                 }
@@ -374,7 +387,7 @@ void TaskGraph::execute(const TaskExecuteInfo &info)
             }
 
             cmd_list.write_timestamp(batch_query_pool, PipelineStage::BottomOfPipe, batch_index * 2 + 1);
-            queue.end_command_list(cmd_list);
+            submit_queue.end_command_list(cmd_list);
 
             batch_index++;
             last_batch_access = task_batch.execution_access;
@@ -382,7 +395,7 @@ void TaskGraph::execute(const TaskExecuteInfo &info)
 
         bool has_additional_barriers = !task_submit.additional_signal_barrier_indices.empty();
         if (has_additional_barriers) {
-            CommandList &cmd_list = queue.begin_command_list();
+            CommandList &cmd_list = submit_queue.begin_command_list();
             CommandBatcher cmd_batcher(cmd_list);
 
             for (u32 barrier_index : task_submit.additional_signal_barrier_indices) {
@@ -398,10 +411,31 @@ void TaskGraph::execute(const TaskExecuteInfo &info)
             }
             cmd_batcher.flush_barriers();
 
-            queue.end_command_list(cmd_list);
+            submit_queue.end_command_list(cmd_list);
         }
 
-        queue.submit({ .additional_wait_semas = info.wait_semas, .additional_signal_semas = info.signal_semas });
+        SemaphoreSubmitInfo wait_semas[] = { { transfer_sema, transfer_sema.counter(), PipelineStage::AllTransfer } };
+        std::span<SemaphoreSubmitInfo> wait_semas_all = {};
+        if (is_first_submit) {
+            wait_semas_all = stack.alloc<SemaphoreSubmitInfo>(info.wait_semas.size() + count_of(wait_semas));
+
+            usize i = 0;
+            for (auto &v : info.wait_semas) {
+                wait_semas_all[i++] = v;
+            }
+
+            for (auto &v : wait_semas) {
+                wait_semas_all[i++] = v;
+            }
+        }
+
+        std::span<SemaphoreSubmitInfo> signal_semas_all = {};
+        if (is_last_submit) {
+            signal_semas_all = info.signal_semas;
+        }
+
+        submit_queue.submit({ .additional_wait_semas = wait_semas_all, .additional_signal_semas = signal_semas_all });
+        submit_index++;
     }
 }
 
@@ -426,6 +460,7 @@ bool TaskGraph::prepare_task(Task &task)
 
         for_each_image_use(task.m_task_uses, [&](TaskImageID id, [[maybe_unused]] const PipelineAccessImpl &access, ImageLayout layout) {
             TaskImage &task_image = m_images[static_cast<usize>(id)];
+            LR_ASSERT(task_image.image_id != ImageID::Invalid, "Task '{}' using invalid image {}!", task.m_name, static_cast<u32>(id));
             Image &image = *m_device->get_image(task_image.image_id);
 
             switch (layout) {
@@ -447,6 +482,7 @@ bool TaskGraph::prepare_task(Task &task)
             }
         });
 
+        usize color_attachment_size = color_attachment_formats.size();
         bool is_graphics_pipeline =
             !color_attachment_formats.empty() || graphics_info.depth_attachment_format != Format::Unknown || graphics_info.stencil_attachment_format != Format::Unknown;
 
@@ -458,7 +494,7 @@ bool TaskGraph::prepare_task(Task &task)
             graphics_info.scissors = pipeline_info.m_scissors;
             graphics_info.vertex_binding_infos = pipeline_info.m_vertex_binding_infos;
             graphics_info.vertex_attrib_infos = pipeline_info.m_vertex_attrib_infos;
-            graphics_info.blend_attachments = pipeline_info.m_blend_attachments;
+            graphics_info.blend_attachments = { pipeline_info.m_blend_attachments.data(), color_attachment_size };
             graphics_info.shader_ids = pipeline_info.m_shader_ids;
             graphics_info.layout_id = task.m_pipeline_layout_id;
 
@@ -471,11 +507,12 @@ bool TaskGraph::prepare_task(Task &task)
 
             task.m_pipeline_id = m_device->create_compute_pipeline(compute_info);
         }
-
-        return true;
     }
 
-    return false;
+    // TODO: probably should add some error checking instead of using bools
+    // this should return 3rd value indicating that this pass is probably a
+    // transfer or a dummy.
+    return true;
 }
 
 TaskSubmit &TaskGraph::new_submit(CommandType type)

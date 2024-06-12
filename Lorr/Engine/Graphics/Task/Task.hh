@@ -8,7 +8,7 @@ struct TaskPersistentImageInfo {
     ImageID image_id = ImageID::Invalid;
     ImageViewID image_view_id = ImageViewID::Invalid;
     ImageLayout layout = ImageLayout::Undefined;
-    PipelineAccessImpl access = PipelineAccess::None;
+    PipelineAccessImpl access = PipelineAccess::TopOfPipe;
 };
 
 LR_HANDLE(TaskBufferID, u32);
@@ -82,8 +82,8 @@ namespace Preset {
     using ColorReadOnly = TaskImageUse<ImageLayout::ColorReadOnly, PipelineAccess::FragmentShaderRead>;
     using ComputeWrite = TaskImageUse<ImageLayout::General, PipelineAccess::ComputeWrite>;
     using ComputeRead = TaskImageUse<ImageLayout::General, PipelineAccess::ComputeRead>;
-    using TransferRead = TaskImageUse<ImageLayout::TransferSrc, PipelineAccess::TransferRead>;
-    using TransferWrite = TaskImageUse<ImageLayout::TransferDst, PipelineAccess::TransferWrite>;
+    using BlitRead = TaskImageUse<ImageLayout::TransferSrc, PipelineAccess::BlitRead>;
+    using BlitWrite = TaskImageUse<ImageLayout::TransferDst, PipelineAccess::BlitWrite>;
 
     using VertexBuffer = TaskBufferUse<PipelineAccess::VertexAttrib>;
     using IndexBuffer = TaskBufferUse<PipelineAccess::IndexAttrib>;
@@ -178,6 +178,8 @@ struct TaskContext {
     template<typename T>
     void set_push_constants(T &v)
     {
+        ZoneScoped;
+
         PipelineLayoutID pipeline_layout = m_device->get_pipeline_layout<T>();
         m_cmd_list.set_push_constants(pipeline_layout, &v, sizeof(T), 0);
     }
@@ -230,7 +232,7 @@ struct TaskWrapper : Task {
             return m_task.prepare(info);
         }
 
-        return true;
+        return false;
     }
 
     void execute(TaskContext &tc) override { m_task.execute(tc); }

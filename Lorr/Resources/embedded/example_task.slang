@@ -16,4 +16,3 @@ void cs_main(uint3 thread_id : SV_DispatchThreadID)
     tex[thread_id.xy] = float4(color, 1.0);
 }
 
-

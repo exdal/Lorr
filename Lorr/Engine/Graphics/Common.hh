@@ -1,6 +1,6 @@
 #pragma once
 
-#include <Resources/shaders/lorr.slang>  // IWYU pragma: export
+#include <Resources/embedded/lorr.slang>  // IWYU pragma: export
 
 #include "Vulkan.hh"  // IWYU pragma: export
 #include "zfwd.hh"

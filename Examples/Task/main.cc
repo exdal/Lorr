@@ -9,14 +9,6 @@
 using namespace lr;
 using namespace lr::graphics;
 
-namespace lr::embedded::shaders {
-constexpr static _data_t example_compute[] = {
-#include <example_compute.slang.h>
-};
-constexpr static std::span example_compute_sp = { &example_compute->as_u8, count_of(example_compute) - 1 };
-constexpr static std::string_view example_compute_str = { &example_compute->as_c8, count_of(example_compute) - 1 };
-}  // namespace lr::embedded::shaders
-
 struct ComputeTask {
     std::string_view name = "Compute";
 
@@ -34,11 +26,11 @@ struct ComputeTask {
     {
         auto &pipeline_info = info.pipeline_info;
 
-        VirtualFileInfo virtual_files[] = { { "lorr", embedded::shaders::lorr_sp } };
+        VirtualFileInfo virtual_files[] = { { "lorr", embedded::lorr_sp } };
         VirtualDir virtual_dir = { virtual_files };
         ShaderCompileInfo shader_compile_info = {
             .real_path = "example_compute.slang",
-            .code = embedded::shaders::example_compute_str,
+            .code = embedded::example_compute_str,
             .virtual_env = { &virtual_dir, 1 },
         };
 

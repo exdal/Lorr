@@ -2,7 +2,7 @@
 
 #include "Task.hh"
 
-#include "Engine/Embedded.hh"
+#include <Embedded.hh>
 
 #include <imgui.h>
 
@@ -35,11 +35,11 @@ struct ImGuiTask {
     {
         auto &pipeline_info = info.pipeline_info;
 
-        VirtualFileInfo virtual_files[] = { { "lorr", embedded::shaders::lorr_sp } };
+        VirtualFileInfo virtual_files[] = { { "lorr", embedded::lorr_sp } };
         VirtualDir virtual_dir = { virtual_files };
         ShaderCompileInfo shader_compile_info = {
             .real_path = "imgui.slang",
-            .code = embedded::shaders::imgui_str,
+            .code = embedded::imgui_str,
             .virtual_env = { &virtual_dir, 1 },
         };
 

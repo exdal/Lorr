@@ -308,7 +308,7 @@ void TaskGraph::execute(const TaskExecuteInfo &info)
             .startTime = task_query_offset_ts,
             .endTime = task_query_offset_ts + delta,
             .name = task->m_name.data(),
-            .color = legit::Colors::colors[task_index % count_of(legit::Colors::colors)],
+            .color = legit::Colors::colors[(task_index * 3 + 1) % count_of(legit::Colors::colors)],
         });
 
         task_query_offset_ts += delta;

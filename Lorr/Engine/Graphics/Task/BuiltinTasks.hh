@@ -104,60 +104,54 @@ struct ImGuiTask {
 
     void execute(TaskContext &tc)
     {
-        auto device = tc.device();
-        auto &task_attachment = tc.task_image_data(uses.attachment);
-        auto &font = tc.task_image_data(uses.font);
-        auto &cmd_list = tc.command_list();
-        auto &staging_buffer = device->frame_staging_buffer();
-        auto render_extent = device->get_image(task_attachment.image_id)->m_extent;
+        Device *device = tc.device();
+        TaskImage &task_attachment = tc.task_image_data(uses.attachment);
+        TaskImage &task_font = tc.task_image_data(uses.font);
+        Image *attachment_image = device->get_image(task_attachment.image_id);
+        CommandList &cmd_list = tc.command_list();
+        StagingBuffer &staging_buffer = device->frame_staging_buffer();
+
         auto &io = ImGui::GetIO();
         ImDrawData *draw_data = ImGui::GetDrawData();
-
         u64 vertex_size_bytes = draw_data->TotalVtxCount * sizeof(ImDrawVert);
         u64 index_size_bytes = draw_data->TotalIdxCount * sizeof(ImDrawIdx);
         if (!draw_data || vertex_size_bytes == 0) {
             return;
         }
 
-        // TODO: Figure out how to recreate buffer for GPU memory.
-        // Using staging buffer(CPU) is not ideal.
         auto vertex_buffer_alloc = staging_buffer.alloc(vertex_size_bytes);
         auto index_buffer_alloc = staging_buffer.alloc(index_size_bytes);
-        LR_ASSERT(vertex_buffer_alloc.size >= vertex_size_bytes);
-        LR_ASSERT(index_buffer_alloc.size >= index_size_bytes);
-
         auto vertex_data = reinterpret_cast<ImDrawVert *>(vertex_buffer_alloc.ptr);
         auto index_data = reinterpret_cast<ImDrawIdx *>(index_buffer_alloc.ptr);
-
-        for (i32 i = 0; i < draw_data->CmdListsCount; i++) {
-            const ImDrawList *im_cmd_list = draw_data->CmdLists[i];
-            memcpy(vertex_data, im_cmd_list->VtxBuffer.Data, im_cmd_list->VtxBuffer.Size * sizeof(ImDrawVert));
-            memcpy(index_data, im_cmd_list->IdxBuffer.Data, im_cmd_list->IdxBuffer.Size * sizeof(ImDrawIdx));
-            vertex_data += im_cmd_list->VtxBuffer.Size;
-            index_data += im_cmd_list->IdxBuffer.Size;
+        for (const ImDrawList *draw_list : draw_data->CmdLists) {
+            memcpy(vertex_data, draw_list->VtxBuffer.Data, draw_list->VtxBuffer.Size * sizeof(ImDrawVert));
+            memcpy(index_data, draw_list->IdxBuffer.Data, draw_list->IdxBuffer.Size * sizeof(ImDrawIdx));
+            vertex_data += draw_list->VtxBuffer.Size;
+            index_data += draw_list->IdxBuffer.Size;
         }
 
         BufferID vertex_buffer = self.vertex_buffers[device->frame_index()];
         BufferID index_buffer = self.index_buffers[device->frame_index()];
-        device->upload_staging(vertex_buffer_alloc, vertex_buffer);
-        device->upload_staging(index_buffer_alloc, index_buffer);
+        staging_buffer.upload(vertex_buffer_alloc, vertex_buffer);
+        staging_buffer.upload(index_buffer_alloc, index_buffer);
 
+        Extent3D render_extent = attachment_image->m_extent;
         cmd_list.begin_rendering({
             .render_area = { 0, 0, render_extent.width, render_extent.height },
             .color_attachments = { { tc.as_color_attachment(uses.attachment) } },
         });
         cmd_list.set_vertex_buffer(vertex_buffer);
         cmd_list.set_index_buffer(index_buffer, 0, true);
+        cmd_list.set_viewport(0, { .x = 0, .y = 0, .width = io.DisplaySize.x, .height = io.DisplaySize.y, .depth_min = 0.01, .depth_max = 1.0 });
 
         glm::vec2 scale = { 2.0f / draw_data->DisplaySize.x, 2.0f / draw_data->DisplaySize.y };
         glm::vec2 translate = { -1.0f - draw_data->DisplayPos.x * scale.x, -1.0f - draw_data->DisplayPos.y * scale.y };
-
         push_constants.scale = scale;
         push_constants.translate = translate;
-        push_constants.image_view_id = font.image_view_id;
+        push_constants.image_view_id = task_font.image_view_id;
         push_constants.sampler_id = self.sampler;
         tc.set_push_constants(push_constants);
-        cmd_list.set_viewport(0, { .x = 0, .y = 0, .width = io.DisplaySize.x, .height = io.DisplaySize.y, .depth_min = 0.01, .depth_max = 1.0 });
+
         ImVec2 clip_off = draw_data->DisplayPos;
         ImVec2 clip_scale = draw_data->FramebufferScale;
         u32 vertex_offset = 0;

@@ -7,24 +7,106 @@
 #include "Engine/Memory/Stack.hh"
 
 namespace lr::graphics {
+void StagingBuffer::init(Device *device)
+{
+    ZoneScoped;
+
+    m_device = device;
+}
+
 StagingAllocResult StagingBuffer::alloc(usize size, u64 alignment)
 {
     ZoneScoped;
 
-    u8 *ptr = m_buffer_ptr + m_buffer_offset;
-    u64 offset = m_buffer_offset;
-    u64 aligned_offset = align_up(m_buffer_offset + size, alignment);
-    u64 clamped_offset = lr::min(aligned_offset, MAX_SIZE) - m_buffer_offset;
-    m_buffer_offset += clamped_offset;
+    usize aligned_size = align_up(size, alignment);
+    StagingBufferBlock *suitable_block = nullptr;
 
-    return { .buffer_id = m_buffer_id, .ptr = ptr, .size = clamped_offset, .offset = offset };
+    // search for suitable area
+    for (StagingBufferBlock &block : m_blocks) {
+        auto &[buffer_id, offset] = block;
+        Buffer *buffer = m_device->get_buffer(buffer_id);
+        usize remaining = buffer->m_data_size - offset;
+        if (remaining >= aligned_size) {
+            suitable_block = &block;
+            break;
+        }
+    }
+
+    if (!suitable_block) {
+        // no area found, create new buffer
+        BufferID new_buffer_id = m_device->create_buffer({
+            .usage_flags = BufferUsage::TransferSrc,
+            .flags = MemoryFlag::HostSeqWrite,
+            .preference = MemoryPreference::Host,
+            .data_size = max(aligned_size, BLOCK_SIZE),
+        });
+
+        suitable_block = &*m_blocks.emplace(new_buffer_id, 0);
+    }
+
+    auto &[buffer_id, offset] = *suitable_block;
+    Buffer *buffer = m_device->get_buffer(buffer_id);
+    u64 alloc_offset = offset;
+    u8 *alloc_ptr = reinterpret_cast<u8 *>(buffer->m_host_data) + alloc_offset;
+    offset += aligned_size;
+
+    return { .buffer_id = buffer_id, .ptr = alloc_ptr, .offset = alloc_offset, .size = aligned_size };
 }
 
 void StagingBuffer::reset()
 {
     ZoneScoped;
 
-    m_buffer_offset = 0;
+    if (m_blocks.empty()) {
+        return;
+    }
+
+    // shrink to first block
+    for (auto i = m_blocks.begin(); i != m_blocks.end();) {
+        auto &[buffer_id, offset] = *i;
+        if (i == m_blocks.begin()) {
+            offset = 0;
+            i++;
+        }
+        else {
+            m_device->delete_buffers({ &buffer_id, 1 });
+            i = m_blocks.erase(i);
+        }
+    }
+}
+
+u64 StagingBuffer::size()
+{
+    ZoneScoped;
+
+    u64 size = 0;
+    for (StagingBufferBlock &block : m_blocks) {
+        auto &[buffer_id, offset] = block;
+        size += offset;
+    }
+
+    return size;
+}
+
+void StagingBuffer::upload(StagingAllocResult &result, BufferID dst_buffer)
+{
+    ZoneScoped;
+
+    CommandQueue &transfer_queue = m_device->get_queue(CommandType::Transfer);
+    CommandList &cmd_list = transfer_queue.begin_command_list();
+    cmd_list.memory_barrier({ .src_access = PipelineAccess::HostReadWrite, .dst_access = PipelineAccess::TransferReadWrite });
+    BufferCopyRegion buffer_region = {
+        .src_offset = result.offset,
+        .dst_offset = 0,
+        .size = result.size,
+    };
+    cmd_list.copy_buffer_to_buffer(result.buffer_id, dst_buffer, { &buffer_region, 1 });
+    transfer_queue.end_command_list(cmd_list);
+
+    // NOTE: We control offsets per frame, there will be no
+    // buffer overlaps, do not self wait, also ignore sync errors
+    // VVL does not support timeline semas yet.
+    transfer_queue.submit({ .self_wait = false });
 }
 
 VKResult Device::init(const DeviceInfo &info)
@@ -163,15 +245,7 @@ VKResult Device::init(const DeviceInfo &info)
 
     m_staging_buffers.resize(m_frame_count);
     for (auto &staging_buffer : m_staging_buffers) {
-        staging_buffer.m_buffer_id = create_buffer({
-            .usage_flags = BufferUsage::TransferSrc,
-            .flags = MemoryFlag::HostSeqWrite,
-            .preference = MemoryPreference::Host,
-            .data_size = staging_buffer.capacity(),
-            .debug_name = "Staging Buffer",
-        });
-        staging_buffer.m_buffer_ptr = buffer_host_data(staging_buffer.m_buffer_id);
-        staging_buffer.m_buffer_offset = 0;
+        staging_buffer.init(this);
     }
 
     {
@@ -1530,34 +1604,7 @@ void Device::set_image_data(ImageID image_id, const void *data, ImageLayout new_
     CommandQueue &transfer_queue = get_queue(CommandType::Transfer);
     MemoryRequirements image_mem = memory_requirements(image_id);
 
-    StagingAllocResult alloc_result = {};
-    if (image_mem.size <= staging_buffer.size()) {
-        alloc_result = staging_buffer.alloc(image_mem.size);
-    }
-    else if (image_mem.size <= staging_buffer.capacity()) {
-        transfer_queue.submit({});
-        transfer_queue.wait_for_work();
-        staging_buffer.reset();
-
-        alloc_result = staging_buffer.alloc(image_mem.size);
-    }
-    else {
-        auto [buffer_id, buffer_result] = create_buffer({
-            .usage_flags = BufferUsage::TransferSrc,
-            .flags = MemoryFlag::HostSeqWrite,
-            .preference = MemoryPreference::Host,
-            .data_size = image_mem.size,
-        });
-        if (!buffer_result) {
-            LR_LOG_ERROR("Failed to allocate image buffer. {}", buffer_result);
-            return;
-        }
-
-        alloc_result.buffer_id = buffer_id;
-        alloc_result.ptr = buffer_host_data(buffer_id);
-        transfer_queue.defer(buffer_id);
-    }
-
+    StagingAllocResult alloc_result = staging_buffer.alloc(image_mem.size, image_mem.alignment);
     memcpy(alloc_result.ptr, data, image_mem.size);
 
     auto &cmd_list = transfer_queue.begin_command_list();
@@ -1588,25 +1635,7 @@ void Device::set_image_data(ImageID image_id, const void *data, ImageLayout new_
     transfer_queue.end_command_list(cmd_list);
     transfer_queue.submit({});
     transfer_queue.wait_for_work();
-}
-
-void Device::upload_staging(StagingAllocResult &alloc_result, BufferID gpu_buffer)
-{
-    ZoneScoped;
-
-    CommandQueue &transfer_queue = get_queue(CommandType::Transfer);
-    CommandList &cmd_list = transfer_queue.begin_command_list();
-    cmd_list.memory_barrier({ .src_access = PipelineAccess::HostReadWrite, .dst_access = PipelineAccess::TransferReadWrite });
-    BufferCopyRegion buffer_region = {
-        .src_offset = alloc_result.offset,
-        .dst_offset = 0,
-        .size = alloc_result.size,
-    };
-    cmd_list.copy_buffer_to_buffer(alloc_result.buffer_id, gpu_buffer, { &buffer_region, 1 });
-    transfer_queue.end_command_list(cmd_list);
-
-    // Sync is done in CPU, no need to wait on GPU
-    transfer_queue.submit({ .self_wait = false });
+    staging_buffer.reset();
 }
 
 VKResult Device::create_command_queue(CommandQueue &command_queue, CommandType type, std::string_view debug_name)

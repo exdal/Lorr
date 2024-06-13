@@ -11,25 +11,27 @@ namespace lr::graphics {
 struct StagingAllocResult {
     BufferID buffer_id = BufferID::Invalid;
     u8 *ptr = nullptr;
-    u64 size = 0;
     u64 offset = 0;
+    u64 size = 0;
 };
 
-// NOTE: If this becomes a sync problem, we can move it to per-queue.
-// Of course it must have lesser memory but we can get around it with streaming.
 struct StagingBuffer {
-    constexpr static u64 MAX_SIZE = mib_to_bytes(32);
+    // Config
+    constexpr static usize BLOCK_SIZE = mib_to_bytes(16);
 
-    BufferID m_buffer_id = BufferID::Invalid;
-    u8 *m_buffer_ptr = nullptr;
-    u64 m_buffer_offset = 0;
+    struct StagingBufferBlock {
+        BufferID buffer_id = BufferID::Invalid;
+        u64 offset = 0;
+    };
 
-    // Returns a pointer to data and remaining size on allocator
+    plf::colony<StagingBufferBlock> m_blocks = {};
+    Device *m_device = nullptr;
+
+    void init(Device *device);
     StagingAllocResult alloc(usize size, u64 alignment = 8);
     void reset();
-    u64 offset() { return m_buffer_offset; }
-    u64 size() { return capacity() - m_buffer_offset; }
-    u64 capacity() { return MAX_SIZE; }
+    u64 size();
+    void upload(StagingAllocResult &result, BufferID dst_buffer);
 };
 
 struct DeviceInfo {
@@ -136,7 +138,6 @@ struct Device {
     Result<SamplerID, VKResult> create_cached_sampler(const SamplerInfo &info);
 
     void set_image_data(ImageID image_id, const void *data, ImageLayout new_layout, ImageLayout old_layout = ImageLayout::Undefined);
-    void upload_staging(StagingAllocResult &alloc_result, BufferID gpu_buffer);
 
     /// Utils ///
     bool is_feature_supported(DeviceFeature feature) { return m_supported_features & feature; }

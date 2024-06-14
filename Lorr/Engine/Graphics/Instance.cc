@@ -56,7 +56,7 @@ VKResult Instance::init(const InstanceInfo &info)
         "VK_EXT_debug_report",
 #endif
     });
-    instance_builder.require_api_version(1, 3, VK_HEADER_VERSION);
+    instance_builder.require_api_version(1, 3, 0);
     auto instance_result = instance_builder.build();
     if (!instance_result) {
         auto error = static_cast<VKResult>(instance_result.vk_result());

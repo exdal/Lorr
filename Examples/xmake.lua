@@ -7,6 +7,8 @@ local add_example = function(example_name, srcs)
     target_end()
 end
 
-add_example("Triangle", "Triangle/main.cc")
-add_example("Task", "Task/main.cc")
-add_example("Testbed", "Testbed/main.cc")
+if has_config("build_examples") then
+    add_example("Triangle", "Triangle/main.cc")
+    add_example("Task", "Task/main.cc")
+    add_example("Testbed", "Testbed/main.cc")
+end

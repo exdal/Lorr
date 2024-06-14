@@ -6,6 +6,7 @@ add_cxxflags("clang::-Wshadow-all")
 set_warnings("extra")
 set_runtimes("MT", "c++_static")
 
+-- OPTIONS --
 option("profile")
     set_default(false)
     set_description("Enable application wide profiling.")
@@ -21,18 +22,22 @@ option("wayland")
     add_defines("LR_WAYLAND=1", { public = true })
 option_end()
 
+option("build_examples")
+    set_default(false)
+    set_description("Build examples")
+option_end()
+
+-- PACKAGES --
 add_requires("fmt 10.2.1")
-add_requires(
-    "xxhash",
-    "glm",
-    "vulkan-memory-allocator",
-    "vk-bootstrap v1.3.283",
-    "plf_colony",
-    "sol2",
-    "imgui v1.90.5-docking",
-    "simdutf",
-    "unordered_dense"
-)
+add_requires("xxhash")
+add_requires("glm")
+add_requires("vulkan-memory-allocator")
+add_requires("vk-bootstrap v1.3.283")
+add_requires("plf_colony")
+add_requires("sol2")
+add_requires("imgui v1.90.5-docking")
+add_requires("simdutf")
+add_requires("unordered_dense")
 add_requires("tracy", { configs = {
     on_demand = true,
     callstack = true,

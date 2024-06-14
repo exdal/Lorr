@@ -155,8 +155,9 @@ VKResult Device::init(const DeviceInfo &info)
         });
         auto physical_device_result = physical_device_selector.select();
         if (!physical_device_result) {
+            auto error = physical_device_result.error();
             auto r = static_cast<VKResult>(physical_device_result.vk_result());
-            LR_LOG_ERROR("Failed to select Vulkan Physical Device! {}", r);
+            LR_LOG_ERROR("Failed to select Vulkan Physical Device! {} - {}", error.message(), r);
             return r;
         }
 
@@ -165,9 +166,8 @@ VKResult Device::init(const DeviceInfo &info)
 
     {
         /// DEVICE INITIALIZATION ///
-        // if
-        // (selected_physical_device.enable_extension_if_present("VK_EXT_descriptor_buffer"))
-        //     features |= DeviceFeature::DescriptorBuffer;
+        if (m_physical_device.enable_extension_if_present("VK_EXT_descriptor_buffer"))
+            m_supported_features |= DeviceFeature::DescriptorBuffer;
         if (m_physical_device.enable_extension_if_present("VK_EXT_memory_budget"))
             m_supported_features |= DeviceFeature::MemoryBudget;
         if (m_physical_device.properties.limits.timestampPeriod != 0) {
@@ -186,13 +186,15 @@ VKResult Device::init(const DeviceInfo &info)
         if (m_supported_features & DeviceFeature::DescriptorBuffer)
             device_builder.add_pNext(&desciptor_buffer_features);
 
-        auto device = device_builder.build();
-        if (!device) {
-            LR_LOG_ERROR("Failed to select Vulkan Device!");
-            return static_cast<VKResult>(device.vk_result());
+        auto device_result = device_builder.build();
+        if (!device_result) {
+            auto error = device_result.error();
+            auto r = static_cast<VKResult>(device_result.vk_result());
+            LR_LOG_ERROR("Failed to select Vulkan Device! {} - {}", error.message(), r);
+            return r;
         }
 
-        m_handle = device.value();
+        m_handle = device_result.value();
     }
 
     {

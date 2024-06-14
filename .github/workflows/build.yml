@@ -77,11 +77,11 @@ jobs:
 
       - name: Configure xmake and install dependencies (Unix)
         if: ${{ matrix.platform.os != 'windows' }}
-        run: xmake config -vD --toolchain=clang-18 --arch=${{ matrix.platform.arch }} --mode=${{ matrix.mode }} --runtimes=${{ matrix.platform.runtime }} --yes --policies=package.precompiled:n
+        run: xmake config -vD --build_examples=true --toolchain=clang-18 --arch=${{ matrix.platform.arch }} --mode=${{ matrix.mode }} --runtimes=${{ matrix.platform.runtime }} --yes --policies=package.precompiled:n
 
       - name: Configure xmake and install dependencies (Windows)
         if: ${{ matrix.platform.os == 'windows' }}
-        run: xmake config -vD --toolchain=msvc --arch=${{ matrix.platform.arch }} --mode=${{ matrix.mode }} --runtimes=${{ matrix.platform.runtime }} --yes --policies=package.precompiled:n
+        run: xmake config -vD --build_examples=true --toolchain=msvc --arch=${{ matrix.platform.arch }} --mode=${{ matrix.mode }} --runtimes=${{ matrix.platform.runtime }} --yes --policies=package.precompiled:n
 
       # Save dependencies
       - name: Save cached xmake dependencies

@@ -50,7 +50,6 @@ struct ComputeTask {
         auto &cmd_list = tc.command_list();
         auto &storage_image_data = tc.task_image_data(uses.storage_image);
         Image *storage_image = tc.device()->get_image(storage_image_data.image_id);
-        auto &io = ImGui::GetIO();
 
         push_constants.image_size = { storage_image->m_extent.width, storage_image->m_extent.height };
         push_constants.image_view_id = storage_image_data.image_view_id;

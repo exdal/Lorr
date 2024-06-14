@@ -609,7 +609,6 @@ VKResult Device::get_swapchain_images(SwapChain &swap_chain, std::span<ImageID> 
     memory::ScopedStack stack;
 
     u32 image_count = images.size();
-    auto image_ids = stack.alloc<ImageID>(image_count);
     auto images_raw = stack.alloc<VkImage>(image_count);
 
     auto result = CHECK(vkGetSwapchainImagesKHR(m_handle, swap_chain.m_handle, &image_count, images_raw.data()));
@@ -621,7 +620,7 @@ VKResult Device::get_swapchain_images(SwapChain &swap_chain, std::span<ImageID> 
     for (u32 i = 0; i < images.size(); i++) {
         VkImage &image_handle = images_raw[i];
         Extent3D extent = { swap_chain.m_extent.width, swap_chain.m_extent.height, 1 };
-        auto [image, image_id] = m_resources.images.create(image_handle, nullptr, swap_chain.m_format, extent, 1, 1);
+        auto [image, image_id] = m_resources.images.create(swap_chain.m_format, extent, 1, 1, nullptr, image_handle);
 
         images[i] = image_id;
     }
@@ -708,27 +707,25 @@ VKResult Device::create_pipeline_layouts(std::span<PipelineLayout> pipeline_layo
         vk_pipeline_layouts[i] = info.layouts[i];
     }
 
-    for (auto &pipeline_layout : pipeline_layouts) {
-        VkPipelineLayoutCreateInfo pipeline_layout_create_info = {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-            .pNext = nullptr,
-            .flags = 0,
-            .setLayoutCount = static_cast<u32>(info.layouts.size()),
-            .pSetLayouts = vk_pipeline_layouts.data(),
-            .pushConstantRangeCount = static_cast<u32>(info.push_constants.size()),
-            .pPushConstantRanges = reinterpret_cast<const VkPushConstantRange *>(info.push_constants.data()),
-        };
+    VkPipelineLayoutCreateInfo pipeline_layout_create_info = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = 0,
+        .setLayoutCount = static_cast<u32>(info.layouts.size()),
+        .pSetLayouts = vk_pipeline_layouts.data(),
+        .pushConstantRangeCount = static_cast<u32>(info.push_constants.size()),
+        .pPushConstantRanges = reinterpret_cast<const VkPushConstantRange *>(info.push_constants.data()),
+    };
 
-        for (auto &layout : pipeline_layouts) {
-            VkPipelineLayout layout_handle = VK_NULL_HANDLE;
-            auto result = CHECK(vkCreatePipelineLayout(m_handle, &pipeline_layout_create_info, nullptr, &layout_handle));
-            if (result != VKResult::Success) {
-                LR_LOG_ERROR("Failed to create Pipeline Layout! {}", result);
-                return result;
-            }
-
-            layout.m_handle = layout_handle;
+    for (auto &layout : pipeline_layouts) {
+        VkPipelineLayout layout_handle = VK_NULL_HANDLE;
+        auto result = CHECK(vkCreatePipelineLayout(m_handle, &pipeline_layout_create_info, nullptr, &layout_handle));
+        if (result != VKResult::Success) {
+            LR_LOG_ERROR("Failed to create Pipeline Layout! {}", result);
+            return result;
         }
+
+        layout.m_handle = layout_handle;
     }
 
     return VKResult::Success;
@@ -985,7 +982,7 @@ Result<PipelineID, VKResult> Device::create_graphics_pipeline(const GraphicsPipe
         return result;
     }
 
-    auto pipeline = m_resources.pipelines.create(pipeline_handle, PipelineBindPoint::Graphics);
+    auto pipeline = m_resources.pipelines.create(PipelineBindPoint::Graphics, pipeline_handle);
     if (!pipeline) {
         LR_LOG_ERROR("Failed to allocate Graphics Pipeline!");
         return VKResult::OutOfPoolMem;
@@ -1024,7 +1021,7 @@ Result<PipelineID, VKResult> Device::create_compute_pipeline(const ComputePipeli
         return result;
     }
 
-    auto pipeline = m_resources.pipelines.create(pipeline_handle, PipelineBindPoint::Compute);
+    auto pipeline = m_resources.pipelines.create(PipelineBindPoint::Compute, pipeline_handle);
     if (!pipeline) {
         LR_LOG_ERROR("Failed to allocate Compute Pipeline!");
         return VKResult::OutOfPoolMem;
@@ -1069,7 +1066,7 @@ Result<ShaderID, VKResult> Device::create_shader(ShaderStageFlag stage, std::spa
         return result;
     }
 
-    auto shader = m_resources.shaders.create(shader_module, stage);
+    auto shader = m_resources.shaders.create(stage, shader_module);
     if (!shader) {
         LR_LOG_ERROR("Failed to allocate shader!");
         return VKResult::OutOfPoolMem;
@@ -1116,7 +1113,7 @@ VKResult Device::create_descriptor_pools(std::span<DescriptorPool> descriptor_po
             return result;
         }
 
-        descriptor_pool = DescriptorPool(pool_handle, info.flags);
+        descriptor_pool = DescriptorPool(info.flags, pool_handle);
     }
 
     return VKResult::Success;
@@ -1201,7 +1198,7 @@ VKResult Device::create_descriptor_sets(std::span<DescriptorSet> descriptor_sets
             return result;
         }
 
-        descriptor_set = DescriptorSet(descriptor_set_handle, &info.pool);
+        descriptor_set = DescriptorSet(&info.pool, descriptor_set_handle);
     }
 
     return VKResult::Success;
@@ -1282,7 +1279,7 @@ Result<BufferID, VKResult> Device::create_buffer(const BufferInfo &info)
     };
     u64 device_address = vkGetBufferDeviceAddress(m_handle, &device_address_info);
 
-    auto buffer = m_resources.buffers.create(buffer_handle, info.data_size, allocation_result.pMappedData, device_address, allocation);
+    auto buffer = m_resources.buffers.create(info.data_size, allocation_result.pMappedData, device_address, allocation, buffer_handle);
     if (!buffer) {
         LR_LOG_ERROR("Failed to allocate Buffer!");
         return VKResult::OutOfPoolMem;
@@ -1375,7 +1372,7 @@ Result<ImageID, VKResult> Device::create_image(const ImageInfo &info)
         return result;
     }
 
-    auto image = m_resources.images.create(image_handle, allocation, info.format, info.extent, info.slice_count, info.mip_levels);
+    auto image = m_resources.images.create(info.format, info.extent, info.slice_count, info.mip_levels, allocation, image_handle);
     if (!image) {
         LR_LOG_ERROR("Failed to allocate Image!");
         return VKResult::OutOfPoolMem;
@@ -1446,7 +1443,7 @@ Result<ImageViewID, VKResult> Device::create_image_view(const ImageViewInfo &inf
         return result;
     }
 
-    auto image_view = m_resources.image_views.create(image_view_handle, image->m_format, info.type, info.subresource_range);
+    auto image_view = m_resources.image_views.create(image->m_format, info.type, info.subresource_range, image_view_handle);
     if (!image_view) {
         LR_LOG_ERROR("Failed to allocate Image View!");
         return VKResult::OutOfPoolMem;

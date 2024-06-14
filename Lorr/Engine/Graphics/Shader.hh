@@ -6,9 +6,9 @@
 namespace lr::graphics {
 struct Shader {
     Shader() = default;
-    Shader(VkShaderModule shader_module, ShaderStageFlag stage_flags)
-        : m_handle(shader_module),
-          m_stage(stage_flags)
+    Shader(ShaderStageFlag stage_flags, VkShaderModule shader_module)
+        : m_stage(stage_flags),
+          m_handle(shader_module)
     {
     }
 

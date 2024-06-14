@@ -91,9 +91,9 @@ struct ComputePipelineInfo {
 
 struct Pipeline {
     Pipeline() = default;
-    Pipeline(VkPipeline pipeline, PipelineBindPoint bind_point)
-        : m_handle(pipeline),
-          m_bind_point(bind_point)
+    Pipeline(PipelineBindPoint bind_point, VkPipeline pipeline)
+        : m_bind_point(bind_point),
+          m_handle(pipeline)
     {
     }
 

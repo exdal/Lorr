@@ -19,12 +19,12 @@ struct BufferInfo {
 
 struct Buffer {
     Buffer() = default;
-    Buffer(VkBuffer buffer, u64 data_size, void *host_data, u64 device_address, VmaAllocation allocation)
-        : m_handle(buffer),
-          m_data_size(data_size),
+    Buffer(u64 data_size, void *host_data, u64 device_address, VmaAllocation allocation, VkBuffer buffer)
+        : m_data_size(data_size),
           m_host_data(host_data),
           m_device_address(device_address),
-          m_allocation(allocation)
+          m_allocation(allocation),
+          m_handle(buffer)
     {
     }
 
@@ -58,13 +58,13 @@ struct ImageInfo {
 
 struct Image {
     Image() = default;
-    Image(VkImage image, VmaAllocation allocation, Format format, Extent3D extent, u32 slice_count, u32 mip_count)
-        : m_handle(image),
-          m_allocation(allocation),
-          m_format(format),
+    Image(Format format, Extent3D extent, u32 slice_count, u32 mip_count, VmaAllocation allocation, VkImage image)
+        : m_format(format),
           m_extent(extent),
           m_slice_count(slice_count),
-          m_mip_levels(mip_count)
+          m_mip_levels(mip_count),
+          m_allocation(allocation),
+          m_handle(image)
     {
     }
 
@@ -100,11 +100,11 @@ struct ImageViewInfo {
 
 struct ImageView {
     ImageView() = default;
-    ImageView(VkImageView image_view, Format format, ImageViewType type, const ImageSubresourceRange &subres_range)
-        : m_handle(image_view),
-          m_format(format),
+    ImageView(Format format, ImageViewType type, const ImageSubresourceRange &subres_range, VkImageView image_view)
+        : m_format(format),
           m_type(type),
-          m_subresource_range(subres_range)
+          m_subresource_range(subres_range),
+          m_handle(image_view)
     {
     }
 

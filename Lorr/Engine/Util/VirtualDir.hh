@@ -37,7 +37,7 @@ struct VirtualDir {
 
         auto [file_size, _] = os::file_size(file);
         std::vector<u8> file_contents(file_size);
-        os::read_file(file, file_contents.data(), { 0, file_size });
+        os::read_file(file, file_contents.data(), { { 0, file_size } });
         os::close_file(file);
 
         m_files.emplace(std::string(virtual_path), std::move(file_contents));

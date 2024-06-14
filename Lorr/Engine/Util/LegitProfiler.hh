@@ -333,7 +333,6 @@ public:
         cpuGraph.RenderTimings(graphWidth, legendWidth, graphHeight, frameOffset);
         if ((float)graphHeight * 2 + (float)sizeMargin + (float)sizeMargin < canvasSize.y) {
             ImGui::Columns(2);
-            size_t textSize = 50;
             ImGui::Checkbox("Stop profiling", &stopProfiling);
             // ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - textSize);
             ImGui::Checkbox("Colored legend text", &useColoredLegendText);

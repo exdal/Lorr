@@ -403,6 +403,7 @@ VKResult CommandQueue::submit(const QueueSubmitInfo &info)
     VkSubmitInfo2 submit_info = {
         .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
         .pNext = nullptr,
+        .flags = 0,
         .waitSemaphoreInfoCount = all_waits_size,
         .pWaitSemaphoreInfos = reinterpret_cast<const VkSemaphoreSubmitInfo *>(all_waits.data()),
         .commandBufferInfoCount = static_cast<u32>(cmd_submits.size()),

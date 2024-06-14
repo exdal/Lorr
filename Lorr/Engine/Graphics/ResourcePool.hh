@@ -64,7 +64,7 @@ struct PagedResourcePool {
             page = std::make_unique<Page>();
         }
 
-        ResourceT *resource = &page->at(index);
+        ResourceT *resource = &page->at(page_offset);
         std::construct_at(reinterpret_cast<ResourceT *>(resource), std::forward<Args>(args)...);
         return { resource, static_cast<ResourceID>(index) };
     }

@@ -62,7 +62,6 @@ u64 os::read_file(File file, void *data, u64range range)
     // `read` can be interrupted, it can read *some* bytes,
     // so we need to make it loop and carefully read whole data
     range.clamp(max_read_size);
-    u64 offset = range.min;
     u64 read_bytes_size = 0;
     u64 target_size = range.length();
     while (read_bytes_size < target_size) {
@@ -74,7 +73,6 @@ u64 os::read_file(File file, void *data, u64range range)
             break;
         }
 
-        offset += cur_read_size;
         read_bytes_size += cur_read_size;
     }
 

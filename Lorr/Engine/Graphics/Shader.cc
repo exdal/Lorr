@@ -77,7 +77,7 @@ std::vector<slang::CompilerOptionEntry> get_slang_entries(ShaderCompileFlag flag
 
     // clang-format on
 
-    return std::move(entries);
+    return entries;
 }
 
 bool ShaderCompiler::init()

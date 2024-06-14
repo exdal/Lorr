@@ -75,7 +75,6 @@ int main(int argc, char *argv[])
         BufferID gpu_buffer = gpu_buffers[frame_index];
 
         CommandQueue &graphics_queue = device.get_queue(CommandType::Graphics);
-        Semaphore &graphics_sema = graphics_queue.semaphore();
         CommandQueue &transfer_queue = device.get_queue(CommandType::Transfer);
         Semaphore &transfer_sema = transfer_queue.semaphore();
 
@@ -101,7 +100,7 @@ int main(int argc, char *argv[])
             });
 
             RenderingBeginInfo render_info = {
-                .render_area = { 0, 0, swap_chain.m_extent.width, swap_chain.m_extent.height },
+                .render_area = { { 0, 0 }, { swap_chain.m_extent.width, swap_chain.m_extent.height } },
                 .color_attachments = { { {
                     .image_view_id = image_view_id,
                     .image_layout = ImageLayout::ColorAttachment,

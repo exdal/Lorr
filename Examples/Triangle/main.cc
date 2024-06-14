@@ -73,7 +73,7 @@ int main(int argc, char *argv[])
         });
 
         RenderingBeginInfo render_info = {
-            .render_area = { 0, 0, swap_chain.m_extent.width, swap_chain.m_extent.height },
+            .render_area = { { 0, 0 }, { swap_chain.m_extent.width, swap_chain.m_extent.height } },
             .color_attachments = { { {
                 .image_view_id = image_view_id,
                 .image_layout = ImageLayout::ColorAttachment,

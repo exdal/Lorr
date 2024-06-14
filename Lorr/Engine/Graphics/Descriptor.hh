@@ -12,9 +12,9 @@ struct DescriptorPoolInfo {
 
 struct DescriptorPool {
     DescriptorPool() = default;
-    DescriptorPool(VkDescriptorPool pool, DescriptorPoolFlag flags)
-        : m_handle(pool),
-          m_flags(flags)
+    DescriptorPool(DescriptorPoolFlag flags, VkDescriptorPool pool)
+        : m_flags(flags),
+          m_handle(pool)
     {
     }
 
@@ -55,9 +55,9 @@ struct DescriptorSetInfo {
 
 struct DescriptorSet {
     DescriptorSet() = default;
-    DescriptorSet(VkDescriptorSet descriptor_set, DescriptorPool *pool)
-        : m_handle(descriptor_set),
-          m_pool(pool)
+    DescriptorSet(DescriptorPool *pool, VkDescriptorSet descriptor_set)
+        : m_pool(pool),
+          m_handle(descriptor_set)
     {
     }
 

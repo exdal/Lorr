@@ -739,7 +739,7 @@ Result<PipelineID, VKResult> Device::create_graphics_pipeline(this Device &self,
         vk_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
         vk_info.pNext = nullptr;
         vk_info.flags = 0;
-        vk_info.stage = static_cast<VkShaderStageFlagBits>(shader.m_stage);
+        vk_info.stage = static_cast<VkShaderStageFlagBits>(shader.stage);
         vk_info.module = shader;
         vk_info.pName = "main";
         vk_info.pSpecializationInfo = nullptr;
@@ -958,7 +958,7 @@ Result<PipelineID, VKResult> Device::create_compute_pipeline(this Device &self, 
 
     Shader &shader = self.shader_at(info.shader_id);
     PipelineShaderStageInfo shader_info = {
-        .shader_stage = shader.m_stage,
+        .shader_stage = shader.stage,
         .module = shader,
         .entry_point = "main",
     };
@@ -1049,7 +1049,7 @@ void Device::delete_shaders(this Device &self, ls::span<ShaderID> shaders)
 
         vkDestroyShaderModule(self, shader, nullptr);
         self.resources.shaders.destroy(shader_id);
-        shader.m_handle = VK_NULL_HANDLE;
+        shader.handle = VK_NULL_HANDLE;
     }
 }
 

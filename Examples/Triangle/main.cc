@@ -29,13 +29,12 @@ struct TriangleTask {
         shader_compile_info.entry_point = "fs_main";
         auto [fs_ir, fs_result] = ShaderCompiler::compile(shader_compile_info);
         if (!vs_result || !fs_result) {
-            LR_LOG_ERROR("Failed to initialize ImGui pass! {}, {}", vs_result, fs_result);
+            LR_LOG_ERROR("Failed to initialize Triangle pass! {}, {}", vs_result, fs_result);
             return false;
         }
 
         pipeline_info.set_shader(info.device->create_shader(ShaderStageFlag::Vertex, vs_ir));
         pipeline_info.set_shader(info.device->create_shader(ShaderStageFlag::Fragment, fs_ir));
-
         pipeline_info.set_dynamic_states(DynamicState::Viewport | DynamicState::Scissor);
         pipeline_info.set_viewport({});
         pipeline_info.set_scissors({});

@@ -91,29 +91,29 @@ namespace Preset {
 
 struct TaskPipelineInfo {
     union {
-        GraphicsPipelineInfo m_graphics_info = {};
-        ComputePipelineInfo m_compute_info;
+        GraphicsPipelineInfo graphics_info = {};
+        ComputePipelineInfo compute_info;
     };
 
-    std::vector<Viewport> m_viewports = {};
-    std::vector<Rect2D> m_scissors = {};
-    std::vector<VertexLayoutBindingInfo> m_vertex_binding_infos = {};
-    std::vector<VertexAttribInfo> m_vertex_attrib_infos = {};
-    std::vector<PipelineColorBlendAttachment> m_blend_attachments = {};
-    std::vector<ShaderID> m_shader_ids = {};
+    std::vector<Viewport> viewports = {};
+    std::vector<Rect2D> scissors = {};
+    std::vector<VertexLayoutBindingInfo> vertex_binding_infos = {};
+    std::vector<VertexAttribInfo> vertex_attrib_infos = {};
+    std::vector<PipelineColorBlendAttachment> blend_attachments = {};
+    std::vector<ShaderID> shader_ids = {};
 
-    void set_dynamic_states(DynamicState states) { m_graphics_info.dynamic_state = states; }
-    void set_viewport(const Viewport &viewport) { m_viewports.push_back(viewport); }
-    void set_scissors(const Rect2D &rect) { m_scissors.push_back(rect); }
-    void set_shader(ShaderID shader_id) { m_shader_ids.push_back(shader_id); }
-    void set_rasterizer_state(const RasterizerStateInfo &info) { m_graphics_info.rasterizer_state = info; }
-    void set_multisample_state(const MultisampleStateInfo &info) { m_graphics_info.multisample_state = info; }
-    void set_depth_stencil_state(const DepthStencilStateInfo &info) { m_graphics_info.depth_stencil_state = info; }
-    void set_blend_constants(const glm::vec4 &constants) { m_graphics_info.blend_constants = constants; }
-    void set_blend_attachments(const std::vector<PipelineColorBlendAttachment> &infos) { m_blend_attachments = infos; }
+    void set_dynamic_states(DynamicState states) { graphics_info.dynamic_state = states; }
+    void set_viewport(const Viewport &viewport) { viewports.push_back(viewport); }
+    void set_scissors(const Rect2D &rect) { scissors.push_back(rect); }
+    void set_shader(ShaderID shader_id) { shader_ids.push_back(shader_id); }
+    void set_rasterizer_state(const RasterizerStateInfo &info) { graphics_info.rasterizer_state = info; }
+    void set_multisample_state(const MultisampleStateInfo &info) { graphics_info.multisample_state = info; }
+    void set_depth_stencil_state(const DepthStencilStateInfo &info) { graphics_info.depth_stencil_state = info; }
+    void set_blend_constants(const glm::vec4 &constants) { graphics_info.blend_constants = constants; }
+    void set_blend_attachments(const std::vector<PipelineColorBlendAttachment> &infos) { blend_attachments = infos; }
     void set_blend_attachment_all(const PipelineColorBlendAttachment &info)
     {
-        for (auto &v : m_blend_attachments) {
+        for (auto &v : blend_attachments) {
             v = info;
         }
     }
@@ -124,13 +124,13 @@ struct TaskPipelineInfo {
             stride += format_to_size(attrib.format);
         }
 
-        m_vertex_binding_infos.push_back({
-            .binding = static_cast<u32>(m_vertex_binding_infos.size()),
+        vertex_binding_infos.push_back({
+            .binding = static_cast<u32>(vertex_binding_infos.size()),
             .stride = stride,
             .input_rate = VertexInputRate::Vertex,
         });
 
-        m_vertex_attrib_infos.insert(m_vertex_attrib_infos.end(), attribs.begin(), attribs.end());
+        vertex_attrib_infos.insert(vertex_attrib_infos.end(), attribs.begin(), attribs.end());
     }
 };
 
@@ -197,14 +197,14 @@ struct Task {
     virtual bool prepare(TaskPrepareInfo &info) = 0;
     virtual void execute(TaskContext &tc) = 0;
 
-    PipelineID m_pipeline_id = PipelineID::Invalid;
-    PipelineLayoutID m_pipeline_layout_id = PipelineLayoutID::None;
-    ls::span<TaskUse> m_task_uses = {};
-    std::string_view m_name = {};
-    f64 m_start_ts = 0.0f;
-    f64 m_end_ts = 0.0f;
+    PipelineID pipeline_id = PipelineID::Invalid;
+    PipelineLayoutID pipeline_layout_id = PipelineLayoutID::None;
+    ls::span<TaskUse> task_uses = {};
+    std::string_view name = {};
+    f64 start_ts = 0.0f;
+    f64 end_ts = 0.0f;
 
-    f64 execution_time() { return (m_end_ts - m_start_ts) / 1000000.f; }
+    f64 execution_time() { return (end_ts - start_ts) / 1000000.f; }
 };
 
 template<typename TaskT>
@@ -215,31 +215,31 @@ concept TaskConcept = requires {
 
 template<TaskConcept TaskT>
 struct TaskWrapper : Task {
-    TaskWrapper(const TaskT &task)
-        : m_task(task)
+    TaskWrapper(const TaskT &task_)
+        : task(task_)
     {
         constexpr bool has_push_constants = requires { TaskT{}.push_constants; };
         if constexpr (has_push_constants) {
-            m_pipeline_layout_id = static_cast<PipelineLayoutID>(sizeof(typename TaskT::PushConstants) / sizeof(u32));
+            pipeline_layout_id = static_cast<PipelineLayoutID>(sizeof(typename TaskT::PushConstants) / sizeof(u32));
         }
 
-        m_task_uses = { reinterpret_cast<TaskUse *>(&m_task.uses), TASK_USE_COUNT };
-        m_name = m_task.name;
+        task_uses = { reinterpret_cast<TaskUse *>(&task.uses), TASK_USE_COUNT };
+        name = task.name;
     }
 
     bool prepare(TaskPrepareInfo &info) override
     {
         constexpr bool has_prepare = requires { TaskT{}.prepare(info); };
         if constexpr (has_prepare) {
-            return m_task.prepare(info);
+            return task.prepare(info);
         }
 
         return false;
     }
 
-    void execute(TaskContext &tc) override { m_task.execute(tc); }
+    void execute(TaskContext &tc) override { task.execute(tc); }
 
-    TaskT m_task = {};
+    TaskT task = {};
     constexpr static usize TASK_USE_COUNT = sizeof(typename TaskT::Uses) / sizeof(TaskUse);
 };
 

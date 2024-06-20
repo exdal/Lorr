@@ -7,18 +7,18 @@ namespace lr::graphics {
 struct Shader {
     Shader() = default;
     Shader(ShaderStageFlag stage_flags, VkShaderModule shader_module)
-        : m_stage(stage_flags),
-          m_handle(shader_module)
+        : stage(stage_flags),
+          handle(shader_module)
     {
     }
 
-    ShaderStageFlag m_stage = ShaderStageFlag::Count;
+    ShaderStageFlag stage = ShaderStageFlag::Count;
 
-    VkShaderModule m_handle = VK_NULL_HANDLE;
+    VkShaderModule handle = VK_NULL_HANDLE;
 
     constexpr static auto OBJECT_TYPE = VK_OBJECT_TYPE_SHADER_MODULE;
-    operator auto &() { return m_handle; }
-    explicit operator bool() { return m_handle != VK_NULL_HANDLE; }
+    operator auto &() { return handle; }
+    explicit operator bool() { return handle != VK_NULL_HANDLE; }
 };
 
 enum class ShaderCompileFlag : u32 {

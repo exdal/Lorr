@@ -69,7 +69,7 @@ u32 TaskGraph::schedule_task(this TaskGraph &self, Task *task, TaskSubmit &submi
 
     u32 first_batch_index = 0;
     for_each_use(
-        task->m_task_uses,
+        task->task_uses,
         [&](TaskBufferID id, const PipelineAccessImpl &access) {
             TaskBuffer &task_buffer = self.buffers[static_cast<usize>(id)];
             u32 cur_batch_index = task_buffer.last_batch_index;
@@ -109,7 +109,7 @@ TaskID TaskGraph::add_task(this TaskGraph &self, std::unique_ptr<Task> &&task)
     ZoneScoped;
 
     if (!self.prepare_task(*task)) {
-        LR_LOG_ERROR("Failed to prepare task '{}'!", task->m_name);
+        LR_LOG_ERROR("Failed to prepare task '{}'!", task->name);
         return TaskID::Invalid;
     }
 
@@ -120,7 +120,7 @@ TaskID TaskGraph::add_task(this TaskGraph &self, std::unique_ptr<Task> &&task)
     TaskBatch &batch = current_submit.batches[batch_index];
 
     for_each_use(
-        task->m_task_uses,
+        task->task_uses,
         [&](TaskBufferID id, const PipelineAccessImpl &access) {
             TaskBuffer &task_buffer = self.buffers[static_cast<usize>(id)];
             bool is_read_on_read = access.access == MemoryAccess::Read && task_buffer.last_access.access == MemoryAccess::Read;
@@ -192,8 +192,8 @@ std::string TaskGraph::generate_graphviz(this TaskGraph &self)
     ss << "node [fontsize = \"16\" shape = \"ellipse\"]\n";
     ss << "edge [];\n";
     for (u32 task_id = 0; task_id < self.tasks.size(); task_id++) {
-        std::string_view name = self.tasks[task_id]->m_name;
-        auto uses = self.tasks[task_id]->m_task_uses;
+        std::string_view name = self.tasks[task_id]->name;
+        auto uses = self.tasks[task_id]->task_uses;
 
         ss << fmt::format(R"(task{} [)", task_id) << "\n";
         ss << fmt::format(R"(label = "<name> {}({}))", name, task_id);
@@ -268,7 +268,7 @@ void TaskGraph::draw_profiler_ui(this TaskGraph &self)
 
                     for (TaskID task_id : batch.tasks) {
                         Task *task = &*self.tasks[static_cast<usize>(task_id)];
-                        ImGui::BulletText("%s - %lfms", task->m_name.data(), task->execution_time());
+                        ImGui::BulletText("%s - %lfms", task->name.data(), task->execution_time());
                     }
 
                     ImGui::TreePop();
@@ -303,14 +303,14 @@ void TaskGraph::execute(this TaskGraph &self, const TaskExecuteInfo &info)
 
         u32 task_index = i / 4;
         auto &task = self.tasks[task_index];
-        task->m_start_ts = static_cast<f64>(task_query_results[i + 0]);
-        task->m_end_ts = static_cast<f64>(task_query_results[i + 2]);
+        task->start_ts = static_cast<f64>(task_query_results[i + 0]);
+        task->end_ts = static_cast<f64>(task_query_results[i + 2]);
 
-        f64 delta = ((task->m_end_ts / 1000000.0f) - (task->m_start_ts / 1000000.0f)) / 1000.0f;
+        f64 delta = ((task->end_ts / 1000000.0f) - (task->start_ts / 1000000.0f)) / 1000.0f;
         self.task_gpu_profiler_tasks.push_back({
             .startTime = task_query_offset_ts,
             .endTime = task_query_offset_ts + delta,
-            .name = task->m_name.data(),
+            .name = task->name.data(),
             .color = legit::Colors::colors[(task_index * 3 + 1) % count_of(legit::Colors::colors)],
         });
 
@@ -369,15 +369,15 @@ void TaskGraph::execute(this TaskGraph &self, const TaskExecuteInfo &info)
             for (TaskID task_id : task_batch.tasks) {
                 u32 task_index = static_cast<u32>(task_id);
                 Task *task = &*self.tasks[task_index];
-                if (task->m_pipeline_id != PipelineID::Invalid) {
-                    Pipeline &pipeline = self.device->pipeline_at(task->m_pipeline_id);
-                    batch_cmd_list.set_descriptor_sets(task->m_pipeline_layout_id, pipeline.bind_point, 0, self.device->descriptor_set);
+                if (task->pipeline_id != PipelineID::Invalid) {
+                    Pipeline &pipeline = self.device->pipeline_at(task->pipeline_id);
+                    batch_cmd_list.set_descriptor_sets(task->pipeline_layout_id, pipeline.bind_point, 0, self.device->descriptor_set);
                 }
 
                 batch_cmd_list.reset_query_pool(task_query_pool, task_index * 2, 2);
                 batch_cmd_list.write_timestamp(task_query_pool, PipelineStage::TopOfPipe, task_index * 2);
-                if (task->m_pipeline_id != PipelineID::Invalid) {
-                    batch_cmd_list.set_pipeline(task->m_pipeline_id);
+                if (task->pipeline_id != PipelineID::Invalid) {
+                    batch_cmd_list.set_pipeline(task->pipeline_id);
                 }
 
                 {
@@ -455,18 +455,18 @@ bool TaskGraph::prepare_task(this TaskGraph &self, Task &task)
 
     // it is okay to resize to uses size despite Task::Uses contains buffers
     // as long as GraphicsPipelineInfo::Formats is less than/eqals to resize size
-    prepare_info.pipeline_info.m_blend_attachments.resize(task.m_task_uses.size());
+    prepare_info.pipeline_info.blend_attachments.resize(task.task_uses.size());
 
     if (task.prepare(prepare_info)) {
         std::vector<Format> color_attachment_formats = {};
 
         auto &pipeline_info = prepare_info.pipeline_info;
-        auto &graphics_info = pipeline_info.m_graphics_info;
-        auto &compute_info = pipeline_info.m_compute_info;
+        auto &graphics_info = pipeline_info.graphics_info;
+        auto &compute_info = pipeline_info.compute_info;
 
-        for_each_image_use(task.m_task_uses, [&](TaskImageID id, [[maybe_unused]] const PipelineAccessImpl &access, ImageLayout layout) {
+        for_each_image_use(task.task_uses, [&](TaskImageID id, [[maybe_unused]] const PipelineAccessImpl &access, ImageLayout layout) {
             TaskImage &task_image = self.images[static_cast<usize>(id)];
-            LR_ASSERT(task_image.image_id != ImageID::Invalid, "Task '{}' using invalid image {}!", task.m_name, static_cast<u32>(id));
+            LR_ASSERT(task_image.image_id != ImageID::Invalid, "Task '{}' using invalid image {}!", task.name, static_cast<u32>(id));
             Image &image = self.device->image_at(task_image.image_id);
 
             switch (layout) {
@@ -493,25 +493,25 @@ bool TaskGraph::prepare_task(this TaskGraph &self, Task &task)
             !color_attachment_formats.empty() || graphics_info.depth_attachment_format != Format::Unknown || graphics_info.stencil_attachment_format != Format::Unknown;
 
         if (is_graphics_pipeline) {
-            LR_ASSERT(!pipeline_info.m_shader_ids.empty(), "Graphics pipeline requires at least one shader");
+            LR_ASSERT(!pipeline_info.shader_ids.empty(), "Graphics pipeline requires at least one shader");
 
             graphics_info.color_attachment_formats = color_attachment_formats;
-            graphics_info.viewports = pipeline_info.m_viewports;
-            graphics_info.scissors = pipeline_info.m_scissors;
-            graphics_info.vertex_binding_infos = pipeline_info.m_vertex_binding_infos;
-            graphics_info.vertex_attrib_infos = pipeline_info.m_vertex_attrib_infos;
-            graphics_info.blend_attachments = { pipeline_info.m_blend_attachments.data(), color_attachment_size };
-            graphics_info.shader_ids = pipeline_info.m_shader_ids;
-            graphics_info.layout_id = task.m_pipeline_layout_id;
+            graphics_info.viewports = pipeline_info.viewports;
+            graphics_info.scissors = pipeline_info.scissors;
+            graphics_info.vertex_binding_infos = pipeline_info.vertex_binding_infos;
+            graphics_info.vertex_attrib_infos = pipeline_info.vertex_attrib_infos;
+            graphics_info.blend_attachments = { pipeline_info.blend_attachments.data(), color_attachment_size };
+            graphics_info.shader_ids = pipeline_info.shader_ids;
+            graphics_info.layout_id = task.pipeline_layout_id;
 
-            task.m_pipeline_id = self.device->create_graphics_pipeline(graphics_info);
+            task.pipeline_id = self.device->create_graphics_pipeline(graphics_info);
         }
         else {
-            LR_ASSERT(pipeline_info.m_shader_ids.size() == 1, "Compute pipelines require a shader");
-            compute_info.shader_id = pipeline_info.m_shader_ids[0];
-            compute_info.layout_id = task.m_pipeline_layout_id;
+            LR_ASSERT(pipeline_info.shader_ids.size() == 1, "Compute pipelines require a shader");
+            compute_info.shader_id = pipeline_info.shader_ids[0];
+            compute_info.layout_id = task.pipeline_layout_id;
 
-            task.m_pipeline_id = self.device->create_compute_pipeline(compute_info);
+            task.pipeline_id = self.device->create_compute_pipeline(compute_info);
         }
     }
 

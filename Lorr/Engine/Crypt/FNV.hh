@@ -1,8 +1,8 @@
 #pragma once
 
 namespace lr::Hash {
-constexpr u32 kFNV32Value = 2166136261U;
-constexpr u32 kFNV32Prime = 16777619U;
+constexpr u32 kFNV32Value = 2166136261_u32;
+constexpr u32 kFNV32Prime = 16777619_u32;
 
 constexpr u32 FNV32(const char *pData, u32 dataLen)
 {
@@ -25,8 +25,8 @@ constexpr u32 FNV32String(std::string_view str)
     return FNV32(str.data(), str.length());
 }
 
-constexpr u64 kFNV64Value = 14695981039346656037ULL;
-constexpr u64 kFNV64Prime = 1099511628211ULL;
+constexpr u64 kFNV64Value = 14695981039346656037_u64;
+constexpr u64 kFNV64Prime = 1099511628211_u64;
 
 constexpr u64 FNV64(const char *pData, u32 dataLen)
 {

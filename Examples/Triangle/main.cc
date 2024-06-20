@@ -1,117 +1,118 @@
-#include "Engine/Core/Log.hh"
-#include "Engine/Graphics/Common.hh"
-#include "Engine/Graphics/Device.hh"
-#include "Engine/Graphics/Instance.hh"
+#include "Engine/Core/Application.hh"
 
-#include "Engine/OS/Window.hh"
+#include "Engine/Graphics/Task/BuiltinTasks.hh"
 
 using namespace lr;
 using namespace lr::graphics;
 
-int main(int argc, char *argv[])
+struct TriangleTask {
+    std::string_view name = "Triangle";
+
+    struct Uses {
+        Preset::ColorAttachmentWrite attachment = {};
+    } uses = {};
+
+    bool prepare(TaskPrepareInfo &info)
+    {
+        auto &pipeline_info = info.pipeline_info;
+
+        VirtualFileInfo virtual_files[] = { { "lorr", embedded::lorr_sp } };
+        VirtualDir virtual_dir = { virtual_files };
+        ShaderCompileInfo shader_compile_info = {
+            .real_path = "example_triangle.slang",
+            .code = embedded::example_triangle_str,
+            .virtual_env = { &virtual_dir, 1 },
+        };
+
+        shader_compile_info.entry_point = "vs_main";
+        auto [vs_ir, vs_result] = ShaderCompiler::compile(shader_compile_info);
+        shader_compile_info.entry_point = "fs_main";
+        auto [fs_ir, fs_result] = ShaderCompiler::compile(shader_compile_info);
+        if (!vs_result || !fs_result) {
+            LR_LOG_ERROR("Failed to initialize ImGui pass! {}, {}", vs_result, fs_result);
+            return false;
+        }
+
+        pipeline_info.set_shader(info.device->create_shader(ShaderStageFlag::Vertex, vs_ir));
+        pipeline_info.set_shader(info.device->create_shader(ShaderStageFlag::Fragment, fs_ir));
+
+        pipeline_info.set_dynamic_states(DynamicState::Viewport | DynamicState::Scissor);
+        pipeline_info.set_viewport({});
+        pipeline_info.set_scissors({});
+        pipeline_info.set_blend_attachment_all({
+            .blend_enabled = true,
+            .src_blend = BlendFactor::SrcAlpha,
+            .dst_blend = BlendFactor::InvSrcAlpha,
+            .src_blend_alpha = BlendFactor::One,
+            .dst_blend_alpha = BlendFactor::InvSrcAlpha,
+        });
+
+        return true;
+    }
+
+    void execute(TaskContext &tc)
+    {
+        auto &task_attachment = tc.task_image_data(uses.attachment);
+        auto &attachment_image = tc.device.image_at(task_attachment.image_id);
+        auto render_extent = attachment_image.extent;
+        auto rendering_attachment_info = tc.as_color_attachment(uses.attachment);
+
+        tc.cmd_list.begin_rendering({
+            .render_area = { 0, 0, render_extent.width, render_extent.height },
+            .color_attachments = rendering_attachment_info,
+        });
+        tc.cmd_list.set_viewport(
+            0,
+            { .x = 0, .y = 0, .width = static_cast<f32>(render_extent.width), .height = static_cast<f32>(render_extent.height), .depth_min = 0.01f, .depth_max = 1.0f });
+        tc.cmd_list.set_scissors(0, { 0, 0, render_extent.width, render_extent.height });
+        tc.cmd_list.draw(3);
+        tc.cmd_list.end_rendering();
+    }
+};
+
+struct TriangleApp : Application {
+    bool prepare(this TriangleApp &self)
+    {
+        self.task_graph.add_task<TriangleTask>({
+            .uses = { .attachment = self.swap_chain_image_id },
+        });
+        self.task_graph.add_task<BuiltinTask::ImGuiTask>({
+            .uses = {
+                .attachment = self.swap_chain_image_id,
+                .font = self.imgui_font_image_id,
+            },
+        });
+        self.task_graph.present(self.swap_chain_image_id);
+
+        return true;
+    }
+
+    bool update(this TriangleApp &self, f64 delta_time)
+    {
+        self.task_graph.draw_profiler_ui();
+        return true;
+    }
+
+    bool do_prepare() override { return prepare(); }
+    bool do_update(f64 delta_time) override { return update(delta_time); }
+};
+
+static TriangleApp app = {};
+
+Application &Application::get()
+{
+    return app;
+}
+
+i32 main(i32 argc, c8 **argv)
 {
     ZoneScoped;
 
-    lr::Log::init(argc, argv);
+    app.init(ApplicationInfo{
+        .args = { argv, static_cast<usize>(argc) },
+        .window_info = { .title = "Hello Triangle", .width = 1280, .height = 720, .flags = os::WindowFlag::Centered },
+    });
+    app.run();
 
-    os::Window window;
-    Instance instance;
-    Device device;
-    SwapChain swap_chain;
-    std::array<ImageID, 3> images = {};
-    std::array<ImageViewID, 3> image_views = {};
-
-    auto create_swap_chain = [&](u32 width, u32 height) {
-        if (swap_chain) {
-            device.delete_swap_chains({ &swap_chain, 1 });
-            device.delete_image_views(image_views);
-            device.delete_images(images);
-        }
-
-        device.create_swap_chain(swap_chain, { window.get_surface(instance.m_handle), { width, height } });
-        device.get_swapchain_images(swap_chain, images);
-        for (u32 i = 0; i < images.size(); i++) {
-            ImageViewInfo image_view_info = { .image_id = images[i], .usage_flags = ImageUsage::ColorAttachment | ImageUsage::TransferDst };
-            auto [image_view_id, r_image_view] = device.create_image_view(image_view_info);
-            image_views[i] = image_view_id;
-        }
-    };
-
-    instance.init({});
-    window.init({ .title = "Triangle", .width = 1280, .height = 780, .flags = os::WindowFlag::Centered });
-    device.init({ .instance = &instance.m_handle, .frame_count = 3 });
-    create_swap_chain(window.m_width, window.m_height);
-
-    bool swap_chain_dead = false;
-    while (!window.should_close()) {
-        usize frame_index = device.new_frame();
-        Semaphore &frame_sema = device.frame_sema();
-
-        if (swap_chain_dead) {
-            create_swap_chain(window.m_width, window.m_height);
-            swap_chain_dead = false;
-        }
-
-        auto [acquire_sema, present_sema] = swap_chain.binary_semas(frame_index);
-        auto [acq_index, acq_result] = device.acquire_next_image(swap_chain, acquire_sema);
-        if (acq_result != VKResult::Success) {
-            swap_chain_dead = true;
-            continue;
-        }
-
-        CommandQueue &queue = device.get_queue(CommandType::Graphics);
-        ImageID image_id = images[acq_index];
-        ImageViewID image_view_id = image_views[acq_index];
-
-        CommandList &cmd_list = queue.begin_command_list();
-        cmd_list.image_transition({
-            .src_access = PipelineAccess::TopOfPipe,
-            .dst_access = PipelineAccess::ColorAttachmentReadWrite,
-            .old_layout = ImageLayout::Undefined,
-            .new_layout = ImageLayout::ColorAttachment,
-            .image_id = image_id,
-        });
-
-        RenderingBeginInfo render_info = {
-            .render_area = { { 0, 0 }, { swap_chain.m_extent.width, swap_chain.m_extent.height } },
-            .color_attachments = { { {
-                .image_view_id = image_view_id,
-                .image_layout = ImageLayout::ColorAttachment,
-                .load_op = AttachmentLoadOp::Clear,
-                .store_op = AttachmentStoreOp::Store,
-                .clear_value = { ColorClearValue(0.1f, 0.1f, 0.1f, 1.0f) },
-            } } },
-        };
-        cmd_list.begin_rendering(render_info);
-        cmd_list.end_rendering();
-
-        cmd_list.image_transition({
-            .src_access = PipelineAccess::GraphicsReadWrite,
-            .dst_access = PipelineAccess::BottomOfPipe,
-            .old_layout = ImageLayout::ColorAttachment,
-            .new_layout = ImageLayout::Present,
-            .image_id = image_id,
-        });
-        queue.end_command_list(cmd_list);
-        queue.submit({
-            .additional_wait_semas = { {
-                { acquire_sema, 0, PipelineStage::TopOfPipe },
-            } },
-            .additional_signal_semas = { {
-                { present_sema, 0, PipelineStage::BottomOfPipe },
-                { frame_sema, frame_sema.counter() + 1, PipelineStage::AllCommands },
-            } },
-        });
-
-        if (queue.present(swap_chain, present_sema, acq_index) == VKResult::OutOfDate) {
-            swap_chain_dead = true;
-        }
-
-        device.end_frame();
-        window.poll();
-
-        FrameMark;
-    }
-
-    return 0;
+    return 1;
 }

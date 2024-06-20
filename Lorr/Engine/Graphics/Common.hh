@@ -938,8 +938,8 @@ struct ImageBarrier {
     PipelineAccessImpl dst_access = PipelineAccess::None;
     ImageLayout old_layout = ImageLayout::Undefined;
     ImageLayout new_layout = ImageLayout::Undefined;
-    u32 src_queue_family_id = ~0u;
-    u32 dst_queue_family_id = ~0u;
+    u32 src_queue_family_id = ~0_u32;
+    u32 dst_queue_family_id = ~0_u32;
     ImageID image_id = ImageID::Invalid;
     ImageSubresourceRange subresource_range = {};
 
@@ -1088,7 +1088,7 @@ struct RenderingAttachmentInfo {
 
 struct RenderingBeginInfo {
     Rect2D render_area = {};
-    std::span<const RenderingAttachmentInfo> color_attachments = {};
+    ls::span<RenderingAttachmentInfo> color_attachments = {};
     std::optional<RenderingAttachmentInfo> depth_attachment = std::nullopt;
     std::optional<RenderingAttachmentInfo> stencil_attachment = std::nullopt;
 };
@@ -1096,7 +1096,7 @@ struct RenderingBeginInfo {
 struct DescriptorSetLayoutElement {
     using VkType = VkDescriptorSetLayoutBinding;
 
-    u32 binding = ~0u;
+    u32 binding = ~0_u32;
     DescriptorType descriptor_type = DescriptorType::Count;
     u32 descriptor_count = 0;
     ShaderStageFlag stage = ShaderStageFlag::Count;

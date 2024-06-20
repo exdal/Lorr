@@ -1,7 +1,6 @@
 #pragma once
 
 #include "Key.hh"
-#include "Engine/Core/EventManager.hh"
 #include "Engine/Graphics/Vulkan.hh"
 
 #ifndef GLFW_INCLUDE_NONE
@@ -35,53 +34,6 @@ enum class WindowFlag : u32 {
 LR_TYPEOP_ARITHMETIC(WindowFlag, WindowFlag, |);
 LR_TYPEOP_ARITHMETIC_INT(WindowFlag, WindowFlag, &);
 
-enum WindowEvent : Event {
-    LR_WINDOW_EVENT_RESIZE,
-    LR_WINDOW_EVENT_MOUSE_POSITION,
-    LR_WINDOW_EVENT_MOUSE_STATE,
-    LR_WINDOW_EVENT_MOUSE_SCROLL,
-    LR_WINDOW_EVENT_KEYBOARD_STATE,
-    LR_WINDOW_EVENT_CHAR,
-};
-
-union WindowEventData {
-    u8 data;
-
-    struct {
-        u32 size_width;
-        u32 size_height;
-    };
-
-    struct {
-        f32 mouse_x;
-        f32 mouse_y;
-    };
-
-    struct {
-        Key mouse;
-        KeyState mouse_state;
-        KeyMod mouse_mods;
-    };
-
-    struct {
-        f64 mouse_offset_x;
-        f64 mouse_offset_y;
-    };
-
-    struct {
-        Key key;
-        KeyState key_state;
-        KeyMod key_mods;
-        i32 key_scancode;
-    };
-
-    struct {
-        char32_t char_val;
-    };
-};
-
-using WindowEventManager = EventManager<WindowEventData>;
-
 struct SystemDisplay {
     std::string name;
 
@@ -94,36 +46,34 @@ struct SystemDisplay {
 };
 
 struct WindowInfo {
-    constexpr static u32 USE_PRIMARY_MONITOR = ~0u;
+    constexpr static u32 USE_PRIMARY_MONITOR = ~0_u32;
 
     std::string_view title = {};
     std::string_view icon = {};
     u32 monitor = USE_PRIMARY_MONITOR;
-    i32 width = 0;
-    i32 height = 0;
+    u32 width = 0;
+    u32 height = 0;
     WindowFlag flags = WindowFlag::None;
 };
 
 struct Window {
-    ~Window();
-    bool init(const WindowInfo &info);
-    void poll();
-    void set_cursor(WindowCursor cursor);
+    bool init(this Window &, const WindowInfo &info);
+    void poll(this Window &);
+    void set_cursor(this Window &, WindowCursor cursor);
 
-    SystemDisplay get_display(u32 monitor_id = WindowInfo::USE_PRIMARY_MONITOR);
-    Result<VkSurfaceKHR, VkResult> get_surface(VkInstance instance);
-    bool should_close();
+    SystemDisplay display_at(this Window &, u32 monitor_id = WindowInfo::USE_PRIMARY_MONITOR);
+    Result<VkSurfaceKHR, VkResult> get_surface(this Window &, VkInstance instance);
+    bool should_close(this Window &);
 
-    u32 m_width = 0;
-    u32 m_height = 0;
+    u32 width = 0;
+    u32 height = 0;
 
-    WindowCursor m_current_cursor = WindowCursor::Arrow;
-    glm::uvec2 m_cursor_position = {};
-    WindowEventManager m_event_manager = {};
+    WindowCursor current_cursor = WindowCursor::Arrow;
+    glm::uvec2 cursor_position = {};
 
-    GLFWwindow *m_handle = nullptr;
-    u32 m_monitor_id = WindowInfo::USE_PRIMARY_MONITOR;
-    std::array<GLFWcursor *, usize(WindowCursor::Count)> m_cursors = {};
+    GLFWwindow *handle = nullptr;
+    u32 monitor_id = WindowInfo::USE_PRIMARY_MONITOR;
+    std::array<GLFWcursor *, usize(WindowCursor::Count)> cursors = {};
 };
 
 }  // namespace lr::os

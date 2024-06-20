@@ -22,7 +22,7 @@ struct static_vector {
     typedef std::reverse_iterator<const_iterator> const_reverse_iterator;
 
     constexpr static_vector() noexcept = default;
-    constexpr explicit static_vector(size_type count) noexcept
+    constexpr static_vector(size_type count) noexcept
         requires(std::is_default_constructible_v<T>)
         : m_size(count)
     {
@@ -248,7 +248,6 @@ struct static_vector {
 private:
     size_type m_size = 0;
 
-    // aligned_storage_t is unreliable and causes UB (c++23 depr)
     union {
         value_type m_data[Capacity] = {};
         alignas(T[Capacity]) std::byte m_bytes[sizeof(T) * Capacity];

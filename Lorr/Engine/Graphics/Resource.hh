@@ -19,24 +19,24 @@ struct BufferInfo {
 
 struct Buffer {
     Buffer() = default;
-    Buffer(u64 data_size, void *host_data, u64 device_address, VmaAllocation allocation, VkBuffer buffer)
-        : m_data_size(data_size),
-          m_host_data(host_data),
-          m_device_address(device_address),
-          m_allocation(allocation),
-          m_handle(buffer)
+    Buffer(u64 data_size_, void *host_data_, u64 device_address_, VmaAllocation allocation_, VkBuffer buffer_)
+        : data_size(data_size_),
+          host_data(host_data_),
+          device_address(device_address_),
+          allocation(allocation_),
+          handle(buffer_)
     {
     }
 
-    u64 m_data_size = 0;
-    void *m_host_data = nullptr;
-    u64 m_device_address = 0;
-    VmaAllocation m_allocation = {};
-    VkBuffer m_handle = nullptr;
+    u64 data_size = 0;
+    void *host_data = nullptr;
+    u64 device_address = 0;
+    VmaAllocation allocation = {};
+    VkBuffer handle = nullptr;
 
     constexpr static auto OBJECT_TYPE = VK_OBJECT_TYPE_BUFFER;
-    operator auto &() { return m_handle; }
-    explicit operator bool() { return m_handle != nullptr; }
+    operator auto &() { return handle; }
+    explicit operator bool() { return handle != nullptr; }
 };
 
 /////////////////////////////////
@@ -51,34 +51,34 @@ struct ImageInfo {
     Extent3D extent = {};
     u32 slice_count = 1;
     u32 mip_levels = 1;
-    std::span<u32> queue_indices = {};
+    ls::span<u32> queue_indices = {};
 
     std::string_view debug_name = {};
 };
 
 struct Image {
     Image() = default;
-    Image(Format format, Extent3D extent, u32 slice_count, u32 mip_count, VmaAllocation allocation, VkImage image)
-        : m_format(format),
-          m_extent(extent),
-          m_slice_count(slice_count),
-          m_mip_levels(mip_count),
-          m_allocation(allocation),
-          m_handle(image)
+    Image(Format format_, Extent3D extent_, u32 slice_count_, u32 mip_count_, VmaAllocation allocation_, VkImage image_)
+        : format(format_),
+          extent(extent_),
+          slice_count(slice_count_),
+          mip_levels(mip_count_),
+          allocation(allocation_),
+          handle(image_)
     {
     }
 
-    Format m_format = Format::Unknown;
-    Extent3D m_extent = {};
-    u32 m_slice_count = 1;
-    u32 m_mip_levels = 1;
+    Format format = Format::Unknown;
+    Extent3D extent = {};
+    u32 slice_count = 1;
+    u32 mip_levels = 1;
 
-    VmaAllocation m_allocation = {};
-    VkImage m_handle = VK_NULL_HANDLE;
+    VmaAllocation allocation = {};
+    VkImage handle = VK_NULL_HANDLE;
 
     constexpr static auto OBJECT_TYPE = VK_OBJECT_TYPE_IMAGE;
-    operator auto &() { return m_handle; }
-    explicit operator bool() { return m_handle != nullptr; }
+    operator auto &() { return handle; }
+    explicit operator bool() { return handle != nullptr; }
 };
 
 // Image views can have different formats depending on the creation flags
@@ -100,23 +100,23 @@ struct ImageViewInfo {
 
 struct ImageView {
     ImageView() = default;
-    ImageView(Format format, ImageViewType type, const ImageSubresourceRange &subres_range, VkImageView image_view)
-        : m_format(format),
-          m_type(type),
-          m_subresource_range(subres_range),
-          m_handle(image_view)
+    ImageView(Format format_, ImageViewType type_, const ImageSubresourceRange &subres_range_, VkImageView image_view_)
+        : format(format_),
+          type(type_),
+          subresource_range(subres_range_),
+          handle(image_view_)
     {
     }
 
-    Format m_format = Format::Unknown;
-    ImageViewType m_type = ImageViewType::View2D;
-    ImageSubresourceRange m_subresource_range = {};
+    Format format = Format::Unknown;
+    ImageViewType type = ImageViewType::View2D;
+    ImageSubresourceRange subresource_range = {};
 
-    VkImageView m_handle = VK_NULL_HANDLE;
+    VkImageView handle = VK_NULL_HANDLE;
 
     constexpr static auto OBJECT_TYPE = VK_OBJECT_TYPE_IMAGE_VIEW;
-    operator auto &() { return m_handle; }
-    explicit operator bool() { return m_handle != nullptr; }
+    operator auto &() { return handle; }
+    explicit operator bool() { return handle != nullptr; }
 };
 
 /////////////////////////////////
@@ -140,16 +140,16 @@ struct SamplerInfo {
 
 struct Sampler {
     Sampler() = default;
-    Sampler(VkSampler sampler)
-        : m_handle(sampler)
+    Sampler(VkSampler sampler_)
+        : handle(sampler_)
     {
     }
 
-    VkSampler m_handle = VK_NULL_HANDLE;
+    VkSampler handle = VK_NULL_HANDLE;
 
     constexpr static auto OBJECT_TYPE = VK_OBJECT_TYPE_SAMPLER;
-    operator auto &() { return m_handle; }
-    explicit operator bool() { return m_handle != nullptr; }
+    operator auto &() { return handle; }
+    explicit operator bool() { return handle != nullptr; }
 };
 
 // Helper hash function for 'cached samplers'

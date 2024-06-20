@@ -5,16 +5,16 @@
 
 namespace lr::graphics {
 struct PipelineLayoutInfo {
-    std::span<DescriptorSetLayout> layouts = {};
-    std::span<PushConstantRange> push_constants = {};
+    ls::span<DescriptorSetLayout> layouts = {};
+    ls::span<PushConstantRange> push_constants = {};
 };
 
 struct PipelineLayout {
-    VkPipelineLayout m_handle = nullptr;
+    VkPipelineLayout handle = VK_NULL_HANDLE;
 
     constexpr static auto OBJECT_TYPE = VK_OBJECT_TYPE_PIPELINE_LAYOUT;
-    operator auto &() { return m_handle; }
-    explicit operator bool() { return m_handle != nullptr; }
+    operator auto &() { return handle; }
+    explicit operator bool() { return handle != VK_NULL_HANDLE; }
 };
 
 struct VertexLayoutBindingInfo {
@@ -60,23 +60,23 @@ struct DepthStencilStateInfo {
 };
 
 struct GraphicsPipelineInfo {
-    std::span<Format> color_attachment_formats = {};
+    ls::span<Format> color_attachment_formats = {};
     Format depth_attachment_format = Format::Unknown;
     Format stencil_attachment_format = Format::Unknown;
 
-    std::span<Viewport> viewports = {};
-    std::span<Rect2D> scissors = {};
+    ls::span<Viewport> viewports = {};
+    ls::span<Rect2D> scissors = {};
 
     // Vertex Input State
-    std::span<ShaderID> shader_ids = {};
-    std::span<VertexLayoutBindingInfo> vertex_binding_infos = {};
-    std::span<VertexAttribInfo> vertex_attrib_infos = {};
+    ls::span<ShaderID> shader_ids = {};
+    ls::span<VertexLayoutBindingInfo> vertex_binding_infos = {};
+    ls::span<VertexAttribInfo> vertex_attrib_infos = {};
 
     RasterizerStateInfo rasterizer_state = {};
     MultisampleStateInfo multisample_state = {};
     DepthStencilStateInfo depth_stencil_state = {};
     // Color Blend Attachment State
-    std::span<PipelineColorBlendAttachment> blend_attachments = {};
+    ls::span<PipelineColorBlendAttachment> blend_attachments = {};
     glm::vec4 blend_constants = {};
     // Dynamic State
     DynamicState dynamic_state = {};
@@ -91,18 +91,18 @@ struct ComputePipelineInfo {
 
 struct Pipeline {
     Pipeline() = default;
-    Pipeline(PipelineBindPoint bind_point, VkPipeline pipeline)
-        : m_bind_point(bind_point),
-          m_handle(pipeline)
+    Pipeline(PipelineBindPoint bind_point_, VkPipeline pipeline_)
+        : bind_point(bind_point_),
+          handle(pipeline_)
     {
     }
 
-    PipelineBindPoint m_bind_point = PipelineBindPoint::Graphics;
-    VkPipeline m_handle = nullptr;
+    PipelineBindPoint bind_point = PipelineBindPoint::Graphics;
+    VkPipeline handle = VK_NULL_HANDLE;
 
     constexpr static auto OBJECT_TYPE = VK_OBJECT_TYPE_PIPELINE;
-    operator auto &() { return m_handle; }
-    explicit operator bool() { return m_handle != nullptr; }
+    operator auto &() { return handle; }
+    explicit operator bool() { return handle != VK_NULL_HANDLE; }
 };
 
 }  // namespace lr::graphics

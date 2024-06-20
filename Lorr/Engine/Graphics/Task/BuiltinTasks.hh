@@ -7,9 +7,6 @@
 #include <imgui.h>
 
 namespace lr::graphics::BuiltinTask {
-
-// TODO: Pipeline cache, sampler cache, transient buffers
-
 struct ImGuiTask {
     std::string_view name = "ImGui";
 
@@ -104,14 +101,12 @@ struct ImGuiTask {
 
     void execute(TaskContext &tc)
     {
-        Device *device = tc.device();
-        TaskImage &task_attachment = tc.task_image_data(uses.attachment);
-        TaskImage &task_font = tc.task_image_data(uses.font);
-        Image *attachment_image = device->get_image(task_attachment.image_id);
-        CommandList &cmd_list = tc.command_list();
-        StagingBuffer &staging_buffer = device->frame_staging_buffer();
+        auto &task_attachment = tc.task_image_data(uses.attachment);
+        auto &task_font = tc.task_image_data(uses.font);
+        auto &attachment_image = tc.device.image_at(task_attachment.image_id);
+        auto &staging_buffer = tc.staging_buffer();
 
-        auto &io = ImGui::GetIO();
+        auto &imgui = ImGui::GetIO();
         ImDrawData *draw_data = ImGui::GetDrawData();
         u64 vertex_size_bytes = draw_data->TotalVtxCount * sizeof(ImDrawVert);
         u64 index_size_bytes = draw_data->TotalIdxCount * sizeof(ImDrawIdx);
@@ -130,19 +125,20 @@ struct ImGuiTask {
             index_data += draw_list->IdxBuffer.Size;
         }
 
-        BufferID vertex_buffer = self.vertex_buffers[device->frame_index()];
-        BufferID index_buffer = self.index_buffers[device->frame_index()];
-        staging_buffer.upload(vertex_buffer_alloc, vertex_buffer);
-        staging_buffer.upload(index_buffer_alloc, index_buffer);
+        BufferID vertex_buffer = self.vertex_buffers[tc.frame_index];
+        BufferID index_buffer = self.index_buffers[tc.frame_index];
+        staging_buffer.upload(vertex_buffer_alloc, vertex_buffer, tc.copy_cmd_list);
+        staging_buffer.upload(index_buffer_alloc, index_buffer, tc.copy_cmd_list);
 
-        Extent3D render_extent = attachment_image->m_extent;
-        cmd_list.begin_rendering({
+        Extent3D render_extent = attachment_image.extent;
+        auto rendering_attachment_info = tc.as_color_attachment(uses.attachment);
+        tc.cmd_list.begin_rendering({
             .render_area = { 0, 0, render_extent.width, render_extent.height },
-            .color_attachments = { { tc.as_color_attachment(uses.attachment) } },
+            .color_attachments = rendering_attachment_info,
         });
-        cmd_list.set_vertex_buffer(vertex_buffer);
-        cmd_list.set_index_buffer(index_buffer, 0, true);
-        cmd_list.set_viewport(0, { .x = 0, .y = 0, .width = io.DisplaySize.x, .height = io.DisplaySize.y, .depth_min = 0.01, .depth_max = 1.0 });
+        tc.cmd_list.set_vertex_buffer(vertex_buffer);
+        tc.cmd_list.set_index_buffer(index_buffer, 0, true);
+        tc.cmd_list.set_viewport(0, { .x = 0, .y = 0, .width = imgui.DisplaySize.x, .height = imgui.DisplaySize.y, .depth_min = 0.01, .depth_max = 1.0 });
 
         glm::vec2 scale = { 2.0f / draw_data->DisplaySize.x, 2.0f / draw_data->DisplaySize.y };
         glm::vec2 translate = { -1.0f - draw_data->DisplayPos.x * scale.x, -1.0f - draw_data->DisplayPos.y * scale.y };
@@ -163,8 +159,8 @@ struct ImGuiTask {
 
                 ImVec2 clip_min((im_cmd.ClipRect.x - clip_off.x) * clip_scale.x, (im_cmd.ClipRect.y - clip_off.y) * clip_scale.y);
                 ImVec2 const clip_max((im_cmd.ClipRect.z - clip_off.x) * clip_scale.x, (im_cmd.ClipRect.w - clip_off.y) * clip_scale.y);
-                clip_min.x = std::clamp(clip_min.x, 0.0f, static_cast<f32>(io.DisplaySize.x));
-                clip_min.y = std::clamp(clip_min.y, 0.0f, static_cast<f32>(io.DisplaySize.y));
+                clip_min.x = std::clamp(clip_min.x, 0.0f, static_cast<f32>(imgui.DisplaySize.x));
+                clip_min.y = std::clamp(clip_min.y, 0.0f, static_cast<f32>(imgui.DisplaySize.y));
                 if (clip_max.x <= clip_min.x || clip_max.y <= clip_min.y) {
                     continue;
                 }
@@ -173,14 +169,14 @@ struct ImGuiTask {
                     .offset = { i32(clip_min.x), i32(clip_min.y) },
                     .extent = { u32(clip_max.x - clip_min.x), u32(clip_max.y - clip_min.y) },
                 };
-                cmd_list.set_scissors(0, scissor);
-                cmd_list.draw_indexed(im_cmd.ElemCount, im_cmd.IdxOffset + index_offset, i32(im_cmd.VtxOffset + vertex_offset));
+                tc.cmd_list.set_scissors(0, scissor);
+                tc.cmd_list.draw_indexed(im_cmd.ElemCount, im_cmd.IdxOffset + index_offset, i32(im_cmd.VtxOffset + vertex_offset));
             }
 
             vertex_offset += draw_list->VtxBuffer.Size;
             index_offset += draw_list->IdxBuffer.Size;
         }
-        cmd_list.end_rendering();
+        tc.cmd_list.end_rendering();
     }
 };
 

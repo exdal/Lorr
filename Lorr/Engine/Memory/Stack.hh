@@ -38,7 +38,7 @@ struct ScopedStack {
     }
 
     template<typename T>
-    std::span<T> alloc(usize count)
+    ls::span<T> alloc(usize count)
     {
         ZoneScoped;
 
@@ -50,12 +50,12 @@ struct ScopedStack {
     }
 
     template<typename T, typename... ArgsT>
-    std::span<T> alloc_n(ArgsT &&...args)
+    ls::span<T> alloc_n(ArgsT &&...args)
     {
         ZoneScoped;
 
         usize count = sizeof...(ArgsT);
-        std::span<T> spn = alloc<T>(count);
+        ls::span<T> spn = alloc<T>(count);
         std::construct_at(reinterpret_cast<T *>(spn.data()), std::forward<ArgsT>(args)...);
 
         return spn;

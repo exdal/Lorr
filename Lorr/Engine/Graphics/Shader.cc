@@ -172,7 +172,7 @@ Result<std::vector<u32>, VKResult> ShaderCompiler::compile(const ShaderCompileIn
 
     SlangReflection *reflection = compile_request->getReflection();
     u32 entry_point_count = spReflection_getEntryPointCount(reflection);
-    u32 found_entry_point_id = ~0u;
+    u32 found_entry_point_id = ~0_u32;
     for (u32 i = 0; i < entry_point_count; i++) {
         SlangReflectionEntryPoint *entry_point = spReflection_getEntryPointByIndex(reflection, i);
         std::string_view entry_point_name = spReflectionEntryPoint_getName(entry_point);

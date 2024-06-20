@@ -1,5 +1,7 @@
 #include "Window.hh"
 
+#include "Engine/Core/Application.hh"
+
 #if defined(LR_WIN32)
 #define GLFW_EXPOSE_NATIVE_WIN32
 #elif defined(LR_LINUX)
@@ -23,14 +25,7 @@
 #endif
 
 namespace lr::os {
-Window::~Window()
-{
-    ZoneScoped;
-
-    glfwTerminate();
-}
-
-bool Window::init(const WindowInfo &info)
+bool Window::init(this Window &self, const WindowInfo &info)
 {
     ZoneScoped;
 
@@ -39,12 +34,12 @@ bool Window::init(const WindowInfo &info)
         return false;
     }
 
-    m_monitor_id = info.monitor;
+    self.monitor_id = info.monitor;
     i32 new_pos_x = 25;
     i32 new_pos_y = 25;
 
     if (info.flags & WindowFlag::Centered) {
-        SystemDisplay display = get_display(m_monitor_id);
+        SystemDisplay display = self.display_at(self.monitor_id);
 
         i32 dc_x = static_cast<i32>(display.res_w / 2);
         i32 dc_y = static_cast<i32>(display.res_h / 2);
@@ -59,90 +54,79 @@ bool Window::init(const WindowInfo &info)
     glfwWindowHint(GLFW_MAXIMIZED, !!(info.flags & WindowFlag::Maximized));
     glfwWindowHint(GLFW_POSITION_X, new_pos_x);
     glfwWindowHint(GLFW_POSITION_Y, new_pos_y);
-    m_handle = glfwCreateWindow(info.width, info.height, info.title.data(), nullptr, nullptr);
+    self.handle = glfwCreateWindow(static_cast<i32>(info.width), static_cast<i32>(info.height), info.title.data(), nullptr, nullptr);
 
     /// Initialize callbacks
-    glfwSetWindowUserPointer(m_handle, this);
+    glfwSetWindowUserPointer(self.handle, &self);
 
-    // LR_WINDOW_EVENT_RESIZE
-    glfwSetFramebufferSizeCallback(m_handle, [](GLFWwindow *window, i32 width, i32 height) {
+    Application::get().push_event(ApplicationEvent::WindowResize, {});
+    glfwSetFramebufferSizeCallback(self.handle, [](GLFWwindow *window, i32 width, i32 height) {
         Window *self = reinterpret_cast<Window *>(glfwGetWindowUserPointer(window));
-        WindowEventManager &event_man = self->m_event_manager;
+        self->width = width;
+        self->height = height;
 
-        self->m_width = width;
-        self->m_height = height;
-
-        WindowEventData event_data = {
-            .size_width = static_cast<u32>(width),
-            .size_height = static_cast<u32>(height),
-        };
-        event_man.push(LR_WINDOW_EVENT_RESIZE, event_data);
+        Application::get().push_event(
+            ApplicationEvent::WindowResize,
+            {
+                .window_size = { static_cast<u32>(width), static_cast<u32>(height) },
+            });
     });
 
-    // LR_WINDOW_EVENT_MOUSE_POSITION
-    glfwSetCursorPosCallback(m_handle, [](GLFWwindow *window, f64 pos_x, f64 pos_y) {
-        Window *self = reinterpret_cast<Window *>(glfwGetWindowUserPointer(window));
-        WindowEventManager &event_man = self->m_event_manager;
+    glfwSetCursorPosCallback(self.handle, [](GLFWwindow *window, f64 pos_x, f64 pos_y) {
+        [[maybe_unused]] Window *self = reinterpret_cast<Window *>(glfwGetWindowUserPointer(window));
 
-        WindowEventData event_data = {
-            .mouse_x = static_cast<f32>(pos_x),
-            .mouse_y = static_cast<f32>(pos_y),
-        };
-        event_man.push(LR_WINDOW_EVENT_MOUSE_POSITION, event_data);
+        Application::get().push_event(ApplicationEvent::MousePosition, { .mouse_pos = { pos_x, pos_y } });
     });
 
-    // LR_WINDOW_EVENT_MOUSE_STATE
-    glfwSetMouseButtonCallback(m_handle, [](GLFWwindow *window, i32 button, i32 action, i32 mods) {
-        Window *self = reinterpret_cast<Window *>(glfwGetWindowUserPointer(window));
-        WindowEventManager &event_man = self->m_event_manager;
+    glfwSetMouseButtonCallback(self.handle, [](GLFWwindow *window, i32 button, i32 action, i32 mods) {
+        [[maybe_unused]] Window *self = reinterpret_cast<Window *>(glfwGetWindowUserPointer(window));
 
-        WindowEventData event_data = {
-            .mouse = static_cast<Key>(button),
-            .mouse_state = static_cast<KeyState>(action),
-            .mouse_mods = static_cast<KeyMod>(mods),
-        };
-        event_man.push(LR_WINDOW_EVENT_MOUSE_STATE, event_data);
+        Application::get().push_event(
+            ApplicationEvent::MouseState,
+            {
+                .mouse_key = static_cast<Key>(button),
+                .mouse_key_state = static_cast<KeyState>(action),
+                .mouse_key_mod = static_cast<KeyMod>(mods),
+            });
     });
 
-    // LR_WINDOW_EVENT_KEYBOARD_STATE
-    glfwSetKeyCallback(m_handle, [](GLFWwindow *window, i32 key, i32 scancode, i32 action, i32 mods) {
-        Window *self = reinterpret_cast<Window *>(glfwGetWindowUserPointer(window));
-        WindowEventManager &event_man = self->m_event_manager;
+    glfwSetKeyCallback(self.handle, [](GLFWwindow *window, i32 key, i32 scancode, i32 action, i32 mods) {
+        [[maybe_unused]] Window *self = reinterpret_cast<Window *>(glfwGetWindowUserPointer(window));
 
-        WindowEventData event_data = {
-            .key = static_cast<Key>(key),
-            .key_state = static_cast<KeyState>(action),
-            .key_mods = static_cast<KeyMod>(mods),
-            .key_scancode = scancode,
-        };
-        event_man.push(LR_WINDOW_EVENT_KEYBOARD_STATE, event_data);
+        Application::get().push_event(
+            ApplicationEvent::KeyboardState,
+            {
+                .key = static_cast<Key>(key),
+                .key_state = static_cast<KeyState>(action),
+                .key_mods = static_cast<KeyMod>(mods),
+                .key_scancode = scancode,
+            });
     });
 
-    glfwSetScrollCallback(m_handle, [](GLFWwindow *window, f64 off_x, f64 off_y) {
-        Window *self = reinterpret_cast<Window *>(glfwGetWindowUserPointer(window));
-        WindowEventManager &event_man = self->m_event_manager;
+    glfwSetScrollCallback(self.handle, [](GLFWwindow *window, f64 off_x, f64 off_y) {
+        [[maybe_unused]] Window *self = reinterpret_cast<Window *>(glfwGetWindowUserPointer(window));
 
-        WindowEventData event_data = {
-            .mouse_offset_x = off_x,
-            .mouse_offset_y = off_y,
-        };
-        event_man.push(LR_WINDOW_EVENT_MOUSE_SCROLL, event_data);
+        Application::get().push_event(
+            ApplicationEvent::MouseScroll,
+            {
+                .mouse_scroll_offset = { off_x, off_y },
+            });
     });
 
     // LR_WINDOW_EVENT_CHAR
-    glfwSetCharCallback(m_handle, [](GLFWwindow *window, u32 codepoint) {
-        Window *self = reinterpret_cast<Window *>(glfwGetWindowUserPointer(window));
-        WindowEventManager &event_man = self->m_event_manager;
+    glfwSetCharCallback(self.handle, [](GLFWwindow *window, u32 codepoint) {
+        [[maybe_unused]] Window *self = reinterpret_cast<Window *>(glfwGetWindowUserPointer(window));
 
-        WindowEventData event_data = {
-            .char_val = static_cast<char32_t>(codepoint),
-        };
-        event_man.push(LR_WINDOW_EVENT_CHAR, event_data);
+        Application::get().push_event(
+            ApplicationEvent::InputChar,
+            {
+                .input_char = static_cast<char32_t>(codepoint),
+            });
     });
 
     /// Initialize standard cursors, should be available across all platforms
     /// hopefully...
-    m_cursors = {
+    self.cursors = {
         glfwCreateStandardCursor(GLFW_CURSOR_NORMAL),      glfwCreateStandardCursor(GLFW_IBEAM_CURSOR),     glfwCreateStandardCursor(GLFW_RESIZE_ALL_CURSOR),
         glfwCreateStandardCursor(GLFW_RESIZE_NS_CURSOR),   glfwCreateStandardCursor(GLFW_RESIZE_EW_CURSOR), glfwCreateStandardCursor(GLFW_RESIZE_NESW_CURSOR),
         glfwCreateStandardCursor(GLFW_RESIZE_NWSE_CURSOR), glfwCreateStandardCursor(GLFW_HAND_CURSOR),      glfwCreateStandardCursor(GLFW_NOT_ALLOWED_CURSOR),
@@ -151,27 +135,27 @@ bool Window::init(const WindowInfo &info)
 
     i32 real_width;
     i32 real_height;
-    glfwGetWindowSize(m_handle, &real_width, &real_height);
+    glfwGetWindowSize(self.handle, &real_width, &real_height);
 
-    m_width = real_width;
-    m_height = real_height;
+    self.width = real_width;
+    self.height = real_height;
 
     return true;
 }
 
-void Window::poll()
+void Window::poll(this Window &)
 {
     ZoneScoped;
 
     glfwPollEvents();
 }
 
-void Window::set_cursor(WindowCursor cursor)
+void Window::set_cursor(this Window &self, WindowCursor cursor)
 {
-    glfwSetCursor(m_handle, m_cursors[usize(cursor)]);
+    glfwSetCursor(self.handle, self.cursors[usize(cursor)]);
 }
 
-SystemDisplay Window::get_display(u32 monitor_id)
+SystemDisplay Window::display_at(this Window &, u32 monitor_id)
 {
     ZoneScoped;
 
@@ -204,7 +188,7 @@ SystemDisplay Window::get_display(u32 monitor_id)
     };
 }
 
-Result<VkSurfaceKHR, VkResult> Window::get_surface(VkInstance instance)
+Result<VkSurfaceKHR, VkResult> Window::get_surface(this Window &self, VkInstance instance)
 {
     VkSurfaceKHR surface = nullptr;
 
@@ -215,7 +199,7 @@ Result<VkSurfaceKHR, VkResult> Window::get_surface(VkInstance instance)
         .sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR,
         .pNext = nullptr,
         .hinstance = GetModuleHandleA(nullptr),
-        .hwnd = glfwGetWin32Window(m_handle),
+        .hwnd = glfwGetWin32Window(self.handle),
     };
 
     auto result = vkCreateWin32SurfaceKHR(instance, &create_info, nullptr, &surface);
@@ -228,7 +212,7 @@ Result<VkSurfaceKHR, VkResult> Window::get_surface(VkInstance instance)
         .pNext = nullptr,
         .flags = 0,
         .display = glfwGetWaylandDisplay(),
-        .surface = glfwGetWaylandWindow(m_handle),
+        .surface = glfwGetWaylandWindow(self.handle),
     };
 
     auto result = vkCreateWaylandSurfaceKHR(instance, &create_info, nullptr, &surface);
@@ -240,7 +224,7 @@ Result<VkSurfaceKHR, VkResult> Window::get_surface(VkInstance instance)
         .pNext = nullptr,
         .flags = 0,
         .dpy = glfwGetX11Display(),
-        .window = glfwGetX11Window(m_handle),
+        .window = glfwGetX11Window(self.handle),
     };
 
     auto result = vkCreateXlibSurfaceKHR(instance, &create_info, nullptr, &surface);
@@ -255,8 +239,8 @@ Result<VkSurfaceKHR, VkResult> Window::get_surface(VkInstance instance)
     return Result(surface, VK_SUCCESS);
 }
 
-bool Window::should_close()
+bool Window::should_close(this Window &self)
 {
-    return glfwWindowShouldClose(m_handle);
+    return glfwWindowShouldClose(self.handle);
 }
 }  // namespace lr::os

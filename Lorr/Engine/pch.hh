@@ -15,9 +15,9 @@
 #include <glm/vec4.hpp>
 
 #include "Core/Log.hh"
-#include "Util/Handle.hh"
 #include "Util/Result.hh"
 #include "Util/TypeOperators.hh"
+#include "Util/span.hh"
 #include "Util/static_vector.hh"
 #include <plf_colony.h>
 

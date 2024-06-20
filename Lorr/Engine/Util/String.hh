@@ -1,7 +1,7 @@
 #pragma once
 
 namespace ls {
-constexpr std::string_view trim_forward_ranged(std::string_view str, std::span<lr::i8range> ranges)
+constexpr std::string_view trim_forward_ranged(std::string_view str, ls::span<lr::i8range> ranges)
 {
     for (usize i = 0; i < str.length(); i++) {
         i8 c = str[i];

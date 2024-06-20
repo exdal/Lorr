@@ -7,16 +7,16 @@ template<bool IS_64_BIT = true>
 struct TLSFAllocator {
     // Note on ALIGN_#: we can remove them and just set FL_INDEX_SHIFT to SL_COUNT when we
     // do gpu mem management
-    constexpr static usize SL_INDEX_COUNT = 5u;
+    constexpr static usize SL_INDEX_COUNT = 5_sz;
     constexpr static usize SL_INDEX_SIZE = 1 << SL_INDEX_COUNT;
-    constexpr static usize FL_INDEX_MAX = IS_64_BIT ? 32u : 30u;
+    constexpr static usize FL_INDEX_MAX = IS_64_BIT ? 32_u32 : 30_u32;
     constexpr static usize FL_INDEX_SHIFT = SL_INDEX_COUNT + 3;
     constexpr static usize FL_INDEX_COUNT = FL_INDEX_MAX - FL_INDEX_SHIFT + 1;
     constexpr static usize MIN_BLOCK_SIZE = 1 << FL_INDEX_SHIFT;
 
     using BlockID = u32;
     struct MemoryBlock {
-        constexpr static BlockID INVALID = ~0u;
+        constexpr static BlockID INVALID = ~0_u32;
         BlockID next_physical = INVALID;
         BlockID prev_physical = INVALID;
         BlockID next_logical = INVALID;

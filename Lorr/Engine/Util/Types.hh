@@ -27,7 +27,26 @@ typedef std::intptr_t uptr;
 typedef std::uintptr_t iptr;
 typedef std::size_t usize;
 
+// STRING LITERALS
+// clang-format off
+constexpr u64 operator""_u64(unsigned long long n) { return static_cast<u64>(n); }
+constexpr i64 operator""_i64(unsigned long long n) { return static_cast<i64>(n); }
+constexpr u32 operator""_u32(unsigned long long n) { return static_cast<u32>(n); }
+constexpr i32 operator""_i32(unsigned long long n) { return static_cast<i32>(n); }
+constexpr u16 operator""_u16(unsigned long long n) { return static_cast<u16>(n); }
+constexpr i16 operator""_i16(unsigned long long n) { return static_cast<i16>(n); }
+constexpr u8 operator""_u8(unsigned long long n) { return static_cast<u8>(n); }
+constexpr i8 operator""_i8(unsigned long long n) { return static_cast<i8>(n); }
+
+constexpr usize operator""_sz(unsigned long long n) { return static_cast<usize>(n); }
+
+constexpr c8 operator""_c8(unsigned long long n) { return static_cast<c8>(n); }
+constexpr c16 operator""_c16(unsigned long long n) { return static_cast<c16>(n); }
+constexpr c32 operator""_c32(unsigned long long n) { return static_cast<c32>(n); }
+// clang-format on
+
 namespace lr {
+// MINMAX
 template<typename T>
 const T &min(const T &a, const T &b)
 {
@@ -96,4 +115,7 @@ constexpr T mib_to_bytes(const T x)
 {
     return x << static_cast<T>(20);
 }
+
+#define LR_HANDLE(name, type) enum class name : type { Invalid = std::numeric_limits<type>::max() }
+
 }  // namespace lr

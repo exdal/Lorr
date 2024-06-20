@@ -11,21 +11,21 @@ struct VertexOutput {
 
 [shader("vertex")]
 VertexOutput vs_main(u32 vertex_id : SV_VertexID) {
+    float4 pos_arr[3] = {
+        { 0.0, -0.3, 0.0, 1.0},
+        {-0.3,  0.3, 0.0, 1.0},
+        { 0.3,  0.3, 0.0, 1.0},
+    };
+
+    float4 color_arr[3] = {
+        {0.0, 1.0, 0.0, 1.0},
+        {1.0, 0.0, 0.0, 1.0},
+        {0.0, 0.0, 1.0, 1.0},
+    };
+
     VertexOutput output;
-    switch (vertex_id) {
-        case 0:
-            output.position = float4(0.0, -0.3, 0.0, 1.0);
-            output.cv.color = float4(0.0, 1.0, 0.0, 1.0);
-            break;
-        case 1:
-            output.position = float4(-0.3, 0.3, 0.0, 1.0);
-            output.cv.color = float4(1.0, 0.0, 0.0, 1.0);
-            break;
-        case 2:
-            output.position = float4(0.3, 0.3, 0.0, 1.0);
-            output.cv.color = float4(0.0, 0.0, 1.0, 1.0);
-            break;
-    }
+    output.position = pos_arr[vertex_id];
+    output.cv.color = color_arr[vertex_id];
 
     return output;
 }

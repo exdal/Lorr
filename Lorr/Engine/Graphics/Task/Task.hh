@@ -141,25 +141,24 @@ struct TaskPrepareInfo {
 
 LR_HANDLE(TaskID, u32);
 struct TaskContext {
-    TaskContext(std::span<TaskImage> task_images, CommandList &cmd_list, Device *device)
-        : m_task_images(task_images),
-          m_cmd_list(cmd_list),
-          m_device(device)
+    TaskContext(ls::span<TaskImage> task_images_, CommandList &cmd_list_, CommandList &copy_cmd_list_, Device &device_, usize frame_index_)
+        : task_images(task_images_),
+          cmd_list(cmd_list_),
+          copy_cmd_list(copy_cmd_list_),
+          device(device_),
+          frame_index(frame_index_)
     {
     }
 
-    CommandList &command_list() { return m_cmd_list; }
-    Device *device() { return m_device; }
-
     template<typename T>
-    RenderingAttachmentInfo as_color_attachment(T &use, std::optional<ColorClearValue> clear_val = std::nullopt)
+    RenderingAttachmentInfo as_color_attachment(this TaskContext &self, T &use, std::optional<ColorClearValue> clear_val = std::nullopt)
     {
         ZoneScoped;
 
         LR_ASSERT(use.image_layout == ImageLayout::ColorAttachment, "Rendering Attachment must have ColorAttachment layout!");
 
         RenderingAttachmentInfo info = {
-            .image_view_id = m_task_images[static_cast<usize>(use.task_image_id)].image_view_id,
+            .image_view_id = self.task_image_data(use).image_view_id,
             .image_layout = ImageLayout::ColorAttachment,
             .load_op = clear_val ? AttachmentLoadOp::Clear : AttachmentLoadOp::Load,
             .store_op = use.access == PipelineAccess::ColorAttachmentWrite ? AttachmentStoreOp::Store : AttachmentStoreOp::None,
@@ -170,24 +169,27 @@ struct TaskContext {
     }
 
     template<typename T>
-    TaskImage &task_image_data(T &use)
+    TaskImage &task_image_data(this TaskContext &self, T &use)
     {
-        return m_task_images[static_cast<usize>(use.task_image_id)];
+        return self.task_images[static_cast<usize>(use.task_image_id)];
     }
 
     template<typename T>
-    void set_push_constants(T &v)
+    void set_push_constants(this TaskContext &self, T &v)
     {
         ZoneScoped;
 
-        PipelineLayoutID pipeline_layout = m_device->get_pipeline_layout<T>();
-        m_cmd_list.set_push_constants(pipeline_layout, &v, sizeof(T), 0);
+        PipelineLayoutID pipeline_layout = self.device.get_pipeline_layout<T>();
+        self.cmd_list.set_push_constants(pipeline_layout, &v, sizeof(T), 0);
     }
 
-private:
-    std::span<TaskImage> m_task_images;
-    CommandList &m_cmd_list;
-    Device *m_device;
+    StagingBuffer &staging_buffer(this TaskContext &self) { return self.device.staging_buffer_at(self.frame_index); }
+
+    ls::span<TaskImage> task_images;
+    CommandList &cmd_list;
+    CommandList &copy_cmd_list;
+    Device &device;
+    usize frame_index;
 };
 
 struct Task {
@@ -197,7 +199,7 @@ struct Task {
 
     PipelineID m_pipeline_id = PipelineID::Invalid;
     PipelineLayoutID m_pipeline_layout_id = PipelineLayoutID::None;
-    std::span<TaskUse> m_task_uses = {};
+    ls::span<TaskUse> m_task_uses = {};
     std::string_view m_name = {};
     f64 m_start_ts = 0.0f;
     f64 m_end_ts = 0.0f;

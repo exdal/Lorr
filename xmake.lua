@@ -5,7 +5,7 @@ set_runtimes("MT", "c++_static")
 
 -- WARNINGS --
 add_cxxflags(
-    "-Wshadow-all",
+    -- "-Wshadow-all", -- clang analyzer fucking sucks
     "-Wno-gnu-line-marker",
     "-Wno-gnu-anonymous-struct",
     "-Wno-gnu-zero-variadic-macro-arguments",

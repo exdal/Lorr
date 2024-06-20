@@ -14,12 +14,12 @@ struct VirtualFile {
 
 struct VirtualFileInfo {
     std::string_view path = {};
-    std::span<const u8> data = {};
+    ls::span<const u8> data = {};
 };
 
 struct VirtualDir {
     VirtualDir() = default;
-    VirtualDir(std::span<const VirtualFileInfo> infos)
+    VirtualDir(ls::span<VirtualFileInfo> infos)
     {
         for (const VirtualFileInfo &info : infos) {
             std::vector<u8> data = { info.data.begin(), info.data.end() };

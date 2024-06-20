@@ -1,44 +1,39 @@
 #pragma once
 
-#include <deque>
-
-#define LR_INVALID_EVENT ~0u
-
 namespace lr {
-using Event = u32;
-template<typename DataT>
+template<typename EventT, typename DataT>
 struct EventManager {
     struct EventMetadata {
-        Event event = {};
+        EventT event = EventT::Invalid;
         DataT data = {};
     };
+    plf::colony<EventMetadata> queue = {};
 
-    bool peek() { return !m_queue.empty(); }
+    bool peek(this auto &self) { return !self.queue.empty(); }
 
-    Event dispatch(DataT &data_out)
+    EventT dispatch(this auto &self, DataT &data_out)
     {
         ZoneScoped;
 
-        if (!m_queue.empty()) {
-            EventMetadata &v = m_queue.front();
+        if (!self.queue.empty()) {
+            auto begin_it = self.queue.begin();
+            EventMetadata &v = *begin_it;
             data_out = v.data;
 
-            m_queue.pop_front();
+            self.queue.erase(begin_it);
 
             return v.event;
         }
 
-        return LR_INVALID_EVENT;
+        return EventT::Invalid;
     }
 
-    void push(Event event, DataT &data)
+    void push(this auto &self, EventT event, const DataT &data)
     {
         ZoneScoped;
 
-        m_queue.emplace_back(event, data);
+        self.queue.emplace(event, data);
     }
-
-    std::deque<EventMetadata> m_queue = {};
 };
 
 }  // namespace lr

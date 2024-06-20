@@ -5,46 +5,45 @@
 namespace lr::graphics {
 
 struct DescriptorPoolInfo {
-    std::span<DescriptorPoolSize> sizes = {};
+    ls::span<DescriptorPoolSize> sizes = {};
     u32 max_sets = 0;
     DescriptorPoolFlag flags = DescriptorPoolFlag::None;
 };
 
 struct DescriptorPool {
     DescriptorPool() = default;
-    DescriptorPool(DescriptorPoolFlag flags, VkDescriptorPool pool)
-        : m_flags(flags),
-          m_handle(pool)
+    DescriptorPool(DescriptorPoolFlag flags_, VkDescriptorPool pool_)
+        : flags(flags_),
+          handle(pool_)
     {
     }
 
-    DescriptorPoolFlag m_flags = DescriptorPoolFlag::None;
-
-    VkDescriptorPool m_handle = VK_NULL_HANDLE;
+    DescriptorPoolFlag flags = DescriptorPoolFlag::None;
+    VkDescriptorPool handle = VK_NULL_HANDLE;
 
     constexpr static auto OBJECT_TYPE = VK_OBJECT_TYPE_DESCRIPTOR_POOL;
-    operator auto &() { return m_handle; }
-    explicit operator bool() { return m_handle != nullptr; }
+    operator auto &() { return handle; }
+    explicit operator bool() { return handle != nullptr; }
 };
 
 struct DescriptorSetLayoutInfo {
-    std::span<DescriptorSetLayoutElement> elements = {};
-    std::span<DescriptorBindingFlag> binding_flags = {};
+    ls::span<DescriptorSetLayoutElement> elements = {};
+    ls::span<DescriptorBindingFlag> binding_flags = {};
     DescriptorSetLayoutFlag flags = DescriptorSetLayoutFlag::None;
 };
 
 struct DescriptorSetLayout {
     DescriptorSetLayout() = default;
-    DescriptorSetLayout(VkDescriptorSetLayout descriptor_set_layout)
-        : m_handle(descriptor_set_layout)
+    DescriptorSetLayout(VkDescriptorSetLayout descriptor_set_layout_)
+        : handle(descriptor_set_layout_)
     {
     }
 
-    VkDescriptorSetLayout m_handle = VK_NULL_HANDLE;
+    VkDescriptorSetLayout handle = VK_NULL_HANDLE;
 
     constexpr static auto OBJECT_TYPE = VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT;
-    operator auto &() { return m_handle; }
-    explicit operator bool() { return m_handle != nullptr; }
+    operator auto &() { return handle; }
+    explicit operator bool() { return handle != nullptr; }
 };
 
 struct DescriptorSetInfo {
@@ -55,18 +54,18 @@ struct DescriptorSetInfo {
 
 struct DescriptorSet {
     DescriptorSet() = default;
-    DescriptorSet(DescriptorPool *pool, VkDescriptorSet descriptor_set)
-        : m_pool(pool),
-          m_handle(descriptor_set)
+    DescriptorSet(DescriptorPool *pool_, VkDescriptorSet descriptor_set_)
+        : pool(pool_),
+          handle(descriptor_set_)
     {
     }
 
-    DescriptorPool *m_pool = nullptr;
-    VkDescriptorSet m_handle = VK_NULL_HANDLE;
+    DescriptorPool *pool = nullptr;
+    VkDescriptorSet handle = VK_NULL_HANDLE;
 
     constexpr static auto OBJECT_TYPE = VK_OBJECT_TYPE_DESCRIPTOR_SET;
-    operator auto &() { return m_handle; }
-    explicit operator bool() { return m_handle != nullptr; }
+    operator auto &() { return handle; }
+    explicit operator bool() { return handle != nullptr; }
 };
 
 }  // namespace lr::graphics

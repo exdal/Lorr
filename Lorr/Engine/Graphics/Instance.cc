@@ -59,9 +59,10 @@ VKResult Instance::init(const InstanceInfo &info)
     instance_builder.require_api_version(1, 3, 0);
     auto instance_result = instance_builder.build();
     if (!instance_result) {
-        auto error = static_cast<VKResult>(instance_result.vk_result());
-        LR_LOG_ERROR("Failed to create Vulkan Instance! {}", error);
-        return error;
+        auto error = instance_result.error();
+        auto r = static_cast<VKResult>(instance_result.vk_result());
+        LR_LOG_ERROR("Failed to create Vulkan Instance! {} - {}", error.message(), r);
+        return r;
     }
 
     m_handle = instance_result.value();

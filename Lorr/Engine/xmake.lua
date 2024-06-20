@@ -1,6 +1,6 @@
 target("Lorr")
     set_kind("static")
-    set_languages("cxx20")
+    set_languages("cxx23")
     add_forceincludes("Engine/pch.hh", { public = true })
     set_pcheader("Engine/pch.hh", { public = true })
     add_cxxflags("clang::-march=native", "clang_cl::/arch:AVX2", "cl::/arch:AVX2")
@@ -42,7 +42,6 @@ target("Lorr")
         "vulkan-memory-allocator",
         "vk-bootstrap",
         "plf_colony",
-        "sol2",
         "loguru",
         "imgui",
         "simdutf",
@@ -64,7 +63,7 @@ target("Lorr")
 
             local comment_str = string.format("// %s\n", file_path)
             local arr_str = string.format("constexpr static _data_t %s[] = {\n#include <%s.h>\n};\n", file_name, file_name_full)
-            local span_str = string.format("constexpr static std::span %s_sp = { &%s->as_u8, count_of(%s) - 1 };\n", file_name, file_name, file_name)
+            local span_str = string.format("constexpr static ls::span %s_sp = { &%s->as_u8, count_of(%s) - 1 };\n", file_name, file_name, file_name)
             local sv_str = string.format("constexpr static std::string_view %s_str = { &%s->as_c8, count_of(%s) -1 };\n", file_name, file_name, file_name)
             embedded_str = embedded_str .. comment_str .. arr_str .. span_str .. sv_str .. '\n'
         end

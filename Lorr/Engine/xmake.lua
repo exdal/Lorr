@@ -50,13 +50,12 @@ target("Lorr")
         "fastgltf",
         { public = true })
 
-    on_load(function (target)
+    on_config(function (target)
         local gendir = target:autogendir()
         local headerdir = path.join(target:autogendir(), "rules", "utils", "bin2c")
         target:add("includedirs", headerdir, { public = true })
         target:add("includedirs", gendir, { public = true })
         target:set("configdir", gendir)
-
         local embedded_str = ""
         for _, file_path in ipairs(os.files("$(projectdir)/Lorr/Resources/embedded/**")) do
             local file_name_full = file_path:match("([^/\\]+)$")

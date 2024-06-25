@@ -8,7 +8,7 @@
 #endif
 #include <GLFW/glfw3.h>
 
-namespace lr::os {
+namespace lr {
 enum class WindowCursor {
     Arrow,
     TextInput,
@@ -31,8 +31,8 @@ enum class WindowFlag : u32 {
     Borderless = 1 << 2,
     Maximized = 1 << 3,
 };
-LR_TYPEOP_ARITHMETIC(WindowFlag, WindowFlag, |);
-LR_TYPEOP_ARITHMETIC_INT(WindowFlag, WindowFlag, &);
+template<>
+struct has_bitmask<WindowFlag> : std::true_type {};
 
 struct SystemDisplay {
     std::string name;
@@ -76,4 +76,4 @@ struct Window {
     std::array<GLFWcursor *, usize(WindowCursor::Count)> cursors = {};
 };
 
-}  // namespace lr::os
+}  // namespace lr

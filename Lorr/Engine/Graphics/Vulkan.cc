@@ -18,7 +18,7 @@ VKFN_CALIBRATED_TIMESTAMPS_EXT_INSTANCE_FUNCTIONS
 VKFN_DEBUG_UTILS_EXT_DEVICE_FUNCTIONS
 #undef VKFN_FUNCTION
 
-namespace lr::graphics {
+namespace lr {
 bool vulkan::load_instance(VkInstance instance, PFN_vkGetInstanceProcAddr get_instance_proc_addr)
 {
     ZoneScoped;
@@ -69,4 +69,4 @@ bool vulkan::load_device(VkDevice device, PFN_vkGetDeviceProcAddr get_device_pro
 
     return true;
 }
-}  // namespace lr::graphics
+}  // namespace lr

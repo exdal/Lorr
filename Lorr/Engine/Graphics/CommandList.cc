@@ -4,7 +4,7 @@
 
 #include "Engine/Memory/Stack.hh"
 
-namespace lr::graphics {
+namespace lr {
 void CommandList::reset_query_pool(this CommandList &self, TimestampQueryPool &query_pool, u32 first_query, u32 query_count)
 {
     ZoneScoped;
@@ -455,4 +455,4 @@ void CommandQueue::wait_for_work(this CommandQueue &self)
     vkQueueWaitIdle(self);
 }
 
-}  // namespace lr::graphics
+}  // namespace lr

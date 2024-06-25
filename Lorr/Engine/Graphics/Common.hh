@@ -7,16 +7,15 @@
 
 #include <source_location>
 
-namespace lr::graphics {
+namespace lr {
 enum class DeviceFeature : u64 {
     None = 0,
     DescriptorBuffer = 1 << 0,
     MemoryBudget = 1 << 1,
     QueryTimestamp = 1 << 2,
 };
-LR_TYPEOP_ARITHMETIC_INT(DeviceFeature, DeviceFeature, &);
-LR_TYPEOP_ARITHMETIC(DeviceFeature, DeviceFeature, |);
-LR_TYPEOP_ASSIGNMENT(DeviceFeature, DeviceFeature, |);
+template<>
+struct has_bitmask<DeviceFeature> : std::true_type {};
 
 enum class VKResult : i32 {
     Success = VK_SUCCESS,
@@ -174,9 +173,8 @@ enum class BufferUsage : u64 {
     ResourceDescriptor = VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT,
     BufferDeviceAddress = VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
 };
-LR_TYPEOP_ARITHMETIC_INT(BufferUsage, BufferUsage, &);
-LR_TYPEOP_ARITHMETIC(BufferUsage, BufferUsage, |);
-LR_TYPEOP_ASSIGNMENT(BufferUsage, BufferUsage, |);
+template<>
+struct has_bitmask<BufferUsage> : std::true_type {};
 
 /// COMMAND ---------------------------- ///
 
@@ -192,9 +190,8 @@ enum class CommandTypeMask : u32 {
     Compute = 1 << static_cast<u32>(CommandType::Compute),
     Transfer = 1 << static_cast<u32>(CommandType::Transfer),
 };
-LR_TYPEOP_ARITHMETIC(CommandTypeMask, CommandTypeMask, |);
-LR_TYPEOP_ARITHMETIC_INT(CommandTypeMask, CommandTypeMask, &);
-LR_TYPEOP_ASSIGNMENT(CommandTypeMask, CommandTypeMask, |);
+template<>
+struct has_bitmask<CommandTypeMask> : std::true_type {};
 
 enum class CommandAllocatorFlag : u32 {
     None = 0,
@@ -202,8 +199,8 @@ enum class CommandAllocatorFlag : u32 {
     ResetCommandBuffer = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
     Protected = VK_COMMAND_POOL_CREATE_PROTECTED_BIT,
 };
-LR_TYPEOP_ARITHMETIC(CommandAllocatorFlag, CommandAllocatorFlag, |);
-LR_TYPEOP_ARITHMETIC_INT(CommandAllocatorFlag, CommandAllocatorFlag, &);
+template<>
+struct has_bitmask<lr::CommandAllocatorFlag> : std::true_type {};
 
 /// DESCRIPTOR ---------------------------- ///
 
@@ -223,8 +220,8 @@ enum class DescriptorSetLayoutFlag : u32 {
     DescriptorBuffer = VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT,
     EmbeddedSamplers = VK_DESCRIPTOR_SET_LAYOUT_CREATE_EMBEDDED_IMMUTABLE_SAMPLERS_BIT_EXT,
 };
-LR_TYPEOP_ARITHMETIC(DescriptorSetLayoutFlag, DescriptorSetLayoutFlag, |);
-LR_TYPEOP_ARITHMETIC_INT(DescriptorSetLayoutFlag, DescriptorSetLayoutFlag, &);
+template<>
+struct has_bitmask<lr::DescriptorSetLayoutFlag> : std::true_type {};
 
 enum class DescriptorBindingFlag : u32 {
     None = 0,
@@ -233,8 +230,8 @@ enum class DescriptorBindingFlag : u32 {
     PartiallyBound = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT,
     VariableDescriptorCount = VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT,
 };
-LR_TYPEOP_ARITHMETIC(DescriptorBindingFlag, DescriptorBindingFlag, |);
-LR_TYPEOP_ARITHMETIC_INT(DescriptorBindingFlag, DescriptorBindingFlag, &);
+template<>
+struct has_bitmask<DescriptorBindingFlag> : std::true_type {};
 
 enum class DescriptorPoolFlag : u32 {
     None = 0,
@@ -243,8 +240,8 @@ enum class DescriptorPoolFlag : u32 {
     FreeDescriptorSet = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT,
     UpdateAfterBind = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT,
 };
-LR_TYPEOP_ARITHMETIC(DescriptorPoolFlag, DescriptorPoolFlag, |);
-LR_TYPEOP_ARITHMETIC_INT(DescriptorPoolFlag, DescriptorPoolFlag, &);
+template<>
+struct has_bitmask<DescriptorPoolFlag> : std::true_type {};
 
 /// IMAGE ---------------------------- ///
 
@@ -355,8 +352,8 @@ enum class ImageUsage : u32 {
     TransferDst = VK_IMAGE_USAGE_TRANSFER_DST_BIT,
     Storage = VK_IMAGE_USAGE_STORAGE_BIT,
 };
-LR_TYPEOP_ARITHMETIC(ImageUsage, ImageUsage, |);
-LR_TYPEOP_ARITHMETIC_INT(ImageUsage, ImageUsage, &);
+template<>
+struct has_bitmask<ImageUsage> : std::true_type {};
 
 enum class ImageLayout : u32 {
     Undefined = VK_IMAGE_LAYOUT_UNDEFINED,
@@ -430,6 +427,7 @@ enum class PipelineStage : u64 {
     FragmentShader = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
     EarlyFragmentTests = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT,
     LateFragmentTests = VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+    DepthStencilTests = EarlyFragmentTests | LateFragmentTests,
     ColorAttachmentOutput = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
     AllGraphics = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT,
 
@@ -448,8 +446,8 @@ enum class PipelineStage : u64 {
     AllCommands = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
     BottomOfPipe = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
 };
-LR_TYPEOP_ARITHMETIC(PipelineStage, PipelineStage, |);
-LR_TYPEOP_ARITHMETIC_INT(PipelineStage, PipelineStage, &);
+template<>
+struct has_bitmask<PipelineStage> : std::true_type {};
 
 enum class MemoryAccess : u64 {
     None = VK_ACCESS_2_NONE,
@@ -474,8 +472,8 @@ enum class MemoryAccess : u64 {
     Write = VK_ACCESS_2_MEMORY_WRITE_BIT,
     ReadWrite = Read | Write,
 };
-LR_TYPEOP_ARITHMETIC(MemoryAccess, MemoryAccess, |);
-LR_TYPEOP_ARITHMETIC_INT(MemoryAccess, MemoryAccess, &);
+template<>
+struct has_bitmask<MemoryAccess> : std::true_type {};
 
 struct PipelineAccessImpl {
     constexpr PipelineAccessImpl(MemoryAccess mem_access, PipelineStage pipeline_stage)
@@ -515,6 +513,7 @@ namespace PipelineAccess {
     LRX(FragmentShaderRead, MemoryAccess::Read, PipelineStage::FragmentShader);
     LRX(EarlyFragmentTestsRead, MemoryAccess::Read, PipelineStage::EarlyFragmentTests);
     LRX(LateFragmentTestsRead, MemoryAccess::Read, PipelineStage::LateFragmentTests);
+    LRX(DepthStencilRead, MemoryAccess::Read, PipelineStage::DepthStencilTests);
     LRX(ColorAttachmentRead, MemoryAccess::Read, PipelineStage::ColorAttachmentOutput);
     LRX(GraphicsRead, MemoryAccess::Read, PipelineStage::AllGraphics);
     LRX(ComputeRead, MemoryAccess::Read, PipelineStage::ComputeShader);
@@ -529,6 +528,7 @@ namespace PipelineAccess {
     LRX(FragmentShaderWrite, MemoryAccess::Write, PipelineStage::FragmentShader);
     LRX(EarlyFragmentTestsWrite, MemoryAccess::Write, PipelineStage::EarlyFragmentTests);
     LRX(LateFragmentTestsWrite, MemoryAccess::Write, PipelineStage::LateFragmentTests);
+    LRX(DepthStencilWrite, MemoryAccess::Write, PipelineStage::DepthStencilTests);
     LRX(ColorAttachmentWrite, MemoryAccess::Write, PipelineStage::ColorAttachmentOutput);
     LRX(GraphicsWrite, MemoryAccess::Write, PipelineStage::AllGraphics);
     LRX(ComputeWrite, MemoryAccess::Write, PipelineStage::ComputeShader);
@@ -543,6 +543,7 @@ namespace PipelineAccess {
     LRX(FragmentShaderReadWrite, MemoryAccess::ReadWrite, PipelineStage::FragmentShader);
     LRX(EarlyFragmentTestsReadWrite, MemoryAccess::ReadWrite, PipelineStage::EarlyFragmentTests);
     LRX(LateFragmentTestsReadWrite, MemoryAccess::ReadWrite, PipelineStage::LateFragmentTests);
+    LRX(DepthStencilReadWrite, MemoryAccess::ReadWrite, PipelineStage::DepthStencilTests);
     LRX(ColorAttachmentReadWrite, MemoryAccess::ReadWrite, PipelineStage::ColorAttachmentOutput);
     LRX(GraphicsReadWrite, MemoryAccess::ReadWrite, PipelineStage::AllGraphics);
     LRX(ComputeReadWrite, MemoryAccess::ReadWrite, PipelineStage::ComputeShader);
@@ -629,11 +630,13 @@ union ColorClearValue {
 
 struct DepthClearValue {
     DepthClearValue() = default;
-    DepthClearValue(float depth, u8 stencil)
+    DepthClearValue(f32 depth)
+        : m_depth(depth) {};
+    DepthClearValue(f32 depth, u8 stencil)
         : m_depth(depth),
           m_stencil(stencil) {};
 
-    float m_depth = 0.0f;
+    f32 m_depth = 0.0f;
     u8 m_stencil = 0;
 };
 
@@ -685,7 +688,8 @@ enum class ColorMask : u32 {
 
     RGBA = R | G | B | A,
 };
-LR_TYPEOP_ARITHMETIC(ColorMask, ColorMask, |);
+template<>
+struct has_bitmask<ColorMask> : std::true_type {};
 
 enum class DynamicState : u32 {
     Viewport = 1 << 0,                 // VK_DYNAMIC_STATE_VIEWPORT,
@@ -717,8 +721,8 @@ enum class DynamicState : u32 {
     Last = PrimitiveRestartEnable,
     Count = 24,  // Always Last + 1 because bitwise
 };
-LR_TYPEOP_ARITHMETIC(DynamicState, DynamicState, |);
-LR_TYPEOP_ARITHMETIC_INT(DynamicState, DynamicState, &);
+template<>
+struct has_bitmask<DynamicState> : std::true_type {};
 
 enum class ShaderStageFlag : u32 {
     Vertex = VK_SHADER_STAGE_VERTEX_BIT,
@@ -729,7 +733,8 @@ enum class ShaderStageFlag : u32 {
     All = Vertex | Fragment | Compute | TessellationControl | TessellationEvaluation,
     Count = 5,
 };
-LR_TYPEOP_ARITHMETIC_INT(ShaderStageFlag, ShaderStageFlag, &);
+template<>
+struct has_bitmask<ShaderStageFlag> : std::true_type {};
 
 /// MEMORY ---------------------------- ///
 enum class MemoryFlag : u32 {
@@ -738,8 +743,8 @@ enum class MemoryFlag : u32 {
     HostSeqWrite = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
     HostReadWrite = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT,
 };
-LR_TYPEOP_ARITHMETIC(MemoryFlag, MemoryFlag, |);
-LR_TYPEOP_ARITHMETIC_INT(MemoryFlag, MemoryFlag, &);
+template<>
+struct has_bitmask<MemoryFlag> : std::true_type {};
 
 enum class MemoryPreference : u32 {
     Auto = VMA_MEMORY_USAGE_AUTO,
@@ -1185,15 +1190,15 @@ struct MemoryRequirements {
     u32 memory_type_bits = 0;
 };
 
-}  // namespace lr::graphics
+}  // namespace lr
 
 namespace fmt {
 template<>
-struct formatter<lr::graphics::VKResult> : formatter<string_view> {
+struct formatter<lr::VKResult> : formatter<string_view> {
     template<typename FormatContext>
-    constexpr auto format(lr::graphics::VKResult v, FormatContext &ctx) const
+    constexpr auto format(lr::VKResult v, FormatContext &ctx) const
     {
-        return fmt::format_to(ctx.out(), "{}({})", lr::graphics::vkresult_to_string(v), static_cast<i32>(v));
+        return fmt::format_to(ctx.out(), "{}({})", lr::vkresult_to_string(v), static_cast<i32>(v));
     }
 };
 }  // namespace fmt

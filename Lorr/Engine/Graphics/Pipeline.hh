@@ -3,7 +3,7 @@
 #include "Common.hh"
 #include "Descriptor.hh"
 
-namespace lr::graphics {
+namespace lr {
 struct PipelineLayoutInfo {
     ls::span<DescriptorSetLayout> layouts = {};
     ls::span<PushConstantRange> push_constants = {};
@@ -105,4 +105,4 @@ struct Pipeline {
     explicit operator bool() { return handle != VK_NULL_HANDLE; }
 };
 
-}  // namespace lr::graphics
+}  // namespace lr

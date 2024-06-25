@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <type_traits>
 
 typedef double f64;
 typedef float f32;
@@ -117,5 +118,54 @@ constexpr T mib_to_bytes(const T x)
 }
 
 #define LR_HANDLE(name, type) enum class name : type { Invalid = std::numeric_limits<type>::max() }
+template<typename T>
+struct has_bitmask : std::false_type {};
 
+// Enum utils
+
+template<typename T>
+std::enable_if_t<lr::has_bitmask<T>::value, T> constexpr operator|(T l, T r)
+{
+    using enum_type_t = std::underlying_type_t<T>;
+    return static_cast<T>(static_cast<enum_type_t>(l) | static_cast<enum_type_t>(r));
+}
+
+template<typename T>
+std::enable_if_t<lr::has_bitmask<T>::value, T &> constexpr operator|=(T &l, T r)
+{
+    return l = l | r;
+}
+
+template<typename T>
+std::enable_if_t<lr::has_bitmask<T>::value, bool> constexpr operator&(T l, T r)
+{
+    using enum_type_t = std::underlying_type_t<T>;
+    return static_cast<bool>(static_cast<enum_type_t>(l) & static_cast<enum_type_t>(r));
+}
+
+template<typename T>
+std::enable_if_t<lr::has_bitmask<T>::value, T &> constexpr operator&=(T &l, T r)
+{
+    return l = l & r;
+}
+
+template<typename T>
+std::enable_if_t<lr::has_bitmask<T>::value, T> constexpr operator^(T l, T r)
+{
+    using enum_type_t = std::underlying_type_t<T>;
+    return static_cast<T>(static_cast<enum_type_t>(l) ^ static_cast<enum_type_t>(r));
+}
+
+template<typename T>
+std::enable_if_t<lr::has_bitmask<T>::value, T &> constexpr operator^=(T &l, T r)
+{
+    return l = l ^ r;
+}
+
+template<typename T>
+std::enable_if_t<lr::has_bitmask<T>::value, T> constexpr operator~(T l)
+{
+    using enum_type_t = std::underlying_type_t<T>;
+    return static_cast<T>(~static_cast<enum_type_t>(l));
+}
 }  // namespace lr

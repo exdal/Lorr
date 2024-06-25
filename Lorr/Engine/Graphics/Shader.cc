@@ -3,7 +3,7 @@
 #include <slang-com-ptr.h>
 #include <slang.h>
 
-namespace lr::graphics {
+namespace lr {
 struct CompilerContext {
     Slang::ComPtr<slang::IGlobalSession> global_session;
 } compiler_ctx;
@@ -109,6 +109,7 @@ Result<std::vector<u32>, VKResult> ShaderCompiler::compile(const ShaderCompileIn
         .format = SLANG_SPIRV,
         .profile = compiler_ctx.global_session->findProfile("spirv_1_4"),
         .flags = SLANG_TARGET_FLAG_GENERATE_SPIRV_DIRECTLY,
+        .forceGLSLScalarBufferLayout = true,
         .compilerOptionEntries = entries.data(),
         .compilerOptionEntryCount = static_cast<u32>(entries.size()),
     };
@@ -116,6 +117,7 @@ Result<std::vector<u32>, VKResult> ShaderCompiler::compile(const ShaderCompileIn
     slang::SessionDesc session_desc = {
         .targets = &target_desc,
         .targetCount = 1,
+        .defaultMatrixLayoutMode = SLANG_MATRIX_LAYOUT_ROW_MAJOR,
         .searchPaths = nullptr,
         .searchPathCount = 0,
         .preprocessorMacros = macros.data(),
@@ -201,4 +203,4 @@ Result<std::vector<u32>, VKResult> ShaderCompiler::compile(const ShaderCompileIn
     return std::move(spirv_data);
 }
 
-}  // namespace lr::graphics
+}  // namespace lr

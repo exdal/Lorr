@@ -2,8 +2,7 @@
 
 #include "Common.hh"
 
-namespace lr::graphics {
-
+namespace lr {
 struct DescriptorPoolInfo {
     ls::span<DescriptorPoolSize> sizes = {};
     u32 max_sets = 0;
@@ -68,4 +67,4 @@ struct DescriptorSet {
     explicit operator bool() { return handle != nullptr; }
 };
 
-}  // namespace lr::graphics
+}  // namespace lr

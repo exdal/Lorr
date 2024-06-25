@@ -2,8 +2,6 @@
 
 #include "Engine/Memory/Stack.hh"
 
-using namespace lr::graphics;
-
 namespace lr {
 bool Application::init(this Application &self, const ApplicationInfo &info)
 {
@@ -80,32 +78,57 @@ void Application::poll_events(this Application &self)
 {
     ZoneScoped;
 
+    thread_local bool move_cam = false;
     auto &imgui = ImGui::GetIO();
     while (self.event_manager.peek()) {
-        ApplicationEventData event_data = {};
-        switch (self.event_manager.dispatch(event_data)) {
+        ApplicationEventData e = {};
+        switch (self.event_manager.dispatch(e)) {
             case ApplicationEvent::WindowResize: {
                 break;
             }
             case ApplicationEvent::MousePosition: {
-                auto &pos = event_data.mouse_pos;
+                auto &pos = e.mouse_pos;
                 imgui.AddMousePosEvent(pos.x, pos.y);
+
+                thread_local glm::vec2 last_pos = { 1280.0f / 2, 720.0f / 2 };
+                auto delta = pos - last_pos;
+                if (move_cam) {
+                    self.camera.yaw += delta.x / 5.0f;
+                    self.camera.pitch -= delta.y / 5.0f;
+                }
+                last_pos = pos;
                 break;
             }
             case ApplicationEvent::MouseState: {
-                imgui.AddMouseButtonEvent(event_data.mouse_key, event_data.mouse_key_state == KeyState::Down);
+                if (!imgui.WantCaptureMouse)
+                    move_cam = !move_cam;
+                imgui.AddMouseButtonEvent(e.mouse_key, e.mouse_key_state == KeyState::Down);
                 break;
             }
             case ApplicationEvent::MouseScroll: {
-                auto &offset = event_data.mouse_scroll_offset;
+                auto &offset = e.mouse_scroll_offset;
                 imgui.AddMouseWheelEvent(offset.x, offset.y);
+                self.camera.pitch += offset.x;
                 break;
             }
             case ApplicationEvent::KeyboardState: {
+                Key k = e.key;
+                bool d = e.key_state != KeyState::Up;
+                f32 v = 1.0f;
+
+                // clang-format off
+                if (k == LR_KEY_SPACE) v = 5.0f;
+                if (k == LR_KEY_W) self.camera.velocity.z = d ?  v : 0.0f;
+                if (k == LR_KEY_S) self.camera.velocity.z = d ? -v : 0.0f;
+                if (k == LR_KEY_D) self.camera.velocity.x = d ?  v : 0.0f;
+                if (k == LR_KEY_A) self.camera.velocity.x = d ? -v : 0.0f;
+                if (k == LR_KEY_E) self.camera.velocity.y = d ?  v : 0.0f;
+                if (k == LR_KEY_Q) self.camera.velocity.y = d ? -v : 0.0f;
+                // clang-format on
                 break;
             }
             case ApplicationEvent::InputChar: {
-                imgui.AddInputCharacterUTF16(event_data.input_char);
+                imgui.AddInputCharacterUTF16(e.input_char);
                 break;
             }
             default: {
@@ -140,8 +163,8 @@ void Application::run(this Application &self)
 
         // Delta time
         f64 cur_time = glfwGetTime();
-        f64 delta_time = cur_time - last_time;
-        imgui.DeltaTime = static_cast<f32>(delta_time);
+        f32 delta_time = static_cast<f32>(cur_time - last_time);
+        imgui.DeltaTime = delta_time;
         last_time = cur_time;
 
         // Begin frame
@@ -168,7 +191,10 @@ void Application::run(this Application &self)
         ImGui::NewFrame();
         auto &extent = self.default_surface.swap_chain.extent;
         imgui.DisplaySize = ImVec2(static_cast<f32>(extent.width), static_cast<f32>(extent.height));
+
+        self.camera.update(delta_time);
         self.do_update(delta_time);
+
         ImGui::Render();
 
         // Render frame
@@ -192,7 +218,7 @@ void Application::run(this Application &self)
     }
 }
 
-VKResult Application::create_surface(this Application &self, ApplicationSurface &surface, std::optional<os::WindowInfo> window_info)
+VKResult Application::create_surface(this Application &self, ApplicationSurface &surface, std::optional<WindowInfo> window_info)
 {
     ZoneScoped;
     memory::ScopedStack stack;
@@ -210,7 +236,7 @@ VKResult Application::create_surface(this Application &self, ApplicationSurface 
     surface.images.resize(self.device.frame_count);
     surface.image_views.resize(self.device.frame_count);
 
-    graphics::SwapChainInfo swap_chain_info = {
+    SwapChainInfo swap_chain_info = {
         .surface = surface.window.get_surface(self.instance.m_handle),
         .extent = { surface.window.width, surface.window.height },
     };

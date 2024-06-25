@@ -8,8 +8,6 @@ enum class FileAccess {
     Write = 1 << 0,
     Read = 1 << 1,
 };
-LR_TYPEOP_ARITHMETIC(FileAccess, FileAccess, |);
-LR_TYPEOP_ARITHMETIC_INT(FileAccess, FileAccess, &);
 
 // These are not complete, some OS specific results may occur
 enum class FileResult : i32 {
@@ -37,3 +35,8 @@ void release(void *data, u64 size = 0);
 bool commit(void *data, u64 size);
 void decommit(void *data, u64 size);
 }  // namespace lr::os
+
+namespace lr {
+template<>
+struct has_bitmask<os::FileAccess> : std::true_type {};
+}  // namespace lr

@@ -4,7 +4,7 @@
 #include "Resource.hh"
 #include "Shader.hh"
 
-namespace lr::graphics {
+namespace lr {
 template<typename ResourceT, typename ResourceID>
 struct allocation_result {
     allocation_result(ResourceT &res, ResourceID res_id)
@@ -119,4 +119,4 @@ struct ResourcePools {
     std::array<PipelineLayout, (max_push_constant_size / sizeof(u32)) + 1> pipeline_layouts = {};
 };
 
-}  // namespace lr::graphics
+}  // namespace lr

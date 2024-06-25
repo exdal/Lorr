@@ -10,32 +10,36 @@
 
 #include "Engine/OS/Window.hh"
 
+#include "Engine/World/Camera.hh"
+
 namespace lr {
 struct ApplicationSurface {
-    os::Window window = {};
-    graphics::SwapChain swap_chain = {};
-    ls::static_vector<graphics::ImageID, graphics::Limits::FrameCount> images = {};
-    ls::static_vector<graphics::ImageViewID, graphics::Limits::FrameCount> image_views = {};
+    Window window = {};
+    SwapChain swap_chain = {};
+    ls::static_vector<ImageID, Limits::FrameCount> images = {};
+    ls::static_vector<ImageViewID, Limits::FrameCount> image_views = {};
     b32 swap_chain_ok = false;
 };
 
 struct ApplicationInfo {
     ls::span<c8 *> args = {};
-    os::WindowInfo window_info = {};
+    WindowInfo window_info = {};
 };
 
 struct Application {
     static Application &get();
 
     EventManager<ApplicationEvent, ApplicationEventData> event_manager = {};
-    graphics::Instance instance = {};
-    graphics::Device device = {};
+    Instance instance = {};
+    Device device = {};
     ApplicationSurface default_surface = {};
-    graphics::TaskGraph task_graph = {};
-    graphics::TaskImageID swap_chain_image_id = {};
+    TaskGraph task_graph = {};
+    TaskImageID swap_chain_image_id = {};
 
     // TODO: Resource management
-    graphics::TaskImageID imgui_font_image_id = {};
+    TaskImageID imgui_font_image_id = {};
+
+    PerspectiveCamera camera = {};
 
     bool init(this Application &, const ApplicationInfo &info);
     void push_event(this Application &, ApplicationEvent event, const ApplicationEventData &data);
@@ -44,11 +48,11 @@ struct Application {
     void run(this Application &);
 
     virtual bool do_prepare() = 0;
-    virtual bool do_update(f64 delta_time) = 0;
+    virtual bool do_update(f32 delta_time) = 0;
 
 private:
     // TODO: Properly handle this when we need multiple windows/sc.
-    graphics::VKResult create_surface(this Application &, ApplicationSurface &surface, std::optional<os::WindowInfo> window_info = std::nullopt);
+    VKResult create_surface(this Application &, ApplicationSurface &surface, std::optional<WindowInfo> window_info = std::nullopt);
 };
 
 }  // namespace lr

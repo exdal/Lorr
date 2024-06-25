@@ -45,8 +45,9 @@ target("Lorr")
         "loguru",
         "imgui",
         "simdutf",
-        "slang",
+        "slang-lorr",
         "unordered_dense",
+        "fastgltf",
         { public = true })
 
     on_load(function (target)

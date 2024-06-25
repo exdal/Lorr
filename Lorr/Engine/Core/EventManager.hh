@@ -18,11 +18,12 @@ struct EventManager {
         if (!self.queue.empty()) {
             auto begin_it = self.queue.begin();
             EventMetadata &v = *begin_it;
+            EventT event_type = v.event;
             data_out = v.data;
 
             self.queue.erase(begin_it);
 
-            return v.event;
+            return event_type;
         }
 
         return EventT::Invalid;

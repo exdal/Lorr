@@ -144,7 +144,7 @@ VKFN_DEBUG_UTILS_EXT_DEVICE_FUNCTIONS
 #define VMA_VULKAN_VERSION 1003000
 #include <vk_mem_alloc.h>
 
-namespace lr::graphics::vulkan {
+namespace lr::vulkan {
 bool load_instance(VkInstance instance, PFN_vkGetInstanceProcAddr get_instance_proc_addr);
 bool load_device(VkDevice device, PFN_vkGetDeviceProcAddr get_device_proc_addr);
-}  // namespace lr::graphics::vulkan
+}  // namespace lr::vulkan

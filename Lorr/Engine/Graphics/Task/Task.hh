@@ -1,197 +1,18 @@
 #pragma once
 
 #include "Engine/Graphics/Common.hh"
-#include "Engine/Graphics/Device.hh"
+#include "Engine/Graphics/CommandList.hh"
 
-namespace lr::graphics {
-struct TaskPersistentImageInfo {
-    ImageID image_id = ImageID::Invalid;
-    ImageViewID image_view_id = ImageViewID::Invalid;
-    ImageLayout layout = ImageLayout::Undefined;
-    PipelineAccessImpl access = PipelineAccess::TopOfPipe;
-};
+#include "TaskResource.hh"
 
-LR_HANDLE(TaskBufferID, u32);
-struct TaskBuffer {
-    BufferID buffer_id = BufferID::Invalid;
-    PipelineAccessImpl last_access = PipelineAccess::None;
-    u32 last_batch_index = 0;
-    u32 last_submit_index = 0;
-};
-
-LR_HANDLE(TaskImageID, u32);
-struct TaskImage {
-    ImageID image_id = ImageID::Invalid;
-    ImageViewID image_view_id = ImageViewID::Invalid;
-    ImageLayout last_layout = ImageLayout::Undefined;
-    PipelineAccessImpl last_access = PipelineAccess::None;
-    u32 last_batch_index = 0;
-    u32 last_submit_index = 0;
-};
-
-enum class TaskUseType : u32 { Buffer = 0, Image };
-struct TaskUse {
-    TaskUseType type = TaskUseType::Buffer;
-    ImageLayout image_layout = ImageLayout::Undefined;
-    PipelineAccessImpl access = PipelineAccess::None;
-    union {
-        TaskBufferID task_buffer_id = TaskBufferID::Invalid;
-        TaskImageID task_image_id;
-        u32 index;
-    };
-};
-
-template<PipelineAccessImpl AccessT>
-struct TaskBufferUse : TaskUse {
-    constexpr TaskBufferUse()
-    {
-        this->type = TaskUseType::Buffer;
-        this->access = AccessT;
-    }
-
-    constexpr TaskBufferUse(TaskBufferID id)
-    {
-        this->type = TaskUseType::Buffer;
-        this->access = AccessT;
-        this->task_buffer_id = id;
-    };
-};
-
-template<ImageLayout LayoutT, PipelineAccessImpl AccessT>
-struct TaskImageUse : TaskUse {
-    constexpr TaskImageUse()
-    {
-        this->type = TaskUseType::Image;
-        this->image_layout = LayoutT;
-        this->access = AccessT;
-    }
-
-    constexpr TaskImageUse(TaskImageID id)
-    {
-        this->type = TaskUseType::Image;
-        this->image_layout = LayoutT;
-        this->access = AccessT;
-        this->task_image_id = id;
-    };
-};
-
-// Task Use Presets
-namespace Preset {
-    using ColorAttachmentWrite = TaskImageUse<ImageLayout::ColorAttachment, PipelineAccess::ColorAttachmentReadWrite>;
-    using ColorAttachmentRead = TaskImageUse<ImageLayout::ColorAttachment, PipelineAccess::ColorAttachmentRead>;
-    using ColorReadOnly = TaskImageUse<ImageLayout::ColorReadOnly, PipelineAccess::FragmentShaderRead>;
-    using ComputeWrite = TaskImageUse<ImageLayout::General, PipelineAccess::ComputeWrite>;
-    using ComputeRead = TaskImageUse<ImageLayout::General, PipelineAccess::ComputeRead>;
-    using BlitRead = TaskImageUse<ImageLayout::TransferSrc, PipelineAccess::BlitRead>;
-    using BlitWrite = TaskImageUse<ImageLayout::TransferDst, PipelineAccess::BlitWrite>;
-
-    using VertexBuffer = TaskBufferUse<PipelineAccess::VertexAttrib>;
-    using IndexBuffer = TaskBufferUse<PipelineAccess::IndexAttrib>;
-};  // namespace Preset
-
-struct TaskPipelineInfo {
-    union {
-        GraphicsPipelineInfo graphics_info = {};
-        ComputePipelineInfo compute_info;
-    };
-
-    std::vector<Viewport> viewports = {};
-    std::vector<Rect2D> scissors = {};
-    std::vector<VertexLayoutBindingInfo> vertex_binding_infos = {};
-    std::vector<VertexAttribInfo> vertex_attrib_infos = {};
-    std::vector<PipelineColorBlendAttachment> blend_attachments = {};
-    std::vector<ShaderID> shader_ids = {};
-
-    void set_dynamic_states(DynamicState states) { graphics_info.dynamic_state = states; }
-    void set_viewport(const Viewport &viewport) { viewports.push_back(viewport); }
-    void set_scissors(const Rect2D &rect) { scissors.push_back(rect); }
-    void set_shader(ShaderID shader_id) { shader_ids.push_back(shader_id); }
-    void set_rasterizer_state(const RasterizerStateInfo &info) { graphics_info.rasterizer_state = info; }
-    void set_multisample_state(const MultisampleStateInfo &info) { graphics_info.multisample_state = info; }
-    void set_depth_stencil_state(const DepthStencilStateInfo &info) { graphics_info.depth_stencil_state = info; }
-    void set_blend_constants(const glm::vec4 &constants) { graphics_info.blend_constants = constants; }
-    void set_blend_attachments(const std::vector<PipelineColorBlendAttachment> &infos) { blend_attachments = infos; }
-    void set_blend_attachment_all(const PipelineColorBlendAttachment &info)
-    {
-        for (auto &v : blend_attachments) {
-            v = info;
-        }
-    }
-    void set_vertex_layout(const std::vector<VertexAttribInfo> &attribs)
-    {
-        u32 stride = 0;
-        for (const VertexAttribInfo &attrib : attribs) {
-            stride += format_to_size(attrib.format);
-        }
-
-        vertex_binding_infos.push_back({
-            .binding = static_cast<u32>(vertex_binding_infos.size()),
-            .stride = stride,
-            .input_rate = VertexInputRate::Vertex,
-        });
-
-        vertex_attrib_infos.insert(vertex_attrib_infos.end(), attribs.begin(), attribs.end());
-    }
-};
-
+namespace lr {
 struct TaskPrepareInfo {
     Device *device = nullptr;
     TaskPipelineInfo pipeline_info = {};
 };
 
+struct TaskContext;
 LR_HANDLE(TaskID, u32);
-struct TaskContext {
-    TaskContext(ls::span<TaskImage> task_images_, CommandList &cmd_list_, CommandList &copy_cmd_list_, Device &device_, usize frame_index_)
-        : task_images(task_images_),
-          cmd_list(cmd_list_),
-          copy_cmd_list(copy_cmd_list_),
-          device(device_),
-          frame_index(frame_index_)
-    {
-    }
-
-    template<typename T>
-    RenderingAttachmentInfo as_color_attachment(this TaskContext &self, T &use, std::optional<ColorClearValue> clear_val = std::nullopt)
-    {
-        ZoneScoped;
-
-        LR_ASSERT(use.image_layout == ImageLayout::ColorAttachment, "Rendering Attachment must have ColorAttachment layout!");
-
-        RenderingAttachmentInfo info = {
-            .image_view_id = self.task_image_data(use).image_view_id,
-            .image_layout = ImageLayout::ColorAttachment,
-            .load_op = clear_val ? AttachmentLoadOp::Clear : AttachmentLoadOp::Load,
-            .store_op = use.access == PipelineAccess::ColorAttachmentWrite ? AttachmentStoreOp::Store : AttachmentStoreOp::None,
-            .clear_value = { clear_val.value_or(ColorClearValue{}) },
-        };
-
-        return info;
-    }
-
-    template<typename T>
-    TaskImage &task_image_data(this TaskContext &self, T &use)
-    {
-        return self.task_images[static_cast<usize>(use.task_image_id)];
-    }
-
-    template<typename T>
-    void set_push_constants(this TaskContext &self, T &v)
-    {
-        ZoneScoped;
-
-        PipelineLayoutID pipeline_layout = self.device.get_pipeline_layout<T>();
-        self.cmd_list.set_push_constants(pipeline_layout, &v, sizeof(T), 0);
-    }
-
-    StagingBuffer &staging_buffer(this TaskContext &self) { return self.device.staging_buffer_at(self.frame_index); }
-
-    ls::span<TaskImage> task_images;
-    CommandList &cmd_list;
-    CommandList &copy_cmd_list;
-    Device &device;
-    usize frame_index;
-};
-
 struct Task {
     virtual ~Task() = default;
     virtual bool prepare(TaskPrepareInfo &info) = 0;
@@ -203,6 +24,7 @@ struct Task {
     std::string_view name = {};
     f64 start_ts = 0.0f;
     f64 end_ts = 0.0f;
+    Extent2D render_extent = {};
 
     f64 execution_time() { return (end_ts - start_ts) / 1000000.f; }
 };
@@ -275,4 +97,4 @@ struct TaskSubmit {
     auto &frame_query_pool(u32 frame_index) { return query_pools[frame_index]; }
 };
 
-}  // namespace lr::graphics
+}  // namespace lr

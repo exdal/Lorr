@@ -6,7 +6,7 @@
 #include "Engine/Memory/Bit.hh"
 #include "Engine/Memory/Stack.hh"
 
-namespace lr::graphics {
+namespace lr {
 void StagingBuffer::init(this StagingBuffer &self, Device *device)
 {
     ZoneScoped;
@@ -1659,4 +1659,4 @@ VKResult Device::create_command_allocators(this Device &self, ls::span<CommandAl
     return VKResult::Success;
 }
 
-}  // namespace lr::graphics
+}  // namespace lr

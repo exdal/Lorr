@@ -1,12 +1,12 @@
 #pragma once
 
-#include "Task.hh"
+#include "TaskGraph.hh"
 
 #include <Embedded.hh>
 
 #include <imgui.h>
 
-namespace lr::graphics::BuiltinTask {
+namespace lr::BuiltinTask {
 struct ImGuiTask {
     std::string_view name = "ImGui";
 
@@ -87,9 +87,9 @@ struct ImGuiTask {
         }
 
         self.sampler = info.device->create_cached_sampler({
-            .min_filter = graphics::Filtering::Linear,
-            .mag_filter = graphics::Filtering::Linear,
-            .mip_filter = graphics::Filtering::Linear,
+            .min_filter = Filtering::Linear,
+            .mag_filter = Filtering::Linear,
+            .mip_filter = Filtering::Linear,
             .address_u = TextureAddressMode::Repeat,
             .address_v = TextureAddressMode::Repeat,
             .min_lod = -1000,
@@ -101,12 +101,11 @@ struct ImGuiTask {
 
     void execute(TaskContext &tc)
     {
-        auto &task_attachment = tc.task_image_data(uses.attachment);
+        auto color_attachment = tc.as_color_attachment(uses.attachment);
         auto &task_font = tc.task_image_data(uses.font);
-        auto &attachment_image = tc.device.image_at(task_attachment.image_id);
         auto &staging_buffer = tc.staging_buffer();
-
         auto &imgui = ImGui::GetIO();
+
         ImDrawData *draw_data = ImGui::GetDrawData();
         u64 vertex_size_bytes = draw_data->TotalVtxCount * sizeof(ImDrawVert);
         u64 index_size_bytes = draw_data->TotalIdxCount * sizeof(ImDrawIdx);
@@ -130,11 +129,9 @@ struct ImGuiTask {
         staging_buffer.upload(vertex_buffer_alloc, vertex_buffer, tc.copy_cmd_list);
         staging_buffer.upload(index_buffer_alloc, index_buffer, tc.copy_cmd_list);
 
-        Extent3D render_extent = attachment_image.extent;
-        auto rendering_attachment_info = tc.as_color_attachment(uses.attachment);
         tc.cmd_list.begin_rendering({
-            .render_area = { 0, 0, render_extent.width, render_extent.height },
-            .color_attachments = rendering_attachment_info,
+            .render_area = tc.pass_rect(),
+            .color_attachments = color_attachment,
         });
         tc.cmd_list.set_vertex_buffer(vertex_buffer);
         tc.cmd_list.set_index_buffer(index_buffer, 0, true);
@@ -165,7 +162,7 @@ struct ImGuiTask {
                     continue;
                 }
 
-                graphics::Rect2D scissor = {
+                Rect2D scissor = {
                     .offset = { i32(clip_min.x), i32(clip_min.y) },
                     .extent = { u32(clip_max.x - clip_min.x), u32(clip_max.y - clip_min.y) },
                 };
@@ -180,4 +177,4 @@ struct ImGuiTask {
     }
 };
 
-}  // namespace lr::graphics::BuiltinTask
+}  // namespace lr::BuiltinTask

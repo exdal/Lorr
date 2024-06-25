@@ -3,7 +3,7 @@
 #include "Common.hh"
 #include "Engine/Util/VirtualDir.hh"
 
-namespace lr::graphics {
+namespace lr {
 struct Shader {
     Shader() = default;
     Shader(ShaderStageFlag stage_flags, VkShaderModule shader_module)
@@ -33,8 +33,8 @@ enum class ShaderCompileFlag : u32 {
     UseGLLayout = 1 << 8,
     UseScalarLayout = 1 << 9,
 };
-LR_TYPEOP_ARITHMETIC(ShaderCompileFlag, ShaderCompileFlag, |);
-LR_TYPEOP_ARITHMETIC_INT(ShaderCompileFlag, ShaderCompileFlag, &);
+template<>
+struct has_bitmask<lr::ShaderCompileFlag> : std::true_type {};
 
 struct ShaderPreprocessorMacroInfo {
     std::string_view name = {};
@@ -42,7 +42,7 @@ struct ShaderPreprocessorMacroInfo {
 };
 
 struct ShaderCompileInfo {
-    ShaderCompileFlag compile_flags = ShaderCompileFlag::None;
+    ShaderCompileFlag compile_flags = ShaderCompileFlag::MatrixRowMajor;
     std::string_view entry_point = "main";
     std::string_view real_path = {};  // for shader debugging
     std::string_view code = {};
@@ -55,4 +55,4 @@ namespace ShaderCompiler {
     Result<std::vector<u32>, VKResult> compile(const ShaderCompileInfo &info);
 }  // namespace ShaderCompiler
 
-}  // namespace lr::graphics
+}  // namespace lr

@@ -2,7 +2,7 @@
 
 #include "Common.hh"
 
-namespace lr::graphics {
+namespace lr {
 struct InstanceInfo {
     std::string_view app_name = "Lorr App";
     std::string_view engine_name = "Lorr";
@@ -13,4 +13,4 @@ struct Instance {
 
     vkb::Instance m_handle;
 };
-}  // namespace lr::graphics
+}  // namespace lr

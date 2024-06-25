@@ -1,3 +1,5 @@
+includes("packages/**.lua")
+
 add_rules("mode.debug", "mode.release", "mode.releasedbg")
 set_project("Lorr")
 set_version("1.0.0")
@@ -41,7 +43,6 @@ add_requires("glm")
 add_requires("vulkan-memory-allocator")
 add_requires("vk-bootstrap v1.3.283")
 add_requires("plf_colony")
-add_requires("sol2")
 add_requires("imgui v1.90.5-docking")
 add_requires("simdutf")
 add_requires("unordered_dense")
@@ -54,10 +55,7 @@ add_requires("tracy", { configs = {
     system_tracing = true,
 } })
 add_requires("loguru", { configs = { fmt = true } })
-add_requires("slang v2024.1.18", { configs = {
-    slang_glslang = true,
-    embed_stdlib = true
-} })
+add_requires("slang-lorr v2024.1.22")
 
 if is_plat("linux") then
     add_requires("glfw 3.4", { configs = {

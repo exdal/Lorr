@@ -7,7 +7,7 @@
 #include "ResourcePool.hh"
 #include "SwapChain.hh"
 
-namespace lr::graphics {
+namespace lr {
 struct StagingAllocResult {
     BufferID buffer_id = BufferID::Invalid;
     u8 *ptr = nullptr;
@@ -207,4 +207,4 @@ T *Device::buffer_host_data(this Device &self, BufferID buffer_id)
 {
     return reinterpret_cast<T *>(self.buffer_at(buffer_id).host_data);
 }
-}  // namespace lr::graphics
+}  // namespace lr

@@ -8,5 +8,6 @@ local add_example = function(example_name, srcs)
 end
 
 if has_config("build_examples") then
-    add_example("Triangle", "Triangle/main.cc")
+    add_example("Cube", "Cube/main.cc")
+    add_example("Advanced", "Advanced/**.cc")
 end

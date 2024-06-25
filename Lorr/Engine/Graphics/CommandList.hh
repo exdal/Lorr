@@ -3,7 +3,7 @@
 #include "Common.hh"
 #include "zfwd.hh"
 
-namespace lr::graphics {
+namespace lr {
 struct Semaphore {
     u64 advance(this auto &self) { return ++self.counter; }
 
@@ -154,4 +154,4 @@ struct CommandQueue {
     explicit operator bool() { return handle != VK_NULL_HANDLE; }
 };
 
-}  // namespace lr::graphics
+}  // namespace lr

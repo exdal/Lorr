@@ -1,6 +1,6 @@
 #include "Instance.hh"
 
-namespace lr::graphics {
+namespace lr {
 constexpr loguru::Verbosity to_loguru_severity(VkDebugUtilsMessageSeverityFlagBitsEXT severity)
 {
     switch (severity) {
@@ -75,4 +75,4 @@ VKResult Instance::init(const InstanceInfo &info)
     return VKResult::Success;
 }
 
-}  // namespace lr::graphics
+}  // namespace lr

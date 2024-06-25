@@ -3,7 +3,7 @@
 #include "Common.hh"
 #include "CommandList.hh"
 
-namespace lr::graphics {
+namespace lr {
 struct SwapChainInfo {
     VkSurfaceKHR surface = nullptr;
     Extent2D extent = {};
@@ -28,4 +28,4 @@ struct SwapChain {
     operator bool() { return handle != VK_NULL_HANDLE; }
 };
 
-}  // namespace lr::graphics
+}  // namespace lr

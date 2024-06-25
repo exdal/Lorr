@@ -24,7 +24,7 @@
 #endif
 #endif
 
-namespace lr::os {
+namespace lr {
 bool Window::init(this Window &self, const WindowInfo &info)
 {
     ZoneScoped;
@@ -243,4 +243,4 @@ bool Window::should_close(this Window &self)
 {
     return glfwWindowShouldClose(self.handle);
 }
-}  // namespace lr::os
+}  // namespace lr

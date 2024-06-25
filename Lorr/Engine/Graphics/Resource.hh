@@ -4,7 +4,7 @@
 
 #include "Engine/Crypt/FNV.hh"
 
-namespace lr::graphics {
+namespace lr {
 /////////////////////////////////
 // BUFFERS
 
@@ -160,4 +160,4 @@ constexpr SamplerHash HSAMPLER(SamplerInfo info)
     return static_cast<SamplerHash>(Hash::FNV64(v.data(), size));
 }
 
-}  // namespace lr::graphics
+}  // namespace lr

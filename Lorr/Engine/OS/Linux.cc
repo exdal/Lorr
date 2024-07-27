@@ -10,9 +10,10 @@
 namespace lr {
 
 /// FILE SYSTEM ///
-Result<os::File, os::FileResult> os::open_file(std::string_view path, FileAccess access)
-{
+File::File(std::string_view path, FileAccess access) {
     ZoneScoped;
+
+    errno = 0;
 
     i32 flags = O_CREAT | O_WRONLY | O_RDONLY;
     if (access & FileAccess::Write)
@@ -22,52 +23,77 @@ Result<os::File, os::FileResult> os::open_file(std::string_view path, FileAccess
 
     i32 file = open64(path.data(), flags, S_IRUSR | S_IWUSR);
     if (file < 0) {
-        return static_cast<FileResult>(file);
+        switch (errno) {
+            case EACCES:
+                this->result = FileResult::NoAccess;
+                break;
+            case EEXIST:
+                this->result = FileResult::Exists;
+                break;
+            case EISDIR:
+                this->result = FileResult::IsDir;
+                break;
+            case EBUSY:
+                this->result = FileResult::InUse;
+                break;
+            default:
+                this->result = FileResult::Unknown;
+                break;
+        }
+
+        return;
     }
-
-    return static_cast<File>(file);
-}
-
-void os::close_file(File &file)
-{
-    ZoneScoped;
-
-    close(static_cast<i32>(file));
-    file = File::Invalid;
-}
-
-Result<u64, os::FileResult> os::file_size(File file)
-{
-    ZoneScoped;
 
     struct stat st = {};
-    i32 result = fstat(static_cast<i32>(file), &st);
-    if (result < 0) {
-        LR_LOG_ERROR("Failed to open file! {}", result);
-        return static_cast<FileResult>(result);
-    }
-
-    return st.st_size;
+    fstat(static_cast<i32>(file), &st);
+    this->size = st.st_size;
+    this->handle = static_cast<uptr>(file);
 }
 
-// https://pubs.opengroup.org/onlinepubs/7908799/xsh/read.html
-u64 os::read_file(File file, void *data, u64range range)
-{
+auto _write(i32 handle, const void *data, u64 size) -> u64 {
+    return write(handle, data, size);
+}
+
+void File::write(this File &self, const void *data, ls::u64range range) {
     ZoneScoped;
 
-    LR_CHECK(file != File::Invalid, "Trying to read invalid file");
+    LR_CHECK(self.handle.has_value(), "Trying to write invalid file");
 
-    auto [max_read_size, _] = file_size(file);
+    u64 offset = range.min;
+    u64 written_bytes_size = 0;
+    u64 target_size = range.length();
+    while (written_bytes_size < target_size) {
+        u64 remainder_size = target_size - written_bytes_size;
+        const u8 *cur_data = reinterpret_cast<const u8 *>(data) + offset;
+        iptr cur_written_size = _write(static_cast<i32>(self.handle.value()), cur_data, remainder_size);
+        if (cur_written_size < 0) {
+            LR_LOG_TRACE("File write interrupted! {}", cur_written_size);
+            break;
+        }
+
+        offset += cur_written_size;
+        written_bytes_size += cur_written_size;
+    }
+}
+
+auto _read(i32 handle, void *data, u64 size) -> u64 {
+    return read(handle, data, size);
+}
+
+u64 File::read(this File &self, void *data, ls::u64range range) {
+    ZoneScoped;
+
+    LR_CHECK(self.handle.has_value(), "Trying to read invalid file");
 
     // `read` can be interrupted, it can read *some* bytes,
     // so we need to make it loop and carefully read whole data
-    range.clamp(max_read_size);
+    range.clamp(self.size);
     u64 read_bytes_size = 0;
     u64 target_size = range.length();
     while (read_bytes_size < target_size) {
         u64 remainder_size = target_size - read_bytes_size;
         u8 *cur_data = reinterpret_cast<u8 *>(data) + read_bytes_size;
-        iptr cur_read_size = read(static_cast<i32>(file), cur_data, remainder_size);
+        iptr cur_read_size = _read(static_cast<i32>(self.handle.value()), cur_data, remainder_size);
         if (cur_read_size < 0) {
             LR_LOG_TRACE("File read interrupted! {}", cur_read_size);
             break;
@@ -79,54 +105,43 @@ u64 os::read_file(File file, void *data, u64range range)
     return read_bytes_size;
 }
 
-void os::write_file(File file, const void *data, u64range range)
-{
+void File::seek(this File &self, u64 offset) {
     ZoneScoped;
 
-    LR_CHECK(file != File::Invalid, "Trying to write invalid file");
+    lseek64(static_cast<i32>(self.handle.value()), static_cast<i64>(offset), SEEK_SET);
+}
 
-    u64 offset = range.min;
-    u64 written_bytes_size = 0;
-    u64 target_size = range.length();
-    while (written_bytes_size < target_size) {
-        u64 remainder_size = target_size - written_bytes_size;
-        const u8 *cur_data = reinterpret_cast<const u8 *>(data) + offset;
-        iptr cur_written_size = write(static_cast<i32>(file), cur_data, remainder_size);
-        if (cur_written_size < 0) {
-            LR_LOG_TRACE("File write interrupted! {}", cur_written_size);
-            break;
-        }
+void _close(i32 file) {
+    close(file);
+}
 
-        offset += cur_written_size;
-        written_bytes_size += cur_written_size;
-    }
+void File::close(this File &self) {
+    ZoneScoped;
+
+    _close(static_cast<i32>(self.handle.value()));
+    self.handle.reset();
 }
 
 /// MEMORY ///
-u64 os::page_size()
-{
+u64 mem_page_size() {
     return 0;
 }
 
-void *os::reserve(u64 size)
-{
+void *mem_reserve(u64 size) {
     return mmap(nullptr, size, PROT_NONE, MAP_PRIVATE | MAP_ANON, -1, 0);
 }
 
-void os::release(void *data, u64 size)
-{
+void mem_release(void *data, u64 size) {
     TracyFree(data);
     munmap(data, size);
 }
 
-bool os::commit(void *data, u64 size)
-{
+bool mem_commit(void *data, u64 size) {
     TracyAllocN(data, size, "Virtual Alloc");
     return mprotect(data, size, PROT_READ | PROT_WRITE);
 }
 
-void os::decommit(void *data, u64 size)
-{
+void mem_decommit(void *data, u64 size) {
     madvise(data, size, MADV_DONTNEED);
     mprotect(data, size, PROT_NONE);
 }

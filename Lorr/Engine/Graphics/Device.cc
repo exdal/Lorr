@@ -7,18 +7,16 @@
 #include "Engine/Memory/Stack.hh"
 
 namespace lr {
-void StagingBuffer::init(this StagingBuffer &self, Device *device)
-{
+void StagingBuffer::init(this StagingBuffer &self, Device *device) {
     ZoneScoped;
 
     self.device = device;
 }
 
-StagingAllocResult StagingBuffer::alloc(this StagingBuffer &self, usize size, u64 alignment)
-{
+StagingAllocResult StagingBuffer::alloc(this StagingBuffer &self, usize size, u64 alignment) {
     ZoneScoped;
 
-    usize aligned_size = align_up(size, alignment);
+    usize aligned_size = ls::align_up(size, alignment);
     StagingBufferBlock *suitable_block = nullptr;
 
     // search for suitable area
@@ -38,7 +36,7 @@ StagingAllocResult StagingBuffer::alloc(this StagingBuffer &self, usize size, u6
             .usage_flags = BufferUsage::TransferSrc,
             .flags = MemoryFlag::HostSeqWrite,
             .preference = MemoryPreference::Host,
-            .data_size = max(aligned_size, BLOCK_SIZE),
+            .data_size = ls::max(aligned_size, BLOCK_SIZE),
         });
 
         suitable_block = &*self.blocks.emplace(new_buffer_id, 0);
@@ -53,8 +51,7 @@ StagingAllocResult StagingBuffer::alloc(this StagingBuffer &self, usize size, u6
     return { .buffer_id = buffer_id, .ptr = alloc_ptr, .offset = alloc_offset, .size = aligned_size };
 }
 
-void StagingBuffer::reset(this StagingBuffer &self)
-{
+void StagingBuffer::reset(this StagingBuffer &self) {
     ZoneScoped;
 
     if (self.blocks.empty()) {
@@ -67,16 +64,14 @@ void StagingBuffer::reset(this StagingBuffer &self)
         if (i == self.blocks.begin()) {
             offset = 0;
             i++;
-        }
-        else {
+        } else {
             self.device->delete_buffers(buffer_id);
             i = self.blocks.erase(i);
         }
     }
 }
 
-u64 StagingBuffer::size(this StagingBuffer &self)
-{
+u64 StagingBuffer::size(this StagingBuffer &self) {
     ZoneScoped;
 
     u64 size = 0;
@@ -88,8 +83,7 @@ u64 StagingBuffer::size(this StagingBuffer &self)
     return size;
 }
 
-void StagingBuffer::upload(this StagingBuffer &, StagingAllocResult &result, BufferID dst_buffer, CommandList &cmd_list)
-{
+void StagingBuffer::upload(this StagingBuffer &, StagingAllocResult &result, BufferID dst_buffer, CommandList &cmd_list) {
     ZoneScoped;
 
     cmd_list.memory_barrier({ .src_access = PipelineAccess::HostReadWrite, .dst_access = PipelineAccess::TransferReadWrite });
@@ -101,8 +95,7 @@ void StagingBuffer::upload(this StagingBuffer &, StagingAllocResult &result, Buf
     cmd_list.copy_buffer_to_buffer(result.buffer_id, dst_buffer, buffer_region);
 }
 
-VKResult Device::init(this Device &self, const DeviceInfo &info)
-{
+VKResult Device::init(this Device &self, const DeviceInfo &info) {
     ZoneScoped;
 
     self.instance = info.instance;
@@ -133,6 +126,11 @@ VKResult Device::init(this Device &self, const DeviceInfo &info)
         vk12_features.bufferDeviceAddress = true;
         vk12_features.hostQueryReset = true;
         physical_device_selector.set_required_features_12(vk12_features);
+
+        VkPhysicalDeviceVulkan11Features vk11_features = {};
+        vk11_features.variablePointers = true;
+        vk11_features.variablePointersStorageBuffer = true;
+        physical_device_selector.set_required_features_11(vk11_features);
 
         VkPhysicalDeviceFeatures vk10_features = {};
         vk10_features.vertexPipelineStoresAndAtomics = true;
@@ -332,8 +330,7 @@ VKResult Device::init(this Device &self, const DeviceInfo &info)
     return VKResult::Success;
 }
 
-VKResult Device::create_timestamp_query_pools(this Device &self, ls::span<TimestampQueryPool> query_pools, const TimestampQueryPoolInfo &info)
-{
+VKResult Device::create_timestamp_query_pools(this Device &self, ls::span<TimestampQueryPool> query_pools, const TimestampQueryPoolInfo &info) {
     ZoneScoped;
 
     VkQueryPoolCreateInfo create_info = {
@@ -359,8 +356,7 @@ VKResult Device::create_timestamp_query_pools(this Device &self, ls::span<Timest
     return VKResult::Success;
 }
 
-void Device::delete_timestamp_query_pools(this Device &self, ls::span<TimestampQueryPool> query_pools)
-{
+void Device::delete_timestamp_query_pools(this Device &self, ls::span<TimestampQueryPool> query_pools) {
     ZoneScoped;
 
     for (TimestampQueryPool &query_pool : query_pools) {
@@ -368,8 +364,7 @@ void Device::delete_timestamp_query_pools(this Device &self, ls::span<TimestampQ
     }
 }
 
-void Device::get_timestamp_query_pool_results(this Device &self, TimestampQueryPool &query_pool, u32 first_query, u32 count, ls::span<u64> time_stamps)
-{
+void Device::get_timestamp_query_pool_results(this Device &self, TimestampQueryPool &query_pool, u32 first_query, u32 count, ls::span<u64> time_stamps) {
     ZoneScoped;
 
     vkGetQueryPoolResults(
@@ -383,8 +378,7 @@ void Device::get_timestamp_query_pool_results(this Device &self, TimestampQueryP
         VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT);
 }
 
-VKResult Device::create_command_lists(this Device &self, ls::span<CommandList> command_lists, CommandAllocator &allocator)
-{
+VKResult Device::create_command_lists(this Device &self, ls::span<CommandList> command_lists, CommandAllocator &allocator) {
     ZoneScoped;
 
     VkCommandBufferAllocateInfo allocate_info = {
@@ -410,8 +404,7 @@ VKResult Device::create_command_lists(this Device &self, ls::span<CommandList> c
     return VKResult::Success;
 }
 
-void Device::delete_command_lists(this Device &self, ls::span<CommandList> command_lists)
-{
+void Device::delete_command_lists(this Device &self, ls::span<CommandList> command_lists) {
     ZoneScoped;
 
     for (CommandList &cmd_list : command_lists) {
@@ -419,15 +412,13 @@ void Device::delete_command_lists(this Device &self, ls::span<CommandList> comma
     }
 }
 
-void Device::reset_command_allocator(this Device &self, CommandAllocator &allocator)
-{
+void Device::reset_command_allocator(this Device &self, CommandAllocator &allocator) {
     ZoneScoped;
 
     vkResetCommandPool(self, allocator, VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT);
 }
 
-VKResult Device::create_binary_semaphores(this Device &self, ls::span<Semaphore> semaphores)
-{
+VKResult Device::create_binary_semaphores(this Device &self, ls::span<Semaphore> semaphores) {
     ZoneScoped;
 
     VkSemaphoreTypeCreateInfo semaphore_type_info = {
@@ -454,8 +445,7 @@ VKResult Device::create_binary_semaphores(this Device &self, ls::span<Semaphore>
     return VKResult::Success;
 }
 
-VKResult Device::create_timeline_semaphores(this Device &self, ls::span<Semaphore> semaphores, u64 initial_value)
-{
+VKResult Device::create_timeline_semaphores(this Device &self, ls::span<Semaphore> semaphores, u64 initial_value) {
     ZoneScoped;
 
     VkSemaphoreTypeCreateInfo semaphore_type_info = {
@@ -483,8 +473,7 @@ VKResult Device::create_timeline_semaphores(this Device &self, ls::span<Semaphor
     return VKResult::Success;
 }
 
-void Device::delete_semaphores(this Device &self, ls::span<Semaphore> semaphores)
-{
+void Device::delete_semaphores(this Device &self, ls::span<Semaphore> semaphores) {
     ZoneScoped;
 
     for (Semaphore &semaphore : semaphores) {
@@ -492,8 +481,7 @@ void Device::delete_semaphores(this Device &self, ls::span<Semaphore> semaphores
     }
 }
 
-VKResult Device::wait_for_semaphore(this Device &self, Semaphore &semaphore, u64 desired_value, u64 timeout)
-{
+VKResult Device::wait_for_semaphore(this Device &self, Semaphore &semaphore, u64 desired_value, u64 timeout) {
     ZoneScoped;
 
     VkSemaphoreWaitInfo wait_info = {
@@ -507,18 +495,16 @@ VKResult Device::wait_for_semaphore(this Device &self, Semaphore &semaphore, u64
     return CHECK(vkWaitSemaphores(self, &wait_info, timeout));
 }
 
-Result<u64, VKResult> Device::get_semaphore_counter(this Device &self, Semaphore &semaphore)
-{
+ls::result<u64, VKResult> Device::get_semaphore_counter(this Device &self, Semaphore &semaphore) {
     ZoneScoped;
 
     u64 value = 0;
     auto result = CHECK(vkGetSemaphoreCounterValue(self, semaphore, &value));
 
-    return Result(value, result);
+    return ls::result(value, result);
 }
 
-VKResult Device::create_swap_chain(this Device &self, SwapChain &swap_chain, const SwapChainInfo &info)
-{
+VKResult Device::create_swap_chain(this Device &self, SwapChain &swap_chain, const SwapChainInfo &info) {
     ZoneScoped;
 
     self.wait_for_work();
@@ -564,8 +550,7 @@ VKResult Device::create_swap_chain(this Device &self, SwapChain &swap_chain, con
     return VKResult::Success;
 }
 
-void Device::delete_swap_chains(this Device &self, ls::span<SwapChain> swap_chains)
-{
+void Device::delete_swap_chains(this Device &self, ls::span<SwapChain> swap_chains) {
     ZoneScoped;
 
     self.wait_for_work();
@@ -575,8 +560,7 @@ void Device::delete_swap_chains(this Device &self, ls::span<SwapChain> swap_chai
     }
 }
 
-VKResult Device::get_swapchain_images(this Device &self, SwapChain &swap_chain, ls::span<ImageID> images)
-{
+VKResult Device::get_swapchain_images(this Device &self, SwapChain &swap_chain, ls::span<ImageID> images) {
     ZoneScoped;
     u32 image_count = images.size();
     ls::static_vector<VkImage, Limits::FrameCount> images_raw(image_count);
@@ -598,15 +582,13 @@ VKResult Device::get_swapchain_images(this Device &self, SwapChain &swap_chain, 
     return VKResult::Success;
 }
 
-void Device::wait_for_work(this Device &self)
-{
+void Device::wait_for_work(this Device &self) {
     ZoneScoped;
 
     vkDeviceWaitIdle(self);
 }
 
-usize Device::new_frame(this Device &self)
-{
+usize Device::new_frame(this Device &self) {
     ZoneScoped;
 
     i64 sema_counter = static_cast<i64>(self.frame_sema.counter);
@@ -616,8 +598,7 @@ usize Device::new_frame(this Device &self)
     return self.sema_index();
 }
 
-Result<u32, VKResult> Device::acquire_next_image(this Device &self, SwapChain &swap_chain, Semaphore &acquire_sema)
-{
+ls::result<u32, VKResult> Device::acquire_next_image(this Device &self, SwapChain &swap_chain, Semaphore &acquire_sema) {
     ZoneScoped;
 
     u32 image_id = 0;
@@ -626,11 +607,10 @@ Result<u32, VKResult> Device::acquire_next_image(this Device &self, SwapChain &s
         return result;
     }
 
-    return Result(image_id, result);
+    return ls::result(image_id, result);
 }
 
-void Device::end_frame(this Device &self)
-{
+void Device::end_frame(this Device &self) {
     ZoneScoped;
 
     auto checkndelete_fn = [&](auto &container, u64 sema_counter, const auto &deleter_fn) {
@@ -639,8 +619,7 @@ void Device::end_frame(this Device &self)
             if (sema_counter > timeline_val) {
                 deleter_fn(v);
                 i = container.erase(i);
-            }
-            else {
+            } else {
                 i++;
             }
         }
@@ -658,8 +637,7 @@ void Device::end_frame(this Device &self)
     self.frame_sema.advance();
 }
 
-VKResult Device::create_pipeline_layouts(this Device &self, ls::span<PipelineLayout> pipeline_layouts, const PipelineLayoutInfo &info)
-{
+VKResult Device::create_pipeline_layouts(this Device &self, ls::span<PipelineLayout> pipeline_layouts, const PipelineLayoutInfo &info) {
     ZoneScoped;
     memory::ScopedStack stack;
 
@@ -692,8 +670,7 @@ VKResult Device::create_pipeline_layouts(this Device &self, ls::span<PipelineLay
     return VKResult::Success;
 }
 
-void Device::delete_pipeline_layouts(this Device &self, ls::span<PipelineLayout> pipeline_layout)
-{
+void Device::delete_pipeline_layouts(this Device &self, ls::span<PipelineLayout> pipeline_layout) {
     ZoneScoped;
 
     for (PipelineLayout &layout : pipeline_layout) {
@@ -701,8 +678,7 @@ void Device::delete_pipeline_layouts(this Device &self, ls::span<PipelineLayout>
     }
 }
 
-Result<PipelineID, VKResult> Device::create_graphics_pipeline(this Device &self, const GraphicsPipelineInfo &info)
-{
+ls::result<PipelineID, VKResult> Device::create_graphics_pipeline(this Device &self, const GraphicsPipelineInfo &info) {
     ZoneScoped;
     memory::ScopedStack stack;
 
@@ -952,8 +928,7 @@ Result<PipelineID, VKResult> Device::create_graphics_pipeline(this Device &self,
     return pipeline->id;
 };
 
-Result<PipelineID, VKResult> Device::create_compute_pipeline(this Device &self, const ComputePipelineInfo &info)
-{
+ls::result<PipelineID, VKResult> Device::create_compute_pipeline(this Device &self, const ComputePipelineInfo &info) {
     ZoneScoped;
 
     Shader &shader = self.shader_at(info.shader_id);
@@ -991,8 +966,7 @@ Result<PipelineID, VKResult> Device::create_compute_pipeline(this Device &self, 
     return pipeline->id;
 }
 
-void Device::delete_pipelines(this Device &self, ls::span<PipelineID> pipelines)
-{
+void Device::delete_pipelines(this Device &self, ls::span<PipelineID> pipelines) {
     ZoneScoped;
 
     for (const PipelineID pipeline_id : pipelines) {
@@ -1008,8 +982,7 @@ void Device::delete_pipelines(this Device &self, ls::span<PipelineID> pipelines)
     }
 }
 
-Result<ShaderID, VKResult> Device::create_shader(this Device &self, ShaderStageFlag stage, ls::span<u32> ir)
-{
+ls::result<ShaderID, VKResult> Device::create_shader(this Device &self, ShaderStageFlag stage, ls::span<u32> ir) {
     ZoneScoped;
 
     VkShaderModuleCreateInfo create_info = {
@@ -1036,8 +1009,7 @@ Result<ShaderID, VKResult> Device::create_shader(this Device &self, ShaderStageF
     return shader->id;
 }
 
-void Device::delete_shaders(this Device &self, ls::span<ShaderID> shaders)
-{
+void Device::delete_shaders(this Device &self, ls::span<ShaderID> shaders) {
     ZoneScoped;
 
     for (const ShaderID shader_id : shaders) {
@@ -1053,8 +1025,7 @@ void Device::delete_shaders(this Device &self, ls::span<ShaderID> shaders)
     }
 }
 
-VKResult Device::create_descriptor_pools(this Device &self, ls::span<DescriptorPool> descriptor_pools, const DescriptorPoolInfo &info)
-{
+VKResult Device::create_descriptor_pools(this Device &self, ls::span<DescriptorPool> descriptor_pools, const DescriptorPoolInfo &info) {
     ZoneScoped;
 
     VkDescriptorPoolCreateInfo create_info = {
@@ -1080,8 +1051,7 @@ VKResult Device::create_descriptor_pools(this Device &self, ls::span<DescriptorP
     return VKResult::Success;
 }
 
-void Device::delete_descriptor_pools(this Device &self, ls::span<DescriptorPool> descriptor_pools)
-{
+void Device::delete_descriptor_pools(this Device &self, ls::span<DescriptorPool> descriptor_pools) {
     ZoneScoped;
 
     for (DescriptorPool &pool : descriptor_pools) {
@@ -1089,8 +1059,7 @@ void Device::delete_descriptor_pools(this Device &self, ls::span<DescriptorPool>
     }
 }
 
-VKResult Device::create_descriptor_set_layouts(this Device &self, ls::span<DescriptorSetLayout> descriptor_set_layouts, const DescriptorSetLayoutInfo &info)
-{
+VKResult Device::create_descriptor_set_layouts(this Device &self, ls::span<DescriptorSetLayout> descriptor_set_layouts, const DescriptorSetLayoutInfo &info) {
     ZoneScoped;
 
     LR_ASSERT(info.elements.size() == info.binding_flags.size());
@@ -1123,8 +1092,7 @@ VKResult Device::create_descriptor_set_layouts(this Device &self, ls::span<Descr
     return VKResult::Success;
 }
 
-void Device::delete_descriptor_set_layouts(this Device &self, ls::span<DescriptorSetLayout> layouts)
-{
+void Device::delete_descriptor_set_layouts(this Device &self, ls::span<DescriptorSetLayout> layouts) {
     ZoneScoped;
 
     for (DescriptorSetLayout &layout : layouts) {
@@ -1132,8 +1100,7 @@ void Device::delete_descriptor_set_layouts(this Device &self, ls::span<Descripto
     }
 }
 
-VKResult Device::create_descriptor_sets(this Device &self, ls::span<DescriptorSet> descriptor_sets, const DescriptorSetInfo &info)
-{
+VKResult Device::create_descriptor_sets(this Device &self, ls::span<DescriptorSet> descriptor_sets, const DescriptorSetInfo &info) {
     ZoneScoped;
 
     VkDescriptorSetVariableDescriptorCountAllocateInfo set_count_info = {
@@ -1165,8 +1132,7 @@ VKResult Device::create_descriptor_sets(this Device &self, ls::span<DescriptorSe
     return VKResult::Success;
 }
 
-void Device::delete_descriptor_sets(this Device &self, ls::span<DescriptorSet> descriptor_sets)
-{
+void Device::delete_descriptor_sets(this Device &self, ls::span<DescriptorSet> descriptor_sets) {
     ZoneScoped;
 
     for (const DescriptorSet &descriptor_set : descriptor_sets) {
@@ -1179,16 +1145,14 @@ void Device::delete_descriptor_sets(this Device &self, ls::span<DescriptorSet> d
     }
 }
 
-void Device::update_descriptor_sets(this Device &self, ls::span<WriteDescriptorSet> writes, ls::span<CopyDescriptorSet> copies)
-{
+void Device::update_descriptor_sets(this Device &self, ls::span<WriteDescriptorSet> writes, ls::span<CopyDescriptorSet> copies) {
     ZoneScoped;
 
     vkUpdateDescriptorSets(
         self, writes.size(), reinterpret_cast<const VkWriteDescriptorSet *>(writes.data()), copies.size(), reinterpret_cast<const VkCopyDescriptorSet *>(copies.data()));
 }
 
-Result<BufferID, VKResult> Device::create_buffer(this Device &self, const BufferInfo &info)
-{
+ls::result<BufferID, VKResult> Device::create_buffer(this Device &self, const BufferInfo &info) {
     ZoneScoped;
 
     constexpr static MemoryFlag host_flags = MemoryFlag::HostSeqWrite | MemoryFlag::HostReadWrite;
@@ -1253,8 +1217,7 @@ Result<BufferID, VKResult> Device::create_buffer(this Device &self, const Buffer
     return buffer->id;
 }
 
-void Device::delete_buffers(this Device &self, ls::span<BufferID> buffers)
-{
+void Device::delete_buffers(this Device &self, ls::span<BufferID> buffers) {
     ZoneScoped;
 
     for (BufferID buffer_id : buffers) {
@@ -1270,8 +1233,7 @@ void Device::delete_buffers(this Device &self, ls::span<BufferID> buffers)
     }
 }
 
-MemoryRequirements Device::memory_requirements(this Device &self, BufferID buffer_id)
-{
+MemoryRequirements Device::memory_requirements(this Device &self, BufferID buffer_id) {
     ZoneScoped;
 
     VkMemoryRequirements vk_info = {};
@@ -1280,8 +1242,7 @@ MemoryRequirements Device::memory_requirements(this Device &self, BufferID buffe
     return { .size = vk_info.size, .alignment = vk_info.alignment, .memory_type_bits = vk_info.memoryTypeBits };
 }
 
-Result<ImageID, VKResult> Device::create_image(this Device &self, const ImageInfo &info)
-{
+ls::result<ImageID, VKResult> Device::create_image(this Device &self, const ImageInfo &info) {
     ZoneScoped;
 
     LR_ASSERT(!info.extent.is_zero(), "Cannot create zero extent image.");
@@ -1342,8 +1303,7 @@ Result<ImageID, VKResult> Device::create_image(this Device &self, const ImageInf
     return image->id;
 }
 
-void Device::delete_images(this Device &self, ls::span<ImageID> images)
-{
+void Device::delete_images(this Device &self, ls::span<ImageID> images) {
     ZoneScoped;
 
     for (const ImageID image_id : images) {
@@ -1362,8 +1322,7 @@ void Device::delete_images(this Device &self, ls::span<ImageID> images)
     }
 }
 
-MemoryRequirements Device::memory_requirements(this Device &self, ImageID image_id)
-{
+MemoryRequirements Device::memory_requirements(this Device &self, ImageID image_id) {
     ZoneScoped;
 
     VkMemoryRequirements vk_info = {};
@@ -1372,8 +1331,7 @@ MemoryRequirements Device::memory_requirements(this Device &self, ImageID image_
     return { .size = vk_info.size, .alignment = vk_info.alignment, .memory_type_bits = vk_info.memoryTypeBits };
 }
 
-Result<ImageViewID, VKResult> Device::create_image_view(this Device &self, const ImageViewInfo &info)
-{
+ls::result<ImageViewID, VKResult> Device::create_image_view(this Device &self, const ImageViewInfo &info) {
     ZoneScoped;
 
     LR_ASSERT(info.usage_flags != ImageUsage::None);
@@ -1442,8 +1400,7 @@ Result<ImageViewID, VKResult> Device::create_image_view(this Device &self, const
     return image_view->id;
 }
 
-void Device::delete_image_views(this Device &self, ls::span<ImageViewID> image_views)
-{
+void Device::delete_image_views(this Device &self, ls::span<ImageViewID> image_views) {
     ZoneScoped;
 
     for (ImageViewID image_view_id : image_views) {
@@ -1459,8 +1416,7 @@ void Device::delete_image_views(this Device &self, ls::span<ImageViewID> image_v
     }
 }
 
-Result<SamplerID, VKResult> Device::create_sampler(this Device &self, const SamplerInfo &info)
-{
+ls::result<SamplerID, VKResult> Device::create_sampler(this Device &self, const SamplerInfo &info) {
     ZoneScoped;
 
     VkSamplerCreateInfo create_info = {
@@ -1515,8 +1471,7 @@ Result<SamplerID, VKResult> Device::create_sampler(this Device &self, const Samp
     return sampler->id;
 }
 
-void Device::delete_samplers(this Device &self, ls::span<SamplerID> samplers)
-{
+void Device::delete_samplers(this Device &self, ls::span<SamplerID> samplers) {
     ZoneScoped;
 
     for (SamplerID sampler_id : samplers) {
@@ -1532,8 +1487,7 @@ void Device::delete_samplers(this Device &self, ls::span<SamplerID> samplers)
     }
 }
 
-Result<SamplerID, VKResult> Device::create_cached_sampler(this Device &self, const SamplerInfo &info)
-{
+ls::result<SamplerID, VKResult> Device::create_cached_sampler(this Device &self, const SamplerInfo &info) {
     ZoneScoped;
 
     auto hash = HSAMPLER(info);
@@ -1552,8 +1506,7 @@ Result<SamplerID, VKResult> Device::create_cached_sampler(this Device &self, con
     return sampler_id;
 }
 
-void Device::set_image_data(this Device &self, ImageID image_id, const void *data, ImageLayout new_layout, ImageLayout old_layout)
-{
+void Device::set_image_data(this Device &self, ImageID image_id, const void *data, ImageLayout new_layout, ImageLayout old_layout) {
     ZoneScoped;
 
     Image &image = self.image_at(image_id);
@@ -1562,7 +1515,7 @@ void Device::set_image_data(this Device &self, ImageID image_id, const void *dat
     MemoryRequirements image_mem = self.memory_requirements(image_id);
 
     StagingAllocResult alloc_result = staging_buffer.alloc(image_mem.size, image_mem.alignment);
-    memcpy(alloc_result.ptr, data, image_mem.size);
+    std::memcpy(alloc_result.ptr, data, image_mem.size);
 
     auto &cmd_list = transfer_queue.begin_command_list(0);
     cmd_list.image_transition({
@@ -1590,13 +1543,10 @@ void Device::set_image_data(this Device &self, ImageID image_id, const void *dat
     });
 
     transfer_queue.end_command_list(cmd_list);
-    transfer_queue.submit(0, {});
-    transfer_queue.wait_for_work();
-    staging_buffer.reset();
+    transfer_queue.submit(0, { .self_wait = false });
 }
 
-VKResult Device::create_command_queue(this Device &self, CommandQueue &command_queue, CommandType type, std::string_view debug_name)
-{
+VKResult Device::create_command_queue(this Device &self, CommandQueue &command_queue, CommandType type, std::string_view debug_name) {
     ZoneScoped;
     memory::ScopedStack stack;
 
@@ -1634,8 +1584,7 @@ VKResult Device::create_command_queue(this Device &self, CommandQueue &command_q
     return VKResult::Success;
 }
 
-VKResult Device::create_command_allocators(this Device &self, ls::span<CommandAllocator> command_allocators, const CommandAllocatorInfo &info)
-{
+VKResult Device::create_command_allocators(this Device &self, ls::span<CommandAllocator> command_allocators, const CommandAllocatorInfo &info) {
     ZoneScoped;
 
     VkCommandPoolCreateInfo create_info = {

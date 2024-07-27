@@ -35,14 +35,14 @@ struct Shader;
 // SwapChain.hh
 struct SwapChain;
 
-LR_HANDLE(BufferID, u32);
-LR_HANDLE(ImageID, u32);
-LR_HANDLE(ImageViewID, u32);
-LR_HANDLE(SamplerID, u32);
-LR_HANDLE(SamplerHash, u64);
-LR_HANDLE(ShaderID, u32);
+enum class BufferID : u32 { Invalid = ~0_u32 };
+enum class ImageID : u32 { Invalid = ~0_u32 };
+enum class ImageViewID : u32 { Invalid = ~0_u32 };
+enum class SamplerID : u32 { Invalid = ~0_u32 };
+enum class SamplerHash : u64 { Invalid = ~0_u64 };
+enum class ShaderID : u32 { Invalid = ~0_u32 };
 enum class PipelineLayoutID : usize { None = 0 };
-LR_HANDLE(PipelineID, u32);
-LR_HANDLE(PipelineHash, u64);
+enum class PipelineID : u32 { Invalid = ~0_u32 };
+enum class PipelineHash : u64 { Invalid = ~0_u64 };
 
 }  // namespace lr

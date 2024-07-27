@@ -3,6 +3,8 @@
 #include "ApplicationEvent.hh"
 #include "EventManager.hh"
 
+#include "Engine/Asset/Asset.hh"
+
 #include "Engine/Graphics/Device.hh"
 #include "Engine/Graphics/Instance.hh"
 #include "Engine/Graphics/SwapChain.hh"
@@ -33,12 +35,11 @@ struct Application {
     Instance instance = {};
     Device device = {};
     ApplicationSurface default_surface = {};
+    AssetManager asset_man = {};
+
     TaskGraph task_graph = {};
     TaskImageID swap_chain_image_id = {};
-
-    // TODO: Resource management
     TaskImageID imgui_font_image_id = {};
-
     PerspectiveCamera camera = {};
 
     bool init(this Application &, const ApplicationInfo &info);

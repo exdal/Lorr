@@ -20,6 +20,11 @@ To build, simply run `xmake` on project root directory.
 You can configure your toolchain using `xmake f --toolchain=clang|cl|gcc --mode=debug|release` before running building.
 Make sure to run `xmake install -o ./build` to get third party binaries.
 
+Example configuration for clang:
+```
+xmake f --toolchain=clang-18 --sdk=/usr/include/c++/v1 --runtimes=c++_static --cxxflags=-stdlib=libc++ --ldflags=-fuse-ld=lld -m debug --build_examples=y
+```
+
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

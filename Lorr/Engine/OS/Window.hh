@@ -62,7 +62,7 @@ struct Window {
     void set_cursor(this Window &, WindowCursor cursor);
 
     SystemDisplay display_at(this Window &, u32 monitor_id = WindowInfo::USE_PRIMARY_MONITOR);
-    Result<VkSurfaceKHR, VkResult> get_surface(this Window &, VkInstance instance);
+    ls::result<VkSurfaceKHR, VkResult> get_surface(this Window &, VkInstance instance);
     bool should_close(this Window &);
 
     u32 width = 0;

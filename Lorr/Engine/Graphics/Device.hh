@@ -17,7 +17,7 @@ struct StagingAllocResult {
 
 struct StagingBuffer {
     // Config
-    constexpr static usize BLOCK_SIZE = mib_to_bytes(16);
+    constexpr static usize BLOCK_SIZE = ls::mib_to_bytes(16);
 
     struct StagingBufferBlock {
         BufferID buffer_id = BufferID::Invalid;
@@ -78,7 +78,7 @@ struct Device {
     void delete_semaphores(this Device &, ls::span<Semaphore> semaphores);
 
     VKResult wait_for_semaphore(this Device &, Semaphore &semaphore, u64 desired_value, u64 timeout = UINT64_MAX);
-    Result<u64, VKResult> get_semaphore_counter(this Device &, Semaphore &semaphore);
+    ls::result<u64, VKResult> get_semaphore_counter(this Device &, Semaphore &semaphore);
 
     /// Presentation ///
     VKResult create_swap_chain(this Device &, SwapChain &swap_chain, const SwapChainInfo &info);
@@ -87,18 +87,18 @@ struct Device {
 
     void wait_for_work(this Device &);
     usize new_frame(this Device &);
-    Result<u32, VKResult> acquire_next_image(this Device &, SwapChain &swap_chain, Semaphore &acquire_sema);
+    ls::result<u32, VKResult> acquire_next_image(this Device &, SwapChain &swap_chain, Semaphore &acquire_sema);
     void end_frame(this Device &);
 
     /// Input Assembly ///
     VKResult create_pipeline_layouts(this Device &, ls::span<PipelineLayout> pipeline_layouts, const PipelineLayoutInfo &info);
     void delete_pipeline_layouts(this Device &, ls::span<PipelineLayout> pipeline_layouts);
-    Result<PipelineID, VKResult> create_graphics_pipeline(this Device &, const GraphicsPipelineInfo &info);
-    Result<PipelineID, VKResult> create_compute_pipeline(this Device &, const ComputePipelineInfo &info);
+    ls::result<PipelineID, VKResult> create_graphics_pipeline(this Device &, const GraphicsPipelineInfo &info);
+    ls::result<PipelineID, VKResult> create_compute_pipeline(this Device &, const ComputePipelineInfo &info);
     void delete_pipelines(this Device &, ls::span<PipelineID> pipelines);
 
     /// Shaders ///
-    Result<ShaderID, VKResult> create_shader(this Device &, ShaderStageFlag stage, ls::span<u32> ir);
+    ls::result<ShaderID, VKResult> create_shader(this Device &, ShaderStageFlag stage, ls::span<u32> ir);
     void delete_shaders(this Device &, ls::span<ShaderID> shaders);
 
     /// Descriptor ///
@@ -113,7 +113,7 @@ struct Device {
     void update_descriptor_sets(this Device &, ls::span<WriteDescriptorSet> writes, ls::span<CopyDescriptorSet> copies);
 
     /// Buffers ///
-    Result<BufferID, VKResult> create_buffer(this Device &, const BufferInfo &info);
+    ls::result<BufferID, VKResult> create_buffer(this Device &, const BufferInfo &info);
     void delete_buffers(this Device &, ls::span<BufferID> buffers);
     template<typename T>
     T *buffer_host_data(this Device &, BufferID buffer_id);
@@ -121,18 +121,18 @@ struct Device {
     MemoryRequirements memory_requirements(this Device &, BufferID buffer_id);
 
     /// Images ///
-    Result<ImageID, VKResult> create_image(this Device &, const ImageInfo &info);
+    ls::result<ImageID, VKResult> create_image(this Device &, const ImageInfo &info);
     void delete_images(this Device &, ls::span<ImageID> images);
 
     MemoryRequirements memory_requirements(this Device &, ImageID image_id);
 
-    Result<ImageViewID, VKResult> create_image_view(this Device &, const ImageViewInfo &info);
+    ls::result<ImageViewID, VKResult> create_image_view(this Device &, const ImageViewInfo &info);
     void delete_image_views(this Device &, ls::span<ImageViewID> image_views);
 
-    Result<SamplerID, VKResult> create_sampler(this Device &, const SamplerInfo &info);
+    ls::result<SamplerID, VKResult> create_sampler(this Device &, const SamplerInfo &info);
     void delete_samplers(this Device &, ls::span<SamplerID> samplers);
 
-    Result<SamplerID, VKResult> create_cached_sampler(this Device &, const SamplerInfo &info);
+    ls::result<SamplerID, VKResult> create_cached_sampler(this Device &, const SamplerInfo &info);
 
     void set_image_data(this Device &, ImageID image_id, const void *data, ImageLayout new_layout, ImageLayout old_layout = ImageLayout::Undefined);
 
@@ -140,8 +140,7 @@ struct Device {
     bool is_feature_supported(this auto &self, DeviceFeature feature) { return self.supported_features & feature; }
 
     template<typename T>
-    void set_object_name(this auto &self, [[maybe_unused]] T &v, [[maybe_unused]] std::string_view name)
-    {
+    void set_object_name(this auto &self, [[maybe_unused]] T &v, [[maybe_unused]] std::string_view name) {
 #if LR_DEBUG
         VkDebugUtilsObjectNameInfoEXT object_name_info = {
             .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
@@ -155,8 +154,7 @@ struct Device {
     }
 
     template<VkObjectType ObjectType, typename T>
-    void set_object_name_raw(this auto &self, [[maybe_unused]] T v, [[maybe_unused]] std::string_view name)
-    {
+    void set_object_name_raw(this auto &self, [[maybe_unused]] T v, [[maybe_unused]] std::string_view name) {
 #if LR_DEBUG
         VkDebugUtilsObjectNameInfoEXT object_name_info = {
             .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
@@ -170,12 +168,10 @@ struct Device {
     }
 
     template<typename T = void>
-    PipelineLayoutID get_pipeline_layout()
-    {
+    PipelineLayoutID get_pipeline_layout() {
         if constexpr (std::is_same_v<T, void>) {
             return static_cast<PipelineLayoutID>(0);
-        }
-        else {
+        } else {
             usize index = sizeof(T) / sizeof(u32);
             return static_cast<PipelineLayoutID>(index);
         }
@@ -203,8 +199,7 @@ private:
 };
 
 template<typename T = u8>
-T *Device::buffer_host_data(this Device &self, BufferID buffer_id)
-{
-    return reinterpret_cast<T *>(self.buffer_at(buffer_id).host_data);
+T *Device::buffer_host_data(this Device &self, BufferID buffer_id) {
+    return ls::bit_cast<T *>(self.buffer_at(buffer_id).host_data);
 }
 }  // namespace lr

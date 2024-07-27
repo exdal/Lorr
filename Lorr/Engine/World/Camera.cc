@@ -7,7 +7,7 @@ void PerspectiveCamera::calc_proj_matrix(this PerspectiveCamera &self)
 {
     ZoneScoped;
 
-    self.projection_matrix = glm::perspectiveLH(glm::radians(self.fov), self.aspect_ratio, 0.1f, 1000.0f);
+    self.projection_matrix = glm::perspectiveLH(glm::radians(self.fov), self.aspect_ratio, 0.1f, 1000000.0f);
     self.projection_matrix[1][1] *= -1;
 }
 

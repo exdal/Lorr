@@ -6,6 +6,12 @@ target("Lorr")
     add_cxxflags("clang::-march=native", "clang_cl::/arch:AVX2", "cl::/arch:AVX2")
     set_runtimes("MT", "c++_static")
 
+    if is_mode("debug") then
+        add_ldflags(
+            "-Wl,--export-dynamic",
+            { tools = { "clang", "gcc" } })
+    end
+
     add_includedirs("../", { public = true });
     add_files("**.cc")
     add_rpathdirs("@executable_path")
@@ -33,21 +39,24 @@ target("Lorr")
     end
 
     add_packages(
-        "fmt",
-        "tracy",
-        "xxhash",
-        "glm",
         "glfw",
         "vulkan-headers",
         "vulkan-memory-allocator",
         "vk-bootstrap",
+        "imgui",
+        "slang-lorr",
+        "fmt",
+        "tracy",
+        "xxhash",
+        "glm",
         "plf_colony",
         "loguru",
-        "imgui",
         "simdutf",
-        "slang-lorr",
         "unordered_dense",
+        "lz4",
+        "zstd",
         "fastgltf",
+        "stb",
         { public = true })
 
     on_config(function (target)

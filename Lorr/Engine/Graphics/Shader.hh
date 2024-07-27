@@ -8,9 +8,7 @@ struct Shader {
     Shader() = default;
     Shader(ShaderStageFlag stage_flags, VkShaderModule shader_module)
         : stage(stage_flags),
-          handle(shader_module)
-    {
-    }
+          handle(shader_module) {}
 
     ShaderStageFlag stage = ShaderStageFlag::Count;
 
@@ -52,7 +50,7 @@ struct ShaderCompileInfo {
 
 namespace ShaderCompiler {
     bool init();
-    Result<std::vector<u32>, VKResult> compile(const ShaderCompileInfo &info);
+    ls::result<std::vector<u32>, VKResult> compile(const ShaderCompileInfo &info);
 }  // namespace ShaderCompiler
 
 }  // namespace lr

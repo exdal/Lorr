@@ -1,11 +1,14 @@
 #pragma once
 
+#ifndef LOGURU_STACKTRACES
+#define LOGURU_STACKTRACES
+#endif
+
 #include <loguru.hpp>
 
 namespace lr {
 struct Log {
-    static inline void init(i32 argc, char **argv)
-    {
+    static inline void init(i32 argc, char **argv) {
         loguru::init(argc, argv);
         loguru::add_file("engine.log", loguru::Truncate, loguru::Verbosity_MAX);
     }

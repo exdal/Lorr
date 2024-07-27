@@ -70,13 +70,11 @@ enum class VKResult : i32 {
     ResultMax = VK_RESULT_MAX_ENUM,
 };
 
-constexpr bool operator!(VKResult r)
-{
+constexpr bool operator!(VKResult r) {
     return r != VKResult::Success;
 }
 
-constexpr static std::string_view vkresult_to_string(VKResult result)
-{
+constexpr static std::string_view vkresult_to_string(VKResult result) {
 #define CASE(x)       \
     case VKResult::x: \
         return #x;
@@ -137,8 +135,7 @@ constexpr static std::string_view vkresult_to_string(VKResult result)
 }
 
 constexpr static VKResult CHECK(
-    VkResult vkr, [[maybe_unused]] std::initializer_list<VKResult> allowed_checks = {}, [[maybe_unused]] std::source_location LOC = std::source_location::current())
-{
+    VkResult vkr, [[maybe_unused]] std::initializer_list<VKResult> allowed_checks = {}, [[maybe_unused]] std::source_location LOC = std::source_location::current()) {
     auto result = static_cast<VKResult>(vkr);
 #if LR_DEBUG
     if (result != VKResult::Success)
@@ -300,8 +297,7 @@ enum class Format : u32 {
     Vec4U = R32G32B32A32_SINT,
 };
 
-constexpr static u32 format_to_size(Format format)
-{
+constexpr static u32 format_to_size(Format format) {
     switch (format) {
         case Format::R32_SFLOAT:
         case Format::R32_SINT:
@@ -486,13 +482,11 @@ struct PipelineAccessImpl {
     auto operator<=>(const PipelineAccessImpl &) const = default;
 };
 
-constexpr PipelineAccessImpl operator|(const PipelineAccessImpl &lhs, const PipelineAccessImpl &rhs)
-{
+constexpr PipelineAccessImpl operator|(const PipelineAccessImpl &lhs, const PipelineAccessImpl &rhs) {
     return { lhs.access | rhs.access, lhs.stage | rhs.stage };
 }
 
-constexpr PipelineAccessImpl operator|=(PipelineAccessImpl &lhs, const PipelineAccessImpl &rhs)
-{
+constexpr PipelineAccessImpl operator|=(PipelineAccessImpl &lhs, const PipelineAccessImpl &rhs) {
     PipelineAccessImpl lhsn = { lhs.access | rhs.access, lhs.stage | rhs.stage };
     return lhs = lhsn | rhs;
 }
@@ -948,8 +942,7 @@ struct ImageBarrier {
     ImageID image_id = ImageID::Invalid;
     ImageSubresourceRange subresource_range = {};
 
-    VkImageMemoryBarrier2 vk_type(VkImage image)
-    {
+    VkImageMemoryBarrier2 vk_type(VkImage image) {
         return { .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
                  .pNext = nullptr,
                  .srcStageMask = VkPipelineStageFlags2(src_access.stage),
@@ -969,8 +962,7 @@ struct MemoryBarrier {
     PipelineAccessImpl src_access = PipelineAccess::None;
     PipelineAccessImpl dst_access = PipelineAccess::None;
 
-    VkMemoryBarrier2 vk_type()
-    {
+    VkMemoryBarrier2 vk_type() {
         return { .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2,
                  .pNext = nullptr,
                  .srcStageMask = VkPipelineStageFlags2(src_access.stage),
@@ -1024,9 +1016,7 @@ static_assert(sizeof(ImageBlit::VkType) == sizeof(ImageBlit));
 struct CommandListSubmitInfo {
     CommandListSubmitInfo() = default;
     CommandListSubmitInfo(VkCommandBuffer command_list_)
-        : command_list(command_list_)
-    {
-    }
+        : command_list(command_list_) {}
 
     using VkType = VkCommandBufferSubmitInfo;
 
@@ -1046,9 +1036,7 @@ struct SemaphoreSubmitInfo {
     SemaphoreSubmitInfo(VkSemaphore semaphore_, u64 value_, PipelineStage stages_)
         : semaphore(semaphore_),
           value(value_),
-          stage_mask(stages_)
-    {
-    }
+          stage_mask(stages_) {}
 
     using VkType = VkSemaphoreSubmitInfo;
 
@@ -1074,8 +1062,7 @@ struct RenderingAttachmentInfo {
         DepthClearValue depth_clear;
     } clear_value;
 
-    const VkRenderingAttachmentInfo vk_info(VkImageView image_view) const
-    {
+    const VkRenderingAttachmentInfo vk_info(VkImageView image_view) const {
         return {
             .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
             .pNext = nullptr,
@@ -1196,8 +1183,7 @@ namespace fmt {
 template<>
 struct formatter<lr::VKResult> : formatter<string_view> {
     template<typename FormatContext>
-    constexpr auto format(lr::VKResult v, FormatContext &ctx) const
-    {
+    constexpr auto format(lr::VKResult v, FormatContext &ctx) const {
         return fmt::format_to(ctx.out(), "{}({})", lr::vkresult_to_string(v), static_cast<i32>(v));
     }
 };

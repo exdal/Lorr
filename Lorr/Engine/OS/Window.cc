@@ -25,8 +25,7 @@
 #endif
 
 namespace lr {
-bool Window::init(this Window &self, const WindowInfo &info)
-{
+bool Window::init(this Window &self, const WindowInfo &info) {
     ZoneScoped;
 
     if (!glfwInit()) {
@@ -143,27 +142,23 @@ bool Window::init(this Window &self, const WindowInfo &info)
     return true;
 }
 
-void Window::poll(this Window &)
-{
+void Window::poll(this Window &) {
     ZoneScoped;
 
     glfwPollEvents();
 }
 
-void Window::set_cursor(this Window &self, WindowCursor cursor)
-{
+void Window::set_cursor(this Window &self, WindowCursor cursor) {
     glfwSetCursor(self.handle, self.cursors[usize(cursor)]);
 }
 
-SystemDisplay Window::display_at(this Window &, u32 monitor_id)
-{
+SystemDisplay Window::display_at(this Window &, u32 monitor_id) {
     ZoneScoped;
 
     GLFWmonitor *monitor = nullptr;
     if (monitor_id == WindowInfo::USE_PRIMARY_MONITOR) {
         monitor = glfwGetPrimaryMonitor();
-    }
-    else {
+    } else {
         i32 monitor_count = 0;
         GLFWmonitor **monitors = glfwGetMonitors(&monitor_count);
         if (monitor_id > static_cast<u32>(monitor_count)) {
@@ -188,8 +183,7 @@ SystemDisplay Window::display_at(this Window &, u32 monitor_id)
     };
 }
 
-Result<VkSurfaceKHR, VkResult> Window::get_surface(this Window &self, VkInstance instance)
-{
+ls::result<VkSurfaceKHR, VkResult> Window::get_surface(this Window &self, VkInstance instance) {
     VkSurfaceKHR surface = nullptr;
 
 #if defined(LR_WIN32)
@@ -236,11 +230,10 @@ Result<VkSurfaceKHR, VkResult> Window::get_surface(this Window &self, VkInstance
         return result;
     }
 
-    return Result(surface, VK_SUCCESS);
+    return ls::result(surface, VK_SUCCESS);
 }
 
-bool Window::should_close(this Window &self)
-{
+bool Window::should_close(this Window &self) {
     return glfwWindowShouldClose(self.handle);
 }
 }  // namespace lr

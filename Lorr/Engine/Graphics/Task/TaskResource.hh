@@ -11,15 +11,15 @@ struct TaskPersistentImageInfo {
     PipelineAccessImpl access = PipelineAccess::TopOfPipe;
 };
 
-LR_HANDLE(TaskBufferID, u32);
-struct TaskBuffer {
+enum class TaskBufferID : u32 { Invalid = ~0_u32 };
+struct TaskBufferInfo {
     BufferID buffer_id = BufferID::Invalid;
     PipelineAccessImpl last_access = PipelineAccess::None;
     u32 last_batch_index = 0;
     u32 last_submit_index = 0;
 };
 
-LR_HANDLE(TaskImageID, u32);
+enum class TaskImageID : u32 { Invalid = ~0_u32 };
 struct TaskImage {
     ImageID image_id = ImageID::Invalid;
     ImageViewID image_view_id = ImageViewID::Invalid;
@@ -44,14 +44,12 @@ struct TaskUse {
 
 template<PipelineAccessImpl AccessT>
 struct TaskBufferUse : TaskUse {
-    constexpr TaskBufferUse()
-    {
+    constexpr TaskBufferUse() {
         this->type = TaskUseType::Buffer;
         this->access = AccessT;
     }
 
-    constexpr TaskBufferUse(TaskBufferID id)
-    {
+    constexpr TaskBufferUse(TaskBufferID id) {
         this->type = TaskUseType::Buffer;
         this->access = AccessT;
         this->task_buffer_id = id;
@@ -60,15 +58,13 @@ struct TaskBufferUse : TaskUse {
 
 template<ImageLayout LayoutT, PipelineAccessImpl AccessT>
 struct TaskImageUse : TaskUse {
-    constexpr TaskImageUse()
-    {
+    constexpr TaskImageUse() {
         this->type = TaskUseType::Image;
         this->image_layout = LayoutT;
         this->access = AccessT;
     }
 
-    constexpr TaskImageUse(TaskImageID id)
-    {
+    constexpr TaskImageUse(TaskImageID id) {
         this->type = TaskUseType::Image;
         this->image_layout = LayoutT;
         this->access = AccessT;
@@ -114,14 +110,12 @@ struct TaskPipelineInfo {
     void set_depth_stencil_state(const DepthStencilStateInfo &info) { graphics_info.depth_stencil_state = info; }
     void set_blend_constants(const glm::vec4 &constants) { graphics_info.blend_constants = constants; }
     void set_blend_attachments(const std::vector<PipelineColorBlendAttachment> &infos) { blend_attachments = infos; }
-    void set_blend_attachment_all(const PipelineColorBlendAttachment &info)
-    {
+    void set_blend_attachment_all(const PipelineColorBlendAttachment &info) {
         for (auto &v : blend_attachments) {
             v = info;
         }
     }
-    void set_vertex_layout(const std::vector<VertexAttribInfo> &attribs)
-    {
+    void set_vertex_layout(ls::span<const VertexAttribInfo> attribs) {
         u32 stride = 0;
         for (const VertexAttribInfo &attrib : attribs) {
             stride += format_to_size(attrib.format);

@@ -63,6 +63,16 @@ void TaskGraph::set_image(this TaskGraph &self, TaskImageID task_image_id, const
     self.images[index] = { .image_id = info.image_id, .image_view_id = info.image_view_id, .last_layout = info.layout, .last_access = info.access };
 }
 
+TaskBufferID TaskGraph::add_buffer(this TaskGraph &self, const TaskBufferInfo &info)
+{
+    ZoneScoped;
+
+    TaskBufferID task_buffer_id = static_cast<TaskBufferID>(self.buffers.size());
+    self.buffers.push_back({ .buffer_id = info.buffer_id });
+
+    return task_buffer_id;
+}
+
 u32 TaskGraph::schedule_task(this TaskGraph &self, Task *task, TaskSubmit &submit)
 {
     ZoneScoped;
@@ -71,7 +81,7 @@ u32 TaskGraph::schedule_task(this TaskGraph &self, Task *task, TaskSubmit &submi
     for_each_use(
         task->task_uses,
         [&](TaskBufferID id, const PipelineAccessImpl &access) {
-            TaskBuffer &task_buffer = self.buffers[static_cast<usize>(id)];
+            TaskBufferInfo &task_buffer = self.buffers[static_cast<usize>(id)];
             u32 cur_batch_index = task_buffer.last_batch_index;
 
             bool is_read_on_read = access.access == MemoryAccess::Read && task_buffer.last_access.access == MemoryAccess::Read;
@@ -122,7 +132,7 @@ TaskID TaskGraph::add_task(this TaskGraph &self, std::unique_ptr<Task> &&task)
     for_each_use(
         task->task_uses,
         [&](TaskBufferID id, const PipelineAccessImpl &access) {
-            TaskBuffer &task_buffer = self.buffers[static_cast<usize>(id)];
+            TaskBufferInfo &task_buffer = self.buffers[static_cast<usize>(id)];
             bool is_read_on_read = access.access == MemoryAccess::Read && task_buffer.last_access.access == MemoryAccess::Read;
             if (!is_read_on_read) {
                 batch.execution_access |= access;
@@ -386,7 +396,7 @@ void TaskGraph::execute(this TaskGraph &self, const TaskExecuteInfo &info)
                 }
 
                 {
-                    ZoneScopedN(task.name.data());
+                    ZoneScoped;
                     TaskContext tc(*self.device, self, task, batch_cmd_list, copy_cmd_list, info.frame_index);
                     task.execute(tc);
                 }

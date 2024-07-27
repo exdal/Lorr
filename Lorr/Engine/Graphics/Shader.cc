@@ -8,8 +8,7 @@ struct CompilerContext {
     Slang::ComPtr<slang::IGlobalSession> global_session;
 } compiler_ctx;
 
-std::vector<slang::CompilerOptionEntry> get_slang_entries(ShaderCompileFlag flags)
-{
+std::vector<slang::CompilerOptionEntry> get_slang_entries(ShaderCompileFlag flags) {
     ZoneScoped;
 
     // clang-format off
@@ -80,8 +79,7 @@ std::vector<slang::CompilerOptionEntry> get_slang_entries(ShaderCompileFlag flag
     return entries;
 }
 
-bool ShaderCompiler::init()
-{
+bool ShaderCompiler::init() {
     ZoneScoped;
 
     if (compiler_ctx.global_session) {
@@ -92,8 +90,7 @@ bool ShaderCompiler::init()
     return true;
 }
 
-Result<std::vector<u32>, VKResult> ShaderCompiler::compile(const ShaderCompileInfo &info)
-{
+ls::result<std::vector<u32>, VKResult> ShaderCompiler::compile(const ShaderCompileInfo &info) {
     ZoneScoped;
 
     /////////////////////////////////////////

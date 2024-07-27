@@ -150,7 +150,6 @@ i32 main(i32 argc, c8 **argv)
         .args = { argv, static_cast<usize>(argc) },
         .window_info = { .title = "Hello Cube", .width = 1280, .height = 720, .flags = WindowFlag::Centered },
     });
-    app.run();
 
     return 1;
 }

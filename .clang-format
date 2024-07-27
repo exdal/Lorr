@@ -26,7 +26,6 @@ AlwaysBreakBeforeMultilineStrings: false
 AlwaysBreakTemplateDeclarations: Yes
 BinPackArguments: false
 BinPackParameters: false
-BreakBeforeBraces: Stroustrup
 
 SortIncludes: false
 
@@ -67,3 +66,7 @@ Standard: Latest
 UseCRLF: false
 UseTab: Never
 AccessModifierOffset: -4
+
+BreakBeforeBraces: Custom
+BraceWrapping:
+  BeforeElse: false

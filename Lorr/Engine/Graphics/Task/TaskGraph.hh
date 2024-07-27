@@ -22,7 +22,7 @@ struct TaskGraph {
     std::vector<TaskSubmit> submits = {};
     std::vector<TaskBarrier> barriers = {};
     std::vector<TaskImage> images = {};
-    std::vector<TaskBuffer> buffers = {};
+    std::vector<TaskBufferInfo> buffers = {};
 
     // Profilers
     ls::static_vector<TimestampQueryPool, Limits::FrameCount> task_query_pools = {};
@@ -35,6 +35,7 @@ struct TaskGraph {
 
     TaskImageID add_image(this TaskGraph &, const TaskPersistentImageInfo &info);
     void set_image(this TaskGraph &, TaskImageID task_image_id, const TaskPersistentImageInfo &info);
+    TaskBufferID add_buffer(this TaskGraph &, const TaskBufferInfo &info);
 
     u32 schedule_task(this TaskGraph &, Task *task, TaskSubmit &submit);
 
@@ -51,7 +52,7 @@ struct TaskGraph {
     void execute(this TaskGraph &, const TaskExecuteInfo &info);
 
     TaskImage &task_image_at(this auto &self, TaskImageID id) { return self.images[static_cast<usize>(id)]; }
-    TaskBuffer &task_buffer_at(this auto &self, TaskBufferID id) { return self.buffers[static_cast<usize>(id)]; }
+    TaskBufferInfo &task_buffer_at(this auto &self, TaskBufferID id) { return self.buffers[static_cast<usize>(id)]; }
 
 private:
     TaskID add_task(this TaskGraph &, std::unique_ptr<Task> &&task);

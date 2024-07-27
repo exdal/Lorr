@@ -5,10 +5,42 @@
 #endif
 #include <Windows.h>
 
+#if LR_LINUX
+// Basic type declaration to shut LSP up.
+using DWORD = u32;
+using HANDLE = void *;
+struct OVERLAPPED {
+    usize Offset = 0;
+    usize OffsetHigh = 0;
+};
+
+struct LARGE_INTEGER {
+    usize QuadPart = 0;
+};
+
+enum : DWORD {
+    OPEN_EXISTING,
+    GENERIC_READ,
+    FILE_SHARE_READ,
+    GENERIC_WRITE,
+    FILE_SHARE_WRITE,
+    CREATE_ALWAYS,
+    FILE_ATTRIBUTE_NORMAL,
+    FILE_BEGIN,
+};
+static HANDLE INVALID_HANDLE_VALUE = nullptr;
+
+HANDLE CreateFileA(const void *, DWORD, DWORD, void *, DWORD, DWORD, void *);
+void GetFileSizeEx(HANDLE, LARGE_INTEGER *);
+u32 WriteFile(HANDLE, const void *, DWORD, void *, OVERLAPPED *);
+bool ReadFile(HANDLE, void *, DWORD, void *, OVERLAPPED *);
+bool SetFilePointerEx(HANDLE, LARGE_INTEGER, void *, DWORD);
+void CloseHandle(HANDLE);
+#endif
+
 namespace lr {
 /// FILE SYSTEM ///
-Result<os::File, os::FileResult> os::open_file(std::string_view path, FileAccess access)
-{
+File::File(std::string_view path, FileAccess access) {
     ZoneScoped;
 
     DWORD flags = 0;
@@ -24,74 +56,25 @@ Result<os::File, os::FileResult> os::open_file(std::string_view path, FileAccess
         share_flags |= FILE_SHARE_WRITE;
     }
 
-    HANDLE file_handle = CreateFileA(path.data(), flags, share_flags, 0, creation_flags, FILE_ATTRIBUTE_NORMAL, nullptr);
+    HANDLE file_handle = CreateFileA(path.data(), flags, share_flags, nullptr, creation_flags, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (file_handle == INVALID_HANDLE_VALUE) {
-        return FileResult::NoAccess;
+        this->result = FileResult::NoAccess;
+        return;
     }
 
-    return *reinterpret_cast<File *>(file_handle);
+    LARGE_INTEGER li = {};
+    GetFileSizeEx(file_handle, &li);
+
+    this->size = li.QuadPart;
+    this->handle = *reinterpret_cast<uptr *>(file_handle);
 }
 
-void os::close_file(File &file)
-{
+void File::write(this File &self, const void *data, ls::u64range range) {
     ZoneScoped;
 
-    HANDLE file_handle = reinterpret_cast<HANDLE>(file);
-    CloseHandle(file_handle);
-    file = File::Invalid;
-}
+    LR_CHECK(self.handle.has_value(), "Trying to write invalid file");
 
-Result<u64, os::FileResult> os::file_size(File file)
-{
-    ZoneScoped;
-
-    usize size;
-    HANDLE file_handle = reinterpret_cast<HANDLE>(file);
-    GetFileSizeEx(file_handle, reinterpret_cast<LARGE_INTEGER *>(&size));
-
-    return size;
-}
-
-u64 os::read_file(File file, void *data, u64range range)
-{
-    ZoneScoped;
-
-    LR_CHECK(file != File::Invalid, "Trying to read invalid file");
-
-    auto [max_read_size, _] = file_size(file);
-
-    HANDLE file_handle = reinterpret_cast<HANDLE>(file);
-    range.clamp(max_read_size);
-    u64 offset = range.min;
-    u64 read_bytes_size = 0;
-    u64 target_size = range.length();
-    while (read_bytes_size < target_size) {
-        u64 remainder_size = target_size - read_bytes_size;
-        u8 *cur_data = reinterpret_cast<u8 *>(data) + read_bytes_size;
-        DWORD cur_read_size = 0;
-        OVERLAPPED overlapped = {};
-        overlapped.Offset = offset & 0x00000000ffffffffull;
-        overlapped.OffsetHigh = (offset & 0xffffffff00000000ull) >> 32;
-        ReadFile(file_handle, cur_data, remainder_size, &cur_read_size, &overlapped);
-        if (cur_read_size < 0) {
-            LR_LOG_TRACE("File read interrupted! {}", cur_read_size);
-            break;
-        }
-
-        offset += cur_read_size;
-        read_bytes_size += cur_read_size;
-    }
-
-    return read_bytes_size;
-}
-
-void os::write_file(File file, const void *data, u64range range)
-{
-    ZoneScoped;
-
-    LR_CHECK(file != File::Invalid, "Trying to write invalid file");
-
-    HANDLE file_handle = reinterpret_cast<HANDLE>(file);
+    HANDLE file_handle = reinterpret_cast<HANDLE>(self.handle.value());
     u64 offset = range.min;
     u64 written_bytes_size = 0;
     u64 target_size = range.length();
@@ -112,33 +95,74 @@ void os::write_file(File file, const void *data, u64range range)
     }
 }
 
+u64 File::read(this File &self, void *data, ls::u64range range) {
+    ZoneScoped;
+
+    LR_CHECK(self.handle.has_value(), "Trying to read invalid file");
+
+    auto file_handle = reinterpret_cast<HANDLE>(self.handle.value());
+    range.clamp(self.size);
+    u64 offset = range.min;
+    u64 read_bytes_size = 0;
+    u64 target_size = range.length();
+    while (read_bytes_size < target_size) {
+        u64 remainder_size = target_size - read_bytes_size;
+        u8 *cur_data = reinterpret_cast<u8 *>(data) + read_bytes_size;
+        DWORD cur_read_size = 0;
+        OVERLAPPED overlapped = {};
+        overlapped.Offset = offset & 0x00000000ffffffffull;
+        overlapped.OffsetHigh = (offset & 0xffffffff00000000ull) >> 32u;
+        ReadFile(file_handle, cur_data, remainder_size, &cur_read_size, &overlapped);
+        if (cur_read_size < 0) {
+            LR_LOG_TRACE("File read interrupted! {}", cur_read_size);
+            break;
+        }
+
+        offset += cur_read_size;
+        read_bytes_size += cur_read_size;
+    }
+
+    return read_bytes_size;
+}
+
+void File::seek(this File &self, u64 offset) {
+    ZoneScoped;
+
+    LARGE_INTEGER li = {};
+    li.QuadPart = offset;
+    SetFilePointerEx(reinterpret_cast<HANDLE>(self.handle.value()), li, nullptr, FILE_BEGIN);
+}
+
+void File::close(this File &self) {
+    ZoneScoped;
+
+    HANDLE file_handle = reinterpret_cast<HANDLE>(self.handle.value());
+    CloseHandle(file_handle);
+    self.handle.reset();
+}
+
 /// MEMORY ///
-u64 os::page_size()
-{
+u64 mem_page_size() {
     SYSTEM_INFO sys_info = {};
     GetSystemInfo(&sys_info);
     return sys_info.dwPageSize;
 }
 
-void *os::reserve(u64 size)
-{
+void *mem_reserve(u64 size) {
     return VirtualAlloc(nullptr, size, MEM_RESERVE, PAGE_READWRITE);
 }
 
-void os::release(void *data, u64 size)
-{
+void mem_release(void *data, u64 size) {
     TracyFree(data);
     VirtualFree(data, size, MEM_RELEASE);
 }
 
-bool os::commit(void *data, u64 size)
-{
+bool mem_commit(void *data, u64 size) {
     TracyAllocN(data, size, "Virtual Alloc");
     return VirtualAlloc(data, size, MEM_COMMIT, PAGE_READWRITE) != nullptr;
 }
 
-void os::decommit(void *data, u64 size)
-{
+void mem_decommit(void *data, u64 size) {
     VirtualFree(data, size, MEM_DECOMMIT);
 }
 }  // namespace lr

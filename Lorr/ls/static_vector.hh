@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <cassert>
 
 namespace ls {
 template<typename T, size_t Capacity>
@@ -24,62 +25,46 @@ struct static_vector {
     constexpr static_vector() noexcept = default;
     constexpr static_vector(size_type count) noexcept
         requires(std::is_default_constructible_v<T>)
-        : m_size(count)
-    {
+        : m_size(count) {
         std::uninitialized_default_construct_n(begin(), count);
     }
 
-    explicit constexpr static_vector(const_iterator begin_it, const_iterator end_it)
-    {
+    explicit constexpr static_vector(const_iterator begin_it, const_iterator end_it) {
         m_size = std::distance(begin_it, end_it);
-        LR_ASSERT(m_size <= capacity());
+        assert(m_size <= capacity());
         std::uninitialized_copy(begin_it, end_it, begin());
     }
 
-    explicit constexpr static_vector(iterator begin_it, iterator end_it)
-    {
+    explicit constexpr static_vector(iterator begin_it, iterator end_it) {
         m_size = std::distance(begin_it, end_it);
-        LR_ASSERT(m_size <= capacity());
+        assert(m_size <= capacity());
         std::uninitialized_copy(begin_it, end_it, begin());
     }
 
     constexpr static_vector(const this_type &other) noexcept
-        : static_vector(other.begin(), other.end())
-    {
-    }
+        : static_vector(other.begin(), other.end()) {}
 
     constexpr static_vector(pointer ptr, size_type size)
-        : static_vector(ptr, ptr + size)
-    {
-    }
+        : static_vector(ptr, ptr + size) {}
 
     constexpr static_vector(std::initializer_list<value_type> v)
-        : static_vector(v.begin(), v.end())
-    {
-    }
+        : static_vector(v.begin(), v.end()) {}
 
     template<size_t N>
     constexpr static_vector(element_type (&arr)[N]) noexcept
-        : static_vector(arr, N)
-    {
-    }
+        : static_vector(arr, N) {}
 
     template<size_t N>
     constexpr static_vector(std::array<value_type, N> &arr) noexcept
-        : static_vector(arr.begin(), arr.end())
-    {
-    }
+        : static_vector(arr.begin(), arr.end()) {}
 
     template<size_t N>
     constexpr static_vector(const std::array<value_type, N> &arr) noexcept
-        : static_vector(arr.begin(), arr.end())
-    {
-    }
+        : static_vector(arr.begin(), arr.end()) {}
 
     constexpr static_vector(this_type &&other) noexcept
         requires(std::movable<T>)
-        : m_size(std::move(other.size()))
-    {
+        : m_size(std::move(other.size())) {
         std::uninitialized_move(other.begin(), other.end(), begin());
     }
 
@@ -93,8 +78,7 @@ struct static_vector {
     constexpr size_type size_bytes() const noexcept { return m_size * sizeof(T); }
     constexpr bool empty() const noexcept { return m_size == 0; }
     constexpr bool full() const noexcept { return m_size == Capacity; }
-    constexpr void clear() noexcept
-    {
+    constexpr void clear() noexcept {
         if (!std::is_trivially_destructible_v<value_type>) {
             std::destroy(begin(), end());
         }
@@ -107,9 +91,8 @@ struct static_vector {
     constexpr const_reference front() const { return front(); }
     constexpr reference back() { return m_data[m_size - 1]; }
     constexpr const_reference back() const { return back(); }
-    constexpr reference at(size_type i)
-    {
-        LR_ASSERT(i < size());
+    constexpr reference at(size_type i) {
+        assert(i < size());
         return m_data[i];
     }
     constexpr const_reference at(size_type i) const { return at(i); }
@@ -127,9 +110,8 @@ struct static_vector {
     constexpr const_reverse_iterator crend() const noexcept { return rend(); }
 
     // Modifiers
-    constexpr iterator erase(const_iterator pos)
-    {
-        LR_ASSERT(pos >= begin() && pos <= end());
+    constexpr iterator erase(const_iterator pos) {
+        assert(pos >= begin() && pos <= end());
         iterator i = const_cast<iterator>(pos);
         std::destroy_at(i);
         std::move(i + 1, end(), i);
@@ -137,8 +119,7 @@ struct static_vector {
         return i;
     }
 
-    constexpr iterator erase(const_iterator first, const_iterator last)
-    {
+    constexpr iterator erase(const_iterator first, const_iterator last) {
         if (first != last) {
             iterator pos = const_cast<value_type *>(std::move(const_cast<value_type *>(last), end(), const_cast<value_type *>(first)));
             std::destroy(pos, end());
@@ -148,13 +129,11 @@ struct static_vector {
         return const_cast<value_type *>(first);
     }
 
-    constexpr void resize(size_type count)
-    {
-        LR_ASSERT(count <= capacity());
+    constexpr void resize(size_type count) {
+        assert(count <= capacity());
         if (count < size()) {
             erase(begin() + count, end());
-        }
-        else {
+        } else {
             auto remaining = count - size();
             for (size_type i = 0; i < remaining; i++) {
                 emplace_back();
@@ -162,57 +141,49 @@ struct static_vector {
         }
     }
 
-    constexpr void push_back(const T &v)
-    {
-        LR_ASSERT(!full());
+    constexpr void push_back(const T &v) {
+        assert(!full());
         std::construct_at(end(), v);
         m_size++;
     }
 
-    constexpr void push_back(T &&v)
-    {
-        LR_ASSERT(!full());
+    constexpr void push_back(T &&v) {
+        assert(!full());
         std::construct_at(end(), std::move(v));
         m_size++;
     }
 
     template<typename... Args>
-    constexpr reference emplace_back(Args &&...args)
-    {
-        LR_ASSERT(!full());
+    constexpr reference emplace_back(Args &&...args) {
+        assert(!full());
         auto pos = end();
         std::construct_at(pos, std::forward<Args>(args)...);
         m_size++;
         return *pos;
     }
 
-    constexpr void pop_back()
-    {
+    constexpr void pop_back() {
         m_size--;
         std::destroy_at(end());
     }
 
     // Operators
-    constexpr reference operator[](size_type i)
-    {
-        LR_ASSERT(i <= m_size);
+    constexpr reference operator[](size_type i) {
+        assert(i <= m_size);
         return m_data[i];
     }
 
-    constexpr const_reference operator[](size_type i) const
-    {
-        LR_ASSERT(i <= m_size);
+    constexpr const_reference operator[](size_type i) const {
+        assert(i <= m_size);
         return m_data[i];
     }
 
-    constexpr reference operator()(size_type i) const
-    {
-        LR_ASSERT(i <= m_size);
+    constexpr reference operator()(size_type i) const {
+        assert(i <= m_size);
         return m_data[i];
     }
 
-    constexpr this_type &operator=(const this_type &other) noexcept
-    {
+    constexpr this_type &operator=(const this_type &other) noexcept {
         if (&other == this) {
             return *this;
         }
@@ -223,8 +194,7 @@ struct static_vector {
         return *this;
     }
 
-    constexpr this_type &operator=(this_type &&other) noexcept
-    {
+    constexpr this_type &operator=(this_type &&other) noexcept {
         if (&other == this) {
             return *this;
         }
@@ -235,9 +205,8 @@ struct static_vector {
         return *this;
     }
 
-    constexpr this_type &operator=(std::initializer_list<value_type> initl) noexcept
-    {
-        LR_ASSERT(initl.size() <= capacity());
+    constexpr this_type &operator=(std::initializer_list<value_type> initl) noexcept {
+        assert(initl.size() <= capacity());
 
         clear();
         m_size = initl.size();
@@ -256,44 +225,37 @@ private:
 
 /// OPERATORS ///
 template<typename T, usize NT, typename U, usize NU>
-constexpr bool operator==(static_vector<T, NT> lhs, static_vector<U, NU> rhs)
-{
+constexpr bool operator==(static_vector<T, NT> lhs, static_vector<U, NU> rhs) {
     return (lhs.size() == rhs.size()) && std::equal(lhs.begin(), lhs.end(), rhs.begin());
 }
 
 template<typename T, usize NT, typename U, usize NU>
-constexpr bool operator<(static_vector<T, NT> lhs, static_vector<U, NU> rhs)
-{
+constexpr bool operator<(static_vector<T, NT> lhs, static_vector<U, NU> rhs) {
     return std::lexicographical_compare(lhs.begin(), lhs.end(), rhs.begin(), rhs.end());
 }
 
 template<typename T, usize NT, typename U, usize NU>
-constexpr bool operator!=(static_vector<T, NT> lhs, static_vector<U, NU> rhs)
-{
+constexpr bool operator!=(static_vector<T, NT> lhs, static_vector<U, NU> rhs) {
     return !(lhs == rhs);
 }
 
 template<typename T, usize NT, typename U, usize NU>
-constexpr bool operator<=(static_vector<T, NT> lhs, static_vector<U, NU> rhs)
-{
+constexpr bool operator<=(static_vector<T, NT> lhs, static_vector<U, NU> rhs) {
     return !(rhs < lhs);
 }
 
 template<typename T, usize NT, typename U, usize NU>
-constexpr bool operator>(static_vector<T, NT> lhs, static_vector<U, NU> rhs)
-{
+constexpr bool operator>(static_vector<T, NT> lhs, static_vector<U, NU> rhs) {
     return rhs < lhs;
 }
 
 template<typename T, usize NT, typename U, usize NU>
-constexpr bool operator>=(static_vector<T, NT> lhs, static_vector<U, NU> rhs)
-{
+constexpr bool operator>=(static_vector<T, NT> lhs, static_vector<U, NU> rhs) {
     return !(lhs < rhs);
 }
 
 template<typename T, usize NT, typename U, usize NU>
-constexpr bool operator<=>(static_vector<T, NT> lhs, static_vector<U, NU> rhs)
-{
+constexpr bool operator<=>(static_vector<T, NT> lhs, static_vector<U, NU> rhs) {
     return std::lexicographical_compare_three_way(lhs.begin(), lhs.end(), rhs.begin(), rhs.end());
 }
 

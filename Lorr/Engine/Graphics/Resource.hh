@@ -2,7 +2,7 @@
 
 #include "Common.hh"
 
-#include "Engine/Crypt/FNV.hh"
+#include "Engine/Memory/Hasher.hh"
 
 namespace lr {
 /////////////////////////////////
@@ -24,9 +24,7 @@ struct Buffer {
           host_data(host_data_),
           device_address(device_address_),
           allocation(allocation_),
-          handle(buffer_)
-    {
-    }
+          handle(buffer_) {}
 
     u64 data_size = 0;
     void *host_data = nullptr;
@@ -64,9 +62,7 @@ struct Image {
           slice_count(slice_count_),
           mip_levels(mip_count_),
           allocation(allocation_),
-          handle(image_)
-    {
-    }
+          handle(image_) {}
 
     Format format = Format::Unknown;
     Extent3D extent = {};
@@ -104,9 +100,7 @@ struct ImageView {
         : format(format_),
           type(type_),
           subresource_range(subres_range_),
-          handle(image_view_)
-    {
-    }
+          handle(image_view_) {}
 
     Format format = Format::Unknown;
     ImageViewType type = ImageViewType::View2D;
@@ -133,7 +127,7 @@ struct SamplerInfo {
     float max_anisotropy = 0;
     float mip_lod_bias = 0;
     float min_lod = 0;
-    float max_lod = 0;
+    float max_lod = 1000.0f;
     bool use_anisotropy = false;
     std::string_view debug_name = {};
 };
@@ -141,9 +135,7 @@ struct SamplerInfo {
 struct Sampler {
     Sampler() = default;
     Sampler(VkSampler sampler_)
-        : handle(sampler_)
-    {
-    }
+        : handle(sampler_) {}
 
     VkSampler handle = VK_NULL_HANDLE;
 
@@ -153,11 +145,10 @@ struct Sampler {
 };
 
 // Helper hash function for 'cached samplers'
-constexpr SamplerHash HSAMPLER(SamplerInfo info)
-{
+constexpr SamplerHash HSAMPLER(SamplerInfo info) {
     constexpr usize size = sizeof(SamplerInfo);
-    auto v = std::bit_cast<std::array<const char, size>>(info);
-    return static_cast<SamplerHash>(Hash::FNV64(v.data(), size));
+    auto v = ls::bit_cast<std::array<const char, size>>(info);
+    return static_cast<SamplerHash>(fnv64(v.data(), size));
 }
 
 }  // namespace lr

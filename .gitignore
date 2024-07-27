@@ -11,5 +11,5 @@ out/
 *.rdbg
 *.log
 .xmake/
-.clangd/
+compile_commands.json
 .luarc.json

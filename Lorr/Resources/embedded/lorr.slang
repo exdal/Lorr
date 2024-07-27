@@ -31,6 +31,22 @@ typedef u32 BufferID;
 typedef u32 ImageID;
 typedef u32 ImageViewID;
 typedef u32 SamplerID;
+static u32 INVALID = ~0u;
+
+struct Material {
+    float4 albedo_color = { 1.0f, 1.0f, 1.0f, 1.0f };
+    float4 emissive_color = { 0.0f, 0.0f, 0.0f, 1.0f };
+    f32 roughness_factor = 0.0f;
+    f32 metallic_factor = 0.0f;
+    u32 alpha_mode = 0u;
+    f32 alpha_cutoff = 0.0f;
+    ImageViewID albedo_image_view = INVALID;
+    SamplerID albedo_sampler = INVALID;
+    ImageViewID normal_image_view = INVALID;
+    SamplerID normal_sampler = INVALID;
+    ImageViewID emissive_image_view = INVALID;
+    SamplerID emissive_sampler = INVALID;
+};
 
 /// TODO: About storage images, RWTexture2D can have multiple formats
 /// while staying at the same binding index.
@@ -64,6 +80,7 @@ StructuredBuffer<u64> __bda_array;
 func load_buffer<T>(BufferID buffer_id) -> T * {
     return (T *)(__bda_array[buffer_id]);
 }
+
 }
 
 #endif

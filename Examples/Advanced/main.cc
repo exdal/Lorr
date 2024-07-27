@@ -15,7 +15,6 @@ i32 main(i32 argc, c8 **argv)
         .args = { argv, static_cast<usize>(argc) },
         .window_info = { .title = "Hello GLTF", .width = 1280, .height = 720, .flags = lr::WindowFlag::Centered },
     });
-    app.run();
 
     return 1;
 }

@@ -12,7 +12,7 @@ struct TaskPrepareInfo {
 };
 
 struct TaskContext;
-LR_HANDLE(TaskID, u32);
+enum class TaskID : u32 { Invalid = ~0_u32 };
 struct Task {
     virtual ~Task() = default;
     virtual bool prepare(TaskPrepareInfo &info) = 0;
@@ -38,8 +38,7 @@ concept TaskConcept = requires {
 template<TaskConcept TaskT>
 struct TaskWrapper : Task {
     TaskWrapper(const TaskT &task_)
-        : task(task_)
-    {
+        : task(task_) {
         constexpr bool has_push_constants = requires { TaskT{}.push_constants; };
         if constexpr (has_push_constants) {
             pipeline_layout_id = static_cast<PipelineLayoutID>(sizeof(typename TaskT::PushConstants) / sizeof(u32));
@@ -49,8 +48,7 @@ struct TaskWrapper : Task {
         name = task.name;
     }
 
-    bool prepare(TaskPrepareInfo &info) override
-    {
+    bool prepare(TaskPrepareInfo &info) override {
         constexpr bool has_prepare = requires { TaskT{}.prepare(info); };
         if constexpr (has_prepare) {
             return task.prepare(info);

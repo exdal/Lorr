@@ -28,8 +28,7 @@ struct ImGuiTask {
         std::array<BufferID, 3> index_buffers = {};
     } self = {};
 
-    bool prepare(TaskPrepareInfo &info)
-    {
+    bool prepare(TaskPrepareInfo &info) {
         auto &pipeline_info = info.pipeline_info;
 
         VirtualFileInfo virtual_files[] = { { "lorr", embedded::lorr_sp } };
@@ -55,11 +54,13 @@ struct ImGuiTask {
         pipeline_info.set_dynamic_states(DynamicState::Viewport | DynamicState::Scissor);
         pipeline_info.set_viewport({});
         pipeline_info.set_scissors({});
-        pipeline_info.set_vertex_layout({
+
+        VertexAttribInfo vertex_layout[] = {
             { .format = Format::R32G32_SFLOAT, .location = 0, .offset = offsetof(ImDrawVert, pos) },
             { .format = Format::R32G32_SFLOAT, .location = 1, .offset = offsetof(ImDrawVert, uv) },
             { .format = Format::R8G8B8A8_UNORM, .location = 2, .offset = offsetof(ImDrawVert, col) },
-        });
+        };
+        pipeline_info.set_vertex_layout(vertex_layout);
         pipeline_info.set_blend_attachment_all({
             .blend_enabled = true,
             .src_blend = BlendFactor::SrcAlpha,
@@ -73,7 +74,7 @@ struct ImGuiTask {
                 .usage_flags = BufferUsage::Vertex | BufferUsage::TransferDst,
                 .flags = MemoryFlag::Dedicated,
                 .preference = MemoryPreference::Device,
-                .data_size = mib_to_bytes(32),
+                .data_size = ls::mib_to_bytes(32),
             });
         }
 
@@ -82,7 +83,7 @@ struct ImGuiTask {
                 .usage_flags = BufferUsage::Index | BufferUsage::TransferDst,
                 .flags = MemoryFlag::Dedicated,
                 .preference = MemoryPreference::Device,
-                .data_size = mib_to_bytes(32),
+                .data_size = ls::mib_to_bytes(32),
             });
         }
 
@@ -99,8 +100,7 @@ struct ImGuiTask {
         return true;
     }
 
-    void execute(TaskContext &tc)
-    {
+    void execute(TaskContext &tc) {
         auto color_attachment = tc.as_color_attachment(uses.attachment);
         auto &task_font = tc.task_image_data(uses.font);
         auto &staging_buffer = tc.staging_buffer();

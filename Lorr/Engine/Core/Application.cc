@@ -3,8 +3,7 @@
 #include "Engine/Memory/Stack.hh"
 
 namespace lr {
-bool Application::init(this Application &self, const ApplicationInfo &info)
-{
+bool Application::init(this Application &self, const ApplicationInfo &info) {
     ZoneScoped;
 
     Log::init(static_cast<i32>(info.args.size()), info.args.data());
@@ -18,6 +17,10 @@ bool Application::init(this Application &self, const ApplicationInfo &info)
     }
 
     if (!self.create_surface(self.default_surface, info.window_info)) {
+        return false;
+    }
+
+    if (!self.asset_man.init(&self.device)) {
         return false;
     }
 
@@ -64,18 +67,22 @@ bool Application::init(this Application &self, const ApplicationInfo &info)
         .access = PipelineAccess::FragmentShaderRead,
     });
 
-    return self.do_prepare();
+    if (!self.do_prepare()) {
+        LR_LOG_FATAL("Failed to initialize application!");
+        return false;
+    }
+
+    self.run();
+    return true;
 }
 
-void Application::push_event(this Application &self, ApplicationEvent event, const ApplicationEventData &data)
-{
+void Application::push_event(this Application &self, ApplicationEvent event, const ApplicationEventData &data) {
     ZoneScoped;
 
     self.event_manager.push(event, data);
 }
 
-void Application::poll_events(this Application &self)
-{
+void Application::poll_events(this Application &self) {
     ZoneScoped;
 
     thread_local bool move_cam = false;
@@ -114,10 +121,9 @@ void Application::poll_events(this Application &self)
             case ApplicationEvent::KeyboardState: {
                 Key k = e.key;
                 bool d = e.key_state != KeyState::Up;
-                f32 v = 1.0f;
+                static f32 v = 100.0f;
 
                 // clang-format off
-                if (k == LR_KEY_SPACE) v = 5.0f;
                 if (k == LR_KEY_W) self.camera.velocity.z = d ?  v : 0.0f;
                 if (k == LR_KEY_S) self.camera.velocity.z = d ? -v : 0.0f;
                 if (k == LR_KEY_D) self.camera.velocity.x = d ?  v : 0.0f;
@@ -138,8 +144,7 @@ void Application::poll_events(this Application &self)
     }
 }
 
-void Application::run(this Application &self)
-{
+void Application::run(this Application &self) {
     ZoneScoped;
 
     f64 last_time = 0.0f;
@@ -214,12 +219,12 @@ void Application::run(this Application &self)
         self.device.end_frame();
         window.poll();
         self.poll_events();
+
         FrameMark;
     }
 }
 
-VKResult Application::create_surface(this Application &self, ApplicationSurface &surface, std::optional<WindowInfo> window_info)
-{
+VKResult Application::create_surface(this Application &self, ApplicationSurface &surface, std::optional<WindowInfo> window_info) {
     ZoneScoped;
     memory::ScopedStack stack;
 
@@ -266,4 +271,5 @@ VKResult Application::create_surface(this Application &self, ApplicationSurface 
 
     return VKResult::Success;
 }
+
 }  // namespace lr

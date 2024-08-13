@@ -1,5 +1,4 @@
-includes("packages/**.lua")
-includes("scripts/**.lua")
+includes("xmake/**.lua")
 
 add_rules("mode.debug", "mode.release", "mode.releasedbg")
 add_rules("plugin.compile_commands.autoupdate", { outputdir = ".", lsp = "clangd" })

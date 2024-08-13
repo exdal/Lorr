@@ -12,8 +12,6 @@
 
 #include "Engine/OS/Window.hh"
 
-#include "Engine/World/Camera.hh"
-
 namespace lr {
 struct ApplicationSurface {
     Window window = {};
@@ -40,7 +38,6 @@ struct Application {
     TaskGraph task_graph = {};
     TaskImageID swap_chain_image_id = {};
     TaskImageID imgui_font_image_id = {};
-    PerspectiveCamera camera = {};
 
     bool init(this Application &, const ApplicationInfo &info);
     void push_event(this Application &, ApplicationEvent event, const ApplicationEventData &data);

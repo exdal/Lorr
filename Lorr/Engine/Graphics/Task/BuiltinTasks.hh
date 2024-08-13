@@ -7,6 +7,75 @@
 #include <imgui.h>
 
 namespace lr::BuiltinTask {
+struct FullScreenTask {
+    std::string_view name = "FullScreen";
+
+    struct Uses {
+        Preset::ColorReadOnly source = {};
+        Preset::ColorAttachmentWrite destination = {};
+    } uses = {};
+
+    struct PushConstants {
+        ImageViewID image_view_id = {};
+        SamplerID sampler_id = {};
+    } push_constants = {};
+
+    bool prepare(TaskPrepareInfo &info) {
+        auto &pipeline_info = info.pipeline_info;
+
+        VirtualFileInfo virtual_files[] = { { "lorr", embedded::lorr_sp } };
+        VirtualDir virtual_dir = { virtual_files };
+        ShaderCompileInfo shader_compile_info = {
+            .real_path = "fullscreen.slang",
+            .code = embedded::fullscreen_str,
+            .virtual_env = { &virtual_dir, 1 },
+        };
+
+        shader_compile_info.entry_point = "vs_main";
+        auto [vs_ir, vs_result] = ShaderCompiler::compile(shader_compile_info);
+        shader_compile_info.entry_point = "fs_main";
+        auto [fs_ir, fs_result] = ShaderCompiler::compile(shader_compile_info);
+        if (!vs_result || !fs_result) {
+            LR_LOG_ERROR("Failed to initialize ImGui pass! {}, {}", vs_result, fs_result);
+            return false;
+        }
+
+        pipeline_info.set_shader(info.device->create_shader(ShaderStageFlag::Vertex, vs_ir));
+        pipeline_info.set_shader(info.device->create_shader(ShaderStageFlag::Fragment, fs_ir));
+        pipeline_info.set_dynamic_states(DynamicState::Viewport | DynamicState::Scissor);
+        pipeline_info.set_viewport({});
+        pipeline_info.set_scissors({});
+
+        return true;
+    }
+
+    void execute(TaskContext &tc) {
+        auto &src_image = tc.task_image_data(uses.source);
+        auto dst_attachment = tc.as_color_attachment(uses.destination);
+
+        tc.cmd_list.begin_rendering(RenderingBeginInfo{
+            .render_area = tc.pass_rect(),
+            .color_attachments = dst_attachment,
+        });
+
+        push_constants.image_view_id = src_image.image_view_id;
+        push_constants.sampler_id = tc.device.create_cached_sampler(SamplerInfo{
+            .min_filter = Filtering::Linear,
+            .mag_filter = Filtering::Linear,
+            .mip_filter = Filtering::Linear,
+            .address_u = TextureAddressMode::Repeat,
+            .address_v = TextureAddressMode::Repeat,
+            .min_lod = -1000,
+            .max_lod = 1000,
+        });
+        tc.set_push_constants(push_constants);
+        tc.cmd_list.set_viewport(0, tc.pass_viewport());
+        tc.cmd_list.set_scissors(0, tc.pass_rect());
+        tc.cmd_list.draw(3);
+        tc.cmd_list.end_rendering();
+    }
+};
+
 struct ImGuiTask {
     std::string_view name = "ImGui";
 

@@ -44,7 +44,7 @@ bool AssetManager::init(this AssetManager &self, Device *device) {
     return true;
 }
 
-ls::option<ModelID> AssetManager::load_model(this AssetManager &self, std::string_view path) {
+ls::option<ModelID> AssetManager::load_model(this AssetManager &self, const fs::path &path) {
     ZoneScoped;
 
     File model_file(path, FileAccess::Read);
@@ -105,7 +105,7 @@ ls::option<ModelID> AssetManager::load_model(this AssetManager &self, std::strin
 
     usize material_offset = self.materials.size();
     for (auto &v : model_data->materials) {
-        auto &material = self.materials.emplace_back();
+        Material material = {};
         material.albedo_color = v.albedo_color;
         material.emissive_color = v.emissive_color;
         material.roughness_factor = v.roughness_factor;
@@ -113,8 +113,6 @@ ls::option<ModelID> AssetManager::load_model(this AssetManager &self, std::strin
         material.alpha_mode = v.alpha_mode;
         material.alpha_cutoff = v.alpha_cutoff;
 
-        // TODO: When there is a potential error, we need an error texture
-        // or full white texture.
         if (auto i = v.albedo_image_data_index; i.has_value()) {
             material.albedo_texture_index = i.value() + texture_offset;
         }
@@ -124,6 +122,8 @@ ls::option<ModelID> AssetManager::load_model(this AssetManager &self, std::strin
         if (auto i = v.emissive_image_data_index; i.has_value()) {
             material.emissive_texture_index = i.value() + texture_offset;
         }
+
+        self.add_material(material);
     }
 
     for (auto &v : model_data->primitives) {
@@ -199,54 +199,59 @@ ls::option<ModelID> AssetManager::load_model(this AssetManager &self, std::strin
         staging_buffer.reset();
     }
 
-    self.refresh_materials();
     return static_cast<ModelID>(model_id);
 }
 
-void AssetManager::refresh_materials(this AssetManager &self) {
+ls::option<MaterialID> AssetManager::add_material(this AssetManager &self, const Material &material) {
     ZoneScoped;
 
-    LR_ASSERT(self.materials.size() < MAX_MATERIAL_COUNT, "Material count must be lesser than MAX_MATERIAL_COUNT!");
+    auto &transfer_queue = self.device->queue_at(CommandType::Transfer);
+    auto cmd_list = transfer_queue.begin_command_list(0);
 
-    std::vector<GPUMaterial> gpu_materials = {};
-    for (auto &v : self.materials) {
-        auto &material = gpu_materials.emplace_back();
+    BufferID temp_buffer = self.device->create_buffer(BufferInfo{
+        .usage_flags = BufferUsage::TransferSrc,
+        .flags = MemoryFlag::HostSeqWrite,
+        .preference = MemoryPreference::Host,
+        .data_size = sizeof(GPUMaterial),
+    });
+    transfer_queue.defer(temp_buffer);
 
-        material.albedo_color = v.albedo_color;
-        material.emissive_color = v.emissive_color;
-        material.roughness_factor = v.roughness_factor;
-        material.metallic_factor = v.metallic_factor;
-        material.alpha_mode = v.alpha_mode;
-        material.alpha_cutoff = v.alpha_cutoff;
-        {
-            auto &texture = self.textures[v.albedo_texture_index.value_or(0)];
-            material.albedo_image_view = texture.image_view_id;
-            material.albedo_sampler = texture.sampler_id;
-        }
-        {
-            auto &texture = self.textures[v.normal_texture_index.value_or(0)];
-            material.normal_image_view = texture.image_view_id;
-            material.normal_sampler = texture.sampler_id;
-        }
-        {
-            auto &texture = self.textures[v.emissive_texture_index.value_or(0)];
-            material.emissive_image_view = texture.image_view_id;
-            material.emissive_sampler = texture.sampler_id;
-        }
+    auto gpu_material = self.device->buffer_host_data<GPUMaterial>(temp_buffer);
+    gpu_material->albedo_color = material.albedo_color;
+    gpu_material->emissive_color = material.emissive_color;
+    gpu_material->roughness_factor = material.roughness_factor;
+    gpu_material->metallic_factor = material.metallic_factor;
+    gpu_material->alpha_mode = material.alpha_mode;
+    gpu_material->alpha_cutoff = material.alpha_cutoff;
+    {
+        auto &texture = self.textures[material.albedo_texture_index.value_or(0)];
+        gpu_material->albedo_image_view = texture.image_view_id;
+        gpu_material->albedo_sampler = texture.sampler_id;
+    }
+    {
+        auto &texture = self.textures[material.normal_texture_index.value_or(0)];
+        gpu_material->normal_image_view = texture.image_view_id;
+        gpu_material->normal_sampler = texture.sampler_id;
+    }
+    {
+        auto &texture = self.textures[material.emissive_texture_index.value_or(0)];
+        gpu_material->emissive_image_view = texture.image_view_id;
+        gpu_material->emissive_sampler = texture.sampler_id;
     }
 
-    auto &staging_buffer = self.device->staging_buffer_at(0);
-    staging_buffer.reset();
-    auto buffer_alloc = staging_buffer.alloc(gpu_materials.size() * sizeof(GPUMaterial));
-    std::memcpy(buffer_alloc.ptr, gpu_materials.data(), gpu_materials.size() * sizeof(GPUMaterial));
+    BufferCopyRegion copy_region = {
+        .src_offset = 0,
+        .dst_offset = self.materials.size() * sizeof(GPUMaterial),
+        .size = sizeof(GPUMaterial),
+    };
+    cmd_list.copy_buffer_to_buffer(temp_buffer, self.material_buffer_id, copy_region);
+    transfer_queue.end_command_list(cmd_list);
+    transfer_queue.submit(0, { .self_wait = false });
 
-    auto &queue = self.device->queue_at(CommandType::Transfer);
-    auto cmd_list = queue.begin_command_list(0);
-    BufferCopyRegion copy_region = { .src_offset = buffer_alloc.offset, .dst_offset = 0, .size = buffer_alloc.size };
-    cmd_list.copy_buffer_to_buffer(buffer_alloc.buffer_id, self.material_buffer_id, copy_region);
-    queue.end_command_list(cmd_list);
-    queue.submit(0, {});
-    queue.wait_for_work();
+    usize material_index = self.materials.size();
+    self.materials.push_back(material);
+
+    return static_cast<MaterialID>(material_index);
 }
 
 }  // namespace lr

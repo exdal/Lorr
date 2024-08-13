@@ -2,11 +2,6 @@
 #pragma once
 #endif
 
-#define LR_DESCRIPTOR_INDEX_SAMPLER 0
-#define LR_DESCRIPTOR_INDEX_IMAGES 1
-#define LR_DESCRIPTOR_INDEX_STORAGE_IMAGES 2
-#define LR_DESCRIPTOR_INDEX_STORAGE_BUFFERS 3
-#define LR_DESCRIPTOR_INDEX_BDA_ARRAY 4
 
 #ifdef __cplusplus
 // C++ stuff goes here

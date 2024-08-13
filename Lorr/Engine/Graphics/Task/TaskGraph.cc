@@ -7,8 +7,7 @@
 #include <sstream>
 
 namespace lr {
-void for_each_use(ls::span<TaskUse> uses, const auto &buffer_fn, const auto &image_fn)
-{
+void for_each_use(ls::span<TaskUse> uses, const auto &buffer_fn, const auto &image_fn) {
     for (TaskUse &use : uses) {
         switch (use.type) {
             case TaskUseType::Buffer:
@@ -21,8 +20,7 @@ void for_each_use(ls::span<TaskUse> uses, const auto &buffer_fn, const auto &ima
     }
 }
 
-void for_each_image_use(ls::span<TaskUse> uses, const auto &image_fn)
-{
+void for_each_image_use(ls::span<TaskUse> uses, const auto &image_fn) {
     for (TaskUse &use : uses) {
         if (use.type == TaskUseType::Image) {
             image_fn(use.task_image_id, use.access, use.image_layout);
@@ -30,8 +28,7 @@ void for_each_image_use(ls::span<TaskUse> uses, const auto &image_fn)
     }
 }
 
-bool TaskGraph::init(this TaskGraph &self, const TaskGraphInfo &info)
-{
+bool TaskGraph::init(this TaskGraph &self, const TaskGraphInfo &info) {
     ZoneScoped;
 
     self.device = info.device;
@@ -45,8 +42,7 @@ bool TaskGraph::init(this TaskGraph &self, const TaskGraphInfo &info)
     return true;
 }
 
-TaskImageID TaskGraph::add_image(this TaskGraph &self, const TaskPersistentImageInfo &info)
-{
+TaskImageID TaskGraph::add_image(this TaskGraph &self, const TaskPersistentImageInfo &info) {
     ZoneScoped;
 
     TaskImageID task_image_id = static_cast<TaskImageID>(self.images.size());
@@ -55,16 +51,14 @@ TaskImageID TaskGraph::add_image(this TaskGraph &self, const TaskPersistentImage
     return task_image_id;
 }
 
-void TaskGraph::set_image(this TaskGraph &self, TaskImageID task_image_id, const TaskPersistentImageInfo &info)
-{
+void TaskGraph::set_image(this TaskGraph &self, TaskImageID task_image_id, const TaskPersistentImageInfo &info) {
     ZoneScoped;
 
     usize index = static_cast<usize>(task_image_id);
     self.images[index] = { .image_id = info.image_id, .image_view_id = info.image_view_id, .last_layout = info.layout, .last_access = info.access };
 }
 
-TaskBufferID TaskGraph::add_buffer(this TaskGraph &self, const TaskBufferInfo &info)
-{
+TaskBufferID TaskGraph::add_buffer(this TaskGraph &self, const TaskBufferInfo &info) {
     ZoneScoped;
 
     TaskBufferID task_buffer_id = static_cast<TaskBufferID>(self.buffers.size());
@@ -73,8 +67,22 @@ TaskBufferID TaskGraph::add_buffer(this TaskGraph &self, const TaskBufferInfo &i
     return task_buffer_id;
 }
 
-u32 TaskGraph::schedule_task(this TaskGraph &self, Task *task, TaskSubmit &submit)
-{
+void TaskGraph::update_task_infos(this TaskGraph &self) {
+    ZoneScoped;
+
+    for (auto &task : self.tasks) {
+        glm::uvec2 render_extent = {};
+        for_each_image_use(task->task_uses, [&](TaskImageID id, [[maybe_unused]] const PipelineAccessImpl &access, ImageLayout layout) {
+            TaskImage &task_image = self.images[static_cast<usize>(id)];
+            Image &image = self.device->image_at(task_image.image_id);
+            render_extent = glm::max(render_extent, glm::uvec2({ image.extent.width, image.extent.height }));
+        });
+
+        task->render_extent = { render_extent.x, render_extent.y };
+    }
+}
+
+u32 TaskGraph::schedule_task(this TaskGraph &self, Task *task, TaskSubmit &submit) {
     ZoneScoped;
 
     u32 first_batch_index = 0;
@@ -114,8 +122,7 @@ u32 TaskGraph::schedule_task(this TaskGraph &self, Task *task, TaskSubmit &submi
     return first_batch_index;
 }
 
-TaskID TaskGraph::add_task(this TaskGraph &self, std::unique_ptr<Task> &&task)
-{
+TaskID TaskGraph::add_task(this TaskGraph &self, std::unique_ptr<Task> &&task) {
     ZoneScoped;
 
     if (!self.prepare_task(*task)) {
@@ -146,10 +153,6 @@ TaskID TaskGraph::add_task(this TaskGraph &self, std::unique_ptr<Task> &&task)
             TaskImage &task_image = self.images[static_cast<usize>(id)];
             bool is_same_layout = layout == task_image.last_layout;
             bool is_read_on_read = access.access == MemoryAccess::Read && task_image.last_access.access == MemoryAccess::Read;
-            ImageAspect aspect = layout == ImageLayout::ColorAttachment          ? ImageAspect::Color
-                                 : layout == ImageLayout::DepthAttachment        ? ImageAspect::Depth
-                                 : layout == ImageLayout::DepthStencilAttachment ? ImageAspect::DepthStencil
-                                                                                 : ImageAspect::Stencil;
 
             if (!is_same_layout || !is_read_on_read) {
                 u32 barrier_id = self.barriers.size();
@@ -164,7 +167,6 @@ TaskID TaskGraph::add_task(this TaskGraph &self, std::unique_ptr<Task> &&task)
                 batch.barrier_indices.push_back(barrier_id);
             }
 
-            task_image.subresource_range.aspect_mask = aspect;
             task_image.last_layout = layout;
             task_image.last_access = access;
             task_image.last_batch_index = batch_index;
@@ -177,8 +179,7 @@ TaskID TaskGraph::add_task(this TaskGraph &self, std::unique_ptr<Task> &&task)
     return task_id;
 }
 
-void TaskGraph::present(this TaskGraph &self, TaskImageID task_image_id)
-{
+void TaskGraph::present(this TaskGraph &self, TaskImageID task_image_id) {
     ZoneScoped;
 
     TaskImage &task_image = self.images[static_cast<usize>(task_image_id)];
@@ -195,8 +196,7 @@ void TaskGraph::present(this TaskGraph &self, TaskImageID task_image_id)
     task_submit.additional_signal_barrier_indices.push_back(barrier_id);
 }
 
-std::string TaskGraph::generate_graphviz(this TaskGraph &self)
-{
+std::string TaskGraph::generate_graphviz(this TaskGraph &self) {
     ZoneScoped;
 
     u32 batch_id = 0;
@@ -255,8 +255,7 @@ std::string TaskGraph::generate_graphviz(this TaskGraph &self)
     return ss.str();
 }
 
-void TaskGraph::draw_profiler_ui(this TaskGraph &self)
-{
+void TaskGraph::draw_profiler_ui(this TaskGraph &self) {
     ZoneScoped;
 
     auto &io = ImGui::GetIO();
@@ -296,8 +295,7 @@ void TaskGraph::draw_profiler_ui(this TaskGraph &self)
     ImGui::End();
 }
 
-void TaskGraph::execute(this TaskGraph &self, const TaskExecuteInfo &info)
-{
+void TaskGraph::execute(this TaskGraph &self, const TaskExecuteInfo &info) {
     ZoneScoped;
     memory::ScopedStack stack;
 
@@ -460,8 +458,7 @@ void TaskGraph::execute(this TaskGraph &self, const TaskExecuteInfo &info)
     }
 }
 
-bool TaskGraph::prepare_task(this TaskGraph &self, Task &task)
-{
+bool TaskGraph::prepare_task(this TaskGraph &self, Task &task) {
     ZoneScoped;
 
     TaskPrepareInfo prepare_info = {
@@ -524,8 +521,7 @@ bool TaskGraph::prepare_task(this TaskGraph &self, Task &task)
             graphics_info.layout_id = task.pipeline_layout_id;
 
             task.pipeline_id = self.device->create_graphics_pipeline(graphics_info);
-        }
-        else {
+        } else {
             LR_ASSERT(pipeline_info.shader_ids.size() == 1, "Compute pipelines require a shader");
             compute_info.shader_id = pipeline_info.shader_ids[0];
             compute_info.layout_id = task.pipeline_layout_id;
@@ -540,8 +536,7 @@ bool TaskGraph::prepare_task(this TaskGraph &self, Task &task)
     return true;
 }
 
-TaskSubmit &TaskGraph::new_submit(this TaskGraph &self, CommandType type)
-{
+TaskSubmit &TaskGraph::new_submit(this TaskGraph &self, CommandType type) {
     ZoneScoped;
 
     u32 submit_id = self.submits.size();

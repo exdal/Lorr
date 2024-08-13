@@ -38,6 +38,8 @@ struct TaskGraph {
     TaskBufferID add_buffer(this TaskGraph &, const TaskBufferInfo &info);
 
     u32 schedule_task(this TaskGraph &, Task *task, TaskSubmit &submit);
+    // Used to update every task infos, ie, render_extent
+    void update_task_infos(this TaskGraph &);
 
     // Recording
     template<typename TaskT>
@@ -61,8 +63,7 @@ private:
 };
 
 template<typename TaskT>
-TaskID TaskGraph::add_task(const TaskT &task_info)
-{
+TaskID TaskGraph::add_task(const TaskT &task_info) {
     ZoneScoped;
 
     std::unique_ptr<Task> task = std::make_unique<TaskWrapper<TaskT>>(task_info);
@@ -76,20 +77,17 @@ struct TaskContext {
           task(task_),
           cmd_list(cmd_list_),
           copy_cmd_list(copy_cmd_list_),
-          frame_index(frame_index_)
-    {
-    }
+          frame_index(frame_index_) {}
 
     template<typename T>
-    RenderingAttachmentInfo as_color_attachment(this TaskContext &self, T &use, std::optional<ColorClearValue> clear_val = std::nullopt)
-    {
+    RenderingAttachmentInfo as_color_attachment(this TaskContext &self, T &use, std::optional<ColorClearValue> clear_val = std::nullopt) {
         ZoneScoped;
 
         RenderingAttachmentInfo info = {
             .image_view_id = self.task_image_data(use).image_view_id,
             .image_layout = ImageLayout::ColorAttachment,
             .load_op = clear_val ? AttachmentLoadOp::Clear : AttachmentLoadOp::Load,
-            .store_op = use.access == PipelineAccess::ColorAttachmentWrite ? AttachmentStoreOp::Store : AttachmentStoreOp::None,
+            .store_op = use.access.access & MemoryAccess::Write ? AttachmentStoreOp::Store : AttachmentStoreOp::None,
             .clear_value = { clear_val.value_or(ColorClearValue{}) },
         };
 
@@ -97,8 +95,7 @@ struct TaskContext {
     }
 
     template<typename T>
-    RenderingAttachmentInfo as_depth_attachment(this TaskContext &self, T &use, std::optional<DepthClearValue> clear_val = std::nullopt)
-    {
+    RenderingAttachmentInfo as_depth_attachment(this TaskContext &self, T &use, std::optional<DepthClearValue> clear_val = std::nullopt) {
         ZoneScoped;
 
         RenderingAttachmentInfo info = {
@@ -113,14 +110,12 @@ struct TaskContext {
     }
 
     template<typename T>
-    TaskImage &task_image_data(this TaskContext &self, T &use)
-    {
+    TaskImage &task_image_data(this TaskContext &self, T &use) {
         return self.task_graph.task_image_at(use.task_image_id);
     }
 
     template<typename T>
-    void set_push_constants(this TaskContext &self, T &v)
-    {
+    void set_push_constants(this TaskContext &self, T &v) {
         ZoneScoped;
 
         PipelineLayoutID pipeline_layout = self.device.get_pipeline_layout<T>();
@@ -129,8 +124,7 @@ struct TaskContext {
 
     StagingBuffer &staging_buffer(this TaskContext &self) { return self.device.staging_buffer_at(self.frame_index); }
 
-    Viewport pass_viewport(this TaskContext &self)
-    {
+    Viewport pass_viewport(this TaskContext &self) {
         return {
             .x = 0,
             .y = 0,
@@ -141,8 +135,7 @@ struct TaskContext {
         };
     }
 
-    Rect2D pass_rect(this TaskContext &self)
-    {
+    Rect2D pass_rect(this TaskContext &self) {
         return {
             .offset = { 0, 0 },
             .extent = self.task.render_extent,

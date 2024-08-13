@@ -32,14 +32,14 @@ bool Application::init(this Application &self, const ApplicationInfo &info) {
 
     /// IMGUI ///
     ImGui::CreateContext();
-    auto &io = ImGui::GetIO();
-    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
-    io.IniFilename = nullptr;
+    auto &imgui = ImGui::GetIO();
+    imgui.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+    imgui.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+    imgui.IniFilename = nullptr;
+    imgui.DisplayFramebufferScale = { 1.0f, 1.0f };
     ImGui::StyleColorsDark();
 
-    auto &imgui = ImGui::GetIO();
-
+    // TODO: Move this to asset manager
     u8 *font_data = nullptr;  // imgui context frees this itself
     i32 font_width, font_height;
     imgui.Fonts->GetTexDataAsRGBA32(&font_data, &font_width, &font_height);
@@ -58,7 +58,6 @@ bool Application::init(this Application &self, const ApplicationInfo &info) {
         .usage_flags = ImageUsage::Sampled | ImageUsage::TransferDst,
         .debug_name = "ImGui Font Atlas View",
     });
-    imgui.Fonts->SetTexID(&imgui_font_view_id);
 
     self.imgui_font_image_id = self.task_graph.add_image({
         .image_id = imgui_font_id,
@@ -66,6 +65,7 @@ bool Application::init(this Application &self, const ApplicationInfo &info) {
         .layout = ImageLayout::ColorReadOnly,
         .access = PipelineAccess::FragmentShaderRead,
     });
+    imgui.Fonts->SetTexID(&self.imgui_font_image_id);
 
     if (!self.do_prepare()) {
         LR_LOG_FATAL("Failed to initialize application!");
@@ -85,7 +85,6 @@ void Application::push_event(this Application &self, ApplicationEvent event, con
 void Application::poll_events(this Application &self) {
     ZoneScoped;
 
-    thread_local bool move_cam = false;
     auto &imgui = ImGui::GetIO();
     while (self.event_manager.peek()) {
         ApplicationEventData e = {};
@@ -96,41 +95,18 @@ void Application::poll_events(this Application &self) {
             case ApplicationEvent::MousePosition: {
                 auto &pos = e.mouse_pos;
                 imgui.AddMousePosEvent(pos.x, pos.y);
-
-                thread_local glm::vec2 last_pos = { 1280.0f / 2, 720.0f / 2 };
-                auto delta = pos - last_pos;
-                if (move_cam) {
-                    self.camera.yaw += delta.x / 5.0f;
-                    self.camera.pitch -= delta.y / 5.0f;
-                }
-                last_pos = pos;
                 break;
             }
             case ApplicationEvent::MouseState: {
-                if (!imgui.WantCaptureMouse)
-                    move_cam = !move_cam;
                 imgui.AddMouseButtonEvent(e.mouse_key, e.mouse_key_state == KeyState::Down);
                 break;
             }
             case ApplicationEvent::MouseScroll: {
                 auto &offset = e.mouse_scroll_offset;
                 imgui.AddMouseWheelEvent(offset.x, offset.y);
-                self.camera.pitch += offset.x;
                 break;
             }
             case ApplicationEvent::KeyboardState: {
-                Key k = e.key;
-                bool d = e.key_state != KeyState::Up;
-                static f32 v = 100.0f;
-
-                // clang-format off
-                if (k == LR_KEY_W) self.camera.velocity.z = d ?  v : 0.0f;
-                if (k == LR_KEY_S) self.camera.velocity.z = d ? -v : 0.0f;
-                if (k == LR_KEY_D) self.camera.velocity.x = d ?  v : 0.0f;
-                if (k == LR_KEY_A) self.camera.velocity.x = d ? -v : 0.0f;
-                if (k == LR_KEY_E) self.camera.velocity.y = d ?  v : 0.0f;
-                if (k == LR_KEY_Q) self.camera.velocity.y = d ? -v : 0.0f;
-                // clang-format on
                 break;
             }
             case ApplicationEvent::InputChar: {
@@ -193,13 +169,12 @@ void Application::run(this Application &self) {
         self.task_graph.set_image(self.swap_chain_image_id, { .image_id = image_id, .image_view_id = image_view_id });
 
         // Update application
-        ImGui::NewFrame();
         auto &extent = self.default_surface.swap_chain.extent;
         imgui.DisplaySize = ImVec2(static_cast<f32>(extent.width), static_cast<f32>(extent.height));
 
-        self.camera.update(delta_time);
+        // NOTE: Make sure to do all imgui settings BEFORE NewFrame!!!
+        ImGui::NewFrame();
         self.do_update(delta_time);
-
         ImGui::Render();
 
         // Render frame
@@ -268,6 +243,8 @@ VKResult Application::create_surface(this Application &self, ApplicationSurface 
 
         surface.image_views[i] = image_view_id;
     }
+
+    self.task_graph.update_task_infos();
 
     return VKResult::Success;
 }

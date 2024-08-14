@@ -40,9 +40,8 @@ std::unique_ptr<ImageAssetData> parse_image_stbi(u8 *data, usize data_size) {
 std::unique_ptr<ModelAssetData> parse_model_gltf(u8 *data, usize data_size) {
     ZoneScoped;
 
-    fastgltf::GltfDataBuffer gltf_buffer;
-    gltf_buffer.fromByteView(data, data_size - get_gltf_padding(), data_size);
-    auto gltf_type = fastgltf::determineGltfFileType(&gltf_buffer);
+    auto gltf_buffer = fastgltf::GltfDataBuffer::FromBytes(ls::bit_cast<std::byte *>(data), data_size);
+    auto gltf_type = fastgltf::determineGltfFileType(gltf_buffer.get());
     if (gltf_type != fastgltf::GltfType::GLB) {
         LR_LOG_ERROR("Only GLB is supported!");
         return nullptr;
@@ -73,7 +72,7 @@ std::unique_ptr<ModelAssetData> parse_model_gltf(u8 *data, usize data_size) {
     auto options = fastgltf::Options::None;
     options |= fastgltf::Options::DontRequireValidAssetMember;
 
-    auto result = parser.loadGltf(&gltf_buffer, {}, options);
+    auto result = parser.loadGltf(gltf_buffer.get(), {}, options);
     if (!result) {
         LR_LOG_ERROR("Failed to load GLTF! {}", fastgltf::getErrorMessage(result.error()));
         return nullptr;
@@ -281,7 +280,7 @@ std::unique_ptr<ModelAssetData> parse_model_gltf(u8 *data, usize data_size) {
             if (auto attrib = k.findAttribute("POSITION");
                 attrib != k.attributes.end()
             ) {
-                auto &accessor = asset.accessors[attrib->second];
+                auto &accessor = asset.accessors[attrib->accessorIndex];
                 primitive.vertex_count = accessor.count;
                 model->vertices.resize(model->vertices.size() + accessor.count);
                 fastgltf::iterateAccessorWithIndex<glm::vec3>(asset, accessor,
@@ -293,7 +292,7 @@ std::unique_ptr<ModelAssetData> parse_model_gltf(u8 *data, usize data_size) {
             if (auto attrib = k.findAttribute("NORMAL");
                 attrib != k.attributes.end()
             ) {
-                auto &accessor = asset.accessors[attrib->second];
+                auto &accessor = asset.accessors[attrib->accessorIndex];
                 fastgltf::iterateAccessorWithIndex<glm::vec3>(asset, accessor,
                     [&](glm::vec3 normal, usize i) {
                         model->vertices[vertex_offset + i].normal = normal;
@@ -303,7 +302,7 @@ std::unique_ptr<ModelAssetData> parse_model_gltf(u8 *data, usize data_size) {
             if (auto attrib = k.findAttribute("TEXCOORD_0");
                 attrib != k.attributes.end()
             ) {
-                auto &accessor = asset.accessors[attrib->second];
+                auto &accessor = asset.accessors[attrib->accessorIndex];
                 fastgltf::iterateAccessorWithIndex<glm::vec2>(asset, accessor,
                     [&](glm::vec2 uv, usize i) {
                         model->vertices[vertex_offset + i].uv_x = uv.x;
@@ -314,7 +313,7 @@ std::unique_ptr<ModelAssetData> parse_model_gltf(u8 *data, usize data_size) {
             if (auto attrib = k.findAttribute("COLOR");
                 attrib != k.attributes.end()
             ) {
-                auto &accessor = asset.accessors[attrib->second];
+                auto &accessor = asset.accessors[attrib->accessorIndex];
                 fastgltf::iterateAccessorWithIndex<glm::vec4>(asset, accessor,
                     [&](glm::vec4 color, usize i) {
                         model->vertices[vertex_offset + i].color = glm::packUnorm4x8(color);
@@ -333,12 +332,6 @@ std::unique_ptr<ModelAssetData> parse_model_gltf(u8 *data, usize data_size) {
     LR_LOG_TRACE("GLTF parsing end.");
 
     return model;
-}
-
-usize get_gltf_padding() {
-    ZoneScoped;
-
-    return fastgltf::getGltfBufferPadding();
 }
 
 }  // namespace lr

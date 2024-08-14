@@ -17,7 +17,7 @@ add_requires("tracy v0.10", { configs = {
 } })
 add_requires("loguru", { configs = { fmt = true } })
 add_requires("slang-lorr v2024.1.22")
-add_requires("fastgltf")
+add_requires("fastgltf v0.8.0")
 add_requires("stb 2023.12.15")
 add_requires("lz4 v1.9.4")
 add_requires("zstd v1.5.6")

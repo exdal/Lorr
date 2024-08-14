@@ -83,6 +83,5 @@ struct ModelAssetData {
 
 std::unique_ptr<ImageAssetData> parse_image_stbi(u8 *data, usize data_size);
 std::unique_ptr<ModelAssetData> parse_model_gltf(u8 *data, usize data_size);
-usize get_gltf_padding();
 
 }  // namespace lr

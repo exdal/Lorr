@@ -1,12 +1,8 @@
-#ifdef __cplusplus
-#pragma once
-#endif
-
-
-#ifdef __cplusplus
-// C++ stuff goes here
-#else
-// Slang stuff goes here
+#define LR_DESCRIPTOR_INDEX_SAMPLER 0
+#define LR_DESCRIPTOR_INDEX_IMAGES 1
+#define LR_DESCRIPTOR_INDEX_STORAGE_IMAGES 2
+#define LR_DESCRIPTOR_INDEX_STORAGE_BUFFERS 3
+#define LR_DESCRIPTOR_INDEX_BDA_ARRAY 4
 
 // arithmetic types
 typedef double f64;
@@ -77,6 +73,4 @@ func load_buffer<T>(BufferID buffer_id) -> T * {
 }
 
 }
-
-#endif
 

@@ -25,6 +25,7 @@
 #include <glm/vec4.hpp>
 
 #include "Core/Log.hh"
+#include <ankerl/unordered_dense.h>
 #include <plf_colony.h>
 
 namespace fs = std::filesystem;

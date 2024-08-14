@@ -15,6 +15,7 @@ target("Lorr")
     add_rpathdirs("@executable_path")
     add_includedirs("../", { public = true });
     add_files("**.cc")
+
     add_files("./Resources/**")
     add_rules("lorr.install_resources", {
         root_dir = os.scriptdir() .. "/Resources",

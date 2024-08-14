@@ -5,6 +5,10 @@
 namespace lr {
 struct Identifier {
     constexpr static std::string_view SPLIT = "://";
+
+    u64 category_hash = 0;
+    u64 name_hash = 0;
+
     template<usize N>
     constexpr Identifier(const c8 (&arr)[N]) {
         std::string_view str = arr;
@@ -23,12 +27,13 @@ struct Identifier {
         this->name_hash = fnv64_str(str.substr(split_pos + SPLIT.length()));
     }
 
-    u64 category_hash = 0;
-    u64 name_hash = 0;
+    constexpr u64 full_hash() const { return name_hash ^ (category_hash << 1_u64); }
+
+    constexpr bool operator==(const Identifier &) const = default;
 };
 }  // namespace lr
 
 template<>
 struct std::hash<lr::Identifier> {
-    usize operator()(const lr::Identifier &v) const noexcept { return v.name_hash ^ (v.category_hash << 1); }
+    usize operator()(const lr::Identifier &v) const noexcept { return v.full_hash(); }
 };

@@ -2,7 +2,7 @@
 
 #include "TaskGraph.hh"
 
-#include <Embedded.hh>
+#include "Engine/Core/Application.hh"
 
 #include <imgui.h>
 
@@ -21,27 +21,18 @@ struct FullScreenTask {
     } push_constants = {};
 
     bool prepare(TaskPrepareInfo &info) {
+        auto &app = Application::get();
         auto &pipeline_info = info.pipeline_info;
 
-        VirtualFileInfo virtual_files[] = { { "lorr", embedded::lorr_sp } };
-        VirtualDir virtual_dir = { virtual_files };
-        ShaderCompileInfo shader_compile_info = {
-            .real_path = "fullscreen.slang",
-            .code = embedded::fullscreen_str,
-            .virtual_env = { &virtual_dir, 1 },
-        };
-
-        shader_compile_info.entry_point = "vs_main";
-        auto [vs_ir, vs_result] = ShaderCompiler::compile(shader_compile_info);
-        shader_compile_info.entry_point = "fs_main";
-        auto [fs_ir, fs_result] = ShaderCompiler::compile(shader_compile_info);
-        if (!vs_result || !fs_result) {
-            LR_LOG_ERROR("Failed to initialize ImGui pass! {}, {}", vs_result, fs_result);
+        auto vs = app.asset_man.shader_at("shader://fullscreen_vs");
+        auto fs = app.asset_man.shader_at("shader://fullscreen_fs");
+        if (!vs || !fs) {
+            LR_LOG_ERROR("Shaders are invalid.", name);
             return false;
         }
 
-        pipeline_info.set_shader(info.device->create_shader(ShaderStageFlag::Vertex, vs_ir));
-        pipeline_info.set_shader(info.device->create_shader(ShaderStageFlag::Fragment, fs_ir));
+        pipeline_info.set_shader(vs.value());
+        pipeline_info.set_shader(fs.value());
         pipeline_info.set_dynamic_states(DynamicState::Viewport | DynamicState::Scissor);
         pipeline_info.set_viewport({});
         pipeline_info.set_scissors({});
@@ -98,28 +89,18 @@ struct ImGuiTask {
     } self = {};
 
     bool prepare(TaskPrepareInfo &info) {
+        auto &app = Application::get();
         auto &pipeline_info = info.pipeline_info;
 
-        VirtualFileInfo virtual_files[] = { { "lorr", embedded::lorr_sp } };
-        VirtualDir virtual_dir = { virtual_files };
-        ShaderCompileInfo shader_compile_info = {
-            .real_path = "imgui.slang",
-            .code = embedded::imgui_str,
-            .virtual_env = { &virtual_dir, 1 },
-        };
-
-        shader_compile_info.entry_point = "vs_main";
-        auto [vs_ir, vs_result] = ShaderCompiler::compile(shader_compile_info);
-        shader_compile_info.entry_point = "fs_main";
-        auto [fs_ir, fs_result] = ShaderCompiler::compile(shader_compile_info);
-        if (!vs_result || !fs_result) {
-            LR_LOG_ERROR("Failed to initialize ImGui pass! {}, {}", vs_result, fs_result);
+        auto vs = app.asset_man.shader_at("shader://imgui_vs");
+        auto fs = app.asset_man.shader_at("shader://imgui_fs");
+        if (!vs || !fs) {
+            LR_LOG_ERROR("Shaders are invalid.", name);
             return false;
         }
 
-        pipeline_info.set_shader(info.device->create_shader(ShaderStageFlag::Vertex, vs_ir));
-        pipeline_info.set_shader(info.device->create_shader(ShaderStageFlag::Fragment, fs_ir));
-
+        pipeline_info.set_shader(vs.value());
+        pipeline_info.set_shader(fs.value());
         pipeline_info.set_dynamic_states(DynamicState::Viewport | DynamicState::Scissor);
         pipeline_info.set_viewport({});
         pipeline_info.set_scissors({});

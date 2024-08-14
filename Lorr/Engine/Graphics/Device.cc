@@ -234,8 +234,6 @@ VKResult Device::init(this Device &self, const DeviceInfo &info) {
 
     /// DEVICE CONTEXT ///
 
-    ShaderCompiler::init();
-
     self.staging_buffers.resize(self.frame_count);
     for (auto &staging_buffer : self.staging_buffers) {
         staging_buffer.init(&self);

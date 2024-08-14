@@ -874,7 +874,7 @@ struct PipelineShaderStageInfo {
     VkPipelineShaderStageCreateFlags create_flags = {};
     ShaderStageFlag shader_stage = ShaderStageFlag::All;
     VkShaderModule module = VK_NULL_HANDLE;
-    const char *entry_point = nullptr;
+    const char *entry_point = "main";
     VkSpecializationInfo *specialization_info = nullptr;
 
     operator auto &() { return *reinterpret_cast<VkType *>(this); }

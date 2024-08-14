@@ -1,4 +1,4 @@
-import lorr;
+import "lorr";
 
 struct VertexOutput {
     float4 position     : SV_Position;

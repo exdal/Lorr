@@ -19,7 +19,7 @@ File::File(const fs::path &path, FileAccess access) {
     if (access & FileAccess::Write)
         flags &= ~O_RDONLY;
     if (access & FileAccess::Read)
-        flags &= ~O_WRONLY;
+        flags &= ~(O_WRONLY | O_CREAT);
 
     i32 file = open64(path.c_str(), flags, S_IRUSR | S_IWUSR);
     if (file < 0) {

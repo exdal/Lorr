@@ -1,4 +1,4 @@
-import lorr;
+import "lorr";
 
 #define GAMMA_TO_LINEAR(Gamma) ((Gamma) < 0.04045 ? (Gamma) / 12.92 : pow(max((Gamma) + 0.055, 0.0) / 1.055, 2.4))
 #define SRGBA_TO_LINEAR(col) \

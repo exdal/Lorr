@@ -29,7 +29,7 @@ struct VirtualDir {
     ls::option<std::reference_wrapper<VirtualFile>> read_file(const std::string &virtual_path, const fs::path &real_path) {
         File file(real_path, FileAccess::Read);
         if (!file) {
-            LR_LOG_ERROR("Failed to read file!");
+            LR_LOG_ERROR("Failed to read file '{}'!", real_path.c_str());
             return ls::nullopt;
         }
 

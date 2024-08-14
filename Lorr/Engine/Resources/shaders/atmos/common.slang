@@ -1,4 +1,4 @@
-import lorr;
+import "../lorr";
 
 struct Atmosphere {
     float3 rayleigh_scatter;
@@ -32,7 +32,7 @@ bool ray_hit_sphere(float3 origin, float3 dir, float radius, out float t) {
     return false;
 }
 
-float3 extinction_sum(Atmosphere atmos, float altitude) {
+float3 extinction_sum(Atmosphere *atmos, float altitude) {
     float3 rayleigh = atmos.rayleigh_scatter * exp(-altitude / atmos.rayleigh_density);
     float mie = (atmos.mie_scatter + atmos.mie_absorption) * exp(-altitude / atmos.mie_density);
     float3 ozone = atmos.ozone_absorption * max(0.0, 1.0 - abs(altitude - atmos.ozone_height) / atmos.ozone_thickness);

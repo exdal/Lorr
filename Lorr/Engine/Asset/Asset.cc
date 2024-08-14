@@ -188,6 +188,9 @@ bool AssetManager::init(this AssetManager &self, Device *device) {
     /// ENGINE RESOURCES ///
     self.load_shader("shader://imgui_vs", ShaderCompileInfo{ .entry_point = "vs_main", .path = "imgui.slang" });
     self.load_shader("shader://imgui_fs", ShaderCompileInfo{ .entry_point = "fs_main", .path = "imgui.slang" });
+    self.load_shader("shader://fullscreen_vs", ShaderCompileInfo{ .entry_point = "vs_main", .path = "fullscreen.slang" });
+    self.load_shader("shader://fullscreen_fs", ShaderCompileInfo{ .entry_point = "fs_main", .path = "fullscreen.slang" });
+    self.load_shader("shader://atmos.transmittance", ShaderCompileInfo{ .entry_point = "cs_main", .path = "atmos/transmittance.slang" });
 
     return true;
 }

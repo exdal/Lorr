@@ -1,8 +1,10 @@
-add_requires("fmt 10.2.1")
+add_requires("fmt 11.0.2")
 add_requires("xxhash")
-add_requires("glm")
+add_requires("glm 1.0.1", { configs = {
+    header_only = true,
+    cxx_standard = "20",
+}})
 add_requires("vulkan-memory-allocator")
-add_requires("vk-bootstrap v1.3.283")
 add_requires("plf_colony")
 add_requires("imgui v1.90.5-docking")
 add_requires("simdutf")
@@ -17,6 +19,7 @@ add_requires("tracy v0.10", { configs = {
 } })
 add_requires("loguru", { configs = { fmt = true } })
 add_requires("slang-lorr v2024.1.22")
+add_requires("lr-vk-bootstrap v1.3.292")
 add_requires("fastgltf v0.8.0")
 add_requires("stb 2023.12.15")
 add_requires("lz4 v1.9.4")

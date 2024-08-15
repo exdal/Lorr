@@ -45,7 +45,7 @@ target("Lorr")
         "glfw",
         "vulkan-headers",
         "vulkan-memory-allocator",
-        "vk-bootstrap",
+        "lr-vk-bootstrap",
         "imgui",
         "slang-lorr",
         "fmt",

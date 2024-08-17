@@ -1,15 +1,9 @@
-import "lorr";
+import "../lorr";
 
 struct VertexOutput {
     float4 position     : SV_Position;
     float2 tex_coord    : TEXCOORD;
 };
-
-[[vk::push_constant]] struct
-{
-    ImageViewID image_view_id;
-    SamplerID sampler_id;
-} c;
 
 [shader("vertex")]
 VertexOutput vs_main(u32 vertex_id : SV_VertexID) {
@@ -24,10 +18,6 @@ VertexOutput vs_main(u32 vertex_id : SV_VertexID) {
 [shader("fragment")]
 float4 fs_main(VertexOutput input) : SV_TARGET
 {
-    const Texture2D font_texture = Texture2D<float4>::get(c.image_view_id);
-    const SamplerState linear_sampler = SamplerState::get(c.sampler_id);
-
-    return font_texture.Sample(linear_sampler, input.tex_coord);
+    return float4(input.tex_coord.xy, 0.0, 1.0);
 }
-
 

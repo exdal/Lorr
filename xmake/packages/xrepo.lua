@@ -24,6 +24,7 @@ add_requires("fastgltf v0.8.0")
 add_requires("stb 2023.12.15")
 add_requires("lz4 v1.9.4")
 add_requires("zstd v1.5.6")
+add_requires("flecs v4.0.0")
 
 if is_plat("linux") then
     add_requires("glfw 3.4", { configs = {

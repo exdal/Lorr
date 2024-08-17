@@ -11,7 +11,6 @@ struct TaskPersistentImageInfo {
     PipelineAccessImpl access = PipelineAccess::TopOfPipe;
 };
 
-enum class TaskBufferID : u32 { Invalid = ~0_u32 };
 struct TaskBufferInfo {
     BufferID buffer_id = BufferID::Invalid;
     PipelineAccessImpl last_access = PipelineAccess::None;
@@ -27,7 +26,6 @@ enum class TaskImageFlag {
 template<>
 struct has_bitmask<TaskImageFlag> : std::true_type {};
 
-enum class TaskImageID : u32 { Invalid = ~0_u32 };
 struct TaskImage {
     ImageID image_id = ImageID::Invalid;
     ImageViewID image_view_id = ImageViewID::Invalid;

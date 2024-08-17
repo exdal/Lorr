@@ -1,10 +1,14 @@
-#include "Layout.hh"
+#include "EditorLayout.hh"
 
 #include <imgui.h>
 #include <imgui_internal.h>
 
 namespace lr {
-void EditorLayout::setup_theme(this EditorLayout &self, EditorTheme theme) {
+void EditorLayout::init(this EditorLayout &self) {
+    self.setup_theme(EditorTheme::Dark);
+}
+
+void EditorLayout::setup_theme(this EditorLayout &, EditorTheme theme) {
     ZoneScoped;
 
 #define LR_RGB(r, g, b) ImVec4((r) / 250.0f, (g) / 255.0f, (b) / 255.0f, 1.0f)
@@ -46,9 +50,48 @@ void EditorLayout::setup_theme(this EditorLayout &self, EditorTheme theme) {
             colors[ImGuiCol_SliderGrabActive] = LR_RGB(22, 22, 22);
             break;
     }
+
+#undef LR_RGB
 }
 
-void EditorLayout::draw_base(this EditorLayout &self) {
+void EditorLayout::setup_dockspace(this EditorLayout &self) {
+    ZoneScoped;
+
+    auto [asset_browser_panel_id, asset_browser_panel] = self.add_panel<AssetBrowserPanel>("Asset Browser", 0);
+    auto [console_panel_id, console_panel] = self.add_panel<ConsolePanel>("Console", 0);
+    auto [inspector_panel_id, inspector_panel] = self.add_panel<InspectorPanel>("Inspector", 0);
+    auto [scene_browser_panel_id, scene_browser_panel] = self.add_panel<SceneBrowserPanel>("Scene Browser", 0);
+    auto [tools_panel_id, tools_panel] = self.add_panel<ToolsPanel>("Tools", 0);
+    auto [viewport_panel_id, viewport_panel] = self.add_panel<ViewportPanel>("Viewport", 0);
+
+    ImGuiViewport *viewport = ImGui::GetMainViewport();
+    i32 dock_node_flags = ImGuiDockNodeFlags_PassthruCentralNode;
+
+    auto dockspace_id = ImGui::GetID("EngineDockSpace");
+    self.dockspace_id = dockspace_id;
+
+    ImGui::DockBuilderRemoveNode(dockspace_id);
+    ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace | dock_node_flags);
+    ImGui::DockBuilderSetNodeSize(dockspace_id, viewport->Size);
+
+    auto main_dock_id = dockspace_id;
+    auto up_dock_id = ImGui::DockBuilderSplitNode(main_dock_id, ImGuiDir_Up, 0.05f, nullptr, &main_dock_id);
+    auto most_left_dock_id = ImGui::DockBuilderSplitNode(main_dock_id, ImGuiDir_Left, 0.03f, nullptr, &main_dock_id);
+    auto down_dock_id = ImGui::DockBuilderSplitNode(main_dock_id, ImGuiDir_Down, 0.30f, nullptr, &main_dock_id);
+    auto left_dock_id = ImGui::DockBuilderSplitNode(main_dock_id, ImGuiDir_Left, 0.20f, nullptr, &main_dock_id);
+    auto right_dock_id = ImGui::DockBuilderSplitNode(main_dock_id, ImGuiDir_Right, 0.25f, nullptr, &main_dock_id);
+
+    ImGui::DockBuilderDockWindow("###up_dock", up_dock_id);
+    ImGui::DockBuilderDockWindow(tools_panel->name.data(), most_left_dock_id);
+    ImGui::DockBuilderDockWindow(viewport_panel->name.data(), main_dock_id);
+    ImGui::DockBuilderDockWindow(console_panel->name.data(), down_dock_id);
+    ImGui::DockBuilderDockWindow(asset_browser_panel->name.data(), down_dock_id);
+    ImGui::DockBuilderDockWindow(scene_browser_panel->name.data(), left_dock_id);
+    ImGui::DockBuilderDockWindow(inspector_panel->name.data(), right_dock_id);
+    ImGui::DockBuilderFinish(dockspace_id);
+}
+
+void EditorLayout::update(this EditorLayout &self) {
     ZoneScoped;
 
     ImGuiViewport *viewport = ImGui::GetMainViewport();
@@ -75,37 +118,21 @@ void EditorLayout::draw_base(this EditorLayout &self) {
     ImGui::Begin("EditorDock", nullptr, dock_window_flags);
     ImGui::PopStyleVar(3);
 
-    // Setup dockspace
-    i32 dock_node_flags = ImGuiDockNodeFlags_PassthruCentralNode;
-    auto dockspace_id = ImGui::GetID("EditorDockSpace");
-    if (!ImGui::DockBuilderGetNode(dockspace_id)) {
-        ImGui::DockBuilderRemoveNode(dockspace_id);
-        ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace | dock_node_flags);
-        ImGui::DockBuilderSetNodeSize(dockspace_id, viewport->Size);
-        auto main_dock_id = dockspace_id;
-        auto up_dock_id = ImGui::DockBuilderSplitNode(main_dock_id, ImGuiDir_Up, 0.05f, nullptr, &main_dock_id);
-        auto most_left_dock_id = ImGui::DockBuilderSplitNode(main_dock_id, ImGuiDir_Left, 0.03f, nullptr, &main_dock_id);
-        auto down_dock_id = ImGui::DockBuilderSplitNode(main_dock_id, ImGuiDir_Down, 0.30f, nullptr, &main_dock_id);
-        auto left_dock_id = ImGui::DockBuilderSplitNode(main_dock_id, ImGuiDir_Left, 0.20f, nullptr, &main_dock_id);
-        auto right_dock_id = ImGui::DockBuilderSplitNode(main_dock_id, ImGuiDir_Right, 0.25f, nullptr, &main_dock_id);
-
-        ImGui::DockBuilderDockWindow("###up_dock", up_dock_id);
-        ImGui::DockBuilderDockWindow("###most_left_dock", most_left_dock_id);
-        ImGui::DockBuilderDockWindow("###left_dock", left_dock_id);
-        ImGui::DockBuilderDockWindow("###right_dock", right_dock_id);
-        ImGui::DockBuilderDockWindow("###down_dock", down_dock_id);
-        ImGui::DockBuilderDockWindow("###down_dock2", down_dock_id);
-        ImGui::DockBuilderDockWindow("###center_dock", main_dock_id);
-
-        ImGui::DockBuilderFinish(dockspace_id);
+    if (!self.dockspace_id) {
+        self.setup_dockspace();
     }
 
     ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
-    ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), dock_node_flags | ImGuiDockNodeFlags_NoWindowMenuButton);
+    i32 dock_node_flags = ImGuiDockNodeFlags_PassthruCentralNode;
+    ImGui::DockSpace(self.dockspace_id.value(), ImVec2(0.0f, 0.0f), dock_node_flags | ImGuiDockNodeFlags_NoWindowMenuButton);
     ImGui::PopStyleVar();
 
     if (ImGui::BeginMenuBar()) {
         if (ImGui::BeginMenu("File")) {
+            if (ImGui::MenuItem("Exit")) {
+                // ok
+            }
+
             ImGui::EndMenu();
         }
 
@@ -126,37 +153,8 @@ void EditorLayout::draw_base(this EditorLayout &self) {
     ImGui::Text("Project name etc");
     ImGui::End();
 
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(2.0f, 2.0f));
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
-    ImGui::SetNextWindowClass(&window_class);
-    ImGui::Begin("###most_left_dock");
-
-    auto v = ImGui::GetContentRegionAvail();
-    ImGui::Button("X", ImVec2(v.x, v.x));
-    ImGui::Button("X", ImVec2(v.x, v.x));
-    ImGui::Button("X", ImVec2(v.x, v.x));
-    ImGui::Button("X", ImVec2(v.x, v.x));
-    ImGui::Button("X", ImVec2(v.x, v.x));
-    ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal, 2.0f);
-    ImGui::Button("X", ImVec2(v.x, v.x));
-    ImGui::Button("X", ImVec2(v.x, v.x));
-    ImGui::Button("X", ImVec2(v.x, v.x));
-    ImGui::End();
-    ImGui::PopStyleVar(2);
-
-    ImGui::Begin("Viewport###center_dock");
-    ImGui::End();
-
-    ImGui::Begin("Scene Browser###left_dock");
-    ImGui::End();
-
-    ImGui::Begin("Inspector###right_dock");
-    ImGui::End();
-
-    ImGui::Begin("Asset Browser###down_dock");
-    ImGui::End();
-
-    ImGui::Begin("Console###down_dock2");
-    ImGui::End();
+    for (auto &panel : self.panels) {
+        panel->do_update();
+    }
 }
 }  // namespace lr

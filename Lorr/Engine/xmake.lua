@@ -60,6 +60,7 @@ target("Lorr")
         "zstd",
         "fastgltf",
         "stb",
+        "flecs",
         { public = true })
 
 target_end()

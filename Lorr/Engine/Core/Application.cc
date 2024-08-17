@@ -37,6 +37,7 @@ bool Application::init(this Application &self, const ApplicationInfo &info) {
     imgui.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
     imgui.IniFilename = nullptr;
     imgui.DisplayFramebufferScale = { 1.0f, 1.0f };
+    imgui.BackendFlags = ImGuiBackendFlags_RendererHasVtxOffset;
     ImGui::StyleColorsDark();
 
     // TODO: Move this to asset manager
@@ -65,7 +66,7 @@ bool Application::init(this Application &self, const ApplicationInfo &info) {
         .layout = ImageLayout::ColorReadOnly,
         .access = PipelineAccess::FragmentShaderRead,
     });
-    imgui.Fonts->SetTexID(&self.imgui_font_image_id);
+    imgui.Fonts->SetTexID(nullptr);
 
     if (!self.do_prepare()) {
         LR_LOG_FATAL("Failed to initialize application!");
@@ -196,6 +197,13 @@ void Application::run(this Application &self) {
         self.poll_events();
 
         FrameMark;
+    }
+}
+
+void Application::set_active_scene(this Application &self, SceneID scene_id) {
+    usize scene_idx = static_cast<usize>(scene_id);
+    if (scene_id != SceneID::Invalid && scene_idx < self.scenes.size()) {
+        self.active_scene = scene_id;
     }
 }
 

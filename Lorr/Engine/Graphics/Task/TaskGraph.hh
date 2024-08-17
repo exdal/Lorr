@@ -114,6 +114,8 @@ struct TaskContext {
         return self.task_graph.task_image_at(use.task_image_id);
     }
 
+    TaskImage &task_image_data(this TaskContext &self, TaskImageID task_image_id) { return self.task_graph.task_image_at(task_image_id); }
+
     template<typename T>
     void set_push_constants(this TaskContext &self, T &v) {
         ZoneScoped;

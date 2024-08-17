@@ -141,8 +141,8 @@ struct ImGuiTask {
             .min_filter = Filtering::Linear,
             .mag_filter = Filtering::Linear,
             .mip_filter = Filtering::Linear,
-            .address_u = TextureAddressMode::Repeat,
-            .address_v = TextureAddressMode::Repeat,
+            .address_u = TextureAddressMode::ClampToEdge,
+            .address_v = TextureAddressMode::ClampToEdge,
             .min_lod = -1000,
             .max_lod = 1000,
         });
@@ -191,9 +191,7 @@ struct ImGuiTask {
         glm::vec2 translate = { -1.0f - draw_data->DisplayPos.x * scale.x, -1.0f - draw_data->DisplayPos.y * scale.y };
         push_constants.scale = scale;
         push_constants.translate = translate;
-        push_constants.image_view_id = task_font.image_view_id;
         push_constants.sampler_id = self.sampler;
-        tc.set_push_constants(push_constants);
 
         ImVec2 clip_off = draw_data->DisplayPos;
         ImVec2 clip_scale = draw_data->FramebufferScale;
@@ -217,6 +215,16 @@ struct ImGuiTask {
                     .extent = { u32(clip_max.x - clip_min.x), u32(clip_max.y - clip_min.y) },
                 };
                 tc.cmd_list.set_scissors(0, scissor);
+
+                if (im_cmd.TextureId) {
+                    TaskImageID im_image_id = (TaskImageID)(iptr)(im_cmd.TextureId);
+                    auto &im_image = tc.task_image_data(im_image_id);
+                    push_constants.image_view_id = im_image.image_view_id;
+                } else {
+                    push_constants.image_view_id = task_font.image_view_id;
+                }
+
+                tc.set_push_constants(push_constants);
                 tc.cmd_list.draw_indexed(im_cmd.ElemCount, im_cmd.IdxOffset + index_offset, i32(im_cmd.VtxOffset + vertex_offset));
             }
 

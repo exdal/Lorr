@@ -12,7 +12,6 @@ struct TaskPrepareInfo {
 };
 
 struct TaskContext;
-enum class TaskID : u32 { Invalid = ~0_u32 };
 struct Task {
     virtual ~Task() = default;
     virtual bool prepare(TaskPrepareInfo &info) = 0;

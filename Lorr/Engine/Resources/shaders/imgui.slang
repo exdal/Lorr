@@ -44,6 +44,7 @@ float4 fs_main(VertexOutput input) : SV_TARGET
 {
     const Texture2D font_texture = Texture2D<float4>::get(c.image_view_id);
     const SamplerState linear_sampler = SamplerState::get(c.sampler_id);
+
     float4 col = font_texture.Sample(linear_sampler, input.tex_coord) * input.color;
     col.xyz *= col.w;
     SRGBA_TO_LINEAR(col);

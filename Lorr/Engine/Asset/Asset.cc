@@ -54,17 +54,16 @@ struct SlangVirtualFS : ISlangFileSystem {
         }
 
         // /resources/shaders/xx.slang -> shader://xx
-        auto ident_str = fs::relative(path, m_root_dir).replace_extension("").string();
-        std::replace(ident_str.begin(), ident_str.end(), fs::path::preferred_separator, '.');
-        ident_str = "shader://" + ident_str;
+        auto module_name = fs::relative(path, m_root_dir).replace_extension("").string();
+        std::replace(module_name.begin(), module_name.end(), fs::path::preferred_separator, '.');
 
-        auto it = m_virtual_env.files.find(ident_str);
+        auto it = m_virtual_env.files.find(module_name);
         if (it == m_virtual_env.files.end()) {
-            if (auto result = m_virtual_env.read_file(ident_str, path); result.has_value()) {
+            if (auto result = m_virtual_env.read_file(module_name, path); result.has_value()) {
                 auto &new_file = result.value().get();
                 *outBlob = new SlangBlob(std::vector<u8>{ new_file.data(), (new_file.data() + new_file.size()) });
 
-                LR_LOG_TRACE("New shader '{}' is loaded.", ident_str);
+                LR_LOG_TRACE("New shader module '{}' is loaded.", module_name);
                 return SLANG_OK;
             } else {
                 LR_LOG_ERROR("Failed to load shader '{}'!", path.c_str());
@@ -186,11 +185,13 @@ bool AssetManager::init(this AssetManager &self, Device *device) {
     self.textures.emplace_back(invalid_image_id, invalid_image_view_id, invalid_sampler_id);
 
     /// ENGINE RESOURCES ///
-    self.load_shader("shader://imgui_vs", ShaderCompileInfo{ .entry_point = "vs_main", .path = "imgui.slang" });
-    self.load_shader("shader://imgui_fs", ShaderCompileInfo{ .entry_point = "fs_main", .path = "imgui.slang" });
-    self.load_shader("shader://fullscreen_vs", ShaderCompileInfo{ .entry_point = "vs_main", .path = "fullscreen.slang" });
-    self.load_shader("shader://fullscreen_fs", ShaderCompileInfo{ .entry_point = "fs_main", .path = "fullscreen.slang" });
-    self.load_shader("shader://atmos.transmittance", ShaderCompileInfo{ .entry_point = "cs_main", .path = "atmos/transmittance.slang" });
+    self.load_shader("shader://imgui_vs", { .entry_point = "vs_main", .path = "imgui.slang" });
+    self.load_shader("shader://imgui_fs", { .entry_point = "fs_main", .path = "imgui.slang" });
+    self.load_shader("shader://fullscreen_vs", { .entry_point = "vs_main", .path = "fullscreen.slang" });
+    self.load_shader("shader://fullscreen_fs", { .entry_point = "fs_main", .path = "fullscreen.slang" });
+    self.load_shader("shader://atmos.transmittance", { .entry_point = "cs_main", .path = "atmos/transmittance.slang" });
+    self.load_shader("shader://editor.grid_vs", { .entry_point = "vs_main", .path = "editor/grid.slang" });
+    self.load_shader("shader://editor.grid_fs", { .entry_point = "fs_main", .path = "editor/grid.slang" });
 
     return true;
 }

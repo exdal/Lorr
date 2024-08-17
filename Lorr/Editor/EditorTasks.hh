@@ -42,7 +42,6 @@ struct GridTask {
         auto &app = Application::get();
         auto &scene = app.scene_at(app.active_scene.value());
         auto camera = scene.active_camera->get_mut<PerspectiveCamera>();
-        camera->update(1.0);
 
         auto dst_attachment = tc.as_color_attachment(uses.attachment);
 

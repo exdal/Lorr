@@ -40,6 +40,11 @@ bool Application::init(this Application &self, const ApplicationInfo &info) {
     imgui.BackendFlags = ImGuiBackendFlags_RendererHasVtxOffset;
     ImGui::StyleColorsDark();
 
+    imgui.KeyMap[ImGuiKey_W] = LR_KEY_W;
+    imgui.KeyMap[ImGuiKey_A] = LR_KEY_A;
+    imgui.KeyMap[ImGuiKey_S] = LR_KEY_S;
+    imgui.KeyMap[ImGuiKey_D] = LR_KEY_D;
+
     // TODO: Move this to asset manager
     //
 
@@ -122,6 +127,7 @@ void Application::poll_events(this Application &self) {
                 break;
             }
             case ApplicationEvent::KeyboardState: {
+                imgui.AddKeyEvent(static_cast<ImGuiKey>(e.key), e.key_state == KeyState::Down);
                 break;
             }
             case ApplicationEvent::InputChar: {
@@ -184,6 +190,7 @@ void Application::run(this Application &self) {
         self.task_graph.set_image(self.swap_chain_image_id, { .image_id = image_id, .image_view_id = image_view_id });
 
         // Update application
+        self.ecs.progress();
         auto &extent = self.default_surface.swap_chain.extent;
         imgui.DisplaySize = ImVec2(static_cast<f32>(extent.width), static_cast<f32>(extent.height));
 

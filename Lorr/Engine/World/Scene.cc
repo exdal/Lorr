@@ -1,11 +1,16 @@
-#include "Camera.hh"
 #include "Scene.hh"
+
+#include "Camera.hh"
 
 namespace lr {
 Scene::Scene(std::string name_, flecs::world &world_)
     : name(std::move(name_)),
       ecs(world_) {
     this->handle = ecs.entity();
+
+    ecs.system<PerspectiveCamera>().each([](flecs::iter &it, usize, PerspectiveCamera &cam) {  //
+        cam.update(it.delta_time());
+    });
 }
 
 flecs::entity Scene::create_entity(this Scene &self, std::string_view name) {

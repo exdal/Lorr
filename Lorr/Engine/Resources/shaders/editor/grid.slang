@@ -17,21 +17,40 @@ float3 UnprojectPoint(float x, float y, float z, float4x4 view_proj_mat_inv) {
     return unprojectedPoint.xyz / unprojectedPoint.w;
 }
 
-float4 grid(float3 fragPos3D, float scale) {
-    float2 coord = fragPos3D.xz * scale; // use the scale variable to set the distance between the lines
-    float2 derivative = fwidth(coord);
-    float2 grid = abs(fract(coord - 0.5) - 0.5) / derivative;
-    float line = min(grid.x, grid.y);
-    float minimumz = min(derivative.y, 1);
-    float minimumx = min(derivative.x, 1);
-    float4 color = float4(0.2, 0.2, 0.2, 1.0 - min(line, 1.0));
+float4 pristine_grid(float3 uv, float2 lineWidth)
+{
+    float2 ddx = ddx_fine(uv.xz);
+    float2 ddy = ddy_fine(uv.xz);
+    float2 uvDeriv = float2(length(float2(ddx.x, ddy.x)), length(float2(ddx.y, ddy.y)));
+    bool2 invertLine = bool2(lineWidth.x > 0.5, lineWidth.y > 0.5);
+    float2 targetWidth = float2(
+      invertLine.x ? 1.0 - lineWidth.x : lineWidth.x,
+      invertLine.y ? 1.0 - lineWidth.y : lineWidth.y
+      );
+    float2 drawWidth = clamp(targetWidth, uvDeriv, float2(0.5));
+    float2 lineAA = uvDeriv * 1.5;
+    float2 gridUV = abs(fract(uv.xz) * 2.0 - 1.0);
+    gridUV.x = invertLine.x ? gridUV.x : 1.0 - gridUV.x;
+    gridUV.y = invertLine.y ? gridUV.y : 1.0 - gridUV.y;
+    float2 grid2 = smoothstep(drawWidth + lineAA, drawWidth - lineAA, gridUV);
+
+    grid2 *= clamp(targetWidth / drawWidth, 0.0, 1.0);
+    grid2 = lerp(grid2, targetWidth, clamp(uvDeriv * 2.0 - 1.0, 0.0, 1.0));
+    grid2.x = invertLine.x ? 1.0 - grid2.x : grid2.x;
+    grid2.y = invertLine.y ? 1.0 - grid2.y : grid2.y;
+    float minimumz = min(uvDeriv.y, 1);
+    float minimumx = min(uvDeriv.x, 1);
+
+    float4 color = float4(0.35, 0.35, 0.35, lerp(grid2.x, 1.0, grid2.y));
     // z axis
-    if(fragPos3D.x > -0.1 * minimumx && fragPos3D.x < 0.1 * minimumx)
+    if(uv.x > -0.1 * minimumx && uv.x < 1.5 * minimumx)
         color.z = 1.0;
     // x axis
-    if(fragPos3D.z > -0.1 * minimumz && fragPos3D.z < 0.1 * minimumz)
+    if(uv.z > -0.1 * minimumz && uv.z < 1.5 * minimumz)
         color.x = 1.0;
+
     return color;
+
 }
 
 [shader("vertex")]
@@ -50,7 +69,7 @@ VertexOutput vs_main(u32 vertex_id : SV_VertexID) {
 float4 fs_main(VertexOutput input) : SV_TARGET
 {
     float t = -input.near_pos.y / (input.far_pos.y - input.near_pos.y);
-    float3 fragPos3D = input.near_pos + t * (input.far_pos - input.near_pos);
-    return grid(fragPos3D, 10) * float(t > 0);
+    float3 pixel_pos = input.near_pos + t * (input.far_pos - input.near_pos);
+    return pristine_grid(pixel_pos, float2(1.0 / 150.0)) * float(t > 0);
 }
 

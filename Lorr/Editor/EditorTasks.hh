@@ -4,6 +4,8 @@
 
 #include "Engine/Graphics/Task/TaskGraph.hh"
 
+#include "Engine/World/Camera.hh"
+
 namespace lr {
 struct GridTask {
     std::string_view name = "Grid";
@@ -11,6 +13,10 @@ struct GridTask {
     struct Uses {
         Preset::ColorAttachmentWrite attachment = {};
     } uses = {};
+
+    struct PushConstants {
+        glm::mat4 view_proj_mat_inv = {};
+    };
 
     bool prepare(TaskPrepareInfo &info) {
         auto &app = Application::get();
@@ -33,6 +39,11 @@ struct GridTask {
     }
 
     void execute(TaskContext &tc) {
+        auto &app = Application::get();
+        auto &scene = app.scene_at(app.active_scene.value());
+        auto camera = scene.active_camera->get_mut<PerspectiveCamera>();
+        camera->update(1.0);
+
         auto dst_attachment = tc.as_color_attachment(uses.attachment);
 
         tc.cmd_list.begin_rendering(RenderingBeginInfo{
@@ -42,9 +53,14 @@ struct GridTask {
 
         tc.cmd_list.set_viewport(0, tc.pass_viewport());
         tc.cmd_list.set_scissors(0, tc.pass_rect());
+
+        PushConstants c = {
+            .view_proj_mat_inv = glm::inverse(camera->proj_view_matrix),
+        };
+        tc.set_push_constants(c);
         tc.cmd_list.draw(3);
         tc.cmd_list.end_rendering();
     }
-};
+};  // namespace lr
 
 }  // namespace lr

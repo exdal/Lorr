@@ -1,7 +1,5 @@
 #pragma once
 
-#include "Camera.hh"
-
 #include <flecs.h>
 
 namespace lr {
@@ -10,7 +8,6 @@ struct Scene {
     std::string name;
     flecs::world &ecs;
     flecs::entity handle;
-    std::vector<PerspectiveCamera> cameras = {};
     ls::option<flecs::entity> active_camera = ls::nullopt;
 
     Scene(std::string name_, flecs::world &world_);

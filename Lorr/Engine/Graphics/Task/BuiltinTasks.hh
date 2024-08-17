@@ -113,10 +113,12 @@ struct ImGuiTask {
         pipeline_info.set_vertex_layout(vertex_layout);
         pipeline_info.set_blend_attachment_all({
             .blend_enabled = true,
-            .src_blend = BlendFactor::SrcAlpha,
+            .src_blend = BlendFactor::One,
             .dst_blend = BlendFactor::InvSrcAlpha,
+            .blend_op = BlendOp::Add,
             .src_blend_alpha = BlendFactor::One,
             .dst_blend_alpha = BlendFactor::InvSrcAlpha,
+            .blend_op_alpha = BlendOp::Add,
         });
 
         for (BufferID &vertex_buffer : self.vertex_buffers) {

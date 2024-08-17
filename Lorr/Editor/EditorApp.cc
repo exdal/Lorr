@@ -82,6 +82,7 @@ bool EditorApp::prepare(this EditorApp &self) {
     self.layout.init();
 
     auto [dummy_scene_id, dummy_scene] = self.add_scene<DummyScene>("dummy_scene");
+    self.set_active_scene(dummy_scene_id);
     dummy_scene->do_load();
 
     return true;

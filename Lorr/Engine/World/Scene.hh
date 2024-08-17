@@ -9,6 +9,7 @@ enum class SceneID : u32 { Invalid = ~0_u32 };
 struct Scene {
     std::string name;
     flecs::world &ecs;
+    flecs::entity handle;
     std::vector<PerspectiveCamera> cameras = {};
     ls::option<flecs::entity> active_camera = ls::nullopt;
 
@@ -19,6 +20,11 @@ struct Scene {
 
     void set_active_camera(this Scene &, flecs::entity camera_entity);
     flecs::entity create_perspective_camera(this Scene &, const glm::vec3 &position, f32 fov, f32 aspect);
+
+    template<typename T>
+    void children(const T &f) {
+        this->handle.children(f);
+    }
 
     virtual bool do_load() = 0;
     virtual bool do_unload() = 0;

@@ -10,6 +10,7 @@ enum class EditorTheme {
 struct EditorLayout {
     std::vector<std::unique_ptr<PanelI>> panels = {};
     ls::option<u32> dockspace_id = ls::nullopt;
+    bool show_profiler = false;
 
     void init(this EditorLayout &);
     void setup_theme(this EditorLayout &, EditorTheme theme);

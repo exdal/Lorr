@@ -1,5 +1,7 @@
 #include "EditorLayout.hh"
 
+#include "EditorApp.hh"
+
 #include <imgui.h>
 #include <imgui_internal.h>
 
@@ -11,58 +13,83 @@ void EditorLayout::init(this EditorLayout &self) {
 void EditorLayout::setup_theme(this EditorLayout &, EditorTheme theme) {
     ZoneScoped;
 
-#define LR_RGB(r, g, b) ImVec4((r) / 250.0f, (g) / 255.0f, (b) / 255.0f, 1.0f)
+    ImGuiStyle &style = ImGui::GetStyle();
+    ImVec4 *colors = style.Colors;
 
-    auto &s = ImGui::GetStyle();
-    auto &colors = s.Colors;
-    switch (theme) {
-        default:
-            colors[ImGuiCol_Text] = LR_RGB(218, 218, 218);
-            colors[ImGuiCol_WindowBg] = LR_RGB(32, 32, 32);
-            colors[ImGuiCol_MenuBarBg] = LR_RGB(15, 15, 15);
-            colors[ImGuiCol_DockingEmptyBg] = LR_RGB(0, 0, 0);
-            colors[ImGuiCol_DockingPreview] = LR_RGB(22, 22, 22);
-            colors[ImGuiCol_Border] = LR_RGB(15, 15, 15);
-            colors[ImGuiCol_ResizeGrip] = ImVec4(0, 0, 0, 0);
-            colors[ImGuiCol_ResizeGripHovered] = LR_RGB(24, 24, 24);
-            colors[ImGuiCol_ResizeGripActive] = LR_RGB(28, 28, 28);
-            colors[ImGuiCol_Separator] = LR_RGB(15, 15, 15);
-            colors[ImGuiCol_SeparatorHovered] = LR_RGB(24, 24, 24);
-            colors[ImGuiCol_SeparatorActive] = LR_RGB(28, 28, 28);
-            colors[ImGuiCol_Header] = LR_RGB(15, 15, 15);
-            colors[ImGuiCol_HeaderHovered] = LR_RGB(24, 24, 24);
-            colors[ImGuiCol_HeaderActive] = LR_RGB(28, 28, 28);
-            colors[ImGuiCol_FrameBg] = LR_RGB(15, 15, 15);
-            colors[ImGuiCol_FrameBgHovered] = LR_RGB(15, 15, 15);
-            colors[ImGuiCol_FrameBgActive] = LR_RGB(15, 15, 15);
-            colors[ImGuiCol_Button] = LR_RGB(15, 15, 15);
-            colors[ImGuiCol_ButtonHovered] = LR_RGB(24, 24, 24);
-            colors[ImGuiCol_ButtonActive] = LR_RGB(28, 28, 28);
-            colors[ImGuiCol_TitleBg] = LR_RGB(15, 15, 15);
-            colors[ImGuiCol_TitleBgActive] = LR_RGB(15, 15, 15);
-            colors[ImGuiCol_TitleBgCollapsed] = LR_RGB(15, 15, 15);
-            colors[ImGuiCol_Tab] = LR_RGB(15, 15, 15);
-            colors[ImGuiCol_TabHovered] = LR_RGB(32, 32, 32);
-            colors[ImGuiCol_TabActive] = LR_RGB(32, 32, 32);
-            colors[ImGuiCol_TabUnfocused] = LR_RGB(15, 15, 15);
-            colors[ImGuiCol_TabUnfocusedActive] = LR_RGB(32, 32, 32);
-            colors[ImGuiCol_SliderGrab] = LR_RGB(32, 32, 32);
-            colors[ImGuiCol_SliderGrabActive] = LR_RGB(22, 22, 22);
-            break;
-    }
+    colors[ImGuiCol_Text] = ImVec4(0.95f, 0.95f, 0.95f, 1.00f);
+    colors[ImGuiCol_TextDisabled] = ImVec4(0.50f, 0.50f, 0.50f, 1.00f);
+    colors[ImGuiCol_WindowBg] = ImVec4(0.05f, 0.05f, 0.05f, 1.00f);
+    colors[ImGuiCol_ChildBg] = ImVec4(0.10f, 0.10f, 0.10f, 1.00f);
+    colors[ImGuiCol_PopupBg] = ImVec4(0.10f, 0.10f, 0.10f, 0.90f);
+    colors[ImGuiCol_Border] = ImVec4(0.10f, 0.10f, 0.10f, 1.00f);
+    colors[ImGuiCol_BorderShadow] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
+    colors[ImGuiCol_FrameBg] = ImVec4(0.08f, 0.08f, 0.08f, 1.00f);
+    colors[ImGuiCol_FrameBgHovered] = ImVec4(0.15f, 0.15f, 0.15f, 1.00f);
+    colors[ImGuiCol_FrameBgActive] = ImVec4(0.20f, 0.20f, 0.20f, 1.00f);
+    colors[ImGuiCol_TitleBg] = ImVec4(0.05f, 0.05f, 0.05f, 0.80f);
+    colors[ImGuiCol_TitleBgActive] = ImVec4(0.10f, 0.10f, 0.10f, 1.00f);
+    colors[ImGuiCol_TitleBgCollapsed] = ImVec4(0.00f, 0.00f, 0.00f, 0.60f);
+    colors[ImGuiCol_MenuBarBg] = ImVec4(0.10f, 0.10f, 0.10f, 1.00f);
+    colors[ImGuiCol_ScrollbarBg] = ImVec4(0.05f, 0.05f, 0.05f, 0.30f);
+    colors[ImGuiCol_ScrollbarGrab] = ImVec4(0.20f, 0.20f, 0.20f, 1.00f);
+    colors[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.30f, 0.30f, 0.30f, 1.00f);
+    colors[ImGuiCol_ScrollbarGrabActive] = ImVec4(0.40f, 0.40f, 0.40f, 1.00f);
+    colors[ImGuiCol_CheckMark] = ImVec4(0.80f, 0.80f, 0.80f, 1.00f);
+    colors[ImGuiCol_SliderGrab] = ImVec4(0.40f, 0.40f, 0.40f, 1.00f);
+    colors[ImGuiCol_SliderGrabActive] = ImVec4(0.60f, 0.60f, 0.60f, 1.00f);
+    colors[ImGuiCol_Button] = ImVec4(0.08f, 0.08f, 0.08f, 1.00f);
+    colors[ImGuiCol_ButtonHovered] = ImVec4(0.20f, 0.20f, 0.20f, 1.00f);
+    colors[ImGuiCol_ButtonActive] = ImVec4(0.30f, 0.30f, 0.30f, 1.00f);
+    colors[ImGuiCol_Header] = ImVec4(0.15f, 0.15f, 0.15f, 0.60f);
+    colors[ImGuiCol_HeaderHovered] = ImVec4(0.25f, 0.25f, 0.25f, 0.80f);
+    colors[ImGuiCol_HeaderActive] = ImVec4(0.35f, 0.35f, 0.35f, 1.00f);
+    colors[ImGuiCol_Separator] = ImVec4(0.10f, 0.10f, 0.10f, 1.00f);
+    colors[ImGuiCol_SeparatorHovered] = ImVec4(0.40f, 0.40f, 0.40f, 0.78f);
+    colors[ImGuiCol_SeparatorActive] = ImVec4(0.50f, 0.50f, 0.50f, 1.00f);
+    colors[ImGuiCol_ResizeGrip] = ImVec4(0.40f, 0.40f, 0.40f, 0.25f);
+    colors[ImGuiCol_ResizeGripHovered] = ImVec4(0.50f, 0.50f, 0.50f, 0.67f);
+    colors[ImGuiCol_ResizeGripActive] = ImVec4(0.60f, 0.60f, 0.60f, 0.95f);
+    colors[ImGuiCol_Tab] = ImVec4(0.10f, 0.10f, 0.10f, 1.00f);
+    colors[ImGuiCol_TabHovered] = ImVec4(0.20f, 0.20f, 0.20f, 0.80f);
+    colors[ImGuiCol_TabActive] = ImVec4(0.15f, 0.15f, 0.15f, 1.00f);
+    colors[ImGuiCol_TabUnfocused] = ImVec4(0.10f, 0.10f, 0.10f, 1.00f);
+    colors[ImGuiCol_TabUnfocusedActive] = ImVec4(0.10f, 0.10f, 0.10f, 1.00f);
+    colors[ImGuiCol_DockingPreview] = ImVec4(0.50f, 0.50f, 0.50f, 0.70f);
+    colors[ImGuiCol_DockingEmptyBg] = ImVec4(0.05f, 0.05f, 0.05f, 1.00f);
+    colors[ImGuiCol_PlotLines] = ImVec4(0.80f, 0.80f, 0.80f, 1.00f);
+    colors[ImGuiCol_PlotLinesHovered] = ImVec4(0.90f, 0.90f, 0.90f, 1.00f);
+    colors[ImGuiCol_PlotHistogram] = ImVec4(0.80f, 0.80f, 0.80f, 1.00f);
+    colors[ImGuiCol_PlotHistogramHovered] = ImVec4(0.90f, 0.90f, 0.90f, 1.00f);
+    colors[ImGuiCol_TableHeaderBg] = ImVec4(0.10f, 0.10f, 0.10f, 1.00f);
+    colors[ImGuiCol_TableBorderStrong] = ImVec4(0.30f, 0.30f, 0.30f, 1.00f);
+    colors[ImGuiCol_TableBorderLight] = ImVec4(0.30f, 0.30f, 0.30f, 1.00f);
+    colors[ImGuiCol_TableRowBg] = ImVec4(0.05f, 1.0f, 0.05f, 0.0f);
+    colors[ImGuiCol_TableRowBgAlt] = ImVec4(1.0f, 0.05f, 0.05f, 0.0f);
+    colors[ImGuiCol_TextSelectedBg] = ImVec4(0.30f, 0.30f, 0.30f, 0.35f);
+    colors[ImGuiCol_DragDropTarget] = ImVec4(0.90f, 0.90f, 0.00f, 0.90f);
+    colors[ImGuiCol_NavHighlight] = ImVec4(0.60f, 0.60f, 0.60f, 1.00f);
+    colors[ImGuiCol_NavWindowingHighlight] = ImVec4(1.00f, 1.00f, 1.00f, 0.70f);
+    colors[ImGuiCol_NavWindowingDimBg] = ImVec4(0.80f, 0.80f, 0.80f, 0.20f);
+    colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.80f, 0.80f, 0.80f, 0.35f);
 
-#undef LR_RGB
+    style.FrameRounding = 0.0f;
+    style.GrabRounding = 0.0f;
+    style.WindowRounding = 0.0f;
+    style.ChildRounding = 0.0f;
+    style.PopupRounding = 0.0f;
+    style.ScrollbarRounding = 0.0f;
+    style.TabRounding = 0.0f;
 }
 
 void EditorLayout::setup_dockspace(this EditorLayout &self) {
     ZoneScoped;
 
-    auto [asset_browser_panel_id, asset_browser_panel] = self.add_panel<AssetBrowserPanel>("Asset Browser", 0);
-    auto [console_panel_id, console_panel] = self.add_panel<ConsolePanel>("Console", 0);
-    auto [inspector_panel_id, inspector_panel] = self.add_panel<InspectorPanel>("Inspector", 0);
-    auto [scene_browser_panel_id, scene_browser_panel] = self.add_panel<SceneBrowserPanel>("Scene Browser", 0);
+    auto [asset_browser_panel_id, asset_browser_panel] = self.add_panel<AssetBrowserPanel>("\uf87c Asset Browser", 0);
+    auto [console_panel_id, console_panel] = self.add_panel<ConsolePanel>("\uf05a  Console", 0);
+    auto [inspector_panel_id, inspector_panel] = self.add_panel<InspectorPanel>("\uf0ad  Inspector", 0);
+    auto [scene_browser_panel_id, scene_browser_panel] = self.add_panel<SceneBrowserPanel>("\uf0c9  Scene Browser", 0);
     auto [tools_panel_id, tools_panel] = self.add_panel<ToolsPanel>("Tools", 0);
-    auto [viewport_panel_id, viewport_panel] = self.add_panel<ViewportPanel>("Viewport", 0);
+    auto [viewport_panel_id, viewport_panel] = self.add_panel<ViewportPanel>("\uf06e  Viewport", 0);
 
     ImGuiViewport *viewport = ImGui::GetMainViewport();
     i32 dock_node_flags = ImGuiDockNodeFlags_PassthruCentralNode;
@@ -94,6 +121,7 @@ void EditorLayout::setup_dockspace(this EditorLayout &self) {
 void EditorLayout::update(this EditorLayout &self) {
     ZoneScoped;
 
+    auto &app = EditorApp::get();
     ImGuiViewport *viewport = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(viewport->WorkPos);
     ImGui::SetNextWindowSize(viewport->WorkSize);
@@ -136,6 +164,14 @@ void EditorLayout::update(this EditorLayout &self) {
             ImGui::EndMenu();
         }
 
+        if (ImGui::BeginMenu("View")) {
+            if (ImGui::MenuItem("Task Graph Profiler")) {
+                self.show_profiler = !self.show_profiler;
+            }
+
+            ImGui::EndMenu();
+        }
+
         ImGui::EndMenuBar();
     }
 
@@ -152,6 +188,10 @@ void EditorLayout::update(this EditorLayout &self) {
     ImGui::Begin("###up_dock");
     ImGui::Text("Project name etc");
     ImGui::End();
+
+    if (self.show_profiler) {
+        app.task_graph.draw_profiler_ui();
+    }
 
     for (auto &panel : self.panels) {
         panel->do_update();

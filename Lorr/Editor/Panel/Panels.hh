@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Engine/World/Scene.hh"
+
 #include <imgui.h>
 #include <imgui_internal.h>
 
@@ -27,6 +29,8 @@ struct ToolsPanel : PanelI {
 };
 
 struct SceneBrowserPanel : PanelI {
+    flecs::entity selected_entity = {};
+
     SceneBrowserPanel(std::string_view name_, c8 icon_code_, bool open_ = true);
 
     void update(this SceneBrowserPanel &);

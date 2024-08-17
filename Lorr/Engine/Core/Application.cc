@@ -41,6 +41,20 @@ bool Application::init(this Application &self, const ApplicationInfo &info) {
     ImGui::StyleColorsDark();
 
     // TODO: Move this to asset manager
+    //
+
+    auto roboto_path = fs::current_path() / "resources/fonts/Roboto-Regular.ttf";
+    auto fa_regular_400_path = fs::current_path() / "resources/fonts/fa-regular-400.ttf";
+    auto fa_solid_900_path = fs::current_path() / "resources/fonts/fa-solid-900.ttf";
+
+    ImWchar icons_ranges[] = { 0xf000, 0xf8ff, 0 };
+    ImFontConfig font_config;
+    font_config.MergeMode = true;
+    imgui.Fonts->AddFontFromFileTTF(roboto_path.c_str(), 16.0f, nullptr);
+    imgui.Fonts->AddFontFromFileTTF(fa_regular_400_path.c_str(), 14.0f, &font_config, icons_ranges);
+    imgui.Fonts->AddFontFromFileTTF(fa_solid_900_path.c_str(), 14.0f, &font_config, icons_ranges);
+    imgui.Fonts->Build();
+
     u8 *font_data = nullptr;  // imgui context frees this itself
     i32 font_width, font_height;
     imgui.Fonts->GetTexDataAsRGBA32(&font_data, &font_width, &font_height);

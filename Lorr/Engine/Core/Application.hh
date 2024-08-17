@@ -43,7 +43,7 @@ struct Application {
 
     flecs::world ecs;
     std::vector<std::unique_ptr<Scene>> scenes = {};
-    SceneID active_scene = SceneID::Invalid;
+    ls::option<SceneID> active_scene = ls::nullopt;
 
     bool init(this Application &, const ApplicationInfo &info);
     void push_event(this Application &, ApplicationEvent event, const ApplicationEventData &data);
@@ -61,6 +61,8 @@ struct Application {
     }
 
     void set_active_scene(this Application &, SceneID scene_id);
+
+    Scene &scene_at(this Application &self, SceneID scene_id) { return *self.scenes[static_cast<usize>(scene_id)]; }
 
     virtual bool do_prepare() = 0;
     virtual bool do_update(f32 delta_time) = 0;

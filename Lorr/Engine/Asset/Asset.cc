@@ -190,6 +190,10 @@ bool AssetManager::init(this AssetManager &self, Device *device) {
     self.load_shader("shader://fullscreen_vs", { .entry_point = "vs_main", .path = "fullscreen.slang" });
     self.load_shader("shader://fullscreen_fs", { .entry_point = "fs_main", .path = "fullscreen.slang" });
     self.load_shader("shader://atmos.transmittance", { .entry_point = "cs_main", .path = "atmos/transmittance.slang" });
+    self.load_shader("shader://atmos.lut_vs", { .entry_point = "vs_main", .path = "atmos/lut.slang" });
+    self.load_shader("shader://atmos.lut_fs", { .entry_point = "fs_main", .path = "atmos/lut.slang" });
+    self.load_shader("shader://atmos.final_vs", { .entry_point = "vs_main", .path = "atmos/final.slang" });
+    self.load_shader("shader://atmos.final_fs", { .entry_point = "fs_main", .path = "atmos/final.slang" });
     self.load_shader("shader://editor.grid_vs", { .entry_point = "vs_main", .path = "editor/grid.slang" });
     self.load_shader("shader://editor.grid_fs", { .entry_point = "fs_main", .path = "editor/grid.slang" });
 

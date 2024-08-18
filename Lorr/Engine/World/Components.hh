@@ -1,5 +1,6 @@
 #pragma once
 
 namespace lr {
-struct ActiveCamera {};
+struct EditorSelectedComp {};
+struct ActiveCameraComp {};
 }  // namespace lr

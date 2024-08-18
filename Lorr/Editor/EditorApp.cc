@@ -6,52 +6,50 @@
 #include "Editor/EditorTasks.hh"
 
 namespace lr {
-struct TransmittanceTask {
-    std::string_view name = "Transmittance";
-
-    struct Uses {
-        Preset::ComputeWrite storage_image = {};
-    } uses = {};
-
-    struct PushConstants {
-        glm::vec2 image_size = {};
-        ImageViewID image_view_id = ImageViewID::Invalid;
-        BufferID atmos_buffer_id = BufferID::Invalid;
-    } push_constants = {};
-
-    bool prepare(TaskPrepareInfo &info) {
-        auto &app = Application::get();
-        auto &pipeline_info = info.pipeline_info;
-
-        auto cs = app.asset_man.shader_at("shader://atmos.transmittance");
-        if (!cs) {
-            LR_LOG_ERROR("Shaders are invalid.", name);
-            return false;
-        }
-
-        pipeline_info.set_shader(cs.value());
-
-        return true;
-    }
-
-    void execute(TaskContext &tc) {
-        auto &storage_image_data = tc.task_image_data(uses.storage_image);
-        auto &storage_image = tc.device.image_at(storage_image_data.image_id);
-
-        push_constants.image_size = { storage_image.extent.width, storage_image.extent.height };
-        push_constants.image_view_id = storage_image_data.image_view_id;
-        tc.set_push_constants(push_constants);
-
-        tc.cmd_list.dispatch(storage_image.extent.width / 16 + 1, storage_image.extent.height / 16 + 1, 1);
-    }
-};
-
 bool EditorApp::prepare(this EditorApp &self) {
     ZoneScoped;
 
+    auto transmittance_image = self.device.create_image(ImageInfo{
+        .usage_flags = ImageUsage::Storage | ImageUsage::Sampled,
+        .format = Format::R32G32B32A32_SFLOAT,
+        .type = ImageType::View2D,
+        .initial_layout = ImageLayout::General,
+        .extent = { 256, 64, 1 },
+    });
+
+    auto transmittance_image_view = self.device.create_image_view(ImageViewInfo{
+        .image_id = transmittance_image,
+        .usage_flags = ImageUsage::Storage | ImageUsage::Sampled,
+        .type = ImageViewType::View2D,
+    });
+
+    auto transmittance_task_image = self.task_graph.add_image(TaskPersistentImageInfo{
+        .image_id = transmittance_image,
+        .image_view_id = transmittance_image_view,
+    });
+
+    auto sky_lut_image = self.device.create_image(ImageInfo{
+        .usage_flags = ImageUsage::ColorAttachment | ImageUsage::Sampled,
+        .format = Format::R32G32B32A32_SFLOAT,
+        .type = ImageType::View2D,
+        .initial_layout = ImageLayout::ColorAttachment,
+        .extent = { 400, 200, 1 },
+        .debug_name = "Sky LUT",
+    });
+    auto sky_lut_image_view = self.device.create_image_view(ImageViewInfo{
+        .image_id = sky_lut_image,
+        .usage_flags = ImageUsage::ColorAttachment | ImageUsage::Sampled,
+        .type = ImageViewType::View2D,
+        .debug_name = "Sky LUT View",
+    });
+    auto sky_lut_task_image = self.task_graph.add_image(TaskPersistentImageInfo{
+        .image_id = sky_lut_image,
+        .image_view_id = sky_lut_image_view,
+    });
+
     auto game_view_image = self.device.create_image(ImageInfo{
         .usage_flags = ImageUsage::ColorAttachment | ImageUsage::Sampled,
-        .format = Format::R8G8B8A8_UNORM,
+        .format = Format::R32G32B32A32_SFLOAT,
         .type = ImageType::View2D,
         .initial_layout = ImageLayout::ColorAttachment,
         .extent = self.default_surface.swap_chain.extent,
@@ -64,6 +62,24 @@ bool EditorApp::prepare(this EditorApp &self) {
     self.game_view_image_id = self.task_graph.add_image(TaskPersistentImageInfo{
         .image_id = game_view_image,
         .image_view_id = game_view_image_view,
+    });
+
+    self.task_graph.add_task<TransmittanceTask>({
+        .uses = {
+            .storage_image = transmittance_task_image,
+        },
+    });
+    self.task_graph.add_task<SkyLUTTask>({
+        .uses = {
+            .attachment = sky_lut_task_image,
+            .transmittance_lut = transmittance_task_image,
+        },
+    });
+    self.task_graph.add_task<SkyFinalTask>({
+        .uses = {
+            .attachment = self.game_view_image_id,
+            .sky_lut = sky_lut_task_image,
+        },
     });
 
     self.task_graph.add_task<GridTask>({

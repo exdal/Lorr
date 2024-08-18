@@ -18,9 +18,9 @@ struct EditorLayout {
     void update(this EditorLayout &);
 
     template<typename T>
-    std::pair<usize, T *> add_panel(this EditorLayout &self, std::string_view name, c8 icon_code, bool open = true) {
+    std::pair<usize, T *> add_panel(this EditorLayout &self, std::string_view name, bool open = true) {
         usize panel_index = self.panels.size();
-        auto panel = std::make_unique<T>(name, icon_code, open);
+        auto panel = std::make_unique<T>(name, open);
         T *panel_ptr = panel.get();
         self.panels.push_back(std::move(panel));
         return { panel_index, panel_ptr };

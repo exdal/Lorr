@@ -2,9 +2,11 @@
 
 #include "EditorApp.hh"
 
+#include "Engine/World/Components.hh"
+
 namespace lr {
-SceneBrowserPanel::SceneBrowserPanel(std::string_view name_, c8 icon_code_, bool open_)
-    : PanelI(name_, icon_code_, open_) {
+SceneBrowserPanel::SceneBrowserPanel(std::string_view name_, bool open_)
+    : PanelI(name_, open_) {
 }
 
 void draw_gradient_shadow_bottom(const float scale) {
@@ -39,7 +41,7 @@ void SceneBrowserPanel::update(this SceneBrowserPanel &self) {
 
     ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.0, 0.0, 0.0, 0.0));
     if (ImGui::BeginTable("scene_entity_list", 1, flags)) {
-        ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_DefaultSort | ImGuiTableColumnFlags_WidthStretch, 0.0f);
+        ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch, 0.0f);
 
         ImGui::TableSetupScrollFreeze(0, 1);
         ImGui::TableHeadersRow();
@@ -53,8 +55,9 @@ void SceneBrowserPanel::update(this SceneBrowserPanel &self) {
                 ImGui::TableSetColumnIndex(0);
 
                 ImGuiSelectableFlags selectable_flags = ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap;
-                if (ImGui::Selectable(e.name().c_str(), e == self.selected_entity, selectable_flags)) {
-                    self.selected_entity = e;
+                if (ImGui::Selectable(e.name().c_str(), e.has<EditorSelectedComp>(), selectable_flags)) {
+                    app.ecs.each([](flecs::entity c, EditorSelectedComp) { c.remove<EditorSelectedComp>(); });
+                    e.add<EditorSelectedComp>();
                 }
             });
         }

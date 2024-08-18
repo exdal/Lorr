@@ -41,16 +41,15 @@ float4 pristine_grid(float3 uv, float2 lineWidth)
     float minimumz = min(uvDeriv.y, 1);
     float minimumx = min(uvDeriv.x, 1);
 
-    float4 color = float4(0.35, 0.35, 0.35, lerp(grid2.x, 1.0, grid2.y));
+    float4 color = float4(0.4, 0.4, 0.4, lerp(grid2.x, 1.0, grid2.y));
     // z axis
-    if(uv.x > -0.1 * minimumx && uv.x < 1.5 * minimumx)
+    if(uv.x > -0.1 * minimumx && uv.x < 10.0 * minimumx)
         color.z = 1.0;
     // x axis
-    if(uv.z > -0.1 * minimumz && uv.z < 1.5 * minimumz)
+    if(uv.z > -0.1 * minimumz && uv.z < 10.0 * minimumz)
         color.x = 1.0;
 
     return color;
-
 }
 
 [shader("vertex")]
@@ -69,7 +68,10 @@ VertexOutput vs_main(u32 vertex_id : SV_VertexID) {
 float4 fs_main(VertexOutput input) : SV_TARGET
 {
     float t = -input.near_pos.y / (input.far_pos.y - input.near_pos.y);
+    if (t < 0.)
+        discard;
+
     float3 pixel_pos = input.near_pos + t * (input.far_pos - input.near_pos);
-    return pristine_grid(pixel_pos, float2(1.0 / 150.0)) * float(t > 0);
+    return pristine_grid(pixel_pos, 1.0 / 200.0) * float(t > 0.0);
 }
 

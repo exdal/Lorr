@@ -8,12 +8,10 @@
 namespace lr {
 struct PanelI {
     std::string_view name = {};
-    c8 icon_code = 0;
     bool open = true;
 
-    PanelI(std::string_view name_, c8 icon_code_, bool open_ = true)
+    PanelI(std::string_view name_, bool open_ = true)
         : name(name_),
-          icon_code(icon_code_),
           open(open_) {};
 
     virtual ~PanelI() = default;
@@ -21,7 +19,7 @@ struct PanelI {
 };
 
 struct ToolsPanel : PanelI {
-    ToolsPanel(std::string_view name_, c8 icon_code_, bool open_ = true);
+    ToolsPanel(std::string_view name_, bool open_ = true);
 
     void update(this ToolsPanel &);
 
@@ -31,7 +29,7 @@ struct ToolsPanel : PanelI {
 struct SceneBrowserPanel : PanelI {
     flecs::entity selected_entity = {};
 
-    SceneBrowserPanel(std::string_view name_, c8 icon_code_, bool open_ = true);
+    SceneBrowserPanel(std::string_view name_, bool open_ = true);
 
     void update(this SceneBrowserPanel &);
 
@@ -39,7 +37,7 @@ struct SceneBrowserPanel : PanelI {
 };
 
 struct ViewportPanel : PanelI {
-    ViewportPanel(std::string_view name_, c8 icon_code_, bool open_ = true);
+    ViewportPanel(std::string_view name_, bool open_ = true);
 
     void update(this ViewportPanel &);
 
@@ -47,7 +45,7 @@ struct ViewportPanel : PanelI {
 };
 
 struct InspectorPanel : PanelI {
-    InspectorPanel(std::string_view name_, c8 icon_code_, bool open_ = true);
+    InspectorPanel(std::string_view name_, bool open_ = true);
 
     void update(this InspectorPanel &);
 
@@ -55,7 +53,7 @@ struct InspectorPanel : PanelI {
 };
 
 struct AssetBrowserPanel : PanelI {
-    AssetBrowserPanel(std::string_view name_, c8 icon_code_, bool open_ = true);
+    AssetBrowserPanel(std::string_view name_, bool open_ = true);
 
     void update(this AssetBrowserPanel &);
 
@@ -63,7 +61,7 @@ struct AssetBrowserPanel : PanelI {
 };
 
 struct ConsolePanel : PanelI {
-    ConsolePanel(std::string_view name_, c8 icon_code_, bool open_ = true);
+    ConsolePanel(std::string_view name_, bool open_ = true);
 
     void update(this ConsolePanel &);
 

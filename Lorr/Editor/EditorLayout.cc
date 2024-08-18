@@ -10,7 +10,7 @@ void EditorLayout::init(this EditorLayout &self) {
     self.setup_theme(EditorTheme::Dark);
 }
 
-void EditorLayout::setup_theme(this EditorLayout &, EditorTheme theme) {
+void EditorLayout::setup_theme(this EditorLayout &, EditorTheme) {
     ZoneScoped;
 
     ImGuiStyle &style = ImGui::GetStyle();
@@ -84,12 +84,12 @@ void EditorLayout::setup_theme(this EditorLayout &, EditorTheme theme) {
 void EditorLayout::setup_dockspace(this EditorLayout &self) {
     ZoneScoped;
 
-    auto [asset_browser_panel_id, asset_browser_panel] = self.add_panel<AssetBrowserPanel>("\uf87c Asset Browser", 0);
-    auto [console_panel_id, console_panel] = self.add_panel<ConsolePanel>("\uf05a  Console", 0);
-    auto [inspector_panel_id, inspector_panel] = self.add_panel<InspectorPanel>("\uf0ad  Inspector", 0);
-    auto [scene_browser_panel_id, scene_browser_panel] = self.add_panel<SceneBrowserPanel>("\uf0c9  Scene Browser", 0);
-    auto [tools_panel_id, tools_panel] = self.add_panel<ToolsPanel>("Tools", 0);
-    auto [viewport_panel_id, viewport_panel] = self.add_panel<ViewportPanel>("\uf06e  Viewport", 0);
+    auto [asset_browser_panel_id, asset_browser_panel] = self.add_panel<AssetBrowserPanel>("\uf87c Asset Browser");
+    auto [console_panel_id, console_panel] = self.add_panel<ConsolePanel>("\uf05a  Console");
+    auto [inspector_panel_id, inspector_panel] = self.add_panel<InspectorPanel>("\uf0ad  Inspector");
+    auto [scene_browser_panel_id, scene_browser_panel] = self.add_panel<SceneBrowserPanel>("\uf0c9  Scene Browser");
+    auto [tools_panel_id, tools_panel] = self.add_panel<ToolsPanel>("Tools");
+    auto [viewport_panel_id, viewport_panel] = self.add_panel<ViewportPanel>("\uf06e  Viewport");
 
     ImGuiViewport *viewport = ImGui::GetMainViewport();
     i32 dock_node_flags = ImGuiDockNodeFlags_PassthruCentralNode;
@@ -186,7 +186,6 @@ void EditorLayout::update(this EditorLayout &self) {
 
     ImGui::SetNextWindowClass(&window_class);
     ImGui::Begin("###up_dock");
-    ImGui::Text("Project name etc");
     ImGui::End();
 
     if (self.show_profiler) {

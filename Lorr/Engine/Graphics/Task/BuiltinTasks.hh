@@ -34,6 +34,15 @@ struct FullScreenTask {
         pipeline_info.set_shader(vs.value());
         pipeline_info.set_shader(fs.value());
         pipeline_info.set_dynamic_states(DynamicState::Viewport | DynamicState::Scissor);
+        pipeline_info.set_blend_attachment_all({
+            .blend_enabled = true,
+            .src_blend = BlendFactor::One,
+            .dst_blend = BlendFactor::InvSrcAlpha,
+            .blend_op = BlendOp::Add,
+            .src_blend_alpha = BlendFactor::One,
+            .dst_blend_alpha = BlendFactor::InvSrcAlpha,
+            .blend_op_alpha = BlendOp::Add,
+        });
         pipeline_info.set_viewport({});
         pipeline_info.set_scissors({});
 

@@ -5,8 +5,8 @@
 #include "Engine/World/Camera.hh"
 
 namespace lr {
-ViewportPanel::ViewportPanel(std::string_view name_, c8 icon_code_, bool open_)
-    : PanelI(name_, icon_code_, open_) {
+ViewportPanel::ViewportPanel(std::string_view name_, bool open_)
+    : PanelI(name_, open_) {
 }
 
 void ViewportPanel::update(this ViewportPanel &self) {
@@ -21,7 +21,6 @@ void ViewportPanel::update(this ViewportPanel &self) {
     auto work_area_size = ImGui::GetContentRegionAvail();
     ImGui::Image(reinterpret_cast<ImTextureID>(static_cast<iptr>(app.game_view_image_id)), work_area_size);
     ImGui::SetCursorPos(ImVec2(5, 30));
-    ImGui::Text("Camera Pos(%f, %f, %f)", camera->position.x, camera->position.y, camera->position.z);
 
     if (ImGui::IsWindowHovered()) {
         if (ImGui::IsKeyDown(ImGuiKey_W)) {

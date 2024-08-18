@@ -1,8 +1,8 @@
 #include "Panels.hh"
 
 namespace lr {
-AssetBrowserPanel::AssetBrowserPanel(std::string_view name_, c8 icon_code_, bool open_)
-    : PanelI(name_, icon_code_, open_) {
+AssetBrowserPanel::AssetBrowserPanel(std::string_view name_, bool open_)
+    : PanelI(name_, open_) {
 }
 
 void AssetBrowserPanel::update(this AssetBrowserPanel &self) {

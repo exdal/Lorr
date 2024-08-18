@@ -1,8 +1,8 @@
 #include "Panels.hh"
 
 namespace lr {
-ToolsPanel::ToolsPanel(std::string_view name_, c8 icon_code_, bool open_)
-    : PanelI(name_, icon_code_, open_) {
+ToolsPanel::ToolsPanel(std::string_view name_, bool open_)
+    : PanelI(name_, open_) {
 }
 
 void ToolsPanel::update(this ToolsPanel &self) {

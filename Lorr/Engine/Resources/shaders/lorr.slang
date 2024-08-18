@@ -4,6 +4,8 @@
 #define LR_DESCRIPTOR_INDEX_STORAGE_BUFFERS 3
 #define LR_DESCRIPTOR_INDEX_BDA_ARRAY 4
 
+static const float PI = 3.14159265358;
+
 // arithmetic types
 typedef double f64;
 typedef float f32;

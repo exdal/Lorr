@@ -44,8 +44,8 @@ struct RenderPipeline {
     TaskGraph task_graph = {};
 
     // Buffers for static objects
-    TaskBufferID persistent_vertex_buffer = {};
-    TaskBufferID persistent_index_buffer = {};
+    BufferID persistent_vertex_buffer = {};
+    BufferID persistent_index_buffer = {};
 
     // Buffers for dynamic objects
     ls::static_vector<BufferID, Limits::FrameCount> dynamic_vertex_buffers = {};
@@ -55,6 +55,7 @@ struct RenderPipeline {
     ls::static_vector<BufferID, Limits::FrameCount> cpu_upload_buffers = {};
     ls::static_vector<BufferID, Limits::FrameCount> world_camera_buffers = {};
     ls::static_vector<BufferID, Limits::FrameCount> world_data_buffers = {};
+    BufferID concentric_sample_buffer = {};
     GPUWorldData world_data = {};
 
     // Backbuffer

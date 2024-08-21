@@ -5,6 +5,8 @@
 #include "Camera.hh"
 #include "RenderPipelineTasks.hh"
 
+#include <random>
+
 namespace lr {
 bool RenderPipeline::init(this RenderPipeline &self, Device *device) {
     ZoneScoped;
@@ -63,6 +65,8 @@ bool RenderPipeline::setup_resources(this RenderPipeline &self) {
     auto &app = Application::get();
     auto &asset_man = app.asset_man;
     auto &imgui = ImGui::GetIO();
+    auto &transfer_queue = self.device->queue_at(CommandType::Transfer);
+    auto cmd_list = transfer_queue.begin_command_list(0);
 
     // Load shaders
     asset_man.load_shader("shader://imgui_vs", { .entry_point = "vs_main", .path = "imgui.slang" });
@@ -185,7 +189,54 @@ bool RenderPipeline::setup_resources(this RenderPipeline &self) {
         self.cpu_upload_buffers.push_back(BufferID::Invalid);
     }
 
-    // Setting buffer addresses for GPUWorldData here is has no effect, always set them at ::prepare
+    u32 sample_count = 4096;
+    auto concentric_sample_buffer_cpu = self.device->create_buffer(BufferInfo{
+        .usage_flags = BufferUsage::TransferSrc,
+        .flags = MemoryFlag::HostSeqWrite,
+        .preference = MemoryPreference::Host,
+        .data_size = sizeof(glm::vec2) * sample_count,
+        .debug_name = "Concentric Sample Buffer CPU",
+    });
+
+    std::random_device random_device;
+    std::mt19937 dist_gen(random_device());
+    std::uniform_real_distribution<f32> f32_dist(0.0, 1.0);
+
+    auto points = self.device->buffer_host_data<glm::vec2>(concentric_sample_buffer_cpu);
+    for (u32 i = 0; i < sample_count; i++) {
+        f32 r1 = f32_dist(dist_gen);
+        f32 r2 = f32_dist(dist_gen);
+
+        if (r1 == 0.0f && r2 == 0.0f) {
+            continue;
+        }
+
+        f32 radius = 1.0f;
+        f32 phi = 0.0f;
+        f32 a = (2.0f * r1) - 1.0f;
+        f32 b = (2.0f * r2) - 1.0f;
+        if ((a * a) > (b * b)) {
+            radius *= a;
+            phi = (glm::pi<f32>() / 4.0f) * (b / a);
+        } else {
+            radius *= b;
+            phi = (glm::pi<f32>() / 2.0f) - ((glm::pi<f32>() / 4.0f) * (a / b));
+        }
+
+        points[i] = glm::vec2(glm::cos(phi), glm::sin(phi)) * radius;
+    }
+
+    self.concentric_sample_buffer = self.device->create_buffer(BufferInfo{
+        .usage_flags = BufferUsage::TransferDst,
+        .preference = MemoryPreference::Device,
+        .data_size = sizeof(glm::vec2) * sample_count,
+        .debug_name = "Concentric Sample Buffer",
+    });
+    BufferCopyRegion concentric_sample_copy = { .size = sizeof(glm::vec2) * sample_count };
+    cmd_list.copy_buffer_to_buffer(concentric_sample_buffer_cpu, self.concentric_sample_buffer, concentric_sample_copy);
+
+    transfer_queue.end_command_list(cmd_list);
+    transfer_queue.submit(0, QueueSubmitInfo{ .self_wait = true });
 
     return true;
 }

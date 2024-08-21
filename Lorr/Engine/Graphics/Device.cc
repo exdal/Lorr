@@ -571,7 +571,7 @@ VKResult Device::get_swapchain_images(this Device &self, SwapChain &swap_chain, 
 
     for (u32 i = 0; i < images.size(); i++) {
         VkImage &image_handle = images_raw[i];
-        auto image_result = self.resources.images.create(swap_chain.format, swap_chain.extent, 1, 1, nullptr, image_handle);
+        auto image_result = self.resources.images.create(ImageUsage::ColorAttachment, swap_chain.format, swap_chain.extent, 1, 1, nullptr, image_handle);
 
         images[i] = image_result->id;
     }
@@ -1287,7 +1287,7 @@ ls::result<ImageID, VKResult> Device::create_image(this Device &self, const Imag
         return result;
     }
 
-    auto image = self.resources.images.create(info.format, info.extent, info.slice_count, info.mip_levels, allocation, image_handle);
+    auto image = self.resources.images.create(info.usage_flags, info.format, info.extent, info.slice_count, info.mip_levels, allocation, image_handle);
     if (!image) {
         LR_LOG_ERROR("Failed to allocate Image!");
         return VKResult::OutOfPoolMem;
@@ -1345,9 +1345,7 @@ MemoryRequirements Device::memory_requirements(this Device &self, ImageID image_
 ls::result<ImageViewID, VKResult> Device::create_image_view(this Device &self, const ImageViewInfo &info) {
     ZoneScoped;
 
-    LR_ASSERT(info.usage_flags != ImageUsage::None);
-
-    Image &image = self.image_at(info.image_id);
+    auto &image = self.image_at(info.image_id);
     VkImageViewCreateInfo create_info = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
         .pNext = nullptr,
@@ -1395,10 +1393,10 @@ ls::result<ImageViewID, VKResult> Device::create_image_view(this Device &self, c
         .type = DescriptorType::StorageImage,
         .image_info = &storage_descriptor_info,
     };
-    if (info.usage_flags & ImageUsage::Sampled) {
+    if (image.usage_flags & ImageUsage::Sampled) {
         descriptor_writes.push_back(sampled_write_set_info);
     }
-    if (info.usage_flags & ImageUsage::Storage) {
+    if (image.usage_flags & ImageUsage::Storage) {
         descriptor_writes.push_back(storage_write_set_info);
     }
 

@@ -9,6 +9,7 @@
 namespace lr {
 struct TaskExecuteInfo {
     u32 frame_index = 0;
+    void *execution_data = nullptr;  // This is custom user data
     ls::span<SemaphoreSubmitInfo> wait_semas = {};
     ls::span<SemaphoreSubmitInfo> signal_semas = {};
 };
@@ -71,13 +72,14 @@ TaskID TaskGraph::add_task(const TaskT &task_info) {
 }
 
 struct TaskContext {
-    TaskContext(Device &device_, TaskGraph &task_graph_, Task &task_, CommandList &cmd_list_, CommandList &copy_cmd_list_, usize frame_index_)
+    TaskContext(Device &device_, TaskGraph &task_graph_, Task &task_, CommandList &cmd_list_, CommandList &copy_cmd_list_, usize frame_index_, void *execution_data_)
         : device(device_),
           task_graph(task_graph_),
           task(task_),
           cmd_list(cmd_list_),
           copy_cmd_list(copy_cmd_list_),
-          frame_index(frame_index_) {}
+          frame_index(frame_index_),
+          execution_data(execution_data_) {}
 
     template<typename T>
     RenderingAttachmentInfo as_color_attachment(this TaskContext &self, T &use, std::optional<ColorClearValue> clear_val = std::nullopt) {
@@ -150,6 +152,7 @@ struct TaskContext {
     CommandList &cmd_list;
     CommandList &copy_cmd_list;
     usize frame_index;
+    void *execution_data;
 };
 
 }  // namespace lr

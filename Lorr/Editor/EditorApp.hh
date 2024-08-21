@@ -9,7 +9,6 @@ struct EditorApp : Application {
     static EditorApp &get() { return dynamic_cast<EditorApp &>(Application::get()); }
 
     EditorLayout layout = {};
-    TaskImageID game_view_image_id = TaskImageID::Invalid;
 
     bool prepare(this EditorApp &);
     bool update(this EditorApp &, f32 delta_time);

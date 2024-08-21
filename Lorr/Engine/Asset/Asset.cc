@@ -171,7 +171,6 @@ bool AssetManager::init(this AssetManager &self, Device *device) {
     self.device->set_image_data(invalid_image_id, &invalid_tex_data, ImageLayout::ColorReadOnly);
     auto invalid_image_view_id = self.device->create_image_view(ImageViewInfo{
         .image_id = invalid_image_id,
-        .usage_flags = ImageUsage::Sampled | ImageUsage::TransferDst,
         .type = ImageViewType::View2D,
         .debug_name = "Invalid Placeholder View",
     });
@@ -183,19 +182,6 @@ bool AssetManager::init(this AssetManager &self, Device *device) {
         .max_lod = 10000.0f,
     });
     self.textures.emplace_back(invalid_image_id, invalid_image_view_id, invalid_sampler_id);
-
-    /// ENGINE RESOURCES ///
-    self.load_shader("shader://imgui_vs", { .entry_point = "vs_main", .path = "imgui.slang" });
-    self.load_shader("shader://imgui_fs", { .entry_point = "fs_main", .path = "imgui.slang" });
-    self.load_shader("shader://fullscreen_vs", { .entry_point = "vs_main", .path = "fullscreen.slang" });
-    self.load_shader("shader://fullscreen_fs", { .entry_point = "fs_main", .path = "fullscreen.slang" });
-    self.load_shader("shader://atmos.transmittance", { .entry_point = "cs_main", .path = "atmos/transmittance.slang" });
-    self.load_shader("shader://atmos.lut_vs", { .entry_point = "vs_main", .path = "atmos/lut.slang" });
-    self.load_shader("shader://atmos.lut_fs", { .entry_point = "fs_main", .path = "atmos/lut.slang" });
-    self.load_shader("shader://atmos.final_vs", { .entry_point = "vs_main", .path = "atmos/final.slang" });
-    self.load_shader("shader://atmos.final_fs", { .entry_point = "fs_main", .path = "atmos/final.slang" });
-    self.load_shader("shader://editor.grid_vs", { .entry_point = "vs_main", .path = "editor/grid.slang" });
-    self.load_shader("shader://editor.grid_fs", { .entry_point = "fs_main", .path = "editor/grid.slang" });
 
     return true;
 }
@@ -238,7 +224,6 @@ ls::option<ModelID> AssetManager::load_model(this AssetManager &self, const fs::
             self.device->set_image_data(texture.image_id, image_data->data, ImageLayout::ColorReadOnly);
             texture.image_view_id = self.device->create_image_view(ImageViewInfo{
                 .image_id = texture.image_id,
-                .usage_flags = ImageUsage::Sampled | ImageUsage::TransferDst,
                 .type = ImageViewType::View2D,
             });
 
@@ -436,7 +421,7 @@ ls::option<ShaderID> AssetManager::load_shader(this AssetManager &self, Identifi
 
     slang::TargetDesc target_desc = {
         .format = SLANG_SPIRV,
-        .profile = slang_global_session->findProfile("spirv_1_4"),
+        .profile = slang_global_session->findProfile("spirv_1_6"),
         .flags = SLANG_TARGET_FLAG_GENERATE_SPIRV_DIRECTLY,
         .forceGLSLScalarBufferLayout = true,
         .compilerOptionEntries = entries.data(),

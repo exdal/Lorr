@@ -2,16 +2,16 @@ import "../lorr";
 import "common";
 
 [[vk::push_constant]] struct {
+    lr::World *world;
     float2 image_size;
     ImageViewID target_image_id;
-    BufferID atmos_buffer_id;
 } c;
 
 [shader("compute")]
 [numthreads(16, 16, 1)]
 void cs_main(uint3 thread_id : SV_DispatchThreadID) {
     let target_image = RWTexture2D<float4>::get(c.target_image_id);
-    let atmos = lr::load_buffer<Atmosphere>(c.atmos_buffer_id);
+    lr::Atmosphere *atmos = &c.world->atmosphere;
     float2 uv = float2(thread_id.xy) / c.image_size;
     float altitude = lerp(atmos.planet_radius, atmos.atmos_radius, uv.y);
     float sun_cos_theta = uv.x * 2.0 - 1.0;

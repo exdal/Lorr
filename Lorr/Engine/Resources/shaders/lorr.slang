@@ -26,21 +26,6 @@ typedef u32 ImageViewID;
 typedef u32 SamplerID;
 static u32 INVALID = ~0u;
 
-struct Material {
-    float4 albedo_color = { 1.0f, 1.0f, 1.0f, 1.0f };
-    float4 emissive_color = { 0.0f, 0.0f, 0.0f, 1.0f };
-    f32 roughness_factor = 0.0f;
-    f32 metallic_factor = 0.0f;
-    u32 alpha_mode = 0u;
-    f32 alpha_cutoff = 0.0f;
-    ImageViewID albedo_image_view = INVALID;
-    SamplerID albedo_sampler = INVALID;
-    ImageViewID normal_image_view = INVALID;
-    SamplerID normal_sampler = INVALID;
-    ImageViewID emissive_image_view = INVALID;
-    SamplerID emissive_sampler = INVALID;
-};
-
 /// TODO: About storage images, RWTexture2D can have multiple formats
 /// while staying at the same binding index.
 namespace lr {
@@ -73,6 +58,62 @@ StructuredBuffer<u64> __bda_array;
 func load_buffer<T>(BufferID buffer_id) -> T * {
     return (T *)(__bda_array[buffer_id]);
 }
+
+struct Material {
+    float4 albedo_color = { 1.0f, 1.0f, 1.0f, 1.0f };
+    float4 emissive_color = { 0.0f, 0.0f, 0.0f, 1.0f };
+    f32 roughness_factor = 0.0f;
+    f32 metallic_factor = 0.0f;
+    u32 alpha_mode = 0u;
+    f32 alpha_cutoff = 0.0f;
+    ImageViewID albedo_image_view = INVALID;
+    SamplerID albedo_sampler = INVALID;
+    ImageViewID normal_image_view = INVALID;
+    SamplerID normal_sampler = INVALID;
+    ImageViewID emissive_image_view = INVALID;
+    SamplerID emissive_sampler = INVALID;
+};
+
+struct Sun {
+    float3 direction;
+    f32 intensity;
+};
+
+struct Atmosphere {
+    float3 rayleigh_scatter;
+    float rayleigh_density;
+    float planet_radius;
+    float atmos_radius;
+    float mie_scatter;
+    float mie_absorption;
+    float mie_density;
+    float mie_asymmetry;
+    float ozone_height;
+    float ozone_thickness;
+    float3 ozone_absorption;
+};
+
+struct Camera {
+    float4x4 projection_mat;
+    float4x4 view_mat;
+    float4x4 projection_view_mat;
+    float4x4 inv_view_mat;
+    float4x4 inv_projection_view_mat;
+    float3 position;
+};
+
+struct World {
+    Camera *cameras;
+    Material *materials;
+    Sun sun;
+    Atmosphere atmosphere;
+};
+
+extension World {
+    static World *from_buffer(BufferID buffer_id) {
+        return load_buffer<World>(buffer_id);
+    }
+};
 
 }
 

@@ -72,10 +72,10 @@ void TaskGraph::update_task_infos(this TaskGraph &self) {
 
     for (auto &task : self.tasks) {
         glm::uvec2 render_extent = {};
-        for_each_image_use(task->task_uses, [&](TaskImageID id, [[maybe_unused]] const PipelineAccessImpl &access, ImageLayout layout) {
+        for_each_image_use(task->task_uses, [&](TaskImageID id, const PipelineAccessImpl &, ImageLayout) {
             TaskImage &task_image = self.images[static_cast<usize>(id)];
             Image &image = self.device->image_at(task_image.image_id);
-            render_extent = glm::max(render_extent, glm::uvec2({ image.extent.width, image.extent.height }));
+            render_extent = glm::min(render_extent, glm::uvec2({ image.extent.width, image.extent.height }));
         });
 
         task->render_extent = { render_extent.x, render_extent.y };
@@ -395,7 +395,7 @@ void TaskGraph::execute(this TaskGraph &self, const TaskExecuteInfo &info) {
 
                 {
                     ZoneScoped;
-                    TaskContext tc(*self.device, self, task, batch_cmd_list, copy_cmd_list, info.frame_index);
+                    TaskContext tc(*self.device, self, task, batch_cmd_list, copy_cmd_list, info.frame_index, info.execution_data);
                     task.execute(tc);
                 }
                 batch_cmd_list.write_timestamp(task_query_pool, PipelineStage::BottomOfPipe, task_index * 2 + 1);
@@ -476,13 +476,11 @@ bool TaskGraph::prepare_task(this TaskGraph &self, Task &task) {
         auto &graphics_info = pipeline_info.graphics_info;
         auto &compute_info = pipeline_info.compute_info;
 
-        glm::uvec2 render_extent = {};
+        glm::uvec2 render_extent = { ~0_u32, ~0_u32 };
         for_each_image_use(task.task_uses, [&](TaskImageID id, [[maybe_unused]] const PipelineAccessImpl &access, ImageLayout layout) {
             TaskImage &task_image = self.images[static_cast<usize>(id)];
             LR_ASSERT(task_image.image_id != ImageID::Invalid, "Task '{}' using invalid image {}!", task.name, static_cast<u32>(id));
             Image &image = self.device->image_at(task_image.image_id);
-
-            render_extent = glm::max(render_extent, glm::uvec2({ image.extent.width, image.extent.height }));
 
             switch (layout) {
                 case ImageLayout::ColorAttachment:
@@ -501,6 +499,8 @@ bool TaskGraph::prepare_task(this TaskGraph &self, Task &task) {
                 default:
                     return;
             }
+
+            render_extent = glm::min(render_extent, glm::uvec2({ image.extent.width, image.extent.height }));
         });
 
         task.render_extent = { render_extent.x, render_extent.y };

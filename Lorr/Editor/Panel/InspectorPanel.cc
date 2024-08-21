@@ -28,6 +28,18 @@ void InspectorPanel::update(this InspectorPanel &self) {
         }
     });
 
+    // Temp, remove it later
+    static glm::vec2 sun_rotation = {};
+    bool updateRot = false;
+    updateRot |= ImGui::SliderFloat("Sun Rotation X", &sun_rotation.x, 0, 360);
+    updateRot |= ImGui::SliderFloat("Sun Rotation Y", &sun_rotation.y, -20, 90);
+
+    if (updateRot) {
+        auto rad = glm::radians(sun_rotation);
+        glm::vec3 direction = { glm::cos(rad.x) * glm::cos(rad.y), glm::sin(rad.y), glm::sin(rad.x) * glm::cos(rad.y) };
+        app.main_render_pipeline.world_data.sun.direction = glm::normalize(direction);
+    }
+
     ImGui::End();
 }
 

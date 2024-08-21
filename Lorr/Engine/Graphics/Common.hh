@@ -351,6 +351,7 @@ enum class ImageUsage : u32 {
     TransferSrc = VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
     TransferDst = VK_IMAGE_USAGE_TRANSFER_DST_BIT,
     Storage = VK_IMAGE_USAGE_STORAGE_BIT,
+    SwapChainRelative = 1 << 30,
 };
 template<>
 struct has_bitmask<ImageUsage> : std::true_type {};

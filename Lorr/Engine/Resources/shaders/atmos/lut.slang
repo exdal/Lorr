@@ -7,9 +7,9 @@ struct VertexOutput {
 };
 
 [[vk::push_constant]] struct {
+    lr::World *world;
     ImageViewID transmittance_image_id;
     SamplerID transmittance_sampler_id;
-    BufferID atmos_buffer_id;
 } c;
 
 [shader("vertex")]
@@ -25,9 +25,9 @@ VertexOutput vs_main(u32 vertex_id : SV_VertexID) {
 [shader("fragment")]
 float4 fs_main(VertexOutput input) : SV_TARGET
 {
-    let atmos = lr::load_buffer<Atmosphere>(c.atmos_buffer_id);
-    float3 eye_pos = float3(0.0, atmos.planet_radius + 100.0, 0.0); // ALWAYS HAVE + 1 ON EYE POS!!!
-    const float3 sun_dir = float3(0.7660, 0.6428, 0.0);
+    lr::Atmosphere *atmos = &c.world->atmosphere;
+    float3 eye_pos = float3(0.0, atmos.planet_radius + c.world->cameras[0].position.y + 2.0, 0.0); // ALWAYS HAVE + 1 ON EYE POS!!!
+    const float3 sun_dir = c.world->sun.direction;
     const float sun_intensity = 10.0;
     const float step_count = 48.0;
 

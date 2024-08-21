@@ -24,68 +24,17 @@ bool Application::init(this Application &self, const ApplicationInfo &info) {
         return false;
     }
 
-    self.task_graph.init({ .device = &self.device });
-    self.swap_chain_image_id = self.task_graph.add_image({
-        .image_id = self.default_surface.images[0],
-        .image_view_id = self.default_surface.image_views[0],
-    });
+    self.main_render_pipeline.init(&self.device);
 
-    /// IMGUI ///
-    ImGui::CreateContext();
     auto &imgui = ImGui::GetIO();
-    imgui.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-    imgui.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
-    imgui.IniFilename = nullptr;
-    imgui.DisplayFramebufferScale = { 1.0f, 1.0f };
-    imgui.BackendFlags = ImGuiBackendFlags_RendererHasVtxOffset;
-    ImGui::StyleColorsDark();
-
     imgui.KeyMap[ImGuiKey_W] = LR_KEY_W;
     imgui.KeyMap[ImGuiKey_A] = LR_KEY_A;
     imgui.KeyMap[ImGuiKey_S] = LR_KEY_S;
     imgui.KeyMap[ImGuiKey_D] = LR_KEY_D;
-
-    // TODO: Move this to asset manager
-    //
-
-    auto roboto_path = fs::current_path() / "resources/fonts/Roboto-Regular.ttf";
-    auto fa_regular_400_path = fs::current_path() / "resources/fonts/fa-regular-400.ttf";
-    auto fa_solid_900_path = fs::current_path() / "resources/fonts/fa-solid-900.ttf";
-
-    ImWchar icons_ranges[] = { 0xf000, 0xf8ff, 0 };
-    ImFontConfig font_config;
-    font_config.MergeMode = true;
-    imgui.Fonts->AddFontFromFileTTF(roboto_path.c_str(), 16.0f, nullptr);
-    imgui.Fonts->AddFontFromFileTTF(fa_regular_400_path.c_str(), 14.0f, &font_config, icons_ranges);
-    imgui.Fonts->AddFontFromFileTTF(fa_solid_900_path.c_str(), 14.0f, &font_config, icons_ranges);
-    imgui.Fonts->Build();
-
-    u8 *font_data = nullptr;  // imgui context frees this itself
-    i32 font_width, font_height;
-    imgui.Fonts->GetTexDataAsRGBA32(&font_data, &font_width, &font_height);
-
-    ImageID imgui_font_id = self.device.create_image({
-        .usage_flags = ImageUsage::Sampled | ImageUsage::TransferDst,
-        .format = Format::R8G8B8A8_UNORM,
-        .type = ImageType::View2D,
-        .extent = { static_cast<u32>(font_width), static_cast<u32>(font_height), 1u },
-        .debug_name = "ImGui Font Atlas",
-    });
-    self.device.set_image_data(imgui_font_id, font_data, ImageLayout::ColorReadOnly);
-
-    ImageViewID imgui_font_view_id = self.device.create_image_view({
-        .image_id = imgui_font_id,
-        .usage_flags = ImageUsage::Sampled | ImageUsage::TransferDst,
-        .debug_name = "ImGui Font Atlas View",
-    });
-
-    self.imgui_font_image_id = self.task_graph.add_image({
-        .image_id = imgui_font_id,
-        .image_view_id = imgui_font_view_id,
-        .layout = ImageLayout::ColorReadOnly,
-        .access = PipelineAccess::FragmentShaderRead,
-    });
-    imgui.Fonts->SetTexID(nullptr);
+    imgui.KeyMap[ImGuiKey_Enter] = LR_KEY_ENTER;
+    imgui.KeyMap[ImGuiKey_Backspace] = LR_KEY_BACKSPACE;
+    imgui.KeyMap[ImGuiKey_LeftArrow] = LR_KEY_LEFT;
+    imgui.KeyMap[ImGuiKey_RightArrow] = LR_KEY_RIGHT;
 
     if (!self.do_prepare()) {
         LR_LOG_FATAL("Failed to initialize application!");
@@ -110,6 +59,7 @@ void Application::poll_events(this Application &self) {
         ApplicationEventData e = {};
         switch (self.event_manager.dispatch(e)) {
             case ApplicationEvent::WindowResize: {
+                self.main_render_pipeline.on_resize(e.window_size);
                 break;
             }
             case ApplicationEvent::MousePosition: {
@@ -153,9 +103,7 @@ void Application::run(this Application &self) {
     auto &image_views = self.default_surface.image_views;
 
     // Renderer context
-    auto &frame_sema = self.device.frame_sema;
     auto &imgui = ImGui::GetIO();
-    auto &present_queue = self.device.queue_at(CommandType::Graphics);
 
     while (!window.should_close()) {
         if (!self.default_surface.swap_chain_ok) {
@@ -169,26 +117,6 @@ void Application::run(this Application &self) {
         imgui.DeltaTime = delta_time;
         last_time = cur_time;
 
-        // Begin frame
-        usize sema_index = self.device.new_frame();
-        auto [acquire_sema, present_sema] = swap_chain.binary_semas(sema_index);
-        auto [frame_index, acq_result] = self.device.acquire_next_image(swap_chain, acquire_sema);
-        if (acq_result != VKResult::Success) {
-            self.default_surface.swap_chain_ok = false;
-            continue;
-        }
-
-        // Reset frame resources
-        self.device.staging_buffer_at(frame_index).reset();
-        for (CommandQueue &cmd_queue : self.device.queues) {
-            CommandAllocator &cmd_allocator = cmd_queue.command_allocator(frame_index);
-            self.device.reset_command_allocator(cmd_allocator);
-        }
-
-        ImageID image_id = images[frame_index];
-        ImageViewID image_view_id = image_views[frame_index];
-        self.task_graph.set_image(self.swap_chain_image_id, { .image_id = image_id, .image_view_id = image_view_id });
-
         // Update application
         self.ecs.progress();
         auto &extent = self.default_surface.swap_chain.extent;
@@ -200,18 +128,7 @@ void Application::run(this Application &self) {
         ImGui::Render();
 
         // Render frame
-        SemaphoreSubmitInfo wait_semas[] = {
-            { acquire_sema, 0, PipelineStage::TopOfPipe },
-        };
-        SemaphoreSubmitInfo signal_semas[] = {
-            { present_sema, 0, PipelineStage::BottomOfPipe },
-            { frame_sema, frame_sema.counter + 1, PipelineStage::AllCommands },
-        };
-        self.task_graph.execute({ .frame_index = frame_index, .wait_semas = wait_semas, .signal_semas = signal_semas });
-
-        if (present_queue.present(swap_chain, present_sema, frame_index) == VKResult::OutOfDate) {
-            self.default_surface.swap_chain_ok = false;
-        }
+        self.main_render_pipeline.render_into(swap_chain, images, image_views);
 
         self.device.end_frame();
         window.poll();
@@ -261,7 +178,6 @@ VKResult Application::create_surface(this Application &self, ApplicationSurface 
         // ImageView
         ImageViewInfo image_view_info = {
             .image_id = surface.images[i],
-            .usage_flags = ImageUsage::TransferDst,
             .debug_name = stack.format("SwapChain ImageView {}", i),
         };
         auto [image_view_id, image_view_result] = self.device.create_image_view(image_view_info);
@@ -272,8 +188,6 @@ VKResult Application::create_surface(this Application &self, ApplicationSurface 
 
         surface.image_views[i] = image_view_id;
     }
-
-    self.task_graph.update_task_infos();
 
     return VKResult::Success;
 }

@@ -8,10 +8,10 @@
 #include "Engine/Graphics/Device.hh"
 #include "Engine/Graphics/Instance.hh"
 #include "Engine/Graphics/SwapChain.hh"
-#include "Engine/Graphics/Task/TaskGraph.hh"
 
 #include "Engine/OS/Window.hh"
 
+#include "Engine/World/RenderPipeline.hh"
 #include "Engine/World/Scene.hh"
 
 namespace lr {
@@ -37,13 +37,11 @@ struct Application {
     ApplicationSurface default_surface = {};
     AssetManager asset_man = {};
 
-    TaskGraph task_graph = {};
-    TaskImageID swap_chain_image_id = {};
-    TaskImageID imgui_font_image_id = {};
-
     flecs::world ecs;
     std::vector<std::unique_ptr<Scene>> scenes = {};
     ls::option<SceneID> active_scene = ls::nullopt;
+
+    RenderPipeline main_render_pipeline = {};
 
     bool init(this Application &, const ApplicationInfo &info);
     void push_event(this Application &, ApplicationEvent event, const ApplicationEventData &data);

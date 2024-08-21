@@ -5,8 +5,7 @@ struct VertexOutput {
     float2 tex_coord    : TEXCOORD;
 };
 
-[[vk::push_constant]] struct
-{
+[[vk::push_constant]] struct {
     ImageViewID image_view_id;
     SamplerID sampler_id;
 } c;

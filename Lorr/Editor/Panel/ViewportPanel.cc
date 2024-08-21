@@ -19,7 +19,7 @@ void ViewportPanel::update(this ViewportPanel &self) {
     ImGui::PopStyleVar();
 
     auto work_area_size = ImGui::GetContentRegionAvail();
-    ImGui::Image(reinterpret_cast<ImTextureID>(static_cast<iptr>(app.game_view_image_id)), work_area_size);
+    ImGui::Image(reinterpret_cast<ImTextureID>(static_cast<iptr>(app.main_render_pipeline.final_image)), work_area_size);
     ImGui::SetCursorPos(ImVec2(5, 30));
 
     if (ImGui::IsWindowHovered()) {

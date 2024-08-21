@@ -6,9 +6,8 @@ struct VertexOutput {
     float3 far_pos      : POSITION;
 };
 
-[[vk::push_constant]] struct
-{
-    float4x4 view_proj_mat_inv;
+[[vk::push_constant]] struct {
+    lr::World *world;
 } c;
 
 
@@ -58,8 +57,8 @@ VertexOutput vs_main(u32 vertex_id : SV_VertexID) {
 
     float2 uv = float2((vertex_id << 1) & 2, vertex_id & 2);
     output.position = float4(uv * float2(2.0, 2.0) - float2(1.0, 1.0), 0.5, 1);
-    output.near_pos = UnprojectPoint(output.position.x, output.position.y, 0.0, c.view_proj_mat_inv);
-    output.far_pos =  UnprojectPoint(output.position.x, output.position.y, 1.0, c.view_proj_mat_inv);
+    output.near_pos = UnprojectPoint(output.position.x, output.position.y, 0.0, c.world.cameras[0].inv_projection_view_mat);
+    output.far_pos =  UnprojectPoint(output.position.x, output.position.y, 1.0, c.world.cameras[0].inv_projection_view_mat);
 
     return output;
 }

@@ -6,9 +6,9 @@ struct VertexOutput {
 };
 
 [[vk::push_constant]] struct {
+    lr::World *world;
     ImageViewID sky_lut_image_id;
     SamplerID sky_lut_sampler_id;
-    float4x4 proj_view_mat_inv;
 } c;
 
 [shader("vertex")]
@@ -50,7 +50,7 @@ float4 fs_main(VertexOutput input) : SV_TARGET
     const SamplerState sampler = SamplerState::get(c.sky_lut_sampler_id);
     
     float4 clip_space = float4(2.0 * input.tex_coord - 1.0, 1.0, 1.0);
-    float4 world_space = mul(c.proj_view_mat_inv, clip_space);
+    float4 world_space = mul(c.world->cameras[0].inv_projection_view_mat, clip_space);
     float3 world_pos = world_space.xyz / world_space.w;
     float3 direction = normalize(world_pos);
 

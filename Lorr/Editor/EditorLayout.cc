@@ -189,7 +189,7 @@ void EditorLayout::update(this EditorLayout &self) {
     ImGui::End();
 
     if (self.show_profiler) {
-        app.task_graph.draw_profiler_ui();
+        app.main_render_pipeline.task_graph.draw_profiler_ui();
     }
 
     for (auto &panel : self.panels) {

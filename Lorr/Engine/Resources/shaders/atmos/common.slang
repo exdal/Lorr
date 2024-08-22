@@ -1,26 +1,25 @@
 import "../lorr";
 
-bool ray_hit_sphere(float3 origin, float3 dir, float radius, out float t) {
-    float a = dot(dir, dir);
-    float b = 2.0 * dot(origin, dir);
+bool ray_hit_sphere(float3 origin, float3 direction, float radius, out float t) {
+    float a = dot(direction, direction);
+    float b = 2.0 * dot(origin, direction);
     float c = dot(origin, origin) - radius * radius;
     float discriminant = b * b - 4.0 * a * c;
-    if (discriminant > 0.0) {
-        t = (-b - sqrt(discriminant)) / (a * 2.0);
-        if (t > 0.0) {
-            return true;
-        }
-        t = (-b + sqrt(discriminant)) / (a * 2.0);
-        return t > 0.0;
-    }
 
-    t = -1.0;
-    return false;
+    if (discriminant < 0.0)
+        return false;
+
+    if (c <= 0.0)
+        t = (-b + sqrt(discriminant)) / (a * 2.0);
+    else 
+        t = (-b + -sqrt(discriminant)) / (a * 2.0);
+    
+    return (b <= 0.0);
 }
 
 float3 extinction_sum(lr::Atmosphere *atmos, float altitude) {
     float3 rayleigh = atmos->rayleigh_scatter * exp(-altitude / atmos->rayleigh_density);
-    float mie = (atmos.mie_scatter + atmos.mie_absorption) * exp(-altitude / atmos->mie_density);
+    float3 mie = (atmos->mie_scatter + atmos->mie_absorption) * exp(-altitude / atmos->mie_density);
     float3 ozone = atmos->ozone_absorption * max(0.0, 1.0 - abs(altitude - atmos->ozone_height) / atmos->ozone_thickness);
 
     return rayleigh + mie + ozone;
@@ -44,10 +43,10 @@ float get_mie_phase(lr::Atmosphere *atmos, float altitude)
     return scale * num / denom;
 }
 
-void get_scattering(lr::Atmosphere *atmos, float altitude, out float3 rayleigh, out float mie)
+void get_scattering(lr::Atmosphere atmos, float altitude, out float3 rayleigh, out float mie)
 {
-    rayleigh = atmos->rayleigh_scatter * exp(-altitude / atmos->rayleigh_density);
-    mie = (atmos->mie_scatter + atmos->mie_absorption) * exp(-altitude / atmos->mie_density);
+    rayleigh = atmos.rayleigh_scatter * exp(-altitude / atmos.rayleigh_density);
+    mie = (atmos.mie_scatter + atmos.mie_absorption) * exp(-altitude / atmos.mie_density);
 }
 
 float3 sample_lut(lr::Atmosphere *atmos, ImageViewID target_image_id, SamplerID sampler_id, float altitude, float theta)

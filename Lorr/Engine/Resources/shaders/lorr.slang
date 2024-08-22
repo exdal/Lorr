@@ -82,14 +82,17 @@ struct Sun {
 struct Atmosphere {
     float3 rayleigh_scatter;
     float rayleigh_density;
+
     float planet_radius;
     float atmos_radius;
     float mie_scatter;
     float mie_absorption;
+
     float mie_density;
     float mie_asymmetry;
     float ozone_height;
     float ozone_thickness;
+
     float3 ozone_absorption;
 };
 

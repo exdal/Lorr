@@ -20,6 +20,7 @@ struct GPUAtmosphereData {
     f32 ozone_height = 25 * 1e3f;
     f32 ozone_thickness = 15 * 1e3f;
     glm::vec3 ozone_absorption = glm::vec3(0.650, 1.881, 0.085) * 1e-6f;
+    f32 _unused;
 };
 
 struct GPUCameraData {
@@ -66,6 +67,7 @@ struct RenderPipeline {
     TaskImageID imgui_font_image = {};
     // Atmosphere
     TaskImageID atmos_transmittance_image = {};
+    TaskImageID atmos_ms_image = {};
     TaskImageID atmos_sky_lut_image = {};
     TaskImageID atmos_multiscatter_lut_image = {};
 
@@ -75,6 +77,7 @@ struct RenderPipeline {
     bool setup_imgui(this RenderPipeline &);
     bool setup_resources(this RenderPipeline &);
     bool setup_passes(this RenderPipeline &);
+    bool setup_persistent_images(this RenderPipeline &);
 
     // Presentation
     bool prepare(this RenderPipeline &, usize frame_index);

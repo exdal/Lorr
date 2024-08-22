@@ -413,7 +413,7 @@ ls::option<ShaderID> AssetManager::load_shader(this AssetManager &self, Identifi
     /////////////////////////////////////////
     /// SESSION INITIALIZATION
 
-    std::vector<slang::CompilerOptionEntry> entries = get_slang_entries(info.compile_flags);
+    std::vector<slang::CompilerOptionEntry> entries = get_slang_entries(info.compile_flags | ShaderCompileFlag::UseScalarLayout);
     std::vector<slang::PreprocessorMacroDesc> macros;
     for (ShaderPreprocessorMacroInfo &v : info.definitions) {
         macros.emplace_back(v.name.data(), v.value.data());
@@ -421,7 +421,7 @@ ls::option<ShaderID> AssetManager::load_shader(this AssetManager &self, Identifi
 
     slang::TargetDesc target_desc = {
         .format = SLANG_SPIRV,
-        .profile = slang_global_session->findProfile("spirv_1_6"),
+        .profile = slang_global_session->findProfile("spirv_1_5"),
         .flags = SLANG_TARGET_FLAG_GENERATE_SPIRV_DIRECTLY,
         .forceGLSLScalarBufferLayout = true,
         .compilerOptionEntries = entries.data(),

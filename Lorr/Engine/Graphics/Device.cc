@@ -1400,7 +1400,9 @@ ls::result<ImageViewID, VKResult> Device::create_image_view(this Device &self, c
         descriptor_writes.push_back(storage_write_set_info);
     }
 
-    self.update_descriptor_sets(descriptor_writes, {});
+    if (!descriptor_writes.empty()) {
+        self.update_descriptor_sets(descriptor_writes, {});
+    }
 
     if (!info.debug_name.empty()) {
         self.set_object_name(image_view->resource, info.debug_name);

@@ -6,60 +6,19 @@
 #include <imgui.h>
 
 namespace lr {
-struct TransmittanceTask {
-    std::string_view name = "Transmittance";
-
-    struct Uses {
-        Preset::ComputeWrite storage_image = {};
-    } uses = {};
-
-    struct PushConstants {
-        u64 world_ptr = 0;
-        glm::vec2 image_size = {};
-        ImageViewID image_view_id = ImageViewID::Invalid;
-    };
-
-    bool prepare(TaskPrepareInfo &info) {
-        auto &app = Application::get();
-        auto &pipeline_info = info.pipeline_info;
-
-        auto cs = app.asset_man.shader_at("shader://atmos.transmittance");
-        if (!cs) {
-            LR_LOG_ERROR("Shaders are invalid.", name);
-            return false;
-        }
-
-        pipeline_info.set_shader(cs.value());
-
-        return true;
-    }
-
-    void execute(TaskContext &tc) {
-        auto &storage_image_data = tc.task_image_data(uses.storage_image);
-        auto &storage_image = tc.device.image_at(storage_image_data.image_id);
-
-        PushConstants c = {
-            .world_ptr = *static_cast<u64 *>(tc.execution_data),
-            .image_size = { storage_image.extent.width, storage_image.extent.height },
-            .image_view_id = storage_image_data.image_view_id,
-        };
-        tc.set_push_constants(c);
-
-        tc.cmd_list.dispatch(storage_image.extent.width / 16 + 1, storage_image.extent.height / 16 + 1, 1);
-    }
-};
-
 struct SkyLUTTask {
     std::string_view name = "Sky LUT";
 
     struct Uses {
         Preset::ColorAttachmentWrite attachment = {};
         Preset::ColorReadOnly transmittance_lut = {};
+        Preset::ColorReadOnly ms_lut = {};
     } uses = {};
 
     struct PushConstants {
         u64 world_ptr = 0;
         ImageViewID transmittance_image_id = ImageViewID::Invalid;
+        ImageViewID ms_lut = ImageViewID::Invalid;
         SamplerID transmittance_sampler_id = SamplerID::Invalid;
     };
 
@@ -85,6 +44,7 @@ struct SkyLUTTask {
 
     void execute(TaskContext &tc) {
         auto &transmittance_lut = tc.task_image_data(uses.transmittance_lut);
+        auto &ms_lut = tc.task_image_data(uses.ms_lut);
         auto dst_attachment = tc.as_color_attachment(uses.attachment);
 
         tc.cmd_list.begin_rendering(RenderingBeginInfo{
@@ -98,6 +58,7 @@ struct SkyLUTTask {
         PushConstants c = {
             .world_ptr = *static_cast<u64 *>(tc.execution_data),
             .transmittance_image_id = transmittance_lut.image_view_id,
+            .ms_lut = ms_lut.image_view_id,
             .transmittance_sampler_id = tc.device.create_cached_sampler(SamplerInfo{
                 .min_filter = Filtering::Linear,
                 .mag_filter = Filtering::Linear,

@@ -5,22 +5,19 @@
 #include "Engine/Memory/Stack.hh"
 
 namespace lr {
-void CommandList::reset_query_pool(this CommandList &self, TimestampQueryPool &query_pool, u32 first_query, u32 query_count)
-{
+void CommandList::reset_query_pool(this CommandList &self, TimestampQueryPool &query_pool, u32 first_query, u32 query_count) {
     ZoneScoped;
 
     vkCmdResetQueryPool(self, query_pool, first_query, query_count);
 }
 
-void CommandList::write_timestamp(this CommandList &self, TimestampQueryPool &query_pool, PipelineStage pipeline_stage, u32 query_index)
-{
+void CommandList::write_timestamp(this CommandList &self, TimestampQueryPool &query_pool, PipelineStage pipeline_stage, u32 query_index) {
     ZoneScoped;
 
     vkCmdWriteTimestamp2(self, static_cast<VkPipelineStageFlags2>(pipeline_stage), query_pool, query_index);
 }
 
-void CommandList::image_transition(this CommandList &self, const ImageBarrier &barrier)
-{
+void CommandList::image_transition(this CommandList &self, const ImageBarrier &barrier, std::source_location LOC) {
     ZoneScoped;
 
     Image &image = self.device->image_at(barrier.image_id);
@@ -40,8 +37,7 @@ void CommandList::image_transition(this CommandList &self, const ImageBarrier &b
     vkCmdPipelineBarrier2(self, &dependency_info);
 }
 
-void CommandList::memory_barrier(this CommandList &self, const MemoryBarrier &barrier)
-{
+void CommandList::memory_barrier(this CommandList &self, const MemoryBarrier &barrier, std::source_location LOC) {
     ZoneScoped;
 
     VkMemoryBarrier2 vk_barrier = static_cast<MemoryBarrier>(barrier).vk_type();
@@ -60,8 +56,7 @@ void CommandList::memory_barrier(this CommandList &self, const MemoryBarrier &ba
     vkCmdPipelineBarrier2(self, &dependency_info);
 }
 
-void CommandList::set_barriers(this CommandList &self, ls::span<MemoryBarrier> memory, ls::span<ImageBarrier> image)
-{
+void CommandList::set_barriers(this CommandList &self, ls::span<MemoryBarrier> memory, ls::span<ImageBarrier> image, std::source_location LOC) {
     ZoneScoped;
     memory::ScopedStack stack;
 
@@ -90,15 +85,13 @@ void CommandList::set_barriers(this CommandList &self, ls::span<MemoryBarrier> m
     vkCmdPipelineBarrier2(self, &dependency_info);
 }
 
-void CommandList::copy_buffer_to_buffer(this CommandList &self, BufferID src, BufferID dst, ls::span<BufferCopyRegion> regions)
-{
+void CommandList::copy_buffer_to_buffer(this CommandList &self, BufferID src, BufferID dst, ls::span<BufferCopyRegion> regions) {
     ZoneScoped;
 
     vkCmdCopyBuffer(self, self.device->buffer_at(src), self.device->buffer_at(dst), regions.size(), (VkBufferCopy *)regions.data());
 }
 
-void CommandList::copy_buffer_to_image(this CommandList &self, BufferID src, ImageID dst, ImageLayout layout, ls::span<ImageCopyRegion> regions)
-{
+void CommandList::copy_buffer_to_image(this CommandList &self, BufferID src, ImageID dst, ImageLayout layout, ls::span<ImageCopyRegion> regions) {
     ZoneScoped;
 
     vkCmdCopyBufferToImage(
@@ -111,8 +104,7 @@ void CommandList::copy_buffer_to_image(this CommandList &self, BufferID src, Ima
 }
 
 void CommandList::blit_image(
-    this CommandList &self, ImageID src, ImageLayout src_layout, ImageID dst, ImageLayout dst_layout, Filtering filter, ls::span<ImageBlit> blits)
-{
+    this CommandList &self, ImageID src, ImageLayout src_layout, ImageID dst, ImageLayout dst_layout, Filtering filter, ls::span<ImageBlit> blits) {
     ZoneScoped;
 
     VkBlitImageInfo2 blit_info = {
@@ -129,8 +121,7 @@ void CommandList::blit_image(
     vkCmdBlitImage2(self, &blit_info);
 }
 
-void CommandList::begin_rendering(this CommandList &self, const RenderingBeginInfo &info)
-{
+void CommandList::begin_rendering(this CommandList &self, const RenderingBeginInfo &info) {
     ZoneScoped;
     memory::ScopedStack stack;
 
@@ -168,31 +159,27 @@ void CommandList::begin_rendering(this CommandList &self, const RenderingBeginIn
     vkCmdBeginRendering(self, &rendering_info);
 }
 
-void CommandList::end_rendering(this CommandList &self)
-{
+void CommandList::end_rendering(this CommandList &self) {
     ZoneScoped;
 
     vkCmdEndRendering(self);
 }
 
-void CommandList::set_pipeline(this CommandList &self, PipelineID pipeline_id)
-{
+void CommandList::set_pipeline(this CommandList &self, PipelineID pipeline_id) {
     ZoneScoped;
 
     Pipeline &pipeline = self.device->pipeline_at(pipeline_id);
     vkCmdBindPipeline(self, static_cast<VkPipelineBindPoint>(pipeline.bind_point), pipeline);
 }
 
-void CommandList::set_push_constants(this CommandList &self, PipelineLayoutID layout_id, void *data, u32 data_size, u32 offset, ShaderStageFlag stage_flags)
-{
+void CommandList::set_push_constants(this CommandList &self, PipelineLayoutID layout_id, void *data, u32 data_size, u32 offset, ShaderStageFlag stage_flags) {
     ZoneScoped;
 
     PipelineLayout &layout = self.device->pipeline_layout_at(layout_id);
     vkCmdPushConstants(self, layout, static_cast<VkShaderStageFlags>(stage_flags), offset, data_size, data);
 }
 
-void CommandList::set_descriptor_sets(this CommandList &self, PipelineLayoutID layout_id, PipelineBindPoint bind_point, u32 first_set, ls::span<DescriptorSet> sets)
-{
+void CommandList::set_descriptor_sets(this CommandList &self, PipelineLayoutID layout_id, PipelineBindPoint bind_point, u32 first_set, ls::span<DescriptorSet> sets) {
     ZoneScoped;
     memory::ScopedStack stack;
 
@@ -205,71 +192,61 @@ void CommandList::set_descriptor_sets(this CommandList &self, PipelineLayoutID l
     vkCmdBindDescriptorSets(self, static_cast<VkPipelineBindPoint>(bind_point), layout, first_set, sets.size(), descriptor_sets.data(), 0, nullptr);
 }
 
-void CommandList::set_vertex_buffer(this CommandList &self, BufferID buffer_id, u64 offset, u32 first_binding, u32 binding_count)
-{
+void CommandList::set_vertex_buffer(this CommandList &self, BufferID buffer_id, u64 offset, u32 first_binding, u32 binding_count) {
     ZoneScoped;
 
     Buffer &buffer = self.device->buffer_at(buffer_id);
     vkCmdBindVertexBuffers(self, first_binding, binding_count, &buffer.handle, &offset);
 }
 
-void CommandList::set_index_buffer(this CommandList &self, BufferID buffer_id, u64 offset, bool use_u16)
-{
+void CommandList::set_index_buffer(this CommandList &self, BufferID buffer_id, u64 offset, bool use_u16) {
     ZoneScoped;
 
     Buffer &buffer = self.device->buffer_at(buffer_id);
     vkCmdBindIndexBuffer(self, buffer, offset, use_u16 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32);
 }
 
-void CommandList::set_viewport(this CommandList &self, u32 id, const Viewport &viewport)
-{
+void CommandList::set_viewport(this CommandList &self, u32 id, const Viewport &viewport) {
     ZoneScoped;
 
     vkCmdSetViewport(self, id, 1, reinterpret_cast<const VkViewport *>(&viewport));
 }
 
-void CommandList::set_scissors(this CommandList &self, u32 id, const Rect2D &rect)
-{
+void CommandList::set_scissors(this CommandList &self, u32 id, const Rect2D &rect) {
     ZoneScoped;
 
     vkCmdSetScissor(self, id, 1, reinterpret_cast<const VkRect2D *>(&rect));
 }
 
-void CommandList::draw(this CommandList &self, u32 vertex_count, u32 first_vertex, u32 instance_count, u32 first_instance)
-{
+void CommandList::draw(this CommandList &self, u32 vertex_count, u32 first_vertex, u32 instance_count, u32 first_instance) {
     ZoneScoped;
 
     vkCmdDraw(self, vertex_count, instance_count, first_vertex, first_instance);
 }
 
-void CommandList::draw_indexed(this CommandList &self, u32 index_count, u32 first_index, i32 vertex_offset, u32 instance_count, u32 first_instance)
-{
+void CommandList::draw_indexed(this CommandList &self, u32 index_count, u32 first_index, i32 vertex_offset, u32 instance_count, u32 first_instance) {
     ZoneScoped;
 
     vkCmdDrawIndexed(self, index_count, instance_count, first_index, vertex_offset, first_instance);
 }
 
-void CommandList::dispatch(this CommandList &self, u32 group_x, u32 group_y, u32 group_z)
-{
+void CommandList::dispatch(this CommandList &self, u32 group_x, u32 group_y, u32 group_z) {
     ZoneScoped;
 
     vkCmdDispatch(self, group_x, group_y, group_z);
 }
 
 CommandBatcher::CommandBatcher(CommandList &command_list)
-    : command_list(command_list)
-{
+    : command_list(command_list) {
 }
 
-CommandBatcher::~CommandBatcher()
-{
+CommandBatcher::~CommandBatcher() {
     ZoneScoped;
 
     flush_barriers();
 }
 
-void CommandBatcher::insert_memory_barrier(const MemoryBarrier &barrier)
-{
+void CommandBatcher::insert_memory_barrier(const MemoryBarrier &barrier) {
     ZoneScoped;
 
     if (m_memory_barriers.full()) {
@@ -279,8 +256,7 @@ void CommandBatcher::insert_memory_barrier(const MemoryBarrier &barrier)
     m_memory_barriers.push_back(barrier);
 }
 
-void CommandBatcher::insert_image_barrier(const ImageBarrier &barrier)
-{
+void CommandBatcher::insert_image_barrier(const ImageBarrier &barrier) {
     ZoneScoped;
 
     if (m_image_barriers.full()) {
@@ -290,8 +266,7 @@ void CommandBatcher::insert_image_barrier(const ImageBarrier &barrier)
     m_image_barriers.emplace_back(barrier);
 }
 
-void CommandBatcher::flush_barriers()
-{
+void CommandBatcher::flush_barriers() {
     ZoneScoped;
 
     if (m_image_barriers.empty() && m_memory_barriers.empty()) {
@@ -303,8 +278,7 @@ void CommandBatcher::flush_barriers()
     m_memory_barriers.clear();
 }
 
-void CommandQueue::defer(this CommandQueue &self, ls::span<BufferID> buffer_ids)
-{
+void CommandQueue::defer(this CommandQueue &self, ls::span<BufferID> buffer_ids) {
     ZoneScoped;
 
     for (BufferID v : buffer_ids) {
@@ -312,8 +286,7 @@ void CommandQueue::defer(this CommandQueue &self, ls::span<BufferID> buffer_ids)
     }
 }
 
-void CommandQueue::defer(this CommandQueue &self, ls::span<ImageID> image_ids)
-{
+void CommandQueue::defer(this CommandQueue &self, ls::span<ImageID> image_ids) {
     ZoneScoped;
 
     for (ImageID v : image_ids) {
@@ -321,8 +294,7 @@ void CommandQueue::defer(this CommandQueue &self, ls::span<ImageID> image_ids)
     }
 }
 
-void CommandQueue::defer(this CommandQueue &self, ls::span<ImageViewID> image_view_ids)
-{
+void CommandQueue::defer(this CommandQueue &self, ls::span<ImageViewID> image_view_ids) {
     ZoneScoped;
 
     for (ImageViewID v : image_view_ids) {
@@ -330,8 +302,7 @@ void CommandQueue::defer(this CommandQueue &self, ls::span<ImageViewID> image_vi
     }
 }
 
-void CommandQueue::defer(this CommandQueue &self, ls::span<SamplerID> sampler_ids)
-{
+void CommandQueue::defer(this CommandQueue &self, ls::span<SamplerID> sampler_ids) {
     ZoneScoped;
 
     for (SamplerID v : sampler_ids) {
@@ -339,8 +310,7 @@ void CommandQueue::defer(this CommandQueue &self, ls::span<SamplerID> sampler_id
     }
 }
 
-void CommandQueue::defer(this CommandQueue &self, ls::span<CommandList> command_lists)
-{
+void CommandQueue::defer(this CommandQueue &self, ls::span<CommandList> command_lists) {
     ZoneScoped;
 
     for (const CommandList &command_list : command_lists) {
@@ -348,9 +318,9 @@ void CommandQueue::defer(this CommandQueue &self, ls::span<CommandList> command_
     }
 }
 
-CommandList &CommandQueue::begin_command_list(this CommandQueue &self, usize frame_index)
-{
+CommandList &CommandQueue::begin_command_list(this CommandQueue &self, usize frame_index, std::source_location LOC) {
     ZoneScoped;
+    memory::ScopedStack stack;
 
     auto &v = self.command_lists[frame_index];
     auto it = v.emplace();
@@ -358,6 +328,7 @@ CommandList &CommandQueue::begin_command_list(this CommandQueue &self, usize fra
     CommandList &cmd_list = *it;
 
     self.device->create_command_lists(cmd_list, cmd_allocator);
+    self.device->set_object_name(cmd_list, stack.format("At {}:{} {}", LOC.file_name(), LOC.line(), LOC.function_name()));
     cmd_list.rendering_frame = frame_index;
 
     VkCommandBufferBeginInfo begin_info = {
@@ -371,8 +342,7 @@ CommandList &CommandQueue::begin_command_list(this CommandQueue &self, usize fra
     return cmd_list;
 }
 
-void CommandQueue::end_command_list(this CommandQueue &self, CommandList &cmd_list)
-{
+void CommandQueue::end_command_list(this CommandQueue &self, CommandList &cmd_list) {
     ZoneScoped;
 
     auto &frame_lists = self.frame_cmd_submits[cmd_list.rendering_frame];
@@ -383,8 +353,7 @@ void CommandQueue::end_command_list(this CommandQueue &self, CommandList &cmd_li
     self.defer(cmd_list);
 }
 
-VKResult CommandQueue::submit(this CommandQueue &self, usize frame_index, const QueueSubmitInfo &info)
-{
+VKResult CommandQueue::submit(this CommandQueue &self, usize frame_index, const QueueSubmitInfo &info) {
     ZoneScoped;
     memory::ScopedStack stack;
 
@@ -431,8 +400,7 @@ VKResult CommandQueue::submit(this CommandQueue &self, usize frame_index, const 
     return result;
 }
 
-VKResult CommandQueue::present(this CommandQueue &self, SwapChain &swap_chain, Semaphore &present_sema, u32 image_id)
-{
+VKResult CommandQueue::present(this CommandQueue &self, SwapChain &swap_chain, Semaphore &present_sema, u32 image_id) {
     ZoneScoped;
 
     VkPresentInfoKHR present_info = {
@@ -448,8 +416,7 @@ VKResult CommandQueue::present(this CommandQueue &self, SwapChain &swap_chain, S
     return static_cast<VKResult>(vkQueuePresentKHR(self, &present_info));
 }
 
-void CommandQueue::wait_for_work(this CommandQueue &self)
-{
+void CommandQueue::wait_for_work(this CommandQueue &self) {
     ZoneScoped;
 
     vkQueueWaitIdle(self);

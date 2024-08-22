@@ -9,6 +9,7 @@ struct VertexOutput {
 [[vk::push_constant]] struct {
     lr::World *world;
     ImageViewID transmittance_image_id;
+    ImageViewID ms_image_id;
     SamplerID transmittance_sampler_id;
 } c;
 
@@ -88,13 +89,12 @@ float4 fs_main(VertexOutput input) : SV_TARGET
         // Shadowing factor
         float sunTheta = dot(sun_dir, stepPosition / h);
         float3 sunTrans = sample_lut(atmos, c.transmittance_image_id, c.transmittance_sampler_id, altitude, sunTheta);
-        // float3 MS = sample_lut(atmos, MultiScatterLut, LinearSampler, altitude, sunTheta);
-        float3 MS = float3(0.0);
-        
+        float3 MS = sample_lut(atmos, c.ms_image_id, c.transmittance_sampler_id, altitude, sunTheta);
+        //float3 MS = float3(0.0);
         // Get scattering coefficient
         float3 rayleighScat;
         float mieScat;
-        get_scattering(atmos, altitude, rayleighScat, mieScat);
+        get_scattering(*atmos, altitude, rayleighScat, mieScat);
         
         // Molecules scattered on ray's position
         float3 rayleighInScat = rayleighScat * (rayleighPhase + MS);

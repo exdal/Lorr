@@ -25,7 +25,7 @@ struct File {
     FileResult result = FileResult::Success;
 
     File() = default;
-    File(std::string_view path, FileAccess access);
+    File(const fs::path &path, FileAccess access);
     File(const File &) = default;
     File(File &&) = default;
     ~File() { close(); }

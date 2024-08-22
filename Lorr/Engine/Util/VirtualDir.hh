@@ -2,14 +2,13 @@
 
 #include "Engine/OS/OS.hh"
 
-#include <ankerl/unordered_dense.h>
-
 namespace lr {
 struct VirtualFile {
-    std::vector<u8> contents = {};
+    std::unique_ptr<u8[]> contents = {};
+    usize content_size = 0;
 
-    const u8 *data() const { return contents.data(); }
-    usize size() const { return contents.size(); }
+    const u8 *data() const { return contents.get(); }
+    usize size() const { return content_size; }
 };
 
 struct VirtualFileInfo {
@@ -18,30 +17,27 @@ struct VirtualFileInfo {
 };
 
 struct VirtualDir {
-    VirtualDir() = default;
-    VirtualDir(ls::span<VirtualFileInfo> infos) {
-        for (const VirtualFileInfo &info : infos) {
-            std::vector<u8> data = { info.data.begin(), info.data.end() };
-            m_files.emplace(std::string(info.path), std::move(data));
-        }
+    ankerl::unordered_dense::map<std::string, VirtualFile> files = {};
+
+    ls::option<std::reference_wrapper<VirtualFile>> add_file(const VirtualFileInfo &info) {
+        auto data = std::make_unique_for_overwrite<u8[]>(info.data.size());
+        std::memcpy(data.get(), info.data.data(), info.data.size());
+        auto it = files.emplace(std::string(info.path), VirtualFile{ std::move(data), info.data.size() });
+        return it.first->second;
     }
 
-    bool read_file(std::string_view virtual_path, std::string_view real_path) {
+    ls::option<std::reference_wrapper<VirtualFile>> read_file(const std::string &virtual_path, const fs::path &real_path) {
         File file(real_path, FileAccess::Read);
         if (!file) {
-            LR_LOG_ERROR("Failed to read file!");
-            return false;
+            // john loguru hates wstring
+            std::string str = real_path.string();
+            LR_LOG_ERROR("Failed to read file '{}'!", str);
+            return ls::nullopt;
         }
 
-        std::vector<u8> contents(file.size);
-        file.read(contents.data(), { 0, ~0_sz });
-        m_files.emplace(std::string(virtual_path), std::move(contents));
-        return true;
+        auto it = files.emplace(virtual_path, VirtualFile{ file.whole_data(), file.size });
+        return it.first->second;
     }
-
-    const auto &files() const { return m_files; }
-
-    ankerl::unordered_dense::map<std::string, VirtualFile> m_files = {};
 };
 
 }  // namespace lr

@@ -4,6 +4,7 @@
 
 #include <ls/enum.hh>
 #include <ls/option.hh>
+#include <ls/path.hh>
 #include <ls/range.hh>
 #include <ls/result.hh>
 #include <ls/span.hh>
@@ -13,6 +14,7 @@
 #include <tracy/Tracy.hpp>
 
 #include <array>
+#include <filesystem>
 #include <span>
 #include <string_view>
 
@@ -23,7 +25,10 @@
 #include <glm/vec4.hpp>
 
 #include "Core/Log.hh"
+#include <ankerl/unordered_dense.h>
 #include <plf_colony.h>
+
+namespace fs = std::filesystem;
 
 namespace lr {
 template<typename T, usize N>

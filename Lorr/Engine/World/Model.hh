@@ -18,6 +18,7 @@ enum class AlphaMode : u32 {
     Blend,
 };
 
+enum class MaterialID : u32 { Invalid = ~0_u32 };
 struct Material {
     glm::vec4 albedo_color = { 1.0f, 1.0f, 1.0f, 1.0f };
     glm::vec4 emissive_color = { 0.0f, 0.0f, 0.0f, 1.0f };

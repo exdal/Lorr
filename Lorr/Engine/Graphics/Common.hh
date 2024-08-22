@@ -1,6 +1,10 @@
 #pragma once
 
-#include <Resources/embedded/lorr.slang>  // IWYU pragma: export
+#define LR_DESCRIPTOR_INDEX_SAMPLER 0
+#define LR_DESCRIPTOR_INDEX_IMAGES 1
+#define LR_DESCRIPTOR_INDEX_STORAGE_IMAGES 2
+#define LR_DESCRIPTOR_INDEX_STORAGE_BUFFERS 3
+#define LR_DESCRIPTOR_INDEX_BDA_ARRAY 4
 
 #include "Vulkan.hh"  // IWYU pragma: export
 #include "zfwd.hh"
@@ -347,6 +351,7 @@ enum class ImageUsage : u32 {
     TransferSrc = VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
     TransferDst = VK_IMAGE_USAGE_TRANSFER_DST_BIT,
     Storage = VK_IMAGE_USAGE_STORAGE_BIT,
+    SwapChainRelative = 1 << 30,
 };
 template<>
 struct has_bitmask<ImageUsage> : std::true_type {};
@@ -870,7 +875,7 @@ struct PipelineShaderStageInfo {
     VkPipelineShaderStageCreateFlags create_flags = {};
     ShaderStageFlag shader_stage = ShaderStageFlag::All;
     VkShaderModule module = VK_NULL_HANDLE;
-    const char *entry_point = nullptr;
+    const char *entry_point = "main";
     VkSpecializationInfo *specialization_info = nullptr;
 
     operator auto &() { return *reinterpret_cast<VkType *>(this); }

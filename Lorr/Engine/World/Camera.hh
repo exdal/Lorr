@@ -8,9 +8,7 @@ struct PerspectiveCamera {
     PerspectiveCamera(const glm::vec3 &position_, f32 fov_, f32 aspect_)
         : position(position_),
           fov(fov_),
-          aspect_ratio(aspect_)
-    {
-    }
+          aspect_ratio(aspect_) {}
 
     glm::vec3 position = {};
     f32 yaw = 0.0f;
@@ -22,12 +20,11 @@ struct PerspectiveCamera {
 
     glm::quat orientation = {};
     glm::mat4 projection_matrix = {};
-    glm::mat4 view_matrix = {};
-    glm::mat4 proj_view_matrix = {};
 
-    void calc_proj_matrix(this PerspectiveCamera &self);
-    void calc_view_matrix(this PerspectiveCamera &self);
+    void calc_proj_matrix(this PerspectiveCamera &);
+    glm::mat4 calc_view_matrix(this PerspectiveCamera &);
 
     void update(this PerspectiveCamera &, f32 delta_time);
 };
+
 }  // namespace lr

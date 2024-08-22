@@ -11,7 +11,6 @@ struct TaskPersistentImageInfo {
     PipelineAccessImpl access = PipelineAccess::TopOfPipe;
 };
 
-enum class TaskBufferID : u32 { Invalid = ~0_u32 };
 struct TaskBufferInfo {
     BufferID buffer_id = BufferID::Invalid;
     PipelineAccessImpl last_access = PipelineAccess::None;
@@ -19,11 +18,19 @@ struct TaskBufferInfo {
     u32 last_submit_index = 0;
 };
 
-enum class TaskImageID : u32 { Invalid = ~0_u32 };
+enum class TaskImageFlag {
+    None = 0,
+    SwapChainRelative = 1 << 0,
+};
+
+template<>
+struct has_bitmask<TaskImageFlag> : std::true_type {};
+
 struct TaskImage {
     ImageID image_id = ImageID::Invalid;
     ImageViewID image_view_id = ImageViewID::Invalid;
     ImageSubresourceRange subresource_range = {};
+    TaskImageFlag flags = TaskImageFlag::None;
     ImageLayout last_layout = ImageLayout::Undefined;
     PipelineAccessImpl last_access = PipelineAccess::None;
     u32 last_batch_index = 0;

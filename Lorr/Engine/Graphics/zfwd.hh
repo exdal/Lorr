@@ -45,4 +45,8 @@ enum class PipelineLayoutID : usize { None = 0 };
 enum class PipelineID : u32 { Invalid = ~0_u32 };
 enum class PipelineHash : u64 { Invalid = ~0_u64 };
 
+enum class TaskID : u32 { Invalid = ~0_u32 };
+enum class TaskImageID : u32 { Invalid = ~0_u32 };
+enum class TaskBufferID : u32 { Invalid = ~0_u32 };
+
 }  // namespace lr

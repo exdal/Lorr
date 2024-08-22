@@ -10,7 +10,7 @@
 namespace lr {
 
 /// FILE SYSTEM ///
-File::File(std::string_view path, FileAccess access) {
+File::File(const fs::path &path, FileAccess access) {
     ZoneScoped;
 
     errno = 0;
@@ -19,9 +19,9 @@ File::File(std::string_view path, FileAccess access) {
     if (access & FileAccess::Write)
         flags &= ~O_RDONLY;
     if (access & FileAccess::Read)
-        flags &= ~O_WRONLY;
+        flags &= ~(O_WRONLY | O_CREAT);
 
-    i32 file = open64(path.data(), flags, S_IRUSR | S_IWUSR);
+    i32 file = open64(path.c_str(), flags, S_IRUSR | S_IWUSR);
     if (file < 0) {
         switch (errno) {
             case EACCES:

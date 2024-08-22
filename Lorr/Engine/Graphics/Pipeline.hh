@@ -93,9 +93,7 @@ struct Pipeline {
     Pipeline() = default;
     Pipeline(PipelineBindPoint bind_point_, VkPipeline pipeline_)
         : bind_point(bind_point_),
-          handle(pipeline_)
-    {
-    }
+          handle(pipeline_) {}
 
     PipelineBindPoint bind_point = PipelineBindPoint::Graphics;
     VkPipeline handle = VK_NULL_HANDLE;

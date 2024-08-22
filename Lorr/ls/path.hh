@@ -1,5 +1,7 @@
 #pragma once
 
+#include <string_view>
+
 namespace ls {
 struct path_view {
     std::string_view str = {};
@@ -7,14 +9,12 @@ struct path_view {
     usize name_pos = ~0_sz;
 
     path_view(std::string_view path)
-        : str(path)
-    {
+        : str(path) {
         name_pos = str.find_last_of("\\/");
         extension_pos = str.rfind('.');
     }
 
-    std::optional<std::string_view> directory()
-    {
+    std::optional<std::string_view> directory() {
         if (name_pos == ~0_sz) {
             return ".";
         }
@@ -28,8 +28,7 @@ struct path_view {
     }
 
     // Returns the file name with extension (if available)
-    std::optional<std::string_view> name()
-    {
+    std::optional<std::string_view> name() {
         if (str.ends_with('\\') || str.ends_with('/')) {
             return std::nullopt;
         }
@@ -37,8 +36,7 @@ struct path_view {
         return str.substr(name_pos + 1, str.length() - name_pos);
     }
 
-    std::optional<std::string_view> name_only()
-    {
+    std::optional<std::string_view> name_only() {
         if (str.ends_with('\\') || str.ends_with('/')) {
             return std::nullopt;
         }
@@ -51,8 +49,7 @@ struct path_view {
         return n;
     }
 
-    std::optional<std::string_view> extension()
-    {
+    std::optional<std::string_view> extension() {
         if (extension_pos == ~0_sz) {
             return std::nullopt;
         }

@@ -56,14 +56,16 @@ struct ImageInfo {
 
 struct Image {
     Image() = default;
-    Image(Format format_, Extent3D extent_, u32 slice_count_, u32 mip_count_, VmaAllocation allocation_, VkImage image_)
-        : format(format_),
+    Image(ImageUsage usage_flags_, Format format_, Extent3D extent_, u32 slice_count_, u32 mip_count_, VmaAllocation allocation_, VkImage image_)
+        : usage_flags(usage_flags_),
+          format(format_),
           extent(extent_),
           slice_count(slice_count_),
           mip_levels(mip_count_),
           allocation(allocation_),
           handle(image_) {}
 
+    ImageUsage usage_flags = {};
     Format format = Format::Unknown;
     Extent3D extent = {};
     u32 slice_count = 1;
@@ -84,7 +86,6 @@ struct Image {
 
 struct ImageViewInfo {
     ImageID image_id = ImageID::Invalid;
-    ImageUsage usage_flags = ImageUsage::None;
     ImageViewType type = ImageViewType::View2D;
     ImageSubresourceRange subresource_range = {};
     ImageComponentSwizzle swizzle_r = ImageComponentSwizzle::Identity;

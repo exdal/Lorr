@@ -15,7 +15,7 @@ struct SwapChain {
     std::pair<Semaphore &, Semaphore &> binary_semas(usize frame_counter) { return { acquire_semas[frame_counter], present_semas[frame_counter] }; }
 
     Format format = Format::Unknown;
-    Extent2D extent = {};
+    Extent3D extent = {};
 
     ls::static_vector<Semaphore, Limits::FrameCount> acquire_semas;
     ls::static_vector<Semaphore, Limits::FrameCount> present_semas;

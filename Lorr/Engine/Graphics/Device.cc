@@ -234,8 +234,6 @@ VKResult Device::init(this Device &self, const DeviceInfo &info) {
 
     /// DEVICE CONTEXT ///
 
-    ShaderCompiler::init();
-
     self.staging_buffers.resize(self.frame_count);
     for (auto &staging_buffer : self.staging_buffers) {
         staging_buffer.init(&self);
@@ -526,7 +524,7 @@ VKResult Device::create_swap_chain(this Device &self, SwapChain &swap_chain, con
 
     swap_chain = {};
     swap_chain.format = static_cast<Format>(result->image_format);
-    swap_chain.extent = { result->extent.width, result->extent.height };
+    swap_chain.extent = { result->extent.width, result->extent.height, 1 };
 
     swap_chain.acquire_semas.resize(self.frame_count);
     swap_chain.present_semas.resize(self.frame_count);
@@ -573,8 +571,7 @@ VKResult Device::get_swapchain_images(this Device &self, SwapChain &swap_chain, 
 
     for (u32 i = 0; i < images.size(); i++) {
         VkImage &image_handle = images_raw[i];
-        Extent3D extent = { swap_chain.extent.width, swap_chain.extent.height, 1 };
-        auto image_result = self.resources.images.create(swap_chain.format, extent, 1, 1, nullptr, image_handle);
+        auto image_result = self.resources.images.create(ImageUsage::ColorAttachment, swap_chain.format, swap_chain.extent, 1, 1, nullptr, image_handle);
 
         images[i] = image_result->id;
     }
@@ -1267,7 +1264,7 @@ ls::result<ImageID, VKResult> Device::create_image(this Device &self, const Imag
         .sharingMode = sharing_mode,
         .queueFamilyIndexCount = static_cast<u32>(info.queue_indices.size()),
         .pQueueFamilyIndices = info.queue_indices.data(),
-        .initialLayout = static_cast<VkImageLayout>(info.initial_layout),
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
     };
 
     VmaAllocationCreateInfo allocation_info = {
@@ -1290,7 +1287,7 @@ ls::result<ImageID, VKResult> Device::create_image(this Device &self, const Imag
         return result;
     }
 
-    auto image = self.resources.images.create(info.format, info.extent, info.slice_count, info.mip_levels, allocation, image_handle);
+    auto image = self.resources.images.create(info.usage_flags, info.format, info.extent, info.slice_count, info.mip_levels, allocation, image_handle);
     if (!image) {
         LR_LOG_ERROR("Failed to allocate Image!");
         return VKResult::OutOfPoolMem;
@@ -1298,6 +1295,20 @@ ls::result<ImageID, VKResult> Device::create_image(this Device &self, const Imag
 
     if (!info.debug_name.empty()) {
         self.set_object_name(image->resource, info.debug_name);
+    }
+
+    if (info.initial_layout != ImageLayout::Undefined) {
+        auto &queue = self.queue_at(CommandType::Graphics);
+        auto &cmd_list = queue.begin_command_list(0);
+        cmd_list.image_transition(ImageBarrier{
+            .src_access = PipelineAccess::None,
+            .dst_access = PipelineAccess::All,
+            .old_layout = ImageLayout::Undefined,
+            .new_layout = info.initial_layout,
+            .image_id = image->id,
+        });
+        queue.end_command_list(cmd_list);
+        queue.submit(0, {});
     }
 
     return image->id;
@@ -1334,9 +1345,7 @@ MemoryRequirements Device::memory_requirements(this Device &self, ImageID image_
 ls::result<ImageViewID, VKResult> Device::create_image_view(this Device &self, const ImageViewInfo &info) {
     ZoneScoped;
 
-    LR_ASSERT(info.usage_flags != ImageUsage::None);
-
-    Image &image = self.image_at(info.image_id);
+    auto &image = self.image_at(info.image_id);
     VkImageViewCreateInfo create_info = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
         .pNext = nullptr,
@@ -1384,14 +1393,16 @@ ls::result<ImageViewID, VKResult> Device::create_image_view(this Device &self, c
         .type = DescriptorType::StorageImage,
         .image_info = &storage_descriptor_info,
     };
-    if (info.usage_flags & ImageUsage::Sampled) {
+    if (image.usage_flags & ImageUsage::Sampled) {
         descriptor_writes.push_back(sampled_write_set_info);
     }
-    if (info.usage_flags & ImageUsage::Storage) {
+    if (image.usage_flags & ImageUsage::Storage) {
         descriptor_writes.push_back(storage_write_set_info);
     }
 
-    self.update_descriptor_sets(descriptor_writes, {});
+    if (!descriptor_writes.empty()) {
+        self.update_descriptor_sets(descriptor_writes, {});
+    }
 
     if (!info.debug_name.empty()) {
         self.set_object_name(image_view->resource, info.debug_name);

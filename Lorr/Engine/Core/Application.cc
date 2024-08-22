@@ -24,48 +24,17 @@ bool Application::init(this Application &self, const ApplicationInfo &info) {
         return false;
     }
 
-    self.task_graph.init({ .device = &self.device });
-    self.swap_chain_image_id = self.task_graph.add_image({
-        .image_id = self.default_surface.images[0],
-        .image_view_id = self.default_surface.image_views[0],
-    });
-
-    /// IMGUI ///
-    ImGui::CreateContext();
-    auto &io = ImGui::GetIO();
-    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
-    io.IniFilename = nullptr;
-    ImGui::StyleColorsDark();
+    self.main_render_pipeline.init(&self.device);
 
     auto &imgui = ImGui::GetIO();
-
-    u8 *font_data = nullptr;  // imgui context frees this itself
-    i32 font_width, font_height;
-    imgui.Fonts->GetTexDataAsRGBA32(&font_data, &font_width, &font_height);
-
-    ImageID imgui_font_id = self.device.create_image({
-        .usage_flags = ImageUsage::Sampled | ImageUsage::TransferDst,
-        .format = Format::R8G8B8A8_UNORM,
-        .type = ImageType::View2D,
-        .extent = { static_cast<u32>(font_width), static_cast<u32>(font_height), 1u },
-        .debug_name = "ImGui Font Atlas",
-    });
-    self.device.set_image_data(imgui_font_id, font_data, ImageLayout::ColorReadOnly);
-
-    ImageViewID imgui_font_view_id = self.device.create_image_view({
-        .image_id = imgui_font_id,
-        .usage_flags = ImageUsage::Sampled | ImageUsage::TransferDst,
-        .debug_name = "ImGui Font Atlas View",
-    });
-    imgui.Fonts->SetTexID(&imgui_font_view_id);
-
-    self.imgui_font_image_id = self.task_graph.add_image({
-        .image_id = imgui_font_id,
-        .image_view_id = imgui_font_view_id,
-        .layout = ImageLayout::ColorReadOnly,
-        .access = PipelineAccess::FragmentShaderRead,
-    });
+    imgui.KeyMap[ImGuiKey_W] = LR_KEY_W;
+    imgui.KeyMap[ImGuiKey_A] = LR_KEY_A;
+    imgui.KeyMap[ImGuiKey_S] = LR_KEY_S;
+    imgui.KeyMap[ImGuiKey_D] = LR_KEY_D;
+    imgui.KeyMap[ImGuiKey_Enter] = LR_KEY_ENTER;
+    imgui.KeyMap[ImGuiKey_Backspace] = LR_KEY_BACKSPACE;
+    imgui.KeyMap[ImGuiKey_LeftArrow] = LR_KEY_LEFT;
+    imgui.KeyMap[ImGuiKey_RightArrow] = LR_KEY_RIGHT;
 
     if (!self.do_prepare()) {
         LR_LOG_FATAL("Failed to initialize application!");
@@ -85,52 +54,30 @@ void Application::push_event(this Application &self, ApplicationEvent event, con
 void Application::poll_events(this Application &self) {
     ZoneScoped;
 
-    thread_local bool move_cam = false;
     auto &imgui = ImGui::GetIO();
     while (self.event_manager.peek()) {
         ApplicationEventData e = {};
         switch (self.event_manager.dispatch(e)) {
             case ApplicationEvent::WindowResize: {
+                self.main_render_pipeline.on_resize(e.window_size);
                 break;
             }
             case ApplicationEvent::MousePosition: {
                 auto &pos = e.mouse_pos;
                 imgui.AddMousePosEvent(pos.x, pos.y);
-
-                thread_local glm::vec2 last_pos = { 1280.0f / 2, 720.0f / 2 };
-                auto delta = pos - last_pos;
-                if (move_cam) {
-                    self.camera.yaw += delta.x / 5.0f;
-                    self.camera.pitch -= delta.y / 5.0f;
-                }
-                last_pos = pos;
                 break;
             }
             case ApplicationEvent::MouseState: {
-                if (!imgui.WantCaptureMouse)
-                    move_cam = !move_cam;
                 imgui.AddMouseButtonEvent(e.mouse_key, e.mouse_key_state == KeyState::Down);
                 break;
             }
             case ApplicationEvent::MouseScroll: {
                 auto &offset = e.mouse_scroll_offset;
                 imgui.AddMouseWheelEvent(offset.x, offset.y);
-                self.camera.pitch += offset.x;
                 break;
             }
             case ApplicationEvent::KeyboardState: {
-                Key k = e.key;
-                bool d = e.key_state != KeyState::Up;
-                static f32 v = 100.0f;
-
-                // clang-format off
-                if (k == LR_KEY_W) self.camera.velocity.z = d ?  v : 0.0f;
-                if (k == LR_KEY_S) self.camera.velocity.z = d ? -v : 0.0f;
-                if (k == LR_KEY_D) self.camera.velocity.x = d ?  v : 0.0f;
-                if (k == LR_KEY_A) self.camera.velocity.x = d ? -v : 0.0f;
-                if (k == LR_KEY_E) self.camera.velocity.y = d ?  v : 0.0f;
-                if (k == LR_KEY_Q) self.camera.velocity.y = d ? -v : 0.0f;
-                // clang-format on
+                imgui.AddKeyEvent(static_cast<ImGuiKey>(e.key), e.key_state == KeyState::Down);
                 break;
             }
             case ApplicationEvent::InputChar: {
@@ -156,9 +103,7 @@ void Application::run(this Application &self) {
     auto &image_views = self.default_surface.image_views;
 
     // Renderer context
-    auto &frame_sema = self.device.frame_sema;
     auto &imgui = ImGui::GetIO();
-    auto &present_queue = self.device.queue_at(CommandType::Graphics);
 
     while (!window.should_close()) {
         if (!self.default_surface.swap_chain_ok) {
@@ -172,55 +117,31 @@ void Application::run(this Application &self) {
         imgui.DeltaTime = delta_time;
         last_time = cur_time;
 
-        // Begin frame
-        usize sema_index = self.device.new_frame();
-        auto [acquire_sema, present_sema] = swap_chain.binary_semas(sema_index);
-        auto [frame_index, acq_result] = self.device.acquire_next_image(swap_chain, acquire_sema);
-        if (acq_result != VKResult::Success) {
-            self.default_surface.swap_chain_ok = false;
-            continue;
-        }
-
-        // Reset frame resources
-        self.device.staging_buffer_at(frame_index).reset();
-        for (CommandQueue &cmd_queue : self.device.queues) {
-            CommandAllocator &cmd_allocator = cmd_queue.command_allocator(frame_index);
-            self.device.reset_command_allocator(cmd_allocator);
-        }
-
-        ImageID image_id = images[frame_index];
-        ImageViewID image_view_id = image_views[frame_index];
-        self.task_graph.set_image(self.swap_chain_image_id, { .image_id = image_id, .image_view_id = image_view_id });
-
         // Update application
-        ImGui::NewFrame();
+        self.ecs.progress();
         auto &extent = self.default_surface.swap_chain.extent;
         imgui.DisplaySize = ImVec2(static_cast<f32>(extent.width), static_cast<f32>(extent.height));
 
-        self.camera.update(delta_time);
+        // NOTE: Make sure to do all imgui settings BEFORE NewFrame!!!
+        ImGui::NewFrame();
         self.do_update(delta_time);
-
         ImGui::Render();
 
         // Render frame
-        SemaphoreSubmitInfo wait_semas[] = {
-            { acquire_sema, 0, PipelineStage::TopOfPipe },
-        };
-        SemaphoreSubmitInfo signal_semas[] = {
-            { present_sema, 0, PipelineStage::BottomOfPipe },
-            { frame_sema, frame_sema.counter + 1, PipelineStage::AllCommands },
-        };
-        self.task_graph.execute({ .frame_index = frame_index, .wait_semas = wait_semas, .signal_semas = signal_semas });
-
-        if (present_queue.present(swap_chain, present_sema, frame_index) == VKResult::OutOfDate) {
-            self.default_surface.swap_chain_ok = false;
-        }
+        self.main_render_pipeline.render_into(swap_chain, images, image_views);
 
         self.device.end_frame();
         window.poll();
         self.poll_events();
 
         FrameMark;
+    }
+}
+
+void Application::set_active_scene(this Application &self, SceneID scene_id) {
+    usize scene_idx = static_cast<usize>(scene_id);
+    if (scene_id != SceneID::Invalid && scene_idx < self.scenes.size()) {
+        self.active_scene = scene_id;
     }
 }
 
@@ -257,7 +178,6 @@ VKResult Application::create_surface(this Application &self, ApplicationSurface 
         // ImageView
         ImageViewInfo image_view_info = {
             .image_id = surface.images[i],
-            .usage_flags = ImageUsage::TransferDst,
             .debug_name = stack.format("SwapChain ImageView {}", i),
         };
         auto [image_view_id, image_view_result] = self.device.create_image_view(image_view_info);

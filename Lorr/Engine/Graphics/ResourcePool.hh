@@ -9,9 +9,7 @@ template<typename ResourceT, typename ResourceID>
 struct allocation_result {
     allocation_result(ResourceT &res, ResourceID res_id)
         : resource(res),
-          id(res_id)
-    {
-    }
+          id(res_id) {}
 
     ResourceT &resource;
     ResourceID id;
@@ -37,8 +35,7 @@ struct PagedResourcePool {
     std::array<std::unique_ptr<Page>, PAGE_COUNT> pages = {};
 
     template<typename... Args>
-    std::optional<allocation_result<ResourceT, ResourceID>> create(this auto &self, Args &&...args)
-    {
+    std::optional<allocation_result<ResourceT, ResourceID>> create(this auto &self, Args &&...args) {
         ZoneScoped;
 
         index_type index = static_cast<index_type>(~0);
@@ -47,8 +44,7 @@ struct PagedResourcePool {
             if (index >= MAX_RESOURCE_COUNT) {
                 return std::nullopt;
             }
-        }
-        else {
+        } else {
             index = self.free_indexes.back();
             self.free_indexes.pop_back();
         }
@@ -70,8 +66,7 @@ struct PagedResourcePool {
         return allocation_result(resource, static_cast<ResourceID>(index));
     }
 
-    void destroy(this auto &self, ResourceID id)
-    {
+    void destroy(this auto &self, ResourceID id) {
         ZoneScoped;
 
         index_type index = static_cast<index_type>(id);
@@ -82,8 +77,7 @@ struct PagedResourcePool {
         self.free_indexes.push_back(index);
     }
 
-    ResourceT &get(this auto &self, ResourceID id)
-    {
+    ResourceT &get(this auto &self, ResourceID id) {
         ZoneScoped;
 
         index_type index = static_cast<index_type>(id);
@@ -93,8 +87,7 @@ struct PagedResourcePool {
         return self.pages[page_id]->at(page_offset);
     }
 
-    void reset(this auto &self)
-    {
+    void reset(this auto &self) {
         ZoneScoped;
 
         self.latest_index = 0;

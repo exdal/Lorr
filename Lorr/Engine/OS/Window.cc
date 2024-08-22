@@ -58,7 +58,6 @@ bool Window::init(this Window &self, const WindowInfo &info) {
     /// Initialize callbacks
     glfwSetWindowUserPointer(self.handle, &self);
 
-    Application::get().push_event(ApplicationEvent::WindowResize, {});
     glfwSetFramebufferSizeCallback(self.handle, [](GLFWwindow *window, i32 width, i32 height) {
         Window *self = reinterpret_cast<Window *>(glfwGetWindowUserPointer(window));
         self->width = width;

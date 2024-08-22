@@ -1,5 +1,6 @@
 #pragma once
 
+#include <limits>
 #include <optional>
 
 namespace ls {
@@ -107,7 +108,7 @@ public:
 
     template<typename U>
     [[nodiscard]] constexpr T value_or(this auto &&self, U &&default_value) {
-        return self.has_value() ? *self : static_cast<T>(std::forward<U>(default_value));
+        return self.has_value() ? self._value : static_cast<T>(std::forward<U>(default_value));
     }
 
     void swap(option_flag<T> &other) noexcept(std::is_nothrow_move_constructible_v<T> && std::is_nothrow_swappable_v<T>) {

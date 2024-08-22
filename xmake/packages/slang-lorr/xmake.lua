@@ -11,6 +11,7 @@ package("slang-lorr")
     add_versions("v2024.1.17", "62b7219e715bd4c0f984bcd98c9767fb6422c78f")
 
     add_patches("v2024.9.1",  path.join(os.scriptdir(), "patches", "2024.9.1",  "clang.patch"), "2b3267cc8235ee0668444577c75e03cdb1325c619922bf925bf17867a4d366a1")
+    add_patches("v2024.9.1",  path.join(os.scriptdir(), "patches", "2024.9.1",  "warnings.patch"), "fc1935d8559e337c088406e5fcc6ca62b94df30c98293337fdc662f403760106")
     add_patches("v2024.1.22", path.join(os.scriptdir(), "patches", "2024.1.22", "clang.patch"), "0e651f450e94b5517099d3489f69acb75970a4256fe1bb763205ef544530ef4d")
     add_patches("v2024.1.22", path.join(os.scriptdir(), "patches", "2024.1.22", "warnings.patch"), "0f77493869660b8d34ccaeeec4ca358804423303b72e5cb430b73d0a888d3fff")
 

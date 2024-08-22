@@ -55,7 +55,7 @@ struct SlangVirtualFS : ISlangFileSystem {
 
         // /resources/shaders/xx.slang -> shader://xx
         auto module_name = fs::relative(path, m_root_dir).replace_extension("").string();
-        std::replace(module_name.begin(), module_name.end(), fs::path::preferred_separator, '.');
+        std::replace(module_name.begin(), module_name.end(), static_cast<c8>(fs::path::preferred_separator), '.');
 
         auto it = m_virtual_env.files.find(module_name);
         if (it == m_virtual_env.files.end()) {
@@ -66,7 +66,8 @@ struct SlangVirtualFS : ISlangFileSystem {
                 LR_LOG_TRACE("New shader module '{}' is loaded.", module_name);
                 return SLANG_OK;
             } else {
-                LR_LOG_ERROR("Failed to load shader '{}'!", path.c_str());
+                auto path_str = path.string();
+                LR_LOG_ERROR("Failed to load shader '{}'!", path_str);
                 return SLANG_E_NOT_FOUND;
             }
         } else {
@@ -460,18 +461,19 @@ ls::option<ShaderID> AssetManager::load_shader(this AssetManager &self, Identifi
     i32 main_shader_id = compile_request->addTranslationUnit(SLANG_SOURCE_LANGUAGE_SLANG, nullptr);
 
     auto full_path = root_path / info.path;
+    auto full_path_str = full_path.string();
     if (info.source.has_value()) {
         const char *source_data = info.source->data();
-        compile_request->addTranslationUnitSourceStringSpan(main_shader_id, full_path.c_str(), source_data, source_data + info.source->length());
+        compile_request->addTranslationUnitSourceStringSpan(main_shader_id, full_path_str.c_str(), source_data, source_data + info.source->length());
     } else {
         File file(full_path, FileAccess::Read);
         if (!file) {
-            LR_LOG_ERROR("Failed to read shader file '{}'! {}", full_path.c_str(), static_cast<usize>(file.result));
+            LR_LOG_ERROR("Failed to read shader file '{}'! {}", full_path_str.c_str(), static_cast<usize>(file.result));
             return ls::nullopt;
         }
         auto file_data = file.whole_data();
         const char *source_data = ls::bit_cast<const char *>(file_data.get());
-        compile_request->addTranslationUnitSourceStringSpan(main_shader_id, full_path.c_str(), source_data, source_data + file.size);
+        compile_request->addTranslationUnitSourceStringSpan(main_shader_id, full_path_str.c_str(), source_data, source_data + file.size);
     }
 
     const SlangResult compile_result = compile_request->compile();

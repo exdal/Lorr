@@ -5,8 +5,6 @@
 #include "Camera.hh"
 #include "RenderPipelineTasks.hh"
 
-#include <random>
-
 namespace lr {
 bool RenderPipeline::init(this RenderPipeline &self, Device *device) {
     ZoneScoped;
@@ -44,9 +42,9 @@ bool RenderPipeline::setup_imgui(this RenderPipeline &) {
     imgui.BackendFlags = ImGuiBackendFlags_RendererHasVtxOffset;
     ImGui::StyleColorsDark();
 
-    auto roboto_path = fs::current_path() / "resources/fonts/Roboto-Regular.ttf";
-    auto fa_regular_400_path = fs::current_path() / "resources/fonts/fa-regular-400.ttf";
-    auto fa_solid_900_path = fs::current_path() / "resources/fonts/fa-solid-900.ttf";
+    std::string roboto_path = (fs::current_path() / "resources/fonts/Roboto-Regular.ttf").string();
+    std::string fa_regular_400_path = (fs::current_path() / "resources/fonts/fa-regular-400.ttf").string();
+    std::string fa_solid_900_path = (fs::current_path() / "resources/fonts/fa-solid-900.ttf").string();
 
     ImWchar icons_ranges[] = { 0xf000, 0xf8ff, 0 };
     ImFontConfig font_config;
@@ -397,7 +395,7 @@ bool RenderPipeline::prepare(this RenderPipeline &self, usize frame_index) {
     // Upload stuff to its buffers
     auto &cpu_buffer_id = self.cpu_upload_buffers[frame_index];
     update_buffer(cpu_buffer_id, "Temp World Buffer", upload_size, BufferUsage::TransferSrc, true);
-    auto cpu_buffer_data = device.buffer_host_data(cpu_buffer_id);
+    auto cpu_buffer_data = device.buffer_host_data<u8>(cpu_buffer_id);
     auto cpu_buffer_offset = 0_sz;
 
     // Camera

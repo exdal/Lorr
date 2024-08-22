@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <memory>
 
 namespace ls {
 template<typename T, size_t Capacity>

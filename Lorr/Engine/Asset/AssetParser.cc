@@ -85,7 +85,7 @@ std::unique_ptr<ModelAssetData> parse_model_gltf(u8 *data, usize data_size) {
     // Buffers
     ///////////////////////////////////////////////
 
-    std::vector<ls::span<const u8>> buffers = {};
+    std::vector<ls::span<u8>> buffers = {};
 
     LR_LOG_TRACE("Parsing GLTF buffers...");
 
@@ -96,11 +96,11 @@ std::unique_ptr<ModelAssetData> parse_model_gltf(u8 *data, usize data_size) {
                 [](const auto &) {},
                 [&](const fastgltf::sources::ByteView &view) {
                     // Embedded byte
-                    buffers.emplace_back(ls::bit_cast<const u8 *>(view.bytes.data()), view.bytes.size_bytes());
+                    buffers.emplace_back(ls::bit_cast<u8 *>(view.bytes.data()), view.bytes.size_bytes());
                 },
                 [&](const fastgltf::sources::Array &arr) {
                     // Embedded array
-                    buffers.emplace_back(ls::bit_cast<const u8 *>(arr.bytes.data()), arr.bytes.size_bytes());
+                    buffers.emplace_back(ls::bit_cast<u8 *>(arr.bytes.data()), arr.bytes.size_bytes());
                 },
             },
             v.data);

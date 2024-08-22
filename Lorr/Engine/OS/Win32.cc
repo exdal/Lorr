@@ -30,7 +30,7 @@ enum : DWORD {
 };
 static HANDLE INVALID_HANDLE_VALUE = nullptr;
 
-HANDLE CreateFileA(const void *, DWORD, DWORD, void *, DWORD, DWORD, void *);
+HANDLE CreateFileW(const void *, DWORD, DWORD, void *, DWORD, DWORD, void *);
 void GetFileSizeEx(HANDLE, LARGE_INTEGER *);
 u32 WriteFile(HANDLE, const void *, DWORD, void *, OVERLAPPED *);
 bool ReadFile(HANDLE, void *, DWORD, void *, OVERLAPPED *);
@@ -56,7 +56,7 @@ File::File(const fs::path &path, FileAccess access) {
         share_flags |= FILE_SHARE_WRITE;
     }
 
-    HANDLE file_handle = CreateFileA(path.c_str(), flags, share_flags, nullptr, creation_flags, FILE_ATTRIBUTE_NORMAL, nullptr);
+    HANDLE file_handle = CreateFileW(path.c_str(), flags, share_flags, nullptr, creation_flags, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (file_handle == INVALID_HANDLE_VALUE) {
         this->result = FileResult::NoAccess;
         return;

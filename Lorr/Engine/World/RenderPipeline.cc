@@ -214,53 +214,6 @@ bool RenderPipeline::setup_resources(this RenderPipeline &self) {
         self.cpu_upload_buffers.push_back(BufferID::Invalid);
     }
 
-    u32 sample_count = 4096;
-    BufferID concentric_sample_buffer_cpu = self.device->create_buffer(BufferInfo{
-        .usage_flags = BufferUsage::TransferSrc,
-        .flags = MemoryFlag::HostSeqWrite,
-        .preference = MemoryPreference::Host,
-        .data_size = sizeof(glm::vec2) * sample_count,
-        .debug_name = "Concentric Sample Buffer CPU",
-    });
-    transfer_queue.defer(concentric_sample_buffer_cpu);
-
-    std::random_device random_device;
-    std::mt19937 dist_gen(random_device());
-    std::uniform_real_distribution<f32> f32_dist(0.0, 1.0);
-
-    auto points = self.device->buffer_host_data<glm::vec2>(concentric_sample_buffer_cpu);
-    for (u32 i = 0; i < sample_count; i++) {
-        f32 r1 = f32_dist(dist_gen);
-        f32 r2 = f32_dist(dist_gen);
-
-        if (r1 == 0.0f && r2 == 0.0f) {
-            continue;
-        }
-
-        f32 radius = 1.0f;
-        f32 phi = 0.0f;
-        f32 a = (2.0f * r1) - 1.0f;
-        f32 b = (2.0f * r2) - 1.0f;
-        if ((a * a) > (b * b)) {
-            radius *= a;
-            phi = (glm::pi<f32>() / 4.0f) * (b / a);
-        } else {
-            radius *= b;
-            phi = (glm::pi<f32>() / 2.0f) - ((glm::pi<f32>() / 4.0f) * (a / b));
-        }
-
-        points[i] = glm::vec2(glm::cos(phi), glm::sin(phi)) * radius;
-    }
-
-    self.concentric_sample_buffer = self.device->create_buffer(BufferInfo{
-        .usage_flags = BufferUsage::TransferDst,
-        .preference = MemoryPreference::Device,
-        .data_size = sizeof(glm::vec2) * sample_count,
-        .debug_name = "Concentric Sample Buffer",
-    });
-    BufferCopyRegion concentric_sample_copy = { .size = sizeof(glm::vec2) * sample_count };
-    cmd_list.copy_buffer_to_buffer(concentric_sample_buffer_cpu, self.concentric_sample_buffer, concentric_sample_copy);
-
     transfer_queue.end_command_list(cmd_list);
     transfer_queue.submit(0, QueueSubmitInfo{ .self_wait = true });
 
@@ -356,7 +309,6 @@ bool RenderPipeline::setup_persistent_images(this RenderPipeline &self) {
     {
         struct PushConstants {
             u64 world_ptr = 0;
-            BufferID sample_buffer_id = {};
             ImageViewID transmittance_image_id = {};
             SamplerID transmittance_sampler_id = {};
             glm::vec2 target_image_size = {};
@@ -374,7 +326,6 @@ bool RenderPipeline::setup_persistent_images(this RenderPipeline &self) {
         auto &transmittance_task_image_info = self.task_graph.task_image_at(self.atmos_transmittance_image);
 
         c.world_ptr = world_data_device_address;
-        c.sample_buffer_id = self.concentric_sample_buffer;
         c.transmittance_image_id = transmittance_task_image_info.image_view_id;
         c.transmittance_sampler_id = sky_sampler_id;
         c.target_image_size = { image_info.extent.width, image_info.extent.height };

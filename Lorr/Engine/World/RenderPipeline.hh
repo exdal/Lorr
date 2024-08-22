@@ -56,7 +56,6 @@ struct RenderPipeline {
     ls::static_vector<BufferID, Limits::FrameCount> cpu_upload_buffers = {};
     ls::static_vector<BufferID, Limits::FrameCount> world_camera_buffers = {};
     ls::static_vector<BufferID, Limits::FrameCount> world_data_buffers = {};
-    BufferID concentric_sample_buffer = {};
     GPUWorldData world_data = {};
 
     // Backbuffer

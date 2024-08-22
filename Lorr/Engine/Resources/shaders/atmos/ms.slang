@@ -3,7 +3,6 @@ import "common";
 
 [[vk::push_constant]] struct {
     lr::World *world;
-    BufferID sample_buffer_id;
     ImageViewID transmittance_image_id;
     SamplerID transmittance_sampler_id;
     float2 image_size;

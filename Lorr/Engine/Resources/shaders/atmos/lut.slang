@@ -30,7 +30,7 @@ float4 fs_main(VertexOutput input) : SV_TARGET
     float3 eye_pos = float3(0.0, atmos.planet_radius + c.world->cameras[0].position.y + 2.0, 0.0); // ALWAYS HAVE + 1 ON EYE POS!!!
     const float3 sun_dir = c.world->sun.direction;
     const float sun_intensity = 10.0;
-    const float step_count = 48.0;
+    const float step_count = 30.0;
 
     float u = input.tex_coord.x;
     float v = input.tex_coord.y;

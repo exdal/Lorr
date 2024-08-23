@@ -11,8 +11,11 @@ struct Scene {
     ls::option<flecs::entity> active_camera = ls::nullopt;
 
     Scene(std::string name_, flecs::world &world_);
+    Scene(const fs::path &path_, flecs::world &world_);
     virtual ~Scene() = default;
 
+    void export_to(this Scene &, const fs::path &path);
+    void setup_systems(this Scene &);
     flecs::entity create_entity(this Scene &, std::string_view name);
 
     void set_active_camera(this Scene &, flecs::entity camera_entity);

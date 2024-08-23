@@ -71,6 +71,7 @@ struct RenderPipeline {
     TaskImageID atmos_multiscatter_lut_image = {};
 
     bool init(this RenderPipeline &, Device *device);
+    void shutdown(this RenderPipeline &);
 
     // Initialization passes
     bool setup_imgui(this RenderPipeline &);

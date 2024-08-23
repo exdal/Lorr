@@ -84,12 +84,12 @@ void EditorLayout::setup_theme(this EditorLayout &, EditorTheme) {
 void EditorLayout::setup_dockspace(this EditorLayout &self) {
     ZoneScoped;
 
-    auto [asset_browser_panel_id, asset_browser_panel] = self.add_panel<AssetBrowserPanel>("\uf87c Asset Browser");
-    auto [console_panel_id, console_panel] = self.add_panel<ConsolePanel>("\uf05a  Console");
-    auto [inspector_panel_id, inspector_panel] = self.add_panel<InspectorPanel>("\uf0ad  Inspector");
-    auto [scene_browser_panel_id, scene_browser_panel] = self.add_panel<SceneBrowserPanel>("\uf0c9  Scene Browser");
+    auto [asset_browser_panel_id, asset_browser_panel] = self.add_panel<AssetBrowserPanel>(LRED_ICON_ASSETS "  Asset Browser");
+    auto [console_panel_id, console_panel] = self.add_panel<ConsolePanel>(LRED_ICON_INFO "  Console");
+    auto [inspector_panel_id, inspector_panel] = self.add_panel<InspectorPanel>(LRED_ICON_WRENCH "  Inspector");
+    auto [scene_browser_panel_id, scene_browser_panel] = self.add_panel<SceneBrowserPanel>(LRED_ICON_SANDWICH "  Scene Browser");
     auto [tools_panel_id, tools_panel] = self.add_panel<ToolsPanel>("Tools");
-    auto [viewport_panel_id, viewport_panel] = self.add_panel<ViewportPanel>("\uf06e  Viewport");
+    auto [viewport_panel_id, viewport_panel] = self.add_panel<ViewportPanel>(LRED_ICON_EYE "  Viewport");
 
     ImGuiViewport *viewport = ImGui::GetMainViewport();
     i32 dock_node_flags = ImGuiDockNodeFlags_PassthruCentralNode;
@@ -158,7 +158,7 @@ void EditorLayout::update(this EditorLayout &self) {
     if (ImGui::BeginMenuBar()) {
         if (ImGui::BeginMenu("File")) {
             if (ImGui::MenuItem("Exit")) {
-                // ok
+                app.shutdown(false);
             }
 
             ImGui::EndMenu();

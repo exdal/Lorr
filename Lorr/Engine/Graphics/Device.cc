@@ -306,12 +306,13 @@ VKResult Device::init(this Device &self, const DeviceInfo &info) {
     {
         self.bda_array_buffer = self.create_buffer({
             .usage_flags = BufferUsage::Storage,
-            .flags = MemoryFlag::HostSeqWrite | MemoryFlag::Dedicated,
+            .flags = MemoryFlag::HostSeqWrite,
             .preference = MemoryPreference::Device,
             .data_size = self.resources.buffers.max_resources() * sizeof(u64),
+            .debug_name = "BDA Buffer",
         });
         Buffer &bda_array_buffer = self.buffer_at(self.bda_array_buffer);
-        vmaMapMemory(self.allocator, bda_array_buffer.allocation, reinterpret_cast<void **>(&self.bda_array_host_addr));
+        self.bda_array_host_addr = reinterpret_cast<u64 *>(bda_array_buffer.host_data);
 
         BufferDescriptorInfo buffer_descriptor_info = { .buffer = bda_array_buffer, .offset = 0, .range = VK_WHOLE_SIZE };
         WriteDescriptorSet write_info = {
@@ -326,6 +327,39 @@ VKResult Device::init(this Device &self, const DeviceInfo &info) {
     }
 
     return VKResult::Success;
+}
+
+void Device::shutdown(this Device &self, bool) {
+    ZoneScoped;
+
+    self.end_frame();
+    for (auto &v : self.queues) {
+        for (auto &allocator : v.allocators) {
+            vkDestroyCommandPool(self.handle, allocator, nullptr);
+        }
+    }
+
+    for (auto &v : self.staging_buffers) {
+        for (auto &b : v.blocks) {
+            self.delete_buffers(b.buffer_id);
+        }
+    }
+
+    self.delete_semaphores(self.frame_sema);
+    self.delete_descriptor_set_layouts(self.descriptor_set_layout);
+    self.delete_descriptor_sets(self.descriptor_set);
+    self.delete_descriptor_pools(self.descriptor_pool);
+    self.delete_buffers(self.bda_array_buffer);
+
+    for (auto &v : self.resources.cached_samplers) {
+        self.delete_samplers(v.second);
+    }
+
+    for (auto &v : self.resources.cached_pipelines) {
+        self.delete_pipelines(v.second);
+    }
+
+    // TODO: Print results for self.resources.*
 }
 
 VKResult Device::create_timestamp_query_pools(this Device &self, ls::span<TimestampQueryPool> query_pools, const TimestampQueryPoolInfo &info) {
@@ -1189,6 +1223,9 @@ ls::result<BufferID, VKResult> Device::create_buffer(this Device &self, const Bu
         LR_LOG_ERROR("Failed to create Buffer! {}", result);
         return result;
     }
+#if LR_DEBUG
+    vmaSetAllocationName(self.allocator, allocation, info.debug_name.data());
+#endif
 
     VkBufferDeviceAddressInfo device_address_info = {
         .sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,

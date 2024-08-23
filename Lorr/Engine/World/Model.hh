@@ -1,6 +1,5 @@
 #pragma once
 
-#include "Engine/Asset/Texture.hh"
 #include "Engine/Graphics/zfwd.hh"
 
 namespace lr {
@@ -10,6 +9,12 @@ struct Vertex {
     glm::vec3 normal = {};
     f32 uv_y = 0.0f;
     u32 color = 0;
+};
+
+struct Texture {
+    ImageID image_id = ImageID::Invalid;
+    ImageViewID image_view_id = ImageViewID::Invalid;
+    SamplerID sampler_id = SamplerID::Invalid;
 };
 
 enum class AlphaMode : u32 {
@@ -27,7 +32,6 @@ struct Material {
     AlphaMode alpha_mode = AlphaMode::Opaque;
     f32 alpha_cutoff = 0.0f;
 
-    ls::option<SamplerID> sampler_id;
     ls::option<usize> albedo_texture_index;
     ls::option<usize> normal_texture_index;
     ls::option<usize> emissive_texture_index;

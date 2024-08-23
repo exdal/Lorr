@@ -30,6 +30,27 @@ bool RenderPipeline::init(this RenderPipeline &self, Device *device) {
     return true;
 }
 
+void RenderPipeline::shutdown(this RenderPipeline &self) {
+    ZoneScoped;
+
+    self.device->delete_buffers(self.persistent_vertex_buffer);
+    self.device->delete_buffers(self.persistent_index_buffer);
+    self.device->delete_buffers(self.dynamic_vertex_buffers);
+    self.device->delete_buffers(self.dynamic_index_buffers);
+    self.device->delete_buffers(self.cpu_upload_buffers);
+    self.device->delete_buffers(self.world_camera_buffers);
+    self.device->delete_buffers(self.world_data_buffers);
+
+    for (auto &v : self.task_graph.buffers) {
+        self.device->delete_buffers(v.buffer_id);
+    }
+
+    for (auto &v : self.task_graph.images) {
+        self.device->delete_image_views(v.image_view_id);
+        self.device->delete_images(v.image_id);
+    }
+}
+
 bool RenderPipeline::setup_imgui(this RenderPipeline &) {
     ZoneScoped;
 

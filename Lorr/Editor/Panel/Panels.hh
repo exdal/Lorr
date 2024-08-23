@@ -45,6 +45,8 @@ struct ViewportPanel : PanelI {
 };
 
 struct InspectorPanel : PanelI {
+    glm::vec2 sun_dir = {};
+
     InspectorPanel(std::string_view name_, bool open_ = true);
 
     void update(this InspectorPanel &);

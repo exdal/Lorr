@@ -118,11 +118,15 @@ void Application::run(this Application &self) {
         last_time = cur_time;
 
         // Update application
-        self.ecs.progress();
+        if (!self.ecs.progress()) {
+            LR_LOG_WARN("ECS stopped processing!");
+            break;
+        }
+
         auto &extent = self.default_surface.swap_chain.extent;
         imgui.DisplaySize = ImVec2(static_cast<f32>(extent.width), static_cast<f32>(extent.height));
 
-        // NOTE: Make sure to do all imgui settings BEFORE NewFrame!!!
+        // WARN: Make sure to do all imgui settings BEFORE NewFrame!!!
         ImGui::NewFrame();
         self.do_update(delta_time);
         ImGui::Render();
@@ -136,6 +140,35 @@ void Application::run(this Application &self) {
 
         FrameMark;
     }
+
+    self.shutdown(true);
+}
+
+void Application::shutdown(this Application &self, bool hard) {
+    ZoneScoped;
+
+    if (!hard) {
+        LR_LOG_INFO("Soft shutdown requested.");
+        self.ecs.quit();
+        return;
+    }
+
+    LR_LOG_WARN("Shutting down application...");
+    self.device.wait_for_work();
+#ifdef LR_DEBUG
+    self.asset_man.shutdown(true);
+#else
+    self.asset_man.shutdown(false);
+#endif
+    self.device.delete_swap_chains(self.default_surface.swap_chain);
+    self.main_render_pipeline.shutdown();
+#ifdef LR_DEBUG
+    self.device.shutdown(LR_DEBUG);
+#else
+    self.device.shutdown(false);
+#endif
+
+    LR_LOG_INFO("Complete!");
 }
 
 void Application::set_active_scene(this Application &self, SceneID scene_id) {

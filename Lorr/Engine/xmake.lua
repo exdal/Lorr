@@ -55,6 +55,7 @@ target("Lorr")
         "plf_colony",
         "loguru",
         "simdutf",
+        "simdjson",
         "unordered_dense",
         "lz4",
         "zstd",

@@ -61,6 +61,7 @@ struct Device {
     vkb::Device handle = {};
 
     VKResult init(this Device &, const DeviceInfo &info);
+    void shutdown(this Device &, bool print_reports);
 
     /// Commands ///
     VKResult create_timestamp_query_pools(this Device &, ls::span<TimestampQueryPool> query_pools, const TimestampQueryPoolInfo &info);

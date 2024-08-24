@@ -12,6 +12,7 @@ InspectorPanel::InspectorPanel(std::string_view name_, bool open_)
 
 void InspectorPanel::update(this InspectorPanel &self) {
     auto &app = EditorApp::get();
+    auto active_tool = app.layout.active_tool;
 
     ImGui::Begin(self.name.data());
     auto query = app.ecs.query<EditorSelectedComp>();
@@ -28,16 +29,21 @@ void InspectorPanel::update(this InspectorPanel &self) {
         }
     });
 
-    // Temp, remove it later
-    static glm::vec2 sun_rotation = {};
-    bool updateRot = false;
-    updateRot |= ImGui::SliderFloat("Sun Rotation X", &sun_rotation.x, 0, 360);
-    updateRot |= ImGui::SliderFloat("Sun Rotation Y", &sun_rotation.y, -20, 90);
+    switch (active_tool) {
+        case ActiveTool::Cursor:
+            break;
+        case ActiveTool::Atmosphere: {
+            ImGui::SeparatorText(LRED_ICON_SUN "  Atmosphere");
+            bool update_rotation = false;
+            update_rotation |= ImGui::SliderFloat2("Sun Rotation", &self.sun_dir.x, 0, 360);
 
-    if (updateRot) {
-        auto rad = glm::radians(sun_rotation);
-        glm::vec3 direction = { glm::cos(rad.x) * glm::cos(rad.y), glm::sin(rad.y), glm::sin(rad.x) * glm::cos(rad.y) };
-        app.main_render_pipeline.world_data.sun.direction = glm::normalize(direction);
+            if (update_rotation) {
+                auto rad = glm::radians(self.sun_dir);
+                glm::vec3 direction = { glm::cos(rad.x) * glm::cos(rad.y), glm::sin(rad.y), glm::sin(rad.x) * glm::cos(rad.y) };
+                app.main_render_pipeline.world_data.sun.direction = glm::normalize(direction);
+            }
+            break;
+        }
     }
 
     ImGui::End();

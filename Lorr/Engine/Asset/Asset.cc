@@ -187,6 +187,40 @@ bool AssetManager::init(this AssetManager &self, Device *device) {
     return true;
 }
 
+void AssetManager::shutdown(this AssetManager &self, bool print_reports) {
+    ZoneScoped;
+
+    self.device->delete_buffers(self.material_buffer_id);
+
+    if (print_reports) {
+        LR_LOG_INFO("{} alive textures.", self.textures.size());
+        LR_LOG_INFO("{} alive materials.", self.materials.size());
+        LR_LOG_INFO("{} alive models.", self.models.size());
+        LR_LOG_INFO("{} alive shaders.", self.shaders.size());
+    }
+
+    for (auto &v : self.textures) {
+        self.device->delete_images(v.image_id);
+        self.device->delete_image_views(v.image_view_id);
+        self.device->delete_samplers(v.sampler_id);
+    }
+
+    for (auto &v : self.models) {
+        if (v.vertex_buffer.has_value()) {
+            auto id = v.vertex_buffer.value();
+            self.device->delete_buffers(id);
+        }
+        if (v.index_buffer.has_value()) {
+            auto id = v.index_buffer.value();
+            self.device->delete_buffers(id);
+        }
+    }
+
+    for (auto &v : self.shaders) {
+        self.device->delete_shaders(v.second);
+    }
+}
+
 ls::option<ModelID> AssetManager::load_model(this AssetManager &self, const fs::path &path) {
     ZoneScoped;
 
@@ -301,6 +335,7 @@ ls::option<ModelID> AssetManager::load_model(this AssetManager &self, const fs::
             .flags = MemoryFlag::Dedicated,
             .preference = MemoryPreference::Device,
             .data_size = vertex_upload_size,
+            .debug_name = "Model Vertex Buffer",
         });
 
         auto cmd_list = queue.begin_command_list(0);
@@ -326,6 +361,7 @@ ls::option<ModelID> AssetManager::load_model(this AssetManager &self, const fs::
             .flags = MemoryFlag::Dedicated,
             .preference = MemoryPreference::Device,
             .data_size = index_upload_size,
+            .debug_name = "Model Index Buffer",
         });
 
         auto cmd_list = queue.begin_command_list(0);
@@ -355,6 +391,7 @@ ls::option<MaterialID> AssetManager::add_material(this AssetManager &self, const
         .flags = MemoryFlag::HostSeqWrite,
         .preference = MemoryPreference::Host,
         .data_size = sizeof(GPUMaterial),
+        .debug_name = "Temp GPU Material Buffer",
     });
     transfer_queue.defer(temp_buffer);
 

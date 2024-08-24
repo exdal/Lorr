@@ -48,6 +48,7 @@ struct Application {
 
     void poll_events(this Application &);
     void run(this Application &);
+    void shutdown(this Application &, bool hard);
 
     template<typename T>
     std::pair<SceneID, T *> add_scene(this Application &self, std::string_view scene_name) {
@@ -57,13 +58,12 @@ struct Application {
         self.scenes.push_back(std::move(scene));
         return { static_cast<SceneID>(scene_id), scene_ptr };
     }
-
     void set_active_scene(this Application &, SceneID scene_id);
-
     Scene &scene_at(this Application &self, SceneID scene_id) { return *self.scenes[static_cast<usize>(scene_id)]; }
 
     virtual bool do_prepare() = 0;
     virtual bool do_update(f32 delta_time) = 0;
+    virtual void do_shutdown() = 0;
 
 private:
     // TODO: Properly handle this when we need multiple windows/sc.

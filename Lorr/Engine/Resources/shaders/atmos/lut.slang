@@ -55,7 +55,7 @@ float4 fs_main(VertexOutput input) : SV_TARGET
         sin(altitude_angle),
         cosAltitude * sin(azimuth_angle)
     );
-    
+
     // Get Rayleigh + Mie phase
     float cosTheta = dot(rayDirection, sun_dir);
     float rayleighPhase = get_rayleigh_phase(-cosTheta);
@@ -71,8 +71,7 @@ float4 fs_main(VertexOutput input) : SV_TARGET
 
     float stepSize = max_dist / step_count;
     float t = 0.0;
-    for (float i = 0.0; i < step_count; i += 1.0)
-    {
+    for (float i = 0.0; i < step_count; i += 1.0) {
         float nextT = stepSize * i;
         float deltaT = nextT - t;
         t = nextT;

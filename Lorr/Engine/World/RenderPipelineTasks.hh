@@ -260,6 +260,7 @@ struct ImGuiTask {
                 .flags = MemoryFlag::Dedicated,
                 .preference = MemoryPreference::Device,
                 .data_size = ls::mib_to_bytes(32),
+                .debug_name = "ImGui Vertex Buffer",
             });
         }
 
@@ -269,6 +270,7 @@ struct ImGuiTask {
                 .flags = MemoryFlag::Dedicated,
                 .preference = MemoryPreference::Device,
                 .data_size = ls::mib_to_bytes(32),
+                .debug_name = "ImGui Index Buffer",
             });
         }
 

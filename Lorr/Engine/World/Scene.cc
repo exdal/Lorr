@@ -2,13 +2,27 @@
 
 #include "Camera.hh"
 
+#include <simdjson.h>
+
 namespace lr {
 Scene::Scene(std::string name_, flecs::world &world_)
     : name(std::move(name_)),
       ecs(world_) {
     this->handle = ecs.entity();
+}
 
-    ecs.system<PerspectiveCamera>().each([](flecs::iter &it, usize, PerspectiveCamera &cam) {  //
+Scene::Scene(const fs::path &path_, flecs::world &world_)
+    : ecs(world_) {
+}
+
+void Scene::export_to(this Scene &self, const fs::path &path) {
+    ZoneScoped;
+}
+
+void Scene::setup_systems(this Scene &self) {
+    ZoneScoped;
+
+    self.ecs.system<PerspectiveCamera>().each([](flecs::iter &it, usize, PerspectiveCamera &cam) {  //
         cam.update(it.delta_time());
     });
 }

@@ -61,6 +61,7 @@ struct AssetManager {
     ankerl::unordered_dense::map<Identifier, ShaderID> shaders = {};
 
     bool init(this AssetManager &, Device *device);
+    void shutdown(this AssetManager &, bool print_reports);
 
     ls::option<ModelID> load_model(this AssetManager &, const fs::path &path);
     ls::option<MaterialID> add_material(this AssetManager &, const Material &material);

@@ -2,7 +2,7 @@
 
 #include "EditorApp.hh"
 
-#include "Engine/World/Camera.hh"
+#include "Engine/World/Components.hh"
 
 namespace lr {
 ViewportPanel::ViewportPanel(std::string_view name_, bool open_)
@@ -12,7 +12,7 @@ ViewportPanel::ViewportPanel(std::string_view name_, bool open_)
 void ViewportPanel::update(this ViewportPanel &self) {
     auto &app = EditorApp::get();
     auto &scene = app.scene_at(app.active_scene.value());
-    auto camera = scene.active_camera->get_mut<PerspectiveCamera>();
+    auto camera = scene.active_camera->get_mut<Component::Camera>();
 
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0, 0.0));
     ImGui::Begin(self.name.data());

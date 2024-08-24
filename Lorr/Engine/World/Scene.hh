@@ -14,6 +14,7 @@ struct Scene {
     Scene(const fs::path &path_, flecs::world &world_);
     virtual ~Scene() = default;
 
+    bool import_from(this Scene &, const fs::path &path);
     void export_to(this Scene &, const fs::path &path);
     void setup_systems(this Scene &);
     flecs::entity create_entity(this Scene &, std::string_view name);

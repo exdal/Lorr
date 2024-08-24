@@ -44,6 +44,7 @@ struct Application {
     RenderPipeline main_render_pipeline = {};
 
     bool init(this Application &, const ApplicationInfo &info);
+    void setup_world(this Application &);
     void push_event(this Application &, ApplicationEvent event, const ApplicationEventData &data);
 
     void poll_events(this Application &);

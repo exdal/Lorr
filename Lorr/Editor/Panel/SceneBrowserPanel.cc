@@ -55,9 +55,9 @@ void SceneBrowserPanel::update(this SceneBrowserPanel &self) {
                 ImGui::TableSetColumnIndex(0);
 
                 ImGuiSelectableFlags selectable_flags = ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap;
-                if (ImGui::Selectable(e.name().c_str(), e.has<EditorSelectedComp>(), selectable_flags)) {
-                    app.ecs.each([](flecs::entity c, EditorSelectedComp) { c.remove<EditorSelectedComp>(); });
-                    e.add<EditorSelectedComp>();
+                if (ImGui::Selectable(e.name().c_str(), e.has<Component::EditorSelected>(), selectable_flags)) {
+                    app.ecs.each([](flecs::entity c, Component::EditorSelected) { c.remove<Component::EditorSelected>(); });
+                    e.add<Component::EditorSelected>();
                 }
             });
         }

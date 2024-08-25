@@ -55,13 +55,13 @@ target("Lorr")
         "plf_colony",
         "loguru",
         "simdutf",
-        "simdjson",
         "unordered_dense",
         "lz4",
         "zstd",
         "fastgltf",
         "stb",
         "flecs",
+        "reflect-cpp",
         { public = true })
 
 target_end()

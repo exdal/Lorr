@@ -2,7 +2,7 @@
 
 #include "Engine/Core/Application.hh"
 
-#include "Camera.hh"
+#include "Components.hh"
 #include "RenderPipelineTasks.hh"
 
 namespace lr {
@@ -395,7 +395,7 @@ bool RenderPipeline::prepare(this RenderPipeline &self, usize frame_index) {
     auto &transfer_queue = device.queue_at(CommandType::Transfer);
     auto cmd_list = transfer_queue.begin_command_list(frame_index);
 
-    auto cameras = ecs.query<PerspectiveCamera>();
+    auto cameras = ecs.query<Prefab::PerspectiveCamera, Component::Transform, Component::Camera>();
     auto new_camera_buffer_size = cameras.count() * sizeof(GPUCameraData);
     auto upload_size = new_camera_buffer_size + sizeof(GPUWorldData);
 
@@ -422,14 +422,13 @@ bool RenderPipeline::prepare(this RenderPipeline &self, usize frame_index) {
     // Camera
     auto camera_ptr = reinterpret_cast<GPUCameraData *>(cpu_buffer_data + cpu_buffer_offset);
     BufferCopyRegion camera_copy_region = { .src_offset = 0, .dst_offset = 0, .size = new_camera_buffer_size };
-    cameras.each([&](PerspectiveCamera &camera) {
-        auto view_matrix = camera.calc_view_matrix();
-        camera_ptr->projection_mat = camera.projection_matrix;
-        camera_ptr->view_mat = view_matrix;
-        camera_ptr->projection_view_mat = glm::transpose(camera.projection_matrix * view_matrix);
-        camera_ptr->inv_view_mat = glm::inverse(glm::transpose(view_matrix));
-        camera_ptr->inv_projection_view_mat = glm::inverse(glm::transpose(camera.projection_matrix)) * camera_ptr->inv_view_mat;
-        camera_ptr->position = camera.position;
+    cameras.each([&](Prefab::PerspectiveCamera, Component::Transform &t, Component::Camera &c) {
+        camera_ptr->projection_mat = c.projection;
+        camera_ptr->view_mat = t.matrix;
+        camera_ptr->projection_view_mat = glm::transpose(c.projection * t.matrix);
+        camera_ptr->inv_view_mat = glm::inverse(glm::transpose(t.matrix));
+        camera_ptr->inv_projection_view_mat = glm::inverse(glm::transpose(c.projection)) * camera_ptr->inv_view_mat;
+        camera_ptr->position = t.position;
 
         camera_ptr++;
         cpu_buffer_offset += sizeof(GPUCameraData);

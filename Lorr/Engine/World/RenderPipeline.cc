@@ -58,7 +58,7 @@ bool RenderPipeline::setup_imgui(this RenderPipeline &) {
     auto &imgui = ImGui::GetIO();
     imgui.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     imgui.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
-    imgui.IniFilename = nullptr;
+    imgui.IniFilename = "editor_layout.ini";
     imgui.DisplayFramebufferScale = { 1.0f, 1.0f };
     imgui.BackendFlags = ImGuiBackendFlags_RendererHasVtxOffset;
     ImGui::StyleColorsDark();
@@ -261,6 +261,7 @@ bool RenderPipeline::setup_passes(this RenderPipeline &self) {
             .attachment = self.final_image,
         },
     });
+
     self.task_graph.add_task<ImGuiTask>({
         .uses = {
             .attachment = self.swap_chain_image,

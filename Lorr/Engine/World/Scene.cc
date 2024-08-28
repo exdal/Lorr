@@ -26,10 +26,6 @@ void Scene::export_to(this Scene &self, const fs::path &path) {
     ZoneScoped;
 }
 
-void Scene::setup_systems(this Scene &self) {
-    ZoneScoped;
-}
-
 flecs::entity Scene::create_entity(this Scene &self, std::string_view name) {
     return self.ecs.entity(name.data()).child_of(self.handle);
 }

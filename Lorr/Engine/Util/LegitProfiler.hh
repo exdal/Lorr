@@ -59,8 +59,7 @@ struct ProfilerTask {
     double GetLength() { return endTime - startTime; }
 };
 
-inline glm::vec2 Vec2(ImVec2 vec)
-{
+inline glm::vec2 Vec2(ImVec2 vec) {
     return { vec.x, vec.y };
 }
 
@@ -71,8 +70,7 @@ public:
     bool useColoredLegendText = true;
     float maxFrameTime = 1000.0f;
 
-    ProfilerGraph(size_t framesCount)
-    {
+    ProfilerGraph(size_t framesCount) {
         frames.resize(framesCount);
         for (auto &frame : frames)
             frame.tasks.reserve(100);
@@ -81,8 +79,7 @@ public:
         useColoredLegendText = true;
     }
 
-    void LoadFrameData(const legit::ProfilerTask *tasks, size_t count)
-    {
+    void LoadFrameData(const legit::ProfilerTask *tasks, size_t count) {
         auto &currFrame = frames[currFrameIndex];
         currFrame.tasks.resize(0);
         for (size_t taskIndex = 0; taskIndex < count; taskIndex++) {
@@ -91,8 +88,7 @@ public:
             else {
                 if (tasks[taskIndex - 1].color != tasks[taskIndex].color || tasks[taskIndex - 1].name != tasks[taskIndex].name) {
                     currFrame.tasks.push_back(tasks[taskIndex]);
-                }
-                else {
+                } else {
                     currFrame.tasks.back().endTime = tasks[taskIndex].endTime;
                 }
             }
@@ -115,8 +111,7 @@ public:
         RebuildTaskStats(currFrameIndex, 300 /*frames.size()*/);
     }
 
-    void RenderTimings(int graphWidth, int legendWidth, int height, size_t frameIndexOffset)
-    {
+    void RenderTimings(int graphWidth, int legendWidth, int height, size_t frameIndexOffset) {
         ImDrawList *drawList = ImGui::GetWindowDrawList();
         const glm::vec2 widgetPos = Vec2(ImGui::GetCursorScreenPos());
         RenderGraph(drawList, widgetPos, glm::vec2(graphWidth, height), frameIndexOffset);
@@ -125,8 +120,7 @@ public:
     }
 
 private:
-    void RebuildTaskStats(size_t endFrame, size_t framesCount)
-    {
+    void RebuildTaskStats(size_t endFrame, size_t framesCount) {
         for (auto &taskStat : taskStats) {
             taskStat.maxTime = -1.0f;
             taskStat.priorityOrder = size_t(-1);
@@ -154,8 +148,7 @@ private:
         }
     }
 
-    void RenderGraph(ImDrawList *drawList, glm::vec2 graphPos, glm::vec2 graphSize, size_t frameIndexOffset)
-    {
+    void RenderGraph(ImDrawList *drawList, glm::vec2 graphPos, glm::vec2 graphSize, size_t frameIndexOffset) {
         glm::vec2 area_size = graphPos + graphSize;
         Rect(drawList, graphPos, area_size, 0xffffffff, false);
         float heightThreshold = 1.0f;
@@ -181,8 +174,7 @@ private:
 
         ImGui::PopClipRect();
     }
-    void RenderLegend(ImDrawList *drawList, glm::vec2 legendPos, glm::vec2 legendSize, size_t frameIndexOffset)
-    {
+    void RenderLegend(ImDrawList *drawList, glm::vec2 legendPos, glm::vec2 legendSize, size_t frameIndexOffset) {
         float markerLeftRectMargin = 3.0f;
         float markerLeftRectWidth = 5.0f;
         float markerMidWidth = 30.0f;
@@ -213,8 +205,7 @@ private:
 
             if (stat.onScreenIndex == size_t(-1)) {
                 stat.onScreenIndex = tasksShownCount++;
-            }
-            else
+            } else
                 continue;
             float taskStartHeight = (float(task.startTime) / (1.0f / maxFrameTime)) * legendSize.y;
             float taskEndHeight = (float(task.endTime) / (1.0f / maxFrameTime)) * legendSize.y;
@@ -245,23 +236,20 @@ private:
         ImGui::PopClipRect();
     }
 
-    static void Rect(ImDrawList *drawList, glm::vec2 minPoint, glm::vec2 maxPoint, uint32_t col, bool filled = true)
-    {
+    static void Rect(ImDrawList *drawList, glm::vec2 minPoint, glm::vec2 maxPoint, uint32_t col, bool filled = true) {
         if (filled)
             drawList->AddRectFilled(ImVec2(minPoint.x, minPoint.y), ImVec2(maxPoint.x, maxPoint.y), col);
         else
             drawList->AddRect(ImVec2(minPoint.x, minPoint.y), ImVec2(maxPoint.x, maxPoint.y), col);
     }
     static void Text(ImDrawList *drawList, glm::vec2 point, uint32_t col, const char *text) { drawList->AddText(ImVec2(point.x, point.y), col, text); }
-    static void Triangle(ImDrawList *drawList, std::array<glm::vec2, 3> points, uint32_t col, bool filled = true)
-    {
+    static void Triangle(ImDrawList *drawList, std::array<glm::vec2, 3> points, uint32_t col, bool filled = true) {
         if (filled)
             drawList->AddTriangleFilled(ImVec2(points[0].x, points[0].y), ImVec2(points[1].x, points[1].y), ImVec2(points[2].x, points[2].y), col);
         else
             drawList->AddTriangle(ImVec2(points[0].x, points[0].y), ImVec2(points[1].x, points[1].y), ImVec2(points[2].x, points[2].y), col);
     }
-    static void RenderTaskMarker(ImDrawList *drawList, glm::vec2 leftMinPoint, glm::vec2 leftMaxPoint, glm::vec2 rightMinPoint, glm::vec2 rightMaxPoint, uint32_t col)
-    {
+    static void RenderTaskMarker(ImDrawList *drawList, glm::vec2 leftMinPoint, glm::vec2 leftMaxPoint, glm::vec2 rightMinPoint, glm::vec2 rightMaxPoint, uint32_t col) {
         Rect(drawList, leftMinPoint, leftMaxPoint, col, true);
         Rect(drawList, rightMinPoint, rightMaxPoint, col, true);
         std::array<ImVec2, 4> points = { ImVec2(leftMaxPoint.x, leftMinPoint.y),
@@ -292,8 +280,7 @@ class ProfilersWindow {
 public:
     ProfilersWindow()
         : cpuGraph(300),
-          gpuGraph(300)
-    {
+          gpuGraph(300) {
         stopProfiling = false;
         frameOffset = 0;
         frameWidth = 3;
@@ -303,8 +290,7 @@ public:
         fpsFramesCount = 0;
         avgFrameTime = 1.0f;
     }
-    void Render()
-    {
+    void Render() {
         fpsFramesCount++;
         auto currFrameTime = std::chrono::system_clock::now();
         {

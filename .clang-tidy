@@ -91,7 +91,6 @@ Checks: "
         misc-misplaced-const,
         misc-new-delete-overloads,
         misc-non-copyable-objects,
-        misc-no-recursion,
         misc-throw-by-value-catch-by-reference,
         misc-uniqueptr-reset-release,
         modernize-*,

@@ -66,14 +66,18 @@ bool Window::init(this Window &self, const WindowInfo &info) {
         Application::get().push_event(
             ApplicationEvent::WindowResize,
             {
-                .window_size = { static_cast<u32>(width), static_cast<u32>(height) },
+                .size = { static_cast<u32>(width), static_cast<u32>(height) },
             });
     });
 
     glfwSetCursorPosCallback(self.handle, [](GLFWwindow *window, f64 pos_x, f64 pos_y) {
         [[maybe_unused]] Window *self = reinterpret_cast<Window *>(glfwGetWindowUserPointer(window));
 
-        Application::get().push_event(ApplicationEvent::MousePosition, { .mouse_pos = { pos_x, pos_y } });
+        Application::get().push_event(
+            ApplicationEvent::MousePosition,
+            {
+                .position = { pos_x, pos_y },
+            });
     });
 
     glfwSetMouseButtonCallback(self.handle, [](GLFWwindow *window, i32 button, i32 action, i32 mods) {
@@ -82,9 +86,9 @@ bool Window::init(this Window &self, const WindowInfo &info) {
         Application::get().push_event(
             ApplicationEvent::MouseState,
             {
-                .mouse_key = static_cast<Key>(button),
-                .mouse_key_state = static_cast<KeyState>(action),
-                .mouse_key_mod = static_cast<KeyMod>(mods),
+                .key = static_cast<Key>(button),
+                .key_state = static_cast<KeyState>(action),
+                .key_mods = static_cast<KeyMod>(mods),
             });
     });
 
@@ -107,7 +111,7 @@ bool Window::init(this Window &self, const WindowInfo &info) {
         Application::get().push_event(
             ApplicationEvent::MouseScroll,
             {
-                .mouse_scroll_offset = { off_x, off_y },
+                .position = { off_x, off_y },
             });
     });
 
@@ -118,7 +122,22 @@ bool Window::init(this Window &self, const WindowInfo &info) {
         Application::get().push_event(
             ApplicationEvent::InputChar,
             {
-                .input_char = static_cast<char32_t>(codepoint),
+                .input_char = static_cast<c32>(codepoint),
+            });
+    });
+
+    // LR_WINDOW_EVENT_DROP
+    glfwSetDropCallback(self.handle, [](GLFWwindow *window, i32 path_count, const c8 *paths_cstr[]) {
+        [[maybe_unused]] Window *self = reinterpret_cast<Window *>(glfwGetWindowUserPointer(window));
+        std::vector<std::string> paths(path_count);
+        for (i32 i = 0; i < path_count; i++) {
+            paths[i] = std::string(paths_cstr[i]);
+        }
+
+        Application::get().push_event(
+            ApplicationEvent::Drop,
+            {
+                .paths = paths,
             });
     });
 

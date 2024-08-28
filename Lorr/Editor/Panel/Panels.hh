@@ -6,6 +6,12 @@
 #include <imgui_internal.h>
 
 namespace lr {
+struct Directory {
+    fs::path path = {};
+    std::vector<Directory> subdirs = {};
+    std::vector<fs::path> files = {};
+};
+
 struct PanelI {
     std::string_view name = {};
     bool open = true;
@@ -55,7 +61,14 @@ struct InspectorPanel : PanelI {
 };
 
 struct AssetBrowserPanel : PanelI {
+    Directory asset_dir = {};
+
     AssetBrowserPanel(std::string_view name_, bool open_ = true);
+
+    void refresh_file_tree(this AssetBrowserPanel &);
+
+    void draw_project_tree(this AssetBrowserPanel &);
+    void draw_file_tree(this AssetBrowserPanel &, Directory &root_dir);
 
     void update(this AssetBrowserPanel &);
 

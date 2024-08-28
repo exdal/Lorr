@@ -4,13 +4,10 @@
 #include <glm/gtx/quaternion.hpp>
 
 namespace lr::Component {
-struct Icon {
-    c32 code = 0;
+// NOTE: Components without `reflect` functions will not be shown in inspector panel
 
-    static void reflect(flecs::world &w) {
-        w.component<Icon>()  //
-            .member<c32, Icon>("icon", &Icon::code);
-    }
+struct Icon {
+    const c8 *code = nullptr;
 };
 
 struct Transform {
@@ -23,8 +20,7 @@ struct Transform {
         w.component<Transform>()  //
             .member<glm::vec3, Transform>("position", &Transform::position)
             .member<glm::vec3, Transform>("scale", &Transform::scale)
-            .member<glm::vec3, Transform>("rotation", &Transform::rotation)
-            .member<glm::mat4, Transform>("matrix", &Transform::matrix);
+            .member<glm::vec3, Transform>("rotation", &Transform::rotation);
     }
 };
 
@@ -37,7 +33,6 @@ struct Camera {
 
     static void reflect(flecs::world &w) {
         w.component<Camera>()  //
-            .member<glm::mat4, Camera>("projection", &Camera::projection)
             .member<glm::vec3, Camera>("velocity", &Camera::velocity)
             .member<f32, Camera>("fov", &Camera::fov)
             .member<f32, Camera>("aspect_ratio", &Camera::aspect_ratio);

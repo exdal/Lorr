@@ -99,7 +99,6 @@ void Application::setup_world(this Application &self) {
         .assign_string([](std::string *data, const char *value) { *data = value; });
 
     // SETUP REFLECTION
-    Component::Icon::reflect(self.ecs);
     Component::Transform::reflect(self.ecs);
     Component::Camera::reflect(self.ecs);
 
@@ -107,14 +106,14 @@ void Application::setup_world(this Application &self) {
     self.ecs
         .prefab<Prefab::PerspectiveCamera>()  //
         .add<Prefab::PerspectiveCamera>()
-        .set<Component::Icon>({ U'\uf030' })
+        .set<Component::Icon>({ "\uf030" })
         .set<Component::Transform>({})
         .set<Component::Camera>({});
 
     self.ecs
         .prefab<Prefab::OrthographicCamera>()  //
         .add<Prefab::OrthographicCamera>()
-        .set<Component::Icon>({ U'\uf030' })
+        .set<Component::Icon>({ "\uf030" })
         .set<Component::Transform>({})
         .set<Component::Camera>({});
 
@@ -128,18 +127,17 @@ void Application::setup_world(this Application &self) {
             auto inv_orient = glm::conjugate(c.orientation);
             t.position += glm::vec3(inv_orient * glm::vec4(c.velocity * it.delta_time(), 0.0f));
 
-            c.projection = glm::perspectiveLH(glm::radians(c.fov), c.aspect_ratio, 0.1f, 1000000.0f);
+            c.projection = glm::perspectiveLH(glm::radians(c.fov), c.aspect_ratio, 0.1f, 10000.0f);
             c.projection[1][1] *= -1;
 
             c.orientation = glm::angleAxis(glm::radians(t.rotation.x), glm::vec3(0.0f, -1.0f, 0.0f));
             c.orientation = glm::angleAxis(glm::radians(t.rotation.y), glm::vec3(1.0f, 0.0f, 0.0f)) * c.orientation;
+            c.orientation = glm::angleAxis(glm::radians(t.rotation.z), glm::vec3(0.0f, 0.0f, 1.0f)) * c.orientation;
             c.orientation = glm::normalize(c.orientation);
 
             glm::mat4 rotation_mat = glm::toMat4(c.orientation);
             glm::mat4 translation_mat = glm::translate(glm::mat4(1.f), -t.position);
             t.matrix = rotation_mat * translation_mat;
-
-            c.velocity = {};
         });
 }
 
@@ -157,25 +155,27 @@ void Application::poll_events(this Application &self) {
         ApplicationEventData e = {};
         switch (self.event_manager.dispatch(e)) {
             case ApplicationEvent::WindowResize: {
-                self.main_render_pipeline.on_resize(e.window_size);
+                self.main_render_pipeline.on_resize(e.size);
                 break;
             }
             case ApplicationEvent::MousePosition: {
-                auto &pos = e.mouse_pos;
+                auto &pos = e.position;
                 imgui.AddMousePosEvent(pos.x, pos.y);
                 break;
             }
             case ApplicationEvent::MouseState: {
-                imgui.AddMouseButtonEvent(e.mouse_key, e.mouse_key_state == KeyState::Down);
+                bool down = e.key_state == KeyState::Down || e.key_state == KeyState::Repeat;
+                imgui.AddMouseButtonEvent(e.key, down);
                 break;
             }
             case ApplicationEvent::MouseScroll: {
-                auto &offset = e.mouse_scroll_offset;
+                auto &offset = e.position;
                 imgui.AddMouseWheelEvent(offset.x, offset.y);
                 break;
             }
             case ApplicationEvent::KeyboardState: {
-                imgui.AddKeyEvent(static_cast<ImGuiKey>(e.key), e.key_state == KeyState::Down);
+                bool down = e.key_state == KeyState::Down || e.key_state == KeyState::Repeat;
+                imgui.AddKeyEvent(static_cast<ImGuiKey>(e.key), down);
                 break;
             }
             case ApplicationEvent::InputChar: {

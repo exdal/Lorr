@@ -3,43 +3,17 @@
 #include "Engine/OS/Key.hh"
 
 namespace lr {
-union ApplicationEventData {
-    u8 data = 0;
+struct ApplicationEventData {
+    glm::uvec2 size = {};
+    glm::vec2 position = {};
 
-    // ::WindowResize
-    struct {
-        glm::uvec2 window_size;
-    };
+    Key key = LR_KEY_UNKNOWN;
+    KeyState key_state = KeyState::Up;
+    KeyMod key_mods = KeyMod::None;
+    i32 key_scancode = ~0_i32;
 
-    // ::MousePosition
-    struct {
-        glm::vec2 mouse_pos;
-    };
-
-    // ::MouseState
-    struct {
-        Key mouse_key;
-        KeyState mouse_key_state;
-        KeyMod mouse_key_mod;
-    };
-
-    // ::MouseScroll
-    struct {
-        glm::vec2 mouse_scroll_offset;
-    };
-
-    // ::KeyboardState
-    struct {
-        Key key;
-        KeyState key_state;
-        KeyMod key_mods;
-        i32 key_scancode;
-    };
-
-    // ::InputChar
-    struct {
-        c32 input_char;
-    };
+    c32 input_char = ~0_u32;
+    std::vector<std::string> paths = {};
 };
 
 enum class ApplicationEvent : u32 {
@@ -49,6 +23,7 @@ enum class ApplicationEvent : u32 {
     MouseScroll,
     KeyboardState,
     InputChar,
+    Drop,
 
     Invalid = ~0_u32,
 };

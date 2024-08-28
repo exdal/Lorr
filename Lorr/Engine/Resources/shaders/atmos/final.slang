@@ -29,7 +29,7 @@ float3 ACES(float3 x)
     const float d = 0.59;
     const float e = 0.14;
 
-    return saturate(pow(abs((x * (a * x + b)) / (x * (c * x + d) + e)), 1 / 1.7));
+    return saturate(x * (a * x + b)) / (x * (c * x + d) + e);
 }
 
 float3 dither(float2 seed, float3 color)
@@ -59,8 +59,6 @@ float4 fs_main(VertexOutput input) : SV_TARGET
     float v = 0.5 - 0.5 * sign(l) * sqrt(abs(l) / (0.5 * PI));
 
     float3 color = sky_lut.Sample(sampler, float2(u, v)).rgb;
-    color = ACES(color);
-    color = dither(input.tex_coord, color);
 
     return float4(color, 1.0);
 }

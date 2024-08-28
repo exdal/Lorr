@@ -16,7 +16,6 @@ struct Scene {
 
     bool import_from(this Scene &, const fs::path &path);
     void export_to(this Scene &, const fs::path &path);
-    void setup_systems(this Scene &);
     flecs::entity create_entity(this Scene &, std::string_view name);
 
     void set_active_camera(this Scene &, flecs::entity camera_entity);

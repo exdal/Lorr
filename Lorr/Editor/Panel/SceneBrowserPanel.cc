@@ -2,6 +2,7 @@
 
 #include "EditorApp.hh"
 
+#include "Engine/Memory/Stack.hh"
 #include "Engine/World/Components.hh"
 
 namespace lr {
@@ -49,13 +50,18 @@ void SceneBrowserPanel::update(this SceneBrowserPanel &self) {
         if (app.active_scene.has_value()) {
             auto &scene = app.scene_at(app.active_scene.value());
             scene.children([&](flecs::entity e) {
+                memory::ScopedStack stack;
+
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
 
                 ImGui::TableSetColumnIndex(0);
+                std::string_view entity_name = {};
+                auto icon_comp = e.get<Component::Icon>();
+                entity_name = stack.format("{}  {}", icon_comp ? icon_comp->code : "\uf1b2", e.name().c_str());
 
                 ImGuiSelectableFlags selectable_flags = ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap;
-                if (ImGui::Selectable(e.name().c_str(), e.has<Component::EditorSelected>(), selectable_flags)) {
+                if (ImGui::Selectable(entity_name.data(), e.has<Component::EditorSelected>(), selectable_flags)) {
                     app.ecs.each([](flecs::entity c, Component::EditorSelected) { c.remove<Component::EditorSelected>(); });
                     e.add<Component::EditorSelected>();
                 }

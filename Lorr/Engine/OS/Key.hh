@@ -2,6 +2,7 @@
 
 namespace lr {
 enum Key : u32 {
+    LR_KEY_UNKNOWN = ~0_u32,
     LR_KEY_MOUSE_1 = 0,
     LR_KEY_MOUSE_2 = 1,
     LR_KEY_MOUSE_3 = 2,

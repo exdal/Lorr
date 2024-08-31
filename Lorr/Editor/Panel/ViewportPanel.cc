@@ -11,7 +11,8 @@ ViewportPanel::ViewportPanel(std::string_view name_, bool open_)
 
 void ViewportPanel::update(this ViewportPanel &self) {
     auto &app = EditorApp::get();
-    auto &scene = app.scene_at(app.active_scene.value());
+    auto &world = app.world;
+    auto &scene = world.scene_at(world.active_scene.value());
     auto camera = scene.active_camera->get_mut<Component::Camera>();
     auto camera_transform = scene.active_camera->get_mut<Component::Transform>();
 
@@ -20,7 +21,14 @@ void ViewportPanel::update(this ViewportPanel &self) {
     ImGui::PopStyleVar();
 
     auto work_area_size = ImGui::GetContentRegionAvail();
-    ImGui::Image(reinterpret_cast<ImTextureID>(static_cast<iptr>(app.main_render_pipeline.final_image)), work_area_size);
+    ImGui::Image(reinterpret_cast<ImTextureID>(static_cast<iptr>(app.world_render_pipeline.final_image)), work_area_size);
+
+    if (ImGui::BeginDragDropTarget()) {
+        if (const auto *payload = ImGui::AcceptDragDropPayload("ASSET_PATH")) {
+            std::string_view path_sv(static_cast<const c8 *>(payload->Data), payload->DataSize);
+        }
+        ImGui::EndDragDropTarget();
+    }
 
     if (ImGui::IsWindowHovered()) {
         constexpr static f32 velocity = 3.0;

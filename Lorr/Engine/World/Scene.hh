@@ -5,21 +5,17 @@
 namespace lr {
 enum class SceneID : u32 { Invalid = ~0_u32 };
 struct Scene {
-    std::string name;
     flecs::world &ecs;
     flecs::entity handle;
     ls::option<flecs::entity> active_camera = ls::nullopt;
 
-    Scene(std::string name_, flecs::world &world_);
-    Scene(const fs::path &path_, flecs::world &world_);
+    Scene(std::string_view name_, flecs::world &world_);
     virtual ~Scene() = default;
 
-    bool import_from(this Scene &, const fs::path &path);
-    void export_to(this Scene &, const fs::path &path);
     flecs::entity create_entity(this Scene &, std::string_view name);
 
     void set_active_camera(this Scene &, flecs::entity camera_entity);
-    flecs::entity create_perspective_camera(this Scene &, const glm::vec3 &position, f32 fov, f32 aspect);
+    flecs::entity create_perspective_camera(this Scene &, std::string_view name, const glm::vec3 &position, f32 fov, f32 aspect);
 
     template<typename T>
     void children(const T &f) {

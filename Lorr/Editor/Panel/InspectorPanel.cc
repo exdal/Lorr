@@ -16,7 +16,7 @@ void InspectorPanel::update(this InspectorPanel &self) {
     ImGui::Begin(self.name.data());
     auto region = ImGui::GetContentRegionAvail();
 
-    auto query = app.ecs.query<Component::EditorSelected>();
+    auto query = app.world.ecs.query<Component::EditorSelected>();
     query.each([&region](flecs::entity e, Component::EditorSelected) {
         if (ImGui::Button(e.name().c_str(), ImVec2(region.x, 0))) {
             // TODO: Rename entity
@@ -101,13 +101,10 @@ void InspectorPanel::update(this InspectorPanel &self) {
             break;
         case ActiveTool::Atmosphere: {
             ImGui::SeparatorText(LRED_ICON_SUN "  Atmosphere");
-            bool update_rotation = false;
-            update_rotation |= ImGui::DragFloat2("Sun Rotation", &self.sun_dir.x, 0.5f);
-
-            if (update_rotation) {
+            if (ImGui::DragFloat2("Sun Rotation", &self.sun_dir.x, 0.5f)) {
                 auto rad = glm::radians(self.sun_dir);
                 glm::vec3 direction = { glm::cos(rad.x) * glm::cos(rad.y), glm::sin(rad.y), glm::sin(rad.x) * glm::cos(rad.y) };
-                app.main_render_pipeline.world_data.sun.direction = glm::normalize(direction);
+                app.world_render_pipeline.world_data.sun.direction = glm::normalize(direction);
             }
             break;
         }

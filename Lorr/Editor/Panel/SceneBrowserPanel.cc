@@ -24,7 +24,7 @@ void SceneBrowserPanel::update(this SceneBrowserPanel &self) {
     ZoneScoped;
 
     static bool create_entity_open = false;
-    auto &app = EditorApp::get();
+    auto &world = EditorApp::get().world;
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0, 0.0));
     ImGui::Begin(self.name.data());
     ImGui::PopStyleVar();
@@ -47,8 +47,8 @@ void SceneBrowserPanel::update(this SceneBrowserPanel &self) {
         ImGui::TableSetupScrollFreeze(0, 1);
         ImGui::TableHeadersRow();
 
-        if (app.active_scene.has_value()) {
-            auto &scene = app.scene_at(app.active_scene.value());
+        if (world.active_scene.has_value()) {
+            auto &scene = world.scene_at(world.active_scene.value());
             scene.children([&](flecs::entity e) {
                 memory::ScopedStack stack;
 
@@ -62,7 +62,7 @@ void SceneBrowserPanel::update(this SceneBrowserPanel &self) {
 
                 ImGuiSelectableFlags selectable_flags = ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap;
                 if (ImGui::Selectable(entity_name.data(), e.has<Component::EditorSelected>(), selectable_flags)) {
-                    app.ecs.each([](flecs::entity c, Component::EditorSelected) { c.remove<Component::EditorSelected>(); });
+                    world.ecs.each([](flecs::entity c, Component::EditorSelected) { c.remove<Component::EditorSelected>(); });
                     e.add<Component::EditorSelected>();
                 }
             });
@@ -70,7 +70,7 @@ void SceneBrowserPanel::update(this SceneBrowserPanel &self) {
 
         if (ImGui::BeginPopupContextWindow("create_ctxwin")) {
             if (ImGui::BeginMenu("Create...")) {
-                if (ImGui::MenuItem("Entity", nullptr, false, app.active_scene.has_value())) {
+                if (ImGui::MenuItem("Entity", nullptr, false, world.active_scene.has_value())) {
                     create_entity_open = true;
                 }
                 ImGui::EndMenu();
@@ -97,7 +97,7 @@ void SceneBrowserPanel::update(this SceneBrowserPanel &self) {
         }
 
         if (ImGui::Button("OK", ImVec2(120, 0))) {
-            auto &scene = app.scene_at(app.active_scene.value());
+            auto &scene = world.scene_at(world.active_scene.value());
             scene.create_entity(entity_name);
 
             ImGui::CloseCurrentPopup();

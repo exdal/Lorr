@@ -211,7 +211,7 @@ void EditorLayout::update(this EditorLayout &self) {
     ImGui::PopStyleColor();
 
     if (self.show_profiler) {
-        app.main_render_pipeline.task_graph.draw_profiler_ui();
+        app.world_render_pipeline.task_graph.draw_profiler_ui();
     }
 
     for (auto &panel : self.panels) {
@@ -221,7 +221,43 @@ void EditorLayout::update(this EditorLayout &self) {
 }  // namespace lr
 
 bool LRGui::DragXY(glm::vec2 &coords) {
-    return false;
+    bool value_changed = false;
+    ImGui::PushMultiItemsWidths(3, ImGui::CalcItemWidth());
+
+    float padding = GImGui->Font->FontSize + GImGui->Style.FramePadding.y * 2.0f;
+    ImVec2 button_size = { padding, padding };
+
+    // X
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, { 0, 0 });
+    ImGui::PushStyleColor(ImGuiCol_Button, { 0.8f, 0.1f, 0.15f, 1.0f });
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, { 0.9f, 0.2f, 0.2f, 1.0f });
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, { 0.8f, 0.1f, 0.15f, 1.0f });
+    if (ImGui::Button("X", button_size)) {
+    }
+    ImGui::PopStyleColor(3);
+
+    ImGui::SameLine();
+    value_changed |= ImGui::DragFloat("##X", &coords.x, 0.1f, 0.0f, 0.0f, "%.2f");
+    ImGui::PopItemWidth();
+    ImGui::PopStyleVar();
+
+    ImGui::SameLine();
+
+    // Y
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, { 0, 0 });
+    ImGui::PushStyleColor(ImGuiCol_Button, { 0.2f, 0.7f, 0.2f, 1.0f });
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, { 0.3f, 0.8f, 0.3f, 1.0f });
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, { 0.2f, 0.7f, 0.2f, 1.0f });
+    if (ImGui::Button("Y", button_size)) {
+    }
+    ImGui::PopStyleColor(3);
+
+    ImGui::SameLine();
+    value_changed |= ImGui::DragFloat("##Y", &coords.y, 0.1f, 0.0f, 0.0f, "%.2f");
+    ImGui::PopItemWidth();
+    ImGui::PopStyleVar();
+
+    return value_changed;
 }
 
 bool LRGui::DragXYZ(glm::vec3 &coords) {

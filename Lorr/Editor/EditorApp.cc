@@ -8,9 +8,9 @@ bool EditorApp::prepare(this EditorApp &self) {
 
     self.layout.init();
 
-    auto [dummy_scene_id, dummy_scene] = self.add_scene<DummyScene>("dummy_scene");
-    self.set_active_scene(dummy_scene_id);
-    dummy_scene->do_load();
+    auto dummy_scene_id = self.world.create_scene<DummyScene>("dummy_scene");
+    self.world.set_active_scene(dummy_scene_id);
+    self.world.scene_at(dummy_scene_id).do_load();
 
     return true;
 }

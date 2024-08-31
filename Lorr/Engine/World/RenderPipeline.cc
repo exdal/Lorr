@@ -71,7 +71,7 @@ bool RenderPipeline::setup_imgui(this RenderPipeline &) {
     ImFontConfig font_config;
     font_config.MergeMode = true;
     imgui.Fonts->AddFontFromFileTTF(roboto_path.c_str(), 16.0f, nullptr);
-    imgui.Fonts->AddFontFromFileTTF(fa_regular_400_path.c_str(), 14.0f, &font_config, icons_ranges);
+    // imgui.Fonts->AddFontFromFileTTF(fa_regular_400_path.c_str(), 14.0f, &font_config, icons_ranges);
     imgui.Fonts->AddFontFromFileTTF(fa_solid_900_path.c_str(), 14.0f, &font_config, icons_ranges);
     imgui.Fonts->Build();
 
@@ -253,6 +253,7 @@ bool RenderPipeline::setup_passes(this RenderPipeline &self) {
         .uses = {
             .attachment = self.final_image,
             .sky_lut = self.atmos_sky_lut_image,
+            .transmittance_lut = self.atmos_transmittance_image,
         },
     });
 
@@ -391,12 +392,12 @@ bool RenderPipeline::prepare(this RenderPipeline &self, usize frame_index) {
     };
 
     auto &app = Application::get();
-    auto &ecs = app.ecs;
+    auto &world = app.world;
     auto &device = app.device;
     auto &transfer_queue = device.queue_at(CommandType::Transfer);
     auto cmd_list = transfer_queue.begin_command_list(frame_index);
 
-    auto cameras = ecs.query<Prefab::PerspectiveCamera, Component::Transform, Component::Camera>();
+    auto cameras = world.ecs.query<Prefab::PerspectiveCamera, Component::Transform, Component::Camera>();
     auto new_camera_buffer_size = cameras.count() * sizeof(GPUCameraData);
     auto upload_size = new_camera_buffer_size + sizeof(GPUWorldData);
 

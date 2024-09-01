@@ -68,7 +68,8 @@ void AssetBrowserPanel::draw_dir_contents(this AssetBrowserPanel &self) {
         for (auto &v : self.selected_dir->files) {
             ImGui::TableNextColumn();
 
-            ImGui::Button(v.filename().c_str(), button_size);
+            auto file_name = v.filename().string();
+            ImGui::Button(file_name.c_str(), button_size);
             if (ImGui::BeginDragDropSource()) {
                 auto payload_data = v.string();
                 ImGui::SetDragDropPayload("ASSET_PATH", payload_data.c_str(), payload_data.length());
@@ -102,7 +103,8 @@ void AssetBrowserPanel::draw_file_tree(this AssetBrowserPanel &self, Directory &
     }
 
     auto cur_node_flags = no_subdirs ? tree_node_file_flags : tree_node_dir_flags;
-    if (ImGui::TreeNodeEx(root_dir.path.c_str(), cur_node_flags, "%s  %s", icon, root_dir.path.filename().c_str())) {
+    auto file_name = root_dir.path.string();
+    if (ImGui::TreeNodeEx(root_dir.path.c_str(), cur_node_flags, "%s  %s", icon, file_name.c_str())) {
         if (ImGui::IsItemClicked()) {
             self.selected_dir = &root_dir;
         }
@@ -133,10 +135,12 @@ void AssetBrowserPanel::update(this AssetBrowserPanel &self) {
         auto rel_path = fs::relative(self.selected_dir->path, self.asset_dir.path);
 
         for (const auto &v : rel_path) {
+            auto dir_name = v.string();
+
             ImGui::SameLine();
             ImGui::TextUnformatted("/");
             ImGui::SameLine();
-            ImGui::Button(v.c_str());
+            ImGui::Button(dir_name.c_str());
         }
     }
 

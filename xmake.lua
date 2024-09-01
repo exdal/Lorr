@@ -22,3 +22,4 @@ add_cxxflags(
 add_ldflags("-fuse-ld=lld", { tools = { "clang" } })
 
 includes("Lorr")
+includes("tests")

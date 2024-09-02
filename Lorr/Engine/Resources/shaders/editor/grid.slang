@@ -42,10 +42,10 @@ float4 pristine_grid(float3 uv, float2 lineWidth)
 
     float4 color = float4(0.4, 0.4, 0.4, lerp(grid2.x, 1.0, grid2.y));
     // z axis
-    if(uv.x > -0.1 * minimumx && uv.x < 10.0 * minimumx)
+    if(uv.x > -0.1 * minimumx && uv.x < 1.0 * minimumx)
         color.z = 1.0;
     // x axis
-    if(uv.z > -0.1 * minimumz && uv.z < 10.0 * minimumz)
+    if(uv.z > -0.1 * minimumz && uv.z < 1.0 * minimumz)
         color.x = 1.0;
 
     return color;

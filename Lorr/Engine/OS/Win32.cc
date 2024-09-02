@@ -19,7 +19,7 @@ struct LARGE_INTEGER {
 };
 
 enum : DWORD {
-    OPEN_EXISTING,
+    TRUNCATE_EXISTING,
     GENERIC_READ,
     FILE_SHARE_READ,
     GENERIC_WRITE,
@@ -27,6 +27,7 @@ enum : DWORD {
     CREATE_ALWAYS,
     FILE_ATTRIBUTE_NORMAL,
     FILE_BEGIN,
+    OPEN_EXISTING,
 };
 static HANDLE INVALID_HANDLE_VALUE = nullptr;
 
@@ -43,11 +44,14 @@ namespace lr {
 File::File(const fs::path &path, FileAccess access) {
     ZoneScoped;
 
+    SetLastError(0);
+
     DWORD flags = 0;
-    DWORD creation_flags = OPEN_EXISTING;
+    DWORD creation_flags = 0;
     DWORD share_flags = 0;
     if (access & FileAccess::Read) {
         flags |= GENERIC_READ;
+        creation_flags |= OPEN_EXISTING;
         share_flags |= FILE_SHARE_READ;
     }
     if (access & FileAccess::Write) {
@@ -58,6 +62,7 @@ File::File(const fs::path &path, FileAccess access) {
 
     HANDLE file_handle = CreateFileW(path.c_str(), flags, share_flags, nullptr, creation_flags, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (file_handle == INVALID_HANDLE_VALUE) {
+        LR_LOG_ERROR("Failed to open file! {}", GetLastError());
         this->result = FileResult::NoAccess;
         return;
     }
@@ -66,7 +71,7 @@ File::File(const fs::path &path, FileAccess access) {
     GetFileSizeEx(file_handle, &li);
 
     this->size = li.QuadPart;
-    this->handle = *reinterpret_cast<uptr *>(file_handle);
+    this->handle = reinterpret_cast<uptr>(file_handle);
 }
 
 void File::write(this File &self, const void *data, ls::u64range range) {
@@ -80,7 +85,7 @@ void File::write(this File &self, const void *data, ls::u64range range) {
     u64 target_size = range.length();
     while (written_bytes_size < target_size) {
         u64 remainder_size = target_size - written_bytes_size;
-        const u8 *cur_data = reinterpret_cast<const u8 *>(data) + offset;
+        const u8 *cur_data = reinterpret_cast<const u8 *>(data) + offset + written_bytes_size;
         DWORD cur_written_size = 0;
         OVERLAPPED overlapped = {};
         overlapped.Offset = offset & 0x00000000ffffffffull;
@@ -90,7 +95,6 @@ void File::write(this File &self, const void *data, ls::u64range range) {
             break;
         }
 
-        offset += cur_written_size;
         written_bytes_size += cur_written_size;
     }
 }
@@ -101,24 +105,23 @@ u64 File::read(this File &self, void *data, ls::u64range range) {
     LR_CHECK(self.handle.has_value(), "Trying to read invalid file");
 
     auto file_handle = reinterpret_cast<HANDLE>(self.handle.value());
+
     range.clamp(self.size);
-    u64 offset = range.min;
     u64 read_bytes_size = 0;
     u64 target_size = range.length();
     while (read_bytes_size < target_size) {
         u64 remainder_size = target_size - read_bytes_size;
-        u8 *cur_data = reinterpret_cast<u8 *>(data) + read_bytes_size;
+        u8 *cur_data = reinterpret_cast<u8 *>(data) + range.min + read_bytes_size;
         DWORD cur_read_size = 0;
         OVERLAPPED overlapped = {};
-        overlapped.Offset = offset & 0x00000000ffffffffull;
-        overlapped.OffsetHigh = (offset & 0xffffffff00000000ull) >> 32u;
+        overlapped.Offset = read_bytes_size & 0x00000000ffffffffull;
+        overlapped.OffsetHigh = (read_bytes_size & 0xffffffff00000000ull) >> 32u;
         ReadFile(file_handle, cur_data, remainder_size, &cur_read_size, &overlapped);
         if (cur_read_size < 0) {
             LR_LOG_TRACE("File read interrupted! {}", cur_read_size);
             break;
         }
 
-        offset += cur_read_size;
         read_bytes_size += cur_read_size;
     }
 
@@ -136,9 +139,11 @@ void File::seek(this File &self, u64 offset) {
 void File::close(this File &self) {
     ZoneScoped;
 
-    HANDLE file_handle = reinterpret_cast<HANDLE>(self.handle.value());
-    CloseHandle(file_handle);
-    self.handle.reset();
+    if (self.handle) {
+        HANDLE file_handle = reinterpret_cast<HANDLE>(self.handle.value());
+        CloseHandle(file_handle);
+        self.handle.reset();
+    }
 }
 
 /// MEMORY ///

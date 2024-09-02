@@ -15,11 +15,11 @@ File::File(const fs::path &path, FileAccess access) {
 
     errno = 0;
 
-    i32 flags = O_CREAT | O_WRONLY | O_RDONLY;
+    i32 flags = O_CREAT | O_WRONLY | O_RDONLY | O_TRUNC;
     if (access & FileAccess::Write)
         flags &= ~O_RDONLY;
     if (access & FileAccess::Read)
-        flags &= ~(O_WRONLY | O_CREAT);
+        flags &= ~(O_WRONLY | O_CREAT | O_TRUNC);
 
     i32 file = open64(path.c_str(), flags, S_IRUSR | S_IWUSR);
     if (file < 0) {
@@ -59,19 +59,18 @@ void File::write(this File &self, const void *data, ls::u64range range) {
 
     LR_CHECK(self.handle.has_value(), "Trying to write invalid file");
 
-    u64 offset = range.min;
+    u64 data_offset = range.min;
     u64 written_bytes_size = 0;
     u64 target_size = range.length();
     while (written_bytes_size < target_size) {
         u64 remainder_size = target_size - written_bytes_size;
-        const u8 *cur_data = reinterpret_cast<const u8 *>(data) + offset;
+        const u8 *cur_data = reinterpret_cast<const u8 *>(data) + data_offset + written_bytes_size;
         iptr cur_written_size = _write(static_cast<i32>(self.handle.value()), cur_data, remainder_size);
         if (cur_written_size < 0) {
             LR_LOG_TRACE("File write interrupted! {}", cur_written_size);
             break;
         }
 
-        offset += cur_written_size;
         written_bytes_size += cur_written_size;
     }
 }
@@ -92,7 +91,7 @@ u64 File::read(this File &self, void *data, ls::u64range range) {
     u64 target_size = range.length();
     while (read_bytes_size < target_size) {
         u64 remainder_size = target_size - read_bytes_size;
-        u8 *cur_data = reinterpret_cast<u8 *>(data) + read_bytes_size;
+        u8 *cur_data = reinterpret_cast<u8 *>(data) + range.min + read_bytes_size;
         iptr cur_read_size = _read(static_cast<i32>(self.handle.value()), cur_data, remainder_size);
         if (cur_read_size < 0) {
             LR_LOG_TRACE("File read interrupted! {}", cur_read_size);
@@ -118,8 +117,10 @@ void _close(i32 file) {
 void File::close(this File &self) {
     ZoneScoped;
 
-    _close(static_cast<i32>(self.handle.value()));
-    self.handle.reset();
+    if (self.handle) {
+        _close(static_cast<i32>(self.handle.value()));
+        self.handle.reset();
+    }
 }
 
 /// MEMORY ///

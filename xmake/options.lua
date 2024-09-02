@@ -13,8 +13,8 @@ option("wayland")
     add_defines("LR_WAYLAND=1", { public = true })
 option_end()
 
-option("build_examples")
+option("enable_tests")
     set_default(false)
-    set_description("Build examples")
+    set_description("Enable tests")
 option_end()
 

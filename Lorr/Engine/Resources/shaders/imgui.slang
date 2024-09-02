@@ -35,6 +35,7 @@ VertexOutput vs_main(VertexInput input) {
     output.position = float4(input.position * c.scale + c.translate, 0.0, 1.0);
     output.tex_coord = input.tex_coord;
     output.color = input.color;
+    SRGBA_TO_LINEAR(output.color);
 
     return output;
 }
@@ -45,9 +46,9 @@ float4 fs_main(VertexOutput input) : SV_TARGET
     const Texture2D font_texture = Texture2D<float4>::get(c.image_view_id);
     const SamplerState linear_sampler = SamplerState::get(c.sampler_id);
 
-    float4 col = font_texture.Sample(linear_sampler, input.tex_coord) * input.color;
+    float4 col =  font_texture.Sample(linear_sampler, input.tex_coord) * input.color;
     col.rgb *= col.a;
-    SRGBA_TO_LINEAR(col);
+
     return col;
 }
 

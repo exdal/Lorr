@@ -3,31 +3,9 @@
 #include "Components.hh"
 
 namespace lr {
-Scene::Scene(std::string name_, flecs::world &world_)
-    : name(std::move(name_)),
-      ecs(world_) {
-    this->handle = ecs.entity();
-}
-
-Scene::Scene(const fs::path &path_, flecs::world &world_)
+Scene::Scene(std::string_view name_, flecs::world &world_)
     : ecs(world_) {
-    import_from(path_);
-}
-
-bool Scene::import_from(this Scene &self, const fs::path &path) {
-    ZoneScoped;
-
-    auto path_str = path.string();
-
-    return true;
-}
-
-void Scene::export_to(this Scene &self, const fs::path &path) {
-    ZoneScoped;
-}
-
-void Scene::setup_systems(this Scene &self) {
-    ZoneScoped;
+    this->handle = ecs.entity(name_.data());
 }
 
 flecs::entity Scene::create_entity(this Scene &self, std::string_view name) {
@@ -40,8 +18,16 @@ void Scene::set_active_camera(this Scene &self, flecs::entity camera_entity) {
     self.active_camera = camera_entity;
 }
 
-flecs::entity Scene::create_perspective_camera(this Scene &self, const glm::vec3 &position, f32 fov, f32 aspect) {
-    auto camera_entity = self.create_entity("camera").is_a<Prefab::PerspectiveCamera>();
+flecs::entity Scene::create_perspective_camera(this Scene &self, std::string_view name, const glm::vec3 &position, f32 fov, f32 aspect) {
+    auto camera_entity = self.create_entity(name).is_a<Prefab::PerspectiveCamera>();
+
+    auto *transform = camera_entity.get_mut<Component::Transform>();
+    auto *camera = camera_entity.get_mut<Component::Camera>();
+
+    transform->position = position;
+    camera->fov = fov;
+    camera->aspect_ratio = aspect;
+
     return camera_entity;
 }
 

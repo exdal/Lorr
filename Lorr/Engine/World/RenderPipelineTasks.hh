@@ -81,12 +81,14 @@ struct SkyFinalTask {
     struct Uses {
         Preset::ColorAttachmentRead attachment = {};
         Preset::ColorReadOnly sky_lut = {};
+        Preset::ColorReadOnly transmittance_lut = {};
     } uses = {};
 
     struct PushConstants {
         u64 world_ptr = 0;
         ImageViewID sky_view_image_id = ImageViewID::Invalid;
-        SamplerID sky_view_sampler_id = SamplerID::Invalid;
+        ImageViewID transmittance_image_id = ImageViewID::Invalid;
+        SamplerID sampler_id = SamplerID::Invalid;
     };
 
     bool prepare(TaskPrepareInfo &info) {
@@ -111,6 +113,7 @@ struct SkyFinalTask {
 
     void execute(TaskContext &tc) {
         auto &sky_lut = tc.task_image_data(uses.sky_lut);
+        auto &transmittance_lut = tc.task_image_data(uses.transmittance_lut);
         auto dst_attachment = tc.as_color_attachment(uses.attachment);
 
         tc.cmd_list.begin_rendering(RenderingBeginInfo{
@@ -124,7 +127,8 @@ struct SkyFinalTask {
         PushConstants c = {
             .world_ptr = *static_cast<u64 *>(tc.execution_data),
             .sky_view_image_id = sky_lut.image_view_id,
-            .sky_view_sampler_id = tc.device.create_cached_sampler(SamplerInfo{
+            .transmittance_image_id = transmittance_lut.image_view_id,
+            .sampler_id = tc.device.create_cached_sampler(SamplerInfo{
                 .min_filter = Filtering::Linear,
                 .mag_filter = Filtering::Linear,
                 .mip_filter = Filtering::Linear,

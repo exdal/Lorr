@@ -12,7 +12,7 @@
 #include "Engine/OS/Window.hh"
 
 #include "Engine/World/RenderPipeline.hh"
-#include "Engine/World/Scene.hh"
+#include "Engine/World/World.hh"
 
 namespace lr {
 struct ApplicationSurface {
@@ -37,30 +37,15 @@ struct Application {
     ApplicationSurface default_surface = {};
     AssetManager asset_man = {};
 
-    flecs::world ecs;
-    std::vector<std::unique_ptr<Scene>> scenes = {};
-    ls::option<SceneID> active_scene = ls::nullopt;
-
-    RenderPipeline main_render_pipeline = {};
+    RenderPipeline world_render_pipeline = {};
+    World world = {};
 
     bool init(this Application &, const ApplicationInfo &info);
-    void setup_world(this Application &);
     void push_event(this Application &, ApplicationEvent event, const ApplicationEventData &data);
 
     void poll_events(this Application &);
     void run(this Application &);
     void shutdown(this Application &, bool hard);
-
-    template<typename T>
-    std::pair<SceneID, T *> add_scene(this Application &self, std::string_view scene_name) {
-        auto scene = std::make_unique<T>(std::string(scene_name), self.ecs);
-        usize scene_id = self.scenes.size();
-        T *scene_ptr = scene.get();
-        self.scenes.push_back(std::move(scene));
-        return { static_cast<SceneID>(scene_id), scene_ptr };
-    }
-    void set_active_scene(this Application &, SceneID scene_id);
-    Scene &scene_at(this Application &self, SceneID scene_id) { return *self.scenes[static_cast<usize>(scene_id)]; }
 
     virtual bool do_prepare() = 0;
     virtual bool do_update(f32 delta_time) = 0;

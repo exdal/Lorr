@@ -48,3 +48,8 @@ struct EditorLayout {
     PanelI *panel_at(this EditorLayout &self, usize index) { return self.panels[index].get(); }
 };
 }  // namespace lr
+
+namespace LRGui {
+bool DragXY(glm::vec2 &coords);
+bool DragXYZ(glm::vec3 &coords);
+}  // namespace LRGui

@@ -135,7 +135,7 @@ void AssetBrowserPanel::update(this AssetBrowserPanel &self) {
         auto rel_path = fs::relative(self.selected_dir->path, self.asset_dir.path);
 
         for (const auto &v : rel_path) {
-            auto dir_name = v.string();
+            auto dir_name = v.filename().string();
 
             ImGui::SameLine();
             ImGui::TextUnformatted("/");

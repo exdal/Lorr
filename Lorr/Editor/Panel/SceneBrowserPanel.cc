@@ -6,8 +6,8 @@
 #include "Engine/World/Components.hh"
 
 namespace lr {
-SceneBrowserPanel::SceneBrowserPanel(std::string_view name_, bool open_)
-    : PanelI(name_, open_) {
+SceneBrowserPanel::SceneBrowserPanel(std::string name_, bool open_)
+    : PanelI(std::move(name_), open_) {
 }
 
 void draw_gradient_shadow_bottom(const float scale) {
@@ -58,7 +58,7 @@ void SceneBrowserPanel::update(this SceneBrowserPanel &self) {
                 ImGui::TableSetColumnIndex(0);
                 std::string_view entity_name = {};
                 auto icon_comp = e.get<Component::Icon>();
-                entity_name = stack.format("{}  {}", icon_comp ? icon_comp->code : "\uf1b2", e.name().c_str());
+                entity_name = stack.format("{}  {}", icon_comp ? icon_comp->code : Icon::fa::cube, e.name().c_str());
 
                 ImGuiSelectableFlags selectable_flags = ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap;
                 if (ImGui::Selectable(entity_name.data(), e.has<Component::EditorSelected>(), selectable_flags)) {

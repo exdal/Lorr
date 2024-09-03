@@ -253,6 +253,8 @@ enum class Format : u32 {
     // Generic types -- component dependant types
     Unknown = VK_FORMAT_UNDEFINED,
 
+    R8_UNORM = VK_FORMAT_R8_UNORM,
+
     R32_SFLOAT = VK_FORMAT_R32_SFLOAT,
     R32_SINT = VK_FORMAT_R32_SINT,
     R32_UINT = VK_FORMAT_R32_UINT,

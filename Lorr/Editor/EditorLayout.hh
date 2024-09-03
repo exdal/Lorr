@@ -2,19 +2,6 @@
 
 #include "Panel/Panels.hh"
 
-#define LRED_ICON_ASSETS "\uf87c"
-#define LRED_ICON_INFO "\uf05a"
-#define LRED_ICON_WRENCH "\uf0ad"
-#define LRED_ICON_SANDWICH "\uf0c9"
-#define LRED_ICON_EYE "\uf06e"
-#define LRED_ICON_CURSOR "\uf245"
-#define LRED_ICON_BRUSH "\uf1fc"
-#define LRED_ICON_SAPLING "\uf4d8"
-#define LRED_ICON_MEASURE "\uf545"
-#define LRED_ICON_EGG "\uf7fb"
-#define LRED_ICON_EARTH "\uf57d"
-#define LRED_ICON_SUN "\uf185"
-
 namespace lr {
 enum class EditorTheme {
     Dark,
@@ -37,9 +24,9 @@ struct EditorLayout {
     void update(this EditorLayout &);
 
     template<typename T>
-    std::pair<usize, T *> add_panel(this EditorLayout &self, std::string_view name, bool open = true) {
+    std::pair<usize, T *> add_panel(this EditorLayout &self, std::string name, bool open = true) {
         usize panel_index = self.panels.size();
-        auto panel = std::make_unique<T>(name, open);
+        auto panel = std::make_unique<T>(std::move(name), open);
         T *panel_ptr = panel.get();
         self.panels.push_back(std::move(panel));
         return { panel_index, panel_ptr };

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Model.hh"
+
 #include <flecs.h>
 #include <glm/gtx/quaternion.hpp>
 
@@ -11,8 +13,8 @@ struct Icon {
 };
 
 struct Transform {
-    glm::vec3 position = {};
-    glm::vec3 scale = {};
+    glm::vec3 position = { 0.0, 0.0, 0.0 };
+    glm::vec3 scale = { 1.0, 1.0, 1.0 };
     glm::vec3 rotation = {};
     glm::mat4 matrix = {};
 
@@ -39,6 +41,16 @@ struct Camera {
     }
 };
 
+struct RenderableModel {
+    using ModelID_t = std::underlying_type_t<ModelID>;
+    ModelID_t model_id = ~0_u32;
+
+    static void reflect(flecs::world &w) {
+        w.component<RenderableModel>()  //
+            .member<ModelID_t, RenderableModel>("model_id", &RenderableModel::model_id);
+    }
+};
+
 struct EditorSelected {};
 struct ActiveCamera {};
 }  // namespace lr::Component
@@ -46,4 +58,5 @@ struct ActiveCamera {};
 namespace lr::Prefab {
 struct PerspectiveCamera {};
 struct OrthographicCamera {};
+struct RenderableModel {};
 }  // namespace lr::Prefab

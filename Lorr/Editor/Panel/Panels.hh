@@ -1,7 +1,6 @@
 #pragma once
 
-#include "Engine/World/Scene.hh"
-
+#include <flecs.h>
 #include <imgui.h>
 #include <imgui_internal.h>
 
@@ -13,11 +12,11 @@ struct Directory {
 };
 
 struct PanelI {
-    std::string_view name = {};
+    std::string name = {};
     bool open = true;
 
-    PanelI(std::string_view name_, bool open_ = true)
-        : name(name_),
+    PanelI(std::string name_, bool open_ = true)
+        : name(std::move(name_)),
           open(open_) {};
 
     virtual ~PanelI() = default;
@@ -25,7 +24,7 @@ struct PanelI {
 };
 
 struct ToolsPanel : PanelI {
-    ToolsPanel(std::string_view name_, bool open_ = true);
+    ToolsPanel(std::string name_, bool open_ = true);
 
     void update(this ToolsPanel &);
 
@@ -35,7 +34,7 @@ struct ToolsPanel : PanelI {
 struct SceneBrowserPanel : PanelI {
     flecs::entity selected_entity = {};
 
-    SceneBrowserPanel(std::string_view name_, bool open_ = true);
+    SceneBrowserPanel(std::string name_, bool open_ = true);
 
     void update(this SceneBrowserPanel &);
 
@@ -43,8 +42,9 @@ struct SceneBrowserPanel : PanelI {
 };
 
 struct ViewportPanel : PanelI {
-    ViewportPanel(std::string_view name_, bool open_ = true);
+    ViewportPanel(std::string name_, bool open_ = true);
 
+    void on_drop(this ViewportPanel &);
     void update(this ViewportPanel &);
 
     void do_update() override { update(); }
@@ -53,7 +53,7 @@ struct ViewportPanel : PanelI {
 struct InspectorPanel : PanelI {
     glm::vec2 sun_dir = {};
 
-    InspectorPanel(std::string_view name_, bool open_ = true);
+    InspectorPanel(std::string name_, bool open_ = true);
 
     void update(this InspectorPanel &);
 
@@ -64,7 +64,7 @@ struct AssetBrowserPanel : PanelI {
     Directory asset_dir = {};
     Directory *selected_dir = nullptr;
 
-    AssetBrowserPanel(std::string_view name_, bool open_ = true);
+    AssetBrowserPanel(std::string name_, bool open_ = true);
 
     void refresh_file_tree(this AssetBrowserPanel &);
 
@@ -78,7 +78,14 @@ struct AssetBrowserPanel : PanelI {
 };
 
 struct ConsolePanel : PanelI {
-    ConsolePanel(std::string_view name_, bool open_ = true);
+    struct Message {
+        loguru::Verbosity verbosity = {};
+        std::string message = {};
+    };
+
+    std::vector<Message> messages = {};
+
+    ConsolePanel(std::string name_, bool open_ = true);
 
     void update(this ConsolePanel &);
 

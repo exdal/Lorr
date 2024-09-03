@@ -3,8 +3,8 @@
 #include "EditorApp.hh"
 
 namespace lr {
-ToolsPanel::ToolsPanel(std::string_view name_, bool open_)
-    : PanelI(name_, open_) {
+ToolsPanel::ToolsPanel(std::string name_, bool open_)
+    : PanelI(std::move(name_), open_) {
 }
 
 void ToolsPanel::update(this ToolsPanel &self) {
@@ -38,18 +38,18 @@ void ToolsPanel::update(this ToolsPanel &self) {
 
     // Cursor
 
-    tool_button(ActiveTool::Cursor, LRED_ICON_CURSOR);
+    tool_button(ActiveTool::Cursor, Icon::fa::arrow_pointer);
     ImGui::BeginDisabled();
-    ImGui::Button(LRED_ICON_BRUSH, ImVec2(work_area_size.x, work_area_size.x));
-    ImGui::Button(LRED_ICON_SAPLING, ImVec2(work_area_size.x, work_area_size.x));
-    ImGui::Button(LRED_ICON_MEASURE, ImVec2(work_area_size.x, work_area_size.x));
-    ImGui::Button(LRED_ICON_EGG, ImVec2(work_area_size.x, work_area_size.x));
+    ImGui::Button(Icon::fa::paintbrush, ImVec2(work_area_size.x, work_area_size.x));
+    ImGui::Button(Icon::fa::seedling, ImVec2(work_area_size.x, work_area_size.x));
+    ImGui::Button(Icon::fa::ruler, ImVec2(work_area_size.x, work_area_size.x));
+    ImGui::Button(Icon::fa::egg, ImVec2(work_area_size.x, work_area_size.x));
     ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal, 2.0f);
-    ImGui::Button(LRED_ICON_EARTH, ImVec2(work_area_size.x, work_area_size.x));
+    ImGui::Button(Icon::fa::earth_americas, ImVec2(work_area_size.x, work_area_size.x));
     ImGui::EndDisabled();
 
     // Atmosphere
-    tool_button(ActiveTool::Atmosphere, LRED_ICON_SUN);
+    tool_button(ActiveTool::Atmosphere, Icon::fa::sun);
 
     ImGui::End();
     ImGui::PopStyleColor(2);

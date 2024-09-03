@@ -28,6 +28,8 @@
 #include <ankerl/unordered_dense.h>
 #include <plf_colony.h>
 
+#include "Util/Icons.hh"
+
 namespace fs = std::filesystem;
 
 namespace lr {

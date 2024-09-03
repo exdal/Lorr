@@ -5,12 +5,13 @@
 #include "Engine/World/Components.hh"
 
 namespace lr {
-InspectorPanel::InspectorPanel(std::string_view name_, bool open_)
-    : PanelI(name_, open_) {
+InspectorPanel::InspectorPanel(std::string name_, bool open_)
+    : PanelI(std::move(name_), open_) {
 }
 
 void InspectorPanel::update(this InspectorPanel &self) {
     auto &app = EditorApp::get();
+    auto &world = app.world;
     auto active_tool = app.layout.active_tool;
 
     ImGui::Begin(self.name.data());
@@ -100,11 +101,9 @@ void InspectorPanel::update(this InspectorPanel &self) {
         case ActiveTool::Cursor:
             break;
         case ActiveTool::Atmosphere: {
-            ImGui::SeparatorText(LRED_ICON_SUN "  Atmosphere");
+            ImGui::SeparatorText("Atmosphere");
             if (ImGui::DragFloat2("Sun Rotation", &self.sun_dir.x, 0.5f)) {
-                auto rad = glm::radians(self.sun_dir);
-                glm::vec3 direction = { glm::cos(rad.x) * glm::cos(rad.y), glm::sin(rad.y), glm::sin(rad.x) * glm::cos(rad.y) };
-                app.world_render_pipeline.world_data.sun.direction = glm::normalize(direction);
+                world.set_sun_direction(self.sun_dir);
             }
             break;
         }

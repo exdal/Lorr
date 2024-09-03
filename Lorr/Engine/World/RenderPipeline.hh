@@ -32,9 +32,16 @@ struct GPUCameraData {
     glm::vec3 position = {};
 };
 
+// NOTE: Soon, we will have one giant buffer with all vertex buffers
+// and this won't just contain the transform info.
+struct GPUModelData {
+    glm::mat4 model_transform_mat = {};
+};
+
 struct GPUWorldData {
     u64 cameras = {};
     u64 materials = {};
+    u64 models = {};
     GPUSunData sun = {};
     GPUAtmosphereData atmosphere = {};
 };
@@ -55,20 +62,25 @@ struct RenderPipeline {
     // Scene data
     ls::static_vector<BufferID, Limits::FrameCount> cpu_upload_buffers = {};
     ls::static_vector<BufferID, Limits::FrameCount> world_camera_buffers = {};
+    ls::static_vector<BufferID, Limits::FrameCount> world_model_buffers = {};
     ls::static_vector<BufferID, Limits::FrameCount> world_data_buffers = {};
     GPUWorldData world_data = {};
 
     // Backbuffer
     TaskImageID swap_chain_image = {};
+    // Geometry
+    TaskImageID geometry_depth_image = {};
     // Post processing image
     TaskImageID final_image = {};
-    // ImGui Context
-    TaskImageID imgui_font_image = {};
     // Atmosphere
     TaskImageID atmos_transmittance_image = {};
     TaskImageID atmos_ms_image = {};
     TaskImageID atmos_sky_lut_image = {};
     TaskImageID atmos_multiscatter_lut_image = {};
+
+    // ImGui
+    ImFont *im_roboto_fa = nullptr;
+    ImFont *im_fa_big = nullptr;
 
     bool init(this RenderPipeline &, Device *device);
     void shutdown(this RenderPipeline &);
@@ -80,6 +92,7 @@ struct RenderPipeline {
     bool setup_persistent_images(this RenderPipeline &);
 
     // Presentation
+    void update_world_data(this RenderPipeline &);
     bool prepare(this RenderPipeline &, usize frame_index);
     bool render_into(this RenderPipeline &, SwapChain &swap_chain, ls::span<ImageID> images, ls::span<ImageViewID> image_views);
 

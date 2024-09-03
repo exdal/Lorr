@@ -1,8 +1,8 @@
 #include "Panels.hh"
 
 namespace lr {
-AssetBrowserPanel::AssetBrowserPanel(std::string_view name_, bool open_)
-    : PanelI(name_, open_) {
+AssetBrowserPanel::AssetBrowserPanel(std::string name_, bool open_)
+    : PanelI(std::move(name_), open_) {
     this->refresh_file_tree();
 }
 
@@ -89,7 +89,6 @@ void AssetBrowserPanel::draw_file_tree(this AssetBrowserPanel &self, Directory &
 
     auto tree_node_file_flags = tree_node_dir_flags;
     tree_node_file_flags |= ImGuiTreeNodeFlags_Leaf;
-    // tree_node_file_flags |= ImGuiTreeNodeFlags_NoTreePushOnOpen;
 
     ImGui::TableNextRow();
     ImGui::TableNextColumn();
@@ -97,13 +96,13 @@ void AssetBrowserPanel::draw_file_tree(this AssetBrowserPanel &self, Directory &
     bool no_subdirs = root_dir.subdirs.empty();
     bool no_files = root_dir.files.empty();
 
-    const c8 *icon = "\uf07b";
+    const c8 *icon = Icon::fa::folder;
     if (no_subdirs && no_files) {
-        icon = "\uf07c";
+        icon = Icon::fa::folder_open;
     }
 
     auto cur_node_flags = no_subdirs ? tree_node_file_flags : tree_node_dir_flags;
-    auto file_name = root_dir.path.string();
+    std::string file_name = root_dir.path.filename();
     if (ImGui::TreeNodeEx(root_dir.path.c_str(), cur_node_flags, "%s  %s", icon, file_name.c_str())) {
         if (ImGui::IsItemClicked()) {
             self.selected_dir = &root_dir;
@@ -122,12 +121,12 @@ void AssetBrowserPanel::update(this AssetBrowserPanel &self) {
     auto avail_region = ImGui::GetContentRegionAvail();
 
     // HEADER
-    if (ImGui::Button("\uf021")) {
+    if (ImGui::Button(Icon::fa::arrows_rotate)) {
         self.refresh_file_tree();
     }
 
     ImGui::SameLine();
-    if (ImGui::Button("\uf015")) {
+    if (ImGui::Button(Icon::fa::house)) {
         self.selected_dir = &self.asset_dir;
     }
 

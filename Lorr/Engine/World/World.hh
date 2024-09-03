@@ -1,21 +1,29 @@
 #pragma once
 
-#include "RenderPipeline.hh"
 #include "Scene.hh"
 
 namespace lr {
+struct SunInfo {
+    glm::vec3 direction = {};
+    f32 intensity = 10.0f;
+};
+
 struct World {
     flecs::world ecs{};
     std::vector<std::unique_ptr<Scene>> scenes = {};
     ls::option<SceneID> active_scene = ls::nullopt;
 
-    RenderPipeline main_render_pipeline = {};
+    // World Environment
+    SunInfo sun_info = {};
 
     bool init(this World &);
     void shutdown(this World &);
     bool poll(this World &);
 
     bool serialize_scene(this World &, SceneID scene_id, const fs::path &path);
+
+    // Atmosphere
+    void set_sun_direction(this World &, const glm::vec2 &dir);
 
     template<typename T>
     SceneID create_scene(this World &self, std::string_view name) {

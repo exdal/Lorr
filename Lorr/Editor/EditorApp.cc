@@ -1,6 +1,6 @@
 #include "EditorApp.hh"
 
-#include "Editor/DummyScene.hh"
+#include "Editor/StarterScene.hh"
 
 namespace lr {
 bool EditorApp::prepare(this EditorApp &self) {
@@ -8,7 +8,7 @@ bool EditorApp::prepare(this EditorApp &self) {
 
     self.layout.init();
 
-    auto dummy_scene_id = self.world.create_scene<DummyScene>("dummy_scene");
+    auto dummy_scene_id = self.world.create_scene<StarterScene>("starter_scene");
     self.world.set_active_scene(dummy_scene_id);
     self.world.scene_at(dummy_scene_id).do_load();
 

@@ -52,7 +52,7 @@ struct GPUMaterial {
     SamplerID emissive_sampler = SamplerID::Invalid;
 };
 
-enum class ModelID : usize { Invalid = ~0_sz };
+enum class ModelID : u32 { Invalid = ~0_u32 };
 struct Model {
     struct Primitive {
         usize vertex_offset = 0;

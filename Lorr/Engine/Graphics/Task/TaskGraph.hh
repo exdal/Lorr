@@ -104,7 +104,7 @@ struct TaskContext {
             .image_view_id = self.task_image_data(use).image_view_id,
             .image_layout = ImageLayout::DepthStencilAttachment,
             .load_op = clear_val ? AttachmentLoadOp::Clear : AttachmentLoadOp::Load,
-            .store_op = use.access == PipelineAccess::DepthStencilWrite ? AttachmentStoreOp::Store : AttachmentStoreOp::None,
+            .store_op = use.access.access & MemoryAccess::Write ? AttachmentStoreOp::Store : AttachmentStoreOp::None,
             .clear_value = { .depth_clear = clear_val.value_or(DepthClearValue{}) },
         };
 
@@ -134,7 +134,7 @@ struct TaskContext {
             .y = 0,
             .width = static_cast<f32>(self.task.render_extent.width),
             .height = static_cast<f32>(self.task.render_extent.height),
-            .depth_min = 0.01f,
+            .depth_min = 0.0f,
             .depth_max = 1.0f,
         };
     }

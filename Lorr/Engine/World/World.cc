@@ -57,16 +57,23 @@ bool World::init(this World &self) {
     self.ecs
         .prefab<Prefab::PerspectiveCamera>()  //
         .add<Prefab::PerspectiveCamera>()
-        .set<Component::Icon>({ "\uf030" })
+        .set<Component::Icon>({ Icon::fa::camera })
         .set<Component::Transform>({})
         .set<Component::Camera>({});
 
     self.ecs
         .prefab<Prefab::OrthographicCamera>()  //
         .add<Prefab::OrthographicCamera>()
-        .set<Component::Icon>({ "\uf030" })
+        .set<Component::Icon>({ Icon::fa::camera })
         .set<Component::Transform>({})
         .set<Component::Camera>({});
+
+    self.ecs
+        .prefab<Prefab::RenderableModel>()  //
+        .add<Prefab::RenderableModel>()
+        .set<Component::Icon>({ Icon::fa::cube })
+        .set<Component::Transform>({})
+        .set<Component::RenderableModel>({});
 
     // SETUP SYSTEMS
     self.ecs.system<Prefab::PerspectiveCamera, Component::Transform, Component::Camera>()
@@ -78,7 +85,7 @@ bool World::init(this World &self) {
             auto inv_orient = glm::conjugate(c.orientation);
             t.position += glm::vec3(inv_orient * glm::vec4(c.velocity * it.delta_time(), 0.0f));
 
-            c.projection = glm::perspectiveLH(glm::radians(c.fov), c.aspect_ratio, 0.1f, 10000.0f);
+            c.projection = glm::perspectiveLH(glm::radians(c.fov), c.aspect_ratio, 0.01f, 1000.0f);
             c.projection[1][1] *= -1;
 
             c.orientation = glm::angleAxis(glm::radians(t.rotation.x), glm::vec3(0.0f, -1.0f, 0.0f));
@@ -89,6 +96,15 @@ bool World::init(this World &self) {
             glm::mat4 rotation_mat = glm::toMat4(c.orientation);
             glm::mat4 translation_mat = glm::translate(glm::mat4(1.f), -t.position);
             t.matrix = rotation_mat * translation_mat;
+        });
+
+    self.ecs.system<Prefab::RenderableModel, Component::Transform, Component::RenderableModel>()
+        .kind(flecs::OnUpdate)
+        .each([](flecs::iter &, usize, Prefab::RenderableModel, Component::Transform &t, Component::RenderableModel &m) {
+            t.matrix = glm::mat4(1.0);
+            t.matrix = glm::translate(t.matrix, t.position);
+            t.matrix = glm::rotate(t.matrix, t.rotation.x, glm::vec3(0.0, 0.0, 1.0));
+            t.matrix = glm::scale(t.matrix, t.scale);
         });
 
     return true;
@@ -104,6 +120,14 @@ bool World::poll(this World &self) {
     ZoneScoped;
 
     return self.ecs.progress();
+}
+
+void World::set_sun_direction(this World &self, const glm::vec2 &dir) {
+    ZoneScoped;
+
+    auto rad = glm::radians(dir);
+    glm::vec3 direction = { glm::cos(rad.x) * glm::cos(rad.y), glm::sin(rad.y), glm::sin(rad.x) * glm::cos(rad.y) };
+    self.sun_info.direction = glm::normalize(direction);
 }
 
 void World::set_active_scene(this World &self, SceneID scene_id) {

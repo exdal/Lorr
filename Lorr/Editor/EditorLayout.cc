@@ -105,12 +105,12 @@ void EditorLayout::setup_theme(this EditorLayout &, EditorTheme) {
 void EditorLayout::setup_dockspace(this EditorLayout &self) {
     ZoneScoped;
 
-    auto [asset_browser_panel_id, asset_browser_panel] = self.add_panel<AssetBrowserPanel>(LRED_ICON_ASSETS "  Asset Browser");
-    auto [console_panel_id, console_panel] = self.add_panel<ConsolePanel>(LRED_ICON_INFO "  Console");
-    auto [inspector_panel_id, inspector_panel] = self.add_panel<InspectorPanel>(LRED_ICON_WRENCH "  Inspector");
-    auto [scene_browser_panel_id, scene_browser_panel] = self.add_panel<SceneBrowserPanel>(LRED_ICON_SANDWICH "  Scene Browser");
+    auto [asset_browser_panel_id, asset_browser_panel] = self.add_panel<AssetBrowserPanel>(fmt::format("{}  Asset Browser", Icon::fa::photo_film));
+    auto [console_panel_id, console_panel] = self.add_panel<ConsolePanel>(fmt::format("{}  Console", Icon::fa::circle_info));
+    auto [inspector_panel_id, inspector_panel] = self.add_panel<InspectorPanel>(fmt::format("{}  Inspector", Icon::fa::wrench));
+    auto [scene_browser_panel_id, scene_browser_panel] = self.add_panel<SceneBrowserPanel>(fmt::format("{}  Scene Browser", Icon::fa::bars));
     auto [tools_panel_id, tools_panel] = self.add_panel<ToolsPanel>("Tools");
-    auto [viewport_panel_id, viewport_panel] = self.add_panel<ViewportPanel>(LRED_ICON_EYE "  Viewport");
+    auto [viewport_panel_id, viewport_panel] = self.add_panel<ViewportPanel>(fmt::format("{}  Viewport", Icon::fa::eye));
 
     ImGuiViewport *viewport = ImGui::GetMainViewport();
     i32 dock_node_flags = ImGuiDockNodeFlags_PassthruCentralNode;

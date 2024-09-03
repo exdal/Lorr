@@ -17,7 +17,7 @@ struct fastgltf::ElementTraits<glm::vec2> : fastgltf::ElementTraitsBase<glm::vec
 #include <stb_image.h>
 
 namespace lr {
-std::unique_ptr<ImageAssetData> parse_image_stbi(u8 *data, usize data_size) {
+std::unique_ptr<ImageAssetData> AssetParser::STB(u8 *data, usize data_size) {
     ZoneScoped;
 
     i32 width, height, channel_count;
@@ -37,13 +37,16 @@ std::unique_ptr<ImageAssetData> parse_image_stbi(u8 *data, usize data_size) {
     return result;
 }
 
-std::unique_ptr<ModelAssetData> parse_model_gltf(u8 *data, usize data_size) {
+std::unique_ptr<ModelAssetData> AssetParser::GLTF(const fs::path &path) {
     ZoneScoped;
 
-    auto gltf_buffer = fastgltf::GltfDataBuffer::FromBytes(ls::bit_cast<std::byte *>(data), data_size);
+    std::string path_str = path.string();
+    LR_LOG_TRACE("Attempting to load GLTF file {}", path_str);
+
+    auto gltf_buffer = fastgltf::GltfDataBuffer::FromPath(path);
     auto gltf_type = fastgltf::determineGltfFileType(gltf_buffer.get());
-    if (gltf_type != fastgltf::GltfType::GLB) {
-        LR_LOG_ERROR("Only GLB is supported!");
+    if (gltf_type == fastgltf::GltfType::Invalid) {
+        LR_LOG_ERROR("GLTF model type is invalid!");
         return nullptr;
     }
 
@@ -71,8 +74,10 @@ std::unique_ptr<ModelAssetData> parse_model_gltf(u8 *data, usize data_size) {
 
     auto options = fastgltf::Options::None;
     options |= fastgltf::Options::DontRequireValidAssetMember;
+    options |= fastgltf::Options::LoadExternalBuffers;
+    options |= fastgltf::Options::LoadExternalImages;
 
-    auto result = parser.loadGltf(gltf_buffer.get(), {}, options);
+    auto result = parser.loadGltf(gltf_buffer.get(), path.parent_path(), options);
     if (!result) {
         LR_LOG_ERROR("Failed to load GLTF! {}", fastgltf::getErrorMessage(result.error()));
         return nullptr;

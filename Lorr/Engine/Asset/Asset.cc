@@ -224,15 +224,9 @@ void AssetManager::shutdown(this AssetManager &self, bool print_reports) {
 ls::option<ModelID> AssetManager::load_model(this AssetManager &self, const fs::path &path) {
     ZoneScoped;
 
-    File model_file(path, FileAccess::Read);
-    if (!model_file) {
-        return ls::nullopt;
-    }
-
     usize model_id = self.models.size();
     auto &model = self.models.emplace_back();
-    auto model_file_data = model_file.whole_data();
-    auto model_data = parse_model_gltf(model_file_data.get(), model_file.size);
+    auto model_data = AssetParser::GLTF(path);
 
     usize texture_offset = self.textures.size();
     for (auto &v : model_data->textures) {
@@ -241,7 +235,7 @@ ls::option<ModelID> AssetManager::load_model(this AssetManager &self, const fs::
         switch (v.file_type) {
             case AssetFileType::PNG:
             case AssetFileType::JPEG:
-                image_data = parse_image_stbi(v.data.data(), v.data.size());
+                image_data = AssetParser::STB(v.data.data(), v.data.size());
                 break;
             default:
                 break;

@@ -161,6 +161,8 @@ bool AssetManager::init(this AssetManager &self, Device *device) {
         .debug_name = "Material Buffer",
     });
 
+    self.working_dir = fs::current_path();
+
     u32 invalid_tex_data[] = { 0xFF000000, 0xFFFF00FF, 0xFFFF00FF, 0xFF000000 };
     auto invalid_image_id = self.device->create_image(ImageInfo{
         .usage_flags = ImageUsage::Sampled | ImageUsage::TransferDst,
@@ -371,6 +373,7 @@ ls::option<ModelID> AssetManager::load_model(this AssetManager &self, const fs::
         staging_buffer.reset();
     }
 
+    self.model_paths.push_back(fs::relative(path, self.working_dir));
     return static_cast<ModelID>(model_id);
 }
 

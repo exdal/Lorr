@@ -26,6 +26,6 @@ namespace fa {
     constexpr static detail::icon_t arrows_rotate = "\uf021";
     constexpr static detail::icon_t house = "\uf015";
     constexpr static detail::icon_t cube = "\uf1b2";
-
+    constexpr static detail::icon_t up_down_left_right = "\uf0b2";
 }  // namespace fa
 }  // namespace lr::Icon

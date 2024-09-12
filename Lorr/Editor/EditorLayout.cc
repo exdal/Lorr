@@ -105,12 +105,12 @@ void EditorLayout::setup_theme(this EditorLayout &, EditorTheme) {
 void EditorLayout::setup_dockspace(this EditorLayout &self) {
     ZoneScoped;
 
-    auto [asset_browser_panel_id, asset_browser_panel] = self.add_panel<AssetBrowserPanel>(fmt::format("{}  Asset Browser", Icon::fa::photo_film));
-    auto [console_panel_id, console_panel] = self.add_panel<ConsolePanel>(fmt::format("{}  Console", Icon::fa::circle_info));
-    auto [inspector_panel_id, inspector_panel] = self.add_panel<InspectorPanel>(fmt::format("{}  Inspector", Icon::fa::wrench));
-    auto [scene_browser_panel_id, scene_browser_panel] = self.add_panel<SceneBrowserPanel>(fmt::format("{}  Scene Browser", Icon::fa::bars));
-    auto [tools_panel_id, tools_panel] = self.add_panel<ToolsPanel>("Tools");
-    auto [viewport_panel_id, viewport_panel] = self.add_panel<ViewportPanel>(fmt::format("{}  Viewport", Icon::fa::eye));
+    auto [asset_browser_panel_id, asset_browser_panel] = self.add_panel<AssetBrowserPanel>("Asset Browser", Icon::fa::photo_film);
+    auto [console_panel_id, console_panel] = self.add_panel<ConsolePanel>("Console", Icon::fa::circle_info);
+    auto [inspector_panel_id, inspector_panel] = self.add_panel<InspectorPanel>("Inspector", Icon::fa::wrench);
+    auto [scene_browser_panel_id, scene_browser_panel] = self.add_panel<SceneBrowserPanel>("Scene Browser", Icon::fa::bars);
+    auto [tools_panel_id, tools_panel] = self.add_panel<ToolsPanel>("Tools", Icon::fa::wrench);
+    auto [viewport_panel_id, viewport_panel] = self.add_panel<ViewportPanel>("Viewport", Icon::fa::eye);
 
     ImGuiViewport *viewport = ImGui::GetMainViewport();
     i32 dock_node_flags = ImGuiDockNodeFlags_PassthruCentralNode;
@@ -177,6 +177,17 @@ void EditorLayout::update(this EditorLayout &self) {
 
     if (ImGui::BeginMenuBar()) {
         if (ImGui::BeginMenu("File")) {
+            if (ImGui::MenuItem("Export scene")) {
+                app.world.export_scene(app.world.active_scene.value(), "scene.json");
+                app.world.export_project("world.lrproj");
+            }
+
+            if (ImGui::MenuItem("Import scene")) {
+                app.world.import_scene(app.world.active_scene.value(), "scene.json");
+            }
+
+            ImGui::Separator();
+
             if (ImGui::MenuItem("Exit")) {
                 app.shutdown(false);
             }

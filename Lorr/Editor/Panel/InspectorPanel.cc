@@ -11,19 +11,17 @@ InspectorPanel::InspectorPanel(std::string name_, bool open_)
 
 void InspectorPanel::update(this InspectorPanel &self) {
     auto &app = EditorApp::get();
-    auto &world = app.world;
-    auto active_tool = app.layout.active_tool;
 
     ImGui::Begin(self.name.data());
     auto region = ImGui::GetContentRegionAvail();
 
     auto query = app.world.ecs.query<Component::EditorSelected>();
-    query.each([&region](flecs::entity e, Component::EditorSelected) {
+    query.each([&](flecs::entity e, Component::EditorSelected) {
         if (ImGui::Button(e.name().c_str(), ImVec2(region.x, 0))) {
             // TODO: Rename entity
         }
 
-        e.each([&e](flecs::id component_id) {
+        e.each([&](flecs::id component_id) {
             auto world = e.world();
             if (!component_id.is_entity()) {
                 return;
@@ -34,10 +32,11 @@ void InspectorPanel::update(this InspectorPanel &self) {
                 return;
             }
 
-            auto component_name = component_entity.name();
+            auto component_name = component_entity.doc_name();
             auto component_data = component_entity.get<flecs::Struct>();
             i32 member_count = ecs_vec_count(&component_data->members);
-            if (ImGui::CollapsingHeader(component_name, nullptr)) {
+            auto name_with_icon = fmt::format("{}  {}", app.component_icons[component_id.raw_id()], component_name);
+            if (ImGui::CollapsingHeader(name_with_icon.c_str(), nullptr, ImGuiTreeNodeFlags_DefaultOpen)) {
                 ImGui::PushID(static_cast<i32>(component_id));
                 ImGui::BeginTable(
                     "entity_props",
@@ -73,6 +72,15 @@ void InspectorPanel::update(this InspectorPanel &self) {
                     } else if (member_type == flecs::I32) {
                         auto v = reinterpret_cast<i32 *>(ptr + member_offset);
                         ImGui::DragInt("", v);
+                    } else if (member_type == flecs::U32) {
+                        auto v = reinterpret_cast<u32 *>(ptr + member_offset);
+                        ImGui::DragScalar("", ImGuiDataType_U32, v);
+                    } else if (member_type == flecs::I64) {
+                        auto v = reinterpret_cast<i64 *>(ptr + member_offset);
+                        ImGui::DragScalar("", ImGuiDataType_S64, v);
+                    } else if (member_type == flecs::I64) {
+                        auto v = reinterpret_cast<u64 *>(ptr + member_offset);
+                        ImGui::DragScalar("", ImGuiDataType_U64, v);
                     } else if (member_type == world.entity<glm::vec2>()) {
                         auto v = reinterpret_cast<f32 *>(ptr + member_offset);
                         ImGui::DragFloat2("", v);
@@ -82,9 +90,10 @@ void InspectorPanel::update(this InspectorPanel &self) {
                     } else if (member_type == world.entity<glm::vec4>()) {
                         auto v = reinterpret_cast<f32 *>(ptr + member_offset);
                         ImGui::DragFloat4("", v);
-                    } else if (member_type == flecs::String) {
-                        auto v = reinterpret_cast<const c8 *>(ptr + member_offset);
-                        ImGui::Text(member.name, v);
+                    } else if (member_type == world.entity<std::string>()) {
+                        auto v = reinterpret_cast<std::string *>(ptr + member_offset);
+
+                        ImGui::InputText("", v);
                     }
 
                     ImGui::PopID();
@@ -95,19 +104,12 @@ void InspectorPanel::update(this InspectorPanel &self) {
                 ImGui::PopID();
             }
         });
-    });
 
-    switch (active_tool) {
-        case ActiveTool::Cursor:
-            break;
-        case ActiveTool::Atmosphere: {
-            ImGui::SeparatorText("Atmosphere");
-            if (ImGui::DragFloat2("Sun Rotation", &self.sun_dir.x, 0.5f)) {
-                world.set_sun_direction(self.sun_dir);
-            }
-            break;
+        if (ImGui::Button("Add Component", ImVec2(region.x, 0))) {
         }
-    }
+
+        ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal);
+    });
 
     ImGui::End();
 }

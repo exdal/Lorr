@@ -3,27 +3,19 @@
 #include "Scene.hh"
 
 namespace lr {
-struct SunInfo {
-    glm::vec3 direction = {};
-    f32 intensity = 10.0f;
-};
-
 struct World {
+    std::string name = {};
     flecs::world ecs{};
     std::vector<std::unique_ptr<Scene>> scenes = {};
     ls::option<SceneID> active_scene = ls::nullopt;
-
-    // World Environment
-    SunInfo sun_info = {};
 
     bool init(this World &);
     void shutdown(this World &);
     bool poll(this World &);
 
-    bool serialize_scene(this World &, SceneID scene_id, const fs::path &path);
-
-    // Atmosphere
-    void set_sun_direction(this World &, const glm::vec2 &dir);
+    bool import_scene(this World &, SceneID scene_id, const fs::path &path);
+    bool export_scene(this World &, SceneID scene_id, const fs::path &path);
+    bool export_project(this World &, const fs::path &path);
 
     template<typename T>
     SceneID create_scene(this World &self, std::string_view name) {
@@ -41,7 +33,7 @@ struct World {
         ZoneScoped;
 
         auto scene_id = self.create_scene<T>("unnamed scene");
-        if (!self.serialize_scene(scene_id, path)) {
+        if (!self.import_scene(scene_id, path)) {
             LR_LOG_ERROR("Failed to parse scene!");
             return SceneID::Invalid;
         }

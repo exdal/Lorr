@@ -54,9 +54,9 @@ struct CommandList {
     void write_timestamp(this CommandList &, TimestampQueryPool &query_pool, PipelineStage pipeline_stage, u32 query_index);
 
     // Barrier utils
-    void image_transition(this CommandList &, const ImageBarrier &barrier, std::source_location LOC = std::source_location::current());
-    void memory_barrier(this CommandList &, const MemoryBarrier &barrier, std::source_location LOC = std::source_location::current());
-    void set_barriers(this CommandList &, ls::span<MemoryBarrier> memory, ls::span<ImageBarrier> image, std::source_location LOC = std::source_location::current());
+    void image_transition(this CommandList &, const ImageBarrier &barrier);
+    void memory_barrier(this CommandList &, const MemoryBarrier &barrier);
+    void set_barriers(this CommandList &, ls::span<MemoryBarrier> memory, ls::span<ImageBarrier> image);
 
     // Copy Commands
     void copy_buffer_to_buffer(this CommandList &, BufferID src, BufferID dst, ls::span<BufferCopyRegion> regions);

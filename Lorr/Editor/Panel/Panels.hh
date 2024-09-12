@@ -3,6 +3,7 @@
 #include <flecs.h>
 #include <imgui.h>
 #include <imgui_internal.h>
+#include <imgui_stdlib.h>
 
 namespace lr {
 struct Directory {

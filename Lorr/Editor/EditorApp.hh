@@ -8,6 +8,7 @@ namespace lr {
 struct EditorApp : Application {
     static EditorApp &get() { return dynamic_cast<EditorApp &>(Application::get()); }
 
+    ankerl::unordered_dense::map<flecs::id_t, Icon::detail::icon_t> component_icons = {};
     EditorLayout layout = {};
 
     bool prepare(this EditorApp &);

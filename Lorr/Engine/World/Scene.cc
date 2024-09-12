@@ -15,20 +15,37 @@ flecs::entity Scene::create_entity(this Scene &self, std::string_view name) {
 void Scene::set_active_camera(this Scene &self, flecs::entity camera_entity) {
     ZoneScoped;
 
-    self.active_camera = camera_entity;
+    self.ecs.each([](flecs::entity c, Component::ActiveCamera) { c.remove<Component::ActiveCamera>(); });
+    camera_entity.add<Component::ActiveCamera>();
+}
+
+flecs::entity Scene::get_active_camera(this Scene &self) {
+    ZoneScoped;
+
+    flecs::entity e = flecs::entity::null();
+    self.ecs.each([&](flecs::entity c, Component::ActiveCamera) { e = c; });
+
+    return e;
 }
 
 flecs::entity Scene::create_perspective_camera(this Scene &self, std::string_view name, const glm::vec3 &position, f32 fov, f32 aspect) {
-    auto camera_entity = self.create_entity(name).is_a<Prefab::PerspectiveCamera>();
+    ZoneScoped;
 
-    auto *transform = camera_entity.get_mut<Component::Transform>();
-    auto *camera = camera_entity.get_mut<Component::Camera>();
+    return self
+        .create_entity(name)  //
+        .add<Component::PerspectiveCamera>()
+        .set<Component::Transform>({ .position = position })
+        .set<Component::Camera>({ .fov = fov, .aspect_ratio = aspect });
+}
 
-    transform->position = position;
-    camera->fov = fov;
-    camera->aspect_ratio = aspect;
+flecs::entity Scene::create_directional_light(this Scene &self, std::string_view name, const glm::vec2 &direction) {
+    ZoneScoped;
 
-    return camera_entity;
+    auto rotation_3d = glm::vec3(direction, 0.0);
+    return self
+        .create_entity(name)  //
+        .set<Component::Transform>({ .rotation = rotation_3d })
+        .set<Component::DirectionalLight>({});
 }
 
 }  // namespace lr

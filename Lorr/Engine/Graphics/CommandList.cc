@@ -1,6 +1,6 @@
 #include "CommandList.hh"
 
-#include "Device.hh"
+#include "Device.hh"  // IWYU pragma: export
 
 #include "Engine/Memory/Stack.hh"
 
@@ -17,7 +17,7 @@ void CommandList::write_timestamp(this CommandList &self, TimestampQueryPool &qu
     vkCmdWriteTimestamp2(self, static_cast<VkPipelineStageFlags2>(pipeline_stage), query_pool, query_index);
 }
 
-void CommandList::image_transition(this CommandList &self, const ImageBarrier &barrier, std::source_location LOC) {
+void CommandList::image_transition(this CommandList &self, const ImageBarrier &barrier) {
     ZoneScoped;
 
     Image &image = self.device->image_at(barrier.image_id);
@@ -37,7 +37,7 @@ void CommandList::image_transition(this CommandList &self, const ImageBarrier &b
     vkCmdPipelineBarrier2(self, &dependency_info);
 }
 
-void CommandList::memory_barrier(this CommandList &self, const MemoryBarrier &barrier, std::source_location LOC) {
+void CommandList::memory_barrier(this CommandList &self, const MemoryBarrier &barrier) {
     ZoneScoped;
 
     VkMemoryBarrier2 vk_barrier = static_cast<MemoryBarrier>(barrier).vk_type();
@@ -56,7 +56,7 @@ void CommandList::memory_barrier(this CommandList &self, const MemoryBarrier &ba
     vkCmdPipelineBarrier2(self, &dependency_info);
 }
 
-void CommandList::set_barriers(this CommandList &self, ls::span<MemoryBarrier> memory, ls::span<ImageBarrier> image, std::source_location LOC) {
+void CommandList::set_barriers(this CommandList &self, ls::span<MemoryBarrier> memory, ls::span<ImageBarrier> image) {
     ZoneScoped;
     memory::ScopedStack stack;
 

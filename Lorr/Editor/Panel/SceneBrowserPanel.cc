@@ -10,20 +10,9 @@ SceneBrowserPanel::SceneBrowserPanel(std::string name_, bool open_)
     : PanelI(std::move(name_), open_) {
 }
 
-void draw_gradient_shadow_bottom(const float scale) {
-    const auto draw_list = ImGui::GetWindowDrawList();
-    const auto pos = ImGui::GetWindowPos();
-    const auto window_height = ImGui::GetWindowHeight();
-    const auto window_width = ImGui::GetWindowWidth();
-
-    const ImRect bb(0, scale, pos.x + window_width, window_height + pos.y);
-    draw_list->AddRectFilledMultiColor(bb.Min, bb.Max, IM_COL32(20, 20, 20, 0), IM_COL32(20, 20, 20, 0), IM_COL32(20, 20, 20, 255), IM_COL32(20, 20, 20, 255));
-}
-
 void SceneBrowserPanel::update(this SceneBrowserPanel &self) {
     ZoneScoped;
 
-    static bool create_entity_open = false;
     auto &world = EditorApp::get().world;
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0, 0.0));
     ImGui::Begin(self.name.data());
@@ -57,8 +46,7 @@ void SceneBrowserPanel::update(this SceneBrowserPanel &self) {
 
                 ImGui::TableSetColumnIndex(0);
                 std::string_view entity_name = {};
-                auto icon_comp = e.get<Component::Icon>();
-                entity_name = stack.format("{}  {}", icon_comp ? icon_comp->code : Icon::fa::cube, e.name().c_str());
+                entity_name = stack.format("{}  {}", Icon::fa::cube, e.name().c_str());
 
                 ImGuiSelectableFlags selectable_flags = ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap;
                 if (ImGui::Selectable(entity_name.data(), e.has<Component::EditorSelected>(), selectable_flags)) {
@@ -68,12 +56,48 @@ void SceneBrowserPanel::update(this SceneBrowserPanel &self) {
             });
         }
 
-        if (ImGui::BeginPopupContextWindow("create_ctxwin")) {
+        if (ImGui::BeginPopupContextWindow("create_ctxwin", ImGuiPopupFlags_AnyPopup | 1)) {
             if (ImGui::BeginMenu("Create...")) {
                 if (ImGui::MenuItem("Entity", nullptr, false, world.active_scene.has_value())) {
-                    create_entity_open = true;
+                    ImGui::OpenPopup("create_entity_popup");
+                    ImGui::OpenPopup("fuck");
                 }
+
+                if (ImGui::BeginPopup("fuck")) {
+                    ImGui::TextUnformatted("wow");
+                    ImGui::EndPopup();
+                }
+
                 ImGui::EndMenu();
+            }
+
+            ImGui::EndPopup();
+        }
+
+        if (ImGui::BeginPopupModal("create_entity_popup", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+            static std::string entity_name = {};
+            ImGui::InputText("Name for Entity", &entity_name);
+
+            if (entity_name.empty()) {
+                ImGui::BeginDisabled();
+            }
+
+            if (ImGui::Button("OK", ImVec2(120, 0))) {
+                auto &scene = world.scene_at(world.active_scene.value());
+                scene.create_entity(entity_name);
+
+                ImGui::CloseCurrentPopup();
+                entity_name.clear();
+            }
+
+            if (entity_name.empty()) {
+                ImGui::EndDisabled();
+            }
+
+            ImGui::SameLine();
+
+            if (ImGui::Button("Cancel", ImVec2(120, 0))) {
+                ImGui::CloseCurrentPopup();
             }
 
             ImGui::EndPopup();
@@ -82,45 +106,6 @@ void SceneBrowserPanel::update(this SceneBrowserPanel &self) {
         ImGui::EndTable();
     }
     ImGui::PopStyleColor();
-
-    if (create_entity_open) {
-        ImGui::OpenPopup("###create_entity");
-    }
-
-    if (ImGui::BeginPopupModal("Create an entity...###create_entity", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-        static char entity_name[64] = {};
-        std::string_view entity_name_sv = entity_name;
-        ImGui::InputText("Name for Entity", entity_name, 64);
-
-        if (entity_name_sv.empty()) {
-            ImGui::BeginDisabled();
-        }
-
-        if (ImGui::Button("OK", ImVec2(120, 0))) {
-            auto &scene = world.scene_at(world.active_scene.value());
-            scene.create_entity(entity_name);
-
-            ImGui::CloseCurrentPopup();
-
-            std::memset(entity_name, 0, count_of(entity_name));
-        }
-
-        if (entity_name_sv.empty()) {
-            ImGui::EndDisabled();
-        }
-
-        ImGui::SetItemDefaultFocus();
-        ImGui::SameLine();
-
-        if (ImGui::Button("Cancel", ImVec2(120, 0))) {
-            ImGui::CloseCurrentPopup();
-
-            std::memset(entity_name, 0, count_of(entity_name));
-        }
-
-        ImGui::EndPopup();
-        create_entity_open = false;
-    }
 
     ImGui::End();
 }

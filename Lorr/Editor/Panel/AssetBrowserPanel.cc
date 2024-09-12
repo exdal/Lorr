@@ -1,5 +1,7 @@
 #include "Panels.hh"
 
+#include "Engine/Memory/Stack.hh"
+
 namespace lr {
 AssetBrowserPanel::AssetBrowserPanel(std::string name_, bool open_)
     : PanelI(std::move(name_), open_) {
@@ -96,7 +98,7 @@ void AssetBrowserPanel::draw_file_tree(this AssetBrowserPanel &self, Directory &
     bool no_subdirs = root_dir.subdirs.empty();
     bool no_files = root_dir.files.empty();
 
-    const c8 *icon = Icon::fa::folder;
+    auto icon = Icon::fa::folder;
     if (no_subdirs && no_files) {
         icon = Icon::fa::folder_open;
     }
@@ -104,7 +106,7 @@ void AssetBrowserPanel::draw_file_tree(this AssetBrowserPanel &self, Directory &
     auto cur_node_flags = no_subdirs ? tree_node_file_flags : tree_node_dir_flags;
     std::string file_name = root_dir.path.filename();
     if (ImGui::TreeNodeEx(root_dir.path.c_str(), cur_node_flags, "%s  %s", icon, file_name.c_str())) {
-        if (ImGui::IsItemClicked()) {
+        if (ImGui::IsItemToggledOpen() || ImGui::IsItemClicked()) {
             self.selected_dir = &root_dir;
         }
 
@@ -117,6 +119,8 @@ void AssetBrowserPanel::draw_file_tree(this AssetBrowserPanel &self, Directory &
 }
 
 void AssetBrowserPanel::update(this AssetBrowserPanel &self) {
+    memory::ScopedStack stack;
+
     ImGui::Begin(self.name.data(), nullptr, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
     auto avail_region = ImGui::GetContentRegionAvail();
 

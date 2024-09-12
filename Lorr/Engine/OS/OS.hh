@@ -46,6 +46,17 @@ struct File {
         return data;
     }
 
+    std::string read_string(this File &self, ls::u64range range) {
+        ZoneScoped;
+
+        range.clamp(self.size);
+        std::string str;
+        str.resize(range.length());
+        self.read(str.data(), range);
+
+        return str;
+    }
+
     File &operator=(File &&) = default;
     bool operator==(const File &) const = default;
     explicit operator bool() { return result == FileResult::Success; }

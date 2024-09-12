@@ -48,9 +48,6 @@ void ToolsPanel::update(this ToolsPanel &self) {
     ImGui::Button(Icon::fa::earth_americas, ImVec2(work_area_size.x, work_area_size.x));
     ImGui::EndDisabled();
 
-    // Atmosphere
-    tool_button(ActiveTool::Atmosphere, Icon::fa::sun);
-
     ImGui::End();
     ImGui::PopStyleColor(2);
     ImGui::PopStyleVar(2);

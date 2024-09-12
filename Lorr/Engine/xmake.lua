@@ -61,7 +61,8 @@ target("Lorr")
         "fastgltf",
         "stb",
         "flecs",
-        "reflect-cpp",
+        "yyjson",
+        "imguizmo-lorr",
         { public = true })
 
 target_end()

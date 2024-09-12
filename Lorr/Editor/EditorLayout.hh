@@ -9,7 +9,9 @@ enum class EditorTheme {
 
 enum class ActiveTool : u32 {
     Cursor = 0,
-    Atmosphere,
+    TerrainBrush,
+    DecalBrush,
+    MaterialEditor,
 };
 
 struct EditorLayout {
@@ -24,9 +26,10 @@ struct EditorLayout {
     void update(this EditorLayout &);
 
     template<typename T>
-    std::pair<usize, T *> add_panel(this EditorLayout &self, std::string name, bool open = true) {
+    std::pair<usize, T *> add_panel(this EditorLayout &self, std::string name, const c8 *icon, bool open = true) {
         usize panel_index = self.panels.size();
-        auto panel = std::make_unique<T>(std::move(name), open);
+        auto icon_name = fmt::format("{}  {}", icon, name);
+        auto panel = std::make_unique<T>(std::move(icon_name), open);
         T *panel_ptr = panel.get();
         self.panels.push_back(std::move(panel));
         return { panel_index, panel_ptr };

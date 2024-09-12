@@ -53,9 +53,11 @@ struct AssetManager {
     Device *device = nullptr;
     BufferID material_buffer_id = BufferID::Invalid;
 
+    fs::path working_dir = {};
     std::vector<Texture> textures = {};
     std::vector<Material> materials = {};
     std::vector<Model> models = {};
+    std::vector<fs::path> model_paths = {};
 
     VirtualDir shader_virtual_env = {};
     ankerl::unordered_dense::map<Identifier, ShaderID> shaders = {};

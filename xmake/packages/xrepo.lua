@@ -8,7 +8,7 @@ add_requires("vulkan-memory-allocator v3.1.0")
 add_requires("plf_colony v7.41")
 add_requires("imgui v1.91.0-docking")
 add_requires("simdutf v5.3.11")
-add_requires("reflect-cpp v0.11.1")
+add_requires("yyjson v0.10.0")
 add_requires("unordered_dense v4.4.0")
 add_requires("tracy v0.10", { configs = {
     on_demand = true,
@@ -39,3 +39,5 @@ end
 if has_config("enable_tests") then
     add_requires("gtest v1.15.2", { configs = { main = true, gmock = true } })
 end
+
+add_requires("imguizmo-lorr 1.89+WIP")

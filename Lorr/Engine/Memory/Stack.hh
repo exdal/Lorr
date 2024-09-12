@@ -72,7 +72,19 @@ struct ScopedStack {
         return { begin, end };
     }
 
-    std::wstring_view to_utf16(std::string_view str) {
+    std::u32string_view to_utf32(std::string_view str) {
+        ZoneScoped;
+
+        auto &stack = get_thread_stack();
+        auto *begin = reinterpret_cast<c32 *>(stack.ptr);
+        usize size = simdutf::convert_utf8_to_utf32(str.data(), str.length(), begin);
+        begin[size] = L'\0';
+        stack.ptr = ls::align_up(stack.ptr + (size + 1) * sizeof(c32), 8);
+
+        return { reinterpret_cast<c32 *>(begin), size };
+    }
+
+    std::u16string_view to_utf16(std::string_view str) {
         ZoneScoped;
 
         auto &stack = get_thread_stack();
@@ -81,19 +93,37 @@ struct ScopedStack {
         begin[size] = L'\0';
         stack.ptr = ls::align_up(stack.ptr + (size + 1) * sizeof(c16), 8);
 
-        return { reinterpret_cast<wchar_t *>(begin), size };
+        return { reinterpret_cast<c16 *>(begin), size };
     }
 
-    std::string_view to_utf8(std::wstring_view str) {
+    std::string_view to_utf8(std::u32string_view str) {
         ZoneScoped;
 
         auto &stack = get_thread_stack();
-        c8 *begin = reinterpret_cast<c8 *>(stack.ptr);
-        usize size = simdutf::convert_utf16_to_utf8(reinterpret_cast<const c16 *>(str.data()), str.length(), begin);
+        auto *begin = reinterpret_cast<c8 *>(stack.ptr);
+        usize size = simdutf::convert_utf32_to_utf8(str.data(), str.length(), begin);
         begin[size] = '\0';
         stack.ptr = ls::align_up(stack.ptr + size + 1, 8);
 
         return { begin, size };
+    }
+
+    std::string_view to_utf8(std::u16string_view str) {
+        ZoneScoped;
+
+        auto &stack = get_thread_stack();
+        auto *begin = reinterpret_cast<c8 *>(stack.ptr);
+        usize size = simdutf::convert_utf16_to_utf8(str.data(), str.length(), begin);
+        begin[size] = '\0';
+        stack.ptr = ls::align_up(stack.ptr + size + 1, 8);
+
+        return { begin, size };
+    }
+
+    std::string_view to_utf8(c32 str) {
+        ZoneScoped;
+
+        return to_utf8({ &str, 1 });
     }
 
     std::string_view to_upper(std::string_view str) {

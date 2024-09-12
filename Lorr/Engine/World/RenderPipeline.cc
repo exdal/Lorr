@@ -408,11 +408,23 @@ void RenderPipeline::update_world_data(this RenderPipeline &self) {
 
     auto &app = Application::get();
     auto &world = app.world;
+    if (!world.active_scene.has_value()) {
+        return;
+    }
 
-    self.world_data.sun = {
-        .direction = world.sun_info.direction,
-        .intensity = world.sun_info.intensity,
-    };
+    auto &scene = world.scene_at(world.active_scene.value());
+    auto directional_light_query =  //
+        world.ecs
+            .query_builder<Component::Transform, Component::DirectionalLight>()  //
+            .with(flecs::ChildOf, scene.handle)
+            .build();
+
+    directional_light_query.each([&self](flecs::entity, Component::Transform &t, Component::DirectionalLight &l) {
+        auto rad = glm::radians(t.rotation);
+        glm::vec3 direction = { glm::cos(rad.x) * glm::cos(rad.y), glm::sin(rad.y), glm::sin(rad.x) * glm::cos(rad.y) };
+        self.world_data.sun.direction = glm::normalize(direction);
+        self.world_data.sun.intensity = l.intensity;
+    });
 }
 
 bool RenderPipeline::prepare(this RenderPipeline &self, usize frame_index) {
@@ -445,11 +457,11 @@ bool RenderPipeline::prepare(this RenderPipeline &self, usize frame_index) {
     self.update_world_data();
 
     auto upload_size = sizeof(GPUWorldData);
-    auto cameras = world.ecs.query<Prefab::PerspectiveCamera, Component::Transform, Component::Camera>();
+    auto cameras = world.ecs.query<Component::Transform, Component::Camera>();
     auto new_camera_buffer_size = cameras.count() * sizeof(GPUCameraData);
     upload_size += new_camera_buffer_size;
 
-    auto models = world.ecs.query<Prefab::RenderableModel, Component::Transform, Component::RenderableModel>();
+    auto models = world.ecs.query<Component::Transform, Component::RenderableModel>();
     auto new_model_buffer_size = models.count() * sizeof(GPUModelData);
     upload_size += new_model_buffer_size;
 
@@ -480,7 +492,7 @@ bool RenderPipeline::prepare(this RenderPipeline &self, usize frame_index) {
     // Camera
     auto camera_ptr = reinterpret_cast<GPUCameraData *>(cpu_buffer_data + cpu_buffer_offset);
     BufferCopyRegion camera_copy_region = { .src_offset = 0, .dst_offset = 0, .size = new_camera_buffer_size };
-    cameras.each([&](Prefab::PerspectiveCamera, Component::Transform &t, Component::Camera &c) {
+    cameras.each([&](Component::Transform &t, Component::Camera &c) {
         camera_ptr->projection_mat = c.projection;
         camera_ptr->view_mat = t.matrix;
         camera_ptr->projection_view_mat = glm::transpose(c.projection * t.matrix);
@@ -496,7 +508,7 @@ bool RenderPipeline::prepare(this RenderPipeline &self, usize frame_index) {
     // Model
     auto model_ptr = reinterpret_cast<GPUModelData *>(cpu_buffer_data + cpu_buffer_offset);
     BufferCopyRegion model_copy_region = { .src_offset = cpu_buffer_offset, .dst_offset = 0, .size = sizeof(GPUModelData) };
-    models.each([&](Prefab::RenderableModel, Component::Transform &t, Component::RenderableModel &) {
+    models.each([&](Component::Transform &t, Component::RenderableModel &) {
         model_ptr->model_transform_mat = t.matrix;
 
         model_ptr++;

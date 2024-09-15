@@ -8,7 +8,7 @@ add_requires("vulkan-memory-allocator v3.1.0")
 add_requires("plf_colony v7.41")
 add_requires("imgui v1.91.0-docking")
 add_requires("simdutf v5.3.11")
-add_requires("yyjson v0.10.0")
+add_requires("glaze v3.1.7")
 add_requires("unordered_dense v4.4.0")
 add_requires("tracy v0.10", { configs = {
     on_demand = true,

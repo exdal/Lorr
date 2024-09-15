@@ -24,7 +24,7 @@ bool Application::init(this Application &self, const ApplicationInfo &info) {
         return false;
     }
 
-    if (!self.world.init()) {
+    if (!self.world.init({})) {
         return false;
     }
 

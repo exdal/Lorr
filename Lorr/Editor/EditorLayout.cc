@@ -178,6 +178,7 @@ void EditorLayout::update(this EditorLayout &self) {
     if (ImGui::BeginMenuBar()) {
         if (ImGui::BeginMenu("File")) {
             if (ImGui::MenuItem("Export scene")) {
+                app.world.create_project("test project", fs::current_path() / ".projects");
                 app.world.export_scene(app.world.active_scene.value(), "scene.json");
                 app.world.export_project("world.lrproj");
             }

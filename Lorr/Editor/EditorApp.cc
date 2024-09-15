@@ -26,9 +26,9 @@ bool EditorApp::prepare(this EditorApp &self) {
 
     self.layout.init();
 
-    auto dummy_scene_id = self.world.create_scene_from_file<StarterScene>("scene.json");
+    auto dummy_scene_id = self.world.create_scene<StarterScene>("starter_scene");
     self.world.set_active_scene(dummy_scene_id);
-    // self.world.scene_at(dummy_scene_id).do_load();
+    self.world.scene_at(dummy_scene_id).do_load();
 
     // initialize component icons
     auto get_icon_of = [&self](const auto &v) {

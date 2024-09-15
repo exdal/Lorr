@@ -19,13 +19,13 @@
 #include <span>
 #include <string_view>
 
+#include <glm/gtc/type_ptr.hpp>
+#include <glm/gtx/common.hpp>
 #include <glm/mat4x4.hpp>
 #include <glm/trigonometric.hpp>
 #include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
 #include <glm/vec4.hpp>
-#include <glm/gtc/type_ptr.hpp>
-#include <glm/gtx/common.hpp>
 
 #include "Core/Log.hh"
 #include <ankerl/unordered_dense.h>
@@ -40,6 +40,11 @@ template<typename T, usize N>
 constexpr usize count_of(T (&)[N]) {
     return N;
 }
+
+template<class... T>
+struct match : T... {
+    using T::operator()...;
+};
 
 }  // namespace lr
 

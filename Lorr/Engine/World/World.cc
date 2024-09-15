@@ -5,12 +5,15 @@
 #include "Engine/Core/Application.hh"
 #include "Engine/Memory/Stack.hh"
 #include "Engine/OS/OS.hh"
+#include "Engine/Util/json_driver.hh"
 
+#include <glaze/glaze.hpp>
 #include <glm/gtx/euler_angles.hpp>
-#include <yyjson.h>
 
 namespace lr {
-bool World::init(this World &self) {
+bool World::init(this World &self, const WorldInfo &info) {
+    ZoneScoped;
+
     // SETUP CUSTOM TYPES
     self.ecs
         .component<glm::vec2>("glm::vec2")  //
@@ -90,6 +93,16 @@ bool World::init(this World &self) {
             t.matrix *= glm::scale(glm::mat4(1.0), t.scale);
         });
 
+    std::visit(
+        match{
+            [](const auto &) {},
+            // Starter project
+            [](std::monostate) {},
+            // Existing project
+            [](const fs::path &) {},
+        },
+        info.name_info);
+
     return true;
 }
 
@@ -105,8 +118,6 @@ bool World::poll(this World &self) {
     return self.ecs.progress();
 }
 
-// Holy fuck, i hate these functions
-
 bool World::import_scene(this World &self, SceneID scene_id, const fs::path &path) {
     ZoneScoped;
 
@@ -118,104 +129,107 @@ bool World::import_scene(this World &self, SceneID scene_id, const fs::path &pat
     }
 
     auto json_str = file.read_string({ 0, ~0_sz });
-    yyjson_read_err doc_err;
-    auto *doc = yyjson_read_opts(json_str.data(), json_str.length(), 0, nullptr, &doc_err);
-    LS_DEFER(&) {
-        yyjson_doc_free(doc);
-    };
+    generic_json json = {};
+    auto json_err = glz::read_json(json, json_str);
+    if (json_err != glz::error_code::none) {
+        LR_LOG_ERROR("Failed to open scene file! {}", json_err.custom_error_message);
+        return false;
+    }
 
-    auto *root = yyjson_doc_get_root(doc);
-    auto *name_obj = yyjson_obj_get(root, "name");
-    if (!name_obj) {
+    auto &name_json = json.at("name");
+    if (!name_json) {
         LR_LOG_ERROR("Scene files must have names!");
         return false;
     }
 
-    scene.handle.set_name(yyjson_get_str(name_obj));
+    LS_EXPECT(name_json.is_string());
+    scene.handle.set_name(name_json.get_string().c_str());
 
-    auto *entities_obj = yyjson_obj_get(root, "entities");
-    yyjson_val *entity_obj = nullptr;
-    usize elem_idx, arr_count;
-    yyjson_arr_foreach(entities_obj, elem_idx, arr_count, entity_obj) {
-        auto *entity_name_obj = yyjson_obj_get(entity_obj, "name");
-        if (!entity_name_obj) {
+    auto &entities_json = json.at("entities");
+    for (auto &entity_json : entities_json.get_array()) {
+        auto &entity_name_json = entity_json.at("name");
+        if (!entity_name_json) {
             LR_LOG_ERROR("Entities must have names!");
             return false;
         }
 
-        auto e = scene.create_entity(yyjson_get_str(entity_name_obj));
+        LS_EXPECT(entity_name_json.is_string());
+        auto e = scene.create_entity(entity_name_json.get_string());
 
-        auto *tags_obj = yyjson_obj_get(entity_obj, "tags");
-        usize tag_idx, tag_count;
-        yyjson_val *tag_obj = nullptr;
-        yyjson_arr_foreach(tags_obj, tag_idx, tag_count, tag_obj) {
-            auto *tag_name = yyjson_get_str(tag_obj);
-            auto tag = self.ecs.component(tag_name);
+        auto &entity_tags_json = entity_json.at("tags");
+        LS_EXPECT(entity_tags_json.is_array());
+        for (auto &entity_tag : entity_tags_json.get_array()) {
+            LS_EXPECT(entity_tag.is_string());
+
+            auto tag = self.ecs.component(entity_tag.get_string().c_str());
             e.add(tag);
         }
 
-        auto *components_obj = yyjson_obj_get(entity_obj, "components");
-        usize component_idx, component_count;
-        yyjson_val *component_obj;
-        yyjson_arr_foreach(components_obj, component_idx, component_count, component_obj) {
-            auto *component_name_obj = yyjson_obj_get(component_obj, "name");
-            if (!component_name_obj) {
-                LR_LOG_ERROR("Components must have names!");
+        auto &components_json = entity_json.at("components");
+        LS_EXPECT(components_json.is_array());
+        for (auto &component_json : components_json.get_array()) {
+            LS_EXPECT(component_json.is_object());
+
+            auto &component_name_json = component_json.at("name");
+            LS_EXPECT(component_name_json.is_string());
+            if (!component_name_json) {
+                LR_LOG_ERROR("Entity '{}' has corrupt components JSON array.", e.name());
                 return false;
             }
 
-            auto *component_name = yyjson_get_str(component_name_obj);
-            auto component_id = self.ecs.lookup(component_name);
+            auto &component_name = component_name_json.get_string();
+            auto component_id = self.ecs.lookup(component_name.c_str());
             if (!component_id) {
-                LR_LOG_ERROR("Invalid component '{}'!", component_name);
+                LR_LOG_ERROR("Entity '{}' has invalid component named '{}'!", e.name(), component_name);
                 return false;
             }
 
             e.add(component_id);
-
-            auto *component_data = component_id.get<flecs::Struct>();
-            auto member_count = ecs_vec_count(&component_data->members);
-            auto *members = static_cast<ecs_member_t *>(ecs_vec_first(&component_data->members));
-            auto *ptr = static_cast<u8 *>(e.get_mut(component_id));
-            for (i32 i = 0; i < member_count; i++) {
-                const auto &member = members[i];
-                auto member_type = flecs::entity(self.ecs, member.type);
-                auto member_offset = member.offset;
-
-                auto *member_obj = yyjson_obj_get(component_obj, member.name);
-
-                if (member_type == flecs::F32) {
-                    auto &v = *reinterpret_cast<f32 *>(ptr + member_offset);
-
-                    v = static_cast<f32>(yyjson_get_real(member_obj));
-                } else if (member_type == flecs::I32 || member_type == flecs::U32) {
-                    auto &v = *reinterpret_cast<i32 *>(ptr + member_offset);
-
-                    v = yyjson_get_int(member_obj);
-                } else if (member_type == flecs::I64 || member_type == flecs::U64) {
-                    auto &v = *reinterpret_cast<i64 *>(ptr + member_offset);
-
-                    v = yyjson_get_sint(member_obj);
-
-                } else if (
-                    member_type == self.ecs.entity<glm::vec2>()     //
-                    || member_type == self.ecs.entity<glm::vec3>()  //
-                    || member_type == self.ecs.entity<glm::vec4>()) {
-                    auto v = reinterpret_cast<f32 *>(ptr + member_offset);
-
-                    usize i, _;
-                    yyjson_val *m = nullptr;
-                    yyjson_arr_foreach(member_obj, i, _, m) {
-                        v[i] = static_cast<f32>(yyjson_get_real(m));
-                    }
-                } else if (member_type == self.ecs.entity<std::string>()) {
-                    auto &v = *reinterpret_cast<std::string *>(ptr + member_offset);
-
-                    auto *str = yyjson_get_str(member_obj);
-                    auto str_len = yyjson_get_len(member_obj);
-                    v = std::string(str, str_len);
-                }
-            }
+            Component::Wrapper component(e, component_id);
+            component.for_each([&](usize &, std::string_view member_name, Component::Wrapper::Member &member) {
+                auto &member_json = component_json.at(member_name);
+                std::visit(
+                    match{
+                        [](const auto &) {},
+                        [&](f32 *v) {
+                            LS_EXPECT(member_json.is_float());
+                            *v = member_json.as<f32>();
+                        },
+                        [&](i32 *v) {
+                            LS_EXPECT(member_json.is_integer());
+                            *v = member_json.as<i32>();
+                        },
+                        [&](u32 *v) {
+                            LS_EXPECT(member_json.is_integer());
+                            *v = member_json.as<u32>();
+                        },
+                        [&](i64 *v) {
+                            LS_EXPECT(member_json.is_integer());
+                            *v = member_json.as<i64>();
+                        },
+                        [&](u64 *v) {
+                            LS_EXPECT(member_json.is_integer());
+                            *v = member_json.as<u64>();
+                        },
+                        [&](glm::vec2 *v) {
+                            LS_EXPECT(member_json.is<glm::vec2>());
+                            *v = member_json.as<glm::vec2>();
+                        },
+                        [&](glm::vec3 *v) {
+                            LS_EXPECT(member_json.is<glm::vec3>());
+                            *v = member_json.as<glm::vec3>();
+                        },
+                        [&](glm::vec4 *v) {
+                            LS_EXPECT(member_json.is<glm::vec4>());
+                            *v = member_json.as<glm::vec4>();
+                        },
+                        [&](std::string *v) {
+                            LS_EXPECT(member_json.is_string());
+                            *v = member_json.as<std::string>();
+                        },
+                    },
+                    member);
+            });
         }
     }
 
@@ -227,25 +241,16 @@ bool World::export_scene(this World &self, SceneID scene_id, const fs::path &pat
 
     auto &scene = self.scene_at(scene_id);
     const auto &scene_name = scene.handle.name();
-    auto *doc = yyjson_mut_doc_new(nullptr);
-    auto *root = yyjson_mut_obj(doc);
-    yyjson_mut_doc_set_root(doc, root);
 
-    yyjson_mut_obj_add_strn(doc, root, "name", scene_name, scene_name.length());
-
-    auto *entities_obj = yyjson_mut_arr(doc);
-    yyjson_mut_obj_add_val(doc, root, "entities", entities_obj);
-
+    generic_json json = {};
+    json["name"] = std::string(scene_name, scene_name.length());
+    auto entities_json = generic_json::array_t{};
     scene.children([&](flecs::entity e) {
-        auto *entity_obj = yyjson_mut_obj(doc);
-        yyjson_mut_arr_append(entities_obj, entity_obj);
-        yyjson_mut_obj_add_strn(doc, entity_obj, "name", e.name(), e.name().length());
+        auto &entity_json = entities_json.emplace_back();
+        entity_json["name"] = std::string(e.name(), e.name().length());
 
-        auto *tags_obj = yyjson_mut_arr(doc);
-        yyjson_mut_obj_add_val(doc, entity_obj, "tags", tags_obj);
-
-        auto *components_obj = yyjson_mut_arr(doc);
-        yyjson_mut_obj_add_val(doc, entity_obj, "components", components_obj);
+        generic_json::array_t entity_tags_json = {};
+        generic_json::array_t entity_components_json = {};
 
         e.each([&](flecs::id component_id) {
             auto world = e.world();
@@ -253,75 +258,48 @@ bool World::export_scene(this World &self, SceneID scene_id, const fs::path &pat
                 return;
             }
 
-            auto component_entity = component_id.entity();
-            auto component_name = component_entity.symbol();
-
-            if (!component_entity.has<flecs::Struct>()) {
+            Component::Wrapper component(e, component_id);
+            if (!component.has_component()) {
                 // It's a tag
-                yyjson_mut_arr_add_strn(doc, tags_obj, component_name, component_name.length());
-
+                entity_tags_json.emplace_back(std::string(component.name));
                 return;
             }
 
-            auto *component_obj = yyjson_mut_obj(doc);
-            yyjson_mut_obj_add_strn(doc, component_obj, "name", component_name, component_name.length());
+            auto &entity_component_json = entity_components_json.emplace_back();
+            entity_component_json["name"] = std::string(component.name);
+            component.for_each([&](usize &, std::string_view member_name, Component::Wrapper::Member &member) {
+                generic_json member_json = {};
+                std::visit(
+                    match{
+                        [](const auto &) {},
+                        [&](f32 *v) { member_json = *v; },
+                        [&](i32 *v) { member_json = *v; },
+                        [&](u32 *v) { member_json = *v; },
+                        [&](i64 *v) { member_json = *v; },
+                        [&](u64 *v) { member_json = *v; },
+                        [&](glm::vec2 *v) { member_json = *v; },
+                        [&](glm::vec3 *v) { member_json = *v; },
+                        [&](glm::vec4 *v) { member_json = *v; },
+                        [&](std::string *v) { member_json = *v; },
+                    },
+                    member);
 
-            auto component_data = component_entity.get<flecs::Struct>();
-            i32 member_count = ecs_vec_count(&component_data->members);
-            auto members = static_cast<ecs_member_t *>(ecs_vec_first(&component_data->members));
-            auto ptr = static_cast<u8 *>(e.get_mut(component_id));
-            for (i32 i = 0; i < member_count; i++) {
-                const auto &member = members[i];
-                auto member_type = flecs::entity(world, member.type);
-                auto member_offset = member.offset;
-
-                if (member_type == flecs::F32) {
-                    auto v = *reinterpret_cast<f32 *>(ptr + member_offset);
-
-                    yyjson_mut_obj_add_real(doc, component_obj, member.name, v);
-                } else if (member_type == flecs::I32 || member_type == flecs::U32) {
-                    auto v = *reinterpret_cast<i32 *>(ptr + member_offset);
-
-                    yyjson_mut_obj_add_int(doc, component_obj, member.name, v);
-                } else if (member_type == flecs::I64 || member_type == flecs::U64) {
-                    auto v = *reinterpret_cast<i64 *>(ptr + member_offset);
-
-                    yyjson_mut_obj_add_sint(doc, component_obj, member.name, v);
-                } else if (member_type == world.entity<glm::vec2>()) {
-                    auto v = reinterpret_cast<f32 *>(ptr + member_offset);
-                    auto *vec_obj = yyjson_mut_arr_with_float(doc, v, 2);
-
-                    yyjson_mut_obj_add_val(doc, component_obj, member.name, vec_obj);
-                } else if (member_type == world.entity<glm::vec3>()) {
-                    auto v = reinterpret_cast<f32 *>(ptr + member_offset);
-                    auto *vec_obj = yyjson_mut_arr_with_float(doc, v, 3);
-
-                    yyjson_mut_obj_add_val(doc, component_obj, member.name, vec_obj);
-                } else if (member_type == world.entity<glm::vec4>()) {
-                    auto v = reinterpret_cast<f32 *>(ptr + member_offset);
-                    auto *vec_obj = yyjson_mut_arr_with_float(doc, v, 4);
-
-                    yyjson_mut_obj_add_val(doc, component_obj, member.name, vec_obj);
-                } else if (member_type == world.entity<std::string>()) {
-                    auto v = reinterpret_cast<std::string *>(ptr + member_offset);
-
-                    yyjson_mut_obj_add_strn(doc, component_obj, member.name, v->c_str(), v->length());
-                }
-            }
-
-            yyjson_mut_arr_add_val(components_obj, component_obj);
+                entity_component_json[member_name] = member_json;
+            });
         });
+
+        entity_json["tags"] = entity_tags_json;
+        entity_json["components"] = entity_components_json;
     });
 
-    usize json_len = 0;
-    auto *json = yyjson_mut_write(doc, YYJSON_WRITE_PRETTY_TWO_SPACES | YYJSON_WRITE_NEWLINE_AT_END | YYJSON_WRITE_ESCAPE_UNICODE, &json_len);
-    LS_DEFER(&) {
-        if (json) {
-            free(json);
-        }
+    json["entities"] = entities_json;
 
-        yyjson_mut_doc_free(doc);
-    };
+    std::string json_str;
+    auto json_str_err = glz::write<glz::opts{ .prettify = true, .indentation_width = 2 }>(json, json_str);
+    if (json_str_err != glz::error_code::none) {
+        LR_LOG_ERROR("Failed to write for file '{}'! {}", path, json_str_err.custom_error_message);
+        return false;
+    }
 
     File file(path, FileAccess::Write);
     if (!file) {
@@ -329,7 +307,7 @@ bool World::export_scene(this World &self, SceneID scene_id, const fs::path &pat
         return false;
     }
 
-    file.write(json, { 0, json_len });
+    file.write(json_str.data(), { 0, json_str.length() });
 
     return true;
 }
@@ -349,30 +327,22 @@ bool World::export_project(this World &self, const fs::path &path) {
     auto &app = Application::get();
     auto &asset_man = app.asset_man;
 
-    auto *doc = yyjson_mut_doc_new(nullptr);
-    auto *root = yyjson_mut_obj(doc);
-    yyjson_mut_doc_set_root(doc, root);
+    generic_json json = {};
+    json["project_name"] = self.name;
+    generic_json::array_t models_json = {};
 
-    yyjson_mut_obj_add_strn(doc, root, "project_name", self.name.c_str(), self.name.length());
-
-    auto *models_obj = yyjson_mut_arr(doc);
-    yyjson_mut_obj_add_val(doc, root, "models", models_obj);
     for (auto &path : asset_man.model_paths) {
-        auto path_str = path.string();
-        auto path_sv = stack.to_utf8(path.u16string());
-        yyjson_mut_arr_add_strn(doc, models_obj, path_sv.data(), path_sv.length());
+        models_json.emplace_back(path.string());
     }
 
-    yyjson_write_err err;
-    usize json_len = 0;
-    auto *json = yyjson_mut_write_opts(doc, YYJSON_WRITE_PRETTY_TWO_SPACES | YYJSON_WRITE_NEWLINE_AT_END | YYJSON_WRITE_ESCAPE_UNICODE, nullptr, &json_len, &err);
-    LS_DEFER(&) {
-        if (json) {
-            free(json);
-        }
+    json["models"] = models_json;
 
-        yyjson_mut_doc_free(doc);
-    };
+    std::string json_str;
+    auto json_str_err = glz::write<glz::opts{ .prettify = true, .indentation_width = 2 }>(json, json_str);
+    if (json_str_err != glz::error_code::none) {
+        LR_LOG_ERROR("Failed to write for file '{}'! {}", path, json_str_err.custom_error_message);
+        return false;
+    }
 
     File file(path, FileAccess::Write);
     if (!file) {
@@ -380,7 +350,33 @@ bool World::export_project(this World &self, const fs::path &path) {
         return false;
     }
 
-    file.write(json, { 0, json_len });
+    file.write(json_str.data(), { 0, json_str.length() });
+
+    return true;
+}
+
+bool World::create_project(this World &self, std::string_view name, const fs::path &root_dir) {
+    ZoneScoped;
+
+    // /<root_dir>/<name>/[dir_tree*]
+    constexpr static std::string_view dir_tree[] = {
+        "Assets", "Assets/Audio", "Assets/Scenes", "Assets/Shaders", "Assets/Models",
+    };
+
+    // Create project root directory first
+    std::error_code err;
+    auto proj_root_dir = root_dir / name;
+    fs::create_directories(proj_root_dir, err);
+    if (err) {
+        LR_LOG_ERROR("Failed to create directory '{}'! {}", proj_root_dir, err.message());
+        return false;
+    }
+
+    for (const auto &dir : dir_tree) {
+        fs::create_directories(proj_root_dir / dir);
+    }
+
+    self.export_project(proj_root_dir / "world.lrproj");
 
     return true;
 }

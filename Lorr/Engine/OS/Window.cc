@@ -2,9 +2,9 @@
 
 #include "Engine/Core/Application.hh"
 
-#if defined(LR_WIN32)
+#if defined(LS_WINDOWS)
 #define GLFW_EXPOSE_NATIVE_WIN32
-#elif defined(LR_LINUX)
+#elif defined(LS_LINUX)
 #if defined(LR_WAYLAND)
 #define GLFW_EXPOSE_NATIVE_WAYLAND
 #else
@@ -14,9 +14,9 @@
 
 #include <GLFW/glfw3native.h>
 
-#if defined(LR_WIN32)
+#if defined(LS_WINDOWS)
 #include <vulkan/vulkan_win32.h>
-#elif defined(LR_LINUX)
+#elif defined(LS_LINUX)
 #if defined(LR_WAYLAND)
 #include <vulkan/vulkan_wayland.h>
 #else
@@ -204,7 +204,7 @@ SystemDisplay Window::display_at(this Window &, u32 monitor_id) {
 ls::result<VkSurfaceKHR, VkResult> Window::get_surface(this Window &self, VkInstance instance) {
     VkSurfaceKHR surface = nullptr;
 
-#if defined(LR_WIN32)
+#if defined(LS_WINDOWS)
     auto vkCreateWin32SurfaceKHR = (PFN_vkCreateWin32SurfaceKHR)vkGetInstanceProcAddr(instance, "vkCreateWin32SurfaceKHR");
 
     VkWin32SurfaceCreateInfoKHR create_info = {
@@ -215,7 +215,7 @@ ls::result<VkSurfaceKHR, VkResult> Window::get_surface(this Window &self, VkInst
     };
 
     auto result = vkCreateWin32SurfaceKHR(instance, &create_info, nullptr, &surface);
-#elif defined(LR_LINUX)
+#elif defined(LS_LINUX)
 #if defined(LR_WAYLAND)
     auto vkCreateWaylandSurfaceKHR = (PFN_vkCreateWaylandSurfaceKHR)vkGetInstanceProcAddr(instance, "vkCreateWaylandSurfaceKHR");
 

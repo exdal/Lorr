@@ -13,8 +13,17 @@ target("Lorr")
     end
 
     add_rpathdirs("@executable_path")
-    add_includedirs("../", { public = true });
+    add_includedirs("../", { public = true })
     add_files("**.cc")
+    if is_plat("windows") then
+        add_syslinks("gdi32", "msimg32", "user32")
+        remove_files("OS/Linux*")
+    elseif is_plat("linux") then
+        if not has_config("wayland") then
+            add_syslinks("xcb")
+        end
+        remove_files("OS/Win32*")
+    end
 
     add_files("./Resources/**")
     add_rules("lorr.install_resources", {
@@ -25,21 +34,9 @@ target("Lorr")
     add_options("profile")
     add_options("wayland")
 
-    if is_mode("debug") then
-        add_defines("LR_DEBUG", { public = true })
-    end
-
-    if is_plat("windows") then
-        add_defines("LR_WIN32=1", { public = true })
-        add_syslinks("gdi32", "msimg32", "user32")
-        remove_files("OS/Linux*")
-    elseif is_plat("linux") then
-        add_defines("LR_LINUX=1", { public = true })
-        if not has_config("wayland") then
-            add_syslinks("xcb")
-        end
-        remove_files("OS/Win32*")
-    end
+    add_deps(
+        "ls",
+        { public = true })
 
     add_packages(
         "glfw",
@@ -61,7 +58,7 @@ target("Lorr")
         "fastgltf",
         "stb",
         "flecs",
-        "yyjson",
+        "glaze",
         "imguizmo-lorr",
         { public = true })
 

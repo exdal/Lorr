@@ -19,8 +19,7 @@ VKFN_DEBUG_UTILS_EXT_DEVICE_FUNCTIONS
 #undef VKFN_FUNCTION
 
 namespace lr {
-bool vulkan::load_instance(VkInstance instance, PFN_vkGetInstanceProcAddr get_instance_proc_addr)
-{
+bool vulkan::load_instance(VkInstance instance, PFN_vkGetInstanceProcAddr get_instance_proc_addr) {
     ZoneScoped;
 
 #define VKFN_FUNCTION(_name)                                                   \
@@ -40,8 +39,7 @@ bool vulkan::load_instance(VkInstance instance, PFN_vkGetInstanceProcAddr get_in
     return true;
 }
 
-bool vulkan::load_device(VkDevice device, PFN_vkGetDeviceProcAddr get_device_proc_addr)
-{
+bool vulkan::load_device(VkDevice device, PFN_vkGetDeviceProcAddr get_device_proc_addr) {
     ZoneScoped;
 
 #define VKFN_FUNCTION(_name)                                                 \
@@ -53,7 +51,7 @@ bool vulkan::load_device(VkDevice device, PFN_vkGetDeviceProcAddr get_device_pro
 
     VKFN_LOGICAL_DEVICE_FUNCTIONS
     VKFN_COMMAND_BUFFER_FUNCTIONS
-#if LR_DEBUG
+#if LS_DEBUG
     VKFN_DEBUG_UTILS_EXT_DEVICE_FUNCTIONS
 #endif
 #if TRACY_ENABLE

@@ -141,7 +141,7 @@ constexpr static std::string_view vkresult_to_string(VKResult result) {
 constexpr static VKResult CHECK(
     VkResult vkr, [[maybe_unused]] std::initializer_list<VKResult> allowed_checks = {}, [[maybe_unused]] std::source_location LOC = std::source_location::current()) {
     auto result = static_cast<VKResult>(vkr);
-#if LR_DEBUG
+#if LS_DEBUG
     if (result != VKResult::Success)
         for (auto &a : allowed_checks)
             if (a == result)

@@ -8,6 +8,8 @@ struct Scene {
     flecs::world &ecs;
     flecs::entity handle;
 
+    const std::string_view name() { return { handle.name(), handle.name().length() }; }
+
     Scene(std::string_view name_, flecs::world &world_);
     virtual ~Scene() = default;
 

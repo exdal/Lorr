@@ -8,11 +8,16 @@ bool Application::init(this Application &self, const ApplicationInfo &info) {
 
     Log::init(static_cast<i32>(info.args.size()), info.args.data());
 
+    if (!self.do_super_init(info.args)) {
+        LR_LOG_FATAL("Super init failed!");
+        return false;
+    }
+
     if (!self.instance.init({ .engine_name = "Lorr" })) {
         return false;
     }
 
-    if (!self.device.init({ .instance = &self.instance.m_handle, .frame_count = 3 })) {
+    if (!self.device.init({ .instance = &self.instance.handle, .frame_count = 3 })) {
         return false;
     }
 
@@ -24,7 +29,7 @@ bool Application::init(this Application &self, const ApplicationInfo &info) {
         return false;
     }
 
-    if (!self.world.init({})) {
+    if (!self.world.init()) {
         return false;
     }
 
@@ -54,16 +59,16 @@ bool Application::init(this Application &self, const ApplicationInfo &info) {
 void Application::push_event(this Application &self, ApplicationEvent event, const ApplicationEventData &data) {
     ZoneScoped;
 
-    self.event_manager.push(event, data);
+    self.event_man.push(event, data);
 }
 
 void Application::poll_events(this Application &self) {
     ZoneScoped;
 
     auto &imgui = ImGui::GetIO();
-    while (self.event_manager.peek()) {
+    while (self.event_man.peek()) {
         ApplicationEventData e = {};
-        switch (self.event_manager.dispatch(e)) {
+        switch (self.event_man.dispatch(e)) {
             case ApplicationEvent::WindowResize: {
                 self.world_render_pipeline.on_resize(e.size);
                 break;
@@ -163,18 +168,10 @@ void Application::shutdown(this Application &self, bool hard) {
 
     LR_LOG_WARN("Shutting down application...");
     self.device.wait_for_work();
-#ifdef LR_DEBUG
-    self.asset_man.shutdown(true);
-#else
-    self.asset_man.shutdown(false);
-#endif
+    self.asset_man.shutdown(LS_DEBUG == 1);
     self.device.delete_swap_chains(self.default_surface.swap_chain);
     self.world_render_pipeline.shutdown();
-#ifdef LR_DEBUG
-    self.device.shutdown(LR_DEBUG);
-#else
-    self.device.shutdown(false);
-#endif
+    self.device.shutdown(LS_DEBUG == 1);
 
     LR_LOG_INFO("Complete!");
 }
@@ -197,7 +194,7 @@ VKResult Application::create_surface(this Application &self, ApplicationSurface 
     surface.image_views.resize(self.device.frame_count);
 
     SwapChainInfo swap_chain_info = {
-        .surface = surface.window.get_surface(self.instance.m_handle),
+        .surface = surface.window.get_surface(self.instance.handle),
         .extent = { surface.window.width, surface.window.height },
     };
 

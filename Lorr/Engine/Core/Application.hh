@@ -31,7 +31,7 @@ struct ApplicationInfo {
 struct Application {
     static Application &get();
 
-    EventManager<ApplicationEvent, ApplicationEventData> event_manager = {};
+    EventManager<ApplicationEvent, ApplicationEventData> event_man = {};
     Instance instance = {};
     Device device = {};
     ApplicationSurface default_surface = {};
@@ -47,6 +47,7 @@ struct Application {
     void run(this Application &);
     void shutdown(this Application &, bool hard);
 
+    virtual bool do_super_init(ls::span<c8 *> args) = 0;
     virtual bool do_prepare() = 0;
     virtual bool do_update(f32 delta_time) = 0;
     virtual void do_shutdown() = 0;

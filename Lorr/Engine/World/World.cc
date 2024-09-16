@@ -2,7 +2,6 @@
 
 #include "Components.hh"
 
-#include "Engine/Core/Application.hh"
 #include "Engine/Memory/Stack.hh"
 #include "Engine/OS/OS.hh"
 #include "Engine/Util/json_driver.hh"
@@ -11,7 +10,7 @@
 #include <glm/gtx/euler_angles.hpp>
 
 namespace lr {
-bool World::init(this World &self, const WorldInfo &info) {
+bool World::init(this World &self) {
     ZoneScoped;
 
     // SETUP CUSTOM TYPES
@@ -93,16 +92,6 @@ bool World::init(this World &self, const WorldInfo &info) {
             t.matrix *= glm::scale(glm::mat4(1.0), t.scale);
         });
 
-    std::visit(
-        match{
-            [](const auto &) {},
-            // Starter project
-            [](std::monostate) {},
-            // Existing project
-            [](const fs::path &) {},
-        },
-        info.name_info);
-
     return true;
 }
 
@@ -118,10 +107,9 @@ bool World::poll(this World &self) {
     return self.ecs.progress();
 }
 
-bool World::import_scene(this World &self, SceneID scene_id, const fs::path &path) {
+bool World::import_scene(this World &self, Scene &scene, const fs::path &path) {
     ZoneScoped;
 
-    auto &scene = self.scene_at(scene_id);
     File file(path, FileAccess::Read);
     if (!file) {
         LR_LOG_ERROR("Failed to open file {}!", path);
@@ -236,14 +224,11 @@ bool World::import_scene(this World &self, SceneID scene_id, const fs::path &pat
     return true;
 }
 
-bool World::export_scene(this World &self, SceneID scene_id, const fs::path &path) {
+bool World::export_scene(this World &, Scene &scene, const fs::path &dir) {
     ZoneScoped;
 
-    auto &scene = self.scene_at(scene_id);
-    const auto &scene_name = scene.handle.name();
-
     generic_json json = {};
-    json["name"] = std::string(scene_name, scene_name.length());
+    json["name"] = std::string(scene.name());
     auto entities_json = generic_json::array_t{};
     scene.children([&](flecs::entity e) {
         auto &entity_json = entities_json.emplace_back();
@@ -297,13 +282,15 @@ bool World::export_scene(this World &self, SceneID scene_id, const fs::path &pat
     std::string json_str;
     auto json_str_err = glz::write<glz::opts{ .prettify = true, .indentation_width = 2 }>(json, json_str);
     if (json_str_err != glz::error_code::none) {
-        LR_LOG_ERROR("Failed to write for file '{}'! {}", path, json_str_err.custom_error_message);
+        LR_LOG_ERROR("Failed to serialze scene '{}'! {}", scene.name(), json_str_err.custom_error_message);
         return false;
     }
 
-    File file(path, FileAccess::Write);
+    auto clear_name = fmt::format("{}.lrscene", scene.name());
+    auto file_path = dir / clear_name;
+    File file(file_path, FileAccess::Write);
     if (!file) {
-        LR_LOG_ERROR("Failed to open file {}!", path);
+        LR_LOG_ERROR("Failed to open file {}!", file_path);
         return false;
     }
 
@@ -312,9 +299,41 @@ bool World::export_scene(this World &self, SceneID scene_id, const fs::path &pat
     return true;
 }
 
-bool World::export_project(this World &self, const fs::path &path) {
+bool World::import_project(this World &self, const fs::path &path) {
     ZoneScoped;
-    memory::ScopedStack stack;
+
+    File project_file(path, FileAccess::Read);
+    if (!project_file) {
+        LR_LOG_ERROR("Failed to read '{}'!", path);
+        return false;
+    }
+
+    ProjectInfo project_info = {};
+    auto json = project_file.read_string({ 0, project_file.size });
+
+    if (auto err = glz::read_json(project_info, json)) {
+        LR_LOG_ERROR("Failed to read project! {}", err.custom_error_message);
+        return false;
+    }
+
+    const fs::path &dir = path.parent_path();
+
+    self.project_info = project_info;
+    self.name = project_info.project_name;
+    fs::path models_path = dir / project_info.models_path;
+    fs::path scenes_path = dir / project_info.scenes_path;
+
+    return true;
+}
+
+bool World::export_project(this World &self, const fs::path &root_dir) {
+    ZoneScoped;
+
+    // root_dir = /path/to/my_projects
+    // proj_root_dir = root_dir / <PROJECT_NAME>
+    // proj_file = proj_root_dir / world.lrproj
+    auto proj_root_dir = root_dir / self.name;
+    auto proj_file = proj_root_dir / "world.lrproj";
 
     // Project Name
     // - Audio
@@ -324,59 +343,60 @@ bool World::export_project(this World &self, const fs::path &path) {
     // - Prefabs
     // world.lrproj
 
-    auto &app = Application::get();
-    auto &asset_man = app.asset_man;
+    // Fresh project, the dev has freedom to change file structure
+    // but we prepare initial structure to ease out some stuff
+    if (!fs::exists(proj_root_dir)) {
+        // /<root_dir>/<name>/[dir_tree*]
+        // clang-format off
+        constexpr static std::string_view dir_tree[] = {
+            "Assets",
+            "Assets/Audio",
+            "Assets/Scenes",
+            "Assets/Shaders",
+            "Assets/Models",
+        };
+        // clang-format on
 
-    generic_json json = {};
-    json["project_name"] = self.name;
-    generic_json::array_t models_json = {};
+        // Create project root directory first
+        std::error_code err;
+        fs::create_directories(proj_root_dir, err);
+        if (err) {
+            LR_LOG_ERROR("Failed to create directory '{}'! {}", proj_root_dir, err.message());
+            return false;
+        }
 
-    for (auto &path : asset_man.model_paths) {
-        models_json.emplace_back(path.string());
+        for (const auto &dir : dir_tree) {
+            fs::create_directories(proj_root_dir / dir);
+        }
+
+        ProjectInfo new_proj_info = {
+            .project_name = self.name,
+            .scenes_path = dir_tree[2],
+            .models_path = dir_tree[3],
+        };
+        self.project_info = new_proj_info;
     }
 
-    json["models"] = models_json;
+    LS_EXPECT(self.project_info.has_value());
+
+    for (auto &scene : self.scenes) {
+        self.export_scene(*scene, proj_root_dir / self.project_info->scenes_path);
+    }
 
     std::string json_str;
-    auto json_str_err = glz::write<glz::opts{ .prettify = true, .indentation_width = 2 }>(json, json_str);
+    auto json_str_err = glz::write<glz::opts{ .prettify = true, .indentation_width = 2 }>(self.project_info.value(), json_str);
     if (json_str_err != glz::error_code::none) {
-        LR_LOG_ERROR("Failed to write for file '{}'! {}", path, json_str_err.custom_error_message);
+        LR_LOG_ERROR("Failed to write for file '{}'! {}", proj_file, json_str_err.custom_error_message);
         return false;
     }
 
-    File file(path, FileAccess::Write);
+    File file(proj_file, FileAccess::Write);
     if (!file) {
-        LR_LOG_ERROR("Failed to open file {}!", path);
+        LR_LOG_ERROR("Failed to open file {}!", proj_file);
         return false;
     }
 
     file.write(json_str.data(), { 0, json_str.length() });
-
-    return true;
-}
-
-bool World::create_project(this World &self, std::string_view name, const fs::path &root_dir) {
-    ZoneScoped;
-
-    // /<root_dir>/<name>/[dir_tree*]
-    constexpr static std::string_view dir_tree[] = {
-        "Assets", "Assets/Audio", "Assets/Scenes", "Assets/Shaders", "Assets/Models",
-    };
-
-    // Create project root directory first
-    std::error_code err;
-    auto proj_root_dir = root_dir / name;
-    fs::create_directories(proj_root_dir, err);
-    if (err) {
-        LR_LOG_ERROR("Failed to create directory '{}'! {}", proj_root_dir, err.message());
-        return false;
-    }
-
-    for (const auto &dir : dir_tree) {
-        fs::create_directories(proj_root_dir / dir);
-    }
-
-    self.export_project(proj_root_dir / "world.lrproj");
 
     return true;
 }

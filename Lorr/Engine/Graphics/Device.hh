@@ -142,7 +142,7 @@ struct Device {
 
     template<typename T>
     void set_object_name(this auto &self, [[maybe_unused]] T &v, [[maybe_unused]] std::string_view name) {
-#if LR_DEBUG
+#if LS_DEBUG
         VkDebugUtilsObjectNameInfoEXT object_name_info = {
             .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
             .pNext = nullptr,
@@ -156,7 +156,7 @@ struct Device {
 
     template<VkObjectType ObjectType, typename T>
     void set_object_name_raw(this auto &self, [[maybe_unused]] T v, [[maybe_unused]] std::string_view name) {
-#if LR_DEBUG
+#if LS_DEBUG
         VkDebugUtilsObjectNameInfoEXT object_name_info = {
             .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
             .pNext = nullptr,

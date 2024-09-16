@@ -60,6 +60,9 @@ struct File {
     File &operator=(File &&) = default;
     bool operator==(const File &) const = default;
     explicit operator bool() { return result == FileResult::Success; }
+
+    static ls::option<std::string> open_dialog();
+    static bool save_dialog(const fs::path &path);
 };
 
 /// MEMORY ///

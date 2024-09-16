@@ -177,14 +177,28 @@ void EditorLayout::update(this EditorLayout &self) {
 
     if (ImGui::BeginMenuBar()) {
         if (ImGui::BeginMenu("File")) {
-            if (ImGui::MenuItem("Export scene")) {
-                app.world.create_project("test project", fs::current_path() / ".projects");
-                app.world.export_scene(app.world.active_scene.value(), "scene.json");
-                app.world.export_project("world.lrproj");
+            if (ImGui::MenuItem("New Scene")) {
             }
 
-            if (ImGui::MenuItem("Import scene")) {
-                app.world.import_scene(app.world.active_scene.value(), "scene.json");
+            if (ImGui::MenuItem("Open Scene")) {
+            }
+
+            ImGui::Separator();
+
+            if (ImGui::MenuItem("Save")) {
+                auto p = fs::current_path() / ".projects";
+                app.world.export_project(p);
+            }
+
+            if (ImGui::MenuItem("Save As...")) {
+            }
+
+            ImGui::Separator();
+
+            if (ImGui::MenuItem("New Project...")) {
+            }
+
+            if (ImGui::MenuItem("Open Project...")) {
             }
 
             ImGui::Separator();

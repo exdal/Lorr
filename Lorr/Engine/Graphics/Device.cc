@@ -1223,7 +1223,7 @@ ls::result<BufferID, VKResult> Device::create_buffer(this Device &self, const Bu
         LR_LOG_ERROR("Failed to create Buffer! {}", result);
         return result;
     }
-#if LR_DEBUG
+#if LS_DEBUG
     vmaSetAllocationName(self.allocator, allocation, info.debug_name.data());
 #endif
 

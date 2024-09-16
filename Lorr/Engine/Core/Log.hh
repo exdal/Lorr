@@ -20,7 +20,7 @@ struct Log {
 #define LR_LOG_ERROR(...) LOG_F(ERROR, __VA_ARGS__)
 #define LR_LOG_FATAL(...) LOG_F(FATAL, __VA_ARGS__)
 
-#if defined(LR_DEBUG)
+#if defined(LS_DEBUG)
 #define LR_ASSERT(test, ...) CHECK_F(test, ##__VA_ARGS__)
 #else
 #define LR_ASSERT(...)

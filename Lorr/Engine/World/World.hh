@@ -3,25 +3,27 @@
 #include "Scene.hh"
 
 namespace lr {
-// aka ProjectInfo
-struct WorldInfo {
-    std::variant<std::monostate, fs::path> name_info;
+struct ProjectInfo {
+    std::string_view project_name = {};
+    std::string_view scenes_path = {};
+    std::string_view models_path = {};
 };
 
 struct World {
-    std::string name = {};
+    std::string name = "unnamed_world";
     flecs::world ecs{};
     std::vector<std::unique_ptr<Scene>> scenes = {};
     ls::option<SceneID> active_scene = ls::nullopt;
+    ls::option<ProjectInfo> project_info = ls::nullopt;
 
-    bool init(this World &, const WorldInfo &info);
+    bool init(this World &);
     void shutdown(this World &);
     bool poll(this World &);
 
-    bool import_scene(this World &, SceneID scene_id, const fs::path &path);
-    bool export_scene(this World &, SceneID scene_id, const fs::path &path);
-    bool export_project(this World &, const fs::path &path);
-    bool create_project(this World &, std::string_view name, const fs::path &root_dir);
+    bool import_scene(this World &, Scene &scene, const fs::path &path);
+    bool export_scene(this World &, Scene &scene, const fs::path &dir);
+    bool import_project(this World &, const fs::path &path);
+    bool export_project(this World &, const fs::path &root_dir);
 
     template<typename T>
     SceneID create_scene(this World &self, std::string_view name) {

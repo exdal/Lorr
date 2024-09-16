@@ -7,6 +7,8 @@
 #include <sys/sysinfo.h>
 #include <unistd.h>
 
+#include <iostream>
+
 namespace lr {
 
 /// FILE SYSTEM ///
@@ -120,6 +122,30 @@ void File::close(this File &self) {
     if (self.handle) {
         _close(static_cast<i32>(self.handle.value()));
         self.handle.reset();
+    }
+}
+
+ls::option<std::string> File::open_dialog() {
+    ZoneScoped;
+
+    std::cout.flush();
+    if (std::system("zenity --version") != 0) {
+        LR_LOG_ERROR("Zenity is not installed on the system.");
+        return ls::nullopt;
+    }
+
+    auto *f = popen("zenity --file-selection", "r");
+    std::string result = {};
+
+    return result;
+}
+
+bool File::save_dialog(const fs::path &path) {
+    ZoneScoped;
+
+    if (std::system("zenity --version") != 0) {
+        LR_LOG_ERROR("Zenity is not installed on the system.");
+        return ls::nullopt;
     }
 }
 

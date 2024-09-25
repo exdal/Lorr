@@ -13,7 +13,7 @@ struct Identifier {
     constexpr Identifier(const c8 (&arr)[N]) {
         std::string_view str = arr;
         usize split_pos = str.find(SPLIT);
-        LR_ASSERT(split_pos != ~0_sz, "Identifiers must be formated like 'category://name'!");
+        LS_EXPECT(split_pos != ~0_sz);
 
         this->category_hash = fnv64_str(str.substr(0, split_pos));
         this->name_hash = fnv64_str(str.substr(split_pos + SPLIT.length()));
@@ -21,7 +21,7 @@ struct Identifier {
 
     constexpr Identifier(std::string_view str) {
         usize split_pos = str.find(SPLIT);
-        LR_ASSERT(split_pos != ~0_sz, "Identifiers must be formated like 'category://name'!");
+        LS_EXPECT(split_pos != ~0_sz);
 
         this->category_hash = fnv64_str(str.substr(0, split_pos));
         this->name_hash = fnv64_str(str.substr(split_pos + SPLIT.length()));

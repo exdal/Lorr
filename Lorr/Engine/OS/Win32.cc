@@ -5,7 +5,7 @@
 #endif
 #include <Windows.h>
 
-#if LR_LINUX
+#if LS_LINUX
 // Basic type declaration to shut LSP up.
 using DWORD = u32;
 using HANDLE = void *;
@@ -62,7 +62,7 @@ File::File(const fs::path &path, FileAccess access) {
 
     HANDLE file_handle = CreateFileW(path.c_str(), flags, share_flags, nullptr, creation_flags, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (file_handle == INVALID_HANDLE_VALUE) {
-        LR_LOG_ERROR("Failed to open file! {}", GetLastError());
+        LOG_ERROR("Failed to open file! {}", GetLastError());
         this->result = FileResult::NoAccess;
         return;
     }
@@ -77,7 +77,7 @@ File::File(const fs::path &path, FileAccess access) {
 void File::write(this File &self, const void *data, ls::u64range range) {
     ZoneScoped;
 
-    LR_CHECK(self.handle.has_value(), "Trying to write invalid file");
+    LS_EXPECT(self.handle.has_value());
 
     HANDLE file_handle = reinterpret_cast<HANDLE>(self.handle.value());
     u64 offset = range.min;
@@ -91,7 +91,7 @@ void File::write(this File &self, const void *data, ls::u64range range) {
         overlapped.Offset = offset & 0x00000000ffffffffull;
         overlapped.OffsetHigh = (offset & 0xffffffff00000000ull) >> 32;
         if (WriteFile(file_handle, cur_data, remainder_size, &cur_written_size, &overlapped) == 0) {
-            LR_LOG_TRACE("File write interrupted! {}", cur_written_size);
+            LOG_TRACE("File write interrupted! {}", cur_written_size);
             break;
         }
 
@@ -102,7 +102,7 @@ void File::write(this File &self, const void *data, ls::u64range range) {
 u64 File::read(this File &self, void *data, ls::u64range range) {
     ZoneScoped;
 
-    LR_CHECK(self.handle.has_value(), "Trying to read invalid file");
+    LS_EXPECT(self.handle.has_value());
 
     auto file_handle = reinterpret_cast<HANDLE>(self.handle.value());
 
@@ -118,7 +118,7 @@ u64 File::read(this File &self, void *data, ls::u64range range) {
         overlapped.OffsetHigh = (read_bytes_size & 0xffffffff00000000ull) >> 32u;
         ReadFile(file_handle, cur_data, remainder_size, &cur_read_size, &overlapped);
         if (cur_read_size < 0) {
-            LR_LOG_TRACE("File read interrupted! {}", cur_read_size);
+            LOG_TRACE("File read interrupted! {}", cur_read_size);
             break;
         }
 
@@ -144,6 +144,11 @@ void File::close(this File &self) {
         CloseHandle(file_handle);
         self.handle.reset();
     }
+}
+
+ls::option<fs::path> File::open_dialog(std::string_view title, bool save) {
+    // Open file dialog in Windows is not implemented
+    LS_EXPECT(false);
 }
 
 /// MEMORY ///

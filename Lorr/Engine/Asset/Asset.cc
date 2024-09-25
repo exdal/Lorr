@@ -14,9 +14,26 @@ struct SlangBlob : ISlangBlob {
     std::atomic_uint32_t m_refCount = 1;
 
     ISlangUnknown *getInterface(SlangUUID const &) { return nullptr; }
-    SLANG_IUNKNOWN_QUERY_INTERFACE
-    SLANG_IUNKNOWN_ADD_REF
-    SLANG_IUNKNOWN_RELEASE
+    SLANG_NO_THROW SlangResult SLANG_MCALL queryInterface(SlangUUID const &uuid, void **outObject) SLANG_OVERRIDE {
+        ISlangUnknown *intf = getInterface(uuid);
+        if (intf) {
+            addRef();
+            *outObject = intf;
+            return SLANG_OK;
+        }
+        return SLANG_E_NO_INTERFACE;
+    }
+
+    SLANG_NO_THROW uint32_t SLANG_MCALL addRef() override { return ++m_refCount; }
+
+    SLANG_NO_THROW uint32_t SLANG_MCALL release() override {
+        --m_refCount;
+        if (m_refCount == 0) {
+            delete this;
+            return 0;
+        }
+        return m_refCount;
+    }
 
     SlangBlob(const std::vector<u8> &data)
         : m_data(data) {}
@@ -34,9 +51,26 @@ struct SlangVirtualFS : ISlangFileSystem {
     fs::path m_root_dir;
     std::atomic_uint32_t m_refCount;
 
-    SLANG_IUNKNOWN_QUERY_INTERFACE
-    SLANG_IUNKNOWN_ADD_REF
-    SLANG_IUNKNOWN_RELEASE
+    SLANG_NO_THROW SlangResult SLANG_MCALL queryInterface(SlangUUID const &uuid, void **outObject) SLANG_OVERRIDE {
+        ISlangUnknown *intf = getInterface(uuid);
+        if (intf) {
+            addRef();
+            *outObject = intf;
+            return SLANG_OK;
+        }
+        return SLANG_E_NO_INTERFACE;
+    }
+
+    SLANG_NO_THROW uint32_t SLANG_MCALL addRef() override { return ++m_refCount; }
+
+    SLANG_NO_THROW uint32_t SLANG_MCALL release() override {
+        --m_refCount;
+        if (m_refCount == 0) {
+            delete this;
+            return 0;
+        }
+        return m_refCount;
+    }
 
     SlangVirtualFS(VirtualDir &venv, fs::path &root_dir)
         : m_virtual_env(venv),
@@ -63,11 +97,11 @@ struct SlangVirtualFS : ISlangFileSystem {
                 auto &new_file = result.value().get();
                 *outBlob = new SlangBlob(std::vector<u8>{ new_file.data(), (new_file.data() + new_file.size()) });
 
-                LR_LOG_TRACE("New shader module '{}' is loaded.", module_name);
+                LOG_TRACE("New shader module '{}' is loaded.", module_name);
                 return SLANG_OK;
             } else {
                 auto path_str = path.string();
-                LR_LOG_ERROR("Failed to load shader '{}'!", path_str);
+                LOG_ERROR("Failed to load shader '{}'!", path_str);
                 return SLANG_E_NOT_FOUND;
             }
         } else {
@@ -195,10 +229,10 @@ void AssetManager::shutdown(this AssetManager &self, bool print_reports) {
     self.device->delete_buffers(self.material_buffer_id);
 
     if (print_reports) {
-        LR_LOG_INFO("{} alive textures.", self.textures.size());
-        LR_LOG_INFO("{} alive materials.", self.materials.size());
-        LR_LOG_INFO("{} alive models.", self.models.size());
-        LR_LOG_INFO("{} alive shaders.", self.shaders.size());
+        LOG_INFO("{} alive textures.", self.textures.size());
+        LOG_INFO("{} alive materials.", self.materials.size());
+        LOG_INFO("{} alive models.", self.models.size());
+        LOG_INFO("{} alive shaders.", self.shaders.size());
     }
 
     for (auto &v : self.textures) {
@@ -270,7 +304,7 @@ ls::option<ModelID> AssetManager::load_model(this AssetManager &self, const fs::
                 texture.sampler_id = self.device->create_cached_sampler(sampler_info);
             }
         } else {
-            LR_LOG_ERROR("An image named {} could not be parsed!", v.name);
+            LOG_ERROR("An image named {} could not be parsed!", v.name);
             texture = self.textures[0];
         }
     }
@@ -440,13 +474,16 @@ ls::option<ShaderID> AssetManager::load_shader(this AssetManager &self, Identifi
     if (!slang_global_session) {
         auto result = slang::createGlobalSession(slang_global_session.writeRef());
         if (SLANG_FAILED(result)) {
-            LR_LOG_FATAL("Cannot initialize shader compiler session! {}", result);
+            LOG_FATAL("Cannot initialize shader compiler session! {}", result);
             return ls::nullopt;
         }
     }
 
     /////////////////////////////////////////
     /// SESSION INITIALIZATION
+
+    auto root_path = fs::current_path() / "resources" / "shaders";
+    SlangVirtualFS slang_fs(self.shader_virtual_env, root_path);
 
     std::vector<slang::CompilerOptionEntry> entries = get_slang_entries(info.compile_flags | ShaderCompileFlag::UseScalarLayout);
     std::vector<slang::PreprocessorMacroDesc> macros;
@@ -471,10 +508,11 @@ ls::option<ShaderID> AssetManager::load_shader(this AssetManager &self, Identifi
         .searchPathCount = 0,
         .preprocessorMacros = macros.data(),
         .preprocessorMacroCount = static_cast<u32>(macros.size()),
+        .fileSystem = &slang_fs,
     };
     Slang::ComPtr<slang::ISession> session;
     if (SLANG_FAILED(slang_global_session->createSession(session_desc, session.writeRef()))) {
-        LR_LOG_ERROR("Failed to create compiler session!");
+        LOG_ERROR("Failed to create compiler session!");
         return ls::nullopt;
     }
 
@@ -484,13 +522,9 @@ ls::option<ShaderID> AssetManager::load_shader(this AssetManager &self, Identifi
     // https://github.com/shader-slang/slang/blob/ed0681164d78591148781d08934676bfec63f9da/examples/cpu-com-example/main.cpp
     Slang::ComPtr<SlangCompileRequest> compile_request;
     if (SLANG_FAILED(session->createCompileRequest(compile_request.writeRef()))) {
-        LR_LOG_ERROR("Failed to create compile request!");
+        LOG_ERROR("Failed to create compile request!");
         return ls::nullopt;
     }
-
-    auto root_path = fs::current_path() / "resources" / "shaders";
-    SlangVirtualFS slang_fs(self.shader_virtual_env, root_path);
-    compile_request->setFileSystem(&slang_fs);
 
     i32 main_shader_id = compile_request->addTranslationUnit(SLANG_SOURCE_LANGUAGE_SLANG, nullptr);
 
@@ -502,7 +536,7 @@ ls::option<ShaderID> AssetManager::load_shader(this AssetManager &self, Identifi
     } else {
         File file(full_path, FileAccess::Read);
         if (!file) {
-            LR_LOG_ERROR("Failed to read shader file '{}'! {}", full_path_str.c_str(), static_cast<usize>(file.result));
+            LOG_ERROR("Failed to read shader file '{}'! {}", full_path_str.c_str(), static_cast<usize>(file.result));
             return ls::nullopt;
         }
         auto file_data = file.whole_data();
@@ -513,14 +547,14 @@ ls::option<ShaderID> AssetManager::load_shader(this AssetManager &self, Identifi
     const SlangResult compile_result = compile_request->compile();
     const char *diagnostics = compile_request->getDiagnosticOutput();
     if (SLANG_FAILED(compile_result)) {
-        LR_LOG_ERROR("Failed to compile shader!\n{}\n", diagnostics);
+        LOG_ERROR("Failed to compile shader!\n{}\n", diagnostics);
         return ls::nullopt;
     }
 
     Slang::ComPtr<slang::IModule> shader_module;
     if (SLANG_FAILED(compile_request->getModule(main_shader_id, shader_module.writeRef()))) {
         // if this gets hit, something is def wrong
-        LR_LOG_ERROR("Failed to get shader module!");
+        LOG_ERROR("Failed to get shader module!");
         return ls::nullopt;
     }
 
@@ -562,7 +596,7 @@ ls::option<ShaderID> AssetManager::load_shader(this AssetManager &self, Identifi
     }
 
     if (found_entry_point_id == ~0u) {
-        LR_LOG_ERROR("Failed to find given entry point ''!", info.entry_point);
+        LOG_ERROR("Failed to find given entry point ''!", info.entry_point);
         return ls::nullopt;
     }
 
@@ -571,7 +605,7 @@ ls::option<ShaderID> AssetManager::load_shader(this AssetManager &self, Identifi
 
     Slang::ComPtr<slang::IBlob> spirv_blob;
     if (SLANG_FAILED(compile_request->getEntryPointCodeBlob(found_entry_point_id, 0, spirv_blob.writeRef()))) {
-        LR_LOG_ERROR("Failed to get entrypoint assembly!");
+        LOG_ERROR("Failed to get entrypoint assembly!");
         return ls::nullopt;
     }
 

@@ -186,8 +186,10 @@ void EditorLayout::update(this EditorLayout &self) {
             ImGui::Separator();
 
             if (ImGui::MenuItem("Save")) {
-                auto p = fs::current_path() / ".projects";
-                app.world.export_project(p);
+                auto path = File::open_dialog("Save Project", FileDialogFlag::Save | FileDialogFlag::DirOnly);
+                if (path.has_value()) {
+                    app.world.export_project(path.value());
+                }
             }
 
             if (ImGui::MenuItem("Save As...")) {
@@ -199,6 +201,16 @@ void EditorLayout::update(this EditorLayout &self) {
             }
 
             if (ImGui::MenuItem("Open Project...")) {
+                auto path = File::open_dialog("Open Project");
+                if (!path.has_value()) {
+                    LOG_ERROR("Could not open project file.");
+                    return;
+                }
+
+                if (path->extension() != ".lrproj") {
+                    LOG_ERROR("Project files must end with .lrproj.");
+                    return;
+                }
             }
 
             ImGui::Separator();
@@ -222,19 +234,6 @@ void EditorLayout::update(this EditorLayout &self) {
     }
 
     ImGui::End();
-
-    ImGuiDockNodeFlags dock_node_flags_override = ImGuiDockNodeFlags_NoTabBar;
-    dock_node_flags_override |= ImGuiDockNodeFlags_NoDockingOverMe;
-    dock_node_flags_override |= ImGuiDockNodeFlags_NoDockingSplit;
-    dock_node_flags_override |= ImGuiDockNodeFlags_NoResizeX;
-    ImGuiWindowClass window_class;
-    window_class.DockNodeFlagsOverrideSet = dock_node_flags_override;
-
-    ImGui::SetNextWindowClass(&window_class);
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.082f, 0.082f, 0.082f, 1.00f));
-    ImGui::Begin("###up_dock");
-    ImGui::End();
-    ImGui::PopStyleColor();
 
     if (self.show_profiler) {
         app.world_render_pipeline.task_graph.draw_profiler_ui();

@@ -112,7 +112,7 @@ bool World::import_scene(this World &self, Scene &scene, const fs::path &path) {
 
     File file(path, FileAccess::Read);
     if (!file) {
-        LR_LOG_ERROR("Failed to open file {}!", path);
+        LOG_ERROR("Failed to open file {}!", path);
         return false;
     }
 
@@ -120,13 +120,13 @@ bool World::import_scene(this World &self, Scene &scene, const fs::path &path) {
     generic_json json = {};
     auto json_err = glz::read_json(json, json_str);
     if (json_err != glz::error_code::none) {
-        LR_LOG_ERROR("Failed to open scene file! {}", json_err.custom_error_message);
+        LOG_ERROR("Failed to open scene file! {}", json_err.custom_error_message);
         return false;
     }
 
     auto &name_json = json.at("name");
     if (!name_json) {
-        LR_LOG_ERROR("Scene files must have names!");
+        LOG_ERROR("Scene files must have names!");
         return false;
     }
 
@@ -137,7 +137,7 @@ bool World::import_scene(this World &self, Scene &scene, const fs::path &path) {
     for (auto &entity_json : entities_json.get_array()) {
         auto &entity_name_json = entity_json.at("name");
         if (!entity_name_json) {
-            LR_LOG_ERROR("Entities must have names!");
+            LOG_ERROR("Entities must have names!");
             return false;
         }
 
@@ -161,14 +161,14 @@ bool World::import_scene(this World &self, Scene &scene, const fs::path &path) {
             auto &component_name_json = component_json.at("name");
             LS_EXPECT(component_name_json.is_string());
             if (!component_name_json) {
-                LR_LOG_ERROR("Entity '{}' has corrupt components JSON array.", e.name());
+                LOG_ERROR("Entity '{}' has corrupt components JSON array.", e.name());
                 return false;
             }
 
             auto &component_name = component_name_json.get_string();
             auto component_id = self.ecs.lookup(component_name.c_str());
             if (!component_id) {
-                LR_LOG_ERROR("Entity '{}' has invalid component named '{}'!", e.name(), component_name);
+                LOG_ERROR("Entity '{}' has invalid component named '{}'!", e.name(), component_name);
                 return false;
             }
 
@@ -282,15 +282,15 @@ bool World::export_scene(this World &, Scene &scene, const fs::path &dir) {
     std::string json_str;
     auto json_str_err = glz::write<glz::opts{ .prettify = true, .indentation_width = 2 }>(json, json_str);
     if (json_str_err != glz::error_code::none) {
-        LR_LOG_ERROR("Failed to serialze scene '{}'! {}", scene.name(), json_str_err.custom_error_message);
+        LOG_ERROR("Failed to serialze scene '{}'! {}", scene.name(), json_str_err.custom_error_message);
         return false;
     }
 
-    auto clear_name = fmt::format("{}.lrscene", scene.name());
+    auto clear_name = std::format("{}.lrscene", scene.name());
     auto file_path = dir / clear_name;
     File file(file_path, FileAccess::Write);
     if (!file) {
-        LR_LOG_ERROR("Failed to open file {}!", file_path);
+        LOG_ERROR("Failed to open file {}!", file_path);
         return false;
     }
 
@@ -304,7 +304,7 @@ bool World::import_project(this World &self, const fs::path &path) {
 
     File project_file(path, FileAccess::Read);
     if (!project_file) {
-        LR_LOG_ERROR("Failed to read '{}'!", path);
+        LOG_ERROR("Failed to read '{}'!", path);
         return false;
     }
 
@@ -312,7 +312,7 @@ bool World::import_project(this World &self, const fs::path &path) {
     auto json = project_file.read_string({ 0, project_file.size });
 
     if (auto err = glz::read_json(project_info, json)) {
-        LR_LOG_ERROR("Failed to read project! {}", err.custom_error_message);
+        LOG_ERROR("Failed to read project! {}", err.custom_error_message);
         return false;
     }
 
@@ -361,7 +361,7 @@ bool World::export_project(this World &self, const fs::path &root_dir) {
         std::error_code err;
         fs::create_directories(proj_root_dir, err);
         if (err) {
-            LR_LOG_ERROR("Failed to create directory '{}'! {}", proj_root_dir, err.message());
+            LOG_ERROR("Failed to create directory '{}'! {}", proj_root_dir, err.message());
             return false;
         }
 
@@ -386,13 +386,13 @@ bool World::export_project(this World &self, const fs::path &root_dir) {
     std::string json_str;
     auto json_str_err = glz::write<glz::opts{ .prettify = true, .indentation_width = 2 }>(self.project_info.value(), json_str);
     if (json_str_err != glz::error_code::none) {
-        LR_LOG_ERROR("Failed to write for file '{}'! {}", proj_file, json_str_err.custom_error_message);
+        LOG_ERROR("Failed to write for file '{}'! {}", proj_file, json_str_err.custom_error_message);
         return false;
     }
 
     File file(proj_file, FileAccess::Write);
     if (!file) {
-        LR_LOG_ERROR("Failed to open file {}!", proj_file);
+        LOG_ERROR("Failed to open file {}!", proj_file);
         return false;
     }
 

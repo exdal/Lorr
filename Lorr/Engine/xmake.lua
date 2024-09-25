@@ -1,4 +1,11 @@
 target("Lorr")
+    -- Asan Mode --
+    if is_mode("asan") then
+        set_policy("build.sanitizer.address", true)
+        set_policy("build.sanitizer.undefined", true)
+        set_policy("build.sanitizer.leak", true)
+    end
+
     set_kind("static")
     set_languages("cxx23")
     add_forceincludes("Engine/pch.hh", { public = true })
@@ -45,12 +52,10 @@ target("Lorr")
         "vk-bootstrap",
         "imgui",
         "slang-lorr",
-        "fmt",
         "tracy",
         "xxhash",
         "glm",
         "plf_colony",
-        "loguru",
         "simdutf",
         "unordered_dense",
         "lz4",
@@ -60,6 +65,7 @@ target("Lorr")
         "flecs",
         "glaze",
         "imguizmo-lorr",
+        "luau",
         { public = true })
 
 target_end()

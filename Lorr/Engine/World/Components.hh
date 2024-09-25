@@ -5,15 +5,13 @@
 #include <flecs.h>
 #include <glm/gtx/quaternion.hpp>
 
-namespace fmt {
 template<>
-struct formatter<flecs::string_view> : formatter<string_view> {
+struct std::formatter<flecs::string_view> : formatter<string_view> {
     template<typename FormatContext>
     constexpr auto format(const flecs::string_view &v, FormatContext &ctx) const {
-        return fmt::format_to(ctx.out(), "{}", std::string_view(v.c_str(), v.length()));
+        return std::format_to(ctx.out(), "{}", std::string_view(v.c_str(), v.length()));
     }
 };
-}  // namespace fmt
 
 namespace lr::Component {
 struct Transform {

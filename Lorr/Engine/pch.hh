@@ -15,9 +15,12 @@
 #include <tracy/Tracy.hpp>
 
 #include <array>
+#include <format>
 #include <filesystem>
 #include <span>
 #include <string_view>
+
+namespace fs = std::filesystem;
 
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtx/common.hpp>
@@ -27,13 +30,11 @@
 #include <glm/vec3.hpp>
 #include <glm/vec4.hpp>
 
-#include "Core/Log.hh"
+#include "Core/Logger.hh"
 #include <ankerl/unordered_dense.h>
 #include <plf_colony.h>
 
 #include "Util/Icons.hh"
-
-namespace fs = std::filesystem;
 
 namespace lr {
 template<typename T, usize N>
@@ -48,14 +49,11 @@ struct match : T... {
 
 }  // namespace lr
 
-namespace fmt {
 template<>
-struct formatter<fs::path> : formatter<string_view> {
+struct std::formatter<fs::path> : formatter<string_view> {
     template<typename FormatContext>
     constexpr auto format(const fs::path &v, FormatContext &ctx) const {
         auto str = v.string();
-        return fmt::format_to(ctx.out(), "{}", str);
+        return std::format_to(ctx.out(), "{}", str);
     }
 };
-
-}  // namespace fmt

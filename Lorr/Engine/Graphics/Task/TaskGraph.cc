@@ -126,7 +126,7 @@ TaskID TaskGraph::add_task(this TaskGraph &self, std::unique_ptr<Task> &&task) {
     ZoneScoped;
 
     if (!self.prepare_task(*task)) {
-        LR_LOG_ERROR("Failed to prepare task '{}'!", task->name);
+        LOG_ERROR("Failed to prepare task '{}'!", task->name);
         return TaskID::Invalid;
     }
 
@@ -210,10 +210,10 @@ std::string TaskGraph::generate_graphviz(this TaskGraph &self) {
         std::string_view name = self.tasks[task_id]->name;
         auto uses = self.tasks[task_id]->task_uses;
 
-        ss << fmt::format(R"(task{} [)", task_id) << "\n";
-        ss << fmt::format(R"(label = "<name> {}({}))", name, task_id);
+        ss << std::format(R"(task{} [)", task_id) << "\n";
+        ss << std::format(R"(label = "<name> {}({}))", name, task_id);
         for (auto &use : uses) {
-            ss << fmt::format(R"(|<i{}> image {})", use.index, use.index);
+            ss << std::format(R"(|<i{}> image {})", use.index, use.index);
         }
         ss << "\"\n";
         ss << R"(shape = "record")"
@@ -227,14 +227,14 @@ std::string TaskGraph::generate_graphviz(this TaskGraph &self) {
             TaskBatch &batch = submit.batches[i];
             TaskID mid_task_id = batch.tasks[batch.tasks.size() / 2];
 
-            ss << fmt::format(R"(subgraph cluster_{})", batch_id) << " {\n";
-            ss << fmt::format(R"(label = "Batch {}\n{} barriers";)", batch_id, batch.barrier_indices.size()) << "\n";
+            ss << std::format(R"(subgraph cluster_{})", batch_id) << " {\n";
+            ss << std::format(R"(label = "Batch {}\n{} barriers";)", batch_id, batch.barrier_indices.size()) << "\n";
             if (i != 0) {
                 TaskBatch &last_batch = submit.batches[i - 1];
                 TaskID last_mid_task_id = last_batch.tasks[last_batch.tasks.size() / 2];
                 u32 lmtidx = static_cast<u32>(last_mid_task_id);
                 u32 mtidx = static_cast<u32>(mid_task_id);
-                ss << fmt::format("task{} -> task{} [ltail = cluster_{} lhead = cluster_{} label=\"todo barrier info\"];\n", lmtidx, mtidx, i - 1, i);
+                ss << std::format("task{} -> task{} [ltail = cluster_{} lhead = cluster_{} label=\"todo barrier info\"];\n", lmtidx, mtidx, i - 1, i);
             }
             for (TaskID task_id : batch.tasks) {
                 if (task_id == mid_task_id && i != 0) {
@@ -242,7 +242,7 @@ std::string TaskGraph::generate_graphviz(this TaskGraph &self) {
                 }
 
                 u32 task_index = static_cast<u32>(task_id);
-                ss << fmt::format("task{} ", task_index);
+                ss << std::format("task{} ", task_index);
             }
 
             ss << "\n}\n";
@@ -479,7 +479,7 @@ bool TaskGraph::prepare_task(this TaskGraph &self, Task &task) {
         glm::uvec2 render_extent = { ~0_u32, ~0_u32 };
         for_each_image_use(task.task_uses, [&](TaskImageID id, [[maybe_unused]] const PipelineAccessImpl &access, ImageLayout layout) {
             TaskImage &task_image = self.images[static_cast<usize>(id)];
-            LR_ASSERT(task_image.image_id != ImageID::Invalid, "Task '{}' using invalid image {}!", task.name, static_cast<u32>(id));
+            LS_EXPECT(task_image.image_id != ImageID::Invalid);
             Image &image = self.device->image_at(task_image.image_id);
 
             switch (layout) {
@@ -509,7 +509,7 @@ bool TaskGraph::prepare_task(this TaskGraph &self, Task &task) {
             !color_attachment_formats.empty() || graphics_info.depth_attachment_format != Format::Unknown || graphics_info.stencil_attachment_format != Format::Unknown;
 
         if (is_graphics_pipeline) {
-            LR_ASSERT(!pipeline_info.shader_ids.empty(), "Graphics pipeline requires at least one shader");
+            LS_EXPECT(!pipeline_info.shader_ids.empty());
 
             graphics_info.color_attachment_formats = color_attachment_formats;
             graphics_info.viewports = pipeline_info.viewports;
@@ -522,7 +522,7 @@ bool TaskGraph::prepare_task(this TaskGraph &self, Task &task) {
 
             task.pipeline_id = self.device->create_graphics_pipeline(graphics_info);
         } else {
-            LR_ASSERT(pipeline_info.shader_ids.size() == 1, "Compute pipelines require a shader");
+            LS_EXPECT(pipeline_info.shader_ids.size() == 1);
             compute_info.shader_id = pipeline_info.shader_ids[0];
             compute_info.layout_id = task.pipeline_layout_id;
 
@@ -542,7 +542,7 @@ TaskSubmit &TaskGraph::new_submit(this TaskGraph &self, CommandType type) {
     u32 submit_id = self.submits.size();
     TaskSubmit &submit = self.submits.emplace_back();
 
-    std::string name = fmt::format("TG Submit {}", submit_id);
+    std::string name = std::format("TG Submit {}", submit_id);
     submit.type = type;
     self.device->create_timestamp_query_pools(submit.query_pools, { .query_count = 128, .debug_name = name });
 

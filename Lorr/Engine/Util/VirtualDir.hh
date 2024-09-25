@@ -31,7 +31,7 @@ struct VirtualDir {
         if (!file) {
             // john loguru hates wstring
             std::string str = real_path.string();
-            LR_LOG_ERROR("Failed to read file '{}'!", str);
+            LOG_ERROR("Failed to read file '{}'!", str);
             return ls::nullopt;
         }
 

@@ -28,7 +28,7 @@ struct EditorLayout {
     template<typename T>
     std::pair<usize, T *> add_panel(this EditorLayout &self, std::string name, const c8 *icon, bool open = true) {
         usize panel_index = self.panels.size();
-        auto icon_name = fmt::format("{}  {}", icon, name);
+        auto icon_name = std::format("{}  {}", icon, name);
         auto panel = std::make_unique<T>(std::move(icon_name), open);
         T *panel_ptr = panel.get();
         self.panels.push_back(std::move(panel));

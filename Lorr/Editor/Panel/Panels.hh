@@ -80,7 +80,7 @@ struct AssetBrowserPanel : PanelI {
 
 struct ConsolePanel : PanelI {
     struct Message {
-        loguru::Verbosity verbosity = {};
+        u32 verbosity = {};
         std::string message = {};
     };
 

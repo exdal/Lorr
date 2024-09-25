@@ -6,6 +6,6 @@ TEST(filesystem, directory_iterator) {
     fs::path rel_resources = fs::relative(resources, root);
 
     for (const auto &v : rel_resources) {
-        fmt::println("{}", v.filename().string());
+        std::println("{}", v.filename().string());
     }
 }

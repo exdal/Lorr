@@ -42,7 +42,7 @@ struct World {
 
         auto scene_id = self.create_scene<T>("unnamed scene");
         if (!self.import_scene(scene_id, path)) {
-            LR_LOG_ERROR("Failed to parse scene!");
+            LOG_ERROR("Failed to parse scene!");
             return SceneID::Invalid;
         }
 

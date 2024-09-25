@@ -13,17 +13,17 @@ bool RenderPipeline::init(this RenderPipeline &self, Device *device) {
     self.task_graph.init(TaskGraphInfo{ .device = device });
 
     if (!self.setup_imgui()) {
-        LR_LOG_ERROR("Failed to setup ImGui pipeline!");
+        LOG_ERROR("Failed to setup ImGui pipeline!");
         return false;
     }
 
     if (!self.setup_resources()) {
-        LR_LOG_ERROR("Failed to setup render pipeline resources!");
+        LOG_ERROR("Failed to setup render pipeline resources!");
         return false;
     }
 
     if (!self.setup_passes()) {
-        LR_LOG_ERROR("Failed to setup render passes!");
+        LOG_ERROR("Failed to setup render passes!");
         return false;
     }
 
@@ -526,7 +526,7 @@ bool RenderPipeline::prepare(this RenderPipeline &self, usize frame_index) {
 
     if (self.device->frame_sema.counter == 0) {
         if (!self.setup_persistent_images()) {
-            LR_LOG_ERROR("Failed to setup persistent images!");
+            LOG_ERROR("Failed to setup persistent images!");
             return false;
         }
     }

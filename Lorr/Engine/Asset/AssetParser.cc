@@ -41,12 +41,12 @@ std::unique_ptr<ModelAssetData> AssetParser::GLTF(const fs::path &path) {
     ZoneScoped;
 
     std::string path_str = path.string();
-    LR_LOG_TRACE("Attempting to load GLTF file {}", path_str);
+    LOG_TRACE("Attempting to load GLTF file {}", path_str);
 
     auto gltf_buffer = fastgltf::GltfDataBuffer::FromPath(path);
     auto gltf_type = fastgltf::determineGltfFileType(gltf_buffer.get());
     if (gltf_type == fastgltf::GltfType::Invalid) {
-        LR_LOG_ERROR("GLTF model type is invalid!");
+        LOG_ERROR("GLTF model type is invalid!");
         return nullptr;
     }
 
@@ -69,7 +69,7 @@ std::unique_ptr<ModelAssetData> AssetParser::GLTF(const fs::path &path) {
     extensions |= fastgltf::Extensions::EXT_texture_webp;
     extensions |= fastgltf::Extensions::MSFT_texture_dds;
 
-    LR_LOG_TRACE("GLTF parsing start.");
+    LOG_TRACE("GLTF parsing start.");
     fastgltf::Parser parser(extensions);
 
     auto options = fastgltf::Options::None;
@@ -79,7 +79,7 @@ std::unique_ptr<ModelAssetData> AssetParser::GLTF(const fs::path &path) {
 
     auto result = parser.loadGltf(gltf_buffer.get(), path.parent_path(), options);
     if (!result) {
-        LR_LOG_ERROR("Failed to load GLTF! {}", fastgltf::getErrorMessage(result.error()));
+        LOG_ERROR("Failed to load GLTF! {}", fastgltf::getErrorMessage(result.error()));
         return nullptr;
     }
 
@@ -92,7 +92,7 @@ std::unique_ptr<ModelAssetData> AssetParser::GLTF(const fs::path &path) {
 
     std::vector<ls::span<u8>> buffers = {};
 
-    LR_LOG_TRACE("Parsing GLTF buffers...");
+    LOG_TRACE("Parsing GLTF buffers...");
 
     // sources::Vector is not used for importing, ignore it
     for (const auto &v : asset.buffers) {
@@ -111,13 +111,13 @@ std::unique_ptr<ModelAssetData> AssetParser::GLTF(const fs::path &path) {
             v.data);
     }
 
-    LR_LOG_TRACE("{} total buffers.", buffers.size());
+    LOG_TRACE("{} total buffers.", buffers.size());
 
     ///////////////////////////////////////////////
     // Samplers
     ///////////////////////////////////////////////
 
-    LR_LOG_TRACE("Parsing GLTF samplers...");
+    LOG_TRACE("Parsing GLTF samplers...");
 
     auto gltf_filter_to_lr = [](fastgltf::Filter f) -> Filtering {
         switch (f) {
@@ -148,7 +148,7 @@ std::unique_ptr<ModelAssetData> AssetParser::GLTF(const fs::path &path) {
         sampler.address_v = gltf_address_mode_to_lr(v.wrapT);
     }
 
-    LR_LOG_TRACE("{} total samplers.", model->samplers.size());
+    LOG_TRACE("{} total samplers.", model->samplers.size());
 
     ///////////////////////////////////////////////
     // Textures
@@ -169,7 +169,7 @@ std::unique_ptr<ModelAssetData> AssetParser::GLTF(const fs::path &path) {
         }
     };
 
-    LR_LOG_TRACE("Parsing GLTF textures...");
+    LOG_TRACE("Parsing GLTF textures...");
 
     for (const auto &v : asset.textures) {
         auto &texture = model->textures.emplace_back();
@@ -210,13 +210,13 @@ std::unique_ptr<ModelAssetData> AssetParser::GLTF(const fs::path &path) {
             image.data);
     }
 
-    LR_LOG_TRACE("{} total textures.", model->textures.size());
+    LOG_TRACE("{} total textures.", model->textures.size());
 
     ///////////////////////////////////////////////
     // Materials
     ///////////////////////////////////////////////
 
-    LR_LOG_TRACE("Parsing GLTF materials...");
+    LOG_TRACE("Parsing GLTF materials...");
 
     for (const auto &v : asset.materials) {
         auto &material = model->materials.emplace_back();
@@ -255,9 +255,9 @@ std::unique_ptr<ModelAssetData> AssetParser::GLTF(const fs::path &path) {
         }
     }
 
-    LR_LOG_TRACE("{} total materials.", model->materials.size());
+    LOG_TRACE("{} total materials.", model->materials.size());
 
-    LR_LOG_TRACE("Parsing GLTF meshes...");
+    LOG_TRACE("Parsing GLTF meshes...");
 
     for (const auto &v : asset.meshes) {
         auto &mesh = model->meshes.emplace_back();
@@ -332,9 +332,9 @@ std::unique_ptr<ModelAssetData> AssetParser::GLTF(const fs::path &path) {
         }
     }
 
-    LR_LOG_TRACE("{} total meshes, {} total primitives.", model->meshes.size(), model->primitives.size());
+    LOG_TRACE("{} total meshes, {} total primitives.", model->meshes.size(), model->primitives.size());
 
-    LR_LOG_TRACE("GLTF parsing end.");
+    LOG_TRACE("GLTF parsing end.");
 
     return model;
 }

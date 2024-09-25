@@ -32,7 +32,7 @@ void InspectorPanel::update(this InspectorPanel &self) {
                 return;
             }
 
-            auto name_with_icon = fmt::format("{}  {}", app.component_icons[component_id.raw_id()], component.name);
+            auto name_with_icon = std::format("{}  {}", app.component_icons[component_id.raw_id()], component.name);
             if (ImGui::CollapsingHeader(name_with_icon.c_str(), nullptr, ImGuiTreeNodeFlags_DefaultOpen)) {
                 ImGui::PushID(static_cast<i32>(component_id));
                 ImGui::BeginTable(

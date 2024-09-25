@@ -22,11 +22,11 @@ namespace lr {
 bool vulkan::load_instance(VkInstance instance, PFN_vkGetInstanceProcAddr get_instance_proc_addr) {
     ZoneScoped;
 
-#define VKFN_FUNCTION(_name)                                                   \
-    _name = (PFN_##_name)get_instance_proc_addr(instance, #_name);             \
-    if ((_name) == nullptr) {                                                  \
-        LR_LOG_TRACE("Failed to load Vulkan Instance function '{}'.", #_name); \
-        return false;                                                          \
+#define VKFN_FUNCTION(_name)                                                \
+    _name = (PFN_##_name)get_instance_proc_addr(instance, #_name);          \
+    if ((_name) == nullptr) {                                               \
+        LOG_TRACE("Failed to load Vulkan Instance function '{}'.", #_name); \
+        return false;                                                       \
     }
 
     VKFN_INSTANCE_FUNCTIONS
@@ -42,11 +42,11 @@ bool vulkan::load_instance(VkInstance instance, PFN_vkGetInstanceProcAddr get_in
 bool vulkan::load_device(VkDevice device, PFN_vkGetDeviceProcAddr get_device_proc_addr) {
     ZoneScoped;
 
-#define VKFN_FUNCTION(_name)                                                 \
-    _name = (PFN_##_name)get_device_proc_addr(device, #_name);               \
-    if ((_name) == nullptr) {                                                \
-        LR_LOG_ERROR("Failed to load Vulkan Device function '{}'.", #_name); \
-        return false;                                                        \
+#define VKFN_FUNCTION(_name)                                              \
+    _name = (PFN_##_name)get_device_proc_addr(device, #_name);            \
+    if ((_name) == nullptr) {                                             \
+        LOG_ERROR("Failed to load Vulkan Device function '{}'.", #_name); \
+        return false;                                                     \
     }
 
     VKFN_LOGICAL_DEVICE_FUNCTIONS

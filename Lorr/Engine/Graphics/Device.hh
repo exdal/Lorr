@@ -141,7 +141,7 @@ struct Device {
     bool is_feature_supported(this auto &self, DeviceFeature feature) { return self.supported_features & feature; }
 
     template<typename T>
-    void set_object_name(this auto &self, [[maybe_unused]] T &v, [[maybe_unused]] std::string_view name) {
+    void set_object_name([[maybe_unused]] this auto &self, [[maybe_unused]] T &v, [[maybe_unused]] std::string_view name) {
 #if LS_DEBUG
         VkDebugUtilsObjectNameInfoEXT object_name_info = {
             .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
@@ -155,7 +155,7 @@ struct Device {
     }
 
     template<VkObjectType ObjectType, typename T>
-    void set_object_name_raw(this auto &self, [[maybe_unused]] T v, [[maybe_unused]] std::string_view name) {
+    void set_object_name_raw([[maybe_unused]] this auto &self, [[maybe_unused]] T v, [[maybe_unused]] std::string_view name) {
 #if LS_DEBUG
         VkDebugUtilsObjectNameInfoEXT object_name_info = {
             .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,

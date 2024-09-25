@@ -30,7 +30,7 @@ struct SkyLUTTask {
         auto vs = app.asset_man.shader_at("shader://atmos.lut_vs");
         auto fs = app.asset_man.shader_at("shader://atmos.lut_fs");
         if (!vs || !fs) {
-            LR_LOG_ERROR("Shaders are invalid.", name);
+            LOG_ERROR("Shaders are invalid.", name);
             return false;
         }
 
@@ -99,7 +99,7 @@ struct SkyFinalTask {
         auto vs = app.asset_man.shader_at("shader://atmos.final_vs");
         auto fs = app.asset_man.shader_at("shader://atmos.final_fs");
         if (!vs || !fs) {
-            LR_LOG_ERROR("Shaders are invalid.", name);
+            LOG_ERROR("Shaders are invalid.", name);
             return false;
         }
 
@@ -166,7 +166,7 @@ struct GeometryTask {
         auto vs = app.asset_man.shader_at("shader://model_vs");
         auto fs = app.asset_man.shader_at("shader://model_fs");
         if (!vs || !fs) {
-            LR_LOG_ERROR("Shaders are invalid.", name);
+            LOG_ERROR("Shaders are invalid.", name);
             return false;
         }
 
@@ -254,7 +254,7 @@ struct GridTask {
         auto vs = app.asset_man.shader_at("shader://editor.grid_vs");
         auto fs = app.asset_man.shader_at("shader://editor.grid_fs");
         if (!vs || !fs) {
-            LR_LOG_ERROR("Shaders are invalid.", name);
+            LOG_ERROR("Shaders are invalid.", name);
             return false;
         }
 
@@ -327,7 +327,7 @@ struct ImGuiTask {
         auto vs = app.asset_man.shader_at("shader://imgui_vs");
         auto fs = app.asset_man.shader_at("shader://imgui_fs");
         if (!vs || !fs) {
-            LR_LOG_ERROR("Shaders are invalid.", name);
+            LOG_ERROR("Shaders are invalid.", name);
             return false;
         }
 

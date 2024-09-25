@@ -6,10 +6,10 @@ namespace lr {
 bool Application::init(this Application &self, const ApplicationInfo &info) {
     ZoneScoped;
 
-    Log::init(static_cast<i32>(info.args.size()), info.args.data());
+    Logger::init("engine");
 
     if (!self.do_super_init(info.args)) {
-        LR_LOG_FATAL("Super init failed!");
+        LOG_FATAL("Super init failed!");
         return false;
     }
 
@@ -48,7 +48,7 @@ bool Application::init(this Application &self, const ApplicationInfo &info) {
     imgui.KeyMap[ImGuiKey_RightArrow] = LR_KEY_RIGHT;
 
     if (!self.do_prepare()) {
-        LR_LOG_FATAL("Failed to initialize application!");
+        LOG_FATAL("Failed to initialize application!");
         return false;
     }
 
@@ -132,7 +132,7 @@ void Application::run(this Application &self) {
 
         // Update application
         if (!self.world.poll()) {
-            LR_LOG_WARN("World stopped processing!");
+            LOG_WARN("World stopped processing!");
             break;
         }
 
@@ -161,19 +161,26 @@ void Application::shutdown(this Application &self, bool hard) {
     ZoneScoped;
 
     if (!hard) {
-        LR_LOG_INFO("Soft shutdown requested.");
+        LOG_INFO("Soft shutdown requested.");
         self.world.shutdown();
         return;
     }
 
-    LR_LOG_WARN("Shutting down application...");
+    LOG_WARN("Shutting down application...");
     self.device.wait_for_work();
-    self.asset_man.shutdown(LS_DEBUG == 1);
+#ifdef LS_DEBUG
+    self.asset_man.shutdown(true);
+#else
+    self.asset_man.shutdown(false);
+#endif
     self.device.delete_swap_chains(self.default_surface.swap_chain);
     self.world_render_pipeline.shutdown();
-    self.device.shutdown(LS_DEBUG == 1);
-
-    LR_LOG_INFO("Complete!");
+#ifdef LS_DEBUG
+    self.device.shutdown(true);
+#else
+    self.device.shutdown(false);
+#endif
+    LOG_INFO("Complete!");
 }
 
 VKResult Application::create_surface(this Application &self, ApplicationSurface &surface, std::optional<WindowInfo> window_info) {
@@ -213,7 +220,7 @@ VKResult Application::create_surface(this Application &self, ApplicationSurface 
         };
         auto [image_view_id, image_view_result] = self.device.create_image_view(image_view_info);
         if (!image_view_result) {
-            LR_LOG_ERROR("Failed to create ImageView({}) for SwapChain!", i);
+            LOG_ERROR("Failed to create ImageView({}) for SwapChain!", i);
             return {};
         }
 

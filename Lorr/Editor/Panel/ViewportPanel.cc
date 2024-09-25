@@ -37,7 +37,7 @@ void ViewportPanel::on_drop(this ViewportPanel &) {
     auto &world = app.world;
 
     if (!world.active_scene) {
-        LR_LOG_WARN("Trying to import asset into invalid scene!");
+        LOG_WARN("Trying to import asset into invalid scene!");
         return;
     }
 
@@ -47,7 +47,7 @@ void ViewportPanel::on_drop(this ViewportPanel &) {
         std::string_view path_sv(static_cast<const c8 *>(payload->Data), payload->DataSize);
         auto model_id = app.asset_man.load_model(path_sv);
         if (!model_id) {
-            LR_LOG_ERROR("Failed to import model into the scene!");
+            LOG_ERROR("Failed to import model into the scene!");
             return;
         }
 

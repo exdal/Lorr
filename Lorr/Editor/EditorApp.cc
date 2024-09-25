@@ -29,9 +29,6 @@ bool EditorApp::prepare(this EditorApp &self) {
     self.world.set_active_scene(dummy_scene_id);
     self.world.scene_at(dummy_scene_id).do_load();
 
-    auto p = fs::current_path() / ".projects" / "unnamed_world" / "world.lrproj";
-    self.world.import_project(p);
-
     // initialize component icons
     auto get_icon_of = [&self](const auto &v) {
         using T = std::decay_t<decltype(v)>;

@@ -1,4 +1,3 @@
-add_requires("fmt 11.0.2")
 add_requires("xxhash v0.8.2")
 add_requires("glm 1.0.1", { configs = {
     header_only = true,
@@ -18,8 +17,7 @@ add_requires("tracy v0.10", { configs = {
     exit = true,
     system_tracing = true,
 } })
-add_requires("loguru v2.1.0", { configs = { fmt = true } })
-add_requires("slang-lorr v2024.9.1")
+add_requires("slang-lorr v2024.11.1")
 add_requires("vk-bootstrap v1.3.292")
 add_requires("fastgltf v0.8.0")
 add_requires("stb 2023.12.15")
@@ -41,3 +39,4 @@ if has_config("enable_tests") then
 end
 
 add_requires("imguizmo-lorr 1.89+WIP")
+add_requires("luau 0.643")

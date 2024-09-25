@@ -147,7 +147,7 @@ constexpr static VKResult CHECK(
             if (a == result)
                 return result;
 
-    LR_ASSERT(result == VKResult::Success, "Vulkan check failed '{}' at {}:{} - {}", result, LOC.file_name(), LOC.line(), LOC.function_name());
+    LS_EXPECT(result == VKResult::Success);
 #endif
 
     return result;
@@ -338,10 +338,11 @@ constexpr static u32 format_to_size(Format format) {
         case Format::D32_SFLOAT:
         case Format::D24_SFLOAT_S8_UINT:
             return sizeof(u32);
-        default:
-            break;
+        default:;
     }
 
+    // all formats need to be defined
+    LS_DEBUGBREAK();
     return 0;
 }
 
@@ -1186,12 +1187,10 @@ struct MemoryRequirements {
 
 }  // namespace lr
 
-namespace fmt {
 template<>
-struct formatter<lr::VKResult> : formatter<string_view> {
+struct std::formatter<lr::VKResult> : formatter<string_view> {
     template<typename FormatContext>
     constexpr auto format(lr::VKResult v, FormatContext &ctx) const {
-        return fmt::format_to(ctx.out(), "{}({})", lr::vkresult_to_string(v), static_cast<i32>(v));
+        return std::format_to(ctx.out(), "{}({})", lr::vkresult_to_string(v), static_cast<i32>(v));
     }
 };
-}  // namespace fmt

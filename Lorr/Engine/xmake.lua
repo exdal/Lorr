@@ -8,8 +8,8 @@ target("Lorr")
 
     set_kind("static")
     set_languages("cxx23")
-    add_forceincludes("Engine/pch.hh", { public = true })
-    set_pcheader("Engine/pch.hh", { public = true })
+    add_forceincludes("Engine/pch.hh", { public = true, force = true })
+    set_pcheader("Engine/pch.hh", { public = true, force = true })
     add_cxxflags("clang::-march=native", "clang_cl::/arch:AVX2", "cl::/arch:AVX2")
     set_runtimes("MT", "c++_static")
 
@@ -65,7 +65,6 @@ target("Lorr")
         "flecs",
         "glaze",
         "imguizmo-lorr",
-        "luau",
         { public = true })
 
 target_end()

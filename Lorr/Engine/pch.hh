@@ -19,6 +19,7 @@
 #include <filesystem>
 #include <span>
 #include <string_view>
+#include <variant>
 
 namespace fs = std::filesystem;
 

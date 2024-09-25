@@ -104,8 +104,8 @@ void AssetBrowserPanel::draw_file_tree(this AssetBrowserPanel &self, Directory &
     }
 
     auto cur_node_flags = no_subdirs ? tree_node_file_flags : tree_node_dir_flags;
-    std::string file_name = root_dir.path.filename();
-    if (ImGui::TreeNodeEx(root_dir.path.c_str(), cur_node_flags, "%s  %s", icon, file_name.c_str())) {
+    auto file_name = root_dir.path.filename().native();
+    if (ImGui::TreeNodeEx(root_dir.path.c_str(), cur_node_flags, "%s  %ws", icon, file_name.c_str())) {
         if (ImGui::IsItemToggledOpen() || ImGui::IsItemClicked()) {
             self.selected_dir = &root_dir;
         }

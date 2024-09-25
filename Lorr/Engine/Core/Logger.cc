@@ -1,4 +1,5 @@
 #include "Engine/Core/Logger.hh"
+#include <ctime>
 
 #include "Engine/OS/OS.hh"
 
@@ -29,4 +30,10 @@ void Logger::to_file(std::string_view str) {
     File::to_stdout(str);
 }
 
+std::tm Logger::get_time() {
+    auto now = std::chrono::system_clock::now();
+    auto time = std::chrono::system_clock::to_time_t(now);
+
+    return *std::localtime(&time);
+}
 }  // namespace lr

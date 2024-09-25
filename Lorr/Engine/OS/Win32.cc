@@ -146,9 +146,17 @@ void File::close(this File &self) {
     }
 }
 
-ls::option<fs::path> File::open_dialog(std::string_view title, bool save) {
-    // Open file dialog in Windows is not implemented
-    LS_EXPECT(false);
+ls::option<fs::path> File::open_dialog(std::string_view title, FileDialogFlag flags) {
+    ZoneScoped;
+}
+
+void File::to_stdout(std::string_view str) {
+    ZoneScoped;
+
+    static auto stdout_hnd = GetStdHandle(STD_OUTPUT_HANDLE);
+
+    DWORD written = 0;
+    WriteFile(stdout_hnd, str.data(), str.length(), &written, nullptr);
 }
 
 /// MEMORY ///

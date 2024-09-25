@@ -16,7 +16,7 @@ target("ls")
     on_config(function (target)
         if (target:has_tool("cxx", "cl")) then
             target:add("defines", "LS_COMPILER_MSVC=1", { force = true, public = true })
-        elseif(target:has_tool("cxx", "clang") or target:has_tool("cxx", "clang-cl")) then
+        elseif(target:has_tool("cxx", "clang") or target:has_tool("cxx", "clang_cl")) then
             target:add("defines", "LS_COMPILER_CLANG=1", { force = true, public = true })
         elseif target:has_tool("cxx", "gcc") then
             target:add("defines", "LS_COMPILER_GCC=1", { force = true, public = true })

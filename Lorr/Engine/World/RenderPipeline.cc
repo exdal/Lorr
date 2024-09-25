@@ -63,9 +63,8 @@ bool RenderPipeline::setup_imgui(this RenderPipeline &self) {
     imgui.BackendFlags = ImGuiBackendFlags_RendererHasVtxOffset;
     ImGui::StyleColorsDark();
 
-    std::string roboto_path = fs::current_path() / "resources/fonts/Roboto-Regular.ttf";
-    std::string fa_regular_400_path = fs::current_path() / "resources/fonts/fa-regular-400.ttf";
-    std::string fa_solid_900_path = fs::current_path() / "resources/fonts/fa-solid-900.ttf";
+    auto roboto_path = (fs::current_path() / "resources/fonts/Roboto-Regular.ttf").string();
+    auto fa_solid_900_path = (fs::current_path() / "resources/fonts/fa-solid-900.ttf").string();
 
     ImWchar icons_ranges[] = { 0xf000, 0xf8ff, 0 };
     ImFontConfig font_config;

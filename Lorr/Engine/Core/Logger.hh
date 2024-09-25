@@ -12,6 +12,7 @@ namespace Logger {
 
     void init(std::string_view name);
     void to_file(std::string_view str);
+    std::tm get_time();
 }  // namespace Logger
 
 struct LoggerFmt : public std::string_view {
@@ -34,21 +35,19 @@ constexpr static void LOG(Logger::Category cat, const LoggerFmt &fmt, ArgsT &&..
     ZoneScoped;
     memory::ScopedStack stack;
 
-    auto now = std::chrono::system_clock::now();
-    auto time = std::chrono::system_clock::to_time_t(now);
-    auto *tm = std::localtime(&time);
+    auto tm = Logger::get_time();
     auto msg = stack.format(fmt.get<ArgsT...>(), args...);
     auto full_msg = stack.format(
         "{}{:04}-{:02}-{:02} {:02}:{:02}:{:02} | {} | {}:{}: {}\033[0m\n",
         Logger::LOG_CATEGORY_COLORS[cat],
         // YYYY-MM-DD
-        tm->tm_year + 1900,
-        tm->tm_mon + 1,
-        tm->tm_mday,
+        tm.tm_year + 1900,
+        tm.tm_mon + 1,
+        tm.tm_mday,
         // HH-MM-SS
-        tm->tm_hour,
-        tm->tm_min,
-        tm->tm_sec,
+        tm.tm_hour,
+        tm.tm_min,
+        tm.tm_sec,
         // CAT
         Logger::LOG_CATEGORY_STR[cat],
         // F:L

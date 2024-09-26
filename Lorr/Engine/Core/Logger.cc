@@ -26,7 +26,8 @@ void Logger::init(std::string_view name) {
 void Logger::to_file(std::string_view str) {
     ZoneScoped;
 
-    GLOBAL_LOGGER.file.write(str.data(), { 0, str.length() });
+    // strip out console colors
+    GLOBAL_LOGGER.file.write(str.data(), { 5, str.length() - 5 });
     File::to_stdout(str);
 }
 

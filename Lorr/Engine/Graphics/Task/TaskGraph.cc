@@ -105,10 +105,11 @@ u32 TaskGraph::schedule_task(this TaskGraph &self, Task *task, TaskSubmit &submi
             u32 cur_batch_index = task_image.last_batch_index;
 
             bool is_same_layout = layout == task_image.last_layout;
-            bool is_last_none = last_access.access == MemoryAccess::None;
             bool is_read_on_read = access.access == MemoryAccess::Read && last_access.access == MemoryAccess::Read;
 
-            if ((!is_same_layout || !is_read_on_read) && !is_last_none) {
+            bool is_same_layout_read_on_read = is_same_layout && is_read_on_read;
+
+            if (is_same_layout_read_on_read) {
                 cur_batch_index++;
             }
 

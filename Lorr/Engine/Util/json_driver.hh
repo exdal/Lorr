@@ -2,13 +2,14 @@
 
 #include <glaze/core/common.hpp>
 #include <glaze/core/meta.hpp>
+#include <glaze/json/read.hpp>
 
 namespace lr {
 struct generic_json {
     using array_t = std::vector<generic_json>;
     using object_t = ankerl::unordered_dense::map<std::string, generic_json>;
     using null_t = std::nullptr_t;
-    using val_t = std::variant<null_t, std::string, bool, array_t, object_t, u64, f32, f64, glm::vec2, glm::vec3, glm::vec4>;
+    using val_t = std::variant<null_t, std::string, bool, array_t, object_t, f64, glm::vec2, glm::vec3, glm::vec4>;
     val_t data{};
 
     template<class T>
@@ -148,8 +149,7 @@ struct generic_json {
     [[nodiscard]] bool is_object() const noexcept { return is<generic_json::object_t>(); }
     [[nodiscard]] bool is_string() const noexcept { return is<std::string>(); }
     [[nodiscard]] bool is_null() const noexcept { return is<std::nullptr_t>(); }
-    [[nodiscard]] bool is_float() const noexcept { return is<f64>(); }
-    [[nodiscard]] bool is_integer() const noexcept { return is<u64>(); }
+    [[nodiscard]] bool is_number() const noexcept { return is<f64>(); }
 
     [[nodiscard]] auto &get_array() noexcept { return get<array_t>(); }
     [[nodiscard]] const array_t &get_array() const noexcept { return get<array_t>(); }
@@ -157,10 +157,8 @@ struct generic_json {
     [[nodiscard]] const auto &get_object() const noexcept { return get<object_t>(); }
     [[nodiscard]] auto &get_string() noexcept { return get<std::string>(); }
     [[nodiscard]] auto get_string() const noexcept { return get<std::string>(); }
-    [[nodiscard]] auto &get_float() noexcept { return get<f64>(); }
-    [[nodiscard]] const auto &get_float() const noexcept { return get<f64>(); }
-    [[nodiscard]] auto &get_integer() noexcept { return get<u64>(); }
-    [[nodiscard]] const auto &get_integer() const noexcept { return get<u64>(); }
+    [[nodiscard]] auto &get_number() noexcept { return get<f64>(); }
+    [[nodiscard]] const auto &get_number() const noexcept { return get<f64>(); }
 
     // empty() returns true if the value is an empty JSON object, array, or string, or a null value
     // otherwise returns false
@@ -193,25 +191,30 @@ struct generic_json {
 };
 }  // namespace lr
 
+template<typename KeyT, typename ValueT>
+struct glz::meta<ankerl::unordered_dense::map<KeyT, ValueT>> {
+    static constexpr std::string_view name = glz::join_v<chars<"ankerl::unordered_dense::map<">, name_v<KeyT>, chars<",">, name_v<ValueT>, chars<">">>;
+};
+
 template<>
 struct glz::meta<glm::vec2> {
     static constexpr std::string_view name = "glm::vec2";
     using T = glm::vec2;
-    static constexpr auto value = array(&T::x, &T::y);
+    static constexpr auto value = object(&T::x, &T::y);
 };
 
 template<>
 struct glz::meta<glm::vec3> {
     static constexpr std::string_view name = "glm::vec3";
     using T = glm::vec3;
-    static constexpr auto value = array(&T::x, &T::y, &T::z);
+    static constexpr auto value = object(&T::x, &T::y, &T::z);
 };
 
 template<>
 struct glz::meta<glm::vec4> {
     static constexpr std::string_view name = "glm::vec4";
     using T = glm::vec4;
-    static constexpr auto value = array(&T::x, &T::y, &T::z, &T::w);
+    static constexpr auto value = object(&T::x, &T::y, &T::z, &T::w);
 };
 
 template<>

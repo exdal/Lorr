@@ -38,7 +38,7 @@ constexpr static void LOG(Logger::Category cat, const LoggerFmt &fmt, ArgsT &&..
     auto tm = Logger::get_time();
     auto msg = stack.format(fmt.get<ArgsT...>(), args...);
     auto full_msg = stack.format(
-        "{}{:04}-{:02}-{:02} {:02}:{:02}:{:02} | {} | {}:{}: {}\033[0m\n",
+        "{}{:04}-{:02}-{:02} {:02}:{:02}:{:02} | {} | {}:{}: {}\n\033[00m",
         Logger::LOG_CATEGORY_COLORS[cat],
         // YYYY-MM-DD
         tm.tm_year + 1900,

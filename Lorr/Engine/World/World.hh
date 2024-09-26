@@ -4,14 +4,15 @@
 
 namespace lr {
 struct ProjectInfo {
-    std::string_view project_name = {};
-    std::string_view scenes_path = {};
-    std::string_view models_path = {};
+    std::string project_name = {};
+    fs::path project_root_path = {};
+    fs::path scenes_path = {};
+    fs::path models_path = {};
 };
 
 struct World {
-    std::string name = "unnamed_world";
     flecs::world ecs{};
+    flecs::entity root = {};
     std::vector<std::unique_ptr<Scene>> scenes = {};
     ls::option<SceneID> active_scene = ls::nullopt;
     ls::option<ProjectInfo> project_info = ls::nullopt;
@@ -20,16 +21,22 @@ struct World {
     void shutdown(this World &);
     bool poll(this World &);
 
+    // Project IO
     bool import_scene(this World &, Scene &scene, const fs::path &path);
     bool export_scene(this World &, Scene &scene, const fs::path &dir);
     bool import_project(this World &, const fs::path &path);
-    bool export_project(this World &, const fs::path &root_dir);
+    bool export_project(this World &, std::string_view project_name, const fs::path &root_dir);
+
+    // Active Project Utils
+    bool unload_active_project(this World &);
+    bool save_active_project(this World &);
+    bool is_project_active() { return project_info.has_value(); }
 
     template<typename T>
     SceneID create_scene(this World &self, std::string_view name) {
         ZoneScoped;
 
-        auto scene = std::make_unique<T>(std::string(name), self.ecs);
+        auto scene = std::make_unique<T>(std::string(name), self.ecs, self.root);
         usize scene_id = self.scenes.size();
         self.scenes.push_back(std::move(scene));
 
@@ -41,7 +48,7 @@ struct World {
         ZoneScoped;
 
         auto scene_id = self.create_scene<T>("unnamed scene");
-        if (!self.import_scene(scene_id, path)) {
+        if (!self.import_scene(self.scene_at(scene_id), path)) {
             LOG_ERROR("Failed to parse scene!");
             return SceneID::Invalid;
         }

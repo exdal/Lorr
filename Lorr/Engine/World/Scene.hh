@@ -10,7 +10,7 @@ struct Scene {
 
     const std::string_view name() { return { handle.name(), handle.name().length() }; }
 
-    Scene(std::string_view name_, flecs::world &world_);
+    Scene(std::string_view name_, flecs::world &world_, flecs::entity &root_);
     virtual ~Scene() = default;
 
     flecs::entity create_entity(this Scene &, std::string_view name);

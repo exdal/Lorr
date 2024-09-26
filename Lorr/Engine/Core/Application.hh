@@ -29,6 +29,13 @@ struct ApplicationInfo {
 };
 
 struct Application {
+    // Prevent `Application` from being copied, `::get()` only has to return a reference
+    Application() = default;
+    Application(const Application &) = delete;
+    Application(Application &&) = delete;
+    Application &operator=(const Application &) = delete;
+    Application &operator=(Application &&) = delete;
+
     static Application &get();
 
     EventManager<ApplicationEvent, ApplicationEventData> event_man = {};

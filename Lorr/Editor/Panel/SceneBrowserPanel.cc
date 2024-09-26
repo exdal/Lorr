@@ -30,6 +30,8 @@ void SceneBrowserPanel::update(this SceneBrowserPanel &self) {
     flags |= ImGuiTableFlags_SizingFixedFit;
 
     ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.0, 0.0, 0.0, 0.0));
+
+    bool open_create_entity_popup = false;
     if (ImGui::BeginTable("scene_entity_list", 1, flags)) {
         ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch, 0.0f);
 
@@ -53,19 +55,21 @@ void SceneBrowserPanel::update(this SceneBrowserPanel &self) {
                     world.ecs.each([](flecs::entity c, Component::EditorSelected) { c.remove<Component::EditorSelected>(); });
                     e.add<Component::EditorSelected>();
                 }
+
+                if (e.has<Component::Camera>()) {
+                    if (ImGui::BeginDragDropSource()) {
+                        flecs::entity_t id = e.id();
+                        ImGui::SetDragDropPayload("ATTACH_CAMERA", &id, sizeof(flecs::entity_t));
+                        ImGui::EndDragDropSource();
+                    }
+                }
             });
         }
 
         if (ImGui::BeginPopupContextWindow("create_ctxwin", ImGuiPopupFlags_AnyPopup | 1)) {
             if (ImGui::BeginMenu("Create...")) {
                 if (ImGui::MenuItem("Entity", nullptr, false, world.active_scene.has_value())) {
-                    ImGui::OpenPopup("create_entity_popup");
-                    ImGui::OpenPopup("fuck");
-                }
-
-                if (ImGui::BeginPopup("fuck")) {
-                    ImGui::TextUnformatted("wow");
-                    ImGui::EndPopup();
+                    open_create_entity_popup = true;
                 }
 
                 ImGui::EndMenu();
@@ -74,7 +78,11 @@ void SceneBrowserPanel::update(this SceneBrowserPanel &self) {
             ImGui::EndPopup();
         }
 
-        if (ImGui::BeginPopupModal("create_entity_popup", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        if (open_create_entity_popup) {
+            ImGui::OpenPopup("###create_entity_popup");
+        }
+
+        if (ImGui::BeginPopupModal("Create Entity...###create_entity_popup", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
             static std::string entity_name = {};
             ImGui::InputText("Name for Entity", &entity_name);
 

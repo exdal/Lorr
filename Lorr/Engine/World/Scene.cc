@@ -3,9 +3,9 @@
 #include "Components.hh"
 
 namespace lr {
-Scene::Scene(std::string_view name_, flecs::world &world_)
+Scene::Scene(std::string_view name_, flecs::world &world_, flecs::entity &root_)
     : ecs(world_) {
-    this->handle = ecs.entity(name_.data());
+    this->handle = ecs.entity(name_.data()).child_of(root_);
 }
 
 flecs::entity Scene::create_entity(this Scene &self, std::string_view name) {

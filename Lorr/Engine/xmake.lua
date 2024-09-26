@@ -63,7 +63,7 @@ target("Lorr")
         "fastgltf",
         "stb",
         "flecs",
-        "glaze",
+        "glaze-lorr",
         "imguizmo-lorr",
         { public = true })
 

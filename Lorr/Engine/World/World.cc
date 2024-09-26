@@ -4,6 +4,7 @@
 
 #include "Engine/OS/OS.hh"
 #include "Engine/Util/json_driver.hh"
+#include "Engine/World/RuntimeScene.hh"
 
 #include <glaze/glaze.hpp>
 #include <glm/gtx/euler_angles.hpp>
@@ -91,6 +92,8 @@ bool World::init(this World &self) {
             t.matrix *= glm::scale(glm::mat4(1.0), t.scale);
         });
 
+    self.root = self.ecs.entity();
+
     return true;
 }
 
@@ -115,11 +118,16 @@ bool World::import_scene(this World &self, Scene &scene, const fs::path &path) {
         return false;
     }
 
-    auto json_str = file.read_string({ 0, ~0_sz });
+    auto json_str = file.read_string({ 0, file.size });
     generic_json json = {};
-    auto json_err = glz::read_json(json, json_str);
+    auto json_err = glz::read<glz::opts{
+        .error_on_unknown_keys = false,
+        .prettify = true,
+        .indentation_width = 2,
+        .new_lines_in_arrays = false,
+    }>(json, json_str);
     if (json_err != glz::error_code::none) {
-        LOG_ERROR("Failed to open scene file! {}", json_err.custom_error_message);
+        LOG_ERROR("Failed to parse scene file '{}'! {} @ {}", path, glz::format_error(json_err), json_err.location);
         return false;
     }
 
@@ -179,23 +187,23 @@ bool World::import_scene(this World &self, Scene &scene, const fs::path &path) {
                     match{
                         [](const auto &) {},
                         [&](f32 *v) {
-                            LS_EXPECT(member_json.is_float());
+                            LS_EXPECT(member_json.is_number());
                             *v = member_json.as<f32>();
                         },
                         [&](i32 *v) {
-                            LS_EXPECT(member_json.is_integer());
+                            LS_EXPECT(member_json.is_number());
                             *v = member_json.as<i32>();
                         },
                         [&](u32 *v) {
-                            LS_EXPECT(member_json.is_integer());
+                            LS_EXPECT(member_json.is_number());
                             *v = member_json.as<u32>();
                         },
                         [&](i64 *v) {
-                            LS_EXPECT(member_json.is_integer());
+                            LS_EXPECT(member_json.is_number());
                             *v = member_json.as<i64>();
                         },
                         [&](u64 *v) {
-                            LS_EXPECT(member_json.is_integer());
+                            LS_EXPECT(member_json.is_number());
                             *v = member_json.as<u64>();
                         },
                         [&](glm::vec2 *v) {
@@ -279,7 +287,11 @@ bool World::export_scene(this World &, Scene &scene, const fs::path &dir) {
     json["entities"] = entities_json;
 
     std::string json_str;
-    auto json_str_err = glz::write<glz::opts{ .prettify = true, .indentation_width = 2 }>(json, json_str);
+    auto json_str_err = glz::write<glz::opts{
+        .prettify = true,
+        .indentation_width = 2,
+        .new_lines_in_arrays = false,
+    }>(json, json_str);
     if (json_str_err != glz::error_code::none) {
         LOG_ERROR("Failed to serialze scene '{}'! {}", scene.name(), json_str_err.custom_error_message);
         return false;
@@ -318,20 +330,28 @@ bool World::import_project(this World &self, const fs::path &path) {
     const fs::path &dir = path.parent_path();
 
     self.project_info = project_info;
-    self.name = project_info.project_name;
     fs::path models_path = dir / project_info.models_path;
     fs::path scenes_path = dir / project_info.scenes_path;
+
+    for (const auto &iter : fs::directory_iterator(scenes_path)) {
+        if (fs::is_directory(iter)) {
+            continue;
+        }
+
+        const auto &scene_path = iter.path();
+        self.create_scene_from_file<RuntimeScene>(scene_path);
+    }
 
     return true;
 }
 
-bool World::export_project(this World &self, const fs::path &root_dir) {
+bool World::export_project(this World &self, std::string_view project_name, const fs::path &root_dir) {
     ZoneScoped;
 
     // root_dir = /path/to/my_projects
     // proj_root_dir = root_dir / <PROJECT_NAME>
     // proj_file = proj_root_dir / world.lrproj
-    auto proj_root_dir = root_dir / self.name;
+    auto proj_root_dir = root_dir / project_name;
     auto proj_file = proj_root_dir / "world.lrproj";
 
     // Project Name
@@ -369,7 +389,8 @@ bool World::export_project(this World &self, const fs::path &root_dir) {
         }
 
         ProjectInfo new_proj_info = {
-            .project_name = self.name,
+            .project_name = std::string(project_name),
+            .project_root_path = proj_root_dir,
             .scenes_path = dir_tree[2],
             .models_path = dir_tree[3],
         };
@@ -398,6 +419,24 @@ bool World::export_project(this World &self, const fs::path &root_dir) {
     file.write(json_str.data(), { 0, json_str.length() });
 
     return true;
+}
+
+bool World::unload_active_project(this World &self) {
+    ZoneScoped;
+
+    self.root.children([](flecs::entity e) { e.destruct(); });
+    self.active_scene.reset();
+    self.scenes.clear();
+    self.project_info.reset();
+
+    return true;
+}
+
+bool World::save_active_project(this World &self) {
+    ZoneScoped;
+
+    LS_EXPECT(self.is_project_active());
+    return self.export_project(self.project_info->project_name, self.project_info->project_root_path);
 }
 
 void World::set_active_scene(this World &self, SceneID scene_id) {

@@ -76,7 +76,7 @@ struct RenderPipeline {
     TaskImageID atmos_transmittance_image = {};
     TaskImageID atmos_ms_image = {};
     TaskImageID atmos_sky_lut_image = {};
-    TaskImageID atmos_multiscatter_lut_image = {};
+    TaskImageID atmos_final_image = {};
 
     // ImGui
     ImFont *im_roboto_fa = nullptr;

@@ -39,7 +39,8 @@ struct EditorLayout {
 };
 }  // namespace lr
 
-namespace LRGui {
-bool DragXY(glm::vec2 &coords);
-bool DragXYZ(glm::vec3 &coords);
-}  // namespace LRGui
+namespace lg {
+bool drag_xy(glm::vec2 &coords);
+bool drag_xyz(glm::vec3 &coords);
+void center_text(std::string_view str);
+}  // namespace lg

@@ -175,29 +175,21 @@ void EditorLayout::update(this EditorLayout &self) {
     ImGui::DockSpace(self.dockspace_id.value(), ImVec2(0.0f, 0.0f), dock_node_flags | ImGuiDockNodeFlags_NoWindowMenuButton);
     ImGui::PopStyleVar();
 
+    bool open_create_project_popup = false;
     if (ImGui::BeginMenuBar()) {
         if (ImGui::BeginMenu("File")) {
-            if (ImGui::MenuItem("New Scene")) {
-            }
-
-            if (ImGui::MenuItem("Open Scene")) {
+            if (ImGui::MenuItem("New Scene", nullptr)) {
             }
 
             ImGui::Separator();
 
-            if (ImGui::MenuItem("Save")) {
-                auto path = File::open_dialog("Save Project", FileDialogFlag::Save | FileDialogFlag::DirOnly);
-                if (path.has_value()) {
-                    app.world.export_project(path.value());
-                }
-            }
-
-            if (ImGui::MenuItem("Save As...")) {
+            if (ImGui::MenuItem("Save Project", nullptr, false, app.world.is_project_active())) {
             }
 
             ImGui::Separator();
 
             if (ImGui::MenuItem("New Project...")) {
+                open_create_project_popup = true;
             }
 
             if (ImGui::MenuItem("Open Project...")) {
@@ -211,6 +203,13 @@ void EditorLayout::update(this EditorLayout &self) {
                     LOG_ERROR("Project files must end with .lrproj.");
                     return;
                 }
+
+                app.world.unload_active_project();
+                if (app.world.import_project(path.value())) {
+                    for (auto &p : self.panels) {
+                        p->do_project_refresh();
+                    }
+                }
             }
 
             ImGui::Separator();
@@ -223,6 +222,12 @@ void EditorLayout::update(this EditorLayout &self) {
         }
 
         if (ImGui::BeginMenu("View")) {
+            if (ImGui::MenuItem("New Viewport")) {
+                self.add_panel<ViewportPanel>("Viewport 2", Icon::fa::eye);
+            }
+
+            ImGui::Separator();
+
             if (ImGui::MenuItem("Task Graph Profiler")) {
                 self.show_profiler = !self.show_profiler;
             }
@@ -231,6 +236,52 @@ void EditorLayout::update(this EditorLayout &self) {
         }
 
         ImGui::EndMenuBar();
+    }
+
+    if (open_create_project_popup) {
+        ImGui::OpenPopup("###create_project_popup");
+    }
+
+    if (ImGui::BeginPopupModal("Create Project...###create_project_popup", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        static std::string project_name = {};
+        static std::string project_root_path = {};
+
+        ImGui::TextUnformatted("Project Name");
+        ImGui::InputText("##project_name", &project_name);
+
+        ImGui::TextUnformatted("Project Location");
+        ImGui::InputText("##project_path", &project_root_path);
+        ImGui::SameLine();
+        if (ImGui::Button(Icon::fa::folder_open)) {
+            auto path = File::open_dialog("New Project...", FileDialogFlag::Save | FileDialogFlag::DirOnly);
+            if (path.has_value()) {
+                project_root_path = path->string();
+            }
+        }
+
+        ImGui::Separator();
+
+        bool disabled = project_name.empty() || project_root_path.empty();
+        if (disabled) {
+            ImGui::BeginDisabled();
+        }
+
+        if (ImGui::Button("OK", ImVec2(120, 0))) {
+            app.world.export_project(project_name, project_root_path);
+            ImGui::CloseCurrentPopup();
+        }
+
+        if (disabled) {
+            ImGui::EndDisabled();
+        }
+
+        ImGui::SameLine();
+
+        if (ImGui::Button("Cancel", ImVec2(120, 0))) {
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
     }
 
     ImGui::End();
@@ -245,7 +296,7 @@ void EditorLayout::update(this EditorLayout &self) {
 }
 }  // namespace lr
 
-bool LRGui::DragXY(glm::vec2 &coords) {
+bool lg::drag_xy(glm::vec2 &coords) {
     bool value_changed = false;
     ImGui::PushMultiItemsWidths(3, ImGui::CalcItemWidth());
 
@@ -285,7 +336,7 @@ bool LRGui::DragXY(glm::vec2 &coords) {
     return value_changed;
 }
 
-bool LRGui::DragXYZ(glm::vec3 &coords) {
+bool lg::drag_xyz(glm::vec3 &coords) {
     bool value_changed = false;
     ImGui::PushMultiItemsWidths(3, ImGui::CalcItemWidth());
 
@@ -339,4 +390,12 @@ bool LRGui::DragXYZ(glm::vec3 &coords) {
     ImGui::PopStyleVar();
 
     return value_changed;
+}
+
+void lg::center_text(std::string_view str) {
+    auto window_size = ImGui::GetWindowSize();
+    auto text_size = ImGui::CalcTextSize(str.begin(), str.end());
+
+    ImGui::SetCursorPos({ (window_size.x - text_size.x) * 0.5f, (window_size.y - text_size.y) * 0.5f });
+    ImGui::TextUnformatted(str.begin(), str.end());
 }

@@ -1,6 +1,6 @@
 #include "EditorApp.hh"
 
-static lr::EditorApp app = {};
+static lr::EditorApp app;
 
 lr::Application &lr::Application::get() {
     return app;

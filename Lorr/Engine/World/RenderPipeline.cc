@@ -229,6 +229,28 @@ bool RenderPipeline::setup_resources(this RenderPipeline &self) {
     self.atmos_sky_lut_image = self.task_graph.add_image(TaskPersistentImageInfo{
         .image_id = sky_lut_image,
         .image_view_id = sky_lut_view,
+        .layout = ImageLayout::ColorAttachment,
+        .access = PipelineAccess::ColorAttachmentRead,
+    });
+
+    auto sky_final_image = app.device.create_image(ImageInfo{
+        .usage_flags = ImageUsage::ColorAttachment | ImageUsage::Sampled,
+        .format = Format::R32G32B32A32_SFLOAT,
+        .type = ImageType::View2D,
+        .initial_layout = ImageLayout::ColorAttachment,
+        .extent = app.default_surface.swap_chain.extent,
+        .debug_name = "Sky Final",
+    });
+    auto sky_final_view = app.device.create_image_view(ImageViewInfo{
+        .image_id = sky_final_image,
+        .type = ImageViewType::View2D,
+        .debug_name = "Sky Final View",
+    });
+    self.atmos_final_image = self.task_graph.add_image(TaskPersistentImageInfo{
+        .image_id = sky_final_image,
+        .image_view_id = sky_final_view,
+        .layout = ImageLayout::ColorAttachment,
+        .access = PipelineAccess::ColorAttachmentRead,
     });
 
     // Load buffers
@@ -276,7 +298,7 @@ bool RenderPipeline::setup_passes(this RenderPipeline &self) {
     });
     self.task_graph.add_task<SkyFinalTask>({
         .uses = {
-            .attachment = self.final_image,
+            .attachment = self.atmos_final_image,
             .sky_lut = self.atmos_sky_lut_image,
             .transmittance_lut = self.atmos_transmittance_image,
         },

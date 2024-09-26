@@ -6,8 +6,8 @@ namespace lr {
 // Dummy scene for Editor's "Load Project" UI.
 // Better than displaying full black image to screen.
 struct StarterScene : Scene {
-    StarterScene(std::string_view name_, flecs::world &world_)
-        : Scene(name_, world_) {};
+    StarterScene(std::string_view name_, flecs::world &world_, flecs::entity &root_)
+        : Scene(name_, world_, root_) {};
 
     bool load(this StarterScene &);
     bool unload(this StarterScene &);

@@ -62,8 +62,8 @@ void InspectorPanel::update(this InspectorPanel &self) {
                             [](u32 *v) { ImGui::DragScalar("", ImGuiDataType_U32, v); },
                             [](i64 *v) { ImGui::DragScalar("", ImGuiDataType_S64, v); },
                             [](u64 *v) { ImGui::DragScalar("", ImGuiDataType_U64, v); },
-                            [](glm::vec2 *v) { LRGui::DragXY(*v); },
-                            [](glm::vec3 *v) { LRGui::DragXYZ(*v); },
+                            [](glm::vec2 *v) { lg::drag_xy(*v); },
+                            [](glm::vec3 *v) { lg::drag_xyz(*v); },
                             [](std::string *v) { ImGui::InputText("", v); },
                         },
                         member);

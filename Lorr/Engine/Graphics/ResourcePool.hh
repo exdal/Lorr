@@ -6,12 +6,20 @@
 
 namespace lr {
 template<typename ResourceT, typename ResourceID>
-struct allocation_result {
-    allocation_result(ResourceT &res, ResourceID res_id)
+struct ResourceResult {
+    ResourceResult(ResourceT *res, ResourceID res_id)
         : resource(res),
           id(res_id) {}
 
-    ResourceT &resource;
+    explicit ResourceResult(std::nullptr_t)
+        : resource(nullptr),
+          id(ResourceID::Invalid) {}
+
+    ResourceResult &operator=(std::nullptr_t &&) = delete;
+
+    operator bool() { return id != ResourceID::Invalid; }
+
+    ResourceT *resource;
     ResourceID id;
 };
 
@@ -35,14 +43,14 @@ struct PagedResourcePool {
     std::array<std::unique_ptr<Page>, PAGE_COUNT> pages = {};
 
     template<typename... Args>
-    std::optional<allocation_result<ResourceT, ResourceID>> create(this auto &self, Args &&...args) {
+    ResourceResult<ResourceT, ResourceID> create(this auto &self, Args &&...args) {
         ZoneScoped;
 
         index_type index = static_cast<index_type>(~0);
         if (self.free_indexes.empty()) {
             index = self.latest_index++;
             if (index >= MAX_RESOURCE_COUNT) {
-                return std::nullopt;
+                return ResourceResult<ResourceT, ResourceID>(nullptr);
             }
         } else {
             index = self.free_indexes.back();
@@ -53,7 +61,7 @@ struct PagedResourcePool {
         index_type page_offset = index & PAGE_MASK;
 
         if (page_id >= PAGE_COUNT) {
-            return std::nullopt;
+            return ResourceResult<ResourceT, ResourceID>(nullptr);
         }
 
         auto &page = self.pages[page_id];
@@ -61,9 +69,9 @@ struct PagedResourcePool {
             page = std::make_unique<Page>();
         }
 
-        ResourceT &resource = page->at(page_offset);
-        std::construct_at(reinterpret_cast<ResourceT *>(&resource), std::forward<Args>(args)...);
-        return allocation_result(resource, static_cast<ResourceID>(index));
+        ResourceT *resource = &page->at(page_offset);
+        std::construct_at(resource, std::forward<Args>(args)...);
+        return ResourceResult(resource, static_cast<ResourceID>(index));
     }
 
     void destroy(this auto &self, ResourceID id) {

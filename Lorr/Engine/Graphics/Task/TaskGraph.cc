@@ -4,8 +4,6 @@
 
 #include "Engine/Memory/Stack.hh"
 
-#include <sstream>
-
 namespace lr {
 void for_each_use(ls::span<TaskUse> uses, const auto &buffer_fn, const auto &image_fn) {
     for (TaskUse &use : uses) {
@@ -42,7 +40,7 @@ bool TaskGraph::init(this TaskGraph &self, const TaskGraphInfo &info) {
     return true;
 }
 
-TaskImageID TaskGraph::add_image(this TaskGraph &self, const TaskPersistentImageInfo &info) {
+TaskImageID TaskGraph::add_image(this TaskGraph &self, const TaskImageInfo &info) {
     ZoneScoped;
 
     TaskImageID task_image_id = static_cast<TaskImageID>(self.images.size());
@@ -51,7 +49,7 @@ TaskImageID TaskGraph::add_image(this TaskGraph &self, const TaskPersistentImage
     return task_image_id;
 }
 
-void TaskGraph::set_image(this TaskGraph &self, TaskImageID task_image_id, const TaskPersistentImageInfo &info) {
+void TaskGraph::set_image(this TaskGraph &self, TaskImageID task_image_id, const TaskImageInfo &info) {
     ZoneScoped;
 
     usize index = static_cast<usize>(task_image_id);
@@ -82,47 +80,6 @@ void TaskGraph::update_task_infos(this TaskGraph &self) {
     }
 }
 
-u32 TaskGraph::schedule_task(this TaskGraph &self, Task *task, TaskSubmit &submit) {
-    ZoneScoped;
-
-    u32 first_batch_index = 0;
-    for_each_use(
-        task->task_uses,
-        [&](TaskBufferID id, const PipelineAccessImpl &access) {
-            TaskBufferInfo &task_buffer = self.buffers[static_cast<usize>(id)];
-            u32 cur_batch_index = task_buffer.last_batch_index;
-
-            bool is_read_on_read = access.access == MemoryAccess::Read && task_buffer.last_access.access == MemoryAccess::Read;
-            if (!is_read_on_read) {
-                cur_batch_index++;
-            }
-
-            first_batch_index = std::max(first_batch_index, cur_batch_index);
-        },
-        [&](TaskImageID id, const PipelineAccessImpl &access, ImageLayout layout) {
-            TaskImage &task_image = self.images[static_cast<usize>(id)];
-            auto &last_access = task_image.last_access;
-            u32 cur_batch_index = task_image.last_batch_index;
-
-            bool is_same_layout = layout == task_image.last_layout;
-            bool is_read_on_read = access.access == MemoryAccess::Read && last_access.access == MemoryAccess::Read;
-
-            bool is_same_layout_read_on_read = is_same_layout && is_read_on_read;
-
-            if (is_same_layout_read_on_read) {
-                cur_batch_index++;
-            }
-
-            first_batch_index = std::max(first_batch_index, cur_batch_index);
-        });
-
-    if (first_batch_index >= submit.batches.size()) {
-        submit.batches.resize(first_batch_index + 1);
-    }
-
-    return first_batch_index;
-}
-
 TaskID TaskGraph::add_task(this TaskGraph &self, std::unique_ptr<Task> &&task) {
     ZoneScoped;
 
@@ -132,50 +89,54 @@ TaskID TaskGraph::add_task(this TaskGraph &self, std::unique_ptr<Task> &&task) {
     }
 
     TaskID task_id = static_cast<TaskID>(self.tasks.size());
-    u32 submit_index = self.submits.size() - 1;
-    TaskSubmit &current_submit = self.submits[submit_index];
-    u32 batch_index = self.schedule_task(&*task, current_submit);
-    TaskBatch &batch = current_submit.batches[batch_index];
+    self.tasks.push_back(std::move(task));
+
+    auto submit_index = self.submits.size() - 1;
+    auto batch_index = self.batches.size();
+    auto &submit = self.submits[submit_index];
+    auto &batch = self.batches.emplace_back();
 
     for_each_use(
         task->task_uses,
-        [&](TaskBufferID id, const PipelineAccessImpl &access) {
-            TaskBufferInfo &task_buffer = self.buffers[static_cast<usize>(id)];
-            bool is_read_on_read = access.access == MemoryAccess::Read && task_buffer.last_access.access == MemoryAccess::Read;
+        [&](TaskBufferID id, const PipelineAccessImpl &use_access) {
+            auto &task_buffer = self.task_buffer_at(id);
+            bool is_read_on_read = use_access.access == MemoryAccess::Read && task_buffer.last_access.access == MemoryAccess::Read;
+
             if (!is_read_on_read) {
-                batch.execution_access |= access;
+                u32 barrier_id = self.barriers.size();
+                self.barriers.push_back(TaskBarrier{
+                    .src_access = task_buffer.last_access,
+                    .dst_access = use_access,
+                });
+
+                batch.barrier_indices.push_back(barrier_id);
             }
 
-            task_buffer.last_access = access;
-            task_buffer.last_batch_index = batch_index;
-            task_buffer.last_submit_index = submit_index;
+            task_buffer.last_access = use_access;
         },
-        [&](TaskImageID id, const PipelineAccessImpl &access, ImageLayout layout) {
-            TaskImage &task_image = self.images[static_cast<usize>(id)];
-            bool is_same_layout = layout == task_image.last_layout;
-            bool is_read_on_read = access.access == MemoryAccess::Read && task_image.last_access.access == MemoryAccess::Read;
+        [&](TaskImageID id, const PipelineAccessImpl &use_access, ImageLayout use_layout) {
+            auto &task_image = self.task_image_at(id);
+            bool is_same_layout = use_layout == task_image.last_layout;
+            bool is_read_on_read = use_access.access == MemoryAccess::Read && task_image.last_access.access == MemoryAccess::Read;
 
             if (!is_same_layout || !is_read_on_read) {
                 u32 barrier_id = self.barriers.size();
                 self.barriers.push_back(TaskBarrier{
                     .src_layout = task_image.last_layout,
-                    .dst_layout = layout,
+                    .dst_layout = use_layout,
                     .src_access = task_image.last_access,
-                    .dst_access = access,
+                    .dst_access = use_access,
                     .image_id = id,
                 });
 
                 batch.barrier_indices.push_back(barrier_id);
             }
 
-            task_image.last_layout = layout;
-            task_image.last_access = access;
-            task_image.last_batch_index = batch_index;
-            task_image.last_submit_index = submit_index;
+            task_image.last_layout = use_layout;
+            task_image.last_access = use_access;
         });
 
-    batch.tasks.push_back(task_id);
-    self.tasks.push_back(std::move(task));
+    submit.batch_indices.emplace_back(batch_index);
 
     return task_id;
 }
@@ -183,8 +144,8 @@ TaskID TaskGraph::add_task(this TaskGraph &self, std::unique_ptr<Task> &&task) {
 void TaskGraph::present(this TaskGraph &self, TaskImageID task_image_id) {
     ZoneScoped;
 
-    TaskImage &task_image = self.images[static_cast<usize>(task_image_id)];
-    TaskSubmit &task_submit = self.submits[task_image.last_submit_index];
+    auto &task_image = self.task_image_at(task_image_id);
+    auto &task_submit = self.submits[task_image.last_submit_index];
 
     u32 barrier_id = self.barriers.size();
     self.barriers.push_back({
@@ -195,65 +156,6 @@ void TaskGraph::present(this TaskGraph &self, TaskImageID task_image_id) {
         .image_id = task_image_id,
     });
     task_submit.additional_signal_barrier_indices.push_back(barrier_id);
-}
-
-std::string TaskGraph::generate_graphviz(this TaskGraph &self) {
-    ZoneScoped;
-
-    u32 batch_id = 0;
-
-    std::stringstream ss;
-    ss << "digraph task_graph {\n";
-    ss << "graph [rankdir = \"LR\" compound = true];\n";
-    ss << "node [fontsize = \"16\" shape = \"ellipse\"]\n";
-    ss << "edge [];\n";
-    for (u32 task_id = 0; task_id < self.tasks.size(); task_id++) {
-        std::string_view name = self.tasks[task_id]->name;
-        auto uses = self.tasks[task_id]->task_uses;
-
-        ss << std::format(R"(task{} [)", task_id) << "\n";
-        ss << std::format(R"(label = "<name> {}({}))", name, task_id);
-        for (auto &use : uses) {
-            ss << std::format(R"(|<i{}> image {})", use.index, use.index);
-        }
-        ss << "\"\n";
-        ss << R"(shape = "record")"
-           << "\n";
-        ss << "];\n";
-    }
-
-    // mfw dot doesnt have proper subgraph connectors
-    for (TaskSubmit &submit : self.submits) {
-        for (u32 i = 0; i < submit.batches.size(); i++) {
-            TaskBatch &batch = submit.batches[i];
-            TaskID mid_task_id = batch.tasks[batch.tasks.size() / 2];
-
-            ss << std::format(R"(subgraph cluster_{})", batch_id) << " {\n";
-            ss << std::format(R"(label = "Batch {}\n{} barriers";)", batch_id, batch.barrier_indices.size()) << "\n";
-            if (i != 0) {
-                TaskBatch &last_batch = submit.batches[i - 1];
-                TaskID last_mid_task_id = last_batch.tasks[last_batch.tasks.size() / 2];
-                u32 lmtidx = static_cast<u32>(last_mid_task_id);
-                u32 mtidx = static_cast<u32>(mid_task_id);
-                ss << std::format("task{} -> task{} [ltail = cluster_{} lhead = cluster_{} label=\"todo barrier info\"];\n", lmtidx, mtidx, i - 1, i);
-            }
-            for (TaskID task_id : batch.tasks) {
-                if (task_id == mid_task_id && i != 0) {
-                    continue;
-                }
-
-                u32 task_index = static_cast<u32>(task_id);
-                ss << std::format("task{} ", task_index);
-            }
-
-            ss << "\n}\n";
-            batch_id++;
-        }
-    }
-
-    ss << "}\n";
-
-    return ss.str();
 }
 
 void TaskGraph::draw_profiler_ui(this TaskGraph &self) {
@@ -274,8 +176,8 @@ void TaskGraph::draw_profiler_ui(this TaskGraph &self) {
         TaskSubmit &submit = self.submits[submit_index];
 
         if (ImGui::TreeNode(&submit, "Submit %u", submit_index)) {
-            for (u32 batch_index = 0; batch_index < submit.batches.size(); batch_index++) {
-                TaskBatch &batch = submit.batches[batch_index];
+            for (u32 batch_index = 0; batch_index < submit.batch_indices.size(); batch_index++) {
+                TaskBatch &batch = self.batches[batch_index];
 
                 if (ImGui::TreeNode(&batch, "Batch %u - %lfms", batch_index, batch.execution_time())) {
                     ImGui::Text("%lu total barrier(s).", batch.barrier_indices.size());
@@ -338,8 +240,8 @@ void TaskGraph::execute(this TaskGraph &self, const TaskExecuteInfo &info) {
         bool is_first_submit = submit_index == 0;
         bool is_last_submit = submit_index == self.submits.size() - 1;
 
-        auto batch_query_results = stack.alloc<u64>(task_submit.batches.size() * 4);
-        self.device->get_timestamp_query_pool_results(batch_query_pool, 0, task_submit.batches.size() * 2, batch_query_results);
+        auto batch_query_results = stack.alloc<u64>(task_submit.batch_indices.size() * 4);
+        self.device->get_timestamp_query_pool_results(batch_query_pool, 0, task_submit.batch_indices.size() * 2, batch_query_results);
 
         for (u32 i = 0; i < batch_query_results.size(); i += 4) {
             if (batch_query_results[i + 1] == 0 && batch_query_results[i + 3] == 0) {
@@ -347,14 +249,14 @@ void TaskGraph::execute(this TaskGraph &self, const TaskExecuteInfo &info) {
             }
 
             u32 batch_index = i / 4;
-            auto &batch = task_submit.batches[batch_index];
+            auto &batch = self.batches[batch_index];
             batch.start_ts = static_cast<f64>(batch_query_results[i + 0]);
             batch.end_ts = static_cast<f64>(batch_query_results[i + 2]);
         }
 
         PipelineAccessImpl last_batch_access = PipelineAccess::TopOfPipe;
-        usize batch_index = 0;
-        for (auto &task_batch : task_submit.batches) {
+        for (auto batch_index : task_submit.batch_indices) {
+            auto &task_batch = self.batches[batch_index];
             auto &copy_cmd_list = transfer_queue.begin_command_list(info.frame_index);
             auto &batch_cmd_list = submit_queue.begin_command_list(info.frame_index);
             CommandBatcher cmd_batcher(batch_cmd_list);

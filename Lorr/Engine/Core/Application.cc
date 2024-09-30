@@ -97,6 +97,10 @@ void Application::poll_events(this Application &self) {
                 imgui.AddInputCharacterUTF16(e.input_char);
                 break;
             }
+            case ApplicationEvent::Quit: {
+                self.should_close = true;
+                break;
+            }
             default: {
                 break;
             }
@@ -118,7 +122,15 @@ void Application::run(this Application &self) {
     // Renderer context
     auto &imgui = ImGui::GetIO();
 
-    while (!window.should_close()) {
+    while (true) {
+        bool should_close = false;
+        should_close |= window.should_close();
+        should_close |= self.world.ecs.should_quit();
+        should_close |= self.should_close;
+        if (should_close) {
+            break;
+        }
+
         if (!self.default_surface.swap_chain_ok) {
             self.create_surface(self.default_surface);
             self.default_surface.swap_chain_ok = true;
@@ -131,18 +143,15 @@ void Application::run(this Application &self) {
         last_time = cur_time;
 
         // Update application
-        if (!self.world.poll()) {
-            LOG_WARN("World stopped processing!");
-            break;
-        }
-
         auto &extent = self.default_surface.swap_chain.extent;
         imgui.DisplaySize = ImVec2(static_cast<f32>(extent.width), static_cast<f32>(extent.height));
 
+        self.world.begin_frame();
         // WARN: Make sure to do all imgui settings BEFORE NewFrame!!!
         ImGui::NewFrame();
         self.do_update(delta_time);
         ImGui::Render();
+        self.world.end_frame();
 
         // Render frame
         self.world_render_pipeline.render_into(swap_chain, images, image_views);
@@ -154,20 +163,16 @@ void Application::run(this Application &self) {
         FrameMark;
     }
 
-    self.shutdown(true);
+    self.shutdown();
 }
 
-void Application::shutdown(this Application &self, bool hard) {
+void Application::shutdown(this Application &self) {
     ZoneScoped;
 
-    if (!hard) {
-        LOG_INFO("Soft shutdown requested.");
-        self.world.shutdown();
-        return;
-    }
-
     LOG_WARN("Shutting down application...");
+
     self.device.wait_for_work();
+    self.world.shutdown();
 #ifdef LS_DEBUG
     self.asset_man.shutdown(true);
 #else

@@ -53,28 +53,24 @@ struct AssetManager {
     Device *device = nullptr;
     BufferID material_buffer_id = BufferID::Invalid;
 
-    fs::path working_dir = {};
-    std::vector<Texture> textures = {};
-    std::vector<Material> materials = {};
-    std::vector<Model> models = {};
-    std::vector<fs::path> model_paths = {};
-
     VirtualDir shader_virtual_env = {};
     ankerl::unordered_dense::map<Identifier, ShaderID> shaders = {};
+    ankerl::unordered_dense::map<Identifier, Texture> textures = {};
+    ankerl::unordered_dense::map<Identifier, Material> materials = {};
+    ankerl::unordered_dense::map<Identifier, Model> models = {};
 
     bool init(this AssetManager &, Device *device);
     void shutdown(this AssetManager &, bool print_reports);
 
-    ls::option<ModelID> load_model(this AssetManager &, const fs::path &path);
-    ls::option<MaterialID> add_material(this AssetManager &, const Material &material);
     // If `ShaderCompileInfo::source` has value, shader is loaded from memory.
     // But `path` is STILL used to print debug information.
-    ls::option<ShaderID> load_shader(this AssetManager &, Identifier ident, const ShaderCompileInfo &info);
+    ls::option<ShaderID> load_shader(this AssetManager &, const Identifier &ident, const ShaderCompileInfo &info);
+    Model *load_model(this AssetManager &, const Identifier &ident, const fs::path &path);
+    Material *add_material(this AssetManager &, const Identifier &ident, const Material &material);
 
-    ls::option<ShaderID> shader_at(this AssetManager &, Identifier ident);
-
-    auto &model_at(ModelID model_id) { return models[static_cast<usize>(model_id)]; }
-    auto &material_at(MaterialID material_id) { return materials[static_cast<usize>(material_id)]; }
+    ls::option<ShaderID> shader_at(this AssetManager &, const Identifier &ident);
+    Material *material_at(this AssetManager &, const Identifier &);
+    Model *model_at(this AssetManager &, const Identifier &);
 
     constexpr static VertexAttribInfo VERTEX_LAYOUT[] = {
         { .format = Format::R32G32B32_SFLOAT, .location = 0, .offset = offsetof(Vertex, position) },

@@ -4,18 +4,17 @@
 #include "Engine/Graphics/Pipeline.hh"
 
 namespace lr {
-struct TaskPersistentImageInfo {
+struct TaskImageInfo {
     ImageID image_id = ImageID::Invalid;
     ImageViewID image_view_id = ImageViewID::Invalid;
     ImageLayout layout = ImageLayout::Undefined;
     PipelineAccessImpl access = PipelineAccess::TopOfPipe;
+    usize last_submit_index = 0;
 };
 
 struct TaskBufferInfo {
     BufferID buffer_id = BufferID::Invalid;
     PipelineAccessImpl last_access = PipelineAccess::None;
-    u32 last_batch_index = 0;
-    u32 last_submit_index = 0;
 };
 
 enum class TaskImageFlag {
@@ -33,8 +32,8 @@ struct TaskImage {
     TaskImageFlag flags = TaskImageFlag::None;
     ImageLayout last_layout = ImageLayout::Undefined;
     PipelineAccessImpl last_access = PipelineAccess::None;
-    u32 last_batch_index = 0;
-    u32 last_submit_index = 0;
+
+    usize last_submit_index = 0;
 };
 
 enum class TaskUseType : u32 { Buffer = 0, Image };

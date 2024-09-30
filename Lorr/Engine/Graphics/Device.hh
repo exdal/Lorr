@@ -141,6 +141,7 @@ struct Device {
     bool is_feature_supported(this auto &self, DeviceFeature feature) { return self.supported_features & feature; }
 
     template<typename T>
+        requires(!std::is_pointer_v<T>)
     void set_object_name([[maybe_unused]] this auto &self, [[maybe_unused]] T &v, [[maybe_unused]] std::string_view name) {
 #if LS_DEBUG
         VkDebugUtilsObjectNameInfoEXT object_name_info = {

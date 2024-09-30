@@ -36,13 +36,11 @@ void ViewportPanel::on_drop(this ViewportPanel &self) {
     auto &app = EditorApp::get();
     auto &world = app.world;
 
-    if (!world.active_scene) {
-        LOG_WARN("Trying to import asset into invalid scene!");
+    if (!world.active_scene.has_value()) {
         return;
     }
 
     auto &scene = world.scene_at(world.active_scene.value());
-
     if (const auto *payload = ImGui::AcceptDragDropPayload("ASSET_PATH")) {
         std::string_view path_sv(static_cast<const c8 *>(payload->Data), payload->DataSize);
         auto model_id = app.asset_man.load_model(path_sv);

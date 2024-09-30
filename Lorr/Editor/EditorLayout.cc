@@ -143,7 +143,7 @@ void EditorLayout::update(this EditorLayout &self) {
     ZoneScoped;
 
     auto &app = EditorApp::get();
-    ImGuiViewport *viewport = ImGui::GetMainViewport();
+    auto *viewport = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(viewport->WorkPos);
     ImGui::SetNextWindowSize(viewport->WorkSize);
     ImGui::SetNextWindowViewport(viewport->ID);
@@ -184,6 +184,7 @@ void EditorLayout::update(this EditorLayout &self) {
             ImGui::Separator();
 
             if (ImGui::MenuItem("Save Project", nullptr, false, app.world.is_project_active())) {
+                app.world.save_active_project();
             }
 
             ImGui::Separator();
@@ -215,7 +216,7 @@ void EditorLayout::update(this EditorLayout &self) {
             ImGui::Separator();
 
             if (ImGui::MenuItem("Exit")) {
-                app.shutdown(false);
+                app.shutdown();
             }
 
             ImGui::EndMenu();

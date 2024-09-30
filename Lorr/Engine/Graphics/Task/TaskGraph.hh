@@ -19,9 +19,13 @@ struct TaskGraphInfo {
 };
 
 struct TaskGraph {
+    constexpr static usize MAX_PERMUTATIONS = 32;
+
     std::vector<std::unique_ptr<Task>> tasks = {};
     std::vector<TaskSubmit> submits = {};
+    std::vector<TaskBatch> batches = {};
     std::vector<TaskBarrier> barriers = {};
+
     std::vector<TaskImage> images = {};
     std::vector<TaskBufferInfo> buffers = {};
 
@@ -34,11 +38,10 @@ struct TaskGraph {
 
     bool init(this TaskGraph &, const TaskGraphInfo &info);
 
-    TaskImageID add_image(this TaskGraph &, const TaskPersistentImageInfo &info);
-    void set_image(this TaskGraph &, TaskImageID task_image_id, const TaskPersistentImageInfo &info);
+    TaskImageID add_image(this TaskGraph &, const TaskImageInfo &info);
+    void set_image(this TaskGraph &, TaskImageID task_image_id, const TaskImageInfo &info);
     TaskBufferID add_buffer(this TaskGraph &, const TaskBufferInfo &info);
 
-    u32 schedule_task(this TaskGraph &, Task *task, TaskSubmit &submit);
     // Used to update every task infos, ie, render_extent
     void update_task_infos(this TaskGraph &);
 
@@ -48,7 +51,6 @@ struct TaskGraph {
     void present(this TaskGraph &, TaskImageID task_image_id);
 
     // Debug tools
-    std::string generate_graphviz(this TaskGraph &);
     void draw_profiler_ui(this TaskGraph &);
 
     // Rendering

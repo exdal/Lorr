@@ -157,7 +157,7 @@ VKResult Device::init(this Device &self, const DeviceInfo &info) {
     {
         /// DEVICE INITIALIZATION ///
         // We don't want to kill the coverage...
-        // if (self.physical_device.enable_extension_if_present("VK_EXT_descriptor_buffer"))
+        // if (self.physical_devce.enable_extension_if_present("VK_EXT_descriptor_buffer"))
         //    self.supported_features |= DeviceFeature::DescriptorBuffer;
         if (self.physical_device.enable_extension_if_present("VK_EXT_memory_budget"))
             self.supported_features |= DeviceFeature::MemoryBudget;
@@ -607,7 +607,7 @@ VKResult Device::get_swapchain_images(this Device &self, SwapChain &swap_chain, 
         VkImage &image_handle = images_raw[i];
         auto image_result = self.resources.images.create(ImageUsage::ColorAttachment, swap_chain.format, swap_chain.extent, 1, 1, nullptr, image_handle);
 
-        images[i] = image_result->id;
+        images[i] = image_result.id;
     }
 
     return VKResult::Success;
@@ -956,7 +956,7 @@ ls::result<PipelineID, VKResult> Device::create_graphics_pipeline(this Device &s
         return VKResult::OutOfPoolMem;
     }
 
-    return pipeline->id;
+    return pipeline.id;
 };
 
 ls::result<PipelineID, VKResult> Device::create_compute_pipeline(this Device &self, const ComputePipelineInfo &info) {
@@ -994,7 +994,7 @@ ls::result<PipelineID, VKResult> Device::create_compute_pipeline(this Device &se
         return VKResult::OutOfPoolMem;
     }
 
-    return pipeline->id;
+    return pipeline.id;
 }
 
 void Device::delete_pipelines(this Device &self, ls::span<PipelineID> pipelines) {
@@ -1037,7 +1037,7 @@ ls::result<ShaderID, VKResult> Device::create_shader(this Device &self, ShaderSt
         return VKResult::OutOfPoolMem;
     }
 
-    return shader->id;
+    return shader.id;
 }
 
 void Device::delete_shaders(this Device &self, ls::span<ShaderID> shaders) {
@@ -1241,14 +1241,14 @@ ls::result<BufferID, VKResult> Device::create_buffer(this Device &self, const Bu
     }
 
     if (self.bda_array_host_addr) {
-        self.bda_array_host_addr[usize(buffer->id)] = device_address;
+        self.bda_array_host_addr[static_cast<usize>(buffer.id)] = device_address;
     }
 
     if (!info.debug_name.empty()) {
-        self.set_object_name(buffer->resource, info.debug_name);
+        self.set_object_name(*buffer.resource, info.debug_name);
     }
 
-    return buffer->id;
+    return buffer.id;
 }
 
 void Device::delete_buffers(this Device &self, ls::span<BufferID> buffers) {
@@ -1331,7 +1331,7 @@ ls::result<ImageID, VKResult> Device::create_image(this Device &self, const Imag
     }
 
     if (!info.debug_name.empty()) {
-        self.set_object_name(image->resource, info.debug_name);
+        self.set_object_name(*image.resource, info.debug_name);
     }
 
     if (info.initial_layout != ImageLayout::Undefined) {
@@ -1342,13 +1342,13 @@ ls::result<ImageID, VKResult> Device::create_image(this Device &self, const Imag
             .dst_access = PipelineAccess::All,
             .old_layout = ImageLayout::Undefined,
             .new_layout = info.initial_layout,
-            .image_id = image->id,
+            .image_id = image.id,
         });
         queue.end_command_list(cmd_list);
         queue.submit(0, {});
     }
 
-    return image->id;
+    return image.id;
 }
 
 void Device::delete_images(this Device &self, ls::span<ImageID> images) {
@@ -1411,13 +1411,13 @@ ls::result<ImageViewID, VKResult> Device::create_image_view(this Device &self, c
     }
 
     ls::static_vector<WriteDescriptorSet, 2> descriptor_writes = {};
-    ImageDescriptorInfo sampled_descriptor_info = { .image_view = image_view->resource, .image_layout = ImageLayout::ColorReadOnly };
-    ImageDescriptorInfo storage_descriptor_info = { .image_view = image_view->resource, .image_layout = ImageLayout::General };
+    ImageDescriptorInfo sampled_descriptor_info = { .image_view = *image_view.resource, .image_layout = ImageLayout::ColorReadOnly };
+    ImageDescriptorInfo storage_descriptor_info = { .image_view = *image_view.resource, .image_layout = ImageLayout::General };
 
     WriteDescriptorSet sampled_write_set_info = {
         .dst_descriptor_set = self.descriptor_set,
         .dst_binding = LR_DESCRIPTOR_INDEX_IMAGES,
-        .dst_element = static_cast<u32>(image_view->id),
+        .dst_element = static_cast<u32>(image_view.id),
         .count = 1,
         .type = DescriptorType::SampledImage,
         .image_info = &sampled_descriptor_info,
@@ -1425,7 +1425,7 @@ ls::result<ImageViewID, VKResult> Device::create_image_view(this Device &self, c
     WriteDescriptorSet storage_write_set_info = {
         .dst_descriptor_set = self.descriptor_set,
         .dst_binding = LR_DESCRIPTOR_INDEX_STORAGE_IMAGES,
-        .dst_element = static_cast<u32>(image_view->id),
+        .dst_element = static_cast<u32>(image_view.id),
         .count = 1,
         .type = DescriptorType::StorageImage,
         .image_info = &storage_descriptor_info,
@@ -1442,10 +1442,10 @@ ls::result<ImageViewID, VKResult> Device::create_image_view(this Device &self, c
     }
 
     if (!info.debug_name.empty()) {
-        self.set_object_name(image_view->resource, info.debug_name);
+        self.set_object_name(*image_view.resource, info.debug_name);
     }
 
-    return image_view->id;
+    return image_view.id;
 }
 
 void Device::delete_image_views(this Device &self, ls::span<ImageViewID> image_views) {
@@ -1501,11 +1501,11 @@ ls::result<SamplerID, VKResult> Device::create_sampler(this Device &self, const 
         return VKResult::OutOfPoolMem;
     }
 
-    ImageDescriptorInfo descriptor_info = { .sampler = sampler->resource };
+    ImageDescriptorInfo descriptor_info = { .sampler = *sampler.resource };
     WriteDescriptorSet write_set_info = {
         .dst_descriptor_set = self.descriptor_set,
         .dst_binding = LR_DESCRIPTOR_INDEX_SAMPLER,
-        .dst_element = static_cast<u32>(sampler->id),
+        .dst_element = static_cast<u32>(sampler.id),
         .count = 1,
         .type = DescriptorType::Sampler,
         .image_info = &descriptor_info,
@@ -1513,10 +1513,10 @@ ls::result<SamplerID, VKResult> Device::create_sampler(this Device &self, const 
     self.update_descriptor_sets(write_set_info, {});
 
     if (!info.debug_name.empty()) {
-        self.set_object_name(sampler->resource, info.debug_name);
+        self.set_object_name(*sampler.resource, info.debug_name);
     }
 
-    return sampler->id;
+    return sampler.id;
 }
 
 void Device::delete_samplers(this Device &self, ls::span<SamplerID> samplers) {

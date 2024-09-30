@@ -23,7 +23,7 @@ struct Transform {
     glm::mat4 matrix = {};
 
     static void reflect(flecs::world &w) {
-        w.component<Transform>("lr.Component.Transform")  //
+        w.component<Transform>()  //
             .member<glm::vec3, Transform>("position", &Transform::position)
             .member<glm::vec3, Transform>("scale", &Transform::scale)
             .member<glm::vec3, Transform>("rotation", &Transform::rotation);
@@ -40,7 +40,7 @@ struct Camera {
     f32 aspect_ratio = 1.777f;
 
     static void reflect(flecs::world &w) {
-        w.component<Camera>("lr.Component.Camera")  //
+        w.component<Camera>()  //
             .member<glm::vec3, Camera>("velocity", &Camera::velocity)
             .member<f32, Camera>("fov", &Camera::fov)
             .member<f32, Camera>("aspect_ratio", &Camera::aspect_ratio);
@@ -54,7 +54,7 @@ struct RenderableModel {
     ModelID_t model_id = ~0_u32;
 
     static void reflect(flecs::world &w) {
-        w.component<RenderableModel>("lr.Component.RenderableModel")  //
+        w.component<RenderableModel>()  //
             .member<ModelID_t, RenderableModel>("model_id", &RenderableModel::model_id);
     }
 };
@@ -64,7 +64,7 @@ struct DirectionalLight {
 
     f32 intensity = 10.0f;
     static void reflect(flecs::world &w) {
-        w.component<DirectionalLight>("lr.Component.DirectionalLight")  //
+        w.component<DirectionalLight>()  //
             .member<f32, DirectionalLight>("intensity", &DirectionalLight::intensity);
     }
 };
@@ -72,19 +72,19 @@ struct DirectionalLight {
 /// TAGS ///
 
 struct ActiveCamera {
-    static void reflect(flecs::world &w) { w.component<ActiveCamera>("lr.Component.ActiveCamera"); }
+    static void reflect(flecs::world &w) { w.component<ActiveCamera>(); }
 };
 
 struct EditorSelected {
-    static void reflect(flecs::world &w) { w.component<EditorSelected>("lr.Component.EditorSelected"); }
+    static void reflect(flecs::world &w) { w.component<EditorSelected>(); }
 };
 
 struct PerspectiveCamera {
-    static void reflect(flecs::world &w) { w.component<PerspectiveCamera>("lr.Component.PerspectiveCamera"); }
+    static void reflect(flecs::world &w) { w.component<PerspectiveCamera>(); }
 };
 
 struct OrthographicCamera {
-    static void reflect(flecs::world &w) { w.component<OrthographicCamera>("lr.Component.OrthographicCamera"); }
+    static void reflect(flecs::world &w) { w.component<OrthographicCamera>(); }
 };
 
 constexpr static std::tuple<  //
@@ -114,8 +114,17 @@ constexpr static void reflect_all(flecs::world &w) {
 struct Wrapper {
     using Member = std::variant<std::monostate, f32 *, i32 *, u32 *, i64 *, u64 *, glm::vec2 *, glm::vec3 *, glm::vec4 *, std::string *>;
 
+    flecs::entity component_entity = {};
+    std::string path = {};
+    std::string_view name = {};
+    const flecs::Struct *struct_data = nullptr;
+    usize member_count = 0;
+    ecs_member_t *members = nullptr;
+    u8 *members_data = nullptr;
+
     inline Wrapper(flecs::entity &holder_, flecs::id &comp_id_) {
         component_entity = comp_id_.entity();
+        path = component_entity.path();
         name = { component_entity.name(), component_entity.name().length() };
 
         if (!has_component()) {
@@ -163,13 +172,6 @@ struct Wrapper {
             fn(i, member_name, data);
         }
     }
-
-    flecs::entity component_entity = {};
-    std::string_view name = {};
-    const flecs::Struct *struct_data = nullptr;
-    usize member_count = 0;
-    ecs_member_t *members = nullptr;
-    u8 *members_data = nullptr;
 };
 
 }  // namespace lr::Component

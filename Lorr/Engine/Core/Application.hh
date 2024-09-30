@@ -47,12 +47,14 @@ struct Application {
     RenderPipeline world_render_pipeline = {};
     World world = {};
 
+    bool should_close = false;
+
     bool init(this Application &, const ApplicationInfo &info);
     void push_event(this Application &, ApplicationEvent event, const ApplicationEventData &data);
 
     void poll_events(this Application &);
     void run(this Application &);
-    void shutdown(this Application &, bool hard);
+    void shutdown(this Application &);
 
     virtual bool do_super_init(ls::span<c8 *> args) = 0;
     virtual bool do_prepare() = 0;

@@ -4,7 +4,7 @@ namespace lr {
 struct HasherI {
     virtual ~HasherI() = default;
 
-    virtual bool hash(void *data, usize data_size) = 0;
+    virtual bool hash(const void *data, usize data_size) = 0;
     virtual u64 value() = 0;
     virtual void reset() = 0;
 };
@@ -13,7 +13,7 @@ struct HasherXXH64 : HasherI {
     HasherXXH64();
     ~HasherXXH64() override;
 
-    bool hash(void *data, usize data_size) override;
+    bool hash(const void *data, usize data_size) override;
     u64 value() override;
     void reset() override;
 

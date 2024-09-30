@@ -114,25 +114,25 @@ bool RenderPipeline::setup_resources(this RenderPipeline &self) {
     auto cmd_list = transfer_queue.begin_command_list(0);
 
     // Load shaders
-    asset_man.load_shader("shader://imgui_vs", { .entry_point = "vs_main", .path = "imgui.slang" });
-    asset_man.load_shader("shader://imgui_fs", { .entry_point = "fs_main", .path = "imgui.slang" });
-    asset_man.load_shader("shader://fullscreen_vs", { .entry_point = "vs_main", .path = "fullscreen.slang" });
-    asset_man.load_shader("shader://fullscreen_fs", { .entry_point = "fs_main", .path = "fullscreen.slang" });
-    asset_man.load_shader("shader://model_vs", { .entry_point = "vs_main", .path = "model.slang" });
-    asset_man.load_shader("shader://model_fs", { .entry_point = "fs_main", .path = "model.slang" });
+    asset_man.load_shader("imgui_vs", { .entry_point = "vs_main", .path = "imgui.slang" });
+    asset_man.load_shader("imgui_fs", { .entry_point = "fs_main", .path = "imgui.slang" });
+    asset_man.load_shader("fullscreen_vs", { .entry_point = "vs_main", .path = "fullscreen.slang" });
+    asset_man.load_shader("fullscreen_fs", { .entry_point = "fs_main", .path = "fullscreen.slang" });
+    asset_man.load_shader("model_vs", { .entry_point = "vs_main", .path = "model.slang" });
+    asset_man.load_shader("model_fs", { .entry_point = "fs_main", .path = "model.slang" });
 
-    asset_man.load_shader("shader://atmos.transmittance", { .entry_point = "cs_main", .path = "atmos/transmittance.slang" });
-    asset_man.load_shader("shader://atmos.ms", { .entry_point = "cs_main", .path = "atmos/ms.slang" });
-    asset_man.load_shader("shader://atmos.lut_vs", { .entry_point = "vs_main", .path = "atmos/lut.slang" });
-    asset_man.load_shader("shader://atmos.lut_fs", { .entry_point = "fs_main", .path = "atmos/lut.slang" });
-    asset_man.load_shader("shader://atmos.final_vs", { .entry_point = "vs_main", .path = "atmos/final.slang" });
-    asset_man.load_shader("shader://atmos.final_fs", { .entry_point = "fs_main", .path = "atmos/final.slang" });
-    asset_man.load_shader("shader://editor.grid_vs", { .entry_point = "vs_main", .path = "editor/grid.slang" });
-    asset_man.load_shader("shader://editor.grid_fs", { .entry_point = "fs_main", .path = "editor/grid.slang" });
+    asset_man.load_shader("atmos.transmittance", { .entry_point = "cs_main", .path = "atmos/transmittance.slang" });
+    asset_man.load_shader("atmos.ms", { .entry_point = "cs_main", .path = "atmos/ms.slang" });
+    asset_man.load_shader("atmos.lut_vs", { .entry_point = "vs_main", .path = "atmos/lut.slang" });
+    asset_man.load_shader("atmos.lut_fs", { .entry_point = "fs_main", .path = "atmos/lut.slang" });
+    asset_man.load_shader("atmos.final_vs", { .entry_point = "vs_main", .path = "atmos/final.slang" });
+    asset_man.load_shader("atmos.final_fs", { .entry_point = "fs_main", .path = "atmos/final.slang" });
+    asset_man.load_shader("editor.grid_vs", { .entry_point = "vs_main", .path = "editor/grid.slang" });
+    asset_man.load_shader("editor.grid_fs", { .entry_point = "fs_main", .path = "editor/grid.slang" });
 
     // Load textures
     // Images
-    self.swap_chain_image = self.task_graph.add_image(TaskPersistentImageInfo{
+    self.swap_chain_image = self.task_graph.add_image(TaskImageInfo{
         .image_id = app.default_surface.images[0],
         .image_view_id = app.default_surface.image_views[0],
     });
@@ -150,7 +150,7 @@ bool RenderPipeline::setup_resources(this RenderPipeline &self) {
         .type = ImageViewType::View2D,
         .debug_name = "Geometry Depth Image View",
     });
-    self.geometry_depth_image = self.task_graph.add_image(TaskPersistentImageInfo{
+    self.geometry_depth_image = self.task_graph.add_image(TaskImageInfo{
         .image_id = geometry_depth_image,
         .image_view_id = geometry_depth_view,
     });
@@ -168,7 +168,7 @@ bool RenderPipeline::setup_resources(this RenderPipeline &self) {
         .type = ImageViewType::View2D,
         .debug_name = "Final Image View",
     });
-    self.final_image = self.task_graph.add_image(TaskPersistentImageInfo{
+    self.final_image = self.task_graph.add_image(TaskImageInfo{
         .image_id = final_image,
         .image_view_id = final_image_view,
     });
@@ -186,7 +186,7 @@ bool RenderPipeline::setup_resources(this RenderPipeline &self) {
         .type = ImageViewType::View2D,
         .debug_name = "Sky Transmittance View",
     });
-    self.atmos_transmittance_image = self.task_graph.add_image(TaskPersistentImageInfo{
+    self.atmos_transmittance_image = self.task_graph.add_image(TaskImageInfo{
         .image_id = transmittance_image,
         .image_view_id = transmittance_view,
         .layout = ImageLayout::ColorReadOnly,
@@ -206,7 +206,7 @@ bool RenderPipeline::setup_resources(this RenderPipeline &self) {
         .type = ImageViewType::View2D,
         .debug_name = "Sky MS View",
     });
-    self.atmos_ms_image = self.task_graph.add_image(TaskPersistentImageInfo{
+    self.atmos_ms_image = self.task_graph.add_image(TaskImageInfo{
         .image_id = ms_image,
         .image_view_id = ms_view,
         .layout = ImageLayout::ColorReadOnly,
@@ -226,7 +226,7 @@ bool RenderPipeline::setup_resources(this RenderPipeline &self) {
         .type = ImageViewType::View2D,
         .debug_name = "Sky LUT View",
     });
-    self.atmos_sky_lut_image = self.task_graph.add_image(TaskPersistentImageInfo{
+    self.atmos_sky_lut_image = self.task_graph.add_image(TaskImageInfo{
         .image_id = sky_lut_image,
         .image_view_id = sky_lut_view,
         .layout = ImageLayout::ColorAttachment,
@@ -246,7 +246,7 @@ bool RenderPipeline::setup_resources(this RenderPipeline &self) {
         .type = ImageViewType::View2D,
         .debug_name = "Sky Final View",
     });
-    self.atmos_final_image = self.task_graph.add_image(TaskPersistentImageInfo{
+    self.atmos_final_image = self.task_graph.add_image(TaskImageInfo{
         .image_id = sky_final_image,
         .image_view_id = sky_final_view,
         .layout = ImageLayout::ColorAttachment,
@@ -298,7 +298,7 @@ bool RenderPipeline::setup_passes(this RenderPipeline &self) {
     });
     self.task_graph.add_task<SkyFinalTask>({
         .uses = {
-            .attachment = self.atmos_final_image,
+            .attachment = self.final_image,
             .sky_lut = self.atmos_sky_lut_image,
             .transmittance_lut = self.atmos_transmittance_image,
         },
@@ -356,7 +356,7 @@ bool RenderPipeline::setup_persistent_images(this RenderPipeline &self) {
 
         auto layout_id = static_cast<PipelineLayoutID>(sizeof(PushConstants) / sizeof(u32));
         ComputePipelineInfo pipeline_info = {
-            .shader_id = asset_man.shader_at("shader://atmos.transmittance").value(),
+            .shader_id = asset_man.shader_at("atmos.transmittance").value(),
             .layout_id = layout_id,
         };
         auto pipeline_id = self.device->create_compute_pipeline(pipeline_info);
@@ -391,7 +391,7 @@ bool RenderPipeline::setup_persistent_images(this RenderPipeline &self) {
 
         auto layout_id = static_cast<PipelineLayoutID>(sizeof(PushConstants) / sizeof(u32));
         ComputePipelineInfo pipeline_info = {
-            .shader_id = asset_man.shader_at("shader://atmos.ms").value(),
+            .shader_id = asset_man.shader_at("atmos.ms").value(),
             .layout_id = layout_id,
         };
         auto pipeline_id = self.device->create_compute_pipeline(pipeline_info);

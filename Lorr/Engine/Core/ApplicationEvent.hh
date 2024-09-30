@@ -17,13 +17,14 @@ struct ApplicationEventData {
 };
 
 enum class ApplicationEvent : u32 {
-    WindowResize,
+    WindowResize = 0,
     MousePosition,
     MouseState,
     MouseScroll,
     KeyboardState,
     InputChar,
     Drop,
+    Quit,
 
     Invalid = ~0_u32,
 };

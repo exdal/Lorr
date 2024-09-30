@@ -130,8 +130,8 @@ struct ScopedStack {
         ZoneScoped;
 
         auto &stack = get_thread_stack();
-        c8 *begin = reinterpret_cast<c8 *>(stack.ptr);
-        memcpy(begin, str.data(), str.length());
+        auto *begin = reinterpret_cast<c8 *>(stack.ptr);
+        std::copy(str.begin(), str.end(), begin);
         c8 *end = reinterpret_cast<c8 *>(stack.ptr + str.length());
         stack.ptr = ls::align_up(reinterpret_cast<u8 *>(end + 1), 8);
 
@@ -145,12 +145,26 @@ struct ScopedStack {
         ZoneScoped;
 
         auto &stack = get_thread_stack();
-        c8 *begin = reinterpret_cast<c8 *>(stack.ptr);
-        memcpy(begin, str.data(), str.length());
-        c8 *end = reinterpret_cast<c8 *>(stack.ptr + str.length());
+        auto *begin = reinterpret_cast<c8 *>(stack.ptr);
+        std::copy(str.begin(), str.end(), begin);
+        auto *end = reinterpret_cast<c8 *>(stack.ptr + str.length());
         stack.ptr = ls::align_up(reinterpret_cast<u8 *>(end + 1), 8);
 
         std::transform(begin, end, begin, ::tolower);
+        *end = '\0';
+
+        return { begin, end };
+    }
+
+    std::string_view null_terminate(std::string_view str) {
+        ZoneScoped;
+
+        auto &stack = get_thread_stack();
+        auto *begin = reinterpret_cast<c8 *>(stack.ptr);
+        std::copy(str.begin(), str.end(), begin);
+        auto *end = reinterpret_cast<c8 *>(stack.ptr + str.length());
+        stack.ptr = ls::align_up(reinterpret_cast<u8 *>(end + 1), 8);
+
         *end = '\0';
 
         return { begin, end };

@@ -19,7 +19,8 @@ struct World {
 
     bool init(this World &);
     void shutdown(this World &);
-    bool poll(this World &);
+    void begin_frame(this World &);
+    void end_frame(this World &);
 
     // Project IO
     bool import_scene(this World &, Scene &scene, const fs::path &path);

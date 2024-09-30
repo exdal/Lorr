@@ -57,13 +57,13 @@ target("Lorr")
         "glm",
         "plf_colony",
         "simdutf",
+        "simdjson",
         "unordered_dense",
         "lz4",
         "zstd",
         "fastgltf",
         "stb",
         "flecs",
-        "glaze-lorr",
         "imguizmo-lorr",
         { public = true })
 

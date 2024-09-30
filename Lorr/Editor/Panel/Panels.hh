@@ -5,6 +5,8 @@
 #include <imgui_internal.h>
 #include <imgui_stdlib.h>
 
+#include "Engine/World/Scene.hh"
+
 namespace lr {
 struct Directory {
     fs::path path = {};

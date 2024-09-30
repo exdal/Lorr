@@ -141,6 +141,12 @@ bool Window::init(this Window &self, const WindowInfo &info) {
             });
     });
 
+    glfwSetWindowCloseCallback(self.handle, [](GLFWwindow *window) {
+        [[maybe_unused]] Window *self = reinterpret_cast<Window *>(glfwGetWindowUserPointer(window));
+
+        Application::get().push_event(ApplicationEvent::Quit, {});
+    });
+
     /// Initialize standard cursors, should be available across all platforms
     /// hopefully...
     self.cursors = {

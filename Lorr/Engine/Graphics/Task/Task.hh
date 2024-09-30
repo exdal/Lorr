@@ -86,10 +86,8 @@ struct TaskBatch {
 
 struct TaskSubmit {
     CommandType type = CommandType::Graphics;
-
-    std::vector<TaskBatch> batches = {};
     std::array<TimestampQueryPool, Limits::FrameCount> query_pools = {};
-
+    std::vector<usize> batch_indices = {};
     // Additional pipeline barriers that will be executed after
     std::vector<u32> additional_signal_barrier_indices = {};
 

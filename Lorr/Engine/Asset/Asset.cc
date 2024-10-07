@@ -87,7 +87,7 @@ struct SlangVirtualFS : ISlangFileSystem {
             path.replace_extension("slang");
         }
 
-        // /resources/shaders/xx.slang -> shader://xx
+        // /resources/shaders/path/to/xx.slang -> path.to.xx
         auto module_name = fs::relative(path, m_root_dir).replace_extension("").string();
         std::replace(module_name.begin(), module_name.end(), static_cast<c8>(fs::path::preferred_separator), '.');
 
@@ -118,7 +118,7 @@ std::vector<slang::CompilerOptionEntry> get_slang_entries(ShaderCompileFlag flag
     // clang-format off
     std::vector<slang::CompilerOptionEntry> entries = {};
     entries.emplace_back(
-        slang::CompilerOptionName::VulkanUseEntryPointName, 
+        slang::CompilerOptionName::VulkanUseEntryPointName,
         slang::CompilerOptionValue{ .intValue0 = true });
 
     if (flags & ShaderCompileFlag::GenerateDebugInfo) {
@@ -177,7 +177,6 @@ std::vector<slang::CompilerOptionEntry> get_slang_entries(ShaderCompileFlag flag
             slang::CompilerOptionName::GLSLForceScalarLayout,
             slang::CompilerOptionValue{ .intValue0 = true });
     }
-
     // clang-format on
 
     return entries;
@@ -187,13 +186,6 @@ bool AssetManager::init(this AssetManager &self, Device *device) {
     ZoneScoped;
 
     self.device = device;
-    self.material_buffer_id = self.device->create_buffer(BufferInfo{
-        .usage_flags = BufferUsage::TransferDst,
-        .flags = MemoryFlag::Dedicated,
-        .preference = MemoryPreference::Device,
-        .data_size = sizeof(GPUMaterial) * MAX_MATERIAL_COUNT,
-        .debug_name = "Material Buffer",
-    });
 
     u32 invalid_tex_data[] = { 0xFF000000, 0xFFFF00FF, 0xFFFF00FF, 0xFF000000 };
     auto invalid_image_id = self.device->create_image(ImageInfo{
@@ -215,15 +207,13 @@ bool AssetManager::init(this AssetManager &self, Device *device) {
         .address_u = TextureAddressMode::Repeat,
         .address_v = TextureAddressMode::Repeat,
     });
-    self.textures.emplace_back(invalid_image_id, invalid_image_view_id, invalid_sampler_id);
+    self.textures.try_emplace(INVALID_TEXTURE, invalid_image_id, invalid_image_view_id, invalid_sampler_id);
 
     return true;
 }
 
 void AssetManager::shutdown(this AssetManager &self, bool print_reports) {
     ZoneScoped;
-
-    self.device->delete_buffers(self.material_buffer_id);
 
     if (print_reports) {
         LOG_INFO("{} alive textures.", self.textures.size());
@@ -232,29 +222,32 @@ void AssetManager::shutdown(this AssetManager &self, bool print_reports) {
         LOG_INFO("{} alive shaders.", self.shaders.size());
     }
 
-    for (auto &v : self.textures) {
-        self.device->delete_images(v.image_id);
-        self.device->delete_image_views(v.image_view_id);
-        self.device->delete_samplers(v.sampler_id);
+    for (auto &[ident, texture] : self.textures) {
+        LOG_INFO("Alive texture {}", ident.sv());
+        self.device->delete_images(texture.image_id);
+        self.device->delete_image_views(texture.image_view_id);
+        self.device->delete_samplers(texture.sampler_id);
     }
 
-    for (auto &v : self.models) {
-        if (v.vertex_buffer.has_value()) {
-            auto id = v.vertex_buffer.value();
+    for (auto &[ident, model] : self.models) {
+        LOG_INFO("Alive model {}", ident.sv());
+        if (model.vertex_buffer.has_value()) {
+            auto id = model.vertex_buffer.value();
             self.device->delete_buffers(id);
         }
-        if (v.index_buffer.has_value()) {
-            auto id = v.index_buffer.value();
+        if (model.index_buffer.has_value()) {
+            auto id = model.index_buffer.value();
             self.device->delete_buffers(id);
         }
     }
 
-    for (auto &v : self.shaders) {
-        self.device->delete_shaders(v.second);
+    for (auto &[ident, shader] : self.shaders) {
+        LOG_INFO("Alive shader {}", ident.sv());
+        self.device->delete_shaders(shader);
     }
 }
 
-ls::option<ShaderID> AssetManager::load_shader(this AssetManager &self, const Identifier &ident, const ShaderCompileInfo &info) {
+ls::option<ShaderProgram> AssetManager::load_shader_program(this AssetManager &self, const Identifier &ident, const ShaderCompileInfo &info) {
     ZoneScoped;
 
     /////////////////////////////////////////
@@ -351,88 +344,107 @@ ls::option<ShaderID> AssetManager::load_shader(this AssetManager &self, const Id
     /////////////////////////////////////////
     /// REFLECTION
 
-    SlangReflection *reflection = compile_request->getReflection();
-    u32 entry_point_count = spReflection_getEntryPointCount(reflection);
-    u32 found_entry_point_id = ~0_u32;
-    ShaderStageFlag found_shader_stage = ShaderStageFlag::Count;
+    ShaderProgram program = {};
+    slang::ShaderReflection *program_layout = slang::ShaderReflection::get(compile_request);
+
+    // Get Entrypoint
+    u32 entry_point_count = program_layout->getEntryPointCount();
     for (u32 i = 0; i < entry_point_count; i++) {
-        SlangReflectionEntryPoint *entry_point = spReflection_getEntryPointByIndex(reflection, i);
-        std::string_view entry_point_name = spReflectionEntryPoint_getName(entry_point);
-        if (entry_point_name == info.entry_point) {
-            found_entry_point_id = i;
-            auto slang_stage = spReflectionEntryPoint_getStage(entry_point);
-            switch (slang_stage) {
-                case SLANG_STAGE_VERTEX:
-                    found_shader_stage = ShaderStageFlag::Vertex;
-                    break;
-                case SLANG_STAGE_HULL:
-                    found_shader_stage = ShaderStageFlag::TessellationControl;
-                    break;
-                case SLANG_STAGE_DOMAIN:
-                    found_shader_stage = ShaderStageFlag::TessellationEvaluation;
-                    break;
-                case SLANG_STAGE_FRAGMENT:
-                    found_shader_stage = ShaderStageFlag::Fragment;
-                    break;
-                case SLANG_STAGE_COMPUTE:
-                    found_shader_stage = ShaderStageFlag::Compute;
-                    break;
-                    break;
-                default:
-                    break;
+        auto *entry_point = program_layout->getEntryPointByIndex(i);
+        ShaderStageFlag entry_point_stage = ShaderStageFlag::Count;
+        auto slang_stage = entry_point->getStage();
+
+        switch (slang_stage) {
+            case SLANG_STAGE_VERTEX:
+                entry_point_stage = ShaderStageFlag::Vertex;
+                break;
+            case SLANG_STAGE_HULL:
+                entry_point_stage = ShaderStageFlag::TessellationControl;
+                break;
+            case SLANG_STAGE_DOMAIN:
+                entry_point_stage = ShaderStageFlag::TessellationEvaluation;
+                break;
+            case SLANG_STAGE_FRAGMENT:
+                entry_point_stage = ShaderStageFlag::Fragment;
+                break;
+            case SLANG_STAGE_COMPUTE:
+                entry_point_stage = ShaderStageFlag::Compute;
+                break;
+            default:
+                LOG_ERROR("Unknown shader stage for {}", ident.sv());
+                return ls::nullopt;
+        }
+
+        Slang::ComPtr<slang::IBlob> spirv_blob;
+        if (SLANG_FAILED(compile_request->getEntryPointCodeBlob(i, 0, spirv_blob.writeRef()))) {
+            LOG_ERROR("Failed to get entrypoint assembly!");
+            return ls::nullopt;
+        }
+
+        ls::span<u32> spirv_data_view(ls::bit_cast<u32 *>(spirv_blob->getBufferPointer()), spirv_blob->getBufferSize() / sizeof(u32));
+        auto [shader_id, shader_result] = self.device->create_shader(entry_point_stage, spirv_data_view);
+        if (!shader_result) {
+            return ls::nullopt;
+        }
+
+        auto &shader = program.programs.emplace_back();
+        shader.shader_id = shader_id;
+        shader.stage = entry_point_stage;
+        if (entry_point_stage == ShaderStageFlag::Compute) {
+            entry_point->getComputeThreadGroupSize(3, glm::value_ptr(shader.thread_group_size));
+        }
+
+        self.shaders.try_emplace(ident, shader_id);
+    }
+
+    // Get push constants
+    u32 param_count = program_layout->getParameterCount();
+    for (u32 i = 0; i < param_count; i++) {
+        auto *param = program_layout->getParameterByIndex(i);
+        auto *type_layout = param->getTypeLayout();
+        auto *element_type_layout = type_layout->getElementTypeLayout();
+        auto param_category = param->getCategory();
+
+        if (param_category == slang::ParameterCategory::PushConstantBuffer) {
+            usize push_constant_size = 0;
+            auto field_count = type_layout->getFieldCount();
+            for (u32 f = 0; f < field_count; f++) {
+                auto *field_param = element_type_layout->getFieldByIndex(f);
+                auto *field_type_layout = field_param->getTypeLayout();
+                push_constant_size += field_type_layout->getSize();
             }
+
+            program.pipeline_layout_id = static_cast<PipelineLayoutID>(push_constant_size / sizeof(u32));
+
             break;
         }
     }
 
-    if (found_entry_point_id == ~0u) {
-        LOG_ERROR("Failed to find given entry point ''!", info.entry_point);
-        return ls::nullopt;
-    }
-
-    /////////////////////////////////////////
-    /// RESULT BLOB/CLEAN UP
-
-    Slang::ComPtr<slang::IBlob> spirv_blob;
-    if (SLANG_FAILED(compile_request->getEntryPointCodeBlob(found_entry_point_id, 0, spirv_blob.writeRef()))) {
-        LOG_ERROR("Failed to get entrypoint assembly!");
-        return ls::nullopt;
-    }
-
-    ls::span<u32> spirv_data_view(ls::bit_cast<u32 *>(spirv_blob->getBufferPointer()), spirv_blob->getBufferSize() / sizeof(u32));
-    auto [shader_id, shader_result] = self.device->create_shader(found_shader_stage, spirv_data_view);
-    if (!shader_result) {
-        return ls::nullopt;
-    }
-
-    self.shaders.emplace(ident, shader_id);
-
-    return shader_id;
+    return program;
 }
 
 Model *AssetManager::load_model(this AssetManager &self, const Identifier &ident, const fs::path &path) {
     ZoneScoped;
 
-    usize model_id = self.models.size();
-    auto model = self.models.emplace(ident);
+    auto &model = self.models[ident];
     auto model_data = AssetParser::GLTF(path);
 
-    usize texture_offset = self.textures.size();
+    std::vector<Identifier> texture_idents;
     for (auto &v : model_data->textures) {
-        auto &texture = self.textures.emplace_back();
         std::unique_ptr<ImageAssetData> image_data;
         switch (v.file_type) {
             case AssetFileType::PNG:
             case AssetFileType::JPEG:
                 image_data = AssetParser::STB(v.data.data(), v.data.size());
                 break;
-            default:
-                break;
+            default:;
         }
 
         if (image_data) {
+            auto new_ident = Identifier::random();
             Extent3D extent = { image_data->width, image_data->height, 1 };
 
+            auto &texture = self.textures[new_ident];
             texture.image_id = self.device->create_image(ImageInfo{
                 .usage_flags = ImageUsage::Sampled | ImageUsage::TransferDst,
                 .format = image_data->format,
@@ -456,14 +468,18 @@ Model *AssetManager::load_model(this AssetManager &self, const Identifier &ident
                 };
                 texture.sampler_id = self.device->create_cached_sampler(sampler_info);
             }
+
+            texture_idents.push_back(new_ident);
         } else {
             LOG_ERROR("An image named {} could not be parsed!", v.name);
-            texture = self.textures[0];
+            texture_idents.push_back(INVALID_TEXTURE);
         }
     }
 
-    usize material_offset = self.materials.size();
+    std::vector<Identifier> material_idents;
     for (auto &v : model_data->materials) {
+        auto new_ident = Identifier::random();
+
         Material material = {};
         material.albedo_color = v.albedo_color;
         material.emissive_color = v.emissive_color;
@@ -473,16 +489,17 @@ Model *AssetManager::load_model(this AssetManager &self, const Identifier &ident
         material.alpha_cutoff = v.alpha_cutoff;
 
         if (auto i = v.albedo_image_data_index; i.has_value()) {
-            material.albedo_texture_index = i.value() + texture_offset;
+            material.albedo_texture = texture_idents[i.value()];
         }
         if (auto i = v.normal_image_data_index; i.has_value()) {
-            material.normal_texture_index = i.value() + texture_offset;
+            material.normal_texture = texture_idents[i.value()];
         }
         if (auto i = v.emissive_image_data_index; i.has_value()) {
-            material.emissive_texture_index = i.value() + texture_offset;
+            material.emissive_texture = texture_idents[i.value()];
         }
 
-        self.add_material(material);
+        self.add_material(new_ident, material);
+        material_idents.push_back(new_ident);
     }
 
     for (auto &v : model_data->primitives) {
@@ -492,8 +509,8 @@ Model *AssetManager::load_model(this AssetManager &self, const Identifier &ident
         primitive.index_offset = v.index_offset.value();
         primitive.index_count = v.index_count.value();
 
-        if (auto material_index = v.material_index; material_index.has_value()) {
-            primitive.material_index = material_offset + material_index.value();
+        if (auto i = v.material_index; i.has_value()) {
+            primitive.material_ident = material_idents[i.value()];
         }
     }
 
@@ -560,63 +577,19 @@ Model *AssetManager::load_model(this AssetManager &self, const Identifier &ident
         staging_buffer.reset();
     }
 
-    return static_cast<ModelID>(model_id);
+    return &model;
 }
 
-Material *AssetManager::add_material(this AssetManager &self, const Identifier &identifier, const Material &material) {
+Material *AssetManager::add_material(this AssetManager &self, const Identifier &ident, const Material &material_data) {
     ZoneScoped;
 
-    auto &transfer_queue = self.device->queue_at(CommandType::Transfer);
-    auto cmd_list = transfer_queue.begin_command_list(0);
+    auto material_iter = self.materials.try_emplace(ident, material_data);
+    auto &material = material_iter.first->second;
 
-    BufferID temp_buffer = self.device->create_buffer(BufferInfo{
-        .usage_flags = BufferUsage::TransferSrc,
-        .flags = MemoryFlag::HostSeqWrite,
-        .preference = MemoryPreference::Host,
-        .data_size = sizeof(GPUMaterial),
-        .debug_name = "Temp GPU Material Buffer",
-    });
-    transfer_queue.defer(temp_buffer);
-
-    auto gpu_material = self.device->buffer_host_data<GPUMaterial>(temp_buffer);
-    gpu_material->albedo_color = material.albedo_color;
-    gpu_material->emissive_color = material.emissive_color;
-    gpu_material->roughness_factor = material.roughness_factor;
-    gpu_material->metallic_factor = material.metallic_factor;
-    gpu_material->alpha_mode = material.alpha_mode;
-    gpu_material->alpha_cutoff = material.alpha_cutoff;
-    {
-        auto &texture = self.textures[material.albedo_texture_index.value_or(0)];
-        gpu_material->albedo_image_view = texture.image_view_id;
-        gpu_material->albedo_sampler = texture.sampler_id;
-    }
-    {
-        auto &texture = self.textures[material.normal_texture_index.value_or(0)];
-        gpu_material->normal_image_view = texture.image_view_id;
-        gpu_material->normal_sampler = texture.sampler_id;
-    }
-    {
-        auto &texture = self.textures[material.emissive_texture_index.value_or(0)];
-        gpu_material->emissive_image_view = texture.image_view_id;
-        gpu_material->emissive_sampler = texture.sampler_id;
-    }
-
-    BufferCopyRegion copy_region = {
-        .src_offset = 0,
-        .dst_offset = self.materials.size() * sizeof(GPUMaterial),
-        .size = sizeof(GPUMaterial),
-    };
-    cmd_list.copy_buffer_to_buffer(temp_buffer, self.material_buffer_id, copy_region);
-    transfer_queue.end_command_list(cmd_list);
-    transfer_queue.submit(0, { .self_wait = false });
-
-    usize material_index = self.materials.size();
-    self.materials.push_back(material);
-
-    return static_cast<MaterialID>(material_index);
+    return &material;
 }
 
-ls::option<ShaderID> AssetManager::shader_at(this AssetManager &self, Identifier ident) {
+ls::option<ShaderID> AssetManager::shader_at(this AssetManager &self, const Identifier &ident) {
     ZoneScoped;
 
     auto it = self.shaders.find(ident);
@@ -625,6 +598,39 @@ ls::option<ShaderID> AssetManager::shader_at(this AssetManager &self, Identifier
     }
 
     return it->second;
+}
+
+Texture *AssetManager::texture_at(this AssetManager &self, const Identifier &ident) {
+    ZoneScoped;
+
+    auto it = self.textures.find(ident);
+    if (it == self.textures.end()) {
+        return nullptr;
+    }
+
+    return &it->second;
+}
+
+Material *AssetManager::material_at(this AssetManager &self, const Identifier &ident) {
+    ZoneScoped;
+
+    auto it = self.materials.find(ident);
+    if (it == self.materials.end()) {
+        return nullptr;
+    }
+
+    return &it->second;
+}
+
+Model *AssetManager::model_at(this AssetManager &self, const Identifier &ident) {
+    ZoneScoped;
+
+    auto it = self.models.find(ident);
+    if (it == self.models.end()) {
+        return nullptr;
+    }
+
+    return &it->second;
 }
 
 }  // namespace lr

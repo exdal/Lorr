@@ -32,12 +32,6 @@ struct GPUCameraData {
     glm::vec3 position = {};
 };
 
-// NOTE: Soon, we will have one giant buffer with all vertex buffers
-// and this won't just contain the transform info.
-struct GPUModelData {
-    glm::mat4 model_transform_mat = {};
-};
-
 struct GPUWorldData {
     u64 cameras = {};
     u64 materials = {};
@@ -54,6 +48,7 @@ struct RenderPipeline {
     // Buffers for static objects
     BufferID persistent_vertex_buffer = {};
     BufferID persistent_index_buffer = {};
+    BufferID persistent_material_buffer = {};
 
     // Buffers for dynamic objects
     ls::static_vector<BufferID, Limits::FrameCount> dynamic_vertex_buffers = {};

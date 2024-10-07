@@ -47,7 +47,9 @@ struct TaskGraph {
 
     // Recording
     template<typename TaskT>
-    TaskID add_task(const TaskT &task_info);
+    TaskID add_task(this TaskGraph &, const TaskT &task_info);
+    template<typename AgainstTheGodAndNature = void>
+    TaskID add_task(this TaskGraph &, const InlineTask &inline_task);
     void present(this TaskGraph &, TaskImageID task_image_id);
 
     // Debug tools
@@ -66,11 +68,19 @@ private:
 };
 
 template<typename TaskT>
-TaskID TaskGraph::add_task(const TaskT &task_info) {
+TaskID TaskGraph::add_task(this TaskGraph &self, const TaskT &task_info) {
     ZoneScoped;
 
     std::unique_ptr<Task> task = std::make_unique<TaskWrapper<TaskT>>(task_info);
-    return add_task(std::move(task));
+    return self.add_task(std::move(task));
+}
+
+template<typename>
+TaskID TaskGraph::add_task(this TaskGraph &self, const InlineTask &inline_task) {
+    ZoneScoped;
+
+    std::unique_ptr<Task> task = std::make_unique<InlineTask>(inline_task);
+    return self.add_task(task);
 }
 
 struct TaskContext {

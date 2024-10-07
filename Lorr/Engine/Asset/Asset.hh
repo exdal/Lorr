@@ -4,6 +4,7 @@
 
 #include "Engine/Graphics/Common.hh"
 #include "Engine/Graphics/Pipeline.hh"
+#include "Engine/Graphics/Shader.hh"
 #include "Engine/Util/VirtualDir.hh"
 #include "Engine/World/Model.hh"
 
@@ -43,17 +44,26 @@ struct ShaderCompileInfo {
     ls::option<std::string_view> source = ls::nullopt;
 };
 
-// For future, we can have giant Vertex and Index buffers
-// to ease out the Model management. But that might introduce
-// more work, stuff like allocation, etc... Change it when needed.
+struct ShaderProgram {
+    struct GraphicsProgram {
+        ShaderID vertex_shader;
+        ShaderID pixel_shader;
+    };
+
+    struct ComputeProgram {
+        glm::u64vec3 thread_group_size = {};
+        ShaderID compute_shader;
+    };
+
+    PipelineLayoutID pipeline_layout_id = PipelineLayoutID::None;
+    std::variant<std::monostate, GraphicsProgram, ComputeProgram> program = {};
+};
 
 struct AssetManager {
-    constexpr static usize MAX_MATERIAL_COUNT = 64;
-
     Device *device = nullptr;
-    BufferID material_buffer_id = BufferID::Invalid;
 
     VirtualDir shader_virtual_env = {};
+    ankerl::unordered_dense::map<Identifier, PipelineID> pipelines = {};
     ankerl::unordered_dense::map<Identifier, ShaderID> shaders = {};
     ankerl::unordered_dense::map<Identifier, Texture> textures = {};
     ankerl::unordered_dense::map<Identifier, Material> materials = {};
@@ -64,13 +74,14 @@ struct AssetManager {
 
     // If `ShaderCompileInfo::source` has value, shader is loaded from memory.
     // But `path` is STILL used to print debug information.
-    ls::option<ShaderID> load_shader(this AssetManager &, const Identifier &ident, const ShaderCompileInfo &info);
+    ls::option<ShaderProgram> load_shader_program(this AssetManager &, const Identifier &ident, const ShaderCompileInfo &info);
     Model *load_model(this AssetManager &, const Identifier &ident, const fs::path &path);
-    Material *add_material(this AssetManager &, const Identifier &ident, const Material &material);
+    Material *add_material(this AssetManager &, const Identifier &ident, const Material &material_data);
 
     ls::option<ShaderID> shader_at(this AssetManager &, const Identifier &ident);
-    Material *material_at(this AssetManager &, const Identifier &);
-    Model *model_at(this AssetManager &, const Identifier &);
+    Texture *texture_at(this AssetManager &, const Identifier &ident);
+    Material *material_at(this AssetManager &, const Identifier &ident);
+    Model *model_at(this AssetManager &, const Identifier &ident);
 
     constexpr static VertexAttribInfo VERTEX_LAYOUT[] = {
         { .format = Format::R32G32B32_SFLOAT, .location = 0, .offset = offsetof(Vertex, position) },

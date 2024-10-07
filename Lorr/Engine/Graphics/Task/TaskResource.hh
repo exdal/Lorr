@@ -107,21 +107,59 @@ struct TaskPipelineInfo {
     std::vector<PipelineColorBlendAttachment> blend_attachments = {};
     std::vector<ShaderID> shader_ids = {};
 
-    void set_dynamic_states(DynamicState states) { graphics_info.dynamic_state = states; }
-    void set_viewport(const Viewport &viewport) { viewports.push_back(viewport); }
-    void set_scissors(const Rect2D &rect) { scissors.push_back(rect); }
-    void set_shader(ShaderID shader_id) { shader_ids.push_back(shader_id); }
-    void set_rasterizer_state(const RasterizerStateInfo &info) { graphics_info.rasterizer_state = info; }
-    void set_multisample_state(const MultisampleStateInfo &info) { graphics_info.multisample_state = info; }
-    void set_depth_stencil_state(const DepthStencilStateInfo &info) { graphics_info.depth_stencil_state = info; }
-    void set_blend_constants(const glm::vec4 &constants) { graphics_info.blend_constants = constants; }
-    void set_blend_attachments(const std::vector<PipelineColorBlendAttachment> &infos) { blend_attachments = infos; }
-    void set_blend_attachment_all(const PipelineColorBlendAttachment &info) {
+    auto &set_dynamic_states(DynamicState states) {
+        graphics_info.dynamic_state = states;
+        return *this;
+    }
+
+    auto &set_viewport(const Viewport &viewport) {
+        viewports.push_back(viewport);
+        return *this;
+    }
+
+    auto &set_scissors(const Rect2D &rect) {
+        scissors.push_back(rect);
+        return *this;
+    }
+
+    auto &set_shader(ShaderID shader_id) {
+        shader_ids.push_back(shader_id);
+        return *this;
+    }
+
+    auto &set_rasterizer_state(const RasterizerStateInfo &info) {
+        graphics_info.rasterizer_state = info;
+        return *this;
+    }
+
+    auto &set_multisample_state(const MultisampleStateInfo &info) {
+        graphics_info.multisample_state = info;
+        return *this;
+    }
+
+    auto &set_depth_stencil_state(const DepthStencilStateInfo &info) {
+        graphics_info.depth_stencil_state = info;
+        return *this;
+    }
+
+    auto &set_blend_constants(const glm::vec4 &constants) {
+        graphics_info.blend_constants = constants;
+        return *this;
+    }
+
+    auto &set_blend_attachments(const std::vector<PipelineColorBlendAttachment> &infos) {
+        blend_attachments = infos;
+        return *this;
+    }
+
+    auto &set_blend_attachment_all(const PipelineColorBlendAttachment &info) {
         for (auto &v : blend_attachments) {
             v = info;
         }
+        return *this;
     }
-    void set_vertex_layout(ls::span<const VertexAttribInfo> attribs) {
+
+    auto &set_vertex_layout(ls::span<const VertexAttribInfo> attribs) {
         u32 stride = 0;
         for (const VertexAttribInfo &attrib : attribs) {
             stride += format_to_size(attrib.format);
@@ -134,6 +172,7 @@ struct TaskPipelineInfo {
         });
 
         vertex_attrib_infos.insert(vertex_attrib_infos.end(), attribs.begin(), attribs.end());
+        return *this;
     }
 };
 

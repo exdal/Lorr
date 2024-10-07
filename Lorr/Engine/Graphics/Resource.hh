@@ -44,7 +44,6 @@ struct ImageInfo {
     ImageUsage usage_flags = ImageUsage::Sampled;
     Format format = Format::Unknown;
     ImageType type = ImageType::View2D;
-    ImageLayout initial_layout = ImageLayout::Undefined;
 
     Extent3D extent = {};
     u32 slice_count = 1;
@@ -127,7 +126,7 @@ struct SamplerInfo {
     CompareOp compare_op = {};
     float max_anisotropy = 0;
     float mip_lod_bias = 0;
-    float min_lod = 0;
+    float min_lod = -1000.0f;
     float max_lod = 1000.0f;
     bool use_anisotropy = false;
     std::string_view debug_name = {};

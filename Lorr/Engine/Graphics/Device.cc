@@ -125,6 +125,9 @@ VKResult Device::init(this Device &self, const DeviceInfo &info) {
         vk12_features.timelineSemaphore = true;
         vk12_features.bufferDeviceAddress = true;
         vk12_features.hostQueryReset = true;
+        // Shader features
+        vk12_features.scalarBlockLayout = true;
+        vk12_features.shaderInt8 = true;
         physical_device_selector.set_required_features_12(vk12_features);
 
         VkPhysicalDeviceVulkan11Features vk11_features = {};
@@ -325,6 +328,14 @@ VKResult Device::init(this Device &self, const DeviceInfo &info) {
         };
         self.update_descriptor_sets(write_info, {});
     }
+
+    self.staging_buffer = self.create_buffer({
+        .usage_flags = BufferUsage::None,
+        .flags = MemoryFlag::HostSeqWrite,
+        .preference = MemoryPreference::Host,
+        .data_size = STAGING_UPLOAD_SIZE,
+        .debug_name = "Staging Buffer",
+    });
 
     return VKResult::Success;
 }
@@ -1276,6 +1287,53 @@ MemoryRequirements Device::memory_requirements(this Device &self, BufferID buffe
     return { .size = vk_info.size, .alignment = vk_info.alignment, .memory_type_bits = vk_info.memoryTypeBits };
 }
 
+void Device::upload_staging(this Device &self, BufferID target_buffer_id, const void *data, ls::u64range range, u64 frame_index) {
+    ZoneScoped;
+
+    // This is very bare implementation of a staging buffer
+    // You should replace this with a ring buffer and move
+    // to different worker thread for better streaming,
+    // dont clog the render thread
+
+    auto &transfer_queue = self.queue_at(CommandType::Transfer);
+    CommandList cmd_list = {};
+    self.create_command_lists(cmd_list, transfer_queue.command_allocator(frame_index));
+
+    u64 offset = range.min;
+    u64 written_bytes_size = 0;
+    u64 target_size = range.length();
+    auto &target_buffer = self.buffer_at(target_buffer_id);
+    LS_EXPECT(target_buffer.data_size <= target_size);
+
+    while (written_bytes_size < target_size) {
+        u64 remainder_size = target_size - written_bytes_size;
+        const u8 *cur_data = reinterpret_cast<const u8 *>(data) + offset + written_bytes_size;
+        u8 *buffer_data = self.buffer_host_data(self.staging_buffer);
+        auto cur_write_size = ls::min(STAGING_UPLOAD_SIZE, target_size - remainder_size);
+        std::memcpy(buffer_data, cur_data, cur_write_size);
+
+        cmd_list.begin_recording();
+        BufferCopyRegion copy_region = {
+            .src_offset = 0,
+            .dst_offset = written_bytes_size,
+            .size = cur_write_size,
+        };
+        cmd_list.copy_buffer_to_buffer(self.staging_buffer, target_buffer_id, copy_region);
+        cmd_list.end_recording();
+
+        CommandListSubmitInfo cmd_list_submit(cmd_list);
+        QueueSubmitInfo submit_info = {
+            .self_wait = true,
+            .additional_command_lists = cmd_list_submit,
+        };
+        transfer_queue.submit(frame_index, submit_info);
+
+        written_bytes_size += cur_write_size;
+    }
+
+    self.delete_command_lists(cmd_list);
+}
+
 ls::result<ImageID, VKResult> Device::create_image(this Device &self, const ImageInfo &info) {
     ZoneScoped;
 
@@ -1332,20 +1390,6 @@ ls::result<ImageID, VKResult> Device::create_image(this Device &self, const Imag
 
     if (!info.debug_name.empty()) {
         self.set_object_name(*image.resource, info.debug_name);
-    }
-
-    if (info.initial_layout != ImageLayout::Undefined) {
-        auto &queue = self.queue_at(CommandType::Graphics);
-        auto &cmd_list = queue.begin_command_list(0);
-        cmd_list.image_transition(ImageBarrier{
-            .src_access = PipelineAccess::None,
-            .dst_access = PipelineAccess::All,
-            .old_layout = ImageLayout::Undefined,
-            .new_layout = info.initial_layout,
-            .image_id = image.id,
-        });
-        queue.end_command_list(cmd_list);
-        queue.submit(0, {});
     }
 
     return image.id;

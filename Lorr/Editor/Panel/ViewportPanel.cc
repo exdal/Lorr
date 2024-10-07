@@ -43,8 +43,9 @@ void ViewportPanel::on_drop(this ViewportPanel &self) {
     auto &scene = world.scene_at(world.active_scene.value());
     if (const auto *payload = ImGui::AcceptDragDropPayload("ASSET_PATH")) {
         std::string_view path_sv(static_cast<const c8 *>(payload->Data), payload->DataSize);
-        auto model_id = app.asset_man.load_model(path_sv);
-        if (!model_id) {
+        auto model_ident = Identifier::random();
+        auto model = app.asset_man.load_model(model_ident, path_sv);
+        if (!model) {
             LOG_ERROR("Failed to import model into the scene!");
             return;
         }
@@ -52,7 +53,7 @@ void ViewportPanel::on_drop(this ViewportPanel &self) {
         scene
             .create_entity("model")  //
             .set<Component::Transform>({})
-            .set<Component::RenderableModel>({ .model_id = static_cast<u32>(model_id.value()) });
+            .set<Component::RenderableModel>({ model_ident });
     } else if (const auto *payload = ImGui::AcceptDragDropPayload("ATTACH_CAMERA")) {
         auto camera_id = *static_cast<flecs::entity_t *>(payload->Data);
         self.camera_entity = world.ecs.entity(camera_id);

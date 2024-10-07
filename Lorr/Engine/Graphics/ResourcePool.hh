@@ -25,10 +25,10 @@ struct ResourceResult {
 
 // Paged resource pool, a bit cleaner implementation to linked lists.
 // is from Daxa
-template<typename ResourceT, typename ResourceID>
-struct PagedResourcePool {
-    static_assert(std::is_default_constructible_v<ResourceT>, "ResourceT must have default constructor.");
 
+template<typename ResourceT, typename ResourceID>
+    requires(std::is_default_constructible_v<ResourceT>)
+struct PagedResourcePool {
     using index_type = std::underlying_type_t<ResourceID>;
 
     constexpr static index_type MAX_RESOURCE_COUNT = 1 << 19u;

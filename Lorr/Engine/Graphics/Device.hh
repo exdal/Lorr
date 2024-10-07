@@ -41,7 +41,10 @@ struct DeviceInfo {
 
 struct Device {
     constexpr static usize QUEUE_COUNT = static_cast<usize>(CommandType::Count);
+    constexpr static u64 STAGING_UPLOAD_SIZE = ls::mib_to_bytes(128);
+
     std::array<CommandQueue, QUEUE_COUNT> queues = {};
+    BufferID staging_buffer = BufferID::Invalid;
     ls::static_vector<StagingBuffer, Limits::FrameCount> staging_buffers = {};
     Semaphore frame_sema = {};
     usize frame_count = 0;  // global frame count, same across all swap chains
@@ -120,6 +123,8 @@ struct Device {
     T *buffer_host_data(this Device &, BufferID buffer_id);
 
     MemoryRequirements memory_requirements(this Device &, BufferID buffer_id);
+
+    void upload_staging(this Device &, BufferID target_buffer_id, const void *data, ls::u64range range, u64 frame_index);
 
     /// Images ///
     ls::result<ImageID, VKResult> create_image(this Device &, const ImageInfo &info);

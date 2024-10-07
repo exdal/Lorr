@@ -27,8 +27,8 @@ struct SkyLUTTask {
         auto &app = Application::get();
         auto &pipeline_info = info.pipeline_info;
 
-        auto vs = app.asset_man.shader_at("shader://atmos.lut_vs");
-        auto fs = app.asset_man.shader_at("shader://atmos.lut_fs");
+        auto vs = app.asset_man.shader_at("atmos.lut_vs");
+        auto fs = app.asset_man.shader_at("atmos.lut_fs");
         if (!vs || !fs) {
             LOG_ERROR("Shaders are invalid.", name);
             return false;
@@ -66,8 +66,6 @@ struct SkyLUTTask {
                 .mip_filter = Filtering::Linear,
                 .address_u = TextureAddressMode::ClampToEdge,
                 .address_v = TextureAddressMode::ClampToEdge,
-                .min_lod = -1000,
-                .max_lod = 1000,
             }),
         };
         tc.set_push_constants(c);
@@ -96,8 +94,8 @@ struct SkyFinalTask {
         auto &app = Application::get();
         auto &pipeline_info = info.pipeline_info;
 
-        auto vs = app.asset_man.shader_at("shader://atmos.final_vs");
-        auto fs = app.asset_man.shader_at("shader://atmos.final_fs");
+        auto vs = app.asset_man.shader_at("atmos.final_vs");
+        auto fs = app.asset_man.shader_at("atmos.final_fs");
         if (!vs || !fs) {
             LOG_ERROR("Shaders are invalid.", name);
             return false;
@@ -135,8 +133,6 @@ struct SkyFinalTask {
                 .mip_filter = Filtering::Linear,
                 .address_u = TextureAddressMode::Repeat,
                 .address_v = TextureAddressMode::ClampToEdge,
-                .min_lod = -1000,
-                .max_lod = 1000,
             }),
         };
         tc.set_push_constants(c);
@@ -155,16 +151,16 @@ struct GeometryTask {
 
     struct PushConstants {
         u64 world_ptr = 0;
-        ModelID model_id = ModelID::Invalid;
-        MaterialID material_id = MaterialID::Invalid;
+        GPUModelID model_id = GPUModelID::Invalid;
+        GPUMaterialID material_id = GPUMaterialID::Invalid;
     };
 
     bool prepare(TaskPrepareInfo &info) {
         auto &app = Application::get();
         auto &pipeline_info = info.pipeline_info;
 
-        auto vs = app.asset_man.shader_at("shader://model_vs");
-        auto fs = app.asset_man.shader_at("shader://model_fs");
+        auto vs = app.asset_man.shader_at("model_vs");
+        auto fs = app.asset_man.shader_at("model_fs");
         if (!vs || !fs) {
             LOG_ERROR("Shaders are invalid.", name);
             return false;
@@ -214,17 +210,16 @@ struct GeometryTask {
 
         auto models = world.ecs.query<Component::RenderableModel>();
         models.each([&](Component::RenderableModel &m) {
-            c.model_id = static_cast<ModelID>(m.model_id);
-            auto &model = asset_man.model_at(c.model_id);
+            auto model = asset_man.model_at(m.model);
 
-            tc.cmd_list.set_vertex_buffer(model.vertex_buffer.value());
-            tc.cmd_list.set_index_buffer(model.index_buffer.value());
+            tc.cmd_list.set_vertex_buffer(model->vertex_buffer.value());
+            tc.cmd_list.set_index_buffer(model->index_buffer.value());
 
-            for (auto &mesh : model.meshes) {
+            for (auto &mesh : model->meshes) {
                 for (auto &primitive_index : mesh.primitive_indices) {
-                    auto &primitive = model.primitives[primitive_index];
+                    auto &primitive = model->primitives[primitive_index];
 
-                    c.material_id = static_cast<MaterialID>(primitive.material_index);
+                    // c.material_id = static_cast<MaterialID>(primitive.material_index);
                     tc.set_push_constants(c);
                     tc.cmd_list.draw_indexed(primitive.index_count, primitive.index_offset, static_cast<i32>(primitive.vertex_offset));
                 }
@@ -251,8 +246,8 @@ struct GridTask {
         auto &app = Application::get();
         auto &pipeline_info = info.pipeline_info;
 
-        auto vs = app.asset_man.shader_at("shader://editor.grid_vs");
-        auto fs = app.asset_man.shader_at("shader://editor.grid_fs");
+        auto vs = app.asset_man.shader_at("editor.grid_vs");
+        auto fs = app.asset_man.shader_at("editor.grid_fs");
         if (!vs || !fs) {
             LOG_ERROR("Shaders are invalid.", name);
             return false;
@@ -324,8 +319,8 @@ struct ImGuiTask {
         auto &app = Application::get();
         auto &pipeline_info = info.pipeline_info;
 
-        auto vs = app.asset_man.shader_at("shader://imgui_vs");
-        auto fs = app.asset_man.shader_at("shader://imgui_fs");
+        auto vs = app.asset_man.shader_at("imgui_vs");
+        auto fs = app.asset_man.shader_at("imgui_fs");
         if (!vs || !fs) {
             LOG_ERROR("Shaders are invalid.", name);
             return false;

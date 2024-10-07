@@ -89,7 +89,6 @@ TaskID TaskGraph::add_task(this TaskGraph &self, std::unique_ptr<Task> &&task) {
     }
 
     TaskID task_id = static_cast<TaskID>(self.tasks.size());
-    self.tasks.push_back(std::move(task));
 
     auto submit_index = self.submits.size() - 1;
     auto batch_index = self.batches.size();
@@ -137,6 +136,7 @@ TaskID TaskGraph::add_task(this TaskGraph &self, std::unique_ptr<Task> &&task) {
         });
 
     submit.batch_indices.emplace_back(batch_index);
+    self.tasks.push_back(std::move(task));
 
     return task_id;
 }

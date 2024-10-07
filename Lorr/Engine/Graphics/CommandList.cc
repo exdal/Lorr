@@ -5,6 +5,24 @@
 #include "Engine/Memory/Stack.hh"
 
 namespace lr {
+void CommandList::begin_recording(this CommandList &self) {
+    ZoneScoped;
+
+    VkCommandBufferBeginInfo begin_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        .pNext = nullptr,
+        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+        .pInheritanceInfo = nullptr,
+    };
+    vkBeginCommandBuffer(self, &begin_info);
+}
+
+void CommandList::end_recording(this CommandList &self) {
+    ZoneScoped;
+
+    vkEndCommandBuffer(self);
+}
+
 void CommandList::reset_query_pool(this CommandList &self, TimestampQueryPool &query_pool, u32 first_query, u32 query_count) {
     ZoneScoped;
 
@@ -330,14 +348,7 @@ CommandList &CommandQueue::begin_command_list(this CommandQueue &self, usize fra
     self.device->create_command_lists(cmd_list, cmd_allocator);
     self.device->set_object_name(cmd_list, stack.format("At {}:{} {}", LOC.file_name(), LOC.line(), LOC.function_name()));
     cmd_list.rendering_frame = frame_index;
-
-    VkCommandBufferBeginInfo begin_info = {
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-        .pNext = nullptr,
-        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-        .pInheritanceInfo = nullptr,
-    };
-    vkBeginCommandBuffer(cmd_list, &begin_info);
+    cmd_list.begin_recording();
 
     return cmd_list;
 }
@@ -345,11 +356,10 @@ CommandList &CommandQueue::begin_command_list(this CommandQueue &self, usize fra
 void CommandQueue::end_command_list(this CommandQueue &self, CommandList &cmd_list) {
     ZoneScoped;
 
+    cmd_list.end_recording();
+
     auto &frame_lists = self.frame_cmd_submits[cmd_list.rendering_frame];
     frame_lists.emplace_back(cmd_list);
-
-    vkEndCommandBuffer(cmd_list);
-
     self.defer(cmd_list);
 }
 
@@ -358,44 +368,68 @@ VKResult CommandQueue::submit(this CommandQueue &self, usize frame_index, const 
     memory::ScopedStack stack;
 
     auto &cmd_lists = self.command_lists[frame_index];
-    auto &cmd_submits = self.frame_cmd_submits[frame_index];
-
+    auto &self_cmd_submits = self.frame_cmd_submits[frame_index];
     SemaphoreSubmitInfo self_waits[] = { { self.semaphore, self.semaphore.counter, PipelineStage::AllCommands } };
     SemaphoreSubmitInfo self_signals[] = { { self.semaphore, self.semaphore.advance(), PipelineStage::AllCommands } };
 
-    u32 all_waits_size = 0;
-    auto all_waits = stack.alloc<SemaphoreSubmitInfo>(info.additional_wait_semas.size() + count_of(self_waits));
-    for (const SemaphoreSubmitInfo &v : info.additional_wait_semas)
-        all_waits[all_waits_size++] = v;
+    ls::span<CommandListSubmitInfo> cmd_submits = self_cmd_submits;
+    ls::span<SemaphoreSubmitInfo> sema_waits = {};
+    ls::span<SemaphoreSubmitInfo> sema_signals = self_signals;
 
-    if (info.self_wait) {
-        for (const SemaphoreSubmitInfo &v : self_waits)
-            all_waits[all_waits_size++] = v;
+    if (!info.additional_wait_semas.empty() || info.self_wait) {
+        sema_waits = stack.alloc<SemaphoreSubmitInfo>(info.additional_wait_semas.size() + count_of(self_waits));
+        usize i = 0;
+        for (auto &v : info.additional_wait_semas) {
+            sema_waits[i++] = v;
+        }
+
+        if (info.self_wait) {
+            for (auto &v : self_waits) {
+                sema_waits[i++] = v;
+            }
+        }
     }
 
-    u32 all_signals_size = 0;
-    auto all_signals = stack.alloc<SemaphoreSubmitInfo>(info.additional_signal_semas.size() + count_of(self_signals));
-    for (const SemaphoreSubmitInfo &v : info.additional_signal_semas)
-        all_signals[all_signals_size++] = v;
-    for (const SemaphoreSubmitInfo &v : self_signals)
-        all_signals[all_signals_size++] = v;
+    if (!info.additional_signal_semas.empty()) {
+        sema_signals = stack.alloc<SemaphoreSubmitInfo>(info.additional_signal_semas.size() + count_of(self_signals));
+        usize i = 0;
+        for (auto &v : info.additional_signal_semas) {
+            sema_signals[i++] = v;
+        }
+
+        for (auto &v : self_signals) {
+            sema_signals[i++] = v;
+        }
+    }
+
+    if (!info.additional_command_lists.empty()) {
+        cmd_submits = stack.alloc<CommandListSubmitInfo>(self_cmd_submits.size() + info.additional_command_lists.size());
+        usize i = 0;
+        for (auto &v : info.additional_command_lists) {
+            cmd_submits[i++] = v;
+        }
+
+        for (auto &v : self_cmd_submits) {
+            cmd_submits[i++] = v;
+        }
+    }
 
     VkSubmitInfo2 submit_info = {
         .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
         .pNext = nullptr,
         .flags = 0,
-        .waitSemaphoreInfoCount = all_waits_size,
-        .pWaitSemaphoreInfos = reinterpret_cast<const VkSemaphoreSubmitInfo *>(all_waits.data()),
+        .waitSemaphoreInfoCount = static_cast<u32>(sema_waits.size()),
+        .pWaitSemaphoreInfos = reinterpret_cast<const VkSemaphoreSubmitInfo *>(sema_waits.data()),
         .commandBufferInfoCount = static_cast<u32>(cmd_submits.size()),
         .pCommandBufferInfos = reinterpret_cast<VkCommandBufferSubmitInfo *>(cmd_submits.data()),
-        .signalSemaphoreInfoCount = all_signals_size,
-        .pSignalSemaphoreInfos = reinterpret_cast<const VkSemaphoreSubmitInfo *>(all_signals.data()),
+        .signalSemaphoreInfoCount = static_cast<u32>(sema_signals.size()),
+        .pSignalSemaphoreInfos = reinterpret_cast<const VkSemaphoreSubmitInfo *>(sema_signals.data()),
     };
     auto result = static_cast<VKResult>(vkQueueSubmit2(self, 1, &submit_info, nullptr));
 
     // POST CLEANUP //
     cmd_lists.clear();
-    cmd_submits.clear();
+    self_cmd_submits.clear();
 
     return result;
 }

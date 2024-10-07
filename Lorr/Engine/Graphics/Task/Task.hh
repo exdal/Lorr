@@ -28,6 +28,15 @@ struct Task {
     f64 execution_time() { return (end_ts - start_ts) / 1000000.f; }
 };
 
+struct InlineTask : Task {
+    std::string name = {};
+    std::vector<TaskUse> uses = {};
+    std::function<void(TaskContext &)> execute_cb = {};
+
+    bool prepare(TaskPrepareInfo &) override { return true; }
+    void execute(TaskContext &tc) override { execute_cb(tc); }
+};
+
 template<typename TaskT>
 concept TaskConcept = requires {
     TaskT{}.uses;

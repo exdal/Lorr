@@ -141,13 +141,13 @@ bool RenderPipeline::setup_resources(this RenderPipeline &self) {
         .usage_flags = ImageUsage::DepthStencilAttachment | ImageUsage::Sampled,
         .format = Format::D32_SFLOAT,
         .type = ImageType::View2D,
-        .initial_layout = ImageLayout::ColorAttachment,
         .extent = app.default_surface.swap_chain.extent,
         .debug_name = "Geometry Depth Image",
     });
     auto geometry_depth_view = app.device.create_image_view(ImageViewInfo{
         .image_id = geometry_depth_image,
         .type = ImageViewType::View2D,
+        .subresource_range = { .aspect_mask = ImageAspect::Depth },
         .debug_name = "Geometry Depth Image View",
     });
     self.geometry_depth_image = self.task_graph.add_image(TaskImageInfo{
@@ -159,7 +159,6 @@ bool RenderPipeline::setup_resources(this RenderPipeline &self) {
         .usage_flags = ImageUsage::ColorAttachment | ImageUsage::Sampled,
         .format = Format::R32G32B32A32_SFLOAT,
         .type = ImageType::View2D,
-        .initial_layout = ImageLayout::ColorAttachment,
         .extent = app.default_surface.swap_chain.extent,
         .debug_name = "Final Image",
     });
@@ -177,7 +176,6 @@ bool RenderPipeline::setup_resources(this RenderPipeline &self) {
         .usage_flags = ImageUsage::Storage | ImageUsage::Sampled,
         .format = Format::R32G32B32A32_SFLOAT,
         .type = ImageType::View2D,
-        .initial_layout = ImageLayout::General,
         .extent = { 256, 64, 1 },
         .debug_name = "Sky Transmittance Image",
     });
@@ -189,15 +187,12 @@ bool RenderPipeline::setup_resources(this RenderPipeline &self) {
     self.atmos_transmittance_image = self.task_graph.add_image(TaskImageInfo{
         .image_id = transmittance_image,
         .image_view_id = transmittance_view,
-        .layout = ImageLayout::ColorReadOnly,
-        .access = PipelineAccess::FragmentShaderRead,
     });
 
     auto ms_image = app.device.create_image(ImageInfo{
         .usage_flags = ImageUsage::Storage | ImageUsage::Sampled,
         .format = Format::R32G32B32A32_SFLOAT,
         .type = ImageType::View2D,
-        .initial_layout = ImageLayout::General,
         .extent = { 256, 256, 1 },
         .debug_name = "Sky MS Image",
     });
@@ -209,15 +204,12 @@ bool RenderPipeline::setup_resources(this RenderPipeline &self) {
     self.atmos_ms_image = self.task_graph.add_image(TaskImageInfo{
         .image_id = ms_image,
         .image_view_id = ms_view,
-        .layout = ImageLayout::ColorReadOnly,
-        .access = PipelineAccess::FragmentShaderRead,
     });
 
     auto sky_lut_image = app.device.create_image(ImageInfo{
         .usage_flags = ImageUsage::ColorAttachment | ImageUsage::Sampled,
         .format = Format::R32G32B32A32_SFLOAT,
         .type = ImageType::View2D,
-        .initial_layout = ImageLayout::ColorAttachment,
         .extent = { 400, 200, 1 },
         .debug_name = "Sky LUT",
     });
@@ -229,15 +221,12 @@ bool RenderPipeline::setup_resources(this RenderPipeline &self) {
     self.atmos_sky_lut_image = self.task_graph.add_image(TaskImageInfo{
         .image_id = sky_lut_image,
         .image_view_id = sky_lut_view,
-        .layout = ImageLayout::ColorAttachment,
-        .access = PipelineAccess::ColorAttachmentRead,
     });
 
     auto sky_final_image = app.device.create_image(ImageInfo{
         .usage_flags = ImageUsage::ColorAttachment | ImageUsage::Sampled,
         .format = Format::R32G32B32A32_SFLOAT,
         .type = ImageType::View2D,
-        .initial_layout = ImageLayout::ColorAttachment,
         .extent = app.default_surface.swap_chain.extent,
         .debug_name = "Sky Final",
     });
@@ -249,8 +238,6 @@ bool RenderPipeline::setup_resources(this RenderPipeline &self) {
     self.atmos_final_image = self.task_graph.add_image(TaskImageInfo{
         .image_id = sky_final_image,
         .image_view_id = sky_final_view,
-        .layout = ImageLayout::ColorAttachment,
-        .access = PipelineAccess::ColorAttachmentRead,
     });
 
     // Load buffers
@@ -274,7 +261,7 @@ bool RenderPipeline::setup_resources(this RenderPipeline &self) {
     per_frame_buffer(self.dynamic_vertex_buffers, "Dynamic Vertex Buffer", sizeof(Vertex) * 1024 * 128, BufferUsage::Vertex);
     per_frame_buffer(self.dynamic_index_buffers, "Dynamic Index Buffer", sizeof(u32) * 1024 * 128, BufferUsage::Index);
     per_frame_buffer(self.world_camera_buffers, "Camera Buffer", sizeof(GPUCameraData) * 16);
-    per_frame_buffer(self.world_model_buffers, "Model Buffer", sizeof(GPUModelData) * 64);
+    per_frame_buffer(self.world_model_buffers, "Model Buffer", sizeof(GPUModel) * 64);
     per_frame_buffer(self.world_data_buffers, "World Buffer", sizeof(GPUWorldData));
     for (usize i = 0; i < self.device->frame_count; i++) {
         self.cpu_upload_buffers.push_back(BufferID::Invalid);
@@ -483,7 +470,7 @@ bool RenderPipeline::prepare(this RenderPipeline &self, usize frame_index) {
     upload_size += new_camera_buffer_size;
 
     auto models = world.ecs.query<Component::Transform, Component::RenderableModel>();
-    auto new_model_buffer_size = models.count() * sizeof(GPUModelData);
+    auto new_model_buffer_size = models.count() * sizeof(GPUModel);
     upload_size += new_model_buffer_size;
 
     // IN ORDER:
@@ -496,7 +483,7 @@ bool RenderPipeline::prepare(this RenderPipeline &self, usize frame_index) {
 
     // Materials
     // TODO: Get this out of asset manager
-    auto material_buffer_id = app.asset_man.material_buffer_id;
+    auto material_buffer_id = self.persistent_material_buffer;
 
     // World data itself
     auto world_data_buffer_id = self.world_data_buffers[frame_index];
@@ -527,13 +514,13 @@ bool RenderPipeline::prepare(this RenderPipeline &self, usize frame_index) {
     cmd_list.copy_buffer_to_buffer(cpu_buffer_id, camera_buffer_id, camera_copy_region);
 
     // Model
-    auto model_ptr = reinterpret_cast<GPUModelData *>(cpu_buffer_data + cpu_buffer_offset);
-    BufferCopyRegion model_copy_region = { .src_offset = cpu_buffer_offset, .dst_offset = 0, .size = sizeof(GPUModelData) };
+    auto model_ptr = reinterpret_cast<GPUModel *>(cpu_buffer_data + cpu_buffer_offset);
+    BufferCopyRegion model_copy_region = { .src_offset = cpu_buffer_offset, .dst_offset = 0, .size = sizeof(GPUModel) };
     models.each([&](Component::Transform &t, Component::RenderableModel &) {
-        model_ptr->model_transform_mat = t.matrix;
+        model_ptr->transform_mat = t.matrix;
 
         model_ptr++;
-        cpu_buffer_offset += sizeof(GPUModelData);
+        cpu_buffer_offset += sizeof(GPUModel);
     });
     cmd_list.copy_buffer_to_buffer(cpu_buffer_id, model_buffer_id, model_copy_region);
 

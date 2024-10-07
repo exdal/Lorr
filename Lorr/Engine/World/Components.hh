@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Model.hh"
+#include "Engine/Asset/Identifier.hh"
 
 #include <flecs.h>
 #include <glm/gtx/quaternion.hpp>
@@ -50,12 +50,11 @@ struct Camera {
 struct RenderableModel {
     constexpr static auto ICON = Icon::fa::cube;
 
-    using ModelID_t = std::underlying_type_t<ModelID>;
-    ModelID_t model_id = ~0_u32;
+    Identifier model = {};
 
     static void reflect(flecs::world &w) {
         w.component<RenderableModel>()  //
-            .member<ModelID_t, RenderableModel>("model_id", &RenderableModel::model_id);
+            .member<Identifier, RenderableModel>("model", &RenderableModel::model);
     }
 };
 

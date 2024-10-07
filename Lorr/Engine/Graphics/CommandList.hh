@@ -49,6 +49,9 @@ struct CommandAllocator {
 
 /// COMMAND LIST ///
 struct CommandList {
+    void begin_recording(this CommandList &);
+    void end_recording(this CommandList &);
+
     // Debugging
     void reset_query_pool(this CommandList &, TimestampQueryPool &query_pool, u32 first_query, u32 query_count);
     void write_timestamp(this CommandList &, TimestampQueryPool &query_pool, PipelineStage pipeline_stage, u32 query_index);
@@ -114,6 +117,7 @@ struct QueueSubmitInfo {
     bool self_wait = true;
     ls::span<SemaphoreSubmitInfo> additional_wait_semas = {};
     ls::span<SemaphoreSubmitInfo> additional_signal_semas = {};
+    ls::span<CommandListSubmitInfo> additional_command_lists = {};
 };
 
 struct CommandQueue {

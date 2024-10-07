@@ -9,18 +9,20 @@ private:
 public:
     u64 hash = 0;
 
+    constexpr Identifier() = default;
     template<usize N>
         requires(N <= STORAGE_SIZE - 1)
     constexpr Identifier(const c8 (&arr)[N])
         : Identifier(std::string_view(arr, N)) {}
     constexpr Identifier(std::string_view str) {
-        LS_EXPECT(str.length() < STORAGE_SIZE - 1);
-
         this->hash = ankerl::unordered_dense::detail::wyhash::hash(str.data(), str.length());
         std::copy(str.begin(), str.end(), storage);
         storage[str.length()] = '\0';
     }
+    constexpr std::string_view sv() const { return storage; }
     constexpr bool operator==(const Identifier &other) const { return this->hash == other.hash; };
+
+    static Identifier random();
 };
 }  // namespace lr
 

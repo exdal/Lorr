@@ -2,6 +2,7 @@
 
 #include "Engine/Core/Application.hh"
 #include "Engine/Graphics/Task/TaskGraph.hh"
+#include "Engine/World/Components.hh"
 
 #include <imgui.h>
 
@@ -26,10 +27,10 @@ struct SkyLUTTask {
         auto &app = Application::get();
         auto &pipeline_info = info.pipeline_info;
 
-        auto vs = app.asset_man.shader_at("shader://atmos.lut_vs");
-        auto fs = app.asset_man.shader_at("shader://atmos.lut_fs");
+        auto vs = app.asset_man.shader_at("atmos.lut_vs");
+        auto fs = app.asset_man.shader_at("atmos.lut_fs");
         if (!vs || !fs) {
-            LR_LOG_ERROR("Shaders are invalid.", name);
+            LOG_ERROR("Shaders are invalid.", name);
             return false;
         }
 
@@ -65,8 +66,6 @@ struct SkyLUTTask {
                 .mip_filter = Filtering::Linear,
                 .address_u = TextureAddressMode::ClampToEdge,
                 .address_v = TextureAddressMode::ClampToEdge,
-                .min_lod = -1000,
-                .max_lod = 1000,
             }),
         };
         tc.set_push_constants(c);
@@ -95,10 +94,10 @@ struct SkyFinalTask {
         auto &app = Application::get();
         auto &pipeline_info = info.pipeline_info;
 
-        auto vs = app.asset_man.shader_at("shader://atmos.final_vs");
-        auto fs = app.asset_man.shader_at("shader://atmos.final_fs");
+        auto vs = app.asset_man.shader_at("atmos.final_vs");
+        auto fs = app.asset_man.shader_at("atmos.final_fs");
         if (!vs || !fs) {
-            LR_LOG_ERROR("Shaders are invalid.", name);
+            LOG_ERROR("Shaders are invalid.", name);
             return false;
         }
 
@@ -134,12 +133,99 @@ struct SkyFinalTask {
                 .mip_filter = Filtering::Linear,
                 .address_u = TextureAddressMode::Repeat,
                 .address_v = TextureAddressMode::ClampToEdge,
-                .min_lod = -1000,
-                .max_lod = 1000,
             }),
         };
         tc.set_push_constants(c);
         tc.cmd_list.draw(3);
+        tc.cmd_list.end_rendering();
+    }
+};
+
+struct GeometryTask {
+    std::string_view name = "Geometry";
+
+    struct Uses {
+        Preset::ColorAttachmentRead color_attachment = {};
+        Preset::DepthAttachmentWrite depth_attachment = {};
+    } uses = {};
+
+    struct PushConstants {
+        u64 world_ptr = 0;
+        GPUModelID model_id = GPUModelID::Invalid;
+        GPUMaterialID material_id = GPUMaterialID::Invalid;
+    };
+
+    bool prepare(TaskPrepareInfo &info) {
+        auto &app = Application::get();
+        auto &pipeline_info = info.pipeline_info;
+
+        auto vs = app.asset_man.shader_at("model_vs");
+        auto fs = app.asset_man.shader_at("model_fs");
+        if (!vs || !fs) {
+            LOG_ERROR("Shaders are invalid.", name);
+            return false;
+        }
+
+        pipeline_info.set_shader(vs.value());
+        pipeline_info.set_shader(fs.value());
+        pipeline_info.set_vertex_layout(AssetManager::VERTEX_LAYOUT);
+        pipeline_info.set_rasterizer_state({ .cull_mode = CullMode::Back });
+        pipeline_info.set_depth_stencil_state({ .enable_depth_test = true, .enable_depth_write = true, .depth_compare_op = CompareOp::LessEqual });
+        pipeline_info.set_dynamic_states(DynamicState::Viewport | DynamicState::Scissor);
+        pipeline_info.set_blend_attachment_all({
+            .blend_enabled = true,
+            .src_blend = BlendFactor::SrcAlpha,
+            .dst_blend = BlendFactor::InvSrcAlpha,
+            .blend_op = BlendOp::Add,
+            .src_blend_alpha = BlendFactor::One,
+            .dst_blend_alpha = BlendFactor::InvSrcAlpha,
+            .blend_op_alpha = BlendOp::Add,
+        });
+        pipeline_info.set_viewport({});
+        pipeline_info.set_scissors({});
+
+        return true;
+    }
+
+    void execute(TaskContext &tc) {
+        auto &app = Application::get();
+        auto &asset_man = app.asset_man;
+        auto &world = app.world;
+
+        auto color_attachment_info = tc.as_color_attachment(uses.color_attachment);
+        auto depth_attachment_info = tc.as_depth_attachment(uses.depth_attachment, DepthClearValue(1.0f));
+
+        tc.cmd_list.begin_rendering(RenderingBeginInfo{
+            .render_area = tc.pass_rect(),
+            .color_attachments = color_attachment_info,
+            .depth_attachment = depth_attachment_info,
+        });
+
+        tc.cmd_list.set_viewport(0, tc.pass_viewport());
+        tc.cmd_list.set_scissors(0, tc.pass_rect());
+
+        PushConstants c = {
+            .world_ptr = *static_cast<u64 *>(tc.execution_data),
+        };
+
+        auto models = world.ecs.query<Component::RenderableModel>();
+        models.each([&](Component::RenderableModel &m) {
+            auto model = asset_man.model_at(m.model);
+
+            tc.cmd_list.set_vertex_buffer(model->vertex_buffer.value());
+            tc.cmd_list.set_index_buffer(model->index_buffer.value());
+
+            for (auto &mesh : model->meshes) {
+                for (auto &primitive_index : mesh.primitive_indices) {
+                    auto &primitive = model->primitives[primitive_index];
+
+                    // c.material_id = static_cast<MaterialID>(primitive.material_index);
+                    tc.set_push_constants(c);
+                    tc.cmd_list.draw_indexed(primitive.index_count, primitive.index_offset, static_cast<i32>(primitive.vertex_offset));
+                }
+            }
+        });
+
         tc.cmd_list.end_rendering();
     }
 };
@@ -149,6 +235,7 @@ struct GridTask {
 
     struct Uses {
         Preset::ColorAttachmentWrite attachment = {};
+        Preset::DepthAttachmentWrite depth_attachment = {};
     } uses = {};
 
     struct PushConstants {
@@ -159,15 +246,17 @@ struct GridTask {
         auto &app = Application::get();
         auto &pipeline_info = info.pipeline_info;
 
-        auto vs = app.asset_man.shader_at("shader://editor.grid_vs");
-        auto fs = app.asset_man.shader_at("shader://editor.grid_fs");
+        auto vs = app.asset_man.shader_at("editor.grid_vs");
+        auto fs = app.asset_man.shader_at("editor.grid_fs");
         if (!vs || !fs) {
-            LR_LOG_ERROR("Shaders are invalid.", name);
+            LOG_ERROR("Shaders are invalid.", name);
             return false;
         }
 
         pipeline_info.set_shader(vs.value());
         pipeline_info.set_shader(fs.value());
+        pipeline_info.set_rasterizer_state({ .cull_mode = CullMode::None });
+        pipeline_info.set_depth_stencil_state({ .enable_depth_test = true, .enable_depth_write = false, .depth_compare_op = CompareOp::LessEqual });
         pipeline_info.set_dynamic_states(DynamicState::Viewport | DynamicState::Scissor);
         pipeline_info.set_blend_attachment_all({
             .blend_enabled = true,
@@ -186,10 +275,12 @@ struct GridTask {
 
     void execute(TaskContext &tc) {
         auto dst_attachment = tc.as_color_attachment(uses.attachment);
+        auto depth_attachment = tc.as_depth_attachment(uses.depth_attachment);
 
         tc.cmd_list.begin_rendering(RenderingBeginInfo{
             .render_area = tc.pass_rect(),
             .color_attachments = dst_attachment,
+            .depth_attachment = depth_attachment,
         });
 
         tc.cmd_list.set_viewport(0, tc.pass_viewport());
@@ -209,7 +300,6 @@ struct ImGuiTask {
 
     struct Uses {
         Preset::ColorAttachmentWrite attachment = {};
-        Preset::ColorReadOnly font = {};
     } uses = {};
 
     struct PushConstants {
@@ -229,10 +319,10 @@ struct ImGuiTask {
         auto &app = Application::get();
         auto &pipeline_info = info.pipeline_info;
 
-        auto vs = app.asset_man.shader_at("shader://imgui_vs");
-        auto fs = app.asset_man.shader_at("shader://imgui_fs");
+        auto vs = app.asset_man.shader_at("imgui_vs");
+        auto fs = app.asset_man.shader_at("imgui_fs");
         if (!vs || !fs) {
-            LR_LOG_ERROR("Shaders are invalid.", name);
+            LOG_ERROR("Shaders are invalid.", name);
             return false;
         }
 
@@ -293,7 +383,6 @@ struct ImGuiTask {
 
     void execute(TaskContext &tc) {
         auto color_attachment = tc.as_color_attachment(uses.attachment);
-        auto &task_font = tc.task_image_data(uses.font);
         auto &staging_buffer = tc.staging_buffer();
         auto &imgui = ImGui::GetIO();
 
@@ -333,7 +422,6 @@ struct ImGuiTask {
         PushConstants c = {
             .translate = translate,
             .scale = scale,
-            .image_view_id = task_font.image_view_id,
             .sampler_id = self.sampler,
         };
 
@@ -360,11 +448,8 @@ struct ImGuiTask {
                 };
                 tc.cmd_list.set_scissors(0, scissor);
 
-                if (im_cmd.TextureId) {
-                    auto im_image_id = (TaskImageID)(iptr)(im_cmd.TextureId);
-                    auto &im_image = tc.task_image_data(im_image_id);
-                    c.image_view_id = im_image.image_view_id;
-                }
+                auto im_image_id = static_cast<ImageViewID>(reinterpret_cast<iptr>(im_cmd.TextureId));
+                c.image_view_id = im_image_id;
 
                 tc.set_push_constants(c);
                 tc.cmd_list.draw_indexed(im_cmd.ElemCount, im_cmd.IdxOffset + index_offset, i32(im_cmd.VtxOffset + vertex_offset));

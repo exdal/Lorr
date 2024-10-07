@@ -19,9 +19,13 @@ struct TaskGraphInfo {
 };
 
 struct TaskGraph {
+    constexpr static usize MAX_PERMUTATIONS = 32;
+
     std::vector<std::unique_ptr<Task>> tasks = {};
     std::vector<TaskSubmit> submits = {};
+    std::vector<TaskBatch> batches = {};
     std::vector<TaskBarrier> barriers = {};
+
     std::vector<TaskImage> images = {};
     std::vector<TaskBufferInfo> buffers = {};
 
@@ -34,21 +38,21 @@ struct TaskGraph {
 
     bool init(this TaskGraph &, const TaskGraphInfo &info);
 
-    TaskImageID add_image(this TaskGraph &, const TaskPersistentImageInfo &info);
-    void set_image(this TaskGraph &, TaskImageID task_image_id, const TaskPersistentImageInfo &info);
+    TaskImageID add_image(this TaskGraph &, const TaskImageInfo &info);
+    void set_image(this TaskGraph &, TaskImageID task_image_id, const TaskImageInfo &info);
     TaskBufferID add_buffer(this TaskGraph &, const TaskBufferInfo &info);
 
-    u32 schedule_task(this TaskGraph &, Task *task, TaskSubmit &submit);
     // Used to update every task infos, ie, render_extent
     void update_task_infos(this TaskGraph &);
 
     // Recording
     template<typename TaskT>
-    TaskID add_task(const TaskT &task_info);
+    TaskID add_task(this TaskGraph &, const TaskT &task_info);
+    template<typename AgainstTheGodAndNature = void>
+    TaskID add_task(this TaskGraph &, const InlineTask &inline_task);
     void present(this TaskGraph &, TaskImageID task_image_id);
 
     // Debug tools
-    std::string generate_graphviz(this TaskGraph &);
     void draw_profiler_ui(this TaskGraph &);
 
     // Rendering
@@ -64,11 +68,19 @@ private:
 };
 
 template<typename TaskT>
-TaskID TaskGraph::add_task(const TaskT &task_info) {
+TaskID TaskGraph::add_task(this TaskGraph &self, const TaskT &task_info) {
     ZoneScoped;
 
     std::unique_ptr<Task> task = std::make_unique<TaskWrapper<TaskT>>(task_info);
-    return add_task(std::move(task));
+    return self.add_task(std::move(task));
+}
+
+template<typename>
+TaskID TaskGraph::add_task(this TaskGraph &self, const InlineTask &inline_task) {
+    ZoneScoped;
+
+    std::unique_ptr<Task> task = std::make_unique<InlineTask>(inline_task);
+    return self.add_task(task);
 }
 
 struct TaskContext {
@@ -104,7 +116,7 @@ struct TaskContext {
             .image_view_id = self.task_image_data(use).image_view_id,
             .image_layout = ImageLayout::DepthStencilAttachment,
             .load_op = clear_val ? AttachmentLoadOp::Clear : AttachmentLoadOp::Load,
-            .store_op = use.access == PipelineAccess::DepthStencilWrite ? AttachmentStoreOp::Store : AttachmentStoreOp::None,
+            .store_op = use.access.access & MemoryAccess::Write ? AttachmentStoreOp::Store : AttachmentStoreOp::None,
             .clear_value = { .depth_clear = clear_val.value_or(DepthClearValue{}) },
         };
 
@@ -134,7 +146,7 @@ struct TaskContext {
             .y = 0,
             .width = static_cast<f32>(self.task.render_extent.width),
             .height = static_cast<f32>(self.task.render_extent.height),
-            .depth_min = 0.01f,
+            .depth_min = 0.0f,
             .depth_max = 1.0f,
         };
     }

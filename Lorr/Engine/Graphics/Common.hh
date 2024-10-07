@@ -141,13 +141,13 @@ constexpr static std::string_view vkresult_to_string(VKResult result) {
 constexpr static VKResult CHECK(
     VkResult vkr, [[maybe_unused]] std::initializer_list<VKResult> allowed_checks = {}, [[maybe_unused]] std::source_location LOC = std::source_location::current()) {
     auto result = static_cast<VKResult>(vkr);
-#if LR_DEBUG
+#if LS_DEBUG
     if (result != VKResult::Success)
         for (auto &a : allowed_checks)
             if (a == result)
                 return result;
 
-    LR_ASSERT(result == VKResult::Success, "Vulkan check failed '{}' at {}:{} - {}", result, LOC.file_name(), LOC.line(), LOC.function_name());
+    LS_EXPECT(result == VKResult::Success);
 #endif
 
     return result;
@@ -253,6 +253,8 @@ enum class Format : u32 {
     // Generic types -- component dependant types
     Unknown = VK_FORMAT_UNDEFINED,
 
+    R8_UNORM = VK_FORMAT_R8_UNORM,
+
     R32_SFLOAT = VK_FORMAT_R32_SFLOAT,
     R32_SINT = VK_FORMAT_R32_SINT,
     R32_UINT = VK_FORMAT_R32_UINT,
@@ -336,10 +338,11 @@ constexpr static u32 format_to_size(Format format) {
         case Format::D32_SFLOAT:
         case Format::D24_SFLOAT_S8_UINT:
             return sizeof(u32);
-        default:
-            break;
+        default:;
     }
 
+    // all formats need to be defined
+    LS_DEBUGBREAK();
     return 0;
 }
 
@@ -1184,12 +1187,10 @@ struct MemoryRequirements {
 
 }  // namespace lr
 
-namespace fmt {
 template<>
-struct formatter<lr::VKResult> : formatter<string_view> {
+struct std::formatter<lr::VKResult> : formatter<string_view> {
     template<typename FormatContext>
     constexpr auto format(lr::VKResult v, FormatContext &ctx) const {
-        return fmt::format_to(ctx.out(), "{}({})", lr::vkresult_to_string(v), static_cast<i32>(v));
+        return std::format_to(ctx.out(), "{}({})", lr::vkresult_to_string(v), static_cast<i32>(v));
     }
 };
-}  // namespace fmt

@@ -81,7 +81,9 @@ struct ModelAssetData {
     std::vector<TextureData> textures = {};
 };
 
-std::unique_ptr<ImageAssetData> parse_image_stbi(u8 *data, usize data_size);
-std::unique_ptr<ModelAssetData> parse_model_gltf(u8 *data, usize data_size);
+struct AssetParser {
+    static std::unique_ptr<ImageAssetData> STB(u8 *data, usize data_size);
+    static std::unique_ptr<ModelAssetData> GLTF(const fs::path &path);
+};
 
 }  // namespace lr

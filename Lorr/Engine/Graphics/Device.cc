@@ -125,6 +125,9 @@ VKResult Device::init(this Device &self, const DeviceInfo &info) {
         vk12_features.timelineSemaphore = true;
         vk12_features.bufferDeviceAddress = true;
         vk12_features.hostQueryReset = true;
+        // Shader features
+        vk12_features.scalarBlockLayout = true;
+        vk12_features.shaderInt8 = true;
         physical_device_selector.set_required_features_12(vk12_features);
 
         VkPhysicalDeviceVulkan11Features vk11_features = {};
@@ -147,7 +150,7 @@ VKResult Device::init(this Device &self, const DeviceInfo &info) {
         if (!physical_device_result) {
             auto error = physical_device_result.error();
             auto r = static_cast<VKResult>(physical_device_result.vk_result());
-            LR_LOG_ERROR("Failed to select Vulkan Physical Device! {} - {}", error.message(), r);
+            LOG_ERROR("Failed to select Vulkan Physical Device! {} - {}", error.message(), r);
             return r;
         }
 
@@ -157,7 +160,7 @@ VKResult Device::init(this Device &self, const DeviceInfo &info) {
     {
         /// DEVICE INITIALIZATION ///
         // We don't want to kill the coverage...
-        // if (self.physical_device.enable_extension_if_present("VK_EXT_descriptor_buffer"))
+        // if (self.physical_devce.enable_extension_if_present("VK_EXT_descriptor_buffer"))
         //    self.supported_features |= DeviceFeature::DescriptorBuffer;
         if (self.physical_device.enable_extension_if_present("VK_EXT_memory_budget"))
             self.supported_features |= DeviceFeature::MemoryBudget;
@@ -181,7 +184,7 @@ VKResult Device::init(this Device &self, const DeviceInfo &info) {
         if (!device_result) {
             auto error = device_result.error();
             auto r = static_cast<VKResult>(device_result.vk_result());
-            LR_LOG_ERROR("Failed to select Vulkan Device! {} - {}", error.message(), r);
+            LOG_ERROR("Failed to select Vulkan Device! {} - {}", error.message(), r);
             return r;
         }
 
@@ -190,7 +193,7 @@ VKResult Device::init(this Device &self, const DeviceInfo &info) {
 
     {
         if (!vulkan::load_device(self, self.instance->fp_vkGetDeviceProcAddr)) {
-            LR_LOG_ERROR("Failed to create Vulkan Device! Extension not found.");
+            LOG_ERROR("Failed to create Vulkan Device! Extension not found.");
             return VKResult::ExtNotPresent;
         }
 
@@ -227,7 +230,7 @@ VKResult Device::init(this Device &self, const DeviceInfo &info) {
 
         auto result = CHECK(vmaCreateAllocator(&allocator_create_info, &self.allocator));
         if (!result) {
-            LR_LOG_ERROR("Failed to create VKAllocator! {}", (u32)result);
+            LOG_ERROR("Failed to create VKAllocator! {}", (u32)result);
             return result;
         }
     }
@@ -266,7 +269,7 @@ VKResult Device::init(this Device &self, const DeviceInfo &info) {
 
         DescriptorPoolFlag descriptor_pool_flags = DescriptorPoolFlag::UpdateAfterBind;
         if (auto result = self.create_descriptor_pools(self.descriptor_pool, { .sizes = pool_sizes, .max_sets = 1, .flags = descriptor_pool_flags }); !result) {
-            LR_LOG_ERROR("Failed to init device! Descriptor pool failed '{}'.", result);
+            LOG_ERROR("Failed to init device! Descriptor pool failed '{}'.", result);
             return result;
         }
         self.set_object_name(self.descriptor_pool, "Bindless Descriptor Pool");
@@ -275,13 +278,13 @@ VKResult Device::init(this Device &self, const DeviceInfo &info) {
         if (auto result = self.create_descriptor_set_layouts(
                 self.descriptor_set_layout, { .elements = layout_elements, .binding_flags = binding_flags, .flags = descriptor_set_layout_flags });
             !result) {
-            LR_LOG_ERROR("Failed to init device! Descriptor set layout failed '{}'", result);
+            LOG_ERROR("Failed to init device! Descriptor set layout failed '{}'", result);
             return result;
         }
         self.set_object_name(self.descriptor_set_layout, "Bindless Descriptor Set Layout");
 
         if (auto result = self.create_descriptor_sets(self.descriptor_set, { .layout = self.descriptor_set_layout, .pool = self.descriptor_pool }); !result) {
-            LR_LOG_ERROR("Failed to init device! Descriptor set failed '{}'.", result);
+            LOG_ERROR("Failed to init device! Descriptor set failed '{}'.", result);
             return result;
         }
         self.set_object_name(self.descriptor_set, "Bindless Descriptor Set");
@@ -299,7 +302,7 @@ VKResult Device::init(this Device &self, const DeviceInfo &info) {
             };
 
             self.create_pipeline_layouts(pipeline_layouts[i], pipeline_layout_info);
-            self.set_object_name(pipeline_layouts[i], fmt::format("Pipeline Layout ({})", i));
+            self.set_object_name(pipeline_layouts[i], std::format("Pipeline Layout ({})", i));
         }
     }
 
@@ -325,6 +328,14 @@ VKResult Device::init(this Device &self, const DeviceInfo &info) {
         };
         self.update_descriptor_sets(write_info, {});
     }
+
+    self.staging_buffer = self.create_buffer({
+        .usage_flags = BufferUsage::None,
+        .flags = MemoryFlag::HostSeqWrite,
+        .preference = MemoryPreference::Host,
+        .data_size = STAGING_UPLOAD_SIZE,
+        .debug_name = "Staging Buffer",
+    });
 
     return VKResult::Success;
 }
@@ -377,7 +388,7 @@ VKResult Device::create_timestamp_query_pools(this Device &self, ls::span<Timest
     for (TimestampQueryPool &query_pool : query_pools) {
         VKResult result = CHECK(vkCreateQueryPool(self, &create_info, nullptr, &query_pool.handle));
         if (result != VKResult::Success) {
-            LR_LOG_ERROR("Failed to create timestamp query pool! {}", result);
+            LOG_ERROR("Failed to create timestamp query pool! {}", result);
             return result;
         }
 
@@ -424,7 +435,7 @@ VKResult Device::create_command_lists(this Device &self, ls::span<CommandList> c
     for (CommandList &cmd_list : command_lists) {
         VKResult result = CHECK(vkAllocateCommandBuffers(self, &allocate_info, &cmd_list.handle));
         if (result != VKResult::Success) {
-            LR_LOG_ERROR("Failed to create Command List! {}", result);
+            LOG_ERROR("Failed to create Command List! {}", result);
             return result;
         }
 
@@ -469,7 +480,7 @@ VKResult Device::create_binary_semaphores(this Device &self, ls::span<Semaphore>
     for (Semaphore &semaphore : semaphores) {
         VKResult result = CHECK(vkCreateSemaphore(self, &semaphore_info, nullptr, &semaphore.handle));
         if (result != VKResult::Success) {
-            LR_LOG_ERROR("Failed to create binary semaphore! {}", result);
+            LOG_ERROR("Failed to create binary semaphore! {}", result);
             return result;
         }
     }
@@ -497,7 +508,7 @@ VKResult Device::create_timeline_semaphores(this Device &self, ls::span<Semaphor
         semaphore.counter = initial_value;
         VKResult result = CHECK(vkCreateSemaphore(self, &semaphore_info, nullptr, &semaphore.handle));
         if (result != VKResult::Success) {
-            LR_LOG_ERROR("Failed to create timeline semaphore! {}", result);
+            LOG_ERROR("Failed to create timeline semaphore! {}", result);
             return result;
         }
     }
@@ -552,7 +563,7 @@ VKResult Device::create_swap_chain(this Device &self, SwapChain &swap_chain, con
     auto result = builder.build();
 
     if (!result) {
-        LR_LOG_ERROR("Failed to create SwapChain!");
+        LOG_ERROR("Failed to create SwapChain!");
         return static_cast<VKResult>(result.vk_result());
     }
 
@@ -569,12 +580,12 @@ VKResult Device::create_swap_chain(this Device &self, SwapChain &swap_chain, con
 
     u32 i = 0;
     for (Semaphore &v : swap_chain.acquire_semas) {
-        self.set_object_name(v, fmt::format("SwapChain Acquire Sema {}", i++));
+        self.set_object_name(v, std::format("SwapChain Acquire Sema {}", i++));
     }
 
     i = 0;
     for (Semaphore &v : swap_chain.present_semas) {
-        self.set_object_name(v, fmt::format("SwapChain Present Sema {}", i++));
+        self.set_object_name(v, std::format("SwapChain Present Sema {}", i++));
     }
 
     self.set_object_name_raw<VK_OBJECT_TYPE_SWAPCHAIN_KHR>(swap_chain.handle.swapchain, "SwapChain");
@@ -599,7 +610,7 @@ VKResult Device::get_swapchain_images(this Device &self, SwapChain &swap_chain, 
 
     auto result = CHECK(vkGetSwapchainImagesKHR(self, swap_chain.handle, &image_count, images_raw.data()));
     if (!result) {
-        LR_LOG_ERROR("Failed to get SwapChain images! {}", result);
+        LOG_ERROR("Failed to get SwapChain images! {}", result);
         return result;
     }
 
@@ -607,7 +618,7 @@ VKResult Device::get_swapchain_images(this Device &self, SwapChain &swap_chain, 
         VkImage &image_handle = images_raw[i];
         auto image_result = self.resources.images.create(ImageUsage::ColorAttachment, swap_chain.format, swap_chain.extent, 1, 1, nullptr, image_handle);
 
-        images[i] = image_result->id;
+        images[i] = image_result.id;
     }
 
     return VKResult::Success;
@@ -691,7 +702,7 @@ VKResult Device::create_pipeline_layouts(this Device &self, ls::span<PipelineLay
         VkPipelineLayout layout_handle = VK_NULL_HANDLE;
         auto result = CHECK(vkCreatePipelineLayout(self, &pipeline_layout_create_info, nullptr, &layout_handle));
         if (result != VKResult::Success) {
-            LR_LOG_ERROR("Failed to create Pipeline Layout! {}", result);
+            LOG_ERROR("Failed to create Pipeline Layout! {}", result);
             return result;
         }
 
@@ -946,17 +957,17 @@ ls::result<PipelineID, VKResult> Device::create_graphics_pipeline(this Device &s
     VkPipeline pipeline_handle = VK_NULL_HANDLE;
     auto result = CHECK(vkCreateGraphicsPipelines(self, nullptr, 1, &pipeline_create_info, nullptr, &pipeline_handle));
     if (result != VKResult::Success) {
-        LR_LOG_ERROR("Failed to create Graphics Pipeline! {}", result);
+        LOG_ERROR("Failed to create Graphics Pipeline! {}", result);
         return result;
     }
 
     auto pipeline = self.resources.pipelines.create(PipelineBindPoint::Graphics, pipeline_handle);
     if (!pipeline) {
-        LR_LOG_ERROR("Failed to allocate Graphics Pipeline!");
+        LOG_ERROR("Failed to allocate Graphics Pipeline!");
         return VKResult::OutOfPoolMem;
     }
 
-    return pipeline->id;
+    return pipeline.id;
 };
 
 ls::result<PipelineID, VKResult> Device::create_compute_pipeline(this Device &self, const ComputePipelineInfo &info) {
@@ -984,17 +995,17 @@ ls::result<PipelineID, VKResult> Device::create_compute_pipeline(this Device &se
     VkPipeline pipeline_handle = VK_NULL_HANDLE;
     auto result = CHECK(vkCreateComputePipelines(self, nullptr, 1, &pipeline_create_info, nullptr, &pipeline_handle));
     if (result != VKResult::Success) {
-        LR_LOG_ERROR("Failed to create Compute Pipeline! {}", result);
+        LOG_ERROR("Failed to create Compute Pipeline! {}", result);
         return result;
     }
 
     auto pipeline = self.resources.pipelines.create(PipelineBindPoint::Compute, pipeline_handle);
     if (!pipeline) {
-        LR_LOG_ERROR("Failed to allocate Compute Pipeline!");
+        LOG_ERROR("Failed to allocate Compute Pipeline!");
         return VKResult::OutOfPoolMem;
     }
 
-    return pipeline->id;
+    return pipeline.id;
 }
 
 void Device::delete_pipelines(this Device &self, ls::span<PipelineID> pipelines) {
@@ -1003,7 +1014,7 @@ void Device::delete_pipelines(this Device &self, ls::span<PipelineID> pipelines)
     for (const PipelineID pipeline_id : pipelines) {
         Pipeline &pipeline = self.resources.pipelines.get(pipeline_id);
         if (!pipeline) {
-            LR_LOG_ERROR("Referencing to invalid Pipeline.");
+            LOG_ERROR("Referencing to invalid Pipeline.");
             return;
         }
 
@@ -1027,17 +1038,17 @@ ls::result<ShaderID, VKResult> Device::create_shader(this Device &self, ShaderSt
     VkShaderModule shader_module = VK_NULL_HANDLE;
     auto result = CHECK(vkCreateShaderModule(self, &create_info, nullptr, &shader_module));
     if (result != VKResult::Success) {
-        LR_LOG_ERROR("Failed to create shader! {}", result);
+        LOG_ERROR("Failed to create shader! {}", result);
         return result;
     }
 
     auto shader = self.resources.shaders.create(stage, shader_module);
     if (!shader) {
-        LR_LOG_ERROR("Failed to allocate shader!");
+        LOG_ERROR("Failed to allocate shader!");
         return VKResult::OutOfPoolMem;
     }
 
-    return shader->id;
+    return shader.id;
 }
 
 void Device::delete_shaders(this Device &self, ls::span<ShaderID> shaders) {
@@ -1046,7 +1057,7 @@ void Device::delete_shaders(this Device &self, ls::span<ShaderID> shaders) {
     for (const ShaderID shader_id : shaders) {
         Shader &shader = self.resources.shaders.get(shader_id);
         if (!shader) {
-            LR_LOG_ERROR("Referencing to invalid Shader.");
+            LOG_ERROR("Referencing to invalid Shader.");
             return;
         }
 
@@ -1072,7 +1083,7 @@ VKResult Device::create_descriptor_pools(this Device &self, ls::span<DescriptorP
         VkDescriptorPool pool_handle = VK_NULL_HANDLE;
         auto result = CHECK(vkCreateDescriptorPool(self, &create_info, nullptr, &pool_handle));
         if (result != VKResult::Success) {
-            LR_LOG_ERROR("Failed to create Descriptor Pool! {}", result);
+            LOG_ERROR("Failed to create Descriptor Pool! {}", result);
             return result;
         }
 
@@ -1093,7 +1104,7 @@ void Device::delete_descriptor_pools(this Device &self, ls::span<DescriptorPool>
 VKResult Device::create_descriptor_set_layouts(this Device &self, ls::span<DescriptorSetLayout> descriptor_set_layouts, const DescriptorSetLayoutInfo &info) {
     ZoneScoped;
 
-    LR_ASSERT(info.elements.size() == info.binding_flags.size());
+    LS_EXPECT(info.elements.size() == info.binding_flags.size());
     VkDescriptorSetLayoutBindingFlagsCreateInfo binding_flags_create_info = {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
         .pNext = nullptr,
@@ -1113,7 +1124,7 @@ VKResult Device::create_descriptor_set_layouts(this Device &self, ls::span<Descr
         VkDescriptorSetLayout layout_handle = VK_NULL_HANDLE;
         auto result = CHECK(vkCreateDescriptorSetLayout(self, &create_info, nullptr, &layout_handle));
         if (result != VKResult::Success) {
-            LR_LOG_ERROR("Failed to create Descriptor Set Layout! {}", result);
+            LOG_ERROR("Failed to create Descriptor Set Layout! {}", result);
             return result;
         }
 
@@ -1153,7 +1164,7 @@ VKResult Device::create_descriptor_sets(this Device &self, ls::span<DescriptorSe
         VkDescriptorSet descriptor_set_handle = VK_NULL_HANDLE;
         auto result = CHECK(vkAllocateDescriptorSets(self, &allocate_info, &descriptor_set_handle));
         if (result != VKResult::Success) {
-            LR_LOG_ERROR("Failed to create Descriptor Set! {}", result);
+            LOG_ERROR("Failed to create Descriptor Set! {}", result);
             return result;
         }
 
@@ -1220,10 +1231,10 @@ ls::result<BufferID, VKResult> Device::create_buffer(this Device &self, const Bu
     VmaAllocationInfo allocation_result = {};
     auto result = CHECK(vmaCreateBuffer(self.allocator, &create_info, &allocation_info, &buffer_handle, &allocation, &allocation_result));
     if (result != VKResult::Success) {
-        LR_LOG_ERROR("Failed to create Buffer! {}", result);
+        LOG_ERROR("Failed to create Buffer! {}", result);
         return result;
     }
-#if LR_DEBUG
+#if LS_DEBUG
     vmaSetAllocationName(self.allocator, allocation, info.debug_name.data());
 #endif
 
@@ -1236,19 +1247,19 @@ ls::result<BufferID, VKResult> Device::create_buffer(this Device &self, const Bu
 
     auto buffer = self.resources.buffers.create(info.data_size, allocation_result.pMappedData, device_address, allocation, buffer_handle);
     if (!buffer) {
-        LR_LOG_ERROR("Failed to allocate Buffer!");
+        LOG_ERROR("Failed to allocate Buffer!");
         return VKResult::OutOfPoolMem;
     }
 
     if (self.bda_array_host_addr) {
-        self.bda_array_host_addr[usize(buffer->id)] = device_address;
+        self.bda_array_host_addr[static_cast<usize>(buffer.id)] = device_address;
     }
 
     if (!info.debug_name.empty()) {
-        self.set_object_name(buffer->resource, info.debug_name);
+        self.set_object_name(*buffer.resource, info.debug_name);
     }
 
-    return buffer->id;
+    return buffer.id;
 }
 
 void Device::delete_buffers(this Device &self, ls::span<BufferID> buffers) {
@@ -1257,7 +1268,7 @@ void Device::delete_buffers(this Device &self, ls::span<BufferID> buffers) {
     for (BufferID buffer_id : buffers) {
         Buffer &buffer = self.resources.buffers.get(buffer_id);
         if (!buffer) {
-            LR_LOG_ERROR("Referencing to invalid Buffer!");
+            LOG_ERROR("Referencing to invalid Buffer!");
             return;
         }
 
@@ -1276,10 +1287,57 @@ MemoryRequirements Device::memory_requirements(this Device &self, BufferID buffe
     return { .size = vk_info.size, .alignment = vk_info.alignment, .memory_type_bits = vk_info.memoryTypeBits };
 }
 
+void Device::upload_staging(this Device &self, BufferID target_buffer_id, const void *data, ls::u64range range, u64 frame_index) {
+    ZoneScoped;
+
+    // This is very bare implementation of a staging buffer
+    // You should replace this with a ring buffer and move
+    // to different worker thread for better streaming,
+    // dont clog the render thread
+
+    auto &transfer_queue = self.queue_at(CommandType::Transfer);
+    CommandList cmd_list = {};
+    self.create_command_lists(cmd_list, transfer_queue.command_allocator(frame_index));
+
+    u64 offset = range.min;
+    u64 written_bytes_size = 0;
+    u64 target_size = range.length();
+    auto &target_buffer = self.buffer_at(target_buffer_id);
+    LS_EXPECT(target_buffer.data_size <= target_size);
+
+    while (written_bytes_size < target_size) {
+        u64 remainder_size = target_size - written_bytes_size;
+        const u8 *cur_data = reinterpret_cast<const u8 *>(data) + offset + written_bytes_size;
+        u8 *buffer_data = self.buffer_host_data(self.staging_buffer);
+        auto cur_write_size = ls::min(STAGING_UPLOAD_SIZE, target_size - remainder_size);
+        std::memcpy(buffer_data, cur_data, cur_write_size);
+
+        cmd_list.begin_recording();
+        BufferCopyRegion copy_region = {
+            .src_offset = 0,
+            .dst_offset = written_bytes_size,
+            .size = cur_write_size,
+        };
+        cmd_list.copy_buffer_to_buffer(self.staging_buffer, target_buffer_id, copy_region);
+        cmd_list.end_recording();
+
+        CommandListSubmitInfo cmd_list_submit(cmd_list);
+        QueueSubmitInfo submit_info = {
+            .self_wait = true,
+            .additional_command_lists = cmd_list_submit,
+        };
+        transfer_queue.submit(frame_index, submit_info);
+
+        written_bytes_size += cur_write_size;
+    }
+
+    self.delete_command_lists(cmd_list);
+}
+
 ls::result<ImageID, VKResult> Device::create_image(this Device &self, const ImageInfo &info) {
     ZoneScoped;
 
-    LR_ASSERT(!info.extent.is_zero(), "Cannot create zero extent image.");
+    LS_EXPECT(!info.extent.is_zero());
 
     VkSharingMode sharing_mode = VK_SHARING_MODE_EXCLUSIVE;
     if (!info.queue_indices.empty()) {
@@ -1320,35 +1378,21 @@ ls::result<ImageID, VKResult> Device::create_image(this Device &self, const Imag
 
     auto result = CHECK(vmaCreateImage(self.allocator, &create_info, &allocation_info, &image_handle, &allocation, nullptr));
     if (result != VKResult::Success) {
-        LR_LOG_ERROR("Failed to create Image! {}", result);
+        LOG_ERROR("Failed to create Image! {}", result);
         return result;
     }
 
     auto image = self.resources.images.create(info.usage_flags, info.format, info.extent, info.slice_count, info.mip_levels, allocation, image_handle);
     if (!image) {
-        LR_LOG_ERROR("Failed to allocate Image!");
+        LOG_ERROR("Failed to allocate Image!");
         return VKResult::OutOfPoolMem;
     }
 
     if (!info.debug_name.empty()) {
-        self.set_object_name(image->resource, info.debug_name);
+        self.set_object_name(*image.resource, info.debug_name);
     }
 
-    if (info.initial_layout != ImageLayout::Undefined) {
-        auto &queue = self.queue_at(CommandType::Graphics);
-        auto &cmd_list = queue.begin_command_list(0);
-        cmd_list.image_transition(ImageBarrier{
-            .src_access = PipelineAccess::None,
-            .dst_access = PipelineAccess::All,
-            .old_layout = ImageLayout::Undefined,
-            .new_layout = info.initial_layout,
-            .image_id = image->id,
-        });
-        queue.end_command_list(cmd_list);
-        queue.submit(0, {});
-    }
-
-    return image->id;
+    return image.id;
 }
 
 void Device::delete_images(this Device &self, ls::span<ImageID> images) {
@@ -1357,7 +1401,7 @@ void Device::delete_images(this Device &self, ls::span<ImageID> images) {
     for (const ImageID image_id : images) {
         Image &image = self.resources.images.get(image_id);
         if (!image) {
-            LR_LOG_ERROR("Referencing to invalid Image!");
+            LOG_ERROR("Referencing to invalid Image!");
             return;
         }
 
@@ -1400,24 +1444,24 @@ ls::result<ImageViewID, VKResult> Device::create_image_view(this Device &self, c
     VkImageView image_view_handle = nullptr;
     auto result = CHECK(vkCreateImageView(self, &create_info, nullptr, &image_view_handle));
     if (result != VKResult::Success) {
-        LR_LOG_ERROR("Failed to create Image View! {}", result);
+        LOG_ERROR("Failed to create Image View! {}", result);
         return result;
     }
 
     auto image_view = self.resources.image_views.create(image.format, info.type, info.subresource_range, image_view_handle);
     if (!image_view) {
-        LR_LOG_ERROR("Failed to allocate Image View!");
+        LOG_ERROR("Failed to allocate Image View!");
         return VKResult::OutOfPoolMem;
     }
 
     ls::static_vector<WriteDescriptorSet, 2> descriptor_writes = {};
-    ImageDescriptorInfo sampled_descriptor_info = { .image_view = image_view->resource, .image_layout = ImageLayout::ColorReadOnly };
-    ImageDescriptorInfo storage_descriptor_info = { .image_view = image_view->resource, .image_layout = ImageLayout::General };
+    ImageDescriptorInfo sampled_descriptor_info = { .image_view = *image_view.resource, .image_layout = ImageLayout::ColorReadOnly };
+    ImageDescriptorInfo storage_descriptor_info = { .image_view = *image_view.resource, .image_layout = ImageLayout::General };
 
     WriteDescriptorSet sampled_write_set_info = {
         .dst_descriptor_set = self.descriptor_set,
         .dst_binding = LR_DESCRIPTOR_INDEX_IMAGES,
-        .dst_element = static_cast<u32>(image_view->id),
+        .dst_element = static_cast<u32>(image_view.id),
         .count = 1,
         .type = DescriptorType::SampledImage,
         .image_info = &sampled_descriptor_info,
@@ -1425,7 +1469,7 @@ ls::result<ImageViewID, VKResult> Device::create_image_view(this Device &self, c
     WriteDescriptorSet storage_write_set_info = {
         .dst_descriptor_set = self.descriptor_set,
         .dst_binding = LR_DESCRIPTOR_INDEX_STORAGE_IMAGES,
-        .dst_element = static_cast<u32>(image_view->id),
+        .dst_element = static_cast<u32>(image_view.id),
         .count = 1,
         .type = DescriptorType::StorageImage,
         .image_info = &storage_descriptor_info,
@@ -1442,10 +1486,10 @@ ls::result<ImageViewID, VKResult> Device::create_image_view(this Device &self, c
     }
 
     if (!info.debug_name.empty()) {
-        self.set_object_name(image_view->resource, info.debug_name);
+        self.set_object_name(*image_view.resource, info.debug_name);
     }
 
-    return image_view->id;
+    return image_view.id;
 }
 
 void Device::delete_image_views(this Device &self, ls::span<ImageViewID> image_views) {
@@ -1454,7 +1498,7 @@ void Device::delete_image_views(this Device &self, ls::span<ImageViewID> image_v
     for (ImageViewID image_view_id : image_views) {
         ImageView &image_view = self.resources.image_views.get(image_view_id);
         if (!image_view) {
-            LR_LOG_ERROR("Referencing to invalid Image View!");
+            LOG_ERROR("Referencing to invalid Image View!");
             return;
         }
 
@@ -1491,21 +1535,21 @@ ls::result<SamplerID, VKResult> Device::create_sampler(this Device &self, const 
     VkSampler sampler_handle = nullptr;
     auto result = CHECK(vkCreateSampler(self, &create_info, nullptr, &sampler_handle));
     if (result != VKResult::Success) {
-        LR_LOG_ERROR("Failed to create Sampler! {}", result);
+        LOG_ERROR("Failed to create Sampler! {}", result);
         return result;
     }
 
     auto sampler = self.resources.samplers.create(sampler_handle);
     if (!sampler) {
-        LR_LOG_ERROR("Failed to allocate Sampler!");
+        LOG_ERROR("Failed to allocate Sampler!");
         return VKResult::OutOfPoolMem;
     }
 
-    ImageDescriptorInfo descriptor_info = { .sampler = sampler->resource };
+    ImageDescriptorInfo descriptor_info = { .sampler = *sampler.resource };
     WriteDescriptorSet write_set_info = {
         .dst_descriptor_set = self.descriptor_set,
         .dst_binding = LR_DESCRIPTOR_INDEX_SAMPLER,
-        .dst_element = static_cast<u32>(sampler->id),
+        .dst_element = static_cast<u32>(sampler.id),
         .count = 1,
         .type = DescriptorType::Sampler,
         .image_info = &descriptor_info,
@@ -1513,10 +1557,10 @@ ls::result<SamplerID, VKResult> Device::create_sampler(this Device &self, const 
     self.update_descriptor_sets(write_set_info, {});
 
     if (!info.debug_name.empty()) {
-        self.set_object_name(sampler->resource, info.debug_name);
+        self.set_object_name(*sampler.resource, info.debug_name);
     }
 
-    return sampler->id;
+    return sampler.id;
 }
 
 void Device::delete_samplers(this Device &self, ls::span<SamplerID> samplers) {
@@ -1525,7 +1569,7 @@ void Device::delete_samplers(this Device &self, ls::span<SamplerID> samplers) {
     for (SamplerID sampler_id : samplers) {
         Sampler &sampler = self.resources.samplers.get(sampler_id);
         if (!sampler) {
-            LR_LOG_ERROR("Referencing to invalid Sampler!");
+            LOG_ERROR("Referencing to invalid Sampler!");
             return;
         }
 
@@ -1563,7 +1607,9 @@ void Device::set_image_data(this Device &self, ImageID image_id, const void *dat
     MemoryRequirements image_mem = self.memory_requirements(image_id);
 
     StagingAllocResult alloc_result = staging_buffer.alloc(image_mem.size, image_mem.alignment);
-    std::memcpy(alloc_result.ptr, data, image_mem.size);
+
+    usize host_size = image.extent.width * image.extent.height * format_to_size(image.format);
+    std::memcpy(alloc_result.ptr, data, host_size);
 
     auto &cmd_list = transfer_queue.begin_command_list(0);
     cmd_list.image_transition({
@@ -1608,7 +1654,7 @@ VKResult Device::create_command_queue(this Device &self, CommandQueue &command_q
     auto queue_handle = self.handle.get_queue(vkb_type);
     if (!queue_handle) {
         auto r = static_cast<VKResult>(queue_handle.vk_result());
-        LR_LOG_ERROR("Failed to create Device Queue! {}", r);
+        LOG_ERROR("Failed to create Device Queue! {}", r);
         return r;
     }
 
@@ -1645,7 +1691,7 @@ VKResult Device::create_command_allocators(this Device &self, ls::span<CommandAl
     for (CommandAllocator &allocator : command_allocators) {
         VKResult result = CHECK(vkCreateCommandPool(self, &create_info, nullptr, &allocator.handle));
         if (result != VKResult::Success) {
-            LR_LOG_ERROR("Failed to create Command Allocator! {}", result);
+            LOG_ERROR("Failed to create Command Allocator! {}", result);
             return result;
         }
 

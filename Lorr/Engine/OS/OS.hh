@@ -19,6 +19,13 @@ enum class FileAccess {
     Read = 1 << 1,
 };
 
+enum class FileDialogFlag {
+    None = 0,
+    DirOnly = 1 << 0,
+    Save = 1 << 1,
+    Multiselect = 1 << 2,
+};
+
 struct File {
     ls::option<uptr> handle;
     usize size = 0;
@@ -46,9 +53,31 @@ struct File {
         return data;
     }
 
-    File &operator=(File &&) = default;
+    std::string read_string(this File &self, ls::u64range range) {
+        ZoneScoped;
+
+        range.clamp(self.size);
+        std::string str;
+        str.resize(range.length());
+        self.read(str.data(), range);
+
+        return str;
+    }
+
+    File &operator=(File &&rhs) noexcept {
+        this->handle = rhs.handle;
+        this->size = rhs.size;
+        this->result = rhs.result;
+
+        rhs.handle.reset();
+
+        return *this;
+    }
     bool operator==(const File &) const = default;
     explicit operator bool() { return result == FileResult::Success; }
+
+    static ls::option<fs::path> open_dialog(std::string_view title, FileDialogFlag flags = FileDialogFlag::None);
+    static void to_stdout(std::string_view str);
 };
 
 /// MEMORY ///
@@ -60,4 +89,6 @@ void mem_decommit(void *data, u64 size);
 
 template<>
 struct has_bitmask<FileAccess> : ls::true_type {};
+template<>
+struct has_bitmask<FileDialogFlag> : ls::true_type {};
 }  // namespace lr

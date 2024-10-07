@@ -11,6 +11,6 @@ struct InstanceInfo {
 struct Instance {
     VKResult init(const InstanceInfo &info);
 
-    vkb::Instance m_handle;
+    vkb::Instance handle;
 };
 }  // namespace lr

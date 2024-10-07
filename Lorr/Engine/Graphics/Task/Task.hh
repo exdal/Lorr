@@ -28,6 +28,15 @@ struct Task {
     f64 execution_time() { return (end_ts - start_ts) / 1000000.f; }
 };
 
+struct InlineTask : Task {
+    std::string name = {};
+    std::vector<TaskUse> uses = {};
+    std::function<void(TaskContext &)> execute_cb = {};
+
+    bool prepare(TaskPrepareInfo &) override { return true; }
+    void execute(TaskContext &tc) override { execute_cb(tc); }
+};
+
 template<typename TaskT>
 concept TaskConcept = requires {
     TaskT{}.uses;
@@ -86,10 +95,8 @@ struct TaskBatch {
 
 struct TaskSubmit {
     CommandType type = CommandType::Graphics;
-
-    std::vector<TaskBatch> batches = {};
     std::array<TimestampQueryPool, Limits::FrameCount> query_pools = {};
-
+    std::vector<usize> batch_indices = {};
     // Additional pipeline barriers that will be executed after
     std::vector<u32> additional_signal_barrier_indices = {};
 

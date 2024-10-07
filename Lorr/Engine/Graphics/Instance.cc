@@ -1,25 +1,23 @@
 #include "Instance.hh"
 
 namespace lr {
-constexpr loguru::Verbosity to_loguru_severity(VkDebugUtilsMessageSeverityFlagBitsEXT severity)
-{
+constexpr Logger::Category to_log_category(VkDebugUtilsMessageSeverityFlagBitsEXT severity) {
     switch (severity) {
         case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
         case VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT:
-            return loguru::Verbosity_INFO;
+            return Logger::INF;
         case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT:
-            return loguru::Verbosity_WARNING;
+            return Logger::WRN;
         case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
-            return loguru::Verbosity_ERROR;
+            return Logger::ERR;
         default:
             break;
     }
 
-    return loguru::Verbosity_0;
+    return Logger::DBG;
 }
 
-VKResult Instance::init(const InstanceInfo &info)
-{
+VKResult Instance::init(const InstanceInfo &info) {
     ZoneScoped;
 
     vkb::InstanceBuilder instance_builder;
@@ -34,8 +32,8 @@ VKResult Instance::init(const InstanceInfo &info)
            const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData,
            [[maybe_unused]] void *pUserData) -> VkBool32 {
             auto type = vkb::to_string_message_type(messageType);
-            VLOG_F(
-                to_loguru_severity(messageSeverity),
+            auto category = to_log_category(messageSeverity);
+            LOG(category,
                 "[VK] {}:\n===========================================================\n{}\n===========================================================",
                 type,
                 pCallbackData->pMessage);
@@ -45,12 +43,12 @@ VKResult Instance::init(const InstanceInfo &info)
     instance_builder.enable_extensions({
         "VK_KHR_surface",
         "VK_KHR_get_physical_device_properties2",
-#if defined(LR_WIN32)
+#if defined(LS_WINDOWS)
         "VK_KHR_win32_surface",
-#elif defined(LR_LINUX)
+#elif defined(LS_LINUX)
         "VK_KHR_xcb_surface",
 #endif
-#if LR_DEBUG
+#if LS_DEBUG
         //! Debug extensions, always put it to bottom
         "VK_EXT_debug_utils",
         "VK_EXT_debug_report",
@@ -61,14 +59,14 @@ VKResult Instance::init(const InstanceInfo &info)
     if (!instance_result) {
         auto error = instance_result.error();
         auto r = static_cast<VKResult>(instance_result.vk_result());
-        LR_LOG_ERROR("Failed to create Vulkan Instance! {} - {}", error.message(), r);
+        LOG_ERROR("Failed to create Vulkan Instance! {} - {}", error.message(), r);
         return r;
     }
 
-    m_handle = instance_result.value();
+    handle = instance_result.value();
 
-    if (!vulkan::load_instance(m_handle, m_handle.fp_vkGetInstanceProcAddr)) {
-        LR_LOG_ERROR("Failed to create Vulkan Instance! Extension not found.");
+    if (!vulkan::load_instance(handle, handle.fp_vkGetInstanceProcAddr)) {
+        LOG_ERROR("Failed to create Vulkan Instance! Extension not found.");
         return VKResult::ExtNotPresent;
     }
 

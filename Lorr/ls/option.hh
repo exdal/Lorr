@@ -56,7 +56,8 @@ template<typename T>
 struct option_flag {
 private:
     static_assert(
-        !std::is_same_v<std::nullopt_t, std::remove_cvref_t<decltype(option_flag_val<T>::nullopt)>>, "To use option_flag, `T` must have option_flag_val defined!");
+        !std::is_same_v<std::nullopt_t, std::remove_cvref_t<decltype(option_flag_val<T>::nullopt)>>,
+        "To use option_flag, `T` must have option_flag_val defined!");
 
     struct Dummy {
         // Make sure it's non-trivial, we don't want to initialize value with its default value.
@@ -146,7 +147,9 @@ public:
         return *this;
     }
 
-    template<typename U, std::enable_if_t<std::conjunction_v<std::is_constructible<T, const U &>, std::is_assignable<T &, const U &>>, int> = 0>
+    template<
+        typename U,
+        std::enable_if_t<std::conjunction_v<std::is_constructible<T, const U &>, std::is_assignable<T &, const U &>>, int> = 0>
     option_flag &operator=(const option_flag<U> &other) {
         if (other.has_value()) {
             if (has_value()) {
@@ -209,6 +212,9 @@ bool operator>=(const option_flag<T> &opt, const U &value) {
 }
 
 template<typename T>
-using option = std::conditional_t<!std::is_same_v<std::nullopt_t, std::remove_const_t<decltype(option_flag_val<T>::nullopt)>>, option_flag<T>, std::optional<T>>;
+using option = std::conditional_t<
+    !std::is_same_v<std::nullopt_t, std::remove_const_t<decltype(option_flag_val<T>::nullopt)>>,
+    option_flag<T>,
+    std::optional<T>>;
 
 }  // namespace ls

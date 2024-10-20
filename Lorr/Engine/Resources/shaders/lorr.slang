@@ -36,9 +36,16 @@ extension SamplerState {
 }
 
 [[vk::binding(LR_DESCRIPTOR_INDEX_IMAGES, 0)]]
-Texture2D<float4> __textures[];
+Texture2D<float4> __textures_f4[];
 extension Texture2D<float4> {
-  static Texture2D get(ImageViewID i) { return __textures[i]; }
+  static Texture2D<float4> get(ImageViewID i) { return __textures_f4[i]; }
+};
+
+
+[[vk::binding(LR_DESCRIPTOR_INDEX_IMAGES, 0)]]
+Texture2D<float> __textures_f1[];
+extension Texture2D<float> {
+  static Texture2D<float> get(ImageViewID i) { return __textures_f1[i]; }
 };
 
 [[vk::binding(LR_DESCRIPTOR_INDEX_STORAGE_IMAGES, 0)]]
@@ -105,9 +112,14 @@ struct Camera {
     float3 position;
 };
 
+struct Model {
+    float4x4 model_transform_mat;
+};
+
 struct World {
     Camera *cameras;
     Material *materials;
+    Model *models;
     Sun sun;
     Atmosphere atmosphere;
 };

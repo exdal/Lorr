@@ -7,6 +7,8 @@
 #include <sys/sysinfo.h>
 #include <unistd.h>
 
+#include <iostream>
+
 namespace lr {
 
 /// FILE SYSTEM ///
@@ -57,7 +59,7 @@ auto _write(i32 handle, const void *data, u64 size) -> u64 {
 void File::write(this File &self, const void *data, ls::u64range range) {
     ZoneScoped;
 
-    LR_CHECK(self.handle.has_value(), "Trying to write invalid file");
+    LS_EXPECT(self.handle.has_value());
 
     u64 data_offset = range.min;
     u64 written_bytes_size = 0;
@@ -65,9 +67,13 @@ void File::write(this File &self, const void *data, ls::u64range range) {
     while (written_bytes_size < target_size) {
         u64 remainder_size = target_size - written_bytes_size;
         const u8 *cur_data = reinterpret_cast<const u8 *>(data) + data_offset + written_bytes_size;
+
+        errno = 0;
         iptr cur_written_size = _write(static_cast<i32>(self.handle.value()), cur_data, remainder_size);
+        LS_EXPECT(errno == 0);
+
         if (cur_written_size < 0) {
-            LR_LOG_TRACE("File write interrupted! {}", cur_written_size);
+            LOG_TRACE("File write interrupted! {}", cur_written_size);
             break;
         }
 
@@ -82,7 +88,7 @@ auto _read(i32 handle, void *data, u64 size) -> u64 {
 u64 File::read(this File &self, void *data, ls::u64range range) {
     ZoneScoped;
 
-    LR_CHECK(self.handle.has_value(), "Trying to read invalid file");
+    LS_EXPECT(self.handle.has_value());
 
     // `read` can be interrupted, it can read *some* bytes,
     // so we need to make it loop and carefully read whole data
@@ -92,9 +98,11 @@ u64 File::read(this File &self, void *data, ls::u64range range) {
     while (read_bytes_size < target_size) {
         u64 remainder_size = target_size - read_bytes_size;
         u8 *cur_data = reinterpret_cast<u8 *>(data) + range.min + read_bytes_size;
+
+        errno = 0;
         iptr cur_read_size = _read(static_cast<i32>(self.handle.value()), cur_data, remainder_size);
         if (cur_read_size < 0) {
-            LR_LOG_TRACE("File read interrupted! {}", cur_read_size);
+            LOG_TRACE("File read interrupted! {}", cur_read_size);
             break;
         }
 
@@ -121,6 +129,45 @@ void File::close(this File &self) {
         _close(static_cast<i32>(self.handle.value()));
         self.handle.reset();
     }
+}
+
+ls::option<fs::path> File::open_dialog(std::string_view title, FileDialogFlag flags) {
+    ZoneScoped;
+
+    std::cout.flush();
+    if (std::system("zenity --version") != 0) {
+        LOG_ERROR("Zenity is not installed on the system.");
+        return ls::nullopt;
+    }
+
+    auto cmd = std::format("zenity --file-selection --title=\"{}\" ", title);
+    if (flags & FileDialogFlag::DirOnly) {
+        cmd += std::format("--directory ");
+    }
+    if (flags & FileDialogFlag::Save) {
+        cmd += std::format("--save ");
+    }
+    if (flags & FileDialogFlag::Multiselect) {
+        cmd += std::format("--multiple ");
+    }
+
+    c8 pipe_data[2048] = {};
+    auto *pipe = popen(cmd.c_str(), "r");
+    if (!pipe) {
+        return ls::nullopt;
+    }
+
+    fgets(pipe_data, count_of(pipe_data) - 1, pipe);
+    std::string path_str = pipe_data;
+    if (path_str.back() == '\n') {
+        path_str.pop_back();
+    }
+
+    return std::move(path_str);
+}
+
+void File::to_stdout(std::string_view str) {
+    _write(STDOUT_FILENO, str.data(), str.length());
 }
 
 /// MEMORY ///

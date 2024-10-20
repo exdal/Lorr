@@ -163,8 +163,9 @@ struct Handle<CommandList>::Impl {
 
     u32 id = ~0_u32;
     vk::CommandType type = vk::CommandType::Count;
-    ls::option<PipelineID> bound_pipeline = ls::nullopt;
-    ls::option<PipelineLayoutID> bound_pipeline_layout = ls::nullopt;
+    ls::option<Pipeline> bound_pipeline = ls::nullopt;
+    ls::option<VkPipelineLayout> bound_pipeline_layout = ls::nullopt;
+    VkPipelineBindPoint bind_point = VK_PIPELINE_BIND_POINT_MAX_ENUM;
 
     VkCommandPool allocator = VK_NULL_HANDLE;
     VkCommandBuffer handle = VK_NULL_HANDLE;
@@ -179,6 +180,7 @@ struct Handle<CommandQueue>::Impl {
     Semaphore semaphore = {};
 
     PagedResourcePool<CommandList::Impl, u32, { .MAX_RESOURCE_COUNT = 2048u, .PAGE_BITS = 32u }> command_lists = {};
+    std::vector<VkCommandBufferSubmitInfo> frame_cmd_list_infos = {};
 
     plf::colony<std::pair<BufferID, u64>> garbage_buffers = {};
     plf::colony<std::pair<ImageID, u64>> garbage_images = {};

@@ -56,30 +56,34 @@ struct DepthClearValue {
     DepthClearValue() = default;
     DepthClearValue(f32 depth_)
         : depth(depth_) {};
-    DepthClearValue(f32 depth_, u8 stencil_)
+    DepthClearValue(f32 depth_, u32 stencil_)
         : depth(depth_),
           stencil(stencil_) {};
 
     f32 depth = 0.0f;
-    u8 stencil = 0;
+    u32 stencil = 0;
 };
 
+// Safe to cast VK type
 union ClearValue {
     ColorClearValue color = {};
     DepthClearValue depth;
 };
 
+// Safe to cast VK type
 struct Offset2D {
     i32 x = 0;
     i32 y = 0;
 };
 
+// Safe to cast VK type
 struct Offset3D {
     i32 x = 0;
     i32 y = 0;
     i32 z = 0;
 };
 
+// Safe to cast VK type
 struct Extent2D {
     u32 width = 0;
     u32 height = 0;
@@ -87,6 +91,7 @@ struct Extent2D {
     bool is_zero() const { return width == 0 && height == 0; }
 };
 
+// Safe to cast VK type
 struct Extent3D {
     u32 width = 0;
     u32 height = 0;
@@ -95,15 +100,17 @@ struct Extent3D {
     bool is_zero() const { return width == 0 && height == 0 && depth == 0; }
 };
 
+// Safe to cast VK type
 struct Viewport {
     f32 x = 0.0f;
     f32 y = 0.0f;
     f32 width = 0.0f;
     f32 height = 0.0f;
-    float depth_min = 0.0f;
-    float depth_max = 1.0f;
+    f32 depth_min = 0.0f;
+    f32 depth_max = 1.0f;
 };
 
+// Safe to cast VK type
 struct Rect2D {
     Offset2D offset = {};
     Extent2D extent = {};
@@ -439,25 +446,27 @@ struct CommandList : Handle<CommandList> {
 };
 
 struct CommandBatcher {
-    constexpr static usize kMaxMemoryBarriers = 16;
-    constexpr static usize kMaxImageBarriers = 16;
-
-    CommandBatcher(CommandList &command_list);
-    ~CommandBatcher();
-
-    void insert_memory_barrier(const vk::MemoryBarrier &barrier);
-    void insert_image_barrier(const vk::ImageBarrier &barrier);
-    void flush_barriers();
-
-    ls::static_vector<vk::MemoryBarrier, kMaxMemoryBarriers> m_memory_barriers = {};
-    ls::static_vector<vk::ImageBarrier, kMaxImageBarriers> m_image_barriers = {};
+    constexpr static usize MAX_MEMORY_BARRIERS = 16;
+    constexpr static usize MAX_IMAGE_BARRIERS = 16;
 
     CommandList &command_list;
+
+    CommandBatcher(CommandList &command_list_);
+    ~CommandBatcher();
+
+    auto insert_memory_barrier(const vk::MemoryBarrier &barrier) -> void;
+    auto insert_image_barrier(const vk::ImageBarrier &barrier) -> void;
+    auto flush_barriers() -> void;
+
+    ls::static_vector<vk::MemoryBarrier, MAX_MEMORY_BARRIERS> memory_barriers = {};
+    ls::static_vector<vk::ImageBarrier, MAX_IMAGE_BARRIERS> image_barriers = {};
 };
 
 struct CommandQueue : Handle<CommandQueue> {
     static auto create(Device_H, vk::CommandType type) -> std::expected<CommandQueue, vk::Result>;
     auto destroy() -> void;
+
+    auto semaphore() -> Semaphore;
 
     auto defer(ls::span<BufferID> buffer_ids) -> void;
     auto defer(ls::span<ImageID> image_ids) -> void;
@@ -467,8 +476,8 @@ struct CommandQueue : Handle<CommandQueue> {
     auto begin(std::source_location LOC = std::source_location::current()) -> CommandList;
     auto end(CommandList &cmd_list) -> void;
 
-    auto submit(ls::span<Semaphore_H> wait_semas) -> std::expected<void, vk::Result>;
-    auto present(SwapChain_H swap_chain, Semaphore_H present_sema, u32 image_id) -> std::expected<void, vk::Result>;
+    auto submit(ls::span<Semaphore_H> wait_semas, ls::span<Semaphore_H> signal_semas) -> vk::Result;
+    auto present(SwapChain_H swap_chain, Semaphore_H present_sema, u32 image_id) -> vk::Result;
     auto wait() -> void;
 };
 

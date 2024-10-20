@@ -347,36 +347,44 @@ auto CommandList::begin_rendering(const RenderingBeginInfo &info) -> void {
     ZoneScoped;
     memory::ScopedStack stack;
 
-    auto color_attachments = stack.alloc<VkRenderingAttachmentInfo>(info.color_attachments.size());
-    VkRenderingAttachmentInfo depth_attachment = {};
-    VkRenderingAttachmentInfo stencil_attachment = {};
-
-    for (u32 i = 0; i < color_attachments.size(); i++) {
-        auto &v = info.color_attachments[i];
-        auto &vk_info = color_attachments[i];
+    auto to_vk_attachment = [&](const vk::RenderingAttachmentInfo &v, VkRenderingAttachmentInfo &vk_info) {
         auto image_view = impl->device.image_view(v.image_view_id);
 
         vk_info = {
             .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
             .pNext = nullptr,
+            .imageView = image_view->handle,
+            .imageLayout = static_cast<VkImageLayout>(v.image_layout),
+            .resolveMode = {},
+            .resolveImageView = VK_NULL_HANDLE,
+            .resolveImageLayout = {},
+            .loadOp = static_cast<VkAttachmentLoadOp>(v.load_op),
+            .storeOp = static_cast<VkAttachmentStoreOp>(v.store_op),
+            .clearValue = ls::bit_cast<VkClearValue>(v.clear_val),
         };
+    };
+
+    auto color_attachments = stack.alloc<VkRenderingAttachmentInfo>(info.color_attachments.size());
+    VkRenderingAttachmentInfo depth_attachment = {};
+    VkRenderingAttachmentInfo stencil_attachment = {};
+
+    for (u32 i = 0; i < color_attachments.size(); i++) {
+        to_vk_attachment(info.color_attachments[i], color_attachments[i]);
     }
 
     if (info.depth_attachment) {
-        ImageView &image_view = self.device->image_view_at(info.depth_attachment->image_view_id);
-        depth_attachment = info.depth_attachment->vk_info(image_view);
+        to_vk_attachment(info.depth_attachment.value(), depth_attachment);
     }
 
     if (info.stencil_attachment) {
-        ImageView &image_view = self.device->image_view_at(info.stencil_attachment->image_view_id);
-        stencil_attachment = info.stencil_attachment->vk_info(image_view);
+        to_vk_attachment(info.stencil_attachment.value(), stencil_attachment);
     }
 
     VkRenderingInfo rendering_info = {
         .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
         .pNext = nullptr,
         .flags = 0,
-        .renderArea = info.render_area,
+        .renderArea = ls::bit_cast<VkRect2D>(info.render_area),
         .layerCount = 1,
         .viewMask = 0,
         .colorAttachmentCount = static_cast<u32>(color_attachments.size()),
@@ -388,36 +396,118 @@ auto CommandList::begin_rendering(const RenderingBeginInfo &info) -> void {
 }
 
 auto CommandList::end_rendering() -> void {
+    ZoneScoped;
+
+    vkCmdEndRendering(impl->handle);
 }
 
 auto CommandList::set_pipeline(PipelineID pipeline_id) -> void {
+    ZoneScoped;
+
+    auto pipeline = impl->device.pipeline(pipeline_id);
+    impl->bound_pipeline = pipeline;
+    impl->bound_pipeline_layout = impl->device->resources.pipeline_layouts.at(std::to_underlying(pipeline.layout_id()));
+    impl->bind_point = static_cast<VkPipelineBindPoint>(pipeline.bind_point());
+
+    vkCmdBindPipeline(impl->handle, impl->bind_point, pipeline->handle);
 }
 
 auto CommandList::set_push_constants(void *data, u32 data_size, u32 data_offset) -> void {
+    ZoneScoped;
+
+    LS_EXPECT(impl->bound_pipeline_layout.has_value());
+    vkCmdPushConstants(impl->handle, impl->bound_pipeline_layout.value(), VK_SHADER_STAGE_ALL, data_offset, data_size, data);
 }
 
 auto CommandList::set_descriptor_set() -> void {
+    ZoneScoped;
+
+    vkCmdBindDescriptorSets(
+        impl->handle, impl->bind_point, impl->bound_pipeline_layout.value(), 0, 1, &impl->device->descriptor_set, 0, nullptr);
 }
 
 auto CommandList::set_vertex_buffer(BufferID buffer_id, u64 offset, u32 first_binding, u32 binding_count) -> void {
+    ZoneScoped;
+
+    auto buffer = impl->device.buffer(buffer_id);
+    vkCmdBindVertexBuffers(impl->handle, first_binding, binding_count, &buffer->handle, &offset);
 }
 
 auto CommandList::set_index_buffer(BufferID buffer_id, u64 offset, bool use_u16) {
+    ZoneScoped;
+
+    auto buffer = impl->device.buffer(buffer_id);
+    vkCmdBindIndexBuffer(impl->handle, buffer->handle, offset, use_u16 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32);
 }
 
 auto CommandList::set_viewport(const vk::Viewport &viewport) -> void {
+    ZoneScoped;
+
+    vkCmdSetViewport(impl->handle, 0, 1, reinterpret_cast<const VkViewport *>(&viewport));
 }
 
 auto CommandList::set_scissors(const vk::Rect2D &rect) -> void {
+    ZoneScoped;
+
+    vkCmdSetScissor(impl->handle, 0, 1, reinterpret_cast<const VkRect2D *>(&rect));
 }
 
 auto CommandList::draw(u32 vertex_count, u32 first_vertex, u32 instance_count, u32 first_instance) -> void {
+    ZoneScoped;
+
+    vkCmdDraw(impl->handle, vertex_count, instance_count, first_vertex, first_instance);
 }
 
 auto CommandList::draw_indexed(u32 index_count, u32 first_index, i32 vertex_offset, u32 instance_count, u32 first_instance) -> void {
+    ZoneScoped;
+
+    vkCmdDrawIndexed(impl->handle, index_count, instance_count, first_index, vertex_offset, first_instance);
 }
 
 auto CommandList::dispatch(u32 group_x, u32 group_y, u32 group_z) -> void {
+    ZoneScoped;
+
+    vkCmdDispatch(impl->handle, group_x, group_y, group_z);
+}
+
+CommandBatcher::CommandBatcher(CommandList &command_list_)
+    : command_list(command_list_) {
+}
+
+CommandBatcher::~CommandBatcher() {
+    flush_barriers();
+}
+
+auto CommandBatcher::insert_memory_barrier(const vk::MemoryBarrier &barrier) -> void {
+    ZoneScoped;
+
+    if (memory_barriers.full()) {
+        flush_barriers();
+    }
+
+    memory_barriers.push_back(barrier);
+}
+
+auto CommandBatcher::insert_image_barrier(const vk::ImageBarrier &barrier) -> void {
+    ZoneScoped;
+
+    if (image_barriers.full()) {
+        flush_barriers();
+    }
+
+    image_barriers.emplace_back(barrier);
+}
+
+auto CommandBatcher::flush_barriers() -> void {
+    ZoneScoped;
+
+    if (image_barriers.empty() && memory_barriers.empty()) {
+        return;
+    }
+
+    command_list.set_barriers(memory_barriers, image_barriers);
+    image_barriers.clear();
+    memory_barriers.clear();
 }
 
 auto CommandQueue::create(Device_H device, vk::CommandType type) -> std::expected<CommandQueue, vk::Result> {
@@ -453,6 +543,10 @@ auto CommandQueue::destroy() -> void {
     ZoneScoped;
 
     impl->semaphore.destroy();
+}
+
+auto CommandQueue::semaphore() -> Semaphore {
+    return impl->semaphore;
 }
 
 auto CommandQueue::defer(ls::span<BufferID> buffer_ids) -> void {
@@ -535,16 +629,115 @@ auto CommandQueue::end(CommandList &cmd_list) -> void {
     ZoneScoped;
 
     vkEndCommandBuffer(cmd_list->handle);
+    impl->frame_cmd_list_infos.push_back({
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
+        .pNext = nullptr,
+        .commandBuffer = cmd_list->handle,
+        .deviceMask = 0,
+    });
     impl->garbage_command_lists.emplace(cmd_list->id, impl->semaphore.counter());
 }
 
-auto CommandQueue::submit(ls::span<Semaphore_H> wait_semas) -> std::expected<void, vk::Result> {
+auto CommandQueue::submit(ls::span<Semaphore_H> wait_semas, ls::span<Semaphore_H> signal_semas) -> vk::Result {
+    ZoneScoped;
+    memory::ScopedStack stack;
+
+    ls::span<VkSemaphoreSubmitInfo> sema_waits = {};
+    ls::span<VkSemaphoreSubmitInfo> sema_signals = {};
+
+    if (!wait_semas.empty()) {
+        sema_waits = stack.alloc<VkSemaphoreSubmitInfo>(wait_semas.size());
+        for (u32 i = 0; i < sema_waits.size(); i++) {
+            auto &wait_sema = wait_semas[i];
+            sema_waits[i] = {
+                .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+                .pNext = nullptr,
+                .semaphore = wait_sema->handle,
+                .value = wait_sema->value,
+                .stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+                .deviceIndex = 0,
+            };
+        }
+    }
+
+    if (!signal_semas.empty()) {
+        sema_signals = stack.alloc<VkSemaphoreSubmitInfo>(signal_semas.size());
+        for (u32 i = 0; i < sema_signals.size(); i++) {
+            Semaphore signal_sema = signal_semas[i];
+            sema_signals[i] = {
+                .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+                .pNext = nullptr,
+                .semaphore = signal_sema->handle,
+                .value = signal_sema.advance(),
+                .stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+                .deviceIndex = 0,
+            };
+        }
+    }
+
+    VkSubmitInfo2 submit_info = {
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+        .pNext = nullptr,
+        .flags = 0,
+        .waitSemaphoreInfoCount = static_cast<u32>(sema_waits.size()),
+        .pWaitSemaphoreInfos = sema_waits.data(),
+        .commandBufferInfoCount = static_cast<u32>(impl->frame_cmd_list_infos.size()),
+        .pCommandBufferInfos = impl->frame_cmd_list_infos.data(),
+        .signalSemaphoreInfoCount = static_cast<u32>(sema_signals.size()),
+        .pSignalSemaphoreInfos = sema_signals.data(),
+    };
+    auto result = vkQueueSubmit2(impl->handle, 1, &submit_info, nullptr);
+    switch (result) {
+        // Error cases
+        case VK_ERROR_OUT_OF_HOST_MEMORY:
+            return vk::Result::OutOfHostMem;
+        case VK_ERROR_OUT_OF_DEVICE_MEMORY:
+            return vk::Result::OutOfDeviceMem;
+        case VK_ERROR_DEVICE_LOST:
+            return vk::Result::DeviceLost;
+        default:;
+    }
+
+    return vk::Result::Success;
 }
 
-auto CommandQueue::present(SwapChain_H swap_chain, Semaphore_H present_sema, u32 image_id) -> std::expected<void, vk::Result> {
+auto CommandQueue::present(SwapChain_H swap_chain, Semaphore_H present_sema, u32 image_id) -> vk::Result {
+    ZoneScoped;
+
+    VkPresentInfoKHR present_info = {
+        .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+        .pNext = nullptr,
+        .waitSemaphoreCount = 1,
+        .pWaitSemaphores = &present_sema->handle,
+        .swapchainCount = 1,
+        .pSwapchains = &swap_chain->handle.swapchain,
+        .pImageIndices = &image_id,
+        .pResults = nullptr,
+    };
+    auto result = vkQueuePresentKHR(impl->handle, &present_info);
+    switch (result) {
+        // Error cases
+        case VK_ERROR_OUT_OF_HOST_MEMORY:
+            return vk::Result::OutOfHostMem;
+        case VK_ERROR_OUT_OF_DEVICE_MEMORY:
+            return vk::Result::OutOfDeviceMem;
+        case VK_ERROR_DEVICE_LOST:
+            return vk::Result::DeviceLost;
+        case VK_ERROR_OUT_OF_DATE_KHR:
+            return vk::Result::OutOfDate;
+        case VK_ERROR_SURFACE_LOST_KHR:
+            return vk::Result::SurfaceLost;
+        // Success case
+        case VK_SUBOPTIMAL_KHR:
+            return vk::Result::Suboptimal;
+        default:;
+    }
+
+    return vk::Result::Success;
 }
 
 auto CommandQueue::wait() -> void {
+    vkQueueWaitIdle(impl->handle);
 }
 
 }  // namespace lr

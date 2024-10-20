@@ -2,7 +2,8 @@
 
 namespace lr::vk {
 enum class Result : i32 {
-    NotReady = 1,
+    Success = 0,
+    NotReady,
     TimeOut,
     EventSet,
     EventReset,
@@ -181,6 +182,7 @@ enum class ImageAspectFlag : u32 {
 };
 consteval void enable_bitmask(ImageAspectFlag);
 
+// Safe to cast VK type
 enum class PipelineBindPoint : u32 {
     Graphics = 0,
     Compute,
@@ -188,6 +190,8 @@ enum class PipelineBindPoint : u32 {
 
 // PERF: This is performance critical enum, so I had to
 // manually assign VK flags to it
+//
+// Safe to cast VK type
 enum class PipelineStage : u64 {
     None = 0,
     TopOfPipe = 1 << 0,
@@ -219,6 +223,7 @@ enum class PipelineStage : u64 {
 };
 consteval void enable_bitmask(PipelineStage);
 
+// Safe to cast VK type
 enum class MemoryAccess : u64 {
     None = 0,
     IndirectRead = 1 << 0,
@@ -290,16 +295,18 @@ enum class CompareOp : u32 {
     Always,
 };
 
+// Safe to cast into VK type
 enum class AttachmentLoadOp : u32 {
     Load = 0,
     Clear,
     DontCare,
 };
 
+// Safe to cast into VK type
 enum class AttachmentStoreOp : u32 {
     Store = 0,
     DontCare,
-    None,
+    None = 1000301000,
 };
 
 enum class BlendFactor : u32 {

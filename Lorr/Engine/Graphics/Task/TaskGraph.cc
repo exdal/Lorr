@@ -65,28 +65,8 @@ TaskBufferID TaskGraph::add_buffer(this TaskGraph &self, const TaskBufferInfo &i
     return task_buffer_id;
 }
 
-void TaskGraph::update_task_infos(this TaskGraph &self) {
-    ZoneScoped;
-
-    for (auto &task : self.tasks) {
-        glm::uvec2 render_extent = {};
-        for_each_image_use(task->task_uses, [&](TaskImageID id, const PipelineAccessImpl &, ImageLayout) {
-            TaskImage &task_image = self.images[static_cast<usize>(id)];
-            Image &image = self.device->image_at(task_image.image_id);
-            render_extent = glm::min(render_extent, glm::uvec2({ image.extent.width, image.extent.height }));
-        });
-
-        task->render_extent = { render_extent.x, render_extent.y };
-    }
-}
-
 TaskID TaskGraph::add_task(this TaskGraph &self, std::unique_ptr<Task> &&task) {
     ZoneScoped;
-
-    if (!self.prepare_task(*task)) {
-        LOG_ERROR("Failed to prepare task '{}'!", task->name);
-        return TaskID::Invalid;
-    }
 
     TaskID task_id = static_cast<TaskID>(self.tasks.size());
 
@@ -226,7 +206,7 @@ void TaskGraph::execute(this TaskGraph &self, const TaskExecuteInfo &info) {
         self.task_gpu_profiler_tasks.push_back({
             .startTime = task_query_offset_ts,
             .endTime = task_query_offset_ts + delta,
-            .name = task->name.data(),
+            .name = task->name,
             .color = legit::Colors::colors[(task_index * 3 + 1) % count_of(legit::Colors::colors)],
         });
 
@@ -285,22 +265,17 @@ void TaskGraph::execute(this TaskGraph &self, const TaskExecuteInfo &info) {
             cmd_batcher.flush_barriers();
 
             for (TaskID task_id : task_batch.tasks) {
+                ZoneScoped;
+
                 u32 task_index = static_cast<u32>(task_id);
+                Task &task = *self.tasks[task_index];
+
                 batch_cmd_list.reset_query_pool(task_query_pool, task_index * 2, 2);
                 batch_cmd_list.write_timestamp(task_query_pool, PipelineStage::TopOfPipe, task_index * 2);
 
-                Task &task = *self.tasks[task_index];
-                if (task.pipeline_id != PipelineID::Invalid) {
-                    Pipeline &pipeline = self.device->pipeline_at(task.pipeline_id);
-                    batch_cmd_list.set_pipeline(task.pipeline_id);
-                    batch_cmd_list.set_descriptor_sets(task.pipeline_layout_id, pipeline.bind_point, 0, self.device->descriptor_set);
-                }
+                TaskContext tc(self, task, batch_cmd_list, info.execution_data);
+                task.execute(tc);
 
-                {
-                    ZoneScoped;
-                    TaskContext tc(*self.device, self, task, batch_cmd_list, copy_cmd_list, info.frame_index, info.execution_data);
-                    task.execute(tc);
-                }
                 batch_cmd_list.write_timestamp(task_query_pool, PipelineStage::BottomOfPipe, task_index * 2 + 1);
             }
 
@@ -361,82 +336,36 @@ void TaskGraph::execute(this TaskGraph &self, const TaskExecuteInfo &info) {
     }
 }
 
-bool TaskGraph::prepare_task(this TaskGraph &self, Task &task) {
+GraphicsPipelineInfo TaskGraph::get_task_pipeline_info(this TaskGraph &self, TaskID task_id) {
     ZoneScoped;
 
-    TaskPrepareInfo prepare_info = {
-        .device = self.device,
-    };
+    GraphicsPipelineInfo pipeline_info = {};
 
-    // it is okay to resize to uses size despite Task::Uses contains buffers
-    // as long as GraphicsPipelineInfo::Formats is less than/eqals to resize size
-    prepare_info.pipeline_info.blend_attachments.resize(task.task_uses.size());
+    auto &task = self.task_at(task_id);
+    for_each_image_use(task.task_uses, [&](TaskImageID id, [[maybe_unused]] const PipelineAccessImpl &access, ImageLayout layout) {
+        TaskImage &task_image = self.images[static_cast<usize>(id)];
+        LS_EXPECT(task_image.image_id != ImageID::Invalid);
+        Image &image = self.device->image_at(task_image.image_id);
 
-    if (task.prepare(prepare_info)) {
-        std::vector<Format> color_attachment_formats = {};
-
-        auto &pipeline_info = prepare_info.pipeline_info;
-        auto &graphics_info = pipeline_info.graphics_info;
-        auto &compute_info = pipeline_info.compute_info;
-
-        glm::uvec2 render_extent = { ~0_u32, ~0_u32 };
-        for_each_image_use(task.task_uses, [&](TaskImageID id, [[maybe_unused]] const PipelineAccessImpl &access, ImageLayout layout) {
-            TaskImage &task_image = self.images[static_cast<usize>(id)];
-            LS_EXPECT(task_image.image_id != ImageID::Invalid);
-            Image &image = self.device->image_at(task_image.image_id);
-
-            switch (layout) {
-                case ImageLayout::ColorAttachment:
-                    color_attachment_formats.push_back(image.format);
-                    break;
-                case ImageLayout::DepthStencilAttachment:
-                    graphics_info.depth_attachment_format = image.format;
-                    graphics_info.stencil_attachment_format = image.format;
-                    break;
-                case ImageLayout::DepthAttachment:
-                    graphics_info.depth_attachment_format = image.format;
-                    break;
-                case ImageLayout::StencilAttachment:
-                    graphics_info.stencil_attachment_format = image.format;
-                    break;
-                default:
-                    return;
-            }
-
-            render_extent = glm::min(render_extent, glm::uvec2({ image.extent.width, image.extent.height }));
-        });
-
-        task.render_extent = { render_extent.x, render_extent.y };
-        usize color_attachment_size = color_attachment_formats.size();
-        bool is_graphics_pipeline =
-            !color_attachment_formats.empty() || graphics_info.depth_attachment_format != Format::Unknown || graphics_info.stencil_attachment_format != Format::Unknown;
-
-        if (is_graphics_pipeline) {
-            LS_EXPECT(!pipeline_info.shader_ids.empty());
-
-            graphics_info.color_attachment_formats = color_attachment_formats;
-            graphics_info.viewports = pipeline_info.viewports;
-            graphics_info.scissors = pipeline_info.scissors;
-            graphics_info.vertex_binding_infos = pipeline_info.vertex_binding_infos;
-            graphics_info.vertex_attrib_infos = pipeline_info.vertex_attrib_infos;
-            graphics_info.blend_attachments = { pipeline_info.blend_attachments.data(), color_attachment_size };
-            graphics_info.shader_ids = pipeline_info.shader_ids;
-            graphics_info.layout_id = task.pipeline_layout_id;
-
-            task.pipeline_id = self.device->create_graphics_pipeline(graphics_info);
-        } else {
-            LS_EXPECT(pipeline_info.shader_ids.size() == 1);
-            compute_info.shader_id = pipeline_info.shader_ids[0];
-            compute_info.layout_id = task.pipeline_layout_id;
-
-            task.pipeline_id = self.device->create_compute_pipeline(compute_info);
+        switch (layout) {
+            case ImageLayout::ColorAttachment:
+                pipeline_info.color_attachment_formats.push_back(image.format);
+                break;
+            case ImageLayout::DepthStencilAttachment:
+                pipeline_info.depth_attachment_format = image.format;
+                pipeline_info.stencil_attachment_format = image.format;
+                break;
+            case ImageLayout::DepthAttachment:
+                pipeline_info.depth_attachment_format = image.format;
+                break;
+            case ImageLayout::StencilAttachment:
+                pipeline_info.stencil_attachment_format = image.format;
+                break;
+            default:;
         }
-    }
+    });
 
-    // TODO: probably should add some error checking instead of using bools
-    // this should return 3rd value indicating that this pass is probably a
-    // transfer or a dummy.
-    return true;
+    return pipeline_info;
 }
 
 TaskSubmit &TaskGraph::new_submit(this TaskGraph &self, CommandType type) {
@@ -450,6 +379,88 @@ TaskSubmit &TaskGraph::new_submit(this TaskGraph &self, CommandType type) {
     self.device->create_timestamp_query_pools(submit.query_pools, { .query_count = 128, .debug_name = name });
 
     return submit;
+}
+
+TaskContext::TaskContext(TaskGraph &task_graph_, Task &task_, CommandList &cmd_list_, void *execution_data_)
+    : device(*task_graph_.device),
+      task_graph(task_graph_),
+      task(task_),
+      cmd_list(cmd_list_),
+      execution_data(execution_data_),
+      render_extent({}) {
+    glm::uvec2 render_extent_ = {};
+    for_each_image_use(task_.task_uses, [&](TaskImageID id, const PipelineAccessImpl &, ImageLayout) {
+        auto &task_image = task_graph_.task_image_at(id);
+        Image &image = device.image_at(task_image.image_id);
+        render_extent_ = glm::min(render_extent_, { image.extent.width, image.extent.height });
+    });
+
+    render_extent = { render_extent_.x, render_extent_.y };
+}
+
+RenderingAttachmentInfo TaskContext::as_color_attachment(this TaskContext &self, TaskUse &use, std::optional<ColorClearValue> clear_val) {
+    ZoneScoped;
+
+    RenderingAttachmentInfo info = {
+        .image_view_id = self.task_image_data(use).image_view_id,
+        .image_layout = ImageLayout::ColorAttachment,
+        .load_op = clear_val ? AttachmentLoadOp::Clear : AttachmentLoadOp::Load,
+        .store_op = use.access.access & MemoryAccess::Write ? AttachmentStoreOp::Store : AttachmentStoreOp::None,
+        .clear_value = { clear_val.value_or(ColorClearValue{}) },
+    };
+
+    return info;
+}
+
+RenderingAttachmentInfo TaskContext::as_depth_attachment(this TaskContext &self, TaskUse &use, std::optional<DepthClearValue> clear_val) {
+    ZoneScoped;
+
+    RenderingAttachmentInfo info = {
+        .image_view_id = self.task_image_data(use).image_view_id,
+        .image_layout = ImageLayout::DepthStencilAttachment,
+        .load_op = clear_val ? AttachmentLoadOp::Clear : AttachmentLoadOp::Load,
+        .store_op = use.access.access & MemoryAccess::Write ? AttachmentStoreOp::Store : AttachmentStoreOp::None,
+        .clear_value = { .depth_clear = clear_val.value_or(DepthClearValue{}) },
+    };
+
+    return info;
+}
+
+TaskImage &TaskContext::task_image_data(this TaskContext &self, TaskUse &use) {
+    return self.task_graph.task_image_at(use.task_image_id);
+}
+
+TaskImage &TaskContext::task_image_data(this TaskContext &self, TaskImageID task_image_id) {
+    return self.task_graph.task_image_at(task_image_id);
+}
+
+Viewport TaskContext::pass_viewport(this TaskContext &self) {
+    return {
+        .x = 0,
+        .y = 0,
+        .width = static_cast<f32>(self.render_extent.width),
+        .height = static_cast<f32>(self.render_extent.height),
+        .depth_min = 0.0f,
+        .depth_max = 1.0f,
+    };
+}
+
+Rect2D TaskContext::pass_rect(this TaskContext &self) {
+    return {
+        .offset = { 0, 0 },
+        .extent = self.render_extent,
+    };
+}
+
+void TaskContext::set_pipeline(this TaskContext &self, PipelineID pipeline_id) {
+    ZoneScoped;
+
+    auto &pipeline = self.device.pipeline_at(pipeline_id);
+    self.cmd_list.set_pipeline(pipeline_id);
+    self.cmd_list.set_descriptor_sets(pipeline.layout_id, pipeline.bind_point, 0, self.device.descriptor_set);
+
+    self.pipeline_id = pipeline_id;
+    self.pipeline_layout_id = pipeline.layout_id;
 }
 
 }  // namespace lr

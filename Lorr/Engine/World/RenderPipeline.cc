@@ -1,58 +1,18 @@
 #include "RenderPipeline.hh"
 
-#include "Engine/Core/Application.hh"
+#include "Engine/World/Components.hh"
 
-#include "Components.hh"
-#include "RenderPipelineTasks.hh"
+#include "Engine/Core/Application.hh"
 
 namespace lr {
 bool RenderPipeline::init(this RenderPipeline &self, Device *device) {
     ZoneScoped;
 
+    auto &app = Application::get();
+    auto &asset_man = app.asset_man;
+
     self.device = device;
     self.task_graph.init(TaskGraphInfo{ .device = device });
-
-    if (!self.setup_imgui()) {
-        LOG_ERROR("Failed to setup ImGui pipeline!");
-        return false;
-    }
-
-    if (!self.setup_resources()) {
-        LOG_ERROR("Failed to setup render pipeline resources!");
-        return false;
-    }
-
-    if (!self.setup_passes()) {
-        LOG_ERROR("Failed to setup render passes!");
-        return false;
-    }
-
-    return true;
-}
-
-void RenderPipeline::shutdown(this RenderPipeline &self) {
-    ZoneScoped;
-
-    self.device->delete_buffers(self.persistent_vertex_buffer);
-    self.device->delete_buffers(self.persistent_index_buffer);
-    self.device->delete_buffers(self.dynamic_vertex_buffers);
-    self.device->delete_buffers(self.dynamic_index_buffers);
-    self.device->delete_buffers(self.cpu_upload_buffers);
-    self.device->delete_buffers(self.world_camera_buffers);
-    self.device->delete_buffers(self.world_data_buffers);
-
-    for (auto &v : self.task_graph.buffers) {
-        self.device->delete_buffers(v.buffer_id);
-    }
-
-    for (auto &v : self.task_graph.images) {
-        self.device->delete_image_views(v.image_view_id);
-        self.device->delete_images(v.image_id);
-    }
-}
-
-bool RenderPipeline::setup_imgui(this RenderPipeline &self) {
-    ZoneScoped;
 
     ImGui::CreateContext();
     auto &imgui = ImGui::GetIO();
@@ -102,36 +62,7 @@ bool RenderPipeline::setup_imgui(this RenderPipeline &self) {
 
     imgui.FontDefault = self.im_roboto_fa;
 
-    return true;
-}
-
-bool RenderPipeline::setup_resources(this RenderPipeline &self) {
-    ZoneScoped;
-
-    auto &app = Application::get();
-    auto &asset_man = app.asset_man;
-    auto &transfer_queue = self.device->queue_at(CommandType::Transfer);
-    auto cmd_list = transfer_queue.begin_command_list(0);
-
-    // Load shaders
-    asset_man.load_shader("imgui_vs", { .entry_point = "vs_main", .path = "imgui.slang" });
-    asset_man.load_shader("imgui_fs", { .entry_point = "fs_main", .path = "imgui.slang" });
-    asset_man.load_shader("fullscreen_vs", { .entry_point = "vs_main", .path = "fullscreen.slang" });
-    asset_man.load_shader("fullscreen_fs", { .entry_point = "fs_main", .path = "fullscreen.slang" });
-    asset_man.load_shader("model_vs", { .entry_point = "vs_main", .path = "model.slang" });
-    asset_man.load_shader("model_fs", { .entry_point = "fs_main", .path = "model.slang" });
-
-    asset_man.load_shader("atmos.transmittance", { .entry_point = "cs_main", .path = "atmos/transmittance.slang" });
-    asset_man.load_shader("atmos.ms", { .entry_point = "cs_main", .path = "atmos/ms.slang" });
-    asset_man.load_shader("atmos.lut_vs", { .entry_point = "vs_main", .path = "atmos/lut.slang" });
-    asset_man.load_shader("atmos.lut_fs", { .entry_point = "fs_main", .path = "atmos/lut.slang" });
-    asset_man.load_shader("atmos.final_vs", { .entry_point = "vs_main", .path = "atmos/final.slang" });
-    asset_man.load_shader("atmos.final_fs", { .entry_point = "fs_main", .path = "atmos/final.slang" });
-    asset_man.load_shader("editor.grid_vs", { .entry_point = "vs_main", .path = "editor/grid.slang" });
-    asset_man.load_shader("editor.grid_fs", { .entry_point = "fs_main", .path = "editor/grid.slang" });
-
-    // Load textures
-    // Images
+    // Setup images
     self.swap_chain_image = self.task_graph.add_image(TaskImageInfo{
         .image_id = app.default_surface.images[0],
         .image_view_id = app.default_surface.image_views[0],
@@ -240,6 +171,23 @@ bool RenderPipeline::setup_resources(this RenderPipeline &self) {
         .image_view_id = sky_final_view,
     });
 
+    SamplerID linear_sampler = self.device->create_sampler({
+        .min_filter = Filtering::Linear,
+        .mag_filter = Filtering::Linear,
+        .mip_filter = Filtering::Linear,
+        .address_u = TextureAddressMode::ClampToEdge,
+        .address_v = TextureAddressMode::ClampToEdge,
+    });
+    self.tg_execution_data.linear_sampler = linear_sampler;
+
+    SamplerID sky_sampler = self.device->create_sampler({
+        .min_filter = Filtering::Linear,
+        .mag_filter = Filtering::Linear,
+        .mip_filter = Filtering::Linear,
+        .address_u = TextureAddressMode::Repeat,
+        .address_v = TextureAddressMode::ClampToEdge,
+    });
+
     // Load buffers
     self.dynamic_vertex_buffers.resize(self.device->frame_count);
     self.dynamic_index_buffers.resize(self.device->frame_count);
@@ -267,46 +215,283 @@ bool RenderPipeline::setup_resources(this RenderPipeline &self) {
         self.cpu_upload_buffers.push_back(BufferID::Invalid);
     }
 
-    transfer_queue.end_command_list(cmd_list);
-    transfer_queue.submit(0, QueueSubmitInfo{ .self_wait = true });
+    // Setup tasks
+    constexpr VertexAttribInfo IMGUI_VERTEX_LAYOUT[] = {
+        { .format = Format::R32G32_SFLOAT, .location = 0, .offset = offsetof(ImDrawVert, pos) },
+        { .format = Format::R32G32_SFLOAT, .location = 1, .offset = offsetof(ImDrawVert, uv) },
+        { .format = Format::R8G8B8A8_UNORM, .location = 2, .offset = offsetof(ImDrawVert, col) },
+    };
 
-    return true;
-}
+    auto sky_lut_program = asset_man.load_shader_program({ .path = "atmos/lut.slang" });
+    auto sky_final_program = asset_man.load_shader_program({ .path = "atmos/final.slang" });
+    auto geometry_program = asset_man.load_shader_program({ .path = "model.slang" });
+    auto grid_program = asset_man.load_shader_program({ .path = "editor/grid.slang" });
+    auto imgui_program = asset_man.load_shader_program({ .path = "imgui.slang" });
 
-bool RenderPipeline::setup_passes(this RenderPipeline &self) {
-    ZoneScoped;
+    auto sky_transmittance_program = asset_man.load_shader_program({ .path = "atmos/transmittance.slang" });
+    auto sky_ms_program = asset_man.load_shader_program({ .path = "atmos/ms.slang" });
 
-    self.task_graph.add_task<SkyLUTTask>({
+    auto sky_lut_pipeline = self.device->create_graphics_pipeline(  //
+        GraphicsPipelineInfo()                                      //
+            .set_program(std::get<GraphicsPipelineProgram>(sky_lut_program.value())));
+
+    auto sky_final_pipeline = self.device->create_graphics_pipeline(  //
+        GraphicsPipelineInfo()                                        //
+            .set_program(std::get<GraphicsPipelineProgram>(sky_final_program.value())));
+
+    auto geometry_pipeline = self.device->create_graphics_pipeline(  //
+        GraphicsPipelineInfo()
+            .set_program(std::get<GraphicsPipelineProgram>(geometry_program.value()))
+            .set_vertex_layout(VERTEX_LAYOUT)
+            .set_raster_state({
+                .cull_mode = CullMode::Back,
+            })
+            .set_depth_stencil_state({
+                .enable_depth_test = true,
+                .enable_depth_write = true,
+                .depth_compare_op = CompareOp::LessEqual,
+            })
+            .set_blend_attachments({ {
+                .blend_enabled = true,
+                .src_blend = BlendFactor::SrcAlpha,
+                .dst_blend = BlendFactor::InvSrcAlpha,
+                .blend_op = BlendOp::Add,
+                .src_blend_alpha = BlendFactor::One,
+                .dst_blend_alpha = BlendFactor::InvSrcAlpha,
+                .blend_op_alpha = BlendOp::Add,
+            } }));
+
+    auto grid_pipeline = self.device->create_graphics_pipeline(  //
+        GraphicsPipelineInfo()
+            .set_program(std::get<GraphicsPipelineProgram>(grid_program.value()))
+            .set_depth_stencil_state({
+                .enable_depth_test = true,
+                .enable_depth_write = true,
+                .depth_compare_op = CompareOp::LessEqual,
+            })
+            .set_blend_attachments({ {
+                .blend_enabled = true,
+                .src_blend = BlendFactor::SrcAlpha,
+                .dst_blend = BlendFactor::InvSrcAlpha,
+                .blend_op = BlendOp::Add,
+                .src_blend_alpha = BlendFactor::One,
+                .dst_blend_alpha = BlendFactor::InvSrcAlpha,
+                .blend_op_alpha = BlendOp::Add,
+            } }));
+
+    auto imgui_pipeline = self.device->create_graphics_pipeline(  //
+        GraphicsPipelineInfo()
+            .set_program(std::get<GraphicsPipelineProgram>(imgui_program.value()))
+            .set_vertex_layout(IMGUI_VERTEX_LAYOUT)
+            .set_blend_attachments({ {
+                .blend_enabled = true,
+                .src_blend = BlendFactor::One,
+                .dst_blend = BlendFactor::InvSrcAlpha,
+                .blend_op = BlendOp::Add,
+                .src_blend_alpha = BlendFactor::One,
+                .dst_blend_alpha = BlendFactor::InvSrcAlpha,
+                .blend_op_alpha = BlendOp::Add,
+            } }));
+
+    self.task_graph.add_task({
+        .name = "Sky LUT Task",
         .uses = {
-            .attachment = self.atmos_sky_lut_image,
-            .transmittance_lut = self.atmos_transmittance_image,
-            .ms_lut = self.atmos_ms_image,
+            Preset::ColorAttachmentWrite(self.atmos_sky_lut_image),
+            Preset::ColorReadOnly(self.atmos_transmittance_image),
+            Preset::ColorReadOnly(self.atmos_ms_image),
         },
+        .execute_cb = [&](TaskContext &tc) {
+            auto &exec_data = tc.exec_data_as<TaskExecutionData>();
+
+            RenderingAttachmentInfo color_attachment = {
+                .image_view_id = sky_lut_view,
+                .image_layout = ImageLayout::ColorAttachment,
+                .load_op = AttachmentLoadOp::Clear,
+                .store_op = AttachmentStoreOp::Store,
+                .clear_value = { .color_clear = ColorClearValue(0.0f, 0.0f, 0.0f, 1.0f) },
+            };
+
+            tc.cmd_list.begin_rendering({
+                .render_area = tc.pass_rect(),
+                .color_attachments = color_attachment,
+            });
+            tc.set_pipeline(sky_lut_pipeline);
+            tc.cmd_list.set_viewport(0, tc.pass_viewport());
+            tc.cmd_list.set_scissors(0, tc.pass_rect());
+
+            struct {
+                u64 world_ptr = exec_data.world_buffer_ptr;
+                ImageViewID transmittance_image = transmittance_view;
+                ImageViewID ms_lut = ms_view;
+                SamplerID transmittance_sampler = linear_sampler;
+            } c = {};
+            tc.set_push_constants(c);
+            tc.cmd_list.draw(3);
+            tc.cmd_list.end_rendering();
+        }
     });
-    self.task_graph.add_task<SkyFinalTask>({
+    self.task_graph.add_task({
+        .name = "Sky Final Task",
         .uses = {
-            .attachment = self.final_image,
-            .sky_lut = self.atmos_sky_lut_image,
-            .transmittance_lut = self.atmos_transmittance_image,
+            Preset::ColorAttachmentWrite(self.final_image),
+            Preset::ColorReadOnly(self.atmos_sky_lut_image),
+            Preset::ColorReadOnly(self.atmos_transmittance_image),
         },
+        .execute_cb = [&](TaskContext &tc) {
+            auto &exec_data = tc.exec_data_as<TaskExecutionData>();
+
+            RenderingAttachmentInfo color_attachment = {
+                .image_view_id = final_image_view,
+                .image_layout = ImageLayout::ColorAttachment,
+                .load_op = AttachmentLoadOp::Clear,
+                .store_op = AttachmentStoreOp::Store,
+                .clear_value = { .color_clear = ColorClearValue(0.0f, 0.0f, 0.0f, 1.0f) },
+            };
+
+            tc.cmd_list.begin_rendering({
+                .render_area = tc.pass_rect(),
+                .color_attachments = color_attachment,
+            });
+
+            tc.set_pipeline(sky_final_pipeline);
+            tc.cmd_list.set_viewport(0, tc.pass_viewport());
+            tc.cmd_list.set_scissors(0, tc.pass_rect());
+
+            struct {
+                u64 world_ptr = exec_data.world_buffer_ptr;
+                ImageViewID sky_lut = sky_lut_view;
+                ImageViewID transmittance_image = transmittance_view;
+                SamplerID sampler = sky_sampler;
+            } c = {};
+            tc.set_push_constants(c);
+            tc.cmd_list.draw(3);
+            tc.cmd_list.end_rendering();
+        }
     });
 
-    self.task_graph.add_task<GeometryTask>({
+    self.task_graph.add_task({
+        .name = "Geometry Task",
         .uses = {
-            .color_attachment = self.final_image,
-            .depth_attachment = self.geometry_depth_image,
+            Preset::ColorAttachmentWrite(self.final_image),
+            Preset::DepthAttachmentWrite(self.geometry_depth_image),
         },
+        .execute_cb = [&](TaskContext &tc) {
+            auto &exec_data = tc.exec_data_as<TaskExecutionData>();
+
+            RenderingAttachmentInfo color_attachment = {
+                .image_view_id = final_image_view,
+                .image_layout = ImageLayout::ColorAttachment,
+                .load_op = AttachmentLoadOp::Clear,
+                .store_op = AttachmentStoreOp::Store,
+                .clear_value = { .color_clear = ColorClearValue(0.0f, 0.0f, 0.0f, 1.0f) },
+            };
+
+            RenderingAttachmentInfo depth_attachment = {
+                .image_view_id = geometry_depth_view,
+                .image_layout = ImageLayout::DepthAttachment,
+                .load_op = AttachmentLoadOp::Clear,
+                .store_op = AttachmentStoreOp::Store,
+                .clear_value = { .depth_clear = DepthClearValue(1.0f) },
+            };
+
+            tc.cmd_list.begin_rendering(RenderingBeginInfo{
+                .render_area = tc.pass_rect(),
+                .color_attachments = color_attachment,
+                .depth_attachment = depth_attachment,
+            });
+
+            tc.set_pipeline(geometry_pipeline);
+            tc.cmd_list.set_viewport(0, tc.pass_viewport());
+            tc.cmd_list.set_scissors(0, tc.pass_rect());
+
+            struct {
+                u64 world_ptr = exec_data.world_buffer_ptr;
+                GPUModelID model_id = GPUModelID::Invalid;
+                GPUMaterialID material_id = GPUMaterialID::Invalid;
+            } c = {};
+
+            auto models = app.world.ecs.query<Component::RenderableModel>();
+            models.each([&](Component::RenderableModel &m) {
+                auto model = asset_man.model_at(m.model);
+
+                tc.cmd_list.set_vertex_buffer(model->vertex_buffer.value());
+                tc.cmd_list.set_index_buffer(model->index_buffer.value());
+
+                for (auto &mesh : model->meshes) {
+                    for (auto &primitive_index : mesh.primitive_indices) {
+                        auto &primitive = model->primitives[primitive_index];
+
+                        // c.material_id = static_cast<MaterialID>(primitive.material_index);
+                        tc.set_push_constants(c);
+                        tc.cmd_list.draw_indexed(primitive.index_count, primitive.index_offset, static_cast<i32>(primitive.vertex_offset));
+                    }
+                }
+            });
+
+            tc.cmd_list.end_rendering();
+        }
     });
-    self.task_graph.add_task<GridTask>({
+    self.task_graph.add_task({
+        .name = "Grid Task",
         .uses = {
-            .attachment = self.final_image,
-            .depth_attachment = self.geometry_depth_image,
+            Preset::ColorAttachmentWrite(self.final_image),
+            Preset::DepthAttachmentWrite(self.geometry_depth_image),
         },
+        .execute_cb = [&](TaskContext &tc) {
+            auto &exec_data = tc.exec_data_as<TaskExecutionData>();
+
+            RenderingAttachmentInfo color_attachment = {
+                .image_view_id = final_image_view,
+                .image_layout = ImageLayout::ColorAttachment,
+                .load_op = AttachmentLoadOp::Clear,
+                .store_op = AttachmentStoreOp::Store,
+                .clear_value = { .color_clear = ColorClearValue(0.0f, 0.0f, 0.0f, 1.0f) },
+            };
+
+            RenderingAttachmentInfo depth_attachment = {
+                .image_view_id = geometry_depth_view,
+                .image_layout = ImageLayout::DepthAttachment,
+                .load_op = AttachmentLoadOp::Clear,
+                .store_op = AttachmentStoreOp::Store,
+                .clear_value = { .depth_clear = DepthClearValue(1.0f) },
+            };
+
+            tc.cmd_list.begin_rendering(RenderingBeginInfo{
+                .render_area = tc.pass_rect(),
+                .color_attachments = color_attachment,
+                .depth_attachment = depth_attachment,
+            });
+
+            tc.set_pipeline(grid_pipeline);
+            tc.set_push_constants(exec_data.world_buffer_ptr);
+            tc.cmd_list.draw(3);
+            tc.cmd_list.end_rendering();
+        }
     });
 
-    self.task_graph.add_task<ImGuiTask>({
+    self.task_graph.add_task({
+        .name = "ImGui Task",
         .uses = {
-            .attachment = self.swap_chain_image,
+            Preset::ColorAttachmentWrite(self.swap_chain_image),
+        },
+        .execute_cb = [&](TaskContext &tc) {
+            auto &exec_data = tc.exec_data_as<TaskExecutionData>();
+            auto &imgui = ImGui::GetIO();
+            
+            RenderingAttachmentInfo color_attachment = {
+                .image_view_id = final_image_view,
+                .image_layout = ImageLayout::ColorAttachment,
+                .load_op = AttachmentLoadOp::Load,
+                .store_op = AttachmentStoreOp::Store,
+            };
+
+            ImDrawData *draw_data = ImGui::GetDrawData();
+            u64 vertex_size_bytes = draw_data->TotalVtxCount * sizeof(ImDrawVert);
+            u64 index_size_bytes = draw_data->TotalIdxCount * sizeof(ImDrawIdx);
+            if (!draw_data || vertex_size_bytes == 0) {
+                return;
+            }
+
         },
     });
     self.task_graph.present(self.swap_chain_image);
@@ -314,101 +499,25 @@ bool RenderPipeline::setup_passes(this RenderPipeline &self) {
     return true;
 }
 
-bool RenderPipeline::setup_persistent_images(this RenderPipeline &self) {
+void RenderPipeline::shutdown(this RenderPipeline &self) {
     ZoneScoped;
 
-    auto &app = Application::get();
-    auto &asset_man = app.asset_man;
-    auto &graphics_queue = self.device->queue_at(CommandType::Graphics);
-    auto cmd_list = graphics_queue.begin_command_list(0);
-    auto world_data_device_address = self.device->buffer_at(self.world_data_buffers[0]).device_address;
+    self.device->delete_buffers(self.persistent_vertex_buffer);
+    self.device->delete_buffers(self.persistent_index_buffer);
+    self.device->delete_buffers(self.dynamic_vertex_buffers);
+    self.device->delete_buffers(self.dynamic_index_buffers);
+    self.device->delete_buffers(self.cpu_upload_buffers);
+    self.device->delete_buffers(self.world_camera_buffers);
+    self.device->delete_buffers(self.world_data_buffers);
 
-    auto sky_sampler_id = self.device->create_cached_sampler(SamplerInfo{
-        .min_filter = Filtering::Linear,
-        .mag_filter = Filtering::Linear,
-        .mip_filter = Filtering::Linear,
-        .address_u = TextureAddressMode::ClampToEdge,
-        .address_v = TextureAddressMode::ClampToEdge,
-        .min_lod = -1000,
-        .max_lod = 1000,
-    });
-
-    // TODO: Delete pipeline IDs later
-    {
-        struct PushConstants {
-            u64 world_ptr = 0;
-            glm::vec2 image_size = {};
-            ImageViewID image_view_id = ImageViewID::Invalid;
-        } c = {};
-
-        auto layout_id = static_cast<PipelineLayoutID>(sizeof(PushConstants) / sizeof(u32));
-        ComputePipelineInfo pipeline_info = {
-            .shader_id = asset_man.shader_at("atmos.transmittance").value(),
-            .layout_id = layout_id,
-        };
-        auto pipeline_id = self.device->create_compute_pipeline(pipeline_info);
-        auto &task_image_info = self.task_graph.task_image_at(self.atmos_transmittance_image);
-        auto &image_info = self.device->image_at(task_image_info.image_id);
-
-        c.world_ptr = world_data_device_address;
-        c.image_size = { image_info.extent.width, image_info.extent.height };
-        c.image_view_id = task_image_info.image_view_id;
-
-        cmd_list.set_pipeline(pipeline_id);
-        cmd_list.set_descriptor_sets(layout_id, PipelineBindPoint::Compute, 0, self.device->descriptor_set);
-        cmd_list.set_push_constants(layout_id, &c, sizeof(PushConstants), 0);
-        cmd_list.dispatch(image_info.extent.width / 16 + 1, image_info.extent.height / 16 + 1, 1);
-        cmd_list.image_transition(ImageBarrier{
-            .src_access = PipelineAccess::All,
-            .dst_access = PipelineAccess::FragmentShaderRead,
-            .old_layout = ImageLayout::General,
-            .new_layout = ImageLayout::ColorReadOnly,
-            .image_id = task_image_info.image_id,
-        });
+    for (auto &v : self.task_graph.buffers) {
+        self.device->delete_buffers(v.buffer_id);
     }
 
-    {
-        struct PushConstants {
-            u64 world_ptr = 0;
-            ImageViewID transmittance_image_id = {};
-            SamplerID transmittance_sampler_id = {};
-            glm::vec2 target_image_size = {};
-            ImageViewID target_view_id = ImageViewID::Invalid;
-        } c = {};
-
-        auto layout_id = static_cast<PipelineLayoutID>(sizeof(PushConstants) / sizeof(u32));
-        ComputePipelineInfo pipeline_info = {
-            .shader_id = asset_man.shader_at("atmos.ms").value(),
-            .layout_id = layout_id,
-        };
-        auto pipeline_id = self.device->create_compute_pipeline(pipeline_info);
-        auto &task_image_info = self.task_graph.task_image_at(self.atmos_ms_image);
-        auto &image_info = self.device->image_at(task_image_info.image_id);
-        auto &transmittance_task_image_info = self.task_graph.task_image_at(self.atmos_transmittance_image);
-
-        c.world_ptr = world_data_device_address;
-        c.transmittance_image_id = transmittance_task_image_info.image_view_id;
-        c.transmittance_sampler_id = sky_sampler_id;
-        c.target_image_size = { image_info.extent.width, image_info.extent.height };
-        c.target_view_id = task_image_info.image_view_id;
-
-        cmd_list.set_pipeline(pipeline_id);
-        cmd_list.set_descriptor_sets(layout_id, PipelineBindPoint::Compute, 0, self.device->descriptor_set);
-        cmd_list.set_push_constants(layout_id, &c, sizeof(PushConstants), 0);
-        cmd_list.dispatch(image_info.extent.width / 16 + 1, image_info.extent.height / 16 + 1, 1);
-        cmd_list.image_transition(ImageBarrier{
-            .src_access = PipelineAccess::ComputeWrite,
-            .dst_access = PipelineAccess::FragmentShaderRead,
-            .old_layout = ImageLayout::General,
-            .new_layout = ImageLayout::ColorReadOnly,
-            .image_id = task_image_info.image_id,
-        });
+    for (auto &v : self.task_graph.images) {
+        self.device->delete_image_views(v.image_view_id);
+        self.device->delete_images(v.image_id);
     }
-
-    graphics_queue.end_command_list(cmd_list);
-    graphics_queue.submit(0, QueueSubmitInfo{});
-
-    return true;
 }
 
 void RenderPipeline::update_world_data(this RenderPipeline &self) {
@@ -532,17 +641,18 @@ bool RenderPipeline::prepare(this RenderPipeline &self, usize frame_index) {
     transfer_queue.end_command_list(cmd_list);
     transfer_queue.submit(frame_index, QueueSubmitInfo{});
 
-    if (self.device->frame_sema.counter == 0) {
-        if (!self.setup_persistent_images()) {
-            LOG_ERROR("Failed to setup persistent images!");
-            return false;
-        }
-    }
+    // if (self.device->frame_sema.counter == 0) {
+    //     if (!self.setup_persistent_images()) {
+    //         LOG_ERROR("Failed to setup persistent images!");
+    //         return false;
+    //     }
+    // }
 
     return true;
 }
 
-bool RenderPipeline::render_into(this RenderPipeline &self, SwapChain &swap_chain, ls::span<ImageID> images, ls::span<ImageViewID> image_views) {
+bool RenderPipeline::render_into(
+    this RenderPipeline &self, SwapChain &swap_chain, ls::span<ImageID> images, ls::span<ImageViewID> image_views) {
     ZoneScoped;
 
     auto &frame_sema = self.device->frame_sema;
@@ -555,7 +665,7 @@ bool RenderPipeline::render_into(this RenderPipeline &self, SwapChain &swap_chai
     }
 
     // Reset frame resources
-    self.device->staging_buffer_at(frame_index).reset();
+    self.device->staging_buffers.at(frame_index).reset();
     for (CommandQueue &cmd_queue : self.device->queues) {
         CommandAllocator &cmd_allocator = cmd_queue.command_allocator(frame_index);
         self.device->reset_command_allocator(cmd_allocator);
@@ -563,6 +673,7 @@ bool RenderPipeline::render_into(this RenderPipeline &self, SwapChain &swap_chai
 
     self.prepare(frame_index);
     u64 world_data_device_address = self.device->buffer_at(self.world_data_buffers[frame_index]).device_address;
+    self.tg_execution_data.world_buffer_ptr = world_data_device_address;
 
     self.task_graph.set_image(
         self.swap_chain_image,
@@ -578,9 +689,10 @@ bool RenderPipeline::render_into(this RenderPipeline &self, SwapChain &swap_chai
         { present_sema, 0, PipelineStage::BottomOfPipe },
         { frame_sema, frame_sema.counter + 1, PipelineStage::AllCommands },
     };
+
     self.task_graph.execute({
         .frame_index = frame_index,
-        .execution_data = &world_data_device_address,
+        .execution_data = &self.tg_execution_data,
         .wait_semas = wait_semas,
         .signal_semas = signal_semas,
     });
@@ -590,14 +702,6 @@ bool RenderPipeline::render_into(this RenderPipeline &self, SwapChain &swap_chai
     }
 
     return true;
-}
-
-void RenderPipeline::on_resize(this RenderPipeline &self, glm::uvec2 size) {
-    ZoneScoped;
-
-    // TODO: resize all images with ImageUsage::SwapChain with correct ratio
-
-    self.task_graph.update_task_infos();
 }
 
 }  // namespace lr

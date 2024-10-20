@@ -15,6 +15,7 @@
 #include <tracy/Tracy.hpp>
 
 #include <array>
+#include <expected>
 #include <format>
 #include <filesystem>
 #include <span>

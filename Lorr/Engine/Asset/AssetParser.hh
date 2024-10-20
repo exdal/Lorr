@@ -1,6 +1,5 @@
 #pragma once
 
-#include "Engine/Graphics/Common.hh"
 #include "Engine/World/Model.hh"
 
 #include <fastgltf/types.hpp>
@@ -16,7 +15,7 @@ enum class AssetFileType : u32 {
 struct ImageAssetData {
     u32 width = 0;
     u32 height = 0;
-    Format format = {};
+    vk::Format format = {};
 
     u8 *data = nullptr;
     usize data_size = 0;
@@ -32,10 +31,10 @@ struct ImageAssetData {
 
 struct ModelAssetData {
     struct SamplerData {
-        Filtering mag_filter = {};
-        Filtering min_filter = {};
-        TextureAddressMode address_u = {};
-        TextureAddressMode address_v = {};
+        vk::Filtering mag_filter = {};
+        vk::Filtering min_filter = {};
+        vk::SamplerAddressMode address_u = {};
+        vk::SamplerAddressMode address_v = {};
     };
 
     struct TextureData {

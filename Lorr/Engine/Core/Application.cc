@@ -70,7 +70,6 @@ void Application::poll_events(this Application &self) {
         ApplicationEventData e = {};
         switch (self.event_man.dispatch(e)) {
             case ApplicationEvent::WindowResize: {
-                self.world_render_pipeline.on_resize(e.size);
                 break;
             }
             case ApplicationEvent::MousePosition: {

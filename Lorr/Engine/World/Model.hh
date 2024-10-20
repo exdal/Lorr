@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Engine/Asset/Identifier.hh"
-#include "Engine/Graphics/zfwd.hh"
+#include "Engine/Graphics/Vulkan.hh"
 
 namespace lr {
 struct Vertex {
@@ -10,6 +10,14 @@ struct Vertex {
     glm::vec3 normal = {};
     f32 uv_y = 0.0f;
     u32 color = 0;
+};
+
+constexpr static vk::VertexAttribInfo VERTEX_LAYOUT[] = {
+    { .format = vk::Format::R32G32B32_SFLOAT, .location = 0, .offset = offsetof(Vertex, position) },
+    { .format = vk::Format::R32_SFLOAT, .location = 1, .offset = offsetof(Vertex, uv_x) },
+    { .format = vk::Format::R32G32B32_SFLOAT, .location = 2, .offset = offsetof(Vertex, normal) },
+    { .format = vk::Format::R32_SFLOAT, .location = 3, .offset = offsetof(Vertex, uv_y) },
+    { .format = vk::Format::R8G8B8A8_UNORM, .location = 4, .offset = offsetof(Vertex, color) },
 };
 
 static Identifier INVALID_TEXTURE = "invalid_texture";

@@ -1,37 +1,37 @@
 #pragma once
 
-#include "Engine/Graphics/Common.hh"
-#include "Engine/Graphics/Pipeline.hh"
+#include "Engine/Graphics/Vulkan.hh"
 
 namespace lr {
+enum class TaskImageID : u32 { Invalid = ~0_u32 };
+enum class TaskBufferID : u32 { Invalid = ~0_u32 };
+
 struct TaskImageInfo {
     ImageID image_id = ImageID::Invalid;
     ImageViewID image_view_id = ImageViewID::Invalid;
-    ImageLayout layout = ImageLayout::Undefined;
-    PipelineAccessImpl access = PipelineAccess::TopOfPipe;
+    vk::ImageLayout layout = vk::ImageLayout::Undefined;
+    vk::PipelineAccessImpl access = vk::PipelineAccess::TopOfPipe;
     usize last_submit_index = 0;
 };
 
 struct TaskBufferInfo {
     BufferID buffer_id = BufferID::Invalid;
-    PipelineAccessImpl last_access = PipelineAccess::None;
+    vk::PipelineAccessImpl last_access = vk::PipelineAccess::None;
 };
 
 enum class TaskImageFlag {
     None = 0,
     SwapChainRelative = 1 << 0,
 };
-
-template<>
-struct has_bitmask<TaskImageFlag> : std::true_type {};
+consteval void enable_bitmask(TaskImageFlag);
 
 struct TaskImage {
     ImageID image_id = ImageID::Invalid;
     ImageViewID image_view_id = ImageViewID::Invalid;
-    ImageSubresourceRange subresource_range = {};
+    vk::ImageSubresourceRange subresource_range = {};
     TaskImageFlag flags = TaskImageFlag::None;
-    ImageLayout last_layout = ImageLayout::Undefined;
-    PipelineAccessImpl last_access = PipelineAccess::None;
+    vk::ImageLayout last_layout = vk::ImageLayout::Undefined;
+    vk::PipelineAccessImpl last_access = vk::PipelineAccess::None;
 
     usize last_submit_index = 0;
 };
@@ -39,8 +39,8 @@ struct TaskImage {
 enum class TaskUseType : u32 { Buffer = 0, Image };
 struct TaskUse {
     TaskUseType type = TaskUseType::Buffer;
-    ImageLayout image_layout = ImageLayout::Undefined;
-    PipelineAccessImpl access = PipelineAccess::None;
+    vk::ImageLayout image_layout = vk::ImageLayout::Undefined;
+    vk::PipelineAccessImpl access = vk::PipelineAccess::None;
     union {
         TaskBufferID task_buffer_id = TaskBufferID::Invalid;
         TaskImageID task_image_id;
@@ -48,7 +48,7 @@ struct TaskUse {
     };
 };
 
-template<PipelineAccessImpl AccessT>
+template<vk::PipelineAccessImpl AccessT>
 struct TaskBufferUse : TaskUse {
     constexpr TaskBufferUse() {
         this->type = TaskUseType::Buffer;
@@ -62,7 +62,7 @@ struct TaskBufferUse : TaskUse {
     };
 };
 
-template<ImageLayout LayoutT, PipelineAccessImpl AccessT>
+template<vk::ImageLayout LayoutT, vk::PipelineAccessImpl AccessT>
 struct TaskImageUse : TaskUse {
     constexpr TaskImageUse() {
         this->type = TaskUseType::Image;
@@ -80,100 +80,18 @@ struct TaskImageUse : TaskUse {
 
 // Task Use Presets
 namespace Preset {
-    using ColorAttachmentWrite = TaskImageUse<ImageLayout::ColorAttachment, PipelineAccess::ColorAttachmentReadWrite>;
-    using ColorAttachmentRead = TaskImageUse<ImageLayout::ColorAttachment, PipelineAccess::ColorAttachmentRead>;
-    using DepthAttachmentWrite = TaskImageUse<ImageLayout::DepthAttachment, PipelineAccess::DepthStencilReadWrite>;
-    using DepthAttachmentRead = TaskImageUse<ImageLayout::DepthAttachment, PipelineAccess::DepthStencilRead>;
-    using ColorReadOnly = TaskImageUse<ImageLayout::ColorReadOnly, PipelineAccess::FragmentShaderRead>;
-    using ComputeWrite = TaskImageUse<ImageLayout::General, PipelineAccess::ComputeWrite>;
-    using ComputeRead = TaskImageUse<ImageLayout::General, PipelineAccess::ComputeRead>;
-    using BlitRead = TaskImageUse<ImageLayout::TransferSrc, PipelineAccess::BlitRead>;
-    using BlitWrite = TaskImageUse<ImageLayout::TransferDst, PipelineAccess::BlitWrite>;
+    using ColorAttachmentWrite = TaskImageUse<vk::ImageLayout::ColorAttachment, vk::PipelineAccess::ColorAttachmentReadWrite>;
+    using ColorAttachmentRead = TaskImageUse<vk::ImageLayout::ColorAttachment, vk::PipelineAccess::ColorAttachmentRead>;
+    using DepthAttachmentWrite = TaskImageUse<vk::ImageLayout::DepthAttachment, vk::PipelineAccess::DepthStencilReadWrite>;
+    using DepthAttachmentRead = TaskImageUse<vk::ImageLayout::DepthAttachment, vk::PipelineAccess::DepthStencilRead>;
+    using ColorReadOnly = TaskImageUse<vk::ImageLayout::ColorReadOnly, vk::PipelineAccess::FragmentShaderRead>;
+    using ComputeWrite = TaskImageUse<vk::ImageLayout::General, vk::PipelineAccess::ComputeWrite>;
+    using ComputeRead = TaskImageUse<vk::ImageLayout::General, vk::PipelineAccess::ComputeRead>;
+    using BlitRead = TaskImageUse<vk::ImageLayout::TransferSrc, vk::PipelineAccess::BlitRead>;
+    using BlitWrite = TaskImageUse<vk::ImageLayout::TransferDst, vk::PipelineAccess::BlitWrite>;
 
-    using VertexBuffer = TaskBufferUse<PipelineAccess::VertexAttrib>;
-    using IndexBuffer = TaskBufferUse<PipelineAccess::IndexAttrib>;
+    using VertexBuffer = TaskBufferUse<vk::PipelineAccess::VertexAttrib>;
+    using IndexBuffer = TaskBufferUse<vk::PipelineAccess::IndexAttrib>;
 };  // namespace Preset
-
-struct TaskPipelineInfo {
-    union {
-        GraphicsPipelineInfo graphics_info = {};
-        ComputePipelineInfo compute_info;
-    };
-
-    std::vector<Viewport> viewports = {};
-    std::vector<Rect2D> scissors = {};
-    std::vector<VertexLayoutBindingInfo> vertex_binding_infos = {};
-    std::vector<VertexAttribInfo> vertex_attrib_infos = {};
-    std::vector<PipelineColorBlendAttachment> blend_attachments = {};
-    std::vector<ShaderID> shader_ids = {};
-
-    auto &set_dynamic_states(DynamicState states) {
-        graphics_info.dynamic_state = states;
-        return *this;
-    }
-
-    auto &set_viewport(const Viewport &viewport) {
-        viewports.push_back(viewport);
-        return *this;
-    }
-
-    auto &set_scissors(const Rect2D &rect) {
-        scissors.push_back(rect);
-        return *this;
-    }
-
-    auto &set_shader(ShaderID shader_id) {
-        shader_ids.push_back(shader_id);
-        return *this;
-    }
-
-    auto &set_rasterizer_state(const RasterizerStateInfo &info) {
-        graphics_info.rasterizer_state = info;
-        return *this;
-    }
-
-    auto &set_multisample_state(const MultisampleStateInfo &info) {
-        graphics_info.multisample_state = info;
-        return *this;
-    }
-
-    auto &set_depth_stencil_state(const DepthStencilStateInfo &info) {
-        graphics_info.depth_stencil_state = info;
-        return *this;
-    }
-
-    auto &set_blend_constants(const glm::vec4 &constants) {
-        graphics_info.blend_constants = constants;
-        return *this;
-    }
-
-    auto &set_blend_attachments(const std::vector<PipelineColorBlendAttachment> &infos) {
-        blend_attachments = infos;
-        return *this;
-    }
-
-    auto &set_blend_attachment_all(const PipelineColorBlendAttachment &info) {
-        for (auto &v : blend_attachments) {
-            v = info;
-        }
-        return *this;
-    }
-
-    auto &set_vertex_layout(ls::span<const VertexAttribInfo> attribs) {
-        u32 stride = 0;
-        for (const VertexAttribInfo &attrib : attribs) {
-            stride += format_to_size(attrib.format);
-        }
-
-        vertex_binding_infos.push_back({
-            .binding = static_cast<u32>(vertex_binding_infos.size()),
-            .stride = stride,
-            .input_rate = VertexInputRate::Vertex,
-        });
-
-        vertex_attrib_infos.insert(vertex_attrib_infos.end(), attribs.begin(), attribs.end());
-        return *this;
-    }
-};
 
 }  // namespace lr

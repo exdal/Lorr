@@ -5,21 +5,19 @@
 
 #include "Engine/Asset/Asset.hh"
 
-#include "Engine/Graphics/Device.hh"
-#include "Engine/Graphics/Instance.hh"
-#include "Engine/Graphics/SwapChain.hh"
-
-#include "Engine/OS/Window.hh"
+#include "Engine/Graphics/Vulkan.hh"
 
 #include "Engine/World/RenderPipeline.hh"
 #include "Engine/World/World.hh"
+
+#include "Engine/Window/Window.hh"
 
 namespace lr {
 struct ApplicationSurface {
     Window window = {};
     SwapChain swap_chain = {};
-    ls::static_vector<ImageID, Limits::FrameCount> images = {};
-    ls::static_vector<ImageViewID, Limits::FrameCount> image_views = {};
+    ls::static_vector<ImageID, Device::Limits::FrameCount> images = {};
+    ls::static_vector<ImageViewID, Device::Limits::FrameCount> image_views = {};
     b32 swap_chain_ok = false;
 };
 
@@ -39,7 +37,6 @@ struct Application {
     static Application &get();
 
     EventManager<ApplicationEvent, ApplicationEventData> event_man = {};
-    Instance instance = {};
     Device device = {};
     ApplicationSurface default_surface = {};
     AssetManager asset_man = {};
@@ -63,7 +60,7 @@ struct Application {
 
 private:
     // TODO: Properly handle this when we need multiple windows/sc.
-    VKResult create_surface(this Application &, ApplicationSurface &surface, std::optional<WindowInfo> window_info = std::nullopt);
+    bool create_surface(this Application &, ApplicationSurface &surface, std::optional<WindowInfo> window_info = std::nullopt);
 };
 
 }  // namespace lr

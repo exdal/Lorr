@@ -5,64 +5,16 @@
 #include "Pipeline.hh"
 #include "Resource.hh"
 #include "ResourcePool.hh"
+#include "StagingBuffer.hh"
 #include "SwapChain.hh"
 
 namespace lr {
-struct StagingAllocResult {
-    BufferID buffer_id = BufferID::Invalid;
-    u8 *ptr = nullptr;
-    u64 offset = 0;
-    u64 size = 0;
-};
-
-struct StagingBuffer {
-    // Config
-    constexpr static usize BLOCK_SIZE = ls::mib_to_bytes(16);
-
-    struct StagingBufferBlock {
-        BufferID buffer_id = BufferID::Invalid;
-        u64 offset = 0;
-    };
-
-    plf::colony<StagingBufferBlock> blocks = {};
-    Device *device = nullptr;
-
-    void init(this StagingBuffer &, Device *device);
-    StagingAllocResult alloc(this StagingBuffer &, usize size, u64 alignment = 8);
-    void reset(this StagingBuffer &);
-    u64 size(this StagingBuffer &);
-    void upload(this StagingBuffer &, StagingAllocResult &result, BufferID dst_buffer, CommandList &cmd_list);
-};
-
 struct DeviceInfo {
     vkb::Instance *instance = nullptr;
     usize frame_count = 3;
 };
 
 struct Device {
-    constexpr static usize QUEUE_COUNT = static_cast<usize>(CommandType::Count);
-    constexpr static u64 STAGING_UPLOAD_SIZE = ls::mib_to_bytes(128);
-
-    std::array<CommandQueue, QUEUE_COUNT> queues = {};
-    BufferID staging_buffer = BufferID::Invalid;
-    ls::static_vector<StagingBuffer, Limits::FrameCount> staging_buffers = {};
-    Semaphore frame_sema = {};
-    usize frame_count = 0;  // global frame count, same across all swap chains
-
-    DescriptorPool descriptor_pool = {};
-    DescriptorSetLayout descriptor_set_layout = {};
-    DescriptorSet descriptor_set = {};
-
-    BufferID bda_array_buffer = BufferID::Invalid;
-    u64 *bda_array_host_addr = nullptr;
-
-    DeviceFeature supported_features = DeviceFeature::None;
-    ResourcePools resources = {};
-    VmaAllocator allocator = {};
-    vkb::PhysicalDevice physical_device = {};
-    vkb::Instance *instance = nullptr;
-    vkb::Device handle = {};
-
     VKResult init(this Device &, const DeviceInfo &info);
     void shutdown(this Device &, bool print_reports);
 
@@ -70,7 +22,8 @@ struct Device {
     VKResult create_timestamp_query_pools(this Device &, ls::span<TimestampQueryPool> query_pools, const TimestampQueryPoolInfo &info);
     void delete_timestamp_query_pools(this Device &, ls::span<TimestampQueryPool> query_pools);
 
-    void get_timestamp_query_pool_results(this Device &, TimestampQueryPool &query_pool, u32 first_query, u32 count, ls::span<u64> time_stamps);
+    void get_timestamp_query_pool_results(
+        this Device &, TimestampQueryPool &query_pool, u32 first_query, u32 count, ls::span<u64> time_stamps);
 
     VKResult create_command_lists(this Device &, ls::span<CommandList> command_lists, CommandAllocator &allocator);
     void delete_command_lists(this Device &, ls::span<CommandList> command_lists);
@@ -108,10 +61,9 @@ struct Device {
     /// Descriptor ///
     VKResult create_descriptor_pools(this Device &, ls::span<DescriptorPool> descriptor_pools, const DescriptorPoolInfo &info);
     void delete_descriptor_pools(this Device &, ls::span<DescriptorPool> descriptor_pools);
-
-    VKResult create_descriptor_set_layouts(this Device &, ls::span<DescriptorSetLayout> descriptor_set_layouts, const DescriptorSetLayoutInfo &info);
+    VKResult create_descriptor_set_layouts(
+        this Device &, ls::span<DescriptorSetLayout> descriptor_set_layouts, const DescriptorSetLayoutInfo &info);
     void delete_descriptor_set_layouts(this Device &, ls::span<DescriptorSetLayout> layouts);
-
     VKResult create_descriptor_sets(this Device &, ls::span<DescriptorSet> descriptor_sets, const DescriptorSetInfo &info);
     void delete_descriptor_sets(this Device &, ls::span<DescriptorSet> descriptor_sets);
     void update_descriptor_sets(this Device &, ls::span<WriteDescriptorSet> writes, ls::span<CopyDescriptorSet> copies);
@@ -121,26 +73,17 @@ struct Device {
     void delete_buffers(this Device &, ls::span<BufferID> buffers);
     template<typename T>
     T *buffer_host_data(this Device &, BufferID buffer_id);
-
     MemoryRequirements memory_requirements(this Device &, BufferID buffer_id);
-
-    void upload_staging(this Device &, BufferID target_buffer_id, const void *data, ls::u64range range, u64 frame_index);
 
     /// Images ///
     ls::result<ImageID, VKResult> create_image(this Device &, const ImageInfo &info);
     void delete_images(this Device &, ls::span<ImageID> images);
-
     MemoryRequirements memory_requirements(this Device &, ImageID image_id);
-
     ls::result<ImageViewID, VKResult> create_image_view(this Device &, const ImageViewInfo &info);
     void delete_image_views(this Device &, ls::span<ImageViewID> image_views);
-
     ls::result<SamplerID, VKResult> create_sampler(this Device &, const SamplerInfo &info);
     void delete_samplers(this Device &, ls::span<SamplerID> samplers);
-
-    ls::result<SamplerID, VKResult> create_cached_sampler(this Device &, const SamplerInfo &info);
-
-    void set_image_data(this Device &, ImageID image_id, const void *data, ImageLayout new_layout, ImageLayout old_layout = ImageLayout::Undefined);
+    void set_image_data(this Device &, ImageID image_id, const void *data, ImageLayout image_layout);
 
     /// Utils ///
     bool is_feature_supported(this auto &self, DeviceFeature feature) { return self.supported_features & feature; }
@@ -149,12 +92,13 @@ struct Device {
         requires(!std::is_pointer_v<T>)
     void set_object_name([[maybe_unused]] this auto &self, [[maybe_unused]] T &v, [[maybe_unused]] std::string_view name) {
 #if LS_DEBUG
+        auto null_terminated = std::string(name);
         VkDebugUtilsObjectNameInfoEXT object_name_info = {
             .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
             .pNext = nullptr,
             .objectType = T::OBJECT_TYPE,
             .objectHandle = (u64)v.handle,
-            .pObjectName = name.data(),
+            .pObjectName = null_terminated.c_str(),
         };
         vkSetDebugUtilsObjectNameEXT(self, &object_name_info);
 #endif
@@ -163,12 +107,13 @@ struct Device {
     template<VkObjectType ObjectType, typename T>
     void set_object_name_raw([[maybe_unused]] this auto &self, [[maybe_unused]] T v, [[maybe_unused]] std::string_view name) {
 #if LS_DEBUG
+        auto null_terminated = std::string(name);
         VkDebugUtilsObjectNameInfoEXT object_name_info = {
             .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
             .pNext = nullptr,
             .objectType = ObjectType,
             .objectHandle = (u64)v,
-            .pObjectName = name.data(),
+            .pObjectName = null_terminated.c_str(),
         };
         vkSetDebugUtilsObjectNameEXT(self, &object_name_info);
 #endif
@@ -191,8 +136,9 @@ struct Device {
     auto buffer_at(this auto &self, BufferID id) -> Buffer & { return self.resources.buffers.get(id); }
     auto pipeline_at(this auto &self, PipelineID id) -> Pipeline & { return self.resources.pipelines.get(id); }
     auto shader_at(this auto &self, ShaderID id) -> Shader & { return self.resources.shaders.get(id); }
-    auto pipeline_layout_at(this auto &self, PipelineLayoutID id) -> PipelineLayout & { return self.resources.pipeline_layouts[static_cast<usize>(id)]; }
-    StagingBuffer &staging_buffer_at(this auto &self, usize i) { return self.staging_buffers[i]; }
+    auto pipeline_layout_at(this auto &self, PipelineLayoutID id) -> PipelineLayout & {
+        return self.resources.pipeline_layouts[static_cast<usize>(id)];
+    }
 
     usize sema_index(this auto &self) { return self.frame_sema.counter % self.frame_count; }
 

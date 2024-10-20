@@ -1,67 +1,65 @@
 #pragma once
 
-#include "Pipeline.hh"
-#include "Resource.hh"
-#include "Shader.hh"
-
 namespace lr {
-template<typename ResourceT, typename ResourceID>
-struct ResourceResult {
-    ResourceResult(ResourceT *res, ResourceID res_id)
-        : resource(res),
-          id(res_id) {}
+template<typename T>
+concept EnumType = std::is_enum_v<T>;
 
-    explicit ResourceResult(std::nullptr_t)
-        : resource(nullptr),
-          id(ResourceID::Invalid) {}
-
-    ResourceResult &operator=(std::nullptr_t &&) = delete;
-
-    operator bool() { return id != ResourceID::Invalid; }
-
-    ResourceT *resource;
-    ResourceID id;
+template<typename T>
+struct EnumAccessor {
+    using type = T;
 };
 
-// Paged resource pool, a bit cleaner implementation to linked lists.
-// is from Daxa
+template<EnumType T>
+struct EnumAccessor<T> {
+    using type = std::underlying_type_t<T>;
+};
 
-template<typename ResourceT, typename ResourceID>
-    requires(std::is_default_constructible_v<ResourceT>)
+struct PagedResourcePoolInfo {
+    u32 MAX_RESOURCE_COUNT = 1 << 19u;
+    u32 PAGE_BITS = 1 << 9u;
+};
+
+template<typename ResourceT, typename ResourceID, PagedResourcePoolInfo INFO = {}>
 struct PagedResourcePool {
-    using index_type = std::underlying_type_t<ResourceID>;
+    using index_type = EnumAccessor<ResourceID>::type;
 
-    constexpr static index_type MAX_RESOURCE_COUNT = 1 << 19u;
-    constexpr static index_type PAGE_BITS = 9u;
-    constexpr static index_type PAGE_SIZE = 1 << PAGE_BITS;
+    constexpr static index_type PAGE_SIZE = INFO.PAGE_BITS;
     constexpr static index_type PAGE_MASK = PAGE_SIZE - 1u;
-    constexpr static index_type PAGE_COUNT = MAX_RESOURCE_COUNT / PAGE_SIZE;
+    constexpr static index_type PAGE_COUNT = INFO.MAX_RESOURCE_COUNT / PAGE_SIZE;
     using Page = std::array<ResourceT, PAGE_SIZE>;
+
+    struct Result {
+        ResourceT *impl = nullptr;
+        ResourceID id = {};
+        bool is_fresh = false;
+    };
 
     index_type latest_index = 0;
     std::vector<index_type> free_indexes = {};
     std::array<std::unique_ptr<Page>, PAGE_COUNT> pages = {};
 
-    template<typename... Args>
-    ResourceResult<ResourceT, ResourceID> create(this auto &self, Args &&...args) {
+    ls::option<Result> create(this auto &self) {
         ZoneScoped;
 
         index_type index = static_cast<index_type>(~0);
+        bool is_fresh = false;
         if (self.free_indexes.empty()) {
             index = self.latest_index++;
-            if (index >= MAX_RESOURCE_COUNT) {
-                return ResourceResult<ResourceT, ResourceID>(nullptr);
+            is_fresh = true;
+            if (index >= INFO.MAX_RESOURCE_COUNT) {
+                return ls::nullopt;
             }
         } else {
             index = self.free_indexes.back();
+            is_fresh = true;
             self.free_indexes.pop_back();
         }
 
-        index_type page_id = index >> PAGE_BITS;
+        index_type page_id = index >> INFO.PAGE_BITS;
         index_type page_offset = index & PAGE_MASK;
 
         if (page_id >= PAGE_COUNT) {
-            return ResourceResult<ResourceT, ResourceID>(nullptr);
+            return ls::nullopt;
         }
 
         auto &page = self.pages[page_id];
@@ -69,19 +67,25 @@ struct PagedResourcePool {
             page = std::make_unique<Page>();
         }
 
-        ResourceT *resource = &page->at(page_offset);
-        std::construct_at(resource, std::forward<Args>(args)...);
-        return ResourceResult(resource, static_cast<ResourceID>(index));
+        return { static_cast<ResourceID>(index), page.at(index), is_fresh };
     }
 
     void destroy(this auto &self, ResourceID id) {
         ZoneScoped;
 
         index_type index = static_cast<index_type>(id);
-        index_type page_id = index >> PAGE_BITS;
+        index_type page_id = index >> INFO.PAGE_BITS;
         index_type page_offset = index & PAGE_MASK;
 
-        self.pages[page_id]->at(page_offset) = {};
+        self.pages[page_id]->at(page_offset) = nullptr;
+        self.free_indexes.push_back(index);
+    }
+
+    void zombify(this auto &self, ResourceID id) {
+        ZoneScoped;
+
+        auto index = static_cast<index_type>(id);
+
         self.free_indexes.push_back(index);
     }
 
@@ -89,7 +93,7 @@ struct PagedResourcePool {
         ZoneScoped;
 
         index_type index = static_cast<index_type>(id);
-        index_type page_id = index >> PAGE_BITS;
+        index_type page_id = index >> INFO.PAGE_BITS;
         index_type page_offset = index & PAGE_MASK;
 
         return self.pages[page_id]->at(page_offset);
@@ -102,22 +106,7 @@ struct PagedResourcePool {
         self.free_indexes.clear();
     }
 
-    index_type max_resources() { return MAX_RESOURCE_COUNT; }
-};
-
-struct ResourcePools {
-    PagedResourcePool<Buffer, BufferID> buffers = {};
-    PagedResourcePool<Image, ImageID> images = {};
-    PagedResourcePool<ImageView, ImageViewID> image_views = {};
-    PagedResourcePool<Sampler, SamplerID> samplers = {};
-    PagedResourcePool<Shader, ShaderID> shaders = {};
-    PagedResourcePool<Pipeline, PipelineID> pipelines = {};
-
-    ankerl::unordered_dense::map<SamplerHash, SamplerID> cached_samplers = {};
-    ankerl::unordered_dense::map<PipelineHash, PipelineID> cached_pipelines = {};
-
-    constexpr static usize max_push_constant_size = 128;
-    std::array<PipelineLayout, (max_push_constant_size / sizeof(u32)) + 1> pipeline_layouts = {};
+    index_type max_resources() { return INFO.MAX_RESOURCE_COUNT; }
 };
 
 }  // namespace lr

@@ -3,15 +3,14 @@
 #include "Task.hh"
 #include "TaskResource.hh"
 
-#include "Engine/Graphics/Device.hh"
 #include "Engine/Util/LegitProfiler.hh"
 
 namespace lr {
 struct TaskExecuteInfo {
     u32 frame_index = 0;
     void *execution_data = nullptr;  // This is custom user data
-    ls::span<SemaphoreSubmitInfo> wait_semas = {};
-    ls::span<SemaphoreSubmitInfo> signal_semas = {};
+    ls::span<Semaphore> wait_semas = {};
+    ls::span<Semaphore> signal_semas = {};
 };
 
 struct TaskGraphInfo {
@@ -30,7 +29,7 @@ struct TaskGraph {
     std::vector<TaskBufferInfo> buffers = {};
 
     // Profilers
-    ls::static_vector<TimestampQueryPool, Limits::FrameCount> task_query_pools = {};
+    ls::static_vector<QueryPool, Device::Limits::FrameCount> task_query_pools = {};
     std::vector<legit::ProfilerTask> task_gpu_profiler_tasks = {};
     legit::ProfilerGraph task_gpu_profiler_graph = { 400 };
 
@@ -42,14 +41,9 @@ struct TaskGraph {
     void set_image(this TaskGraph &, TaskImageID task_image_id, const TaskImageInfo &info);
     TaskBufferID add_buffer(this TaskGraph &, const TaskBufferInfo &info);
 
-    // Used to update every task infos, ie, render_extent
-    void update_task_infos(this TaskGraph &);
-
     // Recording
-    template<typename TaskT>
+    template<typename TaskT = InlineTask>
     TaskID add_task(this TaskGraph &, const TaskT &task_info);
-    template<typename AgainstTheGodAndNature = void>
-    TaskID add_task(this TaskGraph &, const InlineTask &inline_task);
     void present(this TaskGraph &, TaskImageID task_image_id);
 
     // Debug tools
@@ -58,13 +52,16 @@ struct TaskGraph {
     // Rendering
     void execute(this TaskGraph &, const TaskExecuteInfo &info);
 
-    TaskImage &task_image_at(this auto &self, TaskImageID id) { return self.images[static_cast<usize>(id)]; }
-    TaskBufferInfo &task_buffer_at(this auto &self, TaskBufferID id) { return self.buffers[static_cast<usize>(id)]; }
+    template<TaskConcept T>
+    usize get_task_color_attachment_count();
+
+    Task &task_at(this TaskGraph &self, TaskID id) { return *self.tasks[static_cast<usize>(id)]; }
+    TaskImage &task_image_at(this TaskGraph &self, TaskImageID id) { return self.images[static_cast<usize>(id)]; }
+    TaskBufferInfo &task_buffer_at(this TaskGraph &self, TaskBufferID id) { return self.buffers[static_cast<usize>(id)]; }
 
 private:
     TaskID add_task(this TaskGraph &, std::unique_ptr<Task> &&task);
-    bool prepare_task(this TaskGraph &, Task &task);
-    TaskSubmit &new_submit(this TaskGraph &, CommandType type);
+    TaskSubmit &new_submit(this TaskGraph &, vk::CommandType type);
 };
 
 template<typename TaskT>
@@ -75,96 +72,64 @@ TaskID TaskGraph::add_task(this TaskGraph &self, const TaskT &task_info) {
     return self.add_task(std::move(task));
 }
 
-template<typename>
-TaskID TaskGraph::add_task(this TaskGraph &self, const InlineTask &inline_task) {
-    ZoneScoped;
+template<TaskConcept TaskT>
+usize TaskGraph::get_task_color_attachment_count() {
+    usize count = 0;
 
-    std::unique_ptr<Task> task = std::make_unique<InlineTask>(inline_task);
-    return self.add_task(task);
+    constexpr static usize TASK_USE_COUNT = sizeof(typename TaskT::Uses) / sizeof(TaskUse);
+    typename TaskT::Uses uses = {};
+    ls::span task_uses = { reinterpret_cast<TaskUse *>(&uses), TASK_USE_COUNT };
+
+    for_each_image_use(task_uses, [&](TaskImageID, const vk::PipelineAccessImpl &, vk::ImageLayout layout) {
+        switch (layout) {
+            case vk::ImageLayout::ColorAttachment:
+                count++;
+                break;
+            default:;
+        }
+    });
+
+    return count;
 }
 
 struct TaskContext {
-    TaskContext(Device &device_, TaskGraph &task_graph_, Task &task_, CommandList &cmd_list_, CommandList &copy_cmd_list_, usize frame_index_, void *execution_data_)
-        : device(device_),
-          task_graph(task_graph_),
-          task(task_),
-          cmd_list(cmd_list_),
-          copy_cmd_list(copy_cmd_list_),
-          frame_index(frame_index_),
-          execution_data(execution_data_) {}
+    Device &device;
+    TaskGraph &task_graph;
+    Task &task;
+    CommandList &cmd_list;
 
-    template<typename T>
-    RenderingAttachmentInfo as_color_attachment(this TaskContext &self, T &use, std::optional<ColorClearValue> clear_val = std::nullopt) {
-        ZoneScoped;
+private:
+    void *execution_data;
 
-        RenderingAttachmentInfo info = {
-            .image_view_id = self.task_image_data(use).image_view_id,
-            .image_layout = ImageLayout::ColorAttachment,
-            .load_op = clear_val ? AttachmentLoadOp::Clear : AttachmentLoadOp::Load,
-            .store_op = use.access.access & MemoryAccess::Write ? AttachmentStoreOp::Store : AttachmentStoreOp::None,
-            .clear_value = { clear_val.value_or(ColorClearValue{}) },
-        };
+public:
+    vk::Extent2D render_extent = {};
+    ls::option<PipelineID> pipeline_id = ls::nullopt;
+    ls::option<PipelineLayoutID> pipeline_layout_id = ls::nullopt;
 
-        return info;
-    }
+    TaskContext(TaskGraph &task_graph_, Task &task_, CommandList &cmd_list_, void *execution_data_);
 
-    template<typename T>
-    RenderingAttachmentInfo as_depth_attachment(this TaskContext &self, T &use, std::optional<DepthClearValue> clear_val = std::nullopt) {
-        ZoneScoped;
+    vk::RenderingAttachmentInfo as_color_attachment(
+        this TaskContext &, TaskUse &use, std::optional<vk::ColorClearValue> clear_val = std::nullopt);
+    vk::RenderingAttachmentInfo as_depth_attachment(
+        this TaskContext &, TaskUse &use, std::optional<vk::DepthClearValue> clear_val = std::nullopt);
+    TaskImage &task_image_data(this TaskContext &, TaskUse &use);
+    TaskImage &task_image_data(this TaskContext &, TaskImageID task_image_id);
+    vk::Viewport pass_viewport(this TaskContext &);
+    vk::Rect2D pass_rect(this TaskContext &);
 
-        RenderingAttachmentInfo info = {
-            .image_view_id = self.task_image_data(use).image_view_id,
-            .image_layout = ImageLayout::DepthStencilAttachment,
-            .load_op = clear_val ? AttachmentLoadOp::Clear : AttachmentLoadOp::Load,
-            .store_op = use.access.access & MemoryAccess::Write ? AttachmentStoreOp::Store : AttachmentStoreOp::None,
-            .clear_value = { .depth_clear = clear_val.value_or(DepthClearValue{}) },
-        };
-
-        return info;
-    }
-
-    template<typename T>
-    TaskImage &task_image_data(this TaskContext &self, T &use) {
-        return self.task_graph.task_image_at(use.task_image_id);
-    }
-
-    TaskImage &task_image_data(this TaskContext &self, TaskImageID task_image_id) { return self.task_graph.task_image_at(task_image_id); }
+    void set_pipeline(this TaskContext &, PipelineID pipeline_id);
 
     template<typename T>
     void set_push_constants(this TaskContext &self, T &v) {
         ZoneScoped;
 
-        PipelineLayoutID pipeline_layout = self.device.get_pipeline_layout<T>();
-        self.cmd_list.set_push_constants(pipeline_layout, &v, sizeof(T), 0);
+        self.cmd_list.set_push_constants(*self.pipeline_layout_id, &v, sizeof(T), 0);
     }
 
-    StagingBuffer &staging_buffer(this TaskContext &self) { return self.device.staging_buffer_at(self.frame_index); }
-
-    Viewport pass_viewport(this TaskContext &self) {
-        return {
-            .x = 0,
-            .y = 0,
-            .width = static_cast<f32>(self.task.render_extent.width),
-            .height = static_cast<f32>(self.task.render_extent.height),
-            .depth_min = 0.0f,
-            .depth_max = 1.0f,
-        };
+    template<typename T = void>
+    T &exec_data_as() {
+        return *static_cast<T *>(execution_data);
     }
-
-    Rect2D pass_rect(this TaskContext &self) {
-        return {
-            .offset = { 0, 0 },
-            .extent = self.task.render_extent,
-        };
-    }
-
-    Device &device;
-    TaskGraph &task_graph;
-    Task &task;
-    CommandList &cmd_list;
-    CommandList &copy_cmd_list;
-    usize frame_index;
-    void *execution_data;
 };
 
 }  // namespace lr

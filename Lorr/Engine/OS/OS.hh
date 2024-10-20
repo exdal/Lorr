@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Engine/Core/Handle.hh"
+
 namespace lr {
 // These are not complete, some OS specific results may occur
 enum class FileResult : i32 {
@@ -14,17 +16,19 @@ constexpr bool operator!(FileResult v) {
     return v != FileResult::Success;
 }
 
-enum class FileAccess {
+enum class FileAccess : u32 {
     Write = 1 << 0,
     Read = 1 << 1,
 };
+consteval void enable_bitmask(FileAccess);
 
-enum class FileDialogFlag {
+enum class FileDialogFlag : u32 {
     None = 0,
     DirOnly = 1 << 0,
     Save = 1 << 1,
     Multiselect = 1 << 2,
 };
+consteval void enable_bitmask(FileDialogFlag);
 
 struct File {
     ls::option<uptr> handle;
@@ -87,8 +91,4 @@ void mem_release(void *data, u64 size = 0);
 bool mem_commit(void *data, u64 size);
 void mem_decommit(void *data, u64 size);
 
-template<>
-struct has_bitmask<FileAccess> : ls::true_type {};
-template<>
-struct has_bitmask<FileDialogFlag> : ls::true_type {};
 }  // namespace lr

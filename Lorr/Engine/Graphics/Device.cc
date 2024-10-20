@@ -3,210 +3,17 @@
 #include "Resource.hh"
 #include "Shader.hh"
 
-#include "Engine/Memory/Bit.hh"
 #include "Engine/Memory/Stack.hh"
 
 namespace lr {
-void StagingBuffer::init(this StagingBuffer &self, Device *device) {
-    ZoneScoped;
-
-    self.device = device;
-}
-
-StagingAllocResult StagingBuffer::alloc(this StagingBuffer &self, usize size, u64 alignment) {
-    ZoneScoped;
-
-    usize aligned_size = ls::align_up(size, alignment);
-    StagingBufferBlock *suitable_block = nullptr;
-
-    // search for suitable area
-    for (StagingBufferBlock &block : self.blocks) {
-        auto &[buffer_id, offset] = block;
-        Buffer &buffer = self.device->buffer_at(buffer_id);
-        usize remaining = buffer.data_size - offset;
-        if (remaining >= aligned_size) {
-            suitable_block = &block;
-            break;
-        }
-    }
-
-    if (!suitable_block) {
-        // no area found, create new buffer
-        BufferID new_buffer_id = self.device->create_buffer({
-            .usage_flags = BufferUsage::TransferSrc,
-            .flags = MemoryFlag::HostSeqWrite,
-            .preference = MemoryPreference::Host,
-            .data_size = ls::max(aligned_size, BLOCK_SIZE),
-        });
-
-        suitable_block = &*self.blocks.emplace(new_buffer_id, 0);
-    }
-
-    auto &[buffer_id, offset] = *suitable_block;
-    Buffer &buffer = self.device->buffer_at(buffer_id);
-    u64 alloc_offset = offset;
-    u8 *alloc_ptr = reinterpret_cast<u8 *>(buffer.host_data) + alloc_offset;
-    offset += aligned_size;
-
-    return { .buffer_id = buffer_id, .ptr = alloc_ptr, .offset = alloc_offset, .size = aligned_size };
-}
-
-void StagingBuffer::reset(this StagingBuffer &self) {
-    ZoneScoped;
-
-    if (self.blocks.empty()) {
-        return;
-    }
-
-    // shrink to first block
-    for (auto i = self.blocks.begin(); i != self.blocks.end();) {
-        auto &[buffer_id, offset] = *i;
-        if (i == self.blocks.begin()) {
-            offset = 0;
-            i++;
-        } else {
-            self.device->delete_buffers(buffer_id);
-            i = self.blocks.erase(i);
-        }
-    }
-}
-
-u64 StagingBuffer::size(this StagingBuffer &self) {
-    ZoneScoped;
-
-    u64 size = 0;
-    for (StagingBufferBlock &block : self.blocks) {
-        auto &[buffer_id, offset] = block;
-        size += offset;
-    }
-
-    return size;
-}
-
-void StagingBuffer::upload(this StagingBuffer &, StagingAllocResult &result, BufferID dst_buffer, CommandList &cmd_list) {
-    ZoneScoped;
-
-    cmd_list.memory_barrier({ .src_access = PipelineAccess::HostReadWrite, .dst_access = PipelineAccess::TransferReadWrite });
-    BufferCopyRegion buffer_region = {
-        .src_offset = result.offset,
-        .dst_offset = 0,
-        .size = result.size,
-    };
-    cmd_list.copy_buffer_to_buffer(result.buffer_id, dst_buffer, buffer_region);
-}
-
 VKResult Device::init(this Device &self, const DeviceInfo &info) {
     ZoneScoped;
 
-    self.instance = info.instance;
-    self.frame_count = info.frame_count;
+    self.create_command_queue(self.queues[0], CommandType::Graphics, "Graphics Command Queue");
+    self.create_command_queue(self.queues[1], CommandType::Compute, "Compute Command Queue");
+    self.create_command_queue(self.queues[2], CommandType::Transfer, "Transfer Command Queue");
 
-    {
-        vkb::PhysicalDeviceSelector physical_device_selector(*self.instance);
-        physical_device_selector.defer_surface_initialization();
-        physical_device_selector.set_minimum_version(1, 3);
-
-        VkPhysicalDeviceVulkan13Features vk13_features = {};
-        vk13_features.synchronization2 = true;
-        vk13_features.dynamicRendering = true;
-        physical_device_selector.set_required_features_13(vk13_features);
-
-        VkPhysicalDeviceVulkan12Features vk12_features = {};
-        vk12_features.descriptorIndexing = true;
-        vk12_features.shaderSampledImageArrayNonUniformIndexing = true;
-        vk12_features.shaderStorageBufferArrayNonUniformIndexing = true;
-        vk12_features.descriptorBindingSampledImageUpdateAfterBind = true;
-        vk12_features.descriptorBindingStorageImageUpdateAfterBind = true;
-        vk12_features.descriptorBindingStorageBufferUpdateAfterBind = true;
-        vk12_features.descriptorBindingUpdateUnusedWhilePending = true;
-        vk12_features.descriptorBindingPartiallyBound = true;
-        vk12_features.descriptorBindingVariableDescriptorCount = true;
-        vk12_features.runtimeDescriptorArray = true;
-        vk12_features.timelineSemaphore = true;
-        vk12_features.bufferDeviceAddress = true;
-        vk12_features.hostQueryReset = true;
-        // Shader features
-        vk12_features.scalarBlockLayout = true;
-        vk12_features.shaderInt8 = true;
-        physical_device_selector.set_required_features_12(vk12_features);
-
-        VkPhysicalDeviceVulkan11Features vk11_features = {};
-        vk11_features.variablePointers = true;
-        vk11_features.variablePointersStorageBuffer = true;
-        physical_device_selector.set_required_features_11(vk11_features);
-
-        VkPhysicalDeviceFeatures vk10_features = {};
-        vk10_features.vertexPipelineStoresAndAtomics = true;
-        vk10_features.fragmentStoresAndAtomics = true;
-        vk10_features.shaderInt64 = true;
-        physical_device_selector.set_required_features(vk10_features);
-        physical_device_selector.add_required_extensions({
-            "VK_KHR_swapchain",
-#if TRACY_ENABLE
-            "VK_EXT_calibrated_timestamps",
-#endif
-        });
-        auto physical_device_result = physical_device_selector.select();
-        if (!physical_device_result) {
-            auto error = physical_device_result.error();
-            auto r = static_cast<VKResult>(physical_device_result.vk_result());
-            LOG_ERROR("Failed to select Vulkan Physical Device! {} - {}", error.message(), r);
-            return r;
-        }
-
-        self.physical_device = physical_device_result.value();
-    }
-
-    {
-        /// DEVICE INITIALIZATION ///
-        // We don't want to kill the coverage...
-        // if (self.physical_devce.enable_extension_if_present("VK_EXT_descriptor_buffer"))
-        //    self.supported_features |= DeviceFeature::DescriptorBuffer;
-        if (self.physical_device.enable_extension_if_present("VK_EXT_memory_budget"))
-            self.supported_features |= DeviceFeature::MemoryBudget;
-        if (self.physical_device.properties.limits.timestampPeriod != 0) {
-            self.supported_features |= DeviceFeature::QueryTimestamp;
-        }
-
-        vkb::DeviceBuilder device_builder(self.physical_device);
-        VkPhysicalDeviceDescriptorBufferFeaturesEXT desciptor_buffer_features = {
-            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT,
-            .pNext = nullptr,
-            .descriptorBuffer = true,
-            .descriptorBufferCaptureReplay = false,
-            .descriptorBufferImageLayoutIgnored = true,
-            .descriptorBufferPushDescriptors = true,
-        };
-        if (self.supported_features & DeviceFeature::DescriptorBuffer)
-            device_builder.add_pNext(&desciptor_buffer_features);
-
-        auto device_result = device_builder.build();
-        if (!device_result) {
-            auto error = device_result.error();
-            auto r = static_cast<VKResult>(device_result.vk_result());
-            LOG_ERROR("Failed to select Vulkan Device! {} - {}", error.message(), r);
-            return r;
-        }
-
-        self.handle = device_result.value();
-    }
-
-    {
-        if (!vulkan::load_device(self, self.instance->fp_vkGetDeviceProcAddr)) {
-            LOG_ERROR("Failed to create Vulkan Device! Extension not found.");
-            return VKResult::ExtNotPresent;
-        }
-
-        self.set_object_name_raw<VK_OBJECT_TYPE_INSTANCE>(self.instance->instance, "Instance");
-        self.set_object_name_raw<VK_OBJECT_TYPE_DEVICE>(self.handle.device, "Device");
-        self.set_object_name_raw<VK_OBJECT_TYPE_PHYSICAL_DEVICE>(self.physical_device.physical_device, "Physical Device");
-
-        self.create_command_queue(self.queues[0], CommandType::Graphics, "Graphics Command Queue");
-        self.create_command_queue(self.queues[1], CommandType::Compute, "Compute Command Queue");
-        self.create_command_queue(self.queues[2], CommandType::Transfer, "Transfer Command Queue");
-
-        self.create_timeline_semaphores(self.frame_sema, 0);
-    }
+    self.create_timeline_semaphores(self.frame_sema, 0);
 
     /// ALLOCATOR INITIALIZATION ///
     {
@@ -215,7 +22,7 @@ VKResult Device::init(this Device &self, const DeviceInfo &info) {
         vulkan_functions.vkGetDeviceProcAddr = vkGetDeviceProcAddr;
 
         VmaAllocatorCreateInfo allocator_create_info = {
-            .flags = VMA_ALLOCATOR_CREATE_EXT_MEMORY_BUDGET_BIT | VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT,
+            .flags = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT,
             .physicalDevice = self.physical_device,
             .device = self,
             .preferredLargeHeapBlockSize = 0,
@@ -236,11 +43,6 @@ VKResult Device::init(this Device &self, const DeviceInfo &info) {
     }
 
     /// DEVICE CONTEXT ///
-
-    self.staging_buffers.resize(self.frame_count);
-    for (auto &staging_buffer : self.staging_buffers) {
-        staging_buffer.init(&self);
-    }
 
     {
         DescriptorBindingFlag bindless_flags = DescriptorBindingFlag::UpdateAfterBind | DescriptorBindingFlag::PartiallyBound;
@@ -263,12 +65,15 @@ VKResult Device::init(this Device &self, const DeviceInfo &info) {
 
         add_descriptor_binding(LR_DESCRIPTOR_INDEX_SAMPLER, DescriptorType::Sampler, self.resources.samplers.max_resources());
         add_descriptor_binding(LR_DESCRIPTOR_INDEX_IMAGES, DescriptorType::SampledImage, self.resources.images.max_resources());
-        add_descriptor_binding(LR_DESCRIPTOR_INDEX_STORAGE_IMAGES, DescriptorType::StorageImage, self.resources.image_views.max_resources());
+        add_descriptor_binding(
+            LR_DESCRIPTOR_INDEX_STORAGE_IMAGES, DescriptorType::StorageImage, self.resources.image_views.max_resources());
         add_descriptor_binding(LR_DESCRIPTOR_INDEX_STORAGE_BUFFERS, DescriptorType::StorageBuffer, self.resources.buffers.max_resources());
         add_descriptor_binding(LR_DESCRIPTOR_INDEX_BDA_ARRAY, DescriptorType::StorageBuffer, 1);
 
         DescriptorPoolFlag descriptor_pool_flags = DescriptorPoolFlag::UpdateAfterBind;
-        if (auto result = self.create_descriptor_pools(self.descriptor_pool, { .sizes = pool_sizes, .max_sets = 1, .flags = descriptor_pool_flags }); !result) {
+        if (auto result =
+                self.create_descriptor_pools(self.descriptor_pool, { .sizes = pool_sizes, .max_sets = 1, .flags = descriptor_pool_flags });
+            !result) {
             LOG_ERROR("Failed to init device! Descriptor pool failed '{}'.", result);
             return result;
         }
@@ -276,14 +81,17 @@ VKResult Device::init(this Device &self, const DeviceInfo &info) {
 
         DescriptorSetLayoutFlag descriptor_set_layout_flags = DescriptorSetLayoutFlag::UpdateAfterBindPool;
         if (auto result = self.create_descriptor_set_layouts(
-                self.descriptor_set_layout, { .elements = layout_elements, .binding_flags = binding_flags, .flags = descriptor_set_layout_flags });
+                self.descriptor_set_layout,
+                { .elements = layout_elements, .binding_flags = binding_flags, .flags = descriptor_set_layout_flags });
             !result) {
             LOG_ERROR("Failed to init device! Descriptor set layout failed '{}'", result);
             return result;
         }
         self.set_object_name(self.descriptor_set_layout, "Bindless Descriptor Set Layout");
 
-        if (auto result = self.create_descriptor_sets(self.descriptor_set, { .layout = self.descriptor_set_layout, .pool = self.descriptor_pool }); !result) {
+        if (auto result =
+                self.create_descriptor_sets(self.descriptor_set, { .layout = self.descriptor_set_layout, .pool = self.descriptor_pool });
+            !result) {
             LOG_ERROR("Failed to init device! Descriptor set failed '{}'.", result);
             return result;
         }
@@ -329,13 +137,9 @@ VKResult Device::init(this Device &self, const DeviceInfo &info) {
         self.update_descriptor_sets(write_info, {});
     }
 
-    self.staging_buffer = self.create_buffer({
-        .usage_flags = BufferUsage::None,
-        .flags = MemoryFlag::HostSeqWrite,
-        .preference = MemoryPreference::Host,
-        .data_size = STAGING_UPLOAD_SIZE,
-        .debug_name = "Staging Buffer",
-    });
+    for (u32 i = 0; i < self.frame_count; i++) {
+        self.staging_buffers.emplace_back(&self, ls::mib_to_bytes(64));
+    }
 
     return VKResult::Success;
 }
@@ -350,21 +154,11 @@ void Device::shutdown(this Device &self, bool) {
         }
     }
 
-    for (auto &v : self.staging_buffers) {
-        for (auto &b : v.blocks) {
-            self.delete_buffers(b.buffer_id);
-        }
-    }
-
     self.delete_semaphores(self.frame_sema);
     self.delete_descriptor_set_layouts(self.descriptor_set_layout);
     self.delete_descriptor_sets(self.descriptor_set);
     self.delete_descriptor_pools(self.descriptor_pool);
     self.delete_buffers(self.bda_array_buffer);
-
-    for (auto &v : self.resources.cached_samplers) {
-        self.delete_samplers(v.second);
-    }
 
     for (auto &v : self.resources.cached_pipelines) {
         self.delete_pipelines(v.second);
@@ -373,7 +167,8 @@ void Device::shutdown(this Device &self, bool) {
     // TODO: Print results for self.resources.*
 }
 
-VKResult Device::create_timestamp_query_pools(this Device &self, ls::span<TimestampQueryPool> query_pools, const TimestampQueryPoolInfo &info) {
+VKResult Device::create_timestamp_query_pools(
+    this Device &self, ls::span<TimestampQueryPool> query_pools, const TimestampQueryPoolInfo &info) {
     ZoneScoped;
 
     VkQueryPoolCreateInfo create_info = {
@@ -407,7 +202,8 @@ void Device::delete_timestamp_query_pools(this Device &self, ls::span<TimestampQ
     }
 }
 
-void Device::get_timestamp_query_pool_results(this Device &self, TimestampQueryPool &query_pool, u32 first_query, u32 count, ls::span<u64> time_stamps) {
+void Device::get_timestamp_query_pool_results(
+    this Device &self, TimestampQueryPool &query_pool, u32 first_query, u32 count, ls::span<u64> time_stamps) {
     ZoneScoped;
 
     vkGetQueryPoolResults(
@@ -569,7 +365,7 @@ VKResult Device::create_swap_chain(this Device &self, SwapChain &swap_chain, con
 
     swap_chain = {};
     swap_chain.format = static_cast<Format>(result->image_format);
-    swap_chain.extent = { result->extent.width, result->extent.height, 1 };
+    swap_chain.extent = { .width = result->extent.width, .height = result->extent.height, .depth = 1 };
 
     swap_chain.acquire_semas.resize(self.frame_count);
     swap_chain.present_semas.resize(self.frame_count);
@@ -616,7 +412,8 @@ VKResult Device::get_swapchain_images(this Device &self, SwapChain &swap_chain, 
 
     for (u32 i = 0; i < images.size(); i++) {
         VkImage &image_handle = images_raw[i];
-        auto image_result = self.resources.images.create(ImageUsage::ColorAttachment, swap_chain.format, swap_chain.extent, 1, 1, nullptr, image_handle);
+        auto image_result = self.resources.images.create(
+            ImageUsage::ColorAttachment, swap_chain.format, swap_chain.extent, ImageAspect::Color, 1, 1, nullptr, image_handle);
 
         images[i] = image_result.id;
     }
@@ -730,20 +527,22 @@ ls::result<PipelineID, VKResult> Device::create_graphics_pipeline(this Device &s
         .viewMask = 0,
         .colorAttachmentCount = static_cast<u32>(info.color_attachment_formats.size()),
         .pColorAttachmentFormats = reinterpret_cast<const VkFormat *>(info.color_attachment_formats.data()),
-        .depthAttachmentFormat = static_cast<VkFormat>(info.depth_attachment_format),
-        .stencilAttachmentFormat = static_cast<VkFormat>(info.stencil_attachment_format),
+        .depthAttachmentFormat = static_cast<VkFormat>(info.depth_attachment_format.value_or(Format::Unknown)),
+        .stencilAttachmentFormat = static_cast<VkFormat>(info.stencil_attachment_format.value_or(Format::Unknown)),
     };
 
     // Viewport State
 
+    VkViewport default_viewport = { .x = 0, .y = 0, .width = 1, .height = 1, .minDepth = 0.0f, .maxDepth = 1.0f };
+    VkRect2D default_scissors = { .offset = { .x = 0, .y = 0 }, .extent = { .width = 1, .height = 1 } };
     VkPipelineViewportStateCreateInfo viewport_state_info = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
         .pNext = nullptr,
         .flags = 0,
-        .viewportCount = static_cast<u32>(info.viewports.size()),
-        .pViewports = reinterpret_cast<const VkViewport *>(info.viewports.data()),
-        .scissorCount = static_cast<u32>(info.scissors.size()),
-        .pScissors = reinterpret_cast<const VkRect2D *>(info.scissors.data()),
+        .viewportCount = 1,
+        .pViewports = &default_viewport,
+        .scissorCount = 1,
+        .pScissors = &default_scissors,
     };
 
     // Shaders
@@ -866,93 +665,13 @@ ls::result<PipelineID, VKResult> Device::create_graphics_pipeline(this Device &s
 
     // Color Blending
 
-    VkPipelineColorBlendStateCreateInfo color_blend_info = {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
-        .pNext = nullptr,
-        .flags = 0,
-        .logicOpEnable = false,
-        .logicOp = {},
-        .attachmentCount = static_cast<u32>(info.blend_attachments.size()),
-        .pAttachments = reinterpret_cast<const VkPipelineColorBlendAttachmentState *>(info.blend_attachments.data()),
-        .blendConstants = { info.blend_constants.x, info.blend_constants.y, info.blend_constants.z, info.blend_constants.w },
-    };
-
     /// DYNAMIC STATE ------------------------------------------------------------
-
-    constexpr static VkDynamicState k_dynamic_states[] = {
-        VK_DYNAMIC_STATE_VIEWPORT,
-        VK_DYNAMIC_STATE_SCISSOR,
-        VK_DYNAMIC_STATE_LINE_WIDTH,
-        VK_DYNAMIC_STATE_DEPTH_BIAS,
-        VK_DYNAMIC_STATE_BLEND_CONSTANTS,
-        VK_DYNAMIC_STATE_DEPTH_BOUNDS,
-        VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK,
-        VK_DYNAMIC_STATE_STENCIL_WRITE_MASK,
-        VK_DYNAMIC_STATE_STENCIL_REFERENCE,
-        VK_DYNAMIC_STATE_CULL_MODE,
-        VK_DYNAMIC_STATE_FRONT_FACE,
-        VK_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY,
-        VK_DYNAMIC_STATE_VIEWPORT_WITH_COUNT,
-        VK_DYNAMIC_STATE_SCISSOR_WITH_COUNT,
-        VK_DYNAMIC_STATE_VERTEX_INPUT_BINDING_STRIDE,
-        VK_DYNAMIC_STATE_DEPTH_TEST_ENABLE,
-        VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE,
-        VK_DYNAMIC_STATE_DEPTH_COMPARE_OP,
-        VK_DYNAMIC_STATE_DEPTH_BOUNDS_TEST_ENABLE,
-        VK_DYNAMIC_STATE_STENCIL_TEST_ENABLE,
-        VK_DYNAMIC_STATE_STENCIL_OP,
-        VK_DYNAMIC_STATE_RASTERIZER_DISCARD_ENABLE,
-        VK_DYNAMIC_STATE_DEPTH_BIAS_ENABLE,
-        VK_DYNAMIC_STATE_PRIMITIVE_RESTART_ENABLE,
-    };
-    static_assert(count_of(k_dynamic_states) == usize(DynamicState::Count));
-
-    u32 dynamic_state_mask = static_cast<u32>(info.dynamic_state);
-    usize state_count = memory::set_bit_count(dynamic_state_mask);
-    ls::static_vector<VkDynamicState, usize(DynamicState::Count)> dynamic_states;
-    for (usize i = 0; i < state_count; i++) {
-        u32 shift = memory::find_first_set32(dynamic_state_mask);
-        dynamic_states.push_back(k_dynamic_states[shift]);
-        dynamic_state_mask ^= 1 << shift;
-    }
-
-    VkPipelineDynamicStateCreateInfo dynamic_state_info = {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
-        .pNext = nullptr,
-        .flags = 0,
-        .dynamicStateCount = static_cast<u32>(dynamic_states.size()),
-        .pDynamicStates = dynamic_states.data(),
-    };
 
     /// GRAPHICS PIPELINE --------------------------------------------------------
 
     VkPipelineCreateFlags pipeline_create_flags = 0;
     if (self.is_feature_supported(DeviceFeature::DescriptorBuffer))
         pipeline_create_flags |= VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
-
-    PipelineLayout &pipeline_layout = self.pipeline_layout_at(info.layout_id);
-
-    VkGraphicsPipelineCreateInfo pipeline_create_info = {
-        .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-        .pNext = &rendering_info,
-        .flags = pipeline_create_flags,
-        .stageCount = static_cast<u32>(vk_shader_stage_infos.size()),
-        .pStages = vk_shader_stage_infos.data(),
-        .pVertexInputState = &input_layout_info,
-        .pInputAssemblyState = &input_assembly_info,
-        .pTessellationState = &tessellation_info,
-        .pViewportState = reinterpret_cast<const VkPipelineViewportStateCreateInfo *>(&viewport_state_info),
-        .pRasterizationState = &rasterizer_info,
-        .pMultisampleState = &multisample_info,
-        .pDepthStencilState = &depth_stencil_info,
-        .pColorBlendState = &color_blend_info,
-        .pDynamicState = &dynamic_state_info,
-        .layout = pipeline_layout,
-        .renderPass = nullptr,
-        .subpass = 0,
-        .basePipelineHandle = VK_NULL_HANDLE,
-        .basePipelineIndex = 0,
-    };
 
     VkPipeline pipeline_handle = VK_NULL_HANDLE;
     auto result = CHECK(vkCreateGraphicsPipelines(self, nullptr, 1, &pipeline_create_info, nullptr, &pipeline_handle));
@@ -961,7 +680,7 @@ ls::result<PipelineID, VKResult> Device::create_graphics_pipeline(this Device &s
         return result;
     }
 
-    auto pipeline = self.resources.pipelines.create(PipelineBindPoint::Graphics, pipeline_handle);
+    auto pipeline = self.resources.pipelines.create(PipelineBindPoint::Graphics, info.layout_id, pipeline_handle);
     if (!pipeline) {
         LOG_ERROR("Failed to allocate Graphics Pipeline!");
         return VKResult::OutOfPoolMem;
@@ -999,7 +718,7 @@ ls::result<PipelineID, VKResult> Device::create_compute_pipeline(this Device &se
         return result;
     }
 
-    auto pipeline = self.resources.pipelines.create(PipelineBindPoint::Compute, pipeline_handle);
+    auto pipeline = self.resources.pipelines.create(PipelineBindPoint::Compute, info.layout_id, pipeline_handle);
     if (!pipeline) {
         LOG_ERROR("Failed to allocate Compute Pipeline!");
         return VKResult::OutOfPoolMem;
@@ -1027,16 +746,6 @@ void Device::delete_pipelines(this Device &self, ls::span<PipelineID> pipelines)
 ls::result<ShaderID, VKResult> Device::create_shader(this Device &self, ShaderStageFlag stage, ls::span<u32> ir) {
     ZoneScoped;
 
-    VkShaderModuleCreateInfo create_info = {
-        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-        .pNext = nullptr,
-        .flags = 0,
-        .codeSize = ir.size_bytes(),
-        .pCode = ir.data(),
-    };
-
-    VkShaderModule shader_module = VK_NULL_HANDLE;
-    auto result = CHECK(vkCreateShaderModule(self, &create_info, nullptr, &shader_module));
     if (result != VKResult::Success) {
         LOG_ERROR("Failed to create shader! {}", result);
         return result;
@@ -1101,7 +810,8 @@ void Device::delete_descriptor_pools(this Device &self, ls::span<DescriptorPool>
     }
 }
 
-VKResult Device::create_descriptor_set_layouts(this Device &self, ls::span<DescriptorSetLayout> descriptor_set_layouts, const DescriptorSetLayoutInfo &info) {
+VKResult Device::create_descriptor_set_layouts(
+    this Device &self, ls::span<DescriptorSetLayout> descriptor_set_layouts, const DescriptorSetLayoutInfo &info) {
     ZoneScoped;
 
     LS_EXPECT(info.elements.size() == info.binding_flags.size());
@@ -1191,7 +901,11 @@ void Device::update_descriptor_sets(this Device &self, ls::span<WriteDescriptorS
     ZoneScoped;
 
     vkUpdateDescriptorSets(
-        self, writes.size(), reinterpret_cast<const VkWriteDescriptorSet *>(writes.data()), copies.size(), reinterpret_cast<const VkCopyDescriptorSet *>(copies.data()));
+        self,
+        writes.size(),
+        reinterpret_cast<const VkWriteDescriptorSet *>(writes.data()),
+        copies.size(),
+        reinterpret_cast<const VkCopyDescriptorSet *>(copies.data()));
 }
 
 ls::result<BufferID, VKResult> Device::create_buffer(this Device &self, const BufferInfo &info) {
@@ -1287,53 +1001,6 @@ MemoryRequirements Device::memory_requirements(this Device &self, BufferID buffe
     return { .size = vk_info.size, .alignment = vk_info.alignment, .memory_type_bits = vk_info.memoryTypeBits };
 }
 
-void Device::upload_staging(this Device &self, BufferID target_buffer_id, const void *data, ls::u64range range, u64 frame_index) {
-    ZoneScoped;
-
-    // This is very bare implementation of a staging buffer
-    // You should replace this with a ring buffer and move
-    // to different worker thread for better streaming,
-    // dont clog the render thread
-
-    auto &transfer_queue = self.queue_at(CommandType::Transfer);
-    CommandList cmd_list = {};
-    self.create_command_lists(cmd_list, transfer_queue.command_allocator(frame_index));
-
-    u64 offset = range.min;
-    u64 written_bytes_size = 0;
-    u64 target_size = range.length();
-    auto &target_buffer = self.buffer_at(target_buffer_id);
-    LS_EXPECT(target_buffer.data_size <= target_size);
-
-    while (written_bytes_size < target_size) {
-        u64 remainder_size = target_size - written_bytes_size;
-        const u8 *cur_data = reinterpret_cast<const u8 *>(data) + offset + written_bytes_size;
-        u8 *buffer_data = self.buffer_host_data(self.staging_buffer);
-        auto cur_write_size = ls::min(STAGING_UPLOAD_SIZE, target_size - remainder_size);
-        std::memcpy(buffer_data, cur_data, cur_write_size);
-
-        cmd_list.begin_recording();
-        BufferCopyRegion copy_region = {
-            .src_offset = 0,
-            .dst_offset = written_bytes_size,
-            .size = cur_write_size,
-        };
-        cmd_list.copy_buffer_to_buffer(self.staging_buffer, target_buffer_id, copy_region);
-        cmd_list.end_recording();
-
-        CommandListSubmitInfo cmd_list_submit(cmd_list);
-        QueueSubmitInfo submit_info = {
-            .self_wait = true,
-            .additional_command_lists = cmd_list_submit,
-        };
-        transfer_queue.submit(frame_index, submit_info);
-
-        written_bytes_size += cur_write_size;
-    }
-
-    self.delete_command_lists(cmd_list);
-}
-
 ls::result<ImageID, VKResult> Device::create_image(this Device &self, const ImageInfo &info) {
     ZoneScoped;
 
@@ -1364,8 +1031,8 @@ ls::result<ImageID, VKResult> Device::create_image(this Device &self, const Imag
 
     VmaAllocationCreateInfo allocation_info = {
         .flags = 0,
-        .usage = VMA_MEMORY_USAGE_GPU_ONLY,
-        .requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        .usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
+        .requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
         .preferredFlags = 0,
         .memoryTypeBits = 0,
         .pool = nullptr,
@@ -1382,7 +1049,8 @@ ls::result<ImageID, VKResult> Device::create_image(this Device &self, const Imag
         return result;
     }
 
-    auto image = self.resources.images.create(info.usage_flags, info.format, info.extent, info.slice_count, info.mip_levels, allocation, image_handle);
+    auto image = self.resources.images.create(
+        info.usage_flags, info.format, info.extent, info.image_aspect, info.slice_count, info.mip_levels, allocation, image_handle);
     if (!image) {
         LOG_ERROR("Failed to allocate Image!");
         return VKResult::OutOfPoolMem;
@@ -1579,97 +1247,32 @@ void Device::delete_samplers(this Device &self, ls::span<SamplerID> samplers) {
     }
 }
 
-ls::result<SamplerID, VKResult> Device::create_cached_sampler(this Device &self, const SamplerInfo &info) {
+void Device::set_image_data(this Device &self, ImageID image_id, const void *data, ImageLayout image_layout) {
     ZoneScoped;
 
-    auto hash = HSAMPLER(info);
-    auto it = self.resources.cached_samplers.find(hash);
-    if (it != self.resources.cached_samplers.end()) {
-        return it->second;
-    }
+    auto &image = self.image_at(image_id);
+    auto &queue = self.queue_at(CommandType::Graphics);
+    auto cmd_list = queue.begin_command_list(0);
 
-    auto [sampler_id, result] = self.create_sampler(info);
-    if (!result) {
-        return result;
-    }
-
-    self.resources.cached_samplers.emplace(hash, sampler_id);
-
-    return sampler_id;
-}
-
-void Device::set_image_data(this Device &self, ImageID image_id, const void *data, ImageLayout new_layout, ImageLayout old_layout) {
-    ZoneScoped;
-
-    Image &image = self.image_at(image_id);
-    StagingBuffer &staging_buffer = self.staging_buffer_at(0);
-    CommandQueue &transfer_queue = self.queue_at(CommandType::Transfer);
-    MemoryRequirements image_mem = self.memory_requirements(image_id);
-
-    StagingAllocResult alloc_result = staging_buffer.alloc(image_mem.size, image_mem.alignment);
-
-    usize host_size = image.extent.width * image.extent.height * format_to_size(image.format);
-    std::memcpy(alloc_result.ptr, data, host_size);
-
-    auto &cmd_list = transfer_queue.begin_command_list(0);
-    cmd_list.image_transition({
-        .src_access = PipelineAccess::All,
-        .dst_access = PipelineAccess::TransferWrite,
-        .old_layout = old_layout,
+    cmd_list.image_transition(ImageBarrier{
+        .src_access = PipelineAccess::None,
+        .dst_access = PipelineAccess::TransferReadWrite,
+        .old_layout = ImageLayout::Undefined,
         .new_layout = ImageLayout::TransferDst,
-        .image_id = image_id,
+        .subresource_range = image.whole_subresource_range(),
     });
 
-    ImageCopyRegion copy_region = {
-        .buffer_offset = alloc_result.offset,
-        .image_subresource_layer = {},
-        .image_offset = {},
-        .image_extent = image.extent,
-    };
-    cmd_list.copy_buffer_to_image(alloc_result.buffer_id, image_id, ImageLayout::TransferDst, copy_region);
-
-    cmd_list.image_transition({
-        .src_access = PipelineAccess::TransferWrite,
-        .dst_access = PipelineAccess::All,
-        .old_layout = ImageLayout::TransferDst,
-        .new_layout = new_layout,
-        .image_id = image_id,
-    });
-
-    transfer_queue.end_command_list(cmd_list);
-    transfer_queue.submit(0, { .self_wait = false });
+    queue.end_command_list(cmd_list);
+    queue.submit(0, {});
+    queue.wait_for_work();
 }
-
-VKResult Device::create_command_queue(this Device &self, CommandQueue &command_queue, CommandType type, std::string_view debug_name) {
+VKResult Device::create_command_queue(this Device &self, CommandQueue &command_queue, ) {
     ZoneScoped;
     memory::ScopedStack stack;
-
-    vkb::QueueType vkb_types[] = {
-        vkb::QueueType::graphics,  // CommandType::Graphics,
-        vkb::QueueType::compute,   // CommandType::Compute,
-        vkb::QueueType::transfer,  // CommandType::Transfer,
-    };
-    vkb::QueueType vkb_type = vkb_types[static_cast<usize>(type)];
-
-    auto queue_handle = self.handle.get_queue(vkb_type);
-    if (!queue_handle) {
-        auto r = static_cast<VKResult>(queue_handle.vk_result());
-        LOG_ERROR("Failed to create Device Queue! {}", r);
-        return r;
-    }
-
-    u32 queue_index = self.handle.get_queue_index(vkb_type).value();
 
     std::string_view callocator_name = stack.format("{} Command Allocator", debug_name);
     std::string_view timeline_sema_name = stack.format("{} Semaphore", debug_name);
 
-    command_queue.type = type;
-    command_queue.family_index = queue_index;
-    command_queue.device = &self;
-    command_queue.handle = queue_handle.value();
-    command_queue.frame_cmd_submits.resize(self.frame_count);
-    command_queue.command_lists.resize(self.frame_count);
-    command_queue.allocators.resize(self.frame_count);
     self.create_timeline_semaphores(command_queue.semaphore, 0);
     self.create_command_allocators(command_queue.allocators, { .type = type, .debug_name = callocator_name });
     self.set_object_name(command_queue, debug_name);
@@ -1678,7 +1281,8 @@ VKResult Device::create_command_queue(this Device &self, CommandQueue &command_q
     return VKResult::Success;
 }
 
-VKResult Device::create_command_allocators(this Device &self, ls::span<CommandAllocator> command_allocators, const CommandAllocatorInfo &info) {
+VKResult Device::create_command_allocators(
+    this Device &self, ls::span<CommandAllocator> command_allocators, const CommandAllocatorInfo &info) {
     ZoneScoped;
 
     VkCommandPoolCreateInfo create_info = {

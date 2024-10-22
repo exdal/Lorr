@@ -3,7 +3,7 @@
 #include "Engine/Graphics/Vulkan/ToVk.hh"
 
 namespace lr {
-auto Semaphore::create(Device_H device, ls::option<u64> initial_value, const std::string &name) -> std::expected<Semaphore, vk::Result> {
+auto Semaphore::create(Device_H device, const ls::option<u64> &initial_value) -> std::expected<Semaphore, vk::Result> {
     ZoneScoped;
 
     auto impl = new Impl;
@@ -12,7 +12,7 @@ auto Semaphore::create(Device_H device, ls::option<u64> initial_value, const std
     VkSemaphoreTypeCreateInfo semaphore_type_info = {
         .sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO,
         .pNext = nullptr,
-        .semaphoreType = initial_value.has_value() ? VK_SEMAPHORE_TYPE_BINARY : VK_SEMAPHORE_TYPE_TIMELINE,
+        .semaphoreType = initial_value.has_value() ? VK_SEMAPHORE_TYPE_TIMELINE : VK_SEMAPHORE_TYPE_BINARY,
         .initialValue = initial_value.value_or(0),
     };
 
@@ -31,8 +31,6 @@ auto Semaphore::create(Device_H device, ls::option<u64> initial_value, const std
         default:;
     }
 
-    set_object_name(device, impl->handle, VK_OBJECT_TYPE_SEMAPHORE, name);
-
     return Semaphore(impl);
 }
 
@@ -42,15 +40,44 @@ auto Semaphore::destroy() -> void {
     vkDestroySemaphore(impl->device->handle, impl->handle, nullptr);
 }
 
+auto Semaphore::set_name(const std::string &name) -> Semaphore & {
+    set_object_name(impl->device, impl->handle, VK_OBJECT_TYPE_SEMAPHORE, name);
+
+    return *this;
+}
+
+auto Semaphore::wait(u64 wait_value) -> void {
+    ZoneScoped;
+
+    VkSemaphoreWaitInfo wait_info = {
+        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
+        .pNext = nullptr,
+        .flags = 0,
+        .semaphoreCount = 1,
+        .pSemaphores = &impl->handle,
+        .pValues = &wait_value,
+    };
+    vkWaitSemaphores(impl->device->handle, &wait_info, ~0_u64);
+}
+
 auto Semaphore::advance() -> u64 {
     return ++impl->value;
 }
 
-auto Semaphore::counter() -> u64 {
+auto Semaphore::value() -> u64 {
     return impl->value;
 }
 
-auto QueryPool::create(Device_H device, u32 query_count, const std::string &name) -> std::expected<QueryPool, vk::Result> {
+auto Semaphore::counter() -> u64 {
+    ZoneScoped;
+
+    u64 value = 0;
+    vkGetSemaphoreCounterValue(impl->device->handle, impl->handle, &value);
+
+    return value;
+}
+
+auto QueryPool::create(Device_H device, u32 query_count) -> std::expected<QueryPool, vk::Result> {
     ZoneScoped;
 
     // We are getting query results with availibilty bit
@@ -77,8 +104,6 @@ auto QueryPool::create(Device_H device, u32 query_count, const std::string &name
         default:;
     }
 
-    set_object_name(device, impl->handle, VK_OBJECT_TYPE_QUERY_POOL, name);
-
     // This is literally just memset to zero, cmd version is same but happens when queue is on execute state
     vkResetQueryPool(device->handle, impl->handle, 0, query_count);
 
@@ -87,6 +112,12 @@ auto QueryPool::create(Device_H device, u32 query_count, const std::string &name
 
 auto QueryPool::destroy() -> void {
     vkDestroyQueryPool(impl->device->handle, impl->handle, nullptr);
+}
+
+auto QueryPool::set_name(const std::string &name) -> QueryPool & {
+    set_object_name(impl->device, impl->handle, VK_OBJECT_TYPE_QUERY_POOL, name);
+
+    return *this;
 }
 
 auto QueryPool::get_results(u32 first_query, u32 count, ls::span<u64> time_stamps) -> void {
@@ -360,7 +391,7 @@ auto CommandList::begin_rendering(const RenderingBeginInfo &info) -> void {
             .resolveImageLayout = {},
             .loadOp = static_cast<VkAttachmentLoadOp>(v.load_op),
             .storeOp = static_cast<VkAttachmentStoreOp>(v.store_op),
-            .clearValue = ls::bit_cast<VkClearValue>(v.clear_val),
+            .clearValue = ls::bit_cast<VkClearValue>(v.clear_value),
         };
     };
 
@@ -545,45 +576,74 @@ auto CommandQueue::destroy() -> void {
     impl->semaphore.destroy();
 }
 
+auto CommandQueue::set_name(const std::string &name) -> CommandQueue {
+    set_object_name(impl->device, impl->handle, VK_OBJECT_TYPE_QUEUE, name);
+
+    return *this;
+}
+
 auto CommandQueue::semaphore() -> Semaphore {
     return impl->semaphore;
 }
 
 auto CommandQueue::defer(ls::span<BufferID> buffer_ids) -> void {
     for (auto &v : buffer_ids) {
-        impl->garbage_buffers.emplace(v, impl->semaphore.counter());
+        impl->garbage_buffers.emplace(v, impl->semaphore.value());
     }
 }
 
 auto CommandQueue::defer(ls::span<ImageID> image_ids) -> void {
     for (auto &v : image_ids) {
-        impl->garbage_images.emplace(v, impl->semaphore.counter());
+        impl->garbage_images.emplace(v, impl->semaphore.value());
     }
 }
 
 auto CommandQueue::defer(ls::span<ImageViewID> image_view_ids) -> void {
     for (auto &v : image_view_ids) {
-        impl->garbage_image_views.emplace(v, impl->semaphore.counter());
+        impl->garbage_image_views.emplace(v, impl->semaphore.value());
     }
 }
 
 auto CommandQueue::defer(ls::span<SamplerID> sampler_ids) -> void {
     for (auto &v : sampler_ids) {
-        impl->garbage_samplers.emplace(v, impl->semaphore.counter());
+        impl->garbage_samplers.emplace(v, impl->semaphore.value());
     }
+}
+
+auto CommandQueue::collect_garbage() -> void {
+    ZoneScoped;
+
+    auto checkndelete_fn = [&](auto &container, u64 sema_counter, const auto &deleter_fn) {
+        for (auto i = container.begin(); i != container.end();) {
+            auto &[v, timeline_val] = *i;
+            if (sema_counter > timeline_val) {
+                deleter_fn(v);
+                i = container.erase(i);
+            } else {
+                i++;
+            }
+        }
+    };
+
+    u64 queue_counter = impl->semaphore.counter();
+    checkndelete_fn(impl->garbage_buffers, queue_counter, [&](BufferID id) { impl->device.destroy_buffer(id); });
+    checkndelete_fn(impl->garbage_images, queue_counter, [&](ImageID id) { impl->device.destroy_image(id); });
+    checkndelete_fn(impl->garbage_image_views, queue_counter, [&](ImageViewID id) { impl->device.destroy_image_view(id); });
+    checkndelete_fn(impl->garbage_samplers, queue_counter, [&](SamplerID id) { impl->device.destroy_sampler(id); });
+    checkndelete_fn(impl->garbage_command_lists, queue_counter, [&](u32 id) { impl->free_command_lists.emplace_back(id); });
 }
 
 auto CommandQueue::begin(std::source_location LOC) -> CommandList {
     ZoneScoped;
     memory::ScopedStack stack;
 
-    auto cmd_list = impl->command_lists.create();
+    CommandList::Impl *cmd_list_impl = nullptr;
+    if (impl->free_command_lists.empty()) {
+        auto cmd_list_id = impl->command_list_pool.size();
+        cmd_list_impl = &impl->command_list_pool.emplace_back();
+        cmd_list_impl->device = impl->device;
+        cmd_list_impl->id = cmd_list_id;
 
-    auto cmd_list_impl = cmd_list->impl;
-    cmd_list_impl->device = impl->device;
-    cmd_list_impl->id = cmd_list->id;
-
-    if (cmd_list->is_fresh) {
         VkCommandPoolCreateInfo cmd_alloc_info = {
             .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
             .pNext = nullptr,
@@ -601,6 +661,10 @@ auto CommandQueue::begin(std::source_location LOC) -> CommandList {
         };
         vkAllocateCommandBuffers(impl->device->handle, &cmd_list_info, &cmd_list_impl->handle);
     } else {
+        auto cmd_list_id = impl->free_command_lists.back();
+        cmd_list_impl = &impl->command_list_pool.at(cmd_list_id);
+        impl->free_command_lists.pop_back();
+
         // VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT is like "fully" destroying
         // a std::vector<T> (aka freeing its memory). If this flag is set to 0,
         // its like calling vector.clear(), it doesnt free the memory but sets
@@ -629,16 +693,16 @@ auto CommandQueue::end(CommandList &cmd_list) -> void {
     ZoneScoped;
 
     vkEndCommandBuffer(cmd_list->handle);
-    impl->frame_cmd_list_infos.push_back({
+    impl->cmd_list_submits.push_back({
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
         .pNext = nullptr,
         .commandBuffer = cmd_list->handle,
         .deviceMask = 0,
     });
-    impl->garbage_command_lists.emplace(cmd_list->id, impl->semaphore.counter());
+    impl->garbage_command_lists.emplace(cmd_list->id, impl->semaphore.value());
 }
 
-auto CommandQueue::submit(ls::span<Semaphore_H> wait_semas, ls::span<Semaphore_H> signal_semas) -> vk::Result {
+auto CommandQueue::submit(ls::span<Semaphore> wait_semas, ls::span<Semaphore> signal_semas) -> vk::Result {
     ZoneScoped;
     memory::ScopedStack stack;
 
@@ -681,12 +745,15 @@ auto CommandQueue::submit(ls::span<Semaphore_H> wait_semas, ls::span<Semaphore_H
         .flags = 0,
         .waitSemaphoreInfoCount = static_cast<u32>(sema_waits.size()),
         .pWaitSemaphoreInfos = sema_waits.data(),
-        .commandBufferInfoCount = static_cast<u32>(impl->frame_cmd_list_infos.size()),
-        .pCommandBufferInfos = impl->frame_cmd_list_infos.data(),
+        .commandBufferInfoCount = static_cast<u32>(impl->cmd_list_submits.size()),
+        .pCommandBufferInfos = impl->cmd_list_submits.data(),
         .signalSemaphoreInfoCount = static_cast<u32>(sema_signals.size()),
         .pSignalSemaphoreInfos = sema_signals.data(),
     };
     auto result = vkQueueSubmit2(impl->handle, 1, &submit_info, nullptr);
+
+    impl->cmd_list_submits.clear();
+
     switch (result) {
         // Error cases
         case VK_ERROR_OUT_OF_HOST_MEMORY:
@@ -701,7 +768,32 @@ auto CommandQueue::submit(ls::span<Semaphore_H> wait_semas, ls::span<Semaphore_H
     return vk::Result::Success;
 }
 
-auto CommandQueue::present(SwapChain_H swap_chain, Semaphore_H present_sema, u32 image_id) -> vk::Result {
+auto CommandQueue::acquire(SwapChain swap_chain, Semaphore acquire_sema) -> std::expected<u32, vk::Result> {
+    ZoneScoped;
+
+    // VK_NOT_READY and VK_TIMEOUT will never be returned because of we are waiting indefinitely.
+    // VK_SUBOPTIMAL_KHR is ignored, since the image can still be used.
+
+    u32 image_id = 0;
+    auto result = vkAcquireNextImageKHR(impl->device->handle, swap_chain->handle, UINT64_MAX, acquire_sema->handle, nullptr, &image_id);
+    switch (result) {
+        case VK_ERROR_OUT_OF_HOST_MEMORY:
+            return std::unexpected(vk::Result::OutOfHostMem);
+        case VK_ERROR_OUT_OF_DEVICE_MEMORY:
+            return std::unexpected(vk::Result::OutOfDeviceMem);
+        case VK_ERROR_DEVICE_LOST:
+            return std::unexpected(vk::Result::DeviceLost);
+        case VK_ERROR_OUT_OF_DATE_KHR:
+            return std::unexpected(vk::Result::OutOfDate);
+        case VK_ERROR_SURFACE_LOST_KHR:
+            return std::unexpected(vk::Result::SurfaceLost);
+        default:;
+    }
+
+    return image_id;
+}
+
+auto CommandQueue::present(SwapChain swap_chain, Semaphore present_sema, u32 image_id) -> vk::Result {
     ZoneScoped;
 
     VkPresentInfoKHR present_info = {

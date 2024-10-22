@@ -3,7 +3,6 @@
 #include "Engine/Graphics/Vulkan.hh"
 
 #include "Engine/Graphics/ResourcePool.hh"
-#include "Engine/Graphics/StagingBuffer.hh"
 
 #ifndef VK_NO_PROTOTYPES
 #define VK_NO_PROTOTYPES
@@ -24,10 +23,14 @@
 #undef LR_VULKAN_INSTANCE_FUNC
 
 namespace lr {
+namespace vk {
+    auto get_vk_surface(VkInstance instance, void *handle) -> std::expected<VkSurfaceKHR, vk::Result>;
+}
+
 bool load_vulkan_instance(VkInstance instance, PFN_vkGetInstanceProcAddr get_instance_proc_addr);
 bool load_vulkan_device(VkDevice device, PFN_vkGetDeviceProcAddr get_device_proc_addr);
 
-enum Descriptors : u32 {
+enum class Descriptors : u32 {
     Samplers = 0,
     Images,
     StorageImages,
@@ -171,6 +174,12 @@ struct Handle<CommandList>::Impl {
     VkCommandBuffer handle = VK_NULL_HANDLE;
 };
 
+template<typename ResourceT>
+struct SubmittedResource {
+    ResourceT resource;
+    u64 sema_value;
+};
+
 template<>
 struct Handle<CommandQueue>::Impl {
     Device device = {};
@@ -179,14 +188,15 @@ struct Handle<CommandQueue>::Impl {
     u32 family_index = 0;  // Physical device queue family index
     Semaphore semaphore = {};
 
-    PagedResourcePool<CommandList::Impl, u32, { .MAX_RESOURCE_COUNT = 2048u, .PAGE_BITS = 32u }> command_lists = {};
-    std::vector<VkCommandBufferSubmitInfo> frame_cmd_list_infos = {};
+    std::deque<CommandList::Impl> command_list_pool = {};
+    std::vector<u32> free_command_lists = {};
+    std::vector<VkCommandBufferSubmitInfo> cmd_list_submits = {};
 
-    plf::colony<std::pair<BufferID, u64>> garbage_buffers = {};
-    plf::colony<std::pair<ImageID, u64>> garbage_images = {};
-    plf::colony<std::pair<ImageViewID, u64>> garbage_image_views = {};
-    plf::colony<std::pair<SamplerID, u64>> garbage_samplers = {};
-    plf::colony<std::pair<u32, u64>> garbage_command_lists = {};
+    plf::colony<SubmittedResource<BufferID>> garbage_buffers = {};
+    plf::colony<SubmittedResource<ImageID>> garbage_images = {};
+    plf::colony<SubmittedResource<ImageViewID>> garbage_image_views = {};
+    plf::colony<SubmittedResource<SamplerID>> garbage_samplers = {};
+    plf::colony<SubmittedResource<u32>> garbage_command_lists = {};
 
     VkQueue handle = VK_NULL_HANDLE;
 };
@@ -198,6 +208,8 @@ struct Handle<Surface>::Impl {
 
 template<>
 struct Handle<SwapChain>::Impl {
+    Device device = {};
+
     vk::Format format = vk::Format::Undefined;
     vk::Extent3D extent = {};
 
@@ -208,6 +220,50 @@ struct Handle<SwapChain>::Impl {
     vkb::Swapchain handle = {};
 };
 
+struct ActiveGPUAllocation {
+    BufferID buffer_id = BufferID::Invalid;
+    u32 size = 0;
+    u32 offset = 0;
+    u64 sema_counter = 0;
+};
+
+struct GPUAllocationNode {
+    using NodeID = TransferManager::NodeID;
+
+    ls::option<NodeID> prev_bin = ls::nullopt;
+    ls::option<NodeID> next_bin = ls::nullopt;
+    ls::option<NodeID> prev_neighbor = ls::nullopt;
+    ls::option<NodeID> next_neighbor = ls::nullopt;
+    u32 size = 0;
+    u32 offset : 31 = 0;
+    bool used : 1 = false;
+};
+
+template<>
+struct Handle<TransferManager>::Impl {
+    Device device = {};
+
+    Semaphore semaphore = {};
+    BufferID buffer_id = BufferID::Invalid;
+    u32 size = 0;
+    u32 max_allocs = 0;
+    u32 free_storage = 0;
+
+    u32 used_bins_top = {};
+    u8 used_bins[TransferManager::NUM_TOP_BINS] = {};
+    ls::option<TransferManager::NodeID> bin_indices[TransferManager::NUM_LEAF_BINS] = {};
+
+    std::deque<SubmittedResource<u32>> tracked_nodes = {};
+    std::vector<GPUAllocationNode> nodes = {};
+    std::vector<TransferManager::NodeID> free_nodes = {};
+    u32 free_offset = 0;
+
+    auto find_free_node(u32 node_size) -> ls::option<TransferManager::NodeID>;
+    auto free_node(u32 node_index) -> void;
+    auto insert_node_into_bin(u32 node_size, u32 data_offset) -> u32;
+    auto remove_node_from_bin(u32 node_index) -> void;
+};
+
 struct ResourcePools {
     PagedResourcePool<Buffer::Impl, BufferID> buffers = {};
     PagedResourcePool<Image::Impl, ImageID> images = {};
@@ -215,26 +271,29 @@ struct ResourcePools {
     PagedResourcePool<Sampler::Impl, SamplerID, { .MAX_RESOURCE_COUNT = 512u, .PAGE_BITS = 32u }> samplers = {};
     PagedResourcePool<Pipeline::Impl, PipelineID> pipelines = {};
 
-    constexpr static usize max_push_constant_size = 128;
-    std::array<VkPipelineLayout, (max_push_constant_size / sizeof(u32)) + 1> pipeline_layouts = {};
+    constexpr static usize MAX_PUSH_CONSTANT_SIZE = 128;
+    std::array<VkPipelineLayout, (MAX_PUSH_CONSTANT_SIZE / sizeof(u32)) + 1> pipeline_layouts = {};
 };
 
 template<>
 struct Handle<Device>::Impl {
     constexpr static usize QUEUE_COUNT = static_cast<usize>(vk::CommandType::Count);
-    constexpr static u64 STAGING_UPLOAD_SIZE = ls::mib_to_bytes(128);
 
     std::array<CommandQueue, QUEUE_COUNT> queues = {};
-    ls::static_vector<StagingBuffer, Device::Limits::FrameCount> staging_buffers;
     Semaphore frame_sema = {};
     usize frame_count = 0;  // global frame count, same across all swap chains
 
     VkDescriptorPool descriptor_pool = {};
     VkDescriptorSetLayout descriptor_set_layout = {};
     VkDescriptorSet descriptor_set = {};
-
     BufferID bda_array_buffer = BufferID::Invalid;
     u64 *bda_array_host_addr = nullptr;
+
+    // Transfer manager should be used for frame time transient buffers.
+    // NEVER use it to upload image data, use static buffer for it.
+    // Static buffer is blocking, transfer manager is not blocking if not full.
+    TransferManager transfer_man = {};
+    BufferID persistent_buffer = {};
 
     DeviceFeature supported_features = DeviceFeature::None;
     ResourcePools resources = {};

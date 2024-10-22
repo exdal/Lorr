@@ -13,10 +13,6 @@ struct TaskExecuteInfo {
     ls::span<Semaphore> signal_semas = {};
 };
 
-struct TaskGraphInfo {
-    Device *device = nullptr;
-};
-
 struct TaskGraph {
     constexpr static usize MAX_PERMUTATIONS = 32;
 
@@ -33,9 +29,9 @@ struct TaskGraph {
     std::vector<legit::ProfilerTask> task_gpu_profiler_tasks = {};
     legit::ProfilerGraph task_gpu_profiler_graph = { 400 };
 
-    Device *device = nullptr;
+    Device device = {};
 
-    bool init(this TaskGraph &, const TaskGraphInfo &info);
+    bool init(this TaskGraph &, Device device_);
 
     TaskImageID add_image(this TaskGraph &, const TaskImageInfo &info);
     void set_image(this TaskGraph &, TaskImageID task_image_id, const TaskImageInfo &info);

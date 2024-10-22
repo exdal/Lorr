@@ -13,14 +13,6 @@
 #include "Engine/Window/Window.hh"
 
 namespace lr {
-struct ApplicationSurface {
-    Window window = {};
-    SwapChain swap_chain = {};
-    ls::static_vector<ImageID, Device::Limits::FrameCount> images = {};
-    ls::static_vector<ImageViewID, Device::Limits::FrameCount> image_views = {};
-    b32 swap_chain_ok = false;
-};
-
 struct ApplicationInfo {
     ls::span<c8 *> args = {};
     WindowInfo window_info = {};
@@ -38,7 +30,9 @@ struct Application {
 
     EventManager<ApplicationEvent, ApplicationEventData> event_man = {};
     Device device = {};
-    ApplicationSurface default_surface = {};
+    Window window = {};
+    SwapChain swap_chain = {};
+
     AssetManager asset_man = {};
 
     RenderPipeline world_render_pipeline = {};
@@ -57,10 +51,6 @@ struct Application {
     virtual bool do_prepare() = 0;
     virtual bool do_update(f32 delta_time) = 0;
     virtual void do_shutdown() = 0;
-
-private:
-    // TODO: Properly handle this when we need multiple windows/sc.
-    bool create_surface(this Application &, ApplicationSurface &surface, std::optional<WindowInfo> window_info = std::nullopt);
 };
 
 }  // namespace lr

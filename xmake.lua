@@ -11,7 +11,7 @@ set_encodings("utf-8")
 -- WARNINGS --
 set_warnings("allextra", "pedantic")
 add_cxxflags(
-    -- "-Wshadow-all", -- clang analyzer false positive
+    "-Wshadow-all",
     "-Wno-gnu-line-marker",
     "-Wno-gnu-anonymous-struct",
     "-Wno-gnu-zero-variadic-macro-arguments",

@@ -151,7 +151,7 @@ enum class ImageLayout : u32 {
     ShaderReadOnly = 5,
     TransferSrc = 6,
     TransferDst = 7,
-    Present = 8,
+    Present = 1000001002,
     DepthAttachment = 1000241000,
     DepthReadOnly = 1000241001,
     StencilAttachment = 1000241002,
@@ -176,9 +176,10 @@ enum class ImageViewType : u32 {
 };
 
 enum class ImageAspectFlag : u32 {
-    Color = 0,
-    Depth = 1 << 0,
-    Stencil = 1 << 1,
+    None = 0,
+    Color = 1 << 0,
+    Depth = 1 << 1,
+    Stencil = 1 << 2,
 };
 consteval void enable_bitmask(ImageAspectFlag);
 

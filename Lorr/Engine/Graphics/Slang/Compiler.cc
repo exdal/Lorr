@@ -196,8 +196,6 @@ struct Handle<SlangCompiler>::Impl {
 };
 
 auto SlangModule::destroy() -> void {
-    impl->session->destroy();
-
     delete impl;
     impl = nullptr;
 }
@@ -283,6 +281,10 @@ auto SlangModule::get_reflection() -> ShaderReflection {
     }
 
     return result;
+}
+
+auto SlangModule::session() -> SlangSession * {
+    return impl->session;
 }
 
 auto SlangSession::destroy() -> void {

@@ -43,11 +43,13 @@ struct ShaderReflection {
     glm::u64vec3 thread_group_size = {};
 };
 
+struct SlangSession;
 struct SlangModule : Handle<SlangModule> {
     auto destroy() -> void;
 
     auto get_entry_point(std::string_view name) -> std::vector<u32>;
     auto get_reflection() -> ShaderReflection;
+    auto session() -> SlangSession *;
 };
 
 struct SlangSession : Handle<SlangSession> {

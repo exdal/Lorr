@@ -71,9 +71,7 @@ ls::option<SlangModule> AssetManager::load_shader(
 
     // TODO: Error handling
     auto compiler_session = self.shader_compiler.new_session(session_info).value();
-    auto shader_module = compiler_session.load_module(compile_info).value();
-
-    return shader_module;
+    return compiler_session.load_module(compile_info).value();
 }
 
 Model *AssetManager::load_model(this AssetManager &self, const Identifier &ident, const fs::path &path) {
@@ -103,8 +101,8 @@ Model *AssetManager::load_model(this AssetManager &self, const Identifier &ident
                 vk::ImageUsage::Sampled | vk::ImageUsage::TransferDst,
                 image_data->format,
                 vk::ImageType::View2D,
-                vk::ImageAspectFlag::Color,
                 extent,
+                vk::ImageAspectFlag::Color,
                 1,
                 1);
             auto image_view_id = ImageView::create(
@@ -114,7 +112,7 @@ Model *AssetManager::load_model(this AssetManager &self, const Identifier &ident
                 vk::ImageSubresourceRange{
                     .aspect_flags = vk::ImageAspectFlag::Color,
                 });
-            self.device->set_image_data(texture.image_id, image_data->data, ImageLayout::ColorReadOnly);
+            self.device.upload(texture.image_id, image_data->data, image_data->data_size, vk::ImageLayout::ColorReadOnly);
 
             texture.image_id = image_id.value();
             texture.image_view_id = image_view_id.value();
@@ -130,12 +128,7 @@ Model *AssetManager::load_model(this AssetManager &self, const Identifier &ident
                     sampler_info.address_u,
                     sampler_info.address_v,
                     vk::SamplerAddressMode::Repeat,
-                    vk::CompareOp::LessEqual,
-                    0,
-                    0,
-                    -1000.0f,
-                    1000.0f,
-                    false);
+                    vk::CompareOp::LessEqual);
                 texture.sampler_id = sampler.value_or(SamplerID::Invalid);
             }
 
@@ -193,19 +186,19 @@ Model *AssetManager::load_model(this AssetManager &self, const Identifier &ident
     usize vertex_upload_size = model_data->vertices.size() * sizeof(Vertex);
     usize index_upload_size = model_data->indices.size() * sizeof(u32);
     auto vertex_buffer_id = Buffer::create(
-        self.device,
-        vk::BufferUsage::TransferDst | vk::BufferUsage::Vertex,
-        vk::MemoryAllocationUsage::PreferDevice,
-        vk::MemoryAllocationFlag::None,
-        vertex_upload_size,
-        "Model Vertex Buffer");
+                                self.device,
+                                vk::BufferUsage::TransferDst | vk::BufferUsage::Vertex,
+                                vertex_upload_size,
+                                vk::MemoryAllocationUsage::PreferDevice,
+                                vk::MemoryAllocationFlag::None)
+                                .value();
     auto index_buffer_id = Buffer::create(
-        self.device,
-        vk::BufferUsage::TransferDst | vk::BufferUsage::Index,
-        vk::MemoryAllocationUsage::PreferDevice,
-        vk::MemoryAllocationFlag::None,
-        index_upload_size,
-        "Model Index Buffer");
+                               self.device,
+                               vk::BufferUsage::TransferDst | vk::BufferUsage::Index,
+                               index_upload_size,
+                               vk::MemoryAllocationUsage::PreferDevice,
+                               vk::MemoryAllocationFlag::None)
+                               .value();
 
     return &self.models.try_emplace(ident, model).first->second;
 }

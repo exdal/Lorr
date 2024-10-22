@@ -29,7 +29,7 @@ std::unique_ptr<ImageAssetData> AssetParser::STB(u8 *data, usize data_size) {
     auto result = std::make_unique<ImageAssetData>();
     result->width = static_cast<u32>(width);
     result->height = static_cast<u32>(height);
-    result->format = lr::Format::R8G8B8A8_UNORM;
+    result->format = vk::Format::R8G8B8A8_UNORM;
     result->data = parsed_data;
     result->data_size = width * height * channel_count;
     result->deleter = [](u8 *v) { stbi_image_free(v); };
@@ -119,24 +119,24 @@ std::unique_ptr<ModelAssetData> AssetParser::GLTF(const fs::path &path) {
 
     LOG_TRACE("Parsing GLTF samplers...");
 
-    auto gltf_filter_to_lr = [](fastgltf::Filter f) -> Filtering {
+    auto gltf_filter_to_lr = [](fastgltf::Filter f) -> vk::Filtering {
         switch (f) {
             case fastgltf::Filter::Nearest:
-                return Filtering::Nearest;
+                return vk::Filtering::Nearest;
             case fastgltf::Filter::Linear:
             default:
-                return Filtering::Linear;
+                return vk::Filtering::Linear;
         }
     };
 
-    auto gltf_address_mode_to_lr = [](fastgltf::Wrap w) -> TextureAddressMode {
+    auto gltf_address_mode_to_lr = [](fastgltf::Wrap w) -> vk::SamplerAddressMode {
         switch (w) {
             case fastgltf::Wrap::ClampToEdge:
-                return TextureAddressMode::ClampToEdge;
+                return vk::SamplerAddressMode::ClampToEdge;
             case fastgltf::Wrap::MirroredRepeat:
-                return TextureAddressMode::MirroredRepeat;
+                return vk::SamplerAddressMode::MirroredRepeat;
             case fastgltf::Wrap::Repeat:
-                return TextureAddressMode::Repeat;
+                return vk::SamplerAddressMode::Repeat;
         }
     };
 

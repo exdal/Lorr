@@ -1,6 +1,7 @@
 #include "Engine/Window/Window.hh"
 
 #include "Engine/Core/Application.hh"
+#include "Engine/Graphics/Vulkan/Impl.hh"
 
 #ifndef GLFW_INCLUDE_NONE
 #define GLFW_INCLUDE_NONE
@@ -219,18 +220,56 @@ auto Window::should_close() -> bool {
     return glfwWindowShouldClose(impl->handle);
 }
 
-auto Window::native_handle() -> NativeWindowHandle {
+auto Window::get_size() -> glm::uvec2 {
+    return { impl->width, impl->height };
+}
+
+auto Window::get_native_handle() -> void * {
+#if defined(LS_WINDOWS)
+    return reinterpret_cast<void *>(glfwGetWin32Window(impl->handle));
+#elif defined(LS_LINUX)
+    return reinterpret_cast<void *>(glfwGetX11Window(impl->handle));
+#endif
+}
+
+auto vk::get_vk_surface(VkInstance instance, void *handle) -> std::expected<VkSurfaceKHR, vk::Result> {
     ZoneScoped;
 
-    return NativeWindowHandle{
+    VkSurfaceKHR surface = {};
+
 #if defined(LS_WINDOWS)
-        .win32_instance = GetModuleHandleA(nullptr),
-        .win32_handle = glfwGetWin32Window(impl->handle),
-#elif defined(LS_LINUX)
-        .x11_display = glfwGetX11Display(impl->handle),
-        .x11_window = glfwGetX11Window(impl->handle),
-#endif
+    auto vkCreateWin32SurfaceKHR = (PFN_vkCreateWin32SurfaceKHR)vkGetInstanceProcAddr(instance, "vkCreateWin32SurfaceKHR");
+
+    VkWin32SurfaceCreateInfoKHR create_info = {
+        .sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR,
+        .pNext = nullptr,
+        .hinstance = GetModuleHandleA(nullptr),
+        .hwnd = reinterpret_cast<HWND>(handle),
     };
+
+    auto result = vkCreateWin32SurfaceKHR(instance, &create_info, nullptr, &surface);
+#elif defined(LS_LINUX)
+    auto vkCreateXlibSurfaceKHR = (PFN_vkCreateXlibSurfaceKHR)vkGetInstanceProcAddr(instance, "vkCreateXlibSurfaceKHR");
+
+    VkXlibSurfaceCreateInfoKHR create_info = {
+        .sType = VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR,
+        .pNext = nullptr,
+        .flags = 0,
+        .dpy = glfwGetX11Display(),
+        .window = reinterpret_cast<::Window>(handle),
+    };
+
+    auto result = vkCreateXlibSurfaceKHR(instance, &create_info, nullptr, &surface);
+#endif
+    switch (result) {
+        case VK_ERROR_OUT_OF_HOST_MEMORY:
+            return std::unexpected(vk::Result::OutOfHostMem);
+        case VK_ERROR_OUT_OF_DEVICE_MEMORY:
+            return std::unexpected(vk::Result::OutOfDeviceMem);
+        default:;
+    }
+
+    return surface;
 }
 
 }  // namespace lr

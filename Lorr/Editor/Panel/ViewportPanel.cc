@@ -83,8 +83,8 @@ void ViewportPanel::update(this ViewportPanel &self) {
     ImGuizmo::SetRect(window_pos.x, window_pos.y, window_size.x, window_size.y);
 
     if (self.camera_entity.has_value()) {
-        auto &final_image = task_graph.task_image_at(app.world_render_pipeline.final_image);
-        ImGui::Image(reinterpret_cast<ImTextureID>(static_cast<iptr>(final_image.image_view_id)), work_area_size);
+        // auto &final_image = task_graph.task_image_at(app.world_render_pipeline.final_image);
+        // ImGui::Image(reinterpret_cast<ImTextureID>(static_cast<iptr>(final_image.image_view_id)), work_area_size);
 
         auto *camera = self.camera_entity->get_mut<Component::Camera>();
         auto *camera_transform = self.camera_entity->get_mut<Component::Transform>();
@@ -98,7 +98,8 @@ void ViewportPanel::update(this ViewportPanel &self) {
             projection[1][1] *= -1;
 
             f32 gizmo_mat[16] = {};
-            ImGuizmo::RecomposeMatrixFromComponents(glm::value_ptr(t.position), glm::value_ptr(t.rotation), glm::value_ptr(t.scale), gizmo_mat);
+            ImGuizmo::RecomposeMatrixFromComponents(
+                glm::value_ptr(t.position), glm::value_ptr(t.rotation), glm::value_ptr(t.scale), gizmo_mat);
             if (ImGuizmo::Manipulate(
                     glm::value_ptr(camera_transform->matrix),  //
                     glm::value_ptr(projection),

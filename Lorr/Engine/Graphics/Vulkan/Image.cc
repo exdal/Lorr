@@ -5,14 +5,13 @@
 namespace lr {
 auto Image::create(
     Device_H device,
-    vk::ImageUsage usage_flags,
+    vk::ImageUsage usage,
     vk::Format format,
     vk::ImageType type,
-    vk::ImageAspectFlag aspect_flags,
     vk::Extent3D extent,
+    vk::ImageAspectFlag aspect_flags,
     u32 slice_count,
-    u32 mip_levels,
-    const std::string &name) -> std::expected<ImageID, vk::Result> {
+    u32 mip_count) -> std::expected<ImageID, vk::Result> {
     ZoneScoped;
 
     LS_EXPECT(!extent.is_zero());
@@ -24,11 +23,11 @@ auto Image::create(
         .imageType = to_vk_image_type(type),
         .format = get_format_info(format).vk_format,
         .extent = { extent.width, extent.height, extent.depth },
-        .mipLevels = mip_levels,
+        .mipLevels = mip_count,
         .arrayLayers = slice_count,
         .samples = VK_SAMPLE_COUNT_1_BIT,
         .tiling = VK_IMAGE_TILING_OPTIMAL,
-        .usage = to_vk_image_usage(usage_flags),
+        .usage = to_vk_image_usage(usage),
         .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
         .queueFamilyIndexCount = 0,
         .pQueueFamilyIndices = nullptr,
@@ -54,10 +53,27 @@ auto Image::create(
         return std::unexpected(vk::Result::Unknown);
     }
 
-#if LS_DEBUG
-    vmaSetAllocationName(device->allocator, allocation, name.c_str());
-#endif
-    set_object_name(device, image_handle, VK_OBJECT_TYPE_IMAGE, name);
+    auto image_id = device->resources.images.create();
+    if (!image_id.has_value()) {
+        return std::unexpected(vk::Result::OutOfPoolMem);
+    }
+
+    auto impl = image_id->impl;
+    impl->device = device;
+    impl->usage_flags = usage;
+    impl->format = format;
+    impl->aspect_flags = aspect_flags;
+    impl->extent = extent;
+    impl->slice_count = slice_count;
+    impl->mip_levels = mip_count;
+    impl->allocation = allocation;
+    impl->handle = image_handle;
+
+    return image_id->id;
+}
+
+auto Image::create_for_swap_chain(Device_H device, vk::Format format, vk::Extent3D extent) -> std::expected<ImageID, vk::Result> {
+    ZoneScoped;
 
     auto image_id = device->resources.images.create();
     if (!image_id.has_value()) {
@@ -66,20 +82,27 @@ auto Image::create(
 
     auto impl = image_id->impl;
     impl->device = device;
-    impl->usage_flags = usage_flags;
+    impl->usage_flags = vk::ImageUsage::ColorAttachment;
     impl->format = format;
-    impl->aspect_flags = aspect_flags;
+    impl->aspect_flags = vk::ImageAspectFlag::Color;
     impl->extent = extent;
-    impl->slice_count = slice_count;
-    impl->mip_levels = mip_levels;
-    impl->allocation = allocation;
-    impl->handle = image_handle;
+    impl->slice_count = 1;
+    impl->mip_levels = 1;
+    impl->allocation = nullptr;
+    impl->handle = nullptr;
 
     return image_id->id;
 }
 
 auto Image::destroy() -> void {
     vmaDestroyImage(impl->device->allocator, impl->handle, impl->allocation);
+}
+
+auto Image::set_name(const std::string &name) -> Image & {
+    vmaSetAllocationName(impl->device->allocator, impl->allocation, name.c_str());
+    set_object_name(impl->device, impl->handle, VK_OBJECT_TYPE_IMAGE, name);
+
+    return *this;
 }
 
 auto Image::format() -> vk::Format {
@@ -100,20 +123,18 @@ auto Image::subresource_range() -> vk::ImageSubresourceRange {
     };
 }
 
-auto ImageView::create(
-    Device_H device, ImageID image_id, vk::ImageViewType type, vk::ImageSubresourceRange subresource_range, const std::string &name)
+auto ImageView::create(Device_H device, ImageID image_id, vk::ImageViewType type, vk::ImageSubresourceRange subresource_range)
     -> std::expected<ImageViewID, vk::Result> {
     ZoneScoped;
 
-    auto &image = device->resources.images.get(image_id);
-
+    auto image = Device(device).image(image_id);
     VkImageViewCreateInfo create_info = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
         .pNext = nullptr,
         .flags = 0,
-        .image = image.handle,
+        .image = image->handle,
         .viewType = to_vk_image_view_type(type),
-        .format = get_format_info(image.format).vk_format,
+        .format = get_format_info(image.format()).vk_format,
         .components = { VK_COMPONENT_SWIZZLE_IDENTITY,
                         VK_COMPONENT_SWIZZLE_IDENTITY,
                         VK_COMPONENT_SWIZZLE_IDENTITY,
@@ -137,8 +158,6 @@ auto ImageView::create(
         default:;
     }
 
-    set_object_name(device, image_view_handle, VK_OBJECT_TYPE_SAMPLER, name);
-
     auto image_view = device->resources.image_views.create();
     if (!image_view.has_value()) {
         return std::unexpected(vk::Result::OutOfPoolMem);
@@ -146,7 +165,7 @@ auto ImageView::create(
 
     auto impl = image_view->impl;
     impl->device = device;
-    impl->format = image.format;
+    impl->format = image.format();
     impl->type = type;
     impl->subresource_range = subresource_range;
     impl->handle = image_view_handle;
@@ -166,7 +185,7 @@ auto ImageView::create(
     VkWriteDescriptorSet sampled_write_set_info = {
         .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
         .pNext = nullptr,
-        .dstSet = device->descriptor_set,
+        .dstSet = impl->device->descriptor_set,
         .dstBinding = std::to_underlying(Descriptors::Images),
         .dstArrayElement = std::to_underlying(image_view->id),
         .descriptorCount = 1,
@@ -178,7 +197,7 @@ auto ImageView::create(
     VkWriteDescriptorSet storage_write_set_info = {
         .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
         .pNext = nullptr,
-        .dstSet = device->descriptor_set,
+        .dstSet = impl->device->descriptor_set,
         .dstBinding = std::to_underlying(Descriptors::StorageImages),
         .dstArrayElement = std::to_underlying(image_view->id),
         .descriptorCount = 1,
@@ -187,15 +206,15 @@ auto ImageView::create(
         .pBufferInfo = nullptr,
         .pTexelBufferView = nullptr,
     };
-    if (image.usage_flags & vk::ImageUsage::Sampled) {
+    if (image->usage_flags & vk::ImageUsage::Sampled) {
         descriptor_writes.push_back(sampled_write_set_info);
     }
-    if (image.usage_flags & vk::ImageUsage::Storage) {
+    if (image->usage_flags & vk::ImageUsage::Storage) {
         descriptor_writes.push_back(storage_write_set_info);
     }
 
     if (!descriptor_writes.empty()) {
-        vkUpdateDescriptorSets(device->handle, descriptor_writes.size(), descriptor_writes.data(), 0, nullptr);
+        vkUpdateDescriptorSets(impl->device->handle, descriptor_writes.size(), descriptor_writes.data(), 0, nullptr);
     }
 
     return image_view->id;
@@ -203,6 +222,12 @@ auto ImageView::create(
 
 auto ImageView::destroy() -> void {
     vkDestroyImageView(impl->device->handle, impl->handle, nullptr);
+}
+
+auto ImageView::set_name(const std::string &name) -> ImageView & {
+    set_object_name(impl->device, impl->handle, VK_OBJECT_TYPE_IMAGE_VIEW, name);
+
+    return *this;
 }
 
 auto ImageView::format() -> vk::Format {
@@ -217,26 +242,39 @@ auto ImageView::subresource_range() -> vk::ImageSubresourceRange {
     return impl->subresource_range;
 }
 
-auto Sampler::create(Device_H device, const SamplerInfo &info, const std::string &name) -> std::expected<SamplerID, vk::Result> {
+auto Sampler::create(
+    Device_H device,
+    vk::Filtering min_filter,
+    vk::Filtering mag_filter,
+    vk::Filtering mip_filter,
+    vk::SamplerAddressMode addr_u,
+    vk::SamplerAddressMode addr_v,
+    vk::SamplerAddressMode addr_w,
+    vk::CompareOp compare_op,
+    f32 max_anisotropy,
+    f32 mip_lod_bias,
+    f32 min_lod,
+    f32 max_lod,
+    bool use_anisotropy) -> std::expected<SamplerID, vk::Result> {
     ZoneScoped;
 
     VkSamplerCreateInfo create_info = {
         .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
         .pNext = nullptr,
         .flags = 0,
-        .magFilter = to_vk_filtering(info.mag_filter),
-        .minFilter = to_vk_filtering(info.min_filter),
-        .mipmapMode = to_vk_mipmap_address_mode(info.mip_filter),
-        .addressModeU = to_vk_address_mode(info.address_u),
-        .addressModeV = to_vk_address_mode(info.address_v),
-        .addressModeW = to_vk_address_mode(info.address_w),
-        .mipLodBias = info.mip_lod_bias,
-        .anisotropyEnable = info.use_anisotropy,
-        .maxAnisotropy = info.max_anisotropy,
-        .compareEnable = info.compare_op != vk::CompareOp::Never,
-        .compareOp = to_vk_compare_op(info.compare_op),
-        .minLod = info.min_lod,
-        .maxLod = info.max_lod,
+        .magFilter = to_vk_filtering(mag_filter),
+        .minFilter = to_vk_filtering(min_filter),
+        .mipmapMode = to_vk_mipmap_address_mode(mip_filter),
+        .addressModeU = to_vk_address_mode(addr_u),
+        .addressModeV = to_vk_address_mode(addr_v),
+        .addressModeW = to_vk_address_mode(addr_w),
+        .mipLodBias = mip_lod_bias,
+        .anisotropyEnable = use_anisotropy,
+        .maxAnisotropy = max_anisotropy,
+        .compareEnable = compare_op != vk::CompareOp::Never,
+        .compareOp = to_vk_compare_op(compare_op),
+        .minLod = min_lod,
+        .maxLod = max_lod,
         .borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK,
         .unnormalizedCoordinates = 0,
     };
@@ -250,8 +288,6 @@ auto Sampler::create(Device_H device, const SamplerInfo &info, const std::string
             return std::unexpected(vk::Result::OutOfDeviceMem);
         default:;
     }
-
-    set_object_name(device, sampler_handle, VK_OBJECT_TYPE_SAMPLER, name);
 
     auto sampler = device->resources.samplers.create();
     if (!sampler.has_value()) {
@@ -272,7 +308,7 @@ auto Sampler::create(Device_H device, const SamplerInfo &info, const std::string
         .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
         .pNext = nullptr,
         .dstSet = device->descriptor_set,
-        .dstBinding = std::to_underlying(Descriptors::Images),
+        .dstBinding = std::to_underlying(Descriptors::Samplers),
         .dstArrayElement = std::to_underlying(sampler->id),
         .descriptorCount = 1,
         .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER,
@@ -288,6 +324,12 @@ auto Sampler::create(Device_H device, const SamplerInfo &info, const std::string
 
 auto Sampler::destroy() -> void {
     vkDestroySampler(impl->device->handle, impl->handle, nullptr);
+}
+
+auto Sampler::set_name(const std::string &name) -> Sampler & {
+    set_object_name(impl->device, impl->handle, VK_OBJECT_TYPE_SAMPLER, name);
+
+    return *this;
 }
 
 }  // namespace lr

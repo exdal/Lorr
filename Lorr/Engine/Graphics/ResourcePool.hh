@@ -31,7 +31,6 @@ struct PagedResourcePool {
     struct Result {
         ResourceT *impl = nullptr;
         ResourceID id = {};
-        bool is_fresh = false;
     };
 
     index_type latest_index = 0;
@@ -42,21 +41,18 @@ struct PagedResourcePool {
         ZoneScoped;
 
         index_type index = static_cast<index_type>(~0);
-        bool is_fresh = false;
         if (self.free_indexes.empty()) {
             index = self.latest_index++;
-            is_fresh = true;
             if (index >= INFO.MAX_RESOURCE_COUNT) {
                 return ls::nullopt;
             }
         } else {
             index = self.free_indexes.back();
-            is_fresh = true;
             self.free_indexes.pop_back();
         }
 
-        index_type page_id = index >> INFO.PAGE_BITS;
-        index_type page_offset = index & PAGE_MASK;
+        auto page_id = index >> static_cast<index_type>(INFO.PAGE_BITS);
+        auto page_offset = index & PAGE_MASK;
 
         if (page_id >= PAGE_COUNT) {
             return ls::nullopt;
@@ -67,34 +63,26 @@ struct PagedResourcePool {
             page = std::make_unique<Page>();
         }
 
-        return { static_cast<ResourceID>(index), page.at(index), is_fresh };
+        return Result(&page->at(index), static_cast<ResourceID>(index));
     }
 
     void destroy(this auto &self, ResourceID id) {
         ZoneScoped;
 
-        index_type index = static_cast<index_type>(id);
-        index_type page_id = index >> INFO.PAGE_BITS;
-        index_type page_offset = index & PAGE_MASK;
-
-        self.pages[page_id]->at(page_offset) = nullptr;
-        self.free_indexes.push_back(index);
-    }
-
-    void zombify(this auto &self, ResourceID id) {
-        ZoneScoped;
-
         auto index = static_cast<index_type>(id);
+        auto page_id = index >> static_cast<index_type>(INFO.PAGE_BITS);
+        auto page_offset = index & PAGE_MASK;
 
+        self.pages[page_id]->at(page_offset) = {};
         self.free_indexes.push_back(index);
     }
 
     ResourceT &get(this auto &self, ResourceID id) {
         ZoneScoped;
 
-        index_type index = static_cast<index_type>(id);
-        index_type page_id = index >> INFO.PAGE_BITS;
-        index_type page_offset = index & PAGE_MASK;
+        auto index = static_cast<index_type>(id);
+        auto page_id = index >> static_cast<index_type>(INFO.PAGE_BITS);
+        auto page_offset = index & PAGE_MASK;
 
         return self.pages[page_id]->at(page_offset);
     }

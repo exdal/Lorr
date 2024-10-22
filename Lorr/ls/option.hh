@@ -24,17 +24,17 @@ struct option_flag_val<T> {
 
 template<>
 struct option_flag_val<u8> {
-    constexpr static auto nullopt = ~0_u8;
+    constexpr static auto nullopt = std::numeric_limits<u8>::max();
 };
 
 template<>
 struct option_flag_val<u16> {
-    constexpr static auto nullopt = ~0_u16;
+    constexpr static auto nullopt = std::numeric_limits<u16>::max();
 };
 
 template<>
 struct option_flag_val<u32> {
-    constexpr static auto nullopt = ~0_u32;
+    constexpr static auto nullopt = std::numeric_limits<u32>::max();
 };
 
 template<>

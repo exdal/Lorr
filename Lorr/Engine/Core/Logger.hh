@@ -20,9 +20,9 @@ struct LoggerFmt : public std::string_view {
 
     template<typename String>
         requires std::constructible_from<std::string_view, String>
-    consteval LoggerFmt(const String &string, const std::source_location location = std::source_location::current()) noexcept
+    consteval LoggerFmt(const String &string, const std::source_location LOC = std::source_location::current()) noexcept
         : std::string_view(string),
-          location(location) {}
+          location(LOC) {}
 
     template<std::formattable<char>... Args>
     constexpr const std::format_string<Args...> &get() const noexcept {

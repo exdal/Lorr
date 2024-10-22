@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Engine/Graphics/Task/TaskGraph.hh"
+#include "Engine/World/RenderPasses.hh"
 
 namespace lr {
 struct GPUSunData {
@@ -40,50 +40,26 @@ struct GPUWorldData {
     GPUAtmosphereData atmosphere = {};
 };
 
-struct TaskExecutionData {
-    u64 world_buffer_ptr = 0;
-    SamplerID linear_sampler = SamplerID::Invalid;
-};
-
 struct RenderPipeline {
-    Device *device = nullptr;
+    Device device = {};
     // Main task graph for entire pipeline
     TaskGraph task_graph = {};
-    TaskExecutionData tg_execution_data = {};
 
     // Buffers for static objects
     BufferID persistent_vertex_buffer = {};
     BufferID persistent_index_buffer = {};
     BufferID persistent_material_buffer = {};
 
-    // Buffers for dynamic objects
-    ls::static_vector<BufferID, Device::Limits::FrameCount> dynamic_vertex_buffers = {};
-    ls::static_vector<BufferID, Device::Limits::FrameCount> dynamic_index_buffers = {};
-
-    // Scene data
-    ls::static_vector<BufferID, Device::Limits::FrameCount> cpu_upload_buffers = {};
-    ls::static_vector<BufferID, Device::Limits::FrameCount> world_camera_buffers = {};
-    ls::static_vector<BufferID, Device::Limits::FrameCount> world_model_buffers = {};
-    ls::static_vector<BufferID, Device::Limits::FrameCount> world_data_buffers = {};
     GPUWorldData world_data = {};
 
-    // Backbuffer
+    // Pipeline Info
+    SamplerID linear_sampler = {};
+    SamplerID nearest_sampler = {};
     TaskImageID swap_chain_image = {};
-    // Geometry
-    TaskImageID geometry_depth_image = {};
-    // Post processing image
-    TaskImageID final_image = {};
-    // Atmosphere
-    TaskImageID atmos_transmittance_image = {};
-    TaskImageID atmos_ms_image = {};
-    TaskImageID atmos_sky_lut_image = {};
-    TaskImageID atmos_final_image = {};
+    // Passes
+    ImguiPass imgui_pass = {};
 
-    // ImGui
-    ImFont *im_roboto_fa = nullptr;
-    ImFont *im_fa_big = nullptr;
-
-    bool init(this RenderPipeline &, Device *device);
+    bool init(this RenderPipeline &, Device device);
     void shutdown(this RenderPipeline &);
 
     // Presentation

@@ -38,13 +38,17 @@ auto Device::create(usize frame_count) -> std::expected<Device, vk::Result> {
             auto category = to_log_category(messageSeverity);
             LOG(category,
                 "[VK] "
-                "{}:\n===========================================================\n{}\n===================================================="
+                "{}:\n========================================================="
+                "=="
+                "\n{}\n===================================================="
                 "=======",
                 type,
                 pCallbackData->pMessage);
             return VK_FALSE;
         });
 
+    // For some reason, indentation gets fucked so disable clang-format
+    // clang-format off
     instance_builder.enable_extensions({
         "VK_KHR_surface",
         "VK_KHR_get_physical_device_properties2",
@@ -56,9 +60,11 @@ auto Device::create(usize frame_count) -> std::expected<Device, vk::Result> {
 #if LS_DEBUG
         //! Debug extensions, always put it to bottom
         "VK_EXT_debug_utils",
-        "VK_EXT_debug_report",
+        "VK_EXT_debug_report"
 #endif
     });
+    // clang-format on
+
     instance_builder.require_api_version(1, 3, 0);
     auto instance_result = instance_builder.build();
     if (!instance_result) {
@@ -147,10 +153,15 @@ auto Device::create(usize frame_count) -> std::expected<Device, vk::Result> {
     impl->physical_device = physical_device_result.value();
 
     // We don't want to kill the coverage...
-    // if (impl->physical_device.enable_extension_if_present("VK_EXT_descriptor_buffer")) {
+    // if
+    // (impl->physical_device.enable_extension_if_present("VK_EXT_descriptor_buffer"))
+    // {
     //     impl->supported_features |= DeviceFeature::DescriptorBuffer;
-    //     VkPhysicalDeviceDescriptorBufferFeaturesEXT desciptor_buffer_features = {
-    //         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT,
+    //     VkPhysicalDeviceDescriptorBufferFeaturesEXT desciptor_buffer_features
+    //     =
+    //     {
+    //         .sType =
+    //         VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT,
     //         .pNext = nullptr,
     //         .descriptorBuffer = true,
     //         .descriptorBufferCaptureReplay = false,
@@ -200,11 +211,198 @@ auto Device::create(usize frame_count) -> std::expected<Device, vk::Result> {
         return std::unexpected(vk::Result::ExtNotPresent);
     }
 
-    set_object_name(impl, impl->instance, VK_OBJECT_TYPE_INSTANCE, "Instance");
-    set_object_name(impl, impl->physical_device, VK_OBJECT_TYPE_PHYSICAL_DEVICE, "Physical Device");
-    set_object_name(impl, impl->handle, VK_OBJECT_TYPE_DEVICE, "Device");
+    set_object_name(impl, impl->instance.instance, VK_OBJECT_TYPE_INSTANCE, "Instance");
+    set_object_name(impl, impl->physical_device.physical_device, VK_OBJECT_TYPE_PHYSICAL_DEVICE, "Physical Device");
+    set_object_name(impl, impl->handle.device, VK_OBJECT_TYPE_DEVICE, "Device");
 
-    auto create_command_queue = [&](vk::CommandType type, const std::string &debug_name) {};
+    impl->queues[0] = CommandQueue::create(impl, vk::CommandType::Graphics).value().set_name("Graphics Queue");
+    impl->queues[1] = CommandQueue::create(impl, vk::CommandType::Compute).value().set_name("Compute Queue");
+    impl->queues[2] = CommandQueue::create(impl, vk::CommandType::Transfer).value().set_name("Transfer Queue");
+    impl->frame_sema = Semaphore::create(impl, 0).value().set_name("Device Frame Semaphore");
+
+    VmaVulkanFunctions vulkan_functions = {};
+    vulkan_functions.vkGetInstanceProcAddr = vkGetInstanceProcAddr;
+    vulkan_functions.vkGetDeviceProcAddr = vkGetDeviceProcAddr;
+
+    VmaAllocatorCreateInfo allocator_create_info = {
+        .flags = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT,
+        .physicalDevice = impl->physical_device,
+        .device = impl->handle,
+        .preferredLargeHeapBlockSize = 0,
+        .pAllocationCallbacks = nullptr,
+        .pDeviceMemoryCallbacks = nullptr,
+        .pHeapSizeLimit = nullptr,
+        .pVulkanFunctions = &vulkan_functions,
+        .instance = impl->instance,
+        .vulkanApiVersion = VK_API_VERSION_1_3,
+        .pTypeExternalMemoryHandleTypes = nullptr,
+    };
+    auto allocator_result = vmaCreateAllocator(&allocator_create_info, &impl->allocator);
+    if (allocator_result != VK_SUCCESS) {
+        LOG_ERROR("Failed to create VMA");
+        return std::unexpected(vk::Result::Unknown);
+    }
+
+    VkDescriptorBindingFlags bindless_flags = VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT | VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
+    std::vector<VkDescriptorPoolSize> pool_sizes;
+    std::vector<VkDescriptorSetLayoutBinding> layout_elements;
+    std::vector<VkDescriptorBindingFlags> binding_flags;
+    auto add_descriptor_binding = [&](Descriptors binding, VkDescriptorType type, u32 count) {
+        pool_sizes.push_back({
+            .type = type,
+            .descriptorCount = count,
+        });
+        layout_elements.push_back({
+            .binding = std::to_underlying(binding),
+            .descriptorType = type,
+            .descriptorCount = count,
+            .stageFlags = VK_SHADER_STAGE_ALL,
+            .pImmutableSamplers = nullptr,
+        });
+        binding_flags.push_back(bindless_flags);
+    };
+
+    add_descriptor_binding(Descriptors::Samplers, VK_DESCRIPTOR_TYPE_SAMPLER, impl->resources.samplers.max_resources());
+    add_descriptor_binding(Descriptors::Images, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, impl->resources.images.max_resources());
+    add_descriptor_binding(Descriptors::StorageImages, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, impl->resources.image_views.max_resources());
+    add_descriptor_binding(Descriptors::StorageBuffers, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, impl->resources.buffers.max_resources());
+    add_descriptor_binding(Descriptors::BDA, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1);
+
+    VkDescriptorPoolCreateInfo descriptor_pool_info = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT,
+        .maxSets = 1,
+        .poolSizeCount = static_cast<u32>(pool_sizes.size()),
+        .pPoolSizes = pool_sizes.data(),
+    };
+    auto descriptor_pool_result = vkCreateDescriptorPool(impl->handle, &descriptor_pool_info, nullptr, &impl->descriptor_pool);
+    switch (descriptor_pool_result) {
+        case VK_ERROR_OUT_OF_HOST_MEMORY:
+            LOG_ERROR("Failed to create Descriptor Pool, out of host mem");
+            return std::unexpected(vk::Result::OutOfHostMem);
+        case VK_ERROR_OUT_OF_DEVICE_MEMORY:
+            LOG_ERROR("Failed to create Descriptor Pool, out of device mem");
+            return std::unexpected(vk::Result::OutOfDeviceMem);
+        default:;
+    }
+
+    VkDescriptorSetLayoutBindingFlagsCreateInfo binding_flags_create_info = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
+        .pNext = nullptr,
+        .bindingCount = static_cast<u32>(binding_flags.size()),
+        .pBindingFlags = binding_flags.data(),
+    };
+
+    VkDescriptorSetLayoutCreateInfo descriptor_set_layout_info = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .pNext = &binding_flags_create_info,
+        .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT,
+        .bindingCount = static_cast<u32>(layout_elements.size()),
+        .pBindings = layout_elements.data(),
+    };
+    auto descriptor_set_layout =
+        vkCreateDescriptorSetLayout(impl->handle, &descriptor_set_layout_info, nullptr, &impl->descriptor_set_layout);
+    switch (descriptor_set_layout) {
+        case VK_ERROR_OUT_OF_HOST_MEMORY:
+            LOG_ERROR("Failed to create Descriptor Set Layout, out of host mem");
+            return std::unexpected(vk::Result::OutOfHostMem);
+        case VK_ERROR_OUT_OF_DEVICE_MEMORY:
+            LOG_ERROR("Failed to create Descriptor Set Layout, out of device mem");
+            return std::unexpected(vk::Result::OutOfDeviceMem);
+        default:;
+    }
+
+    VkDescriptorSetAllocateInfo descriptor_set_info = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .pNext = nullptr,
+        .descriptorPool = impl->descriptor_pool,
+        .descriptorSetCount = 1,
+        .pSetLayouts = &impl->descriptor_set_layout,
+    };
+    auto descriptor_set_result = vkAllocateDescriptorSets(impl->handle, &descriptor_set_info, &impl->descriptor_set);
+    switch (descriptor_set_result) {
+        case VK_ERROR_OUT_OF_HOST_MEMORY:
+            LOG_ERROR("Failed to create Descriptor Set, out of host mem");
+            return std::unexpected(vk::Result::OutOfHostMem);
+        case VK_ERROR_OUT_OF_DEVICE_MEMORY:
+            LOG_ERROR("Failed to create Descriptor Set, out of device mem");
+            return std::unexpected(vk::Result::OutOfDeviceMem);
+        case VK_ERROR_FRAGMENTED_POOL:
+            LOG_ERROR("Failed to create Descriptor Set, fragmented pool");
+            return std::unexpected(vk::Result::FragmentedPool);
+        default:;
+    }
+
+    set_object_name(impl, impl->descriptor_pool, VK_OBJECT_TYPE_DESCRIPTOR_POOL, "Bindless Descriptor Pool");
+    set_object_name(impl, impl->descriptor_set_layout, VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, "Bindless Descriptor Set Layout");
+    set_object_name(impl, impl->descriptor_set, VK_OBJECT_TYPE_DESCRIPTOR_SET, "Bindless Descriptor Set");
+
+    for (u32 i = 0; i < impl->resources.pipeline_layouts.size(); i++) {
+        auto &layout = impl->resources.pipeline_layouts.at(i);
+        VkPushConstantRange push_constant_range = {
+            .stageFlags = VK_SHADER_STAGE_ALL,
+            .offset = 0,
+            .size = static_cast<u32>(i * sizeof(u32)),
+        };
+        VkPipelineLayoutCreateInfo pipeline_layout_create_info = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .setLayoutCount = 1,
+            .pSetLayouts = &impl->descriptor_set_layout,
+            .pushConstantRangeCount = !!i,
+            .pPushConstantRanges = &push_constant_range,
+        };
+
+        vkCreatePipelineLayout(impl->handle, &pipeline_layout_create_info, nullptr, &layout);
+        set_object_name(impl, layout, VK_OBJECT_TYPE_PIPELINE_LAYOUT, std::format("Pipeline Layout ({})", i));
+    }
+
+    // I would rather a crashed renderer than a renderer without BDA buffer
+    impl->bda_array_buffer = Buffer::create(
+                                 impl,
+                                 vk::BufferUsage::Storage,
+                                 impl->resources.buffers.max_resources() * sizeof(u64),
+                                 vk::MemoryAllocationUsage::PreferDevice,
+                                 vk::MemoryAllocationFlag::HostSeqWrite)
+                                 .value();
+    auto &bda_buffer = impl->resources.buffers.get(impl->bda_array_buffer);
+    impl->bda_array_host_addr = static_cast<u64 *>(bda_buffer.host_data);
+
+    VkDescriptorBufferInfo bda_descriptor_info = {
+        .buffer = bda_buffer.handle,
+        .offset = 0,
+        .range = ~0_u64,
+    };
+
+    VkWriteDescriptorSet sampler_write_set_info = {
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .pNext = nullptr,
+        .dstSet = impl->descriptor_set,
+        .dstBinding = std::to_underlying(Descriptors::BDA),
+        .dstArrayElement = std::to_underlying(impl->bda_array_buffer),
+        .descriptorCount = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+        .pImageInfo = nullptr,
+        .pBufferInfo = &bda_descriptor_info,
+        .pTexelBufferView = nullptr,
+    };
+
+    vkUpdateDescriptorSets(impl->handle, 1, &sampler_write_set_info, 0, nullptr);
+
+    impl->transfer_man = TransferManager::create(impl);
+    impl->persistent_buffer = Buffer::create(
+                                  impl,
+                                  vk::BufferUsage::TransferSrc,
+                                  Device::Limits::PersistentBufferSize,
+                                  vk::MemoryAllocationUsage::PreferHost,
+                                  vk::MemoryAllocationFlag::HostSeqWrite)
+                                  .value();
+
+    auto a = impl->transfer_man.allocate(1024);
+    auto b = impl->transfer_man.allocate(1024);
+    auto c = impl->transfer_man.allocate(1024);
 
     return Device(impl);
 }
@@ -212,17 +410,149 @@ auto Device::create(usize frame_count) -> std::expected<Device, vk::Result> {
 auto Device::destroy() -> void {
 }
 
+auto Device::frame_count() -> usize {
+    return impl->frame_count;
+}
+
+auto Device::frame_sema() -> Semaphore {
+    return impl->frame_sema;
+}
+
 auto Device::queue(vk::CommandType type) -> CommandQueue {
     return impl->queues.at(std::to_underlying(type));
 }
 
+auto Device::transfer_manager() -> TransferManager {
+    return impl->transfer_man;
+}
+
 auto Device::wait() -> void {
+    vkDeviceWaitIdle(impl->handle);
 }
 
 auto Device::new_frame() -> usize {
+    ZoneScoped;
+
+    i64 sema_counter = static_cast<i64>(impl->frame_sema.value());
+    u64 wait_val = static_cast<u64>(std::max<i64>(0, sema_counter - static_cast<i64>(impl->frame_count - 1)));
+
+    impl->frame_sema.wait(wait_val);
+    return impl->frame_sema.value() % impl->frame_count;
 }
 
 auto Device::end_frame() -> void {
+    ZoneScoped;
+
+    for (auto &v : impl->queues) {
+        v.collect_garbage();
+    }
+    impl->transfer_man.collect_garbage();
+}
+
+auto Device::buffer(BufferID id) -> Buffer {
+    ZoneScoped;
+    return Buffer(&impl->resources.buffers.get(id));
+}
+
+auto Device::image(ImageID id) -> Image {
+    ZoneScoped;
+    return Image(&impl->resources.images.get(id));
+}
+
+auto Device::image_view(ImageViewID id) -> ImageView {
+    ZoneScoped;
+    return ImageView(&impl->resources.image_views.get(id));
+}
+
+auto Device::sampler(SamplerID id) -> Sampler {
+    ZoneScoped;
+    return Sampler(&impl->resources.samplers.get(id));
+}
+
+auto Device::pipeline(PipelineID id) -> Pipeline {
+    ZoneScoped;
+    return Pipeline(&impl->resources.pipelines.get(id));
+}
+
+auto Device::upload(ImageID dst_image_id, void *data, u64 data_size, vk::ImageLayout new_layout) -> void {
+    ZoneScoped;
+
+    auto dst_image = this->image(dst_image_id);
+    auto graphics_queue = queue(vk::CommandType::Graphics);
+    auto extent = dst_image.extent();
+    const auto &format_info = get_format_info(dst_image.format());
+    auto buffer_ptr = this->buffer(impl->persistent_buffer).host_ptr();
+
+    auto rows = (extent.height + format_info.block_height - 1) / format_info.block_height;
+    auto cols = (extent.width + format_info.block_width - 1) / format_info.block_width;
+    auto pixel_size = rows * cols * format_info.component_size;
+    LS_EXPECT(pixel_size == data_size);
+
+    std::memcpy(buffer_ptr, data, data_size);
+
+    auto cmd_list = graphics_queue.begin();
+    cmd_list.image_transition({
+        .src_stage = vk::PipelineStage::TopOfPipe,
+        .src_access = vk::MemoryAccess::None,
+        .dst_stage = vk::PipelineStage::Copy,
+        .dst_access = vk::MemoryAccess::TransferWrite,
+        .old_layout = vk::ImageLayout::Undefined,
+        .new_layout = vk::ImageLayout::TransferDst,
+        .image_id = dst_image_id,
+    });
+    vk::ImageCopyRegion copy_region = {
+        .buffer_offset = 0,
+        .image_extent = extent,
+    };
+    cmd_list.copy_buffer_to_image(impl->persistent_buffer, dst_image_id, vk::ImageLayout::TransferDst, copy_region);
+    cmd_list.image_transition({
+        .src_stage = vk::PipelineStage::Copy,
+        .src_access = vk::MemoryAccess::TransferWrite,
+        .dst_stage = vk::PipelineStage::AllCommands,
+        .dst_access = vk::MemoryAccess::ReadWrite,
+        .old_layout = vk::ImageLayout::TransferDst,
+        .new_layout = new_layout,
+        .image_id = dst_image_id,
+    });
+
+    graphics_queue.end(cmd_list);
+    graphics_queue.submit({}, {});
+    graphics_queue.wait();
+}
+
+auto Device::destroy_buffer(BufferID id) -> void {
+    ZoneScoped;
+    auto v = buffer(id);
+    v.destroy();
+    impl->resources.buffers.destroy(id);
+}
+
+auto Device::destroy_image(ImageID id) -> void {
+    ZoneScoped;
+    auto v = image(id);
+    v.destroy();
+    impl->resources.images.destroy(id);
+}
+
+auto Device::destroy_image_view(ImageViewID id) -> void {
+    ZoneScoped;
+    auto v = image_view(id);
+    v.destroy();
+    impl->resources.image_views.destroy(id);
+}
+
+auto Device::destroy_sampler(SamplerID id) -> void {
+    ZoneScoped;
+    auto v = sampler(id);
+    v.destroy();
+    impl->resources.samplers.destroy(id);
+}
+
+auto Device::destroy_pipeline(PipelineID id) -> void {
+    ZoneScoped;
+    auto v = pipeline(id);
+    v.destroy();
+    impl->resources.pipelines.destroy(id);
 }
 
 }  // namespace lr

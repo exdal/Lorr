@@ -3,8 +3,7 @@
 #include "Engine/Graphics/Vulkan/ToVk.hh"
 
 namespace lr {
-auto Shader::create(Device_H device, std::vector<u32> &ir, vk::ShaderStageFlag stage, const std::string &name)
-    -> std::expected<Shader, vk::Result> {
+auto Shader::create(Device_H device, const std::vector<u32> &ir, vk::ShaderStageFlag stage) -> std::expected<Shader, vk::Result> {
     ZoneScoped;
 
     VkShaderModuleCreateInfo create_info = {
@@ -25,8 +24,6 @@ auto Shader::create(Device_H device, std::vector<u32> &ir, vk::ShaderStageFlag s
         default:;
     }
 
-    set_object_name(device, shader_module, VK_OBJECT_TYPE_SHADER_MODULE, name);
-
     auto impl = new Impl;
     impl->device = device;
     impl->stage = stage;
@@ -39,7 +36,13 @@ auto Shader::destroy() -> void {
     vkDestroyShaderModule(impl->device->handle, impl->handle, nullptr);
 }
 
-auto Pipeline::create(Device_H device, const GraphicsPipelineInfo &info, const std::string &name) -> std::expected<PipelineID, vk::Result> {
+auto Shader::set_name(const std::string &name) -> Shader & {
+    set_object_name(impl->device, impl->handle, VK_OBJECT_TYPE_SHADER_MODULE, name);
+
+    return *this;
+}
+
+auto Pipeline::create(Device_H device, const GraphicsPipelineInfo &info) -> std::expected<PipelineID, vk::Result> {
     ZoneScoped;
 
     std::vector<VkFormat> color_attachment_formats;
@@ -267,8 +270,6 @@ auto Pipeline::create(Device_H device, const GraphicsPipelineInfo &info, const s
         default:;
     }
 
-    set_object_name(device, pipeline_handle, VK_OBJECT_TYPE_PIPELINE, name);
-
     auto pipeline = device->resources.pipelines.create();
     if (!pipeline.has_value()) {
         return std::unexpected(vk::Result::OutOfPoolMem);
@@ -283,7 +284,7 @@ auto Pipeline::create(Device_H device, const GraphicsPipelineInfo &info, const s
     return pipeline->id;
 }
 
-auto Pipeline::create(Device_H device, const ComputePipelineInfo &info, const std::string &name) -> std::expected<PipelineID, vk::Result> {
+auto Pipeline::create(Device_H device, const ComputePipelineInfo &info) -> std::expected<PipelineID, vk::Result> {
     ZoneScoped;
 
     VkPipelineShaderStageCreateInfo shader_stage_info = {
@@ -317,8 +318,6 @@ auto Pipeline::create(Device_H device, const ComputePipelineInfo &info, const st
         default:;
     }
 
-    set_object_name(device, pipeline_handle, VK_OBJECT_TYPE_PIPELINE, name);
-
     auto pipeline = device->resources.pipelines.create();
     if (!pipeline.has_value()) {
         return std::unexpected(vk::Result::OutOfPoolMem);
@@ -335,6 +334,12 @@ auto Pipeline::create(Device_H device, const ComputePipelineInfo &info, const st
 
 auto Pipeline::destroy() -> void {
     vkDestroyPipeline(impl->device->handle, impl->handle, nullptr);
+}
+
+auto Pipeline::set_name(const std::string &name) -> Pipeline & {
+    set_object_name(impl->device, impl->handle, VK_OBJECT_TYPE_PIPELINE, name);
+
+    return *this;
 }
 
 auto Pipeline::bind_point() -> vk::PipelineBindPoint {

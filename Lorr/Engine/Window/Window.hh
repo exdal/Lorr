@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Engine/Core/Handle.hh"
+#include "Engine/Graphics/Vulkan.hh"
 
 namespace lr {
 enum class WindowCursor {
@@ -49,18 +50,6 @@ struct WindowInfo {
     WindowFlag flags = WindowFlag::None;
 };
 
-union NativeWindowHandle {
-    struct {
-        void *win32_instance = nullptr;
-        void *win32_handle = nullptr;
-    };
-
-    struct {
-        void *x11_display;
-        void *x11_window;
-    };
-};
-
 struct Window : Handle<Window> {
     static auto create(const WindowInfo &info) -> Window;
     auto destroy() -> void;
@@ -70,7 +59,9 @@ struct Window : Handle<Window> {
 
     static auto display_at(u32 monitor_id = WindowInfo::USE_PRIMARY_MONITOR) -> SystemDisplay;
     auto should_close() -> bool;
-    auto native_handle() -> NativeWindowHandle;
+    auto get_size() -> glm::uvec2;
+    auto get_native_handle() -> void *;
+    auto get_surface(Device) -> Surface;
 };
 
 }  // namespace lr

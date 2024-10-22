@@ -4,12 +4,8 @@
 
 namespace lr {
 auto Buffer::create(
-    Device_H device,
-    vk::BufferUsage usage_flags,
-    vk::MemoryAllocationUsage memory_usage,
-    vk::MemoryAllocationFlag memory_flags,
-    u64 size,
-    const std::string &name) -> std::expected<BufferID, vk::Result> {
+    Device_H device, vk::BufferUsage usage_flags, u64 size, vk::MemoryAllocationUsage memory_usage, vk::MemoryAllocationFlag memory_flags)
+    -> std::expected<BufferID, vk::Result> {
     ZoneScoped;
 
     constexpr static auto host_flags = vk::MemoryAllocationFlag::HostSeqWrite | vk::MemoryAllocationFlag::HostReadWrite;
@@ -49,11 +45,6 @@ auto Buffer::create(
         return std::unexpected(vk::Result::Unknown);
     }
 
-#if LS_DEBUG
-    vmaSetAllocationName(device->allocator, allocation, name.c_str());
-#endif
-    set_object_name(device, buffer_handle, VK_OBJECT_TYPE_BUFFER, name);
-
     VkBufferDeviceAddressInfo device_address_info = {
         .sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
         .pNext = nullptr,
@@ -82,6 +73,13 @@ auto Buffer::create(
 
 auto Buffer::destroy() -> void {
     vmaDestroyBuffer(impl->device->allocator, impl->handle, impl->allocation);
+}
+
+auto Buffer::set_name(const std::string &name) -> Buffer & {
+    vmaSetAllocationName(impl->device->allocator, impl->allocation, name.c_str());
+    set_object_name(impl->device, impl->handle, VK_OBJECT_TYPE_BUFFER, name);
+
+    return *this;
 }
 
 auto Buffer::data_size() -> u64 {

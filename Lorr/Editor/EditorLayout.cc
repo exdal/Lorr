@@ -2,6 +2,8 @@
 
 #include "EditorApp.hh"
 
+#include "Engine/OS/OS.hh"
+
 #include <imgui.h>
 #include <imgui_internal.h>
 

@@ -73,19 +73,19 @@ auto SwapChain::set_name(const std::string &name) -> SwapChain & {
     return *this;
 }
 
-auto SwapChain::format() -> vk::Format {
+auto SwapChain::format() const -> vk::Format {
     return impl->format;
 }
 
-auto SwapChain::extent() -> vk::Extent3D {
+auto SwapChain::extent() const -> vk::Extent3D {
     return impl->extent;
 }
 
-auto SwapChain::semaphores(usize i) -> std::pair<Semaphore, Semaphore> {
+auto SwapChain::semaphores(usize i) const -> std::pair<Semaphore, Semaphore> {
     return { impl->acquire_semas.at(i), impl->present_semas.at(i) };
 }
 
-auto SwapChain::get_images() -> std::pair<std::vector<ImageID>, std::vector<ImageViewID>> {
+auto SwapChain::get_images() const -> std::vector<ImageID> {
     ZoneScoped;
 
     u32 image_count = impl->device->frame_count;
@@ -96,33 +96,34 @@ auto SwapChain::get_images() -> std::pair<std::vector<ImageID>, std::vector<Imag
     }
 
     std::vector<ImageID> images(image_count);
-    std::vector<ImageViewID> image_views(image_count);
 
     for (u32 i = 0; i < image_count; i++) {
         auto image_id = Image::create_for_swap_chain(impl->device, impl->format, impl->extent).value();
         auto image = impl->device.image(image_id);
         image->handle = image_handles[i];
-
-        auto image_view_id =
+        image->default_view =
             ImageView::create(
                 impl->device,
                 image_id,
                 vk::ImageViewType::View2D,
                 { .aspect_flags = vk::ImageAspectFlag::Color, .base_mip = 0, .mip_count = 1, .base_slice = 0, .slice_count = 1 })
-                .value();
+                .value_or(ImageViewID::Invalid);
 
         images[i] = image_id;
-        image_views[i] = image_view_id;
 
         set_object_name(impl->device, impl->device.image(image_id)->handle, VK_OBJECT_TYPE_IMAGE, std::format("SwapChain Image {}", i));
         set_object_name(
             impl->device,
-            impl->device.image_view(image_view_id)->handle,
+            impl->device.image_view(image->default_view)->handle,
             VK_OBJECT_TYPE_IMAGE_VIEW,
             std::format("SwapChain Image View {}", i));
     }
 
-    return { images, image_views };
+    return images;
+}
+
+auto SwapChain::image_index() const -> u32 {
+    return impl->acquired_index;
 }
 
 }  // namespace lr

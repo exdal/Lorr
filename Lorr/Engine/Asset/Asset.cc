@@ -9,7 +9,6 @@ bool AssetManager::init(this AssetManager &self, Device device) {
     ZoneScoped;
 
     self.device = device;
-    self.shader_compiler = SlangCompiler::create().value();
 
     u32 invalid_tex_data[] = { 0xFF000000, 0xFFFF00FF, 0xFFFF00FF, 0xFF000000 };
     // auto invalid_image_id = self.device->create_image(ImageInfo{
@@ -63,15 +62,6 @@ void AssetManager::shutdown(this AssetManager &self, bool print_reports) {
         //     self.device->delete_buffers(id);
         // }
     }
-}
-
-ls::option<SlangModule> AssetManager::load_shader(
-    this AssetManager &self, const ShaderSessionInfo &session_info, const ShaderCompileInfo &compile_info) {
-    ZoneScoped;
-
-    // TODO: Error handling
-    auto compiler_session = self.shader_compiler.new_session(session_info).value();
-    return compiler_session.load_module(compile_info).value();
 }
 
 Model *AssetManager::load_model(this AssetManager &self, const Identifier &ident, const fs::path &path) {
@@ -210,6 +200,24 @@ Material *AssetManager::add_material(this AssetManager &self, const Identifier &
     auto &material = material_iter.first->second;
 
     return &material;
+}
+
+fs::path AssetManager::asset_dir(AssetType type) {
+    ZoneScoped;
+
+    auto root = fs::current_path() / "resources";
+    switch (type) {
+        case AssetType::Root:
+            return root;
+        case AssetType::Shader:
+            return root / "shaders";
+        case AssetType::Image:
+            return root / "textures";
+        case AssetType::Model:
+            return root / "models";
+        case AssetType::Font:
+            return root / "fonts";
+    }
 }
 
 Texture *AssetManager::texture_at(this AssetManager &self, const Identifier &ident) {

@@ -51,8 +51,9 @@ struct File {
     std::unique_ptr<u8[]> whole_data(this File &self) {
         ZoneScoped;
 
-        auto data = std::make_unique_for_overwrite<u8[]>(self.size);
+        auto data = std::make_unique_for_overwrite<u8[]>(self.size + 1);
         self.read(data.get(), { 0, ~0_sz });
+        data[self.size] = '\0';
 
         return data;
     }

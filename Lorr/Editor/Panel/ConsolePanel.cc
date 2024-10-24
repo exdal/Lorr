@@ -1,6 +1,6 @@
 #include "Panels.hh"
 
-#include "Engine/Core/Application.hh"
+// #include "Engine/Core/Application.hh"
 
 namespace lr {
 // void log_cb(void *user_Data, const loguru::Message &message) {
@@ -16,8 +16,8 @@ ConsolePanel::ConsolePanel(std::string name_, bool open_)
 }
 
 void ConsolePanel::update(this ConsolePanel &self) {
-    auto &app = Application::get();
-    auto &render_pipeline = app.world_render_pipeline;
+    // auto &app = Application::get();
+    // auto &render_pipeline = app.world_render_pipeline;
 
     ImGui::Begin(self.name.data());
     ImGuiListClipper clipper;

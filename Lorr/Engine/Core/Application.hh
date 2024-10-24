@@ -7,7 +7,6 @@
 
 #include "Engine/Graphics/Vulkan.hh"
 
-#include "Engine/World/RenderPipeline.hh"
 #include "Engine/World/World.hh"
 
 #include "Engine/Window/Window.hh"
@@ -35,7 +34,6 @@ struct Application {
 
     AssetManager asset_man = {};
 
-    RenderPipeline world_render_pipeline = {};
     World world = {};
 
     bool should_close = false;
@@ -49,7 +47,7 @@ struct Application {
 
     virtual bool do_super_init(ls::span<c8 *> args) = 0;
     virtual bool do_prepare() = 0;
-    virtual bool do_update(f32 delta_time) = 0;
+    virtual bool do_update(f64 delta_time) = 0;
     virtual void do_shutdown() = 0;
 };
 

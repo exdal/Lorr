@@ -95,16 +95,19 @@ ls::option<u32> findLowestSetBitAfter(u32 bitMask, u32 startBitIndex) {
     return tzcnt_nonzero(bitsAfter);
 }
 
-auto TransferManager::create(Device_H device, u32 capacity, u32 max_allocs) -> TransferManager {
+auto TransferManager::create(Device_H device, u32 capacity, vk::BufferUsage additional_buffer_usage, u32 max_allocs) -> TransferManager {
     ZoneScoped;
 
     auto impl = new Impl;
     impl->device = device;
     impl->semaphore = Semaphore::create(device, 0).value();
-    impl->buffer_id =
-        Buffer::create(
-            device, vk::BufferUsage::TransferSrc, capacity, vk::MemoryAllocationUsage::PreferHost, vk::MemoryAllocationFlag::HostSeqWrite)
-            .value();
+    impl->buffer_id = Buffer::create(
+                          device,
+                          vk::BufferUsage::TransferSrc | additional_buffer_usage,
+                          capacity,
+                          vk::MemoryAllocationUsage::PreferHost,
+                          vk::MemoryAllocationFlag::HostSeqWrite)
+                          .value();
     impl->size = capacity;
     impl->max_allocs = max_allocs;
     impl->free_offset = max_allocs - 1;
@@ -168,7 +171,7 @@ auto TransferManager::collect_garbage() -> void {
     }
 }
 
-auto TransferManager::semaphore() -> Semaphore {
+auto TransferManager::semaphore() const -> Semaphore {
     return impl->semaphore;
 }
 
@@ -256,7 +259,7 @@ auto TransferManager::Impl::free_node(u32 node_index) -> void {
 
     if (node.next_neighbor.has_value() && this->nodes[node.next_neighbor.value()].used == false) {
         auto &next_node = this->nodes[node.next_neighbor.value()];
-        size += next_node.size;
+        node_size += next_node.size;
 
         this->remove_node_from_bin(node.next_neighbor.value());
 
@@ -304,6 +307,7 @@ auto TransferManager::Impl::insert_node_into_bin(u32 node_size, u32 data_offset)
         this->nodes[top_node_index.value()].prev_bin = node_index;
     }
     this->bin_indices[bin_index] = node_index;
+    this->free_storage += node_size;
 
     return node_index;
 }

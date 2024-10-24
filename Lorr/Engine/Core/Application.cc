@@ -1,6 +1,6 @@
 #include "Application.hh"
 
-#include "Engine/Memory/Stack.hh"
+#include <imgui.h>
 
 namespace lr {
 bool Application::init(this Application &self, const ApplicationInfo &info) {
@@ -19,18 +19,12 @@ bool Application::init(this Application &self, const ApplicationInfo &info) {
         return false;
     }
     self.device = device.value();
-
     self.window = Window::create(info.window_info);
+    auto window_size = self.window.get_size();
+    auto surface = Surface::create(self.device, self.window.get_native_handle()).value();
+    self.swap_chain = SwapChain::create(self.device, surface, { window_size.x, window_size.y }).value().set_name("Main SwapChain");
 
     if (!self.asset_man.init(self.device)) {
-        return false;
-    }
-
-    if (!self.world.init()) {
-        return false;
-    }
-
-    if (!self.world_render_pipeline.init(self.device)) {
         return false;
     }
 
@@ -51,6 +45,10 @@ bool Application::init(this Application &self, const ApplicationInfo &info) {
     imgui.KeyMap[ImGuiKey_Backspace] = LR_KEY_BACKSPACE;
     imgui.KeyMap[ImGuiKey_LeftArrow] = LR_KEY_LEFT;
     imgui.KeyMap[ImGuiKey_RightArrow] = LR_KEY_RIGHT;
+
+    if (!self.world.init()) {
+        return false;
+    }
 
     if (!self.do_prepare()) {
         LOG_FATAL("Failed to initialize application!");
@@ -105,9 +103,7 @@ void Application::poll_events(this Application &self) {
                 self.should_close = true;
                 break;
             }
-            default: {
-                break;
-            }
+            default:;
         }
     }
 }
@@ -118,15 +114,16 @@ void Application::run(this Application &self) {
     // Renderer context
     auto &imgui = ImGui::GetIO();
     std::vector<ImageID> images = {};
-    std::vector<ImageViewID> image_views = {};
-    b32 swap_chain_ok = false;
+    images = self.swap_chain.get_images();
+
+    b32 swap_chain_ok = true;
 
     while (true) {
-        bool should_close = false;
-        should_close |= self.window.should_close();
-        should_close |= self.world.ecs.should_quit();
-        should_close |= self.should_close;
-        if (should_close) {
+        bool die = false;
+        die |= self.window.should_close();
+        die |= self.world.ecs.should_quit();
+        die |= self.should_close;
+        if (die) {
             break;
         }
 
@@ -134,14 +131,24 @@ void Application::run(this Application &self) {
             auto surface = Surface::create(self.device, self.window.get_native_handle()).value();
             auto window_size = self.window.get_size();
             self.swap_chain = SwapChain::create(self.device, surface, { window_size.x, window_size.y }).value();
-            std::tie(images, image_views) = self.swap_chain.get_images();
+            images = self.swap_chain.get_images();
 
             swap_chain_ok = true;
         }
 
+        auto present_queue = self.device.queue(vk::CommandType::Graphics);
+        usize sema_index = self.device.new_frame();
+
+        auto [acquire_sema, present_sema] = self.swap_chain.semaphores(sema_index);
+        auto acquired_image_index = present_queue.acquire(self.swap_chain, acquire_sema);
+        if (!acquired_image_index.has_value()) {
+            swap_chain_ok = false;
+            continue;
+        }
+
         // Delta time
         f64 delta_time = self.world.ecs.delta_time();
-        imgui.DeltaTime = delta_time;
+        imgui.DeltaTime = static_cast<f32>(delta_time);
 
         // Update application
         auto extent = self.swap_chain.extent();
@@ -149,15 +156,14 @@ void Application::run(this Application &self) {
 
         self.world.begin_frame();
         // WARN: Make sure to do all imgui settings BEFORE NewFrame!!!
-        // ImGui::NewFrame();
-        // self.do_update(delta_time);
-        // ImGui::Render();
+        ImGui::NewFrame();
+        self.do_update(delta_time);
+        ImGui::Render();
         self.world.end_frame();
 
-        // Render frame
-        self.world_render_pipeline.render_into(self.swap_chain, images, image_views);
+        self.world.renderer->render(self.swap_chain, images[acquired_image_index.value()], {}, {});
+        self.device.end_frame(self.swap_chain, sema_index);
 
-        self.device.end_frame();
         self.window.poll();
         self.poll_events();
 
@@ -180,7 +186,6 @@ void Application::shutdown(this Application &self) {
     self.asset_man.shutdown(false);
 #endif
     self.swap_chain.destroy();
-    self.world_render_pipeline.shutdown();
 #ifdef LS_DEBUG
     self.device.destroy();
 #else

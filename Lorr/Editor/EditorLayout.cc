@@ -290,7 +290,7 @@ void EditorLayout::update(this EditorLayout &self) {
     ImGui::End();
 
     if (self.show_profiler) {
-        app.world_render_pipeline.task_graph.draw_profiler_ui();
+        app.world.renderer->pbr_graph.draw_profiler_ui();
     }
 
     for (auto &panel : self.panels) {

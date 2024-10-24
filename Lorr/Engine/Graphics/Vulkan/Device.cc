@@ -391,7 +391,6 @@ auto Device::create(usize frame_count) -> std::expected<Device, vk::Result> {
 
     vkUpdateDescriptorSets(impl->handle, 1, &sampler_write_set_info, 0, nullptr);
 
-    impl->transfer_man = TransferManager::create(impl);
     impl->persistent_buffer = Buffer::create(
                                   impl,
                                   vk::BufferUsage::TransferSrc,
@@ -400,9 +399,7 @@ auto Device::create(usize frame_count) -> std::expected<Device, vk::Result> {
                                   vk::MemoryAllocationFlag::HostSeqWrite)
                                   .value();
 
-    auto a = impl->transfer_man.allocate(1024);
-    auto b = impl->transfer_man.allocate(1024);
-    auto c = impl->transfer_man.allocate(1024);
+    impl->shader_compiler = SlangCompiler::create().value();
 
     return Device(impl);
 }
@@ -410,23 +407,25 @@ auto Device::create(usize frame_count) -> std::expected<Device, vk::Result> {
 auto Device::destroy() -> void {
 }
 
-auto Device::frame_count() -> usize {
+auto Device::frame_count() const -> usize {
     return impl->frame_count;
 }
 
-auto Device::frame_sema() -> Semaphore {
+auto Device::frame_sema() const -> Semaphore {
     return impl->frame_sema;
 }
 
-auto Device::queue(vk::CommandType type) -> CommandQueue {
+auto Device::queue(vk::CommandType type) const -> CommandQueue {
     return impl->queues.at(std::to_underlying(type));
 }
 
-auto Device::transfer_manager() -> TransferManager {
-    return impl->transfer_man;
+auto Device::new_slang_session(const SlangSessionInfo &info) -> ls::option<SlangSession> {
+    return impl->shader_compiler.new_session(info);
 }
 
-auto Device::wait() -> void {
+auto Device::wait() const -> void {
+    ZoneScoped;
+
     vkDeviceWaitIdle(impl->handle);
 }
 
@@ -440,42 +439,52 @@ auto Device::new_frame() -> usize {
     return impl->frame_sema.value() % impl->frame_count;
 }
 
-auto Device::end_frame() -> void {
+auto Device::end_frame(SwapChain &swap_chain, usize semaphore_index) -> void {
     ZoneScoped;
+
+    auto present_queue = this->queue(vk::CommandType::Graphics);
+    auto present_queue_sema = present_queue.semaphore();
+
+    auto [_, present_sema] = swap_chain.semaphores(semaphore_index);
+    Semaphore signal_semas[] = { present_sema, impl->frame_sema, present_queue_sema };
+    present_queue.submit(present_queue_sema, signal_semas);
+    present_queue.present(swap_chain, present_sema, swap_chain.image_index());
 
     for (auto &v : impl->queues) {
         v.collect_garbage();
     }
-    impl->transfer_man.collect_garbage();
 }
 
-auto Device::buffer(BufferID id) -> Buffer {
+auto Device::buffer(BufferID id) const -> Buffer {
     ZoneScoped;
     return Buffer(&impl->resources.buffers.get(id));
 }
 
-auto Device::image(ImageID id) -> Image {
+auto Device::image(ImageID id) const -> Image {
     ZoneScoped;
     return Image(&impl->resources.images.get(id));
 }
 
-auto Device::image_view(ImageViewID id) -> ImageView {
+auto Device::image_view(ImageViewID id) const -> ImageView {
     ZoneScoped;
     return ImageView(&impl->resources.image_views.get(id));
 }
 
-auto Device::sampler(SamplerID id) -> Sampler {
+auto Device::sampler(SamplerID id) const -> Sampler {
     ZoneScoped;
     return Sampler(&impl->resources.samplers.get(id));
 }
 
-auto Device::pipeline(PipelineID id) -> Pipeline {
+auto Device::pipeline(PipelineID id) const -> Pipeline {
     ZoneScoped;
     return Pipeline(&impl->resources.pipelines.get(id));
 }
 
 auto Device::upload(ImageID dst_image_id, void *data, u64 data_size, vk::ImageLayout new_layout) -> void {
     ZoneScoped;
+
+    // TODO: yeah
+    LS_EXPECT(data_size <= Device::Limits::PersistentBufferSize);
 
     auto dst_image = this->image(dst_image_id);
     auto graphics_queue = queue(vk::CommandType::Graphics);

@@ -1,8 +1,16 @@
 #pragma once
 
-#include "Engine/World/RenderPasses.hh"
+#include "Engine/Graphics/Vulkan.hh"
 
 namespace lr {
+// This struct should contain most generic and used object
+// stuff like linear samplers, world buffers, etc...
+struct WorldRenderContext {
+    SamplerID linear_sampler = SamplerID::Invalid;
+    SamplerID nearest_sampler = SamplerID::Invalid;
+    BufferID world_buffer = BufferID::Invalid;
+};
+
 struct GPUSunData {
     glm::vec3 direction = {};
     f32 intensity = 10.0f;
@@ -38,34 +46,6 @@ struct GPUWorldData {
     u64 models = {};
     GPUSunData sun = {};
     GPUAtmosphereData atmosphere = {};
-};
-
-struct RenderPipeline {
-    Device device = {};
-    // Main task graph for entire pipeline
-    TaskGraph task_graph = {};
-
-    // Buffers for static objects
-    BufferID persistent_vertex_buffer = {};
-    BufferID persistent_index_buffer = {};
-    BufferID persistent_material_buffer = {};
-
-    GPUWorldData world_data = {};
-
-    // Pipeline Info
-    SamplerID linear_sampler = {};
-    SamplerID nearest_sampler = {};
-    TaskImageID swap_chain_image = {};
-    // Passes
-    ImguiPass imgui_pass = {};
-
-    bool init(this RenderPipeline &, Device device);
-    void shutdown(this RenderPipeline &);
-
-    // Presentation
-    void update_world_data(this RenderPipeline &);
-    bool prepare(this RenderPipeline &, usize frame_index);
-    bool render_into(this RenderPipeline &, SwapChain &swap_chain, ls::span<ImageID> images, ls::span<ImageViewID> image_views);
 };
 
 }  // namespace lr

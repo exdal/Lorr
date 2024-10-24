@@ -1,9 +1,9 @@
 #include "World.hh"
 
-#include "Engine/World/Modules.hh"
-
+#include "Engine/Core/Application.hh"
 #include "Engine/OS/OS.hh"
 #include "Engine/Util/JsonWriter.hh"
+#include "Engine/World/Modules.hh"
 #include "Engine/World/RuntimeScene.hh"
 
 #include <simdjson.h>
@@ -23,6 +23,7 @@ bool json_to_vec(simdjson::ondemand::value &o, glm::vec<N, T> &vec) {
 bool World::init(this World &self) {
     ZoneScoped;
 
+    self.renderer = std::make_unique<WorldRenderer>(Application::get().device);
     self.unload_active_project();
 
     return true;

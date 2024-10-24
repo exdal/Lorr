@@ -1,10 +1,29 @@
-#include <utility>
-
 #include "Engine/Graphics/Slang/Compiler.hh"
 
 #include "Engine/Util/VirtualDir.hh"
 
+#include <utility>
+
 namespace lr {
+constexpr auto to_shader_stage(SlangStage v) {
+    switch (v) {
+        case SLANG_STAGE_VERTEX:
+            return vk::ShaderStageFlag::Vertex;
+        case SLANG_STAGE_HULL:
+            return vk::ShaderStageFlag::TessellationControl;
+        case SLANG_STAGE_DOMAIN:
+            return vk::ShaderStageFlag::TessellationEvaluation;
+        case SLANG_STAGE_GEOMETRY:
+        case SLANG_STAGE_FRAGMENT:
+            return vk::ShaderStageFlag::Fragment;
+        case SLANG_STAGE_COMPUTE:
+            return vk::ShaderStageFlag::Compute;
+        default:;
+    }
+
+    return vk::ShaderStageFlag::None;
+}
+
 struct SlangBlob : ISlangBlob {
     std::vector<u8> m_data = {};
     std::atomic_uint32_t m_refCount = 1;
@@ -108,79 +127,10 @@ struct SlangVirtualFS : ISlangFileSystem {
     }
 };
 
-std::vector<slang::CompilerOptionEntry> get_slang_entries(ShaderCompileFlag flags) {
-    ZoneScoped;
-
-    // clang-format off
-    std::vector<slang::CompilerOptionEntry> entries = {};
-    entries.emplace_back(
-        slang::CompilerOptionName::VulkanUseEntryPointName,
-        slang::CompilerOptionValue{ .intValue0 = true });
-
-    if (flags & ShaderCompileFlag::GenerateDebugInfo) {
-        entries.emplace_back(
-            slang::CompilerOptionName::DebugInformation,
-            slang::CompilerOptionValue({ .intValue0 = SLANG_DEBUG_INFO_FORMAT_PDB }));
-    }
-
-    if (flags & ShaderCompileFlag::SkipOptimization) {
-        entries.emplace_back(
-            slang::CompilerOptionName::Optimization,
-            slang::CompilerOptionValue{ .intValue0 = SLANG_OPTIMIZATION_LEVEL_NONE });
-    }
-    else {
-        entries.emplace_back(
-            slang::CompilerOptionName::Optimization,
-            slang::CompilerOptionValue{ .intValue0 = SLANG_OPTIMIZATION_LEVEL_MAXIMAL });
-    }
-
-    if (flags & ShaderCompileFlag::SkipValidation) {
-        entries.emplace_back(
-            slang::CompilerOptionName::SkipSPIRVValidation,
-            slang::CompilerOptionValue({ .intValue0 = true }));
-    }
-
-    if (flags & ShaderCompileFlag::MatrixRowMajor) {
-        entries.emplace_back(
-            slang::CompilerOptionName::MatrixLayoutRow,
-            slang::CompilerOptionValue{ .intValue0 = true });
-    }
-    else if (flags & ShaderCompileFlag::MatrixColumnMajor) {
-        entries.emplace_back(
-            slang::CompilerOptionName::MatrixLayoutColumn,
-            slang::CompilerOptionValue{ .intValue0 = true });
-    }
-
-    if (flags & ShaderCompileFlag::InvertY) {
-        entries.emplace_back(
-            slang::CompilerOptionName::VulkanInvertY,
-            slang::CompilerOptionValue{ .intValue0 = true });
-    }
-
-    if (flags & ShaderCompileFlag::DXPositionW) {
-        entries.emplace_back(
-            slang::CompilerOptionName::VulkanUseDxPositionW,
-            slang::CompilerOptionValue{ .intValue0 = true });
-    }
-
-    if (flags & ShaderCompileFlag::UseGLLayout) {
-        entries.emplace_back(
-            slang::CompilerOptionName::VulkanUseGLLayout,
-            slang::CompilerOptionValue{ .intValue0 = true });
-    }
-    else if (flags & ShaderCompileFlag::UseScalarLayout) {
-        entries.emplace_back(
-            slang::CompilerOptionName::GLSLForceScalarLayout,
-            slang::CompilerOptionValue{ .intValue0 = true });
-    }
-    // clang-format on
-
-    return entries;
-}
-
+using SlangSession_H = Handle<struct SlangSession>;
 template<>
 struct Handle<SlangModule>::Impl {
-    SlangSession *session = nullptr;
+    SlangSession_H session = {};
     slang::IModule *slang_module = nullptr;
 };
 
@@ -200,7 +150,7 @@ auto SlangModule::destroy() -> void {
     impl = nullptr;
 }
 
-auto SlangModule::get_entry_point(std::string_view name) -> std::vector<u32> {
+auto SlangModule::get_entry_point(std::string_view name) -> ls::option<SlangEntryPoint> {
     ZoneScoped;
 
     Slang::ComPtr<slang::IEntryPoint> entry_point;
@@ -214,24 +164,54 @@ auto SlangModule::get_entry_point(std::string_view name) -> std::vector<u32> {
     component_types.push_back(entry_point);
 
     Slang::ComPtr<slang::IComponentType> composed_program;
-    Slang::ComPtr<slang::IBlob> composite_blob;
-    if (SLANG_FAILED(impl->session->impl->session->createCompositeComponentType(
-            component_types.data(), component_types.size(), composed_program.writeRef(), composite_blob.writeRef()))) {
-        LOG_ERROR("Failed to compose shader program.");
-        return {};
+    {
+        Slang::ComPtr<slang::IBlob> diagnostics_blob;
+        auto result = impl->session->session->createCompositeComponentType(
+            component_types.data(), u32(component_types.size()), composed_program.writeRef(), diagnostics_blob.writeRef());
+        if (diagnostics_blob) {
+            LOG_TRACE("{}", (const char *)diagnostics_blob->getBufferPointer());
+        }
+
+        if (SLANG_FAILED(result)) {
+            LOG_ERROR("Failed to composite shader module.");
+            return ls::nullopt;
+        }
+    }
+
+    Slang::ComPtr<slang::IComponentType> linked_program;
+    {
+        Slang::ComPtr<slang::IBlob> diagnostics_blob;
+        composed_program->link(linked_program.writeRef(), diagnostics_blob.writeRef());
+        if (diagnostics_blob) {
+            LOG_TRACE("{}", (const char *)diagnostics_blob->getBufferPointer());
+        }
     }
 
     Slang::ComPtr<slang::IBlob> spirv_code;
-    Slang::ComPtr<slang::IBlob> entry_point_blob;
-    if (SLANG_FAILED(composed_program->getEntryPointCode(0, 0, spirv_code.writeRef(), entry_point_blob.writeRef()))) {
-        LOG_ERROR("Failed to compile shader.");
-        return {};
+    {
+        Slang::ComPtr<slang::IBlob> diagnostics_blob;
+        auto result = linked_program->getEntryPointCode(0, 0, spirv_code.writeRef(), diagnostics_blob.writeRef());
+        if (diagnostics_blob) {
+            LOG_TRACE("{}", (const char *)diagnostics_blob->getBufferPointer());
+        }
+
+        if (SLANG_FAILED(result)) {
+            LOG_ERROR("Failed to compile shader module.");
+            return ls::nullopt;
+        }
     }
 
-    std::vector<u32> output(spirv_code->getBufferSize() / 4);
-    std::memcpy(output.data(), spirv_code->getBufferPointer(), spirv_code->getBufferSize());
+    auto *program_layout = linked_program->getLayout();
+    LS_EXPECT(program_layout->getEntryPointCount() == 1);
+    auto *entry_point_refl = program_layout->getEntryPointByIndex(0);
 
-    return output;
+    std::vector<u32> ir(spirv_code->getBufferSize() / 4);
+    std::memcpy(ir.data(), spirv_code->getBufferPointer(), spirv_code->getBufferSize());
+
+    return SlangEntryPoint{
+        .ir = std::move(ir),
+        .shader_stage = to_shader_stage(entry_point_refl->getStage()),
+    };
 }
 
 auto SlangModule::get_reflection() -> ShaderReflection {
@@ -239,18 +219,16 @@ auto SlangModule::get_reflection() -> ShaderReflection {
 
     ShaderReflection result = {};
     slang::ShaderReflection *program_layout = impl->slang_module->getLayout();
+    ls::option<u32> compute_entry_point_index = ls::nullopt;
 
-    auto find_entry_point_by_stage = [&](SlangStage stage) -> ls::option<u32> {
-        u32 entry_point_count = program_layout->getEntryPointCount();
-        for (u32 i = 0; i < entry_point_count; i++) {
-            auto *entry_point = program_layout->getEntryPointByIndex(i);
-            if (entry_point->getStage() == stage) {
-                return i;
-            }
+    u32 entry_point_count = program_layout->getEntryPointCount();
+    for (u32 i = 0; i < entry_point_count; i++) {
+        auto *entry_point = program_layout->getEntryPointByIndex(i);
+        if (entry_point->getStage() == SLANG_STAGE_COMPUTE) {
+            compute_entry_point_index = i;
+            break;
         }
-
-        return ls::nullopt;
-    };
+    }
 
     // Get push constants
     u32 param_count = program_layout->getParameterCount();
@@ -269,21 +247,20 @@ auto SlangModule::get_reflection() -> ShaderReflection {
                 push_constant_size += field_type_layout->getSize();
             }
 
-            result.pipeline_layout_id = static_cast<PipelineLayoutID>(push_constant_size / sizeof(u32));
+            result.pipeline_layout_index = (push_constant_size / sizeof(u32));
             break;
         }
     }
 
-    auto compute_index = find_entry_point_by_stage(SLANG_STAGE_COMPUTE);
-    if (compute_index.has_value()) {
-        auto *entry_point = program_layout->getEntryPointByIndex(compute_index.value());
+    if (compute_entry_point_index.has_value()) {
+        auto *entry_point = program_layout->getEntryPointByIndex(compute_entry_point_index.value());
         entry_point->getComputeThreadGroupSize(3, glm::value_ptr(result.thread_group_size));
     }
 
     return result;
 }
 
-auto SlangModule::session() -> SlangSession * {
+auto SlangModule::session() -> SlangSession {
     return impl->session;
 }
 
@@ -292,14 +269,15 @@ auto SlangSession::destroy() -> void {
     impl = nullptr;
 }
 
-auto SlangSession::load_module(const ShaderCompileInfo &info) -> ls::option<SlangModule> {
+auto SlangSession::load_module(const SlangModuleInfo &info) -> ls::option<SlangModule> {
     ZoneScoped;
 
     slang::IModule *slang_module = {};
     Slang::ComPtr<slang::IBlob> diagnostics_blob;
     const auto &path_str = info.path.string();
     if (info.source.has_value()) {
-        slang_module = impl->session->loadModuleFromSourceString("", path_str.c_str(), info.source->data(), diagnostics_blob.writeRef());
+        slang_module = impl->session->loadModuleFromSourceString(
+            info.module_name.c_str(), path_str.c_str(), info.source->data(), diagnostics_blob.writeRef());
     } else {
         File file(info.path, FileAccess::Read);
         if (!file) {
@@ -308,12 +286,17 @@ auto SlangSession::load_module(const ShaderCompileInfo &info) -> ls::option<Slan
         }
         auto file_data = file.whole_data();
         const char *source_data = ls::bit_cast<const char *>(file_data.get());
-        slang_module = impl->session->loadModuleFromSourceString("", path_str.c_str(), source_data, diagnostics_blob.writeRef());
+        slang_module =
+            impl->session->loadModuleFromSourceString(info.module_name.c_str(), path_str.c_str(), source_data, diagnostics_blob.writeRef());
+    }
+
+    if (diagnostics_blob) {
+        LOG_TRACE("{}", (const char *)diagnostics_blob->getBufferPointer());
     }
 
     auto module_impl = new SlangModule::Impl;
     module_impl->slang_module = slang_module;
-    module_impl->session = this;
+    module_impl->session = impl;
 
     return SlangModule(module_impl);
 }
@@ -332,12 +315,17 @@ auto SlangCompiler::destroy() -> void {
     impl = nullptr;
 }
 
-auto SlangCompiler::new_session(const ShaderSessionInfo &info) -> ls::option<SlangSession> {
+auto SlangCompiler::new_session(const SlangSessionInfo &info) -> ls::option<SlangSession> {
     ZoneScoped;
 
     auto slang_fs = std::make_unique<SlangVirtualFS>(info.root_directory);
 
-    std::vector<slang::CompilerOptionEntry> entries = get_slang_entries(info.compile_flags | ShaderCompileFlag::UseScalarLayout);
+    slang::CompilerOptionEntry entries[] = {
+        { slang::CompilerOptionName::Optimization, slang::CompilerOptionValue{ .intValue0 = SLANG_OPTIMIZATION_LEVEL_MAXIMAL } },
+        { slang::CompilerOptionName::UseUpToDateBinaryModule, slang::CompilerOptionValue{ .intValue0 = 1 } },
+        { slang::CompilerOptionName::GLSLForceScalarLayout, slang::CompilerOptionValue{ .intValue0 = 1 } },
+        { slang::CompilerOptionName::Language, slang::CompilerOptionValue{ .stringValue0 = "slang" } },
+    };
     std::vector<slang::PreprocessorMacroDesc> macros;
     macros.reserve(info.definitions.size());
     for (auto &v : info.definitions) {
@@ -346,11 +334,13 @@ auto SlangCompiler::new_session(const ShaderSessionInfo &info) -> ls::option<Sla
 
     slang::TargetDesc target_desc = {
         .format = SLANG_SPIRV,
-        .profile = impl->global_session->findProfile("spirv_1_5"),
+        .profile = impl->global_session->findProfile("spirv_1_6"),
         .flags = SLANG_TARGET_FLAG_GENERATE_SPIRV_DIRECTLY,
+        .floatingPointMode = SLANG_FLOATING_POINT_MODE_FAST,
+        .lineDirectiveMode = SLANG_LINE_DIRECTIVE_MODE_STANDARD,
         .forceGLSLScalarBufferLayout = true,
-        .compilerOptionEntries = entries.data(),
-        .compilerOptionEntryCount = static_cast<u32>(entries.size()),
+        .compilerOptionEntries = entries,
+        .compilerOptionEntryCount = static_cast<u32>(count_of(entries)),
     };
 
     slang::SessionDesc session_desc = {

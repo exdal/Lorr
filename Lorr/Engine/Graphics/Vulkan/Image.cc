@@ -68,6 +68,13 @@ auto Image::create(
     impl->mip_levels = mip_count;
     impl->allocation = allocation;
     impl->handle = image_handle;
+    impl->default_view =
+        ImageView::create(
+            device,
+            image_id->id,
+            vk::ImageViewType::View2D,
+            { .aspect_flags = aspect_flags, .base_mip = 0, .mip_count = mip_count, .base_slice = 0, .slice_count = slice_count })
+            .value_or(ImageViewID::Invalid);
 
     return image_id->id;
 }
@@ -101,19 +108,20 @@ auto Image::destroy() -> void {
 auto Image::set_name(const std::string &name) -> Image & {
     vmaSetAllocationName(impl->device->allocator, impl->allocation, name.c_str());
     set_object_name(impl->device, impl->handle, VK_OBJECT_TYPE_IMAGE, name);
+    set_object_name(impl->device, impl->device.image_view(impl->default_view), VK_OBJECT_TYPE_IMAGE_VIEW, name + " View");
 
     return *this;
 }
 
-auto Image::format() -> vk::Format {
+auto Image::format() const -> vk::Format {
     return impl->format;
 }
 
-auto Image::extent() -> vk::Extent3D {
+auto Image::extent() const -> vk::Extent3D {
     return impl->extent;
 }
 
-auto Image::subresource_range() -> vk::ImageSubresourceRange {
+auto Image::subresource_range() const -> vk::ImageSubresourceRange {
     return {
         .aspect_flags = impl->aspect_flags,
         .base_mip = 0,
@@ -121,6 +129,10 @@ auto Image::subresource_range() -> vk::ImageSubresourceRange {
         .base_slice = 0,
         .slice_count = impl->slice_count,
     };
+}
+
+auto Image::view() const -> ImageViewID {
+    return impl->default_view;
 }
 
 auto ImageView::create(Device_H device, ImageID image_id, vk::ImageViewType type, vk::ImageSubresourceRange subresource_range)
@@ -172,14 +184,14 @@ auto ImageView::create(Device_H device, ImageID image_id, vk::ImageViewType type
 
     ls::static_vector<VkWriteDescriptorSet, 2> descriptor_writes = {};
     VkDescriptorImageInfo sampled_descriptor_info = {
+        .sampler = VK_NULL_HANDLE,
         .imageView = impl->handle,
         .imageLayout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL,
-        .sampler = VK_NULL_HANDLE,
     };
     VkDescriptorImageInfo storage_descriptor_info = {
+        .sampler = VK_NULL_HANDLE,
         .imageView = impl->handle,
         .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
-        .sampler = VK_NULL_HANDLE,
     };
 
     VkWriteDescriptorSet sampled_write_set_info = {
@@ -230,15 +242,15 @@ auto ImageView::set_name(const std::string &name) -> ImageView & {
     return *this;
 }
 
-auto ImageView::format() -> vk::Format {
+auto ImageView::format() const -> vk::Format {
     return impl->format;
 }
 
-auto ImageView::aspect_flags() -> vk::ImageAspectFlag {
+auto ImageView::aspect_flags() const -> vk::ImageAspectFlag {
     return impl->subresource_range.aspect_flags;
 }
 
-auto ImageView::subresource_range() -> vk::ImageSubresourceRange {
+auto ImageView::subresource_range() const -> vk::ImageSubresourceRange {
     return impl->subresource_range;
 }
 

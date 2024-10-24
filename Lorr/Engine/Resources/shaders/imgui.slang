@@ -1,4 +1,6 @@
-import "lorr";
+module imgui;
+
+import lorr;
 
 #define GAMMA_TO_LINEAR(Gamma) ((Gamma) < 0.04045 ? (Gamma) / 12.92 : pow(max((Gamma) + 0.055, 0.0) / 1.055, 2.4))
 #define SRGBA_TO_LINEAR(col) \
@@ -43,10 +45,8 @@ VertexOutput vs_main(VertexInput input) {
 [shader("fragment")]
 float4 fs_main(VertexOutput input) : SV_TARGET
 {
-    const let font_texture = Texture2D<float4>::get(c.image_view_id);
-    const let linear_sampler = SamplerState::get(c.sampler_id);
-
-    float4 col =  font_texture.Sample(linear_sampler, input.tex_coord) * input.color;
+    const let font_texture = ImageView(c.image_view_id);
+    float4 col =  font_texture.sample(c.sampler_id, input.tex_coord) * input.color;
     col.rgb *= col.a;
 
     return col;

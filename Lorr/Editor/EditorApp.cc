@@ -45,7 +45,7 @@ bool EditorApp::prepare(this EditorApp &self) {
     return true;
 }
 
-bool EditorApp::update(this EditorApp &self, [[maybe_unused]] f32 delta_time) {
+bool EditorApp::update(this EditorApp &self, [[maybe_unused]] f64 delta_time) {
     ZoneScoped;
 
     self.layout.update();

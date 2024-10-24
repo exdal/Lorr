@@ -1,9 +1,6 @@
 #pragma once
 
 #include "Task.hh"
-#include "TaskResource.hh"
-
-#include "Engine/Util/LegitProfiler.hh"
 
 namespace lr {
 struct TaskExecuteInfo {
@@ -13,80 +10,41 @@ struct TaskExecuteInfo {
     ls::span<Semaphore> signal_semas = {};
 };
 
-struct TaskGraph {
-    constexpr static usize MAX_PERMUTATIONS = 32;
-
-    std::vector<std::unique_ptr<Task>> tasks = {};
-    std::vector<TaskSubmit> submits = {};
-    std::vector<TaskBatch> batches = {};
-    std::vector<TaskBarrier> barriers = {};
-
-    std::vector<TaskImage> images = {};
-    std::vector<TaskBufferInfo> buffers = {};
-
-    // Profilers
-    ls::static_vector<QueryPool, Device::Limits::FrameCount> task_query_pools = {};
-    std::vector<legit::ProfilerTask> task_gpu_profiler_tasks = {};
-    legit::ProfilerGraph task_gpu_profiler_graph = { 400 };
-
+struct TaskGraphInfo {
     Device device = {};
+    u32 staging_buffer_size = ls::mib_to_bytes(8);
+    vk::BufferUsage staging_buffer_uses = vk::BufferUsage::None;
+};
 
-    bool init(this TaskGraph &, Device device_);
+struct TaskGraph : Handle<TaskGraph> {
+    auto static create(const TaskGraphInfo &info) -> TaskGraph;
 
-    TaskImageID add_image(this TaskGraph &, const TaskImageInfo &info);
-    void set_image(this TaskGraph &, TaskImageID task_image_id, const TaskImageInfo &info);
-    TaskBufferID add_buffer(this TaskGraph &, const TaskBufferInfo &info);
+    auto add_image(const TaskImageInfo &info) -> TaskImageID;
+    auto set_image(TaskImageID task_image_id, const TaskImageInfo &info) -> void;
+
+    auto new_submit(vk::CommandType type) -> usize;
 
     // Recording
     template<typename TaskT = InlineTask>
-    TaskID add_task(this TaskGraph &, const TaskT &task_info);
-    void present(this TaskGraph &, TaskImageID task_image_id);
+    auto add_task(const TaskT &task_info) -> TaskID {
+        ZoneScoped;
+
+        std::unique_ptr<Task> task = std::make_unique<TaskWrapper<TaskT>>(task_info);
+        return this->add_task(std::move(task));
+    }
+    auto add_task(std::unique_ptr<Task> &&task) -> TaskID;
+    auto present(TaskImageID dst_task_image_id) -> void;
 
     // Debug tools
-    void draw_profiler_ui(this TaskGraph &);
+    auto draw_profiler_ui() -> void;
 
     // Rendering
-    void execute(this TaskGraph &, const TaskExecuteInfo &info);
+    auto execute(const TaskExecuteInfo &info) -> void;
 
-    template<TaskConcept T>
-    usize get_task_color_attachment_count();
-
-    Task &task_at(this TaskGraph &self, TaskID id) { return *self.tasks[static_cast<usize>(id)]; }
-    TaskImage &task_image_at(this TaskGraph &self, TaskImageID id) { return self.images[static_cast<usize>(id)]; }
-    TaskBufferInfo &task_buffer_at(this TaskGraph &self, TaskBufferID id) { return self.buffers[static_cast<usize>(id)]; }
-
-private:
-    TaskID add_task(this TaskGraph &, std::unique_ptr<Task> &&task);
-    TaskSubmit &new_submit(this TaskGraph &, vk::CommandType type);
+    auto transfer_manager() -> TransferManager &;
+    auto task(TaskID id) -> Task &;
+    auto task_image(TaskImageID id) -> TaskImage &;
 };
-
-template<typename TaskT>
-TaskID TaskGraph::add_task(this TaskGraph &self, const TaskT &task_info) {
-    ZoneScoped;
-
-    std::unique_ptr<Task> task = std::make_unique<TaskWrapper<TaskT>>(task_info);
-    return self.add_task(std::move(task));
-}
-
-template<TaskConcept TaskT>
-usize TaskGraph::get_task_color_attachment_count() {
-    usize count = 0;
-
-    constexpr static usize TASK_USE_COUNT = sizeof(typename TaskT::Uses) / sizeof(TaskUse);
-    typename TaskT::Uses uses = {};
-    ls::span task_uses = { reinterpret_cast<TaskUse *>(&uses), TASK_USE_COUNT };
-
-    for_each_image_use(task_uses, [&](TaskImageID, const vk::PipelineAccessImpl &, vk::ImageLayout layout) {
-        switch (layout) {
-            case vk::ImageLayout::ColorAttachment:
-                count++;
-                break;
-            default:;
-        }
-    });
-
-    return count;
-}
 
 struct TaskContext {
     Device &device;
@@ -102,16 +60,19 @@ public:
     ls::option<PipelineID> pipeline_id = ls::nullopt;
     ls::option<PipelineLayoutID> pipeline_layout_id = ls::nullopt;
 
-    TaskContext(TaskGraph &task_graph_, Task &task_, CommandList &cmd_list_, void *execution_data_);
+    TaskContext(Device &device_, TaskGraph &task_graph_, Task &task_, CommandList &cmd_list_, void *execution_data_);
 
     vk::RenderingAttachmentInfo as_color_attachment(
         this TaskContext &, TaskUse &use, std::optional<vk::ColorClearValue> clear_val = std::nullopt);
     vk::RenderingAttachmentInfo as_depth_attachment(
         this TaskContext &, TaskUse &use, std::optional<vk::DepthClearValue> clear_val = std::nullopt);
+    TaskUse &task_use(usize index);
     TaskImage &task_image_data(this TaskContext &, TaskUse &use);
     TaskImage &task_image_data(this TaskContext &, TaskImageID task_image_id);
     vk::Viewport pass_viewport(this TaskContext &);
     vk::Rect2D pass_rect(this TaskContext &);
+    GPUAllocation transient_buffer(u64 size);
+    ImageViewID image_view(TaskImageID id);
 
     void set_pipeline(this TaskContext &, PipelineID pipeline_id);
 
@@ -119,7 +80,7 @@ public:
     void set_push_constants(this TaskContext &self, T &v) {
         ZoneScoped;
 
-        self.cmd_list.set_push_constants(*self.pipeline_layout_id, &v, sizeof(T), 0);
+        self.cmd_list.set_push_constants(&v, sizeof(T), 0);
     }
 
     template<typename T = void>

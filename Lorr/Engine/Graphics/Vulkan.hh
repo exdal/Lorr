@@ -2,6 +2,8 @@
 
 #include "VulkanEnums.hh"
 
+#include "Engine/Graphics/Slang/Compiler.hh"
+
 #include "Engine/Core/Handle.hh"
 
 namespace lr {
@@ -281,9 +283,9 @@ struct Buffer : Handle<Buffer> {
     auto destroy() -> void;
     auto set_name(const std::string &) -> Buffer &;
 
-    auto data_size() -> u64;
-    auto device_address() -> u64;
-    auto host_ptr() -> u8 *;
+    auto data_size() const -> u64;
+    auto device_address() const -> u64;
+    auto host_ptr() const -> u8 *;
 };
 
 struct Image : Handle<Image> {
@@ -300,9 +302,10 @@ struct Image : Handle<Image> {
     auto destroy() -> void;
     auto set_name(const std::string &) -> Image &;
 
-    auto format() -> vk::Format;
-    auto extent() -> vk::Extent3D;
-    auto subresource_range() -> vk::ImageSubresourceRange;
+    auto format() const -> vk::Format;
+    auto extent() const -> vk::Extent3D;
+    auto subresource_range() const -> vk::ImageSubresourceRange;
+    auto view() const -> ImageViewID;
 };
 
 // Image views can have different formats depending on the creation flags
@@ -316,9 +319,9 @@ struct ImageView : Handle<ImageView> {
     auto destroy() -> void;
     auto set_name(const std::string &) -> ImageView &;
 
-    auto format() -> vk::Format;
-    auto aspect_flags() -> vk::ImageAspectFlag;
-    auto subresource_range() -> vk::ImageSubresourceRange;
+    auto format() const -> vk::Format;
+    auto aspect_flags() const -> vk::ImageAspectFlag;
+    auto subresource_range() const -> vk::ImageSubresourceRange;
 };
 
 struct Sampler : Handle<Sampler> {
@@ -349,12 +352,22 @@ struct Shader : Handle<Shader> {
     auto set_name(const std::string &) -> Shader &;
 };
 
+struct ShaderCompileInfo {
+    std::vector<ShaderPreprocessorMacroInfo> macros = {};
+    // Root path is where included modules will be searched and linked
+    std::string module_name = {};
+    fs::path root_path = {};
+    fs::path shader_path = {};
+    ls::option<std::string_view> shader_source = ls::nullopt;
+    std::vector<std::string> entry_points = {};
+};
+
 struct GraphicsPipelineInfo {
     std::vector<vk::Format> color_attachment_formats = {};
     ls::option<vk::Format> depth_attachment_format = ls::nullopt;
     ls::option<vk::Format> stencil_attachment_format = ls::nullopt;
 
-    std::vector<Shader_H> shaders = {};
+    ShaderCompileInfo shader_module_info = {};
     // Vertex Input State
     std::vector<vk::VertexAttribInfo> vertex_attrib_infos = {};
 
@@ -364,25 +377,20 @@ struct GraphicsPipelineInfo {
     // Color Blend Attachment State
     std::vector<vk::PipelineColorBlendAttachment> blend_attachments = {};
     glm::vec4 blend_constants = {};
-
-    PipelineLayoutID layout_id = PipelineLayoutID::None;
 };
 
 struct ComputePipelineInfo {
-    Device_H device = {};
-    Shader_H shader = {};
-    PipelineLayoutID layout_id = PipelineLayoutID::None;
-    std::string name = {};
+    ShaderCompileInfo shader_module_info = {};
 };
 
 struct Pipeline : Handle<Pipeline> {
-    static auto create(Device_H, const GraphicsPipelineInfo &info) -> std::expected<PipelineID, vk::Result>;
-    static auto create(Device_H, const ComputePipelineInfo &info) -> std::expected<PipelineID, vk::Result>;
+    static auto create(Device, const GraphicsPipelineInfo &info) -> std::expected<PipelineID, vk::Result>;
+    static auto create(Device, const ComputePipelineInfo &info) -> std::expected<PipelineID, vk::Result>;
     auto destroy() -> void;
     auto set_name(const std::string &) -> Pipeline &;
 
-    auto bind_point() -> vk::PipelineBindPoint;
-    auto layout_id() -> PipelineLayoutID;
+    auto bind_point() const -> vk::PipelineBindPoint;
+    auto layout_id() const -> PipelineLayoutID;
 };
 
 /////////////////////////////////
@@ -395,8 +403,8 @@ struct Semaphore : Handle<Semaphore> {
 
     auto wait(u64 wait_value) -> void;
     auto advance() -> u64;
-    auto value() -> u64;
-    auto counter() -> u64;
+    auto value() const -> u64;
+    auto counter() const -> u64;
 };
 
 struct QueryPool : Handle<QueryPool> {
@@ -404,7 +412,7 @@ struct QueryPool : Handle<QueryPool> {
     auto destroy() -> void;
     auto set_name(const std::string &) -> QueryPool &;
 
-    auto get_results(u32 first_query, u32 count, ls::span<u64> time_stamps) -> void;
+    auto get_results(u32 first_query, u32 count, ls::span<u64> time_stamps) const -> void;
 };
 
 struct RenderingBeginInfo {
@@ -440,7 +448,7 @@ struct CommandList : Handle<CommandList> {
     auto set_push_constants(void *data, u32 data_size, u32 data_offset) -> void;
     auto set_descriptor_set() -> void;
     auto set_vertex_buffer(BufferID buffer_id, u64 offset = 0, u32 first_binding = 0, u32 binding_count = 1) -> void;
-    auto set_index_buffer(BufferID buffer_id, u64 offset = 0, bool use_u16 = false);
+    auto set_index_buffer(BufferID buffer_id, u64 offset = 0, bool use_u16 = false) -> void;
     auto set_viewport(const vk::Viewport &viewport) -> void;
     auto set_scissors(const vk::Rect2D &rect) -> void;
 
@@ -485,7 +493,7 @@ struct CommandQueue : Handle<CommandQueue> {
     auto submit(ls::span<Semaphore> wait_semas, ls::span<Semaphore> signal_semas) -> vk::Result;
     auto acquire(SwapChain swap_chain, Semaphore acquire_sema) -> std::expected<u32, vk::Result>;
     auto present(SwapChain swap_chain, Semaphore present_sema, u32 image_id) -> vk::Result;
-    auto wait() -> void;
+    auto wait() const -> void;
 };
 
 /////////////////////////////////
@@ -500,10 +508,11 @@ struct SwapChain : Handle<SwapChain> {
     auto destroy() -> void;
     auto set_name(const std::string &) -> SwapChain &;
 
-    auto format() -> vk::Format;
-    auto extent() -> vk::Extent3D;
-    auto semaphores(usize i) -> std::pair<Semaphore, Semaphore>;
-    auto get_images() -> std::pair<std::vector<ImageID>, std::vector<ImageViewID>>;
+    auto format() const -> vk::Format;
+    auto extent() const -> vk::Extent3D;
+    auto semaphores(usize i) const -> std::pair<Semaphore, Semaphore>;
+    auto get_images() const -> std::vector<ImageID>;
+    auto image_index() const -> u32;
 };
 
 struct GPUAllocation {
@@ -525,12 +534,16 @@ struct TransferManager : Handle<TransferManager> {
     static constexpr u32 LEAF_BINS_INDEX_MASK = 0x7;
     static constexpr u32 NUM_LEAF_BINS = NUM_TOP_BINS * BINS_PER_LEAF;
 
-    auto static create(Device_H, u32 capacity = ls::mib_to_bytes(32), u32 max_allocs = 128 * 1024) -> TransferManager;
+    auto static create(
+        Device_H,
+        u32 capacity = ls::mib_to_bytes(32),
+        vk::BufferUsage additional_buffer_usage = vk::BufferUsage::None,
+        u32 max_allocs = 128 * 1024) -> TransferManager;
     auto destroy() -> void;
 
     auto allocate(u64 size, u64 alignment = 16) -> ls::option<GPUAllocation>;
     auto collect_garbage() -> void;
-    auto semaphore() -> Semaphore;
+    auto semaphore() const -> Semaphore;
 };
 
 enum class DeviceFeature : u64 {
@@ -545,20 +558,20 @@ struct Device : Handle<Device> {
     static auto create(usize frame_count) -> std::expected<Device, vk::Result>;
     auto destroy() -> void;
 
-    auto frame_count() -> usize;
-    auto frame_sema() -> Semaphore;
-    auto queue(vk::CommandType type) -> CommandQueue;
-    auto transfer_manager() -> TransferManager;
-    auto wait() -> void;
+    auto frame_count() const -> usize;
+    auto frame_sema() const -> Semaphore;
+    auto queue(vk::CommandType type) const -> CommandQueue;
+    auto new_slang_session(const SlangSessionInfo &info) -> ls::option<SlangSession>;
+    auto wait() const -> void;
 
     auto new_frame() -> usize;
-    auto end_frame() -> void;
+    auto end_frame(SwapChain &, usize semaphore_index) -> void;
 
-    auto buffer(BufferID) -> Buffer;
-    auto image(ImageID) -> Image;
-    auto image_view(ImageViewID) -> ImageView;
-    auto sampler(SamplerID) -> Sampler;
-    auto pipeline(PipelineID) -> Pipeline;
+    auto buffer(BufferID) const -> Buffer;
+    auto image(ImageID) const -> Image;
+    auto image_view(ImageViewID) const -> ImageView;
+    auto sampler(SamplerID) const -> Sampler;
+    auto pipeline(PipelineID) const -> Pipeline;
 
     auto upload(ImageID dst_image_id, void *data, u64 data_size, vk::ImageLayout new_layout) -> void;
 

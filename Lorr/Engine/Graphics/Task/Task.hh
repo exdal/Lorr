@@ -1,8 +1,73 @@
 #pragma once
 
-#include "TaskResource.hh"
+#include "Engine/Graphics/Vulkan.hh"
 
 namespace lr {
+enum class TaskImageID : u32 { Invalid = ~0_u32 };
+struct TaskImageInfo {
+    ImageID image_id = ImageID::Invalid;
+    vk::ImageLayout layout = vk::ImageLayout::Undefined;
+    vk::PipelineAccessImpl access = vk::PipelineAccess::TopOfPipe;
+    usize last_submit_index = 0;
+};
+
+struct TaskImage {
+    ImageID image_id = ImageID::Invalid;
+    vk::ImageSubresourceRange subresource_range = {};
+    vk::ImageLayout last_layout = vk::ImageLayout::Undefined;
+    vk::PipelineAccessImpl last_access = vk::PipelineAccess::None;
+
+    usize last_submit_index = 0;
+};
+
+enum class TaskUseType : u32 { Buffer = 0, Image };
+struct TaskUse {
+    TaskUseType type = TaskUseType::Buffer;
+    vk::ImageLayout image_layout = vk::ImageLayout::Undefined;
+    vk::PipelineAccessImpl access = vk::PipelineAccess::None;
+    union {
+        TaskImageID task_image_id = TaskImageID::Invalid;
+        u32 index;
+    };
+};
+
+template<vk::PipelineAccessImpl AccessT>
+struct TaskBufferUse : TaskUse {
+    constexpr TaskBufferUse() {
+        this->type = TaskUseType::Buffer;
+        this->access = AccessT;
+    }
+};
+
+template<vk::ImageLayout LayoutT, vk::PipelineAccessImpl AccessT>
+struct TaskImageUse : TaskUse {
+    constexpr TaskImageUse() {
+        this->type = TaskUseType::Image;
+        this->image_layout = LayoutT;
+        this->access = AccessT;
+    }
+
+    constexpr TaskImageUse(TaskImageID id) {
+        this->type = TaskUseType::Image;
+        this->image_layout = LayoutT;
+        this->access = AccessT;
+        this->task_image_id = id;
+    };
+};
+
+// Task Use Presets
+namespace Preset {
+    using ColorAttachmentWrite = TaskImageUse<vk::ImageLayout::ColorAttachment, vk::PipelineAccess::ColorAttachmentReadWrite>;
+    using ColorAttachmentRead = TaskImageUse<vk::ImageLayout::ColorAttachment, vk::PipelineAccess::ColorAttachmentRead>;
+    using DepthAttachmentWrite = TaskImageUse<vk::ImageLayout::DepthAttachment, vk::PipelineAccess::DepthStencilReadWrite>;
+    using DepthAttachmentRead = TaskImageUse<vk::ImageLayout::DepthAttachment, vk::PipelineAccess::DepthStencilRead>;
+    using ColorReadOnly = TaskImageUse<vk::ImageLayout::ColorReadOnly, vk::PipelineAccess::FragmentShaderRead>;
+    using ComputeWrite = TaskImageUse<vk::ImageLayout::General, vk::PipelineAccess::ComputeWrite>;
+    using ComputeRead = TaskImageUse<vk::ImageLayout::General, vk::PipelineAccess::ComputeRead>;
+    using BlitRead = TaskImageUse<vk::ImageLayout::TransferSrc, vk::PipelineAccess::BlitRead>;
+    using BlitWrite = TaskImageUse<vk::ImageLayout::TransferDst, vk::PipelineAccess::BlitWrite>;
+};  // namespace Preset
+
 enum class TaskID : u32 { Invalid = ~0_u32 };
 
 struct TaskContext;
@@ -33,20 +98,27 @@ concept TaskConcept = requires() {
 } and requires(TaskContext &tc) { TaskT{}.execute(tc); };
 
 template<typename TaskT>
-concept TaskHasPushConstants = requires { typename TaskT::PushConstants; };
+concept IsTaskUSeContainer = requires() {
+    std::begin(TaskT{}.uses);
+    std::end(TaskT{}.uses);
+};
 
 template<TaskConcept TaskT>
 struct TaskWrapper : Task {
     TaskWrapper(const TaskT &task_)
         : task(task_) {
-        task_uses = { reinterpret_cast<TaskUse *>(&task.uses), TASK_USE_COUNT };
+        if constexpr (IsTaskUSeContainer<TaskT>) {
+            task_uses = { task.uses.begin(), task.uses.end() };
+        } else {
+            constexpr usize TASK_USE_COUNT = sizeof(decltype(task.uses)) / sizeof(TaskUse);
+            task_uses = { reinterpret_cast<TaskUse *>(&task.uses), TASK_USE_COUNT };
+        }
         name = task.name;
     }
 
     void execute(TaskContext &tc) override { task.execute(tc); }
 
     TaskT task = {};
-    constexpr static usize TASK_USE_COUNT = sizeof(decltype(task.uses)) / sizeof(TaskUse);
 };
 
 struct TaskBarrier {

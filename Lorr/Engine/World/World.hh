@@ -1,6 +1,7 @@
 #pragma once
 
-#include "Scene.hh"
+#include "Engine/World/Renderer.hh"
+#include "Engine/World/Scene.hh"
 
 namespace lr {
 struct ProjectInfo {
@@ -13,6 +14,7 @@ struct ProjectInfo {
 struct World {
     flecs::world ecs{};
     flecs::entity root = {};
+    std::unique_ptr<WorldRenderer> renderer = {};
     std::vector<std::unique_ptr<Scene>> scenes = {};
     ls::option<SceneID> active_scene = ls::nullopt;
     ls::option<ProjectInfo> project_info = ls::nullopt;

@@ -3,6 +3,7 @@
 #include "Engine/Graphics/Vulkan.hh"
 
 #include "Engine/Graphics/ResourcePool.hh"
+#include "Engine/Graphics/Slang/Compiler.hh"
 
 #ifndef VK_NO_PROTOTYPES
 #define VK_NO_PROTOTYPES
@@ -102,6 +103,7 @@ struct Handle<Image>::Impl {
     vk::Format format = vk::Format::Undefined;
     vk::ImageAspectFlag aspect_flags = vk::ImageAspectFlag::Color;
     vk::Extent3D extent = {};
+    ImageViewID default_view = {};
     u32 slice_count = 1;
     u32 mip_levels = 1;
 
@@ -210,6 +212,7 @@ template<>
 struct Handle<SwapChain>::Impl {
     Device device = {};
 
+    u32 acquired_index = 0;
     vk::Format format = vk::Format::Undefined;
     vk::Extent3D extent = {};
 
@@ -268,7 +271,7 @@ struct ResourcePools {
     PagedResourcePool<Buffer::Impl, BufferID> buffers = {};
     PagedResourcePool<Image::Impl, ImageID> images = {};
     PagedResourcePool<ImageView::Impl, ImageViewID> image_views = {};
-    PagedResourcePool<Sampler::Impl, SamplerID, { .MAX_RESOURCE_COUNT = 512u, .PAGE_BITS = 32u }> samplers = {};
+    PagedResourcePool<Sampler::Impl, SamplerID, { .MAX_RESOURCE_COUNT = 512u }> samplers = {};
     PagedResourcePool<Pipeline::Impl, PipelineID> pipelines = {};
 
     constexpr static usize MAX_PUSH_CONSTANT_SIZE = 128;
@@ -292,9 +295,9 @@ struct Handle<Device>::Impl {
     // Transfer manager should be used for frame time transient buffers.
     // NEVER use it to upload image data, use static buffer for it.
     // Static buffer is blocking, transfer manager is not blocking if not full.
-    TransferManager transfer_man = {};
     BufferID persistent_buffer = {};
 
+    SlangCompiler shader_compiler = {};
     DeviceFeature supported_features = DeviceFeature::None;
     ResourcePools resources = {};
     VmaAllocator allocator = {};

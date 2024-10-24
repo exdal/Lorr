@@ -42,7 +42,7 @@ auto Shader::set_name(const std::string &name) -> Shader & {
     return *this;
 }
 
-auto Pipeline::create(Device_H device, const GraphicsPipelineInfo &info) -> std::expected<PipelineID, vk::Result> {
+auto Pipeline::create(Device device, const GraphicsPipelineInfo &info) -> std::expected<PipelineID, vk::Result> {
     ZoneScoped;
 
     std::vector<VkFormat> color_attachment_formats;
@@ -73,18 +73,43 @@ auto Pipeline::create(Device_H device, const GraphicsPipelineInfo &info) -> std:
         .pScissors = &scissor,
     };
 
+    auto slang_session = device.new_slang_session({
+        .definitions = info.shader_module_info.macros,
+        .root_directory = info.shader_module_info.root_path,
+    });
+    auto slang_module = slang_session->load_module({
+        .path = info.shader_module_info.shader_path,
+        .module_name = info.shader_module_info.module_name,
+        .source = info.shader_module_info.shader_source,
+    });
+    auto module_reflection = slang_module->get_reflection();
+
+    std::vector<Shader> garbage_shaders;
     std::vector<VkPipelineShaderStageCreateInfo> shader_stage_infos;
-    shader_stage_infos.reserve(info.shaders.size());
-    for (auto &v : info.shaders) {
+    shader_stage_infos.reserve(info.shader_module_info.entry_points.size());
+    for (auto &v : info.shader_module_info.entry_points) {
+        auto entry_point = slang_module->get_entry_point(v);
+        if (!entry_point.has_value()) {
+            LOG_ERROR("Shader stage '{}' is not found for shader module '{}'", v, info.shader_module_info.module_name);
+            return std::unexpected(vk::Result::Unknown);
+        }
+
+        auto shader = Shader::create(device, entry_point->ir, entry_point->shader_stage);
+        if (!shader.has_value()) {
+            LOG_ERROR("Failed to compile shader module '{}', entry point '{}'!", info.shader_module_info.module_name, v);
+            return std::unexpected(vk::Result::Unknown);
+        }
+
         shader_stage_infos.push_back({
             .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
             .pNext = nullptr,
             .flags = 0,
-            .stage = to_vk_shader_stage(v->stage),
-            .module = v->handle,
+            .stage = to_vk_shader_stage(shader.value()->stage),
+            .module = shader.value()->handle,
             .pName = "main",
             .pSpecializationInfo = nullptr,
         });
+        garbage_shaders.push_back(shader.value());
     }
 
     u32 vertex_layout_stride = 0;
@@ -236,7 +261,7 @@ auto Pipeline::create(Device_H device, const GraphicsPipelineInfo &info) -> std:
         .pDynamicStates = DYNAMIC_STATES,
     };
 
-    VkPipelineLayout pipeline_layout = device->resources.pipeline_layouts.at(std::to_underlying(info.layout_id));
+    VkPipelineLayout pipeline_layout = device->resources.pipeline_layouts.at(module_reflection.pipeline_layout_index);
 
     VkGraphicsPipelineCreateInfo pipeline_create_info = {
         .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
@@ -262,6 +287,13 @@ auto Pipeline::create(Device_H device, const GraphicsPipelineInfo &info) -> std:
 
     VkPipeline pipeline_handle = {};
     auto result = vkCreateGraphicsPipelines(device->handle, nullptr, 1, &pipeline_create_info, nullptr, &pipeline_handle);
+
+    slang_module->destroy();
+    slang_session->destroy();
+    for (auto &v : garbage_shaders) {
+        v.destroy();
+    }
+
     switch (result) {
         case VK_ERROR_OUT_OF_HOST_MEMORY:
             return std::unexpected(vk::Result::OutOfHostMem);
@@ -278,26 +310,53 @@ auto Pipeline::create(Device_H device, const GraphicsPipelineInfo &info) -> std:
     auto impl = pipeline->impl;
     impl->device = device;
     impl->bind_point = vk::PipelineBindPoint::Graphics;
-    impl->layout_id = info.layout_id;
+    impl->layout_id = static_cast<PipelineLayoutID>(module_reflection.pipeline_layout_index);
     impl->handle = pipeline_handle;
 
     return pipeline->id;
 }
 
-auto Pipeline::create(Device_H device, const ComputePipelineInfo &info) -> std::expected<PipelineID, vk::Result> {
+auto Pipeline::create(Device device, const ComputePipelineInfo &info) -> std::expected<PipelineID, vk::Result> {
     ZoneScoped;
+
+    auto slang_session = device.new_slang_session({
+        .definitions = info.shader_module_info.macros,
+        .root_directory = info.shader_module_info.root_path,
+    });
+    if (!slang_session.has_value()) {
+        LOG_ERROR("Failed to initialize compute pipeline session!");
+        return std::unexpected(vk::Result::Unknown);
+    }
+
+    auto slang_module = slang_session->load_module({
+        .path = info.shader_module_info.shader_path,
+        .module_name = info.shader_module_info.module_name,
+        .source = info.shader_module_info.shader_source,
+    });
+    if (!slang_module.has_value()) {
+        LOG_ERROR("Failed to create compute pipeline module!");
+        return std::unexpected(vk::Result::Unknown);
+    }
+
+    auto cs_main = slang_module->get_entry_point("cs_main");
+    if (!cs_main.has_value()) {
+        LOG_ERROR("Compute shader '{}' is missing 'cs_main' entry point!", info.shader_module_info.module_name);
+        return std::unexpected(vk::Result::Unknown);
+    }
+    auto shader = Shader::create(device, cs_main->ir, vk::ShaderStageFlag::Compute);
+    auto module_reflection = slang_module->get_reflection();
 
     VkPipelineShaderStageCreateInfo shader_stage_info = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
         .pNext = nullptr,
         .flags = 0,
-        .stage = to_vk_shader_stage(info.shader->stage),
-        .module = info.shader->handle,
+        .stage = to_vk_shader_stage(vk::ShaderStageFlag::Compute),
+        .module = shader.value()->handle,
         .pName = "main",
         .pSpecializationInfo = nullptr,
     };
 
-    VkPipelineLayout pipeline_layout = device->resources.pipeline_layouts.at(std::to_underlying(info.layout_id));
+    VkPipelineLayout pipeline_layout = device->resources.pipeline_layouts.at(module_reflection.pipeline_layout_index);
     VkComputePipelineCreateInfo pipeline_create_info = {
         .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
         .pNext = nullptr,
@@ -310,6 +369,11 @@ auto Pipeline::create(Device_H device, const ComputePipelineInfo &info) -> std::
 
     VkPipeline pipeline_handle = {};
     auto result = vkCreateComputePipelines(device->handle, nullptr, 1, &pipeline_create_info, nullptr, &pipeline_handle);
+
+    slang_module->destroy();
+    slang_session->destroy();
+    shader->destroy();
+
     switch (result) {
         case VK_ERROR_OUT_OF_HOST_MEMORY:
             return std::unexpected(vk::Result::OutOfHostMem);
@@ -326,7 +390,7 @@ auto Pipeline::create(Device_H device, const ComputePipelineInfo &info) -> std::
     auto impl = pipeline->impl;
     impl->device = device;
     impl->bind_point = vk::PipelineBindPoint::Compute;
-    impl->layout_id = info.layout_id;
+    impl->layout_id = static_cast<PipelineLayoutID>(module_reflection.pipeline_layout_index);
     impl->handle = pipeline_handle;
 
     return pipeline->id;
@@ -342,11 +406,11 @@ auto Pipeline::set_name(const std::string &name) -> Pipeline & {
     return *this;
 }
 
-auto Pipeline::bind_point() -> vk::PipelineBindPoint {
+auto Pipeline::bind_point() const -> vk::PipelineBindPoint {
     return impl->bind_point;
 }
 
-auto Pipeline::layout_id() -> PipelineLayoutID {
+auto Pipeline::layout_id() const -> PipelineLayoutID {
     return impl->layout_id;
 }
 

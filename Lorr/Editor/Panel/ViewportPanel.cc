@@ -66,7 +66,7 @@ void ViewportPanel::on_project_refresh(this ViewportPanel &self) {
 
 void ViewportPanel::update(this ViewportPanel &self) {
     auto &app = EditorApp::get();
-    auto &task_graph = app.world_render_pipeline.task_graph;
+    // auto &task_graph = app.world_render_pipeline.task_graph;
 
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0, 0.0));
     ImGui::Begin(self.name.data());

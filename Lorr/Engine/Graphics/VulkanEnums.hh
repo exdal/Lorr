@@ -361,6 +361,7 @@ enum class ColorMask : u32 {
 consteval void enable_bitmask(ColorMask);
 
 enum class ShaderStageFlag : u32 {
+    None = 0,
     Vertex = 1 << 0,
     Fragment = 1 << 1,
     Compute = 1 << 2,

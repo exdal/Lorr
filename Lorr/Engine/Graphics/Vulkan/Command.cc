@@ -64,11 +64,11 @@ auto Semaphore::advance() -> u64 {
     return ++impl->value;
 }
 
-auto Semaphore::value() -> u64 {
+auto Semaphore::value() const -> u64 {
     return impl->value;
 }
 
-auto Semaphore::counter() -> u64 {
+auto Semaphore::counter() const -> u64 {
     ZoneScoped;
 
     u64 value = 0;
@@ -120,7 +120,7 @@ auto QueryPool::set_name(const std::string &name) -> QueryPool & {
     return *this;
 }
 
-auto QueryPool::get_results(u32 first_query, u32 count, ls::span<u64> time_stamps) -> void {
+auto QueryPool::get_results(u32 first_query, u32 count, ls::span<u64> time_stamps) const -> void {
     ZoneScoped;
 
     vkGetQueryPoolResults(
@@ -464,7 +464,7 @@ auto CommandList::set_vertex_buffer(BufferID buffer_id, u64 offset, u32 first_bi
     vkCmdBindVertexBuffers(impl->handle, first_binding, binding_count, &buffer->handle, &offset);
 }
 
-auto CommandList::set_index_buffer(BufferID buffer_id, u64 offset, bool use_u16) {
+auto CommandList::set_index_buffer(BufferID buffer_id, u64 offset, bool use_u16) -> void {
     ZoneScoped;
 
     auto buffer = impl->device.buffer(buffer_id);
@@ -774,8 +774,8 @@ auto CommandQueue::acquire(SwapChain swap_chain, Semaphore acquire_sema) -> std:
     // VK_NOT_READY and VK_TIMEOUT will never be returned because of we are waiting indefinitely.
     // VK_SUBOPTIMAL_KHR is ignored, since the image can still be used.
 
-    u32 image_id = 0;
-    auto result = vkAcquireNextImageKHR(impl->device->handle, swap_chain->handle, UINT64_MAX, acquire_sema->handle, nullptr, &image_id);
+    auto result = vkAcquireNextImageKHR(
+        impl->device->handle, swap_chain->handle, UINT64_MAX, acquire_sema->handle, nullptr, &swap_chain->acquired_index);
     switch (result) {
         case VK_ERROR_OUT_OF_HOST_MEMORY:
             return std::unexpected(vk::Result::OutOfHostMem);
@@ -790,7 +790,8 @@ auto CommandQueue::acquire(SwapChain swap_chain, Semaphore acquire_sema) -> std:
         default:;
     }
 
-    return image_id;
+    this->submit(acquire_sema, impl->semaphore);
+    return swap_chain->acquired_index;
 }
 
 auto CommandQueue::present(SwapChain swap_chain, Semaphore present_sema, u32 image_id) -> vk::Result {
@@ -828,7 +829,7 @@ auto CommandQueue::present(SwapChain swap_chain, Semaphore present_sema, u32 ima
     return vk::Result::Success;
 }
 
-auto CommandQueue::wait() -> void {
+auto CommandQueue::wait() const -> void {
     vkQueueWaitIdle(impl->handle);
 }
 

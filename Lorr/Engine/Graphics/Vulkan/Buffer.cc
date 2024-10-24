@@ -82,15 +82,15 @@ auto Buffer::set_name(const std::string &name) -> Buffer & {
     return *this;
 }
 
-auto Buffer::data_size() -> u64 {
+auto Buffer::data_size() const -> u64 {
     return impl->data_size;
 }
 
-auto Buffer::device_address() -> u64 {
+auto Buffer::device_address() const -> u64 {
     return impl->device_address;
 }
 
-auto Buffer::host_ptr() -> u8 * {
+auto Buffer::host_ptr() const -> u8 * {
     return static_cast<u8 *>(impl->host_data);
 }
 

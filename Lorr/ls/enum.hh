@@ -1,49 +1,47 @@
 #pragma once
 
-#include <type_traits>
-
 #include <ls/types.hh>
+#include <type_traits>
+#include <utility>
 
 namespace lr {
 template<typename T>
-struct has_bitmask : std::false_type {};
+concept BitmaskedEnum = requires(T v) {
+    std::is_enum_v<T>;
+    enable_bitmask(v);
+};
 
-template<typename T>
-std::enable_if_t<has_bitmask<T>::value, T> constexpr operator|(T l, T r) {
-    using enum_type_t = std::underlying_type_t<T>;
-    return static_cast<T>(static_cast<enum_type_t>(l) | static_cast<enum_type_t>(r));
+template<BitmaskedEnum T>
+constexpr T operator|(T lhs, T rhs) {
+    return static_cast<T>(std::to_underlying(lhs) | std::to_underlying(rhs));
 }
 
-template<typename T>
-std::enable_if_t<has_bitmask<T>::value, T &> constexpr operator|=(T &l, T r) {
-    return l = l | r;
+template<BitmaskedEnum T>
+constexpr T &operator|=(T &lhs, T rhs) {
+    return lhs = lhs | rhs;
 }
 
-template<typename T>
-std::enable_if_t<has_bitmask<T>::value, bool> constexpr operator&(T l, T r) {
-    using enum_type_t = std::underlying_type_t<T>;
-    return static_cast<bool>(static_cast<enum_type_t>(l) & static_cast<enum_type_t>(r));
+template<BitmaskedEnum T>
+constexpr bool operator&(T lhs, T rhs) {
+    return static_cast<bool>(std::to_underlying(lhs) & std::to_underlying(rhs));
 }
 
-template<typename T>
-std::enable_if_t<has_bitmask<T>::value, T &> constexpr operator&=(T &l, T r) {
-    return l = l & r;
+template<BitmaskedEnum T>
+constexpr T &operator&=(T &lhs, T rhs) {
+    return lhs = lhs & rhs;
 }
 
-template<typename T>
-std::enable_if_t<has_bitmask<T>::value, T> constexpr operator^(T l, T r) {
-    using enum_type_t = std::underlying_type_t<T>;
-    return static_cast<T>(static_cast<enum_type_t>(l) ^ static_cast<enum_type_t>(r));
+template<BitmaskedEnum T>
+constexpr T operator^(T lhs, T rhs) {
+    return static_cast<T>(std::to_underlying(lhs) ^ std::to_underlying(rhs));
 }
 
-template<typename T>
-std::enable_if_t<has_bitmask<T>::value, T &> constexpr operator^=(T &l, T r) {
-    return l = l ^ r;
+template<BitmaskedEnum T>
+constexpr T &operator^=(T &lhs, T rhs) {
+    return lhs = lhs ^ rhs;
 }
-
-template<typename T>
-std::enable_if_t<has_bitmask<T>::value, T> constexpr operator~(T l) {
-    using enum_type_t = std::underlying_type_t<T>;
-    return static_cast<T>(~static_cast<enum_type_t>(l));
+template<BitmaskedEnum T>
+constexpr bool operator~(T lhs) {
+    return static_cast<T>(~std::to_underlying(lhs));
 }
 }  // namespace lr

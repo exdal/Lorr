@@ -1,59 +1,46 @@
 #pragma once
 
-#include "Pipeline.hh"
-#include "Resource.hh"
-#include "Shader.hh"
-
 namespace lr {
-template<typename ResourceT, typename ResourceID>
-struct allocation_result {
-    allocation_result(ResourceT &res, ResourceID res_id)
-        : resource(res),
-          id(res_id) {}
-
-    ResourceT &resource;
-    ResourceID id;
+struct PagedResourcePoolInfo {
+    usize MAX_RESOURCE_COUNT = 1u << 19u;
+    usize PAGE_BITS = 9u;
 };
 
-// Paged resource pool, a bit cleaner implementation to linked lists.
-// is from Daxa
-template<typename ResourceT, typename ResourceID>
+template<typename ResourceT, typename ResourceID, PagedResourcePoolInfo INFO = {}>
 struct PagedResourcePool {
-    static_assert(std::is_default_constructible_v<ResourceT>, "ResourceT must have default constructor.");
-
-    using index_type = std::underlying_type_t<ResourceID>;
-
-    constexpr static index_type MAX_RESOURCE_COUNT = 1 << 19u;
-    constexpr static index_type PAGE_BITS = 9u;
-    constexpr static index_type PAGE_SIZE = 1 << PAGE_BITS;
-    constexpr static index_type PAGE_MASK = PAGE_SIZE - 1u;
-    constexpr static index_type PAGE_COUNT = MAX_RESOURCE_COUNT / PAGE_SIZE;
+    constexpr static usize MAX_RESOURCE_COUNT = INFO.MAX_RESOURCE_COUNT;
+    constexpr static usize PAGE_BITS = INFO.PAGE_BITS;
+    constexpr static usize PAGE_SIZE = 1_sz << PAGE_BITS;
+    constexpr static usize PAGE_MASK = PAGE_SIZE - 1_sz;
+    constexpr static usize PAGE_COUNT = MAX_RESOURCE_COUNT / PAGE_SIZE;
     using Page = std::array<ResourceT, PAGE_SIZE>;
 
-    index_type latest_index = 0;
-    std::vector<index_type> free_indexes = {};
+    struct Result {
+        ResourceT *impl = nullptr;
+        ResourceID id = {};
+    };
+
+    u32 latest_index = 0;
+    std::vector<u32> free_indexes = {};
     std::array<std::unique_ptr<Page>, PAGE_COUNT> pages = {};
 
-    template<typename... Args>
-    std::optional<allocation_result<ResourceT, ResourceID>> create(this auto &self, Args &&...args) {
+    ls::option<Result> create(this auto &self) {
         ZoneScoped;
 
-        index_type index = static_cast<index_type>(~0);
+        u32 index = 0;
         if (self.free_indexes.empty()) {
             index = self.latest_index++;
             if (index >= MAX_RESOURCE_COUNT) {
-                return std::nullopt;
+                return ls::nullopt;
             }
         } else {
             index = self.free_indexes.back();
             self.free_indexes.pop_back();
         }
 
-        index_type page_id = index >> PAGE_BITS;
-        index_type page_offset = index & PAGE_MASK;
-
+        auto page_id = static_cast<usize>(index) >> PAGE_BITS;
         if (page_id >= PAGE_COUNT) {
-            return std::nullopt;
+            return ls::nullopt;
         }
 
         auto &page = self.pages[page_id];
@@ -61,17 +48,15 @@ struct PagedResourcePool {
             page = std::make_unique<Page>();
         }
 
-        ResourceT &resource = page->at(page_offset);
-        std::construct_at(reinterpret_cast<ResourceT *>(&resource), std::forward<Args>(args)...);
-        return allocation_result(resource, static_cast<ResourceID>(index));
+        return Result(&page->at(index), static_cast<ResourceID>(index));
     }
 
     void destroy(this auto &self, ResourceID id) {
         ZoneScoped;
 
-        index_type index = static_cast<index_type>(id);
-        index_type page_id = index >> PAGE_BITS;
-        index_type page_offset = index & PAGE_MASK;
+        u32 index = static_cast<u32>(id);
+        auto page_id = static_cast<usize>(index) >> PAGE_BITS;
+        auto page_offset = static_cast<usize>(index) & PAGE_MASK;
 
         self.pages[page_id]->at(page_offset) = {};
         self.free_indexes.push_back(index);
@@ -80,9 +65,9 @@ struct PagedResourcePool {
     ResourceT &get(this auto &self, ResourceID id) {
         ZoneScoped;
 
-        index_type index = static_cast<index_type>(id);
-        index_type page_id = index >> PAGE_BITS;
-        index_type page_offset = index & PAGE_MASK;
+        auto index = static_cast<usize>(id);
+        auto page_id = index >> PAGE_BITS;
+        auto page_offset = index & PAGE_MASK;
 
         return self.pages[page_id]->at(page_offset);
     }
@@ -94,22 +79,7 @@ struct PagedResourcePool {
         self.free_indexes.clear();
     }
 
-    index_type max_resources() { return MAX_RESOURCE_COUNT; }
-};
-
-struct ResourcePools {
-    PagedResourcePool<Buffer, BufferID> buffers = {};
-    PagedResourcePool<Image, ImageID> images = {};
-    PagedResourcePool<ImageView, ImageViewID> image_views = {};
-    PagedResourcePool<Sampler, SamplerID> samplers = {};
-    PagedResourcePool<Shader, ShaderID> shaders = {};
-    PagedResourcePool<Pipeline, PipelineID> pipelines = {};
-
-    ankerl::unordered_dense::map<SamplerHash, SamplerID> cached_samplers = {};
-    ankerl::unordered_dense::map<PipelineHash, PipelineID> cached_pipelines = {};
-
-    constexpr static usize max_push_constant_size = 128;
-    std::array<PipelineLayout, (max_push_constant_size / sizeof(u32)) + 1> pipeline_layouts = {};
+    u32 max_resources() { return MAX_RESOURCE_COUNT; }
 };
 
 }  // namespace lr

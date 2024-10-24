@@ -1,27 +1,45 @@
 #pragma once
 
-#include "RenderPipeline.hh"
-#include "Scene.hh"
+#include "Engine/World/Renderer.hh"
+#include "Engine/World/Scene.hh"
 
 namespace lr {
+struct ProjectInfo {
+    std::string project_name = {};
+    fs::path project_root_path = {};
+    fs::path scenes_path = {};
+    fs::path models_path = {};
+};
+
 struct World {
     flecs::world ecs{};
+    flecs::entity root = {};
+    std::unique_ptr<WorldRenderer> renderer = {};
     std::vector<std::unique_ptr<Scene>> scenes = {};
     ls::option<SceneID> active_scene = ls::nullopt;
-
-    RenderPipeline main_render_pipeline = {};
+    ls::option<ProjectInfo> project_info = ls::nullopt;
 
     bool init(this World &);
     void shutdown(this World &);
-    bool poll(this World &);
+    void begin_frame(this World &);
+    void end_frame(this World &);
 
-    bool serialize_scene(this World &, SceneID scene_id, const fs::path &path);
+    // Project IO
+    bool import_scene(this World &, Scene &scene, const fs::path &path);
+    bool export_scene(this World &, Scene &scene, const fs::path &dir);
+    bool import_project(this World &, const fs::path &path);
+    bool export_project(this World &, std::string_view project_name, const fs::path &root_dir);
+
+    // Active Project Utils
+    bool unload_active_project(this World &);
+    bool save_active_project(this World &);
+    bool is_project_active() { return project_info.has_value(); }
 
     template<typename T>
     SceneID create_scene(this World &self, std::string_view name) {
         ZoneScoped;
 
-        auto scene = std::make_unique<T>(std::string(name), self.ecs);
+        auto scene = std::make_unique<T>(std::string(name), self.ecs, self.root);
         usize scene_id = self.scenes.size();
         self.scenes.push_back(std::move(scene));
 
@@ -33,8 +51,8 @@ struct World {
         ZoneScoped;
 
         auto scene_id = self.create_scene<T>("unnamed scene");
-        if (!self.serialize_scene(scene_id, path)) {
-            LR_LOG_ERROR("Failed to parse scene!");
+        if (!self.import_scene(self.scene_at(scene_id), path)) {
+            LOG_ERROR("Failed to parse scene!");
             return SceneID::Invalid;
         }
 

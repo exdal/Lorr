@@ -1,8 +1,12 @@
 #include "Panels.hh"
 
+#include "Editor/EditorLayout.hh"
+#include "Engine/Core/Application.hh"
+#include "Engine/Memory/Stack.hh"
+
 namespace lr {
-AssetBrowserPanel::AssetBrowserPanel(std::string_view name_, bool open_)
-    : PanelI(name_, open_) {
+AssetBrowserPanel::AssetBrowserPanel(std::string name_, bool open_)
+    : PanelI(std::move(name_), open_) {
     this->refresh_file_tree();
 }
 
@@ -23,12 +27,30 @@ void populate_directory(Directory &dir) {
     });
 }
 
+void AssetBrowserPanel::on_project_refresh(this AssetBrowserPanel &self) {
+    auto &app = Application::get();
+    auto &project_info = app.world.project_info;
+    if (!project_info.has_value()) {
+        return;
+    }
+
+    self.asset_dir = { .path = project_info->project_root_path };
+    self.refresh_file_tree();
+}
+
 void AssetBrowserPanel::refresh_file_tree(this AssetBrowserPanel &self) {
-    self.asset_dir = { .path = fs::current_path() / "resources" };  // TODO: (project) replace later
-    populate_directory(self.asset_dir);
+    auto &app = Application::get();
+    if (app.world.project_info) {
+        self.asset_dir = { .path = app.world.project_info->project_root_path / "Assets" };  // TODO: (project) replace later
+        populate_directory(self.asset_dir.value());
+    }
 }
 
 void AssetBrowserPanel::draw_project_tree(this AssetBrowserPanel &self) {
+    if (!self.asset_dir.has_value()) {
+        return;
+    }
+
     ImGuiTableFlags table_flags = ImGuiTableFlags_RowBg;
     table_flags |= ImGuiTableFlags_ContextMenuInBody;
     table_flags |= ImGuiTableFlags_ScrollY;
@@ -40,7 +62,7 @@ void AssetBrowserPanel::draw_project_tree(this AssetBrowserPanel &self) {
         ImGui::TableNextRow();
         ImGui::TableNextColumn();
 
-        self.draw_file_tree(self.asset_dir);
+        self.draw_file_tree(self.asset_dir.value());
 
         ImGui::EndTable();
     }
@@ -89,7 +111,6 @@ void AssetBrowserPanel::draw_file_tree(this AssetBrowserPanel &self, Directory &
 
     auto tree_node_file_flags = tree_node_dir_flags;
     tree_node_file_flags |= ImGuiTreeNodeFlags_Leaf;
-    // tree_node_file_flags |= ImGuiTreeNodeFlags_NoTreePushOnOpen;
 
     ImGui::TableNextRow();
     ImGui::TableNextColumn();
@@ -97,15 +118,15 @@ void AssetBrowserPanel::draw_file_tree(this AssetBrowserPanel &self, Directory &
     bool no_subdirs = root_dir.subdirs.empty();
     bool no_files = root_dir.files.empty();
 
-    const c8 *icon = "\uf07b";
+    auto icon = Icon::fa::folder;
     if (no_subdirs && no_files) {
-        icon = "\uf07c";
+        icon = Icon::fa::folder_open;
     }
 
     auto cur_node_flags = no_subdirs ? tree_node_file_flags : tree_node_dir_flags;
-    auto file_name = root_dir.path.string();
+    auto file_name = root_dir.path.filename().string();
     if (ImGui::TreeNodeEx(root_dir.path.c_str(), cur_node_flags, "%s  %s", icon, file_name.c_str())) {
-        if (ImGui::IsItemClicked()) {
+        if (ImGui::IsItemToggledOpen() || ImGui::IsItemClicked()) {
             self.selected_dir = &root_dir;
         }
 
@@ -118,24 +139,33 @@ void AssetBrowserPanel::draw_file_tree(this AssetBrowserPanel &self, Directory &
 }
 
 void AssetBrowserPanel::update(this AssetBrowserPanel &self) {
+    memory::ScopedStack stack;
+
     ImGui::Begin(self.name.data(), nullptr, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    if (!self.asset_dir.has_value()) {
+        lg::center_text("No active project");
+        ImGui::End();
+
+        return;
+    }
+
     auto avail_region = ImGui::GetContentRegionAvail();
 
     // HEADER
-    if (ImGui::Button("\uf021")) {
+    if (ImGui::Button(Icon::fa::arrows_rotate)) {
         self.refresh_file_tree();
     }
 
     ImGui::SameLine();
-    if (ImGui::Button("\uf015")) {
-        self.selected_dir = &self.asset_dir;
+    if (ImGui::Button(Icon::fa::house)) {
+        self.selected_dir = &self.asset_dir.value();
     }
 
     if (self.selected_dir) {
-        auto rel_path = fs::relative(self.selected_dir->path, self.asset_dir.path);
+        auto rel_path = fs::relative(self.selected_dir->path, self.asset_dir->path);
 
         for (const auto &v : rel_path) {
-            auto dir_name = v.string();
+            auto dir_name = v.filename().string();
 
             ImGui::SameLine();
             ImGui::TextUnformatted("/");

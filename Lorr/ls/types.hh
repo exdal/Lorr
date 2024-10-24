@@ -91,4 +91,10 @@ constexpr To bit_cast(const From &from) noexcept {
     return __builtin_bit_cast(To, from);
 }
 
+// WARN: ONLY USE THIS AS A FUNCTION ARGUMENT
+template<typename T>
+T *temp_ptr(T &&v) {
+    return &v;
+}
+
 }  // namespace ls

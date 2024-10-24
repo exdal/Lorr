@@ -1,6 +1,7 @@
 #pragma once
 
-#include "Engine/Graphics/zfwd.hh"
+#include "Engine/Asset/Identifier.hh"
+#include "Engine/Graphics/Vulkan.hh"
 
 namespace lr {
 struct Vertex {
@@ -11,6 +12,15 @@ struct Vertex {
     u32 color = 0;
 };
 
+constexpr static vk::VertexAttribInfo VERTEX_LAYOUT[] = {
+    { .format = vk::Format::R32G32B32_SFLOAT, .location = 0, .offset = offsetof(Vertex, position) },
+    { .format = vk::Format::R32_SFLOAT, .location = 1, .offset = offsetof(Vertex, uv_x) },
+    { .format = vk::Format::R32G32B32_SFLOAT, .location = 2, .offset = offsetof(Vertex, normal) },
+    { .format = vk::Format::R32_SFLOAT, .location = 3, .offset = offsetof(Vertex, uv_y) },
+    { .format = vk::Format::R8G8B8A8_UNORM, .location = 4, .offset = offsetof(Vertex, color) },
+};
+
+static Identifier INVALID_TEXTURE = "invalid_texture";
 struct Texture {
     ImageID image_id = ImageID::Invalid;
     ImageViewID image_view_id = ImageViewID::Invalid;
@@ -23,7 +33,7 @@ enum class AlphaMode : u32 {
     Blend,
 };
 
-enum class MaterialID : u32 { Invalid = ~0_u32 };
+static Identifier INVALID_MATERIAL = "invalid_material";
 struct Material {
     glm::vec4 albedo_color = { 1.0f, 1.0f, 1.0f, 1.0f };
     glm::vec4 emissive_color = { 0.0f, 0.0f, 0.0f, 1.0f };
@@ -32,11 +42,12 @@ struct Material {
     AlphaMode alpha_mode = AlphaMode::Opaque;
     f32 alpha_cutoff = 0.0f;
 
-    ls::option<usize> albedo_texture_index;
-    ls::option<usize> normal_texture_index;
-    ls::option<usize> emissive_texture_index;
+    ls::option<Identifier> albedo_texture = ls::nullopt;
+    ls::option<Identifier> normal_texture = ls::nullopt;
+    ls::option<Identifier> emissive_texture = ls::nullopt;
 };
 
+enum class GPUMaterialID : u32 { Invalid = ~0_u32 };
 struct GPUMaterial {
     glm::vec4 albedo_color = { 1.0f, 1.0f, 1.0f, 1.0f };
     glm::vec4 emissive_color = { 0.0f, 0.0f, 0.0f, 1.0f };
@@ -52,14 +63,14 @@ struct GPUMaterial {
     SamplerID emissive_sampler = SamplerID::Invalid;
 };
 
-enum class ModelID : usize { Invalid = ~0_sz };
+static Identifier INVALID_MODEL = "invalid_model";
 struct Model {
     struct Primitive {
         usize vertex_offset = 0;
         usize vertex_count = 0;
         usize index_offset = 0;
         usize index_count = 0;
-        usize material_index = 0;
+        Identifier material_ident = {};
     };
 
     struct Mesh {
@@ -72,5 +83,10 @@ struct Model {
 
     ls::option<BufferID> vertex_buffer;
     ls::option<BufferID> index_buffer;
+};
+
+enum class GPUModelID : u32 { Invalid = ~0_u32 };
+struct GPUModel {
+    glm::mat4 transform_mat = {};
 };
 }  // namespace lr

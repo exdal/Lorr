@@ -7,15 +7,19 @@ enum class SceneID : u32 { Invalid = ~0_u32 };
 struct Scene {
     flecs::world &ecs;
     flecs::entity handle;
-    ls::option<flecs::entity> active_camera = ls::nullopt;
 
-    Scene(std::string_view name_, flecs::world &world_);
+    const std::string_view name() { return { handle.name(), handle.name().length() }; }
+
+    Scene(std::string_view name_, flecs::world &world_, flecs::entity &root_);
     virtual ~Scene() = default;
 
     flecs::entity create_entity(this Scene &, std::string_view name);
 
     void set_active_camera(this Scene &, flecs::entity camera_entity);
+    flecs::entity get_active_camera(this Scene &);
+
     flecs::entity create_perspective_camera(this Scene &, std::string_view name, const glm::vec3 &position, f32 fov, f32 aspect);
+    flecs::entity create_directional_light(this Scene &, std::string_view name, const glm::vec2 &direction);
 
     template<typename T>
     void children(const T &f) {

@@ -104,6 +104,7 @@ auto Device::create(usize frame_count) -> std::expected<Device, vk::Result> {
     VkPhysicalDeviceVulkan13Features vk13_features = {};
     vk13_features.synchronization2 = true;
     vk13_features.dynamicRendering = true;
+    vk13_features.shaderDemoteToHelperInvocation = true;
     physical_device_selector.set_required_features_13(vk13_features);
 
     VkPhysicalDeviceVulkan12Features vk12_features = {};

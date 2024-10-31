@@ -137,7 +137,8 @@ auto Pipeline::create(Device device, const GraphicsPipelineInfo &info) -> std::e
         .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
         .pNext = nullptr,
         .flags = 0,
-        .vertexBindingDescriptionCount = 1,
+        // Allow layoutless draws, fixes 'VUID-vkCmdDraw-None-04008'
+        .vertexBindingDescriptionCount = !info.vertex_attrib_infos.empty(),
         .pVertexBindingDescriptions = &input_binding_description,
         .vertexAttributeDescriptionCount = static_cast<u32>(input_attrib_descriptions.size()),
         .pVertexAttributeDescriptions = input_attrib_descriptions.data(),
@@ -307,7 +308,7 @@ auto Pipeline::create(Device device, const GraphicsPipelineInfo &info) -> std::e
         return std::unexpected(vk::Result::OutOfPoolMem);
     }
 
-    auto impl = pipeline->impl;
+    auto impl = pipeline->self;
     impl->device = device;
     impl->bind_point = vk::PipelineBindPoint::Graphics;
     impl->layout_id = static_cast<PipelineLayoutID>(module_reflection.pipeline_layout_index);
@@ -387,7 +388,7 @@ auto Pipeline::create(Device device, const ComputePipelineInfo &info) -> std::ex
         return std::unexpected(vk::Result::OutOfPoolMem);
     }
 
-    auto impl = pipeline->impl;
+    auto impl = pipeline->self;
     impl->device = device;
     impl->bind_point = vk::PipelineBindPoint::Compute;
     impl->layout_id = static_cast<PipelineLayoutID>(module_reflection.pipeline_layout_index);

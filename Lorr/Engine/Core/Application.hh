@@ -4,12 +4,9 @@
 #include "EventManager.hh"
 
 #include "Engine/Asset/Asset.hh"
-
 #include "Engine/Graphics/Vulkan.hh"
-
-#include "Engine/World/World.hh"
-
 #include "Engine/Window/Window.hh"
+#include "Engine/World/World.hh"
 
 namespace lr {
 struct ApplicationInfo {

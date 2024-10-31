@@ -12,7 +12,7 @@ struct FragmentOutput {
 };
 
 [[vk::push_constant]] struct {
-    lr::World *world;
+    World *world;
 } c;
 
 
@@ -70,7 +70,7 @@ VertexOutput vs_main(u32 vertex_id : SV_VertexID) {
 
 [shader("fragment")]
 FragmentOutput fs_main(VertexOutput input) {
-    lr::Camera *camera = &c.world->cameras[0];
+    Camera *camera = &c.world->cameras[c.world.active_camera_index];
 
     FragmentOutput output;
     float t = -input.near_pos.y / (input.far_pos.y - input.near_pos.y);

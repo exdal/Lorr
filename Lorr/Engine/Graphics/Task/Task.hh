@@ -13,6 +13,7 @@ struct TaskImageInfo {
 
 struct TaskImage {
     ImageID image_id = ImageID::Invalid;
+    ImageViewID image_view_id = ImageViewID::Invalid;
     vk::ImageSubresourceRange subresource_range = {};
     vk::ImageLayout last_layout = vk::ImageLayout::Undefined;
     vk::PipelineAccessImpl last_access = vk::PipelineAccess::None;
@@ -61,7 +62,8 @@ namespace Preset {
     using ColorAttachmentRead = TaskImageUse<vk::ImageLayout::ColorAttachment, vk::PipelineAccess::ColorAttachmentRead>;
     using DepthAttachmentWrite = TaskImageUse<vk::ImageLayout::DepthAttachment, vk::PipelineAccess::DepthStencilReadWrite>;
     using DepthAttachmentRead = TaskImageUse<vk::ImageLayout::DepthAttachment, vk::PipelineAccess::DepthStencilRead>;
-    using ColorReadOnly = TaskImageUse<vk::ImageLayout::ColorReadOnly, vk::PipelineAccess::FragmentShaderRead>;
+    using ColorReadOnly = TaskImageUse<vk::ImageLayout::ColorReadOnly, vk::PipelineAccess::ColorRead>;
+    using ShaderReadOnly = TaskImageUse<vk::ImageLayout::ShaderReadOnly, vk::PipelineAccess::FragmentShaderRead>;
     using ComputeWrite = TaskImageUse<vk::ImageLayout::General, vk::PipelineAccess::ComputeWrite>;
     using ComputeRead = TaskImageUse<vk::ImageLayout::General, vk::PipelineAccess::ComputeRead>;
     using BlitRead = TaskImageUse<vk::ImageLayout::TransferSrc, vk::PipelineAccess::BlitRead>;

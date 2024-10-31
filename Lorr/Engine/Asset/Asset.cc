@@ -1,211 +1,88 @@
 #include "Asset.hh"
 
-#include "Engine/OS/OS.hh"
-
-#include "Engine/Asset/AssetParser.hh"
+#include "Engine/Asset/ParserGLTF.hh"
 
 namespace lr {
-bool AssetManager::init(this AssetManager &self, Device device) {
+struct MaterialTextureInfo {
+    Identifier albedo_ident = {};
+    Identifier normal_ident = {};
+    Identifier emissive_ident = {};
+};
+
+template<>
+struct Handle<AssetManager>::Impl {
+    Device device = {};
+    fs::path root_path = fs::current_path();
+
+    ankerl::unordered_dense::map<Identifier, Model> model_map = {};
+    ankerl::unordered_dense::map<Identifier, Texture> texture_map = {};
+    ankerl::unordered_dense::map<Identifier, Material> material_map = {};
+};
+
+auto AssetManager::create(Device_H device) -> AssetManager {
     ZoneScoped;
 
-    self.device = device;
+    auto impl = new Impl;
+    impl->device = device;
+    auto self = AssetManager(impl);
 
-    u32 invalid_tex_data[] = { 0xFF000000, 0xFFFF00FF, 0xFFFF00FF, 0xFF000000 };
-    // auto invalid_image_id = self.device->create_image(ImageInfo{
-    //     .usage_flags = ImageUsage::Sampled | ImageUsage::TransferDst,
-    //     .format = Format::R8G8B8A8_UNORM,
-    //     .type = ImageType::View2D,
-    //     .extent = { 2, 2, 1 },
-    //     .debug_name = "Invalid Placeholder",
-    // });
-    // self.device->set_image_data(invalid_image_id, &invalid_tex_data, ImageLayout::ColorReadOnly);
-    // auto invalid_image_view_id = self.device->create_image_view(ImageViewInfo{
-    //     .image_id = invalid_image_id,
-    //     .type = ImageViewType::View2D,
-    //     .debug_name = "Invalid Placeholder View",
-    // });
-    // auto invalid_sampler_id = self.device->create_sampler({
-    //     .min_filter = Filtering::Nearest,
-    //     .mag_filter = Filtering::Nearest,
-    //     .address_u = TextureAddressMode::Repeat,
-    //     .address_v = TextureAddressMode::Repeat,
-    // });
-    // self.textures.try_emplace(INVALID_TEXTURE, invalid_image_id, invalid_image_view_id, invalid_sampler_id);
+    auto invalid_texture_id = Image::create(
+                                  device,
+                                  vk::ImageUsage::Sampled | vk::ImageUsage::TransferDst,
+                                  vk::Format::R8G8B8A8_UNORM,
+                                  vk::ImageType::View2D,
+                                  { 1024, 1024, 1 })
+                                  .value();
+    std::vector<u32> invalid_texture_data(1024 * 1024, 0xFFFFFFFF);
+    impl->device.upload(
+        invalid_texture_id, invalid_texture_data.data(), invalid_texture_data.size() * sizeof(u32), vk::ImageLayout::ShaderReadOnly);
+    self.add_texure(
+        INVALID_TEXTURE,
+        invalid_texture_id,
+        Sampler::create(
+            device,
+            vk::Filtering::Linear,
+            vk::Filtering::Linear,
+            vk::Filtering::Nearest,
+            vk::SamplerAddressMode::Repeat,
+            vk::SamplerAddressMode::Repeat,
+            vk::SamplerAddressMode::Repeat,
+            vk::CompareOp::Never)
+            .value());
 
-    return true;
+    return self;
 }
 
-void AssetManager::shutdown(this AssetManager &self, bool print_reports) {
+auto AssetManager::destroy() -> void {
     ZoneScoped;
 
-    if (print_reports) {
-        LOG_INFO("{} alive textures.", self.textures.size());
-        LOG_INFO("{} alive materials.", self.materials.size());
-        LOG_INFO("{} alive models.", self.models.size());
-    }
+    LOG_TRACE("{} alive textures.", impl->texture_map.size());
+    LOG_TRACE("{} alive materials.", impl->material_map.size());
+    LOG_TRACE("{} alive models.", impl->model_map.size());
 
-    for (auto &[ident, texture] : self.textures) {
+    for (auto &[ident, texture] : impl->texture_map) {
         LOG_INFO("Alive texture {}", ident.sv());
-        // self.device->delete_images(texture.image_id);
-        // self.device->delete_image_views(texture.image_view_id);
-        // self.device->delete_samplers(texture.sampler_id);
+        impl->device.destroy_sampler(texture.sampler_id);
+        impl->device.destroy_image(texture.image_id);
     }
 
-    for (auto &[ident, model] : self.models) {
+    for (auto &[ident, model] : impl->model_map) {
         LOG_INFO("Alive model {}", ident.sv());
-        // if (model.vertex_buffer.has_value()) {
-        //     auto id = model.vertex_buffer.value();
-        //     self.device->delete_buffers(id);
-        // }
-        // if (model.index_buffer.has_value()) {
-        //     auto id = model.index_buffer.value();
-        //     self.device->delete_buffers(id);
-        // }
+        for (auto &v : model.meshes) {
+            impl->device.destroy_buffer(v.vertex_buffer_cpu);
+            impl->device.destroy_buffer(v.index_buffer_cpu);
+        }
     }
 }
 
-Model *AssetManager::load_model(this AssetManager &self, const Identifier &ident, const fs::path &path) {
-    ZoneScoped;
-
-    Model model = {};
-    auto model_data = AssetParser::GLTF(path);
-
-    std::vector<Identifier> texture_idents;
-    for (auto &v : model_data->textures) {
-        std::unique_ptr<ImageAssetData> image_data;
-        switch (v.file_type) {
-            case AssetFileType::PNG:
-            case AssetFileType::JPEG:
-                image_data = AssetParser::STB(v.data.data(), v.data.size());
-                break;
-            default:;
-        }
-
-        if (image_data) {
-            auto new_ident = Identifier::random();
-            vk::Extent3D extent = { image_data->width, image_data->height, 1 };
-            auto &texture = self.textures[new_ident];
-            // TODO: Error handling
-            auto image_id = Image::create(
-                self.device,
-                vk::ImageUsage::Sampled | vk::ImageUsage::TransferDst,
-                image_data->format,
-                vk::ImageType::View2D,
-                extent,
-                vk::ImageAspectFlag::Color,
-                1,
-                1);
-            auto image_view_id = ImageView::create(
-                self.device,
-                texture.image_id,
-                vk::ImageViewType::View2D,
-                vk::ImageSubresourceRange{
-                    .aspect_flags = vk::ImageAspectFlag::Color,
-                });
-            self.device.upload(texture.image_id, image_data->data, image_data->data_size, vk::ImageLayout::ColorReadOnly);
-
-            texture.image_id = image_id.value();
-            texture.image_view_id = image_view_id.value();
-
-            if (auto sampler_index = v.sampler_index; sampler_index.has_value()) {
-                auto &sampler_info = model_data->samplers[sampler_index.value()];
-                // TODO: Error handling
-                auto sampler = Sampler::create(
-                    self.device,
-                    sampler_info.min_filter,
-                    sampler_info.mag_filter,
-                    vk::Filtering::Linear,
-                    sampler_info.address_u,
-                    sampler_info.address_v,
-                    vk::SamplerAddressMode::Repeat,
-                    vk::CompareOp::LessEqual);
-                texture.sampler_id = sampler.value_or(SamplerID::Invalid);
-            }
-
-            texture_idents.push_back(new_ident);
-        } else {
-            LOG_ERROR("An image named {} could not be parsed!", v.name);
-            texture_idents.push_back(INVALID_TEXTURE);
-        }
-    }
-
-    std::vector<Identifier> material_idents;
-    for (auto &v : model_data->materials) {
-        auto new_ident = Identifier::random();
-
-        Material material = {};
-        material.albedo_color = v.albedo_color;
-        material.emissive_color = v.emissive_color;
-        material.roughness_factor = v.roughness_factor;
-        material.metallic_factor = v.metallic_factor;
-        material.alpha_mode = v.alpha_mode;
-        material.alpha_cutoff = v.alpha_cutoff;
-
-        if (auto i = v.albedo_image_data_index; i.has_value()) {
-            material.albedo_texture = texture_idents[i.value()];
-        }
-        if (auto i = v.normal_image_data_index; i.has_value()) {
-            material.normal_texture = texture_idents[i.value()];
-        }
-        if (auto i = v.emissive_image_data_index; i.has_value()) {
-            material.emissive_texture = texture_idents[i.value()];
-        }
-
-        self.add_material(new_ident, material);
-        material_idents.push_back(new_ident);
-    }
-
-    for (auto &v : model_data->primitives) {
-        auto &primitive = model.primitives.emplace_back();
-        primitive.vertex_offset = v.vertex_offset.value();
-        primitive.vertex_count = v.vertex_count.value();
-        primitive.index_offset = v.index_offset.value();
-        primitive.index_count = v.index_count.value();
-
-        if (auto i = v.material_index; i.has_value()) {
-            primitive.material_ident = material_idents[i.value()];
-        }
-    }
-
-    for (auto &v : model_data->meshes) {
-        auto &mesh = model.meshes.emplace_back();
-        mesh.name = v.name;
-        mesh.primitive_indices = v.primitive_indices;
-    }
-
-    usize vertex_upload_size = model_data->vertices.size() * sizeof(Vertex);
-    usize index_upload_size = model_data->indices.size() * sizeof(u32);
-    auto vertex_buffer_id = Buffer::create(
-                                self.device,
-                                vk::BufferUsage::TransferDst | vk::BufferUsage::Vertex,
-                                vertex_upload_size,
-                                vk::MemoryAllocationUsage::PreferDevice,
-                                vk::MemoryAllocationFlag::None)
-                                .value();
-    auto index_buffer_id = Buffer::create(
-                               self.device,
-                               vk::BufferUsage::TransferDst | vk::BufferUsage::Index,
-                               index_upload_size,
-                               vk::MemoryAllocationUsage::PreferDevice,
-                               vk::MemoryAllocationFlag::None)
-                               .value();
-
-    return &self.models.try_emplace(ident, model).first->second;
+auto AssetManager::set_root_path(const fs::path &path) -> void {
+    impl->root_path = path;
 }
 
-Material *AssetManager::add_material(this AssetManager &self, const Identifier &ident, const Material &material_data) {
+auto AssetManager::asset_root_path(AssetType type) -> fs::path {
     ZoneScoped;
 
-    auto material_iter = self.materials.try_emplace(ident, material_data);
-    auto &material = material_iter.first->second;
-
-    return &material;
-}
-
-fs::path AssetManager::asset_dir(AssetType type) {
-    ZoneScoped;
-
-    auto root = fs::current_path() / "resources";
+    auto root = impl->root_path / "resources";
     switch (type) {
         case AssetType::Root:
             return root;
@@ -220,33 +97,257 @@ fs::path AssetManager::asset_dir(AssetType type) {
     }
 }
 
-Texture *AssetManager::texture_at(this AssetManager &self, const Identifier &ident) {
+auto AssetManager::add_texure(const Identifier &ident, ImageID image_id, SamplerID sampler_id) -> Texture * {
     ZoneScoped;
 
-    auto it = self.textures.find(ident);
-    if (it == self.textures.end()) {
+    auto [texture_it, texture_inserted] = impl->texture_map.try_emplace(ident);
+    if (!texture_inserted) {
+        return nullptr;
+    }
+
+    auto &texture = texture_it->second;
+    texture.image_id = image_id;
+    texture.sampler_id = sampler_id;
+
+    return &texture;
+}
+
+auto AssetManager::load_model(const Identifier &ident, const fs::path &path) -> Model * {
+    ZoneScoped;
+
+    auto [model_it, model_inseted] = impl->model_map.try_emplace(ident);
+    if (!model_inseted) {
+        return nullptr;
+    }
+
+    auto &model = model_it->second;
+    auto model_info = GLTFModelInfo::parse(impl->device, path);
+    LS_DEFER(&) {
+        model_info->destroy(impl->device);
+    };
+
+    if (!model_info.has_value()) {
+        LOG_ERROR("Failed to parse Model '{}'!", path);
+        return nullptr;
+    }
+
+    auto graphics_queue = impl->device.queue(vk::CommandType::Graphics);
+    auto image_cmd_list = graphics_queue.begin();
+
+    std::vector<SamplerID> samplers;
+    samplers.reserve(model_info->samplers.size());
+    for (auto &v : model_info->samplers) {
+        samplers.emplace_back(Sampler::create(
+                                  impl->device,
+                                  v.min_filter,
+                                  v.mag_filter,
+                                  vk::Filtering::Linear,
+                                  v.address_u,
+                                  v.address_v,
+                                  vk::SamplerAddressMode::ClampToBorder,
+                                  vk::CompareOp::Always)
+                                  .value());
+    }
+
+    std::vector<ImageID> images;
+    images.reserve(model_info->images.size());
+    for (auto &v : model_info->images) {
+        auto image_id = Image::create(
+                            impl->device,
+                            vk::ImageUsage::Sampled | vk::ImageUsage::TransferDst | vk::ImageUsage::TransferSrc,
+                            v.format,
+                            vk::ImageType::View2D,
+                            v.extent,
+                            vk::ImageAspectFlag::Color,
+                            1,
+                            static_cast<u32>(glm::floor(glm::log2(static_cast<f32>(ls::max(v.extent.width, v.extent.height)))) + 1))
+                            .value();
+        auto image = impl->device.image(image_id);
+        image.set_name(v.name);
+
+        image_cmd_list.image_transition({
+            .dst_stage = vk::PipelineStage::Copy,
+            .dst_access = vk::MemoryAccess::TransferWrite,
+            .new_layout = vk::ImageLayout::TransferDst,
+            .image_id = image_id,
+        });
+
+        vk::ImageCopyRegion first_copy_region = {
+            .image_subresource_layer = { vk::ImageAspectFlag::Color, 0, 0, 1 },
+            .image_extent = v.extent,
+        };
+        image_cmd_list.copy_buffer_to_image(v.buffer_id.value(), image_id, vk::ImageLayout::TransferDst, first_copy_region);
+
+        // Mip chain generation
+        image_cmd_list.image_transition({
+            .src_stage = vk::PipelineStage::Copy,
+            .src_access = vk::MemoryAccess::TransferWrite,
+            .dst_stage = vk::PipelineStage::Blit,
+            .dst_access = vk::MemoryAccess::TransferRead,
+            .old_layout = vk::ImageLayout::TransferDst,
+            .new_layout = vk::ImageLayout::TransferSrc,
+            .image_id = image_id,
+            .subresource_range = { vk::ImageAspectFlag::Color, 0, 1, 0, 1 },
+        });
+
+        i32 width = static_cast<i32>(image.extent().width);
+        i32 height = static_cast<i32>(image.extent().height);
+        for (u32 i = 1; i < image.mip_count(); i++) {
+            image_cmd_list.image_transition({
+                .dst_stage = vk::PipelineStage::Blit,
+                .dst_access = vk::MemoryAccess::TransferWrite,
+                .new_layout = vk::ImageLayout::TransferDst,
+                .image_id = image_id,
+                .subresource_range = { vk::ImageAspectFlag::Color, i, 1, 0, 1 },
+            });
+
+            vk::ImageBlit blit = {
+                .src_subresource = { vk::ImageAspectFlag::Color, i - 1, 0, 1 },
+                .src_offsets = { {}, { width >> (i - 1), height >> (i - 1), 1 } },
+                .dst_subresource = { vk::ImageAspectFlag::Color, i, 0, 1 },
+                .dst_offsets = { {}, { width >> i, height >> i, 1 } },
+            };
+            image_cmd_list.blit_image(
+                image_id, vk::ImageLayout::TransferSrc, image_id, vk::ImageLayout::TransferDst, vk::Filtering::Linear, blit);
+
+            image_cmd_list.image_transition({
+                .src_stage = vk::PipelineStage::Blit,
+                .src_access = vk::MemoryAccess::TransferWrite,
+                .dst_stage = vk::PipelineStage::Blit,
+                .dst_access = vk::MemoryAccess::TransferRead,
+                .old_layout = vk::ImageLayout::TransferDst,
+                .new_layout = vk::ImageLayout::TransferSrc,
+                .image_id = image_id,
+                .subresource_range = { vk::ImageAspectFlag::Color, i, 1, 0, 1 },
+            });
+        }
+
+        image_cmd_list.image_transition({
+            .src_stage = vk::PipelineStage::Blit,
+            .src_access = vk::MemoryAccess::TransferRead,
+            .dst_stage = vk::PipelineStage::FragmentShader,
+            .dst_access = vk::MemoryAccess::ShaderRead,
+            .old_layout = vk::ImageLayout::TransferSrc,
+            .new_layout = vk::ImageLayout::ShaderReadOnly,
+            .image_id = image_id,
+            .subresource_range = { vk::ImageAspectFlag::Color, 0, image.mip_count(), 0, 1 },
+        });
+
+        images.push_back(image_id);
+    }
+
+    graphics_queue.end(image_cmd_list);
+    graphics_queue.submit({}, {});
+    graphics_queue.wait();
+    for (auto &v : model_info->images) {
+        if (v.buffer_id.has_value()) {
+            impl->device.destroy_buffer(v.buffer_id.value());
+            v.buffer_id.reset();
+        }
+    }
+
+    std::vector<Identifier> texture_idents;
+    texture_idents.reserve(model_info->textures.size());
+    for (auto &v : model_info->textures) {
+        auto new_ident = Identifier::random();
+        auto [texture_it, texture_inserted] = impl->texture_map.try_emplace(new_ident);
+        if (texture_inserted) {
+            auto &texture = texture_it->second;
+            texture.image_id = images[v.image_index.value()];
+            texture.sampler_id = samplers[v.sampler_index.value()];
+
+            texture_idents.push_back(texture_it->first);
+        } else {
+            LOG_ERROR("Failed to insert identifier '{}' into textures map, wat?", new_ident.sv());
+            texture_idents.push_back(INVALID_TEXTURE);
+        }
+    }
+
+    std::vector<Identifier> material_idents = {};
+    for (auto &v : model_info->materials) {
+        auto new_ident = Identifier::random();
+        auto [material_it, material_inserted] = impl->material_map.try_emplace(new_ident);
+        if (material_inserted) {
+            auto &material = material_it->second;
+            material.albedo_color = v.albedo_color;
+            material.emissive_color = v.emissive_color;
+            material.roughness_factor = v.roughness_factor;
+            material.metallic_factor = v.metallic_factor;
+            material.alpha_mode = v.alpha_mode;
+            material.alpha_cutoff = v.alpha_cutoff;
+
+            if (auto i = v.albedo_texture_index; i.has_value()) {
+                material.albedo_texture_ident = texture_idents[i.value()];
+            }
+            if (auto i = v.normal_texture_index; i.has_value()) {
+                material.normal_texture_ident = texture_idents[i.value()];
+            }
+            if (auto i = v.emissive_texture_index; i.has_value()) {
+                material.emissive_texture_ident = texture_idents[i.value()];
+            }
+
+            // self.add_material(new_ident, material);
+            material_idents.push_back(material_it->first);
+        }
+    }
+
+    for (auto &v : model_info->primitives) {
+        auto &primitive = model.primitives.emplace_back();
+        primitive.vertex_offset = v.vertex_offset.value();
+        primitive.vertex_count = v.vertex_count.value();
+        primitive.index_offset = v.index_offset.value();
+        primitive.index_count = v.index_count.value();
+        primitive.material_ident = material_idents[v.material_index.value()];
+    }
+
+    for (auto &v : model_info->meshes) {
+        auto &mesh = model.meshes.emplace_back();
+        mesh.name = v.name;
+        mesh.primitive_indices = v.primitive_indices;
+        mesh.vertex_buffer_cpu = v.vertex_buffer_cpu.value();
+        mesh.index_buffer_cpu = v.index_buffer_cpu.value();
+        mesh.total_vertex_count = v.total_vertex_count;
+        mesh.total_index_count = v.total_index_count;
+        v.vertex_buffer_cpu.reset();
+        v.index_buffer_cpu.reset();
+    }
+
+    return &model;
+}
+
+auto AssetManager::load_material(const Identifier &, const fs::path &) -> Material * {
+    ZoneScoped;
+
+    return nullptr;
+}
+
+auto AssetManager::model(const Identifier &ident) -> Model * {
+    ZoneScoped;
+
+    auto it = impl->model_map.find(ident);
+    if (it == impl->model_map.end()) {
         return nullptr;
     }
 
     return &it->second;
 }
 
-Material *AssetManager::material_at(this AssetManager &self, const Identifier &ident) {
+auto AssetManager::texture(const Identifier &ident) -> Texture * {
     ZoneScoped;
 
-    auto it = self.materials.find(ident);
-    if (it == self.materials.end()) {
+    auto it = impl->texture_map.find(ident);
+    if (it == impl->texture_map.end()) {
         return nullptr;
     }
 
     return &it->second;
 }
 
-Model *AssetManager::model_at(this AssetManager &self, const Identifier &ident) {
+auto AssetManager::material(const Identifier &ident) -> Material * {
     ZoneScoped;
 
-    auto it = self.models.find(ident);
-    if (it == self.models.end()) {
+    auto it = impl->material_map.find(ident);
+    if (it == impl->material_map.end()) {
         return nullptr;
     }
 

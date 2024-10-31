@@ -15,22 +15,27 @@ enum class AssetType : u32 {
     Font,
 };
 
-struct AssetManager {
-    Device device = {};
-    ankerl::unordered_dense::map<Identifier, Texture> textures = {};
-    ankerl::unordered_dense::map<Identifier, Material> materials = {};
-    ankerl::unordered_dense::map<Identifier, Model> models = {};
+enum class AssetFileType : u32 {
+    None = 0,
+    GLB,
+    PNG,
+    JPEG,
+};
 
-    bool init(this AssetManager &, Device device);
-    void shutdown(this AssetManager &, bool print_reports);
+struct AssetManager : Handle<AssetManager> {
+    static auto create(Device_H) -> AssetManager;
+    auto destroy() -> void;
 
-    Model *load_model(this AssetManager &, const Identifier &ident, const fs::path &path);
-    Material *add_material(this AssetManager &, const Identifier &ident, const Material &material_data);
+    auto set_root_path(const fs::path &path) -> void;
+    auto asset_root_path(AssetType type) -> fs::path;
 
-    fs::path asset_dir(AssetType type);
+    auto add_texure(const Identifier &ident, ImageID image_id, SamplerID sampler_id) -> Texture *;
 
-    Texture *texture_at(this AssetManager &, const Identifier &ident);
-    Material *material_at(this AssetManager &, const Identifier &ident);
-    Model *model_at(this AssetManager &, const Identifier &ident);
+    auto load_model(const Identifier &ident, const fs::path &path) -> Model *;
+    auto load_material(const Identifier &ident, const fs::path &path) -> Material *;
+
+    auto model(const Identifier &ident) -> Model *;
+    auto texture(const Identifier &ident) -> Texture *;
+    auto material(const Identifier &ident) -> Material *;
 };
 }  // namespace lr

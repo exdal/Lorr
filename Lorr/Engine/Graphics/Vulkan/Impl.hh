@@ -2,8 +2,8 @@
 
 #include "Engine/Graphics/Vulkan.hh"
 
-#include "Engine/Graphics/ResourcePool.hh"
 #include "Engine/Graphics/Slang/Compiler.hh"
+#include "Engine/Memory/PagedPool.hh"
 
 #ifndef VK_NO_PROTOTYPES
 #define VK_NO_PROTOTYPES
@@ -247,7 +247,8 @@ struct Handle<TransferManager>::Impl {
     Device device = {};
 
     Semaphore semaphore = {};
-    BufferID buffer_id = BufferID::Invalid;
+    BufferID cpu_buffer_id = BufferID::Invalid;
+    BufferID gpu_buffer_id = BufferID::Invalid;
     u32 size = 0;
     u32 max_allocs = 0;
     u32 free_storage = 0;
@@ -260,19 +261,14 @@ struct Handle<TransferManager>::Impl {
     std::vector<GPUAllocationNode> nodes = {};
     std::vector<TransferManager::NodeID> free_nodes = {};
     u32 free_offset = 0;
-
-    auto find_free_node(u32 node_size) -> ls::option<TransferManager::NodeID>;
-    auto free_node(u32 node_index) -> void;
-    auto insert_node_into_bin(u32 node_size, u32 data_offset) -> u32;
-    auto remove_node_from_bin(u32 node_index) -> void;
 };
 
 struct ResourcePools {
-    PagedResourcePool<Buffer::Impl, BufferID> buffers = {};
-    PagedResourcePool<Image::Impl, ImageID> images = {};
-    PagedResourcePool<ImageView::Impl, ImageViewID> image_views = {};
-    PagedResourcePool<Sampler::Impl, SamplerID, { .MAX_RESOURCE_COUNT = 512u }> samplers = {};
-    PagedResourcePool<Pipeline::Impl, PipelineID> pipelines = {};
+    PagedPool<Buffer::Impl, BufferID> buffers = {};
+    PagedPool<Image::Impl, ImageID> images = {};
+    PagedPool<ImageView::Impl, ImageViewID> image_views = {};
+    PagedPool<Sampler::Impl, SamplerID, { .MAX_RESOURCE_COUNT = 512u }> samplers = {};
+    PagedPool<Pipeline::Impl, PipelineID> pipelines = {};
 
     constexpr static usize MAX_PUSH_CONSTANT_SIZE = 128;
     std::array<VkPipelineLayout, (MAX_PUSH_CONSTANT_SIZE / sizeof(u32)) + 1> pipeline_layouts = {};

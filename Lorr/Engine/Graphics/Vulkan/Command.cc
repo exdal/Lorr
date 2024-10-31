@@ -150,13 +150,12 @@ auto CommandList::image_transition(const vk::ImageBarrier &barrier) -> void {
     ZoneScoped;
 
     auto image = impl->device.image(barrier.image_id);
-    auto subresource = image.subresource_range();
     VkImageSubresourceRange vk_image_subresource_range = {
-        .aspectMask = to_vk_image_aspect_flags(subresource.aspect_flags),
-        .baseMipLevel = subresource.base_mip,
-        .levelCount = subresource.mip_count,
-        .baseArrayLayer = subresource.base_slice,
-        .layerCount = subresource.slice_count,
+        .aspectMask = to_vk_image_aspect_flags(barrier.subresource_range.aspect_flags),
+        .baseMipLevel = barrier.subresource_range.base_mip,
+        .levelCount = barrier.subresource_range.mip_count,
+        .baseArrayLayer = barrier.subresource_range.base_slice,
+        .layerCount = barrier.subresource_range.slice_count,
     };
 
     VkImageMemoryBarrier2 image_memory_barrier = {
@@ -443,7 +442,7 @@ auto CommandList::set_pipeline(PipelineID pipeline_id) -> void {
     vkCmdBindPipeline(impl->handle, impl->bind_point, pipeline->handle);
 }
 
-auto CommandList::set_push_constants(void *data, u32 data_size, u32 data_offset) -> void {
+auto CommandList::set_push_constants(const void *data, u32 data_size, u32 data_offset) -> void {
     ZoneScoped;
 
     LS_EXPECT(impl->bound_pipeline_layout.has_value());

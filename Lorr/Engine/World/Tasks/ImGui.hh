@@ -8,7 +8,7 @@
 
 namespace lr::Tasks {
 inline GraphicsPipelineInfo imgui_pipeline_info(AssetManager &asset_man, vk::Format attachment_format) {
-    auto shaders_root = asset_man.asset_dir(AssetType::Shader);
+    auto shaders_root = asset_man.asset_root_path(AssetType::Shader);
 
     return {
         .color_attachment_formats = { attachment_format },
@@ -44,8 +44,8 @@ inline std::pair<u8 *, glm::ivec2> imgui_build_font_atlas(AssetManager &asset_ma
     ZoneScoped;
 
     auto &imgui = ImGui::GetIO();
-    auto roboto_path = (asset_man.asset_dir(AssetType::Font) / "Roboto-Regular.ttf").string();
-    auto fa_solid_900_path = (asset_man.asset_dir(AssetType::Font) / "fa-solid-900.ttf").string();
+    auto roboto_path = (asset_man.asset_root_path(AssetType::Font) / "Roboto-Regular.ttf").string();
+    auto fa_solid_900_path = (asset_man.asset_root_path(AssetType::Font) / "fa-solid-900.ttf").string();
 
     ImWchar icons_ranges[] = { 0xf000, 0xf8ff, 0 };
     ImFontConfig font_config;
@@ -76,8 +76,8 @@ struct ImGuiTask {
         Preset::ColorAttachmentWrite attachment = {};
     } uses = {};
 
-    TaskImageID font_atlas_image = {};
-    PipelineID pipeline = {};
+    ImageID font_atlas_image = ImageID::Invalid;
+    PipelineID pipeline = PipelineID::Invalid;
 
     void execute(TaskContext &tc) {
         struct PushConstants {
@@ -111,24 +111,17 @@ struct ImGuiTask {
 
         tc.set_pipeline(this->pipeline);
 
-        RenderingBeginInfo rendering_info = {
+        tc.cmd_list.begin_rendering({
             .render_area = tc.pass_rect(),
             .color_attachments = color_attachment,
-        };
-        tc.cmd_list.begin_rendering(rendering_info);
-        tc.cmd_list.set_vertex_buffer(vertex_buffer_alloc.buffer_id, vertex_buffer_alloc.offset);
-        tc.cmd_list.set_index_buffer(index_buffer_alloc.buffer_id, index_buffer_alloc.offset, true);
+        });
+        tc.cmd_list.set_vertex_buffer(vertex_buffer_alloc.gpu_buffer_id, vertex_buffer_alloc.offset);
+        tc.cmd_list.set_index_buffer(index_buffer_alloc.gpu_buffer_id, index_buffer_alloc.offset, true);
         tc.cmd_list.set_viewport(
             { .x = 0, .y = 0, .width = imgui.DisplaySize.x, .height = imgui.DisplaySize.y, .depth_min = 0.01, .depth_max = 1.0 });
 
         glm::vec2 scale = { 2.0f / draw_data->DisplaySize.x, 2.0f / draw_data->DisplaySize.y };
         glm::vec2 translate = { -1.0f - draw_data->DisplayPos.x * scale.x, -1.0f - draw_data->DisplayPos.y * scale.y };
-        PushConstants c = {
-            .translate = translate,
-            .scale = scale,
-            .image_view_id = tc.image_view(this->font_atlas_image),
-            .sampler_id = render_context.linear_sampler,
-        };
         ImVec2 clip_off = draw_data->DisplayPos;
         ImVec2 clip_scale = draw_data->FramebufferScale;
         u32 vertex_offset = 0;
@@ -146,18 +139,23 @@ struct ImGuiTask {
                     continue;
                 }
 
-                vk::Rect2D scissor = {
+                tc.cmd_list.set_scissors({
                     .offset = { i32(clip_min.x), i32(clip_min.y) },
                     .extent = { u32(clip_max.x - clip_min.x), u32(clip_max.y - clip_min.y) },
-                };
-                tc.cmd_list.set_scissors(scissor);
+                });
 
+                auto rendering_image = tc.device.image(this->font_atlas_image).view();
                 if (im_cmd.TextureId) {
-                    auto im_image_id = (TaskImageID)(iptr)(im_cmd.TextureId);
-                    c.image_view_id = tc.image_view(im_image_id);
+                    auto im_image_id = (ImageID)(iptr)(im_cmd.TextureId);
+                    rendering_image = tc.device.image(im_image_id).view();
                 }
 
-                tc.set_push_constants(c);
+                tc.set_push_constants(PushConstants{
+                    .translate = translate,
+                    .scale = scale,
+                    .image_view_id = rendering_image,
+                    .sampler_id = render_context.world_data.linear_sampler,
+                });
                 tc.cmd_list.draw_indexed(im_cmd.ElemCount, im_cmd.IdxOffset + index_offset, i32(im_cmd.VtxOffset + vertex_offset));
             }
 

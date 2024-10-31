@@ -13,7 +13,6 @@ constexpr auto to_shader_stage(SlangStage v) {
             return vk::ShaderStageFlag::TessellationControl;
         case SLANG_STAGE_DOMAIN:
             return vk::ShaderStageFlag::TessellationEvaluation;
-        case SLANG_STAGE_GEOMETRY:
         case SLANG_STAGE_FRAGMENT:
             return vk::ShaderStageFlag::Fragment;
         case SLANG_STAGE_COMPUTE:
@@ -62,7 +61,7 @@ struct SlangBlob : ISlangBlob {
 // have proper asset manager with all shaders are preloaded into virtual environment, so ::loadFile
 // would just return already existing shader file.
 struct SlangVirtualFS : ISlangFileSystem {
-    VirtualDir m_virtual_env;
+    VirtualDir &m_virtual_env;
     fs::path m_root_dir;
     std::atomic_uint32_t m_refCount;
 
@@ -87,8 +86,8 @@ struct SlangVirtualFS : ISlangFileSystem {
         return m_refCount;
     }
 
-    SlangVirtualFS(fs::path root_dir)
-        : m_virtual_env({}),
+    SlangVirtualFS(VirtualDir &virtual_dir, fs::path root_dir)
+        : m_virtual_env(virtual_dir),
           m_root_dir(std::move(root_dir)),
           m_refCount(1) {};
     virtual ~SlangVirtualFS() = default;
@@ -143,6 +142,7 @@ struct Handle<SlangSession>::Impl {
 template<>
 struct Handle<SlangCompiler>::Impl {
     Slang::ComPtr<slang::IGlobalSession> global_session;
+    VirtualDir virtual_dir = {};
 };
 
 auto SlangModule::destroy() -> void {
@@ -306,7 +306,6 @@ auto SlangCompiler::create() -> ls::option<SlangCompiler> {
 
     auto impl = new Impl;
     slang::createGlobalSession(impl->global_session.writeRef());
-
     return SlangCompiler(impl);
 }
 
@@ -318,7 +317,7 @@ auto SlangCompiler::destroy() -> void {
 auto SlangCompiler::new_session(const SlangSessionInfo &info) -> ls::option<SlangSession> {
     ZoneScoped;
 
-    auto slang_fs = std::make_unique<SlangVirtualFS>(info.root_directory);
+    auto slang_fs = std::make_unique<SlangVirtualFS>(impl->virtual_dir, info.root_directory);
 
     slang::CompilerOptionEntry entries[] = {
         { slang::CompilerOptionName::Optimization, slang::CompilerOptionValue{ .intValue0 = SLANG_OPTIMIZATION_LEVEL_MAXIMAL } },

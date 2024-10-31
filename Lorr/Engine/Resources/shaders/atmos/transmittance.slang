@@ -1,17 +1,19 @@
+import atmos;
 import "../lorr";
-import "common";
 
 [[vk::push_constant]] struct {
-    lr::World *world;
+    World *world;
     float2 image_size;
-    ImageViewID target_image_id;
+    ImageViewID transmittance_image_id;
+    u32 pad;
 } c;
 
 [shader("compute")]
 [numthreads(16, 16, 1)]
 void cs_main(uint3 thread_id : SV_DispatchThreadID) {
-    lr::Atmosphere *atmos = &c.world->atmosphere;
-    RWTexture2D target_image = RWTexture2D<float4>::get(c.target_image_id);
+    Atmosphere *atmos = &c.world->atmosphere;
+    const let transmittance_image = ImageView(c.transmittance_image_id);
+
     float2 uv = float2(float2(thread_id.xy) + 0.5) / float2(c.image_size);
     float altitude = lerp(atmos.planet_radius, atmos.atmos_radius, uv.y);
     float sun_cos_theta = uv.x * 2.0 - 1.0;
@@ -29,5 +31,5 @@ void cs_main(uint3 thread_id : SV_DispatchThreadID) {
         optical_depth += extinction_sum(atmos, ray_altitude) * distance_per_step;
     }
 
-    target_image[thread_id.xy] = float4(exp(-optical_depth), 1.0);
+    transmittance_image.rw()[thread_id.xy] = float4(exp(-optical_depth), 1.0);
 }

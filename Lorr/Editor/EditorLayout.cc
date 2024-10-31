@@ -225,11 +225,11 @@ void EditorLayout::update(this EditorLayout &self) {
         }
 
         if (ImGui::BeginMenu("View")) {
-            if (ImGui::MenuItem("New Viewport")) {
-                self.add_panel<ViewportPanel>("Viewport 2", Icon::fa::eye);
-            }
-
-            ImGui::Separator();
+            // if (ImGui::MenuItem("New Viewport")) {
+            //     self.add_panel<ViewportPanel>("Viewport 2", Icon::fa::eye);
+            // }
+            //
+            // ImGui::Separator();
 
             if (ImGui::MenuItem("Task Graph Profiler")) {
                 self.show_profiler = !self.show_profiler;

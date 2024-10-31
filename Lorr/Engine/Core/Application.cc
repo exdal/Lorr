@@ -13,20 +13,18 @@ bool Application::init(this Application &self, const ApplicationInfo &info) {
         return false;
     }
 
-    auto device = Device::create(3);
-    if (!device.has_value()) {
+    auto device_result = Device::create(3);
+    if (!device_result.has_value()) {
         LOG_ERROR("Failed to create application! Device failed.");
         return false;
     }
-    self.device = device.value();
+    self.device = device_result.value();
     self.window = Window::create(info.window_info);
     auto window_size = self.window.get_size();
     auto surface = Surface::create(self.device, self.window.get_native_handle()).value();
     self.swap_chain = SwapChain::create(self.device, surface, { window_size.x, window_size.y }).value().set_name("Main SwapChain");
 
-    if (!self.asset_man.init(self.device)) {
-        return false;
-    }
+    self.asset_man = AssetManager::create(self.device);
 
     ImGui::CreateContext();
     auto &imgui = ImGui::GetIO();
@@ -161,7 +159,7 @@ void Application::run(this Application &self) {
         ImGui::Render();
         self.world.end_frame();
 
-        self.world.renderer->render(self.swap_chain, images[acquired_image_index.value()], {}, {});
+        self.world.renderer->render(self.swap_chain, images[acquired_image_index.value()]);
         self.device.end_frame(self.swap_chain, sema_index);
 
         self.window.poll();
@@ -180,17 +178,9 @@ void Application::shutdown(this Application &self) {
 
     self.device.wait();
     self.world.shutdown();
-#ifdef LS_DEBUG
-    self.asset_man.shutdown(true);
-#else
-    self.asset_man.shutdown(false);
-#endif
+    self.asset_man.destroy();
     self.swap_chain.destroy();
-#ifdef LS_DEBUG
     self.device.destroy();
-#else
-    self.device.destroy();
-#endif
     LOG_INFO("Complete!");
 }
 

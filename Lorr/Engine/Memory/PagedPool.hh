@@ -1,23 +1,23 @@
 #pragma once
 
 namespace lr {
-struct PagedResourcePoolInfo {
+struct PagedPoolInfo {
     usize MAX_RESOURCE_COUNT = 1u << 19u;
     usize PAGE_BITS = 9u;
 };
 
-template<typename ResourceT, typename ResourceID, PagedResourcePoolInfo INFO = {}>
-struct PagedResourcePool {
+template<typename T, typename ID, PagedPoolInfo INFO = {}>
+struct PagedPool {
     constexpr static usize MAX_RESOURCE_COUNT = INFO.MAX_RESOURCE_COUNT;
     constexpr static usize PAGE_BITS = INFO.PAGE_BITS;
     constexpr static usize PAGE_SIZE = 1_sz << PAGE_BITS;
     constexpr static usize PAGE_MASK = PAGE_SIZE - 1_sz;
     constexpr static usize PAGE_COUNT = MAX_RESOURCE_COUNT / PAGE_SIZE;
-    using Page = std::array<ResourceT, PAGE_SIZE>;
+    using Page = std::array<T, PAGE_SIZE>;
 
     struct Result {
-        ResourceT *impl = nullptr;
-        ResourceID id = {};
+        T *self = nullptr;
+        ID id = {};
     };
 
     u32 latest_index = 0;
@@ -48,10 +48,10 @@ struct PagedResourcePool {
             page = std::make_unique<Page>();
         }
 
-        return Result(&page->at(index), static_cast<ResourceID>(index));
+        return Result(&page->at(index), static_cast<ID>(index));
     }
 
-    void destroy(this auto &self, ResourceID id) {
+    void destroy(this auto &self, ID id) {
         ZoneScoped;
 
         u32 index = static_cast<u32>(id);
@@ -62,7 +62,7 @@ struct PagedResourcePool {
         self.free_indexes.push_back(index);
     }
 
-    ResourceT &get(this auto &self, ResourceID id) {
+    T &get(this auto &self, ID id) {
         ZoneScoped;
 
         auto index = static_cast<usize>(id);

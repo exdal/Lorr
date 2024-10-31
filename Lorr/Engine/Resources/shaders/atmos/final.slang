@@ -1,17 +1,18 @@
+import atmos;
 import "../lorr";
-import "common";
+
+[[vk::push_constant]] struct {
+    World *world;
+    ImageViewID sky_lut_image_id;
+    SamplerID sampler_id;
+    ImageViewID transmittance_lut_image_id;
+    u32 pad;
+} c;
 
 struct VertexOutput {
     float4 position     : SV_Position;
     float2 tex_coord    : TEXCOORD;
 };
-
-[[vk::push_constant]] struct {
-    lr::World *world;
-    ImageViewID sky_lut_image_id;
-    ImageViewID transmittance_lut_image_id;
-    SamplerID sampler_id;
-} c;
 
 [shader("vertex")]
 VertexOutput vs_main(u32 vertex_id : SV_VertexID) {
@@ -32,17 +33,6 @@ float draw_sun(float cos_theta, float sun_radius) {
     return 0.0;
 }
 
-float3 ACES(float3 x)
-{
-    const float a = 2.51;
-    const float b = 0.03;
-    const float c = 2.43;
-    const float d = 0.59;
-    const float e = 0.14;
-
-    return saturate(x * (a * x + b)) / (x * (c * x + d) + e);
-}
-
 float3 dither(float2 seed, float3 color)
 {
     color *= 255;
@@ -54,14 +44,22 @@ float3 dither(float2 seed, float3 color)
     return color;
 }
 
+vec3 aces(vec3 x) {
+    const float a = 2.51;
+    const float b = 0.03;
+    const float c = 2.43;
+    const float d = 0.59;
+    const float e = 0.14;
+    return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0);
+}
+
 [shader("fragment")]
 float4 fs_main(VertexOutput input) : SV_TARGET
 {
-    lr::Atmosphere *atmos = &c.world->atmosphere;
-    lr::Sun *sun = &c.world->sun;
+    Atmosphere *atmos = &c.world->atmosphere;
+    Sun *sun = &c.world->sun;
 
-    const Texture2D sky_lut = Texture2D<float4>::get(c.sky_lut_image_id);
-    const SamplerState sampler = SamplerState::get(c.sampler_id);
+    const let sky_lut = ImageView(c.sky_lut_image_id);
     
     float4 clip_space = float4(2.0 * input.tex_coord - 1.0, 1.0, 1.0);
     float4 world_space = mul(c.world->cameras[0].inv_projection_view_mat, clip_space);
@@ -72,13 +70,14 @@ float4 fs_main(VertexOutput input) : SV_TARGET
     float u = atan2(direction.z, direction.x) / (2.0 * PI);
     float v = 0.5 - 0.5 * sign(l) * sqrt(abs(l) / (0.5 * PI));
 
-    float3 color = sky_lut.Sample(sampler, float2(u, v)).rgb;
+    float3 color = sky_lut.sample(c.sampler_id, float2(u, v)).rgb;
 
     float3 eye_pos = float3(0.0, c.world->cameras[0].position.y, 0.0);
     float altitude = length(eye_pos);
     float cos_theta = dot(sun->direction, eye_pos / altitude);
     float3 transmittance = sample_lut(atmos, c.transmittance_lut_image_id, c.sampler_id, altitude, cos_theta);
     color += draw_sun(dot(sun->direction, direction), 1.0) * sun->intensity * transmittance;
+    color = aces(color);
 
     return float4(color, 1.0);
 }

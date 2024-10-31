@@ -50,11 +50,11 @@ struct Camera {
 struct RenderableModel {
     constexpr static auto ICON = Icon::fa::cube;
 
-    Identifier model = {};
+    Identifier identifier = {};
 
     static void reflect(flecs::world &w) {
         w.component<RenderableModel>()  //
-            .member<Identifier, RenderableModel>("model", &RenderableModel::model);
+            .member<Identifier, RenderableModel>("identifier", &RenderableModel::identifier);
     }
 };
 

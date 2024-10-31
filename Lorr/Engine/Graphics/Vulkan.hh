@@ -99,6 +99,15 @@ struct Extent3D {
     u32 height = 0;
     u32 depth = 0;
 
+    Extent3D() = default;
+    Extent3D(u32 width_, u32 height_, u32 depth_)
+        : width(width_),
+          height(height_),
+          depth(depth_) {};
+    Extent3D(const Extent2D &extent2d)
+        : width(extent2d.width),
+          height(extent2d.height),
+          depth(1) {};
     bool is_zero() const { return width == 0 && height == 0 && depth == 0; }
 };
 
@@ -270,6 +279,13 @@ struct MemoryRequirements {
     u64 alignment = 0;
     u32 memory_type_bits = 0;
 };
+
+enum class AlphaMode : u32 {
+    Opaque = 0,
+    Mask,
+    Blend,
+};
+
 }  // namespace lr::vk
 
 namespace lr {
@@ -278,8 +294,11 @@ namespace lr {
 
 struct Buffer : Handle<Buffer> {
     static auto create(
-        Device_H, vk::BufferUsage usage, u64 size, vk::MemoryAllocationUsage memory_usage, vk::MemoryAllocationFlag memory_flags)
-        -> std::expected<BufferID, vk::Result>;
+        Device_H,
+        vk::BufferUsage usage,
+        u64 size,
+        vk::MemoryAllocationUsage memory_usage,
+        vk::MemoryAllocationFlag memory_flags = vk::MemoryAllocationFlag::None) -> std::expected<BufferID, vk::Result>;
     auto destroy() -> void;
     auto set_name(const std::string &) -> Buffer &;
 
@@ -304,6 +323,8 @@ struct Image : Handle<Image> {
 
     auto format() const -> vk::Format;
     auto extent() const -> vk::Extent3D;
+    auto slice_count() const -> u32;
+    auto mip_count() const -> u32;
     auto subresource_range() const -> vk::ImageSubresourceRange;
     auto view() const -> ImageViewID;
 };
@@ -445,7 +466,7 @@ struct CommandList : Handle<CommandList> {
     auto begin_rendering(const RenderingBeginInfo &info) -> void;
     auto end_rendering() -> void;
     auto set_pipeline(PipelineID pipeline_id) -> void;
-    auto set_push_constants(void *data, u32 data_size, u32 data_offset) -> void;
+    auto set_push_constants(const void *data, u32 data_size, u32 data_offset) -> void;
     auto set_descriptor_set() -> void;
     auto set_vertex_buffer(BufferID buffer_id, u64 offset = 0, u32 first_binding = 0, u32 binding_count = 1) -> void;
     auto set_index_buffer(BufferID buffer_id, u64 offset = 0, bool use_u16 = false) -> void;
@@ -516,13 +537,22 @@ struct SwapChain : Handle<SwapChain> {
 };
 
 struct GPUAllocation {
-    BufferID buffer_id = BufferID::Invalid;
+    BufferID gpu_buffer_id = BufferID::Invalid;
+    BufferID cpu_buffer_id = BufferID::Invalid;
     u8 *ptr = nullptr;
     u64 offset = 0;
     u64 size = 0;
+    u64 gpu_device_address = 0;
+
+    auto gpu_offset() -> u64 { return gpu_device_address + offset; }
 };
 
 struct TransferManager : Handle<TransferManager> {
+    struct StorageReport {
+        u32 free_space = 0;
+        u32 largest_free_region = 0;
+    };
+
     // Transfer Manager uses offset allocator (by sebbbi), it is same as TLSF.
     // I wrote my TLSF impl. so long ago, I basically forgot about it.
     // Better to use something working.
@@ -539,11 +569,25 @@ struct TransferManager : Handle<TransferManager> {
         u32 capacity = ls::mib_to_bytes(32),
         vk::BufferUsage additional_buffer_usage = vk::BufferUsage::None,
         u32 max_allocs = 128 * 1024) -> TransferManager;
+    auto static create_with_gpu(
+        Device_H,
+        u32 capacity = ls::mib_to_bytes(32),
+        vk::BufferUsage additional_buffer_usage = vk::BufferUsage::None,
+        u32 max_allocs = 128 * 1024) -> TransferManager;
     auto destroy() -> void;
 
     auto allocate(u64 size, u64 alignment = 16) -> ls::option<GPUAllocation>;
+    auto upload(ls::span<GPUAllocation> allocations) -> void;
     auto collect_garbage() -> void;
     auto semaphore() const -> Semaphore;
+    auto storage_report() const -> StorageReport;
+
+private:
+    auto init_allocator(u32 capacity, u32 max_allocs) -> void;
+    auto find_free_node(u32 node_size) -> ls::option<NodeID>;
+    auto free_node(u32 node_index) -> void;
+    auto insert_node_into_bin(u32 node_size, u32 data_offset) -> u32;
+    auto remove_node_from_bin(u32 node_index) -> void;
 };
 
 enum class DeviceFeature : u64 {

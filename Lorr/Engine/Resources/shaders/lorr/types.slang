@@ -1,19 +1,32 @@
 implementing lorr;
 
-static const float PI = 3.14159265358;
+public static const float PI = 3.14159265358;
 
 // arithmetic types
-typedef double f64;
-typedef float f32;
-typedef uint64_t u64;
-typedef int64_t i64;
-typedef uint32_t u32;
-typedef int32_t i32;
-typedef uint16_t u16;
-typedef int16_t i16;
-typedef uint8_t u8;
-typedef int8_t i8;
-typedef u32 b32;
+public typedef double f64;
+public typedef float f32;
+public typedef uint64_t u64;
+public typedef int64_t i64;
+public typedef uint32_t u32;
+public typedef int32_t i32;
+public typedef uint16_t u16;
+public typedef int16_t i16;
+public typedef uint8_t u8;
+public typedef int8_t i8;
+public typedef u32 b32;
+
+// math
+public typedef float2 vec2;
+public typedef float3 vec3;
+public typedef float4 vec4;
+public typedef int2 ivec2;
+public typedef int3 ivec3;
+public typedef int4 ivec4;
+public typedef uint2 uvec2;
+public typedef uint3 uvec3;
+public typedef uint4 uvec4;
+public typedef matrix<f32, 4, 4> mat4;
+public typedef matrix<f32, 4, 3> mat3;
 
 // resource types
 public typedef u32 BufferID;
@@ -45,6 +58,10 @@ public struct ImageView {
     [ForceInline]
     public float4 sample(SamplerID sampler_id, float2 uv) {
         return __textures_f4[this.handle].Sample(__samplers[sampler_id], uv);
+    }
+
+    public RWTexture2D rw() {
+        return __storage_images[this.handle];
     }
 };
 

@@ -51,6 +51,7 @@ struct TaskContext {
     TaskGraph &task_graph;
     Task &task;
     CommandList &cmd_list;
+    ls::static_vector<GPUAllocation, 8> batch_allocations = {};
 
 private:
     void *execution_data;
@@ -61,6 +62,7 @@ public:
     ls::option<PipelineLayoutID> pipeline_layout_id = ls::nullopt;
 
     TaskContext(Device &device_, TaskGraph &task_graph_, Task &task_, CommandList &cmd_list_, void *execution_data_);
+    ~TaskContext();
 
     vk::RenderingAttachmentInfo as_color_attachment(
         this TaskContext &, TaskUse &use, std::optional<vk::ColorClearValue> clear_val = std::nullopt);
@@ -77,7 +79,7 @@ public:
     void set_pipeline(this TaskContext &, PipelineID pipeline_id);
 
     template<typename T>
-    void set_push_constants(this TaskContext &self, T &v) {
+    void set_push_constants(this TaskContext &self, const T &v) {
         ZoneScoped;
 
         self.cmd_list.set_push_constants(&v, sizeof(T), 0);

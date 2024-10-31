@@ -39,7 +39,7 @@ auto TaskGraph::create(const TaskGraphInfo &info) -> TaskGraph {
         impl->task_query_pools.emplace_back(QueryPool::create(info.device, 512).value());
     }
 
-    impl->transfer_man = TransferManager::create(info.device, info.staging_buffer_size, info.staging_buffer_uses);
+    impl->transfer_man = TransferManager::create_with_gpu(info.device, info.staging_buffer_size, info.staging_buffer_uses);
     auto tg = TaskGraph(impl);
     tg.new_submit(vk::CommandType::Graphics);
 
@@ -52,6 +52,7 @@ auto TaskGraph::add_image(const TaskImageInfo &info) -> TaskImageID {
     auto task_image_id = static_cast<TaskImageID>(impl->images.size());
     impl->images.push_back({
         .image_id = info.image_id,
+        .image_view_id = info.image_id != ImageID::Invalid ? impl->device.image(info.image_id).view() : ImageViewID::Invalid,
         .last_layout = info.layout,
         .last_access = info.access,
     });
@@ -65,6 +66,7 @@ auto TaskGraph::set_image(TaskImageID task_image_id, const TaskImageInfo &info) 
     auto index = static_cast<usize>(task_image_id);
     impl->images[index] = {
         .image_id = info.image_id,
+        .image_view_id = impl->device.image(info.image_id).view(),
         .last_layout = info.layout,
         .last_access = info.access,
     };
@@ -150,6 +152,8 @@ auto TaskGraph::draw_profiler_ui() -> void {
     ImGui::Begin("Legit Profiler", nullptr);
     ImGui::Text("Frametime: %.4fms (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
 
+    ImGui::Text("Self allocator: %u", impl->transfer_man.storage_report().free_space);
+
     impl->task_gpu_profiler_graph.LoadFrameData(impl->task_gpu_profiler_tasks.data(), impl->task_gpu_profiler_tasks.size());
     impl->task_gpu_profiler_graph.RenderTimings(500, 20, 200, 0);
     ImGui::SliderFloat("Graph detail", &impl->task_gpu_profiler_graph.maxFrameTime, 1.0f, 10000.f);
@@ -219,6 +223,9 @@ auto TaskGraph::execute(const TaskExecuteInfo &info) -> void {
     for (auto &task_submit : impl->submits) {
         auto submit_queue = impl->device.queue(task_submit.type);
         auto submit_sema = submit_queue.semaphore();
+        auto transfer_queue = impl->device.queue(vk::CommandType::Transfer);
+        auto transfer_queue_sema = transfer_queue.semaphore();
+
         auto batch_query_pool = task_submit.query_pools.at(info.frame_index);
         bool is_first_submit = submit_index == 0;
         bool is_last_submit = submit_index == impl->submits.size() - 1;
@@ -316,14 +323,15 @@ auto TaskGraph::execute(const TaskExecuteInfo &info) -> void {
         }
 
         ls::span<Semaphore> wait_semas_all = submit_sema;
-        if (false) {
-            wait_semas_all = stack.alloc<Semaphore>(info.wait_semas.size() + 1);
+        if (is_first_submit) {
+            wait_semas_all = stack.alloc<Semaphore>(info.wait_semas.size() + 2);
             u32 i = 0;
             for (; i < info.wait_semas.size(); i++) {
                 wait_semas_all[i] = info.wait_semas[i];
             }
 
             wait_semas_all[i++] = submit_sema;
+            wait_semas_all[i++] = transfer_queue_sema;
         }
 
         ls::span<Semaphore> signal_semas_all = submit_sema;
@@ -365,7 +373,11 @@ TaskContext::TaskContext(Device &device_, TaskGraph &task_graph_, Task &task_, C
       execution_data(execution_data_),
       render_extent({}) {
     glm::uvec2 render_extent_ = { ~0_u32, ~0_u32 };
-    for_each_use(task_.task_uses, [&](TaskImageID id, const vk::PipelineAccessImpl &, vk::ImageLayout) {
+    for_each_use(task_.task_uses, [&](TaskImageID id, const vk::PipelineAccessImpl &, vk::ImageLayout layout) {
+        if (layout != vk::ImageLayout::ColorAttachment) {
+            return;
+        }
+
         auto &task_image = task_graph_.task_image(id);
         auto image = device.image(task_image.image_id);
         auto extent = image.extent();
@@ -373,6 +385,13 @@ TaskContext::TaskContext(Device &device_, TaskGraph &task_graph_, Task &task_, C
     });
 
     render_extent = { render_extent_.x, render_extent_.y };
+}
+
+TaskContext::~TaskContext() {
+    if (!this->batch_allocations.empty()) {
+        this->task_graph.transfer_manager().upload(this->batch_allocations);
+    }
+    this->batch_allocations.clear();
 }
 
 vk::RenderingAttachmentInfo TaskContext::as_color_attachment(
@@ -440,7 +459,16 @@ vk::Rect2D TaskContext::pass_rect(this TaskContext &self) {
 GPUAllocation TaskContext::transient_buffer(u64 size) {
     ZoneScoped;
 
-    return this->task_graph.transfer_manager().allocate(size).value();
+    auto transfer_manager = this->task_graph.transfer_manager();
+    if (this->batch_allocations.full()) {
+        transfer_manager.upload(this->batch_allocations);
+        this->batch_allocations.clear();
+    }
+
+    auto allocation = this->task_graph.transfer_manager().allocate(size).value();
+    this->batch_allocations.push_back(allocation);
+
+    return allocation;
 }
 
 ImageViewID TaskContext::image_view(TaskImageID id) {

@@ -41,8 +41,8 @@ void ViewportPanel::on_drop(this ViewportPanel &self) {
     }
 
     auto &scene = world.scene_at(world.active_scene.value());
-    if (const auto *payload = ImGui::AcceptDragDropPayload("ASSET_PATH")) {
-        std::string_view path_sv(static_cast<const c8 *>(payload->Data), payload->DataSize);
+    if (const auto *asset_payload = ImGui::AcceptDragDropPayload("ASSET_PATH")) {
+        std::string_view path_sv(static_cast<const c8 *>(asset_payload->Data), asset_payload->DataSize);
         auto model_ident = Identifier::random();
         auto model = app.asset_man.load_model(model_ident, path_sv);
         if (!model) {
@@ -51,11 +51,12 @@ void ViewportPanel::on_drop(this ViewportPanel &self) {
         }
 
         scene
-            .create_entity("model")  //
+            .create_entity(model_ident.sv())  //
             .set<Component::Transform>({})
             .set<Component::RenderableModel>({ model_ident });
-    } else if (const auto *payload = ImGui::AcceptDragDropPayload("ATTACH_CAMERA")) {
-        auto camera_id = *static_cast<flecs::entity_t *>(payload->Data);
+        world.renderer->construct_scene();
+    } else if (const auto *camera_payload = ImGui::AcceptDragDropPayload("ATTACH_CAMERA")) {
+        auto camera_id = *static_cast<flecs::entity_t *>(camera_payload->Data);
         self.camera_entity = world.ecs.entity(camera_id);
     }
 }
@@ -66,7 +67,7 @@ void ViewportPanel::on_project_refresh(this ViewportPanel &self) {
 
 void ViewportPanel::update(this ViewportPanel &self) {
     auto &app = EditorApp::get();
-    // auto &task_graph = app.world_render_pipeline.task_graph;
+    auto &world = app.world;
 
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0, 0.0));
     ImGui::Begin(self.name.data());
@@ -83,8 +84,7 @@ void ViewportPanel::update(this ViewportPanel &self) {
     ImGuizmo::SetRect(window_pos.x, window_pos.y, window_size.x, window_size.y);
 
     if (self.camera_entity.has_value()) {
-        // auto &final_image = task_graph.task_image_at(app.world_render_pipeline.final_image);
-        // ImGui::Image(reinterpret_cast<ImTextureID>(static_cast<iptr>(final_image.image_view_id)), work_area_size);
+        ImGui::Image(reinterpret_cast<ImTextureID>(static_cast<iptr>(world.renderer->final_image)), work_area_size);
 
         auto *camera = self.camera_entity->get_mut<Component::Camera>();
         auto *camera_transform = self.camera_entity->get_mut<Component::Transform>();

@@ -56,7 +56,7 @@ auto Buffer::create(
         return std::unexpected(vk::Result::OutOfPoolMem);
     }
 
-    auto impl = buffer->impl;
+    auto impl = buffer->self;
     impl->device = device;
     impl->data_size = allocation_result.size;
     impl->host_data = allocation_result.pMappedData;

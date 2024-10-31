@@ -425,6 +425,7 @@ namespace PipelineAccess {
     LRX(LateFragmentTestsRead, MemoryAccess::Read, PipelineStage::LateFragmentTests);
     LRX(DepthStencilRead, MemoryAccess::Read, PipelineStage::DepthStencilTests);
     LRX(ColorAttachmentRead, MemoryAccess::Read, PipelineStage::ColorAttachmentOutput);
+    LRX(ColorRead, MemoryAccess::Read, PipelineStage::ColorAttachmentOutput | PipelineStage::FragmentShader);
     LRX(GraphicsRead, MemoryAccess::Read, PipelineStage::AllGraphics);
     LRX(ComputeRead, MemoryAccess::Read, PipelineStage::ComputeShader);
     LRX(TransferRead, MemoryAccess::Read, PipelineStage::AllTransfer);

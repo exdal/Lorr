@@ -58,7 +58,7 @@ auto Image::create(
         return std::unexpected(vk::Result::OutOfPoolMem);
     }
 
-    auto impl = image_id->impl;
+    auto impl = image_id->self;
     impl->device = device;
     impl->usage_flags = usage;
     impl->format = format;
@@ -87,7 +87,7 @@ auto Image::create_for_swap_chain(Device_H device, vk::Format format, vk::Extent
         return std::unexpected(vk::Result::OutOfPoolMem);
     }
 
-    auto impl = image_id->impl;
+    auto impl = image_id->self;
     impl->device = device;
     impl->usage_flags = vk::ImageUsage::ColorAttachment;
     impl->format = format;
@@ -102,13 +102,18 @@ auto Image::create_for_swap_chain(Device_H device, vk::Format format, vk::Extent
 }
 
 auto Image::destroy() -> void {
+    impl->device.destroy_image_view(impl->default_view);
     vmaDestroyImage(impl->device->allocator, impl->handle, impl->allocation);
 }
 
 auto Image::set_name(const std::string &name) -> Image & {
+    if (name.empty()) {
+        return *this;
+    }
+
     vmaSetAllocationName(impl->device->allocator, impl->allocation, name.c_str());
     set_object_name(impl->device, impl->handle, VK_OBJECT_TYPE_IMAGE, name);
-    set_object_name(impl->device, impl->device.image_view(impl->default_view), VK_OBJECT_TYPE_IMAGE_VIEW, name + " View");
+    impl->device.image_view(impl->default_view).set_name(name + " View");
 
     return *this;
 }
@@ -119,6 +124,14 @@ auto Image::format() const -> vk::Format {
 
 auto Image::extent() const -> vk::Extent3D {
     return impl->extent;
+}
+
+auto Image::slice_count() const -> u32 {
+    return impl->slice_count;
+}
+
+auto Image::mip_count() const -> u32 {
+    return impl->mip_levels;
 }
 
 auto Image::subresource_range() const -> vk::ImageSubresourceRange {
@@ -175,7 +188,7 @@ auto ImageView::create(Device_H device, ImageID image_id, vk::ImageViewType type
         return std::unexpected(vk::Result::OutOfPoolMem);
     }
 
-    auto impl = image_view->impl;
+    auto impl = image_view->self;
     impl->device = device;
     impl->format = image.format();
     impl->type = type;
@@ -306,7 +319,7 @@ auto Sampler::create(
         return std::unexpected(vk::Result::OutOfPoolMem);
     }
 
-    auto impl = sampler->impl;
+    auto impl = sampler->self;
     impl->device = device;
     impl->handle = sampler_handle;
 

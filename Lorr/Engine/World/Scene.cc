@@ -15,17 +15,7 @@ flecs::entity Scene::create_entity(this Scene &self, std::string_view name) {
 void Scene::set_active_camera(this Scene &self, flecs::entity camera_entity) {
     ZoneScoped;
 
-    self.ecs.each([](flecs::entity c, Component::ActiveCamera) { c.remove<Component::ActiveCamera>(); });
-    camera_entity.add<Component::ActiveCamera>();
-}
-
-flecs::entity Scene::get_active_camera(this Scene &self) {
-    ZoneScoped;
-
-    flecs::entity e = flecs::entity::null();
-    self.ecs.each([&](flecs::entity c, Component::ActiveCamera) { e = c; });
-
-    return e;
+    self.active_camera = camera_entity;
 }
 
 flecs::entity Scene::create_perspective_camera(this Scene &self, std::string_view name, const glm::vec3 &position, f32 fov, f32 aspect) {

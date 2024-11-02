@@ -65,7 +65,8 @@ struct GPUCameraData {
 };
 
 struct GPUModelTransformData {
-    glm::mat4 transform_mat = {};
+    glm::mat4 model_transform_mat = {};
+    glm::mat4 world_transform_mat = {};
 };
 
 struct GPUWorldData {

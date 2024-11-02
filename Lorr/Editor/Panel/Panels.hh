@@ -46,16 +46,13 @@ struct SceneBrowserPanel : PanelI {
 };
 
 struct ViewportPanel : PanelI {
-    ls::option<flecs::entity> camera_entity = ls::nullopt;
-
     ViewportPanel(std::string name_, bool open_ = true);
 
     void on_drop(this ViewportPanel &);
-    void on_project_refresh(this ViewportPanel &);
     void update(this ViewportPanel &);
 
     void do_update() override { update(); }
-    void do_project_refresh() override { on_project_refresh(); }
+    void do_project_refresh() override {}
 };
 
 struct InspectorPanel : PanelI {

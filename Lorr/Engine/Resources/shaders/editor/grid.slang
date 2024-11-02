@@ -15,7 +15,6 @@ struct FragmentOutput {
     World *world;
 } c;
 
-
 float3 UnprojectPoint(float x, float y, float z, float4x4 view_proj_mat_inv) {
     float4 unprojectedPoint =  mul(view_proj_mat_inv, float4(x, y, z, 1.0));
     return unprojectedPoint.xyz / unprojectedPoint.w;

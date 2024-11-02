@@ -2,6 +2,43 @@ implementing atmos;
 
 import "../lorr";
 
+public float safe_sqrt(float x)
+{
+    return sqrt(max(0, x));
+}
+
+float fromSubUvsToUnit(float u, float resolution) {
+    return (u - 0.5 / resolution) * (resolution / (resolution - 1.0));
+}
+
+float fromUnitToSubUvs(float u, float resolution) {
+    return (u + 0.5f / resolution) * (resolution / (resolution + 1.0));
+}
+
+public float2 get_multiscattering_lut_uv(Atmosphere *atmos, float altitude, float cos_theta) {
+    float2 uv = clamp(float2(
+        cos_theta * 0.5 + 0.5,
+        altitude / (atmos->atmos_radius - atmos->planet_radius)),
+        0.0, 1.0
+    );
+    return float2(fromUnitToSubUvs(uv.x, 32), fromUnitToSubUvs(uv.y, 32));
+}
+
+public float2 get_transmittance_lut_uv(Atmosphere *atmos, float2 p) {
+    float h = safe_sqrt(
+        atmos->atmos_radius * atmos->atmos_radius -
+        atmos.planet_radius * atmos->planet_radius);
+    float rho = safe_sqrt(p.x * p.x - atmos->planet_radius * atmos->planet_radius);
+    float discriminant = p.x * p.x * (p.y * p.y - 1.0) +
+        atmos->atmos_radius * atmos->atmos_radius;
+    float d = max(0.0, -p.x *  p.y + safe_sqrt(discriminant));
+    float d_min = atmos->atmos_radius - p.x;
+    float d_max = rho + h;
+    float mu = (d - d_min) / (d_max - d_min);
+    float r = rho / h;
+    return float2(mu, r);
+}
+
 public bool ray_hit_sphere(float3 origin, float3 direction, float radius, out float t) {
     float a = dot(direction, direction);
     float b = 2.0 * dot(origin, direction);

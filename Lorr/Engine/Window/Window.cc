@@ -137,15 +137,15 @@ auto Window::create(const WindowInfo &info) -> Window {
     glfwSetDropCallback(impl->handle, [](GLFWwindow *window, i32 path_count, const c8 *paths_cstr[]) {
         [[maybe_unused]] auto *self = reinterpret_cast<Window::Impl *>(glfwGetWindowUserPointer(window));
 
-        std::vector<std::string> paths(path_count);
+        std::vector<fs::path> paths(path_count);
         for (i32 i = 0; i < path_count; i++) {
-            paths[i] = std::string(paths_cstr[i]);
+            paths[i] = fs::path(paths_cstr[i]);
         }
 
         Application::get().push_event(
             ApplicationEvent::Drop,
             {
-                .paths = paths,
+                .paths = std::move(paths),
             });
     });
 

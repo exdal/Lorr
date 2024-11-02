@@ -25,13 +25,13 @@ VertexOutput vs_main(u32 vertex_id : SV_VertexID) {
 }
 
 [shader("fragment")]
-vec4 fs_main(VertexOutput input) : SV_TARGET
-{
+vec4 fs_main(VertexOutput input) : SV_TARGET {
+    const let transmittance_image = ImageView(c.transmittance_image_id);
+    const let multiscatter_image = ImageView(c.ms_image_id);
     Atmosphere *atmos = &c.world->atmosphere;
     vec3 eye_pos = vec3(0.0, atmos.planet_radius + c.world->cameras[0].position.y + 2.0, 0.0); // ALWAYS HAVE + 1 ON EYE POS!!!
     const vec3 sun_dir = c.world->sun.direction;
-    const f32 sun_intensity = 10.0;
-    const f32 step_count = 30.0;
+    const i32 step_count = 30;
 
     f32 u = input.tex_coord.x;
     f32 v = input.tex_coord.y;
@@ -61,52 +61,61 @@ vec4 fs_main(VertexOutput input) : SV_TARGET
     f32 cosTheta = dot(rayDirection, sun_dir);
     f32 rayleighPhase = get_rayleigh_phase(-cosTheta);
     f32 miePhase = get_mie_phase(atmos, cosTheta);
-    
-    vec3 luminance = vec3(0.0, 0.0, 0.0);
-    vec3 transmittance = vec3(1.0, 1.0, 1.0);
-    
+
     f32 max_dist = 0.0;
     if (!ray_hit_sphere(eye_pos, rayDirection, atmos.planet_radius, max_dist)) {
         ray_hit_sphere(eye_pos, rayDirection, atmos.atmos_radius, max_dist);
     }
 
-    f32 stepSize = max_dist / step_count;
-    f32 t = 0.0;
-    for (float i = 0.0; i < step_count; i += 1.0) {
-        f32 nextT = stepSize * i;
-        f32 deltaT = nextT - t;
-        t = nextT;
-        
-        vec3 stepPosition = eye_pos + t * rayDirection;
-        
+    vec3 luminance = vec3(0.0, 0.0, 0.0);
+    vec3 transmittance = vec3(1.0, 1.0, 1.0);
+
+    for (int i = 0; i < step_count; i++) {
+        float cur_step = float(i) / step_count;
+        float next_step = float(i + 1) / step_count;
+        cur_step *= cur_step;
+        next_step *= next_step;
+        cur_step = cur_step * max_dist;
+        next_step = next_step > 1.0 ? max_dist : next_step * max_dist;
+        float delta_step = next_step - cur_step;
+        float step = cur_step + delta_step * 0.3;
+
+        vec3 stepPosition = eye_pos + step * rayDirection;
         h = length(stepPosition);
-        
+
         // Altitude from ground to top atmosphere
         f32 altitude = h - atmos.planet_radius;
         vec3 extinction = extinction_sum(atmos, altitude);
-        vec3 altitudeTrans = exp(-deltaT * extinction);
-        
-        // Shadowing factor
-        f32 sunTheta = dot(sun_dir, stepPosition / h);
-        vec3 sunTrans = sample_lut(atmos, c.transmittance_image_id, c.world.linear_sampler, altitude, sunTheta);
-        vec3 MS = sample_lut(atmos, c.ms_image_id, c.world.linear_sampler, altitude, sunTheta);
-        //vec3 MS = vec3(0.0);
-        // Get scattering coefficient
-        vec3 rayleighScat;
-        f32 mieScat;
-        get_scattering(*atmos, altitude, rayleighScat, mieScat);
-        
-        // Molecules scattered on ray's position
-        vec3 rayleighInScat = rayleighScat * (rayleighPhase + MS);
-        vec3 mieInScat = mieScat * (miePhase + MS);
-        vec3 scatteringPhase = (rayleighInScat + mieInScat) * sunTrans;
 
+        // Shadowing factor
+        float3 up_vec = normalize(stepPosition);
+        f32 sun_theta = dot(sun_dir, up_vec);
+
+        float2 transmittance_uv = get_transmittance_lut_uv(atmos, float2(h, sun_theta));
+        float3 sun_transmittance = transmittance_image.sample(c.world->linear_sampler, transmittance_uv).rgb;
+
+        float2 multiscatter_uv = get_multiscattering_lut_uv(atmos, altitude, sun_theta);
+        float3 MS = multiscatter_image.sample(c.world->linear_sampler, multiscatter_uv).rgb;
+
+        // Get scattering coefficient
+        vec3 rayleigh_scattering;
+        f32 mie_scattering;
+        get_scattering(*atmos, altitude, rayleigh_scattering, mie_scattering);
+
+        // Molecules scattered on ray's position
+        float3 scattering_phase = mie_scattering * miePhase + rayleigh_scattering * rayleighPhase;
+        float _ = 0;
+        float earth_shadow = !ray_hit_sphere(stepPosition, sun_dir, atmos->planet_radius, _) ? 1.0 : 0.0;
+
+        float3 sun_luminance = earth_shadow * sun_transmittance * scattering_phase + MS * (mie_scattering + rayleigh_scattering);
+
+        vec3 step_transmittance = exp(-delta_step * extinction);
         // https://www.ea.com/frostbite/news/physically-based-unified-volumetric-rendering-in-frostbite
         // slide 28
-        vec3 integral = (scatteringPhase - scatteringPhase * altitudeTrans) / extinction;
+        vec3 integral = (sun_luminance - sun_luminance * step_transmittance) / extinction;
 
-        luminance += sun_intensity * (integral * transmittance);
-        transmittance *= altitudeTrans;
+        luminance += c.world->sun.intensity * (integral * transmittance);
+        transmittance *= step_transmittance;
     }
 
     return vec4(luminance, 1.0);

@@ -33,6 +33,7 @@ struct WorldRenderer {
     // Sky
     ImageID sky_transmittance_image = ImageID::Invalid;
     ImageID sky_multiscatter_image = ImageID::Invalid;
+    ImageID sky_aerial_perspective_image = ImageID::Invalid;
     ImageID sky_view_image = ImageID::Invalid;
 
     WorldRenderer(Device device_);
@@ -44,14 +45,6 @@ struct WorldRenderer {
 
     auto construct_scene(this WorldRenderer &) -> void;
     auto render(this WorldRenderer &, SwapChain &swap_chain, ImageID image_id) -> bool;
-
-    auto create_attachment(
-        this WorldRenderer &,
-        vk::Extent3D extent,
-        vk::ImageUsage usage,
-        vk::Format format,
-        vk::ImageLayout layout,
-        vk::ImageAspectFlag aspect_flags = vk::ImageAspectFlag::Color) -> ImageID;
 };
 
 }  // namespace lr

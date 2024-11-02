@@ -1,4 +1,4 @@
-implementing lorr;
+implementing "../lorr";
 
 public struct Material {
     public vec4 albedo_color = { 1.0f, 1.0f, 1.0f, 1.0f };
@@ -48,6 +48,7 @@ public struct Camera {
 
 public struct Model {
     public mat4 model_transform_mat;
+    public mat4 world_transform_mat;
 };
 
 public struct World {

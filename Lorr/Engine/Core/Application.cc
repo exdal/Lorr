@@ -1,5 +1,7 @@
 #include "Application.hh"
 
+#include "Engine/Memory/Hasher.hh"
+
 #include <imgui.h>
 
 namespace lr {
@@ -65,6 +67,7 @@ void Application::push_event(this Application &self, ApplicationEvent event, con
 
 void Application::poll_events(this Application &self) {
     ZoneScoped;
+    memory::ScopedStack stack;
 
     auto &imgui = ImGui::GetIO();
     while (self.event_man.peek()) {
@@ -95,6 +98,24 @@ void Application::poll_events(this Application &self) {
             }
             case ApplicationEvent::InputChar: {
                 imgui.AddInputCharacterUTF16(e.input_char);
+                break;
+            }
+            case ApplicationEvent::Drop: {
+                for (const auto &p : e.paths) {
+                    if (!p.has_extension()) {
+                        continue;
+                    }
+                    const auto &extension = p.extension();
+                    auto upper_ext = stack.to_upper(extension.string());
+                    LOG_TRACE("ext: {}", upper_ext);
+                    switch (fnv64_str(upper_ext)) {
+                        case fnv64_c(".LRPROJ"): {
+                            self.world.import_project(p);
+                            break;
+                        }
+                        default:;
+                    }
+                }
                 break;
             }
             case ApplicationEvent::Quit: {

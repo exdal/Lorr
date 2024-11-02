@@ -142,12 +142,6 @@ void AssetBrowserPanel::update(this AssetBrowserPanel &self) {
     memory::ScopedStack stack;
 
     ImGui::Begin(self.name.data(), nullptr, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-    if (!self.asset_dir.has_value()) {
-        lg::center_text("No active project");
-        ImGui::End();
-
-        return;
-    }
 
     auto avail_region = ImGui::GetContentRegionAvail();
 
@@ -156,35 +150,40 @@ void AssetBrowserPanel::update(this AssetBrowserPanel &self) {
         self.refresh_file_tree();
     }
 
-    ImGui::SameLine();
-    if (ImGui::Button(Icon::fa::house)) {
-        self.selected_dir = &self.asset_dir.value();
-    }
-
-    if (self.selected_dir) {
-        auto rel_path = fs::relative(self.selected_dir->path, self.asset_dir->path);
-
-        for (const auto &v : rel_path) {
-            auto dir_name = v.filename().string();
-
-            ImGui::SameLine();
-            ImGui::TextUnformatted("/");
-            ImGui::SameLine();
-            ImGui::Button(dir_name.c_str());
+    if (self.asset_dir.has_value()) {
+        ImGui::SameLine();
+        if (ImGui::Button(Icon::fa::house)) {
+            self.selected_dir = &self.asset_dir.value();
         }
+
+        if (self.selected_dir) {
+            auto rel_path = fs::relative(self.selected_dir->path, self.asset_dir->path);
+
+            for (const auto &v : rel_path) {
+                auto dir_name = v.filename().string();
+
+                ImGui::SameLine();
+                ImGui::TextUnformatted("/");
+                ImGui::SameLine();
+                ImGui::Button(dir_name.c_str());
+            }
+        }
+
+        // ACTUAL FILE TREE
+        if (ImGui::BeginTable("asset_browser_context", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_ContextMenuInBody, avail_region)) {
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+
+            self.draw_project_tree();
+            ImGui::TableNextColumn();
+            self.draw_dir_contents();
+
+            ImGui::EndTable();
+        }
+    } else {
+        lg::center_text("No active project");
     }
 
-    // ACTUAL FILE TREE
-    if (ImGui::BeginTable("asset_browser_context", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_ContextMenuInBody, avail_region)) {
-        ImGui::TableNextRow();
-        ImGui::TableNextColumn();
-
-        self.draw_project_tree();
-        ImGui::TableNextColumn();
-        self.draw_dir_contents();
-
-        ImGui::EndTable();
-    }
     ImGui::End();
 }
 

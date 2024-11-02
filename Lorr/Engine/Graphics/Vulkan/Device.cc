@@ -530,6 +530,26 @@ auto Device::upload(ImageID dst_image_id, void *data, u64 data_size, vk::ImageLa
     graphics_queue.wait();
 }
 
+auto Device::image_transition(ImageID image_id, vk::ImageLayout from, vk::ImageLayout to) -> void {
+    ZoneScoped;
+
+    auto queue = this->queue(vk::CommandType::Graphics);
+    auto cmd_list = queue.begin();
+    cmd_list.image_transition({
+        .src_stage = vk::PipelineStage::AllCommands,
+        .src_access = vk::MemoryAccess::ReadWrite,
+        .dst_stage = vk::PipelineStage::AllCommands,
+        .dst_access = vk::MemoryAccess::ReadWrite,
+        .old_layout = from,
+        .new_layout = to,
+        .image_id = image_id,
+        .subresource_range = this->image(image_id).subresource_range(),
+    });
+    queue.end(cmd_list);
+    queue.submit({}, {});
+    queue.wait();
+}
+
 auto Device::destroy_buffer(BufferID id) -> void {
     ZoneScoped;
     auto v = buffer(id);

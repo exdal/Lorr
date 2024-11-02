@@ -49,6 +49,7 @@ struct GeometryTask {
     struct Uses {
         Preset::ColorAttachmentRead color_attachment = {};
         Preset::DepthAttachmentWrite depth_attachment = {};
+        Preset::ShaderReadOnly transmittance_image = {};
     } uses = {};
 
     PipelineID pipeline = {};
@@ -56,6 +57,7 @@ struct GeometryTask {
     void execute(TaskContext &tc) {
         struct PushConstants {
             u64 world_ptr = 0;
+            ImageViewID transmittance_image = ImageViewID::Invalid;
             u32 model_transform_index = ~0_u32;
             GPUMaterialID gpu_material_id = GPUMaterialID::Invalid;
         };
@@ -64,6 +66,7 @@ struct GeometryTask {
 
         auto color_attachment_info = tc.as_color_attachment(uses.color_attachment);
         auto depth_attachment_info = tc.as_depth_attachment(uses.depth_attachment, vk::DepthClearValue(1.0f));
+        auto transmittance_image_view = tc.image_view(uses.transmittance_image.task_image_id);
 
         tc.set_pipeline(this->pipeline);
 
@@ -84,6 +87,7 @@ struct GeometryTask {
                 for (auto &primitive : render_context.mesh_primitives) {
                     tc.set_push_constants(PushConstants{
                         .world_ptr = render_context.world_ptr,
+                        .transmittance_image = transmittance_image_view,
                         .model_transform_index = model_index,
                         .gpu_material_id = primitive.material_id,
                     });

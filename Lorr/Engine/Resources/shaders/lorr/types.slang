@@ -1,4 +1,4 @@
-implementing lorr;
+implementing "../lorr";
 
 public static const float PI = 3.14159265358;
 
@@ -43,7 +43,9 @@ public static u32 INVALID = ~0u;
 
 [[vk::binding(LR_DESCRIPTOR_INDEX_SAMPLER, 0)]]         SamplerState __samplers[];
 [[vk::binding(LR_DESCRIPTOR_INDEX_IMAGES, 0)]]          Texture2D<float4> __textures_f4[];
+[[vk::binding(LR_DESCRIPTOR_INDEX_IMAGES, 0)]]          Texture3D<float4> __textures_f4_3d[];
 [[vk::binding(LR_DESCRIPTOR_INDEX_STORAGE_IMAGES, 0)]]  RWTexture2D<float4> __storage_images[];
+[[vk::binding(LR_DESCRIPTOR_INDEX_STORAGE_IMAGES, 0)]]  RWTexture3D<float4> __storage_images_3d[];
 [[vk::binding(LR_DESCRIPTOR_INDEX_STORAGE_BUFFERS, 0)]] ByteAddressBuffer __storage_buffers[];
 [[vk::binding(LR_DESCRIPTOR_INDEX_BDA_ARRAY, 0)]]       StructuredBuffer<u64> __bda_array;
 
@@ -60,8 +62,17 @@ public struct ImageView {
         return __textures_f4[this.handle].Sample(__samplers[sampler_id], uv);
     }
 
+    [ForceInline]
+    public float4 sample(SamplerID sampler_id, float3 uvw) {
+        return __textures_f4_3d[this.handle].Sample(__samplers[sampler_id], uvw);
+    }
+
     public RWTexture2D rw() {
         return __storage_images[this.handle];
+    }
+
+    public RWTexture3D rw_3d() {
+        return __storage_images_3d[this.handle];
     }
 };
 

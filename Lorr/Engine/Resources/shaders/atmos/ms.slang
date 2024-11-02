@@ -77,6 +77,8 @@ const static vec3 Samples[64] = {
 };
 
 vec3 integrate(Atmosphere *atmos, vec3 ray_pos, vec3 sun_dir) {
+    const let transmittance_image = ImageView(c.transmittance_image_id);
+
     const float step_count = 256.0;
     const uint sample_count = 64;
 
@@ -106,32 +108,35 @@ vec3 integrate(Atmosphere *atmos, vec3 ray_pos, vec3 sun_dir) {
             float dt = next_t - t;
             t = next_t;
 
-            vec3 step_position = ray_pos + t * sample_dir;
+            float3 step_position = ray_pos + t * sample_dir;
             float h = length(step_position);
             float altitude = h - atmos.planet_radius;
-            vec3 up = step_position / h;
-
-            vec3 rayleigh_scatter = atmos->rayleigh_scatter * exp(-altitude / atmos->rayleigh_density);
-            float mie_scatter = (atmos->mie_scatter + atmos->mie_absorption) * exp(-altitude / atmos->mie_density);
+            float3 up_vec = normalize(step_position);
+            float sun_theta = dot(sun_dir, up_vec);
 
             vec3 extinction = extinction_sum(atmos, altitude);
-            vec3 altitude_trans = exp(-dt * extinction);
-            float sun_theta = dot(sun_dir, up);
-            vec3 sun_trans = sample_lut(atmos, c.transmittance_image_id, c.world.linear_sampler, altitude, sun_theta);
 
-            // (6)
-            vec3 rayleigh_inner_s = rayleigh_scatter * rayleigh_phase;
-            vec3 mie_inner_s = mie_scatter * mie_phase;
-            vec3 scattering_phase = (rayleigh_inner_s + mie_inner_s) * sun_trans;
-            vec3 integral_lum = (scattering_phase - scattering_phase * altitude_trans) / extinction;
+            float2 transmittance_uv = get_transmittance_lut_uv(atmos, float2(h, sun_theta));
+            float3 sun_transmittance = transmittance_image.sample(c.world->linear_sampler, transmittance_uv).rgb;
+
+            vec3 rayleigh_scattering = atmos->rayleigh_scatter * exp(-altitude / atmos->rayleigh_density);
+            float mie_scattering = (atmos->mie_scatter + atmos->mie_absorption) * exp(-altitude / atmos->mie_density);
+            float3 scattering_phase = mie_scattering * mie_phase + rayleigh_scattering * rayleigh_phase;
+            float _ = 0;
+            float earth_shadow = !ray_hit_sphere(step_position, sun_dir, atmos->planet_radius, _) ? 1.0 : 0.0;
+
+            float3 step_transmittance = exp(-dt * extinction);
+            float3 sun_luminance = earth_shadow * sun_transmittance * scattering_phase * (1.0 / 4.0 * PI);
+
+            float3 integral_lum = (sun_luminance - sun_luminance * step_transmittance) / extinction;
             L2 += integral_lum * transmittance;
 
             // (7)
-            vec3 scattering_no_phase = rayleigh_scatter + mie_scatter;
-            vec3 integral_fms = (scattering_no_phase - scattering_no_phase * altitude_trans) / extinction;
+            vec3 scattering_no_phase = rayleigh_scattering + mie_scattering;
+            vec3 integral_fms = (scattering_no_phase - scattering_no_phase * step_transmittance) / extinction;
             Fms += integral_fms * transmittance;
 
-            transmittance *= altitude_trans;
+            transmittance *= step_transmittance;
         }
 
         if (planet_hit) {

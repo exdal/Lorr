@@ -46,9 +46,9 @@ auto WorldRenderer::setup_persistent_resources(this WorldRenderer &self) -> void
                                vk::Filtering::Nearest,
                                vk::Filtering::Nearest,
                                vk::Filtering::Nearest,
-                               vk::SamplerAddressMode::ClampToEdge,
-                               vk::SamplerAddressMode::ClampToEdge,
-                               vk::SamplerAddressMode::ClampToEdge,
+                               vk::SamplerAddressMode::Repeat,
+                               vk::SamplerAddressMode::Repeat,
+                               vk::SamplerAddressMode::Repeat,
                                vk::CompareOp::Always)
                                .value();
 
@@ -60,18 +60,43 @@ auto WorldRenderer::setup_persistent_resources(this WorldRenderer &self) -> void
                                 vk::ImageType::View2D,
                                 vk::Extent3D(imgui_atlas_dimensions.x, imgui_atlas_dimensions.y, 1u))
                                 .value();
-
     self.device.upload(self.imgui_font_image, imgui_atlas_data, glm::compMul(imgui_atlas_dimensions) * 4, vk::ImageLayout::ShaderReadOnly);
 
-    self.sky_transmittance_image = self.create_attachment(
-        { 256, 64, 1 }, vk::ImageUsage::Storage | vk::ImageUsage::Sampled, vk::Format::R32G32B32A32_SFLOAT, vk::ImageLayout::General);
-    self.sky_multiscatter_image = self.create_attachment(
-        { 64, 64, 1 }, vk::ImageUsage::Storage | vk::ImageUsage::Sampled, vk::Format::R32G32B32A32_SFLOAT, vk::ImageLayout::General);
-    self.sky_view_image = self.create_attachment(
-        { 400, 200, 1 },
-        vk::ImageUsage::ColorAttachment | vk::ImageUsage::Sampled,
-        vk::Format::R32G32B32A32_SFLOAT,
-        vk::ImageLayout::ColorAttachment);
+    self.sky_transmittance_image = Image::create(
+                                       self.device,
+                                       vk::ImageUsage::Storage | vk::ImageUsage::Sampled,
+                                       vk::Format::R32G32B32A32_SFLOAT,
+                                       vk::ImageType::View2D,
+                                       { 256, 64, 1 })
+                                       .value();
+    self.device.image_transition(self.sky_transmittance_image, vk::ImageLayout::Undefined, vk::ImageLayout::General);
+
+    self.sky_multiscatter_image = Image::create(
+                                      self.device,
+                                      vk::ImageUsage::Storage | vk::ImageUsage::Sampled,
+                                      vk::Format::R32G32B32A32_SFLOAT,
+                                      vk::ImageType::View2D,
+                                      { 32, 32, 1 })  // dont change
+                                      .value();
+    self.device.image_transition(self.sky_multiscatter_image, vk::ImageLayout::Undefined, vk::ImageLayout::General);
+
+    self.sky_aerial_perspective_image = Image::create(
+                                            self.device,
+                                            vk::ImageUsage::Storage | vk::ImageUsage::Sampled,
+                                            vk::Format::R32G32B32A32_SFLOAT,
+                                            vk::ImageType::View3D,
+                                            { 32, 32, 32 })
+                                            .value();
+    self.device.image_transition(self.sky_aerial_perspective_image, vk::ImageLayout::Undefined, vk::ImageLayout::General);
+
+    self.sky_view_image = Image::create(
+                              self.device,
+                              vk::ImageUsage::ColorAttachment | vk::ImageUsage::Sampled,
+                              vk::Format::R32G32B32A32_SFLOAT,
+                              vk::ImageType::View2D,
+                              { 200, 100, 1 })
+                              .value();
+    self.device.image_transition(self.sky_view_image, vk::ImageLayout::Undefined, vk::ImageLayout::ColorAttachment);
 }
 
 auto WorldRenderer::record_setup_graph(this WorldRenderer &self) -> void {
@@ -184,23 +209,29 @@ auto WorldRenderer::record_pbr_graph(this WorldRenderer &self, SwapChain &swap_c
     auto &asset_man = Application::get().asset_man;
     self.swap_chain_image = self.pbr_graph.add_image({});
 
-    self.final_image = self.create_attachment(
-        swap_chain.extent(),
-        vk::ImageUsage::ColorAttachment | vk::ImageUsage::Sampled,
-        vk::Format::R8G8B8A8_SRGB,
-        vk::ImageLayout::ColorAttachment);
+    self.final_image = Image::create(
+                           self.device,
+                           vk::ImageUsage::ColorAttachment | vk::ImageUsage::Sampled,
+                           vk::Format::R8G8B8A8_SRGB,
+                           vk::ImageType::View2D,
+                           swap_chain.extent())
+                           .value();
+    self.device.image_transition(self.final_image, vk::ImageLayout::Undefined, vk::ImageLayout::ColorAttachment);
 
-    self.geo_depth_image = self.create_attachment(
-        swap_chain.extent(),
-        vk::ImageUsage::DepthStencilAttachment,
-        vk::Format::D32_SFLOAT,
-        vk::ImageLayout::DepthAttachment,
-        vk::ImageAspectFlag::Depth);
+    self.geo_depth_image = Image::create(
+                               self.device,
+                               vk::ImageUsage::DepthStencilAttachment,
+                               vk::Format::D32_SFLOAT,
+                               vk::ImageType::View2D,
+                               swap_chain.extent(),
+                               vk::ImageAspectFlag::Depth)
+                               .value();
+    self.device.image_transition(self.geo_depth_image, vk::ImageLayout::Undefined, vk::ImageLayout::DepthAttachment);
 
     auto final_task_image = self.pbr_graph.add_image({
         .image_id = self.final_image,
-        .layout = vk::ImageLayout::ShaderReadOnly,
-        .access = vk::PipelineAccess::FragmentShaderRead,
+        .layout = vk::ImageLayout::ColorAttachment,
+        .access = vk::PipelineAccess::ColorAttachmentWrite,
     });
 
     auto geo_depth_task_image = self.pbr_graph.add_image({
@@ -221,6 +252,12 @@ auto WorldRenderer::record_pbr_graph(this WorldRenderer &self, SwapChain &swap_c
         .access = vk::PipelineAccess::FragmentShaderRead,
     });
 
+    auto sky_aerial_perspective_task_image = self.pbr_graph.add_image({
+        .image_id = self.sky_aerial_perspective_image,
+        .layout = vk::ImageLayout::General,
+        .access = vk::PipelineAccess::ComputeWrite,
+    });
+
     auto sky_view_task_image = self.pbr_graph.add_image({
         .image_id = self.sky_view_image,
         .layout = vk::ImageLayout::ColorAttachment,
@@ -234,6 +271,13 @@ auto WorldRenderer::record_pbr_graph(this WorldRenderer &self, SwapChain &swap_c
             .ms_lut = sky_multiscatter_task_image,
         },
         .pipeline = Pipeline::create(self.device, Tasks::sky_view_pipeline_info(asset_man)).value(),
+    });
+    self.pbr_graph.add_task(Tasks::SkyAerialTask{
+        .uses = {
+            .aerial_lut = sky_aerial_perspective_task_image,
+            .transmittance_lut = sky_transmittance_task_image,
+        },
+        .pipeline = Pipeline::create(self.device, Tasks::sky_aerial_pipeline_info(asset_man)).value(),
     });
     self.pbr_graph.add_task(Tasks::SkyFinalTask{
         .uses = {
@@ -256,6 +300,7 @@ auto WorldRenderer::record_pbr_graph(this WorldRenderer &self, SwapChain &swap_c
         .uses = {
             .color_attachment = final_task_image,
             .depth_attachment = geo_depth_task_image,
+            .transmittance_image = sky_transmittance_task_image,
         },
         .pipeline = Pipeline::create(self.device, Tasks::geometry_pipeline_info(asset_man)).value(),
     });
@@ -536,7 +581,16 @@ auto WorldRenderer::render(this WorldRenderer &self, SwapChain &swap_chain, Imag
     world_data.model_transforms_ptr = gpu_model_transforms_alloc.gpu_offset();
     auto model_transforms_ptr = reinterpret_cast<GPUModelTransformData *>(gpu_model_transforms_alloc.ptr);
     model_transform_query.each([&](Component::Transform &t, Component::RenderableModel &) {
-        model_transforms_ptr->transform_mat = t.matrix;
+        auto rotation = glm::radians(t.rotation);
+
+        glm::mat4 &world_mat = model_transforms_ptr->world_transform_mat;
+        world_mat = glm::translate(glm::mat4(1.0), glm::vec3(0.0f));
+        world_mat *= glm::rotate(glm::mat4(1.0), rotation.x, glm::vec3(1.0, 0.0, 0.0));
+        world_mat *= glm::rotate(glm::mat4(1.0), rotation.y, glm::vec3(0.0, 1.0, 0.0));
+        world_mat *= glm::rotate(glm::mat4(1.0), rotation.z, glm::vec3(0.0, 0.0, 1.0));
+        world_mat *= glm::scale(glm::mat4(1.0), t.scale);
+
+        model_transforms_ptr->model_transform_mat = t.matrix;
 
         model_transforms_ptr++;
     });
@@ -574,33 +628,6 @@ auto WorldRenderer::render(this WorldRenderer &self, SwapChain &swap_chain, Imag
     });
 
     return true;
-}
-
-auto WorldRenderer::create_attachment(
-    this WorldRenderer &self,
-    vk::Extent3D extent,
-    vk::ImageUsage usage,
-    vk::Format format,
-    vk::ImageLayout layout,
-    vk::ImageAspectFlag aspect_flags) -> ImageID {
-    ZoneScoped;
-
-    auto image = Image::create(self.device, usage, format, vk::ImageType::View2D, extent, aspect_flags).value();
-
-    auto queue = self.device.queue(vk::CommandType::Graphics);
-    auto cmd_list = queue.begin();
-    cmd_list.image_transition({
-        .dst_stage = vk::PipelineStage::AllCommands,
-        .dst_access = vk::MemoryAccess::Write,
-        .new_layout = layout,
-        .image_id = image,
-        .subresource_range = { .aspect_flags = aspect_flags, },
-    });
-    queue.end(cmd_list);
-    queue.submit({}, {});
-    queue.wait();
-
-    return image;
 }
 
 }  // namespace lr

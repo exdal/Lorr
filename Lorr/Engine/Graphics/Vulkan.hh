@@ -618,6 +618,7 @@ struct Device : Handle<Device> {
     auto pipeline(PipelineID) const -> Pipeline;
 
     auto upload(ImageID dst_image_id, void *data, u64 data_size, vk::ImageLayout new_layout) -> void;
+    auto image_transition(ImageID image_id, vk::ImageLayout from, vk::ImageLayout to) -> void;
 
     auto destroy_buffer(BufferID) -> void;
     auto destroy_image(ImageID) -> void;

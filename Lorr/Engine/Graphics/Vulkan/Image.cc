@@ -58,6 +58,19 @@ auto Image::create(
         return std::unexpected(vk::Result::OutOfPoolMem);
     }
 
+    vk::ImageViewType view_type = {};
+    switch (type) {
+        case vk::ImageType::View1D:
+            view_type = vk::ImageViewType::View1D;
+            break;
+        case vk::ImageType::View2D:
+            view_type = vk::ImageViewType::View2D;
+            break;
+        case vk::ImageType::View3D:
+            view_type = vk::ImageViewType::View3D;
+            break;
+    }
+
     auto impl = image_id->self;
     impl->device = device;
     impl->usage_flags = usage;
@@ -72,7 +85,7 @@ auto Image::create(
         ImageView::create(
             device,
             image_id->id,
-            vk::ImageViewType::View2D,
+            view_type,
             { .aspect_flags = aspect_flags, .base_mip = 0, .mip_count = mip_count, .base_slice = 0, .slice_count = slice_count })
             .value_or(ImageViewID::Invalid);
 

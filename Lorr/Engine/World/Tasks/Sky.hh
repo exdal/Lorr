@@ -27,6 +27,17 @@ inline ComputePipelineInfo sky_multiscatter_pipeline_info(AssetManager &asset_ma
              } };
 }
 
+inline ComputePipelineInfo sky_aerial_pipeline_info(AssetManager &asset_man) {
+    auto shaders_root = asset_man.asset_root_path(AssetType::Shader);
+
+    return { .shader_module_info = {
+                 .module_name = "atmos.aerial_perspective",
+                 .root_path = shaders_root,
+                 .shader_path = shaders_root / "atmos" / "aerial_perspective.slang",
+                 .entry_points = { "cs_main" },
+             } };
+}
+
 inline GraphicsPipelineInfo sky_view_pipeline_info(AssetManager &asset_man) {
     auto shaders_root = asset_man.asset_root_path(AssetType::Shader);
 
@@ -56,6 +67,44 @@ inline GraphicsPipelineInfo sky_final_pipeline_info(AssetManager &asset_man) {
         .blend_attachments = { { .blend_enabled = false } },
     };
 }
+
+struct SkyAerialTask {
+    constexpr static std::string_view name = "Sky Aerial";
+
+    struct Uses {
+        Preset::ComputeWrite aerial_lut = {};
+        Preset::ShaderReadOnly transmittance_lut = {};
+    } uses = {};
+
+    PipelineID pipeline = {};
+
+    void execute(TaskContext &tc) {
+        struct PushConstants {
+            u64 world_ptr = 0;
+            glm::vec3 target_image_size = {};
+            ImageViewID target_image_id = ImageViewID::Invalid;
+            ImageViewID transmittance_image_id = ImageViewID::Invalid;
+            f32 z_far = 0.0;
+        };
+
+        auto &render_context = tc.exec_data_as<WorldRenderContext>();
+        auto &aerial_use = tc.task_image_data(uses.aerial_lut);
+        auto aerial_lut_info = tc.device.image(aerial_use.image_id);
+        auto &transmittance_use = tc.task_image_data(uses.transmittance_lut);
+
+        auto extent = aerial_lut_info.extent();
+        tc.set_pipeline(this->pipeline);
+
+        tc.set_push_constants(PushConstants{
+            .world_ptr = render_context.world_ptr,
+            .target_image_size = { extent.width, extent.height, extent.depth },
+            .target_image_id = aerial_use.image_view_id,
+            .transmittance_image_id = transmittance_use.image_view_id,
+            .z_far = 2000.0f,
+        });
+        tc.cmd_list.dispatch(extent.width / 16 + 1, extent.height / 16 + 1, 1);
+    }
+};
 
 struct SkyViewTask {
     constexpr static std::string_view name = "Sky View";

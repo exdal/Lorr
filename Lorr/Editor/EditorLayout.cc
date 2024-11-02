@@ -207,7 +207,6 @@ void EditorLayout::update(this EditorLayout &self) {
                     return;
                 }
 
-                app.world.unload_active_project();
                 if (app.world.import_project(path.value())) {
                     for (auto &p : self.panels) {
                         p->do_project_refresh();

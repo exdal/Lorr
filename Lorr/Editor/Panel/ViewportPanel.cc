@@ -32,7 +32,7 @@ ViewportPanel::ViewportPanel(std::string name_, bool open_)
     ImGuizmo::AllowAxisFlip(true);
 }
 
-void ViewportPanel::on_drop(this ViewportPanel &self) {
+void ViewportPanel::on_drop(this ViewportPanel &) {
     auto &app = EditorApp::get();
     auto &world = app.world;
 
@@ -56,13 +56,9 @@ void ViewportPanel::on_drop(this ViewportPanel &self) {
             .set<Component::RenderableModel>({ model_ident });
         world.renderer->construct_scene();
     } else if (const auto *camera_payload = ImGui::AcceptDragDropPayload("ATTACH_CAMERA")) {
-        auto camera_id = *static_cast<flecs::entity_t *>(camera_payload->Data);
-        self.camera_entity = world.ecs.entity(camera_id);
+        auto camera_id = *static_cast<flecs::entity *>(camera_payload->Data);
+        scene.set_active_camera(camera_id);
     }
-}
-
-void ViewportPanel::on_project_refresh(this ViewportPanel &self) {
-    self.camera_entity.reset();
 }
 
 void ViewportPanel::update(this ViewportPanel &self) {
@@ -74,86 +70,92 @@ void ViewportPanel::update(this ViewportPanel &self) {
     ImGui::PopStyleVar();
 
     auto *current_window = ImGui::GetCurrentWindow();
-    auto window_rect = current_window->InnerRect;
-    auto window_pos = window_rect.Min;
-    auto window_size = window_rect.GetSize();
-    auto work_area_size = ImGui::GetContentRegionAvail();
 
-    ImGuizmo::SetOrthographic(false);
-    ImGuizmo::SetDrawlist();
-    ImGuizmo::SetRect(window_pos.x, window_pos.y, window_size.x, window_size.y);
+    if (world.active_scene.has_value()) {
+        auto &scene = world.scene_at(world.active_scene.value());
+        if (scene.active_camera.has_value()) {
+            auto window_rect = current_window->InnerRect;
+            auto window_pos = window_rect.Min;
+            auto window_size = window_rect.GetSize();
+            auto work_area_size = ImGui::GetContentRegionAvail();
 
-    if (self.camera_entity.has_value()) {
-        ImGui::Image(reinterpret_cast<ImTextureID>(static_cast<iptr>(world.renderer->final_image)), work_area_size);
+            ImGuizmo::SetOrthographic(false);
+            ImGuizmo::SetDrawlist();
+            ImGuizmo::SetRect(window_pos.x, window_pos.y, window_size.x, window_size.y);
 
-        auto *camera = self.camera_entity->get_mut<Component::Camera>();
-        auto *camera_transform = self.camera_entity->get_mut<Component::Transform>();
+            ImGui::Image(reinterpret_cast<ImTextureID>(static_cast<iptr>(world.renderer->final_image)), work_area_size);
 
-        auto query = app.world.ecs
-                         .query_builder<Component::EditorSelected, Component::Transform>()  //
-                         .without<Component::Camera>()
-                         .build();
-        query.each([&](Component::EditorSelected, Component::Transform &t) {
-            auto projection = camera->projection;
-            projection[1][1] *= -1;
+            auto *camera = scene.active_camera->get_mut<Component::Camera>();
+            auto *camera_transform = scene.active_camera->get_mut<Component::Transform>();
 
-            f32 gizmo_mat[16] = {};
-            ImGuizmo::RecomposeMatrixFromComponents(
-                glm::value_ptr(t.position), glm::value_ptr(t.rotation), glm::value_ptr(t.scale), gizmo_mat);
-            if (ImGuizmo::Manipulate(
-                    glm::value_ptr(camera_transform->matrix),  //
-                    glm::value_ptr(projection),
-                    ImGuizmo::TRANSLATE | ImGuizmo::ROTATE | ImGuizmo::SCALE,
-                    ImGuizmo::MODE::LOCAL,
-                    gizmo_mat)) {
-                ImGuizmo::DecomposeMatrixToComponents(gizmo_mat, &t.position[0], &t.rotation[0], &t.scale[0]);
-            }
-        });
+            auto query = app.world.ecs
+                             .query_builder<Component::EditorSelected, Component::Transform>()  //
+                             .without<Component::Camera>()
+                             .build();
+            query.each([&](Component::EditorSelected, Component::Transform &t) {
+                auto projection = camera->projection;
+                projection[1][1] *= -1;
 
-        if (!ImGuizmo::IsUsingAny() && ImGui::IsWindowHovered()) {
-            constexpr static f32 velocity = 3.0;
-            bool reset_z = false;
-            bool reset_x = false;
+                f32 gizmo_mat[16] = {};
+                ImGuizmo::RecomposeMatrixFromComponents(
+                    glm::value_ptr(t.position), glm::value_ptr(t.rotation), glm::value_ptr(t.scale), gizmo_mat);
+                if (ImGuizmo::Manipulate(
+                        glm::value_ptr(camera_transform->matrix),  //
+                        glm::value_ptr(projection),
+                        ImGuizmo::TRANSLATE | ImGuizmo::ROTATE | ImGuizmo::SCALE,
+                        ImGuizmo::MODE::LOCAL,
+                        gizmo_mat)) {
+                    ImGuizmo::DecomposeMatrixToComponents(gizmo_mat, &t.position[0], &t.rotation[0], &t.scale[0]);
+                }
+            });
 
-            if (ImGui::IsKeyDown(ImGuiKey_W)) {
-                camera->velocity.z = velocity;
-                reset_z |= true;
-            }
+            if (!ImGuizmo::IsUsingAny() && ImGui::IsWindowHovered()) {
+                constexpr static f32 velocity = 3.0;
+                bool reset_z = false;
+                bool reset_x = false;
 
-            if (ImGui::IsKeyDown(ImGuiKey_S)) {
-                camera->velocity.z = -velocity;
-                reset_z |= true;
-            }
+                if (ImGui::IsKeyDown(ImGuiKey_W)) {
+                    camera->velocity.z = velocity;
+                    reset_z |= true;
+                }
 
-            if (ImGui::IsKeyDown(ImGuiKey_A)) {
-                camera->velocity.x = -velocity;
-                reset_x |= true;
-            }
+                if (ImGui::IsKeyDown(ImGuiKey_S)) {
+                    camera->velocity.z = -velocity;
+                    reset_z |= true;
+                }
 
-            if (ImGui::IsKeyDown(ImGuiKey_D)) {
-                camera->velocity.x = velocity;
-                reset_x |= true;
-            }
+                if (ImGui::IsKeyDown(ImGuiKey_A)) {
+                    camera->velocity.x = -velocity;
+                    reset_x |= true;
+                }
 
-            if (!reset_z) {
-                camera->velocity.z = 0.0;
-            }
+                if (ImGui::IsKeyDown(ImGuiKey_D)) {
+                    camera->velocity.x = velocity;
+                    reset_x |= true;
+                }
 
-            if (!reset_x) {
-                camera->velocity.x = 0.0;
-            }
+                if (!reset_z) {
+                    camera->velocity.z = 0.0;
+                }
 
-            if (ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
-                auto drag = ImGui::GetMouseDragDelta(ImGuiMouseButton_Left, 0);
-                camera_transform->rotation.x += drag.x * 0.1f;
-                camera_transform->rotation.y -= drag.y * 0.1f;
-                ImGui::ResetMouseDragDelta(ImGuiMouseButton_Left);
+                if (!reset_x) {
+                    camera->velocity.x = 0.0;
+                }
+
+                if (ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
+                    auto drag = ImGui::GetMouseDragDelta(ImGuiMouseButton_Left, 0);
+                    camera_transform->rotation.x += drag.x * 0.1f;
+                    camera_transform->rotation.y -= drag.y * 0.1f;
+                    ImGui::ResetMouseDragDelta(ImGuiMouseButton_Left);
+                }
+            } else {
+                camera->velocity = {};
             }
         } else {
-            camera->velocity = {};
+            lg::center_text("No active camera.");
         }
     } else {
-        lg::center_text("Drop and Drop a camera entity to attach this viewport");
+        lg::center_text("No scene to render.");
     }
 
     if (ImGui::BeginDragDropTargetCustom(current_window->InnerRect, ImGui::GetID("##viewport_drop_target"))) {

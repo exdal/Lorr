@@ -1,7 +1,5 @@
 #pragma once
 
-#include "Engine/Core/Handle.hh"
-
 namespace lr {
 // These are not complete, some OS specific results may occur
 enum class FileResult : i32 {
@@ -84,6 +82,17 @@ struct File {
     static ls::option<fs::path> open_dialog(std::string_view title, FileDialogFlag flags = FileDialogFlag::None);
     static void to_stdout(std::string_view str);
 };
+
+/// FILE ///
+// Can we add stdout and other pipes here?
+enum class FileDescriptor : uptr { Invalid = 0 };
+
+// https://man7.org/linux/man-pages/man7/inotify.7.html
+// https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-readdirectorychangesw
+//
+auto os_file_watcher_init() -> FileDescriptor;
+auto os_file_watcher_add(FileDescriptor watcher, const fs::path &path) -> std::expected<FileDescriptor, FileResult>;
+auto os_file_watcher_read(FileDescriptor watcher, FileDescriptor socket) -> std::string;
 
 /// MEMORY ///
 u64 mem_page_size();

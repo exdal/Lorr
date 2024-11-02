@@ -58,8 +58,7 @@ void SceneBrowserPanel::update(this SceneBrowserPanel &self) {
 
                 if (e.has<Component::Camera>()) {
                     if (ImGui::BeginDragDropSource()) {
-                        flecs::entity_t id = e.id();
-                        ImGui::SetDragDropPayload("ATTACH_CAMERA", &id, sizeof(flecs::entity_t));
+                        ImGui::SetDragDropPayload("ATTACH_CAMERA", &e, sizeof(flecs::entity));
                         ImGui::EndDragDropSource();
                     }
                 }

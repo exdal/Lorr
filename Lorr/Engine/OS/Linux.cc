@@ -1,6 +1,7 @@
 #include "OS.hh"
 
 #include <sys/file.h>
+#include <sys/inotify.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
@@ -9,7 +10,11 @@
 
 #include <iostream>
 
+// TODO:
+// Properly handle all errno cases.
+
 namespace lr {
+using std::to_underlying;
 
 /// FILE SYSTEM ///
 File::File(const fs::path &path, FileAccess access) {
@@ -168,6 +173,43 @@ ls::option<fs::path> File::open_dialog(std::string_view title, FileDialogFlag fl
 
 void File::to_stdout(std::string_view str) {
     _write(STDOUT_FILENO, str.data(), str.length());
+}
+
+/// FILE ///
+auto os_file_watcher_init() -> FileDescriptor {
+    return static_cast<FileDescriptor>(inotify_init());
+}
+
+auto os_file_watcher_add(FileDescriptor watcher, const fs::path &path) -> std::expected<FileDescriptor, FileResult> {
+    ZoneScoped;
+    errno = 0;
+
+    i32 descriptor = inotify_add_watch(static_cast<i32>(watcher), path.c_str(), IN_MOVE | IN_CLOSE | IN_CREATE | IN_DELETE);
+    if (descriptor < 0) {
+        switch (errno) {
+            case EACCES:
+                return std::unexpected(FileResult::NoAccess);
+            case EEXIST:
+                return std::unexpected(FileResult::Exists);
+            default:
+                return std::unexpected(static_cast<FileResult>(errno));
+        }
+    }
+
+    return static_cast<FileDescriptor>(descriptor);
+}
+
+// holy fuck its cancer
+auto os_file_watcher_read(FileDescriptor watcher, FileDescriptor socket) -> std::string {
+    ZoneScoped;
+
+    // constexpr usize buffer_size = sizeof(struct inotify_event) + 1024 + 1;
+    // c8 buffer[buffer_size] = {};
+    //
+    // auto fd = static_cast<i32>(socket);
+    // i32 read_bytes = select();
+
+    return {};
 }
 
 /// MEMORY ///

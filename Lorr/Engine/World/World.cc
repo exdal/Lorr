@@ -231,8 +231,8 @@ bool World::import_project(this World &self, const fs::path &path) {
         LOG_ERROR("Project file must have `name` value as string.");
         return false;
     }
-    project_info.project_name = std::string(name_json.get_string().value());
 
+    project_info.project_name = std::string(name_json.get_string().value());
     project_info.project_root_path = project_root;
 
     auto scenes_json = doc["scenes"];
@@ -249,6 +249,7 @@ bool World::import_project(this World &self, const fs::path &path) {
     }
     project_info.models_path = project_root / fs::path(models_json.get_string().value());
 
+    self.unload_active_project();
     self.project_info = project_info;
 
     for (const auto &iter : fs::directory_iterator(project_info.scenes_path)) {

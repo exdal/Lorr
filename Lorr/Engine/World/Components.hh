@@ -70,10 +70,6 @@ struct DirectionalLight {
 
 /// TAGS ///
 
-struct ActiveCamera {
-    static void reflect(flecs::world &w) { w.component<ActiveCamera>(); }
-};
-
 struct EditorSelected {
     static void reflect(flecs::world &w) { w.component<EditorSelected>(); }
 };
@@ -91,7 +87,6 @@ constexpr static std::tuple<  //
     Camera,
     RenderableModel,
     DirectionalLight,
-    ActiveCamera,
     EditorSelected,
     PerspectiveCamera,
     OrthographicCamera>

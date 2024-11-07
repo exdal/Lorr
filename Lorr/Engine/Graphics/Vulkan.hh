@@ -364,6 +364,15 @@ struct Sampler : Handle<Sampler> {
     auto set_name(const std::string &) -> Sampler &;
 };
 
+struct SampledImage {
+    ImageViewID image_view_id : 24;
+    SamplerID sampler_id : 8;
+    SampledImage() = default;
+    SampledImage(ImageViewID image_view_id_, SamplerID sampler_id_)
+        : image_view_id(image_view_id_),
+          sampler_id(sampler_id_) {}
+};
+
 /////////////////////////////////
 // PIPELINE
 

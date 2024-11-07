@@ -34,8 +34,7 @@ flecs::entity Scene::create_directional_light(this Scene &self, std::string_view
     auto rotation_3d = glm::vec3(direction, 0.0);
     return self
         .create_entity(name)  //
-        .set<Component::Transform>({ .rotation = rotation_3d })
-        .set<Component::DirectionalLight>({});
+        .set<Component::DirectionalLight>({ rotation_3d });
 }
 
 }  // namespace lr

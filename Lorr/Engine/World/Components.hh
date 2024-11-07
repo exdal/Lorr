@@ -35,15 +35,20 @@ struct Camera {
 
     glm::quat orientation = {};
     glm::mat4 projection = {};
-    glm::vec3 velocity = {};
+    glm::vec3 cur_axis_velocity = {};
+    f32 velocity = 3.0;
     f32 fov = 60.0f;
     f32 aspect_ratio = 1.777f;
+    f32 near_clip = 0.1;
+    f32 far_clip = 10000.0;
 
     static void reflect(flecs::world &w) {
         w.component<Camera>()  //
-            .member<glm::vec3, Camera>("velocity", &Camera::velocity)
+            .member<f32, Camera>("velocity", &Camera::velocity)
             .member<f32, Camera>("fov", &Camera::fov)
-            .member<f32, Camera>("aspect_ratio", &Camera::aspect_ratio);
+            .member<f32, Camera>("aspect_ratio", &Camera::aspect_ratio)
+            .member<f32, Camera>("near_clip", &Camera::near_clip)
+            .member<f32, Camera>("far_clip", &Camera::far_clip);
     }
 };
 
@@ -61,9 +66,11 @@ struct RenderableModel {
 struct DirectionalLight {
     constexpr static auto ICON = Icon::fa::sun;
 
+    glm::vec2 angle = {};
     f32 intensity = 10.0f;
     static void reflect(flecs::world &w) {
         w.component<DirectionalLight>()  //
+            .member<glm::vec2, DirectionalLight>("angle", &DirectionalLight::angle)
             .member<f32, DirectionalLight>("intensity", &DirectionalLight::intensity);
     }
 };

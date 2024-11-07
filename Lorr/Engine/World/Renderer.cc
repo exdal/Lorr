@@ -3,9 +3,11 @@
 #include "Engine/Core/Application.hh"
 #include "Engine/World/Components.hh"
 
+#include "Engine/World/Tasks/Cloud.hh"
 #include "Engine/World/Tasks/Geometry.hh"
 #include "Engine/World/Tasks/Grid.hh"
 #include "Engine/World/Tasks/ImGui.hh"
+#include "Engine/World/Tasks/PostProcess.hh"
 #include "Engine/World/Tasks/Sky.hh"
 
 #include <glm/gtx/component_wise.hpp>
@@ -39,7 +41,7 @@ auto WorldRenderer::setup_persistent_resources(this WorldRenderer &self) -> void
                               vk::SamplerAddressMode::ClampToEdge,
                               vk::SamplerAddressMode::ClampToEdge,
                               vk::SamplerAddressMode::ClampToEdge,
-                              vk::CompareOp::Always)
+                              vk::CompareOp::Never)
                               .value();
     self.nearest_sampler = Sampler::create(
                                self.device,
@@ -49,7 +51,7 @@ auto WorldRenderer::setup_persistent_resources(this WorldRenderer &self) -> void
                                vk::SamplerAddressMode::Repeat,
                                vk::SamplerAddressMode::Repeat,
                                vk::SamplerAddressMode::Repeat,
-                               vk::CompareOp::Always)
+                               vk::CompareOp::Never)
                                .value();
 
     auto [imgui_atlas_data, imgui_atlas_dimensions] = Tasks::imgui_build_font_atlas(asset_man);
@@ -65,7 +67,7 @@ auto WorldRenderer::setup_persistent_resources(this WorldRenderer &self) -> void
     self.sky_transmittance_image = Image::create(
                                        self.device,
                                        vk::ImageUsage::Storage | vk::ImageUsage::Sampled,
-                                       vk::Format::R32G32B32A32_SFLOAT,
+                                       vk::Format::R16G16B16A16_SFLOAT,
                                        vk::ImageType::View2D,
                                        { 256, 64, 1 })
                                        .value();
@@ -74,7 +76,7 @@ auto WorldRenderer::setup_persistent_resources(this WorldRenderer &self) -> void
     self.sky_multiscatter_image = Image::create(
                                       self.device,
                                       vk::ImageUsage::Storage | vk::ImageUsage::Sampled,
-                                      vk::Format::R32G32B32A32_SFLOAT,
+                                      vk::Format::R16G16B16A16_SFLOAT,
                                       vk::ImageType::View2D,
                                       { 32, 32, 1 })  // dont change
                                       .value();
@@ -83,7 +85,7 @@ auto WorldRenderer::setup_persistent_resources(this WorldRenderer &self) -> void
     self.sky_aerial_perspective_image = Image::create(
                                             self.device,
                                             vk::ImageUsage::Storage | vk::ImageUsage::Sampled,
-                                            vk::Format::R32G32B32A32_SFLOAT,
+                                            vk::Format::R16G16B16A16_SFLOAT,
                                             vk::ImageType::View3D,
                                             { 32, 32, 32 })
                                             .value();
@@ -92,11 +94,20 @@ auto WorldRenderer::setup_persistent_resources(this WorldRenderer &self) -> void
     self.sky_view_image = Image::create(
                               self.device,
                               vk::ImageUsage::ColorAttachment | vk::ImageUsage::Sampled,
-                              vk::Format::R32G32B32A32_SFLOAT,
+                              vk::Format::R16G16B16A16_SFLOAT,
                               vk::ImageType::View2D,
                               { 200, 100, 1 })
                               .value();
     self.device.image_transition(self.sky_view_image, vk::ImageLayout::Undefined, vk::ImageLayout::ColorAttachment);
+
+    self.cloud_noise_image = Image::create(
+                                 self.device,
+                                 vk::ImageUsage::Storage | vk::ImageUsage::Sampled,
+                                 vk::Format::R16G16B16A16_SFLOAT,
+                                 vk::ImageType::View3D,
+                                 { 256, 256, 256 })
+                                 .value();
+    self.device.image_transition(self.cloud_noise_image, vk::ImageLayout::Undefined, vk::ImageLayout::General);
 }
 
 auto WorldRenderer::record_setup_graph(this WorldRenderer &self) -> void {
@@ -194,6 +205,35 @@ auto WorldRenderer::record_setup_graph(this WorldRenderer &self) -> void {
         }
     });
 
+    auto cloud_noise_pipeline = Pipeline::create(self.device, Tasks::cloud_noise_pipeline_info(asset_man)).value();
+    auto cloud_noise_task_image = task_graph.add_image({
+        .image_id = self.cloud_noise_image,
+    });
+
+    task_graph.add_task(InlineTask{
+        .uses = {
+            Preset::ComputeWrite(cloud_noise_task_image),
+        },
+        .execute_cb = [&](TaskContext &tc) {
+            auto &cloud_noise_image_use = tc.task_use(0);
+            auto cloud_noise_task_image_info = tc.task_image_data(cloud_noise_image_use);
+            auto cloud_noise_image_info = tc.device.image(cloud_noise_task_image_info.image_id);
+            auto image_extent = cloud_noise_image_info.extent();
+
+            struct PushConstants {
+                ImageViewID detail_image_view = ImageViewID::Invalid;
+                glm::vec3 image_size = {};
+            };
+
+            tc.set_pipeline(cloud_noise_pipeline);
+            tc.set_push_constants(PushConstants{
+                .detail_image_view = cloud_noise_image_info.view(),
+                .image_size = { image_extent.width, image_extent.height, image_extent.depth },
+            });
+            tc.cmd_list.dispatch(image_extent.width / 16 + 1, image_extent.height / 16 + 1, image_extent.depth);
+        }
+    });
+
     auto transfer_sema = self.device.queue(vk::CommandType::Transfer).semaphore();
     task_graph.execute({
         .frame_index = 0,
@@ -209,10 +249,19 @@ auto WorldRenderer::record_pbr_graph(this WorldRenderer &self, SwapChain &swap_c
     auto &asset_man = Application::get().asset_man;
     self.swap_chain_image = self.pbr_graph.add_image({});
 
+    self.editor_view_image = Image::create(
+                                 self.device,
+                                 vk::ImageUsage::ColorAttachment | vk::ImageUsage::Sampled,
+                                 vk::Format::B8G8R8A8_SRGB,
+                                 vk::ImageType::View2D,
+                                 swap_chain.extent())
+                                 .value();
+    self.device.image_transition(self.editor_view_image, vk::ImageLayout::Undefined, vk::ImageLayout::ColorAttachment);
+
     self.final_image = Image::create(
                            self.device,
                            vk::ImageUsage::ColorAttachment | vk::ImageUsage::Sampled,
-                           vk::Format::R8G8B8A8_SRGB,
+                           vk::Format::R32G32B32A32_SFLOAT,
                            vk::ImageType::View2D,
                            swap_chain.extent())
                            .value();
@@ -220,13 +269,19 @@ auto WorldRenderer::record_pbr_graph(this WorldRenderer &self, SwapChain &swap_c
 
     self.geo_depth_image = Image::create(
                                self.device,
-                               vk::ImageUsage::DepthStencilAttachment,
+                               vk::ImageUsage::DepthStencilAttachment | vk::ImageUsage::Sampled,
                                vk::Format::D32_SFLOAT,
                                vk::ImageType::View2D,
                                swap_chain.extent(),
                                vk::ImageAspectFlag::Depth)
                                .value();
     self.device.image_transition(self.geo_depth_image, vk::ImageLayout::Undefined, vk::ImageLayout::DepthAttachment);
+
+    auto editor_view_task_image = self.pbr_graph.add_image({
+        .image_id = self.editor_view_image,
+        .layout = vk::ImageLayout::ColorAttachment,
+        .access = vk::PipelineAccess::ColorAttachmentWrite,
+    });
 
     auto final_task_image = self.pbr_graph.add_image({
         .image_id = self.final_image,
@@ -270,12 +325,14 @@ auto WorldRenderer::record_pbr_graph(this WorldRenderer &self, SwapChain &swap_c
             .transmittance_lut = sky_transmittance_task_image,
             .ms_lut = sky_multiscatter_task_image,
         },
-        .pipeline = Pipeline::create(self.device, Tasks::sky_view_pipeline_info(asset_man)).value(),
+        .pipeline = Pipeline::create(self.device, Tasks::sky_view_pipeline_info(asset_man,
+                    self.device.image(self.sky_view_image).format())).value(),
     });
     self.pbr_graph.add_task(Tasks::SkyAerialTask{
         .uses = {
             .aerial_lut = sky_aerial_perspective_task_image,
             .transmittance_lut = sky_transmittance_task_image,
+            .multiscatter_lut = sky_multiscatter_task_image,
         },
         .pipeline = Pipeline::create(self.device, Tasks::sky_aerial_pipeline_info(asset_man)).value(),
     });
@@ -285,7 +342,8 @@ auto WorldRenderer::record_pbr_graph(this WorldRenderer &self, SwapChain &swap_c
             .sky_view_lut = sky_view_task_image,
             .transmittance_lut = sky_transmittance_task_image,
         },
-        .pipeline = Pipeline::create(self.device, Tasks::sky_final_pipeline_info(asset_man)).value(),
+        .pipeline = Pipeline::create(self.device, Tasks::sky_final_pipeline_info(asset_man,
+                    self.device.image(self.final_image).format())).value(),
         .sky_sampler = Sampler::create(
             self.device,
             vk::Filtering::Linear,
@@ -294,7 +352,7 @@ auto WorldRenderer::record_pbr_graph(this WorldRenderer &self, SwapChain &swap_c
             vk::SamplerAddressMode::Repeat,
             vk::SamplerAddressMode::ClampToEdge,
             vk::SamplerAddressMode::ClampToEdge,
-            vk::CompareOp::Always).value(),
+            vk::CompareOp::Never).value(),
     });
     self.pbr_graph.add_task(Tasks::GeometryTask{
         .uses = {
@@ -302,21 +360,41 @@ auto WorldRenderer::record_pbr_graph(this WorldRenderer &self, SwapChain &swap_c
             .depth_attachment = geo_depth_task_image,
             .transmittance_image = sky_transmittance_task_image,
         },
-        .pipeline = Pipeline::create(self.device, Tasks::geometry_pipeline_info(asset_man)).value(),
+        .pipeline = Pipeline::create(self.device, Tasks::geometry_pipeline_info(asset_man,
+                    self.device.image(self.final_image).format(), self.device.image(self.geo_depth_image).format())).value(),
+    });
+    self.pbr_graph.add_task(Tasks::SkyApplyAerialTask{
+        .uses = {
+            .color_attachment = final_task_image,
+            .depth_image = geo_depth_task_image,
+            .aerial_perspective_image = sky_aerial_perspective_task_image,
+        },
+        .pipeline = Pipeline::create(self.device, Tasks::sky_apply_aerial_pipeline_info(asset_man,
+                    self.device.image(self.final_image).format())).value(),
     });
     self.pbr_graph.add_task(Tasks::GridTask{
         .uses = {
             .color_attachment = final_task_image,
             .depth_attachment = geo_depth_task_image,
         },
-        .pipeline = Pipeline::create(self.device, Tasks::grid_pipeline_info(asset_man)).value(),
+        .pipeline = Pipeline::create(self.device, Tasks::grid_pipeline_info(asset_man,
+                    self.device.image(self.final_image).format(), self.device.image(self.geo_depth_image).format())).value(),
+    });
+    self.pbr_graph.add_task(Tasks::TonemapTask{
+        .uses = {
+            .dst_attachment = editor_view_task_image,
+            .src_image = final_task_image,
+        },
+        .pipeline = Pipeline::create(self.device, Tasks::tonemap_pipeline_info(asset_man,
+                    self.device.image(self.editor_view_image).format())).value()
     });
     self.pbr_graph.add_task(Tasks::ImGuiTask{
         .uses = {
             .attachment = self.swap_chain_image,
         },
         .font_atlas_image = self.imgui_font_image,
-        .pipeline = Pipeline::create(self.device, Tasks::imgui_pipeline_info(asset_man, swap_chain.format())).value()
+        .pipeline = Pipeline::create(self.device, Tasks::imgui_pipeline_info(asset_man,
+                    swap_chain.format())).value()
     });
     self.pbr_graph.present(self.swap_chain_image);
 }
@@ -384,8 +462,11 @@ auto WorldRenderer::construct_scene(this WorldRenderer &self) -> void {
                 if (!material_exists) {
                     auto *material = asset_man.material(v.material_ident);
                     auto *albedo_texture = asset_man.texture(material->albedo_texture_ident.value_or(INVALID_TEXTURE));
-                    // auto *normal_texture = asset_man.texture(material->normal_texture_ident.value_or(INVALID_TEXTURE));
-                    // auto *emissive_texture = asset_man.texture(material->emissive_texture_ident.value_or(INVALID_TEXTURE));
+                    auto albedo_image = self.device.image(albedo_texture->image_id);
+                    auto *normal_texture = asset_man.texture(material->normal_texture_ident.value_or(INVALID_TEXTURE));
+                    auto normal_image = self.device.image(normal_texture->image_id);
+                    auto *emissive_texture = asset_man.texture(material->emissive_texture_ident.value_or(INVALID_TEXTURE));
+                    auto emissive_image = self.device.image(emissive_texture->image_id);
 
                     material_id = gpu_materials.size();
                     gpu_material_idents.push_back(v.material_ident);
@@ -396,10 +477,9 @@ auto WorldRenderer::construct_scene(this WorldRenderer &self) -> void {
                         .metallic_factor = material->metallic_factor,
                         .alpha_mode = material->alpha_mode,
                         .alpha_cutoff = material->alpha_cutoff,
-                        .albedo_image = albedo_texture->image_id,
-                        .albedo_sampler = albedo_texture->sampler_id,
-                        // .normal_image = normal_texture->image_id,
-                        // .emissive_image = emissive_texture->image_id,
+                        .albedo_image = { albedo_image.view(), albedo_texture->sampler_id },
+                        .normal_image = { normal_image.view(), normal_texture->sampler_id },
+                        .emissive_image = { emissive_image.view(), emissive_texture->sampler_id },
                     });
                 }
 
@@ -524,8 +604,10 @@ auto WorldRenderer::render(this WorldRenderer &self, SwapChain &swap_chain, Imag
     }
 
     auto &scene = world.scene_at(world.active_scene.value());
+    bool has_world_data = self.context.has_value();
 
-    GPUWorldData world_data = {};
+    GPUWorldData new_world_data = {};
+    auto &world_data = has_world_data ? self.context.value().world_data : new_world_data;
     world_data.linear_sampler = self.linear_sampler;
     world_data.nearest_sampler = self.nearest_sampler;
 
@@ -537,7 +619,7 @@ auto WorldRenderer::render(this WorldRenderer &self, SwapChain &swap_chain, Imag
             .build();
     auto directional_light_query =  //
         world.ecs
-            .query_builder<Component::Transform, Component::DirectionalLight>()  //
+            .query_builder<Component::DirectionalLight>()  //
             .with(flecs::ChildOf, scene.handle)
             .build();
     auto model_transform_query =  //
@@ -547,10 +629,13 @@ auto WorldRenderer::render(this WorldRenderer &self, SwapChain &swap_chain, Imag
             .build();
 
     // Process entities
-    directional_light_query.each([&](flecs::entity, Component::Transform &t, Component::DirectionalLight &l) {
-        auto rad = glm::radians(t.rotation);
-        glm::vec3 direction = { glm::cos(rad.x) * glm::cos(rad.y), glm::sin(rad.y), glm::sin(rad.x) * glm::cos(rad.y) };
-        world_data.sun.direction = glm::normalize(direction);
+    directional_light_query.each([&](Component::DirectionalLight &l) {
+        auto rad = glm::radians(l.angle);
+        world_data.sun.direction = {
+            glm::cos(rad.x) * glm::cos(rad.y),
+            glm::sin(rad.y),
+            glm::sin(rad.x) * glm::cos(rad.y),
+        };
         world_data.sun.intensity = l.intensity;
     });
 
@@ -570,6 +655,8 @@ auto WorldRenderer::render(this WorldRenderer &self, SwapChain &swap_chain, Imag
         camera_ptr->inv_view_mat = glm::inverse(glm::transpose(t.matrix));
         camera_ptr->inv_projection_view_mat = glm::inverse(glm::transpose(c.projection)) * camera_ptr->inv_view_mat;
         camera_ptr->position = t.position;
+        camera_ptr->near_clip = c.near_clip;
+        camera_ptr->far_clip = c.far_clip;
 
         camera_ptr++;
     });
@@ -591,7 +678,6 @@ auto WorldRenderer::render(this WorldRenderer &self, SwapChain &swap_chain, Imag
         world_mat *= glm::scale(glm::mat4(1.0), t.scale);
 
         model_transforms_ptr->model_transform_mat = t.matrix;
-
         model_transforms_ptr++;
     });
 
@@ -599,7 +685,6 @@ auto WorldRenderer::render(this WorldRenderer &self, SwapChain &swap_chain, Imag
     auto world_ptr = gpu_world_alloc.gpu_offset();
     std::memcpy(gpu_world_alloc.ptr, &world_data, sizeof(GPUWorldData));
 
-    bool has_world_data = self.context.has_value();
     self.context = WorldRenderContext{
         .world_ptr = world_ptr,
         .world_data = world_data,

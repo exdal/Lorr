@@ -79,7 +79,7 @@ const static vec3 Samples[64] = {
 vec3 integrate(Atmosphere *atmos, vec3 ray_pos, vec3 sun_dir) {
     const let transmittance_image = ImageView(c.transmittance_image_id);
 
-    const float step_count = 256.0;
+    const int step_count = 256;
     const uint sample_count = 64;
 
     vec3 L2_sum = vec3(0.0);
@@ -101,20 +101,22 @@ vec3 integrate(Atmosphere *atmos, vec3 ray_pos, vec3 sun_dir) {
         float rayleigh_phase = get_rayleigh_phase(-cos_theta);
         float mie_phase = get_mie_phase(atmos, cos_theta);
 
-        float step_size = max_dist / step_count;
-        float t = 0.0;
-        for (float i = 0.0; i < step_count; i += 1.0) {
-            float next_t = i * step_size;
-            float dt = next_t - t;
-            t = next_t;
+        for (int i = 0; i < step_count; i++) {
+            float cur_step = float(i) / step_count;
+            float next_step = float(i + 1) / step_count;
+            cur_step *= cur_step;
+            next_step *= next_step;
+            cur_step = cur_step * max_dist;
+            next_step = next_step > 1.0 ? max_dist : next_step * max_dist;
+            float delta_step = next_step - cur_step;
+            float step = cur_step + delta_step * 0.3;
 
-            float3 step_position = ray_pos + t * sample_dir;
+            float3 step_position = ray_pos + step * sample_dir;
             float h = length(step_position);
             float altitude = h - atmos.planet_radius;
             float3 up_vec = normalize(step_position);
             float sun_theta = dot(sun_dir, up_vec);
-
-            vec3 extinction = extinction_sum(atmos, altitude);
+            const let medium = MediumScattering(atmos, altitude);
 
             float2 transmittance_uv = get_transmittance_lut_uv(atmos, float2(h, sun_theta));
             float3 sun_transmittance = transmittance_image.sample(c.world->linear_sampler, transmittance_uv).rgb;
@@ -125,30 +127,29 @@ vec3 integrate(Atmosphere *atmos, vec3 ray_pos, vec3 sun_dir) {
             float _ = 0;
             float earth_shadow = !ray_hit_sphere(step_position, sun_dir, atmos->planet_radius, _) ? 1.0 : 0.0;
 
-            float3 step_transmittance = exp(-dt * extinction);
+            float3 step_transmittance = exp(-delta_step * medium.extinction_sum);
             float3 sun_luminance = earth_shadow * sun_transmittance * scattering_phase * (1.0 / 4.0 * PI);
 
-            float3 integral_lum = (sun_luminance - sun_luminance * step_transmittance) / extinction;
+            float3 integral_lum = (sun_luminance - sun_luminance * step_transmittance) / medium.extinction_sum;
             L2 += integral_lum * transmittance;
 
             // (7)
             vec3 scattering_no_phase = rayleigh_scattering + mie_scattering;
-            vec3 integral_fms = (scattering_no_phase - scattering_no_phase * step_transmittance) / extinction;
+            vec3 integral_fms = (scattering_no_phase - scattering_no_phase * step_transmittance) / medium.extinction_sum;
             Fms += integral_fms * transmittance;
 
             transmittance *= step_transmittance;
         }
 
         if (planet_hit) {
-            const vec3 terrain_albedo = vec3(0.217, 0.347, 0.594);
             vec3 hit_pos = ray_pos + max_dist * sample_dir;
             float h = length(hit_pos);
             vec3 up = hit_pos / h;
-            float altitude = h - atmos.planet_radius;
             float theta = dot(sun_dir, up);
-            vec3 sun_trans = sample_lut(atmos, c.transmittance_image_id, c.world.linear_sampler, altitude, theta);
+            float2 transmittance_uv = get_transmittance_lut_uv(atmos, float2(h, theta));
+            float3 sun_transmittance = transmittance_image.sample(c.world->linear_sampler, transmittance_uv).rgb;
             float light_theta = saturate(dot(up, sun_dir));
-            L2 += sun_trans * transmittance * light_theta * (terrain_albedo / PI);
+            L2 += sun_transmittance * transmittance * light_theta * (atmos->terrain_albedo / PI);
         }
 
         L2_sum += L2 / sample_count;
@@ -171,5 +172,5 @@ void cs_main(uint3 thread_id : SV_DispatchThreadID) {
     vec3 sun_dir = vec3(0.0, sun_cos_theta, sqrt(1.0 - sun_cos_theta * sun_cos_theta));
     vec3 ray_pos = vec3(0.0, altitude, 0.0);
 
-    ms_image.rw()[thread_id.xy] = float4(integrate(atmos, ray_pos, sun_dir), 1.0);
+    ms_image.store(thread_id.xy, float4(integrate(atmos, ray_pos, sun_dir), 1.0));
 }

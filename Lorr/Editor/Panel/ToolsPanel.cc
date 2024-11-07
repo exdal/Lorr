@@ -44,9 +44,9 @@ void ToolsPanel::update(this ToolsPanel &self) {
     ImGui::Button(Icon::fa::seedling, ImVec2(work_area_size.x, work_area_size.x));
     ImGui::Button(Icon::fa::ruler, ImVec2(work_area_size.x, work_area_size.x));
     ImGui::Button(Icon::fa::egg, ImVec2(work_area_size.x, work_area_size.x));
-    ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal, 2.0f);
-    ImGui::Button(Icon::fa::earth_americas, ImVec2(work_area_size.x, work_area_size.x));
     ImGui::EndDisabled();
+    ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal, 2.0f);
+    tool_button(ActiveTool::World, Icon::fa::earth_americas);
 
     ImGui::End();
     ImGui::PopStyleColor(2);

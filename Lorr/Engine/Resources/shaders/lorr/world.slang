@@ -1,18 +1,15 @@
 implementing "../lorr";
 
 public struct Material {
-    public vec4 albedo_color = { 1.0f, 1.0f, 1.0f, 1.0f };
-    public vec4 emissive_color = { 0.0f, 0.0f, 0.0f, 1.0f };
-    public f32 roughness_factor = 0.0f;
-    public f32 metallic_factor = 0.0f;
-    public u32 alpha_mode = 0u;
-    public f32 alpha_cutoff = 0.0f;
-    public ImageViewID albedo_image_view = {};
-    public SamplerID albedo_sampler = {};
-    public ImageViewID normal_image_view = {};
-    public SamplerID normal_sampler = {};
-    public ImageViewID emissive_image_view = {};
-    public SamplerID emissive_sampler = {};
+    public vec4 albedo_color;
+    public vec4 emissive_color;
+    public f32 roughness_factor;
+    public f32 metallic_factor;
+    public u32 alpha_mode;
+    public f32 alpha_cutoff;
+    public SampledImage albedo_image;
+    public SampledImage normal_image;
+    public SampledImage emissive_image;
 };
 
 public struct Sun {
@@ -35,6 +32,9 @@ public struct Atmosphere {
     public f32 ozone_thickness;
 
     public vec3 ozone_absorption;
+    public f32 aerial_km_per_slice;
+    public vec3 terrain_albedo;
+    public f32 aerial_perspective_exposure;
 };
 
 public struct Camera {
@@ -44,6 +44,8 @@ public struct Camera {
     public mat4 inv_view_mat;
     public mat4 inv_projection_view_mat;
     public vec3 position;
+    public float near_clip;
+    public float far_clip;
 };
 
 public struct Model {

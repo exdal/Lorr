@@ -83,7 +83,7 @@ void ViewportPanel::update(this ViewportPanel &self) {
             ImGuizmo::SetDrawlist();
             ImGuizmo::SetRect(window_pos.x, window_pos.y, window_size.x, window_size.y);
 
-            ImGui::Image(reinterpret_cast<ImTextureID>(static_cast<iptr>(world.renderer->final_image)), work_area_size);
+            ImGui::Image(reinterpret_cast<ImTextureID>(static_cast<iptr>(world.renderer->editor_view_image)), work_area_size);
 
             auto *camera = scene.active_camera->get_mut<Component::Camera>();
             auto *camera_transform = scene.active_camera->get_mut<Component::Transform>();
@@ -110,36 +110,35 @@ void ViewportPanel::update(this ViewportPanel &self) {
             });
 
             if (!ImGuizmo::IsUsingAny() && ImGui::IsWindowHovered()) {
-                constexpr static f32 velocity = 3.0;
                 bool reset_z = false;
                 bool reset_x = false;
 
                 if (ImGui::IsKeyDown(ImGuiKey_W)) {
-                    camera->velocity.z = velocity;
+                    camera->cur_axis_velocity.z = camera->velocity;
                     reset_z |= true;
                 }
 
                 if (ImGui::IsKeyDown(ImGuiKey_S)) {
-                    camera->velocity.z = -velocity;
+                    camera->cur_axis_velocity.z = -camera->velocity;
                     reset_z |= true;
                 }
 
                 if (ImGui::IsKeyDown(ImGuiKey_A)) {
-                    camera->velocity.x = -velocity;
+                    camera->cur_axis_velocity.x = -camera->velocity;
                     reset_x |= true;
                 }
 
                 if (ImGui::IsKeyDown(ImGuiKey_D)) {
-                    camera->velocity.x = velocity;
+                    camera->cur_axis_velocity.x = camera->velocity;
                     reset_x |= true;
                 }
 
                 if (!reset_z) {
-                    camera->velocity.z = 0.0;
+                    camera->cur_axis_velocity.z = 0.0;
                 }
 
                 if (!reset_x) {
-                    camera->velocity.x = 0.0;
+                    camera->cur_axis_velocity.x = 0.0;
                 }
 
                 if (ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
@@ -149,7 +148,7 @@ void ViewportPanel::update(this ViewportPanel &self) {
                     ImGui::ResetMouseDragDelta(ImGuiMouseButton_Left);
                 }
             } else {
-                camera->velocity = {};
+                camera->cur_axis_velocity = {};
             }
         } else {
             lg::center_text("No active camera.");

@@ -5,12 +5,12 @@
 #include "Engine/World/RenderContext.hh"
 
 namespace lr::Tasks {
-inline GraphicsPipelineInfo geometry_pipeline_info(AssetManager &asset_man) {
+inline GraphicsPipelineInfo geometry_pipeline_info(AssetManager &asset_man, vk::Format dst_color_format, vk::Format dst_depth_format) {
     auto shaders_root = asset_man.asset_root_path(AssetType::Shader);
 
     return {
-        .color_attachment_formats = { vk::Format::R8G8B8A8_SRGB },
-        .depth_attachment_format = vk::Format::D32_SFLOAT,
+        .color_attachment_formats = { dst_color_format },
+        .depth_attachment_format = dst_depth_format,
         .shader_module_info = {
             .module_name = "model",
             .root_path = shaders_root,
@@ -47,7 +47,7 @@ struct GeometryTask {
     constexpr static std::string_view name = "Geometry";
 
     struct Uses {
-        Preset::ColorAttachmentRead color_attachment = {};
+        Preset::ColorAttachmentWrite color_attachment = {};
         Preset::DepthAttachmentWrite depth_attachment = {};
         Preset::ShaderReadOnly transmittance_image = {};
     } uses = {};
@@ -60,6 +60,7 @@ struct GeometryTask {
             ImageViewID transmittance_image = ImageViewID::Invalid;
             u32 model_transform_index = ~0_u32;
             GPUMaterialID gpu_material_id = GPUMaterialID::Invalid;
+            u32 pad = 0;
         };
 
         auto &render_context = tc.exec_data_as<WorldRenderContext>();

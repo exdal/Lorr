@@ -37,8 +37,9 @@ void cs_main(uint3 thread_id : SV_DispatchThreadID) {
     for (float i = 0.0; i < STEP_COUNT; i += 1.0) {
         ray_pos += sun_dir * distance_per_step;
         let ray_altitude = length(ray_pos) - atmos.planet_radius;
-        optical_depth += extinction_sum(atmos, ray_altitude) * distance_per_step;
+        const let medium = MediumScattering(atmos, ray_altitude);
+        optical_depth += medium.extinction_sum * distance_per_step;
     }
 
-    transmittance_image.rw()[thread_id.xy] = float4(exp(-optical_depth), 1.0);
+    transmittance_image.store(thread_id.xy, float4(exp(-optical_depth), 1.0));
 }

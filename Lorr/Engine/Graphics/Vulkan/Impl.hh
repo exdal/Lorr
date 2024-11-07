@@ -267,7 +267,7 @@ struct ResourcePools {
     PagedPool<Buffer::Impl, BufferID> buffers = {};
     PagedPool<Image::Impl, ImageID> images = {};
     PagedPool<ImageView::Impl, ImageViewID> image_views = {};
-    PagedPool<Sampler::Impl, SamplerID, { .MAX_RESOURCE_COUNT = 512u }> samplers = {};
+    PagedPool<Sampler::Impl, SamplerID, 7u, 256> samplers = {};
     PagedPool<Pipeline::Impl, PipelineID> pipelines = {};
 
     constexpr static usize MAX_PUSH_CONSTANT_SIZE = 128;

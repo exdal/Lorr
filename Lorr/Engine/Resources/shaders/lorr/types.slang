@@ -30,10 +30,8 @@ public typedef matrix<f32, 4, 3> mat3;
 
 // resource types
 public typedef u32 BufferID;
-public typedef u32 ImageID;
 public typedef u32 ImageViewID;
 public typedef u32 SamplerID;
-public static u32 INVALID = ~0u;
 
 #define LR_DESCRIPTOR_INDEX_SAMPLER 0
 #define LR_DESCRIPTOR_INDEX_IMAGES 1
@@ -67,12 +65,37 @@ public struct ImageView {
         return __textures_f4_3d[this.handle].Sample(__samplers[sampler_id], uvw);
     }
 
-    public RWTexture2D rw() {
-        return __storage_images[this.handle];
+    [ForceInline]
+    public void store(uint2 thread_id, float4 color) {
+        const let rw_image = __storage_images[this.handle];
+        rw_image[thread_id] = color;
     }
 
-    public RWTexture3D rw_3d() {
-        return __storage_images_3d[this.handle];
+    [ForceInline]
+    public void store(uint3 thread_id, float4 color) {
+        const let rw_image = __storage_images_3d[this.handle];
+        rw_image[thread_id] = color;
     }
 };
 
+public struct SampledImage {
+    ImageViewID image_view_id : 24;
+    SamplerID sampler_id : 8;
+
+    [ForceInline]
+    public __init(ImageViewID image_view_id, SamplerID sampler_id) {
+        this.image_view_id = image_view_id;
+        this.sampler_id = sampler_id;
+    }
+
+    [ForceInline]
+    public float4 sample(float2 uv) {
+        return __textures_f4[this.image_view_id].Sample(__samplers[this.sampler_id], uv);
+    }
+
+    [ForceInline]
+    public float4 sample(float3 uvw) {
+        return __textures_f4_3d[this.image_view_id].Sample(__samplers[this.sampler_id], uvw);
+    }
+
+};

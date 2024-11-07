@@ -24,8 +24,9 @@ struct WorldRenderer {
     SamplerID nearest_sampler = SamplerID::Invalid;
 
     TaskImageID swap_chain_image = TaskImageID::Invalid;
-    ImageID imgui_font_image = ImageID::Invalid;
+    ImageID editor_view_image = ImageID::Invalid;
     ImageID final_image = ImageID::Invalid;
+    ImageID imgui_font_image = ImageID::Invalid;
 
     // Vis
     ImageID geo_depth_image = ImageID::Invalid;
@@ -35,6 +36,9 @@ struct WorldRenderer {
     ImageID sky_multiscatter_image = ImageID::Invalid;
     ImageID sky_aerial_perspective_image = ImageID::Invalid;
     ImageID sky_view_image = ImageID::Invalid;
+
+    // Cloud
+    ImageID cloud_noise_image = ImageID::Invalid;
 
     WorldRenderer(Device device_);
 

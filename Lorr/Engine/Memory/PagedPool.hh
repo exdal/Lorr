@@ -6,14 +6,15 @@ struct PagedPoolInfo {
     usize PAGE_BITS = 9u;
 };
 
-template<typename T, typename ID, PagedPoolInfo INFO = {}>
+template<typename T, typename ID, const usize PAGE_BITS = 9u, usize MAX_RESOURCE_COUNT = 1u << 19u>
 struct PagedPool {
-    constexpr static usize MAX_RESOURCE_COUNT = INFO.MAX_RESOURCE_COUNT;
-    constexpr static usize PAGE_BITS = INFO.PAGE_BITS;
     constexpr static usize PAGE_SIZE = 1_sz << PAGE_BITS;
     constexpr static usize PAGE_MASK = PAGE_SIZE - 1_sz;
     constexpr static usize PAGE_COUNT = MAX_RESOURCE_COUNT / PAGE_SIZE;
     using Page = std::array<T, PAGE_SIZE>;
+
+    static_assert(
+        (1u >> PAGE_BITS) < PAGE_COUNT, "Implementation has one page and is not allowed, modify PAGE_BITS or use static vector instead.");
 
     struct Result {
         T *self = nullptr;

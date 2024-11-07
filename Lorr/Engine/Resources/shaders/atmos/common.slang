@@ -1,9 +1,11 @@
 implementing atmos;
 
 import "../lorr";
+// To sky unit, in our case meters to KM
+public const static float CAMERA_SCALE_UNIT    = 0.001;
+public const static float PLANET_RADIUS_OFFSET = 0.0001;
 
-public float safe_sqrt(float x)
-{
+public float safe_sqrt(float x) {
     return sqrt(max(0, x));
 }
 
@@ -13,15 +15,6 @@ float fromSubUvsToUnit(float u, float resolution) {
 
 float fromUnitToSubUvs(float u, float resolution) {
     return (u + 0.5f / resolution) * (resolution / (resolution + 1.0));
-}
-
-public float2 get_multiscattering_lut_uv(Atmosphere *atmos, float altitude, float cos_theta) {
-    float2 uv = clamp(float2(
-        cos_theta * 0.5 + 0.5,
-        altitude / (atmos->atmos_radius - atmos->planet_radius)),
-        0.0, 1.0
-    );
-    return float2(fromUnitToSubUvs(uv.x, 32), fromUnitToSubUvs(uv.y, 32));
 }
 
 public float2 get_transmittance_lut_uv(Atmosphere *atmos, float2 p) {
@@ -37,6 +30,15 @@ public float2 get_transmittance_lut_uv(Atmosphere *atmos, float2 p) {
     float mu = (d - d_min) / (d_max - d_min);
     float r = rho / h;
     return float2(mu, r);
+}
+
+public float2 get_multiscattering_lut_uv(Atmosphere *atmos, float altitude, float cos_theta) {
+    float2 uv = clamp(float2(
+        cos_theta * 0.5 + 0.5,
+        altitude / (atmos->atmos_radius - atmos->planet_radius)),
+        0.0, 1.0
+    );
+    return float2(fromUnitToSubUvs(uv.x, 32), fromUnitToSubUvs(uv.y, 32));
 }
 
 public bool ray_hit_sphere(float3 origin, float3 direction, float radius, out float t) {
@@ -57,13 +59,48 @@ public bool ray_hit_sphere(float3 origin, float3 direction, float radius, out fl
     return (b <= 0.0);
 }
 
-public float3 extinction_sum(Atmosphere *atmos, float altitude) {
-    float3 rayleigh = atmos->rayleigh_scatter * exp(-altitude / atmos->rayleigh_density);
-    float3 mie = (atmos->mie_scatter + atmos->mie_absorption) * exp(-altitude / atmos->mie_density);
-    float3 ozone = atmos->ozone_absorption * max(0.0, 1.0 - abs(altitude - atmos->ozone_height) / atmos->ozone_thickness);
-
-    return rayleigh + mie + ozone;
+public float ray_sphere_intersect_nearest(vec3 r0, vec3 rd, vec3 s0, float sR) {
+    float a = dot(rd, rd);
+    vec3 s0_r0 = r0 - s0;
+    float b = 2.0 * dot(rd, s0_r0);
+    float c = dot(s0_r0, s0_r0) - (sR * sR);
+    float delta = b * b - 4.0*a*c;
+    if (delta < 0.0 || a == 0.0)
+    {
+        return -1.0;
+    }
+    float sol0 = (-b - safe_sqrt(delta)) / (2.0*a);
+    float sol1 = (-b + safe_sqrt(delta)) / (2.0*a);
+    if (sol0 < 0.0 && sol1 < 0.0)
+    {
+        return -1.0;
+    }
+    if (sol0 < 0.0)
+    {
+        return max(0.0, sol1);
+    }
+    else if (sol1 < 0.0)
+    {
+        return max(0.0, sol0);
+    }
+    return max(0.0, min(sol0, sol1));
 }
+
+
+public struct MediumScattering {
+    public float3 rayleigh_scattering;
+    public float3 mie_scattering;
+    public float3 ozone_scattering;
+    public float3 extinction_sum;
+
+    [ForceInline]
+    public __init(Atmosphere *atmos, float altitude) {
+        this.rayleigh_scattering = atmos->rayleigh_scatter * exp(-altitude / atmos->rayleigh_density);
+        this.mie_scattering = (atmos->mie_scatter + atmos->mie_absorption) * exp(-altitude / atmos->mie_density);
+        this.ozone_scattering = atmos->ozone_absorption * max(0.0, 1.0 - abs(altitude - atmos->ozone_height) / atmos->ozone_thickness);
+        this.extinction_sum = this.rayleigh_scattering + this.mie_scattering + this.ozone_scattering;
+    }
+};
 
 public float get_rayleigh_phase(float altitude)
 {
@@ -83,16 +120,3 @@ public float get_mie_phase(Atmosphere *atmos, float altitude)
     return scale * num / denom;
 }
 
-public void get_scattering(Atmosphere atmos, float altitude, out float3 rayleigh, out float mie)
-{
-    rayleigh = atmos.rayleigh_scatter * exp(-altitude / atmos.rayleigh_density);
-    mie = (atmos.mie_scatter + atmos.mie_absorption) * exp(-altitude / atmos.mie_density);
-}
-
-public float3 sample_lut(Atmosphere *atmos, ImageViewID target_image_id, SamplerID sampler_id, float altitude, float theta)
-{
-    const let lut_image = ImageView(target_image_id);
-
-    float2 uv = float2(0.5 + 0.5 * theta, max(0.0, min(altitude / (atmos->atmos_radius - atmos->planet_radius), 1.0)));
-    return lut_image.sample(sampler_id, uv).xyz;
-}

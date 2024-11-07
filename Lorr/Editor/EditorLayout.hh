@@ -12,6 +12,7 @@ enum class ActiveTool : u32 {
     TerrainBrush,
     DecalBrush,
     MaterialEditor,
+    World,
 };
 
 struct EditorLayout {

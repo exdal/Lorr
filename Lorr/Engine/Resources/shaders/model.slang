@@ -5,7 +5,7 @@ import atmos.atmos;
 
 [[vk::push_constant]] struct {
     World *world;
-    ImageViewID transmittance_lut;
+    ImageView transmittance_lut;
     u32 model_transform_index;
     u32 material_id;
     u32 pad;
@@ -27,9 +27,9 @@ struct VertexOutput {
 
 [shader("vertex")]
 VertexOutput vs_main(VertexInput input) {
-    const let world = c.world;
-    const let camera = world.cameras[world.active_camera_index];
-    const let model = world.models[c.model_transform_index];
+    World *world = c.world;
+    Camera *camera = &world->cameras[world.active_camera_index];
+    Model *model = &world->models[c.model_transform_index];
 
     VertexOutput output;
     output.world_position = mul(float4(input.position, 1.0), model.model_transform_mat);
@@ -43,23 +43,21 @@ VertexOutput vs_main(VertexInput input) {
 float4 fs_main(VertexOutput input) : SV_Target {
     World *world = c.world;
     Atmosphere *atmos = &world->atmosphere;
-    const let transmittance_image = ImageView(c.transmittance_lut);
-    
-    Camera active_camera = world->cameras[world->active_camera_index];
-    
-    Material material = world->materials[c.material_id];
-    const let texture = ImageView(material.albedo_image_view);
-    float3 sampled_albedo_color = texture.sample(material.albedo_sampler, input.tex_coord).rgb;
-    const let albedo_color = material.albedo_color.xyz;
+    Sun *sun = &world->sun;
+    Camera *camera = &world->cameras[world->active_camera_index];
+    Material *material = &world->materials[c.material_id];
 
-    const float scaling_unit = 0.1;  // 100 meters
-    float3 world_pos = input.world_position.xyz * scaling_unit + float3(0.0, 0.0, atmos->planet_radius);
-    float h = length(world_pos);
+    float3 world_position = input.world_position.xyz * CAMERA_SCALE_UNIT + float3(0.0, atmos->planet_radius, 0.0);
+    float h = length(world_position);
+    float3 up_vec = world_position / h;
+    float cos_theta = dot(sun->direction, up_vec);
+    float2 transmittance_uv = get_transmittance_lut_uv(atmos, float2(h, cos_theta));
+    float3 sun_transmittance = c.transmittance_lut.sample(c.world->linear_sampler, transmittance_uv).rgb;
 
-    float cos_theta = dot(world->sun.direction, world_pos / h);
-    float2 transmittance_lut_uv = get_transmittance_lut_uv(atmos, float2(h, cos_theta));
-    float3 transmittance_color = transmittance_image.sample(world->linear_sampler, transmittance_lut_uv).rgb;
+    float3 albedo_color = material->albedo_image.sample(input.tex_coord).rgb;
+    float diff = max(dot(input.normal, sun->direction), 0.0);
+    float3 ambient = float3(0.1) * albedo_color;
+    float3 diffuse = diff * albedo_color;
 
-    float3 radiance = max(0.0, dot(input.normal, world->sun.direction));
-    return float4(transmittance_color, 1.0);
+    return float4((ambient + diffuse) * 0.5 * sun_transmittance, 1.0);
 }

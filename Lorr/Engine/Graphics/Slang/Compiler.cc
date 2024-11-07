@@ -57,7 +57,7 @@ struct SlangBlob : ISlangBlob {
 };
 
 // PERF: When we are at Editor environment, shaders obviously needs to be loaded through file system.
-// But when we are at production environment, we don't need file system because we probably would
+// But when we are at runtime environment, we don't need file system because we probably would
 // have proper asset manager with all shaders are preloaded into virtual environment, so ::loadFile
 // would just return already existing shader file.
 struct SlangVirtualFS : ISlangFileSystem {
@@ -192,11 +192,11 @@ auto SlangModule::get_entry_point(std::string_view name) -> ls::option<SlangEntr
         Slang::ComPtr<slang::IBlob> diagnostics_blob;
         auto result = linked_program->getEntryPointCode(0, 0, spirv_code.writeRef(), diagnostics_blob.writeRef());
         if (diagnostics_blob) {
-            LOG_TRACE("{}", (const char *)diagnostics_blob->getBufferPointer());
+            // warning spam
         }
 
         if (SLANG_FAILED(result)) {
-            LOG_ERROR("Failed to compile shader module.");
+            LOG_ERROR("Failed to compile shader module.\n{}", (const char *)diagnostics_blob->getBufferPointer());
             return ls::nullopt;
         }
     }
@@ -320,10 +320,22 @@ auto SlangCompiler::new_session(const SlangSessionInfo &info) -> ls::option<Slan
     auto slang_fs = std::make_unique<SlangVirtualFS>(impl->virtual_dir, info.root_directory);
 
     slang::CompilerOptionEntry entries[] = {
-        { slang::CompilerOptionName::Optimization, slang::CompilerOptionValue{ .intValue0 = SLANG_OPTIMIZATION_LEVEL_MAXIMAL } },
-        { slang::CompilerOptionName::UseUpToDateBinaryModule, slang::CompilerOptionValue{ .intValue0 = 1 } },
-        { slang::CompilerOptionName::GLSLForceScalarLayout, slang::CompilerOptionValue{ .intValue0 = 1 } },
-        { slang::CompilerOptionName::Language, slang::CompilerOptionValue{ .stringValue0 = "slang" } },
+#if LS_DEBUG
+        { slang::CompilerOptionName::Optimization,
+          { .kind = slang::CompilerOptionValueKind::Int, .intValue0 = SLANG_OPTIMIZATION_LEVEL_NONE } },
+        { slang::CompilerOptionName::DebugInformationFormat,
+          { .kind = slang::CompilerOptionValueKind::Int, .intValue0 = SLANG_DEBUG_INFO_FORMAT_C7 } },
+        { slang::CompilerOptionName::DumpIntermediates, { .kind = slang::CompilerOptionValueKind::Int, .intValue0 = 1 } },
+#else
+        { slang::CompilerOptionName::Optimization,
+          { .kind = slang::CompilerOptionValueKind::Int, .intValue0 = SLANG_OPTIMIZATION_LEVEL_MAXIMAL } },
+#endif
+        { slang::CompilerOptionName::UseUpToDateBinaryModule, { .kind = slang::CompilerOptionValueKind::Int, .intValue0 = 1 } },
+        { slang::CompilerOptionName::GLSLForceScalarLayout, { .kind = slang::CompilerOptionValueKind::Int, .intValue0 = 1 } },
+        { slang::CompilerOptionName::Language, { .kind = slang::CompilerOptionValueKind::String, .stringValue0 = "slang" } },
+        { slang::CompilerOptionName::DisableWarnings, { .kind = slang::CompilerOptionValueKind::String, .stringValue0 = "39001,41012" } },
+        { slang::CompilerOptionName::Capability,
+          { .kind = slang::CompilerOptionValueKind::Int, .intValue0 = impl->global_session->findCapability("spirv_1_6") } },
     };
     std::vector<slang::PreprocessorMacroDesc> macros;
     macros.reserve(info.definitions.size());
@@ -333,7 +345,7 @@ auto SlangCompiler::new_session(const SlangSessionInfo &info) -> ls::option<Slan
 
     slang::TargetDesc target_desc = {
         .format = SLANG_SPIRV,
-        .profile = impl->global_session->findProfile("spirv_1_6"),
+        .profile = impl->global_session->findProfile("glsl460"),
         .flags = SLANG_TARGET_FLAG_GENERATE_SPIRV_DIRECTLY,
         .floatingPointMode = SLANG_FLOATING_POINT_MODE_FAST,
         .lineDirectiveMode = SLANG_LINE_DIRECTIVE_MODE_STANDARD,

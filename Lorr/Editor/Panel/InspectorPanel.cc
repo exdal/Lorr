@@ -82,6 +82,23 @@ void InspectorPanel::update(this InspectorPanel &self) {
         ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal);
     });
 
+    switch (app.layout.active_tool) {
+        case ActiveTool::World: {
+            auto name_with_icon = std::format("{}  Atmosphere", Icon::fa::earth_americas);
+            if (ImGui::CollapsingHeader(name_with_icon.c_str(), nullptr, ImGuiTreeNodeFlags_DefaultOpen)) {
+                auto &atmos = app.world.renderer->context->world_data.atmosphere;
+                ImGui::DragFloat("Aerial KM per slice", &atmos.aerial_km_per_slice);
+                ImGui::DragFloat("Aerial Perspective Exposure", &atmos.aerial_perspective_exposure);
+            }
+            break;
+        }
+        case ActiveTool::Cursor:
+        case ActiveTool::TerrainBrush:
+        case ActiveTool::DecalBrush:
+        case ActiveTool::MaterialEditor:
+            break;
+    }
+
     ImGui::End();
 }
 

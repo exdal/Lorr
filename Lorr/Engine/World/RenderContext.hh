@@ -9,18 +9,20 @@ struct GPUSunData {
 };
 
 struct GPUAtmosphereData {
-    glm::vec3 rayleigh_scatter = glm::vec3(5.802, 13.558, 33.1) * 1e-6f;
-    f32 rayleigh_density = 8.0 * 1e3f;
-    f32 planet_radius = 6360.0 * 1e3f;
-    f32 atmos_radius = 6460.0 * 1e3f;
-    f32 mie_scatter = 3.996 * 1e-6f;
-    f32 mie_absorption = 4.4 * 1e-6f;
-    f32 mie_density = 1.2 * 1e3f;
+    glm::vec3 rayleigh_scatter = { 0.005802f, 0.013558f, 0.033100f };
+    f32 rayleigh_density = 8.0;
+    f32 planet_radius = 6360.0;
+    f32 atmos_radius = 6460.0;
+    f32 mie_scatter = 0.003996;
+    f32 mie_absorption = 0.004440;
+    f32 mie_density = 1.2;
     f32 mie_asymmetry = 0.8;
-    f32 ozone_height = 25 * 1e3f;
-    f32 ozone_thickness = 15 * 1e3f;
-    glm::vec3 ozone_absorption = glm::vec3(0.650, 1.881, 0.085) * 1e-6f;
-    f32 _unused;
+    f32 ozone_height = 25.0;
+    f32 ozone_thickness = 15.0;
+    glm::vec3 ozone_absorption = { 0.000650, 0.001881, 0.000085 };
+    f32 aerial_km_per_slice = 4.0;
+    glm::vec3 terrain_albedo = { 0.3, 0.3, 0.3 };
+    f32 aerial_perspective_exposure = 8.0;
 };
 
 enum class GPUMaterialID : u32 { Invalid = ~0_u32 };
@@ -31,12 +33,9 @@ struct GPUMaterial {
     f32 metallic_factor = 0.0f;
     vk::AlphaMode alpha_mode = vk::AlphaMode::Opaque;
     f32 alpha_cutoff = 0.0f;
-    ImageID albedo_image = ImageID::Invalid;
-    SamplerID albedo_sampler = SamplerID::Invalid;
-    ImageID normal_image = ImageID::Invalid;
-    SamplerID normal_sampler = SamplerID::Invalid;
-    ImageID emissive_image = ImageID::Invalid;
-    SamplerID emissive_sampler = SamplerID::Invalid;
+    SampledImage albedo_image = {};
+    SampledImage normal_image = {};
+    SampledImage emissive_image = {};
 };
 
 struct GPUMeshPrimitive {
@@ -62,6 +61,8 @@ struct GPUCameraData {
     glm::mat4 inv_view_mat = {};
     glm::mat4 inv_projection_view_mat = {};
     glm::vec3 position = {};
+    f32 near_clip = {};
+    f32 far_clip = {};
 };
 
 struct GPUModelTransformData {

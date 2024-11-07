@@ -5,12 +5,12 @@
 #include "Engine/World/RenderContext.hh"
 
 namespace lr::Tasks {
-inline GraphicsPipelineInfo grid_pipeline_info(AssetManager &asset_man) {
+inline GraphicsPipelineInfo grid_pipeline_info(AssetManager &asset_man, vk::Format dst_color_format, vk::Format dst_depth_format) {
     auto shaders_root = asset_man.asset_root_path(AssetType::Shader);
 
     return {
-        .color_attachment_formats = { vk::Format::R8G8B8A8_SRGB },
-        .depth_attachment_format = vk::Format::D32_SFLOAT,
+        .color_attachment_formats = { dst_color_format },
+        .depth_attachment_format = dst_depth_format,
         .shader_module_info = {
             .module_name = "editor.grid",
             .root_path = shaders_root,

@@ -58,9 +58,9 @@ struct CoreECS {
                 t.rotation.y = glm::clamp(t.rotation.y, -89.0f, 89.0f);
 
                 auto inv_orient = glm::conjugate(c.orientation);
-                t.position += glm::vec3(inv_orient * glm::vec4(c.velocity * it.delta_time(), 0.0f));
+                t.position += glm::vec3(inv_orient * glm::vec4(c.cur_axis_velocity * it.delta_time(), 0.0f));
 
-                c.projection = glm::perspectiveLH(glm::radians(c.fov), c.aspect_ratio, 0.01f, 10000.0f);
+                c.projection = glm::perspectiveLH(glm::radians(c.fov), c.aspect_ratio, c.near_clip, c.far_clip);
                 c.projection[1][1] *= -1;
 
                 auto rotation = glm::radians(t.rotation);

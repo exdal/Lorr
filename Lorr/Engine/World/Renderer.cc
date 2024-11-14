@@ -100,14 +100,23 @@ auto WorldRenderer::setup_persistent_resources(this WorldRenderer &self) -> void
                               .value();
     self.device.image_transition(self.sky_view_image, vk::ImageLayout::Undefined, vk::ImageLayout::ColorAttachment);
 
-    self.cloud_noise_image = Image::create(
-                                 self.device,
-                                 vk::ImageUsage::Storage | vk::ImageUsage::Sampled,
-                                 vk::Format::R16G16B16A16_SFLOAT,
-                                 vk::ImageType::View3D,
-                                 { 256, 256, 256 })
-                                 .value();
-    self.device.image_transition(self.cloud_noise_image, vk::ImageLayout::Undefined, vk::ImageLayout::General);
+    self.cloud_shape_noise_image = Image::create(
+                                       self.device,
+                                       vk::ImageUsage::Storage | vk::ImageUsage::Sampled,
+                                       vk::Format::R16G16B16A16_SFLOAT,
+                                       vk::ImageType::View3D,
+                                       { 256, 256, 256 })
+                                       .value();
+    self.device.image_transition(self.cloud_shape_noise_image, vk::ImageLayout::Undefined, vk::ImageLayout::General);
+
+    self.cloud_detail_noise_image = Image::create(
+                                        self.device,
+                                        vk::ImageUsage::Storage | vk::ImageUsage::Sampled,
+                                        vk::Format::R16G16B16A16_SFLOAT,
+                                        vk::ImageType::View3D,
+                                        { 128, 128, 128 })
+                                        .value();
+    self.device.image_transition(self.cloud_detail_noise_image, vk::ImageLayout::Undefined, vk::ImageLayout::General);
 }
 
 auto WorldRenderer::record_setup_graph(this WorldRenderer &self) -> void {
@@ -205,14 +214,14 @@ auto WorldRenderer::record_setup_graph(this WorldRenderer &self) -> void {
         }
     });
 
-    auto cloud_noise_pipeline = Pipeline::create(self.device, Tasks::cloud_noise_pipeline_info(asset_man)).value();
-    auto cloud_noise_task_image = task_graph.add_image({
-        .image_id = self.cloud_noise_image,
+    auto cloud_shape_noise_pipeline = Pipeline::create(self.device, Tasks::cloud_shape_noise_pipeline_info(asset_man)).value();
+    auto cloud_shape_noise_task_image = task_graph.add_image({
+        .image_id = self.cloud_shape_noise_image,
     });
 
     task_graph.add_task(InlineTask{
         .uses = {
-            Preset::ComputeWrite(cloud_noise_task_image),
+            Preset::ComputeWrite(cloud_shape_noise_task_image),
         },
         .execute_cb = [&](TaskContext &tc) {
             auto &cloud_noise_image_use = tc.task_use(0);
@@ -221,16 +230,65 @@ auto WorldRenderer::record_setup_graph(this WorldRenderer &self) -> void {
             auto image_extent = cloud_noise_image_info.extent();
 
             struct PushConstants {
-                ImageViewID detail_image_view = ImageViewID::Invalid;
                 glm::vec3 image_size = {};
+                ImageViewID detail_image_view = ImageViewID::Invalid;
             };
 
-            tc.set_pipeline(cloud_noise_pipeline);
+            tc.set_pipeline(cloud_shape_noise_pipeline);
             tc.set_push_constants(PushConstants{
+                .image_size = glm::vec3(1.0) / glm::vec3(f32(image_extent.width), f32(image_extent.height), image_extent.depth),
                 .detail_image_view = cloud_noise_image_info.view(),
-                .image_size = { image_extent.width, image_extent.height, image_extent.depth },
             });
-            tc.cmd_list.dispatch(image_extent.width / 16 + 1, image_extent.height / 16 + 1, image_extent.depth);
+            tc.cmd_list.dispatch(image_extent.width / 16, image_extent.height / 16, image_extent.depth);
+
+            tc.cmd_list.image_transition({
+                .src_stage = cloud_noise_image_use.access.stage,
+                .src_access = cloud_noise_image_use.access.access,
+                .dst_stage = vk::PipelineStage::FragmentShader,
+                .dst_access = vk::MemoryAccess::ShaderRead,
+                .old_layout = cloud_noise_image_use.image_layout,
+                .new_layout = vk::ImageLayout::ShaderReadOnly,
+                .image_id = cloud_noise_task_image_info.image_id,
+            });
+        }
+    });
+
+    auto cloud_detail_noise_pipeline = Pipeline::create(self.device, Tasks::cloud_detail_noise_pipeline_info(asset_man)).value();
+    auto cloud_detail_noise_task_image = task_graph.add_image({
+        .image_id = self.cloud_detail_noise_image,
+    });
+
+    task_graph.add_task(InlineTask{
+        .uses = {
+            Preset::ComputeWrite(cloud_detail_noise_task_image),
+        },
+        .execute_cb = [&](TaskContext &tc) {
+            auto &cloud_noise_image_use = tc.task_use(0);
+            auto cloud_noise_task_image_info = tc.task_image_data(cloud_noise_image_use);
+            auto cloud_noise_image_info = tc.device.image(cloud_noise_task_image_info.image_id);
+            auto image_extent = cloud_noise_image_info.extent();
+
+            struct PushConstants {
+                glm::vec3 image_size = {};
+                ImageViewID detail_image_view = ImageViewID::Invalid;
+            };
+
+            tc.set_pipeline(cloud_detail_noise_pipeline);
+            tc.set_push_constants(PushConstants{
+                .image_size = glm::vec3(1.0) / glm::vec3(f32(image_extent.width), f32(image_extent.height), image_extent.depth),
+                .detail_image_view = cloud_noise_image_info.view(),
+            });
+            tc.cmd_list.dispatch(image_extent.width / 16, image_extent.height / 16, image_extent.depth);
+
+            tc.cmd_list.image_transition({
+                .src_stage = cloud_noise_image_use.access.stage,
+                .src_access = cloud_noise_image_use.access.access,
+                .dst_stage = vk::PipelineStage::FragmentShader,
+                .dst_access = vk::MemoryAccess::ShaderRead,
+                .old_layout = cloud_noise_image_use.image_layout,
+                .new_layout = vk::ImageLayout::ShaderReadOnly,
+                .image_id = cloud_noise_task_image_info.image_id,
+            });
         }
     });
 
@@ -319,6 +377,18 @@ auto WorldRenderer::record_pbr_graph(this WorldRenderer &self, SwapChain &swap_c
         .access = vk::PipelineAccess::ColorAttachmentWrite,
     });
 
+    auto cloud_shape_noise_task_image = self.pbr_graph.add_image({
+        .image_id = self.cloud_shape_noise_image,
+        .layout = vk::ImageLayout::ShaderReadOnly,
+        .access = vk::PipelineAccess::FragmentShaderRead,
+    });
+
+    auto cloud_detail_noise_task_image = self.pbr_graph.add_image({
+        .image_id = self.cloud_detail_noise_image,
+        .layout = vk::ImageLayout::ShaderReadOnly,
+        .access = vk::PipelineAccess::FragmentShaderRead,
+    });
+
     self.pbr_graph.add_task(Tasks::SkyViewTask{
         .uses = {
             .sky_view_attachment = sky_view_task_image,
@@ -349,11 +419,33 @@ auto WorldRenderer::record_pbr_graph(this WorldRenderer &self, SwapChain &swap_c
             vk::Filtering::Linear,
             vk::Filtering::Linear,
             vk::Filtering::Linear,
-            vk::SamplerAddressMode::Repeat,
+            vk::SamplerAddressMode::ClampToEdge,
             vk::SamplerAddressMode::ClampToEdge,
             vk::SamplerAddressMode::ClampToEdge,
             vk::CompareOp::Never).value(),
     });
+    self.pbr_graph.add_task(Tasks::CloudDraw{
+        .uses = {
+            .color_attachment = final_task_image,
+            .depth_image = geo_depth_task_image,
+            .transmittance_lut_image = sky_transmittance_task_image,
+            .aerial_perspective_lut_image = sky_aerial_perspective_task_image,
+            .cloud_shape_image = cloud_shape_noise_task_image,
+            .cloud_detail_image = cloud_detail_noise_task_image,
+        },
+        .pipeline = Pipeline::create(self.device, Tasks::draw_clouds_pipeline_info(asset_man,
+                    self.device.image(self.final_image).format())).value(),
+        .sampler = Sampler::create(
+            self.device,
+            vk::Filtering::Linear,
+            vk::Filtering::Linear,
+            vk::Filtering::Linear,
+            vk::SamplerAddressMode::Repeat,
+            vk::SamplerAddressMode::Repeat,
+            vk::SamplerAddressMode::Repeat,
+            vk::CompareOp::Never).value(),
+    });
+
     self.pbr_graph.add_task(Tasks::GeometryTask{
         .uses = {
             .color_attachment = final_task_image,
@@ -632,9 +724,9 @@ auto WorldRenderer::render(this WorldRenderer &self, SwapChain &swap_chain, Imag
     directional_light_query.each([&](Component::DirectionalLight &l) {
         auto rad = glm::radians(l.angle);
         world_data.sun.direction = {
-            glm::cos(rad.x) * glm::cos(rad.y),
-            glm::sin(rad.y),
-            glm::sin(rad.x) * glm::cos(rad.y),
+            glm::cos(rad.x) * glm::sin(rad.y),
+            glm::sin(rad.x) * glm::sin(rad.y),
+            glm::cos(rad.y),
         };
         world_data.sun.intensity = l.intensity;
     });

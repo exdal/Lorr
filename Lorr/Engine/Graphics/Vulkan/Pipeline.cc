@@ -339,7 +339,13 @@ auto Pipeline::create(Device device, const ComputePipelineInfo &info) -> std::ex
         return std::unexpected(vk::Result::Unknown);
     }
 
-    auto cs_main = slang_module->get_entry_point("cs_main");
+    auto &entry_point_names = info.shader_module_info.entry_points;
+    if (entry_point_names.size() != 1) {
+        LOG_ERROR("Compute pipeline must have one entry point");
+        return std::unexpected(vk::Result::Unknown);
+    }
+
+    auto cs_main = slang_module->get_entry_point(info.shader_module_info.entry_points[0]);
     if (!cs_main.has_value()) {
         LOG_ERROR("Compute shader '{}' is missing 'cs_main' entry point!", info.shader_module_info.module_name);
         return std::unexpected(vk::Result::Unknown);

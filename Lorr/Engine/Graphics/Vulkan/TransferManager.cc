@@ -2,7 +2,7 @@
 
 namespace lr {
 inline u32 lzcnt_nonzero(u32 v) {
-#ifdef _MSC_VER
+#if LS_COMPILER_MSVC
     unsigned long retVal;
     _BitScanReverse(&retVal, v);
     return 31 - retVal;
@@ -12,7 +12,7 @@ inline u32 lzcnt_nonzero(u32 v) {
 }
 
 inline u32 tzcnt_nonzero(u32 v) {
-#ifdef _MSC_VER
+#if LS_COMPILER_MSVC
     unsigned long retVal;
     _BitScanForward(&retVal, v);
     return retVal;

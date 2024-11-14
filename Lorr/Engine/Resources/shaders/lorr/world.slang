@@ -7,9 +7,9 @@ public struct Material {
     public f32 metallic_factor;
     public u32 alpha_mode;
     public f32 alpha_cutoff;
-    public SampledImage albedo_image;
-    public SampledImage normal_image;
-    public SampledImage emissive_image;
+    public SampledImage<float4> albedo_image;
+    public SampledImage<float4> normal_image;
+    public SampledImage<float4> emissive_image;
 };
 
 public struct Sun {
@@ -21,20 +21,35 @@ public struct Atmosphere {
     public vec3 rayleigh_scatter;
     public f32 rayleigh_density;
 
-    public f32 planet_radius;
-    public f32 atmos_radius;
-    public f32 mie_scatter;
-    public f32 mie_absorption;
-
+    public vec3 mie_scatter;
     public f32 mie_density;
+    public f32 mie_extinction;
     public f32 mie_asymmetry;
+
+    public vec3 ozone_absorption;
     public f32 ozone_height;
     public f32 ozone_thickness;
 
-    public vec3 ozone_absorption;
-    public f32 aerial_km_per_slice;
     public vec3 terrain_albedo;
-    public f32 aerial_perspective_exposure;
+    public f32 aerial_km_per_slice;
+    public f32 planet_radius;
+    public f32 atmos_radius;
+};
+
+public struct Clouds {
+    public vec2 bounds;
+    public f32 global_scale;
+    public f32 shape_noise_scale;
+    public vec3 shape_noise_weights;
+    public f32 detail_noise_scale;
+    public vec3 detail_noise_weights;
+    public f32 detail_noise_influence;
+    public f32 coverage;
+    public f32 general_density;
+    public vec3 phase_values;
+    public f32 cloud_type;
+    public f32 draw_distance;
+    public f32 darkness_threshold;
 };
 
 public struct Camera {
@@ -64,5 +79,6 @@ public struct World {
 
     public Sun sun;
     public Atmosphere atmosphere;
+    public Clouds clouds;
 };
 

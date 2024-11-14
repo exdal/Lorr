@@ -1,30 +1,24 @@
 implementing atmos;
 
 import "../lorr";
-// To sky unit, in our case meters to KM
-public const static float CAMERA_SCALE_UNIT    = 0.001;
-public const static float PLANET_RADIUS_OFFSET = 0.0001;
+import "../noise/hemisphere";
 
-public float safe_sqrt(float x) {
-    return sqrt(max(0, x));
-}
-
-float fromSubUvsToUnit(float u, float resolution) {
+public float fromSubUvsToUnit(float u, float resolution) {
     return (u - 0.5 / resolution) * (resolution / (resolution - 1.0));
 }
 
-float fromUnitToSubUvs(float u, float resolution) {
+public float fromUnitToSubUvs(float u, float resolution) {
     return (u + 0.5f / resolution) * (resolution / (resolution + 1.0));
 }
 
 public float2 get_transmittance_lut_uv(Atmosphere *atmos, float2 p) {
-    float h = safe_sqrt(
+    float h = lr::safe_sqrt(
         atmos->atmos_radius * atmos->atmos_radius -
-        atmos.planet_radius * atmos->planet_radius);
-    float rho = safe_sqrt(p.x * p.x - atmos->planet_radius * atmos->planet_radius);
+        atmos->planet_radius * atmos->planet_radius);
+    float rho = lr::safe_sqrt(p.x * p.x - atmos->planet_radius * atmos->planet_radius);
     float discriminant = p.x * p.x * (p.y * p.y - 1.0) +
         atmos->atmos_radius * atmos->atmos_radius;
-    float d = max(0.0, -p.x *  p.y + safe_sqrt(discriminant));
+    float d = max(0.0, -p.x *  p.y + lr::safe_sqrt(discriminant));
     float d_min = atmos->atmos_radius - p.x;
     float d_max = rho + h;
     float mu = (d - d_min) / (d_max - d_min);
@@ -41,82 +35,212 @@ public float2 get_multiscattering_lut_uv(Atmosphere *atmos, float altitude, floa
     return float2(fromUnitToSubUvs(uv.x, 32), fromUnitToSubUvs(uv.y, 32));
 }
 
-public bool ray_hit_sphere(float3 origin, float3 direction, float radius, out float t) {
-    float a = dot(direction, direction);
-    float b = 2.0 * dot(origin, direction);
-    float c = dot(origin, origin) - radius * radius;
-    float discriminant = b * b - 4.0 * a * c;
+public float2 get_sky_view_lut_uv(Atmosphere *atmos, bool intersect_planet, float view_zenith_cos, float light_view_cos, float altitude) {
+    float2 uv = 0.0;
+    float horizon = sqrt(altitude * altitude - atmos->planet_radius * atmos->planet_radius);
+    float beta = acos(horizon / altitude);
+    float zenith_horizon_angle = PI - beta;
+        // Non-linear parametization
+    if (!intersect_planet) {
+        float coord = acos(view_zenith_cos) / zenith_horizon_angle;
+        coord = 1.0 - coord;
+        coord = sqrt(coord);
+        coord = 1.0 - coord;
+        uv.y = 0.5 * coord;
+    } else {
+        float coord = (acos(view_zenith_cos) - zenith_horizon_angle) / beta;
+        coord = sqrt(coord);
+        uv.y = 0.5 * coord + 0.5;  // Non-linear parametization
+    }
 
-    t = 0.0;
-    if (discriminant < 0.0)
-        return false;
+    uv.x = sqrt(-light_view_cos * 0.5 + 0.5);
 
-    if (c <= 0.0)
-        t = (-b + sqrt(discriminant)) / (a * 2.0);
-    else 
-        t = (-b + -sqrt(discriminant)) / (a * 2.0);
-    
-    return (b <= 0.0);
+    return uv;
 }
 
-public float ray_sphere_intersect_nearest(vec3 r0, vec3 rd, vec3 s0, float sR) {
-    float a = dot(rd, rd);
-    vec3 s0_r0 = r0 - s0;
-    float b = 2.0 * dot(rd, s0_r0);
-    float c = dot(s0_r0, s0_r0) - (sR * sR);
-    float delta = b * b - 4.0*a*c;
-    if (delta < 0.0 || a == 0.0)
-    {
-        return -1.0;
+public bool move_to_top_atmosphere(inout float3 pos, float3 dir, float atmos_radius) {
+    float h = length(pos);
+    if (h > atmos_radius) {
+        const let top_intersection = lr::ray_sphere_intersect_nearest(pos, dir, atmos_radius);
+        if (top_intersection.hasValue) {
+            float3 up_vec = pos / h;
+            float3 up_offset = up_vec * -PLANET_RADIUS_OFFSET;
+            pos = pos + dir * top_intersection.value + up_offset;
+        } else {
+            return false;
+        }
     }
-    float sol0 = (-b - safe_sqrt(delta)) / (2.0*a);
-    float sol1 = (-b + safe_sqrt(delta)) / (2.0*a);
-    if (sol0 < 0.0 && sol1 < 0.0)
-    {
-        return -1.0;
-    }
-    if (sol0 < 0.0)
-    {
-        return max(0.0, sol1);
-    }
-    else if (sol1 < 0.0)
-    {
-        return max(0.0, sol0);
-    }
-    return max(0.0, min(sol0, sol1));
+    return true;
 }
-
 
 public struct MediumScattering {
     public float3 rayleigh_scattering;
+    public float3 rayleigh_extinction;
+
     public float3 mie_scattering;
-    public float3 ozone_scattering;
+    public float3 mie_extinction;
+
+    public float3 ozone_absorption;
+    public float3 ozone_extinction;
+
+    public float3 scattering_sum;
     public float3 extinction_sum;
 
     [ForceInline]
     public __init(Atmosphere *atmos, float altitude) {
-        this.rayleigh_scattering = atmos->rayleigh_scatter * exp(-altitude / atmos->rayleigh_density);
-        this.mie_scattering = (atmos->mie_scatter + atmos->mie_absorption) * exp(-altitude / atmos->mie_density);
-        this.ozone_scattering = atmos->ozone_absorption * max(0.0, 1.0 - abs(altitude - atmos->ozone_height) / atmos->ozone_thickness);
-        this.extinction_sum = this.rayleigh_scattering + this.mie_scattering + this.ozone_scattering;
+        const float rayleigh_density  = exp(-altitude / atmos->rayleigh_density);
+        const float mie_density = exp(-altitude / atmos->mie_density);
+        const float ozone_density = max(0.0, 1.0 - abs(altitude - atmos->ozone_height) / atmos->ozone_thickness);
+
+        this.rayleigh_scattering = atmos->rayleigh_scatter * rayleigh_density;
+        this.rayleigh_extinction = this.rayleigh_scattering;  // Rayleigh scattering doesn't have absorption behavior
+
+        this.mie_scattering = atmos->mie_scatter * mie_density;
+        this.mie_extinction = atmos->mie_extinction * mie_density;  // Mie scattering doesn't have absorption behavior
+
+        this.ozone_absorption = atmos->ozone_absorption *  ozone_density;
+        this.ozone_extinction = this.ozone_absorption;
+
+        this.scattering_sum = this.rayleigh_scattering + this.mie_scattering;
+        this.extinction_sum = this.rayleigh_extinction + this.mie_extinction + this.ozone_extinction;
     }
 };
 
-public float get_rayleigh_phase(float altitude)
-{
-    const float k = 3.0 / (16.0 * PI);
-    return k * (1.0 + altitude * altitude);
-}
 
-public float get_mie_phase(Atmosphere *atmos, float altitude)
-{
-    const float g = atmos->mie_asymmetry;
-    const float g2 = g * g;
-    const float scale = 3.0 / (8.0 * PI);
+public struct AtmosphereLuminance {
+    public float3 luminance = float3(0.0);
+    public float3 multiscattering_as_1 = float3(0.0);
+    public float3 transmittance = float3(1.0);
+};
 
-    float num = (1.0 - g2) * (1.0 + altitude * altitude);
-    float denom = (2.0 + g2) * pow(abs(1.0 + g2 - 2.0 * g * altitude), 1.5);
-    
-    return scale * num / denom;
+public struct AtmosphereSampling {
+    public bool variable_sample_count = false;
+    public float initial_sample_count = 0.0;
+    public float min_sample_count = 0.0;
+    public float max_sample_count = 0.0;
+    public float inv_distance_to_sample_count_max = 0.01;
+};
+
+public struct AtmosphereIntegrateInfo {
+    public float3 eye_pos = {};
+    public float3 eye_dir = {};
+    public float3 sun_dir = {};
+    public float sun_intensity = 1.0;
+    public float max_integration_length = 9000000.0;
+    public AtmosphereSampling sampling = {};
+    public ImageView<float4> transmittance_image;
+    public Optional<ImageView<float4>> multiscattering_image;
+    public bool eval_mie_rayleigh_phase = true;
+    public bool eval_planet_luminance = false;
+};
+
+public func integrate_single_scattered_luminance(
+    in World *world,
+    in AtmosphereIntegrateInfo info) -> AtmosphereLuminance
+{
+    AtmosphereLuminance result;
+    Atmosphere *atmos = &world->atmosphere;
+
+    const let atmos_intersection = lr::ray_sphere_intersect_nearest(info.eye_pos, info.eye_dir, atmos->atmos_radius);
+    const let planet_intersection = lr::ray_sphere_intersect_nearest(info.eye_pos, info.eye_dir, atmos->planet_radius);
+    float integration_length = 0.0;
+    if (!atmos_intersection.hasValue && !planet_intersection.hasValue) {
+        // No intersection
+        return {};
+    } else if (atmos_intersection.hasValue && !planet_intersection.hasValue) {
+        // Atmosphere only intersection
+        integration_length = atmos_intersection.value;
+    } else if (!atmos_intersection.hasValue && planet_intersection.hasValue) {
+        // Planet only intersection
+        integration_length = planet_intersection.value;
+    } else {
+        // Ray intersects both atmosphere and planet, select the closest intersection
+        integration_length = min(atmos_intersection.value, planet_intersection.value);
+    }
+
+    integration_length = min(integration_length, info.max_integration_length);
+    float sample_count = info.sampling.initial_sample_count;
+    float sample_count_floor = info.sampling.initial_sample_count;
+    float max_integration_length_floor = integration_length;
+    if (info.sampling.variable_sample_count) {
+        sample_count = lerp(info.sampling.min_sample_count, info.sampling.max_sample_count,
+                            saturate(integration_length * info.sampling.inv_distance_to_sample_count_max));
+        sample_count_floor = floor(sample_count);
+        max_integration_length_floor = integration_length * sample_count_floor / sample_count;
+    }
+
+    float cos_theta = dot(info.sun_dir, info.eye_dir);
+    float rayleigh_phase = lr::rayleigh_phase(-cos_theta);
+    float mie_phase = lr::mie_phase(atmos->mie_asymmetry, cos_theta);
+
+    float step = 0.0;
+    float delta_step = integration_length / sample_count;
+    for (float i = 0; i < sample_count; i += 1.0) {
+        if (info.sampling.variable_sample_count) {
+            float cur_step  = (i + 0.0) / sample_count_floor;
+            float next_step = (i + 1.0) / sample_count_floor;
+            cur_step *= cur_step;
+            next_step *= next_step;
+
+            cur_step *= max_integration_length_floor;
+            next_step = next_step > 1.0 ? integration_length : next_step * max_integration_length_floor;
+            delta_step = next_step - cur_step;
+            step = cur_step + delta_step * 0.3;
+        } else {
+            step = integration_length * (i + 0.3) / sample_count;
+        }
+
+        float3 step_pos = info.eye_pos + step * info.eye_dir;
+        float h = length(step_pos);
+        float altitude = h - atmos->planet_radius;
+        MediumScattering medium_info = MediumScattering(atmos, altitude);
+
+        float3 up_vec = normalize(step_pos);
+        float3 up_vec_scaled = PLANET_RADIUS_OFFSET * up_vec;
+        float earth_shadow = lr::ray_sphere_intersect_nearest(step_pos - up_vec_scaled, info.sun_dir, atmos->planet_radius).hasValue ? 0.0 : 1.0;
+        f32 sun_theta = dot(info.sun_dir, up_vec);
+
+        float2 transmittance_uv = get_transmittance_lut_uv(atmos, float2(h, sun_theta));
+        float3 sun_transmittance = info.transmittance_image.sample(world->linear_sampler, transmittance_uv).rgb;
+
+        float3 MS = 0.0;
+        if (info.multiscattering_image.hasValue) {
+            float2 multiscatter_uv = get_multiscattering_lut_uv(atmos, altitude, sun_theta);
+            MS = info.multiscattering_image.value.sample(world->linear_sampler, multiscatter_uv).rgb;
+        }
+
+        float3 scattering_phase = 0.0;
+        if (info.eval_mie_rayleigh_phase) {
+            scattering_phase = medium_info.mie_scattering * mie_phase + medium_info.rayleigh_scattering * rayleigh_phase;
+        } else {
+            scattering_phase = medium_info.scattering_sum * lr::uniform_phase();
+        }
+
+        float3 sun_luminance = earth_shadow * sun_transmittance * scattering_phase + (MS * medium_info.scattering_sum);
+        float3 step_transmittance = exp(-delta_step * medium_info.extinction_sum);
+
+        float3 integral = (sun_luminance - sun_luminance * step_transmittance) / medium_info.extinction_sum;
+        float3 ms_integral = (medium_info.scattering_sum - medium_info.scattering_sum * step_transmittance) / medium_info.extinction_sum;
+
+        result.luminance += info.sun_intensity * (integral * result.transmittance);
+        result.multiscattering_as_1 += ms_integral * result.transmittance;
+        result.transmittance *= step_transmittance;
+    }
+
+    // Accumulate light bouncing off planet's ground
+    if (info.eval_planet_luminance && planet_intersection.hasValue && integration_length == planet_intersection.value) {
+        float3 planet_pos = info.eye_pos + integration_length * info.eye_dir;
+        float h = length(planet_pos);
+        float3 up_vec = planet_pos / h;
+        float sun_theta = dot(info.sun_dir, up_vec);
+        float NoL = saturate(dot(normalize(info.sun_dir), normalize(up_vec)));
+
+        float2 transmittance_uv = get_transmittance_lut_uv(atmos, float2(h, sun_theta));
+        float3 sun_transmittance = info.transmittance_image.sample(world->linear_sampler, transmittance_uv).rgb;
+
+        result.luminance += info.sun_intensity * (sun_transmittance * result.transmittance * NoL * atmos->terrain_albedo / PI);
+    }
+
+    return result;
 }
 

@@ -26,8 +26,7 @@ struct VertexOutput {
 {
     float2 translate;
     float2 scale;
-    ImageViewID image_view_id;
-    SamplerID sampler_id;
+    SampledImage<float4> image;
 } c;
 
 [shader("vertex")]
@@ -45,8 +44,7 @@ VertexOutput vs_main(VertexInput input) {
 [shader("fragment")]
 float4 fs_main(VertexOutput input) : SV_TARGET
 {
-    const let font_texture = ImageView(c.image_view_id);
-    float4 col =  font_texture.sample(c.sampler_id, input.tex_coord) * input.color;
+    float4 col =  c.image.sample(input.tex_coord) * input.color;
     col.rgb *= col.a;
 
     return col;

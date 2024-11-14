@@ -1,6 +1,7 @@
 implementing "../lorr";
 
-public static const float PI = 3.14159265358;
+public static const float PI = 3.1415926535897932384626433832795;
+public static const float TAU = 6.283185307179586476925286766559;
 
 // arithmetic types
 public typedef double f64;
@@ -40,14 +41,12 @@ public typedef u32 SamplerID;
 #define LR_DESCRIPTOR_INDEX_BDA_ARRAY 4
 
 [[vk::binding(LR_DESCRIPTOR_INDEX_SAMPLER, 0)]]         SamplerState __samplers[];
-[[vk::binding(LR_DESCRIPTOR_INDEX_IMAGES, 0)]]          Texture2D<float4> __textures_f4[];
-[[vk::binding(LR_DESCRIPTOR_INDEX_IMAGES, 0)]]          Texture3D<float4> __textures_f4_3d[];
-[[vk::binding(LR_DESCRIPTOR_INDEX_STORAGE_IMAGES, 0)]]  RWTexture2D<float4> __storage_images[];
-[[vk::binding(LR_DESCRIPTOR_INDEX_STORAGE_IMAGES, 0)]]  RWTexture3D<float4> __storage_images_3d[];
+[[vk::binding(LR_DESCRIPTOR_INDEX_IMAGES, 0)]]          __DynamicResource __textures[];
+[[vk::binding(LR_DESCRIPTOR_INDEX_STORAGE_IMAGES, 0)]]  __DynamicResource __storage_images[];
 [[vk::binding(LR_DESCRIPTOR_INDEX_STORAGE_BUFFERS, 0)]] ByteAddressBuffer __storage_buffers[];
 [[vk::binding(LR_DESCRIPTOR_INDEX_BDA_ARRAY, 0)]]       StructuredBuffer<u64> __bda_array;
 
-public struct ImageView {
+public struct ImageView<Format> {
     ImageViewID handle;
 
     [ForceInline]
@@ -56,29 +55,29 @@ public struct ImageView {
     }
 
     [ForceInline]
-    public float4 sample(SamplerID sampler_id, float2 uv) {
-        return __textures_f4[this.handle].Sample(__samplers[sampler_id], uv);
+    public Format sample(SamplerID sampler_id, float2 uv) {
+        return __textures[this.handle].as<Texture2D<Format>>().Sample(__samplers[sampler_id], uv);
     }
 
     [ForceInline]
-    public float4 sample(SamplerID sampler_id, float3 uvw) {
-        return __textures_f4_3d[this.handle].Sample(__samplers[sampler_id], uvw);
+    public Format sample(SamplerID sampler_id, float3 uvw) {
+        return __textures[this.handle].as<Texture3D<Format>>().Sample(__samplers[sampler_id], uvw);
     }
 
     [ForceInline]
-    public void store(uint2 thread_id, float4 color) {
-        const let rw_image = __storage_images[this.handle];
+    public void store(uint2 thread_id, Format color) {
+        const let rw_image = __storage_images[this.handle].as<RWTexture2D<Format>>();
         rw_image[thread_id] = color;
     }
 
     [ForceInline]
-    public void store(uint3 thread_id, float4 color) {
-        const let rw_image = __storage_images_3d[this.handle];
+    public void store(uint3 thread_id, Format color) {
+        const let rw_image = __storage_images[this.handle].as<RWTexture3D<Format>>();
         rw_image[thread_id] = color;
     }
 };
 
-public struct SampledImage {
+public struct SampledImage<Format> {
     ImageViewID image_view_id : 24;
     SamplerID sampler_id : 8;
 
@@ -89,13 +88,13 @@ public struct SampledImage {
     }
 
     [ForceInline]
-    public float4 sample(float2 uv) {
-        return __textures_f4[this.image_view_id].Sample(__samplers[this.sampler_id], uv);
+    public Format sample(float2 uv) {
+        return __textures[this.image_view_id].as<Texture2D<Format>>().Sample(__samplers[this.sampler_id], uv);
     }
 
     [ForceInline]
-    public float4 sample(float3 uvw) {
-        return __textures_f4_3d[this.image_view_id].Sample(__samplers[this.sampler_id], uvw);
+    public Format sample(float3 uvw) {
+        return __textures[this.image_view_id].as<Texture3D<Format>>().Sample(__samplers[this.sampler_id], uvw);
     }
 
 };

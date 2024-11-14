@@ -38,7 +38,8 @@ struct WorldRenderer {
     ImageID sky_view_image = ImageID::Invalid;
 
     // Cloud
-    ImageID cloud_noise_image = ImageID::Invalid;
+    ImageID cloud_shape_noise_image = ImageID::Invalid;
+    ImageID cloud_detail_noise_image = ImageID::Invalid;
 
     WorldRenderer(Device device_);
 

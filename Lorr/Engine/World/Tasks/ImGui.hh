@@ -83,8 +83,7 @@ struct ImGuiTask {
         struct PushConstants {
             glm::vec2 translate = translate;
             glm::vec2 scale = scale;
-            ImageViewID image_view_id = {};
-            SamplerID sampler_id = {};
+            SampledImage sampled_image = {};
         };
 
         auto color_attachment = tc.as_color_attachment(uses.attachment, vk::ColorClearValue(0.0f, 0.0f, 0.0f, 1.0f));
@@ -153,8 +152,7 @@ struct ImGuiTask {
                 tc.set_push_constants(PushConstants{
                     .translate = translate,
                     .scale = scale,
-                    .image_view_id = rendering_image,
-                    .sampler_id = render_context.world_data.linear_sampler,
+                    .sampled_image = { rendering_image, render_context.world_data.linear_sampler },
                 });
                 tc.cmd_list.draw_indexed(im_cmd.ElemCount, im_cmd.IdxOffset + index_offset, i32(im_cmd.VtxOffset + vertex_offset));
             }

@@ -13,7 +13,7 @@ float3 aces(float3 x) {
 
 [[vk::push_constant]] struct {
     World *world;
-    ImageView src_image_view;
+    ImageView<float4> src_image_view;
     f32 avg_luminance;
 } c;
 

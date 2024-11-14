@@ -84,12 +84,30 @@ void InspectorPanel::update(this InspectorPanel &self) {
 
     switch (app.layout.active_tool) {
         case ActiveTool::World: {
-            auto name_with_icon = std::format("{}  Atmosphere", Icon::fa::earth_americas);
-            if (ImGui::CollapsingHeader(name_with_icon.c_str(), nullptr, ImGuiTreeNodeFlags_DefaultOpen)) {
+            auto name_with_icon = std::format("{}  World", Icon::fa::earth_americas);
+            ImGui::SeparatorText(name_with_icon.c_str());
+
+            if (ImGui::CollapsingHeader("Atmosphere", nullptr, ImGuiTreeNodeFlags_DefaultOpen)) {
                 auto &atmos = app.world.renderer->context->world_data.atmosphere;
                 ImGui::DragFloat("Aerial KM per slice", &atmos.aerial_km_per_slice);
-                ImGui::DragFloat("Aerial Perspective Exposure", &atmos.aerial_perspective_exposure);
             }
+
+            if (ImGui::CollapsingHeader("Clouds", nullptr, ImGuiTreeNodeFlags_DefaultOpen)) {
+                auto &clouds = app.world.renderer->context->world_data.clouds;
+                ImGui::DragFloat2("Layer Bounds", glm::value_ptr(clouds.bounds));
+                ImGui::DragFloat("Global Scale", &clouds.global_scale, 0.0001, 0.00001, 1.0);
+                ImGui::DragFloat("Shape Noise Scale", &clouds.shape_noise_scale, 0.0001, 0.00001, 1.0);
+                ImGui::DragFloat("Detail Noise Scale", &clouds.detail_noise_scale, 0.0001, 0.00001, 1.0);
+                ImGui::DragFloat("Coverage", &clouds.coverage, 0.001, 0.0, 1.0);
+                ImGui::DragFloat("Detail Noise Influence", &clouds.detail_noise_influence, 0.0001, 0.00001, 1.0);
+                ImGui::DragFloat("General Density", &clouds.general_density, 0.0001, 0.00001, 1.0);
+                ImGui::SliderFloat("Cloud Type", &clouds.cloud_type, 0.0, 1.0);
+
+                ImGui::SliderFloat3("Cloud Shape Weights", glm::value_ptr(clouds.shape_noise_weights), 0.0, 1.0);
+                ImGui::SliderFloat3("Cloud Detail Weights", glm::value_ptr(clouds.detail_noise_weights), 0.0, 1.0);
+                ImGui::SliderFloat("Cloud Darkness Threshold", &clouds.darkness_threshold, 0.0, 1.0);
+            }
+
             break;
         }
         case ActiveTool::Cursor:

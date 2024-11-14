@@ -22,7 +22,7 @@ Make sure to run `xmake install -o ./build` to get third party binaries.
 
 Example configuration for clang:
 ```
-xmake f --toolchain=clang-18 --sdk=/usr/include/c++/v1 --runtimes=c++_static --cxxflags=-stdlib=libc++ --ldflags=-fuse-ld=lld -m debug --build_examples=y
+xmake f --toolchain=clang-18 --sdk=/usr/include/c++/v1 --runtimes=c++_static --cxxflags=-stdlib=libc++ --ldflags=-fuse-ld=lld -m debug
 ```
 
 ## License

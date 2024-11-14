@@ -40,7 +40,7 @@ struct Camera {
     f32 fov = 60.0f;
     f32 aspect_ratio = 1.777f;
     f32 near_clip = 0.1;
-    f32 far_clip = 10000.0;
+    f32 far_clip = 100000.0;
 
     static void reflect(flecs::world &w) {
         w.component<Camera>()  //

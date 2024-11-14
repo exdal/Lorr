@@ -5,7 +5,7 @@ import atmos.atmos;
 
 [[vk::push_constant]] struct {
     World *world;
-    ImageView transmittance_lut;
+    ImageView<float4> transmittance_lut;
     u32 model_transform_index;
     u32 material_id;
     u32 pad;

@@ -3,8 +3,8 @@ import "../lorr";
 
 [[vk::push_constant]] struct {
     World *world;
-    ImageView depth_image;
-    ImageView aerial_perspective_image;
+    ImageView<float4> depth_image;
+    ImageView<float4> aerial_perspective_image;
 } c;
 
 struct VertexOutput {
@@ -49,9 +49,6 @@ float4 fs_main(VertexOutput input) : SV_TARGET {
     float4 ap = weight * c.aerial_perspective_image.sample(world->linear_sampler, float3(input.tex_coord, w));
     float3 luminance = ap.rgb;
     float transmittance = ap.a;
-
-    luminance *= atmos->aerial_perspective_exposure;
-    transmittance *= atmos->aerial_perspective_exposure;
 
     return float4(luminance, transmittance);
 }

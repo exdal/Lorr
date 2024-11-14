@@ -4,7 +4,7 @@ import "../lorr";
 [[vk::push_constant]] struct {
     World *world;
     float2 image_size;
-    ImageViewID transmittance_image_id;
+    ImageView<float4> transmittance_image;
     u32 pad;
 } c;
 
@@ -12,14 +12,13 @@ import "../lorr";
 [numthreads(16, 16, 1)]
 void cs_main(uint3 thread_id : SV_DispatchThreadID) {
     Atmosphere *atmos = &c.world->atmosphere;
-    const let transmittance_image = ImageView(c.transmittance_image_id);
     float2 uv = float2(float2(thread_id.xy) + 0.5) / float2(c.image_size);
 
-    float h = safe_sqrt(
+    float h = lr::safe_sqrt(
         atmos->atmos_radius * atmos->atmos_radius -
-        atmos.planet_radius * atmos->planet_radius);
+        atmos->planet_radius * atmos->planet_radius);
     float rho = h * uv.y;
-    float lut_x = safe_sqrt(rho * rho + atmos->planet_radius * atmos->planet_radius);
+    float lut_x = lr::safe_sqrt(rho * rho + atmos->planet_radius * atmos->planet_radius);
     float d_min = atmos->atmos_radius - lut_x;
     float d_max = rho + h;
     float d = d_min + uv.x * (d_max - d_min);
@@ -30,8 +29,7 @@ void cs_main(uint3 thread_id : SV_DispatchThreadID) {
     float3 ray_pos = float3(0.0, 0.0, lut_x);
 
     const float STEP_COUNT = 1000.0;
-    float distance = 0.0;
-    ray_hit_sphere(ray_pos, sun_dir, atmos.atmos_radius, distance);
+    float distance = lr::ray_sphere_intersect_nearest(ray_pos, sun_dir, atmos.atmos_radius).value;
     float distance_per_step = distance / STEP_COUNT;
     float3 optical_depth = float3(0.0);
     for (float i = 0.0; i < STEP_COUNT; i += 1.0) {
@@ -41,5 +39,5 @@ void cs_main(uint3 thread_id : SV_DispatchThreadID) {
         optical_depth += medium.extinction_sum * distance_per_step;
     }
 
-    transmittance_image.store(thread_id.xy, float4(exp(-optical_depth), 1.0));
+    c.transmittance_image.store(thread_id.xy, float4(exp(-optical_depth), 1.0));
 }

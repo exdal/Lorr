@@ -41,8 +41,8 @@ inline GraphicsPipelineInfo draw_clouds_pipeline_info(AssetManager &asset_man, v
         },
         .blend_attachments = { {
             .blend_enabled = true,
-            .src_blend = vk::BlendFactor::InvSrcAlpha,
-            .dst_blend = vk::BlendFactor::One,
+            .src_blend = vk::BlendFactor::One,
+            .dst_blend = vk::BlendFactor::SrcAlpha,
             .blend_op = vk::BlendOp::Add,
             .src_blend_alpha = vk::BlendFactor::Zero,
             .dst_blend_alpha = vk::BlendFactor::One,
@@ -56,7 +56,7 @@ struct CloudDraw {
 
     struct Uses {
         Preset::ColorAttachmentWrite color_attachment = {};
-        Preset::ShaderReadOnly depth_image = {};
+        Preset::ColorAttachmentWrite depth_attachment = {};
         Preset::ShaderReadOnly transmittance_lut_image = {};
         Preset::ShaderReadOnly aerial_perspective_lut_image = {};
         Preset::ShaderReadOnly cloud_shape_image = {};
@@ -69,7 +69,6 @@ struct CloudDraw {
     void execute(TaskContext &tc) {
         struct PushConstants {
             u64 world_ptr = 0;
-            ImageViewID depth_image = ImageViewID::Invalid;
             ImageViewID transmittance_lut_image = ImageViewID::Invalid;
             ImageViewID aerial_perspective_lut_image = ImageViewID::Invalid;
             SampledImage cloud_shape_image = {};
@@ -78,7 +77,7 @@ struct CloudDraw {
 
         auto &render_context = tc.exec_data_as<WorldRenderContext>();
         auto color_attachment = tc.as_color_attachment(uses.color_attachment);
-        auto &depth_image_use = tc.task_image_data(uses.depth_image);
+        auto depth_attachment = tc.as_depth_attachment(uses.depth_attachment);
         auto &transmittance_lut_image_use = tc.task_image_data(uses.transmittance_lut_image);
         auto &aerial_perspective_lut_image_use = tc.task_image_data(uses.aerial_perspective_lut_image);
         auto &cloud_shape_image_use = tc.task_image_data(uses.cloud_shape_image);
@@ -89,13 +88,13 @@ struct CloudDraw {
         tc.cmd_list.begin_rendering({
             .render_area = tc.pass_rect(),
             .color_attachments = color_attachment,
+            .depth_attachment = depth_attachment,
         });
 
         tc.cmd_list.set_viewport(tc.pass_viewport());
         tc.cmd_list.set_scissors(tc.pass_rect());
         tc.set_push_constants(PushConstants{
             .world_ptr = render_context.world_ptr,
-            .depth_image = depth_image_use.image_view_id,
             .transmittance_lut_image = transmittance_lut_image_use.image_view_id,
             .aerial_perspective_lut_image = aerial_perspective_lut_image_use.image_view_id,
             .cloud_shape_image = { cloud_shape_image_use.image_view_id, this->sampler },

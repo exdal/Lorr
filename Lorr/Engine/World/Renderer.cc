@@ -103,7 +103,7 @@ auto WorldRenderer::setup_persistent_resources(this WorldRenderer &self) -> void
     self.cloud_shape_noise_image = Image::create(
                                        self.device,
                                        vk::ImageUsage::Storage | vk::ImageUsage::Sampled,
-                                       vk::Format::R16G16B16A16_SFLOAT,
+                                       vk::Format::R8G8B8A8_UNORM,
                                        vk::ImageType::View3D,
                                        { 256, 256, 256 })
                                        .value();
@@ -112,7 +112,7 @@ auto WorldRenderer::setup_persistent_resources(this WorldRenderer &self) -> void
     self.cloud_detail_noise_image = Image::create(
                                         self.device,
                                         vk::ImageUsage::Storage | vk::ImageUsage::Sampled,
-                                        vk::Format::R16G16B16A16_SFLOAT,
+                                        vk::Format::R8G8B8A8_UNORM,
                                         vk::ImageType::View3D,
                                         { 128, 128, 128 })
                                         .value();
@@ -427,7 +427,7 @@ auto WorldRenderer::record_pbr_graph(this WorldRenderer &self, SwapChain &swap_c
     self.pbr_graph.add_task(Tasks::CloudDraw{
         .uses = {
             .color_attachment = final_task_image,
-            .depth_image = geo_depth_task_image,
+            .depth_attachment = geo_depth_task_image,
             .transmittance_lut_image = sky_transmittance_task_image,
             .aerial_perspective_lut_image = sky_aerial_perspective_task_image,
             .cloud_shape_image = cloud_shape_noise_task_image,

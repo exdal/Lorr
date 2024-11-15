@@ -4,7 +4,7 @@ import "../lorr";
 
 [[vk::push_constant]] struct {
     World *world;
-    ImageView<float4> depth_image;
+    //ImageView<float4> depth_image;
     ImageView<float4> transmittance_lut_image;
     ImageView<float4> aerial_perspective_lut_image;
     SampledImage<float4> shape_noise_image;
@@ -97,10 +97,9 @@ float sample_density(World *world, float3 pos_m) {
 float sample_sun_density(World *world, float3 pos_km, float3 sun_dir) {
     float3 cloud_layer_boundaries = get_cloud_layer_boundaries(world, pos_km, sun_dir);
     cloud_layer_boundaries.xy = max(cloud_layer_boundaries.xy, 0.0);
-    const int step_count_int = 5;
     float march_dist = cloud_layer_boundaries.y - cloud_layer_boundaries.x;
     cloud_layer_boundaries.y = cloud_layer_boundaries.x + march_dist;
-    float step_count = float(step_count_int);
+    float step_count = float(world->clouds.sun_step_count);
     float step_t = (cloud_layer_boundaries.y - cloud_layer_boundaries.x) / step_count;
     float sample_t = cloud_layer_boundaries.x + 0.001 * step_t;
 
@@ -135,15 +134,13 @@ float4 fs_main(VertexOutput input) : SV_TARGET {
     if (cloud_layer_boundaries.z == 1.0 ||
         cloud_layer_boundaries.y <= cloud_layer_boundaries.x ||
         cloud_layer_boundaries.x > (clouds->draw_distance * CAMERA_SCALE_UNIT)) {
-        return float4(0.0);
+        return float4(0.0, 0.0, 0.0, 1.0);
     }
 
-    float cloud_z = 1.0;
     float3 sun_dir = normalize(world->sun.direction);
-    const int step_count_int = 60;
     float march_dist = cloud_layer_boundaries.y - cloud_layer_boundaries.x;
     cloud_layer_boundaries.y = cloud_layer_boundaries.x + march_dist;
-    float step_count = float(step_count_int);
+    float step_count = float(clouds->clouds_step_count);
     float step_t = (cloud_layer_boundaries.y - cloud_layer_boundaries.x) / step_count;
     float sample_t = cloud_layer_boundaries.x + 0.001 * step_t;
 
@@ -169,6 +166,9 @@ float4 fs_main(VertexOutput input) : SV_TARGET {
         atmos_transmittance_1 = c.transmittance_lut_image.sample(world->linear_sampler, transmittance_uv).rgb;
     }
 
+    float linear_depth_sum = 0.0;
+    float transmittance_sum = 0.0;
+
     float3 ray_hit_pos = 0.0;
     float ray_hit_pos_weight = 0.0;
 
@@ -185,32 +185,37 @@ float4 fs_main(VertexOutput input) : SV_TARGET {
         float3 step_pos_m = step_pos * (1.0 / CAMERA_SCALE_UNIT);
         float density = sample_density(world, step_pos_m);
         if (density > 0.0) {
+            if (transmittance < 1.0) {
+                float4 ppos = mul(camera->projection_view_mat, float4(step_pos, 1.0));
+                float cloud_z = ppos.z / ppos.w;
+                linear_depth_sum += transmittance * cloud_z;
+                transmittance_sum += transmittance;
+            }
             float sun_density = sample_sun_density(world, step_pos, sun_dir);
             float optical_depth = density * step_t * (1.0 / CAMERA_SCALE_UNIT);
-            float step_transmittance = exp(-optical_depth);
-            float powder_transmittance = exp(-optical_depth * 2.0);
+            float step_transmittance = exp(-optical_depth * 0.446);
+            float powder_transmittance = exp(-optical_depth * 0.446 * 2.0);
             float sun_light = sun_density * phase * density;
 
             float integral = (sun_light - sun_light * step_transmittance * powder_transmittance) / density;
             luminance += world->sun.intensity * (integral * transmittance * atmos_transmittance);
             transmittance *= step_transmittance * powder_transmittance;
         }
-        if(transmittance < 0.01) {
+        if(transmittance < 0.001) {
             break;
         }
 
         sample_t += step_t;
     }
 
-    if (false) {
+    if (ray_hit_pos_weight > 0.0) {
         ray_hit_pos /= ray_hit_pos_weight;
         float3 p = ray_hit_pos - float3(0.0, atmos->planet_radius, 0.0);
         float4 v = mul(camera->view_mat, float4(p, 1.0));
-        cloud_z = v.z / v.w;
         ray_hit_pos -= world_pos;
         float ray_hit_h = length(ray_hit_pos);
 
-        float slice = ray_hit_h * (1.0 / atmos->aerial_km_per_slice) * 1000.0;
+        float slice = ray_hit_h * (1.0 / atmos->aerial_km_per_slice);
         float weight = 1.0;
         if (slice < 0.5) {
             weight = saturate(slice * 2.0);
@@ -219,8 +224,10 @@ float4 fs_main(VertexOutput input) : SV_TARGET {
 
         float w = sqrt(slice / 32.0); // from linear space to squared distribution
         float4 ap = weight * c.aerial_perspective_lut_image.sample(world->linear_sampler, float3(input.tex_coord, w));
+        ap *= 0.5;
         luminance = luminance * (1.0 - ap.a) + ap.rgb * (1.0 - transmittance);
     }
 
+    // float cloud_depth = linear_depth_sum / transmittance_sum;
     return float4(luminance, transmittance);
 }

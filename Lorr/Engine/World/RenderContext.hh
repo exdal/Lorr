@@ -37,10 +37,12 @@ struct GPUClouds {
     f32 detail_noise_influence = 0.4;
     f32 coverage = 0.9;
     f32 general_density = 0.1;
-    glm::vec3 phase_values = { 0.863, -0.528, 0.5 };  // forward phase, backwards phase, mix factor
+    glm::vec3 phase_values = { 0.183, -0.253, 0.5 };  // forward phase, backwards phase, mix factor
     f32 cloud_type = 0.0;
-    f32 draw_distance = 100000.0;
-    f32 darkness_threshold = 0.238;
+    f32 draw_distance = 80000.0;
+    f32 darkness_threshold = 0.450;
+    i32 sun_step_count = 5;
+    i32 clouds_step_count = 30;
 };
 
 enum class GPUMaterialID : u32 { Invalid = ~0_u32 };

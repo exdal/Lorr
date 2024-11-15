@@ -19,7 +19,7 @@ public float rayleigh_phase(float altitude) {
     return k * (1.0 + altitude * altitude);
 }
 
-public float mie_phase(float g, float altitude) {
+public float cornette_shanks_phase(float g, float altitude) {
     const float g2 = g * g;
     const float scale = 3.0 / (8.0 * PI);
 
@@ -31,9 +31,8 @@ public float mie_phase(float g, float altitude) {
 
 public float henyey_greenstein_phase(float g, float cos_theta) {
     float g2 = g * g;
-    float numer = 1.0 - g2;
     float denom = 1.0 + g2 + 2.0 * g * cos_theta;
-    return numer / (4.0 * PI * denom * sqrt(denom));
+    return (1.0 - g2) / (4.0 * PI * denom * sqrt(denom));
 }
 
 public float dual_henyey_greenstein_phase(float g0, float g1, float w, float cos_theta) {

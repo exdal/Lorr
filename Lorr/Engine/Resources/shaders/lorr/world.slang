@@ -50,6 +50,8 @@ public struct Clouds {
     public f32 cloud_type;
     public f32 draw_distance;
     public f32 darkness_threshold;
+    public i32 sun_step_count;
+    public i32 clouds_step_count;
 };
 
 public struct Camera {

@@ -105,7 +105,7 @@ float alligator(float3 position, float frequency, int octaves, float lacunarity,
     }
     result /= amplitude_sum;
 
-    result *= 1.5;
+    result *= 1.8;
     result = pow(result, 0.7);
     return result;
 }

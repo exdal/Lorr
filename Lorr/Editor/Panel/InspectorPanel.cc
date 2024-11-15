@@ -106,6 +106,10 @@ void InspectorPanel::update(this InspectorPanel &self) {
                 ImGui::SliderFloat3("Cloud Shape Weights", glm::value_ptr(clouds.shape_noise_weights), 0.0, 1.0);
                 ImGui::SliderFloat3("Cloud Detail Weights", glm::value_ptr(clouds.detail_noise_weights), 0.0, 1.0);
                 ImGui::SliderFloat("Cloud Darkness Threshold", &clouds.darkness_threshold, 0.0, 1.0);
+                ImGui::SliderFloat3("Cloud Phase Consts.", glm::value_ptr(clouds.phase_values), -1.0, 1.0);
+
+                ImGui::DragInt("Sun Step Count", &clouds.sun_step_count, 1, 0, 16);
+                ImGui::DragInt("Clouds Step Count", &clouds.clouds_step_count, 1, 0, 64);
             }
 
             break;

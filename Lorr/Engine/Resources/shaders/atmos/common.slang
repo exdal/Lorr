@@ -170,8 +170,8 @@ public func integrate_single_scattered_luminance(
     }
 
     float cos_theta = dot(info.sun_dir, info.eye_dir);
-    float rayleigh_phase = lr::rayleigh_phase(-cos_theta);
-    float mie_phase = lr::mie_phase(atmos->mie_asymmetry, cos_theta);
+    float rayleigh_phase = lr::rayleigh_phase(cos_theta);
+    float mie_phase = lr::henyey_greenstein_phase(atmos->mie_asymmetry, -cos_theta);
 
     float step = 0.0;
     float delta_step = integration_length / sample_count;

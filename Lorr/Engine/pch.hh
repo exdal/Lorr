@@ -1,10 +1,13 @@
 #pragma once
 
+#define GLM_FORCE_SIMD_AVX2
+#define GLM_FORCE_CXX20
 #define GLM_ENABLE_EXPERIMENTAL
 
 #include <ls/defer.hh>
 #include <ls/enum.hh>
 #include <ls/option.hh>
+#include <ls/pair.hh>
 #include <ls/path.hh>
 #include <ls/range.hh>
 #include <ls/result.hh>
@@ -24,6 +27,7 @@
 
 namespace fs = std::filesystem;
 
+#include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtx/common.hpp>
 #include <glm/mat4x4.hpp>

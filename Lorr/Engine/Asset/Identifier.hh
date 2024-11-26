@@ -23,6 +23,7 @@ public:
     constexpr bool operator==(const Identifier &other) const { return this->hash == other.hash; };
 
     static Identifier random();
+    static Identifier invalid();
 };
 }  // namespace lr
 

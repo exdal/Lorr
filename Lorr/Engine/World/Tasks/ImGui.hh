@@ -40,7 +40,7 @@ inline GraphicsPipelineInfo imgui_pipeline_info(AssetManager &asset_man, vk::For
     };
 }
 
-inline std::pair<u8 *, glm::ivec2> imgui_build_font_atlas(AssetManager &asset_man) {
+inline ls::pair<u8 *, glm::ivec2> imgui_build_font_atlas(AssetManager &asset_man) {
     ZoneScoped;
 
     auto &imgui = ImGui::GetIO();
@@ -77,7 +77,7 @@ struct ImGuiTask {
     } uses = {};
 
     ImageID font_atlas_image = ImageID::Invalid;
-    PipelineID pipeline = PipelineID::Invalid;
+    Pipeline pipeline = {};
 
     void execute(TaskContext &tc) {
         struct PushConstants {
@@ -108,7 +108,7 @@ struct ImGuiTask {
             vertex_data += draw_list->VtxBuffer.Size;
         }
 
-        tc.set_pipeline(this->pipeline);
+        tc.set_pipeline(this->pipeline.id());
 
         tc.cmd_list.begin_rendering({
             .render_area = tc.pass_rect(),
@@ -152,7 +152,7 @@ struct ImGuiTask {
                 tc.set_push_constants(PushConstants{
                     .translate = translate,
                     .scale = scale,
-                    .sampled_image = { rendering_image, render_context.world_data.linear_sampler },
+                    .sampled_image = { rendering_image.id(), render_context.world_data.linear_sampler },
                 });
                 tc.cmd_list.draw_indexed(im_cmd.ElemCount, im_cmd.IdxOffset + index_offset, i32(im_cmd.VtxOffset + vertex_offset));
             }

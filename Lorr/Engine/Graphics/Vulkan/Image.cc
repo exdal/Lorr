@@ -1,17 +1,18 @@
 #include "Engine/Graphics/Vulkan/Impl.hh"
 
 #include "Engine/Graphics/Vulkan/ToVk.hh"
+#include "Engine/Memory/Hasher.hh"
 
 namespace lr {
 auto Image::create(
-    Device_H device,
+    Device device,
     vk::ImageUsage usage,
     vk::Format format,
     vk::ImageType type,
     vk::Extent3D extent,
     vk::ImageAspectFlag aspect_flags,
     u32 slice_count,
-    u32 mip_count) -> std::expected<ImageID, vk::Result> {
+    u32 mip_count) -> std::expected<Image, vk::Result> {
     ZoneScoped;
 
     LS_EXPECT(!extent.is_zero());
@@ -36,7 +37,7 @@ auto Image::create(
 
     VmaAllocationCreateInfo allocation_info = {
         .flags = 0,
-        .usage = VMA_MEMORY_USAGE_GPU_ONLY,
+        .usage = VMA_MEMORY_USAGE_AUTO,
         .requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
         .preferredFlags = 0,
         .memoryTypeBits = 0,
@@ -53,8 +54,8 @@ auto Image::create(
         return std::unexpected(vk::Result::Unknown);
     }
 
-    auto image_id = device->resources.images.create();
-    if (!image_id.has_value()) {
+    auto image = device->resources.images.create();
+    if (!image.has_value()) {
         return std::unexpected(vk::Result::OutOfPoolMem);
     }
 
@@ -71,7 +72,8 @@ auto Image::create(
             break;
     }
 
-    auto impl = image_id->self;
+    auto impl = image->self;
+    auto self = Image(impl);
     impl->device = device;
     impl->usage_flags = usage;
     impl->format = format;
@@ -79,28 +81,25 @@ auto Image::create(
     impl->extent = extent;
     impl->slice_count = slice_count;
     impl->mip_levels = mip_count;
+    impl->id = image->id;
     impl->allocation = allocation;
     impl->handle = image_handle;
-    impl->default_view =
-        ImageView::create(
-            device,
-            image_id->id,
-            view_type,
-            { .aspect_flags = aspect_flags, .base_mip = 0, .mip_count = mip_count, .base_slice = 0, .slice_count = slice_count })
-            .value_or(ImageViewID::Invalid);
 
-    return image_id->id;
+    // The reason why this exist is because i am fucking lazy, okay?
+    impl->default_view = ImageView::create(device, self, view_type, self.subresource_range()).value();
+
+    return self;
 }
 
-auto Image::create_for_swap_chain(Device_H device, vk::Format format, vk::Extent3D extent) -> std::expected<ImageID, vk::Result> {
+auto Image::create_for_swap_chain(Device_H device, vk::Format format, vk::Extent3D extent) -> std::expected<Image, vk::Result> {
     ZoneScoped;
 
-    auto image_id = device->resources.images.create();
-    if (!image_id.has_value()) {
+    auto image = device->resources.images.create();
+    if (!image.has_value()) {
         return std::unexpected(vk::Result::OutOfPoolMem);
     }
 
-    auto impl = image_id->self;
+    auto impl = image->self;
     impl->device = device;
     impl->usage_flags = vk::ImageUsage::ColorAttachment;
     impl->format = format;
@@ -108,15 +107,17 @@ auto Image::create_for_swap_chain(Device_H device, vk::Format format, vk::Extent
     impl->extent = extent;
     impl->slice_count = 1;
     impl->mip_levels = 1;
+    impl->id = image->id;
     impl->allocation = nullptr;
     impl->handle = nullptr;
 
-    return image_id->id;
+    return Image(impl);
 }
 
 auto Image::destroy() -> void {
-    impl->device.destroy_image_view(impl->default_view);
+    impl->default_view.destroy();
     vmaDestroyImage(impl->device->allocator, impl->handle, impl->allocation);
+    impl->device->resources.images.destroy(impl->id);
 }
 
 auto Image::set_name(const std::string &name) -> Image & {
@@ -124,9 +125,150 @@ auto Image::set_name(const std::string &name) -> Image & {
         return *this;
     }
 
-    vmaSetAllocationName(impl->device->allocator, impl->allocation, name.c_str());
+    if (impl->allocation) {
+        vmaSetAllocationName(impl->device->allocator, impl->allocation, name.c_str());
+    }
     set_object_name(impl->device, impl->handle, VK_OBJECT_TYPE_IMAGE, name);
-    impl->device.image_view(impl->default_view).set_name(name + " View");
+    impl->default_view.set_name(name + " View");
+
+    return *this;
+}
+
+auto Image::generate_mips(vk::ImageLayout old_layout) -> Image & {
+    ZoneScoped;
+
+    LS_EXPECT(impl->aspect_flags & vk::ImageAspectFlag::Color);
+    auto graphics_queue = impl->device.queue(vk::CommandType::Graphics);
+    auto image_cmd_list = graphics_queue.begin();
+
+    image_cmd_list.image_transition({
+        .src_stage = vk::PipelineStage::AllCommands,
+        .src_access = vk::MemoryAccess::ReadWrite,
+        .dst_stage = vk::PipelineStage::Blit,
+        .dst_access = vk::MemoryAccess::TransferRead,
+        .old_layout = old_layout,
+        .new_layout = vk::ImageLayout::TransferSrc,
+        .image_id = impl->id,
+        .subresource_range = { impl->aspect_flags, 0, 1, 0, 1 },
+    });
+
+    i32 width = static_cast<i32>(impl->extent.width);
+    i32 height = static_cast<i32>(impl->extent.height);
+    for (u32 i = 1; i < impl->mip_levels; i++) {
+        image_cmd_list.image_transition({
+            .dst_stage = vk::PipelineStage::Blit,
+            .dst_access = vk::MemoryAccess::TransferWrite,
+            .new_layout = vk::ImageLayout::TransferDst,
+            .image_id = impl->id,
+            .subresource_range = { vk::ImageAspectFlag::Color, i, 1, 0, 1 },
+        });
+
+        vk::ImageBlit blit = {
+            .src_subresource = { vk::ImageAspectFlag::Color, i - 1, 0, 1 },
+            .src_offsets = { {}, { width >> (i - 1), height >> (i - 1), 1 } },
+            .dst_subresource = { vk::ImageAspectFlag::Color, i, 0, 1 },
+            .dst_offsets = { {}, { width >> i, height >> i, 1 } },
+        };
+        image_cmd_list.blit_image(
+            impl->id, vk::ImageLayout::TransferSrc, impl->id, vk::ImageLayout::TransferDst, vk::Filtering::Linear, blit);
+
+        image_cmd_list.image_transition({
+            .src_stage = vk::PipelineStage::Blit,
+            .src_access = vk::MemoryAccess::TransferWrite,
+            .dst_stage = vk::PipelineStage::Blit,
+            .dst_access = vk::MemoryAccess::TransferRead,
+            .old_layout = vk::ImageLayout::TransferDst,
+            .new_layout = vk::ImageLayout::TransferSrc,
+            .image_id = impl->id,
+            .subresource_range = { vk::ImageAspectFlag::Color, i, 1, 0, 1 },
+        });
+    }
+
+    image_cmd_list.image_transition({
+        .src_stage = vk::PipelineStage::Blit,
+        .src_access = vk::MemoryAccess::TransferRead,
+        .dst_stage = vk::PipelineStage::AllCommands,
+        .dst_access = vk::MemoryAccess::ReadWrite,
+        .old_layout = vk::ImageLayout::TransferSrc,
+        .new_layout = old_layout,
+        .image_id = impl->id,
+        .subresource_range = { vk::ImageAspectFlag::Color, 0, impl->mip_levels, 0, 1 },
+    });
+
+    graphics_queue.end(image_cmd_list);
+    graphics_queue.submit({}, {});
+    graphics_queue.wait();
+
+    return *this;
+}
+
+auto Image::set_data(void *data, u64 data_size, vk::ImageLayout new_layout) -> Image & {
+    ZoneScoped;
+
+    LS_EXPECT(data_size <= Device::Limits::PersistentBufferSize);
+    auto graphics_queue = impl->device.queue(vk::CommandType::Graphics);
+    auto cmd_list = graphics_queue.begin();
+    auto transfer_man = impl->device.transfer_man();
+
+    const auto &format_info = get_format_info(impl->format);
+    auto rows = (impl->extent.height + format_info.block_height - 1) / format_info.block_height;
+    auto cols = (impl->extent.width + format_info.block_width - 1) / format_info.block_width;
+    auto pixel_size = rows * cols * format_info.component_size;
+    LS_EXPECT(pixel_size == data_size);
+
+    auto allocation = transfer_man.allocate(pixel_size);
+    std::memcpy(allocation->ptr, data, data_size);
+
+    cmd_list.image_transition({
+        .src_stage = vk::PipelineStage::TopOfPipe,
+        .src_access = vk::MemoryAccess::None,
+        .dst_stage = vk::PipelineStage::Copy,
+        .dst_access = vk::MemoryAccess::TransferWrite,
+        .old_layout = vk::ImageLayout::Undefined,
+        .new_layout = vk::ImageLayout::TransferDst,
+        .image_id = impl->id,
+    });
+    vk::ImageCopyRegion copy_region = {
+        .buffer_offset = allocation->offset,
+        .image_extent = impl->extent,
+    };
+    cmd_list.copy_buffer_to_image(allocation->cpu_buffer_id, impl->id, vk::ImageLayout::TransferDst, copy_region);
+    cmd_list.image_transition({
+        .src_stage = vk::PipelineStage::Copy,
+        .src_access = vk::MemoryAccess::TransferWrite,
+        .dst_stage = vk::PipelineStage::AllCommands,
+        .dst_access = vk::MemoryAccess::ReadWrite,
+        .old_layout = vk::ImageLayout::TransferDst,
+        .new_layout = new_layout,
+        .image_id = impl->id,
+    });
+
+    graphics_queue.end(cmd_list);
+    graphics_queue.submit({}, transfer_man.semaphore());
+    graphics_queue.wait();
+    transfer_man.collect_garbage();
+
+    return *this;
+}
+
+auto Image::transition(vk::ImageLayout from, vk::ImageLayout to) -> Image & {
+    ZoneScoped;
+
+    auto queue = impl->device.queue(vk::CommandType::Graphics);
+    auto cmd_list = queue.begin();
+    cmd_list.image_transition({
+        .src_stage = vk::PipelineStage::AllCommands,
+        .src_access = vk::MemoryAccess::ReadWrite,
+        .dst_stage = vk::PipelineStage::AllCommands,
+        .dst_access = vk::MemoryAccess::ReadWrite,
+        .old_layout = from,
+        .new_layout = to,
+        .image_id = impl->id,
+        .subresource_range = this->subresource_range(),
+    });
+    queue.end(cmd_list);
+    queue.submit({}, {});
+    queue.wait();
 
     return *this;
 }
@@ -157,15 +299,18 @@ auto Image::subresource_range() const -> vk::ImageSubresourceRange {
     };
 }
 
-auto Image::view() const -> ImageViewID {
+auto Image::view() const -> ImageView {
     return impl->default_view;
 }
 
-auto ImageView::create(Device_H device, ImageID image_id, vk::ImageViewType type, vk::ImageSubresourceRange subresource_range)
-    -> std::expected<ImageViewID, vk::Result> {
+auto Image::id() const -> ImageID {
+    return impl->id;
+}
+
+auto ImageView::create(Device_H device, Image image, vk::ImageViewType type, vk::ImageSubresourceRange subresource_range)
+    -> std::expected<ImageView, vk::Result> {
     ZoneScoped;
 
-    auto image = Device(device).image(image_id);
     VkImageViewCreateInfo create_info = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
         .pNext = nullptr,
@@ -206,6 +351,7 @@ auto ImageView::create(Device_H device, ImageID image_id, vk::ImageViewType type
     impl->format = image.format();
     impl->type = type;
     impl->subresource_range = subresource_range;
+    impl->id = image_view->id;
     impl->handle = image_view_handle;
 
     ls::static_vector<VkWriteDescriptorSet, 2> descriptor_writes = {};
@@ -255,11 +401,12 @@ auto ImageView::create(Device_H device, ImageID image_id, vk::ImageViewType type
         vkUpdateDescriptorSets(impl->device->handle, descriptor_writes.size(), descriptor_writes.data(), 0, nullptr);
     }
 
-    return image_view->id;
+    return ImageView(impl);
 }
 
 auto ImageView::destroy() -> void {
     vkDestroyImageView(impl->device->handle, impl->handle, nullptr);
+    impl->device->resources.image_views.destroy(impl->id);
 }
 
 auto ImageView::set_name(const std::string &name) -> ImageView & {
@@ -280,8 +427,26 @@ auto ImageView::subresource_range() const -> vk::ImageSubresourceRange {
     return impl->subresource_range;
 }
 
+auto ImageView::id() const -> ImageViewID {
+    return impl->id;
+}
+
+struct CachedSamplerInfo {
+    vk::Filtering min_filter = {};
+    vk::Filtering mag_filter = {};
+    vk::Filtering mip_filter = {};
+    vk::SamplerAddressMode addr_u = {};
+    vk::SamplerAddressMode addr_v = {};
+    vk::SamplerAddressMode addr_w = {};
+    vk::CompareOp compare_op = {};
+    f32 max_anisotropy = {};
+    f32 mip_lod_bias = {};
+    f32 min_lod = {};
+    f32 max_lod = {};
+};
+
 auto Sampler::create(
-    Device_H device,
+    Device device,
     vk::Filtering min_filter,
     vk::Filtering mag_filter,
     vk::Filtering mip_filter,
@@ -293,8 +458,35 @@ auto Sampler::create(
     f32 mip_lod_bias,
     f32 min_lod,
     f32 max_lod,
-    bool use_anisotropy) -> std::expected<SamplerID, vk::Result> {
+    bool use_anisotropy) -> std::expected<Sampler, vk::Result> {
     ZoneScoped;
+
+    CachedSamplerInfo cached_sampler_info = {
+        .min_filter = min_filter,
+        .mag_filter = mag_filter,
+        .mip_filter = mip_filter,
+        .addr_u = addr_u,
+        .addr_v = addr_v,
+        .addr_w = addr_w,
+        .compare_op = compare_op,
+        .max_anisotropy = max_anisotropy,
+        .mip_lod_bias = mip_lod_bias,
+        .min_lod = min_lod,
+        .max_lod = max_lod,
+    };
+
+    HasherXXH64 sampler_hasher = {};
+    sampler_hasher.hash(&cached_sampler_info, sizeof(CachedSamplerInfo));
+    auto hash_val = sampler_hasher.value();
+
+    // its not worth caching a sampler with variable anisotropy
+    if (!use_anisotropy) {
+        for (auto &[avail_hash, sampler_id] : device->resources.cached_samplers) {
+            if (avail_hash == hash_val) {
+                return device.sampler(sampler_id);
+            }
+        }
+    }
 
     VkSamplerCreateInfo create_info = {
         .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
@@ -332,8 +524,11 @@ auto Sampler::create(
         return std::unexpected(vk::Result::OutOfPoolMem);
     }
 
+    device->resources.cached_samplers.emplace_back(hash_val, sampler->id);
+
     auto impl = sampler->self;
     impl->device = device;
+    impl->id = sampler->id;
     impl->handle = sampler_handle;
 
     VkDescriptorImageInfo sampler_descriptor_info = {
@@ -357,17 +552,25 @@ auto Sampler::create(
 
     vkUpdateDescriptorSets(device->handle, 1, &sampler_write_set_info, 0, nullptr);
 
-    return sampler->id;
+    return Sampler(impl);
 }
 
 auto Sampler::destroy() -> void {
     vkDestroySampler(impl->device->handle, impl->handle, nullptr);
+    impl->device->resources.samplers.destroy(impl->id);
+    std::erase_if(impl->device->resources.cached_samplers, [&](ls::pair<u64, SamplerID> &v) {  //
+        return v.n1 == impl->id;
+    });
 }
 
 auto Sampler::set_name(const std::string &name) -> Sampler & {
     set_object_name(impl->device, impl->handle, VK_OBJECT_TYPE_SAMPLER, name);
 
     return *this;
+}
+
+auto Sampler::id() const -> SamplerID {
+    return impl->id;
 }
 
 }  // namespace lr

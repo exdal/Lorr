@@ -81,6 +81,7 @@ struct Task {
     std::string name = {};
     f64 start_ts = 0.0f;
     f64 end_ts = 0.0f;
+    u32 color = 0xFFFFFFFF;
 
     f64 execution_time() { return (end_ts - start_ts) / 1000000.f; }
 };

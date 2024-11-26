@@ -18,7 +18,7 @@ void cs_main(uint3 thread_id : SV_DispatchThreadID) {
         atmos->atmos_radius * atmos->atmos_radius -
         atmos->planet_radius * atmos->planet_radius);
     float rho = h * uv.y;
-    float lut_x = lr::safe_sqrt(rho * rho + atmos->planet_radius * atmos->planet_radius);
+    float lut_x = sqrt(rho * rho + atmos->planet_radius * atmos->planet_radius);
     float d_min = atmos->atmos_radius - lut_x;
     float d_max = rho + h;
     float d = d_min + uv.x * (d_max - d_min);

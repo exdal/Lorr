@@ -56,15 +56,14 @@ struct CloudDraw {
 
     struct Uses {
         Preset::ColorAttachmentWrite color_attachment = {};
-        Preset::ColorAttachmentWrite depth_attachment = {};
         Preset::ShaderReadOnly transmittance_lut_image = {};
         Preset::ShaderReadOnly aerial_perspective_lut_image = {};
         Preset::ShaderReadOnly cloud_shape_image = {};
         Preset::ShaderReadOnly cloud_detail_image = {};
     } uses = {};
 
-    PipelineID pipeline = {};
-    SamplerID sampler = {};
+    Pipeline pipeline = {};
+    Sampler sampler = {};
 
     void execute(TaskContext &tc) {
         struct PushConstants {
@@ -77,18 +76,16 @@ struct CloudDraw {
 
         auto &render_context = tc.exec_data_as<WorldRenderContext>();
         auto color_attachment = tc.as_color_attachment(uses.color_attachment);
-        auto depth_attachment = tc.as_depth_attachment(uses.depth_attachment);
         auto &transmittance_lut_image_use = tc.task_image_data(uses.transmittance_lut_image);
         auto &aerial_perspective_lut_image_use = tc.task_image_data(uses.aerial_perspective_lut_image);
         auto &cloud_shape_image_use = tc.task_image_data(uses.cloud_shape_image);
         auto &cloud_detail_image_use = tc.task_image_data(uses.cloud_detail_image);
 
-        tc.set_pipeline(this->pipeline);
+        tc.set_pipeline(this->pipeline.id());
 
         tc.cmd_list.begin_rendering({
             .render_area = tc.pass_rect(),
             .color_attachments = color_attachment,
-            .depth_attachment = depth_attachment,
         });
 
         tc.cmd_list.set_viewport(tc.pass_viewport());
@@ -97,8 +94,8 @@ struct CloudDraw {
             .world_ptr = render_context.world_ptr,
             .transmittance_lut_image = transmittance_lut_image_use.image_view_id,
             .aerial_perspective_lut_image = aerial_perspective_lut_image_use.image_view_id,
-            .cloud_shape_image = { cloud_shape_image_use.image_view_id, this->sampler },
-            .cloud_detail_image = { cloud_detail_image_use.image_view_id, this->sampler },
+            .cloud_shape_image = { cloud_shape_image_use.image_view_id, this->sampler.id() },
+            .cloud_detail_image = { cloud_detail_image_use.image_view_id, this->sampler.id() },
         });
         tc.cmd_list.draw(3);
         tc.cmd_list.end_rendering();

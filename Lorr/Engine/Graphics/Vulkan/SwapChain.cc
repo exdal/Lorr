@@ -81,11 +81,11 @@ auto SwapChain::extent() const -> vk::Extent3D {
     return impl->extent;
 }
 
-auto SwapChain::semaphores(usize i) const -> std::pair<Semaphore, Semaphore> {
+auto SwapChain::semaphores(usize i) const -> ls::pair<Semaphore, Semaphore> {
     return { impl->acquire_semas.at(i), impl->present_semas.at(i) };
 }
 
-auto SwapChain::get_images() const -> std::vector<ImageID> {
+auto SwapChain::get_images() const -> std::vector<Image> {
     ZoneScoped;
 
     u32 image_count = impl->device->frame_count;
@@ -95,28 +95,21 @@ auto SwapChain::get_images() const -> std::vector<ImageID> {
         return {};
     }
 
-    std::vector<ImageID> images(image_count);
-
+    std::vector<Image> images(image_count);
     for (u32 i = 0; i < image_count; i++) {
-        auto image_id = Image::create_for_swap_chain(impl->device, impl->format, impl->extent).value();
-        auto image = impl->device.image(image_id);
+        auto image = Image::create_for_swap_chain(impl->device, impl->format, impl->extent).value();
         image->handle = image_handles[i];
         image->default_view =
             ImageView::create(
                 impl->device,
-                image_id,
+                image,
                 vk::ImageViewType::View2D,
                 { .aspect_flags = vk::ImageAspectFlag::Color, .base_mip = 0, .mip_count = 1, .base_slice = 0, .slice_count = 1 })
-                .value_or(ImageViewID::Invalid);
+                .value()
+                .set_name(std::format("SwapChain Image View {}", i));
 
-        images[i] = image_id;
-
-        set_object_name(impl->device, impl->device.image(image_id)->handle, VK_OBJECT_TYPE_IMAGE, std::format("SwapChain Image {}", i));
-        set_object_name(
-            impl->device,
-            impl->device.image_view(image->default_view)->handle,
-            VK_OBJECT_TYPE_IMAGE_VIEW,
-            std::format("SwapChain Image View {}", i));
+        images[i] = image;
+        image.set_name(std::format("SwapChain Image {}", i));
     }
 
     return images;

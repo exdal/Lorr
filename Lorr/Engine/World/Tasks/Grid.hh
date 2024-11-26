@@ -43,7 +43,7 @@ struct GridTask {
         Preset::DepthAttachmentRead depth_attachment = {};
     } uses = {};
 
-    PipelineID pipeline = {};
+    Pipeline pipeline = {};
 
     void execute(TaskContext &tc) {
         struct PushConstants {
@@ -52,7 +52,7 @@ struct GridTask {
 
         auto color_attachment = tc.as_color_attachment(uses.color_attachment);
         auto depth_attachment = tc.as_depth_attachment(uses.depth_attachment);
-        tc.set_pipeline(this->pipeline);
+        tc.set_pipeline(this->pipeline.id());
         auto &render_context = tc.exec_data_as<WorldRenderContext>();
         tc.cmd_list.begin_rendering({
             .render_area = tc.pass_rect(),

@@ -18,10 +18,10 @@ inline GraphicsPipelineInfo geometry_pipeline_info(AssetManager &asset_man, vk::
             .entry_points = { "vs_main", "fs_main" },
         },
         .vertex_attrib_infos = {
-            { .format = vk::Format::R32G32B32_SFLOAT, .location = 0, .offset = offsetof(Vertex, position) },
-            { .format = vk::Format::R32_SFLOAT, .location = 1, .offset = offsetof(Vertex, uv_x) },
-            { .format = vk::Format::R32G32B32_SFLOAT, .location = 2, .offset = offsetof(Vertex, normal) },
-            { .format = vk::Format::R32_SFLOAT, .location = 3, .offset = offsetof(Vertex, uv_y) },
+            { .format = vk::Format::R32G32B32_SFLOAT, .location = 0, .offset = offsetof(Model::Vertex, position) },
+            { .format = vk::Format::R32_SFLOAT, .location = 1, .offset = offsetof(Model::Vertex, uv_x) },
+            { .format = vk::Format::R32G32B32_SFLOAT, .location = 2, .offset = offsetof(Model::Vertex, normal) },
+            { .format = vk::Format::R32_SFLOAT, .location = 3, .offset = offsetof(Model::Vertex, uv_y) },
         },
         .rasterizer_state = {
             .cull_mode = vk::CullMode::Back,
@@ -52,14 +52,14 @@ struct GeometryTask {
         Preset::ShaderReadOnly transmittance_image = {};
     } uses = {};
 
-    PipelineID pipeline = {};
+    Pipeline pipeline = {};
 
     void execute(TaskContext &tc) {
         struct PushConstants {
             u64 world_ptr = 0;
             ImageViewID transmittance_image = ImageViewID::Invalid;
             u32 model_transform_index = ~0_u32;
-            GPUMaterialID gpu_material_id = GPUMaterialID::Invalid;
+            u32 material_index = 0;
             u32 pad = 0;
         };
 
@@ -69,7 +69,7 @@ struct GeometryTask {
         auto depth_attachment_info = tc.as_depth_attachment(uses.depth_attachment, vk::DepthClearValue(1.0f));
         auto transmittance_image_view = tc.image_view(uses.transmittance_image.task_image_id);
 
-        tc.set_pipeline(this->pipeline);
+        tc.set_pipeline(this->pipeline.id());
 
         tc.cmd_list.begin_rendering(RenderingBeginInfo{
             .render_area = tc.pass_rect(),
@@ -80,17 +80,17 @@ struct GeometryTask {
         tc.cmd_list.set_viewport(tc.pass_viewport());
         tc.cmd_list.set_scissors(tc.pass_rect());
 
-        if (render_context.index_buffer != BufferID::Invalid) {
-            tc.cmd_list.set_vertex_buffer(render_context.vertex_buffer);
-            tc.cmd_list.set_index_buffer(render_context.index_buffer);
-
-            for (u32 model_index = 0; model_index < render_context.models.size(); model_index++) {
-                for (auto &primitive : render_context.mesh_primitives) {
+        for (auto &model : render_context.models) {
+            tc.cmd_list.set_vertex_buffer(model.vertex_bufffer_id);
+            tc.cmd_list.set_index_buffer(model.index_buffer_id);
+            for (auto &mesh : model.meshes) {
+                for (auto &primitive_index : mesh.primitive_indices) {
+                    auto &primitive = model.primitives[primitive_index];
                     tc.set_push_constants(PushConstants{
                         .world_ptr = render_context.world_ptr,
                         .transmittance_image = transmittance_image_view,
-                        .model_transform_index = model_index,
-                        .gpu_material_id = primitive.material_id,
+                        .model_transform_index = 0,
+                        .material_index = primitive.material_index,
                     });
                     tc.cmd_list.draw_indexed(primitive.index_count, primitive.index_offset, static_cast<i32>(primitive.vertex_offset));
                 }

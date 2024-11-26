@@ -1,22 +1,25 @@
 #include "Asset.hh"
 
 #include "Engine/Asset/ParserGLTF.hh"
+#include "Engine/Asset/ParserSTB.hh"
+#include "Engine/Memory/Hasher.hh"
+#include "Engine/Memory/PagedPool.hh"
+#include "Engine/OS/OS.hh"
 
 namespace lr {
-struct MaterialTextureInfo {
-    Identifier albedo_ident = {};
-    Identifier normal_ident = {};
-    Identifier emissive_ident = {};
-};
-
 template<>
 struct Handle<AssetManager>::Impl {
     Device device = {};
     fs::path root_path = fs::current_path();
 
-    ankerl::unordered_dense::map<Identifier, Model> model_map = {};
-    ankerl::unordered_dense::map<Identifier, Texture> texture_map = {};
-    ankerl::unordered_dense::map<Identifier, Material> material_map = {};
+    ankerl::unordered_dense::map<Identifier, Asset> registry = {};
+
+    PagedPool<Model, ModelID, 6_sz, 1024_sz> models = {};
+    PagedPool<Texture, TextureID, 6_sz, 1024_sz> textures = {};
+    PagedPool<Material, MaterialID, 6_sz, 1024_sz> materials = {};
+
+    Buffer material_buffer = {};
+    std::vector<GPUModel> gpu_models = {};
 };
 
 auto AssetManager::create(Device_H device) -> AssetManager {
@@ -24,55 +27,19 @@ auto AssetManager::create(Device_H device) -> AssetManager {
 
     auto impl = new Impl;
     impl->device = device;
-    auto self = AssetManager(impl);
+    impl->material_buffer = Buffer::create(
+                                device,
+                                vk::BufferUsage::Storage | vk::BufferUsage::TransferDst,
+                                impl->materials.max_resources() * sizeof(GPUMaterial),
+                                vk::MemoryAllocationUsage::PreferDevice)
+                                .value()
+                                .set_name("Material Buffer");
 
-    auto invalid_texture_id = Image::create(
-                                  device,
-                                  vk::ImageUsage::Sampled | vk::ImageUsage::TransferDst,
-                                  vk::Format::R8G8B8A8_UNORM,
-                                  vk::ImageType::View2D,
-                                  { 1024, 1024, 1 })
-                                  .value();
-    std::vector<u32> invalid_texture_data(1024 * 1024, 0xFFFFFFFF);
-    impl->device.upload(
-        invalid_texture_id, invalid_texture_data.data(), invalid_texture_data.size() * sizeof(u32), vk::ImageLayout::ShaderReadOnly);
-    self.add_texure(
-        INVALID_TEXTURE,
-        invalid_texture_id,
-        Sampler::create(
-            device,
-            vk::Filtering::Linear,
-            vk::Filtering::Linear,
-            vk::Filtering::Nearest,
-            vk::SamplerAddressMode::Repeat,
-            vk::SamplerAddressMode::Repeat,
-            vk::SamplerAddressMode::Repeat,
-            vk::CompareOp::Never)
-            .value());
-
-    return self;
+    return AssetManager(impl);
 }
 
 auto AssetManager::destroy() -> void {
     ZoneScoped;
-
-    LOG_TRACE("{} alive textures.", impl->texture_map.size());
-    LOG_TRACE("{} alive materials.", impl->material_map.size());
-    LOG_TRACE("{} alive models.", impl->model_map.size());
-
-    for (auto &[ident, texture] : impl->texture_map) {
-        LOG_INFO("Alive texture {}", ident.sv());
-        impl->device.destroy_sampler(texture.sampler_id);
-        impl->device.destroy_image(texture.image_id);
-    }
-
-    for (auto &[ident, model] : impl->model_map) {
-        LOG_INFO("Alive model {}", ident.sv());
-        for (auto &v : model.meshes) {
-            impl->device.destroy_buffer(v.vertex_buffer_cpu);
-            impl->device.destroy_buffer(v.index_buffer_cpu);
-        }
-    }
 }
 
 auto AssetManager::set_root_path(const fs::path &path) -> void {
@@ -88,270 +55,523 @@ auto AssetManager::asset_root_path(AssetType type) -> fs::path {
             return root;
         case AssetType::Shader:
             return root / "shaders";
-        case AssetType::Image:
-            return root / "textures";
         case AssetType::Model:
             return root / "models";
+        case AssetType::Texture:
+            return root / "textures";
+        case AssetType::Material:
+            return root / "materials";
         case AssetType::Font:
             return root / "fonts";
     }
 }
 
-auto AssetManager::add_texure(const Identifier &ident, ImageID image_id, SamplerID sampler_id) -> Texture * {
+auto AssetManager::to_asset_file_type(const fs::path &path) -> AssetFileType {
     ZoneScoped;
+    memory::ScopedStack stack;
 
-    auto [texture_it, texture_inserted] = impl->texture_map.try_emplace(ident);
-    if (!texture_inserted) {
-        return nullptr;
+    if (!path.has_extension()) {
+        return AssetFileType::None;
     }
 
-    auto &texture = texture_it->second;
-    texture.image_id = image_id;
-    texture.sampler_id = sampler_id;
-
-    return &texture;
+    auto extension = stack.to_upper(path.extension().string());
+    switch (fnv64_str(extension)) {
+        case fnv64_c(".GLB"):
+            return AssetFileType::GLB;
+        case fnv64_c(".PNG"):
+            return AssetFileType::PNG;
+        case fnv64_c(".JPG"):
+        case fnv64_c(".JPEG"):
+            return AssetFileType::JPEG;
+        default:
+            return AssetFileType::None;
+    }
 }
 
-auto AssetManager::load_model(const Identifier &ident, const fs::path &path) -> Model * {
+auto AssetManager::material_buffer() const -> Buffer & {
+    return impl->material_buffer;
+}
+
+auto AssetManager::gpu_models() const -> ls::span<GPUModel> {
+    return impl->gpu_models;
+}
+
+auto AssetManager::register_asset(const Identifier &ident, const fs::path &path, AssetType type) -> Asset * {
     ZoneScoped;
 
-    auto [model_it, model_inseted] = impl->model_map.try_emplace(ident);
-    if (!model_inseted) {
+    Asset asset = {};
+    asset.path = path;
+    asset.type = type;
+
+    switch (type) {
+        case AssetType::Model: {
+            auto model_result = impl->models.create();
+            if (!model_result.has_value()) {
+                LOG_ERROR("Failed to create new model, out of pool space.");
+                return nullptr;
+            }
+
+            asset.model_id = model_result->id;
+            break;
+        }
+        case AssetType::Texture: {
+            auto texture_result = impl->textures.create();
+            if (!texture_result.has_value()) {
+                LOG_ERROR("Failed to create new texture, out of pool space.");
+                return nullptr;
+            }
+
+            asset.texture_id = texture_result->id;
+            break;
+        }
+        case AssetType::Material: {
+            auto material_result = impl->materials.create();
+            if (!material_result.has_value()) {
+                LOG_ERROR("Failed to create new material, out of pool space.");
+                return nullptr;
+            }
+
+            asset.material_id = material_result->id;
+            break;
+        }
+        case AssetType::None:
+        case AssetType::Shader:
+        case AssetType::Font:
+            LS_EXPECT(false);  // TODO: Other asset types
+            return nullptr;
+    }
+
+    auto [asset_it, inserted] = impl->registry.try_emplace(ident, asset);
+    if (!inserted) {
         return nullptr;
     }
 
-    auto &model = model_it->second;
-    auto model_info = GLTFModelInfo::parse(impl->device, path);
-    LS_DEFER(&) {
-        model_info->destroy(impl->device);
-    };
+    return &asset_it->second;
+}
 
+auto AssetManager::load_texture(const Identifier &ident, vk::Format format, vk::Extent3D extent, ls::span<u8> pixels, Sampler sampler)
+    -> TextureID {
+    ZoneScoped;
+
+    auto image = Image::create(
+        impl->device,
+        vk::ImageUsage::Sampled | vk::ImageUsage::TransferDst,
+        format,
+        vk::ImageType::View2D,
+        extent,
+        vk::ImageAspectFlag::Color,
+        1,
+        static_cast<u32>(glm::floor(glm::log2(static_cast<f32>(ls::max(extent.width, extent.height)))) + 1));
+    if (!image.has_value()) {
+        return TextureID::Invalid;
+    }
+
+    image->set_name(std::string(ident.sv()))
+        .set_data(pixels.data(), pixels.size(), vk::ImageLayout::TransferDst)
+        .generate_mips(vk::ImageLayout::TransferDst)
+        .transition(vk::ImageLayout::TransferDst, vk::ImageLayout::ShaderReadOnly);
+
+    auto *asset = this->register_asset(ident, "", AssetType::Texture);
+    if (!asset) {
+        return TextureID::Invalid;
+    }
+
+    auto *texture = this->get_texture(asset->texture_id);
+    texture->image = image.value();
+    if (sampler) {
+        texture->sampler = sampler;
+    } else {
+        texture->sampler = Sampler::create(
+                               impl->device,
+                               vk::Filtering::Linear,
+                               vk::Filtering::Linear,
+                               vk::Filtering::Linear,
+                               vk::SamplerAddressMode::Repeat,
+                               vk::SamplerAddressMode::Repeat,
+                               vk::SamplerAddressMode::Repeat,
+                               vk::CompareOp::Never)
+                               .value()
+                               .set_name("Linear Repeat Sampler");
+    }
+
+    return asset->texture_id;
+}
+
+auto AssetManager::load_texture(const Identifier &ident, const fs::path &path, Sampler sampler) -> TextureID {
+    ZoneScoped;
+
+    if (!path.has_extension()) {
+        LOG_ERROR("Trying to load texture \"{}\" file without an extension.", ident.sv());
+        return TextureID::Invalid;
+    }
+
+    File file(path, FileAccess::Read);
+    if (!file) {
+        LOG_ERROR("Cannot read texture file.");
+        return TextureID::Invalid;
+    }
+
+    auto file_data = file.whole_data();
+    vk::Format format = {};
+    vk::Extent3D extent = {};
+    std::vector<u8> pixels = {};
+
+    switch (this->to_asset_file_type(path)) {
+        case AssetFileType::PNG:
+        case AssetFileType::JPEG: {
+            auto image = STBImageInfo::parse(ls::span{ file_data.get(), file.size });
+            if (!image.has_value()) {
+                return TextureID::Invalid;
+            }
+            format = image->format;
+            extent = image->extent;
+            pixels = std::move(image->data);
+            break;
+        }
+        case AssetFileType::None:
+        case AssetFileType::GLB:
+        default:
+            return TextureID::Invalid;
+    }
+
+    return this->load_texture(ident, format, extent, pixels, sampler);
+}
+
+auto AssetManager::load_model(const Identifier &ident, const fs::path &path) -> ModelID {
+    ZoneScoped;
+
+    auto model_info = GLTFModelInfo::parse(path);
     if (!model_info.has_value()) {
         LOG_ERROR("Failed to parse Model '{}'!", path);
-        return nullptr;
+        return ModelID::Invalid;
     }
 
-    auto graphics_queue = impl->device.queue(vk::CommandType::Graphics);
-    auto image_cmd_list = graphics_queue.begin();
-
-    std::vector<SamplerID> samplers;
-    samplers.reserve(model_info->samplers.size());
-    for (auto &v : model_info->samplers) {
-        samplers.emplace_back(Sampler::create(
-                                  impl->device,
-                                  v.min_filter,
-                                  v.mag_filter,
-                                  vk::Filtering::Linear,
-                                  v.address_u,
-                                  v.address_v,
-                                  vk::SamplerAddressMode::ClampToBorder,
-                                  vk::CompareOp::Always)
-                                  .value());
-    }
-
-    std::vector<ImageID> images;
-    images.reserve(model_info->images.size());
-    for (auto &v : model_info->images) {
-        auto image_id = Image::create(
-                            impl->device,
-                            vk::ImageUsage::Sampled | vk::ImageUsage::TransferDst | vk::ImageUsage::TransferSrc,
-                            v.format,
-                            vk::ImageType::View2D,
-                            v.extent,
-                            vk::ImageAspectFlag::Color,
-                            1,
-                            static_cast<u32>(glm::floor(glm::log2(static_cast<f32>(ls::max(v.extent.width, v.extent.height)))) + 1))
-                            .value();
-        auto image = impl->device.image(image_id);
-        image.set_name(v.name);
-
-        image_cmd_list.image_transition({
-            .dst_stage = vk::PipelineStage::Copy,
-            .dst_access = vk::MemoryAccess::TransferWrite,
-            .new_layout = vk::ImageLayout::TransferDst,
-            .image_id = image_id,
-        });
-
-        vk::ImageCopyRegion first_copy_region = {
-            .image_subresource_layer = { vk::ImageAspectFlag::Color, 0, 0, 1 },
-            .image_extent = v.extent,
-        };
-        image_cmd_list.copy_buffer_to_image(v.buffer_id.value(), image_id, vk::ImageLayout::TransferDst, first_copy_region);
-
-        // Mip chain generation
-        image_cmd_list.image_transition({
-            .src_stage = vk::PipelineStage::Copy,
-            .src_access = vk::MemoryAccess::TransferWrite,
-            .dst_stage = vk::PipelineStage::Blit,
-            .dst_access = vk::MemoryAccess::TransferRead,
-            .old_layout = vk::ImageLayout::TransferDst,
-            .new_layout = vk::ImageLayout::TransferSrc,
-            .image_id = image_id,
-            .subresource_range = { vk::ImageAspectFlag::Color, 0, 1, 0, 1 },
-        });
-
-        i32 width = static_cast<i32>(image.extent().width);
-        i32 height = static_cast<i32>(image.extent().height);
-        for (u32 i = 1; i < image.mip_count(); i++) {
-            image_cmd_list.image_transition({
-                .dst_stage = vk::PipelineStage::Blit,
-                .dst_access = vk::MemoryAccess::TransferWrite,
-                .new_layout = vk::ImageLayout::TransferDst,
-                .image_id = image_id,
-                .subresource_range = { vk::ImageAspectFlag::Color, i, 1, 0, 1 },
-            });
-
-            vk::ImageBlit blit = {
-                .src_subresource = { vk::ImageAspectFlag::Color, i - 1, 0, 1 },
-                .src_offsets = { {}, { width >> (i - 1), height >> (i - 1), 1 } },
-                .dst_subresource = { vk::ImageAspectFlag::Color, i, 0, 1 },
-                .dst_offsets = { {}, { width >> i, height >> i, 1 } },
-            };
-            image_cmd_list.blit_image(
-                image_id, vk::ImageLayout::TransferSrc, image_id, vk::ImageLayout::TransferDst, vk::Filtering::Linear, blit);
-
-            image_cmd_list.image_transition({
-                .src_stage = vk::PipelineStage::Blit,
-                .src_access = vk::MemoryAccess::TransferWrite,
-                .dst_stage = vk::PipelineStage::Blit,
-                .dst_access = vk::MemoryAccess::TransferRead,
-                .old_layout = vk::ImageLayout::TransferDst,
-                .new_layout = vk::ImageLayout::TransferSrc,
-                .image_id = image_id,
-                .subresource_range = { vk::ImageAspectFlag::Color, i, 1, 0, 1 },
-            });
-        }
-
-        image_cmd_list.image_transition({
-            .src_stage = vk::PipelineStage::Blit,
-            .src_access = vk::MemoryAccess::TransferRead,
-            .dst_stage = vk::PipelineStage::FragmentShader,
-            .dst_access = vk::MemoryAccess::ShaderRead,
-            .old_layout = vk::ImageLayout::TransferSrc,
-            .new_layout = vk::ImageLayout::ShaderReadOnly,
-            .image_id = image_id,
-            .subresource_range = { vk::ImageAspectFlag::Color, 0, image.mip_count(), 0, 1 },
-        });
-
-        images.push_back(image_id);
-    }
-
-    graphics_queue.end(image_cmd_list);
-    graphics_queue.submit({}, {});
-    graphics_queue.wait();
-    for (auto &v : model_info->images) {
-        if (v.buffer_id.has_value()) {
-            impl->device.destroy_buffer(v.buffer_id.value());
-            v.buffer_id.reset();
-        }
-    }
-
-    std::vector<Identifier> texture_idents;
-    texture_idents.reserve(model_info->textures.size());
+    std::vector<TextureID> textures = {};
+    textures.reserve(model_info->textures.size());
     for (auto &v : model_info->textures) {
-        auto new_ident = Identifier::random();
-        auto [texture_it, texture_inserted] = impl->texture_map.try_emplace(new_ident);
-        if (texture_inserted) {
-            auto &texture = texture_it->second;
-            texture.image_id = images[v.image_index.value()];
-            texture.sampler_id = samplers[v.sampler_index.value()];
-
-            texture_idents.push_back(texture_it->first);
-        } else {
-            LOG_ERROR("Failed to insert identifier '{}' into textures map, wat?", new_ident.sv());
-            texture_idents.push_back(INVALID_TEXTURE);
+        if (!v.image_index.has_value()) {
+            LOG_ERROR("Model {} has invalid image.", ident.sv());
+            return ModelID::Invalid;
         }
+
+        auto &image_info = model_info->images[v.image_index.value()];
+        Sampler sampler = {};
+        if (v.sampler_index.has_value()) {
+            auto &sampler_info = model_info->samplers[v.sampler_index.value()];
+            sampler = Sampler::create(
+                          impl->device,
+                          sampler_info.min_filter,
+                          sampler_info.mag_filter,
+                          vk::Filtering::Linear,
+                          sampler_info.address_u,
+                          sampler_info.address_v,
+                          vk::SamplerAddressMode::Repeat,
+                          vk::CompareOp::Never)
+                          .value();
+        }
+
+        textures.emplace_back(this->load_texture(Identifier::random(), image_info.format, image_info.extent, image_info.pixels, sampler));
     }
 
-    std::vector<Identifier> material_idents = {};
+    std::vector<MaterialID> materials = {};
     for (auto &v : model_info->materials) {
-        auto new_ident = Identifier::random();
-        auto [material_it, material_inserted] = impl->material_map.try_emplace(new_ident);
-        if (material_inserted) {
-            auto &material = material_it->second;
-            material.albedo_color = v.albedo_color;
-            material.emissive_color = v.emissive_color;
-            material.roughness_factor = v.roughness_factor;
-            material.metallic_factor = v.metallic_factor;
-            material.alpha_mode = v.alpha_mode;
-            material.alpha_cutoff = v.alpha_cutoff;
-
-            if (auto i = v.albedo_texture_index; i.has_value()) {
-                material.albedo_texture_ident = texture_idents[i.value()];
-            }
-            if (auto i = v.normal_texture_index; i.has_value()) {
-                material.normal_texture_ident = texture_idents[i.value()];
-            }
-            if (auto i = v.emissive_texture_index; i.has_value()) {
-                material.emissive_texture_ident = texture_idents[i.value()];
-            }
-
-            // self.add_material(new_ident, material);
-            material_idents.push_back(material_it->first);
+        TextureID albedo_texture_id = TextureID::Invalid;
+        TextureID normal_texture_id = TextureID::Invalid;
+        TextureID emissive_texture_id = TextureID::Invalid;
+        if (auto i = v.albedo_texture_index; i.has_value()) {
+            albedo_texture_id = textures[i.value()];
         }
+        if (auto i = v.normal_texture_index; i.has_value()) {
+            normal_texture_id = textures[i.value()];
+        }
+        if (auto i = v.emissive_texture_index; i.has_value()) {
+            emissive_texture_id = textures[i.value()];
+        }
+
+        materials.push_back(this->load_material(
+            Identifier::random(),
+            Material{
+                .albedo_color = v.albedo_color,
+                .emissive_color = v.emissive_color,
+                .roughness_factor = v.roughness_factor,
+                .metallic_factor = v.metallic_factor,
+                .alpha_mode = v.alpha_mode,
+                .alpha_cutoff = v.alpha_cutoff,
+                .albedo_texture_id = albedo_texture_id,
+                .normal_texture_id = normal_texture_id,
+                .emissive_texture_id = emissive_texture_id,
+            }));
     }
 
+    std::vector<Model::Vertex> vertices = {};
+    vertices.reserve(model_info->vertices.size());
+    for (const auto &v : model_info->vertices) {
+        vertices.push_back({
+            .position = v.position,
+            .uv_x = v.tex_coord_0.x,
+            .normal = v.normal,
+            .uv_y = v.tex_coord_0.y,
+        });
+    }
+
+    std::vector<Model::Index> indices = {};
+    indices.reserve(model_info->indices.size());
+    for (const auto &v : model_info->indices) {
+        indices.emplace_back(v);
+    }
+
+    std::vector<Model::Primitive> primitives = {};
+    primitives.reserve(model_info->primitives.size());
     for (auto &v : model_info->primitives) {
-        auto &primitive = model.primitives.emplace_back();
-        primitive.vertex_offset = v.vertex_offset.value();
-        primitive.vertex_count = v.vertex_count.value();
-        primitive.index_offset = v.index_offset.value();
-        primitive.index_count = v.index_count.value();
-        primitive.material_ident = material_idents[v.material_index.value()];
+        auto &primitive = primitives.emplace_back();
+        primitive.vertex_offset = v.vertex_offset;
+        primitive.vertex_count = v.vertex_count;
+        primitive.index_offset = v.index_offset;
+        primitive.index_count = v.index_count;
+        primitive.material_id = materials[v.material_index];
     }
 
+    std::vector<Model::Mesh> meshes = {};
+    meshes.reserve(model_info->meshes.size());
     for (auto &v : model_info->meshes) {
-        auto &mesh = model.meshes.emplace_back();
+        auto &mesh = meshes.emplace_back();
         mesh.name = v.name;
         mesh.primitive_indices = v.primitive_indices;
-        mesh.vertex_buffer_cpu = v.vertex_buffer_cpu.value();
-        mesh.index_buffer_cpu = v.index_buffer_cpu.value();
-        mesh.total_vertex_count = v.total_vertex_count;
-        mesh.total_index_count = v.total_index_count;
-        v.vertex_buffer_cpu.reset();
-        v.index_buffer_cpu.reset();
     }
 
-    return &model;
+    //  ── STAGING UPLOAD ──────────────────────────────────────────────────
+    // TODO: Multiple duplication of CPU buffers, consider using CPU buffer
+    // instead of vectors in the future. Currently, not a huge problem.
+    // ─────────────────────────────────────────────────────────────────────
+    auto transfer_man = impl->device.transfer_man();
+    auto transfer_queue = impl->device.queue(vk::CommandType::Transfer);
+    usize vertex_buffer_upload_size = vertices.size() * sizeof(Model::Vertex);
+    auto vertex_buffer_gpu = Buffer::create(
+                                 impl->device,
+                                 vk::BufferUsage::Vertex | vk::BufferUsage::TransferDst,
+                                 vertex_buffer_upload_size,
+                                 vk::MemoryAllocationUsage::PreferDevice)
+                                 .value()
+                                 .set_name(std::format("{} Vertex Buffer", ident.sv()));
+    usize index_buffer_upload_size = model_info->indices.size() * sizeof(Model::Index);
+    auto index_buffer_gpu = Buffer::create(
+                                impl->device,
+                                vk::BufferUsage::Index | vk::BufferUsage::TransferDst,
+                                index_buffer_upload_size,
+                                vk::MemoryAllocationUsage::PreferDevice)
+                                .value()
+                                .set_name(std::format("{} Index Buffer", ident.sv()));
+
+    {
+        auto cmd_list = transfer_queue.begin();
+        auto vertex_buffer_alloc = transfer_man.allocate(vertex_buffer_upload_size);
+        std::memcpy(vertex_buffer_alloc->ptr, vertices.data(), vertex_buffer_upload_size);
+        vk::BufferCopyRegion vertex_copy_region = { .src_offset = vertex_buffer_alloc->offset, .size = vertex_buffer_upload_size };
+        cmd_list.copy_buffer_to_buffer(vertex_buffer_alloc->cpu_buffer_id, vertex_buffer_gpu.id(), vertex_copy_region);
+        transfer_queue.end(cmd_list);
+        transfer_queue.submit({}, transfer_man.semaphore());
+        transfer_queue.wait();
+        transfer_man.collect_garbage();
+    }
+
+    {
+        auto cmd_list = transfer_queue.begin();
+        auto index_buffer_alloc = transfer_man.allocate(index_buffer_upload_size);
+        std::memcpy(index_buffer_alloc->ptr, indices.data(), index_buffer_upload_size);
+        vk::BufferCopyRegion index_copy_region = { .src_offset = index_buffer_alloc->offset, .size = index_buffer_upload_size };
+        cmd_list.copy_buffer_to_buffer(index_buffer_alloc->cpu_buffer_id, index_buffer_gpu.id(), index_copy_region);
+        transfer_queue.end(cmd_list);
+        transfer_queue.submit({}, transfer_man.semaphore());
+        transfer_queue.wait();
+        transfer_man.collect_garbage();
+    }
+
+    //   ──────────────────────────────────────────────────────────────────────
+    auto *asset = this->register_asset(ident, "", AssetType::Model);
+    if (!asset) {
+        return ModelID::Invalid;
+    }
+
+    auto *model = this->get_model(asset->model_id);
+    model->primitives = primitives;
+    model->meshes = meshes;
+    model->vertex_buffer = vertex_buffer_gpu;
+    model->index_buffer = index_buffer_gpu;
+
+    //   ──────────────────────────────────────────────────────────────────────
+
+    auto model_index = std::to_underlying(asset->model_id);
+    if (impl->gpu_models.size() <= model_index) {
+        impl->gpu_models.resize(model_index + 1);
+    }
+
+    auto &gpu_model = impl->gpu_models.at(model_index);
+
+    gpu_model.primitives.reserve(model->primitives.size());
+    for (auto &primitive : model->primitives) {
+        gpu_model.primitives.push_back({
+            .vertex_offset = primitive.vertex_offset,
+            .vertex_count = primitive.vertex_count,
+            .index_offset = primitive.index_offset,
+            .index_count = primitive.index_count,
+            .material_index = std::to_underlying(primitive.material_id),
+        });
+    }
+
+    for (auto &mesh : model->meshes) {
+        gpu_model.meshes.push_back({
+            .primitive_indices = mesh.primitive_indices,
+        });
+    }
+
+    gpu_model.vertex_bufffer_id = model->vertex_buffer.id();
+    gpu_model.index_buffer_id = model->index_buffer.id();
+
+    return asset->model_id;
 }
 
-auto AssetManager::load_material(const Identifier &, const fs::path &) -> Material * {
+auto AssetManager::load_material(const Identifier &ident, const Material &material_info) -> MaterialID {
     ZoneScoped;
 
-    return nullptr;
+    auto *asset = this->register_asset(ident, "", AssetType::Material);
+    if (!asset) {
+        return MaterialID::Invalid;
+    }
+
+    auto *material = this->get_material(asset->material_id);
+    *material = material_info;
+
+    auto *albedo_texture = this->get_texture(material_info.albedo_texture_id);
+    auto *normal_texture = this->get_texture(material_info.normal_texture_id);
+    auto *emissive_texture = this->get_texture(material_info.emissive_texture_id);
+
+    // TODO: Invalid checkerboard image
+    GPUMaterial gpu_material = {
+        .albedo_color = material_info.albedo_color,
+        .emissive_color = material_info.emissive_color,
+        .roughness_factor = material_info.roughness_factor,
+        .metallic_factor = material_info.metallic_factor,
+        .alpha_mode = material_info.alpha_mode,
+        .albedo_image = albedo_texture ? albedo_texture->sampled_image() : SampledImage(),
+        .normal_image = normal_texture ? normal_texture->sampled_image() : SampledImage(),
+        .emissive_image = emissive_texture ? emissive_texture->sampled_image() : SampledImage(),
+    };
+
+    u64 gpu_buffer_offset = std::to_underlying(asset->material_id) * sizeof(GPUMaterial);
+
+    auto transfer_man = impl->device.transfer_man();
+    auto transfer_queue = impl->device.queue(vk::CommandType::Transfer);
+    auto cmd_list = transfer_queue.begin();
+    auto gpu_material_alloc = transfer_man.allocate(sizeof(GPUMaterial));
+    std::memcpy(gpu_material_alloc->ptr, &gpu_material, sizeof(GPUMaterial));
+
+    vk::BufferCopyRegion copy_region = {
+        .src_offset = gpu_material_alloc->offset,
+        .dst_offset = gpu_buffer_offset,
+        .size = sizeof(GPUMaterial),
+    };
+    cmd_list.copy_buffer_to_buffer(gpu_material_alloc->cpu_buffer_id, impl->material_buffer.id(), copy_region);
+
+    transfer_queue.end(cmd_list);
+    transfer_queue.submit({}, transfer_man.semaphore());
+    transfer_queue.wait();
+
+    return asset->material_id;
 }
 
-auto AssetManager::model(const Identifier &ident) -> Model * {
+auto AssetManager::load_material(const Identifier &, const fs::path &) -> MaterialID {
     ZoneScoped;
 
-    auto it = impl->model_map.find(ident);
-    if (it == impl->model_map.end()) {
+    return MaterialID::Invalid;
+}
+
+auto AssetManager::get_asset(const Identifier &ident) -> Asset * {
+    ZoneScoped;
+
+    auto it = impl->registry.find(ident);
+    if (it == impl->registry.end()) {
         return nullptr;
     }
 
     return &it->second;
 }
 
-auto AssetManager::texture(const Identifier &ident) -> Texture * {
+auto AssetManager::get_model(const Identifier &ident) -> Model * {
     ZoneScoped;
 
-    auto it = impl->texture_map.find(ident);
-    if (it == impl->texture_map.end()) {
+    auto *asset = this->get_asset(ident);
+    if (asset == nullptr) {
         return nullptr;
     }
 
-    return &it->second;
+    LS_EXPECT(asset->type == AssetType::Model);
+    if (asset->type != AssetType::Model || asset->model_id == ModelID::Invalid) {
+        return nullptr;
+    }
+
+    return &impl->models.get(asset->model_id);
 }
 
-auto AssetManager::material(const Identifier &ident) -> Material * {
+auto AssetManager::get_model(ModelID model_id) -> Model * {
     ZoneScoped;
 
-    auto it = impl->material_map.find(ident);
-    if (it == impl->material_map.end()) {
+    if (model_id == ModelID::Invalid) {
         return nullptr;
     }
 
-    return &it->second;
+    return &impl->models.get(model_id);
+}
+
+auto AssetManager::get_texture(const Identifier &ident) -> Texture * {
+    ZoneScoped;
+
+    auto *asset = this->get_asset(ident);
+    if (asset == nullptr) {
+        return nullptr;
+    }
+
+    LS_EXPECT(asset->type == AssetType::Texture);
+    if (asset->type != AssetType::Texture || asset->texture_id == TextureID::Invalid) {
+        return nullptr;
+    }
+
+    return &impl->textures.get(asset->texture_id);
+}
+
+auto AssetManager::get_texture(TextureID texture_id) -> Texture * {
+    ZoneScoped;
+
+    if (texture_id == TextureID::Invalid) {
+        return nullptr;
+    }
+
+    return &impl->textures.get(texture_id);
+}
+
+auto AssetManager::get_material(const Identifier &ident) -> Material * {
+    ZoneScoped;
+
+    auto *asset = this->get_asset(ident);
+    if (asset == nullptr) {
+        return nullptr;
+    }
+
+    LS_EXPECT(asset->type == AssetType::Material);
+    if (asset->type != AssetType::Material || asset->material_id == MaterialID::Invalid) {
+        return nullptr;
+    }
+
+    return &impl->materials.get(asset->material_id);
+}
+
+auto AssetManager::get_material(MaterialID material_id) -> Material * {
+    ZoneScoped;
+
+    if (material_id == MaterialID::Invalid) {
+        return nullptr;
+    }
+
+    return &impl->materials.get(material_id);
 }
 
 }  // namespace lr

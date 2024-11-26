@@ -44,9 +44,11 @@ float4 fs_main(VertexOutput input) : SV_TARGET {
     
     float3 clip_space = float3(input.tex_coord * 2.0 - 1.0, 1.0);
     float4 clip_pos = mul(camera->inv_projection_view_mat, float4(clip_space, 1.0));
-    float3 clip_dir = clip_pos.xyz;
-    float3 world_dir = normalize(clip_dir);
-    float3 world_pos = camera->position * CAMERA_SCALE_UNIT + float3(0.0, atmos->planet_radius, 0.0);
+    float3 clip_dir = clip_pos.xyz / clip_pos.w;
+    float3 world_dir = normalize(clip_dir - camera->position);
+    float3 world_pos = float3(0.0, camera->position.y, 0.0) *
+                       CAMERA_SCALE_UNIT +
+                       float3(0.0, atmos->planet_radius, 0.0);
 
     const let planet_intersection = lr::ray_sphere_intersect_nearest(world_pos, world_dir, atmos->planet_radius);
 

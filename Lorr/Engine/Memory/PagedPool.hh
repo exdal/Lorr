@@ -1,11 +1,6 @@
 #pragma once
 
 namespace lr {
-struct PagedPoolInfo {
-    usize MAX_RESOURCE_COUNT = 1u << 19u;
-    usize PAGE_BITS = 9u;
-};
-
 template<typename T, typename ID, const usize PAGE_BITS = 9u, usize MAX_RESOURCE_COUNT = 1u << 19u>
 struct PagedPool {
     constexpr static usize PAGE_SIZE = 1_sz << PAGE_BITS;

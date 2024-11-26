@@ -101,13 +101,14 @@ auto TransferManager::create(Device_H device, u32 capacity, vk::BufferUsage addi
     auto impl = new Impl;
     impl->device = device;
     impl->semaphore = Semaphore::create(device, 0).value();
-    impl->cpu_buffer_id = Buffer::create(
-                              device,
-                              vk::BufferUsage::TransferSrc | additional_buffer_usage,
-                              capacity,
-                              vk::MemoryAllocationUsage::PreferHost,
-                              vk::MemoryAllocationFlag::HostSeqWrite)
-                              .value();
+    impl->cpu_buffer = Buffer::create(
+                           device,
+                           vk::BufferUsage::TransferSrc | additional_buffer_usage,
+                           capacity,
+                           vk::MemoryAllocationUsage::PreferHost,
+                           vk::MemoryAllocationFlag::HostSeqWrite)
+                           .value()
+                           .set_name("Transfer Manager CPU Buffer");
 
     auto self = TransferManager(impl);
     self.init_allocator(capacity, max_allocs);
@@ -122,20 +123,22 @@ auto TransferManager::create_with_gpu(Device_H device, u32 capacity, vk::BufferU
     auto impl = new Impl;
     impl->device = device;
     impl->semaphore = Semaphore::create(device, 0).value();
-    impl->gpu_buffer_id = Buffer::create(
-                              device,
-                              vk::BufferUsage::TransferDst | additional_buffer_usage,
-                              capacity,
-                              vk::MemoryAllocationUsage::PreferDevice,
-                              vk::MemoryAllocationFlag::None)
-                              .value();
-    impl->cpu_buffer_id = Buffer::create(
-                              device,
-                              vk::BufferUsage::TransferSrc | additional_buffer_usage,
-                              capacity,
-                              vk::MemoryAllocationUsage::PreferHost,
-                              vk::MemoryAllocationFlag::HostSeqWrite)
-                              .value();
+    impl->gpu_buffer = Buffer::create(
+                           device,
+                           vk::BufferUsage::TransferDst | additional_buffer_usage,
+                           capacity,
+                           vk::MemoryAllocationUsage::PreferDevice,
+                           vk::MemoryAllocationFlag::None)
+                           .value()
+                           .set_name("Transfer Manager GPU Buffer");
+    impl->cpu_buffer = Buffer::create(
+                           device,
+                           vk::BufferUsage::TransferSrc | additional_buffer_usage,
+                           capacity,
+                           vk::MemoryAllocationUsage::PreferHost,
+                           vk::MemoryAllocationFlag::HostSeqWrite)
+                           .value()
+                           .set_name("Transfer Manager CPU Buffer");
 
     auto self = TransferManager(impl);
     self.init_allocator(capacity, max_allocs);
@@ -147,7 +150,10 @@ auto TransferManager::destroy() -> void {
     ZoneScoped;
 
     impl->semaphore.destroy();
-    impl->device.destroy_buffer(impl->cpu_buffer_id);
+    impl->cpu_buffer.destroy();
+    if (impl->gpu_buffer) {
+        impl->gpu_buffer.destroy();
+    }
 
     delete impl;
     impl = nullptr;
@@ -165,22 +171,34 @@ auto TransferManager::allocate(u64 size, u64 alignment) -> ls::option<GPUAllocat
     impl->tracked_nodes.emplace_back(node_index.value(), impl->semaphore.value());
 
     auto &node = impl->nodes[node_index.value()];
-    auto cpu_buffer_ptr = impl->device.buffer(impl->cpu_buffer_id).host_ptr();
-    auto gpu_buffer_address = impl->device.buffer(impl->gpu_buffer_id).device_address();
+    auto cpu_buffer_ptr = impl->cpu_buffer.host_ptr();
     return GPUAllocation{
-        .gpu_buffer_id = impl->gpu_buffer_id,
-        .cpu_buffer_id = impl->cpu_buffer_id,
+        .gpu_buffer_id = impl->gpu_buffer ? impl->gpu_buffer.id() : BufferID::Invalid,
+        .cpu_buffer_id = impl->cpu_buffer.id(),
         .ptr = cpu_buffer_ptr + node.offset,
         .offset = node.offset,
         .size = node.size,
-        .gpu_device_address = gpu_buffer_address,
+        .gpu_device_address = impl->gpu_buffer ? impl->gpu_buffer.device_address() : 0,
+        .allocator_data = node_index.value(),
     };
+}
+
+auto TransferManager::discard(GPUAllocation &alloc) -> void {
+    ZoneScoped;
+
+    auto erased = std::erase_if(impl->tracked_nodes, [&](auto &node) {  //
+        return node.resource == alloc.allocator_data;
+    });
+
+    if (erased) {
+        this->free_node(alloc.allocator_data);
+    }
 }
 
 auto TransferManager::upload(ls::span<GPUAllocation> allocations) -> void {
     ZoneScoped;
 
-    LS_EXPECT(impl->gpu_buffer_id != BufferID::Invalid);
+    LS_EXPECT(impl->gpu_buffer);
 
     auto transfer_queue = impl->device.queue(vk::CommandType::Transfer);
     auto transfer_queue_sema = transfer_queue.semaphore();
@@ -215,7 +233,7 @@ auto TransferManager::collect_garbage() -> void {
     }
 }
 
-auto TransferManager::semaphore() const -> Semaphore {
+auto TransferManager::semaphore() const -> Semaphore & {
     return impl->semaphore;
 }
 
@@ -235,6 +253,12 @@ auto TransferManager::storage_report() const -> StorageReport {
     }
 
     return { .free_space = free_storage, .largest_free_region = largest_free_region };
+}
+
+auto TransferManager::capacity() const -> u32 {
+    ZoneScoped;
+
+    return impl->size;
 }
 
 auto TransferManager::init_allocator(u32 capacity, u32 max_allocs) -> void {

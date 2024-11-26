@@ -28,13 +28,4 @@ flecs::entity Scene::create_perspective_camera(this Scene &self, std::string_vie
         .set<Component::Camera>({ .fov = fov, .aspect_ratio = aspect });
 }
 
-flecs::entity Scene::create_directional_light(this Scene &self, std::string_view name, const glm::vec2 &direction) {
-    ZoneScoped;
-
-    auto rotation_3d = glm::vec3(direction, 0.0);
-    return self
-        .create_entity(name)  //
-        .set<Component::DirectionalLight>({ rotation_3d });
-}
-
 }  // namespace lr

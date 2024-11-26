@@ -14,12 +14,13 @@ struct ProjectInfo {
 struct World {
     flecs::world ecs{};
     flecs::entity root = {};
-    std::unique_ptr<WorldRenderer> renderer = {};
+    WorldRenderer renderer = {};
     std::vector<std::unique_ptr<Scene>> scenes = {};
     ls::option<SceneID> active_scene = ls::nullopt;
     ls::option<ProjectInfo> project_info = ls::nullopt;
 
     bool init(this World &);
+    void setup_ecs(this World &);
     void shutdown(this World &);
     void begin_frame(this World &);
     void end_frame(this World &);

@@ -30,7 +30,7 @@ struct TonemapTask {
         Preset::ShaderReadOnly src_image = {};
     } uses = {};
 
-    PipelineID pipeline = {};
+    Pipeline pipeline = {};
 
     void execute(TaskContext &tc) {
         struct PushConstants {
@@ -41,7 +41,7 @@ struct TonemapTask {
 
         auto dst_attachment = tc.as_color_attachment(uses.dst_attachment);
         auto src_image_view = tc.image_view(uses.src_image.task_image_id);
-        tc.set_pipeline(this->pipeline);
+        tc.set_pipeline(this->pipeline.id());
         auto &render_context = tc.exec_data_as<WorldRenderContext>();
         tc.cmd_list.begin_rendering({
             .render_area = tc.pass_rect(),

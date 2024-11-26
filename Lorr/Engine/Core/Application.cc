@@ -132,7 +132,7 @@ void Application::run(this Application &self) {
 
     // Renderer context
     auto &imgui = ImGui::GetIO();
-    std::vector<ImageID> images = {};
+    std::vector<Image> images = {};
     images = self.swap_chain.get_images();
 
     b32 swap_chain_ok = true;
@@ -180,7 +180,7 @@ void Application::run(this Application &self) {
         ImGui::Render();
         self.world.end_frame();
 
-        self.world.renderer->render(self.swap_chain, images[acquired_image_index.value()]);
+        self.world.renderer.render(self.swap_chain, images[acquired_image_index.value()]);
         self.device.end_frame(self.swap_chain, sema_index);
 
         self.window.poll();

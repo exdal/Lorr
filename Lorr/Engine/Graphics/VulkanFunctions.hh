@@ -113,10 +113,18 @@ LR_VULKAN_DEVICE_FUNC(vkCmdBlitImage2)
 
 // TIMESTAMPS_EXT functions
 LR_VULKAN_DEVICE_FUNC(vkGetCalibratedTimestampsEXT)
-LR_VULKAN_DEVICE_FUNC(vkGetPhysicalDeviceCalibrateableTimeDomainsEXT)
+LR_VULKAN_INSTANCE_FUNC(vkGetPhysicalDeviceCalibrateableTimeDomainsEXT)
 
 // Debug util functions
+#ifdef LS_DEBUG
 LR_VULKAN_DEVICE_FUNC(vkSetDebugUtilsObjectNameEXT)
+LR_VULKAN_DEVICE_FUNC(vkCmdBeginDebugUtilsLabelEXT)
+LR_VULKAN_DEVICE_FUNC(vkCmdEndDebugUtilsLabelEXT)
+LR_VULKAN_DEVICE_FUNC(vkCmdInsertDebugUtilsLabelEXT)
+LR_VULKAN_DEVICE_FUNC(vkQueueBeginDebugUtilsLabelEXT)
+LR_VULKAN_DEVICE_FUNC(vkQueueEndDebugUtilsLabelEXT)
+LR_VULKAN_DEVICE_FUNC(vkQueueInsertDebugUtilsLabelEXT)
+#endif
 
 #undef LR_VULKAN_INSTANCE_FUNC
 #undef LR_VULKAN_DEVICE_FUNC

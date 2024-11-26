@@ -2,8 +2,8 @@ implementing "../lorr";
 
 /// CONSTANTS ///
 // To sky unit, in our case meters to KM
-public const static float CAMERA_SCALE_UNIT    = 0.001;
-public const static float PLANET_RADIUS_OFFSET = 0.0001;
+public const static float CAMERA_SCALE_UNIT    = 0.01;
+public const static float PLANET_RADIUS_OFFSET = 0.001;
 
 ///
 /// PAHASE FUNCTIONS ///

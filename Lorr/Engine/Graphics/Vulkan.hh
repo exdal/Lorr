@@ -298,35 +298,41 @@ struct Buffer : Handle<Buffer> {
         vk::BufferUsage usage,
         u64 size,
         vk::MemoryAllocationUsage memory_usage,
-        vk::MemoryAllocationFlag memory_flags = vk::MemoryAllocationFlag::None) -> std::expected<BufferID, vk::Result>;
+        vk::MemoryAllocationFlag memory_flags = vk::MemoryAllocationFlag::None) -> std::expected<Buffer, vk::Result>;
     auto destroy() -> void;
     auto set_name(const std::string &) -> Buffer &;
 
     auto data_size() const -> u64;
     auto device_address() const -> u64;
     auto host_ptr() const -> u8 *;
+    auto id() const -> BufferID;
 };
 
 struct Image : Handle<Image> {
     static auto create(
-        Device_H,
+        Device,
         vk::ImageUsage usage,
         vk::Format format,
         vk::ImageType type,
         vk::Extent3D extent,
         vk::ImageAspectFlag aspect_flags = vk::ImageAspectFlag::Color,
         u32 slice_count = 1,
-        u32 mip_count = 1) -> std::expected<ImageID, vk::Result>;
-    static auto create_for_swap_chain(Device_H, vk::Format format, vk::Extent3D extent) -> std::expected<ImageID, vk::Result>;
+        u32 mip_count = 1) -> std::expected<Image, vk::Result>;
+    static auto create_for_swap_chain(Device_H, vk::Format format, vk::Extent3D extent) -> std::expected<Image, vk::Result>;
     auto destroy() -> void;
     auto set_name(const std::string &) -> Image &;
+
+    auto generate_mips(vk::ImageLayout old_layout) -> Image &;
+    auto set_data(void *data, u64 data_size, vk::ImageLayout new_layout) -> Image &;
+    auto transition(vk::ImageLayout from, vk::ImageLayout to) -> Image &;
 
     auto format() const -> vk::Format;
     auto extent() const -> vk::Extent3D;
     auto slice_count() const -> u32;
     auto mip_count() const -> u32;
     auto subresource_range() const -> vk::ImageSubresourceRange;
-    auto view() const -> ImageViewID;
+    auto view() const -> ImageView;
+    auto id() const -> ImageID;
 };
 
 // Image views can have different formats depending on the creation flags
@@ -335,19 +341,20 @@ struct Image : Handle<Image> {
 // https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VkImageViewCreateInfo.html
 
 struct ImageView : Handle<ImageView> {
-    static auto create(Device_H, ImageID image_id, vk::ImageViewType type, vk::ImageSubresourceRange subresource_range)
-        -> std::expected<ImageViewID, vk::Result>;
+    static auto create(Device_H, Image image, vk::ImageViewType type, vk::ImageSubresourceRange subresource_range)
+        -> std::expected<ImageView, vk::Result>;
     auto destroy() -> void;
     auto set_name(const std::string &) -> ImageView &;
 
     auto format() const -> vk::Format;
     auto aspect_flags() const -> vk::ImageAspectFlag;
     auto subresource_range() const -> vk::ImageSubresourceRange;
+    auto id() const -> ImageViewID;
 };
 
 struct Sampler : Handle<Sampler> {
     static auto create(
-        Device_H,
+        Device,
         vk::Filtering min_filter,
         vk::Filtering mag_filter,
         vk::Filtering mip_filter,
@@ -359,9 +366,11 @@ struct Sampler : Handle<Sampler> {
         f32 mip_lod_bias = 0,
         f32 min_lod = 0,
         f32 max_lod = 1000.0f,
-        bool use_anisotropy = false) -> std::expected<SamplerID, vk::Result>;
+        bool use_anisotropy = false) -> std::expected<Sampler, vk::Result>;
     auto destroy() -> void;
     auto set_name(const std::string &) -> Sampler &;
+
+    auto id() const -> SamplerID;
 };
 
 struct SampledImage {
@@ -414,13 +423,14 @@ struct ComputePipelineInfo {
 };
 
 struct Pipeline : Handle<Pipeline> {
-    static auto create(Device, const GraphicsPipelineInfo &info) -> std::expected<PipelineID, vk::Result>;
-    static auto create(Device, const ComputePipelineInfo &info) -> std::expected<PipelineID, vk::Result>;
+    static auto create(Device, const GraphicsPipelineInfo &info) -> std::expected<Pipeline, vk::Result>;
+    static auto create(Device, const ComputePipelineInfo &info) -> std::expected<Pipeline, vk::Result>;
     auto destroy() -> void;
     auto set_name(const std::string &) -> Pipeline &;
 
     auto bind_point() const -> vk::PipelineBindPoint;
     auto layout_id() const -> PipelineLayoutID;
+    auto id() const -> PipelineID;
 };
 
 /////////////////////////////////
@@ -454,6 +464,10 @@ struct RenderingBeginInfo {
 
 struct CommandList : Handle<CommandList> {
     friend CommandQueue;
+
+    auto insert_label(std::string_view name, const glm::vec4 &color) -> void;
+    auto begin_label(std::string_view name, const glm::vec4 &color) -> void;
+    auto end_label() -> void;
 
     auto reset_query_pool(QueryPool_H, u32 first_query, u32 query_count) -> void;
     auto write_query_pool(QueryPool_H, vk::PipelineStage pipeline_stage, u32 query_index) -> void;
@@ -519,6 +533,8 @@ struct CommandQueue : Handle<CommandQueue> {
 
     auto begin(std::source_location LOC = std::source_location::current()) -> CommandList;
     auto end(CommandList &cmd_list) -> void;
+    auto begin_label(std::string_view name, const glm::vec4 &color) -> void;
+    auto end_label() -> void;
 
     auto submit(ls::span<Semaphore> wait_semas, ls::span<Semaphore> signal_semas) -> vk::Result;
     auto acquire(SwapChain swap_chain, Semaphore acquire_sema) -> std::expected<u32, vk::Result>;
@@ -540,8 +556,8 @@ struct SwapChain : Handle<SwapChain> {
 
     auto format() const -> vk::Format;
     auto extent() const -> vk::Extent3D;
-    auto semaphores(usize i) const -> std::pair<Semaphore, Semaphore>;
-    auto get_images() const -> std::vector<ImageID>;
+    auto semaphores(usize i) const -> ls::pair<Semaphore, Semaphore>;
+    auto get_images() const -> std::vector<Image>;
     auto image_index() const -> u32;
 };
 
@@ -552,6 +568,7 @@ struct GPUAllocation {
     u64 offset = 0;
     u64 size = 0;
     u64 gpu_device_address = 0;
+    u64 allocator_data = 0;
 
     auto gpu_offset() -> u64 { return gpu_device_address + offset; }
 };
@@ -586,10 +603,12 @@ struct TransferManager : Handle<TransferManager> {
     auto destroy() -> void;
 
     auto allocate(u64 size, u64 alignment = 16) -> ls::option<GPUAllocation>;
+    auto discard(GPUAllocation &alloc) -> void;
     auto upload(ls::span<GPUAllocation> allocations) -> void;
     auto collect_garbage() -> void;
-    auto semaphore() const -> Semaphore;
+    auto semaphore() const -> Semaphore &;
     auto storage_report() const -> StorageReport;
+    auto capacity() const -> u32;
 
 private:
     auto init_allocator(u32 capacity, u32 max_allocs) -> void;
@@ -617,6 +636,7 @@ struct Device : Handle<Device> {
     auto new_slang_session(const SlangSessionInfo &info) -> ls::option<SlangSession>;
     auto wait() const -> void;
 
+    auto transfer_man() const -> TransferManager &;
     auto new_frame() -> usize;
     auto end_frame(SwapChain &, usize semaphore_index) -> void;
 
@@ -626,14 +646,7 @@ struct Device : Handle<Device> {
     auto sampler(SamplerID) const -> Sampler;
     auto pipeline(PipelineID) const -> Pipeline;
 
-    auto upload(ImageID dst_image_id, void *data, u64 data_size, vk::ImageLayout new_layout) -> void;
-    auto image_transition(ImageID image_id, vk::ImageLayout from, vk::ImageLayout to) -> void;
-
-    auto destroy_buffer(BufferID) -> void;
-    auto destroy_image(ImageID) -> void;
-    auto destroy_image_view(ImageViewID) -> void;
-    auto destroy_sampler(SamplerID) -> void;
-    auto destroy_pipeline(PipelineID) -> void;
+    auto feature_supported(DeviceFeature feature) -> bool;
 
     struct Limits {
         constexpr static u32 FrameCount = 3;

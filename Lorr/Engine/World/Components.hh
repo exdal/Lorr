@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Engine/Asset/Identifier.hh"
+#include "Engine/World/Model.hh"
 
 #include <flecs.h>
 #include <glm/gtx/quaternion.hpp>
@@ -40,7 +41,7 @@ struct Camera {
     f32 fov = 60.0f;
     f32 aspect_ratio = 1.777f;
     f32 near_clip = 0.1;
-    f32 far_clip = 100000.0;
+    f32 far_clip = 1000.0;
 
     static void reflect(flecs::world &w) {
         w.component<Camera>()  //
@@ -56,22 +57,11 @@ struct RenderableModel {
     constexpr static auto ICON = Icon::fa::cube;
 
     Identifier identifier = {};
+    ModelID model_id = ModelID::Invalid;
 
     static void reflect(flecs::world &w) {
         w.component<RenderableModel>()  //
             .member<Identifier, RenderableModel>("identifier", &RenderableModel::identifier);
-    }
-};
-
-struct DirectionalLight {
-    constexpr static auto ICON = Icon::fa::sun;
-
-    glm::vec2 angle = {};
-    f32 intensity = 10.0f;
-    static void reflect(flecs::world &w) {
-        w.component<DirectionalLight>()  //
-            .member<glm::vec2, DirectionalLight>("angle", &DirectionalLight::angle)
-            .member<f32, DirectionalLight>("intensity", &DirectionalLight::intensity);
     }
 };
 
@@ -93,7 +83,6 @@ constexpr static std::tuple<  //
     Transform,
     Camera,
     RenderableModel,
-    DirectionalLight,
     EditorSelected,
     PerspectiveCamera,
     OrthographicCamera>

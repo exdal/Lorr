@@ -1,55 +1,45 @@
 #pragma once
 
-#include "Engine/Graphics/Task/TaskGraph.hh"
+#include "Engine/Core/Handle.hh"
+#include "Engine/Graphics/Vulkan.hh"
 #include "Engine/World/RenderContext.hh"
 
 namespace lr {
+struct WorldRenderer : Handle<WorldRenderer> {
+    struct PBRFlags {
+        bool render_sky = true;
+        bool render_aerial_perspective = true;
+        bool render_clouds = false;
+        bool render_editor_grid = true;
+        bool render_imgui = true;
+    };
 
-struct WorldRenderer {
-    Device device = {};
-    TaskGraph pbr_graph = {};
-    TransferManager transfer_man = {};
+    struct SceneBeginInfo {
+        GPUAllocation cameras_allocation = {};
+        GPUAllocation model_transfors_allocation = {};
+        BufferID materials_buffer_id = BufferID::Invalid;
+        ls::span<GPUModel> gpu_models = {};
+    };
 
-    ls::option<WorldRenderContext> context = ls::nullopt;
-    std::vector<GPUMeshPrimitive> gpu_mesh_primitives = {};
-    std::vector<GPUMesh> gpu_meshes = {};
-    std::vector<GPUModel> gpu_models = {};
+    static auto create(Device device) -> WorldRenderer;
 
-    // Static buffers
-    BufferID material_buffer = BufferID::Invalid;
-    BufferID static_vertex_buffer = BufferID::Invalid;
-    BufferID static_index_buffer = BufferID::Invalid;
+    auto setup_persistent_resources() -> void;
+    auto record_setup_graph() -> void;
+    auto record_pbr_graph(SwapChain &swap_chain) -> void;
+    auto get_pbr_flags() -> PBRFlags &;
+    auto update_pbr_graph() -> void;
 
-    SamplerID linear_sampler = SamplerID::Invalid;
-    SamplerID nearest_sampler = SamplerID::Invalid;
+    auto begin_scene_render_data(u32 camera_count, u32 model_transform_count) -> ls::option<SceneBeginInfo>;
+    auto end_scene_render_data(SceneBeginInfo &info) -> void;
 
-    TaskImageID swap_chain_image = TaskImageID::Invalid;
-    ImageID editor_view_image = ImageID::Invalid;
-    ImageID final_image = ImageID::Invalid;
-    ImageID imgui_font_image = ImageID::Invalid;
+    auto update_world_data() -> void;
+    auto render(SwapChain &swap_chain, Image &image) -> bool;
+    auto draw_profiler_ui() -> void;
 
-    // Vis
-    ImageID geo_depth_image = ImageID::Invalid;
-
-    // Sky
-    ImageID sky_transmittance_image = ImageID::Invalid;
-    ImageID sky_multiscatter_image = ImageID::Invalid;
-    ImageID sky_aerial_perspective_image = ImageID::Invalid;
-    ImageID sky_view_image = ImageID::Invalid;
-
-    // Cloud
-    ImageID cloud_shape_noise_image = ImageID::Invalid;
-    ImageID cloud_detail_noise_image = ImageID::Invalid;
-
-    WorldRenderer(Device device_);
-
-    auto setup_persistent_resources(this WorldRenderer &) -> void;
-
-    auto record_setup_graph(this WorldRenderer &) -> void;
-    auto record_pbr_graph(this WorldRenderer &, SwapChain &swap_chain) -> void;
-
-    auto construct_scene(this WorldRenderer &) -> void;
-    auto render(this WorldRenderer &, SwapChain &swap_chain, ImageID image_id) -> bool;
+    auto sun_angle() -> glm::vec2 &;
+    auto update_sun_dir() -> void;
+    auto world_data() -> GPUWorldData &;
+    auto composition_image() -> Image;
 };
 
 }  // namespace lr

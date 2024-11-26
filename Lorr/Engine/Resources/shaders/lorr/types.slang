@@ -75,6 +75,11 @@ public struct ImageView<Format> {
         const let rw_image = __storage_images[this.handle].as<RWTexture3D<Format>>();
         rw_image[thread_id] = color;
     }
+
+    [ForceInline]
+    public func id() -> ImageViewID {
+        return this.handle;
+    }
 };
 
 public struct SampledImage<Format> {

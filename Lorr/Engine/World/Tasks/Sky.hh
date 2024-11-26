@@ -119,7 +119,7 @@ struct SkyAerialTask {
         Preset::ShaderReadOnly multiscatter_lut = {};
     } uses = {};
 
-    PipelineID pipeline = {};
+    Pipeline pipeline = {};
 
     void execute(TaskContext &tc) {
         struct PushConstants {
@@ -137,7 +137,7 @@ struct SkyAerialTask {
         auto &multiscatter_use = tc.task_image_data(uses.multiscatter_lut);
 
         auto extent = aerial_lut_info.extent();
-        tc.set_pipeline(this->pipeline);
+        tc.set_pipeline(this->pipeline.id());
 
         tc.set_push_constants(PushConstants{
             .world_ptr = render_context.world_ptr,
@@ -159,7 +159,7 @@ struct SkyViewTask {
         Preset::ShaderReadOnly ms_lut = {};
     } uses = {};
 
-    PipelineID pipeline = {};
+    Pipeline pipeline = {};
 
     void execute(TaskContext &tc) {
         struct PushConstants {
@@ -173,7 +173,7 @@ struct SkyViewTask {
         auto &transmittance_use = tc.task_image_data(uses.transmittance_lut);
         auto &ms_use = tc.task_image_data(uses.ms_lut);
 
-        tc.set_pipeline(this->pipeline);
+        tc.set_pipeline(this->pipeline.id());
 
         tc.cmd_list.begin_rendering({
             .render_area = tc.pass_rect(),
@@ -201,8 +201,8 @@ struct SkyFinalTask {
         Preset::ShaderReadOnly transmittance_lut = {};
     } uses = {};
 
-    PipelineID pipeline = {};
-    SamplerID sky_sampler = {};
+    Pipeline pipeline = {};
+    Sampler sky_sampler = {};
 
     void execute(TaskContext &tc) {
         struct PushConstants {
@@ -216,7 +216,7 @@ struct SkyFinalTask {
         auto &sky_view_use = tc.task_image_data(uses.sky_view_lut);
         auto &transmittance_use = tc.task_image_data(uses.transmittance_lut);
 
-        tc.set_pipeline(this->pipeline);
+        tc.set_pipeline(this->pipeline.id());
 
         tc.cmd_list.begin_rendering({
             .render_area = tc.pass_rect(),
@@ -227,7 +227,7 @@ struct SkyFinalTask {
         tc.cmd_list.set_scissors(tc.pass_rect());
         tc.set_push_constants(PushConstants{
             .world_ptr = render_context.world_ptr,
-            .sky_view_lut = { sky_view_use.image_view_id, sky_sampler },
+            .sky_view_lut = { sky_view_use.image_view_id, sky_sampler.id() },
             .transmittance_lut_id = transmittance_use.image_view_id,
         });
         tc.cmd_list.draw(3);
@@ -244,7 +244,7 @@ struct SkyApplyAerialTask {
         Preset::ShaderReadOnly aerial_perspective_image = {};
     } uses = {};
 
-    PipelineID pipeline = {};
+    Pipeline pipeline = {};
 
     void execute(TaskContext &tc) {
         struct PushConstants {
@@ -258,7 +258,7 @@ struct SkyApplyAerialTask {
         auto &depth_image_use = tc.task_image_data(uses.depth_image);
         auto &aerial_perspective_image_use = tc.task_image_data(uses.aerial_perspective_image);
 
-        tc.set_pipeline(this->pipeline);
+        tc.set_pipeline(this->pipeline.id());
 
         tc.cmd_list.begin_rendering({
             .render_area = tc.pass_rect(),

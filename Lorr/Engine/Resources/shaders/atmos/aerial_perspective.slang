@@ -25,9 +25,10 @@ void cs_main(uint3 thread_id : SV_DispatchThreadID) {
     float3 clip_space = float3(2.0 * uv - 1.0, 0.5);
     float4 world_space = mul(camera->inv_projection_view_mat, float4(clip_space, 1.0));
     float3 world_pos = world_space.xyz / world_space.w;
-    float3 eye_dir = normalize(world_pos - camera.position);
-    float eye_height = camera.position.y * CAMERA_SCALE_UNIT + PLANET_RADIUS_OFFSET;
-    vec3 eye_pos = float3(0.0, eye_height + atmos.planet_radius, 0.0);
+    float3 eye_dir = normalize(world_pos - camera->position);
+    float3 eye_pos = float3(0.0, camera->position.y, 0.0) *
+                     CAMERA_SCALE_UNIT +
+                     float3(0.0, atmos->planet_radius, 0.0);
 
     int step_count = int(max(1.0, float(thread_id.z + 1.0) * 2.0));
     float slice = ((float(thread_id.z) + 0.5) * (1.0 / c.target_image_size.z));

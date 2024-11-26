@@ -19,7 +19,6 @@ struct Scene {
     void set_active_camera(this Scene &, flecs::entity camera_entity);
 
     flecs::entity create_perspective_camera(this Scene &, std::string_view name, const glm::vec3 &position, f32 fov, f32 aspect);
-    flecs::entity create_directional_light(this Scene &, std::string_view name, const glm::vec2 &direction);
 
     template<typename T>
     void children(const T &f) {

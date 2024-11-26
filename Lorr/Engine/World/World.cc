@@ -3,7 +3,7 @@
 #include "Engine/Core/Application.hh"
 #include "Engine/OS/OS.hh"
 #include "Engine/Util/JsonWriter.hh"
-#include "Engine/World/Modules.hh"
+#include "Engine/World/Components.hh"
 #include "Engine/World/RuntimeScene.hh"
 
 #include <simdjson.h>
@@ -23,10 +23,100 @@ bool json_to_vec(simdjson::ondemand::value &o, glm::vec<N, T> &vec) {
 bool World::init(this World &self) {
     ZoneScoped;
 
-    self.renderer = std::make_unique<WorldRenderer>(Application::get().device);
+    self.renderer = WorldRenderer::create(Application::get().device);
     self.unload_active_project();
 
     return true;
+}
+
+void World::setup_ecs(this World &self) {
+    ZoneScoped;
+
+    self.ecs
+        .component<glm::vec2>("glm::vec2")  //
+        .member<f32>("x")
+        .member<f32>("y");
+
+    self.ecs
+        .component<glm::vec3>("glm::vec3")  //
+        .member<f32>("x")
+        .member<f32>("y")
+        .member<f32>("z");
+
+    self.ecs
+        .component<glm::vec4>("glm::vec4")  //
+        .member<f32>("x")
+        .member<f32>("y")
+        .member<f32>("z")
+        .member<f32>("w");
+
+    self.ecs
+        .component<glm::mat3>("glm::mat3")  //
+        .member<glm::vec3>("col0")
+        .member<glm::vec3>("col1")
+        .member<glm::vec3>("col2");
+
+    self.ecs
+        .component<glm::mat4>("glm::mat4")  //
+        .member<glm::vec4>("col0")
+        .member<glm::vec4>("col1")
+        .member<glm::vec4>("col2")
+        .member<glm::vec4>("col3");
+
+    self.ecs.component<std::string>("std::string")
+        .opaque(flecs::String)
+        .serialize([](const flecs::serializer *s, const std::string *data) {
+            const char *str = data->c_str();
+            return s->value(flecs::String, &str);
+        })
+        .assign_string([](std::string *data, const char *value) { *data = value; });
+
+    self.ecs.component<Identifier>("Identifier")
+        .opaque(flecs::String)
+        .serialize([](const flecs::serializer *s, const Identifier *data) {
+            const char *str = data->sv().data();
+            return s->value(flecs::String, &str);
+        })
+        .assign_string([](Identifier *data, const char *value) { *data = Identifier(value); });
+
+    // SETUP REFLECTION
+    Component::reflect_all(self.ecs);
+
+    // SETUP SYSTEMS
+    self.ecs.system<Component::PerspectiveCamera, Component::Transform, Component::Camera>()
+        .kind(flecs::OnUpdate)
+        .each([](flecs::iter &it, usize, Component::PerspectiveCamera, Component::Transform &t, Component::Camera &c) {
+            t.rotation.x = std::fmod(t.rotation.x, 360.0f);
+            t.rotation.y = glm::clamp(t.rotation.y, -89.0f, 89.0f);
+
+            auto inv_orient = glm::conjugate(c.orientation);
+            t.position += glm::vec3(inv_orient * glm::vec4(c.cur_axis_velocity * it.delta_time(), 0.0f));
+
+            c.projection = glm::perspectiveLH(glm::radians(c.fov), c.aspect_ratio, c.near_clip, c.far_clip);
+            c.projection[1][1] *= -1;
+
+            auto rotation = glm::radians(t.rotation);
+            c.orientation = glm::angleAxis(rotation.x, glm::vec3(0.0f, -1.0f, 0.0f));
+            c.orientation = glm::angleAxis(rotation.y, glm::vec3(1.0f, 0.0f, 0.0f)) * c.orientation;
+            c.orientation = glm::angleAxis(rotation.z, glm::vec3(0.0f, 0.0f, 1.0f)) * c.orientation;
+            c.orientation = glm::normalize(c.orientation);
+
+            glm::mat4 rotation_mat = glm::toMat4(c.orientation);
+            glm::mat4 translation_mat = glm::translate(glm::mat4(1.f), -t.position);
+            t.matrix = rotation_mat * translation_mat;
+        });
+
+    self.ecs.system<Component::RenderableModel, Component::Transform, Component::RenderableModel>()
+        .kind(flecs::OnUpdate)
+        .each([](flecs::iter &, usize, Component::RenderableModel, Component::Transform &t, Component::RenderableModel &) {
+            auto rotation = glm::radians(t.rotation);
+
+            t.matrix = glm::translate(glm::mat4(1.0), t.position);
+            t.matrix *= glm::rotate(glm::mat4(1.0), rotation.x, glm::vec3(1.0, 0.0, 0.0));
+            t.matrix *= glm::rotate(glm::mat4(1.0), rotation.y, glm::vec3(0.0, 1.0, 0.0));
+            t.matrix *= glm::rotate(glm::mat4(1.0), rotation.z, glm::vec3(0.0, 0.0, 1.0));
+            t.matrix *= glm::scale(glm::mat4(1.0), t.scale);
+        });
 }
 
 void World::shutdown(this World &self) {
@@ -37,6 +127,63 @@ void World::shutdown(this World &self) {
 
 void World::begin_frame(this World &self) {
     ZoneScoped;
+
+    if (!self.active_scene.has_value()) {
+        return;
+    }
+
+    auto &app = Application::get();
+    auto &asset_man = app.asset_man;
+    auto &scene = self.scene_at(self.active_scene.value());
+
+    auto camera_query =  //
+        self.ecs
+            .query_builder<Component::Transform, Component::Camera>()  //
+            .with(flecs::ChildOf, scene.handle)
+            .build();
+    auto model_transform_query =  //
+        self.ecs
+            .query_builder<Component::Transform, Component::RenderableModel>()  //
+            .with(flecs::ChildOf, scene.handle)
+            .build();
+
+    auto scene_begin_info = self.renderer.begin_scene_render_data(camera_query.count(), model_transform_query.count());
+    if (!scene_begin_info.has_value()) {
+        return;
+    }
+
+    auto camera_ptr = reinterpret_cast<GPUCameraData *>(scene_begin_info->cameras_allocation.ptr);
+    camera_query.each([&](Component::Transform &t, Component::Camera &c) {
+        camera_ptr->projection_mat = c.projection;
+        camera_ptr->view_mat = t.matrix;
+        camera_ptr->projection_view_mat = glm::transpose(c.projection * t.matrix);
+        camera_ptr->inv_view_mat = glm::inverse(glm::transpose(t.matrix));
+        camera_ptr->inv_projection_view_mat = glm::inverse(glm::transpose(c.projection)) * camera_ptr->inv_view_mat;
+        camera_ptr->position = t.position;
+        camera_ptr->near_clip = c.near_clip;
+        camera_ptr->far_clip = c.far_clip;
+
+        camera_ptr++;
+    });
+
+    auto model_transforms_ptr = reinterpret_cast<GPUModelTransformData *>(scene_begin_info->model_transfors_allocation.ptr);
+    model_transform_query.each([&](Component::Transform &t, Component::RenderableModel &) {
+        auto rotation = glm::radians(t.rotation);
+
+        glm::mat4 &world_mat = model_transforms_ptr->world_transform_mat;
+        world_mat = glm::translate(glm::mat4(1.0), glm::vec3(0.0f));
+        world_mat *= glm::rotate(glm::mat4(1.0), rotation.x, glm::vec3(1.0, 0.0, 0.0));
+        world_mat *= glm::rotate(glm::mat4(1.0), rotation.y, glm::vec3(0.0, 1.0, 0.0));
+        world_mat *= glm::rotate(glm::mat4(1.0), rotation.z, glm::vec3(0.0, 0.0, 1.0));
+        world_mat *= glm::scale(glm::mat4(1.0), t.scale);
+
+        model_transforms_ptr->model_transform_mat = t.matrix;
+        model_transforms_ptr++;
+    });
+
+    scene_begin_info->materials_buffer_id = asset_man.material_buffer().id();
+    scene_begin_info->gpu_models = asset_man.gpu_models();
+    self.renderer.end_scene_render_data(scene_begin_info.value());
 
     self.ecs.progress();
 }
@@ -351,7 +498,7 @@ bool World::unload_active_project(this World &self) {
     self.scenes.clear();
     self.project_info.reset();
 
-    self.ecs.import <Module::CoreECS>();
+    self.setup_ecs();
     self.root = self.ecs.entity();
 
     return true;

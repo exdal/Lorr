@@ -2,7 +2,6 @@
 
 #include "Engine/Asset/ParserSTB.hh"
 #include "Engine/OS/OS.hh"
-#include "Engine/World/Model.hh"
 
 #include <glm/packing.hpp>
 
@@ -18,7 +17,7 @@ template<>
 struct fastgltf::ElementTraits<glm::vec2> : fastgltf::ElementTraitsBase<glm::vec2, AccessorType::Vec2, float> {};
 
 namespace lr {
-auto GLTFModelInfo::parse(Device device, const fs::path &path) -> ls::option<GLTFModelInfo> {
+auto GLTFModelInfo::parse(const fs::path &path) -> ls::option<GLTFModelInfo> {
     ZoneScoped;
 
     std::string path_str = path.string();
@@ -139,7 +138,6 @@ auto GLTFModelInfo::parse(Device device, const fs::path &path) -> ls::option<GLT
     auto parse_image = [&](const std::string &name, ls::span<u8> data, fastgltf::MimeType mime) -> ls::option<GLTFImageInfo> {
         GLTFImageInfo info = {};
         info.name = name;
-        std::vector<u8> parsed_data = {};
         switch (mime) {
             case fastgltf::MimeType::JPEG:
             case fastgltf::MimeType::PNG: {
@@ -147,31 +145,19 @@ auto GLTFModelInfo::parse(Device device, const fs::path &path) -> ls::option<GLT
                 if (!image.has_value()) {
                     return ls::nullopt;
                 }
-
                 info.format = image->format;
                 info.extent = image->extent;
-                parsed_data = std::move(image->data);
-                break;
+                info.pixels = std::move(image->data);
+                return info;
             }
             case fastgltf::MimeType::KTX2:
-            case fastgltf::MimeType::DDS:
+            case fastgltf::MimeType::DDS: {
+            }
             case fastgltf::MimeType::None:
             case fastgltf::MimeType::GltfBuffer:
             case fastgltf::MimeType::OctetStream:
                 return ls::nullopt;
         }
-
-        info.buffer_id = Buffer::create(
-                             device,
-                             vk::BufferUsage::TransferSrc,
-                             parsed_data.size(),
-                             vk::MemoryAllocationUsage::PreferHost,
-                             vk::MemoryAllocationFlag::HostSeqWrite)
-                             .value();
-        auto buffer = device.buffer(info.buffer_id.value());
-        auto *buffer_ptr = buffer.host_ptr();
-        std::memcpy(buffer_ptr, parsed_data.data(), parsed_data.size());
-        return info;
     };
 
     for (const auto &v : asset.images) {
@@ -197,7 +183,6 @@ auto GLTFModelInfo::parse(Device device, const fs::path &path) -> ls::option<GLT
                 },
                 [&](const fastgltf::sources::URI &uri) {
                     // External file
-
                     const auto image_file_path = path.parent_path() / uri.uri.fspath();
                     File file(image_file_path, FileAccess::Read);
                     file.seek(uri.fileByteOffset);
@@ -217,11 +202,9 @@ auto GLTFModelInfo::parse(Device device, const fs::path &path) -> ls::option<GLT
 
     for (const auto &v : asset.textures) {
         auto &texture = model.textures.emplace_back();
-
         if (v.samplerIndex.has_value()) {
             texture.sampler_index = v.samplerIndex.value();
         }
-
         if (v.imageIndex.has_value()) {
             texture.image_index = v.imageIndex.value();
         }
@@ -273,12 +256,9 @@ auto GLTFModelInfo::parse(Device device, const fs::path &path) -> ls::option<GLT
 
     LOG_TRACE("Parsing GLTF meshes...");
 
+    u32 total_vertex_count = 0;
+    u32 total_index_count = 0;
     for (const auto &v : asset.meshes) {
-        auto &mesh = model.meshes.emplace_back();
-        mesh.name = v.name;
-
-        u32 total_vertex_count = 0;
-        u32 total_index_count = 0;
         for (const auto &k : v.primitives) {
             auto &index_accessor = asset.accessors[k.indicesAccessor.value()];
             if (auto attrib = k.findAttribute("POSITION"); attrib != k.attributes.end()) {
@@ -288,30 +268,17 @@ auto GLTFModelInfo::parse(Device device, const fs::path &path) -> ls::option<GLT
 
             total_index_count += index_accessor.count;
         }
+    }
 
-        mesh.total_vertex_count = total_vertex_count;
-        mesh.total_index_count = total_index_count;
+    model.vertices.resize(total_vertex_count);
+    model.indices.resize(total_index_count);
 
-        mesh.vertex_buffer_cpu = Buffer::create(
-                                     device,
-                                     vk::BufferUsage::TransferSrc,
-                                     total_vertex_count * sizeof(Vertex),
-                                     vk::MemoryAllocationUsage::PreferHost,
-                                     vk::MemoryAllocationFlag::HostSeqWrite)
-                                     .value();
-        mesh.index_buffer_cpu = Buffer::create(
-                                    device,
-                                    vk::BufferUsage::TransferSrc,
-                                    total_index_count * sizeof(u32),
-                                    vk::MemoryAllocationUsage::PreferHost,
-                                    vk::MemoryAllocationFlag::HostSeqWrite)
-                                    .value();
+    u32 vertex_offset = 0;
+    u32 index_offset = 0;
+    for (const auto &v : asset.meshes) {
+        auto &mesh = model.meshes.emplace_back();
+        mesh.name = v.name;
 
-        auto *vertices = reinterpret_cast<Vertex *>(device.buffer(mesh.vertex_buffer_cpu.value()).host_ptr());
-        auto *indices = reinterpret_cast<u32 *>(device.buffer(mesh.index_buffer_cpu.value()).host_ptr());
-
-        u32 vertex_offset = 0;
-        u32 index_offset = 0;
         for (const auto &k : v.primitives) {
             mesh.primitive_indices.push_back(model.primitives.size());
             auto &primitive = model.primitives.emplace_back();
@@ -321,45 +288,46 @@ auto GLTFModelInfo::parse(Device device, const fs::path &path) -> ls::option<GLT
             primitive.index_offset = index_offset;
             primitive.index_count = index_accessor.count;
 
-            fastgltf::iterateAccessorWithIndex<u32>(asset, index_accessor, [&](u32 index, usize i) { indices[index_offset + i] = index; });
+            fastgltf::iterateAccessorWithIndex<u32>(asset, index_accessor, [&](u32 index, usize i) {  //
+                model.indices[index_offset + i] = index;
+            });
 
             if (auto attrib = k.findAttribute("POSITION"); attrib != k.attributes.end()) {
                 auto &accessor = asset.accessors[attrib->accessorIndex];
                 primitive.vertex_count = accessor.count;
 
-                fastgltf::iterateAccessorWithIndex<glm::vec3>(
-                    asset, accessor, [&](glm::vec3 pos, usize i) { vertices[vertex_offset + i].position = pos; });
+                fastgltf::iterateAccessorWithIndex<glm::vec3>(asset, accessor, [&](glm::vec3 pos, usize i) {  //
+                    model.vertices[vertex_offset + i].position = pos;
+                });
             }
-
-            LS_EXPECT(vertices != nullptr);
 
             if (auto attrib = k.findAttribute("NORMAL"); attrib != k.attributes.end()) {
                 auto &accessor = asset.accessors[attrib->accessorIndex];
-                fastgltf::iterateAccessorWithIndex<glm::vec3>(
-                    asset, accessor, [&](glm::vec3 normal, usize i) { vertices[vertex_offset + i].normal = normal; });
+                fastgltf::iterateAccessorWithIndex<glm::vec3>(asset, accessor, [&](glm::vec3 normal, usize i) {  //
+                    model.vertices[vertex_offset + i].normal = normal;
+                });
             }
 
             if (auto attrib = k.findAttribute("TEXCOORD_0"); attrib != k.attributes.end()) {
                 auto &accessor = asset.accessors[attrib->accessorIndex];
-                fastgltf::iterateAccessorWithIndex<glm::vec2>(asset, accessor, [&](glm::vec2 uv, usize i) {
-                    auto &vertex = vertices[vertex_offset + i];
-                    vertex.uv_x = uv.x;
-                    vertex.uv_y = uv.y;
+                fastgltf::iterateAccessorWithIndex<glm::vec2>(asset, accessor, [&](glm::vec2 uv, usize i) {  //
+                    model.vertices[vertex_offset + i].tex_coord_0 = uv;
                 });
             }
 
-            // if (auto attrib = k.findAttribute("COLOR"); attrib != k.attributes.end()) {
-            //     auto &accessor = asset.accessors[attrib->accessorIndex];
-            //     fastgltf::iterateAccessorWithIndex<glm::vec4>(
-            //         asset, accessor, [&](glm::vec4 color, usize i) { vertices[vertex_offset + i].color = glm::packUnorm4x8(color); });
-            // }
+            if (auto attrib = k.findAttribute("COLOR"); attrib != k.attributes.end()) {
+                auto &accessor = asset.accessors[attrib->accessorIndex];
+                fastgltf::iterateAccessorWithIndex<glm::vec4>(asset, accessor, [&](glm::vec4 color, usize i) {  //
+                    model.vertices[vertex_offset + i].color = glm::packUnorm4x8(color);
+                });
+            }
 
             if (k.materialIndex.has_value()) {
                 primitive.material_index = k.materialIndex.value();
             }
 
-            vertex_offset += primitive.vertex_count.value();
-            index_offset += primitive.index_count.value();
+            vertex_offset += primitive.vertex_count;
+            index_offset += primitive.index_count;
         }
     }
 
@@ -368,25 +336,6 @@ auto GLTFModelInfo::parse(Device device, const fs::path &path) -> ls::option<GLT
     LOG_TRACE("GLTF parsing end.");
 
     return model;
-}
-
-auto GLTFModelInfo::destroy(Device device) -> void {
-    ZoneScoped;
-
-    for (auto &v : this->images) {
-        if (v.buffer_id.has_value()) {
-            device.destroy_buffer(v.buffer_id.value());
-        }
-    }
-
-    for (auto &v : this->meshes) {
-        if (v.vertex_buffer_cpu.has_value()) {
-            device.destroy_buffer(v.vertex_buffer_cpu.value());
-        }
-        if (v.index_buffer_cpu.has_value()) {
-            device.destroy_buffer(v.index_buffer_cpu.value());
-        }
-    }
 }
 
 }  // namespace lr

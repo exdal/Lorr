@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Engine/Graphics/Vulkan.hh"
+#include "Engine/World/Model.hh"
 
 namespace lr {
 struct GPUSunData {
@@ -39,39 +40,10 @@ struct GPUClouds {
     f32 general_density = 0.1;
     glm::vec3 phase_values = { 0.183, -0.253, 0.5 };  // forward phase, backwards phase, mix factor
     f32 cloud_type = 0.0;
-    f32 draw_distance = 80000.0;
+    f32 draw_distance = 1000.0;
     f32 darkness_threshold = 0.450;
     i32 sun_step_count = 5;
     i32 clouds_step_count = 30;
-};
-
-enum class GPUMaterialID : u32 { Invalid = ~0_u32 };
-struct GPUMaterial {
-    glm::vec4 albedo_color = { 1.0f, 1.0f, 1.0f, 1.0f };
-    glm::vec4 emissive_color = { 0.0f, 0.0f, 0.0f, 1.0f };
-    f32 roughness_factor = 0.0f;
-    f32 metallic_factor = 0.0f;
-    vk::AlphaMode alpha_mode = vk::AlphaMode::Opaque;
-    f32 alpha_cutoff = 0.0f;
-    SampledImage albedo_image = {};
-    SampledImage normal_image = {};
-    SampledImage emissive_image = {};
-};
-
-struct GPUMeshPrimitive {
-    u32 vertex_offset = 0;
-    u32 vertex_count = 0;
-    u32 index_offset = 0;
-    u32 index_count = 0;
-    GPUMaterialID material_id = GPUMaterialID::Invalid;
-};
-
-struct GPUMesh {
-    std::vector<u32> primitive_indices = {};
-};
-
-struct GPUModel {
-    std::vector<u32> mesh_indices = {};
 };
 
 struct GPUCameraData {
@@ -90,13 +62,16 @@ struct GPUModelTransformData {
     glm::mat4 world_transform_mat = {};
 };
 
+// NOTE: THIS IS GPU WORLD DATA, DO NOT CHANGE THIS WITHOUT
+// SHADER MODIFICATION!!! PLACE CPU RELATED STUFF AT `WorldRenderContext`!
+//
 struct GPUWorldData {
     SamplerID linear_sampler = SamplerID::Invalid;
     SamplerID nearest_sampler = SamplerID::Invalid;
 
-    u64 cameras_ptr = {};
-    u64 materials_ptr = {};
-    u64 model_transforms_ptr = {};
+    u64 cameras_ptr = 0;
+    u64 materials_ptr = 0;
+    u64 model_transforms_ptr = 0;
     u32 active_camera_index = 0;
 
     GPUSunData sun = {};
@@ -110,10 +85,8 @@ struct WorldRenderContext {
     u64 world_ptr = 0;
     GPUWorldData world_data = {};
     ls::span<GPUModel> models = {};
-    ls::span<GPUMesh> meshes = {};
-    ls::span<GPUMeshPrimitive> mesh_primitives = {};
-    BufferID vertex_buffer = BufferID::Invalid;
-    BufferID index_buffer = BufferID::Invalid;
+
+    glm::vec2 sun_angle = { 0, 0 };
 };
 
 }  // namespace lr

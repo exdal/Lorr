@@ -44,8 +44,8 @@ void ViewportPanel::on_drop(this ViewportPanel &) {
     if (const auto *asset_payload = ImGui::AcceptDragDropPayload("ASSET_PATH")) {
         std::string_view path_sv(static_cast<const c8 *>(asset_payload->Data), asset_payload->DataSize);
         auto model_ident = Identifier::random();
-        auto model = app.asset_man.load_model(model_ident, path_sv);
-        if (!model) {
+        auto model_id = app.asset_man.load_model(model_ident, path_sv);
+        if (model_id == ModelID::Invalid) {
             LOG_ERROR("Failed to import model into the scene!");
             return;
         }
@@ -53,8 +53,8 @@ void ViewportPanel::on_drop(this ViewportPanel &) {
         scene
             .create_entity(model_ident.sv())  //
             .set<Component::Transform>({})
-            .set<Component::RenderableModel>({ model_ident });
-        world.renderer->construct_scene();
+            .set<Component::RenderableModel>({ model_ident, model_id })
+            .emit(flecs::OnSet);
     } else if (const auto *camera_payload = ImGui::AcceptDragDropPayload("ATTACH_CAMERA")) {
         auto camera_id = *static_cast<flecs::entity *>(camera_payload->Data);
         scene.set_active_camera(camera_id);
@@ -70,8 +70,9 @@ void ViewportPanel::update(this ViewportPanel &self) {
     ImGui::PopStyleVar();
 
     auto *current_window = ImGui::GetCurrentWindow();
+    auto editor_image = world.renderer.composition_image();
 
-    if (world.active_scene.has_value()) {
+    if (world.active_scene.has_value() && editor_image) {
         auto &scene = world.scene_at(world.active_scene.value());
         if (scene.active_camera.has_value()) {
             auto window_rect = current_window->InnerRect;
@@ -83,7 +84,7 @@ void ViewportPanel::update(this ViewportPanel &self) {
             ImGuizmo::SetDrawlist();
             ImGuizmo::SetRect(window_pos.x, window_pos.y, window_size.x, window_size.y);
 
-            ImGui::Image(reinterpret_cast<ImTextureID>(static_cast<iptr>(world.renderer->editor_view_image)), work_area_size);
+            ImGui::Image(reinterpret_cast<ImTextureID>(static_cast<iptr>(editor_image.id())), work_area_size);
 
             auto *camera = scene.active_camera->get_mut<Component::Camera>();
             auto *camera_transform = scene.active_camera->get_mut<Component::Transform>();

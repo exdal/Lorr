@@ -3,6 +3,13 @@
 #include "Engine/Graphics/Vulkan.hh"
 
 namespace lr {
+struct GLTFVertex {
+    glm::vec3 position = {};
+    glm::vec3 normal = {};
+    glm::vec2 tex_coord_0 = {};
+    u32 color = 0;
+};
+
 struct GLTFSamplerInfo {
     vk::Filtering mag_filter = {};
     vk::Filtering min_filter = {};
@@ -14,7 +21,7 @@ struct GLTFImageInfo {
     std::string name = {};
     vk::Format format = vk::Format::Undefined;
     vk::Extent2D extent = {};
-    ls::option<BufferID> buffer_id = ls::nullopt;
+    std::vector<u8> pixels = {};
 };
 
 struct GLTFTextureInfo {
@@ -37,20 +44,16 @@ struct GLTFMaterialInfo {
 };
 
 struct GLTFPrimitiveInfo {
-    ls::option<u32> vertex_offset;
-    ls::option<u32> vertex_count;
-    ls::option<u32> index_offset;
-    ls::option<u32> index_count;
-    ls::option<u32> material_index;
+    u32 vertex_offset = 0;
+    u32 vertex_count = 0;
+    u32 index_offset = 0;
+    u32 index_count = 0;
+    u32 material_index = 0;
 };
 
 struct GLTFMeshInfo {
     std::string name = {};
     std::vector<u32> primitive_indices = {};
-    ls::option<BufferID> vertex_buffer_cpu = ls::nullopt;
-    ls::option<BufferID> index_buffer_cpu = ls::nullopt;
-    u32 total_vertex_count = 0;
-    u32 total_index_count = 0;
 };
 
 struct GLTFModelInfo {
@@ -60,9 +63,10 @@ struct GLTFModelInfo {
     std::vector<GLTFMaterialInfo> materials = {};
     std::vector<GLTFPrimitiveInfo> primitives = {};
     std::vector<GLTFMeshInfo> meshes = {};
+    std::vector<GLTFVertex> vertices = {};
+    std::vector<u32> indices = {};
 
-    static auto parse(Device device, const fs::path &path) -> ls::option<GLTFModelInfo>;
-    auto destroy(Device device) -> void;
+    static auto parse(const fs::path &path) -> ls::option<GLTFModelInfo>;
 };
 
 }  // namespace lr

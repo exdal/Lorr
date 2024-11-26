@@ -134,6 +134,42 @@ auto QueryPool::get_results(u32 first_query, u32 count, ls::span<u64> time_stamp
         VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT);
 }
 
+auto CommandList::insert_label(std::string_view name, const glm::vec4 &color) -> void {
+    ZoneScoped;
+
+#ifdef LS_DEBUG
+    VkDebugUtilsLabelEXT label_info = {
+        .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,
+        .pNext = nullptr,
+        .pLabelName = name.data(),
+        .color = { color.r, color.g, color.b, color.a },
+    };
+    vkCmdInsertDebugUtilsLabelEXT(impl->handle, &label_info);
+#endif
+}
+
+auto CommandList::begin_label(std::string_view name, const glm::vec4 &color) -> void {
+    ZoneScoped;
+
+#ifdef LS_DEBUG
+    VkDebugUtilsLabelEXT label_info = {
+        .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,
+        .pNext = nullptr,
+        .pLabelName = name.data(),
+        .color = { color.r, color.g, color.b, color.a },
+    };
+    vkCmdBeginDebugUtilsLabelEXT(impl->handle, &label_info);
+#endif
+}
+
+auto CommandList::end_label() -> void {
+    ZoneScoped;
+
+#ifdef LS_DEBUG
+    vkCmdEndDebugUtilsLabelEXT(impl->handle);
+#endif
+}
+
 auto CommandList::reset_query_pool(QueryPool_H query_pool, u32 first_query, u32 query_count) -> void {
     ZoneScoped;
 
@@ -446,6 +482,7 @@ auto CommandList::set_push_constants(const void *data, u32 data_size, u32 data_o
     ZoneScoped;
 
     LS_EXPECT(impl->bound_pipeline_layout.has_value());
+    LS_EXPECT((data_size / sizeof(u32)) <= static_cast<u32>(impl->bound_pipeline->layout_id()));
     vkCmdPushConstants(impl->handle, impl->bound_pipeline_layout.value(), VK_SHADER_STAGE_ALL, data_offset, data_size, data);
 }
 
@@ -625,10 +662,10 @@ auto CommandQueue::collect_garbage() -> void {
     };
 
     u64 queue_counter = impl->semaphore.counter();
-    checkndelete_fn(impl->garbage_buffers, queue_counter, [&](BufferID id) { impl->device.destroy_buffer(id); });
-    checkndelete_fn(impl->garbage_images, queue_counter, [&](ImageID id) { impl->device.destroy_image(id); });
-    checkndelete_fn(impl->garbage_image_views, queue_counter, [&](ImageViewID id) { impl->device.destroy_image_view(id); });
-    checkndelete_fn(impl->garbage_samplers, queue_counter, [&](SamplerID id) { impl->device.destroy_sampler(id); });
+    checkndelete_fn(impl->garbage_buffers, queue_counter, [&](BufferID id) { impl->device.buffer(id).destroy(); });
+    checkndelete_fn(impl->garbage_images, queue_counter, [&](ImageID id) { impl->device.image(id).destroy(); });
+    checkndelete_fn(impl->garbage_image_views, queue_counter, [&](ImageViewID id) { impl->device.image_view(id).destroy(); });
+    checkndelete_fn(impl->garbage_samplers, queue_counter, [&](SamplerID id) { impl->device.sampler(id).destroy(); });
     checkndelete_fn(impl->garbage_command_lists, queue_counter, [&](u32 id) { impl->free_command_lists.emplace_back(id); });
 }
 
@@ -699,6 +736,29 @@ auto CommandQueue::end(CommandList &cmd_list) -> void {
         .deviceMask = 0,
     });
     impl->garbage_command_lists.emplace(cmd_list->id, impl->semaphore.value());
+}
+
+auto CommandQueue::begin_label(std::string_view name, const glm::vec4 &color) -> void {
+    ZoneScoped;
+
+#ifdef LS_DEBUG
+    VkDebugUtilsLabelEXT label_info = {
+        .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,
+        .pNext = nullptr,
+        .pLabelName = name.data(),
+        .color = { color.r, color.g, color.b, color.a },
+    };
+
+    vkQueueBeginDebugUtilsLabelEXT(impl->handle, &label_info);
+#endif
+}
+
+auto CommandQueue::end_label() -> void {
+    ZoneScoped;
+
+#ifdef LS_DEBUG
+    vkQueueEndDebugUtilsLabelEXT(impl->handle);
+#endif
 }
 
 auto CommandQueue::submit(ls::span<Semaphore> wait_semas, ls::span<Semaphore> signal_semas) -> vk::Result {

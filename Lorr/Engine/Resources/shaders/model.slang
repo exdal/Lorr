@@ -7,7 +7,7 @@ import atmos.atmos;
     World *world;
     ImageView<float4> transmittance_lut;
     u32 model_transform_index;
-    u32 material_id;
+    u32 material_index;
     u32 pad;
 } c;
 
@@ -45,7 +45,7 @@ float4 fs_main(VertexOutput input) : SV_Target {
     Atmosphere *atmos = &world->atmosphere;
     Sun *sun = &world->sun;
     Camera *camera = &world->cameras[world->active_camera_index];
-    Material *material = &world->materials[c.material_id];
+    Material *material = &world->materials[c.material_index];
 
     float3 world_position = input.world_position.xyz * CAMERA_SCALE_UNIT + float3(0.0, atmos->planet_radius, 0.0);
     float h = length(world_position);
@@ -59,5 +59,5 @@ float4 fs_main(VertexOutput input) : SV_Target {
     float3 ambient = float3(0.1) * albedo_color;
     float3 diffuse = diff * albedo_color;
 
-    return float4((ambient + diffuse) * 0.5 * sun_transmittance, 1.0);
+    return float4(diffuse * 0.5 * sun_transmittance, 1.0);
 }

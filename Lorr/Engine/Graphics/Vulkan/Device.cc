@@ -60,7 +60,6 @@ auto Device::create(usize frame_count) -> std::expected<Device, vk::Result> {
 #if LS_DEBUG
         //! Debug extensions, always put it to bottom
         "VK_EXT_debug_utils",
-        "VK_EXT_debug_report"
 #endif
     });
     // clang-format on
@@ -154,15 +153,10 @@ auto Device::create(usize frame_count) -> std::expected<Device, vk::Result> {
     impl->physical_device = physical_device_result.value();
 
     // We don't want to kill the coverage...
-    // if
-    // (impl->physical_device.enable_extension_if_present("VK_EXT_descriptor_buffer"))
-    // {
+    // if (impl->physical_device.enable_extension_if_present("VK_EXT_descriptor_buffer")) {
     //     impl->supported_features |= DeviceFeature::DescriptorBuffer;
-    //     VkPhysicalDeviceDescriptorBufferFeaturesEXT desciptor_buffer_features
-    //     =
-    //     {
-    //         .sType =
-    //         VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT,
+    //     VkPhysicalDeviceDescriptorBufferFeaturesEXT desciptor_buffer_features = {
+    //         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT,
     //         .pNext = nullptr,
     //         .descriptorBuffer = true,
     //         .descriptorBufferCaptureReplay = false,
@@ -173,9 +167,13 @@ auto Device::create(usize frame_count) -> std::expected<Device, vk::Result> {
     // }
     if (impl->physical_device.enable_extension_if_present("VK_EXT_memory_budget")) {
         impl->supported_features |= DeviceFeature::MemoryBudget;
+
+        LOG_INFO("Memory Budget extension enabled.");
     }
     if (impl->physical_device.properties.limits.timestampPeriod != 0) {
         impl->supported_features |= DeviceFeature::QueryTimestamp;
+
+        LOG_INFO("Query Timestamp extension enabled.");
     }
 
     vkb::DeviceBuilder device_builder(impl->physical_device);
@@ -367,22 +365,21 @@ auto Device::create(usize frame_count) -> std::expected<Device, vk::Result> {
                                  impl->resources.buffers.max_resources() * sizeof(u64),
                                  vk::MemoryAllocationUsage::PreferDevice,
                                  vk::MemoryAllocationFlag::HostSeqWrite)
-                                 .value();
-    auto &bda_buffer = impl->resources.buffers.get(impl->bda_array_buffer);
-    impl->bda_array_host_addr = static_cast<u64 *>(bda_buffer.host_data);
+                                 .value()
+                                 .set_name("BDA Array Buffer");
 
     VkDescriptorBufferInfo bda_descriptor_info = {
-        .buffer = bda_buffer.handle,
+        .buffer = impl->bda_array_buffer->handle,
         .offset = 0,
         .range = ~0_u64,
     };
 
-    VkWriteDescriptorSet sampler_write_set_info = {
+    VkWriteDescriptorSet bda_write_descriptor_set_info = {
         .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
         .pNext = nullptr,
         .dstSet = impl->descriptor_set,
         .dstBinding = std::to_underlying(Descriptors::BDA),
-        .dstArrayElement = std::to_underlying(impl->bda_array_buffer),
+        .dstArrayElement = std::to_underlying(impl->bda_array_buffer.id()),
         .descriptorCount = 1,
         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
         .pImageInfo = nullptr,
@@ -390,16 +387,9 @@ auto Device::create(usize frame_count) -> std::expected<Device, vk::Result> {
         .pTexelBufferView = nullptr,
     };
 
-    vkUpdateDescriptorSets(impl->handle, 1, &sampler_write_set_info, 0, nullptr);
+    vkUpdateDescriptorSets(impl->handle, 1, &bda_write_descriptor_set_info, 0, nullptr);
 
-    impl->persistent_buffer = Buffer::create(
-                                  impl,
-                                  vk::BufferUsage::TransferSrc,
-                                  Device::Limits::PersistentBufferSize,
-                                  vk::MemoryAllocationUsage::PreferHost,
-                                  vk::MemoryAllocationFlag::HostSeqWrite)
-                                  .value();
-
+    impl->transfer_manager = TransferManager::create(impl, Limits::PersistentBufferSize);
     impl->shader_compiler = SlangCompiler::create().value();
 
     return Device(impl);
@@ -430,6 +420,12 @@ auto Device::wait() const -> void {
     vkDeviceWaitIdle(impl->handle);
 }
 
+auto Device::transfer_man() const -> TransferManager & {
+    ZoneScoped;
+
+    return impl->transfer_manager;
+}
+
 auto Device::new_frame() -> usize {
     ZoneScoped;
 
@@ -451,6 +447,7 @@ auto Device::end_frame(SwapChain &swap_chain, usize semaphore_index) -> void {
     present_queue.submit(present_queue_sema, signal_semas);
     present_queue.present(swap_chain, present_sema, swap_chain.image_index());
 
+    impl->transfer_manager.collect_garbage();
     for (auto &v : impl->queues) {
         v.collect_garbage();
     }
@@ -481,108 +478,9 @@ auto Device::pipeline(PipelineID id) const -> Pipeline {
     return Pipeline(&impl->resources.pipelines.get(id));
 }
 
-auto Device::upload(ImageID dst_image_id, void *data, u64 data_size, vk::ImageLayout new_layout) -> void {
+auto Device::feature_supported(DeviceFeature feature) -> bool {
     ZoneScoped;
-
-    // TODO: yeah
-    LS_EXPECT(data_size <= Device::Limits::PersistentBufferSize);
-
-    auto dst_image = this->image(dst_image_id);
-    auto graphics_queue = queue(vk::CommandType::Graphics);
-    auto extent = dst_image.extent();
-    const auto &format_info = get_format_info(dst_image.format());
-    auto buffer_ptr = this->buffer(impl->persistent_buffer).host_ptr();
-
-    auto rows = (extent.height + format_info.block_height - 1) / format_info.block_height;
-    auto cols = (extent.width + format_info.block_width - 1) / format_info.block_width;
-    auto pixel_size = rows * cols * format_info.component_size;
-    LS_EXPECT(pixel_size == data_size);
-
-    std::memcpy(buffer_ptr, data, data_size);
-
-    auto cmd_list = graphics_queue.begin();
-    cmd_list.image_transition({
-        .src_stage = vk::PipelineStage::TopOfPipe,
-        .src_access = vk::MemoryAccess::None,
-        .dst_stage = vk::PipelineStage::Copy,
-        .dst_access = vk::MemoryAccess::TransferWrite,
-        .old_layout = vk::ImageLayout::Undefined,
-        .new_layout = vk::ImageLayout::TransferDst,
-        .image_id = dst_image_id,
-    });
-    vk::ImageCopyRegion copy_region = {
-        .buffer_offset = 0,
-        .image_extent = extent,
-    };
-    cmd_list.copy_buffer_to_image(impl->persistent_buffer, dst_image_id, vk::ImageLayout::TransferDst, copy_region);
-    cmd_list.image_transition({
-        .src_stage = vk::PipelineStage::Copy,
-        .src_access = vk::MemoryAccess::TransferWrite,
-        .dst_stage = vk::PipelineStage::AllCommands,
-        .dst_access = vk::MemoryAccess::ReadWrite,
-        .old_layout = vk::ImageLayout::TransferDst,
-        .new_layout = new_layout,
-        .image_id = dst_image_id,
-    });
-
-    graphics_queue.end(cmd_list);
-    graphics_queue.submit({}, {});
-    graphics_queue.wait();
-}
-
-auto Device::image_transition(ImageID image_id, vk::ImageLayout from, vk::ImageLayout to) -> void {
-    ZoneScoped;
-
-    auto queue = this->queue(vk::CommandType::Graphics);
-    auto cmd_list = queue.begin();
-    cmd_list.image_transition({
-        .src_stage = vk::PipelineStage::AllCommands,
-        .src_access = vk::MemoryAccess::ReadWrite,
-        .dst_stage = vk::PipelineStage::AllCommands,
-        .dst_access = vk::MemoryAccess::ReadWrite,
-        .old_layout = from,
-        .new_layout = to,
-        .image_id = image_id,
-        .subresource_range = this->image(image_id).subresource_range(),
-    });
-    queue.end(cmd_list);
-    queue.submit({}, {});
-    queue.wait();
-}
-
-auto Device::destroy_buffer(BufferID id) -> void {
-    ZoneScoped;
-    auto v = buffer(id);
-    v.destroy();
-    impl->resources.buffers.destroy(id);
-}
-
-auto Device::destroy_image(ImageID id) -> void {
-    ZoneScoped;
-    auto v = image(id);
-    v.destroy();
-    impl->resources.images.destroy(id);
-}
-
-auto Device::destroy_image_view(ImageViewID id) -> void {
-    ZoneScoped;
-    auto v = image_view(id);
-    v.destroy();
-    impl->resources.image_views.destroy(id);
-}
-
-auto Device::destroy_sampler(SamplerID id) -> void {
-    ZoneScoped;
-    auto v = sampler(id);
-    v.destroy();
-    impl->resources.samplers.destroy(id);
-}
-
-auto Device::destroy_pipeline(PipelineID id) -> void {
-    ZoneScoped;
-    auto v = pipeline(id);
-    v.destroy();
-    impl->resources.pipelines.destroy(id);
+    return impl->supported_features & feature;
 }
 
 }  // namespace lr

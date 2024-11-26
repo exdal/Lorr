@@ -90,6 +90,7 @@ struct Handle<Buffer>::Impl {
     u64 data_size = 0;
     void *host_data = nullptr;
     u64 device_address = 0;
+    BufferID id = BufferID::Invalid;
 
     VmaAllocation allocation = {};
     VkBuffer handle = VK_NULL_HANDLE;
@@ -103,9 +104,10 @@ struct Handle<Image>::Impl {
     vk::Format format = vk::Format::Undefined;
     vk::ImageAspectFlag aspect_flags = vk::ImageAspectFlag::Color;
     vk::Extent3D extent = {};
-    ImageViewID default_view = {};
+    ImageView default_view = {};
     u32 slice_count = 1;
     u32 mip_levels = 1;
+    ImageID id = ImageID::Invalid;
 
     VmaAllocation allocation = {};
     VkImage handle = VK_NULL_HANDLE;
@@ -118,6 +120,7 @@ struct Handle<ImageView>::Impl {
     vk::Format format = vk::Format::Undefined;
     vk::ImageViewType type = vk::ImageViewType::View2D;
     vk::ImageSubresourceRange subresource_range = {};
+    ImageViewID id = ImageViewID::Invalid;
 
     VkImageView handle = VK_NULL_HANDLE;
 };
@@ -125,6 +128,8 @@ struct Handle<ImageView>::Impl {
 template<>
 struct Handle<Sampler>::Impl {
     Device device = {};
+
+    SamplerID id = SamplerID::Invalid;
 
     VkSampler handle = VK_NULL_HANDLE;
 };
@@ -143,6 +148,7 @@ struct Handle<Pipeline>::Impl {
 
     vk::PipelineBindPoint bind_point = vk::PipelineBindPoint::Graphics;
     PipelineLayoutID layout_id = PipelineLayoutID::None;
+    PipelineID id = PipelineID::Invalid;
 
     VkPipeline handle = VK_NULL_HANDLE;
 };
@@ -247,8 +253,8 @@ struct Handle<TransferManager>::Impl {
     Device device = {};
 
     Semaphore semaphore = {};
-    BufferID cpu_buffer_id = BufferID::Invalid;
-    BufferID gpu_buffer_id = BufferID::Invalid;
+    Buffer cpu_buffer = {};
+    Buffer gpu_buffer = {};
     u32 size = 0;
     u32 max_allocs = 0;
     u32 free_storage = 0;
@@ -267,7 +273,8 @@ struct ResourcePools {
     PagedPool<Buffer::Impl, BufferID> buffers = {};
     PagedPool<Image::Impl, ImageID> images = {};
     PagedPool<ImageView::Impl, ImageViewID> image_views = {};
-    PagedPool<Sampler::Impl, SamplerID, 7u, 256> samplers = {};
+    PagedPool<Sampler::Impl, SamplerID, 7_sz, 256_sz> samplers = {};
+    std::vector<ls::pair<u64, SamplerID>> cached_samplers = {};
     PagedPool<Pipeline::Impl, PipelineID> pipelines = {};
 
     constexpr static usize MAX_PUSH_CONSTANT_SIZE = 128;
@@ -285,13 +292,8 @@ struct Handle<Device>::Impl {
     VkDescriptorPool descriptor_pool = {};
     VkDescriptorSetLayout descriptor_set_layout = {};
     VkDescriptorSet descriptor_set = {};
-    BufferID bda_array_buffer = BufferID::Invalid;
-    u64 *bda_array_host_addr = nullptr;
-
-    // Transfer manager should be used for frame time transient buffers.
-    // NEVER use it to upload image data, use static buffer for it.
-    // Static buffer is blocking, transfer manager is not blocking if not full.
-    BufferID persistent_buffer = {};
+    Buffer bda_array_buffer = {};
+    TransferManager transfer_manager = {};
 
     SlangCompiler shader_compiler = {};
     DeviceFeature supported_features = DeviceFeature::None;

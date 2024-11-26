@@ -84,16 +84,48 @@ void InspectorPanel::update(this InspectorPanel &self) {
 
     switch (app.layout.active_tool) {
         case ActiveTool::World: {
+            auto &world_data = app.world.renderer.world_data();
+            auto &pbr_flags = app.world.renderer.get_pbr_flags();
             auto name_with_icon = std::format("{}  World", Icon::fa::earth_americas);
             ImGui::SeparatorText(name_with_icon.c_str());
 
+            if (ImGui::CollapsingHeader("Sun", nullptr, ImGuiTreeNodeFlags_DefaultOpen)) {
+                auto &sun = world_data.sun;
+                bool update_sun = ImGui::DragFloat2("Sun Direction", glm::value_ptr(app.world.renderer.sun_angle()));
+                ImGui::DragFloat("Intensity", &sun.intensity);
+
+                if (update_sun) {
+                    app.world.renderer.update_sun_dir();
+                }
+            }
+
             if (ImGui::CollapsingHeader("Atmosphere", nullptr, ImGuiTreeNodeFlags_DefaultOpen)) {
-                auto &atmos = app.world.renderer->context->world_data.atmosphere;
+                auto &atmos = world_data.atmosphere;
+                if (ImGui::Checkbox("Atmosphere##Enable", &pbr_flags.render_sky)) {
+                    app.world.renderer.update_pbr_graph();
+                }
+
+                ImGui::DragFloat3("Rayleigh Scattering", glm::value_ptr(atmos.rayleigh_scatter), 0.00001, 0.0, 0.01);
+                ImGui::DragFloat("Rayleigh Density", &atmos.rayleigh_density, 0.1);
+                ImGui::DragFloat3("Mie Scattering", glm::value_ptr(atmos.mie_scatter), 0.00001, 0.0, 0.01);
+                ImGui::DragFloat("Mie Density", &atmos.mie_density, 0.1);
+                ImGui::DragFloat("Mie Extinction", &atmos.mie_extinction, 0.00001);
+                ImGui::DragFloat("Mie Asymmetry", &atmos.mie_asymmetry, 0.1);
+                ImGui::DragFloat3("Ozone Absorption", glm::value_ptr(atmos.ozone_absorption), 0.00001, 0.0, 0.01);
+                ImGui::DragFloat("Ozone Height", &atmos.ozone_height);
+                ImGui::DragFloat("Ozone Thickness", &atmos.ozone_thickness);
+                ImGui::DragFloat3("Terrain Albedo", glm::value_ptr(atmos.terrain_albedo), 0.01, 0.0, 1.0);
                 ImGui::DragFloat("Aerial KM per slice", &atmos.aerial_km_per_slice);
+                ImGui::DragFloat("Planet Radius", &atmos.planet_radius);
+                ImGui::DragFloat("Atmosphere Radius", &atmos.atmos_radius);
             }
 
             if (ImGui::CollapsingHeader("Clouds", nullptr, ImGuiTreeNodeFlags_DefaultOpen)) {
-                auto &clouds = app.world.renderer->context->world_data.clouds;
+                auto &clouds = world_data.clouds;
+                if (ImGui::Checkbox("Clouds##Enable", &pbr_flags.render_clouds)) {
+                    app.world.renderer.update_pbr_graph();
+                }
+
                 ImGui::DragFloat2("Layer Bounds", glm::value_ptr(clouds.bounds));
                 ImGui::DragFloat("Global Scale", &clouds.global_scale, 0.0001, 0.00001, 1.0);
                 ImGui::DragFloat("Shape Noise Scale", &clouds.shape_noise_scale, 0.0001, 0.00001, 1.0);

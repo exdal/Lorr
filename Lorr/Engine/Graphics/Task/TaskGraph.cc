@@ -46,13 +46,25 @@ auto TaskGraph::create(const TaskGraphInfo &info) -> TaskGraph {
     return tg;
 }
 
+auto TaskGraph::destroy() -> void {
+    ZoneScoped;
+
+    impl->transfer_man.destroy();
+    for (auto &v : impl->task_query_pools) {
+        v.destroy();
+    }
+
+    delete impl;
+    impl = nullptr;
+}
+
 auto TaskGraph::add_image(const TaskImageInfo &info) -> TaskImageID {
     ZoneScoped;
 
     auto task_image_id = static_cast<TaskImageID>(impl->images.size());
     impl->images.push_back({
         .image_id = info.image_id,
-        .image_view_id = info.image_id != ImageID::Invalid ? impl->device.image(info.image_id).view() : ImageViewID::Invalid,
+        .image_view_id = info.image_id != ImageID::Invalid ? impl->device.image(info.image_id).view().id() : ImageViewID::Invalid,
         .last_layout = info.layout,
         .last_access = info.access,
     });
@@ -66,7 +78,7 @@ auto TaskGraph::set_image(TaskImageID task_image_id, const TaskImageInfo &info) 
     auto index = static_cast<usize>(task_image_id);
     impl->images[index] = {
         .image_id = info.image_id,
-        .image_view_id = impl->device.image(info.image_id).view(),
+        .image_view_id = impl->device.image(info.image_id).view().id(),
         .last_layout = info.layout,
         .last_access = info.access,
     };
@@ -92,6 +104,7 @@ auto TaskGraph::add_task(std::unique_ptr<Task> &&task) -> TaskID {
     ZoneScoped;
 
     auto task_id = static_cast<TaskID>(impl->tasks.size());
+    task->color = legit::Colors::colors[(std::to_underlying(task_id) * 3 + 1) % count_of(legit::Colors::colors)];
 
     auto submit_index = impl->submits.size() - 1;
     auto batch_index = impl->batches.size();
@@ -152,7 +165,9 @@ auto TaskGraph::draw_profiler_ui() -> void {
     ImGui::Begin("Legit Profiler", nullptr);
     ImGui::Text("Frametime: %.4fms (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
 
-    ImGui::Text("Self allocator: %u", impl->transfer_man.storage_report().free_space);
+    auto allocator_storage = impl->transfer_man.storage_report();
+    ImGui::Text("TG Allocator: (%u/%u)", allocator_storage.free_space, impl->transfer_man.capacity());
+    ImGui::ProgressBar(static_cast<f32>(allocator_storage.free_space) / static_cast<f32>(impl->transfer_man.capacity()));
 
     impl->task_gpu_profiler_graph.LoadFrameData(impl->task_gpu_profiler_tasks.data(), impl->task_gpu_profiler_tasks.size());
     impl->task_gpu_profiler_graph.RenderTimings(500, 20, 200, 0);
@@ -191,10 +206,10 @@ auto TaskGraph::execute(const TaskExecuteInfo &info) -> void {
     memory::ScopedStack stack;
 
     impl->task_gpu_profiler_tasks.clear();
+    impl->transfer_man.collect_garbage();
 
     auto &task_query_pool = impl->task_query_pools[info.frame_index];
     auto task_query_results = stack.alloc<u64>(impl->tasks.size() * 4);
-
     task_query_pool.get_results(0, impl->tasks.size() * 2, task_query_results);
 
     f64 task_query_offset_ts = 0.0;
@@ -213,7 +228,7 @@ auto TaskGraph::execute(const TaskExecuteInfo &info) -> void {
             .startTime = task_query_offset_ts,
             .endTime = task_query_offset_ts + delta,
             .name = task->name,
-            .color = legit::Colors::colors[(task_index * 3 + 1) % count_of(legit::Colors::colors)],
+            .color = task->color,
         });
 
         task_query_offset_ts += delta;
@@ -222,6 +237,8 @@ auto TaskGraph::execute(const TaskExecuteInfo &info) -> void {
     u32 submit_index = 0;
     for (auto &task_submit : impl->submits) {
         auto submit_queue = impl->device.queue(task_submit.type);
+        submit_queue.begin_label(stack.format("Submit {} - {} batches", submit_index, task_submit.batch_indices.size()), { 0, 0, 0, 1 });
+
         auto submit_sema = submit_queue.semaphore();
         auto transfer_queue = impl->device.queue(vk::CommandType::Transfer);
         auto transfer_queue_sema = transfer_queue.semaphore();
@@ -253,6 +270,10 @@ auto TaskGraph::execute(const TaskExecuteInfo &info) -> void {
             batch_cmd_list.reset_query_pool(batch_query_pool, batch_index * 2, 2);
             batch_cmd_list.write_query_pool(batch_query_pool, vk::PipelineStage::TopOfPipe, batch_index * 2);
 
+            batch_cmd_list.begin_label(
+                stack.format("Batch {} - {} barriers, {} tasks", batch_index, task_batch.barrier_indices.size(), task_batch.tasks.size()),
+                { 0, 0, 0, 1 });
+
             cmd_batcher.insert_memory_barrier({
                 .src_stage = last_batch_access.stage,
                 .src_access = last_batch_access.access,
@@ -279,19 +300,20 @@ auto TaskGraph::execute(const TaskExecuteInfo &info) -> void {
 
             for (TaskID task_id : task_batch.tasks) {
                 ZoneScoped;
-
                 auto &task = this->task(task_id);
 
                 auto task_index = static_cast<u32>(task_id);
                 batch_cmd_list.reset_query_pool(task_query_pool, task_index * 2, 2);
                 batch_cmd_list.write_query_pool(task_query_pool, vk::PipelineStage::TopOfPipe, task_index * 2);
 
+                batch_cmd_list.begin_label(task.name, glm::unpackUnorm4x8(task.color));
                 TaskContext tc(impl->device, *this, task, batch_cmd_list, info.execution_data);
                 task.execute(tc);
-
+                batch_cmd_list.end_label();
                 batch_cmd_list.write_query_pool(task_query_pool, vk::PipelineStage::BottomOfPipe, task_index * 2 + 1);
             }
 
+            batch_cmd_list.end_label();
             batch_cmd_list.write_query_pool(batch_query_pool, vk::PipelineStage::BottomOfPipe, batch_index * 2 + 1);
             submit_queue.end(batch_cmd_list);
 
@@ -302,6 +324,8 @@ auto TaskGraph::execute(const TaskExecuteInfo &info) -> void {
         bool has_additional_barriers = !task_submit.additional_signal_barrier_indices.empty();
         if (has_additional_barriers) {
             auto cmd_list = submit_queue.begin();
+            cmd_list.insert_label(
+                stack.format("{} additional barriers", task_submit.additional_signal_barrier_indices.size()), { 0, 0, 0, 1 });
             CommandBatcher cmd_batcher(cmd_list);
 
             for (u32 barrier_index : task_submit.additional_signal_barrier_indices) {
@@ -346,11 +370,10 @@ auto TaskGraph::execute(const TaskExecuteInfo &info) -> void {
             signal_semas_all[i++] = impl->transfer_man.semaphore();
         }
 
+        submit_queue.end_label();
         submit_queue.submit(wait_semas_all, signal_semas_all);
         submit_index++;
     }
-
-    impl->transfer_man.collect_garbage();
 }
 
 auto TaskGraph::transfer_manager() -> TransferManager & {
@@ -400,7 +423,7 @@ vk::RenderingAttachmentInfo TaskContext::as_color_attachment(
 
     auto &task_image = self.task_image_data(use);
     vk::RenderingAttachmentInfo info = {
-        .image_view_id = self.device.image(task_image.image_id).view(),
+        .image_view_id = self.device.image(task_image.image_id).view().id(),
         .image_layout = vk::ImageLayout::ColorAttachment,
         .load_op = clear_val ? vk::AttachmentLoadOp::Clear : vk::AttachmentLoadOp::Load,
         .store_op = use.access.access & vk::MemoryAccess::Write ? vk::AttachmentStoreOp::Store : vk::AttachmentStoreOp::None,
@@ -416,7 +439,7 @@ vk::RenderingAttachmentInfo TaskContext::as_depth_attachment(
 
     auto &task_image = self.task_image_data(use);
     vk::RenderingAttachmentInfo info = {
-        .image_view_id = self.device.image(task_image.image_id).view(),
+        .image_view_id = self.device.image(task_image.image_id).view().id(),
         .image_layout = vk::ImageLayout::DepthStencilAttachment,
         .load_op = clear_val ? vk::AttachmentLoadOp::Clear : vk::AttachmentLoadOp::Load,
         .store_op = use.access.access & vk::MemoryAccess::Write ? vk::AttachmentStoreOp::Store : vk::AttachmentStoreOp::None,
@@ -474,7 +497,7 @@ GPUAllocation TaskContext::transient_buffer(u64 size) {
 ImageViewID TaskContext::image_view(TaskImageID id) {
     ZoneScoped;
 
-    return this->device.image(this->task_image_data(id).image_id).view();
+    return this->device.image(this->task_image_data(id).image_id).view().id();
 }
 
 void TaskContext::set_pipeline(this TaskContext &self, PipelineID pipeline_id_) {

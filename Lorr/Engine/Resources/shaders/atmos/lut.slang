@@ -30,11 +30,14 @@ vec4 fs_main(VertexOutput input) : SV_TARGET {
     Atmosphere *atmos = &world->atmosphere;
     Sun *sun = &world->sun;
 
-    float3 eye_pos = camera->position * CAMERA_SCALE_UNIT + float3(0.0, atmos->planet_radius, 0.0);
+    float3 eye_pos = float3(0.0, camera->position.y, 0.0) *
+                     CAMERA_SCALE_UNIT +
+                     float3(0.0, atmos->planet_radius, 0.0);
 
     f32 h = length(eye_pos);
     f32 u = fromSubUvsToUnit(input.tex_coord.x, 200);
     f32 v = fromSubUvsToUnit(input.tex_coord.y, 100);
+
     float horizon = sqrt(h * h - atmos->planet_radius * atmos->planet_radius);
     float cos_beta = horizon / h;
     float beta = acos(cos_beta);

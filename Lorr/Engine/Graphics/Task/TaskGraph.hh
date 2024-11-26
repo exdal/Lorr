@@ -18,6 +18,7 @@ struct TaskGraphInfo {
 
 struct TaskGraph : Handle<TaskGraph> {
     auto static create(const TaskGraphInfo &info) -> TaskGraph;
+    auto destroy() -> void;
 
     auto add_image(const TaskImageInfo &info) -> TaskImageID;
     auto set_image(TaskImageID task_image_id, const TaskImageInfo &info) -> void;

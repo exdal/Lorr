@@ -12,4 +12,8 @@ Identifier Identifier::random() {
 
     return { name };
 }
+
+Identifier Identifier::invalid() {
+    return "INVALID";
+}
 }  // namespace lr

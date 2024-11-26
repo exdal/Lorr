@@ -42,7 +42,7 @@ auto Shader::set_name(const std::string &name) -> Shader & {
     return *this;
 }
 
-auto Pipeline::create(Device device, const GraphicsPipelineInfo &info) -> std::expected<PipelineID, vk::Result> {
+auto Pipeline::create(Device device, const GraphicsPipelineInfo &info) -> std::expected<Pipeline, vk::Result> {
     ZoneScoped;
 
     std::vector<VkFormat> color_attachment_formats;
@@ -99,6 +99,8 @@ auto Pipeline::create(Device device, const GraphicsPipelineInfo &info) -> std::e
             LOG_ERROR("Failed to compile shader module '{}', entry point '{}'!", info.shader_module_info.module_name, v);
             return std::unexpected(vk::Result::Unknown);
         }
+
+        shader->set_name(std::format("Shader {}:{}", info.shader_module_info.shader_path, v));
 
         shader_stage_infos.push_back({
             .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
@@ -312,12 +314,16 @@ auto Pipeline::create(Device device, const GraphicsPipelineInfo &info) -> std::e
     impl->device = device;
     impl->bind_point = vk::PipelineBindPoint::Graphics;
     impl->layout_id = static_cast<PipelineLayoutID>(module_reflection.pipeline_layout_index);
+    impl->id = pipeline->id;
     impl->handle = pipeline_handle;
 
-    return pipeline->id;
+    auto self = Pipeline(impl);
+    self.set_name(std::format("Pipeline {}", info.shader_module_info.module_name));
+
+    return self;
 }
 
-auto Pipeline::create(Device device, const ComputePipelineInfo &info) -> std::expected<PipelineID, vk::Result> {
+auto Pipeline::create(Device device, const ComputePipelineInfo &info) -> std::expected<Pipeline, vk::Result> {
     ZoneScoped;
 
     auto slang_session = device.new_slang_session({
@@ -398,9 +404,10 @@ auto Pipeline::create(Device device, const ComputePipelineInfo &info) -> std::ex
     impl->device = device;
     impl->bind_point = vk::PipelineBindPoint::Compute;
     impl->layout_id = static_cast<PipelineLayoutID>(module_reflection.pipeline_layout_index);
+    impl->id = pipeline->id;
     impl->handle = pipeline_handle;
 
-    return pipeline->id;
+    return Pipeline(impl);
 }
 
 auto Pipeline::destroy() -> void {
@@ -419,6 +426,10 @@ auto Pipeline::bind_point() const -> vk::PipelineBindPoint {
 
 auto Pipeline::layout_id() const -> PipelineLayoutID {
     return impl->layout_id;
+}
+
+auto Pipeline::id() const -> PipelineID {
+    return impl->id;
 }
 
 }  // namespace lr

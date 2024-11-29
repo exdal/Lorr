@@ -15,6 +15,7 @@ struct WorldRenderer : Handle<WorldRenderer> {
     };
 
     struct SceneBeginInfo {
+        u32 active_camera = 0;
         GPUAllocation cameras_allocation = {};
         GPUAllocation model_transfors_allocation = {};
         BufferID materials_buffer_id = BufferID::Invalid;

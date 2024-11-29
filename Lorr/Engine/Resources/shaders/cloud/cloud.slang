@@ -131,8 +131,15 @@ func sample_sun_density(
     }
 
     // Do we have to convert this to meters?
-    float transmittance = exp(-total_density * (1.0 / CAMERA_SCALE_UNIT));
+    float transmittance = exp(-total_density * (1.0 / CAMERA_SCALE_UNIT) * world->clouds.sun_light_absorption);
     return world->clouds.darkness_threshold + transmittance * (1.0 - world->clouds.darkness_threshold);
+}
+
+float dual_cloud_phase(float cos_theta, float3 params) {
+    float forwards_lobe =  lr::henyey_greenstein_phase( params.x, cos_theta);
+    float backwards_lobe = lr::henyey_greenstein_phase(-params.y, cos_theta);
+    float mix_factor =     lr::henyey_greenstein_phase( params.z, cos_theta);
+    return lerp(lerp(forwards_lobe, backwards_lobe, 0.2), mix_factor, 0.15);
 }
 
 public struct CloudLuminance {
@@ -175,7 +182,9 @@ public func integrate_clouds(World *world, in CloudIntegrateInfo info) -> CloudL
     sample_t += step_t * info.sample_offset;
 
     float sun_cos_theta = dot(info.eye_dir, sun_dir);
-    float phase = lr::dual_henyey_greenstein_phase(clouds->phase_values.x, clouds->phase_values.y, clouds->phase_values.z, -sun_cos_theta);
+
+    float phase = dual_cloud_phase(-sun_cos_theta, clouds->phase_values);
+
     // dual atmos transmittance
     float3 atmos_transmittance_0 = 0.0;
     {
@@ -224,11 +233,14 @@ public func integrate_clouds(World *world, in CloudIntegrateInfo info) -> CloudL
 
             float sun_density = sample_sun_density(world, step_pos, sun_dir, info.cloud_shape_image, info.cloud_detail_image);
             float optical_depth = density * step_t * (1.0 / CAMERA_SCALE_UNIT);
-            float step_transmittance = exp(-optical_depth);
-            float powder_transmittance = exp(-optical_depth * 2.0);
-            float3 sun_light = phase * density;
+            float step_transmittance = exp(-optical_depth * world->clouds.cloud_light_absorption);
 
-            float3 integral = (sun_light - sun_light * step_transmittance * powder_transmittance) / density;
+            float powder =  8.0 * (1.0 - 0.97 * exp(-2.0 * density));
+            float powder_transmittance = lerp(powder, 1.0, sun_cos_theta * 0.5 + 0.5);
+
+            float3 step_luminance = sun_density * density * phase;
+            float3 integral = (step_luminance - step_luminance * step_transmittance * powder_transmittance) / density;
+
             luminance += world->sun.intensity * (integral * transmittance * atmos_transmittance);
             transmittance *= step_transmittance;
         }

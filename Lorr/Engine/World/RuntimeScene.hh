@@ -4,15 +4,11 @@
 
 namespace lr {
 struct RuntimeScene : Scene {
-    RuntimeScene(std::string_view name_, flecs::world &world_, flecs::entity &root_)
-        : Scene(name_, world_, root_) {};
+    RuntimeScene(const std::string &name_, World &world_)
+        : Scene(name_, world_) {};
 
-    bool load(this RuntimeScene &);
-    bool unload(this RuntimeScene &);
-    void update(this RuntimeScene &);
-
-    bool do_load() override { return load(); };
-    bool do_unload() override { return unload(); };
-    void do_update() override { update(); };
+    bool load() override;
+    bool unload() override;
+    void update() override;
 };
 }  // namespace lr

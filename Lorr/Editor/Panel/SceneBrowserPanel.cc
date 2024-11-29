@@ -38,9 +38,13 @@ void SceneBrowserPanel::update(this SceneBrowserPanel &self) {
         ImGui::TableSetupScrollFreeze(0, 1);
         ImGui::TableHeadersRow();
 
-        if (world.active_scene.has_value()) {
-            auto &scene = world.scene_at(world.active_scene.value());
-            scene.children([&](flecs::entity e) {
+        if (world.active_scene().has_value()) {
+            auto &scene = world.scene(world.active_scene().value());
+            scene.each_children([&](flecs::entity e) {
+                if (e.has<Component::Hidden>()) {
+                    return;
+                }
+
                 memory::ScopedStack stack;
 
                 ImGui::TableNextRow();
@@ -52,22 +56,15 @@ void SceneBrowserPanel::update(this SceneBrowserPanel &self) {
 
                 ImGuiSelectableFlags selectable_flags = ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap;
                 if (ImGui::Selectable(entity_name.data(), e.has<Component::EditorSelected>(), selectable_flags)) {
-                    world.ecs.each([](flecs::entity c, Component::EditorSelected) { c.remove<Component::EditorSelected>(); });
+                    world.ecs().each([](flecs::entity c, Component::EditorSelected) { c.remove<Component::EditorSelected>(); });
                     e.add<Component::EditorSelected>();
-                }
-
-                if (e.has<Component::Camera>()) {
-                    if (ImGui::BeginDragDropSource()) {
-                        ImGui::SetDragDropPayload("ATTACH_CAMERA", &e, sizeof(flecs::entity));
-                        ImGui::EndDragDropSource();
-                    }
                 }
             });
         }
 
         if (ImGui::BeginPopupContextWindow("create_ctxwin", ImGuiPopupFlags_AnyPopup | 1)) {
             if (ImGui::BeginMenu("Create...")) {
-                if (ImGui::MenuItem("Entity", nullptr, false, world.active_scene.has_value())) {
+                if (ImGui::MenuItem("Entity", nullptr, false, world.active_scene().has_value())) {
                     open_create_entity_popup = true;
                 }
 
@@ -90,7 +87,7 @@ void SceneBrowserPanel::update(this SceneBrowserPanel &self) {
             }
 
             if (ImGui::Button("OK", ImVec2(120, 0))) {
-                auto &scene = world.scene_at(world.active_scene.value());
+                auto &scene = world.scene(world.active_scene().value());
                 scene.create_entity(entity_name);
 
                 ImGui::CloseCurrentPopup();

@@ -29,21 +29,10 @@ void populate_directory(Directory &dir) {
 
 void AssetBrowserPanel::on_project_refresh(this AssetBrowserPanel &self) {
     auto &app = Application::get();
-    auto &project_info = app.world.project_info;
-    if (!project_info.has_value()) {
-        return;
-    }
-
-    self.asset_dir = { .path = project_info->project_root_path };
-    self.refresh_file_tree();
 }
 
 void AssetBrowserPanel::refresh_file_tree(this AssetBrowserPanel &self) {
     auto &app = Application::get();
-    if (app.world.project_info) {
-        self.asset_dir = { .path = app.world.project_info->project_root_path / "Assets" };  // TODO: (project) replace later
-        populate_directory(self.asset_dir.value());
-    }
 }
 
 void AssetBrowserPanel::draw_project_tree(this AssetBrowserPanel &self) {

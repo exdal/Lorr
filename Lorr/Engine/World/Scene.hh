@@ -1,33 +1,38 @@
 #pragma once
 
+#include "Engine/Core/Handle.hh"
+
+#include "Engine/Memory/PagedPool.hh"
+
 #include <flecs.h>
 
 namespace lr {
+using World_H = Handle<struct World>;
+
 enum class SceneID : u32 { Invalid = ~0_u32 };
 struct Scene {
-    flecs::world &ecs;
+    World &world;
     flecs::entity handle;
-    ls::option<flecs::entity> active_camera;
 
-    const std::string_view name() { return { handle.name(), handle.name().length() }; }
+    // Camera handles need to be pointers, look below
+    flecs::entity *editor_camera;
+    PagedPool<flecs::entity, u32, 64> cameras = {};
 
-    Scene(std::string_view name_, flecs::world &world_, flecs::entity &root_);
+    Scene(const std::string &name_, World &world_);
     virtual ~Scene() = default;
 
-    flecs::entity create_entity(this Scene &, std::string_view name);
-
-    void set_active_camera(this Scene &, flecs::entity camera_entity);
-
-    flecs::entity create_perspective_camera(this Scene &, std::string_view name, const glm::vec3 &position, f32 fov, f32 aspect);
+    auto create_entity(const std::string &name) -> flecs::entity;
+    auto create_perspective_camera(const std::string &name, const glm::vec3 &position, const glm::vec3 &rotation, f32 fov, f32 aspect_ratio)
+        -> flecs::entity *;
 
     template<typename T>
-    void children(const T &f) {
+    void each_children(const T &f) {
         this->handle.children(f);
     }
 
-    virtual bool do_load() = 0;
-    virtual bool do_unload() = 0;
-    virtual void do_update() = 0;
+    virtual auto load() -> bool = 0;
+    virtual auto unload() -> bool = 0;
+    virtual auto update() -> void = 0;
 };
 
 }  // namespace lr

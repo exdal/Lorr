@@ -185,8 +185,8 @@ void EditorLayout::update(this EditorLayout &self) {
 
             ImGui::Separator();
 
-            if (ImGui::MenuItem("Save Project", nullptr, false, app.world.is_project_active())) {
-                app.world.save_active_project();
+            if (ImGui::MenuItem("Save Project", nullptr, false)) {
+                // app.world.save_active_project();
             }
 
             ImGui::Separator();
@@ -207,11 +207,11 @@ void EditorLayout::update(this EditorLayout &self) {
                     return;
                 }
 
-                if (app.world.import_project(path.value())) {
-                    for (auto &p : self.panels) {
-                        p->do_project_refresh();
-                    }
-                }
+                // if (app.world.import_project(path.value())) {
+                //     for (auto &p : self.panels) {
+                //         p->do_project_refresh();
+                //     }
+                // }
             }
 
             ImGui::Separator();
@@ -269,7 +269,7 @@ void EditorLayout::update(this EditorLayout &self) {
         }
 
         if (ImGui::Button("OK", ImVec2(120, 0))) {
-            app.world.export_project(project_name, project_root_path);
+            app.world.export_to(project_root_path);
             ImGui::CloseCurrentPopup();
         }
 
@@ -289,7 +289,7 @@ void EditorLayout::update(this EditorLayout &self) {
     ImGui::End();
 
     if (self.show_profiler) {
-        app.world.renderer.draw_profiler_ui();
+        app.world_renderer.draw_profiler_ui();
     }
 
     for (auto &panel : self.panels) {

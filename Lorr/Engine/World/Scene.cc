@@ -1,31 +1,42 @@
-#include "Scene.hh"
+#include "Engine/World/Scene.hh"
 
-#include "Components.hh"
+#include "Engine/World/Components.hh"
+#include "Engine/World/World.hh"
 
 namespace lr {
-Scene::Scene(std::string_view name_, flecs::world &world_, flecs::entity &root_)
-    : ecs(world_) {
-    this->handle = ecs.entity(name_.data()).child_of(root_);
-}
-
-flecs::entity Scene::create_entity(this Scene &self, std::string_view name) {
-    return self.ecs.entity(name.data()).child_of(self.handle);
-}
-
-void Scene::set_active_camera(this Scene &self, flecs::entity camera_entity) {
+Scene::Scene(const std::string &name_, World &world_)
+    : world(world_),
+      handle(this->world.create_entity(name_)),
+      editor_camera(nullptr) {
     ZoneScoped;
 
-    self.active_camera = camera_entity;
+    this->editor_camera = this->create_perspective_camera("editor_camera", { 0.0, 2.0, 0.0 }, { 0, 0, 0 }, 65.0, 1.6);
+    this->editor_camera  //
+        ->add<Component::Hidden>()
+        .add<Component::ActiveCamera>();
 }
 
-flecs::entity Scene::create_perspective_camera(this Scene &self, std::string_view name, const glm::vec3 &position, f32 fov, f32 aspect) {
+auto Scene::create_entity(const std::string &name) -> flecs::entity {
     ZoneScoped;
 
-    return self
-        .create_entity(name)  //
-        .add<Component::PerspectiveCamera>()
-        .set<Component::Transform>({ .position = position })
-        .set<Component::Camera>({ .fov = fov, .aspect_ratio = aspect });
+    return this->world.create_entity(name).child_of(this->handle);
 }
 
+auto Scene::create_perspective_camera(
+    const std::string &name, const glm::vec3 &position, const glm::vec3 &rotation, f32 fov, f32 aspect_ratio) -> flecs::entity * {
+    ZoneScoped;
+
+    auto camera_entity_result = this->cameras.create();
+    if (!camera_entity_result.has_value()) {
+        return {};
+    }
+
+    auto &camera_entity = camera_entity_result->self;
+    *camera_entity = this->create_entity(name)  //
+                         .add<Component::PerspectiveCamera>()
+                         .set<Component::Transform>({ .position = position, .rotation = rotation })
+                         .set<Component::Camera>({ .fov = fov, .aspect_ratio = aspect_ratio, .index = camera_entity_result->id });
+
+    return camera_entity;
+}
 }  // namespace lr

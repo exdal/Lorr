@@ -14,6 +14,7 @@ enum class AssetType : u32 {
     Texture,
     Material,
     Font,
+    Scene,
 };
 
 enum class AssetFileType : u32 {
@@ -22,6 +23,26 @@ enum class AssetFileType : u32 {
     GLB,
     PNG,
     JPEG,
+};
+
+enum class AssetFileFlags : u64 {
+    None = 0,
+};
+consteval void enable_bitmask(AssetFileFlags);
+
+struct TextureAssetFileHeader {
+    vk::Extent3D extent = {};
+    vk::Format format = vk::Format::Undefined;
+};
+
+struct AssetFileHeader {
+    c8 magic[4] = { 'L', 'O', 'R', 'R' };
+    u16 version = 1;
+    AssetFileFlags flags = AssetFileFlags::None;
+    AssetType type = AssetType::None;
+    union {
+        TextureAssetFileHeader texture_header = {};
+    };
 };
 
 struct Asset {
@@ -42,7 +63,6 @@ struct AssetManager : Handle<AssetManager> {
     auto asset_root_path(AssetType type) -> fs::path;
     auto to_asset_file_type(const fs::path &path) -> AssetFileType;
     auto material_buffer() const -> Buffer &;
-    auto gpu_models() const -> ls::span<GPUModel>;
     auto register_asset(const Identifier &ident, const fs::path &path, AssetType type) -> Asset *;
 
     auto load_texture(const Identifier &ident, vk::Format format, vk::Extent3D extent, ls::span<u8> pixels, Sampler sampler = {})

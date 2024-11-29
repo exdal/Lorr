@@ -32,18 +32,20 @@ struct GPUClouds {
     glm::vec2 bounds = { 2.0, 5.0 };
     f32 global_scale = 0.15;
     f32 shape_noise_scale = 0.3;
-    glm::vec3 shape_noise_weights = { 0.559, 0.272, 0.125 };
+    glm::vec3 shape_noise_weights = { 0.625f, 0.25f, 0.125f };
     f32 detail_noise_scale = 0.3;
-    glm::vec3 detail_noise_weights = { 0.767, 0.262, 0.168 };
+    glm::vec3 detail_noise_weights = { 0.625f, 0.25f, 0.125f };
     f32 detail_noise_influence = 0.4;
     f32 coverage = 0.9;
     f32 general_density = 0.1;
-    glm::vec3 phase_values = { 0.183, -0.253, 0.5 };  // forward phase, backwards phase, mix factor
+    glm::vec3 phase_values = { 0.623, 0.335, 0.979 };  // forwards phase, backwards phase, mix factor
     f32 cloud_type = 0.0;
     f32 draw_distance = 1000.0;
     f32 darkness_threshold = 0.450;
     i32 sun_step_count = 5;
     i32 clouds_step_count = 30;
+    f32 cloud_light_absorption = 0.443;
+    f32 sun_light_absorption = 0.224;
 };
 
 struct GPUCameraData {

@@ -1,8 +1,8 @@
 implementing "../lorr";
 
 public struct Material {
-    public vec4 albedo_color;
-    public vec4 emissive_color;
+    public vec3 albedo_color;
+    public vec3 emissive_color;
     public f32 roughness_factor;
     public f32 metallic_factor;
     public u32 alpha_mode;
@@ -52,6 +52,8 @@ public struct Clouds {
     public f32 darkness_threshold;
     public i32 sun_step_count;
     public i32 clouds_step_count;
+    public f32 cloud_light_absorption;
+    public f32 sun_light_absorption;
 };
 
 public struct Camera {
@@ -61,8 +63,8 @@ public struct Camera {
     public mat4 inv_view_mat;
     public mat4 inv_projection_view_mat;
     public vec3 position;
-    public float near_clip;
-    public float far_clip;
+    public f32 near_clip;
+    public f32 far_clip;
 };
 
 public struct Model {

@@ -12,20 +12,19 @@ struct Handle<AssetManager>::Impl {
     Device device = {};
     fs::path root_path = fs::current_path();
 
-    ankerl::unordered_dense::map<Identifier, Asset> registry = {};
-
-    PagedPool<Model, ModelID, 6_sz, 1024_sz> models = {};
-    PagedPool<Texture, TextureID, 6_sz, 1024_sz> textures = {};
-    PagedPool<Material, MaterialID, 6_sz, 1024_sz> materials = {};
-
     Buffer material_buffer = {};
-    std::vector<GPUModel> gpu_models = {};
+    ankerl::unordered_dense::map<Identifier, Asset> registry = {};
+    PagedPool<Model, ModelID> models = {};
+    PagedPool<Texture, TextureID> textures = {};
+    PagedPool<Material, MaterialID, 1024_sz> materials = {};
 };
 
 auto AssetManager::create(Device_H device) -> AssetManager {
     ZoneScoped;
 
     auto impl = new Impl;
+    auto self = AssetManager(impl);
+
     impl->device = device;
     impl->material_buffer = Buffer::create(
                                 device,
@@ -35,7 +34,9 @@ auto AssetManager::create(Device_H device) -> AssetManager {
                                 .value()
                                 .set_name("Material Buffer");
 
-    return AssetManager(impl);
+    self.set_root_path(fs::current_path());
+
+    return self;
 }
 
 auto AssetManager::destroy() -> void {
@@ -63,6 +64,8 @@ auto AssetManager::asset_root_path(AssetType type) -> fs::path {
             return root / "materials";
         case AssetType::Font:
             return root / "fonts";
+        case AssetType::Scene:
+            return root / "scenes";
     }
 }
 
@@ -90,10 +93,6 @@ auto AssetManager::to_asset_file_type(const fs::path &path) -> AssetFileType {
 
 auto AssetManager::material_buffer() const -> Buffer & {
     return impl->material_buffer;
-}
-
-auto AssetManager::gpu_models() const -> ls::span<GPUModel> {
-    return impl->gpu_models;
 }
 
 auto AssetManager::register_asset(const Identifier &ident, const fs::path &path, AssetType type) -> Asset * {
@@ -137,6 +136,7 @@ auto AssetManager::register_asset(const Identifier &ident, const fs::path &path,
         case AssetType::None:
         case AssetType::Shader:
         case AssetType::Font:
+        case AssetType::Scene:
             LS_EXPECT(false);  // TODO: Other asset types
             return nullptr;
     }
@@ -397,35 +397,6 @@ auto AssetManager::load_model(const Identifier &ident, const fs::path &path) -> 
     model->meshes = meshes;
     model->vertex_buffer = vertex_buffer_gpu;
     model->index_buffer = index_buffer_gpu;
-
-    //   ──────────────────────────────────────────────────────────────────────
-
-    auto model_index = std::to_underlying(asset->model_id);
-    if (impl->gpu_models.size() <= model_index) {
-        impl->gpu_models.resize(model_index + 1);
-    }
-
-    auto &gpu_model = impl->gpu_models.at(model_index);
-
-    gpu_model.primitives.reserve(model->primitives.size());
-    for (auto &primitive : model->primitives) {
-        gpu_model.primitives.push_back({
-            .vertex_offset = primitive.vertex_offset,
-            .vertex_count = primitive.vertex_count,
-            .index_offset = primitive.index_offset,
-            .index_count = primitive.index_count,
-            .material_index = std::to_underlying(primitive.material_id),
-        });
-    }
-
-    for (auto &mesh : model->meshes) {
-        gpu_model.meshes.push_back({
-            .primitive_indices = mesh.primitive_indices,
-        });
-    }
-
-    gpu_model.vertex_bufffer_id = model->vertex_buffer.id();
-    gpu_model.index_buffer_id = model->index_buffer.id();
 
     return asset->model_id;
 }

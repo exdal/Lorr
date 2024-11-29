@@ -217,4 +217,7 @@ using option = std::conditional_t<
     option_flag<T>,
     std::optional<T>>;
 
+template<typename T>
+using option_ref = option<std::reference_wrapper<T>>;
+
 }  // namespace ls

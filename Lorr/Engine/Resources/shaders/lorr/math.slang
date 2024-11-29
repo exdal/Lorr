@@ -35,10 +35,6 @@ public float henyey_greenstein_phase(float g, float cos_theta) {
     return (1.0 - g2) / (4.0 * PI * denom * sqrt(denom));
 }
 
-public float dual_henyey_greenstein_phase(float g0, float g1, float w, float cos_theta) {
-    return lerp(henyey_greenstein_phase(g0, cos_theta), henyey_greenstein_phase(g1, cos_theta), w);
-}
-
 ///
 /// GENERAL MATH ///
 ///

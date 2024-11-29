@@ -273,7 +273,7 @@ struct ResourcePools {
     PagedPool<Buffer::Impl, BufferID> buffers = {};
     PagedPool<Image::Impl, ImageID> images = {};
     PagedPool<ImageView::Impl, ImageViewID> image_views = {};
-    PagedPool<Sampler::Impl, SamplerID, 7_sz, 256_sz> samplers = {};
+    PagedPool<Sampler::Impl, SamplerID, 256_sz> samplers = {};
     std::vector<ls::pair<u64, SamplerID>> cached_samplers = {};
     PagedPool<Pipeline::Impl, PipelineID> pipelines = {};
 

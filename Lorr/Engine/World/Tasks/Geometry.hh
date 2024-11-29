@@ -89,7 +89,7 @@ struct GeometryTask {
                     tc.set_push_constants(PushConstants{
                         .world_ptr = render_context.world_ptr,
                         .transmittance_image = transmittance_image_view,
-                        .model_transform_index = 0,
+                        .model_transform_index = model.transform_index,
                         .material_index = primitive.material_index,
                     });
                     tc.cmd_list.draw_indexed(primitive.index_count, primitive.index_offset, static_cast<i32>(primitive.vertex_offset));

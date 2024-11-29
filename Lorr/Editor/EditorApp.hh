@@ -8,11 +8,10 @@ namespace lr {
 struct EditorApp : Application {
     static EditorApp &get() { return dynamic_cast<EditorApp &>(Application::get()); }
 
-    ankerl::unordered_dense::map<flecs::id_t, Icon::detail::icon_t> component_icons = {};
     EditorLayout layout = {};
 
-    bool prepare(this EditorApp &);
-    bool update(this EditorApp &, f64 delta_time);
+    bool prepare(this EditorApp &self);
+    bool update(this EditorApp &self, f64 delta_time);
 
     bool do_super_init([[maybe_unused]] ls::span<c8 *> args) override { return true; };
     void do_shutdown() override {}

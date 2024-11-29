@@ -1,68 +1,42 @@
 #include "Bit.hh"
 
-#if defined(_MSC_VER)
+#ifdef LS_COMPILER_MSVC
 #include <intrin.h>
+
+#define __builtin_popcount(v) __popcnt(v)
+#define __builtin_popcountll(v) __popcnt64(v)
+#define __builtin_ia32_lzcnt_u32(v) _lzcnt_u32(v)
+#define __builtin_ia32_lzcnt_u64(v) _lzcnt_u64(v)
+#define __builtin_ia32_tzcnt_u32(v) _tzcnt_u32(v)
+#define __builtin_ia32_tzcnt_u64(v) _tzcnt_u64(v)
+
+#elifdef LS_COMPILER_CLANG
+#include <x86intrin.h>
 #endif
 
 namespace lr {
-usize memory::set_bit_count(u32 v)
-{
-#if defined(_MSC_VER) && (_MSC_VER >= 1400)
-    return __popcnt(v);
-#else
+usize memory::set_bit_count(u32 v) {
     return __builtin_popcount(v);
-#endif
 }
 
-usize memory::set_bit_count(u64 v)
-{
-#if defined(_MSC_VER) && (_MSC_VER >= 1400)
-    return __popcnt64(v);
-#else
+usize memory::set_bit_count(u64 v) {
     return __builtin_popcountll(v);
-#endif
 }
 
-u32 memory::find_least_set32(u32 v)
-{
-#if defined(_MSC_VER) && (_MSC_VER >= 1400)
-    unsigned long index;
-    return _BitScanReverse(&index, v) ? index : ~0_u32;
-#else
-    i32 b = v ? 32 - __builtin_clz(v) : 0;
-    return b - 1;
-#endif
+u32 memory::lzcnt_32(u32 v) {
+    return __builtin_ia32_lzcnt_u32(v);
 }
 
-u32 memory::find_least_set64(u64 v)
-{
-#if defined(_MSC_VER) && (_MSC_VER >= 1400)
-    unsigned long index;
-    return _BitScanReverse64(&index, v) ? index : ~0_u32;
-#else
-    i32 b = v ? 64 - __builtin_clzll(v) : 0;
-    return b - 1;
-#endif
+u32 memory::lzcnt_64(u64 v) {
+    return __builtin_ia32_lzcnt_u64(v);
 }
 
-u32 memory::find_first_set32(u32 v)
-{
-#if defined(_MSC_VER) && (_MSC_VER >= 1400)
-    unsigned long index;
-    return _BitScanForward(&index, v) ? index : ~0_u32;
-#else
-    return __builtin_ffs((i32)v) - 1;
-#endif
+u32 memory::tzcnt_32(u32 v) {
+    return __builtin_ia32_tzcnt_u32(v);
 }
 
-u32 memory::find_first_set64(u64 v)
-{
-#if defined(_MSC_VER) && (_MSC_VER >= 1400)
-    unsigned long index;
-    return _BitScanForward64(&index, v) ? index : ~0_u32;
-#else
-    return __builtin_ffsll((i64)v) - 1;
-#endif
+u32 memory::tzcnt_64(u64 v) {
+    return __builtin_ia32_tzcnt_u64(v);
 }
 
 }  // namespace lr

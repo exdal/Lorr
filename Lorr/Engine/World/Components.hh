@@ -42,6 +42,7 @@ struct Camera {
     f32 aspect_ratio = 1.777f;
     f32 near_clip = 0.1;
     f32 far_clip = 1000.0;
+    u32 index = 0;
 
     static void reflect(flecs::world &w) {
         w.component<Camera>()  //
@@ -79,13 +80,23 @@ struct OrthographicCamera {
     static void reflect(flecs::world &w) { w.component<OrthographicCamera>(); }
 };
 
+struct ActiveCamera {
+    static void reflect(flecs::world &w) { w.component<ActiveCamera>(); }
+};
+
+struct Hidden {
+    static void reflect(flecs::world &w) { w.component<Hidden>(); }
+};
+
 constexpr static std::tuple<  //
     Transform,
     Camera,
     RenderableModel,
     EditorSelected,
     PerspectiveCamera,
-    OrthographicCamera>
+    OrthographicCamera,
+    ActiveCamera,
+    Hidden>
     ALL_COMPONENTS;
 
 template<typename T>
@@ -102,7 +113,8 @@ constexpr static void reflect_all(flecs::world &w) {
 }
 
 struct Wrapper {
-    using Member = std::variant<std::monostate, f32 *, i32 *, u32 *, i64 *, u64 *, glm::vec2 *, glm::vec3 *, glm::vec4 *, std::string *>;
+    using Member =
+        std::variant<std::monostate, f32 *, i32 *, u32 *, i64 *, u64 *, glm::vec2 *, glm::vec3 *, glm::vec4 *, std::string *, Identifier *>;
 
     flecs::entity component_entity = {};
     std::string path = {};
@@ -157,6 +169,11 @@ struct Wrapper {
                 data = reinterpret_cast<glm::vec4 *>(self.members_data + member.offset);
             } else if (member_type == world.entity<std::string>()) {
                 data = reinterpret_cast<std::string *>(self.members_data + member.offset);
+            } else if (member_type == world.entity<Identifier>()) {
+                data = reinterpret_cast<Identifier *>(self.members_data + member.offset);
+            } else {
+                LOG_FATAL("Trying to access unknown component type!");
+                return;
             }
 
             fn(i, member_name, data);

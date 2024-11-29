@@ -1,6 +1,7 @@
-#include "Engine/World/Renderer.hh"
+#include "Engine/World/WorldRenderer.hh"
 
 #include "Engine/Core/Application.hh"
+
 #include "Engine/World/Components.hh"
 
 #include "Engine/World/Tasks/Cloud.hh"
@@ -643,6 +644,7 @@ auto WorldRenderer::end_scene_render_data(WorldRenderer::SceneBeginInfo &info) -
 
     ls::static_vector<GPUAllocation, 2> allocations = {};
     auto &world_data = impl->context.world_data;
+    world_data.active_camera_index = info.active_camera;
     world_data.cameras_ptr = 0;
     world_data.model_transforms_ptr = 0;
     world_data.materials_ptr =

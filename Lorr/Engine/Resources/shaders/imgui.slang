@@ -42,8 +42,7 @@ VertexOutput vs_main(VertexInput input) {
 }
 
 [shader("fragment")]
-float4 fs_main(VertexOutput input) : SV_TARGET
-{
+float4 fs_main(VertexOutput input) : SV_TARGET {
     float4 col =  c.image.sample(input.tex_coord) * input.color;
     col.rgb *= col.a;
 

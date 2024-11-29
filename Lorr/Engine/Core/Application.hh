@@ -7,6 +7,7 @@
 #include "Engine/Graphics/Vulkan.hh"
 #include "Engine/Window/Window.hh"
 #include "Engine/World/World.hh"
+#include "Engine/World/WorldRenderer.hh"
 
 namespace lr {
 struct ApplicationInfo {
@@ -29,9 +30,10 @@ struct Application {
     Window window = {};
     SwapChain swap_chain = {};
 
-    AssetManager asset_man = {};
-
+    WorldRenderer world_renderer = {};
     World world = {};
+
+    AssetManager asset_man = {};
 
     bool should_close = false;
 

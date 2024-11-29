@@ -56,7 +56,7 @@ float4 fs_main(VertexOutput input) : SV_Target {
 
     float3 albedo_color = material->albedo_image.sample(input.tex_coord).rgb;
     float diff = max(dot(input.normal, sun->direction), 0.0);
-    float3 ambient = float3(0.1) * albedo_color;
+    float3 ambient = float3(0.2) * albedo_color;
     float3 diffuse = diff * albedo_color;
 
     return float4(diffuse * 0.5 * sun_transmittance, 1.0);

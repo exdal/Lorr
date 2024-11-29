@@ -11,18 +11,19 @@ InspectorPanel::InspectorPanel(std::string name_, bool open_)
 
 void InspectorPanel::update(this InspectorPanel &self) {
     auto &app = EditorApp::get();
+    auto &world = app.world;
 
     ImGui::Begin(self.name.data());
     auto region = ImGui::GetContentRegionAvail();
 
-    auto query = app.world.ecs.query<Component::EditorSelected>();
+    auto query = world.ecs().query<Component::EditorSelected>();
     query.each([&](flecs::entity e, Component::EditorSelected) {
         if (ImGui::Button(e.name().c_str(), ImVec2(region.x, 0))) {
             // TODO: Rename entity
         }
 
         e.each([&](flecs::id component_id) {
-            auto world = e.world();
+            auto ecs_world = e.world();
             if (!component_id.is_entity()) {
                 return;
             }
@@ -32,7 +33,7 @@ void InspectorPanel::update(this InspectorPanel &self) {
                 return;
             }
 
-            auto name_with_icon = std::format("{}  {}", app.component_icons[component_id.raw_id()], component.name);
+            auto name_with_icon = std::format("{}  {}", world.component_icon(component_id.raw_id()), component.name);
             if (ImGui::CollapsingHeader(name_with_icon.c_str(), nullptr, ImGuiTreeNodeFlags_DefaultOpen)) {
                 ImGui::PushID(static_cast<i32>(component_id));
                 ImGui::BeginTable(
@@ -65,6 +66,7 @@ void InspectorPanel::update(this InspectorPanel &self) {
                             [](glm::vec2 *v) { lg::drag_xy(*v); },
                             [](glm::vec3 *v) { lg::drag_xyz(*v); },
                             [](std::string *v) { ImGui::InputText("", v); },
+                            [](Identifier *v) { ImGui::TextUnformatted(v->sv().data()); },
                         },
                         member);
                     ImGui::PopID();
@@ -84,25 +86,25 @@ void InspectorPanel::update(this InspectorPanel &self) {
 
     switch (app.layout.active_tool) {
         case ActiveTool::World: {
-            auto &world_data = app.world.renderer.world_data();
-            auto &pbr_flags = app.world.renderer.get_pbr_flags();
+            auto &world_data = app.world_renderer.world_data();
+            auto &pbr_flags = app.world_renderer.get_pbr_flags();
             auto name_with_icon = std::format("{}  World", Icon::fa::earth_americas);
             ImGui::SeparatorText(name_with_icon.c_str());
 
             if (ImGui::CollapsingHeader("Sun", nullptr, ImGuiTreeNodeFlags_DefaultOpen)) {
                 auto &sun = world_data.sun;
-                bool update_sun = ImGui::DragFloat2("Sun Direction", glm::value_ptr(app.world.renderer.sun_angle()));
+                bool update_sun = ImGui::DragFloat2("Sun Direction", glm::value_ptr(app.world_renderer.sun_angle()));
                 ImGui::DragFloat("Intensity", &sun.intensity);
 
                 if (update_sun) {
-                    app.world.renderer.update_sun_dir();
+                    app.world_renderer.update_sun_dir();
                 }
             }
 
             if (ImGui::CollapsingHeader("Atmosphere", nullptr, ImGuiTreeNodeFlags_DefaultOpen)) {
                 auto &atmos = world_data.atmosphere;
                 if (ImGui::Checkbox("Atmosphere##Enable", &pbr_flags.render_sky)) {
-                    app.world.renderer.update_pbr_graph();
+                    app.world_renderer.update_pbr_graph();
                 }
 
                 ImGui::DragFloat3("Rayleigh Scattering", glm::value_ptr(atmos.rayleigh_scatter), 0.00001, 0.0, 0.01);
@@ -123,7 +125,7 @@ void InspectorPanel::update(this InspectorPanel &self) {
             if (ImGui::CollapsingHeader("Clouds", nullptr, ImGuiTreeNodeFlags_DefaultOpen)) {
                 auto &clouds = world_data.clouds;
                 if (ImGui::Checkbox("Clouds##Enable", &pbr_flags.render_clouds)) {
-                    app.world.renderer.update_pbr_graph();
+                    app.world_renderer.update_pbr_graph();
                 }
 
                 ImGui::DragFloat2("Layer Bounds", glm::value_ptr(clouds.bounds));
@@ -142,6 +144,9 @@ void InspectorPanel::update(this InspectorPanel &self) {
 
                 ImGui::DragInt("Sun Step Count", &clouds.sun_step_count, 1, 0, 16);
                 ImGui::DragInt("Clouds Step Count", &clouds.clouds_step_count, 1, 0, 64);
+
+                ImGui::DragFloat("Self Light Absorption", &clouds.cloud_light_absorption, 0.0001, 0.00001, 1.0);
+                ImGui::DragFloat("Sun Light Absorption", &clouds.sun_light_absorption, 0.0001, 0.00001, 1.0);
             }
 
             break;

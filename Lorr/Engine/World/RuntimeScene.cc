@@ -1,15 +1,15 @@
 #include "Engine/World/RuntimeScene.hh"
 
 namespace lr {
-bool RuntimeScene::load(this RuntimeScene &) {
+auto RuntimeScene::load() -> bool {
     return true;
 }
 
-bool RuntimeScene::unload(this RuntimeScene &) {
+auto RuntimeScene::unload() -> bool {
     return true;
 }
 
-void RuntimeScene::update(this RuntimeScene &) {
+auto RuntimeScene::update() -> void {
 }
 
 }  // namespace lr

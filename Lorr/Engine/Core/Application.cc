@@ -1,7 +1,5 @@
 #include "Application.hh"
 
-#include "Engine/Memory/Hasher.hh"
-
 #include <imgui.h>
 
 namespace lr {
@@ -9,24 +7,6 @@ bool Application::init(this Application &self, const ApplicationInfo &info) {
     ZoneScoped;
 
     Logger::init("engine");
-
-    if (!self.do_super_init(info.args)) {
-        LOG_FATAL("Super init failed!");
-        return false;
-    }
-
-    auto device_result = Device::create(3);
-    if (!device_result.has_value()) {
-        LOG_ERROR("Failed to create application! Device failed.");
-        return false;
-    }
-    self.device = device_result.value();
-    self.window = Window::create(info.window_info);
-    auto window_size = self.window.get_size();
-    auto surface = Surface::create(self.device, self.window.get_native_handle()).value();
-    self.swap_chain = SwapChain::create(self.device, surface, { window_size.x, window_size.y }).value().set_name("Main SwapChain");
-
-    self.asset_man = AssetManager::create(self.device);
 
     ImGui::CreateContext();
     auto &imgui = ImGui::GetIO();
@@ -46,9 +26,32 @@ bool Application::init(this Application &self, const ApplicationInfo &info) {
     imgui.KeyMap[ImGuiKey_LeftArrow] = LR_KEY_LEFT;
     imgui.KeyMap[ImGuiKey_RightArrow] = LR_KEY_RIGHT;
 
-    if (!self.world.init()) {
+    if (!self.do_super_init(info.args)) {
+        LOG_FATAL("Super init failed!");
         return false;
     }
+
+    auto device_result = Device::create(3);
+    if (!device_result.has_value()) {
+        LOG_ERROR("Failed to create application! Device failed.");
+        return false;
+    }
+    self.device = device_result.value();
+    self.asset_man = AssetManager::create(self.device);
+
+    self.window = Window::create(info.window_info);
+    auto window_size = self.window.get_size();
+    auto surface = Surface::create(self.device, self.window.get_native_handle()).value();
+    self.swap_chain = SwapChain::create(self.device, surface, { window_size.x, window_size.y }).value().set_name("Main SwapChain");
+    self.world_renderer = WorldRenderer::create(self.device);
+
+    auto world_result = World::create("default_world");
+    if (!world_result.has_value()) {
+        LOG_FATAL("Failed to create default world!");
+        return false;
+    }
+
+    self.world = world_result.value();
 
     if (!self.do_prepare()) {
         LOG_FATAL("Failed to initialize application!");
@@ -101,21 +104,6 @@ void Application::poll_events(this Application &self) {
                 break;
             }
             case ApplicationEvent::Drop: {
-                for (const auto &p : e.paths) {
-                    if (!p.has_extension()) {
-                        continue;
-                    }
-                    const auto &extension = p.extension();
-                    auto upper_ext = stack.to_upper(extension.string());
-                    LOG_TRACE("ext: {}", upper_ext);
-                    switch (fnv64_str(upper_ext)) {
-                        case fnv64_c(".LRPROJ"): {
-                            self.world.import_project(p);
-                            break;
-                        }
-                        default:;
-                    }
-                }
                 break;
             }
             case ApplicationEvent::Quit: {
@@ -140,7 +128,7 @@ void Application::run(this Application &self) {
     while (true) {
         bool die = false;
         die |= self.window.should_close();
-        die |= self.world.ecs.should_quit();
+        die |= self.world.should_quit();
         die |= self.should_close;
         if (die) {
             break;
@@ -166,21 +154,21 @@ void Application::run(this Application &self) {
         }
 
         // Delta time
-        f64 delta_time = self.world.ecs.delta_time();
+        f64 delta_time = self.world.delta_time();
         imgui.DeltaTime = static_cast<f32>(delta_time);
 
         // Update application
         auto extent = self.swap_chain.extent();
         imgui.DisplaySize = ImVec2(static_cast<f32>(extent.width), static_cast<f32>(extent.height));
 
-        self.world.begin_frame();
+        self.world.begin_frame(self.world_renderer);
         // WARN: Make sure to do all imgui settings BEFORE NewFrame!!!
         ImGui::NewFrame();
         self.do_update(delta_time);
         ImGui::Render();
         self.world.end_frame();
 
-        self.world.renderer.render(self.swap_chain, images[acquired_image_index.value()]);
+        self.world_renderer.render(self.swap_chain, images[acquired_image_index.value()]);
         self.device.end_frame(self.swap_chain, sema_index);
 
         self.window.poll();
@@ -198,7 +186,7 @@ void Application::shutdown(this Application &self) {
     LOG_WARN("Shutting down application...");
 
     self.device.wait();
-    self.world.shutdown();
+    self.world.destroy();
     self.asset_man.destroy();
     self.swap_chain.destroy();
     self.device.destroy();

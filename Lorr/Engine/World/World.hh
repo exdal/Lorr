@@ -1,67 +1,39 @@
 #pragma once
 
-#include "Engine/World/Renderer.hh"
+#include "Engine/Core/Handle.hh"
 #include "Engine/World/Scene.hh"
+#include "Engine/World/WorldRenderer.hh"
 
 namespace lr {
-struct ProjectInfo {
-    std::string project_name = {};
-    fs::path project_root_path = {};
-    fs::path scenes_path = {};
-    fs::path models_path = {};
-};
+struct World : Handle<World> {
+    static auto create(const std::string &name) -> ls::option<World>;
+    static auto create_from(const fs::path &path) -> ls::option<World>;
+    auto destroy() -> void;
 
-struct World {
-    flecs::world ecs{};
-    flecs::entity root = {};
-    WorldRenderer renderer = {};
-    std::vector<std::unique_ptr<Scene>> scenes = {};
-    ls::option<SceneID> active_scene = ls::nullopt;
-    ls::option<ProjectInfo> project_info = ls::nullopt;
+    auto export_to(const fs::path &path) -> bool;
 
-    bool init(this World &);
-    void setup_ecs(this World &);
-    void shutdown(this World &);
-    void begin_frame(this World &);
-    void end_frame(this World &);
-
-    // Project IO
-    bool import_scene(this World &, Scene &scene, const fs::path &path);
-    bool export_scene(this World &, Scene &scene, const fs::path &dir);
-    bool import_project(this World &, const fs::path &path);
-    bool export_project(this World &, std::string_view project_name, const fs::path &root_dir);
-
-    // Active Project Utils
-    bool unload_active_project(this World &);
-    bool save_active_project(this World &);
-    bool is_project_active() { return project_info.has_value(); }
+    auto begin_frame(WorldRenderer &renderer) -> void;
+    auto end_frame() -> void;
 
     template<typename T>
-    SceneID create_scene(this World &self, std::string_view name) {
+    auto add_scene(const std::string &name) -> ls::option<SceneID> {
         ZoneScoped;
 
-        auto scene = std::make_unique<T>(std::string(name), self.ecs, self.root);
-        usize scene_id = self.scenes.size();
-        self.scenes.push_back(std::move(scene));
-
-        return static_cast<SceneID>(scene_id);
+        std::unique_ptr<Scene> scene = std::make_unique<T>(name, *this);
+        return this->add_scene(std::move(scene));
     }
 
-    template<typename T>
-    SceneID create_scene_from_file(this World &self, const fs::path &path) {
-        ZoneScoped;
+    auto add_scene(std::unique_ptr<Scene> &&scene) -> ls::option<SceneID>;
+    auto set_active_scene(SceneID scene_id) -> void;
+    auto scene(SceneID scene_id) -> Scene &;
+    auto active_scene() -> ls::option<SceneID>;
 
-        auto scene_id = self.create_scene<T>("unnamed scene");
-        if (!self.import_scene(self.scene_at(scene_id), path)) {
-            LOG_ERROR("Failed to parse scene!");
-            return SceneID::Invalid;
-        }
+    auto should_quit() -> bool;
+    auto delta_time() -> f64;
 
-        return scene_id;
-    }
-
-    void set_active_scene(this World &, SceneID scene_id);
-    Scene &scene_at(this World &self, SceneID scene_id) { return *self.scenes[static_cast<usize>(scene_id)]; }
+    auto component_icon(flecs::id_t id) -> Icon::detail::icon_t;
+    auto create_entity(const std::string &name) -> flecs::entity;
+    auto ecs() const -> const flecs::world &;
 };
 
 }  // namespace lr

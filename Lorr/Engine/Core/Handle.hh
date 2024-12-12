@@ -15,11 +15,21 @@ public:
     Handle(Impl *impl_)
         : impl(impl_) {};
 
-    operator T() const noexcept { return T(impl); }
-    T unwrap() const noexcept { return T(impl); }
+    operator T() const noexcept {
+        LS_EXPECT(impl != nullptr);
+        return T(impl);
+    }
+
+    T unwrap() const noexcept {
+        LS_EXPECT(impl != nullptr);
+        return T(impl);
+    }
 
     operator bool() const noexcept { return impl; }
-    auto operator->() const noexcept { return impl; }
+    auto operator->() const noexcept {
+        LS_EXPECT(impl != nullptr);
+        return impl;
+    }
 
     bool operator==(Handle other) const noexcept { return impl == other.impl; }
 };

@@ -13,7 +13,9 @@ SceneBrowserPanel::SceneBrowserPanel(std::string name_, bool open_)
 void SceneBrowserPanel::update(this SceneBrowserPanel &self) {
     ZoneScoped;
 
-    auto &world = EditorApp::get().world;
+    auto &app = EditorApp::get();
+    auto &asset_man = app.asset_man;
+    auto &world = app.world;
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0, 0.0));
     ImGui::Begin(self.name.data());
     ImGui::PopStyleVar();
@@ -39,8 +41,8 @@ void SceneBrowserPanel::update(this SceneBrowserPanel &self) {
         ImGui::TableHeadersRow();
 
         if (world.active_scene().has_value()) {
-            auto &scene = world.scene(world.active_scene().value());
-            scene.each_children([&](flecs::entity e) {
+            auto scene = asset_man.get_scene(world.active_scene().value());
+            scene.root().children([&](flecs::entity e) {
                 if (e.has<Component::Hidden>()) {
                     return;
                 }
@@ -51,8 +53,7 @@ void SceneBrowserPanel::update(this SceneBrowserPanel &self) {
                 ImGui::TableNextColumn();
 
                 ImGui::TableSetColumnIndex(0);
-                std::string_view entity_name = {};
-                entity_name = stack.format("{}  {}", Icon::fa::cube, e.name().c_str());
+                auto entity_name = stack.format("{}  {}", Icon::fa::cube, e.name().c_str());
 
                 ImGuiSelectableFlags selectable_flags = ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap;
                 if (ImGui::Selectable(entity_name.data(), e.has<Component::EditorSelected>(), selectable_flags)) {
@@ -87,8 +88,9 @@ void SceneBrowserPanel::update(this SceneBrowserPanel &self) {
             }
 
             if (ImGui::Button("OK", ImVec2(120, 0))) {
-                auto &scene = world.scene(world.active_scene().value());
-                scene.create_entity(entity_name);
+                auto scene = asset_man.get_scene(world.active_scene().value());
+                auto created_entity = scene.create_entity(entity_name);
+                created_entity.set<Component::Transform>({});
 
                 ImGui::CloseCurrentPopup();
                 entity_name.clear();

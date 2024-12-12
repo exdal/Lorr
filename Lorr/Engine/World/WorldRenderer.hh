@@ -7,10 +7,10 @@
 namespace lr {
 struct WorldRenderer : Handle<WorldRenderer> {
     struct PBRFlags {
-        bool render_sky = true;
-        bool render_aerial_perspective = true;
+        bool render_sky = false;
+        bool render_aerial_perspective = false;
         bool render_clouds = false;
-        bool render_editor_grid = true;
+        bool render_editor_grid = false;
         bool render_imgui = true;
     };
 

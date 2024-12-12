@@ -25,18 +25,17 @@ enum class WindowFlag : u32 {
     Resizable = 1 << 1,
     Borderless = 1 << 2,
     Maximized = 1 << 3,
+    WorkAreaRelative = 1 << 4,  // Width and height of the window will be relative to available work area size
 };
 consteval void enable_bitmask(WindowFlag);
 
 struct SystemDisplay {
-    std::string name;
+    std::string name = {};
 
-    i32 res_w;
-    i32 res_h;
-    i32 pos_x;
-    i32 pos_y;
-
-    i32 refresh_rate;
+    glm::ivec2 position = {};
+    glm::ivec4 work_area = {};
+    glm::ivec2 resolution = {};
+    i32 refresh_rate = 30.0;
 };
 
 struct WindowInfo {

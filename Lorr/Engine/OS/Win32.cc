@@ -1,4 +1,4 @@
-#include "OS.hh"
+#include "Engine/OS/OS.hh"
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -41,7 +41,7 @@ void CloseHandle(HANDLE);
 
 namespace lr {
 /// FILE SYSTEM ///
-File::File(const fs::path &path, FileAccess access) {
+auto os::file_open(const fs::path &path, FileAccess access) -> std::expected<FileDescriptor, FileResult> {
     ZoneScoped;
 
     SetLastError(0);
@@ -63,55 +63,39 @@ File::File(const fs::path &path, FileAccess access) {
     HANDLE file_handle = CreateFileW(path.c_str(), flags, share_flags, nullptr, creation_flags, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (file_handle == INVALID_HANDLE_VALUE) {
         LOG_ERROR("Failed to open file! {}", GetLastError());
-        this->result = FileResult::NoAccess;
-        return;
+        return std::unexpected(FileResult::NoAccess);
     }
+
+    return reinterpret_cast<FileDescriptor>(file_handle);
+}
+
+auto os::file_close(FileDescriptor file) -> void {
+    ZoneScoped;
+
+    HANDLE file_handle = reinterpret_cast<HANDLE>(file);
+    CloseHandle(file_handle);
+}
+
+auto os::file_size(FileDescriptor file) -> std::expected<usize, FileResult> {
+    ZoneScoped;
 
     LARGE_INTEGER li = {};
-    GetFileSizeEx(file_handle, &li);
+    GetFileSizeEx(reinterpret_cast<HANDLE>(file), &li);
 
-    this->size = li.QuadPart;
-    this->handle = reinterpret_cast<uptr>(file_handle);
+    return static_cast<usize>(li.QuadPart);
 }
 
-void File::write(this File &self, const void *data, ls::u64range range) {
+auto os::file_read(FileDescriptor file, void *data, usize size) -> usize {
     ZoneScoped;
 
-    LS_EXPECT(self.handle.has_value());
+    auto file_handle = reinterpret_cast<HANDLE>(file);
 
-    HANDLE file_handle = reinterpret_cast<HANDLE>(self.handle.value());
-    u64 offset = range.min;
-    u64 written_bytes_size = 0;
-    u64 target_size = range.length();
-    while (written_bytes_size < target_size) {
-        u64 remainder_size = target_size - written_bytes_size;
-        const u8 *cur_data = reinterpret_cast<const u8 *>(data) + offset + written_bytes_size;
-        DWORD cur_written_size = 0;
-        OVERLAPPED overlapped = {};
-        overlapped.Offset = offset & 0x00000000ffffffffull;
-        overlapped.OffsetHigh = (offset & 0xffffffff00000000ull) >> 32;
-        if (WriteFile(file_handle, cur_data, remainder_size, &cur_written_size, &overlapped) == 0) {
-            LOG_TRACE("File write interrupted! {}", cur_written_size);
-            break;
-        }
-
-        written_bytes_size += cur_written_size;
-    }
-}
-
-u64 File::read(this File &self, void *data, ls::u64range range) {
-    ZoneScoped;
-
-    LS_EXPECT(self.handle.has_value());
-
-    auto file_handle = reinterpret_cast<HANDLE>(self.handle.value());
-
-    range.clamp(self.size);
     u64 read_bytes_size = 0;
-    u64 target_size = range.length();
+    u64 target_size = size;
     while (read_bytes_size < target_size) {
         u64 remainder_size = target_size - read_bytes_size;
-        u8 *cur_data = reinterpret_cast<u8 *>(data) + range.min + read_bytes_size;
+        u8 *cur_data = reinterpret_cast<u8 *>(data) + read_bytes_size;
+
         DWORD cur_read_size = 0;
         OVERLAPPED overlapped = {};
         overlapped.Offset = read_bytes_size & 0x00000000ffffffffull;
@@ -128,29 +112,43 @@ u64 File::read(this File &self, void *data, ls::u64range range) {
     return read_bytes_size;
 }
 
-void File::seek(this File &self, u64 offset) {
+auto os::file_write(FileDescriptor file, const void *data, usize size) -> usize {
+    ZoneScoped;
+
+    HANDLE file_handle = reinterpret_cast<HANDLE>(file);
+    u64 written_bytes_size = 0;
+    u64 target_size = size;
+    while (written_bytes_size < target_size) {
+        u64 remainder_size = target_size - written_bytes_size;
+        const u8 *cur_data = reinterpret_cast<const u8 *>(data) + written_bytes_size;
+        DWORD cur_written_size = 0;
+        OVERLAPPED overlapped = {};
+        overlapped.Offset = written_bytes_size & 0x00000000ffffffffull;
+        overlapped.OffsetHigh = (written_bytes_size & 0xffffffff00000000ull) >> 32;
+        if (WriteFile(file_handle, cur_data, remainder_size, &cur_written_size, &overlapped) == 0) {
+            LOG_TRACE("File write interrupted! {}", cur_written_size);
+            break;
+        }
+
+        written_bytes_size += cur_written_size;
+    }
+
+    return written_bytes_size;
+}
+
+auto os::file_seek(FileDescriptor file, i64 offset) -> void {
     ZoneScoped;
 
     LARGE_INTEGER li = {};
     li.QuadPart = offset;
-    SetFilePointerEx(reinterpret_cast<HANDLE>(self.handle.value()), li, nullptr, FILE_BEGIN);
+    SetFilePointerEx(reinterpret_cast<HANDLE>(file), li, nullptr, FILE_BEGIN);
 }
 
-void File::close(this File &self) {
-    ZoneScoped;
-
-    if (self.handle) {
-        HANDLE file_handle = reinterpret_cast<HANDLE>(self.handle.value());
-        CloseHandle(file_handle);
-        self.handle.reset();
-    }
-}
-
-ls::option<fs::path> File::open_dialog(std::string_view title, FileDialogFlag flags) {
+auto os::file_dialog(std::string_view title, FileDialogFlag flags) -> ls::option<fs::path> {
     ZoneScoped;
 }
 
-void File::to_stdout(std::string_view str) {
+auto os::file_stdout(std::string_view str) -> void {
     ZoneScoped;
 
     static auto stdout_hnd = GetStdHandle(STD_OUTPUT_HANDLE);
@@ -159,28 +157,62 @@ void File::to_stdout(std::string_view str) {
     WriteFile(stdout_hnd, str.data(), str.length(), &written, nullptr);
 }
 
-/// MEMORY ///
-u64 mem_page_size() {
+auto os::file_stderr(std::string_view str) -> void {
+    ZoneScoped;
+
+    static auto stdout_hnd = GetStdHandle(STD_ERROR_HANDLE);
+
+    DWORD written = 0;
+    WriteFile(stdout_hnd, str.data(), str.length(), &written, nullptr);
+}
+
+auto os::file_watcher_init() -> FileDescriptor {
+    ZoneScoped;
+
+    return FileDescriptor::Invalid;
+}
+
+auto os::file_watcher_add(FileDescriptor watcher, const fs::path &path) -> std::expected<FileDescriptor, FileResult> {
+    ZoneScoped;
+
+    return FileDescriptor::Invalid;
+}
+
+auto os::file_watcher_read(FileDescriptor watcher, FileDescriptor socket) -> std::string {
+    ZoneScoped;
+
+    return {};
+}
+
+auto mem_page_size() -> u64 {
+    ZoneScoped;
+
     SYSTEM_INFO sys_info = {};
     GetSystemInfo(&sys_info);
     return sys_info.dwPageSize;
 }
 
-void *mem_reserve(u64 size) {
+auto mem_reserve(u64 size) -> void * {
+    ZoneScoped;
+
     return VirtualAlloc(nullptr, size, MEM_RESERVE, PAGE_READWRITE);
 }
 
-void mem_release(void *data, u64 size) {
+auto mem_release(void *data, u64 size) -> void {
+    ZoneScoped;
     TracyFree(data);
     VirtualFree(data, size, MEM_RELEASE);
 }
 
-bool mem_commit(void *data, u64 size) {
+auto mem_commit(void *data, u64 size) -> bool {
+    ZoneScoped;
     TracyAllocN(data, size, "Virtual Alloc");
     return VirtualAlloc(data, size, MEM_COMMIT, PAGE_READWRITE) != nullptr;
 }
 
-void mem_decommit(void *data, u64 size) {
+auto mem_decommit(void *data, u64 size) -> void {
+    ZoneScoped;
+
     VirtualFree(data, size, MEM_DECOMMIT);
 }
 }  // namespace lr

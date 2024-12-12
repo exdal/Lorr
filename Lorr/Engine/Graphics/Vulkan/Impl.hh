@@ -49,6 +49,7 @@ struct FormatInfo {
 
 constexpr static FormatInfo FORMAT_INFOS[] = {
     // clang-format off
+    //OUR FORMAT                             COMP BLKW BLKH  VULKAN FORMAT
     { vk::Format::Undefined,                    0,   1,   1, VK_FORMAT_UNDEFINED },
     { vk::Format::R8_UNORM,                     1,   1,   1, VK_FORMAT_R8_UNORM },
     { vk::Format::R8G8B8A8_UNORM,               4,   1,   1, VK_FORMAT_R8G8B8A8_UNORM },

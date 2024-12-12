@@ -56,10 +56,6 @@ inline ls::pair<u8 *, glm::ivec2> imgui_build_font_atlas(AssetManager &asset_man
     imgui.Fonts->AddFontFromFileTTF(roboto_path.c_str(), 16.0f, nullptr);
     imgui.Fonts->AddFontFromFileTTF(fa_solid_900_path.c_str(), 14.0f, &font_config, icons_ranges);
 
-    font_config.GlyphMinAdvanceX = 32.0f;
-    font_config.MergeMode = false;
-    imgui.Fonts->AddFontFromFileTTF(fa_solid_900_path.c_str(), 32.0f, &font_config, icons_ranges);
-
     imgui.Fonts->Build();
 
     u8 *font_data = nullptr;  // imgui context frees this itself

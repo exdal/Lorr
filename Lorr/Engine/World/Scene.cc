@@ -4,39 +4,81 @@
 #include "Engine/World/World.hh"
 
 namespace lr {
-Scene::Scene(const std::string &name_, World &world_)
-    : world(world_),
-      handle(this->world.create_entity(name_)),
-      editor_camera(nullptr) {
+template<>
+struct Handle<Scene>::Impl {
+    World *world = nullptr;
+    flecs::entity handle = {};
+
+    u32 editor_camera_index = {};
+    std::vector<flecs::entity> cameras = {};
+};
+
+auto Scene::create(const std::string &name, World *world) -> ls::option<Scene> {
+    auto impl = new Impl;
+    auto self = Scene(impl);
+
+    impl->world = world;
+    impl->handle = world->create_entity(name);
+
+    impl->editor_camera_index = self.create_perspective_camera("editor_camera", { 0.0, 2.0, 0.0 }, { 0, 0, 0 }, 65.0, 1.6);
+    impl->cameras[impl->editor_camera_index].add<Component::Hidden>().add<Component::ActiveCamera>();
+
+    return self;
+}
+
+auto Scene::destroy() -> void {
     ZoneScoped;
 
-    this->editor_camera = this->create_perspective_camera("editor_camera", { 0.0, 2.0, 0.0 }, { 0, 0, 0 }, 65.0, 1.6);
-    this->editor_camera  //
-        ->add<Component::Hidden>()
-        .add<Component::ActiveCamera>();
+    delete impl;
+    impl = nullptr;
 }
 
 auto Scene::create_entity(const std::string &name) -> flecs::entity {
     ZoneScoped;
 
-    return this->world.create_entity(name).child_of(this->handle);
+    return impl->world->create_entity(name).child_of(impl->handle);
 }
 
 auto Scene::create_perspective_camera(
-    const std::string &name, const glm::vec3 &position, const glm::vec3 &rotation, f32 fov, f32 aspect_ratio) -> flecs::entity * {
+    const std::string &name, const glm::vec3 &position, const glm::vec3 &rotation, f32 fov, f32 aspect_ratio) -> u32 {
     ZoneScoped;
 
-    auto camera_entity_result = this->cameras.create();
-    if (!camera_entity_result.has_value()) {
-        return {};
-    }
+    u32 camera_id = impl->cameras.size();
+    auto e = this->create_entity(name)  //
+                 .add<Component::PerspectiveCamera>()
+                 .set<Component::Transform>({ .position = position, .rotation = rotation })
+                 .set<Component::Camera>({ .fov = fov, .aspect_ratio = aspect_ratio, .index = camera_id });
+    impl->cameras.push_back(e);
 
-    auto &camera_entity = camera_entity_result->self;
-    *camera_entity = this->create_entity(name)  //
-                         .add<Component::PerspectiveCamera>()
-                         .set<Component::Transform>({ .position = position, .rotation = rotation })
-                         .set<Component::Camera>({ .fov = fov, .aspect_ratio = aspect_ratio, .index = camera_entity_result->id });
-
-    return camera_entity;
+    return camera_id;
 }
+
+auto Scene::root() -> flecs::entity {
+    ZoneScoped;
+
+    return impl->handle;
+}
+
+auto Scene::cameras() -> ls::span<flecs::entity> {
+    ZoneScoped;
+
+    return impl->cameras;
+}
+
+auto Scene::editor_camera_index() -> u32 {
+    ZoneScoped;
+
+    return impl->editor_camera_index;
+}
+
+auto Scene::name() -> std::string {
+    ZoneScoped;
+
+    return { impl->handle.name() };
+}
+
+auto Scene::name_sv() -> std::string_view {
+    return { impl->handle.name().c_str(), impl->handle.name().length() };
+}
+
 }  // namespace lr

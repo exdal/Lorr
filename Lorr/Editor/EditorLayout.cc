@@ -1,8 +1,8 @@
 #include "EditorLayout.hh"
 
-#include "EditorApp.hh"
-
-#include "Engine/OS/OS.hh"
+#include "Editor/EditorApp.hh"
+#include "Editor/Panel/AssetBrowserPanel.hh"
+#include "Engine/OS/File.hh"
 
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -111,147 +111,158 @@ void EditorLayout::setup_dockspace(this EditorLayout &self) {
     auto [console_panel_id, console_panel] = self.add_panel<ConsolePanel>("Console", Icon::fa::circle_info);
     auto [inspector_panel_id, inspector_panel] = self.add_panel<InspectorPanel>("Inspector", Icon::fa::wrench);
     auto [scene_browser_panel_id, scene_browser_panel] = self.add_panel<SceneBrowserPanel>("Scene Browser", Icon::fa::bars);
-    auto [tools_panel_id, tools_panel] = self.add_panel<ToolsPanel>("Tools", Icon::fa::wrench);
     auto [viewport_panel_id, viewport_panel] = self.add_panel<ViewportPanel>("Viewport", Icon::fa::eye);
 
     ImGuiViewport *viewport = ImGui::GetMainViewport();
     i32 dock_node_flags = ImGuiDockNodeFlags_PassthruCentralNode;
 
-    auto dockspace_id = ImGui::GetID("EngineDockSpace");
-    self.dockspace_id = dockspace_id;
+    auto dockspace_id_tmp = ImGui::GetID("EngineDockSpace");
+    self.dockspace_id = dockspace_id_tmp;
 
-    ImGui::DockBuilderRemoveNode(dockspace_id);
-    ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace | dock_node_flags);
-    ImGui::DockBuilderSetNodeSize(dockspace_id, viewport->Size);
+    ImGui::DockBuilderRemoveNode(dockspace_id_tmp);
+    ImGui::DockBuilderAddNode(dockspace_id_tmp, ImGuiDockNodeFlags_DockSpace | dock_node_flags);
+    ImGui::DockBuilderSetNodeSize(dockspace_id_tmp, viewport->Size);
 
-    auto main_dock_id = dockspace_id;
+    auto main_dock_id = dockspace_id_tmp;
     auto up_dock_id = ImGui::DockBuilderSplitNode(main_dock_id, ImGuiDir_Up, 0.05f, nullptr, &main_dock_id);
-    auto most_left_dock_id = ImGui::DockBuilderSplitNode(main_dock_id, ImGuiDir_Left, 0.03f, nullptr, &main_dock_id);
     auto down_dock_id = ImGui::DockBuilderSplitNode(main_dock_id, ImGuiDir_Down, 0.30f, nullptr, &main_dock_id);
     auto left_dock_id = ImGui::DockBuilderSplitNode(main_dock_id, ImGuiDir_Left, 0.20f, nullptr, &main_dock_id);
     auto right_dock_id = ImGui::DockBuilderSplitNode(main_dock_id, ImGuiDir_Right, 0.25f, nullptr, &main_dock_id);
 
     ImGui::DockBuilderDockWindow("###up_dock", up_dock_id);
-    ImGui::DockBuilderDockWindow(tools_panel->name.data(), most_left_dock_id);
     ImGui::DockBuilderDockWindow(viewport_panel->name.data(), main_dock_id);
     ImGui::DockBuilderDockWindow(console_panel->name.data(), down_dock_id);
     ImGui::DockBuilderDockWindow(asset_browser_panel->name.data(), down_dock_id);
     ImGui::DockBuilderDockWindow(scene_browser_panel->name.data(), left_dock_id);
     ImGui::DockBuilderDockWindow(inspector_panel->name.data(), right_dock_id);
-    ImGui::DockBuilderFinish(dockspace_id);
+    ImGui::DockBuilderFinish(dockspace_id_tmp);
 }
 
 void EditorLayout::update(this EditorLayout &self) {
     ZoneScoped;
 
     auto &app = EditorApp::get();
+
     auto *viewport = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(viewport->WorkPos);
     ImGui::SetNextWindowSize(viewport->WorkSize);
     ImGui::SetNextWindowViewport(viewport->ID);
+    if (app.active_project.has_value()) {
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+        ImGui::SetNextWindowBgAlpha(0.0f);
 
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
-    ImGui::SetNextWindowBgAlpha(0.0f);
+        i32 dock_window_flags = ImGuiWindowFlags_NoDocking;
+        dock_window_flags |= ImGuiWindowFlags_NoTitleBar;
+        dock_window_flags |= ImGuiWindowFlags_NoCollapse;
+        dock_window_flags |= ImGuiWindowFlags_NoResize;
+        dock_window_flags |= ImGuiWindowFlags_NoMove;
+        dock_window_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus;
+        dock_window_flags |= ImGuiWindowFlags_NoNavFocus;
+        dock_window_flags |= ImGuiWindowFlags_NoScrollbar;
+        dock_window_flags |= ImGuiWindowFlags_NoScrollWithMouse;
+        dock_window_flags |= ImGuiWindowFlags_NoBackground;
+        dock_window_flags |= ImGuiWindowFlags_MenuBar;
+        ImGui::Begin("EditorDock", nullptr, dock_window_flags);
+        ImGui::PopStyleVar(2);
 
-    i32 dock_window_flags = ImGuiWindowFlags_NoDocking;
-    dock_window_flags |= ImGuiWindowFlags_NoTitleBar;
-    dock_window_flags |= ImGuiWindowFlags_NoCollapse;
-    dock_window_flags |= ImGuiWindowFlags_NoResize;
-    dock_window_flags |= ImGuiWindowFlags_NoMove;
-    dock_window_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus;
-    dock_window_flags |= ImGuiWindowFlags_NoNavFocus;
-    dock_window_flags |= ImGuiWindowFlags_NoScrollbar;
-    dock_window_flags |= ImGuiWindowFlags_NoScrollWithMouse;
-    dock_window_flags |= ImGuiWindowFlags_NoBackground;
-    dock_window_flags |= ImGuiWindowFlags_MenuBar;
-    ImGui::Begin("EditorDock", nullptr, dock_window_flags);
-    ImGui::PopStyleVar(2);
+        if (!self.dockspace_id) {
+            self.setup_dockspace();
+        }
 
-    if (!self.dockspace_id) {
-        self.setup_dockspace();
-    }
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
+        i32 dock_node_flags = ImGuiDockNodeFlags_PassthruCentralNode;
+        ImGui::DockSpace(self.dockspace_id.value(), ImVec2(0.0f, 0.0f), dock_node_flags | ImGuiDockNodeFlags_NoWindowMenuButton);
+        ImGui::PopStyleVar();
 
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
-    i32 dock_node_flags = ImGuiDockNodeFlags_PassthruCentralNode;
-    ImGui::DockSpace(self.dockspace_id.value(), ImVec2(0.0f, 0.0f), dock_node_flags | ImGuiDockNodeFlags_NoWindowMenuButton);
-    ImGui::PopStyleVar();
-
-    bool open_create_project_popup = false;
-    if (ImGui::BeginMenuBar()) {
-        if (ImGui::BeginMenu("File")) {
-            if (ImGui::MenuItem("New Scene", nullptr)) {
-            }
-
-            ImGui::Separator();
-
-            if (ImGui::MenuItem("Save Project", nullptr, false)) {
-                // app.world.save_active_project();
-            }
-
-            ImGui::Separator();
-
-            if (ImGui::MenuItem("New Project...")) {
-                open_create_project_popup = true;
-            }
-
-            if (ImGui::MenuItem("Open Project...")) {
-                auto path = File::open_dialog("Open Project");
-                if (!path.has_value()) {
-                    LOG_ERROR("Could not open project file.");
-                    return;
+        if (ImGui::BeginMenuBar()) {
+            if (ImGui::BeginMenu("File")) {
+                if (ImGui::MenuItem("New Scene", nullptr)) {
                 }
 
-                if (path->extension() != ".lrproj") {
-                    LOG_ERROR("Project files must end with .lrproj.");
-                    return;
+                ImGui::Separator();
+
+                if (ImGui::MenuItem("Save Project", nullptr, false)) {
+                    // app.world.save_active_project();
                 }
 
-                // if (app.world.import_project(path.value())) {
-                //     for (auto &p : self.panels) {
-                //         p->do_project_refresh();
-                //     }
+                ImGui::Separator();
+
+                if (ImGui::MenuItem("Exit")) {
+                    app.shutdown();
+                }
+
+                ImGui::EndMenu();
+            }
+
+            if (ImGui::BeginMenu("View")) {
+                // if (ImGui::MenuItem("New Viewport")) {
+                //     self.add_panel<ViewportPanel>("Viewport 2", Icon::fa::eye);
                 // }
+                //
+                // ImGui::Separator();
+
+                if (ImGui::MenuItem("Task Graph Profiler")) {
+                    self.show_profiler = !self.show_profiler;
+                }
+
+                ImGui::EndMenu();
             }
 
-            ImGui::Separator();
-
-            if (ImGui::MenuItem("Exit")) {
-                app.shutdown();
-            }
-
-            ImGui::EndMenu();
+            ImGui::EndMenuBar();
         }
 
-        if (ImGui::BeginMenu("View")) {
-            // if (ImGui::MenuItem("New Viewport")) {
-            //     self.add_panel<ViewportPanel>("Viewport 2", Icon::fa::eye);
-            // }
-            //
-            // ImGui::Separator();
+        ImGui::End();
 
-            if (ImGui::MenuItem("Task Graph Profiler")) {
-                self.show_profiler = !self.show_profiler;
-            }
-
-            ImGui::EndMenu();
+        if (self.show_profiler) {
+            app.world_renderer.draw_profiler_ui();
         }
 
-        ImGui::EndMenuBar();
-    }
+        for (auto &panel : self.panels) {
+            panel->do_update();
+        }
+    } else {
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+        ImGui::SetNextWindowPos({ 0, 0 });
+        ImGui::SetNextWindowSize(viewport->Size);
 
-    if (open_create_project_popup) {
-        ImGui::OpenPopup("###create_project_popup");
-    }
+        ImGui::Begin("New Project", nullptr, ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoDecoration);
 
-    if (ImGui::BeginPopupModal("Create Project...###create_project_popup", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        auto &style = ImGui::GetStyle();
+        auto window_size = ImGui::GetWindowSize();
+        auto frame_padding = style.FramePadding;
+        f32 item_width = 300.0f;
+        f32 window_width = (item_width * 2.0f) + 4.0f;
+        ImGui::SetCursorPos({ (window_size.x - frame_padding.x - window_width) * 0.5f, 100.0f });
+
+        ImGui::BeginGroup();
+        ImGui::TextUnformatted("Open recent project...");
+        if (!app.recent_projects.empty()) {
+            for (const auto &v : app.recent_projects) {
+                const auto &path_str = v.string();
+                if (ImGui::Button(path_str.c_str(), { item_width, 50 })) {
+                    app.open_project(v / "world.lrproj");
+                }
+            }
+        } else {
+            ImGui::InvisibleButton("", { item_width, 400 });
+        }
+        ImGui::EndGroup();
+
+        ImGui::SameLine();
+        ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical, 4.0);
+        ImGui::SameLine();
+
+        ImGui::BeginChild("##create_project_right", { item_width, 0 });
+        ImGui::TextUnformatted("Create new project...");
+
         static std::string project_name = {};
         static std::string project_root_path = {};
 
-        ImGui::TextUnformatted("Project Name");
+        ImGui::SeparatorText("Project Name");
         ImGui::InputText("##project_name", &project_name);
-
-        ImGui::TextUnformatted("Project Location");
+        ImGui::SeparatorText("Project Path");
         ImGui::InputText("##project_path", &project_root_path);
         ImGui::SameLine();
         if (ImGui::Button(Icon::fa::folder_open)) {
@@ -268,32 +279,18 @@ void EditorLayout::update(this EditorLayout &self) {
             ImGui::BeginDisabled();
         }
 
-        if (ImGui::Button("OK", ImVec2(120, 0))) {
-            app.world.export_to(project_root_path);
-            ImGui::CloseCurrentPopup();
+        if (ImGui::Button("OK", ImVec2(item_width, 0))) {
+            app.new_project(project_root_path, project_name);
         }
 
         if (disabled) {
             ImGui::EndDisabled();
         }
 
-        ImGui::SameLine();
+        ImGui::EndChild();
+        ImGui::End();
 
-        if (ImGui::Button("Cancel", ImVec2(120, 0))) {
-            ImGui::CloseCurrentPopup();
-        }
-
-        ImGui::EndPopup();
-    }
-
-    ImGui::End();
-
-    if (self.show_profiler) {
-        app.world_renderer.draw_profiler_ui();
-    }
-
-    for (auto &panel : self.panels) {
-        panel->do_update();
+        ImGui::PopStyleVar(2);
     }
 }
 }  // namespace lr
@@ -343,7 +340,7 @@ bool lg::drag_xyz(glm::vec3 &coords) {
     ImGui::PushMultiItemsWidths(3, ImGui::CalcItemWidth());
 
     float padding = GImGui->Font->FontSize + GImGui->Style.FramePadding.y * 2.0f;
-    ImVec2 button_size = { padding, padding };
+    ImVec2 button_size = { 3.0, padding };
 
     // X
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, { 0, 0 });

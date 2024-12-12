@@ -1,4 +1,4 @@
-#include "OS.hh"
+#include "Engine/OS/OS.hh"
 
 #include <sys/file.h>
 #include <sys/inotify.h>
@@ -10,14 +10,11 @@
 
 #include <iostream>
 
-// TODO:
-// Properly handle all errno cases.
+typedef struct inotify_event inotify_event_t;
 
 namespace lr {
-using std::to_underlying;
-
-/// FILE SYSTEM ///
-File::File(const fs::path &path, FileAccess access) {
+// TODO: Properly handle all errno cases.
+auto os::file_open(const fs::path &path, FileAccess access) -> std::expected<FileDescriptor, FileResult> {
     ZoneScoped;
 
     errno = 0;
@@ -32,80 +29,52 @@ File::File(const fs::path &path, FileAccess access) {
     if (file < 0) {
         switch (errno) {
             case EACCES:
-                this->result = FileResult::NoAccess;
-                break;
+                return std::unexpected(FileResult::NoAccess);
             case EEXIST:
-                this->result = FileResult::Exists;
-                break;
+                return std::unexpected(FileResult::Exists);
             case EISDIR:
-                this->result = FileResult::IsDir;
-                break;
+                return std::unexpected(FileResult::IsDir);
             case EBUSY:
-                this->result = FileResult::InUse;
-                break;
+                return std::unexpected(FileResult::InUse);
             default:
-                this->result = FileResult::Unknown;
-                break;
+                return std::unexpected(FileResult::Unknown);
         }
-
-        return;
     }
+
+    return static_cast<FileDescriptor>(file);
+}
+
+auto os::file_close(FileDescriptor file) -> void {
+    ZoneScoped;
+
+    close(static_cast<i32>(file));
+}
+
+auto os::file_size(FileDescriptor file) -> std::expected<usize, FileResult> {
+    ZoneScoped;
+
+    errno = 0;
 
     struct stat st = {};
     fstat(static_cast<i32>(file), &st);
-    this->size = st.st_size;
-    this->handle = static_cast<uptr>(file);
-}
-
-auto _write(i32 handle, const void *data, u64 size) -> u64 {
-    return write(handle, data, size);
-}
-
-void File::write(this File &self, const void *data, ls::u64range range) {
-    ZoneScoped;
-
-    LS_EXPECT(self.handle.has_value());
-
-    u64 data_offset = range.min;
-    u64 written_bytes_size = 0;
-    u64 target_size = range.length();
-    while (written_bytes_size < target_size) {
-        u64 remainder_size = target_size - written_bytes_size;
-        const u8 *cur_data = reinterpret_cast<const u8 *>(data) + data_offset + written_bytes_size;
-
-        errno = 0;
-        iptr cur_written_size = _write(static_cast<i32>(self.handle.value()), cur_data, remainder_size);
-        LS_EXPECT(errno == 0);
-
-        if (cur_written_size < 0) {
-            LOG_TRACE("File write interrupted! {}", cur_written_size);
-            break;
-        }
-
-        written_bytes_size += cur_written_size;
+    if (errno != 0) {
+        return std::unexpected(FileResult::Unknown);
     }
+
+    return st.st_size;
 }
 
-auto _read(i32 handle, void *data, u64 size) -> u64 {
-    return read(handle, data, size);
-}
-
-u64 File::read(this File &self, void *data, ls::u64range range) {
+auto os::file_read(FileDescriptor file, void *data, usize size) -> usize {
     ZoneScoped;
 
-    LS_EXPECT(self.handle.has_value());
-
-    // `read` can be interrupted, it can read *some* bytes,
-    // so we need to make it loop and carefully read whole data
-    range.clamp(self.size);
     u64 read_bytes_size = 0;
-    u64 target_size = range.length();
+    u64 target_size = size;
     while (read_bytes_size < target_size) {
         u64 remainder_size = target_size - read_bytes_size;
-        u8 *cur_data = reinterpret_cast<u8 *>(data) + range.min + read_bytes_size;
+        u8 *cur_data = reinterpret_cast<u8 *>(data) + read_bytes_size;
 
         errno = 0;
-        iptr cur_read_size = _read(static_cast<i32>(self.handle.value()), cur_data, remainder_size);
+        iptr cur_read_size = read(static_cast<i32>(file), cur_data, remainder_size);
         if (cur_read_size < 0) {
             LOG_TRACE("File read interrupted! {}", cur_read_size);
             break;
@@ -117,26 +86,34 @@ u64 File::read(this File &self, void *data, ls::u64range range) {
     return read_bytes_size;
 }
 
-void File::seek(this File &self, u64 offset) {
+auto os::file_write(FileDescriptor file, const void *data, usize size) -> usize {
     ZoneScoped;
 
-    lseek64(static_cast<i32>(self.handle.value()), static_cast<i64>(offset), SEEK_SET);
-}
+    u64 written_bytes_size = 0;
+    u64 target_size = size;
+    while (written_bytes_size < target_size) {
+        u64 remainder_size = target_size - written_bytes_size;
+        const u8 *cur_data = reinterpret_cast<const u8 *>(data) + written_bytes_size;
 
-void _close(i32 file) {
-    close(file);
-}
+        errno = 0;
+        iptr cur_written_size = write(static_cast<i32>(file), cur_data, remainder_size);
+        if (cur_written_size < 0) {
+            break;
+        }
 
-void File::close(this File &self) {
-    ZoneScoped;
-
-    if (self.handle) {
-        _close(static_cast<i32>(self.handle.value()));
-        self.handle.reset();
+        written_bytes_size += cur_written_size;
     }
+
+    return written_bytes_size;
 }
 
-ls::option<fs::path> File::open_dialog(std::string_view title, FileDialogFlag flags) {
+auto os::file_seek(FileDescriptor file, i64 offset) -> void {
+    ZoneScoped;
+
+    lseek64(static_cast<i32>(file), offset, SEEK_SET);
+}
+
+auto os::file_dialog(std::string_view title, FileDialogFlag flags) -> ls::option<fs::path> {
     ZoneScoped;
 
     std::cout.flush();
@@ -171,16 +148,25 @@ ls::option<fs::path> File::open_dialog(std::string_view title, FileDialogFlag fl
     return std::move(path_str);
 }
 
-void File::to_stdout(std::string_view str) {
-    _write(STDOUT_FILENO, str.data(), str.length());
+void os::file_stdout(std::string_view str) {
+    ZoneScoped;
+
+    write(STDOUT_FILENO, str.data(), str.length());
 }
 
-/// FILE ///
-auto os_file_watcher_init() -> FileDescriptor {
-    return static_cast<FileDescriptor>(inotify_init());
+void os::file_stderr(std::string_view str) {
+    ZoneScoped;
+
+    write(STDERR_FILENO, str.data(), str.length());
 }
 
-auto os_file_watcher_add(FileDescriptor watcher, const fs::path &path) -> std::expected<FileDescriptor, FileResult> {
+auto os::file_watcher_init() -> FileDescriptor {
+    ZoneScoped;
+
+    return static_cast<FileDescriptor>(inotify_init1(IN_NONBLOCK | IN_CLOEXEC));
+}
+
+auto os::file_watcher_add(FileDescriptor watcher, const fs::path &path) -> std::expected<FileDescriptor, FileResult> {
     ZoneScoped;
     errno = 0;
 
@@ -192,46 +178,119 @@ auto os_file_watcher_add(FileDescriptor watcher, const fs::path &path) -> std::e
             case EEXIST:
                 return std::unexpected(FileResult::Exists);
             default:
-                return std::unexpected(static_cast<FileResult>(errno));
+                return std::unexpected(FileResult::Unknown);
         }
     }
 
     return static_cast<FileDescriptor>(descriptor);
 }
 
-// holy fuck its cancer
-auto os_file_watcher_read(FileDescriptor watcher, FileDescriptor socket) -> std::string {
+auto os::file_watcher_remove(FileDescriptor watcher, FileDescriptor watch_descriptor) -> void {
     ZoneScoped;
 
-    // constexpr usize buffer_size = sizeof(struct inotify_event) + 1024 + 1;
-    // c8 buffer[buffer_size] = {};
-    //
-    // auto fd = static_cast<i32>(socket);
-    // i32 read_bytes = select();
-
-    return {};
+    inotify_rm_watch(static_cast<i32>(watcher), static_cast<i32>(watch_descriptor));
 }
 
-/// MEMORY ///
-u64 mem_page_size() {
+auto os::file_watcher_read(FileDescriptor watcher, u8 *buffer, usize buffer_size) -> std::expected<i64, FileResult> {
+    ZoneScoped;
+
+    errno = 0;
+    auto file_sock = static_cast<i32>(watcher);
+    auto read_size = read(file_sock, buffer, buffer_size);
+    if (read_size < 0) {
+        switch (errno) {
+            case EBADF: {
+                return std::unexpected(FileResult::BadFileDescriptor);
+            }
+            case EISDIR: {
+                return std::unexpected(FileResult::IsDir);
+            }
+            case EINTR: {
+                return std::unexpected(FileResult::Interrupted);
+            }
+            default: {
+                return std::unexpected(FileResult::Unknown);
+            }
+        }
+    }
+
+    return read_size;
+}
+
+auto os::file_watcher_peek(u8 *buffer, i64 &buffer_offset) -> FileEvent {
+    ZoneScoped;
+
+    auto *event_data = reinterpret_cast<inotify_event_t *>(buffer + buffer_offset);
+    buffer_offset += static_cast<i64>(sizeof(inotify_event_t)) + event_data->len;
+
+    FileActionMask action_mask = FileActionMask::None;
+    if (event_data->len && !(event_data->mask & IN_ISDIR)) {
+        // File action
+        constexpr static auto FILE_CREATE_MASK = IN_CREATE | IN_MOVED_TO;
+        constexpr static auto FILE_DELETE_MASK = IN_DELETE | IN_MOVED_FROM;
+        constexpr static auto FILE_MODIFY_MASK = IN_CLOSE_WRITE | IN_CLOSE_NOWRITE;
+
+        if (event_data->mask & FILE_CREATE_MASK) {
+            action_mask |= FileActionMask::Create;
+        }
+
+        if (event_data->mask & FILE_DELETE_MASK) {
+            action_mask |= FileActionMask::Delete;
+        }
+
+        if (event_data->mask & FILE_MODIFY_MASK) {
+            action_mask |= FileActionMask::Modify;
+        }
+    } else {
+        // Directory action
+        constexpr static auto DIR_CREATE_MASK = IN_CREATE | IN_MOVE_SELF | IN_MOVED_TO;
+        constexpr static auto DIR_DELETE_MASK = IN_DELETE | IN_DELETE_SELF | IN_UNMOUNT | IN_MOVED_FROM;
+
+        if (event_data->mask & DIR_CREATE_MASK) {
+            action_mask |= FileActionMask::Directory | FileActionMask::Create;
+        }
+
+        if (event_data->mask & DIR_DELETE_MASK) {
+            action_mask |= FileActionMask::Directory | FileActionMask::Delete;
+        }
+    }
+
+    return FileEvent{
+        .file_name = event_data->name,
+        .action_mask = action_mask,
+        .watch_descriptor = static_cast<FileDescriptor>(event_data->wd),
+    };
+}
+
+auto os::file_watcher_buffer_size() -> i64 {
+    return sizeof(inotify_event_t) + 1024 + 1;
+}
+
+auto os::mem_page_size() -> u64 {
     return 0;
 }
 
-void *mem_reserve(u64 size) {
+auto os::mem_reserve(u64 size) -> void * {
+    ZoneScoped;
+
     return mmap(nullptr, size, PROT_NONE, MAP_PRIVATE | MAP_ANON, -1, 0);
 }
 
-void mem_release(void *data, u64 size) {
-    TracyFree(data);
+auto os::mem_release(void *data, u64 size) -> void {
+    ZoneScoped;
+
     munmap(data, size);
 }
 
-bool mem_commit(void *data, u64 size) {
-    TracyAllocN(data, size, "Virtual Alloc");
+auto os::mem_commit(void *data, u64 size) -> bool {
+    ZoneScoped;
+
     return mprotect(data, size, PROT_READ | PROT_WRITE);
 }
 
-void mem_decommit(void *data, u64 size) {
+auto os::mem_decommit(void *data, u64 size) -> void {
+    ZoneScoped;
+
     madvise(data, size, MADV_DONTNEED);
     mprotect(data, size, PROT_NONE);
 }

@@ -1,5 +1,12 @@
 #include "Engine/Graphics/Vulkan/Impl.hh"  // IWYU pragma: export
 
+#define VMA_IMPLEMENTATION
+#define VMA_STATIC_VULKAN_FUNCTIONS 0
+#define VMA_DYNAMIC_VULKAN_FUNCTIONS 1
+#define VMA_VULKAN_VERSION 1003000
+
+#include <vk_mem_alloc.h>
+
 #define LR_VULKAN_INSTANCE_FUNC(name, ...) PFN_##name name;
 #define LR_VULKAN_DEVICE_FUNC(name, ...) PFN_##name name;
 #include "Engine/Graphics/VulkanFunctions.hh"

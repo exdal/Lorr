@@ -45,6 +45,8 @@ auto Buffer::create(
         return std::unexpected(vk::Result::Unknown);
     }
 
+    TracyAllocNS(reinterpret_cast<void *>(impl->allocation), allocation_result.size, 8, "VMA");
+
     VkBufferDeviceAddressInfo device_address_info = {
         .sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
         .pNext = nullptr,
@@ -74,6 +76,9 @@ auto Buffer::create(
 }
 
 auto Buffer::destroy() -> void {
+    ZoneScoped;
+
+    TracyFreeNS(reinterpret_cast<void *>(impl->allocation), 8, "VMA");
     vmaDestroyBuffer(impl->device->allocator, impl->handle, impl->allocation);
     impl->device->resources.buffers.destroy(impl->id);
 }

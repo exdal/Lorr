@@ -9,10 +9,6 @@ import "../lorr";
     ImageView<float4> ms_image;
 } c;
 
-float relative_luminance(float3 c) {
-    return 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
-}
-
 [shader("compute")]
 [numthreads(16, 16, 1)]
 void cs_main(uint3 thread_id : SV_DispatchThreadID) {

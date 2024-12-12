@@ -1,7 +1,7 @@
 #include "Engine/Asset/ParserGLTF.hh"
 
 #include "Engine/Asset/ParserSTB.hh"
-#include "Engine/OS/OS.hh"
+#include "Engine/OS/File.hh"
 
 #include <glm/packing.hpp>
 
@@ -185,9 +185,9 @@ auto GLTFModelInfo::parse(const fs::path &path) -> ls::option<GLTFModelInfo> {
                     // External file
                     const auto image_file_path = path.parent_path() / uri.uri.fspath();
                     File file(image_file_path, FileAccess::Read);
-                    file.seek(uri.fileByteOffset);
+                    file.seek(static_cast<i64>(uri.fileByteOffset));
                     std::vector<u8> file_data(file.size - uri.fileByteOffset);
-                    file.read(file_data.data(), { 0, file_data.size() });
+                    file.read(file_data.data(), file_data.size());
                     model.images.emplace_back(parse_image(std::string(v.name), file_data, fastgltf::MimeType::PNG).value());
                 },
             },

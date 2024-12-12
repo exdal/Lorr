@@ -54,6 +54,8 @@ auto Image::create(
         return std::unexpected(vk::Result::Unknown);
     }
 
+    TracyAllocNS(reinterpret_cast<void *>(impl->allocation), allocation_result.size, 8, "VMA");
+
     auto image = device->resources.images.create();
     if (!image.has_value()) {
         return std::unexpected(vk::Result::OutOfPoolMem);
@@ -115,12 +117,17 @@ auto Image::create_for_swap_chain(Device_H device, vk::Format format, vk::Extent
 }
 
 auto Image::destroy() -> void {
+    ZoneScoped;
+
+    TracyFreeNS(reinterpret_cast<void *>(impl->allocation), 8, "VMA");
     impl->default_view.destroy();
     vmaDestroyImage(impl->device->allocator, impl->handle, impl->allocation);
     impl->device->resources.images.destroy(impl->id);
 }
 
 auto Image::set_name(const std::string &name) -> Image & {
+    ZoneScoped;
+
     if (name.empty()) {
         return *this;
     }

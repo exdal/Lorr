@@ -55,7 +55,7 @@ auto Device::create(usize frame_count) -> std::expected<Device, vk::Result> {
 #if defined(LS_WINDOWS)
         "VK_KHR_win32_surface",
 #elif defined(LS_LINUX)
-        "VK_KHR_xcb_surface",
+        "VK_KHR_xlib_surface",
 #endif
 #if LS_DEBUG
         //! Debug extensions, always put it to bottom

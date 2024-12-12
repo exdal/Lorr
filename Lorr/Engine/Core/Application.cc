@@ -125,15 +125,7 @@ void Application::run(this Application &self) {
 
     b32 swap_chain_ok = true;
 
-    while (true) {
-        bool die = false;
-        die |= self.window.should_close();
-        die |= self.world.should_quit();
-        die |= self.should_close;
-        if (die) {
-            break;
-        }
-
+    while (!self.should_close) {
         if (!swap_chain_ok) {
             auto surface = Surface::create(self.device, self.window.get_native_handle()).value();
             auto window_size = self.window.get_size();
@@ -161,18 +153,21 @@ void Application::run(this Application &self) {
         auto extent = self.swap_chain.extent();
         imgui.DisplaySize = ImVec2(static_cast<f32>(extent.width), static_cast<f32>(extent.height));
 
-        self.world.begin_frame(self.world_renderer);
         // WARN: Make sure to do all imgui settings BEFORE NewFrame!!!
         ImGui::NewFrame();
+        self.world.begin_frame(self.world_renderer);
         self.do_update(delta_time);
-        ImGui::Render();
         self.world.end_frame();
+        self.should_close |= self.window.should_close();
+
+        ImGui::Render();
 
         self.world_renderer.render(self.swap_chain, images[acquired_image_index.value()]);
         self.device.end_frame(self.swap_chain, sema_index);
 
         self.window.poll();
         self.poll_events();
+        self.should_close |= self.world.should_quit();
 
         FrameMark;
     }

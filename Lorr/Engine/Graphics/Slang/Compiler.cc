@@ -279,15 +279,13 @@ auto SlangSession::load_module(const SlangModuleInfo &info) -> ls::option<SlangM
         slang_module = impl->session->loadModuleFromSourceString(
             info.module_name.c_str(), path_str.c_str(), info.source->data(), diagnostics_blob.writeRef());
     } else {
-        File file(info.path, FileAccess::Read);
-        if (!file) {
-            LOG_ERROR("Failed to read shader file '{}'! {}", path_str.c_str(), static_cast<usize>(file.result));
+        auto source_data = File::to_string(info.path);
+        if (source_data.empty()) {
+            LOG_ERROR("Failed to read shader file '{}'!", path_str.c_str());
             return ls::nullopt;
         }
-        auto file_data = file.whole_data();
-        const char *source_data = ls::bit_cast<const char *>(file_data.get());
-        slang_module =
-            impl->session->loadModuleFromSourceString(info.module_name.c_str(), path_str.c_str(), source_data, diagnostics_blob.writeRef());
+        slang_module = impl->session->loadModuleFromSourceString(
+            info.module_name.c_str(), path_str.c_str(), source_data.c_str(), diagnostics_blob.writeRef());
     }
 
     if (diagnostics_blob) {

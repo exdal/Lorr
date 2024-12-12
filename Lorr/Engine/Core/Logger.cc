@@ -1,13 +1,6 @@
 #include "Engine/Core/Logger.hh"
 
-#include "Engine/OS/OS.hh"
-
-#define VMA_IMPLEMENTATION
-#define VMA_STATIC_VULKAN_FUNCTIONS 0
-#define VMA_DYNAMIC_VULKAN_FUNCTIONS 1
-#define VMA_VULKAN_VERSION 1003000
-
-#include <vk_mem_alloc.h>
+#include "Engine/OS/File.hh"
 
 namespace lr {
 struct LoggerImpl {
@@ -33,7 +26,7 @@ void Logger::to_file(std::string_view str) {
     ZoneScoped;
 
     // strip out console colors
-    GLOBAL_LOGGER.file.write(str.data(), { 5, str.length() - 5 });
+    GLOBAL_LOGGER.file.write(str.data() + 5, str.length() - 5);
     File::to_stdout(str);
 }
 

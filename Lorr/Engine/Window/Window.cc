@@ -41,20 +41,24 @@ auto Window::create(const WindowInfo &info) -> Window {
         return Handle(nullptr);
     }
 
-    auto impl = new Impl;
-    impl->monitor_id = info.monitor;
+    SystemDisplay display = Window::display_at(info.monitor);
 
     i32 new_pos_x = 25;
     i32 new_pos_y = 25;
+    i32 new_width = static_cast<i32>(info.width);
+    i32 new_height = static_cast<i32>(info.height);
 
-    if (info.flags & WindowFlag::Centered) {
-        SystemDisplay display = Window::display_at(impl->monitor_id);
+    if (info.flags & WindowFlag::WorkAreaRelative) {
+        new_pos_x = display.work_area.x;
+        new_pos_y = display.work_area.y;
+        new_width = display.work_area.z;
+        new_height = display.work_area.w;
+    } else if (info.flags & WindowFlag::Centered) {
+        auto center_x = display.work_area.z / 2;
+        auto center_y = display.work_area.w / 2;
 
-        i32 dc_x = static_cast<i32>(display.res_w / 2);
-        i32 dc_y = static_cast<i32>(display.res_h / 2);
-
-        new_pos_x += dc_x - static_cast<i32>(info.width / 2);
-        new_pos_y += dc_y - static_cast<i32>(info.height / 2);
+        new_pos_x = center_x - new_width / 2;
+        new_pos_y = center_y - new_height / 2;
     }
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
@@ -63,7 +67,12 @@ auto Window::create(const WindowInfo &info) -> Window {
     glfwWindowHint(GLFW_MAXIMIZED, !!(info.flags & WindowFlag::Maximized));
     glfwWindowHint(GLFW_POSITION_X, new_pos_x);
     glfwWindowHint(GLFW_POSITION_Y, new_pos_y);
-    impl->handle = glfwCreateWindow(static_cast<i32>(info.width), static_cast<i32>(info.height), info.title.data(), nullptr, nullptr);
+
+    auto impl = new Impl;
+    impl->width = static_cast<u32>(new_width);
+    impl->height = static_cast<u32>(new_height);
+    impl->monitor_id = info.monitor;
+    impl->handle = glfwCreateWindow(new_width, new_height, info.title.data(), nullptr, nullptr);
 
     /// Initialize callbacks
     glfwSetWindowUserPointer(impl->handle, impl);
@@ -202,16 +211,17 @@ auto Window::display_at(u32 monitor_id) -> SystemDisplay {
     }
     const char *monitor_name = glfwGetMonitorName(monitor);
     const GLFWvidmode *vid_mode = glfwGetVideoMode(monitor);
-    i32 pos_x = 0;
-    i32 pos_y = 0;
-    glfwGetMonitorPos(monitor, &pos_x, &pos_y);
+    glm::ivec2 position = {};
+    glfwGetMonitorPos(monitor, &position.x, &position.y);
+
+    glm::ivec4 work_area = {};
+    glfwGetMonitorWorkarea(monitor, &work_area.x, &work_area.y, &work_area.z, &work_area.w);
 
     return SystemDisplay{
         .name = monitor_name,
-        .res_w = vid_mode->width,
-        .res_h = vid_mode->height,
-        .pos_x = pos_x,
-        .pos_y = pos_y,
+        .position = position,
+        .work_area = work_area,
+        .resolution = { vid_mode->width, vid_mode->height },
         .refresh_rate = vid_mode->refreshRate,
     };
 }

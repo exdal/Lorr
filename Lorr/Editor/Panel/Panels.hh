@@ -5,15 +5,7 @@
 #include <imgui_internal.h>
 #include <imgui_stdlib.h>
 
-#include "Engine/World/Scene.hh"
-
 namespace lr {
-struct Directory {
-    fs::path path = {};
-    std::vector<Directory> subdirs = {};
-    std::vector<fs::path> files = {};
-};
-
 struct PanelI {
     std::string name = {};
     bool open = true;
@@ -27,14 +19,6 @@ struct PanelI {
     virtual void do_project_refresh() {}
 };
 
-struct ToolsPanel : PanelI {
-    ToolsPanel(std::string name_, bool open_ = true);
-
-    void update(this ToolsPanel &);
-
-    void do_update() override { update(); }
-};
-
 struct SceneBrowserPanel : PanelI {
     flecs::entity selected_entity = {};
 
@@ -46,6 +30,8 @@ struct SceneBrowserPanel : PanelI {
 };
 
 struct ViewportPanel : PanelI {
+    u32 gizmo_op = 0;
+
     ViewportPanel(std::string name_, bool open_ = true);
 
     void on_drop(this ViewportPanel &);
@@ -63,25 +49,6 @@ struct InspectorPanel : PanelI {
     void update(this InspectorPanel &);
 
     void do_update() override { update(); }
-};
-
-struct AssetBrowserPanel : PanelI {
-    ls::option<Directory> asset_dir = ls::nullopt;
-    Directory *selected_dir = nullptr;
-
-    AssetBrowserPanel(std::string name_, bool open_ = true);
-
-    void on_project_refresh(this AssetBrowserPanel &);
-    void refresh_file_tree(this AssetBrowserPanel &);
-
-    void draw_project_tree(this AssetBrowserPanel &);
-    void draw_dir_contents(this AssetBrowserPanel &);
-    void draw_file_tree(this AssetBrowserPanel &, Directory &root_dir);
-
-    void update(this AssetBrowserPanel &);
-
-    void do_update() override { update(); }
-    void do_project_refresh() override { on_project_refresh(); }
 };
 
 struct ConsolePanel : PanelI {

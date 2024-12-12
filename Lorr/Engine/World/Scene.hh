@@ -2,37 +2,28 @@
 
 #include "Engine/Core/Handle.hh"
 
-#include "Engine/Memory/PagedPool.hh"
-
 #include <flecs.h>
 
 namespace lr {
 using World_H = Handle<struct World>;
+struct AssetManager;
 
 enum class SceneID : u32 { Invalid = ~0_u32 };
-struct Scene {
-    World &world;
-    flecs::entity handle;
-
-    // Camera handles need to be pointers, look below
-    flecs::entity *editor_camera;
-    PagedPool<flecs::entity, u32, 64> cameras = {};
-
-    Scene(const std::string &name_, World &world_);
-    virtual ~Scene() = default;
+struct Scene : Handle<Scene> {
+    static auto create(const std::string &name, World *world) -> ls::option<Scene>;
+    auto destroy() -> void;
 
     auto create_entity(const std::string &name) -> flecs::entity;
     auto create_perspective_camera(const std::string &name, const glm::vec3 &position, const glm::vec3 &rotation, f32 fov, f32 aspect_ratio)
-        -> flecs::entity *;
+        -> u32;
 
-    template<typename T>
-    void each_children(const T &f) {
-        this->handle.children(f);
-    }
+    auto root() -> flecs::entity;
+    auto cameras() -> ls::span<flecs::entity>;
+    auto editor_camera_index() -> u32;
+    auto name() -> std::string;
+    auto name_sv() -> std::string_view;
 
-    virtual auto load() -> bool = 0;
-    virtual auto unload() -> bool = 0;
-    virtual auto update() -> void = 0;
+    friend AssetManager;
 };
 
 }  // namespace lr

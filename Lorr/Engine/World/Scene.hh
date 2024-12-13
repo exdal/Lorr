@@ -1,30 +1,29 @@
 #pragma once
 
+#include "Engine/Core/Handle.hh"
+
 #include <flecs.h>
 
 namespace lr {
+using World_H = Handle<struct World>;
+struct AssetManager;
+
 enum class SceneID : u32 { Invalid = ~0_u32 };
-struct Scene {
-    flecs::world &ecs;
-    flecs::entity handle;
-    ls::option<flecs::entity> active_camera = ls::nullopt;
+struct Scene : Handle<Scene> {
+    static auto create(const std::string &name, World *world) -> ls::option<Scene>;
+    auto destroy() -> void;
 
-    Scene(std::string_view name_, flecs::world &world_);
-    virtual ~Scene() = default;
+    auto create_entity(const std::string &name) -> flecs::entity;
+    auto create_perspective_camera(const std::string &name, const glm::vec3 &position, const glm::vec3 &rotation, f32 fov, f32 aspect_ratio)
+        -> u32;
 
-    flecs::entity create_entity(this Scene &, std::string_view name);
+    auto root() -> flecs::entity;
+    auto cameras() -> ls::span<flecs::entity>;
+    auto editor_camera_index() -> u32;
+    auto name() -> std::string;
+    auto name_sv() -> std::string_view;
 
-    void set_active_camera(this Scene &, flecs::entity camera_entity);
-    flecs::entity create_perspective_camera(this Scene &, std::string_view name, const glm::vec3 &position, f32 fov, f32 aspect);
-
-    template<typename T>
-    void children(const T &f) {
-        this->handle.children(f);
-    }
-
-    virtual bool do_load() = 0;
-    virtual bool do_unload() = 0;
-    virtual void do_update() = 0;
+    friend AssetManager;
 };
 
 }  // namespace lr

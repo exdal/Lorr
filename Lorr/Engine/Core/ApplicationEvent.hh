@@ -13,17 +13,18 @@ struct ApplicationEventData {
     i32 key_scancode = ~0_i32;
 
     c32 input_char = ~0_u32;
-    std::vector<std::string> paths = {};
+    std::vector<fs::path> paths = {};
 };
 
 enum class ApplicationEvent : u32 {
-    WindowResize,
+    WindowResize = 0,
     MousePosition,
     MouseState,
     MouseScroll,
     KeyboardState,
     InputChar,
     Drop,
+    Quit,
 
     Invalid = ~0_u32,
 };

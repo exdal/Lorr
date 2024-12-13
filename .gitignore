@@ -13,3 +13,4 @@ out/
 .xmake/
 compile_commands.json
 .luarc.json
+.notes/

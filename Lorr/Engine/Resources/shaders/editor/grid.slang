@@ -6,10 +6,14 @@ struct VertexOutput {
     float3 far_pos      : POSITION;
 };
 
-[[vk::push_constant]] struct {
-    lr::World *world;
-} c;
+struct FragmentOutput {
+    float4 color : SV_Target;
+    float depth  : SV_Depth;
+};
 
+[[vk::push_constant]] struct {
+    World *world;
+} c;
 
 float3 UnprojectPoint(float x, float y, float z, float4x4 view_proj_mat_inv) {
     float4 unprojectedPoint =  mul(view_proj_mat_inv, float4(x, y, z, 1.0));
@@ -64,13 +68,22 @@ VertexOutput vs_main(u32 vertex_id : SV_VertexID) {
 }
 
 [shader("fragment")]
-float4 fs_main(VertexOutput input) : SV_TARGET
-{
+FragmentOutput fs_main(VertexOutput input) {
+    Camera *camera = &c.world->cameras[c.world.active_camera_index];
+
+    FragmentOutput output;
     float t = -input.near_pos.y / (input.far_pos.y - input.near_pos.y);
-    if (t < 0.)
+    if (t < 0.0)
         discard;
 
     float3 pixel_pos = input.near_pos + t * (input.far_pos - input.near_pos);
-    return pristine_grid(pixel_pos, 1.0 / 200.0) * float(t > 0.0);
+    pixel_pos.y -= 0.1;
+
+    float4 clip_space_pos = mul(camera->projection_view_mat, float4(pixel_pos, 1.0));
+    float depth = clip_space_pos.z / clip_space_pos.w;
+
+    output.color = pristine_grid(pixel_pos, 1.0 / 200.0) * float(t > 0.0);
+    output.depth = depth;
+    return output;
 }
 

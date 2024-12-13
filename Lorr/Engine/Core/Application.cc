@@ -1,38 +1,22 @@
 #include "Application.hh"
 
-#include "Engine/Memory/Stack.hh"
+#include <imgui.h>
 
 namespace lr {
 bool Application::init(this Application &self, const ApplicationInfo &info) {
     ZoneScoped;
 
-    Log::init(static_cast<i32>(info.args.size()), info.args.data());
+    Logger::init("engine");
 
-    if (!self.instance.init({ .engine_name = "Lorr" })) {
-        return false;
-    }
-
-    if (!self.device.init({ .instance = &self.instance.m_handle, .frame_count = 3 })) {
-        return false;
-    }
-
-    if (!self.create_surface(self.default_surface, info.window_info)) {
-        return false;
-    }
-
-    if (!self.asset_man.init(&self.device)) {
-        return false;
-    }
-
-    if (!self.world.init()) {
-        return false;
-    }
-
-    if (!self.world_render_pipeline.init(&self.device)) {
-        return false;
-    }
-
+    ImGui::CreateContext();
     auto &imgui = ImGui::GetIO();
+    imgui.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+    imgui.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+    imgui.IniFilename = "editor_layout.ini";
+    imgui.DisplayFramebufferScale = { 1.0f, 1.0f };
+    imgui.BackendFlags = ImGuiBackendFlags_RendererHasVtxOffset;
+    ImGui::StyleColorsDark();
+
     imgui.KeyMap[ImGuiKey_W] = LR_KEY_W;
     imgui.KeyMap[ImGuiKey_A] = LR_KEY_A;
     imgui.KeyMap[ImGuiKey_S] = LR_KEY_S;
@@ -42,8 +26,35 @@ bool Application::init(this Application &self, const ApplicationInfo &info) {
     imgui.KeyMap[ImGuiKey_LeftArrow] = LR_KEY_LEFT;
     imgui.KeyMap[ImGuiKey_RightArrow] = LR_KEY_RIGHT;
 
+    if (!self.do_super_init(info.args)) {
+        LOG_FATAL("Super init failed!");
+        return false;
+    }
+
+    auto device_result = Device::create(3);
+    if (!device_result.has_value()) {
+        LOG_ERROR("Failed to create application! Device failed.");
+        return false;
+    }
+    self.device = device_result.value();
+    self.asset_man = AssetManager::create(self.device);
+
+    self.window = Window::create(info.window_info);
+    auto window_size = self.window.get_size();
+    auto surface = Surface::create(self.device, self.window.get_native_handle()).value();
+    self.swap_chain = SwapChain::create(self.device, surface, { window_size.x, window_size.y }).value().set_name("Main SwapChain");
+    self.world_renderer = WorldRenderer::create(self.device);
+
+    auto world_result = World::create("default_world");
+    if (!world_result.has_value()) {
+        LOG_FATAL("Failed to create default world!");
+        return false;
+    }
+
+    self.world = world_result.value();
+
     if (!self.do_prepare()) {
-        LR_LOG_FATAL("Failed to initialize application!");
+        LOG_FATAL("Failed to initialize application!");
         return false;
     }
 
@@ -54,18 +65,18 @@ bool Application::init(this Application &self, const ApplicationInfo &info) {
 void Application::push_event(this Application &self, ApplicationEvent event, const ApplicationEventData &data) {
     ZoneScoped;
 
-    self.event_manager.push(event, data);
+    self.event_man.push(event, data);
 }
 
 void Application::poll_events(this Application &self) {
     ZoneScoped;
+    memory::ScopedStack stack;
 
     auto &imgui = ImGui::GetIO();
-    while (self.event_manager.peek()) {
+    while (self.event_man.peek()) {
         ApplicationEventData e = {};
-        switch (self.event_manager.dispatch(e)) {
+        switch (self.event_man.dispatch(e)) {
             case ApplicationEvent::WindowResize: {
-                self.world_render_pipeline.on_resize(e.size);
                 break;
             }
             case ApplicationEvent::MousePosition: {
@@ -92,9 +103,14 @@ void Application::poll_events(this Application &self) {
                 imgui.AddInputCharacterUTF16(e.input_char);
                 break;
             }
-            default: {
+            case ApplicationEvent::Drop: {
                 break;
             }
+            case ApplicationEvent::Quit: {
+                self.should_close = true;
+                break;
+            }
+            default:;
         }
     }
 }
@@ -102,128 +118,74 @@ void Application::poll_events(this Application &self) {
 void Application::run(this Application &self) {
     ZoneScoped;
 
-    f64 last_time = 0.0f;
-
-    // Surface info
-    auto &window = self.default_surface.window;
-    auto &swap_chain = self.default_surface.swap_chain;
-    auto &images = self.default_surface.images;
-    auto &image_views = self.default_surface.image_views;
-
     // Renderer context
     auto &imgui = ImGui::GetIO();
+    std::vector<Image> images = {};
+    images = self.swap_chain.get_images();
 
-    while (!window.should_close()) {
-        if (!self.default_surface.swap_chain_ok) {
-            self.create_surface(self.default_surface);
-            self.default_surface.swap_chain_ok = true;
+    b32 swap_chain_ok = true;
+
+    while (!self.should_close) {
+        if (!swap_chain_ok) {
+            auto surface = Surface::create(self.device, self.window.get_native_handle()).value();
+            auto window_size = self.window.get_size();
+            self.swap_chain = SwapChain::create(self.device, surface, { window_size.x, window_size.y }).value();
+            images = self.swap_chain.get_images();
+
+            swap_chain_ok = true;
+        }
+
+        auto present_queue = self.device.queue(vk::CommandType::Graphics);
+        usize sema_index = self.device.new_frame();
+
+        auto [acquire_sema, present_sema] = self.swap_chain.semaphores(sema_index);
+        auto acquired_image_index = present_queue.acquire(self.swap_chain, acquire_sema);
+        if (!acquired_image_index.has_value()) {
+            swap_chain_ok = false;
+            continue;
         }
 
         // Delta time
-        f64 cur_time = glfwGetTime();
-        f32 delta_time = static_cast<f32>(cur_time - last_time);
-        imgui.DeltaTime = delta_time;
-        last_time = cur_time;
+        f64 delta_time = self.world.delta_time();
+        imgui.DeltaTime = static_cast<f32>(delta_time);
 
         // Update application
-        if (!self.world.poll()) {
-            LR_LOG_WARN("World stopped processing!");
-            break;
-        }
-
-        auto &extent = self.default_surface.swap_chain.extent;
+        auto extent = self.swap_chain.extent();
         imgui.DisplaySize = ImVec2(static_cast<f32>(extent.width), static_cast<f32>(extent.height));
 
         // WARN: Make sure to do all imgui settings BEFORE NewFrame!!!
         ImGui::NewFrame();
+        self.world.begin_frame(self.world_renderer);
         self.do_update(delta_time);
+        self.world.end_frame();
+        self.should_close |= self.window.should_close();
+
         ImGui::Render();
 
-        // Render frame
-        self.world_render_pipeline.render_into(swap_chain, images, image_views);
+        self.world_renderer.render(self.swap_chain, images[acquired_image_index.value()]);
+        self.device.end_frame(self.swap_chain, sema_index);
 
-        self.device.end_frame();
-        window.poll();
+        self.window.poll();
         self.poll_events();
+        self.should_close |= self.world.should_quit();
 
         FrameMark;
     }
 
-    self.shutdown(true);
+    self.shutdown();
 }
 
-void Application::shutdown(this Application &self, bool hard) {
+void Application::shutdown(this Application &self) {
     ZoneScoped;
 
-    if (!hard) {
-        LR_LOG_INFO("Soft shutdown requested.");
-        self.world.shutdown();
-        return;
-    }
+    LOG_WARN("Shutting down application...");
 
-    LR_LOG_WARN("Shutting down application...");
-    self.device.wait_for_work();
-#ifdef LR_DEBUG
-    self.asset_man.shutdown(true);
-#else
-    self.asset_man.shutdown(false);
-#endif
-    self.device.delete_swap_chains(self.default_surface.swap_chain);
-    self.world_render_pipeline.shutdown();
-#ifdef LR_DEBUG
-    self.device.shutdown(LR_DEBUG);
-#else
-    self.device.shutdown(false);
-#endif
-
-    LR_LOG_INFO("Complete!");
-}
-
-VKResult Application::create_surface(this Application &self, ApplicationSurface &surface, std::optional<WindowInfo> window_info) {
-    ZoneScoped;
-    memory::ScopedStack stack;
-
-    if (window_info != std::nullopt) {
-        surface.window.init(*window_info);
-    }
-
-    if (surface.swap_chain) {
-        self.device.delete_swap_chains(self.default_surface.swap_chain);
-        self.device.delete_image_views(self.default_surface.image_views);
-        self.device.delete_images(self.default_surface.images);
-    }
-
-    surface.images.resize(self.device.frame_count);
-    surface.image_views.resize(self.device.frame_count);
-
-    SwapChainInfo swap_chain_info = {
-        .surface = surface.window.get_surface(self.instance.m_handle),
-        .extent = { surface.window.width, surface.window.height },
-    };
-
-    if (auto result = self.device.create_swap_chain(surface.swap_chain, swap_chain_info); !result) {
-        return result;
-    }
-    self.device.get_swapchain_images(surface.swap_chain, surface.images);
-    for (usize i = 0; i < self.device.frame_count; i++) {
-        // Image
-        self.device.set_object_name(self.device.image_at(surface.images[i]), stack.format("SwapChain Image {}", i));
-
-        // ImageView
-        ImageViewInfo image_view_info = {
-            .image_id = surface.images[i],
-            .debug_name = stack.format("SwapChain ImageView {}", i),
-        };
-        auto [image_view_id, image_view_result] = self.device.create_image_view(image_view_info);
-        if (!image_view_result) {
-            LR_LOG_ERROR("Failed to create ImageView({}) for SwapChain!", i);
-            return {};
-        }
-
-        surface.image_views[i] = image_view_id;
-    }
-
-    return VKResult::Success;
+    self.device.wait();
+    self.world.destroy();
+    self.asset_man.destroy();
+    self.swap_chain.destroy();
+    self.device.destroy();
+    LOG_INFO("Complete!");
 }
 
 }  // namespace lr

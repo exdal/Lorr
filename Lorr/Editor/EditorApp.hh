@@ -5,16 +5,28 @@
 #include "EditorLayout.hh"
 
 namespace lr {
+struct Project {
+    fs::path root_dir = {};
+};
+
 struct EditorApp : Application {
     static EditorApp &get() { return dynamic_cast<EditorApp &>(Application::get()); }
 
     EditorLayout layout = {};
+    ls::option<Project> active_project = ls::nullopt;
+    ankerl::unordered_dense::set<fs::path> recent_projects = {};
 
-    bool prepare(this EditorApp &);
-    bool update(this EditorApp &, f32 delta_time);
+    auto load_editor_data(this EditorApp &) -> void;
+    auto save_editor_data(this EditorApp &) -> void;
+    auto new_project(this EditorApp &, const fs::path &root_dir, const std::string &name) -> bool;
+    auto open_project(this EditorApp &, const fs::path &path) -> bool;
 
-    void do_shutdown() override {}
-    bool do_prepare() override { return prepare(); }
-    bool do_update(f32 delta_time) override { return update(delta_time); }
+    auto prepare(this EditorApp &) -> bool;
+    auto update(this EditorApp &, f64 delta_time) -> bool;
+
+    auto do_super_init([[maybe_unused]] ls::span<c8 *> args) -> bool override { return true; };
+    auto do_shutdown() -> void override {}
+    auto do_prepare() -> bool override { return prepare(); }
+    auto do_update(f64 delta_time) -> bool override { return update(delta_time); }
 };
 }  // namespace lr

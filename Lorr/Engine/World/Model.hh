@@ -1,76 +1,90 @@
 #pragma once
 
-#include "Engine/Graphics/zfwd.hh"
+#include "Engine/Graphics/Vulkan.hh"
 
 namespace lr {
-struct Vertex {
-    glm::vec3 position = {};
-    f32 uv_x = 0.0f;
-    glm::vec3 normal = {};
-    f32 uv_y = 0.0f;
-    u32 color = 0;
-};
-
+enum class TextureID : u32 { Invalid = std::numeric_limits<u32>::max() };
 struct Texture {
-    ImageID image_id = ImageID::Invalid;
-    ImageViewID image_view_id = ImageViewID::Invalid;
-    SamplerID sampler_id = SamplerID::Invalid;
+    Image image = {};
+    Sampler sampler = {};
+
+    SampledImage sampled_image() { return { image.view().id(), sampler.id() }; }
 };
 
-enum class AlphaMode : u32 {
-    Opaque = 0,
-    Mask,
-    Blend,
-};
-
-enum class MaterialID : u32 { Invalid = ~0_u32 };
+enum class MaterialID : u32 { Invalid = std::numeric_limits<u32>::max() };
 struct Material {
-    glm::vec4 albedo_color = { 1.0f, 1.0f, 1.0f, 1.0f };
-    glm::vec4 emissive_color = { 0.0f, 0.0f, 0.0f, 1.0f };
+    glm::vec3 albedo_color = { 1.0f, 1.0f, 1.0f };
+    glm::vec3 emissive_color = { 0.0f, 0.0f, 0.0f };
     f32 roughness_factor = 0.0f;
     f32 metallic_factor = 0.0f;
-    AlphaMode alpha_mode = AlphaMode::Opaque;
+    vk::AlphaMode alpha_mode = vk::AlphaMode::Opaque;
     f32 alpha_cutoff = 0.0f;
-
-    ls::option<usize> albedo_texture_index;
-    ls::option<usize> normal_texture_index;
-    ls::option<usize> emissive_texture_index;
+    TextureID albedo_texture_id = TextureID::Invalid;
+    TextureID normal_texture_id = TextureID::Invalid;
+    TextureID emissive_texture_id = TextureID::Invalid;
 };
 
 struct GPUMaterial {
-    glm::vec4 albedo_color = { 1.0f, 1.0f, 1.0f, 1.0f };
-    glm::vec4 emissive_color = { 0.0f, 0.0f, 0.0f, 1.0f };
-    f32 roughness_factor = 0.0f;
-    f32 metallic_factor = 0.0f;
-    AlphaMode alpha_mode = AlphaMode::Opaque;
-    f32 alpha_cutoff = 0.0f;
-    ImageViewID albedo_image_view = ImageViewID::Invalid;
-    SamplerID albedo_sampler = SamplerID::Invalid;
-    ImageViewID normal_image_view = ImageViewID::Invalid;
-    SamplerID normal_sampler = SamplerID::Invalid;
-    ImageViewID emissive_image_view = ImageViewID::Invalid;
-    SamplerID emissive_sampler = SamplerID::Invalid;
+    alignas(4) glm::vec3 albedo_color = { 1.0f, 1.0f, 1.0f };
+    alignas(4) glm::vec3 emissive_color = { 0.0f, 0.0f, 0.0f };
+    alignas(4) f32 roughness_factor = 0.0f;
+    alignas(4) f32 metallic_factor = 0.0f;
+    alignas(4) vk::AlphaMode alpha_mode = vk::AlphaMode::Opaque;
+    alignas(4) f32 alpha_cutoff = 0.0f;
+    alignas(4) SampledImage albedo_image = {};
+    alignas(4) SampledImage normal_image = {};
+    alignas(4) SampledImage emissive_image = {};
 };
 
-enum class ModelID : usize { Invalid = ~0_sz };
+enum class ModelID : u32 { Invalid = std::numeric_limits<u32>::max() };
 struct Model {
+    struct Vertex {
+        alignas(4) glm::vec3 position = {};
+        alignas(4) f32 uv_x = 0.0f;
+        alignas(4) glm::vec3 normal = {};
+        alignas(4) f32 uv_y = 0.0f;
+    };
+
+    using Index = u32;
+
     struct Primitive {
-        usize vertex_offset = 0;
-        usize vertex_count = 0;
-        usize index_offset = 0;
-        usize index_count = 0;
-        usize material_index = 0;
+        u32 vertex_offset = 0;
+        u32 vertex_count = 0;
+        u32 index_offset = 0;
+        u32 index_count = 0;
+        MaterialID material_id = MaterialID::Invalid;
     };
 
     struct Mesh {
         std::string name = {};
-        std::vector<usize> primitive_indices = {};
+        std::vector<u32> primitive_indices = {};
+    };
+
+    std::vector<Primitive> primitives = {};
+    std::vector<Mesh> meshes = {};
+    Buffer vertex_buffer = {};
+    Buffer index_buffer = {};
+};
+
+struct GPUModel {
+    struct Primitive {
+        u32 vertex_offset = 0;
+        u32 vertex_count = 0;
+        u32 index_offset = 0;
+        u32 index_count = 0;
+        u32 material_index = 0;
+    };
+
+    struct Mesh {
+        std::vector<u32> primitive_indices = {};
     };
 
     std::vector<Primitive> primitives = {};
     std::vector<Mesh> meshes = {};
 
-    ls::option<BufferID> vertex_buffer;
-    ls::option<BufferID> index_buffer;
+    u32 transform_index = 0;
+    BufferID vertex_bufffer_id = BufferID::Invalid;
+    BufferID index_buffer_id = BufferID::Invalid;
 };
+
 }  // namespace lr

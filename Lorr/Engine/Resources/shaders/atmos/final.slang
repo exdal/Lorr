@@ -1,86 +1,82 @@
+import atmos;
 import "../lorr";
-import "common";
+
+[[vk::push_constant]] struct {
+    World *world;
+    SampledImage<float4> sky_view_lut;
+    ImageView<float4> transmittance_lut;
+    u32 pad;
+} c;
 
 struct VertexOutput {
     float4 position     : SV_Position;
     float2 tex_coord    : TEXCOORD;
 };
 
-[[vk::push_constant]] struct {
-    lr::World *world;
-    ImageViewID sky_lut_image_id;
-    ImageViewID transmittance_lut_image_id;
-    SamplerID sampler_id;
-} c;
-
 [shader("vertex")]
 VertexOutput vs_main(u32 vertex_id : SV_VertexID) {
     VertexOutput output;
-
     output.tex_coord = float2((vertex_id << 1) & 2, vertex_id & 2);
-    output.position = float4(output.tex_coord * float2(2.0, 2.0) - float2(1.0, 1.0), 0.5, 1);
+    output.position = float4(2.0 * output.tex_coord - 1.0, 1.0, 1.0);
 
     return output;
 }
 
-float draw_sun(float cos_theta, float sun_radius) {
-    float deg = cos(sun_radius * PI / 180.0);
-    if (cos_theta > deg) {
-        return 1.0;
+float3 draw_sun(float3 world_dir, float3 sun_dir, float radius) {
+    const float min_cos_theta = cos(radius * PI / 180.0);
+
+    float cosTheta = dot(world_dir, sun_dir);
+    if (cosTheta >= min_cos_theta) {
+        return float3(1.0);
     }
 
-    return 0.0;
-}
-
-float3 ACES(float3 x)
-{
-    const float a = 2.51;
-    const float b = 0.03;
-    const float c = 2.43;
-    const float d = 0.59;
-    const float e = 0.14;
-
-    return saturate(x * (a * x + b)) / (x * (c * x + d) + e);
-}
-
-float3 dither(float2 seed, float3 color)
-{
-    color *= 255;
-
-    float rand = frac(sin(dot(seed, float2(12.9898, 78.233) * 2.0)) * 43758.5453);
-    color = select(rand.xxx < (color - floor(color)), ceil(color), floor(color));
-    color /= 255;
-
-    return color;
+    float offset = min_cos_theta - cosTheta;
+    float gaussianBloom = exp(-offset * 50000.0) * 0.5;
+    float invBloom = 1.0/(0.02 + offset * 300.0) * 0.01;
+    return float3(gaussianBloom + invBloom);
 }
 
 [shader("fragment")]
-float4 fs_main(VertexOutput input) : SV_TARGET
-{
-    lr::Atmosphere *atmos = &c.world->atmosphere;
-    lr::Sun *sun = &c.world->sun;
-
-    const Texture2D sky_lut = Texture2D<float4>::get(c.sky_lut_image_id);
-    const SamplerState sampler = SamplerState::get(c.sampler_id);
+float4 fs_main(VertexOutput input) : SV_TARGET {
+    Camera *camera = &c.world->cameras[c.world.active_camera_index];
+    Atmosphere *atmos = &c.world->atmosphere;
+    Sun *sun = &c.world->sun;
     
-    float4 clip_space = float4(2.0 * input.tex_coord - 1.0, 1.0, 1.0);
-    float4 world_space = mul(c.world->cameras[0].inv_projection_view_mat, clip_space);
-    float3 world_pos = world_space.xyz / world_space.w;
-    float3 direction = normalize(world_pos);
+    float3 clip_space = float3(input.tex_coord * 2.0 - 1.0, 1.0);
+    float4 clip_pos = mul(camera->inv_projection_view_mat, float4(clip_space, 1.0));
+    float3 clip_dir = clip_pos.xyz / clip_pos.w;
+    float3 world_dir = normalize(clip_dir - camera->position);
+    float3 world_pos = float3(0.0, camera->position.y, 0.0) *
+                       CAMERA_SCALE_UNIT +
+                       float3(0.0, atmos->planet_radius, 0.0);
 
-    float l = asin(direction.y);
-    float u = atan2(direction.z, direction.x) / (2.0 * PI);
-    float v = 0.5 - 0.5 * sign(l) * sqrt(abs(l) / (0.5 * PI));
+    const let planet_intersection = lr::ray_sphere_intersect_nearest(world_pos, world_dir, atmos->planet_radius);
 
-    float3 color = sky_lut.Sample(sampler, float2(u, v)).rgb;
+    float h = length(world_pos);
+    float3 up_vec = normalize(world_pos);
 
-    float3 eye_pos = float3(0.0, c.world->cameras[0].position.y, 0.0);
-    float altitude = length(eye_pos);
-    float cos_theta = dot(sun->direction, eye_pos / altitude);
-    float3 transmittance = sample_lut(atmos, c.transmittance_lut_image_id, c.sampler_id, altitude, cos_theta);
-    color += draw_sun(dot(sun->direction, direction), 1.0) * sun->intensity * transmittance;
+    float3 sun_dir = normalize(sun->direction);
+    float3 right_vec = normalize(cross(up_vec, world_dir));
+    float3 forward_vec = normalize(cross(right_vec, up_vec));
+    float2 light_on_plane = normalize(float2(dot(sun_dir, forward_vec), dot(sun_dir, right_vec)));
 
-    return float4(color, 1.0);
+    float view_zenith_cos_angle = dot(world_dir, up_vec);
+    float light_view_cos_angle = light_on_plane.x;
+
+    float2 uv = get_sky_view_lut_uv(atmos, planet_intersection.hasValue, view_zenith_cos_angle, light_view_cos_angle, h);
+    uv.x = fromUnitToSubUvs(uv.x, 200.0);
+    uv.y = fromUnitToSubUvs(uv.y, 100.0);
+    float3 luminance = c.sky_view_lut.sample(uv).rgb;
+
+    float sun_cos_theta = dot(sun.direction, up_vec);
+    float2 transmittance_uv = get_transmittance_lut_uv(atmos, float2(h, sun_cos_theta));
+    float3 sun_transmittance = c.transmittance_lut.sample(c.world->linear_sampler, transmittance_uv).rgb;
+
+    if (!planet_intersection.hasValue) {
+        luminance += draw_sun(world_dir, sun->direction, 1.0) * sun.intensity * sun_transmittance;
+    }
+
+    return float4(luminance, 1.0);
 }
 
 

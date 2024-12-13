@@ -1,6 +1,6 @@
 #include "EditorApp.hh"
 
-static lr::EditorApp app = {};
+static lr::EditorApp app;
 
 lr::Application &lr::Application::get() {
     return app;
@@ -11,8 +11,7 @@ i32 main(i32 argc, c8 **argv) {
 
     app.init(lr::ApplicationInfo{
         .args = { argv, static_cast<usize>(argc) },
-        .window_info = { .title = "Lorr Editor", .width = 1580, .height = 820, .flags = lr::WindowFlag::Centered },
+        .window_info = { .title = "Lorr Editor", .width = 1720, .height = 880, .flags = lr::WindowFlag::Centered, },
     });
-
-    return 1;
+    return 0;
 }

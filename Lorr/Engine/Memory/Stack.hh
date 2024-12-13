@@ -60,19 +60,31 @@ struct ScopedStack {
     }
 
     template<typename... ArgsT>
-    std::string_view format(const fmt::format_string<ArgsT...> fmt, ArgsT &&...args) {
+    std::string_view format(const std::format_string<ArgsT...> fmt, ArgsT &&...args) {
         ZoneScoped;
 
         auto &stack = get_thread_stack();
         c8 *begin = reinterpret_cast<c8 *>(stack.ptr);
-        c8 *end = fmt::vformat_to(begin, fmt.get(), fmt::make_format_args(args...));
+        c8 *end = std::vformat_to(begin, fmt.get(), std::make_format_args(args...));
         *end = '\0';
         stack.ptr = ls::align_up(reinterpret_cast<u8 *>(end + 1), 8);
 
         return { begin, end };
     }
 
-    std::wstring_view to_utf16(std::string_view str) {
+    std::u32string_view to_utf32(std::string_view str) {
+        ZoneScoped;
+
+        auto &stack = get_thread_stack();
+        auto *begin = reinterpret_cast<c32 *>(stack.ptr);
+        usize size = simdutf::convert_utf8_to_utf32(str.data(), str.length(), begin);
+        begin[size] = L'\0';
+        stack.ptr = ls::align_up(stack.ptr + (size + 1) * sizeof(c32), 8);
+
+        return { reinterpret_cast<c32 *>(begin), size };
+    }
+
+    std::u16string_view to_utf16(std::string_view str) {
         ZoneScoped;
 
         auto &stack = get_thread_stack();
@@ -81,27 +93,45 @@ struct ScopedStack {
         begin[size] = L'\0';
         stack.ptr = ls::align_up(stack.ptr + (size + 1) * sizeof(c16), 8);
 
-        return { reinterpret_cast<wchar_t *>(begin), size };
+        return { reinterpret_cast<c16 *>(begin), size };
     }
 
-    std::string_view to_utf8(std::wstring_view str) {
+    std::string_view to_utf8(std::u32string_view str) {
         ZoneScoped;
 
         auto &stack = get_thread_stack();
-        c8 *begin = reinterpret_cast<c8 *>(stack.ptr);
-        usize size = simdutf::convert_utf16_to_utf8(reinterpret_cast<const c16 *>(str.data()), str.length(), begin);
+        auto *begin = reinterpret_cast<c8 *>(stack.ptr);
+        usize size = simdutf::convert_utf32_to_utf8(str.data(), str.length(), begin);
         begin[size] = '\0';
         stack.ptr = ls::align_up(stack.ptr + size + 1, 8);
 
         return { begin, size };
     }
 
+    std::string_view to_utf8(std::u16string_view str) {
+        ZoneScoped;
+
+        auto &stack = get_thread_stack();
+        auto *begin = reinterpret_cast<c8 *>(stack.ptr);
+        usize size = simdutf::convert_utf16_to_utf8(str.data(), str.length(), begin);
+        begin[size] = '\0';
+        stack.ptr = ls::align_up(stack.ptr + size + 1, 8);
+
+        return { begin, size };
+    }
+
+    std::string_view to_utf8(c32 str) {
+        ZoneScoped;
+
+        return to_utf8({ &str, 1 });
+    }
+
     std::string_view to_upper(std::string_view str) {
         ZoneScoped;
 
         auto &stack = get_thread_stack();
-        c8 *begin = reinterpret_cast<c8 *>(stack.ptr);
-        memcpy(begin, str.data(), str.length());
+        auto *begin = reinterpret_cast<c8 *>(stack.ptr);
+        std::copy(str.begin(), str.end(), begin);
         c8 *end = reinterpret_cast<c8 *>(stack.ptr + str.length());
         stack.ptr = ls::align_up(reinterpret_cast<u8 *>(end + 1), 8);
 
@@ -115,12 +145,26 @@ struct ScopedStack {
         ZoneScoped;
 
         auto &stack = get_thread_stack();
-        c8 *begin = reinterpret_cast<c8 *>(stack.ptr);
-        memcpy(begin, str.data(), str.length());
-        c8 *end = reinterpret_cast<c8 *>(stack.ptr + str.length());
+        auto *begin = reinterpret_cast<c8 *>(stack.ptr);
+        std::copy(str.begin(), str.end(), begin);
+        auto *end = reinterpret_cast<c8 *>(stack.ptr + str.length());
         stack.ptr = ls::align_up(reinterpret_cast<u8 *>(end + 1), 8);
 
         std::transform(begin, end, begin, ::tolower);
+        *end = '\0';
+
+        return { begin, end };
+    }
+
+    std::string_view null_terminate(std::string_view str) {
+        ZoneScoped;
+
+        auto &stack = get_thread_stack();
+        auto *begin = reinterpret_cast<c8 *>(stack.ptr);
+        std::copy(str.begin(), str.end(), begin);
+        auto *end = reinterpret_cast<c8 *>(stack.ptr + str.length());
+        stack.ptr = ls::align_up(reinterpret_cast<u8 *>(end + 1), 8);
+
         *end = '\0';
 
         return { begin, end };

@@ -21,14 +21,7 @@ toolchain("nix-clang")
         toolchain:add("ldflags", march)
         toolchain:add("shflags", march)
 
-        -- Force LLVM stuff
+        -- Force LLVM flags
         toolchain:add("cxflags", "-stdlib=libc++")
-        toolchain:add("ldflags", "-fuse-ld=lld")
-
-        -- NixOS env
-        toolchain:add("includedirs", os.getenv("NIX_CLANG_INC"))
-        toolchain:add("includedirs", os.getenv("NIX_LIBCXX_INC"))
-        toolchain:add("includedirs", os.getenv("NIX_GLIBC_INC"))
-
-        toolchain:add("linkdirs", os.getenv("NIX_GLIBC_LIB"))
+        toolchain:add("cxflags", "-march=native")
     end)

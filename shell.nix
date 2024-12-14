@@ -1,33 +1,34 @@
-{ callPackage,
+{ callPackage, stdenv,
   llvmPackages_19,
   cmake, ninja, gnumake, xmake,
-  python313,
-  glibc,
-  xorg, glfw
+  pkg-config, python313, fzf,
+  zlib, xorg, glfw
 }:
-
-let main = callPackage ./default.nix {};
-in main.overrideAttrs (oa: {
+let
+  main = callPackage ./default.nix {};
+in
+main.overrideAttrs rec {
   nativeBuildInputs = [
     cmake
     ninja
     gnumake
     xmake
 
-    python313
-
-    glibc
-    glibc.dev
-
-    llvmPackages_19.stdenv
-    llvmPackages_19.clang-unwrapped
+    llvmPackages_19.clang-tools
+    llvmPackages_19.clangUseLLVM
     llvmPackages_19.llvm
-    llvmPackages_19.lld
     llvmPackages_19.libcxx.dev
-  ] ++ (oa.nativeBuildInputs or [ ]);
 
-  buildInputs = [
+    pkg-config
+    python313
+    fzf
+
+    zlib.dev
     xorg.libX11.dev
+    xorg.libXi.dev
+    xorg.libXrandr
+    xorg.libXcursor
+    xorg.libXinerama
     glfw
-  ] ++ (oa.buildInputs or [ ]);
-})
+  ];
+}

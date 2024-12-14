@@ -23,10 +23,12 @@ usize memory::set_bit_count(u64 v) {
     return __builtin_popcountll(v);
 }
 
+__attribute__((target("lzcnt")))
 u32 memory::lzcnt_32(u32 v) {
     return __builtin_ia32_lzcnt_u32(v);
 }
 
+__attribute__((target("lzcnt")))
 u32 memory::lzcnt_64(u64 v) {
     return __builtin_ia32_lzcnt_u64(v);
 }

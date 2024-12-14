@@ -40,18 +40,13 @@ union ColorClearValue {
         : color_f32({ r, g, b, a }) {};
     ColorClearValue(u32 r, u32 g, u32 b, u32 a)
         : color_u32({ r, g, b, a }) {};
-    ColorClearValue(i32 r, i32 g, i32 b, i32 a)
-        : color_i32({ r, g, b, a }) {};
     ColorClearValue(const glm::vec4 &val)
         : color_f32(val) {};
     ColorClearValue(const glm::uvec4 &val)
         : color_u32(val) {};
-    ColorClearValue(const glm::ivec4 &val)
-        : color_i32(val) {};
 
     glm::vec4 color_f32 = {};
     glm::uvec4 color_u32;
-    glm::ivec4 color_i32;
 };
 
 struct DepthClearValue {
@@ -271,7 +266,7 @@ struct ImageDescriptorInfo {
 struct BufferDescriptorInfo {
     BufferID buffer = BufferID::Invalid;
     u64 offset = 0;
-    u64 range = ~0ULL;
+    u64 range = ~0_u64;
 };
 
 struct MemoryRequirements {

@@ -20,3 +20,56 @@ rule("lorr.install_resources")
         batchcmds:set_depcache(target:dependfile(abs_output))
     end)
 
+rule("lorr.debug")
+    on_config(function (target)
+        if is_mode("debug") then
+            if not target:get("symbols") then
+                target:set("symbols", "debug")
+            end
+            if not target:get("optimize") then
+                target:set("optimize", "smallest")
+            end
+            target:add("cuflags", "-G")
+            target:add("cxflags", "-DLS_DEBUG=1")
+            target:add("cuflags", "-DLS_DEBUG=1")
+        end
+    end)
+
+rule("lorr.release")
+    on_config(function (target)
+        if is_mode("release") then
+            if not target:get("symbols") and target:kind() ~= "shared" then
+                target:set("symbols", "hidden")
+            end
+            if not target:get("optimize") then
+                target:set("optimize", "fastest")
+            end
+
+            if not target:get("strip") then
+                target:set("strip", "all")
+            end
+
+            target:add("cxflags", "-DNDEBUG")
+            target:add("cuflags", "-DNDEBUG")
+        end
+    end)
+
+rule("lorr.releasedbg")
+    on_config(function (target)
+        if is_mode("releasedbg") then
+            if not target:get("symbols") then
+                target:set("symbols", "debug")
+            end
+            if not target:get("optimize") then
+                target:set("optimize", "fastest")
+            end
+
+            if not target:get("strip") then
+                target:set("strip", "all")
+            end
+
+            target:add("cuflags", "-lineinfo")
+            target:add("cxflags", "-DNDEBUG")
+            target:add("cuflags", "-DNDEBUG")
+        end
+    end)

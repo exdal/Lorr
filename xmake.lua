@@ -1,6 +1,6 @@
 includes("xmake/**.lua")
 
-add_rules("mode.debug", "mode.release", "mode.releasedbg")
+add_rules("lorr.debug", "lorr.release", "lorr.releasedbg")
 add_rules("plugin.compile_commands.autoupdate", { outputdir = ".", lsp = "clangd" })
 
 set_project("Lorr")
@@ -17,9 +17,6 @@ add_cxxflags(
     "-Wno-gnu-zero-variadic-macro-arguments",
     "-Wno-missing-braces",
     { tools = { "clang", "gcc" } })
-
--- Compiler Config --
-add_ldflags("-fuse-ld=lld", { tools = { "clang" } })
 
 includes("Lorr")
 includes("tests")

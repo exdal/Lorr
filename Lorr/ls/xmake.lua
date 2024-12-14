@@ -3,10 +3,6 @@ target("ls")
     set_languages("cxx23")
     add_includedirs("../", { public = true })
 
-    if is_mode("debug") then
-        add_defines("LS_DEBUG=1", { public = true })
-    end
-
     if is_plat("windows") then
         add_defines("LS_WINDOWS=1", { public = true })
     elseif is_plat("linux") then

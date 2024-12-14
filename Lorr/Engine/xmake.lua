@@ -26,9 +26,6 @@ target("Lorr")
         add_syslinks("gdi32", "msimg32", "user32")
         remove_files("OS/Linux*")
     elseif is_plat("linux") then
-        if not has_config("wayland") then
-            add_syslinks("xcb")
-        end
         remove_files("OS/Win32*")
     end
 

@@ -2,7 +2,8 @@
   llvmPackages_19,
   cmake, ninja, gnumake, xmake,
   python313,
-  glibc
+  glibc,
+  xorg, glfw
 }:
 
 let main = callPackage ./default.nix {};
@@ -23,5 +24,10 @@ in main.overrideAttrs (oa: {
     llvmPackages_19.llvm
     llvmPackages_19.lld
     llvmPackages_19.libcxx.dev
-  ];
+  ] ++ (oa.nativeBuildInputs or [ ]);
+
+  buildInputs = [
+    xorg.libX11.dev
+    glfw
+  ] ++ (oa.buildInputs or [ ]);
 })

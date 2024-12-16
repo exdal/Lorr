@@ -30,6 +30,8 @@ package("slang-lorr")
     add_configs("slang_glslang", { description = "Enable glslang dependency and slang-glslang wrapper target", default = true, type = "boolean" })
     add_configs("slang_llvm_flavor", { description = "How to get or build slang-llvm (available options: FETCH_BINARY, USE_SYSTEM_LLVM, DISABLE)", default = "DISABLE", type = "string" })
 
+    set_policy("package.cmake_generator.ninja", true)
+
     add_deps("cmake")
 
     on_install("windows|x64", "macosx", "linux|x86_64", function (package)

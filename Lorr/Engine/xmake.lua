@@ -11,7 +11,6 @@ target("Lorr")
     add_forceincludes("Engine/pch.hh", { public = true, force = true })
     set_pcheader("Engine/pch.hh", { public = true, force = true })
     add_cxxflags("clang::-march=native", "clang_cl::/arch:AVX2", "cl::/arch:AVX2")
-    set_runtimes("MT", "c++_static")
 
     if is_mode("debug") then
         add_ldflags(

@@ -9,6 +9,10 @@ target("ls")
         add_defines("LS_LINUX=1", { public = true })
     end
 
+    if is_mode("debug") then
+        add_defines("LS_DEBUG=1", { public = true })
+    end
+
     on_config(function (target)
         if (target:has_tool("cc", "cl")) then
             target:add("defines", "LS_COMPILER_MSVC=1", { force = true, public = true })

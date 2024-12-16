@@ -307,7 +307,12 @@ struct Handle<Device>::Impl {
 };
 
 template<typename T>
-static void set_object_name(Device_H device, T v, VkObjectType object_type, std::string_view name) {
+static void set_object_name(
+    [[maybe_unused]] Device_H device,
+    [[maybe_unused]] T v,
+    [[maybe_unused]] VkObjectType object_type,
+    [[maybe_unused]] std::string_view name) {
+#ifdef LS_DEBUG
     VkDebugUtilsObjectNameInfoEXT object_name_info = {
         .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
         .pNext = nullptr,
@@ -316,6 +321,7 @@ static void set_object_name(Device_H device, T v, VkObjectType object_type, std:
         .pObjectName = name.data(),
     };
     vkSetDebugUtilsObjectNameEXT(device->handle, &object_name_info);
+#endif
 }
 
 }  // namespace lr

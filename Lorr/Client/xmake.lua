@@ -1,7 +1,0 @@
-target("Client")
-    set_kind("library")
-    set_languages("cxx23")
-    add_deps("Lorr")
-    add_includedirs("./", { public = true })
-    add_files("**.cc")
-target_end()

@@ -17,7 +17,6 @@ add_requires("tracy v0.10", { configs = {
     exit = true,
     system_tracing = true,
 } })
-add_requires("slang-lorr v2024.13")
 add_requires("vk-bootstrap v1.3.292")
 add_requires("fastgltf v0.8.0")
 add_requires("stb 2023.12.15")
@@ -39,3 +38,4 @@ if has_config("enable_tests") then
 end
 
 add_requires("imguizmo-lorr 1.89+WIP")
+add_requires("slang-lorr v2024.13")

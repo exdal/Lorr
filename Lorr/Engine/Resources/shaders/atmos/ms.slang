@@ -3,13 +3,14 @@ import "../lorr";
 
 import "../noise/hemisphere";
 
-[[vk::push_constant]] struct {
+struct PushConstants {
     World *world;
     ImageView<float4> transmittance_image;
     float2 ms_image_size;
     ImageView<float4> ms_image;
     u32 pad;
-} c;
+};
+[[vk::push_constant]] PushConstants c;
 
 [shader("compute")]
 [numthreads(16, 16, 1)]

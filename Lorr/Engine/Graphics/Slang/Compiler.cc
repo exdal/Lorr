@@ -2,8 +2,6 @@
 
 #include "Engine/Util/VirtualDir.hh"
 
-#include <utility>
-
 namespace lr {
 constexpr auto to_shader_stage(SlangStage v) {
     switch (v) {

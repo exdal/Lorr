@@ -1,13 +1,14 @@
 import atmos;
 import "../lorr";
 
-[[vk::push_constant]] struct {
+struct PushConstants {
     World *world;
     float3 target_image_size;
     ImageView<float4> target_image;
     ImageView<float4> transmittance_image;
     ImageView<float4> ms_image;
-} c;
+};
+[[vk::push_constant]] PushConstants c;
 
 [shader("compute")]
 [numthreads(16, 16, 1)]

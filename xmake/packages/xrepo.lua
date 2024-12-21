@@ -38,4 +38,4 @@ if has_config("enable_tests") then
 end
 
 add_requires("imguizmo-lorr 1.89+WIP")
-add_requires("slang-lorr v2024.13")
+add_requires("slang-lorr v2024.17.3")

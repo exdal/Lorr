@@ -11,9 +11,10 @@ struct FragmentOutput {
     float depth  : SV_Depth;
 };
 
-[[vk::push_constant]] struct {
+struct PushConstants {
     World *world;
-} c;
+};
+[[vk::push_constant]] PushConstants c;
 
 float3 UnprojectPoint(float x, float y, float z, float4x4 view_proj_mat_inv) {
     float4 unprojectedPoint =  mul(view_proj_mat_inv, float4(x, y, z, 1.0));

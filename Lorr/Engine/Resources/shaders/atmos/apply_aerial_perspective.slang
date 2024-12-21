@@ -1,11 +1,12 @@
 import atmos;
 import "../lorr";
 
-[[vk::push_constant]] struct {
+struct PushConstants {
     World *world;
     ImageView<float4> depth_image;
     ImageView<float4> aerial_perspective_image;
-} c;
+};
+[[vk::push_constant]] PushConstants c;
 
 struct VertexOutput {
     float4 position     : SV_Position;

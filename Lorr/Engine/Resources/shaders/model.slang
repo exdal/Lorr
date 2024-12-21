@@ -3,13 +3,14 @@ module model;
 import lorr;
 import atmos.atmos;
 
-[[vk::push_constant]] struct {
+struct PushConstants {
     World *world;
     ImageView<float4> transmittance_lut;
     u32 model_transform_index;
     u32 material_index;
     u32 pad;
-} c;
+};
+[[vk::push_constant]] PushConstants c;
 
 struct VertexInput {
     float3 position  : POSITION;

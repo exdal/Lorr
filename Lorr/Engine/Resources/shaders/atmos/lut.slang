@@ -1,12 +1,13 @@
 import atmos;
 import "../lorr";
 
-[[vk::push_constant]] struct {
+struct PushConstants {
     World *world;
     ImageView<float4> transmittance_image;
     ImageView<float4> ms_image;
     u32 pad;
-} c;
+};
+[[vk::push_constant]] PushConstants c;
 
 struct VertexOutput {
     vec4 position     : SV_Position;

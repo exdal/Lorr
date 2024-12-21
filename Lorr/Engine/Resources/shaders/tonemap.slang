@@ -11,11 +11,12 @@ float3 aces(float3 x) {
     return (x * (a * x + b)) / (x * (c * x + d) + e);
 }
 
-[[vk::push_constant]] struct {
+struct PushConstants {
     World *world;
     ImageView<float4> src_image_view;
     f32 avg_luminance;
-} c;
+};
+[[vk::push_constant]] PushConstants c;
 
 struct VertexOutput {
     float4 position     : SV_Position;

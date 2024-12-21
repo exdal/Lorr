@@ -22,12 +22,12 @@ struct VertexOutput {
     float4 color        : COLOR;
 };
 
-[[vk::push_constant]] struct
-{
+struct PushConstants {
     float2 translate;
     float2 scale;
     SampledImage<float4> image;
-} c;
+};
+[[vk::push_constant]] PushConstants c;
 
 [shader("vertex")]
 VertexOutput vs_main(VertexInput input) {

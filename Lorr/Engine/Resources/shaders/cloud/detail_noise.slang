@@ -1,10 +1,11 @@
 import cloud;
 import "../lorr";
 
-[[vk::push_constant]] struct {
+struct PushConstants {
     float3 image_size_inv;
     ImageView<float4> noise_image;
-} c;
+};
+[[vk::push_constant]] PushConstants c;
 
 float smoothstep_unchecked(float x) {
     x = clamp(x, 0.0, 1.0);

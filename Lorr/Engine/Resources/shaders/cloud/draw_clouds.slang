@@ -2,13 +2,14 @@ import cloud;
 import "../atmos/atmos";
 import "../lorr";
 
-[[vk::push_constant]] struct {
+struct PushConstants {
     World *world;
     ImageView<float4> transmittance_lut_image;
     ImageView<float4> aerial_perspective_lut_image;
     SampledImage<float4> shape_noise_image;
     SampledImage<float4> detail_noise_image;
-} c;
+};
+[[vk::push_constant]] PushConstants c;
 
 struct VertexOutput {
     vec4 position     : SV_Position;

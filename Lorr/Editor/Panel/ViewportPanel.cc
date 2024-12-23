@@ -38,26 +38,33 @@ void ViewportPanel::on_drop(this ViewportPanel &) {
     auto &app = EditorApp::get();
     auto &asset_man = app.asset_man;
     auto &world = app.world;
-    auto active_scene = world.active_scene();
+    auto &world_renderer = app.world_renderer;
 
-    if (!active_scene.has_value()) {
-        return;
-    }
-
-    auto scene = asset_man.get_scene(active_scene.value());
-    if (const auto *asset_payload = ImGui::AcceptDragDropPayload("ASSET_PATH")) {
-        auto *asset = static_cast<Asset *>(asset_payload->Data);
-        auto model_id = asset->model_id;  // TODO: AssetManager::import_model()
-        if (model_id == ModelID::Invalid) {
-            LOG_ERROR("Failed to import model into the scene!");
-            return;
+    if (const auto *asset_payload = ImGui::AcceptDragDropPayload("ASSET_BY_UUID")) {
+        auto *uuid = static_cast<UUID *>(asset_payload->Data);
+        auto *asset = asset_man.get_asset(*uuid);
+        switch (asset->type) {
+            case AssetType::Scene: {
+                if (world.active_scene().has_value()) {
+                    // asset_man.unload_scene(world.active_scene().value());
+                }
+                asset_man.load_scene(asset);
+                world.set_active_scene(asset->scene_id);
+                auto &pbr_flags = world_renderer.get_pbr_flags();
+                pbr_flags.render_editor_grid = true;
+                pbr_flags.render_sky = true;
+                pbr_flags.render_aerial_perspective = true;
+                world_renderer.update_pbr_graph();
+                break;
+            }
+            case AssetType::None:
+            case AssetType::Shader:
+            case AssetType::Model:
+            case AssetType::Texture:
+            case AssetType::Material:
+            case AssetType::Font:
+                break;
         }
-
-        auto model_ident = Identifier::random();
-        scene
-            .create_entity(std::string(model_ident.sv()))  //
-            .set<Component::Transform>({})
-            .set<Component::RenderableModel>({ model_ident, model_id });
     }
 }
 
@@ -76,7 +83,7 @@ void ViewportPanel::update(this ViewportPanel &self) {
 
     if (world.active_scene().has_value() && editor_image) {
         auto scene = asset_man.get_scene(world.active_scene().value());
-        auto &editor_camera = scene.cameras()[scene.editor_camera_index()];
+        auto editor_camera = scene.editor_camera();
         auto window_rect = current_window->InnerRect;
         auto window_pos = window_rect.Min;
         auto window_size = window_rect.GetSize();

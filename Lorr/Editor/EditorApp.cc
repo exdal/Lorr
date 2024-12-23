@@ -1,7 +1,6 @@
 #include "EditorApp.hh"
 
 #include "Engine/OS/File.hh"
-
 #include "Engine/Util/JsonWriter.hh"
 
 #include <simdjson.h>

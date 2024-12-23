@@ -66,7 +66,7 @@ private:
 
     union {
         Dummy dummy;
-        std::remove_const_t<T> _value;
+        std::remove_const_t<T> value_;
     };
 
 public:
@@ -75,7 +75,7 @@ public:
     template<typename U = T, std::enable_if_t<std::is_copy_constructible_v<T>, int> = 0>
     constexpr option_flag(const option_flag<U> &other) {
         if (other.has_value()) {
-            new (std::addressof(_value)) T(*other);
+            new (std::addressof(value_)) T(*other);
         } else {
             reset();
         }
@@ -83,7 +83,7 @@ public:
     template<typename U = T, std::enable_if_t<std::is_move_constructible_v<T>, int> = 0>
     constexpr option_flag(option_flag<U> &&other) {
         if (other.has_value()) {
-            new (std::addressof(_value)) T(std::move(*other));
+            new (std::addressof(value_)) T(std::move(*other));
         } else {
             reset();
         }
@@ -91,45 +91,56 @@ public:
 
     template<typename U = T, std::enable_if_t<std::is_constructible_v<T, U &&>, int> = 0>
     constexpr option_flag(U &&v) noexcept(std::is_nothrow_assignable_v<T &, U> && std::is_nothrow_constructible_v<T, U>) {
-        new (std::addressof(_value)) T(std::forward<U>(v));
+        new (std::addressof(value_)) T(std::forward<U>(v));
     }
 
     ~option_flag() { reset(); }
 
-    constexpr bool has_value(this const auto &self) { return self._value != option_flag_val<T>::nullopt; }
-    constexpr void reset() noexcept { this->_value = option_flag_val<T>::nullopt; }
+    constexpr bool has_value(this const auto &self) { return self.value_ != option_flag_val<T>::nullopt; }
+    constexpr void reset() noexcept { this->value_ = option_flag_val<T>::nullopt; }
 
-    [[nodiscard]] constexpr T &&value(this auto &&self) {
+    template<typename SelfT>
+    [[nodiscard]] constexpr T &&value(this SelfT &&self) {
         if (!self.has_value()) {
             throw std::bad_optional_access();
         }
 
-        return std::forward<option_flag<T>>(self)._value;
+        return std::forward<option_flag<T>>(self).value_;
     }
 
-    template<typename U>
-    [[nodiscard]] constexpr T value_or(this auto &&self, U &&default_value) {
-        return self.has_value() ? self._value : static_cast<T>(std::forward<U>(default_value));
+    template<typename U, typename SelfT>
+    [[nodiscard]] constexpr T value_or(this SelfT &&self, U &&default_value) {
+        return self.has_value() ? self.value_ : static_cast<T>(std::forward<U>(default_value));
+    }
+
+    template<typename SelfT, typename FuncT>
+    constexpr auto &&or_else(this SelfT &&self, FuncT &&fun) {
+        if (self) {
+            return self;
+        }
+
+        return std::forward<FuncT>(fun);
     }
 
     void swap(option_flag<T> &other) noexcept(std::is_nothrow_move_constructible_v<T> && std::is_nothrow_swappable_v<T>) {
         static_assert(std::is_move_constructible_v<T>);
         if (has_value() && other.has_value()) {
-            std::swap(_value, other._value);
+            std::swap(value_, other.value_);
         } else if (has_value() && !other.has_value()) {
-            other._value = std::move(_value);
+            other.value_ = std::move(value_);
         } else if (!has_value() && other.has_value()) {
-            _value = std::move(other._value);
+            value_ = std::move(other.value_);
         }
     }
 
     // operators
-    constexpr T &&operator*(this auto &&self) {
+    template<typename SelfT>
+    constexpr T &&operator*(this SelfT &&self) {
         if (!self.has_value()) {
             throw std::bad_optional_access();
         }
 
-        return std::forward<option_flag<T>>(self)._value;
+        return std::forward<option_flag<T>>(self).value_;
     }
 
     constexpr option_flag &operator=(std::nullopt_t) noexcept {
@@ -140,9 +151,9 @@ public:
     template<typename U = T, std::enable_if_t<std::is_constructible_v<T, U &&>, int> = 0>
     option_flag &operator=(U &&_new) noexcept(std::is_nothrow_assignable_v<T &, U> && std::is_nothrow_constructible_v<T, U>) {
         if (has_value()) {
-            _value = std::forward<U>(_new);
+            value_ = std::forward<U>(_new);
         } else {
-            new (std::addressof(_value)) T(std::forward<U>(_new));
+            new (std::addressof(value_)) T(std::forward<U>(_new));
         }
         return *this;
     }
@@ -153,9 +164,9 @@ public:
     option_flag &operator=(const option_flag<U> &other) {
         if (other.has_value()) {
             if (has_value()) {
-                _value = other._value;
+                value_ = other.value_;
             } else {
-                new (std::addressof(_value)) T(other._value);
+                new (std::addressof(value_)) T(other.value_);
             }
         } else {
             reset();
@@ -167,9 +178,9 @@ public:
     option_flag &operator=(option_flag<U> &&other) noexcept(std::is_nothrow_assignable_v<T &, T> && std::is_nothrow_constructible_v<T, T>) {
         if (other.has_value()) {
             if (has_value()) {
-                _value = std::move(other._value);
+                value_ = std::move(other.value_);
             } else {
-                new (std::addressof(_value)) T(other._value);
+                new (std::addressof(value_)) T(other.value_);
             }
         } else {
             reset();
@@ -177,7 +188,7 @@ public:
         return *this;
     }
 
-    constexpr auto operator->(this auto &&self) { return std::addressof(self._value); }
+    constexpr auto operator->(this auto &&self) { return std::addressof(self.value_); }
     constexpr explicit operator bool() const noexcept { return has_value(); }
 };
 

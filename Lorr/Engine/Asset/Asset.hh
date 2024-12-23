@@ -1,7 +1,6 @@
 #pragma once
 
-#include "Identifier.hh"
-
+#include "Engine/Asset/UUID.hh"
 #include "Engine/Graphics/Vulkan.hh"
 #include "Engine/World/Model.hh"
 #include "Engine/World/Scene.hh"
@@ -35,6 +34,7 @@ enum class AssetFileType : u32 {
 };
 
 struct Asset {
+    UUID uuid = {};
     fs::path path = {};
     AssetType type = AssetType::None;
     union {
@@ -69,7 +69,7 @@ struct AssetFileHeader {
     };
 };
 
-using AssetRegistry = ankerl::unordered_dense::map<Identifier, Asset>;
+using AssetRegistry = ankerl::unordered_dense::map<UUID, Asset>;
 struct AssetManager : Handle<AssetManager> {
     static auto create(Device_H) -> AssetManager;
     auto destroy() -> void;
@@ -79,43 +79,57 @@ struct AssetManager : Handle<AssetManager> {
     auto material_buffer() const -> Buffer &;
     auto registry() const -> const AssetRegistry &;
 
+    // Add already existing asset into the registry.
+    // File must end with `.lrasset` extension.
+    auto add_asset(const fs::path &path) -> Asset *;
+
     //  ── Registered Assets ───────────────────────────────────────────────
     // These functions make engine aware of given asset, it does __NOT__
     // load them. Useful if we want to individually load scene/world assets.
     //
-    auto register_asset(const Identifier &ident, const fs::path &path, AssetType type) -> Asset *;
-    auto register_asset_from_file(const fs::path &path) -> Asset *;
-    auto register_model(const Identifier &ident, const fs::path &path) -> Asset *;
-    auto register_texture(const Identifier &ident, const fs::path &path) -> Asset *;
-    auto register_material(const Identifier &ident, const fs::path &path) -> Asset *;
-    auto register_scene(const Identifier &ident, const fs::path &path) -> Asset *;
+    auto register_asset(const fs::path &path, UUID &uuid, AssetType type) -> Asset *;
+    auto register_model(const fs::path &path, UUID &uuid) -> Asset *;
+    auto register_texture(const fs::path &path, UUID &uuid) -> Asset *;
+    auto register_material(const fs::path &path, UUID &uuid) -> Asset *;
+    auto register_scene(const fs::path &path, UUID &uuid) -> Asset *;
 
     //  ── Created Assets ──────────────────────────────────────────────────
-    // Assets that will be assigned new UUID's, must not exist in registry.
+    // Assets that will be created and asinged new UUID. New `.lrasset` file
+    // will be written in the same directory as target asset.
+    // All created assets will be automatically registered into the registry.
     //
-    auto create_scene(Asset *asset, const std::string &name) -> Scene;
+    auto create_scene(const std::string &name, const fs::path &path) -> Asset *;
+    auto write_asset_meta(Asset *asset, const UUID &uuid) -> void;
 
     //  ── Imported Assets ─────────────────────────────────────────────────
     // Assets that already exist in the filesystem with already set UUID's
     //
-    auto load_model(const Identifier &ident, const fs::path &path) -> ModelID;
-    auto load_texture(const Identifier &ident, vk::Format format, vk::Extent3D extent, ls::span<u8> pixels, Sampler sampler = {})
-        -> TextureID;
-    auto load_texture(const Identifier &ident, const fs::path &path, Sampler sampler = {}) -> TextureID;
-    auto load_material(const Identifier &ident, const Material &material_info) -> MaterialID;
-    auto load_material(const Identifier &ident, const fs::path &path) -> MaterialID;
-    auto import_scene(Asset *asset) -> bool;
 
-    auto export_scene(SceneID scene_id) -> bool;
+    //  ── Load Assets ─────────────────────────────────────────────────────
+    // Load contents of registered assets.
+    //
+    auto load_model(Asset *asset) -> bool;
+    auto load_texture(Asset *asset, vk::Format format, vk::Extent3D extent, ls::span<u8> pixels, Sampler sampler = {}) -> bool;
+    auto load_texture(Asset *asset, Sampler sampler = {}) -> bool;
+    auto load_material(Asset *asset, const Material &material_info) -> bool;
+    auto load_material(Asset *asset) -> bool;
+    auto load_scene(Asset *asset) -> bool;
 
-    auto get_asset(const Identifier &ident) -> Asset *;
-    auto get_model(const Identifier &ident) -> Model *;
+    //  ── Exporting Assets ────────────────────────────────────────────────
+    // All export_# functions must have path, developer have freedom to
+    // export their assets into custom directory if needed, otherwise
+    // default to asset->path.
+    //
+    auto export_scene(Asset *asset, const fs::path &path) -> bool;
+
+    auto get_asset(const UUID &uuid) -> Asset *;
+    auto get_model(const UUID &uuid) -> Model *;
     auto get_model(ModelID model_id) -> Model *;
-    auto get_texture(const Identifier &ident) -> Texture *;
+    auto get_texture(const UUID &uuid) -> Texture *;
     auto get_texture(TextureID texture_id) -> Texture *;
-    auto get_material(const Identifier &ident) -> Material *;
+    auto get_material(const UUID &uuid) -> Material *;
     auto get_material(MaterialID material_id) -> Material *;
-    auto get_scene(const Identifier &ident) -> Scene;
+    auto get_scene(const UUID &uuid) -> Scene;
     auto get_scene(SceneID scene_id) -> Scene;
 };
 }  // namespace lr

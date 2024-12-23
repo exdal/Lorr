@@ -435,7 +435,6 @@ auto WorldRenderer::record_pbr_graph(SwapChain &swap_chain) -> void {
     });
 
     if (impl->pbr_flags.render_sky) {
-        LS_EXPECT(impl->context.world_data.cameras_ptr != 0);
         impl->pbr_graph.add_task(Tasks::SkyViewTask{
             .uses = {
                 .sky_view_attachment = sky_view_task_image,
@@ -538,7 +537,6 @@ auto WorldRenderer::record_pbr_graph(SwapChain &swap_chain) -> void {
     });
 
     if (impl->pbr_flags.render_clouds) {
-        LS_EXPECT(impl->context.world_data.cameras_ptr != 0);
         impl->pbr_graph.add_task(Tasks::CloudDraw{
             .uses = {
                 .color_attachment = final_task_image,
@@ -563,7 +561,6 @@ auto WorldRenderer::record_pbr_graph(SwapChain &swap_chain) -> void {
 
     // ── SKY APPLY AERIAL PASS ───────────────────────────────────────────
     if (impl->pbr_flags.render_sky && impl->pbr_flags.render_aerial_perspective) {
-        LS_EXPECT(impl->context.world_data.cameras_ptr != 0);
         impl->pbr_graph.add_task(Tasks::SkyApplyAerialTask{
             .uses = {
                 .color_attachment = final_task_image,

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Engine/Asset/Identifier.hh"
+#include "Engine/Asset/UUID.hh"
 #include "Engine/World/Model.hh"
 
 #include <flecs.h>
@@ -57,12 +57,12 @@ struct Camera {
 struct RenderableModel {
     constexpr static auto ICON = Icon::fa::cube;
 
-    Identifier identifier = {};
+    UUID uuid = {};
     ModelID model_id = ModelID::Invalid;
 
     static void reflect(flecs::world &w) {
         w.component<RenderableModel>()  //
-            .member<Identifier, RenderableModel>("identifier", &RenderableModel::identifier);
+            .member<UUID, RenderableModel>("uuid", &RenderableModel::uuid);
     }
 };
 
@@ -84,6 +84,10 @@ struct ActiveCamera {
     static void reflect(flecs::world &w) { w.component<ActiveCamera>(); }
 };
 
+struct EditorCamera {
+    static void reflect(flecs::world &w) { w.component<EditorCamera>(); }
+};
+
 struct Hidden {
     static void reflect(flecs::world &w) { w.component<Hidden>(); }
 };
@@ -96,6 +100,7 @@ constexpr static std::tuple<  //
     PerspectiveCamera,
     OrthographicCamera,
     ActiveCamera,
+    EditorCamera,
     Hidden>
     ALL_COMPONENTS;
 
@@ -114,7 +119,7 @@ constexpr static void reflect_all(flecs::world &w) {
 
 struct Wrapper {
     using Member =
-        std::variant<std::monostate, f32 *, i32 *, u32 *, i64 *, u64 *, glm::vec2 *, glm::vec3 *, glm::vec4 *, std::string *, Identifier *>;
+        std::variant<std::monostate, f32 *, i32 *, u32 *, i64 *, u64 *, glm::vec2 *, glm::vec3 *, glm::vec4 *, std::string *, UUID *>;
 
     flecs::entity component_entity = {};
     std::string path = {};
@@ -169,8 +174,8 @@ struct Wrapper {
                 data = reinterpret_cast<glm::vec4 *>(self.members_data + member.offset);
             } else if (member_type == world.entity<std::string>()) {
                 data = reinterpret_cast<std::string *>(self.members_data + member.offset);
-            } else if (member_type == world.entity<Identifier>()) {
-                data = reinterpret_cast<Identifier *>(self.members_data + member.offset);
+            } else if (member_type == world.entity<UUID>()) {
+                data = reinterpret_cast<UUID *>(self.members_data + member.offset);
             } else {
                 LOG_FATAL("Trying to access unknown component type!");
                 return;

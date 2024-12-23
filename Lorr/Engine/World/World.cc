@@ -81,13 +81,13 @@ auto World::create(const std::string &name) -> ls::option<World> {
         })
         .assign_string([](std::string *data, const char *value) { *data = value; });
 
-    impl->ecs.component<Identifier>("Identifier")
+    impl->ecs.component<UUID>("uuid")
         .opaque(flecs::String)
-        .serialize([](const flecs::serializer *s, const Identifier *data) {
-            const char *str = data->sv().data();
-            return s->value(flecs::String, &str);
+        .serialize([](const flecs::serializer *s, const UUID *data) {
+            auto str = data->str();
+            return s->value(flecs::String, str.c_str());
         })
-        .assign_string([](Identifier *data, const char *value) { *data = Identifier(value); });
+        .assign_string([](UUID *data, const char *value) { *data = UUID::from_string(std::string_view(value)).value(); });
 
     Component::reflect_all(impl->ecs);
 

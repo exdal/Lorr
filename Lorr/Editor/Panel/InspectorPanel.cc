@@ -66,7 +66,7 @@ void InspectorPanel::update(this InspectorPanel &self) {
                             [](glm::vec2 *v) { lg::drag_xy(*v); },
                             [](glm::vec3 *v) { lg::drag_xyz(*v); },
                             [](std::string *v) { ImGui::InputText("", v); },
-                            [](Identifier *v) { ImGui::TextUnformatted(v->sv().data()); },
+                            [](UUID *v) { ImGui::TextUnformatted(v->str().c_str()); },
                         },
                         member);
                     ImGui::PopID();

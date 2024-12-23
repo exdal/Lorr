@@ -40,11 +40,12 @@ auto AssetDirectory::add_asset(const fs::path &path_) -> bool {
     }
 
     auto &app = EditorApp::get();
-    auto *asset = app.asset_man.register_asset_from_file(path_);
+    auto *asset = app.asset_man.add_asset(path_);
     if (!asset) {
         return false;
     }
 
+    LOG_TRACE("New asset added from '{}'", asset->path);
     this->assets.push_back(asset);
 
     return true;
@@ -138,7 +139,7 @@ void AssetBrowserPanel::draw_dir_contents(this AssetBrowserPanel &self) {
             const auto &file_name = asset->path.filename().string();
             ImGui::Button(file_name.c_str(), button_size);
             if (ImGui::BeginDragDropSource()) {
-                ImGui::SetDragDropPayload("ASSET_PATH", asset, sizeof(void *));
+                ImGui::SetDragDropPayload("ASSET_BY_UUID", &asset->uuid, sizeof(UUID));
                 ImGui::EndDragDropSource();
             }
         }
@@ -165,8 +166,13 @@ void AssetBrowserPanel::draw_dir_contents(this AssetBrowserPanel &self) {
             ImGui::OpenPopup("###create_dir_popup");
         }
 
+        if (open_create_scene_popup) {
+            ImGui::OpenPopup("###create_scene_popup");
+        }
+
         if (ImGui::BeginPopupModal("Create Directory...###create_dir_popup", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-            static std::string new_dir_name = "New Directory";
+            constexpr static auto default_dir_name = "New Directory";
+            static std::string new_dir_name = default_dir_name;
             ImGui::InputText("", &new_dir_name);
 
             if (new_dir_name.empty()) {
@@ -176,10 +182,39 @@ void AssetBrowserPanel::draw_dir_contents(this AssetBrowserPanel &self) {
             if (ImGui::Button("OK")) {
                 fs::create_directory(self.current_dir->path / new_dir_name);
                 ImGui::CloseCurrentPopup();
-                new_dir_name = "New Directory";
+                new_dir_name = default_dir_name;
             }
 
             if (new_dir_name.empty()) {
+                ImGui::EndDisabled();
+            }
+
+            ImGui::SameLine();
+
+            if (ImGui::Button("Cancel")) {
+                ImGui::CloseCurrentPopup();
+            }
+
+            ImGui::EndPopup();
+        }
+
+        if (ImGui::BeginPopupModal("Create Scene...###create_scene_popup", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+            constexpr static auto default_scene_name = "New Scene";
+            static std::string new_scene_name = default_scene_name;
+            ImGui::InputText("", &new_scene_name);
+
+            if (new_scene_name.empty()) {
+                ImGui::BeginDisabled();
+            }
+
+            if (ImGui::Button("OK")) {
+                auto &app = EditorApp::get();
+                app.asset_man.create_scene(new_scene_name, self.current_dir->path / (new_scene_name + ".json"));
+                ImGui::CloseCurrentPopup();
+                new_scene_name = default_scene_name;
+            }
+
+            if (new_scene_name.empty()) {
                 ImGui::EndDisabled();
             }
 

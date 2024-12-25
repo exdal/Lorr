@@ -2,25 +2,10 @@
 
 #include "Engine/Util/VirtualDir.hh"
 
+#include <slang-com-ptr.h>
+#include <slang.h>
+
 namespace lr {
-constexpr auto to_shader_stage(SlangStage v) {
-    switch (v) {
-        case SLANG_STAGE_VERTEX:
-            return vk::ShaderStageFlag::Vertex;
-        case SLANG_STAGE_HULL:
-            return vk::ShaderStageFlag::TessellationControl;
-        case SLANG_STAGE_DOMAIN:
-            return vk::ShaderStageFlag::TessellationEvaluation;
-        case SLANG_STAGE_FRAGMENT:
-            return vk::ShaderStageFlag::Fragment;
-        case SLANG_STAGE_COMPUTE:
-            return vk::ShaderStageFlag::Compute;
-        default:;
-    }
-
-    return vk::ShaderStageFlag::None;
-}
-
 struct SlangBlob : ISlangBlob {
     std::vector<u8> m_data = {};
     std::atomic_uint32_t m_refCount = 1;
@@ -201,14 +186,13 @@ auto SlangModule::get_entry_point(std::string_view name) -> ls::option<SlangEntr
 
     auto *program_layout = linked_program->getLayout();
     LS_EXPECT(program_layout->getEntryPointCount() == 1);
-    auto *entry_point_refl = program_layout->getEntryPointByIndex(0);
+    // auto *entry_point_refl = program_layout->getEntryPointByIndex(0);
 
     std::vector<u32> ir(spirv_code->getBufferSize() / 4);
     std::memcpy(ir.data(), spirv_code->getBufferPointer(), spirv_code->getBufferSize());
 
     return SlangEntryPoint{
         .ir = std::move(ir),
-        .shader_stage = to_shader_stage(entry_point_refl->getStage()),
     };
 }
 
@@ -336,7 +320,7 @@ auto SlangCompiler::new_session(const SlangSessionInfo &info) -> ls::option<Slan
     std::vector<slang::PreprocessorMacroDesc> macros;
     macros.reserve(info.definitions.size());
     for (auto &v : info.definitions) {
-        macros.emplace_back(v.name.data(), v.value.data());
+        macros.emplace_back(v.n0.c_str(), v.n1.c_str());
     }
 
     slang::TargetDesc target_desc = {

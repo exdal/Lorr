@@ -1,46 +1,13 @@
 #pragma once
 
 #include "Engine/Asset/Asset.hh"
-#include "Engine/Graphics/Task/TaskGraph.hh"
 #include "Engine/World/RenderContext.hh"
+#include "Engine/Graphics/VulkanDevice.hh"
 
 #include <imgui.h>
 
 namespace lr::Tasks {
-inline GraphicsPipelineInfo imgui_pipeline_info(AssetManager &asset_man, vk::Format attachment_format) {
-    auto shaders_root = asset_man.asset_root_path(AssetType::Shader);
-
-    return {
-        .color_attachment_formats = { attachment_format },
-        .shader_module_info = {
-            .module_name = "imgui",
-            .root_path = shaders_root,
-            .shader_path = shaders_root / "imgui.slang",
-            .entry_points = { "vs_main", "fs_main" },
-        },
-        .vertex_attrib_infos = {
-            { .format = vk::Format::R32G32_SFLOAT, .location = 0, .offset = offsetof(ImDrawVert, pos) },
-            { .format = vk::Format::R32G32_SFLOAT, .location = 1, .offset = offsetof(ImDrawVert, uv) },
-            { .format = vk::Format::R8G8B8A8_UNORM, .location = 2, .offset = offsetof(ImDrawVert, col) },
-        },
-        .depth_stencil_state = {
-            .enable_depth_test = true,
-            .enable_depth_write = true,
-            .depth_compare_op = vk::CompareOp::LessEqual,
-        },
-        .blend_attachments = { {
-            .blend_enabled = true,
-            .src_blend = vk::BlendFactor::SrcAlpha,
-            .dst_blend = vk::BlendFactor::InvSrcAlpha,
-            .blend_op = vk::BlendOp::Add,
-            .src_blend_alpha = vk::BlendFactor::One,
-            .dst_blend_alpha = vk::BlendFactor::InvSrcAlpha,
-            .blend_op_alpha = vk::BlendOp::Add,
-        } },
-    };
-}
-
-inline ls::pair<u8 *, glm::ivec2> imgui_build_font_atlas(AssetManager &asset_man) {
+inline auto imgui_build_font_atlas(AssetManager &asset_man) -> ls::pair<std::vector<u8>, glm::ivec2> {
     ZoneScoped;
 
     auto &imgui = ImGui::GetIO();
@@ -58,70 +25,69 @@ inline ls::pair<u8 *, glm::ivec2> imgui_build_font_atlas(AssetManager &asset_man
 
     imgui.Fonts->Build();
 
-    u8 *font_data = nullptr;  // imgui context frees this itself
+    u8 *font_data = nullptr;
     i32 font_width, font_height;
     imgui.Fonts->GetTexDataAsRGBA32(&font_data, &font_width, &font_height);
 
-    return { font_data, { font_width, font_height } };
+    auto bytes_size = font_width * font_height * 4;
+    auto bytes = std::vector<u8>(bytes_size);
+    std::memcpy(bytes.data(), font_data, bytes_size);
+    IM_FREE(font_data);
+
+    return { std::move(bytes), { font_width, font_height } };
 }
 
-struct ImGuiTask {
-    constexpr static std::string_view name = "ImGui";
+struct PushConstants {
+    glm::vec2 translate = {};
+    glm::vec2 scale = {};
+    SampledImage sampled_image = {};
+};
 
-    struct Uses {
-        Preset::ColorAttachmentWrite attachment = {};
-    } uses = {};
+inline auto imgui_draw(Device &device, vuk::Value<vuk::ImageAttachment> &&input_attachment, WorldRenderContext &render_context)
+    -> vuk::Value<vuk::ImageAttachment> {
+    ZoneScoped;
 
-    ImageID font_atlas_image = ImageID::Invalid;
-    Pipeline pipeline = {};
-
-    void execute(TaskContext &tc) {
-        struct PushConstants {
-            glm::vec2 translate = translate;
-            glm::vec2 scale = scale;
-            SampledImage sampled_image = {};
-        };
-
-        auto color_attachment = tc.as_color_attachment(uses.attachment, vk::ColorClearValue(0.0f, 0.0f, 0.0f, 1.0f));
-        auto &render_context = tc.exec_data_as<WorldRenderContext>();
+    auto pass = vuk::make_pass("imgui", [&](vuk::CommandBuffer &cmd_list, VUK_IA(vuk::Access::eColorWrite) dst) {
+        auto &transfer_man = device.transfer_man();
         auto &imgui = ImGui::GetIO();
 
         ImDrawData *draw_data = ImGui::GetDrawData();
         u64 vertex_size_bytes = draw_data->TotalVtxCount * sizeof(ImDrawVert);
         u64 index_size_bytes = draw_data->TotalIdxCount * sizeof(ImDrawIdx);
         if (!draw_data || vertex_size_bytes == 0) {
-            return;
+            return dst;
         }
 
-        auto vertex_buffer_alloc = tc.transient_buffer(vertex_size_bytes);
-        auto vertex_data = reinterpret_cast<ImDrawVert *>(vertex_buffer_alloc.ptr);
-        auto index_buffer_alloc = tc.transient_buffer(index_size_bytes);
-        auto index_data = reinterpret_cast<ImDrawIdx *>(index_buffer_alloc.ptr);
-        for (const ImDrawList *draw_list : draw_data->CmdLists) {
+        auto pipeline = device.pipeline(render_context.imgui_pipeline.id());
+        auto vertex_buffer = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eCPUonly, vertex_size_bytes);
+        auto index_buffer = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eCPUonly, index_size_bytes);
+        auto vertex_data = vertex_buffer.host_ptr<ImDrawVert>();
+        auto index_data = index_buffer.host_ptr<ImDrawIdx>();
+        for (const auto *draw_list : draw_data->CmdLists) {
             memcpy(vertex_data, draw_list->VtxBuffer.Data, draw_list->VtxBuffer.Size * sizeof(ImDrawVert));
             memcpy(index_data, draw_list->IdxBuffer.Data, draw_list->IdxBuffer.Size * sizeof(ImDrawIdx));
             index_data += draw_list->IdxBuffer.Size;
             vertex_data += draw_list->VtxBuffer.Size;
         }
 
-        tc.set_pipeline(this->pipeline.id());
+        cmd_list  //
+            .set_dynamic_state(vuk::DynamicStateFlagBits::eViewport | vuk::DynamicStateFlagBits::eScissor)
+            .set_rasterization(vuk::PipelineRasterizationStateCreateInfo{})
+            .set_color_blend(dst, vuk::BlendPreset::eAlphaBlend)
+            .set_viewport(0, { .x = 0, .y = 0, .width = imgui.DisplaySize.x, .height = imgui.DisplaySize.y })
+            .bind_graphics_pipeline(*pipeline)
+            .bind_persistent(0, device.bindless_descriptor_set())
+            .bind_index_buffer(index_buffer.buffer, sizeof(ImDrawIdx) == 2 ? vuk::IndexType::eUint16 : vuk::IndexType::eUint32)
+            .bind_vertex_buffer(
+                0,
+                vertex_buffer.buffer,
+                0,
+                vuk::Packed{ vuk::Format::eR32G32Sfloat, vuk::Format::eR32G32Sfloat, vuk::Format::eR8G8B8A8Unorm });
 
-        tc.cmd_list.begin_rendering({
-            .render_area = tc.pass_rect(),
-            .color_attachments = color_attachment,
-        });
-        tc.cmd_list.set_vertex_buffer(vertex_buffer_alloc.gpu_buffer_id, vertex_buffer_alloc.offset);
-        tc.cmd_list.set_index_buffer(index_buffer_alloc.gpu_buffer_id, index_buffer_alloc.offset, true);
-        tc.cmd_list.set_viewport(
-            { .x = 0, .y = 0, .width = imgui.DisplaySize.x, .height = imgui.DisplaySize.y, .depth_min = 0.01, .depth_max = 1.0 });
-
-        glm::vec2 scale = { 2.0f / draw_data->DisplaySize.x, 2.0f / draw_data->DisplaySize.y };
-        glm::vec2 translate = { -1.0f - draw_data->DisplayPos.x * scale.x, -1.0f - draw_data->DisplayPos.y * scale.y };
         ImVec2 clip_off = draw_data->DisplayPos;
         ImVec2 clip_scale = draw_data->FramebufferScale;
         u32 vertex_offset = 0;
         u32 index_offset = 0;
-
         for (ImDrawList *draw_list : draw_data->CmdLists) {
             for (i32 cmd_i = 0; cmd_i < draw_list->CmdBuffer.Size; cmd_i++) {
                 ImDrawCmd &im_cmd = draw_list->CmdBuffer[cmd_i];
@@ -134,30 +100,32 @@ struct ImGuiTask {
                     continue;
                 }
 
-                tc.cmd_list.set_scissors({
-                    .offset = { i32(clip_min.x), i32(clip_min.y) },
-                    .extent = { u32(clip_max.x - clip_min.x), u32(clip_max.y - clip_min.y) },
-                });
+                auto rect = vuk::Rect2D::absolute(
+                    { i32(clip_min.x), i32(clip_min.y) }, { u32(clip_max.x - clip_min.x), u32(clip_max.y - clip_min.y) });
+                cmd_list.set_scissor(0, rect);
 
-                auto rendering_image = tc.device.image(this->font_atlas_image).view();
+                auto rendering_image = render_context.imgui_font_view.id();
                 if (im_cmd.TextureId) {
-                    auto im_image_id = (ImageID)(iptr)(im_cmd.TextureId);
-                    rendering_image = tc.device.image(im_image_id).view();
+                    auto user_view_id = (ImageViewID)(iptr)(im_cmd.TextureId);
+                    rendering_image = user_view_id;
                 }
 
-                tc.set_push_constants(PushConstants{
-                    .translate = translate,
-                    .scale = scale,
-                    .sampled_image = { rendering_image.id(), render_context.world_data.linear_sampler },
-                });
-                tc.cmd_list.draw_indexed(im_cmd.ElemCount, im_cmd.IdxOffset + index_offset, i32(im_cmd.VtxOffset + vertex_offset));
+                PushConstants c;
+                c.scale = { 2.0f / draw_data->DisplaySize.x, 2.0f / draw_data->DisplaySize.y };
+                c.translate = { -1.0f - draw_data->DisplayPos.x * c.scale.x, -1.0f - draw_data->DisplayPos.y * c.scale.y };
+                c.sampled_image = { rendering_image, render_context.linear_sampler.id() };
+                cmd_list.push_constants(vuk::ShaderStageFlagBits::eVertex | vuk::ShaderStageFlagBits::eFragment, 0, c);
+                cmd_list.draw_indexed(im_cmd.ElemCount, 1, im_cmd.IdxOffset + index_offset, i32(im_cmd.VtxOffset + vertex_offset), 0);
             }
 
             vertex_offset += draw_list->VtxBuffer.Size;
             index_offset += draw_list->IdxBuffer.Size;
         }
 
-        tc.cmd_list.end_rendering();
-    }
-};
+        return dst;
+    });
+
+    return pass(input_attachment);
+}
+
 }  // namespace lr::Tasks

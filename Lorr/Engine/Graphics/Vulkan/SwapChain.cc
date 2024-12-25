@@ -1,24 +1,26 @@
-#include "Engine/Graphics/Vulkan/Impl.hh"
+#include "Engine/Graphics/Vulkan.hh"
+
+#include "Engine/Graphics/VulkanDevice.hh"
 
 namespace lr {
-auto Surface::create(Device_H device, void *handle) -> std::expected<Surface, vk::Result> {
-    auto result = vk::get_vk_surface(device->instance, handle);
+auto Surface::create(Device &device, void *handle) -> std::expected<Surface, vuk::VkException> {
+    auto result = vulkan_get_os_surface(device.instance, handle, device.instance.fp_vkGetInstanceProcAddr);
     if (!result.has_value()) {
         return std::unexpected(result.error());
     }
 
-    auto impl = new Impl;
-    impl->handle = result.value();
+    auto surface = Surface{};
+    surface.handle_ = result.value();
 
-    return Surface(impl);
+    return surface;
 }
 
-auto SwapChain::create(Device_H device, Surface_H surface, vk::Extent2D extent) -> std::expected<SwapChain, vk::Result> {
+auto SwapChain::create(Device &device, Surface &surface, vuk::Extent2D extent) -> std::expected<SwapChain, vuk::VkException> {
     ZoneScoped;
 
-    VkPresentModeKHR present_mode = device->frame_count == 1 ? VK_PRESENT_MODE_FIFO_KHR : VK_PRESENT_MODE_IMMEDIATE_KHR;
-    vkb::SwapchainBuilder builder(device->handle, surface->handle);
-    builder.set_desired_min_image_count(device->frame_count);
+    VkPresentModeKHR present_mode = device.frame_count() == 1 ? VK_PRESENT_MODE_FIFO_KHR : VK_PRESENT_MODE_IMMEDIATE_KHR;
+    vkb::SwapchainBuilder builder(device.handle, surface.handle_);
+    builder.set_desired_min_image_count(device.frame_count());
     builder.set_desired_extent(extent.width, extent.height);
     builder.set_desired_format({ VK_FORMAT_B8G8R8A8_SRGB, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR });
     builder.set_desired_present_mode(present_mode);
@@ -29,94 +31,53 @@ auto SwapChain::create(Device_H device, Surface_H surface, vk::Extent2D extent) 
         auto vk_result = result.vk_result();
         LOG_ERROR("Failed to create Swap Chain! {}", error.message());
 
-        switch (vk_result) {
-            case VK_ERROR_OUT_OF_HOST_MEMORY:
-                return std::unexpected(vk::Result::OutOfHostMem);
-            case VK_ERROR_OUT_OF_DEVICE_MEMORY:
-                return std::unexpected(vk::Result::OutOfDeviceMem);
-            case VK_ERROR_DEVICE_LOST:
-                return std::unexpected(vk::Result::DeviceLost);
-            case VK_ERROR_SURFACE_LOST_KHR:
-                return std::unexpected(vk::Result::SurfaceLost);
-            case VK_ERROR_NATIVE_WINDOW_IN_USE_KHR:
-                return std::unexpected(vk::Result::WindowInUse);
-            case VK_ERROR_INITIALIZATION_FAILED:
-                return std::unexpected(vk::Result::InitFailed);
-            default:;
-        }
+        return std::unexpected(vk_result);
     }
 
-    auto impl = new Impl;
-    impl->device = device;
-    impl->format = vk::Format::B8G8R8A8_SRGB;
-    impl->extent = { extent.width, extent.height, 1 };
-    impl->surface = surface;
-    impl->handle = result.value();
-    for (u32 i = 0; i < device->frame_count; i++) {
-        impl->acquire_semas.emplace_back(Semaphore::create(device, ls::nullopt).value());
-        impl->present_semas.emplace_back(Semaphore::create(device, ls::nullopt).value());
+    auto format = vuk::Format::eB8G8R8A8Srgb;
+    auto extent_3d = vuk::Extent3D{ extent.width, extent.height, 1 };
+
+    auto frame_count = device.frame_count();
+    auto swap_chain_handle = vuk::Swapchain(*device.allocator, frame_count);
+    swap_chain_handle.surface = surface.handle_;
+    swap_chain_handle.swapchain = result->swapchain;
+
+    auto images = *result->get_images();
+    auto image_views = *result->get_image_views();
+
+    for (u32 i = 0; i < images.size(); i++) {
+        vuk::ImageAttachment attachment = {
+            .image = vuk::Image{ images[i], nullptr },
+            .image_view = vuk::ImageView{ { 0 }, image_views[i] },
+            .extent = extent_3d,
+            .format = format,
+            .sample_count = vuk::Samples::e1,
+            .view_type = vuk::ImageViewType::e2D,
+            .components = {},
+            .base_level = 0,
+            .level_count = 1,
+            .base_layer = 0,
+            .layer_count = 1,
+        };
+
+        swap_chain_handle.images.push_back(attachment);
     }
 
-    return SwapChain(impl);
+    auto swap_chain = SwapChain{};
+    swap_chain.format_ = format;
+    swap_chain.extent_ = extent_3d;
+    swap_chain.surface_ = surface;
+    swap_chain.handle_ = std::move(swap_chain_handle);
+
+    return swap_chain;
 }
 
-auto SwapChain::destroy() -> void {
+auto SwapChain::format() const -> vuk::Format {
+    return format_;
 }
 
-auto SwapChain::set_name(const std::string &name) -> SwapChain & {
-    set_object_name(impl->device, impl->handle.swapchain, VK_OBJECT_TYPE_SWAPCHAIN_KHR, name);
-    for (u32 i = 0; i < impl->device->frame_count; i++) {
-        impl->acquire_semas[i].set_name(std::format("{} Acquire Sema {}", name, i));
-        impl->present_semas[i].set_name(std::format("{} Present Sema {}", name, i));
-    }
-
-    return *this;
-}
-
-auto SwapChain::format() const -> vk::Format {
-    return impl->format;
-}
-
-auto SwapChain::extent() const -> vk::Extent3D {
-    return impl->extent;
-}
-
-auto SwapChain::semaphores(usize i) const -> ls::pair<Semaphore, Semaphore> {
-    return { impl->acquire_semas.at(i), impl->present_semas.at(i) };
-}
-
-auto SwapChain::get_images() const -> std::vector<Image> {
-    ZoneScoped;
-
-    u32 image_count = impl->device->frame_count;
-    std::vector<VkImage> image_handles(image_count);
-    auto result = vkGetSwapchainImagesKHR(impl->device->handle, impl->handle, &image_count, image_handles.data());
-    if (result != VK_SUCCESS) {
-        return {};
-    }
-
-    std::vector<Image> images(image_count);
-    for (u32 i = 0; i < image_count; i++) {
-        auto image = Image::create_for_swap_chain(impl->device, impl->format, impl->extent).value();
-        image->handle = image_handles[i];
-        image->default_view =
-            ImageView::create(
-                impl->device,
-                image,
-                vk::ImageViewType::View2D,
-                { .aspect_flags = vk::ImageAspectFlag::Color, .base_mip = 0, .mip_count = 1, .base_slice = 0, .slice_count = 1 })
-                .value()
-                .set_name(std::format("SwapChain Image View {}", i));
-
-        images[i] = image;
-        image.set_name(std::format("SwapChain Image {}", i));
-    }
-
-    return images;
-}
-
-auto SwapChain::image_index() const -> u32 {
-    return impl->acquired_index;
+auto SwapChain::extent() const -> vuk::Extent3D {
+    return extent_;
 }
 
 }  // namespace lr

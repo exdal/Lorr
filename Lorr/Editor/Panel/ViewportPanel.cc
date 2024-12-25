@@ -38,7 +38,6 @@ void ViewportPanel::on_drop(this ViewportPanel &) {
     auto &app = EditorApp::get();
     auto &asset_man = app.asset_man;
     auto &world = app.world;
-    auto &world_renderer = app.world_renderer;
 
     if (const auto *asset_payload = ImGui::AcceptDragDropPayload("ASSET_BY_UUID")) {
         auto *uuid = static_cast<UUID *>(asset_payload->Data);
@@ -50,11 +49,6 @@ void ViewportPanel::on_drop(this ViewportPanel &) {
                 }
                 asset_man.load_scene(asset);
                 world.set_active_scene(asset->scene_id);
-                auto &pbr_flags = world_renderer.get_pbr_flags();
-                pbr_flags.render_editor_grid = true;
-                pbr_flags.render_sky = true;
-                pbr_flags.render_aerial_perspective = true;
-                world_renderer.update_pbr_graph();
                 break;
             }
             case AssetType::None:

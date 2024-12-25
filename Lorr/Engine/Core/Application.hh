@@ -5,6 +5,7 @@
 
 #include "Engine/Asset/Asset.hh"
 #include "Engine/Graphics/Vulkan.hh"
+#include "Engine/Graphics/VulkanDevice.hh"
 #include "Engine/Window/Window.hh"
 #include "Engine/World/World.hh"
 #include "Engine/World/WorldRenderer.hh"

@@ -31,19 +31,13 @@ bool Application::init(this Application &self, const ApplicationInfo &info) {
         return false;
     }
 
-    auto device_result = Device::create(3);
-    if (!device_result.has_value()) {
-        LOG_ERROR("Failed to create application! Device failed.");
-        return false;
-    }
-    self.device = device_result.value();
-    self.asset_man = AssetManager::create(self.device);
+    self.device.init(3);
+    self.asset_man = AssetManager::create(&self.device);
 
     self.window = Window::create(info.window_info);
     auto window_size = self.window.get_size();
     auto surface = Surface::create(self.device, self.window.get_native_handle()).value();
-    self.swap_chain = SwapChain::create(self.device, surface, { window_size.x, window_size.y }).value().set_name("Main SwapChain");
-    self.world_renderer = WorldRenderer::create(self.device);
+    self.swap_chain = SwapChain::create(self.device, surface, { window_size.x, window_size.y }).value();
 
     auto world_result = World::create("default_world");
     if (!world_result.has_value()) {
@@ -120,8 +114,6 @@ void Application::run(this Application &self) {
 
     // Renderer context
     auto &imgui = ImGui::GetIO();
-    std::vector<Image> images = {};
-    images = self.swap_chain.get_images();
 
     b32 swap_chain_ok = true;
 
@@ -130,19 +122,14 @@ void Application::run(this Application &self) {
             auto surface = Surface::create(self.device, self.window.get_native_handle()).value();
             auto window_size = self.window.get_size();
             self.swap_chain = SwapChain::create(self.device, surface, { window_size.x, window_size.y }).value();
-            images = self.swap_chain.get_images();
 
             swap_chain_ok = true;
         }
 
-        auto present_queue = self.device.queue(vk::CommandType::Graphics);
-        usize sema_index = self.device.new_frame();
+        auto swap_chain_attachment = self.device.new_frame(self.swap_chain);
 
-        auto [acquire_sema, present_sema] = self.swap_chain.semaphores(sema_index);
-        auto acquired_image_index = present_queue.acquire(self.swap_chain, acquire_sema);
-        if (!acquired_image_index.has_value()) {
-            swap_chain_ok = false;
-            continue;
+        if (!self.world_renderer) {
+            self.world_renderer = WorldRenderer::create(&self.device);
         }
 
         // Delta time
@@ -162,8 +149,8 @@ void Application::run(this Application &self) {
 
         ImGui::Render();
 
-        self.world_renderer.render(self.swap_chain, images[acquired_image_index.value()]);
-        self.device.end_frame(self.swap_chain, sema_index);
+        auto rendered_attachment = self.world_renderer.render(std::move(swap_chain_attachment));
+        self.device.end_frame(std::move(rendered_attachment));
 
         self.window.poll();
         self.poll_events();
@@ -180,10 +167,10 @@ void Application::shutdown(this Application &self) {
 
     LOG_WARN("Shutting down application...");
 
-    self.device.wait();
+    // self.device.wait();
     self.world.destroy();
     self.asset_man.destroy();
-    self.swap_chain.destroy();
+    // self.swap_chain.destroy();
     self.device.destroy();
     LOG_INFO("Complete!");
 }

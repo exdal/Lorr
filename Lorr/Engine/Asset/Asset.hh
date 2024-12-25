@@ -55,8 +55,8 @@ enum class AssetFileFlags : u64 {
 consteval void enable_bitmask(AssetFileFlags);
 
 struct TextureAssetFileHeader {
-    vk::Extent3D extent = {};
-    vk::Format format = vk::Format::Undefined;
+    vuk::Extent3D extent = {};
+    vuk::Format format = vuk::Format::eUndefined;
 };
 
 struct AssetFileHeader {
@@ -71,7 +71,7 @@ struct AssetFileHeader {
 
 using AssetRegistry = ankerl::unordered_dense::map<UUID, Asset>;
 struct AssetManager : Handle<AssetManager> {
-    static auto create(Device_H) -> AssetManager;
+    static auto create(Device *device) -> AssetManager;
     auto destroy() -> void;
 
     auto asset_root_path(AssetType type) -> fs::path;
@@ -109,7 +109,7 @@ struct AssetManager : Handle<AssetManager> {
     // Load contents of registered assets.
     //
     auto load_model(Asset *asset) -> bool;
-    auto load_texture(Asset *asset, vk::Format format, vk::Extent3D extent, ls::span<u8> pixels, Sampler sampler = {}) -> bool;
+    auto load_texture(Asset *asset, vuk::Format format, vuk::Extent3D extent, ls::span<u8> pixels, Sampler sampler = {}) -> bool;
     auto load_texture(Asset *asset, Sampler sampler = {}) -> bool;
     auto load_material(Asset *asset, const Material &material_info) -> bool;
     auto load_material(Asset *asset) -> bool;

@@ -81,6 +81,12 @@ struct GPUWorldData {
     GPUClouds clouds = {};
 };
 
+struct FrameResources {
+    FrameResources(Device &device, SwapChain &swap_chain) {}
+
+    ~FrameResources() {}
+};
+
 // This struct should contain most generic and used object
 // stuff like linear samplers, world buffers, etc...
 struct WorldRenderContext {
@@ -89,6 +95,17 @@ struct WorldRenderContext {
     ls::span<GPUModel> models = {};
 
     glm::vec2 sun_angle = { 0, 0 };
+
+    Sampler linear_sampler = {};
+    Sampler nearest_sampler = {};
+
+    Image imgui_font_image = {};
+    ImageView imgui_font_view = {};
+    Pipeline imgui_pipeline = {};
+
+    // FRAME IMAGES
+    // Images that DO rely on Swap Chain dimensions
+    std::unique_ptr<FrameResources> frame_resources = {};
 };
 
 }  // namespace lr

@@ -39,3 +39,4 @@ end
 
 add_requires("imguizmo-lorr 1.89+WIP")
 add_requires("slang-lorr v2024.17.3")
+add_requires("vuk 2024.12.25")

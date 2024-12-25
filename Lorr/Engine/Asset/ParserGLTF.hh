@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Engine/Graphics/Vulkan.hh"
+#include "Engine/Graphics/VulkanTypes.hh"
 
 namespace lr {
 struct GLTFVertex {
@@ -11,16 +11,16 @@ struct GLTFVertex {
 };
 
 struct GLTFSamplerInfo {
-    vk::Filtering mag_filter = {};
-    vk::Filtering min_filter = {};
-    vk::SamplerAddressMode address_u = {};
-    vk::SamplerAddressMode address_v = {};
+    vuk::Filter mag_filter = {};
+    vuk::Filter min_filter = {};
+    vuk::SamplerAddressMode address_u = {};
+    vuk::SamplerAddressMode address_v = {};
 };
 
 struct GLTFImageInfo {
     std::string name = {};
-    vk::Format format = vk::Format::Undefined;
-    vk::Extent2D extent = {};
+    vuk::Format format = vuk::Format::eUndefined;
+    vuk::Extent3D extent = {};
     std::vector<u8> pixels = {};
 };
 
@@ -35,7 +35,6 @@ struct GLTFMaterialInfo {
     glm::vec4 emissive_color = {};
     f32 roughness_factor = 0.0f;
     f32 metallic_factor = 0.0f;
-    vk::AlphaMode alpha_mode = {};
     f32 alpha_cutoff = 0.0f;
 
     ls::option<u32> albedo_texture_index;

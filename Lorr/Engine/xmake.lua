@@ -61,6 +61,7 @@ target("Lorr")
         "stb",
         "flecs",
         "imguizmo-lorr",
+        "vuk",
         { public = true })
 
 target_end()

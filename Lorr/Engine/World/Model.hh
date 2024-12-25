@@ -5,10 +5,17 @@
 namespace lr {
 enum class TextureID : u32 { Invalid = std::numeric_limits<u32>::max() };
 struct Texture {
-    Image image = {};
+    Image image = image = {};
+    ImageView image_view = {};
     Sampler sampler = {};
 
-    SampledImage sampled_image() { return { image.view().id(), sampler.id() }; }
+    SampledImage sampled_image() { return { image_view.id(), sampler.id() }; }
+};
+
+enum class AlphaMode : u32 {
+    Opaque = 0,
+    Mask,
+    Blend,
 };
 
 enum class MaterialID : u32 { Invalid = std::numeric_limits<u32>::max() };
@@ -17,7 +24,7 @@ struct Material {
     glm::vec3 emissive_color = { 0.0f, 0.0f, 0.0f };
     f32 roughness_factor = 0.0f;
     f32 metallic_factor = 0.0f;
-    vk::AlphaMode alpha_mode = vk::AlphaMode::Opaque;
+    AlphaMode alpha_mode = AlphaMode::Opaque;
     f32 alpha_cutoff = 0.0f;
     TextureID albedo_texture_id = TextureID::Invalid;
     TextureID normal_texture_id = TextureID::Invalid;
@@ -29,7 +36,7 @@ struct GPUMaterial {
     alignas(4) glm::vec3 emissive_color = { 0.0f, 0.0f, 0.0f };
     alignas(4) f32 roughness_factor = 0.0f;
     alignas(4) f32 metallic_factor = 0.0f;
-    alignas(4) vk::AlphaMode alpha_mode = vk::AlphaMode::Opaque;
+    alignas(4) AlphaMode alpha_mode = AlphaMode::Opaque;
     alignas(4) f32 alpha_cutoff = 0.0f;
     alignas(4) SampledImage albedo_image = {};
     alignas(4) SampledImage normal_image = {};

@@ -1,7 +1,6 @@
 #include "Engine/Window/Window.hh"
 
 #include "Engine/Core/Application.hh"
-#include "Engine/Graphics/Vulkan/Impl.hh"
 
 #ifndef GLFW_INCLUDE_NONE
 #define GLFW_INCLUDE_NONE
@@ -242,7 +241,8 @@ auto Window::get_native_handle() -> void * {
 #endif
 }
 
-auto vk::get_vk_surface(VkInstance instance, void *handle) -> std::expected<VkSurfaceKHR, vk::Result> {
+auto vulkan_get_os_surface(VkInstance instance, void *handle, PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr)
+    -> std::expected<VkSurfaceKHR, VkResult> {
     ZoneScoped;
 
     VkSurfaceKHR surface = {};
@@ -271,12 +271,8 @@ auto vk::get_vk_surface(VkInstance instance, void *handle) -> std::expected<VkSu
 
     auto result = vkCreateXlibSurfaceKHR(instance, &create_info, nullptr, &surface);
 #endif
-    switch (result) {
-        case VK_ERROR_OUT_OF_HOST_MEMORY:
-            return std::unexpected(vk::Result::OutOfHostMem);
-        case VK_ERROR_OUT_OF_DEVICE_MEMORY:
-            return std::unexpected(vk::Result::OutOfDeviceMem);
-        default:;
+    if (result != VK_SUCCESS) {
+        return std::unexpected(result);
     }
 
     return surface;

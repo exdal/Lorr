@@ -18,7 +18,7 @@
 namespace lr {
 template<>
 struct Handle<AssetManager>::Impl {
-    Device device = {};
+    Device *device = nullptr;
     fs::path root_path = fs::current_path();
     AssetRegistry registry = {};
 
@@ -30,20 +30,14 @@ struct Handle<AssetManager>::Impl {
     Buffer material_buffer = {};
 };
 
-auto AssetManager::create(Device_H device) -> AssetManager {
+auto AssetManager::create(Device *device) -> AssetManager {
     ZoneScoped;
 
     auto impl = new Impl;
     auto self = AssetManager(impl);
 
     impl->device = device;
-    impl->material_buffer = Buffer::create(
-                                device,
-                                vk::BufferUsage::Storage | vk::BufferUsage::TransferDst,
-                                impl->materials.max_resources() * sizeof(GPUMaterial),
-                                vk::MemoryAllocationUsage::PreferDevice)
-                                .value()
-                                .set_name("Material Buffer");
+    impl->material_buffer = Buffer::create(*device, impl->materials.max_resources() * sizeof(GPUMaterial)).value();
 
     impl->root_path = fs::current_path();
 
@@ -329,14 +323,14 @@ auto AssetManager::load_model(Asset *asset) -> bool {
         if (v.sampler_index.has_value()) {
             auto &sampler_info = model_info->samplers[v.sampler_index.value()];
             sampler = Sampler::create(
-                          impl->device,
+                          *impl->device,
                           sampler_info.min_filter,
                           sampler_info.mag_filter,
-                          vk::Filtering::Linear,
+                          vuk::SamplerMipmapMode::eLinear,
                           sampler_info.address_u,
                           sampler_info.address_v,
-                          vk::SamplerAddressMode::Repeat,
-                          vk::CompareOp::Never)
+                          vuk::SamplerAddressMode::eRepeat,
+                          vuk::CompareOp::eNever)
                           .value();
         }
 
@@ -410,83 +404,39 @@ auto AssetManager::load_model(Asset *asset) -> bool {
         mesh.primitive_indices = v.primitive_indices;
     }
 
-    //  ── STAGING UPLOAD ──────────────────────────────────────────────────
-    // TODO: Multiple duplication of CPU buffers, consider using CPU buffer
-    // instead of vectors in the future. Currently, not a huge problem.
-    // ─────────────────────────────────────────────────────────────────────
-    auto transfer_man = impl->device.transfer_man();
-    auto transfer_queue = impl->device.queue(vk::CommandType::Transfer);
+    auto &transfer_man = impl->device->transfer_man();
     usize vertex_buffer_upload_size = vertices.size() * sizeof(Model::Vertex);
-    auto vertex_buffer_gpu = Buffer::create(
-                                 impl->device,
-                                 vk::BufferUsage::Vertex | vk::BufferUsage::TransferDst,
-                                 vertex_buffer_upload_size,
-                                 vk::MemoryAllocationUsage::PreferDevice)
-                                 .value()
-                                 .set_name(std::format("{} Vertex Buffer", asset->path));
     usize index_buffer_upload_size = model_info->indices.size() * sizeof(Model::Index);
-    auto index_buffer_gpu = Buffer::create(
-                                impl->device,
-                                vk::BufferUsage::Index | vk::BufferUsage::TransferDst,
-                                index_buffer_upload_size,
-                                vk::MemoryAllocationUsage::PreferDevice)
-                                .value()
-                                .set_name(std::format("{} Index Buffer", asset->path));
+    auto vertex_buffer = Buffer::create(*impl->device, vertex_buffer_upload_size).value();
+    auto index_buffer = Buffer::create(*impl->device, index_buffer_upload_size).value();
 
-    {
-        auto cmd_list = transfer_queue.begin();
-        auto vertex_buffer_alloc = transfer_man.allocate(vertex_buffer_upload_size);
-        std::memcpy(vertex_buffer_alloc->ptr, vertices.data(), vertex_buffer_upload_size);
-        vk::BufferCopyRegion vertex_copy_region = { .src_offset = vertex_buffer_alloc->offset, .size = vertex_buffer_upload_size };
-        cmd_list.copy_buffer_to_buffer(vertex_buffer_alloc->cpu_buffer_id, vertex_buffer_gpu.id(), vertex_copy_region);
-        transfer_queue.end(cmd_list);
-        transfer_queue.submit({}, transfer_man.semaphore());
-        transfer_queue.wait();
-        transfer_man.collect_garbage();
-    }
-
-    {
-        auto cmd_list = transfer_queue.begin();
-        auto index_buffer_alloc = transfer_man.allocate(index_buffer_upload_size);
-        std::memcpy(index_buffer_alloc->ptr, indices.data(), index_buffer_upload_size);
-        vk::BufferCopyRegion index_copy_region = { .src_offset = index_buffer_alloc->offset, .size = index_buffer_upload_size };
-        cmd_list.copy_buffer_to_buffer(index_buffer_alloc->cpu_buffer_id, index_buffer_gpu.id(), index_copy_region);
-        transfer_queue.end(cmd_list);
-        transfer_queue.submit({}, transfer_man.semaphore());
-        transfer_queue.wait();
-        transfer_man.collect_garbage();
-    }
+    transfer_man.upload_staging(vertex_buffer, { reinterpret_cast<u8 *>(vertices.data()), vertex_buffer_upload_size });
+    transfer_man.upload_staging(index_buffer, { reinterpret_cast<u8 *>(indices.data()), index_buffer_upload_size });
 
     //   ──────────────────────────────────────────────────────────────────────
     auto *model = this->get_model(asset->model_id);
     model->primitives = primitives;
     model->meshes = meshes;
-    model->vertex_buffer = vertex_buffer_gpu;
-    model->index_buffer = index_buffer_gpu;
+    model->vertex_buffer = vertex_buffer;
+    model->index_buffer = index_buffer;
 
     return true;
 }
 
-auto AssetManager::load_texture(Asset *asset, vk::Format format, vk::Extent3D extent, ls::span<u8> pixels, Sampler sampler) -> bool {
+auto AssetManager::load_texture(Asset *asset, vuk::Format format, vuk::Extent3D extent, ls::span<u8> pixels, Sampler sampler) -> bool {
     ZoneScoped;
 
     auto image = Image::create(
-        impl->device,
-        vk::ImageUsage::Sampled | vk::ImageUsage::TransferDst,
+        *impl->device,
         format,
-        vk::ImageType::View2D,
+        vuk::ImageUsageFlagBits::eSampled,
+        vuk::ImageType::e2D,
         extent,
-        vk::ImageAspectFlag::Color,
         1,
         static_cast<u32>(glm::floor(glm::log2(static_cast<f32>(ls::max(extent.width, extent.height)))) + 1));
     if (!image.has_value()) {
         return false;
     }
-
-    image->set_name(asset->path)
-        .set_data(pixels.data(), pixels.size(), vk::ImageLayout::TransferDst)
-        .generate_mips(vk::ImageLayout::TransferDst)
-        .transition(vk::ImageLayout::TransferDst, vk::ImageLayout::ShaderReadOnly);
 
     auto *texture = this->get_texture(asset->texture_id);
     texture->image = image.value();
@@ -494,16 +444,15 @@ auto AssetManager::load_texture(Asset *asset, vk::Format format, vk::Extent3D ex
         texture->sampler = sampler;
     } else {
         texture->sampler = Sampler::create(
-                               impl->device,
-                               vk::Filtering::Linear,
-                               vk::Filtering::Linear,
-                               vk::Filtering::Linear,
-                               vk::SamplerAddressMode::Repeat,
-                               vk::SamplerAddressMode::Repeat,
-                               vk::SamplerAddressMode::Repeat,
-                               vk::CompareOp::Never)
-                               .value()
-                               .set_name("Linear Repeat Sampler");
+                               *impl->device,
+                               vuk::Filter::eLinear,
+                               vuk::Filter::eLinear,
+                               vuk::SamplerMipmapMode::eLinear,
+                               vuk::SamplerAddressMode::eRepeat,
+                               vuk::SamplerAddressMode::eRepeat,
+                               vuk::SamplerAddressMode::eRepeat,
+                               vuk::CompareOp::eNever)
+                               .value();
     }
 
     return true;
@@ -523,8 +472,8 @@ auto AssetManager::load_texture(Asset *asset, Sampler sampler) -> bool {
         return false;
     }
 
-    vk::Format format = {};
-    vk::Extent3D extent = {};
+    vuk::Format format = {};
+    vuk::Extent3D extent = {};
     std::vector<u8> pixels = {};
 
     switch (this->to_asset_file_type(asset->path)) {
@@ -572,22 +521,22 @@ auto AssetManager::load_material(Asset *asset, const Material &material_info) ->
 
     u64 gpu_buffer_offset = std::to_underlying(asset->material_id) * sizeof(GPUMaterial);
 
-    auto transfer_man = impl->device.transfer_man();
-    auto transfer_queue = impl->device.queue(vk::CommandType::Transfer);
-    auto cmd_list = transfer_queue.begin();
-    auto gpu_material_alloc = transfer_man.allocate(sizeof(GPUMaterial));
-    std::memcpy(gpu_material_alloc->ptr, &gpu_material, sizeof(GPUMaterial));
-
-    vk::BufferCopyRegion copy_region = {
-        .src_offset = gpu_material_alloc->offset,
-        .dst_offset = gpu_buffer_offset,
-        .size = sizeof(GPUMaterial),
-    };
-    cmd_list.copy_buffer_to_buffer(gpu_material_alloc->cpu_buffer_id, impl->material_buffer.id(), copy_region);
-
-    transfer_queue.end(cmd_list);
-    transfer_queue.submit({}, transfer_man.semaphore());
-    transfer_queue.wait();
+    // auto transfer_man = impl->device.transfer_man();
+    // auto transfer_queue = impl->device.queue(vk::CommandType::Transfer);
+    // auto cmd_list = transfer_queue.begin();
+    // auto gpu_material_alloc = transfer_man.allocate(sizeof(GPUMaterial));
+    // std::memcpy(gpu_material_alloc->ptr, &gpu_material, sizeof(GPUMaterial));
+    //
+    // vk::BufferCopyRegion copy_region = {
+    //     .src_offset = gpu_material_alloc->offset,
+    //     .dst_offset = gpu_buffer_offset,
+    //     .size = sizeof(GPUMaterial),
+    // };
+    // cmd_list.copy_buffer_to_buffer(gpu_material_alloc->cpu_buffer_id, impl->material_buffer.id(), copy_region);
+    //
+    // transfer_queue.end(cmd_list);
+    // transfer_queue.submit({}, transfer_man.semaphore());
+    // transfer_queue.wait();
 
     return true;
 }

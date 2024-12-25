@@ -13,8 +13,8 @@ auto STBImageInfo::parse(ls::span<u8> data) -> ls::option<STBImageInfo> {
 
     u64 upload_size = width * height * 4;
     STBImageInfo image = {};
-    image.format = vk::Format::R8G8B8A8_SRGB;
-    image.extent = { static_cast<u32>(width), static_cast<u32>(height) };
+    image.format = vuk::Format::eR8G8B8A8Srgb;
+    image.extent = { static_cast<u32>(width), static_cast<u32>(height), 1 };
     image.data.resize(upload_size);
     std::memcpy(&image.data[0], parsed_data, upload_size);
 

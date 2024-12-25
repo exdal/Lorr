@@ -1,19 +1,10 @@
 #pragma once
 
 #include "Engine/Core/Handle.hh"
-#include "Engine/Graphics/VulkanEnums.hh"
-
-#include <slang-com-ptr.h>
-#include <slang.h>
 
 namespace lr {
-struct ShaderPreprocessorMacroInfo {
-    std::string_view name = {};
-    std::string_view value = {};
-};
-
 struct SlangSessionInfo {
-    std::vector<ShaderPreprocessorMacroInfo> definitions = {};
+    std::vector<ls::pair<std::string, std::string>> definitions = {};
     fs::path root_directory = {};
 };
 
@@ -25,7 +16,6 @@ struct SlangModuleInfo {
 
 struct SlangEntryPoint {
     std::vector<u32> ir = {};
-    vk::ShaderStageFlag shader_stage = {};
 };
 
 struct ShaderReflection {

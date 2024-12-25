@@ -100,24 +100,24 @@ auto GLTFModelInfo::parse(const fs::path &path) -> ls::option<GLTFModelInfo> {
 
     LOG_TRACE("Parsing GLTF samplers...");
 
-    auto gltf_filter_to_lr = [](fastgltf::Filter f) -> vk::Filtering {
+    auto gltf_filter_to_lr = [](fastgltf::Filter f) -> vuk::Filter {
         switch (f) {
             case fastgltf::Filter::Nearest:
-                return vk::Filtering::Nearest;
+                return vuk::Filter::eNearest;
             case fastgltf::Filter::Linear:
             default:
-                return vk::Filtering::Linear;
+                return vuk::Filter::eLinear;
         }
     };
 
-    auto gltf_address_mode_to_lr = [](fastgltf::Wrap w) -> vk::SamplerAddressMode {
+    auto gltf_address_mode_to_lr = [](fastgltf::Wrap w) -> vuk::SamplerAddressMode {
         switch (w) {
             case fastgltf::Wrap::ClampToEdge:
-                return vk::SamplerAddressMode::ClampToEdge;
+                return vuk::SamplerAddressMode::eClampToEdge;
             case fastgltf::Wrap::MirroredRepeat:
-                return vk::SamplerAddressMode::MirroredRepeat;
+                return vuk::SamplerAddressMode::eMirroredRepeat;
             case fastgltf::Wrap::Repeat:
-                return vk::SamplerAddressMode::Repeat;
+                return vuk::SamplerAddressMode::eRepeat;
         }
     };
 
@@ -236,7 +236,7 @@ auto GLTFModelInfo::parse(const fs::path &path) -> ls::option<GLTFModelInfo> {
             v.emissiveFactor[2],
             v.emissiveStrength,
         };
-        material.alpha_mode = static_cast<vk::AlphaMode>(v.alphaMode);
+        // material.alpha_mode = static_cast<vk::AlphaMode>(v.alphaMode);
         material.alpha_cutoff = v.alphaCutoff;
 
         if (auto &tex = pbr.baseColorTexture; tex.has_value()) {

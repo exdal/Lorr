@@ -31,6 +31,8 @@ struct Handle<World>::Impl {
 
     ankerl::unordered_dense::map<flecs::id_t, Icon::detail::icon_t> component_icons = {};
 
+    std::vector<GPUCameraData> gpu_cameras = {};
+    std::vector<GPUModelTransformData> gpu_model_transforms = {};
     std::vector<GPUModel> gpu_models = {};
 };
 
@@ -207,78 +209,77 @@ auto World::begin_frame(WorldRenderer &renderer) -> void {
                                      .with(flecs::ChildOf, scene.root())
                                      .build();
 
-    auto scene_begin_info = renderer.begin_scene_render_data(camera_query.count(), model_transform_query.count());
-    if (!scene_begin_info.has_value()) {
-        return;
-    }
-
+    impl->gpu_cameras.clear();
+    impl->gpu_model_transforms.clear();
     impl->gpu_models.clear();
+
+    impl->gpu_cameras.resize(camera_query.count());
+    impl->gpu_model_transforms.resize(model_transform_query.count());
+
     u32 active_camera_index = 0;
     camera_query.each([&](flecs::entity e, Component::Transform &t, Component::Camera &c) {
-        auto camera_ptr = reinterpret_cast<GPUCameraData *>(scene_begin_info->cameras_allocation.ptr);
-        camera_ptr += c.index;
-
-        camera_ptr->projection_mat = c.projection;
-        camera_ptr->view_mat = t.matrix;
-        camera_ptr->projection_view_mat = glm::transpose(c.projection * t.matrix);
-        camera_ptr->inv_view_mat = glm::inverse(glm::transpose(t.matrix));
-        camera_ptr->inv_projection_view_mat = glm::inverse(glm::transpose(c.projection)) * camera_ptr->inv_view_mat;
-        camera_ptr->position = t.position;
-        camera_ptr->near_clip = c.near_clip;
-        camera_ptr->far_clip = c.far_clip;
+        auto &camera_data = impl->gpu_cameras[c.index];
+        camera_data.projection_mat = c.projection;
+        camera_data.view_mat = t.matrix;
+        camera_data.projection_view_mat = glm::transpose(c.projection * t.matrix);
+        camera_data.inv_view_mat = glm::inverse(glm::transpose(t.matrix));
+        camera_data.inv_projection_view_mat = glm::inverse(glm::transpose(c.projection)) * camera_data.inv_view_mat;
+        camera_data.position = t.position;
+        camera_data.near_clip = c.near_clip;
+        camera_data.far_clip = c.far_clip;
 
         if (e.has<Component::ActiveCamera>()) {
             active_camera_index = c.index;
         }
     });
 
-    u32 model_transform_index = 0;
-    auto model_transforms_ptr = reinterpret_cast<GPUModelTransformData *>(scene_begin_info->model_transfors_allocation.ptr);
-    model_transform_query.each([&](Component::Transform &t, Component::RenderableModel &m) {
-        auto rotation = glm::radians(t.rotation);
-
-        glm::mat4 &world_mat = model_transforms_ptr->world_transform_mat;
-        world_mat = glm::translate(glm::mat4(1.0), glm::vec3(0.0f));
-        world_mat *= glm::rotate(glm::mat4(1.0), rotation.x, glm::vec3(1.0, 0.0, 0.0));
-        world_mat *= glm::rotate(glm::mat4(1.0), rotation.y, glm::vec3(0.0, 1.0, 0.0));
-        world_mat *= glm::rotate(glm::mat4(1.0), rotation.z, glm::vec3(0.0, 0.0, 1.0));
-        world_mat *= glm::scale(glm::mat4(1.0), t.scale);
-
-        model_transforms_ptr->model_transform_mat = t.matrix;
-        model_transforms_ptr++;
-
-        // ──────────────────────────────────────────────────────────────────────
-        auto *model = asset_man.get_model(m.model_id);
-        auto &gpu_model = impl->gpu_models.emplace_back();
-
-        gpu_model.primitives.reserve(model->primitives.size());
-        gpu_model.meshes.reserve(model->meshes.size());
-
-        for (auto &primitive : model->primitives) {
-            gpu_model.primitives.push_back({
-                .vertex_offset = primitive.vertex_offset,
-                .vertex_count = primitive.vertex_count,
-                .index_offset = primitive.index_offset,
-                .index_count = primitive.index_count,
-                .material_index = std::to_underlying(primitive.material_id),
-            });
-        }
-
-        for (auto &mesh : model->meshes) {
-            gpu_model.meshes.push_back({
-                .primitive_indices = mesh.primitive_indices,
-            });
-        }
-
-        gpu_model.transform_index = model_transform_index++;
-        gpu_model.vertex_bufffer_id = model->vertex_buffer.id();
-        gpu_model.index_buffer_id = model->index_buffer.id();
-    });
-
-    scene_begin_info->active_camera = active_camera_index;
-    scene_begin_info->materials_buffer_id = asset_man.material_buffer().id();
-    scene_begin_info->gpu_models = impl->gpu_models;
-    renderer.end_scene_render_data(scene_begin_info.value());
+    // u32 model_transform_index = 0;
+    // auto model_transforms_ptr = reinterpret_cast<GPUModelTransformData *>(scene_begin_info->model_transfors_allocation.ptr);
+    // model_transform_query.each([&](Component::Transform &t, Component::RenderableModel &m) {
+    //     auto rotation = glm::radians(t.rotation);
+    //
+    //     glm::mat4 &world_mat = model_transforms_ptr->world_transform_mat;
+    //     world_mat = glm::translate(glm::mat4(1.0), glm::vec3(0.0f));
+    //     world_mat *= glm::rotate(glm::mat4(1.0), rotation.x, glm::vec3(1.0, 0.0, 0.0));
+    //     world_mat *= glm::rotate(glm::mat4(1.0), rotation.y, glm::vec3(0.0, 1.0, 0.0));
+    //     world_mat *= glm::rotate(glm::mat4(1.0), rotation.z, glm::vec3(0.0, 0.0, 1.0));
+    //     world_mat *= glm::scale(glm::mat4(1.0), t.scale);
+    //
+    //     model_transforms_ptr->model_transform_mat = t.matrix;
+    //     model_transforms_ptr++;
+    //
+    //     // ──────────────────────────────────────────────────────────────────────
+    //     auto *model = asset_man.get_model(m.model_id);
+    //     auto &gpu_model = impl->gpu_models.emplace_back();
+    //
+    //     gpu_model.primitives.reserve(model->primitives.size());
+    //     gpu_model.meshes.reserve(model->meshes.size());
+    //
+    //     for (auto &primitive : model->primitives) {
+    //         gpu_model.primitives.push_back({
+    //             .vertex_offset = primitive.vertex_offset,
+    //             .vertex_count = primitive.vertex_count,
+    //             .index_offset = primitive.index_offset,
+    //             .index_count = primitive.index_count,
+    //             .material_index = std::to_underlying(primitive.material_id),
+    //         });
+    //     }
+    //
+    //     for (auto &mesh : model->meshes) {
+    //         gpu_model.meshes.push_back({
+    //             .primitive_indices = mesh.primitive_indices,
+    //         });
+    //     }
+    //
+    //     gpu_model.transform_index = model_transform_index++;
+    //     gpu_model.vertex_bufffer_id = model->vertex_buffer.id();
+    //     gpu_model.index_buffer_id = model->index_buffer.id();
+    // });
+    //
+    // scene_begin_info->active_camera = active_camera_index;
+    // scene_begin_info->materials_buffer_id = asset_man.material_buffer().id();
+    // scene_begin_info->gpu_models = impl->gpu_models;
+    // renderer.set_scene_data(scene_begin_info.value());
 }
 
 auto World::end_frame() -> void {

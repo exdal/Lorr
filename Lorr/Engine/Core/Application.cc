@@ -31,7 +31,7 @@ bool Application::init(this Application &self, const ApplicationInfo &info) {
         return false;
     }
 
-    self.device.init(3);
+    self.device.init(3).value();
     self.asset_man = AssetManager::create(&self.device);
 
     self.window = Window::create(info.window_info);
@@ -127,6 +127,7 @@ void Application::run(this Application &self) {
         }
 
         auto swap_chain_attachment = self.device.new_frame(self.swap_chain);
+        swap_chain_attachment = vuk::clear_image(std::move(swap_chain_attachment), vuk::Black<f32>);
 
         if (!self.world_renderer) {
             self.world_renderer = WorldRenderer::create(&self.device);
@@ -136,20 +137,19 @@ void Application::run(this Application &self) {
         f64 delta_time = self.world.delta_time();
         imgui.DeltaTime = static_cast<f32>(delta_time);
 
+        self.world_renderer.begin_frame(swap_chain_attachment);
+
         // Update application
         auto extent = self.swap_chain.extent();
         imgui.DisplaySize = ImVec2(static_cast<f32>(extent.width), static_cast<f32>(extent.height));
 
         // WARN: Make sure to do all imgui settings BEFORE NewFrame!!!
-        ImGui::NewFrame();
         self.world.begin_frame(self.world_renderer);
         self.do_update(delta_time);
         self.world.end_frame();
         self.should_close |= self.window.should_close();
 
-        ImGui::Render();
-
-        auto rendered_attachment = self.world_renderer.render(std::move(swap_chain_attachment));
+        auto rendered_attachment = self.world_renderer.end_frame(std::move(swap_chain_attachment));
         self.device.end_frame(std::move(rendered_attachment));
 
         self.window.poll();

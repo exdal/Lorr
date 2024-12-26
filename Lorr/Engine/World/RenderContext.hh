@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Engine/Graphics/Vulkan.hh"
+#include "Engine/Graphics/VulkanDevice.hh"
 #include "Engine/World/Model.hh"
 
 namespace lr {
@@ -82,7 +83,27 @@ struct GPUWorldData {
 };
 
 struct FrameResources {
-    FrameResources(Device &device, SwapChain &swap_chain) {}
+    Image final_image = {};
+    ImageView final_view = {};
+
+    FrameResources(Device &device, vuk::Value<vuk::ImageAttachment> &target_attachment) {
+        // clang-format off
+        final_image = Image::create(
+            device,
+            target_attachment->format,
+            vuk::ImageUsageFlagBits::eColorAttachment | vuk::ImageUsageFlagBits::eSampled,
+            vuk::ImageType::e2D,
+            target_attachment->extent
+        ).value();
+        final_view = ImageView::create(
+            device,
+            final_image,
+            vuk::ImageUsageFlagBits::eColorAttachment | vuk::ImageUsageFlagBits::eSampled,
+            vuk::ImageViewType::e2D,
+            { .aspectMask = vuk::ImageAspectFlagBits::eColor }
+        ).value();
+        // clang-format on
+    }
 
     ~FrameResources() {}
 };
@@ -94,7 +115,7 @@ struct WorldRenderContext {
     GPUWorldData world_data = {};
     ls::span<GPUModel> models = {};
 
-    glm::vec2 sun_angle = { 0, 0 };
+    glm::vec2 sun_angle = { 0.0, 45.0 };
 
     Sampler linear_sampler = {};
     Sampler nearest_sampler = {};
@@ -102,6 +123,20 @@ struct WorldRenderContext {
     Image imgui_font_image = {};
     ImageView imgui_font_view = {};
     Pipeline imgui_pipeline = {};
+    std::vector<vuk::Value<vuk::ImageAttachment>> imgui_rendering_attachments = {};
+    std::vector<ImageViewID> imgui_rendering_view_ids = {};
+
+    Pipeline grid_pipeline = {};
+
+    Image sky_transmittance_lut = {};
+    ImageView sky_transmittance_lut_view = {};
+    Image sky_multiscatter_lut = {};
+    ImageView sky_multiscatter_lut_view = {};
+    Image sky_aerial_perspective_lut = {};
+    ImageView sky_aerial_perspective_lut_view = {};
+    Image sky_view_lut = {};
+    ImageView sky_view_lut_view = {};
+    Pipeline sky_view_pipeline = {};
 
     // FRAME IMAGES
     // Images that DO rely on Swap Chain dimensions

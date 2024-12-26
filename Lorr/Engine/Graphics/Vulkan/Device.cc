@@ -3,6 +3,20 @@
 #include <vuk/runtime/ThisThreadExecutor.hpp>
 
 namespace lr {
+auto BindlessDescriptorSetLayoutInfo::add_binding(Descriptors binding, VkDescriptorType type, u32 count) -> void {
+    ZoneScoped;
+
+    pool_size += count;
+    layout_info.bindings.push_back({
+        .binding = std::to_underlying(binding),
+        .descriptorType = type,
+        .descriptorCount = count,
+        .stageFlags = VK_SHADER_STAGE_ALL,
+        .pImmutableSamplers = nullptr,
+    });
+    layout_info.flags.push_back(VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT);
+}
+
 constexpr Logger::Category to_log_category(VkDebugUtilsMessageSeverityFlagBitsEXT severity) {
     switch (severity) {
         case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
@@ -193,38 +207,9 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
     self.allocator.emplace(*self.frame_resources);
     self.runtime->set_shader_target_version(VK_API_VERSION_1_3);
 
-    VkDescriptorBindingFlags bindless_flags = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
-    std::vector<VkDescriptorPoolSize> pool_sizes;
-    std::vector<VkDescriptorSetLayoutBinding> bindings;
-    std::vector<VkDescriptorBindingFlags> binding_flags;
-    auto add_descriptor_binding = [&](Descriptors binding, VkDescriptorType type, u32 count) {
-        pool_sizes.push_back({
-            .type = type,
-            .descriptorCount = count,
-        });
-        bindings.push_back({
-            .binding = std::to_underlying(binding),
-            .descriptorType = type,
-            .descriptorCount = count,
-            .stageFlags = VK_SHADER_STAGE_ALL,
-            .pImmutableSamplers = nullptr,
-        });
-        binding_flags.push_back(bindless_flags);
-    };
-
-    add_descriptor_binding(Descriptors::Samplers, VK_DESCRIPTOR_TYPE_SAMPLER, self.resources.samplers.max_resources());
-    add_descriptor_binding(Descriptors::Images, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, self.resources.images.max_resources());
-    add_descriptor_binding(Descriptors::StorageImages, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, self.resources.image_views.max_resources());
-    add_descriptor_binding(Descriptors::StorageBuffers, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, self.resources.buffers.max_resources());
-    add_descriptor_binding(Descriptors::BDA, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1);
-
-    auto layout_info = vuk::DescriptorSetLayoutCreateInfo{
-        .index = 0,
-        .bindings = bindings,
-        .flags = binding_flags,
-    };
-
-    self.descriptor_set = self.runtime->create_persistent_descriptorset(*self.allocator, layout_info, 100'000);
+    auto bindless_layout = self.get_bindless_descriptor_set_layout();
+    self.descriptor_set =
+        self.runtime->create_persistent_descriptorset(*self.allocator, bindless_layout.layout_info, bindless_layout.pool_size);
 
     // I would rather a crashed renderer than a renderer without BDA buffer
     self.bda_array_buffer = Buffer::create(self, self.resources.buffers.max_resources() * sizeof(u64), vuk::MemoryUsage::eCPUtoGPU).value();
@@ -315,6 +300,17 @@ auto Device::bindless_descriptor_set() -> vuk::PersistentDescriptorSet & {
 auto Device::feature_supported(this Device &self, DeviceFeature feature) -> bool {
     ZoneScoped;
     return self.supported_features & feature;
+}
+
+auto Device::get_bindless_descriptor_set_layout() -> BindlessDescriptorSetLayoutInfo {
+    BindlessDescriptorSetLayoutInfo bindless_layout;
+    bindless_layout.add_binding(Descriptors::Samplers, VK_DESCRIPTOR_TYPE_SAMPLER, 1000);
+    bindless_layout.add_binding(Descriptors::Images, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1000);
+    bindless_layout.add_binding(Descriptors::StorageImages, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1000);
+    bindless_layout.add_binding(Descriptors::StorageBuffers, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1000);
+    bindless_layout.add_binding(Descriptors::BDA, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1);
+
+    return bindless_layout;
 }
 
 }  // namespace lr

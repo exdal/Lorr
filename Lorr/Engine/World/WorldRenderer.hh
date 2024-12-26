@@ -7,27 +7,43 @@
 namespace lr {
 struct WorldRenderer : Handle<WorldRenderer> {
     struct SceneBeginInfo {
-        u32 active_camera = 0;
-        ls::span<GPUCameraData> gpu_cameras = {};
-        ls::span<GPUModelTransformData> gpu_model_transforms = {};
+        i32 camera_count = 0;
+        i32 model_transform_count = 0;
+    };
+
+    struct GPUSceneData {
+        u32 active_camera_index = 0;
         BufferID materials_buffer_id = BufferID::Invalid;
-        ls::span<GPUModel> gpu_models = {};
+        ls::span<GPUModel> models = {};
+
+        GPUCameraData *cameras = nullptr;
+        GPUModelTransformData *model_transforms = nullptr;
+
+        // Internals
+        ls::option<usize> offset_cameras;
+        ls::option<usize> offset_model_transforms;
+        ls::option<usize> offset_models;
+        usize upload_size = 0;
+        TransientBuffer world_data = {};
     };
 
     static auto create(Device *device) -> WorldRenderer;
-
     auto setup_persistent_resources() -> void;
 
-    auto set_scene_data(SceneBeginInfo &info) -> void;
+    auto begin_scene(const SceneBeginInfo &info) -> GPUSceneData;
+    auto end_scene(GPUSceneData &scene_gpu_data) -> void;
 
-    auto update_world_data() -> void;
-    auto render(vuk::Value<vuk::ImageAttachment> &&target_attachment) -> vuk::Value<vuk::ImageAttachment>;
+    auto begin_frame(vuk::Value<vuk::ImageAttachment> &reference_img) -> void;
+    auto draw_scene() -> ls::pair<ImageViewID, vuk::Value<vuk::ImageAttachment>>;
+    auto end_frame(vuk::Value<vuk::ImageAttachment> &&render_target) -> vuk::Value<vuk::ImageAttachment>;
+
     auto draw_profiler_ui() -> void;
 
     auto sun_angle() -> glm::vec2 &;
     auto update_sun_dir() -> void;
     auto world_data() -> GPUWorldData &;
-    auto composition_image() -> Image;
+    auto composition_image_view() -> ImageView &;
+    auto imgui_image(ImageViewID image_view_id, vuk::Value<vuk::ImageAttachment> &&attachment, const glm::vec2 &size) -> void;
 };
 
 }  // namespace lr

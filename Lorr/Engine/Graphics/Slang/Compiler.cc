@@ -314,8 +314,6 @@ auto SlangCompiler::new_session(const SlangSessionInfo &info) -> ls::option<Slan
         { slang::CompilerOptionName::GLSLForceScalarLayout, { .kind = slang::CompilerOptionValueKind::Int, .intValue0 = 1 } },
         { slang::CompilerOptionName::Language, { .kind = slang::CompilerOptionValueKind::String, .stringValue0 = "slang" } },
         { slang::CompilerOptionName::DisableWarnings, { .kind = slang::CompilerOptionValueKind::String, .stringValue0 = "39001,41012" } },
-        { slang::CompilerOptionName::Capability,
-          { .kind = slang::CompilerOptionValueKind::Int, .intValue0 = impl->global_session->findCapability("spirv_1_6") } },
     };
     std::vector<slang::PreprocessorMacroDesc> macros;
     macros.reserve(info.definitions.size());

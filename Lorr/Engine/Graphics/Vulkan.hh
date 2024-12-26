@@ -80,7 +80,7 @@ struct ImageView {
     static auto create(
         Device &,
         Image &image,
-        vuk::ImageUsageFlagBits image_usage,
+        const vuk::ImageUsageFlags &image_usage,
         vuk::ImageViewType type,
         const vuk::ImageSubresourceRange &subresource_range) -> std::expected<ImageView, vuk::VkException>;
 

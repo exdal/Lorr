@@ -32,7 +32,8 @@ struct TransferManager {
     auto alloc_transient_buffer(this TransferManager &, vuk::MemoryUsage usage, usize size) -> TransientBuffer;
 
     auto upload_staging(this TransferManager &, Buffer &buffer, ls::span<u8> bytes) -> void;
-    auto upload_staging(this TransferManager &, ImageView &image_view, ls::span<u8> bytes) -> void;
+    auto upload_staging(this TransferManager &, TransientBuffer &src, TransientBuffer &dst) -> void;
+    auto upload_staging(this TransferManager &, ImageView &image_view, ls::span<u8> bytes, vuk::Access release_access) -> void;
 
     auto wait_on(this TransferManager &, vuk::UntypedValue &&fut) -> void;
 
@@ -49,6 +50,14 @@ private:
     ls::option<vuk::Allocator> frame_allocator;
 
     friend Device;
+};
+
+struct BindlessDescriptorSetLayoutInfo {
+    BindlessDescriptorSetLayoutInfo() { layout_info.index = 0; }
+    vuk::DescriptorSetLayoutCreateInfo layout_info = {};
+    usize pool_size = 0;
+
+    auto add_binding(Descriptors binding, VkDescriptorType type, u32 count) -> void;
 };
 
 struct DeviceResources {
@@ -86,6 +95,8 @@ struct Device {
     auto bindless_descriptor_set() -> vuk::PersistentDescriptorSet &;
 
     auto feature_supported(this Device &, DeviceFeature feature) -> bool;
+
+    auto get_bindless_descriptor_set_layout() -> BindlessDescriptorSetLayoutInfo;
 
     struct Limits {
         constexpr static u32 FrameCount = 3;

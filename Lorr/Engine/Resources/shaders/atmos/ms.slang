@@ -6,8 +6,8 @@ import "../noise/hemisphere";
 struct PushConstants {
     World *world;
     ImageView<float4> transmittance_image;
-    float2 ms_image_size;
     ImageView<float4> ms_image;
+    float2 ms_image_size;
     u32 pad;
 };
 [[vk::push_constant]] PushConstants c;

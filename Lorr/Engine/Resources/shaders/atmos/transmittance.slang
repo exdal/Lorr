@@ -3,8 +3,8 @@ import "../lorr";
 
 struct PushConstants {
     World *world;
-    float2 image_size;
     ImageView<float4> transmittance_image;
+    float2 image_size;
     u32 pad;
 };
 

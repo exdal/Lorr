@@ -73,9 +73,8 @@ void ViewportPanel::update(this ViewportPanel &self) {
     ImGui::PopStyleVar();
 
     auto *current_window = ImGui::GetCurrentWindow();
-    auto editor_image = world_renderer.composition_image();
 
-    if (world.active_scene().has_value() && editor_image) {
+    if (world.active_scene().has_value()) {
         auto scene = asset_man.get_scene(world.active_scene().value());
         auto editor_camera = scene.editor_camera();
         auto window_rect = current_window->InnerRect;
@@ -87,7 +86,8 @@ void ViewportPanel::update(this ViewportPanel &self) {
         ImGuizmo::SetDrawlist();
         ImGuizmo::SetRect(window_pos.x, window_pos.y, window_size.x, window_size.y);
 
-        ImGui::Image(reinterpret_cast<ImTextureID>(static_cast<iptr>(editor_image.id())), work_area_size);
+        auto [game_view_id, game_view_attachment] = world_renderer.draw_scene();
+        world_renderer.imgui_image(game_view_id, std::move(game_view_attachment), glm::vec2(work_area_size.x, work_area_size.y));
 
         auto *camera = editor_camera.get_mut<Component::Camera>();
         auto *camera_transform = editor_camera.get_mut<Component::Transform>();

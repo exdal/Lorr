@@ -49,7 +49,23 @@ auto TransferManager::upload_staging(this TransferManager &self, Buffer &buffer,
     self.wait_on(std::move(upload_pass(std::move(src_buffer), std::move(dst_buffer))));
 }
 
-auto TransferManager::upload_staging(this TransferManager &self, ImageView &image_view, ls::span<u8> bytes) -> void {
+auto TransferManager::upload_staging(this TransferManager &self, TransientBuffer &src, TransientBuffer &dst) -> void {
+    ZoneScoped;
+
+    auto src_buffer = vuk::acquire_buf("src", src.buffer, vuk::Access::eNone);
+    auto dst_buffer = vuk::discard_buf("dst", dst.buffer);
+    auto upload_pass = vuk::make_pass(
+        "TransferManager::buffer_to_buffer",
+        [](vuk::CommandBuffer &cmd_list, VUK_BA(vuk::Access::eTransferRead) src_, VUK_BA(vuk::Access::eTransferWrite) dst_) {
+            cmd_list.copy_buffer(src_, dst_);
+            return dst_;
+        });
+
+    self.wait_on(std::move(upload_pass(std::move(src_buffer), std::move(dst_buffer))));
+}
+
+auto TransferManager::upload_staging(this TransferManager &self, ImageView &image_view, ls::span<u8> bytes, vuk::Access release_access)
+    -> void {
     ZoneScoped;
 
     auto cpu_buffer = self.alloc_transient_buffer(vuk::MemoryUsage::eCPUonly, bytes.size_bytes());
@@ -76,7 +92,9 @@ auto TransferManager::upload_staging(this TransferManager &self, ImageView &imag
             return dst;
         });
 
-    self.wait_on(std::move(upload_pass(std::move(src_buffer), std::move(dst_image))));
+    auto fut = upload_pass(std::move(src_buffer), std::move(dst_image));
+    fut.as_released(release_access, vuk::DomainFlagBits::eGraphicsQueue);
+    self.wait_on(std::move(fut));
 }
 
 auto TransferManager::wait_on(this TransferManager &self, vuk::UntypedValue &&fut) -> void {

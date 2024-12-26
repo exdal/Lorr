@@ -1,280 +1,178 @@
 #pragma once
 
-#include "Engine/Asset/Asset.hh"
-#include "Engine/Graphics/Task/TaskGraph.hh"
+#include "Engine/Graphics/VulkanDevice.hh"
 #include "Engine/World/RenderContext.hh"
 
 namespace lr::Tasks {
-inline ComputePipelineInfo sky_transmittance_pipeline_info(AssetManager &asset_man) {
-    auto shaders_root = asset_man.asset_root_path(AssetType::Shader);
+inline auto transmittance_lut_dispatch(Device &device, WorldRenderContext &render_context, const fs::path &shaders_root) -> void {
+    ZoneScoped;
 
-    return { .shader_module_info = {
-                 .module_name = "atmos.transmittance",
-                 .root_path = shaders_root,
-                 .shader_path = shaders_root / "atmos" / "transmittance.slang",
-                 .entry_points = { "cs_main" },
-             } };
-}
+    // clang-format off
+    auto sky_transmittance_pipeline = Pipeline::create(device, {
+        .module_name = "atmos.transmittance",
+        .root_path = shaders_root,
+        .shader_path = shaders_root / "atmos" / "transmittance.slang",
+        .entry_points = { "cs_main" },
+    }).value();
+    // clang-format on
 
-inline ComputePipelineInfo sky_multiscatter_pipeline_info(AssetManager &asset_man) {
-    auto shaders_root = asset_man.asset_root_path(AssetType::Shader);
-
-    return { .shader_module_info = {
-                 .module_name = "atmos.ms",
-                 .root_path = shaders_root,
-                 .shader_path = shaders_root / "atmos" / "ms.slang",
-                 .entry_points = { "cs_main" },
-             } };
-}
-
-inline ComputePipelineInfo sky_aerial_pipeline_info(AssetManager &asset_man) {
-    auto shaders_root = asset_man.asset_root_path(AssetType::Shader);
-
-    return { .shader_module_info = {
-                 .module_name = "atmos.aerial_perspective",
-                 .root_path = shaders_root,
-                 .shader_path = shaders_root / "atmos" / "aerial_perspective.slang",
-                 .entry_points = { "cs_main" },
-             } };
-}
-
-inline GraphicsPipelineInfo sky_view_pipeline_info(AssetManager &asset_man, vk::Format dst_color_format) {
-    auto shaders_root = asset_man.asset_root_path(AssetType::Shader);
-
-    return {
-        .color_attachment_formats = { dst_color_format },
-        .shader_module_info = {
-            .module_name = "atmos.lut",
-            .root_path = shaders_root,
-            .shader_path = shaders_root / "atmos" / "lut.slang",
-            .entry_points = { "vs_main", "fs_main" },
-        },
-        .blend_attachments = { { .blend_enabled = false } },
+    struct PushConstants {
+        u64 world_ptr = 0;
+        ImageViewID image_view_id = ImageViewID::Invalid;
+        glm::vec2 image_size = {};
+        u32 pad = 0;
     };
+
+    auto pass = vuk::make_pass(
+        "transmittance lut",
+        [&, pipeline_id = sky_transmittance_pipeline.id()](vuk::CommandBuffer &cmd_list, VUK_IA(vuk::Access::eComputeRW) dst) {
+            auto &target_image_view = render_context.sky_transmittance_lut_view;
+            auto pipeline = device.pipeline(pipeline_id);
+            auto image_size = glm::vec2(target_image_view.extent().width, target_image_view.extent().height);
+            auto groups = (glm::uvec2(image_size) / glm::uvec2(16)) + glm::uvec2(1);
+            cmd_list  //
+                .bind_compute_pipeline(*pipeline)
+                .bind_persistent(0, device.bindless_descriptor_set())
+                .push_constants(
+                    vuk::ShaderStageFlagBits::eCompute,
+                    0,
+                    PushConstants{
+                        .world_ptr = render_context.world_ptr,
+                        .image_view_id = target_image_view.id(),
+                        .image_size = image_size,
+                    })
+                .dispatch(groups.x, groups.y, 1);
+
+            return dst;
+        },
+        vuk::DomainFlagBits::eGraphicsQueue);
+
+    auto &target_image_view = render_context.sky_transmittance_lut_view;
+    auto attachment_info = target_image_view.get_attachment(device, vuk::ImageUsageFlagBits::eStorage);
+    auto attachment = vuk::declare_ia("transmittance lut", attachment_info);
+
+    auto result = pass(std::move(attachment));
+    result.release(vuk::Access::eComputeSampled, vuk::DomainFlagBits::eGraphicsQueue);
+    device.transfer_man().wait_on(std::move(result));
 }
 
-inline GraphicsPipelineInfo sky_final_pipeline_info(AssetManager &asset_man, vk::Format dst_color_format) {
-    auto shaders_root = asset_man.asset_root_path(AssetType::Shader);
+inline auto multiscatter_lut_dispatch(Device &device, WorldRenderContext &render_context, const fs::path &shaders_root) -> void {
+    ZoneScoped;
 
-    return {
-        .color_attachment_formats = { dst_color_format },
-        .shader_module_info = {
-            .module_name = "atmos.final",
-            .root_path = shaders_root,
-            .shader_path = shaders_root / "atmos" / "final.slang",
-            .entry_points = { "vs_main", "fs_main" },
-        },
-        .rasterizer_state = {
-            .cull_mode = vk::CullMode::Back,
-        },
-        .depth_stencil_state = {
-            .enable_depth_test = false,
-            .enable_depth_write = false,
-            .depth_compare_op = vk::CompareOp::LessEqual,
-        },
-        .blend_attachments = { {
-            .blend_enabled = true,
-            .src_blend = vk::BlendFactor::SrcAlpha,
-            .dst_blend = vk::BlendFactor::InvSrcAlpha,
-            .blend_op = vk::BlendOp::Add,
-            .src_blend_alpha = vk::BlendFactor::One,
-            .dst_blend_alpha = vk::BlendFactor::InvSrcAlpha,
-            .blend_op_alpha = vk::BlendOp::Add,
-        } },
+    // clang-format off
+    auto sky_transmittance_pipeline = Pipeline::create(device, {
+        .module_name = "atmos.ms",
+        .root_path = shaders_root,
+        .shader_path = shaders_root / "atmos" / "ms.slang",
+        .entry_points = { "cs_main" },
+    }).value();
+    // clang-format on
+
+    struct PushConstants {
+        u64 world_ptr = 0;
+        ImageViewID transmittance_lut_view_id = ImageViewID::Invalid;
+        ImageViewID image_view_id = ImageViewID::Invalid;
+        glm::vec2 image_size = {};
+        u32 pad = 0;
     };
+
+    auto pass = vuk::make_pass(
+        "multiscatter lut",
+        [&, pipeline_id = sky_transmittance_pipeline.id()](
+            vuk::CommandBuffer &cmd_list, VUK_IA(vuk::Access::eComputeSampled) transmittance_lut, VUK_IA(vuk::Access::eComputeRW) dst) {
+            auto transmittance_lut_view_id = render_context.sky_transmittance_lut_view.id();
+            auto &target_image_view = render_context.sky_multiscatter_lut_view;
+            auto pipeline = device.pipeline(pipeline_id);
+            auto image_size = glm::vec2(target_image_view.extent().width, target_image_view.extent().height);
+            auto groups = (glm::uvec2(image_size) / glm::uvec2(16)) + glm::uvec2(1);
+            cmd_list  //
+                .bind_compute_pipeline(*pipeline)
+                .bind_persistent(0, device.bindless_descriptor_set())
+                .push_constants(
+                    vuk::ShaderStageFlagBits::eCompute,
+                    0,
+                    PushConstants{
+                        .world_ptr = render_context.world_ptr,
+                        .transmittance_lut_view_id = transmittance_lut_view_id,
+                        .image_view_id = target_image_view.id(),
+                        .image_size = image_size,
+                    })
+                .dispatch(groups.x, groups.y, 1);
+
+            return std::make_tuple(transmittance_lut, dst);
+        },
+        vuk::DomainFlagBits::eGraphicsQueue);
+
+    auto &target_image_view = render_context.sky_multiscatter_lut_view;
+    auto multiscatter_attachment_info = target_image_view.get_attachment(device, vuk::ImageUsageFlagBits::eStorage);
+    auto multiscatter_attachment = vuk::declare_ia("multiscatter lut", multiscatter_attachment_info);
+
+    auto &transmittance_lut_view = render_context.sky_transmittance_lut_view;
+    auto transmittance_attachment_info = transmittance_lut_view.get_attachment(device, vuk::ImageUsageFlagBits::eSampled);
+    auto transmittance_attachment = vuk::acquire_ia("transmittance lut", transmittance_attachment_info, vuk::Access::eComputeSampled);
+
+    auto [transmittance_lut_fut, multiscatter_lut_fut] = pass(std::move(transmittance_attachment), std::move(multiscatter_attachment));
+    transmittance_lut_fut.release(vuk::Access::eFragmentSampled, vuk::DomainFlagBits::eGraphicsQueue);
+    multiscatter_lut_fut.release(vuk::Access::eFragmentSampled, vuk::DomainFlagBits::eGraphicsQueue);
+    device.transfer_man().wait_on(std::move(transmittance_lut_fut));
+    device.transfer_man().wait_on(std::move(multiscatter_lut_fut));
 }
 
-inline GraphicsPipelineInfo sky_apply_aerial_pipeline_info(AssetManager &asset_man, vk::Format dst_color_format) {
-    auto shaders_root = asset_man.asset_root_path(AssetType::Shader);
+inline auto sky_view_draw(Device &device, WorldRenderContext &render_context) -> vuk::Value<vuk::ImageAttachment> {
+    ZoneScoped;
 
-    return {
-        .color_attachment_formats = { dst_color_format },
-        .shader_module_info = {
-            .module_name = "atmos.apply_aerial_perspective",
-            .root_path = shaders_root,
-            .shader_path = shaders_root / "atmos" / "apply_aerial_perspective.slang",
-            .entry_points = { "vs_main", "fs_main" },
-        },
-        .depth_stencil_state = {
-            .depth_compare_op = vk::CompareOp::LessEqual,
-        },
-        .blend_attachments = { {
-            .blend_enabled = true,
-            .src_blend = vk::BlendFactor::SrcAlpha,
-            .dst_blend = vk::BlendFactor::InvSrcAlpha,
-            .blend_op = vk::BlendOp::Add,
-            .src_blend_alpha = vk::BlendFactor::One,
-            .dst_blend_alpha = vk::BlendFactor::InvSrcAlpha,
-            .blend_op_alpha = vk::BlendOp::Add,
-        } },
+    struct PushConstants {
+        u64 world_ptr = 0;
+        ImageViewID transmittance_view_id = ImageViewID::Invalid;
+        ImageViewID ms_view_id = ImageViewID::Invalid;
     };
+
+    auto pass = vuk::make_pass(
+        "sky view",
+        [&](vuk::CommandBuffer &cmd_list,
+            VUK_IA(vuk::Access::eColorWrite) dst,
+            VUK_IA(vuk::Access::eFragmentSampled) transmittance_lut,
+            VUK_IA(vuk::Access::eFragmentSampled) multiscatter_lut) {
+            auto pipeline = device.pipeline(render_context.sky_view_pipeline.id());
+            cmd_list  //
+                .bind_graphics_pipeline(*pipeline)
+                .bind_persistent(0, device.bindless_descriptor_set())
+                .set_rasterization({ .cullMode = vuk::CullModeFlagBits::eNone })
+                .set_depth_stencil({})
+                .set_color_blend(dst, vuk::BlendPreset::eOff)
+                .set_viewport(0, vuk::Rect2D::framebuffer())
+                .set_scissor(0, vuk::Rect2D::framebuffer())
+                .push_constants(
+                    vuk::ShaderStageFlagBits::eFragment,
+                    0,
+                    PushConstants{
+                        .world_ptr = render_context.world_ptr,
+                        .transmittance_view_id = render_context.sky_transmittance_lut_view.id(),
+                        .ms_view_id = render_context.sky_multiscatter_lut_view.id(),
+                    })
+                .draw(3, 1, 0, 0);
+            return std::make_tuple(dst, transmittance_lut, multiscatter_lut);
+        });
+
+    auto &sky_view_lut_view = render_context.sky_view_lut_view;
+    auto sky_view_lut_attachment_info = sky_view_lut_view.get_attachment(device, vuk::ImageUsageFlagBits::eColorAttachment);
+    auto sky_view_lut_attachment = vuk::declare_ia("sky view", sky_view_lut_attachment_info);
+
+    auto &transmittance_lut_view = render_context.sky_transmittance_lut_view;
+    auto transmittance_attachment_info = transmittance_lut_view.get_attachment(device, vuk::ImageUsageFlagBits::eSampled);
+    auto transmittance_attachment = vuk::acquire_ia("transmittance lut", transmittance_attachment_info, vuk::Access::eFragmentSampled);
+
+    auto &multiscatter_lut_view = render_context.sky_multiscatter_lut_view;
+    auto multiscatter_attachment_info = multiscatter_lut_view.get_attachment(device, vuk::ImageUsageFlagBits::eStorage);
+    auto multiscatter_attachment = vuk::acquire_ia("multiscatter lut", multiscatter_attachment_info, vuk::Access::eFragmentSampled);
+
+    sky_view_lut_attachment = vuk::clear_image(std::move(sky_view_lut_attachment), vuk::Black<f32>);
+
+    auto [result, transmittance_fut, ms_fut] =
+        pass(std::move(sky_view_lut_attachment), std::move(transmittance_attachment), std::move(multiscatter_attachment));
+    // result.release(vuk::Access::eFragmentSampled);
+
+    return result;
 }
-
-struct SkyAerialTask {
-    constexpr static std::string_view name = "Sky Aerial";
-
-    struct Uses {
-        Preset::ComputeWrite aerial_lut = {};
-        Preset::ShaderReadOnly transmittance_lut = {};
-        Preset::ShaderReadOnly multiscatter_lut = {};
-    } uses = {};
-
-    Pipeline pipeline = {};
-
-    void execute(TaskContext &tc) {
-        struct PushConstants {
-            u64 world_ptr = 0;
-            glm::vec3 target_image_size = {};
-            ImageViewID target_image_id = ImageViewID::Invalid;
-            ImageViewID transmittance_image_id = ImageViewID::Invalid;
-            ImageViewID multiscatter_image_id = ImageViewID::Invalid;
-        };
-
-        auto &render_context = tc.exec_data_as<WorldRenderContext>();
-        auto &aerial_use = tc.task_image_data(uses.aerial_lut);
-        auto aerial_lut_info = tc.device.image(aerial_use.image_id);
-        auto &transmittance_use = tc.task_image_data(uses.transmittance_lut);
-        auto &multiscatter_use = tc.task_image_data(uses.multiscatter_lut);
-
-        auto extent = aerial_lut_info.extent();
-        tc.set_pipeline(this->pipeline.id());
-
-        tc.set_push_constants(PushConstants{
-            .world_ptr = render_context.world_ptr,
-            .target_image_size = { extent.width, extent.height, extent.depth },
-            .target_image_id = aerial_use.image_view_id,
-            .transmittance_image_id = transmittance_use.image_view_id,
-            .multiscatter_image_id = multiscatter_use.image_view_id,
-        });
-        tc.cmd_list.dispatch(extent.width / 16 + 1, extent.height / 16 + 1, extent.depth / 1);
-    }
-};
-
-struct SkyViewTask {
-    constexpr static std::string_view name = "Sky View";
-
-    struct Uses {
-        Preset::ColorAttachmentWrite sky_view_attachment = {};
-        Preset::ShaderReadOnly transmittance_lut = {};
-        Preset::ShaderReadOnly ms_lut = {};
-    } uses = {};
-
-    Pipeline pipeline = {};
-
-    void execute(TaskContext &tc) {
-        struct PushConstants {
-            u64 world_ptr = 0;
-            ImageViewID transmittance_image_id = ImageViewID::Invalid;
-            ImageViewID ms_lut_id = ImageViewID::Invalid;
-        };
-
-        auto &render_context = tc.exec_data_as<WorldRenderContext>();
-        auto sky_view_attachment = tc.as_color_attachment(uses.sky_view_attachment, vk::ColorClearValue(0.0f, 0.0f, 0.0f, 1.0f));
-        auto &transmittance_use = tc.task_image_data(uses.transmittance_lut);
-        auto &ms_use = tc.task_image_data(uses.ms_lut);
-
-        tc.set_pipeline(this->pipeline.id());
-
-        tc.cmd_list.begin_rendering({
-            .render_area = tc.pass_rect(),
-            .color_attachments = sky_view_attachment,
-        });
-
-        tc.cmd_list.set_viewport(tc.pass_viewport());
-        tc.cmd_list.set_scissors(tc.pass_rect());
-        tc.set_push_constants(PushConstants{
-            .world_ptr = render_context.world_ptr,
-            .transmittance_image_id = transmittance_use.image_view_id,
-            .ms_lut_id = ms_use.image_view_id,
-        });
-        tc.cmd_list.draw(3);
-        tc.cmd_list.end_rendering();
-    }
-};
-
-struct SkyFinalTask {
-    constexpr static std::string_view name = "Sky Final";
-
-    struct Uses {
-        Preset::ColorAttachmentWrite color_attachment = {};
-        Preset::ShaderReadOnly sky_view_lut = {};
-        Preset::ShaderReadOnly transmittance_lut = {};
-    } uses = {};
-
-    Pipeline pipeline = {};
-    Sampler sky_sampler = {};
-
-    void execute(TaskContext &tc) {
-        struct PushConstants {
-            u64 world_ptr = 0;
-            SampledImage sky_view_lut = {};
-            ImageViewID transmittance_lut_id = ImageViewID::Invalid;
-        };
-
-        auto &render_context = tc.exec_data_as<WorldRenderContext>();
-        auto color_attachment = tc.as_color_attachment(uses.color_attachment, vk::ColorClearValue(0.0f, 0.0f, 0.0f, 1.0f));
-        auto &sky_view_use = tc.task_image_data(uses.sky_view_lut);
-        auto &transmittance_use = tc.task_image_data(uses.transmittance_lut);
-
-        tc.set_pipeline(this->pipeline.id());
-
-        tc.cmd_list.begin_rendering({
-            .render_area = tc.pass_rect(),
-            .color_attachments = color_attachment,
-        });
-
-        tc.cmd_list.set_viewport(tc.pass_viewport());
-        tc.cmd_list.set_scissors(tc.pass_rect());
-        tc.set_push_constants(PushConstants{
-            .world_ptr = render_context.world_ptr,
-            .sky_view_lut = { sky_view_use.image_view_id, sky_sampler.id() },
-            .transmittance_lut_id = transmittance_use.image_view_id,
-        });
-        tc.cmd_list.draw(3);
-        tc.cmd_list.end_rendering();
-    }
-};
-
-struct SkyApplyAerialTask {
-    constexpr static std::string_view name = "Sky Apply Aerial";
-
-    struct Uses {
-        Preset::ColorAttachmentWrite color_attachment = {};
-        Preset::ShaderReadOnly depth_image = {};
-        Preset::ShaderReadOnly aerial_perspective_image = {};
-    } uses = {};
-
-    Pipeline pipeline = {};
-
-    void execute(TaskContext &tc) {
-        struct PushConstants {
-            u64 world_ptr = 0;
-            ImageViewID depth_image_id = ImageViewID::Invalid;
-            ImageViewID aerial_perspective_id = ImageViewID::Invalid;
-        };
-
-        auto &render_context = tc.exec_data_as<WorldRenderContext>();
-        auto color_attachment = tc.as_color_attachment(uses.color_attachment);
-        auto &depth_image_use = tc.task_image_data(uses.depth_image);
-        auto &aerial_perspective_image_use = tc.task_image_data(uses.aerial_perspective_image);
-
-        tc.set_pipeline(this->pipeline.id());
-
-        tc.cmd_list.begin_rendering({
-            .render_area = tc.pass_rect(),
-            .color_attachments = color_attachment,
-        });
-
-        tc.cmd_list.set_viewport(tc.pass_viewport());
-        tc.cmd_list.set_scissors(tc.pass_rect());
-        tc.set_push_constants(PushConstants{
-            .world_ptr = render_context.world_ptr,
-            .depth_image_id = depth_image_use.image_view_id,
-            .aerial_perspective_id = aerial_perspective_image_use.image_view_id,
-        });
-        tc.cmd_list.draw(3);
-        tc.cmd_list.end_rendering();
-    }
-};
 
 }  // namespace lr::Tasks

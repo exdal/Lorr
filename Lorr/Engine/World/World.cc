@@ -31,8 +31,6 @@ struct Handle<World>::Impl {
 
     ankerl::unordered_dense::map<flecs::id_t, Icon::detail::icon_t> component_icons = {};
 
-    std::vector<GPUCameraData> gpu_cameras = {};
-    std::vector<GPUModelTransformData> gpu_model_transforms = {};
     std::vector<GPUModel> gpu_models = {};
 };
 
@@ -209,16 +207,16 @@ auto World::begin_frame(WorldRenderer &renderer) -> void {
                                      .with(flecs::ChildOf, scene.root())
                                      .build();
 
-    impl->gpu_cameras.clear();
-    impl->gpu_model_transforms.clear();
     impl->gpu_models.clear();
 
-    impl->gpu_cameras.resize(camera_query.count());
-    impl->gpu_model_transforms.resize(model_transform_query.count());
+    auto scene_data = renderer.begin_scene({
+        .camera_count = camera_query.count(),
+        .model_transform_count = model_transform_query.count(),
+    });
 
     u32 active_camera_index = 0;
     camera_query.each([&](flecs::entity e, Component::Transform &t, Component::Camera &c) {
-        auto &camera_data = impl->gpu_cameras[c.index];
+        auto &camera_data = scene_data.cameras[c.index];
         camera_data.projection_mat = c.projection;
         camera_data.view_mat = t.matrix;
         camera_data.projection_view_mat = glm::transpose(c.projection * t.matrix);
@@ -280,6 +278,8 @@ auto World::begin_frame(WorldRenderer &renderer) -> void {
     // scene_begin_info->materials_buffer_id = asset_man.material_buffer().id();
     // scene_begin_info->gpu_models = impl->gpu_models;
     // renderer.set_scene_data(scene_begin_info.value());
+
+    renderer.end_scene(scene_data);
 }
 
 auto World::end_frame() -> void {

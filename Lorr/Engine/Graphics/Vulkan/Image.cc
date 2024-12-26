@@ -63,7 +63,7 @@ auto Image::id() const -> ImageID {
 auto ImageView::create(
     Device &device,
     Image &image,
-    vuk::ImageUsageFlagBits image_usage,
+    const vuk::ImageUsageFlags &image_usage,
     vuk::ImageViewType type,
     const vuk::ImageSubresourceRange &subresource_range) -> std::expected<ImageView, vuk::VkException> {
     ZoneScoped;
@@ -107,11 +107,8 @@ auto ImageView::create(
             vuk::ImageLayout::eReadOnlyOptimal);
     }
     if (image_usage & vuk::ImageUsageFlagBits::eStorage) {
-        device.descriptor_set->update_sampled_image(
-            std::to_underlying(Descriptors::StorageImages),
-            std::to_underlying(image_view_resource->id),
-            image_view_handle,
-            vuk::ImageLayout::eGeneral);
+        device.descriptor_set->update_storage_image(
+            std::to_underlying(Descriptors::StorageImages), std::to_underlying(image_view_resource->id), image_view_handle);
     }
 
     device.descriptor_set->commit(*device.runtime);

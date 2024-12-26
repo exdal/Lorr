@@ -18,6 +18,9 @@ auto Pipeline::create(Device &device, const ShaderCompileInfo &compile_info) -> 
 
     vuk::PipelineBaseCreateInfo create_info = {};
 
+    auto bindless_layout = device.get_bindless_descriptor_set_layout();
+    create_info.explicit_set_layouts.push_back(bindless_layout.layout_info);
+
     for (auto &v : compile_info.entry_points) {
         auto entry_point = slang_module->get_entry_point(v);
         if (!entry_point.has_value()) {

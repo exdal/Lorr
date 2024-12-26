@@ -5,7 +5,6 @@ struct PushConstants {
     World *world;
     ImageView<float4> transmittance_image;
     ImageView<float4> ms_image;
-    u32 pad;
 };
 [[vk::push_constant]] PushConstants c;
 

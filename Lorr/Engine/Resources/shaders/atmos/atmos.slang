@@ -127,8 +127,9 @@ public struct AtmosphereIntegrateInfo {
     public float sun_intensity = 1.0;
     public float max_integration_length = 9000000.0;
     public AtmosphereSampling sampling = {};
-    public ImageView<float4> transmittance_image;
-    public Optional<ImageView<float4>> multiscattering_image;
+    public SamplerState lut_sampler;
+    public Texture2D<float4> transmittance_image;
+    public Optional<Texture2D<float4>> multiscattering_image;
     public bool eval_mie_rayleigh_phase = true;
     public bool eval_planet_luminance = false;
 };
@@ -200,12 +201,12 @@ public func integrate_single_scattered_luminance(
         f32 sun_theta = dot(info.sun_dir, up_vec);
 
         float2 transmittance_uv = get_transmittance_lut_uv(atmos, float2(h, sun_theta));
-        float3 sun_transmittance = info.transmittance_image.sample(world->linear_sampler, transmittance_uv).rgb;
+        float3 sun_transmittance = info.transmittance_image.Sample(info.lut_sampler, transmittance_uv).rgb;
 
         float3 MS = 0.0;
         if (info.multiscattering_image.hasValue) {
             float2 multiscatter_uv = get_multiscattering_lut_uv(atmos, altitude, sun_theta);
-            MS = info.multiscattering_image.value.sample(world->linear_sampler, multiscatter_uv).rgb;
+            MS = info.multiscattering_image.value.Sample(info.lut_sampler, multiscatter_uv).rgb;
         }
 
         float3 scattering_phase = 0.0;
@@ -235,7 +236,7 @@ public func integrate_single_scattered_luminance(
         float NoL = saturate(dot(normalize(info.sun_dir), normalize(up_vec)));
 
         float2 transmittance_uv = get_transmittance_lut_uv(atmos, float2(h, sun_theta));
-        float3 sun_transmittance = info.transmittance_image.sample(world->linear_sampler, transmittance_uv).rgb;
+        float3 sun_transmittance = info.transmittance_image.Sample(info.lut_sampler, transmittance_uv).rgb;
 
         result.luminance += info.sun_intensity * (sun_transmittance * result.transmittance * NoL * atmos->terrain_albedo / PI);
     }

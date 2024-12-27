@@ -1,7 +1,6 @@
 #pragma once
 
 #include "Engine/Graphics/Vulkan.hh"
-#include "Engine/Graphics/VulkanDevice.hh"
 #include "Engine/World/Model.hh"
 
 namespace lr {
@@ -69,8 +68,8 @@ struct GPUModelTransformData {
 // SHADER MODIFICATION!!! PLACE CPU RELATED STUFF AT `WorldRenderContext`!
 //
 struct GPUWorldData {
-    SamplerID linear_sampler = SamplerID::Invalid;
-    SamplerID nearest_sampler = SamplerID::Invalid;
+    SamplerID linear_sampler_id = SamplerID::Invalid;
+    SamplerID nearest_sampler_id = SamplerID::Invalid;
 
     u64 cameras_ptr = 0;
     u64 materials_ptr = 0;
@@ -82,32 +81,6 @@ struct GPUWorldData {
     GPUClouds clouds = {};
 };
 
-struct FrameResources {
-    Image final_image = {};
-    ImageView final_view = {};
-
-    FrameResources(Device &device, vuk::Value<vuk::ImageAttachment> &target_attachment) {
-        // clang-format off
-        final_image = Image::create(
-            device,
-            target_attachment->format,
-            vuk::ImageUsageFlagBits::eColorAttachment | vuk::ImageUsageFlagBits::eSampled,
-            vuk::ImageType::e2D,
-            target_attachment->extent
-        ).value();
-        final_view = ImageView::create(
-            device,
-            final_image,
-            vuk::ImageUsageFlagBits::eColorAttachment | vuk::ImageUsageFlagBits::eSampled,
-            vuk::ImageViewType::e2D,
-            { .aspectMask = vuk::ImageAspectFlagBits::eColor }
-        ).value();
-        // clang-format on
-    }
-
-    ~FrameResources() {}
-};
-
 // This struct should contain most generic and used object
 // stuff like linear samplers, world buffers, etc...
 struct WorldRenderContext {
@@ -116,31 +89,6 @@ struct WorldRenderContext {
     ls::span<GPUModel> models = {};
 
     glm::vec2 sun_angle = { 0.0, 45.0 };
-
-    Sampler linear_sampler = {};
-    Sampler nearest_sampler = {};
-
-    Image imgui_font_image = {};
-    ImageView imgui_font_view = {};
-    Pipeline imgui_pipeline = {};
-    std::vector<vuk::Value<vuk::ImageAttachment>> imgui_rendering_attachments = {};
-    std::vector<ImageViewID> imgui_rendering_view_ids = {};
-
-    Pipeline grid_pipeline = {};
-
-    Image sky_transmittance_lut = {};
-    ImageView sky_transmittance_lut_view = {};
-    Image sky_multiscatter_lut = {};
-    ImageView sky_multiscatter_lut_view = {};
-    Image sky_aerial_perspective_lut = {};
-    ImageView sky_aerial_perspective_lut_view = {};
-    Image sky_view_lut = {};
-    ImageView sky_view_lut_view = {};
-    Pipeline sky_view_pipeline = {};
-
-    // FRAME IMAGES
-    // Images that DO rely on Swap Chain dimensions
-    std::unique_ptr<FrameResources> frame_resources = {};
 };
 
 }  // namespace lr

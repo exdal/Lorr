@@ -115,7 +115,7 @@ auto ImageView::create(
     return image_view;
 }
 
-auto ImageView::get_attachment(Device &device, vuk::ImageUsageFlagBits usage) const -> vuk::ImageAttachment {
+auto ImageView::get_attachment(Device &device, const vuk::ImageUsageFlags &usage) const -> vuk::ImageAttachment {
     ZoneScoped;
 
     auto *image_handle = device.image(bound_image_id_);
@@ -146,6 +146,19 @@ auto ImageView::get_attachment(Device &device, vuk::ImageAttachment::Preset pres
     attachment.image_view = *view_handle;
 
     return attachment;
+}
+
+auto ImageView::discard(Device &device, vuk::Name name, const vuk::ImageUsageFlags &usage) const -> vuk::Value<vuk::ImageAttachment> {
+    ZoneScoped;
+
+    return vuk::discard_ia(name, this->get_attachment(device, usage));
+}
+
+auto ImageView::acquire(Device &device, vuk::Name name, const vuk::ImageUsageFlags &usage, vuk::Access last_access) const
+    -> vuk::Value<vuk::ImageAttachment> {
+    ZoneScoped;
+
+    return vuk::acquire_ia(name, this->get_attachment(device, usage), last_access);
 }
 
 auto ImageView::format() const -> vuk::Format {

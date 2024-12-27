@@ -1,14 +1,14 @@
 import atmos;
 import "../lorr";
-
 import "../noise/hemisphere";
+
+[[vk::binding(0, 0)]] SamplerState sampler;
+[[vk::binding(1, 0)]] Texture2D<float4> transmittance_lut;
+[[vk::binding(2, 0)]] RWTexture2D<float4> multiscattering_lut;
 
 struct PushConstants {
     World *world;
-    ImageView<float4> transmittance_image;
-    ImageView<float4> ms_image;
-    float2 ms_image_size;
-    u32 pad;
+    float2 multiscattering_lut_size;
 };
 [[vk::push_constant]] PushConstants c;
 
@@ -18,7 +18,7 @@ void cs_main(uint3 thread_id : SV_DispatchThreadID) {
     World *world = c.world;
     Atmosphere *atmos = &world->atmosphere;
     Sun *sun = &world->sun;
-    float2 uv = float2(float2(thread_id.xy) + 0.5) / float2(c.ms_image_size);
+    float2 uv = float2(float2(thread_id.xy) + 0.5) / float2(c.multiscattering_lut_size);
 
     float altitude = lerp(atmos->planet_radius, atmos->atmos_radius, uv.y);
     float sun_cos_theta = uv.x * 2.0 - 1.0;
@@ -29,7 +29,8 @@ void cs_main(uint3 thread_id : SV_DispatchThreadID) {
     info.eye_pos = ray_pos;
     info.sun_dir = sun_dir;
     //info.sun_intensity = sun->intensity;
-    info.transmittance_image = c.transmittance_image;
+    info.lut_sampler = sampler;
+    info.transmittance_image = transmittance_lut;
     info.eval_mie_rayleigh_phase = false;
     info.eval_planet_luminance = true;
 
@@ -53,5 +54,5 @@ void cs_main(uint3 thread_id : SV_DispatchThreadID) {
     float3 scattered_luminance = luminance * isotropic_phase;
     float3 f_ms = 1.0 / (1.0 - multi_scattering_as_1);
 
-    c.ms_image.store(thread_id.xy, float4(scattered_luminance * f_ms, 1.0));
+    multiscattering_lut[thread_id.xy] = float4(scattered_luminance * f_ms, 1.0);
 }

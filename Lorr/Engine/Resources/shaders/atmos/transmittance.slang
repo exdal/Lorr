@@ -1,11 +1,11 @@
 import atmos;
 import "../lorr";
 
+[[vk::binding(0, 0)]] RWTexture2D<float4> transmittance_image;
+
 struct PushConstants {
     World *world;
-    ImageView<float4> transmittance_image;
     float2 image_size;
-    u32 pad;
 };
 
 [[vk::push_constant]] PushConstants c;
@@ -41,5 +41,5 @@ void cs_main(uint3 thread_id : SV_DispatchThreadID) {
         optical_depth += medium.extinction_sum * distance_per_step;
     }
 
-    c.transmittance_image.store(thread_id.xy, float4(exp(-optical_depth), 1.0));
+    transmittance_image[thread_id.xy] = float4(exp(-optical_depth), 1.0);
 }

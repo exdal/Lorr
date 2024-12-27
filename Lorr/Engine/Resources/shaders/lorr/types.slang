@@ -34,6 +34,8 @@ public typedef u32 BufferID;
 public typedef u32 ImageViewID;
 public typedef u32 SamplerID;
 
+#ifdef LR_BINDLESS_PIPELINE
+
 #define LR_DESCRIPTOR_INDEX_SAMPLER 0
 #define LR_DESCRIPTOR_INDEX_IMAGES 1
 #define LR_DESCRIPTOR_INDEX_STORAGE_IMAGES 2
@@ -82,6 +84,8 @@ public struct ImageView<Format> {
     }
 };
 
+#endif
+
 public struct SampledImage<Format> {
     ImageViewID image_view_id : 24;
     SamplerID sampler_id : 8;
@@ -92,6 +96,7 @@ public struct SampledImage<Format> {
         this.sampler_id = sampler_id;
     }
 
+#ifdef LR_BINDLESS_PIPELINE
     [ForceInline]
     public Format sample(float2 uv) {
         return __textures[this.image_view_id].as<Texture2D<Format>>().Sample(__samplers[this.sampler_id], uv);
@@ -101,5 +106,6 @@ public struct SampledImage<Format> {
     public Format sample(float3 uvw) {
         return __textures[this.image_view_id].as<Texture3D<Format>>().Sample(__samplers[this.sampler_id], uvw);
     }
+#endif
 
 };

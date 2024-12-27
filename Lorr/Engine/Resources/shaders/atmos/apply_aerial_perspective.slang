@@ -1,10 +1,12 @@
 import atmos;
 import "../lorr";
 
+[[vk::binding(0, 0)]] SamplerState sampler;
+[[vk::binding(1, 0)]] Texture2D<float4> depth_image;
+[[vk::binding(2, 0)]] Texture3D<float4> aerial_perspective_lut;
+
 struct PushConstants {
     World *world;
-    ImageView<float4> depth_image;
-    ImageView<float4> aerial_perspective_image;
 };
 [[vk::push_constant]] PushConstants c;
 
@@ -28,7 +30,7 @@ float4 fs_main(VertexOutput input) : SV_TARGET {
     Camera *active_camera = &world->cameras[world->active_camera_index];
     Atmosphere *atmos = &world->atmosphere;
 
-    float sampled_depth = c.depth_image.sample(world->nearest_sampler, input.tex_coord).r;
+    float sampled_depth = depth_image.Sample(sampler, input.tex_coord).r;
     if (sampled_depth == 1.0) {
         discard;
     }
@@ -47,7 +49,7 @@ float4 fs_main(VertexOutput input) : SV_TARGET {
     }
 
     float w = sqrt(slice / 32.0); // from linear space to squared distribution
-    float4 ap = weight * c.aerial_perspective_image.sample(world->linear_sampler, float3(input.tex_coord, w));
+    float4 ap = weight * aerial_perspective_lut.Sample(sampler, float3(input.tex_coord, w));
     float3 luminance = ap.rgb;
     float transmittance = ap.a;
 

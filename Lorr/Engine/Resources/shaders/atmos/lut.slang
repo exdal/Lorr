@@ -1,10 +1,12 @@
 import atmos;
 import "../lorr";
 
+[[vk::binding(0, 0)]] SamplerState sampler;
+[[vk::binding(1, 0)]] Texture2D<float4> transmittance_lut;
+[[vk::binding(2, 0)]] Texture2D<float4> multiscattering_lut;
+
 struct PushConstants {
     World *world;
-    ImageView<float4> transmittance_image;
-    ImageView<float4> ms_image;
 };
 [[vk::push_constant]] PushConstants c;
 
@@ -78,8 +80,9 @@ vec4 fs_main(VertexOutput input) : SV_TARGET {
     info.eye_dir = eye_dir;
     info.sun_dir = sun_dir;
     info.sun_intensity = sun->intensity;
-    info.transmittance_image = c.transmittance_image;
-    info.multiscattering_image = c.ms_image;
+    info.lut_sampler = sampler;
+    info.transmittance_image = transmittance_lut;
+    info.multiscattering_image = multiscattering_lut;
 
     const int sample_count = 30;
     info.sampling.variable_sample_count = true;

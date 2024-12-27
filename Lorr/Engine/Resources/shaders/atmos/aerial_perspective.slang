@@ -1,12 +1,15 @@
 import atmos;
 import "../lorr";
 
+[[vk::binding(0, 0)]] SamplerState sampler;
+[[vk::binding(1, 0)]] RWTexture3D<float4> aerial_perspective_lut;
+[[vk::binding(2, 0)]] Texture2D<float4> transmittance_lut;
+[[vk::binding(3, 0)]] Texture2D<float4> multiscattering_lut;
+
 struct PushConstants {
     World *world;
     float3 target_image_size;
-    ImageView<float4> target_image;
-    ImageView<float4> transmittance_image;
-    ImageView<float4> ms_image;
+    u32 pad;
 };
 [[vk::push_constant]] PushConstants c;
 
@@ -69,12 +72,12 @@ void cs_main(uint3 thread_id : SV_DispatchThreadID) {
     if (ray_height >= atmos->atmos_radius) {
         float3 prev_ray_pos = ray_pos;
         if (!move_to_top_atmosphere(ray_pos, eye_dir, atmos->atmos_radius)) {
-            c.target_image.store(thread_id, 0.0);
+            aerial_perspective_lut[thread_id] = 0.0;
             return;
         }
         float length_to_atmosphere = length(prev_ray_pos - ray_pos);
         if (t_max_max < length_to_atmosphere) {
-            c.target_image.store(thread_id, 0.0);
+            aerial_perspective_lut[thread_id] = 0.0;
             return;
         }
         t_max_max = max(0.0, t_max_max - length_to_atmosphere);
@@ -85,8 +88,9 @@ void cs_main(uint3 thread_id : SV_DispatchThreadID) {
     info.eye_dir = eye_dir;
     info.sun_dir = sun->direction;
     info.sun_intensity = sun->intensity;
-    info.transmittance_image = c.transmittance_image;
-    info.multiscattering_image = c.ms_image;
+    info.lut_sampler = sampler;
+    info.transmittance_image = transmittance_lut;
+    info.multiscattering_image = multiscattering_lut;
     info.max_integration_length = t_max_max;
 
     info.sampling.variable_sample_count = false;
@@ -94,5 +98,5 @@ void cs_main(uint3 thread_id : SV_DispatchThreadID) {
 
     const let result = integrate_single_scattered_luminance(world, info);
     const float transmittance = dot(result.transmittance, float3(1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f));
-    c.target_image.store(thread_id, float4(result.luminance, transmittance));
+    aerial_perspective_lut[thread_id] = float4(result.luminance, transmittance);
 }

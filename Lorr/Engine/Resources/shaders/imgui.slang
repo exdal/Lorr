@@ -1,6 +1,7 @@
 module imgui;
 
-import lorr;
+[[vk::binding(0, 0)]] SamplerState sampler;
+[[vk::binding(1, 0)]] Texture2D<float4> texture;
 
 #define GAMMA_TO_LINEAR(Gamma) ((Gamma) < 0.04045 ? (Gamma) / 12.92 : pow(max((Gamma) + 0.055, 0.0) / 1.055, 2.4))
 #define SRGBA_TO_LINEAR(col) \
@@ -25,7 +26,6 @@ struct VertexOutput {
 struct PushConstants {
     float2 translate;
     float2 scale;
-    SampledImage<float4> image;
 };
 [[vk::push_constant]] PushConstants c;
 
@@ -43,7 +43,7 @@ VertexOutput vs_main(VertexInput input) {
 
 [shader("fragment")]
 float4 fs_main(VertexOutput input) : SV_TARGET {
-    float4 col =  c.image.sample(input.tex_coord) * input.color;
+    float4 col = texture.Sample(sampler, input.tex_coord) * input.color;
     col.rgb *= col.a;
 
     return col;

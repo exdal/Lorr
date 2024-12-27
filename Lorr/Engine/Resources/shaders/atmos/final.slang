@@ -1,11 +1,12 @@
 import atmos;
 import "../lorr";
 
+[[vk::binding(0, 0)]] SamplerState sampler;
+[[vk::binding(1, 0)]] Texture2D<float4> transmittance_lut;
+[[vk::binding(2, 0)]] Texture2D<float4> sky_view_lut;
+
 struct PushConstants {
     World *world;
-    SampledImage<float4> sky_view_lut;
-    ImageView<float4> transmittance_lut;
-    u32 pad;
 };
 [[vk::push_constant]] PushConstants c;
 
@@ -67,11 +68,11 @@ float4 fs_main(VertexOutput input) : SV_TARGET {
     float2 uv = get_sky_view_lut_uv(atmos, planet_intersection.hasValue, view_zenith_cos_angle, light_view_cos_angle, h);
     uv.x = fromUnitToSubUvs(uv.x, 200.0);
     uv.y = fromUnitToSubUvs(uv.y, 100.0);
-    float3 luminance = c.sky_view_lut.sample(uv).rgb;
+    float3 luminance = sky_view_lut.Sample(sampler, uv).rgb;
 
     float sun_cos_theta = dot(sun.direction, up_vec);
     float2 transmittance_uv = get_transmittance_lut_uv(atmos, float2(h, sun_cos_theta));
-    float3 sun_transmittance = c.transmittance_lut.sample(c.world->linear_sampler, transmittance_uv).rgb;
+    float3 sun_transmittance = transmittance_lut.Sample(sampler, transmittance_uv).rgb;
 
     if (!planet_intersection.hasValue) {
         luminance += draw_sun(world_dir, sun->direction, 1.0) * sun.intensity * sun_transmittance;

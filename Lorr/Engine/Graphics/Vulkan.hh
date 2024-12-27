@@ -2,6 +2,7 @@
 
 #include <vuk/Buffer.hpp>
 #include <vuk/ImageAttachment.hpp>
+#include <vuk/Value.hpp>
 #include <vuk/runtime/vk/Image.hpp>
 #include <vuk/runtime/vk/Pipeline.hpp>
 #include <vuk/runtime/vk/VkSwapchain.hpp>
@@ -84,8 +85,11 @@ struct ImageView {
         vuk::ImageViewType type,
         const vuk::ImageSubresourceRange &subresource_range) -> std::expected<ImageView, vuk::VkException>;
 
-    auto get_attachment(Device &, vuk::ImageUsageFlagBits usage) const -> vuk::ImageAttachment;
+    auto get_attachment(Device &, const vuk::ImageUsageFlags &usage) const -> vuk::ImageAttachment;
     auto get_attachment(Device &, vuk::ImageAttachment::Preset preset) const -> vuk::ImageAttachment;
+    auto discard(Device &, vuk::Name name, const vuk::ImageUsageFlags &usage) const -> vuk::Value<vuk::ImageAttachment>;
+    auto acquire(Device &, vuk::Name name, const vuk::ImageUsageFlags &usage, vuk::Access last_access) const
+        -> vuk::Value<vuk::ImageAttachment>;
 
     auto format() const -> vuk::Format;
     auto extent() const -> vuk::Extent3D;
@@ -141,13 +145,14 @@ struct SampledImage {
 // PIPELINE
 
 struct ShaderCompileInfo {
-    std::vector<ls::pair<std::string, std::string>> macros = {};
+    std::vector<ls::pair<std::string, std::string>> definitions = {};
     // Root path is where included modules will be searched and linked
     std::string module_name = {};
     fs::path root_path = {};
     fs::path shader_path = {};
     ls::option<std::string_view> shader_source = ls::nullopt;
     std::vector<std::string> entry_points = {};
+    bool bindless_pipeline = false;
 };
 
 struct Pipeline {

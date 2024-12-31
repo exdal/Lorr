@@ -109,8 +109,9 @@ struct AssetManager : Handle<AssetManager> {
     // Load contents of registered assets.
     //
     auto load_model(Asset *asset) -> bool;
-    auto load_texture(Asset *asset, vuk::Format format, vuk::Extent3D extent, ls::span<u8> pixels, Sampler sampler = {}) -> bool;
-    auto load_texture(Asset *asset, Sampler sampler = {}) -> bool;
+    auto load_texture(
+        Asset *asset, vuk::Format format, vuk::Extent3D extent, ls::span<u8> pixels, const TextureSamplerInfo &sampler_info = {}) -> bool;
+    auto load_texture(Asset *asset, const TextureSamplerInfo &sampler_info = {}) -> bool;
     auto load_material(Asset *asset, const Material &material_info) -> bool;
     auto load_material(Asset *asset) -> bool;
     auto load_scene(Asset *asset) -> bool;

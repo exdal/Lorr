@@ -319,23 +319,17 @@ auto AssetManager::load_model(Asset *asset) -> bool {
         }
 
         auto &image_info = model_info->images[v.image_index.value()];
-        Sampler sampler = {};
+        TextureSamplerInfo sampler_info = {};
         if (v.sampler_index.has_value()) {
-            auto &sampler_info = model_info->samplers[v.sampler_index.value()];
-            sampler = Sampler::create(
-                          *impl->device,
-                          sampler_info.min_filter,
-                          sampler_info.mag_filter,
-                          vuk::SamplerMipmapMode::eLinear,
-                          sampler_info.address_u,
-                          sampler_info.address_v,
-                          vuk::SamplerAddressMode::eRepeat,
-                          vuk::CompareOp::eNever)
-                          .value();
+            auto &gltf_sampler_info = model_info->samplers[v.sampler_index.value()];
+            sampler_info.address_u = gltf_sampler_info.address_u;
+            sampler_info.address_v = gltf_sampler_info.address_v;
+            sampler_info.min_filter = gltf_sampler_info.min_filter;
+            sampler_info.mag_filter = gltf_sampler_info.mag_filter;
         }
 
         // textures.emplace_back(
-        //     this->load_texture(UUID::generate_random(), image_info.format, image_info.extent, image_info.pixels, sampler));
+        //     this->load_texture(UUID::generate_random(), image_info.format, image_info.extent, image_info.pixels, sampler_info));
     }
 
     std::vector<MaterialID> materials = {};
@@ -423,13 +417,15 @@ auto AssetManager::load_model(Asset *asset) -> bool {
     return true;
 }
 
-auto AssetManager::load_texture(Asset *asset, vuk::Format format, vuk::Extent3D extent, ls::span<u8> pixels, Sampler sampler) -> bool {
+auto AssetManager::load_texture(
+    Asset *asset, vuk::Format format, vuk::Extent3D extent, ls::span<u8> pixels, const TextureSamplerInfo &sampler_info) -> bool {
     ZoneScoped;
 
+    auto &transfer_man = impl->device->transfer_man();
     auto image = Image::create(
         *impl->device,
         format,
-        vuk::ImageUsageFlagBits::eSampled,
+        vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eTransferDst,
         vuk::ImageType::e2D,
         extent,
         1,
@@ -438,27 +434,43 @@ auto AssetManager::load_texture(Asset *asset, vuk::Format format, vuk::Extent3D 
         return false;
     }
 
+    auto image_view = ImageView::create(
+        *impl->device,
+        image.value(),
+        vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eTransferDst,
+        vuk::ImageViewType::e2D,
+        {
+            .aspectMask = vuk::ImageAspectFlagBits::eColor,
+            .baseMipLevel = 0,
+            .levelCount = image->mip_count(),
+            .baseArrayLayer = 0,
+            .layerCount = image->slice_count(),
+        });
+    if (!image_view.has_value()) {
+        return false;
+    }
+
+    transfer_man.upload_staging(image_view.value(), pixels, vuk::Access::eFragmentSampled);
+
     auto *texture = this->get_texture(asset->texture_id);
     texture->image = image.value();
-    if (sampler) {
-        texture->sampler = sampler;
-    } else {
-        texture->sampler = Sampler::create(
-                               *impl->device,
-                               vuk::Filter::eLinear,
-                               vuk::Filter::eLinear,
-                               vuk::SamplerMipmapMode::eLinear,
-                               vuk::SamplerAddressMode::eRepeat,
-                               vuk::SamplerAddressMode::eRepeat,
-                               vuk::SamplerAddressMode::eRepeat,
-                               vuk::CompareOp::eNever)
-                               .value();
-    }
+    texture->image_view = image_view.value();
+    texture->sampler =  //
+        Sampler::create(
+            *impl->device,
+            sampler_info.min_filter,
+            sampler_info.mag_filter,
+            vuk::SamplerMipmapMode::eLinear,
+            sampler_info.address_u,
+            sampler_info.address_v,
+            vuk::SamplerAddressMode::eRepeat,
+            vuk::CompareOp::eNever)
+            .value();
 
     return true;
 }
 
-auto AssetManager::load_texture(Asset *asset, Sampler sampler) -> bool {
+auto AssetManager::load_texture(Asset *asset, const TextureSamplerInfo &sampler_info) -> bool {
     ZoneScoped;
 
     if (!asset->path.has_extension()) {
@@ -494,7 +506,7 @@ auto AssetManager::load_texture(Asset *asset, Sampler sampler) -> bool {
             return false;
     }
 
-    return this->load_texture(asset, format, extent, pixels, sampler);
+    return this->load_texture(asset, format, extent, pixels, sampler_info);
 }
 
 auto AssetManager::load_material(Asset *asset, const Material &material_info) -> bool {

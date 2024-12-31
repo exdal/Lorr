@@ -1,7 +1,9 @@
 #pragma once
 
 #include "Engine/Core/Handle.hh"
-#include "Engine/Graphics/Vulkan.hh"
+#include "Engine/OS/Key.hh"
+
+#include <vulkan/vulkan_core.h>
 
 namespace lr {
 enum class WindowCursor {
@@ -14,7 +16,6 @@ enum class WindowCursor {
     ResizeNWSE,
     Hand,
     NotAllowed,
-    Hidden,
 
     Count,
 };
@@ -35,15 +36,26 @@ struct SystemDisplay {
     glm::ivec2 position = {};
     glm::ivec4 work_area = {};
     glm::ivec2 resolution = {};
-    i32 refresh_rate = 30.0;
+    i32 refresh_rate = 30;
+};
+
+struct WindowCallbacks {
+    void *user_data = nullptr;
+    void (*on_resize)(void *user_data, glm::uvec2 size) = nullptr;
+    void (*on_mouse_pos)(void *user_data, glm::vec2 position, glm::vec2 relative) = nullptr;
+    void (*on_mouse_button)(void *user_data, Key key, KeyState state) = nullptr;
+    void (*on_mouse_scroll)(void *user_data, glm::vec2 offset) = nullptr;
+    void (*on_text_input)(void *user_data, c8 *text) = nullptr;
+    void (*on_key)(void *user_data, Key key, KeyState state, KeyMod mods) = nullptr;
+    void (*on_close)(void *user_data) = nullptr;
 };
 
 struct WindowInfo {
-    constexpr static u32 USE_PRIMARY_MONITOR = ~0_u32;
+    constexpr static i32 USE_PRIMARY_MONITOR = 0;
 
     std::string_view title = {};
     std::string_view icon = {};
-    u32 monitor = USE_PRIMARY_MONITOR;
+    i32 monitor = USE_PRIMARY_MONITOR;
     u32 width = 0;
     u32 height = 0;
     WindowFlag flags = WindowFlag::None;
@@ -53,14 +65,12 @@ struct Window : Handle<Window> {
     static auto create(const WindowInfo &info) -> Window;
     auto destroy() -> void;
 
-    auto poll() -> void;
+    auto poll(const WindowCallbacks &callbacks) -> void;
     auto set_cursor(WindowCursor cursor) -> void;
 
-    static auto display_at(u32 monitor_id = WindowInfo::USE_PRIMARY_MONITOR) -> SystemDisplay;
-    auto should_close() -> bool;
+    static auto display_at(i32 monitor_id = WindowInfo::USE_PRIMARY_MONITOR) -> ls::option<SystemDisplay>;
     auto get_size() -> glm::uvec2;
-    auto get_native_handle() -> void *;
-    auto get_surface(Device) -> Surface;
+    auto get_surface(VkInstance instance) -> VkSurfaceKHR;
 };
 
 }  // namespace lr

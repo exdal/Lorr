@@ -1,8 +1,5 @@
 #pragma once
 
-#include "ApplicationEvent.hh"
-#include "EventManager.hh"
-
 #include "Engine/Asset/Asset.hh"
 #include "Engine/Graphics/Vulkan.hh"
 #include "Engine/Graphics/VulkanDevice.hh"
@@ -11,6 +8,10 @@
 #include "Engine/World/WorldRenderer.hh"
 
 namespace lr {
+struct ApplicationFlags {
+    bool use_wayland : 1 = true;
+};
+
 struct ApplicationInfo {
     ls::span<c8 *> args = {};
     WindowInfo window_info = {};
@@ -26,10 +27,10 @@ struct Application {
 
     static Application &get();
 
-    EventManager<ApplicationEvent, ApplicationEventData> event_man = {};
+    ApplicationFlags flags = {};
     Device device = {};
     Window window = {};
-    SwapChain swap_chain = {};
+    SwapChain swapchain = {};
 
     WorldRenderer world_renderer = {};
     World world = {};
@@ -39,9 +40,6 @@ struct Application {
     bool should_close = false;
 
     bool init(this Application &, const ApplicationInfo &info);
-    void push_event(this Application &, ApplicationEvent event, const ApplicationEventData &data);
-
-    void poll_events(this Application &);
     void run(this Application &);
     void shutdown(this Application &);
 

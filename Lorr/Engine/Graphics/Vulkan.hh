@@ -5,6 +5,7 @@
 #include <vuk/Value.hpp>
 #include <vuk/runtime/vk/Image.hpp>
 #include <vuk/runtime/vk/Pipeline.hpp>
+#include <vuk/runtime/vk/Query.hpp>
 #include <vuk/runtime/vk/VkSwapchain.hpp>
 #include <vuk/runtime/vk/VkTypes.hpp>
 
@@ -14,7 +15,6 @@ enum class ImageID : u32 { Invalid = ~0_u32 };
 enum class ImageViewID : u32 { Invalid = ~0_u32 };
 enum class SamplerID : u32 { Invalid = ~0_u32 };
 enum class PipelineID : u32 { Invalid = ~0_u32 };
-enum class QueryTimestampPoolID : u32 { Invalid = ~0_u32 };
 
 /////////////////////////////////
 // DEVICE RESOURCES
@@ -29,8 +29,11 @@ enum class Descriptors : u32 {
 struct Device;
 
 struct Buffer {
-    static auto create(Device &, u64 size, vuk::MemoryUsage memory_usage = vuk::MemoryUsage::eGPUonly)
-        -> std::expected<Buffer, vuk::VkException>;
+    static auto create(
+        Device &,
+        u64 size,
+        vuk::MemoryUsage memory_usage = vuk::MemoryUsage::eGPUonly,
+        vuk::source_location LOC = vuk::source_location::current()) -> std::expected<Buffer, vuk::VkException>;
 
     auto data_size() const -> u64;
     auto device_address() const -> u64;
@@ -54,7 +57,8 @@ struct Image {
         vuk::ImageType type,
         vuk::Extent3D extent,
         u32 slice_count = 1,
-        u32 mip_count = 1) -> std::expected<Image, vuk::VkException>;
+        u32 mip_count = 1,
+        vuk::source_location LOC = vuk::source_location::current()) -> std::expected<Image, vuk::VkException>;
 
     auto format() const -> vuk::Format;
     auto extent() const -> vuk::Extent3D;
@@ -83,7 +87,8 @@ struct ImageView {
         Image &image,
         const vuk::ImageUsageFlags &image_usage,
         vuk::ImageViewType type,
-        const vuk::ImageSubresourceRange &subresource_range) -> std::expected<ImageView, vuk::VkException>;
+        const vuk::ImageSubresourceRange &subresource_range,
+        vuk::source_location LOC = vuk::source_location::current()) -> std::expected<ImageView, vuk::VkException>;
 
     auto get_attachment(Device &, const vuk::ImageUsageFlags &usage) const -> vuk::ImageAttachment;
     auto get_attachment(Device &, vuk::ImageAttachment::Preset preset) const -> vuk::ImageAttachment;
@@ -94,6 +99,8 @@ struct ImageView {
     auto format() const -> vuk::Format;
     auto extent() const -> vuk::Extent3D;
     auto subresource_range() const -> vuk::ImageSubresourceRange;
+    auto slice_count() const -> u32;
+    auto mip_count() const -> u32;
     auto image_id() const -> ImageID;
     auto id() const -> ImageViewID;
 
@@ -122,7 +129,8 @@ struct Sampler {
         f32 mip_lod_bias = 0,
         f32 min_lod = 0,
         f32 max_lod = 1000.0f,
-        bool use_anisotropy = false) -> std::expected<Sampler, vuk::VkException>;
+        bool use_anisotropy = false,
+        vuk::source_location LOC = vuk::source_location::current()) -> std::expected<Sampler, vuk::VkException>;
 
     auto id() const -> SamplerID;
 
@@ -164,37 +172,13 @@ private:
     PipelineID id_ = PipelineID::Invalid;
 };
 
-struct QueryTimestampPool {
-    static auto create(Device &, u32 query_count) -> std::expected<QueryTimestampPool, vuk::VkException>;
-    auto destroy() -> void;
-    auto set_name(const std::string &) -> QueryTimestampPool &;
-
-    auto get_results(u32 first_query, u32 count, ls::span<u64> time_stamps) const -> void;
-
-    auto id() const -> QueryTimestampPoolID;
-
-private:
-    QueryTimestampPoolID id_ = QueryTimestampPoolID::Invalid;
-};
-
 /////////////////////////////////
 // DEVICE
 
-auto vulkan_get_os_surface(VkInstance instance, void *handle, PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr)
-    -> std::expected<VkSurfaceKHR, VkResult>;
-
-struct SwapChain;
-struct Surface {
-    static auto create(Device &, void *handle) -> std::expected<Surface, vuk::VkException>;
-
-private:
-    VkSurfaceKHR handle_ = VK_NULL_HANDLE;
-
-    friend SwapChain;
-};
-
 struct SwapChain {
-    static auto create(Device &, Surface &surface, vuk::Extent2D extent) -> std::expected<SwapChain, vuk::VkException>;
+    static auto create(Device &, VkSurfaceKHR surface, vuk::Extent2D extent, vuk::source_location LOC = vuk::source_location::current())
+        -> std::expected<SwapChain, vuk::VkException>;
+    auto destroy() -> void;
 
     auto format() const -> vuk::Format;
     auto extent() const -> vuk::Extent3D;
@@ -203,8 +187,8 @@ private:
     vuk::Format format_ = vuk::Format::eUndefined;
     vuk::Extent3D extent_ = {};
 
-    Surface surface_ = {};
-    ls::option<vuk::Swapchain> handle_;  // had to make option to make it stop cry
+    VkSurfaceKHR surface_ = {};
+    ls::option<vuk::Swapchain> handle_ = ls::nullopt;
 
     friend Device;
 };

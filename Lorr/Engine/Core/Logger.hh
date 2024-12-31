@@ -18,9 +18,9 @@ namespace Logger {
 struct LoggerFmt : public std::string_view {
     std::source_location location;
 
-    template<typename String>
-        requires std::constructible_from<std::string_view, String>
-    consteval LoggerFmt(const String &string, const std::source_location LOC = std::source_location::current()) noexcept
+    template<typename StrT>
+        requires std::constructible_from<std::string_view, StrT>
+    consteval LoggerFmt(const StrT &string, const std::source_location LOC = std::source_location::current()) noexcept
         : std::string_view(string),
           location(LOC) {}
 

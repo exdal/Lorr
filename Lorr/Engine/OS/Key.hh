@@ -147,7 +147,7 @@ enum Key : u32 {
 };
 
 enum class KeyState : u32 {
-    Up,
+    Up = 0,
     Down,
     Repeat,
 };

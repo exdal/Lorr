@@ -1,24 +1,8 @@
 #include "Engine/Window/Window.hh"
 
-#include "Engine/Core/Application.hh"
-
-#ifndef GLFW_INCLUDE_NONE
-#define GLFW_INCLUDE_NONE
-#endif
-#include <GLFW/glfw3.h>
-#if defined(LS_WINDOWS)
-#define GLFW_EXPOSE_NATIVE_WIN32
-#elif defined(LS_LINUX)
-#define GLFW_EXPOSE_NATIVE_X11
-#endif
-#include <GLFW/glfw3native.h>
-
-#include <vulkan/vulkan_core.h>
-#if defined(LS_WINDOWS)
-#include <vulkan/vulkan_win32.h>
-#elif defined(LS_LINUX)
-#include <vulkan/vulkan_xlib.h>
-#endif
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_syswm.h>
+#include <SDL2/SDL_vulkan.h>
 
 namespace lr {
 template<>
@@ -29,153 +13,68 @@ struct Handle<Window>::Impl {
     WindowCursor current_cursor = WindowCursor::Arrow;
     glm::uvec2 cursor_position = {};
 
-    GLFWwindow *handle = nullptr;
+    SDL_Window *handle = nullptr;
     u32 monitor_id = WindowInfo::USE_PRIMARY_MONITOR;
-    std::array<GLFWcursor *, usize(WindowCursor::Count)> cursors = {};
+    std::array<SDL_Cursor *, usize(WindowCursor::Count)> cursors = {};
 };
 
 auto Window::create(const WindowInfo &info) -> Window {
-    if (!glfwInit()) {
-        LOG_ERROR("Failed to initialize GLFW!");
+    if (SDL_Init(SDL_INIT_VIDEO) != 0) {
+        LOG_ERROR("Failed to initialize SDL! {}", SDL_GetError());
         return Handle(nullptr);
     }
 
-    SystemDisplay display = Window::display_at(info.monitor);
+    auto display = Window::display_at(info.monitor);
+    if (!display.has_value()) {
+        LOG_ERROR("No available displays!");
+        return Handle(nullptr);
+    }
 
-    i32 new_pos_x = 25;
-    i32 new_pos_y = 25;
+    i32 new_pos_x = SDL_WINDOWPOS_UNDEFINED;
+    i32 new_pos_y = SDL_WINDOWPOS_UNDEFINED;
     i32 new_width = static_cast<i32>(info.width);
     i32 new_height = static_cast<i32>(info.height);
 
     if (info.flags & WindowFlag::WorkAreaRelative) {
-        new_pos_x = display.work_area.x;
-        new_pos_y = display.work_area.y;
-        new_width = display.work_area.z;
-        new_height = display.work_area.w;
+        new_pos_x = display->work_area.x;
+        new_pos_y = display->work_area.y;
+        new_width = display->work_area.z;
+        new_height = display->work_area.w;
     } else if (info.flags & WindowFlag::Centered) {
-        auto center_x = display.work_area.z / 2;
-        auto center_y = display.work_area.w / 2;
-
-        new_pos_x = center_x - new_width / 2;
-        new_pos_y = center_y - new_height / 2;
+        new_pos_x = SDL_WINDOWPOS_CENTERED;
+        new_pos_y = SDL_WINDOWPOS_CENTERED;
     }
 
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    glfwWindowHint(GLFW_RESIZABLE, !!(info.flags & WindowFlag::Resizable));
-    glfwWindowHint(GLFW_DECORATED, !(info.flags & WindowFlag::Borderless));
-    glfwWindowHint(GLFW_MAXIMIZED, !!(info.flags & WindowFlag::Maximized));
-    glfwWindowHint(GLFW_POSITION_X, new_pos_x);
-    glfwWindowHint(GLFW_POSITION_Y, new_pos_y);
+    u32 window_flags = SDL_WINDOW_VULKAN;
+    if (info.flags & WindowFlag::Resizable) {
+        window_flags |= SDL_WINDOW_RESIZABLE;
+    }
+
+    if (info.flags & WindowFlag::Borderless) {
+        window_flags |= SDL_WINDOW_BORDERLESS;
+    }
+
+    if (info.flags & WindowFlag::Maximized) {
+        window_flags |= SDL_WINDOW_MAXIMIZED;
+    }
 
     auto impl = new Impl;
     impl->width = static_cast<u32>(new_width);
     impl->height = static_cast<u32>(new_height);
     impl->monitor_id = info.monitor;
-    impl->handle = glfwCreateWindow(new_width, new_height, info.title.data(), nullptr, nullptr);
+    impl->handle = SDL_CreateWindow(info.title.data(), new_pos_x, new_pos_y, new_width, new_height, window_flags);
 
-    /// Initialize callbacks
-    glfwSetWindowUserPointer(impl->handle, impl);
-    glfwSetFramebufferSizeCallback(impl->handle, [](GLFWwindow *window, i32 width, i32 height) {
-        auto *self = reinterpret_cast<Window::Impl *>(glfwGetWindowUserPointer(window));
-        self->width = width;
-        self->height = height;
-
-        Application::get().push_event(
-            ApplicationEvent::WindowResize,
-            {
-                .size = { static_cast<u32>(width), static_cast<u32>(height) },
-            });
-    });
-
-    glfwSetCursorPosCallback(impl->handle, [](GLFWwindow *window, f64 pos_x, f64 pos_y) {
-        [[maybe_unused]] auto *self = reinterpret_cast<Window::Impl *>(glfwGetWindowUserPointer(window));
-
-        Application::get().push_event(
-            ApplicationEvent::MousePosition,
-            {
-                .position = { pos_x, pos_y },
-            });
-    });
-
-    glfwSetMouseButtonCallback(impl->handle, [](GLFWwindow *window, i32 button, i32 action, i32 mods) {
-        [[maybe_unused]] auto *self = reinterpret_cast<Window::Impl *>(glfwGetWindowUserPointer(window));
-
-        Application::get().push_event(
-            ApplicationEvent::MouseState,
-            {
-                .key = static_cast<Key>(button),
-                .key_state = static_cast<KeyState>(action),
-                .key_mods = static_cast<KeyMod>(mods),
-            });
-    });
-
-    glfwSetKeyCallback(impl->handle, [](GLFWwindow *window, i32 key, i32 scancode, i32 action, i32 mods) {
-        [[maybe_unused]] auto *self = reinterpret_cast<Window::Impl *>(glfwGetWindowUserPointer(window));
-
-        Application::get().push_event(
-            ApplicationEvent::KeyboardState,
-            {
-                .key = static_cast<Key>(key),
-                .key_state = static_cast<KeyState>(action),
-                .key_mods = static_cast<KeyMod>(mods),
-                .key_scancode = scancode,
-            });
-    });
-
-    glfwSetScrollCallback(impl->handle, [](GLFWwindow *window, f64 off_x, f64 off_y) {
-        [[maybe_unused]] auto *self = reinterpret_cast<Window::Impl *>(glfwGetWindowUserPointer(window));
-
-        Application::get().push_event(
-            ApplicationEvent::MouseScroll,
-            {
-                .position = { off_x, off_y },
-            });
-    });
-
-    glfwSetCharCallback(impl->handle, [](GLFWwindow *window, u32 codepoint) {
-        [[maybe_unused]] auto *self = reinterpret_cast<Window::Impl *>(glfwGetWindowUserPointer(window));
-
-        Application::get().push_event(
-            ApplicationEvent::InputChar,
-            {
-                .input_char = static_cast<c32>(codepoint),
-            });
-    });
-
-    glfwSetDropCallback(impl->handle, [](GLFWwindow *window, i32 path_count, const c8 *paths_cstr[]) {
-        [[maybe_unused]] auto *self = reinterpret_cast<Window::Impl *>(glfwGetWindowUserPointer(window));
-
-        std::vector<fs::path> paths(path_count);
-        for (i32 i = 0; i < path_count; i++) {
-            paths[i] = fs::path(paths_cstr[i]);
-        }
-
-        Application::get().push_event(
-            ApplicationEvent::Drop,
-            {
-                .paths = std::move(paths),
-            });
-    });
-
-    glfwSetWindowCloseCallback(impl->handle, [](GLFWwindow *window) {
-        [[maybe_unused]] auto *self = reinterpret_cast<Window::Impl *>(glfwGetWindowUserPointer(window));
-
-        Application::get().push_event(ApplicationEvent::Quit, {});
-    });
-
-    /// Initialize standard cursors, should be available across all platforms
-    /// hopefully...
     impl->cursors = {
-        glfwCreateStandardCursor(GLFW_CURSOR_NORMAL),      glfwCreateStandardCursor(GLFW_IBEAM_CURSOR),
-        glfwCreateStandardCursor(GLFW_RESIZE_ALL_CURSOR),  glfwCreateStandardCursor(GLFW_RESIZE_NS_CURSOR),
-        glfwCreateStandardCursor(GLFW_RESIZE_EW_CURSOR),   glfwCreateStandardCursor(GLFW_RESIZE_NESW_CURSOR),
-        glfwCreateStandardCursor(GLFW_RESIZE_NWSE_CURSOR), glfwCreateStandardCursor(GLFW_HAND_CURSOR),
-        glfwCreateStandardCursor(GLFW_NOT_ALLOWED_CURSOR), glfwCreateStandardCursor(GLFW_CURSOR_HIDDEN),
+        SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_ARROW),    SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_IBEAM),
+        SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_SIZEALL),  SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_SIZENS),
+        SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_SIZEWE),   SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_SIZENESW),
+        SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_SIZENWSE), SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_HAND),
+        SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_NO),
     };
 
     i32 real_width;
     i32 real_height;
-    glfwGetWindowSize(impl->handle, &real_width, &real_height);
+    SDL_GetWindowSizeInPixels(impl->handle, &real_width, &real_height);
 
     impl->width = real_width;
     impl->height = real_height;
@@ -183,98 +82,120 @@ auto Window::create(const WindowInfo &info) -> Window {
     return { impl };
 }
 
-auto Window::poll() -> void {
+auto Window::destroy() -> void {
     ZoneScoped;
 
-    glfwPollEvents();
+    SDL_DestroyWindow(impl->handle);
+}
+
+auto Window::poll(const WindowCallbacks &callbacks) -> void {
+    ZoneScoped;
+
+    SDL_Event e = {};
+    while (SDL_PollEvent(&e) != 0) {
+        switch (e.type) {
+            case SDL_WINDOWEVENT_RESIZED: {
+                if (callbacks.on_resize) {
+                    callbacks.on_resize(callbacks.user_data, { e.window.data1, e.window.data2 });
+                }
+            } break;
+            case SDL_MOUSEMOTION: {
+                if (callbacks.on_mouse_pos) {
+                    callbacks.on_mouse_pos(callbacks.user_data, { e.motion.x, e.motion.y }, { e.motion.xrel, e.motion.yrel });
+                }
+            } break;
+            case SDL_MOUSEBUTTONDOWN:
+            case SDL_MOUSEBUTTONUP: {
+                if (callbacks.on_mouse_button) {
+                    Key mouse_key = LR_KEY_MOUSE_1;
+                    // clang-format off
+                    switch (e.button.button) {
+                        case SDL_BUTTON_LEFT: mouse_key = LR_KEY_MOUSE_LEFT; break;
+                        case SDL_BUTTON_RIGHT: mouse_key = LR_KEY_MOUSE_RIGHT; break;
+                        case SDL_BUTTON_MIDDLE: mouse_key = LR_KEY_MOUSE_MIDDLE; break;
+                        case SDL_BUTTON_X1: mouse_key = LR_KEY_MOUSE_4; break;
+                        case SDL_BUTTON_X2: mouse_key = LR_KEY_MOUSE_5; break;
+                        default: break;
+                    }
+                    // clang-format on
+                    auto state = e.type == SDL_MOUSEBUTTONDOWN ? KeyState::Down : KeyState::Up;
+                    callbacks.on_mouse_button(callbacks.user_data, mouse_key, state);
+                }
+            } break;
+            case SDL_MOUSEWHEEL: {
+                if (callbacks.on_mouse_scroll) {
+                    callbacks.on_mouse_scroll(callbacks.user_data, { e.wheel.preciseX, e.wheel.preciseY });
+                }
+            } break;
+            case SDL_KEYDOWN:
+            case SDL_KEYUP: {
+                if (callbacks.on_key) {
+                    // TODO: We really need a proper input handling
+                    callbacks.on_key(callbacks.user_data, {}, {}, {});
+                }
+            } break;
+            case SDL_TEXTINPUT: {
+                if (callbacks.on_text_input) {
+                    callbacks.on_text_input(callbacks.user_data, e.text.text);
+                }
+            } break;
+            case SDL_QUIT: {
+                if (callbacks.on_close) {
+                    callbacks.on_close(callbacks.user_data);
+                }
+            }
+            default:
+                break;
+        }
+    }
 }
 
 auto Window::set_cursor(WindowCursor cursor) -> void {
-    glfwSetCursor(impl->handle, impl->cursors[usize(cursor)]);
+    SDL_SetCursor(impl->cursors[usize(cursor)]);
 }
 
-auto Window::display_at(u32 monitor_id) -> SystemDisplay {
+auto Window::display_at(i32 monitor_id) -> ls::option<SystemDisplay> {
     ZoneScoped;
 
-    GLFWmonitor *monitor = nullptr;
-    if (monitor_id == WindowInfo::USE_PRIMARY_MONITOR) {
-        monitor = glfwGetPrimaryMonitor();
-    } else {
-        i32 monitor_count = 0;
-        GLFWmonitor **monitors = glfwGetMonitors(&monitor_count);
-        if (monitor_id > static_cast<u32>(monitor_count)) {
-            return {};
-        }
-
-        monitor = monitors[monitor_id];
+    auto display_count = SDL_GetNumVideoDisplays();
+    if (monitor_id >= display_count || display_count < 0) {
+        return ls::nullopt;
     }
-    const char *monitor_name = glfwGetMonitorName(monitor);
-    const GLFWvidmode *vid_mode = glfwGetVideoMode(monitor);
-    glm::ivec2 position = {};
-    glfwGetMonitorPos(monitor, &position.x, &position.y);
 
-    glm::ivec4 work_area = {};
-    glfwGetMonitorWorkarea(monitor, &work_area.x, &work_area.y, &work_area.z, &work_area.w);
+    const char *monitor_name = SDL_GetDisplayName(monitor_id);
+    SDL_DisplayMode display_mode = {};
+    if (SDL_GetCurrentDisplayMode(monitor_id, &display_mode) != 0) {
+        return ls::nullopt;
+    }
+
+    SDL_Rect position_bounds = {};
+    if (SDL_GetDisplayBounds(monitor_id, &position_bounds) != 0) {
+        return ls::nullopt;
+    }
+
+    SDL_Rect work_bounds = {};
+    if (SDL_GetDisplayUsableBounds(monitor_id, &work_bounds) != 0) {
+        return ls::nullopt;
+    }
 
     return SystemDisplay{
         .name = monitor_name,
-        .position = position,
-        .work_area = work_area,
-        .resolution = { vid_mode->width, vid_mode->height },
-        .refresh_rate = vid_mode->refreshRate,
+        .position = { position_bounds.x, position_bounds.y },
+        .work_area = { work_bounds.x, work_bounds.y, work_bounds.w, work_bounds.h },
+        .resolution = { display_mode.w, display_mode.h },
+        .refresh_rate = display_mode.refresh_rate,
     };
-}
-
-auto Window::should_close() -> bool {
-    return glfwWindowShouldClose(impl->handle);
 }
 
 auto Window::get_size() -> glm::uvec2 {
     return { impl->width, impl->height };
 }
 
-auto Window::get_native_handle() -> void * {
-#if defined(LS_WINDOWS)
-    return reinterpret_cast<void *>(glfwGetWin32Window(impl->handle));
-#elif defined(LS_LINUX)
-    return reinterpret_cast<void *>(glfwGetX11Window(impl->handle));
-#endif
-}
-
-auto vulkan_get_os_surface(VkInstance instance, void *handle, PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr)
-    -> std::expected<VkSurfaceKHR, VkResult> {
+auto Window::get_surface(VkInstance instance) -> VkSurfaceKHR {
     ZoneScoped;
 
     VkSurfaceKHR surface = {};
-
-#if defined(LS_WINDOWS)
-    auto vkCreateWin32SurfaceKHR = (PFN_vkCreateWin32SurfaceKHR)vkGetInstanceProcAddr(instance, "vkCreateWin32SurfaceKHR");
-
-    VkWin32SurfaceCreateInfoKHR create_info = {
-        .sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR,
-        .pNext = nullptr,
-        .hinstance = GetModuleHandleA(nullptr),
-        .hwnd = reinterpret_cast<HWND>(handle),
-    };
-
-    auto result = vkCreateWin32SurfaceKHR(instance, &create_info, nullptr, &surface);
-#elif defined(LS_LINUX)
-    auto vkCreateXlibSurfaceKHR = (PFN_vkCreateXlibSurfaceKHR)vkGetInstanceProcAddr(instance, "vkCreateXlibSurfaceKHR");
-
-    VkXlibSurfaceCreateInfoKHR create_info = {
-        .sType = VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR,
-        .pNext = nullptr,
-        .flags = 0,
-        .dpy = glfwGetX11Display(),
-        .window = reinterpret_cast<::Window>(handle),
-    };
-
-    auto result = vkCreateXlibSurfaceKHR(instance, &create_info, nullptr, &surface);
-#endif
-    if (result != VK_SUCCESS) {
-        return std::unexpected(result);
-    }
-
+    SDL_Vulkan_CreateSurface(impl->handle, instance, &surface);
     return surface;
 }
 

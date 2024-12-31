@@ -3,23 +3,12 @@
 #include "Engine/Graphics/VulkanDevice.hh"
 
 namespace lr {
-auto Surface::create(Device &device, void *handle) -> std::expected<Surface, vuk::VkException> {
-    auto result = vulkan_get_os_surface(device.instance, handle, device.instance.fp_vkGetInstanceProcAddr);
-    if (!result.has_value()) {
-        return std::unexpected(result.error());
-    }
-
-    auto surface = Surface{};
-    surface.handle_ = result.value();
-
-    return surface;
-}
-
-auto SwapChain::create(Device &device, Surface &surface, vuk::Extent2D extent) -> std::expected<SwapChain, vuk::VkException> {
+auto SwapChain::create(Device &device, VkSurfaceKHR surface, vuk::Extent2D extent, [[maybe_unused]] vuk::source_location LOC)
+    -> std::expected<SwapChain, vuk::VkException> {
     ZoneScoped;
 
     VkPresentModeKHR present_mode = device.frame_count() == 1 ? VK_PRESENT_MODE_FIFO_KHR : VK_PRESENT_MODE_IMMEDIATE_KHR;
-    vkb::SwapchainBuilder builder(device.handle, surface.handle_);
+    vkb::SwapchainBuilder builder(device.handle, surface);
     builder.set_desired_min_image_count(device.frame_count());
     builder.set_desired_extent(extent.width, extent.height);
     builder.set_desired_format({ VK_FORMAT_B8G8R8A8_SRGB, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR });
@@ -38,9 +27,9 @@ auto SwapChain::create(Device &device, Surface &surface, vuk::Extent2D extent) -
     auto extent_3d = vuk::Extent3D{ extent.width, extent.height, 1 };
 
     auto frame_count = device.frame_count();
-    auto swap_chain_handle = vuk::Swapchain(*device.allocator, frame_count);
-    swap_chain_handle.surface = surface.handle_;
-    swap_chain_handle.swapchain = result->swapchain;
+    auto swapchain_handle = vuk::Swapchain(*device.allocator, frame_count);
+    swapchain_handle.surface = surface;
+    swapchain_handle.swapchain = result->swapchain;
 
     auto images = *result->get_images();
     auto image_views = *result->get_image_views();
@@ -60,16 +49,22 @@ auto SwapChain::create(Device &device, Surface &surface, vuk::Extent2D extent) -
             .layer_count = 1,
         };
 
-        swap_chain_handle.images.push_back(attachment);
+        swapchain_handle.images.push_back(attachment);
     }
 
-    auto swap_chain = SwapChain{};
-    swap_chain.format_ = format;
-    swap_chain.extent_ = extent_3d;
-    swap_chain.surface_ = surface;
-    swap_chain.handle_ = std::move(swap_chain_handle);
+    auto swapchain = SwapChain{};
+    swapchain.format_ = format;
+    swapchain.extent_ = extent_3d;
+    swapchain.surface_ = surface;
+    swapchain.handle_.emplace(std::move(swapchain_handle));
 
-    return swap_chain;
+    return swapchain;
+}
+
+auto SwapChain::destroy() -> void {
+    ZoneScoped;
+
+    handle_.reset();
 }
 
 auto SwapChain::format() const -> vuk::Format {
@@ -79,5 +74,4 @@ auto SwapChain::format() const -> vuk::Format {
 auto SwapChain::extent() const -> vuk::Extent3D {
     return extent_;
 }
-
 }  // namespace lr

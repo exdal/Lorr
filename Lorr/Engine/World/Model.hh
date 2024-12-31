@@ -3,6 +3,13 @@
 #include "Engine/Graphics/Vulkan.hh"
 
 namespace lr {
+struct TextureSamplerInfo {
+    vuk::Filter mag_filter = vuk::Filter::eLinear;
+    vuk::Filter min_filter = vuk::Filter::eLinear;
+    vuk::SamplerAddressMode address_u = vuk::SamplerAddressMode::eRepeat;
+    vuk::SamplerAddressMode address_v = vuk::SamplerAddressMode::eRepeat;
+};
+
 enum class TextureID : u32 { Invalid = std::numeric_limits<u32>::max() };
 struct Texture {
     Image image = image = {};

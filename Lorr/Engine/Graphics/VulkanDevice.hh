@@ -5,6 +5,8 @@
 
 #include "Engine/Memory/PagedPool.hh"
 
+#include "Engine/Util/LegitProfiler.hh"
+
 #include <VkBootstrap.h>
 
 #include <vuk/runtime/vk/Allocator.hpp>
@@ -61,9 +63,9 @@ struct BindlessDescriptorSetLayoutInfo {
 };
 
 struct DeviceResources {
-    PagedPool<vuk::Buffer, BufferID> buffers = {};
-    PagedPool<vuk::Image, ImageID> images = {};
-    PagedPool<vuk::ImageView, ImageViewID> image_views = {};
+    PagedPool<vuk::Unique<vuk::Buffer>, BufferID> buffers = {};
+    PagedPool<vuk::Unique<vuk::Image>, ImageID> images = {};
+    PagedPool<vuk::Unique<vuk::ImageView>, ImageViewID> image_views = {};
     PagedPool<vuk::Sampler, SamplerID, 256_sz> samplers = {};
     PagedPool<vuk::PipelineBaseInfo *, PipelineID, 256_sz> pipelines = {};
 };
@@ -85,6 +87,7 @@ struct Device {
     auto transfer_man(this Device &) -> TransferManager &;
     auto new_frame(this Device &, SwapChain &) -> vuk::Value<vuk::ImageAttachment>;
     auto end_frame(this Device &, vuk::Value<vuk::ImageAttachment> &&target_attachment) -> void;
+    auto wait() -> void;
 
     auto frame_count(this const Device &) -> usize;
     auto buffer(this Device &, BufferID) -> vuk::Buffer *;
@@ -100,14 +103,14 @@ struct Device {
 
     struct Limits {
         constexpr static u32 FrameCount = 3;
-        constexpr static u64 PersistentBufferSize = ls::mib_to_bytes(128);
     };
+
+    auto get_instance() -> VkInstance { return instance.instance; }
 
 private:
     ls::option<vuk::Runtime> runtime;
     ls::option<vuk::Allocator> allocator;
     ls::option<vuk::DeviceSuperFrameResource> frame_resources;
-    ls::option<vuk::DeviceLinearResource> linear_resources;
     vuk::Compiler compiler = {};
 
     usize frames_in_flight = 0;
@@ -119,6 +122,10 @@ private:
     DeviceFeature supported_features = DeviceFeature::None;
     DeviceResources resources = {};
 
+    // Profiling tools
+    std::vector<legit::ProfilerTask> gpu_profiler_tasks = {};
+    legit::ProfilerGraph gpu_profiler_graph = { 400 };
+
     vkb::Instance instance = {};
     vkb::PhysicalDevice physical_device = {};
     vkb::Device handle = {};
@@ -128,8 +135,6 @@ private:
     friend ImageView;
     friend Sampler;
     friend Pipeline;
-    friend QueryTimestampPool;
-    friend Surface;
     friend SwapChain;
 };
 }  // namespace lr

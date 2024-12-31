@@ -10,7 +10,8 @@ auto Image::create(
     vuk::ImageType type,
     vuk::Extent3D extent,
     u32 slice_count,
-    u32 mip_count) -> std::expected<Image, vuk::VkException> {
+    u32 mip_count,
+    vuk::source_location LOC) -> std::expected<Image, vuk::VkException> {
     ZoneScoped;
 
     vuk::ImageCreateInfo create_info = {
@@ -21,14 +22,13 @@ auto Image::create(
         .arrayLayers = slice_count,
         .usage = usage | vuk::ImageUsageFlagBits::eTransferDst,
     };
-    vuk::Image image_handle = {};
-    auto result = device.allocator->allocate_images({ &image_handle, 1 }, { &create_info, 1 });
+    vuk::Unique<vuk::Image> image_handle(*device.allocator);
+    auto result = device.allocator->allocate_images({ &*image_handle, 1 }, { &create_info, 1 }, LOC);
     if (!result.holds_value()) {
         return std::unexpected(result.error());
     }
 
     auto image_resource = device.resources.images.create();
-    *image_resource->self = image_handle;
 
     auto image = Image{};
     image.format_ = format;
@@ -36,6 +36,7 @@ auto Image::create(
     image.slice_count_ = slice_count;
     image.mip_levels_ = mip_count;
     image.id_ = image_resource->id;
+    image_resource->self->swap(image_handle);
 
     return image;
 }
@@ -65,7 +66,8 @@ auto ImageView::create(
     Image &image,
     const vuk::ImageUsageFlags &image_usage,
     vuk::ImageViewType type,
-    const vuk::ImageSubresourceRange &subresource_range) -> std::expected<ImageView, vuk::VkException> {
+    const vuk::ImageSubresourceRange &subresource_range,
+    vuk::source_location LOC) -> std::expected<ImageView, vuk::VkException> {
     ZoneScoped;
 
     auto image_handle = device.image(image.id());
@@ -82,14 +84,13 @@ auto ImageView::create(
         .subresourceRange = subresource_range,
         .view_usage = image_usage,
     };
-    vuk::ImageView image_view_handle = {};
-    auto result = device.allocator->allocate_image_views({ &image_view_handle, 1 }, { &create_info, 1 });
+    vuk::Unique<vuk::ImageView> image_view_handle(*device.allocator);
+    auto result = device.allocator->allocate_image_views({ &*image_view_handle, 1 }, { &create_info, 1 }, LOC);
     if (!result.holds_value()) {
         return std::unexpected(result.error());
     }
 
     auto image_view_resource = device.resources.image_views.create();
-    *image_view_resource->self = image_view_handle;
 
     auto image_view = ImageView{};
     image_view.format_ = image.format();
@@ -103,15 +104,16 @@ auto ImageView::create(
         device.descriptor_set->update_sampled_image(
             std::to_underlying(Descriptors::Images),
             std::to_underlying(image_view_resource->id),
-            image_view_handle,
+            *image_view_handle,
             vuk::ImageLayout::eReadOnlyOptimal);
     }
     if (image_usage & vuk::ImageUsageFlagBits::eStorage) {
         device.descriptor_set->update_storage_image(
-            std::to_underlying(Descriptors::StorageImages), std::to_underlying(image_view_resource->id), image_view_handle);
+            std::to_underlying(Descriptors::StorageImages), std::to_underlying(image_view_resource->id), *image_view_handle);
     }
 
     device.descriptor_set->commit(*device.runtime);
+    image_view_resource->self->swap(image_view_handle);
     return image_view;
 }
 
@@ -173,6 +175,14 @@ auto ImageView::subresource_range() const -> vuk::ImageSubresourceRange {
     return subresource_range_;
 }
 
+auto ImageView::slice_count() const -> u32 {
+    return subresource_range_.layerCount;
+}
+
+auto ImageView::mip_count() const -> u32 {
+    return subresource_range_.levelCount;
+}
+
 auto ImageView::image_id() const -> ImageID {
     return bound_image_id_;
 }
@@ -194,7 +204,8 @@ auto Sampler::create(
     f32 mip_lod_bias,
     f32 min_lod,
     f32 max_lod,
-    bool use_anisotropy) -> std::expected<Sampler, vuk::VkException> {
+    bool use_anisotropy,
+    [[maybe_unused]] vuk::source_location LOC) -> std::expected<Sampler, vuk::VkException> {
     ZoneScoped;
 
     vuk::SamplerCreateInfo create_info = {

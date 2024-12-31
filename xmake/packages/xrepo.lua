@@ -3,7 +3,6 @@ add_requires("glm 1.0.1", { configs = {
     header_only = true,
     cxx_standard = "20",
 }})
-add_requires("vulkan-memory-allocator v3.1.0")
 add_requires("plf_colony v7.41")
 add_requires("imgui v1.91.0-docking")
 add_requires("simdutf v5.5.0")
@@ -24,14 +23,9 @@ add_requires("lz4 v1.9.4")
 add_requires("zstd v1.5.6")
 add_requires("flecs v4.0.0")
 
-if is_plat("linux") then
-    add_requires("glfw 3.4", { configs = {
-        x11 = not has_config("wayland"),
-        wayland = has_config("wayland")
-    } })
-else
-    add_requires("glfw 3.4")
-end
+add_requires("libsdl 2.30.10", { configs = {
+    sdlmain = false,
+} })
 
 if has_config("enable_tests") then
     add_requires("gtest v1.15.2", { configs = { main = true, gmock = true } })
@@ -39,4 +33,6 @@ end
 
 add_requires("imguizmo-lorr 1.89+WIP")
 add_requires("slang-lorr v2024.17.3")
-add_requires("vuk 2024.12.25")
+add_requires("vuk 2024.12.30", { configs = {
+    debug_allocations = false
+} })

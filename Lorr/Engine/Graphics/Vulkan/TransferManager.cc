@@ -82,9 +82,9 @@ auto TransferManager::upload_staging(this TransferManager &self, ImageView &imag
         .imageExtent = image_view.extent(),
     };
 
-    auto dst_attachment = image_view.get_attachment(*self.device, vuk::ImageUsageFlagBits::eTransferDst);
+    auto dst_attachment_info = image_view.get_attachment(*self.device, vuk::ImageUsageFlagBits::eTransferDst);
     auto src_buffer = vuk::acquire_buf("src", cpu_buffer.buffer, vuk::Access::eNone);
-    auto dst_image = vuk::declare_ia("dst", dst_attachment);
+    auto dst_attachment = vuk::declare_ia("dst", dst_attachment_info);
     auto upload_pass = vuk::make_pass(
         "TransferManager::image_upload",
         [copy_region](vuk::CommandBuffer &cmd_list, VUK_BA(vuk::Access::eTransferRead) src, VUK_IA(vuk::Access::eTransferWrite) dst) {
@@ -92,9 +92,13 @@ auto TransferManager::upload_staging(this TransferManager &self, ImageView &imag
             return dst;
         });
 
-    auto fut = upload_pass(std::move(src_buffer), std::move(dst_image));
-    fut.as_released(release_access, vuk::DomainFlagBits::eGraphicsQueue);
-    self.wait_on(std::move(fut));
+    dst_attachment = upload_pass(std::move(src_buffer), std::move(dst_attachment));
+    if (image_view.mip_count() > 1) {
+        dst_attachment = vuk::generate_mips(std::move(dst_attachment), 0, image_view.mip_count());
+    }
+
+    dst_attachment.as_released(release_access, vuk::DomainFlagBits::eGraphicsQueue);
+    self.wait_on(std::move(dst_attachment));
 }
 
 auto TransferManager::wait_on(this TransferManager &self, vuk::UntypedValue &&fut) -> void {

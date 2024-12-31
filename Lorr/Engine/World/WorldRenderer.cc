@@ -2,9 +2,7 @@
 
 #include "Engine/Core/Application.hh"
 
-#include "Engine/World/Tasks/ImGui.hh"
-
-#include <glm/gtx/component_wise.hpp>
+#include <imgui.h>
 
 namespace lr {
 template<>
@@ -26,11 +24,7 @@ struct Handle<WorldRenderer>::Impl {
     ImageView sky_transmittance_lut_view = {};
     Image sky_multiscatter_lut = {};
     ImageView sky_multiscatter_lut_view = {};
-    Image sky_view_lut = {};
-    ImageView sky_view_lut_view = {};
     Pipeline sky_view_pipeline = {};
-    Image sky_aerial_perspective_lut = {};
-    ImageView sky_aerial_perspective_lut_view = {};
     Pipeline sky_aerial_perspective_pipeline = {};
     Pipeline sky_final_pipeline = {};
 
@@ -82,13 +76,30 @@ auto WorldRenderer::setup_persistent_resources() -> void {
         .value();
 
     //  ── IMGUI ───────────────────────────────────────────────────────────
-    auto [imgui_atlas_data, imgui_atlas_dimensions] = Tasks::imgui_build_font_atlas(asset_man);
+    auto &imgui = ImGui::GetIO();
+    auto roboto_path = (asset_man.asset_root_path(AssetType::Font) / "Roboto-Regular.ttf").string();
+    auto fa_solid_900_path = (asset_man.asset_root_path(AssetType::Font) / "fa-solid-900.ttf").string();
+
+    ImWchar icons_ranges[] = { 0xf000, 0xf8ff, 0 };
+    ImFontConfig font_config;
+    font_config.GlyphMinAdvanceX = 16.0f;
+    font_config.MergeMode = true;
+    font_config.PixelSnapH = true;
+
+    imgui.Fonts->AddFontFromFileTTF(roboto_path.c_str(), 16.0f, nullptr);
+    imgui.Fonts->AddFontFromFileTTF(fa_solid_900_path.c_str(), 14.0f, &font_config, icons_ranges);
+    imgui.Fonts->Build();
+
+    u8 *font_data = nullptr;
+    i32 font_width, font_height;
+    imgui.Fonts->GetTexDataAsRGBA32(&font_data, &font_width, &font_height);
+    auto font_bytes = ls::span(font_data, font_width * font_height * 4);
     impl->imgui_font_image = Image::create(
         *impl->device,
         vuk::Format::eR8G8B8A8Unorm,
         vuk::ImageUsageFlagBits::eSampled,
         vuk::ImageType::e2D,
-        vuk::Extent3D(imgui_atlas_dimensions.x, imgui_atlas_dimensions.y, 1u))
+        vuk::Extent3D(font_width, font_height, 1u))
         .value();
     impl->imgui_font_view = ImageView::create(
         *impl->device,
@@ -97,7 +108,8 @@ auto WorldRenderer::setup_persistent_resources() -> void {
         vuk::ImageViewType::e2D,
         { vuk::ImageAspectFlagBits::eColor })
         .value();
-    transfer_man.upload_staging(impl->imgui_font_view, imgui_atlas_data, vuk::Access::eFragmentSampled);
+    transfer_man.upload_staging(impl->imgui_font_view, font_bytes, vuk::Access::eFragmentSampled);
+    IM_FREE(font_data);
     impl->imgui_pipeline = Pipeline::create(*impl->device, {
         .module_name = "imgui",
         .root_path = shaders_root,
@@ -142,40 +154,12 @@ auto WorldRenderer::setup_persistent_resources() -> void {
         vuk::ImageViewType::e2D,
         { vuk::ImageAspectFlagBits::eColor })
         .value();
-    impl->sky_view_lut = Image::create(
-        *impl->device,
-        vuk::Format::eR16G16B16A16Sfloat,
-        vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eColorAttachment,
-        vuk::ImageType::e2D,
-        vuk::Extent3D(200, 100, 1))
-        .value();
-    impl->sky_view_lut_view = ImageView::create(
-        *impl->device,
-        impl->sky_view_lut,
-        vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eColorAttachment,
-        vuk::ImageViewType::e2D,
-        { vuk::ImageAspectFlagBits::eColor })
-        .value();
     impl->sky_view_pipeline = Pipeline::create(*impl->device, {
         .module_name = "atmos.lut",
         .root_path = shaders_root,
         .shader_path = shaders_root / "atmos" / "lut.slang",
         .entry_points = { "vs_main", "fs_main" },
     }).value();
-    impl->sky_aerial_perspective_lut = Image::create(
-        *impl->device,
-        vuk::Format::eR16G16B16A16Sfloat,
-        vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage,
-        vuk::ImageType::e3D,
-        vuk::Extent3D(32, 32, 32))
-        .value();
-    impl->sky_aerial_perspective_lut_view = ImageView::create(
-        *impl->device,
-        impl->sky_aerial_perspective_lut,
-        vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage,
-        vuk::ImageViewType::e3D,
-        { vuk::ImageAspectFlagBits::eColor })
-        .value();
     impl->sky_aerial_perspective_pipeline = Pipeline::create(*impl->device, {
         .module_name = "atmos.aerial_perspective",
         .root_path = shaders_root,
@@ -274,8 +258,6 @@ auto WorldRenderer::setup_persistent_resources() -> void {
     transmittance_lut_attachment = transmittance_lut_pass(std::move(transmittance_lut_attachment));
     std::tie(transmittance_lut_attachment, multiscatter_lut_attachment) =
         multiscatter_lut_pass(std::move(transmittance_lut_attachment), std::move(multiscatter_lut_attachment));
-    transmittance_lut_attachment.release(vuk::Access::eFragmentSampled, vuk::DomainFlagBits::eGraphicsQueue);
-    multiscatter_lut_attachment.release(vuk::Access::eFragmentSampled, vuk::DomainFlagBits::eGraphicsQueue);
 
     transfer_man.wait_on(std::move(transmittance_lut_attachment));
     transfer_man.wait_on(std::move(multiscatter_lut_attachment));
@@ -356,9 +338,13 @@ auto WorldRenderer::end_frame(vuk::Value<vuk::ImageAttachment> &&render_target) 
 
     auto &transfer_man = impl->device->transfer_man();
 
-    auto final_attachment = vuk::declare_ia("final");
-    final_attachment.similar_to(render_target);
-    final_attachment->format = vuk::Format::eR16G16B16A16Sfloat;
+    auto final_attachment = vuk::declare_ia("final", { .format = vuk::Format::eR16G16B16A16Sfloat, .sample_count = vuk::Samples::e1 });
+    final_attachment.same_shape_as(render_target);
+    final_attachment = vuk::clear_image(std::move(final_attachment), vuk::Black<f32>);
+
+    auto depth_attachment = vuk::declare_ia("depth", { .format = vuk::Format::eD32Sfloat, .sample_count = vuk::Samples::e1 });
+    depth_attachment.same_shape_as(render_target);
+    depth_attachment = vuk::clear_image(std::move(depth_attachment), vuk::ClearDepth(1.0));
 
     //  ── SKY VIEW LUT ────────────────────────────────────────────────────
     auto sky_view_pass = vuk::make_pass(
@@ -388,12 +374,58 @@ auto WorldRenderer::end_frame(vuk::Value<vuk::ImageAttachment> &&render_target) 
     auto multiscatter_lut_attachment = impl->sky_multiscatter_lut_view.acquire(
         *impl->device, "multiscatter_lut", vuk::ImageUsageFlagBits::eSampled, vuk::Access::eFragmentSampled);
 
-    auto sky_view_lut_attachment = vuk::declare_ia("sky_view_lut");
-    sky_view_lut_attachment.similar_to(final_attachment);
-    sky_view_lut_attachment->extent = { 200, 100, 1 };
+    auto sky_view_lut_attachment =
+        vuk::declare_ia("sky_view_lut", { .extent = { 200, 100, 1 }, .sample_count = vuk::Samples::e1, .layer_count = 1 });
+    sky_view_lut_attachment.same_format_as(final_attachment);
     sky_view_lut_attachment = vuk::clear_image(std::move(sky_view_lut_attachment), vuk::Black<f32>);
     std::tie(sky_view_lut_attachment, transmittance_lut_attachment, multiscatter_lut_attachment) =
         sky_view_pass(std::move(sky_view_lut_attachment), std::move(transmittance_lut_attachment), std::move(multiscatter_lut_attachment));
+
+    //  ── SKY AERIAL PERSPECTIVE ──────────────────────────────────────────
+    auto sky_aerial_perspective_pass = vuk::make_pass(
+        "sky aerial perspective",
+        [&ctx = impl->context, &pipeline = *impl->device->pipeline(impl->sky_aerial_perspective_pipeline.id())](
+            vuk::CommandBuffer &cmd_list,
+            VUK_IA(vuk::Access::eComputeWrite) dst,
+            VUK_IA(vuk::Access::eFragmentSampled) transmittance_lut,
+            VUK_IA(vuk::Access::eFragmentSampled) multiscatter_lut) {
+            struct PushConstants {
+                u64 world_ptr = 0;
+                glm::vec3 image_size = {};
+                u32 pad = 0;
+            };
+
+            auto image_size = glm::vec3(dst->extent.width, dst->extent.height, dst->extent.height);
+            auto groups = glm::uvec2(image_size) / glm::uvec2(16);
+            cmd_list  //
+                .bind_compute_pipeline(pipeline)
+                .bind_sampler(0, 0, { .magFilter = vuk::Filter::eLinear, .minFilter = vuk::Filter::eLinear })
+                .bind_image(0, 1, dst)
+                .bind_image(0, 2, transmittance_lut)
+                .bind_image(0, 3, multiscatter_lut)
+                .push_constants(
+                    vuk::ShaderStageFlagBits::eCompute,
+                    0,
+                    PushConstants{
+                        .world_ptr = ctx.world_ptr,
+                        .image_size = image_size,
+                    })
+                .dispatch(groups.x, groups.y, static_cast<u32>(image_size.z));
+            return std::make_tuple(dst, transmittance_lut, multiscatter_lut);
+        },
+        vuk::DomainFlagBits::eGraphicsQueue);
+
+    auto sky_aerial_perspective_attachment = vuk::declare_ia(
+        "sky_aerial_perspective",
+        { .image_type = vuk::ImageType::e3D,
+          .extent = { 32, 32, 32 },
+          .sample_count = vuk::Samples::e1,
+          .view_type = vuk::ImageViewType::e3D,
+          .level_count = 1,
+          .layer_count = 1 });
+    sky_aerial_perspective_attachment.same_format_as(sky_view_lut_attachment);
+    std::tie(sky_aerial_perspective_attachment, transmittance_lut_attachment, multiscatter_lut_attachment) = sky_aerial_perspective_pass(
+        std::move(sky_aerial_perspective_attachment), std::move(transmittance_lut_attachment), std::move(multiscatter_lut_attachment));
 
     //  ── SKY FINAL ───────────────────────────────────────────────────────
     auto sky_final_pass = vuk::make_pass(
@@ -402,6 +434,7 @@ auto WorldRenderer::end_frame(vuk::Value<vuk::ImageAttachment> &&render_target) 
             vuk::CommandBuffer &cmd_list,
             VUK_IA(vuk::Access::eColorWrite) dst,
             VUK_IA(vuk::Access::eFragmentSampled) sky_view_lut,
+            VUK_IA(vuk::Access::eFragmentSampled) aerial_perspective_lut,
             VUK_IA(vuk::Access::eFragmentSampled) transmittance_lut) {
             cmd_list  //
                 .bind_graphics_pipeline(pipeline)
@@ -415,18 +448,20 @@ auto WorldRenderer::end_frame(vuk::Value<vuk::ImageAttachment> &&render_target) 
                 .set_scissor(0, vuk::Rect2D::framebuffer())
                 .push_constants(vuk::ShaderStageFlagBits::eFragment, 0, ctx.world_ptr)
                 .draw(3, 1, 0, 0);
-            return dst;
+            return std::make_tuple(dst, sky_view_lut, aerial_perspective_lut, transmittance_lut);
         });
 
-    final_attachment = vuk::clear_image(std::move(final_attachment), vuk::Black<f32>);
-    final_attachment =
-        sky_final_pass(std::move(final_attachment), std::move(sky_view_lut_attachment), std::move(transmittance_lut_attachment));
+    std::tie(final_attachment, sky_view_lut_attachment, sky_aerial_perspective_attachment, transmittance_lut_attachment) = sky_final_pass(
+        std::move(final_attachment),
+        std::move(sky_view_lut_attachment),
+        std::move(sky_aerial_perspective_attachment),
+        std::move(transmittance_lut_attachment));
 
     //  ── EDITOR GRID ─────────────────────────────────────────────────────
     auto editor_grid_pass = vuk::make_pass(
         "editor grid",
         [&ctx = impl->context, &pipeline = *impl->device->pipeline(impl->grid_pipeline.id())](
-            vuk::CommandBuffer &cmd_list, VUK_IA(vuk::Access::eColorWrite) dst) {
+            vuk::CommandBuffer &cmd_list, VUK_IA(vuk::Access::eColorWrite) dst, VUK_IA(vuk::Access::eDepthStencilRW) dst_depth) {
             cmd_list  //
                 .bind_graphics_pipeline(pipeline)
                 .set_rasterization({ .cullMode = vuk::CullModeFlagBits::eNone })
@@ -436,17 +471,14 @@ auto WorldRenderer::end_frame(vuk::Value<vuk::ImageAttachment> &&render_target) 
                 .set_scissor(0, vuk::Rect2D::framebuffer())
                 .push_constants(vuk::ShaderStageFlagBits::eVertex | vuk::ShaderStageFlagBits::eFragment, 0, ctx.world_ptr)
                 .draw(3, 1, 0, 0);
-            return dst;
+            return std::make_tuple(dst, dst_depth);
         });
 
-    final_attachment = editor_grid_pass(std::move(final_attachment));
+    std::tie(final_attachment, depth_attachment) = editor_grid_pass(std::move(final_attachment), std::move(depth_attachment));
 
-    //   ──────────────────────────────────────────────────────────────────────
-    // Store result before rendering imgui
-    // TODO: Find a better way to check your shit
-    if (impl->context.world_data.cameras_ptr != 0) {
-        impl->composition_result = std::move(final_attachment);
-    }
+    //  ── RESULTING IMAGE ─────────────────────────────────────────────────
+    impl->composition_result = std::move(final_attachment);
+
     //  ── IMGUI ───────────────────────────────────────────────────────────
     ImGui::Render();
 
@@ -483,7 +515,7 @@ auto WorldRenderer::end_frame(vuk::Value<vuk::ImageAttachment> &&render_target) 
                 glm::vec2 scale = {};
             };
 
-            PushConstants c;
+            PushConstants c = {};
             c.scale = { 2.0f / draw_data->DisplaySize.x, 2.0f / draw_data->DisplaySize.y };
             c.translate = { -1.0f - draw_data->DisplayPos.x * c.scale.x, -1.0f - draw_data->DisplayPos.y * c.scale.y };
 

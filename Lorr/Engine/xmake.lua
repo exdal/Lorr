@@ -42,9 +42,7 @@ target("Lorr")
         { public = true })
 
     add_packages(
-        "glfw",
-        "vulkan-headers",
-        "vulkan-memory-allocator",
+        "libsdl",
         "vk-bootstrap",
         "imgui",
         "slang-lorr",

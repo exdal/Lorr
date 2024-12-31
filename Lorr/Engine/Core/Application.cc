@@ -1,5 +1,7 @@
 #include "Application.hh"
 
+#include "Engine/Core/ArgParser.hh"
+
 #include <imgui.h>
 
 namespace lr {
@@ -7,6 +9,9 @@ bool Application::init(this Application &self, const ApplicationInfo &info) {
     ZoneScoped;
 
     Logger::init("engine");
+
+    ArgParser arg_parser(info.args);
+    self.flags.use_wayland = !arg_parser["--no-wayland"].has_value();
 
     ImGui::CreateContext();
     auto &imgui = ImGui::GetIO();
@@ -36,8 +41,8 @@ bool Application::init(this Application &self, const ApplicationInfo &info) {
 
     self.window = Window::create(info.window_info);
     auto window_size = self.window.get_size();
-    auto surface = Surface::create(self.device, self.window.get_native_handle()).value();
-    self.swap_chain = SwapChain::create(self.device, surface, { window_size.x, window_size.y }).value();
+    auto surface = self.window.get_surface(self.device.get_instance());
+    self.swapchain = SwapChain::create(self.device, surface, { window_size.x, window_size.y }).value();
 
     auto world_result = World::create("default_world");
     if (!world_result.has_value()) {
@@ -56,78 +61,48 @@ bool Application::init(this Application &self, const ApplicationInfo &info) {
     return true;
 }
 
-void Application::push_event(this Application &self, ApplicationEvent event, const ApplicationEventData &data) {
-    ZoneScoped;
-
-    self.event_man.push(event, data);
-}
-
-void Application::poll_events(this Application &self) {
-    ZoneScoped;
-    memory::ScopedStack stack;
-
-    auto &imgui = ImGui::GetIO();
-    while (self.event_man.peek()) {
-        ApplicationEventData e = {};
-        switch (self.event_man.dispatch(e)) {
-            case ApplicationEvent::WindowResize: {
-                break;
-            }
-            case ApplicationEvent::MousePosition: {
-                auto &pos = e.position;
-                imgui.AddMousePosEvent(pos.x, pos.y);
-                break;
-            }
-            case ApplicationEvent::MouseState: {
-                bool down = e.key_state == KeyState::Down || e.key_state == KeyState::Repeat;
-                imgui.AddMouseButtonEvent(e.key, down);
-                break;
-            }
-            case ApplicationEvent::MouseScroll: {
-                auto &offset = e.position;
-                imgui.AddMouseWheelEvent(offset.x, offset.y);
-                break;
-            }
-            case ApplicationEvent::KeyboardState: {
-                bool down = e.key_state == KeyState::Down || e.key_state == KeyState::Repeat;
-                imgui.AddKeyEvent(static_cast<ImGuiKey>(e.key), down);
-                break;
-            }
-            case ApplicationEvent::InputChar: {
-                imgui.AddInputCharacterUTF16(e.input_char);
-                break;
-            }
-            case ApplicationEvent::Drop: {
-                break;
-            }
-            case ApplicationEvent::Quit: {
-                self.should_close = true;
-                break;
-            }
-            default:;
-        }
-    }
-}
-
 void Application::run(this Application &self) {
     ZoneScoped;
 
-    // Renderer context
-    auto &imgui = ImGui::GetIO();
+    WindowCallbacks window_callbacks = {};
+    window_callbacks.user_data = &self;
+    window_callbacks.on_close = [](void *user_data) {
+        auto app = static_cast<Application *>(user_data);
+        app->should_close = true;
+    };
+    window_callbacks.on_mouse_pos = [](void *, glm::vec2 position, glm::vec2) {
+        auto &imgui = ImGui::GetIO();
+        imgui.AddMousePosEvent(position.x, position.y);
+    };
+    window_callbacks.on_mouse_button = [](void *, Key mouse_key, KeyState state) {
+        auto &imgui = ImGui::GetIO();
+        imgui.AddMouseButtonEvent(static_cast<i32>(mouse_key), state == KeyState::Down);
+    };
+    window_callbacks.on_mouse_scroll = [](void *, glm::vec2 offset) {
+        auto &imgui = ImGui::GetIO();
+        imgui.AddMouseWheelEvent(offset.x, offset.y);
+    };
+    window_callbacks.on_key = [](void *, Key key, KeyState state, KeyMod) {
+        auto &imgui = ImGui::GetIO();
+        imgui.AddKeyEvent(static_cast<ImGuiKey>(key), state == KeyState::Down);
+    };
+    window_callbacks.on_text_input = [](void *, c8 *text) {
+        auto &imgui = ImGui::GetIO();
+        imgui.AddInputCharactersUTF8(text);
+    };
 
-    b32 swap_chain_ok = true;
-
+    b32 swapchain_ok = true;
     while (!self.should_close) {
-        if (!swap_chain_ok) {
-            auto surface = Surface::create(self.device, self.window.get_native_handle()).value();
+        if (!swapchain_ok) {
             auto window_size = self.window.get_size();
-            self.swap_chain = SwapChain::create(self.device, surface, { window_size.x, window_size.y }).value();
+            auto surface = self.window.get_surface(self.device.get_instance());
+            self.swapchain = SwapChain::create(self.device, surface, { window_size.x, window_size.y }).value();
 
-            swap_chain_ok = true;
+            swapchain_ok = true;
         }
 
-        auto swap_chain_attachment = self.device.new_frame(self.swap_chain);
-        swap_chain_attachment = vuk::clear_image(std::move(swap_chain_attachment), vuk::Black<f32>);
+        auto swapchain_attachment = self.device.new_frame(self.swapchain);
+        swapchain_attachment = vuk::clear_image(std::move(swapchain_attachment), vuk::Black<f32>);
 
         if (!self.world_renderer) {
             self.world_renderer = WorldRenderer::create(&self.device);
@@ -135,25 +110,24 @@ void Application::run(this Application &self) {
 
         // Delta time
         f64 delta_time = self.world.delta_time();
+        auto &imgui = ImGui::GetIO();
         imgui.DeltaTime = static_cast<f32>(delta_time);
 
-        self.world_renderer.begin_frame(swap_chain_attachment);
+        self.world_renderer.begin_frame(swapchain_attachment);
 
         // Update application
-        auto extent = self.swap_chain.extent();
+        auto extent = self.swapchain.extent();
         imgui.DisplaySize = ImVec2(static_cast<f32>(extent.width), static_cast<f32>(extent.height));
 
         // WARN: Make sure to do all imgui settings BEFORE NewFrame!!!
         self.world.begin_frame(self.world_renderer);
         self.do_update(delta_time);
         self.world.end_frame();
-        self.should_close |= self.window.should_close();
 
-        auto rendered_attachment = self.world_renderer.end_frame(std::move(swap_chain_attachment));
+        auto rendered_attachment = self.world_renderer.end_frame(std::move(swapchain_attachment));
         self.device.end_frame(std::move(rendered_attachment));
 
-        self.window.poll();
-        self.poll_events();
+        self.window.poll(window_callbacks);
         self.should_close |= self.world.should_quit();
 
         FrameMark;
@@ -167,10 +141,10 @@ void Application::shutdown(this Application &self) {
 
     LOG_WARN("Shutting down application...");
 
-    // self.device.wait();
+    self.device.wait();
+    self.swapchain.destroy();
     self.world.destroy();
     self.asset_man.destroy();
-    // self.swap_chain.destroy();
     self.device.destroy();
     LOG_INFO("Complete!");
 }

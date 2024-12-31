@@ -10,7 +10,7 @@ struct PagedPool {
     constexpr static usize PAGE_MASK = PAGE_SIZE - 1_sz;
     constexpr static usize PAGE_COUNT = MAX_RESOURCE_COUNT / PAGE_SIZE;
     struct Page {
-        std::array<T, PAGE_SIZE> elements = {};
+        std::array<T, PAGE_SIZE> elements;
         // availability mask, each bit represents state of `T` in `arr`.
         // 1 == alive, 0 = dead element.
         u64 mask = 0;

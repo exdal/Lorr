@@ -187,11 +187,11 @@ auto World::destroy() -> void {
     impl = nullptr;
 }
 
-auto World::begin_frame(WorldRenderer &renderer) -> void {
+auto World::update_scene_data(WorldRenderer &renderer) -> bool {
     ZoneScoped;
 
     if (!impl->active_scene.has_value()) {
-        return;
+        return false;
     }
 
     auto &app = Application::get();
@@ -280,9 +280,11 @@ auto World::begin_frame(WorldRenderer &renderer) -> void {
     // renderer.set_scene_data(scene_begin_info.value());
 
     renderer.end_scene(scene_data);
+
+    return true;
 }
 
-auto World::end_frame() -> void {
+auto World::progress() -> void {
     ZoneScoped;
 
     impl->ecs.progress();

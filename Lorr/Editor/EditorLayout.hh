@@ -2,6 +2,8 @@
 
 #include "Panel/Panels.hh"
 
+#include "Engine/Asset/UUID.hh"
+
 namespace lr {
 enum class EditorTheme {
     Dark,
@@ -16,6 +18,8 @@ enum class ActiveTool : u32 {
 };
 
 struct EditorLayout {
+    ankerl::unordered_dense::map<std::string, UUID> editor_assets = {};
+
     std::vector<std::unique_ptr<PanelI>> panels = {};
     ls::option<u32> dockspace_id = ls::nullopt;
     bool show_profiler = false;

@@ -10,8 +10,8 @@ struct World : Handle<World> {
     static auto create_from_file(const fs::path &path) -> ls::option<World>;
     auto destroy() -> void;
 
-    auto begin_frame(WorldRenderer &renderer) -> void;
-    auto end_frame() -> void;
+    auto update_scene_data(WorldRenderer &renderer) -> bool;
+    auto progress() -> void;
 
     auto set_active_scene(SceneID scene_id) -> void;
     auto active_scene() -> ls::option<SceneID>;

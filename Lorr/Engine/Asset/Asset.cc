@@ -300,6 +300,17 @@ auto AssetManager::write_asset_meta(Asset *asset, const UUID &uuid) -> void {
     file.close();
 }
 
+auto AssetManager::import_texture(const fs::path &path) -> Asset * {
+    ZoneScoped;
+
+    auto uuid = UUID::generate_random();
+    auto asset = this->register_texture(path, uuid);
+
+    LS_EXPECT(this->load_texture(asset));
+
+    return asset;
+}
+
 auto AssetManager::load_model(Asset *asset) -> bool {
     ZoneScoped;
 
@@ -421,14 +432,8 @@ auto AssetManager::load_texture(
     ZoneScoped;
 
     auto &transfer_man = impl->device->transfer_man();
-    auto image = Image::create(
-        *impl->device,
-        format,
-        vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eTransferDst,
-        vuk::ImageType::e2D,
-        extent,
-        1,
-        static_cast<u32>(glm::floor(glm::log2(static_cast<f32>(ls::max(extent.width, extent.height)))) + 1));
+    auto image = Image::create(*impl->device, format, vuk::ImageUsageFlagBits::eSampled, vuk::ImageType::e2D, extent);
+    // static_cast<u32>(glm::floor(glm::log2(static_cast<f32>(ls::max(extent.width, extent.height)))) + 1));
     if (!image.has_value()) {
         return false;
     }
@@ -436,7 +441,7 @@ auto AssetManager::load_texture(
     auto image_view = ImageView::create(
         *impl->device,
         image.value(),
-        vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eTransferDst,
+        vuk::ImageUsageFlagBits::eSampled,
         vuk::ImageViewType::e2D,
         {
             .aspectMask = vuk::ImageAspectFlagBits::eColor,
@@ -449,7 +454,7 @@ auto AssetManager::load_texture(
         return false;
     }
 
-    transfer_man.upload_staging(image_view.value(), pixels, vuk::Access::eFragmentSampled);
+    transfer_man.upload_staging(image_view.value(), pixels);
 
     auto *texture = this->get_texture(asset->texture_id);
     texture->image = image.value();

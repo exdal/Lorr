@@ -120,6 +120,8 @@ auto AssetBrowserPanel::find_directory(this AssetBrowserPanel &self, const fs::p
 }
 
 void AssetBrowserPanel::draw_dir_contents(this AssetBrowserPanel &self) {
+    auto &app = EditorApp::get();
+
     i32 table_flags = ImGuiTableFlags_ContextMenuInBody;
     table_flags |= ImGuiTableFlags_ScrollY;
     table_flags |= ImGuiTableFlags_PadOuterX;
@@ -135,6 +137,11 @@ void AssetBrowserPanel::draw_dir_contents(this AssetBrowserPanel &self) {
     bool open_create_scene_popup = false;
     bool open_import_model_popup = false;
 
+    auto *dir_texture = app.asset_man.get_texture(app.layout.editor_assets["dir"]);
+    auto dir_image = app.imgui_renderer.add_image(dir_texture->image_view);
+    auto *scene_texture = app.asset_man.get_texture(app.layout.editor_assets["scene"]);
+    auto scene_image = app.imgui_renderer.add_image(scene_texture->image_view);
+
     ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, { padding, padding });
     if (ImGui::BeginTable("asset_browser", tile_count, table_flags)) {
         auto *cur_dir = self.find_directory(self.current_dir);
@@ -142,7 +149,7 @@ void AssetBrowserPanel::draw_dir_contents(this AssetBrowserPanel &self) {
             ImGui::TableNextColumn();
 
             const auto &file_name = subdir_path.filename().string();
-            if (ImGui::Button(file_name.c_str(), button_size)) {
+            if (ImGuiLR::image_button(file_name, dir_image, button_size)) {
                 self.current_dir = subdir_path;
             }
             if (ImGui::BeginPopupContextItem()) {
@@ -157,14 +164,13 @@ void AssetBrowserPanel::draw_dir_contents(this AssetBrowserPanel &self) {
         for (const auto &uuid : cur_dir->asset_uuids) {
             ImGui::TableNextColumn();
 
-            auto &app = EditorApp::get();
             auto *asset = app.asset_man.get_asset(uuid);
             if (!asset) {
                 continue;
             }
 
             const auto &file_name = asset->path.filename().string();
-            ImGuiLR::image_button(file_name, 0, { 100, 140 });
+            ImGuiLR::image_button(file_name, scene_image, button_size);
             if (ImGui::BeginDragDropSource()) {
                 ImGui::SetDragDropPayload("ASSET_BY_UUID", &asset->uuid, sizeof(UUID));
                 ImGui::EndDragDropSource();

@@ -2,6 +2,7 @@
 
 #include "Editor/EditorApp.hh"
 #include "Editor/Panel/AssetBrowserPanel.hh"
+
 #include "Engine/OS/File.hh"
 
 #include <imgui.h>
@@ -10,6 +11,15 @@
 namespace lr {
 void EditorLayout::init(this EditorLayout &self) {
     self.setup_theme(EditorTheme::Dark);
+
+    auto add_texture = [&self](std::string name, const fs::path &path) {
+        auto &app = EditorApp::get();
+        auto asset = app.asset_man.import_texture(app.asset_man.asset_root_path(AssetType::Root) / "editor" / path);
+        self.editor_assets.emplace(name, asset->uuid);
+    };
+
+    add_texture("dir", "dir.png");
+    add_texture("scene", "scene.png");
 }
 
 void EditorLayout::setup_theme(this EditorLayout &, EditorTheme) {
@@ -411,7 +421,7 @@ bool ImGuiLR::image_button(std::string_view text, ImTextureID texture_id, const 
     cursor_pos.x += style.FramePadding.x;
     cursor_pos.y += style.FramePadding.y;
     ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, { 0.5, 0.9 });
-    ImGui::Button(text.data(), button_size);
+    auto pressed = ImGui::Button(text.data(), button_size);
     ImGui::PopStyleVar();
 
     ImGui::SetNextItemAllowOverlap();
@@ -421,5 +431,5 @@ bool ImGuiLR::image_button(std::string_view text, ImTextureID texture_id, const 
 
     ImGui::EndGroup();
 
-    return false;
+    return pressed;
 }

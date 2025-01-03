@@ -18,10 +18,12 @@ auto TransferManager::destroy(this TransferManager &self) -> void {
 auto TransferManager::alloc_transient_buffer(this TransferManager &self, vuk::MemoryUsage usage, usize size) -> TransientBuffer {
     ZoneScoped;
 
-    // Make sure to call this inside frame mark
-    LS_EXPECT(self.frame_allocator.has_value());
+    auto *allocator = &self.device->allocator.value();
+    if (self.frame_allocator.has_value()) {
+        allocator = &self.frame_allocator.value();
+    }
 
-    auto buffer = vuk::allocate_buffer(*self.frame_allocator, { usage, size, 8 });
+    auto buffer = vuk::allocate_buffer(*allocator, { usage, size, 8 });
     if (!buffer.holds_value()) {
         LOG_ERROR("Transient Buffer Error: {}", buffer.error().error_message);
         return {};
@@ -64,8 +66,7 @@ auto TransferManager::upload_staging(this TransferManager &self, TransientBuffer
     self.wait_on(std::move(upload_pass(std::move(src_buffer), std::move(dst_buffer))));
 }
 
-auto TransferManager::upload_staging(this TransferManager &self, ImageView &image_view, ls::span<u8> bytes, vuk::Access release_access)
-    -> void {
+auto TransferManager::upload_staging(this TransferManager &self, ImageView &image_view, ls::span<u8> bytes) -> void {
     ZoneScoped;
 
     auto cpu_buffer = self.alloc_transient_buffer(vuk::MemoryUsage::eCPUonly, bytes.size_bytes());
@@ -78,6 +79,7 @@ auto TransferManager::upload_staging(this TransferManager &self, ImageView &imag
         .layerCount = 1,
     };
     vuk::BufferImageCopy copy_region = {
+        .bufferOffset = cpu_buffer.buffer.offset,
         .imageSubresource = target_layer,
         .imageExtent = image_view.extent(),
     };
@@ -97,7 +99,6 @@ auto TransferManager::upload_staging(this TransferManager &self, ImageView &imag
         dst_attachment = vuk::generate_mips(std::move(dst_attachment), 0, image_view.mip_count());
     }
 
-    dst_attachment.as_released(release_access, vuk::DomainFlagBits::eGraphicsQueue);
     self.wait_on(std::move(dst_attachment));
 }
 

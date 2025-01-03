@@ -13,11 +13,6 @@ struct Handle<WorldRenderer>::Impl {
     Sampler linear_sampler = {};
     Sampler nearest_sampler = {};
 
-    Image imgui_font_image = {};
-    ImageView imgui_font_view = {};
-    Pipeline imgui_pipeline = {};
-    std::vector<vuk::Value<vuk::SampledImage>> imgui_rendering_images = {};
-
     Pipeline grid_pipeline = {};
 
     Image sky_transmittance_lut = {};
@@ -74,48 +69,6 @@ auto WorldRenderer::setup_persistent_resources() -> void {
         vuk::SamplerAddressMode::eRepeat,
         vuk::CompareOp::eNever)
         .value();
-
-    //  ── IMGUI ───────────────────────────────────────────────────────────
-    auto &imgui = ImGui::GetIO();
-    auto roboto_path = (asset_man.asset_root_path(AssetType::Font) / "Roboto-Regular.ttf").string();
-    auto fa_solid_900_path = (asset_man.asset_root_path(AssetType::Font) / "fa-solid-900.ttf").string();
-
-    ImWchar icons_ranges[] = { 0xf000, 0xf8ff, 0 };
-    ImFontConfig font_config;
-    font_config.GlyphMinAdvanceX = 16.0f;
-    font_config.MergeMode = true;
-    font_config.PixelSnapH = true;
-
-    imgui.Fonts->AddFontFromFileTTF(roboto_path.c_str(), 16.0f, nullptr);
-    imgui.Fonts->AddFontFromFileTTF(fa_solid_900_path.c_str(), 14.0f, &font_config, icons_ranges);
-    imgui.Fonts->Build();
-
-    u8 *font_data = nullptr;
-    i32 font_width, font_height;
-    imgui.Fonts->GetTexDataAsRGBA32(&font_data, &font_width, &font_height);
-    auto font_bytes = ls::span(font_data, font_width * font_height * 4);
-    impl->imgui_font_image = Image::create(
-        *impl->device,
-        vuk::Format::eR8G8B8A8Unorm,
-        vuk::ImageUsageFlagBits::eSampled,
-        vuk::ImageType::e2D,
-        vuk::Extent3D(font_width, font_height, 1u))
-        .value();
-    impl->imgui_font_view = ImageView::create(
-        *impl->device,
-        impl->imgui_font_image,
-        vuk::ImageUsageFlagBits::eSampled,
-        vuk::ImageViewType::e2D,
-        { vuk::ImageAspectFlagBits::eColor })
-        .value();
-    transfer_man.upload_staging(impl->imgui_font_view, font_bytes, vuk::Access::eFragmentSampled);
-    IM_FREE(font_data);
-    impl->imgui_pipeline = Pipeline::create(*impl->device, {
-        .module_name = "imgui",
-        .root_path = shaders_root,
-        .shader_path = shaders_root / "imgui.slang",
-        .entry_points = { "vs_main", "fs_main" },
-    }).value();
 
     //  ── GRID ────────────────────────────────────────────────────────────
     impl->grid_pipeline = Pipeline::create(*impl->device, {
@@ -325,18 +278,8 @@ auto WorldRenderer::end_scene(GPUSceneData &scene_gpu_data) -> void {
     transfer_man.upload_staging(scene_gpu_data.world_data, gpu_buffer);
 }
 
-auto WorldRenderer::begin_frame([[maybe_unused]] vuk::Value<vuk::ImageAttachment> &reference_img) -> void {
+auto WorldRenderer::render(vuk::Value<vuk::ImageAttachment> &render_target) -> vuk::Value<vuk::ImageAttachment> {
     ZoneScoped;
-
-    impl->imgui_rendering_images.clear();
-
-    ImGui::NewFrame();
-}
-
-auto WorldRenderer::end_frame(vuk::Value<vuk::ImageAttachment> &&render_target) -> vuk::Value<vuk::ImageAttachment> {
-    ZoneScoped;
-
-    auto &transfer_man = impl->device->transfer_man();
 
     auto final_attachment = vuk::declare_ia("final", { .format = vuk::Format::eR16G16B16A16Sfloat, .sample_count = vuk::Samples::e1 });
     final_attachment.same_shape_as(render_target);
@@ -476,126 +419,7 @@ auto WorldRenderer::end_frame(vuk::Value<vuk::ImageAttachment> &&render_target) 
 
     std::tie(final_attachment, depth_attachment) = editor_grid_pass(std::move(final_attachment), std::move(depth_attachment));
 
-    //  ── RESULTING IMAGE ─────────────────────────────────────────────────
-    impl->composition_result = std::move(final_attachment);
-
-    //  ── IMGUI ───────────────────────────────────────────────────────────
-    ImGui::Render();
-
-    ImDrawData *draw_data = ImGui::GetDrawData();
-    u64 vertex_size_bytes = draw_data->TotalVtxCount * sizeof(ImDrawVert);
-    u64 index_size_bytes = draw_data->TotalIdxCount * sizeof(ImDrawIdx);
-    if (!draw_data || vertex_size_bytes == 0) {
-        return std::move(render_target);
-    }
-
-    auto vertex_buffer = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eGPUtoCPU, vertex_size_bytes);
-    auto index_buffer = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eGPUtoCPU, index_size_bytes);
-    auto vertex_data = vertex_buffer.host_ptr<ImDrawVert>();
-    auto index_data = index_buffer.host_ptr<ImDrawIdx>();
-    for (const auto *draw_list : draw_data->CmdLists) {
-        memcpy(vertex_data, draw_list->VtxBuffer.Data, draw_list->VtxBuffer.Size * sizeof(ImDrawVert));
-        memcpy(index_data, draw_list->IdxBuffer.Data, draw_list->IdxBuffer.Size * sizeof(ImDrawIdx));
-        index_data += draw_list->IdxBuffer.Size;
-        vertex_data += draw_list->VtxBuffer.Size;
-    }
-
-    auto imgui_pass = vuk::make_pass(
-        "imgui",
-        [draw_data,
-         font_atlas_view = impl->device->image_view(impl->imgui_font_view.id()),
-         vertices = vertex_buffer.buffer,
-         indices = index_buffer.buffer,
-         &pipeline = *impl->device->pipeline(impl->imgui_pipeline.id())](
-            vuk::CommandBuffer &cmd_list,
-            VUK_IA(vuk::Access::eColorWrite) dst,
-            VUK_ARG(vuk::SampledImage[], vuk::Access::eFragmentSampled) sampled_images) {
-            struct PushConstants {
-                glm::vec2 translate = {};
-                glm::vec2 scale = {};
-            };
-
-            PushConstants c = {};
-            c.scale = { 2.0f / draw_data->DisplaySize.x, 2.0f / draw_data->DisplaySize.y };
-            c.translate = { -1.0f - draw_data->DisplayPos.x * c.scale.x, -1.0f - draw_data->DisplayPos.y * c.scale.y };
-
-            cmd_list  //
-                .set_dynamic_state(vuk::DynamicStateFlagBits::eViewport | vuk::DynamicStateFlagBits::eScissor)
-                .set_rasterization(vuk::PipelineRasterizationStateCreateInfo{})
-                .set_color_blend(dst, vuk::BlendPreset::eAlphaBlend)
-                .set_viewport(0, vuk::Rect2D::framebuffer())
-                .bind_graphics_pipeline(pipeline)
-                .bind_index_buffer(indices, sizeof(ImDrawIdx) == 2 ? vuk::IndexType::eUint16 : vuk::IndexType::eUint32)
-                .bind_vertex_buffer(
-                    0, vertices, 0, vuk::Packed{ vuk::Format::eR32G32Sfloat, vuk::Format::eR32G32Sfloat, vuk::Format::eR8G8B8A8Unorm })
-                .push_constants(vuk::ShaderStageFlagBits::eVertex, 0, c);
-
-            ImVec2 clip_off = draw_data->DisplayPos;
-            ImVec2 clip_scale = draw_data->FramebufferScale;
-            u32 vertex_offset = 0;
-            u32 index_offset = 0;
-            for (ImDrawList *draw_list : draw_data->CmdLists) {
-                for (i32 cmd_i = 0; cmd_i < draw_list->CmdBuffer.Size; cmd_i++) {
-                    ImDrawCmd &im_cmd = draw_list->CmdBuffer[cmd_i];
-                    ImVec4 clip_rect;
-                    clip_rect.x = (im_cmd.ClipRect.x - clip_off.x) * clip_scale.x;
-                    clip_rect.y = (im_cmd.ClipRect.y - clip_off.y) * clip_scale.y;
-                    clip_rect.z = (im_cmd.ClipRect.z - clip_off.x) * clip_scale.x;
-                    clip_rect.w = (im_cmd.ClipRect.w - clip_off.y) * clip_scale.y;
-
-                    auto pass_extent = cmd_list.get_ongoing_render_pass().extent;
-                    auto fb_scale = ImVec2(static_cast<f32>(pass_extent.width), static_cast<f32>(pass_extent.height));
-                    if (clip_rect.x < fb_scale.x && clip_rect.y < fb_scale.y && clip_rect.z >= 0.0f && clip_rect.w >= 0.0f) {
-                        if (clip_rect.x < 0.0f) {
-                            clip_rect.x = 0.0f;
-                        }
-                        if (clip_rect.y < 0.0f) {
-                            clip_rect.y = 0.0f;
-                        }
-
-                        vuk::Rect2D scissor;
-                        scissor.offset.x = (int32_t)(clip_rect.x);
-                        scissor.offset.y = (int32_t)(clip_rect.y);
-                        scissor.extent.width = (uint32_t)(clip_rect.z - clip_rect.x);
-                        scissor.extent.height = (uint32_t)(clip_rect.w - clip_rect.y);
-                        cmd_list.set_scissor(0, scissor);
-
-                        if (im_cmd.TextureId != 0) {
-                            auto index = im_cmd.TextureId - 1;
-                            cmd_list  //
-                                .bind_sampler(0, 0, sampled_images[index].sci)
-                                .bind_image(0, 1, sampled_images[index].ia);
-                        } else {
-                            cmd_list  //
-                                .bind_sampler(0, 0, {})
-                                .bind_image(0, 1, *font_atlas_view);
-                        }
-
-                        cmd_list.draw_indexed(
-                            im_cmd.ElemCount, 1, im_cmd.IdxOffset + index_offset, i32(im_cmd.VtxOffset + vertex_offset), 0);
-                    }
-                }
-
-                vertex_offset += draw_list->VtxBuffer.Size;
-                index_offset += draw_list->IdxBuffer.Size;
-            }
-
-            return dst;
-        });
-
-    auto &imgui_io = ImGui::GetIO();
-    imgui_io.Fonts->TexID = impl->imgui_rendering_images.size() + 1;
-    auto imgui_font_attachment =
-        impl->imgui_font_view.acquire(*impl->device, "imgui_font_atlas", vuk::ImageUsageFlagBits::eSampled, vuk::Access::eFragmentSampled);
-    impl->imgui_rendering_images.emplace_back(vuk::combine_image_sampler(
-        "imgui_font_atlas",
-        std::move(imgui_font_attachment),
-        vuk::acquire_sampler("imgui_font_sampler", { .magFilter = vuk::Filter::eLinear, .minFilter = vuk::Filter::eLinear })));
-    auto imgui_rendering_images_arr = vuk::declare_array("imgui_rendering_images", std::span(impl->imgui_rendering_images));
-
-    render_target = imgui_pass(std::move(render_target), std::move(imgui_rendering_images_arr));
-
-    return render_target;
+    return final_attachment;
 }
 
 auto WorldRenderer::draw_profiler_ui() -> void {
@@ -621,22 +445,6 @@ auto WorldRenderer::update_sun_dir() -> void {
 
 auto WorldRenderer::world_data() -> GPUWorldData & {
     return impl->context.world_data;
-}
-
-auto WorldRenderer::composition_result() -> ls::option<vuk::Value<vuk::ImageAttachment>> {
-    return impl->composition_result;
-}
-
-auto WorldRenderer::imgui_image(vuk::Value<vuk::ImageAttachment> &&attachment, const glm::vec2 &size) -> void {
-    ZoneScoped;
-
-    impl->imgui_rendering_images.emplace_back(vuk::combine_image_sampler(
-        "_imgui_img",
-        std::move(attachment),
-        vuk::acquire_sampler("_imgui_sampler", { .magFilter = vuk::Filter::eLinear, .minFilter = vuk::Filter::eLinear })));
-
-    // make it +1 so it wont be nullptr, we already decrement it by one in imgui pass
-    ImGui::Image(impl->imgui_rendering_images.size(), { size.x, size.y });
 }
 
 }  // namespace lr

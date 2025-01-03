@@ -1,17 +1,10 @@
 #include "Application.hh"
 
-#include "Engine/Core/ArgParser.hh"
-
-#include <imgui.h>
-
 namespace lr {
 bool Application::init(this Application &self, const ApplicationInfo &info) {
     ZoneScoped;
 
     Logger::init("engine");
-
-    ArgParser arg_parser(info.args);
-    self.flags.use_wayland = !arg_parser["--no-wayland"].has_value();
 
     ImGui::CreateContext();
     auto &imgui = ImGui::GetIO();
@@ -34,6 +27,7 @@ bool Application::init(this Application &self, const ApplicationInfo &info) {
     auto window_size = self.window.get_size();
     auto surface = self.window.get_surface(self.device.get_instance());
     self.swapchain = SwapChain::create(self.device, surface, { window_size.x, window_size.y }).value();
+    self.imgui_renderer.init(&self.device);
 
     auto world_result = World::create("default_world");
     if (!world_result.has_value()) {
@@ -100,25 +94,20 @@ void Application::run(this Application &self) {
         }
 
         // Delta time
-        f64 delta_time = self.world.delta_time();
-        auto &imgui = ImGui::GetIO();
-        imgui.DeltaTime = static_cast<f32>(delta_time);
-
-        self.world_renderer.begin_frame(swapchain_attachment);
-
-        // Update application
-        auto extent = self.swapchain.extent();
-        imgui.DisplaySize = ImVec2(static_cast<f32>(extent.width), static_cast<f32>(extent.height));
-
-        // WARN: Make sure to do all imgui settings BEFORE NewFrame!!!
-        self.world.begin_frame(self.world_renderer);
-        self.do_update(delta_time);
-        self.world.end_frame();
-
-        auto rendered_attachment = self.world_renderer.end_frame(std::move(swapchain_attachment));
-        self.device.end_frame(std::move(rendered_attachment));
-
+        self.world.progress();
         self.window.poll(window_callbacks);
+
+        f64 delta_time = self.world.delta_time();
+        self.imgui_renderer.begin_frame(delta_time, self.swapchain.extent());
+
+        self.do_update(delta_time);
+        if (self.world.update_scene_data(self.world_renderer)) {
+            self.world_renderer_image_index = self.imgui_renderer.add_image(self.world_renderer.render(swapchain_attachment));
+        }
+
+        swapchain_attachment = self.imgui_renderer.end_frame(std::move(swapchain_attachment));
+        self.device.end_frame(std::move(swapchain_attachment));
+
         self.should_close |= self.world.should_quit();
 
         FrameMark;

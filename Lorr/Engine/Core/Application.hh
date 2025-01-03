@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Engine/Asset/Asset.hh"
+#include "Engine/Graphics/ImGuiRenderer.hh"
 #include "Engine/Graphics/Vulkan.hh"
 #include "Engine/Graphics/VulkanDevice.hh"
 #include "Engine/Window/Window.hh"
@@ -8,10 +9,6 @@
 #include "Engine/World/WorldRenderer.hh"
 
 namespace lr {
-struct ApplicationFlags {
-    bool use_wayland : 1 = true;
-};
-
 struct ApplicationInfo {
     ls::span<c8 *> args = {};
     WindowInfo window_info = {};
@@ -27,11 +24,13 @@ struct Application {
 
     static Application &get();
 
-    ApplicationFlags flags = {};
     Device device = {};
     Window window = {};
     SwapChain swapchain = {};
+    ImGuiRenderer imgui_renderer = {};
 
+    // TODO: Should we remove this somewhere else? It's only used by editor.
+    ImTextureID world_renderer_image_index = 0;
     WorldRenderer world_renderer = {};
     World world = {};
 

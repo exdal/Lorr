@@ -35,7 +35,7 @@ struct TransferManager {
 
     auto upload_staging(this TransferManager &, Buffer &buffer, ls::span<u8> bytes) -> void;
     auto upload_staging(this TransferManager &, TransientBuffer &src, TransientBuffer &dst) -> void;
-    auto upload_staging(this TransferManager &, ImageView &image_view, ls::span<u8> bytes, vuk::Access release_access) -> void;
+    auto upload_staging(this TransferManager &, ImageView &image_view, ls::span<u8> bytes) -> void;
 
     auto wait_on(this TransferManager &, vuk::UntypedValue &&fut) -> void;
 
@@ -63,9 +63,9 @@ struct BindlessDescriptorSetLayoutInfo {
 };
 
 struct DeviceResources {
-    PagedPool<vuk::Unique<vuk::Buffer>, BufferID> buffers = {};
-    PagedPool<vuk::Unique<vuk::Image>, ImageID> images = {};
-    PagedPool<vuk::Unique<vuk::ImageView>, ImageViewID> image_views = {};
+    PagedPool<vuk::Unique<vuk::Buffer>, BufferID, 1024_sz> buffers = {};
+    PagedPool<vuk::Unique<vuk::Image>, ImageID, 1024_sz> images = {};
+    PagedPool<vuk::Unique<vuk::ImageView>, ImageViewID, 1024_sz> image_views = {};
     PagedPool<vuk::Sampler, SamplerID, 256_sz> samplers = {};
     PagedPool<vuk::PipelineBaseInfo *, PipelineID, 256_sz> pipelines = {};
 };
@@ -136,5 +136,7 @@ private:
     friend Sampler;
     friend Pipeline;
     friend SwapChain;
+
+    friend TransferManager;
 };
 }  // namespace lr

@@ -104,6 +104,7 @@ struct AssetManager : Handle<AssetManager> {
     //  ── Imported Assets ─────────────────────────────────────────────────
     // Assets that already exist in the filesystem with already set UUID's
     //
+    auto import_texture(const fs::path &path) -> Asset *;
 
     //  ── Load Assets ─────────────────────────────────────────────────────
     // Load contents of registered assets.

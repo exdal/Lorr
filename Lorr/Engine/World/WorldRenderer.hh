@@ -33,16 +33,13 @@ struct WorldRenderer : Handle<WorldRenderer> {
     auto begin_scene(const SceneBeginInfo &info) -> GPUSceneData;
     auto end_scene(GPUSceneData &scene_gpu_data) -> void;
 
-    auto begin_frame(vuk::Value<vuk::ImageAttachment> &reference_img) -> void;
-    auto end_frame(vuk::Value<vuk::ImageAttachment> &&render_target) -> vuk::Value<vuk::ImageAttachment>;
+    auto render(vuk::Value<vuk::ImageAttachment> &render_target) -> vuk::Value<vuk::ImageAttachment>;
 
     auto draw_profiler_ui() -> void;
 
     auto sun_angle() -> glm::vec2 &;
     auto update_sun_dir() -> void;
     auto world_data() -> GPUWorldData &;
-    auto composition_result() -> ls::option<vuk::Value<vuk::ImageAttachment>>;
-    auto imgui_image(vuk::Value<vuk::ImageAttachment> &&attachment, const glm::vec2 &size) -> void;
 };
 
 }  // namespace lr

@@ -560,8 +560,8 @@ auto WorldRenderer::end_frame(vuk::Value<vuk::ImageAttachment> &&render_target) 
                         scissor.extent.height = (uint32_t)(clip_rect.w - clip_rect.y);
                         cmd_list.set_scissor(0, scissor);
 
-                        if (im_cmd.TextureId) {
-                            auto index = reinterpret_cast<usize>(im_cmd.TextureId) - 1;
+                        if (im_cmd.TextureId != 0) {
+                            auto index = im_cmd.TextureId - 1;
                             cmd_list  //
                                 .bind_sampler(0, 0, sampled_images[index].sci)
                                 .bind_image(0, 1, sampled_images[index].ia);
@@ -584,7 +584,7 @@ auto WorldRenderer::end_frame(vuk::Value<vuk::ImageAttachment> &&render_target) 
         });
 
     auto &imgui_io = ImGui::GetIO();
-    imgui_io.Fonts->TexID = reinterpret_cast<ImTextureID>(impl->imgui_rendering_images.size() + 1);
+    imgui_io.Fonts->TexID = impl->imgui_rendering_images.size() + 1;
     auto imgui_font_attachment =
         impl->imgui_font_view.acquire(*impl->device, "imgui_font_atlas", vuk::ImageUsageFlagBits::eSampled, vuk::Access::eFragmentSampled);
     impl->imgui_rendering_images.emplace_back(vuk::combine_image_sampler(
@@ -636,8 +636,7 @@ auto WorldRenderer::imgui_image(vuk::Value<vuk::ImageAttachment> &&attachment, c
         vuk::acquire_sampler("_imgui_sampler", { .magFilter = vuk::Filter::eLinear, .minFilter = vuk::Filter::eLinear })));
 
     // make it +1 so it wont be nullptr, we already decrement it by one in imgui pass
-    auto im_texture_id = reinterpret_cast<ImTextureID>(impl->imgui_rendering_images.size());
-    ImGui::Image(im_texture_id, { size.x, size.y });
+    ImGui::Image(impl->imgui_rendering_images.size(), { size.x, size.y });
 }
 
 }  // namespace lr

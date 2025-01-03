@@ -40,8 +40,9 @@ struct EditorLayout {
 };
 }  // namespace lr
 
-namespace lg {
+namespace ImGuiLR {
 bool drag_xy(glm::vec2 &coords);
 bool drag_xyz(glm::vec3 &coords);
 void center_text(std::string_view str);
-}  // namespace lg
+bool image_button(std::string_view text, ImTextureID texture_id, const ImVec2 &button_size);
+}  // namespace ImGuiLR

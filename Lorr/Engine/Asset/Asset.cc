@@ -11,7 +11,6 @@
 #include "Engine/OS/File.hh"
 
 #include "Engine/Util/JsonWriter.hh"
-#include "Engine/World/Components.hh"
 
 #include <simdjson.h>
 
@@ -576,71 +575,7 @@ auto AssetManager::export_scene(Asset *asset, const fs::path &path) -> bool {
 
     auto scene = this->get_scene(asset->scene_id);
     LS_EXPECT(scene);
-
-    JsonWriter json;
-    json.begin_obj();
-    json["name"] = scene.name_sv();
-    json["entities"].begin_array();
-    scene.root().children([&](flecs::entity e) {
-        json.begin_obj();
-        json["name"] = std::string_view(e.name(), e.name().length());
-
-        std::vector<Component::Wrapper> components = {};
-
-        json["tags"].begin_array();
-        e.each([&](flecs::id component_id) {
-            auto world = e.world();
-            if (!component_id.is_entity()) {
-                return;
-            }
-
-            Component::Wrapper component(e, component_id);
-            if (!component.has_component()) {
-                json << component.path;
-            } else {
-                components.emplace_back(e, component_id);
-            }
-        });
-        json.end_array();
-
-        json["components"].begin_array();
-        for (auto &component : components) {
-            json.begin_obj();
-            json["name"] = component.path;
-            component.for_each([&](usize &, std::string_view member_name, Component::Wrapper::Member &member) {
-                auto &member_json = json[member_name];
-                std::visit(
-                    match{
-                        [](const auto &) {},
-                        [&](f32 *v) { member_json = *v; },
-                        [&](i32 *v) { member_json = *v; },
-                        [&](u32 *v) { member_json = *v; },
-                        [&](i64 *v) { member_json = *v; },
-                        [&](u64 *v) { member_json = *v; },
-                        [&](glm::vec2 *v) { member_json = *v; },
-                        [&](glm::vec3 *v) { member_json = *v; },
-                        [&](glm::vec4 *v) { member_json = *v; },
-                        [&](std::string *v) { member_json = *v; },
-                        [&](UUID *v) { member_json = v->str().c_str(); },
-                    },
-                    member);
-            });
-            json.end_obj();
-        }
-        json.end_array();
-        json.end_obj();
-    });
-
-    json.end_array();
-    json.end_obj();
-
-    File file(path, FileAccess::Write);
-    if (!file) {
-        LOG_ERROR("Failed to open file {}!", path);
-        return false;
-    }
-
-    file.write(json.stream.view().data(), json.stream.view().length());
+    scene.export_to_file(path);
 
     return true;
 }

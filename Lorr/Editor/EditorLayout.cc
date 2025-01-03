@@ -295,7 +295,7 @@ void EditorLayout::update(this EditorLayout &self) {
 }
 }  // namespace lr
 
-bool lg::drag_xy(glm::vec2 &coords) {
+bool ImGuiLR::drag_xy(glm::vec2 &coords) {
     bool value_changed = false;
     ImGui::PushMultiItemsWidths(3, ImGui::CalcItemWidth());
 
@@ -335,7 +335,7 @@ bool lg::drag_xy(glm::vec2 &coords) {
     return value_changed;
 }
 
-bool lg::drag_xyz(glm::vec3 &coords) {
+bool ImGuiLR::drag_xyz(glm::vec3 &coords) {
     bool value_changed = false;
     ImGui::PushMultiItemsWidths(3, ImGui::CalcItemWidth());
 
@@ -391,10 +391,35 @@ bool lg::drag_xyz(glm::vec3 &coords) {
     return value_changed;
 }
 
-void lg::center_text(std::string_view str) {
+void ImGuiLR::center_text(std::string_view str) {
     auto window_size = ImGui::GetWindowSize();
     auto text_size = ImGui::CalcTextSize(str.begin(), str.end());
 
     ImGui::SetCursorPos({ (window_size.x - text_size.x) * 0.5f, (window_size.y - text_size.y) * 0.5f });
     ImGui::TextUnformatted(str.begin(), str.end());
+}
+
+bool ImGuiLR::image_button(std::string_view text, ImTextureID texture_id, const ImVec2 &button_size) {
+    auto &style = ImGui::GetStyle();
+    auto min_size = std::min(button_size.x, button_size.y);
+    min_size -= style.FramePadding.x * 2.0f;
+    auto new_size = ImVec2(min_size, min_size);
+
+    ImGui::BeginGroup();
+
+    auto cursor_pos = ImGui::GetCursorPos();
+    cursor_pos.x += style.FramePadding.x;
+    cursor_pos.y += style.FramePadding.y;
+    ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, { 0.5, 0.9 });
+    ImGui::Button(text.data(), button_size);
+    ImGui::PopStyleVar();
+
+    ImGui::SetNextItemAllowOverlap();
+    ImGui::SetCursorPos(cursor_pos);
+    ImGui::Image(texture_id, new_size);
+    ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal);
+
+    ImGui::EndGroup();
+
+    return false;
 }

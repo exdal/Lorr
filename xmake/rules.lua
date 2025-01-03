@@ -1,5 +1,5 @@
 rule("lorr.install_resources")
-    set_extensions(".ttf", ".slang", ".lua", ".txt")
+    set_extensions(".png", ".ttf", ".slang", ".lua", ".txt")
     before_buildcmd_file(function (target, batchcmds, sourcefile, opt)
         local output_dir = target:extraconf("rules", "lorr.install_resources", "output_dir") or ""
         local root_dir = target:extraconf("rules", "lorr.install_resources", "root_dir") or os.scriptdir()

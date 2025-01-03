@@ -14,6 +14,8 @@ struct Scene : Handle<Scene> {
     static auto create_from_file(const fs::path &path, World *world) -> ls::option<Scene>;
     auto destroy() -> void;
 
+    auto export_to_file(const fs::path &path) -> bool;
+
     auto create_entity(const std::string &name) -> flecs::entity;
     auto create_perspective_camera(const std::string &name, const glm::vec3 &position, const glm::vec3 &rotation, f32 fov, f32 aspect_ratio)
         -> flecs::entity;

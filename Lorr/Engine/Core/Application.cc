@@ -22,15 +22,6 @@ bool Application::init(this Application &self, const ApplicationInfo &info) {
     imgui.BackendFlags = ImGuiBackendFlags_RendererHasVtxOffset;
     ImGui::StyleColorsDark();
 
-    imgui.KeyMap[ImGuiKey_W] = LR_KEY_W;
-    imgui.KeyMap[ImGuiKey_A] = LR_KEY_A;
-    imgui.KeyMap[ImGuiKey_S] = LR_KEY_S;
-    imgui.KeyMap[ImGuiKey_D] = LR_KEY_D;
-    imgui.KeyMap[ImGuiKey_Enter] = LR_KEY_ENTER;
-    imgui.KeyMap[ImGuiKey_Backspace] = LR_KEY_BACKSPACE;
-    imgui.KeyMap[ImGuiKey_LeftArrow] = LR_KEY_LEFT;
-    imgui.KeyMap[ImGuiKey_RightArrow] = LR_KEY_RIGHT;
-
     if (!self.do_super_init(info.args)) {
         LOG_FATAL("Super init failed!");
         return false;

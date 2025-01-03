@@ -193,7 +193,7 @@ void ViewportPanel::update(this ViewportPanel &self) {
 
         ImGui::PopStyleColor(2);
     } else {
-        lg::center_text("No scene to render.");
+        ImGuiLR::center_text("No scene to render.");
     }
 
     if (ImGui::BeginDragDropTargetCustom(current_window->InnerRect, ImGui::GetID("##viewport_drop_target"))) {

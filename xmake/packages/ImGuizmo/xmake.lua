@@ -8,7 +8,7 @@ package("imguizmo-lorr")
     add_versions("1.89+WIP", "99358b3afc8cdfff5c264f97ab1718b2d8089319")
 
 
-    add_deps("imgui v1.91.0-docking")
+    add_deps("imgui v1.91.6-docking")
 
     on_install("macosx", "linux", "windows", "mingw", "android", "iphoneos", function (package)
             local imgui = package:dep("imgui")

@@ -35,7 +35,6 @@ target("Lorr")
     })
 
     add_options("profile")
-    add_options("wayland")
 
     add_deps(
         "ls",

@@ -1,31 +1,39 @@
 #pragma once
 
-#include "Engine/Core/Handle.hh"
+#include "Engine/World/WorldRenderer.hh"
 
 #include <flecs.h>
 
 namespace lr {
-using World_H = Handle<struct World>;
 struct AssetManager;
 
 enum class SceneID : u32 { Invalid = ~0_u32 };
-struct Scene : Handle<Scene> {
-    static auto create(const std::string &name, World *world) -> ls::option<Scene>;
-    static auto create_from_file(const fs::path &path, World *world) -> ls::option<Scene>;
-    auto destroy() -> void;
+struct Scene {
+    auto init(this Scene &, const std::string &name) -> bool;
+    auto init_from_file(this Scene &, const fs::path &path) -> bool;
+    auto destroy(this Scene &) -> void;
 
-    auto export_to_file(const fs::path &path) -> bool;
+    auto export_to_file(this Scene &, const fs::path &path) -> bool;
 
-    auto create_entity(const std::string &name) -> flecs::entity;
-    auto create_perspective_camera(const std::string &name, const glm::vec3 &position, const glm::vec3 &rotation, f32 fov, f32 aspect_ratio)
+    auto create_entity(this Scene &, const std::string &name) -> flecs::entity;
+    auto create_perspective_camera(
+        this Scene &, const std::string &name, const glm::vec3 &position, const glm::vec3 &rotation, f32 fov, f32 aspect_ratio)
         -> flecs::entity;
-    auto create_editor_camera() -> void;
+    auto create_editor_camera(this Scene &) -> void;
 
-    auto root() -> flecs::entity;
-    auto cameras() -> ls::span<flecs::entity>;
-    auto editor_camera() -> flecs::entity;
-    auto name() -> std::string;
-    auto name_sv() -> std::string_view;
+    auto upload_scene(this Scene &, WorldRenderer &renderer) -> void;
+    auto tick(this Scene &) -> bool;
+
+    auto root(this Scene &) -> const flecs::world &;
+    auto editor_camera(this Scene &) -> flecs::entity;
+    auto get_cameras(this Scene &) -> ls::span<flecs::entity>;
+    auto get_name(this Scene &) -> const std::string &;
+    auto get_name_sv(this Scene &) -> std::string_view;
+
+private:
+    std::string name = {};
+    flecs::world world{};
+    std::vector<flecs::entity> cameras = {};
 
     friend AssetManager;
 };

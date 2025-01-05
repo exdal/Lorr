@@ -5,10 +5,10 @@
 #include "Engine/Util/JsonWriter.hh"
 
 #include "Engine/World/Components.hh"
-#include "Engine/World/World.hh"
 
 #include <simdjson.h>
 
+namespace lr {
 template<glm::length_t N, typename T>
 bool json_to_vec(simdjson::ondemand::value &o, glm::vec<N, T> &vec) {
     using U = glm::vec<N, T>;
@@ -20,38 +20,26 @@ bool json_to_vec(simdjson::ondemand::value &o, glm::vec<N, T> &vec) {
     return true;
 }
 
-namespace lr {
-template<>
-struct Handle<Scene>::Impl {
-    World *world = nullptr;
-    flecs::entity handle = {};
+auto Scene::init(this Scene &self, const std::string &name) -> bool {
+    ZoneScoped;
 
-    std::vector<flecs::entity> cameras = {};
-};
-
-auto Scene::create(const std::string &name, World *world) -> ls::option<Scene> {
-    auto impl = new Impl;
-    auto self = Scene(impl);
-
-    impl->world = world;
-    impl->handle = world->create_entity(name);
-
-    world->ecs()
+    self.name = name;
+    self.world
         .observer<Component::Camera>()  //
         .event(flecs::Monitor)
-        .each([impl](flecs::iter &it, usize i, Component::Camera &camera) {
+        .each([&self](flecs::iter &it, usize i, Component::Camera &camera) {
             if (it.event() == flecs::OnAdd) {
-                camera.index = impl->cameras.size();
-                impl->cameras.push_back(it.entity(i));
+                camera.index = self.cameras.size();
+                self.cameras.push_back(it.entity(i));
             } else {
                 // TODO: Clear vector and reinsert all entities
             }
         });
 
-    return self;
+    return true;
 }
 
-auto Scene::create_from_file(const fs::path &path, World *world) -> ls::option<Scene> {
+auto Scene::init_from_file(this Scene &self, const fs::path &path) -> bool {
     ZoneScoped;
     memory::ScopedStack stack;
     namespace sj = simdjson;
@@ -59,7 +47,7 @@ auto Scene::create_from_file(const fs::path &path, World *world) -> ls::option<S
     File file(path, FileAccess::Read);
     if (!file) {
         LOG_ERROR("Failed to open file {}!", path);
-        return ls::nullopt;
+        return false;
     }
 
     auto json = sj::padded_string(file.size);
@@ -69,31 +57,31 @@ auto Scene::create_from_file(const fs::path &path, World *world) -> ls::option<S
     auto doc = parser.iterate(json);
     if (doc.error()) {
         LOG_ERROR("Failed to parse scene file! {}", sj::error_message(doc.error()));
-        return ls::nullopt;
+        return false;
     }
 
     auto name_json = doc["name"].get_string();
     if (name_json.error()) {
         LOG_ERROR("Scene files must have names!");
-        return ls::nullopt;
+        return false;
     }
 
-    auto self = Scene::create(std::string(name_json.value()), world);
+    self.init(std::string(name_json.value()));
 
     auto entities_json = doc["entities"].get_array();
     for (auto entity_json : entities_json) {
         auto entity_name_json = entity_json["name"];
         if (entity_name_json.error()) {
             LOG_ERROR("Entities must have names!");
-            return ls::nullopt;
+            return false;
         }
 
         auto entity_name = entity_name_json.get_string().value();
-        auto e = self->create_entity(std::string(entity_name.begin(), entity_name.end()));
+        auto e = self.create_entity(std::string(entity_name.begin(), entity_name.end()));
 
         auto entity_tags_json = entity_json["tags"];
         for (auto entity_tag : entity_tags_json.get_array()) {
-            auto tag = world->ecs().component(stack.null_terminate(entity_tag.get_string()).data());
+            auto tag = self.world.component(stack.null_terminate(entity_tag.get_string()).data());
             e.add(tag);
         }
 
@@ -102,14 +90,14 @@ auto Scene::create_from_file(const fs::path &path, World *world) -> ls::option<S
             auto component_name_json = component_json["name"];
             if (component_name_json.error()) {
                 LOG_ERROR("Entity '{}' has corrupt components JSON array.", e.name());
-                return ls::nullopt;
+                return false;
             }
 
             auto component_name = stack.null_terminate(component_name_json.get_string());
-            auto component_id = world->ecs().lookup(component_name.data());
+            auto component_id = self.world.lookup(component_name.data());
             if (!component_id) {
                 LOG_ERROR("Entity '{}' has invalid component named '{}'!", e.name(), component_name);
-                return ls::nullopt;
+                return false;
             }
 
             e.add(component_id);
@@ -135,24 +123,23 @@ auto Scene::create_from_file(const fs::path &path, World *world) -> ls::option<S
         }
     }
 
-    return self;
+    return true;
 }
 
-auto Scene::destroy() -> void {
+auto Scene::destroy(this Scene &self) -> void {
     ZoneScoped;
 
-    delete impl;
-    impl = nullptr;
+    self.world.release();
 }
 
-auto Scene::export_to_file(const fs::path &path) -> bool {
+auto Scene::export_to_file(this Scene &self, const fs::path &path) -> bool {
     ZoneScoped;
 
     JsonWriter json;
     json.begin_obj();
-    json["name"] = impl->handle.name();
+    json["name"] = self.name;
     json["entities"].begin_array();
-    impl->handle.children([&](flecs::entity e) {
+    self.world.each([&](flecs::entity e) {
         json.begin_obj();
         json["name"] = std::string_view(e.name(), e.name().length());
 
@@ -160,7 +147,6 @@ auto Scene::export_to_file(const fs::path &path) -> bool {
 
         json["tags"].begin_array();
         e.each([&](flecs::id component_id) {
-            auto world = e.world();
             if (!component_id.is_entity()) {
                 return;
             }
@@ -216,51 +202,85 @@ auto Scene::export_to_file(const fs::path &path) -> bool {
     return true;
 }
 
-auto Scene::create_entity(const std::string &name) -> flecs::entity {
+auto Scene::create_entity(this Scene &self, const std::string &name) -> flecs::entity {
     ZoneScoped;
 
-    return impl->world->create_entity(name).child_of(impl->handle);
+    return self.world.entity(name);
 }
 
 auto Scene::create_perspective_camera(
-    const std::string &name, const glm::vec3 &position, const glm::vec3 &rotation, f32 fov, f32 aspect_ratio) -> flecs::entity {
+    this Scene &self, const std::string &name, const glm::vec3 &position, const glm::vec3 &rotation, f32 fov, f32 aspect_ratio)
+    -> flecs::entity {
     ZoneScoped;
 
-    u32 camera_id = impl->cameras.size();
-    auto e = this->create_entity(name)  //
+    u32 camera_id = self.cameras.size();
+    auto e = self.create_entity(name)  //
                  .add<Component::PerspectiveCamera>()
                  .set<Component::Transform>({ .position = position, .rotation = rotation })
                  .set<Component::Camera>({ .fov = fov, .aspect_ratio = aspect_ratio, .index = camera_id });
-    impl->cameras.push_back(e);
+    self.cameras.push_back(e);
 
     return e;
 }
 
-auto Scene::create_editor_camera() -> void {
+auto Scene::create_editor_camera(this Scene &self) -> void {
     ZoneScoped;
 
-    this->create_perspective_camera("editor_camera", { 0.0, 2.0, 0.0 }, { 0, 0, 0 }, 65.0, 1.6)
+    self.create_perspective_camera("editor_camera", { 0.0, 2.0, 0.0 }, { 0, 0, 0 }, 65.0, 1.6)
         .add<Component::Hidden>()
         .add<Component::EditorCamera>()
         .add<Component::ActiveCamera>();
 }
 
-auto Scene::root() -> flecs::entity {
+auto Scene::upload_scene(this Scene &self, WorldRenderer &renderer) -> void {
     ZoneScoped;
 
-    return impl->handle;
+    auto camera_query = self.world  //
+                            .query_builder<Component::Transform, Component::Camera>()
+                            .build();
+    auto model_transform_query = self.world  //
+                                     .query_builder<Component::Transform, Component::RenderableModel>()
+                                     .build();
+
+    auto scene_data = renderer.begin_scene({
+        .camera_count = camera_query.count(),
+        .model_transform_count = model_transform_query.count(),
+    });
+
+    u32 active_camera_index = 0;
+    camera_query.each([&](flecs::entity e, Component::Transform &t, Component::Camera &c) {
+        auto &camera_data = scene_data.cameras[c.index];
+        camera_data.projection_mat = c.projection;
+        camera_data.view_mat = t.matrix;
+        camera_data.projection_view_mat = glm::transpose(c.projection * t.matrix);
+        camera_data.inv_view_mat = glm::inverse(glm::transpose(t.matrix));
+        camera_data.inv_projection_view_mat = glm::inverse(glm::transpose(c.projection)) * camera_data.inv_view_mat;
+        camera_data.position = t.position;
+        camera_data.near_clip = c.near_clip;
+        camera_data.far_clip = c.far_clip;
+
+        if (e.has<Component::ActiveCamera>()) {
+            active_camera_index = c.index;
+        }
+    });
+
+    renderer.end_scene(scene_data);
 }
 
-auto Scene::cameras() -> ls::span<flecs::entity> {
-    ZoneScoped;
-
-    return impl->cameras;
+auto Scene::tick(this Scene &self) -> bool {
+    return self.world.progress();
 }
 
-auto Scene::editor_camera() -> flecs::entity {
+auto Scene::root(this Scene &self) -> const flecs::world & {
     ZoneScoped;
 
-    for (const auto &v : impl->cameras) {
+    return self.world;
+}
+
+auto Scene::editor_camera(this Scene &self) -> flecs::entity {
+    ZoneScoped;
+
+    for (const auto &v : self.cameras) {
         if (v.has<Component::EditorCamera>()) {
             return v;
         }
@@ -269,14 +289,20 @@ auto Scene::editor_camera() -> flecs::entity {
     return {};
 }
 
-auto Scene::name() -> std::string {
+auto Scene::get_cameras(this Scene &self) -> ls::span<flecs::entity> {
     ZoneScoped;
 
-    return { impl->handle.name() };
+    return self.cameras;
 }
 
-auto Scene::name_sv() -> std::string_view {
-    return { impl->handle.name().c_str(), impl->handle.name().length() };
+auto Scene::get_name(this Scene &self) -> const std::string & {
+    ZoneScoped;
+
+    return self.name;
+}
+
+auto Scene::get_name_sv(this Scene &self) -> std::string_view {
+    return self.name;
 }
 
 }  // namespace lr

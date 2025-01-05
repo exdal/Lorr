@@ -43,6 +43,8 @@ struct Asset {
         MaterialID material_id;
         SceneID scene_id;
     };
+
+    auto write_metadata(this Asset &, const fs::path &path) -> bool;
 };
 
 //
@@ -79,32 +81,21 @@ struct AssetManager : Handle<AssetManager> {
     auto material_buffer() const -> Buffer &;
     auto registry() const -> const AssetRegistry &;
 
-    // Add already existing asset into the registry.
-    // File must end with `.lrasset` extension.
-    auto add_asset(const fs::path &path) -> Asset *;
-
-    //  ── Registered Assets ───────────────────────────────────────────────
-    // These functions make engine aware of given asset, it does __NOT__
-    // load them. Useful if we want to individually load scene/world assets.
-    //
-    auto register_asset(const fs::path &path, UUID &uuid, AssetType type) -> Asset *;
-    auto register_model(const fs::path &path, UUID &uuid) -> Asset *;
-    auto register_texture(const fs::path &path, UUID &uuid) -> Asset *;
-    auto register_material(const fs::path &path, UUID &uuid) -> Asset *;
-    auto register_scene(const fs::path &path, UUID &uuid) -> Asset *;
-
     //  ── Created Assets ──────────────────────────────────────────────────
     // Assets that will be created and asinged new UUID. New `.lrasset` file
     // will be written in the same directory as target asset.
     // All created assets will be automatically registered into the registry.
     //
+    auto create_asset(AssetType type, const fs::path &path = {}) -> Asset *;
     auto create_scene(const std::string &name, const fs::path &path) -> Asset *;
-    auto write_asset_meta(Asset *asset, const UUID &uuid) -> void;
 
     //  ── Imported Assets ─────────────────────────────────────────────────
     // Assets that already exist in the filesystem with already set UUID's
     //
-    auto import_texture(const fs::path &path) -> Asset *;
+    // Add already existing asset into the registry.
+    // File must end with `.lrasset` extension.
+    auto import_asset(const fs::path &path) -> Asset *;
+    auto import_scene(Asset *asset) -> bool;
 
     //  ── Load Assets ─────────────────────────────────────────────────────
     // Load contents of registered assets.

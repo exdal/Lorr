@@ -7,8 +7,3 @@ option("profile")
     end
 option_end()
 
-option("enable_tests")
-    set_default(false)
-    set_description("Enable tests")
-option_end()
-

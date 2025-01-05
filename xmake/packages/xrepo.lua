@@ -21,15 +21,11 @@ add_requires("fastgltf v0.8.0")
 add_requires("stb 2023.12.15")
 add_requires("lz4 v1.9.4")
 add_requires("zstd v1.5.6")
-add_requires("flecs v4.0.0")
+add_requires("flecs v4.0.3")
 
 add_requires("libsdl 2.30.10", { configs = {
     sdlmain = false,
 } })
-
-if has_config("enable_tests") then
-    add_requires("gtest v1.15.2", { configs = { main = true, gmock = true } })
-end
 
 add_requires("imguizmo-lorr 1.89+WIP")
 add_requires("slang-lorr v2024.17.3")

@@ -15,6 +15,24 @@
 #include <simdjson.h>
 
 namespace lr {
+auto Asset::write_metadata(this Asset &self, const fs::path &path) -> bool {
+    JsonWriter json;
+    json.begin_obj();
+    json["uuid"] = self.uuid.str();
+    json["type"] = std::to_underlying(self.type);
+    json.end_obj();
+
+    File file(path, FileAccess::Write);
+    if (!file) {
+        return false;
+    }
+
+    file.write(json.stream.view().data(), json.stream.view().length());
+    file.close();
+
+    return true;
+}
+
 template<>
 struct Handle<AssetManager>::Impl {
     Device *device = nullptr;
@@ -101,7 +119,41 @@ auto AssetManager::registry() const -> const AssetRegistry & {
     return impl->registry;
 }
 
-auto AssetManager::add_asset(const fs::path &path) -> Asset * {
+auto AssetManager::create_asset(AssetType type, const fs::path &path) -> Asset * {
+    ZoneScoped;
+
+    auto uuid = UUID::generate_random();
+    auto [asset_it, inserted] = impl->registry.try_emplace(uuid);
+    if (!inserted) {
+        LOG_ERROR("Cannot create assert '{}'!", uuid.str());
+        return nullptr;
+    }
+
+    auto &asset = asset_it->second;
+    asset.uuid = uuid;
+    asset.type = type;
+    asset.path = path;
+
+    return &asset;
+}
+
+auto AssetManager::create_scene(const std::string &name, const fs::path &path) -> Asset * {
+    ZoneScoped;
+
+    auto &app = Application::get();
+    auto asset = this->create_asset(AssetType::Scene, path);
+
+    auto scene = Scene::create(name, &app.world);
+    scene->create_editor_camera();
+
+    auto scene_resource = impl->scenes.create();
+    asset->scene_id = scene_resource->id;
+    *scene_resource->self = scene->impl;
+
+    return asset;
+}
+
+auto AssetManager::import_asset(const fs::path &path) -> Asset * {
     ZoneScoped;
     memory::ScopedStack stack;
     namespace sj = simdjson;
@@ -145,170 +197,56 @@ auto AssetManager::add_asset(const fs::path &path) -> Asset * {
     auto uuid = UUID::from_string(uuid_json.value()).value();
     auto type = static_cast<AssetType>(type_json.value().get_uint64());
 
-    return this->register_asset(asset_path, uuid, type);
-}
+    auto [asset_it, inserted] = impl->registry.try_emplace(uuid);
+    if (!inserted) {
+        // is it already in the registry?
+        asset_it = impl->registry.find(uuid);
+        if (asset_it == impl->registry.end()) {
+            LOG_ERROR("Cannot insert assert '{}' into the registry!", uuid.str());
+            return nullptr;
+        }
 
-auto AssetManager::register_asset(const fs::path &path, UUID &uuid, AssetType type) -> Asset * {
-    ZoneScoped;
+        // Already inside registry, just return
+        return &asset_it->second;
+    }
+
+    auto &asset = asset_it->second;
+    asset.path = asset_path;
+    asset.uuid = uuid;
+    asset.type = type;
 
     switch (type) {
-        case AssetType::Model: {
-            return this->register_model(path, uuid);
-        }
-        case AssetType::Texture: {
-            return this->register_texture(path, uuid);
-        }
-        case AssetType::Material: {
-            return this->register_material(path, uuid);
-        }
         case AssetType::Scene: {
-            return this->register_scene(path, uuid);
+            this->import_scene(&asset);
+            break;
         }
+        case AssetType::Model:
+        case AssetType::Texture:
+        case AssetType::Material:
         case AssetType::None:
         case AssetType::Shader:
         case AssetType::Font:
             LS_EXPECT(false);  // TODO: Other asset types
             return nullptr;
     }
-}
-
-auto AssetManager::register_model(const fs::path &path, UUID &uuid) -> Asset * {
-    ZoneScoped;
-
-    auto [asset_it, inserted] = impl->registry.try_emplace(uuid);
-    if (!inserted) {
-        LOG_ERROR("Cannot register new model!");
-        return {};
-    }
-
-    auto model_result = impl->models.create();
-    if (!model_result.has_value()) {
-        LOG_ERROR("Failed to create new model, out of pool space.");
-        return {};
-    }
-
-    auto &asset = asset_it->second;
-    asset.uuid = uuid;
-    asset.path = path;
-    asset.type = AssetType::Model;
-    asset.model_id = model_result->id;
 
     return &asset;
 }
 
-auto AssetManager::register_texture(const fs::path &path, UUID &uuid) -> Asset * {
-    ZoneScoped;
-
-    auto [asset_it, inserted] = impl->registry.try_emplace(uuid);
-    if (!inserted) {
-        LOG_ERROR("Cannot register new texture!");
-        return {};
-    }
-
-    auto texture_result = impl->textures.create();
-    if (!texture_result.has_value()) {
-        LOG_ERROR("Failed to create new texture, out of pool space.");
-        return {};
-    }
-
-    auto &asset = asset_it->second;
-    asset.uuid = uuid;
-    asset.path = path;
-    asset.type = AssetType::Texture;
-    asset.texture_id = texture_result->id;
-
-    return &asset;
-}
-
-auto AssetManager::register_material(const fs::path &path, UUID &uuid) -> Asset * {
-    ZoneScoped;
-
-    auto [asset_it, inserted] = impl->registry.try_emplace(uuid);
-    if (!inserted) {
-        LOG_ERROR("Cannot register new scene!");
-        return {};
-    }
-
-    auto material_result = impl->materials.create();
-    if (!material_result.has_value()) {
-        LOG_ERROR("Failed to create new material, out of pool space.");
-        return {};
-    }
-
-    auto &asset = asset_it->second;
-    asset.uuid = uuid;
-    asset.path = path;
-    asset.type = AssetType::Material;
-    asset.material_id = material_result->id;
-
-    return &asset;
-}
-
-auto AssetManager::register_scene(const fs::path &path, UUID &uuid) -> Asset * {
-    ZoneScoped;
-
-    auto [asset_it, inserted] = impl->registry.try_emplace(uuid);
-    if (!inserted) {
-        LOG_ERROR("Cannot register new scene!");
-        return {};
-    }
-
-    auto scene_result = impl->scenes.create();
-    if (!scene_result.has_value()) {
-        LOG_ERROR("Failed to create new scene, out of pool space.");
-        return {};
-    }
-
-    auto &asset = asset_it->second;
-    asset.uuid = uuid;
-    asset.path = path;
-    asset.type = AssetType::Scene;
-    asset.scene_id = scene_result->id;
-
-    return &asset;
-}
-
-auto AssetManager::create_scene(const std::string &name, const fs::path &path) -> Asset * {
-    ZoneScoped;
-
+auto AssetManager::import_scene(Asset *asset) -> bool {
     auto &app = Application::get();
-    auto uuid = UUID::generate_random();
-    auto asset = this->register_scene(path, uuid);
+    auto &world = app.world;
 
-    auto scene = Scene::create(name, &app.world);
-    scene->create_editor_camera();
-    impl->scenes.get(asset->scene_id) = scene->impl;
+    auto scene = Scene::create_from_file(asset->path, &world).value();
+    if (!scene) {
+        return false;
+    }
 
-    this->export_scene(asset, asset->path);
-    this->write_asset_meta(asset, uuid);
+    auto scene_resource = impl->scenes.create();
+    asset->scene_id = scene_resource->id;
+    scene_resource->self = &scene.impl;
 
-    return asset;
-}
-
-auto AssetManager::write_asset_meta(Asset *asset, const UUID &uuid) -> void {
-    ZoneScoped;
-
-    JsonWriter json;
-    json.begin_obj();
-    json["uuid"] = uuid.str();
-    json["type"] = static_cast<u32>(asset->type);
-    json.end_obj();
-
-    auto path = asset->path.replace_extension(asset->path.extension().string() + ".lrasset");
-    File file(path, FileAccess::Write);
-    file.write(json.stream.view().data(), json.stream.view().length());
-    file.close();
-}
-
-auto AssetManager::import_texture(const fs::path &path) -> Asset * {
-    ZoneScoped;
-
-    auto uuid = UUID::generate_random();
-    auto asset = this->register_texture(path, uuid);
-
-    LS_EXPECT(this->load_texture(asset));
-
-    return asset;
+    return true;
 }
 
 auto AssetManager::load_model(Asset *asset) -> bool {
@@ -456,7 +394,10 @@ auto AssetManager::load_texture(
 
     transfer_man.upload_staging(image_view.value(), pixels);
 
-    auto *texture = this->get_texture(asset->texture_id);
+    auto texture_resource = impl->textures.create();
+    asset->texture_id = texture_resource->id;
+    auto *texture = texture_resource->self;
+
     texture->image = image.value();
     texture->image_view = image_view.value();
     texture->sampler =  //
@@ -566,12 +507,6 @@ auto AssetManager::load_material(Asset *) -> bool {
 auto AssetManager::load_scene(Asset *asset) -> bool {
     ZoneScoped;
 
-    auto &app = Application::get();
-    auto &world = app.world;
-
-    auto scene = Scene::create_from_file(asset->path, &world).value();
-    impl->scenes.get(asset->scene_id) = scene.impl;
-
     return true;
 }
 
@@ -581,8 +516,8 @@ auto AssetManager::export_scene(Asset *asset, const fs::path &path) -> bool {
     auto scene = this->get_scene(asset->scene_id);
     LS_EXPECT(scene);
     scene.export_to_file(path);
-
-    return true;
+    auto meta_path = path.string() + ".lrasset";
+    return asset->write_metadata(meta_path);
 }
 
 auto AssetManager::get_asset(const UUID &uuid) -> Asset * {

@@ -14,7 +14,8 @@ void EditorLayout::init(this EditorLayout &self) {
 
     auto add_texture = [&self](std::string name, const fs::path &path) {
         auto &app = EditorApp::get();
-        auto asset = app.asset_man.import_texture(app.asset_man.asset_root_path(AssetType::Root) / "editor" / path);
+        auto asset = app.asset_man.create_asset(AssetType::Texture, app.asset_man.asset_root_path(AssetType::Root) / "editor" / path);
+        app.asset_man.load_texture(asset);
         self.editor_assets.emplace(name, asset->uuid);
     };
 

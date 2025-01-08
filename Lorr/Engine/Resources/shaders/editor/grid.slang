@@ -59,11 +59,12 @@ float4 pristine_grid(float3 uv, float2 lineWidth)
 [shader("vertex")]
 VertexOutput vs_main(u32 vertex_id : SV_VertexID) {
     VertexOutput output;
+    Camera *camera = &c.world->cameras[c.world.active_camera_index];
 
     float2 uv = float2((vertex_id << 1) & 2, vertex_id & 2);
     output.position = float4(uv * float2(2.0, 2.0) - float2(1.0, 1.0), 0.5, 1);
-    output.near_pos = UnprojectPoint(output.position.x, output.position.y, 0.0, c.world.cameras[0].inv_projection_view_mat);
-    output.far_pos =  UnprojectPoint(output.position.x, output.position.y, 1.0, c.world.cameras[0].inv_projection_view_mat);
+    output.near_pos = UnprojectPoint(output.position.x, output.position.y, 0.0, camera->inv_projection_view_mat);
+    output.far_pos =  UnprojectPoint(output.position.x, output.position.y, 1.0, camera->inv_projection_view_mat);
 
     return output;
 }

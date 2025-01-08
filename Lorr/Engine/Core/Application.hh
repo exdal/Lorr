@@ -5,7 +5,7 @@
 #include "Engine/Graphics/Vulkan.hh"
 #include "Engine/Graphics/VulkanDevice.hh"
 #include "Engine/Window/Window.hh"
-#include "Engine/World/WorldRenderer.hh"
+#include "Engine/World/SceneRenderer.hh"
 
 namespace lr {
 struct ApplicationInfo {
@@ -29,7 +29,7 @@ struct Application {
     ImGuiRenderer imgui_renderer = {};
     // TODO: Should we remove this somewhere else? It's only used by editor.
     ImTextureID world_renderer_image_index = 0;
-    WorldRenderer world_renderer = {};
+    SceneRenderer scene_renderer = {};
     AssetManager asset_man = {};
     ls::option<SceneID> active_scene_id = ls::nullopt;
 

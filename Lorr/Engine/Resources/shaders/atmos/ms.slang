@@ -16,8 +16,8 @@ struct PushConstants {
 [numthreads(16, 16, 1)]
 void cs_main(uint3 thread_id : SV_DispatchThreadID) {
     World *world = c.world;
-    Atmosphere *atmos = &world->atmosphere;
-    Sun *sun = &world->sun;
+    Atmosphere *atmos = world->atmosphere;
+    Sun *sun = world->sun;
     float2 uv = float2(float2(thread_id.xy) + 0.5) / float2(c.multiscattering_lut_size);
 
     float altitude = lerp(atmos->planet_radius, atmos->atmos_radius, uv.y);

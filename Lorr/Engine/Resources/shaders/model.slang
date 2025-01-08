@@ -43,8 +43,8 @@ VertexOutput vs_main(VertexInput input) {
 [shader("fragment")]
 float4 fs_main(VertexOutput input) : SV_Target {
     World *world = c.world;
-    Atmosphere *atmos = &world->atmosphere;
-    Sun *sun = &world->sun;
+    Atmosphere *atmos = world->atmosphere;
+    Sun *sun = world->sun;
     Camera *camera = &world->cameras[world->active_camera_index];
     Material *material = &world->materials[c.material_index];
 

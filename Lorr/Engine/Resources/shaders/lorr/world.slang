@@ -79,10 +79,11 @@ public struct World {
     public Camera *cameras;
     public Material *materials;
     public Model *models;
-    public u32 active_camera_index;
+    public Sun *sun;
+    public Atmosphere *atmosphere;
+    public Clouds *clouds;
 
-    public Sun sun;
-    public Atmosphere atmosphere;
-    public Clouds clouds;
+    public u32 active_camera_index;
+    u32 pad;
 };
 

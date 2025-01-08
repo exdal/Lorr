@@ -230,7 +230,7 @@ void EditorLayout::update(this EditorLayout &self) {
         ImGui::End();
 
         if (self.show_profiler) {
-            app.world_renderer.draw_profiler_ui();
+            app.scene_renderer.draw_profiler_ui();
         }
 
         for (auto &panel : self.panels) {

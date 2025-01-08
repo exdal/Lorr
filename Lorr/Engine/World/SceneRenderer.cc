@@ -1,46 +1,18 @@
-#include "Engine/World/WorldRenderer.hh"
+#include "Engine/World/SceneRenderer.hh"
 
 #include "Engine/Core/Application.hh"
 
 #include <imgui.h>
 
 namespace lr {
-template<>
-struct Handle<WorldRenderer>::Impl {
-    Device *device = nullptr;
-    WorldRenderContext context = {};
-
-    Sampler linear_sampler = {};
-    Sampler nearest_sampler = {};
-
-    Pipeline grid_pipeline = {};
-
-    Image sky_transmittance_lut = {};
-    ImageView sky_transmittance_lut_view = {};
-    Image sky_multiscatter_lut = {};
-    ImageView sky_multiscatter_lut_view = {};
-    Pipeline sky_view_pipeline = {};
-    Pipeline sky_aerial_perspective_pipeline = {};
-    Pipeline sky_final_pipeline = {};
-
-    ls::option<vuk::Value<vuk::ImageAttachment>> composition_result = {};
-};
-
-auto WorldRenderer::create(Device *device) -> WorldRenderer {
-    auto impl = new Impl;
-    auto self = WorldRenderer(impl);
-    impl->device = device;
+auto SceneRenderer::init(this SceneRenderer &self, Device *device) -> bool {
+    self.device = device;
 
     self.setup_persistent_resources();
-
-    // TODO: Remove later
-    impl->context.sun_angle = { 90, 45 };
-    self.update_sun_dir();
-
-    return self;
+    return true;
 }
 
-auto WorldRenderer::setup_persistent_resources() -> void {
+auto SceneRenderer::setup_persistent_resources(this SceneRenderer &self) -> void {
     ZoneScoped;
 
     auto &app = Application::get();
@@ -49,8 +21,8 @@ auto WorldRenderer::setup_persistent_resources() -> void {
     auto shaders_root = asset_man.asset_root_path(AssetType::Shader);
 
     // clang-format off
-    impl->linear_sampler = Sampler::create(
-        *impl->device,
+    self.linear_sampler = Sampler::create(
+        *self.device,
         vuk::Filter::eLinear,
         vuk::Filter::eLinear,
         vuk::SamplerMipmapMode::eLinear,
@@ -59,8 +31,8 @@ auto WorldRenderer::setup_persistent_resources() -> void {
         vuk::SamplerAddressMode::eClampToEdge,
         vuk::CompareOp::eNever)
         .value();
-    impl->nearest_sampler = Sampler::create(
-        *impl->device,
+    self.nearest_sampler = Sampler::create(
+        *self.device,
         vuk::Filter::eNearest,
         vuk::Filter::eNearest,
         vuk::SamplerMipmapMode::eNearest,
@@ -71,7 +43,7 @@ auto WorldRenderer::setup_persistent_resources() -> void {
         .value();
 
     //  ── GRID ────────────────────────────────────────────────────────────
-    impl->grid_pipeline = Pipeline::create(*impl->device, {
+    self.grid_pipeline = Pipeline::create(*self.device, {
         .module_name = "editor.grid",
         .root_path = shaders_root,
         .shader_path = shaders_root / "editor" / "grid.slang",
@@ -79,60 +51,59 @@ auto WorldRenderer::setup_persistent_resources() -> void {
     }).value();
 
     //  ── SKY ─────────────────────────────────────────────────────────────
-    impl->sky_transmittance_lut = Image::create(
-        *impl->device,
+    self.sky_transmittance_lut = Image::create(
+        *self.device,
         vuk::Format::eR16G16B16A16Sfloat,
         vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage,
         vuk::ImageType::e2D,
         vuk::Extent3D(256, 64, 1))
         .value();
-    impl->sky_transmittance_lut_view = ImageView::create(
-        *impl->device,
-        impl->sky_transmittance_lut,
+    self.sky_transmittance_lut_view = ImageView::create(
+        *self.device,
+        self.sky_transmittance_lut,
         vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage,
         vuk::ImageViewType::e2D,
-        { vuk::ImageAspectFlagBits::eColor })
+        { .aspectMask = vuk::ImageAspectFlagBits::eColor })
         .value();
-    impl->sky_multiscatter_lut = Image::create(
-        *impl->device,
+    self.sky_multiscatter_lut = Image::create(
+        *self.device,
         vuk::Format::eR16G16B16A16Sfloat,
         vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage,
         vuk::ImageType::e2D,
         vuk::Extent3D(32, 32, 1))
         .value();
-    impl->sky_multiscatter_lut_view = ImageView::create(
-        *impl->device,
-        impl->sky_multiscatter_lut,
+    self.sky_multiscatter_lut_view = ImageView::create(
+        *self.device,
+        self.sky_multiscatter_lut,
         vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage,
         vuk::ImageViewType::e2D,
-        { vuk::ImageAspectFlagBits::eColor })
+        { .aspectMask = vuk::ImageAspectFlagBits::eColor })
         .value();
-    impl->sky_view_pipeline = Pipeline::create(*impl->device, {
+    self.sky_view_pipeline = Pipeline::create(*self.device, {
         .module_name = "atmos.lut",
         .root_path = shaders_root,
         .shader_path = shaders_root / "atmos" / "lut.slang",
         .entry_points = { "vs_main", "fs_main" },
     }).value();
-    impl->sky_aerial_perspective_pipeline = Pipeline::create(*impl->device, {
+    self.sky_aerial_perspective_pipeline = Pipeline::create(*self.device, {
         .module_name = "atmos.aerial_perspective",
         .root_path = shaders_root,
         .shader_path = shaders_root / "atmos" / "aerial_perspective.slang",
         .entry_points = { "cs_main" },
     }).value();
-    impl->sky_final_pipeline = Pipeline::create(*impl->device, {
+    self.sky_final_pipeline = Pipeline::create(*self.device, {
         .module_name = "atmos.final",
         .root_path = shaders_root,
         .shader_path = shaders_root / "atmos" / "final.slang",
         .entry_points = { "vs_main", "fs_main" },
     }).value();
-
-    auto sky_transmittance_pipeline = Pipeline::create(*impl->device, {
+    self.sky_transmittance_pipeline = Pipeline::create(*self.device, {
         .module_name = "atmos.transmittance",
         .root_path = shaders_root,
         .shader_path = shaders_root / "atmos" / "transmittance.slang",
         .entry_points = { "cs_main" },
     }).value();
-    auto sky_multiscatter_pipeline = Pipeline::create(*impl->device, {
+    self.sky_multiscatter_pipeline = Pipeline::create(*self.device, {
         .module_name = "atmos.ms",
         .root_path = shaders_root,
         .shader_path = shaders_root / "atmos" / "ms.slang",
@@ -143,7 +114,7 @@ auto WorldRenderer::setup_persistent_resources() -> void {
     //  ── DEFINE PASSES ───────────────────────────────────────────────────
     auto transmittance_lut_pass = vuk::make_pass(
         "transmittance lut",
-        [&ctx = impl->context, &pipeline = *impl->device->pipeline(sky_transmittance_pipeline.id())](
+        [&world_ptr = self.world_ptr, &pipeline = *self.device->pipeline(self.sky_transmittance_pipeline.id())](
             vuk::CommandBuffer &cmd_list, VUK_IA(vuk::Access::eComputeRW) dst) {
             struct PushConstants {
                 u64 world_ptr = 0;
@@ -159,7 +130,7 @@ auto WorldRenderer::setup_persistent_resources() -> void {
                     vuk::ShaderStageFlagBits::eCompute,
                     0,
                     PushConstants{
-                        .world_ptr = ctx.world_ptr,
+                        .world_ptr = world_ptr,
                         .image_size = image_size,
                     })
                 .dispatch(groups.x, groups.y, 1);
@@ -170,7 +141,7 @@ auto WorldRenderer::setup_persistent_resources() -> void {
 
     auto multiscatter_lut_pass = vuk::make_pass(
         "multiscatter lut",
-        [&ctx = impl->context, &pipeline = *impl->device->pipeline(sky_multiscatter_pipeline.id())](
+        [&world_ptr = self.world_ptr, &pipeline = *self.device->pipeline(self.sky_multiscatter_pipeline.id())](
             vuk::CommandBuffer &cmd_list,
             [[maybe_unused]] VUK_IA(vuk::Access::eComputeSampled) transmittance_lut,
             VUK_IA(vuk::Access::eComputeRW) dst) {
@@ -190,7 +161,7 @@ auto WorldRenderer::setup_persistent_resources() -> void {
                     vuk::ShaderStageFlagBits::eCompute,
                     0,
                     PushConstants{
-                        .world_ptr = ctx.world_ptr,
+                        .world_ptr = world_ptr,
                         .image_size = image_size,
                     })
                 .dispatch(groups.x, groups.y, 1);
@@ -201,12 +172,14 @@ auto WorldRenderer::setup_persistent_resources() -> void {
     //   ──────────────────────────────────────────────────────────────────────
 
     auto transmittance_lut_attachment =
-        impl->sky_transmittance_lut_view.discard(*impl->device, "sky_transmittance_lut", vuk::ImageUsageFlagBits::eStorage);
+        self.sky_transmittance_lut_view.discard(*self.device, "sky_transmittance_lut", vuk::ImageUsageFlagBits::eStorage);
     auto multiscatter_lut_attachment =
-        impl->sky_multiscatter_lut_view.discard(*impl->device, "sky_multiscatter_lut", vuk::ImageUsageFlagBits::eStorage);
+        self.sky_multiscatter_lut_view.discard(*self.device, "sky_multiscatter_lut", vuk::ImageUsageFlagBits::eStorage);
 
-    auto temp_scene_info = this->begin_scene({});
-    this->end_scene(temp_scene_info);
+    auto temp_scene_info = self.begin_scene({ .has_sun = true, .has_atmosphere = true });
+    *temp_scene_info.sun = {};
+    *temp_scene_info.atmosphere = {};
+    self.end_scene(temp_scene_info);
 
     transmittance_lut_attachment = transmittance_lut_pass(std::move(transmittance_lut_attachment));
     std::tie(transmittance_lut_attachment, multiscatter_lut_attachment) =
@@ -216,16 +189,22 @@ auto WorldRenderer::setup_persistent_resources() -> void {
     transfer_man.wait_on(std::move(multiscatter_lut_attachment));
 }
 
-auto WorldRenderer::begin_scene(const SceneBeginInfo &info) -> GPUSceneData {
+auto SceneRenderer::begin_scene(this SceneRenderer &self, const SceneRenderBeginInfo &info) -> SceneRenderInfo {
     ZoneScoped;
 
-    auto &transfer_man = impl->device->transfer_man();
-    GPUSceneData result;
+    // Reset world data
+    self.world_data = {};
+
+    auto &transfer_man = self.device->transfer_man();
+    SceneRenderInfo result;
 
     usize world_data_bytes = sizeof(GPUWorldData);
     usize cameras_size_bytes = sizeof(GPUCameraData) * info.camera_count;
     usize model_transforms_bytes = sizeof(GPUModelTransformData) * info.model_transform_count;
     usize buffer_size = world_data_bytes + cameras_size_bytes + model_transforms_bytes;
+
+    buffer_size += info.has_sun ? sizeof(GPUSunData) : 0;
+    buffer_size += info.has_atmosphere ? sizeof(GPUAtmosphereData) : 0;
 
     result.world_data = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eCPUonly, buffer_size);
     result.upload_size += sizeof(GPUWorldData);
@@ -245,40 +224,63 @@ auto WorldRenderer::begin_scene(const SceneBeginInfo &info) -> GPUSceneData {
         result.upload_size += model_transforms_bytes;
     }
 
+    if (info.has_sun) {
+        result.sun = reinterpret_cast<GPUSunData *>(ptr + result.upload_size);
+
+        result.offset_sun = result.upload_size;
+        result.upload_size += sizeof(GPUSunData);
+    }
+
+    if (info.has_atmosphere) {
+        result.atmosphere = reinterpret_cast<GPUAtmosphereData *>(ptr + result.upload_size);
+
+        result.offset_atmosphere = result.upload_size;
+        result.upload_size += sizeof(GPUAtmosphereData);
+    }
+
     LS_EXPECT(result.upload_size == buffer_size);
 
     return result;
 }
 
-auto WorldRenderer::end_scene(GPUSceneData &scene_gpu_data) -> void {
+auto SceneRenderer::end_scene(this SceneRenderer &self, SceneRenderInfo &info) -> void {
     ZoneScoped;
 
-    auto &transfer_man = impl->device->transfer_man();
-    auto gpu_buffer = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eGPUonly, scene_gpu_data.upload_size);
-    auto materials_buffer_ptr = scene_gpu_data.materials_buffer_id != BufferID::Invalid
-                                    ? impl->device->buffer(scene_gpu_data.materials_buffer_id)->device_address
-                                    : 0;
+    auto &transfer_man = self.device->transfer_man();
+    auto gpu_buffer = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eGPUonly, info.upload_size);
 
-    auto &world_data = impl->context.world_data;
-    world_data.linear_sampler_id = impl->linear_sampler.id();
-    world_data.nearest_sampler_id = impl->nearest_sampler.id();
+    self.world_data.linear_sampler_id = self.linear_sampler.id();
+    self.world_data.nearest_sampler_id = self.nearest_sampler.id();
 
-    if (scene_gpu_data.offset_cameras.has_value()) {
-        world_data.cameras_ptr = gpu_buffer.device_address() + scene_gpu_data.offset_cameras.value();
+    if (info.offset_cameras.has_value()) {
+        self.world_data.cameras_ptr = gpu_buffer.device_address() + info.offset_cameras.value();
     }
-    world_data.materials_ptr = materials_buffer_ptr;
-    if (scene_gpu_data.offset_model_transforms.has_value()) {
-        world_data.model_transforms_ptr = gpu_buffer.device_address() + scene_gpu_data.offset_model_transforms.value();
+
+    if (info.materials_buffer_id != BufferID::Invalid) {
+        self.world_data.materials_ptr = self.device->buffer(info.materials_buffer_id)->device_address;
     }
-    world_data.active_camera_index = scene_gpu_data.active_camera_index;
 
-    impl->context.world_ptr = gpu_buffer.device_address();
-    std::memcpy(scene_gpu_data.world_data.host_ptr<GPUWorldData>(), &impl->context.world_data, sizeof(GPUWorldData));
+    if (info.offset_model_transforms.has_value()) {
+        self.world_data.model_transforms_ptr = gpu_buffer.device_address() + info.offset_model_transforms.value();
+    }
 
-    transfer_man.upload_staging(scene_gpu_data.world_data, gpu_buffer);
+    if (info.offset_sun.has_value()) {
+        self.world_data.sun_ptr = gpu_buffer.device_address() + info.offset_sun.value();
+    }
+
+    if (info.offset_atmosphere.has_value()) {
+        self.world_data.atmosphere_ptr = gpu_buffer.device_address() + info.offset_atmosphere.value();
+    }
+
+    self.world_data.active_camera_index = info.active_camera_index;
+
+    self.world_ptr = gpu_buffer.device_address();
+    std::memcpy(info.world_data.host_ptr<GPUWorldData>(), &self.world_data, sizeof(GPUWorldData));
+
+    transfer_man.upload_staging(info.world_data, gpu_buffer);
 }
 
-auto WorldRenderer::render(vuk::Value<vuk::ImageAttachment> &render_target) -> vuk::Value<vuk::ImageAttachment> {
+auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttachment> &render_target) -> vuk::Value<vuk::ImageAttachment> {
     ZoneScoped;
 
     auto final_attachment = vuk::declare_ia("final", { .format = vuk::Format::eR16G16B16A16Sfloat, .sample_count = vuk::Samples::e1 });
@@ -292,14 +294,21 @@ auto WorldRenderer::render(vuk::Value<vuk::ImageAttachment> &render_target) -> v
     //  ── SKY VIEW LUT ────────────────────────────────────────────────────
     auto sky_view_pass = vuk::make_pass(
         "sky view",
-        [&ctx = impl->context, &pipeline = *impl->device->pipeline(impl->sky_view_pipeline.id())](
+        [world_ptr = self.world_ptr, &pipeline = *self.device->pipeline(self.sky_view_pipeline.id())](
             vuk::CommandBuffer &cmd_list,
             VUK_IA(vuk::Access::eColorWrite) dst,
             VUK_IA(vuk::Access::eFragmentSampled) transmittance_lut,
             VUK_IA(vuk::Access::eFragmentSampled) multiscatter_lut) {
+            vuk::SamplerCreateInfo sampler_info = {
+                .magFilter = vuk::Filter::eLinear,
+                .minFilter = vuk::Filter::eLinear,
+                .addressModeU = vuk::SamplerAddressMode::eClampToEdge,
+                .addressModeV = vuk::SamplerAddressMode::eClampToEdge,
+            };
+
             cmd_list  //
                 .bind_graphics_pipeline(pipeline)
-                .bind_sampler(0, 0, { .magFilter = vuk::Filter::eLinear, .minFilter = vuk::Filter::eLinear })
+                .bind_sampler(0, 0, sampler_info)
                 .bind_image(0, 1, transmittance_lut)
                 .bind_image(0, 2, multiscatter_lut)
                 .set_rasterization({ .cullMode = vuk::CullModeFlagBits::eNone })
@@ -307,18 +316,18 @@ auto WorldRenderer::render(vuk::Value<vuk::ImageAttachment> &render_target) -> v
                 .set_color_blend(dst, vuk::BlendPreset::eOff)
                 .set_viewport(0, vuk::Rect2D::framebuffer())
                 .set_scissor(0, vuk::Rect2D::framebuffer())
-                .push_constants(vuk::ShaderStageFlagBits::eFragment, 0, ctx.world_ptr)
+                .push_constants(vuk::ShaderStageFlagBits::eFragment, 0, world_ptr)
                 .draw(3, 1, 0, 0);
             return std::make_tuple(dst, transmittance_lut, multiscatter_lut);
         });
 
-    auto transmittance_lut_attachment = impl->sky_transmittance_lut_view.acquire(
-        *impl->device, "transmittance_lut", vuk::ImageUsageFlagBits::eSampled, vuk::Access::eFragmentSampled);
-    auto multiscatter_lut_attachment = impl->sky_multiscatter_lut_view.acquire(
-        *impl->device, "multiscatter_lut", vuk::ImageUsageFlagBits::eSampled, vuk::Access::eFragmentSampled);
+    auto transmittance_lut_attachment = self.sky_transmittance_lut_view.acquire(
+        *self.device, "transmittance_lut", vuk::ImageUsageFlagBits::eSampled, vuk::Access::eFragmentSampled);
+    auto multiscatter_lut_attachment = self.sky_multiscatter_lut_view.acquire(
+        *self.device, "multiscatter_lut", vuk::ImageUsageFlagBits::eSampled, vuk::Access::eFragmentSampled);
 
-    auto sky_view_lut_attachment =
-        vuk::declare_ia("sky_view_lut", { .extent = { 200, 100, 1 }, .sample_count = vuk::Samples::e1, .layer_count = 1 });
+    auto sky_view_lut_attachment = vuk::declare_ia(
+        "sky_view_lut", { .extent = { .width = 200, .height = 100, .depth = 1 }, .sample_count = vuk::Samples::e1, .layer_count = 1 });
     sky_view_lut_attachment.same_format_as(final_attachment);
     sky_view_lut_attachment = vuk::clear_image(std::move(sky_view_lut_attachment), vuk::Black<f32>);
     std::tie(sky_view_lut_attachment, transmittance_lut_attachment, multiscatter_lut_attachment) =
@@ -327,7 +336,7 @@ auto WorldRenderer::render(vuk::Value<vuk::ImageAttachment> &render_target) -> v
     //  ── SKY AERIAL PERSPECTIVE ──────────────────────────────────────────
     auto sky_aerial_perspective_pass = vuk::make_pass(
         "sky aerial perspective",
-        [&ctx = impl->context, &pipeline = *impl->device->pipeline(impl->sky_aerial_perspective_pipeline.id())](
+        [world_ptr = self.world_ptr, &pipeline = *self.device->pipeline(self.sky_aerial_perspective_pipeline.id())](
             vuk::CommandBuffer &cmd_list,
             VUK_IA(vuk::Access::eComputeWrite) dst,
             VUK_IA(vuk::Access::eFragmentSampled) transmittance_lut,
@@ -338,11 +347,18 @@ auto WorldRenderer::render(vuk::Value<vuk::ImageAttachment> &render_target) -> v
                 u32 pad = 0;
             };
 
+            vuk::SamplerCreateInfo sampler_info = {
+                .magFilter = vuk::Filter::eLinear,
+                .minFilter = vuk::Filter::eLinear,
+                .addressModeU = vuk::SamplerAddressMode::eClampToEdge,
+                .addressModeV = vuk::SamplerAddressMode::eClampToEdge,
+            };
+
             auto image_size = glm::vec3(dst->extent.width, dst->extent.height, dst->extent.height);
             auto groups = glm::uvec2(image_size) / glm::uvec2(16);
             cmd_list  //
                 .bind_compute_pipeline(pipeline)
-                .bind_sampler(0, 0, { .magFilter = vuk::Filter::eLinear, .minFilter = vuk::Filter::eLinear })
+                .bind_sampler(0, 0, sampler_info)
                 .bind_image(0, 1, dst)
                 .bind_image(0, 2, transmittance_lut)
                 .bind_image(0, 3, multiscatter_lut)
@@ -350,7 +366,7 @@ auto WorldRenderer::render(vuk::Value<vuk::ImageAttachment> &render_target) -> v
                     vuk::ShaderStageFlagBits::eCompute,
                     0,
                     PushConstants{
-                        .world_ptr = ctx.world_ptr,
+                        .world_ptr = world_ptr,
                         .image_size = image_size,
                     })
                 .dispatch(groups.x, groups.y, static_cast<u32>(image_size.z));
@@ -361,7 +377,7 @@ auto WorldRenderer::render(vuk::Value<vuk::ImageAttachment> &render_target) -> v
     auto sky_aerial_perspective_attachment = vuk::declare_ia(
         "sky_aerial_perspective",
         { .image_type = vuk::ImageType::e3D,
-          .extent = { 32, 32, 32 },
+          .extent = { .width = 32, .height = 32, .depth = 32 },
           .sample_count = vuk::Samples::e1,
           .view_type = vuk::ImageViewType::e3D,
           .level_count = 1,
@@ -373,15 +389,22 @@ auto WorldRenderer::render(vuk::Value<vuk::ImageAttachment> &render_target) -> v
     //  ── SKY FINAL ───────────────────────────────────────────────────────
     auto sky_final_pass = vuk::make_pass(
         "sky final",
-        [&ctx = impl->context, &pipeline = *impl->device->pipeline(impl->sky_final_pipeline.id())](
+        [world_ptr = self.world_ptr, &pipeline = *self.device->pipeline(self.sky_final_pipeline.id())](
             vuk::CommandBuffer &cmd_list,
             VUK_IA(vuk::Access::eColorWrite) dst,
             VUK_IA(vuk::Access::eFragmentSampled) sky_view_lut,
             VUK_IA(vuk::Access::eFragmentSampled) aerial_perspective_lut,
             VUK_IA(vuk::Access::eFragmentSampled) transmittance_lut) {
+            vuk::SamplerCreateInfo sampler_info = {
+                .magFilter = vuk::Filter::eLinear,
+                .minFilter = vuk::Filter::eLinear,
+                .addressModeU = vuk::SamplerAddressMode::eClampToEdge,
+                .addressModeV = vuk::SamplerAddressMode::eClampToEdge,
+            };
+
             cmd_list  //
                 .bind_graphics_pipeline(pipeline)
-                .bind_sampler(0, 0, { .magFilter = vuk::Filter::eLinear, .minFilter = vuk::Filter::eLinear })
+                .bind_sampler(0, 0, sampler_info)
                 .bind_image(0, 1, transmittance_lut)
                 .bind_image(0, 2, sky_view_lut)
                 .set_rasterization({})
@@ -389,21 +412,24 @@ auto WorldRenderer::render(vuk::Value<vuk::ImageAttachment> &render_target) -> v
                 .set_color_blend(dst, vuk::BlendPreset::eOff)
                 .set_viewport(0, vuk::Rect2D::framebuffer())
                 .set_scissor(0, vuk::Rect2D::framebuffer())
-                .push_constants(vuk::ShaderStageFlagBits::eFragment, 0, ctx.world_ptr)
+                .push_constants(vuk::ShaderStageFlagBits::eFragment, 0, world_ptr)
                 .draw(3, 1, 0, 0);
             return std::make_tuple(dst, sky_view_lut, aerial_perspective_lut, transmittance_lut);
         });
 
-    std::tie(final_attachment, sky_view_lut_attachment, sky_aerial_perspective_attachment, transmittance_lut_attachment) = sky_final_pass(
-        std::move(final_attachment),
-        std::move(sky_view_lut_attachment),
-        std::move(sky_aerial_perspective_attachment),
-        std::move(transmittance_lut_attachment));
+    if (self.world_data.rendering_atmos()) {
+        std::tie(final_attachment, sky_view_lut_attachment, sky_aerial_perspective_attachment, transmittance_lut_attachment) =
+            sky_final_pass(
+                std::move(final_attachment),
+                std::move(sky_view_lut_attachment),
+                std::move(sky_aerial_perspective_attachment),
+                std::move(transmittance_lut_attachment));
+    }
 
     //  ── EDITOR GRID ─────────────────────────────────────────────────────
     auto editor_grid_pass = vuk::make_pass(
         "editor grid",
-        [&ctx = impl->context, &pipeline = *impl->device->pipeline(impl->grid_pipeline.id())](
+        [world_ptr = self.world_ptr, &pipeline = *self.device->pipeline(self.grid_pipeline.id())](
             vuk::CommandBuffer &cmd_list, VUK_IA(vuk::Access::eColorWrite) dst, VUK_IA(vuk::Access::eDepthStencilRW) dst_depth) {
             cmd_list  //
                 .bind_graphics_pipeline(pipeline)
@@ -412,7 +438,7 @@ auto WorldRenderer::render(vuk::Value<vuk::ImageAttachment> &render_target) -> v
                 .set_color_blend(dst, vuk::BlendPreset::eAlphaBlend)
                 .set_viewport(0, vuk::Rect2D::framebuffer())
                 .set_scissor(0, vuk::Rect2D::framebuffer())
-                .push_constants(vuk::ShaderStageFlagBits::eVertex | vuk::ShaderStageFlagBits::eFragment, 0, ctx.world_ptr)
+                .push_constants(vuk::ShaderStageFlagBits::eVertex | vuk::ShaderStageFlagBits::eFragment, 0, world_ptr)
                 .draw(3, 1, 0, 0);
             return std::make_tuple(dst, dst_depth);
         });
@@ -422,29 +448,8 @@ auto WorldRenderer::render(vuk::Value<vuk::ImageAttachment> &render_target) -> v
     return final_attachment;
 }
 
-auto WorldRenderer::draw_profiler_ui() -> void {
+auto SceneRenderer::draw_profiler_ui(this SceneRenderer &) -> void {
     ZoneScoped;
-}
-
-auto WorldRenderer::sun_angle() -> glm::vec2 & {
-    ZoneScoped;
-
-    return impl->context.sun_angle;
-}
-
-auto WorldRenderer::update_sun_dir() -> void {
-    ZoneScoped;
-
-    auto rad = glm::radians(impl->context.sun_angle);
-    this->world_data().sun.direction = {
-        glm::cos(rad.x) * glm::sin(rad.y),
-        glm::sin(rad.x) * glm::sin(rad.y),
-        glm::cos(rad.y),
-    };
-}
-
-auto WorldRenderer::world_data() -> GPUWorldData & {
-    return impl->context.world_data;
 }
 
 }  // namespace lr

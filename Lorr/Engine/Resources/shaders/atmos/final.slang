@@ -41,8 +41,8 @@ float3 draw_sun(float3 world_dir, float3 sun_dir, float radius) {
 [shader("fragment")]
 float4 fs_main(VertexOutput input) : SV_TARGET {
     Camera *camera = &c.world->cameras[c.world.active_camera_index];
-    Atmosphere *atmos = &c.world->atmosphere;
-    Sun *sun = &c.world->sun;
+    Atmosphere *atmos = c.world->atmosphere;
+    Sun *sun = c.world->sun;
     
     float3 clip_space = float3(input.tex_coord * 2.0 - 1.0, 1.0);
     float4 clip_pos = mul(camera->inv_projection_view_mat, float4(clip_space, 1.0));

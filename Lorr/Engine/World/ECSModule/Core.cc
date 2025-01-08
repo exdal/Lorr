@@ -57,7 +57,7 @@ ECS::Core::Core(flecs::world &world) {
         })
         .assign_string([](std::string *data, const char *value) { *data = value; });
 
-    world.component<UUID>("uuid")
+    world.component<UUID>("lr::UUID")
         .opaque(flecs::String)
         .serialize([](const flecs::serializer *s, const UUID *data) {
             auto str = data->str();

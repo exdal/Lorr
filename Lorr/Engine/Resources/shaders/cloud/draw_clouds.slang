@@ -30,8 +30,8 @@ VertexOutput vs_main(u32 vertex_id : SV_VertexID) {
 float4 fs_main(VertexOutput input) : SV_TARGET {
     World *world = c.world;
     Camera *camera = &world->cameras[world->active_camera_index];
-    Clouds *clouds = &world->clouds;
-    Atmosphere *atmos = &world->atmosphere;
+    Clouds *clouds = world->clouds;
+    Atmosphere *atmos = world->atmosphere;
 
     float3 clip_space = float3(input.tex_coord * 2.0 - 1.0, 1.0);
     float4 clip_pos = mul(camera->inv_projection_view_mat, float4(clip_space, 1.0));

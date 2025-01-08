@@ -21,7 +21,7 @@ bool Application::init(this Application &self, const ApplicationInfo &info) {
     auto surface = self.window.get_surface(self.device.get_instance());
     self.swapchain = SwapChain::create(self.device, surface, { .width = window_size.x, .height = window_size.y }).value();
     self.imgui_renderer.init(&self.device);
-    self.world_renderer = WorldRenderer::create(&self.device);
+    self.scene_renderer.init(&self.device);
 
     if (!self.do_prepare()) {
         LOG_FATAL("Failed to initialize application!");
@@ -88,8 +88,8 @@ void Application::run(this Application &self) {
             auto *scene = self.asset_man.get_scene(self.active_scene_id.value());
             scene->tick();
 
-            scene->upload_scene(self.world_renderer);
-            self.world_renderer_image_index = self.imgui_renderer.add_image(self.world_renderer.render(swapchain_attachment));
+            scene->upload_scene(self.scene_renderer);
+            self.world_renderer_image_index = self.imgui_renderer.add_image(self.scene_renderer.render(swapchain_attachment));
         }
 
         swapchain_attachment = self.imgui_renderer.end_frame(std::move(swapchain_attachment));

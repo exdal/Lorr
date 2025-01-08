@@ -161,8 +161,8 @@ public struct CloudIntegrateInfo {
 };
 
 public func integrate_clouds(World *world, in CloudIntegrateInfo info) -> CloudLuminance {
-    Clouds *clouds = &world->clouds;
-    Atmosphere *atmos = &world->atmosphere;
+    Clouds *clouds = world->clouds;
+    Atmosphere *atmos = world->atmosphere;
 
     float draw_distance = clouds->draw_distance * CAMERA_SCALE_UNIT;
     float3 cloud_layer_boundaries = get_cloud_layer_boundaries(world, info.eye_pos, info.eye_dir);

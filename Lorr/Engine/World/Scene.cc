@@ -35,7 +35,7 @@ auto Scene::init(this Scene &self, const std::string &name) -> bool {
 
     self.name = name;
     self.world.emplace();
-    self.world->import <ECS::Core>();
+    self.imported_modules.emplace_back(self.world->import <ECS::Core>());
     self.root = self.world->entity();
 
     self.world
@@ -250,7 +250,7 @@ auto Scene::create_editor_camera(this Scene &self) -> void {
         .add<ECS::ActiveCamera>();
 }
 
-auto Scene::upload_scene(this Scene &self, WorldRenderer &renderer) -> void {
+auto Scene::upload_scene(this Scene &self, SceneRenderer &renderer) -> void {
     ZoneScoped;
 
     auto camera_query = self.get_world()  //
@@ -260,9 +260,19 @@ auto Scene::upload_scene(this Scene &self, WorldRenderer &renderer) -> void {
                                      .query_builder<ECS::Transform, ECS::RenderingModel>()
                                      .build();
 
+    auto directional_light_query = self.get_world()  //
+                                       .query_builder<ECS::DirectionalLight>()
+                                       .build();
+
+    auto atmosphere_query = self.get_world()  //
+                                .query_builder<ECS::Atmosphere>()
+                                .build();
+
     auto scene_data = renderer.begin_scene({
         .camera_count = camera_query.count(),
         .model_transform_count = model_transform_query.count(),
+        .has_sun = directional_light_query.count() > 0,
+        .has_atmosphere = atmosphere_query.count() > 0,
     });
 
     u32 active_camera_index = 0;
@@ -280,6 +290,31 @@ auto Scene::upload_scene(this Scene &self, WorldRenderer &renderer) -> void {
         if (e.has<ECS::ActiveCamera>()) {
             active_camera_index = c.index;
         }
+    });
+
+    directional_light_query.each([&](flecs::entity, ECS::DirectionalLight &light) {
+        auto rad = glm::radians(light.direction);
+
+        auto &sun_data = scene_data.sun;
+        sun_data->direction = {
+            glm::cos(rad.x) * glm::sin(rad.y),
+            glm::sin(rad.x) * glm::sin(rad.y),
+            glm::cos(rad.y),
+        };
+        sun_data->intensity = light.intensity;
+    });
+
+    atmosphere_query.each([&](flecs::entity, ECS::Atmosphere &atmos) {
+        auto &atmos_data = scene_data.atmosphere;
+        *atmos_data = {};  // default constructor
+        atmos_data->rayleigh_scatter = atmos.rayleigh_scattering * 1e-3f;
+        atmos_data->rayleigh_density = atmos.rayleigh_density;
+        atmos_data->mie_scatter = atmos.mie_scattering * 1e-3f;
+        atmos_data->mie_density = atmos.mie_density;
+        atmos_data->mie_extinction = atmos.mie_extinction * 1e-3f;
+        atmos_data->ozone_absorption = atmos.ozone_absorption * 1e-3f;
+        atmos_data->ozone_height = atmos.ozone_height;
+        atmos_data->ozone_thickness = atmos.ozone_thickness;
     });
 
     renderer.end_scene(scene_data);
@@ -327,6 +362,10 @@ auto Scene::get_name(this Scene &self) -> const std::string & {
 
 auto Scene::get_name_sv(this Scene &self) -> std::string_view {
     return self.name;
+}
+
+auto Scene::get_imported_modules(this Scene &self) -> ls::span<flecs::entity> {
+    return self.imported_modules;
 }
 
 }  // namespace lr

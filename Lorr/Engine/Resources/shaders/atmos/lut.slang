@@ -29,8 +29,8 @@ VertexOutput vs_main(u32 vertex_id : SV_VertexID) {
 vec4 fs_main(VertexOutput input) : SV_TARGET {
     World *world = c.world;
     Camera *camera = &world->cameras[c.world->active_camera_index];
-    Atmosphere *atmos = &world->atmosphere;
-    Sun *sun = &world->sun;
+    Atmosphere *atmos = world->atmosphere;
+    Sun *sun = world->sun;
 
     float3 eye_pos = float3(0.0, camera->position.y, 0.0) *
                      CAMERA_SCALE_UNIT +

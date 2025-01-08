@@ -28,7 +28,7 @@ VertexOutput vs_main(u32 vertex_id : SV_VertexID) {
 float4 fs_main(VertexOutput input) : SV_TARGET {
     World *world = c.world;
     Camera *active_camera = &world->cameras[world->active_camera_index];
-    Atmosphere *atmos = &world->atmosphere;
+    Atmosphere *atmos = world->atmosphere;
 
     float sampled_depth = depth_image.Sample(sampler, input.tex_coord).r;
     if (sampled_depth == 1.0) {

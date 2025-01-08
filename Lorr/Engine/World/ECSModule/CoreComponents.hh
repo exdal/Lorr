@@ -46,6 +46,22 @@ ECS_COMPONENT_BEGIN(RenderingModel)
     ECS_COMPONENT_MEMBER(model_id, ModelID, ModelID::Invalid)
 ECS_COMPONENT_END();
 
+ECS_COMPONENT_BEGIN(DirectionalLight)
+    ECS_COMPONENT_MEMBER(direction, glm::vec2, {95.0, 0.0})
+    ECS_COMPONENT_MEMBER(intensity, f32, 10.0)
+ECS_COMPONENT_END();
+
+ECS_COMPONENT_BEGIN(Atmosphere)
+    ECS_COMPONENT_MEMBER(rayleigh_scattering, glm::vec3, { 5.802f, 13.558f, 33.100f })
+    ECS_COMPONENT_MEMBER(rayleigh_density, f32, 8.0)
+    ECS_COMPONENT_MEMBER(mie_scattering, glm::vec3, { 3.996f, 3.996f, 3.996f })
+    ECS_COMPONENT_MEMBER(mie_density, f32, 1.2f)
+    ECS_COMPONENT_MEMBER(mie_extinction, f32, 4.44f)
+    ECS_COMPONENT_MEMBER(ozone_absorption, glm::vec3, { 0.650f, 1.881f, 0.085f })
+    ECS_COMPONENT_MEMBER(ozone_height, f32, 25.0f)
+    ECS_COMPONENT_MEMBER(ozone_thickness, f32, 15.0f)
+ECS_COMPONENT_END();
+
 // Any entity with this tag won't be serialized
 ECS_COMPONENT_TAG(Hidden);
 

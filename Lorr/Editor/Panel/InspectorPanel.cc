@@ -89,6 +89,30 @@ auto InspectorPanel::draw_inspector(this InspectorPanel &) -> void {
         });
 
         if (ImGui::Button("Add Component", ImVec2(region.x, 0))) {
+            ImGui::OpenPopup("add_component");
+        }
+
+        ImGui::SetNextWindowPos(ImGui::GetCursorScreenPos());
+        ImGui::SetNextWindowSize({ region.x, 0 });
+        if (ImGui::BeginPopup("add_component")) {
+            memory::ScopedStack stack;
+
+            auto imported_modules = scene->get_imported_modules();
+
+            auto q = scene->get_world().query_builder<flecs::Component>();
+            for (const auto &mod : imported_modules) {
+                q.with(flecs::ChildOf, mod);
+            }
+
+            q.with(flecs::ChildOf, flecs::Flecs).oper(flecs::Not).self().build();
+            q.each([&stack, e](flecs::entity component, flecs::Component &) {  //
+                ImGui::PushID(static_cast<i32>(component.raw_id()));
+                if (ImGui::MenuItem(stack.format("{}  {}", Icon::fa::cube, component.name()).cbegin())) {
+                    e.add(component);
+                }
+                ImGui::PopID();
+            });
+            ImGui::EndPopup();
         }
 
         ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal);

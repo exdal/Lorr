@@ -18,8 +18,8 @@ struct PushConstants {
 void cs_main(uint3 thread_id : SV_DispatchThreadID) {
     World *world = c.world;
     Camera *camera = &world->cameras[c.world->active_camera_index];
-    Atmosphere *atmos = &world->atmosphere;
-    Sun *sun = &world->sun;
+    Atmosphere *atmos = world->atmosphere;
+    Sun *sun = world->sun;
 
     float2 uv = (float2(thread_id.xy) + 0.5) / c.target_image_size.xy;
     float3 clip_space = float3(2.0 * uv - 1.0, 0.5);

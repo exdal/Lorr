@@ -475,7 +475,7 @@ auto AssetManager::load_material(Asset *asset, const Material &material_info) ->
         .emissive_color = material_info.emissive_color,
         .roughness_factor = material_info.roughness_factor,
         .metallic_factor = material_info.metallic_factor,
-        .alpha_mode = material_info.alpha_mode,
+        .alpha_mode = 0,
         .albedo_image = albedo_texture ? albedo_texture->sampled_image() : SampledImage(),
         .normal_image = normal_texture ? normal_texture->sampled_image() : SampledImage(),
         .emissive_image = emissive_texture ? emissive_texture->sampled_image() : SampledImage(),

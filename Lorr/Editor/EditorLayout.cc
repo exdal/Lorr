@@ -2,6 +2,10 @@
 
 #include "Editor/EditorApp.hh"
 #include "Editor/Panel/AssetBrowserPanel.hh"
+#include "Editor/Panel/ConsolePanel.hh"
+#include "Editor/Panel/InspectorPanel.hh"
+#include "Editor/Panel/SceneBrowserPanel.hh"
+#include "Editor/Panel/ViewportPanel.hh"
 
 #include "Engine/OS/File.hh"
 

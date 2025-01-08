@@ -23,7 +23,7 @@ auto TransferManager::alloc_transient_buffer(this TransferManager &self, vuk::Me
         allocator = &self.frame_allocator.value();
     }
 
-    auto buffer = vuk::allocate_buffer(*allocator, { usage, size, 8 });
+    auto buffer = vuk::allocate_buffer(*allocator, { .mem_usage = usage, .size = size, .alignment = 8 });
     if (!buffer.holds_value()) {
         LOG_ERROR("Transient Buffer Error: {}", buffer.error().error_message);
         return {};

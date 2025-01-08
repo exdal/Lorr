@@ -1,4 +1,4 @@
-#include "Panels.hh"
+#include "Editor/Panel/ConsolePanel.hh"
 
 // #include "Engine/Core/Application.hh"
 

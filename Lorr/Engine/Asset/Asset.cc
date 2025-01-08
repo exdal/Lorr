@@ -3,8 +3,6 @@
 #include "Engine/Asset/ParserGLTF.hh"
 #include "Engine/Asset/ParserSTB.hh"
 
-#include "Engine/Core/Application.hh"
-
 #include "Engine/Memory/Hasher.hh"
 #include "Engine/Memory/PagedPool.hh"
 
@@ -42,7 +40,7 @@ struct Handle<AssetManager>::Impl {
     PagedPool<Model, ModelID> models = {};
     PagedPool<Texture, TextureID> textures = {};
     PagedPool<Material, MaterialID, 1024_sz> materials = {};
-    PagedPool<Scene::Impl *, SceneID, 128_sz> scenes = {};
+    PagedPool<Scene, SceneID, 128_sz> scenes = {};
 
     Buffer material_buffer = {};
 };
@@ -140,17 +138,27 @@ auto AssetManager::create_asset(AssetType type, const fs::path &path) -> Asset *
 auto AssetManager::create_scene(const std::string &name, const fs::path &path) -> Asset * {
     ZoneScoped;
 
-    auto &app = Application::get();
     auto asset = this->create_asset(AssetType::Scene, path);
-
-    auto scene = Scene::create(name, &app.world);
-    scene->create_editor_camera();
+    if (!asset) {
+        return nullptr;
+    }
 
     auto scene_resource = impl->scenes.create();
-    asset->scene_id = scene_resource->id;
-    *scene_resource->self = scene->impl;
+    if (!scene_resource) {
+        return nullptr;
+    }
 
-    return asset;
+    asset->scene_id = scene_resource->id;
+    auto *scene = scene_resource->self;
+    if (scene->init(name)) {
+        scene->create_editor_camera();
+        this->export_scene(asset, path);
+        this->unload_scene(asset);
+
+        return asset;
+    }
+
+    return nullptr;
 }
 
 auto AssetManager::import_asset(const fs::path &path) -> Asset * {
@@ -234,17 +242,14 @@ auto AssetManager::import_asset(const fs::path &path) -> Asset * {
 }
 
 auto AssetManager::import_scene(Asset *asset) -> bool {
-    auto &app = Application::get();
-    auto &world = app.world;
+    ZoneScoped;
 
-    auto scene = Scene::create_from_file(asset->path, &world).value();
-    if (!scene) {
+    auto scene_resource = impl->scenes.create();
+    if (!scene_resource) {
         return false;
     }
 
-    auto scene_resource = impl->scenes.create();
     asset->scene_id = scene_resource->id;
-    scene_resource->self = &scene.impl;
 
     return true;
 }
@@ -507,15 +512,22 @@ auto AssetManager::load_material(Asset *) -> bool {
 auto AssetManager::load_scene(Asset *asset) -> bool {
     ZoneScoped;
 
-    return true;
+    auto scene = this->get_scene(asset->scene_id);
+    return scene->init_from_file(asset->path);
+}
+
+auto AssetManager::unload_scene(Asset *asset) -> void {
+    ZoneScoped;
+
+    auto scene = this->get_scene(asset->scene_id);
+    scene->destroy();
 }
 
 auto AssetManager::export_scene(Asset *asset, const fs::path &path) -> bool {
     ZoneScoped;
 
     auto scene = this->get_scene(asset->scene_id);
-    LS_EXPECT(scene);
-    scene.export_to_file(path);
+    scene->export_to_file(path);
     auto meta_path = path.string() + ".lrasset";
     return asset->write_metadata(meta_path);
 }
@@ -609,30 +621,30 @@ auto AssetManager::get_material(MaterialID material_id) -> Material * {
     return &impl->materials.get(material_id);
 }
 
-auto AssetManager::get_scene(const UUID &uuid) -> Scene {
+auto AssetManager::get_scene(const UUID &uuid) -> Scene * {
     ZoneScoped;
 
     auto *asset = this->get_asset(uuid);
     if (asset == nullptr) {
-        return Scene(nullptr);
+        return nullptr;
     }
 
     LS_EXPECT(asset->type == AssetType::Scene);
     if (asset->type != AssetType::Scene || asset->scene_id == SceneID::Invalid) {
-        return Scene(nullptr);
+        return nullptr;
     }
 
-    return Scene(impl->scenes.get(asset->scene_id));
+    return &impl->scenes.get(asset->scene_id);
 }
 
-auto AssetManager::get_scene(SceneID scene_id) -> Scene {
+auto AssetManager::get_scene(SceneID scene_id) -> Scene * {
     ZoneScoped;
 
     if (scene_id == SceneID::Invalid) {
-        return Scene(nullptr);
+        return nullptr;
     }
 
-    return Scene(impl->scenes.get(scene_id));
+    return &impl->scenes.get(scene_id);
 }
 
 }  // namespace lr

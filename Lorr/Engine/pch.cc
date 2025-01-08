@@ -1,4 +1,4 @@
-#ifdef TRACY_ENABLE
+#if TRACY_ENABLE
 
 static void *lr_aligned_alloc(usize size, usize alignment = alignof(usize)) {
 #if LS_WINDOWS == 1

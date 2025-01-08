@@ -1,15 +1,17 @@
 /*
 Copyright 2020 Alexander Sannikov
 
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software
-without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
-permit persons to whom the Software is furnished to do so, subject to the following conditions:
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the
+following conditions:
 
 The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
-PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF
-CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 
 #pragma once
@@ -21,7 +23,9 @@ CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFT
 namespace legit {
 namespace Colors {
     // https://flatuicolors.com/palette/defo
-#define RGBA_LE(col) ((((col) & 0xff000000) >> (3 * 8)) + (((col) & 0x00ff0000) >> (1 * 8)) + (((col) & 0x0000ff00) << (1 * 8)) + (((col) & 0x000000ff) << (3 * 8)))
+#define RGBA_LE(col)                                                                                           \
+    ((((col) & 0xff000000) >> (3 * 8)) + (((col) & 0x00ff0000) >> (1 * 8)) + (((col) & 0x0000ff00) << (1 * 8)) \
+     + (((col) & 0x000000ff) << (3 * 8)))
     const static uint32_t turqoise = RGBA_LE(0x1abc9cffu);
     const static uint32_t greenSea = RGBA_LE(0x16a085ffu);
 
@@ -141,7 +145,9 @@ private:
         for (size_t statIndex = 0; statIndex < taskStats.size(); statIndex++)
             statPriorities[statIndex] = statIndex;
 
-        std::sort(statPriorities.begin(), statPriorities.end(), [this](size_t left, size_t right) { return taskStats[left].maxTime > taskStats[right].maxTime; });
+        std::sort(statPriorities.begin(), statPriorities.end(), [this](size_t left, size_t right) {
+            return taskStats[left].maxTime > taskStats[right].maxTime;
+        });
         for (size_t statNumber = 0; statNumber < taskStats.size(); statNumber++) {
             size_t statIndex = statPriorities[statNumber];
             taskStats[statIndex].priorityOrder = statNumber;
@@ -158,7 +164,9 @@ private:
         for (size_t frameNumber = 0; frameNumber < frames.size(); frameNumber++) {
             size_t frameIndex = (currFrameIndex - frameIndexOffset - 1 - frameNumber + 2 * frames.size()) % frames.size();
 
-            glm::vec2 framePos = graphPos + glm::vec2(graphSize.x - 1 - (float)frameWidth - (float)(frameWidth + frameSpacing) * (float)frameNumber, graphSize.y - 1);
+            glm::vec2 framePos =
+                graphPos
+                + glm::vec2(graphSize.x - 1 - (float)frameWidth - (float)(frameWidth + frameSpacing) * (float)frameNumber, graphSize.y - 1);
             if (framePos.x < graphPos.x + 1)
                 break;
             glm::vec2 taskPos = framePos + glm::vec2(0.0f, 0.0f);
@@ -168,7 +176,12 @@ private:
                 float taskEndHeight = (float(task.endTime) / (1.0f / maxFrameTime)) * graphSize.y;
                 // taskMaxCosts[task.name] = std::max(taskMaxCosts[task.name], task.endTime - task.startTime);
                 if (abs(taskEndHeight - taskStartHeight) > heightThreshold)
-                    Rect(drawList, taskPos + glm::vec2(0.0f, -taskStartHeight), taskPos + glm::vec2(frameWidth, -taskEndHeight), task.color, true);
+                    Rect(
+                        drawList,
+                        taskPos + glm::vec2(0.0f, -taskStartHeight),
+                        taskPos + glm::vec2(frameWidth, -taskEndHeight),
+                        task.color,
+                        true);
             }
         }
 
@@ -215,10 +228,11 @@ private:
             markerLeftRectMin.y -= taskStartHeight;
             markerLeftRectMax.y -= taskEndHeight;
 
-            glm::vec2 markerRightRectMin = legendPos
-                                           + glm::vec2(
-                                               markerLeftRectMargin + markerLeftRectWidth + markerMidWidth,
-                                               legendSize.y - markerRigthRectMargin - (markerRightRectHeight + markerRightRectSpacing) * (float)stat.onScreenIndex);
+            glm::vec2 markerRightRectMin =
+                legendPos
+                + glm::vec2(
+                    markerLeftRectMargin + markerLeftRectWidth + markerMidWidth,
+                    legendSize.y - markerRigthRectMargin - (markerRightRectHeight + markerRightRectSpacing) * (float)stat.onScreenIndex);
             glm::vec2 markerRightRectMax = markerRightRectMin + glm::vec2(markerRightRectWidth, -markerRightRectHeight);
             RenderTaskMarker(drawList, markerLeftRectMin, markerLeftRectMax, markerRightRectMin, markerRightRectMax, task.color);
 
@@ -230,7 +244,11 @@ private:
             timeText << std::fixed << std::string("[") << (taskTimeMs * 1000.0f);
 
             Text(drawList, markerRightRectMax + textMargin, textColor, timeText.str().c_str());
-            Text(drawList, markerRightRectMax + textMargin + glm::vec2(nameOffset, 0.0f), textColor, (std::string("ms] ") + task.name).c_str());
+            Text(
+                drawList,
+                markerRightRectMax + textMargin + glm::vec2(nameOffset, 0.0f),
+                textColor,
+                (std::string("ms] ") + task.name).c_str());
         }
 
         ImGui::PopClipRect();
@@ -242,14 +260,24 @@ private:
         else
             drawList->AddRect(ImVec2(minPoint.x, minPoint.y), ImVec2(maxPoint.x, maxPoint.y), col);
     }
-    static void Text(ImDrawList *drawList, glm::vec2 point, uint32_t col, const char *text) { drawList->AddText(ImVec2(point.x, point.y), col, text); }
+    static void Text(ImDrawList *drawList, glm::vec2 point, uint32_t col, const char *text) {
+        drawList->AddText(ImVec2(point.x, point.y), col, text);
+    }
     static void Triangle(ImDrawList *drawList, std::array<glm::vec2, 3> points, uint32_t col, bool filled = true) {
         if (filled)
-            drawList->AddTriangleFilled(ImVec2(points[0].x, points[0].y), ImVec2(points[1].x, points[1].y), ImVec2(points[2].x, points[2].y), col);
+            drawList->AddTriangleFilled(
+                ImVec2(points[0].x, points[0].y), ImVec2(points[1].x, points[1].y), ImVec2(points[2].x, points[2].y), col);
         else
-            drawList->AddTriangle(ImVec2(points[0].x, points[0].y), ImVec2(points[1].x, points[1].y), ImVec2(points[2].x, points[2].y), col);
+            drawList->AddTriangle(
+                ImVec2(points[0].x, points[0].y), ImVec2(points[1].x, points[1].y), ImVec2(points[2].x, points[2].y), col);
     }
-    static void RenderTaskMarker(ImDrawList *drawList, glm::vec2 leftMinPoint, glm::vec2 leftMaxPoint, glm::vec2 rightMinPoint, glm::vec2 rightMaxPoint, uint32_t col) {
+    static void RenderTaskMarker(
+        ImDrawList *drawList,
+        glm::vec2 leftMinPoint,
+        glm::vec2 leftMaxPoint,
+        glm::vec2 rightMinPoint,
+        glm::vec2 rightMaxPoint,
+        uint32_t col) {
         Rect(drawList, leftMinPoint, leftMaxPoint, col, true);
         Rect(drawList, rightMinPoint, rightMaxPoint, col, true);
         std::array<ImVec2, 4> points = { ImVec2(leftMaxPoint.x, leftMinPoint.y),

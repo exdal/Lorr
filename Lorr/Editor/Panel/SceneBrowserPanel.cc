@@ -1,9 +1,9 @@
-#include "Panels.hh"
+#include "Editor/Panel/SceneBrowserPanel.hh"
 
-#include "EditorApp.hh"
+#include "Editor/EditorApp.hh"
 
 #include "Engine/Memory/Stack.hh"
-#include "Engine/World/Components.hh"
+#include "Engine/World/ECSModule/Core.hh"
 
 namespace lr {
 SceneBrowserPanel::SceneBrowserPanel(std::string name_, bool open_)
@@ -15,7 +15,6 @@ void SceneBrowserPanel::update(this SceneBrowserPanel &self) {
 
     auto &app = EditorApp::get();
     auto &asset_man = app.asset_man;
-    auto &world = app.world;
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0, 0.0));
     ImGui::Begin(self.name.data());
     ImGui::PopStyleVar();
@@ -40,10 +39,10 @@ void SceneBrowserPanel::update(this SceneBrowserPanel &self) {
         ImGui::TableSetupScrollFreeze(0, 1);
         ImGui::TableHeadersRow();
 
-        if (world.active_scene().has_value()) {
-            auto scene = asset_man.get_scene(world.active_scene().value());
-            scene.root().children([&](flecs::entity e) {
-                if (e.has<Component::Hidden>()) {
+        if (app.active_scene_id.has_value()) {
+            auto *scene = asset_man.get_scene(app.active_scene_id.value());
+            scene->get_root().children([&](flecs::entity e) {
+                if (e.has<ECS::Hidden>()) {
                     return;
                 }
 
@@ -56,16 +55,16 @@ void SceneBrowserPanel::update(this SceneBrowserPanel &self) {
                 auto entity_name = stack.format("{}  {}", Icon::fa::cube, e.name().c_str());
 
                 ImGuiSelectableFlags selectable_flags = ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap;
-                if (ImGui::Selectable(entity_name.data(), e.has<Component::EditorSelected>(), selectable_flags)) {
-                    world.ecs().each([](flecs::entity c, Component::EditorSelected) { c.remove<Component::EditorSelected>(); });
-                    e.add<Component::EditorSelected>();
+                if (ImGui::Selectable(entity_name.data(), e.has<ECS::EditorSelected>(), selectable_flags)) {
+                    scene->get_world().each([](flecs::entity c, ECS::EditorSelected) { c.remove<ECS::EditorSelected>(); });
+                    e.add<ECS::EditorSelected>();
                 }
             });
         }
 
         if (ImGui::BeginPopupContextWindow("create_ctxwin", ImGuiPopupFlags_AnyPopup | 1)) {
             if (ImGui::BeginMenu("Create...")) {
-                if (ImGui::MenuItem("Entity", nullptr, false, world.active_scene().has_value())) {
+                if (ImGui::MenuItem("Entity", nullptr, false, app.active_scene_id.has_value())) {
                     open_create_entity_popup = true;
                 }
 
@@ -83,21 +82,13 @@ void SceneBrowserPanel::update(this SceneBrowserPanel &self) {
             static std::string entity_name = {};
             ImGui::InputText("Name for Entity", &entity_name);
 
-            if (entity_name.empty()) {
-                ImGui::BeginDisabled();
-            }
-
-            if (ImGui::Button("OK", ImVec2(120, 0))) {
-                auto scene = asset_man.get_scene(world.active_scene().value());
-                auto created_entity = scene.create_entity(entity_name);
-                created_entity.set<Component::Transform>({});
+            if (ImGui::ButtonEx("OK", ImVec2(120, 0), ImGuiItemFlags_Disabled)) {
+                auto *scene = asset_man.get_scene(app.active_scene_id.value());
+                auto created_entity = scene->create_entity(entity_name);
+                created_entity.set<ECS::Transform>({});
 
                 ImGui::CloseCurrentPopup();
                 entity_name.clear();
-            }
-
-            if (entity_name.empty()) {
-                ImGui::EndDisabled();
             }
 
             ImGui::SameLine();

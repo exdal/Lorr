@@ -15,7 +15,7 @@ struct OVERLAPPED {
 };
 
 struct LARGE_INTEGER {
-    usize QuadPart = 0;
+    i64 QuadPart = 0;
 };
 
 enum : DWORD {
@@ -184,7 +184,7 @@ auto os::file_watcher_read(FileDescriptor watcher, FileDescriptor socket) -> std
     return {};
 }
 
-auto mem_page_size() -> u64 {
+auto os::mem_page_size() -> u64 {
     ZoneScoped;
 
     SYSTEM_INFO sys_info = {};
@@ -198,21 +198,53 @@ auto mem_reserve(u64 size) -> void * {
     return VirtualAlloc(nullptr, size, MEM_RESERVE, PAGE_READWRITE);
 }
 
-auto mem_release(void *data, u64 size) -> void {
+auto os::mem_release(void *data, u64 size) -> void {
     ZoneScoped;
     TracyFree(data);
     VirtualFree(data, size, MEM_RELEASE);
 }
 
-auto mem_commit(void *data, u64 size) -> bool {
+auto os::mem_commit(void *data, u64 size) -> bool {
     ZoneScoped;
     TracyAllocN(data, size, "Virtual Alloc");
     return VirtualAlloc(data, size, MEM_COMMIT, PAGE_READWRITE) != nullptr;
 }
 
-auto mem_decommit(void *data, u64 size) -> void {
+auto os::mem_decommit(void *data, u64 size) -> void {
     ZoneScoped;
 
     VirtualFree(data, size, MEM_DECOMMIT);
 }
+
+auto os::thread_id() -> i64 {
+    ZoneScoped;
+
+    return GetCurrentThreadId();
+}
+
+auto os::tsc() -> u64 {
+    ZoneScoped;
+
+#if defined(LS_COMPILER_CLANG)
+    return __builtin_ia32_rdtsc();
+#else
+    return static_cast<u64>(__rdtsc());
+#endif
+}
+
+auto os::unix_timestamp() -> i64 {
+    ZoneScoped;
+
+    // https://stackoverflow.com/a/46024468
+    constexpr auto UNIX_TIME_START = 0x019DB1DED53E8000_i64;
+    constexpr auto TICKS_PER_SECOND = 10000000_i64;
+
+    FILETIME ft;
+    GetSystemTimeAsFileTime(&ft);
+
+    LARGE_INTEGER li_timestamp = { .LowPart = ft.dwLowDateTime, .HighPart = ft.dwHighDateTime };
+
+    return (li_timestamp.QuadPart - UNIX_TIME_START) / TICKS_PER_SECOND;
+}
+
 }  // namespace lr

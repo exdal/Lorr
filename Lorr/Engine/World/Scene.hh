@@ -24,7 +24,8 @@ struct Scene {
     auto upload_scene(this Scene &, WorldRenderer &renderer) -> void;
     auto tick(this Scene &) -> bool;
 
-    auto root(this Scene &) -> const flecs::world &;
+    auto get_root(this Scene &) -> flecs::entity;
+    auto get_world(this Scene &) -> flecs::world &;
     auto editor_camera(this Scene &) -> flecs::entity;
     auto get_cameras(this Scene &) -> ls::span<flecs::entity>;
     auto get_name(this Scene &) -> const std::string &;
@@ -32,7 +33,8 @@ struct Scene {
 
 private:
     std::string name = {};
-    flecs::world world{};
+    flecs::entity root = {};
+    ls::option<flecs::world> world = ls::nullopt;
     std::vector<flecs::entity> cameras = {};
 
     friend AssetManager;

@@ -1,8 +1,9 @@
-#include "Panels.hh"
+#include "Editor/Panel/InspectorPanel.hh"
 
-#include "EditorApp.hh"
+#include "Editor/EditorApp.hh"
 
-#include "Engine/World/Components.hh"
+#include "Engine/World/ECSModule/ComponentWrapper.hh"
+#include "Engine/World/ECSModule/Core.hh"
 
 namespace lr {
 InspectorPanel::InspectorPanel(std::string name_, bool open_)
@@ -11,13 +12,22 @@ InspectorPanel::InspectorPanel(std::string name_, bool open_)
 
 void InspectorPanel::update(this InspectorPanel &self) {
     auto &app = EditorApp::get();
-    auto &world = app.world;
 
     ImGui::Begin(self.name.data());
+    if (app.active_scene_id.has_value()) {
+        self.draw_inspector();
+    }
+
+    ImGui::End();
+}
+
+auto InspectorPanel::draw_inspector(this InspectorPanel &) -> void {
+    auto &app = EditorApp::get();
+    auto *scene = app.asset_man.get_scene(app.active_scene_id.value());
     auto region = ImGui::GetContentRegionAvail();
 
-    auto query = world.ecs().query<Component::EditorSelected>();
-    query.each([&](flecs::entity e, Component::EditorSelected) {
+    auto query = scene->get_world().query<ECS::EditorSelected>();
+    query.each([&](flecs::entity e, ECS::EditorSelected) {
         if (ImGui::Button(e.name().c_str(), ImVec2(region.x, 0))) {
             // TODO: Rename entity
         }
@@ -28,13 +38,13 @@ void InspectorPanel::update(this InspectorPanel &self) {
                 return;
             }
 
-            Component::Wrapper component(e, component_id);
+            ECS::ComponentWrapper component(e, component_id);
             if (!component.has_component()) {
                 return;
             }
 
-            auto name_with_icon = std::format("{}  {}", world.component_icon(component_id.raw_id()), component.name);
-            if (ImGui::CollapsingHeader(name_with_icon.c_str(), nullptr, ImGuiTreeNodeFlags_DefaultOpen)) {
+            // auto name_with_icon = std::format("{}  {}", world.component_icon(component_id.raw_id()), component.name);
+            if (ImGui::CollapsingHeader(component.name.data(), nullptr, ImGuiTreeNodeFlags_DefaultOpen)) {
                 ImGui::PushID(static_cast<i32>(component_id));
                 ImGui::BeginTable(
                     "entity_props",
@@ -45,7 +55,7 @@ void InspectorPanel::update(this InspectorPanel &self) {
                 ImGui::TableSetupColumn("property", ImGuiTableColumnFlags_WidthStretch);
 
                 ImGui::PushID(component.members_data);
-                component.for_each([&](usize &i, std::string_view member_name, Component::Wrapper::Member &member) {
+                component.for_each([&](usize &i, std::string_view member_name, ECS::ComponentWrapper::Member &member) {
                     // Draw prop label
                     ImGui::TableNextRow();
                     ImGui::TableNextColumn();
@@ -83,8 +93,6 @@ void InspectorPanel::update(this InspectorPanel &self) {
 
         ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal);
     });
-
-    ImGui::End();
 }
 
 }  // namespace lr

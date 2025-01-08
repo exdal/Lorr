@@ -83,13 +83,35 @@ struct JsonWriter {
         stream << '"' << v << '"';
     }
 
+    template<typename T>
+    JsonWriter &operator=(ls::span<T> span) {
+        begin_array();
+        for (usize i = 0; i < span.size(); i++) {
+            new_value(span[i]);
+        }
+        end_array();
+
+        return *this;
+    }
+
     template<glm::length_t N, typename T>
-    JsonWriter &operator=(glm::vec<N, T> &vec) {
+    JsonWriter &operator=(const glm::vec<N, T> &vec) {
         constexpr static std::string_view components[] = { "x", "y", "z", "w" };
         begin_obj();
-        for (usize i = 0; i < N; i++) {
+        for (auto i = 0; i < N; i++) {
             key(components[i]);
             new_value(vec[i]);
+        }
+        end_obj();
+        return *this;
+    }
+
+    JsonWriter &operator=(const glm::quat &quat) {
+        constexpr static std::string_view components[] = { "x", "y", "z", "w" };
+        begin_obj();
+        for (usize i = 0; i < count_of(components); i++) {
+            key(components[i]);
+            new_value(quat[static_cast<i32>(i)]);
         }
         end_obj();
         return *this;

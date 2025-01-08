@@ -51,6 +51,7 @@ struct FileEvent {
 };
 
 namespace os {
+    //  ── IO ──────────────────────────────────────────────────────────────
     auto file_open(const fs::path &path, FileAccess access) -> std::expected<FileDescriptor, FileResult>;
     auto file_close(FileDescriptor file) -> void;
     auto file_size(FileDescriptor file) -> std::expected<usize, FileResult>;
@@ -77,5 +78,12 @@ namespace os {
     auto mem_release(void *data, u64 size = 0) -> void;
     auto mem_commit(void *data, u64 size) -> bool;
     auto mem_decommit(void *data, u64 size) -> void;
+
+    //  ── THREADS ─────────────────────────────────────────────────────────
+    auto thread_id() -> i64;
+
+    //  ── CLOCK ───────────────────────────────────────────────────────────
+    auto tsc() -> u64;
+    auto unix_timestamp() -> i64;
 }  // namespace os
 }  // namespace lr

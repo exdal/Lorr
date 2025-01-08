@@ -18,7 +18,4 @@ add_cxxflags(
     "-Wno-missing-braces",
     { tools = { "clang", "gcc" } })
 
--- Compiler Config --
-add_ldflags("-fuse-ld=lld", { tools = { "clang" } })
-
 includes("Lorr")

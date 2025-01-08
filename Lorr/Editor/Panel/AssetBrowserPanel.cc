@@ -278,8 +278,7 @@ void AssetBrowserPanel::draw_dir_contents(this AssetBrowserPanel &self) {
             }
 
             if (ImGui::Button("OK")) {
-                auto *scene_asset = app.asset_man.create_scene(new_scene_name, self.current_dir->path / (new_scene_name + ".json"));
-                app.asset_man.export_scene(scene_asset, scene_asset->path);
+                app.asset_man.create_scene(new_scene_name, self.current_dir->path / (new_scene_name + ".json"));
                 ImGui::CloseCurrentPopup();
                 new_scene_name = default_scene_name;
             }

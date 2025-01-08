@@ -24,9 +24,13 @@
 #define ECS_COMPONENT_BEGIN(name, ...) struct name {
 #define ECS_COMPONENT_END(...) }
 #define ECS_COMPONENT_MEMBER(name, type, ...) type name __VA_OPT__(=) __VA_ARGS__;
-
-#ifndef ECS_COMPONENT_TAG
 #define ECS_COMPONENT_TAG(name, ...) struct name {}
 #endif
+
+#ifdef ECS_REFLECT_TYPES
+#define ECS_COMPONENT_BEGIN(name, ...) { using _CurrentComponentT = name; world.component<name>(#name)
+#define ECS_COMPONENT_END(...) ;}
+#define ECS_COMPONENT_MEMBER(name, type, ...) .member<type, _CurrentComponentT>(#name, &_CurrentComponentT::name)
+#define ECS_COMPONENT_TAG(name, ...) world.component<name>(#name)
 #endif
 // clang-format on

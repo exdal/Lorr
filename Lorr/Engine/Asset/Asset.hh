@@ -107,6 +107,7 @@ struct AssetManager : Handle<AssetManager> {
     auto load_material(Asset *asset, const Material &material_info) -> bool;
     auto load_material(Asset *asset) -> bool;
     auto load_scene(Asset *asset) -> bool;
+    auto unload_scene(Asset *asset) -> void;
 
     //  ── Exporting Assets ────────────────────────────────────────────────
     // All export_# functions must have path, developer have freedom to
@@ -122,7 +123,7 @@ struct AssetManager : Handle<AssetManager> {
     auto get_texture(TextureID texture_id) -> Texture *;
     auto get_material(const UUID &uuid) -> Material *;
     auto get_material(MaterialID material_id) -> Material *;
-    auto get_scene(const UUID &uuid) -> Scene;
-    auto get_scene(SceneID scene_id) -> Scene;
+    auto get_scene(const UUID &uuid) -> Scene *;
+    auto get_scene(SceneID scene_id) -> Scene *;
 };
 }  // namespace lr

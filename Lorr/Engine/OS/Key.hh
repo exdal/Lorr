@@ -1,6 +1,9 @@
 #pragma once
 
 namespace lr {
+enum class KeyScancode : u32 {
+    eA = 4,
+};
 enum Key : u32 {
     LR_KEY_UNKNOWN = ~0_u32,
     LR_KEY_MOUSE_1 = 0,
@@ -152,14 +155,20 @@ enum class KeyState : u32 {
     Repeat,
 };
 
-enum class KeyMod {
+enum class KeyMod : u32 {
     None = 0,
-    Shift = 1 << 0,
-    Control = 1 << 1,
-    Alt = 1 << 2,
-    Super = 1 << 3,
-    CapsLock = 1 << 4,
-    NumLock = 1 << 5,
+    LShift = 1 << 0,
+    RShift = 1 << 1,
+    LControl = 1 << 2,
+    RControl = 1 << 3,
+    LAlt = 1 << 4,
+    RAlt = 1 << 5,
+    LSuper = 1 << 6,
+    RSuper = 1 << 7,
+    NumLock = 1 << 8,
+    CapsLock = 1 << 9,
+    AltGr = 1 << 10,
+    ScrollLock = 1 << 11,
 };
 
 }  // namespace lr

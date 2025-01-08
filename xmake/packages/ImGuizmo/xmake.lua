@@ -5,8 +5,7 @@ package("imguizmo-lorr")
 
     add_urls("https://github.com/CedricGuillemet/ImGuizmo.git")
     add_versions("1.83", "664cf2d73864a36b2a8b5091d33fc4578c885eca")
-    add_versions("1.89+WIP", "99358b3afc8cdfff5c264f97ab1718b2d8089319")
-
+    add_versions("1.89+WIP", "b10e91756d32395f5c1fefd417899b657ed7cb88")
 
     add_deps("imgui v1.91.6-docking")
 

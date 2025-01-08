@@ -5,7 +5,6 @@
 #include "Engine/Graphics/Vulkan.hh"
 #include "Engine/Graphics/VulkanDevice.hh"
 #include "Engine/Window/Window.hh"
-#include "Engine/World/World.hh"
 #include "Engine/World/WorldRenderer.hh"
 
 namespace lr {
@@ -28,13 +27,11 @@ struct Application {
     Window window = {};
     SwapChain swapchain = {};
     ImGuiRenderer imgui_renderer = {};
-
     // TODO: Should we remove this somewhere else? It's only used by editor.
     ImTextureID world_renderer_image_index = 0;
     WorldRenderer world_renderer = {};
-    World world = {};
-
     AssetManager asset_man = {};
+    ls::option<SceneID> active_scene_id = ls::nullopt;
 
     bool should_close = false;
 

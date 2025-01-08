@@ -8,7 +8,7 @@ add_requires("imgui v1.91.6-docking")
 add_requires("simdutf v5.5.0")
 add_requires("simdjson v3.10.0")
 add_requires("unordered_dense v4.4.0")
-add_requires("tracy v0.10", { configs = {
+add_requires("tracy v0.11.1", { configs = {
     on_demand = true,
     callstack = true,
     callstack_inlines = false,

@@ -294,4 +294,32 @@ auto os::mem_decommit(void *data, u64 size) -> void {
     madvise(data, size, MADV_DONTNEED);
     mprotect(data, size, PROT_NONE);
 }
+
+auto os::thread_id() -> i64 {
+    ZoneScoped;
+
+    return syscall(__NR_gettid);
+}
+
+auto os::tsc() -> u64 {
+    ZoneScoped;
+
+#if defined(LS_COMPILER_CLANG) || defined(LS_COMPILER_GCC)
+    return __builtin_ia32_rdtsc();
+#else
+#error Unknown compiler on Linux
+#endif
+}
+
+auto os::unix_timestamp() -> i64 {
+    ZoneScoped;
+
+    struct timespec ts = {};
+    if (clock_gettime(CLOCK_REALTIME, &ts) == -1) {
+        return 0;
+    }
+
+    return ts.tv_sec;
+}
+
 }  // namespace lr

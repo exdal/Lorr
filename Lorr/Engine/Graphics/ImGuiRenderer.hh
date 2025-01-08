@@ -18,5 +18,11 @@ struct ImGuiRenderer {
 
     auto begin_frame(this ImGuiRenderer &, f64 delta_time, const vuk::Extent3D &extent) -> void;
     auto end_frame(this ImGuiRenderer &, vuk::Value<vuk::ImageAttachment> &&attachment) -> vuk::Value<vuk::ImageAttachment>;
+
+    auto on_mouse_pos(this ImGuiRenderer &, glm::vec2 pos) -> void;
+    auto on_mouse_button(this ImGuiRenderer &, u8 button, bool down) -> void;
+    auto on_mouse_scroll(this ImGuiRenderer &, glm::vec2 offset) -> void;
+    auto on_key(this ImGuiRenderer &, u32 key_code, u32 scan_code, u16 mods, bool down) -> void;
+    auto on_text_input(this ImGuiRenderer &, c8 *text) -> void;
 };
 }  // namespace lr

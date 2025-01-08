@@ -62,7 +62,7 @@ auto Window::create(const WindowInfo &info) -> Window {
     impl->width = static_cast<u32>(new_width);
     impl->height = static_cast<u32>(new_height);
     impl->monitor_id = info.monitor;
-    impl->handle = SDL_CreateWindow(info.title.data(), new_pos_x, new_pos_y, new_width, new_height, window_flags);
+    impl->handle = SDL_CreateWindow(info.title.c_str(), new_pos_x, new_pos_y, new_width, new_height, window_flags);
 
     impl->cursors = {
         SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_ARROW),    SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_IBEAM),
@@ -79,7 +79,9 @@ auto Window::create(const WindowInfo &info) -> Window {
     impl->width = real_width;
     impl->height = real_height;
 
-    return { impl };
+    auto self = Window(impl);
+    self.set_cursor(WindowCursor::Arrow);
+    return self;
 }
 
 auto Window::destroy() -> void {
@@ -107,19 +109,8 @@ auto Window::poll(const WindowCallbacks &callbacks) -> void {
             case SDL_MOUSEBUTTONDOWN:
             case SDL_MOUSEBUTTONUP: {
                 if (callbacks.on_mouse_button) {
-                    Key mouse_key = LR_KEY_MOUSE_1;
-                    // clang-format off
-                    switch (e.button.button) {
-                        case SDL_BUTTON_LEFT: mouse_key = LR_KEY_MOUSE_LEFT; break;
-                        case SDL_BUTTON_RIGHT: mouse_key = LR_KEY_MOUSE_RIGHT; break;
-                        case SDL_BUTTON_MIDDLE: mouse_key = LR_KEY_MOUSE_MIDDLE; break;
-                        case SDL_BUTTON_X1: mouse_key = LR_KEY_MOUSE_4; break;
-                        case SDL_BUTTON_X2: mouse_key = LR_KEY_MOUSE_5; break;
-                        default: break;
-                    }
-                    // clang-format on
-                    auto state = e.type == SDL_MOUSEBUTTONDOWN ? KeyState::Down : KeyState::Up;
-                    callbacks.on_mouse_button(callbacks.user_data, mouse_key, state);
+                    auto state = e.type == SDL_MOUSEBUTTONDOWN;
+                    callbacks.on_mouse_button(callbacks.user_data, e.button.button, state);
                 }
             } break;
             case SDL_MOUSEWHEEL: {
@@ -130,8 +121,8 @@ auto Window::poll(const WindowCallbacks &callbacks) -> void {
             case SDL_KEYDOWN:
             case SDL_KEYUP: {
                 if (callbacks.on_key) {
-                    // TODO: We really need a proper input handling
-                    callbacks.on_key(callbacks.user_data, {}, {}, {});
+                    auto state = e.type == SDL_KEYDOWN;
+                    callbacks.on_key(callbacks.user_data, e.key.keysym.sym, e.key.keysym.scancode, e.key.keysym.mod, state);
                 }
             } break;
             case SDL_TEXTINPUT: {
@@ -151,7 +142,22 @@ auto Window::poll(const WindowCallbacks &callbacks) -> void {
 }
 
 auto Window::set_cursor(WindowCursor cursor) -> void {
+    ZoneScoped;
+
+    impl->current_cursor = cursor;
     SDL_SetCursor(impl->cursors[usize(cursor)]);
+}
+
+auto Window::get_cursor() -> WindowCursor {
+    ZoneScoped;
+
+    return impl->current_cursor;
+}
+
+auto Window::show_cursor(bool show) -> void {
+    ZoneScoped;
+
+    SDL_ShowCursor(show);
 }
 
 auto Window::display_at(i32 monitor_id) -> ls::option<SystemDisplay> {

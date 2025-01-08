@@ -1,19 +1,12 @@
 #include "Application.hh"
 
+#include "Engine/OS/Timer.hh"
+
 namespace lr {
 bool Application::init(this Application &self, const ApplicationInfo &info) {
     ZoneScoped;
 
     Logger::init("engine");
-
-    ImGui::CreateContext();
-    auto &imgui = ImGui::GetIO();
-    imgui.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-    imgui.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
-    imgui.IniFilename = "editor_layout.ini";
-    imgui.DisplayFramebufferScale = { 1.0f, 1.0f };
-    imgui.BackendFlags = ImGuiBackendFlags_RendererHasVtxOffset;
-    ImGui::StyleColorsDark();
 
     if (!self.do_super_init(info.args)) {
         LOG_FATAL("Super init failed!");
@@ -26,16 +19,9 @@ bool Application::init(this Application &self, const ApplicationInfo &info) {
     self.window = Window::create(info.window_info);
     auto window_size = self.window.get_size();
     auto surface = self.window.get_surface(self.device.get_instance());
-    self.swapchain = SwapChain::create(self.device, surface, { window_size.x, window_size.y }).value();
+    self.swapchain = SwapChain::create(self.device, surface, { .width = window_size.x, .height = window_size.y }).value();
     self.imgui_renderer.init(&self.device);
-
-    auto world_result = World::create("default_world");
-    if (!world_result.has_value()) {
-        LOG_FATAL("Failed to create default world!");
-        return false;
-    }
-
-    self.world = world_result.value();
+    self.world_renderer = WorldRenderer::create(&self.device);
 
     if (!self.do_prepare()) {
         LOG_FATAL("Failed to initialize application!");
@@ -55,33 +41,37 @@ void Application::run(this Application &self) {
         auto app = static_cast<Application *>(user_data);
         app->should_close = true;
     };
-    window_callbacks.on_mouse_pos = [](void *, glm::vec2 position, glm::vec2) {
-        auto &imgui = ImGui::GetIO();
-        imgui.AddMousePosEvent(position.x, position.y);
+    window_callbacks.on_mouse_pos = [](void *user_data, glm::vec2 position, glm::vec2) {
+        auto *app = static_cast<Application *>(user_data);
+        app->imgui_renderer.on_mouse_pos(position);
     };
-    window_callbacks.on_mouse_button = [](void *, Key mouse_key, KeyState state) {
-        auto &imgui = ImGui::GetIO();
-        imgui.AddMouseButtonEvent(static_cast<i32>(mouse_key), state == KeyState::Down);
+    window_callbacks.on_mouse_button = [](void *user_data, u8 button, bool down) {
+        auto *app = static_cast<Application *>(user_data);
+        app->imgui_renderer.on_mouse_button(button, down);
     };
-    window_callbacks.on_mouse_scroll = [](void *, glm::vec2 offset) {
-        auto &imgui = ImGui::GetIO();
-        imgui.AddMouseWheelEvent(offset.x, offset.y);
+    window_callbacks.on_mouse_scroll = [](void *user_data, glm::vec2 offset) {
+        auto *app = static_cast<Application *>(user_data);
+        app->imgui_renderer.on_mouse_scroll(offset);
     };
-    window_callbacks.on_key = [](void *, Key key, KeyState state, KeyMod) {
-        auto &imgui = ImGui::GetIO();
-        imgui.AddKeyEvent(static_cast<ImGuiKey>(key), state == KeyState::Down);
+    window_callbacks.on_key = [](void *user_data, SDL_Keycode key_code, SDL_Scancode scan_code, u16 mods, bool down) {
+        auto *app = static_cast<Application *>(user_data);
+        app->imgui_renderer.on_key(key_code, scan_code, mods, down);
     };
-    window_callbacks.on_text_input = [](void *, c8 *text) {
-        auto &imgui = ImGui::GetIO();
-        imgui.AddInputCharactersUTF8(text);
+    window_callbacks.on_text_input = [](void *user_data, c8 *text) {
+        auto *app = static_cast<Application *>(user_data);
+        app->imgui_renderer.on_text_input(text);
     };
 
+    Timer timer;
     b32 swapchain_ok = true;
     while (!self.should_close) {
+        auto delta_time = timer.elapsed();
+        timer.reset();
+
         if (!swapchain_ok) {
             auto window_size = self.window.get_size();
             auto surface = self.window.get_surface(self.device.get_instance());
-            self.swapchain = SwapChain::create(self.device, surface, { window_size.x, window_size.y }).value();
+            self.swapchain = SwapChain::create(self.device, surface, { .width = window_size.x, .height = window_size.y }).value();
 
             swapchain_ok = true;
         }
@@ -89,26 +79,21 @@ void Application::run(this Application &self) {
         auto swapchain_attachment = self.device.new_frame(self.swapchain);
         swapchain_attachment = vuk::clear_image(std::move(swapchain_attachment), vuk::Black<f32>);
 
-        if (!self.world_renderer) {
-            self.world_renderer = WorldRenderer::create(&self.device);
-        }
-
         // Delta time
-        self.world.progress();
         self.window.poll(window_callbacks);
 
-        f64 delta_time = self.world.delta_time();
         self.imgui_renderer.begin_frame(delta_time, self.swapchain.extent());
-
         self.do_update(delta_time);
-        if (self.world.update_scene_data(self.world_renderer)) {
+        if (self.active_scene_id.has_value()) {
+            auto *scene = self.asset_man.get_scene(self.active_scene_id.value());
+            scene->tick();
+
+            scene->upload_scene(self.world_renderer);
             self.world_renderer_image_index = self.imgui_renderer.add_image(self.world_renderer.render(swapchain_attachment));
         }
 
         swapchain_attachment = self.imgui_renderer.end_frame(std::move(swapchain_attachment));
         self.device.end_frame(std::move(swapchain_attachment));
-
-        self.should_close |= self.world.should_quit();
 
         FrameMark;
     }
@@ -123,7 +108,6 @@ void Application::shutdown(this Application &self) {
 
     self.device.wait();
     self.swapchain.destroy();
-    self.world.destroy();
     self.asset_man.destroy();
     self.device.destroy();
     LOG_INFO("Complete!");

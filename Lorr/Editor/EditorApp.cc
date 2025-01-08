@@ -132,9 +132,6 @@ auto EditorApp::new_project(this EditorApp &self, const fs::path &root_dir, cons
     self.recent_projects.insert(proj_root_dir);
     self.save_editor_data();
 
-    self.world.destroy();
-    self.world = World::create_from_file(proj_file_path).value();
-
     return true;
 }
 
@@ -145,9 +142,6 @@ auto EditorApp::open_project(this EditorApp &self, const fs::path &path) -> bool
     self.active_project = Project{ .root_dir = proj_root_dir };
     self.recent_projects.insert(proj_root_dir);
     self.save_editor_data();
-
-    self.world.destroy();
-    self.world = World::create_from_file(path).value();
 
     return true;
 }

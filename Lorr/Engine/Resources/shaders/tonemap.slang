@@ -1,6 +1,8 @@
 module tonemap;
-
 import lorr;
+
+[[vk::binding(0, 0)]] SamplerState sampler;
+[[vk::binding(1, 0)]] Texture2D<float4> raw_image;
 
 float3 aces(float3 x) {
     const float a = 2.51;
@@ -10,13 +12,6 @@ float3 aces(float3 x) {
     const float e = 0.14;
     return (x * (a * x + b)) / (x * (c * x + d) + e);
 }
-
-struct PushConstants {
-    World *world;
-    ImageView<float4> src_image_view;
-    f32 avg_luminance;
-};
-[[vk::push_constant]] PushConstants c;
 
 struct VertexOutput {
     float4 position     : SV_Position;
@@ -34,8 +29,7 @@ VertexOutput vs_main(u32 vertex_id : SV_VertexID) {
 
 [shader("fragment")]
 float4 fs_main(VertexOutput input) : SV_TARGET {
-    World *world = c.world;
-    float3 color = c.src_image_view.sample(world->linear_sampler, input.tex_coord).rgb;
+    float3 color = raw_image.Sample(sampler, input.tex_coord).rgb;
     return float4(aces(color), 1.0);
 }
 

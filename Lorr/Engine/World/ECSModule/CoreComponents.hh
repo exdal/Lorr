@@ -47,7 +47,7 @@ ECS_COMPONENT_BEGIN(RenderingModel)
 ECS_COMPONENT_END();
 
 ECS_COMPONENT_BEGIN(DirectionalLight)
-    ECS_COMPONENT_MEMBER(direction, glm::vec2, {95.0, 0.0})
+    ECS_COMPONENT_MEMBER(direction, glm::vec2, {90.0, 0.0})
     ECS_COMPONENT_MEMBER(intensity, f32, 10.0)
 ECS_COMPONENT_END();
 

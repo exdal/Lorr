@@ -173,8 +173,7 @@ private:
     Pipeline sky_view_pipeline = {};
     Pipeline sky_aerial_perspective_pipeline = {};
     Pipeline sky_final_pipeline = {};
-
-    ls::option<vuk::Value<vuk::ImageAttachment>> composition_result = {};
+    Pipeline tonemap_pipeline = {};
 };
 
 }  // namespace lr

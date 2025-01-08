@@ -65,6 +65,12 @@ auto SceneRenderer::setup_persistent_resources(this SceneRenderer &self) -> void
         vuk::ImageViewType::e2D,
         { .aspectMask = vuk::ImageAspectFlagBits::eColor })
         .value();
+    self.sky_transmittance_pipeline = Pipeline::create(*self.device, {
+        .module_name = "atmos.transmittance",
+        .root_path = shaders_root,
+        .shader_path = shaders_root / "atmos" / "transmittance.slang",
+        .entry_points = { "cs_main" },
+    }).value();
     self.sky_multiscatter_lut = Image::create(
         *self.device,
         vuk::Format::eR16G16B16A16Sfloat,
@@ -79,6 +85,12 @@ auto SceneRenderer::setup_persistent_resources(this SceneRenderer &self) -> void
         vuk::ImageViewType::e2D,
         { .aspectMask = vuk::ImageAspectFlagBits::eColor })
         .value();
+    self.sky_multiscatter_pipeline = Pipeline::create(*self.device, {
+        .module_name = "atmos.ms",
+        .root_path = shaders_root,
+        .shader_path = shaders_root / "atmos" / "ms.slang",
+        .entry_points = { "cs_main" },
+    }).value();
     self.sky_view_pipeline = Pipeline::create(*self.device, {
         .module_name = "atmos.lut",
         .root_path = shaders_root,
@@ -97,17 +109,11 @@ auto SceneRenderer::setup_persistent_resources(this SceneRenderer &self) -> void
         .shader_path = shaders_root / "atmos" / "final.slang",
         .entry_points = { "vs_main", "fs_main" },
     }).value();
-    self.sky_transmittance_pipeline = Pipeline::create(*self.device, {
-        .module_name = "atmos.transmittance",
+    self.tonemap_pipeline = Pipeline::create(*self.device, {
+        .module_name = "tonemap",
         .root_path = shaders_root,
-        .shader_path = shaders_root / "atmos" / "transmittance.slang",
-        .entry_points = { "cs_main" },
-    }).value();
-    self.sky_multiscatter_pipeline = Pipeline::create(*self.device, {
-        .module_name = "atmos.ms",
-        .root_path = shaders_root,
-        .shader_path = shaders_root / "atmos" / "ms.slang",
-        .entry_points = { "cs_main" },
+        .shader_path = shaders_root / "tonemap.slang",
+        .entry_points = { "vs_main", "fs_main" },
     }).value();
     // clang-format on
 
@@ -445,7 +451,29 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
 
     std::tie(final_attachment, depth_attachment) = editor_grid_pass(std::move(final_attachment), std::move(depth_attachment));
 
-    return final_attachment;
+    //  ── TONEMAP ─────────────────────────────────────────────────────────
+    auto tonemap_pass = vuk::make_pass(
+        "tonemap",
+        [&pipeline = *self.device->pipeline(self.tonemap_pipeline.id())](
+            vuk::CommandBuffer &cmd_list, VUK_IA(vuk::Access::eColorWrite) dst, VUK_IA(vuk::Access::eFragmentSampled) src) {
+            cmd_list  //
+                .bind_graphics_pipeline(pipeline)
+                .bind_sampler(0, 0, { .magFilter = vuk::Filter::eLinear, .minFilter = vuk::Filter::eLinear })
+                .bind_image(0, 1, src)
+                .set_rasterization({})
+                .set_color_blend(dst, vuk::BlendPreset::eOff)
+                .set_viewport(0, vuk::Rect2D::framebuffer())
+                .set_scissor(0, vuk::Rect2D::framebuffer())
+                .draw(3, 1, 0, 0);
+            return std::make_tuple(dst, src);
+        });
+
+    auto composition_attachment = vuk::declare_ia("result", { .sample_count = vuk::Samples::e1 });
+    composition_attachment.same_format_as(render_target);
+    composition_attachment.same_shape_as(render_target);
+
+    std::tie(composition_attachment, final_attachment) = tonemap_pass(std::move(composition_attachment), std::move(final_attachment));
+    return composition_attachment;
 }
 
 auto SceneRenderer::draw_profiler_ui(this SceneRenderer &) -> void {

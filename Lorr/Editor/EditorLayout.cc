@@ -52,8 +52,8 @@ void EditorLayout::setup_theme(this EditorLayout &, EditorTheme) {
     colors[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.40f, 0.40f, 0.40f, 1.00f);
     colors[ImGuiCol_ScrollbarGrabActive] = ImVec4(0.43f, 0.43f, 0.43f, 1.00f);
     colors[ImGuiCol_CheckMark] = ImVec4(0.00f, 0.44f, 0.88f, 1.00f);
-    colors[ImGuiCol_SliderGrab] = ImVec4(0.000f, 0.434f, 0.878f, 1.000f);
-    colors[ImGuiCol_SliderGrabActive] = ImVec4(0.000f, 0.434f, 0.878f, 1.000f);
+    colors[ImGuiCol_SliderGrab] = ImVec4(0.000f, 0.434f, 0.878f, 1.00f);
+    colors[ImGuiCol_SliderGrabActive] = ImVec4(0.000f, 0.434f, 0.878f, 1.00f);
     colors[ImGuiCol_Button] = ImVec4(0.22f, 0.22f, 0.22f, 1.00f);
     colors[ImGuiCol_ButtonHovered] = ImVec4(0.28f, 0.28f, 0.28f, 1.00f);
     colors[ImGuiCol_ButtonActive] = ImVec4(0.000f, 0.439f, 0.878f, 0.824f);
@@ -310,98 +310,57 @@ void EditorLayout::update(this EditorLayout &self) {
 }
 }  // namespace lr
 
-bool ImGuiLR::drag_xy(glm::vec2 &coords) {
+static const u64 GDataTypeInfo[] = {
+    sizeof(char),  // ImGuiDataType_S8
+    sizeof(unsigned char),
+    sizeof(short),  // ImGuiDataType_S16
+    sizeof(unsigned short),
+    sizeof(int),  // ImGuiDataType_S32
+    sizeof(unsigned int),
+    sizeof(ImS64),  // ImGuiDataType_S64
+    sizeof(ImU64),
+    sizeof(float),   // ImGuiDataType_Float (float are promoted to double in va_arg)
+    sizeof(double),  // ImGuiDataType_Double
+    sizeof(bool),    // ImGuiDataType_Bool
+};
+
+bool ImGuiLR::drag_vec(i32 id, void *data, usize components, ImGuiDataType data_type) {
+    ImGuiWindow *window = ImGui::GetCurrentWindow();
+    if (window->SkipItems)
+        return false;
+
+    static ImU32 component_colors[] = {
+        IM_COL32(255, 0, 0, 255), IM_COL32(0, 255, 0, 255), IM_COL32(0, 0, 255, 255), ImGui::GetColorU32(ImGuiCol_Text)
+    };
+
     bool value_changed = false;
-    ImGui::PushMultiItemsWidths(3, ImGui::CalcItemWidth());
+    ImGui::BeginGroup();
 
-    float padding = GImGui->Font->FontSize + GImGui->Style.FramePadding.y * 2.0f;
-    ImVec2 button_size = { padding, padding };
+    ImGui::PushID(id);
+    ImGui::PushMultiItemsWidths(static_cast<i32>(components), ImGui::GetContentRegionAvail().x);
+    for (usize i = 0; i < components; i++) {
+        if (i > 0) {
+            ImGui::SameLine(0, GImGui->Style.ItemInnerSpacing.x);
+        }
 
-    // X
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, { 0, 0 });
-    ImGui::PushStyleColor(ImGuiCol_Button, { 0.8f, 0.1f, 0.15f, 1.0f });
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, { 0.9f, 0.2f, 0.2f, 1.0f });
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, { 0.8f, 0.1f, 0.15f, 1.0f });
-    if (ImGui::Button("X", button_size)) {
+        ImGui::PushID(static_cast<i32>(i));
+        value_changed |= ImGui::DragScalar("", data_type, data);
+        ImGui::PopItemWidth();
+        ImGui::PopID();
+
+        auto rect_min = ImGui::GetItemRectMin();
+        auto rect_max = ImGui::GetItemRectMax();
+        auto spacing = ImGui::GetStyle().FramePadding.x / 2.0f;
+
+        if (components > 1) {
+            ImGui::GetWindowDrawList()->AddLine(
+                { rect_min.x + spacing, rect_min.y }, { rect_min.x + spacing, rect_max.y }, component_colors[i], 4);
+        }
+
+        data = (void *)((char *)data + GDataTypeInfo[data_type]);
     }
-    ImGui::PopStyleColor(3);
-
-    ImGui::SameLine();
-    value_changed |= ImGui::DragFloat("##X", &coords.x, 0.1f, 0.0f, 0.0f, "%.2f");
-    ImGui::PopItemWidth();
-    ImGui::PopStyleVar();
-
-    ImGui::SameLine();
-
-    // Y
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, { 0, 0 });
-    ImGui::PushStyleColor(ImGuiCol_Button, { 0.2f, 0.7f, 0.2f, 1.0f });
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, { 0.3f, 0.8f, 0.3f, 1.0f });
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, { 0.2f, 0.7f, 0.2f, 1.0f });
-    if (ImGui::Button("Y", button_size)) {
-    }
-    ImGui::PopStyleColor(3);
-
-    ImGui::SameLine();
-    value_changed |= ImGui::DragFloat("##Y", &coords.y, 0.1f, 0.0f, 0.0f, "%.2f");
-    ImGui::PopItemWidth();
-    ImGui::PopStyleVar();
-
-    return value_changed;
-}
-
-bool ImGuiLR::drag_xyz(glm::vec3 &coords) {
-    bool value_changed = false;
-    ImGui::PushMultiItemsWidths(3, ImGui::CalcItemWidth());
-
-    float padding = GImGui->Font->FontSize + GImGui->Style.FramePadding.y * 2.0f;
-    ImVec2 button_size = { 3.0, padding };
-
-    // X
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, { 0, 0 });
-    ImGui::PushStyleColor(ImGuiCol_Button, { 0.8f, 0.1f, 0.15f, 1.0f });
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, { 0.9f, 0.2f, 0.2f, 1.0f });
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, { 0.8f, 0.1f, 0.15f, 1.0f });
-    if (ImGui::Button("X", button_size)) {
-    }
-    ImGui::PopStyleColor(3);
-
-    ImGui::SameLine();
-    value_changed |= ImGui::DragFloat("##X", &coords.x, 0.1f, 0.0f, 0.0f, "%.2f");
-    ImGui::PopItemWidth();
-    ImGui::PopStyleVar();
-
-    ImGui::SameLine();
-
-    // Y
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, { 0, 0 });
-    ImGui::PushStyleColor(ImGuiCol_Button, { 0.2f, 0.7f, 0.2f, 1.0f });
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, { 0.3f, 0.8f, 0.3f, 1.0f });
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, { 0.2f, 0.7f, 0.2f, 1.0f });
-    if (ImGui::Button("Y", button_size)) {
-    }
-    ImGui::PopStyleColor(3);
-
-    ImGui::SameLine();
-    value_changed |= ImGui::DragFloat("##Y", &coords.y, 0.1f, 0.0f, 0.0f, "%.2f");
-    ImGui::PopItemWidth();
-    ImGui::PopStyleVar();
-
-    ImGui::SameLine();
-
-    // Z
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, { 0, 0 });
-    ImGui::PushStyleColor(ImGuiCol_Button, { 0.1f, 0.25f, 0.8f, 1.0f });
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, { 0.2f, 0.35f, 0.9f, 1.0f });
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, { 0.1f, 0.25f, 0.8f, 1.0f });
-    if (ImGui::Button("Z", button_size)) {
-    }
-    ImGui::PopStyleColor(3);
-
-    ImGui::SameLine();
-    value_changed |= ImGui::DragFloat("##Z", &coords.z, 0.1f, 0.0f, 0.0f, "%.2f");
-    ImGui::PopItemWidth();
-    ImGui::PopStyleVar();
+    ImGui::PopID();
+    ImGui::EndGroup();
 
     return value_changed;
 }
@@ -426,7 +385,7 @@ bool ImGuiLR::image_button(std::string_view text, ImTextureID texture_id, const 
     cursor_pos.x += style.FramePadding.x;
     cursor_pos.y += style.FramePadding.y;
     ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, { 0.5, 0.9 });
-    auto pressed = ImGui::Button(text.data(), button_size);
+    auto pressed = ImGui::Button(text.cbegin(), button_size);
     ImGui::PopStyleVar();
 
     ImGui::SetNextItemAllowOverlap();

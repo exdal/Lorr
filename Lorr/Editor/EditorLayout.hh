@@ -45,8 +45,7 @@ struct EditorLayout {
 }  // namespace lr
 
 namespace ImGuiLR {
-bool drag_xy(glm::vec2 &coords);
-bool drag_xyz(glm::vec3 &coords);
+bool drag_vec(i32 id, void *data, usize components, ImGuiDataType data_type);
 void center_text(std::string_view str);
 bool image_button(std::string_view text, ImTextureID texture_id, const ImVec2 &button_size);
 }  // namespace ImGuiLR

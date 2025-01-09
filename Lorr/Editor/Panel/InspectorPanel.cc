@@ -44,7 +44,7 @@ auto InspectorPanel::draw_inspector(this InspectorPanel &) -> void {
             }
 
             // auto name_with_icon = std::format("{}  {}", world.component_icon(component_id.raw_id()), component.name);
-            if (ImGui::CollapsingHeader(component.name.data(), nullptr, ImGuiTreeNodeFlags_DefaultOpen)) {
+            if (ImGui::CollapsingHeader(component.name.cbegin(), nullptr, ImGuiTreeNodeFlags_DefaultOpen)) {
                 ImGui::PushID(static_cast<i32>(component_id));
                 ImGui::BeginTable(
                     "entity_props",
@@ -61,20 +61,20 @@ auto InspectorPanel::draw_inspector(this InspectorPanel &) -> void {
                     ImGui::TableNextColumn();
 
                     ImGui::SetCursorPosY(ImGui::GetCursorPosY() + ImGui::GetStyle().FramePadding.y);
-                    ImGui::TextUnformatted(member_name.data());
+                    ImGui::TextUnformatted(member_name.cbegin());
                     ImGui::TableNextColumn();
 
                     ImGui::PushID(static_cast<i32>(i));
                     std::visit(
                         match{
                             [](const auto &) {},
-                            [](f32 *v) { ImGui::DragFloat("", v); },
-                            [](i32 *v) { ImGui::DragInt("", v); },
-                            [](u32 *v) { ImGui::DragScalar("", ImGuiDataType_U32, v); },
-                            [](i64 *v) { ImGui::DragScalar("", ImGuiDataType_S64, v); },
-                            [](u64 *v) { ImGui::DragScalar("", ImGuiDataType_U64, v); },
-                            [](glm::vec2 *v) { ImGuiLR::drag_xy(*v); },
-                            [](glm::vec3 *v) { ImGuiLR::drag_xyz(*v); },
+                            [&](f32 *v) { ImGuiLR::drag_vec(0, v, 1, ImGuiDataType_Float); },
+                            [&](i32 *v) { ImGuiLR::drag_vec(0, v, 1, ImGuiDataType_S32); },
+                            [&](u32 *v) { ImGuiLR::drag_vec(0, v, 1, ImGuiDataType_U32); },
+                            [&](i64 *v) { ImGuiLR::drag_vec(0, v, 1, ImGuiDataType_S64); },
+                            [&](u64 *v) { ImGuiLR::drag_vec(0, v, 1, ImGuiDataType_U64); },
+                            [&](glm::vec2 *v) { ImGuiLR::drag_vec(0, glm::value_ptr(*v), 2, ImGuiDataType_Float); },
+                            [&](glm::vec3 *v) { ImGuiLR::drag_vec(0, glm::value_ptr(*v), 3, ImGuiDataType_Float); },
                             [](std::string *v) { ImGui::InputText("", v); },
                             [](UUID *v) { ImGui::TextUnformatted(v->str().c_str()); },
                         },

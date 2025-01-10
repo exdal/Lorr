@@ -96,7 +96,7 @@ auto TransferManager::upload_staging(this TransferManager &self, ImageView &imag
 
     dst_attachment = upload_pass(std::move(src_buffer), std::move(dst_attachment));
     if (image_view.mip_count() > 1) {
-        dst_attachment = vuk::generate_mips(std::move(dst_attachment), 0, image_view.mip_count());
+        dst_attachment = vuk::generate_mips(std::move(dst_attachment), 0, image_view.mip_count() - 1);
     }
 
     self.wait_on(std::move(dst_attachment));

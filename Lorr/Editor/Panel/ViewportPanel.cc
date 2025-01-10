@@ -41,19 +41,19 @@ void ViewportPanel::on_drop(this ViewportPanel &) {
         auto *uuid = static_cast<UUID *>(asset_payload->Data);
         auto *asset = app.asset_man.get_asset(*uuid);
         switch (asset->type) {
+            case AssetType::Model: {
+            } break;
             case AssetType::Scene: {
-                if (app.active_scene_id.has_value()) {
-                    auto *active_scene = app.asset_man.get_scene(app.active_scene_id.value());
-                    active_scene->destroy();
+                if (app.active_scene_uuid.has_value()) {
+                    app.asset_man.export_asset(*uuid, asset->path);
+                    app.asset_man.unload_scene(app.active_scene_uuid.value());
                 }
 
-                LS_EXPECT(app.asset_man.load_scene(asset));
-                app.active_scene_id = asset->scene_id;
-                break;
-            }
+                LS_EXPECT(app.asset_man.load_scene(*uuid));
+                app.active_scene_uuid = *uuid;
+            } break;
             case AssetType::None:
             case AssetType::Shader:
-            case AssetType::Model:
             case AssetType::Texture:
             case AssetType::Material:
             case AssetType::Font:
@@ -62,15 +62,15 @@ void ViewportPanel::on_drop(this ViewportPanel &) {
     }
 }
 
-void ViewportPanel::update(this ViewportPanel &self) {
+void ViewportPanel::render(this ViewportPanel &self, vuk::Format format, vuk::Extent3D extent) {
     auto &app = EditorApp::get();
 
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0, 0.0));
     ImGui::Begin(self.name.data());
     ImGui::PopStyleVar();
 
-    if (app.active_scene_id.has_value()) {
-        self.draw_viewport();
+    if (app.active_scene_uuid.has_value()) {
+        self.draw_viewport(format, extent);
     }
 
     auto *current_window = ImGui::GetCurrentWindow();
@@ -82,9 +82,9 @@ void ViewportPanel::update(this ViewportPanel &self) {
     ImGui::End();
 }
 
-auto ViewportPanel::draw_viewport(this ViewportPanel &self) -> void {
+auto ViewportPanel::draw_viewport(this ViewportPanel &self, vuk::Format format, vuk::Extent3D) -> void {
     auto &app = EditorApp::get();
-    auto *scene = app.asset_man.get_scene(app.active_scene_id.value());
+    auto *scene = app.asset_man.get_scene(app.active_scene_uuid.value());
     auto editor_camera = scene->editor_camera();
     auto *current_window = ImGui::GetCurrentWindow();
     auto window_rect = current_window->InnerRect;
@@ -96,7 +96,10 @@ auto ViewportPanel::draw_viewport(this ViewportPanel &self) -> void {
     ImGuizmo::SetDrawlist();
     ImGuizmo::SetRect(window_pos.x, window_pos.y, window_size.x, window_size.y);
 
-    ImGui::Image(app.world_renderer_image_index, work_area_size);
+    auto game_view_image = app.scene_renderer.render(
+        format, { .width = static_cast<u32>(window_size.x), .height = static_cast<u32>(window_size.y), .depth = 1 });
+    auto game_view_image_idx = app.imgui_renderer.add_image(std::move(game_view_image));
+    ImGui::Image(game_view_image_idx, work_area_size);
 
     auto *camera = editor_camera.get_mut<ECS::Camera>();
     auto *camera_transform = editor_camera.get_mut<ECS::Transform>();

@@ -27,11 +27,9 @@ struct Application {
     Window window = {};
     SwapChain swapchain = {};
     ImGuiRenderer imgui_renderer = {};
-    // TODO: Should we remove this somewhere else? It's only used by editor.
-    ImTextureID world_renderer_image_index = 0;
     SceneRenderer scene_renderer = {};
     AssetManager asset_man = {};
-    ls::option<SceneID> active_scene_id = ls::nullopt;
+    ls::option<UUID> active_scene_uuid = ls::nullopt;
 
     bool should_close = false;
 
@@ -42,6 +40,7 @@ struct Application {
     virtual bool do_super_init(ls::span<c8 *> args) = 0;
     virtual bool do_prepare() = 0;
     virtual bool do_update(f64 delta_time) = 0;
+    virtual bool do_render(vuk::Format format, vuk::Extent3D extent) = 0;
     virtual void do_shutdown() = 0;
 };
 

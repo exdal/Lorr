@@ -11,7 +11,7 @@ auto is_inside(const fs::path &root, const fs::path &path) -> bool {
 struct AssetDirectoryCallbacks {
     void *user_data = nullptr;
     void (*on_new_directory)(void *user_data, AssetDirectory *directory) = nullptr;
-    void (*on_new_asset)(void *user_data, Asset *asset) = nullptr;
+    void (*on_new_asset)(void *user_data, UUID &asset_uuid) = nullptr;
 };
 
 auto populate_directory(AssetDirectory *dir, const AssetDirectoryCallbacks &callbacks) -> void {
@@ -25,9 +25,9 @@ auto populate_directory(AssetDirectory *dir, const AssetDirectoryCallbacks &call
 
             populate_directory(new_dir, callbacks);
         } else if (entry.is_regular_file()) {
-            auto *new_asset = dir->add_asset(path);
+            auto new_asset_uuid = dir->add_asset(path);
             if (callbacks.on_new_asset) {
-                callbacks.on_new_asset(callbacks.user_data, new_asset);
+                callbacks.on_new_asset(callbacks.user_data, new_asset_uuid);
             }
         }
     }
@@ -46,6 +46,7 @@ AssetDirectory::~AssetDirectory() {
 
 auto AssetDirectory::add_subdir(this AssetDirectory &self, const fs::path &path) -> AssetDirectory * {
     auto dir = std::make_unique<AssetDirectory>(path, self.file_watcher, &self);
+
     return self.add_subdir(std::move(dir));
 }
 
@@ -56,21 +57,51 @@ auto AssetDirectory::add_subdir(this AssetDirectory &self, std::unique_ptr<Asset
     return ptr;
 }
 
-auto AssetDirectory::add_asset(this AssetDirectory &self, const fs::path &path) -> Asset * {
-    if (path.extension() != ".lrasset") {
-        return nullptr;
+auto AssetDirectory::add_asset(this AssetDirectory &self, const fs::path &path) -> UUID {
+    auto &app = Application::get();
+    auto asset_extension = app.asset_man.to_asset_file_type(path);
+
+    switch (asset_extension) {
+        case AssetFileType::Meta: {
+            auto asset_uuid = app.asset_man.import_asset(path);
+            if (!asset_uuid) {
+                return UUID(nullptr);
+            }
+
+            LOG_TRACE("Imported asset '{}' added from '{}'", asset_uuid.str(), app.asset_man.get_asset(asset_uuid)->path);
+            self.asset_uuids.push_back(asset_uuid);
+
+            return asset_uuid;
+        }
+
+            // WARN: All these types below are automatically added.
+            // DO NOT CALL `push_back` into `self.asset_uuids`!!!
+
+        case AssetFileType::GLB:
+        case AssetFileType::GLTF: {
+            memory::ScopedStack stack;
+            auto meta_file_path = stack.format("{}.lrasset", path);
+            if (fs::exists(meta_file_path)) {
+                return UUID(nullptr);
+            }
+
+            auto new_model_asset_uuid = app.asset_man.create_asset(AssetType::Model, path);
+            if (!new_model_asset_uuid) {
+                return UUID(nullptr);
+            }
+
+            if (!app.asset_man.init_new_model(new_model_asset_uuid)) {
+                return UUID(nullptr);
+            }
+
+            app.asset_man.export_asset(new_model_asset_uuid, path);
+            return new_model_asset_uuid;
+        }
+        default:
+            break;
     }
 
-    auto &app = EditorApp::get();
-    auto *asset = app.asset_man.import_asset(path);
-    if (!asset) {
-        return nullptr;
-    }
-
-    LOG_TRACE("Imported asset '{}' added from '{}'", asset->uuid.str(), asset->path);
-    self.asset_uuids.push_back(asset->uuid);
-
-    return asset;
+    return UUID(nullptr);
 }
 
 AssetBrowserPanel::AssetBrowserPanel(std::string name_, bool open_)
@@ -171,7 +202,6 @@ void AssetBrowserPanel::draw_dir_contents(this AssetBrowserPanel &self) {
 
     bool open_create_dir_popup = false;
     bool open_create_scene_popup = false;
-    bool open_import_model_popup = false;
 
     auto *dir_texture = app.asset_man.get_texture(app.layout.editor_assets["dir"]);
     auto dir_image = app.imgui_renderer.add_image(dir_texture->image_view);
@@ -224,7 +254,16 @@ void AssetBrowserPanel::draw_dir_contents(this AssetBrowserPanel &self) {
             }
 
             if (ImGui::BeginMenu("Import...")) {
-                open_import_model_popup = ImGui::MenuItem("Model", nullptr, false);
+                if (ImGui::MenuItem("Model", nullptr, false)) {
+                    auto model_path = File::open_dialog("Import GLTF...", FileDialogFlag::Save | FileDialogFlag::DirOnly);
+                    if (model_path.has_value()) {
+                        auto model_asset = app.asset_man.create_asset(AssetType::Model, model_path.value());
+                        if (model_asset) {
+                            app.asset_man.init_new_model(model_asset);
+                            fs::copy_file(model_path.value(), self.current_dir->path);
+                        }
+                    }
+                }
 
                 ImGui::EndMenu();
             }
@@ -278,7 +317,14 @@ void AssetBrowserPanel::draw_dir_contents(this AssetBrowserPanel &self) {
             }
 
             if (ImGui::Button("OK")) {
-                app.asset_man.create_scene(new_scene_name, self.current_dir->path / (new_scene_name + ".json"));
+                auto new_scene_path = self.current_dir->path / (new_scene_name + ".json");
+                auto new_scene_uuid = app.asset_man.create_asset(AssetType::Scene, new_scene_path);
+                auto *scene = app.asset_man.get_scene(new_scene_uuid);
+
+                app.asset_man.init_new_scene(new_scene_uuid, new_scene_name);
+                app.asset_man.export_asset(new_scene_uuid, new_scene_path);
+                scene->destroy();
+
                 ImGui::CloseCurrentPopup();
                 new_scene_name = default_scene_name;
             }
@@ -385,7 +431,7 @@ auto AssetBrowserPanel::poll_watch_events(this AssetBrowserPanel &self) -> void 
     }
 }
 
-void AssetBrowserPanel::update(this AssetBrowserPanel &self) {
+void AssetBrowserPanel::render(this AssetBrowserPanel &self) {
     self.poll_watch_events();
 
     ImGui::Begin(self.name.data(), nullptr, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);

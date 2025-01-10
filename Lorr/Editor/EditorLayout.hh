@@ -3,6 +3,7 @@
 #include "Panel/Panels.hh"
 
 #include "Engine/Asset/UUID.hh"
+#include "Engine/Graphics/VulkanTypes.hh"
 
 namespace lr {
 enum class EditorTheme {
@@ -28,7 +29,7 @@ struct EditorLayout {
     void init(this EditorLayout &);
     void setup_theme(this EditorLayout &, EditorTheme theme);
     void setup_dockspace(this EditorLayout &);
-    void update(this EditorLayout &);
+    void render(this EditorLayout &, vuk::Format format, vuk::Extent3D extent);
 
     template<typename T>
     std::pair<usize, T *> add_panel(this EditorLayout &self, std::string name, const c8 *icon, bool open = true) {

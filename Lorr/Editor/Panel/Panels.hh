@@ -4,6 +4,8 @@
 #include <imgui_internal.h>
 #include <imgui_stdlib.h>
 
+#include "Engine/Graphics/VulkanTypes.hh"
+
 namespace lr {
 struct PanelI {
     std::string name = {};
@@ -15,7 +17,7 @@ struct PanelI {
 
     virtual ~PanelI() = default;
     virtual void do_update() = 0;
-    virtual void do_project_refresh() {}
+    virtual auto do_render(vuk::Format format, vuk::Extent3D extent) -> void = 0;
 };
 
 }  // namespace lr

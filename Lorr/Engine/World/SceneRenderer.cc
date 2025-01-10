@@ -286,15 +286,16 @@ auto SceneRenderer::end_scene(this SceneRenderer &self, SceneRenderInfo &info) -
     transfer_man.upload_staging(info.world_data, gpu_buffer);
 }
 
-auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttachment> &render_target) -> vuk::Value<vuk::ImageAttachment> {
+auto SceneRenderer::render(this SceneRenderer &self, vuk::Format format, vuk::Extent3D extent) -> vuk::Value<vuk::ImageAttachment> {
     ZoneScoped;
 
-    auto final_attachment = vuk::declare_ia("final", { .format = vuk::Format::eR16G16B16A16Sfloat, .sample_count = vuk::Samples::e1 });
-    final_attachment.same_shape_as(render_target);
+    auto hdr_format = vuk::Format::eR16G16B16A16Sfloat;
+    auto final_attachment =
+        vuk::declare_ia("final", { .extent = extent, .format = hdr_format, .sample_count = vuk::Samples::e1, .layer_count = 1 });
     final_attachment = vuk::clear_image(std::move(final_attachment), vuk::Black<f32>);
 
-    auto depth_attachment = vuk::declare_ia("depth", { .format = vuk::Format::eD32Sfloat, .sample_count = vuk::Samples::e1 });
-    depth_attachment.same_shape_as(render_target);
+    auto depth_attachment = vuk::declare_ia(
+        "depth", { .extent = extent, .format = vuk::Format::eD32Sfloat, .sample_count = vuk::Samples::e1, .layer_count = 1 });
     depth_attachment = vuk::clear_image(std::move(depth_attachment), vuk::ClearDepth(1.0));
 
     //  ── SKY VIEW LUT ────────────────────────────────────────────────────
@@ -468,9 +469,8 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
             return std::make_tuple(dst, src);
         });
 
-    auto composition_attachment = vuk::declare_ia("result", { .sample_count = vuk::Samples::e1 });
-    composition_attachment.same_format_as(render_target);
-    composition_attachment.same_shape_as(render_target);
+    auto composition_attachment =
+        vuk::declare_ia("result", { .extent = extent, .format = format, .sample_count = vuk::Samples::e1, .layer_count = 1 });
 
     std::tie(composition_attachment, final_attachment) = tonemap_pass(std::move(composition_attachment), std::move(final_attachment));
     return composition_attachment;

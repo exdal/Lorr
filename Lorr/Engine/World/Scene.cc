@@ -53,7 +53,16 @@ auto Scene::init(this Scene &self, const std::string &name) -> bool {
     return true;
 }
 
-auto Scene::init_from_file(this Scene &self, const fs::path &path) -> bool {
+auto Scene::destroy(this Scene &self) -> void {
+    ZoneScoped;
+
+    self.name.clear();
+    self.root.clear();
+    self.cameras.clear();
+    self.world.reset();
+}
+
+auto Scene::import_from_file(this Scene &self, const fs::path &path) -> bool {
     ZoneScoped;
     memory::ScopedStack stack;
     namespace sj = simdjson;
@@ -80,7 +89,7 @@ auto Scene::init_from_file(this Scene &self, const fs::path &path) -> bool {
         return false;
     }
 
-    self.init(std::string(name_json.value()));
+    self.set_name(std::string(name_json.value()));
 
     auto entities_json = doc["entities"].get_array();
     for (auto entity_json : entities_json) {
@@ -140,15 +149,6 @@ auto Scene::init_from_file(this Scene &self, const fs::path &path) -> bool {
     }
 
     return true;
-}
-
-auto Scene::destroy(this Scene &self) -> void {
-    ZoneScoped;
-
-    self.name.clear();
-    self.root.clear();
-    self.cameras.clear();
-    self.world.reset();
 }
 
 auto Scene::export_to_file(this Scene &self, const fs::path &path) -> bool {
@@ -226,7 +226,16 @@ auto Scene::export_to_file(this Scene &self, const fs::path &path) -> bool {
 auto Scene::create_entity(this Scene &self, const std::string &name) -> flecs::entity {
     ZoneScoped;
 
-    return self.world->entity(flecs::string_view(name.c_str())).child_of(self.root);
+    auto name_sv = flecs::string_view(name.c_str());
+    if (name.empty()) {
+        memory::ScopedStack stack;
+
+        auto e = self.world->entity().child_of(self.root);
+        e.set_name(stack.format("Entity {}", e.raw_id()).cbegin());
+        return e;
+    }
+
+    return self.world->entity(name_sv).child_of(self.root);
 }
 
 auto Scene::create_perspective_camera(
@@ -322,6 +331,12 @@ auto Scene::upload_scene(this Scene &self, SceneRenderer &renderer) -> void {
 
 auto Scene::tick(this Scene &self) -> bool {
     return self.world->progress();
+}
+
+auto Scene::set_name(this Scene &self, const std::string &name) -> void {
+    ZoneScoped;
+
+    self.name = name;
 }
 
 auto Scene::get_root(this Scene &self) -> flecs::entity {

@@ -81,7 +81,6 @@ struct ComponentWrapper {
             } else if (member_type == world.entity<UUID>()) {
                 data = reinterpret_cast<UUID *>(self.members_data + member.offset);
             } else {
-                LOG_FATAL("Trying to access unknown component type!");
                 return;
             }
 

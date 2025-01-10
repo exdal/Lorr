@@ -15,7 +15,7 @@ ConsolePanel::ConsolePanel(std::string name_, bool open_)
     // loguru::add_callback("editor", log_cb, this, loguru::Verbosity_MAX);
 }
 
-void ConsolePanel::update(this ConsolePanel &self) {
+void ConsolePanel::render(this ConsolePanel &self) {
     // auto &app = Application::get();
     // auto &render_pipeline = app.world_render_pipeline;
 

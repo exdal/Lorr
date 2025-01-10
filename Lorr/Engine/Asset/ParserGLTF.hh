@@ -65,7 +65,7 @@ struct GLTFModelInfo {
     std::vector<GLTFVertex> vertices = {};
     std::vector<u32> indices = {};
 
-    static auto parse(const fs::path &path) -> ls::option<GLTFModelInfo>;
+    static auto parse(const fs::path &path, bool load_resources = true) -> ls::option<GLTFModelInfo>;
 };
 
 }  // namespace lr

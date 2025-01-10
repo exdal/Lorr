@@ -42,15 +42,15 @@ float4 pristine_grid(float3 uv, float2 lineWidth)
     grid2 = lerp(grid2, targetWidth, clamp(uvDeriv * 2.0 - 1.0, 0.0, 1.0));
     grid2.x = invertLine.x ? 1.0 - grid2.x : grid2.x;
     grid2.y = invertLine.y ? 1.0 - grid2.y : grid2.y;
-    float minimumz = min(uvDeriv.y, 1);
-    float minimumx = min(uvDeriv.x, 1);
+    float minimumz = min(uvDeriv.y, 1.0);
+    float minimumx = min(uvDeriv.x, 1.0);
 
     float4 color = float4(0.4, 0.4, 0.4, lerp(grid2.x, 1.0, grid2.y));
     // z axis
-    if(uv.x > -0.1 * minimumx && uv.x < 1.0 * minimumx)
+    if(uv.x > -1.0 * minimumx && uv.x < 1.0 * minimumx)
         color.z = 1.0;
     // x axis
-    if(uv.z > -0.1 * minimumz && uv.z < 1.0 * minimumz)
+    if(uv.z > -1.0 * minimumz && uv.z < 1.0 * minimumz)
         color.x = 1.0;
 
     return color;
@@ -84,7 +84,7 @@ FragmentOutput fs_main(VertexOutput input) {
     float4 clip_space_pos = mul(camera->projection_view_mat, float4(pixel_pos, 1.0));
     float depth = clip_space_pos.z / clip_space_pos.w;
 
-    output.color = pristine_grid(pixel_pos, 1.0 / 200.0) * float(t > 0.0);
+    output.color = pristine_grid(pixel_pos, float2(0.005)) * float(t > 0.0);
     output.depth = depth;
     return output;
 }

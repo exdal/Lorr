@@ -32,3 +32,5 @@ add_requires("slang-lorr v2024.17.3")
 add_requires("vuk 2024.12.30", { configs = {
     debug_allocations = false
 } })
+
+add_requires("meshoptimizer v0.22")

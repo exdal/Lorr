@@ -146,6 +146,29 @@ auto EditorApp::open_project(this EditorApp &self, const fs::path &path) -> bool
     return true;
 }
 
+auto EditorApp::save_project(this EditorApp &self) -> void {
+    ZoneScoped;
+
+    const auto &registry = self.asset_man.registry();
+    for (const auto &pair : registry) {
+        const auto &uuid = pair.first;
+        const auto &asset = pair.second;
+        switch (asset.type) {
+            case AssetType::Scene: {
+                LOG_TRACE("Saving Scene {}...", uuid.str());
+                self.asset_man.export_asset(uuid, asset.path);
+            } break;
+            case AssetType::None:
+            case AssetType::Shader:
+            case AssetType::Model:
+            case AssetType::Texture:
+            case AssetType::Material:
+            case AssetType::Font:
+                break;
+        }
+    }
+}
+
 bool EditorApp::prepare(this EditorApp &self) {
     ZoneScoped;
 
@@ -155,10 +178,16 @@ bool EditorApp::prepare(this EditorApp &self) {
     return true;
 }
 
-bool EditorApp::update(this EditorApp &self, [[maybe_unused]] f64 delta_time) {
+bool EditorApp::update(this EditorApp &, f64) {
     ZoneScoped;
 
-    self.layout.update();
+    return true;
+}
+
+auto EditorApp::render(this EditorApp &self, vuk::Format format, vuk::Extent3D extent) -> bool {
+    ZoneScoped;
+
+    self.layout.render(format, extent);
 
     return true;
 }

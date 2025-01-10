@@ -10,11 +10,11 @@ InspectorPanel::InspectorPanel(std::string name_, bool open_)
     : PanelI(std::move(name_), open_) {
 }
 
-void InspectorPanel::update(this InspectorPanel &self) {
+void InspectorPanel::render(this InspectorPanel &self) {
     auto &app = EditorApp::get();
 
     ImGui::Begin(self.name.data());
-    if (app.active_scene_id.has_value()) {
+    if (app.active_scene_uuid.has_value()) {
         self.draw_inspector();
     }
 
@@ -23,7 +23,7 @@ void InspectorPanel::update(this InspectorPanel &self) {
 
 auto InspectorPanel::draw_inspector(this InspectorPanel &) -> void {
     auto &app = EditorApp::get();
-    auto *scene = app.asset_man.get_scene(app.active_scene_id.value());
+    auto *scene = app.asset_man.get_scene(app.active_scene_uuid.value());
     auto region = ImGui::GetContentRegionAvail();
 
     auto query = scene->get_world().query<ECS::EditorSelected>();

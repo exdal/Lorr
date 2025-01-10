@@ -20,13 +20,16 @@ struct EditorApp : Application {
     auto save_editor_data(this EditorApp &) -> void;
     auto new_project(this EditorApp &, const fs::path &root_dir, const std::string &name) -> bool;
     auto open_project(this EditorApp &, const fs::path &path) -> bool;
+    auto save_project(this EditorApp &) -> void;
 
     auto prepare(this EditorApp &) -> bool;
     auto update(this EditorApp &, f64 delta_time) -> bool;
+    auto render(this EditorApp &, vuk::Format format, vuk::Extent3D extent) -> bool;
 
     auto do_super_init([[maybe_unused]] ls::span<c8 *> args) -> bool override { return true; };
     auto do_shutdown() -> void override {}
     auto do_prepare() -> bool override { return prepare(); }
     auto do_update(f64 delta_time) -> bool override { return update(delta_time); }
+    auto do_render(vuk::Format format, vuk::Extent3D extent) -> bool override { return render(format, extent); };
 };
 }  // namespace lr

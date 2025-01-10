@@ -132,9 +132,9 @@ auto ImageView::get_attachment(Device &device, const vuk::ImageUsageFlags &usage
         .sample_count = vuk::Samples::e1,
         .components = {},
         .base_level = 0,
-        .level_count = 1,
+        .level_count = this->mip_count(),
         .base_layer = 0,
-        .layer_count = 1,
+        .layer_count = this->slice_count(),
     };
 }
 

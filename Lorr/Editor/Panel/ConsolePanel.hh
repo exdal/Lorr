@@ -13,8 +13,9 @@ struct ConsolePanel : PanelI {
 
     ConsolePanel(std::string name_, bool open_ = true);
 
-    void update(this ConsolePanel &);
+    void render(this ConsolePanel &);
 
-    void do_update() override { update(); }
+    void do_update() override {}
+    void do_render(vuk::Format, vuk::Extent3D) override { render(); }
 };
 }  // namespace lr

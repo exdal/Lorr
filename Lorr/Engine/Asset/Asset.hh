@@ -1,17 +1,15 @@
 #pragma once
 
+#include "Engine/Asset/Model.hh"
 #include "Engine/Asset/UUID.hh"
+
 #include "Engine/Graphics/Vulkan.hh"
-#include "Engine/World/Model.hh"
+
+#include "Engine/Util/JsonWriter.hh"
+
 #include "Engine/World/Scene.hh"
 
 namespace lr {
-//
-//  ── ASSETS ──────────────────────────────────────────────────────────
-//
-
-struct Asset;
-
 enum class AssetType : u32 {
     None = 0,
     Root = 0,
@@ -27,7 +25,9 @@ enum class AssetType : u32 {
 enum class AssetFileType : u32 {
     None = 0,
     Binary,
+    Meta,
     GLB,
+    GLTF,
     PNG,
     JPEG,
     JSON,
@@ -43,8 +43,6 @@ struct Asset {
         MaterialID material_id;
         SceneID scene_id;
     };
-
-    auto write_metadata(this Asset &, const fs::path &path) -> bool;
 };
 
 //
@@ -86,35 +84,42 @@ struct AssetManager : Handle<AssetManager> {
     // will be written in the same directory as target asset.
     // All created assets will be automatically registered into the registry.
     //
-    auto create_asset(AssetType type, const fs::path &path = {}) -> Asset *;
-    auto create_scene(const std::string &name, const fs::path &path) -> Asset *;
+    auto create_asset(AssetType type, const fs::path &path = {}) -> UUID;
+    auto init_new_model(const UUID &uuid) -> bool;
+    auto init_new_scene(const UUID &uuid, const std::string &name) -> bool;
 
     //  ── Imported Assets ─────────────────────────────────────────────────
     // Assets that already exist in the filesystem with already set UUID's
     //
     // Add already existing asset into the registry.
     // File must end with `.lrasset` extension.
-    auto import_asset(const fs::path &path) -> Asset *;
-    auto import_scene(Asset *asset) -> bool;
+    auto import_asset(const fs::path &path) -> UUID;
 
     //  ── Load Assets ─────────────────────────────────────────────────────
     // Load contents of registered assets.
     //
-    auto load_model(Asset *asset) -> bool;
+    auto load_model(const UUID &uuid) -> bool;
     auto load_texture(
-        Asset *asset, vuk::Format format, vuk::Extent3D extent, ls::span<u8> pixels, const TextureSamplerInfo &sampler_info = {}) -> bool;
-    auto load_texture(Asset *asset, const TextureSamplerInfo &sampler_info = {}) -> bool;
-    auto load_material(Asset *asset, const Material &material_info) -> bool;
-    auto load_material(Asset *asset) -> bool;
-    auto load_scene(Asset *asset) -> bool;
-    auto unload_scene(Asset *asset) -> void;
+        const UUID &uuid,  //
+        vuk::Format format,
+        vuk::Extent3D extent,
+        ls::span<u8> pixels,
+        const TextureSamplerInfo &sampler_info = {}) -> bool;
+    auto load_texture(const UUID &uuid, const TextureSamplerInfo &sampler_info = {}) -> bool;
+    auto load_material(const UUID &uuid, const Material &material_info) -> bool;
+    auto load_material(const UUID &uuid) -> bool;
+
+    auto load_scene(const UUID &uuid) -> bool;
+    auto unload_scene(const UUID &uuid) -> void;
 
     //  ── Exporting Assets ────────────────────────────────────────────────
     // All export_# functions must have path, developer have freedom to
     // export their assets into custom directory if needed, otherwise
     // default to asset->path.
     //
-    auto export_scene(Asset *asset, const fs::path &path) -> bool;
+    auto export_asset(const UUID &uuid, const fs::path &path) -> bool;
+    auto export_model(const UUID &uuid, JsonWriter &json, const fs::path &path) -> bool;
+    auto export_scene(const UUID &uuid, JsonWriter &json, const fs::path &path) -> bool;
 
     auto get_asset(const UUID &uuid) -> Asset *;
     auto get_model(const UUID &uuid) -> Model *;

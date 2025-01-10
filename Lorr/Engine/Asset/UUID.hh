@@ -18,6 +18,7 @@ public:
     auto str() const -> std::string;
 
     UUID() = default;
+    explicit UUID(nullptr_t) {};
     UUID(const UUID &other) = default;
     UUID &operator=(const UUID &other) = default;
     UUID(UUID &&other) = default;
@@ -26,6 +27,8 @@ public:
     constexpr auto operator==(const UUID &other) const -> bool {
         return this->data_u64[0] == other.data_u64[0] && this->data_u64[1] == other.data_u64[1];
     }
+
+    explicit operator bool() const { return data_u64[0] != 0 && data_u64[1] != 0; }
 };
 }  // namespace lr
 

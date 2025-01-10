@@ -1,7 +1,6 @@
 #pragma once
 
-#include "Engine/Asset/UUID.hh"   // IWYU pragma: export
-#include "Engine/World/Model.hh"  // IWYU pragma: export
+#include "Engine/Asset/Model.hh"  // IWYU pragma: export
 
 #include <flecs.h>
 

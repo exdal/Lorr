@@ -59,6 +59,7 @@ target("Lorr")
         "flecs",
         "imguizmo-lorr",
         "vuk",
+        "meshoptimizer",
         { public = true })
 
 target_end()

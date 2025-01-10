@@ -18,9 +18,9 @@ void EditorLayout::init(this EditorLayout &self) {
 
     auto add_texture = [&self](std::string name, const fs::path &path) {
         auto &app = EditorApp::get();
-        auto asset = app.asset_man.create_asset(AssetType::Texture, app.asset_man.asset_root_path(AssetType::Root) / "editor" / path);
-        app.asset_man.load_texture(asset);
-        self.editor_assets.emplace(name, asset->uuid);
+        auto asset_uuid = app.asset_man.create_asset(AssetType::Texture, app.asset_man.asset_root_path(AssetType::Root) / "editor" / path);
+        app.asset_man.load_texture(asset_uuid);
+        self.editor_assets.emplace(name, asset_uuid);
     };
 
     add_texture("dir", "dir.png");
@@ -153,7 +153,7 @@ void EditorLayout::setup_dockspace(this EditorLayout &self) {
     ImGui::DockBuilderFinish(dockspace_id_tmp);
 }
 
-void EditorLayout::update(this EditorLayout &self) {
+void EditorLayout::render(this EditorLayout &self, vuk::Format format, vuk::Extent3D extent) {
     ZoneScoped;
 
     auto &app = EditorApp::get();
@@ -198,7 +198,7 @@ void EditorLayout::update(this EditorLayout &self) {
                 ImGui::Separator();
 
                 if (ImGui::MenuItem("Save Project", nullptr, false)) {
-                    // app.world.save_active_project();
+                    app.save_project();
                 }
 
                 ImGui::Separator();
@@ -235,6 +235,10 @@ void EditorLayout::update(this EditorLayout &self) {
 
         for (auto &panel : self.panels) {
             panel->do_update();
+        }
+
+        for (auto &panel : self.panels) {
+            panel->do_render(format, extent);
         }
     } else {
         ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);

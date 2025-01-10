@@ -6,8 +6,9 @@ namespace lr {
 struct SceneBrowserPanel : PanelI {
     SceneBrowserPanel(std::string name_, bool open_ = true);
 
-    void update(this SceneBrowserPanel &);
+    void render(this SceneBrowserPanel &);
 
-    void do_update() override { update(); }
+    void do_update() override {}
+    void do_render(vuk::Format, vuk::Extent3D) override { render(); }
 };
 }  // namespace lr

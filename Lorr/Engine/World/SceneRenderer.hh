@@ -149,7 +149,7 @@ struct SceneRenderer {
 
     auto begin_scene(this SceneRenderer &, const SceneRenderBeginInfo &info) -> SceneRenderInfo;
     auto end_scene(this SceneRenderer &, SceneRenderInfo &info) -> void;
-    auto render(this SceneRenderer &, vuk::Value<vuk::ImageAttachment> &render_target) -> vuk::Value<vuk::ImageAttachment>;
+    auto render(this SceneRenderer &, vuk::Format format, vuk::Extent3D extent) -> vuk::Value<vuk::ImageAttachment>;
 
     auto draw_profiler_ui(this SceneRenderer &) -> void;
 

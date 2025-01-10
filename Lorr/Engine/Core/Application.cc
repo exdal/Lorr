@@ -84,13 +84,13 @@ void Application::run(this Application &self) {
 
         self.imgui_renderer.begin_frame(delta_time, self.swapchain.extent());
         self.do_update(delta_time);
-        if (self.active_scene_id.has_value()) {
-            auto *scene = self.asset_man.get_scene(self.active_scene_id.value());
+        if (self.active_scene_uuid.has_value()) {
+            auto *scene = self.asset_man.get_scene(self.active_scene_uuid.value());
             scene->tick();
 
             scene->upload_scene(self.scene_renderer);
-            self.world_renderer_image_index = self.imgui_renderer.add_image(self.scene_renderer.render(swapchain_attachment));
         }
+        self.do_render(swapchain_attachment->format, swapchain_attachment->extent);
 
         swapchain_attachment = self.imgui_renderer.end_frame(std::move(swapchain_attachment));
         self.device.end_frame(std::move(swapchain_attachment));

@@ -17,11 +17,8 @@ template<>
 struct fastgltf::ElementTraits<glm::vec2> : fastgltf::ElementTraitsBase<glm::vec2, AccessorType::Vec2, float> {};
 
 namespace lr {
-auto GLTFModelInfo::parse(const fs::path &path) -> ls::option<GLTFModelInfo> {
+auto GLTFModelInfo::parse(const fs::path &path, bool load_resources) -> ls::option<GLTFModelInfo> {
     ZoneScoped;
-
-    std::string path_str = path.string();
-    LOG_TRACE("Attempting to load GLTF file {}", path_str);
 
     auto gltf_buffer = fastgltf::GltfDataBuffer::FromPath(path);
     auto gltf_type = fastgltf::determineGltfFileType(gltf_buffer.get());
@@ -49,14 +46,14 @@ auto GLTFModelInfo::parse(const fs::path &path) -> ls::option<GLTFModelInfo> {
     extensions |= fastgltf::Extensions::EXT_texture_webp;
     extensions |= fastgltf::Extensions::MSFT_texture_dds;
 
-    LOG_TRACE("GLTF parsing start.");
     fastgltf::Parser parser;
 
     auto options = fastgltf::Options::None;
     // options |= fastgltf::Options::DontRequireValidAssetMember;
-    // TODO: Should probably consider loading external buffers manually if size is a problem
-    options |= fastgltf::Options::LoadExternalBuffers;
-    // options |= fastgltf::Options::LoadExternalImages;
+
+    if (load_resources) {
+        options |= fastgltf::Options::LoadExternalBuffers;
+    }
 
     auto result = parser.loadGltf(gltf_buffer.get(), path.parent_path(), options);
     if (!result) {
@@ -73,10 +70,13 @@ auto GLTFModelInfo::parse(const fs::path &path) -> ls::option<GLTFModelInfo> {
 
     std::vector<ls::span<u8>> buffers = {};
 
-    LOG_TRACE("Parsing GLTF buffers...");
-
     // sources::Vector is not used for importing, ignore it
     for (const auto &v : asset.buffers) {
+        if (!load_resources) {
+            buffers.emplace_back();
+            continue;
+        }
+
         std::visit(
             fastgltf::visitor{
                 [](const auto &) {},
@@ -92,13 +92,9 @@ auto GLTFModelInfo::parse(const fs::path &path) -> ls::option<GLTFModelInfo> {
             v.data);
     }
 
-    LOG_TRACE("{} total buffers.", buffers.size());
-
     ///////////////////////////////////////////////
     // Samplers
     ///////////////////////////////////////////////
-
-    LOG_TRACE("Parsing GLTF samplers...");
 
     auto gltf_filter_to_lr = [](fastgltf::Filter f) -> vuk::Filter {
         switch (f) {
@@ -128,8 +124,6 @@ auto GLTFModelInfo::parse(const fs::path &path) -> ls::option<GLTFModelInfo> {
         sampler.address_u = gltf_address_mode_to_lr(v.wrapS);
         sampler.address_v = gltf_address_mode_to_lr(v.wrapT);
     }
-
-    LOG_TRACE("{} total samplers.", model.samplers.size());
 
     ///////////////////////////////////////////////
     // Images
@@ -161,6 +155,11 @@ auto GLTFModelInfo::parse(const fs::path &path) -> ls::option<GLTFModelInfo> {
     };
 
     for (const auto &v : asset.images) {
+        if (!load_resources) {
+            model.images.emplace_back();
+            continue;
+        }
+
         std::visit(
             fastgltf::visitor{
                 [](const auto &) {},
@@ -198,8 +197,6 @@ auto GLTFModelInfo::parse(const fs::path &path) -> ls::option<GLTFModelInfo> {
     // Textures
     ///////////////////////////////////////////////
 
-    LOG_TRACE("Parsing GLTF textures...");
-
     for (const auto &v : asset.textures) {
         auto &texture = model.textures.emplace_back();
         if (v.samplerIndex.has_value()) {
@@ -210,13 +207,9 @@ auto GLTFModelInfo::parse(const fs::path &path) -> ls::option<GLTFModelInfo> {
         }
     }
 
-    LOG_TRACE("{} total images.", model.images.size());
-
     ///////////////////////////////////////////////
     // Materials
     ///////////////////////////////////////////////
-
-    LOG_TRACE("Parsing GLTF materials...");
 
     for (const auto &v : asset.materials) {
         auto &material = model.materials.emplace_back();
@@ -252,10 +245,6 @@ auto GLTFModelInfo::parse(const fs::path &path) -> ls::option<GLTFModelInfo> {
         }
     }
 
-    LOG_TRACE("{} total materials.", model.materials.size());
-
-    LOG_TRACE("Parsing GLTF meshes...");
-
     u32 total_vertex_count = 0;
     u32 total_index_count = 0;
     for (const auto &v : asset.meshes) {
@@ -270,70 +259,68 @@ auto GLTFModelInfo::parse(const fs::path &path) -> ls::option<GLTFModelInfo> {
         }
     }
 
-    model.vertices.resize(total_vertex_count);
-    model.indices.resize(total_index_count);
+    if (load_resources) {
+        model.vertices.resize(total_vertex_count);
+        model.indices.resize(total_index_count);
 
-    u32 vertex_offset = 0;
-    u32 index_offset = 0;
-    for (const auto &v : asset.meshes) {
-        auto &mesh = model.meshes.emplace_back();
-        mesh.name = v.name;
+        u32 vertex_offset = 0;
+        u32 index_offset = 0;
+        for (const auto &v : asset.meshes) {
+            auto &mesh = model.meshes.emplace_back();
+            mesh.name = v.name;
 
-        for (const auto &k : v.primitives) {
-            mesh.primitive_indices.push_back(model.primitives.size());
-            auto &primitive = model.primitives.emplace_back();
-            auto &index_accessor = asset.accessors[k.indicesAccessor.value()];
+            for (const auto &k : v.primitives) {
+                mesh.primitive_indices.push_back(model.primitives.size());
+                auto &primitive = model.primitives.emplace_back();
+                auto &index_accessor = asset.accessors[k.indicesAccessor.value()];
 
-            primitive.vertex_offset = vertex_offset;
-            primitive.index_offset = index_offset;
-            primitive.index_count = index_accessor.count;
+                primitive.vertex_offset = vertex_offset;
+                primitive.index_offset = index_offset;
+                primitive.index_count = index_accessor.count;
 
-            fastgltf::iterateAccessorWithIndex<u32>(asset, index_accessor, [&](u32 index, usize i) {  //
-                model.indices[index_offset + i] = index;
-            });
-
-            if (auto attrib = k.findAttribute("POSITION"); attrib != k.attributes.end()) {
-                auto &accessor = asset.accessors[attrib->accessorIndex];
-                primitive.vertex_count = accessor.count;
-
-                fastgltf::iterateAccessorWithIndex<glm::vec3>(asset, accessor, [&](glm::vec3 pos, usize i) {  //
-                    model.vertices[vertex_offset + i].position = pos;
+                fastgltf::iterateAccessorWithIndex<u32>(asset, index_accessor, [&](u32 index, usize i) {  //
+                    model.indices[index_offset + i] = index;
                 });
-            }
 
-            if (auto attrib = k.findAttribute("NORMAL"); attrib != k.attributes.end()) {
-                auto &accessor = asset.accessors[attrib->accessorIndex];
-                fastgltf::iterateAccessorWithIndex<glm::vec3>(asset, accessor, [&](glm::vec3 normal, usize i) {  //
-                    model.vertices[vertex_offset + i].normal = normal;
-                });
-            }
+                if (auto attrib = k.findAttribute("POSITION"); attrib != k.attributes.end()) {
+                    auto &accessor = asset.accessors[attrib->accessorIndex];
+                    primitive.vertex_count = accessor.count;
 
-            if (auto attrib = k.findAttribute("TEXCOORD_0"); attrib != k.attributes.end()) {
-                auto &accessor = asset.accessors[attrib->accessorIndex];
-                fastgltf::iterateAccessorWithIndex<glm::vec2>(asset, accessor, [&](glm::vec2 uv, usize i) {  //
-                    model.vertices[vertex_offset + i].tex_coord_0 = uv;
-                });
-            }
+                    fastgltf::iterateAccessorWithIndex<glm::vec3>(asset, accessor, [&](glm::vec3 pos, usize i) {  //
+                        model.vertices[vertex_offset + i].position = pos;
+                    });
+                }
 
-            if (auto attrib = k.findAttribute("COLOR"); attrib != k.attributes.end()) {
-                auto &accessor = asset.accessors[attrib->accessorIndex];
-                fastgltf::iterateAccessorWithIndex<glm::vec4>(asset, accessor, [&](glm::vec4 color, usize i) {  //
-                    model.vertices[vertex_offset + i].color = glm::packUnorm4x8(color);
-                });
-            }
+                if (auto attrib = k.findAttribute("NORMAL"); attrib != k.attributes.end()) {
+                    auto &accessor = asset.accessors[attrib->accessorIndex];
+                    fastgltf::iterateAccessorWithIndex<glm::vec3>(asset, accessor, [&](glm::vec3 normal, usize i) {  //
+                        model.vertices[vertex_offset + i].normal = normal;
+                    });
+                }
 
-            if (k.materialIndex.has_value()) {
-                primitive.material_index = k.materialIndex.value();
-            }
+                if (auto attrib = k.findAttribute("TEXCOORD_0"); attrib != k.attributes.end()) {
+                    auto &accessor = asset.accessors[attrib->accessorIndex];
+                    fastgltf::iterateAccessorWithIndex<glm::vec2>(asset, accessor, [&](glm::vec2 uv, usize i) {  //
+                        model.vertices[vertex_offset + i].tex_coord_0 = uv;
+                    });
+                }
 
-            vertex_offset += primitive.vertex_count;
-            index_offset += primitive.index_count;
+                if (auto attrib = k.findAttribute("COLOR"); attrib != k.attributes.end()) {
+                    auto &accessor = asset.accessors[attrib->accessorIndex];
+                    fastgltf::iterateAccessorWithIndex<glm::vec4>(asset, accessor, [&](glm::vec4 color, usize i) {  //
+                        model.vertices[vertex_offset + i].color = glm::packUnorm4x8(color);
+                    });
+                }
+
+                if (k.materialIndex.has_value()) {
+                    primitive.material_index = k.materialIndex.value();
+                }
+
+                vertex_offset += primitive.vertex_count;
+                index_offset += primitive.index_count;
+            }
         }
     }
-
-    LOG_TRACE("{} total meshes, {} total primitives.", model.meshes.size(), model.primitives.size());
-
-    LOG_TRACE("GLTF parsing end.");
 
     return model;
 }

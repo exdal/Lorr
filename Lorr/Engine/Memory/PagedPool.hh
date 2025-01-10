@@ -32,7 +32,8 @@ struct PagedPool {
         for (u32 cur_page_index = 0; cur_page_index < this->pages.size(); cur_page_index++) {
             auto &cur_page = this->pages[cur_page_index];
             if (cur_page->mask == std::numeric_limits<u64>::max()) {
-                return ls::nullopt;
+                page_index = cur_page_index + 1;
+                continue;
             }
 
             page_index = cur_page_index;

@@ -100,8 +100,10 @@ struct AssetManager : Handle<AssetManager> {
     // Load contents of registered assets.
     //
     auto load_model(const UUID &uuid) -> bool;
+
     auto load_texture(const UUID &uuid, ls::span<u8> pixels, const TextureSamplerInfo &sampler_info = {}) -> bool;
     auto load_texture(const UUID &uuid, const TextureSamplerInfo &sampler_info = {}) -> bool;
+
     auto load_material(const UUID &uuid, const Material &material_info) -> bool;
     auto load_material(const UUID &uuid) -> bool;
 

@@ -20,6 +20,8 @@ jobs:
           - { runner: windows-latest, os: windows, arch: x64,    toolchain: msvc,     runtime: MT }
           - { runner: windows-latest, os: windows, arch: x64,    toolchain: clang-cl, runtime: c++_static }
           - { runner: ubuntu-22.04,   os: linux,   arch: x86_64, toolchain: clang-18, runtime: c++_static }
+          - { runner: ubuntu-22.04,   os: linux,   arch: x86_64, toolchain: gcc,      runtime: stdc++_static }
+          - { runner: ubuntu-22.04,   os: linux,   arch: x86_64, toolchain: gcc,      runtime: stdc++_shared }
         mode: [ debug, release ]
 
     runs-on: ${{ matrix.platform.runner }}

@@ -97,6 +97,21 @@ auto AssetDirectory::add_asset(this AssetDirectory &self, const fs::path &path) 
             app.asset_man.export_asset(new_model_asset_uuid, path);
             return new_model_asset_uuid;
         }
+        case AssetFileType::PNG: {
+            memory::ScopedStack stack;
+            auto meta_file_path = stack.format("{}.lrasset", path);
+            if (fs::exists(meta_file_path)) {
+                return UUID(nullptr);
+            }
+
+            auto new_image_asset_uuid = app.asset_man.create_asset(AssetType::Texture, path);
+            if (!new_image_asset_uuid) {
+                return UUID(nullptr);
+            }
+
+            app.asset_man.export_asset(new_image_asset_uuid, path);
+            return new_image_asset_uuid;
+        }
         default:
             break;
     }

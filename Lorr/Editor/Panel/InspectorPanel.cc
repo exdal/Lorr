@@ -61,7 +61,7 @@ auto InspectorPanel::draw_inspector(this InspectorPanel &) -> void {
                     ImGui::TableNextColumn();
 
                     ImGui::SetCursorPosY(ImGui::GetCursorPosY() + ImGui::GetStyle().FramePadding.y);
-                    ImGui::TextUnformatted(member_name.cbegin());
+                    ImGui::TextUnformatted(member_name.cbegin(), member_name.cend());
                     ImGui::TableNextColumn();
 
                     ImGui::PushID(static_cast<i32>(i));
@@ -76,7 +76,36 @@ auto InspectorPanel::draw_inspector(this InspectorPanel &) -> void {
                             [&](glm::vec2 *v) { ImGuiLR::drag_vec(0, glm::value_ptr(*v), 2, ImGuiDataType_Float); },
                             [&](glm::vec3 *v) { ImGuiLR::drag_vec(0, glm::value_ptr(*v), 3, ImGuiDataType_Float); },
                             [](std::string *v) { ImGui::InputText("", v); },
-                            [](UUID *v) { ImGui::TextUnformatted(v->str().c_str()); },
+                            [&](UUID *v) {
+                                auto cursor_pos = ImGui::GetCursorPos();
+                                auto avail_region = ImGui::GetContentRegionAvail();
+                                auto *asset = app.asset_man.get_asset(*v);
+                                if (!asset) {
+                                    ImGui::TextUnformatted("Drop a model here.");
+                                    *v = {};
+                                } else {
+                                    const auto &model_name = asset->path.filename();
+                                    ImGui::Text(
+                                        "Name: %s\nModelID: %u\nUUID: %s",
+                                        model_name.c_str(),
+                                        std::to_underlying(asset->model_id),
+                                        v->str().c_str());
+                                }
+
+                                ImGui::SetCursorPos(cursor_pos);
+                                ImGui::InvisibleButton(reinterpret_cast<const c8 *>(&*v), { avail_region.x, 45.0f });
+                                if (ImGui::BeginDragDropTarget()) {
+                                    if (const auto *asset_payload = ImGui::AcceptDragDropPayload("ASSET_BY_UUID")) {
+                                        auto *dropping_uuid = static_cast<UUID *>(asset_payload->Data);
+                                        auto *dropping_asset = app.asset_man.get_asset(*dropping_uuid);
+                                        if (dropping_asset->type == AssetType::Model) {
+                                            *v = *dropping_uuid;
+                                            app.asset_man.load_model(*dropping_uuid);
+                                        }
+                                    }
+                                    ImGui::EndDragDropTarget();
+                                }
+                            },
                         },
                         member);
                     ImGui::PopID();

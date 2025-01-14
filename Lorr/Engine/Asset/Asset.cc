@@ -124,8 +124,7 @@ auto AssetManager::create_asset(AssetType type, const fs::path &path) -> UUID {
             }
 
             asset.model_id = model_resource->id;
-            break;
-        }
+        } break;
         case AssetType::Texture: {
             auto texture_resource = impl->textures.create();
             if (!texture_resource) {
@@ -133,8 +132,7 @@ auto AssetManager::create_asset(AssetType type, const fs::path &path) -> UUID {
             }
 
             asset.texture_id = texture_resource->id;
-            break;
-        }
+        } break;
         case AssetType::Scene: {
             auto scene_resource = impl->scenes.create();
             if (!scene_resource) {
@@ -142,13 +140,19 @@ auto AssetManager::create_asset(AssetType type, const fs::path &path) -> UUID {
             }
 
             asset.scene_id = scene_resource->id;
-            break;
-        }
-        case AssetType::Material:
+        } break;
+        case AssetType::Material: {
+            auto material_resource = impl->materials.create();
+            if (!material_resource) {
+                return UUID(nullptr);
+            }
+
+            asset.material_id = material_resource->id;
+        } break;
         case AssetType::None:
         case AssetType::Shader:
         case AssetType::Font:
-            LS_EXPECT(false);  // TODO: Other asset types
+            LS_DEBUGBREAK();  // TODO: Other asset types
             return UUID(nullptr);
     }
 
@@ -166,9 +170,36 @@ auto AssetManager::init_new_model(const UUID &uuid) -> bool {
         return false;
     }
 
-    for (usize index = 0; index < gltf_model->images.size(); index++) {
-        auto texture_uuid = this->create_asset(AssetType::Texture);
+    for ([[maybe_unused]] const auto &v : gltf_model->images) {
+        // First check for existing assets
+        UUID texture_uuid = {};
+        std::visit(
+            match{
+                [&](const std::vector<u8> &) {  //
+                    texture_uuid = this->create_asset(AssetType::Texture, asset->path);
+                },
+                [&](const fs::path &path) {
+                    memory::ScopedStack stack;
+                    auto meta_file_path = stack.format("{}.lrasset", path);
+                    if (!fs::exists(meta_file_path)) {
+                        if (fs::exists(path)) {
+                            texture_uuid = this->create_asset(AssetType::Texture, path);
+                            this->export_asset(texture_uuid, path);
+                        }
+                        return;
+                    }
+
+                    texture_uuid = this->import_asset(meta_file_path);
+                },
+            },
+            v.image_data);
+
         model->images.emplace_back(texture_uuid);
+    }
+
+    for ([[maybe_unused]] const auto &v : gltf_model->materials) {
+        auto material_uuid = this->create_asset(AssetType::Material);
+        model->materials.emplace_back(material_uuid);
     }
 
     return true;
@@ -230,33 +261,13 @@ auto AssetManager::import_asset(const fs::path &path) -> UUID {
     auto uuid = UUID::from_string(uuid_json.value()).value();
     auto type = static_cast<AssetType>(type_json.value().get_uint64());
 
-    auto [asset_it, inserted] = impl->registry.try_emplace(uuid);
-    if (!inserted) {
-        // is it already in the registry?
-        asset_it = impl->registry.find(uuid);
-        if (asset_it == impl->registry.end()) {
-            LOG_ERROR("Cannot insert assert '{}' into the registry!", uuid.str());
-            return UUID(nullptr);
-        }
-
-        // Already inside registry, just return
-        return uuid;
+    if (!this->import_asset(uuid, type, asset_path)) {
+        return UUID(nullptr);
     }
-
-    auto &asset = asset_it->second;
-    asset.path = asset_path;
-    asset.uuid = uuid;
-    asset.type = type;
 
     switch (type) {
         case AssetType::Model: {
-            auto model_resource = impl->models.create();
-            if (!model_resource) {
-                return UUID(nullptr);
-            }
-
-            asset.model_id = model_resource->id;
-            auto *model = model_resource->self;
+            auto *model = this->get_model(uuid);
 
             auto images_json = doc["images"].get_array();
             for (auto image_json : images_json) {
@@ -266,13 +277,62 @@ auto AssetManager::import_asset(const fs::path &path) -> UUID {
                     return UUID(nullptr);
                 }
 
+                this->import_asset(image_uuid.value(), AssetType::Texture, asset_path);
                 model->images.emplace_back(image_uuid.value());
             }
+
+            auto materials_json = doc["materials"].get_array();
+            for (auto material_json : materials_json) {
+                auto material_uuid = UUID::from_string(material_json.get_string().value());
+                if (!material_uuid.has_value()) {
+                    LOG_ERROR("Failed to import Model! A material with corrupt UUID.");
+                    return UUID(nullptr);
+                }
+
+                this->import_asset(material_uuid.value(), AssetType::Material, asset_path);
+                model->materials.emplace_back(material_uuid.value());
+            }
+        }
+        default:;
+    }
+
+    return uuid;
+}
+
+auto AssetManager::import_asset(const UUID &uuid, AssetType type, const fs::path &path) -> bool {
+    ZoneScoped;
+
+    auto [asset_it, inserted] = impl->registry.try_emplace(uuid);
+    if (!inserted) {
+        // is it already in the registry?
+        asset_it = impl->registry.find(uuid);
+        if (asset_it == impl->registry.end()) {
+            LOG_ERROR("Cannot insert assert '{}' into the registry!", uuid.str());
+            return false;
+        }
+
+        // Already inside registry, just return
+        return true;
+    }
+
+    auto &asset = asset_it->second;
+    asset.path = path;
+    asset.uuid = uuid;
+    asset.type = type;
+
+    switch (type) {
+        case AssetType::Model: {
+            auto model_resource = impl->models.create();
+            if (!model_resource) {
+                return false;
+            }
+
+            asset.model_id = model_resource->id;
         } break;
         case AssetType::Texture: {
             auto texture_resource = impl->textures.create();
             if (!texture_resource) {
-                return UUID(nullptr);
+                return false;
             }
 
             asset.texture_id = texture_resource->id;
@@ -280,31 +340,93 @@ auto AssetManager::import_asset(const fs::path &path) -> UUID {
         case AssetType::Scene: {
             auto scene_resource = impl->scenes.create();
             if (!scene_resource) {
-                return UUID(nullptr);
+                return false;
             }
 
             asset.scene_id = scene_resource->id;
         } break;
-        case AssetType::Material:
-        case AssetType::None:
-        case AssetType::Shader:
-        case AssetType::Font:
-            LS_EXPECT(false);  // TODO: Other asset types
-            return UUID(nullptr);
+        case AssetType::Material: {
+            auto material_resource = impl->materials.create();
+            if (material_resource) {
+                return false;
+            }
+
+            asset.material_id = material_resource->id;
+        } break;
+        default:
+            LS_DEBUGBREAK();  // TODO: Other asset types
+            return false;
     }
 
-    return uuid;
+    return true;
 }
 
 auto AssetManager::load_model(const UUID &uuid) -> bool {
     ZoneScoped;
 
+    auto *asset = this->get_asset(uuid);
+    auto *model = this->get_model(asset->model_id);
+    auto gltf_model = GLTFModelInfo::parse(asset->path);
+    if (!gltf_model.has_value()) {
+        LOG_ERROR("Failed to parse Model '{}'!", asset->path);
+        return false;
+    }
+
+    for (auto index = 0_sz; index < model->images.size(); index++) {
+        const auto &texture_uuid = model->images[index];
+        auto &texture_data = gltf_model->images[index];
+
+        bool loaded = false;
+        std::visit(
+            match{
+                [&](std::vector<u8> &pixels) {  //
+                    loaded = this->load_texture(texture_uuid, pixels);
+                },
+                [&](const fs::path &) {  //
+                    loaded = this->load_texture(texture_uuid);
+                },
+
+            },
+            texture_data.image_data);
+        if (!loaded) {
+            LOG_ERROR("Failed to load texture {}!", texture_uuid.str());
+            return false;
+        }
+    }
+
     return true;
 }
 
-auto AssetManager::load_texture(
-    const UUID &uuid, vuk::Format format, vuk::Extent3D extent, ls::span<u8> pixels, const TextureSamplerInfo &sampler_info) -> bool {
+auto AssetManager::load_texture(const UUID &uuid, ls::span<u8> pixels, const TextureSamplerInfo &sampler_info) -> bool {
     ZoneScoped;
+
+    auto *asset = this->get_asset(uuid);
+    auto *texture = this->get_texture(asset->texture_id);
+    if (!texture) {
+        LS_DEBUGBREAK();
+        return false;
+    }
+
+    vuk::Format format = {};
+    vuk::Extent3D extent = {};
+    std::vector<u8> raw_pixels = {};
+
+    switch (this->to_asset_file_type(asset->path)) {
+        case AssetFileType::PNG:
+        case AssetFileType::JPEG: {
+            auto image = STBImageInfo::parse(pixels);
+            if (!image.has_value()) {
+                return false;
+            }
+            format = image->format;
+            extent = image->extent;
+            raw_pixels = std::move(image->data);
+        } break;
+        case AssetFileType::None:
+        case AssetFileType::GLB:
+        default:
+            return false;
+    }
 
     auto &transfer_man = impl->device->transfer_man();
     auto image = Image::create(
@@ -316,6 +438,7 @@ auto AssetManager::load_texture(
         1,
         static_cast<u32>(glm::floor(glm::log2(static_cast<f32>(ls::max(extent.width, extent.height)))) + 1));
     if (!image.has_value()) {
+        LS_DEBUGBREAK();
         return false;
     }
 
@@ -332,12 +455,12 @@ auto AssetManager::load_texture(
             .layerCount = image->slice_count(),
         });
     if (!image_view.has_value()) {
+        LS_DEBUGBREAK();
         return false;
     }
 
-    transfer_man.upload_staging(image_view.value(), pixels);
+    transfer_man.upload_staging(image_view.value(), raw_pixels);
 
-    auto *texture = this->get_texture(uuid);
     texture->image = image.value();
     texture->image_view = image_view.value();
     texture->sampler =  //
@@ -370,29 +493,7 @@ auto AssetManager::load_texture(const UUID &uuid, const TextureSamplerInfo &samp
         return false;
     }
 
-    vuk::Format format = {};
-    vuk::Extent3D extent = {};
-    std::vector<u8> pixels = {};
-
-    switch (this->to_asset_file_type(asset->path)) {
-        case AssetFileType::PNG:
-        case AssetFileType::JPEG: {
-            auto image = STBImageInfo::parse(file_contents);
-            if (!image.has_value()) {
-                return false;
-            }
-            format = image->format;
-            extent = image->extent;
-            pixels = std::move(image->data);
-            break;
-        }
-        case AssetFileType::None:
-        case AssetFileType::GLB:
-        default:
-            return false;
-    }
-
-    return this->load_texture(uuid, format, extent, pixels, sampler_info);
+    return this->load_texture(uuid, file_contents, sampler_info);
 }
 
 auto AssetManager::load_material(const UUID &uuid, const Material &material_info) -> bool {
@@ -483,23 +584,23 @@ auto AssetManager::export_asset(const UUID &uuid, const fs::path &path) -> bool 
     json["type"] = std::to_underlying(asset->type);
 
     switch (asset->type) {
-        case AssetType::None:
-        case AssetType::Shader:
+        case AssetType::Texture: {
+            if (!this->export_texture(asset->uuid, json, path)) {
+                return false;
+            }
+        } break;
         case AssetType::Model: {
             if (!this->export_model(asset->uuid, json, path)) {
                 return false;
             }
         } break;
-        case AssetType::Texture:
-        case AssetType::Material:
-        case AssetType::Font:
-            break;
         case AssetType::Scene: {
             if (!this->export_scene(asset->uuid, json, path)) {
                 return false;
             }
-
         } break;
+        default:
+            return false;
     }
 
     json.end_obj();
@@ -515,7 +616,15 @@ auto AssetManager::export_asset(const UUID &uuid, const fs::path &path) -> bool 
     return true;
 }
 
-auto AssetManager::export_model(const UUID &uuid, JsonWriter &json, const fs::path &path) -> bool {
+auto AssetManager::export_texture(const UUID &, JsonWriter &, const fs::path &) -> bool {
+    ZoneScoped;
+
+    // TODO: Add additional sampler information
+    // auto *texture = this->get_texture(uuid);
+    return true;
+}
+
+auto AssetManager::export_model(const UUID &uuid, JsonWriter &json, const fs::path &) -> bool {
     ZoneScoped;
 
     auto *model = this->get_model(uuid);
@@ -523,6 +632,12 @@ auto AssetManager::export_model(const UUID &uuid, JsonWriter &json, const fs::pa
     json["images"].begin_array();
     for (const auto &image : model->images) {
         json << image.str();
+    }
+    json.end_array();
+
+    json["materials"].begin_array();
+    for (const auto &material : model->materials) {
+        json << material.str();
     }
     json.end_array();
 

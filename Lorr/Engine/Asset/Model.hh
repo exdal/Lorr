@@ -35,12 +35,7 @@ struct Material {
 
 enum class ModelID : u32 { Invalid = std::numeric_limits<u32>::max() };
 struct Model {
-    // Due to GLTF, we point image/buffer indices to UUID.
-    struct IndexedAsset {
-        usize index = 0;
-        UUID uuid = {};
-    };
-
     std::vector<UUID> images = {};
+    std::vector<UUID> materials = {};
 };
 }  // namespace lr

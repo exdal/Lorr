@@ -211,12 +211,6 @@ void EditorLayout::render(this EditorLayout &self, vuk::Format format, vuk::Exte
             }
 
             if (ImGui::BeginMenu("View")) {
-                // if (ImGui::MenuItem("New Viewport")) {
-                //     self.add_panel<ViewportPanel>("Viewport 2", Icon::fa::eye);
-                // }
-                //
-                // ImGui::Separator();
-
                 if (ImGui::MenuItem("Task Graph Profiler")) {
                     self.show_profiler = !self.show_profiler;
                 }
@@ -348,7 +342,7 @@ bool ImGuiLR::drag_vec(i32 id, void *data, usize components, ImGuiDataType data_
         }
 
         ImGui::PushID(static_cast<i32>(i));
-        value_changed |= ImGui::DragScalar("", data_type, data);
+        value_changed |= ImGui::DragScalar("", data_type, data, 0.01f);
         ImGui::PopItemWidth();
         ImGui::PopID();
 

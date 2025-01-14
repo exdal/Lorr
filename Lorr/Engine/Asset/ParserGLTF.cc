@@ -1,8 +1,5 @@
 #include "Engine/Asset/ParserGLTF.hh"
 
-#include "Engine/Asset/ParserSTB.hh"
-#include "Engine/OS/File.hh"
-
 #include <glm/packing.hpp>
 
 #include <fastgltf/core.hpp>
@@ -129,65 +126,58 @@ auto GLTFModelInfo::parse(const fs::path &path, bool load_resources) -> ls::opti
     // Images
     ///////////////////////////////////////////////
 
-    auto parse_image = [&](const std::string &name, ls::span<u8> data, fastgltf::MimeType mime) -> ls::option<GLTFImageInfo> {
-        GLTFImageInfo info = {};
-        info.name = name;
+    auto to_asset_file_type = [](fastgltf::MimeType mime) -> AssetFileType {
         switch (mime) {
             case fastgltf::MimeType::JPEG:
-            case fastgltf::MimeType::PNG: {
-                auto image = STBImageInfo::parse(data);
-                if (!image.has_value()) {
-                    return ls::nullopt;
-                }
-                info.format = image->format;
-                info.extent = image->extent;
-                info.pixels = std::move(image->data);
-                return info;
-            }
-            case fastgltf::MimeType::KTX2:
-            case fastgltf::MimeType::DDS: {
-            }
-            case fastgltf::MimeType::None:
-            case fastgltf::MimeType::GltfBuffer:
-            case fastgltf::MimeType::OctetStream:
-                return ls::nullopt;
+                return AssetFileType::JPEG;
+            case fastgltf::MimeType::PNG:
+                return AssetFileType::PNG;
+            default:
+                return AssetFileType::None;
         }
     };
 
     for (const auto &v : asset.images) {
-        if (!load_resources) {
-            model.images.emplace_back();
-            continue;
-        }
-
         std::visit(
             fastgltf::visitor{
                 [](const auto &) {},
                 [&](const fastgltf::sources::ByteView &view) {
                     // Embedded buffer
-                    auto sp = ls::span(ls::bit_cast<u8 *>(view.bytes.data()), view.bytes.size_bytes());
-                    model.images.emplace_back(parse_image(std::string(v.name), sp, view.mimeType).value());
+                    std::vector<u8> pixels(view.bytes.size_bytes());
+                    std::memcpy(pixels.data(), view.bytes.data(), view.bytes.size_bytes());
+
+                    auto &image_info = model.images.emplace_back();
+                    image_info.image_data.emplace<std::vector<u8>>(std::move(pixels));
+                    image_info.file_type = to_asset_file_type(view.mimeType);
                 },
                 [&](const fastgltf::sources::BufferView &view) {
                     // Embedded buffer
                     auto &buffer_view = asset.bufferViews[view.bufferViewIndex];
                     auto &buffer = buffers[buffer_view.bufferIndex];
-                    auto sp = ls::span(ls::bit_cast<u8 *>(buffer.data() + buffer_view.byteOffset), buffer_view.byteLength);
-                    model.images.emplace_back(parse_image(std::string(v.name), sp, view.mimeType).value());
+
+                    std::vector<u8> pixels(buffer_view.byteLength);
+                    std::memcpy(pixels.data(), buffer.data() + buffer_view.byteOffset, buffer_view.byteLength);
+
+                    auto &image_info = model.images.emplace_back();
+                    image_info.image_data.emplace<std::vector<u8>>(std::move(pixels));
+                    image_info.file_type = to_asset_file_type(view.mimeType);
                 },
                 [&](const fastgltf::sources::Array &arr) {
                     // Embedded array
-                    auto sp = ls::span(ls::bit_cast<u8 *>(arr.bytes.data()), arr.bytes.size_bytes());
-                    model.images.emplace_back(parse_image(std::string(v.name), sp, arr.mimeType).value());
+                    std::vector<u8> pixels(arr.bytes.size_bytes());
+                    std::memcpy(pixels.data(), arr.bytes.data(), arr.bytes.size_bytes());
+
+                    auto &image_info = model.images.emplace_back();
+                    image_info.image_data.emplace<std::vector<u8>>(std::move(pixels));
+                    image_info.file_type = to_asset_file_type(arr.mimeType);
                 },
                 [&](const fastgltf::sources::URI &uri) {
                     // External file
-                    const auto image_file_path = path.parent_path() / uri.uri.fspath();
-                    File file(image_file_path, FileAccess::Read);
-                    file.seek(static_cast<i64>(uri.fileByteOffset));
-                    std::vector<u8> file_data(file.size - uri.fileByteOffset);
-                    file.read(file_data.data(), file_data.size());
-                    model.images.emplace_back(parse_image(std::string(v.name), file_data, fastgltf::MimeType::PNG).value());
+                    const auto &image_file_path = path.parent_path() / uri.uri.fspath();
+
+                    auto &image_info = model.images.emplace_back();
+                    image_info.image_data.emplace<fs::path>(image_file_path);
+                    image_info.file_type = to_asset_file_type(uri.mimeType);
                 },
             },
             v.data);

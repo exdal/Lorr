@@ -94,17 +94,13 @@ struct AssetManager : Handle<AssetManager> {
     // Add already existing asset into the registry.
     // File must end with `.lrasset` extension.
     auto import_asset(const fs::path &path) -> UUID;
+    auto import_asset(const UUID &uuid, AssetType type, const fs::path &path) -> bool;
 
     //  ── Load Assets ─────────────────────────────────────────────────────
     // Load contents of registered assets.
     //
     auto load_model(const UUID &uuid) -> bool;
-    auto load_texture(
-        const UUID &uuid,  //
-        vuk::Format format,
-        vuk::Extent3D extent,
-        ls::span<u8> pixels,
-        const TextureSamplerInfo &sampler_info = {}) -> bool;
+    auto load_texture(const UUID &uuid, ls::span<u8> pixels, const TextureSamplerInfo &sampler_info = {}) -> bool;
     auto load_texture(const UUID &uuid, const TextureSamplerInfo &sampler_info = {}) -> bool;
     auto load_material(const UUID &uuid, const Material &material_info) -> bool;
     auto load_material(const UUID &uuid) -> bool;
@@ -118,6 +114,7 @@ struct AssetManager : Handle<AssetManager> {
     // default to asset->path.
     //
     auto export_asset(const UUID &uuid, const fs::path &path) -> bool;
+    auto export_texture(const UUID &uuid, JsonWriter &json, const fs::path &path) -> bool;
     auto export_model(const UUID &uuid, JsonWriter &json, const fs::path &path) -> bool;
     auto export_scene(const UUID &uuid, JsonWriter &json, const fs::path &path) -> bool;
 

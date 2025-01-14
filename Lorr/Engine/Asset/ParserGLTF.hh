@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Engine/Asset/Asset.hh"
+
 #include "Engine/Graphics/VulkanTypes.hh"
 
 namespace lr {
@@ -19,9 +21,8 @@ struct GLTFSamplerInfo {
 
 struct GLTFImageInfo {
     std::string name = {};
-    vuk::Format format = vuk::Format::eUndefined;
-    vuk::Extent3D extent = {};
-    std::vector<u8> pixels = {};
+    AssetFileType file_type = {};
+    std::variant<fs::path, std::vector<u8>> image_data = {};
 };
 
 struct GLTFTextureInfo {

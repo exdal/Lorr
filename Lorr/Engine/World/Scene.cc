@@ -117,7 +117,7 @@ auto Scene::import_from_file(this Scene &self, const fs::path &path) -> bool {
             }
 
             auto component_name = stack.null_terminate(component_name_json.get_string());
-            auto component_id = self.world->lookup(component_name.data());
+            auto component_id = self.world->lookup(component_name.cbegin());
             if (!component_id) {
                 LOG_ERROR("Entity '{}' has invalid component named '{}'!", e.name(), component_name);
                 return false;

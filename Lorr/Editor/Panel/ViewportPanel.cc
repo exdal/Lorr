@@ -41,8 +41,6 @@ void ViewportPanel::on_drop(this ViewportPanel &) {
         auto *uuid = static_cast<UUID *>(asset_payload->Data);
         auto *asset = app.asset_man.get_asset(*uuid);
         switch (asset->type) {
-            case AssetType::Model: {
-            } break;
             case AssetType::Scene: {
                 if (app.active_scene_uuid.has_value()) {
                     app.asset_man.export_asset(*uuid, asset->path);
@@ -52,12 +50,7 @@ void ViewportPanel::on_drop(this ViewportPanel &) {
                 LS_EXPECT(app.asset_man.load_scene(*uuid));
                 app.active_scene_uuid = *uuid;
             } break;
-            case AssetType::None:
-            case AssetType::Shader:
-            case AssetType::Texture:
-            case AssetType::Material:
-            case AssetType::Font:
-                break;
+            default:;
         }
     }
 }
@@ -103,6 +96,7 @@ auto ViewportPanel::draw_viewport(this ViewportPanel &self, vuk::Format format, 
 
     auto *camera = editor_camera.get_mut<ECS::Camera>();
     auto *camera_transform = editor_camera.get_mut<ECS::Transform>();
+    camera->aspect_ratio = window_size.x / window_size.y;
 
     auto query = scene->get_world()
                      .query_builder<ECS::EditorSelected, ECS::Transform>()  //

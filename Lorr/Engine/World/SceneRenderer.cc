@@ -109,6 +109,14 @@ auto SceneRenderer::setup_persistent_resources(this SceneRenderer &self) -> void
         .shader_path = shaders_root / "atmos" / "final.slang",
         .entry_points = { "vs_main", "fs_main" },
     }).value();
+    self.vis_triangle_id_pipeline = Pipeline::create(*self.device, {
+        .definitions = { {"LR_BINDLESS_PIPELINE", "1"} },
+        .module_name = "vis.triangle_id",
+        .root_path = shaders_root,
+        .shader_path = shaders_root / "vis" / "triangle_id.slang",
+        .entry_points = { "vs_main", "fs_main" },
+        .bindless_pipeline = true,
+    }).value();
     self.tonemap_pipeline = Pipeline::create(*self.device, {
         .module_name = "tonemap",
         .root_path = shaders_root,
@@ -244,6 +252,8 @@ auto SceneRenderer::begin_scene(this SceneRenderer &self, const SceneRenderBegin
         result.upload_size += sizeof(GPUAtmosphereData);
     }
 
+    result.models = std::move(self.rendering_models);
+
     LS_EXPECT(result.upload_size == buffer_size);
 
     return result;
@@ -279,6 +289,7 @@ auto SceneRenderer::end_scene(this SceneRenderer &self, SceneRenderInfo &info) -
     }
 
     self.world_data.active_camera_index = info.active_camera_index;
+    self.rendering_models = std::move(info.models);
 
     self.world_ptr = gpu_buffer.device_address();
     std::memcpy(info.world_data.host_ptr<GPUWorldData>(), &self.world_data, sizeof(GPUWorldData));
@@ -431,6 +442,63 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Format format, vuk::Ex
                 std::move(sky_view_lut_attachment),
                 std::move(sky_aerial_perspective_attachment),
                 std::move(transmittance_lut_attachment));
+    }
+
+    //  ── VIS TRI ─────────────────────────────────────────────────────────
+    for (const auto &model : self.rendering_models) {
+        auto vis_triangle_id_pass = vuk::make_pass(
+            "vis triangle",
+            [world_ptr = self.world_ptr,
+             &pipeline = *self.device->pipeline(self.vis_triangle_id_pipeline.id()),
+             &device = self.device,
+             &gpu_model = model](
+                vuk::CommandBuffer &cmd_list, VUK_IA(vuk::Access::eColorWrite) dst, VUK_IA(vuk::Access::eDepthStencilRW) dst_depth) {
+                auto vertex_layout = vuk::Packed{
+                    vuk::Format::eR32G32B32Sfloat,
+                    vuk::Format::eR32G32B32Sfloat,
+                    vuk::Format::eR32G32Sfloat,
+                    vuk::Format::eR8G8B8A8Unorm,
+                };
+
+                struct PushConstants {
+                    u64 world_ptr = 0;
+                    u32 model_index = 0;
+                    u32 material_id = 0;
+                };
+
+                cmd_list  //
+                    .bind_graphics_pipeline(pipeline)
+                    .set_rasterization({ .cullMode = vuk::CullModeFlagBits::eBack })
+                    .set_depth_stencil(
+                        { .depthTestEnable = true, .depthWriteEnable = true, .depthCompareOp = vuk::CompareOp::eLessOrEqual })
+                    .set_color_blend(dst, vuk::BlendPreset::eAlphaBlend)
+                    .set_viewport(0, vuk::Rect2D::framebuffer())
+                    .set_scissor(0, vuk::Rect2D::framebuffer())
+                    .bind_persistent(0, device->bindless_descriptor_set())
+                    .bind_vertex_buffer(0, *device->buffer(gpu_model.vertex_bufffer_id), 0, vertex_layout)
+                    .bind_index_buffer(*device->buffer(gpu_model.index_buffer_id), vuk::IndexType::eUint32);
+
+                for (const auto &mesh : gpu_model.meshes) {
+                    for (auto primitive_index : mesh.primitive_indices) {
+                        auto &primitive = gpu_model.primitives[primitive_index];
+                        cmd_list.push_constants(
+                            vuk::ShaderStageFlagBits::eVertex | vuk::ShaderStageFlagBits::eFragment,
+                            0,
+                            PushConstants{
+                                .world_ptr = world_ptr,
+                                .model_index = gpu_model.transform_index,
+                                .material_id = primitive.material_index,
+                            });
+
+                        cmd_list.draw_indexed(
+                            primitive.index_count, 1, primitive.index_offset, static_cast<i32>(primitive.vertex_offset), 0);
+                    }
+                }
+
+                return std::make_tuple(dst, dst_depth);
+            });
+
+        std::tie(final_attachment, depth_attachment) = vis_triangle_id_pass(std::move(final_attachment), std::move(depth_attachment));
     }
 
     //  ── EDITOR GRID ─────────────────────────────────────────────────────

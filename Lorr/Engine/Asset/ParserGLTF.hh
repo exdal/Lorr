@@ -56,6 +56,18 @@ struct GLTFMeshInfo {
     std::vector<u32> primitive_indices = {};
 };
 
+struct GLTFModelCallbacks {
+    void *user_data = nullptr;
+    void (*on_buffer_sizes)(void *user_data, usize vertex_count, usize index_count) = nullptr;
+
+    // Accessors
+    void (*on_access_index)(void *user_data, u64 offset, u32 index) = nullptr;
+    void (*on_access_position)(void *user_data, u64 offset, glm::vec3 position) = nullptr;
+    void (*on_access_normal)(void *user_data, u64 offset, glm::vec3 normal) = nullptr;
+    void (*on_access_texcoord)(void *user_data, u64 offset, glm::vec2 texcoord) = nullptr;
+    void (*on_access_color)(void *user_data, u64 offset, glm::vec4 color) = nullptr;
+};
+
 struct GLTFModelInfo {
     std::vector<GLTFSamplerInfo> samplers = {};
     std::vector<GLTFImageInfo> images = {};
@@ -63,10 +75,8 @@ struct GLTFModelInfo {
     std::vector<GLTFMaterialInfo> materials = {};
     std::vector<GLTFPrimitiveInfo> primitives = {};
     std::vector<GLTFMeshInfo> meshes = {};
-    std::vector<GLTFVertex> vertices = {};
-    std::vector<u32> indices = {};
 
-    static auto parse(const fs::path &path, bool load_resources = true) -> ls::option<GLTFModelInfo>;
+    static auto parse(const fs::path &path, bool load_resources = true, GLTFModelCallbacks callbacks = {}) -> ls::option<GLTFModelInfo>;
 };
 
 }  // namespace lr

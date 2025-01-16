@@ -81,12 +81,12 @@ ECS::Core::Core(flecs::world &world) {
             auto inv_orient = glm::conjugate(c.orientation);
             t.position += glm::vec3(inv_orient * glm::vec4(c.axis_velocity * it.delta_time(), 0.0f));
 
-            c.projection = glm::perspectiveLH(glm::radians(c.fov), c.aspect_ratio, c.near_clip, c.far_clip);
+            c.projection = glm::perspective(glm::radians(c.fov), c.aspect_ratio, c.near_clip, c.far_clip);
             c.projection[1][1] *= -1;
 
             auto rotation = glm::radians(t.rotation);
-            c.orientation = glm::angleAxis(rotation.x, glm::vec3(0.0f, -1.0f, 0.0f));
-            c.orientation = glm::angleAxis(rotation.y, glm::vec3(1.0f, 0.0f, 0.0f)) * c.orientation;
+            c.orientation = glm::angleAxis(rotation.x, glm::vec3(0.0f, 1.0f, 0.0f));
+            c.orientation = glm::angleAxis(rotation.y, glm::vec3(-1.0f, 0.0f, 0.0f)) * c.orientation;
             c.orientation = glm::angleAxis(rotation.z, glm::vec3(0.0f, 0.0f, 1.0f)) * c.orientation;
             c.orientation = glm::normalize(c.orientation);
 

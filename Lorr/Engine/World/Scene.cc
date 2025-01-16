@@ -1,5 +1,7 @@
 #include "Engine/World/Scene.hh"
 
+#include "Engine/Core/Application.hh"
+
 #include "Engine/OS/File.hh"
 
 #include "Engine/Util/JsonWriter.hh"
@@ -262,20 +264,21 @@ auto Scene::create_editor_camera(this Scene &self) -> void {
 auto Scene::upload_scene(this Scene &self, SceneRenderer &renderer) -> void {
     ZoneScoped;
 
-    auto camera_query = self.get_world()  //
-                            .query_builder<ECS::Transform, ECS::Camera>()
-                            .build();
-    auto model_transform_query = self.get_world()  //
-                                     .query_builder<ECS::Transform, ECS::RenderingModel>()
-                                     .build();
-
-    auto directional_light_query = self.get_world()  //
-                                       .query_builder<ECS::DirectionalLight>()
-                                       .build();
-
-    auto atmosphere_query = self.get_world()  //
-                                .query_builder<ECS::Atmosphere>()
-                                .build();
+    auto &app = Application::get();
+    // clang-format off
+    auto camera_query = self.get_world()
+        .query_builder<ECS::Transform, ECS::Camera>()
+        .build();
+    auto model_transform_query = self.get_world()
+        .query_builder<ECS::Transform, ECS::RenderingModel>()
+        .build();
+    auto directional_light_query = self.get_world()
+        .query_builder<ECS::DirectionalLight>()
+        .build();
+    auto atmosphere_query = self.get_world()
+        .query_builder<ECS::Atmosphere>()
+        .build();
+    // clang-format on
 
     auto scene_data = renderer.begin_scene({
         .camera_count = camera_query.count(),
@@ -283,6 +286,8 @@ auto Scene::upload_scene(this Scene &self, SceneRenderer &renderer) -> void {
         .has_sun = directional_light_query.count() > 0,
         .has_atmosphere = atmosphere_query.count() > 0,
     });
+
+    scene_data.materials_buffer_id = app.asset_man.material_buffer().id();
 
     u32 active_camera_index = 0;
     camera_query.each([&](flecs::entity e, ECS::Transform &t, ECS::Camera &c) {
@@ -324,6 +329,56 @@ auto Scene::upload_scene(this Scene &self, SceneRenderer &renderer) -> void {
         atmos_data->ozone_absorption = atmos.ozone_absorption * 1e-3f;
         atmos_data->ozone_height = atmos.ozone_height;
         atmos_data->ozone_thickness = atmos.ozone_thickness;
+    });
+
+    u32 model_transform_index = 0;
+    scene_data.models.clear();
+    auto model_transforms_ptr = scene_data.model_transforms;
+    model_transform_query.each([&](flecs::entity, ECS::Transform &transform, ECS::RenderingModel &rendering_model) {
+        auto rotation = glm::radians(transform.rotation);
+
+        glm::mat4 &world_mat = model_transforms_ptr->world_transform_mat;
+        world_mat = glm::translate(glm::mat4(1.0), glm::vec3(0.0f));
+        world_mat *= glm::rotate(glm::mat4(1.0), rotation.x, glm::vec3(1.0, 0.0, 0.0));
+        world_mat *= glm::rotate(glm::mat4(1.0), rotation.y, glm::vec3(0.0, 1.0, 0.0));
+        world_mat *= glm::rotate(glm::mat4(1.0), rotation.z, glm::vec3(0.0, 0.0, 1.0));
+        world_mat *= glm::scale(glm::mat4(1.0), transform.scale);
+
+        model_transforms_ptr->model_transform_mat = transform.matrix;
+        model_transforms_ptr++;
+
+        //   ──────────────────────────────────────────────────────────────────────
+        auto *model = app.asset_man.get_model(rendering_model.model);
+        if (!model) {
+            return;
+        }
+
+        auto &gpu_model = scene_data.models.emplace_back();
+
+        gpu_model.primitives.reserve(model->primitives.size());
+        gpu_model.meshes.reserve(model->meshes.size());
+
+        for (auto &primitive : model->primitives) {
+            auto &material_uuid = model->materials[primitive.material_index];
+            auto *material_asset = app.asset_man.get_asset(material_uuid);
+            gpu_model.primitives.push_back({
+                .vertex_offset = primitive.vertex_offset,
+                .vertex_count = primitive.vertex_count,
+                .index_offset = primitive.index_offset,
+                .index_count = primitive.index_count,
+                .material_index = std::to_underlying(material_asset->material_id),
+            });
+        }
+
+        for (auto &mesh : model->meshes) {
+            gpu_model.meshes.push_back({
+                .primitive_indices = mesh.primitive_indices,
+            });
+        }
+
+        gpu_model.transform_index = model_transform_index++;
+        gpu_model.vertex_bufffer_id = model->vertex_buffer.id();
+        gpu_model.index_buffer_id = model->index_buffer.id();
     });
 
     renderer.end_scene(scene_data);

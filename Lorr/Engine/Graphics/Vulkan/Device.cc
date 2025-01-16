@@ -72,7 +72,6 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
     instance_extensions.push_back("VK_KHR_wayland_surface");
 #endif
 #if LS_DEBUG
-    //! Debug extensions, always put it to bottom
     instance_extensions.push_back("VK_EXT_debug_utils");
 #endif
 
@@ -278,6 +277,24 @@ auto Device::wait() -> void {
     ZoneScoped;
 
     runtime->wait_idle();
+}
+
+auto Device::set_name(this Device &self, Buffer &buffer, std::string_view name) -> void {
+    ZoneScoped;
+
+    self.runtime->set_name(self.buffer(buffer.id())->buffer, name);
+}
+
+auto Device::set_name(this Device &self, Image &image, std::string_view name) -> void {
+    ZoneScoped;
+
+    self.runtime->set_name(self.image(image.id())->image, name);
+}
+
+auto Device::set_name(this Device &self, ImageView &image_view, std::string_view name) -> void {
+    ZoneScoped;
+
+    self.runtime->set_name(self.image_view(image_view.id())->payload, name);
 }
 
 auto Device::frame_count(this const Device &self) -> usize {

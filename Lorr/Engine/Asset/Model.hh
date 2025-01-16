@@ -14,7 +14,7 @@ struct TextureSamplerInfo {
 
 enum class TextureID : u32 { Invalid = std::numeric_limits<u32>::max() };
 struct Texture {
-    Image image = image = {};
+    Image image = {};
     ImageView image_view = {};
     Sampler sampler = {};
 
@@ -35,7 +35,26 @@ struct Material {
 
 enum class ModelID : u32 { Invalid = std::numeric_limits<u32>::max() };
 struct Model {
-    std::vector<UUID> images = {};
+    std::vector<UUID> textures = {};
     std::vector<UUID> materials = {};
+
+    struct Primitive {
+        u32 vertex_offset = 0;
+        u32 vertex_count = 0;
+        u32 index_offset = 0;
+        u32 index_count = 0;
+        u32 material_index = 0;
+    };
+
+    struct Mesh {
+        std::string name = {};
+        std::vector<u32> primitive_indices = {};
+    };
+
+    std::vector<Primitive> primitives = {};
+    std::vector<Mesh> meshes = {};
+
+    Buffer vertex_buffer = {};
+    Buffer index_buffer = {};
 };
 }  // namespace lr

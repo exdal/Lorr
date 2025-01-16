@@ -14,6 +14,7 @@ struct EditorApp : Application {
 
     EditorLayout layout = {};
     ls::option<Project> active_project = ls::nullopt;
+    flecs::entity selected_entity = {};
     ankerl::unordered_dense::set<fs::path> recent_projects = {};
 
     auto load_editor_data(this EditorApp &) -> void;

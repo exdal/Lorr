@@ -4,6 +4,7 @@
 
 #include "Engine/Graphics/VulkanDevice.hh"
 
+#include <ImGuizmo.h>
 #include <SDL2/SDL_mouse.h>
 
 namespace lr {
@@ -97,6 +98,7 @@ auto ImGuiRenderer::begin_frame(this ImGuiRenderer &self, f64 delta_time, const 
 
     self.rendering_attachments.clear();
     ImGui::NewFrame();
+    ImGuizmo::BeginFrame();
 
     if (imgui.ConfigFlags & ImGuiConfigFlags_NoMouseCursorChange) {
         return;

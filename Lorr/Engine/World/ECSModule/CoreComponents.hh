@@ -35,7 +35,6 @@ ECS_COMPONENT_BEGIN(Camera)
     ECS_COMPONENT_MEMBER(index, u32, 0)
 ECS_COMPONENT_END();
 
-ECS_COMPONENT_TAG(EditorSelected);
 ECS_COMPONENT_TAG(PerspectiveCamera);
 ECS_COMPONENT_TAG(OrthographicCamera);
 ECS_COMPONENT_TAG(ActiveCamera);
@@ -43,7 +42,6 @@ ECS_COMPONENT_TAG(EditorCamera);
 
 ECS_COMPONENT_BEGIN(RenderingModel)
     ECS_COMPONENT_MEMBER(model, UUID, {})
-    ECS_COMPONENT_MEMBER(model_id, ModelID, ModelID::Invalid)
 ECS_COMPONENT_END();
 
 ECS_COMPONENT_BEGIN(DirectionalLight)

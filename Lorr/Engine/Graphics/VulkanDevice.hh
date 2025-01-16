@@ -28,12 +28,16 @@ struct TransientBuffer {
 };
 
 struct TransferManager {
+    TransferManager &operator=(const TransferManager &) = delete;
+    TransferManager &operator=(TransferManager &&) = delete;
+
     auto init(Device &) -> std::expected<void, vuk::VkException>;
     auto destroy(this TransferManager &) -> void;
 
     auto alloc_transient_buffer(this TransferManager &, vuk::MemoryUsage usage, usize size) -> TransientBuffer;
 
-    auto upload_staging(this TransferManager &, Buffer &buffer, ls::span<u8> bytes) -> void;
+    auto upload_staging(this TransferManager &, Buffer &buffer, ls::span<u8> bytes, u64 offset, u64 element_size) -> void;
+    auto upload_staging(this TransferManager &, TransientBuffer &src, Buffer &dst) -> void;
     auto upload_staging(this TransferManager &, TransientBuffer &src, TransientBuffer &dst) -> void;
     auto upload_staging(this TransferManager &, ImageView &image_view, ls::span<u8> bytes) -> void;
 
@@ -88,6 +92,10 @@ struct Device {
     auto new_frame(this Device &, SwapChain &) -> vuk::Value<vuk::ImageAttachment>;
     auto end_frame(this Device &, vuk::Value<vuk::ImageAttachment> &&target_attachment) -> void;
     auto wait() -> void;
+
+    auto set_name(this Device &, Buffer &buffer, std::string_view name) -> void;
+    auto set_name(this Device &, Image &image, std::string_view name) -> void;
+    auto set_name(this Device &, ImageView &image_view, std::string_view name) -> void;
 
     auto frame_count(this const Device &) -> usize;
     auto buffer(this Device &, BufferID) -> vuk::Buffer *;

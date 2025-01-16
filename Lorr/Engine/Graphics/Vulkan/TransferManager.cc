@@ -32,7 +32,7 @@ auto TransferManager::alloc_transient_buffer(this TransferManager &self, vuk::Me
     return TransientBuffer{ .buffer = buffer->get() };
 }
 
-auto TransferManager::upload_staging(this TransferManager &self, Buffer &buffer, ls::span<u8> bytes) -> void {
+auto TransferManager::upload_staging(this TransferManager &self, Buffer &buffer, ls::span<u8> bytes, u64 offset, u64 element_size) -> void {
     ZoneScoped;
 
     auto cpu_buffer = self.alloc_transient_buffer(vuk::MemoryUsage::eCPUonly, bytes.size_bytes());
@@ -40,12 +40,28 @@ auto TransferManager::upload_staging(this TransferManager &self, Buffer &buffer,
 
     auto *dst_handle = self.device->buffer(buffer.id());
     auto src_buffer = vuk::acquire_buf("src", cpu_buffer.buffer, vuk::Access::eNone);
-    auto dst_buffer = vuk::discard_buf("dst", *dst_handle);
+    auto dst_buffer = vuk::discard_buf("dst", dst_handle->subrange(offset, element_size));
     auto upload_pass = vuk::make_pass(
         "TransferManager::buffer_upload",
         [](vuk::CommandBuffer &cmd_list, VUK_BA(vuk::Access::eTransferRead) src, VUK_BA(vuk::Access::eTransferWrite) dst) {
             cmd_list.copy_buffer(src, dst);
             return dst;
+        });
+
+    self.wait_on(std::move(upload_pass(std::move(src_buffer), std::move(dst_buffer))));
+}
+
+auto TransferManager::upload_staging(this TransferManager &self, TransientBuffer &src, Buffer &dst) -> void {
+    ZoneScoped;
+
+    auto *dst_handle = self.device->buffer(dst.id());
+    auto src_buffer = vuk::acquire_buf("src", src.buffer, vuk::Access::eNone);
+    auto dst_buffer = vuk::discard_buf("dst", *dst_handle);
+    auto upload_pass = vuk::make_pass(
+        "TransferManager::transient_buffer_to_buffer",
+        [](vuk::CommandBuffer &cmd_list, VUK_BA(vuk::Access::eTransferRead) src_, VUK_BA(vuk::Access::eTransferWrite) dst_) {
+            cmd_list.copy_buffer(src_, dst_);
+            return dst_;
         });
 
     self.wait_on(std::move(upload_pass(std::move(src_buffer), std::move(dst_buffer))));

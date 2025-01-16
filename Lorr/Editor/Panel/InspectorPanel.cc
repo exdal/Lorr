@@ -3,7 +3,6 @@
 #include "Editor/EditorApp.hh"
 
 #include "Engine/World/ECSModule/ComponentWrapper.hh"
-#include "Engine/World/ECSModule/Core.hh"
 
 namespace lr {
 InspectorPanel::InspectorPanel(std::string name_, bool open_)
@@ -26,19 +25,18 @@ auto InspectorPanel::draw_inspector(this InspectorPanel &) -> void {
     auto *scene = app.asset_man.get_scene(app.active_scene_uuid.value());
     auto region = ImGui::GetContentRegionAvail();
 
-    auto query = scene->get_world().query<ECS::EditorSelected>();
-    query.each([&](flecs::entity e, ECS::EditorSelected) {
-        if (ImGui::Button(e.name().c_str(), ImVec2(region.x, 0))) {
+    if (app.selected_entity) {
+        if (ImGui::Button(app.selected_entity.name().c_str(), ImVec2(region.x, 0))) {
             // TODO: Rename entity
         }
 
-        e.each([&](flecs::id component_id) {
-            auto ecs_world = e.world();
+        app.selected_entity.each([&](flecs::id component_id) {
+            const auto &ecs_world = app.selected_entity.world();
             if (!component_id.is_entity()) {
                 return;
             }
 
-            ECS::ComponentWrapper component(e, component_id);
+            ECS::ComponentWrapper component(app.selected_entity, component_id);
             if (!component.has_component()) {
                 return;
             }
@@ -134,10 +132,10 @@ auto InspectorPanel::draw_inspector(this InspectorPanel &) -> void {
             }
 
             q.with(flecs::ChildOf, flecs::Flecs).oper(flecs::Not).self().build();
-            q.each([&stack, e](flecs::entity component, flecs::Component &) {  //
+            q.each([&stack, &app](flecs::entity component, flecs::Component &) {  //
                 ImGui::PushID(static_cast<i32>(component.raw_id()));
-                if (ImGui::MenuItem(stack.format("{}  {}", Icon::fa::cube, component.name()).cbegin())) {
-                    e.add(component);
+                if (ImGui::MenuItem(stack.format("{}  {}", Icon::fa::cube, component.name().c_str()).cbegin())) {
+                    app.selected_entity.add(component);
                 }
                 ImGui::PopID();
             });
@@ -145,7 +143,7 @@ auto InspectorPanel::draw_inspector(this InspectorPanel &) -> void {
         }
 
         ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal);
-    });
+    }
 }
 
 }  // namespace lr

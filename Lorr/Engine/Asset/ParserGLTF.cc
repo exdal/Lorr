@@ -1,7 +1,5 @@
 #include "Engine/Asset/ParserGLTF.hh"
 
-#include <glm/packing.hpp>
-
 #include <fastgltf/core.hpp>
 #include <fastgltf/tools.hpp>
 #include <fastgltf/types.hpp>
@@ -14,7 +12,7 @@ template<>
 struct fastgltf::ElementTraits<glm::vec2> : fastgltf::ElementTraitsBase<glm::vec2, AccessorType::Vec2, float> {};
 
 namespace lr {
-auto GLTFModelInfo::parse(const fs::path &path, bool load_resources) -> ls::option<GLTFModelInfo> {
+auto GLTFModelInfo::parse(const fs::path &path, bool load_resources, GLTFModelCallbacks callbacks) -> ls::option<GLTFModelInfo> {
     ZoneScoped;
 
     auto gltf_buffer = fastgltf::GltfDataBuffer::FromPath(path);
@@ -249,10 +247,11 @@ auto GLTFModelInfo::parse(const fs::path &path, bool load_resources) -> ls::opti
         }
     }
 
-    if (load_resources) {
-        model.vertices.resize(total_vertex_count);
-        model.indices.resize(total_index_count);
+    if (callbacks.on_buffer_sizes) {
+        callbacks.on_buffer_sizes(callbacks.user_data, total_vertex_count, total_index_count);
+    }
 
+    if (load_resources) {
         u32 vertex_offset = 0;
         u32 index_offset = 0;
         for (const auto &v : asset.meshes) {
@@ -269,7 +268,8 @@ auto GLTFModelInfo::parse(const fs::path &path, bool load_resources) -> ls::opti
                 primitive.index_count = index_accessor.count;
 
                 fastgltf::iterateAccessorWithIndex<u32>(asset, index_accessor, [&](u32 index, usize i) {  //
-                    model.indices[index_offset + i] = index;
+                    LS_EXPECT(callbacks.on_access_index);
+                    callbacks.on_access_index(callbacks.user_data, index_offset + i, index);
                 });
 
                 if (auto attrib = k.findAttribute("POSITION"); attrib != k.attributes.end()) {
@@ -277,28 +277,36 @@ auto GLTFModelInfo::parse(const fs::path &path, bool load_resources) -> ls::opti
                     primitive.vertex_count = accessor.count;
 
                     fastgltf::iterateAccessorWithIndex<glm::vec3>(asset, accessor, [&](glm::vec3 pos, usize i) {  //
-                        model.vertices[vertex_offset + i].position = pos;
+                        if (callbacks.on_access_position) {
+                            callbacks.on_access_position(callbacks.user_data, vertex_offset + i, pos);
+                        }
                     });
                 }
 
                 if (auto attrib = k.findAttribute("NORMAL"); attrib != k.attributes.end()) {
                     auto &accessor = asset.accessors[attrib->accessorIndex];
                     fastgltf::iterateAccessorWithIndex<glm::vec3>(asset, accessor, [&](glm::vec3 normal, usize i) {  //
-                        model.vertices[vertex_offset + i].normal = normal;
+                        if (callbacks.on_access_normal) {
+                            callbacks.on_access_normal(callbacks.user_data, vertex_offset + i, normal);
+                        }
                     });
                 }
 
                 if (auto attrib = k.findAttribute("TEXCOORD_0"); attrib != k.attributes.end()) {
                     auto &accessor = asset.accessors[attrib->accessorIndex];
                     fastgltf::iterateAccessorWithIndex<glm::vec2>(asset, accessor, [&](glm::vec2 uv, usize i) {  //
-                        model.vertices[vertex_offset + i].tex_coord_0 = uv;
+                        if (callbacks.on_access_texcoord) {
+                            callbacks.on_access_texcoord(callbacks.user_data, vertex_offset + i, uv);
+                        }
                     });
                 }
 
                 if (auto attrib = k.findAttribute("COLOR"); attrib != k.attributes.end()) {
                     auto &accessor = asset.accessors[attrib->accessorIndex];
                     fastgltf::iterateAccessorWithIndex<glm::vec4>(asset, accessor, [&](glm::vec4 color, usize i) {  //
-                        model.vertices[vertex_offset + i].color = glm::packUnorm4x8(color);
+                        if (callbacks.on_access_color) {
+                            callbacks.on_access_color(callbacks.user_data, vertex_offset + i, color);
+                        }
                     });
                 }
 

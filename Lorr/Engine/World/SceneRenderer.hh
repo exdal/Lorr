@@ -71,6 +71,14 @@ struct GPUMaterial {
 };
 
 struct GPUModel {
+    struct Vertex {
+        glm::vec3 position = {};
+        glm::vec3 normal = {};
+        glm::vec2 tex_coord_0 = {};
+        u32 color = 0;
+    };
+    using Index = u32;
+
     struct Primitive {
         u32 vertex_offset = 0;
         u32 vertex_count = 0;
@@ -126,7 +134,7 @@ struct SceneRenderBeginInfo {
 struct SceneRenderInfo {
     u32 active_camera_index = 0;
     BufferID materials_buffer_id = BufferID::Invalid;
-    ls::span<GPUModel> models = {};
+    std::vector<GPUModel> models = {};
 
     GPUCameraData *cameras = nullptr;
     GPUModelTransformData *model_transforms = nullptr;
@@ -158,6 +166,7 @@ private:
 
     u64 world_ptr = 0;
     GPUWorldData world_data = {};
+    std::vector<GPUModel> rendering_models = {};
 
     Sampler linear_sampler = {};
     Sampler nearest_sampler = {};
@@ -173,6 +182,9 @@ private:
     Pipeline sky_view_pipeline = {};
     Pipeline sky_aerial_perspective_pipeline = {};
     Pipeline sky_final_pipeline = {};
+
+    Pipeline vis_triangle_id_pipeline = {};
+
     Pipeline tonemap_pipeline = {};
 };
 

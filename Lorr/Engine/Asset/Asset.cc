@@ -8,6 +8,9 @@
 
 #include "Engine/OS/File.hh"
 
+#include "Engine/World/ECSModule/ComponentWrapper.hh"
+#include "Engine/World/ECSModule/Core.hh"
+
 #include <simdjson.h>
 
 namespace lr {
@@ -33,6 +36,7 @@ auto AssetManager::create(Device *device) -> AssetManager {
 
     impl->device = device;
     impl->material_buffer = Buffer::create(*device, impl->materials.max_resources() * sizeof(GPUMaterial)).value();
+    impl->device->set_name(impl->material_buffer, "GPU Material Buffer");
 
     impl->root_path = fs::current_path();
 
@@ -194,7 +198,7 @@ auto AssetManager::init_new_model(const UUID &uuid) -> bool {
             },
             v.image_data);
 
-        model->images.emplace_back(texture_uuid);
+        model->textures.emplace_back(texture_uuid);
     }
 
     for ([[maybe_unused]] const auto &v : gltf_model->materials) {
@@ -262,6 +266,16 @@ auto AssetManager::import_asset(const fs::path &path) -> UUID {
     auto type = static_cast<AssetType>(type_json.value().get_uint64());
 
     if (!this->import_asset(uuid, type, asset_path)) {
+        auto asset_it = impl->registry.find(uuid);
+        if (asset_it != impl->registry.end()) {
+            // Tried a reinsert, update asset info
+            //
+            auto &updating_asset = asset_it->second;
+            updating_asset.path = asset_path;
+            updating_asset.type = type;
+            return uuid;
+        }
+
         return UUID(nullptr);
     }
 
@@ -269,7 +283,7 @@ auto AssetManager::import_asset(const fs::path &path) -> UUID {
         case AssetType::Model: {
             auto *model = this->get_model(uuid);
 
-            auto images_json = doc["images"].get_array();
+            auto images_json = doc["textures"].get_array();
             for (auto image_json : images_json) {
                 auto image_uuid = UUID::from_string(image_json.get_string().value());
                 if (!image_uuid.has_value()) {
@@ -278,7 +292,7 @@ auto AssetManager::import_asset(const fs::path &path) -> UUID {
                 }
 
                 this->import_asset(image_uuid.value(), AssetType::Texture, asset_path);
-                model->images.emplace_back(image_uuid.value());
+                model->textures.emplace_back(image_uuid.value());
             }
 
             auto materials_json = doc["materials"].get_array();
@@ -304,15 +318,7 @@ auto AssetManager::import_asset(const UUID &uuid, AssetType type, const fs::path
 
     auto [asset_it, inserted] = impl->registry.try_emplace(uuid);
     if (!inserted) {
-        // is it already in the registry?
-        asset_it = impl->registry.find(uuid);
-        if (asset_it == impl->registry.end()) {
-            LOG_ERROR("Cannot insert assert '{}' into the registry!", uuid.str());
-            return false;
-        }
-
-        // Already inside registry, just return
-        return true;
+        return false;
     }
 
     auto &asset = asset_it->second;
@@ -347,7 +353,7 @@ auto AssetManager::import_asset(const UUID &uuid, AssetType type, const fs::path
         } break;
         case AssetType::Material: {
             auto material_resource = impl->materials.create();
-            if (material_resource) {
+            if (!material_resource) {
                 return false;
             }
 
@@ -361,29 +367,119 @@ auto AssetManager::import_asset(const UUID &uuid, AssetType type, const fs::path
     return true;
 }
 
+auto AssetManager::load_asset(const UUID &uuid) -> bool {
+    ZoneScoped;
+
+    auto *asset = this->get_asset(uuid);
+    switch (asset->type) {
+        case AssetType::Model: {
+            return this->load_model(uuid);
+        }
+        case AssetType::Texture: {
+            return this->load_texture(uuid);
+        }
+        default:;
+    }
+
+    return false;
+}
+
 auto AssetManager::load_model(const UUID &uuid) -> bool {
     ZoneScoped;
 
     auto *asset = this->get_asset(uuid);
     auto *model = this->get_model(asset->model_id);
-    auto gltf_model = GLTFModelInfo::parse(asset->path);
+    if (!model) {
+        LS_DEBUGBREAK();
+        return false;
+    }
+
+    struct CallbackInfo {
+        Device *device = nullptr;
+        Model *model = nullptr;
+
+        TransientBuffer vertex_buffer_cpu = {};
+        TransientBuffer index_buffer_cpu = {};
+    };
+    auto on_buffer_sizes = [](void *user_data, usize vertex_count, usize index_count) {
+        auto *info = static_cast<CallbackInfo *>(user_data);
+        auto &transfer_man = info->device->transfer_man();
+        auto vertex_buffer_size = vertex_count * sizeof(GPUModel::Vertex);
+        auto index_buffer_size = index_count * sizeof(GPUModel::Index);
+
+        info->model->vertex_buffer = Buffer::create(*info->device, vertex_buffer_size).value();
+        info->model->index_buffer = Buffer::create(*info->device, index_buffer_size).value();
+        info->vertex_buffer_cpu = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eCPUonly, vertex_buffer_size);
+        info->index_buffer_cpu = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eCPUonly, index_buffer_size);
+    };
+    auto on_access_index = [](void *user_data, u64 offset, u32 index) {
+        auto *info = static_cast<CallbackInfo *>(user_data);
+        auto *ptr = info->index_buffer_cpu.host_ptr<u32>() + offset;
+        *ptr = index;
+    };
+    auto on_access_position = [](void *user_data, u64 offset, glm::vec3 position) {
+        auto *info = static_cast<CallbackInfo *>(user_data);
+        auto *ptr = info->vertex_buffer_cpu.host_ptr<GPUModel::Vertex>() + offset;
+        ptr->position = position;
+    };
+    auto on_access_normal = [](void *user_data, u64 offset, glm::vec3 normal) {
+        auto *info = static_cast<CallbackInfo *>(user_data);
+        auto *ptr = info->vertex_buffer_cpu.host_ptr<GPUModel::Vertex>() + offset;
+        ptr->normal = normal;
+    };
+    auto on_access_texcoord = [](void *user_data, u64 offset, glm::vec2 texcoord) {
+        auto *info = static_cast<CallbackInfo *>(user_data);
+        auto *ptr = info->vertex_buffer_cpu.host_ptr<GPUModel::Vertex>() + offset;
+        ptr->tex_coord_0 = texcoord;
+    };
+    auto on_access_color = [](void *user_data, u64 offset, glm::vec4 color) {
+        auto *info = static_cast<CallbackInfo *>(user_data);
+        auto *ptr = info->vertex_buffer_cpu.host_ptr<GPUModel::Vertex>() + offset;
+        ptr->color = glm::packUnorm4x8(color);
+    };
+
+    CallbackInfo callback_info = { .device = impl->device, .model = model };
+    GLTFModelCallbacks callbacks = {
+        .user_data = &callback_info,
+        .on_buffer_sizes = on_buffer_sizes,
+        .on_access_index = on_access_index,
+        .on_access_position = on_access_position,
+        .on_access_normal = on_access_normal,
+        .on_access_texcoord = on_access_texcoord,
+        .on_access_color = on_access_color,
+    };
+    auto gltf_model = GLTFModelInfo::parse(asset->path, true, callbacks);
     if (!gltf_model.has_value()) {
         LOG_ERROR("Failed to parse Model '{}'!", asset->path);
         return false;
     }
 
-    for (auto index = 0_sz; index < model->images.size(); index++) {
-        const auto &texture_uuid = model->images[index];
-        auto &texture_data = gltf_model->images[index];
+    // TODO: We need to cache images, if theres one image with 2 sampler infos,
+    // image gets copied twice. Add ability for one image to hold multiple
+    // sampler infos.
+    LS_EXPECT(model->textures.size() == gltf_model->textures.size());
+
+    for (auto i = 0_sz; i < model->textures.size(); i++) {
+        const auto &texture_uuid = model->textures[i];
+        auto &gltf_texture = gltf_model->textures[i];
+        auto &texture_data = gltf_model->images[gltf_texture.image_index.value()];
+        auto &gltf_sampler = gltf_model->samplers[gltf_texture.sampler_index.value()];
+
+        TextureSamplerInfo sampler_info = {
+            .mag_filter = gltf_sampler.mag_filter,
+            .min_filter = gltf_sampler.min_filter,
+            .address_u = gltf_sampler.address_u,
+            .address_v = gltf_sampler.address_v,
+        };
 
         bool loaded = false;
         std::visit(
             match{
                 [&](std::vector<u8> &pixels) {  //
-                    loaded = this->load_texture(texture_uuid, pixels);
+                    loaded = this->load_texture(texture_uuid, pixels, sampler_info);
                 },
                 [&](const fs::path &) {  //
-                    loaded = this->load_texture(texture_uuid);
+                    loaded = this->load_texture(texture_uuid, sampler_info);
                 },
 
             },
@@ -393,6 +489,62 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
             return false;
         }
     }
+
+    LS_EXPECT(model->materials.size() == gltf_model->materials.size());
+
+    for (auto i = 0_sz; i < model->materials.size(); i++) {
+        const auto &material_uuid = model->materials[i];
+        auto &gltf_material = gltf_model->materials[i];
+
+        UUID albedo_texture_uuid = {};
+        if (auto tex_idx = gltf_material.albedo_texture_index; tex_idx.has_value()) {
+            albedo_texture_uuid = model->textures[tex_idx.value()];
+        }
+
+        UUID normal_texture_uuid = {};
+        if (auto tex_idx = gltf_material.normal_texture_index; tex_idx.has_value()) {
+            normal_texture_uuid = model->textures[tex_idx.value()];
+        }
+
+        UUID emissive_texture_uuid = {};
+        if (auto tex_idx = gltf_material.emissive_texture_index; tex_idx.has_value()) {
+            emissive_texture_uuid = model->textures[tex_idx.value()];
+        }
+
+        Material material_info = {
+            .albedo_color = gltf_material.albedo_color,
+            .emissive_color = gltf_material.emissive_color,
+            .roughness_factor = gltf_material.roughness_factor,
+            .alpha_cutoff = gltf_material.alpha_cutoff,
+            .albedo_texture = albedo_texture_uuid,
+            .normal_texture = normal_texture_uuid,
+            .emissive_texture = emissive_texture_uuid,
+        };
+        this->load_material(material_uuid, material_info);
+    }
+
+    model->primitives.reserve(gltf_model->primitives.size());
+    for (auto &v : gltf_model->primitives) {
+        auto &primitive = model->primitives.emplace_back();
+        primitive.vertex_offset = v.vertex_offset;
+        primitive.vertex_count = v.vertex_count;
+        primitive.index_offset = v.index_offset;
+        primitive.index_count = v.index_count;
+        primitive.material_index = v.material_index;
+    }
+
+    model->meshes.reserve(gltf_model->meshes.size());
+    for (auto &v : gltf_model->meshes) {
+        auto &mesh = model->meshes.emplace_back();
+        mesh.name = v.name;
+        mesh.primitive_indices = v.primitive_indices;
+    }
+
+    auto &transfer_man = impl->device->transfer_man();
+    transfer_man.upload_staging(callback_info.vertex_buffer_cpu, model->vertex_buffer);
+    transfer_man.upload_staging(callback_info.index_buffer_cpu, model->index_buffer);
+    impl->device->set_name(model->vertex_buffer, "Model VB");
+    impl->device->set_name(model->index_buffer, "Model IB");
 
     return true;
 }
@@ -499,43 +651,30 @@ auto AssetManager::load_texture(const UUID &uuid, const TextureSamplerInfo &samp
 auto AssetManager::load_material(const UUID &uuid, const Material &material_info) -> bool {
     ZoneScoped;
 
-    auto *material = this->get_material(uuid);
+    auto *asset = this->get_asset(uuid);
+    auto *material = this->get_material(asset->material_id);
     *material = material_info;
 
-    // auto *albedo_texture = this->get_texture(material_info.albedo_texture_id);
-    // auto *normal_texture = this->get_texture(material_info.normal_texture_id);
-    // auto *emissive_texture = this->get_texture(material_info.emissive_texture_id);
-    //
-    // // TODO: Invalid checkerboard image
-    // GPUMaterial gpu_material = {
-    //     .albedo_color = material_info.albedo_color,
-    //     .emissive_color = material_info.emissive_color,
-    //     .roughness_factor = material_info.roughness_factor,
-    //     .metallic_factor = material_info.metallic_factor,
-    //     .alpha_mode = 0,
-    //     .albedo_image = albedo_texture ? albedo_texture->sampled_image() : SampledImage(),
-    //     .normal_image = normal_texture ? normal_texture->sampled_image() : SampledImage(),
-    //     .emissive_image = emissive_texture ? emissive_texture->sampled_image() : SampledImage(),
-    // };
-    //
-    // u64 gpu_buffer_offset = std::to_underlying(asset->material_id) * sizeof(GPUMaterial);
+    auto *albedo_texture = this->get_texture(material_info.albedo_texture);
+    auto *normal_texture = this->get_texture(material_info.normal_texture);
+    auto *emissive_texture = this->get_texture(material_info.emissive_texture);
 
-    // auto transfer_man = impl->device.transfer_man();
-    // auto transfer_queue = impl->device.queue(vk::CommandType::Transfer);
-    // auto cmd_list = transfer_queue.begin();
-    // auto gpu_material_alloc = transfer_man.allocate(sizeof(GPUMaterial));
-    // std::memcpy(gpu_material_alloc->ptr, &gpu_material, sizeof(GPUMaterial));
-    //
-    // vk::BufferCopyRegion copy_region = {
-    //     .src_offset = gpu_material_alloc->offset,
-    //     .dst_offset = gpu_buffer_offset,
-    //     .size = sizeof(GPUMaterial),
-    // };
-    // cmd_list.copy_buffer_to_buffer(gpu_material_alloc->cpu_buffer_id, impl->material_buffer.id(), copy_region);
-    //
-    // transfer_queue.end(cmd_list);
-    // transfer_queue.submit({}, transfer_man.semaphore());
-    // transfer_queue.wait();
+    // TODO: Implement a checkerboard image for invalid textures
+    u64 gpu_buffer_offset = std::to_underlying(asset->material_id) * sizeof(GPUMaterial);
+    GPUMaterial gpu_material = {
+        .albedo_color = material_info.albedo_color,
+        .emissive_color = material_info.emissive_color,
+        .roughness_factor = material_info.roughness_factor,
+        .metallic_factor = material_info.metallic_factor,
+        .alpha_mode = 0,
+        .albedo_image = albedo_texture ? albedo_texture->sampled_image() : SampledImage(),
+        .normal_image = normal_texture ? normal_texture->sampled_image() : SampledImage(),
+        .emissive_image = emissive_texture ? emissive_texture->sampled_image() : SampledImage(),
+    };
+
+    auto &transfer_man = impl->device->transfer_man();
+    transfer_man.upload_staging(
+        impl->material_buffer, ls::span(ls::bit_cast<u8 *>(&gpu_material), sizeof(GPUMaterial)), gpu_buffer_offset, sizeof(GPUMaterial));
 
     return true;
 }
@@ -559,7 +698,34 @@ auto AssetManager::load_scene(const UUID &uuid) -> bool {
         return false;
     }
 
-    // TODO: Load every asset this scene has
+    ankerl::unordered_dense::set<UUID> cached_assets = {};
+    scene->get_root().children([&](flecs::entity e) {
+        e.each([&](flecs::id component_id) {
+            auto ecs_world = e.world();
+            if (!component_id.is_entity()) {
+                return;
+            }
+
+            ECS::ComponentWrapper component(e, component_id);
+            if (!component.has_component()) {
+                return;
+            }
+
+            component.for_each([&](usize, std::string_view, ECS::ComponentWrapper::Member &member) {
+                std::visit(
+                    match{
+                        [](const auto &) {},
+                        [&](UUID *v) { cached_assets.emplace(*v); },
+                    },
+                    member);
+            });
+        });
+    });
+
+    for (const auto &cached_uuid : cached_assets) {
+        this->load_asset(cached_uuid);
+    }
+
     return true;
 }
 
@@ -629,8 +795,8 @@ auto AssetManager::export_model(const UUID &uuid, JsonWriter &json, const fs::pa
 
     auto *model = this->get_model(uuid);
 
-    json["images"].begin_array();
-    for (const auto &image : model->images) {
+    json["textures"].begin_array();
+    for (const auto &image : model->textures) {
         json << image.str();
     }
     json.end_array();

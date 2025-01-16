@@ -29,7 +29,6 @@ ViewportPanel::ViewportPanel(std::string name_, bool open_)
     style.RotationOuterLineThickness = 2.0f;
     style.ScaleLineThickness = 4.0f;
     style.ScaleLineCircleSize = 7.0f;
-    ImGuizmo::AllowAxisFlip(true);
 
     this->gizmo_op = ImGuizmo::TRANSLATE;
 }
@@ -85,49 +84,58 @@ auto ViewportPanel::draw_viewport(this ViewportPanel &self, vuk::Format format, 
     auto window_size = window_rect.GetSize();
     auto work_area_size = ImGui::GetContentRegionAvail();
 
-    ImGuizmo::SetOrthographic(false);
+    auto *camera = editor_camera.get_mut<ECS::Camera>();
+    auto *camera_transform = editor_camera.get_mut<ECS::Transform>();
+    camera->aspect_ratio = window_size.x / window_size.y;
+
     ImGuizmo::SetDrawlist();
+
+    ImGuizmo::SetOrthographic(false);
     ImGuizmo::SetRect(window_pos.x, window_pos.y, window_size.x, window_size.y);
+    ImGuizmo::AllowAxisFlip(false);
+    ImGuizmo::Enable(true);
+    ImGuizmo::PushID(1);  // surely thats unique enough
+    LS_DEFER() {
+        ImGuizmo::PopID();
+    };
 
     auto game_view_image = app.scene_renderer.render(
         format, { .width = static_cast<u32>(window_size.x), .height = static_cast<u32>(window_size.y), .depth = 1 });
     auto game_view_image_idx = app.imgui_renderer.add_image(std::move(game_view_image));
     ImGui::Image(game_view_image_idx, work_area_size);
 
-    auto *camera = editor_camera.get_mut<ECS::Camera>();
-    auto *camera_transform = editor_camera.get_mut<ECS::Transform>();
-    camera->aspect_ratio = window_size.x / window_size.y;
-
-    auto query = scene->get_world()
-                     .query_builder<ECS::EditorSelected, ECS::Transform>()  //
-                     .build();
-    query.each([&](ECS::EditorSelected, ECS::Transform &t) {
+    ImVec2 view_man_size = { 100.0f, 100.0f };
+    ImVec2 view_man_pos = { window_pos.x + window_size.x - view_man_size.x, window_pos.y + 20.0f };
+    if (app.selected_entity && app.selected_entity.has<ECS::Transform>()) {
         auto projection = camera->projection;
         projection[1][1] *= -1;
 
+        auto *transform = app.selected_entity.get_mut<ECS::Transform>();
+
         f32 gizmo_mat[16] = {};
-        ImGuizmo::RecomposeMatrixFromComponents(glm::value_ptr(t.position), glm::value_ptr(t.rotation), glm::value_ptr(t.scale), gizmo_mat);
+        ImGuizmo::RecomposeMatrixFromComponents(
+            glm::value_ptr(transform->position), glm::value_ptr(transform->rotation), glm::value_ptr(transform->scale), gizmo_mat);
         if (ImGuizmo::Manipulate(
                 glm::value_ptr(camera_transform->matrix),  //
                 glm::value_ptr(projection),
                 static_cast<ImGuizmo::OPERATION>(self.gizmo_op),
                 ImGuizmo::MODE::LOCAL,
                 gizmo_mat)) {
-            ImGuizmo::DecomposeMatrixToComponents(gizmo_mat, &t.position[0], &t.rotation[0], &t.scale[0]);
+            ImGuizmo::DecomposeMatrixToComponents(gizmo_mat, &transform->position[0], &transform->rotation[0], &transform->scale[0]);
         }
-    });
+    }
 
     if (!ImGuizmo::IsUsingAny() && ImGui::IsWindowHovered()) {
         bool reset_z = false;
         bool reset_x = false;
 
         if (ImGui::IsKeyDown(ImGuiKey_W)) {
-            camera->axis_velocity.z = camera->velocity_mul;
+            camera->axis_velocity.z = -camera->velocity_mul;
             reset_z |= true;
         }
 
         if (ImGui::IsKeyDown(ImGuiKey_S)) {
-            camera->axis_velocity.z = -camera->velocity_mul;
+            camera->axis_velocity.z = camera->velocity_mul;
             reset_z |= true;
         }
 

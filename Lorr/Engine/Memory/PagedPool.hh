@@ -63,7 +63,7 @@ struct PagedPool {
         }
 
         page->mask |= (1_u64 << page_offset.value_or(0));
-        auto *resource = page->elements.begin() + page_offset.value_or(0);
+        auto *resource = &page->elements[page_offset.value_or(0)];
         std::construct_at(resource);
 
         return Result(resource, static_cast<ID>(resource_index));

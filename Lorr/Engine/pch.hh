@@ -8,8 +8,6 @@
 #include <ls/enum.hh>
 #include <ls/option.hh>
 #include <ls/pair.hh>
-#include <ls/range.hh>
-#include <ls/result.hh>
 #include <ls/span.hh>
 #include <ls/static_vector.hh>
 #include <ls/types.hh>

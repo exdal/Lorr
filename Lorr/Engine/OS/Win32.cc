@@ -66,7 +66,7 @@ auto os::file_open(const fs::path &path, FileAccess access) -> std::expected<Fil
         return std::unexpected(FileResult::NoAccess);
     }
 
-    return reinterpret_cast<FileDescriptor>(file_handle);
+    return static_cast<FileDescriptor>(reinterpret_cast<iptr>(file_handle));
 }
 
 auto os::file_close(FileDescriptor file) -> void {
@@ -178,7 +178,19 @@ auto os::file_watcher_add(FileDescriptor watcher, const fs::path &path) -> std::
     return FileDescriptor::Invalid;
 }
 
-auto os::file_watcher_read(FileDescriptor watcher, FileDescriptor socket) -> std::string {
+auto os::file_watcher_read(FileDescriptor watcher, u8 *buffer, usize buffer_size) -> std::expected<i64, FileResult> {
+    ZoneScoped;
+
+    return {};
+}
+
+auto os::file_watcher_peek(u8 *buffer, i64 &buffer_offset) -> FileEvent {
+    ZoneScoped;
+
+    return {};
+}
+
+auto os::file_watcher_buffer_size() -> i64 {
     ZoneScoped;
 
     return {};

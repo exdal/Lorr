@@ -10,7 +10,7 @@ struct GPUSunData {
 
 struct GPUAtmosphereData {
     glm::vec3 rayleigh_scatter = { 0.005802f, 0.013558f, 0.033100f };
-    f32 rayleigh_density = 8.0;
+    f32 rayleigh_density = 8.0f;
 
     glm::vec3 mie_scatter = { 0.003996f, 0.003996f, 0.003996f };
     f32 mie_density = 1.2f;
@@ -28,23 +28,23 @@ struct GPUAtmosphereData {
 };
 
 struct GPUClouds {
-    glm::vec2 bounds = { 2.0, 5.0 };
-    f32 global_scale = 0.15;
-    f32 shape_noise_scale = 0.3;
+    glm::vec2 bounds = { 2.0f, 5.0f };
+    f32 global_scale = 0.15f;
+    f32 shape_noise_scale = 0.3f;
     glm::vec3 shape_noise_weights = { 0.625f, 0.25f, 0.125f };
-    f32 detail_noise_scale = 0.3;
+    f32 detail_noise_scale = 0.3f;
     glm::vec3 detail_noise_weights = { 0.625f, 0.25f, 0.125f };
-    f32 detail_noise_influence = 0.4;
-    f32 coverage = 0.9;
-    f32 general_density = 0.1;
-    glm::vec3 phase_values = { 0.623, 0.335, 0.979 };  // forwards phase, backwards phase, mix factor
-    f32 cloud_type = 0.0;
-    f32 draw_distance = 1000.0;
-    f32 darkness_threshold = 0.450;
+    f32 detail_noise_influence = 0.4f;
+    f32 coverage = 0.9f;
+    f32 general_density = 0.1f;
+    glm::vec3 phase_values = { 0.623f, 0.335f, 0.979f };  // forwards phase, backwards phase, mix factor
+    f32 cloud_type = 0.0f;
+    f32 draw_distance = 1000.0f;
+    f32 darkness_threshold = 0.450f;
     i32 sun_step_count = 5;
     i32 clouds_step_count = 30;
-    f32 cloud_light_absorption = 0.443;
-    f32 sun_light_absorption = 0.224;
+    f32 cloud_light_absorption = 0.443f;
+    f32 sun_light_absorption = 0.224f;
 };
 
 struct GPUCameraData {

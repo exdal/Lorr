@@ -66,7 +66,7 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
     instance_extensions.push_back(VK_KHR_SURFACE_EXTENSION_NAME);
     instance_extensions.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
 #if defined(LS_WINDOWS)
-    extensions.push_back("VK_KHR_win32_surface");
+    instance_extensions.push_back("VK_KHR_win32_surface");
 #elif defined(LS_LINUX)
     instance_extensions.push_back("VK_KHR_xcb_surface");
     instance_extensions.push_back("VK_KHR_wayland_surface");

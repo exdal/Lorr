@@ -31,7 +31,8 @@ auto Pipeline::create(Device &device, const ShaderCompileInfo &compile_info) -> 
             return std::unexpected(VK_ERROR_UNKNOWN);
         }
 
-        create_info.add_spirv(entry_point->ir, compile_info.shader_path);
+        auto shader_name = fs::relative(compile_info.shader_path, compile_info.root_path);
+        create_info.add_spirv(entry_point->ir, shader_name.string());
     }
 
     auto *pipeline_handle = device.runtime->get_pipeline(create_info);

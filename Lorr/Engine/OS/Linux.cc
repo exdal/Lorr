@@ -160,7 +160,7 @@ void os::file_stderr(std::string_view str) {
     write(STDERR_FILENO, str.data(), str.length());
 }
 
-auto os::file_watcher_init() -> FileDescriptor {
+auto os::file_watcher_init(const fs::path &) -> FileDescriptor {
     ZoneScoped;
 
     return static_cast<FileDescriptor>(inotify_init1(IN_NONBLOCK | IN_CLOEXEC));

@@ -90,11 +90,15 @@ auto File::open_dialog(std::string_view title, FileDialogFlag flags) -> ls::opti
     return os::file_dialog(title, flags);
 }
 
-FileWatcher::FileWatcher() {
-    ZoneScoped;
-
-    this->listener = os::file_watcher_init();
+auto FileWatcher::init(const fs::path &root_dir) -> bool {
+    this->listener = os::file_watcher_init(root_dir).value();
     this->event_storage.resize(os::file_watcher_buffer_size());
+
+    return true;
+}
+
+auto FileWatcher::event_buffer_size() -> usize {
+    return os::file_watcher_buffer_size();
 }
 
 auto FileWatcher::watch_dir(const fs::path &path) -> FileDescriptor {
@@ -125,7 +129,7 @@ auto FileWatcher::peek() -> ls::option<FileEvent> {
     }
 
     if (this->storage_offset < this->avail_storage_size) {
-        return os::file_watcher_peek(this->event_storage.data(), this->storage_offset);
+        return os::file_watcher_peek(this->listener, this->event_storage.data(), this->storage_offset);
     }
 
     this->avail_storage_size = 0;
@@ -146,6 +150,8 @@ auto FileWatcher::close() -> void {
     for (const auto &v : this->watching_dirs) {
         os::file_watcher_remove(this->listener, v.first);
     }
+
+    os::file_watcher_destroy(this->listener);
 }
 
 }  // namespace lr

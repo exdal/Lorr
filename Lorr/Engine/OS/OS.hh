@@ -35,6 +35,10 @@ consteval void enable_bitmask(FileDialogFlag);
 // Can we add stdout and other pipes here?
 enum class FileDescriptor : uptr { Invalid = 0 };
 
+struct FileWatcherDescriptor {
+    FileDescriptor handle = FileDescriptor::Invalid;
+    iptr event = 0;
+};
 enum class FileActionMask : u32 {
     None = 0,
     Create = 1 << 0,
@@ -45,7 +49,7 @@ enum class FileActionMask : u32 {
 consteval void enable_bitmask(FileActionMask);
 
 struct FileEvent {
-    std::string_view file_name = {};
+    fs::path file_name = {};
     FileActionMask action_mask = FileActionMask::None;
     FileDescriptor watch_descriptor = FileDescriptor::Invalid;
 };
@@ -65,11 +69,12 @@ namespace os {
     // https://man7.org/linux/man-pages/man7/inotify.7.html
     // https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-readdirectorychangesw
     //
-    auto file_watcher_init() -> FileDescriptor;
-    auto file_watcher_add(FileDescriptor watcher, const fs::path &path) -> std::expected<FileDescriptor, FileResult>;
-    auto file_watcher_remove(FileDescriptor watcher, FileDescriptor watch_descriptor) -> void;
-    auto file_watcher_read(FileDescriptor watcher, u8 *buffer, usize buffer_size) -> std::expected<i64, FileResult>;
-    auto file_watcher_peek(u8 *buffer, i64 &buffer_offset) -> FileEvent;
+    auto file_watcher_init(const fs::path &root_dir) -> std::expected<FileWatcherDescriptor, FileResult>;
+    auto file_watcher_destroy(FileWatcherDescriptor &watcher) -> void;
+    auto file_watcher_add(FileWatcherDescriptor &watcher, const fs::path &path) -> std::expected<FileDescriptor, FileResult>;
+    auto file_watcher_remove(FileWatcherDescriptor &watcher, FileDescriptor watch_descriptor) -> void;
+    auto file_watcher_read(FileWatcherDescriptor &watcher, u8 *buffer, usize buffer_size) -> std::expected<i64, FileResult>;
+    auto file_watcher_peek(FileWatcherDescriptor &watcher, u8 *buffer, i64 &buffer_offset) -> FileEvent;
     auto file_watcher_buffer_size() -> i64;
 
     //  ── MEMORY ──────────────────────────────────────────────────────────

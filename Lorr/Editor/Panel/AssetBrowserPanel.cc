@@ -118,6 +118,7 @@ AssetBrowserPanel::AssetBrowserPanel(std::string name_, bool open_)
     : PanelI(std::move(name_), open_) {
     auto &app = EditorApp::get();
 
+    this->file_watcher.init(app.active_project->root_dir);
     this->home_dir = this->add_directory(app.active_project->root_dir);
     this->current_dir = this->home_dir.get();
 }

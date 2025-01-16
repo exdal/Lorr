@@ -3,6 +3,22 @@
 #include "Editor/EditorApp.hh"
 
 namespace lr {
+auto is_subpath(const fs::path &parent, const fs::path &child) -> bool {
+    auto parent_abs = fs::weakly_canonical(parent);
+    auto child_abs = fs::weakly_canonical(child);
+
+    auto parent_iter = parent_abs.begin();
+    auto child_iter = child_abs.begin();
+
+    for (; parent_iter != parent_abs.end(); ++parent_iter, ++child_iter) {
+        if (child_iter == child_abs.end() || *parent_iter != *child_iter) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 struct AssetDirectoryCallbacks {
     void *user_data = nullptr;
     void (*on_new_directory)(void *user_data, AssetDirectory *directory) = nullptr;
@@ -118,6 +134,7 @@ AssetBrowserPanel::AssetBrowserPanel(std::string name_, bool open_)
     : PanelI(std::move(name_), open_) {
     auto &app = EditorApp::get();
 
+    this->file_watcher.init(app.active_project->root_dir);
     this->home_dir = this->add_directory(app.active_project->root_dir);
     this->current_dir = this->home_dir.get();
 }
@@ -153,15 +170,16 @@ auto AssetBrowserPanel::remove_directory(this AssetBrowserPanel &self, const fs:
 }
 
 auto AssetBrowserPanel::remove_directory(this AssetBrowserPanel &self, AssetDirectory *directory) -> void {
+    auto *parent_dir = directory->parent;
     const auto &path = directory->path;
-    //if (is_inside(path, self.current_dir->path)) {
-    //    self.current_dir = directory->parent;
-    //}
-
     fs::remove_all(path);
 
+    // If we are inside, set cur dir to closest alive dir
+    if (is_subpath(path, self.current_dir->path)) {
+        self.current_dir = parent_dir;
+    }
+
     // Remove found directory from its parent
-    auto *parent_dir = directory->parent;
     if (parent_dir) {
         std::erase_if(parent_dir->subdirs, [directory](const auto &v) { return v.get() == directory; });
     }

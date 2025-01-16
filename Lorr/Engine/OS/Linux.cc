@@ -160,17 +160,26 @@ void os::file_stderr(std::string_view str) {
     write(STDERR_FILENO, str.data(), str.length());
 }
 
-auto os::file_watcher_init() -> FileDescriptor {
+auto os::file_watcher_init(const fs::path &) -> std::expected<FileWatcherDescriptor, FileResult> {
     ZoneScoped;
 
-    return static_cast<FileDescriptor>(inotify_init1(IN_NONBLOCK | IN_CLOEXEC));
+    FileWatcherDescriptor result = {};
+    result.handle = static_cast<FileDescriptor>(inotify_init1(IN_NONBLOCK | IN_CLOEXEC));
+
+    return result;
 }
 
-auto os::file_watcher_add(FileDescriptor watcher, const fs::path &path) -> std::expected<FileDescriptor, FileResult> {
+auto os::file_watcher_destroy(FileWatcherDescriptor &watcher) -> void {
+    ZoneScoped;
+
+    os::file_close(watcher.handle);
+}
+
+auto os::file_watcher_add(FileWatcherDescriptor &watcher, const fs::path &path) -> std::expected<FileDescriptor, FileResult> {
     ZoneScoped;
     errno = 0;
 
-    i32 descriptor = inotify_add_watch(static_cast<i32>(watcher), path.c_str(), IN_MOVE | IN_CLOSE | IN_CREATE | IN_DELETE);
+    i32 descriptor = inotify_add_watch(static_cast<i32>(watcher.handle), path.c_str(), IN_MOVE | IN_CLOSE | IN_CREATE | IN_DELETE);
     if (descriptor < 0) {
         switch (errno) {
             case EACCES:
@@ -185,17 +194,17 @@ auto os::file_watcher_add(FileDescriptor watcher, const fs::path &path) -> std::
     return static_cast<FileDescriptor>(descriptor);
 }
 
-auto os::file_watcher_remove(FileDescriptor watcher, FileDescriptor watch_descriptor) -> void {
+auto os::file_watcher_remove(FileWatcherDescriptor &watcher, FileDescriptor watch_descriptor) -> void {
     ZoneScoped;
 
-    inotify_rm_watch(static_cast<i32>(watcher), static_cast<i32>(watch_descriptor));
+    inotify_rm_watch(static_cast<i32>(watcher.handle), static_cast<i32>(watch_descriptor));
 }
 
-auto os::file_watcher_read(FileDescriptor watcher, u8 *buffer, usize buffer_size) -> std::expected<i64, FileResult> {
+auto os::file_watcher_read(FileWatcherDescriptor &watcher, u8 *buffer, usize buffer_size) -> std::expected<i64, FileResult> {
     ZoneScoped;
 
     errno = 0;
-    auto file_sock = static_cast<i32>(watcher);
+    auto file_sock = static_cast<i32>(watcher.handle);
     auto read_size = read(file_sock, buffer, buffer_size);
     if (read_size < 0) {
         switch (errno) {
@@ -217,7 +226,7 @@ auto os::file_watcher_read(FileDescriptor watcher, u8 *buffer, usize buffer_size
     return read_size;
 }
 
-auto os::file_watcher_peek(u8 *buffer, i64 &buffer_offset) -> FileEvent {
+auto os::file_watcher_peek(FileWatcherDescriptor &, u8 *buffer, i64 &buffer_offset) -> FileEvent {
     ZoneScoped;
 
     auto *event_data = reinterpret_cast<inotify_event_t *>(buffer + buffer_offset);

@@ -113,7 +113,7 @@ auto os::file_seek(FileDescriptor file, i64 offset) -> void {
 auto os::file_dialog(std::string_view title, FileDialogFlag flags) -> ls::option<fs::path> {
     ZoneScoped;
 
-    //OPENFILENAME ofn = {};
+    // OPENFILENAME ofn = {};
 
     return {};
 }
@@ -136,38 +136,105 @@ auto os::file_stderr(std::string_view str) -> void {
     WriteFile(stdout_hnd, str.data(), str.length(), &written, nullptr);
 }
 
-auto os::file_watcher_init() -> FileDescriptor {
+constexpr auto WATCH_FILTERS =
+    FILE_NOTIFY_CHANGE_CREATION | FILE_NOTIFY_CHANGE_FILE_NAME | FILE_NOTIFY_CHANGE_DIR_NAME | FILE_NOTIFY_CHANGE_LAST_WRITE;
+
+auto os::file_watcher_init(const fs::path &root_dir) -> std::expected<FileWatcherDescriptor, FileResult> {
     ZoneScoped;
 
-    return FileDescriptor::Invalid;
+    FileWatcherDescriptor result = {};
+    auto handle = CreateFile(
+        root_dir.c_str(),
+        FILE_LIST_DIRECTORY,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+        nullptr,
+        OPEN_EXISTING,
+        FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OVERLAPPED,
+        nullptr);
+    auto event_handle = CreateEvent(nullptr, false, false, nullptr);
+
+    result.handle = static_cast<FileDescriptor>(reinterpret_cast<iptr>(handle));
+    result.event = reinterpret_cast<iptr>(event_handle);
+
+    return result;
 }
 
-auto os::file_watcher_add(FileDescriptor watcher, const fs::path &path) -> std::expected<FileDescriptor, FileResult> {
+auto os::file_watcher_destroy(FileWatcherDescriptor &watcher) -> void {
     ZoneScoped;
 
-    return FileDescriptor::Invalid;
+    os::file_close(watcher.handle);
+    CloseHandle(reinterpret_cast<HANDLE>(watcher.event));
 }
 
-auto os::file_watcher_remove(FileDescriptor watcher, FileDescriptor watch_descriptor) -> void {
+auto os::file_watcher_add(FileWatcherDescriptor &, const fs::path &) -> std::expected<FileDescriptor, FileResult> {
+    ZoneScoped;
+
+    thread_local usize unique_counter = 0;
+    // Win32 doesn't support individual watches
+    return static_cast<FileDescriptor>(++unique_counter);
+}
+
+auto os::file_watcher_remove(FileWatcherDescriptor &, FileDescriptor) -> void {
     ZoneScoped;
 }
 
-auto os::file_watcher_read(FileDescriptor watcher, u8 *buffer, usize buffer_size) -> std::expected<i64, FileResult> {
+auto os::file_watcher_read(FileWatcherDescriptor &watcher, u8 *buffer, usize buffer_size) -> std::expected<i64, FileResult> {
     ZoneScoped;
 
-    return {};
+    // This shit is pretty retarded. Fuck you microsoft
+#if 0
+    auto event_handle = reinterpret_cast<HANDLE>(watcher.event);
+    auto handle = reinterpret_cast<HANDLE>(watcher.handle);
+    OVERLAPPED overlapped = {};
+    overlapped.hEvent = event_handle;
+
+    ReadDirectoryChangesW(handle, buffer, buffer_size, true, WATCH_FILTERS, nullptr, &overlapped, nullptr);
+    // TODO: Game loop too slow to handle this, we are losing data.
+    if (WaitForSingleObject(event_handle, 0) == WAIT_OBJECT_0) {
+        DWORD bytes_read = 0;
+        GetOverlappedResult(handle, &overlapped, &bytes_read, false);
+        return static_cast<i64>(bytes_read);
+    }
+#endif
+    return 0;
 }
 
-auto os::file_watcher_peek(u8 *buffer, i64 &buffer_offset) -> FileEvent {
+auto os::file_watcher_peek(FileWatcherDescriptor &watcher, u8 *buffer, i64 &buffer_offset) -> FileEvent {
     ZoneScoped;
 
-    return {};
+    auto *event_data = reinterpret_cast<FILE_NOTIFY_INFORMATION *>(buffer);
+    buffer_offset += event_data->NextEntryOffset;
+
+    FileActionMask action_mask = FileActionMask::None;
+    auto file_name_str = std::wstring(event_data->FileName, event_data->FileNameLength / sizeof(wchar_t));
+    auto file_name = fs::path(std::move(file_name_str));
+    switch (event_data->Action) {
+        case FILE_ACTION_ADDED: {
+            action_mask |= FileActionMask::Create;
+        } break;
+        case FILE_ACTION_REMOVED: {
+            action_mask |= FileActionMask::Delete;
+        } break;
+        case FILE_ACTION_MODIFIED: {
+            action_mask |= FileActionMask::Modify;
+        } break;
+        default:
+            break;
+    }
+
+    LOG_TRACE("FileName: {}", file_name);
+
+    return FileEvent{
+        .file_name = std::move(file_name),
+        .action_mask = action_mask,
+        .watch_descriptor = static_cast<FileDescriptor>(1),
+    };
 }
 
 auto os::file_watcher_buffer_size() -> i64 {
     ZoneScoped;
 
-    return {};
+    return sizeof(FILE_NOTIFY_INFORMATION) + 1024_i64;
 }
 
 auto os::mem_page_size() -> u64 {
@@ -184,7 +251,7 @@ auto os::mem_reserve(u64 size) -> void * {
     return VirtualAlloc(nullptr, size, MEM_RESERVE, PAGE_READWRITE);
 }
 
-auto os::mem_release(void *data, u64 size) -> void {
+auto os::mem_release(void *data, [[maybe_unused]] u64 size) -> void {
     ZoneScoped;
     TracyFree(data);
     VirtualFree(data, 0, MEM_RELEASE);
@@ -196,7 +263,7 @@ auto os::mem_commit(void *data, u64 size) -> bool {
     return VirtualAlloc(data, size, MEM_COMMIT, PAGE_READWRITE) != nullptr;
 }
 
-auto os::mem_decommit(void *data, u64 size) -> void {
+auto os::mem_decommit(void *data, [[maybe_unused]] u64 size) -> void {
     ZoneScoped;
 
     VirtualFree(data, 0, MEM_DECOMMIT | MEM_RELEASE);
@@ -230,7 +297,7 @@ auto os::unix_timestamp() -> i64 {
 
     LARGE_INTEGER li_timestamp = {};
     li_timestamp.LowPart = ft.dwLowDateTime;
-    li_timestamp.HighPart = ft.dwHighDateTime;
+    li_timestamp.HighPart = static_cast<LONG>(ft.dwHighDateTime);
 
     return (li_timestamp.QuadPart - UNIX_TIME_START) / TICKS_PER_SECOND;
 }

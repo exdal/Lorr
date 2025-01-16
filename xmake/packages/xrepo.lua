@@ -25,6 +25,7 @@ add_requires("flecs v4.0.3")
 
 add_requires("libsdl 2.30.10", { configs = {
     sdlmain = false,
+    x11 = false,
 } })
 
 add_requires("imguizmo-lorr 1.89+WIP")

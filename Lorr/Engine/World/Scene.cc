@@ -119,7 +119,7 @@ auto Scene::import_from_file(this Scene &self, const fs::path &path) -> bool {
             }
 
             auto component_name = stack.null_terminate(component_name_json.get_string());
-            auto component_id = self.world->lookup(component_name.cbegin());
+            auto component_id = self.world->lookup(component_name.data());
             if (!component_id) {
                 LOG_ERROR("Entity '{}' has invalid component named '{}'!", e.name(), component_name);
                 return false;
@@ -233,7 +233,7 @@ auto Scene::create_entity(this Scene &self, const std::string &name) -> flecs::e
         memory::ScopedStack stack;
 
         auto e = self.world->entity().child_of(self.root);
-        e.set_name(stack.format("Entity {}", e.raw_id()).cbegin());
+        e.set_name(stack.format("Entity {}", e.raw_id()).data());
         return e;
     }
 

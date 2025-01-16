@@ -2,6 +2,8 @@
 
 #include <sstream>
 
+#include <ls/string.hh>
+
 namespace lr {
 struct JsonWriter {
     std::stringstream stream;
@@ -80,7 +82,7 @@ struct JsonWriter {
 
     void str(std::string_view v) {
         new_element();
-        stream << '"' << v << '"';
+        stream << '"' << ls::escape_str(v) << '"';
     }
 
     template<typename T>

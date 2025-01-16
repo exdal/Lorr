@@ -365,10 +365,10 @@ bool ImGuiLR::drag_vec(i32 id, void *data, usize components, ImGuiDataType data_
 
 void ImGuiLR::center_text(std::string_view str) {
     auto window_size = ImGui::GetWindowSize();
-    auto text_size = ImGui::CalcTextSize(str.begin(), str.end());
+    auto text_size = ImGui::CalcTextSize(str.data(), str.data() + str.length());
 
     ImGui::SetCursorPos({ (window_size.x - text_size.x) * 0.5f, (window_size.y - text_size.y) * 0.5f });
-    ImGui::TextUnformatted(str.begin(), str.end());
+    ImGui::TextUnformatted(str.data(), str.data() + str.length());
 }
 
 bool ImGuiLR::image_button(std::string_view text, ImTextureID texture_id, const ImVec2 &button_size) {
@@ -383,7 +383,7 @@ bool ImGuiLR::image_button(std::string_view text, ImTextureID texture_id, const 
     cursor_pos.x += style.FramePadding.x;
     cursor_pos.y += style.FramePadding.y;
     ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, { 0.5, 0.9 });
-    auto pressed = ImGui::Button(text.cbegin(), button_size);
+    auto pressed = ImGui::Button(text.data(), button_size);
     ImGui::PopStyleVar();
 
     ImGui::SetNextItemAllowOverlap();

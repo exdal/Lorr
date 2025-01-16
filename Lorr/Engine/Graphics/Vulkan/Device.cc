@@ -132,6 +132,7 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
     std::vector<const c8 *> device_extensions;
     device_extensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
     device_extensions.push_back(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
+    device_extensions.push_back(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
     physical_device_selector.add_required_extensions(device_extensions);
 
     auto physical_device_result = physical_device_selector.select();

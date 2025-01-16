@@ -42,7 +42,7 @@ auto InspectorPanel::draw_inspector(this InspectorPanel &) -> void {
             }
 
             // auto name_with_icon = std::format("{}  {}", world.component_icon(component_id.raw_id()), component.name);
-            if (ImGui::CollapsingHeader(component.name.cbegin(), nullptr, ImGuiTreeNodeFlags_DefaultOpen)) {
+            if (ImGui::CollapsingHeader(component.name.data(), nullptr, ImGuiTreeNodeFlags_DefaultOpen)) {
                 ImGui::PushID(static_cast<i32>(component_id));
                 ImGui::BeginTable(
                     "entity_props",
@@ -59,7 +59,7 @@ auto InspectorPanel::draw_inspector(this InspectorPanel &) -> void {
                     ImGui::TableNextColumn();
 
                     ImGui::SetCursorPosY(ImGui::GetCursorPosY() + ImGui::GetStyle().FramePadding.y);
-                    ImGui::TextUnformatted(member_name.cbegin(), member_name.cend());
+                    ImGui::TextUnformatted(member_name.data(), member_name.data() + member_name.length());
                     ImGui::TableNextColumn();
 
                     ImGui::PushID(static_cast<i32>(i));
@@ -134,7 +134,7 @@ auto InspectorPanel::draw_inspector(this InspectorPanel &) -> void {
             q.with(flecs::ChildOf, flecs::Flecs).oper(flecs::Not).self().build();
             q.each([&stack, &app](flecs::entity component, flecs::Component &) {  //
                 ImGui::PushID(static_cast<i32>(component.raw_id()));
-                if (ImGui::MenuItem(stack.format("{}  {}", Icon::fa::cube, component.name().c_str()).cbegin())) {
+                if (ImGui::MenuItem(stack.format("{}  {}", Icon::fa::cube, component.name().c_str()).data())) {
                     app.selected_entity.add(component);
                 }
                 ImGui::PopID();

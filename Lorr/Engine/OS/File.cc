@@ -35,6 +35,7 @@ auto File::close() -> void {
 
     if (this->handle.has_value()) {
         os::file_close(this->handle.value());
+        this->handle.reset();
     }
 }
 

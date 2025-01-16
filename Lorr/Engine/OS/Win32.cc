@@ -5,40 +5,6 @@
 #endif
 #include <Windows.h>
 
-#if LS_LINUX
-// Basic type declaration to shut LSP up.
-using DWORD = u32;
-using HANDLE = void *;
-struct OVERLAPPED {
-    usize Offset = 0;
-    usize OffsetHigh = 0;
-};
-
-struct LARGE_INTEGER {
-    i64 QuadPart = 0;
-};
-
-enum : DWORD {
-    TRUNCATE_EXISTING,
-    GENERIC_READ,
-    FILE_SHARE_READ,
-    GENERIC_WRITE,
-    FILE_SHARE_WRITE,
-    CREATE_ALWAYS,
-    FILE_ATTRIBUTE_NORMAL,
-    FILE_BEGIN,
-    OPEN_EXISTING,
-};
-static HANDLE INVALID_HANDLE_VALUE = nullptr;
-
-HANDLE CreateFileW(const void *, DWORD, DWORD, void *, DWORD, DWORD, void *);
-void GetFileSizeEx(HANDLE, LARGE_INTEGER *);
-u32 WriteFile(HANDLE, const void *, DWORD, void *, OVERLAPPED *);
-bool ReadFile(HANDLE, void *, DWORD, void *, OVERLAPPED *);
-bool SetFilePointerEx(HANDLE, LARGE_INTEGER, void *, DWORD);
-void CloseHandle(HANDLE);
-#endif
-
 namespace lr {
 /// FILE SYSTEM ///
 auto os::file_open(const fs::path &path, FileAccess access) -> std::expected<FileDescriptor, FileResult> {
@@ -146,6 +112,10 @@ auto os::file_seek(FileDescriptor file, i64 offset) -> void {
 
 auto os::file_dialog(std::string_view title, FileDialogFlag flags) -> ls::option<fs::path> {
     ZoneScoped;
+
+    //OPENFILENAME ofn = {};
+
+    return {};
 }
 
 auto os::file_stdout(std::string_view str) -> void {
@@ -178,6 +148,10 @@ auto os::file_watcher_add(FileDescriptor watcher, const fs::path &path) -> std::
     return FileDescriptor::Invalid;
 }
 
+auto os::file_watcher_remove(FileDescriptor watcher, FileDescriptor watch_descriptor) -> void {
+    ZoneScoped;
+}
+
 auto os::file_watcher_read(FileDescriptor watcher, u8 *buffer, usize buffer_size) -> std::expected<i64, FileResult> {
     ZoneScoped;
 
@@ -204,7 +178,7 @@ auto os::mem_page_size() -> u64 {
     return sys_info.dwPageSize;
 }
 
-auto mem_reserve(u64 size) -> void * {
+auto os::mem_reserve(u64 size) -> void * {
     ZoneScoped;
 
     return VirtualAlloc(nullptr, size, MEM_RESERVE, PAGE_READWRITE);
@@ -213,7 +187,7 @@ auto mem_reserve(u64 size) -> void * {
 auto os::mem_release(void *data, u64 size) -> void {
     ZoneScoped;
     TracyFree(data);
-    VirtualFree(data, size, MEM_RELEASE);
+    VirtualFree(data, 0, MEM_RELEASE);
 }
 
 auto os::mem_commit(void *data, u64 size) -> bool {
@@ -225,7 +199,7 @@ auto os::mem_commit(void *data, u64 size) -> bool {
 auto os::mem_decommit(void *data, u64 size) -> void {
     ZoneScoped;
 
-    VirtualFree(data, size, MEM_DECOMMIT);
+    VirtualFree(data, 0, MEM_DECOMMIT | MEM_RELEASE);
 }
 
 auto os::thread_id() -> i64 {
@@ -254,7 +228,9 @@ auto os::unix_timestamp() -> i64 {
     FILETIME ft;
     GetSystemTimeAsFileTime(&ft);
 
-    LARGE_INTEGER li_timestamp = { .LowPart = ft.dwLowDateTime, .HighPart = ft.dwHighDateTime };
+    LARGE_INTEGER li_timestamp = {};
+    li_timestamp.LowPart = ft.dwLowDateTime;
+    li_timestamp.HighPart = ft.dwHighDateTime;
 
     return (li_timestamp.QuadPart - UNIX_TIME_START) / TICKS_PER_SECOND;
 }

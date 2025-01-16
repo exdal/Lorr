@@ -505,7 +505,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Format format, vuk::Ex
     auto editor_grid_pass = vuk::make_pass(
         "editor grid",
         [world_ptr = self.world_ptr, &pipeline = *self.device->pipeline(self.grid_pipeline.id())](
-            vuk::CommandBuffer &cmd_list, VUK_IA(vuk::Access::eColorWrite) dst, VUK_IA(vuk::Access::eDepthStencilRW) dst_depth) {
+            vuk::CommandBuffer &cmd_list, VUK_IA(vuk::Access::eColorWrite) dst, VUK_IA(vuk::Access::eDepthStencilRW) depth) {
             cmd_list  //
                 .bind_graphics_pipeline(pipeline)
                 .set_rasterization({ .cullMode = vuk::CullModeFlagBits::eNone })
@@ -515,7 +515,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Format format, vuk::Ex
                 .set_scissor(0, vuk::Rect2D::framebuffer())
                 .push_constants(vuk::ShaderStageFlagBits::eVertex | vuk::ShaderStageFlagBits::eFragment, 0, world_ptr)
                 .draw(3, 1, 0, 0);
-            return std::make_tuple(dst, dst_depth);
+            return std::make_tuple(dst, depth);
         });
 
     std::tie(final_attachment, depth_attachment) = editor_grid_pass(std::move(final_attachment), std::move(depth_attachment));
@@ -539,7 +539,6 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Format format, vuk::Ex
 
     auto composition_attachment =
         vuk::declare_ia("result", { .extent = extent, .format = format, .sample_count = vuk::Samples::e1, .layer_count = 1 });
-
     std::tie(composition_attachment, final_attachment) = tonemap_pass(std::move(composition_attachment), std::move(final_attachment));
     return composition_attachment;
 }

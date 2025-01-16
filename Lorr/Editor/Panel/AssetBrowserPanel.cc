@@ -3,11 +3,6 @@
 #include "Editor/EditorApp.hh"
 
 namespace lr {
-auto is_inside(const fs::path &root, const fs::path &path) -> bool {
-    const auto &root_prev = std::prev(root.end());
-    return std::mismatch(root.begin(), root_prev, path.begin()).first == root_prev;
-}
-
 struct AssetDirectoryCallbacks {
     void *user_data = nullptr;
     void (*on_new_directory)(void *user_data, AssetDirectory *directory) = nullptr;
@@ -159,9 +154,9 @@ auto AssetBrowserPanel::remove_directory(this AssetBrowserPanel &self, const fs:
 
 auto AssetBrowserPanel::remove_directory(this AssetBrowserPanel &self, AssetDirectory *directory) -> void {
     const auto &path = directory->path;
-    if (is_inside(path, self.current_dir->path)) {
-        self.current_dir = directory->parent;
-    }
+    //if (is_inside(path, self.current_dir->path)) {
+    //    self.current_dir = directory->parent;
+    //}
 
     fs::remove_all(path);
 

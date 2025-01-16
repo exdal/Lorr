@@ -55,7 +55,7 @@ void SceneBrowserPanel::render(this SceneBrowserPanel &self) {
 
                 ImGuiSelectableFlags selectable_flags = ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap;
                 ImGui::PushID(static_cast<i32>(e.raw_id()));
-                if (ImGui::Selectable(entity_name.cbegin(), e == app.selected_entity, selectable_flags)) {
+                if (ImGui::Selectable(entity_name.data(), e == app.selected_entity, selectable_flags)) {
                     app.selected_entity = e;
                 }
                 ImGui::PopID();

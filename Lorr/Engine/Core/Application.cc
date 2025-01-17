@@ -106,11 +106,18 @@ void Application::shutdown(this Application &self) {
 
     LOG_WARN("Shutting down application...");
 
+    self.should_close = true;
+
+    self.do_shutdown();
+
+    self.active_scene_uuid.reset();
     self.device.wait();
     self.swapchain.destroy();
     self.asset_man.destroy();
     self.device.destroy();
     LOG_INFO("Complete!");
+
+    Logger::deinit();
 }
 
 }  // namespace lr

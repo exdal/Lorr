@@ -78,7 +78,7 @@ struct PagedPool {
         LS_EXPECT(this->pages.size() > page_index);
 
         auto &page = this->pages[page_index];
-        std::destroy_at(page->elements.begin() + page_offset);
+        std::destroy_at(&page->elements[page_offset]);
         page->mask &= ~(1_u64 << page_offset);
     }
 

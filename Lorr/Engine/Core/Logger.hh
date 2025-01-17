@@ -11,6 +11,7 @@ namespace Logger {
     constexpr static std::string_view LOG_CATEGORY_COLORS[] = { "\033[90m", "\033[32m", "\033[33m", "\033[31m", "\033[31m" };
 
     void init(std::string_view name);
+    void deinit();
     void to_file(std::string_view str);
     std::tm get_time();
 }  // namespace Logger
@@ -38,7 +39,7 @@ constexpr static void LOG(Logger::Category cat, const LoggerFmt &fmt, ArgsT &&..
     auto tm = Logger::get_time();
     auto msg = stack.format(fmt.get<ArgsT...>(), args...);
     auto full_msg = stack.format(
-        "{}{:04}-{:02}-{:02} {:02}:{:02}:{:02} | {} | {}:{}: {}\n\033[00m",
+        "{}{:04}-{:02}-{:02} {:02}:{:02}:{:02} | {} | {}:{}: {}\n",
         Logger::LOG_CATEGORY_COLORS[cat],
         // YYYY-MM-DD
         tm.tm_year + 1900,

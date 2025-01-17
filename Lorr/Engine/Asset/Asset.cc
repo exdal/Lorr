@@ -97,6 +97,27 @@ auto AssetManager::to_asset_file_type(const fs::path &path) -> AssetFileType {
     }
 }
 
+auto AssetManager::to_asset_type_sv(AssetType type) -> std::string_view {
+    ZoneScoped;
+
+    switch (type) {
+        case AssetType::None:
+            return "None";
+        case AssetType::Shader:
+            return "Shader";
+        case AssetType::Model:
+            return "Model";
+        case AssetType::Texture:
+            return "Texture";
+        case AssetType::Material:
+            return "Material";
+        case AssetType::Font:
+            return "Font";
+        case AssetType::Scene:
+            return "Scene";
+    }
+}
+
 auto AssetManager::material_buffer() const -> Buffer & {
     return impl->material_buffer;
 }
@@ -221,40 +242,55 @@ auto AssetManager::init_new_scene(const UUID &uuid, const std::string &name) -> 
     return false;
 }
 
-auto AssetManager::import_asset(const fs::path &path) -> UUID {
+struct AssetMetaFile {
+    simdjson::padded_string contents;
+    simdjson::ondemand::parser parser;
+    simdjson::simdjson_result<simdjson::ondemand::document> doc;
+};
+
+auto read_meta_file(const fs::path &path) -> std::unique_ptr<AssetMetaFile> {
     ZoneScoped;
-    memory::ScopedStack stack;
-    namespace sj = simdjson;
 
     LS_EXPECT(path.extension() == ".lrasset");
     if (!path.has_extension() || path.extension() != ".lrasset") {
         LOG_ERROR("'{}' is not a valid asset file. It must end with .lrasset");
-        return UUID(nullptr);
+        return nullptr;
     }
 
     File file(path, FileAccess::Read);
     if (!file) {
         LOG_ERROR("Failed to open file {}!", path);
+        return nullptr;
+    }
+
+    auto result = std::make_unique<AssetMetaFile>();
+    result->contents = simdjson::padded_string(file.size);
+    file.read(result->contents.data(), file.size);
+    result->doc = result->parser.iterate(result->contents);
+    if (result->doc.error()) {
+        LOG_ERROR("Failed to parse asset meta file! {}", simdjson::error_message(result->doc.error()));
+        return nullptr;
+    }
+
+    return result;
+}
+
+auto AssetManager::import_asset(const fs::path &path) -> UUID {
+    ZoneScoped;
+    memory::ScopedStack stack;
+
+    auto meta_json = read_meta_file(path);
+    if (!meta_json) {
         return UUID(nullptr);
     }
 
-    auto json = sj::padded_string(file.size);
-    file.read(json.data(), file.size);
-
-    sj::ondemand::parser parser;
-    auto doc = parser.iterate(json);
-    if (doc.error()) {
-        LOG_ERROR("Failed to parse scene file! {}", sj::error_message(doc.error()));
-        return UUID(nullptr);
-    }
-
-    auto uuid_json = doc["uuid"].get_string();
+    auto uuid_json = meta_json->doc["uuid"].get_string();
     if (uuid_json.error()) {
-        LOG_ERROR("Failed to read asset meta file. `guid` is missing.");
+        LOG_ERROR("Failed to read asset meta file. `uuid` is missing.");
         return UUID(nullptr);
     }
 
-    auto type_json = doc["type"].get_number();
+    auto type_json = meta_json->doc["type"].get_number();
     if (type_json.error()) {
         LOG_ERROR("Failed to read asset meta file. `type` is missing.");
         return UUID(nullptr);
@@ -265,8 +301,8 @@ auto AssetManager::import_asset(const fs::path &path) -> UUID {
     auto uuid = UUID::from_string(uuid_json.value()).value();
     auto type = static_cast<AssetType>(type_json.value().get_uint64());
 
-    if (!this->import_asset(uuid, type, asset_path)) {
-        auto asset_it = impl->registry.find(uuid);
+    auto [asset_it, inserted] = impl->registry.try_emplace(uuid);
+    if (!inserted) {
         if (asset_it != impl->registry.end()) {
             // Tried a reinsert, update asset info
             //
@@ -279,36 +315,10 @@ auto AssetManager::import_asset(const fs::path &path) -> UUID {
         return UUID(nullptr);
     }
 
-    switch (type) {
-        case AssetType::Model: {
-            auto *model = this->get_model(uuid);
-
-            auto images_json = doc["textures"].get_array();
-            for (auto image_json : images_json) {
-                auto image_uuid = UUID::from_string(image_json.get_string().value());
-                if (!image_uuid.has_value()) {
-                    LOG_ERROR("Failed to import Model! An image with corrupt UUID.");
-                    return UUID(nullptr);
-                }
-
-                this->import_asset(image_uuid.value(), AssetType::Texture, asset_path);
-                model->textures.emplace_back(image_uuid.value());
-            }
-
-            auto materials_json = doc["materials"].get_array();
-            for (auto material_json : materials_json) {
-                auto material_uuid = UUID::from_string(material_json.get_string().value());
-                if (!material_uuid.has_value()) {
-                    LOG_ERROR("Failed to import Model! A material with corrupt UUID.");
-                    return UUID(nullptr);
-                }
-
-                this->import_asset(material_uuid.value(), AssetType::Material, asset_path);
-                model->materials.emplace_back(material_uuid.value());
-            }
-        }
-        default:;
-    }
+    auto &asset = asset_it->second;
+    asset.uuid = uuid;
+    asset.path = asset_path;
+    asset.type = type;
 
     return uuid;
 }
@@ -322,47 +332,9 @@ auto AssetManager::import_asset(const UUID &uuid, AssetType type, const fs::path
     }
 
     auto &asset = asset_it->second;
-    asset.path = path;
     asset.uuid = uuid;
+    asset.path = path;
     asset.type = type;
-
-    switch (type) {
-        case AssetType::Model: {
-            auto model_resource = impl->models.create();
-            if (!model_resource) {
-                return false;
-            }
-
-            asset.model_id = model_resource->id;
-        } break;
-        case AssetType::Texture: {
-            auto texture_resource = impl->textures.create();
-            if (!texture_resource) {
-                return false;
-            }
-
-            asset.texture_id = texture_resource->id;
-        } break;
-        case AssetType::Scene: {
-            auto scene_resource = impl->scenes.create();
-            if (!scene_resource) {
-                return false;
-            }
-
-            asset.scene_id = scene_resource->id;
-        } break;
-        case AssetType::Material: {
-            auto material_resource = impl->materials.create();
-            if (!material_resource) {
-                return false;
-            }
-
-            asset.material_id = material_resource->id;
-        } break;
-        default:
-            LS_DEBUGBREAK();  // TODO: Other asset types
-            return false;
-    }
 
     return true;
 }
@@ -378,19 +350,54 @@ auto AssetManager::load_asset(const UUID &uuid) -> bool {
         case AssetType::Texture: {
             return this->load_texture(uuid);
         }
+        case AssetType::Scene: {
+            return this->load_scene(uuid);
+        }
         default:;
     }
 
     return false;
 }
 
+auto AssetManager::unload_asset(const UUID &uuid) -> void {
+    ZoneScoped;
+
+    auto *asset = this->get_asset(uuid);
+    switch (asset->type) {
+        case AssetType::Model: {
+            this->unload_model(uuid);
+        } break;
+        case AssetType::Texture: {
+            this->unload_texture(uuid);
+        } break;
+        case AssetType::Scene: {
+            this->unload_scene(uuid);
+        } break;
+        default:;
+    }
+}
+
 auto AssetManager::load_model(const UUID &uuid) -> bool {
     ZoneScoped;
 
     auto *asset = this->get_asset(uuid);
-    auto *model = this->get_model(asset->model_id);
-    if (!model) {
-        LS_DEBUGBREAK();
+    if (asset->is_loaded()) {
+        asset->acquire_ref();
+        return true;
+    }
+
+    auto model_resource = impl->models.create();
+    if (!model_resource.has_value()) {
+        return false;
+    }
+
+    asset->model_id = model_resource->id;
+    auto *model = model_resource->self;
+
+    fs::path meta_path = asset->path.string() + ".lrasset";
+    auto meta_json = read_meta_file(meta_path);
+    if (!meta_json) {
+        LOG_ERROR("Model assets require proper meta file.");
         return false;
     }
 
@@ -452,6 +459,30 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
     if (!gltf_model.has_value()) {
         LOG_ERROR("Failed to parse Model '{}'!", asset->path);
         return false;
+    }
+
+    auto images_json = meta_json->doc["textures"].get_array();
+    for (auto image_json : images_json) {
+        auto image_uuid = UUID::from_string(image_json.get_string().value());
+        if (!image_uuid.has_value()) {
+            LOG_ERROR("Failed to import Model! An image with corrupt UUID.");
+            return false;
+        }
+
+        this->import_asset(image_uuid.value(), AssetType::Texture, asset->path);
+        model->textures.emplace_back(image_uuid.value());
+    }
+
+    auto materials_json = meta_json->doc["materials"].get_array();
+    for (auto material_json : materials_json) {
+        auto material_uuid = UUID::from_string(material_json.get_string().value());
+        if (!material_uuid.has_value()) {
+            LOG_ERROR("Failed to import Model! A material with corrupt UUID.");
+            return false;
+        }
+
+        this->import_asset(material_uuid.value(), AssetType::Material, asset->path);
+        model->materials.emplace_back(material_uuid.value());
     }
 
     // TODO: We need to cache images, if theres one image with 2 sampler infos,
@@ -546,18 +577,46 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
     impl->device->set_name(model->vertex_buffer, "Model VB");
     impl->device->set_name(model->index_buffer, "Model IB");
 
+    asset->acquire_ref();
     return true;
+}
+
+auto AssetManager::unload_model(const UUID &uuid) -> void {
+    ZoneScoped;
+
+    auto *asset = this->get_asset(uuid);
+    LS_EXPECT(asset);
+    if (!(asset->is_loaded() && asset->release_ref())) {
+        return;
+    }
+
+    auto *model = this->get_model(asset->model_id);
+    model->primitives.clear();
+    model->meshes.clear();
+
+    for (auto &v : model->materials) {
+        this->unload_material(v);
+    }
+
+    for (auto &v : model->textures) {
+        this->unload_texture(v);
+    }
+
+    impl->models.destroy(asset->model_id);
+    asset->model_id = ModelID::Invalid;
 }
 
 auto AssetManager::load_texture(const UUID &uuid, ls::span<u8> pixels, const TextureSamplerInfo &sampler_info) -> bool {
     ZoneScoped;
 
     auto *asset = this->get_asset(uuid);
-    auto *texture = this->get_texture(asset->texture_id);
-    if (!texture) {
-        LS_DEBUGBREAK();
+    auto texture_resource = impl->textures.create();
+    if (!texture_resource.has_value()) {
         return false;
     }
+
+    asset->texture_id = texture_resource->id;
+    auto *texture = texture_resource->self;
 
     vuk::Format format = {};
     vuk::Extent3D extent = {};
@@ -627,6 +686,7 @@ auto AssetManager::load_texture(const UUID &uuid, ls::span<u8> pixels, const Tex
             vuk::CompareOp::eNever)
             .value();
 
+    asset->acquire_ref();
     return true;
 }
 
@@ -648,11 +708,30 @@ auto AssetManager::load_texture(const UUID &uuid, const TextureSamplerInfo &samp
     return this->load_texture(uuid, file_contents, sampler_info);
 }
 
+auto AssetManager::unload_texture(const UUID &uuid) -> void {
+    ZoneScoped;
+
+    auto *asset = this->get_asset(uuid);
+    LS_EXPECT(asset);
+    if (!(asset->is_loaded() && asset->release_ref())) {
+        return;
+    }
+
+    impl->textures.destroy(asset->texture_id);
+    asset->texture_id = TextureID::Invalid;
+}
+
 auto AssetManager::load_material(const UUID &uuid, const Material &material_info) -> bool {
     ZoneScoped;
 
     auto *asset = this->get_asset(uuid);
-    auto *material = this->get_material(asset->material_id);
+    auto material_resource = impl->materials.create();
+    if (!material_resource.has_value()) {
+        return false;
+    }
+
+    asset->material_id = material_resource->id;
+    auto *material = material_resource->self;
     *material = material_info;
 
     auto *albedo_texture = this->get_texture(material_info.albedo_texture);
@@ -676,24 +755,52 @@ auto AssetManager::load_material(const UUID &uuid, const Material &material_info
     transfer_man.upload_staging(
         impl->material_buffer, ls::span(ls::bit_cast<u8 *>(&gpu_material), sizeof(GPUMaterial)), gpu_buffer_offset, sizeof(GPUMaterial));
 
+    asset->acquire_ref();
     return true;
 }
 
-auto AssetManager::load_material(const UUID &) -> bool {
+auto AssetManager::unload_material(const UUID &uuid) -> void {
     ZoneScoped;
 
-    return true;
+    auto *asset = this->get_asset(uuid);
+    LS_EXPECT(asset);
+    if (!(asset->is_loaded() && asset->release_ref())) {
+        return;
+    }
+
+    auto *material = this->get_material(asset->material_id);
+    if (material->albedo_texture) {
+        this->unload_texture(material->albedo_texture);
+    }
+
+    if (material->normal_texture) {
+        this->unload_texture(material->normal_texture);
+    }
+
+    if (material->emissive_texture) {
+        this->unload_texture(material->emissive_texture);
+    }
+
+    impl->materials.destroy(asset->material_id);
+    asset->model_id = ModelID::Invalid;
 }
 
 auto AssetManager::load_scene(const UUID &uuid) -> bool {
     ZoneScoped;
 
-    auto *scene = this->get_scene(uuid);
+    auto *asset = this->get_asset(uuid);
+    auto scene_resource = impl->scenes.create();
+    if (!scene_resource.has_value()) {
+        return false;
+    }
+
+    asset->scene_id = scene_resource->id;
+    auto *scene = scene_resource->self;
+
     if (!scene->init("unnamed_scene")) {
         return false;
     }
 
-    auto *asset = this->get_asset(uuid);
     if (!scene->import_from_file(asset->path)) {
         return false;
     }
@@ -726,16 +833,52 @@ auto AssetManager::load_scene(const UUID &uuid) -> bool {
         this->load_asset(cached_uuid);
     }
 
+    asset->acquire_ref();
     return true;
 }
 
 auto AssetManager::unload_scene(const UUID &uuid) -> void {
     ZoneScoped;
 
-    auto *scene = this->get_scene(uuid);
+    auto *asset = this->get_asset(uuid);
+    LS_EXPECT(asset);
+    if (!(asset->is_loaded() && asset->release_ref())) {
+        return;
+    }
+
+    auto *scene = this->get_scene(asset->scene_id);
+    ankerl::unordered_dense::set<UUID> cached_assets = {};
+    scene->get_root().children([&](flecs::entity e) {
+        e.each([&](flecs::id component_id) {
+            auto ecs_world = e.world();
+            if (!component_id.is_entity()) {
+                return;
+            }
+
+            ECS::ComponentWrapper component(e, component_id);
+            if (!component.has_component()) {
+                return;
+            }
+
+            component.for_each([&](usize, std::string_view, ECS::ComponentWrapper::Member &member) {
+                std::visit(
+                    match{
+                        [](const auto &) {},
+                        [&](UUID *v) { cached_assets.emplace(*v); },
+                    },
+                    member);
+            });
+        });
+    });
+
+    for (const auto &cached_uuid : cached_assets) {
+        this->unload_asset(cached_uuid);
+    }
+
     scene->destroy();
 
-    // TODO: Unload every asset this scene has
+    impl->scenes.destroy(asset->scene_id);
+    asset->scene_id = SceneID::Invalid;
 }
 
 auto AssetManager::export_asset(const UUID &uuid, const fs::path &path) -> bool {
@@ -818,6 +961,21 @@ auto AssetManager::export_scene(const UUID &uuid, JsonWriter &json, const fs::pa
     json["name"] = scene->get_name_sv();
 
     return scene->export_to_file(path);
+}
+
+auto AssetManager::delete_asset(const UUID &uuid) -> void {
+    ZoneScoped;
+
+    auto *asset = this->get_asset(uuid);
+    if (asset->ref_count > 0) {
+        LOG_WARN("Deleting alive asset {} with {} references!", asset->uuid.str(), asset->ref_count);
+    }
+
+    asset->ref_count = 0;
+    this->unload_asset(uuid);
+    impl->registry.erase(uuid);
+
+    LOG_TRACE("Deleted asset {}.", uuid.str());
 }
 
 auto AssetManager::get_asset(const UUID &uuid) -> Asset * {

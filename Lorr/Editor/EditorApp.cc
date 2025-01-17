@@ -192,4 +192,10 @@ auto EditorApp::render(this EditorApp &self, vuk::Format format, vuk::Extent3D e
     return true;
 }
 
+auto EditorApp::shutdown(this EditorApp &self) -> void {
+    ZoneScoped;
+
+    self.layout.destroy();
+}
+
 }  // namespace lr

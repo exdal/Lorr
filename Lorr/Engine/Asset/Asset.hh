@@ -42,7 +42,15 @@ struct Asset {
         TextureID texture_id;
         MaterialID material_id;
         SceneID scene_id;
+        u32 uni_id;
     };
+
+    // Reference count of loads
+    u64 ref_count = 0;
+
+    auto is_loaded() const -> bool { return model_id != ModelID::Invalid; }
+    auto acquire_ref() -> void { ++ref_count; }
+    auto release_ref() -> bool { return (--ref_count) == 0; }
 };
 
 //
@@ -76,6 +84,7 @@ struct AssetManager : Handle<AssetManager> {
 
     auto asset_root_path(AssetType type) -> fs::path;
     auto to_asset_file_type(const fs::path &path) -> AssetFileType;
+    auto to_asset_type_sv(AssetType type) -> std::string_view;
     auto material_buffer() const -> Buffer &;
     auto registry() const -> const AssetRegistry &;
 
@@ -100,14 +109,17 @@ struct AssetManager : Handle<AssetManager> {
     // Load contents of registered assets.
     //
     auto load_asset(const UUID &uuid) -> bool;
+    auto unload_asset(const UUID &uuid) -> void;
 
     auto load_model(const UUID &uuid) -> bool;
+    auto unload_model(const UUID &uuid) -> void;
 
     auto load_texture(const UUID &uuid, ls::span<u8> pixels, const TextureSamplerInfo &sampler_info = {}) -> bool;
     auto load_texture(const UUID &uuid, const TextureSamplerInfo &sampler_info = {}) -> bool;
+    auto unload_texture(const UUID &uuid) -> void;
 
     auto load_material(const UUID &uuid, const Material &material_info) -> bool;
-    auto load_material(const UUID &uuid) -> bool;
+    auto unload_material(const UUID &uuid) -> void;
 
     auto load_scene(const UUID &uuid) -> bool;
     auto unload_scene(const UUID &uuid) -> void;
@@ -121,6 +133,8 @@ struct AssetManager : Handle<AssetManager> {
     auto export_texture(const UUID &uuid, JsonWriter &json, const fs::path &path) -> bool;
     auto export_model(const UUID &uuid, JsonWriter &json, const fs::path &path) -> bool;
     auto export_scene(const UUID &uuid, JsonWriter &json, const fs::path &path) -> bool;
+
+    auto delete_asset(const UUID &uuid) -> void;
 
     auto get_asset(const UUID &uuid) -> Asset *;
     auto get_model(const UUID &uuid) -> Model *;

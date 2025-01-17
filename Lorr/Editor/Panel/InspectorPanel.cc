@@ -97,8 +97,11 @@ auto InspectorPanel::draw_inspector(this InspectorPanel &) -> void {
                                         auto *dropping_uuid = static_cast<UUID *>(asset_payload->Data);
                                         auto *dropping_asset = app.asset_man.get_asset(*dropping_uuid);
                                         if (dropping_asset->type == AssetType::Model) {
+                                            auto old_uuid = *v;
                                             *v = *dropping_uuid;
-                                            app.asset_man.load_model(*dropping_uuid);
+                                            if (app.asset_man.load_model(*dropping_uuid)) {
+                                                app.asset_man.unload_model(old_uuid);
+                                            }
                                         }
                                     }
                                     ImGui::EndDragDropTarget();

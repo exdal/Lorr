@@ -42,6 +42,7 @@ void ViewportPanel::on_drop(this ViewportPanel &) {
         switch (asset->type) {
             case AssetType::Scene: {
                 if (app.active_scene_uuid.has_value()) {
+                    app.selected_entity = {};
                     app.asset_man.unload_scene(app.active_scene_uuid.value());
                 }
 

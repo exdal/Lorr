@@ -24,9 +24,11 @@ struct EditorLayout {
     std::vector<std::unique_ptr<PanelI>> panels = {};
     ls::option<u32> dockspace_id = ls::nullopt;
     bool show_profiler = false;
+    bool show_assets = false;
     ActiveTool active_tool = ActiveTool::Cursor;
 
     void init(this EditorLayout &);
+    auto destroy(this EditorLayout &) -> void;
     void setup_theme(this EditorLayout &, EditorTheme theme);
     void setup_dockspace(this EditorLayout &);
     void render(this EditorLayout &, vuk::Format format, vuk::Extent3D extent);

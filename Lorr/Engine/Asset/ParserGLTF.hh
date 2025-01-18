@@ -58,7 +58,9 @@ struct GLTFMeshInfo {
 
 struct GLTFModelCallbacks {
     void *user_data = nullptr;
-    void (*on_buffer_sizes)(void *user_data, usize vertex_count, usize index_count) = nullptr;
+    void (*on_buffer_sizes)(void *user_data, u32 vertex_count, u32 index_count, u32 mesh_count) = nullptr;
+    void (*on_mesh_finish)(void *user_data, u32 mesh_index, u32 vertex_count, u32 vertex_offset, u32 index_count, u32 index_offset) =
+        nullptr;
 
     // Accessors
     void (*on_access_index)(void *user_data, u64 offset, u32 index) = nullptr;
@@ -76,7 +78,7 @@ struct GLTFModelInfo {
     std::vector<GLTFPrimitiveInfo> primitives = {};
     std::vector<GLTFMeshInfo> meshes = {};
 
-    static auto parse(const fs::path &path, bool load_resources = true, GLTFModelCallbacks callbacks = {}) -> ls::option<GLTFModelInfo>;
+    static auto parse(const fs::path &path, GLTFModelCallbacks callbacks = {}) -> ls::option<GLTFModelInfo>;
 };
 
 }  // namespace lr

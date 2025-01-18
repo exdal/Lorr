@@ -208,7 +208,7 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
         self.runtime->create_persistent_descriptorset(*self.allocator, bindless_layout.layout_info, bindless_layout.pool_size);
 
     // I would rather a crashed renderer than a renderer without BDA buffer
-    self.bda_array_buffer = Buffer::create(self, self.resources.buffers.max_resources() * sizeof(u64), vuk::MemoryUsage::eCPUtoGPU).value();
+    self.bda_array_buffer = Buffer::create(self, 1024 * sizeof(u64), vuk::MemoryUsage::eCPUtoGPU).value();
 
     self.descriptor_set->update_storage_buffer(std::to_underlying(Descriptors::BDA), 0, *self.buffer(self.bda_array_buffer.id()));
     self.descriptor_set->commit(*self.runtime);
@@ -305,31 +305,31 @@ auto Device::frame_count(this const Device &self) -> usize {
 auto Device::buffer(this Device &self, BufferID id) -> vuk::Buffer * {
     ZoneScoped;
 
-    return &*self.resources.buffers.get(id);
+    return &self.resources.buffers.slot(id)->get();
 }
 
 auto Device::image(this Device &self, ImageID id) -> vuk::Image * {
     ZoneScoped;
 
-    return &*self.resources.images.get(id);
+    return &self.resources.images.slot(id)->get();
 }
 
 auto Device::image_view(this Device &self, ImageViewID id) -> vuk::ImageView * {
     ZoneScoped;
 
-    return &*self.resources.image_views.get(id);
+    return &self.resources.image_views.slot(id)->get();
 }
 
 auto Device::sampler(this Device &self, SamplerID id) -> vuk::Sampler * {
     ZoneScoped;
 
-    return &self.resources.samplers.get(id);
+    return self.resources.samplers.slot(id);
 }
 
 auto Device::pipeline(this Device &self, PipelineID id) -> vuk::PipelineBaseInfo ** {
     ZoneScoped;
 
-    return &self.resources.pipelines.get(id);
+    return self.resources.pipelines.slot(id);
 }
 
 auto Device::bindless_descriptor_set() -> vuk::PersistentDescriptorSet & {

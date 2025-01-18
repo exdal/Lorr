@@ -7,7 +7,7 @@
 namespace lr {
 struct AssetManager;
 
-enum class SceneID : u32 { Invalid = ~0_u32 };
+enum class SceneID : u64 { Invalid = ~0_u64 };
 struct Scene {
     auto init(this Scene &, const std::string &name) -> bool;
     auto destroy(this Scene &) -> void;

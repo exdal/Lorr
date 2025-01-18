@@ -28,16 +28,12 @@ auto Image::create(
         return std::unexpected(result.error());
     }
 
-    auto image_resource = device.resources.images.create();
-
     auto image = Image{};
     image.format_ = format;
     image.extent_ = extent;
     image.slice_count_ = slice_count;
     image.mip_levels_ = mip_count;
-    image.id_ = image_resource->id;
-    image_resource->self->swap(image_handle);
-
+    image.id_ = device.resources.images.create_slot(std::move(image_handle));
     return image;
 }
 
@@ -90,30 +86,25 @@ auto ImageView::create(
         return std::unexpected(result.error());
     }
 
-    auto image_view_resource = device.resources.image_views.create();
-
     auto image_view = ImageView{};
     image_view.format_ = image.format();
     image_view.extent_ = image.extent();
     image_view.type_ = type;
     image_view.subresource_range_ = subresource_range;
     image_view.bound_image_id_ = image.id();
-    image_view.id_ = image_view_resource->id;
+    image_view.id_ = device.resources.image_views.create_slot(std::move(image_view_handle));
+    auto *image_view_ptr = device.resources.image_views.slot(image_view.id_);
+    auto slot_index = SlotMap_decode_id(image_view.id_).index;
 
     if (image_usage & vuk::ImageUsageFlagBits::eSampled) {
         device.descriptor_set->update_sampled_image(
-            std::to_underlying(Descriptors::Images),
-            std::to_underlying(image_view_resource->id),
-            *image_view_handle,
-            vuk::ImageLayout::eReadOnlyOptimal);
+            std::to_underlying(Descriptors::Images), slot_index, **image_view_ptr, vuk::ImageLayout::eReadOnlyOptimal);
     }
     if (image_usage & vuk::ImageUsageFlagBits::eStorage) {
-        device.descriptor_set->update_storage_image(
-            std::to_underlying(Descriptors::StorageImages), std::to_underlying(image_view_resource->id), *image_view_handle);
+        device.descriptor_set->update_storage_image(std::to_underlying(Descriptors::StorageImages), slot_index, **image_view_ptr);
     }
 
     device.descriptor_set->commit(*device.runtime);
-    image_view_resource->self->swap(image_view_handle);
     return image_view;
 }
 
@@ -224,14 +215,12 @@ auto Sampler::create(
         .maxLod = max_lod,
     };
 
-    auto sampler_resource = device.resources.samplers.create();
-    *sampler_resource->self = device.runtime->acquire_sampler(create_info, device.frame_count());
-
     auto sampler = Sampler{};
-    sampler.id_ = sampler_resource->id;
+    sampler.id_ = device.resources.samplers.create_slot();
+    auto *sampler_handle = device.resources.samplers.slot(sampler.id_);
+    *sampler_handle = device.runtime->acquire_sampler(create_info, device.frame_count());
 
-    device.descriptor_set->update_sampler(
-        std::to_underlying(Descriptors::Samplers), std::to_underlying(sampler_resource->id), *sampler_resource->self);
+    device.descriptor_set->update_sampler(std::to_underlying(Descriptors::Samplers), SlotMap_decode_id(sampler.id_).index, *sampler_handle);
     device.descriptor_set->commit(*device.runtime);
 
     return sampler;

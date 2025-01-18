@@ -3,7 +3,7 @@
 #include "Engine/Graphics/Slang/Compiler.hh"
 #include "Engine/Graphics/Vulkan.hh"
 
-#include "Engine/Memory/PagedPool.hh"
+#include "Engine/Memory/SlotMap.hh"
 
 #include "Engine/Util/LegitProfiler.hh"
 
@@ -67,11 +67,11 @@ struct BindlessDescriptorSetLayoutInfo {
 };
 
 struct DeviceResources {
-    PagedPool<vuk::Unique<vuk::Buffer>, BufferID, 1024_sz> buffers = {};
-    PagedPool<vuk::Unique<vuk::Image>, ImageID, 1024_sz> images = {};
-    PagedPool<vuk::Unique<vuk::ImageView>, ImageViewID, 1024_sz> image_views = {};
-    PagedPool<vuk::Sampler, SamplerID, 256_sz> samplers = {};
-    PagedPool<vuk::PipelineBaseInfo *, PipelineID, 256_sz> pipelines = {};
+    SlotMap<vuk::Unique<vuk::Buffer>, BufferID> buffers = {};
+    SlotMap<vuk::Unique<vuk::Image>, ImageID> images = {};
+    SlotMap<vuk::Unique<vuk::ImageView>, ImageViewID> image_views = {};
+    SlotMap<vuk::Sampler, SamplerID> samplers = {};
+    SlotMap<vuk::PipelineBaseInfo *, PipelineID> pipelines = {};
 };
 
 enum class DeviceFeature : u64 {

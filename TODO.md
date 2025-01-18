@@ -1,23 +1,19 @@
 # Editor
 - [x] Editor Camera
+- [ ] Component Icons
+- [ ] Add proper `std::string_view` support for imgui widgets
 
 # Engine Core
 ## Asset Manager
 - [ ] Custom model format for objects
-- [ ] Custom material format using KDL
 - [ ] Custom Texture format
 
 ## Graphics
-### Vulkan
-- [ ] Ref counting
-### Shader
-- [ ] Shader Caching
 ### Techniques
 - [x] Atmosphere
 - [ ] Clouds (NOTE: Sun direction is broken)
 - [ ] Water simulation
 - [ ] Visbuffer
-- [ ] Forward+ lights
 - [ ] Virtual Shadow Maps
 - [ ] Terrain Generation
 - [ ] Bloom

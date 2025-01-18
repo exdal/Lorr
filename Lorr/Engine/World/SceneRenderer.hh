@@ -71,6 +71,8 @@ struct GPUMaterial {
 };
 
 struct GPUModel {
+    constexpr static auto MAX_MESHLET_INDICES = 64_sz;
+    constexpr static auto MAX_MESHLET_PRIMITIVES = 64_sz;
     struct Vertex {
         glm::vec3 position = {};
         glm::vec3 normal = {};
@@ -79,19 +81,17 @@ struct GPUModel {
     };
     using Index = u32;
 
-    struct Primitive {
+    struct Meshlet {
         u32 vertex_offset = 0;
         u32 vertex_count = 0;
         u32 index_offset = 0;
         u32 index_count = 0;
-        u32 material_index = 0;
     };
 
     struct Mesh {
-        std::vector<u32> primitive_indices = {};
+        std::vector<Meshlet> meshlets = {};
     };
 
-    std::vector<Primitive> primitives = {};
     std::vector<Mesh> meshes = {};
 
     u32 transform_index = 0;
@@ -108,8 +108,8 @@ struct GPUModelTransformData {
 // SHADER MODIFICATION!!! PLACE CPU RELATED STUFF AT `WorldRenderContext`!
 //
 struct GPUWorldData {
-    SamplerID linear_sampler_id = SamplerID::Invalid;
-    SamplerID nearest_sampler_id = SamplerID::Invalid;
+    u32 linear_sampler_index = ~0_u32;
+    u32 nearest_sampler_index = ~0_u32;
 
     u64 cameras_ptr = 0;
     u64 materials_ptr = 0;

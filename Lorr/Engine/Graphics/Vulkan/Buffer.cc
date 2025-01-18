@@ -19,18 +19,17 @@ auto Buffer::create(Device &device, u64 size, vuk::MemoryUsage memory_usage, vuk
         return std::unexpected(result.error());
     }
 
-    auto buffer_resource = device.resources.buffers.create();
-    if (device.bda_array_buffer) {
-        auto *device_address_arr = reinterpret_cast<u64 *>(device.bda_array_buffer.host_ptr());
-        device_address_arr[static_cast<usize>(buffer_resource->id)] = buffer_handle->device_address;
-    }
-
     auto buffer = Buffer{};
     buffer.data_size_ = buffer_handle->size;
     buffer.host_data_ = buffer_handle->mapped_ptr;
     buffer.device_address_ = buffer_handle->device_address;
-    buffer.id_ = buffer_resource->id;
-    buffer_resource->self->swap(buffer_handle);
+    buffer.id_ = device.resources.buffers.create_slot(std::move(buffer_handle));
+    if (device.bda_array_buffer) {
+        auto slot_index = SlotMap_decode_id(buffer.id_).index;
+        auto *device_address_arr = reinterpret_cast<u64 *>(device.bda_array_buffer.host_ptr());
+        device_address_arr[slot_index] = buffer_handle->device_address;
+    }
+
     return buffer;
 }
 

@@ -5,6 +5,8 @@
 
 #include "Engine/Graphics/Vulkan.hh"
 
+#include "Engine/Memory/SlotMap.hh"
+
 #include "Engine/Util/JsonWriter.hh"
 
 #include "Engine/World/Scene.hh"
@@ -42,7 +44,7 @@ struct Asset {
         TextureID texture_id;
         MaterialID material_id;
         SceneID scene_id;
-        u32 uni_id;
+        SlotMapIDUnpacked unpacked_id;
     };
 
     // Reference count of loads
@@ -85,7 +87,7 @@ struct AssetManager : Handle<AssetManager> {
     auto asset_root_path(AssetType type) -> fs::path;
     auto to_asset_file_type(const fs::path &path) -> AssetFileType;
     auto to_asset_type_sv(AssetType type) -> std::string_view;
-    auto material_buffer() const -> Buffer &;
+    auto material_buffer() const -> BufferID;
     auto registry() const -> const AssetRegistry &;
 
     //  ── Created Assets ──────────────────────────────────────────────────

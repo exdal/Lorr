@@ -9,12 +9,14 @@
 #include <vuk/runtime/vk/VkSwapchain.hpp>
 #include <vuk/runtime/vk/VkTypes.hpp>
 
+#include "Engine/Memory/SlotMap.hh"
+
 namespace lr {
-enum class BufferID : u32 { Invalid = ~0_u32 };
-enum class ImageID : u32 { Invalid = ~0_u32 };
-enum class ImageViewID : u32 { Invalid = ~0_u32 };
-enum class SamplerID : u32 { Invalid = ~0_u32 };
-enum class PipelineID : u32 { Invalid = ~0_u32 };
+enum class BufferID : u64 { Invalid = ~0_u64 };
+enum class ImageID : u64 { Invalid = ~0_u64 };
+enum class ImageViewID : u64 { Invalid = ~0_u64 };
+enum class SamplerID : u64 { Invalid = ~0_u64 };
+enum class PipelineID : u64 { Invalid = ~0_u64 };
 
 /////////////////////////////////
 // DEVICE RESOURCES
@@ -141,12 +143,12 @@ private:
 };
 
 struct SampledImage {
-    ImageViewID image_view_id : 24;
-    SamplerID sampler_id : 8;
+    u32 image_view_index : 24;
+    u32 sampler_index : 8;
     SampledImage() = default;
     SampledImage(ImageViewID image_view_id_, SamplerID sampler_id_)
-        : image_view_id(image_view_id_),
-          sampler_id(sampler_id_) {}
+        : image_view_index(SlotMap_decode_id(image_view_id_).index),
+          sampler_index(SlotMap_decode_id(sampler_id_).index) {}
 };
 
 /////////////////////////////////

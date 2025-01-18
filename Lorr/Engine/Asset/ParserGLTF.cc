@@ -12,7 +12,7 @@ template<>
 struct fastgltf::ElementTraits<glm::vec2> : fastgltf::ElementTraitsBase<glm::vec2, AccessorType::Vec2, float> {};
 
 namespace lr {
-auto GLTFModelInfo::parse(const fs::path &path, bool load_resources, GLTFModelCallbacks callbacks) -> ls::option<GLTFModelInfo> {
+auto GLTFModelInfo::parse(const fs::path &path, GLTFModelCallbacks callbacks) -> ls::option<GLTFModelInfo> {
     ZoneScoped;
 
     auto gltf_buffer = fastgltf::GltfDataBuffer::FromPath(path);
@@ -44,11 +44,8 @@ auto GLTFModelInfo::parse(const fs::path &path, bool load_resources, GLTFModelCa
     fastgltf::Parser parser;
 
     auto options = fastgltf::Options::None;
+    options |= fastgltf::Options::LoadExternalBuffers;
     // options |= fastgltf::Options::DontRequireValidAssetMember;
-
-    if (load_resources) {
-        options |= fastgltf::Options::LoadExternalBuffers;
-    }
 
     auto result = parser.loadGltf(gltf_buffer.get(), path.parent_path(), options);
     if (!result) {
@@ -67,11 +64,6 @@ auto GLTFModelInfo::parse(const fs::path &path, bool load_resources, GLTFModelCa
 
     // sources::Vector is not used for importing, ignore it
     for (const auto &v : asset.buffers) {
-        if (!load_resources) {
-            buffers.emplace_back();
-            continue;
-        }
-
         std::visit(
             fastgltf::visitor{
                 [](const auto &) {},
@@ -235,6 +227,7 @@ auto GLTFModelInfo::parse(const fs::path &path, bool load_resources, GLTFModelCa
 
     u32 total_vertex_count = 0;
     u32 total_index_count = 0;
+    u32 total_mesh_count = 0;
     for (const auto &v : asset.meshes) {
         for (const auto &k : v.primitives) {
             auto &index_accessor = asset.accessors[k.indicesAccessor.value()];
@@ -245,78 +238,93 @@ auto GLTFModelInfo::parse(const fs::path &path, bool load_resources, GLTFModelCa
 
             total_index_count += index_accessor.count;
         }
+
+        total_mesh_count++;
     }
 
     if (callbacks.on_buffer_sizes) {
-        callbacks.on_buffer_sizes(callbacks.user_data, total_vertex_count, total_index_count);
+        callbacks.on_buffer_sizes(callbacks.user_data, total_vertex_count, total_index_count, total_mesh_count);
     }
 
-    if (load_resources) {
-        u32 vertex_offset = 0;
-        u32 index_offset = 0;
-        for (const auto &v : asset.meshes) {
-            auto &mesh = model.meshes.emplace_back();
-            mesh.name = v.name;
+    u32 mesh_index = 0;
+    u32 vertex_offset = 0;
+    u32 index_offset = 0;
+    for (const auto &v : asset.meshes) {
+        auto &mesh = model.meshes.emplace_back();
+        mesh.name = v.name;
 
-            for (const auto &k : v.primitives) {
-                mesh.primitive_indices.push_back(model.primitives.size());
-                auto &primitive = model.primitives.emplace_back();
-                auto &index_accessor = asset.accessors[k.indicesAccessor.value()];
+        u32 mesh_vertex_offset = vertex_offset;
+        u32 mesh_index_offset = index_offset;
+        u32 mesh_vertex_count = 0;
+        u32 mesh_index_count = 0;
 
-                primitive.vertex_offset = vertex_offset;
-                primitive.index_offset = index_offset;
-                primitive.index_count = index_accessor.count;
+        for (const auto &k : v.primitives) {
+            mesh.primitive_indices.push_back(model.primitives.size());
+            auto &primitive = model.primitives.emplace_back();
+            auto &index_accessor = asset.accessors[k.indicesAccessor.value()];
 
-                fastgltf::iterateAccessorWithIndex<u32>(asset, index_accessor, [&](u32 index, usize i) {  //
-                    LS_EXPECT(callbacks.on_access_index);
+            primitive.vertex_offset = vertex_offset;
+            primitive.index_offset = index_offset;
+            primitive.index_count = index_accessor.count;
+
+            mesh_index_count += index_accessor.count;
+
+            fastgltf::iterateAccessorWithIndex<u32>(asset, index_accessor, [&](u32 index, usize i) {  //
+                if (callbacks.on_access_index) {
                     callbacks.on_access_index(callbacks.user_data, index_offset + i, index);
+                }
+            });
+
+            if (auto attrib = k.findAttribute("POSITION"); attrib != k.attributes.end()) {
+                auto &accessor = asset.accessors[attrib->accessorIndex];
+                primitive.vertex_count = accessor.count;
+                mesh_vertex_count += accessor.count;
+
+                fastgltf::iterateAccessorWithIndex<glm::vec3>(asset, accessor, [&](glm::vec3 pos, usize i) {  //
+                    if (callbacks.on_access_position) {
+                        callbacks.on_access_position(callbacks.user_data, vertex_offset + i, pos);
+                    }
                 });
-
-                if (auto attrib = k.findAttribute("POSITION"); attrib != k.attributes.end()) {
-                    auto &accessor = asset.accessors[attrib->accessorIndex];
-                    primitive.vertex_count = accessor.count;
-
-                    fastgltf::iterateAccessorWithIndex<glm::vec3>(asset, accessor, [&](glm::vec3 pos, usize i) {  //
-                        if (callbacks.on_access_position) {
-                            callbacks.on_access_position(callbacks.user_data, vertex_offset + i, pos);
-                        }
-                    });
-                }
-
-                if (auto attrib = k.findAttribute("NORMAL"); attrib != k.attributes.end()) {
-                    auto &accessor = asset.accessors[attrib->accessorIndex];
-                    fastgltf::iterateAccessorWithIndex<glm::vec3>(asset, accessor, [&](glm::vec3 normal, usize i) {  //
-                        if (callbacks.on_access_normal) {
-                            callbacks.on_access_normal(callbacks.user_data, vertex_offset + i, normal);
-                        }
-                    });
-                }
-
-                if (auto attrib = k.findAttribute("TEXCOORD_0"); attrib != k.attributes.end()) {
-                    auto &accessor = asset.accessors[attrib->accessorIndex];
-                    fastgltf::iterateAccessorWithIndex<glm::vec2>(asset, accessor, [&](glm::vec2 uv, usize i) {  //
-                        if (callbacks.on_access_texcoord) {
-                            callbacks.on_access_texcoord(callbacks.user_data, vertex_offset + i, uv);
-                        }
-                    });
-                }
-
-                if (auto attrib = k.findAttribute("COLOR"); attrib != k.attributes.end()) {
-                    auto &accessor = asset.accessors[attrib->accessorIndex];
-                    fastgltf::iterateAccessorWithIndex<glm::vec4>(asset, accessor, [&](glm::vec4 color, usize i) {  //
-                        if (callbacks.on_access_color) {
-                            callbacks.on_access_color(callbacks.user_data, vertex_offset + i, color);
-                        }
-                    });
-                }
-
-                if (k.materialIndex.has_value()) {
-                    primitive.material_index = k.materialIndex.value();
-                }
-
-                vertex_offset += primitive.vertex_count;
-                index_offset += primitive.index_count;
             }
+
+            if (auto attrib = k.findAttribute("NORMAL"); attrib != k.attributes.end()) {
+                auto &accessor = asset.accessors[attrib->accessorIndex];
+                fastgltf::iterateAccessorWithIndex<glm::vec3>(asset, accessor, [&](glm::vec3 normal, usize i) {  //
+                    if (callbacks.on_access_normal) {
+                        callbacks.on_access_normal(callbacks.user_data, vertex_offset + i, normal);
+                    }
+                });
+            }
+
+            if (auto attrib = k.findAttribute("TEXCOORD_0"); attrib != k.attributes.end()) {
+                auto &accessor = asset.accessors[attrib->accessorIndex];
+                fastgltf::iterateAccessorWithIndex<glm::vec2>(asset, accessor, [&](glm::vec2 uv, usize i) {  //
+                    if (callbacks.on_access_texcoord) {
+                        callbacks.on_access_texcoord(callbacks.user_data, vertex_offset + i, uv);
+                    }
+                });
+            }
+
+            if (auto attrib = k.findAttribute("COLOR"); attrib != k.attributes.end()) {
+                auto &accessor = asset.accessors[attrib->accessorIndex];
+                fastgltf::iterateAccessorWithIndex<glm::vec4>(asset, accessor, [&](glm::vec4 color, usize i) {  //
+                    if (callbacks.on_access_color) {
+                        callbacks.on_access_color(callbacks.user_data, vertex_offset + i, color);
+                    }
+                });
+            }
+
+            if (k.materialIndex.has_value()) {
+                primitive.material_index = k.materialIndex.value();
+            }
+
+            vertex_offset += primitive.vertex_count;
+            index_offset += primitive.index_count;
+        }
+
+        if (callbacks.on_mesh_finish) {
+            callbacks.on_mesh_finish(
+                callbacks.user_data, mesh_index, mesh_vertex_count, mesh_vertex_offset, mesh_index_count, mesh_index_offset);
         }
     }
 

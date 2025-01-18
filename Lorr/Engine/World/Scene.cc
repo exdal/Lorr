@@ -52,6 +52,13 @@ auto Scene::init(this Scene &self, const std::string &name) -> bool {
             }
         });
 
+    self.world
+        ->observer<ECS::Transform>()  //
+        .event(flecs::Monitor)
+        .each([](flecs::iter &it, usize i, ECS::Transform &transform) {  //
+            LOG_TRACE("Transform: {}", it.id(i).raw_id());
+        });
+
     return true;
 }
 
@@ -287,7 +294,7 @@ auto Scene::upload_scene(this Scene &self, SceneRenderer &renderer) -> void {
         .has_atmosphere = atmosphere_query.count() > 0,
     });
 
-    scene_data.materials_buffer_id = app.asset_man.material_buffer().id();
+    scene_data.materials_buffer_id = app.asset_man.material_buffer();
 
     u32 active_camera_index = 0;
     camera_query.each([&](flecs::entity e, ECS::Transform &t, ECS::Camera &c) {
@@ -354,26 +361,16 @@ auto Scene::upload_scene(this Scene &self, SceneRenderer &renderer) -> void {
         }
 
         auto &gpu_model = scene_data.models.emplace_back();
-
-        gpu_model.primitives.reserve(model->primitives.size());
-        gpu_model.meshes.reserve(model->meshes.size());
-
-        for (auto &primitive : model->primitives) {
-            auto &material_uuid = model->materials[primitive.material_index];
-            auto *material_asset = app.asset_man.get_asset(material_uuid);
-            gpu_model.primitives.push_back({
-                .vertex_offset = primitive.vertex_offset,
-                .vertex_count = primitive.vertex_count,
-                .index_offset = primitive.index_offset,
-                .index_count = primitive.index_count,
-                .material_index = std::to_underlying(material_asset->material_id),
-            });
-        }
-
         for (auto &mesh : model->meshes) {
-            gpu_model.meshes.push_back({
-                .primitive_indices = mesh.primitive_indices,
-            });
+            auto &gpu_mesh = gpu_model.meshes.emplace_back();
+            for (auto &meshlet : mesh.meshlets) {
+                gpu_mesh.meshlets.push_back({
+                    .vertex_offset = meshlet.vertex_offset,
+                    .vertex_count = meshlet.vertex_count,
+                    .index_offset = meshlet.index_offset,
+                    .index_count = meshlet.index_count,
+                });
+            }
         }
 
         gpu_model.transform_index = model_transform_index++;

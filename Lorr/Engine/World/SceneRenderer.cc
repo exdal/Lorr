@@ -265,8 +265,8 @@ auto SceneRenderer::end_scene(this SceneRenderer &self, SceneRenderInfo &info) -
     auto &transfer_man = self.device->transfer_man();
     auto gpu_buffer = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eGPUonly, info.upload_size);
 
-    self.world_data.linear_sampler_id = self.linear_sampler.id();
-    self.world_data.nearest_sampler_id = self.nearest_sampler.id();
+    self.world_data.linear_sampler_index = SlotMap_decode_id(self.linear_sampler.id()).index;
+    self.world_data.nearest_sampler_index = SlotMap_decode_id(self.nearest_sampler.id()).index;
 
     if (info.offset_cameras.has_value()) {
         self.world_data.cameras_ptr = gpu_buffer.device_address() + info.offset_cameras.value();
@@ -463,7 +463,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Format format, vuk::Ex
                 struct PushConstants {
                     u64 world_ptr = 0;
                     u32 model_index = 0;
-                    u32 material_id = 0;
+                    u32 pad = 0;
                 };
 
                 cmd_list  //
@@ -474,24 +474,20 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Format format, vuk::Ex
                     .set_color_blend(dst, vuk::BlendPreset::eAlphaBlend)
                     .set_viewport(0, vuk::Rect2D::framebuffer())
                     .set_scissor(0, vuk::Rect2D::framebuffer())
-                    .bind_persistent(0, device->bindless_descriptor_set())
                     .bind_vertex_buffer(0, *device->buffer(gpu_model.vertex_bufffer_id), 0, vertex_layout)
                     .bind_index_buffer(*device->buffer(gpu_model.index_buffer_id), vuk::IndexType::eUint32);
 
                 for (const auto &mesh : gpu_model.meshes) {
-                    for (auto primitive_index : mesh.primitive_indices) {
-                        auto &primitive = gpu_model.primitives[primitive_index];
+                    for (const auto &meshlet : mesh.meshlets) {
                         cmd_list.push_constants(
-                            vuk::ShaderStageFlagBits::eVertex | vuk::ShaderStageFlagBits::eFragment,
+                            vuk::ShaderStageFlagBits::eVertex,
                             0,
                             PushConstants{
                                 .world_ptr = world_ptr,
                                 .model_index = gpu_model.transform_index,
-                                .material_id = primitive.material_index,
                             });
 
-                        cmd_list.draw_indexed(
-                            primitive.index_count, 1, primitive.index_offset, static_cast<i32>(primitive.vertex_offset), 0);
+                        cmd_list.draw_indexed(meshlet.index_count, 1, meshlet.index_offset, static_cast<i32>(meshlet.vertex_offset), 0);
                     }
                 }
 
@@ -515,6 +511,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Format format, vuk::Ex
                 .set_scissor(0, vuk::Rect2D::framebuffer())
                 .push_constants(vuk::ShaderStageFlagBits::eVertex | vuk::ShaderStageFlagBits::eFragment, 0, world_ptr)
                 .draw(3, 1, 0, 0);
+
             return std::make_tuple(dst, depth);
         });
 

@@ -72,6 +72,19 @@ struct ScopedStack {
         return { begin, end };
     }
 
+    template<typename... ArgsT>
+    const c8 *format_char(const std::format_string<ArgsT...> fmt, ArgsT &&...args) {
+        ZoneScoped;
+
+        auto &stack = get_thread_stack();
+        c8 *begin = reinterpret_cast<c8 *>(stack.ptr);
+        c8 *end = std::vformat_to(begin, fmt.get(), std::make_format_args(args...));
+        *end = '\0';
+        stack.ptr = ls::align_up(reinterpret_cast<u8 *>(end + 1), 8);
+
+        return begin;
+    }
+
     std::u32string_view to_utf32(std::string_view str) {
         ZoneScoped;
 

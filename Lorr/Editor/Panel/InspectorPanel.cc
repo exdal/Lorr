@@ -31,6 +31,8 @@ auto InspectorPanel::draw_inspector(this InspectorPanel &) -> void {
         }
 
         app.selected_entity.each([&](flecs::id component_id) {
+            memory::ScopedStack stack;
+
             const auto &ecs_world = app.selected_entity.world();
             if (!component_id.is_entity()) {
                 return;
@@ -41,8 +43,8 @@ auto InspectorPanel::draw_inspector(this InspectorPanel &) -> void {
                 return;
             }
 
-            // auto name_with_icon = std::format("{}  {}", world.component_icon(component_id.raw_id()), component.name);
-            if (ImGui::CollapsingHeader(component.name.data(), nullptr, ImGuiTreeNodeFlags_DefaultOpen)) {
+            auto name_with_icon = stack.format_char("{}", component.name);
+            if (ImGui::CollapsingHeader(name_with_icon, nullptr, ImGuiTreeNodeFlags_DefaultOpen)) {
                 ImGui::PushID(static_cast<i32>(component_id));
                 ImGui::BeginTable(
                     "entity_props",
@@ -82,12 +84,11 @@ auto InspectorPanel::draw_inspector(this InspectorPanel &) -> void {
                                     ImGui::TextUnformatted("Drop a model here.");
                                     *v = {};
                                 } else {
+                                    memory::ScopedStack stack;
                                     const auto &model_name = asset->path.filename();
-                                    ImGui::Text(
-                                        "Name: %s\nModelID: %u\nUUID: %s",
-                                        model_name.c_str(),
-                                        std::to_underlying(asset->model_id),
-                                        v->str().c_str());
+                                    ImGuiLR::text_sv(stack.format("Name: {}", model_name));
+                                    ImGuiLR::text_sv(stack.format("ModelID: {}", std::to_underlying(asset->model_id)));
+                                    ImGuiLR::text_sv(stack.format("UUID: {}", v->str()));
                                 }
 
                                 ImGui::SetCursorPos(cursor_pos);
@@ -137,7 +138,7 @@ auto InspectorPanel::draw_inspector(this InspectorPanel &) -> void {
             q.with(flecs::ChildOf, flecs::Flecs).oper(flecs::Not).self().build();
             q.each([&stack, &app](flecs::entity component, flecs::Component &) {  //
                 ImGui::PushID(static_cast<i32>(component.raw_id()));
-                if (ImGui::MenuItem(stack.format("{}  {}", Icon::fa::cube, component.name().c_str()).data())) {
+                if (ImGui::MenuItem(stack.format_char("{}  {}", Icon::fa::cube, component.name().c_str()))) {
                     app.selected_entity.add(component);
                 }
                 ImGui::PopID();

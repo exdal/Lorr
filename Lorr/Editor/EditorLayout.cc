@@ -231,6 +231,7 @@ void EditorLayout::render(this EditorLayout &self, vuk::Format format, vuk::Exte
         }
 
         if (self.show_assets) {
+            memory::ScopedStack stack;
             const auto &registry = app.asset_man.registry();
             ImGui::Begin("Assets", &self.show_assets);
 
@@ -241,7 +242,7 @@ void EditorLayout::render(this EditorLayout &self, vuk::Format format, vuk::Exte
                 }
             }
 
-            ImGui::Text("%lu total assets, %lu loaded.", registry.size(), loaded_assets);
+            ImGuiLR::text_sv(stack.format("{} total assets, {} loaded.", registry.size(), loaded_assets));
 
             ImGuiTableFlags table_flags = ImGuiTableFlags_Resizable;
             table_flags |= ImGuiTableFlags_Hideable;
@@ -259,7 +260,6 @@ void EditorLayout::render(this EditorLayout &self, vuk::Format format, vuk::Exte
                 ImGui::TableHeadersRow();
 
                 for (const auto &asset_it : registry) {
-                    memory::ScopedStack stack;
                     const auto &asset_uuid = asset_it.first;
                     const auto &asset = asset_it.second;
                     auto asset_uuid_str = asset_uuid.str();
@@ -271,13 +271,13 @@ void EditorLayout::render(this EditorLayout &self, vuk::Format format, vuk::Exte
                     ImGui::TableSetColumnIndex(0);
                     ImGui::TextUnformatted(asset_uuid_str.c_str());
                     ImGui::TableSetColumnIndex(1);
-                    ImGui::TextUnformatted(app.asset_man.to_asset_type_sv(asset.type).data());
+                    ImGuiLR::text_sv(app.asset_man.to_asset_type_sv(asset.type));
                     ImGui::TableSetColumnIndex(2);
                     ImGui::TextUnformatted(asset_path.c_str());
                     ImGui::TableSetColumnIndex(3);
-                    ImGui::TextUnformatted(stack.format("{}", SlotMap_decode_id(asset.scene_id).index).data());
+                    ImGuiLR::text_sv(stack.format("{}", SlotMap_decode_id(asset.scene_id).index));
                     ImGui::TableSetColumnIndex(4);
-                    ImGui::TextUnformatted(stack.format("{}", asset.ref_count).data());
+                    ImGuiLR::text_sv(stack.format("{}", asset.ref_count));
                 }
 
                 ImGui::EndTable();
@@ -453,4 +453,8 @@ bool ImGuiLR::image_button(std::string_view text, ImTextureID texture_id, const 
     ImGui::EndGroup();
 
     return pressed;
+}
+
+void ImGuiLR::text_sv(std::string_view str) {
+    ImGui::TextUnformatted(static_cast<const c8 *>(str.data()), static_cast<const c8 *>(str.data() + str.length()));
 }

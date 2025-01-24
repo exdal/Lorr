@@ -7,8 +7,8 @@
 
 #include "Engine/OS/File.hh"
 
-#include "Engine/World/ECSModule/ComponentWrapper.hh"
-#include "Engine/World/ECSModule/Core.hh"
+#include "Engine/Scene/ECSModule/ComponentWrapper.hh"
+#include "Engine/Scene/ECSModule/Core.hh"
 
 #include <meshoptimizer.h>
 #include <simdjson.h>
@@ -338,6 +338,7 @@ auto AssetManager::unload_asset(const UUID &uuid) -> void {
 
 auto AssetManager::load_model(const UUID &uuid) -> bool {
     ZoneScoped;
+    memory::ScopedStack stack;
 
     auto *asset = this->get_asset(uuid);
     if (asset->is_loaded()) {
@@ -359,70 +360,93 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
         Device *device = nullptr;
         Model *model = nullptr;
 
-        TransientBuffer vertex_buffer_cpu = {};
-        TransientBuffer index_buffer_cpu = {};
+        struct ModelBufferInfo {
+            TransientBuffer vertex_buffer = {};
+            TransientBuffer index_buffer = {};
+        };
+
+        u64 vertex_buffer_size = 0;
+        u64 index_buffer_size = 0;
+        // Per mesh staging buffer (CPU)
+        std::vector<ModelBufferInfo> staging_buffers = {};
     };
-    auto on_buffer_sizes = [](void *user_data, u32 vertex_count, u32 index_count, u32 mesh_count) {
+    auto on_new_node = [](void *user_data, u32 mesh_index, u32 vertex_count, u32 index_count, u32, glm::mat4 transform) {
         auto *info = static_cast<CallbackInfo *>(user_data);
         auto &transfer_man = info->device->transfer_man();
         auto vertex_buffer_size = vertex_count * sizeof(GPUModel::Vertex);
         auto index_buffer_size = index_count * sizeof(GPUModel::Index);
+        auto &node = info->model->nodes.emplace_back();
 
-        info->model->vertex_buffer = Buffer::create(*info->device, vertex_buffer_size).value();
-        info->model->index_buffer = Buffer::create(*info->device, index_buffer_size).value();
-        info->model->meshes.resize(mesh_count);
+        node.transform = transform;
+        node.mesh_indices.push_back(mesh_index);
 
-        info->vertex_buffer_cpu = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eCPUonly, vertex_buffer_size);
-        info->index_buffer_cpu = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eCPUonly, index_buffer_size);
+        if (info->model->meshes.size() <= mesh_index) {
+            info->model->meshes.resize(mesh_index + 1);
+        }
+
+        if (info->staging_buffers.size() <= mesh_index) {
+            info->staging_buffers.resize(mesh_index + 1);
+        }
+
+        auto &staging_buffer = info->staging_buffers[mesh_index];
+        staging_buffer.vertex_buffer = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eCPUonly, vertex_buffer_size);
+        staging_buffer.index_buffer = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eCPUonly, index_buffer_size);
+        info->vertex_buffer_size += vertex_buffer_size;
+        info->index_buffer_size += index_buffer_size;
     };
-    auto on_mesh_finish = [](void *user_data, u32 mesh_index, u32 vertex_count, u32 vertex_offset, u32 index_count, u32 index_offset) {
+    // auto on_new_primitive =
+    //     [](void *user_data, u32 mesh_index, u32 material_index, u32 vertex_count, u32 vertex_offset, u32 index_count, u32 index_offset) {
+    //         auto *info = static_cast<CallbackInfo *>(user_data);
+    //         auto &staging_buffer = info->staging_buffers[mesh_index];
+    //         auto *vertices = staging_buffer.vertex_buffer.host_ptr<GPUModel::Vertex>() + vertex_offset;
+    //         auto *indices = staging_buffer.index_buffer.host_ptr<u32>() + index_offset;
+    //         auto &mesh = info->model->meshes[mesh_index];
+    //         auto meshlet_index = static_cast<u32>(info->model->meshlets.size());
+    //
+    //         mesh.meshlet_indices.push_back(meshlet_index);
+    //         info->model->meshlets.push_back({
+    //             .vertex_offset = vertex_offset,
+    //             .vertex_count = vertex_count,
+    //             .index_offset = index_offset,
+    //             .index_count = index_count,
+    //         });
+    //
+    //         std::vector<u32> provoke(index_count);
+    //         std::vector<u32> reorder(vertex_count + index_count / 3);
+    //         reorder.resize(meshopt_generateProvokingIndexBuffer(provoke.data(), reorder.data(), indices, index_count, vertex_count));
+    //         std::memcpy(indices, provoke.data(), provoke.size() * sizeof(u32));
+    //     };
+    auto on_access_index = [](void *user_data, u32 mesh_index, u64 offset, u32 index) {
         auto *info = static_cast<CallbackInfo *>(user_data);
-        auto *indices = info->index_buffer_cpu.host_ptr<u32>() + index_offset;
-        auto &mesh = info->model->meshes[mesh_index];
-
-        mesh.meshlets.push_back({
-            .vertex_offset = vertex_offset,
-            .vertex_count = vertex_count,
-            .index_offset = index_offset,
-            .index_count = index_count,
-        });
-
-        // std::vector<u32> provoke(index_count);
-        // std::vector<u32> reorder(vertex_count + index_count / 3);
-        // reorder.resize(meshopt_generateProvokingIndexBuffer(provoke.data(), reorder.data(), indices, index_count, vertex_count));
-        // std::memcpy(indices, provoke.data(), provoke.size() * sizeof(u32));
-    };
-    auto on_access_index = [](void *user_data, u64 offset, u32 index) {
-        auto *info = static_cast<CallbackInfo *>(user_data);
-        auto *ptr = info->index_buffer_cpu.host_ptr<u32>() + offset;
+        auto *ptr = info->staging_buffers[mesh_index].index_buffer.host_ptr<u32>() + offset;
         *ptr = index;
     };
-    auto on_access_position = [](void *user_data, u64 offset, glm::vec3 position) {
+    auto on_access_position = [](void *user_data, u32 mesh_index, u64 offset, glm::vec3 position) {
         auto *info = static_cast<CallbackInfo *>(user_data);
-        auto *ptr = info->vertex_buffer_cpu.host_ptr<GPUModel::Vertex>() + offset;
+        auto *ptr = info->staging_buffers[mesh_index].vertex_buffer.host_ptr<GPUModel::Vertex>() + offset;
         ptr->position = position;
     };
-    auto on_access_normal = [](void *user_data, u64 offset, glm::vec3 normal) {
+    auto on_access_normal = [](void *user_data, u32 mesh_index, u64 offset, glm::vec3 normal) {
         auto *info = static_cast<CallbackInfo *>(user_data);
-        auto *ptr = info->vertex_buffer_cpu.host_ptr<GPUModel::Vertex>() + offset;
+        auto *ptr = info->staging_buffers[mesh_index].vertex_buffer.host_ptr<GPUModel::Vertex>() + offset;
         ptr->normal = normal;
     };
-    auto on_access_texcoord = [](void *user_data, u64 offset, glm::vec2 texcoord) {
+    auto on_access_texcoord = [](void *user_data, u32 mesh_index, u64 offset, glm::vec2 texcoord) {
         auto *info = static_cast<CallbackInfo *>(user_data);
-        auto *ptr = info->vertex_buffer_cpu.host_ptr<GPUModel::Vertex>() + offset;
+        auto *ptr = info->staging_buffers[mesh_index].vertex_buffer.host_ptr<GPUModel::Vertex>() + offset;
         ptr->tex_coord_0 = texcoord;
     };
-    auto on_access_color = [](void *user_data, u64 offset, glm::vec4 color) {
+    auto on_access_color = [](void *user_data, u32 mesh_index, u64 offset, glm::vec4 color) {
         auto *info = static_cast<CallbackInfo *>(user_data);
-        auto *ptr = info->vertex_buffer_cpu.host_ptr<GPUModel::Vertex>() + offset;
+        auto *ptr = info->staging_buffers[mesh_index].vertex_buffer.host_ptr<GPUModel::Vertex>() + offset;
         ptr->color = glm::packUnorm4x8(color);
     };
 
     CallbackInfo callback_info = { .device = impl->device, .model = model };
     GLTFModelCallbacks callbacks = {
         .user_data = &callback_info,
-        .on_buffer_sizes = on_buffer_sizes,
-        .on_mesh_finish = on_mesh_finish,
+        .on_new_node = on_new_node,
+        // .on_new_primitive = on_new_primitive,
         .on_access_index = on_access_index,
         .on_access_position = on_access_position,
         .on_access_normal = on_access_normal,
@@ -529,10 +553,69 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
     }
 
     auto &transfer_man = impl->device->transfer_man();
-    transfer_man.upload_staging(callback_info.vertex_buffer_cpu, model->vertex_buffer);
-    transfer_man.upload_staging(callback_info.index_buffer_cpu, model->index_buffer);
-    impl->device->set_name(model->vertex_buffer, "Model VB");
-    impl->device->set_name(model->index_buffer, "Model IB");
+    model->vertex_buffer = Buffer::create(*impl->device, callback_info.vertex_buffer_size).value();
+    model->index_buffer = Buffer::create(*impl->device, callback_info.index_buffer_size).value();
+
+    u32 vertex_offset = 0;
+    u32 index_offset = 0;
+    u32 triangle_offset = 0;
+    for (usize mesh_index = 0; mesh_index < callback_info.staging_buffers.size(); mesh_index++) {
+        auto &staging_buffer = callback_info.staging_buffers[mesh_index];
+        auto &mesh = model->meshes[mesh_index];
+
+        // Build meshlets
+        auto *vertices = staging_buffer.vertex_buffer.host_ptr<GPUModel::Vertex>();
+        const auto vertex_count = staging_buffer.vertex_buffer.buffer.size / sizeof(GPUModel::Vertex);
+        auto *indices = staging_buffer.index_buffer.host_ptr<GPUModel::Index>();
+        const auto index_count = staging_buffer.index_buffer.buffer.size / sizeof(GPUModel::Index);
+
+        const auto max_meshlets = meshopt_buildMeshletsBound(index_count, GPUModel::MAX_MESHLET_INDICES, GPUModel::MAX_MESHLET_PRIMITIVES);
+        auto meshlets = std::vector<meshopt_Meshlet>(max_meshlets);
+        auto meshlet_indices = std::vector<u32>(max_meshlets * GPUModel::MAX_MESHLET_INDICES);
+        auto meshlet_local_indices = std::vector<u8>(max_meshlets * GPUModel::MAX_MESHLET_PRIMITIVES * 3);
+        const auto meshlet_count = meshopt_buildMeshlets(
+            meshlets.data(),
+            meshlet_indices.data(),
+            meshlet_local_indices.data(),
+            indices,
+            index_count,
+            reinterpret_cast<const f32 *>(vertices),
+            vertex_count,
+            sizeof(GPUModel::Vertex),
+            GPUModel::MAX_MESHLET_INDICES,
+            GPUModel::MAX_MESHLET_PRIMITIVES,
+            0.0f);
+
+        meshlets.resize(meshlet_count);
+        const auto &last_meshlet = meshlets.back();
+        meshlet_indices.resize(last_meshlet.vertex_offset + last_meshlet.vertex_count);
+        meshlet_local_indices.resize(last_meshlet.triangle_offset + ((last_meshlet.triangle_count * 3 + 3) & ~3));
+        u64 new_index_buffer_size_bytes = meshlet_indices.size() * sizeof(GPUModel::Index);
+
+        // Combine meshlets
+        for (const auto &meshlet : meshlets) {
+            mesh.meshlet_indices.push_back(model->meshlets.size());
+            model->meshlets.push_back({
+                .vertex_offset = vertex_offset,
+                .index_count = meshlet.vertex_count,
+                .index_offset = index_offset + meshlet.vertex_offset,
+                .triangle_count = meshlet.triangle_count,
+                .triangle_offset = triangle_offset + meshlet.triangle_offset,
+            });
+        }
+
+        std::memcpy(indices, meshlet_indices.data(), new_index_buffer_size_bytes);
+        transfer_man.upload_staging(staging_buffer.vertex_buffer, model->vertex_buffer, vertex_offset * sizeof(GPUModel::Vertex));
+        transfer_man.upload_staging(staging_buffer.index_buffer, model->index_buffer, index_offset * sizeof(GPUModel::Index));
+
+        vertex_offset += vertex_count;
+        index_offset += meshlet_indices.size();
+        triangle_offset += meshlet_local_indices.size();
+    }
+
+    auto model_name = fs::relative(asset->path, impl->root_path).string();
+    impl->device->set_name(model->vertex_buffer, stack.format("{} VB", model_name));
+    impl->device->set_name(model->index_buffer, stack.format("{} IB", model_name));
 
     asset->acquire_ref();
     return true;
@@ -696,8 +779,7 @@ auto AssetManager::load_material(const UUID &uuid, const Material &material_info
     };
 
     auto &transfer_man = impl->device->transfer_man();
-    transfer_man.upload_staging(
-        impl->material_buffer, ls::span(ls::bit_cast<u8 *>(&gpu_material), sizeof(GPUMaterial)), gpu_buffer_offset, sizeof(GPUMaterial));
+    transfer_man.upload_staging(ls::span(ls::bit_cast<u8 *>(&gpu_material), sizeof(GPUMaterial)), impl->material_buffer, gpu_buffer_offset);
 
     asset->acquire_ref();
     return true;

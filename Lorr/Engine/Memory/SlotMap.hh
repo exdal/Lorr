@@ -70,7 +70,7 @@ public:
         ZoneScoped;
 
         if (self.is_valid(id)) {
-            auto [version, index] = SlotMap_decode_id(id);
+            auto index = SlotMap_decode_id(id).index;
             self.states[index] = false;
             self.versions[index] += 1;
             if (self.versions[index] < ~0_u32) {
@@ -103,7 +103,7 @@ public:
         ZoneScoped;
 
         if (self.is_valid(id)) {
-            auto [_, index] = SlotMap_decode_id(id);
+            auto index = SlotMap_decode_id(id).index;
             return &self.slots[index];
         }
 

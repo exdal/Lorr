@@ -275,7 +275,7 @@ void EditorLayout::render(this EditorLayout &self, vuk::Format format, vuk::Exte
                     ImGui::TableSetColumnIndex(2);
                     ImGui::TextUnformatted(asset_path.c_str());
                     ImGui::TableSetColumnIndex(3);
-                    ImGui::TextUnformatted(stack.format("{}", asset.unpacked_id.index).data());
+                    ImGui::TextUnformatted(stack.format("{}", SlotMap_decode_id(asset.scene_id).index).data());
                     ImGui::TableSetColumnIndex(4);
                     ImGui::TextUnformatted(stack.format("{}", asset.ref_count).data());
                 }

@@ -35,22 +35,32 @@ struct Material {
 
 enum class ModelID : u64 { Invalid = std::numeric_limits<u64>::max() };
 struct Model {
-    std::vector<UUID> textures = {};
-    std::vector<UUID> materials = {};
-
     struct Meshlet {
         u32 vertex_offset = 0;
-        u32 vertex_count = 0;
-        u32 index_offset = 0;
         u32 index_count = 0;
+        u32 index_offset = 0;
+        u32 triangle_count = 0;
+        u32 triangle_offset = 0;
+        MaterialID material_id = MaterialID::Invalid;
     };
 
     struct Mesh {
         std::string name = {};
-        std::vector<Meshlet> meshlets = {};
+        std::vector<u32> meshlet_indices = {};
     };
 
+    struct Node {
+        std::vector<u32> mesh_indices = {};
+        std::vector<u32> child_indices = {};
+        glm::mat4 transform = {};
+        std::string name = {};
+    };
+
+    std::vector<UUID> textures = {};
+    std::vector<UUID> materials = {};
+    std::vector<Meshlet> meshlets = {};
     std::vector<Mesh> meshes = {};
+    std::vector<Node> nodes = {};
 
     Buffer vertex_buffer = {};
     Buffer index_buffer = {};

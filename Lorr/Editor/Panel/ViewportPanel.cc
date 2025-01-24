@@ -2,7 +2,7 @@
 
 #include "Editor/EditorApp.hh"
 
-#include "Engine/World/ECSModule/Core.hh"
+#include "Engine/Scene/ECSModule/Core.hh"
 
 #include <ImGuizmo.h>
 

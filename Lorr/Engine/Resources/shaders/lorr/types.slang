@@ -83,7 +83,6 @@ public struct ImageView<Format> {
         return this.handle;
     }
 };
-
 #endif
 
 public struct SampledImage<Format> {
@@ -107,5 +106,4 @@ public struct SampledImage<Format> {
         return __textures[this.image_view_id].as<Texture3D<Format>>().Sample(__samplers[this.sampler_id], uvw);
     }
 #endif
-
 };

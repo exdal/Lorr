@@ -135,11 +135,11 @@ public struct AtmosphereIntegrateInfo {
 };
 
 public func integrate_single_scattered_luminance(
-    in World *world,
+    in Scene scene,
     in AtmosphereIntegrateInfo info) -> AtmosphereLuminance
 {
     AtmosphereLuminance result;
-    Atmosphere *atmos = world->atmosphere;
+    Atmosphere *atmos = scene.atmosphere;
 
     const let atmos_intersection = lr::ray_sphere_intersect_nearest(info.eye_pos, info.eye_dir, atmos->atmos_radius);
     const let planet_intersection = lr::ray_sphere_intersect_nearest(info.eye_pos, info.eye_dir, atmos->planet_radius);

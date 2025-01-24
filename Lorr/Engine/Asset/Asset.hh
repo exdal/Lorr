@@ -5,11 +5,9 @@
 
 #include "Engine/Graphics/Vulkan.hh"
 
-#include "Engine/Memory/SlotMap.hh"
-
 #include "Engine/Util/JsonWriter.hh"
 
-#include "Engine/World/Scene.hh"
+#include "Engine/Scene/Scene.hh"
 
 namespace lr {
 enum class AssetType : u32 {
@@ -44,7 +42,6 @@ struct Asset {
         TextureID texture_id;
         MaterialID material_id;
         SceneID scene_id;
-        SlotMapIDUnpacked unpacked_id;
     };
 
     // Reference count of loads

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Panel/Panels.hh"
+#include "Editor/Panel/Panels.hh"
 
 #include "Engine/Asset/UUID.hh"
 #include "Engine/Graphics/VulkanTypes.hh"

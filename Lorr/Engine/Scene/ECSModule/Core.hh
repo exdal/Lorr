@@ -1,6 +1,7 @@
 #pragma once
 
-#include "Engine/Asset/Model.hh"  // IWYU pragma: export
+#include "Engine/Asset/Model.hh"          // IWYU pragma: export
+#include "Engine/Scene/SceneRenderer.hh"  // IWYU pragma: export
 
 #include <flecs.h>
 
@@ -14,9 +15,9 @@ struct std::formatter<flecs::string_view> : formatter<string_view> {
 
 namespace lr::ECS {
 #define ECS_EXPORT_TYPES
-#include "Engine/World/ECSModule/Reflect.hh"
+#include "Engine/Scene/ECSModule/Reflect.hh"
 
-#include "Engine/World/ECSModule/CoreComponents.hh"
+#include "Engine/Scene/ECSModule/CoreComponents.hh"
 #undef ECS_EXPORT_TYPES
 
 #undef ECS_COMPONENT_BEGIN

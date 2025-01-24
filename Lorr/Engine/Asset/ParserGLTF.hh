@@ -5,13 +5,6 @@
 #include "Engine/Graphics/VulkanTypes.hh"
 
 namespace lr {
-struct GLTFVertex {
-    glm::vec3 position = {};
-    glm::vec3 normal = {};
-    glm::vec2 tex_coord_0 = {};
-    u32 color = 0;
-};
-
 struct GLTFSamplerInfo {
     vuk::Filter mag_filter = {};
     vuk::Filter min_filter = {};
@@ -43,31 +36,32 @@ struct GLTFMaterialInfo {
     ls::option<u32> emissive_texture_index;
 };
 
-struct GLTFPrimitiveInfo {
-    u32 vertex_offset = 0;
-    u32 vertex_count = 0;
-    u32 index_offset = 0;
-    u32 index_count = 0;
-    u32 material_index = 0;
-};
-
-struct GLTFMeshInfo {
-    std::string name = {};
-    std::vector<u32> primitive_indices = {};
-};
-
 struct GLTFModelCallbacks {
+    // clang-format off
     void *user_data = nullptr;
-    void (*on_buffer_sizes)(void *user_data, u32 vertex_count, u32 index_count, u32 mesh_count) = nullptr;
-    void (*on_mesh_finish)(void *user_data, u32 mesh_index, u32 vertex_count, u32 vertex_offset, u32 index_count, u32 index_offset) =
-        nullptr;
+    void (*on_new_node)
+       (void *user_data,
+        u32 mesh_index,
+        u32 vertex_count,
+        u32 index_count,
+        u32 primitive_count,
+        glm::mat4 transform) = nullptr;
+    void (*on_new_primitive)
+       (void *user_data,
+        u32 mesh_index,
+        u32 material_index,
+        u32 vertex_count,
+        u32 vertex_offset,
+        u32 index_count,
+        u32 index_offset) = nullptr;
+    // clang-format on
 
     // Accessors
-    void (*on_access_index)(void *user_data, u64 offset, u32 index) = nullptr;
-    void (*on_access_position)(void *user_data, u64 offset, glm::vec3 position) = nullptr;
-    void (*on_access_normal)(void *user_data, u64 offset, glm::vec3 normal) = nullptr;
-    void (*on_access_texcoord)(void *user_data, u64 offset, glm::vec2 texcoord) = nullptr;
-    void (*on_access_color)(void *user_data, u64 offset, glm::vec4 color) = nullptr;
+    void (*on_access_index)(void *user_data, u32 mesh_index, u64 offset, u32 index) = nullptr;
+    void (*on_access_position)(void *user_data, u32 mesh_index, u64 offset, glm::vec3 position) = nullptr;
+    void (*on_access_normal)(void *user_data, u32 mesh_index, u64 offset, glm::vec3 normal) = nullptr;
+    void (*on_access_texcoord)(void *user_data, u32 mesh_index, u64 offset, glm::vec2 texcoord) = nullptr;
+    void (*on_access_color)(void *user_data, u32 mesh_index, u64 offset, glm::vec4 color) = nullptr;
 };
 
 struct GLTFModelInfo {
@@ -75,8 +69,6 @@ struct GLTFModelInfo {
     std::vector<GLTFImageInfo> images = {};
     std::vector<GLTFTextureInfo> textures = {};
     std::vector<GLTFMaterialInfo> materials = {};
-    std::vector<GLTFPrimitiveInfo> primitives = {};
-    std::vector<GLTFMeshInfo> meshes = {};
 
     static auto parse(const fs::path &path, GLTFModelCallbacks callbacks = {}) -> ls::option<GLTFModelInfo>;
 };

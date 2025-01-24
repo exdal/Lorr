@@ -4,11 +4,7 @@ import "../lorr";
 [[vk::binding(0, 0)]] SamplerState sampler;
 [[vk::binding(1, 0)]] Texture2D<float4> transmittance_lut;
 [[vk::binding(2, 0)]] Texture2D<float4> sky_view_lut;
-
-struct PushConstants {
-    World *world;
-};
-[[vk::push_constant]] PushConstants c;
+[[vk::binding(3, 0)]] Scene scene;
 
 struct VertexOutput {
     float4 position     : SV_Position;
@@ -40,9 +36,9 @@ float3 draw_sun(float3 world_dir, float3 sun_dir, float radius) {
 
 [shader("fragment")]
 float4 fs_main(VertexOutput input) : SV_TARGET {
-    Camera *camera = &c.world->cameras[c.world.active_camera_index];
-    Atmosphere *atmos = c.world->atmosphere;
-    Sun *sun = c.world->sun;
+    Camera *camera = &scene.cameras[scene.active_camera_index];
+    Atmosphere *atmos = scene.atmosphere;
+    Sun *sun = scene.sun;
     
     float3 clip_space = float3(input.tex_coord * 2.0 - 1.0, 1.0);
     float4 clip_pos = mul(camera->inv_projection_view_mat, float4(clip_space, 1.0));

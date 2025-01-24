@@ -36,12 +36,23 @@ struct TransferManager {
 
     auto alloc_transient_buffer(this TransferManager &, vuk::MemoryUsage usage, usize size) -> TransientBuffer;
 
-    auto upload_staging(this TransferManager &, Buffer &buffer, ls::span<u8> bytes, u64 offset, u64 element_size) -> void;
-    auto upload_staging(this TransferManager &, TransientBuffer &src, Buffer &dst) -> void;
+    auto upload_staging(this TransferManager &, ls::span<u8> bytes, Buffer &dst, u64 dst_offset = 0) -> void;
+    auto upload_staging(this TransferManager &, TransientBuffer &src, Buffer &dst, u64 dst_offset = 0) -> void;
     auto upload_staging(this TransferManager &, TransientBuffer &src, TransientBuffer &dst) -> void;
     auto upload_staging(this TransferManager &, ImageView &image_view, ls::span<u8> bytes) -> void;
 
     auto wait_on(this TransferManager &, vuk::UntypedValue &&fut) -> void;
+
+    template<typename T>
+    auto scratch_buffer(const T &val) -> vuk::Buffer {
+        ZoneScoped;
+
+        auto transient_buf = this->alloc_transient_buffer(vuk::MemoryUsage::eCPUtoGPU, sizeof(T));
+        std::memcpy(transient_buf.host_ptr<T>(), &val, sizeof(T));
+
+        return transient_buf.buffer;
+        // return vuk::discard_buf(name, transient_buf.buffer);
+    }
 
 protected:
     auto wait_for_ops(this TransferManager &, vuk::Allocator &allocator, vuk::Compiler &compiler) -> void;

@@ -1,11 +1,14 @@
 #pragma once
 
 #include "Engine/Asset/Asset.hh"
+
 #include "Engine/Graphics/ImGuiRenderer.hh"
 #include "Engine/Graphics/Vulkan.hh"
 #include "Engine/Graphics/VulkanDevice.hh"
+
 #include "Engine/Window/Window.hh"
-#include "Engine/World/SceneRenderer.hh"
+
+#include "Engine/Scene/SceneRenderer.hh"
 
 namespace lr {
 struct ApplicationInfo {

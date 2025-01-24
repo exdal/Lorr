@@ -2,7 +2,7 @@
 
 #include "Editor/EditorApp.hh"
 
-#include "Engine/World/ECSModule/Core.hh"
+#include "Engine/Scene/ECSModule/Core.hh"
 
 #include <ImGuizmo.h>
 
@@ -42,7 +42,7 @@ void ViewportPanel::on_drop(this ViewportPanel &) {
         switch (asset->type) {
             case AssetType::Scene: {
                 if (app.active_scene_uuid.has_value()) {
-                    app.asset_man.export_asset(*uuid, asset->path);
+                    app.selected_entity = {};
                     app.asset_man.unload_scene(app.active_scene_uuid.value());
                 }
 

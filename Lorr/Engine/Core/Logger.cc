@@ -10,8 +10,6 @@ struct LoggerImpl {
         fs::path log_path = fs::current_path() / std::format("{}.log", log_name);
         this->file = File(log_path, FileAccess::Write);
     }
-
-    ~LoggerImpl() { this->file.close(); }
 };
 
 static LoggerImpl GLOBAL_LOGGER;
@@ -20,6 +18,12 @@ void Logger::init(std::string_view name) {
     ZoneScoped;
 
     GLOBAL_LOGGER.init(name);
+}
+
+void Logger::deinit() {
+    ZoneScoped;
+
+    GLOBAL_LOGGER.file.close();
 }
 
 void Logger::to_file(std::string_view str) {

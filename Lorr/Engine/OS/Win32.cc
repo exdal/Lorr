@@ -113,8 +113,7 @@ auto os::file_seek(FileDescriptor file, i64 offset) -> void {
 auto os::file_dialog(std::string_view title, FileDialogFlag flags) -> ls::option<fs::path> {
     ZoneScoped;
 
-    
-    //OPENFILENAME ofn = {};
+    // OPENFILENAME ofn = {};
 
     return {};
 }
@@ -144,7 +143,8 @@ auto os::file_watcher_init(const fs::path &root_dir) -> std::expected<FileWatche
     ZoneScoped;
 
     FileWatcherDescriptor result = {};
-    auto handle = CreateFile(root_dir.c_str(),
+    auto handle = CreateFile(
+        root_dir.c_str(),
         FILE_LIST_DIRECTORY,
         FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
         nullptr,
@@ -189,6 +189,7 @@ auto os::file_watcher_read(FileWatcherDescriptor &watcher, u8 *buffer, usize buf
     overlapped.hEvent = event_handle;
 
     ReadDirectoryChangesW(handle, buffer, buffer_size, true, WATCH_FILTERS, nullptr, &overlapped, nullptr);
+    // TODO: Game loop too slow to handle this, we are losing data.
     if (WaitForSingleObject(event_handle, 0) == WAIT_OBJECT_0) {
         DWORD bytes_read = 0;
         GetOverlappedResult(handle, &overlapped, &bytes_read, false);
@@ -222,7 +223,6 @@ auto os::file_watcher_peek(FileWatcherDescriptor &watcher, u8 *buffer, i64 &buff
     }
 
     LOG_TRACE("FileName: {}", file_name);
-    
     return FileEvent{
         .file_name = std::move(file_name),
         .action_mask = action_mask,

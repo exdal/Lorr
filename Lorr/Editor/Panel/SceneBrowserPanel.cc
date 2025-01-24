@@ -3,7 +3,7 @@
 #include "Editor/EditorApp.hh"
 
 #include "Engine/Memory/Stack.hh"
-#include "Engine/World/ECSModule/Core.hh"
+#include "Engine/Scene/ECSModule/Core.hh"
 
 namespace lr {
 SceneBrowserPanel::SceneBrowserPanel(std::string name_, bool open_)

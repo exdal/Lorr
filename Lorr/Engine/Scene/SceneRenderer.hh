@@ -3,6 +3,8 @@
 #include "Engine/Graphics/VulkanDevice.hh"
 
 namespace lr {
+enum class GPUEntityID : u64 { Invalid = ~0_u64 };
+
 struct GPUSunData {
     glm::vec3 direction = {};
     f32 intensity = 10.0f;
@@ -71,6 +73,8 @@ struct GPUMaterial {
 };
 
 struct GPUModel {
+    constexpr static auto MAX_MESHLET_INDICES = 64_sz;
+    constexpr static auto MAX_MESHLET_PRIMITIVES = 64_sz;
     struct Vertex {
         glm::vec3 position = {};
         glm::vec3 normal = {};
@@ -79,41 +83,46 @@ struct GPUModel {
     };
     using Index = u32;
 
-    struct Primitive {
+    struct Meshlet {
         u32 vertex_offset = 0;
-        u32 vertex_count = 0;
-        u32 index_offset = 0;
         u32 index_count = 0;
+        u32 index_offset = 0;
+        u32 triangle_count = 0;
+        u32 triangle_offset = 0;
         u32 material_index = 0;
     };
 
     struct Mesh {
-        std::vector<u32> primitive_indices = {};
+        std::vector<u32> meshlet_indices = {};
     };
 
-    std::vector<Primitive> primitives = {};
-    std::vector<Mesh> meshes = {};
+    struct Node {
+        std::vector<u32> mesh_indices = {};
+        u32 transform_index = 0;
+    };
 
-    u32 transform_index = 0;
+    std::vector<Meshlet> meshlets = {};
+    std::vector<Mesh> meshes = {};
+    std::vector<Node> nodes = {};
+
     BufferID vertex_bufffer_id = BufferID::Invalid;
     BufferID index_buffer_id = BufferID::Invalid;
 };
 
-struct GPUModelTransformData {
-    glm::mat4 model_transform_mat = {};
-    glm::mat4 world_transform_mat = {};
+struct GPUMeshTransformData {
+    glm::mat4 transform_mat = {};
 };
 
 // WARN: THIS IS GPU WORLD DATA, DO NOT CHANGE THIS WITHOUT
 // SHADER MODIFICATION!!! PLACE CPU RELATED STUFF AT `WorldRenderContext`!
 //
-struct GPUWorldData {
-    SamplerID linear_sampler_id = SamplerID::Invalid;
-    SamplerID nearest_sampler_id = SamplerID::Invalid;
+struct GPUSceneData {
+    u32 linear_sampler_index = ~0_u32;
+    u32 nearest_sampler_index = ~0_u32;
 
     u64 cameras_ptr = 0;
     u64 materials_ptr = 0;
-    u64 model_transforms_ptr = 0;
+    u64 mesh_transforms_ptr = 0;
     u64 sun_ptr = 0;
     u64 atmosphere_ptr = 0;
     u64 clouds_ptr = 0;
@@ -125,8 +134,8 @@ struct GPUWorldData {
 };
 
 struct SceneRenderBeginInfo {
-    i32 camera_count = 0;
-    i32 model_transform_count = 0;
+    u32 camera_count = 0;
+    u32 mesh_transform_count = 0;
     bool has_sun = false;
     bool has_atmosphere = false;
 };
@@ -137,18 +146,18 @@ struct SceneRenderInfo {
     std::vector<GPUModel> models = {};
 
     GPUCameraData *cameras = nullptr;
-    GPUModelTransformData *model_transforms = nullptr;
+    GPUMeshTransformData *mesh_transforms = nullptr;
     GPUSunData *sun = nullptr;
     GPUAtmosphereData *atmosphere = nullptr;
 
     // Internals
     ls::option<u64> offset_cameras;
-    ls::option<u64> offset_model_transforms;
+    ls::option<u64> offset_mesh_transforms;
     ls::option<u64> offset_models;
     ls::option<u64> offset_sun;
     ls::option<u64> offset_atmosphere;
     u64 upload_size = 0;
-    TransientBuffer world_data = {};
+    TransientBuffer buffer = {};
 };
 
 struct SceneRenderer {
@@ -164,8 +173,7 @@ struct SceneRenderer {
 private:
     Device *device = nullptr;
 
-    u64 world_ptr = 0;
-    GPUWorldData world_data = {};
+    GPUSceneData scene_data = {};
     std::vector<GPUModel> rendering_models = {};
 
     Sampler linear_sampler = {};

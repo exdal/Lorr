@@ -11,18 +11,14 @@ struct FragmentOutput {
     float depth  : SV_Depth;
 };
 
-struct PushConstants {
-    World *world;
-};
-[[vk::push_constant]] PushConstants c;
+[[vk::binding(0, 0)]] Scene scene;
 
 float3 UnprojectPoint(float x, float y, float z, float4x4 view_proj_mat_inv) {
     float4 unprojectedPoint =  mul(view_proj_mat_inv, float4(x, y, z, 1.0));
     return unprojectedPoint.xyz / unprojectedPoint.w;
 }
 
-float4 pristine_grid(float3 uv, float2 lineWidth)
-{
+float4 pristine_grid(float3 uv, float2 lineWidth) {
     float2 ddx = ddx_fine(uv.xz);
     float2 ddy = ddy_fine(uv.xz);
     float2 uvDeriv = float2(length(float2(ddx.x, ddy.x)), length(float2(ddx.y, ddy.y)));
@@ -59,7 +55,7 @@ float4 pristine_grid(float3 uv, float2 lineWidth)
 [shader("vertex")]
 VertexOutput vs_main(u32 vertex_id : SV_VertexID) {
     VertexOutput output;
-    Camera *camera = &c.world->cameras[c.world.active_camera_index];
+    Camera *camera = &scene.cameras[scene.active_camera_index];
 
     float2 uv = float2((vertex_id << 1) & 2, vertex_id & 2);
     output.position = float4(uv * float2(2.0, 2.0) - float2(1.0, 1.0), 0.5, 1);
@@ -71,7 +67,7 @@ VertexOutput vs_main(u32 vertex_id : SV_VertexID) {
 
 [shader("fragment")]
 FragmentOutput fs_main(VertexOutput input) {
-    Camera *camera = &c.world->cameras[c.world.active_camera_index];
+    Camera *camera = &scene.cameras[scene.active_camera_index];
 
     FragmentOutput output;
     float t = -input.near_pos.y / (input.far_pos.y - input.near_pos.y);

@@ -5,9 +5,9 @@ import "../lorr";
 [[vk::binding(1, 0)]] RWTexture3D<float4> aerial_perspective_lut;
 [[vk::binding(2, 0)]] Texture2D<float4> transmittance_lut;
 [[vk::binding(3, 0)]] Texture2D<float4> multiscattering_lut;
+[[vk::binding(4, 0)]] Scene scene;
 
 struct PushConstants {
-    World *world;
     float3 target_image_size;
     u32 pad;
 };
@@ -16,10 +16,9 @@ struct PushConstants {
 [shader("compute")]
 [numthreads(16, 16, 1)]
 void cs_main(uint3 thread_id : SV_DispatchThreadID) {
-    World *world = c.world;
-    Camera *camera = &world->cameras[c.world->active_camera_index];
-    Atmosphere *atmos = world->atmosphere;
-    Sun *sun = world->sun;
+    Camera *camera = &scene.cameras[scene.active_camera_index];
+    Atmosphere *atmos = scene.atmosphere;
+    Sun *sun = scene.sun;
 
     float2 uv = (float2(thread_id.xy) + 0.5) / c.target_image_size.xy;
     float3 clip_space = float3(2.0 * uv - 1.0, 0.5);
@@ -96,7 +95,7 @@ void cs_main(uint3 thread_id : SV_DispatchThreadID) {
     info.sampling.variable_sample_count = false;
     info.sampling.initial_sample_count = max(1.0, (float(thread_id.z) + 1.0) * 2.0);
 
-    const let result = integrate_single_scattered_luminance(world, info);
+    const let result = integrate_single_scattered_luminance(scene, info);
     const float transmittance = dot(result.transmittance, float3(1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f));
     aerial_perspective_lut[thread_id] = float4(result.luminance, transmittance);
 }

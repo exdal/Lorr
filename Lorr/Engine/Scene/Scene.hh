@@ -1,13 +1,13 @@
 #pragma once
 
-#include "Engine/World/SceneRenderer.hh"
+#include "Engine/Scene/SceneRenderer.hh"
 
 #include <flecs.h>
 
 namespace lr {
 struct AssetManager;
 
-enum class SceneID : u32 { Invalid = ~0_u32 };
+enum class SceneID : u64 { Invalid = ~0_u64 };
 struct Scene {
     auto init(this Scene &, const std::string &name) -> bool;
     auto destroy(this Scene &) -> void;
@@ -29,7 +29,6 @@ struct Scene {
     auto get_root(this Scene &) -> flecs::entity;
     auto get_world(this Scene &) -> flecs::world &;
     auto editor_camera(this Scene &) -> flecs::entity;
-    auto get_cameras(this Scene &) -> ls::span<flecs::entity>;
     auto get_name(this Scene &) -> const std::string &;
     auto get_name_sv(this Scene &) -> std::string_view;
     auto get_imported_modules(this Scene &) -> ls::span<flecs::entity>;
@@ -38,8 +37,10 @@ private:
     std::string name = {};
     flecs::entity root = {};
     ls::option<flecs::world> world = ls::nullopt;
+
     std::vector<flecs::entity> imported_modules = {};
-    std::vector<flecs::entity> cameras = {};
+    GPUEntityID editor_camera_id = GPUEntityID::Invalid;
+    SlotMap<flecs::entity, GPUEntityID> cameras = {};
 
     friend AssetManager;
 };

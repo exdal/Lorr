@@ -4,11 +4,7 @@ import "../lorr";
 [[vk::binding(0, 0)]] SamplerState sampler;
 [[vk::binding(1, 0)]] Texture2D<float4> depth_image;
 [[vk::binding(2, 0)]] Texture3D<float4> aerial_perspective_lut;
-
-struct PushConstants {
-    World *world;
-};
-[[vk::push_constant]] PushConstants c;
+[[vk::binding(3, 0)]] Scene scene;
 
 struct VertexOutput {
     float4 position     : SV_Position;
@@ -26,9 +22,8 @@ VertexOutput vs_main(u32 vertex_id : SV_VertexID) {
 
 [shader("fragment")]
 float4 fs_main(VertexOutput input) : SV_TARGET {
-    World *world = c.world;
-    Camera *active_camera = &world->cameras[world->active_camera_index];
-    Atmosphere *atmos = world->atmosphere;
+    Camera *active_camera = &scene.cameras[scene.active_camera_index];
+    Atmosphere *atmos = scene.atmosphere;
 
     float sampled_depth = depth_image.Sample(sampler, input.tex_coord).r;
     if (sampled_depth == 1.0) {

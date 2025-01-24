@@ -27,6 +27,10 @@ void EditorLayout::init(this EditorLayout &self) {
     add_texture("scene", "scene.png");
 }
 
+auto EditorLayout::destroy(this EditorLayout &self) -> void {
+    self.panels.clear();
+}
+
 void EditorLayout::setup_theme(this EditorLayout &, EditorTheme) {
     ZoneScoped;
 
@@ -192,11 +196,6 @@ void EditorLayout::render(this EditorLayout &self, vuk::Format format, vuk::Exte
 
         if (ImGui::BeginMenuBar()) {
             if (ImGui::BeginMenu("File")) {
-                if (ImGui::MenuItem("New Scene", nullptr)) {
-                }
-
-                ImGui::Separator();
-
                 if (ImGui::MenuItem("Save Project", nullptr, false)) {
                     app.save_project();
                 }
@@ -204,7 +203,7 @@ void EditorLayout::render(this EditorLayout &self, vuk::Format format, vuk::Exte
                 ImGui::Separator();
 
                 if (ImGui::MenuItem("Exit")) {
-                    app.shutdown();
+                    app.should_close = true;
                 }
 
                 ImGui::EndMenu();
@@ -213,6 +212,10 @@ void EditorLayout::render(this EditorLayout &self, vuk::Format format, vuk::Exte
             if (ImGui::BeginMenu("View")) {
                 if (ImGui::MenuItem("Task Graph Profiler")) {
                     self.show_profiler = !self.show_profiler;
+                }
+
+                if (ImGui::MenuItem("Show Assets")) {
+                    self.show_assets = !self.show_assets;
                 }
 
                 ImGui::EndMenu();
@@ -225,6 +228,62 @@ void EditorLayout::render(this EditorLayout &self, vuk::Format format, vuk::Exte
 
         if (self.show_profiler) {
             app.scene_renderer.draw_profiler_ui();
+        }
+
+        if (self.show_assets) {
+            const auto &registry = app.asset_man.registry();
+            ImGui::Begin("Assets", &self.show_assets);
+
+            usize loaded_assets = 0;
+            for (const auto &asset_it : registry) {
+                if (asset_it.second.is_loaded()) {
+                    loaded_assets++;
+                }
+            }
+
+            ImGui::Text("%lu total assets, %lu loaded.", registry.size(), loaded_assets);
+
+            ImGuiTableFlags table_flags = ImGuiTableFlags_Resizable;
+            table_flags |= ImGuiTableFlags_Hideable;
+            table_flags |= ImGuiTableFlags_RowBg;
+            table_flags |= ImGuiTableFlags_Borders;
+            table_flags |= ImGuiTableFlags_ScrollX;
+            table_flags |= ImGuiTableFlags_ScrollY;
+            if (ImGui::BeginTable("assets", 5, table_flags)) {
+                ImGui::TableSetupColumn("UUID", ImGuiTableColumnFlags_WidthStretch, 0.0f);
+                ImGui::TableSetupColumn("Type", ImGuiTableColumnFlags_WidthStretch, 0.0f);
+                ImGui::TableSetupColumn("Path", ImGuiTableColumnFlags_WidthStretch, 0.0f);
+                ImGui::TableSetupColumn("Index", ImGuiTableColumnFlags_WidthStretch, 0.0f);
+                ImGui::TableSetupColumn("Ref Count", ImGuiTableColumnFlags_WidthStretch, 0.0f);
+
+                ImGui::TableHeadersRow();
+
+                for (const auto &asset_it : registry) {
+                    memory::ScopedStack stack;
+                    const auto &asset_uuid = asset_it.first;
+                    const auto &asset = asset_it.second;
+                    auto asset_uuid_str = asset_uuid.str();
+                    auto asset_path = fs::relative(asset.path, app.active_project->root_dir).string();
+
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+
+                    ImGui::TableSetColumnIndex(0);
+                    ImGui::TextUnformatted(asset_uuid_str.c_str());
+                    ImGui::TableSetColumnIndex(1);
+                    ImGui::TextUnformatted(app.asset_man.to_asset_type_sv(asset.type).data());
+                    ImGui::TableSetColumnIndex(2);
+                    ImGui::TextUnformatted(asset_path.c_str());
+                    ImGui::TableSetColumnIndex(3);
+                    ImGui::TextUnformatted(stack.format("{}", SlotMap_decode_id(asset.scene_id).index).data());
+                    ImGui::TableSetColumnIndex(4);
+                    ImGui::TextUnformatted(stack.format("{}", asset.ref_count).data());
+                }
+
+                ImGui::EndTable();
+            }
+
+            ImGui::End();
         }
 
         for (auto &panel : self.panels) {

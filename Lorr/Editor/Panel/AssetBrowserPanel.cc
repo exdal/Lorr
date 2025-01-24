@@ -3,6 +3,22 @@
 #include "Editor/EditorApp.hh"
 
 namespace lr {
+auto is_subpath(const fs::path &parent, const fs::path &child) -> bool {
+    auto parent_abs = fs::weakly_canonical(parent);
+    auto child_abs = fs::weakly_canonical(child);
+
+    auto parent_iter = parent_abs.begin();
+    auto child_iter = child_abs.begin();
+
+    for (; parent_iter != parent_abs.end(); ++parent_iter, ++child_iter) {
+        if (child_iter == child_abs.end() || *parent_iter != *child_iter) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 struct AssetDirectoryCallbacks {
     void *user_data = nullptr;
     void (*on_new_directory)(void *user_data, AssetDirectory *directory) = nullptr;
@@ -36,7 +52,11 @@ AssetDirectory::AssetDirectory(fs::path path_, FileWatcher *file_watcher_, Asset
 }
 
 AssetDirectory::~AssetDirectory() {
+    auto &app = EditorApp::get();
     this->file_watcher->remove_dir(this->watch_descriptor);
+    for (const auto &asset_uuid : this->asset_uuids) {
+        app.asset_man.delete_asset(asset_uuid);
+    }
 }
 
 auto AssetDirectory::add_subdir(this AssetDirectory &self, const fs::path &path) -> AssetDirectory * {
@@ -129,17 +149,25 @@ auto AssetBrowserPanel::add_directory(this AssetBrowserPanel &self, const fs::pa
         parent = self.find_directory(path.parent_path());
     }
 
-    auto dir = std::make_unique<AssetDirectory>(path, &self.file_watcher, parent);
-    populate_directory(dir.get(), {});
-
     if (parent) {
+        for (const auto &v : parent->subdirs) {
+            if (v->path == path) {
+                return nullptr;
+            }
+        }
+
         // NOTE: If there is parent, we are not creating new root directory.
         // So just return nullptr, instead of another owning directory.
         // This is intentional. You should find this new child directory
         // through `::find_directory`.
+        auto dir = std::make_unique<AssetDirectory>(path, &self.file_watcher, parent);
+        populate_directory(dir.get(), {});
         parent->add_subdir(std::move(dir));
         return nullptr;
     }
+
+    auto dir = std::make_unique<AssetDirectory>(path, &self.file_watcher, nullptr);
+    populate_directory(dir.get(), {});
 
     return dir;
 }
@@ -154,17 +182,20 @@ auto AssetBrowserPanel::remove_directory(this AssetBrowserPanel &self, const fs:
 }
 
 auto AssetBrowserPanel::remove_directory(this AssetBrowserPanel &self, AssetDirectory *directory) -> void {
+    auto *parent_dir = directory->parent;
     const auto &path = directory->path;
-    //if (is_inside(path, self.current_dir->path)) {
-    //    self.current_dir = directory->parent;
-    //}
-
     fs::remove_all(path);
 
+    // If we are inside, set cur dir to closest alive dir
+    if (is_subpath(path, self.current_dir->path)) {
+        self.current_dir = parent_dir;
+    }
+
     // Remove found directory from its parent
-    auto *parent_dir = directory->parent;
     if (parent_dir) {
-        std::erase_if(parent_dir->subdirs, [directory](const auto &v) { return v.get() == directory; });
+        std::erase_if(parent_dir->subdirs, [directory](const auto &v) {  //
+            return v->path == directory->path;
+        });
     }
 }
 
@@ -221,6 +252,7 @@ void AssetBrowserPanel::draw_dir_contents(this AssetBrowserPanel &self) {
 
     ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, { padding, padding });
     if (ImGui::BeginTable("asset_browser", tile_count, table_flags)) {
+        std::vector<AssetDirectory *> deleting_dirs = {};  // this is to avoid iterator corruption
         for (const auto &subdir : self.current_dir->subdirs) {
             ImGui::TableNextColumn();
 
@@ -228,13 +260,17 @@ void AssetBrowserPanel::draw_dir_contents(this AssetBrowserPanel &self) {
             if (ImGuiLR::image_button(file_name, dir_image, button_size)) {
                 self.current_dir = subdir.get();
             }
-            if (ImGui::BeginPopupContextItem()) {
+            if (ImGui::BeginPopupContextItem(file_name.c_str())) {
                 if (ImGui::MenuItem("Delete")) {
-                    self.remove_directory(subdir.get());
+                    deleting_dirs.push_back(subdir.get());
                 }
 
                 ImGui::EndPopup();
             }
+        }
+
+        for (auto *dir : deleting_dirs) {
+            self.remove_directory(dir);
         }
 
         for (const auto &uuid : self.current_dir->asset_uuids) {
@@ -300,7 +336,10 @@ void AssetBrowserPanel::draw_dir_contents(this AssetBrowserPanel &self) {
             }
 
             if (ImGui::Button("OK")) {
-                fs::create_directory(self.current_dir->path / new_dir_name);
+                auto new_dir_path = self.current_dir->path / new_dir_name;
+                fs::create_directory(new_dir_path);
+                self.current_dir->add_subdir(new_dir_path);
+
                 ImGui::CloseCurrentPopup();
                 new_dir_name = default_dir_name;
             }
@@ -447,6 +486,10 @@ void AssetBrowserPanel::render(this AssetBrowserPanel &self) {
 
     ImGui::Begin(self.name.data(), nullptr, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
     auto avail_region = ImGui::GetContentRegionAvail();
+
+    ImGui::SameLine();
+    if (ImGui::Button(Icon::fa::arrows_rotate)) {
+    }
 
     ImGui::SameLine();
     if (ImGui::Button(Icon::fa::house)) {

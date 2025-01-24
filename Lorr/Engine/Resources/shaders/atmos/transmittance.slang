@@ -2,9 +2,9 @@ import atmos;
 import "../lorr";
 
 [[vk::binding(0, 0)]] RWTexture2D<float4> transmittance_image;
+[[vk::binding(1, 0)]] Scene scene;
 
 struct PushConstants {
-    World *world;
     float2 image_size;
 };
 
@@ -13,7 +13,7 @@ struct PushConstants {
 [shader("compute")]
 [numthreads(16, 16, 1)]
 void cs_main(uint3 thread_id : SV_DispatchThreadID) {
-    Atmosphere *atmos = c.world->atmosphere;
+    Atmosphere *atmos = scene.atmosphere;
     float2 uv = float2(float2(thread_id.xy) + 0.5) / float2(c.image_size);
 
     float h = lr::safe_sqrt(

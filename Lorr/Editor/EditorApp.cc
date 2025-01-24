@@ -149,23 +149,9 @@ auto EditorApp::open_project(this EditorApp &self, const fs::path &path) -> bool
 auto EditorApp::save_project(this EditorApp &self) -> void {
     ZoneScoped;
 
-    const auto &registry = self.asset_man.registry();
-    for (const auto &pair : registry) {
-        const auto &uuid = pair.first;
-        const auto &asset = pair.second;
-        switch (asset.type) {
-            case AssetType::Scene: {
-                LOG_TRACE("Saving Scene {}...", uuid.str());
-                self.asset_man.export_asset(uuid, asset.path);
-            } break;
-            case AssetType::None:
-            case AssetType::Shader:
-            case AssetType::Model:
-            case AssetType::Texture:
-            case AssetType::Material:
-            case AssetType::Font:
-                break;
-        }
+    if (self.active_scene_uuid) {
+        auto *scene_asset = self.asset_man.get_asset(self.active_scene_uuid.value());
+        self.asset_man.export_asset(self.active_scene_uuid.value(), scene_asset->path);
     }
 }
 
@@ -190,6 +176,12 @@ auto EditorApp::render(this EditorApp &self, vuk::Format format, vuk::Extent3D e
     self.layout.render(format, extent);
 
     return true;
+}
+
+auto EditorApp::shutdown(this EditorApp &self) -> void {
+    ZoneScoped;
+
+    self.layout.destroy();
 }
 
 }  // namespace lr

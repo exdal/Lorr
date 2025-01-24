@@ -12,8 +12,8 @@ struct AssetDirectory {
     FileDescriptor watch_descriptor = FileDescriptor::Invalid;
 
     AssetDirectory *parent = nullptr;
-    std::vector<std::unique_ptr<AssetDirectory>> subdirs = {};
-    std::vector<UUID> asset_uuids = {};
+    std::deque<std::unique_ptr<AssetDirectory>> subdirs = {};
+    std::deque<UUID> asset_uuids = {};
 
     AssetDirectory(fs::path path_, FileWatcher *file_watcher_, AssetDirectory *parent_);
     ~AssetDirectory();

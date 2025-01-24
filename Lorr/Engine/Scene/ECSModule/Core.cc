@@ -1,4 +1,4 @@
-#include "Engine/World/ECSModule/Core.hh"
+#include "Engine/Scene/ECSModule/Core.hh"
 
 #include "Engine/Asset/UUID.hh"
 
@@ -66,9 +66,9 @@ ECS::Core::Core(flecs::world &world) {
         .assign_string([](UUID *data, const char *value) { *data = UUID::from_string(std::string_view(value)).value(); });
 
 #define ECS_REFLECT_TYPES
-#include "Engine/World/ECSModule/Reflect.hh"
+#include "Engine/Scene/ECSModule/Reflect.hh"
 
-#include "Engine/World/ECSModule/CoreComponents.hh"
+#include "Engine/Scene/ECSModule/CoreComponents.hh"
 #undef ECS_REFLECT_TYPES
 
     //  ── SYSTEMS ─────────────────────────────────────────────────────────

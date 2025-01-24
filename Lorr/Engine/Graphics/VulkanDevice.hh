@@ -3,7 +3,7 @@
 #include "Engine/Graphics/Slang/Compiler.hh"
 #include "Engine/Graphics/Vulkan.hh"
 
-#include "Engine/Memory/PagedPool.hh"
+#include "Engine/Memory/SlotMap.hh"
 
 #include "Engine/Util/LegitProfiler.hh"
 
@@ -36,12 +36,23 @@ struct TransferManager {
 
     auto alloc_transient_buffer(this TransferManager &, vuk::MemoryUsage usage, usize size) -> TransientBuffer;
 
-    auto upload_staging(this TransferManager &, Buffer &buffer, ls::span<u8> bytes, u64 offset, u64 element_size) -> void;
-    auto upload_staging(this TransferManager &, TransientBuffer &src, Buffer &dst) -> void;
+    auto upload_staging(this TransferManager &, ls::span<u8> bytes, Buffer &dst, u64 dst_offset = 0) -> void;
+    auto upload_staging(this TransferManager &, TransientBuffer &src, Buffer &dst, u64 dst_offset = 0) -> void;
     auto upload_staging(this TransferManager &, TransientBuffer &src, TransientBuffer &dst) -> void;
     auto upload_staging(this TransferManager &, ImageView &image_view, ls::span<u8> bytes) -> void;
 
     auto wait_on(this TransferManager &, vuk::UntypedValue &&fut) -> void;
+
+    template<typename T>
+    auto scratch_buffer(const T &val) -> vuk::Buffer {
+        ZoneScoped;
+
+        auto transient_buf = this->alloc_transient_buffer(vuk::MemoryUsage::eCPUtoGPU, sizeof(T));
+        std::memcpy(transient_buf.host_ptr<T>(), &val, sizeof(T));
+
+        return transient_buf.buffer;
+        // return vuk::discard_buf(name, transient_buf.buffer);
+    }
 
 protected:
     auto wait_for_ops(this TransferManager &, vuk::Allocator &allocator, vuk::Compiler &compiler) -> void;
@@ -67,11 +78,11 @@ struct BindlessDescriptorSetLayoutInfo {
 };
 
 struct DeviceResources {
-    PagedPool<vuk::Unique<vuk::Buffer>, BufferID, 1024_sz> buffers = {};
-    PagedPool<vuk::Unique<vuk::Image>, ImageID, 1024_sz> images = {};
-    PagedPool<vuk::Unique<vuk::ImageView>, ImageViewID, 1024_sz> image_views = {};
-    PagedPool<vuk::Sampler, SamplerID, 256_sz> samplers = {};
-    PagedPool<vuk::PipelineBaseInfo *, PipelineID, 256_sz> pipelines = {};
+    SlotMap<vuk::Unique<vuk::Buffer>, BufferID> buffers = {};
+    SlotMap<vuk::Unique<vuk::Image>, ImageID> images = {};
+    SlotMap<vuk::Unique<vuk::ImageView>, ImageViewID> image_views = {};
+    SlotMap<vuk::Sampler, SamplerID> samplers = {};
+    SlotMap<vuk::PipelineBaseInfo *, PipelineID> pipelines = {};
 };
 
 enum class DeviceFeature : u64 {

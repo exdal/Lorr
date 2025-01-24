@@ -4,11 +4,7 @@ import "../lorr";
 [[vk::binding(0, 0)]] SamplerState sampler;
 [[vk::binding(1, 0)]] Texture2D<float4> transmittance_lut;
 [[vk::binding(2, 0)]] Texture2D<float4> multiscattering_lut;
-
-struct PushConstants {
-    World *world;
-};
-[[vk::push_constant]] PushConstants c;
+[[vk::binding(3, 0)]] Scene scene;
 
 struct VertexOutput {
     vec4 position     : SV_Position;
@@ -27,10 +23,9 @@ VertexOutput vs_main(u32 vertex_id : SV_VertexID) {
 
 [shader("fragment")]
 vec4 fs_main(VertexOutput input) : SV_TARGET {
-    World *world = c.world;
-    Camera *camera = &world->cameras[c.world->active_camera_index];
-    Atmosphere *atmos = world->atmosphere;
-    Sun *sun = world->sun;
+    Camera *camera = &scene.cameras[scene.active_camera_index];
+    Atmosphere *atmos = scene.atmosphere;
+    Sun *sun = scene.sun;
 
     float3 eye_pos = float3(0.0, camera->position.y, 0.0) *
                      CAMERA_SCALE_UNIT +
@@ -89,7 +84,7 @@ vec4 fs_main(VertexOutput input) : SV_TARGET {
     info.sampling.min_sample_count = sample_count;
     info.sampling.max_sample_count = sample_count;
 
-    const let result = integrate_single_scattered_luminance(world, info);
+    const let result = integrate_single_scattered_luminance(scene, info);
     const float transmittance = dot(result.transmittance, float3(1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f));
     return float4(result.luminance, transmittance);
 }

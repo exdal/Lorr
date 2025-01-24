@@ -12,7 +12,7 @@ struct TextureSamplerInfo {
     vuk::SamplerAddressMode address_v = vuk::SamplerAddressMode::eRepeat;
 };
 
-enum class TextureID : u32 { Invalid = std::numeric_limits<u32>::max() };
+enum class TextureID : u64 { Invalid = std::numeric_limits<u64>::max() };
 struct Texture {
     Image image = {};
     ImageView image_view = {};
@@ -21,7 +21,7 @@ struct Texture {
     SampledImage sampled_image() { return { image_view.id(), sampler.id() }; }
 };
 
-enum class MaterialID : u32 { Invalid = std::numeric_limits<u32>::max() };
+enum class MaterialID : u64 { Invalid = std::numeric_limits<u64>::max() };
 struct Material {
     glm::vec3 albedo_color = { 1.0f, 1.0f, 1.0f };
     glm::vec3 emissive_color = { 0.0f, 0.0f, 0.0f };
@@ -33,26 +33,34 @@ struct Material {
     UUID emissive_texture = {};
 };
 
-enum class ModelID : u32 { Invalid = std::numeric_limits<u32>::max() };
+enum class ModelID : u64 { Invalid = std::numeric_limits<u64>::max() };
 struct Model {
-    std::vector<UUID> textures = {};
-    std::vector<UUID> materials = {};
-
-    struct Primitive {
+    struct Meshlet {
         u32 vertex_offset = 0;
-        u32 vertex_count = 0;
-        u32 index_offset = 0;
         u32 index_count = 0;
-        u32 material_index = 0;
+        u32 index_offset = 0;
+        u32 triangle_count = 0;
+        u32 triangle_offset = 0;
+        MaterialID material_id = MaterialID::Invalid;
     };
 
     struct Mesh {
         std::string name = {};
-        std::vector<u32> primitive_indices = {};
+        std::vector<u32> meshlet_indices = {};
     };
 
-    std::vector<Primitive> primitives = {};
+    struct Node {
+        std::vector<u32> mesh_indices = {};
+        std::vector<u32> child_indices = {};
+        glm::mat4 transform = {};
+        std::string name = {};
+    };
+
+    std::vector<UUID> textures = {};
+    std::vector<UUID> materials = {};
+    std::vector<Meshlet> meshlets = {};
     std::vector<Mesh> meshes = {};
+    std::vector<Node> nodes = {};
 
     Buffer vertex_buffer = {};
     Buffer index_buffer = {};

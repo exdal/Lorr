@@ -99,7 +99,7 @@ auto InspectorPanel::draw_inspector(this InspectorPanel &) -> void {
                                         if (dropping_asset->type == AssetType::Model) {
                                             auto old_uuid = *v;
                                             *v = *dropping_uuid;
-                                            if (app.asset_man.load_model(*dropping_uuid)) {
+                                            if (app.asset_man.load_model(*dropping_uuid) && old_uuid) {
                                                 app.asset_man.unload_model(old_uuid);
                                             }
                                         }

@@ -147,7 +147,8 @@ auto AssetManager::init_new_model(const UUID &uuid) -> bool {
     ZoneScoped;
 
     auto *asset = this->get_asset(uuid);
-    auto *model = this->get_model(asset->model_id);
+    asset->model_id = impl->models.create_slot();
+    auto *model = impl->models.slot(asset->model_id);
     auto gltf_model = GLTFModelInfo::parse(asset->path);
     if (!gltf_model.has_value()) {
         LOG_ERROR("Failed to parse Model '{}'!", asset->path);
@@ -186,19 +187,24 @@ auto AssetManager::init_new_model(const UUID &uuid) -> bool {
         model->materials.emplace_back(material_uuid);
     }
 
+    asset->acquire_ref();
     return true;
 }
 
 auto AssetManager::init_new_scene(const UUID &uuid, const std::string &name) -> bool {
     ZoneScoped;
 
-    auto *scene = this->get_scene(uuid);
-    if (scene->init(name)) {
-        scene->create_editor_camera();
-        return true;
+    auto *asset = this->get_asset(uuid);
+    asset->scene_id = impl->scenes.create_slot();
+    auto *scene = impl->scenes.slot(asset->scene_id);
+    if (!scene->init(name)) {
+        return false;
     }
 
-    return false;
+    scene->create_editor_camera();
+
+    asset->acquire_ref();
+    return true;
 }
 
 struct AssetMetaFile {

@@ -89,8 +89,8 @@ auto AssetDirectory::add_asset(this AssetDirectory &self, const fs::path &path) 
             return asset_uuid;
         }
 
-            // WARN: All these types below are automatically added.
-            // DO NOT CALL `push_back` into `self.asset_uuids`!!!
+        // WARN: All these types below are automatically added.
+        // DO NOT CALL `push_back` into `self.asset_uuids`!!!
 
         case AssetFileType::GLB:
         case AssetFileType::GLTF: {
@@ -110,6 +110,7 @@ auto AssetDirectory::add_asset(this AssetDirectory &self, const fs::path &path) 
             }
 
             app.asset_man.export_asset(new_model_asset_uuid, path);
+            app.asset_man.unload_asset(new_model_asset_uuid);
             return new_model_asset_uuid;
         }
         case AssetFileType::PNG: {
@@ -300,21 +301,6 @@ void AssetBrowserPanel::draw_dir_contents(this AssetBrowserPanel &self) {
                 ImGui::EndMenu();
             }
 
-            if (ImGui::BeginMenu("Import...")) {
-                if (ImGui::MenuItem("Model", nullptr, false)) {
-                    auto model_path = File::open_dialog("Import GLTF...", FileDialogFlag::Save | FileDialogFlag::DirOnly);
-                    if (model_path.has_value()) {
-                        auto model_asset = app.asset_man.create_asset(AssetType::Model, model_path.value());
-                        if (model_asset) {
-                            app.asset_man.init_new_model(model_asset);
-                            fs::copy_file(model_path.value(), self.current_dir->path);
-                        }
-                    }
-                }
-
-                ImGui::EndMenu();
-            }
-
             ImGui::EndPopup();
         }
 
@@ -369,11 +355,10 @@ void AssetBrowserPanel::draw_dir_contents(this AssetBrowserPanel &self) {
             if (ImGui::Button("OK")) {
                 auto new_scene_path = self.current_dir->path / (new_scene_name + ".json");
                 auto new_scene_uuid = app.asset_man.create_asset(AssetType::Scene, new_scene_path);
-                auto *scene = app.asset_man.get_scene(new_scene_uuid);
 
                 app.asset_man.init_new_scene(new_scene_uuid, new_scene_name);
                 app.asset_man.export_asset(new_scene_uuid, new_scene_path);
-                scene->destroy();
+                app.asset_man.unload_scene(new_scene_uuid);
 
                 ImGui::CloseCurrentPopup();
                 new_scene_name = default_scene_name;

@@ -99,8 +99,8 @@ auto ViewportPanel::draw_viewport(this ViewportPanel &self, vuk::Format format, 
         ImGuizmo::PopID();
     };
 
-    auto game_view_image = app.scene_renderer.render(
-        format, { .width = static_cast<u32>(window_size.x), .height = static_cast<u32>(window_size.y), .depth = 1 });
+    auto game_view_image = scene->render(
+        app.scene_renderer, { .width = static_cast<u32>(window_size.x), .height = static_cast<u32>(window_size.y), .depth = 1 }, format);
     auto game_view_image_idx = app.imgui_renderer.add_image(std::move(game_view_image));
     ImGui::Image(game_view_image_idx, work_area_size);
 

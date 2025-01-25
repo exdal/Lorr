@@ -87,8 +87,6 @@ void Application::run(this Application &self) {
         if (self.active_scene_uuid.has_value()) {
             auto *scene = self.asset_man.get_scene(self.active_scene_uuid.value());
             scene->tick();
-
-            scene->upload_scene(self.scene_renderer);
         }
         self.do_render(swapchain_attachment->format, swapchain_attachment->extent);
 

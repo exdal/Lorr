@@ -41,20 +41,24 @@ struct TransferManager {
     auto upload_staging(this TransferManager &, TransientBuffer &src, TransientBuffer &dst) -> void;
     auto upload_staging(this TransferManager &, ImageView &image_view, ls::span<u8> bytes) -> void;
 
+    template<typename T>
+    auto upload_staging(this TransferManager &self, ls::span<T> span, Buffer &dst, u64 dst_offset = 0) -> void {
+        ZoneScoped;
+
+        self.upload_staging({ reinterpret_cast<u8 *>(span.data()), span.size_bytes() }, dst, dst_offset);
+    }
+
     auto wait_on(this TransferManager &, vuk::UntypedValue &&fut) -> void;
 
     template<typename T>
-    auto scratch_buffer(const T &val) -> vuk::Buffer {
+    [[nodiscard]] auto scratch_buffer(const T &val) -> vuk::Value<vuk::Buffer> {
         ZoneScoped;
 
-        auto transient_buf = this->alloc_transient_buffer(vuk::MemoryUsage::eCPUtoGPU, sizeof(T));
-        std::memcpy(transient_buf.host_ptr<T>(), &val, sizeof(T));
-
-        return transient_buf.buffer;
-        // return vuk::discard_buf(name, transient_buf.buffer);
+        return scratch_buffer(&val, sizeof(T));
     }
 
 protected:
+    auto scratch_buffer(this TransferManager &, const void *data, u64 size) -> vuk::Value<vuk::Buffer>;
     auto wait_for_ops(this TransferManager &, vuk::Allocator &allocator, vuk::Compiler &compiler) -> void;
 
     auto acquire(this TransferManager &, vuk::DeviceFrameResource &allocator) -> void;

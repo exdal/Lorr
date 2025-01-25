@@ -366,23 +366,15 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
         Device *device = nullptr;
         Model *model = nullptr;
 
-        struct ModelBufferInfo {
-            TransientBuffer vertex_buffer = {};
-            TransientBuffer index_buffer = {};
-        };
-
-        u64 vertex_buffer_size = 0;
-        u64 index_buffer_size = 0;
-        // Per mesh staging buffer (CPU)
-        std::vector<ModelBufferInfo> staging_buffers = {};
+        // Per mesh data
+        std::vector<std::vector<Model::Vertex>> mesh_vertices = {};
+        std::vector<std::vector<Model::Index>> mesh_provoked_indices = {};
+        std::vector<std::vector<Model::Index>> mesh_reordered_indices = {};
     };
     auto on_new_node = [](void *user_data, u32 mesh_index, u32 vertex_count, u32 index_count, u32, glm::mat4 transform) {
         auto *info = static_cast<CallbackInfo *>(user_data);
-        auto &transfer_man = info->device->transfer_man();
-        auto vertex_buffer_size = vertex_count * sizeof(GPUModel::Vertex);
-        auto index_buffer_size = index_count * sizeof(GPUModel::Index);
-        auto &node = info->model->nodes.emplace_back();
 
+        auto &node = info->model->nodes.emplace_back();
         node.transform = transform;
         node.mesh_indices.push_back(mesh_index);
 
@@ -390,69 +382,61 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
             info->model->meshes.resize(mesh_index + 1);
         }
 
-        if (info->staging_buffers.size() <= mesh_index) {
-            info->staging_buffers.resize(mesh_index + 1);
+        if (info->mesh_vertices.size() <= mesh_index) {
+            info->mesh_vertices.resize(mesh_index + 1);
         }
 
-        auto &staging_buffer = info->staging_buffers[mesh_index];
-        staging_buffer.vertex_buffer = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eCPUonly, vertex_buffer_size);
-        staging_buffer.index_buffer = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eCPUonly, index_buffer_size);
-        info->vertex_buffer_size += vertex_buffer_size;
-        info->index_buffer_size += index_buffer_size;
+        if (info->mesh_provoked_indices.size() <= mesh_index) {
+            info->mesh_provoked_indices.resize(mesh_index + 1);
+        }
+
+        if (info->mesh_reordered_indices.size() <= mesh_index) {
+            info->mesh_reordered_indices.resize(mesh_index + 1);
+        }
+
+        info->mesh_vertices[mesh_index].resize(vertex_count);
+        info->mesh_provoked_indices[mesh_index].resize(index_count);
+        info->mesh_reordered_indices[mesh_index].resize(vertex_count + index_count / 3);
     };
-    // auto on_new_primitive =
-    //     [](void *user_data, u32 mesh_index, u32 material_index, u32 vertex_count, u32 vertex_offset, u32 index_count, u32 index_offset) {
-    //         auto *info = static_cast<CallbackInfo *>(user_data);
-    //         auto &staging_buffer = info->staging_buffers[mesh_index];
-    //         auto *vertices = staging_buffer.vertex_buffer.host_ptr<GPUModel::Vertex>() + vertex_offset;
-    //         auto *indices = staging_buffer.index_buffer.host_ptr<u32>() + index_offset;
-    //         auto &mesh = info->model->meshes[mesh_index];
-    //         auto meshlet_index = static_cast<u32>(info->model->meshlets.size());
-    //
-    //         mesh.meshlet_indices.push_back(meshlet_index);
-    //         info->model->meshlets.push_back({
-    //             .vertex_offset = vertex_offset,
-    //             .vertex_count = vertex_count,
-    //             .index_offset = index_offset,
-    //             .index_count = index_count,
-    //         });
-    //
-    //         std::vector<u32> provoke(index_count);
-    //         std::vector<u32> reorder(vertex_count + index_count / 3);
-    //         reorder.resize(meshopt_generateProvokingIndexBuffer(provoke.data(), reorder.data(), indices, index_count, vertex_count));
-    //         std::memcpy(indices, provoke.data(), provoke.size() * sizeof(u32));
-    //     };
+    auto on_new_primitive =
+        [](void *user_data, u32 mesh_index, u32 material_index, u32 vertex_count, u32 vertex_offset, u32 index_count, u32 index_offset) {
+            auto *info = static_cast<CallbackInfo *>(user_data);
+            auto &mesh = info->model->meshes[mesh_index];
+            auto meshlet_index = static_cast<u32>(info->model->meshlets.size());
+
+            mesh.meshlet_indices.push_back(meshlet_index);
+            info->model->meshlets.push_back({
+                .vertex_offset = vertex_offset,
+                .index_count = index_count,
+                .index_offset = index_offset,
+            });
+        };
     auto on_access_index = [](void *user_data, u32 mesh_index, u64 offset, u32 index) {
         auto *info = static_cast<CallbackInfo *>(user_data);
-        auto *ptr = info->staging_buffers[mesh_index].index_buffer.host_ptr<u32>() + offset;
-        *ptr = index;
+        info->mesh_provoked_indices[mesh_index][offset] = index;
     };
     auto on_access_position = [](void *user_data, u32 mesh_index, u64 offset, glm::vec3 position) {
         auto *info = static_cast<CallbackInfo *>(user_data);
-        auto *ptr = info->staging_buffers[mesh_index].vertex_buffer.host_ptr<GPUModel::Vertex>() + offset;
-        ptr->position = position;
+        info->mesh_vertices[mesh_index][offset].position = position;
     };
     auto on_access_normal = [](void *user_data, u32 mesh_index, u64 offset, glm::vec3 normal) {
         auto *info = static_cast<CallbackInfo *>(user_data);
-        auto *ptr = info->staging_buffers[mesh_index].vertex_buffer.host_ptr<GPUModel::Vertex>() + offset;
-        ptr->normal = normal;
+        info->mesh_vertices[mesh_index][offset].normal = normal;
     };
     auto on_access_texcoord = [](void *user_data, u32 mesh_index, u64 offset, glm::vec2 texcoord) {
         auto *info = static_cast<CallbackInfo *>(user_data);
-        auto *ptr = info->staging_buffers[mesh_index].vertex_buffer.host_ptr<GPUModel::Vertex>() + offset;
-        ptr->tex_coord_0 = texcoord;
+        info->mesh_vertices[mesh_index][offset].tex_coord_0 = texcoord;
     };
     auto on_access_color = [](void *user_data, u32 mesh_index, u64 offset, glm::vec4 color) {
         auto *info = static_cast<CallbackInfo *>(user_data);
-        auto *ptr = info->staging_buffers[mesh_index].vertex_buffer.host_ptr<GPUModel::Vertex>() + offset;
-        ptr->color = glm::packUnorm4x8(color);
+        info->mesh_vertices[mesh_index][offset].color = glm::packUnorm4x8(color);
     };
 
     CallbackInfo callback_info = { .device = impl->device, .model = model };
     GLTFModelCallbacks callbacks = {
         .user_data = &callback_info,
         .on_new_node = on_new_node,
-        // .on_new_primitive = on_new_primitive,
+        .on_new_primitive = on_new_primitive,
         .on_access_index = on_access_index,
         .on_access_position = on_access_position,
         .on_access_normal = on_access_normal,
@@ -558,70 +542,82 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
         this->load_material(material_uuid, material_info);
     }
 
-    auto &transfer_man = impl->device->transfer_man();
-    model->vertex_buffer = Buffer::create(*impl->device, callback_info.vertex_buffer_size).value();
-    model->index_buffer = Buffer::create(*impl->device, callback_info.index_buffer_size).value();
+    u32 vertex_count = 0;
+    u32 provoked_index_count = 0;
+    u32 reordered_index_count = 0;
+    // Optimize vertex buffer
+    for (usize mesh_index = 0; mesh_index < model->meshes.size(); mesh_index++) {
+        auto &vertices = callback_info.mesh_vertices[mesh_index];
+        auto &provoked_indices = callback_info.mesh_provoked_indices[mesh_index];
+        auto &reordered_indices = callback_info.mesh_reordered_indices[mesh_index];
+
+        std::vector<Model::Index> provoked_indices_remap(vertices.size());
+        const auto unique_vertices = meshopt_generateVertexRemap(  //
+            provoked_indices_remap.data(),
+            provoked_indices.data(),
+            provoked_indices.size(),
+            vertices.data(),
+            vertices.size(),
+            sizeof(Model::Vertex));
+
+        meshopt_remapVertexBuffer(  //
+            vertices.data(),
+            vertices.data(),
+            vertices.size(),
+            sizeof(Model::Vertex),
+            provoked_indices_remap.data());
+        meshopt_remapIndexBuffer(  //
+            provoked_indices.data(),
+            provoked_indices.data(),
+            provoked_indices.size(),
+            provoked_indices_remap.data());
+
+        vertices.resize(unique_vertices);
+
+        meshopt_optimizeVertexFetch(  //
+            vertices.data(),
+            provoked_indices.data(),
+            provoked_indices.size(),
+            vertices.data(),
+            vertices.size(),
+            sizeof(Model::Vertex));
+
+        reordered_indices.resize(vertices.size() + provoked_indices.size() / 3);
+        reordered_indices.resize(meshopt_generateProvokingIndexBuffer(
+            provoked_indices.data(), reordered_indices.data(), provoked_indices.data(), provoked_indices.size(), vertices.size()));
+
+        vertex_count += vertices.size();
+        provoked_index_count += provoked_indices.size();
+        reordered_index_count += reordered_indices.size();
+    }
+
+    model->vertex_buffer = Buffer::create(*impl->device, vertex_count * sizeof(Model::Vertex)).value();
+    model->provoked_index_buffer = Buffer::create(*impl->device, provoked_index_count * sizeof(Model::Index)).value();
+    model->reordered_index_buffer = Buffer::create(*impl->device, reordered_index_count * sizeof(Model::Index)).value();
 
     u32 vertex_offset = 0;
-    u32 index_offset = 0;
-    u32 triangle_offset = 0;
-    for (usize mesh_index = 0; mesh_index < callback_info.staging_buffers.size(); mesh_index++) {
-        auto &staging_buffer = callback_info.staging_buffers[mesh_index];
-        auto &mesh = model->meshes[mesh_index];
+    u32 provoked_index_offset = 0;
+    u32 reordered_index_offset = 0;
+    for (usize mesh_index = 0; mesh_index < model->meshes.size(); mesh_index++) {
+        auto &vertices = callback_info.mesh_vertices[mesh_index];
+        auto &provoked_indices = callback_info.mesh_provoked_indices[mesh_index];
+        auto &reordered_indices = callback_info.mesh_reordered_indices[mesh_index];
 
-        // Build meshlets
-        auto *vertices = staging_buffer.vertex_buffer.host_ptr<GPUModel::Vertex>();
-        const auto vertex_count = staging_buffer.vertex_buffer.buffer.size / sizeof(GPUModel::Vertex);
-        auto *indices = staging_buffer.index_buffer.host_ptr<GPUModel::Index>();
-        const auto index_count = staging_buffer.index_buffer.buffer.size / sizeof(GPUModel::Index);
+        auto &transfer_man = impl->device->transfer_man();
+        transfer_man.upload_staging(ls::span(vertices), model->vertex_buffer, vertex_offset * sizeof(Model::Vertex));
+        transfer_man.upload_staging(ls::span(provoked_indices), model->provoked_index_buffer, provoked_index_offset * sizeof(Model::Index));
+        transfer_man.upload_staging(
+            ls::span(reordered_indices), model->reordered_index_buffer, reordered_index_offset * sizeof(Model::Index));
 
-        const auto max_meshlets = meshopt_buildMeshletsBound(index_count, GPUModel::MAX_MESHLET_INDICES, GPUModel::MAX_MESHLET_PRIMITIVES);
-        auto meshlets = std::vector<meshopt_Meshlet>(max_meshlets);
-        auto meshlet_indices = std::vector<u32>(max_meshlets * GPUModel::MAX_MESHLET_INDICES);
-        auto meshlet_local_indices = std::vector<u8>(max_meshlets * GPUModel::MAX_MESHLET_PRIMITIVES * 3);
-        const auto meshlet_count = meshopt_buildMeshlets(
-            meshlets.data(),
-            meshlet_indices.data(),
-            meshlet_local_indices.data(),
-            indices,
-            index_count,
-            reinterpret_cast<const f32 *>(vertices),
-            vertex_count,
-            sizeof(GPUModel::Vertex),
-            GPUModel::MAX_MESHLET_INDICES,
-            GPUModel::MAX_MESHLET_PRIMITIVES,
-            0.0f);
-
-        meshlets.resize(meshlet_count);
-        const auto &last_meshlet = meshlets.back();
-        meshlet_indices.resize(last_meshlet.vertex_offset + last_meshlet.vertex_count);
-        meshlet_local_indices.resize(last_meshlet.triangle_offset + ((last_meshlet.triangle_count * 3 + 3) & ~3));
-        u64 new_index_buffer_size_bytes = meshlet_indices.size() * sizeof(GPUModel::Index);
-
-        // Combine meshlets
-        for (const auto &meshlet : meshlets) {
-            mesh.meshlet_indices.push_back(model->meshlets.size());
-            model->meshlets.push_back({
-                .vertex_offset = vertex_offset,
-                .index_count = meshlet.vertex_count,
-                .index_offset = index_offset + meshlet.vertex_offset,
-                .triangle_count = meshlet.triangle_count,
-                .triangle_offset = triangle_offset + meshlet.triangle_offset,
-            });
-        }
-
-        std::memcpy(indices, meshlet_indices.data(), new_index_buffer_size_bytes);
-        transfer_man.upload_staging(staging_buffer.vertex_buffer, model->vertex_buffer, vertex_offset * sizeof(GPUModel::Vertex));
-        transfer_man.upload_staging(staging_buffer.index_buffer, model->index_buffer, index_offset * sizeof(GPUModel::Index));
-
-        vertex_offset += vertex_count;
-        index_offset += meshlet_indices.size();
-        triangle_offset += meshlet_local_indices.size();
+        vertex_offset += vertices.size();
+        provoked_index_offset += provoked_indices.size();
+        reordered_index_offset += reordered_indices.size();
     }
 
     auto model_name = fs::relative(asset->path, impl->root_path).string();
     impl->device->set_name(model->vertex_buffer, stack.format("{} VB", model_name));
-    impl->device->set_name(model->index_buffer, stack.format("{} IB", model_name));
+    impl->device->set_name(model->provoked_index_buffer, stack.format("{} PIB", model_name));
+    impl->device->set_name(model->reordered_index_buffer, stack.format("{} RIB", model_name));
 
     asset->acquire_ref();
     return true;

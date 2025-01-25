@@ -5,7 +5,8 @@ import "../noise/hemisphere";
 [[vk::binding(0, 0)]] SamplerState sampler;
 [[vk::binding(1, 0)]] Texture2D<float4> transmittance_lut;
 [[vk::binding(2, 0)]] RWTexture2D<float4> multiscattering_lut;
-[[vk::binding(3, 0)]] Scene scene;
+[[vk::binding(3, 0)]] Atmosphere atmos;
+[[vk::binding(4, 0)]] Sun sun;
 
 struct PushConstants {
     float2 multiscattering_lut_size;
@@ -15,11 +16,9 @@ struct PushConstants {
 [shader("compute")]
 [numthreads(16, 16, 1)]
 void cs_main(uint3 thread_id : SV_DispatchThreadID) {
-    Atmosphere *atmos = scene.atmosphere;
-    Sun *sun = scene.sun;
     float2 uv = float2(float2(thread_id.xy) + 0.5) / float2(c.multiscattering_lut_size);
 
-    float altitude = lerp(atmos->planet_radius, atmos->atmos_radius, uv.y);
+    float altitude = lerp(atmos.planet_radius, atmos.atmos_radius, uv.y);
     float sun_cos_theta = uv.x * 2.0 - 1.0;
     float3 sun_dir = float3(0.0, sun_cos_theta, sqrt(1.0 - sun_cos_theta * sun_cos_theta));
     float3 ray_pos = float3(0.0, altitude, 0.0);
@@ -40,7 +39,7 @@ void cs_main(uint3 thread_id : SV_DispatchThreadID) {
     float3 multi_scattering_as_1 = float3(0.0);
     for (int i = 0; i < 64; i++) {
         info.eye_dir = Noise::hemisphere64[i];
-        const let result = integrate_single_scattered_luminance(scene, info);
+        const let result = integrate_single_scattered_luminance(atmos, info);
         multi_scattering_as_1 += result.multiscattering_as_1;
         luminance += result.luminance;
     }

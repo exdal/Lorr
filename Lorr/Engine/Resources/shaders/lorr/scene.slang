@@ -55,18 +55,3 @@ public struct Camera {
     public f32  far_clip;
 };
 
-public struct Scene {
-    public SamplerID linear_sampler;
-    public SamplerID nearest_sampler;
-
-    public Camera *cameras;
-    public Material *materials;
-    public MeshTransform *mesh_transforms;
-    public Sun *sun;
-    public Atmosphere *atmosphere;
-    public Clouds *clouds;
-
-    public u32 active_camera_index;
-    private u32 pad;
-};
-

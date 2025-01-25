@@ -21,7 +21,7 @@ struct Scene {
         -> flecs::entity;
     auto create_editor_camera(this Scene &) -> void;
 
-    auto upload_scene(this Scene &, SceneRenderer &renderer) -> void;
+    auto render(this Scene &, SceneRenderer &renderer, const vuk::Extent3D &extent, vuk::Format format) -> vuk::Value<vuk::ImageAttachment>;
     auto tick(this Scene &) -> bool;
 
     auto set_name(this Scene &, const std::string &name) -> void;

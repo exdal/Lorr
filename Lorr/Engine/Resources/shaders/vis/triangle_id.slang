@@ -2,11 +2,10 @@ module triangle_id;
 
 import "../lorr";
 
-[[vk::binding(0, 0)]] Scene scene;
-
-struct VertexInput {
-    float3 position  : POSITION;
-};
+[[vk::binding(0, 0)]] Camera camera;
+[[vk::binding(1, 0)]] StructuredBuffer<MeshInstance> mesh_instances;
+[[vk::binding(2, 0)]] StructuredBuffer<Vertex> vertices;
+[[vk::binding(3, 0)]] StructuredBuffer<u32> reordered_indices;
 
 struct PushConstants {
     u32 model_index;
@@ -14,52 +13,37 @@ struct PushConstants {
 [[vk::push_constant]] PushConstants c;
 
 struct VertexOutput {
-    float4 position : SV_Position;
+    float4 position  : SV_Position;
+    u32 primitive_id : PRIMITIVE_ID;
 };
 
 [shader("vertex")]
-VertexOutput vs_main(VertexInput vertex, u32 vertex_id : SV_VertexID) {
-    Camera *camera = &scene.cameras[scene.active_camera_index];
-    MeshTransform *mesh_transform = &scene.mesh_transforms[c.model_index];
-
+VertexOutput vs_main(u32 vertex_id : SV_VertexID) {
     VertexOutput output;
-    let world_position = mul(float4(vertex.position, 1.0), mesh_transform->transform_mat);
+
+    MeshInstance mesh_instance = mesh_instances[c.model_index];
+    const Vertex vertex = vertices[reordered_indices[vertex_id]];
+    const let world_position = mul(float4(vertex.position, 1.0), mesh_instance.transform_mat);
+
     output.position = mul(camera.projection_view_mat, world_position);
+    output.primitive_id = vertex_id;
     return output;
 }
 
-#define RED_SEED 3
-#define GREEN_SEED 5
-#define BLUE_SEED 7
-
-float IDToColor(uint ID, uint seed) {
-    return float(ID % seed) / float(seed);
-}
-
-float IDToColor(uint ID) {
-    return IDToColor(ID, RED_SEED);
-}
-
-float2 IDToColor2(uint ID) {
-    float2 color = float2(0, 0);
-    color.x = IDToColor(ID, RED_SEED);
-    color.y = IDToColor(ID, GREEN_SEED);
-
-    return color;
-}
-
-float3 IDToColor3(uint ID) {
-    float3 color = float3(0, 0, 0);
-    color.x = IDToColor(ID, RED_SEED);
-    color.y = IDToColor(ID, GREEN_SEED);
-    color.z = IDToColor(ID, BLUE_SEED);
-
-    return color;
+uint hash(uint a) {
+    a = (a+0x7ed55d16) + (a<<12);
+    a = (a^0xc761c23c) ^ (a>>19);
+    a = (a+0x165667b1) + (a<<5);
+    a = (a+0xd3a2646c) ^ (a<<9);
+    a = (a+0xfd7046c5) + (a<<3);
+    a = (a^0xb55a4f09) ^ (a>>16);
+    return a;
 }
 
 [shader("fragment")]
-float4 fs_main(VertexOutput input, u32 primitive_id : SV_PrimitiveID) : SV_Target {
-    float3 result = IDToColor3(primitive_id);
-    return float4(result, 1.0);
+float4 fs_main(VertexOutput input) : SV_Target {
+    uint mhash = hash(input.primitive_id);
+    vec3 mcolor = vec3(float(mhash & 255), float((mhash >> 8) & 255), float((mhash >> 16) & 255)) / 255.0;
+    return float4(mcolor, 1.0);
 }
 

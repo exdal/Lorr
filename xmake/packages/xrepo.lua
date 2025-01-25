@@ -30,7 +30,7 @@ add_requires("libsdl 2.30.10", { configs = {
 
 add_requires("imguizmo-lorr 1.89+WIP")
 add_requires("slang-lorr v2024.17.4")
-add_requires("vuk 2024.12.30", { configs = {
+add_requires("vuk 2025.01.25", { configs = {
     debug_allocations = false
 } })
 

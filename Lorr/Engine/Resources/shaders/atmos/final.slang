@@ -4,7 +4,9 @@ import "../lorr";
 [[vk::binding(0, 0)]] SamplerState sampler;
 [[vk::binding(1, 0)]] Texture2D<float4> transmittance_lut;
 [[vk::binding(2, 0)]] Texture2D<float4> sky_view_lut;
-[[vk::binding(3, 0)]] Scene scene;
+[[vk::binding(3, 0)]] Atmosphere atmos;
+[[vk::binding(4, 0)]] Sun sun;
+[[vk::binding(5, 0)]] Camera camera;
 
 struct VertexOutput {
     float4 position     : SV_Position;
@@ -36,24 +38,20 @@ float3 draw_sun(float3 world_dir, float3 sun_dir, float radius) {
 
 [shader("fragment")]
 float4 fs_main(VertexOutput input) : SV_TARGET {
-    Camera *camera = &scene.cameras[scene.active_camera_index];
-    Atmosphere *atmos = scene.atmosphere;
-    Sun *sun = scene.sun;
-    
     float3 clip_space = float3(input.tex_coord * 2.0 - 1.0, 1.0);
-    float4 clip_pos = mul(camera->inv_projection_view_mat, float4(clip_space, 1.0));
+    float4 clip_pos = mul(camera.inv_projection_view_mat, float4(clip_space, 1.0));
     float3 clip_dir = clip_pos.xyz / clip_pos.w;
-    float3 world_dir = normalize(clip_dir - camera->position);
-    float3 world_pos = float3(0.0, camera->position.y, 0.0) *
+    float3 world_dir = normalize(clip_dir - camera.position);
+    float3 world_pos = float3(0.0, camera.position.y, 0.0) *
                        CAMERA_SCALE_UNIT +
-                       float3(0.0, atmos->planet_radius, 0.0);
+                       float3(0.0, atmos.planet_radius, 0.0);
 
-    const let planet_intersection = lr::ray_sphere_intersect_nearest(world_pos, world_dir, atmos->planet_radius);
+    const let planet_intersection = lr::ray_sphere_intersect_nearest(world_pos, world_dir, atmos.planet_radius);
 
     float h = length(world_pos);
     float3 up_vec = normalize(world_pos);
 
-    float3 sun_dir = normalize(sun->direction);
+    float3 sun_dir = normalize(sun.direction);
     float3 right_vec = normalize(cross(up_vec, world_dir));
     float3 forward_vec = normalize(cross(right_vec, up_vec));
     float2 light_on_plane = normalize(float2(dot(sun_dir, forward_vec), dot(sun_dir, right_vec)));
@@ -71,7 +69,7 @@ float4 fs_main(VertexOutput input) : SV_TARGET {
     float3 sun_transmittance = transmittance_lut.Sample(sampler, transmittance_uv).rgb;
 
     if (!planet_intersection.hasValue) {
-        luminance += draw_sun(world_dir, sun->direction, 1.0) * sun.intensity * sun_transmittance;
+        luminance += draw_sun(world_dir, sun.direction, 1.0) * sun.intensity * sun_transmittance;
     }
 
     return float4(luminance, 1.0);

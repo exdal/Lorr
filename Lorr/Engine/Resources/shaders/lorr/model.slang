@@ -1,5 +1,12 @@
 implementing "../lorr";
 
+public struct Vertex {
+    public float3 position;
+    public float3 normal;
+    public float2 tex_coord;
+    public u32 color;
+};
+
 public struct Material {
     public vec3 albedo_color;
     public vec3 emissive_color;
@@ -12,7 +19,8 @@ public struct Material {
     public SampledImage<float4> emissive_image;
 };
 
-public struct MeshTransform {
+public struct MeshInstance {
     public mat4 transform_mat;
+    public u32 material_index;
 };
 

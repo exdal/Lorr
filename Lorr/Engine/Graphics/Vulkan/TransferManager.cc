@@ -118,6 +118,26 @@ auto TransferManager::upload_staging(this TransferManager &self, ImageView &imag
     self.wait_on(std::move(dst_attachment));
 }
 
+auto TransferManager::scratch_buffer(this TransferManager &self, const void *data, u64 size) -> vuk::Value<vuk::Buffer> {
+    ZoneScoped;
+
+    auto cpu_buffer = self.alloc_transient_buffer(vuk::MemoryUsage::eCPUonly, size);
+    std::memcpy(cpu_buffer.host_ptr(), data, size);
+
+    auto gpu_buffer = self.alloc_transient_buffer(vuk::MemoryUsage::eGPUonly, size);
+
+    auto src_buffer = vuk::acquire_buf("src", cpu_buffer.buffer, vuk::Access::eNone);
+    auto dst_buffer = vuk::acquire_buf("dst", gpu_buffer.buffer, vuk::Access::eNone);
+    auto upload_pass = vuk::make_pass(
+        "TransferManager::scratch_buffer",
+        [](vuk::CommandBuffer &cmd_list, VUK_BA(vuk::Access::eTransferRead) src, VUK_BA(vuk::Access::eTransferWrite) dst) {
+            cmd_list.copy_buffer(src, dst);
+            return dst;
+        });
+
+    return upload_pass(std::move(src_buffer), std::move(dst_buffer));
+}
+
 auto TransferManager::wait_on(this TransferManager &self, vuk::UntypedValue &&fut) -> void {
     ZoneScoped;
 

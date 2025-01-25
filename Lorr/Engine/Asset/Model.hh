@@ -35,13 +35,21 @@ struct Material {
 
 enum class ModelID : u64 { Invalid = std::numeric_limits<u64>::max() };
 struct Model {
+    constexpr static auto MAX_MESHLET_INDICES = 64_sz;
+    constexpr static auto MAX_MESHLET_PRIMITIVES = 64_sz;
+
+    struct Vertex {
+        alignas(4) glm::vec3 position = {};
+        alignas(4) glm::vec3 normal = {};
+        alignas(4) glm::vec2 tex_coord_0 = {};
+        alignas(4) u32 color = 0;
+    };
+    using Index = u32;
+
     struct Meshlet {
-        u32 vertex_offset = 0;
-        u32 index_count = 0;
-        u32 index_offset = 0;
-        u32 triangle_count = 0;
-        u32 triangle_offset = 0;
-        MaterialID material_id = MaterialID::Invalid;
+        alignas(4) u32 vertex_offset = 0;
+        alignas(4) u32 index_count = 0;
+        alignas(4) u32 index_offset = 0;
     };
 
     struct Mesh {
@@ -63,6 +71,7 @@ struct Model {
     std::vector<Node> nodes = {};
 
     Buffer vertex_buffer = {};
-    Buffer index_buffer = {};
+    Buffer provoked_index_buffer = {};
+    Buffer reordered_index_buffer = {};
 };
 }  // namespace lr

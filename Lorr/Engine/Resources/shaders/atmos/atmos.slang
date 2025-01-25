@@ -10,33 +10,33 @@ public float fromUnitToSubUvs(float u, float resolution) {
     return (u + 0.5f / resolution) * (resolution / (resolution + 1.0));
 }
 
-public float2 get_transmittance_lut_uv(Atmosphere *atmos, float2 p) {
+public float2 get_transmittance_lut_uv(in Atmosphere atmos, float2 p) {
     float h = lr::safe_sqrt(
-        atmos->atmos_radius * atmos->atmos_radius -
-        atmos->planet_radius * atmos->planet_radius);
-    float rho = lr::safe_sqrt(p.x * p.x - atmos->planet_radius * atmos->planet_radius);
+        atmos.atmos_radius * atmos.atmos_radius -
+        atmos.planet_radius * atmos.planet_radius);
+    float rho = lr::safe_sqrt(p.x * p.x - atmos.planet_radius * atmos.planet_radius);
     float discriminant = p.x * p.x * (p.y * p.y - 1.0) +
-        atmos->atmos_radius * atmos->atmos_radius;
+        atmos.atmos_radius * atmos.atmos_radius;
     float d = max(0.0, -p.x *  p.y + lr::safe_sqrt(discriminant));
-    float d_min = atmos->atmos_radius - p.x;
+    float d_min = atmos.atmos_radius - p.x;
     float d_max = rho + h;
     float mu = (d - d_min) / (d_max - d_min);
     float r = rho / h;
     return float2(mu, r);
 }
 
-public float2 get_multiscattering_lut_uv(Atmosphere *atmos, float altitude, float cos_theta) {
+public float2 get_multiscattering_lut_uv(in Atmosphere atmos, float altitude, float cos_theta) {
     float2 uv = clamp(float2(
         cos_theta * 0.5 + 0.5,
-        altitude / (atmos->atmos_radius - atmos->planet_radius)),
+        altitude / (atmos.atmos_radius - atmos.planet_radius)),
         0.0, 1.0
     );
     return float2(fromUnitToSubUvs(uv.x, 32), fromUnitToSubUvs(uv.y, 32));
 }
 
-public float2 get_sky_view_lut_uv(Atmosphere *atmos, bool intersect_planet, float view_zenith_cos, float light_view_cos, float altitude) {
+public float2 get_sky_view_lut_uv(in Atmosphere atmos, bool intersect_planet, float view_zenith_cos, float light_view_cos, float altitude) {
     float2 uv = 0.0;
-    float horizon = sqrt(altitude * altitude - atmos->planet_radius * atmos->planet_radius);
+    float horizon = sqrt(altitude * altitude - atmos.planet_radius * atmos.planet_radius);
     float beta = acos(horizon / altitude);
     float zenith_horizon_angle = PI - beta;
         // Non-linear parametization
@@ -86,18 +86,18 @@ public struct MediumScattering {
     public float3 extinction_sum;
 
     [ForceInline]
-    public __init(Atmosphere *atmos, float altitude) {
-        const float rayleigh_density  = exp(-altitude / atmos->rayleigh_density);
-        const float mie_density = exp(-altitude / atmos->mie_density);
-        const float ozone_density = max(0.0, 1.0 - abs(altitude - atmos->ozone_height) / atmos->ozone_thickness);
+    public __init(in Atmosphere atmos, float altitude) {
+        const float rayleigh_density  = exp(-altitude / atmos.rayleigh_density);
+        const float mie_density = exp(-altitude / atmos.mie_density);
+        const float ozone_density = max(0.0, 1.0 - abs(altitude - atmos.ozone_height) / atmos.ozone_thickness);
 
-        this.rayleigh_scattering = atmos->rayleigh_scatter * rayleigh_density;
+        this.rayleigh_scattering = atmos.rayleigh_scatter * rayleigh_density;
         this.rayleigh_extinction = this.rayleigh_scattering;  // Rayleigh scattering doesn't have absorption behavior
 
-        this.mie_scattering = atmos->mie_scatter * mie_density;
-        this.mie_extinction = atmos->mie_extinction * mie_density;  // Mie scattering doesn't have absorption behavior
+        this.mie_scattering = atmos.mie_scatter * mie_density;
+        this.mie_extinction = atmos.mie_extinction * mie_density;  // Mie scattering doesn't have absorption behavior
 
-        this.ozone_absorption = atmos->ozone_absorption *  ozone_density;
+        this.ozone_absorption = atmos.ozone_absorption *  ozone_density;
         this.ozone_extinction = this.ozone_absorption;
 
         this.scattering_sum = this.rayleigh_scattering + this.mie_scattering;
@@ -135,14 +135,13 @@ public struct AtmosphereIntegrateInfo {
 };
 
 public func integrate_single_scattered_luminance(
-    in Scene scene,
+    in Atmosphere atmos,
     in AtmosphereIntegrateInfo info) -> AtmosphereLuminance
 {
     AtmosphereLuminance result;
-    Atmosphere *atmos = scene.atmosphere;
 
-    const let atmos_intersection = lr::ray_sphere_intersect_nearest(info.eye_pos, info.eye_dir, atmos->atmos_radius);
-    const let planet_intersection = lr::ray_sphere_intersect_nearest(info.eye_pos, info.eye_dir, atmos->planet_radius);
+    const let atmos_intersection = lr::ray_sphere_intersect_nearest(info.eye_pos, info.eye_dir, atmos.atmos_radius);
+    const let planet_intersection = lr::ray_sphere_intersect_nearest(info.eye_pos, info.eye_dir, atmos.planet_radius);
     float integration_length = 0.0;
     if (!atmos_intersection.hasValue && !planet_intersection.hasValue) {
         // No intersection
@@ -171,7 +170,7 @@ public func integrate_single_scattered_luminance(
 
     float cos_theta = dot(info.sun_dir, info.eye_dir);
     float rayleigh_phase = lr::rayleigh_phase(cos_theta);
-    float mie_phase = lr::henyey_greenstein_phase(atmos->mie_asymmetry, -cos_theta);
+    float mie_phase = lr::henyey_greenstein_phase(atmos.mie_asymmetry, -cos_theta);
 
     float step = 0.0;
     float delta_step = integration_length / sample_count;
@@ -192,12 +191,12 @@ public func integrate_single_scattered_luminance(
 
         float3 step_pos = info.eye_pos + step * info.eye_dir;
         float h = length(step_pos);
-        float altitude = h - atmos->planet_radius;
+        float altitude = h - atmos.planet_radius;
         MediumScattering medium_info = MediumScattering(atmos, altitude);
 
         float3 up_vec = normalize(step_pos);
         float3 up_vec_scaled = PLANET_RADIUS_OFFSET * up_vec;
-        float earth_shadow = lr::ray_sphere_intersect_nearest(step_pos - up_vec_scaled, info.sun_dir, atmos->planet_radius).hasValue ? 0.0 : 1.0;
+        float earth_shadow = lr::ray_sphere_intersect_nearest(step_pos - up_vec_scaled, info.sun_dir, atmos.planet_radius).hasValue ? 0.0 : 1.0;
         f32 sun_theta = dot(info.sun_dir, up_vec);
 
         float2 transmittance_uv = get_transmittance_lut_uv(atmos, float2(h, sun_theta));
@@ -238,7 +237,7 @@ public func integrate_single_scattered_luminance(
         float2 transmittance_uv = get_transmittance_lut_uv(atmos, float2(h, sun_theta));
         float3 sun_transmittance = info.transmittance_image.Sample(info.lut_sampler, transmittance_uv).rgb;
 
-        result.luminance += info.sun_intensity * (sun_transmittance * result.transmittance * NoL * atmos->terrain_albedo / PI);
+        result.luminance += info.sun_intensity * (sun_transmittance * result.transmittance * NoL * atmos.terrain_albedo / PI);
     }
 
     return result;

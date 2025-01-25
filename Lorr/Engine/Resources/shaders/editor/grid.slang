@@ -11,7 +11,7 @@ struct FragmentOutput {
     float depth  : SV_Depth;
 };
 
-[[vk::binding(0, 0)]] Scene scene;
+[[vk::binding(0, 0)]] Camera camera;
 
 float3 UnprojectPoint(float x, float y, float z, float4x4 view_proj_mat_inv) {
     float4 unprojectedPoint =  mul(view_proj_mat_inv, float4(x, y, z, 1.0));
@@ -55,20 +55,17 @@ float4 pristine_grid(float3 uv, float2 lineWidth) {
 [shader("vertex")]
 VertexOutput vs_main(u32 vertex_id : SV_VertexID) {
     VertexOutput output;
-    Camera *camera = &scene.cameras[scene.active_camera_index];
 
     float2 uv = float2((vertex_id << 1) & 2, vertex_id & 2);
     output.position = float4(uv * float2(2.0, 2.0) - float2(1.0, 1.0), 0.5, 1);
-    output.near_pos = UnprojectPoint(output.position.x, output.position.y, 0.0, camera->inv_projection_view_mat);
-    output.far_pos =  UnprojectPoint(output.position.x, output.position.y, 1.0, camera->inv_projection_view_mat);
+    output.near_pos = UnprojectPoint(output.position.x, output.position.y, 0.0, camera.inv_projection_view_mat);
+    output.far_pos =  UnprojectPoint(output.position.x, output.position.y, 1.0, camera.inv_projection_view_mat);
 
     return output;
 }
 
 [shader("fragment")]
 FragmentOutput fs_main(VertexOutput input) {
-    Camera *camera = &scene.cameras[scene.active_camera_index];
-
     FragmentOutput output;
     float t = -input.near_pos.y / (input.far_pos.y - input.near_pos.y);
     if (t < 0.0)
@@ -77,7 +74,7 @@ FragmentOutput fs_main(VertexOutput input) {
     float3 pixel_pos = input.near_pos + t * (input.far_pos - input.near_pos);
     pixel_pos.y -= 0.1;
 
-    float4 clip_space_pos = mul(camera->projection_view_mat, float4(pixel_pos, 1.0));
+    float4 clip_space_pos = mul(camera.projection_view_mat, float4(pixel_pos, 1.0));
     float depth = clip_space_pos.z / clip_space_pos.w;
 
     output.color = pristine_grid(pixel_pos, float2(0.005)) * float(t > 0.0);

@@ -264,13 +264,14 @@ auto Scene::create_editor_camera(this Scene &self) -> void {
         .add<ECS::ActiveCamera>();
 }
 
-auto Scene::upload_scene(this Scene &self, SceneRenderer &renderer) -> void {
+auto Scene::render(this Scene &self, SceneRenderer &renderer, const vuk::Extent3D &extent, vuk::Format format)
+    -> vuk::Value<vuk::ImageAttachment> {
     ZoneScoped;
 
     auto &app = Application::get();
     // clang-format off
     auto camera_query = self.get_world()
-        .query_builder<ECS::Transform, ECS::Camera>()
+        .query_builder<ECS::Transform, ECS::Camera, ECS::ActiveCamera>()
         .build();
     auto model_transform_query = self.get_world()
         .query_builder<ECS::Transform, ECS::RenderingModel>()
@@ -283,30 +284,9 @@ auto Scene::upload_scene(this Scene &self, SceneRenderer &renderer) -> void {
         .build();
     // clang-format on
 
-    // TODO: this is too much
-    u32 mesh_transform_count = 0;
-    model_transform_query.each([&](flecs::entity, ECS::Transform &, ECS::RenderingModel &rendering_model) {  //
-        auto *model = app.asset_man.get_model(rendering_model.model);
-        if (!model) {
-            return;
-        }
-
-        mesh_transform_count += model->meshes.size();
-    });
-
-    auto scene_data = renderer.begin_scene({
-        .camera_count = static_cast<u32>(camera_query.count()),
-        .mesh_transform_count = mesh_transform_count,
-        .has_sun = directional_light_query.count() > 0,
-        .has_atmosphere = atmosphere_query.count() > 0,
-    });
-
-    scene_data.materials_buffer_id = app.asset_man.material_buffer();
-
-    u32 active_camera_index = 0;
-    camera_query.each([&](flecs::entity e, ECS::Transform &t, ECS::Camera &c) {
-        auto index = SlotMap_decode_id(c.id).index;
-        auto &camera_data = scene_data.cameras[index];
+    ls::option<GPUCameraData> active_camera_data = ls::nullopt;
+    camera_query.each([&](flecs::entity, ECS::Transform &t, ECS::Camera &c, ECS::ActiveCamera) {
+        GPUCameraData camera_data = {};
         camera_data.projection_mat = c.projection;
         camera_data.view_mat = t.matrix;
         camera_data.projection_view_mat = glm::transpose(c.projection * t.matrix);
@@ -315,79 +295,60 @@ auto Scene::upload_scene(this Scene &self, SceneRenderer &renderer) -> void {
         camera_data.position = t.position;
         camera_data.near_clip = c.near_clip;
         camera_data.far_clip = c.far_clip;
-
-        if (e.has<ECS::ActiveCamera>()) {
-            active_camera_index = index;
-        }
+        active_camera_data.emplace(camera_data);
     });
 
+    ls::option<GPUSunData> sun_data = ls::nullopt;
     directional_light_query.each([&](flecs::entity, ECS::DirectionalLight &light) {
         auto rad = glm::radians(light.direction);
 
-        auto &sun_data = scene_data.sun;
-        sun_data->direction = {
-            glm::cos(rad.x) * glm::sin(rad.y),
-            glm::sin(rad.x) * glm::sin(rad.y),
-            glm::cos(rad.y),
+        GPUSunData sun = {
+            .direction = {
+                glm::cos(rad.x) * glm::sin(rad.y),
+                glm::sin(rad.x) * glm::sin(rad.y),
+                glm::cos(rad.y),
+            },
+            .intensity = light.intensity
         };
-        sun_data->intensity = light.intensity;
+        sun_data.emplace(sun);
     });
 
-    atmosphere_query.each([&](flecs::entity, ECS::Atmosphere &atmos) {
-        auto &atmos_data = scene_data.atmosphere;
-        *atmos_data = {};  // default constructor
-        atmos_data->rayleigh_scatter = atmos.rayleigh_scattering * 1e-3f;
-        atmos_data->rayleigh_density = atmos.rayleigh_density;
-        atmos_data->mie_scatter = atmos.mie_scattering * 1e-3f;
-        atmos_data->mie_density = atmos.mie_density;
-        atmos_data->mie_extinction = atmos.mie_extinction * 1e-3f;
-        atmos_data->ozone_absorption = atmos.ozone_absorption * 1e-3f;
-        atmos_data->ozone_height = atmos.ozone_height;
-        atmos_data->ozone_thickness = atmos.ozone_thickness;
+    ls::option<GPUAtmosphereData> atmos_data = ls::nullopt;
+    atmosphere_query.each([&](flecs::entity, ECS::Atmosphere &atmos_info) {
+        GPUAtmosphereData atmos = {};
+        atmos.rayleigh_scatter = atmos_info.rayleigh_scattering * 1e-3f;
+        atmos.rayleigh_density = atmos_info.rayleigh_density;
+        atmos.mie_scatter = atmos_info.mie_scattering * 1e-3f;
+        atmos.mie_density = atmos_info.mie_density;
+        atmos.mie_extinction = atmos_info.mie_extinction * 1e-3f;
+        atmos.ozone_absorption = atmos_info.ozone_absorption * 1e-3f;
+        atmos.ozone_height = atmos_info.ozone_height;
+        atmos.ozone_thickness = atmos_info.ozone_thickness;
+        atmos_data.emplace(atmos);
     });
 
-    u32 mesh_transform_index = 0;
-    scene_data.models.clear();
-    auto mesh_transforms_ptr = scene_data.mesh_transforms;
+    std::vector<GPUMeshInstance> mesh_instances = {};
     model_transform_query.each([&](flecs::entity, ECS::Transform &parent_transform, ECS::RenderingModel &rendering_model) {
         auto *model = app.asset_man.get_model(rendering_model.model);
         if (!model) {
             return;
         }
 
-        auto &gpu_model = scene_data.models.emplace_back();
-        for (const auto &meshlet : model->meshlets) {
-            gpu_model.meshlets.push_back({
-                .vertex_offset = meshlet.vertex_offset,
-                .index_count = meshlet.index_count,
-                .index_offset = meshlet.index_offset,
-                .triangle_count = meshlet.triangle_count,
-                .triangle_offset = meshlet.triangle_offset,
-            });
+        for (const auto &node : model->nodes) {
+            auto &instance = mesh_instances.emplace_back();
+            instance.transform_mat = parent_transform.matrix * node.transform;
         }
-
-        for (const auto &mesh : model->meshes) {
-            gpu_model.meshes.push_back({
-                .meshlet_indices = mesh.meshlet_indices,
-            });
-        }
-
-        for (auto &node : model->nodes) {
-            gpu_model.nodes.push_back({
-                .mesh_indices = node.mesh_indices,
-                .transform_index = mesh_transform_index,
-            });
-
-            mesh_transform_index++;
-            mesh_transforms_ptr->transform_mat = parent_transform.matrix * node.transform;
-            mesh_transforms_ptr++;
-        }
-
-        gpu_model.vertex_bufffer_id = model->vertex_buffer.id();
-        gpu_model.index_buffer_id = model->index_buffer.id();
     });
 
-    renderer.end_scene(scene_data);
+    return renderer.render(SceneRenderInfo{
+        .format = format,
+        .extent = extent,
+        .materials_buffer_id = app.asset_man.material_buffer(),
+        .mesh_instances = std::move(mesh_instances),
+        .camera_info = active_camera_data,
+        .sun = sun_data,
+        .atmosphere = atmos_data,
+    });
 }
 
 auto Scene::tick(this Scene &self) -> bool {

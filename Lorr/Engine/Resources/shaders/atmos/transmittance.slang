@@ -2,26 +2,24 @@ import atmos;
 import "../lorr";
 
 [[vk::binding(0, 0)]] RWTexture2D<float4> transmittance_image;
-[[vk::binding(1, 0)]] Scene scene;
+[[vk::binding(1, 0)]] Atmosphere atmosphere;
 
 struct PushConstants {
     float2 image_size;
 };
-
 [[vk::push_constant]] PushConstants c;
 
 [shader("compute")]
 [numthreads(16, 16, 1)]
 void cs_main(uint3 thread_id : SV_DispatchThreadID) {
-    Atmosphere *atmos = scene.atmosphere;
     float2 uv = float2(float2(thread_id.xy) + 0.5) / float2(c.image_size);
 
     float h = lr::safe_sqrt(
-        atmos->atmos_radius * atmos->atmos_radius -
-        atmos->planet_radius * atmos->planet_radius);
+        atmosphere.atmos_radius * atmosphere.atmos_radius -
+        atmosphere.planet_radius * atmosphere.planet_radius);
     float rho = h * uv.y;
-    float lut_x = sqrt(rho * rho + atmos->planet_radius * atmos->planet_radius);
-    float d_min = atmos->atmos_radius - lut_x;
+    float lut_x = sqrt(rho * rho + atmosphere.planet_radius * atmosphere.planet_radius);
+    float d_min = atmosphere.atmos_radius - lut_x;
     float d_max = rho + h;
     float d = d_min + uv.x * (d_max - d_min);
     float lut_y = d == 0.0 ? 1.0 : (h * h - rho * rho - d * d) / (2.0 * lut_x * d);
@@ -31,13 +29,13 @@ void cs_main(uint3 thread_id : SV_DispatchThreadID) {
     float3 ray_pos = float3(0.0, 0.0, lut_x);
 
     const float STEP_COUNT = 1000.0;
-    float distance = lr::ray_sphere_intersect_nearest(ray_pos, sun_dir, atmos.atmos_radius).value;
+    float distance = lr::ray_sphere_intersect_nearest(ray_pos, sun_dir, atmosphere.atmos_radius).value;
     float distance_per_step = distance / STEP_COUNT;
     float3 optical_depth = float3(0.0);
     for (float i = 0.0; i < STEP_COUNT; i += 1.0) {
         ray_pos += sun_dir * distance_per_step;
-        let ray_altitude = length(ray_pos) - atmos.planet_radius;
-        const let medium = MediumScattering(atmos, ray_altitude);
+        let ray_altitude = length(ray_pos) - atmosphere.planet_radius;
+        const let medium = MediumScattering(atmosphere, ray_altitude);
         optical_depth += medium.extinction_sum * distance_per_step;
     }
 

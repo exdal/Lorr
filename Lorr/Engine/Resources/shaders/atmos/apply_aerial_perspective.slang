@@ -4,9 +4,9 @@ import "../lorr";
 [[vk::binding(0, 0)]] SamplerState sampler;
 [[vk::binding(1, 0)]] Texture2D<float4> depth_image;
 [[vk::binding(2, 0)]] Texture3D<float4> aerial_perspective_lut;
-[[vk::binding(3, 0)]] Atmosphere atmos;
-[[vk::binding(4, 0)]] Sun sun;
-[[vk::binding(5, 0)]] Camera camera;
+[[vk::binding(3, 0)]] ConstantBuffer<Atmosphere, ScalarDataLayout> atmos;
+[[vk::binding(4, 0)]] ConstantBuffer<Sun, ScalarDataLayout> sun;
+[[vk::binding(5, 0)]] ConstantBuffer<Camera, ScalarDataLayout> camera;
 
 struct VertexOutput {
     float4 position     : SV_Position;

@@ -5,8 +5,8 @@ import "../noise/hemisphere";
 [[vk::binding(0, 0)]] SamplerState sampler;
 [[vk::binding(1, 0)]] Texture2D<float4> transmittance_lut;
 [[vk::binding(2, 0)]] RWTexture2D<float4> multiscattering_lut;
-[[vk::binding(3, 0)]] Atmosphere atmos;
-[[vk::binding(4, 0)]] Sun sun;
+[[vk::binding(3, 0)]] ConstantBuffer<Atmosphere, ScalarDataLayout> atmos;
+[[vk::binding(4, 0)]] ConstantBuffer<Sun, ScalarDataLayout> sun;
 
 struct PushConstants {
     float2 multiscattering_lut_size;

@@ -11,7 +11,7 @@ struct FragmentOutput {
     float depth  : SV_Depth;
 };
 
-[[vk::binding(0, 0)]] Camera camera;
+[[vk::binding(0, 0)]] ConstantBuffer<Camera, ScalarDataLayout> camera;
 
 float3 UnprojectPoint(float x, float y, float z, float4x4 view_proj_mat_inv) {
     float4 unprojectedPoint =  mul(view_proj_mat_inv, float4(x, y, z, 1.0));

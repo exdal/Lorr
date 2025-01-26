@@ -379,49 +379,49 @@ auto SceneRenderer::render(this SceneRenderer &self, const SceneRenderInfo &info
     }
 
     //  ── VIS TRI ─────────────────────────────────────────────────────────
-    for (const auto &model : self.rendering_models) {
-        auto vis_triangle_id_pass = vuk::make_pass(
-            "vis triangle",
-            [&pipeline = *self.device->pipeline(self.vis_triangle_id_pipeline.id()), &device = self.device, model](
-                vuk::CommandBuffer &cmd_list,
-                VUK_IA(vuk::Access::eColorWrite) dst,
-                VUK_IA(vuk::Access::eDepthStencilRW) dst_depth,
-                VUK_BA(vuk::Access::eVertexRead) camera,
-                VUK_BA(vuk::Access::eVertexRead) mesh_instances) {
-                cmd_list  //
-                    .bind_graphics_pipeline(pipeline)
-                    .set_rasterization({ .cullMode = vuk::CullModeFlagBits::eBack })
-                    .set_depth_stencil(
-                        { .depthTestEnable = true, .depthWriteEnable = true, .depthCompareOp = vuk::CompareOp::eLessOrEqual })
-                    .set_color_blend(dst, vuk::BlendPreset::eAlphaBlend)
-                    .set_viewport(0, vuk::Rect2D::framebuffer())
-                    .set_scissor(0, vuk::Rect2D::framebuffer())
-                    .bind_buffer(0, 0, camera)
-                    .bind_buffer(0, 1, mesh_instances)
-                    .bind_buffer(0, 2, *device->buffer(model.vertex_buffer.id()))
-                    .bind_buffer(0, 3, *device->buffer(model.reordered_index_buffer.id()))
-                    .bind_index_buffer(*device->buffer(model.provoked_index_buffer.id()), vuk::IndexType::eUint32);
-
-                for (usize node_index = 0; node_index < model.nodes.size(); node_index++) {
-                    const auto &node = model.nodes[node_index];
-                    cmd_list  //
-                        .push_constants(vuk::ShaderStageFlagBits::eVertex, 0, node_index);
-                    for (const auto mesh_index : node.mesh_indices) {
-                        const auto &mesh = model.meshes[mesh_index];
-                        for (const auto &meshlet_index : mesh.meshlet_indices) {
-                            const auto &meshlet = model.meshlets[meshlet_index];
-                            cmd_list  //
-                                .draw_indexed(meshlet.index_count, 1, meshlet.index_offset, static_cast<i32>(meshlet.vertex_offset), 0);
-                        }
-                    }
-                }
-
-                return std::make_tuple(dst, dst_depth, camera, mesh_instances);
-            });
-
-        std::tie(final_attachment, depth_attachment, camera_buffer) =
-            vis_triangle_id_pass(std::move(final_attachment), std::move(depth_attachment));
-    }
+    // for (const auto &model : self.rendering_models) {
+    //     auto vis_triangle_id_pass = vuk::make_pass(
+    //         "vis triangle",
+    //         [&pipeline = *self.device->pipeline(self.vis_triangle_id_pipeline.id()), &device = self.device, model](
+    //             vuk::CommandBuffer &cmd_list,
+    //             VUK_IA(vuk::Access::eColorWrite) dst,
+    //             VUK_IA(vuk::Access::eDepthStencilRW) dst_depth,
+    //             VUK_BA(vuk::Access::eVertexRead) camera,
+    //             VUK_BA(vuk::Access::eVertexRead) mesh_instances) {
+    //             cmd_list  //
+    //                 .bind_graphics_pipeline(pipeline)
+    //                 .set_rasterization({ .cullMode = vuk::CullModeFlagBits::eBack })
+    //                 .set_depth_stencil(
+    //                     { .depthTestEnable = true, .depthWriteEnable = true, .depthCompareOp = vuk::CompareOp::eLessOrEqual })
+    //                 .set_color_blend(dst, vuk::BlendPreset::eAlphaBlend)
+    //                 .set_viewport(0, vuk::Rect2D::framebuffer())
+    //                 .set_scissor(0, vuk::Rect2D::framebuffer())
+    //                 .bind_buffer(0, 0, camera)
+    //                 .bind_buffer(0, 1, mesh_instances)
+    //                 .bind_buffer(0, 2, *device->buffer(model.vertex_buffer.id()))
+    //                 .bind_buffer(0, 3, *device->buffer(model.reordered_index_buffer.id()))
+    //                 .bind_index_buffer(*device->buffer(model.provoked_index_buffer.id()), vuk::IndexType::eUint32);
+    //
+    //             for (usize node_index = 0; node_index < model.nodes.size(); node_index++) {
+    //                 const auto &node = model.nodes[node_index];
+    //                 cmd_list  //
+    //                     .push_constants(vuk::ShaderStageFlagBits::eVertex, 0, node_index);
+    //                 for (const auto mesh_index : node.mesh_indices) {
+    //                     const auto &mesh = model.meshes[mesh_index];
+    //                     for (const auto &meshlet_index : mesh.meshlet_indices) {
+    //                         const auto &meshlet = model.meshlets[meshlet_index];
+    //                         cmd_list  //
+    //                             .draw_indexed(meshlet.index_count, 1, meshlet.index_offset, static_cast<i32>(meshlet.vertex_offset), 0);
+    //                     }
+    //                 }
+    //             }
+    //
+    //             return std::make_tuple(dst, dst_depth, camera, mesh_instances);
+    //         });
+    //
+    //     std::tie(final_attachment, depth_attachment, camera_buffer) =
+    //         vis_triangle_id_pass(std::move(final_attachment), std::move(depth_attachment));
+    // }
 
     //  ── EDITOR GRID ─────────────────────────────────────────────────────
     auto editor_grid_pass = vuk::make_pass(

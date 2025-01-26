@@ -1,7 +1,5 @@
 #pragma once
 
-#include "Engine/Asset/Model.hh"
-
 #include "Engine/Graphics/VulkanDevice.hh"
 
 namespace lr {

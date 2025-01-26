@@ -5,9 +5,9 @@ import "../lorr";
 [[vk::binding(1, 0)]] RWTexture3D<float4> aerial_perspective_lut;
 [[vk::binding(2, 0)]] Texture2D<float4> transmittance_lut;
 [[vk::binding(3, 0)]] Texture2D<float4> multiscattering_lut;
-[[vk::binding(4, 0)]] Atmosphere atmos;
-[[vk::binding(5, 0)]] Sun sun;
-[[vk::binding(6, 0)]] Camera camera;
+[[vk::binding(4, 0)]] ConstantBuffer<Atmosphere, ScalarDataLayout> atmos;
+[[vk::binding(5, 0)]] ConstantBuffer<Sun, ScalarDataLayout> sun;
+[[vk::binding(6, 0)]] ConstantBuffer<Camera, ScalarDataLayout> camera;
 
 struct PushConstants {
     float3 target_image_size;

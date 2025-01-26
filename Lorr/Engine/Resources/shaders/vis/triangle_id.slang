@@ -2,7 +2,7 @@ module triangle_id;
 
 import "../lorr";
 
-[[vk::binding(0, 0)]] Camera camera;
+[[vk::binding(0, 0)]] ConstantBuffer<Camera, ScalarDataLayout> camera;
 [[vk::binding(1, 0)]] StructuredBuffer<MeshInstance> mesh_instances;
 [[vk::binding(2, 0)]] StructuredBuffer<Vertex> vertices;
 [[vk::binding(3, 0)]] StructuredBuffer<u32> reordered_indices;

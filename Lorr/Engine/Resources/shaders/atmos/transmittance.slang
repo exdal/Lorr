@@ -2,7 +2,7 @@ import atmos;
 import "../lorr";
 
 [[vk::binding(0, 0)]] RWTexture2D<float4> transmittance_image;
-[[vk::binding(1, 0)]] Atmosphere atmosphere;
+[[vk::binding(1, 0)]] ConstantBuffer<Atmosphere, ScalarDataLayout> atmosphere;
 
 struct PushConstants {
     float2 image_size;

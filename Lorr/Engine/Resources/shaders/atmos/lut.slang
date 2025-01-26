@@ -4,9 +4,9 @@ import "../lorr";
 [[vk::binding(0, 0)]] SamplerState sampler;
 [[vk::binding(1, 0)]] Texture2D<float4> transmittance_lut;
 [[vk::binding(2, 0)]] Texture2D<float4> multiscattering_lut;
-[[vk::binding(3, 0)]] Atmosphere atmos;
-[[vk::binding(4, 0)]] Sun sun;
-[[vk::binding(5, 0)]] Camera camera;
+[[vk::binding(3, 0)]] ConstantBuffer<Atmosphere, ScalarDataLayout> atmos;
+[[vk::binding(4, 0)]] ConstantBuffer<Sun, ScalarDataLayout> sun;
+[[vk::binding(5, 0)]] ConstantBuffer<Camera, ScalarDataLayout> camera;
 
 struct VertexOutput {
     vec4 position     : SV_Position;
@@ -27,7 +27,7 @@ VertexOutput vs_main(u32 vertex_id : SV_VertexID) {
 vec4 fs_main(VertexOutput input) : SV_TARGET {
     float3 eye_pos = float3(0.0, camera.position.y, 0.0) *
                      CAMERA_SCALE_UNIT +
-                     float3(0.0, atmos.planet_radius, 0.0);
+                     float3(0.0, atmos->planet_radius, 0.0);
 
     f32 h = length(eye_pos);
     f32 u = fromSubUvsToUnit(input.tex_coord.x, 200);

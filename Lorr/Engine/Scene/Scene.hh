@@ -25,6 +25,7 @@ struct Scene {
     auto tick(this Scene &) -> bool;
 
     auto set_name(this Scene &, const std::string &name) -> void;
+    auto set_dirty(this Scene &, GPUEntityID gpu_entity_id) -> void;
 
     auto get_root(this Scene &) -> flecs::entity;
     auto get_world(this Scene &) -> flecs::world &;
@@ -39,8 +40,10 @@ private:
     ls::option<flecs::world> world = ls::nullopt;
 
     std::vector<flecs::entity> imported_modules = {};
+
     GPUEntityID editor_camera_id = GPUEntityID::Invalid;
-    SlotMap<flecs::entity, GPUEntityID> cameras = {};
+    SlotMap<flecs::entity, GPUEntityID> gpu_entities = {};
+    std::vector<GPUEntityID> dirty_entities = {};
 
     friend AssetManager;
 };

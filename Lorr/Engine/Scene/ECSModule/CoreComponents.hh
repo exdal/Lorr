@@ -16,10 +16,12 @@
 
 // clang-format off
 ECS_COMPONENT_BEGIN(Transform)
+    // TODO: Do we really need TRS when we have matrix already?
     ECS_COMPONENT_MEMBER(position, glm::vec3, {0.0f, 0.0f, 0.0f})
     ECS_COMPONENT_MEMBER(scale, glm::vec3, {1.0f, 1.0f, 1.0f})
     ECS_COMPONENT_MEMBER(rotation, glm::vec3, {0.0f, 0.0f, 0.0f})
     ECS_COMPONENT_MEMBER(matrix, glm::mat4, {})
+    ECS_COMPONENT_MEMBER(id, GPUEntityID, GPUEntityID::Invalid)
 ECS_COMPONENT_END();
 
 ECS_COMPONENT_BEGIN(Camera)
@@ -31,7 +33,6 @@ ECS_COMPONENT_BEGIN(Camera)
     ECS_COMPONENT_MEMBER(aspect_ratio, f32, 1.777f)
     ECS_COMPONENT_MEMBER(near_clip, f32, 0.1f)
     ECS_COMPONENT_MEMBER(far_clip, f32, 1000.0f)
-    ECS_COMPONENT_MEMBER(id, GPUEntityID, GPUEntityID::Invalid)
 ECS_COMPONENT_END();
 
 ECS_COMPONENT_TAG(PerspectiveCamera);

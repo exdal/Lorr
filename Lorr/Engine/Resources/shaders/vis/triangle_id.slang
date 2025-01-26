@@ -3,12 +3,12 @@ module triangle_id;
 import "../lorr";
 
 [[vk::binding(0, 0)]] ConstantBuffer<Camera, ScalarDataLayout> camera;
-[[vk::binding(1, 0)]] StructuredBuffer<MeshInstance> mesh_instances;
+[[vk::binding(1, 0)]] StructuredBuffer<Entity> entities;
 [[vk::binding(2, 0)]] StructuredBuffer<Vertex> vertices;
 [[vk::binding(3, 0)]] StructuredBuffer<u32> reordered_indices;
 
 struct PushConstants {
-    u32 model_index;
+    u32 entity_index;
 };
 [[vk::push_constant]] PushConstants c;
 
@@ -21,9 +21,9 @@ struct VertexOutput {
 VertexOutput vs_main(u32 vertex_id : SV_VertexID) {
     VertexOutput output;
 
-    MeshInstance mesh_instance = mesh_instances[c.model_index];
+    const Entity entity = entities[c.entity_index];
     const Vertex vertex = vertices[reordered_indices[vertex_id]];
-    const let world_position = mul(float4(vertex.position, 1.0), mesh_instance.transform_mat);
+    const let world_position = mul(float4(vertex.position, 1.0), entity.local_transform_mat);
 
     output.position = mul(camera.projection_view_mat, world_position);
     output.primitive_id = vertex_id;

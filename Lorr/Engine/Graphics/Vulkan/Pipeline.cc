@@ -8,11 +8,6 @@ auto Pipeline::create(Device &device, const ShaderCompileInfo &compile_info) -> 
 
     auto definitions = compile_info.definitions;
     vuk::PipelineBaseCreateInfo create_info = {};
-    if (compile_info.bindless_pipeline) {
-        auto bindless_layout = device.get_bindless_descriptor_set_layout();
-        create_info.explicit_set_layouts.push_back(bindless_layout.layout_info);
-        definitions.emplace_back("LR_BINDLESS_PIPELINE", "1");
-    }
 
     auto slang_session = device.new_slang_session({
         .definitions = definitions,

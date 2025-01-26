@@ -34,57 +34,6 @@ public typedef u32 BufferID;
 public typedef u32 ImageViewID;
 public typedef u32 SamplerID;
 
-#ifdef LR_BINDLESS_PIPELINE
-
-#define LR_DESCRIPTOR_INDEX_SAMPLER 0
-#define LR_DESCRIPTOR_INDEX_IMAGES 1
-#define LR_DESCRIPTOR_INDEX_STORAGE_IMAGES 2
-#define LR_DESCRIPTOR_INDEX_STORAGE_BUFFERS 3
-#define LR_DESCRIPTOR_INDEX_BDA_ARRAY 4
-
-[[vk::binding(LR_DESCRIPTOR_INDEX_SAMPLER, 0)]]         SamplerState __samplers[];
-[[vk::binding(LR_DESCRIPTOR_INDEX_IMAGES, 0)]]          __DynamicResource __textures[];
-[[vk::binding(LR_DESCRIPTOR_INDEX_STORAGE_IMAGES, 0)]]  __DynamicResource __storage_images[];
-[[vk::binding(LR_DESCRIPTOR_INDEX_STORAGE_BUFFERS, 0)]] ByteAddressBuffer __storage_buffers[];
-[[vk::binding(LR_DESCRIPTOR_INDEX_BDA_ARRAY, 0)]]       StructuredBuffer<u64> __bda_array;
-
-public struct ImageView<Format> {
-    ImageViewID handle;
-
-    [ForceInline]
-    public __init(ImageViewID id) {
-        this.handle = id;
-    }
-
-    [ForceInline]
-    public Format sample(SamplerID sampler_id, float2 uv) {
-        return __textures[this.handle].as<Texture2D<Format>>().Sample(__samplers[sampler_id], uv);
-    }
-
-    [ForceInline]
-    public Format sample(SamplerID sampler_id, float3 uvw) {
-        return __textures[this.handle].as<Texture3D<Format>>().Sample(__samplers[sampler_id], uvw);
-    }
-
-    [ForceInline]
-    public void store(uint2 thread_id, Format color) {
-        const let rw_image = __storage_images[this.handle].as<RWTexture2D<Format>>();
-        rw_image[thread_id] = color;
-    }
-
-    [ForceInline]
-    public void store(uint3 thread_id, Format color) {
-        const let rw_image = __storage_images[this.handle].as<RWTexture3D<Format>>();
-        rw_image[thread_id] = color;
-    }
-
-    [ForceInline]
-    public func id() -> ImageViewID {
-        return this.handle;
-    }
-};
-#endif
-
 public struct SampledImage<Format> {
     ImageViewID image_view_id : 24;
     SamplerID sampler_id : 8;
@@ -94,16 +43,4 @@ public struct SampledImage<Format> {
         this.image_view_id = image_view_id;
         this.sampler_id = sampler_id;
     }
-
-#ifdef LR_BINDLESS_PIPELINE
-    [ForceInline]
-    public Format sample(float2 uv) {
-        return __textures[this.image_view_id].as<Texture2D<Format>>().Sample(__samplers[this.sampler_id], uv);
-    }
-
-    [ForceInline]
-    public Format sample(float3 uvw) {
-        return __textures[this.image_view_id].as<Texture3D<Format>>().Sample(__samplers[this.sampler_id], uvw);
-    }
-#endif
 };

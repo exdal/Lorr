@@ -20,7 +20,7 @@ public struct Material {
 };
 
 public struct MeshInstance {
-    public mat4 transform_mat;
+    public u32 entity_index;
     public u32 material_index;
 };
 

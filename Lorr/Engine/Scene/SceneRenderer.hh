@@ -73,8 +73,24 @@ struct GPUMaterial {
 };
 
 struct GPUMeshInstance {
-    alignas(4) glm::mat4 transform_mat = {};
+    alignas(4) u32 entity_index = ~0_u32;
     alignas(4) u32 material_index = ~0_u32;
+};
+
+struct GPUEntityTransform {
+    alignas(4) glm::mat4 local_transform_mat = {};
+};
+
+struct RenderingMesh {
+    u32 entity_index = ~0_u32;
+    u32 vertex_offset = 0;
+    u32 index_count = 0;
+    u32 index_offset = 0;
+
+    // TODO: Remove them when we have mega-buffers
+    BufferID vertex_buffer_id = BufferID::Invalid;
+    BufferID reordered_index_buffer_id = BufferID::Invalid;
+    BufferID provoked_index_buffer_id = BufferID::Invalid;
 };
 
 struct SceneRenderInfo {
@@ -82,7 +98,7 @@ struct SceneRenderInfo {
     vuk::Extent3D extent = {};
 
     BufferID materials_buffer_id = BufferID::Invalid;
-    std::vector<GPUMeshInstance> mesh_instances = {};
+    std::vector<RenderingMesh> rendering_meshes = {};
 
     ls::option<GPUCameraData> camera_info = ls::nullopt;
     ls::option<GPUSunData> sun = ls::nullopt;
@@ -93,14 +109,14 @@ struct SceneRenderer {
     auto init(this SceneRenderer &, Device *device) -> bool;
     auto setup_persistent_resources(this SceneRenderer &) -> void;
 
+    auto update_entity_transform(this SceneRenderer &, GPUEntityID entity_id, GPUEntityTransform transform) -> void;
+
     auto render(this SceneRenderer &, const SceneRenderInfo &render_info) -> vuk::Value<vuk::ImageAttachment>;
     auto draw_profiler_ui(this SceneRenderer &) -> void;
 
 private:
     Device *device = nullptr;
-
-    Sampler linear_sampler = {};
-    Sampler nearest_sampler = {};
+    Buffer gpu_entities_buffer = {};
 
     Pipeline grid_pipeline = {};
 

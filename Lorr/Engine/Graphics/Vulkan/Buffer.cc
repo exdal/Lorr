@@ -24,11 +24,6 @@ auto Buffer::create(Device &device, u64 size, vuk::MemoryUsage memory_usage, vuk
     buffer.host_data_ = buffer_handle->mapped_ptr;
     buffer.device_address_ = buffer_handle->device_address;
     buffer.id_ = device.resources.buffers.create_slot(std::move(buffer_handle));
-    if (device.bda_array_buffer) {
-        auto slot_index = SlotMap_decode_id(buffer.id_).index;
-        auto *device_address_arr = reinterpret_cast<u64 *>(device.bda_array_buffer.host_ptr());
-        device_address_arr[slot_index] = buffer_handle->device_address;
-    }
 
     return buffer;
 }

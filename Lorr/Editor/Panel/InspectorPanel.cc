@@ -3,6 +3,7 @@
 #include "Editor/EditorApp.hh"
 
 #include "Engine/Scene/ECSModule/ComponentWrapper.hh"
+#include "Engine/Scene/ECSModule/Core.hh"
 
 namespace lr {
 InspectorPanel::InspectorPanel(std::string name_, bool open_)
@@ -30,6 +31,7 @@ auto InspectorPanel::draw_inspector(this InspectorPanel &) -> void {
             // TODO: Rename entity
         }
 
+        bool entity_modified = false;
         app.selected_entity.each([&](flecs::id component_id) {
             memory::ScopedStack stack;
 
@@ -68,13 +70,13 @@ auto InspectorPanel::draw_inspector(this InspectorPanel &) -> void {
                     std::visit(
                         match{
                             [](const auto &) {},
-                            [&](f32 *v) { ImGuiLR::drag_vec(0, v, 1, ImGuiDataType_Float); },
-                            [&](i32 *v) { ImGuiLR::drag_vec(0, v, 1, ImGuiDataType_S32); },
-                            [&](u32 *v) { ImGuiLR::drag_vec(0, v, 1, ImGuiDataType_U32); },
-                            [&](i64 *v) { ImGuiLR::drag_vec(0, v, 1, ImGuiDataType_S64); },
-                            [&](u64 *v) { ImGuiLR::drag_vec(0, v, 1, ImGuiDataType_U64); },
-                            [&](glm::vec2 *v) { ImGuiLR::drag_vec(0, glm::value_ptr(*v), 2, ImGuiDataType_Float); },
-                            [&](glm::vec3 *v) { ImGuiLR::drag_vec(0, glm::value_ptr(*v), 3, ImGuiDataType_Float); },
+                            [&](f32 *v) { entity_modified |= ImGuiLR::drag_vec(0, v, 1, ImGuiDataType_Float); },
+                            [&](i32 *v) { entity_modified |= ImGuiLR::drag_vec(0, v, 1, ImGuiDataType_S32); },
+                            [&](u32 *v) { entity_modified |= ImGuiLR::drag_vec(0, v, 1, ImGuiDataType_U32); },
+                            [&](i64 *v) { entity_modified |= ImGuiLR::drag_vec(0, v, 1, ImGuiDataType_S64); },
+                            [&](u64 *v) { entity_modified |= ImGuiLR::drag_vec(0, v, 1, ImGuiDataType_U64); },
+                            [&](glm::vec2 *v) { entity_modified |= ImGuiLR::drag_vec(0, glm::value_ptr(*v), 2, ImGuiDataType_Float); },
+                            [&](glm::vec3 *v) { entity_modified |= ImGuiLR::drag_vec(0, glm::value_ptr(*v), 3, ImGuiDataType_Float); },
                             [](std::string *v) { ImGui::InputText("", v); },
                             [&](UUID *v) {
                                 auto cursor_pos = ImGui::GetCursorPos();
@@ -147,6 +149,11 @@ auto InspectorPanel::draw_inspector(this InspectorPanel &) -> void {
         }
 
         ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal);
+
+        if (entity_modified && app.selected_entity.has<ECS::Transform>()) {
+            auto *transform = app.selected_entity.get<ECS::Transform>();
+            scene->set_dirty(transform->id);
+        }
     }
 }
 

@@ -73,14 +73,6 @@ private:
     friend Device;
 };
 
-struct BindlessDescriptorSetLayoutInfo {
-    BindlessDescriptorSetLayoutInfo() { layout_info.index = 0; }
-    vuk::DescriptorSetLayoutCreateInfo layout_info = {};
-    usize pool_size = 0;
-
-    auto add_binding(Descriptors binding, VkDescriptorType type, u32 count) -> void;
-};
-
 struct DeviceResources {
     SlotMap<vuk::Unique<vuk::Buffer>, BufferID> buffers = {};
     SlotMap<vuk::Unique<vuk::Image>, ImageID> images = {};
@@ -88,14 +80,6 @@ struct DeviceResources {
     SlotMap<vuk::Sampler, SamplerID> samplers = {};
     SlotMap<vuk::PipelineBaseInfo *, PipelineID> pipelines = {};
 };
-
-enum class DeviceFeature : u64 {
-    None = 0,
-    DescriptorBuffer = 1 << 0,
-    MemoryBudget = 1 << 1,
-    QueryTimestamp = 1 << 2,
-};
-consteval void enable_bitmask(DeviceFeature);
 
 struct Device {
     auto init(this Device &, usize frame_count) -> std::expected<void, vuk::VkException>;
@@ -118,11 +102,12 @@ struct Device {
     auto image_view(this Device &, ImageViewID) -> vuk::ImageView *;
     auto sampler(this Device &, SamplerID) -> vuk::Sampler *;
     auto pipeline(this Device &, PipelineID) -> vuk::PipelineBaseInfo **;
-    auto bindless_descriptor_set() -> vuk::PersistentDescriptorSet &;
 
-    auto feature_supported(this Device &, DeviceFeature feature) -> bool;
-
-    auto get_bindless_descriptor_set_layout() -> BindlessDescriptorSetLayoutInfo;
+    auto destroy(this Device &, BufferID) -> void;
+    auto destroy(this Device &, ImageID) -> void;
+    auto destroy(this Device &, ImageViewID) -> void;
+    auto destroy(this Device &, SamplerID) -> void;
+    auto destroy(this Device &, PipelineID) -> void;
 
     struct Limits {
         constexpr static u32 FrameCount = 3;
@@ -131,18 +116,13 @@ struct Device {
     auto get_instance() -> VkInstance { return instance.instance; }
 
 private:
+    usize frames_in_flight = 0;
     ls::option<vuk::Runtime> runtime;
     ls::option<vuk::Allocator> allocator;
     ls::option<vuk::DeviceSuperFrameResource> frame_resources;
     vuk::Compiler compiler = {};
-
-    usize frames_in_flight = 0;
-    vuk::Unique<vuk::PersistentDescriptorSet> descriptor_set;
-    Buffer bda_array_buffer = {};
     TransferManager transfer_manager = {};
-
     SlangCompiler shader_compiler = {};
-    DeviceFeature supported_features = DeviceFeature::None;
     DeviceResources resources = {};
 
     // Profiling tools

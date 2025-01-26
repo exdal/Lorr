@@ -1,5 +1,6 @@
 module lorr;
 
+__include lorr.entity;
 __include lorr.math;
 __include lorr.model;
 __include lorr.scene;

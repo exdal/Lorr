@@ -21,27 +21,6 @@ auto SceneRenderer::setup_persistent_resources(this SceneRenderer &self) -> void
     auto shaders_root = asset_man.asset_root_path(AssetType::Shader);
 
     // clang-format off
-    self.linear_sampler = Sampler::create(
-        *self.device,
-        vuk::Filter::eLinear,
-        vuk::Filter::eLinear,
-        vuk::SamplerMipmapMode::eLinear,
-        vuk::SamplerAddressMode::eClampToEdge,
-        vuk::SamplerAddressMode::eClampToEdge,
-        vuk::SamplerAddressMode::eClampToEdge,
-        vuk::CompareOp::eNever)
-        .value();
-    self.nearest_sampler = Sampler::create(
-        *self.device,
-        vuk::Filter::eNearest,
-        vuk::Filter::eNearest,
-        vuk::SamplerMipmapMode::eNearest,
-        vuk::SamplerAddressMode::eRepeat,
-        vuk::SamplerAddressMode::eRepeat,
-        vuk::SamplerAddressMode::eRepeat,
-        vuk::CompareOp::eNever)
-        .value();
-
     //  ── GRID ────────────────────────────────────────────────────────────
     self.grid_pipeline = Pipeline::create(*self.device, {
         .module_name = "editor.grid",
@@ -184,6 +163,24 @@ auto SceneRenderer::setup_persistent_resources(this SceneRenderer &self) -> void
     transfer_man.wait_on(std::move(multiscatter_lut_attachment));
 }
 
+auto SceneRenderer::update_entity_transform(this SceneRenderer &self, GPUEntityID entity_id, GPUEntityTransform transform) -> void {
+    ZoneScoped;
+
+    u64 target_offset = static_cast<u64>(SlotMap_decode_id(entity_id).index) * sizeof(GPUEntityTransform);
+    // Check if we have enough storage capacity
+    if (self.gpu_entities_buffer.data_size() <= target_offset) {
+        if (self.gpu_entities_buffer.id() != BufferID::Invalid) {
+            self.device->destroy(self.gpu_entities_buffer.id());
+        }
+
+        auto new_buffer_size = ls::max(target_offset * 2, sizeof(GPUEntityTransform) * 64);
+        self.gpu_entities_buffer = Buffer::create(*self.device, new_buffer_size, vuk::MemoryUsage::eGPUonly).value();
+    }
+
+    auto &transfer_man = self.device->transfer_man();
+    transfer_man.upload_staging(ls::span(&transform, 1), self.gpu_entities_buffer, target_offset);
+}
+
 auto SceneRenderer::render(this SceneRenderer &self, const SceneRenderInfo &info) -> vuk::Value<vuk::ImageAttachment> {
     ZoneScoped;
 
@@ -255,14 +252,17 @@ auto SceneRenderer::render(this SceneRenderer &self, const SceneRenderInfo &info
         sun_buffer = transfer_man.scratch_buffer(info.sun.value_or(GPUSunData{}));
     }
 
-    std::tie(sky_view_lut_attachment, transmittance_lut_attachment, multiscatter_lut_attachment, atmos_buffer, sun_buffer, camera_buffer) =
-        sky_view_pass(
-            std::move(sky_view_lut_attachment),
-            std::move(transmittance_lut_attachment),
-            std::move(multiscatter_lut_attachment),
-            std::move(atmos_buffer),
-            std::move(sun_buffer),
-            std::move(camera_buffer));
+    if (rendering_atmos) {
+        std::tie(
+            sky_view_lut_attachment, transmittance_lut_attachment, multiscatter_lut_attachment, atmos_buffer, sun_buffer, camera_buffer) =
+            sky_view_pass(
+                std::move(sky_view_lut_attachment),
+                std::move(transmittance_lut_attachment),
+                std::move(multiscatter_lut_attachment),
+                std::move(atmos_buffer),
+                std::move(sun_buffer),
+                std::move(camera_buffer));
+    }
 
     //  ── SKY AERIAL PERSPECTIVE ──────────────────────────────────────────
     auto sky_aerial_perspective_pass = vuk::make_pass(
@@ -308,20 +308,23 @@ auto SceneRenderer::render(this SceneRenderer &self, const SceneRenderInfo &info
           .level_count = 1,
           .layer_count = 1 });
     sky_aerial_perspective_attachment.same_format_as(sky_view_lut_attachment);
-    std::tie(
-        sky_aerial_perspective_attachment,
-        transmittance_lut_attachment,
-        multiscatter_lut_attachment,
-        atmos_buffer,
-        sun_buffer,
-        camera_buffer) =
-        sky_aerial_perspective_pass(
-            std::move(sky_aerial_perspective_attachment),
-            std::move(transmittance_lut_attachment),
-            std::move(multiscatter_lut_attachment),
-            std::move(atmos_buffer),
-            std::move(sun_buffer),
-            std::move(camera_buffer));
+
+    if (rendering_atmos) {
+        std::tie(
+            sky_aerial_perspective_attachment,
+            transmittance_lut_attachment,
+            multiscatter_lut_attachment,
+            atmos_buffer,
+            sun_buffer,
+            camera_buffer) =
+            sky_aerial_perspective_pass(
+                std::move(sky_aerial_perspective_attachment),
+                std::move(transmittance_lut_attachment),
+                std::move(multiscatter_lut_attachment),
+                std::move(atmos_buffer),
+                std::move(sun_buffer),
+                std::move(camera_buffer));
+    }
 
     //  ── SKY FINAL ───────────────────────────────────────────────────────
     auto sky_final_pass = vuk::make_pass(
@@ -379,49 +382,41 @@ auto SceneRenderer::render(this SceneRenderer &self, const SceneRenderInfo &info
     }
 
     //  ── VIS TRI ─────────────────────────────────────────────────────────
-    // for (const auto &model : self.rendering_models) {
-    //     auto vis_triangle_id_pass = vuk::make_pass(
-    //         "vis triangle",
-    //         [&pipeline = *self.device->pipeline(self.vis_triangle_id_pipeline.id()), &device = self.device, model](
-    //             vuk::CommandBuffer &cmd_list,
-    //             VUK_IA(vuk::Access::eColorWrite) dst,
-    //             VUK_IA(vuk::Access::eDepthStencilRW) dst_depth,
-    //             VUK_BA(vuk::Access::eVertexRead) camera,
-    //             VUK_BA(vuk::Access::eVertexRead) mesh_instances) {
-    //             cmd_list  //
-    //                 .bind_graphics_pipeline(pipeline)
-    //                 .set_rasterization({ .cullMode = vuk::CullModeFlagBits::eBack })
-    //                 .set_depth_stencil(
-    //                     { .depthTestEnable = true, .depthWriteEnable = true, .depthCompareOp = vuk::CompareOp::eLessOrEqual })
-    //                 .set_color_blend(dst, vuk::BlendPreset::eAlphaBlend)
-    //                 .set_viewport(0, vuk::Rect2D::framebuffer())
-    //                 .set_scissor(0, vuk::Rect2D::framebuffer())
-    //                 .bind_buffer(0, 0, camera)
-    //                 .bind_buffer(0, 1, mesh_instances)
-    //                 .bind_buffer(0, 2, *device->buffer(model.vertex_buffer.id()))
-    //                 .bind_buffer(0, 3, *device->buffer(model.reordered_index_buffer.id()))
-    //                 .bind_index_buffer(*device->buffer(model.provoked_index_buffer.id()), vuk::IndexType::eUint32);
-    //
-    //             for (usize node_index = 0; node_index < model.nodes.size(); node_index++) {
-    //                 const auto &node = model.nodes[node_index];
-    //                 cmd_list  //
-    //                     .push_constants(vuk::ShaderStageFlagBits::eVertex, 0, node_index);
-    //                 for (const auto mesh_index : node.mesh_indices) {
-    //                     const auto &mesh = model.meshes[mesh_index];
-    //                     for (const auto &meshlet_index : mesh.meshlet_indices) {
-    //                         const auto &meshlet = model.meshlets[meshlet_index];
-    //                         cmd_list  //
-    //                             .draw_indexed(meshlet.index_count, 1, meshlet.index_offset, static_cast<i32>(meshlet.vertex_offset), 0);
-    //                     }
-    //                 }
-    //             }
-    //
-    //             return std::make_tuple(dst, dst_depth, camera, mesh_instances);
-    //         });
-    //
-    //     std::tie(final_attachment, depth_attachment, camera_buffer) =
-    //         vis_triangle_id_pass(std::move(final_attachment), std::move(depth_attachment));
-    // }
+    for (const auto &mesh : info.rendering_meshes) {
+        auto vis_triangle_id_pass = vuk::make_pass(
+            "vis triangle",
+            [&pipeline = *self.device->pipeline(self.vis_triangle_id_pipeline.id()),
+             &entities = *self.device->buffer(self.gpu_entities_buffer.id()),
+             &device = self.device,
+             mesh](
+                vuk::CommandBuffer &cmd_list,
+                VUK_IA(vuk::Access::eColorWrite) dst,
+                VUK_IA(vuk::Access::eDepthStencilRW) dst_depth,
+                VUK_BA(vuk::Access::eVertexRead) camera) {
+                cmd_list  //
+                    .bind_graphics_pipeline(pipeline)
+                    .set_rasterization({ .cullMode = vuk::CullModeFlagBits::eBack })
+                    .set_depth_stencil(
+                        { .depthTestEnable = true, .depthWriteEnable = true, .depthCompareOp = vuk::CompareOp::eLessOrEqual })
+                    .set_color_blend(dst, vuk::BlendPreset::eAlphaBlend)
+                    .set_viewport(0, vuk::Rect2D::framebuffer())
+                    .set_scissor(0, vuk::Rect2D::framebuffer())
+                    .bind_buffer(0, 0, camera)
+                    .bind_buffer(0, 1, entities)
+                    .bind_buffer(0, 2, *device->buffer(mesh.vertex_buffer_id))
+                    .bind_buffer(0, 3, *device->buffer(mesh.reordered_index_buffer_id))
+                    .bind_index_buffer(*device->buffer(mesh.provoked_index_buffer_id), vuk::IndexType::eUint32)
+                    .push_constants(vuk::ShaderStageFlagBits::eVertex, 0, mesh.entity_index)
+                    .draw_indexed(mesh.index_count, 1, mesh.index_offset, static_cast<i32>(mesh.vertex_offset), 0);
+
+                return std::make_tuple(dst, dst_depth, camera);
+            });
+
+        if (self.gpu_entities_buffer.id() != BufferID::Invalid) {
+            std::tie(final_attachment, depth_attachment, camera_buffer) =
+                vis_triangle_id_pass(std::move(final_attachment), std::move(depth_attachment), std::move(camera_buffer));
+        }
+    }
 
     //  ── EDITOR GRID ─────────────────────────────────────────────────────
     auto editor_grid_pass = vuk::make_pass(

@@ -127,5 +127,9 @@ public:
     auto capacity(this const Self &self) -> usize {  //
         return self.slots.size();
     }
+
+    auto slots_unsafe(this const Self &self) -> ls::span<T> {  //
+        return self.slots;
+    }
 };
 }  // namespace lr

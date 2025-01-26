@@ -20,14 +20,6 @@ enum class PipelineID : u64 { Invalid = ~0_u64 };
 
 /////////////////////////////////
 // DEVICE RESOURCES
-enum class Descriptors : u32 {
-    Samplers = 0,
-    Images,
-    StorageImages,
-    StorageBuffers,
-    BDA,
-};
-
 struct Device;
 
 struct Buffer {
@@ -162,7 +154,6 @@ struct ShaderCompileInfo {
     fs::path shader_path = {};
     ls::option<std::string_view> shader_source = ls::nullopt;
     std::vector<std::string> entry_points = {};
-    bool bindless_pipeline = false;
 };
 
 struct Pipeline {

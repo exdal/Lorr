@@ -3,20 +3,6 @@
 #include <vuk/runtime/ThisThreadExecutor.hpp>
 
 namespace lr {
-auto BindlessDescriptorSetLayoutInfo::add_binding(Descriptors binding, VkDescriptorType type, u32 count) -> void {
-    ZoneScoped;
-
-    pool_size += count;
-    layout_info.bindings.push_back({
-        .binding = std::to_underlying(binding),
-        .descriptorType = type,
-        .descriptorCount = count,
-        .stageFlags = VK_SHADER_STAGE_ALL,
-        .pImmutableSamplers = nullptr,
-    });
-    layout_info.flags.push_back(VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT);
-}
-
 constexpr Logger::Category to_log_category(VkDebugUtilsMessageSeverityFlagBitsEXT severity) {
     switch (severity) {
         case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
@@ -145,17 +131,6 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
 
     self.physical_device = physical_device_result.value();
 
-    if (self.physical_device.enable_extension_if_present("VK_EXT_memory_budget")) {
-        self.supported_features |= DeviceFeature::MemoryBudget;
-
-        LOG_INFO("Memory Budget extension enabled.");
-    }
-    if (self.physical_device.properties.limits.timestampPeriod != 0) {
-        self.supported_features |= DeviceFeature::QueryTimestamp;
-
-        LOG_INFO("Query Timestamp extension enabled.");
-    }
-
     vkb::DeviceBuilder device_builder(self.physical_device);
     auto device_result = device_builder.build();
     if (!device_result) {
@@ -202,17 +177,6 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
     self.frame_resources.emplace(*self.runtime, frame_count);
     self.allocator.emplace(*self.frame_resources);
     self.runtime->set_shader_target_version(VK_API_VERSION_1_3);
-
-    auto bindless_layout = self.get_bindless_descriptor_set_layout();
-    self.descriptor_set =
-        self.runtime->create_persistent_descriptorset(*self.allocator, bindless_layout.layout_info, bindless_layout.pool_size);
-
-    // I would rather a crashed renderer than a renderer without BDA buffer
-    self.bda_array_buffer = Buffer::create(self, 1024 * sizeof(u64), vuk::MemoryUsage::eCPUtoGPU).value();
-
-    self.descriptor_set->update_storage_buffer(std::to_underlying(Descriptors::BDA), 0, *self.buffer(self.bda_array_buffer.id()));
-    self.descriptor_set->commit(*self.runtime);
-
     self.transfer_manager.init(self).value();
     self.shader_compiler = SlangCompiler::create().value();
 
@@ -232,7 +196,6 @@ auto Device::destroy(this Device &self) -> void {
     self.transfer_manager.destroy();
     self.shader_compiler.destroy();
 
-    self.descriptor_set.reset();
     self.frame_resources.reset();
     self.allocator.reset();
     self.runtime.reset();
@@ -332,24 +295,37 @@ auto Device::pipeline(this Device &self, PipelineID id) -> vuk::PipelineBaseInfo
     return self.resources.pipelines.slot(id);
 }
 
-auto Device::bindless_descriptor_set() -> vuk::PersistentDescriptorSet & {
-    return descriptor_set.get();
-}
-
-auto Device::feature_supported(this Device &self, DeviceFeature feature) -> bool {
+auto Device::destroy(this Device &self, BufferID id) -> void {
     ZoneScoped;
-    return self.supported_features & feature;
+
+    self.resources.buffers.slot(id)->release();
+    self.resources.buffers.destroy_slot(id);
 }
 
-auto Device::get_bindless_descriptor_set_layout() -> BindlessDescriptorSetLayoutInfo {
-    BindlessDescriptorSetLayoutInfo bindless_layout;
-    bindless_layout.add_binding(Descriptors::Samplers, VK_DESCRIPTOR_TYPE_SAMPLER, 1000);
-    bindless_layout.add_binding(Descriptors::Images, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1000);
-    bindless_layout.add_binding(Descriptors::StorageImages, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1000);
-    bindless_layout.add_binding(Descriptors::StorageBuffers, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1000);
-    bindless_layout.add_binding(Descriptors::BDA, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1);
+auto Device::destroy(this Device &self, ImageID id) -> void {
+    ZoneScoped;
 
-    return bindless_layout;
+    self.resources.images.slot(id)->release();
+    self.resources.images.destroy_slot(id);
+}
+
+auto Device::destroy(this Device &self, ImageViewID id) -> void {
+    ZoneScoped;
+
+    self.resources.image_views.slot(id)->release();
+    self.resources.image_views.destroy_slot(id);
+}
+
+auto Device::destroy(this Device &self, SamplerID id) -> void {
+    ZoneScoped;
+
+    self.resources.samplers.destroy_slot(id);
+}
+
+auto Device::destroy(this Device &self, PipelineID id) -> void {
+    ZoneScoped;
+
+    self.resources.pipelines.destroy_slot(id);
 }
 
 }  // namespace lr

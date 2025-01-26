@@ -398,19 +398,18 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
         info->mesh_provoked_indices[mesh_index].resize(index_count);
         info->mesh_reordered_indices[mesh_index].resize(vertex_count + index_count / 3);
     };
-    auto on_new_primitive =
-        [](void *user_data, u32 mesh_index, u32 material_index, u32 vertex_count, u32 vertex_offset, u32 index_count, u32 index_offset) {
-            auto *info = static_cast<CallbackInfo *>(user_data);
-            auto &mesh = info->model->meshes[mesh_index];
-            auto meshlet_index = static_cast<u32>(info->model->meshlets.size());
+    auto on_new_primitive = [](void *user_data, u32 mesh_index, u32, u32, u32 vertex_offset, u32 index_count, u32 index_offset) {
+        auto *info = static_cast<CallbackInfo *>(user_data);
+        auto &mesh = info->model->meshes[mesh_index];
+        auto meshlet_index = static_cast<u32>(info->model->meshlets.size());
 
-            mesh.meshlet_indices.push_back(meshlet_index);
-            info->model->meshlets.push_back({
-                .vertex_offset = vertex_offset,
-                .index_count = index_count,
-                .index_offset = index_offset,
-            });
-        };
+        mesh.meshlet_indices.push_back(meshlet_index);
+        info->model->meshlets.push_back({
+            .vertex_offset = vertex_offset,
+            .index_count = index_count,
+            .index_offset = index_offset,
+        });
+    };
     auto on_access_index = [](void *user_data, u32 mesh_index, u64 offset, u32 index) {
         auto *info = static_cast<CallbackInfo *>(user_data);
         info->mesh_provoked_indices[mesh_index][offset] = index;

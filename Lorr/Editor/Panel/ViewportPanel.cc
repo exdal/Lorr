@@ -121,6 +121,7 @@ auto ViewportPanel::draw_viewport(this ViewportPanel &self, vuk::Format format, 
                 static_cast<ImGuizmo::OPERATION>(self.gizmo_op),
                 ImGuizmo::MODE::LOCAL,
                 gizmo_mat)) {
+            scene->set_dirty(transform->id);
             ImGuizmo::DecomposeMatrixToComponents(gizmo_mat, &transform->position[0], &transform->rotation[0], &transform->scale[0]);
         }
     }

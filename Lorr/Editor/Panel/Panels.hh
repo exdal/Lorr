@@ -16,7 +16,6 @@ struct PanelI {
           open(open_) {};
 
     virtual ~PanelI() = default;
-    virtual void do_update() = 0;
     virtual auto do_render(vuk::Format format, vuk::Extent3D extent) -> void = 0;
 };
 

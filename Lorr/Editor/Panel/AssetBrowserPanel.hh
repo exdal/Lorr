@@ -40,8 +40,6 @@ struct AssetBrowserPanel : PanelI {
 
     auto poll_watch_events(this AssetBrowserPanel &) -> void;
     void render(this AssetBrowserPanel &);
-
-    void do_update() override {}
     void do_render(vuk::Format, vuk::Extent3D) override { render(); }
 };
 }  // namespace lr

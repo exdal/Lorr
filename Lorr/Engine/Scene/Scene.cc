@@ -9,6 +9,7 @@
 #include "Engine/Scene/ECSModule/ComponentWrapper.hh"
 #include "Engine/Scene/ECSModule/Core.hh"
 
+#include <glm/gtx/quaternion.hpp>
 #include <simdjson.h>
 
 namespace lr {
@@ -32,29 +33,47 @@ bool json_to_quat(simdjson::ondemand::value &o, glm::quat &quat) {
     return true;
 }
 
+auto SceneEntityDB::import_module(this SceneEntityDB &self, flecs::entity module) -> void {
+    ZoneScoped;
+
+    self.imported_modules.emplace_back(module);
+    module.children([&](flecs::id id) { self.components.push_back(id); });
+}
+
+auto SceneEntityDB::is_component_known(this SceneEntityDB &self, flecs::id component_id) -> bool {
+    ZoneScoped;
+
+    return std::ranges::any_of(self.components, [&](const auto &id) { return id == component_id; });
+}
+
+auto SceneEntityDB::get_components(this SceneEntityDB &self) -> ls::span<flecs::id> {
+    return self.components;
+}
+
 auto Scene::init(this Scene &self, const std::string &name) -> bool {
     ZoneScoped;
 
     self.name = name;
     self.world.emplace();
-    self.imported_modules.emplace_back(self.world->import <ECS::Core>());
+    self.entity_db.import_module(self.world->import <ECS::Core>());
     self.root = self.world->entity();
 
     self.world
         ->observer<ECS::Transform>()  //
         .event(flecs::Monitor)
-        .each([&self](flecs::iter &it, usize i, ECS::Transform &transform) {
+        .each([&self](flecs::iter &it, usize i, ECS::Transform &) {
+            auto entity = it.entity(i);
             if (it.event() == flecs::OnAdd) {
-                auto entity = it.entity(i);
-                auto entity_id = self.gpu_entities.create_slot(flecs::entity(entity));
+                auto entity_id = self.add_gpu_entity(entity);
                 if (entity.has<ECS::EditorCamera>()) {
                     self.editor_camera_id = entity_id;
                 }
 
                 self.dirty_entities.push_back(entity_id);
-                transform.id = entity_id;
             } else if (it.event() == flecs::OnRemove) {
-                self.gpu_entities.destroy_slot(transform.id);
+                if (auto id = self.get_gpu_entity(entity)) {
+                    self.remove_gpu_entity(id.value());
+                }
             }
         });
 
@@ -171,7 +190,6 @@ auto Scene::export_to_file(this Scene &self, const fs::path &path) -> bool {
         json["name"] = std::string_view(e.name(), e.name().length());
 
         std::vector<ECS::ComponentWrapper> components = {};
-
         json["tags"].begin_array();
         e.each([&](flecs::id component_id) {
             if (!component_id.is_entity()) {
@@ -277,7 +295,7 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, const vuk::Extent3
         .query_builder<ECS::Transform, ECS::Camera, ECS::ActiveCamera>()
         .build();
     auto model_query = self.get_world()
-        .query_builder<ECS::RenderingModel, ECS::Transform>()
+        .query_builder<ECS::RenderingModel>()
         .build();
     auto directional_light_query = self.get_world()
         .query_builder<ECS::DirectionalLight>()
@@ -289,12 +307,25 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, const vuk::Extent3
 
     ls::option<GPUCameraData> active_camera_data = ls::nullopt;
     camera_query.each([&](flecs::entity, ECS::Transform &t, ECS::Camera &c, ECS::ActiveCamera) {
+        auto projection_mat = glm::perspective(glm::radians(c.fov), c.aspect_ratio, c.near_clip, c.far_clip);
+        projection_mat[1][1] *= -1;
+
+        glm::quat orientation = {};
+        auto rotation = glm::radians(t.rotation);
+        orientation = glm::angleAxis(rotation.x, glm::vec3(0.0f, 1.0f, 0.0f));
+        orientation = glm::angleAxis(rotation.y, glm::vec3(-1.0f, 0.0f, 0.0f)) * orientation;
+        orientation = glm::angleAxis(rotation.z, glm::vec3(0.0f, 0.0f, 1.0f)) * orientation;
+
+        auto rotation_mat = glm::toMat4(glm::normalize(orientation));
+        auto translation_mat = glm::translate(glm::mat4(1.0f), -t.position);
+        auto view_mat = rotation_mat * translation_mat;
+
         GPUCameraData camera_data = {};
-        camera_data.projection_mat = c.projection;
-        camera_data.view_mat = t.matrix;
-        camera_data.projection_view_mat = glm::transpose(c.projection * t.matrix);
-        camera_data.inv_view_mat = glm::inverse(glm::transpose(t.matrix));
-        camera_data.inv_projection_view_mat = glm::inverse(glm::transpose(c.projection)) * camera_data.inv_view_mat;
+        camera_data.projection_mat = projection_mat;
+        camera_data.view_mat = view_mat;
+        camera_data.projection_view_mat = glm::transpose(projection_mat * view_mat);
+        camera_data.inv_view_mat = glm::inverse(glm::transpose(view_mat));
+        camera_data.inv_projection_view_mat = glm::inverse(glm::transpose(projection_mat)) * camera_data.inv_view_mat;
         camera_data.position = t.position;
         camera_data.near_clip = c.near_clip;
         camera_data.far_clip = c.far_clip;
@@ -331,18 +362,19 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, const vuk::Extent3
     });
 
     std::vector<RenderingMesh> rendering_meshes = {};
-    model_query.each([&](flecs::entity, ECS::RenderingModel &rendering_model, ECS::Transform &transform) {
+    model_query.each([&](flecs::entity e, ECS::RenderingModel &rendering_model) {
         auto *model = app.asset_man.get_model(rendering_model.model);
         if (!model) {
             return;
         }
 
+        auto gpu_entity_id = self.get_gpu_entity(e);
         for (const auto &mesh : model->meshes) {
             for (const auto meshlet_index : mesh.meshlet_indices) {
                 const auto &meshlet = model->meshlets[meshlet_index];
 
                 auto &rendering_mesh = rendering_meshes.emplace_back();
-                rendering_mesh.entity_index = SlotMap_decode_id(transform.id).index;
+                rendering_mesh.entity_index = SlotMap_decode_id(gpu_entity_id.value()).index;
 
                 rendering_mesh.vertex_offset = meshlet.vertex_offset;
                 rendering_mesh.index_offset = meshlet.index_offset;
@@ -360,7 +392,15 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, const vuk::Extent3
         LS_EXPECT(dirty_entity->has<ECS::Transform>());
         auto *transform = dirty_entity->get_mut<ECS::Transform>();
         auto gpu_entity_info = GPUEntityTransform{};
-        gpu_entity_info.local_transform_mat = transform->matrix;
+        auto &matrix = gpu_entity_info.local_transform_mat;
+
+        auto rotation = glm::radians(transform->rotation);
+        matrix = glm::translate(glm::mat4(1.0), transform->position);
+        matrix *= glm::rotate(glm::mat4(1.0), rotation.x, glm::vec3(1.0, 0.0, 0.0));
+        matrix *= glm::rotate(glm::mat4(1.0), rotation.y, glm::vec3(0.0, 1.0, 0.0));
+        matrix *= glm::rotate(glm::mat4(1.0), rotation.z, glm::vec3(0.0, 0.0, 1.0));
+        matrix *= glm::scale(glm::mat4(1.0), transform->scale);
+
         if (dirty_entity->has<ECS::RenderingModel>()) {
             // TODO: Split up model nodes into child entities.
         }
@@ -421,11 +461,41 @@ auto Scene::get_name(this Scene &self) -> const std::string & {
 }
 
 auto Scene::get_name_sv(this Scene &self) -> std::string_view {
+    ZoneScoped;
+
     return self.name;
 }
 
-auto Scene::get_imported_modules(this Scene &self) -> ls::span<flecs::entity> {
-    return self.imported_modules;
+auto Scene::get_gpu_entity(this Scene &self, flecs::entity entity) -> ls::option<GPUEntityID> {
+    ZoneScoped;
+
+    auto it = self.gpu_entities_remap.find(entity);
+    if (it == self.gpu_entities_remap.end()) {
+        return ls::nullopt;
+    }
+
+    return it->second;
+}
+
+auto Scene::get_entity_db(this Scene &self) -> SceneEntityDB & {
+    return self.entity_db;
+}
+
+auto Scene::add_gpu_entity(this Scene &self, flecs::entity entity) -> GPUEntityID {
+    ZoneScoped;
+
+    auto id = self.gpu_entities.create_slot(flecs::entity(entity));
+    self.gpu_entities_remap.emplace(entity, id);
+
+    return id;
+}
+
+auto Scene::remove_gpu_entity(this Scene &self, GPUEntityID id) -> void {
+    ZoneScoped;
+
+    auto *entity = self.gpu_entities.slot(id);
+    self.gpu_entities_remap.erase(*entity);
+    self.gpu_entities.destroy_slot(id);
 }
 
 }  // namespace lr

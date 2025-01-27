@@ -287,10 +287,6 @@ void EditorLayout::render(this EditorLayout &self, vuk::Format format, vuk::Exte
         }
 
         for (auto &panel : self.panels) {
-            panel->do_update();
-        }
-
-        for (auto &panel : self.panels) {
             panel->do_render(format, extent);
         }
     } else {

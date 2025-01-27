@@ -24,6 +24,7 @@ auto ImGuiRenderer::init(this ImGuiRenderer &self, Device *device) -> void {
     auto &imgui = ImGui::GetIO();
     imgui.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     imgui.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+    imgui.ConfigWindowsMoveFromTitleBarOnly = true;
     imgui.IniFilename = "editor_layout.ini";
     imgui.DisplayFramebufferScale = { 1.0f, 1.0f };
     imgui.BackendFlags = ImGuiBackendFlags_RendererHasVtxOffset;

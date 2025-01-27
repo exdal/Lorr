@@ -4,11 +4,52 @@
 
 #include <flecs.h>
 
-namespace lr {
-struct AssetManager;
+template<>
+struct ankerl::unordered_dense::hash<flecs::id> {
+    using is_avalanching = void;
+    u64 operator()(const flecs::id &v) const noexcept {  //
+        return ankerl::unordered_dense::detail::wyhash::hash(&v, sizeof(flecs::id));
+    }
+};
 
+template<>
+struct ankerl::unordered_dense::hash<flecs::entity> {
+    using is_avalanching = void;
+    u64 operator()(const flecs::entity &v) const noexcept {
+        return ankerl::unordered_dense::detail::wyhash::hash(&v, sizeof(flecs::entity));
+    }
+};
+
+namespace lr {
+struct SceneEntityDB {
+    ankerl::unordered_dense::map<flecs::id, Icon::detail::icon_t> component_icons = {};
+    std::vector<flecs::id> components = {};
+    std::vector<flecs::entity> imported_modules = {};
+
+    auto import_module(this SceneEntityDB &, flecs::entity module) -> void;
+    auto is_component_known(this SceneEntityDB &, flecs::id component_id) -> bool;
+    auto get_components(this SceneEntityDB &) -> ls::span<flecs::id>;
+};
+
+struct AssetManager;
 enum class SceneID : u64 { Invalid = ~0_u64 };
 struct Scene {
+private:
+    std::string name = {};
+    flecs::entity root = {};
+    ls::option<flecs::world> world = ls::nullopt;
+    SceneEntityDB entity_db = {};
+
+    GPUEntityID editor_camera_id = GPUEntityID::Invalid;
+
+    // We need additional map to avoid using components to access GPUEntityID of a given entity
+    SlotMap<flecs::entity, GPUEntityID> gpu_entities = {};                             // GPUEntityID -> flecs::entity
+    ankerl::unordered_dense::map<flecs::entity, GPUEntityID> gpu_entities_remap = {};  // flecs::entity -> GPUEntityID
+    std::vector<GPUEntityID> dirty_entities = {};
+
+    friend AssetManager;
+
+public:
     auto init(this Scene &, const std::string &name) -> bool;
     auto destroy(this Scene &) -> void;
 
@@ -32,20 +73,12 @@ struct Scene {
     auto editor_camera(this Scene &) -> flecs::entity;
     auto get_name(this Scene &) -> const std::string &;
     auto get_name_sv(this Scene &) -> std::string_view;
-    auto get_imported_modules(this Scene &) -> ls::span<flecs::entity>;
+    auto get_gpu_entity(this Scene &, flecs::entity entity) -> ls::option<GPUEntityID>;
+    auto get_entity_db(this Scene &) -> SceneEntityDB &;
 
 private:
-    std::string name = {};
-    flecs::entity root = {};
-    ls::option<flecs::world> world = ls::nullopt;
-
-    std::vector<flecs::entity> imported_modules = {};
-
-    GPUEntityID editor_camera_id = GPUEntityID::Invalid;
-    SlotMap<flecs::entity, GPUEntityID> gpu_entities = {};
-    std::vector<GPUEntityID> dirty_entities = {};
-
-    friend AssetManager;
+    auto add_gpu_entity(this Scene &, flecs::entity entity) -> GPUEntityID;
+    auto remove_gpu_entity(this Scene &, GPUEntityID id) -> void;
 };
 
 }  // namespace lr

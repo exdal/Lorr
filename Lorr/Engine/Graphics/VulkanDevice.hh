@@ -28,6 +28,15 @@ struct TransientBuffer {
 };
 
 struct TransferManager {
+private:
+    Device *device = nullptr;
+    std::vector<vuk::UntypedValue> futures = {};
+
+    ls::option<vuk::Allocator> frame_allocator;
+
+    friend Device;
+
+public:
     TransferManager &operator=(const TransferManager &) = delete;
     TransferManager &operator=(TransferManager &&) = delete;
 
@@ -63,14 +72,6 @@ protected:
 
     auto acquire(this TransferManager &, vuk::DeviceFrameResource &allocator) -> void;
     auto release(this TransferManager &) -> void;
-
-private:
-    Device *device = nullptr;
-    std::vector<vuk::UntypedValue> futures = {};
-
-    ls::option<vuk::Allocator> frame_allocator;
-
-    friend Device;
 };
 
 struct DeviceResources {
@@ -82,6 +83,33 @@ struct DeviceResources {
 };
 
 struct Device {
+private:
+    usize frames_in_flight = 0;
+    ls::option<vuk::Runtime> runtime;
+    ls::option<vuk::Allocator> allocator;
+    ls::option<vuk::DeviceSuperFrameResource> frame_resources;
+    vuk::Compiler compiler = {};
+    TransferManager transfer_manager = {};
+    SlangCompiler shader_compiler = {};
+    DeviceResources resources = {};
+
+    // Profiling tools
+    std::vector<legit::ProfilerTask> gpu_profiler_tasks = {};
+    legit::ProfilerGraph gpu_profiler_graph = { 400 };
+
+    vkb::Instance instance = {};
+    vkb::PhysicalDevice physical_device = {};
+    vkb::Device handle = {};
+
+    friend Buffer;
+    friend Image;
+    friend ImageView;
+    friend Sampler;
+    friend Pipeline;
+    friend SwapChain;
+    friend TransferManager;
+
+public:
     auto init(this Device &, usize frame_count) -> std::expected<void, vuk::VkException>;
     auto destroy(this Device &) -> void;
 
@@ -114,32 +142,5 @@ struct Device {
     };
 
     auto get_instance() -> VkInstance { return instance.instance; }
-
-private:
-    usize frames_in_flight = 0;
-    ls::option<vuk::Runtime> runtime;
-    ls::option<vuk::Allocator> allocator;
-    ls::option<vuk::DeviceSuperFrameResource> frame_resources;
-    vuk::Compiler compiler = {};
-    TransferManager transfer_manager = {};
-    SlangCompiler shader_compiler = {};
-    DeviceResources resources = {};
-
-    // Profiling tools
-    std::vector<legit::ProfilerTask> gpu_profiler_tasks = {};
-    legit::ProfilerGraph gpu_profiler_graph = { 400 };
-
-    vkb::Instance instance = {};
-    vkb::PhysicalDevice physical_device = {};
-    vkb::Device handle = {};
-
-    friend Buffer;
-    friend Image;
-    friend ImageView;
-    friend Sampler;
-    friend Pipeline;
-    friend SwapChain;
-
-    friend TransferManager;
 };
 }  // namespace lr

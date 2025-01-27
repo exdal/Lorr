@@ -86,7 +86,6 @@ auto InspectorPanel::draw_inspector(this InspectorPanel &) -> void {
                                     ImGui::TextUnformatted("Drop a model here.");
                                     *v = {};
                                 } else {
-                                    memory::ScopedStack stack;
                                     const auto &model_name = asset->path.filename();
                                     ImGuiLR::text_sv(stack.format("Name: {}", model_name));
                                     ImGuiLR::text_sv(stack.format("ModelID: {}", std::to_underlying(asset->model_id)));
@@ -130,29 +129,23 @@ auto InspectorPanel::draw_inspector(this InspectorPanel &) -> void {
         if (ImGui::BeginPopup("add_component")) {
             memory::ScopedStack stack;
 
-            auto imported_modules = scene->get_imported_modules();
-
-            auto q = scene->get_world().query_builder<flecs::Component>();
-            for (const auto &mod : imported_modules) {
-                q.with(flecs::ChildOf, mod);
-            }
-
-            q.with(flecs::ChildOf, flecs::Flecs).oper(flecs::Not).self().build();
-            q.each([&stack, &app](flecs::entity component, flecs::Component &) {  //
+            auto &entity_db = scene->get_entity_db();
+            auto all_components = entity_db.get_components();
+            for (const auto &component : all_components) {  //
                 ImGui::PushID(static_cast<i32>(component.raw_id()));
-                if (ImGui::MenuItem(stack.format_char("{}  {}", Icon::fa::cube, component.name().c_str()))) {
+                auto component_entity = component.entity();
+                if (ImGui::MenuItem(stack.format_char("{}  {}", Icon::fa::cube, component_entity.name().c_str()))) {
                     app.selected_entity.add(component);
                 }
                 ImGui::PopID();
-            });
+            }
             ImGui::EndPopup();
         }
 
         ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal);
 
-        if (entity_modified && app.selected_entity.has<ECS::Transform>()) {
-            auto *transform = app.selected_entity.get<ECS::Transform>();
-            scene->set_dirty(transform->id);
+        if (auto gpu_entity_id = scene->get_gpu_entity(app.selected_entity); entity_modified) {
+            scene->set_dirty(gpu_entity_id.value());
         }
     }
 }

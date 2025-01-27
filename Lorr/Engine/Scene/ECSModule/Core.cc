@@ -2,13 +2,9 @@
 
 #include "Engine/Asset/UUID.hh"
 
-#include <glm/gtx/quaternion.hpp>
-
 namespace lr {
 ECS::Core::Core(flecs::world &world) {
     ZoneScoped;
-
-    // world.module<Core>("Core");
 
     //  ── BUILTIN TYPES ───────────────────────────────────────────────────
     world
@@ -70,43 +66,6 @@ ECS::Core::Core(flecs::world &world) {
 
 #include "Engine/Scene/ECSModule/CoreComponents.hh"
 #undef ECS_REFLECT_TYPES
-
-    //  ── SYSTEMS ─────────────────────────────────────────────────────────
-    world.system<PerspectiveCamera, Transform, Camera>()
-        .kind(flecs::OnUpdate)
-        .each([](flecs::iter &it, usize, PerspectiveCamera, Transform &t, Camera &c) {
-            t.rotation.x = std::fmod(t.rotation.x, 360.0f);
-            t.rotation.y = glm::clamp(t.rotation.y, -89.0f, 89.0f);
-
-            auto inv_orient = glm::conjugate(c.orientation);
-            t.position += glm::vec3(inv_orient * glm::vec4(c.axis_velocity * it.delta_time(), 0.0f));
-
-            c.projection = glm::perspective(glm::radians(c.fov), c.aspect_ratio, c.near_clip, c.far_clip);
-            c.projection[1][1] *= -1;
-
-            auto rotation = glm::radians(t.rotation);
-            c.orientation = glm::angleAxis(rotation.x, glm::vec3(0.0f, 1.0f, 0.0f));
-            c.orientation = glm::angleAxis(rotation.y, glm::vec3(-1.0f, 0.0f, 0.0f)) * c.orientation;
-            c.orientation = glm::angleAxis(rotation.z, glm::vec3(0.0f, 0.0f, 1.0f)) * c.orientation;
-            c.orientation = glm::normalize(c.orientation);
-
-            glm::mat4 rotation_mat = glm::toMat4(c.orientation);
-            glm::mat4 translation_mat = glm::translate(glm::mat4(1.f), -t.position);
-            t.matrix = rotation_mat * translation_mat;
-        });
-
-    world.system<Transform>()
-        .kind(flecs::OnUpdate)  //
-        .without<Camera>()
-        .each([](flecs::iter &, usize, Transform &t) {
-            auto rotation = glm::radians(t.rotation);
-
-            t.matrix = glm::translate(glm::mat4(1.0), t.position);
-            t.matrix *= glm::rotate(glm::mat4(1.0), rotation.x, glm::vec3(1.0, 0.0, 0.0));
-            t.matrix *= glm::rotate(glm::mat4(1.0), rotation.y, glm::vec3(0.0, 1.0, 0.0));
-            t.matrix *= glm::rotate(glm::mat4(1.0), rotation.z, glm::vec3(0.0, 0.0, 1.0));
-            t.matrix *= glm::scale(glm::mat4(1.0), t.scale);
-        });
 }
 
 }  // namespace lr

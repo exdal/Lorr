@@ -54,11 +54,12 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
 #if defined(LS_WINDOWS)
     instance_extensions.push_back("VK_KHR_win32_surface");
 #elif defined(LS_LINUX)
+    instance_extensions.push_back(VK_KHR_SURFACE_EXTENSION_NAME);
     instance_extensions.push_back("VK_KHR_xcb_surface");
     instance_extensions.push_back("VK_KHR_wayland_surface");
 #endif
 #if LS_DEBUG
-    instance_extensions.push_back("VK_EXT_debug_utils");
+    instance_extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 #endif
 
     instance_builder.enable_extensions(instance_extensions);

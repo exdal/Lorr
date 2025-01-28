@@ -494,8 +494,10 @@ auto Scene::remove_gpu_entity(this Scene &self, GPUEntityID id) -> void {
     ZoneScoped;
 
     auto *entity = self.gpu_entities.slot(id);
-    self.gpu_entities_remap.erase(*entity);
-    self.gpu_entities.destroy_slot(id);
+    if (entity) {
+        self.gpu_entities_remap.erase(*entity);
+        self.gpu_entities.destroy_slot(id);
+    }
 }
 
 }  // namespace lr

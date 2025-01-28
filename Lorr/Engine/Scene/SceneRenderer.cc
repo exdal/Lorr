@@ -170,6 +170,11 @@ auto SceneRenderer::update_entity_transform(this SceneRenderer &self, GPUEntityI
     // Check if we have enough storage capacity
     if (self.gpu_entities_buffer.data_size() <= target_offset) {
         if (self.gpu_entities_buffer.id() != BufferID::Invalid) {
+            // Device wait here is important, do not remove it. Why?
+            // We are using ONE transform buffer for all frames, if
+            // this buffer gets destroyed in current frame, previous
+            // rendering frame buffer will get corrupt and crash GPU.
+            self.device->wait();
             self.device->destroy(self.gpu_entities_buffer.id());
         }
 

@@ -86,6 +86,8 @@ auto Scene::destroy(this Scene &self) -> void {
     self.name.clear();
     self.root.clear();
     self.gpu_entities.reset();
+    self.gpu_entities_remap.clear();
+    self.dirty_entities.clear();
     self.world.reset();
 }
 

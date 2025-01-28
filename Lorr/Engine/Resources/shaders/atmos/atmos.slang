@@ -31,7 +31,9 @@ public float2 get_multiscattering_lut_uv(in Atmosphere atmos, float altitude, fl
         altitude / (atmos.atmos_radius - atmos.planet_radius)),
         0.0, 1.0
     );
-    return float2(fromUnitToSubUvs(uv.x, 32), fromUnitToSubUvs(uv.y, 32));
+    return float2(
+        fromUnitToSubUvs(uv.x, f32(atmos.multiscattering_lut_size.x)),
+        fromUnitToSubUvs(uv.y, f32(atmos.multiscattering_lut_size.y)));
 }
 
 public float2 get_sky_view_lut_uv(in Atmosphere atmos, bool intersect_planet, float view_zenith_cos, float light_view_cos, float altitude) {

@@ -132,9 +132,9 @@ private:
     ImageView sky_multiscatter_lut_view = {};
     Pipeline sky_multiscatter_pipeline = {};
     Pipeline sky_view_pipeline = {};
-    vuk::Extent3D sky_view_lut_extent = { .width = 192, .height = 128, .depth = 1 };
+    vuk::Extent3D sky_view_lut_extent = { .width = 208, .height = 128, .depth = 1 };
     Pipeline sky_aerial_perspective_pipeline = {};
-    vuk::Extent3D aerial_perspective_lut_extent = { .width = 32, .height = 32, .depth = 32 };
+    vuk::Extent3D sky_aerial_perspective_lut_extent = { .width = 32, .height = 32, .depth = 32 };
     Pipeline sky_final_pipeline = {};
 
     Pipeline vis_triangle_id_pipeline = {};

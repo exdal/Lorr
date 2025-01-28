@@ -312,14 +312,14 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, const vuk::Extent3
         auto projection_mat = glm::perspective(glm::radians(c.fov), c.aspect_ratio, c.near_clip, c.far_clip);
         projection_mat[1][1] *= -1;
 
-        glm::quat orientation = {};
         auto rotation = glm::radians(t.rotation);
-        orientation = glm::angleAxis(rotation.x, glm::vec3(0.0f, 1.0f, 0.0f));
-        orientation = glm::angleAxis(rotation.y, glm::vec3(-1.0f, 0.0f, 0.0f)) * orientation;
-        orientation = glm::angleAxis(rotation.z, glm::vec3(0.0f, 0.0f, 1.0f)) * orientation;
+        auto yaw_axis = glm::angleAxis(rotation.x, glm::vec3(0.0f, 1.0f, 0.0f));
+        auto pitch_axis = glm::angleAxis(rotation.y, glm::vec3(-1.0f, 0.0f, 0.0f));
+        auto roll_axis = glm::angleAxis(rotation.z, glm::vec3(0.0f, 0.0f, 1.0f));
+        auto orientation = roll_axis * pitch_axis * yaw_axis;
 
-        auto rotation_mat = glm::toMat4(glm::normalize(orientation));
         auto translation_mat = glm::translate(glm::mat4(1.0f), -t.position);
+        auto rotation_mat = glm::mat4_cast(orientation);
         auto view_mat = rotation_mat * translation_mat;
 
         GPUCameraData camera_data = {};

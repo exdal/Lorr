@@ -74,7 +74,7 @@ auto SceneRenderer::setup_persistent_resources(this SceneRenderer &self) -> void
         .module_name = "atmos.lut",
         .root_path = shaders_root,
         .shader_path = shaders_root / "atmos" / "lut.slang",
-        .entry_points = { "vs_main", "fs_main" },
+        .entry_points = { "cs_main" },
     }).value();
     self.sky_aerial_perspective_pipeline = Pipeline::create(*self.device, {
         .module_name = "atmos.aerial_perspective",
@@ -110,7 +110,7 @@ auto SceneRenderer::setup_persistent_resources(this SceneRenderer &self) -> void
         [&pipeline = *self.device->pipeline(self.sky_transmittance_pipeline.id())](
             vuk::CommandBuffer &cmd_list, VUK_IA(vuk::Access::eComputeRW) dst, VUK_BA(vuk::Access::eComputeRead) atmos) {
             auto image_size = glm::vec2(dst->extent.width, dst->extent.height);
-            auto groups = (glm::uvec2(image_size) / glm::uvec2(16)) + glm::uvec2(1);
+            auto groups = glm::uvec2(image_size) / 16_u32;
             cmd_list  //
                 .bind_compute_pipeline(pipeline)
                 .bind_image(0, 0, dst)
@@ -130,7 +130,7 @@ auto SceneRenderer::setup_persistent_resources(this SceneRenderer &self) -> void
             VUK_BA(vuk::Access::eComputeRead) atmos,
             VUK_BA(vuk::Access::eComputeRead) sun) {
             auto image_size = glm::vec2(dst->extent.width, dst->extent.height);
-            auto groups = (glm::uvec2(image_size) / glm::uvec2(16)) + glm::uvec2(1);
+            auto groups = glm::uvec2(image_size) / 16_u32;
             cmd_list  //
                 .bind_compute_pipeline(pipeline)
                 .bind_sampler(0, 0, { .magFilter = vuk::Filter::eLinear, .minFilter = vuk::Filter::eLinear })
@@ -207,12 +207,12 @@ auto SceneRenderer::render(this SceneRenderer &self, const SceneRenderInfo &info
         "sky view",
         [&pipeline = *self.device->pipeline(self.sky_view_pipeline.id())](
             vuk::CommandBuffer &cmd_list,
-            VUK_IA(vuk::Access::eColorWrite) dst,
-            VUK_IA(vuk::Access::eFragmentSampled) transmittance_lut,
-            VUK_IA(vuk::Access::eFragmentSampled) multiscatter_lut,
-            VUK_BA(vuk::Access::eFragmentRead) atmos,
-            VUK_BA(vuk::Access::eFragmentRead) sun,
-            VUK_BA(vuk::Access::eFragmentRead) camera) {
+            VUK_IA(vuk::Access::eComputeRW) dst,
+            VUK_IA(vuk::Access::eComputeSampled) transmittance_lut,
+            VUK_IA(vuk::Access::eComputeSampled) multiscatter_lut,
+            VUK_BA(vuk::Access::eComputeRead) atmos,
+            VUK_BA(vuk::Access::eComputeRead) sun,
+            VUK_BA(vuk::Access::eComputeRead) camera) {
             vuk::SamplerCreateInfo sampler_info = {
                 .magFilter = vuk::Filter::eLinear,
                 .minFilter = vuk::Filter::eLinear,
@@ -220,20 +220,18 @@ auto SceneRenderer::render(this SceneRenderer &self, const SceneRenderInfo &info
                 .addressModeV = vuk::SamplerAddressMode::eClampToEdge,
             };
 
+            auto image_size = glm::vec2(dst->extent.width, dst->extent.height);
+            auto groups = glm::uvec2(image_size) / 16_u32;
             cmd_list  //
-                .bind_graphics_pipeline(pipeline)
+                .bind_compute_pipeline(pipeline)
                 .bind_sampler(0, 0, sampler_info)
-                .bind_image(0, 1, transmittance_lut)
-                .bind_image(0, 2, multiscatter_lut)
-                .bind_buffer(0, 3, atmos)
-                .bind_buffer(0, 4, sun)
-                .bind_buffer(0, 5, camera)
-                .set_rasterization({ .cullMode = vuk::CullModeFlagBits::eNone })
-                .set_depth_stencil({})
-                .set_color_blend(dst, vuk::BlendPreset::eOff)
-                .set_viewport(0, vuk::Rect2D::framebuffer())
-                .set_scissor(0, vuk::Rect2D::framebuffer())
-                .draw(3, 1, 0, 0);
+                .bind_image(0, 1, dst)
+                .bind_image(0, 2, transmittance_lut)
+                .bind_image(0, 3, multiscatter_lut)
+                .bind_buffer(0, 4, atmos)
+                .bind_buffer(0, 5, sun)
+                .bind_buffer(0, 6, camera)
+                .dispatch(groups.x, groups.y, 1);
             return std::make_tuple(dst, transmittance_lut, multiscatter_lut, atmos, sun, camera);
         });
 
@@ -242,10 +240,15 @@ auto SceneRenderer::render(this SceneRenderer &self, const SceneRenderInfo &info
     auto multiscatter_lut_attachment = self.sky_multiscatter_lut_view.acquire(
         *self.device, "multiscatter_lut", vuk::ImageUsageFlagBits::eSampled, vuk::Access::eFragmentSampled);
 
-    auto sky_view_lut_attachment =
-        vuk::declare_ia("sky_view_lut", { .extent = self.sky_view_lut_extent, .sample_count = vuk::Samples::e1, .layer_count = 1 });
+    auto sky_view_lut_attachment = vuk::declare_ia(
+        "sky_view_lut",
+        { .image_type = vuk::ImageType::e2D,
+          .extent = self.sky_view_lut_extent,
+          .sample_count = vuk::Samples::e1,
+          .view_type = vuk::ImageViewType::e2D,
+          .level_count = 1,
+          .layer_count = 1 });
     sky_view_lut_attachment.same_format_as(final_attachment);
-    sky_view_lut_attachment = vuk::clear_image(std::move(sky_view_lut_attachment), vuk::Black<f32>);
 
     const auto rendering_atmos = info.atmosphere.has_value() && info.sun.has_value();
     vuk::Value<vuk::Buffer> atmos_buffer = {};
@@ -255,6 +258,7 @@ auto SceneRenderer::render(this SceneRenderer &self, const SceneRenderInfo &info
         atmos_info.transmittance_lut_size = self.sky_transmittance_lut_view.extent();
         atmos_info.multiscattering_lut_size = self.sky_multiscatter_lut_view.extent();
         atmos_info.sky_view_lut_size = self.sky_view_lut_extent;
+        atmos_info.aerial_perspective_lut_size = self.sky_aerial_perspective_lut_extent;
 
         atmos_buffer = transfer_man.scratch_buffer(atmos_info);
     }
@@ -293,8 +297,8 @@ auto SceneRenderer::render(this SceneRenderer &self, const SceneRenderInfo &info
                 .addressModeV = vuk::SamplerAddressMode::eClampToEdge,
             };
 
-            auto image_size = glm::vec3(dst->extent.width, dst->extent.height, dst->extent.height);
-            auto groups = glm::uvec2(image_size) / glm::uvec2(16);
+            auto image_size = glm::vec3(dst->extent.width, dst->extent.height, dst->extent.depth);
+            auto groups = glm::uvec2(image_size) / 16_u32;
             cmd_list  //
                 .bind_compute_pipeline(pipeline)
                 .bind_sampler(0, 0, sampler_info)
@@ -307,13 +311,12 @@ auto SceneRenderer::render(this SceneRenderer &self, const SceneRenderInfo &info
                 .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, image_size)
                 .dispatch(groups.x, groups.y, static_cast<u32>(image_size.z));
             return std::make_tuple(dst, transmittance_lut, multiscatter_lut, atmos, sun, camera);
-        },
-        vuk::DomainFlagBits::eGraphicsQueue);
+        });
 
     auto sky_aerial_perspective_attachment = vuk::declare_ia(
         "sky_aerial_perspective",
         { .image_type = vuk::ImageType::e3D,
-          .extent = self.aerial_perspective_lut_extent,
+          .extent = self.sky_aerial_perspective_lut_extent,
           .sample_count = vuk::Samples::e1,
           .view_type = vuk::ImageViewType::e3D,
           .level_count = 1,

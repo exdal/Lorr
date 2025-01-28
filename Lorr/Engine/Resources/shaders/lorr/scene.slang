@@ -47,6 +47,9 @@ public struct Clouds {
     public i32  clouds_step_count;
     public f32  cloud_light_absorption;
     public f32  sun_light_absorption;
+
+    public ivec3 shape_noise_lut_size;
+    public ivec3 detail_noise_lut_size;
 };
 
 public struct Camera {

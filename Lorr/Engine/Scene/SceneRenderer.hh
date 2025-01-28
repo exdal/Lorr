@@ -52,6 +52,8 @@ struct GPUClouds {
     alignas(4) i32 clouds_step_count = 30;
     alignas(4) f32 cloud_light_absorption = 0.443f;
     alignas(4) f32 sun_light_absorption = 0.224f;
+    alignas(4) vuk::Extent3D shape_noise_lut_size = {};
+    alignas(4) vuk::Extent3D detail_noise_lut_size = {};
 };
 
 struct GPUCameraData {
@@ -136,6 +138,13 @@ private:
     Pipeline sky_aerial_perspective_pipeline = {};
     vuk::Extent3D sky_aerial_perspective_lut_extent = { .width = 32, .height = 32, .depth = 32 };
     Pipeline sky_final_pipeline = {};
+
+    Pipeline cloud_base_noise_pipeline = {};
+    Image cloud_base_noise_lut = {};
+    ImageView cloud_base_noise_lut_view = {};
+    Pipeline cloud_detail_noise_pipeline = {};
+    Image cloud_detail_noise_lut = {};
+    ImageView cloud_detail_noise_lut_view = {};
 
     Pipeline vis_triangle_id_pipeline = {};
 

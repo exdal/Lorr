@@ -1,11 +1,8 @@
 import cloud;
 import "../lorr";
 
-struct PushConstants {
-    float3 image_size_inv;
-    ImageView<float4> noise_image;
-};
-[[vk::push_constant]] PushConstants c;
+[[vk::binding(0, 0)]] RWTexture3D<float4> target_image;
+[[vk::binding(1, 0)]] ConstantBuffer<Clouds, ScalarDataLayout> clouds;
 
 float smoothstep_unchecked(float x) {
     x = clamp(x, 0.0, 1.0);
@@ -111,8 +108,7 @@ float alligator(float3 position, float frequency, int octaves, float lacunarity,
     return result;
 }
 
-float alligator_fbm(float3 position, float frequency)
-{
+float alligator_fbm(float3 position, float frequency) {
     return alligator(position, frequency * 1.0, 8, 2.200, 0.5) * 0.625 +
            alligator(position, frequency * 2.0, 8, 2.112, 0.5) * 0.250 +
            alligator(position, frequency * 4.0, 8, 2.233, 0.5) * 0.125;
@@ -121,8 +117,9 @@ float alligator_fbm(float3 position, float frequency)
 [shader("compute")]
 [numthreads(16, 16, 1)]
 void shape_noise_cs_main(uint3 thread_id : SV_DispatchThreadID) {
+    float3 uvw = (float3(thread_id) + 0.5) / float3(clouds.shape_noise_lut_size);
+
     const float BASE_FREQUENCY = 2.0;
-    float3 uvw = c.image_size_inv * ((float3)thread_id + 0.5f);
     float perlin = lerp(1.0, perlin_fbm(uvw, 3.0, 8), 0.5);
     perlin = abs(perlin * 2.0 - 1.0);  // billowy perlin noise
 
@@ -132,15 +129,15 @@ void shape_noise_cs_main(uint3 thread_id : SV_DispatchThreadID) {
     color.w = alligator_fbm(uvw, BASE_FREQUENCY * 4.0);
     color.r = remap(perlin, 0.0, 1.0, color.y, 1.0);
 
-    c.noise_image.store(thread_id, color);
+    target_image[thread_id] = color;
 }
 
 [shader("compute")]
 [numthreads(16, 16, 1)]
 void detail_noise_cs_main(uint3 thread_id : SV_DispatchThreadID) {
-    const float BASE_FREQUENCY = 4.0;
-    float3 uvw = c.image_size_inv * ((float3)thread_id + 0.5f);
+    float3 uvw = (float3(thread_id) + 0.5) / float3(clouds.detail_noise_lut_size);
 
+    const float BASE_FREQUENCY = 4.0;
     float4 color = float4(0.0);
     color.x = alligator_fbm(uvw, BASE_FREQUENCY * 1.0);
     color.y = alligator_fbm(uvw, BASE_FREQUENCY * 2.0);
@@ -159,6 +156,6 @@ void detail_noise_cs_main(uint3 thread_id : SV_DispatchThreadID) {
     float v2 = saturate(lerp(height, gradient.w, gradient.z));
     color.w = v1 * v2;
 
-    c.noise_image.store(thread_id, color);
+    target_image[thread_id] = color;
 }
 

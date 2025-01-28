@@ -88,14 +88,55 @@ auto SceneRenderer::setup_persistent_resources(this SceneRenderer &self) -> void
         .shader_path = shaders_root / "atmos" / "final.slang",
         .entry_points = { "vs_main", "fs_main" },
     }).value();
+    //  ── CLOUD ───────────────────────────────────────────────────────────
+    self.cloud_base_noise_pipeline = Pipeline::create(*self.device, {
+        .module_name = "cloud.noise",
+        .root_path = shaders_root,
+        .shader_path = shaders_root / "cloud" / "noise.slang",
+        .entry_points = { "shape_noise_cs_main" },
+    }).value();
+    self.cloud_base_noise_lut = Image::create(
+        *self.device,
+        vuk::Format::eR8G8B8A8Unorm,
+        vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage,
+        vuk::ImageType::e3D,
+        vuk::Extent3D(256, 256, 256))
+        .value();
+    self.cloud_base_noise_lut_view = ImageView::create(
+        *self.device,
+        self.cloud_base_noise_lut,
+        vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage,
+        vuk::ImageViewType::e3D,
+        { .aspectMask = vuk::ImageAspectFlagBits::eColor })
+        .value();
+    self.cloud_detail_noise_pipeline = Pipeline::create(*self.device, {
+        .module_name = "cloud.noise",
+        .root_path = shaders_root,
+        .shader_path = shaders_root / "cloud" / "noise.slang",
+        .entry_points = { "detail_noise_cs_main" },
+    }).value();
+    self.cloud_detail_noise_lut = Image::create(
+        *self.device,
+        vuk::Format::eR8G8B8A8Unorm,
+        vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage,
+        vuk::ImageType::e3D,
+        vuk::Extent3D(128, 128, 128))
+        .value();
+    self.cloud_detail_noise_lut_view = ImageView::create(
+        *self.device,
+        self.cloud_detail_noise_lut,
+        vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage,
+        vuk::ImageViewType::e3D,
+        { .aspectMask = vuk::ImageAspectFlagBits::eColor })
+        .value();
+    //  ── VISBUFFER ───────────────────────────────────────────────────────
     self.vis_triangle_id_pipeline = Pipeline::create(*self.device, {
-        //.definitions = { {"LR_BINDLESS_PIPELINE", "1"} },
         .module_name = "vis.triangle_id",
         .root_path = shaders_root,
         .shader_path = shaders_root / "vis" / "triangle_id.slang",
         .entry_points = { "vs_main", "fs_main" },
-        //.bindless_pipeline = true,
     }).value();
+    //  ── POST PROCESS ────────────────────────────────────────────────────
     self.tonemap_pipeline = Pipeline::create(*self.device, {
         .module_name = "tonemap",
         .root_path = shaders_root,
@@ -104,7 +145,7 @@ auto SceneRenderer::setup_persistent_resources(this SceneRenderer &self) -> void
     }).value();
     // clang-format on
 
-    //  ── DEFINE PASSES ───────────────────────────────────────────────────
+    //  ── SKY LUTS ────────────────────────────────────────────────────────
     auto transmittance_lut_pass = vuk::make_pass(
         "transmittance lut",
         [&pipeline = *self.device->pipeline(self.sky_transmittance_pipeline.id())](
@@ -143,7 +184,6 @@ auto SceneRenderer::setup_persistent_resources(this SceneRenderer &self) -> void
             return std::make_tuple(transmittance_lut, dst);
         },
         vuk::DomainFlagBits::eGraphicsQueue);
-    //   ──────────────────────────────────────────────────────────────────────
 
     auto transmittance_lut_attachment =
         self.sky_transmittance_lut_view.discard(*self.device, "sky_transmittance_lut", vuk::ImageUsageFlagBits::eStorage);
@@ -162,6 +202,54 @@ auto SceneRenderer::setup_persistent_resources(this SceneRenderer &self) -> void
 
     transfer_man.wait_on(std::move(transmittance_lut_attachment));
     transfer_man.wait_on(std::move(multiscatter_lut_attachment));
+
+    //  ── CLOUD LUTS ──────────────────────────────────────────────────────
+    auto temp_clouds = transfer_man.scratch_buffer(GPUClouds{
+        .shape_noise_lut_size = self.cloud_base_noise_lut.extent(),
+        .detail_noise_lut_size = self.cloud_detail_noise_lut.extent(),
+    });
+    auto cloud_base_noise_lut_pass = vuk::make_pass(
+        "cloud base noise lut",
+        [&pipeline = *self.device->pipeline(self.cloud_base_noise_pipeline.id())](
+            vuk::CommandBuffer &cmd_list, VUK_IA(vuk::Access::eComputeRW) dst, VUK_BA(vuk::Access::eComputeRead) clouds) {
+            auto image_size = glm::vec2(dst->extent.width, dst->extent.height);
+            auto groups = glm::uvec2(image_size) / 16_u32;
+            cmd_list  //
+                .bind_compute_pipeline(pipeline)
+                .bind_image(0, 0, dst)
+                .bind_buffer(0, 1, clouds)
+                .dispatch(groups.x, groups.y, dst->extent.depth);
+            return std::make_tuple(dst, clouds);
+        },
+        vuk::DomainFlagBits::eGraphicsQueue);
+
+    auto cloud_detail_noise_lut_pass = vuk::make_pass(
+        "cloud detail noise lut",
+        [&pipeline = *self.device->pipeline(self.cloud_detail_noise_pipeline.id())](
+            vuk::CommandBuffer &cmd_list, VUK_IA(vuk::Access::eComputeRW) dst, VUK_BA(vuk::Access::eComputeRead) clouds) {
+            auto image_size = glm::vec2(dst->extent.width, dst->extent.height);
+            auto groups = glm::uvec2(image_size) / 16_u32;
+            cmd_list  //
+                .bind_compute_pipeline(pipeline)
+                .bind_image(0, 0, dst)
+                .bind_buffer(0, 1, clouds)
+                .dispatch(groups.x, groups.y, dst->extent.depth);
+            return std::make_tuple(dst, clouds);
+        },
+        vuk::DomainFlagBits::eGraphicsQueue);
+
+    auto cloud_base_noise_lut_attachment =
+        self.cloud_base_noise_lut_view.discard(*self.device, "cloud_base_noise_lut", vuk::ImageUsageFlagBits::eStorage);
+    auto cloud_detail_noise_lut_attachment =
+        self.cloud_detail_noise_lut_view.discard(*self.device, "cloud_detail_noise_lut", vuk::ImageUsageFlagBits::eStorage);
+
+    std::tie(cloud_base_noise_lut_attachment, temp_clouds) =
+        cloud_base_noise_lut_pass(std::move(cloud_base_noise_lut_attachment), std::move(temp_clouds));
+    std::tie(cloud_detail_noise_lut_attachment, temp_clouds) =
+        cloud_detail_noise_lut_pass(std::move(cloud_detail_noise_lut_attachment), std::move(temp_clouds));
+
+    transfer_man.wait_on(std::move(cloud_base_noise_lut_attachment));
+    transfer_man.wait_on(std::move(cloud_detail_noise_lut_attachment));
 }
 
 auto SceneRenderer::update_entity_transform(this SceneRenderer &self, GPUEntityID entity_id, GPUEntityTransform transform) -> void {

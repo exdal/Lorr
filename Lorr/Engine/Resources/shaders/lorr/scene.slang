@@ -22,6 +22,11 @@ public struct Atmosphere {
     public f32  aerial_km_per_slice;
     public f32  planet_radius;
     public f32  atmos_radius;
+
+    public ivec3 transmittance_lut_size;
+    public ivec3 sky_view_lut_size;
+    public ivec3 multiscattering_lut_size;
+    public ivec3 aerial_perspective_lut_size;
 };
 
 public struct Clouds {

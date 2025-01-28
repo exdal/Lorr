@@ -115,7 +115,6 @@ auto SceneRenderer::setup_persistent_resources(this SceneRenderer &self) -> void
                 .bind_compute_pipeline(pipeline)
                 .bind_image(0, 0, dst)
                 .bind_buffer(0, 1, atmos)
-                .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, image_size)
                 .dispatch(groups.x, groups.y, 1);
 
             return std::make_tuple(dst, atmos);
@@ -139,7 +138,6 @@ auto SceneRenderer::setup_persistent_resources(this SceneRenderer &self) -> void
                 .bind_image(0, 2, dst)
                 .bind_buffer(0, 3, atmos)
                 .bind_buffer(0, 4, sun)
-                .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, image_size)
                 .dispatch(groups.x, groups.y, 1);
 
             return std::make_tuple(transmittance_lut, dst);
@@ -151,7 +149,10 @@ auto SceneRenderer::setup_persistent_resources(this SceneRenderer &self) -> void
         self.sky_transmittance_lut_view.discard(*self.device, "sky_transmittance_lut", vuk::ImageUsageFlagBits::eStorage);
     auto multiscatter_lut_attachment =
         self.sky_multiscatter_lut_view.discard(*self.device, "sky_multiscatter_lut", vuk::ImageUsageFlagBits::eStorage);
-    auto temp_atmos = transfer_man.scratch_buffer(GPUAtmosphereData{});
+    auto temp_atmos = transfer_man.scratch_buffer(GPUAtmosphereData{
+        .transmittance_lut_size = self.sky_transmittance_lut_view.extent(),
+        .multiscattering_lut_size = self.sky_multiscatter_lut_view.extent(),
+    });
     auto temp_sun = transfer_man.scratch_buffer(GPUSunData{});
 
     std::tie(transmittance_lut_attachment, temp_atmos) =
@@ -241,8 +242,8 @@ auto SceneRenderer::render(this SceneRenderer &self, const SceneRenderInfo &info
     auto multiscatter_lut_attachment = self.sky_multiscatter_lut_view.acquire(
         *self.device, "multiscatter_lut", vuk::ImageUsageFlagBits::eSampled, vuk::Access::eFragmentSampled);
 
-    auto sky_view_lut_attachment = vuk::declare_ia(
-        "sky_view_lut", { .extent = { .width = 200, .height = 100, .depth = 1 }, .sample_count = vuk::Samples::e1, .layer_count = 1 });
+    auto sky_view_lut_attachment =
+        vuk::declare_ia("sky_view_lut", { .extent = self.sky_view_lut_extent, .sample_count = vuk::Samples::e1, .layer_count = 1 });
     sky_view_lut_attachment.same_format_as(final_attachment);
     sky_view_lut_attachment = vuk::clear_image(std::move(sky_view_lut_attachment), vuk::Black<f32>);
 
@@ -250,7 +251,12 @@ auto SceneRenderer::render(this SceneRenderer &self, const SceneRenderInfo &info
     vuk::Value<vuk::Buffer> atmos_buffer = {};
     vuk::Value<vuk::Buffer> sun_buffer = {};
     if (info.atmosphere.has_value()) {
-        atmos_buffer = transfer_man.scratch_buffer(info.atmosphere.value_or(GPUAtmosphereData{}));
+        auto atmos_info = info.atmosphere.value();
+        atmos_info.transmittance_lut_size = self.sky_transmittance_lut_view.extent();
+        atmos_info.multiscattering_lut_size = self.sky_multiscatter_lut_view.extent();
+        atmos_info.sky_view_lut_size = self.sky_view_lut_extent;
+
+        atmos_buffer = transfer_man.scratch_buffer(atmos_info);
     }
 
     if (info.sun.has_value()) {
@@ -307,7 +313,7 @@ auto SceneRenderer::render(this SceneRenderer &self, const SceneRenderInfo &info
     auto sky_aerial_perspective_attachment = vuk::declare_ia(
         "sky_aerial_perspective",
         { .image_type = vuk::ImageType::e3D,
-          .extent = { .width = 32, .height = 32, .depth = 32 },
+          .extent = self.aerial_perspective_lut_extent,
           .sample_count = vuk::Samples::e1,
           .view_type = vuk::ImageViewType::e3D,
           .level_count = 1,
@@ -392,8 +398,13 @@ auto SceneRenderer::render(this SceneRenderer &self, const SceneRenderInfo &info
             "vis triangle",
             [&pipeline = *self.device->pipeline(self.vis_triangle_id_pipeline.id()),
              &entities = *self.device->buffer(self.gpu_entities_buffer.id()),
-             &device = self.device,
-             mesh](
+             &vertex_buffer = *self.device->buffer(mesh.vertex_buffer_id),
+             &reordered_index_buffer = *self.device->buffer(mesh.reordered_index_buffer_id),
+             &provoked_index_buffer = *self.device->buffer(mesh.provoked_index_buffer_id),
+             entity_index = mesh.entity_index,
+             index_count = mesh.index_count,
+             index_offset = mesh.index_offset,
+             vertex_offset = mesh.vertex_offset](
                 vuk::CommandBuffer &cmd_list,
                 VUK_IA(vuk::Access::eColorWrite) dst,
                 VUK_IA(vuk::Access::eDepthStencilRW) dst_depth,
@@ -408,11 +419,11 @@ auto SceneRenderer::render(this SceneRenderer &self, const SceneRenderInfo &info
                     .set_scissor(0, vuk::Rect2D::framebuffer())
                     .bind_buffer(0, 0, camera)
                     .bind_buffer(0, 1, entities)
-                    .bind_buffer(0, 2, *device->buffer(mesh.vertex_buffer_id))
-                    .bind_buffer(0, 3, *device->buffer(mesh.reordered_index_buffer_id))
-                    .bind_index_buffer(*device->buffer(mesh.provoked_index_buffer_id), vuk::IndexType::eUint32)
-                    .push_constants(vuk::ShaderStageFlagBits::eVertex, 0, mesh.entity_index)
-                    .draw_indexed(mesh.index_count, 1, mesh.index_offset, static_cast<i32>(mesh.vertex_offset), 0);
+                    .bind_buffer(0, 2, vertex_buffer)
+                    .bind_buffer(0, 3, reordered_index_buffer)
+                    .bind_index_buffer(provoked_index_buffer, vuk::IndexType::eUint32)
+                    .push_constants(vuk::ShaderStageFlagBits::eVertex, 0, entity_index)
+                    .draw_indexed(index_count, 1, index_offset, static_cast<i32>(vertex_offset), 0);
 
                 return std::make_tuple(dst, dst_depth, camera);
             });

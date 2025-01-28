@@ -9,15 +9,10 @@ import "../lorr";
 [[vk::binding(5, 0)]] ConstantBuffer<Sun, ScalarDataLayout> sun;
 [[vk::binding(6, 0)]] ConstantBuffer<Camera, ScalarDataLayout> camera;
 
-struct PushConstants {
-    float3 target_image_size;
-};
-[[vk::push_constant]] PushConstants c;
-
 [shader("compute")]
 [numthreads(16, 16, 1)]
 void cs_main(uint3 thread_id : SV_DispatchThreadID) {
-    float2 uv = (float2(thread_id.xy) + 0.5) / c.target_image_size.xy;
+    float2 uv = (float2(thread_id.xy) + 0.5) / float2(atmos.aerial_perspective_lut_size.xy);
     float3 clip_space = float3(2.0 * uv - 1.0, 0.5);
     float4 world_space = mul(camera.inv_projection_view_mat, float4(clip_space, 1.0));
     float3 world_pos = world_space.xyz / world_space.w;
@@ -27,9 +22,9 @@ void cs_main(uint3 thread_id : SV_DispatchThreadID) {
                      float3(0.0, atmos.planet_radius, 0.0);
 
     int step_count = int(max(1.0, float(thread_id.z + 1.0) * 2.0));
-    float slice = ((float(thread_id.z) + 0.5) * (1.0 / c.target_image_size.z));
+    float slice = ((float(thread_id.z) + 0.5) * (1.0 / atmos.aerial_perspective_lut_size.z));
     slice *= slice;
-    slice *= c.target_image_size.z;
+    slice *= atmos.aerial_perspective_lut_size.z;
     float t_max = slice * atmos.aerial_km_per_slice;
 
     float3 ray_pos = eye_pos;

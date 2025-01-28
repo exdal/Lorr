@@ -42,7 +42,7 @@ float4 fs_main(VertexOutput input) : SV_TARGET {
         slice = 0.5;
     }
 
-    float w = sqrt(slice / 32.0); // from linear space to squared distribution
+    float w = sqrt(slice / atmos.aerial_perspective_lut_size.z); // from linear space to squared distribution
     float4 ap = weight * aerial_perspective_lut.Sample(sampler, float3(input.tex_coord, w));
     float3 luminance = ap.rgb;
     float transmittance = ap.a;

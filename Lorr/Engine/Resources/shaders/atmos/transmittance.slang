@@ -4,15 +4,10 @@ import "../lorr";
 [[vk::binding(0, 0)]] RWTexture2D<float4> transmittance_image;
 [[vk::binding(1, 0)]] ConstantBuffer<Atmosphere, ScalarDataLayout> atmosphere;
 
-struct PushConstants {
-    float2 image_size;
-};
-[[vk::push_constant]] PushConstants c;
-
 [shader("compute")]
 [numthreads(16, 16, 1)]
 void cs_main(uint3 thread_id : SV_DispatchThreadID) {
-    float2 uv = float2(float2(thread_id.xy) + 0.5) / float2(c.image_size);
+    float2 uv = float2(float2(thread_id.xy) + 0.5) / float2(atmosphere.transmittance_lut_size.xy);
 
     float h = lr::safe_sqrt(
         atmosphere.atmos_radius * atmosphere.atmos_radius -

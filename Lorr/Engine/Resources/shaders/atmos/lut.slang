@@ -30,8 +30,8 @@ vec4 fs_main(VertexOutput input) : SV_TARGET {
                      float3(0.0, atmos->planet_radius, 0.0);
 
     f32 h = length(eye_pos);
-    f32 u = fromSubUvsToUnit(input.tex_coord.x, 200);
-    f32 v = fromSubUvsToUnit(input.tex_coord.y, 100);
+    f32 u = fromSubUvsToUnit(input.tex_coord.x, f32(atmos.sky_view_lut_size.x));
+    f32 v = fromSubUvsToUnit(input.tex_coord.y, f32(atmos.sky_view_lut_size.y));
 
     float horizon = sqrt(h * h - atmos.planet_radius * atmos.planet_radius);
     float cos_beta = horizon / h;
@@ -77,7 +77,7 @@ vec4 fs_main(VertexOutput input) : SV_TARGET {
     info.transmittance_image = transmittance_lut;
     info.multiscattering_image = multiscattering_lut;
 
-    const int sample_count = 30;
+    const int sample_count = 32;
     info.sampling.variable_sample_count = true;
     info.sampling.min_sample_count = sample_count;
     info.sampling.max_sample_count = sample_count;

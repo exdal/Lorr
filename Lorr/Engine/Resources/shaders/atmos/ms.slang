@@ -8,15 +8,10 @@ import "../noise/hemisphere";
 [[vk::binding(3, 0)]] ConstantBuffer<Atmosphere, ScalarDataLayout> atmos;
 [[vk::binding(4, 0)]] ConstantBuffer<Sun, ScalarDataLayout> sun;
 
-struct PushConstants {
-    float2 multiscattering_lut_size;
-};
-[[vk::push_constant]] PushConstants c;
-
 [shader("compute")]
 [numthreads(16, 16, 1)]
 void cs_main(uint3 thread_id : SV_DispatchThreadID) {
-    float2 uv = float2(float2(thread_id.xy) + 0.5) / float2(c.multiscattering_lut_size);
+    float2 uv = float2(float2(thread_id.xy) + 0.5) / float2(atmos.multiscattering_lut_size.xy);
 
     float altitude = lerp(atmos.planet_radius, atmos.atmos_radius, uv.y);
     float sun_cos_theta = uv.x * 2.0 - 1.0;

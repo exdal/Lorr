@@ -71,6 +71,7 @@ struct GLTFModelInfo {
     std::vector<GLTFMaterialInfo> materials = {};
 
     static auto parse(const fs::path &path, GLTFModelCallbacks callbacks = {}) -> ls::option<GLTFModelInfo>;
+    static auto parse_info(const fs::path &path) -> ls::option<GLTFModelInfo>;
 };
 
 }  // namespace lr

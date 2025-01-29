@@ -13,7 +13,7 @@ struct AssetDirectory {
 
     AssetDirectory *parent = nullptr;
     std::deque<std::unique_ptr<AssetDirectory>> subdirs = {};
-    std::deque<UUID> asset_uuids = {};
+    ankerl::unordered_dense::set<UUID> asset_uuids = {};
 
     AssetDirectory(fs::path path_, FileWatcher *file_watcher_, AssetDirectory *parent_);
     ~AssetDirectory();

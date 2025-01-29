@@ -12,16 +12,7 @@ template<>
 struct fastgltf::ElementTraits<glm::vec2> : fastgltf::ElementTraitsBase<glm::vec2, AccessorType::Vec2, float> {};
 
 namespace lr {
-auto GLTFModelInfo::parse(const fs::path &path, GLTFModelCallbacks callbacks) -> ls::option<GLTFModelInfo> {
-    ZoneScoped;
-
-    auto gltf_buffer = fastgltf::GltfDataBuffer::FromPath(path);
-    auto gltf_type = fastgltf::determineGltfFileType(gltf_buffer.get());
-    if (gltf_type == fastgltf::GltfType::Invalid) {
-        LOG_ERROR("GLTF model type is invalid!");
-        return ls::nullopt;
-    }
-
+static auto get_default_extensions() -> fastgltf::Extensions {
     auto extensions = fastgltf::Extensions::None;
     extensions |= fastgltf::Extensions::KHR_mesh_quantization;
     extensions |= fastgltf::Extensions::KHR_texture_transform;
@@ -41,13 +32,61 @@ auto GLTFModelInfo::parse(const fs::path &path, GLTFModelCallbacks callbacks) ->
     extensions |= fastgltf::Extensions::EXT_texture_webp;
     extensions |= fastgltf::Extensions::MSFT_texture_dds;
 
-    fastgltf::Parser parser;
+    return extensions;
+}
 
+static auto get_default_options() -> fastgltf::Options {
     auto options = fastgltf::Options::None;
     options |= fastgltf::Options::LoadExternalBuffers;
     // options |= fastgltf::Options::DontRequireValidAssetMember;
 
-    auto result = parser.loadGltf(gltf_buffer.get(), path.parent_path(), options);
+    return options;
+}
+
+static auto to_vuk_filter(fastgltf::Filter f) -> vuk::Filter {
+    switch (f) {
+        case fastgltf::Filter::Nearest:
+            return vuk::Filter::eNearest;
+        case fastgltf::Filter::Linear:
+        default:
+            return vuk::Filter::eLinear;
+    }
+}
+
+static auto to_vuk_sampler_address_mode(fastgltf::Wrap w) -> vuk::SamplerAddressMode {
+    switch (w) {
+        case fastgltf::Wrap::ClampToEdge:
+            return vuk::SamplerAddressMode::eClampToEdge;
+        case fastgltf::Wrap::MirroredRepeat:
+            return vuk::SamplerAddressMode::eMirroredRepeat;
+        case fastgltf::Wrap::Repeat:
+            return vuk::SamplerAddressMode::eRepeat;
+    }
+}
+
+static auto to_asset_file_type(fastgltf::MimeType mime) -> AssetFileType {
+    switch (mime) {
+        case fastgltf::MimeType::JPEG:
+            return AssetFileType::JPEG;
+        case fastgltf::MimeType::PNG:
+            return AssetFileType::PNG;
+        default:
+            return AssetFileType::None;
+    }
+}
+
+auto GLTFModelInfo::parse(const fs::path &path, GLTFModelCallbacks callbacks) -> ls::option<GLTFModelInfo> {
+    ZoneScoped;
+
+    auto gltf_buffer = fastgltf::GltfDataBuffer::FromPath(path);
+    auto gltf_type = fastgltf::determineGltfFileType(gltf_buffer.get());
+    if (gltf_type == fastgltf::GltfType::Invalid) {
+        LOG_ERROR("GLTF model type is invalid!");
+        return ls::nullopt;
+    }
+
+    fastgltf::Parser parser(get_default_extensions());
+    auto result = parser.loadGltf(gltf_buffer.get(), path.parent_path(), get_default_options());
     if (!result) {
         LOG_ERROR("Failed to load GLTF! {}", fastgltf::getErrorMessage(result.error()));
         return ls::nullopt;
@@ -83,49 +122,17 @@ auto GLTFModelInfo::parse(const fs::path &path, GLTFModelCallbacks callbacks) ->
     // Samplers
     ///////////////////////////////////////////////
 
-    auto gltf_filter_to_lr = [](fastgltf::Filter f) -> vuk::Filter {
-        switch (f) {
-            case fastgltf::Filter::Nearest:
-                return vuk::Filter::eNearest;
-            case fastgltf::Filter::Linear:
-            default:
-                return vuk::Filter::eLinear;
-        }
-    };
-
-    auto gltf_address_mode_to_lr = [](fastgltf::Wrap w) -> vuk::SamplerAddressMode {
-        switch (w) {
-            case fastgltf::Wrap::ClampToEdge:
-                return vuk::SamplerAddressMode::eClampToEdge;
-            case fastgltf::Wrap::MirroredRepeat:
-                return vuk::SamplerAddressMode::eMirroredRepeat;
-            case fastgltf::Wrap::Repeat:
-                return vuk::SamplerAddressMode::eRepeat;
-        }
-    };
-
     for (const auto &v : asset.samplers) {
         auto &sampler = model.samplers.emplace_back();
-        sampler.mag_filter = gltf_filter_to_lr(v.magFilter.value_or(fastgltf::Filter::Linear));
-        sampler.min_filter = gltf_filter_to_lr(v.minFilter.value_or(fastgltf::Filter::Linear));
-        sampler.address_u = gltf_address_mode_to_lr(v.wrapS);
-        sampler.address_v = gltf_address_mode_to_lr(v.wrapT);
+        sampler.mag_filter = to_vuk_filter(v.magFilter.value_or(fastgltf::Filter::Linear));
+        sampler.min_filter = to_vuk_filter(v.minFilter.value_or(fastgltf::Filter::Linear));
+        sampler.address_u = to_vuk_sampler_address_mode(v.wrapS);
+        sampler.address_v = to_vuk_sampler_address_mode(v.wrapT);
     }
 
     ///////////////////////////////////////////////
     // Images
     ///////////////////////////////////////////////
-
-    auto to_asset_file_type = [](fastgltf::MimeType mime) -> AssetFileType {
-        switch (mime) {
-            case fastgltf::MimeType::JPEG:
-                return AssetFileType::JPEG;
-            case fastgltf::MimeType::PNG:
-                return AssetFileType::PNG;
-            default:
-                return AssetFileType::None;
-        }
-    };
 
     for (const auto &v : asset.images) {
         std::visit(
@@ -345,6 +352,84 @@ auto GLTFModelInfo::parse(const fs::path &path, GLTFModelCallbacks callbacks) ->
             global_index_offset += mesh_index_count;
         }
     }
+
+    return model;
+}
+
+auto GLTFModelInfo::parse_info(const fs::path &path) -> ls::option<GLTFModelInfo> {
+    ZoneScoped;
+
+    auto gltf_buffer = fastgltf::GltfDataBuffer::FromPath(path);
+    auto gltf_type = fastgltf::determineGltfFileType(gltf_buffer.get());
+    if (gltf_type == fastgltf::GltfType::Invalid) {
+        LOG_ERROR("GLTF model type is invalid!");
+        return ls::nullopt;
+    }
+
+    fastgltf::Parser parser(get_default_extensions());
+    auto result = parser.loadGltf(gltf_buffer.get(), path.parent_path(), get_default_options());
+    if (!result) {
+        LOG_ERROR("Failed to load GLTF! {}", fastgltf::getErrorMessage(result.error()));
+        return ls::nullopt;
+    }
+
+    fastgltf::Asset asset = std::move(result.get());
+    GLTFModelInfo model = {};
+
+    ///////////////////////////////////////////////
+    // Textures
+    ///////////////////////////////////////////////
+
+    for (const auto &v : asset.textures) {
+        auto &texture = model.textures.emplace_back();
+        if (v.samplerIndex.has_value()) {
+            texture.sampler_index = v.samplerIndex.value();
+        }
+        if (v.imageIndex.has_value()) {
+            texture.image_index = v.imageIndex.value();
+        }
+    }
+
+    ///////////////////////////////////////////////
+    // Materials
+    ///////////////////////////////////////////////
+
+    for (const auto &v : asset.materials) {
+        auto &material = model.materials.emplace_back();
+        auto &pbr = v.pbrData;
+
+        material.albedo_color = {
+            pbr.baseColorFactor[0],
+            pbr.baseColorFactor[1],
+            pbr.baseColorFactor[2],
+            pbr.baseColorFactor[3],
+        };
+        material.metallic_factor = pbr.metallicFactor;
+        material.roughness_factor = pbr.roughnessFactor;
+        material.emissive_color = {
+            v.emissiveFactor[0],
+            v.emissiveFactor[1],
+            v.emissiveFactor[2],
+            v.emissiveStrength,
+        };
+        // material.alpha_mode = static_cast<vk::AlphaMode>(v.alphaMode);
+        material.alpha_cutoff = v.alphaCutoff;
+
+        if (auto &tex = pbr.baseColorTexture; tex.has_value()) {
+            material.albedo_texture_index = tex->textureIndex;
+        }
+
+        if (auto &tex = v.normalTexture; tex.has_value()) {
+            material.normal_texture_index = tex->textureIndex;
+        }
+
+        if (auto &tex = v.emissiveTexture; tex.has_value()) {
+            material.emissive_texture_index = tex->textureIndex;
+        }
+    }
+
+    // We currently need only these, their data doesn't matter
+    // for now. Can change it in future.
 
     return model;
 }

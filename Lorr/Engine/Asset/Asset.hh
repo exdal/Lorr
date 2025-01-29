@@ -93,16 +93,19 @@ struct AssetManager : Handle<AssetManager> {
     // All created assets will be automatically registered into the registry.
     //
     auto create_asset(AssetType type, const fs::path &path = {}) -> UUID;
-    auto init_new_model(const UUID &uuid) -> bool;
     auto init_new_scene(const UUID &uuid, const std::string &name) -> bool;
 
     //  ── Imported Assets ─────────────────────────────────────────────────
-    // Assets that already exist in the filesystem with already set UUID's
+    auto import_asset(const fs::path &path) -> UUID;
+
+    //  ── Registered Assets ─────────────────────────────────────────────────
+    // Assets that already exist in project root and have meta file with
+    // valid UUID's.
     //
     // Add already existing asset into the registry.
     // File must end with `.lrasset` extension.
-    auto import_asset(const fs::path &path) -> UUID;
-    auto import_asset(const UUID &uuid, AssetType type, const fs::path &path) -> bool;
+    auto register_asset(const fs::path &path) -> UUID;
+    auto register_asset(const UUID &uuid, AssetType type, const fs::path &path) -> bool;
 
     //  ── Load Assets ─────────────────────────────────────────────────────
     // Load contents of registered assets.
@@ -144,5 +147,12 @@ struct AssetManager : Handle<AssetManager> {
     auto get_material(MaterialID material_id) -> Material *;
     auto get_scene(const UUID &uuid) -> Scene *;
     auto get_scene(SceneID scene_id) -> Scene *;
+
+private:
+    auto begin_asset_meta(JsonWriter &json, const UUID &uuid, AssetType type) -> void;
+    auto write_texture_asset_meta(JsonWriter &json, Texture *texture) -> bool;
+    auto write_model_asset_meta(JsonWriter &json, Model *model) -> bool;
+    auto write_scene_asset_meta(JsonWriter &json, Scene *scene) -> bool;
+    auto end_asset_meta(JsonWriter &json, const fs::path &path) -> bool;
 };
 }  // namespace lr

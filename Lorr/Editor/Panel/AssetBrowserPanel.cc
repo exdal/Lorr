@@ -74,65 +74,14 @@ auto AssetDirectory::add_subdir(this AssetDirectory &self, std::unique_ptr<Asset
 
 auto AssetDirectory::add_asset(this AssetDirectory &self, const fs::path &path) -> UUID {
     auto &app = Application::get();
-    auto asset_extension = app.asset_man.to_asset_file_type(path);
-
-    switch (asset_extension) {
-        case AssetFileType::Meta: {
-            auto asset_uuid = app.asset_man.import_asset(path);
-            if (!asset_uuid) {
-                return UUID(nullptr);
-            }
-
-            LOG_TRACE("Imported asset '{}' added from '{}'", asset_uuid.str(), app.asset_man.get_asset(asset_uuid)->path);
-            self.asset_uuids.push_back(asset_uuid);
-
-            return asset_uuid;
-        }
-
-        // WARN: All these types below are automatically added.
-        // DO NOT CALL `push_back` into `self.asset_uuids`!!!
-
-        case AssetFileType::GLB:
-        case AssetFileType::GLTF: {
-            memory::ScopedStack stack;
-            auto meta_file_path = stack.format("{}.lrasset", path);
-            if (fs::exists(meta_file_path)) {
-                return UUID(nullptr);
-            }
-
-            auto new_model_asset_uuid = app.asset_man.create_asset(AssetType::Model, path);
-            if (!new_model_asset_uuid) {
-                return UUID(nullptr);
-            }
-
-            if (!app.asset_man.init_new_model(new_model_asset_uuid)) {
-                return UUID(nullptr);
-            }
-
-            app.asset_man.export_asset(new_model_asset_uuid, path);
-            app.asset_man.unload_asset(new_model_asset_uuid);
-            return new_model_asset_uuid;
-        }
-        case AssetFileType::PNG: {
-            memory::ScopedStack stack;
-            auto meta_file_path = stack.format("{}.lrasset", path);
-            if (fs::exists(meta_file_path)) {
-                return UUID(nullptr);
-            }
-
-            auto new_image_asset_uuid = app.asset_man.create_asset(AssetType::Texture, path);
-            if (!new_image_asset_uuid) {
-                return UUID(nullptr);
-            }
-
-            app.asset_man.export_asset(new_image_asset_uuid, path);
-            return new_image_asset_uuid;
-        }
-        default:
-            break;
+    auto asset_uuid = app.asset_man.import_asset(path);
+    if (!asset_uuid) {
+        return UUID(nullptr);
     }
 
-    return UUID(nullptr);
+    self.asset_uuids.emplace(asset_uuid);
+
+    return asset_uuid;
 }
 
 AssetBrowserPanel::AssetBrowserPanel(std::string name_, bool open_)

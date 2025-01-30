@@ -47,7 +47,7 @@ void ViewportPanel::on_drop(this ViewportPanel &) {
                     app.asset_man.unload_scene(app.active_scene_uuid.value());
                 }
 
-                LS_EXPECT(app.asset_man.load_scene(*uuid));
+                app.asset_man.load_scene(*uuid);
                 app.active_scene_uuid = *uuid;
             } break;
             default:;

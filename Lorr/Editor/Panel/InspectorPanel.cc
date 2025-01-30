@@ -93,7 +93,7 @@ auto InspectorPanel::draw_inspector(this InspectorPanel &) -> void {
                                 }
 
                                 ImGui::SetCursorPos(cursor_pos);
-                                ImGui::InvisibleButton(reinterpret_cast<const c8 *>(&*v), { avail_region.x, 45.0f });
+                                ImGui::InvisibleButton(reinterpret_cast<const c8 *>(&*v), { avail_region.x, 50.0f });
                                 if (ImGui::BeginDragDropTarget()) {
                                     if (const auto *asset_payload = ImGui::AcceptDragDropPayload("ASSET_BY_UUID")) {
                                         auto &old_uuid = *v;

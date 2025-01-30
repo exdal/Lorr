@@ -396,7 +396,6 @@ auto SceneRenderer::render(this SceneRenderer &self, const SceneRenderInfo &info
                 .bind_buffer(0, 4, atmos)
                 .bind_buffer(0, 5, sun)
                 .bind_buffer(0, 6, camera)
-                .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, image_size)
                 .dispatch(groups.x, groups.y, static_cast<u32>(image_size.z));
             return std::make_tuple(dst, transmittance_lut, multiscatter_lut, atmos, sun, camera);
         });
@@ -488,10 +487,9 @@ auto SceneRenderer::render(this SceneRenderer &self, const SceneRenderInfo &info
         auto vis_triangle_id_pass = vuk::make_pass(
             "vis triangle",
             [&pipeline = *self.device->pipeline(self.vis_triangle_id_pipeline.id()),
-             &entities = *self.device->buffer(self.gpu_entities_buffer.id()),
-             &vertex_buffer = *self.device->buffer(mesh.vertex_buffer_id),
-             &reordered_index_buffer = *self.device->buffer(mesh.reordered_index_buffer_id),
-             &provoked_index_buffer = *self.device->buffer(mesh.provoked_index_buffer_id),
+             entities = *self.device->buffer(self.gpu_entities_buffer.id()),
+             vertex_buffer = *self.device->buffer(mesh.vertex_buffer_id),
+             index_buffer = *self.device->buffer(mesh.index_buffer_id),
              entity_index = mesh.entity_index,
              index_count = mesh.index_count,
              index_offset = mesh.index_offset,
@@ -511,8 +509,7 @@ auto SceneRenderer::render(this SceneRenderer &self, const SceneRenderInfo &info
                     .bind_buffer(0, 0, camera)
                     .bind_buffer(0, 1, entities)
                     .bind_buffer(0, 2, vertex_buffer)
-                    .bind_buffer(0, 3, reordered_index_buffer)
-                    .bind_index_buffer(provoked_index_buffer, vuk::IndexType::eUint32)
+                    .bind_index_buffer(index_buffer, vuk::IndexType::eUint32)
                     .push_constants(vuk::ShaderStageFlagBits::eVertex, 0, entity_index)
                     .draw_indexed(index_count, 1, index_offset, static_cast<i32>(vertex_offset), 0);
 

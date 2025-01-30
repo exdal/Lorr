@@ -182,7 +182,8 @@ auto AssetManager::import_asset(const fs::path &path) -> UUID {
 
             auto gltf_model = GLTFModelInfo::parse_info(path);
             Model model = {};
-            for (const auto &v : gltf_model->images) {
+            for (auto &v : gltf_model->textures) {
+                auto &image = gltf_model->images[v.image_index.value()];
                 UUID texture_uuid = {};
                 std::visit(
                     match{
@@ -193,7 +194,7 @@ auto AssetManager::import_asset(const fs::path &path) -> UUID {
                             texture_uuid = this->import_asset(image_path);
                         },
                     },
-                    v.image_data);
+                    image.image_data);
 
                 model.textures.emplace_back(texture_uuid);
             }
@@ -214,7 +215,20 @@ auto AssetManager::import_asset(const fs::path &path) -> UUID {
         }
         case AssetFileType::JPEG:
         case AssetFileType::PNG: {
-        } break;
+            auto uuid = this->create_asset(AssetType::Texture, path);
+            if (!uuid) {
+                return UUID(nullptr);
+            }
+
+            JsonWriter json;
+            this->begin_asset_meta(json, uuid, AssetType::Texture);
+            // this->write_texture_asset_meta(json, &texture);
+            if (!this->end_asset_meta(json, path)) {
+                return UUID(nullptr);
+            }
+
+            return uuid;
+        }
 
         default:;
     }
@@ -382,9 +396,8 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
         Model *model = nullptr;
 
         // Per mesh data
-        std::vector<std::vector<Model::Vertex>> mesh_vertices = {};
-        std::vector<std::vector<Model::Index>> mesh_provoked_indices = {};
-        std::vector<std::vector<Model::Index>> mesh_reordered_indices = {};
+        std::vector<Model::Vertex> vertices = {};
+        std::vector<Model::Index> indices = {};
     };
     auto on_new_node = [](void *user_data, u32 mesh_index, u32 vertex_count, u32 index_count, u32, glm::mat4 transform) {
         auto *info = static_cast<CallbackInfo *>(user_data);
@@ -397,53 +410,42 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
             info->model->meshes.resize(mesh_index + 1);
         }
 
-        if (info->mesh_vertices.size() <= mesh_index) {
-            info->mesh_vertices.resize(mesh_index + 1);
-        }
+        info->vertices.resize(info->vertices.size() + vertex_count);
+        info->indices.resize(info->indices.size() + index_count);
+    };
+    auto on_new_primitive =
+        [](void *user_data, u32 mesh_index, u32, u32 vertex_count, u32 vertex_offset, u32 index_count, u32 index_offset) {
+            auto *info = static_cast<CallbackInfo *>(user_data);
+            auto &mesh = info->model->meshes[mesh_index];
+            auto meshlet_index = static_cast<u32>(info->model->meshlets.size());
 
-        if (info->mesh_provoked_indices.size() <= mesh_index) {
-            info->mesh_provoked_indices.resize(mesh_index + 1);
-        }
-
-        if (info->mesh_reordered_indices.size() <= mesh_index) {
-            info->mesh_reordered_indices.resize(mesh_index + 1);
-        }
-
-        info->mesh_vertices[mesh_index].resize(vertex_count);
-        info->mesh_provoked_indices[mesh_index].resize(index_count);
-        info->mesh_reordered_indices[mesh_index].resize(vertex_count + index_count / 3);
-    };
-    auto on_new_primitive = [](void *user_data, u32 mesh_index, u32, u32, u32 vertex_offset, u32 index_count, u32 index_offset) {
+            mesh.meshlet_indices.push_back(meshlet_index);
+            info->model->meshlets.push_back({
+                .vertex_count = vertex_count,
+                .vertex_offset = vertex_offset,
+                .index_count = index_count,
+                .index_offset = index_offset,
+            });
+        };
+    auto on_access_index = [](void *user_data, u32, u64 offset, u32 index) {
         auto *info = static_cast<CallbackInfo *>(user_data);
-        auto &mesh = info->model->meshes[mesh_index];
-        auto meshlet_index = static_cast<u32>(info->model->meshlets.size());
-
-        mesh.meshlet_indices.push_back(meshlet_index);
-        info->model->meshlets.push_back({
-            .vertex_offset = vertex_offset,
-            .index_count = index_count,
-            .index_offset = index_offset,
-        });
+        info->indices[offset] = index;
     };
-    auto on_access_index = [](void *user_data, u32 mesh_index, u64 offset, u32 index) {
+    auto on_access_position = [](void *user_data, u32, u64 offset, glm::vec3 position) {
         auto *info = static_cast<CallbackInfo *>(user_data);
-        info->mesh_provoked_indices[mesh_index][offset] = index;
+        info->vertices[offset].position = position;
     };
-    auto on_access_position = [](void *user_data, u32 mesh_index, u64 offset, glm::vec3 position) {
+    auto on_access_normal = [](void *user_data, u32, u64 offset, glm::vec3 normal) {
         auto *info = static_cast<CallbackInfo *>(user_data);
-        info->mesh_vertices[mesh_index][offset].position = position;
+        info->vertices[offset].normal = normal;
     };
-    auto on_access_normal = [](void *user_data, u32 mesh_index, u64 offset, glm::vec3 normal) {
+    auto on_access_texcoord = [](void *user_data, u32, u64 offset, glm::vec2 texcoord) {
         auto *info = static_cast<CallbackInfo *>(user_data);
-        info->mesh_vertices[mesh_index][offset].normal = normal;
+        info->vertices[offset].tex_coord_0 = texcoord;
     };
-    auto on_access_texcoord = [](void *user_data, u32 mesh_index, u64 offset, glm::vec2 texcoord) {
+    auto on_access_color = [](void *user_data, u32, u64 offset, glm::vec4 color) {
         auto *info = static_cast<CallbackInfo *>(user_data);
-        info->mesh_vertices[mesh_index][offset].tex_coord_0 = texcoord;
-    };
-    auto on_access_color = [](void *user_data, u32 mesh_index, u64 offset, glm::vec4 color) {
-        auto *info = static_cast<CallbackInfo *>(user_data);
-        info->mesh_vertices[mesh_index][offset].color = glm::packUnorm4x8(color);
+        info->vertices[offset].color = glm::packUnorm4x8(color);
     };
 
     CallbackInfo callback_info = { .device = impl->device, .model = model };
@@ -556,82 +558,48 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
         this->load_material(material_uuid, material_info);
     }
 
-    u32 vertex_count = 0;
-    u32 provoked_index_count = 0;
-    u32 reordered_index_count = 0;
-    // Optimize vertex buffer
-    for (usize mesh_index = 0; mesh_index < model->meshes.size(); mesh_index++) {
-        auto &vertices = callback_info.mesh_vertices[mesh_index];
-        auto &provoked_indices = callback_info.mesh_provoked_indices[mesh_index];
-        auto &reordered_indices = callback_info.mesh_reordered_indices[mesh_index];
+    std::vector<Model::Vertex> remapped_vertices = {};
+    std::vector<Model::Index> remapped_indices = {};
+    for (auto &meshlet : model->meshlets) {
+        auto vertices = ls::span(callback_info.vertices.data() + meshlet.vertex_offset, meshlet.vertex_count);
+        auto indices = ls::span(callback_info.indices.data() + meshlet.index_offset, meshlet.index_count);
 
-        std::vector<Model::Index> provoked_indices_remap(vertices.size());
-        const auto unique_vertices = meshopt_generateVertexRemap(  //
-            provoked_indices_remap.data(),
-            provoked_indices.data(),
-            provoked_indices.size(),
-            vertices.data(),
-            vertices.size(),
-            sizeof(Model::Vertex));
+        std::vector<Model::Index> meshlet_vertex_remap(meshlet.vertex_count);
+        std::vector<Model::Index> meshlet_remapped_indices(meshlet.index_count);
+        const auto unique_vertices = meshopt_optimizeVertexFetchRemap(  //
+            meshlet_vertex_remap.data(),
+            indices.data(),
+            indices.size(),
+            vertices.size());
 
+        meshopt_remapIndexBuffer(  //
+            meshlet_remapped_indices.data(),
+            indices.data(),
+            indices.size(),
+            meshlet_vertex_remap.data());
+
+        std::vector<Model::Vertex> meshlet_remapped_vertices(unique_vertices);
         meshopt_remapVertexBuffer(  //
-            vertices.data(),
+            meshlet_remapped_vertices.data(),
             vertices.data(),
             vertices.size(),
             sizeof(Model::Vertex),
-            provoked_indices_remap.data());
-        meshopt_remapIndexBuffer(  //
-            provoked_indices.data(),
-            provoked_indices.data(),
-            provoked_indices.size(),
-            provoked_indices_remap.data());
+            meshlet_vertex_remap.data());
 
-        vertices.resize(unique_vertices);
-
-        meshopt_optimizeVertexFetch(  //
-            vertices.data(),
-            provoked_indices.data(),
-            provoked_indices.size(),
-            vertices.data(),
-            vertices.size(),
-            sizeof(Model::Vertex));
-
-        reordered_indices.resize(vertices.size() + provoked_indices.size() / 3);
-        reordered_indices.resize(meshopt_generateProvokingIndexBuffer(
-            provoked_indices.data(), reordered_indices.data(), provoked_indices.data(), provoked_indices.size(), vertices.size()));
-
-        vertex_count += vertices.size();
-        provoked_index_count += provoked_indices.size();
-        reordered_index_count += reordered_indices.size();
+        std::ranges::move(meshlet_remapped_vertices, std::back_inserter(remapped_vertices));
+        std::ranges::move(meshlet_remapped_indices, std::back_inserter(remapped_indices));
     }
 
-    model->vertex_buffer = Buffer::create(*impl->device, vertex_count * sizeof(Model::Vertex)).value();
-    model->provoked_index_buffer = Buffer::create(*impl->device, provoked_index_count * sizeof(Model::Index)).value();
-    model->reordered_index_buffer = Buffer::create(*impl->device, reordered_index_count * sizeof(Model::Index)).value();
+    model->vertex_buffer = Buffer::create(*impl->device, remapped_vertices.size() * sizeof(Model::Vertex)).value();
+    model->index_buffer = Buffer::create(*impl->device, remapped_indices.size() * sizeof(Model::Index)).value();
 
-    u32 vertex_offset = 0;
-    u32 provoked_index_offset = 0;
-    u32 reordered_index_offset = 0;
-    for (usize mesh_index = 0; mesh_index < model->meshes.size(); mesh_index++) {
-        auto &vertices = callback_info.mesh_vertices[mesh_index];
-        auto &provoked_indices = callback_info.mesh_provoked_indices[mesh_index];
-        auto &reordered_indices = callback_info.mesh_reordered_indices[mesh_index];
-
-        auto &transfer_man = impl->device->transfer_man();
-        transfer_man.upload_staging(ls::span(vertices), model->vertex_buffer, vertex_offset * sizeof(Model::Vertex));
-        transfer_man.upload_staging(ls::span(provoked_indices), model->provoked_index_buffer, provoked_index_offset * sizeof(Model::Index));
-        transfer_man.upload_staging(
-            ls::span(reordered_indices), model->reordered_index_buffer, reordered_index_offset * sizeof(Model::Index));
-
-        vertex_offset += vertices.size();
-        provoked_index_offset += provoked_indices.size();
-        reordered_index_offset += reordered_indices.size();
-    }
+    auto &transfer_man = impl->device->transfer_man();
+    transfer_man.upload_staging(ls::span(remapped_vertices), model->vertex_buffer);
+    transfer_man.upload_staging(ls::span(remapped_indices), model->index_buffer);
 
     auto model_name = fs::relative(asset->path, impl->root_path).string();
-    impl->device->set_name(model->vertex_buffer, stack.format("{} VB", model_name));
-    impl->device->set_name(model->provoked_index_buffer, stack.format("{} PIB", model_name));
-    impl->device->set_name(model->reordered_index_buffer, stack.format("{} RIB", model_name));
+    impl->device->set_name(model->vertex_buffer, stack.format("{} Vertices", model_name));
+    impl->device->set_name(model->index_buffer, stack.format("{} Indices", model_name));
 
     asset->acquire_ref();
     return true;
@@ -690,7 +658,14 @@ auto AssetManager::load_texture(const UUID &uuid, ls::span<u8> pixels, const Tex
     }
 
     auto &transfer_man = impl->device->transfer_man();
-    auto image = Image::create(*impl->device, format, vuk::ImageUsageFlagBits::eSampled, vuk::ImageType::e2D, extent, 1, 4);
+    auto image = Image::create(
+        *impl->device,
+        format,
+        vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eTransferSrc,
+        vuk::ImageType::e2D,
+        extent,
+        1,
+        static_cast<u32>(glm::floor(glm::log2(static_cast<f32>(ls::max(extent.width, extent.height)))) + 1));
     if (!image.has_value()) {
         LS_DEBUGBREAK();
         return false;
@@ -699,7 +674,7 @@ auto AssetManager::load_texture(const UUID &uuid, ls::span<u8> pixels, const Tex
     auto image_view = ImageView::create(
         *impl->device,
         image.value(),
-        vuk::ImageUsageFlagBits::eSampled,
+        vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eTransferSrc,
         vuk::ImageViewType::e2D,
         {
             .aspectMask = vuk::ImageAspectFlagBits::eColor,

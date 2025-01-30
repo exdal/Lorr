@@ -96,14 +96,14 @@ auto InspectorPanel::draw_inspector(this InspectorPanel &) -> void {
                                 ImGui::InvisibleButton(reinterpret_cast<const c8 *>(&*v), { avail_region.x, 45.0f });
                                 if (ImGui::BeginDragDropTarget()) {
                                     if (const auto *asset_payload = ImGui::AcceptDragDropPayload("ASSET_BY_UUID")) {
-                                        auto *dropping_uuid = static_cast<UUID *>(asset_payload->Data);
-                                        auto *dropping_asset = app.asset_man.get_asset(*dropping_uuid);
+                                        auto &old_uuid = *v;
+                                        auto &dropping_uuid = *static_cast<UUID *>(asset_payload->Data);
+                                        auto *dropping_asset = app.asset_man.get_asset(dropping_uuid);
                                         if (dropping_asset->type == AssetType::Model) {
-                                            auto old_uuid = *v;
-                                            *v = *dropping_uuid;
-                                            if (app.asset_man.load_model(*dropping_uuid) && old_uuid) {
+                                            if (old_uuid != dropping_uuid && app.asset_man.load_model(dropping_uuid) && old_uuid) {
                                                 app.asset_man.unload_model(old_uuid);
                                             }
+                                            old_uuid = dropping_uuid;
                                         }
                                     }
                                     ImGui::EndDragDropTarget();

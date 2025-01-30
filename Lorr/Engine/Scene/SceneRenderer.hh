@@ -96,8 +96,7 @@ struct RenderingMesh {
 
     // TODO: Remove them when we have mega-buffers
     BufferID vertex_buffer_id = BufferID::Invalid;
-    BufferID reordered_index_buffer_id = BufferID::Invalid;
-    BufferID provoked_index_buffer_id = BufferID::Invalid;
+    BufferID index_buffer_id = BufferID::Invalid;
 };
 
 struct SceneRenderInfo {

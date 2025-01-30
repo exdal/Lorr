@@ -47,6 +47,7 @@ struct Model {
     using Index = u32;
 
     struct Meshlet {
+        alignas(4) u32 vertex_count = 0;
         alignas(4) u32 vertex_offset = 0;
         alignas(4) u32 index_count = 0;
         alignas(4) u32 index_offset = 0;
@@ -71,7 +72,6 @@ struct Model {
     std::vector<Node> nodes = {};
 
     Buffer vertex_buffer = {};
-    Buffer provoked_index_buffer = {};
-    Buffer reordered_index_buffer = {};
+    Buffer index_buffer = {};
 };
 }  // namespace lr

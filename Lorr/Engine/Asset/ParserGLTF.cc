@@ -286,8 +286,6 @@ auto GLTFModelInfo::parse(const fs::path &path, GLTFModelCallbacks callbacks) ->
 
         auto mesh_index = static_cast<u32>(node.meshIndex.value());
         auto &mesh = asset.meshes[mesh_index];
-        u32 mesh_vertex_offset = 0;
-        u32 mesh_index_offset = 0;
         u32 mesh_vertex_count = 0;
         u32 mesh_index_count = 0;
 
@@ -301,7 +299,7 @@ auto GLTFModelInfo::parse(const fs::path &path, GLTFModelCallbacks callbacks) ->
 
             if (callbacks.on_access_index) {
                 fastgltf::iterateAccessorWithIndex<u32>(asset, index_accessor, [&](u32 index, usize i) {  //
-                    callbacks.on_access_index(callbacks.user_data, mesh_index, mesh_index_offset + i, index);
+                    callbacks.on_access_index(callbacks.user_data, mesh_index, global_index_offset + i, index);
                 });
             }
 
@@ -310,28 +308,28 @@ auto GLTFModelInfo::parse(const fs::path &path, GLTFModelCallbacks callbacks) ->
                 mesh_vertex_count += accessor.count;
 
                 fastgltf::iterateAccessorWithIndex<glm::vec3>(asset, accessor, [&](glm::vec3 pos, usize i) {  //
-                    callbacks.on_access_position(callbacks.user_data, mesh_index, mesh_vertex_offset + i, pos);
+                    callbacks.on_access_position(callbacks.user_data, mesh_index, global_vertex_offset + i, pos);
                 });
             }
 
             if (auto attrib = primitive.findAttribute("NORMAL"); attrib != primitive.attributes.end() && callbacks.on_access_normal) {
                 auto &accessor = asset.accessors[attrib->accessorIndex];
                 fastgltf::iterateAccessorWithIndex<glm::vec3>(asset, accessor, [&](glm::vec3 normal, usize i) {  //
-                    callbacks.on_access_normal(callbacks.user_data, mesh_index, mesh_vertex_offset + i, normal);
+                    callbacks.on_access_normal(callbacks.user_data, mesh_index, global_vertex_offset + i, normal);
                 });
             }
 
             if (auto attrib = primitive.findAttribute("TEXCOORD_0"); attrib != primitive.attributes.end() && callbacks.on_access_texcoord) {
                 auto &accessor = asset.accessors[attrib->accessorIndex];
                 fastgltf::iterateAccessorWithIndex<glm::vec2>(asset, accessor, [&](glm::vec2 uv, usize i) {  //
-                    callbacks.on_access_texcoord(callbacks.user_data, mesh_index, mesh_vertex_offset + i, uv);
+                    callbacks.on_access_texcoord(callbacks.user_data, mesh_index, global_vertex_offset + i, uv);
                 });
             }
 
             if (auto attrib = primitive.findAttribute("COLOR"); attrib != primitive.attributes.end() && callbacks.on_access_color) {
                 auto &accessor = asset.accessors[attrib->accessorIndex];
                 fastgltf::iterateAccessorWithIndex<glm::vec4>(asset, accessor, [&](glm::vec4 color, usize i) {  //
-                    callbacks.on_access_color(callbacks.user_data, mesh_index, mesh_vertex_offset + i, color);
+                    callbacks.on_access_color(callbacks.user_data, mesh_index, global_vertex_offset + i, color);
                 });
             }
 
@@ -346,8 +344,6 @@ auto GLTFModelInfo::parse(const fs::path &path, GLTFModelCallbacks callbacks) ->
                     global_index_offset);
             }
 
-            mesh_vertex_offset += mesh_vertex_count;
-            mesh_index_offset += mesh_index_count;
             global_vertex_offset += mesh_vertex_count;
             global_index_offset += mesh_index_count;
         }
@@ -375,6 +371,44 @@ auto GLTFModelInfo::parse_info(const fs::path &path) -> ls::option<GLTFModelInfo
 
     fastgltf::Asset asset = std::move(result.get());
     GLTFModelInfo model = {};
+
+    ///////////////////////////////////////////////
+    // Images
+    ///////////////////////////////////////////////
+
+    for (const auto &v : asset.images) {
+        std::visit(
+            fastgltf::visitor{
+                [](const auto &) {},
+                [&](const fastgltf::sources::ByteView &view) {
+                    // Embedded buffer
+                    auto &image_info = model.images.emplace_back();
+                    image_info.image_data.emplace<std::vector<u8>>();
+                    image_info.file_type = to_asset_file_type(view.mimeType);
+                },
+                [&](const fastgltf::sources::BufferView &view) {
+                    // Embedded buffer
+                    auto &image_info = model.images.emplace_back();
+                    image_info.image_data.emplace<std::vector<u8>>();
+                    image_info.file_type = to_asset_file_type(view.mimeType);
+                },
+                [&](const fastgltf::sources::Array &arr) {
+                    // Embedded array
+                    auto &image_info = model.images.emplace_back();
+                    image_info.image_data.emplace<std::vector<u8>>();
+                    image_info.file_type = to_asset_file_type(arr.mimeType);
+                },
+                [&](const fastgltf::sources::URI &uri) {
+                    // External file
+                    const auto &image_file_path = path.parent_path() / uri.uri.fspath();
+
+                    auto &image_info = model.images.emplace_back();
+                    image_info.image_data.emplace<fs::path>(image_file_path);
+                    image_info.file_type = to_asset_file_type(uri.mimeType);
+                },
+            },
+            v.data);
+    }
 
     ///////////////////////////////////////////////
     // Textures

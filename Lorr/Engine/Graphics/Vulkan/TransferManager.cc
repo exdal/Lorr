@@ -43,9 +43,9 @@ auto TransferManager::upload_staging(this TransferManager &self, ls::span<u8> by
     auto dst_buffer = vuk::discard_buf("dst", dst_handle->subrange(dst_offset, cpu_buffer.buffer.size));
     auto upload_pass = vuk::make_pass(
         "TransferManager::buffer_upload",
-        [](vuk::CommandBuffer &cmd_list, VUK_BA(vuk::Access::eTransferRead) src, VUK_BA(vuk::Access::eTransferWrite) dst) {
-            cmd_list.copy_buffer(src, dst);
-            return dst;
+        [](vuk::CommandBuffer &cmd_list, VUK_BA(vuk::Access::eTransferRead) src_ba, VUK_BA(vuk::Access::eTransferWrite) dst_ba) {
+            cmd_list.copy_buffer(src_ba, dst_ba);
+            return dst_ba;
         });
 
     self.wait_on(std::move(upload_pass(std::move(src_buffer), std::move(dst_buffer))));
@@ -59,9 +59,9 @@ auto TransferManager::upload_staging(this TransferManager &self, TransientBuffer
     auto dst_buffer = vuk::discard_buf("dst", dst_handle->subrange(dst_offset, src.buffer.size));
     auto upload_pass = vuk::make_pass(
         "TransferManager::transient_buffer_to_buffer",
-        [](vuk::CommandBuffer &cmd_list, VUK_BA(vuk::Access::eTransferRead) src, VUK_BA(vuk::Access::eTransferWrite) dst) {
-            cmd_list.copy_buffer(src, dst);
-            return dst;
+        [](vuk::CommandBuffer &cmd_list, VUK_BA(vuk::Access::eTransferRead) src_ba, VUK_BA(vuk::Access::eTransferWrite) dst_ba) {
+            cmd_list.copy_buffer(src_ba, dst_ba);
+            return dst_ba;
         });
 
     self.wait_on(std::move(upload_pass(std::move(src_buffer), std::move(dst_buffer))));
@@ -74,9 +74,9 @@ auto TransferManager::upload_staging(this TransferManager &self, TransientBuffer
     auto dst_buffer = vuk::discard_buf("dst", dst.buffer);
     auto upload_pass = vuk::make_pass(
         "TransferManager::buffer_to_buffer",
-        [](vuk::CommandBuffer &cmd_list, VUK_BA(vuk::Access::eTransferRead) src_, VUK_BA(vuk::Access::eTransferWrite) dst_) {
-            cmd_list.copy_buffer(src_, dst_);
-            return dst_;
+        [](vuk::CommandBuffer &cmd_list, VUK_BA(vuk::Access::eTransferRead) src_ba, VUK_BA(vuk::Access::eTransferWrite) dst_ba) {
+            cmd_list.copy_buffer(src_ba, dst_ba);
+            return dst_ba;
         });
 
     self.wait_on(std::move(upload_pass(std::move(src_buffer), std::move(dst_buffer))));
@@ -85,8 +85,14 @@ auto TransferManager::upload_staging(this TransferManager &self, TransientBuffer
 auto TransferManager::upload_staging(this TransferManager &self, ImageView &image_view, ls::span<u8> bytes) -> void {
     ZoneScoped;
 
-    auto cpu_buffer = self.alloc_transient_buffer(vuk::MemoryUsage::eCPUonly, bytes.size_bytes());
-    std::memcpy(cpu_buffer.host_ptr(), bytes.data(), bytes.size_bytes());
+    auto buffer = vuk::allocate_buffer(
+                      *self.device->allocator, { .mem_usage = vuk::MemoryUsage::eCPUonly, .size = bytes.size_bytes(), .alignment = 8 })
+                      .value();
+    std::memcpy(buffer->mapped_ptr, bytes.data(), bytes.size_bytes());
+
+    auto dst_attachment_info = image_view.get_attachment(*self.device, vuk::ImageUsageFlagBits::eTransferDst);
+    auto src_buffer = vuk::acquire_buf("src", *buffer, vuk::Access::eNone);
+    auto dst_attachment = vuk::declare_ia("dst", dst_attachment_info);
 
     vuk::ImageSubresourceLayers target_layer = {
         .aspectMask = vuk::format_to_aspect(image_view.format()),
@@ -95,19 +101,16 @@ auto TransferManager::upload_staging(this TransferManager &self, ImageView &imag
         .layerCount = 1,
     };
     vuk::BufferImageCopy copy_region = {
-        .bufferOffset = cpu_buffer.buffer.offset,
+        .bufferOffset = src_buffer->offset,
         .imageSubresource = target_layer,
-        .imageExtent = image_view.extent(),
+        .imageExtent = dst_attachment->base_mip_extent(),
     };
 
-    auto dst_attachment_info = image_view.get_attachment(*self.device, vuk::ImageUsageFlagBits::eTransferDst);
-    auto src_buffer = vuk::acquire_buf("src", cpu_buffer.buffer, vuk::Access::eNone);
-    auto dst_attachment = vuk::declare_ia("dst", dst_attachment_info);
     auto upload_pass = vuk::make_pass(
         "TransferManager::image_upload",
-        [copy_region](vuk::CommandBuffer &cmd_list, VUK_BA(vuk::Access::eTransferRead) src, VUK_IA(vuk::Access::eTransferWrite) dst) {
-            cmd_list.copy_buffer_to_image(src, dst, copy_region);
-            return dst;
+        [copy_region](vuk::CommandBuffer &cmd_list, VUK_BA(vuk::Access::eTransferRead) src_ba, VUK_IA(vuk::Access::eTransferWrite) dst_ia) {
+            cmd_list.copy_buffer_to_image(src_ba, dst_ia, copy_region);
+            return dst_ia;
         });
 
     dst_attachment = upload_pass(std::move(src_buffer), std::move(dst_attachment));

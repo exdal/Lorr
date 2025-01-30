@@ -383,8 +383,7 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, const vuk::Extent3
                 rendering_mesh.index_count = meshlet.index_count;
 
                 rendering_mesh.vertex_buffer_id = model->vertex_buffer.id();
-                rendering_mesh.provoked_index_buffer_id = model->provoked_index_buffer.id();
-                rendering_mesh.reordered_index_buffer_id = model->reordered_index_buffer.id();
+                rendering_mesh.index_buffer_id = model->index_buffer.id();
             }
         }
     });

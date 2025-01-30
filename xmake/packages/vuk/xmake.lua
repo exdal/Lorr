@@ -8,6 +8,7 @@ package("vuk")
     add_versions("2024.12.28", "ea8ecd70fa1d5d329724dffe003081c188410b48")
     add_versions("2024.12.30", "f29bf6562c4f4046ac57e9b5113bf10b806ba533")
     add_versions("2025.01.25", "7dd89b788d0508494edb5d1d83249ee475dddc4c")
+    add_versions("2025.01.30", "924a546f6753b60b7ae9dda88b21fc1dd0547c50")
 
     add_deps("function2")
     add_deps("spirv-cross")

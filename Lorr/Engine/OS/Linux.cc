@@ -276,7 +276,7 @@ auto os::file_watcher_buffer_size() -> i64 {
 }
 
 auto os::mem_page_size() -> u64 {
-    return 0;
+    return sysconf(_SC_PAGESIZE);
 }
 
 auto os::mem_reserve(u64 size) -> void * {

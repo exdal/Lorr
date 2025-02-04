@@ -34,26 +34,27 @@ struct GPUAtmosphereData {
     alignas(4) vuk::Extent3D aerial_perspective_lut_size = {};
 };
 
-struct GPUClouds {
-    alignas(4) glm::vec2 bounds = { 2.0f, 5.0f };
-    alignas(4) f32 global_scale = 0.15f;
-    alignas(4) f32 shape_noise_scale = 0.3f;
-    alignas(4) glm::vec3 shape_noise_weights = { 0.625f, 0.25f, 0.125f };
-    alignas(4) f32 detail_noise_scale = 0.3f;
-    alignas(4) glm::vec3 detail_noise_weights = { 0.625f, 0.25f, 0.125f };
+struct GPUCloudsData {
+    alignas(4) glm::vec2 bounds = { 1.0f, 10.0f };
+    alignas(4) glm::vec4 shape_noise_weights = { 0.625f, 0.25f, 0.15f, 0.625f };
+    alignas(4) glm::vec4 detail_noise_weights = { 0.625f, 0.25f, 0.15f, 0.625f };
+    alignas(4) f32 shape_noise_scale = 100.0f;
+    alignas(4) f32 detail_noise_scale = 100.0f;
     alignas(4) f32 detail_noise_influence = 0.4f;
-    alignas(4) f32 coverage = 0.9f;
-    alignas(4) f32 general_density = 0.1f;
-    alignas(4) glm::vec3 phase_values = { 0.623f, 0.335f, 0.979f };  // forwards phase, backwards phase, mix factor
+    alignas(4) f32 coverage = 0.5f;
+    alignas(4) f32 general_density = 4.0f;
+    // forwards phase, backwards phase, forwards peak mix factor
+    alignas(4) glm::vec3 phase_values = { 0.427f, -0.335f, 0.15f };
     alignas(4) f32 cloud_type = 0.0f;
-    alignas(4) f32 draw_distance = 1000.0f;
-    alignas(4) f32 darkness_threshold = 0.450f;
+    alignas(4) f32 draw_distance = 5000.0f;
+    alignas(4) f32 darkness_threshold = 0.02f;
     alignas(4) i32 sun_step_count = 5;
-    alignas(4) i32 clouds_step_count = 30;
-    alignas(4) f32 cloud_light_absorption = 0.443f;
-    alignas(4) f32 sun_light_absorption = 0.224f;
-    alignas(4) vuk::Extent3D shape_noise_lut_size = {};
-    alignas(4) vuk::Extent3D detail_noise_lut_size = {};
+    alignas(4) i32 clouds_step_count = 64;
+    alignas(4) f32 extinction = 0.22f;
+    alignas(4) f32 scattering = 0.16f;
+    alignas(4) f32 powder_intensity = 10.0;
+
+    alignas(4) vuk::Extent3D noise_lut_size = {};
 };
 
 struct GPUCameraData {
@@ -109,6 +110,7 @@ struct SceneRenderInfo {
     ls::option<GPUCameraData> camera_info = ls::nullopt;
     ls::option<GPUSunData> sun = ls::nullopt;
     ls::option<GPUAtmosphereData> atmosphere = ls::nullopt;
+    ls::option<GPUCloudsData> clouds = ls::nullopt;
 };
 
 struct SceneRenderer {
@@ -138,12 +140,12 @@ private:
     vuk::Extent3D sky_aerial_perspective_lut_extent = { .width = 32, .height = 32, .depth = 32 };
     Pipeline sky_final_pipeline = {};
 
-    Pipeline cloud_base_noise_pipeline = {};
-    Image cloud_base_noise_lut = {};
-    ImageView cloud_base_noise_lut_view = {};
-    Pipeline cloud_detail_noise_pipeline = {};
+    Pipeline cloud_noise_pipeline = {};
+    Image cloud_shape_noise_lut = {};
+    ImageView cloud_shape_noise_lut_view = {};
     Image cloud_detail_noise_lut = {};
     ImageView cloud_detail_noise_lut_view = {};
+    Pipeline cloud_apply_pipeline = {};
 
     Pipeline vis_triangle_id_pipeline = {};
 

@@ -1,8 +1,32 @@
 import cloud;
 import "../lorr";
 
-[[vk::binding(0, 0)]] RWTexture3D<float4> target_image;
-[[vk::binding(1, 0)]] ConstantBuffer<Clouds, ScalarDataLayout> clouds;
+[[vk::binding(0, 0)]] RWTexture3D<float4> shape_noise_lut;
+[[vk::binding(1, 0)]] RWTexture3D<float4> detail_noise_lut;
+[[vk::binding(2, 0)]] ConstantBuffer<Clouds, ScalarDataLayout> clouds;
+
+// WARN: These hashes are extremely fragile. Replacing one of them would collapse all noise functions.
+public float hash13(float3 p) {
+    const static uint3 VPRIME = uint3(3480082861U, 2420690917U, 2149110343U);
+    const static uint FPRIME = 1317666547U;
+    const static float UIF = 1.0 / float(0xffffffffU);
+
+    uint3 q = uint3(int3(p)) * VPRIME;
+    uint n = (q.x & q.y ^ q.z) * FPRIME;
+    return float(n) * UIF;
+}
+
+public float3 hash33(float3 p) {
+    const static uint UI0 = 1597334673U;
+    const static uint UI1 = 3812015801U;
+    const static uint2 UI2 = uint2(UI0, UI1);
+    const static uint3 UI3 = uint3(UI0, UI1, 2798796415U);
+    const static float UIF = 1.0 / float(0xffffffffU);
+
+    uint3 q = uint3(int3(p)) * UI3;
+    q = (q.x ^ q.y ^ q.z) * UI3;
+    return float3(q) * UIF;
+}
 
 float smoothstep_unchecked(float x) {
     x = clamp(x, 0.0, 1.0);
@@ -62,10 +86,10 @@ float alligator(float3 position, int grid_size, float3 seed) {
     
     float3 id = floor(position);
     float3 grid = position - id;
-    
-    float densest = -3.402823466e+38F;
-    float second_densest = -3.402823466e+38F;
-    
+
+    // Priority queue
+    float d1 = 0.0;
+    float d2 = 0.0;
     for (int ix = -1; ix <= 1; ++ix) {
         for (int iy = -1; iy <= 1; ++iy) {
             for (int iz = -1; iz <= 1; ++iz) {
@@ -77,23 +101,32 @@ float alligator(float3 position, int grid_size, float3 seed) {
                 float3 center = hash33(cell) + offset;
                 float dist = distance(grid, center);
                 float density = hash13(cell) * smoothstep_unchecked(1.0 - dist);
-                if (densest < density) {
-                    second_densest = densest;
-                    densest = density;
-                } else if (second_densest < density) {
-                    second_densest = density;
+                if (density < 1.0) {
+                    if (d1 < density) {
+                        d2 = d1;
+                        d1 = density;
+                    } else if (d2 < density) {
+                        d2 = density;
+                    }
                 }
             }
         }
     }
-    return densest - second_densest;
+
+    return d1 - d2;
 }
 
-float alligator(float3 position, float frequency, int octaves, float lacunarity, float persistence) {
+float alligator_fbm(
+    float3 position,
+    float frequency,
+    int octaves,
+    float lacunarity,
+    float persistence
+) {
     float amplitude = 1.0;
     float amplitude_sum = 0.0;
     float result = 0.0;
-    float3 seed = float3(1582.0);
+    float3 seed = float3(421.0);
     for (int i = 0; i < octaves; ++i) {
         result += alligator(position, uint(frequency), seed) * amplitude;
         amplitude_sum += amplitude;
@@ -103,59 +136,46 @@ float alligator(float3 position, float frequency, int octaves, float lacunarity,
     }
     result /= amplitude_sum;
 
-    result *= 1.8;
-    result = pow(result, 0.7);
+    result = clamp(result * 2.4, 0.0, 1.0);
+    result = pow(result, 0.6);
     return result;
 }
 
-float alligator_fbm(float3 position, float frequency) {
-    return alligator(position, frequency * 1.0, 8, 2.200, 0.5) * 0.625 +
-           alligator(position, frequency * 2.0, 8, 2.112, 0.5) * 0.250 +
-           alligator(position, frequency * 4.0, 8, 2.233, 0.5) * 0.125;
+float alligator_fbm_4(float3 position, float frequency) {
+    return
+        alligator_fbm(position, frequency * 1.0, 8, 2.200, 0.5) * 0.500 +
+        alligator_fbm(position, frequency * 2.0, 8, 2.112, 0.5) * 0.250 +
+        alligator_fbm(position, frequency * 4.0, 8, 2.233, 0.5) * 0.125 +
+        alligator_fbm(position, frequency * 8.0, 8, 2.150, 0.5) * 0.0625;
 }
 
 [shader("compute")]
 [numthreads(16, 16, 1)]
-void shape_noise_cs_main(uint3 thread_id : SV_DispatchThreadID) {
-    float3 uvw = (float3(thread_id) + 0.5) / float3(clouds.shape_noise_lut_size);
+void cs_main(uint3 thread_id : SV_DispatchThreadID) {
+    float3 uvw = (float3(thread_id) + 0.5) / float3(clouds.noise_lut_size);
 
-    const float BASE_FREQUENCY = 2.0;
-    float perlin = lerp(1.0, perlin_fbm(uvw, 3.0, 8), 0.5);
-    perlin = abs(perlin * 2.0 - 1.0);  // billowy perlin noise
+    const static float SHAPE_FREQUENCY = 1.0;
+    float4 shape_color = float4(0.0);
+    shape_color.x = remap(abs(
+                        lerp(1.0, perlin_fbm(uvw, SHAPE_FREQUENCY * 1.0, 8), 0.5) * 2.0 - 1.0), 0.0,
+                        1.0, alligator_fbm_4(uvw, SHAPE_FREQUENCY * 1.0), 1.0);
+    shape_color.y = remap(abs(
+                        lerp(1.0, perlin_fbm(uvw, SHAPE_FREQUENCY * 2.0, 8), 0.5) * 2.0 - 1.0), 0.0,
+                        1.0, alligator_fbm_4(uvw, SHAPE_FREQUENCY * 2.0), 1.0);
+    shape_color.z = remap(abs(
+                        lerp(1.0, perlin_fbm(uvw, SHAPE_FREQUENCY * 3.0, 8), 0.5) * 2.0 - 1.0), 0.0,
+                        1.0, alligator_fbm_4(uvw, SHAPE_FREQUENCY * 3.0), 1.0);
+    shape_color.w = remap(abs(
+                        lerp(1.0, perlin_fbm(uvw, SHAPE_FREQUENCY * 4.0, 8), 0.5) * 2.0 - 1.0), 0.0,
+                        1.0, alligator_fbm_4(uvw, SHAPE_FREQUENCY * 4.0), 1.0);
+    shape_noise_lut[thread_id] = shape_color;
 
-    float4 color = float4(0.0);
-    color.y = alligator_fbm(uvw, BASE_FREQUENCY * 1.0);
-    color.z = alligator_fbm(uvw, BASE_FREQUENCY * 2.0);
-    color.w = alligator_fbm(uvw, BASE_FREQUENCY * 4.0);
-    color.r = remap(perlin, 0.0, 1.0, color.y, 1.0);
-
-    target_image[thread_id] = color;
-}
-
-[shader("compute")]
-[numthreads(16, 16, 1)]
-void detail_noise_cs_main(uint3 thread_id : SV_DispatchThreadID) {
-    float3 uvw = (float3(thread_id) + 0.5) / float3(clouds.detail_noise_lut_size);
-
-    const float BASE_FREQUENCY = 4.0;
-    float4 color = float4(0.0);
-    color.x = alligator_fbm(uvw, BASE_FREQUENCY * 1.0);
-    color.y = alligator_fbm(uvw, BASE_FREQUENCY * 2.0);
-    color.z = alligator_fbm(uvw, BASE_FREQUENCY * 4.0);
-
-    float cloud_type = uvw.x;
-    float height = uvw.y;
-    const float4 strato_gradient = float4(0.0f, 0.07f, 0.08f, 0.15f);
-    const float4 strato_cumulus_gradient = float4(0.0f, 0.2f, 0.42f, 0.6f);
-    const float4 culumulus_gradient = float4(0.0f, 0.08f, 0.75f, 0.98f);
-    float layer_a = 1.0f - saturate(cloud_type * 2.0f);
-    float layer_b = 1.0f - abs(cloud_type - 0.5f) * 2.0f;
-    float layer_c = saturate(cloud_type - 0.5f) * 2.0f;
-    float4 gradient = strato_gradient * layer_a + strato_cumulus_gradient * layer_b + culumulus_gradient * layer_c;
-    float v1 = saturate(lerp(height, gradient.x, gradient.y));
-    float v2 = saturate(lerp(height, gradient.w, gradient.z));
-    color.w = v1 * v2;
-
-    target_image[thread_id] = color;
+    const static float DETAIL_FREQUENCY = 3.0;
+    float4 detail_color = float4(0.0);
+    detail_color.x = alligator_fbm_4(uvw, DETAIL_FREQUENCY * 1.0);
+    detail_color.y = alligator_fbm_4(uvw, DETAIL_FREQUENCY * 2.0);
+    detail_color.z = alligator_fbm_4(uvw, DETAIL_FREQUENCY * 4.0);
+    detail_color.w = alligator_fbm_4(uvw, DETAIL_FREQUENCY * 8.0);
+    detail_noise_lut[thread_id] = detail_color;
 }
 

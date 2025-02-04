@@ -335,7 +335,7 @@ auto SlangCompiler::new_session(const SlangSessionInfo &info) -> ls::option<Slan
     slang::SessionDesc session_desc = {
         .targets = &target_desc,
         .targetCount = 1,
-        .defaultMatrixLayoutMode = SLANG_MATRIX_LAYOUT_ROW_MAJOR,
+        .defaultMatrixLayoutMode = SLANG_MATRIX_LAYOUT_COLUMN_MAJOR,
         .searchPaths = nullptr,
         .searchPathCount = 0,
         .preprocessorMacros = macros.data(),

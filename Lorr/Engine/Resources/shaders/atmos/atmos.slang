@@ -99,14 +99,13 @@ public struct MediumScattering {
         this.mie_scattering = atmos.mie_scatter * mie_density;
         this.mie_extinction = atmos.mie_extinction * mie_density;  // Mie scattering doesn't have absorption behavior
 
-        this.ozone_absorption = atmos.ozone_absorption *  ozone_density;
+        this.ozone_absorption = atmos.ozone_absorption * ozone_density;
         this.ozone_extinction = this.ozone_absorption;
 
         this.scattering_sum = this.rayleigh_scattering + this.mie_scattering;
         this.extinction_sum = this.rayleigh_extinction + this.mie_extinction + this.ozone_extinction;
     }
 };
-
 
 public struct AtmosphereLuminance {
     public float3 luminance = float3(0.0);
@@ -172,7 +171,7 @@ public func integrate_single_scattered_luminance(
 
     float cos_theta = dot(info.sun_dir, info.eye_dir);
     float rayleigh_phase = lr::rayleigh_phase(cos_theta);
-    float mie_phase = lr::henyey_greenstein_phase(atmos.mie_asymmetry, -cos_theta);
+    float mie_phase = lr::henyey_greenstein_phase(atmos.mie_asymmetry, cos_theta);
 
     float step = 0.0;
     float delta_step = integration_length / sample_count;

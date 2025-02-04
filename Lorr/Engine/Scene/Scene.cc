@@ -302,9 +302,6 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, const vuk::Extent3
     auto directional_light_query = self.get_world()
         .query_builder<ECS::DirectionalLight>()
         .build();
-    auto atmosphere_query = self.get_world()
-        .query_builder<ECS::Atmosphere>()
-        .build();
     // clang-format on
 
     ls::option<GPUCameraData> active_camera_data = ls::nullopt;
@@ -313,10 +310,11 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, const vuk::Extent3
         projection_mat[1][1] *= -1;
 
         auto rotation = glm::radians(t.rotation);
-        auto yaw_axis = glm::angleAxis(rotation.x, glm::vec3(0.0f, 1.0f, 0.0f));
-        auto pitch_axis = glm::angleAxis(rotation.y, glm::vec3(-1.0f, 0.0f, 0.0f));
-        auto roll_axis = glm::angleAxis(rotation.z, glm::vec3(0.0f, 0.0f, 1.0f));
-        auto orientation = roll_axis * pitch_axis * yaw_axis;
+        auto orientation = glm::quat{};
+        orientation = glm::angleAxis(rotation.x, glm::vec3(0.0f, 1.0f, 0.0f));
+        orientation = glm::angleAxis(rotation.y, glm::vec3(-1.0f, 0.0f, 0.0f)) * orientation;
+        orientation = glm::angleAxis(rotation.z, glm::vec3(0.0f, 0.0f, 1.0f)) * orientation;
+        orientation = glm::normalize(orientation);
 
         auto translation_mat = glm::translate(glm::mat4(1.0f), -t.position);
         auto rotation_mat = glm::mat4_cast(orientation);
@@ -325,9 +323,9 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, const vuk::Extent3
         GPUCameraData camera_data = {};
         camera_data.projection_mat = projection_mat;
         camera_data.view_mat = view_mat;
-        camera_data.projection_view_mat = glm::transpose(projection_mat * view_mat);
-        camera_data.inv_view_mat = glm::inverse(glm::transpose(view_mat));
-        camera_data.inv_projection_view_mat = glm::inverse(glm::transpose(projection_mat)) * camera_data.inv_view_mat;
+        camera_data.projection_view_mat = camera_data.projection_mat * camera_data.view_mat;
+        camera_data.inv_view_mat = glm::inverse(camera_data.view_mat);
+        camera_data.inv_projection_view_mat = glm::inverse(camera_data.projection_view_mat);
         camera_data.position = t.position;
         camera_data.near_clip = c.near_clip;
         camera_data.far_clip = c.far_clip;
@@ -335,7 +333,9 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, const vuk::Extent3
     });
 
     ls::option<GPUSunData> sun_data = ls::nullopt;
-    directional_light_query.each([&](flecs::entity, ECS::DirectionalLight &light) {
+    ls::option<GPUAtmosphereData> atmos_data = ls::nullopt;
+    ls::option<GPUCloudsData> clouds_data = ls::nullopt;
+    directional_light_query.each([&](flecs::entity e, ECS::DirectionalLight &light) {
         auto rad = glm::radians(light.direction);
 
         GPUSunData sun = {
@@ -347,20 +347,41 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, const vuk::Extent3
             .intensity = light.intensity
         };
         sun_data.emplace(sun);
-    });
 
-    ls::option<GPUAtmosphereData> atmos_data = ls::nullopt;
-    atmosphere_query.each([&](flecs::entity, ECS::Atmosphere &atmos_info) {
-        GPUAtmosphereData atmos = {};
-        atmos.rayleigh_scatter = atmos_info.rayleigh_scattering * 1e-3f;
-        atmos.rayleigh_density = atmos_info.rayleigh_density;
-        atmos.mie_scatter = atmos_info.mie_scattering * 1e-3f;
-        atmos.mie_density = atmos_info.mie_density;
-        atmos.mie_extinction = atmos_info.mie_extinction * 1e-3f;
-        atmos.ozone_absorption = atmos_info.ozone_absorption * 1e-3f;
-        atmos.ozone_height = atmos_info.ozone_height;
-        atmos.ozone_thickness = atmos_info.ozone_thickness;
-        atmos_data.emplace(atmos);
+        if (e.has<ECS::Atmosphere>()) {
+            const auto &atmos_info = *e.get<ECS::Atmosphere>();
+            auto &atmos = atmos_data.emplace();
+            atmos.rayleigh_scatter = atmos_info.rayleigh_scattering * 1e-3f;
+            atmos.rayleigh_density = atmos_info.rayleigh_density;
+            atmos.mie_scatter = atmos_info.mie_scattering * 1e-3f;
+            atmos.mie_density = atmos_info.mie_density;
+            atmos.mie_extinction = atmos_info.mie_extinction * 1e-3f;
+            atmos.ozone_absorption = atmos_info.ozone_absorption * 1e-3f;
+            atmos.ozone_height = atmos_info.ozone_height;
+            atmos.ozone_thickness = atmos_info.ozone_thickness;
+        }
+
+        if (e.has<ECS::Clouds>()) {
+            const auto &clouds_info = *e.get<ECS::Clouds>();
+            auto &clouds = clouds_data.emplace();
+            clouds.bounds = clouds_info.bounds;
+            clouds.shape_noise_scale = clouds_info.shape_noise_scale;
+            clouds.shape_noise_weights = clouds_info.shape_noise_weights;
+            clouds.detail_noise_scale = clouds_info.detail_noise_scale;
+            clouds.detail_noise_weights = clouds_info.detail_noise_weights;
+            clouds.detail_noise_influence = clouds_info.detail_noise_influence;
+            clouds.coverage = clouds_info.coverage;
+            clouds.general_density = clouds_info.general_density;
+            clouds.phase_values = clouds_info.phase_values;
+            clouds.extinction = clouds_info.extinction;
+            clouds.scattering = clouds_info.scattering;
+            clouds.clouds_step_count = clouds_info.clouds_step_count;
+            clouds.sun_step_count = clouds_info.sun_step_count;
+            clouds.darkness_threshold = clouds_info.darkness_threshold;
+            clouds.draw_distance = clouds_info.draw_distance;
+            clouds.cloud_type = clouds_info.cloud_type;
+            clouds.powder_intensity = clouds_info.powder_intensity;
+        }
     });
 
     std::vector<RenderingMesh> rendering_meshes = {};
@@ -418,6 +439,7 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, const vuk::Extent3
         .camera_info = active_camera_data,
         .sun = sun_data,
         .atmosphere = atmos_data,
+        .clouds = clouds_data,
     });
 }
 

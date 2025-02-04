@@ -28,5 +28,7 @@ namespace fa {
     constexpr static detail::icon_t cube = "\uf1b2";
     constexpr static detail::icon_t up_down_left_right = "\uf0b2";
     constexpr static detail::icon_t up_right_and_down_left_from_center = "\uf424";
+    constexpr static detail::icon_t xmark = "\uf00d";
+    constexpr static detail::icon_t trash_can = "\uf2ed";
 }  // namespace fa
 }  // namespace lr::Icon

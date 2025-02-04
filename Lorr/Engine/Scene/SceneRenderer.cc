@@ -89,32 +89,26 @@ auto SceneRenderer::setup_persistent_resources(this SceneRenderer &self) -> void
         .entry_points = { "vs_main", "fs_main" },
     }).value();
     //  ── CLOUD ───────────────────────────────────────────────────────────
-    self.cloud_base_noise_pipeline = Pipeline::create(*self.device, {
+    self.cloud_noise_pipeline = Pipeline::create(*self.device, {
         .module_name = "cloud.noise",
         .root_path = shaders_root,
         .shader_path = shaders_root / "cloud" / "noise.slang",
-        .entry_points = { "shape_noise_cs_main" },
+        .entry_points = { "cs_main" },
     }).value();
-    self.cloud_base_noise_lut = Image::create(
+    self.cloud_shape_noise_lut = Image::create(
         *self.device,
         vuk::Format::eR8G8B8A8Unorm,
         vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage,
         vuk::ImageType::e3D,
-        vuk::Extent3D(256, 256, 256))
+        vuk::Extent3D(128, 128, 128))
         .value();
-    self.cloud_base_noise_lut_view = ImageView::create(
+    self.cloud_shape_noise_lut_view = ImageView::create(
         *self.device,
-        self.cloud_base_noise_lut,
+        self.cloud_shape_noise_lut,
         vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage,
         vuk::ImageViewType::e3D,
         { .aspectMask = vuk::ImageAspectFlagBits::eColor })
         .value();
-    self.cloud_detail_noise_pipeline = Pipeline::create(*self.device, {
-        .module_name = "cloud.noise",
-        .root_path = shaders_root,
-        .shader_path = shaders_root / "cloud" / "noise.slang",
-        .entry_points = { "detail_noise_cs_main" },
-    }).value();
     self.cloud_detail_noise_lut = Image::create(
         *self.device,
         vuk::Format::eR8G8B8A8Unorm,
@@ -129,6 +123,12 @@ auto SceneRenderer::setup_persistent_resources(this SceneRenderer &self) -> void
         vuk::ImageViewType::e3D,
         { .aspectMask = vuk::ImageAspectFlagBits::eColor })
         .value();
+    self.cloud_apply_pipeline = Pipeline::create(*self.device, {
+        .module_name = "cloud.apply_clouds",
+        .root_path = shaders_root,
+        .shader_path = shaders_root / "cloud" / "apply_clouds.slang",
+        .entry_points = { "vs_main", "fs_main" },
+    }).value();
     //  ── VISBUFFER ───────────────────────────────────────────────────────
     self.vis_triangle_id_pipeline = Pipeline::create(*self.device, {
         .module_name = "vis.triangle_id",
@@ -204,51 +204,36 @@ auto SceneRenderer::setup_persistent_resources(this SceneRenderer &self) -> void
     transfer_man.wait_on(std::move(multiscatter_lut_attachment));
 
     //  ── CLOUD LUTS ──────────────────────────────────────────────────────
-    auto temp_clouds = transfer_man.scratch_buffer(GPUClouds{
-        .shape_noise_lut_size = self.cloud_base_noise_lut.extent(),
-        .detail_noise_lut_size = self.cloud_detail_noise_lut.extent(),
+    auto temp_clouds = transfer_man.scratch_buffer(GPUCloudsData{
+        .noise_lut_size = self.cloud_shape_noise_lut_view.extent(),
     });
-    auto cloud_base_noise_lut_pass = vuk::make_pass(
-        "cloud base noise lut",
-        [&pipeline = *self.device->pipeline(self.cloud_base_noise_pipeline.id())](
-            vuk::CommandBuffer &cmd_list, VUK_IA(vuk::Access::eComputeRW) dst, VUK_BA(vuk::Access::eComputeRead) clouds) {
-            auto image_size = glm::vec2(dst->extent.width, dst->extent.height);
+    auto cloud_noise_lut_pass = vuk::make_pass(
+        "cloud noise pass",
+        [&pipeline = *self.device->pipeline(self.cloud_noise_pipeline.id())](
+            vuk::CommandBuffer &cmd_list,
+            VUK_IA(vuk::Access::eComputeRW) shape_noise_lut,
+            VUK_IA(vuk::Access::eComputeRW) detail_noise_lut,
+            VUK_BA(vuk::Access::eComputeRead) clouds) {
+            auto image_size = glm::vec2(shape_noise_lut->extent.width, shape_noise_lut->extent.height);
             auto groups = glm::uvec2(image_size) / 16_u32;
             cmd_list  //
                 .bind_compute_pipeline(pipeline)
-                .bind_image(0, 0, dst)
-                .bind_buffer(0, 1, clouds)
-                .dispatch(groups.x, groups.y, dst->extent.depth);
-            return std::make_tuple(dst, clouds);
+                .bind_image(0, 0, shape_noise_lut)
+                .bind_image(0, 1, detail_noise_lut)
+                .bind_buffer(0, 2, clouds)
+                .dispatch(groups.x, groups.y, shape_noise_lut->extent.depth);
+            return std::make_tuple(shape_noise_lut, detail_noise_lut, clouds);
         },
         vuk::DomainFlagBits::eGraphicsQueue);
 
-    auto cloud_detail_noise_lut_pass = vuk::make_pass(
-        "cloud detail noise lut",
-        [&pipeline = *self.device->pipeline(self.cloud_detail_noise_pipeline.id())](
-            vuk::CommandBuffer &cmd_list, VUK_IA(vuk::Access::eComputeRW) dst, VUK_BA(vuk::Access::eComputeRead) clouds) {
-            auto image_size = glm::vec2(dst->extent.width, dst->extent.height);
-            auto groups = glm::uvec2(image_size) / 16_u32;
-            cmd_list  //
-                .bind_compute_pipeline(pipeline)
-                .bind_image(0, 0, dst)
-                .bind_buffer(0, 1, clouds)
-                .dispatch(groups.x, groups.y, dst->extent.depth);
-            return std::make_tuple(dst, clouds);
-        },
-        vuk::DomainFlagBits::eGraphicsQueue);
-
-    auto cloud_base_noise_lut_attachment =
-        self.cloud_base_noise_lut_view.discard(*self.device, "cloud_base_noise_lut", vuk::ImageUsageFlagBits::eStorage);
+    auto cloud_shape_noise_lut_attachment =
+        self.cloud_shape_noise_lut_view.discard(*self.device, "cloud shape lut", vuk::ImageUsageFlagBits::eStorage);
     auto cloud_detail_noise_lut_attachment =
-        self.cloud_detail_noise_lut_view.discard(*self.device, "cloud_detail_noise_lut", vuk::ImageUsageFlagBits::eStorage);
+        self.cloud_detail_noise_lut_view.discard(*self.device, "cloud detail lut", vuk::ImageUsageFlagBits::eStorage);
 
-    std::tie(cloud_base_noise_lut_attachment, temp_clouds) =
-        cloud_base_noise_lut_pass(std::move(cloud_base_noise_lut_attachment), std::move(temp_clouds));
-    std::tie(cloud_detail_noise_lut_attachment, temp_clouds) =
-        cloud_detail_noise_lut_pass(std::move(cloud_detail_noise_lut_attachment), std::move(temp_clouds));
-
-    transfer_man.wait_on(std::move(cloud_base_noise_lut_attachment));
+    std::tie(cloud_shape_noise_lut_attachment, cloud_detail_noise_lut_attachment, temp_clouds) = cloud_noise_lut_pass(
+        std::move(cloud_shape_noise_lut_attachment), std::move(cloud_detail_noise_lut_attachment), std::move(temp_clouds));
+    transfer_man.wait_on(std::move(cloud_shape_noise_lut_attachment));
     transfer_man.wait_on(std::move(cloud_detail_noise_lut_attachment));
 }
 
@@ -479,6 +464,94 @@ auto SceneRenderer::render(this SceneRenderer &self, const SceneRenderInfo &info
                 std::move(transmittance_lut_attachment),
                 std::move(atmos_buffer),
                 std::move(sun_buffer),
+                std::move(camera_buffer));
+    }
+
+    //  ── CLOUDS ──────────────────────────────────────────────────────────
+    auto cloud_apply_pass = vuk::make_pass(
+        "cloud apply",
+        [&pipeline = *self.device->pipeline(self.cloud_apply_pipeline.id())](
+            vuk::CommandBuffer &cmd_list,
+            VUK_IA(vuk::Access::eColorRW) dst,
+            VUK_IA(vuk::Access::eFragmentSampled) shape_noise_lut,
+            VUK_IA(vuk::Access::eFragmentSampled) detail_noise_lut,
+            VUK_IA(vuk::Access::eFragmentSampled) transmittance_lut,
+            VUK_IA(vuk::Access::eFragmentSampled) aerial_perspective_lut,
+            VUK_BA(vuk::Access::eFragmentRead) sun,
+            VUK_BA(vuk::Access::eFragmentRead) atmos,
+            VUK_BA(vuk::Access::eFragmentRead) clouds,
+            VUK_BA(vuk::Access::eFragmentRead) camera) {
+            vuk::SamplerCreateInfo linear_repeat_sampler = {
+                .magFilter = vuk::Filter::eLinear,
+                .minFilter = vuk::Filter::eLinear,
+                .addressModeU = vuk::SamplerAddressMode::eRepeat,
+                .addressModeV = vuk::SamplerAddressMode::eRepeat,
+                .addressModeW = vuk::SamplerAddressMode::eRepeat,
+            };
+            vuk::SamplerCreateInfo linear_clamp_to_ege_sampler = {
+                .magFilter = vuk::Filter::eLinear,
+                .minFilter = vuk::Filter::eLinear,
+                .addressModeU = vuk::SamplerAddressMode::eClampToEdge,
+                .addressModeV = vuk::SamplerAddressMode::eClampToEdge,
+                .addressModeW = vuk::SamplerAddressMode::eClampToEdge,
+            };
+
+            vuk::PipelineColorBlendAttachmentState blend_info = {
+                .blendEnable = true,
+                .srcColorBlendFactor = vuk::BlendFactor::eOne,
+                .dstColorBlendFactor = vuk::BlendFactor::eSrcAlpha,
+                .colorBlendOp = vuk::BlendOp::eAdd,
+                .srcAlphaBlendFactor = vuk::BlendFactor::eZero,
+                .dstAlphaBlendFactor = vuk::BlendFactor::eOne,
+                .alphaBlendOp = vuk::BlendOp::eAdd,
+            };
+
+            cmd_list  //
+                .bind_graphics_pipeline(pipeline)
+                .bind_sampler(0, 0, linear_repeat_sampler)
+                .bind_sampler(0, 1, linear_clamp_to_ege_sampler)
+                .bind_image(0, 2, shape_noise_lut)
+                .bind_image(0, 3, detail_noise_lut)
+                .bind_image(0, 4, transmittance_lut)
+                .bind_image(0, 5, aerial_perspective_lut)
+                .bind_buffer(0, 6, sun)
+                .bind_buffer(0, 7, atmos)
+                .bind_buffer(0, 8, clouds)
+                .bind_buffer(0, 9, camera)
+                .set_rasterization({})
+                .set_depth_stencil({ .depthCompareOp = vuk::CompareOp::eLessOrEqual })
+                .set_color_blend(dst, blend_info)
+                .set_viewport(0, vuk::Rect2D::framebuffer())
+                .set_scissor(0, vuk::Rect2D::framebuffer())
+                .draw(3, 1, 0, 0);
+            return std::make_tuple(dst, transmittance_lut, aerial_perspective_lut, sun, atmos, clouds, camera);
+        });
+
+    const auto rendering_clouds = info.clouds.has_value();
+    if (rendering_atmos && rendering_clouds) {
+        auto cloud_shape_noise_lut_attachment = self.cloud_shape_noise_lut_view.acquire(
+            *self.device, "cloud shape lut", vuk::ImageUsageFlagBits::eSampled, vuk::Access::eFragmentSampled);
+        auto cloud_detail_noise_lut_attachment = self.cloud_detail_noise_lut_view.acquire(
+            *self.device, "cloud detail lut", vuk::ImageUsageFlagBits::eSampled, vuk::Access::eFragmentSampled);
+
+        auto clouds_buffer = transfer_man.scratch_buffer(info.clouds.value());
+        std::tie(
+            final_attachment,
+            transmittance_lut_attachment,
+            sky_aerial_perspective_attachment,
+            sun_buffer,
+            atmos_buffer,
+            clouds_buffer,
+            camera_buffer) =
+            cloud_apply_pass(
+                std::move(final_attachment),
+                std::move(cloud_shape_noise_lut_attachment),
+                std::move(cloud_detail_noise_lut_attachment),
+                std::move(transmittance_lut_attachment),
+                std::move(sky_aerial_perspective_attachment),
+                std::move(sun_buffer),
+                std::move(atmos_buffer),
+                std::move(clouds_buffer),
                 std::move(camera_buffer));
     }
 

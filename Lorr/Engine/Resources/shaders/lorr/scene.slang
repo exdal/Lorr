@@ -31,11 +31,10 @@ public struct Atmosphere {
 
 public struct Clouds {
     public vec2 bounds;
-    public f32  global_scale;
+    public vec4 shape_noise_weights;
+    public vec4 detail_noise_weights;
     public f32  shape_noise_scale;
-    public vec3 shape_noise_weights;
     public f32  detail_noise_scale;
-    public vec3 detail_noise_weights;
     public f32  detail_noise_influence;
     public f32  coverage;
     public f32  general_density;
@@ -45,11 +44,11 @@ public struct Clouds {
     public f32  darkness_threshold;
     public i32  sun_step_count;
     public i32  clouds_step_count;
-    public f32  cloud_light_absorption;
-    public f32  sun_light_absorption;
+    public f32  extinction_coeff;
+    public f32  scattering_coeff;
+    public f32  powder_intensity;
 
-    public ivec3 shape_noise_lut_size;
-    public ivec3 detail_noise_lut_size;
+    public ivec3 noise_lut_size;
 };
 
 public struct Camera {

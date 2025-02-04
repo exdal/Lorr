@@ -3,7 +3,6 @@
 #include "Editor/EditorApp.hh"
 
 #include "Engine/Scene/ECSModule/ComponentWrapper.hh"
-#include "Engine/Scene/ECSModule/Core.hh"
 
 namespace lr {
 InspectorPanel::InspectorPanel(std::string name_, bool open_)
@@ -21,6 +20,40 @@ void InspectorPanel::render(this InspectorPanel &self) {
     ImGui::End();
 }
 
+auto inspect_asset(UUID &uuid) -> void {
+    memory::ScopedStack stack;
+    auto &app = EditorApp::get();
+
+    auto cursor_pos = ImGui::GetCursorPos();
+    auto avail_region = ImGui::GetContentRegionAvail();
+    auto *asset = app.asset_man.get_asset(uuid);
+    if (!asset) {
+        ImGui::TextUnformatted("Drop a model here.");
+        uuid = {};
+    } else {
+        const auto &model_name = asset->path.filename();
+        ImGuiLR::text_sv(stack.format("Name: {}", model_name));
+        ImGuiLR::text_sv(stack.format("ModelID: {}", std::to_underlying(asset->model_id)));
+        ImGuiLR::text_sv(stack.format("UUID: {}", uuid.str()));
+    }
+
+    ImGui::SetCursorPos(cursor_pos);
+    ImGui::InvisibleButton(reinterpret_cast<const c8 *>(&uuid), { avail_region.x, 50.0f });
+    if (ImGui::BeginDragDropTarget()) {
+        if (const auto *asset_payload = ImGui::AcceptDragDropPayload("ASSET_BY_UUID")) {
+            auto &dropping_uuid = *static_cast<UUID *>(asset_payload->Data);
+            auto *dropping_asset = app.asset_man.get_asset(dropping_uuid);
+            if (dropping_asset->type == AssetType::Model) {
+                if (uuid != dropping_uuid && app.asset_man.load_model(dropping_uuid) && uuid) {
+                    app.asset_man.unload_model(uuid);
+                }
+                uuid = dropping_uuid;
+            }
+        }
+        ImGui::EndDragDropTarget();
+    }
+}
+
 auto InspectorPanel::draw_inspector(this InspectorPanel &) -> void {
     auto &app = EditorApp::get();
     auto *scene = app.asset_man.get_scene(app.active_scene_uuid.value());
@@ -31,6 +64,7 @@ auto InspectorPanel::draw_inspector(this InspectorPanel &) -> void {
             // TODO: Rename entity
         }
 
+        std::vector<flecs::id> removing_components = {};
         bool entity_modified = false;
         app.selected_entity.each([&](flecs::id component_id) {
             memory::ScopedStack stack;
@@ -46,8 +80,8 @@ auto InspectorPanel::draw_inspector(this InspectorPanel &) -> void {
             }
 
             auto name_with_icon = stack.format_char("{}", component.name);
+            ImGui::PushID(static_cast<i32>(component_id));
             if (ImGui::CollapsingHeader(name_with_icon, nullptr, ImGuiTreeNodeFlags_DefaultOpen)) {
-                ImGui::PushID(static_cast<i32>(component_id));
                 ImGui::BeginTable(
                     "entity_props",
                     2,
@@ -77,38 +111,9 @@ auto InspectorPanel::draw_inspector(this InspectorPanel &) -> void {
                             [&](u64 *v) { entity_modified |= ImGuiLR::drag_vec(0, v, 1, ImGuiDataType_U64); },
                             [&](glm::vec2 *v) { entity_modified |= ImGuiLR::drag_vec(0, glm::value_ptr(*v), 2, ImGuiDataType_Float); },
                             [&](glm::vec3 *v) { entity_modified |= ImGuiLR::drag_vec(0, glm::value_ptr(*v), 3, ImGuiDataType_Float); },
+                            [&](glm::vec4 *v) { entity_modified |= ImGuiLR::drag_vec(0, glm::value_ptr(*v), 4, ImGuiDataType_Float); },
                             [](std::string *v) { ImGui::InputText("", v); },
-                            [&](UUID *v) {
-                                auto cursor_pos = ImGui::GetCursorPos();
-                                auto avail_region = ImGui::GetContentRegionAvail();
-                                auto *asset = app.asset_man.get_asset(*v);
-                                if (!asset) {
-                                    ImGui::TextUnformatted("Drop a model here.");
-                                    *v = {};
-                                } else {
-                                    const auto &model_name = asset->path.filename();
-                                    ImGuiLR::text_sv(stack.format("Name: {}", model_name));
-                                    ImGuiLR::text_sv(stack.format("ModelID: {}", std::to_underlying(asset->model_id)));
-                                    ImGuiLR::text_sv(stack.format("UUID: {}", v->str()));
-                                }
-
-                                ImGui::SetCursorPos(cursor_pos);
-                                ImGui::InvisibleButton(reinterpret_cast<const c8 *>(&*v), { avail_region.x, 50.0f });
-                                if (ImGui::BeginDragDropTarget()) {
-                                    if (const auto *asset_payload = ImGui::AcceptDragDropPayload("ASSET_BY_UUID")) {
-                                        auto &old_uuid = *v;
-                                        auto &dropping_uuid = *static_cast<UUID *>(asset_payload->Data);
-                                        auto *dropping_asset = app.asset_man.get_asset(dropping_uuid);
-                                        if (dropping_asset->type == AssetType::Model) {
-                                            if (old_uuid != dropping_uuid && app.asset_man.load_model(dropping_uuid) && old_uuid) {
-                                                app.asset_man.unload_model(old_uuid);
-                                            }
-                                            old_uuid = dropping_uuid;
-                                        }
-                                    }
-                                    ImGui::EndDragDropTarget();
-                                }
-                            },
+                            [&](UUID *v) { inspect_asset(*v); },
                         },
                         member);
                     ImGui::PopID();
@@ -116,8 +121,12 @@ auto InspectorPanel::draw_inspector(this InspectorPanel &) -> void {
 
                 ImGui::PopID();
                 ImGui::EndTable();
-                ImGui::PopID();
+
+                if (ImGui::Button("Remove Component", ImVec2(region.x, 0))) {
+                    removing_components.push_back(component_id);
+                }
             }
+            ImGui::PopID();
         });
 
         if (ImGui::Button("Add Component", ImVec2(region.x, 0))) {
@@ -127,11 +136,10 @@ auto InspectorPanel::draw_inspector(this InspectorPanel &) -> void {
         ImGui::SetNextWindowPos(ImGui::GetCursorScreenPos());
         ImGui::SetNextWindowSize({ region.x, 0 });
         if (ImGui::BeginPopup("add_component")) {
-            memory::ScopedStack stack;
-
             auto &entity_db = scene->get_entity_db();
             auto all_components = entity_db.get_components();
             for (const auto &component : all_components) {  //
+                memory::ScopedStack stack;
                 ImGui::PushID(static_cast<i32>(component.raw_id()));
                 auto component_entity = component.entity();
                 if (ImGui::MenuItem(stack.format_char("{}  {}", Icon::fa::cube, component_entity.name().c_str()))) {
@@ -143,6 +151,11 @@ auto InspectorPanel::draw_inspector(this InspectorPanel &) -> void {
         }
 
         ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal);
+
+        for (const auto &v : removing_components) {
+            app.selected_entity.remove(v);
+        }
+        removing_components.clear();
 
         if (auto gpu_entity_id = scene->get_gpu_entity(app.selected_entity); entity_modified) {
             scene->set_dirty(gpu_entity_id.value());

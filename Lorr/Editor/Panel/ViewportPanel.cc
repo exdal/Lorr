@@ -138,7 +138,7 @@ auto ViewportPanel::draw_viewport(this ViewportPanel &self, vuk::Format format, 
 
     //  ── CAMERA CONTROLLER ───────────────────────────────────────────────
     glm::vec3 axis_velocity = {};
-    constexpr f32 velocity_mul = 3.0f;
+    constexpr f32 velocity_mul = 100.0f;
     if (!ImGuizmo::IsUsingAny() && ImGui::IsWindowHovered()) {
         bool reset_z = false;
         bool reset_x = false;

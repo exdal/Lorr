@@ -2,8 +2,9 @@ implementing "../lorr";
 
 /// CONSTANTS ///
 // To sky unit, in our case meters to KM
-public const static float CAMERA_SCALE_UNIT    = 0.01;
-public const static float PLANET_RADIUS_OFFSET = 0.001;
+public const static float CAMERA_SCALE_UNIT     = 0.01;
+public const static float INV_CAMERA_SCALE_UNIT = 1.0 / CAMERA_SCALE_UNIT;
+public const static float PLANET_RADIUS_OFFSET  = 0.001;
 
 ///
 /// PAHASE FUNCTIONS ///
@@ -31,7 +32,7 @@ public float cornette_shanks_phase(float g, float altitude) {
 
 public float henyey_greenstein_phase(float g, float cos_theta) {
     float g2 = g * g;
-    float denom = 1.0 + g2 + 2.0 * g * cos_theta;
+    float denom = 1.0 + g2 - 2.0 * g * cos_theta;
     return (1.0 - g2) / (4.0 * PI * denom * sqrt(denom));
 }
 
@@ -105,5 +106,4 @@ public Optional<float2> ray_sphere_intersect_outside(float3 ray_origin, float3 r
 public float3 mod(float3 x, float3 y) {
   return x - y * floor(x / y);
 }
-
 }

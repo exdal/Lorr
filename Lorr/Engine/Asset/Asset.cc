@@ -396,7 +396,9 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
         Model *model = nullptr;
 
         // Per mesh data
-        std::vector<Model::Vertex> vertices = {};
+        std::vector<glm::vec3> vertex_positions = {};
+        std::vector<glm::vec3> vertex_normals = {};
+        std::vector<glm::vec2> vertex_texcoords = {};
         std::vector<Model::Index> indices = {};
     };
     auto on_new_node = [](void *user_data, u32 mesh_index, u32 vertex_count, u32 index_count, u32, glm::mat4 transform) {
@@ -410,7 +412,9 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
             info->model->meshes.resize(mesh_index + 1);
         }
 
-        info->vertices.resize(info->vertices.size() + vertex_count);
+        info->vertex_positions.resize(info->vertex_positions.size() + vertex_count);
+        info->vertex_normals.resize(info->vertex_normals.size() + vertex_count);
+        info->vertex_texcoords.resize(info->vertex_texcoords.size() + vertex_count);
         info->indices.resize(info->indices.size() + index_count);
     };
     auto on_new_primitive =
@@ -433,19 +437,15 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
     };
     auto on_access_position = [](void *user_data, u32, u64 offset, glm::vec3 position) {
         auto *info = static_cast<CallbackInfo *>(user_data);
-        info->vertices[offset].position = position;
+        info->vertex_positions[offset] = position;
     };
     auto on_access_normal = [](void *user_data, u32, u64 offset, glm::vec3 normal) {
         auto *info = static_cast<CallbackInfo *>(user_data);
-        info->vertices[offset].normal = normal;
+        info->vertex_normals[offset] = normal;
     };
     auto on_access_texcoord = [](void *user_data, u32, u64 offset, glm::vec2 texcoord) {
         auto *info = static_cast<CallbackInfo *>(user_data);
-        info->vertices[offset].tex_coord_0 = texcoord;
-    };
-    auto on_access_color = [](void *user_data, u32, u64 offset, glm::vec4 color) {
-        auto *info = static_cast<CallbackInfo *>(user_data);
-        info->vertices[offset].color = glm::packUnorm4x8(color);
+        info->vertex_texcoords[offset] = texcoord;
     };
 
     CallbackInfo callback_info = { .device = impl->device, .model = model };
@@ -457,7 +457,6 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
         .on_access_position = on_access_position,
         .on_access_normal = on_access_normal,
         .on_access_texcoord = on_access_texcoord,
-        .on_access_color = on_access_color,
     };
     auto gltf_model = GLTFModelInfo::parse(asset->path, callbacks);
     if (!gltf_model.has_value()) {
@@ -558,10 +557,10 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
         this->load_material(material_uuid, material_info);
     }
 
-    std::vector<Model::Vertex> remapped_vertices = {};
+    std::vector<glm::vec3> remapped_vertex_positions = {};
     std::vector<Model::Index> remapped_indices = {};
     for (auto &meshlet : model->meshlets) {
-        auto vertices = ls::span(callback_info.vertices.data() + meshlet.vertex_offset, meshlet.vertex_count);
+        auto vertices = ls::span(callback_info.vertex_positions.data() + meshlet.vertex_offset, meshlet.vertex_count);
         auto indices = ls::span(callback_info.indices.data() + meshlet.index_offset, meshlet.index_count);
 
         std::vector<Model::Index> meshlet_vertex_remap(meshlet.vertex_count);
@@ -578,28 +577,24 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
             indices.size(),
             meshlet_vertex_remap.data());
 
-        std::vector<Model::Vertex> meshlet_remapped_vertices(unique_vertices);
+        std::vector<glm::vec3> meshlet_remapped_vertex_positions(unique_vertices);
         meshopt_remapVertexBuffer(  //
-            meshlet_remapped_vertices.data(),
+            meshlet_remapped_vertex_positions.data(),
             vertices.data(),
             vertices.size(),
-            sizeof(Model::Vertex),
+            sizeof(glm::vec3),
             meshlet_vertex_remap.data());
 
-        std::ranges::move(meshlet_remapped_vertices, std::back_inserter(remapped_vertices));
+        std::ranges::move(meshlet_remapped_vertex_positions, std::back_inserter(remapped_vertex_positions));
         std::ranges::move(meshlet_remapped_indices, std::back_inserter(remapped_indices));
     }
 
-    model->vertex_buffer = Buffer::create(*impl->device, remapped_vertices.size() * sizeof(Model::Vertex)).value();
+    model->positions_buffer = Buffer::create(*impl->device, remapped_vertex_positions.size() * sizeof(glm::vec3)).value();
     model->index_buffer = Buffer::create(*impl->device, remapped_indices.size() * sizeof(Model::Index)).value();
 
     auto &transfer_man = impl->device->transfer_man();
-    transfer_man.upload_staging(ls::span(remapped_vertices), model->vertex_buffer);
+    transfer_man.upload_staging(ls::span(remapped_vertex_positions), model->positions_buffer);
     transfer_man.upload_staging(ls::span(remapped_indices), model->index_buffer);
-
-    auto model_name = fs::relative(asset->path, impl->root_path).string();
-    impl->device->set_name(model->vertex_buffer, stack.format("{} Vertices", model_name));
-    impl->device->set_name(model->index_buffer, stack.format("{} Indices", model_name));
 
     asset->acquire_ref();
     return true;

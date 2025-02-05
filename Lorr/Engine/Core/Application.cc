@@ -57,7 +57,7 @@ void Application::run(this Application &self) {
         auto *app = static_cast<Application *>(user_data);
         app->imgui_renderer.on_key(key_code, scan_code, mods, down);
     };
-    window_callbacks.on_text_input = [](void *user_data, c8 *text) {
+    window_callbacks.on_text_input = [](void *user_data, const c8 *text) {
         auto *app = static_cast<Application *>(user_data);
         app->imgui_renderer.on_text_input(text);
     };

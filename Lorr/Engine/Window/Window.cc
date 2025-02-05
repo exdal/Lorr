@@ -1,8 +1,8 @@
 #include "Engine/Window/Window.hh"
 
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_syswm.h>
-#include <SDL2/SDL_vulkan.h>
+#include <SDL3/SDL.h>
+#include <SDL3/SDL_video.h>
+#include <SDL3/SDL_vulkan.h>
 
 namespace lr {
 template<>
@@ -19,7 +19,7 @@ struct Handle<Window>::Impl {
 };
 
 auto Window::create(const WindowInfo &info) -> Window {
-    if (SDL_Init(SDL_INIT_VIDEO) != 0) {
+    if (!SDL_Init(SDL_INIT_EVENTS | SDL_INIT_VIDEO)) {
         LOG_ERROR("Failed to initialize SDL! {}", SDL_GetError());
         return Handle(nullptr);
     }
@@ -62,14 +62,23 @@ auto Window::create(const WindowInfo &info) -> Window {
     impl->width = static_cast<u32>(new_width);
     impl->height = static_cast<u32>(new_height);
     impl->monitor_id = info.monitor;
-    impl->handle = SDL_CreateWindow(info.title.c_str(), new_pos_x, new_pos_y, new_width, new_height, window_flags);
+
+    auto window_properties = SDL_CreateProperties();
+    SDL_SetStringProperty(window_properties, SDL_PROP_WINDOW_CREATE_TITLE_STRING, info.title.c_str());
+    SDL_SetNumberProperty(window_properties, SDL_PROP_WINDOW_CREATE_X_NUMBER, new_pos_x);
+    SDL_SetNumberProperty(window_properties, SDL_PROP_WINDOW_CREATE_Y_NUMBER, new_pos_y);
+    SDL_SetNumberProperty(window_properties, SDL_PROP_WINDOW_CREATE_WIDTH_NUMBER, new_width);
+    SDL_SetNumberProperty(window_properties, SDL_PROP_WINDOW_CREATE_HEIGHT_NUMBER, new_height);
+    SDL_SetNumberProperty(window_properties, SDL_PROP_WINDOW_CREATE_FLAGS_NUMBER, window_flags);
+    impl->handle = SDL_CreateWindowWithProperties(window_properties);
+    SDL_DestroyProperties(window_properties);
 
     impl->cursors = {
-        SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_ARROW),    SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_IBEAM),
-        SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_SIZEALL),  SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_SIZENS),
-        SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_SIZEWE),   SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_SIZENESW),
-        SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_SIZENWSE), SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_HAND),
-        SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_NO),
+        SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_DEFAULT),     SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_TEXT),
+        SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_MOVE),        SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_NS_RESIZE),
+        SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_EW_RESIZE),   SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_NESW_RESIZE),
+        SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_NWSE_RESIZE), SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_POINTER),
+        SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_NOT_ALLOWED),
     };
 
     i32 real_width;
@@ -96,45 +105,45 @@ auto Window::poll(const WindowCallbacks &callbacks) -> void {
     SDL_Event e = {};
     while (SDL_PollEvent(&e) != 0) {
         switch (e.type) {
-            case SDL_WINDOWEVENT_RESIZED: {
+            case SDL_EVENT_WINDOW_RESIZED: {
                 if (callbacks.on_resize) {
                     callbacks.on_resize(callbacks.user_data, { e.window.data1, e.window.data2 });
                 }
             } break;
-            case SDL_MOUSEMOTION: {
+            case SDL_EVENT_MOUSE_MOTION: {
                 if (callbacks.on_mouse_pos) {
                     callbacks.on_mouse_pos(callbacks.user_data, { e.motion.x, e.motion.y }, { e.motion.xrel, e.motion.yrel });
                 }
             } break;
-            case SDL_MOUSEBUTTONDOWN:
-            case SDL_MOUSEBUTTONUP: {
+            case SDL_EVENT_MOUSE_BUTTON_DOWN:
+            case SDL_EVENT_MOUSE_BUTTON_UP: {
                 if (callbacks.on_mouse_button) {
-                    auto state = e.type == SDL_MOUSEBUTTONDOWN;
+                    auto state = e.type == SDL_EVENT_MOUSE_BUTTON_DOWN;
                     callbacks.on_mouse_button(callbacks.user_data, e.button.button, state);
                 }
             } break;
-            case SDL_MOUSEWHEEL: {
+            case SDL_EVENT_MOUSE_WHEEL: {
                 if (callbacks.on_mouse_scroll) {
-                    callbacks.on_mouse_scroll(callbacks.user_data, { e.wheel.preciseX, e.wheel.preciseY });
+                    callbacks.on_mouse_scroll(callbacks.user_data, { e.wheel.x, e.wheel.y });
                 }
             } break;
-            case SDL_KEYDOWN:
-            case SDL_KEYUP: {
+            case SDL_EVENT_KEY_DOWN:
+            case SDL_EVENT_KEY_UP: {
                 if (callbacks.on_key) {
-                    auto state = e.type == SDL_KEYDOWN;
-                    callbacks.on_key(callbacks.user_data, e.key.keysym.sym, e.key.keysym.scancode, e.key.keysym.mod, state);
+                    auto state = e.type == SDL_EVENT_KEY_DOWN;
+                    callbacks.on_key(callbacks.user_data, e.key.key, e.key.scancode, e.key.mod, state);
                 }
             } break;
-            case SDL_TEXTINPUT: {
+            case SDL_EVENT_TEXT_INPUT: {
                 if (callbacks.on_text_input) {
                     callbacks.on_text_input(callbacks.user_data, e.text.text);
                 }
             } break;
-            case SDL_QUIT: {
+            case SDL_EVENT_QUIT: {
                 if (callbacks.on_close) {
                     callbacks.on_close(callbacks.user_data);
                 }
-            }
+            } break;
             default:
                 break;
         }
@@ -157,30 +166,36 @@ auto Window::get_cursor() -> WindowCursor {
 auto Window::show_cursor(bool show) -> void {
     ZoneScoped;
 
-    SDL_ShowCursor(show);
+    show ? SDL_ShowCursor() : SDL_HideCursor();
 }
 
 auto Window::display_at(i32 monitor_id) -> ls::option<SystemDisplay> {
     ZoneScoped;
 
-    auto display_count = SDL_GetNumVideoDisplays();
-    if (monitor_id >= display_count || display_count < 0) {
+    i32 display_count = 0;
+    auto *display_ids = SDL_GetDisplays(&display_count);
+    LS_DEFER(&) {
+        SDL_free(display_ids);
+    };
+
+    if (display_count == 0 || display_ids == nullptr) {
         return ls::nullopt;
     }
 
-    const char *monitor_name = SDL_GetDisplayName(monitor_id);
-    SDL_DisplayMode display_mode = {};
-    if (SDL_GetCurrentDisplayMode(monitor_id, &display_mode) != 0) {
+    const auto checking_display = display_ids[monitor_id];
+    const char *monitor_name = SDL_GetDisplayName(checking_display);
+    const auto *display_mode = SDL_GetDesktopDisplayMode(checking_display);
+    if (display_mode == nullptr) {
         return ls::nullopt;
     }
 
     SDL_Rect position_bounds = {};
-    if (SDL_GetDisplayBounds(monitor_id, &position_bounds) != 0) {
+    if (!SDL_GetDisplayBounds(checking_display, &position_bounds)) {
         return ls::nullopt;
     }
 
     SDL_Rect work_bounds = {};
-    if (SDL_GetDisplayUsableBounds(monitor_id, &work_bounds) != 0) {
+    if (!SDL_GetDisplayUsableBounds(checking_display, &work_bounds)) {
         return ls::nullopt;
     }
 
@@ -188,8 +203,8 @@ auto Window::display_at(i32 monitor_id) -> ls::option<SystemDisplay> {
         .name = monitor_name,
         .position = { position_bounds.x, position_bounds.y },
         .work_area = { work_bounds.x, work_bounds.y, work_bounds.w, work_bounds.h },
-        .resolution = { display_mode.w, display_mode.h },
-        .refresh_rate = display_mode.refresh_rate,
+        .resolution = { display_mode->w, display_mode->h },
+        .refresh_rate = display_mode->refresh_rate,
     };
 }
 
@@ -201,7 +216,7 @@ auto Window::get_surface(VkInstance instance) -> VkSurfaceKHR {
     ZoneScoped;
 
     VkSurfaceKHR surface = {};
-    SDL_Vulkan_CreateSurface(impl->handle, instance, &surface);
+    SDL_Vulkan_CreateSurface(impl->handle, instance, nullptr, &surface);
     return surface;
 }
 

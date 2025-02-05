@@ -96,7 +96,7 @@ struct RenderingMesh {
     u32 index_offset = 0;
 
     // TODO: Remove them when we have mega-buffers
-    BufferID vertex_buffer_id = BufferID::Invalid;
+    BufferID positions_buffer_id = BufferID::Invalid;
     BufferID index_buffer_id = BufferID::Invalid;
 };
 

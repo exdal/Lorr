@@ -38,12 +38,6 @@ struct Model {
     constexpr static auto MAX_MESHLET_INDICES = 64_sz;
     constexpr static auto MAX_MESHLET_PRIMITIVES = 64_sz;
 
-    struct Vertex {
-        alignas(4) glm::vec3 position = {};
-        alignas(4) glm::vec3 normal = {};
-        alignas(4) glm::vec2 tex_coord_0 = {};
-        alignas(4) u32 color = 0;
-    };
     using Index = u32;
 
     struct Meshlet {
@@ -71,7 +65,9 @@ struct Model {
     std::vector<Mesh> meshes = {};
     std::vector<Node> nodes = {};
 
-    Buffer vertex_buffer = {};
+    Buffer positions_buffer = {};
+    Buffer normals_buffer = {};
+    Buffer texcoords_buffer = {};
     Buffer index_buffer = {};
 };
 }  // namespace lr

@@ -41,7 +41,7 @@ target("Lorr")
         { public = true })
 
     add_packages(
-        "libsdl",
+        "libsdl3",
         "vk-bootstrap",
         "imgui",
         "slang-lorr",

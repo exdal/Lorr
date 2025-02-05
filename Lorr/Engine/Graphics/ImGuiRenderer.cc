@@ -5,7 +5,7 @@
 #include "Engine/Graphics/VulkanDevice.hh"
 
 #include <ImGuizmo.h>
-#include <SDL2/SDL_mouse.h>
+#include <SDL3/SDL_mouse.h>
 
 namespace lr {
 auto ImGuiRenderer::init(this ImGuiRenderer &self, Device *device) -> void {
@@ -280,13 +280,13 @@ auto ImGuiRenderer::on_key(this ImGuiRenderer &, u32 key_code, u32, u16 mods, bo
 
     auto &imgui = ImGui::GetIO();
     imgui.AddKeyEvent(to_imgui_key(static_cast<SDL_Keycode>(key_code)), down);
-    imgui.AddKeyEvent(ImGuiMod_Ctrl, (mods & KMOD_CTRL) != 0);
-    imgui.AddKeyEvent(ImGuiMod_Shift, (mods & KMOD_SHIFT) != 0);
-    imgui.AddKeyEvent(ImGuiMod_Alt, (mods & KMOD_ALT) != 0);
-    imgui.AddKeyEvent(ImGuiMod_Super, (mods & KMOD_GUI) != 0);
+    imgui.AddKeyEvent(ImGuiMod_Ctrl, (mods & SDL_KMOD_CTRL) != 0);
+    imgui.AddKeyEvent(ImGuiMod_Shift, (mods & SDL_KMOD_SHIFT) != 0);
+    imgui.AddKeyEvent(ImGuiMod_Alt, (mods & SDL_KMOD_ALT) != 0);
+    imgui.AddKeyEvent(ImGuiMod_Super, (mods & SDL_KMOD_GUI) != 0);
 }
 
-auto ImGuiRenderer::on_text_input(this ImGuiRenderer &, c8 *text) -> void {
+auto ImGuiRenderer::on_text_input(this ImGuiRenderer &, const c8 *text) -> void {
     ZoneScoped;
 
     auto &imgui = ImGui::GetIO();
@@ -327,7 +327,7 @@ ImGuiKey to_imgui_key(SDL_Keycode keycode) {
             return ImGuiKey_Enter;
         case SDLK_ESCAPE:
             return ImGuiKey_Escape;
-        case SDLK_QUOTE:
+        case SDLK_APOSTROPHE:
             return ImGuiKey_Apostrophe;
         case SDLK_COMMA:
             return ImGuiKey_Comma;
@@ -347,7 +347,7 @@ ImGuiKey to_imgui_key(SDL_Keycode keycode) {
             return ImGuiKey_Backslash;
         case SDLK_RIGHTBRACKET:
             return ImGuiKey_RightBracket;
-        case SDLK_BACKQUOTE:
+        case SDLK_GRAVE:
             return ImGuiKey_GraveAccent;
         case SDLK_CAPSLOCK:
             return ImGuiKey_CapsLock;
@@ -431,57 +431,57 @@ ImGuiKey to_imgui_key(SDL_Keycode keycode) {
             return ImGuiKey_8;
         case SDLK_9:
             return ImGuiKey_9;
-        case SDLK_a:
+        case SDLK_A:
             return ImGuiKey_A;
-        case SDLK_b:
+        case SDLK_B:
             return ImGuiKey_B;
-        case SDLK_c:
+        case SDLK_C:
             return ImGuiKey_C;
-        case SDLK_d:
+        case SDLK_D:
             return ImGuiKey_D;
-        case SDLK_e:
+        case SDLK_E:
             return ImGuiKey_E;
-        case SDLK_f:
+        case SDLK_F:
             return ImGuiKey_F;
-        case SDLK_g:
+        case SDLK_G:
             return ImGuiKey_G;
-        case SDLK_h:
+        case SDLK_H:
             return ImGuiKey_H;
-        case SDLK_i:
+        case SDLK_I:
             return ImGuiKey_I;
-        case SDLK_j:
+        case SDLK_J:
             return ImGuiKey_J;
-        case SDLK_k:
+        case SDLK_K:
             return ImGuiKey_K;
-        case SDLK_l:
+        case SDLK_L:
             return ImGuiKey_L;
-        case SDLK_m:
+        case SDLK_M:
             return ImGuiKey_M;
-        case SDLK_n:
+        case SDLK_N:
             return ImGuiKey_N;
-        case SDLK_o:
+        case SDLK_O:
             return ImGuiKey_O;
-        case SDLK_p:
+        case SDLK_P:
             return ImGuiKey_P;
-        case SDLK_q:
+        case SDLK_Q:
             return ImGuiKey_Q;
-        case SDLK_r:
+        case SDLK_R:
             return ImGuiKey_R;
-        case SDLK_s:
+        case SDLK_S:
             return ImGuiKey_S;
-        case SDLK_t:
+        case SDLK_T:
             return ImGuiKey_T;
-        case SDLK_u:
+        case SDLK_U:
             return ImGuiKey_U;
-        case SDLK_v:
+        case SDLK_V:
             return ImGuiKey_V;
-        case SDLK_w:
+        case SDLK_W:
             return ImGuiKey_W;
-        case SDLK_x:
+        case SDLK_X:
             return ImGuiKey_X;
-        case SDLK_y:
+        case SDLK_Y:
             return ImGuiKey_Y;
-        case SDLK_z:
+        case SDLK_Z:
             return ImGuiKey_Z;
         case SDLK_F1:
             return ImGuiKey_F1;

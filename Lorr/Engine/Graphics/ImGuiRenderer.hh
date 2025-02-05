@@ -23,6 +23,6 @@ struct ImGuiRenderer {
     auto on_mouse_button(this ImGuiRenderer &, u8 button, bool down) -> void;
     auto on_mouse_scroll(this ImGuiRenderer &, glm::vec2 offset) -> void;
     auto on_key(this ImGuiRenderer &, u32 key_code, u32 scan_code, u16 mods, bool down) -> void;
-    auto on_text_input(this ImGuiRenderer &, c8 *text) -> void;
+    auto on_text_input(this ImGuiRenderer &, const c8 *text) -> void;
 };
 }  // namespace lr

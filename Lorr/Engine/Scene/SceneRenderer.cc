@@ -561,7 +561,7 @@ auto SceneRenderer::render(this SceneRenderer &self, const SceneRenderInfo &info
             "vis triangle",
             [&pipeline = *self.device->pipeline(self.vis_triangle_id_pipeline.id()),
              entities = *self.device->buffer(self.gpu_entities_buffer.id()),
-             vertex_buffer = *self.device->buffer(mesh.vertex_buffer_id),
+             positions_buffer = *self.device->buffer(mesh.positions_buffer_id),
              index_buffer = *self.device->buffer(mesh.index_buffer_id),
              entity_index = mesh.entity_index,
              index_count = mesh.index_count,
@@ -581,7 +581,7 @@ auto SceneRenderer::render(this SceneRenderer &self, const SceneRenderInfo &info
                     .set_scissor(0, vuk::Rect2D::framebuffer())
                     .bind_buffer(0, 0, camera)
                     .bind_buffer(0, 1, entities)
-                    .bind_buffer(0, 2, vertex_buffer)
+                    .bind_buffer(0, 2, positions_buffer)
                     .bind_index_buffer(index_buffer, vuk::IndexType::eUint32)
                     .push_constants(vuk::ShaderStageFlagBits::eVertex, 0, entity_index)
                     .draw_indexed(index_count, 1, index_offset, static_cast<i32>(vertex_offset), 0);

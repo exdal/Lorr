@@ -23,8 +23,8 @@ add_requires("lz4 v1.9.4")
 add_requires("zstd v1.5.6")
 add_requires("flecs v4.0.3")
 
-add_requires("libsdl 2.30.10", { configs = {
-    sdlmain = false,
+add_requires("libsdl3 3.2.2", { configs = {
+    wayland = true,
     x11 = false,
 } })
 

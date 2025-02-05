@@ -4,7 +4,7 @@ import "../lorr";
 
 [[vk::binding(0, 0)]] ConstantBuffer<Camera, ScalarDataLayout> camera;
 [[vk::binding(1, 0)]] StructuredBuffer<Entity> entities;
-[[vk::binding(2, 0)]] StructuredBuffer<Vertex> vertices;
+[[vk::binding(2, 0)]] StructuredBuffer<vec3> vertex_positions;
 
 struct PushConstants {
     u32 entity_index;
@@ -20,9 +20,7 @@ VertexOutput vs_main(u32 vertex_id : SV_VertexID) {
     VertexOutput output;
 
     const Entity entity = entities[c.entity_index];
-    const Vertex vertex = vertices[vertex_id];
-    const let world_position = mul(float4(vertex.position, 1.0), entity.local_transform_mat);
-
+    const let world_position = mul(entity.local_transform_mat, float4(vertex_positions[vertex_id], 1.0));
     output.position = mul(camera.projection_view_mat, world_position);
     return output;
 }

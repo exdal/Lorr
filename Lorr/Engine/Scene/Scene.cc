@@ -411,7 +411,7 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, const vuk::Extent3
                 rendering_mesh.index_offset = meshlet.index_offset;
                 rendering_mesh.index_count = meshlet.index_count;
 
-                rendering_mesh.vertex_buffer_id = model->vertex_buffer.id();
+                rendering_mesh.positions_buffer_id = model->positions_buffer.id();
                 rendering_mesh.index_buffer_id = model->index_buffer.id();
             }
         }
@@ -424,8 +424,11 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, const vuk::Extent3
         auto gpu_entity_info = GPUEntityTransform{};
         auto &matrix = gpu_entity_info.local_transform_mat;
 
+        const auto &rotation = glm::radians(transform->rotation);
         matrix = glm::translate(glm::mat4(1.0), transform->position);
-        matrix *= glm::mat4_cast(Math::compose_quat(glm::radians(transform->rotation)));
+        matrix *= glm::rotate(glm::mat4(1.0), rotation.x, glm::vec3(1.0, 0.0, 0.0));
+        matrix *= glm::rotate(glm::mat4(1.0), rotation.y, glm::vec3(0.0, 1.0, 0.0));
+        matrix *= glm::rotate(glm::mat4(1.0), rotation.z, glm::vec3(0.0, 0.0, 1.0));
         matrix *= glm::scale(glm::mat4(1.0), transform->scale);
 
         if (dirty_entity->has<ECS::RenderingModel>()) {

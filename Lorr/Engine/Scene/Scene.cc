@@ -77,6 +77,15 @@ auto Scene::init(this Scene &self, const std::string &name) -> bool {
             }
         });
 
+    self.world
+        ->system<ECS::Transform, ECS::Camera>()  //
+        .each([&](flecs::iter &it, usize, ECS::Transform &t, ECS::Camera &c) {
+            auto inv_orient = glm::conjugate(Math::compose_quat(glm::radians(t.rotation)));
+            t.position += glm::vec3(inv_orient * c.axis_velocity * it.delta_time());
+
+            c.axis_velocity = {};
+        });
+
     return true;
 }
 
@@ -152,10 +161,16 @@ auto Scene::import_from_file(this Scene &self, const fs::path &path) -> bool {
                 return false;
             }
 
+            LS_EXPECT(self.entity_db.is_component_known(component_id));
             e.add(component_id);
             ECS::ComponentWrapper component(e, component_id);
             component.for_each([&](usize &, std::string_view member_name, ECS::ComponentWrapper::Member &member) {
                 auto member_json = component_json[member_name];
+                if (member_json.error()) {
+                    // Default construct
+                    return;
+                }
+
                 std::visit(
                     match{
                         [](const auto &) {},
@@ -274,7 +289,7 @@ auto Scene::create_perspective_camera(
     return self
         .create_entity(name)  //
         .add<ECS::PerspectiveCamera>()
-        .set<ECS::Transform>({ .position = position, .rotation = rotation })
+        .set<ECS::Transform>({ .position = position, .rotation = Math::normalize_180(rotation) })
         .set<ECS::Camera>({ .fov = fov, .aspect_ratio = aspect_ratio });
 }
 
@@ -309,15 +324,8 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, const vuk::Extent3
         auto projection_mat = glm::perspective(glm::radians(c.fov), c.aspect_ratio, c.near_clip, c.far_clip);
         projection_mat[1][1] *= -1;
 
-        auto rotation = glm::radians(t.rotation);
-        auto orientation = glm::quat{};
-        orientation = glm::angleAxis(rotation.x, glm::vec3(0.0f, 1.0f, 0.0f));
-        orientation = glm::angleAxis(rotation.y, glm::vec3(-1.0f, 0.0f, 0.0f)) * orientation;
-        orientation = glm::angleAxis(rotation.z, glm::vec3(0.0f, 0.0f, 1.0f)) * orientation;
-        orientation = glm::normalize(orientation);
-
         auto translation_mat = glm::translate(glm::mat4(1.0f), -t.position);
-        auto rotation_mat = glm::mat4_cast(orientation);
+        auto rotation_mat = glm::mat4_cast(Math::compose_quat(glm::radians(t.rotation)));
         auto view_mat = rotation_mat * translation_mat;
 
         GPUCameraData camera_data = {};
@@ -416,11 +424,8 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, const vuk::Extent3
         auto gpu_entity_info = GPUEntityTransform{};
         auto &matrix = gpu_entity_info.local_transform_mat;
 
-        auto rotation = glm::radians(transform->rotation);
         matrix = glm::translate(glm::mat4(1.0), transform->position);
-        matrix *= glm::rotate(glm::mat4(1.0), rotation.x, glm::vec3(1.0, 0.0, 0.0));
-        matrix *= glm::rotate(glm::mat4(1.0), rotation.y, glm::vec3(0.0, 1.0, 0.0));
-        matrix *= glm::rotate(glm::mat4(1.0), rotation.z, glm::vec3(0.0, 0.0, 1.0));
+        matrix *= glm::mat4_cast(Math::compose_quat(glm::radians(transform->rotation)));
         matrix *= glm::scale(glm::mat4(1.0), transform->scale);
 
         if (dirty_entity->has<ECS::RenderingModel>()) {
@@ -443,8 +448,8 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, const vuk::Extent3
     });
 }
 
-auto Scene::tick(this Scene &self) -> bool {
-    return self.world->progress();
+auto Scene::tick(this Scene &self, f32 delta_time) -> bool {
+    return self.world->progress(delta_time);
 }
 
 auto Scene::set_name(this Scene &self, const std::string &name) -> void {

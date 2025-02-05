@@ -41,11 +41,10 @@ void SceneBrowserPanel::render(this SceneBrowserPanel &self) {
         if (app.active_scene_uuid.has_value()) {
             auto *scene = asset_man.get_scene(app.active_scene_uuid.value());
             scene->get_root().children([&](flecs::entity e) {
+                memory::ScopedStack stack;
                 if (e.has<ECS::Hidden>()) {
                     return;
                 }
-
-                memory::ScopedStack stack;
 
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();

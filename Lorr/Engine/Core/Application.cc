@@ -86,7 +86,7 @@ void Application::run(this Application &self) {
         self.do_update(delta_time);
         if (self.active_scene_uuid.has_value()) {
             auto *scene = self.asset_man.get_scene(self.active_scene_uuid.value());
-            scene->tick();
+            scene->tick(static_cast<f32>(delta_time));
         }
         self.do_render(swapchain_attachment->format, swapchain_attachment->extent);
 

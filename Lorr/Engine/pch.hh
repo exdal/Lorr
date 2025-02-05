@@ -34,6 +34,9 @@ namespace fs = std::filesystem;
 #include <glm/vec3.hpp>
 #include <glm/vec4.hpp>
 
+#include "Engine/Math/Quat.hh"
+#include "Engine/Math/Rotation.hh"
+
 #include "Core/Logger.hh"
 #include <ankerl/unordered_dense.h>
 #include <plf_colony.h>

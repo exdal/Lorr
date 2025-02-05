@@ -63,7 +63,7 @@ public:
     auto create_editor_camera(this Scene &) -> void;
 
     auto render(this Scene &, SceneRenderer &renderer, const vuk::Extent3D &extent, vuk::Format format) -> vuk::Value<vuk::ImageAttachment>;
-    auto tick(this Scene &) -> bool;
+    auto tick(this Scene &, f32 delta_time) -> bool;
 
     auto set_name(this Scene &, const std::string &name) -> void;
     auto set_dirty(this Scene &, GPUEntityID gpu_entity_id) -> void;

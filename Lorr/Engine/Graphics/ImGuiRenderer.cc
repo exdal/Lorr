@@ -32,7 +32,7 @@ auto ImGuiRenderer::init(this ImGuiRenderer &self, Device *device) -> void {
     ImGui::StyleColorsDark();
 
     //  ── FONT ATLAS ──────────────────────────────────────────────────────
-    ImWchar icons_ranges[] = { 0xf000, 0xf8ff, 0 };
+    ImWchar icons_ranges[] = { 0xc000, 0xf8ff, 0 };
     ImFontConfig font_config;
     font_config.GlyphMinAdvanceX = 16.0f;
     font_config.MergeMode = true;

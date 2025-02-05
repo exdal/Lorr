@@ -30,5 +30,6 @@ namespace fa {
     constexpr static detail::icon_t up_right_and_down_left_from_center = "\uf424";
     constexpr static detail::icon_t xmark = "\uf00d";
     constexpr static detail::icon_t trash_can = "\uf2ed";
+    constexpr static detail::icon_t chart_column = "\ue0e3";
 }  // namespace fa
 }  // namespace lr::Icon

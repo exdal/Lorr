@@ -116,13 +116,7 @@ float alligator(float3 position, int grid_size, float3 seed) {
     return d1 - d2;
 }
 
-float alligator_fbm(
-    float3 position,
-    float frequency,
-    int octaves,
-    float lacunarity,
-    float persistence
-) {
+float alligator_fbm(float3 position, float frequency, int octaves, float lacunarity, float persistence) {
     float amplitude = 1.0;
     float amplitude_sum = 0.0;
     float result = 0.0;

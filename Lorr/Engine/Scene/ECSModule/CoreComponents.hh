@@ -58,9 +58,9 @@ ECS_COMPONENT_END();
 
 ECS_COMPONENT_BEGIN(Clouds)
     ECS_COMPONENT_MEMBER(bounds, glm::vec2, { 1.0f, 10.0f })
-    ECS_COMPONENT_MEMBER(shape_noise_scale, f32, 10.0f)
+    ECS_COMPONENT_MEMBER(shape_noise_scale, f32, 100.0f)
     ECS_COMPONENT_MEMBER(shape_noise_weights, glm::vec4, { 0.625f, 0.25f, 0.15f, 0.625f })
-    ECS_COMPONENT_MEMBER(detail_noise_scale, f32, 10.0f)
+    ECS_COMPONENT_MEMBER(detail_noise_scale, f32, 100.0f)
     ECS_COMPONENT_MEMBER(detail_noise_weights, glm::vec4, { 0.625f, 0.25f, 0.15f, 0.0625f })
     ECS_COMPONENT_MEMBER(detail_noise_influence, f32, 1.0f)
     ECS_COMPONENT_MEMBER(coverage, f32, 0.5f)

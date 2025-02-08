@@ -101,6 +101,7 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
     vk12_features.bufferDeviceAddress = true;
     vk12_features.hostQueryReset = true;
     // Shader features
+    vk12_features.storageBuffer8BitAccess = true;
     vk12_features.scalarBlockLayout = true;
     vk12_features.shaderInt8 = true;
     physical_device_selector.set_required_features_12(vk12_features);
@@ -114,6 +115,7 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
     vk10_features.vertexPipelineStoresAndAtomics = true;
     vk10_features.fragmentStoresAndAtomics = true;
     vk10_features.shaderInt64 = true;
+    vk10_features.multiDrawIndirect = true;
     physical_device_selector.set_required_features(vk10_features);
 
     std::vector<const c8 *> device_extensions;

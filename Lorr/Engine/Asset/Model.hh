@@ -41,15 +41,28 @@ struct Model {
     using Index = u32;
 
     struct Meshlet {
-        alignas(4) u32 vertex_count = 0;
         alignas(4) u32 vertex_offset = 0;
-        alignas(4) u32 index_count = 0;
         alignas(4) u32 index_offset = 0;
+        alignas(4) u32 triangle_offset = 0;
+        alignas(4) u32 triangle_count = 0;
+        alignas(4) glm::vec3 aabb_min = {};
+        alignas(4) glm::vec3 aabb_max = {};
+    };
+
+    struct MeshletInstance {
+        alignas(4) u32 meshlet_index;
+        alignas(4) u32 material_index;
     };
 
     struct Mesh {
         std::string name = {};
+
+        // Geometry info of whole mesh
         std::vector<u32> meshlet_indices = {};
+        u32 vertex_count = 0;
+        u32 vertex_offset = 0;
+        u32 index_count = 0;
+        u32 index_offset = 0;
     };
 
     struct Node {
@@ -59,15 +72,17 @@ struct Model {
         std::string name = {};
     };
 
+    std::vector<Meshlet> meshlets = {};
     std::vector<UUID> textures = {};
     std::vector<UUID> materials = {};
-    std::vector<Meshlet> meshlets = {};
     std::vector<Mesh> meshes = {};
     std::vector<Node> nodes = {};
 
     Buffer positions_buffer = {};
     Buffer normals_buffer = {};
     Buffer texcoords_buffer = {};
-    Buffer index_buffer = {};
+    Buffer meshlet_buffer = {};
+    Buffer indirect_vertices_buffer = {};
+    Buffer local_indices_buffer = {};
 };
 }  // namespace lr

@@ -22,11 +22,9 @@ void cs_main(uint3 thread_id : SV_DispatchThreadID) {
     info.eye_pos = ray_pos;
     info.sun_dir = sun_dir;
     //info.sun_intensity = sun->intensity;
-    info.lut_sampler = sampler;
     info.transmittance_image = transmittance_lut;
     info.eval_mie_rayleigh_phase = false;
     info.eval_planet_luminance = true;
-
     info.sampling.variable_sample_count = false;
     info.sampling.initial_sample_count = 32;
 
@@ -34,7 +32,7 @@ void cs_main(uint3 thread_id : SV_DispatchThreadID) {
     float3 multi_scattering_as_1 = float3(0.0);
     for (int i = 0; i < 64; i++) {
         info.eye_dir = Noise::hemisphere64[i];
-        const let result = integrate_single_scattered_luminance(atmos, info);
+        const let result = integrate_single_scattered_luminance(sampler, atmos, info);
         multi_scattering_as_1 += result.multiscattering_as_1;
         luminance += result.luminance;
     }

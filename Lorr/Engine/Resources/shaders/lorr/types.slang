@@ -44,3 +44,18 @@ public struct SampledImage<Format> {
         this.sampler_id = sampler_id;
     }
 };
+
+public struct DispatchIndirectCommand {
+    public u32 x;
+    public u32 y;
+    public u32 z;
+};
+
+// Direct replica of vulkan's indirect indexed struct
+public struct DrawIndexedIndirectCommand {
+    public u32 index_count;
+    public u32 instance_count;
+    public u32 first_index;
+    public i32 vertex_offset;
+    public u32 first_instance;
+};

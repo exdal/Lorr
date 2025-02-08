@@ -392,29 +392,24 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, const vuk::Extent3
         }
     });
 
-    std::vector<RenderingMesh> rendering_meshes = {};
+    GPUEntityID entity_id = {};
+    u32 meshlet_count = 0;
+    BufferID positions_buffer_id = {};
+    BufferID meshlets_buffer_id = {};
+    BufferID indirect_vertices_buffer_id = {};
+    BufferID local_indices_buffer_id = {};
     model_query.each([&](flecs::entity e, ECS::RenderingModel &rendering_model) {
         auto *model = app.asset_man.get_model(rendering_model.model);
         if (!model) {
             return;
         }
 
-        auto gpu_entity_id = self.get_gpu_entity(e);
-        for (const auto &mesh : model->meshes) {
-            for (const auto meshlet_index : mesh.meshlet_indices) {
-                const auto &meshlet = model->meshlets[meshlet_index];
-
-                auto &rendering_mesh = rendering_meshes.emplace_back();
-                rendering_mesh.entity_index = SlotMap_decode_id(gpu_entity_id.value()).index;
-
-                rendering_mesh.vertex_offset = meshlet.vertex_offset;
-                rendering_mesh.index_offset = meshlet.index_offset;
-                rendering_mesh.index_count = meshlet.index_count;
-
-                rendering_mesh.positions_buffer_id = model->positions_buffer.id();
-                rendering_mesh.index_buffer_id = model->index_buffer.id();
-            }
-        }
+        entity_id = self.get_gpu_entity(e).value();
+        meshlet_count = model->meshlets.size();
+        positions_buffer_id = model->positions_buffer.id();
+        meshlets_buffer_id = model->meshlet_buffer.id();
+        indirect_vertices_buffer_id = model->indirect_vertices_buffer.id();
+        local_indices_buffer_id = model->local_indices_buffer.id();
     });
 
     for (const auto dirty_entity_id : self.dirty_entities) {
@@ -442,8 +437,13 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, const vuk::Extent3
     return renderer.render(SceneRenderInfo{
         .format = format,
         .extent = extent,
+        .meshlet_count = meshlet_count,
+        .entity_id = entity_id,
         .materials_buffer_id = app.asset_man.material_buffer(),
-        .rendering_meshes = std::move(rendering_meshes),
+        .positions_buffer_id = positions_buffer_id,
+        .meshlet_buffer_id = meshlets_buffer_id,
+        .indirect_vertices_buffer_id = indirect_vertices_buffer_id,
+        .local_indices_buffer_id = local_indices_buffer_id,
         .camera_info = active_camera_data,
         .sun = sun_data,
         .atmosphere = atmos_data,

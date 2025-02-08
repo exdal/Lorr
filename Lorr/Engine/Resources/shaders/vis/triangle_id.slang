@@ -1,10 +1,12 @@
-module triangle_id;
-
+import vis;
 import "../lorr";
 
 [[vk::binding(0, 0)]] ConstantBuffer<Camera, ScalarDataLayout> camera;
-[[vk::binding(1, 0)]] StructuredBuffer<Entity> entities;
-[[vk::binding(2, 0)]] StructuredBuffer<vec3> vertex_positions;
+[[vk::binding(1, 0)]] StructuredBuffer<Entity, ScalarDataLayout> entities;
+[[vk::binding(2, 0)]] StructuredBuffer<float3, ScalarDataLayout> vertex_positions;
+[[vk::binding(3, 0)]] StructuredBuffer<Meshlet, ScalarDataLayout> meshlets;
+[[vk::binding(4, 0)]] StructuredBuffer<u32, ScalarDataLayout> indices;
+[[vk::binding(5, 0)]] StructuredBuffer<u8, ScalarDataLayout> local_indices;
 
 struct PushConstants {
     u32 entity_index;
@@ -13,31 +15,40 @@ struct PushConstants {
 
 struct VertexOutput {
     float4 position  : SV_Position;
+    u32 meshlet_id   : MESHLET_ID;
 };
 
 [shader("vertex")]
 VertexOutput vs_main(u32 vertex_id : SV_VertexID) {
-    VertexOutput output;
+    const u32 meshlet_id   = (vertex_id >> MESHLET_PRIMITIVE_BITS) & MESHLET_ID_MASK;
+    const u32 primitive_id = vertex_id & MESHLET_PRIMITIVE_MASK;
 
-    const Entity entity = entities[c.entity_index];
-    const let world_position = mul(entity.local_transform_mat, float4(vertex_positions[vertex_id], 1.0));
-    output.position = mul(camera.projection_view_mat, world_position);
+    const Meshlet meshlet =   meshlets[meshlet_id];
+    const u32 primitive =     u32(local_indices[meshlet.triangle_offset + primitive_id]);
+    const u32 index =         indices          [meshlet.index_offset    + primitive];
+    const float3 vertex_pos = vertex_positions [meshlet.vertex_offset   + index];
+    const Entity entity =     entities[c.entity_index];
+
+    VertexOutput output;
+    output.position = mul(entity.local_transform_mat, float4(vertex_pos, 1.0));
+    output.position = mul(camera.projection_view_mat, output.position);
+    output.meshlet_id = meshlet_id;
     return output;
 }
 
 uint hash(uint a) {
-    a = (a+0x7ed55d16) + (a<<12);
-    a = (a^0xc761c23c) ^ (a>>19);
-    a = (a+0x165667b1) + (a<<5);
-    a = (a+0xd3a2646c) ^ (a<<9);
-    a = (a+0xfd7046c5) + (a<<3);
-    a = (a^0xb55a4f09) ^ (a>>16);
+    a = (a + 0x7ed55d16) + (a << 12);
+    a = (a ^ 0xc761c23c) ^ (a >> 19);
+    a = (a + 0x165667b1) + (a << 5);
+    a = (a + 0xd3a2646c) ^ (a << 9);
+    a = (a + 0xfd7046c5) + (a << 3);
+    a = (a ^ 0xb55a4f09) ^ (a >> 16);
     return a;
 }
 
 [shader("fragment")]
-float4 fs_main(VertexOutput input, u32 primitive_id : SV_PrimitiveID) : SV_Target {
-    uint mhash = hash(primitive_id);
+float4 fs_main(VertexOutput input) : SV_Target {
+    uint mhash = hash(input.meshlet_id);
     vec3 mcolor = vec3(float(mhash & 255), float((mhash >> 8) & 255), float((mhash >> 16) & 255)) / 255.0;
     return float4(mcolor, 1.0);
 }

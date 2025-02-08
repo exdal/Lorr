@@ -1,10 +1,17 @@
 implementing "../lorr";
 
-public struct Vertex {
-    public float3 position;
-    public float3 normal;
-    public float2 tex_coord;
-    public u32 color;
+public struct Meshlet {
+    public u32 vertex_offset;
+    public u32 index_offset;
+    public u32 triangle_offset;
+    public u32 triangle_count;
+    public vec3 aabb_min;
+    public vec3 aabb_max;
+};
+
+public struct MeshletInstance {
+    public u32 meshlet_index;
+    public u32 material_index;
 };
 
 public struct Material {

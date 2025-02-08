@@ -17,16 +17,6 @@
 #include <vuk/vsl/Core.hpp>
 
 namespace lr {
-struct TransientBuffer {
-    vuk::Buffer buffer = {};
-
-    u64 device_address() { return buffer.device_address; }
-    template<typename T = u8>
-    T *host_ptr() {
-        return reinterpret_cast<T *>(buffer.mapped_ptr);
-    }
-};
-
 struct TransferManager {
 private:
     Device *device = nullptr;
@@ -43,28 +33,33 @@ public:
     auto init(Device &) -> std::expected<void, vuk::VkException>;
     auto destroy(this TransferManager &) -> void;
 
-    auto alloc_transient_buffer(this TransferManager &, vuk::MemoryUsage usage, usize size) -> TransientBuffer;
+    [[nodiscard]] auto alloc_transient_buffer(this TransferManager &, vuk::MemoryUsage usage, usize size) -> vuk::Value<vuk::Buffer>;
 
-    auto upload_staging(this TransferManager &, ls::span<u8> bytes, Buffer &dst, u64 dst_offset = 0) -> void;
-    auto upload_staging(this TransferManager &, TransientBuffer &src, Buffer &dst, u64 dst_offset = 0) -> void;
-    auto upload_staging(this TransferManager &, TransientBuffer &src, TransientBuffer &dst) -> void;
-    auto upload_staging(this TransferManager &, ImageView &image_view, ls::span<u8> bytes) -> void;
+    [[nodiscard]] auto upload_staging(this TransferManager &, ls::span<u8> bytes, Buffer &dst, u64 dst_offset = 0)
+        -> vuk::Value<vuk::Buffer>;
+    [[nodiscard]] auto upload_staging(this TransferManager &, vuk::Value<vuk::Buffer> &&src, Buffer &dst, u64 dst_offset = 0)
+        -> vuk::Value<vuk::Buffer>;
+    [[nodiscard]] auto upload_staging(this TransferManager &, vuk::Value<vuk::Buffer> &&src, vuk::Value<vuk::Buffer> &&dst)
+        -> vuk::Value<vuk::Buffer>;
+    [[nodiscard]] auto upload_staging(this TransferManager &, ImageView &image_view, ls::span<u8> bytes)
+        -> vuk::Value<vuk::ImageAttachment>;
 
     template<typename T>
-    auto upload_staging(this TransferManager &self, ls::span<T> span, Buffer &dst, u64 dst_offset = 0) -> void {
+    [[nodiscard]] auto upload_staging(this TransferManager &self, ls::span<T> span, Buffer &dst, u64 dst_offset = 0)
+        -> vuk::Value<vuk::Buffer> {
         ZoneScoped;
 
-        self.upload_staging({ reinterpret_cast<u8 *>(span.data()), span.size_bytes() }, dst, dst_offset);
+        return self.upload_staging({ reinterpret_cast<u8 *>(span.data()), span.size_bytes() }, dst, dst_offset);
     }
 
-    auto wait_on(this TransferManager &, vuk::UntypedValue &&fut) -> void;
-
     template<typename T>
-    [[nodiscard]] auto scratch_buffer(const T &val) -> vuk::Value<vuk::Buffer> {
+    [[nodiscard]] auto scratch_buffer(const T &val = {}) -> vuk::Value<vuk::Buffer> {
         ZoneScoped;
 
         return scratch_buffer(&val, sizeof(T));
     }
+
+    auto wait_on(this TransferManager &, vuk::UntypedValue &&fut) -> void;
 
 protected:
     auto scratch_buffer(this TransferManager &, const void *data, u64 size) -> vuk::Value<vuk::Buffer>;

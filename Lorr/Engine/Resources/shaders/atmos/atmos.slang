@@ -108,38 +108,65 @@ public struct MediumScattering {
 };
 
 public struct AtmosphereLuminance {
-    public float3 luminance = float3(0.0);
-    public float3 multiscattering_as_1 = float3(0.0);
-    public float3 transmittance = float3(1.0);
+    public float3 luminance;
+    public float3 multiscattering_as_1;
+    public float3 transmittance;
+
+    public __init() {
+        this.luminance = float3(0.0);
+        this.multiscattering_as_1 = float3(0.0);
+        this.transmittance = float3(1.0);
+    }
 };
 
 public struct AtmosphereSampling {
-    public bool variable_sample_count = false;
-    public float initial_sample_count = 0.0;
-    public float min_sample_count = 0.0;
-    public float max_sample_count = 0.0;
-    public float inv_distance_to_sample_count_max = 0.01;
+    public bool variable_sample_count;
+    public float initial_sample_count;
+    public float min_sample_count;
+    public float max_sample_count;
+    public float inv_distance_to_sample_count_max;
+
+    public __init() {
+        this.variable_sample_count = false;
+        this.initial_sample_count = 0.0;
+        this.min_sample_count = 0.0;
+        this.max_sample_count = 0.0;
+        this.inv_distance_to_sample_count_max = 0.01;
+    }
 };
 
 public struct AtmosphereIntegrateInfo {
-    public float3 eye_pos = {};
-    public float3 eye_dir = {};
-    public float3 sun_dir = {};
-    public float sun_intensity = 1.0;
-    public float max_integration_length = 9000000.0;
-    public AtmosphereSampling sampling = {};
-    public SamplerState lut_sampler;
+    public float3 eye_pos;
+    public float3 eye_dir;
+    public float3 sun_dir;
+    public float sun_intensity;
+    public float max_integration_length;
+    public AtmosphereSampling sampling;
     public Texture2D<float4> transmittance_image;
     public Optional<Texture2D<float4>> multiscattering_image;
-    public bool eval_mie_rayleigh_phase = true;
-    public bool eval_planet_luminance = false;
+    public bool eval_mie_rayleigh_phase;
+    public bool eval_planet_luminance;
+
+    public __init() {
+        this.eye_pos = {};
+        this.eye_dir = {};
+        this.sun_dir = {};
+        this.sun_intensity = 1.0;
+        this.max_integration_length = 9000000.0;
+        this.sampling = {};
+        this.transmittance_image = {};
+        this.multiscattering_image = none;
+        this.eval_mie_rayleigh_phase = true;
+        this.eval_planet_luminance = false;
+    }
 };
 
 public func integrate_single_scattered_luminance(
+    in SamplerState lut_sampler,
     in Atmosphere atmos,
     in AtmosphereIntegrateInfo info) -> AtmosphereLuminance
 {
-    AtmosphereLuminance result;
+    AtmosphereLuminance result = {};
 
     const let atmos_intersection = lr::ray_sphere_intersect_nearest(info.eye_pos, info.eye_dir, atmos.atmos_radius);
     const let planet_intersection = lr::ray_sphere_intersect_nearest(info.eye_pos, info.eye_dir, atmos.planet_radius);
@@ -201,12 +228,12 @@ public func integrate_single_scattered_luminance(
         f32 sun_theta = dot(info.sun_dir, up_vec);
 
         float2 transmittance_uv = get_transmittance_lut_uv(atmos, float2(h, sun_theta));
-        float3 sun_transmittance = info.transmittance_image.Sample(info.lut_sampler, transmittance_uv).rgb;
+        float3 sun_transmittance = info.transmittance_image.Sample(lut_sampler, transmittance_uv).rgb;
 
         float3 MS = 0.0;
         if (info.multiscattering_image.hasValue) {
             float2 multiscatter_uv = get_multiscattering_lut_uv(atmos, altitude, sun_theta);
-            MS = info.multiscattering_image.value.Sample(info.lut_sampler, multiscatter_uv).rgb;
+            MS = info.multiscattering_image.value.Sample(lut_sampler, multiscatter_uv).rgb;
         }
 
         float3 scattering_phase = 0.0;
@@ -236,7 +263,7 @@ public func integrate_single_scattered_luminance(
         float NoL = saturate(dot(normalize(info.sun_dir), normalize(up_vec)));
 
         float2 transmittance_uv = get_transmittance_lut_uv(atmos, float2(h, sun_theta));
-        float3 sun_transmittance = info.transmittance_image.Sample(info.lut_sampler, transmittance_uv).rgb;
+        float3 sun_transmittance = info.transmittance_image.Sample(lut_sampler, transmittance_uv).rgb;
 
         result.luminance += info.sun_intensity * (sun_transmittance * result.transmittance * NoL * atmos.terrain_albedo / PI);
     }

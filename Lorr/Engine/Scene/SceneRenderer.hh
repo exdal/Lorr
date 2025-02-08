@@ -89,23 +89,17 @@ struct GPUEntityTransform {
     alignas(4) glm::mat4 local_transform_mat = {};
 };
 
-struct RenderingMesh {
-    u32 entity_index = ~0_u32;
-    u32 vertex_offset = 0;
-    u32 index_count = 0;
-    u32 index_offset = 0;
-
-    // TODO: Remove them when we have mega-buffers
-    BufferID positions_buffer_id = BufferID::Invalid;
-    BufferID index_buffer_id = BufferID::Invalid;
-};
-
 struct SceneRenderInfo {
     vuk::Format format = vuk::Format::eR8G8B8A8Srgb;
     vuk::Extent3D extent = {};
 
+    u32 meshlet_count = 0;
+    GPUEntityID entity_id = GPUEntityID::Invalid;
     BufferID materials_buffer_id = BufferID::Invalid;
-    std::vector<RenderingMesh> rendering_meshes = {};
+    BufferID positions_buffer_id = BufferID::Invalid;
+    BufferID meshlet_buffer_id = BufferID::Invalid;
+    BufferID indirect_vertices_buffer_id = BufferID::Invalid;
+    BufferID local_indices_buffer_id = BufferID::Invalid;
 
     ls::option<GPUCameraData> camera_info = ls::nullopt;
     ls::option<GPUSunData> sun = ls::nullopt;
@@ -147,6 +141,8 @@ private:
     ImageView cloud_detail_noise_lut_view = {};
     Pipeline cloud_apply_pipeline = {};
 
+    Pipeline vis_cull_meshlets_pipeline = {};
+    Pipeline vis_cull_triangles_pipeline = {};
     Pipeline vis_triangle_id_pipeline = {};
 
     Pipeline tonemap_pipeline = {};

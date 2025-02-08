@@ -63,7 +63,9 @@ auto ImGuiRenderer::init(this ImGuiRenderer &self, Device *device) -> void {
         vuk::ImageViewType::e2D,
         { .aspectMask = vuk::ImageAspectFlagBits::eColor })
         .value();
-    transfer_man.upload_staging(self.font_atlas_view, font_bytes);
+    auto imgui_ia = transfer_man.upload_staging(self.font_atlas_view, font_bytes).as_released(vuk::Access::eFragmentSampled, vuk::DomainFlagBits::eGraphicsQueue);
+    imgui_ia->layout = vuk::ImageLayout::eReadOnlyOptimal;
+    transfer_man.wait_on(std::move(imgui_ia));
     IM_FREE(font_data);
     self.pipeline = Pipeline::create(*device, {
         .module_name = "imgui",
@@ -98,6 +100,8 @@ auto ImGuiRenderer::begin_frame(this ImGuiRenderer &self, f64 delta_time, const 
     imgui.DisplaySize = ImVec2(static_cast<f32>(extent.width), static_cast<f32>(extent.height));
 
     self.rendering_attachments.clear();
+    self.add_image(self.font_atlas_view);
+
     ImGui::NewFrame();
     ImGuizmo::BeginFrame();
 
@@ -147,8 +151,8 @@ auto ImGuiRenderer::end_frame(this ImGuiRenderer &self, vuk::Value<vuk::ImageAtt
 
     auto vertex_buffer = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eGPUtoCPU, vertex_size_bytes);
     auto index_buffer = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eGPUtoCPU, index_size_bytes);
-    auto vertex_data = vertex_buffer.host_ptr<ImDrawVert>();
-    auto index_data = index_buffer.host_ptr<ImDrawIdx>();
+    auto vertex_data = reinterpret_cast<ImDrawVert *>(vertex_buffer->mapped_ptr);
+    auto index_data = reinterpret_cast<ImDrawIdx *>(index_buffer->mapped_ptr);
     for (const auto *draw_list : draw_data->CmdLists) {
         memcpy(vertex_data, draw_list->VtxBuffer.Data, draw_list->VtxBuffer.Size * sizeof(ImDrawVert));
         memcpy(index_data, draw_list->IdxBuffer.Data, draw_list->IdxBuffer.Size * sizeof(ImDrawIdx));
@@ -158,13 +162,11 @@ auto ImGuiRenderer::end_frame(this ImGuiRenderer &self, vuk::Value<vuk::ImageAtt
 
     auto imgui_pass = vuk::make_pass(
         "imgui",
-        [draw_data,
-         font_atlas_view = self.device->image_view(self.font_atlas_view.id()),
-         vertices = vertex_buffer.buffer,
-         indices = index_buffer.buffer,
-         &pipeline = *self.device->pipeline(self.pipeline.id())](
+        [draw_data, &pipeline = *self.device->pipeline(self.pipeline.id())](
             vuk::CommandBuffer &cmd_list,
             VUK_IA(vuk::Access::eColorWrite) dst,
+            VUK_BA(vuk::Access::eVertexRead) vertex_buf,
+            VUK_BA(vuk::Access::eIndexRead) index_buf,
             VUK_ARG(vuk::ImageAttachment[], vuk::Access::eFragmentSampled) rendering_images) {
             struct PushConstants {
                 glm::vec2 translate = {};
@@ -181,9 +183,9 @@ auto ImGuiRenderer::end_frame(this ImGuiRenderer &self, vuk::Value<vuk::ImageAtt
                 .set_color_blend(dst, vuk::BlendPreset::eAlphaBlend)
                 .set_viewport(0, vuk::Rect2D::framebuffer())
                 .bind_graphics_pipeline(pipeline)
-                .bind_index_buffer(indices, sizeof(ImDrawIdx) == 2 ? vuk::IndexType::eUint16 : vuk::IndexType::eUint32)
+                .bind_index_buffer(index_buf, sizeof(ImDrawIdx) == 2 ? vuk::IndexType::eUint16 : vuk::IndexType::eUint32)
                 .bind_vertex_buffer(
-                    0, vertices, 0, vuk::Packed{ vuk::Format::eR32G32Sfloat, vuk::Format::eR32G32Sfloat, vuk::Format::eR8G8B8A8Unorm })
+                    0, vertex_buf, 0, vuk::Packed{ vuk::Format::eR32G32Sfloat, vuk::Format::eR32G32Sfloat, vuk::Format::eR8G8B8A8Unorm })
                 .push_constants(vuk::ShaderStageFlagBits::eVertex, 0, c);
 
             ImVec2 clip_off = draw_data->DisplayPos;
@@ -221,7 +223,7 @@ auto ImGuiRenderer::end_frame(this ImGuiRenderer &self, vuk::Value<vuk::ImageAtt
                             auto index = im_cmd.TextureId - 1;
                             cmd_list.bind_image(0, 1, rendering_images[index]);
                         } else {
-                            cmd_list.bind_image(0, 1, *font_atlas_view);
+                            cmd_list.bind_image(0, 1, rendering_images[0]);
                         }
 
                         cmd_list.draw_indexed(
@@ -238,7 +240,7 @@ auto ImGuiRenderer::end_frame(this ImGuiRenderer &self, vuk::Value<vuk::ImageAtt
 
     auto imgui_rendering_images_arr = vuk::declare_array("imgui_rendering_images", std::span(self.rendering_attachments));
 
-    return imgui_pass(std::move(attachment), std::move(imgui_rendering_images_arr));
+    return imgui_pass(std::move(attachment), std::move(vertex_buffer), std::move(index_buffer), std::move(imgui_rendering_images_arr));
 }
 
 auto ImGuiRenderer::on_mouse_pos(this ImGuiRenderer &, glm::vec2 pos) -> void {

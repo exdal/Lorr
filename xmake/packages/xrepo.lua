@@ -29,7 +29,7 @@ add_requires("libsdl3 3.2.2", { configs = {
 } })
 
 add_requires("imguizmo-lorr 1.89+WIP")
-add_requires("slang-lorr v2024.17.4")
+add_requires("slang-lorr testing")
 add_requires("vuk 2025.01.30", {
     configs = { debug_allocations = false },
     debug = is_mode("debug")

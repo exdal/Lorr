@@ -43,7 +43,9 @@ struct GLTFModelCallbacks {
        (void *user_data,
         u32 mesh_index,
         u32 vertex_count,
+        u32 vertex_offset,
         u32 index_count,
+        u32 index_offset,
         u32 primitive_count,
         glm::mat4 transform) = nullptr;
     void (*on_new_primitive)
@@ -51,9 +53,7 @@ struct GLTFModelCallbacks {
         u32 mesh_index,
         u32 material_index,
         u32 vertex_count,
-        u32 vertex_offset,
-        u32 index_count,
-        u32 index_offset) = nullptr;
+        u32 index_count) = nullptr;
     // clang-format on
 
     // Accessors

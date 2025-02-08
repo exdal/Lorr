@@ -232,25 +232,33 @@ auto GLTFModelInfo::parse(const fs::path &path, GLTFModelCallbacks callbacks) ->
         }
     }
 
+    ///////////////////////////////////////////////
+    // Geometry
+    ///////////////////////////////////////////////
+
+    u32 global_vertex_offset = 0;
+    u32 global_index_offset = 0;
     for (const auto &node : asset.nodes) {
         if (!node.meshIndex.has_value()) {
             continue;
         }
 
-        auto &mesh = asset.meshes[node.meshIndex.value()];
+        auto mesh_index = static_cast<u32>(node.meshIndex.value());
+        auto &mesh = asset.meshes[mesh_index];
+
         u32 mesh_vertex_count = 0;
         u32 mesh_index_count = 0;
-        u32 mesh_primitive_count = 0;
-
         for (const auto &primitive : mesh.primitives) {
-            auto &index_accessor = asset.accessors[primitive.indicesAccessor.value()];
-            if (auto attrib = primitive.findAttribute("POSITION"); attrib != primitive.attributes.end()) {
-                auto &vertex_accessor = asset.accessors[attrib->accessorIndex];
-                mesh_vertex_count += vertex_accessor.count;
+            if (!primitive.materialIndex.has_value()) {
+                continue;
             }
 
+            auto &index_accessor = asset.accessors[primitive.indicesAccessor.value()];
             mesh_index_count += index_accessor.count;
-            mesh_primitive_count++;
+            if (auto attrib = primitive.findAttribute("POSITION"); attrib != primitive.attributes.end()) {
+                auto &accessor = asset.accessors[attrib->accessorIndex];
+                mesh_vertex_count += accessor.count;
+            }
         }
 
         glm::mat4 transform = {};
@@ -271,31 +279,22 @@ auto GLTFModelInfo::parse(const fs::path &path, GLTFModelCallbacks callbacks) ->
                 callbacks.user_data,
                 static_cast<u32>(node.meshIndex.value()),
                 mesh_vertex_count,
+                global_vertex_offset,
                 mesh_index_count,
-                mesh_primitive_count,
+                global_index_offset,
+                mesh.primitives.size(),
                 transform);
         }
-    }
-
-    u32 global_vertex_offset = 0;
-    u32 global_index_offset = 0;
-    for (const auto &node : asset.nodes) {
-        if (!node.meshIndex.has_value()) {
-            continue;
-        }
-
-        auto mesh_index = static_cast<u32>(node.meshIndex.value());
-        auto &mesh = asset.meshes[mesh_index];
-        u32 mesh_vertex_count = 0;
-        u32 mesh_index_count = 0;
 
         for (const auto &primitive : mesh.primitives) {
             if (!primitive.materialIndex.has_value()) {
                 continue;
             }
 
+            u32 primitive_vertex_count = 0;
+            u32 primitive_index_count = 0;
             auto &index_accessor = asset.accessors[primitive.indicesAccessor.value()];
-            mesh_index_count += index_accessor.count;
+            primitive_index_count += index_accessor.count;
 
             if (callbacks.on_access_index) {
                 fastgltf::iterateAccessorWithIndex<u32>(asset, index_accessor, [&](u32 index, usize i) {  //
@@ -305,7 +304,7 @@ auto GLTFModelInfo::parse(const fs::path &path, GLTFModelCallbacks callbacks) ->
 
             if (auto attrib = primitive.findAttribute("POSITION"); attrib != primitive.attributes.end() && callbacks.on_access_position) {
                 auto &accessor = asset.accessors[attrib->accessorIndex];
-                mesh_vertex_count += accessor.count;
+                primitive_vertex_count += accessor.count;
 
                 fastgltf::iterateAccessorWithIndex<glm::vec3>(asset, accessor, [&](glm::vec3 pos, usize i) {  //
                     callbacks.on_access_position(callbacks.user_data, mesh_index, global_vertex_offset + i, pos);
@@ -334,14 +333,12 @@ auto GLTFModelInfo::parse(const fs::path &path, GLTFModelCallbacks callbacks) ->
             }
 
             if (callbacks.on_new_primitive) {
-                callbacks.on_new_primitive(
+                callbacks.on_new_primitive(  //
                     callbacks.user_data,
                     mesh_index,
                     primitive.materialIndex.value(),
-                    mesh_vertex_count,
-                    global_vertex_offset,
-                    mesh_index_count,
-                    global_index_offset);
+                    primitive_vertex_count,
+                    primitive_index_count);
             }
 
             global_vertex_offset += mesh_vertex_count;

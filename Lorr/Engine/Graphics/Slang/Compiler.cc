@@ -170,12 +170,15 @@ auto SlangModule::get_entry_point(std::string_view name) -> ls::option<SlangEntr
         }
     }
 
+    auto *program_layout = linked_program->getLayout();
+    LS_EXPECT(program_layout->getEntryPointCount() == 1);
+
     Slang::ComPtr<slang::IBlob> spirv_code;
     {
         Slang::ComPtr<slang::IBlob> diagnostics_blob;
         auto result = linked_program->getEntryPointCode(0, 0, spirv_code.writeRef(), diagnostics_blob.writeRef());
         if (diagnostics_blob) {
-            // warning spam
+            LOG_TRACE("{}", (const char *)diagnostics_blob->getBufferPointer());
         }
 
         if (SLANG_FAILED(result)) {
@@ -184,8 +187,6 @@ auto SlangModule::get_entry_point(std::string_view name) -> ls::option<SlangEntr
         }
     }
 
-    auto *program_layout = linked_program->getLayout();
-    LS_EXPECT(program_layout->getEntryPointCount() == 1);
     // auto *entry_point_refl = program_layout->getEntryPointByIndex(0);
 
     std::vector<u32> ir(spirv_code->getBufferSize() / 4);
@@ -301,19 +302,22 @@ auto SlangCompiler::new_session(const SlangSessionInfo &info) -> ls::option<Slan
 
     slang::CompilerOptionEntry entries[] = {
 #if LS_DEBUG
-        { slang::CompilerOptionName::Optimization,
-          { .kind = slang::CompilerOptionValueKind::Int, .intValue0 = SLANG_OPTIMIZATION_LEVEL_NONE } },
-        { slang::CompilerOptionName::DebugInformationFormat,
-          { .kind = slang::CompilerOptionValueKind::Int, .intValue0 = SLANG_DEBUG_INFO_FORMAT_C7 } },
-        { slang::CompilerOptionName::DumpIntermediates, { .kind = slang::CompilerOptionValueKind::Int, .intValue0 = 1 } },
+        { .name = slang::CompilerOptionName::Optimization,
+          .value = { .kind = slang::CompilerOptionValueKind::Int, .intValue0 = SLANG_OPTIMIZATION_LEVEL_NONE } },
+        { .name = slang::CompilerOptionName::DebugInformationFormat,
+          .value = { .kind = slang::CompilerOptionValueKind::Int, .intValue0 = SLANG_DEBUG_INFO_FORMAT_C7 } },
 #else
         { slang::CompilerOptionName::Optimization,
           { .kind = slang::CompilerOptionValueKind::Int, .intValue0 = SLANG_OPTIMIZATION_LEVEL_MAXIMAL } },
 #endif
-        { slang::CompilerOptionName::UseUpToDateBinaryModule, { .kind = slang::CompilerOptionValueKind::Int, .intValue0 = 1 } },
-        { slang::CompilerOptionName::GLSLForceScalarLayout, { .kind = slang::CompilerOptionValueKind::Int, .intValue0 = 1 } },
-        { slang::CompilerOptionName::Language, { .kind = slang::CompilerOptionValueKind::String, .stringValue0 = "slang" } },
-        { slang::CompilerOptionName::DisableWarnings, { .kind = slang::CompilerOptionValueKind::String, .stringValue0 = "39001,41012" } },
+        { .name = slang::CompilerOptionName::UseUpToDateBinaryModule,
+          .value = { .kind = slang::CompilerOptionValueKind::Int, .intValue0 = 1 } },
+        { .name = slang::CompilerOptionName::GLSLForceScalarLayout,
+          .value = { .kind = slang::CompilerOptionValueKind::Int, .intValue0 = 1 } },
+        { .name = slang::CompilerOptionName::Language,
+          .value = { .kind = slang::CompilerOptionValueKind::String, .stringValue0 = "slang" } },
+        { .name = slang::CompilerOptionName::DisableWarnings,
+          .value = { .kind = slang::CompilerOptionValueKind::String, .stringValue0 = "39001,41012" } },
     };
     std::vector<slang::PreprocessorMacroDesc> macros;
     macros.reserve(info.definitions.size());
@@ -323,7 +327,7 @@ auto SlangCompiler::new_session(const SlangSessionInfo &info) -> ls::option<Slan
 
     slang::TargetDesc target_desc = {
         .format = SLANG_SPIRV,
-        .profile = impl->global_session->findProfile("glsl460"),
+        .profile = impl->global_session->findProfile("spirv_1_4"),
         .flags = SLANG_TARGET_FLAG_GENERATE_SPIRV_DIRECTLY,
         .floatingPointMode = SLANG_FLOATING_POINT_MODE_FAST,
         .lineDirectiveMode = SLANG_LINE_DIRECTIVE_MODE_STANDARD,

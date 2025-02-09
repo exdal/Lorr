@@ -142,10 +142,13 @@ public struct AtmosphereIntegrateInfo {
     public float sun_intensity;
     public float max_integration_length;
     public AtmosphereSampling sampling;
-    public Texture2D<float4> transmittance_image;
-    public Optional<Texture2D<float4>> multiscattering_image;
     public bool eval_mie_rayleigh_phase;
     public bool eval_planet_luminance;
+
+    public Texture2D<float4> transmittance_image;
+#ifndef ATMOS_NO_EVAL_MS
+    public Texture2D<float4> multiscattering_image;
+#endif
 
     public __init() {
         this.eye_pos = {};
@@ -154,10 +157,12 @@ public struct AtmosphereIntegrateInfo {
         this.sun_intensity = 1.0;
         this.max_integration_length = 9000000.0;
         this.sampling = {};
-        this.transmittance_image = {};
-        this.multiscattering_image = none;
         this.eval_mie_rayleigh_phase = true;
         this.eval_planet_luminance = false;
+        this.transmittance_image = {};
+#ifndef ATMOS_NO_EVAL_MS
+        this.multiscattering_image = {};
+#endif
     }
 };
 
@@ -230,13 +235,12 @@ public func integrate_single_scattered_luminance(
         float2 transmittance_uv = get_transmittance_lut_uv(atmos, float2(h, sun_theta));
         float3 sun_transmittance = info.transmittance_image.Sample(lut_sampler, transmittance_uv).rgb;
 
-        float3 MS = 0.0;
-        if (info.multiscattering_image.hasValue) {
-            float2 multiscatter_uv = get_multiscattering_lut_uv(atmos, altitude, sun_theta);
-            MS = info.multiscattering_image.value.Sample(lut_sampler, multiscatter_uv).rgb;
-        }
-
-        float3 scattering_phase = 0.0;
+        float3 MS = float3(0.0);
+#ifndef ATMOS_NO_EVAL_MS
+        float2 multiscatter_uv = get_multiscattering_lut_uv(atmos, altitude, sun_theta);
+        MS = info.multiscattering_image.Sample(lut_sampler, multiscatter_uv).rgb;
+#endif
+        float3 scattering_phase = float3(0.0);
         if (info.eval_mie_rayleigh_phase) {
             scattering_phase = medium_info.mie_scattering * mie_phase + medium_info.rayleigh_scattering * rayleigh_phase;
         } else {

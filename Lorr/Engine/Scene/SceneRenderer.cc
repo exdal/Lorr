@@ -65,6 +65,7 @@ auto SceneRenderer::setup_persistent_resources(this SceneRenderer &self) -> void
         { .aspectMask = vuk::ImageAspectFlagBits::eColor })
         .value();
     self.sky_multiscatter_pipeline = Pipeline::create(*self.device, {
+        .definitions = {{"ATMOS_NO_EVAL_MS", "1"}},
         .module_name = "atmos.ms",
         .root_path = shaders_root,
         .shader_path = shaders_root / "atmos" / "ms.slang",
@@ -716,8 +717,8 @@ auto SceneRenderer::render(this SceneRenderer &self, const SceneRenderInfo &info
             return std::make_tuple(dst, depth, camera);
         });
 
-    // std::tie(final_attachment, depth_attachment, camera_buffer) =
-    //     editor_grid_pass(std::move(final_attachment), std::move(depth_attachment), std::move(camera_buffer));
+    std::tie(final_attachment, depth_attachment, camera_buffer) =
+        editor_grid_pass(std::move(final_attachment), std::move(depth_attachment), std::move(camera_buffer));
 
     //  ── TONEMAP ─────────────────────────────────────────────────────────
     auto tonemap_pass = vuk::make_pass(

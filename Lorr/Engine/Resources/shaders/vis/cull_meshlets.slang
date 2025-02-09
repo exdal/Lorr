@@ -11,7 +11,7 @@ import "../lorr";
 #endif
 
 [shader("compute")]
-[numthreads(128, 1, 1)]
+[numthreads(CULLING_MESHLET_COUNT, 1, 1)]
 void cs_main(uint3 thread_id : SV_DispatchThreadID) {
     const u32 meshlet_id = thread_id.x;
     if (meshlet_id >= meshlet_count) {

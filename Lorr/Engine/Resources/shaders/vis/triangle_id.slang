@@ -48,8 +48,8 @@ uint hash(uint a) {
 
 [shader("fragment")]
 float4 fs_main(VertexOutput input) : SV_Target {
-    uint mhash = hash(input.meshlet_id);
-    vec3 mcolor = vec3(float(mhash & 255), float((mhash >> 8) & 255), float((mhash >> 16) & 255)) / 255.0;
-    return float4(mcolor, 1.0);
+    const u32 h = hash(input.meshlet_id);
+    const float3 color = vec3(float(h & 255), float((h >> 8) & 255), float((h >> 16) & 255)) / 255.0;
+    return float4(color, 1.0);
 }
 

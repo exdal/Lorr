@@ -22,11 +22,12 @@ void cs_main(uint3 thread_id : SV_DispatchThreadID) {
     info.eye_pos = ray_pos;
     info.sun_dir = sun_dir;
     //info.sun_intensity = sun->intensity;
-    info.transmittance_image = transmittance_lut;
     info.eval_mie_rayleigh_phase = false;
     info.eval_planet_luminance = true;
     info.sampling.variable_sample_count = false;
     info.sampling.initial_sample_count = 32;
+
+    info.transmittance_image = transmittance_lut;
 
     float3 luminance = float3(0.0);
     float3 multi_scattering_as_1 = float3(0.0);

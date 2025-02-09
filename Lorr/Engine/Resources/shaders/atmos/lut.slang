@@ -60,13 +60,14 @@ void cs_main(uint3 thread_id : SV_DispatchThreadID) {
     info.eye_dir = eye_dir;
     info.sun_dir = sun_dir;
     info.sun_intensity = sun.intensity;
-    info.transmittance_image = transmittance_lut;
-    info.multiscattering_image = multiscattering_lut;
 
     const int sample_count = 32;
     info.sampling.variable_sample_count = true;
     info.sampling.min_sample_count = sample_count;
     info.sampling.max_sample_count = sample_count;
+
+    info.transmittance_image = transmittance_lut;
+    info.multiscattering_image = multiscattering_lut;
 
     const let result = integrate_single_scattered_luminance(sampler, atmos, info);
     const float transmittance = dot(result.transmittance, float3(1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f));

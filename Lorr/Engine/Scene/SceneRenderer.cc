@@ -204,10 +204,11 @@ auto SceneRenderer::setup_persistent_resources(this SceneRenderer &self) -> void
         self.sky_transmittance_lut_view.discard(*self.device, "sky_transmittance_lut", vuk::ImageUsageFlagBits::eStorage);
     auto multiscatter_lut_attachment =
         self.sky_multiscatter_lut_view.discard(*self.device, "sky_multiscatter_lut", vuk::ImageUsageFlagBits::eStorage);
-    auto temp_atmos = transfer_man.scratch_buffer(GPUAtmosphereData{
-        .transmittance_lut_size = self.sky_transmittance_lut_view.extent(),
-        .multiscattering_lut_size = self.sky_multiscatter_lut_view.extent(),
-    });
+    auto temp_atmos = transfer_man.scratch_buffer(
+        GPUAtmosphereData{
+            .transmittance_lut_size = self.sky_transmittance_lut_view.extent(),
+            .multiscattering_lut_size = self.sky_multiscatter_lut_view.extent(),
+        });
     auto temp_sun = transfer_man.scratch_buffer(GPUSunData{});
 
     std::tie(transmittance_lut_attachment, temp_atmos) =
@@ -219,9 +220,10 @@ auto SceneRenderer::setup_persistent_resources(this SceneRenderer &self) -> void
     transfer_man.wait_on(std::move(multiscatter_lut_attachment));
 
     //  ── CLOUD LUTS ──────────────────────────────────────────────────────
-    auto temp_clouds = transfer_man.scratch_buffer(GPUCloudsData{
-        .noise_lut_size = self.cloud_shape_noise_lut_view.extent(),
-    });
+    auto temp_clouds = transfer_man.scratch_buffer(
+        GPUCloudsData{
+            .noise_lut_size = self.cloud_shape_noise_lut_view.extent(),
+        });
     auto cloud_noise_lut_pass = vuk::make_pass(
         "cloud noise pass",
         [&pipeline = *self.device->pipeline(self.cloud_noise_pipeline.id())](

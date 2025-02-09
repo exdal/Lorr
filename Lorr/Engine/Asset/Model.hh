@@ -58,7 +58,6 @@ struct Model {
         std::string name = {};
 
         // Geometry info of whole mesh
-        std::vector<u32> meshlet_indices = {};
         u32 vertex_count = 0;
         u32 vertex_offset = 0;
         u32 index_count = 0;

@@ -24,10 +24,14 @@ VertexOutput vs_main(u32 vertex_id : SV_VertexID) {
     const u32 primitive_id = vertex_id & MESHLET_PRIMITIVE_MASK;
 
     const Meshlet meshlet =   meshlets[meshlet_id];
-    const u32 primitive =     u32(local_indices[meshlet.triangle_offset + primitive_id]);
-    const u32 index =         indices          [meshlet.index_offset    + primitive];
-    const float3 vertex_pos = vertex_positions [meshlet.vertex_offset   + index];
-    const Entity entity =     entities[c.entity_index];
+    const uint vertex_offset = meshlet.vertex_offset;
+    const uint index_offset = meshlet.index_offset;
+    const uint triangle_offset = meshlet.triangle_offset;
+
+    const u32 primitive = u32(local_indices[triangle_offset + primitive_id]);
+    const u32 index = indices[index_offset + primitive];
+    const float3 vertex_pos = vertex_positions[vertex_offset + index];
+    const Entity entity = entities[c.entity_index];
 
     VertexOutput output;
     output.position = mul(entity.local_transform_mat, float4(vertex_pos, 1.0));

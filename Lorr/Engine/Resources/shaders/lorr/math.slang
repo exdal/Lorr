@@ -93,12 +93,10 @@ public Optional<float2> ray_sphere_intersect_outside(float3 ray_origin, float3 r
     float sol0 = (-b - sqrt(delta)) / (2.0 * a);
     float sol1 = (-b + sqrt(delta)) / (2.0 * a);
 
-    // Intersection on negative direction, no suitable for ray.
     if (sol1 <= 0.0 || sol0 <= 0.0) {
         return none;
     }
 
-    // Two positive intersection, return nearest one.
     return float2(sol0, sol1);
 }
 

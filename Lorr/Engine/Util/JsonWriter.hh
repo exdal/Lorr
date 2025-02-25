@@ -111,7 +111,7 @@ struct JsonWriter {
     JsonWriter &operator=(const glm::quat &quat) {
         constexpr static std::string_view components[] = { "x", "y", "z", "w" };
         begin_obj();
-        for (usize i = 0; i < count_of(components); i++) {
+        for (usize i = 0; i < ls::count_of(components); i++) {
             key(components[i]);
             new_value(quat[static_cast<i32>(i)]);
         }

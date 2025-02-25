@@ -97,4 +97,25 @@ T *temp_ptr(T &&v) {
     return &v;
 }
 
+template<typename T>
+concept Container = requires(T t) {
+    std::begin(t);
+    std::end(t);
+};
+
+template<typename T, usize N>
+constexpr usize count_of(T (&)[N]) {
+    return N;
+}
+
+template<Container T>
+inline usize size_bytes(const T &v) {
+    return v.size() * sizeof(typename T::value_type);
+}
+
+template<class... T>
+struct match : T... {
+    using T::operator()...;
+};
+
 }  // namespace ls

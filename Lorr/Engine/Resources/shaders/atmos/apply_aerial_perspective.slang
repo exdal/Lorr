@@ -4,9 +4,7 @@ import "../lorr";
 [[vk::binding(0, 0)]] SamplerState sampler;
 [[vk::binding(1, 0)]] Texture2D<float4> depth_image;
 [[vk::binding(2, 0)]] Texture3D<float4> aerial_perspective_lut;
-[[vk::binding(3, 0)]] ConstantBuffer<Atmosphere, ScalarDataLayout> atmos;
-[[vk::binding(4, 0)]] ConstantBuffer<Sun, ScalarDataLayout> sun;
-[[vk::binding(5, 0)]] ConstantBuffer<Camera, ScalarDataLayout> camera;
+[[vk::binding(3, 0)]] ConstantBuffer<Scene, ScalarDataLayout> scene;
 
 struct VertexOutput {
     float4 position     : SV_Position;
@@ -28,6 +26,9 @@ float4 fs_main(VertexOutput input) : SV_TARGET {
     if (sampled_depth == 1.0) {
         discard;
     }
+
+    const let camera = scene.camera;
+    const let atmos = scene.atmosphere;
 
     float3 clip_space = float3(input.tex_coord * 2.0 - 1.0, sampled_depth);
     float4 depth_position = mul(camera.inv_projection_view_mat, float4(clip_space, 1.0));

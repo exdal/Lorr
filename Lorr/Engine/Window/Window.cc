@@ -1,6 +1,7 @@
 #include "Engine/Window/Window.hh"
 
 #include <SDL3/SDL.h>
+#include <SDL3/SDL_dialog.h>
 #include <SDL3/SDL_video.h>
 #include <SDL3/SDL_vulkan.h>
 
@@ -84,6 +85,7 @@ auto Window::create(const WindowInfo &info) -> Window {
     i32 real_width;
     i32 real_height;
     SDL_GetWindowSizeInPixels(impl->handle, &real_width, &real_height);
+    SDL_StartTextInput(impl->handle);
 
     impl->width = real_width;
     impl->height = real_height;
@@ -96,6 +98,7 @@ auto Window::create(const WindowInfo &info) -> Window {
 auto Window::destroy() -> void {
     ZoneScoped;
 
+    SDL_StopTextInput(impl->handle);
     SDL_DestroyWindow(impl->handle);
 }
 
@@ -144,8 +147,7 @@ auto Window::poll(const WindowCallbacks &callbacks) -> void {
                     callbacks.on_close(callbacks.user_data);
                 }
             } break;
-            default:
-                break;
+            default:;
         }
     }
 }

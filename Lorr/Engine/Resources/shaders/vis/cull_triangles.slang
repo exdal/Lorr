@@ -1,12 +1,32 @@
 import vis;
 import "../lorr";
 
-[[vk::binding(0, 0)]] StructuredBuffer<Meshlet, ScalarDataLayout> meshlets;
-[[vk::binding(1, 0)]] StructuredBuffer<u32, ScalarDataLayout> visible_meshlet_indices;
-// Resulting buffers
-[[vk::binding(2, 0)]] RWStructuredBuffer<DrawIndexedIndirectCommand, ScalarDataLayout> indirect_draw_commands;
-[[vk::binding(3, 0)]] RWStructuredBuffer<u32, ScalarDataLayout> reordered_indices;
-[[vk::push_constant]] u32 meshlet_count;
+[[vk::binding(0, 0)]] restrict writeonly
+GLSLShaderStorageBuffer<DrawIndexedIndirectCommand, ScalarDataLayout> indirect_draw_command;
+
+struct VisibleMeshletInstancesIndices {
+    u32 indices[];
+};
+[[vk::binding(1, 0)]] restrict readonly
+GLSLShaderStorageBuffer<VisibleMeshletInstancesIndices, ScalarDataLayout> visible_meshlet_instances_indices;
+
+struct Models {
+    Model models[];
+};
+[[vk::binding(2, 0)]] restrict readonly
+GLSLShaderStorageBuffer<Models, ScalarDataLayout> models;
+
+struct MeshletInstances {
+    MeshletInstance instances[];
+};
+[[vk::binding(3, 0)]] restrict readonly
+GLSLShaderStorageBuffer<MeshletInstances, ScalarDataLayout> meshlet_instances;
+
+struct ReorderedIndices {
+    u32 indices[];
+};
+[[vk::binding(4, 0)]] restrict writeonly
+GLSLShaderStorageBuffer<ReorderedIndices, ScalarDataLayout> reordered_indices;
 
 // Shut up LSP
 #ifndef CULLING_TRIANGLE_COUNT
@@ -17,25 +37,27 @@ groupshared u32 base_index_shared;
 
 [shader("compute")]
 [numthreads(CULLING_TRIANGLE_COUNT, 1, 1)]
-void cs_main(uint3 group_id : SV_GroupID, uint3 invocation_id : SV_GroupThreadID) {
-    const u32 meshlet_id = group_id.x;
-    const Meshlet meshlet = meshlets[meshlet_id];
+void cs_main(uint3 group_id : SV_GroupID, uint3 group_thread_id : SV_GroupThreadID) {
+    const u32 local_index = group_thread_id.x;
+    const u32 meshlet_instance_index = visible_meshlet_instances_indices.indices[group_id.x];
+    const MeshletInstance meshlet_instance = meshlet_instances.instances[meshlet_instance_index];
+    const Model model = models.models[meshlet_instance.model_index];
+    const u32 meshlet_index = meshlet_instance.meshlet_index;
+    const Meshlet meshlet = model.meshlets[meshlet_index];
 
-    const u32 local_id = invocation_id.x;
-
-    if (local_id == 0) {
-        InterlockedAdd(indirect_draw_commands[0].index_count, meshlet.triangle_count * 3, base_index_shared);
+    if (local_index == 0) {
+        InterlockedAdd(indirect_draw_command.index_count, meshlet.triangle_count * 3, base_index_shared);
     }
 
     GroupMemoryBarrierWithGroupSync();
 
-    if (invocation_id.x >= meshlet.triangle_count) {
+    if (local_index >= meshlet.triangle_count) {
         return;
     }
 
-    const u32 triangle_id = local_id * 3;
-    const u32 index_offset = base_index_shared + triangle_id;
-    reordered_indices[index_offset + 0] = (meshlet_id << MESHLET_PRIMITIVE_BITS) | ((triangle_id + 0) & MESHLET_PRIMITIVE_MASK);
-    reordered_indices[index_offset + 1] = (meshlet_id << MESHLET_PRIMITIVE_BITS) | ((triangle_id + 1) & MESHLET_PRIMITIVE_MASK);
-    reordered_indices[index_offset + 2] = (meshlet_id << MESHLET_PRIMITIVE_BITS) | ((triangle_id + 2) & MESHLET_PRIMITIVE_MASK);
+    const u32 triangle_index = local_index * 3;
+    const u32 index_offset = base_index_shared + triangle_index;
+    reordered_indices.indices[index_offset + 0] = (meshlet_index << MESHLET_PRIMITIVE_BITS) | ((triangle_index + 0) & MESHLET_PRIMITIVE_MASK);
+    reordered_indices.indices[index_offset + 1] = (meshlet_index << MESHLET_PRIMITIVE_BITS) | ((triangle_index + 1) & MESHLET_PRIMITIVE_MASK);
+    reordered_indices.indices[index_offset + 2] = (meshlet_index << MESHLET_PRIMITIVE_BITS) | ((triangle_index + 2) & MESHLET_PRIMITIVE_MASK);
 }

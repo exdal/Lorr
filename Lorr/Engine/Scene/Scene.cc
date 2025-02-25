@@ -64,16 +64,38 @@ auto Scene::init(this Scene &self, const std::string &name) -> bool {
         .each([&self](flecs::iter &it, usize i, ECS::Transform &) {
             auto entity = it.entity(i);
             if (it.event() == flecs::OnAdd) {
-                auto entity_id = self.add_gpu_entity(entity);
-                if (entity.has<ECS::EditorCamera>()) {
-                    self.editor_camera_id = entity_id;
-                }
-
-                self.dirty_entities.push_back(entity_id);
+                auto transform_id = self.add_transform(entity);
+                self.dirty_transforms.push_back(transform_id);
             } else if (it.event() == flecs::OnRemove) {
-                if (auto id = self.get_gpu_entity(entity)) {
-                    self.remove_gpu_entity(id.value());
-                }
+                self.remove_transform(entity);
+            }
+        });
+
+    self.world
+        ->observer<ECS::EditorCamera>()  //
+        .event(flecs::Monitor)
+        .each([&self](flecs::iter &it, usize i, ECS::EditorCamera) {
+            auto entity = it.entity(i);
+            if (it.event() == flecs::OnAdd) {
+                self.editor_camera = entity;
+            } else if (it.event() == flecs::OnRemove) {
+                self.editor_camera.clear();
+            }
+        });
+
+    self.world
+        ->observer<ECS::RenderingModel>()  //
+        .event(flecs::Monitor)
+        .each([&self](flecs::iter &it, usize i, ECS::RenderingModel &rendering_model) {
+            if (!rendering_model.uuid) {
+                return;
+            }
+
+            auto entity = it.entity(i);
+            if (it.event() == flecs::OnAdd) {
+                self.attach_model(entity, rendering_model.uuid);
+            } else if (it.event() == flecs::OnRemove) {
+                self.detach_model(entity);
             }
         });
 
@@ -94,9 +116,9 @@ auto Scene::destroy(this Scene &self) -> void {
 
     self.name.clear();
     self.root.clear();
-    self.gpu_entities.reset();
-    self.gpu_entities_remap.clear();
-    self.dirty_entities.clear();
+    self.entity_transforms.reset();
+    self.entity_transforms_map.clear();
+    self.dirty_transforms.clear();
     self.world.reset();
 }
 
@@ -172,7 +194,7 @@ auto Scene::import_from_file(this Scene &self, const fs::path &path) -> bool {
                 }
 
                 std::visit(
-                    match{
+                    ls::match{
                         [](const auto &) {},
                         [&](f32 *v) { *v = static_cast<f32>(member_json.get_double()); },
                         [&](i32 *v) { *v = static_cast<i32>(member_json.get_int64()); },
@@ -229,7 +251,7 @@ auto Scene::export_to_file(this Scene &self, const fs::path &path) -> bool {
             component.for_each([&](usize &, std::string_view member_name, ECS::ComponentWrapper::Member &member) {
                 auto &member_json = json[member_name];
                 std::visit(
-                    match{
+                    ls::match{
                         [](const auto &) {},
                         [&](f32 *v) { member_json = *v; },
                         [&](i32 *v) { member_json = *v; },
@@ -306,7 +328,6 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, const vuk::Extent3
     -> vuk::Value<vuk::ImageAttachment> {
     ZoneScoped;
 
-    auto &app = Application::get();
     // clang-format off
     auto camera_query = self.get_world()
         .query_builder<ECS::Transform, ECS::Camera, ECS::ActiveCamera>()
@@ -319,7 +340,7 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, const vuk::Extent3
         .build();
     // clang-format on
 
-    ls::option<GPUCameraData> active_camera_data = ls::nullopt;
+    ls::option<GPU::Camera> active_camera_data = ls::nullopt;
     camera_query.each([&](flecs::entity, ECS::Transform &t, ECS::Camera &c, ECS::ActiveCamera) {
         auto projection_mat = glm::perspective(glm::radians(c.fov), c.aspect_ratio, c.near_clip, c.far_clip);
         projection_mat[1][1] *= -1;
@@ -328,7 +349,7 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, const vuk::Extent3
         auto rotation_mat = glm::mat4_cast(Math::compose_quat(glm::radians(t.rotation)));
         auto view_mat = rotation_mat * translation_mat;
 
-        GPUCameraData camera_data = {};
+        GPU::Camera camera_data = {};
         camera_data.projection_mat = projection_mat;
         camera_data.view_mat = view_mat;
         camera_data.projection_view_mat = camera_data.projection_mat * camera_data.view_mat;
@@ -340,21 +361,17 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, const vuk::Extent3
         active_camera_data.emplace(camera_data);
     });
 
-    ls::option<GPUSunData> sun_data = ls::nullopt;
-    ls::option<GPUAtmosphereData> atmos_data = ls::nullopt;
-    ls::option<GPUCloudsData> clouds_data = ls::nullopt;
+    ls::option<GPU::Sun> sun_data = ls::nullopt;
+    ls::option<GPU::Atmosphere> atmos_data = ls::nullopt;
+    ls::option<GPU::Clouds> clouds_data = ls::nullopt;
     directional_light_query.each([&](flecs::entity e, ECS::DirectionalLight &light) {
-        auto rad = glm::radians(light.direction);
+        auto light_dir_rad = glm::radians(light.direction);
 
-        GPUSunData sun = {
-            .direction = {
-                glm::cos(rad.x) * glm::sin(rad.y),
-                glm::sin(rad.x) * glm::sin(rad.y),
-                glm::cos(rad.y),
-            },
-            .intensity = light.intensity
-        };
-        sun_data.emplace(sun);
+        auto &sun = sun_data.emplace();
+        sun.direction.x = glm::cos(light_dir_rad.x) * glm::sin(light_dir_rad.y);
+        sun.direction.y = glm::sin(light_dir_rad.x) * glm::sin(light_dir_rad.y);
+        sun.direction.z = glm::cos(light_dir_rad.y);
+        sun.intensity = light.intensity;
 
         if (e.has<ECS::Atmosphere>()) {
             const auto &atmos_info = *e.get<ECS::Atmosphere>();
@@ -392,63 +409,78 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, const vuk::Extent3
         }
     });
 
-    GPUEntityID entity_id = {};
-    u32 meshlet_count = 0;
-    BufferID positions_buffer_id = {};
-    BufferID meshlets_buffer_id = {};
-    BufferID indirect_vertices_buffer_id = {};
-    BufferID local_indices_buffer_id = {};
-    model_query.each([&](flecs::entity e, ECS::RenderingModel &rendering_model) {
-        auto *model = app.asset_man.get_model(rendering_model.model);
-        if (!model) {
-            return;
+    if (self.models_dirty) {
+        memory::ScopedStack stack;
+        self.models_dirty = false;
+
+        auto &app = Application::get();
+        auto gpu_models = stack.alloc<GPU::Model>(self.rendering_models.size());
+        u32 meshlet_instance_count = 0;
+
+        for (const auto &[gpu_model, model_it] : std::views::zip(gpu_models, self.rendering_models)) {
+            const auto &model_uuid = model_it.first;
+            auto *model = app.asset_man.get_model(model_uuid);
+
+            meshlet_instance_count += model->meshlet_count * model_it.second.size();
+
+            gpu_model.vertex_positions = model->vertex_positions.device_address();
+            gpu_model.indices = model->indices.device_address();
+            gpu_model.local_triangle_indices = model->local_triangle_indices.device_address();
+            gpu_model.meshlets = model->meshlets.device_address();
+            gpu_model.meshlet_bounds = model->meshlet_bounds.device_address();
         }
 
-        entity_id = self.get_gpu_entity(e).value();
-        meshlet_count = model->meshlets.size();
-        positions_buffer_id = model->positions_buffer.id();
-        meshlets_buffer_id = model->meshlet_buffer.id();
-        indirect_vertices_buffer_id = model->indirect_vertices_buffer.id();
-        local_indices_buffer_id = model->local_indices_buffer.id();
-    });
+        auto gpu_meshlet_instances = stack.alloc<GPU::MeshletInstance>(meshlet_instance_count);
+        u32 model_offset = 0;
+        u32 meshlet_instance_offset = 0;
+        for (const auto &model_it : self.rendering_models) {
+            auto &model_uuid = model_it.first;
+            auto &transform_ids = model_it.second;
+            auto *model = app.asset_man.get_model(model_uuid);
+            for (const auto transform_id : transform_ids) {
+                for (u32 meshlet_index = 0; meshlet_index < model->meshlet_count; meshlet_index++) {
+                    auto &meshlet_instance = gpu_meshlet_instances[meshlet_instance_offset];
+                    meshlet_instance.model_index = model_offset;
+                    meshlet_instance.material_index = 0;
+                    meshlet_instance.transform_index = SlotMap_decode_id(transform_id).index;
+                    meshlet_instance.meshlet_index = meshlet_index;
 
-    for (const auto dirty_entity_id : self.dirty_entities) {
-        auto *dirty_entity = self.gpu_entities.slot(dirty_entity_id);
-        LS_EXPECT(dirty_entity->has<ECS::Transform>());
-        auto *transform = dirty_entity->get_mut<ECS::Transform>();
-        auto gpu_entity_info = GPUEntityTransform{};
-        auto &matrix = gpu_entity_info.local_transform_mat;
-
-        const auto &rotation = glm::radians(transform->rotation);
-        matrix = glm::translate(glm::mat4(1.0), transform->position);
-        matrix *= glm::rotate(glm::mat4(1.0), rotation.x, glm::vec3(1.0, 0.0, 0.0));
-        matrix *= glm::rotate(glm::mat4(1.0), rotation.y, glm::vec3(0.0, 1.0, 0.0));
-        matrix *= glm::rotate(glm::mat4(1.0), rotation.z, glm::vec3(0.0, 0.0, 1.0));
-        matrix *= glm::scale(glm::mat4(1.0), transform->scale);
-
-        if (dirty_entity->has<ECS::RenderingModel>()) {
-            // TODO: Split up model nodes into child entities.
+                    meshlet_instance_offset += 1;
+                }
+            }
+            model_offset += 1;
         }
 
-        renderer.update_entity_transform(dirty_entity_id, gpu_entity_info);
+        auto compose_info = SceneComposeInfo{
+            .gpu_models = gpu_models,
+            .gpu_meshlet_instances = gpu_meshlet_instances,
+        };
+        renderer.compose(compose_info);
     }
-    self.dirty_entities.clear();
 
-    return renderer.render(SceneRenderInfo{
+    auto transforms = self.entity_transforms.slots_unsafe();
+
+    auto scene_info = GPU::Scene{
+        .camera = active_camera_data.value(),
+        .sun = sun_data.value_or(GPU::Sun{}),
+        .atmosphere = atmos_data.value_or(GPU::Atmosphere{}),
+        .clouds = clouds_data.value_or(GPU::Clouds{}),
+    };
+
+    auto render_info = SceneRenderInfo{
         .format = format,
         .extent = extent,
-        .meshlet_count = meshlet_count,
-        .entity_id = entity_id,
-        .materials_buffer_id = app.asset_man.material_buffer(),
-        .positions_buffer_id = positions_buffer_id,
-        .meshlet_buffer_id = meshlets_buffer_id,
-        .indirect_vertices_buffer_id = indirect_vertices_buffer_id,
-        .local_indices_buffer_id = local_indices_buffer_id,
-        .camera_info = active_camera_data,
-        .sun = sun_data,
-        .atmosphere = atmos_data,
-        .clouds = clouds_data,
-    });
+        .scene_info = scene_info,
+        .dirty_transform_ids = self.dirty_transforms,
+        .transforms = transforms,
+        .render_atmos = sun_data.has_value() && atmos_data.has_value(),
+        .render_clouds = clouds_data.has_value(),
+    };
+
+    auto rendered_attachment = renderer.render(render_info);
+    self.dirty_transforms.clear();
+
+    return rendered_attachment;
 }
 
 auto Scene::tick(this Scene &self, f32 delta_time) -> bool {
@@ -461,10 +493,96 @@ auto Scene::set_name(this Scene &self, const std::string &name) -> void {
     self.name = name;
 }
 
-auto Scene::set_dirty(this Scene &self, GPUEntityID gpu_entity_id) -> void {
+auto Scene::set_dirty(this Scene &self, flecs::entity entity) -> void {
     ZoneScoped;
 
-    self.dirty_entities.push_back(gpu_entity_id);
+    LS_EXPECT(entity.has<ECS::Transform>());
+    auto it = self.entity_transforms_map.find(entity);
+    if (it == self.entity_transforms_map.end()) {
+        return;
+    }
+
+    auto transform_id = it->second;
+    const auto *entity_transform = entity.get<ECS::Transform>();
+    auto *gpu_transform = self.entity_transforms.slot(transform_id);
+
+    auto &local_transform = gpu_transform->local;
+    const auto &rotation = glm::radians(entity_transform->rotation);
+    local_transform = glm::translate(glm::mat4(1.0), entity_transform->position);
+    local_transform *= glm::rotate(glm::mat4(1.0), rotation.x, glm::vec3(1.0, 0.0, 0.0));
+    local_transform *= glm::rotate(glm::mat4(1.0), rotation.y, glm::vec3(0.0, 1.0, 0.0));
+    local_transform *= glm::rotate(glm::mat4(1.0), rotation.z, glm::vec3(0.0, 0.0, 1.0));
+    local_transform *= glm::scale(glm::mat4(1.0), entity_transform->scale);
+
+    self.dirty_transforms.push_back(transform_id);
+}
+
+auto Scene::attach_model(this Scene &self, flecs::entity entity, const UUID &model_uuid) -> bool {
+    ZoneScoped;
+
+    if (!entity.has<ECS::RenderingModel>()) {
+        return false;
+    }
+
+    auto *rendering_model = entity.get_mut<ECS::RenderingModel>();
+    if (!rendering_model) {
+        return false;
+    }
+
+    self.detach_model(entity);
+
+    auto transforms_it = self.entity_transforms_map.find(entity);
+    if (transforms_it == self.entity_transforms_map.end()) {
+        // Target entity must have a  transform component, figure out why its missing.
+        LS_DEBUGBREAK();
+        return false;
+    }
+
+    auto instances_it = self.rendering_models.find(model_uuid);
+    if (instances_it == self.rendering_models.end()) {
+        bool inserted = false;
+        std::tie(instances_it, inserted) = self.rendering_models.try_emplace(model_uuid);
+        if (!inserted) {
+            return false;
+        }
+    }
+
+    const auto transform_id = transforms_it->second;
+    auto &instances = instances_it->second;
+    instances.push_back(transform_id);
+    self.models_dirty = true;
+
+    return true;
+}
+
+auto Scene::detach_model(this Scene &self, flecs::entity entity) -> bool {
+    ZoneScoped;
+
+    if (!entity.has<ECS::RenderingModel>()) {
+        return false;
+    }
+
+    auto *rendering_model = entity.get_mut<ECS::RenderingModel>();
+    if (!rendering_model) {
+        return false;
+    }
+
+    auto instances_it = self.rendering_models.find(rendering_model->uuid);
+    auto transforms_it = self.entity_transforms_map.find(entity);
+    if (instances_it == self.rendering_models.end() || transforms_it == self.entity_transforms_map.end()) {
+        return false;
+    }
+
+    const auto transform_id = transforms_it->second;
+    auto &instances = instances_it->second;
+    std::erase_if(instances, [transform_id](const GPU::TransformID id) { return id == transform_id; });
+    self.models_dirty = true;
+
+    if (instances.empty()) {
+        self.rendering_models.erase(instances_it);
+    }
+
+    return true;
 }
 
 auto Scene::get_root(this Scene &self) -> flecs::entity {
@@ -479,10 +597,10 @@ auto Scene::get_world(this Scene &self) -> flecs::world & {
     return self.world.value();
 }
 
-auto Scene::editor_camera(this Scene &self) -> flecs::entity {
+auto Scene::get_editor_camera(this Scene &self) -> flecs::entity {
     ZoneScoped;
 
-    return *self.gpu_entities.slot(self.editor_camera_id);
+    return self.editor_camera;
 }
 
 auto Scene::get_name(this Scene &self) -> const std::string & {
@@ -497,38 +615,29 @@ auto Scene::get_name_sv(this Scene &self) -> std::string_view {
     return self.name;
 }
 
-auto Scene::get_gpu_entity(this Scene &self, flecs::entity entity) -> ls::option<GPUEntityID> {
-    ZoneScoped;
-
-    auto it = self.gpu_entities_remap.find(entity);
-    if (it == self.gpu_entities_remap.end()) {
-        return ls::nullopt;
-    }
-
-    return it->second;
-}
-
 auto Scene::get_entity_db(this Scene &self) -> SceneEntityDB & {
     return self.entity_db;
 }
 
-auto Scene::add_gpu_entity(this Scene &self, flecs::entity entity) -> GPUEntityID {
+auto Scene::add_transform(this Scene &self, flecs::entity entity) -> GPU::TransformID {
     ZoneScoped;
 
-    auto id = self.gpu_entities.create_slot(flecs::entity(entity));
-    self.gpu_entities_remap.emplace(entity, id);
+    auto id = self.entity_transforms.create_slot();
+    self.entity_transforms_map.emplace(entity, id);
 
     return id;
 }
 
-auto Scene::remove_gpu_entity(this Scene &self, GPUEntityID id) -> void {
+auto Scene::remove_transform(this Scene &self, flecs::entity entity) -> void {
     ZoneScoped;
 
-    auto *entity = self.gpu_entities.slot(id);
-    if (entity) {
-        self.gpu_entities_remap.erase(*entity);
-        self.gpu_entities.destroy_slot(id);
+    auto it = self.entity_transforms_map.find(entity);
+    if (it == self.entity_transforms_map.end()) {
+        return;
     }
+
+    self.entity_transforms.destroy_slot(it->second);
+    self.entity_transforms_map.erase(it);
 }
 
 }  // namespace lr

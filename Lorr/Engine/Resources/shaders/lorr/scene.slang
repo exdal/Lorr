@@ -62,3 +62,9 @@ public struct Camera {
     public f32  far_clip;
 };
 
+public struct Scene {
+    public Camera camera;
+    public Sun sun;
+    public Atmosphere atmosphere;
+    public Clouds clouds;
+};

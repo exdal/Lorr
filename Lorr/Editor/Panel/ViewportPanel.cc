@@ -151,7 +151,7 @@ auto ViewportPanel::draw_tools(this ViewportPanel &self) -> void {
     ImGui::SetNextWindowSize({ editor_camera_popup_width, 0 });
     if (ImGui::BeginPopup("editor_camera")) {
         auto *scene = app.asset_man.get_scene(app.active_scene_uuid.value());
-        auto editor_camera = scene->editor_camera();
+        auto editor_camera = scene->get_editor_camera();
         auto *camera_transform = editor_camera.get_mut<ECS::Transform>();
         auto *camera_info = editor_camera.get_mut<ECS::Camera>();
 
@@ -173,7 +173,7 @@ auto ViewportPanel::draw_tools(this ViewportPanel &self) -> void {
 auto ViewportPanel::draw_viewport(this ViewportPanel &self, vuk::Format format, vuk::Extent3D) -> void {
     auto &app = EditorApp::get();
     auto *scene = app.asset_man.get_scene(app.active_scene_uuid.value());
-    auto editor_camera = scene->editor_camera();
+    auto editor_camera = scene->get_editor_camera();
     auto *current_window = ImGui::GetCurrentWindow();
     auto window_rect = current_window->InnerRect;
     auto window_pos = window_rect.Min;
@@ -223,9 +223,7 @@ auto ViewportPanel::draw_viewport(this ViewportPanel &self, vuk::Format format, 
                 glm::value_ptr(transform->rotation),
                 glm::value_ptr(transform->scale));
 
-            if (auto gpu_entity_id = scene->get_gpu_entity(app.selected_entity)) {
-                scene->set_dirty(gpu_entity_id.value());
-            }
+            scene->set_dirty(app.selected_entity);
         }
     }
 

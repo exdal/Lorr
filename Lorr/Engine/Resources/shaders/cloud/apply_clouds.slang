@@ -17,10 +17,7 @@ import "../lorr";
 [[vk::binding(3, 0)]] Texture3D<float4> detail_noise_lut;
 [[vk::binding(4, 0)]] Texture2D<float4> transmittance_lut;
 [[vk::binding(5, 0)]] Texture3D<float4> aerial_perspective_lut;
-[[vk::binding(6, 0)]] ConstantBuffer<Sun, ScalarDataLayout> sun;
-[[vk::binding(7, 0)]] ConstantBuffer<Atmosphere, ScalarDataLayout> atmos;
-[[vk::binding(8, 0)]] ConstantBuffer<Clouds, ScalarDataLayout> clouds;
-[[vk::binding(9, 0)]] ConstantBuffer<Camera, ScalarDataLayout> camera;
+[[vk::binding(6, 0)]] ConstantBuffer<Scene, ScalarDataLayout> scene;
 
 static const f32 DENSITY_EPSILON = 1e-4;
 
@@ -55,6 +52,9 @@ VertexOutput vs_main(u32 vertex_id : SV_VertexID) {
 // TODO: Wetness
 // TODO: Different cloud types
 func sample_density(float3 pos_m) -> float {
+    const let atmos = scene.atmosphere;
+    const let clouds = scene.clouds;
+
     const float cloud_layer_min_km = clouds.bounds.x;
     const float cloud_layer_max_km = clouds.bounds.y;
     const float cloud_layer_thickness_km = cloud_layer_max_km - cloud_layer_min_km;
@@ -85,9 +85,13 @@ func sample_density(float3 pos_m) -> float {
 }
 
 func sample_sun_density(float3 pos_km) -> float {
+    const let atmos = scene.atmosphere;
+    const let clouds = scene.clouds;
+    const let sun = scene.sun;
+
     float3 cloud_layer_boundaries = get_cloud_layer_boundaries(atmos, clouds, pos_km, sun.direction);
     const let march_dist = min(cloud_layer_boundaries.y - cloud_layer_boundaries.x, 20.0);
-    const let step_count = float(clouds->sun_step_count);
+    const let step_count = float(clouds.sun_step_count);
 
     float old_ray_shift = 0.0;
     float density_sum = 0.0;
@@ -122,6 +126,10 @@ float dual_cloud_phase(float cos_theta, float3 params) {
 
 [shader("fragment")]
 float4 fs_main(VertexOutput input) : SV_Target {
+    const let camera = scene.camera;
+    const let atmos = scene.atmosphere;
+    const let clouds = scene.clouds;
+    const let sun = scene.sun;
     const let clip_space = float3(input.tex_coord * 2.0 - 1.0, 1.0);
     const let world_space = mul(camera.inv_projection_view_mat, float4(clip_space, 1.0));
     const let world_pos = world_space.xyz / world_space.w;
@@ -154,7 +162,7 @@ float4 fs_main(VertexOutput input) : SV_Target {
     float3 luminance = float3(0.0);
 
     float old_ray_shift = 0.0;
-    const let step_count = float(clouds->clouds_step_count);
+    const let step_count = float(clouds.clouds_step_count);
     for (int i = 0; i < clouds.clouds_step_count; i++) {
         float new_ray_shift = march_dist * (float(i) + 0.3) / step_count;
         float delta_step = new_ray_shift - old_ray_shift;

@@ -36,8 +36,7 @@ ECS_COMPONENT_TAG(ActiveCamera);
 ECS_COMPONENT_TAG(EditorCamera);
 
 ECS_COMPONENT_BEGIN(RenderingModel)
-    ECS_COMPONENT_MEMBER(model, UUID, {})
-    ECS_COMPONENT_MEMBER(mesh_index, u32, 0)
+    ECS_COMPONENT_MEMBER(uuid, UUID, {})
 ECS_COMPONENT_END();
 
 ECS_COMPONENT_BEGIN(DirectionalLight)

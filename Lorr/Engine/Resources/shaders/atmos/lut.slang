@@ -5,19 +5,21 @@ import "../lorr";
 [[vk::binding(1, 0)]] RWTexture2D<float4> sky_view_lut;
 [[vk::binding(2, 0)]] Texture2D<float4> transmittance_lut;
 [[vk::binding(3, 0)]] Texture2D<float4> multiscattering_lut;
-[[vk::binding(4, 0)]] ConstantBuffer<Atmosphere, ScalarDataLayout> atmos;
-[[vk::binding(5, 0)]] ConstantBuffer<Sun, ScalarDataLayout> sun;
-[[vk::binding(6, 0)]] ConstantBuffer<Camera, ScalarDataLayout> camera;
+[[vk::binding(4, 0)]] ConstantBuffer<Scene, ScalarDataLayout> scene;
 
 [shader("compute")]
 [numthreads(16, 16, 1)]
 void cs_main(uint3 thread_id : SV_DispatchThreadID) {
+    const let camera = scene.camera;
+    const let atmos = scene.atmosphere;
+    const let sun = scene.sun;
+
     float2 tex_coord = (float2(thread_id.xy) + 0.5) / float2(atmos.sky_view_lut_size.xy);
     f32 u = fromSubUvsToUnit(tex_coord.x, f32(atmos.sky_view_lut_size.x));
     f32 v = fromSubUvsToUnit(tex_coord.y, f32(atmos.sky_view_lut_size.y));
     float3 eye_pos = float3(0.0, camera.position.y, 0.0) *
                  CAMERA_SCALE_UNIT +
-                 float3(0.0, atmos->planet_radius, 0.0);
+                 float3(0.0, atmos.planet_radius, 0.0);
     f32 h = length(eye_pos);
     float horizon = lr::safe_sqrt(h * h - atmos.planet_radius * atmos.planet_radius);
     float cos_beta = horizon / h;

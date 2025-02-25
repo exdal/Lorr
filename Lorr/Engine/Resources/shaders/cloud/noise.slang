@@ -3,7 +3,7 @@ import "../lorr";
 
 [[vk::binding(0, 0)]] RWTexture3D<float4> shape_noise_lut;
 [[vk::binding(1, 0)]] RWTexture3D<float4> detail_noise_lut;
-[[vk::binding(2, 0)]] ConstantBuffer<Clouds, ScalarDataLayout> clouds;
+[[vk::binding(2, 0)]] ConstantBuffer<Scene, ScalarDataLayout> scene;
 
 // WARN: These hashes are extremely fragile. Replacing one of them would collapse all noise functions.
 public float hash13(float3 p) {
@@ -146,7 +146,7 @@ float alligator_fbm_4(float3 position, float frequency) {
 [shader("compute")]
 [numthreads(16, 16, 1)]
 void cs_main(uint3 thread_id : SV_DispatchThreadID) {
-    float3 uvw = (float3(thread_id) + 0.5) / float3(clouds.noise_lut_size);
+    float3 uvw = (float3(thread_id) + 0.5) / float3(scene.clouds.noise_lut_size);
 
     const static float SHAPE_FREQUENCY = 1.0;
     float4 shape_color = float4(0.0);

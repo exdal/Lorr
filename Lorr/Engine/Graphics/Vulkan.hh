@@ -34,6 +34,10 @@ struct Buffer {
     auto host_ptr() const -> u8 *;
     auto id() const -> BufferID;
 
+    auto acquire(Device &, vuk::Name name, vuk::Access access, u64 offset = 0, u64 size = ~0_u64) -> vuk::Value<vuk::Buffer>;
+    auto discard(Device &, vuk::Name name, u64 offset = 0, u64 size = ~0_u64) -> vuk::Value<vuk::Buffer>;
+    auto subrange(Device &, u64 offset = 0, u64 size = ~0_u64) -> vuk::Buffer;
+
     explicit operator bool() const { return id_ != BufferID::Invalid; }
 
 private:
@@ -157,7 +161,8 @@ struct ShaderCompileInfo {
 };
 
 struct Pipeline {
-    static auto create(Device &, const ShaderCompileInfo &compile_info) -> std::expected<Pipeline, vuk::VkException>;
+    static auto create(Device &, const ShaderCompileInfo &compile_info, ls::span<vuk::DescriptorSetLayoutCreateInfo> explicit_layouts = {})
+        -> std::expected<Pipeline, vuk::VkException>;
 
     auto id() const -> PipelineID;
 

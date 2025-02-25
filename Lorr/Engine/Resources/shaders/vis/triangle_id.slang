@@ -1,17 +1,25 @@
 import vis;
 import "../lorr";
 
-[[vk::binding(0, 0)]] ConstantBuffer<Camera, ScalarDataLayout> camera;
-[[vk::binding(1, 0)]] StructuredBuffer<Entity, ScalarDataLayout> entities;
-[[vk::binding(2, 0)]] StructuredBuffer<float3, ScalarDataLayout> vertex_positions;
-[[vk::binding(3, 0)]] StructuredBuffer<Meshlet, ScalarDataLayout> meshlets;
-[[vk::binding(4, 0)]] StructuredBuffer<u32, ScalarDataLayout> indices;
-[[vk::binding(5, 0)]] StructuredBuffer<u8, ScalarDataLayout> local_indices;
+[[vk::binding(0, 0)]] ConstantBuffer<Scene, ScalarDataLayout> scene;
 
-struct PushConstants {
-    u32 entity_index;
+struct Transforms {
+    Transform transforms[];
 };
-[[vk::push_constant]] PushConstants c;
+[[vk::binding(1, 0)]] restrict readonly
+GLSLShaderStorageBuffer<Transforms, ScalarDataLayout> transforms;
+
+struct Models {
+    Model models[];
+};
+[[vk::binding(2, 0)]] restrict readonly
+GLSLShaderStorageBuffer<Models, ScalarDataLayout> models;
+
+struct MeshletInstances {
+    MeshletInstance instances[];
+};
+[[vk::binding(3, 0)]] restrict readonly
+GLSLShaderStorageBuffer<MeshletInstances, ScalarDataLayout> meshlet_instances;
 
 struct VertexOutput {
     float4 position  : SV_Position;
@@ -20,23 +28,25 @@ struct VertexOutput {
 
 [shader("vertex")]
 VertexOutput vs_main(u32 vertex_id : SV_VertexID) {
-    const u32 meshlet_id   = (vertex_id >> MESHLET_PRIMITIVE_BITS) & MESHLET_ID_MASK;
-    const u32 primitive_id = vertex_id & MESHLET_PRIMITIVE_MASK;
+    const u32 meshlet_instance_index = (vertex_id >> MESHLET_PRIMITIVE_BITS) & MESHLET_ID_MASK;
+    const u32 primitive_index = vertex_id & MESHLET_PRIMITIVE_MASK;
 
-    const Meshlet meshlet =   meshlets[meshlet_id];
+    const MeshletInstance meshlet_instance = meshlet_instances.instances[meshlet_instance_index];
+    const Model model = models.models[meshlet_instance.model_index];
+    const Meshlet meshlet = model.meshlets[meshlet_instance.meshlet_index];
     const uint vertex_offset = meshlet.vertex_offset;
     const uint index_offset = meshlet.index_offset;
     const uint triangle_offset = meshlet.triangle_offset;
 
-    const u32 primitive = u32(local_indices[triangle_offset + primitive_id]);
-    const u32 index = indices[index_offset + primitive];
-    const float3 vertex_pos = vertex_positions[vertex_offset + index];
-    const Entity entity = entities[c.entity_index];
+    const u32 primitive = u32(model.local_triangle_indices[triangle_offset + primitive_index]);
+    const u32 index = model.indices[index_offset + primitive];
+    const float3 vertex_pos = model.vertex_positions[vertex_offset + index];
+    const Transform transform = transforms.transforms[meshlet_instance.transform_index];
 
     VertexOutput output;
-    output.position = mul(entity.local_transform_mat, float4(vertex_pos, 1.0));
-    output.position = mul(camera.projection_view_mat, output.position);
-    output.meshlet_id = meshlet_id;
+    output.position = mul(transform.local, float4(vertex_pos, 1.0));
+    output.position = mul(scene.camera.projection_view_mat, output.position);
+    output.meshlet_id = meshlet_instance.meshlet_index;
     return output;
 }
 

@@ -112,6 +112,7 @@ void Application::shutdown(this Application &self) {
     self.device.wait();
     self.swapchain.destroy();
     self.asset_man.destroy();
+    self.scene_renderer.destroy();
     self.device.destroy();
     LOG_INFO("Complete!");
 

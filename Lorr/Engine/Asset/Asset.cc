@@ -3,6 +3,8 @@
 #include "Engine/Asset/ParserGLTF.hh"
 #include "Engine/Asset/ParserSTB.hh"
 
+#include "Engine/Graphics/VulkanDevice.hh"
+
 #include "Engine/Memory/Hasher.hh"
 
 #include "Engine/OS/File.hh"
@@ -36,7 +38,7 @@ auto AssetManager::create(Device *device) -> AssetManager {
 
     impl->device = device;
     impl->root_path = fs::current_path();
-    impl->material_buffer = Buffer::create(*device, 1024 * sizeof(GPUMaterial)).value();
+    impl->material_buffer = Buffer::create(*device, 1024 * sizeof(GPU::Material)).value();
     impl->device->set_name(impl->material_buffer, "GPU Material Buffer");
 
     return self;
@@ -188,7 +190,7 @@ auto AssetManager::import_asset(const fs::path &path) -> UUID {
                 auto &image = gltf_model->images[v.image_index.value()];
                 UUID texture_uuid = {};
                 std::visit(
-                    match{
+                    ls::match{
                         [&](const std::vector<u8> &) {  //
                             texture_uuid = this->create_asset(AssetType::Texture, path);
                         },
@@ -393,8 +395,7 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
         return false;
     }
 
-    struct CallbackInfo {
-        Device *device = nullptr;
+    struct GLTFCallbacks {
         Model *model = nullptr;
 
         // Per mesh data
@@ -403,14 +404,15 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
         std::vector<glm::vec2> vertex_texcoords = {};
         std::vector<Model::Index> indices = {};
     };
-    // clang-format off
-    auto on_new_node = [](void *user_data, u32 mesh_index, u32 vertex_count, u32 vertex_offset, u32 index_count, u32 index_offset, u32 primitive_count, glm::mat4 transform) {
-        // clang-format on
-        auto *info = static_cast<CallbackInfo *>(user_data);
-
-        auto &node = info->model->nodes.emplace_back();
-        node.transform = transform;
-        node.mesh_indices.push_back(mesh_index);
+    auto on_new_node = [](void *user_data,
+                          u32 mesh_index,
+                          u32 vertex_count,
+                          u32 vertex_offset,
+                          u32 index_count,
+                          u32 index_offset,
+                          [[maybe_unused]] u32 primitive_count,
+                          [[maybe_unused]] glm::mat4 transform) {
+        auto *info = static_cast<GLTFCallbacks *>(user_data);
 
         if (info->model->meshes.size() <= mesh_index) {
             info->model->meshes.resize(mesh_index + 1);
@@ -432,33 +434,32 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
     //     auto &mesh = info->model->meshes[mesh_index];
     // };
     auto on_access_index = [](void *user_data, u32, u64 offset, u32 index) {
-        auto *info = static_cast<CallbackInfo *>(user_data);
+        auto *info = static_cast<GLTFCallbacks *>(user_data);
         info->indices[offset] = index;
     };
     auto on_access_position = [](void *user_data, u32, u64 offset, glm::vec3 position) {
-        auto *info = static_cast<CallbackInfo *>(user_data);
+        auto *info = static_cast<GLTFCallbacks *>(user_data);
         info->vertex_positions[offset] = position;
     };
     auto on_access_normal = [](void *user_data, u32, u64 offset, glm::vec3 normal) {
-        auto *info = static_cast<CallbackInfo *>(user_data);
+        auto *info = static_cast<GLTFCallbacks *>(user_data);
         info->vertex_normals[offset] = normal;
     };
     auto on_access_texcoord = [](void *user_data, u32, u64 offset, glm::vec2 texcoord) {
-        auto *info = static_cast<CallbackInfo *>(user_data);
+        auto *info = static_cast<GLTFCallbacks *>(user_data);
         info->vertex_texcoords[offset] = texcoord;
     };
 
-    CallbackInfo callback_info = { .device = impl->device, .model = model };
-    GLTFModelCallbacks callbacks = {
-        .user_data = &callback_info,
-        .on_new_node = on_new_node,
-        //.on_new_primitive = on_new_primitive,
-        .on_access_index = on_access_index,
-        .on_access_position = on_access_position,
-        .on_access_normal = on_access_normal,
-        .on_access_texcoord = on_access_texcoord,
-    };
-    auto gltf_model = GLTFModelInfo::parse(asset->path, callbacks);
+    GLTFCallbacks gltf_callbacks = { .model = model };
+    auto gltf_model = GLTFModelInfo::parse(
+        asset->path,
+        { .user_data = &gltf_callbacks,
+          .on_new_node = on_new_node,
+          //.on_new_primitive = on_new_primitive,
+          .on_access_index = on_access_index,
+          .on_access_position = on_access_position,
+          .on_access_normal = on_access_normal,
+          .on_access_texcoord = on_access_texcoord });
     if (!gltf_model.has_value()) {
         LOG_ERROR("Failed to parse Model '{}'!", asset->path);
         return false;
@@ -508,7 +509,7 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
 
         bool loaded = false;
         std::visit(
-            match{
+            ls::match{
                 [&](std::vector<u8> &pixels) {  //
                     loaded = this->load_texture(texture_uuid, pixels, sampler_info);
                 },
@@ -557,104 +558,128 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
         this->load_material(material_uuid, material_info);
     }
 
-    std::vector<glm::vec3> remapped_vertex_positions = {};
-    std::vector<Model::Meshlet> meshlets = {};
-    std::vector<u32> indirect_vertices = {};
-    std::vector<u8> local_indices = {};
-    for (auto &mesh : model->meshes) {
-        auto mesh_vertex_positions = ls::span(callback_info.vertex_positions.data() + mesh.vertex_offset, mesh.vertex_count);
-        auto mesh_indices = ls::span(callback_info.indices.data() + mesh.index_offset, mesh.index_count);
+    //  ── MESH PROCESSING ─────────────────────────────────────────────────
+    std::vector<glm::vec3> model_vertex_positions = {};
+    std::vector<u32> model_indices = {};
 
-        u32 mesh_vertex_offset = remapped_vertex_positions.size();
-        u32 mesh_indirect_vertices_offset = indirect_vertices.size();
-        u32 mesh_local_indices_offset = local_indices.size();
+    std::vector<GPU::Meshlet> model_meshlets = {};
+    std::vector<GPU::MeshletBounds> model_meshlet_bounds = {};
+    std::vector<u8> model_local_triangle_indices = {};
 
-        auto mesh_vertex_remap_indices = std::vector<Model::Index>(mesh.vertex_count);
-        auto mesh_remapped_indices = std::vector<Model::Index>(mesh.index_count);
-        const auto unique_vertices = meshopt_optimizeVertexFetchRemap(  //
-            mesh_vertex_remap_indices.data(),
-            mesh_indices.data(),
-            mesh_indices.size(),
-            mesh_vertex_positions.size());
+    for (const auto &mesh : model->meshes) {
+        ZoneScopedN("GPU Meshlet Generation");
+        auto vertex_offset = model_vertex_positions.size();
+        auto index_offset = model_indices.size();
+        auto triangle_offset = model_local_triangle_indices.size();
 
-        meshopt_remapIndexBuffer(  //
-            mesh_remapped_indices.data(),
-            mesh_indices.data(),
-            mesh_indices.size(),
-            mesh_vertex_remap_indices.data());
+        auto raw_vertex_positions = ls::span(gltf_callbacks.vertex_positions.data() + mesh.vertex_offset, mesh.vertex_count);
+        auto raw_indices = ls::span(gltf_callbacks.indices.data() + mesh.index_offset, mesh.index_count);
 
-        auto mesh_remapped_vertex_positions = std::vector<glm::vec3>(unique_vertices);
-        meshopt_remapVertexBuffer(  //
-            mesh_remapped_vertex_positions.data(),
-            mesh_vertex_positions.data(),
-            mesh_vertex_positions.size(),
-            sizeof(glm::vec3),
-            mesh_vertex_remap_indices.data());
+        //  ── PRE-OPTIMIZATION ────────────────────────────────────────────────
+        auto vertex_positions = std::vector<glm::vec3>();
+        auto indices = std::vector<Model::Index>(mesh.vertex_count);
+        {
+            ZoneScopedN("Pre-optimize Geometry");
+            auto remapped_indices = std::vector<Model::Index>(mesh.index_count);
+            const auto unique_vertices = meshopt_optimizeVertexFetchRemap(  //
+                indices.data(),
+                raw_indices.data(),
+                raw_indices.size(),
+                raw_vertex_positions.size());
 
-        //  ── MESHLETS ────────────────────────────────────────────────────────
-        auto max_meshlets = meshopt_buildMeshletsBound(  //
-            mesh_remapped_indices.size(),
-            Model::MAX_MESHLET_INDICES,
-            Model::MAX_MESHLET_PRIMITIVES);
+            meshopt_remapIndexBuffer(  //
+                remapped_indices.data(),
+                raw_indices.data(),
+                raw_indices.size(),
+                indices.data());
 
-        auto mesh_raw_meshlets = std::vector<meshopt_Meshlet>(max_meshlets);
-        auto mesh_indirect_vertices = std::vector<u32>(max_meshlets * Model::MAX_MESHLET_INDICES);
-        auto mesh_local_indices = std::vector<u8>(max_meshlets * Model::MAX_MESHLET_PRIMITIVES * 3);
-        auto mesh_meshlet_count = meshopt_buildMeshlets(  //
-            mesh_raw_meshlets.data(),
-            mesh_indirect_vertices.data(),
-            mesh_local_indices.data(),
-            mesh_remapped_indices.data(),
-            mesh_remapped_indices.size(),
-            reinterpret_cast<f32 *>(mesh_remapped_vertex_positions.data()),
-            mesh_remapped_vertex_positions.size(),
-            sizeof(glm::vec3),
-            Model::MAX_MESHLET_INDICES,
-            Model::MAX_MESHLET_PRIMITIVES,
-            0.0);
-        const auto &last_meshlet = mesh_raw_meshlets[mesh_meshlet_count - 1];
-        mesh_indirect_vertices.resize(last_meshlet.vertex_offset + last_meshlet.vertex_count);
-        mesh_local_indices.resize(last_meshlet.triangle_offset + ((last_meshlet.triangle_count * 3 + 3) & ~3_u32));
-        mesh_raw_meshlets.resize(mesh_meshlet_count);
-
-        auto mesh_meshlets = std::vector<Model::Meshlet>(mesh_meshlet_count);
-        for (const auto &[raw_meshlet, meshlet] : std::ranges::zip_view(mesh_raw_meshlets, mesh_meshlets)) {
-            auto meshlet_bb_min = glm::vec3(std::numeric_limits<f32>::max());
-            auto meshlet_bb_max = glm::vec3(std::numeric_limits<f32>::lowest());
-            for (u32 i = 0; i < raw_meshlet.triangle_count * 3; i++) {
-                const auto &tri_pos =
-                    mesh_remapped_vertex_positions[raw_meshlet.vertex_offset + mesh_local_indices[raw_meshlet.triangle_offset + i]];
-                meshlet_bb_min = glm::min(meshlet_bb_min, tri_pos);
-                meshlet_bb_max = glm::max(meshlet_bb_max, tri_pos);
-            }
-
-            meshlet.vertex_offset = mesh_vertex_offset;
-            meshlet.index_offset = mesh_indirect_vertices_offset + raw_meshlet.vertex_offset;
-            meshlet.triangle_offset = mesh_local_indices_offset + raw_meshlet.triangle_offset;
-            meshlet.triangle_count = raw_meshlet.triangle_count;
-            meshlet.aabb_min = meshlet_bb_min;
-            meshlet.aabb_max = meshlet_bb_max;
+            vertex_positions.resize(unique_vertices);
+            meshopt_remapVertexBuffer(  //
+                vertex_positions.data(),
+                raw_vertex_positions.data(),
+                raw_vertex_positions.size(),
+                sizeof(glm::vec3),
+                indices.data());
         }
 
-        std::ranges::move(mesh_remapped_vertex_positions, std::back_inserter(remapped_vertex_positions));
-        std::ranges::move(mesh_meshlets, std::back_inserter(meshlets));
-        std::ranges::move(mesh_indirect_vertices, std::back_inserter(indirect_vertices));
-        std::ranges::move(mesh_local_indices, std::back_inserter(local_indices));
+        auto meshlets = std::vector<GPU::Meshlet>();
+        auto meshlet_bounds = std::vector<GPU::MeshletBounds>();
+        auto meshlet_indices = std::vector<u32>();
+        auto local_triangle_indices = std::vector<u8>();
+        {
+            ZoneScopedN("Build Meshlets");
+            // Worst case count
+            auto max_meshlets = meshopt_buildMeshletsBound(  //
+                indices.size(),
+                Model::MAX_MESHLET_INDICES,
+                Model::MAX_MESHLET_PRIMITIVES);
+            auto raw_meshlets = std::vector<meshopt_Meshlet>(max_meshlets);
+            meshlet_indices.resize(max_meshlets * Model::MAX_MESHLET_INDICES);
+            local_triangle_indices.resize(max_meshlets * Model::MAX_MESHLET_PRIMITIVES * 3);
+            auto meshlet_count = meshopt_buildMeshlets(  //
+                raw_meshlets.data(),
+                meshlet_indices.data(),
+                local_triangle_indices.data(),
+                indices.data(),
+                indices.size(),
+                reinterpret_cast<f32 *>(vertex_positions.data()),
+                vertex_positions.size(),
+                sizeof(glm::vec3),
+                Model::MAX_MESHLET_INDICES,
+                Model::MAX_MESHLET_PRIMITIVES,
+                0.0);
+
+            // Trim meshlets from worst case to current case
+            raw_meshlets.resize(meshlet_count);
+            meshlets.resize(meshlet_count);
+            meshlet_bounds.resize(meshlet_count);
+            const auto &last_meshlet = raw_meshlets[meshlet_count - 1];
+            meshlet_indices.resize(last_meshlet.vertex_offset + last_meshlet.vertex_count);
+            local_triangle_indices.resize(last_meshlet.triangle_offset + ((last_meshlet.triangle_count * 3 + 3) & ~3_u32));
+
+            for (const auto &[raw_meshlet, meshlet, meshlet_aabb] : std::views::zip(raw_meshlets, meshlets, meshlet_bounds)) {
+                auto meshlet_bb_min = glm::vec3(std::numeric_limits<f32>::max());
+                auto meshlet_bb_max = glm::vec3(std::numeric_limits<f32>::lowest());
+                for (u32 i = 0; i < raw_meshlet.triangle_count * 3; i++) {
+                    const auto &tri_pos = vertex_positions
+                        [meshlet_indices[raw_meshlet.vertex_offset + local_triangle_indices[raw_meshlet.triangle_offset + i]]];
+                    meshlet_bb_min = glm::min(meshlet_bb_min, tri_pos);
+                    meshlet_bb_max = glm::max(meshlet_bb_max, tri_pos);
+                }
+
+                meshlet.vertex_offset = vertex_offset;
+                meshlet.index_offset = index_offset + raw_meshlet.vertex_offset;
+                meshlet.triangle_offset = triangle_offset + raw_meshlet.triangle_offset;
+                meshlet.triangle_count = raw_meshlet.triangle_count;
+                meshlet_aabb.aabb_min = meshlet_bb_min;
+                meshlet_aabb.aabb_max = meshlet_bb_max;
+            }
+        }
+
+        std::ranges::move(vertex_positions, std::back_inserter(model_vertex_positions));
+        std::ranges::move(meshlet_indices, std::back_inserter(model_indices));
+        std::ranges::move(meshlets, std::back_inserter(model_meshlets));
+        std::ranges::move(meshlet_bounds, std::back_inserter(model_meshlet_bounds));
+        std::ranges::move(local_triangle_indices, std::back_inserter(model_local_triangle_indices));
     }
 
-    model->positions_buffer = Buffer::create(*impl->device, remapped_vertex_positions.size() * sizeof(glm::vec3)).value();
-    model->meshlet_buffer = Buffer::create(*impl->device, meshlets.size() * sizeof(Model::Meshlet)).value();
-    model->indirect_vertices_buffer = Buffer::create(*impl->device, indirect_vertices.size() * sizeof(u32)).value();
-    model->local_indices_buffer = Buffer::create(*impl->device, local_indices.size() * sizeof(u8)).value();
+    model->meshlet_count = model_meshlets.size();
 
     auto &transfer_man = impl->device->transfer_man();
-    transfer_man.wait_on(transfer_man.upload_staging(ls::span(remapped_vertex_positions), model->positions_buffer));
-    transfer_man.wait_on(transfer_man.upload_staging(ls::span(meshlets), model->meshlet_buffer));
-    transfer_man.wait_on(transfer_man.upload_staging(ls::span(indirect_vertices), model->indirect_vertices_buffer));
-    transfer_man.wait_on(transfer_man.upload_staging(ls::span(local_indices), model->local_indices_buffer));
+    model->vertex_positions = Buffer::create(*impl->device, ls::size_bytes(model_vertex_positions)).value();
+    transfer_man.wait_on(transfer_man.upload_staging(ls::span(model_vertex_positions), model->vertex_positions));
 
-    // TODO: Remove this after indirect buffers
-    model->meshlets = std::move(meshlets);
+    model->indices = Buffer::create(*impl->device, ls::size_bytes(model_indices)).value();
+    transfer_man.wait_on(transfer_man.upload_staging(ls::span(model_indices), model->indices));
+
+    model->meshlets = Buffer::create(*impl->device, ls::size_bytes(model_meshlets)).value();
+    transfer_man.wait_on(transfer_man.upload_staging(ls::span(model_meshlets), model->meshlets));
+
+    model->meshlet_bounds = Buffer::create(*impl->device, ls::size_bytes(model_meshlet_bounds)).value();
+    transfer_man.wait_on(transfer_man.upload_staging(ls::span(model_meshlet_bounds), model->meshlet_bounds));
+
+    model->local_triangle_indices = Buffer::create(*impl->device, ls::size_bytes(model_local_triangle_indices)).value();
+    transfer_man.wait_on(transfer_man.upload_staging(ls::span(model_local_triangle_indices), model->local_triangle_indices));
 
     asset->acquire_ref();
     return true;
@@ -810,8 +835,8 @@ auto AssetManager::load_material(const UUID &uuid, const Material &material_info
     auto *emissive_texture = this->get_texture(material_info.emissive_texture);
 
     // TODO: Implement a checkerboard image for invalid textures
-    u64 gpu_buffer_offset = SlotMap_decode_id(asset->material_id).index * sizeof(GPUMaterial);
-    GPUMaterial gpu_material = {
+    u64 gpu_buffer_offset = SlotMap_decode_id(asset->material_id).index * sizeof(GPU::Material);
+    GPU::Material gpu_material = {
         .albedo_color = material_info.albedo_color,
         .emissive_color = material_info.emissive_color,
         .roughness_factor = material_info.roughness_factor,
@@ -824,7 +849,7 @@ auto AssetManager::load_material(const UUID &uuid, const Material &material_info
 
     auto &transfer_man = impl->device->transfer_man();
     transfer_man.wait_on(transfer_man.upload_staging(
-        ls::span(ls::bit_cast<u8 *>(&gpu_material), sizeof(GPUMaterial)), impl->material_buffer, gpu_buffer_offset));
+        ls::span(ls::bit_cast<u8 *>(&gpu_material), sizeof(GPU::Material)), impl->material_buffer, gpu_buffer_offset));
 
     asset->acquire_ref();
     return true;
@@ -886,7 +911,7 @@ auto AssetManager::load_scene(const UUID &uuid) -> bool {
 
             component.for_each([&](usize, std::string_view, ECS::ComponentWrapper::Member &member) {
                 std::visit(
-                    match{
+                    ls::match{
                         [](const auto &) {},
                         [&](UUID *v) {
                             if (*v) {
@@ -932,7 +957,7 @@ auto AssetManager::unload_scene(const UUID &uuid) -> void {
 
             component.for_each([&](usize, std::string_view, ECS::ComponentWrapper::Member &member) {
                 std::visit(
-                    match{
+                    ls::match{
                         [](const auto &) {},
                         [&](UUID *v) {
                             if (*v) {

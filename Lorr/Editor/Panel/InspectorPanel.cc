@@ -23,7 +23,11 @@ void InspectorPanel::render(this InspectorPanel &self) {
 auto inspect_asset(UUID &uuid) -> void {
     memory::ScopedStack stack;
     auto &app = EditorApp::get();
+    if (!app.active_scene_uuid.has_value()) {
+        return;
+    }
 
+    auto *scene = app.asset_man.get_scene(app.active_scene_uuid.value());
     auto cursor_pos = ImGui::GetCursorPos();
     auto avail_region = ImGui::GetContentRegionAvail();
     auto *asset = app.asset_man.get_asset(uuid);
@@ -33,7 +37,6 @@ auto inspect_asset(UUID &uuid) -> void {
     } else {
         const auto &model_name = asset->path.filename();
         ImGuiLR::text_sv(stack.format("Name: {}", model_name));
-        ImGuiLR::text_sv(stack.format("ModelID: {}", std::to_underlying(asset->model_id)));
         ImGuiLR::text_sv(stack.format("UUID: {}", uuid.str()));
     }
 
@@ -47,6 +50,7 @@ auto inspect_asset(UUID &uuid) -> void {
                 if (uuid != dropping_uuid && app.asset_man.load_model(dropping_uuid) && uuid) {
                     app.asset_man.unload_model(uuid);
                 }
+                scene->attach_model(app.selected_entity, dropping_uuid);
                 uuid = dropping_uuid;
             }
         }
@@ -102,7 +106,7 @@ auto InspectorPanel::draw_inspector(this InspectorPanel &) -> void {
 
                     ImGui::PushID(static_cast<i32>(i));
                     std::visit(
-                        match{
+                        ls::match{
                             [](const auto &) {},
                             [&](f32 *v) { entity_modified |= ImGuiLR::drag_vec(0, v, 1, ImGuiDataType_Float); },
                             [&](i32 *v) { entity_modified |= ImGuiLR::drag_vec(0, v, 1, ImGuiDataType_S32); },
@@ -157,9 +161,7 @@ auto InspectorPanel::draw_inspector(this InspectorPanel &) -> void {
         }
         removing_components.clear();
 
-        if (auto gpu_entity_id = scene->get_gpu_entity(app.selected_entity); entity_modified) {
-            scene->set_dirty(gpu_entity_id.value());
-        }
+        scene->set_dirty(app.selected_entity);
     }
 }
 

@@ -128,7 +128,7 @@ public:
         return self.slots.size();
     }
 
-    auto slots_unsafe(this const Self &self) -> ls::span<T> {  //
+    auto slots_unsafe(this Self &self) -> ls::span<T> {  //
         return self.slots;
     }
 };

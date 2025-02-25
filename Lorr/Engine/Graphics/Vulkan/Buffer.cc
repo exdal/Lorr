@@ -44,4 +44,25 @@ auto Buffer::id() const -> BufferID {
     return id_;
 }
 
+auto Buffer::acquire(Device &device, vuk::Name name, vuk::Access access, u64 offset, u64 size) -> vuk::Value<vuk::Buffer> {
+    ZoneScoped;
+
+    auto vuk_handle = *device.buffer(this->id_);
+    return vuk::acquire_buf(name, vuk_handle.subrange(offset, size != ~0_u64 ? size : this->data_size_), access);
+}
+
+auto Buffer::discard(Device &device, vuk::Name name, u64 offset, u64 size) -> vuk::Value<vuk::Buffer> {
+    ZoneScoped;
+
+    auto vuk_handle = *device.buffer(this->id_);
+    return vuk::discard_buf(name, vuk_handle.subrange(offset, size != ~0_u64 ? size : this->data_size_));
+}
+
+auto Buffer::subrange(Device &device, u64 offset, u64 size) -> vuk::Buffer {
+    ZoneScoped;
+
+    auto vuk_handle = *device.buffer(this->id_);
+    return vuk_handle.subrange(offset, size != ~0_u64 ? size : this->data_size_);
+}
+
 }  // namespace lr

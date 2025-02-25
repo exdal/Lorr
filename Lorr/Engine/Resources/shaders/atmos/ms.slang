@@ -5,12 +5,13 @@ import "../noise/hemisphere";
 [[vk::binding(0, 0)]] SamplerState sampler;
 [[vk::binding(1, 0)]] Texture2D<float4> transmittance_lut;
 [[vk::binding(2, 0)]] RWTexture2D<float4> multiscattering_lut;
-[[vk::binding(3, 0)]] ConstantBuffer<Atmosphere, ScalarDataLayout> atmos;
-[[vk::binding(4, 0)]] ConstantBuffer<Sun, ScalarDataLayout> sun;
+[[vk::binding(3, 0)]] ConstantBuffer<Scene, ScalarDataLayout> scene;
 
 [shader("compute")]
 [numthreads(16, 16, 1)]
 void cs_main(uint3 thread_id : SV_DispatchThreadID) {
+    const let atmos = scene.atmosphere;
+
     float2 uv = float2(float2(thread_id.xy) + 0.5) / float2(atmos.multiscattering_lut_size.xy);
 
     float altitude = lerp(atmos.planet_radius, atmos.atmos_radius, uv.y);
@@ -21,7 +22,6 @@ void cs_main(uint3 thread_id : SV_DispatchThreadID) {
     AtmosphereIntegrateInfo info = {};
     info.eye_pos = ray_pos;
     info.sun_dir = sun_dir;
-    //info.sun_intensity = sun->intensity;
     info.eval_mie_rayleigh_phase = false;
     info.eval_planet_luminance = true;
     info.sampling.variable_sample_count = false;

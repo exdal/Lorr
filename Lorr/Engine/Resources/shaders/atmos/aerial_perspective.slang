@@ -5,13 +5,15 @@ import "../lorr";
 [[vk::binding(1, 0)]] RWTexture3D<float4> aerial_perspective_lut;
 [[vk::binding(2, 0)]] Texture2D<float4> transmittance_lut;
 [[vk::binding(3, 0)]] Texture2D<float4> multiscattering_lut;
-[[vk::binding(4, 0)]] ConstantBuffer<Atmosphere, ScalarDataLayout> atmos;
-[[vk::binding(5, 0)]] ConstantBuffer<Sun, ScalarDataLayout> sun;
-[[vk::binding(6, 0)]] ConstantBuffer<Camera, ScalarDataLayout> camera;
+[[vk::binding(4, 0)]] ConstantBuffer<Scene, ScalarDataLayout> scene;
 
 [shader("compute")]
 [numthreads(16, 16, 1)]
 void cs_main(uint3 thread_id : SV_DispatchThreadID) {
+    const let camera = scene.camera;
+    const let atmos = scene.atmosphere;
+    const let sun = scene.sun;
+
     float2 uv = (float2(thread_id.xy) + 0.5) / float2(atmos.aerial_perspective_lut_size.xy);
     float3 clip_space = float3(2.0 * uv - 1.0, 0.5);
     float4 world_space = mul(camera.inv_projection_view_mat, float4(clip_space, 1.0));

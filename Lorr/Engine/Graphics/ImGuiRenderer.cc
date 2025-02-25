@@ -5,6 +5,7 @@
 #include "Engine/Graphics/VulkanDevice.hh"
 
 #include <ImGuizmo.h>
+#include <SDL3/SDL_keyboard.h>
 #include <SDL3/SDL_mouse.h>
 
 namespace lr {
@@ -22,13 +23,14 @@ auto ImGuiRenderer::init(this ImGuiRenderer &self, Device *device) -> void {
     //  ── IMGUI CONTEXT ───────────────────────────────────────────────────
     ImGui::CreateContext();
     auto &imgui = ImGui::GetIO();
-    imgui.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-    imgui.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
     imgui.ConfigWindowsMoveFromTitleBarOnly = true;
     imgui.IniFilename = "editor_layout.ini";
     imgui.DisplayFramebufferScale = { 1.0f, 1.0f };
-    imgui.BackendFlags = ImGuiBackendFlags_RendererHasVtxOffset;
-    imgui.BackendFlags = ImGuiBackendFlags_HasMouseCursors;
+    imgui.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+    imgui.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+    imgui.ConfigFlags |= ImGuiConfigFlags_IsSRGB;
+    imgui.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;
+    imgui.BackendFlags |= ImGuiBackendFlags_HasMouseCursors;
     ImGui::StyleColorsDark();
 
     //  ── FONT ATLAS ──────────────────────────────────────────────────────
@@ -267,6 +269,7 @@ auto ImGuiRenderer::on_mouse_button(this ImGuiRenderer &, u8 button, bool down) 
 
     auto &imgui = ImGui::GetIO();
     imgui.AddMouseButtonEvent(imgui_button, down);
+    imgui.AddMouseSourceEvent(ImGuiMouseSource_Mouse);
 }
 
 auto ImGuiRenderer::on_mouse_scroll(this ImGuiRenderer &, glm::vec2 offset) -> void {
@@ -276,16 +279,19 @@ auto ImGuiRenderer::on_mouse_scroll(this ImGuiRenderer &, glm::vec2 offset) -> v
     imgui.AddMouseWheelEvent(offset.x, offset.y);
 }
 
-ImGuiKey to_imgui_key(SDL_Keycode keycode);
-auto ImGuiRenderer::on_key(this ImGuiRenderer &, u32 key_code, u32, u16 mods, bool down) -> void {
+ImGuiKey to_imgui_key(SDL_Keycode keycode, SDL_Scancode scancode);
+auto ImGuiRenderer::on_key(this ImGuiRenderer &, u32 key_code, u32 scan_code, u16 mods, bool down) -> void {
     ZoneScoped;
 
     auto &imgui = ImGui::GetIO();
-    imgui.AddKeyEvent(to_imgui_key(static_cast<SDL_Keycode>(key_code)), down);
     imgui.AddKeyEvent(ImGuiMod_Ctrl, (mods & SDL_KMOD_CTRL) != 0);
     imgui.AddKeyEvent(ImGuiMod_Shift, (mods & SDL_KMOD_SHIFT) != 0);
     imgui.AddKeyEvent(ImGuiMod_Alt, (mods & SDL_KMOD_ALT) != 0);
     imgui.AddKeyEvent(ImGuiMod_Super, (mods & SDL_KMOD_GUI) != 0);
+
+    auto key = to_imgui_key(static_cast<SDL_Keycode>(key_code), static_cast<SDL_Scancode>(scan_code));
+    imgui.AddKeyEvent(key, down);
+    imgui.SetKeyEventNativeData(key, static_cast<i32>(key_code), static_cast<i32>(scan_code), static_cast<i32>(scan_code));
 }
 
 auto ImGuiRenderer::on_text_input(this ImGuiRenderer &, const c8 *text) -> void {
@@ -295,8 +301,47 @@ auto ImGuiRenderer::on_text_input(this ImGuiRenderer &, const c8 *text) -> void 
     imgui.AddInputCharactersUTF8(text);
 }
 
-ImGuiKey to_imgui_key(SDL_Keycode keycode) {
+ImGuiKey to_imgui_key(SDL_Keycode keycode, SDL_Scancode scancode) {
     ZoneScoped;
+
+    switch (scancode) {
+        case SDL_SCANCODE_KP_0:
+            return ImGuiKey_Keypad0;
+        case SDL_SCANCODE_KP_1:
+            return ImGuiKey_Keypad1;
+        case SDL_SCANCODE_KP_2:
+            return ImGuiKey_Keypad2;
+        case SDL_SCANCODE_KP_3:
+            return ImGuiKey_Keypad3;
+        case SDL_SCANCODE_KP_4:
+            return ImGuiKey_Keypad4;
+        case SDL_SCANCODE_KP_5:
+            return ImGuiKey_Keypad5;
+        case SDL_SCANCODE_KP_6:
+            return ImGuiKey_Keypad6;
+        case SDL_SCANCODE_KP_7:
+            return ImGuiKey_Keypad7;
+        case SDL_SCANCODE_KP_8:
+            return ImGuiKey_Keypad8;
+        case SDL_SCANCODE_KP_9:
+            return ImGuiKey_Keypad9;
+        case SDL_SCANCODE_KP_PERIOD:
+            return ImGuiKey_KeypadDecimal;
+        case SDL_SCANCODE_KP_DIVIDE:
+            return ImGuiKey_KeypadDivide;
+        case SDL_SCANCODE_KP_MULTIPLY:
+            return ImGuiKey_KeypadMultiply;
+        case SDL_SCANCODE_KP_MINUS:
+            return ImGuiKey_KeypadSubtract;
+        case SDL_SCANCODE_KP_PLUS:
+            return ImGuiKey_KeypadAdd;
+        case SDL_SCANCODE_KP_ENTER:
+            return ImGuiKey_KeypadEnter;
+        case SDL_SCANCODE_KP_EQUALS:
+            return ImGuiKey_KeypadEqual;
+        default:
+            break;
+    }
 
     switch (keycode) {
         case SDLK_TAB:
@@ -361,40 +406,6 @@ ImGuiKey to_imgui_key(SDL_Keycode keycode) {
             return ImGuiKey_PrintScreen;
         case SDLK_PAUSE:
             return ImGuiKey_Pause;
-        case SDLK_KP_0:
-            return ImGuiKey_Keypad0;
-        case SDLK_KP_1:
-            return ImGuiKey_Keypad1;
-        case SDLK_KP_2:
-            return ImGuiKey_Keypad2;
-        case SDLK_KP_3:
-            return ImGuiKey_Keypad3;
-        case SDLK_KP_4:
-            return ImGuiKey_Keypad4;
-        case SDLK_KP_5:
-            return ImGuiKey_Keypad5;
-        case SDLK_KP_6:
-            return ImGuiKey_Keypad6;
-        case SDLK_KP_7:
-            return ImGuiKey_Keypad7;
-        case SDLK_KP_8:
-            return ImGuiKey_Keypad8;
-        case SDLK_KP_9:
-            return ImGuiKey_Keypad9;
-        case SDLK_KP_PERIOD:
-            return ImGuiKey_KeypadDecimal;
-        case SDLK_KP_DIVIDE:
-            return ImGuiKey_KeypadDivide;
-        case SDLK_KP_MULTIPLY:
-            return ImGuiKey_KeypadMultiply;
-        case SDLK_KP_MINUS:
-            return ImGuiKey_KeypadSubtract;
-        case SDLK_KP_PLUS:
-            return ImGuiKey_KeypadAdd;
-        case SDLK_KP_ENTER:
-            return ImGuiKey_KeypadEnter;
-        case SDLK_KP_EQUALS:
-            return ImGuiKey_KeypadEqual;
         case SDLK_LCTRL:
             return ImGuiKey_LeftCtrl;
         case SDLK_LSHIFT:

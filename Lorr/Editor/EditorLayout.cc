@@ -226,10 +226,6 @@ void EditorLayout::render(this EditorLayout &self, vuk::Format format, vuk::Exte
 
         ImGui::End();
 
-        if (self.show_profiler) {
-            app.scene_renderer.draw_profiler_ui();
-        }
-
         if (self.show_assets) {
             memory::ScopedStack stack;
             const auto &registry = app.asset_man.registry();

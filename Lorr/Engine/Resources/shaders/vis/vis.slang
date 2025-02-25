@@ -8,3 +8,4 @@ public constexpr static u32 MESHLET_ID_MASK = (1u << MESHLET_ID_BITS) - 1u;
 // Do not ever go higher than that.
 public constexpr static u32 MESHLET_PRIMITIVE_BITS = 8u;
 public constexpr static u32 MESHLET_PRIMITIVE_MASK = (1u << MESHLET_PRIMITIVE_BITS) - 1u;
+

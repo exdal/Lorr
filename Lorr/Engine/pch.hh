@@ -43,19 +43,6 @@ namespace fs = std::filesystem;
 
 #include "Util/Icons.hh"
 
-namespace lr {
-template<typename T, usize N>
-constexpr usize count_of(T (&)[N]) {
-    return N;
-}
-
-template<class... T>
-struct match : T... {
-    using T::operator()...;
-};
-
-}  // namespace lr
-
 template<>
 struct std::formatter<fs::path> : formatter<string_view> {
     template<typename FormatContext>

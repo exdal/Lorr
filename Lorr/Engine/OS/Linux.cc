@@ -139,7 +139,7 @@ auto os::file_dialog(std::string_view title, FileDialogFlag flags) -> ls::option
         return ls::nullopt;
     }
 
-    fgets(pipe_data, count_of(pipe_data) - 1, pipe);
+    fgets(pipe_data, ls::count_of(pipe_data) - 1, pipe);
     std::string path_str = pipe_data;
     if (path_str.back() == '\n') {
         path_str.pop_back();

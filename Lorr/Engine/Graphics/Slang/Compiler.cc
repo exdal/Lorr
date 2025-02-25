@@ -307,8 +307,8 @@ auto SlangCompiler::new_session(const SlangSessionInfo &info) -> ls::option<Slan
         { .name = slang::CompilerOptionName::DebugInformationFormat,
           .value = { .kind = slang::CompilerOptionValueKind::Int, .intValue0 = SLANG_DEBUG_INFO_FORMAT_C7 } },
 #else
-        { slang::CompilerOptionName::Optimization,
-          { .kind = slang::CompilerOptionValueKind::Int, .intValue0 = SLANG_OPTIMIZATION_LEVEL_MAXIMAL } },
+        { .name = slang::CompilerOptionName::Optimization,
+          .value = { .kind = slang::CompilerOptionValueKind::Int, .intValue0 = SLANG_OPTIMIZATION_LEVEL_MAXIMAL } },
 #endif
         { .name = slang::CompilerOptionName::UseUpToDateBinaryModule,
           .value = { .kind = slang::CompilerOptionValueKind::Int, .intValue0 = 1 } },
@@ -333,7 +333,7 @@ auto SlangCompiler::new_session(const SlangSessionInfo &info) -> ls::option<Slan
         .lineDirectiveMode = SLANG_LINE_DIRECTIVE_MODE_STANDARD,
         .forceGLSLScalarBufferLayout = true,
         .compilerOptionEntries = entries,
-        .compilerOptionEntryCount = static_cast<u32>(count_of(entries)),
+        .compilerOptionEntryCount = static_cast<u32>(ls::count_of(entries)),
     };
 
     slang::SessionDesc session_desc = {

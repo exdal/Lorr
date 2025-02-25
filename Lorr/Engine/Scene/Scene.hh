@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Engine/Asset/UUID.hh"
+
 #include "Engine/Scene/SceneRenderer.hh"
 
 #include <flecs.h>
@@ -39,15 +41,14 @@ private:
     flecs::entity root = {};
     ls::option<flecs::world> world = ls::nullopt;
     SceneEntityDB entity_db = {};
+    flecs::entity editor_camera = {};
 
-    GPUEntityID editor_camera_id = GPUEntityID::Invalid;
+    SlotMap<GPU::Transforms, GPU::TransformID> entity_transforms = {};
+    ankerl::unordered_dense::map<flecs::entity, GPU::TransformID> entity_transforms_map = {};
+    std::vector<GPU::TransformID> dirty_transforms = {};
 
-    // We need additional map to avoid using components to access GPUEntityID of a given entity
-    SlotMap<flecs::entity, GPUEntityID> gpu_entities = {};                             // GPUEntityID -> flecs::entity
-    ankerl::unordered_dense::map<flecs::entity, GPUEntityID> gpu_entities_remap = {};  // flecs::entity -> GPUEntityID
-    std::vector<GPUEntityID> dirty_entities = {};
-
-    friend AssetManager;
+    ankerl::unordered_dense::map<UUID, std::vector<GPU::TransformID>> rendering_models = {};
+    bool models_dirty = false;
 
 public:
     auto init(this Scene &, const std::string &name) -> bool;
@@ -66,19 +67,23 @@ public:
     auto tick(this Scene &, f32 delta_time) -> bool;
 
     auto set_name(this Scene &, const std::string &name) -> void;
-    auto set_dirty(this Scene &, GPUEntityID gpu_entity_id) -> void;
+    auto set_dirty(this Scene &, flecs::entity entity) -> void;
+
+    auto attach_model(this Scene &, flecs::entity entity, const UUID &model_uuid) -> bool;
+    auto detach_model(this Scene &, flecs::entity entity) -> bool;
 
     auto get_root(this Scene &) -> flecs::entity;
     auto get_world(this Scene &) -> flecs::world &;
-    auto editor_camera(this Scene &) -> flecs::entity;
+    auto get_editor_camera(this Scene &) -> flecs::entity;
     auto get_name(this Scene &) -> const std::string &;
     auto get_name_sv(this Scene &) -> std::string_view;
-    auto get_gpu_entity(this Scene &, flecs::entity entity) -> ls::option<GPUEntityID>;
     auto get_entity_db(this Scene &) -> SceneEntityDB &;
 
 private:
-    auto add_gpu_entity(this Scene &, flecs::entity entity) -> GPUEntityID;
-    auto remove_gpu_entity(this Scene &, GPUEntityID id) -> void;
+    auto add_transform(this Scene &, flecs::entity entity) -> GPU::TransformID;
+    auto remove_transform(this Scene &, flecs::entity entity) -> void;
+
+    friend AssetManager;
 };
 
 }  // namespace lr

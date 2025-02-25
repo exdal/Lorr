@@ -233,12 +233,12 @@ public func integrate_single_scattered_luminance(
         f32 sun_theta = dot(info.sun_dir, up_vec);
 
         float2 transmittance_uv = get_transmittance_lut_uv(atmos, float2(h, sun_theta));
-        float3 sun_transmittance = info.transmittance_image.Sample(lut_sampler, transmittance_uv).rgb;
+        float3 sun_transmittance = info.transmittance_image.SampleLevel(lut_sampler, transmittance_uv, 0.0).rgb;
 
         float3 MS = float3(0.0);
 #ifndef ATMOS_NO_EVAL_MS
         float2 multiscatter_uv = get_multiscattering_lut_uv(atmos, altitude, sun_theta);
-        MS = info.multiscattering_image.Sample(lut_sampler, multiscatter_uv).rgb;
+        MS = info.multiscattering_image.SampleLevel(lut_sampler, multiscatter_uv, 0.0).rgb;
 #endif
         float3 scattering_phase = float3(0.0);
         if (info.eval_mie_rayleigh_phase) {
@@ -267,7 +267,7 @@ public func integrate_single_scattered_luminance(
         float NoL = saturate(dot(normalize(info.sun_dir), normalize(up_vec)));
 
         float2 transmittance_uv = get_transmittance_lut_uv(atmos, float2(h, sun_theta));
-        float3 sun_transmittance = info.transmittance_image.Sample(lut_sampler, transmittance_uv).rgb;
+        float3 sun_transmittance = info.transmittance_image.SampleLevel(lut_sampler, transmittance_uv, 0.0).rgb;
 
         result.luminance += info.sun_intensity * (sun_transmittance * result.transmittance * NoL * atmos.terrain_albedo / PI);
     }

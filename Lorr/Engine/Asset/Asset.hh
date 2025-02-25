@@ -3,6 +3,8 @@
 #include "Engine/Asset/Model.hh"
 #include "Engine/Asset/UUID.hh"
 
+#include "Engine/Core/Handle.hh"
+
 #include "Engine/Graphics/Vulkan.hh"
 
 #include "Engine/Util/JsonWriter.hh"

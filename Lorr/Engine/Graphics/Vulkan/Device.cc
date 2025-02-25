@@ -104,6 +104,7 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
     vk12_features.storageBuffer8BitAccess = true;
     vk12_features.scalarBlockLayout = true;
     vk12_features.shaderInt8 = true;
+    vk12_features.shaderSubgroupExtendedTypes = true;
     physical_device_selector.set_required_features_12(vk12_features);
 
     VkPhysicalDeviceVulkan11Features vk11_features = {};
@@ -240,10 +241,43 @@ auto Device::end_frame(this Device &self, vuk::Value<vuk::ImageAttachment> &&tar
     self.transfer_manager.release();
 }
 
-auto Device::wait() -> void {
+auto Device::wait(this Device &self, std::source_location LOC) -> void {
+    ZoneScopedN("Device Wait Idle");
+
+    LOG_TRACE("Device wait idle triggered at {}:{}!", LOC.file_name(), LOC.line());
+    self.runtime->wait_idle();
+}
+
+auto Device::create_persistent_descriptor_set(this Device &self, ls::span<BindlessDescriptorInfo> bindings, u32 index)
+    -> vuk::Unique<vuk::PersistentDescriptorSet> {
     ZoneScoped;
 
-    runtime->wait_idle();
+    auto raw_bindings = std::vector<VkDescriptorSetLayoutBinding>(bindings.size());
+    auto binding_flags = std::vector<VkDescriptorBindingFlags>(bindings.size());
+    for (usize i = 0; i < bindings.size(); i++) {
+        auto &binding = bindings[i];
+        auto &raw_binding = raw_bindings[i];
+
+        raw_binding.binding = binding.binding;
+        raw_binding.descriptorType = vuk::DescriptorBinding::vk_descriptor_type(binding.type);
+        raw_binding.descriptorCount = binding.descriptor_count;
+        binding_flags[i] = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
+    }
+
+    vuk::DescriptorSetLayoutCreateInfo layout_ci = {
+        .index = index,
+        .bindings = std::move(raw_bindings),
+        .flags = std::move(binding_flags),
+    };
+
+    // is 128 enough?
+    return self.runtime->create_persistent_descriptorset(self.allocator.value(), layout_ci, 128);
+}
+
+auto Device::commit_descriptor_set(this Device &self, vuk::PersistentDescriptorSet &set) -> void {
+    ZoneScoped;
+
+    set.commit(self.runtime.value());
 }
 
 auto Device::set_name(this Device &self, Buffer &buffer, std::string_view name) -> void {

@@ -17,22 +17,22 @@ public struct Material {
 };
 
 public struct Meshlet {
-    public u32 vertex_offset = 0;
-    public u32 index_offset = 0;
-    public u32 triangle_offset = 0;
-    public u32 triangle_count = 0;
+    public u32 vertex_offset;
+    public u32 index_offset;
+    public u32 triangle_offset;
+    public u32 triangle_count;
 };
 
 public struct MeshletBounds {
-    public vec3 aabb_min = {};
-    public vec3 aabb_max = {};
+    public vec3 aabb_min;
+    public vec3 aabb_max;
 };
 
 public struct MeshletInstance {
-    public u32 model_index = 0;
-    public u32 material_index = 0;
-    public u32 transform_index = 0;
-    public u32 meshlet_index = 0;
+    public u32 model_index;
+    public u32 material_index;
+    public u32 transform_index;
+    public u32 meshlet_index;
 };
 
 public struct Model {

@@ -58,18 +58,24 @@ public:
         vuk::source_location LOC = vuk::source_location::current()) -> vuk::Value<vuk::Buffer>;
     [[nodiscard]] auto upload_staging(
         this TransferManager &,
-        ls::span<u8> bytes,
+        void *data,
+        u64 data_size,
         vuk::Value<vuk::Buffer> &&dst,
+        u64 dst_offset = 0,
         vuk::source_location LOC = vuk::source_location::current()) -> vuk::Value<vuk::Buffer>;
     [[nodiscard]] auto upload_staging(
         this TransferManager &,
-        ls::span<u8> bytes,
+        void *data,
+        u64 data_size,
         Buffer &dst,
         u64 dst_offset = 0,
         vuk::source_location LOC = vuk::source_location::current()) -> vuk::Value<vuk::Buffer>;
     [[nodiscard]] auto upload_staging(
-        this TransferManager &, ImageView &image_view, ls::span<u8> bytes, vuk::source_location LOC = vuk::source_location::current())
-        -> vuk::Value<vuk::ImageAttachment>;
+        this TransferManager &,
+        ImageView &image_view,
+        void *data,
+        u64 data_size,
+        vuk::source_location LOC = vuk::source_location::current()) -> vuk::Value<vuk::ImageAttachment>;
     template<typename T>
     [[nodiscard]] auto upload_staging(
         this TransferManager &self,
@@ -79,7 +85,7 @@ public:
         vuk::source_location LOC = vuk::source_location::current()) -> vuk::Value<vuk::Buffer> {
         ZoneScoped;
 
-        return self.upload_staging({ reinterpret_cast<u8 *>(span.data()), span.size_bytes() }, dst, dst_offset, LOC);
+        return self.upload_staging(reinterpret_cast<void *>(span.data()), span.size_bytes(), dst, dst_offset, LOC);
     }
 
     template<typename T>
@@ -91,7 +97,7 @@ public:
         vuk::source_location LOC = vuk::source_location::current()) -> vuk::Value<vuk::Buffer> {
         ZoneScoped;
 
-        return self.upload_staging({ reinterpret_cast<u8 *>(span.data()), span.size_bytes() }, std::move(dst), dst_offset, LOC);
+        return self.upload_staging(reinterpret_cast<void *>(span.data()), span.size_bytes(), std::move(dst), dst_offset, LOC);
     }
 
     template<typename T>
@@ -104,14 +110,11 @@ public:
 
     auto wait_on(this TransferManager &, vuk::UntypedValue &&fut) -> void;
 
-    // This is host and device blocking. Please don't spam it
-    auto resize_buffer(this TransferManager &, Buffer &buffer, u64 new_size) -> Buffer;
-
 protected:
     [[nodiscard]] auto scratch_buffer(
         this TransferManager &, const void *data, u64 size, vuk::source_location LOC = vuk::source_location::current())
         -> vuk::Value<vuk::Buffer>;
-    auto wait_for_ops(this TransferManager &, vuk::Allocator &allocator, vuk::Compiler &compiler) -> void;
+    auto wait_for_ops(this TransferManager &, vuk::Compiler &compiler) -> void;
 
     auto acquire(this TransferManager &, vuk::DeviceFrameResource &allocator) -> void;
     auto release(this TransferManager &) -> void;

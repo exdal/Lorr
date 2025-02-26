@@ -286,7 +286,7 @@ auto SceneRenderer::setup_persistent_resources(this SceneRenderer &self) -> void
     self.device->set_name(self.cloud_detail_noise_lut_view, "Cloud Detail Noise View");
 }
 
-auto SceneRenderer::compose(this SceneRenderer &self, SceneComposeInfo &compose_info) -> void {
+auto SceneRenderer::compose(this SceneRenderer &self, SceneComposeInfo &compose_info) -> ComposedScene {
     ZoneScoped;
 
     auto &transfer_man = self.device->transfer_man();
@@ -300,30 +300,33 @@ auto SceneRenderer::compose(this SceneRenderer &self, SceneComposeInfo &compose_
             self.device->destroy(self.models_buffer.id());
         }
 
-        auto new_buffer_size = ls::max(compose_info.gpu_models.size_bytes() * 2, sizeof(GPU::Model));
+        auto new_buffer_size = compose_info.gpu_models.size_bytes();
         self.models_buffer = Buffer::create(*self.device, new_buffer_size, vuk::MemoryUsage::eGPUonly).value();
         self.bindless_set.update_storage_buffer(Descriptor_Models, 0, *self.device->buffer(self.models_buffer.id()));
     }
 
-    if (compose_info.gpu_meshlet_instances.size_bytes() > self.meshlet_instance_buffer.data_size()) {
-        if (self.meshlet_instance_buffer) {
+    if (compose_info.gpu_meshlet_instances.size_bytes() > self.meshlet_instances_buffer.data_size()) {
+        if (self.meshlet_instances_buffer) {
             self.device->wait();
-            self.device->destroy(self.meshlet_instance_buffer.id());
+            self.device->destroy(self.meshlet_instances_buffer.id());
         }
 
-        auto new_buffer_size = ls::max(compose_info.gpu_meshlet_instances.size_bytes() * 2, sizeof(GPU::MeshletInstance));
-        self.meshlet_instance_buffer = Buffer::create(*self.device, new_buffer_size, vuk::MemoryUsage::eGPUonly).value();
-        self.bindless_set.update_storage_buffer(Descriptor_MeshletInstances, 0, *self.device->buffer(self.meshlet_instance_buffer.id()));
+        auto new_buffer_size = compose_info.gpu_meshlet_instances.size_bytes();
+        self.meshlet_instances_buffer = Buffer::create(*self.device, new_buffer_size, vuk::MemoryUsage::eGPUonly).value();
+        self.bindless_set.update_storage_buffer(Descriptor_MeshletInstances, 0, *self.device->buffer(self.meshlet_instances_buffer.id()));
     }
 
     self.device->commit_descriptor_set(self.bindless_set);
 
     self.meshlet_instance_count = compose_info.gpu_meshlet_instances.size();
-    transfer_man.wait_on(transfer_man.upload_staging(compose_info.gpu_models, self.models_buffer));
-    transfer_man.wait_on(transfer_man.upload_staging(compose_info.gpu_meshlet_instances, self.meshlet_instance_buffer));
+    return ComposedScene{
+        .models_buffer = transfer_man.upload_staging(compose_info.gpu_models, self.models_buffer),
+        .meshlet_instances_buffer = transfer_man.upload_staging(compose_info.gpu_meshlet_instances, self.meshlet_instances_buffer),
+    };
 }
 
-auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info) -> vuk::Value<vuk::ImageAttachment> {
+auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::option<ComposedScene> &composed_scene)
+    -> vuk::Value<vuk::ImageAttachment> {
     ZoneScoped;
 
     auto &transfer_man = self.device->transfer_man();
@@ -332,6 +335,7 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info) -> v
     //
     // WARN: compose_info.transforms contains _ALL_ transforms!!!
     //
+    bool rebuild_transforms = false;
     if (info.transforms.size_bytes() > self.transforms_buffer.data_size()) {
         if (self.transforms_buffer.id() != BufferID::Invalid) {
             // Device wait here is important, do not remove it. Why?
@@ -342,27 +346,38 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info) -> v
             self.device->destroy(self.transforms_buffer.id());
         }
 
-        auto new_buffer_size = ls::max(info.transforms.size_bytes() * 2, sizeof(GPU::Transforms));
-        self.transforms_buffer = Buffer::create(*self.device, new_buffer_size, vuk::MemoryUsage::eGPUonly).value();
+        self.transforms_buffer = Buffer::create(*self.device, info.transforms.size_bytes(), vuk::MemoryUsage::eGPUonly).value();
         self.bindless_set.update_storage_buffer(Descriptor_Transforms, 0, *self.device->buffer(self.transforms_buffer.id()));
         self.device->commit_descriptor_set(self.bindless_set);
+
+        rebuild_transforms = true;
     }
 
     auto transforms_buffer = self.transforms_buffer.acquire(*self.device, "Transforms Buffer", vuk::Access::eNone);
     if (!info.dirty_transform_ids.empty()) {
-        auto transform_count = info.dirty_transform_ids.size();
+        auto transform_count = rebuild_transforms ? info.transforms.size() : info.dirty_transform_ids.size();
         auto new_transforms_size_bytes = transform_count * sizeof(GPU::Transforms);
 
         auto upload_buffer = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eCPUonly, new_transforms_size_bytes);
         auto *dst_transform_ptr = reinterpret_cast<GPU::Transforms *>(upload_buffer->mapped_ptr);
         auto upload_offsets = std::vector<u64>(transform_count);
 
-        for (const auto &[dirty_transform_id, offset] : std::views::zip(info.dirty_transform_ids, upload_offsets)) {
-            auto index = SlotMap_decode_id(dirty_transform_id).index;
-            const auto &transform = info.transforms[index];
-            std::memcpy(dst_transform_ptr, &transform, sizeof(GPU::Transforms));
-            offset = index * sizeof(GPU::Transforms);
-            dst_transform_ptr++;
+        if (!rebuild_transforms) {
+            for (const auto &[dirty_transform_id, offset] : std::views::zip(info.dirty_transform_ids, upload_offsets)) {
+                auto index = SlotMap_decode_id(dirty_transform_id).index;
+                const auto &transform = info.transforms[index];
+                std::memcpy(dst_transform_ptr, &transform, sizeof(GPU::Transforms));
+                offset = index * sizeof(GPU::Transforms);
+                dst_transform_ptr++;
+            }
+        } else {
+            u64 offset = 0;
+            for (auto &v : upload_offsets) {
+                v = offset;
+                offset += sizeof(GPU::Transforms);
+            }
+
+            std::memcpy(dst_transform_ptr, info.transforms.data(), ls::size_bytes(info.transforms));
         }
 
         auto update_transforms_pass = vuk::make_pass(
@@ -640,7 +655,7 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info) -> v
                 return std::make_tuple(meshlet_indirect, visible_meshlet_instances_indices);
             });
 
-        auto meshlets_indirect_dispatch = transfer_man.scratch_buffer<vuk::DispatchIndirectCommand>({});
+        auto meshlets_indirect_dispatch = transfer_man.scratch_buffer<vuk::DispatchIndirectCommand>({ .x = 0, .y = 1, .z = 1 });
         auto visible_meshlet_instances_buffer =
             transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eGPUonly, self.meshlet_instance_count * sizeof(u32));
         std::tie(meshlets_indirect_dispatch, visible_meshlet_instances_buffer) =
@@ -665,16 +680,29 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info) -> v
                     .bind_buffer(0, 3, meshlet_instances)
                     .bind_buffer(0, 4, reordered_indices)
                     .dispatch_indirect(meshlet_indirect);
-                return std::make_tuple(triangles_indirect, models, meshlet_instances, reordered_indices);
+                return std::make_tuple(triangles_indirect, visible_meshlet_instances_indices, models, meshlet_instances, reordered_indices);
             });
 
         auto triangles_indexed_indirect_dispatch = transfer_man.scratch_buffer<vuk::DrawIndexedIndirectCommand>({ .instanceCount = 1 });
-        auto models_buffer = self.models_buffer.acquire(*self.device, "Models", vuk::Access::eNone);
-        auto meshlet_instances_buffer = self.meshlet_instance_buffer.acquire(*self.device, "Meshlet Instances", vuk::Access::eNone);
         auto reordered_indices_buffer = transfer_man.alloc_transient_buffer(
             vuk::MemoryUsage::eGPUonly, self.meshlet_instance_count * Model::MAX_MESHLET_PRIMITIVES * 3 * sizeof(u32));
 
-        std::tie(triangles_indexed_indirect_dispatch, models_buffer, meshlet_instances_buffer, reordered_indices_buffer) =
+        vuk::Value<vuk::Buffer> models_buffer;
+        vuk::Value<vuk::Buffer> meshlet_instances_buffer;
+        if (composed_scene.has_value()) {
+            models_buffer = std::move(composed_scene->models_buffer);
+            meshlet_instances_buffer = std::move(composed_scene->meshlet_instances_buffer);
+        } else {
+            models_buffer = self.models_buffer.acquire(*self.device, "Models", vuk::Access::eNone);
+            meshlet_instances_buffer = self.meshlet_instances_buffer.acquire(*self.device, "Meshlet Instances", vuk::Access::eNone);
+        }
+
+        std::tie(
+            triangles_indexed_indirect_dispatch,
+            visible_meshlet_instances_buffer,
+            models_buffer,
+            meshlet_instances_buffer,
+            reordered_indices_buffer) =
             vis_cull_triangles_pass(
                 std::move(triangles_indexed_indirect_dispatch),
                 std::move(meshlets_indirect_dispatch),
@@ -695,6 +723,7 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info) -> v
                 VUK_BA(vuk::eVertexRead) transforms,
                 VUK_BA(vuk::eVertexRead) models,
                 VUK_BA(vuk::eVertexRead) meshlet_instances,
+                VUK_BA(vuk::eVertexRead) visible_meshlet_instances_indices,
                 VUK_BA(vuk::eIndexRead) index_buffer) {
                 cmd_list  //
                     .bind_graphics_pipeline(pipeline)
@@ -708,6 +737,7 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info) -> v
                     .bind_buffer(0, 1, transforms)
                     .bind_buffer(0, 2, models)
                     .bind_buffer(0, 3, meshlet_instances)
+                    .bind_buffer(0, 4, visible_meshlet_instances_indices)
                     .bind_index_buffer(index_buffer, vuk::IndexType::eUint32)
                     .draw_indexed_indirect(1, triangle_indirect);
                 return std::make_tuple(dst, dst_depth, scene);
@@ -721,6 +751,7 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info) -> v
             std::move(transforms_buffer),
             std::move(models_buffer),
             std::move(meshlet_instances_buffer),
+            std::move(visible_meshlet_instances_buffer),
             std::move(reordered_indices_buffer));
     }
 

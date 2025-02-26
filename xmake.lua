@@ -1,5 +1,4 @@
-add_repositories("exdal https://github.com/exdal/xmake-repo.git")
-includes("xmake/**.lua")
+includes("xmake/*.lua")
 
 add_rules("mode.debug", "mode.release", "mode.releasedbg")
 add_rules("plugin.compile_commands.autoupdate", { outputdir = ".", lsp = "clangd" })

@@ -8,6 +8,11 @@ struct SceneComposeInfo {
     ls::span<GPU::MeshletInstance> gpu_meshlet_instances = {};
 };
 
+struct ComposedScene {
+    vuk::Value<vuk::Buffer> models_buffer = {};
+    vuk::Value<vuk::Buffer> meshlet_instances_buffer = {};
+};
+
 struct SceneRenderInfo {
     vuk::Format format = vuk::Format::eR8G8B8A8Srgb;
     vuk::Extent3D extent = {};
@@ -28,8 +33,9 @@ struct SceneRenderer {
     auto setup_persistent_resources(this SceneRenderer &) -> void;
 
     // Scene
-    auto compose(this SceneRenderer &, SceneComposeInfo &compose_info) -> void;
-    auto render(this SceneRenderer &, SceneRenderInfo &render_info) -> vuk::Value<vuk::ImageAttachment>;
+    auto compose(this SceneRenderer &, SceneComposeInfo &compose_info) -> ComposedScene;
+    auto render(this SceneRenderer &, SceneRenderInfo &render_info, ls::option<ComposedScene> &composed_scene)
+        -> vuk::Value<vuk::ImageAttachment>;
 
 private:
     Device *device = nullptr;
@@ -39,7 +45,7 @@ private:
 
     u32 meshlet_instance_count = 0;
     Buffer models_buffer = {};
-    Buffer meshlet_instance_buffer = {};
+    Buffer meshlet_instances_buffer = {};
 
     Pipeline grid_pipeline = {};
 

@@ -47,7 +47,6 @@ auto ImGuiRenderer::init(this ImGuiRenderer &self, Device *device) -> void {
     u8 *font_data = nullptr;
     i32 font_width, font_height;
     imgui.Fonts->GetTexDataAsRGBA32(&font_data, &font_width, &font_height);
-    auto font_bytes = ls::span(font_data, font_width * font_height * 4);
 
     // clang-format off
     auto &transfer_man = device->transfer_man();
@@ -65,7 +64,8 @@ auto ImGuiRenderer::init(this ImGuiRenderer &self, Device *device) -> void {
         vuk::ImageViewType::e2D,
         { .aspectMask = vuk::ImageAspectFlagBits::eColor })
         .value();
-    auto imgui_ia = transfer_man.upload_staging(self.font_atlas_view, font_bytes).as_released(vuk::Access::eFragmentSampled, vuk::DomainFlagBits::eGraphicsQueue);
+    auto imgui_ia = transfer_man.upload_staging(self.font_atlas_view, font_data, font_width * font_height * 4)
+        .as_released(vuk::Access::eFragmentSampled, vuk::DomainFlagBits::eGraphicsQueue);
     imgui_ia->layout = vuk::ImageLayout::eReadOnlyOptimal;
     transfer_man.wait_on(std::move(imgui_ia));
     IM_FREE(font_data);

@@ -766,7 +766,7 @@ auto AssetManager::load_texture(const UUID &uuid, ls::span<u8> pixels, const Tex
         return false;
     }
 
-    auto attachment = transfer_man.upload_staging(image_view.value(), raw_pixels)
+    auto attachment = transfer_man.upload_staging(image_view.value(), raw_pixels.data(), ls::size_bytes(raw_pixels))
                           .as_released(vuk::Access::eFragmentSampled, vuk::DomainFlagBits::eGraphicsQueue);
     attachment->layout = vuk::ImageLayout::eReadOnlyOptimal;
     transfer_man.wait_on(std::move(attachment));

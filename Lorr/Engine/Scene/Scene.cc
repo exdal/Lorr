@@ -409,6 +409,7 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, const vuk::Extent3
         }
     });
 
+    ls::option<ComposedScene> composed_scene = ls::nullopt;
     if (self.models_dirty) {
         memory::ScopedStack stack;
         self.models_dirty = false;
@@ -425,9 +426,9 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, const vuk::Extent3
 
             gpu_model.vertex_positions = model->vertex_positions.device_address();
             gpu_model.indices = model->indices.device_address();
-            gpu_model.local_triangle_indices = model->local_triangle_indices.device_address();
             gpu_model.meshlets = model->meshlets.device_address();
             gpu_model.meshlet_bounds = model->meshlet_bounds.device_address();
+            gpu_model.local_triangle_indices = model->local_triangle_indices.device_address();
         }
 
         auto gpu_meshlet_instances = stack.alloc<GPU::MeshletInstance>(meshlet_instance_count);
@@ -455,7 +456,7 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, const vuk::Extent3
             .gpu_models = gpu_models,
             .gpu_meshlet_instances = gpu_meshlet_instances,
         };
-        renderer.compose(compose_info);
+        composed_scene.emplace(renderer.compose(compose_info));
     }
 
     auto transforms = self.entity_transforms.slots_unsafe();
@@ -477,7 +478,7 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, const vuk::Extent3
         .render_clouds = clouds_data.has_value(),
     };
 
-    auto rendered_attachment = renderer.render(render_info);
+    auto rendered_attachment = renderer.render(render_info, composed_scene);
     self.dirty_transforms.clear();
 
     return rendered_attachment;

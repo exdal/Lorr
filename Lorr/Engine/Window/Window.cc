@@ -218,7 +218,10 @@ auto Window::get_surface(VkInstance instance) -> VkSurfaceKHR {
     ZoneScoped;
 
     VkSurfaceKHR surface = {};
-    SDL_Vulkan_CreateSurface(impl->handle, instance, nullptr, &surface);
+    if (!SDL_Vulkan_CreateSurface(impl->handle, instance, nullptr, &surface)) {
+        LOG_ERROR("{}", SDL_GetError());
+        return nullptr;
+    }
     return surface;
 }
 

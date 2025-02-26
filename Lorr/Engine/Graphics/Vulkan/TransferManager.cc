@@ -64,32 +64,36 @@ auto TransferManager::upload_staging(
 }
 
 auto TransferManager::upload_staging(
-    this TransferManager &self, ls::span<u8> bytes, vuk::Value<vuk::Buffer> &&dst, vuk::source_location LOC) -> vuk::Value<vuk::Buffer> {
-    ZoneScoped;
-
-    auto cpu_buffer = self.alloc_transient_buffer(vuk::MemoryUsage::eCPUonly, bytes.size_bytes(), LOC);
-    std::memcpy(cpu_buffer->mapped_ptr, bytes.data(), bytes.size_bytes());
-    return self.upload_staging(std::move(cpu_buffer), std::move(dst), LOC);
-}
-
-auto TransferManager::upload_staging(this TransferManager &self, ls::span<u8> bytes, Buffer &dst, u64 dst_offset, vuk::source_location LOC)
+    this TransferManager &self, void *data, u64 data_size, vuk::Value<vuk::Buffer> &&dst, u64 dst_offset, vuk::source_location LOC)
     -> vuk::Value<vuk::Buffer> {
     ZoneScoped;
 
-    auto cpu_buffer = self.alloc_transient_buffer(vuk::MemoryUsage::eCPUonly, bytes.size_bytes(), LOC);
-    std::memcpy(cpu_buffer->mapped_ptr, bytes.data(), bytes.size_bytes());
+    auto cpu_buffer = self.alloc_transient_buffer(vuk::MemoryUsage::eCPUonly, data_size, LOC);
+    std::memcpy(cpu_buffer->mapped_ptr, data, data_size);
+
+    auto dst_buffer = vuk::discard_buf("dst", dst->subrange(dst_offset, cpu_buffer->size), LOC);
+    return self.upload_staging(std::move(cpu_buffer), std::move(dst_buffer), LOC);
+}
+
+auto TransferManager::upload_staging(
+    this TransferManager &self, void *data, u64 data_size, Buffer &dst, u64 dst_offset, vuk::source_location LOC)
+    -> vuk::Value<vuk::Buffer> {
+    ZoneScoped;
+
+    auto cpu_buffer = self.alloc_transient_buffer(vuk::MemoryUsage::eCPUonly, data_size, LOC);
+    std::memcpy(cpu_buffer->mapped_ptr, data, data_size);
 
     auto *dst_handle = self.device->buffer(dst.id());
     auto dst_buffer = vuk::discard_buf("dst", dst_handle->subrange(dst_offset, cpu_buffer->size), LOC);
     return self.upload_staging(std::move(cpu_buffer), std::move(dst_buffer), LOC);
 }
 
-auto TransferManager::upload_staging(this TransferManager &self, ImageView &image_view, ls::span<u8> bytes, vuk::source_location LOC)
+auto TransferManager::upload_staging(this TransferManager &self, ImageView &image_view, void *data, u64 data_size, vuk::source_location LOC)
     -> vuk::Value<vuk::ImageAttachment> {
     ZoneScoped;
 
-    auto cpu_buffer = self.alloc_transient_buffer(vuk::MemoryUsage::eCPUonly, bytes.size_bytes(), LOC);
-    std::memcpy(cpu_buffer->mapped_ptr, bytes.data(), bytes.size_bytes());
+    auto cpu_buffer = self.alloc_transient_buffer(vuk::MemoryUsage::eCPUonly, data_size, LOC);
+    std::memcpy(cpu_buffer->mapped_ptr, data, data_size);
 
     auto dst_attachment_info = image_view.get_attachment(*self.device, vuk::ImageUsageFlagBits::eTransferDst);
     auto dst_attachment = vuk::declare_ia("dst", dst_attachment_info, LOC);
@@ -147,40 +151,10 @@ auto TransferManager::wait_on(this TransferManager &self, vuk::UntypedValue &&fu
     self.futures.emplace_back(std::move(fut));
 }
 
-auto TransferManager::resize_buffer(this TransferManager &self, Buffer &buffer, u64 new_size) -> Buffer {
+auto TransferManager::wait_for_ops(this TransferManager &self, vuk::Compiler &compiler) -> void {
     ZoneScoped;
 
-    LS_EXPECT(buffer);
-    auto *old_buffer_handle = self.device->buffer(buffer.id());
-    if (old_buffer_handle->size < new_size) {
-        ZoneScopedN("Buffer resize");
-        // Device wait here is important, do not remove it. Why?
-        // We are using ONE transform buffer for all frames, if
-        // this buffer gets destroyed in current frame, previous
-        // rendering frame buffer will get corrupt and crash GPU.
-        self.device->wait();
-        auto new_buffer = Buffer::create(*self.device, new_size, old_buffer_handle->memory_usage).value();
-        auto new_buffer_handle = self.device->buffer(new_buffer.id());
-        auto new_buffer_subrange = new_buffer_handle->subrange(0, old_buffer_handle->size);
-
-        auto old_buffer_val = vuk::acquire_buf("old resizing buffer", *old_buffer_handle, vuk::Access::eNone);
-        auto new_buffer_val = vuk::discard_buf("new resizing buffer subrance", new_buffer_subrange);
-        self.upload_staging(std::move(old_buffer_val), std::move(new_buffer_val))  //
-            .wait(*self.device->allocator, self.device->compiler);
-
-        self.device->destroy(buffer.id());
-
-        return new_buffer;
-    }
-
-    // No new allocations needed, just return back
-    return buffer;
-}
-
-auto TransferManager::wait_for_ops(this TransferManager &self, vuk::Allocator &allocator, vuk::Compiler &compiler) -> void {
-    ZoneScoped;
-
-    vuk::wait_for_values_explicit(allocator, compiler, self.futures, {});
+    vuk::wait_for_values_explicit(*self.frame_allocator, compiler, self.futures, {});
     self.futures.clear();
 }
 

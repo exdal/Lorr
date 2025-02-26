@@ -1,3 +1,9 @@
+add_repositories("exdal https://github.com/exdal/xmake-repo.git")
+
+includes("packages/ImGuizmo/xmake.lua")
+includes("packages/slang-lorr/xmake.lua")
+includes("packages/vuk/xmake.lua")
+
 add_requires("xxhash v0.8.3")
 add_requires("glm 1.0.1", { configs = {
     header_only = true,
@@ -25,12 +31,12 @@ add_requires("flecs v4.0.3")
 
 add_requires("libsdl3 3.2.2", { configs = {
     wayland = true,
-    x11 = false,
+    x11 = true,
 } })
 
 add_requires("imguizmo-lorr 1.89+WIP")
 add_requires("slang-lorr testing")
-add_requires("vuk 2025.02.21.3-format", {
+add_requires("vuk 2025.02.26.2", {
     configs = { debug_allocations = false },
     debug = is_mode("debug")
 })

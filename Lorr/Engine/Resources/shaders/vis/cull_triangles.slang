@@ -34,16 +34,33 @@ GLSLShaderStorageBuffer<ReorderedIndices, ScalarDataLayout> reordered_indices;
 #endif
 
 groupshared u32 base_index_shared;
+groupshared u32 triangles_passed_shared;
 
 [shader("compute")]
 [numthreads(CULLING_TRIANGLE_COUNT, 1, 1)]
 void cs_main(uint3 group_id : SV_GroupID, uint3 group_thread_id : SV_GroupThreadID) {
     const u32 local_index = group_thread_id.x;
-    const u32 meshlet_instance_index = visible_meshlet_instances_indices.indices[group_id.x];
+    const u32 visible_meshlet_index = group_id.x;
+    const u32 meshlet_instance_index = visible_meshlet_instances_indices.indices[visible_meshlet_index];
     const MeshletInstance meshlet_instance = meshlet_instances.instances[meshlet_instance_index];
     const Model model = models.models[meshlet_instance.model_index];
     const u32 meshlet_index = meshlet_instance.meshlet_index;
     const Meshlet meshlet = model.meshlets[meshlet_index];
+
+    if (local_index == 0) {
+        triangles_passed_shared = 0;
+    }
+
+    GroupMemoryBarrierWithGroupSync();
+
+    bool triangle_passed = false;
+    u32 active_triangle_index = 0;
+    if (local_index < meshlet.triangle_count) {
+        triangle_passed = true;
+        InterlockedAdd(triangles_passed_shared, 1, active_triangle_index);
+    }
+
+    GroupMemoryBarrierWithGroupSync();
 
     if (local_index == 0) {
         InterlockedAdd(indirect_draw_command.index_count, meshlet.triangle_count * 3, base_index_shared);
@@ -51,13 +68,11 @@ void cs_main(uint3 group_id : SV_GroupID, uint3 group_thread_id : SV_GroupThread
 
     GroupMemoryBarrierWithGroupSync();
 
-    if (local_index >= meshlet.triangle_count) {
-        return;
+    if (triangle_passed) {
+        const u32 triangle_index = local_index * 3;
+        const u32 index_offset = base_index_shared + active_triangle_index * 3;
+        reordered_indices.indices[index_offset + 0] = (visible_meshlet_index << MESHLET_PRIMITIVE_BITS) | ((triangle_index + 0) & MESHLET_PRIMITIVE_MASK);
+        reordered_indices.indices[index_offset + 1] = (visible_meshlet_index << MESHLET_PRIMITIVE_BITS) | ((triangle_index + 1) & MESHLET_PRIMITIVE_MASK);
+        reordered_indices.indices[index_offset + 2] = (visible_meshlet_index << MESHLET_PRIMITIVE_BITS) | ((triangle_index + 2) & MESHLET_PRIMITIVE_MASK);
     }
-
-    const u32 triangle_index = local_index * 3;
-    const u32 index_offset = base_index_shared + triangle_index;
-    reordered_indices.indices[index_offset + 0] = (meshlet_index << MESHLET_PRIMITIVE_BITS) | ((triangle_index + 0) & MESHLET_PRIMITIVE_MASK);
-    reordered_indices.indices[index_offset + 1] = (meshlet_index << MESHLET_PRIMITIVE_BITS) | ((triangle_index + 1) & MESHLET_PRIMITIVE_MASK);
-    reordered_indices.indices[index_offset + 2] = (meshlet_index << MESHLET_PRIMITIVE_BITS) | ((triangle_index + 2) & MESHLET_PRIMITIVE_MASK);
 }

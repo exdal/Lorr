@@ -56,7 +56,8 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
 #elif defined(LS_LINUX)
     instance_extensions.push_back(VK_KHR_SURFACE_EXTENSION_NAME);
     instance_extensions.push_back("VK_KHR_xcb_surface");
-    instance_extensions.push_back("VK_KHR_wayland_surface");
+    instance_extensions.push_back("VK_KHR_xlib_surface");
+    // instance_extensions.push_back("VK_KHR_wayland_surface");
 #endif
 #if LS_DEBUG
     instance_extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
@@ -234,7 +235,7 @@ auto Device::new_frame(this Device &self, SwapChain &swapchain) -> vuk::Value<vu
 auto Device::end_frame(this Device &self, vuk::Value<vuk::ImageAttachment> &&target_attachment) -> void {
     ZoneScoped;
 
-    self.transfer_manager.wait_for_ops(*self.allocator, self.compiler);
+    self.transfer_manager.wait_for_ops(self.compiler);
 
     auto result = vuk::enqueue_presentation(std::move(target_attachment));
     result.submit(*self.transfer_manager.frame_allocator, self.compiler, { .graph_label = {}, .callbacks = {} });

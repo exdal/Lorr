@@ -575,33 +575,6 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
         auto raw_vertex_positions = ls::span(gltf_callbacks.vertex_positions.data() + mesh.vertex_offset, mesh.vertex_count);
         auto raw_indices = ls::span(gltf_callbacks.indices.data() + mesh.index_offset, mesh.index_count);
 
-        //  ── PRE-OPTIMIZATION ────────────────────────────────────────────────
-        auto vertex_positions = std::vector<glm::vec3>();
-        auto indices = std::vector<Model::Index>(mesh.vertex_count);
-        {
-            ZoneScopedN("Pre-optimize Geometry");
-            auto remapped_indices = std::vector<Model::Index>(mesh.index_count);
-            const auto unique_vertices = meshopt_optimizeVertexFetchRemap(  //
-                indices.data(),
-                raw_indices.data(),
-                raw_indices.size(),
-                raw_vertex_positions.size());
-
-            meshopt_remapIndexBuffer(  //
-                remapped_indices.data(),
-                raw_indices.data(),
-                raw_indices.size(),
-                indices.data());
-
-            vertex_positions.resize(unique_vertices);
-            meshopt_remapVertexBuffer(  //
-                vertex_positions.data(),
-                raw_vertex_positions.data(),
-                raw_vertex_positions.size(),
-                sizeof(glm::vec3),
-                indices.data());
-        }
-
         auto meshlets = std::vector<GPU::Meshlet>();
         auto meshlet_bounds = std::vector<GPU::MeshletBounds>();
         auto meshlet_indices = std::vector<u32>();
@@ -610,7 +583,7 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
             ZoneScopedN("Build Meshlets");
             // Worst case count
             auto max_meshlets = meshopt_buildMeshletsBound(  //
-                indices.size(),
+                raw_indices.size(),
                 Model::MAX_MESHLET_INDICES,
                 Model::MAX_MESHLET_PRIMITIVES);
             auto raw_meshlets = std::vector<meshopt_Meshlet>(max_meshlets);
@@ -620,10 +593,10 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
                 raw_meshlets.data(),
                 meshlet_indices.data(),
                 local_triangle_indices.data(),
-                indices.data(),
-                indices.size(),
-                reinterpret_cast<f32 *>(vertex_positions.data()),
-                vertex_positions.size(),
+                raw_indices.data(),
+                raw_indices.size(),
+                reinterpret_cast<f32 *>(raw_vertex_positions.data()),
+                raw_vertex_positions.size(),
                 sizeof(glm::vec3),
                 Model::MAX_MESHLET_INDICES,
                 Model::MAX_MESHLET_PRIMITIVES,
@@ -641,7 +614,7 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
                 auto meshlet_bb_min = glm::vec3(std::numeric_limits<f32>::max());
                 auto meshlet_bb_max = glm::vec3(std::numeric_limits<f32>::lowest());
                 for (u32 i = 0; i < raw_meshlet.triangle_count * 3; i++) {
-                    const auto &tri_pos = vertex_positions
+                    const auto &tri_pos = raw_vertex_positions
                         [meshlet_indices[raw_meshlet.vertex_offset + local_triangle_indices[raw_meshlet.triangle_offset + i]]];
                     meshlet_bb_min = glm::min(meshlet_bb_min, tri_pos);
                     meshlet_bb_max = glm::max(meshlet_bb_max, tri_pos);
@@ -656,7 +629,7 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
             }
         }
 
-        std::ranges::move(vertex_positions, std::back_inserter(model_vertex_positions));
+        std::ranges::move(raw_vertex_positions, std::back_inserter(model_vertex_positions));
         std::ranges::move(meshlet_indices, std::back_inserter(model_indices));
         std::ranges::move(meshlets, std::back_inserter(model_meshlets));
         std::ranges::move(meshlet_bounds, std::back_inserter(model_meshlet_bounds));

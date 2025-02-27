@@ -42,9 +42,9 @@ VertexOutput vs_main(u32 vertex_id : SV_VertexID) {
     const Model model = models.models[meshlet_instance.model_index];
 
     const Meshlet meshlet = model.meshlets[meshlet_instance.meshlet_index];
-    const uint vertex_offset = meshlet.vertex_offset;
-    const uint index_offset = meshlet.index_offset;
-    const uint triangle_offset = meshlet.triangle_offset;
+    const u32 vertex_offset = meshlet.vertex_offset;
+    const u32 index_offset = meshlet.index_offset;
+    const u32 triangle_offset = meshlet.triangle_offset;
 
     const u32 local_triangle = u32(model.local_triangle_indices[triangle_offset + triangle_index]);
     const u32 index = model.indices[index_offset + local_triangle];

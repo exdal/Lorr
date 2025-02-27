@@ -60,12 +60,15 @@ auto Scene::init(this Scene &self, const std::string &name) -> bool {
 
     self.world
         ->observer<ECS::Transform>()  //
-        .event(flecs::Monitor)
+        .event(flecs::OnSet)
+        .event(flecs::OnAdd)
+        .event(flecs::OnRemove)
         .each([&self](flecs::iter &it, usize i, ECS::Transform &) {
             auto entity = it.entity(i);
-            if (it.event() == flecs::OnAdd) {
-                auto transform_id = self.add_transform(entity);
-                self.dirty_transforms.push_back(transform_id);
+            if (it.event() == flecs::OnSet) {
+                self.set_dirty(entity);
+            } else if (it.event() == flecs::OnAdd) {
+                self.add_transform(entity);
             } else if (it.event() == flecs::OnRemove) {
                 self.remove_transform(entity);
             }
@@ -85,14 +88,15 @@ auto Scene::init(this Scene &self, const std::string &name) -> bool {
 
     self.world
         ->observer<ECS::RenderingModel>()  //
-        .event(flecs::Monitor)
+        .event(flecs::OnSet)
+        .event(flecs::OnRemove)
         .each([&self](flecs::iter &it, usize i, ECS::RenderingModel &rendering_model) {
             if (!rendering_model.uuid) {
                 return;
             }
 
             auto entity = it.entity(i);
-            if (it.event() == flecs::OnAdd) {
+            if (it.event() == flecs::OnSet) {
                 self.attach_model(entity, rendering_model.uuid);
             } else if (it.event() == flecs::OnRemove) {
                 self.detach_model(entity);
@@ -211,6 +215,8 @@ auto Scene::import_from_file(this Scene &self, const fs::path &path) -> bool {
                     },
                     member);
             });
+
+            e.modified(component_id);
         }
     }
 

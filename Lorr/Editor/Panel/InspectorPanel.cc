@@ -20,14 +20,9 @@ void InspectorPanel::render(this InspectorPanel &self) {
     ImGui::End();
 }
 
-auto inspect_asset(UUID &uuid) -> void {
+auto inspect_asset(UUID &uuid) -> bool {
     memory::ScopedStack stack;
     auto &app = EditorApp::get();
-    if (!app.active_scene_uuid.has_value()) {
-        return;
-    }
-
-    auto *scene = app.asset_man.get_scene(app.active_scene_uuid.value());
     auto cursor_pos = ImGui::GetCursorPos();
     auto avail_region = ImGui::GetContentRegionAvail();
     auto *asset = app.asset_man.get_asset(uuid);
@@ -50,12 +45,15 @@ auto inspect_asset(UUID &uuid) -> void {
                 if (uuid != dropping_uuid && app.asset_man.load_model(dropping_uuid) && uuid) {
                     app.asset_man.unload_model(uuid);
                 }
-                scene->attach_model(app.selected_entity, dropping_uuid);
                 uuid = dropping_uuid;
+
+                return true;
             }
         }
         ImGui::EndDragDropTarget();
     }
+
+    return false;
 }
 
 auto InspectorPanel::draw_inspector(this InspectorPanel &) -> void {
@@ -69,7 +67,6 @@ auto InspectorPanel::draw_inspector(this InspectorPanel &) -> void {
         }
 
         std::vector<flecs::id> removing_components = {};
-        bool entity_modified = false;
         app.selected_entity.each([&](flecs::id component_id) {
             memory::ScopedStack stack;
 
@@ -104,23 +101,28 @@ auto InspectorPanel::draw_inspector(this InspectorPanel &) -> void {
                     ImGui::TextUnformatted(member_name.data(), member_name.data() + member_name.length());
                     ImGui::TableNextColumn();
 
+                    bool component_modified = false;
                     ImGui::PushID(static_cast<i32>(i));
                     std::visit(
                         ls::match{
                             [](const auto &) {},
-                            [&](f32 *v) { entity_modified |= ImGuiLR::drag_vec(0, v, 1, ImGuiDataType_Float); },
-                            [&](i32 *v) { entity_modified |= ImGuiLR::drag_vec(0, v, 1, ImGuiDataType_S32); },
-                            [&](u32 *v) { entity_modified |= ImGuiLR::drag_vec(0, v, 1, ImGuiDataType_U32); },
-                            [&](i64 *v) { entity_modified |= ImGuiLR::drag_vec(0, v, 1, ImGuiDataType_S64); },
-                            [&](u64 *v) { entity_modified |= ImGuiLR::drag_vec(0, v, 1, ImGuiDataType_U64); },
-                            [&](glm::vec2 *v) { entity_modified |= ImGuiLR::drag_vec(0, glm::value_ptr(*v), 2, ImGuiDataType_Float); },
-                            [&](glm::vec3 *v) { entity_modified |= ImGuiLR::drag_vec(0, glm::value_ptr(*v), 3, ImGuiDataType_Float); },
-                            [&](glm::vec4 *v) { entity_modified |= ImGuiLR::drag_vec(0, glm::value_ptr(*v), 4, ImGuiDataType_Float); },
+                            [&](f32 *v) { component_modified |= ImGuiLR::drag_vec(0, v, 1, ImGuiDataType_Float); },
+                            [&](i32 *v) { component_modified |= ImGuiLR::drag_vec(0, v, 1, ImGuiDataType_S32); },
+                            [&](u32 *v) { component_modified |= ImGuiLR::drag_vec(0, v, 1, ImGuiDataType_U32); },
+                            [&](i64 *v) { component_modified |= ImGuiLR::drag_vec(0, v, 1, ImGuiDataType_S64); },
+                            [&](u64 *v) { component_modified |= ImGuiLR::drag_vec(0, v, 1, ImGuiDataType_U64); },
+                            [&](glm::vec2 *v) { component_modified |= ImGuiLR::drag_vec(0, glm::value_ptr(*v), 2, ImGuiDataType_Float); },
+                            [&](glm::vec3 *v) { component_modified |= ImGuiLR::drag_vec(0, glm::value_ptr(*v), 3, ImGuiDataType_Float); },
+                            [&](glm::vec4 *v) { component_modified |= ImGuiLR::drag_vec(0, glm::value_ptr(*v), 4, ImGuiDataType_Float); },
                             [](std::string *v) { ImGui::InputText("", v); },
-                            [&](UUID *v) { inspect_asset(*v); },
+                            [&](UUID *v) { component_modified |= inspect_asset(*v); },
                         },
                         member);
                     ImGui::PopID();
+
+                    if (component_modified) {
+                        app.selected_entity.modified(component_id.entity());
+                    }
                 });
 
                 ImGui::PopID();
@@ -160,8 +162,6 @@ auto InspectorPanel::draw_inspector(this InspectorPanel &) -> void {
             app.selected_entity.remove(v);
         }
         removing_components.clear();
-
-        scene->set_dirty(app.selected_entity);
     }
 }
 

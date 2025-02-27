@@ -223,7 +223,7 @@ auto ViewportPanel::draw_viewport(this ViewportPanel &self, vuk::Format format, 
                 glm::value_ptr(transform->rotation),
                 glm::value_ptr(transform->scale));
 
-            scene->set_dirty(app.selected_entity);
+            app.selected_entity.modified<ECS::Transform>();
         }
     }
 

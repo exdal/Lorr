@@ -355,7 +355,7 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, const vuk::Extent3
         auto rotation_mat = glm::mat4_cast(Math::compose_quat(glm::radians(t.rotation)));
         auto view_mat = rotation_mat * translation_mat;
 
-        GPU::Camera camera_data = {};
+        auto &camera_data = active_camera_data.emplace();
         camera_data.projection_mat = projection_mat;
         camera_data.view_mat = view_mat;
         camera_data.projection_view_mat = camera_data.projection_mat * camera_data.view_mat;
@@ -364,7 +364,6 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, const vuk::Extent3
         camera_data.position = t.position;
         camera_data.near_clip = c.near_clip;
         camera_data.far_clip = c.far_clip;
-        active_camera_data.emplace(camera_data);
     });
 
     ls::option<GPU::Sun> sun_data = ls::nullopt;
@@ -425,10 +424,10 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, const vuk::Extent3
         u32 meshlet_instance_count = 0;
 
         for (const auto &[gpu_model, model_it] : std::views::zip(gpu_models, self.rendering_models)) {
-            const auto &model_uuid = model_it.first;
+            const auto &[model_uuid, transform_ids] = model_it;
             auto *model = app.asset_man.get_model(model_uuid);
 
-            meshlet_instance_count += model->meshlet_count * model_it.second.size();
+            meshlet_instance_count += model->meshlet_count * transform_ids.size();
 
             gpu_model.vertex_positions = model->vertex_positions.device_address();
             gpu_model.indices = model->indices.device_address();
@@ -441,8 +440,7 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, const vuk::Extent3
         u32 model_offset = 0;
         u32 meshlet_instance_offset = 0;
         for (const auto &model_it : self.rendering_models) {
-            auto &model_uuid = model_it.first;
-            auto &transform_ids = model_it.second;
+            const auto &[model_uuid, transform_ids] = model_it;
             auto *model = app.asset_man.get_model(model_uuid);
             for (const auto transform_id : transform_ids) {
                 for (u32 meshlet_index = 0; meshlet_index < model->meshlet_count; meshlet_index++) {
@@ -455,6 +453,7 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, const vuk::Extent3
                     meshlet_instance_offset += 1;
                 }
             }
+
             model_offset += 1;
         }
 
@@ -540,7 +539,7 @@ auto Scene::attach_model(this Scene &self, flecs::entity entity, const UUID &mod
 
     auto transforms_it = self.entity_transforms_map.find(entity);
     if (transforms_it == self.entity_transforms_map.end()) {
-        // Target entity must have a  transform component, figure out why its missing.
+        // Target entity must have a transform component, figure out why its missing.
         LS_DEBUGBREAK();
         return false;
     }

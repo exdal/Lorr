@@ -278,11 +278,9 @@ auto GLTFModelInfo::parse(const fs::path &path, GLTFModelCallbacks callbacks) ->
             callbacks.on_new_node(
                 callbacks.user_data,
                 static_cast<u32>(node.meshIndex.value()),
-                mesh_vertex_count,
-                global_vertex_offset,
-                mesh_index_count,
-                global_index_offset,
                 mesh.primitives.size(),
+                mesh_vertex_count,
+                mesh_index_count,
                 transform);
         }
 
@@ -337,7 +335,9 @@ auto GLTFModelInfo::parse(const fs::path &path, GLTFModelCallbacks callbacks) ->
                     callbacks.user_data,
                     mesh_index,
                     primitive.materialIndex.value(),
+                    global_vertex_offset,
                     primitive_vertex_count,
+                    global_index_offset,
                     primitive_index_count);
             }
 

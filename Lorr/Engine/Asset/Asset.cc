@@ -406,11 +406,9 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
     };
     auto on_new_node = [](void *user_data,
                           u32 mesh_index,
-                          u32 vertex_count,
-                          u32 vertex_offset,
-                          u32 index_count,
-                          u32 index_offset,
                           [[maybe_unused]] u32 primitive_count,
+                          u32 vertex_count,
+                          u32 index_count,
                           [[maybe_unused]] glm::mat4 transform) {
         auto *info = static_cast<GLTFCallbacks *>(user_data);
 
@@ -422,17 +420,19 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
         info->vertex_normals.resize(info->vertex_normals.size() + vertex_count);
         info->vertex_texcoords.resize(info->vertex_texcoords.size() + vertex_count);
         info->indices.resize(info->indices.size() + index_count);
-
-        auto &mesh = info->model->meshes[mesh_index];
-        mesh.vertex_count = vertex_count;
-        mesh.vertex_offset = vertex_offset;
-        mesh.index_count = index_count;
-        mesh.index_offset = index_offset;
     };
-    // auto on_new_primitive = [](void *user_data, u32 mesh_index, u32 vertex_count, u32 index_count) {
-    //     auto *info = static_cast<CallbackInfo *>(user_data);
-    //     auto &mesh = info->model->meshes[mesh_index];
-    // };
+    auto on_new_primitive =
+        [](void *user_data, u32 mesh_index, u32 material_index, u32 vertex_offset, u32 vertex_count, u32 index_offset, u32 index_count) {
+            auto *info = static_cast<GLTFCallbacks *>(user_data);
+            auto &mesh = info->model->meshes[mesh_index];
+            mesh.primitive_indices.push_back(info->model->primitives.size());
+            auto &primitive = info->model->primitives.emplace_back();
+            primitive.material_index = material_index;
+            primitive.vertex_offset = vertex_offset;
+            primitive.vertex_count = vertex_count;
+            primitive.index_offset = index_offset;
+            primitive.index_count = index_count;
+        };
     auto on_access_index = [](void *user_data, u32, u64 offset, u32 index) {
         auto *info = static_cast<GLTFCallbacks *>(user_data);
         info->indices[offset] = index;
@@ -455,7 +455,7 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
         asset->path,
         { .user_data = &gltf_callbacks,
           .on_new_node = on_new_node,
-          //.on_new_primitive = on_new_primitive,
+          .on_new_primitive = on_new_primitive,
           .on_access_index = on_access_index,
           .on_access_position = on_access_position,
           .on_access_normal = on_access_normal,
@@ -567,73 +567,77 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
     std::vector<u8> model_local_triangle_indices = {};
 
     for (const auto &mesh : model->meshes) {
-        ZoneScopedN("GPU Meshlet Generation");
-        auto vertex_offset = model_vertex_positions.size();
-        auto index_offset = model_indices.size();
-        auto triangle_offset = model_local_triangle_indices.size();
+        for (auto primitive_index : mesh.primitive_indices) {
+            ZoneScopedN("GPU Meshlet Generation");
 
-        auto raw_vertex_positions = ls::span(gltf_callbacks.vertex_positions.data() + mesh.vertex_offset, mesh.vertex_count);
-        auto raw_indices = ls::span(gltf_callbacks.indices.data() + mesh.index_offset, mesh.index_count);
+            const auto &primitive = model->primitives[primitive_index];
+            auto vertex_offset = model_vertex_positions.size();
+            auto index_offset = model_indices.size();
+            auto triangle_offset = model_local_triangle_indices.size();
 
-        auto meshlets = std::vector<GPU::Meshlet>();
-        auto meshlet_bounds = std::vector<GPU::MeshletBounds>();
-        auto meshlet_indices = std::vector<u32>();
-        auto local_triangle_indices = std::vector<u8>();
-        {
-            ZoneScopedN("Build Meshlets");
-            // Worst case count
-            auto max_meshlets = meshopt_buildMeshletsBound(  //
-                raw_indices.size(),
-                Model::MAX_MESHLET_INDICES,
-                Model::MAX_MESHLET_PRIMITIVES);
-            auto raw_meshlets = std::vector<meshopt_Meshlet>(max_meshlets);
-            meshlet_indices.resize(max_meshlets * Model::MAX_MESHLET_INDICES);
-            local_triangle_indices.resize(max_meshlets * Model::MAX_MESHLET_PRIMITIVES * 3);
-            auto meshlet_count = meshopt_buildMeshlets(  //
-                raw_meshlets.data(),
-                meshlet_indices.data(),
-                local_triangle_indices.data(),
-                raw_indices.data(),
-                raw_indices.size(),
-                reinterpret_cast<f32 *>(raw_vertex_positions.data()),
-                raw_vertex_positions.size(),
-                sizeof(glm::vec3),
-                Model::MAX_MESHLET_INDICES,
-                Model::MAX_MESHLET_PRIMITIVES,
-                0.0);
+            auto raw_vertex_positions = ls::span(gltf_callbacks.vertex_positions.data() + primitive.vertex_offset, primitive.vertex_count);
+            auto raw_indices = ls::span(gltf_callbacks.indices.data() + primitive.index_offset, primitive.index_count);
 
-            // Trim meshlets from worst case to current case
-            raw_meshlets.resize(meshlet_count);
-            meshlets.resize(meshlet_count);
-            meshlet_bounds.resize(meshlet_count);
-            const auto &last_meshlet = raw_meshlets[meshlet_count - 1];
-            meshlet_indices.resize(last_meshlet.vertex_offset + last_meshlet.vertex_count);
-            local_triangle_indices.resize(last_meshlet.triangle_offset + ((last_meshlet.triangle_count * 3 + 3) & ~3_u32));
+            auto meshlets = std::vector<GPU::Meshlet>();
+            auto meshlet_bounds = std::vector<GPU::MeshletBounds>();
+            auto meshlet_indices = std::vector<u32>();
+            auto local_triangle_indices = std::vector<u8>();
+            {
+                ZoneScopedN("Build Meshlets");
+                // Worst case count
+                auto max_meshlets = meshopt_buildMeshletsBound(  //
+                    raw_indices.size(),
+                    Model::MAX_MESHLET_INDICES,
+                    Model::MAX_MESHLET_PRIMITIVES);
+                auto raw_meshlets = std::vector<meshopt_Meshlet>(max_meshlets);
+                meshlet_indices.resize(max_meshlets * Model::MAX_MESHLET_INDICES);
+                local_triangle_indices.resize(max_meshlets * Model::MAX_MESHLET_PRIMITIVES * 3);
+                auto meshlet_count = meshopt_buildMeshlets(  //
+                    raw_meshlets.data(),
+                    meshlet_indices.data(),
+                    local_triangle_indices.data(),
+                    raw_indices.data(),
+                    raw_indices.size(),
+                    reinterpret_cast<f32 *>(raw_vertex_positions.data()),
+                    raw_vertex_positions.size(),
+                    sizeof(glm::vec3),
+                    Model::MAX_MESHLET_INDICES,
+                    Model::MAX_MESHLET_PRIMITIVES,
+                    0.0);
 
-            for (const auto &[raw_meshlet, meshlet, meshlet_aabb] : std::views::zip(raw_meshlets, meshlets, meshlet_bounds)) {
-                auto meshlet_bb_min = glm::vec3(std::numeric_limits<f32>::max());
-                auto meshlet_bb_max = glm::vec3(std::numeric_limits<f32>::lowest());
-                for (u32 i = 0; i < raw_meshlet.triangle_count * 3; i++) {
-                    const auto &tri_pos = raw_vertex_positions
-                        [meshlet_indices[raw_meshlet.vertex_offset + local_triangle_indices[raw_meshlet.triangle_offset + i]]];
-                    meshlet_bb_min = glm::min(meshlet_bb_min, tri_pos);
-                    meshlet_bb_max = glm::max(meshlet_bb_max, tri_pos);
+                // Trim meshlets from worst case to current case
+                raw_meshlets.resize(meshlet_count);
+                meshlets.resize(meshlet_count);
+                meshlet_bounds.resize(meshlet_count);
+                const auto &last_meshlet = raw_meshlets[meshlet_count - 1];
+                meshlet_indices.resize(last_meshlet.vertex_offset + last_meshlet.vertex_count);
+                local_triangle_indices.resize(last_meshlet.triangle_offset + ((last_meshlet.triangle_count * 3 + 3) & ~3_u32));
+
+                for (const auto &[raw_meshlet, meshlet, meshlet_aabb] : std::views::zip(raw_meshlets, meshlets, meshlet_bounds)) {
+                    auto meshlet_bb_min = glm::vec3(std::numeric_limits<f32>::max());
+                    auto meshlet_bb_max = glm::vec3(std::numeric_limits<f32>::lowest());
+                    for (u32 i = 0; i < raw_meshlet.triangle_count * 3; i++) {
+                        const auto &tri_pos = raw_vertex_positions
+                            [meshlet_indices[raw_meshlet.vertex_offset + local_triangle_indices[raw_meshlet.triangle_offset + i]]];
+                        meshlet_bb_min = glm::min(meshlet_bb_min, tri_pos);
+                        meshlet_bb_max = glm::max(meshlet_bb_max, tri_pos);
+                    }
+
+                    meshlet.vertex_offset = vertex_offset;
+                    meshlet.index_offset = index_offset + raw_meshlet.vertex_offset;
+                    meshlet.triangle_offset = triangle_offset + raw_meshlet.triangle_offset;
+                    meshlet.triangle_count = raw_meshlet.triangle_count;
+                    meshlet_aabb.aabb_min = meshlet_bb_min;
+                    meshlet_aabb.aabb_max = meshlet_bb_max;
                 }
-
-                meshlet.vertex_offset = vertex_offset;
-                meshlet.index_offset = index_offset + raw_meshlet.vertex_offset;
-                meshlet.triangle_offset = triangle_offset + raw_meshlet.triangle_offset;
-                meshlet.triangle_count = raw_meshlet.triangle_count;
-                meshlet_aabb.aabb_min = meshlet_bb_min;
-                meshlet_aabb.aabb_max = meshlet_bb_max;
             }
-        }
 
-        std::ranges::move(raw_vertex_positions, std::back_inserter(model_vertex_positions));
-        std::ranges::move(meshlet_indices, std::back_inserter(model_indices));
-        std::ranges::move(meshlets, std::back_inserter(model_meshlets));
-        std::ranges::move(meshlet_bounds, std::back_inserter(model_meshlet_bounds));
-        std::ranges::move(local_triangle_indices, std::back_inserter(model_local_triangle_indices));
+            std::ranges::move(raw_vertex_positions, std::back_inserter(model_vertex_positions));
+            std::ranges::move(meshlet_indices, std::back_inserter(model_indices));
+            std::ranges::move(meshlets, std::back_inserter(model_meshlets));
+            std::ranges::move(meshlet_bounds, std::back_inserter(model_meshlet_bounds));
+            std::ranges::move(local_triangle_indices, std::back_inserter(model_local_triangle_indices));
+        }
     }
 
     model->meshlet_count = model_meshlets.size();

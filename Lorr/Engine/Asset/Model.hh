@@ -40,14 +40,17 @@ struct Model {
 
     using Index = u32;
 
-    struct Mesh {
-        std::string name = {};
-
-        // Geometry info of whole mesh
+    struct Primitive {
+        u32 material_index = 0;
         u32 vertex_count = 0;
         u32 vertex_offset = 0;
         u32 index_count = 0;
         u32 index_offset = 0;
+    };
+
+    struct Mesh {
+        std::string name = {};
+        std::vector<u32> primitive_indices = {};
     };
 
     struct Node {
@@ -59,6 +62,7 @@ struct Model {
 
     std::vector<UUID> textures = {};
     std::vector<UUID> materials = {};
+    std::vector<Primitive> primitives = {};
     std::vector<Mesh> meshes = {};
     std::vector<Node> nodes = {};
 

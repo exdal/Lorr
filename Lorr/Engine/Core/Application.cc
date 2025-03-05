@@ -17,9 +17,8 @@ bool Application::init(this Application &self, const ApplicationInfo &info) {
     self.asset_man = AssetManager::create(&self.device);
 
     self.window = Window::create(info.window_info);
-    auto window_size = self.window.get_size();
     auto surface = self.window.get_surface(self.device.get_instance());
-    self.swapchain = SwapChain::create(self.device, surface, { .width = window_size.x, .height = window_size.y }).value();
+    self.swap_chain.emplace(self.device.create_swap_chain(surface).value());
     self.imgui_renderer.init(&self.device);
     self.scene_renderer.init(&self.device);
 
@@ -37,6 +36,13 @@ void Application::run(this Application &self) {
 
     WindowCallbacks window_callbacks = {};
     window_callbacks.user_data = &self;
+    window_callbacks.on_resize = [](void *user_data, glm::uvec2) {
+        auto app = static_cast<Application *>(user_data);
+        app->device.wait();
+
+        auto surface = app->window.get_surface(app->device.get_instance());
+        app->swap_chain = app->device.create_swap_chain(surface, std::move(app->swap_chain)).value();
+    };
     window_callbacks.on_close = [](void *user_data) {
         auto app = static_cast<Application *>(user_data);
         app->should_close = true;
@@ -63,26 +69,17 @@ void Application::run(this Application &self) {
     };
 
     Timer timer;
-    b32 swapchain_ok = true;
     while (!self.should_close) {
         auto delta_time = timer.elapsed();
         timer.reset();
 
-        if (!swapchain_ok) {
-            auto window_size = self.window.get_size();
-            auto surface = self.window.get_surface(self.device.get_instance());
-            self.swapchain = SwapChain::create(self.device, surface, { .width = window_size.x, .height = window_size.y }).value();
-
-            swapchain_ok = true;
-        }
-
-        auto swapchain_attachment = self.device.new_frame(self.swapchain);
-        swapchain_attachment = vuk::clear_image(std::move(swapchain_attachment), vuk::Black<f32>);
-
         // Delta time
         self.window.poll(window_callbacks);
 
-        self.imgui_renderer.begin_frame(delta_time, self.swapchain.extent());
+        auto swapchain_attachment = self.device.new_frame(self.swap_chain.value());
+        swapchain_attachment = vuk::clear_image(std::move(swapchain_attachment), vuk::Black<f32>);
+
+        self.imgui_renderer.begin_frame(delta_time, swapchain_attachment->extent);
         self.do_update(delta_time);
         if (self.active_scene_uuid.has_value()) {
             auto *scene = self.asset_man.get_scene(self.active_scene_uuid.value());
@@ -103,16 +100,16 @@ void Application::shutdown(this Application &self) {
     ZoneScoped;
 
     LOG_WARN("Shutting down application...");
+    self.device.wait();
 
     self.should_close = true;
 
     self.do_shutdown();
 
     self.active_scene_uuid.reset();
-    self.device.wait();
-    self.swapchain.destroy();
     self.asset_man.destroy();
     self.scene_renderer.destroy();
+    self.swap_chain.reset();
     self.device.destroy();
     LOG_INFO("Complete!");
 

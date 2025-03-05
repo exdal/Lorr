@@ -2,7 +2,7 @@ import vis;
 import "../lorr";
 
 [[vk::binding(0, 0)]] restrict writeonly
-GLSLShaderStorageBuffer<DrawIndexedIndirectCommand, ScalarDataLayout> indirect_draw_command;
+GLSLShaderStorageBuffer<DrawIndexedIndirectCommand, ScalarDataLayout> draw_cmd;
 
 struct VisibleMeshletInstancesIndices {
     u32 indices[];
@@ -63,7 +63,7 @@ void cs_main(uint3 group_id : SV_GroupID, uint3 group_thread_id : SV_GroupThread
     GroupMemoryBarrierWithGroupSync();
 
     if (local_index == 0) {
-        InterlockedAdd(indirect_draw_command.index_count, meshlet.triangle_count * 3, base_index_shared);
+        InterlockedAdd(draw_cmd.index_count, meshlet.triangle_count * 3, base_index_shared);
     }
 
     GroupMemoryBarrierWithGroupSync();

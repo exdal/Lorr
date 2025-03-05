@@ -76,6 +76,7 @@ struct Scene {
     alignas(4) Sun sun = {};
     alignas(4) Atmosphere atmosphere = {};
     alignas(4) Clouds clouds = {};
+    alignas(4) u32 meshlet_instance_count = 0;
 };
 
 struct Material {

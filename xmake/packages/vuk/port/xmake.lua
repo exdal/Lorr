@@ -25,6 +25,7 @@ add_requires("stb 2024.06.01")
 add_requires("function2 4.2.4")
 add_requires("spirv-cross 1.3.268+0")
 add_requires("small_vector 2024.12.23")
+add_requires("vk-bootstrap v1.4.307")
 
 option("debug_allocations")
     set_default(false)
@@ -36,7 +37,9 @@ target("vuk")
     add_languages("cxx23")
     add_files("src/**.cpp")
     add_includedirs("include/", { public = true })
-    remove_files("src/shader_compilers/*")
+
+    remove_files("src/shader_compilers/**")
+    remove_files("src/extra/**")
 
     add_options("debug_allocations")
 
@@ -48,6 +51,7 @@ target("vuk")
         "function2",
         "small_vector",
         "vulkan-memory-allocator",
+        "vk-bootstrap",
         { public = true })
 
     -- private packages

@@ -152,7 +152,6 @@ private:
     friend ImageView;
     friend Sampler;
     friend Pipeline;
-    friend SwapChain;
     friend TransferManager;
 
 public:
@@ -162,13 +161,15 @@ public:
     auto new_slang_session(this Device &, const SlangSessionInfo &info) -> ls::option<SlangSession>;
 
     auto transfer_man(this Device &) -> TransferManager &;
-    auto new_frame(this Device &, SwapChain &) -> vuk::Value<vuk::ImageAttachment>;
+    auto new_frame(this Device &, vuk::Swapchain &) -> vuk::Value<vuk::ImageAttachment>;
     auto end_frame(this Device &, vuk::Value<vuk::ImageAttachment> &&target_attachment) -> void;
     auto wait(this Device &, std::source_location LOC = std::source_location::current()) -> void;
 
     auto create_persistent_descriptor_set(this Device &, ls::span<BindlessDescriptorInfo> bindings, u32 index)
         -> vuk::Unique<vuk::PersistentDescriptorSet>;
     auto commit_descriptor_set(this Device &, vuk::PersistentDescriptorSet &set) -> void;
+    auto create_swap_chain(this Device &, VkSurfaceKHR surface, ls::option<vuk::Swapchain> old_swap_chain = ls::nullopt)
+        -> std::expected<vuk::Swapchain, vuk::VkException>;
 
     auto set_name(this Device &, Buffer &buffer, std::string_view name) -> void;
     auto set_name(this Device &, Image &image, std::string_view name) -> void;
@@ -192,5 +193,6 @@ public:
     };
 
     auto get_instance() -> VkInstance { return instance.instance; }
+    auto get_allocator() -> vuk::Allocator & { return allocator.value(); }
 };
 }  // namespace lr

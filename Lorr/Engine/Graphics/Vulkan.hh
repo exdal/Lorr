@@ -170,25 +170,4 @@ private:
     PipelineID id_ = PipelineID::Invalid;
 };
 
-/////////////////////////////////
-// DEVICE
-
-struct SwapChain {
-    static auto create(Device &, VkSurfaceKHR surface, vuk::Extent2D extent, vuk::source_location LOC = vuk::source_location::current())
-        -> std::expected<SwapChain, vuk::VkException>;
-    auto destroy() -> void;
-
-    auto format() const -> vuk::Format;
-    auto extent() const -> vuk::Extent3D;
-
-private:
-    vuk::Format format_ = vuk::Format::eUndefined;
-    vuk::Extent3D extent_ = {};
-
-    VkSurfaceKHR surface_ = {};
-    ls::option<vuk::Swapchain> handle_ = ls::nullopt;
-
-    friend Device;
-};
-
 }  // namespace lr

@@ -341,8 +341,8 @@ auto GLTFModelInfo::parse(const fs::path &path, GLTFModelCallbacks callbacks) ->
                     primitive_index_count);
             }
 
-            global_vertex_offset += mesh_vertex_count;
-            global_index_offset += mesh_index_count;
+            global_vertex_offset += primitive_vertex_count;
+            global_index_offset += primitive_index_count;
         }
     }
 

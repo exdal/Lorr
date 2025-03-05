@@ -28,8 +28,9 @@ struct VisibleMeshletInstancesIndices {
 GLSLShaderStorageBuffer<VisibleMeshletInstancesIndices, ScalarDataLayout> visible_meshlet_instances_indices;
 
 struct VertexOutput {
-    float4 position  : SV_Position;
-    u32 meshlet_id   : MESHLET_ID;
+    float4 position     : SV_Position;
+    u32 meshlet_index   : MESHLET_ID;
+    u32 triangle_index  : TRIANGLE_ID;
 };
 
 [shader("vertex")]
@@ -54,7 +55,8 @@ VertexOutput vs_main(u32 vertex_id : SV_VertexID) {
     VertexOutput output;
     output.position = mul(transform.local, float4(vertex_pos, 1.0));
     output.position = mul(scene.camera.projection_view_mat, output.position);
-    output.meshlet_id = meshlet_instance.meshlet_index;
+    output.meshlet_index = meshlet_instance.meshlet_index;
+    output.triangle_index = triangle_index / 3;
     return output;
 }
 
@@ -70,7 +72,7 @@ uint hash(uint a) {
 
 [shader("fragment")]
 float4 fs_main(VertexOutput input) : SV_Target {
-    const u32 h = hash(input.meshlet_id);
+    const u32 h = hash(input.meshlet_index);
     const float3 color = vec3(float(h & 255), float((h >> 8) & 255), float((h >> 16) & 255)) / 255.0;
     return float4(color, 1.0);
 }

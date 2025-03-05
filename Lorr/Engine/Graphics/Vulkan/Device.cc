@@ -217,13 +217,13 @@ auto Device::transfer_man(this Device &self) -> TransferManager & {
     return self.transfer_manager;
 }
 
-auto Device::new_frame(this Device &self, SwapChain &swapchain) -> vuk::Value<vuk::ImageAttachment> {
+auto Device::new_frame(this Device &self, vuk::Swapchain &swap_chain) -> vuk::Value<vuk::ImageAttachment> {
     ZoneScoped;
 
     self.gpu_profiler_tasks.clear();
     self.runtime->next_frame();
 
-    auto acquired_swapchain = vuk::acquire_swapchain(swapchain.handle_.value());
+    auto acquired_swapchain = vuk::acquire_swapchain(swap_chain);
     auto acquired_image = vuk::acquire_next_image("present_image", std::move(acquired_swapchain));
 
     auto &frame_resource = self.frame_resources->get_next_frame();
@@ -262,6 +262,7 @@ auto Device::create_persistent_descriptor_set(this Device &self, ls::span<Bindle
         raw_binding.binding = binding.binding;
         raw_binding.descriptorType = vuk::DescriptorBinding::vk_descriptor_type(binding.type);
         raw_binding.descriptorCount = binding.descriptor_count;
+        raw_binding.stageFlags = VK_SHADER_STAGE_ALL;
         binding_flags[i] = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
     }
 
@@ -279,6 +280,78 @@ auto Device::commit_descriptor_set(this Device &self, vuk::PersistentDescriptorS
     ZoneScoped;
 
     set.commit(self.runtime.value());
+}
+
+auto Device::create_swap_chain(this Device &self, VkSurfaceKHR surface, ls::option<vuk::Swapchain> old_swap_chain)
+    -> std::expected<vuk::Swapchain, vuk::VkException> {
+    ZoneScoped;
+
+    VkPresentModeKHR present_mode = self.frame_count() == 1 ? VK_PRESENT_MODE_FIFO_KHR : VK_PRESENT_MODE_IMMEDIATE_KHR;
+    vkb::SwapchainBuilder builder(self.handle, surface);
+    builder.set_desired_min_image_count(self.frame_count());
+    builder.set_desired_format(vuk::SurfaceFormatKHR{
+        .format = vuk::Format::eR8G8B8A8Srgb,
+        .colorSpace = vuk::ColorSpaceKHR::eSrgbNonlinear,
+    });
+    builder.add_fallback_format(vuk::SurfaceFormatKHR{
+        .format = vuk::Format::eB8G8R8A8Srgb,
+        .colorSpace = vuk::ColorSpaceKHR::eSrgbNonlinear,
+    });
+    builder.set_desired_present_mode(present_mode);
+    builder.set_image_usage_flags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+
+    auto recycling = false;
+    auto result = vkb::Result<vkb::Swapchain>{ vkb::Swapchain{} };
+    if (!old_swap_chain) {
+        result = builder.build();
+        old_swap_chain.emplace(self.allocator.value(), result->image_count);
+    } else {
+        recycling = true;
+        builder.set_old_swapchain(old_swap_chain->swapchain);
+        result = builder.build();
+    }
+
+    if (!result.has_value()) {
+        auto error = result.error();
+        auto vk_result = result.vk_result();
+        LOG_ERROR("Failed to create Swap Chain! {}", error.message());
+
+        return std::unexpected(vk_result);
+    }
+
+    if (recycling) {
+        self.allocator->deallocate(std::span{ &old_swap_chain->swapchain, 1 });
+        for (auto &v : old_swap_chain->images) {
+            self.allocator->deallocate(std::span{ &v.image_view, 1 });
+        }
+    }
+
+    old_swap_chain->images.clear();
+
+    auto images = *result->get_images();
+    auto image_views = *result->get_image_views();
+
+    for (u32 i = 0; i < images.size(); i++) {
+        vuk::ImageAttachment attachment = {
+            .image = vuk::Image{ .image = images[i], .allocation = nullptr },
+            .image_view = vuk::ImageView{ { 0 }, image_views[i] },
+            .extent = { .width = result->extent.width, .height = result->extent.height, .depth = 1 },
+            .format = static_cast<vuk::Format>(result->image_format),
+            .sample_count = vuk::Samples::e1,
+            .view_type = vuk::ImageViewType::e2D,
+            .components = {},
+            .base_level = 0,
+            .level_count = 1,
+            .base_layer = 0,
+            .layer_count = 1,
+        };
+        old_swap_chain->images.push_back(attachment);
+    }
+
+    old_swap_chain->swapchain = result->swapchain;
+    old_swap_chain->surface = surface;
+
+    return std::move(*old_swap_chain);
 }
 
 auto Device::set_name(this Device &self, Buffer &buffer, std::string_view name) -> void {
@@ -336,21 +409,27 @@ auto Device::pipeline(this Device &self, PipelineID id) -> vuk::PipelineBaseInfo
 auto Device::destroy(this Device &self, BufferID id) -> void {
     ZoneScoped;
 
-    self.resources.buffers.slot(id)->release();
+    auto *buffer = self.resources.buffers.slot(id);
+    buffer->reset();
+
     self.resources.buffers.destroy_slot(id);
 }
 
 auto Device::destroy(this Device &self, ImageID id) -> void {
     ZoneScoped;
 
-    self.resources.images.slot(id)->release();
+    auto *image = self.resources.images.slot(id);
+    image->reset();
+
     self.resources.images.destroy_slot(id);
 }
 
 auto Device::destroy(this Device &self, ImageViewID id) -> void {
     ZoneScoped;
 
-    self.resources.image_views.slot(id)->release();
+    auto *image_view = self.resources.image_views.slot(id);
+    image_view->reset();
+
     self.resources.image_views.destroy_slot(id);
 }
 

@@ -28,7 +28,7 @@ struct Application {
 
     Device device = {};
     Window window = {};
-    SwapChain swapchain = {};
+    ls::option<vuk::Swapchain> swap_chain = ls::nullopt;
     ImGuiRenderer imgui_renderer = {};
     SceneRenderer scene_renderer = {};
     AssetManager asset_man = {};

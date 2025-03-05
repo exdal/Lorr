@@ -67,4 +67,6 @@ public struct Scene {
     public Sun sun;
     public Atmosphere atmosphere;
     public Clouds clouds;
+
+    public u32 meshlet_instance_count;
 };

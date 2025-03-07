@@ -41,6 +41,7 @@ struct Model {
     using Index = u32;
 
     struct Primitive {
+        u32 meshlet_count = 0;
         u32 material_index = 0;
         u32 vertex_count = 0;
         u32 vertex_offset = 0;
@@ -66,9 +67,9 @@ struct Model {
     std::vector<Mesh> meshes = {};
     std::vector<Node> nodes = {};
 
-    u32 meshlet_count = 0;
     Buffer vertex_positions = {};
     Buffer indices = {};
+    Buffer texture_coords = {};
     Buffer meshlets = {};
     Buffer meshlet_bounds = {};
     Buffer local_triangle_indices = {};

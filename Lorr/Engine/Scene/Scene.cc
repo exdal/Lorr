@@ -419,48 +419,7 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, const vuk::Extent3
         memory::ScopedStack stack;
         self.models_dirty = false;
 
-        auto &app = Application::get();
-        auto gpu_models = stack.alloc<GPU::Model>(self.rendering_models.size());
-        u32 meshlet_instance_count = 0;
-
-        for (const auto &[gpu_model, model_it] : std::views::zip(gpu_models, self.rendering_models)) {
-            const auto &[model_uuid, transform_ids] = model_it;
-            auto *model = app.asset_man.get_model(model_uuid);
-
-            meshlet_instance_count += model->meshlet_count * transform_ids.size();
-
-            gpu_model.vertex_positions = model->vertex_positions.device_address();
-            gpu_model.indices = model->indices.device_address();
-            gpu_model.meshlets = model->meshlets.device_address();
-            gpu_model.meshlet_bounds = model->meshlet_bounds.device_address();
-            gpu_model.local_triangle_indices = model->local_triangle_indices.device_address();
-        }
-
-        auto gpu_meshlet_instances = stack.alloc<GPU::MeshletInstance>(meshlet_instance_count);
-        u32 model_offset = 0;
-        u32 meshlet_instance_offset = 0;
-        for (const auto &model_it : self.rendering_models) {
-            const auto &[model_uuid, transform_ids] = model_it;
-            auto *model = app.asset_man.get_model(model_uuid);
-            for (const auto transform_id : transform_ids) {
-                for (u32 meshlet_index = 0; meshlet_index < model->meshlet_count; meshlet_index++) {
-                    auto &meshlet_instance = gpu_meshlet_instances[meshlet_instance_offset];
-                    meshlet_instance.model_index = model_offset;
-                    meshlet_instance.material_index = 0;
-                    meshlet_instance.transform_index = SlotMap_decode_id(transform_id).index;
-                    meshlet_instance.meshlet_index = meshlet_index;
-
-                    meshlet_instance_offset += 1;
-                }
-            }
-
-            model_offset += 1;
-        }
-
-        auto compose_info = SceneComposeInfo{
-            .gpu_models = gpu_models,
-            .gpu_meshlet_instances = gpu_meshlet_instances,
-        };
+        auto compose_info = self.compose();
         composed_scene.emplace(renderer.compose(compose_info));
     }
 
@@ -623,6 +582,83 @@ auto Scene::get_name_sv(this Scene &self) -> std::string_view {
 
 auto Scene::get_entity_db(this Scene &self) -> SceneEntityDB & {
     return self.entity_db;
+}
+
+auto Scene::compose(this Scene &self) -> SceneComposeInfo {
+    ZoneScoped;
+
+    auto &app = Application::get();
+
+    auto gpu_models = std::vector<GPU::Model>();
+    auto gpu_meshlet_instances = std::vector<GPU::MeshletInstance>();
+    auto gpu_materials = std::vector<GPU::Material>();
+    auto gpu_image_views = std::vector<ImageViewID>();
+    auto gpu_samplers = std::vector<SamplerID>();
+
+    for (const auto &[model_uuid, transform_ids] : self.rendering_models) {
+        auto *model = app.asset_man.get_model(model_uuid);
+
+        //  ── PER MODEL INFORMATION ───────────────────────────────────────────
+        auto model_offset = gpu_models.size();
+        auto &gpu_model = gpu_models.emplace_back();
+        gpu_model.vertex_positions = model->vertex_positions.device_address();
+        gpu_model.indices = model->indices.device_address();
+        gpu_model.texture_coords = model->texture_coords.device_address();
+        gpu_model.meshlets = model->meshlets.device_address();
+        gpu_model.meshlet_bounds = model->meshlet_bounds.device_address();
+        gpu_model.local_triangle_indices = model->local_triangle_indices.device_address();
+
+        auto material_offset = gpu_materials.size();
+        for (const auto &material_uuid : model->materials) {
+            auto *material = app.asset_man.get_material(material_uuid);
+            auto &gpu_material = gpu_materials.emplace_back();
+            gpu_material.albedo_color = material->albedo_color;
+            gpu_material.emissive_color = material->emissive_color;
+            gpu_material.roughness_factor = material->roughness_factor;
+            gpu_material.metallic_factor = material->metallic_factor;
+            gpu_material.alpha_cutoff = material->alpha_cutoff;
+
+            auto add_image_if_exists = [&](const UUID &uuid) -> ls::option<u32> {
+                if (!uuid) {
+                    return ls::nullopt;
+                }
+
+                u32 index = gpu_image_views.size();
+                auto *texture = app.asset_man.get_texture(uuid);
+                gpu_image_views.emplace_back(texture->image_view.id());
+                gpu_samplers.emplace_back(texture->sampler.id());
+                return index;
+            };
+
+            gpu_material.albedo_image_index = add_image_if_exists(material->albedo_texture).value_or(0);
+            gpu_material.normal_image_index = add_image_if_exists(material->normal_texture).value_or(0);
+            gpu_material.emissive_image_index = add_image_if_exists(material->emissive_texture).value_or(0);
+        }
+
+        //  ── INSTANCING ──────────────────────────────────────────────────────
+        for (const auto transform_id : transform_ids) {
+            u32 meshlet_offset = 0;
+            for (const auto &primitive : model->primitives) {
+                for (u32 meshlet_index = 0; meshlet_index < primitive.meshlet_count; meshlet_index++) {
+                    auto &meshlet_instance = gpu_meshlet_instances.emplace_back();
+                    meshlet_instance.model_index = model_offset;
+                    meshlet_instance.material_index = material_offset + primitive.material_index;
+                    meshlet_instance.transform_index = SlotMap_decode_id(transform_id).index;
+                    meshlet_instance.meshlet_index = meshlet_index + meshlet_offset;
+                }
+
+                meshlet_offset += primitive.meshlet_count;
+            }
+        }
+    }
+
+    return SceneComposeInfo{
+        .image_view_ids = std::move(gpu_image_views),
+        .samplers = std::move(gpu_samplers),
+        .gpu_materials = std::move(gpu_materials),
+        .gpu_models = std::move(gpu_models),
+        .gpu_meshlet_instances = std::move(gpu_meshlet_instances),
+    };
 }
 
 auto Scene::add_transform(this Scene &self, flecs::entity entity) -> GPU::TransformID {

@@ -4,11 +4,15 @@
 
 namespace lr {
 struct SceneComposeInfo {
-    ls::span<GPU::Model> gpu_models = {};
-    ls::span<GPU::MeshletInstance> gpu_meshlet_instances = {};
+    std::vector<ImageViewID> image_view_ids = {};
+    std::vector<SamplerID> samplers = {};
+    std::vector<GPU::Material> gpu_materials = {};
+    std::vector<GPU::Model> gpu_models = {};
+    std::vector<GPU::MeshletInstance> gpu_meshlet_instances = {};
 };
 
 struct ComposedScene {
+    vuk::Value<vuk::Buffer> materials_buffer = {};
     vuk::Value<vuk::Buffer> models_buffer = {};
     vuk::Value<vuk::Buffer> meshlet_instances_buffer = {};
 };
@@ -37,13 +41,13 @@ struct SceneRenderer {
     auto render(this SceneRenderer &, SceneRenderInfo &render_info, ls::option<ComposedScene> &composed_scene)
         -> vuk::Value<vuk::ImageAttachment>;
 
-private:
     Device *device = nullptr;
 
     vuk::PersistentDescriptorSet bindless_set = {};
     Buffer transforms_buffer = {};
 
     u32 meshlet_instance_count = 0;
+    Buffer materials_buffer = {};
     Buffer models_buffer = {};
     Buffer meshlet_instances_buffer = {};
 
@@ -71,7 +75,7 @@ private:
 
     Pipeline vis_cull_meshlets_pipeline = {};
     Pipeline vis_cull_triangles_pipeline = {};
-    Pipeline vis_triangle_id_pipeline = {};
+    Pipeline vis_encode_pipeline = {};
 
     Pipeline tonemap_pipeline = {};
 };

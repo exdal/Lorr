@@ -4,15 +4,146 @@
 
 namespace lr {
 enum : u32 {
-    Descriptor_Scene = 0,
-    Descriptor_CullTrianglesCmd,
-    Descriptor_DrawCmd,
-    Descriptor_Models,
-    Descriptor_Transforms,
-    Descriptor_MeshletInstances,
-    Descriptor_VisibleMeshletInstancesIndices,
-    Descriptor_ReorderedIndices,
+    Descriptor_Images = 0,
+    Descriptor_Sampler,
 };
+
+auto render_vis(
+    SceneRenderer &self,
+    ls::option<ComposedScene> &composed_scene,
+    vuk::Value<vuk::Buffer> &&scene_buffer,
+    vuk::Value<vuk::Buffer> &&transforms_buffer,
+    vuk::Value<vuk::ImageAttachment> &&color_attachment,
+    vuk::Value<vuk::ImageAttachment> &&depth_attachment)
+    -> std::tuple<
+        vuk::Value<vuk::Buffer>,           // Scene buffer
+        vuk::Value<vuk::ImageAttachment>,  // Vis output
+        vuk::Value<vuk::ImageAttachment>,  // Color attachment
+        vuk::Value<vuk::ImageAttachment>   // Depth buffer
+        > {
+    ZoneScoped;
+
+    auto &transfer_man = self.device->transfer_man();
+
+    //  ── CULL MESHLETS ───────────────────────────────────────────────────
+    auto meshlets_indirect_dispatch = transfer_man.scratch_buffer<vuk::DispatchIndirectCommand>({ .x = 0, .y = 1, .z = 1 });
+    auto visible_meshlet_instances_buffer =
+        transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eGPUonly, self.meshlet_instance_count * sizeof(u32));
+
+    std::tie(scene_buffer, meshlets_indirect_dispatch, visible_meshlet_instances_buffer) = vuk::make_pass(
+        "vis cull meshlets",
+        [&pipeline = *self.device->pipeline(self.vis_cull_meshlets_pipeline.id()), meshlet_instance_count = self.meshlet_instance_count](
+            vuk::CommandBuffer &cmd_list,
+            VUK_BA(vuk::eComputeRead) scene,
+            VUK_BA(vuk::eComputeWrite) meshlet_indirect,
+            VUK_BA(vuk::eComputeWrite) visible_meshlet_instances_indices) {
+            cmd_list  //
+                .bind_compute_pipeline(pipeline)
+                .bind_buffer(0, 0, scene)
+                .bind_buffer(0, 1, meshlet_indirect)
+                .bind_buffer(0, 2, visible_meshlet_instances_indices)
+                .dispatch((meshlet_instance_count + Model::MAX_MESHLET_INDICES - 1) / Model::MAX_MESHLET_INDICES);
+            return std::make_tuple(scene, meshlet_indirect, visible_meshlet_instances_indices);
+        })(std::move(scene_buffer), std::move(meshlets_indirect_dispatch), std::move(visible_meshlet_instances_buffer));
+
+    //  ── CULL TRIANGLES ──────────────────────────────────────────────────
+    auto triangles_indexed_indirect_dispatch = transfer_man.scratch_buffer<vuk::DrawIndexedIndirectCommand>({ .instanceCount = 1 });
+    auto reordered_indices_buffer = transfer_man.alloc_transient_buffer(
+        vuk::MemoryUsage::eGPUonly, self.meshlet_instance_count * Model::MAX_MESHLET_PRIMITIVES * 3 * sizeof(u32));
+
+    vuk::Value<vuk::Buffer> materials_buffer;
+    vuk::Value<vuk::Buffer> models_buffer;
+    vuk::Value<vuk::Buffer> meshlet_instances_buffer;
+    if (composed_scene.has_value()) {
+        materials_buffer = std::move(composed_scene->materials_buffer);
+        models_buffer = std::move(composed_scene->models_buffer);
+        meshlet_instances_buffer = std::move(composed_scene->meshlet_instances_buffer);
+    } else {
+        materials_buffer = self.materials_buffer.acquire(*self.device, "Materials", vuk::Access::eNone);
+        models_buffer = self.models_buffer.acquire(*self.device, "Models", vuk::Access::eNone);
+        meshlet_instances_buffer = self.meshlet_instances_buffer.acquire(*self.device, "Meshlet Instances", vuk::Access::eNone);
+    }
+
+    std::tie(
+        triangles_indexed_indirect_dispatch,
+        visible_meshlet_instances_buffer,
+        models_buffer,
+        meshlet_instances_buffer,
+        reordered_indices_buffer) =
+        vuk::make_pass(
+            "vis cull triangles",
+            [&pipeline = *self.device->pipeline(self.vis_cull_triangles_pipeline.id())](
+                vuk::CommandBuffer &cmd_list,
+                VUK_BA(vuk::eComputeWrite) triangles_indirect,
+                VUK_BA(vuk::eIndirectRead) meshlet_indirect,
+                VUK_BA(vuk::eComputeRead) visible_meshlet_instances_indices,
+                VUK_BA(vuk::eComputeRead) models,
+                VUK_BA(vuk::eComputeRead) meshlet_instances,
+                VUK_BA(vuk::eComputeWrite) reordered_indices) {
+                cmd_list  //
+                    .bind_compute_pipeline(pipeline)
+                    .bind_buffer(0, 0, triangles_indirect)
+                    .bind_buffer(0, 1, visible_meshlet_instances_indices)
+                    .bind_buffer(0, 2, models)
+                    .bind_buffer(0, 3, meshlet_instances)
+                    .bind_buffer(0, 4, reordered_indices)
+                    .dispatch_indirect(meshlet_indirect);
+                return std::make_tuple(triangles_indirect, visible_meshlet_instances_indices, models, meshlet_instances, reordered_indices);
+            })(
+            std::move(triangles_indexed_indirect_dispatch),
+            std::move(meshlets_indirect_dispatch),
+            std::move(visible_meshlet_instances_buffer),
+            std::move(models_buffer),
+            std::move(meshlet_instances_buffer),
+            std::move(reordered_indices_buffer));
+
+    //  ── DRAW VISBUFFER ──────────────────────────────────────────────────
+    auto visbuffer_attachment = vuk::declare_ia("visbuffer", { .format = vuk::Format::eR32Uint, .sample_count = vuk::Samples::e1 });
+    visbuffer_attachment.same_shape_as(color_attachment);
+    visbuffer_attachment = vuk::clear_image(std::move(visbuffer_attachment), vuk::Black<u32>);
+
+    std::tie(visbuffer_attachment, depth_attachment, scene_buffer) = vuk::make_pass(
+        "vis encode",
+        [&pipeline = *self.device->pipeline(self.vis_encode_pipeline.id())](
+            vuk::CommandBuffer &cmd_list,
+            VUK_IA(vuk::eColorWrite) dst,
+            VUK_IA(vuk::eDepthStencilRW) dst_depth,
+            VUK_BA(vuk::eIndirectRead) triangle_indirect,
+            VUK_BA(vuk::eVertexRead) scene,
+            VUK_BA(vuk::eVertexRead) transforms,
+            VUK_BA(vuk::eVertexRead) models,
+            VUK_BA(vuk::eVertexRead) meshlet_instances,
+            VUK_BA(vuk::eVertexRead) visible_meshlet_instances_indices,
+            VUK_BA(vuk::eIndexRead) index_buffer) {
+            cmd_list  //
+                .bind_graphics_pipeline(pipeline)
+                .set_rasterization({ .cullMode = vuk::CullModeFlagBits::eNone })
+                .set_depth_stencil({ .depthTestEnable = true, .depthWriteEnable = true, .depthCompareOp = vuk::CompareOp::eLessOrEqual })
+                .set_color_blend(dst, vuk::BlendPreset::eOff)
+                .set_viewport(0, vuk::Rect2D::framebuffer())
+                .set_scissor(0, vuk::Rect2D::framebuffer())
+                .bind_buffer(0, 0, scene)
+                .bind_buffer(0, 1, transforms)
+                .bind_buffer(0, 2, models)
+                .bind_buffer(0, 3, meshlet_instances)
+                .bind_buffer(0, 4, visible_meshlet_instances_indices)
+                .bind_index_buffer(index_buffer, vuk::IndexType::eUint32)
+                .draw_indexed_indirect(1, triangle_indirect);
+            return std::make_tuple(dst, dst_depth, scene);
+        })(
+        std::move(visbuffer_attachment),
+        std::move(depth_attachment),
+        std::move(triangles_indexed_indirect_dispatch),
+        std::move(scene_buffer),
+        std::move(transforms_buffer),
+        std::move(models_buffer),
+        std::move(meshlet_instances_buffer),
+        std::move(visible_meshlet_instances_buffer),
+        std::move(reordered_indices_buffer));
+
+    return std::make_tuple(
+        std::move(scene_buffer), std::move(visbuffer_attachment), std::move(color_attachment), std::move(depth_attachment));
+}
 
 auto SceneRenderer::init(this SceneRenderer &self, Device *device) -> bool {
     self.device = device;
@@ -32,21 +163,10 @@ auto SceneRenderer::setup_persistent_resources(this SceneRenderer &self) -> void
     auto &asset_man = app.asset_man;
     auto &transfer_man = app.device.transfer_man();
     BindlessDescriptorInfo descriptor_infos[] = {
-        { .binding = 0, .type = vuk::DescriptorType::eStorageBuffer, .descriptor_count = 1 },
+        { .binding = Descriptor_Images, .type = vuk::DescriptorType::eSampledImage, .descriptor_count = 1024 },
+        { .binding = Descriptor_Sampler, .type = vuk::DescriptorType::eSampler, .descriptor_count = 1024 },
     };
     self.bindless_set = self.device->create_persistent_descriptor_set(descriptor_infos, 1).release();
-    vuk::DescriptorSetLayoutCreateInfo bindless_layout = {};
-    bindless_layout.index = 1;
-    for (const auto &v : descriptor_infos) {
-        bindless_layout.bindings.push_back({
-            .binding = v.binding,
-            .descriptorType = static_cast<VkDescriptorType>(v.type),
-            .descriptorCount = v.descriptor_count,
-            .stageFlags = VK_SHADER_STAGE_ALL,
-            .pImmutableSamplers = nullptr,
-        });
-        bindless_layout.flags.emplace_back(VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT);
-    }
 
     auto shaders_root = asset_man.asset_root_path(AssetType::Shader);
     // clang-format off
@@ -174,12 +294,12 @@ auto SceneRenderer::setup_persistent_resources(this SceneRenderer &self) -> void
         .shader_path = shaders_root / "vis" / "cull_triangles.slang",
         .entry_points = { "cs_main" },
     }).value();
-    self.vis_triangle_id_pipeline = Pipeline::create(*self.device, {
-        .module_name = "vis.triangle_id",
+    self.vis_encode_pipeline = Pipeline::create(*self.device, {
+        .module_name = "vis.encode",
         .root_path = shaders_root,
-        .shader_path = shaders_root / "vis" / "triangle_id.slang",
+        .shader_path = shaders_root / "vis" / "encode.slang",
         .entry_points = { "vs_main", "fs_main" },
-    }, bindless_layout).value();
+    }).value();
     //  ── POST PROCESS ────────────────────────────────────────────────────
     self.tonemap_pipeline = Pipeline::create(*self.device, {
         .module_name = "tonemap",
@@ -226,9 +346,9 @@ auto SceneRenderer::setup_persistent_resources(this SceneRenderer &self) -> void
         });
 
     auto transmittance_lut_attachment =
-        self.sky_transmittance_lut_view.discard(*self.device, "sky_transmittance_lut", vuk::ImageUsageFlagBits::eStorage);
+        self.sky_transmittance_lut_view.discard(*self.device, "sky transmittance lut", vuk::ImageUsageFlagBits::eStorage);
     auto multiscatter_lut_attachment =
-        self.sky_multiscatter_lut_view.discard(*self.device, "sky_multiscatter_lut", vuk::ImageUsageFlagBits::eStorage);
+        self.sky_multiscatter_lut_view.discard(*self.device, "sky multiscatter lut", vuk::ImageUsageFlagBits::eStorage);
 
     auto temp_scene_info = GPU::Scene{};
     temp_scene_info.atmosphere.transmittance_lut_size = self.sky_transmittance_lut_view.extent();
@@ -288,36 +408,56 @@ auto SceneRenderer::compose(this SceneRenderer &self, SceneComposeInfo &compose_
 
     auto &transfer_man = self.device->transfer_man();
 
+    for (u32 i = 0; i < compose_info.image_view_ids.size(); i++) {
+        auto *image_view = self.device->image_view(compose_info.image_view_ids[i]);
+        auto *sampler = self.device->sampler(compose_info.samplers[i]);
+        self.bindless_set.update_sampled_image(Descriptor_Images, i, *image_view, vuk::ImageLayout::eReadOnlyOptimal);
+        self.bindless_set.update_sampler(Descriptor_Sampler, i, *sampler);
+    }
+
+    self.device->commit_descriptor_set(self.bindless_set);
+
     // IMPORTANT: Only wait when buffer is being resized!!!
     // We can still copy into gpu buffer if it has enough space.
 
-    if (compose_info.gpu_models.size_bytes() > self.models_buffer.data_size()) {
+    if (ls::size_bytes(compose_info.gpu_materials) > self.materials_buffer.data_size()) {
+        if (self.materials_buffer) {
+            self.device->wait();
+            self.device->destroy(self.materials_buffer.id());
+        }
+
+        self.materials_buffer = Buffer::create(*self.device, ls::size_bytes(compose_info.gpu_materials)).value();
+    }
+
+    if (ls::size_bytes(compose_info.gpu_models) > self.models_buffer.data_size()) {
         if (self.models_buffer) {
             self.device->wait();
             self.device->destroy(self.models_buffer.id());
         }
 
-        auto new_buffer_size = compose_info.gpu_models.size_bytes();
-        self.models_buffer = Buffer::create(*self.device, new_buffer_size, vuk::MemoryUsage::eGPUonly).value();
+        self.models_buffer = Buffer::create(*self.device, ls::size_bytes(compose_info.gpu_models)).value();
     }
 
-    if (compose_info.gpu_meshlet_instances.size_bytes() > self.meshlet_instances_buffer.data_size()) {
+    if (ls::size_bytes(compose_info.gpu_meshlet_instances) > self.meshlet_instances_buffer.data_size()) {
         if (self.meshlet_instances_buffer) {
             self.device->wait();
             self.device->destroy(self.meshlet_instances_buffer.id());
         }
 
-        auto new_buffer_size = compose_info.gpu_meshlet_instances.size_bytes();
-        self.meshlet_instances_buffer = Buffer::create(*self.device, new_buffer_size, vuk::MemoryUsage::eGPUonly).value();
+        self.meshlet_instances_buffer = Buffer::create(*self.device, ls::size_bytes(compose_info.gpu_meshlet_instances)).value();
     }
 
-    self.bindless_set.update_storage_buffer(0, 0, *self.device->buffer(self.models_buffer.id()));
-    self.device->commit_descriptor_set(self.bindless_set);
-
     self.meshlet_instance_count = compose_info.gpu_meshlet_instances.size();
+    auto materials_buffer =  //
+        transfer_man.upload_staging(ls::span(compose_info.gpu_materials), self.materials_buffer);
+    auto models_buffer =  //
+        transfer_man.upload_staging(ls::span(compose_info.gpu_models), self.models_buffer);
+    auto meshlet_instances_buffer =  //
+        transfer_man.upload_staging(ls::span(compose_info.gpu_meshlet_instances), self.meshlet_instances_buffer);
     return ComposedScene{
-        .models_buffer = transfer_man.upload_staging(compose_info.gpu_models, self.models_buffer),
-        .meshlet_instances_buffer = transfer_man.upload_staging(compose_info.gpu_meshlet_instances, self.meshlet_instances_buffer),
+        .materials_buffer = materials_buffer,
+        .models_buffer = models_buffer,
+        .meshlet_instances_buffer = meshlet_instances_buffer,
     };
 }
 
@@ -630,118 +770,15 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
     }
 
     //  ── VISIBILITY BUFFER ───────────────────────────────────────────────
+    vuk::Value<vuk::ImageAttachment> vis_encoded;
     if (self.meshlet_instance_count) {
-        //  ── CULL MESHLETS ───────────────────────────────────────────────────
-        auto meshlets_indirect_dispatch = transfer_man.scratch_buffer<vuk::DispatchIndirectCommand>({ .x = 0, .y = 1, .z = 1 });
-        auto visible_meshlet_instances_buffer =
-            transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eGPUonly, self.meshlet_instance_count * sizeof(u32));
-
-        std::tie(scene_buffer, meshlets_indirect_dispatch, visible_meshlet_instances_buffer) = vuk::make_pass(
-            "vis cull meshlets",
-            [&pipeline = *self.device->pipeline(self.vis_cull_meshlets_pipeline.id()),
-             meshlet_instance_count = self.meshlet_instance_count](
-                vuk::CommandBuffer &cmd_list,
-                VUK_BA(vuk::eComputeRead) scene,
-                VUK_BA(vuk::eComputeWrite) meshlet_indirect,
-                VUK_BA(vuk::eComputeWrite) visible_meshlet_instances_indices) {
-                cmd_list  //
-                    .bind_compute_pipeline(pipeline)
-                    .bind_buffer(0, 0, scene)
-                    .bind_buffer(0, 1, meshlet_indirect)
-                    .bind_buffer(0, 2, visible_meshlet_instances_indices)
-                    .dispatch((meshlet_instance_count + Model::MAX_MESHLET_INDICES - 1) / Model::MAX_MESHLET_INDICES);
-                return std::make_tuple(scene, meshlet_indirect, visible_meshlet_instances_indices);
-            })(std::move(scene_buffer), std::move(meshlets_indirect_dispatch), std::move(visible_meshlet_instances_buffer));
-
-        //  ── CULL TRIANGLES ──────────────────────────────────────────────────
-        auto triangles_indexed_indirect_dispatch = transfer_man.scratch_buffer<vuk::DrawIndexedIndirectCommand>({ .instanceCount = 1 });
-        auto reordered_indices_buffer = transfer_man.alloc_transient_buffer(
-            vuk::MemoryUsage::eGPUonly, self.meshlet_instance_count * Model::MAX_MESHLET_PRIMITIVES * 3 * sizeof(u32));
-
-        vuk::Value<vuk::Buffer> models_buffer;
-        vuk::Value<vuk::Buffer> meshlet_instances_buffer;
-        if (composed_scene.has_value()) {
-            models_buffer = std::move(composed_scene->models_buffer);
-            meshlet_instances_buffer = std::move(composed_scene->meshlet_instances_buffer);
-        } else {
-            models_buffer = self.models_buffer.acquire(*self.device, "Models", vuk::Access::eNone);
-            meshlet_instances_buffer = self.meshlet_instances_buffer.acquire(*self.device, "Meshlet Instances", vuk::Access::eNone);
-        }
-
-        std::tie(
-            triangles_indexed_indirect_dispatch,
-            visible_meshlet_instances_buffer,
-            models_buffer,
-            meshlet_instances_buffer,
-            reordered_indices_buffer) =
-            vuk::make_pass(
-                "vis cull triangles",
-                [&pipeline = *self.device->pipeline(self.vis_cull_triangles_pipeline.id())](
-                    vuk::CommandBuffer &cmd_list,
-                    VUK_BA(vuk::eComputeWrite) triangles_indirect,
-                    VUK_BA(vuk::eIndirectRead) meshlet_indirect,
-                    VUK_BA(vuk::eComputeRead) visible_meshlet_instances_indices,
-                    VUK_BA(vuk::eComputeRead) models,
-                    VUK_BA(vuk::eComputeRead) meshlet_instances,
-                    VUK_BA(vuk::eComputeWrite) reordered_indices) {
-                    cmd_list  //
-                        .bind_compute_pipeline(pipeline)
-                        .bind_buffer(0, 0, triangles_indirect)
-                        .bind_buffer(0, 1, visible_meshlet_instances_indices)
-                        .bind_buffer(0, 2, models)
-                        .bind_buffer(0, 3, meshlet_instances)
-                        .bind_buffer(0, 4, reordered_indices)
-                        .dispatch_indirect(meshlet_indirect);
-                    return std::make_tuple(
-                        triangles_indirect, visible_meshlet_instances_indices, models, meshlet_instances, reordered_indices);
-                })(
-                std::move(triangles_indexed_indirect_dispatch),
-                std::move(meshlets_indirect_dispatch),
-                std::move(visible_meshlet_instances_buffer),
-                std::move(models_buffer),
-                std::move(meshlet_instances_buffer),
-                std::move(reordered_indices_buffer));
-
-        //  ── DRAW VISBUFFER ──────────────────────────────────────────────────
-        std::tie(final_attachment, depth_attachment, scene_buffer) = vuk::make_pass(
-            "vis triangle id pass",
-            [&pipeline = *self.device->pipeline(self.vis_triangle_id_pipeline.id())](
-                vuk::CommandBuffer &cmd_list,
-                VUK_IA(vuk::eColorWrite) dst,
-                VUK_IA(vuk::eDepthStencilRW) dst_depth,
-                VUK_BA(vuk::eIndirectRead) triangle_indirect,
-                VUK_BA(vuk::eVertexRead) scene,
-                VUK_BA(vuk::eVertexRead) transforms,
-                VUK_BA(vuk::eVertexRead) models,
-                VUK_BA(vuk::eVertexRead) meshlet_instances,
-                VUK_BA(vuk::eVertexRead) visible_meshlet_instances_indices,
-                VUK_BA(vuk::eIndexRead) index_buffer) {
-                cmd_list  //
-                    .bind_graphics_pipeline(pipeline)
-                    .set_rasterization({ .cullMode = vuk::CullModeFlagBits::eNone })
-                    .set_depth_stencil(
-                        { .depthTestEnable = true, .depthWriteEnable = true, .depthCompareOp = vuk::CompareOp::eLessOrEqual })
-                    .set_color_blend(dst, vuk::BlendPreset::eOff)
-                    .set_viewport(0, vuk::Rect2D::framebuffer())
-                    .set_scissor(0, vuk::Rect2D::framebuffer())
-                    .bind_buffer(0, 0, scene)
-                    .bind_buffer(0, 1, transforms)
-                    .bind_buffer(0, 2, models)
-                    .bind_buffer(0, 3, meshlet_instances)
-                    .bind_buffer(0, 4, visible_meshlet_instances_indices)
-                    .bind_index_buffer(index_buffer, vuk::IndexType::eUint32)
-                    .draw_indexed_indirect(1, triangle_indirect);
-                return std::make_tuple(dst, dst_depth, scene);
-            })(
-            std::move(final_attachment),
-            std::move(depth_attachment),
-            std::move(triangles_indexed_indirect_dispatch),
+        std::tie(scene_buffer, vis_encoded, final_attachment, depth_attachment) = render_vis(
+            self,
+            composed_scene,
             std::move(scene_buffer),
             std::move(transforms_buffer),
-            std::move(models_buffer),
-            std::move(meshlet_instances_buffer),
-            std::move(visible_meshlet_instances_buffer),
-            std::move(reordered_indices_buffer));
+            std::move(final_attachment),
+            std::move(depth_attachment));
     }
 
     //  ── EDITOR GRID ─────────────────────────────────────────────────────

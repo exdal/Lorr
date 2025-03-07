@@ -26,8 +26,6 @@ struct Handle<AssetManager>::Impl {
     SlotMap<Texture, TextureID> textures = {};
     SlotMap<Material, MaterialID> materials = {};
     SlotMap<Scene, SceneID> scenes = {};
-
-    Buffer material_buffer = {};
 };
 
 auto AssetManager::create(Device *device) -> AssetManager {
@@ -38,8 +36,6 @@ auto AssetManager::create(Device *device) -> AssetManager {
 
     impl->device = device;
     impl->root_path = fs::current_path();
-    impl->material_buffer = Buffer::create(*device, 1024 * sizeof(GPU::Material)).value();
-    impl->device->set_name(impl->material_buffer, "GPU Material Buffer");
 
     return self;
 }
@@ -119,10 +115,6 @@ auto AssetManager::to_asset_type_sv(AssetType type) -> std::string_view {
         case AssetType::Scene:
             return "Scene";
     }
-}
-
-auto AssetManager::material_buffer() const -> BufferID {
-    return impl->material_buffer.id();
 }
 
 auto AssetManager::registry() const -> const AssetRegistry & {
@@ -570,7 +562,7 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
         for (auto primitive_index : mesh.primitive_indices) {
             ZoneScopedN("GPU Meshlet Generation");
 
-            const auto &primitive = model->primitives[primitive_index];
+            auto &primitive = model->primitives[primitive_index];
             auto vertex_offset = model_vertex_positions.size();
             auto index_offset = model_indices.size();
             auto triangle_offset = model_local_triangle_indices.size();
@@ -613,6 +605,8 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
                 meshlet_indices.resize(last_meshlet.vertex_offset + last_meshlet.vertex_count);
                 local_triangle_indices.resize(last_meshlet.triangle_offset + ((last_meshlet.triangle_count * 3 + 3) & ~3_u32));
 
+                primitive.meshlet_count = meshlet_count;
+
                 for (const auto &[raw_meshlet, meshlet, meshlet_aabb] : std::views::zip(raw_meshlets, meshlets, meshlet_bounds)) {
                     auto meshlet_bb_min = glm::vec3(std::numeric_limits<f32>::max());
                     auto meshlet_bb_max = glm::vec3(std::numeric_limits<f32>::lowest());
@@ -640,14 +634,15 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
         }
     }
 
-    model->meshlet_count = model_meshlets.size();
-
     auto &transfer_man = impl->device->transfer_man();
     model->vertex_positions = Buffer::create(*impl->device, ls::size_bytes(model_vertex_positions)).value();
     transfer_man.wait_on(transfer_man.upload_staging(ls::span(model_vertex_positions), model->vertex_positions));
 
     model->indices = Buffer::create(*impl->device, ls::size_bytes(model_indices)).value();
     transfer_man.wait_on(transfer_man.upload_staging(ls::span(model_indices), model->indices));
+
+    model->texture_coords = Buffer::create(*impl->device, ls::size_bytes(gltf_callbacks.vertex_texcoords)).value();
+    transfer_man.wait_on(transfer_man.upload_staging(ls::span(gltf_callbacks.vertex_texcoords), model->texture_coords));
 
     model->meshlets = Buffer::create(*impl->device, ls::size_bytes(model_meshlets)).value();
     transfer_man.wait_on(transfer_man.upload_staging(ls::span(model_meshlets), model->meshlets));
@@ -806,27 +801,6 @@ auto AssetManager::load_material(const UUID &uuid, const Material &material_info
 
     auto *asset = this->get_asset(uuid);
     asset->material_id = impl->materials.create_slot(const_cast<Material &&>(material_info));
-
-    auto *albedo_texture = this->get_texture(material_info.albedo_texture);
-    auto *normal_texture = this->get_texture(material_info.normal_texture);
-    auto *emissive_texture = this->get_texture(material_info.emissive_texture);
-
-    // TODO: Implement a checkerboard image for invalid textures
-    u64 gpu_buffer_offset = SlotMap_decode_id(asset->material_id).index * sizeof(GPU::Material);
-    GPU::Material gpu_material = {
-        .albedo_color = material_info.albedo_color,
-        .emissive_color = material_info.emissive_color,
-        .roughness_factor = material_info.roughness_factor,
-        .metallic_factor = material_info.metallic_factor,
-        .alpha_mode = 0,
-        .albedo_image = albedo_texture ? albedo_texture->sampled_image() : SampledImage(),
-        .normal_image = normal_texture ? normal_texture->sampled_image() : SampledImage(),
-        .emissive_image = emissive_texture ? emissive_texture->sampled_image() : SampledImage(),
-    };
-
-    auto &transfer_man = impl->device->transfer_man();
-    transfer_man.wait_on(transfer_man.upload_staging(
-        ls::span(ls::bit_cast<u8 *>(&gpu_material), sizeof(GPU::Material)), impl->material_buffer, gpu_buffer_offset));
 
     asset->acquire_ref();
     return true;

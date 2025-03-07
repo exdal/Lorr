@@ -86,7 +86,6 @@ struct AssetManager : Handle<AssetManager> {
     auto asset_root_path(AssetType type) -> fs::path;
     auto to_asset_file_type(const fs::path &path) -> AssetFileType;
     auto to_asset_type_sv(AssetType type) -> std::string_view;
-    auto material_buffer() const -> BufferID;
     auto registry() const -> const AssetRegistry &;
 
     //  ── Created Assets ──────────────────────────────────────────────────

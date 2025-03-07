@@ -3,15 +3,15 @@
 #include "Engine/Graphics/VulkanDevice.hh"
 
 namespace lr {
-auto Pipeline::create(Device &device, const ShaderCompileInfo &compile_info, ls::span<vuk::DescriptorSetLayoutCreateInfo> explicit_layouts)
+auto Pipeline::create(Device &device, const ShaderCompileInfo &compile_info, ls::span<vuk::PersistentDescriptorSet> persistent_sets)
     -> std::expected<Pipeline, vuk::VkException> {
     ZoneScoped;
 
     auto definitions = compile_info.definitions;
     vuk::PipelineBaseCreateInfo create_info = {};
 
-    for (const auto &v : explicit_layouts) {
-        create_info.explicit_set_layouts.push_back(v);
+    for (const auto &v : persistent_sets) {
+        create_info.explicit_set_layouts.push_back(v.set_layout_create_info);
     }
 
     auto slang_session = device.new_slang_session({

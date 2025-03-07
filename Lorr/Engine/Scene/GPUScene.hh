@@ -86,9 +86,9 @@ struct Material {
     alignas(4) f32 metallic_factor = 0.0f;
     alignas(4) u32 alpha_mode = 0;
     alignas(4) f32 alpha_cutoff = 0.0f;
-    alignas(4) SampledImage albedo_image = {};
-    alignas(4) SampledImage normal_image = {};
-    alignas(4) SampledImage emissive_image = {};
+    alignas(4) u32 albedo_image_index = 0;
+    alignas(4) u32 normal_image_index = 0;
+    alignas(4) u32 emissive_image_index = 0;
 };
 
 struct Meshlet {
@@ -113,6 +113,7 @@ struct MeshletInstance {
 struct Model {
     alignas(8) u64 vertex_positions = 0;
     alignas(8) u64 indices = 0;
+    alignas(8) u64 texture_coords = 0;
     alignas(8) u64 meshlets = 0;
     alignas(8) u64 meshlet_bounds = 0;
     alignas(8) u64 local_triangle_indices = 0;

@@ -161,7 +161,7 @@ struct ShaderCompileInfo {
 };
 
 struct Pipeline {
-    static auto create(Device &, const ShaderCompileInfo &compile_info, ls::span<vuk::DescriptorSetLayoutCreateInfo> explicit_layouts = {})
+    static auto create(Device &, const ShaderCompileInfo &compile_info, ls::span<vuk::PersistentDescriptorSet> persistent_sets = {})
         -> std::expected<Pipeline, vuk::VkException>;
 
     auto id() const -> PipelineID;

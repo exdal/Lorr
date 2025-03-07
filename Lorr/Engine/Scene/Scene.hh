@@ -80,6 +80,7 @@ public:
     auto get_entity_db(this Scene &) -> SceneEntityDB &;
 
 private:
+    auto compose(this Scene &) -> SceneComposeInfo;
     auto add_transform(this Scene &, flecs::entity entity) -> GPU::TransformID;
     auto remove_transform(this Scene &, flecs::entity entity) -> void;
 

@@ -282,6 +282,17 @@ void EditorLayout::render(this EditorLayout &self, vuk::Format format, vuk::Exte
             ImGui::End();
         }
 
+        if (self.show_profiler) {
+            auto &io = ImGui::GetIO();
+            ImGui::SetNextWindowSizeConstraints(ImVec2(750, 450), ImVec2(FLT_MAX, FLT_MAX));
+            ImGui::Begin("Frame Profiler", &self.show_profiler);
+            ImGui::Text("Frametime: %.4fms (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
+
+            app.device.render_frame_profiler();
+
+            ImGui::End();
+        }
+
         for (auto &panel : self.panels) {
             panel->do_render(format, extent);
         }

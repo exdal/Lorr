@@ -140,8 +140,10 @@ private:
     DeviceResources resources = {};
 
     // Profiling tools
+    ankerl::unordered_dense::map<vuk::Name, ls::pair<vuk::Query, vuk::Query>> pass_queries = {};
     std::vector<legit::ProfilerTask> gpu_profiler_tasks = {};
     legit::ProfilerGraph gpu_profiler_graph = { 400 };
+    f64 gpu_profiler_query_offset = 0.0;
 
     vkb::Instance instance = {};
     vkb::PhysicalDevice physical_device = {};
@@ -194,5 +196,7 @@ public:
 
     auto get_instance() -> VkInstance { return instance.instance; }
     auto get_allocator() -> vuk::Allocator & { return allocator.value(); }
+
+    auto render_frame_profiler(this Device &) -> void;
 };
 }  // namespace lr

@@ -11,9 +11,9 @@ public struct Material {
     public f32 metallic_factor = 0.0;
     public u32 alpha_mode = 0;
     public f32 alpha_cutoff = 0.0;
-    public SampledImage<float4> albedo_image;
-    public SampledImage<float4> normal_image;
-    public SampledImage<float4> emissive_image;
+    public u32 albedo_image_index = 0;
+    public u32 normal_image_index = 0;
+    public u32 emissive_image_index = 0;
 };
 
 public struct Meshlet {
@@ -38,6 +38,7 @@ public struct MeshletInstance {
 public struct Model {
     public float3 *vertex_positions;
     public u32 *indices;
+    public vec2 *texture_coords;
     public Meshlet *meshlets;
     public MeshletBounds *meshlet_bounds;
     public u8 *local_triangle_indices;

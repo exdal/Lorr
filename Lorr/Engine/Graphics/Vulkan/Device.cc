@@ -303,15 +303,12 @@ auto Device::create_persistent_descriptor_set(this Device &self, ls::span<Bindle
     u32 descriptor_count = 0;
     auto raw_bindings = std::vector<VkDescriptorSetLayoutBinding>(bindings.size());
     auto binding_flags = std::vector<VkDescriptorBindingFlags>(bindings.size());
-    for (usize i = 0; i < bindings.size(); i++) {
-        auto &binding = bindings[i];
-        auto &raw_binding = raw_bindings[i];
-
+    for (const auto &[binding, raw_binding, raw_binding_flags] : std::views::zip(bindings, raw_bindings, binding_flags)) {
         raw_binding.binding = binding.binding;
         raw_binding.descriptorType = vuk::DescriptorBinding::vk_descriptor_type(binding.type);
         raw_binding.descriptorCount = binding.descriptor_count;
         raw_binding.stageFlags = VK_SHADER_STAGE_ALL;
-        binding_flags[i] = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
+        raw_binding_flags = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
         descriptor_count += binding.descriptor_count;
     }
 

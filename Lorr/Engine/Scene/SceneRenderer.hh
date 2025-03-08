@@ -76,6 +76,9 @@ struct SceneRenderer {
     Pipeline vis_cull_meshlets_pipeline = {};
     Pipeline vis_cull_triangles_pipeline = {};
     Pipeline vis_encode_pipeline = {};
+    Pipeline vis_decode_pipeline = {};
+
+    Pipeline pbr_basic_pipeline = {};
 
     Pipeline tonemap_pipeline = {};
 };

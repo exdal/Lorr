@@ -23,7 +23,7 @@ struct Texture {
 
 enum class MaterialID : u64 { Invalid = std::numeric_limits<u64>::max() };
 struct Material {
-    glm::vec3 albedo_color = { 1.0f, 1.0f, 1.0f };
+    glm::vec4 albedo_color = { 1.0f, 1.0f, 1.0f, 1.0f };
     glm::vec3 emissive_color = { 0.0f, 0.0f, 0.0f };
     f32 roughness_factor = 0.0f;
     f32 metallic_factor = 0.0f;

@@ -80,7 +80,7 @@ struct Scene {
 };
 
 struct Material {
-    alignas(4) glm::vec3 albedo_color = { 1.0f, 1.0f, 1.0f };
+    alignas(4) glm::vec4 albedo_color = { 1.0f, 1.0f, 1.0f, 1.0f };
     alignas(4) glm::vec3 emissive_color = { 0.0f, 0.0f, 0.0f };
     alignas(4) f32 roughness_factor = 0.0f;
     alignas(4) f32 metallic_factor = 0.0f;

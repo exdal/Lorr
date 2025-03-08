@@ -5,7 +5,7 @@ public struct Transform {
 };
 
 public struct Material {
-    public vec3 albedo_color = {};
+    public vec4 albedo_color = {};
     public vec3 emissive_color = {};
     public f32 roughness_factor = 0.0;
     public f32 metallic_factor = 0.0;

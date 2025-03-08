@@ -104,4 +104,24 @@ public Optional<float2> ray_sphere_intersect_outside(float3 ray_origin, float3 r
 public float3 mod(float3 x, float3 y) {
   return x - y * floor(x / y);
 }
+
+// Unit vectors octahedral encoding
+// "Survey of Efficient Representations for Independent Unit Vectors"
+// http://jcgt.org/published/0003/02/01
+public float3 oct_to_vec3(float2 e) {
+    float3 v = float3(e.xy, 1.0 - abs(e.x) - abs(e.y));
+    const float2 sign_not_zero = float2((v.x >= 0.0) ? +1.0 : -1.0, (v.y >= 0.0) ? +1.0 : -1.0);
+    if (v.z < 0.0) {
+        v.xy = (1.0 - abs(v.yx)) * sign_not_zero;
+    }
+
+    return normalize(v);
+}
+
+public float2 vec3_to_oct(float3 v) {
+    float2 p = float2(v.x, v.y) * (1.0 / (abs(v.x) + abs(v.y) + abs(v.z)));
+    const float2 sign_not_zero = float2((p.x >= 0.0) ? 1.0 : -1.0, (p.y >= 0.0) ? 1.0 : -1.0);
+    return (v.z <= 0.0) ? ((1.0 - abs(float2(p.y, p.x))) * sign_not_zero) : p;
+}
+
 }

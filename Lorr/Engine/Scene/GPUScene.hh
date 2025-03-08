@@ -1,11 +1,13 @@
 #pragma once
 
-#include "Engine/Graphics/Vulkan.hh"
+#include "Engine/Graphics/VulkanTypes.hh"
 
 namespace lr::GPU {
 enum class TransformID : u64 { Invalid = ~0_u64 };
 struct Transforms {
     alignas(4) glm::mat4 local = {};
+    alignas(4) glm::mat4 world = {};
+    alignas(4) glm::mat3 normal = {};
 };
 
 struct Sun {

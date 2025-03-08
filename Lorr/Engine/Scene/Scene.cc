@@ -471,13 +471,14 @@ auto Scene::set_dirty(this Scene &self, flecs::entity entity) -> void {
     const auto *entity_transform = entity.get<ECS::Transform>();
     auto *gpu_transform = self.entity_transforms.slot(transform_id);
 
-    auto &local_transform = gpu_transform->local;
     const auto &rotation = glm::radians(entity_transform->rotation);
-    local_transform = glm::translate(glm::mat4(1.0), entity_transform->position);
-    local_transform *= glm::rotate(glm::mat4(1.0), rotation.x, glm::vec3(1.0, 0.0, 0.0));
-    local_transform *= glm::rotate(glm::mat4(1.0), rotation.y, glm::vec3(0.0, 1.0, 0.0));
-    local_transform *= glm::rotate(glm::mat4(1.0), rotation.z, glm::vec3(0.0, 0.0, 1.0));
-    local_transform *= glm::scale(glm::mat4(1.0), entity_transform->scale);
+    gpu_transform->local = glm::mat4(1.0);
+    gpu_transform->world = glm::translate(glm::mat4(1.0), entity_transform->position);
+    gpu_transform->world *= glm::rotate(glm::mat4(1.0), rotation.x, glm::vec3(1.0, 0.0, 0.0));
+    gpu_transform->world *= glm::rotate(glm::mat4(1.0), rotation.y, glm::vec3(0.0, 1.0, 0.0));
+    gpu_transform->world *= glm::rotate(glm::mat4(1.0), rotation.z, glm::vec3(0.0, 0.0, 1.0));
+    gpu_transform->world *= glm::scale(glm::mat4(1.0), entity_transform->scale);
+    gpu_transform->normal = glm::inverse(glm::transpose(glm::mat3(gpu_transform->world)));
 
     self.dirty_transforms.push_back(transform_id);
 }

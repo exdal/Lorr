@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Engine/Graphics/Vulkan.hh"
+
 #include "Engine/Scene/GPUScene.hh"
 
 namespace lr {

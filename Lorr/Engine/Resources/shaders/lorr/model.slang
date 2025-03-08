@@ -2,6 +2,8 @@ implementing "../lorr";
 
 public struct Transform {
     public mat4 local = {};
+    public mat4 world = {};
+    public mat3 normal = {};
 };
 
 public struct Material {

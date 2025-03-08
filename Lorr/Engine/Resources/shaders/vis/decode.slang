@@ -103,6 +103,23 @@ func interpolate(in PartialDeriv d, in float3 v) -> float3 {
     return float3(dot(v, d.weight), dot(v, d.ddx), dot(v, d.ddy));
 }
 
+func interpolate3(in PartialDeriv d, in float3x3 v) -> float3 {
+    return float3(
+        interpolate(d, float3(v[0].x, v[1].x, v[2].x)).x,
+        interpolate(d, float3(v[0].y, v[1].y, v[2].y)).x,
+        interpolate(d, float3(v[0].z, v[1].z, v[2].z)).x
+    );
+}
+
+func interpolate4(in PartialDeriv d, in float3x4 v) -> float4 {
+    return float4(
+        interpolate(d, float3(v[0].x, v[1].x, v[2].x)).x,
+        interpolate(d, float3(v[0].y, v[1].y, v[2].y)).x,
+        interpolate(d, float3(v[0].z, v[1].z, v[2].z)).x,
+        interpolate(d, float3(v[0].w, v[1].w, v[2].w)).x
+    );
+}
+
 struct UVGradient {
     float2 gradient;
     float2 ddx;
@@ -128,6 +145,7 @@ func sample_texture(u32 i, UVGradient uv_gradient) -> float4 {
 struct FragmentOutput {
     float4 albedo : SV_Target0;
     float4 normal : SV_Target1;
+    float3 emission : SV_Target2;
 };
 
 [[vk::push_constant]] float2 resolution;
@@ -153,46 +171,82 @@ FragmentOutput fs_main(VertexOutput input, float4 pixel_pos : SV_Position) {
     const u32 vertex_offset = meshlet.vertex_offset;
     const u32 index_offset = meshlet.index_offset;
     const u32 triangle_offset = meshlet.triangle_offset;
-    const uvec3 triangle_indices = uvec3(
+    const uvec3 triangle_indices = {
         u32(model.local_triangle_indices[triangle_offset + triangle_index * 3 + 0]),
         u32(model.local_triangle_indices[triangle_offset + triangle_index * 3 + 1]),
         u32(model.local_triangle_indices[triangle_offset + triangle_index * 3 + 2]),
-    );
-    const uvec3 indices = uvec3(
+    };
+    const uvec3 indices = {
         model.indices[index_offset + triangle_indices.x],
         model.indices[index_offset + triangle_indices.y],
         model.indices[index_offset + triangle_indices.z],
-    );
-    const float3x3 positions = float3x3(
+    };
+    const float3x3 positions = {
         model.vertex_positions[vertex_offset + indices.x],
         model.vertex_positions[vertex_offset + indices.y],
         model.vertex_positions[vertex_offset + indices.z],
-    );
-    const float3x2 tex_coords = float3x2(
+    };
+    const float3x2 tex_coords = {
         model.texture_coords[vertex_offset + indices.x],
         model.texture_coords[vertex_offset + indices.y],
         model.texture_coords[vertex_offset + indices.z],
-    );
-    const float3x4 world_positions = float3x4(
-        mul(transform.local, float4(positions[0], 1.0)),
-        mul(transform.local, float4(positions[1], 1.0)),
-        mul(transform.local, float4(positions[2], 1.0)),
-    );
-    const float3x4 clip_positions = float3x4(
+    };
+    const float3x4 world_positions = {
+        mul(transform.world, float4(positions[0], 1.0)),
+        mul(transform.world, float4(positions[1], 1.0)),
+        mul(transform.world, float4(positions[2], 1.0)),
+    };
+    const float3x4 clip_positions = {
         mul(scene.camera.projection_view_mat, world_positions[0]),
         mul(scene.camera.projection_view_mat, world_positions[1]),
         mul(scene.camera.projection_view_mat, world_positions[2]),
-    );
+    };
     const PartialDeriv partial_deriv = calc_bary(clip_positions, input.tex_coord * 2.0 - 1.0, resolution);
     const UVGradient uv_gradient = calc_uv_gradient(partial_deriv, tex_coords);
     const Material material = materials.materials[meshlet_instance.material_index];
 
+    // ALBEDO ───────────────────────────────────────────────────────────
     if (material.albedo_image_index != ~0u) {
         output.albedo = sample_texture(material.albedo_image_index, uv_gradient);
     } else {
         output.albedo = material.albedo_color;
     }
 
-    output.normal = float4(0.0);
+    // NORMALS ──────────────────────────────────────────────────────────
+    const float3 triangle_normal = normalize(cross(positions[1] - positions[0], positions[2] - positions[0]));
+    const float3 world_normal = normalize(mul(transform.normal, triangle_normal));
+    float3 final_normal = world_normal;
+
+    if (material.normal_image_index != ~0u) {
+        const float3x3 interp_view_positions = {
+            interpolate(partial_deriv, float3(world_positions[0].x, world_positions[1].x, world_positions[2].x)),
+            interpolate(partial_deriv, float3(world_positions[0].y, world_positions[1].y, world_positions[2].y)),
+            interpolate(partial_deriv, float3(world_positions[0].z, world_positions[1].z, world_positions[2].z)),
+        };
+        const float3 ddx_pos = float3(interp_view_positions[0].y, interp_view_positions[1].y, interp_view_positions[2].y);
+        const float3 ddy_pos = float3(interp_view_positions[0].z, interp_view_positions[1].z, interp_view_positions[2].z);
+        const float2 ddx_tex_coord = uv_gradient.ddx;
+        const float2 ddy_tex_coord = uv_gradient.ddy;
+
+        const float3 N = final_normal;
+        const float3 T = normalize(ddx_pos * ddy_tex_coord.y - ddy_pos * ddx_tex_coord.y);
+        const float3 B = -normalize(cross(N, T));
+        const mat3 TBN = { T, B, N };
+
+        float3 sampled_normal = float3(sample_texture(material.normal_image_index, uv_gradient).xy, 1.0) * 2.0 - 1.0;
+        final_normal = normalize(mul(TBN, sampled_normal));
+    }
+
+    output.normal.xy = lr::vec3_to_oct(final_normal);
+    output.normal.zw = lr::vec3_to_oct(triangle_normal);
+
+    // EMISSION ─────────────────────────────────────────────────────────
+    if (material.emissive_image_index != ~0u) {
+        const float3 emissive_texture = sample_texture(material.emissive_image_index, uv_gradient).xyz;
+        output.emission = material.emissive_color * emissive_texture;
+    } else {
+        output.emission = material.emissive_color;
+    }
+
     return output;
 }

@@ -53,7 +53,7 @@ VertexOutput vs_main(u32 vertex_id : SV_VertexID) {
     const Transform transform = transforms.transforms[meshlet_instance.transform_index];
 
     VertexOutput output;
-    output.position = mul(transform.local, float4(vertex_pos, 1.0));
+    output.position = mul(transform.world, float4(vertex_pos, 1.0));
     output.position = mul(scene.camera.projection_view_mat, output.position);
     output.meshlet_index = visible_meshlet_index;
     output.triangle_index = triangle_index / 3;

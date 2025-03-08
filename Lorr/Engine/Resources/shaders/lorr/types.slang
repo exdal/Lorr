@@ -27,7 +27,7 @@ public typedef uint2 uvec2;
 public typedef uint3 uvec3;
 public typedef uint4 uvec4;
 public typedef matrix<f32, 4, 4> mat4;
-public typedef matrix<f32, 4, 3> mat3;
+public typedef matrix<f32, 3, 3> mat3;
 
 // resource types
 public typedef u32 BufferID;

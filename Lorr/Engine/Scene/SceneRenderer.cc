@@ -665,10 +665,18 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
     auto normal_attachment = vuk::declare_ia(
         "normal",
         { .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eColorAttachment,
-          .format = vuk::Format::eR32G32B32A32Sfloat,
+          .format = vuk::Format::eR16G16B16A16Sfloat,
           .sample_count = vuk::Samples::e1 });
     normal_attachment.same_shape_as(visbuffer_attachment);
     normal_attachment = vuk::clear_image(std::move(normal_attachment), vuk::Black<f32>);
+
+    auto emissive_attachment = vuk::declare_ia(
+        "emissive",
+        { .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eColorAttachment,
+          .format = vuk::Format::eB10G11R11UfloatPack32,
+          .sample_count = vuk::Samples::e1 });
+    emissive_attachment.same_shape_as(visbuffer_attachment);
+    emissive_attachment = vuk::clear_image(std::move(emissive_attachment), vuk::Black<f32>);
 
     if (self.meshlet_instance_count) {
         //  ── CULL MESHLETS ───────────────────────────────────────────────────
@@ -807,6 +815,7 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                 vuk::CommandBuffer &cmd_list,
                 VUK_IA(vuk::eColorWrite) albedo,
                 VUK_IA(vuk::eColorWrite) normal,
+                VUK_IA(vuk::eColorWrite) emissive,
                 VUK_IA(vuk::eFragmentRead) visbuffer,
                 VUK_BA(vuk::eFragmentRead) scene,
                 VUK_BA(vuk::eFragmentRead) transforms,
@@ -820,6 +829,7 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                     .set_depth_stencil({})
                     .set_color_blend(albedo, vuk::BlendPreset::eOff)
                     .set_color_blend(normal, vuk::BlendPreset::eOff)
+                    .set_color_blend(emissive, vuk::BlendPreset::eOff)
                     .set_viewport(0, vuk::Rect2D::framebuffer())
                     .set_scissor(0, vuk::Rect2D::framebuffer())
                     .bind_image(0, 0, visbuffer)
@@ -832,12 +842,13 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                     .bind_persistent(1, descriptor_set)
                     .push_constants(vuk::ShaderStageFlagBits::eFragment, 0, glm::vec2(visbuffer->extent.width, visbuffer->extent.height))
                     .draw(3, 1, 0, 1);
-                return std::make_tuple(albedo, normal, scene, transforms);
+                return std::make_tuple(albedo, normal, emissive, scene, transforms);
             });
 
-        std::tie(albedo_attachment, normal_attachment, scene_buffer, transforms_buffer) = vis_decode_pass(
+        std::tie(albedo_attachment, normal_attachment, emissive_attachment, scene_buffer, transforms_buffer) = vis_decode_pass(
             std::move(albedo_attachment),
             std::move(normal_attachment),
+            std::move(emissive_attachment),
             std::move(visbuffer_attachment),
             std::move(scene_buffer),
             std::move(transforms_buffer),
@@ -848,21 +859,30 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
     }
 
     //  ── PBR BASIC ───────────────────────────────────────────────────────
-    final_attachment = vuk::make_pass(
-        "tonemap",
+    auto pbr_basic_pass = vuk::make_pass(
+        "pbr basic",
         [&pipeline = *self.device->pipeline(self.pbr_basic_pipeline.id())](
-            vuk::CommandBuffer &cmd_list, VUK_IA(vuk::Access::eColorWrite) dst, VUK_IA(vuk::Access::eFragmentSampled) src) {
+            vuk::CommandBuffer &cmd_list,
+            VUK_IA(vuk::Access::eColorWrite) dst,
+            VUK_IA(vuk::Access::eFragmentSampled) albedo,
+            VUK_IA(vuk::Access::eFragmentSampled) normal,
+            VUK_IA(vuk::Access::eFragmentSampled) emissive) {
             cmd_list  //
                 .bind_graphics_pipeline(pipeline)
                 .bind_sampler(0, 0, { .magFilter = vuk::Filter::eLinear, .minFilter = vuk::Filter::eLinear })
-                .bind_image(0, 1, src)
+                .bind_image(0, 1, albedo)
+                .bind_image(0, 2, normal)
+                .bind_image(0, 3, emissive)
                 .set_rasterization({})
                 .set_color_blend(dst, vuk::BlendPreset::eOff)
                 .set_viewport(0, vuk::Rect2D::framebuffer())
                 .set_scissor(0, vuk::Rect2D::framebuffer())
                 .draw(3, 1, 0, 0);
             return dst;
-        })(std::move(final_attachment), std::move(albedo_attachment));
+        });
+
+    final_attachment = pbr_basic_pass(
+        std::move(final_attachment), std::move(albedo_attachment), std::move(normal_attachment), std::move(emissive_attachment));
 
     //  ── EDITOR GRID ─────────────────────────────────────────────────────
     std::tie(final_attachment, depth_attachment, scene_buffer) = vuk::make_pass(

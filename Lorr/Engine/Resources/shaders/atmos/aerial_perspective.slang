@@ -18,7 +18,7 @@ void cs_main(uint3 thread_id : SV_DispatchThreadID) {
     float3 clip_space = float3(2.0 * uv - 1.0, 1.0);
     float4 world_space = mul(camera.inv_projection_view_mat, float4(clip_space, 1.0));
     float3 world_pos = world_space.xyz / world_space.w;
-    float3 eye_dir = normalize(world_pos - camera.position);
+    float3 world_dir = normalize(world_pos - camera.position);
     float3 eye_pos = float3(0.0, camera.position.y, 0.0) *
                      CAMERA_SCALE_UNIT +
                      float3(0.0, atmos.planet_radius, 0.0);
@@ -29,56 +29,35 @@ void cs_main(uint3 thread_id : SV_DispatchThreadID) {
     slice *= atmos.aerial_perspective_lut_size.z;
     float t_max = slice * atmos.aerial_gain_per_slice;
 
-    float3 ray_pos = eye_pos + eye_dir;
-    float3 voxel_world_pos = ray_pos + t_max * eye_dir;
-    float voxel_height = length(voxel_world_pos);
-    float3 eye_to_voxel = voxel_world_pos - eye_pos;
-    float eye_to_voxel_height = length(eye_to_voxel);
-    float3 eye_to_voxel_dir = eye_to_voxel / eye_to_voxel_height;
+    float3 ray_pos = eye_pos + t_max * world_dir;
+    float view_height = length(ray_pos);
 
-    const let planet_intersection = lr::ray_sphere_intersect_nearest(eye_pos, eye_to_voxel_dir, atmos.planet_radius);
-    const bool under_ground = voxel_height < atmos.planet_radius;
-    const bool below_horizon = planet_intersection.hasValue && eye_to_voxel_height > planet_intersection.value;
-
-    if (under_ground || below_horizon) {
-        eye_pos += normalize(eye_pos) * 0.02;
-        float3 voxel_world_dir = normalize(voxel_world_pos);
-        float3 eye_proj_on_ground = normalize(eye_pos) * atmos.planet_radius;
-        float3 voxel_proj_on_ground = voxel_world_dir * atmos.planet_radius;
-        float3 voxel_ground_to_ray_start = eye_pos - voxel_proj_on_ground;
-        if (below_horizon && dot(normalize(voxel_ground_to_ray_start), voxel_world_dir) < PLANET_RADIUS_OFFSET) {
-            float3 middle_point = 0.5 * (eye_proj_on_ground + voxel_proj_on_ground);
-            float middle_point_height = length(middle_point);
-            float3 middle_point_on_ground = normalize(middle_point) * atmos.planet_radius;
-            voxel_world_pos = eye_pos + 2.0 * (middle_point_on_ground - eye_pos);
-        } else if (under_ground) {
-            voxel_world_pos = normalize(voxel_world_pos) * atmos.planet_radius;
-        }
-
-        eye_dir = normalize(voxel_world_pos - eye_pos);
-        ray_pos = eye_pos + eye_dir;
-        t_max = length(voxel_world_pos - ray_pos);
+    if (view_height <= (atmos.planet_radius + PLANET_RADIUS_OFFSET)) {
+        ray_pos = normalize(ray_pos) * (atmos.planet_radius + PLANET_RADIUS_OFFSET);
+        world_dir = normalize(ray_pos - eye_pos);
+        t_max = length(ray_pos - eye_pos);
     }
 
     float t_max_max = t_max;
-    float ray_height = length(ray_pos);
-    if (ray_height >= atmos.atmos_radius) {
-        float3 prev_ray_pos = ray_pos;
-        if (!move_to_top_atmosphere(ray_pos, eye_dir, atmos.atmos_radius)) {
+    view_height = length(eye_pos);
+    if (view_height >= atmos.atmos_radius) {
+        float3 prev_ray_pos = eye_pos;
+        if (!move_to_top_atmosphere(eye_pos, world_dir, atmos.atmos_radius)) {
             aerial_perspective_lut[thread_id] = 0.0;
             return;
         }
-        float length_to_atmosphere = length(prev_ray_pos - ray_pos);
+        float length_to_atmosphere = length(prev_ray_pos - eye_pos);
         if (t_max_max < length_to_atmosphere) {
             aerial_perspective_lut[thread_id] = 0.0;
             return;
         }
+
         t_max_max = max(0.0, t_max_max - length_to_atmosphere);
     }
 
     AtmosphereIntegrateInfo info = {};
-    info.eye_pos = ray_pos;
-    info.eye_dir = eye_dir;
+    info.eye_pos = eye_pos;
+    info.eye_dir = world_dir;
     info.sun_dir = sun.direction;
     info.sun_intensity = sun.intensity;
     info.max_integration_length = t_max_max;

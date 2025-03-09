@@ -429,7 +429,8 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
 
     auto depth_attachment = vuk::declare_ia(
         "depth",
-        { .extent = info.extent,  //
+        { .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eDepthStencilAttachment,
+          .extent = info.extent,
           .format = vuk::Format::eD32Sfloat,
           .sample_count = vuk::Samples::e1,
           .level_count = 1,
@@ -533,48 +534,6 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                 std::move(sky_aerial_perspective_attachment),
                 std::move(transmittance_lut_attachment),
                 std::move(multiscatter_lut_attachment),
-                std::move(scene_buffer));
-    }
-
-    //  ── SKY FINAL ───────────────────────────────────────────────────────
-    auto sky_final_pass = vuk::make_pass(
-        "sky final",
-        [&pipeline = *self.device->pipeline(self.sky_final_pipeline.id())](
-            vuk::CommandBuffer &cmd_list,
-            VUK_IA(vuk::Access::eColorWrite) dst,
-            VUK_IA(vuk::Access::eFragmentSampled) sky_view_lut,
-            VUK_IA(vuk::Access::eFragmentSampled) aerial_perspective_lut,
-            VUK_IA(vuk::Access::eFragmentSampled) transmittance_lut,
-            VUK_BA(vuk::Access::eFragmentRead) scene) {
-            vuk::SamplerCreateInfo sampler_info = {
-                .magFilter = vuk::Filter::eLinear,
-                .minFilter = vuk::Filter::eLinear,
-                .addressModeU = vuk::SamplerAddressMode::eClampToEdge,
-                .addressModeV = vuk::SamplerAddressMode::eClampToEdge,
-            };
-
-            cmd_list  //
-                .bind_graphics_pipeline(pipeline)
-                .bind_sampler(0, 0, sampler_info)
-                .bind_image(0, 1, transmittance_lut)
-                .bind_image(0, 2, sky_view_lut)
-                .bind_buffer(0, 3, scene)
-                .set_rasterization({})
-                .set_depth_stencil({})
-                .set_color_blend(dst, vuk::BlendPreset::eOff)
-                .set_viewport(0, vuk::Rect2D::framebuffer())
-                .set_scissor(0, vuk::Rect2D::framebuffer())
-                .draw(3, 1, 0, 0);
-            return std::make_tuple(dst, sky_view_lut, aerial_perspective_lut, transmittance_lut, scene);
-        });
-
-    if (info.render_atmos) {
-        std::tie(final_attachment, sky_view_lut_attachment, sky_aerial_perspective_attachment, transmittance_lut_attachment, scene_buffer) =
-            sky_final_pass(
-                std::move(final_attachment),
-                std::move(sky_view_lut_attachment),
-                std::move(sky_aerial_perspective_attachment),
-                std::move(transmittance_lut_attachment),
                 std::move(scene_buffer));
     }
 
@@ -883,6 +842,70 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
 
     final_attachment = pbr_basic_pass(
         std::move(final_attachment), std::move(albedo_attachment), std::move(normal_attachment), std::move(emissive_attachment));
+
+    //  ── SKY FINAL ───────────────────────────────────────────────────────
+    if (info.render_atmos) {
+        auto sky_final_pass = vuk::make_pass(
+            "sky final",
+            [&pipeline = *self.device->pipeline(self.sky_final_pipeline.id())](
+                vuk::CommandBuffer &cmd_list,
+                VUK_IA(vuk::Access::eColorWrite) dst,
+                VUK_IA(vuk::Access::eFragmentRead) depth,
+                VUK_IA(vuk::Access::eFragmentSampled) sky_view_lut,
+                VUK_IA(vuk::Access::eFragmentSampled) aerial_perspective_lut,
+                VUK_IA(vuk::Access::eFragmentSampled) transmittance_lut,
+                VUK_BA(vuk::Access::eFragmentRead) scene) {
+                vuk::SamplerCreateInfo sampler_info = {
+                    .magFilter = vuk::Filter::eLinear,
+                    .minFilter = vuk::Filter::eLinear,
+                    .addressModeU = vuk::SamplerAddressMode::eClampToEdge,
+                    .addressModeV = vuk::SamplerAddressMode::eClampToEdge,
+                    .addressModeW = vuk::SamplerAddressMode::eClampToEdge,
+
+                };
+
+                vuk::PipelineColorBlendAttachmentState blend_info = {
+                    .blendEnable = true,
+                    .srcColorBlendFactor = vuk::BlendFactor::eOne,
+                    .dstColorBlendFactor = vuk::BlendFactor::eSrcAlpha,
+                    .colorBlendOp = vuk::BlendOp::eAdd,
+                    .srcAlphaBlendFactor = vuk::BlendFactor::eZero,
+                    .dstAlphaBlendFactor = vuk::BlendFactor::eOne,
+                    .alphaBlendOp = vuk::BlendOp::eAdd,
+                };
+
+                cmd_list  //
+                    .bind_graphics_pipeline(pipeline)
+                    .set_rasterization({})
+                    .set_depth_stencil({})
+                    .set_color_blend(dst, blend_info)
+                    .set_viewport(0, vuk::Rect2D::framebuffer())
+                    .set_scissor(0, vuk::Rect2D::framebuffer())
+                    .bind_image(0, 0, depth)
+                    .bind_sampler(0, 1, sampler_info)
+                    .bind_image(0, 2, transmittance_lut)
+                    .bind_image(0, 3, sky_view_lut)
+                    .bind_image(0, 4, aerial_perspective_lut)
+                    .bind_buffer(0, 5, scene)
+                    .draw(3, 1, 0, 0);
+                return std::make_tuple(dst, depth, sky_view_lut, aerial_perspective_lut, transmittance_lut, scene);
+            });
+
+        std::tie(
+            final_attachment,
+            depth_attachment,
+            sky_view_lut_attachment,
+            sky_aerial_perspective_attachment,
+            transmittance_lut_attachment,
+            scene_buffer) =
+            sky_final_pass(
+                std::move(final_attachment),
+                std::move(depth_attachment),
+                std::move(sky_view_lut_attachment),
+                std::move(sky_aerial_perspective_attachment),
+                std::move(transmittance_lut_attachment),
+                std::move(scene_buffer));
+    }
 
     //  ── EDITOR GRID ─────────────────────────────────────────────────────
     std::tie(final_attachment, depth_attachment, scene_buffer) = vuk::make_pass(

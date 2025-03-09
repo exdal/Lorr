@@ -53,6 +53,7 @@ ECS_COMPONENT_BEGIN(Atmosphere)
     ECS_COMPONENT_MEMBER(ozone_absorption, glm::vec3, { 0.650f, 1.881f, 0.085f })
     ECS_COMPONENT_MEMBER(ozone_height, f32, 25.0f)
     ECS_COMPONENT_MEMBER(ozone_thickness, f32, 15.0f)
+    ECS_COMPONENT_MEMBER(aerial_gain_per_slice, f32, 8.0f)
 ECS_COMPONENT_END();
 
 ECS_COMPONENT_BEGIN(Clouds)

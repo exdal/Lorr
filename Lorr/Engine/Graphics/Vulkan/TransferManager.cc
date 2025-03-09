@@ -92,37 +92,11 @@ auto TransferManager::upload_staging(this TransferManager &self, ImageView &imag
     -> vuk::Value<vuk::ImageAttachment> {
     ZoneScoped;
 
-    auto cpu_buffer = self.alloc_transient_buffer(vuk::MemoryUsage::eCPUonly, data_size, LOC);
-    std::memcpy(cpu_buffer->mapped_ptr, data, data_size);
-
     auto dst_attachment_info = image_view.get_attachment(*self.device, vuk::ImageUsageFlagBits::eTransferDst);
-    auto dst_attachment = vuk::declare_ia("dst", dst_attachment_info, LOC);
-
-    vuk::ImageSubresourceLayers target_layer = {
-        .aspectMask = vuk::format_to_aspect(image_view.format()),
-        .mipLevel = 0,
-        .baseArrayLayer = 0,
-        .layerCount = 1,
-    };
-    vuk::BufferImageCopy copy_region = {
-        .bufferOffset = cpu_buffer->offset,
-        .imageSubresource = target_layer,
-        .imageExtent = dst_attachment->base_mip_extent(),
-    };
-
-    auto upload_pass = vuk::make_pass(
-        "TransferManager::image_upload",
-        [copy_region](vuk::CommandBuffer &cmd_list, VUK_BA(vuk::Access::eTransferRead) src_ba, VUK_IA(vuk::Access::eTransferWrite) dst_ia) {
-            cmd_list.copy_buffer_to_image(src_ba, dst_ia, copy_region);
-            return dst_ia;
-        });
-
-    dst_attachment = upload_pass(std::move(cpu_buffer), std::move(dst_attachment), LOC);
-    if (image_view.mip_count() > 1) {
-        dst_attachment = vuk::generate_mips(std::move(dst_attachment), 0, image_view.mip_count() - 1);
-    }
-
-    return dst_attachment;
+    auto result =
+        vuk::host_data_to_image(self.device->allocator.value(), vuk::DomainFlagBits::eGraphicsQueue, dst_attachment_info, data, LOC);
+    result = vuk::generate_mips(std::move(result), 0, image_view.mip_count() - 1);
+    return result;
 }
 
 auto TransferManager::scratch_buffer(this TransferManager &self, const void *data, u64 size, vuk::source_location LOC)

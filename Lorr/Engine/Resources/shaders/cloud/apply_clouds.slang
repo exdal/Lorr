@@ -212,7 +212,7 @@ float4 fs_main(VertexOutput input) : SV_Target {
         float3 p = march_dist - float3(0.0, atmos.planet_radius, 0.0);
         float4 v = mul(camera.view_mat, float4(p, 1.0));
         float ray_hit_h = length(step_pos_sum - eye_pos);
-        float slice = ray_hit_h * (1.0 / atmos.aerial_km_per_slice);
+        float slice = ray_hit_h * (1.0 / atmos.aerial_gain_per_slice);
         float weight = 1.0;
         if (slice < 0.5) {
             weight = saturate(slice * 2.0);

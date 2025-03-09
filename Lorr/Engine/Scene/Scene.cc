@@ -389,6 +389,7 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, const vuk::Extent3
             atmos.ozone_absorption = atmos_info.ozone_absorption * 1e-3f;
             atmos.ozone_height = atmos_info.ozone_height;
             atmos.ozone_thickness = atmos_info.ozone_thickness;
+            atmos.aerial_gain_per_slice = atmos_info.aerial_gain_per_slice;
         }
 
         if (e.has<ECS::Clouds>()) {

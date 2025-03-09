@@ -27,7 +27,7 @@ void cs_main(uint3 thread_id : SV_DispatchThreadID) {
     float slice = ((float(thread_id.z) + 0.5) * (1.0 / atmos.aerial_perspective_lut_size.z));
     slice *= slice;
     slice *= atmos.aerial_perspective_lut_size.z;
-    float t_max = slice * atmos.aerial_km_per_slice;
+    float t_max = slice * atmos.aerial_gain_per_slice;
 
     float3 ray_pos = eye_pos;
     float3 voxel_world_pos = ray_pos + t_max * eye_dir;

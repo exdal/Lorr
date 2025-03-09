@@ -29,7 +29,7 @@ struct Atmosphere {
     alignas(4) f32 ozone_thickness = 15.0f;
 
     alignas(4) glm::vec3 terrain_albedo = { 0.3f, 0.3f, 0.3f };
-    alignas(4) f32 aerial_km_per_slice = 8.0f;
+    alignas(4) f32 aerial_gain_per_slice = 8.0f;
     alignas(4) f32 planet_radius = 6360.0f;
     alignas(4) f32 atmos_radius = 6460.0f;
 

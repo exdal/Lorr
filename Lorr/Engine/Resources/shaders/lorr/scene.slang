@@ -19,7 +19,7 @@ public struct Atmosphere {
     public f32  ozone_thickness;
 
     public vec3 terrain_albedo;
-    public f32  aerial_km_per_slice;
+    public f32  aerial_gain_per_slice;
     public f32  planet_radius;
     public f32  atmos_radius;
 

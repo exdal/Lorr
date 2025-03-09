@@ -176,18 +176,14 @@ public func integrate_single_scattered_luminance(
     const let atmos_intersection = lr::ray_sphere_intersect_nearest(info.eye_pos, info.eye_dir, atmos.atmos_radius);
     const let planet_intersection = lr::ray_sphere_intersect_nearest(info.eye_pos, info.eye_dir, atmos.planet_radius);
     float integration_length = 0.0;
-    if (!atmos_intersection.hasValue && !planet_intersection.hasValue) {
+    if (!atmos_intersection.hasValue) {
         // No intersection
         return {};
-    } else if (atmos_intersection.hasValue && !planet_intersection.hasValue) {
+    } else if (!planet_intersection.hasValue) {
         // Atmosphere only intersection
         integration_length = atmos_intersection.value;
-    } else if (!atmos_intersection.hasValue && planet_intersection.hasValue) {
-        // Planet only intersection
-        integration_length = planet_intersection.value;
     } else {
-        // Ray intersects both atmosphere and planet, select the closest intersection
-        integration_length = min(atmos_intersection.value, planet_intersection.value);
+        integration_length = max(0.0, planet_intersection.value);
     }
 
     integration_length = min(integration_length, info.max_integration_length);

@@ -503,6 +503,7 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                 .minFilter = vuk::Filter::eLinear,
                 .addressModeU = vuk::SamplerAddressMode::eClampToEdge,
                 .addressModeV = vuk::SamplerAddressMode::eClampToEdge,
+                .addressModeW = vuk::SamplerAddressMode::eClampToEdge,
             };
 
             auto image_size = glm::vec3(dst->extent.width, dst->extent.height, dst->extent.depth);
@@ -861,7 +862,6 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                     .addressModeU = vuk::SamplerAddressMode::eClampToEdge,
                     .addressModeV = vuk::SamplerAddressMode::eClampToEdge,
                     .addressModeW = vuk::SamplerAddressMode::eClampToEdge,
-
                 };
 
                 vuk::PipelineColorBlendAttachmentState blend_info = {

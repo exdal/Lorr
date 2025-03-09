@@ -50,7 +50,6 @@ public Optional<float> ray_sphere_intersect_nearest(float3 ray_origin, float3 ra
     float c = dot(ray_origin, ray_origin) - (sphere_radius * sphere_radius);
     float delta = b * b - 4.0 * a * c;
 
-    // No intersection state.
     if (delta < 0.0 || a == 0.0) {
         return none;
     }
@@ -58,17 +57,14 @@ public Optional<float> ray_sphere_intersect_nearest(float3 ray_origin, float3 ra
     float sol0 = (-b - sqrt(delta)) / (2.0 * a);
     float sol1 = (-b + sqrt(delta)) / (2.0 * a);
 
-    // Intersection on negative direction, no suitable for ray.
-    if (sol1 < 0.0) { // When sol1 < 0.0, sol0 < 0.0 too.
+    if (sol1 < 0.0) {
         return none;
     }
 
-    // Maybe exist one positive intersection.
     if (sol0 < 0.0) {
         return max(0.0, sol1);
     }
 
-    // Two positive intersection, return nearest one.
     return max(0.0, min(sol0, sol1));
 }
 

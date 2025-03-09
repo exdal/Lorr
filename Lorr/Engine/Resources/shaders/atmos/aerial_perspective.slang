@@ -15,7 +15,7 @@ void cs_main(uint3 thread_id : SV_DispatchThreadID) {
     const let sun = scene.sun;
 
     float2 uv = (float2(thread_id.xy) + 0.5) / float2(atmos.aerial_perspective_lut_size.xy);
-    float3 clip_space = float3(2.0 * uv - 1.0, 0.5);
+    float3 clip_space = float3(2.0 * uv - 1.0, 1.0);
     float4 world_space = mul(camera.inv_projection_view_mat, float4(clip_space, 1.0));
     float3 world_pos = world_space.xyz / world_space.w;
     float3 eye_dir = normalize(world_pos - camera.position);
@@ -29,7 +29,7 @@ void cs_main(uint3 thread_id : SV_DispatchThreadID) {
     slice *= atmos.aerial_perspective_lut_size.z;
     float t_max = slice * atmos.aerial_gain_per_slice;
 
-    float3 ray_pos = eye_pos;
+    float3 ray_pos = eye_pos + eye_dir;
     float3 voxel_world_pos = ray_pos + t_max * eye_dir;
     float voxel_height = length(voxel_world_pos);
     float3 eye_to_voxel = voxel_world_pos - eye_pos;
@@ -52,11 +52,11 @@ void cs_main(uint3 thread_id : SV_DispatchThreadID) {
             float3 middle_point_on_ground = normalize(middle_point) * atmos.planet_radius;
             voxel_world_pos = eye_pos + 2.0 * (middle_point_on_ground - eye_pos);
         } else if (under_ground) {
-            voxel_world_pos = voxel_world_dir * atmos.planet_radius;
+            voxel_world_pos = normalize(voxel_world_pos) * atmos.planet_radius;
         }
 
         eye_dir = normalize(voxel_world_pos - eye_pos);
-        ray_pos = eye_pos;
+        ray_pos = eye_pos + eye_dir;
         t_max = length(voxel_world_pos - ray_pos);
     }
 
@@ -77,7 +77,7 @@ void cs_main(uint3 thread_id : SV_DispatchThreadID) {
     }
 
     AtmosphereIntegrateInfo info = {};
-    info.eye_pos = eye_pos;
+    info.eye_pos = ray_pos;
     info.eye_dir = eye_dir;
     info.sun_dir = sun.direction;
     info.sun_intensity = sun.intensity;

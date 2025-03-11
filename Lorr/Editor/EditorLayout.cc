@@ -404,7 +404,7 @@ bool ImGuiLR::drag_vec(i32 id, void *data, usize components, ImGuiDataType data_
         }
 
         ImGui::PushID(static_cast<i32>(i));
-        value_changed |= ImGui::DragScalar("", data_type, data, 0.51f);
+        value_changed |= ImGui::DragScalar("", data_type, data, 0.01f);
         ImGui::PopItemWidth();
         ImGui::PopID();
 

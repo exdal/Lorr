@@ -271,3 +271,32 @@ public func integrate_single_scattered_luminance(
     return result;
 }
 
+public func sample_aerial_perspective(
+    in Atmosphere atmos,
+    in Texture3D<float4> aerial_perspective_lut,
+    in SamplerState sampler,
+    float2 uv,
+    float3 camera_relative_pos
+) -> float4 {
+    const float half_slice_depth = 0.70710678118654752440084436210485f;  // sqrt(0.5f)
+    const float aerial_gain_per_slice_inv = (1.0 / atmos.aerial_gain_per_slice);
+    const float aerial_perspective_lut_depth = float(atmos.aerial_perspective_lut_size.z);
+
+    float relative_depth = length(camera_relative_pos);
+    float linear_slice = relative_depth * aerial_gain_per_slice_inv;
+    float linear_w = linear_slice * (1.0 / aerial_perspective_lut_depth);
+    float non_linear_w = sqrt(linear_w);
+    float non_linear_slice = non_linear_w * aerial_perspective_lut_depth;
+
+    float weight = 1.0;
+    if (non_linear_slice < half_slice_depth) {
+        weight = saturate(non_linear_slice * non_linear_slice * 2.0);
+    }
+    weight *= saturate(relative_depth * INV_CAMERA_SCALE_UNIT);
+
+    float4 aerial_perspective = aerial_perspective_lut.Sample(sampler, float3(uv, non_linear_w));
+    aerial_perspective.xyz *= weight;
+    aerial_perspective.w = 1.0 - (weight * (1.0 - aerial_perspective.w));
+
+    return aerial_perspective;
+}

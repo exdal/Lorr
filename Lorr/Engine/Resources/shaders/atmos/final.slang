@@ -46,7 +46,6 @@ float4 fs_main(VertexOutput input, float4 pixel_pos : SV_Position) : SV_TARGET {
     float3 clip_space = float3(input.tex_coord * 2.0 - 1.0, depth);
     float4 clip_pos = mul(camera.inv_projection_view_mat, float4(clip_space, 1.0));
     float3 clip_dir = clip_pos.xyz / clip_pos.w;
-    float3 camera_relative_pos = (clip_dir - camera.position) * CAMERA_SCALE_UNIT;
 
     float3 world_dir = normalize(clip_dir - camera.position);
     float3 world_pos = float3(0.0, camera.position.y, 0.0) *
@@ -54,27 +53,8 @@ float4 fs_main(VertexOutput input, float4 pixel_pos : SV_Position) : SV_TARGET {
                        float3(0.0, atmos.planet_radius, 0.0);
 
     if (depth != 1.0) {
-        const float half_slice_depth = 0.70710678118654752440084436210485f; // sqrt(0.5f)
-        const float aerial_gain_per_slice_inv = (1.0 / atmos.aerial_gain_per_slice);
-        const float aerial_perspective_lut_depth = float(atmos.aerial_perspective_lut_size.z);
-
-        float relative_depth = length(camera_relative_pos);
-        float linear_slice = relative_depth * aerial_gain_per_slice_inv;
-        float linear_w = linear_slice * (1.0 / aerial_perspective_lut_depth);
-        float non_linear_w = sqrt(linear_w);
-        float non_linear_slice = non_linear_w * aerial_perspective_lut_depth;
-
-        float weight = 1.0;
-        if (non_linear_slice < half_slice_depth) {
-            weight = saturate(non_linear_slice * non_linear_slice * 2.0);
-        }
-        weight *= saturate(relative_depth * INV_CAMERA_SCALE_UNIT);
-
-        float4 aerial_perspective = aerial_perspective_lut.Sample(sampler, float3(input.tex_coord, non_linear_w));
-        aerial_perspective.xyz *= weight;
-        aerial_perspective.w = 1.0 - (weight * (1.0 - aerial_perspective.w));
-
-        return aerial_perspective;
+        float3 camera_relative_pos = (clip_dir - camera.position) * CAMERA_SCALE_UNIT;
+        return sample_aerial_perspective(atmos, aerial_perspective_lut, sampler, input.tex_coord, camera_relative_pos);
     }
 
     const let planet_intersection = lr::ray_sphere_intersect_nearest(world_pos, world_dir, atmos.planet_radius);

@@ -11,13 +11,14 @@ import cloud;
 import "../atmos/atmos";
 import "../lorr";
 
-[[vk::binding(0, 0)]] SamplerState linear_repeat_sampler;
-[[vk::binding(1, 0)]] SamplerState linear_clamp_to_edge_sampler;
-[[vk::binding(2, 0)]] Texture3D<float4> shape_noise_lut;
-[[vk::binding(3, 0)]] Texture3D<float4> detail_noise_lut;
-[[vk::binding(4, 0)]] Texture2D<float4> transmittance_lut;
-[[vk::binding(5, 0)]] Texture3D<float4> aerial_perspective_lut;
-[[vk::binding(6, 0)]] ConstantBuffer<Scene, ScalarDataLayout> scene;
+[[vk::binding(0, 0)]] Texture2D<f32> depth_attachment;
+[[vk::binding(1, 0)]] SamplerState linear_repeat_sampler;
+[[vk::binding(2, 0)]] SamplerState linear_clamp_to_edge_sampler;
+[[vk::binding(3, 0)]] Texture3D<float4> shape_noise_lut;
+[[vk::binding(4, 0)]] Texture3D<float4> detail_noise_lut;
+[[vk::binding(5, 0)]] Texture2D<float4> transmittance_lut;
+[[vk::binding(6, 0)]] Texture3D<float4> aerial_perspective_lut;
+[[vk::binding(7, 0)]] ConstantBuffer<Scene, ScalarDataLayout> scene;
 
 static const f32 DENSITY_EPSILON = 1e-4;
 
@@ -125,11 +126,17 @@ float dual_cloud_phase(float cos_theta, float3 params) {
 }
 
 [shader("fragment")]
-float4 fs_main(VertexOutput input) : SV_Target {
+float4 fs_main(VertexOutput input, float4 pixel_pos : SV_Position) : SV_Target {
+    const let depth = depth_attachment.Load(ivec3(ivec2(pixel_pos.xy), 0)).x;
+    if (depth != 1.0) {
+        discard;
+    }
+
     const let camera = scene.camera;
     const let atmos = scene.atmosphere;
     const let clouds = scene.clouds;
     const let sun = scene.sun;
+
     const let clip_space = float3(input.tex_coord * 2.0 - 1.0, 1.0);
     const let world_space = mul(camera.inv_projection_view_mat, float4(clip_space, 1.0));
     const let world_pos = world_space.xyz / world_space.w;
@@ -210,18 +217,8 @@ float4 fs_main(VertexOutput input) : SV_Target {
     if (transmittance_sum > 0.0) {
         step_pos_sum /= transmittance_sum;
         float3 p = march_dist - float3(0.0, atmos.planet_radius, 0.0);
-        float4 v = mul(camera.view_mat, float4(p, 1.0));
-        float ray_hit_h = length(step_pos_sum - eye_pos);
-        float slice = ray_hit_h * (1.0 / atmos.aerial_gain_per_slice);
-        float weight = 1.0;
-        if (slice < 0.5) {
-            weight = saturate(slice * 2.0);
-            slice = 0.5;
-        }
-
-        float w = sqrt(slice / float(atmos.aerial_perspective_lut_size.z)); // from linear space to squared distribution
-        float4 ap = weight * aerial_perspective_lut.Sample(linear_clamp_to_edge_sampler, float3(input.tex_coord, w));
-        ap *= 0.5;
+        float3 relative_pos = (world_pos - camera.position) * CAMERA_SCALE_UNIT;
+        float4 ap = sample_aerial_perspective(atmos, aerial_perspective_lut, linear_clamp_to_edge_sampler, input.tex_coord, relative_pos);
         luminance = luminance * (1.0 - ap.w) + ap.xyz * (1.0 - transmittance);
     }
 

@@ -73,7 +73,7 @@ struct SceneRenderer {
     Image cloud_detail_noise_lut = {};
     ImageView cloud_detail_noise_lut_view = {};
     Pipeline cloud_apply_pipeline = {};
-    vuk::Extent3D cloud_noise_lut_extent = { .width = 208, .height = 128, .depth = 128 };
+    vuk::Extent3D cloud_noise_lut_extent = { .width = 128, .height = 128, .depth = 128 };
 
     Pipeline vis_cull_meshlets_pipeline = {};
     Pipeline vis_cull_triangles_pipeline = {};

@@ -1,6 +1,7 @@
 #include "Editor/Panel/AssetBrowserPanel.hh"
 
 #include "Editor/EditorApp.hh"
+#include "Engine/Util/Icons/IconsMaterialDesignIcons.hh"
 
 namespace lr {
 auto is_subpath(const fs::path &parent, const fs::path &child) -> bool {
@@ -197,8 +198,6 @@ void AssetBrowserPanel::draw_dir_contents(this AssetBrowserPanel &self) {
 
     auto *dir_texture = app.asset_man.get_texture(app.layout.editor_assets["dir"]);
     auto dir_image = app.imgui_renderer.add_image(dir_texture->image_view);
-    auto *scene_texture = app.asset_man.get_texture(app.layout.editor_assets["scene"]);
-    auto scene_image = app.imgui_renderer.add_image(scene_texture->image_view);
 
     ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, { padding, padding });
     if (ImGui::BeginTable("asset_browser", tile_count, table_flags)) {
@@ -232,7 +231,9 @@ void AssetBrowserPanel::draw_dir_contents(this AssetBrowserPanel &self) {
             }
 
             const auto &file_name = asset->path.filename().string();
-            ImGuiLR::image_button(file_name, scene_image, button_size);
+            auto *asset_texture = app.layout.get_asset_texture(asset);
+            auto asset_image = app.imgui_renderer.add_image(asset_texture->image_view);
+            ImGuiLR::image_button(file_name, asset_image, button_size);
             if (ImGui::BeginDragDropSource()) {
                 ImGui::SetDragDropPayload("ASSET_BY_UUID", &asset->uuid, sizeof(UUID));
                 ImGui::EndDragDropSource();
@@ -367,9 +368,9 @@ void AssetBrowserPanel::draw_file_tree(this AssetBrowserPanel &self, AssetDirect
         bool no_files = subdir->asset_uuids.empty();
         auto cur_node_flags = no_subdirs ? tree_node_file_flags : tree_node_dir_flags;
 
-        auto icon = Icon::fa::folder;
+        auto icon = ICON_MDI_FOLDER;
         if (no_subdirs && no_files) {
-            icon = Icon::fa::folder_open;
+            icon = ICON_MDI_FOLDER_OPEN;
         }
 
         const auto &file_name = subdir->path.filename().string();
@@ -422,11 +423,11 @@ void AssetBrowserPanel::render(this AssetBrowserPanel &self) {
     auto avail_region = ImGui::GetContentRegionAvail();
 
     ImGui::SameLine();
-    if (ImGui::Button(Icon::fa::arrows_rotate)) {
+    if (ImGui::Button(ICON_MDI_RELOAD)) {
     }
 
     ImGui::SameLine();
-    if (ImGui::Button(Icon::fa::house)) {
+    if (ImGui::Button(ICON_MDI_HOME)) {
         self.current_dir = self.home_dir.get();
     }
 

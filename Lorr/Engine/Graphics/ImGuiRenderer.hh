@@ -10,11 +10,13 @@ struct ImGuiRenderer {
     Image font_atlas_image = {};
     ImageView font_atlas_view = {};
     Pipeline pipeline = {};
-    std::vector<vuk::Value<vuk::ImageAttachment>> rendering_attachments = {};
+    std::vector<vuk::Value<vuk::ImageAttachment>> rendering_images = {};
+    ankerl::unordered_dense::map<ImageViewID, ImTextureID> acquired_images = {};
 
     auto init(this ImGuiRenderer &, Device *device) -> void;
+    auto add_font(this ImGuiRenderer &, const fs::path &path) -> ImFont *;
     auto add_image(this ImGuiRenderer &, vuk::Value<vuk::ImageAttachment> &&attachment) -> ImTextureID;
-    auto add_image(this ImGuiRenderer &, ImageView &image_view) -> ImTextureID;
+    auto add_image(this ImGuiRenderer &, ImageView &image_view, LR_THISCALL) -> ImTextureID;
 
     auto begin_frame(this ImGuiRenderer &, f64 delta_time, const vuk::Extent3D &extent) -> void;
     auto end_frame(this ImGuiRenderer &, vuk::Value<vuk::ImageAttachment> &&attachment) -> vuk::Value<vuk::ImageAttachment>;

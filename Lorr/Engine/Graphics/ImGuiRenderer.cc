@@ -8,6 +8,8 @@
 #include <SDL3/SDL_keyboard.h>
 #include <SDL3/SDL_mouse.h>
 
+#include "Engine/Util/Icons/IconsMaterialDesignIcons.hh"
+
 namespace lr {
 auto ImGuiRenderer::init(this ImGuiRenderer &self, Device *device) -> void {
     ZoneScoped;
@@ -18,7 +20,7 @@ auto ImGuiRenderer::init(this ImGuiRenderer &self, Device *device) -> void {
     auto shaders_root = app.asset_man.asset_root_path(AssetType::Shader);
     auto fonts_root = app.asset_man.asset_root_path(AssetType::Font);
     auto roboto_path = (fonts_root / "Roboto-Regular.ttf").string();
-    auto fa_solid_900_path = (fonts_root / "fa-solid-900.ttf").string();
+    auto materialdesignicons_path = (fonts_root / FONT_ICON_FILE_NAME_MDI).string();
 
     //  ── IMGUI CONTEXT ───────────────────────────────────────────────────
     ImGui::CreateContext();
@@ -34,14 +36,14 @@ auto ImGuiRenderer::init(this ImGuiRenderer &self, Device *device) -> void {
     ImGui::StyleColorsDark();
 
     //  ── FONT ATLAS ──────────────────────────────────────────────────────
-    ImWchar icons_ranges[] = { 0xc000, 0xf8ff, 0 };
+    ImWchar icons_ranges[] = { ICON_MIN_MDI, ICON_MAX_MDI, 0 };
     ImFontConfig font_config;
     font_config.GlyphMinAdvanceX = 16.0f;
     font_config.MergeMode = true;
     font_config.PixelSnapH = true;
 
     imgui.Fonts->AddFontFromFileTTF(roboto_path.c_str(), 16.0f, nullptr);
-    imgui.Fonts->AddFontFromFileTTF(fa_solid_900_path.c_str(), 14.0f, &font_config, icons_ranges);
+    imgui.Fonts->AddFontFromFileTTF(materialdesignicons_path.c_str(), 16.0f, &font_config, icons_ranges);
     imgui.Fonts->Build();
 
     u8 *font_data = nullptr;
@@ -83,16 +85,24 @@ auto ImGuiRenderer::init(this ImGuiRenderer &self, Device *device) -> void {
 auto ImGuiRenderer::add_image(this ImGuiRenderer &self, vuk::Value<vuk::ImageAttachment> &&attachment) -> ImTextureID {
     ZoneScoped;
 
-    self.rendering_attachments.emplace_back(std::move(attachment));
-    return self.rendering_attachments.size();
+    self.rendering_images.emplace_back(std::move(attachment));
+    return self.rendering_images.size();
 }
 
-auto ImGuiRenderer::add_image(this ImGuiRenderer &self, ImageView &image_view) -> ImTextureID {
+auto ImGuiRenderer::add_image(this ImGuiRenderer &self, ImageView &image_view, LR_CALLSTACK) -> ImTextureID {
     ZoneScoped;
 
+    auto acquired_it = self.acquired_images.find(image_view.id());
+    if (acquired_it != self.acquired_images.end()) {
+        return acquired_it->second;
+    }
+
     auto attachment_info = image_view.get_attachment(*self.device, vuk::ImageUsageFlagBits::eSampled);
-    auto attachment = vuk::acquire_ia("imgui_rendering_image_attachment", attachment_info, vuk::Access::eFragmentSampled);
-    return self.add_image(std::move(attachment));
+    auto attachment = vuk::acquire_ia("imgui", attachment_info, vuk::Access::eFragmentSampled, LOC);
+    auto texture_id = self.add_image(std::move(attachment));
+    self.acquired_images.emplace(image_view.id(), texture_id);
+
+    return texture_id;
 }
 
 auto ImGuiRenderer::begin_frame(this ImGuiRenderer &self, f64 delta_time, const vuk::Extent3D &extent) -> void {
@@ -103,7 +113,8 @@ auto ImGuiRenderer::begin_frame(this ImGuiRenderer &self, f64 delta_time, const 
     imgui.DeltaTime = static_cast<f32>(delta_time);
     imgui.DisplaySize = ImVec2(static_cast<f32>(extent.width), static_cast<f32>(extent.height));
 
-    self.rendering_attachments.clear();
+    self.rendering_images.clear();
+    self.acquired_images.clear();
     self.add_image(self.font_atlas_view);
 
     ImGui::NewFrame();
@@ -242,7 +253,7 @@ auto ImGuiRenderer::end_frame(this ImGuiRenderer &self, vuk::Value<vuk::ImageAtt
             return dst;
         });
 
-    auto imgui_rendering_images_arr = vuk::declare_array("imgui_rendering_images", std::span(self.rendering_attachments));
+    auto imgui_rendering_images_arr = vuk::declare_array("imgui rendering images", std::span(self.rendering_images));
 
     return imgui_pass(std::move(attachment), std::move(vertex_buffer), std::move(index_buffer), std::move(imgui_rendering_images_arr));
 }

@@ -3,6 +3,7 @@
 #include "Editor/EditorApp.hh"
 
 #include "Engine/Scene/ECSModule/Core.hh"
+#include "Engine/Util/Icons/IconsMaterialDesignIcons.hh"
 
 #include <ImGuizmo.h>
 #include <glm/gtx/quaternion.hpp>
@@ -96,7 +97,7 @@ auto ViewportPanel::draw_tools(this ViewportPanel &self) -> void {
     ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.082f, 0.082f, 0.082f, 1.00f));
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0, 0.0, 0.0, 0.00));
 
-    if (ImGui::Button(Icon::fa::up_down_left_right, button_size)) {
+    if (ImGui::Button(ICON_MDI_AXIS_ARROW, button_size)) {
         self.gizmo_op = ImGuizmo::TRANSLATE;
     }
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
@@ -104,7 +105,7 @@ auto ViewportPanel::draw_tools(this ViewportPanel &self) -> void {
     }
 
     ImGui::SameLine();
-    if (ImGui::Button(Icon::fa::arrows_rotate, button_size)) {
+    if (ImGui::Button(ICON_MDI_ROTATE_360, button_size)) {
         self.gizmo_op = ImGuizmo::ROTATE;
     }
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
@@ -112,7 +113,7 @@ auto ViewportPanel::draw_tools(this ViewportPanel &self) -> void {
     }
 
     ImGui::SameLine();
-    if (ImGui::Button(Icon::fa::up_right_and_down_left_from_center)) {
+    if (ImGui::Button(ICON_MDI_ARROW_EXPAND)) {
         self.gizmo_op = ImGuizmo::SCALE;
     }
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
@@ -121,7 +122,7 @@ auto ViewportPanel::draw_tools(this ViewportPanel &self) -> void {
 
     f32 right_align_offset = work_area_size.x - rounding - frame_padding.x - button_size.x;
     ImGui::SameLine(right_align_offset);
-    if (ImGui::Button(Icon::fa::camera)) {
+    if (ImGui::Button(ICON_MDI_CAMERA)) {
         ImGui::OpenPopup("editor_camera");
     }
     const static f32 editor_camera_popup_width = 200.0f;
@@ -138,7 +139,7 @@ auto ViewportPanel::draw_tools(this ViewportPanel &self) -> void {
     right_align_offset -= button_size.x;
 
     ImGui::SameLine(right_align_offset);
-    if (ImGui::Button(Icon::fa::chart_column)) {
+    if (ImGui::Button(ICON_MDI_CHART_BAR)) {
     }
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
         ImGui::SetTooltip("Frame Profiler");
@@ -195,9 +196,9 @@ auto ViewportPanel::draw_viewport(this ViewportPanel &self, vuk::Format format, 
     };
 
     auto render_extent = vuk::Extent3D(static_cast<u32>(window_size.x), static_cast<u32>(window_size.y), 1);
-    auto game_view_image = scene->render(app.scene_renderer, render_extent, format);
-    auto game_view_image_idx = app.imgui_renderer.add_image(std::move(game_view_image));
-    ImGui::Image(game_view_image_idx, work_area_size);
+    auto scene_render_result = scene->render(app.scene_renderer, render_extent, format);
+    auto scene_render_image_idx = app.imgui_renderer.add_image(std::move(scene_render_result));
+    ImGui::Image(scene_render_image_idx, work_area_size);
 
     if (app.selected_entity && app.selected_entity.has<ECS::Transform>()) {
         auto projection = glm::perspective(glm::radians(camera->fov), camera->aspect_ratio, camera->near_clip, camera->far_clip);

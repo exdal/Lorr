@@ -5,6 +5,8 @@
 #include "Engine/Memory/Stack.hh"
 #include "Engine/Scene/ECSModule/Core.hh"
 
+#include "Engine/Util/Icons/IconsMaterialDesignIcons.hh"
+
 namespace lr {
 SceneBrowserPanel::SceneBrowserPanel(std::string name_, bool open_)
     : PanelI(std::move(name_), open_) {
@@ -64,7 +66,7 @@ void SceneBrowserPanel::draw_hierarchy(this SceneBrowserPanel &) {
         ImGui::TableNextColumn();
 
         ImGui::TableSetColumnIndex(0);
-        auto entity_name = stack.format("{}  {}", Icon::fa::cube, e.name().c_str());
+        auto entity_name = stack.format("{}  {}", ICON_MDI_CUBE, e.name().c_str());
 
         ImGuiSelectableFlags selectable_flags = ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap;
         ImGui::PushID(static_cast<i32>(e.raw_id()));

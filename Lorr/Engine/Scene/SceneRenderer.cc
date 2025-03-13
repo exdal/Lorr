@@ -305,13 +305,13 @@ auto SceneRenderer::compose(this SceneRenderer &self, SceneComposeInfo &compose_
         self.materials_buffer = Buffer::create(*self.device, ls::size_bytes(compose_info.gpu_materials)).value();
     }
 
-    if (ls::size_bytes(compose_info.gpu_models) > self.models_buffer.data_size()) {
-        if (self.models_buffer) {
+    if (ls::size_bytes(compose_info.gpu_meshes) > self.meshes_buffer.data_size()) {
+        if (self.meshes_buffer) {
             self.device->wait();
-            self.device->destroy(self.models_buffer.id());
+            self.device->destroy(self.meshes_buffer.id());
         }
 
-        self.models_buffer = Buffer::create(*self.device, ls::size_bytes(compose_info.gpu_models)).value();
+        self.meshes_buffer = Buffer::create(*self.device, ls::size_bytes(compose_info.gpu_meshes)).value();
     }
 
     if (ls::size_bytes(compose_info.gpu_meshlet_instances) > self.meshlet_instances_buffer.data_size()) {
@@ -326,13 +326,13 @@ auto SceneRenderer::compose(this SceneRenderer &self, SceneComposeInfo &compose_
     self.meshlet_instance_count = compose_info.gpu_meshlet_instances.size();
     auto materials_buffer =  //
         transfer_man.upload_staging(ls::span(compose_info.gpu_materials), self.materials_buffer);
-    auto models_buffer =  //
-        transfer_man.upload_staging(ls::span(compose_info.gpu_models), self.models_buffer);
+    auto meshes_buffer =  //
+        transfer_man.upload_staging(ls::span(compose_info.gpu_meshes), self.meshes_buffer);
     auto meshlet_instances_buffer =  //
         transfer_man.upload_staging(ls::span(compose_info.gpu_meshlet_instances), self.meshlet_instances_buffer);
     return ComposedScene{
         .materials_buffer = materials_buffer,
-        .models_buffer = models_buffer,
+        .meshes_buffer = meshes_buffer,
         .meshlet_instances_buffer = meshlet_instances_buffer,
     };
 }
@@ -624,29 +624,29 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
             vuk::MemoryUsage::eGPUonly, self.meshlet_instance_count * Model::MAX_MESHLET_PRIMITIVES * 3 * sizeof(u32));
 
         vuk::Value<vuk::Buffer> materials_buffer;
-        vuk::Value<vuk::Buffer> models_buffer;
+        vuk::Value<vuk::Buffer> meshes_buffer;
         vuk::Value<vuk::Buffer> meshlet_instances_buffer;
         if (composed_scene.has_value()) {
             materials_buffer = std::move(composed_scene->materials_buffer);
-            models_buffer = std::move(composed_scene->models_buffer);
+            meshes_buffer = std::move(composed_scene->meshes_buffer);
             meshlet_instances_buffer = std::move(composed_scene->meshlet_instances_buffer);
         } else {
             materials_buffer = self.materials_buffer.acquire(*self.device, "Materials", vuk::Access::eNone);
-            models_buffer = self.models_buffer.acquire(*self.device, "Models", vuk::Access::eNone);
+            meshes_buffer = self.meshes_buffer.acquire(*self.device, "Meshes", vuk::Access::eNone);
             meshlet_instances_buffer = self.meshlet_instances_buffer.acquire(*self.device, "Meshlet Instances", vuk::Access::eNone);
         }
 
         std::tie(
             triangles_indexed_indirect_dispatch,
             visible_meshlet_instances_buffer,
-            models_buffer,
+            meshes_buffer,
             meshlet_instances_buffer,
             reordered_indices_buffer) =
             vis_cull_triangles_pass(
                 std::move(triangles_indexed_indirect_dispatch),
                 std::move(meshlets_indirect_dispatch),
                 std::move(visible_meshlet_instances_buffer),
-                std::move(models_buffer),
+                std::move(meshes_buffer),
                 std::move(meshlet_instances_buffer),
                 std::move(reordered_indices_buffer));
 
@@ -687,7 +687,7 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
             depth_attachment,
             scene_buffer,
             transforms_buffer,
-            models_buffer,
+            meshes_buffer,
             meshlet_instances_buffer,
             visible_meshlet_instances_buffer) =
             vis_encode_pass(
@@ -696,7 +696,7 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                 std::move(triangles_indexed_indirect_dispatch),
                 std::move(scene_buffer),
                 std::move(transforms_buffer),
-                std::move(models_buffer),
+                std::move(meshes_buffer),
                 std::move(meshlet_instances_buffer),
                 std::move(visible_meshlet_instances_buffer),
                 std::move(reordered_indices_buffer));
@@ -712,7 +712,7 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                 VUK_IA(vuk::eFragmentRead) visbuffer,
                 VUK_BA(vuk::eFragmentRead) scene,
                 VUK_BA(vuk::eFragmentRead) transforms,
-                VUK_BA(vuk::eFragmentRead) models,
+                VUK_BA(vuk::eFragmentRead) meshes,
                 VUK_BA(vuk::eFragmentRead) meshlet_instances,
                 VUK_BA(vuk::eFragmentRead) visible_meshlet_instances_indices,
                 VUK_BA(vuk::eFragmentRead) materials) {
@@ -728,7 +728,7 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                     .bind_image(0, 0, visbuffer)
                     .bind_buffer(0, 1, scene)
                     .bind_buffer(0, 2, transforms)
-                    .bind_buffer(0, 3, models)
+                    .bind_buffer(0, 3, meshes)
                     .bind_buffer(0, 4, meshlet_instances)
                     .bind_buffer(0, 5, visible_meshlet_instances_indices)
                     .bind_buffer(0, 6, materials)
@@ -745,7 +745,7 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
             std::move(visbuffer_attachment),
             std::move(scene_buffer),
             std::move(transforms_buffer),
-            std::move(models_buffer),
+            std::move(meshes_buffer),
             std::move(meshlet_instances_buffer),
             std::move(visible_meshlet_instances_buffer),
             std::move(materials_buffer));

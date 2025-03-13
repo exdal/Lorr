@@ -566,6 +566,7 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
             auto vertex_offset = model_vertex_positions.size();
             auto index_offset = model_indices.size();
             auto triangle_offset = model_local_triangle_indices.size();
+            auto meshlet_offset = model_meshlets.size();
 
             auto raw_vertex_positions = ls::span(gltf_callbacks.vertex_positions.data() + primitive.vertex_offset, primitive.vertex_count);
             auto raw_indices = ls::span(gltf_callbacks.indices.data() + primitive.index_offset, primitive.index_count);
@@ -605,8 +606,6 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
                 meshlet_indices.resize(last_meshlet.vertex_offset + last_meshlet.vertex_count);
                 local_triangle_indices.resize(last_meshlet.triangle_offset + ((last_meshlet.triangle_count * 3 + 3) & ~3_u32));
 
-                primitive.meshlet_count = meshlet_count;
-
                 for (const auto &[raw_meshlet, meshlet, meshlet_aabb] : std::views::zip(raw_meshlets, meshlets, meshlet_bounds)) {
                     auto meshlet_bb_min = glm::vec3(std::numeric_limits<f32>::max());
                     auto meshlet_bb_max = glm::vec3(std::numeric_limits<f32>::lowest());
@@ -624,6 +623,10 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
                     meshlet_aabb.aabb_min = meshlet_bb_min;
                     meshlet_aabb.aabb_max = meshlet_bb_max;
                 }
+
+                primitive.meshlet_count = meshlet_count;
+                primitive.meshlet_offset = meshlet_offset;
+                primitive.local_triangle_indices_offset = triangle_offset;
             }
 
             std::ranges::move(raw_vertex_positions, std::back_inserter(model_vertex_positions));

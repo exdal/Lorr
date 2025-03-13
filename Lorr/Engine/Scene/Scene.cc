@@ -99,7 +99,7 @@ auto Scene::init(this Scene &self, const std::string &name) -> bool {
             if (it.event() == flecs::OnSet) {
                 self.attach_model(entity, rendering_model.uuid);
             } else if (it.event() == flecs::OnRemove) {
-                self.detach_model(entity);
+                self.detach_mesh(entity, rendering_model.uuid, rendering_model.mesh_index);
             }
         });
 
@@ -484,74 +484,6 @@ auto Scene::set_dirty(this Scene &self, flecs::entity entity) -> void {
     self.dirty_transforms.push_back(transform_id);
 }
 
-auto Scene::attach_model(this Scene &self, flecs::entity entity, const UUID &model_uuid) -> bool {
-    ZoneScoped;
-
-    if (!entity.has<ECS::RenderingModel>()) {
-        return false;
-    }
-
-    auto *rendering_model = entity.get_mut<ECS::RenderingModel>();
-    if (!rendering_model) {
-        return false;
-    }
-
-    self.detach_model(entity);
-
-    auto transforms_it = self.entity_transforms_map.find(entity);
-    if (transforms_it == self.entity_transforms_map.end()) {
-        // Target entity must have a transform component, figure out why its missing.
-        LS_DEBUGBREAK();
-        return false;
-    }
-
-    auto instances_it = self.rendering_models.find(model_uuid);
-    if (instances_it == self.rendering_models.end()) {
-        bool inserted = false;
-        std::tie(instances_it, inserted) = self.rendering_models.try_emplace(model_uuid);
-        if (!inserted) {
-            return false;
-        }
-    }
-
-    const auto transform_id = transforms_it->second;
-    auto &instances = instances_it->second;
-    instances.push_back(transform_id);
-    self.models_dirty = true;
-
-    return true;
-}
-
-auto Scene::detach_model(this Scene &self, flecs::entity entity) -> bool {
-    ZoneScoped;
-
-    if (!entity.has<ECS::RenderingModel>()) {
-        return false;
-    }
-
-    auto *rendering_model = entity.get_mut<ECS::RenderingModel>();
-    if (!rendering_model) {
-        return false;
-    }
-
-    auto instances_it = self.rendering_models.find(rendering_model->uuid);
-    auto transforms_it = self.entity_transforms_map.find(entity);
-    if (instances_it == self.rendering_models.end() || transforms_it == self.entity_transforms_map.end()) {
-        return false;
-    }
-
-    const auto transform_id = transforms_it->second;
-    auto &instances = instances_it->second;
-    std::erase_if(instances, [transform_id](const GPU::TransformID id) { return id == transform_id; });
-    self.models_dirty = true;
-
-    if (instances.empty()) {
-        self.rendering_models.erase(instances_it);
-    }
-
-    return true;
-}
-
 auto Scene::get_root(this Scene &self) -> flecs::entity {
     ZoneScoped;
 
@@ -591,24 +523,26 @@ auto Scene::compose(this Scene &self) -> SceneComposeInfo {
 
     auto &app = Application::get();
 
-    auto gpu_models = std::vector<GPU::Model>();
+    auto gpu_meshes = std::vector<GPU::Mesh>();
     auto gpu_meshlet_instances = std::vector<GPU::MeshletInstance>();
     auto gpu_materials = std::vector<GPU::Material>();
     auto gpu_image_views = std::vector<ImageViewID>();
     auto gpu_samplers = std::vector<SamplerID>();
 
-    for (const auto &[model_uuid, transform_ids] : self.rendering_models) {
-        auto *model = app.asset_man.get_model(model_uuid);
+    for (const auto &[uuid_mesh_index, transform_ids] : self.rendering_meshes) {
+        auto *model = app.asset_man.get_model(uuid_mesh_index.first);
+        auto &mesh = model->meshes[uuid_mesh_index.second];
+        auto &first_primitive = model->primitives[mesh.primitive_indices[0]];
 
         //  ── PER MODEL INFORMATION ───────────────────────────────────────────
-        auto model_offset = gpu_models.size();
-        auto &gpu_model = gpu_models.emplace_back();
-        gpu_model.vertex_positions = model->vertex_positions.device_address();
-        gpu_model.indices = model->indices.device_address();
-        gpu_model.texture_coords = model->texture_coords.device_address();
-        gpu_model.meshlets = model->meshlets.device_address();
-        gpu_model.meshlet_bounds = model->meshlet_bounds.device_address();
-        gpu_model.local_triangle_indices = model->local_triangle_indices.device_address();
+        auto mesh_offset = gpu_meshes.size();
+        auto &gpu_mesh = gpu_meshes.emplace_back();
+        gpu_mesh.vertex_positions = model->vertex_positions.device_address() + first_primitive.vertex_offset;
+        gpu_mesh.indices = model->indices.device_address() + first_primitive.index_offset;
+        gpu_mesh.texture_coords = model->texture_coords.device_address() + first_primitive.vertex_offset;
+        gpu_mesh.meshlets = model->meshlets.device_address() + first_primitive.meshlet_offset;
+        gpu_mesh.meshlet_bounds = model->meshlet_bounds.device_address() + first_primitive.meshlet_offset;
+        gpu_mesh.local_triangle_indices = model->local_triangle_indices.device_address() + first_primitive.local_triangle_indices_offset;
 
         auto material_offset = gpu_materials.size();
         for (const auto &material_uuid : model->materials) {
@@ -640,10 +574,11 @@ auto Scene::compose(this Scene &self) -> SceneComposeInfo {
         //  ── INSTANCING ──────────────────────────────────────────────────────
         for (const auto transform_id : transform_ids) {
             u32 meshlet_offset = 0;
-            for (const auto &primitive : model->primitives) {
+            for (const auto primitive_index : mesh.primitive_indices) {
+                const auto &primitive = model->primitives[primitive_index];
                 for (u32 meshlet_index = 0; meshlet_index < primitive.meshlet_count; meshlet_index++) {
                     auto &meshlet_instance = gpu_meshlet_instances.emplace_back();
-                    meshlet_instance.model_index = model_offset;
+                    meshlet_instance.model_index = mesh_offset;
                     meshlet_instance.material_index = material_offset + primitive.material_index;
                     meshlet_instance.transform_index = SlotMap_decode_id(transform_id).index;
                     meshlet_instance.meshlet_index = meshlet_index + meshlet_offset;
@@ -658,7 +593,7 @@ auto Scene::compose(this Scene &self) -> SceneComposeInfo {
         .image_view_ids = std::move(gpu_image_views),
         .samplers = std::move(gpu_samplers),
         .gpu_materials = std::move(gpu_materials),
-        .gpu_models = std::move(gpu_models),
+        .gpu_meshes = std::move(gpu_meshes),
         .gpu_meshlet_instances = std::move(gpu_meshlet_instances),
     };
 }
@@ -682,6 +617,59 @@ auto Scene::remove_transform(this Scene &self, flecs::entity entity) -> void {
 
     self.entity_transforms.destroy_slot(it->second);
     self.entity_transforms_map.erase(it);
+}
+
+auto Scene::attach_model(this Scene &self, flecs::entity entity, const UUID &model_uuid) -> bool {
+    ZoneScoped;
+
+    auto &app = Application::get();
+    // self.detach_model(entity, model_uuid, mesh_index);
+
+    auto transforms_it = self.entity_transforms_map.find(entity);
+    if (transforms_it == self.entity_transforms_map.end()) {
+        // Target entity must have a transform component, figure out why its missing.
+        LS_DEBUGBREAK();
+        return false;
+    }
+
+    auto mesh_pair = std::pair(model_uuid, 0_u32);
+    auto instances_it = self.rendering_meshes.find(mesh_pair);
+    if (instances_it == self.rendering_meshes.end()) {
+        bool inserted = false;
+        std::tie(instances_it, inserted) = self.rendering_meshes.try_emplace(mesh_pair);
+        if (!inserted) {
+            return false;
+        }
+    }
+
+    const auto transform_id = transforms_it->second;
+    auto &instances = instances_it->second;
+    instances.push_back(transform_id);
+    self.models_dirty = true;
+
+    return true;
+}
+
+auto Scene::detach_mesh(this Scene &self, flecs::entity entity, const UUID &model_uuid, u32 mesh_index) -> bool {
+    ZoneScoped;
+
+    auto mesh_pair = std::pair(model_uuid, mesh_index);
+    auto instances_it = self.rendering_meshes.find(mesh_pair);
+    auto transforms_it = self.entity_transforms_map.find(entity);
+    if (instances_it == self.rendering_meshes.end() || transforms_it == self.entity_transforms_map.end()) {
+        return false;
+    }
+
+    const auto transform_id = transforms_it->second;
+    auto &instances = instances_it->second;
+    std::erase_if(instances, [transform_id](const GPU::TransformID id) { return id == transform_id; });
+    self.models_dirty = true;
+
+    if (instances.empty()) {
+        self.rendering_meshes.erase(instances_it);
+    }
+
+    return true;
 }
 
 }  // namespace lr

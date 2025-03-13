@@ -2,6 +2,7 @@
 
 #include "Editor/Panel/Panels.hh"
 
+#include "Engine/Asset/Asset.hh"
 #include "Engine/Asset/UUID.hh"
 #include "Engine/Graphics/VulkanTypes.hh"
 
@@ -32,6 +33,8 @@ struct EditorLayout {
     void setup_theme(this EditorLayout &, EditorTheme theme);
     void setup_dockspace(this EditorLayout &);
     void render(this EditorLayout &, vuk::Format format, vuk::Extent3D extent);
+
+    auto get_asset_texture(this EditorLayout &, Asset *asset) -> Texture *;
 
     template<typename T>
     std::pair<usize, T *> add_panel(this EditorLayout &self, std::string name, const c8 *icon, bool open = true) {

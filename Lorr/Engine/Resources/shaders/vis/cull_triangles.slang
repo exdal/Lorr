@@ -10,11 +10,11 @@ struct VisibleMeshletInstancesIndices {
 [[vk::binding(1, 0)]] restrict readonly
 GLSLShaderStorageBuffer<VisibleMeshletInstancesIndices, ScalarDataLayout> visible_meshlet_instances_indices;
 
-struct Models {
-    Model models[];
+struct Meshes {
+    Mesh meshes[];
 };
 [[vk::binding(2, 0)]] restrict readonly
-GLSLShaderStorageBuffer<Models, ScalarDataLayout> models;
+GLSLShaderStorageBuffer<Meshes, ScalarDataLayout> meshes;
 
 struct MeshletInstances {
     MeshletInstance instances[];
@@ -43,9 +43,9 @@ void cs_main(uint3 group_id : SV_GroupID, uint3 group_thread_id : SV_GroupThread
     const u32 visible_meshlet_index = group_id.x;
     const u32 meshlet_instance_index = visible_meshlet_instances_indices.indices[visible_meshlet_index];
     const MeshletInstance meshlet_instance = meshlet_instances.instances[meshlet_instance_index];
-    const Model model = models.models[meshlet_instance.model_index];
+    const Mesh mesh = meshes.meshes[meshlet_instance.mesh_index];
     const u32 meshlet_index = meshlet_instance.meshlet_index;
-    const Meshlet meshlet = model.meshlets[meshlet_index];
+    const Meshlet meshlet = mesh.meshlets[meshlet_index];
 
     if (local_index == 0) {
         triangles_passed_shared = 0;

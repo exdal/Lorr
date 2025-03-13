@@ -31,13 +31,13 @@ public struct MeshletBounds {
 };
 
 public struct MeshletInstance {
-    public u32 model_index;
+    public u32 mesh_index;
     public u32 material_index;
     public u32 transform_index;
     public u32 meshlet_index;
 };
 
-public struct Model {
+public struct Mesh {
     public float3 *vertex_positions;
     public u32 *indices;
     public vec2 *texture_coords;
@@ -46,3 +46,7 @@ public struct Model {
     public u8 *local_triangle_indices;
 };
 
+public struct Light {
+    public vec3 position;
+    public vec3 color;
+};

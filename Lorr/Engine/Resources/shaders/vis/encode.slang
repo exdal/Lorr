@@ -9,11 +9,11 @@ struct Transforms {
 [[vk::binding(1, 0)]] restrict readonly
 GLSLShaderStorageBuffer<Transforms, ScalarDataLayout> transforms;
 
-struct Models {
-    Model models[];
+struct Meshes {
+    Mesh meshes[];
 };
 [[vk::binding(2, 0)]] restrict readonly
-GLSLShaderStorageBuffer<Models, ScalarDataLayout> models;
+GLSLShaderStorageBuffer<Meshes, ScalarDataLayout> meshes;
 
 struct MeshletInstances {
     MeshletInstance instances[];
@@ -40,16 +40,16 @@ VertexOutput vs_main(u32 vertex_id : SV_VertexID) {
 
     const u32 meshlet_instance_index = visible_meshlet_instances_indices.indices[visible_meshlet_index];
     const MeshletInstance meshlet_instance = meshlet_instances.instances[meshlet_instance_index];
-    const Model model = models.models[meshlet_instance.model_index];
+    const Mesh mesh = meshes.meshes[meshlet_instance.mesh_index];
 
-    const Meshlet meshlet = model.meshlets[meshlet_instance.meshlet_index];
+    const Meshlet meshlet = mesh.meshlets[meshlet_instance.meshlet_index];
     const u32 vertex_offset = meshlet.vertex_offset;
     const u32 index_offset = meshlet.index_offset;
     const u32 triangle_offset = meshlet.triangle_offset;
 
-    const u32 local_triangle = u32(model.local_triangle_indices[triangle_offset + triangle_index]);
-    const u32 index = model.indices[index_offset + local_triangle];
-    const float3 vertex_pos = model.vertex_positions[vertex_offset + index];
+    const u32 local_triangle = u32(mesh.local_triangle_indices[triangle_offset + triangle_index]);
+    const u32 index = mesh.indices[index_offset + local_triangle];
+    const float3 vertex_pos = mesh.vertex_positions[vertex_offset + index];
     const Transform transform = transforms.transforms[meshlet_instance.transform_index];
 
     VertexOutput output;

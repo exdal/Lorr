@@ -18,4 +18,9 @@ struct pair {
 template<typename T0, typename T1>
 pair(T0, T1) -> pair<T0, T1>;
 
+template<typename T0, typename T1, typename U0, typename U1>
+constexpr bool operator<=>(const pair<T0, T1> &lhs, const pair<U0, U1> &rhs) {
+    return std::compare_three_way{}(lhs, rhs);
+}
+
 }  // namespace ls

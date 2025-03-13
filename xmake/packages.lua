@@ -10,7 +10,9 @@ add_requires("glm 1.0.1", { configs = {
     cxx_standard = "20",
 }})
 add_requires("plf_colony v7.41")
-add_requires("imgui v1.91.6-docking")
+add_requires("imgui v1.91.6-docking", { configs = {
+    wchar32 = true,
+} })
 add_requires("simdutf v6.2.0")
 add_requires("simdjson v3.11.3")
 add_requires("unordered_dense v4.5.0")

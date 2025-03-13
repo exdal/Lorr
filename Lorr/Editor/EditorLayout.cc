@@ -12,6 +12,8 @@
 #include <imgui.h>
 #include <imgui_internal.h>
 
+#include "Engine/Util/Icons/IconsMaterialDesignIcons.hh"
+
 namespace lr {
 void EditorLayout::init(this EditorLayout &self) {
     self.setup_theme(EditorTheme::Dark);
@@ -25,6 +27,9 @@ void EditorLayout::init(this EditorLayout &self) {
 
     add_texture("dir", "dir.png");
     add_texture("scene", "scene.png");
+    add_texture("model", "model.png");
+    add_texture("texture", "texture.png");
+    add_texture("file", "file.png");
 }
 
 auto EditorLayout::destroy(this EditorLayout &self) -> void {
@@ -126,11 +131,11 @@ void EditorLayout::setup_theme(this EditorLayout &, EditorTheme) {
 void EditorLayout::setup_dockspace(this EditorLayout &self) {
     ZoneScoped;
 
-    auto [asset_browser_panel_id, asset_browser_panel] = self.add_panel<AssetBrowserPanel>("Asset Browser", Icon::fa::photo_film);
-    auto [console_panel_id, console_panel] = self.add_panel<ConsolePanel>("Console", Icon::fa::circle_info);
-    auto [inspector_panel_id, inspector_panel] = self.add_panel<InspectorPanel>("Inspector", Icon::fa::wrench);
-    auto [scene_browser_panel_id, scene_browser_panel] = self.add_panel<SceneBrowserPanel>("Scene Browser", Icon::fa::bars);
-    auto [viewport_panel_id, viewport_panel] = self.add_panel<ViewportPanel>("Viewport", Icon::fa::eye);
+    auto [asset_browser_panel_id, asset_browser_panel] = self.add_panel<AssetBrowserPanel>("Asset Browser", ICON_MDI_IMAGE_MULTIPLE);
+    auto [console_panel_id, console_panel] = self.add_panel<ConsolePanel>("Console", ICON_MDI_INFORMATION_SLAB_CIRCLE);
+    auto [inspector_panel_id, inspector_panel] = self.add_panel<InspectorPanel>("Inspector", ICON_MDI_WRENCH);
+    auto [scene_browser_panel_id, scene_browser_panel] = self.add_panel<SceneBrowserPanel>("Scene Browser", ICON_MDI_FILE_TREE);
+    auto [viewport_panel_id, viewport_panel] = self.add_panel<ViewportPanel>("Viewport", ICON_MDI_EYE);
 
     ImGuiViewport *viewport = ImGui::GetMainViewport();
     i32 dock_node_flags = ImGuiDockNodeFlags_PassthruCentralNode;
@@ -340,7 +345,7 @@ void EditorLayout::render(this EditorLayout &self, vuk::Format format, vuk::Exte
         ImGui::SeparatorText("Project Path");
         ImGui::InputText("##project_path", &project_root_path);
         ImGui::SameLine();
-        if (ImGui::Button(Icon::fa::folder_open)) {
+        if (ImGui::Button(ICON_MDI_FOLDER_OPEN)) {
             auto path = File::open_dialog("New Project...", FileDialogFlag::Save | FileDialogFlag::DirOnly);
             if (path.has_value()) {
                 project_root_path = path->string();
@@ -368,6 +373,22 @@ void EditorLayout::render(this EditorLayout &self, vuk::Format format, vuk::Exte
         ImGui::PopStyleVar(2);
     }
 }
+
+auto EditorLayout::get_asset_texture(this EditorLayout &self, Asset *asset) -> Texture * {
+    auto &app = EditorApp::get();
+
+    switch (asset->type) {
+        case AssetType::Model:
+            return app.asset_man.get_texture(self.editor_assets["model"]);
+        case AssetType::Texture:
+            return app.asset_man.get_texture(self.editor_assets["texture"]);
+        case AssetType::Scene:
+            return app.asset_man.get_texture(self.editor_assets["scene"]);
+        default:
+            return app.asset_man.get_texture(self.editor_assets["file"]);
+    }
+}
+
 }  // namespace lr
 
 static const u64 GDataTypeInfo[] = {

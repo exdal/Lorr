@@ -3,6 +3,7 @@
 #include "Editor/EditorApp.hh"
 
 #include "Engine/Scene/ECSModule/ComponentWrapper.hh"
+#include "Engine/Util/Icons/IconsMaterialDesignIcons.hh"
 
 namespace lr {
 InspectorPanel::InspectorPanel(std::string name_, bool open_)
@@ -148,7 +149,7 @@ auto InspectorPanel::draw_inspector(this InspectorPanel &) -> void {
                 memory::ScopedStack stack;
                 ImGui::PushID(static_cast<i32>(component.raw_id()));
                 auto component_entity = component.entity();
-                if (ImGui::MenuItem(stack.format_char("{}  {}", Icon::fa::cube, component_entity.name().c_str()))) {
+                if (ImGui::MenuItem(stack.format_char("{}  {}", ICON_MDI_CUBE, component_entity.name().c_str()))) {
                     app.selected_entity.add(component);
                 }
                 ImGui::PopID();

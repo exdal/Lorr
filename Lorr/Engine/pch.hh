@@ -41,8 +41,6 @@ namespace fs = std::filesystem;
 #include <ankerl/unordered_dense.h>
 #include <plf_colony.h>
 
-#include "Util/Icons.hh"
-
 template<>
 struct std::formatter<fs::path> : formatter<string_view> {
     template<typename FormatContext>
@@ -51,3 +49,20 @@ struct std::formatter<fs::path> : formatter<string_view> {
         return std::format_to(ctx.out(), "{}", str);
     }
 };
+
+template<typename T, typename U>
+struct ankerl::unordered_dense::hash<ls::pair<T, U>> {
+    using is_avalanching = void;
+    u64 operator()(const ls::pair<T, U> &v) const noexcept {
+        usize seed = 0;
+        auto lhs = ankerl::unordered_dense::hash<T>{}(v.n0);
+        ls::hash_combine(seed, lhs);
+        auto rhs = ankerl::unordered_dense::hash<U>{}(v.n1);
+        ls::hash_combine(seed, rhs);
+
+        return seed;
+    }
+};
+
+#define LR_CALLSTACK std::source_location LOC
+#define LR_THISCALL LR_CALLSTACK = std::source_location::current()

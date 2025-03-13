@@ -11,11 +11,11 @@ struct Transforms {
 [[vk::binding(2, 0)]] restrict readonly
 GLSLShaderStorageBuffer<Transforms, ScalarDataLayout> transforms;
 
-struct Models {
-    Model models[];
+struct Meshes {
+    Mesh meshes[];
 };
 [[vk::binding(3, 0)]] restrict readonly
-GLSLShaderStorageBuffer<Models, ScalarDataLayout> models;
+GLSLShaderStorageBuffer<Meshes, ScalarDataLayout> meshes;
 
 struct MeshletInstances {
     MeshletInstance instances[];
@@ -164,32 +164,32 @@ FragmentOutput fs_main(VertexOutput input, float4 pixel_pos : SV_Position) {
     const u32 triangle_index = pixel & MESHLET_PRIMITIVE_MASK;
     const u32 meshlet_instance_index = visible_meshlet_instances_indices.indices[visible_meshlet_index];
     const MeshletInstance meshlet_instance = meshlet_instances.instances[meshlet_instance_index];
-    const Model model = models.models[meshlet_instance.model_index];
+    const Mesh mesh = meshes.meshes[meshlet_instance.mesh_index];
     const Transform transform = transforms.transforms[meshlet_instance.transform_index];
 
-    const Meshlet meshlet = model.meshlets[meshlet_instance.meshlet_index];
+    const Meshlet meshlet = mesh.meshlets[meshlet_instance.meshlet_index];
     const u32 vertex_offset = meshlet.vertex_offset;
     const u32 index_offset = meshlet.index_offset;
     const u32 triangle_offset = meshlet.triangle_offset;
     const uvec3 triangle_indices = {
-        u32(model.local_triangle_indices[triangle_offset + triangle_index * 3 + 0]),
-        u32(model.local_triangle_indices[triangle_offset + triangle_index * 3 + 1]),
-        u32(model.local_triangle_indices[triangle_offset + triangle_index * 3 + 2]),
+        u32(mesh.local_triangle_indices[triangle_offset + triangle_index * 3 + 0]),
+        u32(mesh.local_triangle_indices[triangle_offset + triangle_index * 3 + 1]),
+        u32(mesh.local_triangle_indices[triangle_offset + triangle_index * 3 + 2]),
     };
     const uvec3 indices = {
-        model.indices[index_offset + triangle_indices.x],
-        model.indices[index_offset + triangle_indices.y],
-        model.indices[index_offset + triangle_indices.z],
+        mesh.indices[index_offset + triangle_indices.x],
+        mesh.indices[index_offset + triangle_indices.y],
+        mesh.indices[index_offset + triangle_indices.z],
     };
     const float3x3 positions = {
-        model.vertex_positions[vertex_offset + indices.x],
-        model.vertex_positions[vertex_offset + indices.y],
-        model.vertex_positions[vertex_offset + indices.z],
+        mesh.vertex_positions[vertex_offset + indices.x],
+        mesh.vertex_positions[vertex_offset + indices.y],
+        mesh.vertex_positions[vertex_offset + indices.z],
     };
     const float3x2 tex_coords = {
-        model.texture_coords[vertex_offset + indices.x],
-        model.texture_coords[vertex_offset + indices.y],
-        model.texture_coords[vertex_offset + indices.z],
+        mesh.texture_coords[vertex_offset + indices.x],
+        mesh.texture_coords[vertex_offset + indices.y],
+        mesh.texture_coords[vertex_offset + indices.z],
     };
     const float3x4 world_positions = {
         mul(transform.world, float4(positions[0], 1.0)),

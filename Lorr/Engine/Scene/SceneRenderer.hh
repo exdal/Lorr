@@ -9,13 +9,13 @@ struct SceneComposeInfo {
     std::vector<ImageViewID> image_view_ids = {};
     std::vector<SamplerID> samplers = {};
     std::vector<GPU::Material> gpu_materials = {};
-    std::vector<GPU::Model> gpu_models = {};
+    std::vector<GPU::Mesh> gpu_meshes = {};
     std::vector<GPU::MeshletInstance> gpu_meshlet_instances = {};
 };
 
 struct ComposedScene {
     vuk::Value<vuk::Buffer> materials_buffer = {};
-    vuk::Value<vuk::Buffer> models_buffer = {};
+    vuk::Value<vuk::Buffer> meshes_buffer = {};
     vuk::Value<vuk::Buffer> meshlet_instances_buffer = {};
 };
 
@@ -33,16 +33,6 @@ struct SceneRenderInfo {
 };
 
 struct SceneRenderer {
-    auto init(this SceneRenderer &, Device *device) -> bool;
-    auto destroy(this SceneRenderer &) -> void;
-
-    auto setup_persistent_resources(this SceneRenderer &) -> void;
-
-    // Scene
-    auto compose(this SceneRenderer &, SceneComposeInfo &compose_info) -> ComposedScene;
-    auto render(this SceneRenderer &, SceneRenderInfo &render_info, ls::option<ComposedScene> &composed_scene)
-        -> vuk::Value<vuk::ImageAttachment>;
-
     Device *device = nullptr;
 
     vuk::PersistentDescriptorSet bindless_set = {};
@@ -50,7 +40,7 @@ struct SceneRenderer {
 
     u32 meshlet_instance_count = 0;
     Buffer materials_buffer = {};
-    Buffer models_buffer = {};
+    Buffer meshes_buffer = {};
     Buffer meshlet_instances_buffer = {};
 
     Pipeline grid_pipeline = {};
@@ -83,6 +73,16 @@ struct SceneRenderer {
     Pipeline pbr_basic_pipeline = {};
 
     Pipeline tonemap_pipeline = {};
+
+    auto init(this SceneRenderer &, Device *device) -> bool;
+    auto destroy(this SceneRenderer &) -> void;
+
+    auto setup_persistent_resources(this SceneRenderer &) -> void;
+
+    // Scene
+    auto compose(this SceneRenderer &, SceneComposeInfo &compose_info) -> ComposedScene;
+    auto render(this SceneRenderer &, SceneRenderInfo &render_info, ls::option<ComposedScene> &composed_scene)
+        -> vuk::Value<vuk::ImageAttachment>;
 };
 
 }  // namespace lr

@@ -69,7 +69,7 @@ struct TextureAssetFileHeader {
 };
 
 struct AssetFileHeader {
-    c8 magic[4] = { 'L', 'O', 'R', 'R' };
+    c8 magic[4] = {'L', 'O', 'R', 'R'};
     u16 version = 1;
     AssetFileFlags flags = AssetFileFlags::None;
     AssetType type = AssetType::None;
@@ -106,7 +106,8 @@ struct AssetManager : Handle<AssetManager> {
     // Add already existing asset into the registry.
     // File must end with `.lrasset` extension.
     auto register_asset(const fs::path &path) -> UUID;
-    auto register_asset(const UUID &uuid, AssetType type, const fs::path &path) -> bool;
+    auto register_asset(const UUID &uuid, AssetType type, const fs::path &path)
+        -> bool;
 
     //  ── Load Assets ─────────────────────────────────────────────────────
     // Load contents of registered assets.
@@ -117,8 +118,12 @@ struct AssetManager : Handle<AssetManager> {
     auto load_model(const UUID &uuid) -> bool;
     auto unload_model(const UUID &uuid) -> void;
 
-    auto load_texture(const UUID &uuid, ls::span<u8> pixels, const TextureSamplerInfo &sampler_info = {}) -> bool;
-    auto load_texture(const UUID &uuid, const TextureSamplerInfo &sampler_info = {}) -> bool;
+    auto load_texture(
+        const UUID &uuid,
+        ls::span<u8> pixels,
+        const TextureSamplerInfo &sampler_info = {}) -> bool;
+    auto load_texture(
+        const UUID &uuid, const TextureSamplerInfo &sampler_info = {}) -> bool;
     auto unload_texture(const UUID &uuid) -> void;
 
     auto load_material(const UUID &uuid, const Material &material_info) -> bool;
@@ -133,9 +138,12 @@ struct AssetManager : Handle<AssetManager> {
     // default to asset->path.
     //
     auto export_asset(const UUID &uuid, const fs::path &path) -> bool;
-    auto export_texture(const UUID &uuid, JsonWriter &json, const fs::path &path) -> bool;
-    auto export_model(const UUID &uuid, JsonWriter &json, const fs::path &path) -> bool;
-    auto export_scene(const UUID &uuid, JsonWriter &json, const fs::path &path) -> bool;
+    auto export_texture(
+        const UUID &uuid, JsonWriter &json, const fs::path &path) -> bool;
+    auto export_model(const UUID &uuid, JsonWriter &json, const fs::path &path)
+        -> bool;
+    auto export_scene(const UUID &uuid, JsonWriter &json, const fs::path &path)
+        -> bool;
 
     auto delete_asset(const UUID &uuid) -> void;
 
@@ -149,8 +157,9 @@ struct AssetManager : Handle<AssetManager> {
     auto get_scene(const UUID &uuid) -> Scene *;
     auto get_scene(SceneID scene_id) -> Scene *;
 
-private:
-    auto begin_asset_meta(JsonWriter &json, const UUID &uuid, AssetType type) -> void;
+   private:
+    auto begin_asset_meta(JsonWriter &json, const UUID &uuid, AssetType type)
+        -> void;
     auto write_texture_asset_meta(JsonWriter &json, Texture *texture) -> bool;
     auto write_model_asset_meta(JsonWriter &json, Model *model) -> bool;
     auto write_scene_asset_meta(JsonWriter &json, Scene *scene) -> bool;

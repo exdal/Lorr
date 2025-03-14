@@ -47,37 +47,37 @@ constexpr c32 operator""_c32(unsigned long long n) { return static_cast<c32>(n);
 
 namespace ls {
 // MINMAX
-template<typename T>
+template <typename T>
 const T &min(const T &a, const T &b) {
     return (b < a) ? b : a;
 }
 
-template<typename T>
+template <typename T>
 const T &max(const T &a, const T &b) {
     return (a < b) ? b : a;
 }
 
-template<typename T>
+template <typename T>
 T align_up(T size, u64 alignment) {
     return T((u64(size) + (alignment - 1)) & ~(alignment - 1));
 }
 
-template<typename T>
+template <typename T>
 T align_down(T size, u64 alignment) {
     return T(u64(size) & ~(alignment - 1));
 }
 
-template<typename T>
+template <typename T>
 constexpr T kib_to_bytes(const T x) {
     return x << static_cast<T>(10);
 }
 
-template<typename T>
+template <typename T>
 constexpr T mib_to_bytes(const T x) {
     return x << static_cast<T>(20);
 }
 
-template<typename T, T _v>
+template <typename T, T _v>
 struct integral_constant {
     constexpr static T value = _v;
 };
@@ -85,35 +85,37 @@ struct integral_constant {
 using true_type = integral_constant<bool, true>;
 using false_type = integral_constant<bool, false>;
 
-template<typename To, typename From>
-    requires(sizeof(To) == sizeof(From) && std::is_trivially_copyable_v<To> && std::is_trivially_copyable_v<From>)
+template <typename To, typename From>
+    requires(
+        sizeof(To) == sizeof(From) && std::is_trivially_copyable_v<To> &&
+        std::is_trivially_copyable_v<From>)
 constexpr To bit_cast(const From &from) noexcept {
     return __builtin_bit_cast(To, from);
 }
 
 // WARN: ONLY USE THIS AS A FUNCTION ARGUMENT
-template<typename T>
+template <typename T>
 T *temp_ptr(T &&v) {
     return &v;
 }
 
-template<typename T>
-concept Container = requires(T t) {
-    std::begin(t);
-    std::end(t);
+template <typename T>
+concept Container = requires(T &t) {
+    { t.begin() } -> std::same_as<typename T::iterator>;
+    { t.end() } -> std::same_as<typename T::iterator>;
 };
 
-template<typename T, usize N>
+template <typename T, usize N>
 constexpr usize count_of(T (&)[N]) {
     return N;
 }
 
-template<Container T>
+template <Container T>
 inline usize size_bytes(const T &v) {
     return v.size() * sizeof(typename T::value_type);
 }
 
-template<class... T>
+template <class... T>
 struct match : T... {
     using T::operator()...;
 };

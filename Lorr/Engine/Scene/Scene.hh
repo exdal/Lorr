@@ -6,64 +6,79 @@
 
 #include <flecs.h>
 
-template<>
+template <>
 struct ankerl::unordered_dense::hash<flecs::id> {
     using is_avalanching = void;
     u64 operator()(const flecs::id &v) const noexcept {  //
-        return ankerl::unordered_dense::detail::wyhash::hash(&v, sizeof(flecs::id));
+        return ankerl::unordered_dense::detail::wyhash::hash(
+            &v, sizeof(flecs::id));
     }
 };
 
-template<>
+template <>
 struct ankerl::unordered_dense::hash<flecs::entity> {
     using is_avalanching = void;
     u64 operator()(const flecs::entity &v) const noexcept {
-        return ankerl::unordered_dense::detail::wyhash::hash(&v, sizeof(flecs::entity));
+        return ankerl::unordered_dense::detail::wyhash::hash(
+            &v, sizeof(flecs::entity));
     }
 };
 
 namespace lr {
 struct SceneEntityDB {
-    ankerl::unordered_dense::map<flecs::id, std::string_view> component_icons = {};
+    ankerl::unordered_dense::map<flecs::id, std::string_view> component_icons =
+        {};
     std::vector<flecs::id> components = {};
     std::vector<flecs::entity> imported_modules = {};
 
     auto import_module(this SceneEntityDB &, flecs::entity module) -> void;
-    auto is_component_known(this SceneEntityDB &, flecs::id component_id) -> bool;
+    auto is_component_known(this SceneEntityDB &, flecs::id component_id)
+        -> bool;
     auto get_components(this SceneEntityDB &) -> ls::span<flecs::id>;
 };
 
 struct AssetManager;
 enum class SceneID : u64 { Invalid = ~0_u64 };
 struct Scene {
-private:
+   private:
     std::string name = {};
     flecs::entity root = {};
     ls::option<flecs::world> world = ls::nullopt;
     SceneEntityDB entity_db = {};
     flecs::entity editor_camera = {};
 
-    SlotMap<GPU::Transforms, GPU::TransformID> entity_transforms = {};
-    ankerl::unordered_dense::map<flecs::entity, GPU::TransformID> entity_transforms_map = {};
-    std::vector<GPU::TransformID> dirty_transforms = {};
+    SlotMap<GPU::Transforms, GPU::TransformID> transforms = {};
+    ankerl::unordered_dense::map<flecs::entity, GPU::TransformID>
+        entity_transforms_map = {};
+    ankerl::unordered_dense::map<UUID, std::vector<GPU::TransformID>>
+        rendering_model = {};
 
-    ankerl::unordered_dense::map<std::pair<UUID, u32>, std::vector<GPU::TransformID>> rendering_meshes = {};
+    std::vector<GPU::TransformID> dirty_transforms = {};
     bool models_dirty = false;
 
-public:
+   public:
     auto init(this Scene &, const std::string &name) -> bool;
     auto destroy(this Scene &) -> void;
 
     auto import_from_file(this Scene &, const fs::path &path) -> bool;
     auto export_to_file(this Scene &, const fs::path &path) -> bool;
 
-    auto create_entity(this Scene &, const std::string &name = {}) -> flecs::entity;
-    auto create_perspective_camera(
-        this Scene &, const std::string &name, const glm::vec3 &position, const glm::vec3 &rotation, f32 fov, f32 aspect_ratio)
+    auto create_entity(this Scene &, const std::string &name = {})
         -> flecs::entity;
+    auto create_perspective_camera(
+        this Scene &,
+        const std::string &name,
+        const glm::vec3 &position,
+        const glm::vec3 &rotation,
+        f32 fov,
+        f32 aspect_ratio) -> flecs::entity;
     auto create_editor_camera(this Scene &) -> void;
 
-    auto render(this Scene &, SceneRenderer &renderer, const vuk::Extent3D &extent, vuk::Format format) -> vuk::Value<vuk::ImageAttachment>;
+    auto render(
+        this Scene &,
+        SceneRenderer &renderer,
+        const vuk::Extent3D &extent,
+        vuk::Format format) -> vuk::Value<vuk::ImageAttachment>;
     auto tick(this Scene &, f32 delta_time) -> bool;
 
     auto set_name(this Scene &, const std::string &name) -> void;
@@ -76,14 +91,16 @@ public:
     auto get_name_sv(this Scene &) -> std::string_view;
     auto get_entity_db(this Scene &) -> SceneEntityDB &;
 
-private:
+   private:
     auto compose(this Scene &) -> SceneComposeInfo;
 
     auto add_transform(this Scene &, flecs::entity entity) -> GPU::TransformID;
     auto remove_transform(this Scene &, flecs::entity entity) -> void;
 
-    auto attach_model(this Scene &, flecs::entity entity, const UUID &model_uuid) -> bool;
-    auto detach_mesh(this Scene &, flecs::entity entity, const UUID &model_uuid, u32 mesh_index) -> bool;
+    auto attach_model(
+        this Scene &, flecs::entity entity, const UUID &model_uuid) -> bool;
+    auto detach_model(
+        this Scene &, flecs::entity entity, const UUID &model_uuid) -> bool;
 
     friend AssetManager;
 };

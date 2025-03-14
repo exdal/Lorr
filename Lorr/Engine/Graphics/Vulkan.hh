@@ -27,18 +27,29 @@ struct Buffer {
         Device &,
         u64 size,
         vuk::MemoryUsage memory_usage = vuk::MemoryUsage::eGPUonly,
-        vuk::source_location LOC = vuk::source_location::current()) -> std::expected<Buffer, vuk::VkException>;
+        vuk::source_location LOC = vuk::source_location::current())
+        -> std::expected<Buffer, vuk::VkException>;
 
     auto data_size() const -> u64;
     auto device_address() const -> u64;
     auto host_ptr() const -> u8 *;
     auto id() const -> BufferID;
 
-    auto acquire(Device &, vuk::Name name, vuk::Access access, u64 offset = 0, u64 size = ~0_u64) -> vuk::Value<vuk::Buffer>;
-    auto discard(Device &, vuk::Name name, u64 offset = 0, u64 size = ~0_u64) -> vuk::Value<vuk::Buffer>;
-    auto subrange(Device &, u64 offset = 0, u64 size = ~0_u64) -> vuk::Buffer;
+    auto acquire(
+        Device &,
+        vuk::Name name,
+        vuk::Access access,
+        u64 offset = 0,
+        u64 size = ~0_u64) -> vuk::Value<vuk::Buffer>;
+    auto discard(
+        Device &, vuk::Name name, u64 offset = 0, u64 size = ~0_u64)
+        -> vuk::Value<vuk::Buffer>;
+    auto subrange(Device &, u64 offset = 0, u64 size = ~0_u64)
+        -> vuk::Buffer;
 
-    explicit operator bool() const { return id_ != BufferID::Invalid; }
+    explicit operator bool() const {
+        return id_ != BufferID::Invalid;
+    }
 
 private:
     u64 data_size_ = 0;
@@ -56,7 +67,8 @@ struct Image {
         vuk::Extent3D extent,
         u32 slice_count = 1,
         u32 mip_count = 1,
-        vuk::source_location LOC = vuk::source_location::current()) -> std::expected<Image, vuk::VkException>;
+        vuk::source_location LOC = vuk::source_location::current())
+        -> std::expected<Image, vuk::VkException>;
 
     auto format() const -> vuk::Format;
     auto extent() const -> vuk::Extent3D;
@@ -74,9 +86,9 @@ private:
     ImageID id_ = ImageID::Invalid;
 };
 
-// Image views can have different formats depending on the creation flags
-// Currently, we do not support it so view's format is automatically parent
-// image format. See:
+// Image views can have different formats depending on the creation
+// flags Currently, we do not support it so view's format is
+// automatically parent image format. See:
 // https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VkImageViewCreateInfo.html
 
 struct ImageView {
@@ -86,12 +98,23 @@ struct ImageView {
         const vuk::ImageUsageFlags &image_usage,
         vuk::ImageViewType type,
         const vuk::ImageSubresourceRange &subresource_range,
-        vuk::source_location LOC = vuk::source_location::current()) -> std::expected<ImageView, vuk::VkException>;
+        vuk::source_location LOC = vuk::source_location::current())
+        -> std::expected<ImageView, vuk::VkException>;
 
-    auto get_attachment(Device &, const vuk::ImageUsageFlags &usage) const -> vuk::ImageAttachment;
-    auto get_attachment(Device &, vuk::ImageAttachment::Preset preset) const -> vuk::ImageAttachment;
-    auto discard(Device &, vuk::Name name, const vuk::ImageUsageFlags &usage) const -> vuk::Value<vuk::ImageAttachment>;
-    auto acquire(Device &, vuk::Name name, const vuk::ImageUsageFlags &usage, vuk::Access last_access) const
+    auto get_attachment(Device &, const vuk::ImageUsageFlags &usage)
+        const -> vuk::ImageAttachment;
+    auto get_attachment(Device &, vuk::ImageAttachment::Preset preset)
+        const -> vuk::ImageAttachment;
+    auto discard(
+        Device &,
+        vuk::Name name,
+        const vuk::ImageUsageFlags &usage) const
+        -> vuk::Value<vuk::ImageAttachment>;
+    auto acquire(
+        Device &,
+        vuk::Name name,
+        const vuk::ImageUsageFlags &usage,
+        vuk::Access last_access) const
         -> vuk::Value<vuk::ImageAttachment>;
 
     auto format() const -> vuk::Format;
@@ -102,7 +125,9 @@ struct ImageView {
     auto image_id() const -> ImageID;
     auto id() const -> ImageViewID;
 
-    explicit operator bool() const { return id_ != ImageViewID::Invalid; }
+    explicit operator bool() const {
+        return id_ != ImageViewID::Invalid;
+    }
 
 private:
     vuk::Format format_ = vuk::Format::eUndefined;
@@ -128,11 +153,14 @@ struct Sampler {
         f32 min_lod = 0,
         f32 max_lod = 1000.0f,
         bool use_anisotropy = false,
-        vuk::source_location LOC = vuk::source_location::current()) -> std::expected<Sampler, vuk::VkException>;
+        vuk::source_location LOC = vuk::source_location::current())
+        -> std::expected<Sampler, vuk::VkException>;
 
     auto id() const -> SamplerID;
 
-    explicit operator bool() const { return id_ != SamplerID::Invalid; }
+    explicit operator bool() const {
+        return id_ != SamplerID::Invalid;
+    }
 
 private:
     SamplerID id_ = SamplerID::Invalid;
@@ -161,7 +189,10 @@ struct ShaderCompileInfo {
 };
 
 struct Pipeline {
-    static auto create(Device &, const ShaderCompileInfo &compile_info, ls::span<vuk::PersistentDescriptorSet> persistent_sets = {})
+    static auto create(
+        Device &,
+        const ShaderCompileInfo &compile_info,
+        ls::span<vuk::PersistentDescriptorSet> persistent_sets = {})
         -> std::expected<Pipeline, vuk::VkException>;
 
     auto id() const -> PipelineID;

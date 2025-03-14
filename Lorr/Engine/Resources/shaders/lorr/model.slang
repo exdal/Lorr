@@ -37,7 +37,7 @@ public struct MeshletInstance {
     public u32 meshlet_index;
 };
 
-public struct Mesh {
+public struct Model {
     public float3 *vertex_positions;
     public u32 *indices;
     public vec2 *texture_coords;

@@ -5,13 +5,16 @@
 #include <slang-com-ptr.h>
 #include <slang.h>
 
+#include <algorithm>
+
 namespace lr {
 struct SlangBlob : ISlangBlob {
     std::vector<u8> m_data = {};
     std::atomic_uint32_t m_refCount = 1;
 
     ISlangUnknown *getInterface(SlangUUID const &) { return nullptr; }
-    SLANG_NO_THROW SlangResult SLANG_MCALL queryInterface(SlangUUID const &uuid, void **outObject) SLANG_OVERRIDE {
+    SLANG_NO_THROW SlangResult SLANG_MCALL
+    queryInterface(SlangUUID const &uuid, void **outObject) SLANG_OVERRIDE {
         ISlangUnknown *intf = getInterface(uuid);
         if (intf) {
             addRef();
@@ -21,7 +24,9 @@ struct SlangBlob : ISlangBlob {
         return SLANG_E_NO_INTERFACE;
     }
 
-    SLANG_NO_THROW uint32_t SLANG_MCALL addRef() override { return ++m_refCount; }
+    SLANG_NO_THROW uint32_t SLANG_MCALL addRef() override {
+        return ++m_refCount;
+    }
 
     SLANG_NO_THROW uint32_t SLANG_MCALL release() override {
         --m_refCount;
@@ -32,23 +37,28 @@ struct SlangBlob : ISlangBlob {
         return m_refCount;
     }
 
-    SlangBlob(const std::vector<u8> &data)
-        : m_data(data) {}
+    SlangBlob(const std::vector<u8> &data) : m_data(data) {}
     virtual ~SlangBlob() = default;
-    SLANG_NO_THROW void const *SLANG_MCALL getBufferPointer() final { return m_data.data(); };
-    SLANG_NO_THROW size_t SLANG_MCALL getBufferSize() final { return m_data.size(); };
+    SLANG_NO_THROW void const *SLANG_MCALL getBufferPointer() final {
+        return m_data.data();
+    };
+    SLANG_NO_THROW size_t SLANG_MCALL getBufferSize() final {
+        return m_data.size();
+    };
 };
 
-// PERF: When we are at Editor environment, shaders obviously needs to be loaded through file system.
-// But when we are at runtime environment, we don't need file system because we probably would
-// have proper asset manager with all shaders are preloaded into virtual environment, so ::loadFile
-// would just return already existing shader file.
+// PERF: When we are at Editor environment, shaders obviously needs to be loaded
+// through file system. But when we are at runtime environment, we don't need
+// file system because we probably would have proper asset manager with all
+// shaders are preloaded into virtual environment, so ::loadFile would just
+// return already existing shader file.
 struct SlangVirtualFS : ISlangFileSystem {
     VirtualDir &m_virtual_env;
     fs::path m_root_dir;
     std::atomic_uint32_t m_refCount;
 
-    SLANG_NO_THROW SlangResult SLANG_MCALL queryInterface(SlangUUID const &uuid, void **outObject) SLANG_OVERRIDE {
+    SLANG_NO_THROW SlangResult SLANG_MCALL
+    queryInterface(SlangUUID const &uuid, void **outObject) SLANG_OVERRIDE {
         ISlangUnknown *intf = getInterface(uuid);
         if (intf) {
             addRef();
@@ -58,7 +68,9 @@ struct SlangVirtualFS : ISlangFileSystem {
         return SLANG_E_NO_INTERFACE;
     }
 
-    SLANG_NO_THROW uint32_t SLANG_MCALL addRef() override { return ++m_refCount; }
+    SLANG_NO_THROW uint32_t SLANG_MCALL addRef() override {
+        return ++m_refCount;
+    }
 
     SLANG_NO_THROW uint32_t SLANG_MCALL release() override {
         --m_refCount;
@@ -76,23 +88,30 @@ struct SlangVirtualFS : ISlangFileSystem {
     virtual ~SlangVirtualFS() = default;
 
     ISlangUnknown *getInterface(SlangUUID const &) { return nullptr; }
-    SLANG_NO_THROW void *SLANG_MCALL castAs(const SlangUUID &) final { return nullptr; }
+    SLANG_NO_THROW void *SLANG_MCALL castAs(const SlangUUID &) final {
+        return nullptr;
+    }
 
-    SLANG_NO_THROW SlangResult SLANG_MCALL loadFile(char const *path_cstr, ISlangBlob **outBlob) final {
+    SLANG_NO_THROW SlangResult SLANG_MCALL
+    loadFile(char const *path_cstr, ISlangBlob **outBlob) final {
         auto path = fs::path(path_cstr);
         if (path.has_extension()) {
             path.replace_extension("slang");
         }
 
         // /resources/shaders/path/to/xx.slang -> path.to.xx
-        auto module_name = fs::relative(path, m_root_dir).replace_extension("").string();
-        std::replace(module_name.begin(), module_name.end(), static_cast<c8>(fs::path::preferred_separator), '.');
+        auto module_name =
+            fs::relative(path, m_root_dir).replace_extension("").string();
+        std::ranges::replace(
+            module_name, static_cast<c8>(fs::path::preferred_separator), '.');
 
         auto it = m_virtual_env.files.find(module_name);
         if (it == m_virtual_env.files.end()) {
-            if (auto result = m_virtual_env.read_file(module_name, path); result.has_value()) {
+            if (auto result = m_virtual_env.read_file(module_name, path);
+                result.has_value()) {
                 auto &new_file = result.value().get();
-                *outBlob = new SlangBlob(std::vector<u8>{ new_file.data(), (new_file.data() + new_file.size()) });
+                *outBlob = new SlangBlob(std::vector<u8>{
+                    new_file.data(), (new_file.data() + new_file.size())});
 
                 LOG_TRACE("New shader module '{}' is loaded.", module_name);
                 return SLANG_OK;
@@ -103,26 +122,27 @@ struct SlangVirtualFS : ISlangFileSystem {
             }
         } else {
             auto &file = it->second;
-            *outBlob = new SlangBlob(std::vector<u8>{ file.data(), (file.data() + file.size()) });
+            *outBlob = new SlangBlob(
+                std::vector<u8>{file.data(), (file.data() + file.size())});
             return SLANG_OK;
         }
     }
 };
 
 using SlangSession_H = Handle<struct SlangSession>;
-template<>
+template <>
 struct Handle<SlangModule>::Impl {
     SlangSession_H session = {};
     slang::IModule *slang_module = nullptr;
 };
 
-template<>
+template <>
 struct Handle<SlangSession>::Impl {
     std::unique_ptr<SlangVirtualFS> shader_virtual_env;
     Slang::ComPtr<slang::ISession> session;
 };
 
-template<>
+template <>
 struct Handle<SlangCompiler>::Impl {
     Slang::ComPtr<slang::IGlobalSession> global_session;
     VirtualDir virtual_dir = {};
@@ -133,11 +153,13 @@ auto SlangModule::destroy() -> void {
     impl = nullptr;
 }
 
-auto SlangModule::get_entry_point(std::string_view name) -> ls::option<SlangEntryPoint> {
+auto SlangModule::get_entry_point(std::string_view name)
+    -> ls::option<SlangEntryPoint> {
     ZoneScoped;
 
     Slang::ComPtr<slang::IEntryPoint> entry_point;
-    if (SLANG_FAILED(impl->slang_module->findEntryPointByName(name.data(), entry_point.writeRef()))) {
+    if (SLANG_FAILED(impl->slang_module->findEntryPointByName(
+            name.data(), entry_point.writeRef()))) {
         LOG_ERROR("Shader entry point '{}' is not found.", name);
         return {};
     }
@@ -150,7 +172,10 @@ auto SlangModule::get_entry_point(std::string_view name) -> ls::option<SlangEntr
     {
         Slang::ComPtr<slang::IBlob> diagnostics_blob;
         auto result = impl->session->session->createCompositeComponentType(
-            component_types.data(), u32(component_types.size()), composed_program.writeRef(), diagnostics_blob.writeRef());
+            component_types.data(),
+            u32(component_types.size()),
+            composed_program.writeRef(),
+            diagnostics_blob.writeRef());
         if (diagnostics_blob) {
             LOG_TRACE("{}", (const char *)diagnostics_blob->getBufferPointer());
         }
@@ -164,7 +189,8 @@ auto SlangModule::get_entry_point(std::string_view name) -> ls::option<SlangEntr
     Slang::ComPtr<slang::IComponentType> linked_program;
     {
         Slang::ComPtr<slang::IBlob> diagnostics_blob;
-        composed_program->link(linked_program.writeRef(), diagnostics_blob.writeRef());
+        composed_program->link(
+            linked_program.writeRef(), diagnostics_blob.writeRef());
         if (diagnostics_blob) {
             LOG_TRACE("{}", (const char *)diagnostics_blob->getBufferPointer());
         }
@@ -176,21 +202,23 @@ auto SlangModule::get_entry_point(std::string_view name) -> ls::option<SlangEntr
     Slang::ComPtr<slang::IBlob> spirv_code;
     {
         Slang::ComPtr<slang::IBlob> diagnostics_blob;
-        auto result = linked_program->getEntryPointCode(0, 0, spirv_code.writeRef(), diagnostics_blob.writeRef());
+        auto result = linked_program->getEntryPointCode(
+            0, 0, spirv_code.writeRef(), diagnostics_blob.writeRef());
         if (diagnostics_blob) {
             LOG_TRACE("{}", (const char *)diagnostics_blob->getBufferPointer());
         }
 
         if (SLANG_FAILED(result)) {
-            LOG_ERROR("Failed to compile shader module.\n{}", (const char *)diagnostics_blob->getBufferPointer());
+            LOG_ERROR(
+                "Failed to compile shader module.\n{}",
+                (const char *)diagnostics_blob->getBufferPointer());
             return ls::nullopt;
         }
     }
 
-    // auto *entry_point_refl = program_layout->getEntryPointByIndex(0);
-
-    std::vector<u32> ir(spirv_code->getBufferSize() / 4);
-    std::memcpy(ir.data(), spirv_code->getBufferPointer(), spirv_code->getBufferSize());
+    auto ir = std::vector<u32>(spirv_code->getBufferSize() / 4);
+    std::memcpy(
+        ir.data(), spirv_code->getBufferPointer(), spirv_code->getBufferSize());
 
     return SlangEntryPoint{
         .ir = std::move(ir),
@@ -236,8 +264,10 @@ auto SlangModule::get_reflection() -> ShaderReflection {
     }
 
     if (compute_entry_point_index.has_value()) {
-        auto *entry_point = program_layout->getEntryPointByIndex(compute_entry_point_index.value());
-        entry_point->getComputeThreadGroupSize(3, glm::value_ptr(result.thread_group_size));
+        auto *entry_point = program_layout->getEntryPointByIndex(
+            compute_entry_point_index.value());
+        entry_point->getComputeThreadGroupSize(
+            3, glm::value_ptr(result.thread_group_size));
     }
 
     return result;
@@ -252,7 +282,8 @@ auto SlangSession::destroy() -> void {
     impl = nullptr;
 }
 
-auto SlangSession::load_module(const SlangModuleInfo &info) -> ls::option<SlangModule> {
+auto SlangSession::load_module(const SlangModuleInfo &info)
+    -> ls::option<SlangModule> {
     ZoneScoped;
 
     slang::IModule *slang_module = {};
@@ -260,7 +291,10 @@ auto SlangSession::load_module(const SlangModuleInfo &info) -> ls::option<SlangM
     const auto &path_str = info.path.string();
     if (info.source.has_value()) {
         slang_module = impl->session->loadModuleFromSourceString(
-            info.module_name.c_str(), path_str.c_str(), info.source->data(), diagnostics_blob.writeRef());
+            info.module_name.c_str(),
+            path_str.c_str(),
+            info.source->data(),
+            diagnostics_blob.writeRef());
     } else {
         auto source_data = File::to_string(info.path);
         if (source_data.empty()) {
@@ -268,7 +302,10 @@ auto SlangSession::load_module(const SlangModuleInfo &info) -> ls::option<SlangM
             return ls::nullopt;
         }
         slang_module = impl->session->loadModuleFromSourceString(
-            info.module_name.c_str(), path_str.c_str(), source_data.c_str(), diagnostics_blob.writeRef());
+            info.module_name.c_str(),
+            path_str.c_str(),
+            source_data.c_str(),
+            diagnostics_blob.writeRef());
     }
 
     if (diagnostics_blob) {
@@ -295,29 +332,43 @@ auto SlangCompiler::destroy() -> void {
     impl = nullptr;
 }
 
-auto SlangCompiler::new_session(const SlangSessionInfo &info) -> ls::option<SlangSession> {
+auto SlangCompiler::new_session(const SlangSessionInfo &info)
+    -> ls::option<SlangSession> {
     ZoneScoped;
 
-    auto slang_fs = std::make_unique<SlangVirtualFS>(impl->virtual_dir, info.root_directory);
+    auto slang_fs = std::make_unique<SlangVirtualFS>(
+        impl->virtual_dir, info.root_directory);
 
     slang::CompilerOptionEntry entries[] = {
 #if LS_DEBUG
-        { .name = slang::CompilerOptionName::Optimization,
-          .value = { .kind = slang::CompilerOptionValueKind::Int, .intValue0 = SLANG_OPTIMIZATION_LEVEL_NONE } },
-        { .name = slang::CompilerOptionName::DebugInformationFormat,
-          .value = { .kind = slang::CompilerOptionValueKind::Int, .intValue0 = SLANG_DEBUG_INFO_FORMAT_C7 } },
+        {.name = slang::CompilerOptionName::Optimization,
+         .value =
+             {.kind = slang::CompilerOptionValueKind::Int,
+              .intValue0 = SLANG_OPTIMIZATION_LEVEL_NONE}},
+        {.name = slang::CompilerOptionName::DebugInformationFormat,
+         .value =
+             {.kind = slang::CompilerOptionValueKind::Int,
+              .intValue0 = SLANG_DEBUG_INFO_FORMAT_C7}},
 #else
-        { .name = slang::CompilerOptionName::Optimization,
-          .value = { .kind = slang::CompilerOptionValueKind::Int, .intValue0 = SLANG_OPTIMIZATION_LEVEL_MAXIMAL } },
+        {.name = slang::CompilerOptionName::Optimization,
+         .value =
+             {.kind = slang::CompilerOptionValueKind::Int,
+              .intValue0 = SLANG_OPTIMIZATION_LEVEL_MAXIMAL}},
 #endif
-        { .name = slang::CompilerOptionName::UseUpToDateBinaryModule,
-          .value = { .kind = slang::CompilerOptionValueKind::Int, .intValue0 = 1 } },
-        { .name = slang::CompilerOptionName::GLSLForceScalarLayout,
-          .value = { .kind = slang::CompilerOptionValueKind::Int, .intValue0 = 1 } },
-        { .name = slang::CompilerOptionName::Language,
-          .value = { .kind = slang::CompilerOptionValueKind::String, .stringValue0 = "slang" } },
-        { .name = slang::CompilerOptionName::DisableWarnings,
-          .value = { .kind = slang::CompilerOptionValueKind::String, .stringValue0 = "39001,41012" } },
+        {.name = slang::CompilerOptionName::UseUpToDateBinaryModule,
+         .value =
+             {.kind = slang::CompilerOptionValueKind::Int, .intValue0 = 1}},
+        {.name = slang::CompilerOptionName::GLSLForceScalarLayout,
+         .value =
+             {.kind = slang::CompilerOptionValueKind::Int, .intValue0 = 1}},
+        {.name = slang::CompilerOptionName::Language,
+         .value =
+             {.kind = slang::CompilerOptionValueKind::String,
+              .stringValue0 = "slang"}},
+        {.name = slang::CompilerOptionName::DisableWarnings,
+         .value =
+             {.kind = slang::CompilerOptionValueKind::String,
+              .stringValue0 = "39001,41012"}},
     };
     std::vector<slang::PreprocessorMacroDesc> macros;
     macros.reserve(info.definitions.size());
@@ -347,7 +398,8 @@ auto SlangCompiler::new_session(const SlangSessionInfo &info) -> ls::option<Slan
         .fileSystem = slang_fs.get(),
     };
     Slang::ComPtr<slang::ISession> session;
-    if (SLANG_FAILED(impl->global_session->createSession(session_desc, session.writeRef()))) {
+    if (SLANG_FAILED(impl->global_session->createSession(
+            session_desc, session.writeRef()))) {
         LOG_ERROR("Failed to create compiler session!");
         return ls::nullopt;
     }

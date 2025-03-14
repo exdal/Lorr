@@ -5,35 +5,20 @@ import "../lorr";
 
 [[vk::binding(1, 0)]] ConstantBuffer<Scene, ScalarDataLayout> scene;
 
-struct Transforms {
-    Transform transforms[];
-};
 [[vk::binding(2, 0)]] restrict readonly
-GLSLShaderStorageBuffer<Transforms, ScalarDataLayout> transforms;
+RWStructuredBuffer<Transform, ScalarDataLayout> transforms;
 
-struct Meshes {
-    Mesh meshes[];
-};
 [[vk::binding(3, 0)]] restrict readonly
-GLSLShaderStorageBuffer<Meshes, ScalarDataLayout> meshes;
+RWStructuredBuffer<Model, ScalarDataLayout> models;
 
-struct MeshletInstances {
-    MeshletInstance instances[];
-};
 [[vk::binding(4, 0)]] restrict readonly
-GLSLShaderStorageBuffer<MeshletInstances, ScalarDataLayout> meshlet_instances;
+RWStructuredBuffer<MeshletInstance, ScalarDataLayout> meshlet_instances;
 
-struct VisibleMeshletInstancesIndices {
-    u32 indices[];
-};
 [[vk::binding(5, 0)]] restrict readonly
-GLSLShaderStorageBuffer<VisibleMeshletInstancesIndices, ScalarDataLayout> visible_meshlet_instances_indices;
+RWStructuredBuffer<u32, ScalarDataLayout> visible_meshlet_instances_indices;
 
-struct Materials {
-    Material materials[];
-};
 [[vk::binding(6, 0)]] restrict readonly
-GLSLShaderStorageBuffer<Materials, ScalarDataLayout> materials;
+RWStructuredBuffer<Material, ScalarDataLayout> materials;
 
 [[vk::binding(0, 1)]] Texture2D<float4> textures[];
 [[vk::binding(1, 1)]] SamplerState samplers[];
@@ -162,34 +147,34 @@ FragmentOutput fs_main(VertexOutput input, float4 pixel_pos : SV_Position) {
 
     const u32 visible_meshlet_index = (pixel >> MESHLET_PRIMITIVE_BITS) & MESHLET_ID_MASK;
     const u32 triangle_index = pixel & MESHLET_PRIMITIVE_MASK;
-    const u32 meshlet_instance_index = visible_meshlet_instances_indices.indices[visible_meshlet_index];
-    const MeshletInstance meshlet_instance = meshlet_instances.instances[meshlet_instance_index];
-    const Mesh mesh = meshes.meshes[meshlet_instance.mesh_index];
-    const Transform transform = transforms.transforms[meshlet_instance.transform_index];
+    const u32 meshlet_instance_index = visible_meshlet_instances_indices[visible_meshlet_index];
+    const MeshletInstance meshlet_instance = meshlet_instances[meshlet_instance_index];
+    const Model model = models[meshlet_instance.mesh_index];
+    const Transform transform = transforms[meshlet_instance.transform_index];
 
-    const Meshlet meshlet = mesh.meshlets[meshlet_instance.meshlet_index];
+    const Meshlet meshlet = model.meshlets[meshlet_instance.meshlet_index];
     const u32 vertex_offset = meshlet.vertex_offset;
     const u32 index_offset = meshlet.index_offset;
     const u32 triangle_offset = meshlet.triangle_offset;
     const uvec3 triangle_indices = {
-        u32(mesh.local_triangle_indices[triangle_offset + triangle_index * 3 + 0]),
-        u32(mesh.local_triangle_indices[triangle_offset + triangle_index * 3 + 1]),
-        u32(mesh.local_triangle_indices[triangle_offset + triangle_index * 3 + 2]),
+        u32(model.local_triangle_indices[triangle_offset + triangle_index * 3 + 0]),
+        u32(model.local_triangle_indices[triangle_offset + triangle_index * 3 + 1]),
+        u32(model.local_triangle_indices[triangle_offset + triangle_index * 3 + 2]),
     };
     const uvec3 indices = {
-        mesh.indices[index_offset + triangle_indices.x],
-        mesh.indices[index_offset + triangle_indices.y],
-        mesh.indices[index_offset + triangle_indices.z],
+        model.indices[index_offset + triangle_indices.x],
+        model.indices[index_offset + triangle_indices.y],
+        model.indices[index_offset + triangle_indices.z],
     };
     const float3x3 positions = {
-        mesh.vertex_positions[vertex_offset + indices.x],
-        mesh.vertex_positions[vertex_offset + indices.y],
-        mesh.vertex_positions[vertex_offset + indices.z],
+        model.vertex_positions[vertex_offset + indices.x],
+        model.vertex_positions[vertex_offset + indices.y],
+        model.vertex_positions[vertex_offset + indices.z],
     };
     const float3x2 tex_coords = {
-        mesh.texture_coords[vertex_offset + indices.x],
-        mesh.texture_coords[vertex_offset + indices.y],
-        mesh.texture_coords[vertex_offset + indices.z],
+        model.texture_coords[vertex_offset + indices.x],
+        model.texture_coords[vertex_offset + indices.y],
+        model.texture_coords[vertex_offset + indices.z],
     };
     const float3x4 world_positions = {
         mul(transform.world, float4(positions[0], 1.0)),
@@ -203,7 +188,7 @@ FragmentOutput fs_main(VertexOutput input, float4 pixel_pos : SV_Position) {
     };
     const PartialDeriv partial_deriv = calc_bary(clip_positions, input.tex_coord * 2.0 - 1.0, resolution);
     const UVGradient uv_gradient = calc_uv_gradient(partial_deriv, tex_coords);
-    const Material material = materials.materials[meshlet_instance.material_index];
+    const Material material = materials[meshlet_instance.material_index];
 
     // ALBEDO ───────────────────────────────────────────────────────────
     if (material.albedo_image_index != ~0u) {

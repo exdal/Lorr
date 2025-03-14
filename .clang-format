@@ -6,8 +6,6 @@ Language: Cpp
 DerivePointerAlignment: false
 PointerAlignment: Right
 
-ColumnLimit: 140
-
 AlignAfterOpenBracket: AlwaysBreak
 AlignEscapedNewlines: Left
 AlignOperands: true
@@ -29,44 +27,4 @@ BinPackParameters: false
 
 SortIncludes: false
 
-PackConstructorInitializers: Never
-BreakBeforeBinaryOperators: NonAssignment
-BreakBeforeTernaryOperators: true
-BreakConstructorInitializers: BeforeColon
-BreakInheritanceList: BeforeColon
-BreakStringLiterals: true
-CompactNamespaces: true
-ConstructorInitializerAllOnOneLineOrOnePerLine: false
-Cpp11BracedListStyle: false
-FixNamespaceComments: true
-IndentCaseLabels: true
-IndentGotoLabels: false
-KeepEmptyLinesAtTheStartOfBlocks: false
-MaxEmptyLinesToKeep: 1
-NamespaceIndentation: Inner
-SortUsingDeclarations: true
-SpaceAfterCStyleCast: false
-SpaceAfterLogicalNot: false
-SpaceAfterTemplateKeyword: false
-SpaceBeforeAssignmentOperators: true
-SpaceBeforeCpp11BracedList: false
-SpaceBeforeCtorInitializerColon: true
-SpaceBeforeInheritanceColon: true
-SpaceBeforeParens: ControlStatements
-SpaceBeforeRangeBasedForLoopColon: true
-SpaceBeforeSquareBrackets: false
-SpaceInEmptyBlock: false
-SpaceInEmptyParentheses: false
-SpacesInAngles: false
-SpacesInCStyleCastParentheses: false
-SpacesInContainerLiterals: false
-SpacesInParentheses: false
-SpacesInSquareBrackets: false
-Standard: Latest
-UseCRLF: false
-UseTab: Never
-AccessModifierOffset: -4
-
-BreakBeforeBraces: Custom
-BraceWrapping:
-  BeforeElse: false
+ExperimentalAutoDetectBinPacking: true

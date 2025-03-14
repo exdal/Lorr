@@ -1,17 +1,29 @@
 package("slang-lorr")
-    set_homepage("https://github.com/exdal/slang-vk")
+    set_homepage("https://github.com/shader-slang/slang")
     set_description("Making it easier to work with shaders")
     set_license("MIT")
 
-    add_urls("https://github.com/exdal/slang-vk.git")
+    add_urls("https://github.com/shader-slang/slang.git", { submodules = false })
 
-    add_versions("testing", "faab06dd6af464e2f9f3b0f2bbe584c7f2ba9203")
-    add_versions("v2024.17.4", "8ff74412c71de16a1529f7042e9b467674ac5875")
+    add_versions("v2025.6.1",  "a09d554721ecf0c6d967d5f55b3416e3284e71f2")
+    add_patches ("v2025.6.1",  path.join(os.scriptdir(), "patches/", "v2025.6.1.patch"))
 
     add_configs("shared", { description = "Build shared library", default = true, type = "boolean", readonly = true })
 
+    on_load(function (package)
+        local version = package:version();
+        package:add("defines", "SLANG_VERSION=\"" .. version:gsub("v", "") .. "\"")
+    end)
+
     on_install(function (package)
-        import("package.tools.xmake").install(package, {})
+        local root = path.join(os.scriptdir(), "port")
+        for _, file in ipairs(os.files(path.join(root, "**.lua"))) do
+            os.cp(file, path.relative(file, root))
+        end
+
+        import("package.tools.xmake").install(package, {
+            slang_version = package:version_str(),
+        })
         os.cp("include/*.h", package:installdir("include"))
     end)
 package_end()

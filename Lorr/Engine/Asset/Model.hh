@@ -18,13 +18,13 @@ struct Texture {
     ImageView image_view = {};
     Sampler sampler = {};
 
-    SampledImage sampled_image() { return { image_view.id(), sampler.id() }; }
+    SampledImage sampled_image() { return {image_view.id(), sampler.id()}; }
 };
 
 enum class MaterialID : u64 { Invalid = std::numeric_limits<u64>::max() };
 struct Material {
-    glm::vec4 albedo_color = { 1.0f, 1.0f, 1.0f, 1.0f };
-    glm::vec3 emissive_color = { 0.0f, 0.0f, 0.0f };
+    glm::vec4 albedo_color = {1.0f, 1.0f, 1.0f, 1.0f};
+    glm::vec3 emissive_color = {0.0f, 0.0f, 0.0f};
     f32 roughness_factor = 0.0f;
     f32 metallic_factor = 0.0f;
     f32 alpha_cutoff = 0.0f;
@@ -57,10 +57,11 @@ struct Model {
     };
 
     struct Node {
-        std::vector<u32> mesh_indices = {};
-        std::vector<u32> child_indices = {};
-        glm::mat4 transform = {};
         std::string name = {};
+        std::vector<u32> child_indices = {};
+
+        ls::option<u32> mesh_index = ls::nullopt;
+        glm::mat4 transform = {};
     };
 
     std::vector<UUID> textures = {};

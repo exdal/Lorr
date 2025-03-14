@@ -1,7 +1,7 @@
 #pragma once
 
-#include "Engine/Asset/Model.hh"          // IWYU pragma: export
-#include "Engine/Scene/SceneRenderer.hh"  // IWYU pragma: export
+#include "Engine/Asset/Model.hh" // IWYU pragma: export
+#include "Engine/Scene/SceneRenderer.hh" // IWYU pragma: export
 
 #include <flecs.h>
 
@@ -29,4 +29,4 @@ struct Core {
     Core(flecs::world &world);
 };
 
-}  // namespace lr::ECS
+} // namespace lr::ECS

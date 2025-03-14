@@ -8,6 +8,8 @@ struct SceneBrowserPanel : PanelI {
 
     void render(this SceneBrowserPanel &);
     void draw_hierarchy(this SceneBrowserPanel &);
-    void do_render(vuk::Format, vuk::Extent3D) override { render(); }
+    void do_render(vuk::Format, vuk::Extent3D) override {
+        render();
+    }
 };
-}  // namespace lr
+} // namespace lr

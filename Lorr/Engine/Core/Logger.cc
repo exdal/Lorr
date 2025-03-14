@@ -40,4 +40,4 @@ std::tm Logger::get_time() {
 
     return *std::localtime(&time);
 }
-}  // namespace lr
+} // namespace lr

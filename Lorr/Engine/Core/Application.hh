@@ -47,4 +47,4 @@ struct Application {
     virtual void do_shutdown() = 0;
 };
 
-}  // namespace lr
+} // namespace lr

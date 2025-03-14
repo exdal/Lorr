@@ -10,8 +10,7 @@ namespace lr {
 //     m.message = std::format("{}", message.message);
 // }
 
-ConsolePanel::ConsolePanel(std::string name_, bool open_)
-    : PanelI(std::move(name_), open_) {
+ConsolePanel::ConsolePanel(std::string name_, bool open_): PanelI(std::move(name_), open_) {
     // loguru::add_callback("editor", log_cb, this, loguru::Verbosity_MAX);
 }
 
@@ -55,4 +54,4 @@ void ConsolePanel::render(this ConsolePanel &self) {
     ImGui::End();
 }
 
-}  // namespace lr
+} // namespace lr

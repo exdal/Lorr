@@ -124,8 +124,7 @@ auto FileWatcher::peek() -> ls::option<FileEvent> {
     ZoneScoped;
 
     if (this->avail_storage_size == 0) {
-        this->avail_storage_size =
-            os::file_watcher_read(this->listener, this->event_storage.data(), this->event_storage.size()).value_or(0);
+        this->avail_storage_size = os::file_watcher_read(this->listener, this->event_storage.data(), this->event_storage.size()).value_or(0);
     }
 
     if (this->storage_offset < this->avail_storage_size) {
@@ -154,4 +153,4 @@ auto FileWatcher::close() -> void {
     os::file_watcher_destroy(this->listener);
 }
 
-}  // namespace lr
+} // namespace lr

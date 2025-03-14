@@ -1,15 +1,15 @@
 #if TRACY_ENABLE
 
 static void *lr_aligned_alloc(usize size, usize alignment = alignof(usize)) {
-#if LS_WINDOWS == 1
+    #if LS_WINDOWS == 1
     return _aligned_malloc(size, alignment);
-#elif LS_LINUX == 1
+    #elif LS_LINUX == 1
     void *data = nullptr;
     posix_memalign(&data, alignment, size);
     return data;
-#else
-#error "Unknown platform"
-#endif
+    #else
+        #error "Unknown platform"
+    #endif
 }
 
 // https://en.cppreference.com/w/cpp/memory/new/operator_new

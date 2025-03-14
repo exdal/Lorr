@@ -57,7 +57,8 @@ struct option_flag {
 private:
     static_assert(
         !std::is_same_v<std::nullopt_t, std::remove_cvref_t<decltype(option_flag_val<T>::nullopt)>>,
-        "To use option_flag, `T` must have option_flag_val defined!");
+        "To use option_flag, `T` must have option_flag_val defined!"
+    );
 
     struct Dummy {
         // Make sure it's non-trivial, we don't want to initialize value with its default value.
@@ -70,8 +71,12 @@ private:
     };
 
 public:
-    constexpr option_flag() noexcept { reset(); }
-    constexpr option_flag(std::nullopt_t) noexcept { reset(); }
+    constexpr option_flag() noexcept {
+        reset();
+    }
+    constexpr option_flag(std::nullopt_t) noexcept {
+        reset();
+    }
     template<typename U = T, std::enable_if_t<std::is_copy_constructible_v<T>, int> = 0>
     constexpr option_flag(const option_flag<U> &other) {
         if (other.has_value()) {
@@ -94,10 +99,16 @@ public:
         new (std::addressof(value_)) T(std::forward<U>(v));
     }
 
-    ~option_flag() { reset(); }
+    ~option_flag() {
+        reset();
+    }
 
-    constexpr bool has_value(this const auto &self) { return self.value_ != option_flag_val<T>::nullopt; }
-    constexpr void reset() noexcept { this->value_ = option_flag_val<T>::nullopt; }
+    constexpr bool has_value(this const auto &self) {
+        return self.value_ != option_flag_val<T>::nullopt;
+    }
+    constexpr void reset() noexcept {
+        this->value_ = option_flag_val<T>::nullopt;
+    }
 
     template<typename SelfT>
     [[nodiscard]] constexpr T &&value(this SelfT &&self) {
@@ -158,9 +169,7 @@ public:
         return *this;
     }
 
-    template<
-        typename U,
-        std::enable_if_t<std::conjunction_v<std::is_constructible<T, const U &>, std::is_assignable<T &, const U &>>, int> = 0>
+    template<typename U, std::enable_if_t<std::conjunction_v<std::is_constructible<T, const U &>, std::is_assignable<T &, const U &>>, int> = 0>
     option_flag &operator=(const option_flag<U> &other) {
         if (other.has_value()) {
             if (has_value()) {
@@ -188,8 +197,12 @@ public:
         return *this;
     }
 
-    constexpr auto operator->(this auto &&self) { return std::addressof(self.value_); }
-    constexpr explicit operator bool() const noexcept { return has_value(); }
+    constexpr auto operator->(this auto &&self) {
+        return std::addressof(self.value_);
+    }
+    constexpr explicit operator bool() const noexcept {
+        return has_value();
+    }
 };
 
 template<typename T, typename U>
@@ -223,12 +236,10 @@ bool operator>=(const option_flag<T> &opt, const U &value) {
 }
 
 template<typename T>
-using option = std::conditional_t<
-    !std::is_same_v<std::nullopt_t, std::remove_const_t<decltype(option_flag_val<T>::nullopt)>>,
-    option_flag<T>,
-    std::optional<T>>;
+using option =
+    std::conditional_t<!std::is_same_v<std::nullopt_t, std::remove_const_t<decltype(option_flag_val<T>::nullopt)>>, option_flag<T>, std::optional<T>>;
 
 template<typename T>
 using option_ref = option<std::reference_wrapper<T>>;
 
-}  // namespace ls
+} // namespace ls

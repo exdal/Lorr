@@ -46,13 +46,15 @@ struct EditorLayout {
         return { panel_index, panel_ptr };
     }
 
-    PanelI *panel_at(this EditorLayout &self, usize index) { return self.panels[index].get(); }
+    PanelI *panel_at(this EditorLayout &self, usize index) {
+        return self.panels[index].get();
+    }
 };
-}  // namespace lr
+} // namespace lr
 
 namespace ImGuiLR {
 bool drag_vec(i32 id, void *data, usize components, ImGuiDataType data_type);
 void center_text(std::string_view str);
 bool image_button(std::string_view text, ImTextureID texture_id, const ImVec2 &button_size);
 void text_sv(std::string_view str);
-}  // namespace ImGuiLR
+} // namespace ImGuiLR

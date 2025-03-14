@@ -28,12 +28,16 @@ public:
         return this->data_u64[0] == other.data_u64[0] && this->data_u64[1] == other.data_u64[1];
     }
 
-    explicit operator bool() const { return data_u64[0] != 0 && data_u64[1] != 0; }
+    explicit operator bool() const {
+        return data_u64[0] != 0 && data_u64[1] != 0;
+    }
 };
-}  // namespace lr
+} // namespace lr
 
 template<>
 struct ankerl::unordered_dense::hash<lr::UUID> {
     using is_avalanching = void;
-    u64 operator()(const lr::UUID &uuid) const noexcept { return ankerl::unordered_dense::detail::wyhash::hash(&uuid, sizeof(lr::UUID)); }
+    u64 operator()(const lr::UUID &uuid) const noexcept {
+        return ankerl::unordered_dense::detail::wyhash::hash(&uuid, sizeof(lr::UUID));
+    }
 };

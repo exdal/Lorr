@@ -55,9 +55,9 @@ struct ankerl::unordered_dense::hash<ls::pair<T, U>> {
     using is_avalanching = void;
     u64 operator()(const ls::pair<T, U> &v) const noexcept {
         usize seed = 0;
-        auto lhs = ankerl::unordered_dense::hash<T>{}(v.n0);
+        auto lhs = ankerl::unordered_dense::hash<T> {}(v.n0);
         ls::hash_combine(seed, lhs);
-        auto rhs = ankerl::unordered_dense::hash<U>{}(v.n1);
+        auto rhs = ankerl::unordered_dense::hash<U> {}(v.n1);
         ls::hash_combine(seed, rhs);
 
         return seed;

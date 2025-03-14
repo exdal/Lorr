@@ -45,10 +45,10 @@ auto populate_directory(AssetDirectory *dir, const AssetDirectoryCallbacks &call
     }
 }
 
-AssetDirectory::AssetDirectory(fs::path path_, FileWatcher *file_watcher_, AssetDirectory *parent_)
-    : path(std::move(path_)),
-      file_watcher(file_watcher_),
-      parent(parent_) {
+AssetDirectory::AssetDirectory(fs::path path_, FileWatcher *file_watcher_, AssetDirectory *parent_):
+    path(std::move(path_)),
+    file_watcher(file_watcher_),
+    parent(parent_) {
     this->watch_descriptor = file_watcher_->watch_dir(this->path);
 }
 
@@ -85,8 +85,7 @@ auto AssetDirectory::add_asset(this AssetDirectory &self, const fs::path &path) 
     return asset_uuid;
 }
 
-AssetBrowserPanel::AssetBrowserPanel(std::string name_, bool open_)
-    : PanelI(std::move(name_), open_) {
+AssetBrowserPanel::AssetBrowserPanel(std::string name_, bool open_): PanelI(std::move(name_), open_) {
     auto &app = EditorApp::get();
 
     this->file_watcher.init(app.active_project->root_dir);
@@ -144,7 +143,7 @@ auto AssetBrowserPanel::remove_directory(this AssetBrowserPanel &self, AssetDire
 
     // Remove found directory from its parent
     if (parent_dir) {
-        std::erase_if(parent_dir->subdirs, [directory](const auto &v) {  //
+        std::erase_if(parent_dir->subdirs, [directory](const auto &v) { //
             return v->path == directory->path;
         });
     }
@@ -201,7 +200,7 @@ void AssetBrowserPanel::draw_dir_contents(this AssetBrowserPanel &self) {
 
     ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, { padding, padding });
     if (ImGui::BeginTable("asset_browser", tile_count, table_flags)) {
-        std::vector<AssetDirectory *> deleting_dirs = {};  // this is to avoid iterator corruption
+        std::vector<AssetDirectory *> deleting_dirs = {}; // this is to avoid iterator corruption
         for (const auto &subdir : self.current_dir->subdirs) {
             ImGui::TableNextColumn();
 
@@ -242,7 +241,9 @@ void AssetBrowserPanel::draw_dir_contents(this AssetBrowserPanel &self) {
 
         if (ImGui::BeginPopupContextWindow(
                 "asset_browser_ctx",
-                ImGuiPopupFlags_NoOpenOverItems | ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverExistingPopup)) {
+                ImGuiPopupFlags_NoOpenOverItems | ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverExistingPopup
+            ))
+        {
             if (ImGui::BeginMenu("Create...")) {
                 open_create_dir_popup = ImGui::MenuItem("Directory");
                 ImGui::Separator();
@@ -460,4 +461,4 @@ void AssetBrowserPanel::render(this AssetBrowserPanel &self) {
     ImGui::End();
 }
 
-}  // namespace lr
+} // namespace lr

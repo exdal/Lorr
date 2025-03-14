@@ -18,13 +18,15 @@ struct Texture {
     ImageView image_view = {};
     Sampler sampler = {};
 
-    SampledImage sampled_image() { return {image_view.id(), sampler.id()}; }
+    SampledImage sampled_image() {
+        return { image_view.id(), sampler.id() };
+    }
 };
 
 enum class MaterialID : u64 { Invalid = std::numeric_limits<u64>::max() };
 struct Material {
-    glm::vec4 albedo_color = {1.0f, 1.0f, 1.0f, 1.0f};
-    glm::vec3 emissive_color = {0.0f, 0.0f, 0.0f};
+    glm::vec4 albedo_color = { 1.0f, 1.0f, 1.0f, 1.0f };
+    glm::vec3 emissive_color = { 0.0f, 0.0f, 0.0f };
     f32 roughness_factor = 0.0f;
     f32 metallic_factor = 0.0f;
     f32 alpha_cutoff = 0.0f;
@@ -77,4 +79,4 @@ struct Model {
     Buffer meshlet_bounds = {};
     Buffer local_triangle_indices = {};
 };
-}  // namespace lr
+} // namespace lr

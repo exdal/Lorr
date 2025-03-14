@@ -10,4 +10,4 @@ struct ManagedObj {
 private:
     u64 ref_count = 0;
 };
-}  // namespace lr
+} // namespace lr

@@ -26,4 +26,4 @@ constexpr std::string escape_str(std::string_view str) {
 
     return r;
 }
-}  // namespace ls
+} // namespace ls

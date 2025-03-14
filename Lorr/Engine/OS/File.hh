@@ -12,7 +12,9 @@ struct File {
     File(const fs::path &path, FileAccess access);
     File(const File &) = default;
     File(File &&) = default;
-    ~File() { close(); }
+    ~File() {
+        close();
+    }
 
     auto write(const void *data, usize data_size) -> u64;
     auto read(void *data, usize data_size) -> u64;
@@ -35,7 +37,9 @@ struct File {
         return *this;
     }
     bool operator==(const File &) const = default;
-    explicit operator bool() { return result == FileResult::Success; }
+    explicit operator bool() {
+        return result == FileResult::Success;
+    }
 };
 
 struct FileWatcher {
@@ -45,7 +49,9 @@ struct FileWatcher {
     i64 storage_offset = 0;
     i64 avail_storage_size = 0;
 
-    ~FileWatcher() { close(); }
+    ~FileWatcher() {
+        close();
+    }
 
     auto init(const fs::path &root_dir) -> bool;
     auto event_buffer_size() -> usize;
@@ -56,4 +62,4 @@ struct FileWatcher {
     auto close() -> void;
 };
 
-}  // namespace lr
+} // namespace lr

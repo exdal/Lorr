@@ -8,8 +8,8 @@ struct SlotMapIDUnpacked {
 };
 
 template<typename T>
-concept SlotMapID = std::is_enum_v<T> &&                             // ID must be an enum to preserve strong typing.
-                    std::is_same_v<u64, std::underlying_type_t<T>>;  // ID enum must have underlying type of u64.
+concept SlotMapID = std::is_enum_v<T> && // ID must be an enum to preserve strong typing.
+    std::is_same_v<u64, std::underlying_type_t<T>>; // ID enum must have underlying type of u64.
 
 constexpr static u64 SLOT_MAP_VERSION_BITS = 32_u64;
 constexpr static u64 SLOT_MAP_INDEX_MASK = (1_u64 << SLOT_MAP_VERSION_BITS) - 1_u64;
@@ -42,7 +42,7 @@ struct SlotMap {
 private:
     std::vector<T> slots = {};
     // this is vector of dynamic bitsets. T != char/bool
-    std::vector<bool> states = {};  // slot state, useful when iterating
+    std::vector<bool> states = {}; // slot state, useful when iterating
     std::vector<u32> versions = {};
 
     std::vector<usize> free_indices = {};
@@ -120,16 +120,16 @@ public:
         return nullptr;
     }
 
-    auto size(this const Self &self) -> usize {  //
+    auto size(this const Self &self) -> usize { //
         return self.slots.size() - self.free_indices.size();
     }
 
-    auto capacity(this const Self &self) -> usize {  //
+    auto capacity(this const Self &self) -> usize { //
         return self.slots.size();
     }
 
-    auto slots_unsafe(this Self &self) -> ls::span<T> {  //
+    auto slots_unsafe(this Self &self) -> ls::span<T> { //
         return self.slots;
     }
 };
-}  // namespace lr
+} // namespace lr

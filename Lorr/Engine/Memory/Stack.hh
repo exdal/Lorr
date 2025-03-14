@@ -183,4 +183,4 @@ struct ScopedStack {
         return { begin, end };
     }
 };
-}  // namespace lr::memory
+} // namespace lr::memory

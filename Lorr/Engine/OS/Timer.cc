@@ -14,4 +14,4 @@ auto Timer::elapsed() -> f64 {
     std::chrono::duration<f64> delta = now - last_ts;
     return delta.count();
 }
-}  // namespace lr
+} // namespace lr

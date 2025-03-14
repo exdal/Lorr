@@ -264,7 +264,7 @@ auto os::file_watcher_peek(FileWatcherDescriptor &, u8 *buffer, i64 &buffer_offs
         }
     }
 
-    return FileEvent{
+    return FileEvent {
         .file_name = event_data->name,
         .action_mask = action_mask,
         .watch_descriptor = static_cast<FileDescriptor>(event_data->wd),
@@ -316,7 +316,7 @@ auto os::tsc() -> u64 {
 #if defined(LS_COMPILER_CLANG) || defined(LS_COMPILER_GCC)
     return __builtin_ia32_rdtsc();
 #else
-#error Unknown compiler on Linux
+    #error Unknown compiler on Linux
 #endif
 }
 
@@ -331,4 +331,4 @@ auto os::unix_timestamp() -> i64 {
     return ts.tv_sec;
 }
 
-}  // namespace lr
+} // namespace lr

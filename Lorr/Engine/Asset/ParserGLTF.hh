@@ -59,25 +59,11 @@ struct GLTFModelCallbacks {
     // clang-format on
 
     // Accessors
-    void (*on_access_index)(
-        void *user_data, u32 mesh_index, u64 offset, u32 index) = nullptr;
-    void (*on_access_position)(
-        void *user_data,
-        u32 mesh_index,
-        u64 offset,
-        glm::vec3 position) = nullptr;
-    void (*on_access_normal)(
-        void *user_data,
-        u32 mesh_index,
-        u64 offset,
-        glm::vec3 normal) = nullptr;
-    void (*on_access_texcoord)(
-        void *user_data,
-        u32 mesh_index,
-        u64 offset,
-        glm::vec2 texcoord) = nullptr;
-    void (*on_access_color)(
-        void *user_data, u32 mesh_index, u64 offset, glm::vec4 color) = nullptr;
+    void (*on_access_index)(void *user_data, u32 mesh_index, u64 offset, u32 index) = nullptr;
+    void (*on_access_position)(void *user_data, u32 mesh_index, u64 offset, glm::vec3 position) = nullptr;
+    void (*on_access_normal)(void *user_data, u32 mesh_index, u64 offset, glm::vec3 normal) = nullptr;
+    void (*on_access_texcoord)(void *user_data, u32 mesh_index, u64 offset, glm::vec2 texcoord) = nullptr;
+    void (*on_access_color)(void *user_data, u32 mesh_index, u64 offset, glm::vec4 color) = nullptr;
 };
 
 struct GLTFModelInfo {
@@ -86,9 +72,8 @@ struct GLTFModelInfo {
     std::vector<GLTFTextureInfo> textures = {};
     std::vector<GLTFMaterialInfo> materials = {};
 
-    static auto parse(const fs::path &path, GLTFModelCallbacks callbacks = {})
-        -> ls::option<GLTFModelInfo>;
+    static auto parse(const fs::path &path, GLTFModelCallbacks callbacks = {}) -> ls::option<GLTFModelInfo>;
     static auto parse_info(const fs::path &path) -> ls::option<GLTFModelInfo>;
 };
 
-}  // namespace lr
+} // namespace lr

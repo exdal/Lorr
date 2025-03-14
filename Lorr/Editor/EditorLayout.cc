@@ -389,20 +389,20 @@ auto EditorLayout::get_asset_texture(this EditorLayout &self, Asset *asset) -> T
     }
 }
 
-}  // namespace lr
+} // namespace lr
 
 static const u64 GDataTypeInfo[] = {
-    sizeof(char),  // ImGuiDataType_S8
+    sizeof(char), // ImGuiDataType_S8
     sizeof(unsigned char),
-    sizeof(short),  // ImGuiDataType_S16
+    sizeof(short), // ImGuiDataType_S16
     sizeof(unsigned short),
-    sizeof(int),  // ImGuiDataType_S32
+    sizeof(int), // ImGuiDataType_S32
     sizeof(unsigned int),
-    sizeof(ImS64),  // ImGuiDataType_S64
+    sizeof(ImS64), // ImGuiDataType_S64
     sizeof(ImU64),
-    sizeof(float),   // ImGuiDataType_Float (float are promoted to double in va_arg)
-    sizeof(double),  // ImGuiDataType_Double
-    sizeof(bool),    // ImGuiDataType_Bool
+    sizeof(float), // ImGuiDataType_Float (float are promoted to double in va_arg)
+    sizeof(double), // ImGuiDataType_Double
+    sizeof(bool), // ImGuiDataType_Bool
 };
 
 bool ImGuiLR::drag_vec(i32 id, void *data, usize components, ImGuiDataType data_type) {
@@ -410,9 +410,10 @@ bool ImGuiLR::drag_vec(i32 id, void *data, usize components, ImGuiDataType data_
     if (window->SkipItems)
         return false;
 
-    static ImU32 component_colors[] = {
-        IM_COL32(255, 0, 0, 255), IM_COL32(0, 255, 0, 255), IM_COL32(0, 0, 255, 255), ImGui::GetColorU32(ImGuiCol_Text)
-    };
+    static ImU32 component_colors[] = { IM_COL32(255, 0, 0, 255),
+                                        IM_COL32(0, 255, 0, 255),
+                                        IM_COL32(0, 0, 255, 255),
+                                        ImGui::GetColorU32(ImGuiCol_Text) };
 
     bool value_changed = false;
     ImGui::BeginGroup();
@@ -434,8 +435,7 @@ bool ImGuiLR::drag_vec(i32 id, void *data, usize components, ImGuiDataType data_
         auto spacing = ImGui::GetStyle().FramePadding.x / 2.0f;
 
         if (components > 1) {
-            ImGui::GetWindowDrawList()->AddLine(
-                { rect_min.x + spacing, rect_min.y }, { rect_min.x + spacing, rect_max.y }, component_colors[i], 4);
+            ImGui::GetWindowDrawList()->AddLine({ rect_min.x + spacing, rect_min.y }, { rect_min.x + spacing, rect_max.y }, component_colors[i], 4);
         }
 
         data = (void *)((char *)data + GDataTypeInfo[data_type]);

@@ -46,4 +46,4 @@ struct SlangCompiler : Handle<SlangCompiler> {
 
     auto new_session(const SlangSessionInfo &info) -> ls::option<SlangSession>;
 };
-}  // namespace lr
+} // namespace lr

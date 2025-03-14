@@ -1,17 +1,17 @@
 #ifndef ECS_COMPONENT_BEGIN
-#define ECS_COMPONENT_BEGIN(...)
+    #define ECS_COMPONENT_BEGIN(...)
 #endif
 
 #ifndef ECS_COMPONENT_END
-#define ECS_COMPONENT_END(...)
+    #define ECS_COMPONENT_END(...)
 #endif
 
 #ifndef ECS_COMPONENT_MEMBER
-#define ECS_COMPONENT_MEMBER(...)
+    #define ECS_COMPONENT_MEMBER(...)
 #endif
 
 #ifndef ECS_COMPONENT_TAG
-#define ECS_COMPONENT_TAG(...)
+    #define ECS_COMPONENT_TAG(...)
 #endif
 
 // clang-format off

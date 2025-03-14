@@ -27,7 +27,7 @@ enum class WindowFlag : u32 {
     Resizable = 1 << 1,
     Borderless = 1 << 2,
     Maximized = 1 << 3,
-    WorkAreaRelative = 1 << 4,  // Width and height of the window will be relative to available work area size
+    WorkAreaRelative = 1 << 4, // Width and height of the window will be relative to available work area size
 };
 consteval void enable_bitmask(WindowFlag);
 
@@ -76,4 +76,4 @@ struct Window : Handle<Window> {
     auto get_surface(VkInstance instance) -> VkSurfaceKHR;
 };
 
-}  // namespace lr
+} // namespace lr

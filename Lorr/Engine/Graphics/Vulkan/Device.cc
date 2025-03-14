@@ -28,7 +28,7 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
     instance_builder.set_app_name("Lorr App");
     instance_builder.set_engine_name("Lorr");
     instance_builder.set_engine_version(1, 0, 0);
-    instance_builder.enable_validation_layers(false);  // use vkconfig ui...
+    instance_builder.enable_validation_layers(false); // use vkconfig ui...
     instance_builder.request_validation_layers(false);
     instance_builder.set_debug_callback(
         [](VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
@@ -46,7 +46,8 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
                 type,
                 pCallbackData->pMessage);
             return VK_FALSE;
-        });
+        }
+    );
 
     std::vector<const c8 *> instance_extensions;
     instance_extensions.push_back(VK_KHR_SURFACE_EXTENSION_NAME);
@@ -157,21 +158,24 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
 
     auto graphics_queue = self.handle.get_queue(vkb::QueueType::graphics).value();
     auto graphics_queue_family_index = self.handle.get_queue_index(vkb::QueueType::graphics).value();
-    executors.push_back(vuk::create_vkqueue_executor(
-        vulkan_functions, self.handle, graphics_queue, graphics_queue_family_index, vuk::DomainFlagBits::eGraphicsQueue));
+    executors.push_back(
+        vuk::create_vkqueue_executor(vulkan_functions, self.handle, graphics_queue, graphics_queue_family_index, vuk::DomainFlagBits::eGraphicsQueue)
+    );
 
     auto compute_queue = self.handle.get_queue(vkb::QueueType::compute).value();
     auto compute_queue_family_index = self.handle.get_queue_index(vkb::QueueType::compute).value();
-    executors.push_back(vuk::create_vkqueue_executor(
-        vulkan_functions, self.handle, compute_queue, compute_queue_family_index, vuk::DomainFlagBits::eComputeQueue));
+    executors.push_back(
+        vuk::create_vkqueue_executor(vulkan_functions, self.handle, compute_queue, compute_queue_family_index, vuk::DomainFlagBits::eComputeQueue)
+    );
 
     auto transfer_queue = self.handle.get_queue(vkb::QueueType::transfer).value();
     auto transfer_queue_family_index = self.handle.get_queue_index(vkb::QueueType::transfer).value();
-    executors.push_back(vuk::create_vkqueue_executor(
-        vulkan_functions, self.handle, transfer_queue, transfer_queue_family_index, vuk::DomainFlagBits::eTransferQueue));
+    executors.push_back(
+        vuk::create_vkqueue_executor(vulkan_functions, self.handle, transfer_queue, transfer_queue_family_index, vuk::DomainFlagBits::eTransferQueue)
+    );
 
     executors.push_back(std::make_unique<vuk::ThisThreadExecutor>());
-    self.runtime.emplace(vuk::RuntimeCreateParameters{
+    self.runtime.emplace(vuk::RuntimeCreateParameters {
         .instance = self.instance,
         .device = self.handle,
         .physical_device = self.physical_device,
@@ -334,11 +338,11 @@ auto Device::create_swap_chain(this Device &self, VkSurfaceKHR surface, ls::opti
     VkPresentModeKHR present_mode = self.frame_count() == 1 ? VK_PRESENT_MODE_FIFO_KHR : VK_PRESENT_MODE_IMMEDIATE_KHR;
     vkb::SwapchainBuilder builder(self.handle, surface);
     builder.set_desired_min_image_count(self.frame_count());
-    builder.set_desired_format(vuk::SurfaceFormatKHR{
+    builder.set_desired_format(vuk::SurfaceFormatKHR {
         .format = vuk::Format::eR8G8B8A8Srgb,
         .colorSpace = vuk::ColorSpaceKHR::eSrgbNonlinear,
     });
-    builder.add_fallback_format(vuk::SurfaceFormatKHR{
+    builder.add_fallback_format(vuk::SurfaceFormatKHR {
         .format = vuk::Format::eB8G8R8A8Srgb,
         .colorSpace = vuk::ColorSpaceKHR::eSrgbNonlinear,
     });
@@ -346,7 +350,7 @@ auto Device::create_swap_chain(this Device &self, VkSurfaceKHR surface, ls::opti
     builder.set_image_usage_flags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
 
     auto recycling = false;
-    auto result = vkb::Result<vkb::Swapchain>{ vkb::Swapchain{} };
+    auto result = vkb::Result<vkb::Swapchain> { vkb::Swapchain {} };
     if (!old_swap_chain) {
         result = builder.build();
         old_swap_chain.emplace(self.allocator.value(), result->image_count);
@@ -365,9 +369,9 @@ auto Device::create_swap_chain(this Device &self, VkSurfaceKHR surface, ls::opti
     }
 
     if (recycling) {
-        self.allocator->deallocate(std::span{ &old_swap_chain->swapchain, 1 });
+        self.allocator->deallocate(std::span { &old_swap_chain->swapchain, 1 });
         for (auto &v : old_swap_chain->images) {
-            self.allocator->deallocate(std::span{ &v.image_view, 1 });
+            self.allocator->deallocate(std::span { &v.image_view, 1 });
         }
     }
 
@@ -378,8 +382,8 @@ auto Device::create_swap_chain(this Device &self, VkSurfaceKHR surface, ls::opti
 
     for (u32 i = 0; i < images.size(); i++) {
         vuk::ImageAttachment attachment = {
-            .image = vuk::Image{ .image = images[i], .allocation = nullptr },
-            .image_view = vuk::ImageView{ { 0 }, image_views[i] },
+            .image = vuk::Image { .image = images[i], .allocation = nullptr },
+            .image_view = vuk::ImageView { { 0 }, image_views[i] },
             .extent = { .width = result->extent.width, .height = result->extent.height, .depth = 1 },
             .format = static_cast<vuk::Format>(result->image_format),
             .sample_count = vuk::Samples::e1,
@@ -498,4 +502,4 @@ auto Device::render_frame_profiler(this Device &self) -> void {
     ImGui::SliderFloat("Graph detail", &self.gpu_profiler_graph.maxFrameTime, 1.0f, 10000.f);
 }
 
-}  // namespace lr
+} // namespace lr

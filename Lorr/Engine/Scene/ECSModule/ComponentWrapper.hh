@@ -44,7 +44,9 @@ struct ComponentWrapper {
         members_data = static_cast<u8 *>(holder_.get_mut(comp_id_));
     }
 
-    inline bool has_component() { return component_entity.has<flecs::Struct>(); }
+    inline bool has_component() {
+        return component_entity.has<flecs::Struct>();
+    }
     template<typename FuncT>
     inline void for_each(this ComponentWrapper &self, const FuncT &fn) {
         ZoneScoped;
@@ -53,7 +55,7 @@ struct ComponentWrapper {
         for (usize i = 0; i < self.member_count; i++) {
             const auto &member = self.members[i];
             std::string_view member_name(member.name);
-            Member data = std::monostate{};
+            Member data = std::monostate {};
             auto member_type = flecs::entity(world, member.type);
 
             if (member_type == flecs::F32) {
@@ -88,4 +90,4 @@ struct ComponentWrapper {
         }
     }
 };
-}  // namespace lr::ECS
+} // namespace lr::ECS

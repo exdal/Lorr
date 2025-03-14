@@ -31,4 +31,4 @@ ScopedStack::~ScopedStack() {
     stack.ptr = ptr;
 }
 
-}  // namespace lr::memory
+} // namespace lr::memory

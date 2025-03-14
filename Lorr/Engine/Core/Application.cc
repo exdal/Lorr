@@ -116,4 +116,4 @@ void Application::shutdown(this Application &self) {
     Logger::deinit();
 }
 
-}  // namespace lr
+} // namespace lr

@@ -6,8 +6,12 @@ namespace lr {
 struct VirtualFile {
     std::vector<u8> contents = {};
 
-    const u8 *data() const { return contents.data(); }
-    usize size() const { return contents.size(); }
+    const u8 *data() const {
+        return contents.data();
+    }
+    usize size() const {
+        return contents.size();
+    }
 };
 
 struct VirtualFileInfo {
@@ -21,7 +25,7 @@ struct VirtualDir {
     ls::option<std::reference_wrapper<VirtualFile>> add_file(const VirtualFileInfo &info) {
         auto data = std::vector<u8>(info.data.size());
         std::memcpy(data.data(), info.data.data(), info.data.size());
-        auto it = files.emplace(std::string(info.path), VirtualFile{ std::move(data) });
+        auto it = files.emplace(std::string(info.path), VirtualFile { std::move(data) });
         return it.first->second;
     }
 
@@ -34,9 +38,9 @@ struct VirtualDir {
             return ls::nullopt;
         }
 
-        auto it = files.emplace(virtual_path, VirtualFile{ std::move(file_contents) });
+        auto it = files.emplace(virtual_path, VirtualFile { std::move(file_contents) });
         return it.first->second;
     }
 };
 
-}  // namespace lr
+} // namespace lr

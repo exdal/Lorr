@@ -201,7 +201,7 @@ auto Window::display_at(i32 monitor_id) -> ls::option<SystemDisplay> {
         return ls::nullopt;
     }
 
-    return SystemDisplay{
+    return SystemDisplay {
         .name = monitor_name,
         .position = { position_bounds.x, position_bounds.y },
         .work_area = { work_bounds.x, work_bounds.y, work_bounds.w, work_bounds.h },
@@ -225,4 +225,4 @@ auto Window::get_surface(VkInstance instance) -> VkSurfaceKHR {
     return surface;
 }
 
-}  // namespace lr
+} // namespace lr

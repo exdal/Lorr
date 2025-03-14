@@ -11,7 +11,8 @@ auto Image::create(
     vuk::Extent3D extent,
     u32 slice_count,
     u32 mip_count,
-    vuk::source_location LOC) -> std::expected<Image, vuk::VkException> {
+    vuk::source_location LOC
+) -> std::expected<Image, vuk::VkException> {
     ZoneScoped;
 
     vuk::ImageCreateInfo create_info = {
@@ -28,7 +29,7 @@ auto Image::create(
         return std::unexpected(result.error());
     }
 
-    auto image = Image{};
+    auto image = Image {};
     image.format_ = format;
     image.extent_ = extent;
     image.slice_count_ = slice_count;
@@ -63,7 +64,8 @@ auto ImageView::create(
     const vuk::ImageUsageFlags &image_usage,
     vuk::ImageViewType type,
     const vuk::ImageSubresourceRange &subresource_range,
-    vuk::source_location LOC) -> std::expected<ImageView, vuk::VkException> {
+    vuk::source_location LOC
+) -> std::expected<ImageView, vuk::VkException> {
     ZoneScoped;
 
     auto image_handle = device.image(image.id());
@@ -86,7 +88,7 @@ auto ImageView::create(
         return std::unexpected(result.error());
     }
 
-    auto image_view = ImageView{};
+    auto image_view = ImageView {};
     image_view.format_ = image.format();
     image_view.extent_ = image.extent();
     image_view.type_ = type;
@@ -103,7 +105,7 @@ auto ImageView::get_attachment(Device &device, const vuk::ImageUsageFlags &usage
     auto *image_handle = device.image(bound_image_id_);
     auto *view_handle = device.image_view(id_);
 
-    return vuk::ImageAttachment{
+    return vuk::ImageAttachment {
         .image = *image_handle,
         .image_view = *view_handle,
         .usage = usage,
@@ -185,7 +187,8 @@ auto Sampler::create(
     f32 min_lod,
     f32 max_lod,
     bool use_anisotropy,
-    [[maybe_unused]] vuk::source_location LOC) -> std::expected<Sampler, vuk::VkException> {
+    [[maybe_unused]] vuk::source_location LOC
+) -> std::expected<Sampler, vuk::VkException> {
     ZoneScoped;
 
     vuk::SamplerCreateInfo create_info = {
@@ -204,7 +207,7 @@ auto Sampler::create(
         .maxLod = max_lod,
     };
 
-    auto sampler = Sampler{};
+    auto sampler = Sampler {};
     sampler.id_ = device.resources.samplers.create_slot();
     auto *sampler_handle = device.resources.samplers.slot(sampler.id_);
     *sampler_handle = device.runtime->acquire_sampler(create_info, device.frame_count());
@@ -216,4 +219,4 @@ auto Sampler::id() const -> SamplerID {
     return id_;
 }
 
-}  // namespace lr
+} // namespace lr

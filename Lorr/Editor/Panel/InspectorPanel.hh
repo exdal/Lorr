@@ -8,6 +8,8 @@ struct InspectorPanel : PanelI {
 
     auto render(this InspectorPanel &) -> void;
     auto draw_inspector(this InspectorPanel &) -> void;
-    void do_render(vuk::Format, vuk::Extent3D) override { render(); }
+    void do_render(vuk::Format, vuk::Extent3D) override {
+        render();
+    }
 };
-}  // namespace lr
+} // namespace lr

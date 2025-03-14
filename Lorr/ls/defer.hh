@@ -9,12 +9,13 @@ template<typename Fn>
 struct defer {
     Fn func;
 
-    defer(Fn func_)
-        : func(std::move(func_)) {}
+    defer(Fn func_): func(std::move(func_)) {}
 
-    ~defer() { func(); }
+    ~defer() {
+        func();
+    }
 };
 
 #define LS_DEFER(...) ::ls::defer LS_UNIQUE_VAR() = [__VA_ARGS__]
 
-}  // namespace ls
+} // namespace ls

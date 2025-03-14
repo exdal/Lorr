@@ -44,4 +44,4 @@ template<BitmaskedEnum T>
 constexpr bool operator~(T lhs) {
     return static_cast<T>(~std::to_underlying(lhs));
 }
-}  // namespace lr
+} // namespace lr

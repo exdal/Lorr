@@ -34,4 +34,4 @@ void HasherXXH64::reset() {
     XXH3_64bits_reset(ls::bit_cast<XXH3_state_t *>(this->handle));
 }
 
-}  // namespace lr
+} // namespace lr

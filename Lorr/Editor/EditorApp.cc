@@ -128,7 +128,7 @@ auto EditorApp::new_project(this EditorApp &self, const fs::path &root_dir, cons
     file.write(json_str.data(), json_str.length());
     file.close();
 
-    self.active_project = Project{ .root_dir = proj_root_dir };
+    self.active_project = Project { .root_dir = proj_root_dir };
     self.recent_projects.insert(proj_root_dir);
     self.save_editor_data();
 
@@ -139,7 +139,7 @@ auto EditorApp::open_project(this EditorApp &self, const fs::path &path) -> bool
     ZoneScoped;
 
     const auto &proj_root_dir = path.parent_path();
-    self.active_project = Project{ .root_dir = proj_root_dir };
+    self.active_project = Project { .root_dir = proj_root_dir };
     self.recent_projects.insert(proj_root_dir);
     self.save_editor_data();
 
@@ -184,4 +184,4 @@ auto EditorApp::shutdown(this EditorApp &self) -> void {
     self.layout.destroy();
 }
 
-}  // namespace lr
+} // namespace lr

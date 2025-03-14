@@ -11,4 +11,4 @@ struct STBImageInfo {
     static auto parse(ls::span<u8> bytes) -> ls::option<STBImageInfo>;
     static auto parse_info(ls::span<u8> bytes) -> ls::option<STBImageInfo>;
 };
-}  // namespace lr
+} // namespace lr

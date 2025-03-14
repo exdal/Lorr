@@ -3,8 +3,7 @@
 #include "Engine/Graphics/VulkanDevice.hh"
 
 namespace lr {
-auto Buffer::create(Device &device, u64 size, vuk::MemoryUsage memory_usage, vuk::source_location LOC)
-    -> std::expected<Buffer, vuk::VkException> {
+auto Buffer::create(Device &device, u64 size, vuk::MemoryUsage memory_usage, vuk::source_location LOC) -> std::expected<Buffer, vuk::VkException> {
     ZoneScoped;
 
     vuk::BufferCreateInfo create_info = {
@@ -19,7 +18,7 @@ auto Buffer::create(Device &device, u64 size, vuk::MemoryUsage memory_usage, vuk
         return std::unexpected(result.error());
     }
 
-    auto buffer = Buffer{};
+    auto buffer = Buffer {};
     buffer.data_size_ = buffer_handle->size;
     buffer.host_data_ = buffer_handle->mapped_ptr;
     buffer.device_address_ = buffer_handle->device_address;
@@ -65,4 +64,4 @@ auto Buffer::subrange(Device &device, u64 offset, u64 size) -> vuk::Buffer {
     return vuk_handle.subrange(offset, size != ~0_u64 ? size : this->data_size_);
 }
 
-}  // namespace lr
+} // namespace lr

@@ -43,7 +43,9 @@ struct JsonWriter {
         return *this;
     }
 
-    JsonWriter &operator[](std::string_view key_) { return key(key_); }
+    JsonWriter &operator[](std::string_view key_) {
+        return key(key_);
+    }
 
     void begin_obj() {
         new_element();
@@ -210,4 +212,4 @@ struct JsonWriter {
         this->operator=(std::forward<T>(t));
     }
 };
-}  // namespace lr
+} // namespace lr

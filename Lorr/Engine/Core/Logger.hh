@@ -14,16 +14,16 @@ namespace Logger {
     void deinit();
     void to_file(std::string_view str);
     std::tm get_time();
-}  // namespace Logger
+} // namespace Logger
 
 struct LoggerFmt : public std::string_view {
     std::source_location location;
 
     template<typename StrT>
         requires std::constructible_from<std::string_view, StrT>
-    consteval LoggerFmt(const StrT &string, const std::source_location LOC = std::source_location::current()) noexcept
-        : std::string_view(string),
-          location(LOC) {}
+    consteval LoggerFmt(const StrT &string, const std::source_location LOC = std::source_location::current()) noexcept:
+        std::string_view(string),
+        location(LOC) {}
 
     template<std::formattable<char>... Args>
     constexpr const std::format_string<Args...> &get() const noexcept {
@@ -55,7 +55,8 @@ constexpr static void LOG(Logger::Category cat, const LoggerFmt &fmt, ArgsT &&..
         fmt.location.file_name(),
         fmt.location.line(),
         // MSG
-        msg);
+        msg
+    );
 
     Logger::to_file(full_msg);
 }
@@ -86,4 +87,4 @@ constexpr static void LOG_FATAL(const LoggerFmt &fmt, ArgsT &&...args) {
     LS_DEBUGBREAK();
 }
 
-}  // namespace lr
+} // namespace lr

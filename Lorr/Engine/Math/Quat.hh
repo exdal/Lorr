@@ -19,4 +19,4 @@ inline auto compose_quat(const glm::vec3 &rotation) -> glm::quat {
     orientation = glm::angleAxis(rotation.z, glm::vec3(0.0f, 0.0f, 1.0f)) * orientation;
     return glm::normalize(orientation);
 }
-}  // namespace lr::Math
+} // namespace lr::Math

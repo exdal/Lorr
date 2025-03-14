@@ -11,19 +11,16 @@
 #include "Engine/Util/Icons/IconsMaterialDesignIcons.hh"
 
 namespace lr {
-auto ImGuiRenderer::init(this ImGuiRenderer &self, Device *device)
-    -> void {
+auto ImGuiRenderer::init(this ImGuiRenderer &self, Device *device) -> void {
     ZoneScoped;
 
     self.device = device;
 
     auto &app = Application::get();
-    auto shaders_root =
-        app.asset_man.asset_root_path(AssetType::Shader);
+    auto shaders_root = app.asset_man.asset_root_path(AssetType::Shader);
     auto fonts_root = app.asset_man.asset_root_path(AssetType::Font);
     auto roboto_path = (fonts_root / "Roboto-Regular.ttf").string();
-    auto materialdesignicons_path =
-        (fonts_root / FONT_ICON_FILE_NAME_MDI).string();
+    auto materialdesignicons_path = (fonts_root / FONT_ICON_FILE_NAME_MDI).string();
 
     //  ── IMGUI CONTEXT
     //  ───────────────────────────────────────────────────
@@ -47,19 +44,13 @@ auto ImGuiRenderer::init(this ImGuiRenderer &self, Device *device)
     font_config.MergeMode = true;
     font_config.PixelSnapH = true;
 
-    imgui.Fonts->AddFontFromFileTTF(
-        roboto_path.c_str(), 16.0f, nullptr);
-    imgui.Fonts->AddFontFromFileTTF(
-        materialdesignicons_path.c_str(),
-        16.0f,
-        &font_config,
-        icons_ranges);
+    imgui.Fonts->AddFontFromFileTTF(roboto_path.c_str(), 16.0f, nullptr);
+    imgui.Fonts->AddFontFromFileTTF(materialdesignicons_path.c_str(), 16.0f, &font_config, icons_ranges);
     imgui.Fonts->Build();
 
     u8 *font_data = nullptr;
     i32 font_width, font_height;
-    imgui.Fonts->GetTexDataAsRGBA32(
-        &font_data, &font_width, &font_height);
+    imgui.Fonts->GetTexDataAsRGBA32(&font_data, &font_width, &font_height);
 
     // clang-format off
     auto &transfer_man = device->transfer_man();
@@ -93,18 +84,14 @@ auto ImGuiRenderer::init(this ImGuiRenderer &self, Device *device)
     // clang-format on
 }
 
-auto ImGuiRenderer::add_image(
-    this ImGuiRenderer &self,
-    vuk::Value<vuk::ImageAttachment> &&attachment) -> ImTextureID {
+auto ImGuiRenderer::add_image(this ImGuiRenderer &self, vuk::Value<vuk::ImageAttachment> &&attachment) -> ImTextureID {
     ZoneScoped;
 
     self.rendering_images.emplace_back(std::move(attachment));
     return self.rendering_images.size();
 }
 
-auto ImGuiRenderer::add_image(
-    this ImGuiRenderer &self, ImageView &image_view, LR_CALLSTACK)
-    -> ImTextureID {
+auto ImGuiRenderer::add_image(this ImGuiRenderer &self, ImageView &image_view, LR_CALLSTACK) -> ImTextureID {
     ZoneScoped;
 
     auto acquired_it = self.acquired_images.find(image_view.id());
@@ -112,31 +99,21 @@ auto ImGuiRenderer::add_image(
         return acquired_it->second;
     }
 
-    auto attachment_info = image_view.get_attachment(
-        *self.device, vuk::ImageUsageFlagBits::eSampled);
-    auto attachment = vuk::acquire_ia(
-        "imgui image",
-        attachment_info,
-        vuk::Access::eFragmentSampled,
-        LOC);
+    auto attachment_info = image_view.get_attachment(*self.device, vuk::ImageUsageFlagBits::eSampled);
+    auto attachment = vuk::acquire_ia("imgui image", attachment_info, vuk::Access::eFragmentSampled, LOC);
     auto texture_id = self.add_image(std::move(attachment));
     self.acquired_images.emplace(image_view.id(), texture_id);
 
     return texture_id;
 }
 
-auto ImGuiRenderer::begin_frame(
-    this ImGuiRenderer &self,
-    f64 delta_time,
-    const vuk::Extent3D &extent) -> void {
+auto ImGuiRenderer::begin_frame(this ImGuiRenderer &self, f64 delta_time, const vuk::Extent3D &extent) -> void {
     ZoneScoped;
 
     auto &app = Application::get();
     auto &imgui = ImGui::GetIO();
     imgui.DeltaTime = static_cast<f32>(delta_time);
-    imgui.DisplaySize = ImVec2(
-        static_cast<f32>(extent.width),
-        static_cast<f32>(extent.height));
+    imgui.DisplaySize = ImVec2(static_cast<f32>(extent.width), static_cast<f32>(extent.height));
 
     self.rendering_images.clear();
     self.acquired_images.clear();
@@ -150,8 +127,7 @@ auto ImGuiRenderer::begin_frame(
     }
 
     auto imgui_cursor = ImGui::GetMouseCursor();
-    if (imgui.MouseDrawCursor
-        || imgui_cursor == ImGuiMouseCursor_None) {
+    if (imgui.MouseDrawCursor || imgui_cursor == ImGuiMouseCursor_None) {
         app.window.show_cursor(false);
     } else {
         auto next_cursor = WindowCursor::Arrow;
@@ -177,119 +153,80 @@ auto ImGuiRenderer::begin_frame(
     }
 }
 
-auto ImGuiRenderer::end_frame(
-    this ImGuiRenderer &self,
-    vuk::Value<vuk::ImageAttachment> &&attachment)
-    -> vuk::Value<vuk::ImageAttachment> {
+auto ImGuiRenderer::end_frame(this ImGuiRenderer &self, vuk::Value<vuk::ImageAttachment> &&attachment) -> vuk::Value<vuk::ImageAttachment> {
     ZoneScoped;
 
     ImGui::Render();
 
     auto &transfer_man = self.device->transfer_man();
     ImDrawData *draw_data = ImGui::GetDrawData();
-    u64 vertex_size_bytes =
-        draw_data->TotalVtxCount * sizeof(ImDrawVert);
-    u64 index_size_bytes =
-        draw_data->TotalIdxCount * sizeof(ImDrawIdx);
+    u64 vertex_size_bytes = draw_data->TotalVtxCount * sizeof(ImDrawVert);
+    u64 index_size_bytes = draw_data->TotalIdxCount * sizeof(ImDrawIdx);
     if (!draw_data || vertex_size_bytes == 0) {
         return std::move(attachment);
     }
 
-    auto vertex_buffer = transfer_man.alloc_transient_buffer(
-        vuk::MemoryUsage::eGPUtoCPU, vertex_size_bytes);
-    auto index_buffer = transfer_man.alloc_transient_buffer(
-        vuk::MemoryUsage::eGPUtoCPU, index_size_bytes);
-    auto vertex_data =
-        reinterpret_cast<ImDrawVert *>(vertex_buffer->mapped_ptr);
-    auto index_data =
-        reinterpret_cast<ImDrawIdx *>(index_buffer->mapped_ptr);
+    auto vertex_buffer = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eGPUtoCPU, vertex_size_bytes);
+    auto index_buffer = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eGPUtoCPU, index_size_bytes);
+    auto vertex_data = reinterpret_cast<ImDrawVert *>(vertex_buffer->mapped_ptr);
+    auto index_data = reinterpret_cast<ImDrawIdx *>(index_buffer->mapped_ptr);
     for (const auto *draw_list : draw_data->CmdLists) {
-        memcpy(
-            vertex_data,
-            draw_list->VtxBuffer.Data,
-            draw_list->VtxBuffer.Size * sizeof(ImDrawVert));
-        memcpy(
-            index_data,
-            draw_list->IdxBuffer.Data,
-            draw_list->IdxBuffer.Size * sizeof(ImDrawIdx));
+        memcpy(vertex_data, draw_list->VtxBuffer.Data, draw_list->VtxBuffer.Size * sizeof(ImDrawVert));
+        memcpy(index_data, draw_list->IdxBuffer.Data, draw_list->IdxBuffer.Size * sizeof(ImDrawIdx));
         index_data += draw_list->IdxBuffer.Size;
         vertex_data += draw_list->VtxBuffer.Size;
     }
 
     auto imgui_pass = vuk::make_pass(
         "imgui",
-        [draw_data,
-         &pipeline = *self.device->pipeline(self.pipeline.id())](
+        [draw_data, &pipeline = *self.device->pipeline(self.pipeline.id())](
             vuk::CommandBuffer &cmd_list,
             VUK_IA(vuk::Access::eColorWrite) dst,
             VUK_BA(vuk::Access::eVertexRead) vertex_buf,
             VUK_BA(vuk::Access::eIndexRead) index_buf,
-            VUK_ARG(
-                vuk::ImageAttachment[], vuk::Access::eFragmentSampled)
-                rendering_images) {
+            VUK_ARG(vuk::ImageAttachment[], vuk::Access::eFragmentSampled) rendering_images
+        ) {
             struct PushConstants {
                 glm::vec2 translate = {};
                 glm::vec2 scale = {};
             };
 
             PushConstants c = {};
-            c.scale = { 2.0f / draw_data->DisplaySize.x,
-                        2.0f / draw_data->DisplaySize.y };
-            c.translate = {
-                -1.0f - draw_data->DisplayPos.x * c.scale.x,
-                -1.0f - draw_data->DisplayPos.y * c.scale.y
-            };
+            c.scale = { 2.0f / draw_data->DisplaySize.x, 2.0f / draw_data->DisplaySize.y };
+            c.translate = { -1.0f - draw_data->DisplayPos.x * c.scale.x, -1.0f - draw_data->DisplayPos.y * c.scale.y };
 
-            cmd_list  //
-                .set_dynamic_state(
-                    vuk::DynamicStateFlagBits::eViewport
-                    | vuk::DynamicStateFlagBits::eScissor)
-                .set_rasterization(
-                    vuk::PipelineRasterizationStateCreateInfo{})
+            cmd_list //
+                .set_dynamic_state(vuk::DynamicStateFlagBits::eViewport | vuk::DynamicStateFlagBits::eScissor)
+                .set_rasterization(vuk::PipelineRasterizationStateCreateInfo {})
                 .set_color_blend(dst, vuk::BlendPreset::eAlphaBlend)
                 .set_viewport(0, vuk::Rect2D::framebuffer())
                 .bind_graphics_pipeline(pipeline)
-                .bind_index_buffer(
-                    index_buf,
-                    sizeof(ImDrawIdx) == 2 ? vuk::IndexType::eUint16
-                                           : vuk::IndexType::eUint32)
+                .bind_index_buffer(index_buf, sizeof(ImDrawIdx) == 2 ? vuk::IndexType::eUint16 : vuk::IndexType::eUint32)
                 .bind_vertex_buffer(
                     0,
                     vertex_buf,
                     0,
-                    vuk::Packed{ vuk::Format::eR32G32Sfloat,
-                                 vuk::Format::eR32G32Sfloat,
-                                 vuk::Format::eR8G8B8A8Unorm })
-                .push_constants(
-                    vuk::ShaderStageFlagBits::eVertex, 0, c);
+                    vuk::Packed { vuk::Format::eR32G32Sfloat, vuk::Format::eR32G32Sfloat, vuk::Format::eR8G8B8A8Unorm }
+                )
+                .push_constants(vuk::ShaderStageFlagBits::eVertex, 0, c);
 
             ImVec2 clip_off = draw_data->DisplayPos;
             ImVec2 clip_scale = draw_data->FramebufferScale;
             u32 vertex_offset = 0;
             u32 index_offset = 0;
             for (ImDrawList *draw_list : draw_data->CmdLists) {
-                for (i32 cmd_i = 0; cmd_i < draw_list->CmdBuffer.Size;
-                     cmd_i++) {
+                for (i32 cmd_i = 0; cmd_i < draw_list->CmdBuffer.Size; cmd_i++) {
                     ImDrawCmd &im_cmd = draw_list->CmdBuffer[cmd_i];
                     ImVec4 clip_rect(
-                        (im_cmd.ClipRect.x - clip_off.x)
-                            * clip_scale.x,
-                        (im_cmd.ClipRect.y - clip_off.y)
-                            * clip_scale.y,
-                        (im_cmd.ClipRect.z - clip_off.x)
-                            * clip_scale.x,
-                        (im_cmd.ClipRect.w - clip_off.y)
-                            * clip_scale.y);
+                        (im_cmd.ClipRect.x - clip_off.x) * clip_scale.x,
+                        (im_cmd.ClipRect.y - clip_off.y) * clip_scale.y,
+                        (im_cmd.ClipRect.z - clip_off.x) * clip_scale.x,
+                        (im_cmd.ClipRect.w - clip_off.y) * clip_scale.y
+                    );
 
-                    auto pass_extent =
-                        cmd_list.get_ongoing_render_pass().extent;
-                    auto fb_scale = ImVec2(
-                        static_cast<f32>(pass_extent.width),
-                        static_cast<f32>(pass_extent.height));
-                    if (clip_rect.x < fb_scale.x
-                        && clip_rect.y < fb_scale.y
-                        && clip_rect.z >= 0.0f
-                        && clip_rect.w >= 0.0f) {
+                    auto pass_extent = cmd_list.get_ongoing_render_pass().extent;
+                    auto fb_scale = ImVec2(static_cast<f32>(pass_extent.width), static_cast<f32>(pass_extent.height));
+                    if (clip_rect.x < fb_scale.x && clip_rect.y < fb_scale.y && clip_rect.z >= 0.0f && clip_rect.w >= 0.0f) {
                         if (clip_rect.x < 0.0f) {
                             clip_rect.x = 0.0f;
                         }
@@ -300,32 +237,19 @@ auto ImGuiRenderer::end_frame(
                         vuk::Rect2D scissor;
                         scissor.offset.x = (int32_t)(clip_rect.x);
                         scissor.offset.y = (int32_t)(clip_rect.y);
-                        scissor.extent.width =
-                            (uint32_t)(clip_rect.z - clip_rect.x);
-                        scissor.extent.height =
-                            (uint32_t)(clip_rect.w - clip_rect.y);
+                        scissor.extent.width = (uint32_t)(clip_rect.z - clip_rect.x);
+                        scissor.extent.height = (uint32_t)(clip_rect.w - clip_rect.y);
                         cmd_list.set_scissor(0, scissor);
 
-                        cmd_list.bind_sampler(
-                            0,
-                            0,
-                            { .magFilter = vuk::Filter::eLinear,
-                              .minFilter = vuk::Filter::eLinear });
+                        cmd_list.bind_sampler(0, 0, { .magFilter = vuk::Filter::eLinear, .minFilter = vuk::Filter::eLinear });
                         if (im_cmd.TextureId != 0) {
                             auto index = im_cmd.TextureId - 1;
-                            cmd_list.bind_image(
-                                0, 1, rendering_images[index]);
+                            cmd_list.bind_image(0, 1, rendering_images[index]);
                         } else {
-                            cmd_list.bind_image(
-                                0, 1, rendering_images[0]);
+                            cmd_list.bind_image(0, 1, rendering_images[0]);
                         }
 
-                        cmd_list.draw_indexed(
-                            im_cmd.ElemCount,
-                            1,
-                            im_cmd.IdxOffset + index_offset,
-                            i32(im_cmd.VtxOffset + vertex_offset),
-                            0);
+                        cmd_list.draw_indexed(im_cmd.ElemCount, 1, im_cmd.IdxOffset + index_offset, i32(im_cmd.VtxOffset + vertex_offset), 0);
                     }
                 }
 
@@ -334,28 +258,22 @@ auto ImGuiRenderer::end_frame(
             }
 
             return dst;
-        });
+        }
+    );
 
-    auto imgui_rendering_images_arr = vuk::declare_array(
-        "imgui rendering images", std::span(self.rendering_images));
+    auto imgui_rendering_images_arr = vuk::declare_array("imgui rendering images", std::span(self.rendering_images));
 
-    return imgui_pass(
-        std::move(attachment),
-        std::move(vertex_buffer),
-        std::move(index_buffer),
-        std::move(imgui_rendering_images_arr));
+    return imgui_pass(std::move(attachment), std::move(vertex_buffer), std::move(index_buffer), std::move(imgui_rendering_images_arr));
 }
 
-auto ImGuiRenderer::on_mouse_pos(this ImGuiRenderer &, glm::vec2 pos)
-    -> void {
+auto ImGuiRenderer::on_mouse_pos(this ImGuiRenderer &, glm::vec2 pos) -> void {
     ZoneScoped;
 
     auto &imgui = ImGui::GetIO();
     imgui.AddMousePosEvent(pos.x, pos.y);
 }
 
-auto ImGuiRenderer::on_mouse_button(
-    this ImGuiRenderer &, u8 button, bool down) -> void {
+auto ImGuiRenderer::on_mouse_button(this ImGuiRenderer &, u8 button, bool down) -> void {
     ZoneScoped;
 
     i32 imgui_button = 0;
@@ -375,8 +293,7 @@ auto ImGuiRenderer::on_mouse_button(
     imgui.AddMouseSourceEvent(ImGuiMouseSource_Mouse);
 }
 
-auto ImGuiRenderer::on_mouse_scroll(
-    this ImGuiRenderer &, glm::vec2 offset) -> void {
+auto ImGuiRenderer::on_mouse_scroll(this ImGuiRenderer &, glm::vec2 offset) -> void {
     ZoneScoped;
 
     auto &imgui = ImGui::GetIO();
@@ -384,12 +301,7 @@ auto ImGuiRenderer::on_mouse_scroll(
 }
 
 ImGuiKey to_imgui_key(SDL_Keycode keycode, SDL_Scancode scancode);
-auto ImGuiRenderer::on_key(
-    this ImGuiRenderer &,
-    u32 key_code,
-    u32 scan_code,
-    u16 mods,
-    bool down) -> void {
+auto ImGuiRenderer::on_key(this ImGuiRenderer &, u32 key_code, u32 scan_code, u16 mods, bool down) -> void {
     ZoneScoped;
 
     auto &imgui = ImGui::GetIO();
@@ -398,19 +310,12 @@ auto ImGuiRenderer::on_key(
     imgui.AddKeyEvent(ImGuiMod_Alt, (mods & SDL_KMOD_ALT) != 0);
     imgui.AddKeyEvent(ImGuiMod_Super, (mods & SDL_KMOD_GUI) != 0);
 
-    auto key = to_imgui_key(
-        static_cast<SDL_Keycode>(key_code),
-        static_cast<SDL_Scancode>(scan_code));
+    auto key = to_imgui_key(static_cast<SDL_Keycode>(key_code), static_cast<SDL_Scancode>(scan_code));
     imgui.AddKeyEvent(key, down);
-    imgui.SetKeyEventNativeData(
-        key,
-        static_cast<i32>(key_code),
-        static_cast<i32>(scan_code),
-        static_cast<i32>(scan_code));
+    imgui.SetKeyEventNativeData(key, static_cast<i32>(key_code), static_cast<i32>(scan_code), static_cast<i32>(scan_code));
 }
 
-auto ImGuiRenderer::on_text_input(
-    this ImGuiRenderer &, const c8 *text) -> void {
+auto ImGuiRenderer::on_text_input(this ImGuiRenderer &, const c8 *text) -> void {
     ZoneScoped;
 
     auto &imgui = ImGui::GetIO();
@@ -670,4 +575,4 @@ ImGuiKey to_imgui_key(SDL_Keycode keycode, SDL_Scancode scancode) {
     return ImGuiKey_None;
 }
 
-}  // namespace lr
+} // namespace lr

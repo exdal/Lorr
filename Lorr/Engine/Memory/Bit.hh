@@ -13,4 +13,4 @@ u32 lzcnt_64(u64 v);
 // https://www.felixcloutier.com/x86/tzcnt
 u32 tzcnt_32(u32 v);
 u32 tzcnt_64(u64 v);
-}  // namespace lr::memory
+} // namespace lr::memory

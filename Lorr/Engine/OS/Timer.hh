@@ -10,4 +10,4 @@ struct Timer {
     auto reset() -> void;
     auto elapsed() -> f64;
 };
-}  // namespace lr
+} // namespace lr

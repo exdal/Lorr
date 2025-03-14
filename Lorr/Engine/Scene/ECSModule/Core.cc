@@ -8,38 +8,38 @@ ECS::Core::Core(flecs::world &world) {
 
     //  ── BUILTIN TYPES ───────────────────────────────────────────────────
     world
-        .component<glm::vec2>("glm::vec2")  //
+        .component<glm::vec2>("glm::vec2") //
         .member<f32>("x")
         .member<f32>("y");
 
     world
-        .component<glm::vec3>("glm::vec3")  //
+        .component<glm::vec3>("glm::vec3") //
         .member<f32>("x")
         .member<f32>("y")
         .member<f32>("z");
 
     world
-        .component<glm::vec4>("glm::vec4")  //
+        .component<glm::vec4>("glm::vec4") //
         .member<f32>("x")
         .member<f32>("y")
         .member<f32>("z")
         .member<f32>("w");
 
     world
-        .component<glm::mat3>("glm::mat3")  //
+        .component<glm::mat3>("glm::mat3") //
         .member<glm::vec3>("col0")
         .member<glm::vec3>("col1")
         .member<glm::vec3>("col2");
 
     world
-        .component<glm::mat4>("glm::mat4")  //
+        .component<glm::mat4>("glm::mat4") //
         .member<glm::vec4>("col0")
         .member<glm::vec4>("col1")
         .member<glm::vec4>("col2")
         .member<glm::vec4>("col3");
 
     world
-        .component<glm::quat>("glm::quat")  //
+        .component<glm::quat>("glm::quat") //
         .member<f32>("x")
         .member<f32>("y")
         .member<f32>("z")
@@ -68,4 +68,4 @@ ECS::Core::Core(flecs::world &world) {
 #undef ECS_REFLECT_TYPES
 }
 
-}  // namespace lr
+} // namespace lr

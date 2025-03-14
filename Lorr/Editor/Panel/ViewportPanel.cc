@@ -9,8 +9,7 @@
 #include <glm/gtx/quaternion.hpp>
 
 namespace lr {
-ViewportPanel::ViewportPanel(std::string name_, bool open_)
-    : PanelI(std::move(name_), open_) {
+ViewportPanel::ViewportPanel(std::string name_, bool open_): PanelI(std::move(name_), open_) {
     const ImVec4 inspector_color_x = ImVec4(0.75f, 0.20f, 0.20f, 0.80f);
     const ImVec4 inspector_color_y = ImVec4(0.20f, 0.75f, 0.20f, 0.80f);
     const ImVec4 inspector_color_z = ImVec4(0.20f, 0.20f, 0.75f, 0.80f);
@@ -190,7 +189,7 @@ auto ViewportPanel::draw_viewport(this ViewportPanel &self, vuk::Format format, 
     ImGuizmo::SetRect(window_pos.x, window_pos.y, window_size.x, window_size.y);
     ImGuizmo::AllowAxisFlip(true);
     ImGuizmo::Enable(true);
-    ImGuizmo::PushID(1);  // surely thats unique enough
+    ImGuizmo::PushID(1); // surely thats unique enough
     LS_DEFER() {
         ImGuizmo::PopID();
     };
@@ -211,18 +210,25 @@ auto ViewportPanel::draw_viewport(this ViewportPanel &self, vuk::Format format, 
         auto *transform = app.selected_entity.get_mut<ECS::Transform>();
         f32 gizmo_mat[16] = {};
         ImGuizmo::RecomposeMatrixFromComponents(
-            glm::value_ptr(transform->position), glm::value_ptr(transform->rotation), glm::value_ptr(transform->scale), gizmo_mat);
+            glm::value_ptr(transform->position),
+            glm::value_ptr(transform->rotation),
+            glm::value_ptr(transform->scale),
+            gizmo_mat
+        );
         if (ImGuizmo::Manipulate(
-                glm::value_ptr(camera_view),  //
+                glm::value_ptr(camera_view), //
                 glm::value_ptr(projection),
                 static_cast<ImGuizmo::OPERATION>(self.gizmo_op),
                 ImGuizmo::MODE::LOCAL,
-                gizmo_mat)) {
-            ImGuizmo::DecomposeMatrixToComponents(  //
+                gizmo_mat
+            ))
+        {
+            ImGuizmo::DecomposeMatrixToComponents( //
                 gizmo_mat,
                 glm::value_ptr(transform->position),
                 glm::value_ptr(transform->rotation),
-                glm::value_ptr(transform->scale));
+                glm::value_ptr(transform->scale)
+            );
 
             app.selected_entity.modified<ECS::Transform>();
         }
@@ -272,4 +278,4 @@ auto ViewportPanel::draw_viewport(this ViewportPanel &self, vuk::Format format, 
     }
 }
 
-}  // namespace lr
+} // namespace lr

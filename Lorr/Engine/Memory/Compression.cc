@@ -29,7 +29,8 @@ std::vector<u8> CompressorLZ4::compress(void *src_data, usize src_size) {
         reinterpret_cast<c8 *>(dst_data.data()),
         static_cast<i32>(src_size),
         static_cast<i32>(capacity),
-        1);
+        1
+    );
     dst_data.resize(compressed_size);
 
     return dst_data;
@@ -85,4 +86,4 @@ std::vector<u8> CompressorNoop::compress([[maybe_unused]] void *src_data, [[mayb
     return dst_data;
 }
 
-}  // namespace lr
+} // namespace lr

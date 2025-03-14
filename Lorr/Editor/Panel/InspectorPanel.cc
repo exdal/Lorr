@@ -6,9 +6,7 @@
 #include "Engine/Util/Icons/IconsMaterialDesignIcons.hh"
 
 namespace lr {
-InspectorPanel::InspectorPanel(std::string name_, bool open_)
-    : PanelI(std::move(name_), open_) {
-}
+InspectorPanel::InspectorPanel(std::string name_, bool open_): PanelI(std::move(name_), open_) {}
 
 void InspectorPanel::render(this InspectorPanel &self) {
     auto &app = EditorApp::get();
@@ -87,8 +85,8 @@ auto InspectorPanel::draw_inspector(this InspectorPanel &) -> void {
                 ImGui::BeginTable(
                     "entity_props",
                     2,
-                    ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersInner | ImGuiTableFlags_BordersOuterH
-                        | ImGuiTableFlags_NoSavedSettings);
+                    ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersInner | ImGuiTableFlags_BordersOuterH | ImGuiTableFlags_NoSavedSettings
+                );
                 ImGui::TableSetupColumn("label", 0, 0.5f);
                 ImGui::TableSetupColumn("property", ImGuiTableColumnFlags_WidthStretch);
 
@@ -105,7 +103,7 @@ auto InspectorPanel::draw_inspector(this InspectorPanel &) -> void {
                     bool component_modified = false;
                     ImGui::PushID(static_cast<i32>(i));
                     std::visit(
-                        ls::match{
+                        ls::match {
                             [](const auto &) {},
                             [&](f32 *v) { component_modified |= ImGuiLR::drag_vec(0, v, 1, ImGuiDataType_Float); },
                             [&](i32 *v) { component_modified |= ImGuiLR::drag_vec(0, v, 1, ImGuiDataType_S32); },
@@ -118,7 +116,8 @@ auto InspectorPanel::draw_inspector(this InspectorPanel &) -> void {
                             [](std::string *v) { ImGui::InputText("", v); },
                             [&](UUID *v) { component_modified |= inspect_asset(*v); },
                         },
-                        member);
+                        member
+                    );
                     ImGui::PopID();
 
                     if (component_modified) {
@@ -145,7 +144,7 @@ auto InspectorPanel::draw_inspector(this InspectorPanel &) -> void {
         if (ImGui::BeginPopup("add_component")) {
             auto &entity_db = scene->get_entity_db();
             auto all_components = entity_db.get_components();
-            for (const auto &component : all_components) {  //
+            for (const auto &component : all_components) { //
                 memory::ScopedStack stack;
                 ImGui::PushID(static_cast<i32>(component.raw_id()));
                 auto component_entity = component.entity();
@@ -166,4 +165,4 @@ auto InspectorPanel::draw_inspector(this InspectorPanel &) -> void {
     }
 }
 
-}  // namespace lr
+} // namespace lr

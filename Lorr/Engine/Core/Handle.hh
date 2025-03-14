@@ -10,10 +10,8 @@ protected:
 
 public:
     Handle() = default;
-    explicit Handle(std::nullptr_t)
-        : impl(nullptr) {};
-    Handle(Impl *impl_)
-        : impl(impl_) {};
+    explicit Handle(std::nullptr_t): impl(nullptr) {};
+    Handle(Impl *impl_): impl(impl_) {};
 
     operator T() const noexcept {
         LS_EXPECT(impl != nullptr);
@@ -25,13 +23,17 @@ public:
         return T(impl);
     }
 
-    operator bool() const noexcept { return impl; }
+    operator bool() const noexcept {
+        return impl;
+    }
     auto operator->() const noexcept {
         LS_EXPECT(impl != nullptr);
         return impl;
     }
 
-    bool operator==(Handle other) const noexcept { return impl == other.impl; }
+    bool operator==(Handle other) const noexcept {
+        return impl == other.impl;
+    }
 };
 
-}  // namespace lr
+} // namespace lr

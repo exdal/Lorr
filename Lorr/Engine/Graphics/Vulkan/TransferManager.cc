@@ -36,8 +36,7 @@ auto TransferManager::alloc_transient_buffer(this TransferManager &self, vuk::Me
     return vuk::acquire_buf("transient buffer", buffer, vuk::Access::eNone, LOC);
 }
 
-auto TransferManager::upload_staging(
-    this TransferManager &, vuk::Value<vuk::Buffer> &&src, vuk::Value<vuk::Buffer> &&dst, vuk::source_location LOC)
+auto TransferManager::upload_staging(this TransferManager &, vuk::Value<vuk::Buffer> &&src, vuk::Value<vuk::Buffer> &&dst, vuk::source_location LOC)
     -> vuk::Value<vuk::Buffer> {
     ZoneScoped;
 
@@ -48,13 +47,13 @@ auto TransferManager::upload_staging(
             return dst_ba;
         },
         vuk::DomainFlagBits::eAny,
-        LOC);
+        LOC
+    );
 
     return upload_pass(std::move(src), std::move(dst));
 }
 
-auto TransferManager::upload_staging(
-    this TransferManager &self, vuk::Value<vuk::Buffer> &&src, Buffer &dst, u64 dst_offset, vuk::source_location LOC)
+auto TransferManager::upload_staging(this TransferManager &self, vuk::Value<vuk::Buffer> &&src, Buffer &dst, u64 dst_offset, vuk::source_location LOC)
     -> vuk::Value<vuk::Buffer> {
     ZoneScoped;
 
@@ -64,8 +63,13 @@ auto TransferManager::upload_staging(
 }
 
 auto TransferManager::upload_staging(
-    this TransferManager &self, void *data, u64 data_size, vuk::Value<vuk::Buffer> &&dst, u64 dst_offset, vuk::source_location LOC)
-    -> vuk::Value<vuk::Buffer> {
+    this TransferManager &self,
+    void *data,
+    u64 data_size,
+    vuk::Value<vuk::Buffer> &&dst,
+    u64 dst_offset,
+    vuk::source_location LOC
+) -> vuk::Value<vuk::Buffer> {
     ZoneScoped;
 
     auto cpu_buffer = self.alloc_transient_buffer(vuk::MemoryUsage::eCPUonly, data_size, LOC);
@@ -75,8 +79,7 @@ auto TransferManager::upload_staging(
     return self.upload_staging(std::move(cpu_buffer), std::move(dst_buffer), LOC);
 }
 
-auto TransferManager::upload_staging(
-    this TransferManager &self, void *data, u64 data_size, Buffer &dst, u64 dst_offset, vuk::source_location LOC)
+auto TransferManager::upload_staging(this TransferManager &self, void *data, u64 data_size, Buffer &dst, u64 dst_offset, vuk::source_location LOC)
     -> vuk::Value<vuk::Buffer> {
     ZoneScoped;
 
@@ -93,14 +96,12 @@ auto TransferManager::upload_staging(this TransferManager &self, ImageView &imag
     ZoneScoped;
 
     auto dst_attachment_info = image_view.get_attachment(*self.device, vuk::ImageUsageFlagBits::eTransferDst);
-    auto result =
-        vuk::host_data_to_image(self.device->allocator.value(), vuk::DomainFlagBits::eGraphicsQueue, dst_attachment_info, data, LOC);
+    auto result = vuk::host_data_to_image(self.device->allocator.value(), vuk::DomainFlagBits::eGraphicsQueue, dst_attachment_info, data, LOC);
     result = vuk::generate_mips(std::move(result), 0, image_view.mip_count() - 1);
     return result;
 }
 
-auto TransferManager::scratch_buffer(this TransferManager &self, const void *data, u64 size, vuk::source_location LOC)
-    -> vuk::Value<vuk::Buffer> {
+auto TransferManager::scratch_buffer(this TransferManager &self, const void *data, u64 size, vuk::source_location LOC) -> vuk::Value<vuk::Buffer> {
     ZoneScoped;
 
     auto cpu_buffer = self.alloc_transient_buffer(vuk::MemoryUsage::eCPUonly, size, LOC);
@@ -114,7 +115,8 @@ auto TransferManager::scratch_buffer(this TransferManager &self, const void *dat
             return dst;
         },
         vuk::DomainFlagBits::eAny,
-        LOC);
+        LOC
+    );
 
     return upload_pass(std::move(cpu_buffer), std::move(gpu_buffer));
 }
@@ -144,4 +146,4 @@ auto TransferManager::release(this TransferManager &self) -> void {
     self.frame_allocator.reset();
 }
 
-}  // namespace lr
+} // namespace lr

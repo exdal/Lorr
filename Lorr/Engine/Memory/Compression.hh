@@ -31,4 +31,4 @@ struct CompressorNoop : CompressorI {
     void reset() override {}
 };
 
-}  // namespace lr
+} // namespace lr

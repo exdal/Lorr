@@ -19,12 +19,12 @@ enum Key : u32 {
     LR_KEY_MOUSE_MIDDLE = LR_KEY_MOUSE_3,
 
     LR_KEY_SPACE = 32,
-    LR_KEY_AND = 38,    // &
-    LR_KEY_QUOTE = 39,  // '
-    LR_KEY_COMMA = 44,  // ,
-    LR_KEY_MINUS = 45,  // -
-    LR_KEY_DOT = 46,    // .
-    LR_KEY_SLASH = 47,  // /
+    LR_KEY_AND = 38, // &
+    LR_KEY_QUOTE = 39, // '
+    LR_KEY_COMMA = 44, // ,
+    LR_KEY_MINUS = 45, // -
+    LR_KEY_DOT = 46, // .
+    LR_KEY_SLASH = 47, // /
 
     LR_KEY_0 = 48,
     LR_KEY_1 = 49,
@@ -37,8 +37,8 @@ enum Key : u32 {
     LR_KEY_8 = 56,
     LR_KEY_9 = 57,
 
-    LR_KEY_SEMICOLON = 59,  // ;
-    LR_KEY_EQUAL = 61,      // =
+    LR_KEY_SEMICOLON = 59, // ;
+    LR_KEY_EQUAL = 61, // =
 
     LR_KEY_A = 65,
     LR_KEY_B = 66,
@@ -67,10 +67,10 @@ enum Key : u32 {
     LR_KEY_Y = 89,
     LR_KEY_Z = 90,
 
-    LR_KEY_LBRACKET = 91,      // [
-    LR_KEY_BACKSLASH = 92,     /* \ */
-    LR_KEY_RBRACKET = 93,      // ]
-    LR_KEY_GRAVE_ACCENT = 96,  // `
+    LR_KEY_LBRACKET = 91, // [
+    LR_KEY_BACKSLASH = 92, /* \ */
+    LR_KEY_RBRACKET = 93, // ]
+    LR_KEY_GRAVE_ACCENT = 96, // `
     LR_KEY_WORLD_1 = 161,
     LR_KEY_WORLD_2 = 162,
 
@@ -171,4 +171,4 @@ enum class KeyMod : u32 {
     ScrollLock = 1 << 11,
 };
 
-}  // namespace lr
+} // namespace lr

@@ -8,9 +8,7 @@
 #include "Engine/Util/Icons/IconsMaterialDesignIcons.hh"
 
 namespace lr {
-SceneBrowserPanel::SceneBrowserPanel(std::string name_, bool open_)
-    : PanelI(std::move(name_), open_) {
-}
+SceneBrowserPanel::SceneBrowserPanel(std::string name_, bool open_): PanelI(std::move(name_), open_) {}
 
 void SceneBrowserPanel::render(this SceneBrowserPanel &self) {
     ZoneScoped;
@@ -99,4 +97,4 @@ void SceneBrowserPanel::draw_hierarchy(this SceneBrowserPanel &) {
     }
 }
 
-}  // namespace lr
+} // namespace lr

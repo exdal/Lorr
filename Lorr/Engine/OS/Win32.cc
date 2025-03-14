@@ -1,7 +1,7 @@
 #include "Engine/OS/OS.hh"
 
 #ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
+    #define WIN32_LEAN_AND_MEAN
 #endif
 #include <Windows.h>
 
@@ -150,7 +150,8 @@ auto os::file_watcher_init(const fs::path &root_dir) -> std::expected<FileWatche
         nullptr,
         OPEN_EXISTING,
         FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OVERLAPPED,
-        nullptr);
+        nullptr
+    );
     auto event_handle = CreateEvent(nullptr, false, false, nullptr);
 
     result.handle = static_cast<FileDescriptor>(reinterpret_cast<iptr>(handle));
@@ -223,7 +224,7 @@ auto os::file_watcher_peek(FileWatcherDescriptor &watcher, u8 *buffer, i64 &buff
     }
 
     LOG_TRACE("FileName: {}", file_name);
-    return FileEvent{
+    return FileEvent {
         .file_name = std::move(file_name),
         .action_mask = action_mask,
         .watch_descriptor = static_cast<FileDescriptor>(1),
@@ -301,4 +302,4 @@ auto os::unix_timestamp() -> i64 {
     return (li_timestamp.QuadPart - UNIX_TIME_START) / TICKS_PER_SECOND;
 }
 
-}  // namespace lr
+} // namespace lr

@@ -23,11 +23,8 @@ enum class PipelineID : u64 { Invalid = ~0_u64 };
 struct Device;
 
 struct Buffer {
-    static auto create(
-        Device &,
-        u64 size,
-        vuk::MemoryUsage memory_usage = vuk::MemoryUsage::eGPUonly,
-        vuk::source_location LOC = vuk::source_location::current())
+    static auto
+    create(Device &, u64 size, vuk::MemoryUsage memory_usage = vuk::MemoryUsage::eGPUonly, vuk::source_location LOC = vuk::source_location::current())
         -> std::expected<Buffer, vuk::VkException>;
 
     auto data_size() const -> u64;
@@ -35,17 +32,9 @@ struct Buffer {
     auto host_ptr() const -> u8 *;
     auto id() const -> BufferID;
 
-    auto acquire(
-        Device &,
-        vuk::Name name,
-        vuk::Access access,
-        u64 offset = 0,
-        u64 size = ~0_u64) -> vuk::Value<vuk::Buffer>;
-    auto discard(
-        Device &, vuk::Name name, u64 offset = 0, u64 size = ~0_u64)
-        -> vuk::Value<vuk::Buffer>;
-    auto subrange(Device &, u64 offset = 0, u64 size = ~0_u64)
-        -> vuk::Buffer;
+    auto acquire(Device &, vuk::Name name, vuk::Access access, u64 offset = 0, u64 size = ~0_u64) -> vuk::Value<vuk::Buffer>;
+    auto discard(Device &, vuk::Name name, u64 offset = 0, u64 size = ~0_u64) -> vuk::Value<vuk::Buffer>;
+    auto subrange(Device &, u64 offset = 0, u64 size = ~0_u64) -> vuk::Buffer;
 
     explicit operator bool() const {
         return id_ != BufferID::Invalid;
@@ -67,8 +56,8 @@ struct Image {
         vuk::Extent3D extent,
         u32 slice_count = 1,
         u32 mip_count = 1,
-        vuk::source_location LOC = vuk::source_location::current())
-        -> std::expected<Image, vuk::VkException>;
+        vuk::source_location LOC = vuk::source_location::current()
+    ) -> std::expected<Image, vuk::VkException>;
 
     auto format() const -> vuk::Format;
     auto extent() const -> vuk::Extent3D;
@@ -76,7 +65,9 @@ struct Image {
     auto mip_count() const -> u32;
     auto id() const -> ImageID;
 
-    explicit operator bool() const { return id_ != ImageID::Invalid; }
+    explicit operator bool() const {
+        return id_ != ImageID::Invalid;
+    }
 
 private:
     vuk::Format format_ = vuk::Format::eUndefined;
@@ -98,24 +89,13 @@ struct ImageView {
         const vuk::ImageUsageFlags &image_usage,
         vuk::ImageViewType type,
         const vuk::ImageSubresourceRange &subresource_range,
-        vuk::source_location LOC = vuk::source_location::current())
-        -> std::expected<ImageView, vuk::VkException>;
+        vuk::source_location LOC = vuk::source_location::current()
+    ) -> std::expected<ImageView, vuk::VkException>;
 
-    auto get_attachment(Device &, const vuk::ImageUsageFlags &usage)
-        const -> vuk::ImageAttachment;
-    auto get_attachment(Device &, vuk::ImageAttachment::Preset preset)
-        const -> vuk::ImageAttachment;
-    auto discard(
-        Device &,
-        vuk::Name name,
-        const vuk::ImageUsageFlags &usage) const
-        -> vuk::Value<vuk::ImageAttachment>;
-    auto acquire(
-        Device &,
-        vuk::Name name,
-        const vuk::ImageUsageFlags &usage,
-        vuk::Access last_access) const
-        -> vuk::Value<vuk::ImageAttachment>;
+    auto get_attachment(Device &, const vuk::ImageUsageFlags &usage) const -> vuk::ImageAttachment;
+    auto get_attachment(Device &, vuk::ImageAttachment::Preset preset) const -> vuk::ImageAttachment;
+    auto discard(Device &, vuk::Name name, const vuk::ImageUsageFlags &usage) const -> vuk::Value<vuk::ImageAttachment>;
+    auto acquire(Device &, vuk::Name name, const vuk::ImageUsageFlags &usage, vuk::Access last_access) const -> vuk::Value<vuk::ImageAttachment>;
 
     auto format() const -> vuk::Format;
     auto extent() const -> vuk::Extent3D;
@@ -153,8 +133,8 @@ struct Sampler {
         f32 min_lod = 0,
         f32 max_lod = 1000.0f,
         bool use_anisotropy = false,
-        vuk::source_location LOC = vuk::source_location::current())
-        -> std::expected<Sampler, vuk::VkException>;
+        vuk::source_location LOC = vuk::source_location::current()
+    ) -> std::expected<Sampler, vuk::VkException>;
 
     auto id() const -> SamplerID;
 
@@ -170,9 +150,9 @@ struct SampledImage {
     u32 image_view_index : 24;
     u32 sampler_index : 8;
     SampledImage() = default;
-    SampledImage(ImageViewID image_view_id_, SamplerID sampler_id_)
-        : image_view_index(SlotMap_decode_id(image_view_id_).index),
-          sampler_index(SlotMap_decode_id(sampler_id_).index) {}
+    SampledImage(ImageViewID image_view_id_, SamplerID sampler_id_):
+        image_view_index(SlotMap_decode_id(image_view_id_).index),
+        sampler_index(SlotMap_decode_id(sampler_id_).index) {}
 };
 
 /////////////////////////////////
@@ -189,10 +169,7 @@ struct ShaderCompileInfo {
 };
 
 struct Pipeline {
-    static auto create(
-        Device &,
-        const ShaderCompileInfo &compile_info,
-        ls::span<vuk::PersistentDescriptorSet> persistent_sets = {})
+    static auto create(Device &, const ShaderCompileInfo &compile_info, ls::span<vuk::PersistentDescriptorSet> persistent_sets = {})
         -> std::expected<Pipeline, vuk::VkException>;
 
     auto id() const -> PipelineID;
@@ -201,4 +178,4 @@ private:
     PipelineID id_ = PipelineID::Invalid;
 };
 
-}  // namespace lr
+} // namespace lr

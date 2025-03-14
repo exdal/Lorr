@@ -36,7 +36,7 @@ auto Pipeline::create(Device &device, const ShaderCompileInfo &compile_info, ls:
     }
 
     auto *pipeline_handle = device.runtime->get_pipeline(create_info);
-    auto pipeline = Pipeline{};
+    auto pipeline = Pipeline {};
     pipeline.id_ = device.resources.pipelines.create_slot();
     *device.resources.pipelines.slot(pipeline.id_) = pipeline_handle;
 
@@ -47,4 +47,4 @@ auto Pipeline::id() const -> PipelineID {
     return id_;
 }
 
-}  // namespace lr
+} // namespace lr

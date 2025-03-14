@@ -90,5 +90,5 @@ namespace os {
     //  ── CLOCK ───────────────────────────────────────────────────────────
     auto tsc() -> u64;
     auto unix_timestamp() -> i64;
-}  // namespace os
-}  // namespace lr
+} // namespace os
+} // namespace lr

@@ -16,6 +16,7 @@ public struct Material {
     public u32 albedo_image_index = 0;
     public u32 normal_image_index = 0;
     public u32 emissive_image_index = 0;
+    public u32 metallic_rougness_image_index = 0;
 };
 
 public struct Meshlet {
@@ -38,8 +39,9 @@ public struct MeshletInstance {
 };
 
 public struct Model {
-    public float3 *vertex_positions;
     public u32 *indices;
+    public vec3 *vertex_positions;
+    public vec3 *vertex_normals;
     public vec2 *texture_coords;
     public Meshlet *meshlets;
     public MeshletBounds *meshlet_bounds;

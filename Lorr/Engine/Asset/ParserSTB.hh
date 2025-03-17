@@ -4,7 +4,6 @@
 
 namespace lr {
 struct STBImageInfo {
-    vuk::Format format = {};
     vuk::Extent3D extent = {};
     std::vector<u8> data = {};
 

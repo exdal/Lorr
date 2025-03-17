@@ -498,7 +498,7 @@ auto Device::render_frame_profiler(this Device &self) -> void {
     ZoneScoped;
 
     self.gpu_profiler_graph.LoadFrameData(self.gpu_profiler_tasks.data(), self.gpu_profiler_tasks.size());
-    self.gpu_profiler_graph.RenderTimings(500, 20, 200, 0);
+    self.gpu_profiler_graph.RenderTimings(600, 10, 200, 0);
     ImGui::SliderFloat("Graph detail", &self.gpu_profiler_graph.maxFrameTime, 1.0f, 10000.f);
 }
 

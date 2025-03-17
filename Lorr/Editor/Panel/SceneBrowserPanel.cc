@@ -83,6 +83,12 @@ void SceneBrowserPanel::draw_hierarchy(this SceneBrowserPanel &) {
 
             ImGui::Separator();
 
+            if (ImGui::MenuItem("Model")) {
+                auto created_entity = scene->create_entity();
+                created_entity.set<ECS::Transform>({});
+                created_entity.set<ECS::RenderingModel>({});
+            }
+
             if (ImGui::MenuItem("Directional Light")) {
                 auto created_entity = scene->create_entity();
                 created_entity.set<ECS::Transform>({});

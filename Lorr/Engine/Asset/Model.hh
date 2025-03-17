@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Engine/Asset/AssetFile.hh"
 #include "Engine/Asset/UUID.hh"
 
 #include "Engine/Graphics/Vulkan.hh"
@@ -12,15 +13,19 @@ struct TextureSamplerInfo {
     vuk::SamplerAddressMode address_v = vuk::SamplerAddressMode::eRepeat;
 };
 
+struct TextureInfo {
+    TextureSamplerInfo sampler_info = {};
+    bool use_srgb = true;
+
+    ls::span<u8> pixels = {}; // Optional
+    AssetFileType file_type = AssetFileType::None; // Optional
+};
+
 enum class TextureID : u64 { Invalid = std::numeric_limits<u64>::max() };
 struct Texture {
     Image image = {};
     ImageView image_view = {};
     Sampler sampler = {};
-
-    SampledImage sampled_image() {
-        return { image_view.id(), sampler.id() };
-    }
 };
 
 enum class MaterialID : u64 { Invalid = std::numeric_limits<u64>::max() };
@@ -33,6 +38,7 @@ struct Material {
     UUID albedo_texture = {};
     UUID normal_texture = {};
     UUID emissive_texture = {};
+    UUID metallic_roughness_texture = {};
 };
 
 enum class ModelID : u64 { Invalid = std::numeric_limits<u64>::max() };
@@ -63,7 +69,9 @@ struct Model {
         std::vector<u32> child_indices = {};
 
         ls::option<u32> mesh_index = ls::nullopt;
-        glm::mat4 transform = {};
+        glm::vec3 translation;
+        glm::quat rotation;
+        glm::vec3 scale;
     };
 
     std::vector<UUID> textures = {};
@@ -72,8 +80,9 @@ struct Model {
     std::vector<Mesh> meshes = {};
     std::vector<Node> nodes = {};
 
-    Buffer vertex_positions = {};
     Buffer indices = {};
+    Buffer vertex_positions = {};
+    Buffer vertex_normals = {};
     Buffer texture_coords = {};
     Buffer meshlets = {};
     Buffer meshlet_bounds = {};

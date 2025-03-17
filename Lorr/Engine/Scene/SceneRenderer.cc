@@ -581,6 +581,15 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
     emissive_attachment.same_shape_as(visbuffer_attachment);
     emissive_attachment = vuk::clear_image(std::move(emissive_attachment), vuk::Black<f32>);
 
+    auto metallic_roughness_attachment = vuk::declare_ia(
+        "metallic roughness",
+        { .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eColorAttachment,
+          .format = vuk::Format::eR8G8B8A8Unorm,
+          .sample_count = vuk::Samples::e1 }
+    );
+    metallic_roughness_attachment.same_shape_as(visbuffer_attachment);
+    metallic_roughness_attachment = vuk::clear_image(std::move(metallic_roughness_attachment), vuk::Black<f32>);
+
     if (self.meshlet_instance_count) {
         //  ── CULL MESHLETS ───────────────────────────────────────────────────
         auto vis_cull_meshlets_pass = vuk::make_pass(
@@ -727,6 +736,7 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                 VUK_IA(vuk::eColorWrite) albedo,
                 VUK_IA(vuk::eColorWrite) normal,
                 VUK_IA(vuk::eColorWrite) emissive,
+                VUK_IA(vuk::eColorWrite) metallic_roughness,
                 VUK_IA(vuk::eFragmentRead) visbuffer,
                 VUK_BA(vuk::eFragmentRead) scene,
                 VUK_BA(vuk::eFragmentRead) transforms,
@@ -742,6 +752,7 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                     .set_color_blend(albedo, vuk::BlendPreset::eOff)
                     .set_color_blend(normal, vuk::BlendPreset::eOff)
                     .set_color_blend(emissive, vuk::BlendPreset::eOff)
+                    .set_color_blend(metallic_roughness, vuk::BlendPreset::eOff)
                     .set_viewport(0, vuk::Rect2D::framebuffer())
                     .set_scissor(0, vuk::Rect2D::framebuffer())
                     .bind_image(0, 0, visbuffer)
@@ -754,22 +765,24 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                     .bind_persistent(1, descriptor_set)
                     .push_constants(vuk::ShaderStageFlagBits::eFragment, 0, glm::vec2(visbuffer->extent.width, visbuffer->extent.height))
                     .draw(3, 1, 0, 1);
-                return std::make_tuple(albedo, normal, emissive, scene, transforms);
+                return std::make_tuple(albedo, normal, emissive, metallic_roughness, scene, transforms);
             }
         );
 
-        std::tie(albedo_attachment, normal_attachment, emissive_attachment, scene_buffer, transforms_buffer) = vis_decode_pass(
-            std::move(albedo_attachment),
-            std::move(normal_attachment),
-            std::move(emissive_attachment),
-            std::move(visbuffer_attachment),
-            std::move(scene_buffer),
-            std::move(transforms_buffer),
-            std::move(models_buffer),
-            std::move(meshlet_instances_buffer),
-            std::move(visible_meshlet_instances_buffer),
-            std::move(materials_buffer)
-        );
+        std::tie(albedo_attachment, normal_attachment, emissive_attachment, metallic_roughness_attachment, scene_buffer, transforms_buffer) =
+            vis_decode_pass(
+                std::move(albedo_attachment),
+                std::move(normal_attachment),
+                std::move(emissive_attachment),
+                std::move(metallic_roughness_attachment),
+                std::move(visbuffer_attachment),
+                std::move(scene_buffer),
+                std::move(transforms_buffer),
+                std::move(models_buffer),
+                std::move(meshlet_instances_buffer),
+                std::move(visible_meshlet_instances_buffer),
+                std::move(materials_buffer)
+            );
     }
 
     //  ── PBR BASIC ───────────────────────────────────────────────────────
@@ -778,26 +791,50 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
         [&pipeline = *self.device->pipeline(self.pbr_basic_pipeline.id()
          )](vuk::CommandBuffer &cmd_list,
             VUK_IA(vuk::Access::eColorWrite) dst,
-            VUK_IA(vuk::Access::eFragmentSampled) albedo,
-            VUK_IA(vuk::Access::eFragmentSampled) normal,
-            VUK_IA(vuk::Access::eFragmentSampled) emissive) {
+            VUK_BA(vuk::Access::eFragmentRead) scene,
+            VUK_IA(vuk::Access::eFragmentSampled) transmittance_lut,
+            VUK_IA(vuk::Access::eFragmentRead) depth,
+            VUK_IA(vuk::Access::eFragmentRead) albedo,
+            VUK_IA(vuk::Access::eFragmentRead) normal,
+            VUK_IA(vuk::Access::eFragmentRead) emissive,
+            VUK_IA(vuk::Access::eFragmentRead) metallic_roughness) {
+            vuk::SamplerCreateInfo sampler_info = {
+                .magFilter = vuk::Filter::eLinear,
+                .minFilter = vuk::Filter::eLinear,
+                .addressModeU = vuk::SamplerAddressMode::eClampToEdge,
+                .addressModeV = vuk::SamplerAddressMode::eClampToEdge,
+                .addressModeW = vuk::SamplerAddressMode::eClampToEdge,
+            };
+
             cmd_list //
                 .bind_graphics_pipeline(pipeline)
-                .bind_sampler(0, 0, { .magFilter = vuk::Filter::eLinear, .minFilter = vuk::Filter::eLinear })
-                .bind_image(0, 1, albedo)
-                .bind_image(0, 2, normal)
-                .bind_image(0, 3, emissive)
+                .bind_buffer(0, 0, scene)
+                .bind_image(0, 1, transmittance_lut)
+                .bind_sampler(0, 2, sampler_info)
+                .bind_image(0, 3, depth)
+                .bind_image(0, 4, albedo)
+                .bind_image(0, 5, normal)
+                .bind_image(0, 6, emissive)
+                .bind_image(0, 7, metallic_roughness)
                 .set_rasterization({})
                 .set_color_blend(dst, vuk::BlendPreset::eOff)
                 .set_viewport(0, vuk::Rect2D::framebuffer())
                 .set_scissor(0, vuk::Rect2D::framebuffer())
                 .draw(3, 1, 0, 0);
-            return dst;
+            return std::make_tuple(dst, scene, transmittance_lut, depth);
         }
     );
 
-    final_attachment =
-        pbr_basic_pass(std::move(final_attachment), std::move(albedo_attachment), std::move(normal_attachment), std::move(emissive_attachment));
+    std::tie(final_attachment, scene_buffer, transmittance_lut_attachment, depth_attachment) = pbr_basic_pass(
+        std::move(final_attachment),
+        std::move(scene_buffer),
+        std::move(transmittance_lut_attachment),
+        std::move(depth_attachment),
+        std::move(albedo_attachment),
+        std::move(normal_attachment),
+        std::move(emissive_attachment),
+        std::move(metallic_roughness_attachment)
+    );
 
     //  ── SKY FINAL ───────────────────────────────────────────────────────
     if (info.render_atmos) {

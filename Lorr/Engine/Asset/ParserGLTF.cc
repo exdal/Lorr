@@ -232,6 +232,10 @@ auto GLTFModelInfo::parse(const fs::path &path, GLTFModelCallbacks callbacks) ->
         if (auto &tex = v.emissiveTexture; tex.has_value()) {
             material.emissive_texture_index = tex->textureIndex;
         }
+
+        if (auto &tex = v.pbrData.metallicRoughnessTexture; tex.has_value()) {
+            material.metallic_roughness_texture_index = tex->textureIndex;
+        }
     }
 
     ///////////////////////////////////////////////
@@ -266,15 +270,21 @@ auto GLTFModelInfo::parse(const fs::path &path, GLTFModelCallbacks callbacks) ->
         glm::mat4 transform = {};
         if (auto *trs = std::get_if<fastgltf::TRS>(&node.transform)) {
             const auto t = glm::make_vec3(trs->translation.data());
-            const auto r = glm::make_quat(trs->rotation.value_ptr());
+            const auto r = glm::quat(trs->rotation[3], trs->rotation[0], trs->rotation[1], trs->rotation[2]);
             const auto s = glm::make_vec3(trs->scale.data());
 
-            transform = glm::translate(glm::mat4(1.0f), t);
-            transform *= glm::mat4(r);
-            transform = glm::scale(transform, s);
+            const auto rotation_mat = glm::mat4_cast(r);
+            transform = glm::scale(glm::translate(glm::mat4(1.0), t) * rotation_mat, s);
         } else if (auto *mat = std::get_if<fastgltf::math::fmat4x4>(&node.transform)) {
             transform = glm::make_mat4(mat->data());
         }
+
+        fastgltf::math::fmat4x4 local_transform_array {};
+        std::copy_n(&transform[0][0], 16, local_transform_array.data());
+        fastgltf::math::fvec3 scale_array {};
+        fastgltf::math::fquat rotation_array {};
+        fastgltf::math::fvec3 translation_array {};
+        fastgltf::math::decomposeTransformMatrix(local_transform_array, scale_array, rotation_array, translation_array);
 
         if (callbacks.on_new_node) {
             auto name = std::string(node.name.begin(), node.name.end());
@@ -292,7 +302,9 @@ auto GLTFModelInfo::parse(const fs::path &path, GLTFModelCallbacks callbacks) ->
                 std::move(name),
                 std::move(child_node_indices),
                 std::move(mesh_index_opt),
-                transform
+                glm::make_vec3(translation_array.data()),
+                glm::quat(rotation_array[3], rotation_array[0], rotation_array[1], rotation_array[2]),
+                glm::make_vec3(scale_array.data())
             );
         }
 
@@ -470,6 +482,10 @@ auto GLTFModelInfo::parse_info(const fs::path &path) -> ls::option<GLTFModelInfo
 
         if (auto &tex = v.emissiveTexture; tex.has_value()) {
             material.emissive_texture_index = tex->textureIndex;
+        }
+
+        if (auto &tex = v.pbrData.metallicRoughnessTexture; tex.has_value()) {
+            material.metallic_roughness_texture_index = tex->textureIndex;
         }
     }
 

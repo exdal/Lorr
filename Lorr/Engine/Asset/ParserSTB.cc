@@ -8,13 +8,12 @@ auto STBImageInfo::parse(ls::span<u8> bytes) -> ls::option<STBImageInfo> {
     ZoneScoped;
 
     i32 width, height, channel_count;
-    u8 *parsed_data = stbi_load_from_memory(bytes.data(), static_cast<i32>(bytes.size_bytes()), &width, &height, &channel_count, 4);
+    u8 *parsed_data = stbi_load_from_memory(bytes.data(), static_cast<i32>(bytes.size_bytes()), &width, &height, &channel_count, STBI_rgb_alpha);
     if (!parsed_data) {
         return ls::nullopt;
     }
 
     STBImageInfo image = {};
-    image.format = vuk::Format::eR8G8B8A8Srgb;
     image.extent = { .width = static_cast<u32>(width), .height = static_cast<u32>(height), .depth = 1 };
 
     u64 upload_size = width * height * 4;
@@ -35,7 +34,6 @@ auto STBImageInfo::parse_info(ls::span<u8> bytes) -> ls::option<STBImageInfo> {
     }
 
     STBImageInfo image = {};
-    image.format = vuk::Format::eR8G8B8A8Srgb;
     image.extent = { .width = static_cast<u32>(width), .height = static_cast<u32>(height), .depth = 1 };
 
     return image;

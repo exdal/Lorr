@@ -34,6 +34,7 @@ struct GLTFMaterialInfo {
     ls::option<u32> albedo_texture_index;
     ls::option<u32> normal_texture_index;
     ls::option<u32> emissive_texture_index;
+    ls::option<u32> metallic_roughness_texture_index;
 };
 
 struct GLTFModelCallbacks {
@@ -47,7 +48,9 @@ struct GLTFModelCallbacks {
         std::string name,
         std::vector<u32> child_node_indices,
         ls::option<u32> mesh_index,
-        glm::mat4 transform) = nullptr;
+        glm::vec3 translation,
+        glm::quat rotation,
+        glm::vec3 scale) = nullptr;
     void (*on_new_primitive)
        (void *user_data,
         u32 mesh_index,

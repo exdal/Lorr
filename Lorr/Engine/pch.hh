@@ -1,6 +1,7 @@
 #pragma once
 
 #define GLM_FORCE_SIMD_AVX2
+#define GLM_FORCE_INTRINSICS
 #define GLM_FORCE_CXX20
 #define GLM_ENABLE_EXPERIMENTAL
 

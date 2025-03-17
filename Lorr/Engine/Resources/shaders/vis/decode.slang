@@ -131,6 +131,7 @@ struct FragmentOutput {
     float4 albedo : SV_Target0;
     float4 normal : SV_Target1;
     float3 emission : SV_Target2;
+    float4 metallic_roughness : SV_Target3;
 };
 
 [[vk::push_constant]] float2 resolution;
@@ -171,6 +172,11 @@ FragmentOutput fs_main(VertexOutput input, float4 pixel_pos : SV_Position) {
         model.vertex_positions[vertex_offset + indices.y],
         model.vertex_positions[vertex_offset + indices.z],
     };
+    const float3x3 normals = {
+        model.vertex_normals[vertex_offset + indices.x],
+        model.vertex_normals[vertex_offset + indices.y],
+        model.vertex_normals[vertex_offset + indices.z],
+    };
     const float3x2 tex_coords = {
         model.texture_coords[vertex_offset + indices.x],
         model.texture_coords[vertex_offset + indices.y],
@@ -198,9 +204,9 @@ FragmentOutput fs_main(VertexOutput input, float4 pixel_pos : SV_Position) {
     }
 
     // NORMALS ──────────────────────────────────────────────────────────
-    const float3 triangle_normal = normalize(cross(positions[1] - positions[0], positions[2] - positions[0]));
-    const float3 world_normal = normalize(mul(transform.normal, triangle_normal));
-    float3 final_normal = world_normal;
+    const float3 smooth_vertex_normal = normalize(interpolate3(partial_deriv, normals));
+    const float3 smooth_world_normal = normalize(mul(transform.normal, smooth_vertex_normal));
+    float3 final_normal = smooth_world_normal;
 
     if (material.normal_image_index != ~0u) {
         const float3x3 interp_view_positions = {
@@ -215,15 +221,15 @@ FragmentOutput fs_main(VertexOutput input, float4 pixel_pos : SV_Position) {
 
         const float3 N = final_normal;
         const float3 T = normalize(ddx_pos * ddy_tex_coord.y - ddy_pos * ddx_tex_coord.y);
-        const float3 B = -normalize(cross(N, T));
+        const float3 B = normalize(cross(N, T));
         const mat3 TBN = { T, B, N };
 
         float3 sampled_normal = float3(sample_texture(material.normal_image_index, uv_gradient).xy, 1.0) * 2.0 - 1.0;
-        final_normal = normalize(mul(TBN, sampled_normal));
+        final_normal = normalize(mul(sampled_normal, TBN));
     }
 
     output.normal.xy = lr::vec3_to_oct(final_normal);
-    output.normal.zw = lr::vec3_to_oct(triangle_normal);
+    output.normal.zw = lr::vec3_to_oct(smooth_world_normal);
 
     // EMISSION ─────────────────────────────────────────────────────────
     if (material.emissive_image_index != ~0u) {
@@ -231,6 +237,14 @@ FragmentOutput fs_main(VertexOutput input, float4 pixel_pos : SV_Position) {
         output.emission = material.emissive_color * emissive_texture;
     } else {
         output.emission = material.emissive_color;
+    }
+
+    // METALLIC ROUGHNESS ───────────────────────────────────────────────
+    if (material.metallic_rougness_image_index != ~0u) {
+        const float2 metallic_roughness_texture = sample_texture(material.metallic_rougness_image_index, uv_gradient).yz;
+        output.metallic_roughness.xy = metallic_roughness_texture;
+    } else {
+        output.metallic_roughness.xy = float2(material.metallic_factor, material.roughness_factor);
     }
 
     return output;

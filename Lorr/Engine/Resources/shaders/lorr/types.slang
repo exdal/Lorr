@@ -34,17 +34,6 @@ public typedef u32 BufferID;
 public typedef u32 ImageViewID;
 public typedef u32 SamplerID;
 
-public struct SampledImage<Format> {
-    ImageViewID image_view_id : 24;
-    SamplerID sampler_id : 8;
-
-    [ForceInline]
-    public __init(ImageViewID image_view_id, SamplerID sampler_id) {
-        this.image_view_id = image_view_id;
-        this.sampler_id = sampler_id;
-    }
-};
-
 public struct DispatchIndirectCommand {
     public u32 x;
     public u32 y;

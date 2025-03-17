@@ -201,7 +201,7 @@ float4 fs_main(VertexOutput input, float4 pixel_pos : SV_Position) : SV_Target {
             float2 transmittance_uv = get_transmittance_lut_uv(atmos, float2(h, step_sun_cos_theta));
             float3 atmos_transmittance = transmittance_lut.Sample(linear_clamp_to_edge_sampler, transmittance_uv).xyz;
             
-            float3 step_luminance = atmos_transmittance * sun_transmittance * phase * powder_transmittance * clouds.scattering_coeff;
+            float3 step_luminance = (atmos_transmittance * sun_transmittance) * phase * powder_transmittance * clouds.scattering_coeff;
 
             // frostbite luminance approximation
             float3 integral = (step_luminance - step_luminance * step_transmittance) / clouds.extinction_coeff;

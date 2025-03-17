@@ -146,15 +146,6 @@ private:
     SamplerID id_ = SamplerID::Invalid;
 };
 
-struct SampledImage {
-    u32 image_view_index : 24;
-    u32 sampler_index : 8;
-    SampledImage() = default;
-    SampledImage(ImageViewID image_view_id_, SamplerID sampler_id_):
-        image_view_index(SlotMap_decode_id(image_view_id_).index),
-        sampler_index(SlotMap_decode_id(sampler_id_).index) {}
-};
-
 /////////////////////////////////
 // PIPELINE
 

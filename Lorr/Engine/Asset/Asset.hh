@@ -1,40 +1,16 @@
 #pragma once
 
+#include "Engine/Asset/AssetFile.hh"
 #include "Engine/Asset/Model.hh"
 #include "Engine/Asset/UUID.hh"
 
 #include "Engine/Core/Handle.hh"
-
-#include "Engine/Graphics/Vulkan.hh"
 
 #include "Engine/Util/JsonWriter.hh"
 
 #include "Engine/Scene/Scene.hh"
 
 namespace lr {
-enum class AssetType : u32 {
-    None = 0,
-    Root = 0,
-    Shader,
-    Model,
-    Texture,
-    Material,
-    Font,
-    Scene,
-};
-
-// List of file extensions supported by Engine.
-enum class AssetFileType : u32 {
-    None = 0,
-    Binary,
-    Meta,
-    GLB,
-    GLTF,
-    PNG,
-    JPEG,
-    JSON,
-};
-
 struct Asset {
     UUID uuid = {};
     fs::path path = {};
@@ -65,26 +41,6 @@ struct Asset {
 //
 //  ── ASSET FILE ──────────────────────────────────────────────────────
 //
-
-enum class AssetFileFlags : u64 {
-    None = 0,
-};
-consteval void enable_bitmask(AssetFileFlags);
-
-struct TextureAssetFileHeader {
-    vuk::Extent3D extent = {};
-    vuk::Format format = vuk::Format::eUndefined;
-};
-
-struct AssetFileHeader {
-    c8 magic[4] = { 'L', 'O', 'R', 'R' };
-    u16 version = 1;
-    AssetFileFlags flags = AssetFileFlags::None;
-    AssetType type = AssetType::None;
-    union {
-        TextureAssetFileHeader texture_header = {};
-    };
-};
 
 using AssetRegistry = ankerl::unordered_dense::map<UUID, Asset>;
 struct AssetManager : Handle<AssetManager> {
@@ -125,8 +81,7 @@ struct AssetManager : Handle<AssetManager> {
     auto load_model(const UUID &uuid) -> bool;
     auto unload_model(const UUID &uuid) -> void;
 
-    auto load_texture(const UUID &uuid, ls::span<u8> pixels, const TextureSamplerInfo &sampler_info = {}) -> bool;
-    auto load_texture(const UUID &uuid, const TextureSamplerInfo &sampler_info = {}) -> bool;
+    auto load_texture(const UUID &uuid, const TextureInfo &info = {}) -> bool;
     auto unload_texture(const UUID &uuid) -> void;
 
     auto load_material(const UUID &uuid, const Material &material_info) -> bool;

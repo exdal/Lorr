@@ -485,7 +485,7 @@ auto Scene::set_dirty(this Scene &self, flecs::entity entity) -> void {
     gpu_transform->world *= glm::rotate(glm::mat4(1.0), rotation.y, glm::vec3(0.0, 1.0, 0.0));
     gpu_transform->world *= glm::rotate(glm::mat4(1.0), rotation.z, glm::vec3(0.0, 0.0, 1.0));
     gpu_transform->world *= glm::scale(glm::mat4(1.0), entity_transform->scale);
-    gpu_transform->normal = glm::inverse(glm::transpose(glm::mat3(gpu_transform->world)));
+    gpu_transform->normal = glm::mat3(gpu_transform->world);
 
     self.dirty_transforms.push_back(transform_id);
 }
@@ -540,13 +540,14 @@ auto Scene::compose(this Scene &self) -> SceneComposeInfo {
 
         //  ── PER MODEL INFORMATION ───────────────────────────────────────────
         auto model_offset = gpu_models.size();
-        auto &gpu_mesh = gpu_models.emplace_back();
-        gpu_mesh.vertex_positions = model->vertex_positions.device_address();
-        gpu_mesh.indices = model->indices.device_address();
-        gpu_mesh.texture_coords = model->texture_coords.device_address();
-        gpu_mesh.meshlets = model->meshlets.device_address();
-        gpu_mesh.meshlet_bounds = model->meshlet_bounds.device_address();
-        gpu_mesh.local_triangle_indices = model->local_triangle_indices.device_address();
+        auto &gpu_model = gpu_models.emplace_back();
+        gpu_model.indices = model->indices.device_address();
+        gpu_model.vertex_positions = model->vertex_positions.device_address();
+        gpu_model.vertex_normals = model->vertex_normals.device_address();
+        gpu_model.texture_coords = model->texture_coords.device_address();
+        gpu_model.meshlets = model->meshlets.device_address();
+        gpu_model.meshlet_bounds = model->meshlet_bounds.device_address();
+        gpu_model.local_triangle_indices = model->local_triangle_indices.device_address();
 
         auto material_offset = gpu_materials.size();
         for (const auto &material_uuid : model->materials) {
@@ -573,6 +574,7 @@ auto Scene::compose(this Scene &self) -> SceneComposeInfo {
             gpu_material.albedo_image_index = add_image_if_exists(material->albedo_texture).value_or(~0_u32);
             gpu_material.normal_image_index = add_image_if_exists(material->normal_texture).value_or(~0_u32);
             gpu_material.emissive_image_index = add_image_if_exists(material->emissive_texture).value_or(~0_u32);
+            gpu_material.metallic_roughness_image_index = add_image_if_exists(material->metallic_roughness_texture).value_or(~0_u32);
         }
 
         //  ── INSTANCING ──────────────────────────────────────────────────────

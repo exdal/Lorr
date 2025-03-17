@@ -1,14 +1,8 @@
 module imgui;
+import lorr;
 
 [[vk::binding(0, 0)]] SamplerState sampler;
 [[vk::binding(1, 0)]] Texture2D<float4> texture;
-
-#define GAMMA_TO_LINEAR(Gamma) ((Gamma) < 0.04045 ? (Gamma) / 12.92 : pow(max((Gamma) + 0.055, 0.0) / 1.055, 2.4))
-#define SRGBA_TO_LINEAR(col) \
-    col.r = GAMMA_TO_LINEAR(col.r); \
-    col.g = GAMMA_TO_LINEAR(col.g); \
-    col.b = GAMMA_TO_LINEAR(col.b); \
-    col.a = 1.0 - GAMMA_TO_LINEAR(1.0 - col.a);
 
 struct VertexInput
 {
@@ -36,16 +30,13 @@ VertexOutput vs_main(VertexInput input) {
     output.position = float4(input.position * c.scale + c.translate, 0.0, 1.0);
     output.tex_coord = input.tex_coord;
     output.color = input.color;
-    SRGBA_TO_LINEAR(output.color);
 
     return output;
 }
 
 [shader("fragment")]
 float4 fs_main(VertexOutput input) : SV_TARGET {
-    float4 col = texture.Sample(sampler, input.tex_coord) * input.color;
-    col.rgb *= col.a;
-
-    return col;
+    float4 color_sampled = texture.Sample(sampler, input.tex_coord) * input.color;
+    return float4(lr::color_sRGB_EOTF(color_sampled.rgb), color_sampled.a);
 }
 

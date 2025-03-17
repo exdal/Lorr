@@ -181,7 +181,7 @@ auto SceneRenderer::setup_persistent_resources(this SceneRenderer &self) -> void
         .module_name = "tonemap",
         .root_path = shaders_root,
         .shader_path = shaders_root / "tonemap.slang",
-        .entry_points = { "vs_main", "fs_main" },
+        .entry_points = { "cs_main" },
     }).value();
     // clang-format on
 
@@ -190,13 +190,11 @@ auto SceneRenderer::setup_persistent_resources(this SceneRenderer &self) -> void
         "transmittance lut",
         [&pipeline = *self.device->pipeline(self.sky_transmittance_pipeline.id()
          )](vuk::CommandBuffer &cmd_list, VUK_IA(vuk::Access::eComputeRW) dst, VUK_BA(vuk::Access::eComputeRead) atmos) {
-            auto image_size = glm::vec2(dst->extent.width, dst->extent.height);
-            auto groups = glm::uvec2(image_size) / 16_u32;
             cmd_list //
                 .bind_compute_pipeline(pipeline)
                 .bind_image(0, 0, dst)
                 .bind_buffer(0, 1, atmos)
-                .dispatch(groups.x, groups.y, 1);
+                .dispatch_invocations_per_pixel(dst);
 
             return std::make_tuple(dst, atmos);
         }
@@ -209,15 +207,13 @@ auto SceneRenderer::setup_persistent_resources(this SceneRenderer &self) -> void
             VUK_IA(vuk::Access::eComputeSampled) transmittance_lut,
             VUK_IA(vuk::Access::eComputeRW) dst,
             VUK_BA(vuk::Access::eComputeRead) scene) {
-            auto image_size = glm::vec2(dst->extent.width, dst->extent.height);
-            auto groups = glm::uvec2(image_size) / 16_u32;
             cmd_list //
                 .bind_compute_pipeline(pipeline)
                 .bind_sampler(0, 0, { .magFilter = vuk::Filter::eLinear, .minFilter = vuk::Filter::eLinear })
                 .bind_image(0, 1, transmittance_lut)
                 .bind_image(0, 2, dst)
                 .bind_buffer(0, 3, scene)
-                .dispatch(groups.x, groups.y, 1);
+                .dispatch_invocations_per_pixel(dst);
 
             return std::make_tuple(transmittance_lut, dst, scene);
         }
@@ -238,6 +234,8 @@ auto SceneRenderer::setup_persistent_resources(this SceneRenderer &self) -> void
     std::tie(transmittance_lut_attachment, multiscatter_lut_attachment, temp_scene) =
         multiscatter_lut_pass(std::move(transmittance_lut_attachment), std::move(multiscatter_lut_attachment), std::move(temp_scene));
 
+    transmittance_lut_attachment = transmittance_lut_attachment.as_released(vuk::Access::eComputeSampled, vuk::DomainFlagBits::eGraphicsQueue);
+    multiscatter_lut_attachment = multiscatter_lut_attachment.as_released(vuk::Access::eComputeSampled, vuk::DomainFlagBits::eGraphicsQueue);
     transfer_man.wait_on(std::move(transmittance_lut_attachment));
     transfer_man.wait_on(std::move(multiscatter_lut_attachment));
 
@@ -249,14 +247,12 @@ auto SceneRenderer::setup_persistent_resources(this SceneRenderer &self) -> void
             VUK_IA(vuk::Access::eComputeRW) shape_noise_lut,
             VUK_IA(vuk::Access::eComputeRW) detail_noise_lut,
             VUK_BA(vuk::Access::eComputeRead) scene) {
-            auto image_size = glm::vec2(shape_noise_lut->extent.width, shape_noise_lut->extent.height);
-            auto groups = glm::uvec2(image_size) / 16_u32;
             cmd_list //
                 .bind_compute_pipeline(pipeline)
                 .bind_image(0, 0, shape_noise_lut)
                 .bind_image(0, 1, detail_noise_lut)
                 .bind_buffer(0, 2, scene)
-                .dispatch(groups.x, groups.y, shape_noise_lut->extent.depth);
+                .dispatch_invocations_per_pixel(shape_noise_lut);
             return std::make_tuple(shape_noise_lut, detail_noise_lut, scene);
         }
     );
@@ -421,7 +417,12 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
     //  ── PREPARE ATTACHMENTS ─────────────────────────────────────────────
     auto final_attachment = vuk::declare_ia(
         "final",
-        { .extent = info.extent, .format = vuk::Format::eR16G16B16A16Sfloat, .sample_count = vuk::Samples::e1, .level_count = 1, .layer_count = 1 }
+        { .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eColorAttachment,
+          .extent = info.extent,
+          .format = vuk::Format::eB10G11R11UfloatPack32,
+          .sample_count = vuk::Samples::e1,
+          .level_count = 1,
+          .layer_count = 1 }
     );
     final_attachment = vuk::clear_image(std::move(final_attachment), vuk::Black<f32>);
 
@@ -452,8 +453,6 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                 .addressModeV = vuk::SamplerAddressMode::eClampToEdge,
             };
 
-            auto image_size = glm::vec2(dst->extent.width, dst->extent.height);
-            auto groups = glm::uvec2(image_size) / 16_u32;
             cmd_list //
                 .bind_compute_pipeline(pipeline)
                 .bind_sampler(0, 0, sampler_info)
@@ -461,7 +460,7 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                 .bind_image(0, 2, transmittance_lut)
                 .bind_image(0, 3, multiscatter_lut)
                 .bind_buffer(0, 4, scene)
-                .dispatch(groups.x, groups.y, 1);
+                .dispatch_invocations_per_pixel(dst);
             return std::make_tuple(dst, transmittance_lut, multiscatter_lut, scene);
         }
     );
@@ -509,8 +508,6 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                 .addressModeW = vuk::SamplerAddressMode::eClampToEdge,
             };
 
-            auto image_size = glm::vec3(dst->extent.width, dst->extent.height, dst->extent.depth);
-            auto groups = glm::uvec2(image_size) / 16_u32;
             cmd_list //
                 .bind_compute_pipeline(pipeline)
                 .bind_sampler(0, 0, sampler_info)
@@ -518,7 +515,7 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                 .bind_image(0, 2, transmittance_lut)
                 .bind_image(0, 3, multiscatter_lut)
                 .bind_buffer(0, 4, scene)
-                .dispatch(groups.x, groups.y, static_cast<u32>(image_size.z));
+                .dispatch_invocations_per_pixel(dst);
             return std::make_tuple(dst, transmittance_lut, multiscatter_lut, scene);
         }
     );
@@ -557,7 +554,7 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
     auto albedo_attachment = vuk::declare_ia(
         "albedo",
         { .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eColorAttachment,
-          .format = vuk::Format::eR8G8B8A8Unorm,
+          .format = vuk::Format::eR8G8B8A8Srgb,
           .sample_count = vuk::Samples::e1 }
     );
     albedo_attachment.same_shape_as(visbuffer_attachment);
@@ -794,11 +791,18 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
             VUK_BA(vuk::Access::eFragmentRead) scene,
             VUK_IA(vuk::Access::eFragmentSampled) transmittance_lut,
             VUK_IA(vuk::Access::eFragmentRead) depth,
-            VUK_IA(vuk::Access::eFragmentRead) albedo,
+            VUK_IA(vuk::Access::eFragmentSampled) albedo,
             VUK_IA(vuk::Access::eFragmentRead) normal,
             VUK_IA(vuk::Access::eFragmentRead) emissive,
             VUK_IA(vuk::Access::eFragmentRead) metallic_roughness) {
-            vuk::SamplerCreateInfo sampler_info = {
+            vuk::SamplerCreateInfo nearest_sampler = {
+                .magFilter = vuk::Filter::eNearest,
+                .minFilter = vuk::Filter::eNearest,
+                .addressModeU = vuk::SamplerAddressMode::eRepeat,
+                .addressModeV = vuk::SamplerAddressMode::eRepeat,
+            };
+
+            vuk::SamplerCreateInfo linear_clamp_sampler = {
                 .magFilter = vuk::Filter::eLinear,
                 .minFilter = vuk::Filter::eLinear,
                 .addressModeU = vuk::SamplerAddressMode::eClampToEdge,
@@ -809,13 +813,14 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
             cmd_list //
                 .bind_graphics_pipeline(pipeline)
                 .bind_buffer(0, 0, scene)
-                .bind_image(0, 1, transmittance_lut)
-                .bind_sampler(0, 2, sampler_info)
-                .bind_image(0, 3, depth)
-                .bind_image(0, 4, albedo)
-                .bind_image(0, 5, normal)
-                .bind_image(0, 6, emissive)
-                .bind_image(0, 7, metallic_roughness)
+                .bind_sampler(0, 1, linear_clamp_sampler)
+                .bind_sampler(0, 2, nearest_sampler)
+                .bind_image(0, 3, transmittance_lut)
+                .bind_image(0, 4, depth)
+                .bind_image(0, 5, albedo)
+                .bind_image(0, 6, normal)
+                .bind_image(0, 7, emissive)
+                .bind_image(0, 8, metallic_roughness)
                 .set_rasterization({})
                 .set_color_blend(dst, vuk::BlendPreset::eOff)
                 .set_viewport(0, vuk::Rect2D::framebuffer())
@@ -848,7 +853,7 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                 VUK_IA(vuk::Access::eFragmentSampled) aerial_perspective_lut,
                 VUK_IA(vuk::Access::eFragmentSampled) transmittance_lut,
                 VUK_BA(vuk::Access::eFragmentRead) scene) {
-                vuk::SamplerCreateInfo sampler_info = {
+                vuk::SamplerCreateInfo linear_clamp_sampler = {
                     .magFilter = vuk::Filter::eLinear,
                     .minFilter = vuk::Filter::eLinear,
                     .addressModeU = vuk::SamplerAddressMode::eClampToEdge,
@@ -874,7 +879,7 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                     .set_viewport(0, vuk::Rect2D::framebuffer())
                     .set_scissor(0, vuk::Rect2D::framebuffer())
                     .bind_image(0, 0, depth)
-                    .bind_sampler(0, 1, sampler_info)
+                    .bind_sampler(0, 1, linear_clamp_sampler)
                     .bind_image(0, 2, transmittance_lut)
                     .bind_image(0, 3, sky_view_lut)
                     .bind_image(0, 4, aerial_perspective_lut)
@@ -1003,23 +1008,31 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
     std::tie(final_attachment, depth_attachment, scene_buffer) =
         editor_grid_pass(std::move(final_attachment), std::move(depth_attachment), std::move(scene_buffer));
 
-    auto result_attachment =
-        vuk::declare_ia("result", { .extent = info.extent, .format = info.format, .sample_count = vuk::Samples::e1, .layer_count = 1 });
+    auto result_attachment = vuk::declare_ia(
+        "result",
+        { .usage = vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eColorAttachment,
+          .format = vuk::Format::eR8G8B8A8Unorm,
+          .sample_count = vuk::Samples::e1,
+          .layer_count = 1 }
+    );
+    result_attachment.same_shape_as(final_attachment);
 
     //  ── TONEMAP ─────────────────────────────────────────────────────────
-    std::tie(result_attachment, final_attachment) = vuk::
-        make_pass("tonemap", [&pipeline = *self.device->pipeline(self.tonemap_pipeline.id())](vuk::CommandBuffer &cmd_list, VUK_IA(vuk::Access::eColorWrite) dst, VUK_IA(vuk::Access::eFragmentSampled) src) {
+    auto tonemap_pass = vuk::make_pass(
+        "tonemap",
+        [&pipeline = *self.device->pipeline(self.tonemap_pipeline.id()
+         )](vuk::CommandBuffer &cmd_list, VUK_IA(vuk::Access::eComputeWrite) dst, VUK_IA(vuk::Access::eComputeRead) src) {
             cmd_list //
-                .bind_graphics_pipeline(pipeline)
-                .bind_sampler(0, 0, { .magFilter = vuk::Filter::eLinear, .minFilter = vuk::Filter::eLinear })
-                .bind_image(0, 1, src)
-                .set_rasterization({})
-                .set_color_blend(dst, vuk::BlendPreset::eOff)
-                .set_viewport(0, vuk::Rect2D::framebuffer())
-                .set_scissor(0, vuk::Rect2D::framebuffer())
-                .draw(3, 1, 0, 0);
+                .bind_compute_pipeline(pipeline)
+                .bind_image(0, 0, src)
+                .bind_image(0, 1, dst)
+                .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, src->extent)
+                .dispatch_invocations_per_pixel(src);
             return std::make_tuple(dst, src);
-        })(std::move(result_attachment), std::move(final_attachment));
+        }
+    );
+
+    std::tie(result_attachment, final_attachment) = tonemap_pass(std::move(result_attachment), std::move(final_attachment));
 
     return result_attachment;
 }

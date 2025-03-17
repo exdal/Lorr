@@ -120,4 +120,21 @@ public float2 vec3_to_oct(float3 v) {
     return (v.z <= 0.0) ? ((1.0 - abs(float2(p.y, p.x))) * sign_not_zero) : p;
 }
 
+// Color spaces
+public float3 color_sRGB_EOTF(float3 srgb_nonlinear) {
+    bool3 cutoff = srgb_nonlinear < vec3(0.04045);
+    vec3 higher = pow((srgb_nonlinear + vec3(0.055)) / vec3(1.055), vec3(2.4));
+    vec3 lower = srgb_nonlinear / vec3(12.92);
+
+    return lerp(higher, lower, float3(cutoff));
+}
+
+public float3 color_sRGB_OETF(float3 srgb_linear) {
+    bool3 cutoff = srgb_linear < 0.0031308;
+    float3 higher = 1.055 * pow(srgb_linear, 1.0 / 2.4) - 0.055;
+    float3 lower = srgb_linear * 12.92;
+
+    return lerp(higher, lower, float3(cutoff));
+}
+
 }

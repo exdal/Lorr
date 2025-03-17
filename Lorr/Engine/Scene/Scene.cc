@@ -9,6 +9,7 @@
 #include "Engine/Scene/ECSModule/ComponentWrapper.hh"
 #include "Engine/Scene/ECSModule/Core.hh"
 
+#include <algorithm>
 #include <glm/gtx/quaternion.hpp>
 #include <simdjson.h>
 
@@ -535,7 +536,7 @@ auto Scene::compose(this Scene &self) -> SceneComposeInfo {
     auto gpu_image_views = std::vector<ImageViewID>();
     auto gpu_samplers = std::vector<SamplerID>();
 
-    for (const auto &[model_uuid, transform_ids] : self.rendering_model) {
+    for (const auto &[model_uuid, transform_ids] : self.rendering_models) {
         auto *model = app.asset_man.get_model(model_uuid);
 
         //  ── PER MODEL INFORMATION ───────────────────────────────────────────
@@ -627,8 +628,6 @@ auto Scene::remove_transform(this Scene &self, flecs::entity entity) -> void {
 auto Scene::attach_model(this Scene &self, flecs::entity entity, const UUID &model_uuid) -> bool {
     ZoneScoped;
 
-    self.detach_model(entity, model_uuid);
-
     auto transforms_it = self.entity_transforms_map.find(entity);
     if (transforms_it == self.entity_transforms_map.end()) {
         // Target entity must have a transform component, figure out
@@ -637,19 +636,33 @@ auto Scene::attach_model(this Scene &self, flecs::entity entity, const UUID &mod
         return false;
     }
 
-    auto instances_it = self.rendering_model.find(model_uuid);
-    if (instances_it == self.rendering_model.end()) {
+    const auto transform_id = transforms_it->second;
+    // Find the old model UUID and detach it from entity.
+    // TODO: This is retarded
+    auto old_model_uuid = UUID(nullptr);
+    for (const auto &[cur_old_model_uuid, transform_ids] : self.rendering_models) {
+        if (std::ranges::find(transform_ids, transform_id) != transform_ids.end()) {
+            old_model_uuid = cur_old_model_uuid;
+            break;
+        }
+    }
+    if (old_model_uuid) {
+        self.detach_model(entity, old_model_uuid);
+    }
+
+    auto instances_it = self.rendering_models.find(model_uuid);
+    if (instances_it == self.rendering_models.end()) {
         bool inserted = false;
-        std::tie(instances_it, inserted) = self.rendering_model.try_emplace(model_uuid);
+        std::tie(instances_it, inserted) = self.rendering_models.try_emplace(model_uuid);
         if (!inserted) {
             return false;
         }
     }
 
-    const auto transform_id = transforms_it->second;
     auto &instances = instances_it->second;
     instances.push_back(transform_id);
     self.models_dirty = true;
+    self.set_dirty(entity);
 
     return true;
 }
@@ -657,9 +670,9 @@ auto Scene::attach_model(this Scene &self, flecs::entity entity, const UUID &mod
 auto Scene::detach_model(this Scene &self, flecs::entity entity, const UUID &model_uuid) -> bool {
     ZoneScoped;
 
-    auto instances_it = self.rendering_model.find(model_uuid);
+    auto instances_it = self.rendering_models.find(model_uuid);
     auto transforms_it = self.entity_transforms_map.find(entity);
-    if (instances_it == self.rendering_model.end() || transforms_it == self.entity_transforms_map.end()) {
+    if (instances_it == self.rendering_models.end() || transforms_it == self.entity_transforms_map.end()) {
         return false;
     }
 
@@ -669,7 +682,7 @@ auto Scene::detach_model(this Scene &self, flecs::entity entity, const UUID &mod
     self.models_dirty = true;
 
     if (instances.empty()) {
-        self.rendering_model.erase(instances_it);
+        self.rendering_models.erase(instances_it);
     }
 
     return true;

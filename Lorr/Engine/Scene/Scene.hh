@@ -45,7 +45,7 @@ private:
 
     SlotMap<GPU::Transforms, GPU::TransformID> transforms = {};
     ankerl::unordered_dense::map<flecs::entity, GPU::TransformID> entity_transforms_map = {};
-    ankerl::unordered_dense::map<UUID, std::vector<GPU::TransformID>> rendering_model = {};
+    ankerl::unordered_dense::map<UUID, std::vector<GPU::TransformID>> rendering_models = {};
 
     std::vector<GPU::TransformID> dirty_transforms = {};
     bool models_dirty = false;

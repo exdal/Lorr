@@ -28,36 +28,23 @@ VertexOutput vs_main(u32 vertex_id : SV_VertexID) {
     return output;
 }
 
-float D_GGX(float NoH, float roughness) {
-    float a = NoH * roughness;
-    float k = roughness / (1.0 - NoH * NoH + a * a);
-    return k * k * (1.0 / PI);
+float D_GGX(float NoH, float roughness2) {
+    float f = ((roughness2 - 1.0) * NoH * NoH + 1.0);
+    return roughness2 / (PI * f * f);
 }
 
-float V_SmithGGXCorrelated(float NoV, float NoL, float roughness) {
-    float a2 = roughness * roughness;
-    float GGXV = NoL * sqrt(NoV * NoV * (1.0 - a2) + a2);
-    float GGXL = NoV * sqrt(NoL * NoL * (1.0 - a2) + a2);
-    return 0.5 / (GGXV + GGXL);
+float Smith_G2_Height_Correlated_GGX_Lagarde(float NoV, float NoL, float roughness2) {
+    float GGXL = NoV * sqrt((-NoL * roughness2 + NoL) * NoL + roughness2);
+    float GGXV = NoL * sqrt((-NoV * roughness2 + NoV) * NoV + roughness2);
+    return saturate(0.5f / (GGXV + GGXL));
 }
 
-float F_Schlick1(float u, float f0, float f90) {
-    return f0 + (f90 - f0) * pow(1.0 - u, 5.0);
-}
-
-float3 F_Schlick3(float u, float3 f0, float f90) {
-    return f0 + (float3(f90) - f0) * pow(1.0 - u, 5.0);
+float3 F_Schlick(float LoH, float3 specular_albedo) {
+    return specular_albedo + (1.0 - specular_albedo) * pow(1.0 - LoH, 5.0);
 }
 
 float Fd_Lambert() {
     return 1.0 / PI;
-}
-
-float Fd_Burley(float NoV, float NoL, float LoH, float roughness) {
-    float f90 = 0.5 + 2.0 * roughness * LoH * LoH;
-    float lightScatter = F_Schlick1(NoL, 1.0, f90);
-    float viewScatter = F_Schlick1(NoV, 1.0, f90);
-    return lightScatter * viewScatter * (1.0 / PI);
 }
 
 float3 BRDF(float3 V, float3 N, float3 L, float3 albedo, float roughness, float metallic) {
@@ -71,17 +58,19 @@ float3 BRDF(float3 V, float3 N, float3 L, float3 albedo, float roughness, float 
     float3 F0 = 0.16 * reflectance * reflectance * (1.0 - metallic) + albedo * metallic;
 
     float  roughness2 = roughness * roughness;
-    
-    float  D = D_GGX(NoH, roughness);
-    float3 F = F_Schlick3(LoH, F0, 1.0);
-    float  V = V_SmithGGXCorrelated(NoV, NoL, roughness);
+    float  D = D_GGX(NoH, roughness2);
+    float3 V = Smith_G2_Height_Correlated_GGX_Lagarde(NoV, NoL, roughness2);
+    float3 F = F_Schlick(LoH, F0);
 
     // Reflectance (Cook-Torrance)
-    float3 F_R = D * V * F;
+    // V already divided by denominator
+    float3 F_R = (D * V * NoL) * F;
     // Diffuse
     float3 F_D = albedo * Fd_Lambert();
+    // Frensel combination
+    float3 result = (1.0 - F) * (1.0 - metallic) * F_D + F_R;
 
-    return F_R + F_D * (1.0 - F) * (1.0 - metallic);
+    return result;
 }
 
 [shader("fragment")]

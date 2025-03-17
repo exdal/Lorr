@@ -109,7 +109,7 @@ auto TransferManager::scratch_buffer(this TransferManager &self, const void *dat
     auto gpu_buffer = self.alloc_transient_buffer(vuk::MemoryUsage::eGPUonly, size, LOC);
 
     auto upload_pass = vuk::make_pass(
-        "TransferManager::scratch_buffer",
+        "scratch_buffer",
         [](vuk::CommandBuffer &cmd_list, VUK_BA(vuk::Access::eTransferRead) src, VUK_BA(vuk::Access::eTransferWrite) dst) {
             cmd_list.copy_buffer(src, dst);
             return dst;

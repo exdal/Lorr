@@ -114,7 +114,7 @@ func sample_sun_density(float3 pos_km) -> float {
         density_sum += max(0.0, sample_density(step_pos_m));
     }
 
-    float transmittance = exp(-density_sum * clouds.extinction_coeff);
+    float transmittance = exp(-density_sum * clouds.extinction_coeff * step_count);
     return clouds.darkness_threshold + transmittance * (1.0 - clouds.darkness_threshold);
 }
 

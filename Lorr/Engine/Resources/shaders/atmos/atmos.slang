@@ -22,6 +22,7 @@ public float2 get_transmittance_lut_uv(in Atmosphere atmos, float2 p) {
     float d_max = rho + h;
     float mu = (d - d_min) / (d_max - d_min);
     float r = rho / h;
+
     return float2(mu, r);
 }
 
@@ -55,6 +56,8 @@ public float2 get_sky_view_lut_uv(in Atmosphere atmos, bool intersect_planet, fl
     }
 
     uv.x = sqrt(-light_view_cos * 0.5 + 0.5);
+    uv.x = fromUnitToSubUvs(uv.x, f32(atmos.sky_view_lut_size.x));
+    uv.y = fromUnitToSubUvs(uv.y, f32(atmos.sky_view_lut_size.y));
 
     return uv;
 }
@@ -173,12 +176,16 @@ public func integrate_single_scattered_luminance(
 {
     AtmosphereLuminance result = {};
 
+    if (dot(info.eye_pos, info.eye_pos) <= atmos.planet_radius * atmos.planet_radius) {
+        return result;
+    }
+
     const let atmos_intersection = lr::ray_sphere_intersect_nearest(info.eye_pos, info.eye_dir, atmos.atmos_radius);
     const let planet_intersection = lr::ray_sphere_intersect_nearest(info.eye_pos, info.eye_dir, atmos.planet_radius);
     float integration_length = 0.0;
     if (!atmos_intersection.hasValue) {
         // No intersection
-        return {};
+        return result;
     } else if (!planet_intersection.hasValue) {
         // Atmosphere only intersection
         integration_length = atmos_intersection.value;

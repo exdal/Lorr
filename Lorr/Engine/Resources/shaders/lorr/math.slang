@@ -44,25 +44,41 @@ public float safe_sqrt(float x) {
     return sqrt(max(0, x));
 }
 
+public float2 ray_sphere_intersect(float3 ray_origin, float3 ray_direction, float sphere_radius) {
+    float a = dot(ray_direction, ray_direction);
+    float b = 2.0 * dot(ray_direction, ray_origin);
+    float c = dot(ray_origin, ray_origin) - (sphere_radius * sphere_radius);
+    float delta = b * b - 4.0 * a * c;
+
+    if (delta < 0.0) {
+        return -1.0;
+    }
+
+    float sqrt_delta = sqrt(delta);
+    return (-b + float2(-1.0, 1.0) * sqrt_delta) / (2.0 * a);
+}
+
 public Optional<float> ray_sphere_intersect_nearest(float3 ray_origin, float3 ray_direction, float sphere_radius) {
     float a = dot(ray_direction, ray_direction);
     float b = 2.0 * dot(ray_direction, ray_origin);
     float c = dot(ray_origin, ray_origin) - (sphere_radius * sphere_radius);
     float delta = b * b - 4.0 * a * c;
 
-    if (delta < 0.0 || a == 0.0) {
+    if (delta < 0.0) {
         return none;
     }
 
     float sol0 = (-b - sqrt(delta)) / (2.0 * a);
     float sol1 = (-b + sqrt(delta)) / (2.0 * a);
 
-    if (sol1 < 0.0) {
+    if (sol0 < 0.0 && sol1 < 0.0) {
         return none;
     }
 
     if (sol0 < 0.0) {
         return max(0.0, sol1);
+    } else if (sol1 < 0.0) {
+        return max(0.0, sol0);
     }
 
     return max(0.0, min(sol0, sol1));

@@ -8,13 +8,14 @@ import "../atmos/atmos";
 
 // We will be using sun transmittance as global environment map
 [[vk::binding(3, 0)]] Texture2D<float4> sun_transmittance_lut;
+[[vk::binding(4, 0)]] Texture2D<float4> sky_multiscattering_lut;
 
 // G-Buffer
-[[vk::binding(4, 0)]] Texture2D<f32> depth_image;
-[[vk::binding(5, 0)]] Texture2D<float4> albedo_image;
-[[vk::binding(6, 0)]] Texture2D<float4> normal_image;
-[[vk::binding(7, 0)]] Texture2D<float3> emissive_image;
-[[vk::binding(8, 0)]] Texture2D<float4> metallic_roughness_image;
+[[vk::binding(5, 0)]] Texture2D<f32> depth_image;
+[[vk::binding(6, 0)]] Texture2D<float4> albedo_image;
+[[vk::binding(7, 0)]] Texture2D<float4> normal_image;
+[[vk::binding(8, 0)]] Texture2D<float3> emissive_image;
+[[vk::binding(9, 0)]] Texture2D<float4> metallic_roughness_image;
 
 struct VertexOutput {
     float4 position : SV_Position;
@@ -49,30 +50,7 @@ float Fd_Lambert() {
     return 1.0 / PI;
 }
 
-float2 GGXEnvironmentBRDFScaleBias(in float nDotV, in float sqrtRoughness)
-{
-    const float nDotV2 = nDotV * nDotV;
-    const float sqrtRoughness2 = sqrtRoughness * sqrtRoughness;
-    const float sqrtRoughness3 = sqrtRoughness2 * sqrtRoughness;
-
-    const float delta = 0.991086418474895f + (0.412367709802119f * sqrtRoughness * nDotV2) -
-                        (0.363848256078895f * sqrtRoughness2) -
-                        (0.758634385642633f * nDotV * sqrtRoughness2);
-    const float bias = saturate((0.0306613448029984f * sqrtRoughness) + 0.0238299731830387f /
-                                (0.0272458171384516f + sqrtRoughness3 + nDotV2) -
-                                0.0454747751719356f);
-
-    const float scale = saturate(delta - bias);
-    return float2(scale, bias);
-}
-
-float3 GGXEnvironmentBRDF(in float3 specAlbedo, in float nDotV, in float sqrtRoughness)
-{
-    float2 scaleBias = GGXEnvironmentBRDFScaleBias(nDotV, sqrtRoughness);
-    return specAlbedo * scaleBias.x + scaleBias.y;
-}
-
-vec3 mx_ggx_dir_albedo_analytic(float NdotV, float alpha, vec3 F0)
+vec3 GGX_Albedo_Analytic(float NdotV, float alpha, vec3 F0)
 {
     float x = NdotV;
     float y = alpha;
@@ -101,21 +79,22 @@ float3 BRDF(float3 V, float3 N, float3 L, float3 albedo, float roughness, float 
     const float reflectance = 0.5;
     float3 F0 = 0.16 * reflectance * reflectance * (1.0 - metallic) + albedo * metallic;
 
+    // Microfacet
     float  roughness2 = roughness * roughness;
     float  D  = D_GGX(NoH, roughness2);
     float3 G2 = Smith_G2_Height_Correlated_GGX_Lagarde(NoV, NoL, roughness2);
     float3 F  = F_Schlick(LoH, F0);
 
-    float3 comp = mx_ggx_dir_albedo_analytic(NoV, 1.0, F0);
+    float3 comp = GGX_Albedo_Analytic(NoV, roughness2, F0);
     // Reflectance (Cook-Torrance)
     // V already divided by denominator
-    float3 specular = (D * G2 * NoL) * F * comp;
+    float3 specular = F * D * G2;
     // Diffuse
-    float3 diffuse = albedo * Fd_Lambert() * (1.0 - comp);
+    float3 diffuse = (1.0 - metallic) * albedo * Fd_Lambert();
     // Frensel combination
-    float3 result = (1.0 - F) * (1.0 - metallic) * diffuse + specular;
+    float3 result = (1.0 - comp) * diffuse + specular;
 
-    return result;
+    return result * NoL;
 }
 
 [shader("fragment")]
@@ -154,11 +133,29 @@ float4 fs_main(VertexOutput input, float4 frag_pos : SV_Position) : SV_Target {
     float2 transmittance_uv = get_transmittance_lut_uv(scene.atmosphere, float2(h, sun_cos_theta));
     float3 sun_transmittance = sun_transmittance_lut.Sample(linear_clamp_sampler, transmittance_uv).rgb;
 
+    AtmosphereIntegrateInfo info = {};
+    info.eye_pos = ray_pos_planet;
+    info.sun_dir = scene.sun.direction;
+    info.sun_intensity = scene.sun.intensity;
+    info.sampling.variable_sample_count = true;
+    info.sampling.min_sample_count = 6;
+    info.sampling.max_sample_count = 6;
+    info.transmittance_image = sun_transmittance_lut;
+    info.multiscattering_image = sky_multiscattering_lut;
+
+    info.eye_dir = float3(0.0, -1.0, 0.0);
+    const let result_0 = integrate_single_scattered_luminance(linear_clamp_sampler, scene.atmosphere, info);
+    info.eye_dir = float3(0.0,  1.0, 0.0);
+    const let result_1 = integrate_single_scattered_luminance(linear_clamp_sampler, scene.atmosphere, info);
+    float3 ambient_color = lerp(result_0.luminance, result_1.luminance, saturate(N.y * 0.5 + 0.5));
+
     const float NoL = max(dot(N, L), 0.0);
     float3 color = BRDF(V, N, L, albedo_color, roughness, metallic);
-    color = color * NoL * sun_transmittance * scene.sun.intensity;
 
-    color += (albedo_color * 0.03);
+    color = (color * NoL * sun_transmittance * scene.sun.intensity)  // Reflected light
+          + albedo_color * ambient_color  // Planet light
+          + albedo_color * 0.03  // Surface color
+          + emission;  // Emitted light
 
     return float4(color, 1.0);
 }

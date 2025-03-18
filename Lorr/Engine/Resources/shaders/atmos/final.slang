@@ -71,8 +71,6 @@ float4 fs_main(VertexOutput input, float4 pixel_pos : SV_Position) : SV_TARGET {
     float light_view_cos_angle = light_on_plane.x;
 
     float2 uv = get_sky_view_lut_uv(atmos, planet_intersection.hasValue, view_zenith_cos_angle, light_view_cos_angle, h);
-    uv.x = fromUnitToSubUvs(uv.x, f32(atmos.sky_view_lut_size.x));
-    uv.y = fromUnitToSubUvs(uv.y, f32(atmos.sky_view_lut_size.y));
     float3 luminance = sky_view_lut.Sample(sampler, uv).rgb;
 
     float sun_cos_theta = dot(sun.direction, up_vec);

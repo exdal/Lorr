@@ -565,7 +565,7 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
 
         UUID metallic_roughness_texture_uuid = {};
         if (auto tex_idx = gltf_material.metallic_roughness_texture_index; tex_idx.has_value()) {
-            metallic_roughness_texture_uuid = get_gltf_texture(tex_idx.value());
+            metallic_roughness_texture_uuid = get_gltf_texture(tex_idx.value(), false);
         }
 
         Material material_info = {

@@ -688,7 +688,7 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                 VUK_BA(vuk::eIndexRead) index_buffer) {
                 cmd_list //
                     .bind_graphics_pipeline(pipeline)
-                    .set_rasterization({ .cullMode = vuk::CullModeFlagBits::eNone })
+                    .set_rasterization({ .cullMode = vuk::CullModeFlagBits::eBack })
                     .set_depth_stencil({ .depthTestEnable = true, .depthWriteEnable = true, .depthCompareOp = vuk::CompareOp::eLessOrEqual })
                     .set_color_blend(dst, vuk::BlendPreset::eOff)
                     .set_viewport(0, vuk::Rect2D::framebuffer())
@@ -790,6 +790,7 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
             VUK_IA(vuk::Access::eColorWrite) dst,
             VUK_BA(vuk::Access::eFragmentRead) scene,
             VUK_IA(vuk::Access::eFragmentSampled) transmittance_lut,
+            VUK_IA(vuk::Access::eFragmentSampled) multiscatter_lut,
             VUK_IA(vuk::Access::eFragmentRead) depth,
             VUK_IA(vuk::Access::eFragmentSampled) albedo,
             VUK_IA(vuk::Access::eFragmentRead) normal,
@@ -816,24 +817,26 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                 .bind_sampler(0, 1, linear_clamp_sampler)
                 .bind_sampler(0, 2, nearest_sampler)
                 .bind_image(0, 3, transmittance_lut)
-                .bind_image(0, 4, depth)
-                .bind_image(0, 5, albedo)
-                .bind_image(0, 6, normal)
-                .bind_image(0, 7, emissive)
-                .bind_image(0, 8, metallic_roughness)
+                .bind_image(0, 4, multiscatter_lut)
+                .bind_image(0, 5, depth)
+                .bind_image(0, 6, albedo)
+                .bind_image(0, 7, normal)
+                .bind_image(0, 8, emissive)
+                .bind_image(0, 9, metallic_roughness)
                 .set_rasterization({})
                 .set_color_blend(dst, vuk::BlendPreset::eOff)
                 .set_viewport(0, vuk::Rect2D::framebuffer())
                 .set_scissor(0, vuk::Rect2D::framebuffer())
                 .draw(3, 1, 0, 0);
-            return std::make_tuple(dst, scene, transmittance_lut, depth);
+            return std::make_tuple(dst, scene, transmittance_lut, multiscatter_lut, depth);
         }
     );
 
-    std::tie(final_attachment, scene_buffer, transmittance_lut_attachment, depth_attachment) = pbr_basic_pass(
+    std::tie(final_attachment, scene_buffer, transmittance_lut_attachment, multiscatter_lut_attachment, depth_attachment) = pbr_basic_pass(
         std::move(final_attachment),
         std::move(scene_buffer),
         std::move(transmittance_lut_attachment),
+        std::move(multiscatter_lut_attachment),
         std::move(depth_attachment),
         std::move(albedo_attachment),
         std::move(normal_attachment),

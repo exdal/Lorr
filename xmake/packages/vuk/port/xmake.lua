@@ -146,11 +146,11 @@ target("vuk")
     on_config(function (target)
         if target:has_tool("cc", "cl") then
             target:add("defines", "VUK_COMPILER_MSVC=1", { force = true, public = true })
-            target:add("cxflags", "/GR /Zi /RTC1 /permissive- /Zc:char8_t- /wd4068", { public = false })
+            target:add("cxflags", "/permissive- /Zc:char8_t- /wd4068", { public = false })
         elseif target:has_tool("cc", "clang_cl") then
             target:add("defines", "VUK_COMPILER_CLANGCL=1", { force = true, public = true })
             target:add("cxflags", "-Wno-nullability-completeness", { public = false })
-            target:add("cxflags", "/GR /Zi /RTC1 /permissive- /Zc:char8_t- /wd4068", { public = false })
+            target:add("cxflags", "/permissive- /Zc:char8_t- /wd4068", { public = false })
         elseif target:has_tool("cc", "clang") then
             target:add("defines", "VUK_COMPILER_CLANGPP=1", { force = true, public = true })
             target:add("cxflags", "-fno-char8_t -Wno-nullability-completeness", { public = false })

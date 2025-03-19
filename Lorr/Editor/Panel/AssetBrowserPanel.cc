@@ -30,15 +30,20 @@ auto populate_directory(AssetDirectory *dir, const AssetDirectoryCallbacks &call
     for (const auto &entry : fs::directory_iterator(dir->path)) {
         const auto &path = entry.path();
         if (entry.is_directory()) {
+            AssetDirectory *cur_subdir = nullptr;
             auto dir_it = std::ranges::find_if(dir->subdirs, [&](const auto &v) { return path == v->path; });
             if (dir_it == dir->subdirs.end()) {
                 auto *new_dir = dir->add_subdir(path);
                 if (callbacks.on_new_directory) {
                     callbacks.on_new_directory(callbacks.user_data, new_dir);
                 }
+
+                cur_subdir = new_dir;
+            } else {
+                cur_subdir = dir_it->get();
             }
 
-            populate_directory(dir_it->get(), callbacks);
+            populate_directory(cur_subdir, callbacks);
         } else if (entry.is_regular_file()) {
             auto new_asset_uuid = dir->add_asset(path);
             if (callbacks.on_new_asset) {

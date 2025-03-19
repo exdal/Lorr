@@ -125,6 +125,7 @@ float4 fs_main(VertexOutput input, float4 frag_pos : SV_Position) : SV_Target {
     const float3 V = normalize(scene.camera.position - ray_pos);
     const float3 L = normalize(scene.sun.direction);  // temp
 
+    // SUN LIGHT COLOR ──────────────────────────────────────────────────
     const float3 ray_pos_planet = float3(0.0, ray_pos.y, 0.0) *
                             CAMERA_SCALE_UNIT +
                             float3(0.0, scene.atmosphere.planet_radius, 0.0);
@@ -139,6 +140,7 @@ float4 fs_main(VertexOutput input, float4 frag_pos : SV_Position) : SV_Target {
         sun_transmittance *= 0.0;
     }
 
+    // SKY AMBIENT COLOR ────────────────────────────────────────────────
     AtmosphereIntegrateInfo sky_info = {};
     sky_info.eye_pos = ray_pos_planet;
     sky_info.sun_dir = scene.sun.direction;
@@ -155,6 +157,7 @@ float4 fs_main(VertexOutput input, float4 frag_pos : SV_Position) : SV_Target {
     const let sky_result_1 = integrate_single_scattered_luminance(linear_clamp_sampler, scene.atmosphere, sky_info);
     float3 ambient_color = lerp(sky_result_0.luminance, sky_result_1.luminance, saturate(N.y * 0.5 + 0.5));
 
+    // MATERIAL COLOR ───────────────────────────────────────────────────
     const float NoL = max(dot(N, L), 0.0);
     float3 color = BRDF(V, N, L, albedo_color, roughness, metallic);
 

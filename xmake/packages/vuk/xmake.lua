@@ -1,3 +1,5 @@
+includes("port/packages.lua")
+
 package("vuk")
     set_homepage("https://github.com/martty")
     set_license("MIT")
@@ -12,12 +14,13 @@ package("vuk")
 
     add_configs("debug_allocations", { description = "Debug VMA allocations", default = false, type = "boolean" })
 
-    add_deps("spirv-cross")
+    add_deps("spirv-cross-vuk")
     add_deps("function2")
 
     on_install("windows|x64", "linux|x86_64", function (package)
         local configs = {}
         configs.debug_allocations = package:config("debug_allocations")
+        os.cp(path.join(os.scriptdir(), "port", "packages.lua"), "packages.lua")
         os.cp(path.join(os.scriptdir(), "port", "xmake.lua"), "xmake.lua")
 
         import("package.tools.xmake").install(package, configs)

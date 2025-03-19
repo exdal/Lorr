@@ -30,12 +30,15 @@ auto populate_directory(AssetDirectory *dir, const AssetDirectoryCallbacks &call
     for (const auto &entry : fs::directory_iterator(dir->path)) {
         const auto &path = entry.path();
         if (entry.is_directory()) {
-            auto *new_dir = dir->add_subdir(path);
-            if (callbacks.on_new_directory) {
-                callbacks.on_new_directory(callbacks.user_data, new_dir);
+            auto dir_it = std::ranges::find_if(dir->subdirs, [&](const auto &v) { return path == v->path; });
+            if (dir_it == dir->subdirs.end()) {
+                auto *new_dir = dir->add_subdir(path);
+                if (callbacks.on_new_directory) {
+                    callbacks.on_new_directory(callbacks.user_data, new_dir);
+                }
             }
 
-            populate_directory(new_dir, callbacks);
+            populate_directory(dir_it->get(), callbacks);
         } else if (entry.is_regular_file()) {
             auto new_asset_uuid = dir->add_asset(path);
             if (callbacks.on_new_asset) {
@@ -83,6 +86,10 @@ auto AssetDirectory::add_asset(this AssetDirectory &self, const fs::path &path) 
     self.asset_uuids.emplace(asset_uuid);
 
     return asset_uuid;
+}
+
+auto AssetDirectory::refresh(this AssetDirectory &self) -> void {
+    populate_directory(&self, {});
 }
 
 AssetBrowserPanel::AssetBrowserPanel(std::string name_, bool open_): PanelI(std::move(name_), open_) {
@@ -219,6 +226,7 @@ void AssetBrowserPanel::draw_dir_contents(this AssetBrowserPanel &self) {
 
         for (auto *dir : deleting_dirs) {
             self.remove_directory(dir);
+            self.home_dir->refresh();
         }
 
         for (const auto &uuid : self.current_dir->asset_uuids) {
@@ -276,6 +284,7 @@ void AssetBrowserPanel::draw_dir_contents(this AssetBrowserPanel &self) {
                 auto new_dir_path = self.current_dir->path / new_dir_name;
                 fs::create_directory(new_dir_path);
                 self.current_dir->add_subdir(new_dir_path);
+                self.current_dir->refresh();
 
                 ImGui::CloseCurrentPopup();
                 new_dir_name = default_dir_name;
@@ -310,6 +319,8 @@ void AssetBrowserPanel::draw_dir_contents(this AssetBrowserPanel &self) {
                 app.asset_man.init_new_scene(new_scene_uuid, new_scene_name);
                 app.asset_man.export_asset(new_scene_uuid, new_scene_path);
                 app.asset_man.unload_scene(new_scene_uuid);
+
+                self.current_dir->refresh();
 
                 ImGui::CloseCurrentPopup();
                 new_scene_name = default_scene_name;
@@ -425,6 +436,7 @@ void AssetBrowserPanel::render(this AssetBrowserPanel &self) {
 
     ImGui::SameLine();
     if (ImGui::Button(ICON_MDI_RELOAD)) {
+        self.home_dir->refresh();
     }
 
     ImGui::SameLine();

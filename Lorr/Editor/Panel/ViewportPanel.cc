@@ -139,6 +139,7 @@ auto ViewportPanel::draw_tools(this ViewportPanel &self) -> void {
 
     ImGui::SameLine(right_align_offset);
     if (ImGui::Button(ICON_MDI_CHART_BAR)) {
+        app.layout.show_profiler = !app.layout.show_profiler;
     }
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
         ImGui::SetTooltip("Frame Profiler");

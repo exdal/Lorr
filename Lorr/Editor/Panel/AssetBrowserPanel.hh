@@ -20,6 +20,8 @@ struct AssetDirectory {
     auto add_subdir(this AssetDirectory &, const fs::path &path) -> AssetDirectory *;
     auto add_subdir(this AssetDirectory &, std::unique_ptr<AssetDirectory> &&directory) -> AssetDirectory *;
     auto add_asset(this AssetDirectory &, const fs::path &path) -> UUID;
+
+    auto refresh(this AssetDirectory &) -> void;
 };
 
 struct AssetBrowserPanel : PanelI {

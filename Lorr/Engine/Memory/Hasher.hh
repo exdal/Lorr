@@ -4,7 +4,7 @@ namespace lr {
 struct HasherI {
     virtual ~HasherI() = default;
 
-    virtual bool hash(void *data, usize data_size) = 0;
+    virtual bool hash(const void *data, usize data_size) = 0;
     virtual u64 value() = 0;
     virtual void reset() = 0;
 };
@@ -13,7 +13,7 @@ struct HasherXXH64 : HasherI {
     HasherXXH64();
     ~HasherXXH64() override;
 
-    bool hash(void *data, usize data_size) override;
+    bool hash(const void *data, usize data_size) override;
     u64 value() override;
     void reset() override;
 
@@ -25,7 +25,7 @@ namespace detail {
     constexpr u32 fnv32_prime = 16777619_u32;
     constexpr u64 fnv64_val = 14695981039346656037_u64;
     constexpr u64 fnv64_prime = 1099511628211_u64;
-}  // namespace detail
+} // namespace detail
 
 constexpr u32 fnv32(const c8 *data, u32 data_size) {
     u32 fnv = detail::fnv32_val;
@@ -73,4 +73,4 @@ consteval u64 fnv64_c(std::string_view str) {
     return fnv64(str.data(), str.length());
 }
 
-}  // namespace lr
+} // namespace lr

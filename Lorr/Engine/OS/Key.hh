@@ -1,6 +1,9 @@
 #pragma once
 
 namespace lr {
+enum class KeyScancode : u32 {
+    eA = 4,
+};
 enum Key : u32 {
     LR_KEY_UNKNOWN = ~0_u32,
     LR_KEY_MOUSE_1 = 0,
@@ -16,12 +19,12 @@ enum Key : u32 {
     LR_KEY_MOUSE_MIDDLE = LR_KEY_MOUSE_3,
 
     LR_KEY_SPACE = 32,
-    LR_KEY_AND = 38,    // &
-    LR_KEY_QUOTE = 39,  // '
-    LR_KEY_COMMA = 44,  // ,
-    LR_KEY_MINUS = 45,  // -
-    LR_KEY_DOT = 46,    // .
-    LR_KEY_SLASH = 47,  // /
+    LR_KEY_AND = 38, // &
+    LR_KEY_QUOTE = 39, // '
+    LR_KEY_COMMA = 44, // ,
+    LR_KEY_MINUS = 45, // -
+    LR_KEY_DOT = 46, // .
+    LR_KEY_SLASH = 47, // /
 
     LR_KEY_0 = 48,
     LR_KEY_1 = 49,
@@ -34,8 +37,8 @@ enum Key : u32 {
     LR_KEY_8 = 56,
     LR_KEY_9 = 57,
 
-    LR_KEY_SEMICOLON = 59,  // ;
-    LR_KEY_EQUAL = 61,      // =
+    LR_KEY_SEMICOLON = 59, // ;
+    LR_KEY_EQUAL = 61, // =
 
     LR_KEY_A = 65,
     LR_KEY_B = 66,
@@ -64,10 +67,10 @@ enum Key : u32 {
     LR_KEY_Y = 89,
     LR_KEY_Z = 90,
 
-    LR_KEY_LBRACKET = 91,      // [
-    LR_KEY_BACKSLASH = 92,     /* \ */
-    LR_KEY_RBRACKET = 93,      // ]
-    LR_KEY_GRAVE_ACCENT = 96,  // `
+    LR_KEY_LBRACKET = 91, // [
+    LR_KEY_BACKSLASH = 92, /* \ */
+    LR_KEY_RBRACKET = 93, // ]
+    LR_KEY_GRAVE_ACCENT = 96, // `
     LR_KEY_WORLD_1 = 161,
     LR_KEY_WORLD_2 = 162,
 
@@ -147,19 +150,25 @@ enum Key : u32 {
 };
 
 enum class KeyState : u32 {
-    Up,
+    Up = 0,
     Down,
     Repeat,
 };
 
-enum class KeyMod {
+enum class KeyMod : u32 {
     None = 0,
-    Shift = 1 << 0,
-    Control = 1 << 1,
-    Alt = 1 << 2,
-    Super = 1 << 3,
-    CapsLock = 1 << 4,
-    NumLock = 1 << 5,
+    LShift = 1 << 0,
+    RShift = 1 << 1,
+    LControl = 1 << 2,
+    RControl = 1 << 3,
+    LAlt = 1 << 4,
+    RAlt = 1 << 5,
+    LSuper = 1 << 6,
+    RSuper = 1 << 7,
+    NumLock = 1 << 8,
+    CapsLock = 1 << 9,
+    AltGr = 1 << 10,
+    ScrollLock = 1 << 11,
 };
 
-}  // namespace lr
+} // namespace lr

@@ -91,4 +91,39 @@ constexpr To bit_cast(const From &from) noexcept {
     return __builtin_bit_cast(To, from);
 }
 
-}  // namespace ls
+// WARN: ONLY USE THIS AS A FUNCTION ARGUMENT
+template<typename T>
+T *temp_ptr(T &&v) {
+    return &v;
+}
+
+template<typename T>
+concept Container = requires(T &t) {
+    {
+        t.begin()
+    } -> std::same_as<typename T::iterator>;
+    {
+        t.end()
+    } -> std::same_as<typename T::iterator>;
+};
+
+template<typename T, usize N>
+constexpr usize count_of(T (&)[N]) {
+    return N;
+}
+
+template<Container T>
+inline usize size_bytes(const T &v) {
+    return v.size() * sizeof(typename T::value_type);
+}
+
+template<class... T>
+struct match : T... {
+    using T::operator()...;
+};
+
+inline constexpr void hash_combine(usize &seed, usize v) noexcept {
+    seed ^= v + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+}
+
+} // namespace ls

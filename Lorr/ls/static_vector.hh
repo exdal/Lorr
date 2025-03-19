@@ -42,26 +42,20 @@ struct static_vector {
         std::uninitialized_copy(begin_it, end_it, begin());
     }
 
-    constexpr static_vector(const this_type &other) noexcept
-        : static_vector(other.begin(), other.end()) {}
+    constexpr static_vector(const this_type &other) noexcept: static_vector(other.begin(), other.end()) {}
 
-    constexpr static_vector(pointer ptr, size_type size)
-        : static_vector(ptr, ptr + size) {}
+    constexpr static_vector(pointer ptr, size_type size): static_vector(ptr, ptr + size) {}
 
-    constexpr static_vector(std::initializer_list<value_type> v)
-        : static_vector(v.begin(), v.end()) {}
+    constexpr static_vector(std::initializer_list<value_type> v): static_vector(v.begin(), v.end()) {}
 
     template<size_t N>
-    constexpr static_vector(element_type (&arr)[N]) noexcept
-        : static_vector(arr, N) {}
+    constexpr static_vector(element_type (&arr)[N]) noexcept: static_vector(arr, N) {}
 
     template<size_t N>
-    constexpr static_vector(std::array<value_type, N> &arr) noexcept
-        : static_vector(arr.begin(), arr.end()) {}
+    constexpr static_vector(std::array<value_type, N> &arr) noexcept: static_vector(arr.begin(), arr.end()) {}
 
     template<size_t N>
-    constexpr static_vector(const std::array<value_type, N> &arr) noexcept
-        : static_vector(arr.begin(), arr.end()) {}
+    constexpr static_vector(const std::array<value_type, N> &arr) noexcept: static_vector(arr.begin(), arr.end()) {}
 
     constexpr static_vector(this_type &&other) noexcept
         requires(std::movable<T>)
@@ -69,16 +63,34 @@ struct static_vector {
         std::uninitialized_move(other.begin(), other.end(), begin());
     }
 
-    ~static_vector() noexcept { clear(); }
+    ~static_vector() noexcept {
+        clear();
+    }
 
-    constexpr pointer data() noexcept { return m_data; }
-    constexpr const_pointer data() const noexcept { return m_data; }
-    constexpr size_type capacity() const noexcept { return Capacity; }
-    constexpr size_type max_size() const noexcept { return Capacity; }
-    constexpr size_type size() const noexcept { return m_size; }
-    constexpr size_type size_bytes() const noexcept { return m_size * sizeof(T); }
-    constexpr bool empty() const noexcept { return m_size == 0; }
-    constexpr bool full() const noexcept { return m_size == Capacity; }
+    constexpr pointer data() noexcept {
+        return m_data;
+    }
+    constexpr const_pointer data() const noexcept {
+        return m_data;
+    }
+    constexpr size_type capacity() const noexcept {
+        return Capacity;
+    }
+    constexpr size_type max_size() const noexcept {
+        return Capacity;
+    }
+    constexpr size_type size() const noexcept {
+        return m_size;
+    }
+    constexpr size_type size_bytes() const noexcept {
+        return m_size * sizeof(T);
+    }
+    constexpr bool empty() const noexcept {
+        return m_size == 0;
+    }
+    constexpr bool full() const noexcept {
+        return m_size == Capacity;
+    }
     constexpr void clear() noexcept {
         if (!std::is_trivially_destructible_v<value_type>) {
             std::destroy(begin(), end());
@@ -88,27 +100,57 @@ struct static_vector {
     }
 
     // References
-    constexpr reference front() { return m_data[0]; }
-    constexpr const_reference front() const { return front(); }
-    constexpr reference back() { return m_data[m_size - 1]; }
-    constexpr const_reference back() const { return back(); }
+    constexpr reference front() {
+        return m_data[0];
+    }
+    constexpr const_reference front() const {
+        return front();
+    }
+    constexpr reference back() {
+        return m_data[m_size - 1];
+    }
+    constexpr const_reference back() const {
+        return back();
+    }
     constexpr reference at(size_type i) {
         assert(i < size());
         return m_data[i];
     }
-    constexpr const_reference at(size_type i) const { return at(i); }
+    constexpr const_reference at(size_type i) const {
+        return at(i);
+    }
 
     // Iterators
-    constexpr iterator begin() noexcept { return data(); }
-    constexpr const_iterator begin() const noexcept { return data(); }
-    constexpr iterator end() noexcept { return data() + m_size; }
-    constexpr const_iterator end() const noexcept { return data() + m_size; }
-    constexpr const_iterator cbegin() const noexcept { return begin(); }
-    constexpr const_iterator cend() const noexcept { return end(); }
-    constexpr reverse_iterator rbegin() const noexcept { return end(); }
-    constexpr reverse_iterator rend() const noexcept { return begin(); }
-    constexpr const_reverse_iterator crbegin() const noexcept { return rbegin(); }
-    constexpr const_reverse_iterator crend() const noexcept { return rend(); }
+    constexpr iterator begin() noexcept {
+        return data();
+    }
+    constexpr const_iterator begin() const noexcept {
+        return data();
+    }
+    constexpr iterator end() noexcept {
+        return data() + m_size;
+    }
+    constexpr const_iterator end() const noexcept {
+        return data() + m_size;
+    }
+    constexpr const_iterator cbegin() const noexcept {
+        return begin();
+    }
+    constexpr const_iterator cend() const noexcept {
+        return end();
+    }
+    constexpr reverse_iterator rbegin() const noexcept {
+        return end();
+    }
+    constexpr reverse_iterator rend() const noexcept {
+        return begin();
+    }
+    constexpr const_reverse_iterator crbegin() const noexcept {
+        return rbegin();
+    }
+    constexpr const_reverse_iterator crend() const noexcept {
+        return rend();
+    }
 
     // Modifiers
     constexpr iterator erase(const_iterator pos) {
@@ -260,4 +302,4 @@ constexpr bool operator<=>(static_vector<T, NT> lhs, static_vector<U, NU> rhs) {
     return std::lexicographical_compare_three_way(lhs.begin(), lhs.end(), rhs.begin(), rhs.end());
 }
 
-}  // namespace ls
+} // namespace ls

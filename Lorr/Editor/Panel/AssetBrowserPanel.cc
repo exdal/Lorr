@@ -1,31 +1,353 @@
-#include "Panels.hh"
+#include "Editor/Panel/AssetBrowserPanel.hh"
+
+#include "Editor/EditorApp.hh"
+#include "Engine/Util/Icons/IconsMaterialDesignIcons.hh"
 
 namespace lr {
-AssetBrowserPanel::AssetBrowserPanel(std::string_view name_, bool open_)
-    : PanelI(name_, open_) {
-    this->refresh_file_tree();
-}
+auto is_subpath(const fs::path &parent, const fs::path &child) -> bool {
+    auto parent_abs = fs::weakly_canonical(parent);
+    auto child_abs = fs::weakly_canonical(child);
 
-void populate_directory(Directory &dir) {
-    for (const auto &entry : fs::directory_iterator(dir.path)) {
-        if (entry.is_directory()) {
-            Directory subdir;
-            subdir.path = entry.path();
-            populate_directory(subdir);
-            dir.subdirs.push_back(std::move(subdir));
-        } else if (entry.is_regular_file()) {
-            dir.files.push_back(entry.path());
+    auto parent_iter = parent_abs.begin();
+    auto child_iter = child_abs.begin();
+
+    for (; parent_iter != parent_abs.end(); ++parent_iter, ++child_iter) {
+        if (child_iter == child_abs.end() || *parent_iter != *child_iter) {
+            return false;
         }
     }
 
-    std::sort(dir.files.begin(), dir.files.end(), [](const fs::path &lhs, const fs::path &rhs) {  //
-        return lhs.filename() < rhs.filename();
-    });
+    return true;
 }
 
-void AssetBrowserPanel::refresh_file_tree(this AssetBrowserPanel &self) {
-    self.asset_dir = { .path = fs::current_path() / "resources" };  // TODO: (project) replace later
-    populate_directory(self.asset_dir);
+struct AssetDirectoryCallbacks {
+    void *user_data = nullptr;
+    void (*on_new_directory)(void *user_data, AssetDirectory *directory) = nullptr;
+    void (*on_new_asset)(void *user_data, UUID &asset_uuid) = nullptr;
+};
+
+auto populate_directory(AssetDirectory *dir, const AssetDirectoryCallbacks &callbacks) -> void {
+    for (const auto &entry : fs::directory_iterator(dir->path)) {
+        const auto &path = entry.path();
+        if (entry.is_directory()) {
+            AssetDirectory *cur_subdir = nullptr;
+            auto dir_it = std::ranges::find_if(dir->subdirs, [&](const auto &v) { return path == v->path; });
+            if (dir_it == dir->subdirs.end()) {
+                auto *new_dir = dir->add_subdir(path);
+                if (callbacks.on_new_directory) {
+                    callbacks.on_new_directory(callbacks.user_data, new_dir);
+                }
+
+                cur_subdir = new_dir;
+            } else {
+                cur_subdir = dir_it->get();
+            }
+
+            populate_directory(cur_subdir, callbacks);
+        } else if (entry.is_regular_file()) {
+            auto new_asset_uuid = dir->add_asset(path);
+            if (callbacks.on_new_asset) {
+                callbacks.on_new_asset(callbacks.user_data, new_asset_uuid);
+            }
+        }
+    }
+}
+
+AssetDirectory::AssetDirectory(fs::path path_, FileWatcher *file_watcher_, AssetDirectory *parent_):
+    path(std::move(path_)),
+    file_watcher(file_watcher_),
+    parent(parent_) {
+    this->watch_descriptor = file_watcher_->watch_dir(this->path);
+}
+
+AssetDirectory::~AssetDirectory() {
+    auto &app = EditorApp::get();
+    this->file_watcher->remove_dir(this->watch_descriptor);
+    for (const auto &asset_uuid : this->asset_uuids) {
+        app.asset_man.delete_asset(asset_uuid);
+    }
+}
+
+auto AssetDirectory::add_subdir(this AssetDirectory &self, const fs::path &path) -> AssetDirectory * {
+    auto dir = std::make_unique<AssetDirectory>(path, self.file_watcher, &self);
+
+    return self.add_subdir(std::move(dir));
+}
+
+auto AssetDirectory::add_subdir(this AssetDirectory &self, std::unique_ptr<AssetDirectory> &&directory) -> AssetDirectory * {
+    auto *ptr = directory.get();
+    self.subdirs.push_back(std::move(directory));
+
+    return ptr;
+}
+
+auto AssetDirectory::add_asset(this AssetDirectory &self, const fs::path &path) -> UUID {
+    auto &app = Application::get();
+    auto asset_uuid = app.asset_man.import_asset(path);
+    if (!asset_uuid) {
+        return UUID(nullptr);
+    }
+
+    self.asset_uuids.emplace(asset_uuid);
+
+    return asset_uuid;
+}
+
+auto AssetDirectory::refresh(this AssetDirectory &self) -> void {
+    populate_directory(&self, {});
+}
+
+AssetBrowserPanel::AssetBrowserPanel(std::string name_, bool open_): PanelI(std::move(name_), open_) {
+    auto &app = EditorApp::get();
+
+    this->file_watcher.init(app.active_project->root_dir);
+    this->home_dir = this->add_directory(app.active_project->root_dir);
+    this->current_dir = this->home_dir.get();
+}
+
+auto AssetBrowserPanel::add_directory(this AssetBrowserPanel &self, const fs::path &path) -> std::unique_ptr<AssetDirectory> {
+    AssetDirectory *parent = nullptr;
+    if (path.has_parent_path()) {
+        parent = self.find_directory(path.parent_path());
+    }
+
+    if (parent) {
+        for (const auto &v : parent->subdirs) {
+            if (v->path == path) {
+                return nullptr;
+            }
+        }
+
+        // NOTE: If there is parent, we are not creating new root directory.
+        // So just return nullptr, instead of another owning directory.
+        // This is intentional. You should find this new child directory
+        // through `::find_directory`.
+        auto dir = std::make_unique<AssetDirectory>(path, &self.file_watcher, parent);
+        populate_directory(dir.get(), {});
+        parent->add_subdir(std::move(dir));
+        return nullptr;
+    }
+
+    auto dir = std::make_unique<AssetDirectory>(path, &self.file_watcher, nullptr);
+    populate_directory(dir.get(), {});
+
+    return dir;
+}
+
+auto AssetBrowserPanel::remove_directory(this AssetBrowserPanel &self, const fs::path &path) -> void {
+    auto *dir = self.find_directory(path);
+    if (dir == nullptr) {
+        return;
+    }
+
+    self.remove_directory(dir);
+}
+
+auto AssetBrowserPanel::remove_directory(this AssetBrowserPanel &self, AssetDirectory *directory) -> void {
+    auto *parent_dir = directory->parent;
+    const auto &path = directory->path;
+    fs::remove_all(path);
+
+    // If we are inside, set cur dir to closest alive dir
+    if (is_subpath(path, self.current_dir->path)) {
+        self.current_dir = parent_dir;
+    }
+
+    // Remove found directory from its parent
+    if (parent_dir) {
+        std::erase_if(parent_dir->subdirs, [directory](const auto &v) { //
+            return v->path == directory->path;
+        });
+    }
+}
+
+auto AssetBrowserPanel::find_directory(this AssetBrowserPanel &self, const fs::path &path) -> AssetDirectory * {
+    if (!self.home_dir) {
+        return nullptr;
+    }
+
+    AssetDirectory *cur_dir = self.home_dir.get();
+    const auto &relative_to_home = fs::relative(path, self.home_dir->path);
+    for (const auto &depth_path : relative_to_home) {
+        if (depth_path == "/" || depth_path == "." || depth_path.empty()) {
+            continue;
+        }
+
+        bool found = false;
+        for (const auto &subdir : cur_dir->subdirs) {
+            if (subdir->path.filename() == depth_path) {
+                cur_dir = subdir.get();
+                found = true;
+                break;
+            }
+        }
+
+        if (!found) {
+            return nullptr;
+        }
+    }
+
+    return cur_dir;
+}
+
+void AssetBrowserPanel::draw_dir_contents(this AssetBrowserPanel &self) {
+    auto &app = EditorApp::get();
+
+    i32 table_flags = ImGuiTableFlags_ContextMenuInBody;
+    table_flags |= ImGuiTableFlags_ScrollY;
+    table_flags |= ImGuiTableFlags_PadOuterX;
+    table_flags |= ImGuiTableFlags_SizingFixedFit;
+
+    f32 padding = 3.0;
+    ImVec2 button_size = { 100, 140 };
+    auto avail_x = ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ScrollbarSize;
+    f32 tile_size = button_size.x + 2 * padding;
+    i32 tile_count = static_cast<i32>(avail_x / tile_size);
+
+    bool open_create_dir_popup = false;
+    bool open_create_scene_popup = false;
+
+    auto *dir_texture = app.asset_man.get_texture(app.layout.editor_assets["dir"]);
+    auto dir_image = app.imgui_renderer.add_image(dir_texture->image_view);
+
+    ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, { padding, padding });
+    if (ImGui::BeginTable("asset_browser", tile_count, table_flags)) {
+        std::vector<AssetDirectory *> deleting_dirs = {}; // this is to avoid iterator corruption
+        for (const auto &subdir : self.current_dir->subdirs) {
+            ImGui::TableNextColumn();
+
+            const auto &file_name = subdir->path.filename().string();
+            if (ImGuiLR::image_button(file_name, dir_image, button_size)) {
+                self.current_dir = subdir.get();
+            }
+            if (ImGui::BeginPopupContextItem(file_name.c_str())) {
+                if (ImGui::MenuItem("Delete")) {
+                    deleting_dirs.push_back(subdir.get());
+                }
+
+                ImGui::EndPopup();
+            }
+        }
+
+        for (auto *dir : deleting_dirs) {
+            self.remove_directory(dir);
+            self.home_dir->refresh();
+        }
+
+        for (const auto &uuid : self.current_dir->asset_uuids) {
+            ImGui::TableNextColumn();
+
+            auto *asset = app.asset_man.get_asset(uuid);
+            if (!asset) {
+                continue;
+            }
+
+            const auto &file_name = asset->path.filename().string();
+            auto *asset_texture = app.layout.get_asset_texture(asset);
+            auto asset_image = app.imgui_renderer.add_image(asset_texture->image_view);
+            ImGuiLR::image_button(file_name, asset_image, button_size);
+            if (ImGui::BeginDragDropSource()) {
+                ImGui::SetDragDropPayload("ASSET_BY_UUID", &asset->uuid, sizeof(UUID));
+                ImGui::EndDragDropSource();
+            }
+        }
+
+        if (ImGui::BeginPopupContextWindow(
+                "asset_browser_ctx",
+                ImGuiPopupFlags_NoOpenOverItems | ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverExistingPopup
+            ))
+        {
+            if (ImGui::BeginMenu("Create...")) {
+                open_create_dir_popup = ImGui::MenuItem("Directory");
+                ImGui::Separator();
+                open_create_scene_popup = ImGui::MenuItem("Scene");
+
+                ImGui::EndMenu();
+            }
+
+            ImGui::EndPopup();
+        }
+
+        if (open_create_dir_popup) {
+            ImGui::OpenPopup("###create_dir_popup");
+        }
+
+        if (open_create_scene_popup) {
+            ImGui::OpenPopup("###create_scene_popup");
+        }
+
+        if (ImGui::BeginPopupModal("Create Directory...###create_dir_popup", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+            constexpr static auto default_dir_name = "New Directory";
+            static std::string new_dir_name = default_dir_name;
+            ImGui::InputText("", &new_dir_name);
+
+            if (new_dir_name.empty()) {
+                ImGui::BeginDisabled();
+            }
+
+            if (ImGui::Button("OK")) {
+                auto new_dir_path = self.current_dir->path / new_dir_name;
+                fs::create_directory(new_dir_path);
+                self.current_dir->add_subdir(new_dir_path);
+                self.current_dir->refresh();
+
+                ImGui::CloseCurrentPopup();
+                new_dir_name = default_dir_name;
+            }
+
+            if (new_dir_name.empty()) {
+                ImGui::EndDisabled();
+            }
+
+            ImGui::SameLine();
+
+            if (ImGui::Button("Cancel")) {
+                ImGui::CloseCurrentPopup();
+            }
+
+            ImGui::EndPopup();
+        }
+
+        if (ImGui::BeginPopupModal("Create Scene...###create_scene_popup", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+            constexpr static auto default_scene_name = "New Scene";
+            static std::string new_scene_name = default_scene_name;
+            ImGui::InputText("", &new_scene_name);
+
+            if (new_scene_name.empty()) {
+                ImGui::BeginDisabled();
+            }
+
+            if (ImGui::Button("OK")) {
+                auto new_scene_path = self.current_dir->path / (new_scene_name + ".json");
+                auto new_scene_uuid = app.asset_man.create_asset(AssetType::Scene, new_scene_path);
+
+                app.asset_man.init_new_scene(new_scene_uuid, new_scene_name);
+                app.asset_man.export_asset(new_scene_uuid, new_scene_path);
+                app.asset_man.unload_scene(new_scene_uuid);
+
+                self.current_dir->refresh();
+
+                ImGui::CloseCurrentPopup();
+                new_scene_name = default_scene_name;
+            }
+
+            if (new_scene_name.empty()) {
+                ImGui::EndDisabled();
+            }
+
+            ImGui::SameLine();
+
+            if (ImGui::Button("Cancel")) {
+                ImGui::CloseCurrentPopup();
+            }
+
+            ImGui::EndPopup();
+        }
+
+        ImGui::EndTable();
+    }
+
+    ImGui::PopStyleVar();
 }
 
 void AssetBrowserPanel::draw_project_tree(this AssetBrowserPanel &self) {
@@ -40,108 +362,105 @@ void AssetBrowserPanel::draw_project_tree(this AssetBrowserPanel &self) {
         ImGui::TableNextRow();
         ImGui::TableNextColumn();
 
-        self.draw_file_tree(self.asset_dir);
+        self.draw_file_tree(self.home_dir.get());
 
         ImGui::EndTable();
     }
     ImGui::PopStyleVar();
 }
 
-void AssetBrowserPanel::draw_dir_contents(this AssetBrowserPanel &self) {
-    if (!self.selected_dir) {
-        return;
-    }
-
-    i32 table_flags = ImGuiTableFlags_ContextMenuInBody;
-    table_flags |= ImGuiTableFlags_ScrollY;
-    table_flags |= ImGuiTableFlags_PadOuterX;
-    table_flags |= ImGuiTableFlags_SizingFixedFit;
-
-    f32 padding = 3.0;
-    ImVec2 button_size = { 100, 140 };
-    auto avail_x = ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ScrollbarSize;
-    f32 tile_size = button_size.x + 2 * padding;
-    i32 tile_count = static_cast<i32>(avail_x / tile_size);
-
-    ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, { padding, padding });
-    if (ImGui::BeginTable("asset_browser", tile_count, table_flags)) {
-        for (auto &v : self.selected_dir->files) {
-            ImGui::TableNextColumn();
-
-            auto file_name = v.filename().string();
-            ImGui::Button(file_name.c_str(), button_size);
-            if (ImGui::BeginDragDropSource()) {
-                auto payload_data = v.string();
-                ImGui::SetDragDropPayload("ASSET_PATH", payload_data.c_str(), payload_data.length());
-                ImGui::EndDragDropSource();
-            }
-        }
-
-        ImGui::EndTable();
-    }
-    ImGui::PopStyleVar();
-}
-
-void AssetBrowserPanel::draw_file_tree(this AssetBrowserPanel &self, Directory &root_dir) {
+void AssetBrowserPanel::draw_file_tree(this AssetBrowserPanel &self, AssetDirectory *directory) {
     ImGuiTreeNodeFlags tree_node_dir_flags = ImGuiTreeNodeFlags_None;
     tree_node_dir_flags |= ImGuiTreeNodeFlags_FramePadding;
     tree_node_dir_flags |= ImGuiTreeNodeFlags_SpanFullWidth;
 
     auto tree_node_file_flags = tree_node_dir_flags;
     tree_node_file_flags |= ImGuiTreeNodeFlags_Leaf;
-    // tree_node_file_flags |= ImGuiTreeNodeFlags_NoTreePushOnOpen;
 
     ImGui::TableNextRow();
     ImGui::TableNextColumn();
 
-    bool no_subdirs = root_dir.subdirs.empty();
-    bool no_files = root_dir.files.empty();
+    for (const auto &subdir : directory->subdirs) {
+        bool no_subdirs = subdir->subdirs.empty();
+        bool no_files = subdir->asset_uuids.empty();
+        auto cur_node_flags = no_subdirs ? tree_node_file_flags : tree_node_dir_flags;
 
-    const c8 *icon = "\uf07b";
-    if (no_subdirs && no_files) {
-        icon = "\uf07c";
-    }
-
-    auto cur_node_flags = no_subdirs ? tree_node_file_flags : tree_node_dir_flags;
-    auto file_name = root_dir.path.string();
-    if (ImGui::TreeNodeEx(root_dir.path.c_str(), cur_node_flags, "%s  %s", icon, file_name.c_str())) {
-        if (ImGui::IsItemClicked()) {
-            self.selected_dir = &root_dir;
+        auto icon = ICON_MDI_FOLDER;
+        if (no_subdirs && no_files) {
+            icon = ICON_MDI_FOLDER_OPEN;
         }
 
-        for (auto &dirs : root_dir.subdirs) {
-            self.draw_file_tree(dirs);
-        }
+        const auto &file_name = subdir->path.filename().string();
+        if (ImGui::TreeNodeEx(file_name.c_str(), cur_node_flags, "%s  %s", icon, file_name.c_str())) {
+            if (ImGui::IsItemToggledOpen() || ImGui::IsItemClicked()) {
+                self.current_dir = subdir.get();
+            }
 
-        ImGui::TreePop();
+            self.draw_file_tree(subdir.get());
+
+            ImGui::TreePop();
+        }
     }
 }
 
-void AssetBrowserPanel::update(this AssetBrowserPanel &self) {
+auto AssetBrowserPanel::poll_watch_events(this AssetBrowserPanel &self) -> void {
+    while (true) {
+        auto file_event = self.file_watcher.peek();
+        if (!file_event.has_value()) {
+            break;
+        }
+
+        const auto &event_path = self.file_watcher.get_path(file_event->watch_descriptor);
+        const auto &full_path = event_path / file_event->file_name;
+        if (file_event->action_mask & FileActionMask::Directory) {
+            if (file_event->action_mask & FileActionMask::Create) {
+                self.add_directory(full_path);
+            }
+
+            if (file_event->action_mask & FileActionMask::Delete) {
+                self.remove_directory(full_path);
+            }
+        } else {
+            if (file_event->action_mask & FileActionMask::Create) {
+                auto *event_dir = self.find_directory(event_path);
+                if (!event_dir) {
+                    continue;
+                }
+
+                event_dir->add_asset(full_path);
+            }
+        }
+    }
+}
+
+void AssetBrowserPanel::render(this AssetBrowserPanel &self) {
+    self.poll_watch_events();
+
     ImGui::Begin(self.name.data(), nullptr, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
     auto avail_region = ImGui::GetContentRegionAvail();
 
-    // HEADER
-    if (ImGui::Button("\uf021")) {
-        self.refresh_file_tree();
+    ImGui::SameLine();
+    if (ImGui::Button(ICON_MDI_RELOAD)) {
+        self.home_dir->refresh();
     }
 
     ImGui::SameLine();
-    if (ImGui::Button("\uf015")) {
-        self.selected_dir = &self.asset_dir;
+    if (ImGui::Button(ICON_MDI_HOME)) {
+        self.current_dir = self.home_dir.get();
     }
 
-    if (self.selected_dir) {
-        auto rel_path = fs::relative(self.selected_dir->path, self.asset_dir.path);
-
-        for (const auto &v : rel_path) {
-            auto dir_name = v.string();
-
-            ImGui::SameLine();
-            ImGui::TextUnformatted("/");
-            ImGui::SameLine();
-            ImGui::Button(dir_name.c_str());
+    const auto &cur_rel_to_home = fs::relative(self.current_dir->path, self.home_dir->path);
+    for (const auto &v : cur_rel_to_home) {
+        if (v == ".") {
+            continue;
         }
+
+        auto dir_name = v.filename().string();
+
+        ImGui::SameLine();
+        ImGui::TextUnformatted("/");
+        ImGui::SameLine();
+        ImGui::TextUnformatted(dir_name.c_str());
     }
 
     // ACTUAL FILE TREE
@@ -155,7 +474,8 @@ void AssetBrowserPanel::update(this AssetBrowserPanel &self) {
 
         ImGui::EndTable();
     }
+
     ImGui::End();
 }
 
-}  // namespace lr
+} // namespace lr

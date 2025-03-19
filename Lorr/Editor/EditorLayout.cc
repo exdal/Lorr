@@ -1,13 +1,39 @@
 #include "EditorLayout.hh"
 
-#include "EditorApp.hh"
+#include "Editor/EditorApp.hh"
+#include "Editor/Panel/AssetBrowserPanel.hh"
+#include "Editor/Panel/ConsolePanel.hh"
+#include "Editor/Panel/InspectorPanel.hh"
+#include "Editor/Panel/SceneBrowserPanel.hh"
+#include "Editor/Panel/ViewportPanel.hh"
+
+#include "Engine/OS/File.hh"
 
 #include <imgui.h>
 #include <imgui_internal.h>
 
+#include "Engine/Util/Icons/IconsMaterialDesignIcons.hh"
+
 namespace lr {
 void EditorLayout::init(this EditorLayout &self) {
     self.setup_theme(EditorTheme::Dark);
+
+    auto add_texture = [&self](std::string name, const fs::path &path) {
+        auto &app = EditorApp::get();
+        auto asset_uuid = app.asset_man.create_asset(AssetType::Texture, app.asset_man.asset_root_path(AssetType::Root) / "editor" / path);
+        app.asset_man.load_texture(asset_uuid);
+        self.editor_assets.emplace(name, asset_uuid);
+    };
+
+    add_texture("dir", "dir.png");
+    add_texture("scene", "scene.png");
+    add_texture("model", "model.png");
+    add_texture("texture", "texture.png");
+    add_texture("file", "file.png");
+}
+
+auto EditorLayout::destroy(this EditorLayout &self) -> void {
+    self.panels.clear();
 }
 
 void EditorLayout::setup_theme(this EditorLayout &, EditorTheme) {
@@ -35,8 +61,8 @@ void EditorLayout::setup_theme(this EditorLayout &, EditorTheme) {
     colors[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.40f, 0.40f, 0.40f, 1.00f);
     colors[ImGuiCol_ScrollbarGrabActive] = ImVec4(0.43f, 0.43f, 0.43f, 1.00f);
     colors[ImGuiCol_CheckMark] = ImVec4(0.00f, 0.44f, 0.88f, 1.00f);
-    colors[ImGuiCol_SliderGrab] = ImVec4(0.000f, 0.434f, 0.878f, 1.000f);
-    colors[ImGuiCol_SliderGrabActive] = ImVec4(0.000f, 0.434f, 0.878f, 1.000f);
+    colors[ImGuiCol_SliderGrab] = ImVec4(0.000f, 0.434f, 0.878f, 1.00f);
+    colors[ImGuiCol_SliderGrabActive] = ImVec4(0.000f, 0.434f, 0.878f, 1.00f);
     colors[ImGuiCol_Button] = ImVec4(0.22f, 0.22f, 0.22f, 1.00f);
     colors[ImGuiCol_ButtonHovered] = ImVec4(0.28f, 0.28f, 0.28f, 1.00f);
     colors[ImGuiCol_ButtonActive] = ImVec4(0.000f, 0.439f, 0.878f, 0.824f);
@@ -105,213 +131,354 @@ void EditorLayout::setup_theme(this EditorLayout &, EditorTheme) {
 void EditorLayout::setup_dockspace(this EditorLayout &self) {
     ZoneScoped;
 
-    auto [asset_browser_panel_id, asset_browser_panel] = self.add_panel<AssetBrowserPanel>(LRED_ICON_ASSETS "  Asset Browser");
-    auto [console_panel_id, console_panel] = self.add_panel<ConsolePanel>(LRED_ICON_INFO "  Console");
-    auto [inspector_panel_id, inspector_panel] = self.add_panel<InspectorPanel>(LRED_ICON_WRENCH "  Inspector");
-    auto [scene_browser_panel_id, scene_browser_panel] = self.add_panel<SceneBrowserPanel>(LRED_ICON_SANDWICH "  Scene Browser");
-    auto [tools_panel_id, tools_panel] = self.add_panel<ToolsPanel>("Tools");
-    auto [viewport_panel_id, viewport_panel] = self.add_panel<ViewportPanel>(LRED_ICON_EYE "  Viewport");
+    auto [asset_browser_panel_id, asset_browser_panel] = self.add_panel<AssetBrowserPanel>("Asset Browser", ICON_MDI_IMAGE_MULTIPLE);
+    auto [console_panel_id, console_panel] = self.add_panel<ConsolePanel>("Console", ICON_MDI_INFORMATION_SLAB_CIRCLE);
+    auto [inspector_panel_id, inspector_panel] = self.add_panel<InspectorPanel>("Inspector", ICON_MDI_WRENCH);
+    auto [scene_browser_panel_id, scene_browser_panel] = self.add_panel<SceneBrowserPanel>("Scene Browser", ICON_MDI_FILE_TREE);
+    auto [viewport_panel_id, viewport_panel] = self.add_panel<ViewportPanel>("Viewport", ICON_MDI_EYE);
 
     ImGuiViewport *viewport = ImGui::GetMainViewport();
     i32 dock_node_flags = ImGuiDockNodeFlags_PassthruCentralNode;
 
-    auto dockspace_id = ImGui::GetID("EngineDockSpace");
-    self.dockspace_id = dockspace_id;
+    auto dockspace_id_tmp = ImGui::GetID("EngineDockSpace");
+    self.dockspace_id = dockspace_id_tmp;
 
-    ImGui::DockBuilderRemoveNode(dockspace_id);
-    ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace | dock_node_flags);
-    ImGui::DockBuilderSetNodeSize(dockspace_id, viewport->Size);
+    ImGui::DockBuilderRemoveNode(dockspace_id_tmp);
+    ImGui::DockBuilderAddNode(dockspace_id_tmp, ImGuiDockNodeFlags_DockSpace | dock_node_flags);
+    ImGui::DockBuilderSetNodeSize(dockspace_id_tmp, viewport->Size);
 
-    auto main_dock_id = dockspace_id;
+    auto main_dock_id = dockspace_id_tmp;
     auto up_dock_id = ImGui::DockBuilderSplitNode(main_dock_id, ImGuiDir_Up, 0.05f, nullptr, &main_dock_id);
-    auto most_left_dock_id = ImGui::DockBuilderSplitNode(main_dock_id, ImGuiDir_Left, 0.03f, nullptr, &main_dock_id);
     auto down_dock_id = ImGui::DockBuilderSplitNode(main_dock_id, ImGuiDir_Down, 0.30f, nullptr, &main_dock_id);
     auto left_dock_id = ImGui::DockBuilderSplitNode(main_dock_id, ImGuiDir_Left, 0.20f, nullptr, &main_dock_id);
     auto right_dock_id = ImGui::DockBuilderSplitNode(main_dock_id, ImGuiDir_Right, 0.25f, nullptr, &main_dock_id);
 
     ImGui::DockBuilderDockWindow("###up_dock", up_dock_id);
-    ImGui::DockBuilderDockWindow(tools_panel->name.data(), most_left_dock_id);
     ImGui::DockBuilderDockWindow(viewport_panel->name.data(), main_dock_id);
     ImGui::DockBuilderDockWindow(console_panel->name.data(), down_dock_id);
     ImGui::DockBuilderDockWindow(asset_browser_panel->name.data(), down_dock_id);
     ImGui::DockBuilderDockWindow(scene_browser_panel->name.data(), left_dock_id);
     ImGui::DockBuilderDockWindow(inspector_panel->name.data(), right_dock_id);
-    ImGui::DockBuilderFinish(dockspace_id);
+    ImGui::DockBuilderFinish(dockspace_id_tmp);
 }
 
-void EditorLayout::update(this EditorLayout &self) {
+void EditorLayout::render(this EditorLayout &self, vuk::Format format, vuk::Extent3D extent) {
     ZoneScoped;
 
     auto &app = EditorApp::get();
-    ImGuiViewport *viewport = ImGui::GetMainViewport();
+
+    auto *viewport = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(viewport->WorkPos);
     ImGui::SetNextWindowSize(viewport->WorkSize);
     ImGui::SetNextWindowViewport(viewport->ID);
+    if (app.active_project.has_value()) {
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+        ImGui::SetNextWindowBgAlpha(0.0f);
 
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
-    ImGui::SetNextWindowBgAlpha(0.0f);
+        i32 dock_window_flags = ImGuiWindowFlags_NoDocking;
+        dock_window_flags |= ImGuiWindowFlags_NoTitleBar;
+        dock_window_flags |= ImGuiWindowFlags_NoCollapse;
+        dock_window_flags |= ImGuiWindowFlags_NoResize;
+        dock_window_flags |= ImGuiWindowFlags_NoMove;
+        dock_window_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus;
+        dock_window_flags |= ImGuiWindowFlags_NoNavFocus;
+        dock_window_flags |= ImGuiWindowFlags_NoScrollbar;
+        dock_window_flags |= ImGuiWindowFlags_NoScrollWithMouse;
+        dock_window_flags |= ImGuiWindowFlags_NoBackground;
+        dock_window_flags |= ImGuiWindowFlags_MenuBar;
+        ImGui::Begin("EditorDock", nullptr, dock_window_flags);
+        ImGui::PopStyleVar(2);
 
-    i32 dock_window_flags = ImGuiWindowFlags_NoDocking;
-    dock_window_flags |= ImGuiWindowFlags_NoTitleBar;
-    dock_window_flags |= ImGuiWindowFlags_NoCollapse;
-    dock_window_flags |= ImGuiWindowFlags_NoResize;
-    dock_window_flags |= ImGuiWindowFlags_NoMove;
-    dock_window_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus;
-    dock_window_flags |= ImGuiWindowFlags_NoNavFocus;
-    dock_window_flags |= ImGuiWindowFlags_NoScrollbar;
-    dock_window_flags |= ImGuiWindowFlags_NoScrollWithMouse;
-    dock_window_flags |= ImGuiWindowFlags_NoBackground;
-    dock_window_flags |= ImGuiWindowFlags_MenuBar;
-    ImGui::Begin("EditorDock", nullptr, dock_window_flags);
-    ImGui::PopStyleVar(2);
-
-    if (!self.dockspace_id) {
-        self.setup_dockspace();
-    }
-
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
-    i32 dock_node_flags = ImGuiDockNodeFlags_PassthruCentralNode;
-    ImGui::DockSpace(self.dockspace_id.value(), ImVec2(0.0f, 0.0f), dock_node_flags | ImGuiDockNodeFlags_NoWindowMenuButton);
-    ImGui::PopStyleVar();
-
-    if (ImGui::BeginMenuBar()) {
-        if (ImGui::BeginMenu("File")) {
-            if (ImGui::MenuItem("Exit")) {
-                app.shutdown(false);
-            }
-
-            ImGui::EndMenu();
+        if (!self.dockspace_id) {
+            self.setup_dockspace();
         }
 
-        if (ImGui::BeginMenu("View")) {
-            if (ImGui::MenuItem("Task Graph Profiler")) {
-                self.show_profiler = !self.show_profiler;
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
+        i32 dock_node_flags = ImGuiDockNodeFlags_PassthruCentralNode;
+        ImGui::DockSpace(self.dockspace_id.value(), ImVec2(0.0f, 0.0f), dock_node_flags | ImGuiDockNodeFlags_NoWindowMenuButton);
+        ImGui::PopStyleVar();
+
+        if (ImGui::BeginMenuBar()) {
+            if (ImGui::BeginMenu("File")) {
+                if (ImGui::MenuItem("Save Project", nullptr, false)) {
+                    app.save_project();
+                }
+
+                ImGui::Separator();
+
+                if (ImGui::MenuItem("Exit")) {
+                    app.should_close = true;
+                }
+
+                ImGui::EndMenu();
             }
 
-            ImGui::EndMenu();
+            if (ImGui::BeginMenu("View")) {
+                if (ImGui::MenuItem("Task Graph Profiler")) {
+                    self.show_profiler = !self.show_profiler;
+                }
+
+                if (ImGui::MenuItem("Show Assets")) {
+                    self.show_assets = !self.show_assets;
+                }
+
+                ImGui::EndMenu();
+            }
+
+            ImGui::EndMenuBar();
         }
 
-        ImGui::EndMenuBar();
-    }
+        ImGui::End();
 
-    ImGui::End();
+        if (self.show_assets) {
+            memory::ScopedStack stack;
+            const auto &registry = app.asset_man.registry();
+            ImGui::Begin("Assets", &self.show_assets);
 
-    ImGuiDockNodeFlags dock_node_flags_override = ImGuiDockNodeFlags_NoTabBar;
-    dock_node_flags_override |= ImGuiDockNodeFlags_NoDockingOverMe;
-    dock_node_flags_override |= ImGuiDockNodeFlags_NoDockingSplit;
-    dock_node_flags_override |= ImGuiDockNodeFlags_NoResizeX;
-    ImGuiWindowClass window_class;
-    window_class.DockNodeFlagsOverrideSet = dock_node_flags_override;
+            usize loaded_assets = 0;
+            for (const auto &asset_it : registry) {
+                if (asset_it.second.is_loaded()) {
+                    loaded_assets++;
+                }
+            }
 
-    ImGui::SetNextWindowClass(&window_class);
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.082f, 0.082f, 0.082f, 1.00f));
-    ImGui::Begin("###up_dock");
-    ImGui::End();
-    ImGui::PopStyleColor();
+            ImGuiLR::text_sv(stack.format("{} total assets, {} loaded.", registry.size(), loaded_assets));
 
-    if (self.show_profiler) {
-        app.world_render_pipeline.task_graph.draw_profiler_ui();
-    }
+            ImGuiTableFlags table_flags = ImGuiTableFlags_Resizable;
+            table_flags |= ImGuiTableFlags_Hideable;
+            table_flags |= ImGuiTableFlags_RowBg;
+            table_flags |= ImGuiTableFlags_Borders;
+            table_flags |= ImGuiTableFlags_ScrollX;
+            table_flags |= ImGuiTableFlags_ScrollY;
+            if (ImGui::BeginTable("assets", 5, table_flags)) {
+                ImGui::TableSetupColumn("UUID", ImGuiTableColumnFlags_WidthStretch, 0.0f);
+                ImGui::TableSetupColumn("Type", ImGuiTableColumnFlags_WidthStretch, 0.0f);
+                ImGui::TableSetupColumn("Path", ImGuiTableColumnFlags_WidthStretch, 0.0f);
+                ImGui::TableSetupColumn("Index", ImGuiTableColumnFlags_WidthStretch, 0.0f);
+                ImGui::TableSetupColumn("Ref Count", ImGuiTableColumnFlags_WidthStretch, 0.0f);
 
-    for (auto &panel : self.panels) {
-        panel->do_update();
+                ImGui::TableHeadersRow();
+
+                for (const auto &asset_it : registry) {
+                    const auto &asset_uuid = asset_it.first;
+                    const auto &asset = asset_it.second;
+                    auto asset_uuid_str = asset_uuid.str();
+                    auto asset_path = fs::relative(asset.path, app.active_project->root_dir).string();
+
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+
+                    ImGui::TableSetColumnIndex(0);
+                    ImGui::TextUnformatted(asset_uuid_str.c_str());
+                    ImGui::TableSetColumnIndex(1);
+                    ImGuiLR::text_sv(app.asset_man.to_asset_type_sv(asset.type));
+                    ImGui::TableSetColumnIndex(2);
+                    ImGui::TextUnformatted(asset_path.c_str());
+                    ImGui::TableSetColumnIndex(3);
+                    ImGuiLR::text_sv(stack.format("{}", SlotMap_decode_id(asset.scene_id).index));
+                    ImGui::TableSetColumnIndex(4);
+                    ImGuiLR::text_sv(stack.format("{}", asset.ref_count));
+                }
+
+                ImGui::EndTable();
+            }
+
+            ImGui::End();
+        }
+
+        if (self.show_profiler) {
+            auto &io = ImGui::GetIO();
+            ImGui::SetNextWindowSizeConstraints(ImVec2(750, 450), ImVec2(FLT_MAX, FLT_MAX));
+            ImGui::Begin("Frame Profiler", &self.show_profiler);
+            ImGui::Text("Frametime: %.4fms (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
+
+            app.device.render_frame_profiler();
+
+            ImGui::End();
+        }
+
+        for (auto &panel : self.panels) {
+            panel->do_render(format, extent);
+        }
+    } else {
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+        ImGui::SetNextWindowPos({ 0, 0 });
+        ImGui::SetNextWindowSize(viewport->Size);
+
+        ImGui::Begin("New Project", nullptr, ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoDecoration);
+
+        auto &style = ImGui::GetStyle();
+        auto window_size = ImGui::GetWindowSize();
+        auto frame_padding = style.FramePadding;
+        f32 item_width = 300.0f;
+        f32 window_width = (item_width * 2.0f) + 4.0f;
+        ImGui::SetCursorPos({ (window_size.x - frame_padding.x - window_width) * 0.5f, 100.0f });
+
+        ImGui::BeginGroup();
+        ImGui::TextUnformatted("Open recent project...");
+        if (!app.recent_projects.empty()) {
+            for (const auto &v : app.recent_projects) {
+                const auto &path_str = v.string();
+                if (ImGui::Button(path_str.c_str(), { item_width, 50 })) {
+                    app.open_project(v / "world.lrproj");
+                }
+            }
+        } else {
+            ImGui::InvisibleButton("", { item_width, 400 });
+        }
+        ImGui::EndGroup();
+
+        ImGui::SameLine();
+        ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical, 4.0);
+        ImGui::SameLine();
+
+        ImGui::BeginChild("##create_project_right", { item_width, 0 });
+        ImGui::TextUnformatted("Create new project...");
+
+        static std::string project_name = {};
+        static std::string project_root_path = {};
+
+        ImGui::SeparatorText("Project Name");
+        ImGui::InputText("##project_name", &project_name);
+        ImGui::SeparatorText("Project Path");
+        ImGui::InputText("##project_path", &project_root_path);
+        ImGui::SameLine();
+        if (ImGui::Button(ICON_MDI_FOLDER_OPEN)) {
+            auto path = File::open_dialog("New Project...", FileDialogFlag::Save | FileDialogFlag::DirOnly);
+            if (path.has_value()) {
+                project_root_path = path->string();
+            }
+        }
+
+        ImGui::Separator();
+
+        bool disabled = project_name.empty() || project_root_path.empty();
+        if (disabled) {
+            ImGui::BeginDisabled();
+        }
+
+        if (ImGui::Button("OK", ImVec2(item_width, 0))) {
+            app.new_project(project_root_path, project_name);
+        }
+
+        if (disabled) {
+            ImGui::EndDisabled();
+        }
+
+        ImGui::EndChild();
+        ImGui::End();
+
+        ImGui::PopStyleVar(2);
     }
 }
-}  // namespace lr
 
-bool LRGui::DragXY(glm::vec2 &coords) {
+auto EditorLayout::get_asset_texture(this EditorLayout &self, Asset *asset) -> Texture * {
+    auto &app = EditorApp::get();
+
+    switch (asset->type) {
+        case AssetType::Model:
+            return app.asset_man.get_texture(self.editor_assets["model"]);
+        case AssetType::Texture:
+            return app.asset_man.get_texture(self.editor_assets["texture"]);
+        case AssetType::Scene:
+            return app.asset_man.get_texture(self.editor_assets["scene"]);
+        default:
+            return app.asset_man.get_texture(self.editor_assets["file"]);
+    }
+}
+
+} // namespace lr
+
+static const u64 GDataTypeInfo[] = {
+    sizeof(char), // ImGuiDataType_S8
+    sizeof(unsigned char),
+    sizeof(short), // ImGuiDataType_S16
+    sizeof(unsigned short),
+    sizeof(int), // ImGuiDataType_S32
+    sizeof(unsigned int),
+    sizeof(ImS64), // ImGuiDataType_S64
+    sizeof(ImU64),
+    sizeof(float), // ImGuiDataType_Float (float are promoted to double in va_arg)
+    sizeof(double), // ImGuiDataType_Double
+    sizeof(bool), // ImGuiDataType_Bool
+};
+
+bool ImGuiLR::drag_vec(i32 id, void *data, usize components, ImGuiDataType data_type) {
+    ImGuiWindow *window = ImGui::GetCurrentWindow();
+    if (window->SkipItems)
+        return false;
+
+    static ImU32 component_colors[] = { IM_COL32(255, 0, 0, 255),
+                                        IM_COL32(0, 255, 0, 255),
+                                        IM_COL32(0, 0, 255, 255),
+                                        ImGui::GetColorU32(ImGuiCol_Text) };
+
     bool value_changed = false;
-    ImGui::PushMultiItemsWidths(3, ImGui::CalcItemWidth());
+    ImGui::BeginGroup();
 
-    float padding = GImGui->Font->FontSize + GImGui->Style.FramePadding.y * 2.0f;
-    ImVec2 button_size = { padding, padding };
+    ImGui::PushID(id);
+    ImGui::PushMultiItemsWidths(static_cast<i32>(components), ImGui::GetContentRegionAvail().x);
+    for (usize i = 0; i < components; i++) {
+        if (i > 0) {
+            ImGui::SameLine(0, GImGui->Style.ItemInnerSpacing.x);
+        }
 
-    // X
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, { 0, 0 });
-    ImGui::PushStyleColor(ImGuiCol_Button, { 0.8f, 0.1f, 0.15f, 1.0f });
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, { 0.9f, 0.2f, 0.2f, 1.0f });
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, { 0.8f, 0.1f, 0.15f, 1.0f });
-    if (ImGui::Button("X", button_size)) {
+        ImGui::PushID(static_cast<i32>(i));
+        value_changed |= ImGui::DragScalar("", data_type, data, 0.01f);
+        ImGui::PopItemWidth();
+        ImGui::PopID();
+
+        auto rect_min = ImGui::GetItemRectMin();
+        auto rect_max = ImGui::GetItemRectMax();
+        auto spacing = ImGui::GetStyle().FramePadding.x / 2.0f;
+
+        if (components > 1) {
+            ImGui::GetWindowDrawList()->AddLine({ rect_min.x + spacing, rect_min.y }, { rect_min.x + spacing, rect_max.y }, component_colors[i], 4);
+        }
+
+        data = (void *)((char *)data + GDataTypeInfo[data_type]);
     }
-    ImGui::PopStyleColor(3);
-
-    ImGui::SameLine();
-    value_changed |= ImGui::DragFloat("##X", &coords.x, 0.1f, 0.0f, 0.0f, "%.2f");
-    ImGui::PopItemWidth();
-    ImGui::PopStyleVar();
-
-    ImGui::SameLine();
-
-    // Y
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, { 0, 0 });
-    ImGui::PushStyleColor(ImGuiCol_Button, { 0.2f, 0.7f, 0.2f, 1.0f });
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, { 0.3f, 0.8f, 0.3f, 1.0f });
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, { 0.2f, 0.7f, 0.2f, 1.0f });
-    if (ImGui::Button("Y", button_size)) {
-    }
-    ImGui::PopStyleColor(3);
-
-    ImGui::SameLine();
-    value_changed |= ImGui::DragFloat("##Y", &coords.y, 0.1f, 0.0f, 0.0f, "%.2f");
-    ImGui::PopItemWidth();
-    ImGui::PopStyleVar();
+    ImGui::PopID();
+    ImGui::EndGroup();
 
     return value_changed;
 }
 
-bool LRGui::DragXYZ(glm::vec3 &coords) {
-    bool value_changed = false;
-    ImGui::PushMultiItemsWidths(3, ImGui::CalcItemWidth());
+void ImGuiLR::center_text(std::string_view str) {
+    auto window_size = ImGui::GetWindowSize();
+    auto text_size = ImGui::CalcTextSize(str.data(), str.data() + str.length());
 
-    float padding = GImGui->Font->FontSize + GImGui->Style.FramePadding.y * 2.0f;
-    ImVec2 button_size = { padding, padding };
+    ImGui::SetCursorPos({ (window_size.x - text_size.x) * 0.5f, (window_size.y - text_size.y) * 0.5f });
+    ImGui::TextUnformatted(str.data(), str.data() + str.length());
+}
 
-    // X
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, { 0, 0 });
-    ImGui::PushStyleColor(ImGuiCol_Button, { 0.8f, 0.1f, 0.15f, 1.0f });
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, { 0.9f, 0.2f, 0.2f, 1.0f });
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, { 0.8f, 0.1f, 0.15f, 1.0f });
-    if (ImGui::Button("X", button_size)) {
-    }
-    ImGui::PopStyleColor(3);
+bool ImGuiLR::image_button(std::string_view text, ImTextureID texture_id, const ImVec2 &button_size) {
+    auto &style = ImGui::GetStyle();
+    auto min_size = std::min(button_size.x, button_size.y);
+    min_size -= style.FramePadding.x * 2.0f;
+    auto new_size = ImVec2(min_size, min_size);
 
-    ImGui::SameLine();
-    value_changed |= ImGui::DragFloat("##X", &coords.x, 0.1f, 0.0f, 0.0f, "%.2f");
-    ImGui::PopItemWidth();
+    ImGui::BeginGroup();
+
+    auto cursor_pos = ImGui::GetCursorPos();
+    cursor_pos.x += style.FramePadding.x;
+    cursor_pos.y += style.FramePadding.y;
+    ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, { 0.5, 0.9 });
+    auto pressed = ImGui::Button(text.data(), button_size);
     ImGui::PopStyleVar();
 
-    ImGui::SameLine();
+    ImGui::SetNextItemAllowOverlap();
+    ImGui::SetCursorPos(cursor_pos);
+    ImGui::Image(texture_id, new_size);
+    ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal);
 
-    // Y
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, { 0, 0 });
-    ImGui::PushStyleColor(ImGuiCol_Button, { 0.2f, 0.7f, 0.2f, 1.0f });
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, { 0.3f, 0.8f, 0.3f, 1.0f });
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, { 0.2f, 0.7f, 0.2f, 1.0f });
-    if (ImGui::Button("Y", button_size)) {
-    }
-    ImGui::PopStyleColor(3);
+    ImGui::EndGroup();
 
-    ImGui::SameLine();
-    value_changed |= ImGui::DragFloat("##Y", &coords.y, 0.1f, 0.0f, 0.0f, "%.2f");
-    ImGui::PopItemWidth();
-    ImGui::PopStyleVar();
+    return pressed;
+}
 
-    ImGui::SameLine();
-
-    // Z
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, { 0, 0 });
-    ImGui::PushStyleColor(ImGuiCol_Button, { 0.1f, 0.25f, 0.8f, 1.0f });
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, { 0.2f, 0.35f, 0.9f, 1.0f });
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, { 0.1f, 0.25f, 0.8f, 1.0f });
-    if (ImGui::Button("Z", button_size)) {
-    }
-    ImGui::PopStyleColor(3);
-
-    ImGui::SameLine();
-    value_changed |= ImGui::DragFloat("##Z", &coords.z, 0.1f, 0.0f, 0.0f, "%.2f");
-    ImGui::PopItemWidth();
-    ImGui::PopStyleVar();
-
-    return value_changed;
+void ImGuiLR::text_sv(std::string_view str) {
+    ImGui::TextUnformatted(static_cast<const c8 *>(str.data()), static_cast<const c8 *>(str.data() + str.length()));
 }

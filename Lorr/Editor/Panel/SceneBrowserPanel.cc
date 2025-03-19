@@ -1,30 +1,18 @@
-#include "Panels.hh"
+#include "Editor/Panel/SceneBrowserPanel.hh"
 
-#include "EditorApp.hh"
+#include "Editor/EditorApp.hh"
 
 #include "Engine/Memory/Stack.hh"
-#include "Engine/World/Components.hh"
+#include "Engine/Scene/ECSModule/Core.hh"
+
+#include "Engine/Util/Icons/IconsMaterialDesignIcons.hh"
 
 namespace lr {
-SceneBrowserPanel::SceneBrowserPanel(std::string_view name_, bool open_)
-    : PanelI(name_, open_) {
-}
+SceneBrowserPanel::SceneBrowserPanel(std::string name_, bool open_): PanelI(std::move(name_), open_) {}
 
-void draw_gradient_shadow_bottom(const float scale) {
-    const auto draw_list = ImGui::GetWindowDrawList();
-    const auto pos = ImGui::GetWindowPos();
-    const auto window_height = ImGui::GetWindowHeight();
-    const auto window_width = ImGui::GetWindowWidth();
-
-    const ImRect bb(0, scale, pos.x + window_width, window_height + pos.y);
-    draw_list->AddRectFilledMultiColor(bb.Min, bb.Max, IM_COL32(20, 20, 20, 0), IM_COL32(20, 20, 20, 0), IM_COL32(20, 20, 20, 255), IM_COL32(20, 20, 20, 255));
-}
-
-void SceneBrowserPanel::update(this SceneBrowserPanel &self) {
+void SceneBrowserPanel::render(this SceneBrowserPanel &self) {
     ZoneScoped;
 
-    static bool create_entity_open = false;
-    auto &world = EditorApp::get().world;
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0, 0.0));
     ImGui::Begin(self.name.data());
     ImGui::PopStyleVar();
@@ -41,88 +29,78 @@ void SceneBrowserPanel::update(this SceneBrowserPanel &self) {
     flags |= ImGuiTableFlags_SizingFixedFit;
 
     ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.0, 0.0, 0.0, 0.0));
+
     if (ImGui::BeginTable("scene_entity_list", 1, flags)) {
         ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch, 0.0f);
 
         ImGui::TableSetupScrollFreeze(0, 1);
         ImGui::TableHeadersRow();
 
-        if (world.active_scene.has_value()) {
-            auto &scene = world.scene_at(world.active_scene.value());
-            scene.children([&](flecs::entity e) {
-                memory::ScopedStack stack;
-
-                ImGui::TableNextRow();
-                ImGui::TableNextColumn();
-
-                ImGui::TableSetColumnIndex(0);
-                std::string_view entity_name = {};
-                auto icon_comp = e.get<Component::Icon>();
-                entity_name = stack.format("{}  {}", icon_comp ? icon_comp->code : "\uf1b2", e.name().c_str());
-
-                ImGuiSelectableFlags selectable_flags = ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap;
-                if (ImGui::Selectable(entity_name.data(), e.has<Component::EditorSelected>(), selectable_flags)) {
-                    world.ecs.each([](flecs::entity c, Component::EditorSelected) { c.remove<Component::EditorSelected>(); });
-                    e.add<Component::EditorSelected>();
-                }
-            });
-        }
-
-        if (ImGui::BeginPopupContextWindow("create_ctxwin")) {
-            if (ImGui::BeginMenu("Create...")) {
-                if (ImGui::MenuItem("Entity", nullptr, false, world.active_scene.has_value())) {
-                    create_entity_open = true;
-                }
-                ImGui::EndMenu();
-            }
-
-            ImGui::EndPopup();
+        auto &app = EditorApp::get();
+        if (app.active_scene_uuid.has_value()) {
+            self.draw_hierarchy();
         }
 
         ImGui::EndTable();
     }
     ImGui::PopStyleColor();
 
-    if (create_entity_open) {
-        ImGui::OpenPopup("###create_entity");
-    }
-
-    if (ImGui::BeginPopupModal("Create an entity...###create_entity", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-        static char entity_name[64] = {};
-        std::string_view entity_name_sv = entity_name;
-        ImGui::InputText("Name for Entity", entity_name, 64);
-
-        if (entity_name_sv.empty()) {
-            ImGui::BeginDisabled();
-        }
-
-        if (ImGui::Button("OK", ImVec2(120, 0))) {
-            auto &scene = world.scene_at(world.active_scene.value());
-            scene.create_entity(entity_name);
-
-            ImGui::CloseCurrentPopup();
-
-            std::memset(entity_name, 0, count_of(entity_name));
-        }
-
-        if (entity_name_sv.empty()) {
-            ImGui::EndDisabled();
-        }
-
-        ImGui::SetItemDefaultFocus();
-        ImGui::SameLine();
-
-        if (ImGui::Button("Cancel", ImVec2(120, 0))) {
-            ImGui::CloseCurrentPopup();
-
-            std::memset(entity_name, 0, count_of(entity_name));
-        }
-
-        ImGui::EndPopup();
-        create_entity_open = false;
-    }
-
     ImGui::End();
 }
 
-}  // namespace lr
+void SceneBrowserPanel::draw_hierarchy(this SceneBrowserPanel &) {
+    ZoneScoped;
+
+    auto &app = EditorApp::get();
+    auto *scene = app.asset_man.get_scene(app.active_scene_uuid.value());
+
+    scene->get_root().children([&](flecs::entity e) {
+        memory::ScopedStack stack;
+        if (e.has<ECS::Hidden>()) {
+            return;
+        }
+
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn();
+
+        ImGui::TableSetColumnIndex(0);
+        auto entity_name = stack.format("{}  {}", ICON_MDI_CUBE, e.name().c_str());
+
+        ImGuiSelectableFlags selectable_flags = ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap;
+        ImGui::PushID(static_cast<i32>(e.raw_id()));
+        if (ImGui::Selectable(entity_name.data(), e == app.selected_entity, selectable_flags)) {
+            app.selected_entity = e;
+        }
+        ImGui::PopID();
+    });
+
+    if (ImGui::BeginPopupContextWindow("create_ctxwin", ImGuiPopupFlags_AnyPopup | 1)) {
+        if (ImGui::BeginMenu("Create...")) {
+            if (ImGui::MenuItem("Entity")) {
+                auto created_entity = scene->create_entity();
+                created_entity.set<ECS::Transform>({});
+            }
+
+            ImGui::Separator();
+
+            if (ImGui::MenuItem("Model")) {
+                auto created_entity = scene->create_entity();
+                created_entity.set<ECS::Transform>({});
+                created_entity.set<ECS::RenderingModel>({});
+            }
+
+            if (ImGui::MenuItem("Directional Light")) {
+                auto created_entity = scene->create_entity();
+                created_entity.set<ECS::Transform>({});
+                created_entity.set<ECS::DirectionalLight>({});
+                created_entity.set<ECS::Atmosphere>({});
+            }
+
+            ImGui::EndMenu();
+        }
+
+        ImGui::EndPopup();
+    }
+}
+
+} // namespace lr

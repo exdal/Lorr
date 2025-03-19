@@ -7,14 +7,3 @@ option("profile")
     end
 option_end()
 
-option("wayland")
-    set_default(false)
-    set_description("Enable wayland windowing for Linux.")
-    add_defines("LR_WAYLAND=1", { public = true })
-option_end()
-
-option("enable_tests")
-    set_default(false)
-    set_description("Enable tests")
-option_end()
-

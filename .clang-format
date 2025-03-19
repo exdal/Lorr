@@ -1,72 +1,71 @@
----
-BasedOnStyle: Google
-IndentWidth: 4
----
-Language: Cpp
-DerivePointerAlignment: false
-PointerAlignment: Right
-
-ColumnLimit: 170
-
-AlignAfterOpenBracket: AlwaysBreak
-AlignEscapedNewlines: Left
-AlignOperands: true
-AllowAllArgumentsOnNextLine: true
-AllowAllConstructorInitializersOnNextLine: true
-AllowAllParametersOfDeclarationOnNextLine: true
-
-AllowShortBlocksOnASingleLine: Never
+AccessModifierOffset: -4
+AlignAfterOpenBracket: BlockIndent
+AlignConsecutiveMacros: false
+AlignConsecutiveAssignments: false
+AlignConsecutiveDeclarations: false
+AlignEscapedNewlines: DontAlign
+AlignOperands: false
+AlignTrailingComments: false
+AllowAllArgumentsOnNextLine: false
+AllowAllConstructorInitializersOnNextLine: false
+AllowAllParametersOfDeclarationOnNextLine: false
+AllowShortBlocksOnASingleLine: Empty
 AllowShortCaseLabelsOnASingleLine: false
-AllowShortFunctionsOnASingleLine: InlineOnly
+AllowShortFunctionsOnASingleLine: Empty
 AllowShortIfStatementsOnASingleLine: Never
 AllowShortLambdasOnASingleLine: All
-AllowShortLoopsOnASingleLine: False
-
-AlwaysBreakBeforeMultilineStrings: false
+AllowShortLoopsOnASingleLine: false
+AlwaysBreakAfterReturnType: None
+AlwaysBreakBeforeMultilineStrings: true
 AlwaysBreakTemplateDeclarations: Yes
 BinPackArguments: false
 BinPackParameters: false
-
-SortIncludes: false
-
-PackConstructorInitializers: Never
 BreakBeforeBinaryOperators: NonAssignment
+BreakBeforeBraces: Custom
 BreakBeforeTernaryOperators: true
-BreakConstructorInitializers: BeforeColon
-BreakInheritanceList: BeforeColon
-BreakStringLiterals: true
-CompactNamespaces: true
-ConstructorInitializerAllOnOneLineOrOnePerLine: false
+BraceWrapping:
+  AfterControlStatement: MultiLine
+  AfterEnum: false
+  AfterStruct: false
+  SplitEmptyFunction: false
+BreakConstructorInitializers: AfterColon
+BreakInheritanceList: AfterColon
+BreakStringLiterals: false
+ColumnLimit: 150
+CompactNamespaces: false
+ConstructorInitializerAllOnOneLineOrOnePerLine: true
+ConstructorInitializerIndentWidth: 4
+ContinuationIndentWidth: 4
 Cpp11BracedListStyle: false
+DerivePointerAlignment: false
 FixNamespaceComments: true
+IncludeBlocks: Preserve
+IncludeIsMainRegex: '([-_](test|unittest))?$'
 IndentCaseLabels: true
-IndentGotoLabels: false
+IndentPPDirectives: BeforeHash
+IndentWidth: 4
+IndentWrappedFunctionNames: false
 KeepEmptyLinesAtTheStartOfBlocks: false
 MaxEmptyLinesToKeep: 1
 NamespaceIndentation: Inner
-SortUsingDeclarations: true
+PointerAlignment: Right
+ReflowComments: false
+SortIncludes: false
 SpaceAfterCStyleCast: false
 SpaceAfterLogicalNot: false
 SpaceAfterTemplateKeyword: false
 SpaceBeforeAssignmentOperators: true
-SpaceBeforeCpp11BracedList: false
-SpaceBeforeCtorInitializerColon: true
+SpaceBeforeCpp11BracedList: true
+SpaceBeforeCtorInitializerColon: false
 SpaceBeforeInheritanceColon: true
 SpaceBeforeParens: ControlStatements
 SpaceBeforeRangeBasedForLoopColon: true
-SpaceBeforeSquareBrackets: false
-SpaceInEmptyBlock: false
 SpaceInEmptyParentheses: false
+SpacesBeforeTrailingComments: 1
 SpacesInAngles: false
 SpacesInCStyleCastParentheses: false
 SpacesInContainerLiterals: false
 SpacesInParentheses: false
 SpacesInSquareBrackets: false
-Standard: Latest
-UseCRLF: false
+Language: Cpp
 UseTab: Never
-AccessModifierOffset: -4
-
-BreakBeforeBraces: Custom
-BraceWrapping:
-  BeforeElse: false

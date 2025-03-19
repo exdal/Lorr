@@ -16,7 +16,7 @@ HasherXXH64::~HasherXXH64() {
     XXH3_freeState(ls::bit_cast<XXH3_state_t *>(this->handle));
 }
 
-bool HasherXXH64::hash(void *data, usize data_size) {
+bool HasherXXH64::hash(const void *data, usize data_size) {
     ZoneScoped;
 
     return XXH3_64bits_update(ls::bit_cast<XXH3_state_t *>(this->handle), data, data_size) == XXH_OK;
@@ -34,4 +34,4 @@ void HasherXXH64::reset() {
     XXH3_64bits_reset(ls::bit_cast<XXH3_state_t *>(this->handle));
 }
 
-}  // namespace lr
+} // namespace lr

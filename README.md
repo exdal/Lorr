@@ -12,7 +12,7 @@ Lorr uses xmake build tool, you can install it from [here](https://xmake.io/#/ge
 
 ### Notes
 - Vulkan SDK still does not support timeline semaphores, most of the validation errors are related to that.
-- On Linux, due to my hardware, wayland might not be properly supported and X11 is the main window system.
+- On Linux, Wayland is a requirement.
 
 ## Getting Started
 To build, simply run `xmake` on project root directory.
@@ -22,7 +22,7 @@ Make sure to run `xmake install -o ./build` to get third party binaries.
 
 Example configuration for clang:
 ```
-xmake f --toolchain=clang-18 --sdk=/usr/include/c++/v1 --runtimes=c++_static --cxxflags=-stdlib=libc++ --ldflags=-fuse-ld=lld -m debug --build_examples=y
+xmake f --toolchain=clang-18 --sdk=/usr/include/c++/v1 --runtimes=c++_static --cxxflags=-stdlib=libc++ --ldflags=-fuse-ld=lld -m debug
 ```
 
 ## License

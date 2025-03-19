@@ -1,85 +1,122 @@
 #pragma once
 
-#include "Identifier.hh"
+#include "Engine/Asset/AssetFile.hh"
+#include "Engine/Asset/Model.hh"
+#include "Engine/Asset/UUID.hh"
 
-#include "Engine/Graphics/Common.hh"
-#include "Engine/Graphics/Pipeline.hh"
-#include "Engine/Util/VirtualDir.hh"
-#include "Engine/World/Model.hh"
+#include "Engine/Core/Handle.hh"
+
+#include "Engine/Util/JsonWriter.hh"
+
+#include "Engine/Scene/Scene.hh"
 
 namespace lr {
-enum class AssetType : u32 {
-    None = 0,
-    Shader,
-    Image,
-    Model,
-};
-
-enum class ShaderCompileFlag : u32 {
-    None = 0,
-    GenerateDebugInfo = 1 << 1,
-    SkipOptimization = 1 << 2,
-    SkipValidation = 1 << 3,
-    MatrixRowMajor = 1 << 4,
-    MatrixColumnMajor = 1 << 5,
-    InvertY = 1 << 6,
-    DXPositionW = 1 << 7,
-    UseGLLayout = 1 << 8,
-    UseScalarLayout = 1 << 9,
-};
-template<>
-struct has_bitmask<lr::ShaderCompileFlag> : std::true_type {};
-
-struct ShaderPreprocessorMacroInfo {
-    std::string_view name = {};
-    std::string_view value = {};
-};
-
-struct ShaderCompileInfo {
-    ls::span<ShaderPreprocessorMacroInfo> definitions = {};
-    ShaderCompileFlag compile_flags = ShaderCompileFlag::MatrixRowMajor;
-    std::string_view entry_point = "main";
+struct Asset {
+    UUID uuid = {};
     fs::path path = {};
-    ls::option<std::string_view> source = ls::nullopt;
-};
-
-// For future, we can have giant Vertex and Index buffers
-// to ease out the Model management. But that might introduce
-// more work, stuff like allocation, etc... Change it when needed.
-
-struct AssetManager {
-    constexpr static usize MAX_MATERIAL_COUNT = 64;
-
-    Device *device = nullptr;
-    BufferID material_buffer_id = BufferID::Invalid;
-
-    std::vector<Texture> textures = {};
-    std::vector<Material> materials = {};
-    std::vector<Model> models = {};
-
-    VirtualDir shader_virtual_env = {};
-    ankerl::unordered_dense::map<Identifier, ShaderID> shaders = {};
-
-    bool init(this AssetManager &, Device *device);
-    void shutdown(this AssetManager &, bool print_reports);
-
-    ls::option<ModelID> load_model(this AssetManager &, const fs::path &path);
-    ls::option<MaterialID> add_material(this AssetManager &, const Material &material);
-    // If `ShaderCompileInfo::source` has value, shader is loaded from memory.
-    // But `path` is STILL used to print debug information.
-    ls::option<ShaderID> load_shader(this AssetManager &, Identifier ident, const ShaderCompileInfo &info);
-
-    ls::option<ShaderID> shader_at(this AssetManager &, Identifier ident);
-
-    auto &model_at(ModelID model_id) { return models[static_cast<usize>(model_id)]; }
-    auto &material_at(MaterialID material_id) { return materials[static_cast<usize>(material_id)]; }
-
-    constexpr static VertexAttribInfo VERTEX_LAYOUT[] = {
-        { .format = Format::R32G32B32_SFLOAT, .location = 0, .offset = offsetof(Vertex, position) },
-        { .format = Format::R32_SFLOAT, .location = 1, .offset = offsetof(Vertex, uv_x) },
-        { .format = Format::R32G32B32_SFLOAT, .location = 2, .offset = offsetof(Vertex, normal) },
-        { .format = Format::R32_SFLOAT, .location = 3, .offset = offsetof(Vertex, uv_y) },
-        { .format = Format::R8G8B8A8_UNORM, .location = 4, .offset = offsetof(Vertex, color) },
+    AssetType type = AssetType::None;
+    union {
+        ModelID model_id = ModelID::Invalid;
+        TextureID texture_id;
+        MaterialID material_id;
+        SceneID scene_id;
     };
+
+    // Reference count of loads
+    u64 ref_count = 0;
+
+    auto is_loaded() const -> bool {
+        return model_id != ModelID::Invalid;
+    }
+
+    auto acquire_ref() -> void {
+        ++ref_count;
+    }
+
+    auto release_ref() -> bool {
+        return (--ref_count) == 0;
+    }
 };
-}  // namespace lr
+
+//
+//  ── ASSET FILE ──────────────────────────────────────────────────────
+//
+
+using AssetRegistry = ankerl::unordered_dense::map<UUID, Asset>;
+struct AssetManager : Handle<AssetManager> {
+    static auto create(Device *device) -> AssetManager;
+    auto destroy() -> void;
+
+    auto asset_root_path(AssetType type) -> fs::path;
+    auto to_asset_file_type(const fs::path &path) -> AssetFileType;
+    auto to_asset_type_sv(AssetType type) -> std::string_view;
+    auto registry() const -> const AssetRegistry &;
+
+    //  ── Created Assets ──────────────────────────────────────────────────
+    // Assets that will be created and asinged new UUID. New `.lrasset` file
+    // will be written in the same directory as target asset.
+    // All created assets will be automatically registered into the registry.
+    //
+    auto create_asset(AssetType type, const fs::path &path = {}) -> UUID;
+    auto init_new_scene(const UUID &uuid, const std::string &name) -> bool;
+
+    //  ── Imported Assets ─────────────────────────────────────────────────
+    auto import_asset(const fs::path &path) -> UUID;
+
+    //  ── Registered Assets ─────────────────────────────────────────────────
+    // Assets that already exist in project root and have meta file with
+    // valid UUID's.
+    //
+    // Add already existing asset into the registry.
+    // File must end with `.lrasset` extension.
+    auto register_asset(const fs::path &path) -> UUID;
+    auto register_asset(const UUID &uuid, AssetType type, const fs::path &path) -> bool;
+
+    //  ── Load Assets ─────────────────────────────────────────────────────
+    // Load contents of registered assets.
+    //
+    auto load_asset(const UUID &uuid) -> bool;
+    auto unload_asset(const UUID &uuid) -> void;
+
+    auto load_model(const UUID &uuid) -> bool;
+    auto unload_model(const UUID &uuid) -> void;
+
+    auto load_texture(const UUID &uuid, const TextureInfo &info = {}) -> bool;
+    auto unload_texture(const UUID &uuid) -> void;
+
+    auto load_material(const UUID &uuid, const Material &material_info) -> bool;
+    auto unload_material(const UUID &uuid) -> void;
+
+    auto load_scene(const UUID &uuid) -> bool;
+    auto unload_scene(const UUID &uuid) -> void;
+
+    //  ── Exporting Assets ────────────────────────────────────────────────
+    // All export_# functions must have path, developer have freedom to
+    // export their assets into custom directory if needed, otherwise
+    // default to asset->path.
+    //
+    auto export_asset(const UUID &uuid, const fs::path &path) -> bool;
+    auto export_texture(const UUID &uuid, JsonWriter &json, const fs::path &path) -> bool;
+    auto export_model(const UUID &uuid, JsonWriter &json, const fs::path &path) -> bool;
+    auto export_scene(const UUID &uuid, JsonWriter &json, const fs::path &path) -> bool;
+
+    auto delete_asset(const UUID &uuid) -> void;
+
+    auto get_asset(const UUID &uuid) -> Asset *;
+    auto get_model(const UUID &uuid) -> Model *;
+    auto get_model(ModelID model_id) -> Model *;
+    auto get_texture(const UUID &uuid) -> Texture *;
+    auto get_texture(TextureID texture_id) -> Texture *;
+    auto get_material(const UUID &uuid) -> Material *;
+    auto get_material(MaterialID material_id) -> Material *;
+    auto get_scene(const UUID &uuid) -> Scene *;
+    auto get_scene(SceneID scene_id) -> Scene *;
+
+private:
+    auto begin_asset_meta(JsonWriter &json, const UUID &uuid, AssetType type) -> void;
+    auto write_texture_asset_meta(JsonWriter &json, Texture *texture) -> bool;
+    auto write_model_asset_meta(JsonWriter &json, Model *model) -> bool;
+    auto write_scene_asset_meta(JsonWriter &json, Scene *scene) -> bool;
+    auto end_asset_meta(JsonWriter &json, const fs::path &path) -> bool;
+};
+} // namespace lr

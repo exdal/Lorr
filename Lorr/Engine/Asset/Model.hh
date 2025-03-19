@@ -39,6 +39,7 @@ struct Material {
     UUID normal_texture = {};
     UUID emissive_texture = {};
     UUID metallic_roughness_texture = {};
+    UUID occlusion_texture = {};
 };
 
 enum class ModelID : u64 { Invalid = std::numeric_limits<u64>::max() };

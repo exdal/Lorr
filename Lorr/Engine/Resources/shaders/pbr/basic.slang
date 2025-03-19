@@ -15,7 +15,7 @@ import "../atmos/atmos";
 [[vk::binding(6, 0)]] Texture2D<float4> albedo_image;
 [[vk::binding(7, 0)]] Texture2D<float4> normal_image;
 [[vk::binding(8, 0)]] Texture2D<float3> emissive_image;
-[[vk::binding(9, 0)]] Texture2D<float4> metallic_roughness_image;
+[[vk::binding(9, 0)]] Texture2D<float4> metallic_roughness_occlusion_image;
 
 struct VertexOutput {
     float4 position : SV_Position;
@@ -111,9 +111,10 @@ float4 fs_main(VertexOutput input, float4 frag_pos : SV_Position) : SV_Target {
     const float3 mapped_normal = lr::oct_to_vec3(normal_oct_flat.xy);
     const float3 smooth_normal = lr::oct_to_vec3(normal_oct_flat.zw);
     const float3 emission = emissive_image.Load(pixel_pos);
-    const float4 metallic_roughness = metallic_roughness_image.Load(pixel_pos);
-    const float  metallic = metallic_roughness.x;
-    const float  roughness = metallic_roughness.y;
+    const float4 metallic_roughness_occlusion = metallic_roughness_occlusion_image.Load(pixel_pos);
+    const float  metallic = metallic_roughness_occlusion.x;
+    const float  roughness = metallic_roughness_occlusion.y;
+    const float  occlusion = metallic_roughness_occlusion.z;
 
     const float4 NDC = float4(input.tex_coord * 2.0 - 1.0, depth, 1.0);
     const float4 world_position = mul(scene.camera.inv_projection_view_mat, NDC);
@@ -161,6 +162,9 @@ float4 fs_main(VertexOutput input, float4 frag_pos : SV_Position) : SV_Target {
           + albedo_color * ambient_color  // Planet light
           + albedo_color * 0.03  // Surface color
           + emission;  // Emitted light
+
+    // Direct influence over color no matter light position
+    color *= occlusion;
 
     return float4(color, 1.0);
 }

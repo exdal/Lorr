@@ -75,9 +75,9 @@ void cs_main(uint3 thread_id : SV_DispatchThreadID) {
     }
 
     float3 color = input_image.Load(thread_id).rgb;
-    color = ACES_Film(color);
+    //color = ACES_Film(color);
     //color = ACES_Fitted(color);
-    //color = PBRNeutralToneMapping(color);  // this looks like shit, figure out why
+    color = PBRNeutralToneMapping(color);  // this looks like shit, figure out why
     color = lr::color_sRGB_OETF(color);
     output_image[thread_id.xy] = float4(color, 1.0);
 }

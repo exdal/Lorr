@@ -132,22 +132,27 @@ float4 fs_main(VertexOutput input, float4 frag_pos : SV_Position) : SV_Target {
     float sun_cos_theta = dot(L, up_vec);
     float2 transmittance_uv = get_transmittance_lut_uv(scene.atmosphere, float2(h, sun_cos_theta));
     float3 sun_transmittance = sun_transmittance_lut.Sample(linear_clamp_sampler, transmittance_uv).rgb;
+    const let planet_intersection = lr::ray_sphere_intersect_nearest(ray_pos_planet, L, scene.atmosphere.planet_radius);
+    if (planet_intersection.hasValue) {
+        // TODO: Implement a penumbra
+        sun_transmittance *= 0.0;
+    }
 
-    AtmosphereIntegrateInfo info = {};
-    info.eye_pos = ray_pos_planet;
-    info.sun_dir = scene.sun.direction;
-    info.sun_intensity = scene.sun.intensity;
-    info.sampling.variable_sample_count = true;
-    info.sampling.min_sample_count = 6;
-    info.sampling.max_sample_count = 6;
-    info.transmittance_image = sun_transmittance_lut;
-    info.multiscattering_image = sky_multiscattering_lut;
+    AtmosphereIntegrateInfo sky_info = {};
+    sky_info.eye_pos = ray_pos_planet;
+    sky_info.sun_dir = scene.sun.direction;
+    sky_info.sun_intensity = scene.sun.intensity;
+    sky_info.sampling.variable_sample_count = true;
+    sky_info.sampling.min_sample_count = 6;
+    sky_info.sampling.max_sample_count = 6;
+    sky_info.transmittance_image = sun_transmittance_lut;
+    sky_info.multiscattering_image = sky_multiscattering_lut;
 
-    info.eye_dir = float3(0.0, -1.0, 0.0);
-    const let result_0 = integrate_single_scattered_luminance(linear_clamp_sampler, scene.atmosphere, info);
-    info.eye_dir = float3(0.0,  1.0, 0.0);
-    const let result_1 = integrate_single_scattered_luminance(linear_clamp_sampler, scene.atmosphere, info);
-    float3 ambient_color = lerp(result_0.luminance, result_1.luminance, saturate(N.y * 0.5 + 0.5));
+    sky_info.eye_dir = float3(0.0, -1.0, 0.0);
+    const let sky_result_0 = integrate_single_scattered_luminance(linear_clamp_sampler, scene.atmosphere, sky_info);
+    sky_info.eye_dir = float3(0.0,  1.0, 0.0);
+    const let sky_result_1 = integrate_single_scattered_luminance(linear_clamp_sampler, scene.atmosphere, sky_info);
+    float3 ambient_color = lerp(sky_result_0.luminance, sky_result_1.luminance, saturate(N.y * 0.5 + 0.5));
 
     const float NoL = max(dot(N, L), 0.0);
     float3 color = BRDF(V, N, L, albedo_color, roughness, metallic);

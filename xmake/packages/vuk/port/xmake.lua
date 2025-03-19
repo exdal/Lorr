@@ -43,6 +43,7 @@ target("vuk")
 
     add_options("debug_allocations")
 
+    add_defines("VUK_DISABLE_EXCEPTIONS", { force = true, public = true })
     -- public packages
     add_packages(
         "fmt",

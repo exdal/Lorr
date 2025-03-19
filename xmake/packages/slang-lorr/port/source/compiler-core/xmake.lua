@@ -8,6 +8,9 @@ add_slang_target("compiler-core", {
     deps = {
         { "core", { public = false } }
     },
+    defines = {
+        { "SLANG_ENABLE_DXIL_SUPPORT=0", { public = true } }
+    },
     windows_files = "./windows/*.cpp",
     packages = {
         { "slang-spirv-headers", { public = true } }

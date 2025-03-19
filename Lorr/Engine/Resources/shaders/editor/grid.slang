@@ -19,8 +19,8 @@ float3 UnprojectPoint(float x, float y, float z, float4x4 view_proj_mat_inv) {
 }
 
 float4 pristine_grid(float3 uv, float2 lineWidth) {
-    float2 ddx = ddx_fine(uv.xz);
-    float2 ddy = ddy_fine(uv.xz);
+    float2 ddx = ddx(uv.xz);
+    float2 ddy = ddy(uv.xz);
     float2 uvDeriv = float2(length(float2(ddx.x, ddy.x)), length(float2(ddx.y, ddy.y)));
     bool2 invertLine = bool2(lineWidth.x > 0.5, lineWidth.y > 0.5);
     float2 targetWidth = float2(

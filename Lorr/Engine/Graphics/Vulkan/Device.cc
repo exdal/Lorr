@@ -175,13 +175,15 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
     );
 
     executors.push_back(std::make_unique<vuk::ThisThreadExecutor>());
-    self.runtime.emplace(vuk::RuntimeCreateParameters {
-        .instance = self.instance,
-        .device = self.handle,
-        .physical_device = self.physical_device,
-        .executors = std::move(executors),
-        .pointers = vulkan_functions,
-    });
+    self.runtime.emplace(
+        vuk::RuntimeCreateParameters {
+            .instance = self.instance,
+            .device = self.handle,
+            .physical_device = self.physical_device,
+            .executors = std::move(executors),
+            .pointers = vulkan_functions,
+        }
+    );
 
     self.frame_resources.emplace(*self.runtime, frame_count);
     self.allocator.emplace(*self.frame_resources);
@@ -268,12 +270,12 @@ auto Device::end_frame(this Device &self, vuk::Value<vuk::ImageAttachment> &&tar
         auto end_time = static_cast<f64>(device->runtime->retrieve_timestamp(end_ts).value_or(0));
         f64 delta = ((end_time / 1e6f) - (start_time / 1e6f)) / 1e3f;
         auto pass_index = start_ts.id / 2;
-        device->gpu_profiler_tasks.push_back({
-            .startTime = device->gpu_profiler_query_offset,
-            .endTime = device->gpu_profiler_query_offset + delta,
-            .name = name.c_str(),
-            .color = legit::Colors::colors[pass_index % ls::count_of(legit::Colors::colors)],
-        });
+        device->gpu_profiler_tasks.push_back(
+            { .startTime = device->gpu_profiler_query_offset,
+              .endTime = device->gpu_profiler_query_offset + delta,
+              .name = name.c_str(),
+              .color = legit::Colors::colors[pass_index % ls::count_of(legit::Colors::colors)] }
+        );
 
         device->gpu_profiler_query_offset += delta;
     };
@@ -338,14 +340,18 @@ auto Device::create_swap_chain(this Device &self, VkSurfaceKHR surface, ls::opti
     VkPresentModeKHR present_mode = self.frame_count() == 1 ? VK_PRESENT_MODE_FIFO_KHR : VK_PRESENT_MODE_IMMEDIATE_KHR;
     vkb::SwapchainBuilder builder(self.handle, surface);
     builder.set_desired_min_image_count(self.frame_count());
-    builder.set_desired_format(vuk::SurfaceFormatKHR {
-        .format = vuk::Format::eR8G8B8A8Srgb,
-        .colorSpace = vuk::ColorSpaceKHR::eSrgbNonlinear,
-    });
-    builder.add_fallback_format(vuk::SurfaceFormatKHR {
-        .format = vuk::Format::eB8G8R8A8Srgb,
-        .colorSpace = vuk::ColorSpaceKHR::eSrgbNonlinear,
-    });
+    builder.set_desired_format(
+        vuk::SurfaceFormatKHR {
+            .format = vuk::Format::eR8G8B8A8Srgb,
+            .colorSpace = vuk::ColorSpaceKHR::eSrgbNonlinear,
+        }
+    );
+    builder.add_fallback_format(
+        vuk::SurfaceFormatKHR {
+            .format = vuk::Format::eB8G8R8A8Srgb,
+            .colorSpace = vuk::ColorSpaceKHR::eSrgbNonlinear,
+        }
+    );
     builder.set_desired_present_mode(present_mode);
     builder.set_image_usage_flags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
 

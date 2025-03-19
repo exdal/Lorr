@@ -23,6 +23,7 @@
 #include <span>
 #include <string_view>
 #include <variant>
+#include <ranges>
 
 namespace fs = std::filesystem;
 

@@ -1,5 +1,3 @@
-add_repositories("exdal https://github.com/exdal/xmake-repo.git")
-
 includes("packages/ImGuizmo/xmake.lua")
 includes("packages/slang-lorr/xmake.lua")
 includes("packages/vuk/xmake.lua")

@@ -201,7 +201,7 @@ auto AssetManager::import_asset(const fs::path &path) -> UUID {
                 auto &image = gltf_model->images[v.image_index.value()];
                 UUID texture_uuid = {};
                 std::visit(
-                    ls::match {
+                    ls::match{
                         [&](const std::vector<u8> &) { //
                             texture_uuid = this->create_asset(AssetType::Texture, path);
                         },
@@ -520,7 +520,7 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
 
         bool loaded = false;
         std::visit(
-            ls::match {
+            ls::match{
                 [&](std::vector<u8> &pixels) { //
                     loaded = this->load_texture(
                         texture_uuid,
@@ -777,7 +777,7 @@ auto AssetManager::load_texture(const UUID &uuid, const TextureInfo &info) -> bo
     }
 
     auto format = vuk::Format::eUndefined;
-    auto extent = vuk::Extent3D {};
+    auto extent = vuk::Extent3D{};
     auto image_data = std::vector<u8>();
     switch (file_type) {
         case AssetFileType::PNG:

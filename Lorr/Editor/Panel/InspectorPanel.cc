@@ -61,12 +61,13 @@ auto InspectorPanel::draw_inspector(this InspectorPanel &) -> void {
     auto region = ImGui::GetContentRegionAvail();
 
     if (app.selected_entity) {
+        static std::string new_entity_name = {};
         if (ImGui::Button(app.selected_entity.name().c_str(), ImVec2(region.x, 0))) {
+            new_entity_name = std::string(app.selected_entity.name().c_str(), app.selected_entity.name().length());
             ImGui::OpenPopup("###rename_entity");
         }
 
         if (ImGui::BeginPopupModal("Rename entity to...###rename_entity", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-            static auto new_entity_name = std::string(app.selected_entity.name().c_str(), app.selected_entity.name().length());
             ImGui::InputText("", &new_entity_name);
 
             auto entity_exists = scene->find_entity(new_entity_name) || new_entity_name.empty();

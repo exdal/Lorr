@@ -3,7 +3,7 @@ includes("packages.lua")
 add_rules("mode.release", "mode.debug")
 set_project("vuk")
 
-add_requires("fmt 11.1.4", { configs = { header_only = true } })
+add_requires("fmt 11.1.4", { system = false, configs = { header_only = true } })
 add_requires("vulkan-memory-allocator v3.1.0")
 add_requires("concurrentqueue v1.0.4")
 add_requires("plf_colony v7.41")

@@ -41,6 +41,7 @@ target("Lorr")
         { public = true })
 
     add_packages(
+        "fmt",
         "libsdl3",
         "vk-bootstrap",
         "imgui",

@@ -7,7 +7,7 @@ namespace lr {
 //     auto *console = static_cast<ConsolePanel *>(user_Data);
 //     auto &m = console->messages.emplace_back();
 //     m.verbosity = message.verbosity;
-//     m.message = std::format("{}", message.message);
+//     m.message = fmt::format("{}", message.message);
 // }
 
 ConsolePanel::ConsolePanel(std::string name_, bool open_): PanelI(std::move(name_), open_) {

@@ -833,8 +833,8 @@ auto AssetManager::load_texture(const UUID &uuid, const TextureInfo &info) -> bo
     transfer_man.wait_on(std::move(attachment));
 
     auto rel_path = fs::relative(asset->path, impl->root_path);
-    impl->device->set_name(image.value(), std::format("{} Image", rel_path));
-    impl->device->set_name(image_view.value(), std::format("{} Image View", rel_path));
+    impl->device->set_name(image.value(), fmt::format("{} Image", rel_path));
+    impl->device->set_name(image_view.value(), fmt::format("{} Image View", rel_path));
 
     texture->image = image.value();
     texture->image_view = image_view.value();

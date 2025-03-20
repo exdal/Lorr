@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Engine/Asset/Asset.hh"
+#include "Engine/Asset/AssetFile.hh"
 
 #include "Engine/Graphics/VulkanTypes.hh"
 
@@ -35,6 +35,7 @@ struct GLTFMaterialInfo {
     ls::option<u32> normal_texture_index;
     ls::option<u32> emissive_texture_index;
     ls::option<u32> metallic_roughness_texture_index;
+    ls::option<u32> occlusion_texture_index;
 };
 
 struct GLTFModelCallbacks {

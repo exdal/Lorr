@@ -568,6 +568,11 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
             metallic_roughness_texture_uuid = get_gltf_texture(tex_idx.value(), false);
         }
 
+        UUID occlusion_texture_uuid = {};
+        if (auto tex_idx = gltf_material.occlusion_texture_index; tex_idx.has_value()) {
+            occlusion_texture_uuid = get_gltf_texture(tex_idx.value(), false);
+        }
+
         Material material_info = {
             .albedo_color = gltf_material.albedo_color,
             .emissive_color = gltf_material.emissive_color,
@@ -577,6 +582,7 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
             .normal_texture = normal_texture_uuid,
             .emissive_texture = emissive_texture_uuid,
             .metallic_roughness_texture = metallic_roughness_texture_uuid,
+            .occlusion_texture = occlusion_texture_uuid,
         };
         this->load_material(material_uuid, material_info);
     }
@@ -895,6 +901,10 @@ auto AssetManager::unload_material(const UUID &uuid) -> void {
 
     if (material->metallic_roughness_texture) {
         this->unload_texture(material->metallic_roughness_texture);
+    }
+
+    if (material->occlusion_texture) {
+        this->unload_texture(material->occlusion_texture);
     }
 
     impl->materials.destroy_slot(asset->material_id);

@@ -13,10 +13,11 @@ public struct Material {
     public f32 metallic_factor = 0.0;
     public u32 alpha_mode = 0;
     public f32 alpha_cutoff = 0.0;
-    public u32 albedo_image_index = 0;
-    public u32 normal_image_index = 0;
-    public u32 emissive_image_index = 0;
-    public u32 metallic_rougness_image_index = 0;
+    public u32 albedo_image_index = ~0u;
+    public u32 normal_image_index = ~0u;
+    public u32 emissive_image_index = ~0u;
+    public u32 metallic_rougness_image_index = ~0u;
+    public u32 occlusion_image_index = ~0u;
 };
 
 public struct Meshlet {

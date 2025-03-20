@@ -576,6 +576,7 @@ auto Scene::compose(this Scene &self) -> SceneComposeInfo {
             gpu_material.normal_image_index = add_image_if_exists(material->normal_texture).value_or(~0_u32);
             gpu_material.emissive_image_index = add_image_if_exists(material->emissive_texture).value_or(~0_u32);
             gpu_material.metallic_roughness_image_index = add_image_if_exists(material->metallic_roughness_texture).value_or(~0_u32);
+            gpu_material.occlusion_image_index = add_image_if_exists(material->occlusion_texture).value_or(~0_u32);
         }
 
         //  ── INSTANCING ──────────────────────────────────────────────────────

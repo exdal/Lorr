@@ -236,6 +236,10 @@ auto GLTFModelInfo::parse(const fs::path &path, GLTFModelCallbacks callbacks) ->
         if (auto &tex = v.pbrData.metallicRoughnessTexture; tex.has_value()) {
             material.metallic_roughness_texture_index = tex->textureIndex;
         }
+
+        if (auto &tex = v.occlusionTexture; tex.has_value()) {
+            material.occlusion_texture_index = tex->textureIndex;
+        }
     }
 
     ///////////////////////////////////////////////
@@ -486,6 +490,10 @@ auto GLTFModelInfo::parse_info(const fs::path &path) -> ls::option<GLTFModelInfo
 
         if (auto &tex = v.pbrData.metallicRoughnessTexture; tex.has_value()) {
             material.metallic_roughness_texture_index = tex->textureIndex;
+        }
+
+        if (auto &tex = v.occlusionTexture; tex.has_value()) {
+            material.occlusion_texture_index = tex->textureIndex;
         }
     }
 

@@ -131,7 +131,7 @@ struct FragmentOutput {
     float4 albedo : SV_Target0;
     float4 normal : SV_Target1;
     float3 emission : SV_Target2;
-    float4 metallic_roughness : SV_Target3;
+    float4 metallic_roughness_occlusion : SV_Target3;
 };
 
 [[vk::push_constant]] float2 resolution;
@@ -242,11 +242,18 @@ FragmentOutput fs_main(VertexOutput input, float4 pixel_pos : SV_Position) {
     // METALLIC ROUGHNESS ───────────────────────────────────────────────
     if (material.metallic_rougness_image_index != ~0u) {
         const float2 metallic_roughness_texture = sample_texture(material.metallic_rougness_image_index, uv_gradient).bg;
-        output.metallic_roughness.xy = metallic_roughness_texture;
+        output.metallic_roughness_occlusion.xy = metallic_roughness_texture;
     } else {
-        output.metallic_roughness.xy = float2(material.metallic_factor, material.roughness_factor);
+        output.metallic_roughness_occlusion.xy = float2(material.metallic_factor, material.roughness_factor);
     }
-    output.metallic_roughness.zw = float2(0.0);
+
+    // AMBIENT OCCLUSION ────────────────────────────────────────────────
+    if (material.occlusion_image_index != ~0u) {
+        const float occlusion_texture = sample_texture(material.occlusion_image_index, uv_gradient).r;
+        output.metallic_roughness_occlusion.z = occlusion_texture;
+    } else {
+        output.metallic_roughness_occlusion.z = 1.0;
+    }
 
     return output;
 }

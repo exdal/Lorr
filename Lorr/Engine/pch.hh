@@ -19,11 +19,10 @@
 #include <deque>
 #include <expected>
 #include <filesystem>
-#include <format>
+#include <ranges>
 #include <span>
 #include <string_view>
 #include <variant>
-#include <ranges>
 
 namespace fs = std::filesystem;
 
@@ -36,6 +35,9 @@ namespace fs = std::filesystem;
 #include <glm/vec3.hpp>
 #include <glm/vec4.hpp>
 
+#include <fmt/format.h>
+#include <fmt/std.h>
+
 #include "Engine/Math/Quat.hh"
 #include "Engine/Math/Rotation.hh"
 
@@ -43,23 +45,14 @@ namespace fs = std::filesystem;
 #include <ankerl/unordered_dense.h>
 #include <plf_colony.h>
 
-template<>
-struct std::formatter<fs::path> : formatter<string_view> {
-    template<typename FormatContext>
-    constexpr auto format(const fs::path &v, FormatContext &ctx) const {
-        auto str = v.string();
-        return std::format_to(ctx.out(), "{}", str);
-    }
-};
-
 template<typename T, typename U>
 struct ankerl::unordered_dense::hash<ls::pair<T, U>> {
     using is_avalanching = void;
     u64 operator()(const ls::pair<T, U> &v) const noexcept {
         usize seed = 0;
-        auto lhs = ankerl::unordered_dense::hash<T> {}(v.n0);
+        auto lhs = ankerl::unordered_dense::hash<T>{}(v.n0);
         ls::hash_combine(seed, lhs);
-        auto rhs = ankerl::unordered_dense::hash<U> {}(v.n1);
+        auto rhs = ankerl::unordered_dense::hash<U>{}(v.n1);
         ls::hash_combine(seed, rhs);
 
         return seed;

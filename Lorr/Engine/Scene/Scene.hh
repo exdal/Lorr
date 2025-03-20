@@ -63,6 +63,9 @@ public:
         -> flecs::entity;
     auto create_editor_camera(this Scene &) -> void;
 
+    // Finds entity in root.
+    auto find_entity(this Scene &, std::string_view name) -> flecs::entity;
+
     auto render(this Scene &, SceneRenderer &renderer, const vuk::Extent3D &extent, vuk::Format format) -> vuk::Value<vuk::ImageAttachment>;
     auto tick(this Scene &, f32 delta_time) -> bool;
 

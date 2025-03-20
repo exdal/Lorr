@@ -2,6 +2,8 @@ includes("packages/ImGuizmo/xmake.lua")
 includes("packages/slang-lorr/xmake.lua")
 includes("packages/vuk/xmake.lua")
 
+add_requires("fmt 11.1.4", { system = false, configs = { header_only = true } })
+
 add_requires("xxhash v0.8.3")
 add_requires("glm 1.0.1", { configs = {
     header_only = true,

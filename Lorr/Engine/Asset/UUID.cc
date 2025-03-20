@@ -73,7 +73,7 @@ auto UUID::from_string(std::string_view str) -> ls::option<UUID> {
 auto UUID::str() const -> std::string {
     ZoneScoped;
 
-    return std::format(
+    return fmt::format(
         "{:08x}-{:04x}-{:04x}-{:04x}-{:012x}",
         static_cast<u32>(this->data_u64[0] >> 32_u64),
         static_cast<u32>((this->data_u64[0] >> 16_u64) & 0x0000ffff_u64),

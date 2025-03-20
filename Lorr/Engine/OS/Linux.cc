@@ -122,15 +122,15 @@ auto os::file_dialog(std::string_view title, FileDialogFlag flags) -> ls::option
         return ls::nullopt;
     }
 
-    auto cmd = std::format("zenity --file-selection --title=\"{}\" ", title);
+    auto cmd = fmt::format("zenity --file-selection --title=\"{}\" ", title);
     if (flags & FileDialogFlag::DirOnly) {
-        cmd += std::format("--directory ");
+        cmd += fmt::format("--directory ");
     }
     if (flags & FileDialogFlag::Save) {
-        cmd += std::format("--save ");
+        cmd += fmt::format("--save ");
     }
     if (flags & FileDialogFlag::Multiselect) {
-        cmd += std::format("--multiple ");
+        cmd += fmt::format("--multiple ");
     }
 
     c8 pipe_data[2048] = {};

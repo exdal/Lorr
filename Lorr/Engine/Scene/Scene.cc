@@ -199,7 +199,7 @@ auto Scene::import_from_file(this Scene &self, const fs::path &path) -> bool {
                 }
 
                 std::visit(
-                    ls::match {
+                    ls::match{
                         [](const auto &) {},
                         [&](f32 *v) { *v = static_cast<f32>(member_json.get_double()); },
                         [&](i32 *v) { *v = static_cast<i32>(member_json.get_int64()); },
@@ -260,7 +260,7 @@ auto Scene::export_to_file(this Scene &self, const fs::path &path) -> bool {
             component.for_each([&](usize &, std::string_view member_name, ECS::ComponentWrapper::Member &member) {
                 auto &member_json = json[member_name];
                 std::visit(
-                    ls::match {
+                    ls::match{
                         [](const auto &) {},
                         [&](f32 *v) { member_json = *v; },
                         [&](i32 *v) { member_json = *v; },
@@ -337,6 +337,14 @@ auto Scene::create_editor_camera(this Scene &self) -> void {
         .add<ECS::Hidden>()
         .add<ECS::EditorCamera>()
         .add<ECS::ActiveCamera>();
+}
+
+auto Scene::find_entity(this Scene &self, std::string_view name) -> flecs::entity {
+    ZoneScoped;
+    memory::ScopedStack stack;
+
+    const auto *safe_str = stack.null_terminate_cstr(name);
+    return self.root.lookup(safe_str);
 }
 
 auto Scene::render(this Scene &self, SceneRenderer &renderer, const vuk::Extent3D &extent, vuk::Format format) -> vuk::Value<vuk::ImageAttachment> {
@@ -432,15 +440,15 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, const vuk::Extent3
         composed_scene.emplace(renderer.compose(compose_info));
     }
 
-    auto scene_info = GPU::Scene {
+    auto scene_info = GPU::Scene{
         .camera = active_camera_data.value(),
-        .sun = sun_data.value_or(GPU::Sun {}),
-        .atmosphere = atmos_data.value_or(GPU::Atmosphere {}),
-        .clouds = clouds_data.value_or(GPU::Clouds {}),
+        .sun = sun_data.value_or(GPU::Sun{}),
+        .atmosphere = atmos_data.value_or(GPU::Atmosphere{}),
+        .clouds = clouds_data.value_or(GPU::Clouds{}),
     };
 
     auto transforms = self.transforms.slots_unsafe();
-    auto render_info = SceneRenderInfo {
+    auto render_info = SceneRenderInfo{
         .format = format,
         .extent = extent,
         .scene_info = scene_info,
@@ -596,7 +604,7 @@ auto Scene::compose(this Scene &self) -> SceneComposeInfo {
         }
     }
 
-    return SceneComposeInfo {
+    return SceneComposeInfo{
         .image_view_ids = std::move(gpu_image_views),
         .samplers = std::move(gpu_samplers),
         .gpu_materials = std::move(gpu_materials),

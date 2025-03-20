@@ -182,5 +182,19 @@ struct ScopedStack {
 
         return { begin, end };
     }
+
+    const c8 *null_terminate_cstr(std::string_view str) {
+        ZoneScoped;
+
+        auto &stack = get_thread_stack();
+        auto *begin = reinterpret_cast<c8 *>(stack.ptr);
+        std::ranges::copy(str, begin);
+        auto *end = reinterpret_cast<c8 *>(stack.ptr + str.length());
+        stack.ptr = ls::align_up(reinterpret_cast<u8 *>(end + 1), 8);
+
+        *end = '\0';
+
+        return begin;
+    }
 };
 } // namespace lr::memory

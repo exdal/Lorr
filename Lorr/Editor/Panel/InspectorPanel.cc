@@ -62,7 +62,35 @@ auto InspectorPanel::draw_inspector(this InspectorPanel &) -> void {
 
     if (app.selected_entity) {
         if (ImGui::Button(app.selected_entity.name().c_str(), ImVec2(region.x, 0))) {
-            // TODO: Rename entity
+            ImGui::OpenPopup("###rename_entity");
+        }
+
+        if (ImGui::BeginPopupModal("Rename entity to...###rename_entity", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+            static auto new_entity_name = std::string(app.selected_entity.name().c_str(), app.selected_entity.name().length());
+            ImGui::InputText("", &new_entity_name);
+
+            auto entity_exists = scene->find_entity(new_entity_name) || new_entity_name.empty();
+            if (entity_exists) {
+                ImGui::TextColored({ 1.0, 0.0, 0.0, 1.0 }, "Entity with same already exists.");
+                ImGui::BeginDisabled();
+            }
+
+            if (ImGui::Button("OK")) {
+                app.selected_entity.set_name(new_entity_name.c_str());
+                ImGui::CloseCurrentPopup();
+            }
+
+            if (entity_exists) {
+                ImGui::EndDisabled();
+            }
+
+            ImGui::SameLine();
+
+            if (ImGui::Button("Cancel")) {
+                ImGui::CloseCurrentPopup();
+            }
+
+            ImGui::EndPopup();
         }
 
         std::vector<flecs::id> removing_components = {};
@@ -103,7 +131,7 @@ auto InspectorPanel::draw_inspector(this InspectorPanel &) -> void {
                     bool component_modified = false;
                     ImGui::PushID(static_cast<i32>(i));
                     std::visit(
-                        ls::match {
+                        ls::match{
                             [](const auto &) {},
                             [&](f32 *v) { component_modified |= ImGuiLR::drag_vec(0, v, 1, ImGuiDataType_Float); },
                             [&](i32 *v) { component_modified |= ImGuiLR::drag_vec(0, v, 1, ImGuiDataType_S32); },

@@ -104,9 +104,13 @@ void Application::shutdown(this Application &self) {
 
     self.should_close = true;
 
+    if (self.active_scene_uuid) {
+        self.asset_man.unload_asset(self.active_scene_uuid.value());
+        self.active_scene_uuid.reset();
+    }
+
     self.do_shutdown();
 
-    self.active_scene_uuid.reset();
     self.asset_man.destroy();
     self.scene_renderer.destroy();
     self.swap_chain.reset();

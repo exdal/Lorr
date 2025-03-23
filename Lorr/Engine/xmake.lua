@@ -61,6 +61,7 @@ target("Lorr")
         "imguizmo-lorr",
         "vuk",
         "meshoptimizer",
+        "ktx-software",
         { public = true })
 
 target_end()

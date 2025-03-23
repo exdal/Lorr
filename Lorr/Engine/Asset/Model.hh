@@ -75,7 +75,6 @@ struct Model {
         glm::vec3 scale;
     };
 
-    std::vector<UUID> textures = {};
     std::vector<UUID> materials = {};
     std::vector<Primitive> primitives = {};
     std::vector<Mesh> meshes = {};

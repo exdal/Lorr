@@ -224,7 +224,7 @@ auto SceneRenderer::setup_persistent_resources(this SceneRenderer &self) -> void
     auto multiscatter_lut_attachment =
         self.sky_multiscatter_lut_view.discard(*self.device, "sky multiscatter lut", vuk::ImageUsageFlagBits::eStorage);
 
-    auto temp_scene_info = GPU::Scene {};
+    auto temp_scene_info = GPU::Scene{};
     temp_scene_info.atmosphere.transmittance_lut_size = self.sky_transmittance_lut_view.extent();
     temp_scene_info.atmosphere.multiscattering_lut_size = self.sky_multiscatter_lut_view.extent();
     temp_scene_info.clouds.noise_lut_size = self.cloud_noise_lut_extent;
@@ -328,7 +328,7 @@ auto SceneRenderer::compose(this SceneRenderer &self, SceneComposeInfo &compose_
         transfer_man.upload_staging(ls::span(compose_info.gpu_models), self.models_buffer);
     auto meshlet_instances_buffer = //
         transfer_man.upload_staging(ls::span(compose_info.gpu_meshlet_instances), self.meshlet_instances_buffer);
-    return ComposedScene {
+    return ComposedScene{
         .materials_buffer = materials_buffer,
         .models_buffer = models_buffer,
         .meshlet_instances_buffer = meshlet_instances_buffer,

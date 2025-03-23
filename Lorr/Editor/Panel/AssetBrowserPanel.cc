@@ -64,7 +64,9 @@ AssetDirectory::~AssetDirectory() {
     auto &app = EditorApp::get();
     this->file_watcher->remove_dir(this->watch_descriptor);
     for (const auto &asset_uuid : this->asset_uuids) {
-        app.asset_man.delete_asset(asset_uuid);
+        if (app.asset_man.get_asset(asset_uuid)) {
+            app.asset_man.delete_asset(asset_uuid);
+        }
     }
 }
 

@@ -119,11 +119,37 @@ auto Scene::init(this Scene &self, const std::string &name) -> bool {
 auto Scene::destroy(this Scene &self) -> void {
     ZoneScoped;
 
+    self.root.children([](flecs::entity e) {
+        e.each([&](flecs::id component_id) {
+            if (!component_id.is_entity()) {
+                return;
+            }
+
+            ECS::ComponentWrapper component(e, component_id);
+            if (!component.has_component()) {
+                return;
+            }
+
+            component.for_each([&](usize &, std::string_view, ECS::ComponentWrapper::Member &member) {
+                if (auto *component_uuid = std::get_if<UUID *>(&member)) {
+                    const auto &uuid = **component_uuid;
+                    if (uuid) {
+                        auto &app = Application::get();
+                        if (app.asset_man.get_asset(uuid)) {
+                            app.asset_man.unload_asset(uuid);
+                        }
+                    }
+                }
+            });
+        });
+    });
+
     self.name.clear();
     self.root.clear();
     self.transforms.reset();
     self.entity_transforms_map.clear();
     self.dirty_transforms.clear();
+    self.rendering_models.clear();
     self.world.reset();
 }
 
@@ -156,6 +182,7 @@ auto Scene::import_from_file(this Scene &self, const fs::path &path) -> bool {
 
     self.set_name(std::string(name_json.value()));
 
+    std::vector<UUID> requested_assets = {};
     auto entities_json = doc["entities"].get_array();
     for (auto entity_json : entities_json) {
         auto entity_name_json = entity_json["name"];
@@ -181,8 +208,8 @@ auto Scene::import_from_file(this Scene &self, const fs::path &path) -> bool {
                 return false;
             }
 
-            auto component_name = stack.null_terminate(component_name_json.get_string());
-            auto component_id = self.world->lookup(component_name.data());
+            const auto *component_name = stack.null_terminate_cstr(component_name_json.get_string());
+            auto component_id = self.world->lookup(component_name);
             if (!component_id) {
                 LOG_ERROR("Entity '{}' has invalid component named '{}'!", e.name(), component_name);
                 return false;
@@ -210,10 +237,12 @@ auto Scene::import_from_file(this Scene &self, const fs::path &path) -> bool {
                         [&](glm::vec3 *v) { json_to_vec(member_json.value(), *v); },
                         [&](glm::vec4 *v) { json_to_vec(member_json.value(), *v); },
                         [&](glm::quat *v) { json_to_quat(member_json.value(), *v); },
-                        //[&](glm::mat4 *v) {
-                        // json_to_mat(member_json.value(), *v); },
+                        // [&](glm::mat4 *v) {json_to_mat(member_json.value(), *v); },
                         [&](std::string *v) { *v = member_json.get_string().value(); },
-                        [&](UUID *v) { *v = UUID::from_string(member_json.get_string().value()).value(); },
+                        [&](UUID *v) {
+                            *v = UUID::from_string(member_json.get_string().value()).value();
+                            requested_assets.push_back(*v);
+                        },
                     },
                     member
                 );
@@ -221,6 +250,12 @@ auto Scene::import_from_file(this Scene &self, const fs::path &path) -> bool {
 
             e.modified(component_id);
         }
+    }
+
+    LOG_TRACE("Loading scene {} with {} assets...", self.name, requested_assets.size());
+    for (const auto &uuid : requested_assets) {
+        auto &app = Application::get();
+        app.asset_man.load_asset(uuid);
     }
 
     return true;

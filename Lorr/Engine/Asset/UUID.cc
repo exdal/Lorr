@@ -26,11 +26,11 @@ auto UUID::generate_random() -> UUID {
     ZoneScoped;
 
     UUID uuid;
-    std::ranges::generate(uuid.data_u8_arr, std::ref(random_device));
-    uuid.data_u64[0] &= 0xffffffffffff0fff_u64;
-    uuid.data_u64[0] |= 0x0000000000004000_u64;
-    uuid.data_u64[1] &= 0x3fffffffffffffff_u64;
-    uuid.data_u64[1] |= 0x8000000000000000_u64;
+    std::ranges::generate(uuid.data._u8_arr, std::ref(random_device));
+    uuid.data._u64[0] &= 0xffffffffffff0fff_u64;
+    uuid.data._u64[0] |= 0x0000000000004000_u64;
+    uuid.data._u64[1] &= 0x3fffffffffffffff_u64;
+    uuid.data._u64[1] |= 0x8000000000000000_u64;
 
     return uuid;
 }
@@ -58,12 +58,16 @@ auto UUID::from_string(std::string_view str) -> ls::option<UUID> {
 
     UUID uuid;
     try {
-        uuid.data_u64[0] = (convert_segment(str, 0, 8).value() << 32) | //
+        uuid.data._u64[0] = (convert_segment(str, 0, 8).value() << 32) | //
             (convert_segment(str, 9, 4).value() << 16) | //
             convert_segment(str, 14, 4).value();
-        uuid.data_u64[1] = (convert_segment(str, 19, 4).value() << 48) | //
+        uuid.data._u64[1] = (convert_segment(str, 19, 4).value() << 48) | //
             convert_segment(str, 24, 12).value();
-    } catch (std::exception &e) {
+
+#ifdef LS_DEBUG
+        uuid.debug = uuid.str();
+#endif
+    } catch (std::exception &) {
         return ls::nullopt;
     }
 
@@ -75,11 +79,11 @@ auto UUID::str() const -> std::string {
 
     return fmt::format(
         "{:08x}-{:04x}-{:04x}-{:04x}-{:012x}",
-        static_cast<u32>(this->data_u64[0] >> 32_u64),
-        static_cast<u32>((this->data_u64[0] >> 16_u64) & 0x0000ffff_u64),
-        static_cast<u32>(this->data_u64[0] & 0x0000ffff_u64),
-        static_cast<u32>(this->data_u64[1] >> 48_u64),
-        this->data_u64[1] & 0x0000ffffffffffff_u64
+        static_cast<u32>(this->data._u64[0] >> 32_u64),
+        static_cast<u32>((this->data._u64[0] >> 16_u64) & 0x0000ffff_u64),
+        static_cast<u32>(this->data._u64[0] & 0x0000ffff_u64),
+        static_cast<u32>(this->data._u64[1] >> 48_u64),
+        this->data._u64[1] & 0x0000ffffffffffff_u64
     );
 }
 

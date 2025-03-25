@@ -30,11 +30,11 @@ struct Asset {
     }
 
     auto acquire_ref() -> void {
-        ++ref_count;
+        ++std::atomic_ref(ref_count);
     }
 
     auto release_ref() -> bool {
-        return (--ref_count) == 0;
+        return (--std::atomic_ref(ref_count)) == 0;
     }
 };
 
@@ -114,8 +114,9 @@ struct AssetManager : Handle<AssetManager> {
 
 private:
     auto begin_asset_meta(JsonWriter &json, const UUID &uuid, AssetType type) -> void;
+    auto write_model_asset_meta(JsonWriter &json, ls::span<UUID> material_uuids, ls::span<Material> materials) -> bool;
     auto write_texture_asset_meta(JsonWriter &json, Texture *texture) -> bool;
-    auto write_model_asset_meta(JsonWriter &json, Model *model) -> bool;
+    auto write_material_asset_meta(JsonWriter &json, Material *material) -> bool;
     auto write_scene_asset_meta(JsonWriter &json, Scene *scene) -> bool;
     auto end_asset_meta(JsonWriter &json, const fs::path &path) -> bool;
 };

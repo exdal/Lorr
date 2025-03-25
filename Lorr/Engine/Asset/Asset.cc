@@ -3,29 +3,43 @@
 #include "Engine/Asset/ParserGLTF.hh"
 #include "Engine/Asset/ParserSTB.hh"
 
+#include "Engine/Core/Application.hh"
+
+#include "Engine/Core/Logger.hh"
 #include "Engine/Graphics/VulkanDevice.hh"
 
 #include "Engine/Memory/Hasher.hh"
 
 #include "Engine/OS/File.hh"
 
-#include "Engine/Scene/ECSModule/ComponentWrapper.hh"
 #include "Engine/Scene/ECSModule/Core.hh"
 
 #include <meshoptimizer.h>
 #include <simdjson.h>
 
 namespace lr {
+template<glm::length_t N, typename T>
+bool json_to_vec(simdjson::ondemand::value &o, glm::vec<N, T> &vec) {
+    using U = glm::vec<N, T>;
+    for (i32 i = 0; i < U::length(); i++) {
+        constexpr static std::string_view components[] = { "x", "y", "z", "w" };
+        vec[i] = static_cast<T>(o[components[i]].get_double());
+    }
+
+    return true;
+}
+
 template<>
 struct Handle<AssetManager>::Impl {
     Device *device = nullptr;
     fs::path root_path = fs::current_path();
     AssetRegistry registry = {};
 
+    std::shared_mutex mutex = {};
     SlotMap<Model, ModelID> models = {};
     SlotMap<Texture, TextureID> textures = {};
     SlotMap<Material, MaterialID> materials = {};
-    SlotMap<Scene, SceneID> scenes = {};
+    SlotMap<std::unique_ptr<Scene>, SceneID> scenes = {};
 };
 
 auto AssetManager::create(Device *device) -> AssetManager {
@@ -66,6 +80,8 @@ auto AssetManager::asset_root_path(AssetType type) -> fs::path {
         case AssetType::Scene:
             return root / "scenes";
     }
+
+    LS_UNREACHABLE();
 }
 
 auto AssetManager::to_asset_file_type(const fs::path &path) -> AssetFileType {
@@ -115,6 +131,8 @@ auto AssetManager::to_asset_type_sv(AssetType type) -> std::string_view {
         case AssetType::Scene:
             return "Scene";
     }
+
+    LS_UNREACHABLE();
 }
 
 auto AssetManager::registry() const -> const AssetRegistry & {
@@ -124,6 +142,7 @@ auto AssetManager::registry() const -> const AssetRegistry & {
 auto AssetManager::create_asset(AssetType type, const fs::path &path) -> UUID {
     ZoneScoped;
 
+    std::unique_lock _(impl->mutex);
     auto uuid = UUID::generate_random();
     auto [asset_it, inserted] = impl->registry.try_emplace(uuid);
     if (!inserted) {
@@ -144,7 +163,7 @@ auto AssetManager::init_new_scene(const UUID &uuid, const std::string &name) -> 
 
     auto *asset = this->get_asset(uuid);
     asset->scene_id = impl->scenes.create_slot();
-    auto *scene = impl->scenes.slot(asset->scene_id);
+    auto *scene = impl->scenes.slot(asset->scene_id)->get();
     if (!scene->init(name)) {
         return false;
     }
@@ -196,10 +215,10 @@ auto AssetManager::import_asset(const fs::path &path) -> UUID {
     switch (asset_type) {
         case AssetType::Model: {
             auto gltf_model = GLTFModelInfo::parse_info(path);
-            Model model = {};
+            auto textures = std::vector<UUID>();
             for (auto &v : gltf_model->textures) {
                 auto &image = gltf_model->images[v.image_index.value()];
-                UUID texture_uuid = {};
+                auto &texture_uuid = textures.emplace_back();
                 std::visit(
                     ls::match{
                         [&](const std::vector<u8> &) { //
@@ -211,22 +230,46 @@ auto AssetManager::import_asset(const fs::path &path) -> UUID {
                     },
                     image.image_data
                 );
-
-                model.textures.emplace_back(texture_uuid);
             }
 
-            for ([[maybe_unused]] const auto &v : gltf_model->materials) {
-                auto material_uuid = this->create_asset(AssetType::Material);
-                model.materials.emplace_back(material_uuid);
+            auto material_uuids = std::vector<UUID>(gltf_model->materials.size());
+            auto materials = std::vector<Material>(gltf_model->materials.size());
+            for (const auto &[material_uuid, material, gltf_material] : std::views::zip(material_uuids, materials, gltf_model->materials)) {
+                material_uuid = this->create_asset(AssetType::Material);
+                material.albedo_color = gltf_material.albedo_color;
+                material.emissive_color = gltf_material.emissive_color;
+                material.roughness_factor = gltf_material.roughness_factor;
+                material.metallic_factor = gltf_material.metallic_factor;
+                material.alpha_cutoff = gltf_material.alpha_cutoff;
+
+                if (auto tex_idx = gltf_material.albedo_texture_index; tex_idx.has_value()) {
+                    material.albedo_texture = textures[tex_idx.value()];
+                }
+
+                if (auto tex_idx = gltf_material.normal_texture_index; tex_idx.has_value()) {
+                    material.normal_texture = textures[tex_idx.value()];
+                }
+
+                if (auto tex_idx = gltf_material.emissive_texture_index; tex_idx.has_value()) {
+                    material.emissive_texture = textures[tex_idx.value()];
+                }
+
+                if (auto tex_idx = gltf_material.metallic_roughness_texture_index; tex_idx.has_value()) {
+                    material.metallic_roughness_texture = textures[tex_idx.value()];
+                }
+
+                if (auto tex_idx = gltf_material.occlusion_texture_index; tex_idx.has_value()) {
+                    material.occlusion_texture = textures[tex_idx.value()];
+                }
             }
 
-            this->write_model_asset_meta(json, &model);
-        }
+            this->write_model_asset_meta(json, material_uuids, materials);
+        } break;
         case AssetType::Texture: {
             Texture texture = {};
 
             this->write_texture_asset_meta(json, &texture);
-        }
+        } break;
         default:;
     }
 
@@ -305,6 +348,7 @@ auto AssetManager::register_asset(const fs::path &path) -> UUID {
 auto AssetManager::register_asset(const UUID &uuid, AssetType type, const fs::path &path) -> bool {
     ZoneScoped;
 
+    std::unique_lock _(impl->mutex);
     auto [asset_it, inserted] = impl->registry.try_emplace(uuid);
     if (!inserted) {
         if (asset_it != impl->registry.end()) {
@@ -347,6 +391,7 @@ auto AssetManager::unload_asset(const UUID &uuid) -> void {
     ZoneScoped;
 
     auto *asset = this->get_asset(uuid);
+    LS_EXPECT(asset);
     switch (asset->type) {
         case AssetType::Model: {
             this->unload_model(uuid);
@@ -367,7 +412,14 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
 
     auto *asset = this->get_asset(uuid);
     if (asset->is_loaded()) {
+        // Acquire all child assets
+        auto *model = impl->models.slot(asset->model_id);
         asset->acquire_ref();
+
+        for (const auto &v : model->materials) {
+            this->load_material(v, {});
+        }
+
         return true;
     }
 
@@ -467,23 +519,26 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
         return false;
     }
 
-    auto images_json = meta_json->doc["textures"].get_array();
-    for (auto image_json : images_json) {
-        auto image_uuid = UUID::from_string(image_json.get_string().value());
-        if (!image_uuid.has_value()) {
-            LOG_ERROR("Failed to import Model! An image with corrupt UUID.");
+    // TODO: Do we really need this? Maybe only for embedded textures
+    //auto texture_uuids_json = meta_json->doc["texture_uuids"].get_array();
+
+    auto material_uuids_json = meta_json->doc["material_uuids"].get_array();
+    if (material_uuids_json.error()) {
+        LOG_ERROR("Failed to import model {}! Missing material_uuids filed.", asset->path);
+        return false;
+    }
+
+    // Register UUIDs.
+    for (auto material_uuid_json : material_uuids_json) {
+        auto material_uuid_str = material_uuid_json.get_string();
+        if (material_uuid_str.error()) {
+            LOG_ERROR("Failed to import model {}! A material with corrupt UUID.", asset->path);
             return false;
         }
 
-        this->register_asset(image_uuid.value(), AssetType::Texture, asset->path);
-        model->textures.emplace_back(image_uuid.value());
-    }
-
-    auto materials_json = meta_json->doc["materials"].get_array();
-    for (auto material_json : materials_json) {
-        auto material_uuid = UUID::from_string(material_json.get_string().value());
+        auto material_uuid = UUID::from_string(material_uuid_str.value());
         if (!material_uuid.has_value()) {
-            LOG_ERROR("Failed to import Model! A material with corrupt UUID.");
+            LOG_ERROR("Failed to import model {}! A material with corrupt UUID.", asset->path);
             return false;
         }
 
@@ -491,100 +546,55 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
         model->materials.emplace_back(material_uuid.value());
     }
 
-    LS_EXPECT(model->textures.size() == gltf_model->textures.size());
+    // Load registered UUIDs.
+    auto materials_json = meta_json->doc["materials"].get_array();
+    if (materials_json.error()) {
+        LOG_ERROR("Failed to import model {}! Missing materials filed.", asset->path);
+        return false;
+    }
 
-    auto get_gltf_texture = [&](usize i, bool srgb = true) -> UUID {
-        const auto &texture_uuid = model->textures[i];
-        auto *texture_asset = this->get_asset(texture_uuid);
-        if (texture_asset && texture_asset->is_loaded()) {
-            // Skip loaded textrues
-            return texture_uuid;
+    auto materials = std::vector<Material>();
+    for (auto material_json : materials_json) {
+        if (material_json.error()) {
+            LOG_ERROR("Failed to import model {}! A material with error.", asset->path);
+            return false;
         }
 
-        auto &gltf_texture = gltf_model->textures[i];
-        auto &gltf_image = gltf_model->images[gltf_texture.image_index.value()];
-        TextureSamplerInfo sampler_info = {
-            .mag_filter = vuk::Filter::eLinear,
-            .min_filter = vuk::Filter::eLinear,
-            .address_u = vuk::SamplerAddressMode::eRepeat,
-            .address_v = vuk::SamplerAddressMode::eRepeat,
-        };
-
-        if (auto sampler_index = gltf_texture.sampler_index; sampler_index.has_value()) {
-            auto &gltf_sampler = gltf_model->samplers[sampler_index.value()];
-            sampler_info.mag_filter = gltf_sampler.mag_filter;
-            sampler_info.min_filter = gltf_sampler.min_filter;
-            sampler_info.address_u = gltf_sampler.address_u;
-            sampler_info.address_v = gltf_sampler.address_v;
+        auto &material = materials.emplace_back();
+        if (auto member_json = material_json["albedo_color"]; !member_json.error()) {
+            json_to_vec(member_json.value(), material.albedo_color);
         }
-
-        bool loaded = false;
-        std::visit(
-            ls::match{
-                [&](std::vector<u8> &pixels) { //
-                    loaded = this->load_texture(
-                        texture_uuid,
-                        { .sampler_info = sampler_info, .use_srgb = srgb, .pixels = pixels, .file_type = gltf_image.file_type }
-                    );
-                },
-                [&](const fs::path &) { //
-                    loaded = this->load_texture(texture_uuid, { .sampler_info = sampler_info, .use_srgb = srgb });
-                },
-
-            },
-            gltf_image.image_data
-        );
-        if (!loaded) {
-            LOG_ERROR("Failed to load texture {}!", texture_uuid.str());
-            return UUID(nullptr);
+        if (auto member_json = material_json["emissive_color"]; !member_json.error()) {
+            json_to_vec(member_json.value(), material.emissive_color);
         }
-
-        return texture_uuid;
-    };
-
-    LS_EXPECT(model->materials.size() == gltf_model->materials.size());
-
-    for (auto i = 0_sz; i < model->materials.size(); i++) {
-        const auto &material_uuid = model->materials[i];
-        auto &gltf_material = gltf_model->materials[i];
-
-        UUID albedo_texture_uuid = {};
-        if (auto tex_idx = gltf_material.albedo_texture_index; tex_idx.has_value()) {
-            albedo_texture_uuid = get_gltf_texture(tex_idx.value());
+        if (auto member_json = material_json["roughness_factor"]; !member_json.error()) {
+            material.roughness_factor = static_cast<f32>(member_json.get_double());
         }
-
-        UUID normal_texture_uuid = {};
-        if (auto tex_idx = gltf_material.normal_texture_index; tex_idx.has_value()) {
-            normal_texture_uuid = get_gltf_texture(tex_idx.value(), false);
+        if (auto member_json = material_json["metallic_factor"]; !member_json.error()) {
+            material.metallic_factor = static_cast<f32>(member_json.get_double());
         }
-
-        UUID emissive_texture_uuid = {};
-        if (auto tex_idx = gltf_material.emissive_texture_index; tex_idx.has_value()) {
-            emissive_texture_uuid = get_gltf_texture(tex_idx.value());
+        if (auto member_json = material_json["alpha_cutoff"]; !member_json.error()) {
+            material.alpha_cutoff = static_cast<f32>(member_json.get_double());
         }
-
-        UUID metallic_roughness_texture_uuid = {};
-        if (auto tex_idx = gltf_material.metallic_roughness_texture_index; tex_idx.has_value()) {
-            metallic_roughness_texture_uuid = get_gltf_texture(tex_idx.value(), false);
+        if (auto member_json = material_json["albedo_texture"]; !member_json.error()) {
+            material.albedo_texture = UUID::from_string(member_json.get_string().value()).value_or(UUID(nullptr));
         }
-
-        UUID occlusion_texture_uuid = {};
-        if (auto tex_idx = gltf_material.occlusion_texture_index; tex_idx.has_value()) {
-            occlusion_texture_uuid = get_gltf_texture(tex_idx.value(), false);
+        if (auto member_json = material_json["normal_texture"]; !member_json.error()) {
+            material.normal_texture = UUID::from_string(member_json.get_string().value()).value_or(UUID(nullptr));
         }
+        if (auto member_json = material_json["emissive_texture"]; !member_json.error()) {
+            material.emissive_texture = UUID::from_string(member_json.get_string().value()).value_or(UUID(nullptr));
+        }
+        if (auto member_json = material_json["metallic_roughness_texture"]; !member_json.error()) {
+            material.metallic_roughness_texture = UUID::from_string(member_json.get_string().value()).value_or(UUID(nullptr));
+        }
+        if (auto member_json = material_json["occlusion_texture"]; !member_json.error()) {
+            material.occlusion_texture = UUID::from_string(member_json.get_string().value()).value_or(UUID(nullptr));
+        }
+    }
 
-        Material material_info = {
-            .albedo_color = gltf_material.albedo_color,
-            .emissive_color = gltf_material.emissive_color,
-            .roughness_factor = gltf_material.roughness_factor,
-            .alpha_cutoff = gltf_material.alpha_cutoff,
-            .albedo_texture = albedo_texture_uuid,
-            .normal_texture = normal_texture_uuid,
-            .emissive_texture = emissive_texture_uuid,
-            .metallic_roughness_texture = metallic_roughness_texture_uuid,
-            .occlusion_texture = occlusion_texture_uuid,
-        };
-        this->load_material(material_uuid, material_info);
+    for (const auto &[material_uuid, material] : std::views::zip(model->materials, materials)) {
+        this->load_material(material_uuid, material);
     }
 
     //  ── MESH PROCESSING ─────────────────────────────────────────────────
@@ -699,8 +709,10 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
     model->vertex_normals = Buffer::create(*impl->device, ls::size_bytes(gltf_callbacks.vertex_normals)).value();
     transfer_man.wait_on(transfer_man.upload_staging(ls::span(gltf_callbacks.vertex_normals), model->vertex_normals));
 
-    model->texture_coords = Buffer::create(*impl->device, ls::size_bytes(gltf_callbacks.vertex_texcoords)).value();
-    transfer_man.wait_on(transfer_man.upload_staging(ls::span(gltf_callbacks.vertex_texcoords), model->texture_coords));
+    if (!gltf_callbacks.vertex_texcoords.empty()) {
+        model->texture_coords = Buffer::create(*impl->device, ls::size_bytes(gltf_callbacks.vertex_texcoords)).value();
+        transfer_man.wait_on(transfer_man.upload_staging(ls::span(gltf_callbacks.vertex_texcoords), model->texture_coords));
+    }
 
     model->meshlets = Buffer::create(*impl->device, ls::size_bytes(model_meshlets)).value();
     transfer_man.wait_on(transfer_man.upload_staging(ls::span(model_meshlets), model->meshlets));
@@ -725,15 +737,23 @@ auto AssetManager::unload_model(const UUID &uuid) -> void {
     }
 
     auto *model = this->get_model(asset->model_id);
-    model->meshes.clear();
-
     for (auto &v : model->materials) {
         this->unload_material(v);
     }
 
-    for (auto &v : model->textures) {
-        this->unload_texture(v);
+    model->materials.clear();
+    model->primitives.clear();
+    model->meshes.clear();
+    model->nodes.clear();
+    impl->device->destroy(model->indices.id());
+    impl->device->destroy(model->vertex_positions.id());
+    impl->device->destroy(model->vertex_normals.id());
+    if (model->texture_coords) {
+        impl->device->destroy(model->texture_coords.id());
     }
+    impl->device->destroy(model->meshlets.id());
+    impl->device->destroy(model->meshlet_bounds.id());
+    impl->device->destroy(model->local_triangle_indices.id());
 
     impl->models.destroy_slot(asset->model_id);
     asset->model_id = ModelID::Invalid;
@@ -742,115 +762,137 @@ auto AssetManager::unload_model(const UUID &uuid) -> void {
 auto AssetManager::load_texture(const UUID &uuid, const TextureInfo &info) -> bool {
     ZoneScoped;
 
-    auto *asset = this->get_asset(uuid);
-    LS_EXPECT(asset);
-    asset->texture_id = impl->textures.create_slot();
-    auto *texture = impl->textures.slot(asset->texture_id);
+    {
+        std::shared_lock _(impl->mutex);
+        auto *asset = this->get_asset(uuid);
+        LS_EXPECT(asset);
+        asset->acquire_ref();
 
-    auto file_type = AssetFileType::Binary;
-    auto raw_data = ls::span<u8>();
-
-    auto file_contents = std::vector<u8>();
-    if (info.pixels.empty()) {
-        // Load from File.
-        //
-        if (!asset->path.has_extension()) {
-            LOG_ERROR("Trying to load texture \"{}\" without a file extension.", asset->path);
-            return false;
+        if (asset->is_loaded()) {
+            return true;
         }
-
-        file_contents = File::to_bytes(asset->path);
-        if (file_contents.empty()) {
-            LOG_ERROR("Error reading '{}'. Invalid texture file? Notice the question mark.", asset->path);
-            return false;
-        }
-
-        file_type = this->to_asset_file_type(asset->path);
-        raw_data = file_contents;
-    } else {
-        // Load from Memory.
-        //
-
-        LS_EXPECT(info.file_type != AssetFileType::None);
-        file_type = info.file_type;
-        raw_data = info.pixels;
     }
 
-    auto format = vuk::Format::eUndefined;
-    auto extent = vuk::Extent3D{};
-    auto image_data = std::vector<u8>();
-    switch (file_type) {
-        case AssetFileType::PNG:
-        case AssetFileType::JPEG: {
-            auto image = STBImageInfo::parse(raw_data);
-            if (!image.has_value()) {
+    {
+        std::unique_lock _(impl->mutex);
+        auto *asset = this->get_asset(uuid);
+        asset->texture_id = impl->textures.create_slot();
+        auto *texture = impl->textures.slot(asset->texture_id);
+
+        auto format = vuk::Format::eUndefined;
+        auto extent = vuk::Extent3D{};
+
+        auto file_type = info.file_type;
+        auto raw_data = std::vector<u8>(info.pixels.begin(), info.pixels.end());
+        if (info.pixels.empty()) {
+            if (!asset->path.has_extension()) {
+                LOG_ERROR("Trying to load texture \"{}\" without a file extension.", asset->path);
                 return false;
             }
-            extent = image->extent;
-            image_data = std::move(image->data);
-            format = info.use_srgb ? vuk::Format::eR8G8B8A8Srgb : vuk::Format::eR8G8B8A8Unorm;
-        } break;
-        default: {
-            LOG_ERROR("Failed to load texture '{}', invalid extension.", asset->path);
+
+            raw_data = File::to_bytes(asset->path);
+            if (raw_data.empty()) {
+                LOG_ERROR("Error reading '{}'. Invalid texture file? Notice the question mark.", asset->path);
+                return false;
+            }
+
+            file_type = this->to_asset_file_type(asset->path);
+        }
+
+        switch (file_type) {
+            case AssetFileType::PNG:
+            case AssetFileType::JPEG: {
+                auto image_info = STBImageInfo::parse_info(raw_data);
+                if (!image_info.has_value()) {
+                    return false;
+                }
+                extent = image_info->extent;
+                format = info.use_srgb ? vuk::Format::eR8G8B8A8Srgb : vuk::Format::eR8G8B8A8Unorm;
+            } break;
+            default: {
+                LOG_ERROR("Failed to load texture '{}', invalid extension.", asset->path);
+                return false;
+            }
+        }
+
+        auto image = Image::create(
+            *impl->device,
+            format,
+            vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eTransferSrc,
+            vuk::ImageType::e2D,
+            extent,
+            1,
+            static_cast<u32>(glm::floor(glm::log2(static_cast<f32>(ls::max(extent.width, extent.height)))) + 1)
+        );
+        if (!image.has_value()) {
+            LS_DEBUGBREAK();
             return false;
         }
+
+        auto image_view = ImageView::create(
+            *impl->device,
+            image.value(),
+            vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eTransferSrc,
+            vuk::ImageViewType::e2D,
+            { .aspectMask = vuk::ImageAspectFlagBits::eColor,
+              .baseMipLevel = 0,
+              .levelCount = image->mip_count(),
+              .baseArrayLayer = 0,
+              .layerCount = image->slice_count() }
+        );
+        if (!image_view.has_value()) {
+            LS_DEBUGBREAK();
+            return false;
+        }
+
+        auto rel_path = fs::relative(asset->path, impl->root_path);
+        impl->device->set_name(image.value(), fmt::format("{} Image", rel_path));
+        impl->device->set_name(image_view.value(), fmt::format("{} Image View", rel_path));
+
+        texture->image = image.value();
+        texture->image_view = image_view.value();
+        texture->sampler = Sampler::create(
+                               *impl->device,
+                               info.sampler_info.min_filter,
+                               info.sampler_info.mag_filter,
+                               vuk::SamplerMipmapMode::eLinear,
+                               info.sampler_info.address_u,
+                               info.sampler_info.address_v,
+                               vuk::SamplerAddressMode::eRepeat,
+                               vuk::CompareOp::eNever
+        )
+                               .value();
+
+        auto &app = Application::get();
+        auto job = Job::create([this, uuid, file_type, file_data = std::move(raw_data)]() mutable {
+            std::shared_lock _(impl->mutex);
+            auto *asset = this->get_asset(uuid);
+            auto *texture = this->get_texture(asset->texture_id);
+            auto image_data = std::vector<u8>();
+            switch (file_type) {
+                case AssetFileType::PNG:
+                case AssetFileType::JPEG: {
+                    auto image_info = STBImageInfo::parse(file_data);
+                    if (!image_info.has_value()) {
+                        return;
+                    }
+                    image_data = std::move(image_info->data);
+                } break;
+                default: {
+                    LOG_ERROR("Failed to load texture '{}', invalid extension.", asset->path);
+                    return;
+                }
+            }
+
+            auto &transfer_man = impl->device->transfer_man();
+            auto attachment = transfer_man.upload_staging(texture->image_view, image_data.data(), ls::size_bytes(image_data))
+                                  .as_released(vuk::Access::eFragmentSampled, vuk::DomainFlagBits::eGraphicsQueue);
+            transfer_man.wait_on(std::move(attachment));
+            LOG_TRACE("Loaded texture {} {}.", asset->uuid.str(), SlotMap_decode_id(asset->texture_id).index);
+        });
+        app.job_man->submit(std::move(job));
     }
 
-    auto image = Image::create(
-        *impl->device,
-        format,
-        vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eTransferSrc,
-        vuk::ImageType::e2D,
-        extent,
-        1,
-        static_cast<u32>(glm::floor(glm::log2(static_cast<f32>(ls::max(extent.width, extent.height)))) + 1)
-    );
-    if (!image.has_value()) {
-        LS_DEBUGBREAK();
-        return false;
-    }
-
-    auto image_view = ImageView::create(
-        *impl->device,
-        image.value(),
-        vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eTransferSrc,
-        vuk::ImageViewType::e2D,
-        { .aspectMask = vuk::ImageAspectFlagBits::eColor,
-          .baseMipLevel = 0,
-          .levelCount = image->mip_count(),
-          .baseArrayLayer = 0,
-          .layerCount = image->slice_count() }
-    );
-    if (!image_view.has_value()) {
-        LS_DEBUGBREAK();
-        return false;
-    }
-
-    auto &transfer_man = impl->device->transfer_man();
-    auto attachment = transfer_man.upload_staging(image_view.value(), image_data.data(), ls::size_bytes(image_data))
-                          .as_released(vuk::Access::eFragmentSampled, vuk::DomainFlagBits::eGraphicsQueue);
-    attachment->layout = vuk::ImageLayout::eReadOnlyOptimal;
-    transfer_man.wait_on(std::move(attachment));
-
-    auto rel_path = fs::relative(asset->path, impl->root_path);
-    impl->device->set_name(image.value(), fmt::format("{} Image", rel_path));
-    impl->device->set_name(image_view.value(), fmt::format("{} Image View", rel_path));
-
-    texture->image = image.value();
-    texture->image_view = image_view.value();
-    texture->sampler = Sampler::create(
-                           *impl->device,
-                           info.sampler_info.min_filter,
-                           info.sampler_info.mag_filter,
-                           vuk::SamplerMipmapMode::eLinear,
-                           info.sampler_info.address_u,
-                           info.sampler_info.address_v,
-                           vuk::SamplerAddressMode::eRepeat,
-                           vuk::CompareOp::eNever
-    )
-                           .value();
-
-    asset->acquire_ref();
     return true;
 }
 
@@ -871,7 +913,38 @@ auto AssetManager::load_material(const UUID &uuid, const Material &material_info
     ZoneScoped;
 
     auto *asset = this->get_asset(uuid);
-    asset->material_id = impl->materials.create_slot(const_cast<Material &&>(material_info));
+    LS_EXPECT(asset);
+    // Materials don't explicitly load any resources, they need to increase child resources refs.
+    // if (asset->is_loaded()) {
+    //     asset->acquire_ref();
+    //     return true;
+    // }
+
+    if (!asset->is_loaded()) {
+        asset->material_id = impl->materials.create_slot(const_cast<Material &&>(material_info));
+    }
+
+    auto *material = impl->materials.slot(asset->material_id);
+
+    if (material->albedo_texture) {
+        this->load_texture(material->albedo_texture, {});
+    }
+
+    if (material->normal_texture) {
+        this->load_texture(material->normal_texture, { .use_srgb = false });
+    }
+
+    if (material->emissive_texture) {
+        this->load_texture(material->emissive_texture, {});
+    }
+
+    if (material->metallic_roughness_texture) {
+        this->load_texture(material->metallic_roughness_texture, { .use_srgb = false });
+    }
+
+    if (material->occlusion_texture) {
+        this->load_texture(material->occlusion_texture, { .use_srgb = false });
+    }
 
     asset->acquire_ref();
     return true;
@@ -915,8 +988,8 @@ auto AssetManager::load_scene(const UUID &uuid) -> bool {
     ZoneScoped;
 
     auto *asset = this->get_asset(uuid);
-    asset->scene_id = impl->scenes.create_slot();
-    auto *scene = impl->scenes.slot(asset->scene_id);
+    asset->scene_id = impl->scenes.create_slot(std::make_unique<Scene>());
+    auto *scene = impl->scenes.slot(asset->scene_id)->get();
 
     if (!scene->init("unnamed_scene")) {
         return false;
@@ -924,33 +997,6 @@ auto AssetManager::load_scene(const UUID &uuid) -> bool {
 
     if (!scene->import_from_file(asset->path)) {
         return false;
-    }
-
-    ankerl::unordered_dense::set<UUID> cached_assets = {};
-    scene->get_root().children([&](flecs::entity e) {
-        e.each([&](flecs::id component_id) {
-            auto ecs_world = e.world();
-            if (!component_id.is_entity()) {
-                return;
-            }
-
-            ECS::ComponentWrapper component(e, component_id);
-            if (!component.has_component()) {
-                return;
-            }
-
-            component.for_each([&](usize, std::string_view, ECS::ComponentWrapper::Member &member) {
-                if (auto *component_uuid = std::get_if<UUID *>(&member)) {
-                    if (**component_uuid) {
-                        cached_assets.emplace(**component_uuid);
-                    }
-                }
-            });
-        });
-    });
-
-    for (const auto &cached_uuid : cached_assets) {
-        this->load_asset(cached_uuid);
     }
 
     asset->acquire_ref();
@@ -967,33 +1013,6 @@ auto AssetManager::unload_scene(const UUID &uuid) -> void {
     }
 
     auto *scene = this->get_scene(asset->scene_id);
-    ankerl::unordered_dense::set<UUID> cached_assets = {};
-    scene->get_root().children([&](flecs::entity e) {
-        e.each([&](flecs::id component_id) {
-            auto ecs_world = e.world();
-            if (!component_id.is_entity()) {
-                return;
-            }
-
-            ECS::ComponentWrapper component(e, component_id);
-            if (!component.has_component()) {
-                return;
-            }
-
-            component.for_each([&](usize, std::string_view, ECS::ComponentWrapper::Member &member) {
-                if (auto *component_uuid = std::get_if<UUID *>(&member)) {
-                    if (**component_uuid) {
-                        cached_assets.emplace(**component_uuid);
-                    }
-                }
-            });
-        });
-    });
-
-    for (const auto &cached_uuid : cached_assets) {
-        this->unload_asset(cached_uuid);
-    }
-
     scene->destroy();
 
     impl->scenes.destroy_slot(asset->scene_id);
@@ -1044,7 +1063,13 @@ auto AssetManager::export_model(const UUID &uuid, JsonWriter &json, const fs::pa
 
     auto *model = this->get_model(uuid);
     LS_EXPECT(model);
-    return this->write_model_asset_meta(json, model);
+
+    auto materials = std::vector<Material>(model->materials.size());
+    for (const auto &[material_uuid, material] : std::views::zip(model->materials, materials)) {
+        material = *this->get_material(material_uuid);
+    }
+
+    return this->write_model_asset_meta(json, model->materials, materials);
 }
 
 auto AssetManager::export_scene(const UUID &uuid, JsonWriter &json, const fs::path &path) -> bool {
@@ -1065,9 +1090,12 @@ auto AssetManager::delete_asset(const UUID &uuid) -> void {
         LOG_WARN("Deleting alive asset {} with {} references!", asset->uuid.str(), asset->ref_count);
     }
 
-    asset->ref_count = 0;
-    this->unload_asset(uuid);
-    impl->registry.erase(uuid);
+    {
+        std::unique_lock _(impl->mutex);
+        asset->ref_count = ls::min(asset->ref_count, 1_u64);
+        this->unload_asset(uuid);
+        impl->registry.erase(uuid);
+    }
 
     LOG_TRACE("Deleted asset {}.", uuid.str());
 }
@@ -1174,7 +1202,7 @@ auto AssetManager::get_scene(const UUID &uuid) -> Scene * {
         return nullptr;
     }
 
-    return impl->scenes.slot(asset->scene_id);
+    return impl->scenes.slot(asset->scene_id)->get();
 }
 
 auto AssetManager::get_scene(SceneID scene_id) -> Scene * {
@@ -1184,7 +1212,7 @@ auto AssetManager::get_scene(SceneID scene_id) -> Scene * {
         return nullptr;
     }
 
-    return impl->scenes.slot(scene_id);
+    return impl->scenes.slot(scene_id)->get();
 }
 
 auto AssetManager::begin_asset_meta(JsonWriter &json, const UUID &uuid, AssetType type) -> void {
@@ -1201,18 +1229,50 @@ auto AssetManager::write_texture_asset_meta(JsonWriter &, Texture *) -> bool {
     return true;
 }
 
-auto AssetManager::write_model_asset_meta(JsonWriter &json, Model *model) -> bool {
+auto AssetManager::write_material_asset_meta(JsonWriter &json, Material *material) -> bool {
     ZoneScoped;
 
-    json["textures"].begin_array();
-    for (const auto &image : model->textures) {
-        json << image.str();
+    json.begin_obj();
+    json["albedo_color"] = material->albedo_color;
+    json["emissive_color"] = material->emissive_color;
+    json["roughness_factor"] = material->roughness_factor;
+    json["metallic_factor"] = material->metallic_factor;
+    json["alpha_cutoff"] = material->alpha_cutoff;
+    json["albedo_texture"] = material->albedo_texture.str();
+    json["normal_texture"] = material->normal_texture.str();
+    json["emissive_texture"] = material->emissive_texture.str();
+    json["metallic_roughness_texture"] = material->metallic_roughness_texture.str();
+    json["occlusion_texture"] = material->occlusion_texture.str();
+    json.end_obj();
+
+    return true;
+}
+
+auto AssetManager::write_model_asset_meta(JsonWriter &json, ls::span<UUID> material_uuids, ls::span<Material> materials) -> bool {
+    ZoneScoped;
+
+    auto textures = ankerl::unordered_dense::set<UUID>();
+    json["material_uuids"].begin_array();
+    for (const auto &[material_uuid, material] : std::views::zip(material_uuids, materials)) {
+        json << material_uuid.str();
+
+        textures.emplace(material.albedo_texture);
+        textures.emplace(material.normal_texture);
+        textures.emplace(material.emissive_texture);
+        textures.emplace(material.occlusion_texture);
+        textures.emplace(material.metallic_roughness_texture);
+    }
+    json.end_array();
+
+    json["texture_uuids"].begin_array();
+    for (const auto &uuid : textures) {
+        json << uuid.str();
     }
     json.end_array();
 
     json["materials"].begin_array();
-    for (const auto &material : model->materials) {
-        json << material.str();
+    for (auto &material : materials) {
+        write_material_asset_meta(json, &material);
     }
     json.end_array();
 

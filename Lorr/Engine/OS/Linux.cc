@@ -75,7 +75,7 @@ auto os::file_read(FileDescriptor file, void *data, usize size) -> usize {
 
         errno = 0;
         iptr cur_read_size = read(static_cast<i32>(file), cur_data, remainder_size);
-        if (cur_read_size < 0) {
+        if (cur_read_size < 0_iptr) {
             LOG_TRACE("File read interrupted! {}", cur_read_size);
             break;
         }
@@ -97,7 +97,7 @@ auto os::file_write(FileDescriptor file, const void *data, usize size) -> usize 
 
         errno = 0;
         iptr cur_written_size = write(static_cast<i32>(file), cur_data, remainder_size);
-        if (cur_written_size < 0) {
+        if (cur_written_size < 0_iptr) {
             break;
         }
 
@@ -145,7 +145,7 @@ auto os::file_dialog(std::string_view title, FileDialogFlag flags) -> ls::option
         path_str.pop_back();
     }
 
-    return std::move(path_str);
+    return path_str;
 }
 
 void os::file_stdout(std::string_view str) {
@@ -264,7 +264,7 @@ auto os::file_watcher_peek(FileWatcherDescriptor &, u8 *buffer, i64 &buffer_offs
         }
     }
 
-    return FileEvent {
+    return FileEvent{
         .file_name = event_data->name,
         .action_mask = action_mask,
         .watch_descriptor = static_cast<FileDescriptor>(event_data->wd),

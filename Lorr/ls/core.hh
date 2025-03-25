@@ -4,10 +4,12 @@
     #define LS_LIKELY(x) __builtin_expect(x, 1)
     #define LS_UNLIKELY(x) __builtin_expect(x, 0)
     #define LS_DEBUGBREAK() __builtin_trap()
+    #define LS_UNREACHABLE() __builtin_unreachable()
 #elif defined(LS_COMPILER_MSVC)
     #define LS_LIKELY(x) x
     #define LS_UNLIKELY(x) x
     #define LS_DEBUGBREAK() __debugbreak()
+    #define LS_UNREACHABLE()
 #else
     #error "Compiler is not supported"
 #endif

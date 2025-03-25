@@ -1,5 +1,7 @@
 #pragma once
 
+#include <shared_mutex>
+
 namespace lr {
 // For unions and other unsafe stuff
 struct SlotMapIDUnpacked {
@@ -46,11 +48,13 @@ private:
     std::vector<u32> versions = {};
 
     std::vector<usize> free_indices = {};
+    mutable std::shared_mutex mutex = {};
 
 public:
     auto create_slot(this Self &self, T &&v = {}) -> ID {
         ZoneScoped;
 
+        std::unique_lock _(self.mutex);
         if (not self.free_indices.empty()) {
             auto index = self.free_indices.back();
             self.free_indices.pop_back();
@@ -70,6 +74,7 @@ public:
         ZoneScoped;
 
         if (self.is_valid(id)) {
+            std::unique_lock lock(self.mutex);
             auto index = SlotMap_decode_id(id).index;
             self.states[index] = false;
             self.versions[index] += 1;
@@ -86,6 +91,7 @@ public:
     auto reset(this Self &self) -> void {
         ZoneScoped;
 
+        std::unique_lock _(self.mutex);
         self.slots.clear();
         self.versions.clear();
         self.states.clear();
@@ -95,6 +101,7 @@ public:
     auto is_valid(this const Self &self, ID id) -> bool {
         ZoneScoped;
 
+        std::shared_lock _(self.mutex);
         auto [version, index] = SlotMap_decode_id(id);
         return index < self.slots.size() && self.versions[index] == version;
     }
@@ -103,6 +110,7 @@ public:
         ZoneScoped;
 
         if (self.is_valid(id)) {
+            std::shared_lock _(self.mutex);
             auto index = SlotMap_decode_id(id).index;
             return &self.slots[index];
         }
@@ -113,6 +121,7 @@ public:
     auto slot_from_index(this Self &self, usize index) -> T * {
         ZoneScoped;
 
+        std::shared_lock _(self.mutex);
         if (index < self.slots.size() && self.states[index]) {
             return &self.slots[index];
         }
@@ -120,16 +129,31 @@ public:
         return nullptr;
     }
 
-    auto size(this const Self &self) -> usize { //
+    auto size(this const Self &self) -> usize {
+        ZoneScoped;
+
+        std::shared_lock _(self.mutex);
         return self.slots.size() - self.free_indices.size();
     }
 
-    auto capacity(this const Self &self) -> usize { //
+    auto capacity(this const Self &self) -> usize {
+        ZoneScoped;
+
+        std::shared_lock _(self.mutex);
         return self.slots.size();
     }
 
-    auto slots_unsafe(this Self &self) -> ls::span<T> { //
+    auto slots_unsafe(this Self &self) -> ls::span<T> {
+        ZoneScoped;
+
+        std::shared_lock _(self.mutex);
         return self.slots;
+    }
+
+    auto get_mutex(this Self &self) -> std::shared_mutex & {
+        ZoneScoped;
+
+        return self.mutex;
     }
 };
 } // namespace lr

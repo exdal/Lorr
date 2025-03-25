@@ -19,6 +19,7 @@ auto TransferManager::alloc_transient_buffer_raw(this TransferManager &self, vuk
     -> vuk::Buffer {
     ZoneScoped;
 
+    std::unique_lock _(self.mutex);
     auto *allocator = &self.device->allocator.value();
     if (self.frame_allocator.has_value()) {
         allocator = &self.frame_allocator.value();
@@ -95,6 +96,7 @@ auto TransferManager::upload_staging(this TransferManager &self, ImageView &imag
     -> vuk::Value<vuk::ImageAttachment> {
     ZoneScoped;
 
+    std::unique_lock _(self.mutex);
     auto dst_attachment_info = image_view.get_attachment(*self.device, vuk::ImageUsageFlagBits::eTransferDst);
     auto result = vuk::host_data_to_image(self.device->allocator.value(), vuk::DomainFlagBits::eGraphicsQueue, dst_attachment_info, data, LOC);
     result = vuk::generate_mips(std::move(result), 0, image_view.mip_count() - 1);
@@ -131,12 +133,19 @@ auto TransferManager::scratch_buffer(this TransferManager &self, const void *dat
 auto TransferManager::wait_on(this TransferManager &self, vuk::UntypedValue &&fut) -> void {
     ZoneScoped;
 
-    self.futures.emplace_back(std::move(fut));
+    std::unique_lock _(self.mutex);
+#define WAIT_ON_HOST
+#ifdef WAIT_ON_HOST
+    fut.wait(self.device->get_allocator(), self.device->compiler);
+#else
+    self.futures.push_back(std::move(fut));
+#endif
 }
 
 auto TransferManager::wait_for_ops(this TransferManager &self, vuk::Compiler &compiler) -> void {
     ZoneScoped;
 
+    std::unique_lock _(self.mutex);
     vuk::wait_for_values_explicit(*self.frame_allocator, compiler, self.futures, {});
     self.futures.clear();
 }
@@ -144,12 +153,14 @@ auto TransferManager::wait_for_ops(this TransferManager &self, vuk::Compiler &co
 auto TransferManager::acquire(this TransferManager &self, vuk::DeviceFrameResource &allocator) -> void {
     ZoneScoped;
 
+    std::unique_lock _(self.mutex);
     self.frame_allocator.emplace(allocator);
 }
 
 auto TransferManager::release(this TransferManager &self) -> void {
     ZoneScoped;
 
+    std::unique_lock _(self.mutex);
     self.frame_allocator.reset();
 }
 

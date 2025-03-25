@@ -47,7 +47,6 @@ static auto to_vuk_filter(fastgltf::Filter f) -> vuk::Filter {
     switch (f) {
         case fastgltf::Filter::Nearest:
             return vuk::Filter::eNearest;
-        case fastgltf::Filter::Linear:
         default:
             return vuk::Filter::eLinear;
     }
@@ -62,6 +61,8 @@ static auto to_vuk_sampler_address_mode(fastgltf::Wrap w) -> vuk::SamplerAddress
         case fastgltf::Wrap::Repeat:
             return vuk::SamplerAddressMode::eRepeat;
     }
+
+    LS_UNREACHABLE();
 }
 
 static auto to_asset_file_type(fastgltf::MimeType mime) -> AssetFileType {
@@ -104,7 +105,7 @@ auto GLTFModelInfo::parse(const fs::path &path, GLTFModelCallbacks callbacks) ->
     // sources::Vector is not used for importing, ignore it
     for (const auto &v : asset.buffers) {
         std::visit(
-            fastgltf::visitor {
+            fastgltf::visitor{
                 [](const auto &) {},
                 [&](const fastgltf::sources::ByteView &view) {
                     // Embedded byte
@@ -137,7 +138,7 @@ auto GLTFModelInfo::parse(const fs::path &path, GLTFModelCallbacks callbacks) ->
 
     for (const auto &v : asset.images) {
         std::visit(
-            fastgltf::visitor {
+            fastgltf::visitor{
                 [](const auto &) {},
                 [&](const fastgltf::sources::ByteView &view) {
                     // Embedded buffer
@@ -283,11 +284,11 @@ auto GLTFModelInfo::parse(const fs::path &path, GLTFModelCallbacks callbacks) ->
             transform = glm::make_mat4(mat->data());
         }
 
-        fastgltf::math::fmat4x4 local_transform_array {};
+        fastgltf::math::fmat4x4 local_transform_array{};
         std::copy_n(&transform[0][0], 16, local_transform_array.data());
-        fastgltf::math::fvec3 scale_array {};
-        fastgltf::math::fquat rotation_array {};
-        fastgltf::math::fvec3 translation_array {};
+        fastgltf::math::fvec3 scale_array{};
+        fastgltf::math::fquat rotation_array{};
+        fastgltf::math::fvec3 translation_array{};
         fastgltf::math::decomposeTransformMatrix(local_transform_array, scale_array, rotation_array, translation_array);
 
         if (callbacks.on_new_node) {
@@ -404,7 +405,7 @@ auto GLTFModelInfo::parse_info(const fs::path &path) -> ls::option<GLTFModelInfo
 
     for (const auto &v : asset.images) {
         std::visit(
-            fastgltf::visitor {
+            fastgltf::visitor{
                 [](const auto &) {},
                 [&](const fastgltf::sources::ByteView &view) {
                     // Embedded buffer

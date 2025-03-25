@@ -30,11 +30,11 @@ struct Asset {
     }
 
     auto acquire_ref() -> void {
-        ++ref_count;
+        ++std::atomic_ref(ref_count);
     }
 
     auto release_ref() -> bool {
-        return (--ref_count) == 0;
+        return (--std::atomic_ref(ref_count)) == 0;
     }
 };
 

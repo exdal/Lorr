@@ -3,6 +3,9 @@
 #include "Engine/Asset/ParserGLTF.hh"
 #include "Engine/Asset/ParserSTB.hh"
 
+#include "Engine/Core/Application.hh"
+
+#include "Engine/Core/Logger.hh"
 #include "Engine/Graphics/VulkanDevice.hh"
 
 #include "Engine/Memory/Hasher.hh"
@@ -32,10 +35,11 @@ struct Handle<AssetManager>::Impl {
     fs::path root_path = fs::current_path();
     AssetRegistry registry = {};
 
+    std::shared_mutex mutex = {};
     SlotMap<Model, ModelID> models = {};
     SlotMap<Texture, TextureID> textures = {};
     SlotMap<Material, MaterialID> materials = {};
-    SlotMap<Scene, SceneID> scenes = {};
+    SlotMap<std::unique_ptr<Scene>, SceneID> scenes = {};
 };
 
 auto AssetManager::create(Device *device) -> AssetManager {
@@ -125,6 +129,8 @@ auto AssetManager::to_asset_type_sv(AssetType type) -> std::string_view {
         case AssetType::Scene:
             return "Scene";
     }
+
+    LS_UNREACHABLE();
 }
 
 auto AssetManager::registry() const -> const AssetRegistry & {
@@ -134,6 +140,7 @@ auto AssetManager::registry() const -> const AssetRegistry & {
 auto AssetManager::create_asset(AssetType type, const fs::path &path) -> UUID {
     ZoneScoped;
 
+    std::unique_lock _(impl->mutex);
     auto uuid = UUID::generate_random();
     auto [asset_it, inserted] = impl->registry.try_emplace(uuid);
     if (!inserted) {
@@ -154,7 +161,7 @@ auto AssetManager::init_new_scene(const UUID &uuid, const std::string &name) -> 
 
     auto *asset = this->get_asset(uuid);
     asset->scene_id = impl->scenes.create_slot();
-    auto *scene = impl->scenes.slot(asset->scene_id);
+    auto *scene = impl->scenes.slot(asset->scene_id)->get();
     if (!scene->init(name)) {
         return false;
     }
@@ -255,12 +262,12 @@ auto AssetManager::import_asset(const fs::path &path) -> UUID {
             }
 
             this->write_model_asset_meta(json, material_uuids, materials);
-        }
+        } break;
         case AssetType::Texture: {
             Texture texture = {};
 
             this->write_texture_asset_meta(json, &texture);
-        }
+        } break;
         default:;
     }
 
@@ -339,6 +346,7 @@ auto AssetManager::register_asset(const fs::path &path) -> UUID {
 auto AssetManager::register_asset(const UUID &uuid, AssetType type, const fs::path &path) -> bool {
     ZoneScoped;
 
+    std::unique_lock _(impl->mutex);
     auto [asset_it, inserted] = impl->registry.try_emplace(uuid);
     if (!inserted) {
         if (asset_it != impl->registry.end()) {
@@ -752,120 +760,137 @@ auto AssetManager::unload_model(const UUID &uuid) -> void {
 auto AssetManager::load_texture(const UUID &uuid, const TextureInfo &info) -> bool {
     ZoneScoped;
 
-    auto *asset = this->get_asset(uuid);
-    LS_EXPECT(asset);
-    if (asset->is_loaded()) {
+    {
+        std::shared_lock _(impl->mutex);
+        auto *asset = this->get_asset(uuid);
+        LS_EXPECT(asset);
         asset->acquire_ref();
-        return true;
+
+        if (asset->is_loaded()) {
+            return true;
+        }
     }
 
-    asset->texture_id = impl->textures.create_slot();
-    auto *texture = impl->textures.slot(asset->texture_id);
+    {
+        std::unique_lock _(impl->mutex);
+        auto *asset = this->get_asset(uuid);
+        asset->texture_id = impl->textures.create_slot();
+        auto *texture = impl->textures.slot(asset->texture_id);
 
-    auto file_type = AssetFileType::Binary;
-    auto raw_data = ls::span<u8>();
+        auto format = vuk::Format::eUndefined;
+        auto extent = vuk::Extent3D{};
 
-    auto file_contents = std::vector<u8>();
-    if (info.pixels.empty()) {
-        // Load from File.
-        //
-        if (!asset->path.has_extension()) {
-            LOG_ERROR("Trying to load texture \"{}\" without a file extension.", asset->path);
-            return false;
-        }
-
-        file_contents = File::to_bytes(asset->path);
-        if (file_contents.empty()) {
-            LOG_ERROR("Error reading '{}'. Invalid texture file? Notice the question mark.", asset->path);
-            return false;
-        }
-
-        file_type = this->to_asset_file_type(asset->path);
-        raw_data = file_contents;
-    } else {
-        // Load from Memory.
-        //
-
-        LS_EXPECT(info.file_type != AssetFileType::None);
-        file_type = info.file_type;
-        raw_data = info.pixels;
-    }
-
-    auto format = vuk::Format::eUndefined;
-    auto extent = vuk::Extent3D{};
-    auto image_data = std::vector<u8>();
-    switch (file_type) {
-        case AssetFileType::PNG:
-        case AssetFileType::JPEG: {
-            auto image = STBImageInfo::parse(raw_data);
-            if (!image.has_value()) {
+        auto file_type = info.file_type;
+        auto raw_data = std::vector<u8>(info.pixels.begin(), info.pixels.end());
+        if (info.pixels.empty()) {
+            if (!asset->path.has_extension()) {
+                LOG_ERROR("Trying to load texture \"{}\" without a file extension.", asset->path);
                 return false;
             }
-            extent = image->extent;
-            image_data = std::move(image->data);
-            format = info.use_srgb ? vuk::Format::eR8G8B8A8Srgb : vuk::Format::eR8G8B8A8Unorm;
-        } break;
-        default: {
-            LOG_ERROR("Failed to load texture '{}', invalid extension.", asset->path);
+
+            raw_data = File::to_bytes(asset->path);
+            if (raw_data.empty()) {
+                LOG_ERROR("Error reading '{}'. Invalid texture file? Notice the question mark.", asset->path);
+                return false;
+            }
+
+            file_type = this->to_asset_file_type(asset->path);
+        }
+
+        switch (file_type) {
+            case AssetFileType::PNG:
+            case AssetFileType::JPEG: {
+                auto image_info = STBImageInfo::parse_info(raw_data);
+                if (!image_info.has_value()) {
+                    return false;
+                }
+                extent = image_info->extent;
+                format = info.use_srgb ? vuk::Format::eR8G8B8A8Srgb : vuk::Format::eR8G8B8A8Unorm;
+            } break;
+            default: {
+                LOG_ERROR("Failed to load texture '{}', invalid extension.", asset->path);
+                return false;
+            }
+        }
+
+        auto image = Image::create(
+            *impl->device,
+            format,
+            vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eTransferSrc,
+            vuk::ImageType::e2D,
+            extent,
+            1,
+            static_cast<u32>(glm::floor(glm::log2(static_cast<f32>(ls::max(extent.width, extent.height)))) + 1)
+        );
+        if (!image.has_value()) {
+            LS_DEBUGBREAK();
             return false;
         }
+
+        auto image_view = ImageView::create(
+            *impl->device,
+            image.value(),
+            vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eTransferSrc,
+            vuk::ImageViewType::e2D,
+            { .aspectMask = vuk::ImageAspectFlagBits::eColor,
+              .baseMipLevel = 0,
+              .levelCount = image->mip_count(),
+              .baseArrayLayer = 0,
+              .layerCount = image->slice_count() }
+        );
+        if (!image_view.has_value()) {
+            LS_DEBUGBREAK();
+            return false;
+        }
+
+        auto rel_path = fs::relative(asset->path, impl->root_path);
+        impl->device->set_name(image.value(), fmt::format("{} Image", rel_path));
+        impl->device->set_name(image_view.value(), fmt::format("{} Image View", rel_path));
+
+        texture->image = image.value();
+        texture->image_view = image_view.value();
+        texture->sampler = Sampler::create(
+                               *impl->device,
+                               info.sampler_info.min_filter,
+                               info.sampler_info.mag_filter,
+                               vuk::SamplerMipmapMode::eLinear,
+                               info.sampler_info.address_u,
+                               info.sampler_info.address_v,
+                               vuk::SamplerAddressMode::eRepeat,
+                               vuk::CompareOp::eNever
+        )
+                               .value();
+
+        auto &app = Application::get();
+        auto job = Job::create([this, uuid, file_type, file_data = std::move(raw_data)]() mutable {
+            std::shared_lock _(impl->mutex);
+            auto *asset = this->get_asset(uuid);
+            auto *texture = this->get_texture(asset->texture_id);
+            auto image_data = std::vector<u8>();
+            switch (file_type) {
+                case AssetFileType::PNG:
+                case AssetFileType::JPEG: {
+                    auto image_info = STBImageInfo::parse(file_data);
+                    if (!image_info.has_value()) {
+                        return;
+                    }
+                    image_data = std::move(image_info->data);
+                } break;
+                default: {
+                    LOG_ERROR("Failed to load texture '{}', invalid extension.", asset->path);
+                    return;
+                }
+            }
+
+            auto &transfer_man = impl->device->transfer_man();
+            auto attachment = transfer_man.upload_staging(texture->image_view, image_data.data(), ls::size_bytes(image_data))
+                                  .as_released(vuk::Access::eFragmentSampled, vuk::DomainFlagBits::eGraphicsQueue);
+            transfer_man.wait_on(std::move(attachment));
+            LOG_TRACE("Loaded texture {} {}.", asset->uuid.str(), SlotMap_decode_id(asset->texture_id).index);
+        });
+        app.job_man->submit(std::move(job));
     }
 
-    auto image = Image::create(
-        *impl->device,
-        format,
-        vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eTransferSrc,
-        vuk::ImageType::e2D,
-        extent,
-        1,
-        static_cast<u32>(glm::floor(glm::log2(static_cast<f32>(ls::max(extent.width, extent.height)))) + 1)
-    );
-    if (!image.has_value()) {
-        LS_DEBUGBREAK();
-        return false;
-    }
-
-    auto image_view = ImageView::create(
-        *impl->device,
-        image.value(),
-        vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eTransferSrc,
-        vuk::ImageViewType::e2D,
-        { .aspectMask = vuk::ImageAspectFlagBits::eColor,
-          .baseMipLevel = 0,
-          .levelCount = image->mip_count(),
-          .baseArrayLayer = 0,
-          .layerCount = image->slice_count() }
-    );
-    if (!image_view.has_value()) {
-        LS_DEBUGBREAK();
-        return false;
-    }
-
-    auto &transfer_man = impl->device->transfer_man();
-    auto attachment = transfer_man.upload_staging(image_view.value(), image_data.data(), ls::size_bytes(image_data))
-                          .as_released(vuk::Access::eFragmentSampled, vuk::DomainFlagBits::eGraphicsQueue);
-    attachment->layout = vuk::ImageLayout::eReadOnlyOptimal;
-    transfer_man.wait_on(std::move(attachment));
-
-    auto rel_path = fs::relative(asset->path, impl->root_path);
-    impl->device->set_name(image.value(), fmt::format("{} Image", rel_path));
-    impl->device->set_name(image_view.value(), fmt::format("{} Image View", rel_path));
-
-    texture->image = image.value();
-    texture->image_view = image_view.value();
-    texture->sampler = Sampler::create(
-                           *impl->device,
-                           info.sampler_info.min_filter,
-                           info.sampler_info.mag_filter,
-                           vuk::SamplerMipmapMode::eLinear,
-                           info.sampler_info.address_u,
-                           info.sampler_info.address_v,
-                           vuk::SamplerAddressMode::eRepeat,
-                           vuk::CompareOp::eNever
-    )
-                           .value();
-
-    asset->acquire_ref();
     return true;
 }
 
@@ -897,32 +922,26 @@ auto AssetManager::load_material(const UUID &uuid, const Material &material_info
         asset->material_id = impl->materials.create_slot(const_cast<Material &&>(material_info));
     }
 
-    auto sampler_info = TextureSamplerInfo{
-        .mag_filter = vuk::Filter::eLinear,
-        .min_filter = vuk::Filter::eLinear,
-        .address_u = vuk::SamplerAddressMode::eRepeat,
-        .address_v = vuk::SamplerAddressMode::eRepeat,
-    };
-
     auto *material = impl->materials.slot(asset->material_id);
+
     if (material->albedo_texture) {
-        this->load_texture(material->albedo_texture, { .sampler_info = sampler_info });
+        this->load_texture(material->albedo_texture, {});
     }
 
     if (material->normal_texture) {
-        this->load_texture(material->normal_texture, { .sampler_info = sampler_info, .use_srgb = false });
+        this->load_texture(material->normal_texture, { .use_srgb = false });
     }
 
     if (material->emissive_texture) {
-        this->load_texture(material->emissive_texture, { .sampler_info = sampler_info });
+        this->load_texture(material->emissive_texture, {});
     }
 
     if (material->metallic_roughness_texture) {
-        this->load_texture(material->metallic_roughness_texture, { .sampler_info = sampler_info, .use_srgb = false });
+        this->load_texture(material->metallic_roughness_texture, { .use_srgb = false });
     }
 
     if (material->occlusion_texture) {
-        this->load_texture(material->occlusion_texture, { .sampler_info = sampler_info, .use_srgb = false });
+        this->load_texture(material->occlusion_texture, { .use_srgb = false });
     }
 
     asset->acquire_ref();
@@ -967,8 +986,8 @@ auto AssetManager::load_scene(const UUID &uuid) -> bool {
     ZoneScoped;
 
     auto *asset = this->get_asset(uuid);
-    asset->scene_id = impl->scenes.create_slot();
-    auto *scene = impl->scenes.slot(asset->scene_id);
+    asset->scene_id = impl->scenes.create_slot(std::make_unique<Scene>());
+    auto *scene = impl->scenes.slot(asset->scene_id)->get();
 
     if (!scene->init("unnamed_scene")) {
         return false;
@@ -1069,9 +1088,12 @@ auto AssetManager::delete_asset(const UUID &uuid) -> void {
         LOG_WARN("Deleting alive asset {} with {} references!", asset->uuid.str(), asset->ref_count);
     }
 
-    asset->ref_count = ls::min(asset->ref_count, 1_u64);
-    this->unload_asset(uuid);
-    impl->registry.erase(uuid);
+    {
+        std::unique_lock _(impl->mutex);
+        asset->ref_count = ls::min(asset->ref_count, 1_u64);
+        this->unload_asset(uuid);
+        impl->registry.erase(uuid);
+    }
 
     LOG_TRACE("Deleted asset {}.", uuid.str());
 }
@@ -1178,7 +1200,7 @@ auto AssetManager::get_scene(const UUID &uuid) -> Scene * {
         return nullptr;
     }
 
-    return impl->scenes.slot(asset->scene_id);
+    return impl->scenes.slot(asset->scene_id)->get();
 }
 
 auto AssetManager::get_scene(SceneID scene_id) -> Scene * {
@@ -1188,7 +1210,7 @@ auto AssetManager::get_scene(SceneID scene_id) -> Scene * {
         return nullptr;
     }
 
-    return impl->scenes.slot(scene_id);
+    return impl->scenes.slot(scene_id)->get();
 }
 
 auto AssetManager::begin_asset_meta(JsonWriter &json, const UUID &uuid, AssetType type) -> void {

@@ -19,7 +19,9 @@
 #include <deque>
 #include <expected>
 #include <filesystem>
+#include <mutex>
 #include <ranges>
+#include <shared_mutex>
 #include <span>
 #include <string_view>
 #include <variant>

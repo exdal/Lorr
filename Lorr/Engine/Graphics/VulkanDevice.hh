@@ -26,6 +26,8 @@ struct BindlessDescriptorInfo {
 struct TransferManager {
 private:
     Device *device = nullptr;
+
+    mutable std::shared_mutex mutex = {};
     std::vector<vuk::UntypedValue> futures = {};
 
     ls::option<vuk::Allocator> frame_allocator;

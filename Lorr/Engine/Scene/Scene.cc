@@ -135,7 +135,7 @@ auto Scene::destroy(this Scene &self) -> void {
                     const auto &uuid = **component_uuid;
                     if (uuid) {
                         auto &app = Application::get();
-                        if (app.asset_man.get_asset(uuid)) {
+                        if (uuid && app.asset_man.get_asset(uuid)) {
                             app.asset_man.unload_asset(uuid);
                         }
                     }
@@ -255,7 +255,9 @@ auto Scene::import_from_file(this Scene &self, const fs::path &path) -> bool {
     LOG_TRACE("Loading scene {} with {} assets...", self.name, requested_assets.size());
     for (const auto &uuid : requested_assets) {
         auto &app = Application::get();
-        app.asset_man.load_asset(uuid);
+        if (uuid && app.asset_man.get_asset(uuid)) {
+            app.asset_man.load_asset(uuid);
+        }
     }
 
     return true;

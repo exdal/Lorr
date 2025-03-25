@@ -38,7 +38,7 @@ struct SlangBlob : ISlangBlob {
         return m_refCount;
     }
 
-    SlangBlob(const std::vector<u8> &data): m_data(data) {}
+    SlangBlob(const std::vector<u8> &data) : m_data(data) {}
     virtual ~SlangBlob() = default;
     SLANG_NO_THROW void const *SLANG_MCALL getBufferPointer() final {
         return m_data.data();
@@ -81,7 +81,7 @@ struct SlangVirtualFS : ISlangFileSystem {
         return m_refCount;
     }
 
-    SlangVirtualFS(VirtualDir &virtual_dir, fs::path root_dir): m_virtual_env(virtual_dir), m_root_dir(std::move(root_dir)), m_refCount(1) {};
+    SlangVirtualFS(VirtualDir &virtual_dir, fs::path root_dir) : m_virtual_env(virtual_dir), m_root_dir(std::move(root_dir)), m_refCount(1) {};
     virtual ~SlangVirtualFS() = default;
 
     ISlangUnknown *getInterface(SlangUUID const &) {
@@ -105,7 +105,7 @@ struct SlangVirtualFS : ISlangFileSystem {
         if (it == m_virtual_env.files.end()) {
             if (auto result = m_virtual_env.read_file(module_name, path); result.has_value()) {
                 auto &new_file = result.value().get();
-                *outBlob = new SlangBlob(std::vector<u8> { new_file.data(), (new_file.data() + new_file.size()) });
+                *outBlob = new SlangBlob(std::vector<u8>{ new_file.data(), (new_file.data() + new_file.size()) });
 
                 LOG_TRACE("New shader module '{}' is loaded.", module_name);
                 return SLANG_OK;
@@ -116,7 +116,7 @@ struct SlangVirtualFS : ISlangFileSystem {
             }
         } else {
             auto &file = it->second;
-            *outBlob = new SlangBlob(std::vector<u8> { file.data(), (file.data() + file.size()) });
+            *outBlob = new SlangBlob(std::vector<u8>{ file.data(), (file.data() + file.size()) });
             return SLANG_OK;
         }
     }
@@ -148,9 +148,10 @@ auto SlangModule::destroy() -> void {
 
 auto SlangModule::get_entry_point(std::string_view name) -> ls::option<SlangEntryPoint> {
     ZoneScoped;
+    memory::ScopedStack stack;
 
     Slang::ComPtr<slang::IEntryPoint> entry_point;
-    if (SLANG_FAILED(impl->slang_module->findEntryPointByName(name.data(), entry_point.writeRef()))) {
+    if (SLANG_FAILED(impl->slang_module->findEntryPointByName(stack.null_terminate_cstr(name), entry_point.writeRef()))) {
         LOG_ERROR("Shader entry point '{}' is not found.", name);
         return {};
     }
@@ -187,9 +188,6 @@ auto SlangModule::get_entry_point(std::string_view name) -> ls::option<SlangEntr
         }
     }
 
-    auto *program_layout = linked_program->getLayout();
-    LS_EXPECT(program_layout->getEntryPointCount() == 1);
-
     Slang::ComPtr<slang::IBlob> spirv_code;
     {
         Slang::ComPtr<slang::IBlob> diagnostics_blob;
@@ -207,7 +205,7 @@ auto SlangModule::get_entry_point(std::string_view name) -> ls::option<SlangEntr
     auto ir = std::vector<u32>(spirv_code->getBufferSize() / 4);
     std::memcpy(ir.data(), spirv_code->getBufferPointer(), spirv_code->getBufferSize());
 
-    return SlangEntryPoint {
+    return SlangEntryPoint{
         .ir = std::move(ir),
     };
 }
@@ -269,13 +267,14 @@ auto SlangSession::destroy() -> void {
 
 auto SlangSession::load_module(const SlangModuleInfo &info) -> ls::option<SlangModule> {
     ZoneScoped;
+    memory::ScopedStack stack;
 
     slang::IModule *slang_module = {};
     Slang::ComPtr<slang::IBlob> diagnostics_blob;
     const auto &path_str = info.path.string();
     if (info.source.has_value()) {
-        slang_module =
-            impl->session->loadModuleFromSourceString(info.module_name.c_str(), path_str.c_str(), info.source->data(), diagnostics_blob.writeRef());
+        auto source = stack.null_terminate_cstr(info.source.value());
+        slang_module = impl->session->loadModuleFromSourceString(info.module_name.c_str(), path_str.c_str(), source, diagnostics_blob.writeRef());
     } else {
         auto source_data = File::to_string(info.path);
         if (source_data.empty()) {

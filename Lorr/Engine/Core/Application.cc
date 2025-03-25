@@ -13,6 +13,7 @@ bool Application::init(this Application &self, const ApplicationInfo &info) {
         return false;
     }
 
+    self.job_man.emplace(12);
     self.device.init(3).value();
     self.asset_man = AssetManager::create(&self.device);
 
@@ -27,7 +28,9 @@ bool Application::init(this Application &self, const ApplicationInfo &info) {
         return false;
     }
 
+    self.job_man->wait();
     self.run();
+
     return true;
 }
 
@@ -73,8 +76,8 @@ void Application::run(this Application &self) {
         auto delta_time = timer.elapsed();
         timer.reset();
 
-        // Delta time
         self.window.poll(window_callbacks);
+        self.job_man->wait();
 
         auto swapchain_attachment = self.device.new_frame(self.swap_chain.value());
         swapchain_attachment = vuk::clear_image(std::move(swapchain_attachment), vuk::Black<f32>);

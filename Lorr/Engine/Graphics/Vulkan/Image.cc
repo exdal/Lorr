@@ -29,12 +29,13 @@ auto Image::create(
         return std::unexpected(result.error());
     }
 
-    auto image = Image {};
+    auto image = Image{};
     image.format_ = format;
     image.extent_ = extent;
     image.slice_count_ = slice_count;
     image.mip_levels_ = mip_count;
     image.id_ = device.resources.images.create_slot(std::move(image_handle));
+
     return image;
 }
 
@@ -88,7 +89,7 @@ auto ImageView::create(
         return std::unexpected(result.error());
     }
 
-    auto image_view = ImageView {};
+    auto image_view = ImageView{};
     image_view.format_ = image.format();
     image_view.extent_ = image.extent();
     image_view.type_ = type;
@@ -105,7 +106,7 @@ auto ImageView::get_attachment(Device &device, const vuk::ImageUsageFlags &usage
     auto *image_handle = device.image(bound_image_id_);
     auto *view_handle = device.image_view(id_);
 
-    return vuk::ImageAttachment {
+    return vuk::ImageAttachment{
         .image = *image_handle,
         .image_view = *view_handle,
         .usage = usage,
@@ -207,7 +208,7 @@ auto Sampler::create(
         .maxLod = max_lod,
     };
 
-    auto sampler = Sampler {};
+    auto sampler = Sampler{};
     sampler.id_ = device.resources.samplers.create_slot();
     auto *sampler_handle = device.resources.samplers.slot(sampler.id_);
     *sampler_handle = device.runtime->acquire_sampler(create_info, device.frame_count());

@@ -2,6 +2,8 @@
 
 #include "Engine/Asset/Asset.hh"
 
+#include "Engine/Core/JobManager.hh"
+
 #include "Engine/Graphics/ImGuiRenderer.hh"
 #include "Engine/Graphics/Vulkan.hh"
 #include "Engine/Graphics/VulkanDevice.hh"
@@ -26,6 +28,7 @@ struct Application {
 
     static Application &get();
 
+    ls::option<JobManager> job_man = ls::nullopt;
     Device device = {};
     Window window = {};
     ls::option<vuk::Swapchain> swap_chain = ls::nullopt;

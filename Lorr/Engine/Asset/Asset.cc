@@ -80,6 +80,8 @@ auto AssetManager::asset_root_path(AssetType type) -> fs::path {
         case AssetType::Scene:
             return root / "scenes";
     }
+
+    LS_UNREACHABLE();
 }
 
 auto AssetManager::to_asset_file_type(const fs::path &path) -> AssetFileType {

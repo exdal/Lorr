@@ -67,7 +67,7 @@ auto UUID::from_string(std::string_view str) -> ls::option<UUID> {
 #ifdef LS_DEBUG
         uuid.debug = uuid.str();
 #endif
-    } catch (std::exception &e) {
+    } catch (std::exception &) {
         return ls::nullopt;
     }
 

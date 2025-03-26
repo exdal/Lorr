@@ -3,6 +3,14 @@
 #include "Engine/Graphics/VulkanTypes.hh"
 
 namespace lr::GPU {
+enum class CullFlags : u32 {
+    MeshletFrustum = 1 << 0,
+    TriangleBackFace = 1 << 1,
+    MicroTriangles = 1 << 2,
+
+    All = MeshletFrustum | TriangleBackFace | MicroTriangles,
+};
+
 enum class TransformID : u64 { Invalid = ~0_u64 };
 struct Transforms {
     alignas(4) glm::mat4 local = {};
@@ -68,9 +76,12 @@ struct Camera {
     alignas(4) glm::mat4 projection_view_mat = {};
     alignas(4) glm::mat4 inv_view_mat = {};
     alignas(4) glm::mat4 inv_projection_view_mat = {};
+    alignas(4) glm::mat4 frustum_projection_view_mat = {};
     alignas(4) glm::vec3 position = {};
     alignas(4) f32 near_clip = {};
     alignas(4) f32 far_clip = {};
+    alignas(4) glm::vec4 frustum_planes[6] = {};
+    alignas(4) glm::vec2 resolution = {};
 };
 
 struct Scene {
@@ -79,6 +90,7 @@ struct Scene {
     alignas(4) Atmosphere atmosphere = {};
     alignas(4) Clouds clouds = {};
     alignas(4) u32 meshlet_instance_count = 0;
+    alignas(4) CullFlags cull_flags = {};
 };
 
 struct Material {

@@ -162,7 +162,7 @@ auto AssetManager::init_new_scene(const UUID &uuid, const std::string &name) -> 
     ZoneScoped;
 
     auto *asset = this->get_asset(uuid);
-    asset->scene_id = impl->scenes.create_slot();
+    asset->scene_id = impl->scenes.create_slot(std::make_unique<Scene>());
     auto *scene = impl->scenes.slot(asset->scene_id)->get();
     if (!scene->init(name)) {
         return false;
@@ -454,14 +454,16 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
                           glm::vec3 scale) {
         auto *info = static_cast<GLTFCallbacks *>(user_data);
 
-        info->model->nodes.push_back({
-            .name = std::move(name),
-            .child_indices = std::move(child_node_indices),
-            .mesh_index = std::move(mesh_index),
-            .translation = translation,
-            .rotation = rotation,
-            .scale = scale,
-        });
+        info->model->nodes.push_back(
+            {
+                .name = std::move(name),
+                .child_indices = std::move(child_node_indices),
+                .mesh_index = std::move(mesh_index),
+                .translation = translation,
+                .rotation = rotation,
+                .scale = scale,
+            }
+        );
 
         if (mesh_index.has_value()) {
             if (info->model->meshes.size() <= mesh_index.value()) {
@@ -623,6 +625,14 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
             auto raw_vertex_positions = ls::span(gltf_callbacks.vertex_positions.data() + primitive.vertex_offset, primitive.vertex_count);
             auto raw_vertex_normals = ls::span(gltf_callbacks.vertex_normals.data() + primitive.vertex_offset, primitive.vertex_count);
 
+            for (auto &position : raw_vertex_positions) {
+                position = node_transform * glm::vec4(position, 1.0f);
+            }
+
+            for (auto &normal : raw_vertex_normals) {
+                normal = node_normal_transform * normal;
+            }
+
             auto meshlets = std::vector<GPU::Meshlet>();
             auto meshlet_bounds = std::vector<GPU::MeshletBounds>();
             auto meshlet_indices = std::vector<u32>();
@@ -681,14 +691,6 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
                 primitive.meshlet_count = meshlet_count;
                 primitive.meshlet_offset = meshlet_offset;
                 primitive.local_triangle_indices_offset = triangle_offset;
-            }
-
-            for (auto &position : raw_vertex_positions) {
-                position = node_transform * glm::vec4(position, 1.0f);
-            }
-
-            for (auto &normal : raw_vertex_normals) {
-                normal = node_normal_transform * normal;
             }
 
             std::ranges::move(raw_vertex_positions, std::back_inserter(model_vertex_positions));

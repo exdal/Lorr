@@ -112,6 +112,10 @@ public Optional<float2> ray_sphere_intersect_outside(float3 ray_origin, float3 r
     return float2(sol0, sol1);
 }
 
+public bool ray_rect_intersect(float2 bottom_left_0, float2 top_right_0, float2 bottom_left_1, float2 top_right_1) {
+  return !(any(top_right_0 < bottom_left_1) || any(bottom_left_0 > top_right_1));
+}
+
 // HLSL fmod is not same as GLSL mod!!!!!!!
 public float3 mod(float3 x, float3 y) {
   return x - y * floor(x / y);

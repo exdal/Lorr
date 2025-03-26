@@ -1,5 +1,12 @@
 implementing "../lorr";
 
+[Flags]
+public enum CullFlags : u32 {
+    MeshletFrustum,
+    TriangleBackFace,
+    MicroTriangles,
+};
+
 public struct Sun {
     public vec3 direction;
     public f32 intensity;
@@ -57,9 +64,12 @@ public struct Camera {
     public mat4 projection_view_mat;
     public mat4 inv_view_mat;
     public mat4 inv_projection_view_mat;
+    public mat4 frustum_projection_view_mat;
     public vec3 position;
     public f32  near_clip;
     public f32  far_clip;
+    public vec4 frustum_planes[6];
+    public vec2 resolution;
 };
 
 public struct Scene {
@@ -69,4 +79,5 @@ public struct Scene {
     public Clouds clouds;
 
     public u32 meshlet_instance_count;
+    public CullFlags cull_flags;
 };

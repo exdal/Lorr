@@ -2,6 +2,8 @@
 
 #include "Engine/Core/Application.hh"
 
+#include "Engine/Math/Matrix.hh"
+
 #include "Engine/OS/File.hh"
 
 #include "Engine/Util/JsonWriter.hh"
@@ -417,6 +419,15 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, const vuk::Extent3
         camera_data.position = t.position;
         camera_data.near_clip = c.near_clip;
         camera_data.far_clip = c.far_clip;
+        camera_data.resolution = glm::vec2(static_cast<f32>(extent.width), static_cast<f32>(extent.height));
+
+        if (!c.freeze_frustum) {
+            c.frustum_projection_view_mat = camera_data.projection_view_mat;
+            camera_data.frustum_projection_view_mat = camera_data.projection_view_mat;
+        } else {
+            camera_data.frustum_projection_view_mat = c.frustum_projection_view_mat;
+        }
+        Math::calc_frustum_planes(camera_data.frustum_projection_view_mat, camera_data.frustum_planes);
     });
 
     ls::option<GPU::Sun> sun_data = ls::nullopt;
@@ -482,6 +493,7 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, const vuk::Extent3
         .sun = sun_data.value_or(GPU::Sun{}),
         .atmosphere = atmos_data.value_or(GPU::Atmosphere{}),
         .clouds = clouds_data.value_or(GPU::Clouds{}),
+        .cull_flags = self.cull_flags,
     };
 
     auto transforms = self.transforms.slots_unsafe();
@@ -568,6 +580,10 @@ auto Scene::get_name_sv(this Scene &self) -> std::string_view {
 
 auto Scene::get_entity_db(this Scene &self) -> SceneEntityDB & {
     return self.entity_db;
+}
+
+auto Scene::get_cull_flags(this Scene &self) -> GPU::CullFlags & {
+    return self.cull_flags;
 }
 
 auto Scene::compose(this Scene &self) -> SceneComposeInfo {

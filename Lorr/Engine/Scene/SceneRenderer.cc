@@ -162,7 +162,7 @@ auto SceneRenderer::setup_persistent_resources(this SceneRenderer &self) -> void
         .root_path = shaders_root,
         .shader_path = shaders_root / "vis" / "encode.slang",
         .entry_points = { "vs_main", "fs_main" },
-    }).value();
+    }, self.bindless_set).value();
     self.vis_decode_pipeline = Pipeline::create(*self.device, {
         .module_name = "vis.decode",
         .root_path = shaders_root,
@@ -712,8 +712,8 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
         //  ── VISBUFFER ENCODE ────────────────────────────────────────────────
         auto vis_encode_pass = vuk::make_pass(
             "vis encode",
-            [&pipeline = *self.device->pipeline(self.vis_encode_pipeline.id()
-             )](vuk::CommandBuffer &cmd_list,
+            [&pipeline = *self.device->pipeline(self.vis_encode_pipeline.id()), &descriptor_set = self.bindless_set](
+                vuk::CommandBuffer &cmd_list,
                 VUK_IA(vuk::eColorWrite) dst,
                 VUK_IA(vuk::eDepthStencilRW) dst_depth,
                 VUK_BA(vuk::eIndirectRead) triangle_indirect,
@@ -722,7 +722,9 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                 VUK_BA(vuk::eVertexRead) models,
                 VUK_BA(vuk::eVertexRead) meshlet_instances,
                 VUK_BA(vuk::eVertexRead) visible_meshlet_instances_indices,
-                VUK_BA(vuk::eIndexRead) index_buffer) {
+                VUK_BA(vuk::eFragmentRead) materials,
+                VUK_BA(vuk::eIndexRead) index_buffer
+            ) {
                 cmd_list //
                     .bind_graphics_pipeline(pipeline)
                     .set_rasterization({ .cullMode = vuk::CullModeFlagBits::eNone })
@@ -735,9 +737,11 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                     .bind_buffer(0, 2, models)
                     .bind_buffer(0, 3, meshlet_instances)
                     .bind_buffer(0, 4, visible_meshlet_instances_indices)
+                    .bind_buffer(0, 5, materials)
+                    .bind_persistent(1, descriptor_set)
                     .bind_index_buffer(index_buffer, vuk::IndexType::eUint32)
                     .draw_indexed_indirect(1, triangle_indirect);
-                return std::make_tuple(dst, dst_depth, scene, transforms, models, meshlet_instances, visible_meshlet_instances_indices);
+                return std::make_tuple(dst, dst_depth, scene, transforms, models, meshlet_instances, visible_meshlet_instances_indices, materials);
             }
         );
 
@@ -748,7 +752,8 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
             transforms_buffer,
             models_buffer,
             meshlet_instances_buffer,
-            visible_meshlet_instances_buffer
+            visible_meshlet_instances_buffer,
+            materials_buffer
         ) =
             vis_encode_pass(
                 std::move(visbuffer_attachment),
@@ -759,6 +764,7 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                 std::move(models_buffer),
                 std::move(meshlet_instances_buffer),
                 std::move(visible_meshlet_instances_buffer),
+                std::move(materials_buffer),
                 std::move(reordered_indices_buffer)
             );
 

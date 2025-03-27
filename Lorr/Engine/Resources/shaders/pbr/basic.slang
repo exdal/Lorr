@@ -162,8 +162,8 @@ float4 fs_main(VertexOutput input, float4 frag_pos : SV_Position) : SV_Target {
     float3 color = BRDF(V, N, L, albedo_color, roughness, metallic);
 
     color = (color * NoL * sun_transmittance * scene.sun.intensity)  // Reflected light
-          + albedo_color * ambient_color  // Planet light
-          + albedo_color * 0.03  // Surface color
+          + albedo_color * ambient_color * 0.49 // Planet light
+          + albedo_color * 0.13  // Surface color
           + emission;  // Emitted light
 
     // Direct influence over color no matter light position

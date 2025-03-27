@@ -28,12 +28,19 @@ struct Texture {
     Sampler sampler = {};
 };
 
+enum class AlphaMode : u32 {
+    Opaque = 0,
+    Mask,
+    Blend,
+};
+
 enum class MaterialID : u64 { Invalid = std::numeric_limits<u64>::max() };
 struct Material {
     glm::vec4 albedo_color = { 1.0f, 1.0f, 1.0f, 1.0f };
     glm::vec3 emissive_color = { 0.0f, 0.0f, 0.0f };
     f32 roughness_factor = 0.0f;
     f32 metallic_factor = 0.0f;
+    AlphaMode alpha_mode = AlphaMode::Opaque;
     f32 alpha_cutoff = 0.0f;
     UUID albedo_texture = {};
     UUID normal_texture = {};

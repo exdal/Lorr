@@ -6,6 +6,7 @@
 
 #include "Engine/OS/File.hh"
 
+#include "Engine/Scene/GPUScene.hh"
 #include "Engine/Util/JsonWriter.hh"
 
 #include "Engine/Scene/ECSModule/ComponentWrapper.hh"
@@ -619,6 +620,7 @@ auto Scene::compose(this Scene &self) -> SceneComposeInfo {
             gpu_material.emissive_color = material->emissive_color;
             gpu_material.roughness_factor = material->roughness_factor;
             gpu_material.metallic_factor = material->metallic_factor;
+            gpu_material.alpha_mode = static_cast<GPU::AlphaMode>(material->alpha_mode);
             gpu_material.alpha_cutoff = material->alpha_cutoff;
 
             auto add_image_if_exists = [&](const UUID &uuid) -> ls::option<u32> {

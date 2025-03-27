@@ -1,6 +1,7 @@
 #include "Engine/Asset/Asset.hh"
 
 #include "Engine/Asset/ParserGLTF.hh"
+#include "Engine/Asset/ParserKTX2.hh"
 #include "Engine/Asset/ParserSTB.hh"
 
 #include "Engine/Core/Application.hh"
@@ -107,6 +108,8 @@ auto AssetManager::to_asset_file_type(const fs::path &path) -> AssetFileType {
             return AssetFileType::JSON;
         case fnv64_c(".LRASSET"):
             return AssetFileType::Meta;
+        case fnv64_c(".KTX2"):
+            return AssetFileType::KTX2;
         default:
             return AssetFileType::None;
     }
@@ -195,7 +198,8 @@ auto AssetManager::import_asset(const fs::path &path) -> UUID {
             break;
         }
         case AssetFileType::PNG:
-        case AssetFileType::JPEG: {
+        case AssetFileType::JPEG:
+        case AssetFileType::KTX2: {
             asset_type = AssetType::Texture;
             break;
         }
@@ -240,6 +244,7 @@ auto AssetManager::import_asset(const fs::path &path) -> UUID {
                 material.emissive_color = gltf_material.emissive_color;
                 material.roughness_factor = gltf_material.roughness_factor;
                 material.metallic_factor = gltf_material.metallic_factor;
+                material.alpha_mode = static_cast<AlphaMode>(gltf_material.alpha_mode);
                 material.alpha_cutoff = gltf_material.alpha_cutoff;
 
                 if (auto tex_idx = gltf_material.albedo_texture_index; tex_idx.has_value()) {
@@ -575,6 +580,9 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
         if (auto member_json = material_json["metallic_factor"]; !member_json.error()) {
             material.metallic_factor = static_cast<f32>(member_json.get_double());
         }
+        if (auto member_json = material_json["alpha_mode"]; !member_json.error()) {
+            material.alpha_mode = static_cast<AlphaMode>(member_json.get_uint64().value());
+        }
         if (auto member_json = material_json["alpha_cutoff"]; !member_json.error()) {
             material.alpha_cutoff = static_cast<f32>(member_json.get_double());
         }
@@ -801,6 +809,7 @@ auto AssetManager::load_texture(const UUID &uuid, const TextureInfo &info) -> bo
             file_type = this->to_asset_file_type(asset->path);
         }
 
+        u32 mip_level_count = 1;
         switch (file_type) {
             case AssetFileType::PNG:
             case AssetFileType::JPEG: {
@@ -810,6 +819,16 @@ auto AssetManager::load_texture(const UUID &uuid, const TextureInfo &info) -> bo
                 }
                 extent = image_info->extent;
                 format = info.use_srgb ? vuk::Format::eR8G8B8A8Srgb : vuk::Format::eR8G8B8A8Unorm;
+                mip_level_count = static_cast<u32>(glm::floor(glm::log2(static_cast<f32>(ls::max(extent.width, extent.height)))) + 1);
+            } break;
+            case AssetFileType::KTX2: {
+                auto image_info = KTX2ImageInfo::parse_info(raw_data);
+                if (!image_info.has_value()) {
+                    return false;
+                }
+                extent = image_info->base_extent;
+                format = info.use_srgb ? vuk::Format::eBc7SrgbBlock : vuk::Format::eBc7UnormBlock;
+                mip_level_count = image_info->mip_level_count;
             } break;
             default: {
                 LOG_ERROR("Failed to load texture '{}', invalid extension.", asset->path);
@@ -824,7 +843,7 @@ auto AssetManager::load_texture(const UUID &uuid, const TextureInfo &info) -> bo
             vuk::ImageType::e2D,
             extent,
             1,
-            static_cast<u32>(glm::floor(glm::log2(static_cast<f32>(ls::max(extent.width, extent.height)))) + 1)
+            mip_level_count
         );
         if (!image.has_value()) {
             LS_DEBUGBREAK();
@@ -861,7 +880,10 @@ auto AssetManager::load_texture(const UUID &uuid, const TextureInfo &info) -> bo
                                info.sampler_info.address_u,
                                info.sampler_info.address_v,
                                vuk::SamplerAddressMode::eRepeat,
-                               vuk::CompareOp::eNever
+                               vuk::CompareOp::eNever,
+                               0.0,
+                               0.0,
+                               -1000.0
         )
                                .value();
 
@@ -870,7 +892,9 @@ auto AssetManager::load_texture(const UUID &uuid, const TextureInfo &info) -> bo
             std::shared_lock _(impl->mutex);
             auto *asset = this->get_asset(uuid);
             auto *texture = this->get_texture(asset->texture_id);
-            auto image_data = std::vector<u8>();
+            auto format = texture->image.format();
+            auto &transfer_man = impl->device->transfer_man();
+
             switch (file_type) {
                 case AssetFileType::PNG:
                 case AssetFileType::JPEG: {
@@ -878,7 +902,38 @@ auto AssetManager::load_texture(const UUID &uuid, const TextureInfo &info) -> bo
                     if (!image_info.has_value()) {
                         return;
                     }
-                    image_data = std::move(image_info->data);
+                    auto image_data = std::move(image_info->data);
+                    auto attachment = transfer_man.upload_staging(texture->image_view, image_data.data(), ls::size_bytes(image_data))
+                                          .as_released(vuk::Access::eFragmentSampled, vuk::DomainFlagBits::eGraphicsQueue);
+                    transfer_man.wait_on(std::move(attachment));
+                } break;
+                case AssetFileType::KTX2: {
+                    auto image_info = KTX2ImageInfo::parse(file_data);
+                    if (!image_info.has_value()) {
+                        return;
+                    }
+                    auto image_data = std::move(image_info->data);
+
+                    auto dst_attachment_info = texture->image_view.get_attachment(*impl->device, vuk::ImageUsageFlagBits::eTransferDst);
+                    auto dst_attachment = vuk::declare_ia("dst image", dst_attachment_info);
+                    for (u32 level = 0; level < image_info->mip_level_count; level++) {
+                        auto mip_data_offset = image_info->per_level_offsets[level];
+                        auto level_extent = vuk::Extent3D{
+                            .width = image_info->base_extent.width >> level,
+                            .height = image_info->base_extent.height >> level,
+                            .depth = 1,
+                        };
+                        auto alignment = vuk::format_to_texel_block_size(format);
+                        auto size = vuk::compute_image_size(format, level_extent);
+                        auto buffer = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eCPUonly, size, alignment, false);
+
+                        // TODO, WARN: size param might not be safe. Check with asan.
+                        std::memcpy(buffer->mapped_ptr, image_data.data() + mip_data_offset, size);
+                        auto dst_mip = dst_attachment.mip(level);
+                        vuk::copy(std::move(buffer), std::move(dst_mip));
+                    }
+
+                    transfer_man.wait_on(std::move(dst_attachment));
                 } break;
                 default: {
                     LOG_ERROR("Failed to load texture '{}', invalid extension.", asset->path);
@@ -886,10 +941,6 @@ auto AssetManager::load_texture(const UUID &uuid, const TextureInfo &info) -> bo
                 }
             }
 
-            auto &transfer_man = impl->device->transfer_man();
-            auto attachment = transfer_man.upload_staging(texture->image_view, image_data.data(), ls::size_bytes(image_data))
-                                  .as_released(vuk::Access::eFragmentSampled, vuk::DomainFlagBits::eGraphicsQueue);
-            transfer_man.wait_on(std::move(attachment));
             LOG_TRACE("Loaded texture {} {}.", asset->uuid.str(), SlotMap_decode_id(asset->texture_id).index);
         });
         app.job_man->submit(std::move(job));
@@ -1239,6 +1290,7 @@ auto AssetManager::write_material_asset_meta(JsonWriter &json, Material *materia
     json["emissive_color"] = material->emissive_color;
     json["roughness_factor"] = material->roughness_factor;
     json["metallic_factor"] = material->metallic_factor;
+    json["alpha_mode"] = std::to_underlying(material->alpha_mode);
     json["alpha_cutoff"] = material->alpha_cutoff;
     json["albedo_texture"] = material->albedo_texture.str();
     json["normal_texture"] = material->normal_texture.str();

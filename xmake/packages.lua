@@ -28,7 +28,7 @@ add_requires("tracy v0.11.1", { configs = {
     system_tracing = true,
 }, system = false })
 add_requires("vk-bootstrap v1.4.307", { system = false })
-add_requires("fastgltf v0.8.0", { system = false })
+add_requires("fastgltf v0.8.0", { system = false, debug = is_mode("debug") })
 add_requires("stb 2024.06.01", { system = false })
 add_requires("lz4 v1.10.0", { system = false })
 add_requires("zstd v1.5.6", { system = false })

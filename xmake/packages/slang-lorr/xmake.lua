@@ -5,8 +5,8 @@ package("slang-lorr")
 
     add_urls("https://github.com/shader-slang/slang.git", { submodules = false })
 
-    add_versions("v2025.6.1",  "a09d554721ecf0c6d967d5f55b3416e3284e71f2")
-    add_patches ("v2025.6.1",  path.join(os.scriptdir(), "patches/", "v2025.6.1.patch"))
+    add_versions("v2025.6.3",  "b9300bae08a77df6ef2efe2b62de14a13b10b9a4")
+    add_patches ("v2025.6.3",  path.join(os.scriptdir(), "patches", "v2025.6.3.patch"))
 
     add_configs("shared", { description = "Build shared library", default = true, type = "boolean", readonly = true })
 
@@ -25,5 +25,6 @@ package("slang-lorr")
             slang_version = package:version_str(),
         })
         os.cp("include/*.h", package:installdir("include"))
+        os.cp(path.join(package:buildir(), "**.so"), package:installdir("lib"))
     end)
 package_end()

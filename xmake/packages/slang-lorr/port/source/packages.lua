@@ -70,8 +70,8 @@ package("slang-spirv-tools")
     end)
 package_end()
 
-package("slang-glslang")
-    set_homepage("https://github.com/KhronosGroup/glslang/")
+package("slang-glslang-compiler")
+    set_homepage("https://github.com/KhronosGroup/glslang")
     set_description("Khronos-reference front end for GLSL/ESSL, partial front end for HLSL, and a SPIR-V generator.")
     set_license("Apache-2.0")
 
@@ -140,13 +140,10 @@ package("slang-glslang")
             package:add("links", "glslang", "glslang-default-resource-limits")
         end
 
-        -- https://github.com/KhronosGroup/glslang/releases/tag/12.3.0
-        local bindir = package:installdir("bin")
-        local glslangValidator = path.join(bindir, "glslangValidator" .. (is_host("windows") and ".exe" or ""))
-        if not os.isfile(glslangValidator) then
-            local glslang = path.join(bindir, "glslang" .. (is_host("windows") and ".exe" or ""))
-            os.trycp(glslang, glslangValidator)
-        end
+        local mi_path = path.join(package:installdir("include"), "glslang", "MachineIndependent")
+        os.cp("glslang/MachineIndependent/**.h", mi_path)
+        local dst_inlcudes_path = path.join(package:installdir("include"), "glslang", "Include")
+        os.cp("glslang/Include/**.h", dst_inlcudes_path)
     end)
 
     on_test(function (package)

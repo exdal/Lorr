@@ -22,7 +22,6 @@ target("Lorr")
             { tools = { "clang", "gcc" } })
     end
 
-
     add_rpathdirs("@executable_path")
     add_includedirs("../", { public = true })
     add_files("**.cc")
@@ -45,6 +44,7 @@ target("Lorr")
         "ls",
         { public = true })
 
+    set_policy("package.precompiled", false)
     add_packages(
         "fmt",
         "libsdl3",

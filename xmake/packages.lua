@@ -40,7 +40,7 @@ add_requires("libsdl3 3.2.8", { configs = {
 }, system = false })
 
 add_requires("imguizmo-lorr 1.89+WIP")
-add_requires("slang-lorr v2025.6.1")
+add_requires("slang-lorr v2025.6.3")
 add_requires("vuk 2025.03.24.4", { configs = {
     debug_allocations = false
 }, debug = is_mode("debug") or is_mode("asan") })

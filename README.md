@@ -24,7 +24,7 @@ Make sure to run `xmake install -o ./build` to get third party binaries.
 
 Example configuration for clang:
 ```
-xmake f --toolchain=clang --runtimes=c++_static --ldflags=-fuse-ld=mold' -m debug
+xmake f --toolchain=clang --runtimes=c++_static --ldflags='-fuse-ld=lld' -m debug
 xmake build
 ```
 

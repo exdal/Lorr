@@ -6,7 +6,7 @@
 #include "Engine/Util/Icons/IconsMaterialDesignIcons.hh"
 
 namespace lr {
-InspectorPanel::InspectorPanel(std::string name_, bool open_): PanelI(std::move(name_), open_) {}
+InspectorPanel::InspectorPanel(std::string name_, bool open_) : PanelI(std::move(name_), open_) {}
 
 void InspectorPanel::render(this InspectorPanel &self) {
     auto &app = EditorApp::get();
@@ -163,6 +163,8 @@ auto InspectorPanel::draw_inspector(this InspectorPanel &) -> void {
             }
             ImGui::PopID();
         });
+
+        ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal);
 
         if (ImGui::Button("Add Component", ImVec2(region.x, 0))) {
             ImGui::OpenPopup("add_component");

@@ -111,13 +111,13 @@ auto JobManager::submit(this JobManager &self, Arc<Job> job, bool prioritize) ->
     ZoneScoped;
 
     std::unique_lock _(self.mutex);
+    self.job_count.fetch_add(1);
     if (prioritize) {
         self.jobs.push_front(std::move(job));
     } else {
         self.jobs.push_back(std::move(job));
     }
 
-    self.job_count.fetch_add(1);
     self.condition_var.notify_all();
 }
 

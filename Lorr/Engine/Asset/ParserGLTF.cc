@@ -71,6 +71,8 @@ static auto to_asset_file_type(fastgltf::MimeType mime) -> AssetFileType {
             return AssetFileType::JPEG;
         case fastgltf::MimeType::PNG:
             return AssetFileType::PNG;
+        case fastgltf::MimeType::KTX2:
+            return AssetFileType::KTX2;
         default:
             return AssetFileType::None;
     }
@@ -192,8 +194,11 @@ auto GLTFModelInfo::parse(const fs::path &path, GLTFModelCallbacks callbacks) ->
         if (v.samplerIndex.has_value()) {
             texture.sampler_index = v.samplerIndex.value();
         }
+
         if (v.imageIndex.has_value()) {
             texture.image_index = v.imageIndex.value();
+        } else if (v.basisuImageIndex.has_value()) {
+            texture.image_index = v.basisuImageIndex.value();
         }
     }
 
@@ -219,7 +224,7 @@ auto GLTFModelInfo::parse(const fs::path &path, GLTFModelCallbacks callbacks) ->
             v.emissiveFactor[2],
             v.emissiveStrength,
         };
-        // material.alpha_mode = static_cast<vk::AlphaMode>(v.alphaMode);
+        material.alpha_mode = static_cast<GLTFAlphaMode>(v.alphaMode);
         material.alpha_cutoff = v.alphaCutoff;
 
         if (auto &tex = pbr.baseColorTexture; tex.has_value()) {
@@ -447,8 +452,11 @@ auto GLTFModelInfo::parse_info(const fs::path &path) -> ls::option<GLTFModelInfo
         if (v.samplerIndex.has_value()) {
             texture.sampler_index = v.samplerIndex.value();
         }
+
         if (v.imageIndex.has_value()) {
             texture.image_index = v.imageIndex.value();
+        } else if (v.basisuImageIndex.has_value()) {
+            texture.image_index = v.basisuImageIndex.value();
         }
     }
 

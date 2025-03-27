@@ -26,11 +26,10 @@ package("ktx-software")
             "-DKTX_FEATURE_TOOLS_CTS=OFF",
             "-DKTX_FEATURE_VK_UPLOAD=OFF",
             "-DKTX_FEATURE_GL_UPLOAD=OFF",
-            "-DKTX_FEATURE_STATIC_LIBRARY=" .. (package:config("shared") and "OFF" or "ON")
+            "-DLIB_TYPE_DEFAULT=OFF",
+            "-DBUILD_SHARED_LIBS=" .. (package:config("shared") and "ON" or "OFF"),
+            "-DCMAKE_BUILD_TYPE=" .. (package:debug() and "Debug" or "Release"),
         }
-
-        table.insert(configs, "-DCMAKE_BUILD_TYPE=" .. (package:debug() and "Debug" or "Release"))
-        table.insert(configs, "-DBUILD_SHARED_LIBS=" .. (package:config("shared") and "ON" or "OFF"))
 
         import("package.tools.cmake").install(package, configs)
     end)

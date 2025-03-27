@@ -28,7 +28,7 @@ add_requires("tracy v0.11.1", { configs = {
     system_tracing = true,
 }, system = false })
 add_requires("vk-bootstrap v1.4.307", { system = false })
-add_requires("fastgltf v0.8.0", { system = false })
+add_requires("fastgltf v0.8.0", { system = false, debug = is_mode("debug") })
 add_requires("stb 2024.06.01", { system = false })
 add_requires("lz4 v1.10.0", { system = false })
 add_requires("zstd v1.5.6", { system = false })
@@ -40,7 +40,7 @@ add_requires("libsdl3 3.2.8", { configs = {
 }, system = false })
 
 add_requires("imguizmo-lorr 1.89+WIP")
-add_requires("slang-lorr v2025.6.1")
+add_requires("slang-lorr v2025.6.3")
 add_requires("vuk 2025.03.24.4", { configs = {
     debug_allocations = false
 }, debug = is_mode("debug") or is_mode("asan") })

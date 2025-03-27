@@ -5,6 +5,12 @@
 #include "Engine/Graphics/VulkanTypes.hh"
 
 namespace lr {
+enum class GLTFAlphaMode : u32 {
+    Opaque = 0,
+    Mask,
+    Blend,
+};
+
 struct GLTFSamplerInfo {
     vuk::Filter mag_filter = {};
     vuk::Filter min_filter = {};
@@ -29,6 +35,7 @@ struct GLTFMaterialInfo {
     glm::vec4 emissive_color = {};
     f32 roughness_factor = 0.0f;
     f32 metallic_factor = 0.0f;
+    GLTFAlphaMode alpha_mode = {};
     f32 alpha_cutoff = 0.0f;
 
     ls::option<u32> albedo_texture_index;

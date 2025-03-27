@@ -24,6 +24,7 @@ enum class AssetFileType : u32 {
     PNG,
     JPEG,
     JSON,
+    KTX2,
 };
 
 enum class AssetFileFlags : u64 {

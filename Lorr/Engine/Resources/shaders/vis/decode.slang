@@ -198,7 +198,8 @@ FragmentOutput fs_main(VertexOutput input, float4 pixel_pos : SV_Position) {
 
     // ALBEDO ───────────────────────────────────────────────────────────
     if (material.albedo_image_index != ~0u) {
-        output.albedo = sample_texture(material.albedo_image_index, uv_gradient);
+        const float4 albedo_texture = sample_texture(material.albedo_image_index, uv_gradient);
+        output.albedo = material.albedo_color * albedo_texture;
     } else {
         output.albedo = material.albedo_color;
     }
@@ -242,7 +243,7 @@ FragmentOutput fs_main(VertexOutput input, float4 pixel_pos : SV_Position) {
     // METALLIC ROUGHNESS ───────────────────────────────────────────────
     if (material.metallic_rougness_image_index != ~0u) {
         const float2 metallic_roughness_texture = sample_texture(material.metallic_rougness_image_index, uv_gradient).bg;
-        output.metallic_roughness_occlusion.xy = metallic_roughness_texture;
+        output.metallic_roughness_occlusion.xy = float2(material.metallic_factor, material.roughness_factor) * metallic_roughness_texture;
     } else {
         output.metallic_roughness_occlusion.xy = float2(material.metallic_factor, material.roughness_factor);
     }

@@ -1,33 +1,146 @@
 import vis;
 import "../lorr";
 
-[[vk::binding(0, 0)]] restrict writeonly
+[[vk::binding(0, 0)]]
+ConstantBuffer<Scene, ScalarDataLayout> scene;
+
+[[vk::binding(1, 0)]] restrict writeonly
 GLSLShaderStorageBuffer<DrawIndexedIndirectCommand, ScalarDataLayout> draw_cmd;
 
-[[vk::binding(1, 0)]] restrict readonly
-RWStructuredBuffer<u32, ScalarDataLayout> visible_meshlet_instances_indices;
-
 [[vk::binding(2, 0)]] restrict readonly
-RWStructuredBuffer<Model, ScalarDataLayout> models;
+RWStructuredBuffer<u32, ScalarDataLayout> visible_meshlet_instances_indices;
 
 [[vk::binding(3, 0)]] restrict readonly
 RWStructuredBuffer<MeshletInstance, ScalarDataLayout> meshlet_instances;
 
-[[vk::binding(4, 0)]] restrict writeonly
+[[vk::binding(4, 0)]] restrict readonly
+RWStructuredBuffer<Model, ScalarDataLayout> models;
+
+[[vk::binding(5, 0)]] restrict readonly
+RWStructuredBuffer<Transform, ScalarDataLayout> transforms;
+
+[[vk::binding(6, 0)]] restrict writeonly
 RWStructuredBuffer<u32, ScalarDataLayout> reordered_indices;
+
+groupshared u32  base_index_shared;
+groupshared u32  triangles_passed_shared;
+groupshared mat4 model_view_proj_shared;
+
+// https://github.com/GPUOpen-Effects/GeometryFX/blob/master/amd_geometryfx/src/Shaders/AMD_GeometryFX_Filtering.hlsl
+// Parameters: vertices in UV space, viewport extent
+bool CullSmallPrimitive(float3x2 vertices, vec2 viewportExtent) {
+    const uint SUBPIXEL_BITS = 8;
+    const uint SUBPIXEL_MASK = 0xFF;
+    const uint SUBPIXEL_SAMPLES = 1 << SUBPIXEL_BITS;
+    /**
+    Computing this in float-point is not precise enough
+    We switch to a 23.8 representation here which should match the
+    HW subpixel resolution.
+    We use a 8-bit wide guard-band to avoid clipping. If
+    a triangle is outside the guard-band, it will be ignored.
+
+    That is, the actual viewport supported here is 31 bit, one bit is
+    unused, and the guard band is 1 << 23 bit large (8388608 pixels)
+    */
+
+    ivec2 minBB = ivec2(1 << 30, 1 << 30);
+    ivec2 maxBB = ivec2(-(1 << 30), -(1 << 30));
+
+    for (uint i = 0; i < 3; ++i)
+    {
+        f32 v = reinterpret<f32>(1 << 23);
+        vec2 screenSpacePositionFP = vertices[i].xy * viewportExtent;
+        // Check if we would overflow after conversion
+        if (screenSpacePositionFP.x < -v ||
+            screenSpacePositionFP.x >  v ||
+            screenSpacePositionFP.y < -v ||
+            screenSpacePositionFP.y >  v) {
+            return true;
+        }
+
+        ivec2 screenSpacePosition = ivec2(screenSpacePositionFP * SUBPIXEL_SAMPLES);
+        minBB = min(screenSpacePosition, minBB);
+        maxBB = max(screenSpacePosition, maxBB);
+    }
+
+    /**
+    Test is:
+
+    Is the minimum of the bounding box right or above the sample
+    point and is the width less than the pixel width in samples in
+    one direction.
+
+    This will also cull very long triangles which fall between
+    multiple samples.
+    */
+    return !((((minBB.x & SUBPIXEL_MASK) > SUBPIXEL_SAMPLES/2)
+          &&  ((maxBB.x - ((minBB.x & ~SUBPIXEL_MASK) + SUBPIXEL_SAMPLES/2)) < (SUBPIXEL_SAMPLES - 1)))
+          || (((minBB.y & SUBPIXEL_MASK) > SUBPIXEL_SAMPLES/2)
+          &&  ((maxBB.y - ((minBB.y & ~SUBPIXEL_MASK) + SUBPIXEL_SAMPLES/2)) < (SUBPIXEL_SAMPLES - 1))));
+}
+
+bool test_triangle(in Model model, in Meshlet meshlet, u32 local_id) {
+    const u32 triangle_index = local_id * 3;
+    const u32 vertex_offset = meshlet.vertex_offset;
+    const u32 index_offset = meshlet.index_offset;
+    const u32 triangle_offset = meshlet.triangle_offset;
+    const uvec3 triangle_indices = {
+        u32(model.local_triangle_indices[triangle_offset + triangle_index + 0]),
+        u32(model.local_triangle_indices[triangle_offset + triangle_index + 1]),
+        u32(model.local_triangle_indices[triangle_offset + triangle_index + 2]),
+    };
+    const uvec3 indices = {
+        model.indices[index_offset + triangle_indices.x],
+        model.indices[index_offset + triangle_indices.y],
+        model.indices[index_offset + triangle_indices.z],
+    };
+    const float3x3 positions = {
+        model.vertex_positions[vertex_offset + indices.x],
+        model.vertex_positions[vertex_offset + indices.y],
+        model.vertex_positions[vertex_offset + indices.z],
+    };
+
+    const float4 clip_pos_0 = mul(model_view_proj_shared, float4(positions[0], 1.0));
+    const float4 clip_pos_1 = mul(model_view_proj_shared, float4(positions[1], 1.0));
+    const float4 clip_pos_2 = mul(model_view_proj_shared, float4(positions[2], 1.0));
+
+    // Cull all triangles behind camera
+    if (clip_pos_0.z < 0.0 && clip_pos_1.z < 0.0 && clip_pos_2.z < 0.0) {
+        return false;
+    }
+
+    if (scene.cull_flags & CullFlags::TriangleBackFace) {
+        // https://zeux.io/2023/04/28/triangle-backface-culling/#fnref:3
+        const bool is_backfacing = determinant(mat3(clip_pos_0.xyw, clip_pos_1.xyw, clip_pos_2.xyw)) > 0.0;
+        if (is_backfacing) {
+            return false;
+        }
+    }
+
+    if (scene.cull_flags & CullFlags::MicroTriangles) {
+        const float3x2 uv_pos = {
+            clip_pos_0.xy * 0.5 + 0.5,
+            clip_pos_1.xy * 0.5 + 0.5,
+            clip_pos_2.xy * 0.5 + 0.5
+        };
+        if (!CullSmallPrimitive(uv_pos, scene.camera.resolution)) {
+            return false;
+        }
+    }
+
+    return true;
+}
 
 // Shut up LSP
 #ifndef CULLING_TRIANGLE_COUNT
 #define CULLING_TRIANGLE_COUNT 64
 #endif
 
-groupshared u32 base_index_shared;
-groupshared u32 triangles_passed_shared;
-
 [shader("compute")]
 [numthreads(CULLING_TRIANGLE_COUNT, 1, 1)]
 void cs_main(uint3 group_id : SV_GroupID, uint3 group_thread_id : SV_GroupThreadID) {
     const u32 local_index = group_thread_id.x;
+    const u32 triangle_index = local_index * 3;
     const u32 visible_meshlet_index = group_id.x;
     const u32 meshlet_instance_index = visible_meshlet_instances_indices[visible_meshlet_index];
     const MeshletInstance meshlet_instance = meshlet_instances[meshlet_instance_index];
@@ -37,6 +150,8 @@ void cs_main(uint3 group_id : SV_GroupID, uint3 group_thread_id : SV_GroupThread
 
     if (local_index == 0) {
         triangles_passed_shared = 0;
+        const Transform transform = transforms[meshlet_instance.transform_index];
+        model_view_proj_shared = mul(scene.camera.frustum_projection_view_mat, transform.world);
     }
 
     GroupMemoryBarrierWithGroupSync();
@@ -44,20 +159,21 @@ void cs_main(uint3 group_id : SV_GroupID, uint3 group_thread_id : SV_GroupThread
     bool triangle_passed = false;
     u32 active_triangle_index = 0;
     if (local_index < meshlet.triangle_count) {
-        triangle_passed = true;
-        InterlockedAdd(triangles_passed_shared, 1, active_triangle_index);
+        triangle_passed = test_triangle(model, meshlet, local_index);
+        if (triangle_passed) {
+            InterlockedAdd(triangles_passed_shared, 1, active_triangle_index);
+        }
     }
 
     GroupMemoryBarrierWithGroupSync();
 
     if (local_index == 0) {
-        InterlockedAdd(draw_cmd.index_count, meshlet.triangle_count * 3, base_index_shared);
+        InterlockedAdd(draw_cmd.index_count, triangles_passed_shared * 3, base_index_shared);
     }
 
     GroupMemoryBarrierWithGroupSync();
 
     if (triangle_passed) {
-        const u32 triangle_index = local_index * 3;
         const u32 index_offset = base_index_shared + active_triangle_index * 3;
         reordered_indices[index_offset + 0] = (visible_meshlet_index << MESHLET_PRIMITIVE_BITS) | ((triangle_index + 0) & MESHLET_PRIMITIVE_MASK);
         reordered_indices[index_offset + 1] = (visible_meshlet_index << MESHLET_PRIMITIVE_BITS) | ((triangle_index + 1) & MESHLET_PRIMITIVE_MASK);

@@ -50,6 +50,8 @@ private:
     std::vector<GPU::TransformID> dirty_transforms = {};
     bool models_dirty = false;
 
+    GPU::CullFlags cull_flags = GPU::CullFlags::All;
+
 public:
     auto init(this Scene &, const std::string &name) -> bool;
     auto destroy(this Scene &) -> void;
@@ -78,6 +80,7 @@ public:
     auto get_name(this Scene &) -> const std::string &;
     auto get_name_sv(this Scene &) -> std::string_view;
     auto get_entity_db(this Scene &) -> SceneEntityDB &;
+    auto get_cull_flags(this Scene &) -> GPU::CullFlags &;
 
 private:
     auto compose(this Scene &) -> SceneComposeInfo;

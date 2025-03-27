@@ -10,7 +10,7 @@
 ## Graphics
 ### Techniques
 - [x] Atmosphere
-- [-] Clouds (NOTE: Sun direction is broken)
+- [ ] Clouds (Kind of done but it looks like shit)
 - [ ] Water simulation
 - [x] Meshlets and Meshlet Culling
 - [ ] Ambient Occlusion (GTAO)

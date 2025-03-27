@@ -2,8 +2,11 @@
 
 #include "Engine/Core/Application.hh"
 
+#include "Engine/Math/Matrix.hh"
+
 #include "Engine/OS/File.hh"
 
+#include "Engine/Scene/GPUScene.hh"
 #include "Engine/Util/JsonWriter.hh"
 
 #include "Engine/Scene/ECSModule/ComponentWrapper.hh"
@@ -417,6 +420,15 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, const vuk::Extent3
         camera_data.position = t.position;
         camera_data.near_clip = c.near_clip;
         camera_data.far_clip = c.far_clip;
+        camera_data.resolution = glm::vec2(static_cast<f32>(extent.width), static_cast<f32>(extent.height));
+
+        if (!c.freeze_frustum) {
+            c.frustum_projection_view_mat = camera_data.projection_view_mat;
+            camera_data.frustum_projection_view_mat = camera_data.projection_view_mat;
+        } else {
+            camera_data.frustum_projection_view_mat = c.frustum_projection_view_mat;
+        }
+        Math::calc_frustum_planes(camera_data.frustum_projection_view_mat, camera_data.frustum_planes);
     });
 
     ls::option<GPU::Sun> sun_data = ls::nullopt;
@@ -482,6 +494,7 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, const vuk::Extent3
         .sun = sun_data.value_or(GPU::Sun{}),
         .atmosphere = atmos_data.value_or(GPU::Atmosphere{}),
         .clouds = clouds_data.value_or(GPU::Clouds{}),
+        .cull_flags = self.cull_flags,
     };
 
     auto transforms = self.transforms.slots_unsafe();
@@ -570,6 +583,10 @@ auto Scene::get_entity_db(this Scene &self) -> SceneEntityDB & {
     return self.entity_db;
 }
 
+auto Scene::get_cull_flags(this Scene &self) -> GPU::CullFlags & {
+    return self.cull_flags;
+}
+
 auto Scene::compose(this Scene &self) -> SceneComposeInfo {
     ZoneScoped;
 
@@ -603,6 +620,7 @@ auto Scene::compose(this Scene &self) -> SceneComposeInfo {
             gpu_material.emissive_color = material->emissive_color;
             gpu_material.roughness_factor = material->roughness_factor;
             gpu_material.metallic_factor = material->metallic_factor;
+            gpu_material.alpha_mode = static_cast<GPU::AlphaMode>(material->alpha_mode);
             gpu_material.alpha_cutoff = material->alpha_cutoff;
 
             auto add_image_if_exists = [&](const UUID &uuid) -> ls::option<u32> {

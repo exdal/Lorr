@@ -25,6 +25,7 @@ package("slang-lorr")
             slang_version = package:version_str(),
         })
         os.cp("include/*.h", package:installdir("include"))
-        os.cp(path.join(package:buildir(), "**.so"), package:installdir("lib"))
+        os.trycp(path.join(package:buildir(), "**.so"), package:installdir("lib"))
+        os.trycp(path.join(package:buildir(), "**.dll"), package:installdir("lib"))
     end)
 package_end()

@@ -33,166 +33,404 @@ public enum MemoryScope : u32 {
     ShaderCall = 6,
 };
 
+func spirv_type_checks<T>() -> void {
+    if (__type_equals<T, f32>()) {
+        spirv_asm {
+            OpExtension "SPV_EXT_shader_atomic_float_add";
+            OpCapability AtomicFloat32MinMaxEXT
+        };
+    } else if (__type_equals<T, f16>()) {
+        spirv_asm {
+            OpExtension "SPV_EXT_shader_atomic_float_add";
+            OpCapability AtomicFloat16MinMaxEXT
+        };
+    } else if (__type_equals<T, f64>()) {
+        spirv_asm {
+            OpExtension "SPV_EXT_shader_atomic_float_add";
+            OpCapability AtomicFloat64MinMaxEXT
+        };
+    } else if (__type_equals<T, u64>() ||
+               __type_equals<T, i64>()) {
+        spirv_asm {
+            OpCapability Int64Atomics
+        };
+    }
+}
+
+[[ForceInline]]
+public func atomic_load<T>(
+    __ref T dst,
+    constexpr MemoryOrder memory_order,
+    constexpr MemoryLocation location = MemoryLocation::None,
+    constexpr MemoryScope scope = MemoryScope::Queue
+) -> T {
+    spirv_type_checks<T>();
+    const u32 semantics = memory_order | location;
+    return spirv_asm {
+        result:$$T = OpAtomicLoad &dst $scope $semantics;
+    };
+}
+
+[[ForceInline]]
+public func atomic_store<T>(
+    __ref T dst,
+    T desired,
+    constexpr MemoryOrder memory_order,
+    constexpr MemoryLocation location = MemoryLocation::None,
+    constexpr MemoryScope scope = MemoryScope::Queue
+) -> void {
+    spirv_type_checks<T>();
+    const u32 semantics = memory_order | location;
+    spirv_asm {
+        OpAtomicStore &dst $scope $semantics $desired;
+    };
+}
+
+[[ForceInline]]
+public func atomic_increment<T : IInteger>(
+    __ref T dst,
+    constexpr MemoryOrder memory_order,
+    constexpr MemoryLocation location = MemoryLocation::None,
+    constexpr MemoryScope scope = MemoryScope::Queue
+) -> T {
+    spirv_type_checks<T>();
+    const u32 semantics = memory_order | location;
+    return spirv_asm {
+        result:$$T = OpAtomicIIncrement &dst $scope $semantics;
+    };
+}
+
+[[ForceInline]]
+public func atomic_decrement<T : IInteger>(
+    __ref T dst,
+    constexpr MemoryOrder memory_order,
+    constexpr MemoryLocation location = MemoryLocation::None,
+    constexpr MemoryScope scope = MemoryScope::Queue
+) -> T {
+    spirv_type_checks<T>();
+    const u32 semantics = memory_order | location;
+    return spirv_asm {
+        result:$$T = OpAtomicIDecrement &dst $scope $semantics;
+    };
+}
+
+[[ForceInline]]
+public func atomic_add<T : IInteger>(
+    __ref T dst,
+    T value,
+    constexpr MemoryOrder memory_order,
+    constexpr MemoryLocation location = MemoryLocation::None,
+    constexpr MemoryScope scope = MemoryScope::Queue
+) -> T {
+    spirv_type_checks<T>();
+    const u32 semantics = memory_order | location;
+    return spirv_asm {
+        result:$$T = OpAtomicIAdd &dst $scope $semantics $value;
+    };
+}
+
+[[ForceInline]]
+public func atomic_sub<T : IInteger>(
+    __ref T dst,
+    T value,
+    constexpr MemoryOrder memory_order,
+    constexpr MemoryLocation location = MemoryLocation::None,
+    constexpr MemoryScope scope = MemoryScope::Queue
+) -> T {
+    spirv_type_checks<T>();
+    const u32 semantics = memory_order | location;
+    return spirv_asm {
+        result:$$T = OpAtomicISub &dst $scope $semantics $value;
+    };
+}
+
+[[ForceInline]]
+public func atomic_max<T : IInteger>(
+    __ref T dst,
+    T value,
+    constexpr MemoryOrder memory_order,
+    constexpr MemoryLocation location = MemoryLocation::None,
+    constexpr MemoryScope scope = MemoryScope::Queue
+) -> T {
+    spirv_type_checks<T>();
+    const u32 semantics = memory_order | location;
+    if (__isUnsignedInt<T>()) {
+        return spirv_asm {
+            result:$$T = OpAtomicUMax &dst $scope $semantics $value;
+        };
+    } else if (__isSignedInt<T>()) {
+        return spirv_asm {
+            result:$$T = OpAtomicSMax &dst $scope $semantics $value;
+        };
+    } else {
+        spirv_asm { "<invalid atomic_min>" };
+    }
+
+    return {};
+}
+
+[[ForceInline]]
+public func atomic_min<T : IInteger>(
+    __ref T dst,
+    T value,
+    constexpr MemoryOrder memory_order,
+    constexpr MemoryLocation location = MemoryLocation::None,
+    constexpr MemoryScope scope = MemoryScope::Queue
+) -> T {
+    spirv_type_checks<T>();
+    const u32 semantics = memory_order | location;
+    if (__isUnsignedInt<T>()) {
+        return spirv_asm {
+            result:$$T = OpAtomicUMin &dst $scope $semantics $value;
+        };
+    } else if (__isSignedInt<T>()) {
+        return spirv_asm {
+            result:$$T = OpAtomicSMin &dst $scope $semantics $value;
+        };
+    } else {
+        spirv_asm { "<invalid atomic_min>" };
+    }
+
+    return {};
+}
+
+[[ForceInline]]
+public func atomic_and<T : IInteger>(
+    __ref T dst,
+    T value,
+    constexpr MemoryOrder memory_order,
+    constexpr MemoryLocation location = MemoryLocation::None,
+    constexpr MemoryScope scope = MemoryScope::Queue
+) -> T {
+    spirv_type_checks<T>();
+    const u32 semantics = memory_order | location;
+    return spirv_asm {
+        result:$$T = OpAtomicAnd &dst $scope $semantics $value;
+    };
+}
+
+[[ForceInline]]
+public func atomic_or<T : IInteger>(
+    __ref T dst,
+    T value,
+    constexpr MemoryOrder memory_order,
+    constexpr MemoryLocation location = MemoryLocation::None,
+    constexpr MemoryScope scope = MemoryScope::Queue
+) -> T {
+    spirv_type_checks<T>();
+    const u32 semantics = memory_order | location;
+    return spirv_asm {
+        result:$$T = OpAtomicOr &dst $scope $semantics $value;
+    };
+}
+
+[[ForceInline]]
+public func atomic_xor<T : IInteger>(
+    __ref T dst,
+    T value,
+    constexpr MemoryOrder memory_order,
+    constexpr MemoryLocation location = MemoryLocation::None,
+    constexpr MemoryScope scope = MemoryScope::Queue
+) -> T {
+    spirv_type_checks<T>();
+    const u32 semantics = memory_order | location;
+    return spirv_asm {
+        result:$$T = OpAtomicXor &dst $scope $semantics $value;
+    };
+}
+
+// Floating point atomic extension ──────────────────────────────────
+[[ForceInline]]
+public func atomic_add<T : IFloat>(
+    __ref T dst,
+    T value,
+    constexpr MemoryOrder memory_order,
+    constexpr MemoryLocation location = MemoryLocation::None,
+    constexpr MemoryScope scope = MemoryScope::Queue
+) -> T {
+    spirv_type_checks<T>();
+    const u32 semantics = memory_order | location;
+    return spirv_asm {
+        result:$$T = OpAtomicFAddEXT &dst $scope $semantics $value;
+    };
+}
+
+[[ForceInline]]
+public func atomic_max<T : IFloat>(
+    __ref T dst,
+    T value,
+    constexpr MemoryOrder memory_order,
+    constexpr MemoryLocation location = MemoryLocation::None,
+    constexpr MemoryScope scope = MemoryScope::Queue
+) -> T {
+    spirv_type_checks<T>();
+    const u32 semantics = memory_order | location;
+    return spirv_asm {
+        result:$$T = OpAtomicFMaxEXT &dst $scope $semantics $value;
+    };
+}
+
+[[ForceInline]]
+public func atomic_min<T : IFloat>(
+    __ref T dst,
+    T value,
+    constexpr MemoryOrder memory_order,
+    constexpr MemoryLocation location = MemoryLocation::None,
+    constexpr MemoryScope scope = MemoryScope::Queue
+) -> T {
+    spirv_type_checks<T>();
+    const u32 semantics = memory_order | location;
+    return spirv_asm {
+        result:$$T = OpAtomicFMinEXT &dst $scope $semantics $value;
+    };
+}
+
 // Base type for atomics. Can perform very basic operations
 // where it's supported without extensions.
-public struct atomic<T : __BuiltinArithmeticType> {
+public struct atomic<T> {
     T value;
 
-    [mutating]
+    [[ForceInline]]
+    [[mutating]]
     public __init(T v) {
         this.store(v, std::memory_order_acq_rel);
     }
 
+    [[ForceInline]]
+    [[mutating]]
     public func load(
-        MemoryOrder memory_order,
-        MemoryLocation location = MemoryLocation::None,
-        MemoryScope scope = MemoryScope::Queue
+        constexpr MemoryOrder memory_order,
+        constexpr MemoryLocation location = MemoryLocation::None,
+        constexpr MemoryScope scope = MemoryScope::Queue
     ) -> T {
-        const u32 semantics = memory_order | location;
-        if (__isUnsignedInt<T>() || __isSignedInt<T>() || __isFloat<T>()) {
-            return spirv_asm {
-                OpCapability Int64Atomics;
-                result:$$T = OpAtomicLoad &this.value $scope $semantics;
-            };
-        } else {
-            spirv_asm { "<invalid atomic<T>::load>" };
-        }
-
-        return {};
+        return atomic_load(this.value, memory_order, location, scope);
     }
 
+    [[ForceInline]]
+    [[mutating]]
     public func store(
         T desired,
-        MemoryOrder memory_order,
-        MemoryLocation location = MemoryLocation::None,
-        MemoryScope scope = MemoryScope::Queue
+        constexpr MemoryOrder memory_order,
+        constexpr MemoryLocation location = MemoryLocation::None,
+        constexpr MemoryScope scope = MemoryScope::Queue
     ) -> void {
-        const u32 semantics = memory_order | location;
-        if (__isUnsignedInt<T>() || __isSignedInt<T>() || __isFloat<T>()) {
-            return spirv_asm {
-                OpCapability Int64Atomics;
-                OpAtomicStore &this.value $scope $semantics $desired;
-            };
-        } else {
-            spirv_asm { "<invalid atomic<T>::store>" };
-        }
+        atomic_store(this.value, desired, memory_order, location, scope);
     }
 };
 
-// Integer extension of atomic.
-__generic<T : __BuiltinIntegerType>
-public extension atomic<T> {
+// Integer extension ────────────────────────────────────────────────
+public extension<T : IInteger> atomic<T> {
+    [[ForceInline]]
+    [[mutating]]
     public func fetch_add(
         T arg,
         constexpr MemoryOrder memory_order,
         constexpr MemoryLocation location = MemoryLocation::None,
         constexpr MemoryScope scope = MemoryScope::Queue
     ) -> T {
-        const u32 semantics = memory_order | location;
-        return spirv_asm {
-            OpCapability Int64Atomics;
-            result:$$T = OpAtomicIAdd &this.value $scope $semantics $arg;
-        };
+        return atomic_add(this.value, arg, memory_order, location, scope);
     }
 
+    [[ForceInline]]
+    [[mutating]]
     public func fetch_sub(
         T arg,
         constexpr MemoryOrder memory_order,
         constexpr MemoryLocation location = MemoryLocation::None,
         constexpr MemoryScope scope = MemoryScope::Queue
     ) -> T {
-        const u32 semantics = memory_order | location;
-        return spirv_asm {
-            OpCapability Int64Atomics;
-            result:$$T = OpAtomicISub &this.value $scope $semantics $arg;
-        };
+        return atomic_sub(this.value, arg, memory_order, location, scope);
     }
 
+    [[ForceInline]]
+    [[mutating]]
     public func fetch_max(
         T arg,
         constexpr MemoryOrder memory_order,
         constexpr MemoryLocation location = MemoryLocation::None,
         constexpr MemoryScope scope = MemoryScope::Queue
     ) -> T {
-        const u32 semantics = memory_order | location;
-        if (__isUnsignedInt<T>()) {
-            return spirv_asm {
-                OpCapability Int64Atomics;
-                result:$$T = OpAtomicUMax &this.value $scope $semantics $arg;
-            };
-        } else if (__isSignedInt<T>()) {
-            return spirv_asm {
-                OpCapability Int64Atomics;
-                result:$$T = OpAtomicSMax &this.value $scope $semantics $arg;
-            };
-        } else {
-            spirv_asm { "<invalid atomic<T>::fetch_max>" };
-        }
-
-        return {};
+        return atomic_max(this.value, arg, memory_order, location, scope);
     }
 
+    [[ForceInline]]
+    [[mutating]]
     public func fetch_min(
         T arg,
         constexpr MemoryOrder memory_order,
         constexpr MemoryLocation location = MemoryLocation::None,
         constexpr MemoryScope scope = MemoryScope::Queue
     ) -> T {
-        const u32 semantics = memory_order | location;
-        if (__isUnsignedInt<T>()) {
-            return spirv_asm {
-                OpCapability Int64Atomics;
-                result:$$T = OpAtomicUMin &this.value $scope $semantics $arg;
-            };
-        } else if (__isSignedInt<T>()) {
-            return spirv_asm {
-                OpCapability Int64Atomics;
-                result:$$T = OpAtomicSMin &this.value $scope $semantics $arg;
-            };
-        } else {
-            spirv_asm { "<invalid atomic<T>::fetch_min>" };
-        }
-
-        return {};
+        return atomic_min(this.value, arg, memory_order, location, scope);
     }
 
+    [[ForceInline]]
+    [[mutating]]
     public func fetch_and(
         T arg,
         constexpr MemoryOrder memory_order,
         constexpr MemoryLocation location = MemoryLocation::None,
         constexpr MemoryScope scope = MemoryScope::Queue
     ) -> T {
-        const u32 semantics = memory_order | location;
-        return spirv_asm {
-            OpCapability Int64Atomics;
-            result:$$T = OpAtomicAnd &this.value $scope $semantics $arg;
-        };
+        return atomic_and(this.value, arg, memory_order, location, scope);
     }
 
+    [[ForceInline]]
+    [[mutating]]
     public func fetch_or(
         T arg,
         constexpr MemoryOrder memory_order,
         constexpr MemoryLocation location = MemoryLocation::None,
         constexpr MemoryScope scope = MemoryScope::Queue
     ) -> T {
-        const u32 semantics = memory_order | location;
-        return spirv_asm {
-            OpCapability Int64Atomics;
-            result:$$T = OpAtomicOr &this.value $scope $semantics $arg;
-        };
+        return atomic_or(this.value, arg, memory_order, location, scope);
     }
 
+    [[ForceInline]]
+    [[mutating]]
     public func fetch_xor(
         T arg,
         constexpr MemoryOrder memory_order,
         constexpr MemoryLocation location = MemoryLocation::None,
         constexpr MemoryScope scope = MemoryScope::Queue
     ) -> T {
-        const u32 semantics = memory_order | location;
-        return spirv_asm {
-            OpCapability Int64Atomics;
-            result:$$T = OpAtomicOr &this.value $scope $semantics $arg;
-        };
+        return atomic_xor(this.value, arg, memory_order, location, scope);
+    }
+};
+
+// Floating point extension ─────────────────────────────────────────
+public extension<T : IFloat> atomic<T> {
+    [[ForceInline]]
+    [[mutating]]
+    public func fetch_add(
+        T arg,
+        constexpr MemoryOrder memory_order,
+        constexpr MemoryLocation location = MemoryLocation::None,
+        constexpr MemoryScope scope = MemoryScope::Queue
+    ) -> T {
+        return atomic_add(this.value, arg, memory_order, location, scope);
+    }
+
+    [[ForceInline]]
+    [[mutating]]
+    public func fetch_max(
+        T arg,
+        constexpr MemoryOrder memory_order,
+        constexpr MemoryLocation location = MemoryLocation::None,
+        constexpr MemoryScope scope = MemoryScope::Queue
+    ) -> T {
+        return atomic_max(this.value, arg, memory_order, location, scope);
+    }
+
+    [[ForceInline]]
+    [[mutating]]
+    public func fetch_min(
+        T arg,
+        constexpr MemoryOrder memory_order,
+        constexpr MemoryLocation location = MemoryLocation::None,
+        constexpr MemoryScope scope = MemoryScope::Queue
+    ) -> T {
+        return atomic_min(this.value, arg, memory_order, location, scope);
     }
 };
 
@@ -205,6 +443,7 @@ public extension atomic<T> {
 // affected by this command.
 //
 // https://registry.khronos.org/SPIR-V/specs/unified1/SPIRV.html#OpControlBarrier
+[[ForceInline]]
 public func control_barrier(
     constexpr MemoryOrder memory_order,
     constexpr MemoryScope scope_execution = MemoryScope::Workgroup,
@@ -218,6 +457,7 @@ public func control_barrier(
 }
 
 // Good old barrier.
+[[ForceInline]]
 public func memory_barrier(
     constexpr MemoryOrder memory_order,
     constexpr MemoryScope scope = MemoryScope::Queue,
@@ -228,6 +468,5 @@ public func memory_barrier(
         OpMemoryBarrier $scope $semantics;
     };
 }
-
 }
 

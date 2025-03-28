@@ -20,21 +20,7 @@ public struct IndexNonUniform : IUniformity {
     }
 };
 
-public interface ICoherency {
-    static func is_coherent() -> bool;
-};
-
-public struct Coherent : ICoherency {
-    [ForceInline]
-    public static func is_coherent() -> bool {
-        return true;
-    }
-};
-
-public struct Incoherent : ICoherency {
-    [ForceInline]
-    public static func is_coherent() -> bool {
-        return false;
-    }
-};
+public interface ICoherency {};
+public struct Coherent : ICoherency {};
+public struct Incoherent : ICoherency {};
 

@@ -7,7 +7,7 @@ struct LoggerImpl {
     File file = {};
 
     void init(std::string_view log_name) {
-        fs::path log_path = fs::current_path() / std::format("{}.log", log_name);
+        fs::path log_path = fs::current_path() / fmt::format("{}.log", log_name);
         this->file = File(log_path, FileAccess::Write);
     }
 };

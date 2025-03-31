@@ -39,6 +39,8 @@ constexpr u8 operator""_u8(unsigned long long n) { return static_cast<u8>(n); }
 constexpr i8 operator""_i8(unsigned long long n) { return static_cast<i8>(n); }
 
 constexpr usize operator""_sz(unsigned long long n) { return static_cast<usize>(n); }
+constexpr usize operator""_iptr(unsigned long long n) { return static_cast<iptr>(n); }
+constexpr usize operator""_uptr(unsigned long long n) { return static_cast<uptr>(n); }
 
 constexpr c8 operator""_c8(unsigned long long n) { return static_cast<c8>(n); }
 constexpr c16 operator""_c16(unsigned long long n) { return static_cast<c16>(n); }

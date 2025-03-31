@@ -8,7 +8,7 @@ add_slang_target("slang-glslang", {
         "slang-glslang.cpp",
     } },
     packages = { {
-        "slang-glslang", "slang-spirv-headers", "slang-spirv-tools"
+        "slang-glslang-compiler", "slang-spirv-headers", "slang-spirv-tools"
     } },
     ldflags = { {
         "-Wl,--exclude-libs,ALL"

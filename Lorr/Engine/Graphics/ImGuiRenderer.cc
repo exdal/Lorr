@@ -189,6 +189,7 @@ auto ImGuiRenderer::end_frame(this ImGuiRenderer &self, vuk::Value<vuk::ImageAtt
             struct PushConstants {
                 glm::vec2 translate = {};
                 glm::vec2 scale = {};
+                u32 is_srgb = 0;
             };
 
             PushConstants c = {};
@@ -197,7 +198,7 @@ auto ImGuiRenderer::end_frame(this ImGuiRenderer &self, vuk::Value<vuk::ImageAtt
 
             cmd_list //
                 .set_dynamic_state(vuk::DynamicStateFlagBits::eViewport | vuk::DynamicStateFlagBits::eScissor)
-                .set_rasterization(vuk::PipelineRasterizationStateCreateInfo {})
+                .set_rasterization(vuk::PipelineRasterizationStateCreateInfo{})
                 .set_color_blend(dst, vuk::BlendPreset::eAlphaBlend)
                 .set_viewport(0, vuk::Rect2D::framebuffer())
                 .bind_graphics_pipeline(pipeline)
@@ -206,9 +207,8 @@ auto ImGuiRenderer::end_frame(this ImGuiRenderer &self, vuk::Value<vuk::ImageAtt
                     0,
                     vertex_buf,
                     0,
-                    vuk::Packed { vuk::Format::eR32G32Sfloat, vuk::Format::eR32G32Sfloat, vuk::Format::eR8G8B8A8Unorm }
-                )
-                .push_constants(vuk::ShaderStageFlagBits::eVertex, 0, c);
+                    vuk::Packed{ vuk::Format::eR32G32Sfloat, vuk::Format::eR32G32Sfloat, vuk::Format::eR8G8B8A8Unorm }
+                );
 
             ImVec2 clip_off = draw_data->DisplayPos;
             ImVec2 clip_scale = draw_data->FramebufferScale;
@@ -244,11 +244,15 @@ auto ImGuiRenderer::end_frame(this ImGuiRenderer &self, vuk::Value<vuk::ImageAtt
                         cmd_list.bind_sampler(0, 0, { .magFilter = vuk::Filter::eLinear, .minFilter = vuk::Filter::eLinear });
                         if (im_cmd.TextureId != 0) {
                             auto index = im_cmd.TextureId - 1;
-                            cmd_list.bind_image(0, 1, rendering_images[index]);
+                            const auto &image = rendering_images[index];
+                            c.is_srgb = vuk::is_format_srgb(image.format);
+                            cmd_list.bind_image(0, 1, image);
                         } else {
+                            c.is_srgb = 0;
                             cmd_list.bind_image(0, 1, rendering_images[0]);
                         }
 
+                        cmd_list.push_constants(vuk::ShaderStageFlagBits::eVertex | vuk::ShaderStageFlagBits::eFragment, 0, c);
                         cmd_list.draw_indexed(im_cmd.ElemCount, 1, im_cmd.IdxOffset + index_offset, i32(im_cmd.VtxOffset + vertex_offset), 0);
                     }
                 }

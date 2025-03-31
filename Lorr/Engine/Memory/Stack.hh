@@ -60,12 +60,12 @@ struct ScopedStack {
     }
 
     template<typename... ArgsT>
-    std::string_view format(const std::format_string<ArgsT...> fmt, ArgsT &&...args) {
+    std::string_view format(const fmt::format_string<ArgsT...> fmt, ArgsT &&...args) {
         ZoneScoped;
 
         auto &stack = get_thread_stack();
         c8 *begin = reinterpret_cast<c8 *>(stack.ptr);
-        c8 *end = std::vformat_to(begin, fmt.get(), std::make_format_args(args...));
+        c8 *end = fmt::vformat_to(begin, fmt.get(), fmt::make_format_args(args...));
         *end = '\0';
         stack.ptr = ls::align_up(reinterpret_cast<u8 *>(end + 1), 8);
 
@@ -73,12 +73,12 @@ struct ScopedStack {
     }
 
     template<typename... ArgsT>
-    const c8 *format_char(const std::format_string<ArgsT...> fmt, ArgsT &&...args) {
+    const c8 *format_char(const fmt::format_string<ArgsT...> fmt, ArgsT &&...args) {
         ZoneScoped;
 
         auto &stack = get_thread_stack();
         c8 *begin = reinterpret_cast<c8 *>(stack.ptr);
-        c8 *end = std::vformat_to(begin, fmt.get(), std::make_format_args(args...));
+        c8 *end = fmt::vformat_to(begin, fmt.get(), fmt::make_format_args(args...));
         *end = '\0';
         stack.ptr = ls::align_up(reinterpret_cast<u8 *>(end + 1), 8);
 
@@ -144,7 +144,7 @@ struct ScopedStack {
 
         auto &stack = get_thread_stack();
         auto *begin = reinterpret_cast<c8 *>(stack.ptr);
-        std::copy(str.begin(), str.end(), begin);
+        std::ranges::copy(str, begin);
         c8 *end = reinterpret_cast<c8 *>(stack.ptr + str.length());
         stack.ptr = ls::align_up(reinterpret_cast<u8 *>(end + 1), 8);
 
@@ -159,7 +159,7 @@ struct ScopedStack {
 
         auto &stack = get_thread_stack();
         auto *begin = reinterpret_cast<c8 *>(stack.ptr);
-        std::copy(str.begin(), str.end(), begin);
+        std::ranges::copy(str, begin);
         auto *end = reinterpret_cast<c8 *>(stack.ptr + str.length());
         stack.ptr = ls::align_up(reinterpret_cast<u8 *>(end + 1), 8);
 
@@ -174,13 +174,27 @@ struct ScopedStack {
 
         auto &stack = get_thread_stack();
         auto *begin = reinterpret_cast<c8 *>(stack.ptr);
-        std::copy(str.begin(), str.end(), begin);
+        std::ranges::copy(str, begin);
         auto *end = reinterpret_cast<c8 *>(stack.ptr + str.length());
         stack.ptr = ls::align_up(reinterpret_cast<u8 *>(end + 1), 8);
 
         *end = '\0';
 
         return { begin, end };
+    }
+
+    const c8 *null_terminate_cstr(std::string_view str) {
+        ZoneScoped;
+
+        auto &stack = get_thread_stack();
+        auto *begin = reinterpret_cast<c8 *>(stack.ptr);
+        std::ranges::copy(str, begin);
+        auto *end = reinterpret_cast<c8 *>(stack.ptr + str.length());
+        stack.ptr = ls::align_up(reinterpret_cast<u8 *>(end + 1), 8);
+
+        *end = '\0';
+
+        return begin;
     }
 };
 } // namespace lr::memory

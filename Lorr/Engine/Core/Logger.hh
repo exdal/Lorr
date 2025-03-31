@@ -25,9 +25,9 @@ struct LoggerFmt : public std::string_view {
         std::string_view(string),
         location(LOC) {}
 
-    template<std::formattable<char>... Args>
-    constexpr const std::format_string<Args...> &get() const noexcept {
-        return reinterpret_cast<const std::format_string<Args...> &>(*this);
+    template<fmt::formattable<char>... Args>
+    constexpr const fmt::format_string<Args...> &get() const noexcept {
+        return reinterpret_cast<const fmt::format_string<Args...> &>(*this);
     }
 };
 

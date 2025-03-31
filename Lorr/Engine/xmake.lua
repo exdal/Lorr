@@ -1,11 +1,4 @@
 target("Lorr")
-    -- Asan Mode --
-    if is_mode("asan") then
-        set_policy("build.sanitizer.address", true)
-        set_policy("build.sanitizer.undefined", true)
-        set_policy("build.sanitizer.leak", true)
-    end
-
     set_kind("static")
     set_languages("cxx23")
     add_forceincludes("Engine/pch.hh", { public = true, force = true })
@@ -13,6 +6,17 @@ target("Lorr")
     add_cxxflags("clang::-march=native", "clang_cl::/arch:AVX2", "cl::/arch:AVX2")
 
     if is_mode("debug") then
+        add_ldflags(
+            "-Wl,--export-dynamic",
+            { tools = { "clang", "gcc" } })
+    elseif is_mode("asan") then
+        set_policy("build.sanitizer.address", true)
+        set_policy("build.sanitizer.undefined", true)
+        set_policy("build.sanitizer.leak", true)
+    elseif is_mode("tsan") then
+        set_policy("build.sanitizer.thread", true)
+        set_optimize("faster")
+        add_cxflags("-g")
         add_ldflags(
             "-Wl,--export-dynamic",
             { tools = { "clang", "gcc" } })
@@ -40,7 +44,9 @@ target("Lorr")
         "ls",
         { public = true })
 
+    set_policy("package.precompiled", false)
     add_packages(
+        "fmt",
         "libsdl3",
         "vk-bootstrap",
         "imgui",
@@ -60,6 +66,7 @@ target("Lorr")
         "imguizmo-lorr",
         "vuk",
         "meshoptimizer",
+        "ktx-software",
         { public = true })
 
 target_end()

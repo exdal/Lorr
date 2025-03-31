@@ -26,6 +26,8 @@ struct BindlessDescriptorInfo {
 struct TransferManager {
 private:
     Device *device = nullptr;
+
+    mutable std::shared_mutex mutex = {};
     std::vector<vuk::UntypedValue> futures = {};
 
     ls::option<vuk::Allocator> frame_allocator;
@@ -39,8 +41,12 @@ public:
     auto init(Device &) -> std::expected<void, vuk::VkException>;
     auto destroy(this TransferManager &) -> void;
 
-    [[nodiscard]] auto alloc_transient_buffer_raw(this TransferManager &, vuk::MemoryUsage usage, usize size, LR_THISCALL) -> vuk::Buffer;
-    [[nodiscard]] auto alloc_transient_buffer(this TransferManager &, vuk::MemoryUsage usage, usize size, LR_THISCALL) -> vuk::Value<vuk::Buffer>;
+    [[nodiscard]] auto
+    alloc_transient_buffer_raw(this TransferManager &, vuk::MemoryUsage usage, usize size, usize alignment = 8, bool frame = true, LR_THISCALL)
+        -> vuk::Buffer;
+    [[nodiscard]] auto
+    alloc_transient_buffer(this TransferManager &, vuk::MemoryUsage usage, usize size, usize alignment = 8, bool frame = true, LR_THISCALL)
+        -> vuk::Value<vuk::Buffer>;
     [[nodiscard]] auto upload_staging(this TransferManager &, vuk::Value<vuk::Buffer> &&src, vuk::Value<vuk::Buffer> &&dst, LR_THISCALL)
         -> vuk::Value<vuk::Buffer>;
     [[nodiscard]] auto upload_staging(this TransferManager &, vuk::Value<vuk::Buffer> &&src, Buffer &dst, u64 dst_offset = 0, LR_THISCALL)

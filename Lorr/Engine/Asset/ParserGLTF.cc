@@ -47,7 +47,6 @@ static auto to_vuk_filter(fastgltf::Filter f) -> vuk::Filter {
     switch (f) {
         case fastgltf::Filter::Nearest:
             return vuk::Filter::eNearest;
-        case fastgltf::Filter::Linear:
         default:
             return vuk::Filter::eLinear;
     }
@@ -62,6 +61,8 @@ static auto to_vuk_sampler_address_mode(fastgltf::Wrap w) -> vuk::SamplerAddress
         case fastgltf::Wrap::Repeat:
             return vuk::SamplerAddressMode::eRepeat;
     }
+
+    LS_UNREACHABLE();
 }
 
 static auto to_asset_file_type(fastgltf::MimeType mime) -> AssetFileType {
@@ -70,6 +71,8 @@ static auto to_asset_file_type(fastgltf::MimeType mime) -> AssetFileType {
             return AssetFileType::JPEG;
         case fastgltf::MimeType::PNG:
             return AssetFileType::PNG;
+        case fastgltf::MimeType::KTX2:
+            return AssetFileType::KTX2;
         default:
             return AssetFileType::None;
     }
@@ -104,7 +107,7 @@ auto GLTFModelInfo::parse(const fs::path &path, GLTFModelCallbacks callbacks) ->
     // sources::Vector is not used for importing, ignore it
     for (const auto &v : asset.buffers) {
         std::visit(
-            fastgltf::visitor {
+            fastgltf::visitor{
                 [](const auto &) {},
                 [&](const fastgltf::sources::ByteView &view) {
                     // Embedded byte
@@ -137,7 +140,7 @@ auto GLTFModelInfo::parse(const fs::path &path, GLTFModelCallbacks callbacks) ->
 
     for (const auto &v : asset.images) {
         std::visit(
-            fastgltf::visitor {
+            fastgltf::visitor{
                 [](const auto &) {},
                 [&](const fastgltf::sources::ByteView &view) {
                     // Embedded buffer
@@ -191,8 +194,11 @@ auto GLTFModelInfo::parse(const fs::path &path, GLTFModelCallbacks callbacks) ->
         if (v.samplerIndex.has_value()) {
             texture.sampler_index = v.samplerIndex.value();
         }
+
         if (v.imageIndex.has_value()) {
             texture.image_index = v.imageIndex.value();
+        } else if (v.basisuImageIndex.has_value()) {
+            texture.image_index = v.basisuImageIndex.value();
         }
     }
 
@@ -218,7 +224,7 @@ auto GLTFModelInfo::parse(const fs::path &path, GLTFModelCallbacks callbacks) ->
             v.emissiveFactor[2],
             v.emissiveStrength,
         };
-        // material.alpha_mode = static_cast<vk::AlphaMode>(v.alphaMode);
+        material.alpha_mode = static_cast<GLTFAlphaMode>(v.alphaMode);
         material.alpha_cutoff = v.alphaCutoff;
 
         if (auto &tex = pbr.baseColorTexture; tex.has_value()) {
@@ -235,6 +241,10 @@ auto GLTFModelInfo::parse(const fs::path &path, GLTFModelCallbacks callbacks) ->
 
         if (auto &tex = v.pbrData.metallicRoughnessTexture; tex.has_value()) {
             material.metallic_roughness_texture_index = tex->textureIndex;
+        }
+
+        if (auto &tex = v.occlusionTexture; tex.has_value()) {
+            material.occlusion_texture_index = tex->textureIndex;
         }
     }
 
@@ -279,11 +289,11 @@ auto GLTFModelInfo::parse(const fs::path &path, GLTFModelCallbacks callbacks) ->
             transform = glm::make_mat4(mat->data());
         }
 
-        fastgltf::math::fmat4x4 local_transform_array {};
+        fastgltf::math::fmat4x4 local_transform_array{};
         std::copy_n(&transform[0][0], 16, local_transform_array.data());
-        fastgltf::math::fvec3 scale_array {};
-        fastgltf::math::fquat rotation_array {};
-        fastgltf::math::fvec3 translation_array {};
+        fastgltf::math::fvec3 scale_array{};
+        fastgltf::math::fquat rotation_array{};
+        fastgltf::math::fvec3 translation_array{};
         fastgltf::math::decomposeTransformMatrix(local_transform_array, scale_array, rotation_array, translation_array);
 
         if (callbacks.on_new_node) {
@@ -400,7 +410,7 @@ auto GLTFModelInfo::parse_info(const fs::path &path) -> ls::option<GLTFModelInfo
 
     for (const auto &v : asset.images) {
         std::visit(
-            fastgltf::visitor {
+            fastgltf::visitor{
                 [](const auto &) {},
                 [&](const fastgltf::sources::ByteView &view) {
                     // Embedded buffer
@@ -442,8 +452,11 @@ auto GLTFModelInfo::parse_info(const fs::path &path) -> ls::option<GLTFModelInfo
         if (v.samplerIndex.has_value()) {
             texture.sampler_index = v.samplerIndex.value();
         }
+
         if (v.imageIndex.has_value()) {
             texture.image_index = v.imageIndex.value();
+        } else if (v.basisuImageIndex.has_value()) {
+            texture.image_index = v.basisuImageIndex.value();
         }
     }
 
@@ -486,6 +499,10 @@ auto GLTFModelInfo::parse_info(const fs::path &path) -> ls::option<GLTFModelInfo
 
         if (auto &tex = v.pbrData.metallicRoughnessTexture; tex.has_value()) {
             material.metallic_roughness_texture_index = tex->textureIndex;
+        }
+
+        if (auto &tex = v.occlusionTexture; tex.has_value()) {
+            material.occlusion_texture_index = tex->textureIndex;
         }
     }
 

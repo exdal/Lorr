@@ -2,8 +2,11 @@
 
 #include "Engine/Core/Application.hh"
 
+#include "Engine/Math/Matrix.hh"
+
 #include "Engine/OS/File.hh"
 
+#include "Engine/Scene/GPUScene.hh"
 #include "Engine/Util/JsonWriter.hh"
 
 #include "Engine/Scene/ECSModule/ComponentWrapper.hh"
@@ -119,11 +122,37 @@ auto Scene::init(this Scene &self, const std::string &name) -> bool {
 auto Scene::destroy(this Scene &self) -> void {
     ZoneScoped;
 
+    self.root.children([](flecs::entity e) {
+        e.each([&](flecs::id component_id) {
+            if (!component_id.is_entity()) {
+                return;
+            }
+
+            ECS::ComponentWrapper component(e, component_id);
+            if (!component.has_component()) {
+                return;
+            }
+
+            component.for_each([&](usize &, std::string_view, ECS::ComponentWrapper::Member &member) {
+                if (auto *component_uuid = std::get_if<UUID *>(&member)) {
+                    const auto &uuid = **component_uuid;
+                    if (uuid) {
+                        auto &app = Application::get();
+                        if (uuid && app.asset_man.get_asset(uuid)) {
+                            app.asset_man.unload_asset(uuid);
+                        }
+                    }
+                }
+            });
+        });
+    });
+
     self.name.clear();
     self.root.clear();
     self.transforms.reset();
     self.entity_transforms_map.clear();
     self.dirty_transforms.clear();
+    self.rendering_models.clear();
     self.world.reset();
 }
 
@@ -156,6 +185,7 @@ auto Scene::import_from_file(this Scene &self, const fs::path &path) -> bool {
 
     self.set_name(std::string(name_json.value()));
 
+    std::vector<UUID> requested_assets = {};
     auto entities_json = doc["entities"].get_array();
     for (auto entity_json : entities_json) {
         auto entity_name_json = entity_json["name"];
@@ -181,8 +211,8 @@ auto Scene::import_from_file(this Scene &self, const fs::path &path) -> bool {
                 return false;
             }
 
-            auto component_name = stack.null_terminate(component_name_json.get_string());
-            auto component_id = self.world->lookup(component_name.data());
+            const auto *component_name = stack.null_terminate_cstr(component_name_json.get_string());
+            auto component_id = self.world->lookup(component_name);
             if (!component_id) {
                 LOG_ERROR("Entity '{}' has invalid component named '{}'!", e.name(), component_name);
                 return false;
@@ -199,7 +229,7 @@ auto Scene::import_from_file(this Scene &self, const fs::path &path) -> bool {
                 }
 
                 std::visit(
-                    ls::match {
+                    ls::match{
                         [](const auto &) {},
                         [&](f32 *v) { *v = static_cast<f32>(member_json.get_double()); },
                         [&](i32 *v) { *v = static_cast<i32>(member_json.get_int64()); },
@@ -210,16 +240,26 @@ auto Scene::import_from_file(this Scene &self, const fs::path &path) -> bool {
                         [&](glm::vec3 *v) { json_to_vec(member_json.value(), *v); },
                         [&](glm::vec4 *v) { json_to_vec(member_json.value(), *v); },
                         [&](glm::quat *v) { json_to_quat(member_json.value(), *v); },
-                        //[&](glm::mat4 *v) {
-                        // json_to_mat(member_json.value(), *v); },
+                        // [&](glm::mat4 *v) {json_to_mat(member_json.value(), *v); },
                         [&](std::string *v) { *v = member_json.get_string().value(); },
-                        [&](UUID *v) { *v = UUID::from_string(member_json.get_string().value()).value(); },
+                        [&](UUID *v) {
+                            *v = UUID::from_string(member_json.get_string().value()).value();
+                            requested_assets.push_back(*v);
+                        },
                     },
                     member
                 );
             });
 
             e.modified(component_id);
+        }
+    }
+
+    LOG_TRACE("Loading scene {} with {} assets...", self.name, requested_assets.size());
+    for (const auto &uuid : requested_assets) {
+        auto &app = Application::get();
+        if (uuid && app.asset_man.get_asset(uuid)) {
+            app.asset_man.load_asset(uuid);
         }
     }
 
@@ -260,7 +300,7 @@ auto Scene::export_to_file(this Scene &self, const fs::path &path) -> bool {
             component.for_each([&](usize &, std::string_view member_name, ECS::ComponentWrapper::Member &member) {
                 auto &member_json = json[member_name];
                 std::visit(
-                    ls::match {
+                    ls::match{
                         [](const auto &) {},
                         [&](f32 *v) { member_json = *v; },
                         [&](i32 *v) { member_json = *v; },
@@ -339,6 +379,14 @@ auto Scene::create_editor_camera(this Scene &self) -> void {
         .add<ECS::ActiveCamera>();
 }
 
+auto Scene::find_entity(this Scene &self, std::string_view name) -> flecs::entity {
+    ZoneScoped;
+    memory::ScopedStack stack;
+
+    const auto *safe_str = stack.null_terminate_cstr(name);
+    return self.root.lookup(safe_str);
+}
+
 auto Scene::render(this Scene &self, SceneRenderer &renderer, const vuk::Extent3D &extent, vuk::Format format) -> vuk::Value<vuk::ImageAttachment> {
     ZoneScoped;
 
@@ -372,6 +420,15 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, const vuk::Extent3
         camera_data.position = t.position;
         camera_data.near_clip = c.near_clip;
         camera_data.far_clip = c.far_clip;
+        camera_data.resolution = glm::vec2(static_cast<f32>(extent.width), static_cast<f32>(extent.height));
+
+        if (!c.freeze_frustum) {
+            c.frustum_projection_view_mat = camera_data.projection_view_mat;
+            camera_data.frustum_projection_view_mat = camera_data.projection_view_mat;
+        } else {
+            camera_data.frustum_projection_view_mat = c.frustum_projection_view_mat;
+        }
+        Math::calc_frustum_planes(camera_data.frustum_projection_view_mat, camera_data.frustum_planes);
     });
 
     ls::option<GPU::Sun> sun_data = ls::nullopt;
@@ -432,15 +489,16 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, const vuk::Extent3
         composed_scene.emplace(renderer.compose(compose_info));
     }
 
-    auto scene_info = GPU::Scene {
+    auto scene_info = GPU::Scene{
         .camera = active_camera_data.value(),
-        .sun = sun_data.value_or(GPU::Sun {}),
-        .atmosphere = atmos_data.value_or(GPU::Atmosphere {}),
-        .clouds = clouds_data.value_or(GPU::Clouds {}),
+        .sun = sun_data.value_or(GPU::Sun{}),
+        .atmosphere = atmos_data.value_or(GPU::Atmosphere{}),
+        .clouds = clouds_data.value_or(GPU::Clouds{}),
+        .cull_flags = self.cull_flags,
     };
 
     auto transforms = self.transforms.slots_unsafe();
-    auto render_info = SceneRenderInfo {
+    auto render_info = SceneRenderInfo{
         .format = format,
         .extent = extent,
         .scene_info = scene_info,
@@ -525,6 +583,10 @@ auto Scene::get_entity_db(this Scene &self) -> SceneEntityDB & {
     return self.entity_db;
 }
 
+auto Scene::get_cull_flags(this Scene &self) -> GPU::CullFlags & {
+    return self.cull_flags;
+}
+
 auto Scene::compose(this Scene &self) -> SceneComposeInfo {
     ZoneScoped;
 
@@ -558,6 +620,7 @@ auto Scene::compose(this Scene &self) -> SceneComposeInfo {
             gpu_material.emissive_color = material->emissive_color;
             gpu_material.roughness_factor = material->roughness_factor;
             gpu_material.metallic_factor = material->metallic_factor;
+            gpu_material.alpha_mode = static_cast<GPU::AlphaMode>(material->alpha_mode);
             gpu_material.alpha_cutoff = material->alpha_cutoff;
 
             auto add_image_if_exists = [&](const UUID &uuid) -> ls::option<u32> {
@@ -576,6 +639,7 @@ auto Scene::compose(this Scene &self) -> SceneComposeInfo {
             gpu_material.normal_image_index = add_image_if_exists(material->normal_texture).value_or(~0_u32);
             gpu_material.emissive_image_index = add_image_if_exists(material->emissive_texture).value_or(~0_u32);
             gpu_material.metallic_roughness_image_index = add_image_if_exists(material->metallic_roughness_texture).value_or(~0_u32);
+            gpu_material.occlusion_image_index = add_image_if_exists(material->occlusion_texture).value_or(~0_u32);
         }
 
         //  ── INSTANCING ──────────────────────────────────────────────────────
@@ -595,7 +659,7 @@ auto Scene::compose(this Scene &self) -> SceneComposeInfo {
         }
     }
 
-    return SceneComposeInfo {
+    return SceneComposeInfo{
         .image_view_ids = std::move(gpu_image_views),
         .samplers = std::move(gpu_samplers),
         .gpu_materials = std::move(gpu_materials),

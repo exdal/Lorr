@@ -6,10 +6,10 @@
 #include <flecs.h>
 
 template<>
-struct std::formatter<flecs::string_view> : formatter<string_view> {
+struct fmt::formatter<flecs::string_view> : formatter<string_view> {
     template<typename FormatContext>
     constexpr auto format(const flecs::string_view &v, FormatContext &ctx) const {
-        return std::format_to(ctx.out(), "{}", std::string_view(v.c_str(), v.length()));
+        return fmt::format_to(ctx.out(), "{}", std::string_view(v.c_str(), v.length()));
     }
 };
 

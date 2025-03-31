@@ -50,6 +50,8 @@ private:
     std::vector<GPU::TransformID> dirty_transforms = {};
     bool models_dirty = false;
 
+    GPU::CullFlags cull_flags = GPU::CullFlags::All;
+
 public:
     auto init(this Scene &, const std::string &name) -> bool;
     auto destroy(this Scene &) -> void;
@@ -63,6 +65,9 @@ public:
         -> flecs::entity;
     auto create_editor_camera(this Scene &) -> void;
 
+    // Finds entity in root.
+    auto find_entity(this Scene &, std::string_view name) -> flecs::entity;
+
     auto render(this Scene &, SceneRenderer &renderer, const vuk::Extent3D &extent, vuk::Format format) -> vuk::Value<vuk::ImageAttachment>;
     auto tick(this Scene &, f32 delta_time) -> bool;
 
@@ -75,6 +80,7 @@ public:
     auto get_name(this Scene &) -> const std::string &;
     auto get_name_sv(this Scene &) -> std::string_view;
     auto get_entity_db(this Scene &) -> SceneEntityDB &;
+    auto get_cull_flags(this Scene &) -> GPU::CullFlags &;
 
 private:
     auto compose(this Scene &) -> SceneComposeInfo;

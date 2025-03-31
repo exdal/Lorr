@@ -15,7 +15,7 @@ import "../atmos/atmos";
 [[vk::binding(6, 0)]] Texture2D<float4> albedo_image;
 [[vk::binding(7, 0)]] Texture2D<float4> normal_image;
 [[vk::binding(8, 0)]] Texture2D<float3> emissive_image;
-[[vk::binding(9, 0)]] Texture2D<float4> metallic_roughness_image;
+[[vk::binding(9, 0)]] Texture2D<float4> metallic_roughness_occlusion_image;
 
 struct VertexOutput {
     float4 position : SV_Position;
@@ -111,9 +111,10 @@ float4 fs_main(VertexOutput input, float4 frag_pos : SV_Position) : SV_Target {
     const float3 mapped_normal = lr::oct_to_vec3(normal_oct_flat.xy);
     const float3 smooth_normal = lr::oct_to_vec3(normal_oct_flat.zw);
     const float3 emission = emissive_image.Load(pixel_pos);
-    const float4 metallic_roughness = metallic_roughness_image.Load(pixel_pos);
-    const float  metallic = metallic_roughness.x;
-    const float  roughness = metallic_roughness.y;
+    const float4 metallic_roughness_occlusion = metallic_roughness_occlusion_image.Load(pixel_pos);
+    const float  metallic = metallic_roughness_occlusion.x;
+    const float  roughness = metallic_roughness_occlusion.y;
+    const float  occlusion = metallic_roughness_occlusion.z;
 
     const float4 NDC = float4(input.tex_coord * 2.0 - 1.0, depth, 1.0);
     const float4 world_position = mul(scene.camera.inv_projection_view_mat, NDC);
@@ -124,6 +125,7 @@ float4 fs_main(VertexOutput input, float4 frag_pos : SV_Position) : SV_Target {
     const float3 V = normalize(scene.camera.position - ray_pos);
     const float3 L = normalize(scene.sun.direction);  // temp
 
+    // SUN LIGHT COLOR ──────────────────────────────────────────────────
     const float3 ray_pos_planet = float3(0.0, ray_pos.y, 0.0) *
                             CAMERA_SCALE_UNIT +
                             float3(0.0, scene.atmosphere.planet_radius, 0.0);
@@ -138,6 +140,7 @@ float4 fs_main(VertexOutput input, float4 frag_pos : SV_Position) : SV_Target {
         sun_transmittance *= 0.0;
     }
 
+    // SKY AMBIENT COLOR ────────────────────────────────────────────────
     AtmosphereIntegrateInfo sky_info = {};
     sky_info.eye_pos = ray_pos_planet;
     sky_info.sun_dir = scene.sun.direction;
@@ -154,13 +157,17 @@ float4 fs_main(VertexOutput input, float4 frag_pos : SV_Position) : SV_Target {
     const let sky_result_1 = integrate_single_scattered_luminance(linear_clamp_sampler, scene.atmosphere, sky_info);
     float3 ambient_color = lerp(sky_result_0.luminance, sky_result_1.luminance, saturate(N.y * 0.5 + 0.5));
 
+    // MATERIAL COLOR ───────────────────────────────────────────────────
     const float NoL = max(dot(N, L), 0.0);
     float3 color = BRDF(V, N, L, albedo_color, roughness, metallic);
 
     color = (color * NoL * sun_transmittance * scene.sun.intensity)  // Reflected light
-          + albedo_color * ambient_color  // Planet light
-          + albedo_color * 0.03  // Surface color
+          + albedo_color * ambient_color * 0.49 // Planet light
+          + albedo_color * 0.13  // Surface color
           + emission;  // Emitted light
+
+    // Direct influence over color no matter light position
+    color *= occlusion;
 
     return float4(color, 1.0);
 }

@@ -2,8 +2,7 @@ module tonemap;
 import lorr;
 
 [[vk::binding(0, 0)]] Texture2D<float4> input_image;
-[[vk::binding(1, 0)]] RWTexture2D<float4> output_image;
-[[vk::push_constant]] uint3 image_size;
+[[vk::binding(1, 0)]] SamplerState sampler;
 
 float3 ACES_Film(float3 x) {
     const float a = 2.51;
@@ -67,18 +66,29 @@ float3 PBRNeutralToneMapping(float3 color) {
     return lerp(color, newPeak, g);
 }
 
-[shader("compute")]
-[numthreads(8, 8, 1)]
-void cs_main(uint3 thread_id : SV_DispatchThreadID) {
-    if (any(thread_id >= image_size)) {
-        return;
-    }
+struct VertexOutput {
+    float4 position : SV_Position;
+    float2 tex_coord : TEXCOORD;
+};
 
-    float3 color = input_image.Load(thread_id).rgb;
-    color = ACES_Film(color);
+[shader("vertex")]
+VertexOutput vs_main(u32 vertex_id : SV_VertexID) {
+    VertexOutput output;
+    output.tex_coord = float2((vertex_id << 1) & 2, vertex_id & 2);
+    output.position = float4(2.0 * output.tex_coord - 1.0, 1.0, 1.0);
+
+    return output;
+}
+
+[shader("fragment")]
+float4 fs_main(VertexOutput input) {
+    float3 color = input_image.SampleLevel(sampler, input.tex_coord, 0.0).rgb;
+    //color = rec2020_to_rec709(color);
+    //color = lr::color_sRGB_EOTF(color);
+    //color = ACES_Film(color);
     //color = ACES_Fitted(color);
-    //color = PBRNeutralToneMapping(color);  // this looks like shit, figure out why
-    color = lr::color_sRGB_OETF(color);
-    output_image[thread_id.xy] = float4(color, 1.0);
+    color = PBRNeutralToneMapping(color);  // this looks like shit, figure out why
+    //color = lr::color_sRGB_OETF(color);
+    return float4(color, 1.0);
 }
 

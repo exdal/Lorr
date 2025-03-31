@@ -1,7 +1,6 @@
 # Editor
 - [x] Editor Camera
 - [ ] Component Icons
-- [ ] Add proper `std::string_view` support for imgui widgets
 
 # Engine Core
 ## Asset Manager
@@ -11,12 +10,14 @@
 ## Graphics
 ### Techniques
 - [x] Atmosphere
-- [ ] Clouds (NOTE: Sun direction is broken)
+- [ ] Clouds (Kind of done but it looks like shit)
 - [ ] Water simulation
-- [ ] Meshlets and Meshlet Culling
+- [x] Meshlets and Meshlet Culling
+- [ ] Ambient Occlusion (GTAO)
 - [ ] Frustum Culling
 - [ ] Occlusion Culling
-- [ ] Visbuffer
+- [x] Visbuffer
+- [x] Deferred PBR
 - [ ] Virtual Shadow Maps
 - [ ] Terrain Generation
 - [ ] Bloom

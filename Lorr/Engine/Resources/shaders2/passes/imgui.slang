@@ -1,0 +1,50 @@
+module imgui;
+
+import std;
+
+[[vk::binding(0, 0)]] SamplerState sampler;
+[[vk::binding(1, 0)]] Texture2D<f32x4> texture;
+
+struct VertexInput {
+    f32x2 position  : POSITION;
+    f32x2 tex_coord : TEXCOORD;
+    f32x4 color     : COLOR;
+};
+
+struct VertexOutput {
+    f32x4 position     : SV_Position;
+    f32x2 tex_coord    : TEXCOORD;
+    f32x4 color        : COLOR;
+};
+
+struct PushConstants {
+    f32x2 translate;
+    f32x2 scale;
+    u32 is_srgb;
+};
+[[vk::push_constant]] PushConstants c;
+
+[[shader("vertex")]]
+func vs_main(VertexInput input) -> VertexOutput {
+    VertexOutput output;
+
+    output.position = f32x4(input.position * c.scale + c.translate, 0.0, 1.0);
+    output.tex_coord = input.tex_coord;
+    output.color = input.color;
+
+    return output;
+}
+
+[[shader("fragment")]]
+f32x4 fs_main(VertexOutput input) : SV_TARGET {
+    f32x4 color_sampled = texture.Sample(sampler, input.tex_coord) * input.color;
+    f32x3 color = color_sampled.rgb;
+
+    if (c.is_srgb == 0) {
+        color = std::linear_to_srgb(color);
+    }
+
+    return f32x4(color, color_sampled.a);
+}
+
+

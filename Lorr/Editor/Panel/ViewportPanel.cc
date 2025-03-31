@@ -9,7 +9,7 @@
 #include <glm/gtx/quaternion.hpp>
 
 namespace lr {
-ViewportPanel::ViewportPanel(std::string name_, bool open_): PanelI(std::move(name_), open_) {
+ViewportPanel::ViewportPanel(std::string name_, bool open_) : PanelI(std::move(name_), open_) {
     const ImVec4 inspector_color_x = ImVec4(0.75f, 0.20f, 0.20f, 0.80f);
     const ImVec4 inspector_color_y = ImVec4(0.20f, 0.75f, 0.20f, 0.80f);
     const ImVec4 inspector_color_z = ImVec4(0.20f, 0.20f, 0.75f, 0.80f);
@@ -166,6 +166,12 @@ auto ViewportPanel::draw_tools(this ViewportPanel &self) -> void {
         ImGuiLR::drag_vec(3, &camera_info->far_clip, 1, ImGuiDataType_Float);
         ImGui::SeparatorText("Velocity");
         ImGuiLR::drag_vec(4, &camera_info->velocity_mul, 1, ImGuiDataType_Float);
+        ImGui::SeparatorText("Culling");
+        ImGui::Checkbox("Freeze frustum", &camera_info->freeze_frustum);
+        auto &cull_flags = reinterpret_cast<i32 &>(scene->get_cull_flags());
+        ImGui::CheckboxFlags("Cull Meshlet Frustum", &cull_flags, std::to_underlying(GPU::CullFlags::MeshletFrustum));
+        ImGui::CheckboxFlags("Cull Triangle Back Face", &cull_flags, std::to_underlying(GPU::CullFlags::TriangleBackFace));
+        ImGui::CheckboxFlags("Cull Micro Triangles", &cull_flags, std::to_underlying(GPU::CullFlags::MicroTriangles));
 
         ImGui::EndPopup();
     }

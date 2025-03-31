@@ -16,7 +16,6 @@ struct PushConstants {
 };
 [[vk::push_constant]] PushConstants C;
 
-
 [[shader("compute")]]
 [[numthreads(16, 16, 1)]]
 func cs_main(u32x3 thread_id : SV_DispatchThreadID) {

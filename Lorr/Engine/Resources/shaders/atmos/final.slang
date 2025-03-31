@@ -57,7 +57,6 @@ float4 fs_main(VertexOutput input, float4 pixel_pos : SV_Position) : SV_TARGET {
         return sample_aerial_perspective(atmos, aerial_perspective_lut, sampler, input.tex_coord, camera_relative_pos);
     }
 
-    const let planet_intersection = lr::ray_sphere_intersect_nearest(world_pos, world_dir, atmos.planet_radius);
 
     float h = length(world_pos);
     float3 up_vec = normalize(world_pos);
@@ -70,6 +69,7 @@ float4 fs_main(VertexOutput input, float4 pixel_pos : SV_Position) : SV_TARGET {
     float view_zenith_cos_angle = dot(world_dir, up_vec);
     float light_view_cos_angle = light_on_plane.x;
 
+    const let planet_intersection = lr::ray_sphere_intersect_nearest(world_pos, world_dir, atmos.planet_radius);
     float2 uv = get_sky_view_lut_uv(atmos, planet_intersection.hasValue, view_zenith_cos_angle, light_view_cos_angle, h);
     float3 luminance = sky_view_lut.Sample(sampler, uv).rgb;
 

@@ -1,11 +1,9 @@
 implementing std;
 
-import glm;
-
-public namespace std {
 public static constexpr f32 PI = 3.1415926535897932384626433832795;
 public static constexpr f32 TAU = 6.283185307179586476925286766559;
 
+public namespace std {
 /// PHASE FUNCTIONS
 public constexpr func uniform_phase() -> f32 {
     return 1.0 / (4.0 * PI);
@@ -36,12 +34,12 @@ public func safe_sqrt(f32 x) -> f32 {
     return sqrt(max(0, x));
 }
 
-public func mod(glm::vec3 x, glm::vec3 y) -> glm::vec3 {
+public func mod(f32x3 x, f32x3 y) -> f32x3 {
   return x - y * floor(x / y);
 }
 
 /// INTERSECTION
-public func ray_sphere_intersect(glm::vec3 ray_origin, glm::vec3 ray_direction, f32 sphere_radius) -> Optional<glm::vec2> {
+public func ray_sphere_intersect(f32x3 ray_origin, f32x3 ray_direction, f32 sphere_radius) -> Optional<f32x2> {
     const let a = dot(ray_direction, ray_direction);
     const let b = 2.0 * dot(ray_direction, ray_origin);
     const let c = dot(ray_origin, ray_origin) - (sphere_radius * sphere_radius);
@@ -52,10 +50,10 @@ public func ray_sphere_intersect(glm::vec3 ray_origin, glm::vec3 ray_direction, 
     }
 
     const let sqrt_delta = sqrt(delta);
-    return (-b + glm::vec2(-1.0, 1.0) * sqrt_delta) / (2.0 * a);
+    return (-b + f32x2(-1.0, 1.0) * sqrt_delta) / (2.0 * a);
 }
 
-public func ray_sphere_intersect_nearest(glm::vec3 ray_origin, glm::vec3 ray_direction, f32 sphere_radius) -> Optional<f32> {
+public func ray_sphere_intersect_nearest(f32x3 ray_origin, f32x3 ray_direction, f32 sphere_radius) -> Optional<f32> {
     const let sol = ray_sphere_intersect(ray_origin, ray_direction, sphere_radius);
     if (!sol.hasValue) {
         return none;
@@ -77,7 +75,7 @@ public func ray_sphere_intersect_nearest(glm::vec3 ray_origin, glm::vec3 ray_dir
     return max(0.0, min(sol0, sol1));
 }
 
-public func ray_sphere_intersect_inside(glm::vec3 ray_origin, glm::vec3 ray_direction, f32 sphere_radius) -> Optional<f32> {
+public func ray_sphere_intersect_inside(f32x3 ray_origin, f32x3 ray_direction, f32 sphere_radius) -> Optional<f32> {
     const let sol = ray_sphere_intersect(ray_origin, ray_direction, sphere_radius);
     if (!sol.hasValue) {
         return none;
@@ -86,7 +84,7 @@ public func ray_sphere_intersect_inside(glm::vec3 ray_origin, glm::vec3 ray_dire
     return sol.value.y;
 }
 
-public func ray_sphere_intersect_outside(glm::vec3 ray_origin, glm::vec3 ray_direction, f32 sphere_radius) -> Optional<glm::vec2> {
+public func ray_sphere_intersect_outside(f32x3 ray_origin, f32x3 ray_direction, f32 sphere_radius) -> Optional<f32x2> {
     const let sol = ray_sphere_intersect(ray_origin, ray_direction, sphere_radius);
     if (!sol.hasValue) {
         return none;
@@ -98,10 +96,10 @@ public func ray_sphere_intersect_outside(glm::vec3 ray_origin, glm::vec3 ray_dir
         return none;
     }
 
-    return glm::vec2(sol0, sol1);
+    return f32x2(sol0, sol1);
 }
 
-public func ray_rect_intersect(glm::vec2 bottom_left_0, glm::vec2 top_right_0, glm::vec2 bottom_left_1, glm::vec2 top_right_1) -> bool {
+public func ray_rect_intersect(f32x2 bottom_left_0, f32x2 top_right_0, f32x2 bottom_left_1, f32x2 top_right_1) -> bool {
   return !(any(top_right_0 < bottom_left_1) || any(bottom_left_0 > top_right_1));
 }
 

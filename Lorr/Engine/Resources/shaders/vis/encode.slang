@@ -23,7 +23,6 @@ RWStructuredBuffer<Material, ScalarDataLayout> materials;
 
 struct VertexOutput {
     float4 position : SV_Position;
-    float3 vertex_pos : POSITION;
     float2 tex_coord : TEXCOORD;
     nointerpolation u32 meshlet_index : MESHLET_ID;
     nointerpolation u32 triangle_index : TRIANGLE_ID;
@@ -53,7 +52,6 @@ VertexOutput vs_main(u32 vertex_id : SV_VertexID) {
     VertexOutput output;
     output.position = mul(transform.world, float4(vertex_pos, 1.0));
     output.position = mul(scene.camera.projection_view_mat, output.position);
-    output.vertex_pos = vertex_pos;
     output.tex_coord = tex_coord;
     output.meshlet_index = visible_meshlet_index;
     output.triangle_index = triangle_index / 3;
@@ -67,7 +65,6 @@ u32 fs_main(VertexOutput input) : SV_Target {
     if (material.albedo_image_index != ~0u) {
         const float2 grad_x = ddx(input.tex_coord);
         const float2 grad_y = ddy(input.tex_coord);
-        const float  max_obj_space_deriv_len = max(length(ddx(input.vertex_pos)), length(ddy(input.vertex_pos)));
         const float  alpha = material.albedo_color.a * 
                              textures[material.albedo_image_index].SampleGrad(samplers[material.albedo_image_index], input.tex_coord, grad_x, grad_y).a;
 

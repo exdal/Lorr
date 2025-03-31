@@ -1,7 +1,6 @@
 implementing gpu;
 
 import std;
-import glm;
 
 [[vk::binding(1, 0)]]
 __DynamicResource textures[];
@@ -26,13 +25,13 @@ public enum ImageOperand : u32 {
 };
 
 // Image ────────────────────────────────────────────────────────────
-public struct Image<T : ITexelElement, S : __ITextureShape, U : IUniformity = IndexUniform> {
+public struct Image<T : ITexelElement, S : __ITextureShape, U : IUniformity = Uniform> {
     public typealias parent_type = _Texture<T, S, 0, 0, 0, 0, 0, 0, 0>;
     public typealias this_type = Image<T, S, U>;
 
-    u32 index;
+    u32 index = ~0u;
 
-    [mutating]
+    [[mutating]]
     __init(u32 index) {
         this.index = index;
     }
@@ -57,54 +56,65 @@ public struct Image<T : ITexelElement, S : __ITextureShape, U : IUniformity = In
         return this.get().SampleLevel(sampler.get(), tex_coords, mip);
     }
 
-    public func sample_grad<SU : IUniformity>(Sampler<SU> sampler, vector<f32, S.dimensions> tex_coords, f32 ddx, f32 ddy) -> T {
+    public func sample_grad<SU : IUniformity>(
+        Sampler<SU> sampler,
+        vector<f32, S.dimensions> tex_coords,
+        vector<f32, S.dimensions> ddx,
+        vector<f32, S.dimensions> ddy
+    ) -> T {
         return this.get().SampleGrad(sampler.get(), tex_coords, ddx, ddy);
+    }
+
+    public func is_valid() -> bool {
+        return this.index != ~0u;
     }
 };
 
 // Image1D ──────────────────────────────────────────────────────────
-__generic<T : ITexelElement, U : IUniformity = IndexUniform>
+__generic<T : ITexelElement, U : IUniformity = Uniform>
 public typealias Image1D = Image<T, __Shape1D, U>;
 
 __generic<T : ITexelElement, U : IUniformity>
 public extension Image1D<T, U> {
-    public func load(u32 loc, u32 mip = 0) -> T {
-        this.get().Load(glm::i32vec2(loc, mip));
+    public func load(u32 texel, u32 mip = 0) -> T {
+        this.get().Load(i32x2(texel, mip));
     }
 };
 
 // Image2D ──────────────────────────────────────────────────────────
-__generic<T : ITexelElement, U : IUniformity = IndexUniform>
+__generic<T : ITexelElement, U : IUniformity = Uniform>
 public typealias Image2D = Image<T, __Shape2D, U>;
 
-__generic<T : ITexelElement, U : IUniformity>
-public extension Image2D<T, U> {
-    public func load(glm::u32vec2 loc, u32 mip = 0) -> T {
-        this.get().Load(glm::i32vec3(loc, mip));
+public extension<T : ITexelElement, U : IUniformity> Image2D<T, U> {
+    public func load(u32x2 texel, u32 mip = 0) -> T {
+        this.get().Load(i32x3(texel, mip));
     }
 };
 
 // Image3D ──────────────────────────────────────────────────────────
-__generic<T : ITexelElement, U : IUniformity = IndexUniform>
+__generic<T : ITexelElement, U : IUniformity = Uniform>
 public typealias Image3D = Image<T, __Shape3D, U>;
 
-__generic<T : ITexelElement, U : IUniformity>
-public extension Image3D<T, U> {
-    public func load(glm::u32vec3 loc, u32 mip = 0) -> T {
-        this.get().Load(glm::i32vec4(loc, mip));
+public extension<T : ITexelElement, U : IUniformity> Image3D<T, U> {
+    public func load(u32x3 texel, u32 mip = 0) -> T {
+        this.get().Load(i32x4(texel, mip));
     }
 };
 
 // StorageImage ────────────────────────────────────────────────────────────
-public struct StorageImage<T : ITexelElement, S : __ITextureShape, C : ICoherency, U : IUniformity = IndexUniform> {
+public struct StorageImage<T : ITexelElement, S : __ITextureShape, C : ICoherency, U : IUniformity = Uniform> {
     public typealias parent_type = _Texture<T, S, 0, 0, 0, 1, 0, 0, 0>;
-    public typealias this_type = Image<T, S, U>;
+    public typealias this_type = StorageImage<T, S, C, U>;
 
-    u32 index;
+    u32 index = ~0u;
 
-    [mutating]
-    public __init(u32 index) {
+    [[mutating]]
+    __init(u32 index) {
         this.index = index;
+    }
+
+    public static func from_index(u32 index) -> this_type {
+        return { index };
     }
 
     public func get_index() -> u32 {
@@ -114,46 +124,73 @@ public struct StorageImage<T : ITexelElement, S : __ITextureShape, C : ICoherenc
     func get() -> parent_type {
         return textures[U.wrap_index(this.index)].as<parent_type>();
     }
-};
 
-// Incoherent StorageImage
-__generic<T : ITexelElement, S : __ITextureShape, C : ICoherency = Incoherent, U : IUniformity>
-public extension StorageImage<T, S, C, U> {
     public func load(
-        vector<u32, S.dimensions> loc,
+        vector<u32, S.dimensions> texel,
         constexpr std::MemoryScope scope = std::MemoryScope::Queue
     ) -> T {
-        const let self = this.get();
-        const u32 operand = ImageOperand::MakeTexelVisible | ImageOperand::NonPrivateTexel;
-        return spirv_asm {
-            OpCapability VulkanMemoryModel;
-            result:$$T = OpImageRead $self $loc $operand $scope;
-        };
+        if (!C.is_coherent()) {
+            const let self = this.get();
+            const u32 operand = ImageOperand::MakeTexelVisible | ImageOperand::NonPrivateTexel;
+            return spirv_asm {
+                OpCapability VulkanMemoryModel;
+                result:$$T = OpImageRead $self $texel $operand $scope;
+            };
+        } else {
+            return this.get()[texel];
+        }
     }
 
     public func store(
-        vector<u32, S.dimensions> loc,
+        vector<u32, S.dimensions> texel,
         T value,
         constexpr std::MemoryScope scope = std::MemoryScope::Queue
     ) -> void {
-        const let self = this.get();
-        const u32 operand = ImageOperand::MakeTexelAvailable | ImageOperand::NonPrivateTexel;
-        spirv_asm {
-            OpCapability VulkanMemoryModel;
-            OpImageWrite $self $loc $value $operand $scope;
-        };
+        if (!C.is_coherent()) {
+            const let self = this.get();
+            const u32 operand = ImageOperand::MakeTexelAvailable | ImageOperand::NonPrivateTexel;
+            spirv_asm {
+                OpCapability VulkanMemoryModel;
+                OpImageWrite $self $texel $value $operand $scope;
+            };
+        } else {
+            this.get().Store(texel, value);
+        }
+    }
+
+    public func is_valid() -> bool {
+        return this.index != ~0u;
     }
 };
 
-// Coherent StorageImage
-__generic<T : ITexelElement, S : __ITextureShape, C : ICoherency = Coherent, U : IUniformity>
-public extension StorageImage<T, S, C, U> {
-    public func load(vector<u32, S.dimensions> loc) -> T {
-        return this.get().Load(loc);
+public extension<T : ITexelElement & IInteger, S : __ITextureShape, C : ICoherency, U : IUniformity> StorageImage<T, S, C, U> {
+    public func atomic_add(
+        vector<u32, S.dimensions> texel,
+        T value,
+        constexpr std::MemoryOrder memory_order,
+        constexpr std::MemoryLocation location = std::MemoryLocation::None,
+        constexpr std::MemoryScope scope = std::MemoryScope::Queue
+    ) -> T {
+        return std::atomic_add(this.get()[texel], value, memory_order, location, scope);
     }
 
-    public func store(vector<u32, S.dimensions> loc, T value) -> void {
-        this.get().Store(loc, value);
+    public func atomic_increment(
+        vector<u32, S.dimensions> texel,
+        constexpr std::MemoryOrder memory_order,
+        constexpr std::MemoryLocation location = std::MemoryLocation::None,
+        constexpr std::MemoryScope scope = std::MemoryScope::Queue
+    ) -> T {
+        return std::atomic_increment(this.get()[texel], memory_order, location, scope);
+    }
+
+    public func atomic_max(
+        vector<u32, S.dimensions> texel,
+        T value,
+        constexpr std::MemoryOrder memory_order,
+        constexpr std::MemoryLocation location = std::MemoryLocation::None,
+        constexpr std::MemoryScope scope = std::MemoryScope::Queue
+    ) -> T {
+        return std::atomic_max(this.get()[texel], value, memory_order, location, scope);
     }
 };
 

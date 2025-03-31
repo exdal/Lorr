@@ -1,5 +1,5 @@
-import lorr;
-import atmos.atmos;
+import "../lorr";
+import "../atmos/atmos";
 
 [[vk::binding(0, 0)]] ConstantBuffer<Scene> scene;
 

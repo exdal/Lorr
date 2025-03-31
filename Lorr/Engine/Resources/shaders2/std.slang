@@ -9,5 +9,6 @@ __include std.stdint;
 
 // std namespace
 __include std.atomic;
+__include std.color;
 __include std.encoding;
 __include std.math;

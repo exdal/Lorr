@@ -181,7 +181,7 @@ auto SceneRenderer::setup_persistent_resources(this SceneRenderer &self) -> void
         .module_name = "tonemap",
         .root_path = shaders_root,
         .shader_path = shaders_root / "tonemap.slang",
-        .entry_points = { "cs_main" },
+        .entry_points = { "vs_main", "fs_main" },
     }).value();
     // clang-format on
 
@@ -1029,6 +1029,35 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
             );
     }
 
+    auto result_attachment = vuk::declare_ia(
+        "result",
+        { .usage = vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eColorAttachment,
+          .format = vuk::Format::eR8G8B8A8Srgb,
+          .sample_count = vuk::Samples::e1,
+          .layer_count = 1 }
+    );
+    result_attachment.same_shape_as(final_attachment);
+
+    //  ── TONEMAP ─────────────────────────────────────────────────────────
+    auto tonemap_pass = vuk::make_pass(
+        "tonemap",
+        [&pipeline = *self.device->pipeline(self.tonemap_pipeline.id()
+         )](vuk::CommandBuffer &cmd_list, VUK_IA(vuk::Access::eColorWrite) dst, VUK_IA(vuk::Access::eFragmentSampled) src) {
+            cmd_list //
+                .bind_graphics_pipeline(pipeline)
+                .set_rasterization({})
+                .set_color_blend(dst, vuk::BlendPreset::eOff)
+                .set_viewport(0, vuk::Rect2D::framebuffer())
+                .set_scissor(0, vuk::Rect2D::framebuffer())
+                .bind_image(0, 0, src)
+                .bind_sampler(0, 1, {})
+                .draw(3, 1, 0, 0);
+            return dst;
+        }
+    );
+
+    result_attachment = tonemap_pass(std::move(result_attachment), std::move(final_attachment));
+
     //  ── EDITOR GRID ─────────────────────────────────────────────────────
     auto editor_grid_pass = vuk::make_pass(
         "editor grid",
@@ -1051,34 +1080,8 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
         }
     );
 
-    std::tie(final_attachment, depth_attachment, scene_buffer) =
-        editor_grid_pass(std::move(final_attachment), std::move(depth_attachment), std::move(scene_buffer));
-
-    auto result_attachment = vuk::declare_ia(
-        "result",
-        { .usage = vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eColorAttachment,
-          .format = vuk::Format::eR8G8B8A8Unorm,
-          .sample_count = vuk::Samples::e1,
-          .layer_count = 1 }
-    );
-    result_attachment.same_shape_as(final_attachment);
-
-    //  ── TONEMAP ─────────────────────────────────────────────────────────
-    auto tonemap_pass = vuk::make_pass(
-        "tonemap",
-        [&pipeline = *self.device->pipeline(self.tonemap_pipeline.id()
-         )](vuk::CommandBuffer &cmd_list, VUK_IA(vuk::Access::eComputeWrite) dst, VUK_IA(vuk::Access::eComputeRead) src) {
-            cmd_list //
-                .bind_compute_pipeline(pipeline)
-                .bind_image(0, 0, src)
-                .bind_image(0, 1, dst)
-                .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, src->extent)
-                .dispatch_invocations_per_pixel(src);
-            return std::make_tuple(dst, src);
-        }
-    );
-
-    std::tie(result_attachment, final_attachment) = tonemap_pass(std::move(result_attachment), std::move(final_attachment));
+    std::tie(result_attachment, depth_attachment, scene_buffer) =
+        editor_grid_pass(std::move(result_attachment), std::move(depth_attachment), std::move(scene_buffer));
 
     return result_attachment;
 }

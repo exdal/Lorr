@@ -33,6 +33,7 @@ struct PushConstants {
     Model *models;
     Transform *transforms;
     Material *materials;
+
     StorageImage2D<u32> visbuffer;
 };
 

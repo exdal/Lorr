@@ -6,13 +6,14 @@ import sky;
 import scene;
 
 struct PushConstants {
+    Atmosphere *atmosphere;
+    Sun *sun;
+    Camera *camera;
+
     Sampler sampler;
     Image2D<f32x4> sky_transmittance_lut;
     Image2D<f32x4> sky_multiscattering_lut;
     StorageImage2D<f32x4> sky_view_lut;
-    Atmosphere *atmosphere;
-    Sun *sun;
-    Camera *camera;
 };
 [[vk::push_constant]] PushConstants C;
 

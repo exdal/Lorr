@@ -16,7 +16,7 @@ public enum CullFlags : u32 {
 
 public struct Sun {
     public f32x3 direction;
-    public f32 intensity;
+    public f32   intensity;
 };
 
 public struct Atmosphere {

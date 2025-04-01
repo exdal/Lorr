@@ -83,9 +83,9 @@ func test_triangle(Model *model, Meshlet *meshlet, u32 local_id) -> bool {
     const u32x3 indices = meshlet->indices(model, tri);
     const f32x3x3 positions = meshlet->positions(model, tri);
 
-    const float4 clip_pos_0 = mul(model_view_proj_shared, float4(positions[0], 1.0));
-    const float4 clip_pos_1 = mul(model_view_proj_shared, float4(positions[1], 1.0));
-    const float4 clip_pos_2 = mul(model_view_proj_shared, float4(positions[2], 1.0));
+    const f32x4 clip_pos_0 = mul(model_view_proj_shared, f32x4(positions[0], 1.0));
+    const f32x4 clip_pos_1 = mul(model_view_proj_shared, f32x4(positions[1], 1.0));
+    const f32x4 clip_pos_2 = mul(model_view_proj_shared, f32x4(positions[2], 1.0));
 
     // Cull all triangles behind camera
     if (clip_pos_0.z < 0.0 && clip_pos_1.z < 0.0 && clip_pos_2.z < 0.0) {

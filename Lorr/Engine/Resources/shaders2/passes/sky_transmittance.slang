@@ -6,8 +6,9 @@ import sky;
 import scene;
 
 struct PushConstants {
-    StorageImage2D<f32x4> sky_transmittance_lut;
     Atmosphere *atmosphere;
+
+    StorageImage2D<f32x4> sky_transmittance_lut;
 };
 
 [[vk::push_constant]] PushConstants C;

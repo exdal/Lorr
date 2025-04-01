@@ -24,22 +24,22 @@ func test_aabb_vs_plane(f32x3 center, f32x3 extent, f32x4 plane) -> bool {
 }
 
 func test_frustum(in mat4 world_transform, in f32x3 aabb_center, in f32x3 aabb_extent) -> bool {
-    const float3 world_aabb_center = mul(world_transform, float4(aabb_center, 1.0)).xyz;
-    const float3 right = world_transform[0].xyz * aabb_extent.x;
-    const float3 up = world_transform[1].xyz * aabb_extent.y;
-    const float3 forward = -world_transform[2].xyz * aabb_extent.z;
-    const float3 world_extent = {
-        abs(dot(float3(1.0, 0.0, 0.0), right)) +
-        abs(dot(float3(1.0, 0.0, 0.0), up)) +
-        abs(dot(float3(1.0, 0.0, 0.0), forward)),
+    const f32x3 world_aabb_center = mul(world_transform, f32x4(aabb_center, 1.0)).xyz;
+    const f32x3 right = world_transform[0].xyz * aabb_extent.x;
+    const f32x3 up = world_transform[1].xyz * aabb_extent.y;
+    const f32x3 forward = -world_transform[2].xyz * aabb_extent.z;
+    const f32x3 world_extent = {
+        abs(dot(f32x3(1.0, 0.0, 0.0), right)) +
+        abs(dot(f32x3(1.0, 0.0, 0.0), up)) +
+        abs(dot(f32x3(1.0, 0.0, 0.0), forward)),
 
-        abs(dot(float3(0.0, 1.0, 0.0), right)) +
-        abs(dot(float3(0.0, 1.0, 0.0), up)) +
-        abs(dot(float3(0.0, 1.0, 0.0), forward)),
+        abs(dot(f32x3(0.0, 1.0, 0.0), right)) +
+        abs(dot(f32x3(0.0, 1.0, 0.0), up)) +
+        abs(dot(f32x3(0.0, 1.0, 0.0), forward)),
 
-        abs(dot(float3(0.0, 0.0, 1.0), right)) +
-        abs(dot(float3(0.0, 0.0, 1.0), up)) +
-        abs(dot(float3(0.0, 0.0, 1.0), forward))
+        abs(dot(f32x3(0.0, 0.0, 1.0), right)) +
+        abs(dot(f32x3(0.0, 0.0, 1.0), up)) +
+        abs(dot(f32x3(0.0, 0.0, 1.0), forward))
     };
 
     for (uint i = 0; i < 6; i++) {

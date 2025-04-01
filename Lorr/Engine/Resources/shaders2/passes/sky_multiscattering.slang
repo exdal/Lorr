@@ -8,10 +8,11 @@ import scene;
 import embedded.hemisphere;
 
 struct PushConstants {
+    Atmosphere *atmosphere;
+
     Sampler sampler;
     Image2D<f32x4> sky_transmittance_lut;
     StorageImage2D<f32x4> sky_multiscattering_lut;
-    Atmosphere *atmosphere;
 };
 [[vk::push_constant]] PushConstants C;
 

@@ -77,7 +77,7 @@ public typealias Image1D = Image<T, __Shape1D, U>;
 __generic<T : ITexelElement, U : IUniformity>
 public extension Image1D<T, U> {
     public func load(u32 texel, u32 mip = 0) -> T {
-        this.get().Load(i32x2(texel, mip));
+        return this.get().Load(i32x2(texel, mip));
     }
 };
 
@@ -87,7 +87,7 @@ public typealias Image2D = Image<T, __Shape2D, U>;
 
 public extension<T : ITexelElement, U : IUniformity> Image2D<T, U> {
     public func load(u32x2 texel, u32 mip = 0) -> T {
-        this.get().Load(i32x3(texel, mip));
+        return this.get().Load(i32x3(texel, mip));
     }
 };
 
@@ -97,7 +97,7 @@ public typealias Image3D = Image<T, __Shape3D, U>;
 
 public extension<T : ITexelElement, U : IUniformity> Image3D<T, U> {
     public func load(u32x3 texel, u32 mip = 0) -> T {
-        this.get().Load(i32x4(texel, mip));
+        return this.get().Load(i32x4(texel, mip));
     }
 };
 

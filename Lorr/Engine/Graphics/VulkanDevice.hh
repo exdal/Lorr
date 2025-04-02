@@ -16,6 +16,21 @@
 #include <vuk/runtime/vk/VkRuntime.hpp>
 #include <vuk/vsl/Core.hpp>
 
+#ifdef VUK_IA
+    #undef VUK_IA
+    #define VUK_IA(access) [[maybe_unused]] vuk::Arg<vuk::ImageAttachment, access, vuk::tag_type<__COUNTER__>>
+#endif
+
+#ifdef VUK_BA
+    #undef VUK_BA
+    #define VUK_BA(access) [[maybe_unused]] vuk::Arg<vuk::Buffer, access, vuk::tag_type<__COUNTER__>>
+#endif
+
+#ifdef VUK_ARG
+    #undef VUK_ARG
+    #define VUK_ARG(type, access) [[maybe_unused]] vuk::Arg<type, access, vuk::tag_type<__COUNTER__>>
+#endif
+
 namespace lr {
 struct BindlessDescriptorInfo {
     u32 binding = 0;
@@ -97,6 +112,8 @@ struct DeviceResources {
     SlotMap<vuk::Unique<vuk::ImageView>, ImageViewID> image_views = {};
     SlotMap<vuk::Sampler, SamplerID> samplers = {};
     SlotMap<vuk::PipelineBaseInfo *, PipelineID> pipelines = {};
+
+    vuk::PersistentDescriptorSet bindless_set = {};
 };
 
 struct Device {
@@ -160,6 +177,11 @@ public:
     auto destroy(this Device &, ImageViewID) -> void;
     auto destroy(this Device &, SamplerID) -> void;
     auto destroy(this Device &, PipelineID) -> void;
+
+    auto bindless_set(this Device &) -> vuk::PersistentDescriptorSet &;
+    auto recreate_bindless_set(this Device &) -> void;
+    auto refresh_bindless_set(this Device &, ImageViewID image_view_id, const vuk::ImageUsageFlags &usage) -> void;
+    auto refresh_bindless_set(this Device &, SamplerID sampler_id) -> void;
 
     struct Limits {
         constexpr static u32 FrameCount = 3;

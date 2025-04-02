@@ -69,6 +69,7 @@ struct FragmentOutput {
     f32 depth : SV_Depth;
 };
 
+[[shader("fragment")]]
 FragmentOutput fs_main(VertexOutput input) {
     FragmentOutput output;
     float t = -input.near_pos.y / (input.far_pos.y - input.near_pos.y);

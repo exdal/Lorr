@@ -1,6 +1,7 @@
 #include "Engine/Graphics/Slang/Compiler.hh"
 
 #include "Engine/Util/VirtualDir.hh"
+#include "ls/types.hh"
 
 #include <slang-com-ptr.h>
 #include <slang.h>
@@ -93,9 +94,6 @@ struct SlangVirtualFS : ISlangFileSystem {
 
     SLANG_NO_THROW SlangResult SLANG_MCALL loadFile(char const *path_cstr, ISlangBlob **outBlob) final {
         auto path = fs::path(path_cstr);
-        if (path.has_extension()) {
-            path.replace_extension("slang");
-        }
 
         // /resources/shaders/path/to/xx.slang -> path.to.xx
         auto module_name = fs::relative(path, m_root_dir).replace_extension("").string();
@@ -110,8 +108,6 @@ struct SlangVirtualFS : ISlangFileSystem {
                 LOG_TRACE("New shader module '{}' is loaded.", module_name);
                 return SLANG_OK;
             } else {
-                auto path_str = path.string();
-                LOG_ERROR("Failed to load shader '{}'!", path_str);
                 return SLANG_E_NOT_FOUND;
             }
         } else {
@@ -338,7 +334,7 @@ auto SlangCompiler::new_session(const SlangSessionInfo &info) -> ls::option<Slan
 
     slang::TargetDesc target_desc = {
         .format = SLANG_SPIRV,
-        .profile = impl->global_session->findProfile("spirv_1_4"),
+        .profile = impl->global_session->findProfile("spirv_1_5"),
         .flags = SLANG_TARGET_FLAG_GENERATE_SPIRV_DIRECTLY,
         .floatingPointMode = SLANG_FLOATING_POINT_MODE_FAST,
         .lineDirectiveMode = SLANG_LINE_DIRECTIVE_MODE_STANDARD,
@@ -347,12 +343,15 @@ auto SlangCompiler::new_session(const SlangSessionInfo &info) -> ls::option<Slan
         .compilerOptionEntryCount = static_cast<u32>(ls::count_of(entries)),
     };
 
+    const auto search_path = info.root_directory.string();
+    const auto *search_path_cstr = search_path.c_str();
+    const c8 *search_paths[] = { search_path_cstr };
     slang::SessionDesc session_desc = {
         .targets = &target_desc,
         .targetCount = 1,
         .defaultMatrixLayoutMode = SLANG_MATRIX_LAYOUT_COLUMN_MAJOR,
-        .searchPaths = nullptr,
-        .searchPathCount = 0,
+        .searchPaths = search_paths,
+        .searchPathCount = ls::count_of(search_paths),
         .preprocessorMacros = macros.data(),
         .preprocessorMacroCount = static_cast<u32>(macros.size()),
         .fileSystem = slang_fs.get(),

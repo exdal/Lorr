@@ -96,6 +96,37 @@ auto ImageView::create(
     image_view.subresource_range_ = subresource_range;
     image_view.bound_image_id_ = image.id();
     image_view.id_ = device.resources.image_views.create_slot(std::move(image_view_handle));
+    device.refresh_bindless_set(image_view.id(), image_usage);
+
+    return image_view;
+}
+
+auto ImageView::create_frametime(
+    Device &device,
+    ImageViewID old_image_view_id,
+    vuk::ImageView &raw_handle,
+    const vuk::ImageUsageFlags &image_usage,
+    vuk::ImageViewType type,
+    const vuk::ImageSubresourceRange &subresource_range
+) -> ImageView {
+    ZoneScoped;
+
+    // This is hack
+    vuk::Unique<vuk::ImageView> image_view_handle(*device.allocator, raw_handle);
+    auto image_view = ImageView{};
+    if (old_image_view_id == ImageViewID::Invalid) {
+        image_view.format_ = vuk::Format::eUndefined;
+        image_view.extent_ = vuk::Extent3D{ .width = 0, .height = 0, .depth = 0 };
+        image_view.type_ = type;
+        image_view.subresource_range_ = subresource_range;
+        image_view.bound_image_id_ = ImageID::Invalid;
+        image_view.id_ = device.resources.image_views.create_slot(std::move(image_view_handle));
+    } else {
+        auto *old_image_view = device.resources.image_views.slot(old_image_view_id);
+        old_image_view->swap(image_view_handle);
+    }
+
+    device.refresh_bindless_set(image_view.id(), image_usage);
 
     return image_view;
 }
@@ -174,6 +205,10 @@ auto ImageView::id() const -> ImageViewID {
     return id_;
 }
 
+auto ImageView::index() const -> u32 {
+    return SlotMap_decode_id(id_).index;
+}
+
 auto Sampler::create(
     Device &device,
     vuk::Filter min_filter,
@@ -212,12 +247,17 @@ auto Sampler::create(
     sampler.id_ = device.resources.samplers.create_slot();
     auto *sampler_handle = device.resources.samplers.slot(sampler.id_);
     *sampler_handle = device.runtime->acquire_sampler(create_info, device.frame_count());
+    device.refresh_bindless_set(sampler.id());
 
     return sampler;
 }
 
 auto Sampler::id() const -> SamplerID {
     return id_;
+}
+
+auto Sampler::index() const -> u32 {
+    return SlotMap_decode_id(id_).index;
 }
 
 } // namespace lr

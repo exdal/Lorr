@@ -23,21 +23,23 @@ struct SceneRenderInfo {
     vuk::Format format = vuk::Format::eR8G8B8A8Srgb;
     vuk::Extent3D extent = {};
 
-    GPU::Scene scene_info = {};
+    ls::option<GPU::Sun> sun = ls::nullopt;
+    ls::option<GPU::Atmosphere> atmosphere = ls::nullopt;
+    ls::option<GPU::Camera> camera = ls::nullopt;
+    GPU::CullFlags cull_flags = {};
+
     ls::span<GPU::TransformID> dirty_transform_ids = {};
     ls::span<GPU::Transforms> transforms = {};
-
-    // Pass flags
-    bool render_atmos : 1 = true;
-    bool render_clouds : 1 = true;
 };
 
 struct SceneRenderer {
     Device *device = nullptr;
 
-    vuk::PersistentDescriptorSet bindless_set = {};
-    Buffer transforms_buffer = {};
+    Sampler linear_repeat_sampler = {};
+    Sampler linear_clamp_sampler = {};
+    Sampler nearest_repeat_sampler = {};
 
+    Buffer transforms_buffer = {};
     u32 meshlet_instance_count = 0;
     Buffer materials_buffer = {};
     Buffer models_buffer = {};
@@ -56,14 +58,6 @@ struct SceneRenderer {
     Pipeline sky_aerial_perspective_pipeline = {};
     vuk::Extent3D sky_aerial_perspective_lut_extent = { .width = 32, .height = 32, .depth = 32 };
     Pipeline sky_final_pipeline = {};
-
-    Pipeline cloud_noise_pipeline = {};
-    Image cloud_shape_noise_lut = {};
-    ImageView cloud_shape_noise_lut_view = {};
-    Image cloud_detail_noise_lut = {};
-    ImageView cloud_detail_noise_lut_view = {};
-    Pipeline cloud_apply_pipeline = {};
-    vuk::Extent3D cloud_noise_lut_extent = { .width = 128, .height = 128, .depth = 128 };
 
     Pipeline vis_cull_meshlets_pipeline = {};
     Pipeline vis_cull_triangles_pipeline = {};

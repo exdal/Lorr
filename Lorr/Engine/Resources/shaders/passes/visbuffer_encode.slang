@@ -44,6 +44,8 @@ func vs_main(u32 vertex_index : SV_VertexID) -> VertexOutput {
     output.tex_coord = tex_coord;
     output.vis_data = vis.encode();
     output.material_index = meshlet_instance->material_index;
+
+    return output;
 }
 
 [[shader("fragment")]]

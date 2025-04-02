@@ -109,6 +109,7 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
     vk12_features.bufferDeviceAddress = true;
     vk12_features.hostQueryReset = true;
     // Shader features
+    vk12_features.vulkanMemoryModel = true;
     vk12_features.storageBuffer8BitAccess = true;
     vk12_features.scalarBlockLayout = true;
     vk12_features.shaderInt8 = true;
@@ -566,7 +567,7 @@ auto Device::refresh_bindless_set(this Device &self, ImageViewID image_view_id, 
     }
 
     if (usage & vuk::ImageUsageFlagBits::eStorage) {
-        self.bindless_set().update_sampled_image(BindlessDescriptorLayout::StorageImages, index, image_view, vuk::ImageLayout::eGeneral);
+        self.bindless_set().update_storage_image(BindlessDescriptorLayout::StorageImages, index, image_view);
     }
 
     self.commit_descriptor_set(self.bindless_set());

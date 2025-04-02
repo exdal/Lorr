@@ -131,10 +131,9 @@ public struct StorageImage<T : ITexelElement, S : __ITextureShape, C : ICoherenc
     ) -> T {
         if (!C.is_coherent()) {
             const let self = this.get();
-            const u32 operand = ImageOperand::MakeTexelVisible | ImageOperand::NonPrivateTexel;
             return spirv_asm {
                 OpCapability VulkanMemoryModel;
-                result:$$T = OpImageRead $self $texel $operand $scope;
+                result:$$T = OpImageRead $self $texel NonPrivateTexel | MakeTexelVisible $scope;
             };
         } else {
             return this.get()[texel];
@@ -148,10 +147,9 @@ public struct StorageImage<T : ITexelElement, S : __ITextureShape, C : ICoherenc
     ) -> void {
         if (!C.is_coherent()) {
             const let self = this.get();
-            const u32 operand = ImageOperand::MakeTexelAvailable | ImageOperand::NonPrivateTexel;
             spirv_asm {
                 OpCapability VulkanMemoryModel;
-                OpImageWrite $self $texel $value $operand $scope;
+                OpImageWrite $self $texel $value NonPrivateTexel | MakeTexelAvailable $scope;
             };
         } else {
             this.get().Store(texel, value);

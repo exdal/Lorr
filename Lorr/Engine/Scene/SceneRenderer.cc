@@ -161,6 +161,11 @@ auto SceneRenderer::setup_persistent_resources(this SceneRenderer &self) -> void
     // clang-format on
 
     //  ── SKY LUTS ────────────────────────────────────────────────────────
+    auto temp_atmos_info = GPU::Atmosphere{};
+    temp_atmos_info.transmittance_lut_size = self.sky_transmittance_lut_view.extent();
+    temp_atmos_info.multiscattering_lut_size = self.sky_multiscatter_lut_view.extent();
+    auto temp_atmos = transfer_man.scratch_buffer(temp_atmos_info);
+
     auto transmittance_lut_pass = vuk::make_pass(
         "transmittance lut",
         [&pipeline = *self.device->pipeline(self.sky_transmittance_pipeline.id()),
@@ -176,6 +181,16 @@ auto SceneRenderer::setup_persistent_resources(this SceneRenderer &self) -> void
             return std::make_tuple(dst, atmos);
         }
     );
+
+    auto transmittance_lut_attachment =
+        self.sky_transmittance_lut_view.discard(*self.device, "sky transmittance lut", vuk::ImageUsageFlagBits::eStorage);
+
+    std::tie(transmittance_lut_attachment, temp_atmos) = transmittance_lut_pass(std::move(transmittance_lut_attachment), std::move(temp_atmos));
+
+    transmittance_lut_attachment = transmittance_lut_attachment.as_released(vuk::Access::eComputeSampled, vuk::DomainFlagBits::eGraphicsQueue);
+    transfer_man.wait_on(std::move(transmittance_lut_attachment));
+    self.device->set_name(self.sky_transmittance_lut, "Sky Transmittance LUT");
+    self.device->set_name(self.sky_transmittance_lut_view, "Sky Transmittance LUT View");
 
     auto multiscatter_lut_pass = vuk::make_pass(
         "multiscatter lut",
@@ -201,27 +216,14 @@ auto SceneRenderer::setup_persistent_resources(this SceneRenderer &self) -> void
         }
     );
 
-    auto transmittance_lut_attachment =
-        self.sky_transmittance_lut_view.discard(*self.device, "sky transmittance lut", vuk::ImageUsageFlagBits::eStorage);
     auto multiscatter_lut_attachment =
         self.sky_multiscatter_lut_view.discard(*self.device, "sky multiscatter lut", vuk::ImageUsageFlagBits::eStorage);
 
-    auto temp_atmos_info = GPU::Atmosphere{};
-    temp_atmos_info.transmittance_lut_size = self.sky_transmittance_lut_view.extent();
-    temp_atmos_info.multiscattering_lut_size = self.sky_multiscatter_lut_view.extent();
-    auto temp_atmos = transfer_man.scratch_buffer(temp_atmos_info);
-
-    std::tie(transmittance_lut_attachment, temp_atmos) = transmittance_lut_pass(std::move(transmittance_lut_attachment), std::move(temp_atmos));
     std::tie(transmittance_lut_attachment, multiscatter_lut_attachment, temp_atmos) =
         multiscatter_lut_pass(std::move(transmittance_lut_attachment), std::move(multiscatter_lut_attachment), std::move(temp_atmos));
 
-    transmittance_lut_attachment = transmittance_lut_attachment.as_released(vuk::Access::eComputeSampled, vuk::DomainFlagBits::eGraphicsQueue);
     multiscatter_lut_attachment = multiscatter_lut_attachment.as_released(vuk::Access::eComputeSampled, vuk::DomainFlagBits::eGraphicsQueue);
-    transfer_man.wait_on(std::move(transmittance_lut_attachment));
     transfer_man.wait_on(std::move(multiscatter_lut_attachment));
-
-    self.device->set_name(self.sky_transmittance_lut, "Sky Transmittance LUT");
-    self.device->set_name(self.sky_transmittance_lut_view, "Sky Transmittance LUT View");
     self.device->set_name(self.sky_multiscatter_lut, "Sky Multiscattering LUT");
     self.device->set_name(self.sky_multiscatter_lut_view, "Sky Multiscattering LUT View");
 }

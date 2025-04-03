@@ -29,8 +29,6 @@ public enum MemoryScope : u32 {
     Workgroup = 2,
     Subgroup = 3,
     Invocation = 4,
-    Queue = 5,
-    ShaderCall = 6,
 };
 
 func spirv_type_checks<T>() -> void {
@@ -62,7 +60,7 @@ public func atomic_load<T>(
     __ref T dst,
     constexpr MemoryOrder memory_order,
     constexpr MemoryLocation location = MemoryLocation::None,
-    constexpr MemoryScope scope = MemoryScope::Queue
+    constexpr MemoryScope scope = MemoryScope::Workgroup
 ) -> T {
     spirv_type_checks<T>();
     const u32 semantics = memory_order | location;
@@ -77,7 +75,7 @@ public func atomic_store<T>(
     T desired,
     constexpr MemoryOrder memory_order,
     constexpr MemoryLocation location = MemoryLocation::None,
-    constexpr MemoryScope scope = MemoryScope::Queue
+    constexpr MemoryScope scope = MemoryScope::Workgroup
 ) -> void {
     spirv_type_checks<T>();
     const u32 semantics = memory_order | location;
@@ -91,7 +89,7 @@ public func atomic_increment<T : IInteger>(
     __ref T dst,
     constexpr MemoryOrder memory_order,
     constexpr MemoryLocation location = MemoryLocation::None,
-    constexpr MemoryScope scope = MemoryScope::Queue
+    constexpr MemoryScope scope = MemoryScope::Workgroup
 ) -> T {
     spirv_type_checks<T>();
     const u32 semantics = memory_order | location;
@@ -105,7 +103,7 @@ public func atomic_decrement<T : IInteger>(
     __ref T dst,
     constexpr MemoryOrder memory_order,
     constexpr MemoryLocation location = MemoryLocation::None,
-    constexpr MemoryScope scope = MemoryScope::Queue
+    constexpr MemoryScope scope = MemoryScope::Workgroup
 ) -> T {
     spirv_type_checks<T>();
     const u32 semantics = memory_order | location;
@@ -120,10 +118,10 @@ public func atomic_add<T : IInteger>(
     T value,
     constexpr MemoryOrder memory_order,
     constexpr MemoryLocation location = MemoryLocation::None,
-    constexpr MemoryScope scope = MemoryScope::Queue
+    constexpr MemoryScope scope = MemoryScope::Workgroup
 ) -> T {
     spirv_type_checks<T>();
-    const u32 semantics = memory_order | location;
+    constexpr u32 semantics = memory_order | location;
     return spirv_asm {
         result:$$T = OpAtomicIAdd &dst $scope $semantics $value;
     };
@@ -135,10 +133,10 @@ public func atomic_sub<T : IInteger>(
     T value,
     constexpr MemoryOrder memory_order,
     constexpr MemoryLocation location = MemoryLocation::None,
-    constexpr MemoryScope scope = MemoryScope::Queue
+    constexpr MemoryScope scope = MemoryScope::Workgroup
 ) -> T {
     spirv_type_checks<T>();
-    const u32 semantics = memory_order | location;
+    constexpr u32 semantics = memory_order | location;
     return spirv_asm {
         result:$$T = OpAtomicISub &dst $scope $semantics $value;
     };
@@ -150,7 +148,7 @@ public func atomic_max<T : IInteger>(
     T value,
     constexpr MemoryOrder memory_order,
     constexpr MemoryLocation location = MemoryLocation::None,
-    constexpr MemoryScope scope = MemoryScope::Queue
+    constexpr MemoryScope scope = MemoryScope::Workgroup
 ) -> T {
     spirv_type_checks<T>();
     const u32 semantics = memory_order | location;
@@ -175,7 +173,7 @@ public func atomic_min<T : IInteger>(
     T value,
     constexpr MemoryOrder memory_order,
     constexpr MemoryLocation location = MemoryLocation::None,
-    constexpr MemoryScope scope = MemoryScope::Queue
+    constexpr MemoryScope scope = MemoryScope::Workgroup
 ) -> T {
     spirv_type_checks<T>();
     const u32 semantics = memory_order | location;
@@ -200,7 +198,7 @@ public func atomic_and<T : IInteger>(
     T value,
     constexpr MemoryOrder memory_order,
     constexpr MemoryLocation location = MemoryLocation::None,
-    constexpr MemoryScope scope = MemoryScope::Queue
+    constexpr MemoryScope scope = MemoryScope::Workgroup
 ) -> T {
     spirv_type_checks<T>();
     const u32 semantics = memory_order | location;
@@ -215,7 +213,7 @@ public func atomic_or<T : IInteger>(
     T value,
     constexpr MemoryOrder memory_order,
     constexpr MemoryLocation location = MemoryLocation::None,
-    constexpr MemoryScope scope = MemoryScope::Queue
+    constexpr MemoryScope scope = MemoryScope::Workgroup
 ) -> T {
     spirv_type_checks<T>();
     const u32 semantics = memory_order | location;
@@ -230,7 +228,7 @@ public func atomic_xor<T : IInteger>(
     T value,
     constexpr MemoryOrder memory_order,
     constexpr MemoryLocation location = MemoryLocation::None,
-    constexpr MemoryScope scope = MemoryScope::Queue
+    constexpr MemoryScope scope = MemoryScope::Workgroup
 ) -> T {
     spirv_type_checks<T>();
     const u32 semantics = memory_order | location;
@@ -246,7 +244,7 @@ public func atomic_add<T : IFloat>(
     T value,
     constexpr MemoryOrder memory_order,
     constexpr MemoryLocation location = MemoryLocation::None,
-    constexpr MemoryScope scope = MemoryScope::Queue
+    constexpr MemoryScope scope = MemoryScope::Workgroup
 ) -> T {
     spirv_type_checks<T>();
     const u32 semantics = memory_order | location;
@@ -261,7 +259,7 @@ public func atomic_max<T : IFloat>(
     T value,
     constexpr MemoryOrder memory_order,
     constexpr MemoryLocation location = MemoryLocation::None,
-    constexpr MemoryScope scope = MemoryScope::Queue
+    constexpr MemoryScope scope = MemoryScope::Workgroup
 ) -> T {
     spirv_type_checks<T>();
     const u32 semantics = memory_order | location;
@@ -276,7 +274,7 @@ public func atomic_min<T : IFloat>(
     T value,
     constexpr MemoryOrder memory_order,
     constexpr MemoryLocation location = MemoryLocation::None,
-    constexpr MemoryScope scope = MemoryScope::Queue
+    constexpr MemoryScope scope = MemoryScope::Workgroup
 ) -> T {
     spirv_type_checks<T>();
     const u32 semantics = memory_order | location;
@@ -301,7 +299,7 @@ public struct atomic<T> {
     public func load(
         constexpr MemoryOrder memory_order,
         constexpr MemoryLocation location = MemoryLocation::None,
-        constexpr MemoryScope scope = MemoryScope::Queue
+        constexpr MemoryScope scope = MemoryScope::Workgroup
     ) -> T {
         return atomic_load(this.value, memory_order, location, scope);
     }
@@ -312,7 +310,7 @@ public struct atomic<T> {
         T desired,
         constexpr MemoryOrder memory_order,
         constexpr MemoryLocation location = MemoryLocation::None,
-        constexpr MemoryScope scope = MemoryScope::Queue
+        constexpr MemoryScope scope = MemoryScope::Workgroup
     ) -> void {
         atomic_store(this.value, desired, memory_order, location, scope);
     }
@@ -326,7 +324,7 @@ public extension<T : IInteger> atomic<T> {
         T arg,
         constexpr MemoryOrder memory_order,
         constexpr MemoryLocation location = MemoryLocation::None,
-        constexpr MemoryScope scope = MemoryScope::Queue
+        constexpr MemoryScope scope = MemoryScope::Workgroup
     ) -> T {
         return atomic_add(this.value, arg, memory_order, location, scope);
     }
@@ -337,7 +335,7 @@ public extension<T : IInteger> atomic<T> {
         T arg,
         constexpr MemoryOrder memory_order,
         constexpr MemoryLocation location = MemoryLocation::None,
-        constexpr MemoryScope scope = MemoryScope::Queue
+        constexpr MemoryScope scope = MemoryScope::Workgroup
     ) -> T {
         return atomic_sub(this.value, arg, memory_order, location, scope);
     }
@@ -348,7 +346,7 @@ public extension<T : IInteger> atomic<T> {
         T arg,
         constexpr MemoryOrder memory_order,
         constexpr MemoryLocation location = MemoryLocation::None,
-        constexpr MemoryScope scope = MemoryScope::Queue
+        constexpr MemoryScope scope = MemoryScope::Workgroup
     ) -> T {
         return atomic_max(this.value, arg, memory_order, location, scope);
     }
@@ -359,7 +357,7 @@ public extension<T : IInteger> atomic<T> {
         T arg,
         constexpr MemoryOrder memory_order,
         constexpr MemoryLocation location = MemoryLocation::None,
-        constexpr MemoryScope scope = MemoryScope::Queue
+        constexpr MemoryScope scope = MemoryScope::Workgroup
     ) -> T {
         return atomic_min(this.value, arg, memory_order, location, scope);
     }
@@ -370,7 +368,7 @@ public extension<T : IInteger> atomic<T> {
         T arg,
         constexpr MemoryOrder memory_order,
         constexpr MemoryLocation location = MemoryLocation::None,
-        constexpr MemoryScope scope = MemoryScope::Queue
+        constexpr MemoryScope scope = MemoryScope::Workgroup
     ) -> T {
         return atomic_and(this.value, arg, memory_order, location, scope);
     }
@@ -381,7 +379,7 @@ public extension<T : IInteger> atomic<T> {
         T arg,
         constexpr MemoryOrder memory_order,
         constexpr MemoryLocation location = MemoryLocation::None,
-        constexpr MemoryScope scope = MemoryScope::Queue
+        constexpr MemoryScope scope = MemoryScope::Workgroup
     ) -> T {
         return atomic_or(this.value, arg, memory_order, location, scope);
     }
@@ -392,7 +390,7 @@ public extension<T : IInteger> atomic<T> {
         T arg,
         constexpr MemoryOrder memory_order,
         constexpr MemoryLocation location = MemoryLocation::None,
-        constexpr MemoryScope scope = MemoryScope::Queue
+        constexpr MemoryScope scope = MemoryScope::Workgroup
     ) -> T {
         return atomic_xor(this.value, arg, memory_order, location, scope);
     }
@@ -406,7 +404,7 @@ public extension<T : IFloat> atomic<T> {
         T arg,
         constexpr MemoryOrder memory_order,
         constexpr MemoryLocation location = MemoryLocation::None,
-        constexpr MemoryScope scope = MemoryScope::Queue
+        constexpr MemoryScope scope = MemoryScope::Workgroup
     ) -> T {
         return atomic_add(this.value, arg, memory_order, location, scope);
     }
@@ -417,7 +415,7 @@ public extension<T : IFloat> atomic<T> {
         T arg,
         constexpr MemoryOrder memory_order,
         constexpr MemoryLocation location = MemoryLocation::None,
-        constexpr MemoryScope scope = MemoryScope::Queue
+        constexpr MemoryScope scope = MemoryScope::Workgroup
     ) -> T {
         return atomic_max(this.value, arg, memory_order, location, scope);
     }
@@ -428,7 +426,7 @@ public extension<T : IFloat> atomic<T> {
         T arg,
         constexpr MemoryOrder memory_order,
         constexpr MemoryLocation location = MemoryLocation::None,
-        constexpr MemoryScope scope = MemoryScope::Queue
+        constexpr MemoryScope scope = MemoryScope::Workgroup
     ) -> T {
         return atomic_min(this.value, arg, memory_order, location, scope);
     }
@@ -450,7 +448,7 @@ public func control_barrier(
     constexpr MemoryScope scope = MemoryScope::Workgroup,
     constexpr MemoryLocation location = MemoryLocation::Workgroup
 ) -> void {
-    const u32 semantics = memory_order | location;
+    constexpr u32 semantics = memory_order | location;
     spirv_asm {
         OpControlBarrier $scope_execution $scope $semantics;
     };
@@ -460,10 +458,10 @@ public func control_barrier(
 [[ForceInline]]
 public func memory_barrier(
     constexpr MemoryOrder memory_order,
-    constexpr MemoryScope scope = MemoryScope::Queue,
+    constexpr MemoryScope scope = MemoryScope::Workgroup,
     constexpr MemoryLocation location = MemoryLocation::None
 ) -> void {
-    const u32 semantics = memory_order | location;
+    constexpr u32 semantics = memory_order | location;
     spirv_asm {
         OpMemoryBarrier $scope $semantics;
     };

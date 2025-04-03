@@ -34,20 +34,3 @@ public struct NonUniform : IUniformity {
     }
 };
 
-public interface ICoherency {
-    static func is_coherent() -> bool;
-};
-
-public struct Coherent : ICoherency {
-    [[ForceInline]]
-    public static func is_coherent() -> bool {
-        return true;
-    }
-};
-
-public struct Incoherent : ICoherency {
-    [[ForceInline]]
-    public static func is_coherent() -> bool {
-        return false;
-    }
-}

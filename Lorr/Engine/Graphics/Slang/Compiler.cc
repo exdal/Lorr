@@ -311,14 +311,11 @@ auto SlangCompiler::new_session(const SlangSessionInfo &info) -> ls::option<Slan
     auto slang_fs = std::make_unique<SlangVirtualFS>(impl->virtual_dir, info.root_directory);
 
     slang::CompilerOptionEntry entries[] = {
-#if LS_DEBUG
-        { .name = slang::CompilerOptionName::Optimization,
-          .value = { .kind = slang::CompilerOptionValueKind::Int, .intValue0 = SLANG_OPTIMIZATION_LEVEL_NONE } },
-        { .name = slang::CompilerOptionName::DebugInformationFormat,
-          .value = { .kind = slang::CompilerOptionValueKind::Int, .intValue0 = SLANG_DEBUG_INFO_FORMAT_C7 } },
-#else
         { .name = slang::CompilerOptionName::Optimization,
           .value = { .kind = slang::CompilerOptionValueKind::Int, .intValue0 = SLANG_OPTIMIZATION_LEVEL_MAXIMAL } },
+#if LS_DEBUG
+        { .name = slang::CompilerOptionName::DebugInformationFormat,
+          .value = { .kind = slang::CompilerOptionValueKind::Int, .intValue0 = SLANG_DEBUG_INFO_FORMAT_C7 } },
 #endif
         { .name = slang::CompilerOptionName::UseUpToDateBinaryModule, .value = { .kind = slang::CompilerOptionValueKind::Int, .intValue0 = 1 } },
         { .name = slang::CompilerOptionName::GLSLForceScalarLayout, .value = { .kind = slang::CompilerOptionValueKind::Int, .intValue0 = 1 } },

@@ -60,7 +60,7 @@ func cs_main(u32x3 thread_id : SV_DispatchThreadID) {
         return;
     }
 
-    AtmosphereIntegrateInfo info;
+    AtmosphereIntegrateInfo info = {};
     info.eye_pos = eye_pos;
     info.eye_dir = eye_dir;
     info.sun_dir = sun_dir;

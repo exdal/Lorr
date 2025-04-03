@@ -187,11 +187,6 @@ auto SceneRenderer::setup_persistent_resources(this SceneRenderer &self) -> void
 
     std::tie(transmittance_lut_attachment, temp_atmos) = transmittance_lut_pass(std::move(transmittance_lut_attachment), std::move(temp_atmos));
 
-    transmittance_lut_attachment = transmittance_lut_attachment.as_released(vuk::Access::eComputeSampled, vuk::DomainFlagBits::eGraphicsQueue);
-    transfer_man.wait_on(std::move(transmittance_lut_attachment));
-    self.device->set_name(self.sky_transmittance_lut, "Sky Transmittance LUT");
-    self.device->set_name(self.sky_transmittance_lut_view, "Sky Transmittance LUT View");
-
     auto multiscatter_lut_pass = vuk::make_pass(
         "multiscatter lut",
         [&pipeline = *self.device->pipeline(self.sky_multiscatter_pipeline.id()),
@@ -205,6 +200,7 @@ auto SceneRenderer::setup_persistent_resources(this SceneRenderer &self) -> void
             VUK_BA(vuk::Access::eComputeRead) atmos) {
             cmd_list //
                 .bind_compute_pipeline(pipeline)
+                .bind_persistent(0, descriptor_set)
                 .push_constants(
                     vuk::ShaderStageFlagBits::eCompute,
                     0,
@@ -222,8 +218,13 @@ auto SceneRenderer::setup_persistent_resources(this SceneRenderer &self) -> void
     std::tie(transmittance_lut_attachment, multiscatter_lut_attachment, temp_atmos) =
         multiscatter_lut_pass(std::move(transmittance_lut_attachment), std::move(multiscatter_lut_attachment), std::move(temp_atmos));
 
+    transmittance_lut_attachment = transmittance_lut_attachment.as_released(vuk::Access::eComputeSampled, vuk::DomainFlagBits::eGraphicsQueue);
     multiscatter_lut_attachment = multiscatter_lut_attachment.as_released(vuk::Access::eComputeSampled, vuk::DomainFlagBits::eGraphicsQueue);
+    transfer_man.wait_on(std::move(transmittance_lut_attachment));
     transfer_man.wait_on(std::move(multiscatter_lut_attachment));
+
+    self.device->set_name(self.sky_transmittance_lut, "Sky Transmittance LUT");
+    self.device->set_name(self.sky_transmittance_lut_view, "Sky Transmittance LUT View");
     self.device->set_name(self.sky_multiscatter_lut, "Sky Multiscattering LUT");
     self.device->set_name(self.sky_multiscatter_lut_view, "Sky Multiscattering LUT View");
 }

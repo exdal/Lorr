@@ -61,7 +61,7 @@ func cs_main(u32x3 thread_id : SV_DispatchThreadID) {
         t_max_max = max(0.0, t_max_max - length_to_atmosphere);
     }
 
-    AtmosphereIntegrateInfo info;
+    AtmosphereIntegrateInfo info = {};
     info.eye_pos = eye_pos;
     info.eye_dir = world_dir;
     info.sun_dir = C.sun->direction;

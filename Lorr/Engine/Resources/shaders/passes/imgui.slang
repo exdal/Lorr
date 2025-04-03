@@ -41,7 +41,7 @@ f32x4 fs_main(VertexOutput input) : SV_TARGET {
     f32x3 color = color_sampled.rgb;
 
     if (c.is_srgb == 0) {
-        color = std::linear_to_srgb(color);
+        color = std::srgb_to_linear(color);
     }
 
     return f32x4(color, color_sampled.a);

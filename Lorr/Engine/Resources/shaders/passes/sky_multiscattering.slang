@@ -26,7 +26,7 @@ func cs_main(u32x3 thread_id : SV_DispatchThreadID) {
     f32x3 sun_dir = f32x3(0.0, sun_cos_theta, std::safe_sqrt(1.0 - sun_cos_theta * sun_cos_theta));
     f32x3 ray_pos = f32x3(0.0, altitude, 0.0);
 
-    AtmosphereIntegrateInfo info;
+    AtmosphereIntegrateInfo info = {};
     info.eye_pos = ray_pos;
     info.sun_dir = sun_dir;
     info.eval_mie_rayleigh_phase = false;

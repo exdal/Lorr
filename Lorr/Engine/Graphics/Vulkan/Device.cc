@@ -519,7 +519,7 @@ auto Device::recreate_bindless_set(this Device &self) -> void {
     self.wait();
     self.get_allocator().deallocate({ &self.bindless_set(), 1 });
 
-    const u32 initial_min = 64;
+    const u32 initial_min = 1024;
     u32 descriptor_sizes[] = {
         ls::max(initial_min, static_cast<u32>(self.resources.image_views.size() * 2)),
         ls::max(initial_min, static_cast<u32>(self.resources.image_views.size() * 2)),
@@ -531,7 +531,7 @@ auto Device::recreate_bindless_set(this Device &self) -> void {
         { .binding = BindlessDescriptorLayout::SampledImages, .type = vuk::DescriptorType::eSampledImage, .descriptor_count = descriptor_sizes[1] },
         { .binding = BindlessDescriptorLayout::StorageImages, .type = vuk::DescriptorType::eStorageImage, .descriptor_count = descriptor_sizes[2] },
     };
-    self.bindless_set() = self.create_persistent_descriptor_set(initial_descriptor_infos, 1).release();
+    self.bindless_set() = self.create_persistent_descriptor_set(initial_descriptor_infos, 0).release();
 }
 
 auto Device::refresh_bindless_set(this Device &self, ImageViewID image_view_id, const vuk::ImageUsageFlags &usage) -> void {
@@ -539,27 +539,6 @@ auto Device::refresh_bindless_set(this Device &self, ImageViewID image_view_id, 
 
     auto index = SlotMap_decode_id(image_view_id).index;
     auto &image_view = *self.image_view(image_view_id);
-    bool recreate = false;
-
-    // Bounds checking
-    if (usage & vuk::ImageUsageFlagBits::eSampled) {
-        auto &binding_info = self.resources.bindless_set.set_layout_create_info.bindings[BindlessDescriptorLayout::SampledImages];
-        if (index + 1 > binding_info.descriptorCount) {
-            recreate = true;
-        }
-    }
-
-    if (usage & vuk::ImageUsageFlagBits::eStorage) {
-        auto &binding_info = self.resources.bindless_set.set_layout_create_info.bindings[BindlessDescriptorLayout::StorageImages];
-        if (index + 1 > binding_info.descriptorCount) {
-            recreate = true;
-        }
-    }
-
-    // Recreate if needed
-    if (recreate) {
-        self.recreate_bindless_set();
-    }
 
     // Actual stuff
     if (usage & vuk::ImageUsageFlagBits::eSampled) {
@@ -578,17 +557,6 @@ auto Device::refresh_bindless_set(this Device &self, SamplerID sampler_id) -> vo
 
     auto index = SlotMap_decode_id(sampler_id).index;
     auto &sampler = *self.sampler(sampler_id);
-    bool recreate = false;
-
-    // Bounds checking
-    auto &binding_info = self.resources.bindless_set.set_layout_create_info.bindings[BindlessDescriptorLayout::Samplers];
-    if (index + 1 > binding_info.descriptorCount) {
-        recreate = true;
-    }
-
-    if (recreate) {
-        self.recreate_bindless_set();
-    }
 
     self.bindless_set().update_sampler(BindlessDescriptorLayout::Samplers, index, sampler);
     self.commit_descriptor_set(self.bindless_set());

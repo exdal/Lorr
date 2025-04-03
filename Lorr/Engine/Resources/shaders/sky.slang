@@ -136,8 +136,8 @@ public struct AtmosphereIntegrateInfo {
     public bool eval_mie_rayleigh_phase = true;
     public bool eval_planet_luminance = false;
 
-    public Image2D<f32x4> transmittance_image;
-    public Image2D<f32x4> multiscattering_image;
+    public Image2D<f32x4> transmittance_image = { ~0u };
+    public Image2D<f32x4> multiscattering_image = { ~0u };
 };
 
 public func integrate_single_scattered_luminance(
@@ -209,9 +209,9 @@ public func integrate_single_scattered_luminance(
         f32x2 transmittance_uv = get_transmittance_lut_uv(atmosphere, f32x2(h, sun_theta));
         f32x3 sun_transmittance = info.transmittance_image.sample_mip(lut_sampler, transmittance_uv, 0.0).rgb;
 
-        f32x2 multiscatter_uv = get_multiscattering_lut_uv(atmosphere, altitude, sun_theta);
         f32x3 MS = 0.0;
         if (info.multiscattering_image.is_valid()) {
+            f32x2 multiscatter_uv = get_multiscattering_lut_uv(atmosphere, altitude, sun_theta);
             MS = info.multiscattering_image.sample_mip(lut_sampler, multiscatter_uv, 0.0).rgb;
         }
 

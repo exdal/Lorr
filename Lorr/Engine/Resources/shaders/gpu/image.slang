@@ -3,9 +3,9 @@ implementing gpu;
 import std;
 
 [[vk::binding(1, 0)]]
-__DynamicResource textures[];
+__DynamicResource<__DynamicResourceKind.General> textures[];
 [[vk::binding(2, 0)]]
-__DynamicResource storage_textures[];
+__DynamicResource<__DynamicResourceKind.General> storage_textures[];
 
 public enum ImageOperand : u32 {
     None = 0x0,
@@ -32,7 +32,7 @@ public struct Image<T : ITexelElement, S : __ITextureShape, U : IUniformity = Un
     u32 index = ~0u;
 
     [[mutating]]
-    __init(u32 index) {
+    public __init(u32 index) {
         this.index = index;
     }
 
@@ -102,14 +102,14 @@ public extension<T : ITexelElement, U : IUniformity> Image3D<T, U> {
 };
 
 // StorageImage ────────────────────────────────────────────────────────────
-public struct StorageImage<T : ITexelElement, S : __ITextureShape, C : ICoherency, U : IUniformity = Uniform> {
+public struct StorageImage<T : ITexelElement, S : __ITextureShape, U : IUniformity = Uniform> {
     public typealias parent_type = _Texture<T, S, 0, 0, 0, 1, 0, 0, 0>;
-    public typealias this_type = StorageImage<T, S, C, U>;
+    public typealias this_type = StorageImage<T, S, U>;
 
     u32 index = ~0u;
 
     [[mutating]]
-    __init(u32 index) {
+    public __init(u32 index) {
         this.index = index;
     }
 
@@ -122,38 +122,15 @@ public struct StorageImage<T : ITexelElement, S : __ITextureShape, C : ICoherenc
     }
 
     func get() -> parent_type {
-        return textures[U.wrap_index(this.index)].as<parent_type>();
+        return storage_textures[U.wrap_index(this.index)].as<parent_type>();
     }
 
-    public func load(
-        vector<u32, S.dimensions> texel,
-        constexpr std::MemoryScope scope = std::MemoryScope::Queue
-    ) -> T {
-        if (!C.is_coherent()) {
-            const let self = this.get();
-            return spirv_asm {
-                OpCapability VulkanMemoryModel;
-                result:$$T = OpImageRead $self $texel NonPrivateTexel | MakeTexelVisible $scope;
-            };
-        } else {
-            return this.get()[texel];
-        }
+    public func load(vector<u32, S.dimensions> texel) -> T {
+        return this.get()[texel];
     }
 
-    public func store(
-        vector<u32, S.dimensions> texel,
-        T value,
-        constexpr std::MemoryScope scope = std::MemoryScope::Queue
-    ) -> void {
-        if (!C.is_coherent()) {
-            const let self = this.get();
-            spirv_asm {
-                OpCapability VulkanMemoryModel;
-                OpImageWrite $self $texel $value NonPrivateTexel | MakeTexelAvailable $scope;
-            };
-        } else {
-            this.get().Store(texel, value);
-        }
+    public func store(vector<u32, S.dimensions> texel, T value) -> void {
+        this.get().Store(texel, value);
     }
 
     public func is_valid() -> bool {
@@ -161,13 +138,13 @@ public struct StorageImage<T : ITexelElement, S : __ITextureShape, C : ICoherenc
     }
 };
 
-public extension<T : ITexelElement & IInteger, S : __ITextureShape, C : ICoherency, U : IUniformity> StorageImage<T, S, C, U> {
+public extension<T : ITexelElement & IInteger, S : __ITextureShape, U : IUniformity> StorageImage<T, S, U> {
     public func atomic_add(
         vector<u32, S.dimensions> texel,
         T value,
         constexpr std::MemoryOrder memory_order,
         constexpr std::MemoryLocation location = std::MemoryLocation::None,
-        constexpr std::MemoryScope scope = std::MemoryScope::Queue
+        constexpr std::MemoryScope scope = std::MemoryScope::Workgroup
     ) -> T {
         return std::atomic_add(this.get()[texel], value, memory_order, location, scope);
     }
@@ -176,7 +153,7 @@ public extension<T : ITexelElement & IInteger, S : __ITextureShape, C : ICoheren
         vector<u32, S.dimensions> texel,
         constexpr std::MemoryOrder memory_order,
         constexpr std::MemoryLocation location = std::MemoryLocation::None,
-        constexpr std::MemoryScope scope = std::MemoryScope::Queue
+        constexpr std::MemoryScope scope = std::MemoryScope::Workgroup
     ) -> T {
         return std::atomic_increment(this.get()[texel], memory_order, location, scope);
     }
@@ -186,7 +163,7 @@ public extension<T : ITexelElement & IInteger, S : __ITextureShape, C : ICoheren
         T value,
         constexpr std::MemoryOrder memory_order,
         constexpr std::MemoryLocation location = std::MemoryLocation::None,
-        constexpr std::MemoryScope scope = std::MemoryScope::Queue
+        constexpr std::MemoryScope scope = std::MemoryScope::Workgroup
     ) -> T {
         return std::atomic_max(this.get()[texel], value, memory_order, location, scope);
     }
@@ -194,13 +171,13 @@ public extension<T : ITexelElement & IInteger, S : __ITextureShape, C : ICoheren
 
 // StorageImage1D ───────────────────────────────────────────────────
 __generic<T : ITexelElement>
-public typealias StorageImage1D = StorageImage<T, __Shape1D, Incoherent>;
+public typealias StorageImage1D = StorageImage<T, __Shape1D>;
 
 // StorageImage2D ───────────────────────────────────────────────────
 __generic<T : ITexelElement>
-public typealias StorageImage2D = StorageImage<T, __Shape2D, Incoherent>;
+public typealias StorageImage2D = StorageImage<T, __Shape2D>;
 
 // StorageImage3D ───────────────────────────────────────────────────
 __generic<T : ITexelElement>
-public typealias StorageImage3D = StorageImage<T, __Shape3D, Incoherent>;
+public typealias StorageImage3D = StorageImage<T, __Shape3D>;
 

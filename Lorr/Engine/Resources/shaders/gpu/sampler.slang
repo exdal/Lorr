@@ -1,7 +1,7 @@
 implementing gpu;
 
 [[vk::binding(0, 0)]]
-SamplerState samplers[];
+__DynamicResource<__DynamicResourceKind.Sampler> samplers[];
 
 public struct Sampler<U : IUniformity = Uniform> {
     u32 index;
@@ -16,6 +16,6 @@ public struct Sampler<U : IUniformity = Uniform> {
     }
 
     public func get() -> SamplerState {
-        return samplers[U.wrap_index(this.index)];
+        return samplers[U.wrap_index(this.index)].as<SamplerState>();
     }
 }

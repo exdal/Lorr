@@ -78,7 +78,7 @@ auto ImGuiRenderer::init(this ImGuiRenderer &self, Device *device) -> void {
     self.pipeline = Pipeline::create(*device, {
         .module_name = "imgui",
         .root_path = shaders_root,
-        .shader_path = shaders_root / "imgui.slang",
+        .shader_path = shaders_root / "passes" / "imgui.slang",
         .entry_points = { "vs_main", "fs_main" },
     }).value();
     // clang-format on
@@ -186,18 +186,13 @@ auto ImGuiRenderer::end_frame(this ImGuiRenderer &self, vuk::Value<vuk::ImageAtt
             VUK_BA(vuk::Access::eIndexRead) index_buf,
             VUK_ARG(vuk::ImageAttachment[], vuk::Access::eFragmentSampled) rendering_images
         ) {
-            struct PushConstants {
-                glm::vec2 translate = {};
-                glm::vec2 scale = {};
-            };
-
-            PushConstants c = {};
-            c.scale = { 2.0f / draw_data->DisplaySize.x, 2.0f / draw_data->DisplaySize.y };
-            c.translate = { -1.0f - draw_data->DisplayPos.x * c.scale.x, -1.0f - draw_data->DisplayPos.y * c.scale.y };
+            auto scale = glm::vec2(2.0f / draw_data->DisplaySize.x, 2.0f / draw_data->DisplaySize.y);
+            auto translate = glm::vec2(-1.0f - draw_data->DisplayPos.x * scale.x, -1.0f - draw_data->DisplayPos.y * scale.y);
+            u32 is_srgb = 0;
 
             cmd_list //
                 .set_dynamic_state(vuk::DynamicStateFlagBits::eViewport | vuk::DynamicStateFlagBits::eScissor)
-                .set_rasterization(vuk::PipelineRasterizationStateCreateInfo {})
+                .set_rasterization(vuk::PipelineRasterizationStateCreateInfo{})
                 .set_color_blend(dst, vuk::BlendPreset::eAlphaBlend)
                 .set_viewport(0, vuk::Rect2D::framebuffer())
                 .bind_graphics_pipeline(pipeline)
@@ -206,9 +201,8 @@ auto ImGuiRenderer::end_frame(this ImGuiRenderer &self, vuk::Value<vuk::ImageAtt
                     0,
                     vertex_buf,
                     0,
-                    vuk::Packed { vuk::Format::eR32G32Sfloat, vuk::Format::eR32G32Sfloat, vuk::Format::eR8G8B8A8Unorm }
-                )
-                .push_constants(vuk::ShaderStageFlagBits::eVertex, 0, c);
+                    vuk::Packed{ vuk::Format::eR32G32Sfloat, vuk::Format::eR32G32Sfloat, vuk::Format::eR8G8B8A8Unorm }
+                );
 
             ImVec2 clip_off = draw_data->DisplayPos;
             ImVec2 clip_scale = draw_data->FramebufferScale;
@@ -244,11 +238,19 @@ auto ImGuiRenderer::end_frame(this ImGuiRenderer &self, vuk::Value<vuk::ImageAtt
                         cmd_list.bind_sampler(0, 0, { .magFilter = vuk::Filter::eLinear, .minFilter = vuk::Filter::eLinear });
                         if (im_cmd.TextureId != 0) {
                             auto index = im_cmd.TextureId - 1;
-                            cmd_list.bind_image(0, 1, rendering_images[index]);
+                            const auto &image = rendering_images[index];
+                            is_srgb = vuk::is_format_srgb(image.format);
+                            cmd_list.bind_image(0, 1, image);
                         } else {
+                            is_srgb = 0;
                             cmd_list.bind_image(0, 1, rendering_images[0]);
                         }
 
+                        cmd_list.push_constants(
+                            vuk::ShaderStageFlagBits::eVertex | vuk::ShaderStageFlagBits::eFragment,
+                            0,
+                            PushConstants(translate, scale, is_srgb)
+                        );
                         cmd_list.draw_indexed(im_cmd.ElemCount, 1, im_cmd.IdxOffset + index_offset, i32(im_cmd.VtxOffset + vertex_offset), 0);
                     }
                 }

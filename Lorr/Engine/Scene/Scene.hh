@@ -2,6 +2,8 @@
 
 #include "Engine/Asset/UUID.hh"
 
+#include "Engine/Memory/SlotMap.hh"
+
 #include "Engine/Scene/SceneRenderer.hh"
 
 #include <flecs.h>

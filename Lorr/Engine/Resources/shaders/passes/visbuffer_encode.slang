@@ -1,8 +1,12 @@
 module visbuffer_encode;
 
 import std;
+import gpu;
 import scene;
 import visbuffer;
+
+[[vk::binding(0 ,0)]]
+Sampler material_sampler;
 
 struct PushConstants {
     Camera *camera;
@@ -54,7 +58,8 @@ func fs_main(VertexOutput input) -> u32 {
     if (material.albedo_image.is_valid()) {
         const f32x2 grad_x  = ddx(input.tex_coord);
         const f32x2 grad_y  = ddy(input.tex_coord);
-        const f32 alpha_col = material.sample_albedo_color(input.tex_coord, grad_x, grad_y).a;
+        const f32 alpha_col = material.sample_albedo_color(
+            material_sampler, input.tex_coord, grad_x, grad_y).a;
         if (alpha_col < clamp(material.alpha_cutoff, 0.001, 1.0)) {
             discard;
         }

@@ -6,20 +6,29 @@ import pbr;
 import sky;
 import scene;
 
+[[vk::binding(0, 0)]]
+Sampler linear_clamp_sampler;
+[[vk::binding(1, 0)]]
+Sampler nearest_repeat_sampler;
+[[vk::binding(2, 0)]]
+Image2D<f32x4> sky_transmittance_lut;
+[[vk::binding(3, 0)]]
+Image2D<f32x4> sky_multiscattering_lut;
+[[vk::binding(4, 0)]]
+StorageImage2D<f32, ImageFormat::R32F> depth_image;
+[[vk::binding(5, 0)]]
+Image2D<f32x4> albedo_image;
+[[vk::binding(6, 0)]]
+StorageImage2D<f32x4, ImageFormat::RGBA16F> normal_image;
+[[vk::binding(7, 0)]]
+StorageImage2D<f32x3, ImageFormat::R11F_G11F_B10F> emissive_image;
+[[vk::binding(8, 0)]]
+StorageImage2D<f32x3, ImageFormat::RGBA8UI> metallic_roughness_occlusion_image;
+
 struct PushConstants {
     Atmosphere *atmosphere;
     Sun *sun;
     Camera *camera;
-
-    Sampler linear_clamp_sampler;
-    Sampler nearest_repeat_sampler;
-    Image2D<f32x4> sky_transmittance_lut;
-    Image2D<f32x4> sky_multiscattering_lut;
-    Image2D<f32> depth_image;
-    Image2D<f32x4> albedo_image;
-    Image2D<f32x4> normal_image;
-    Image2D<f32x3> emissive_image;
-    Image2D<f32x3> metallic_roughness_occlusion_image;
 };
 [[vk::push_constant]] PushConstants C;
 
@@ -40,17 +49,17 @@ VertexOutput vs_main(u32 vertex_id : SV_VertexID) {
 [[shader("fragment")]]
 f32x4 fs_main(VertexOutput input) : SV_Target {
     const u32x2 pixel_pos = u32x2(input.position.xy);
-    const f32 depth = C.depth_image.load(pixel_pos);
+    const f32 depth = depth_image.load(pixel_pos);
     if (depth == 1.0) {
         discard;
     }
 
-    const f32x3 albedo_color = C.albedo_image.sample_mip(C.nearest_repeat_sampler, input.tex_coord, 0).rgb;
-    const f32x4 normal_oct_flat = C.normal_image.load(pixel_pos);
+    const f32x3 albedo_color = albedo_image.sample_mip(nearest_repeat_sampler, input.tex_coord, 0).rgb;
+    const f32x4 normal_oct_flat = normal_image.load(pixel_pos);
     const f32x3 mapped_normal = std::oct_to_vec3(normal_oct_flat.xy);
     const f32x3 smooth_normal = std::oct_to_vec3(normal_oct_flat.zw);
-    const f32x3 emission = C.emissive_image.load(pixel_pos);
-    const f32x3 metallic_roughness_occlusion = C.metallic_roughness_occlusion_image.load(pixel_pos);
+    const f32x3 emission = emissive_image.load(pixel_pos);
+    const f32x3 metallic_roughness_occlusion = metallic_roughness_occlusion_image.load(pixel_pos);
     const f32  metallic = metallic_roughness_occlusion.x;
     const f32  roughness = metallic_roughness_occlusion.y;
     const f32  occlusion = metallic_roughness_occlusion.z;
@@ -72,7 +81,7 @@ f32x4 fs_main(VertexOutput input) : SV_Target {
     f32x3 up_vec = normalize(ray_pos_planet);
     f32 sun_cos_theta = dot(L, up_vec);
     f32x2 transmittance_uv = get_transmittance_lut_uv(C.atmosphere, f32x2(h, sun_cos_theta));
-    f32x3 sun_transmittance = C.sky_transmittance_lut.sample_mip(C.linear_clamp_sampler, transmittance_uv, 0.0).rgb;
+    f32x3 sun_transmittance = sky_transmittance_lut.sample_mip(linear_clamp_sampler, transmittance_uv, 0.0).rgb;
     const let planet_intersection = std::ray_sphere_intersect_nearest(ray_pos_planet, L, C.atmosphere->planet_radius);
     if (planet_intersection.hasValue) {
         // TODO: Implement a penumbra
@@ -87,13 +96,13 @@ f32x4 fs_main(VertexOutput input) : SV_Target {
     sky_info.sampling.variable_sample_count = true;
     sky_info.sampling.min_sample_count = 6;
     sky_info.sampling.max_sample_count = 6;
-    sky_info.transmittance_image = C.sky_transmittance_lut;
-    sky_info.multiscattering_image = C.sky_multiscattering_lut;
+    sky_info.transmittance_image = sky_transmittance_lut;
+    sky_info.multiscattering_image = sky_multiscattering_lut;
 
     sky_info.eye_dir = f32x3(0.0, -1.0, 0.0);
-    const let sky_result_0 = integrate_single_scattered_luminance(C.atmosphere, C.linear_clamp_sampler, sky_info);
+    const let sky_result_0 = integrate_single_scattered_luminance(C.atmosphere, linear_clamp_sampler, sky_info);
     sky_info.eye_dir = f32x3(0.0,  1.0, 0.0);
-    const let sky_result_1 = integrate_single_scattered_luminance(C.atmosphere, C.linear_clamp_sampler, sky_info);
+    const let sky_result_1 = integrate_single_scattered_luminance(C.atmosphere, linear_clamp_sampler, sky_info);
     f32x3 ambient_color = lerp(sky_result_0.luminance, sky_result_1.luminance, saturate(N.y * 0.5 + 0.5));
 
     // MATERIAL COLOR ───────────────────────────────────────────────────

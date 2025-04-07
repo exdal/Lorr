@@ -19,6 +19,11 @@ func vs_main(u32 vertex_index : SV_VertexID) -> VertexOutput{
     return output;
 }
 
+[[vk::binding(0, 0)]]
+Sampler material_sampler;
+[[vk::binding(1, 0)]]
+Image2D<u32> visbuffer;
+
 struct FragmentOutput {
     f32x4 albedo_color : SV_Target0;
     f32x4 normal_color : SV_Target1;
@@ -33,8 +38,6 @@ struct PushConstants {
     Model *models;
     Transform *transforms;
     Material *materials;
-
-    StorageImage2D<u32> visbuffer;
 };
 
 [[vk::push_constant]] PushConstants C;
@@ -46,7 +49,7 @@ struct PartialDeriv {
 
     [[mutating]]
     __init(in f32x4x3 clip_pos, in f32x2 uv, in f32x2 resolution) {
-                // Partial Derivatives
+        // Partial Derivatives
         const f32x3 inv_w  = 1.0 / f32x3(clip_pos[0].w, clip_pos[1].w, clip_pos[2].w);
         const f32x2 ndc_0  = clip_pos[0].xy * inv_w[0];
         const f32x2 ndc_1  = clip_pos[1].xy * inv_w[1];
@@ -62,8 +65,7 @@ struct PartialDeriv {
         this.uv_ddy = f32x3(ndc_2.x - ndc_1.x, ndc_0.x - ndc_2.x, ndc_1.x - ndc_0.x) * inv_det * inv_w;
         f32 ddx_sum  = dot(this.uv_ddx, 1.0);
         f32 ddy_sum  = dot(this.uv_ddy, 1.0);
-        // Convert UV[0, 1] to UV[-1, 1]
-        const f32x2 delta    = ((uv - 0.5) * 2.0) - ndc_0;
+        const f32x2 delta    = uv - ndc_0;
         const f32 view_inv_w = inv_w.x + delta.x * ddx_sum + delta.y * ddy_sum;
         const f32 view_w     = 1.0 / view_inv_w;
         this.lambda = {
@@ -110,8 +112,8 @@ struct PartialDeriv {
 
 [[shader("fragment")]]
 func fs_main(VertexOutput input) -> FragmentOutput {
-    const u32 texel = C.visbuffer.load(u32x2(input.position.xy));
-    if (texel == ~0) {
+    const u32 texel = visbuffer.load(u32x2(input.position.xy));
+    if (texel == ~0u) {
         discard;
     }
 
@@ -130,16 +132,18 @@ func fs_main(VertexOutput input) -> FragmentOutput {
     const f32x2x3 tex_coords = meshlet->tex_coords(model, indices);
     const f32x4x3 world_pos  = transform->to_world_positions(positions);
     const f32x4x3 clip_pos   = C.camera->to_clip_positions(world_pos);
-    const PartialDeriv deriv = { clip_pos, input.tex_coord, C.camera->resolution };
+    const PartialDeriv deriv = { clip_pos, 2.0 * input.tex_coord - 1.0, f32x2(1280.0, 720.0) };
 
     const f32x2 tex_coord_deriv = deriv.interpolate(tex_coords);
     const f32x2 tex_coord_ddx   = deriv.ddx_of(tex_coords);
     const f32x2 tex_coord_ddy   = deriv.ddy_of(tex_coords);
 
     FragmentOutput output;
+
     // ALBEDO ───────────────────────────────────────────────────────────
-    output.albedo_color = material->sample_albedo_color(
-        tex_coord_deriv, tex_coord_ddx, tex_coord_ddy);
+    output.albedo_color.xy = tex_coord_deriv;
+    output.albedo_color.zw = tex_coord_ddy;
+
     // NORMALS ──────────────────────────────────────────────────────────
     const f32x3 normal_deriv = deriv.interpolate(normals);
     const f32x3 world_normal = mul(transform.normal, normal_deriv);
@@ -162,7 +166,8 @@ func fs_main(VertexOutput input) -> FragmentOutput {
         }
         const f32x3 B = jacobian_sign * sign(dot(pos_ddy, cross(N, pos_ddx))) * cross(N, T);
         const f32x3x3 TBN = f32x3x3(T, -B, N);
-        const f32x2 sampled_normal = material->sample_normal_color(tex_coord_deriv, tex_coord_ddx, tex_coord_ddy).xy * 2.0 - 1.0;
+        const f32x2 sampled_normal = material->sample_normal_color(
+            C.material_sampler, tex_coord_deriv, tex_coord_ddx, tex_coord_ddy).xy * 2.0 - 1.0;
         const f32 sampled_normal_z = sqrt(max(1.0 - sampled_normal.x * sampled_normal.x - sampled_normal.y * sampled_normal.y, 0.0));
         N = mul(f32x3(sampled_normal, sampled_normal_z), TBN);
     }
@@ -171,16 +176,16 @@ func fs_main(VertexOutput input) -> FragmentOutput {
 
     // EMISSION ─────────────────────────────────────────────────────────
     output.emission_color = material->sample_emissive_color(
-        tex_coord_deriv, tex_coord_ddx, tex_coord_ddy);
+        C.material_sampler, tex_coord_deriv, tex_coord_ddx, tex_coord_ddy);
 
     // METALLIC ROUGHNESS ───────────────────────────────────────────────
     const f32x2 metallic_roughness_color = material->sample_metallic_roughness(
-        tex_coord_deriv, tex_coord_ddx, tex_coord_ddy);
+        C.material_sampler, tex_coord_deriv, tex_coord_ddx, tex_coord_ddy);
     output.metallic_roughness_occlusion_color.xy = metallic_roughness_color;
 
     // AMBIENT OCCLUSION ────────────────────────────────────────────────
     const f32 occlusion_color = material->sample_occlusion_color(
-        tex_coord_deriv, tex_coord_ddx, tex_coord_ddy);
+        C.material_sampler, tex_coord_deriv, tex_coord_ddx, tex_coord_ddy);
     output.metallic_roughness_occlusion_color.z = occlusion_color;
 
     return output;

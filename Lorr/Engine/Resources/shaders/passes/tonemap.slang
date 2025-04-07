@@ -3,12 +3,10 @@ module tonemap;
 import std;
 import gpu;
 
-struct PushConstants {
-    Sampler sampler;
-    Image2D<f32x4> input_image;
-};
-
-[[vk::push_constant]] PushConstants C;
+[[vk::binding(0, 0)]]
+Sampler sampler;
+[[vk::binding(1, 0)]]
+Image2D<f32x4> input_image;
 
 struct VertexOutput {
     f32x4 position : SV_Position;
@@ -88,7 +86,7 @@ f32x3 PBRNeutralToneMapping(f32x3 color) {
 
 [[shader("fragment")]]
 f32x4 fs_main(VertexOutput input) {
-    f32x3 color = C.input_image.sample_mip(C.sampler, input.tex_coord, 0.0).rgb;
+    f32x3 color = input_image.sample_mip(sampler, input.tex_coord, 0.0).rgb;
     //color = ACES_Film(color);
     //color = ACES_Fitted(color);
     color = PBRNeutralToneMapping(color);  // this looks like shit, figure out why

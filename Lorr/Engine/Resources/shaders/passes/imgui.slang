@@ -1,9 +1,12 @@
 module imgui;
 
 import std;
+import gpu;
 
-[[vk::binding(0, 0)]] SamplerState sampler;
-[[vk::binding(1, 0)]] Texture2D<f32x4> texture;
+[[vk::binding(0, 0)]]
+Sampler sampler;
+[[vk::binding(1, 0)]]
+Image2D<f32x4> texture;
 
 struct VertexInput {
     f32x2 position  : POSITION;
@@ -37,7 +40,7 @@ func vs_main(VertexInput input) -> VertexOutput {
 
 [[shader("fragment")]]
 f32x4 fs_main(VertexOutput input) : SV_TARGET {
-    f32x4 color_sampled = texture.Sample(sampler, input.tex_coord) * input.color;
+    f32x4 color_sampled = texture.sample_mip(sampler, input.tex_coord, 0.0) * input.color;
     f32x3 color = color_sampled.rgb;
 
     if (c.is_srgb == 0) {

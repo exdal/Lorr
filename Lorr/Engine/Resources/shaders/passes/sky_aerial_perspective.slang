@@ -5,16 +5,19 @@ import gpu;
 import sky;
 import scene;
 
+[[vk::binding(0, 0)]]
+Sampler sampler;
+[[vk::binding(1, 0)]]
+Image2D<f32x4> sky_transmittance_lut;
+[[vk::binding(2, 0)]]
+Image2D<f32x4> sky_multiscattering_lut;
+[[vk::binding(3, 0)]]
+StorageImage3D<f32x4, ImageFormat::RGBA16F> sky_aerial_perspective_lut;
+
 struct PushConstants {
     Atmosphere *atmosphere;
     Sun *sun;
     Camera *camera;
-
-    Sampler sampler;
-    Image2D<f32x4> sky_transmittance_lut;
-    Image2D<f32x4> sky_multiscattering_lut;
-    Image2D<f32x4> sky_view_lut;
-    StorageImage3D<f32x4> sky_aerial_perspective_lut;
 };
 [[vk::push_constant]] PushConstants C;
 
@@ -26,7 +29,7 @@ func cs_main(u32x3 thread_id : SV_DispatchThreadID) {
     f32x4 world_space = mul(C.camera->inv_projection_view_mat, f32x4(clip_space, 1.0));
     f32x3 world_pos = world_space.xyz / world_space.w;
     f32x3 world_dir = normalize(world_pos - C.camera->position);
-    f32x3 eye_pos = f32x3(0.0, C.camera->position.y, 0.0) +
+    f32x3 eye_pos = f32x3(0.0, C.camera->position.y, 0.0) *
                     CAMERA_SCALE_UNIT +
                     f32x3(0.0, C.atmosphere->planet_radius, 0.0);
     int step_count = int(max(1.0, f32(thread_id.z + 1.0) * 2.0));
@@ -49,12 +52,12 @@ func cs_main(u32x3 thread_id : SV_DispatchThreadID) {
     if (view_height >= C.atmosphere->atmos_radius) {
         f32x3 prev_ray_pos = eye_pos;
         if (!move_to_top_atmosphere(eye_pos, world_dir, C.atmosphere->atmos_radius)) {
-            C.sky_aerial_perspective_lut.store(thread_id, 0.0);
+            sky_aerial_perspective_lut.store(thread_id, 0.0);
             return;
         }
         f32 length_to_atmosphere = length(prev_ray_pos - eye_pos);
         if (t_max_max < length_to_atmosphere) {
-            C.sky_aerial_perspective_lut.store(thread_id, 0.0);
+            sky_aerial_perspective_lut.store(thread_id, 0.0);
             return;
         }
 
@@ -71,10 +74,10 @@ func cs_main(u32x3 thread_id : SV_DispatchThreadID) {
     info.sampling.variable_sample_count = false;
     info.sampling.initial_sample_count = max(1.0, (f32(thread_id.z) + 1.0) * 2.0);
 
-    info.transmittance_image = C.sky_transmittance_lut;
-    info.multiscattering_image = C.sky_multiscattering_lut;
+    info.transmittance_image = sky_transmittance_lut;
+    info.multiscattering_image = sky_multiscattering_lut;
 
-    const let result = integrate_single_scattered_luminance(C.atmosphere, C.sampler, info);
+    const let result = integrate_single_scattered_luminance(C.atmosphere, sampler, info);
     const let transmittance = dot(result.transmittance, f32x3(1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f));
-    C.sky_aerial_perspective_lut.store(thread_id, f32x4(result.luminance, transmittance));
+    sky_aerial_perspective_lut.store(thread_id, f32x4(result.luminance, transmittance));
 }

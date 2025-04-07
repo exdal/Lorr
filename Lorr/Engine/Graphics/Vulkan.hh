@@ -83,17 +83,19 @@ private:
     BufferID id_ = BufferID::Invalid;
 };
 
+struct ImageView;
+struct ImageInfo {
+    vuk::Format format;
+    vuk::ImageUsageFlags usage;
+    vuk::ImageType type;
+    vuk::Extent3D extent;
+    u32 slice_count = 1;
+    u32 mip_count = 1;
+    std::string_view name = {};
+};
 struct Image {
-    static auto create(
-        Device &,
-        vuk::Format format,
-        const vuk::ImageUsageFlags &usage,
-        vuk::ImageType type,
-        vuk::Extent3D extent,
-        u32 slice_count = 1,
-        u32 mip_count = 1,
-        vuk::source_location LOC = vuk::source_location::current()
-    ) -> std::expected<Image, vuk::VkException>;
+    static auto create(Device &, const ImageInfo &info, LR_THISCALL) -> std::expected<Image, vuk::VkException>;
+    static auto create_with_view(Device &, const ImageInfo &info, LR_THISCALL) -> std::expected<std::tuple<Image, ImageView>, vuk::VkException>;
 
     auto format() const -> vuk::Format;
     auto extent() const -> vuk::Extent3D;
@@ -118,29 +120,20 @@ private:
 // automatically parent image format. See:
 // https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VkImageViewCreateInfo.html
 
+struct ImageViewInfo {
+    vuk::ImageUsageFlags image_usage;
+    vuk::ImageViewType type;
+    vuk::ImageSubresourceRange subresource_range;
+    std::string_view name = {};
+};
+
 struct ImageView {
-    static auto create(
-        Device &,
-        Image &image,
-        const vuk::ImageUsageFlags &image_usage,
-        vuk::ImageViewType type,
-        const vuk::ImageSubresourceRange &subresource_range,
-        vuk::source_location LOC = vuk::source_location::current()
-    ) -> std::expected<ImageView, vuk::VkException>;
+    static auto create(Device &, Image &image, const ImageViewInfo &info, LR_THISCALL) -> std::expected<ImageView, vuk::VkException>;
 
-    static auto create_frametime(
-        Device &,
-        ImageViewID old_image_view_id,
-        vuk::ImageView &raw_handle,
-        const vuk::ImageUsageFlags &image_usage,
-        vuk::ImageViewType type,
-        const vuk::ImageSubresourceRange &subresource_range
-    ) -> ImageView;
-
-    auto get_attachment(Device &, const vuk::ImageUsageFlags &usage) const -> vuk::ImageAttachment;
-    auto get_attachment(Device &, vuk::ImageAttachment::Preset preset) const -> vuk::ImageAttachment;
-    auto discard(Device &, vuk::Name name, const vuk::ImageUsageFlags &usage) const -> vuk::Value<vuk::ImageAttachment>;
-    auto acquire(Device &, vuk::Name name, const vuk::ImageUsageFlags &usage, vuk::Access last_access) const -> vuk::Value<vuk::ImageAttachment>;
+    auto to_attachment(Device &, const vuk::ImageUsageFlags &usage) const -> vuk::ImageAttachment;
+    auto to_attachment(Device &, vuk::ImageAttachment::Preset preset) const -> vuk::ImageAttachment;
+    auto discard(Device &, vuk::Name name, const vuk::ImageUsageFlags &usage, LR_THISCALL) const -> vuk::Value<vuk::ImageAttachment>;
+    auto acquire(Device &, vuk::Name name, const vuk::ImageUsageFlags &usage, vuk::Access last_access, LR_THISCALL) const -> vuk::Value<vuk::ImageAttachment>;
 
     auto format() const -> vuk::Format;
     auto extent() const -> vuk::Extent3D;
@@ -164,23 +157,23 @@ private:
     ImageViewID id_ = ImageViewID::Invalid;
 };
 
+struct SamplerInfo {
+    vuk::Filter min_filter = vuk::Filter::eLinear;
+    vuk::Filter mag_filter = vuk::Filter::eLinear;
+    vuk::SamplerMipmapMode mipmap_mode = vuk::SamplerMipmapMode::eLinear;
+    vuk::SamplerAddressMode addr_u = vuk::SamplerAddressMode::eRepeat;
+    vuk::SamplerAddressMode addr_v = vuk::SamplerAddressMode::eRepeat;
+    vuk::SamplerAddressMode addr_w = vuk::SamplerAddressMode::eRepeat;
+    vuk::CompareOp compare_op = vuk::CompareOp::eNever;
+    f32 max_anisotropy = 0.0f;
+    f32 mip_lod_bias = 0.0f;
+    f32 min_lod = 0.0f;
+    f32 max_lod = 1000.0f;
+    bool use_anisotropy = false;
+};
+
 struct Sampler {
-    static auto create(
-        Device &,
-        vuk::Filter min_filter,
-        vuk::Filter mag_filter,
-        vuk::SamplerMipmapMode mipmap_mode,
-        vuk::SamplerAddressMode addr_u,
-        vuk::SamplerAddressMode addr_v,
-        vuk::SamplerAddressMode addr_w,
-        vuk::CompareOp compare_op,
-        f32 max_anisotropy = 0,
-        f32 mip_lod_bias = 0,
-        f32 min_lod = 0,
-        f32 max_lod = 1000.0f,
-        bool use_anisotropy = false,
-        vuk::source_location LOC = vuk::source_location::current()
-    ) -> std::expected<Sampler, vuk::VkException>;
+    static auto create(Device &, const SamplerInfo &info, LR_THISCALL) -> std::expected<Sampler, vuk::VkException>;
 
     auto id() const -> SamplerID;
     auto index() const -> u32;

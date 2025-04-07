@@ -5,10 +5,11 @@ import gpu;
 import sky;
 import scene;
 
+[[vk::binding(0, 0)]]
+StorageImage2D<f32x4, ImageFormat::RGBA16F> sky_transmittance_lut;
+
 struct PushConstants {
     Atmosphere *atmosphere;
-
-    StorageImage2D<f32x4> sky_transmittance_lut;
 };
 
 [[vk::push_constant]] PushConstants C;
@@ -42,5 +43,5 @@ func cs_main(u32x3 thread_id : SV_DispatchThreadID) -> void {
         optical_depth += medium.extinction_sum * distance_per_step;
     }
 
-    C.sky_transmittance_lut.store(thread_id.xy, f32x4(exp(-optical_depth), 1.0));
+    sky_transmittance_lut.store(thread_id.xy, f32x4(exp(-optical_depth), 1.0));
 }

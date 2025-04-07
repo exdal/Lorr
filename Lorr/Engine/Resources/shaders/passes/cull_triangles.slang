@@ -15,7 +15,6 @@ struct PushConstants {
     Model *models;
     Camera *camera;
 
-    u32 meshlet_instance_count;
     CullFlags cull_flags;
 };
 [[vk::push_constant]] PushConstants C;

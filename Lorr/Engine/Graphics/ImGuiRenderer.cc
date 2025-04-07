@@ -52,36 +52,28 @@ auto ImGuiRenderer::init(this ImGuiRenderer &self, Device *device) -> void {
     i32 font_width, font_height;
     imgui.Fonts->GetTexDataAsRGBA32(&font_data, &font_width, &font_height);
 
-    // clang-format off
     auto &transfer_man = device->transfer_man();
-    self.font_atlas_image = Image::create(
-        *device,
-        vuk::Format::eR8G8B8A8Unorm,
-        vuk::ImageUsageFlagBits::eSampled,
-        vuk::ImageType::e2D,
-        vuk::Extent3D(font_width, font_height, 1u))
-        .value();
-    self.font_atlas_view = ImageView::create(
-        *device,
-        self.font_atlas_image,
-        vuk::ImageUsageFlagBits::eSampled,
-        vuk::ImageViewType::e2D,
-        { .aspectMask = vuk::ImageAspectFlagBits::eColor })
-        .value();
-    
+    auto font_atlas_image_info = ImageInfo{
+        .format = vuk::Format::eR8G8B8A8Unorm,
+        .usage = vuk::ImageUsageFlagBits::eSampled,
+        .type = vuk::ImageType::e2D,
+        .extent = vuk::Extent3D(font_width, font_height, 1u),
+    };
+    std::tie(self.font_atlas_image, self.font_atlas_view) = Image::create_with_view(*device, font_atlas_image_info).value();
+
     auto imgui_ia = transfer_man.upload_staging(self.font_atlas_view, font_data, font_width * font_height * 4)
-        .as_released(vuk::Access::eFragmentSampled, vuk::DomainFlagBits::eGraphicsQueue);
+                        .as_released(vuk::Access::eFragmentSampled, vuk::DomainFlagBits::eGraphicsQueue);
     imgui_ia->layout = vuk::ImageLayout::eReadOnlyOptimal;
     transfer_man.wait_on(std::move(imgui_ia));
     IM_FREE(font_data);
 
-    self.pipeline = Pipeline::create(*device, {
+    auto pipeline_info = ShaderCompileInfo{
         .module_name = "imgui",
         .root_path = shaders_root,
         .shader_path = shaders_root / "passes" / "imgui.slang",
         .entry_points = { "vs_main", "fs_main" },
-    }).value();
-    // clang-format on
+    };
+    self.pipeline = Pipeline::create(*device, pipeline_info).value();
 }
 
 auto ImGuiRenderer::add_image(this ImGuiRenderer &self, vuk::Value<vuk::ImageAttachment> &&attachment) -> ImTextureID {
@@ -99,8 +91,8 @@ auto ImGuiRenderer::add_image(this ImGuiRenderer &self, ImageView &image_view, L
         return acquired_it->second;
     }
 
-    auto attachment_info = image_view.get_attachment(*self.device, vuk::ImageUsageFlagBits::eSampled);
-    auto attachment = vuk::acquire_ia("imgui image", attachment_info, vuk::Access::eFragmentSampled, LOC);
+    auto attachment =
+        image_view.acquire(*self.device, "imgui rendering image", vuk::ImageUsageFlagBits::eSampled, vuk::Access::eFragmentSampled, LOC);
     auto texture_id = self.add_image(std::move(attachment));
     self.acquired_images.emplace(image_view.id(), texture_id);
 

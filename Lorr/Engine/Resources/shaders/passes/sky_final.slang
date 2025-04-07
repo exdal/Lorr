@@ -5,17 +5,21 @@ import gpu;
 import sky;
 import scene;
 
+[[vk::binding(0, 0)]]
+Sampler sampler;
+[[vk::binding(1, 0)]]
+Image2D<f32x4> sky_transmittance_lut;
+[[vk::binding(2, 0)]]
+Image3D<f32x4> sky_aerial_perspective_lut;
+[[vk::binding(3, 0)]]
+Image2D<f32x4> sky_view_lut;
+[[vk::binding(4, 0)]]
+Image2D<f32> depth_image;
+
 struct PushConstants {
     Atmosphere *atmosphere;
     Sun *sun;
     Camera *camera;
-
-    Sampler sampler;
-    Image2D<f32x4> sky_transmittance_lut;
-    Image2D<f32x4> sky_multiscattering_lut;
-    Image3D<f32x4> sky_aerial_perspective_lut;
-    Image2D<f32x4> sky_view_lut;
-    Image2D<f32>   depth_image;
 };
 [[vk::push_constant]] PushConstants C;
 
@@ -49,7 +53,7 @@ func draw_sun(f32x3 world_dir, f32x3 sun_dir, f32 radius) -> f32x3 {
 
 [[shader("fragment")]]
 f32x4 fs_main(VertexOutput input) : SV_TARGET {
-    f32   depth = C.depth_image.load(u32x2(input.position.xy));
+    f32   depth = depth_image.load(u32x2(input.position.xy));
     f32x3 clip_space = f32x3(input.tex_coord * 2.0 - 1.0, depth);
     f32x4 clip_pos = mul(C.camera->inv_projection_view_mat, f32x4(clip_space, 1.0));
     f32x3 clip_dir = clip_pos.xyz / clip_pos.w;
@@ -61,7 +65,7 @@ f32x4 fs_main(VertexOutput input) : SV_TARGET {
 
     if (depth != 1.0) {
         f32x3 camera_relative_pos = (clip_dir - C.camera->position) * CAMERA_SCALE_UNIT;
-        return sample_aerial_perspective(C.atmosphere, C.sky_aerial_perspective_lut, C.sampler, input.tex_coord, camera_relative_pos);
+        return sample_aerial_perspective(C.atmosphere, sky_aerial_perspective_lut, sampler, input.tex_coord, camera_relative_pos);
     }
 
     f32 h = length(world_pos);
@@ -77,11 +81,11 @@ f32x4 fs_main(VertexOutput input) : SV_TARGET {
 
     const let planet_intersection = std::ray_sphere_intersect_nearest(world_pos, world_dir, C.atmosphere->planet_radius);
     f32x2 uv = get_sky_view_lut_uv(C.atmosphere, planet_intersection.hasValue, view_zenith_cos_angle, light_view_cos_angle, h);
-    f32x3 luminance = C.sky_view_lut.sample_mip(C.sampler, uv, 0.0).rgb;
+    f32x3 luminance = sky_view_lut.sample_mip(sampler, uv, 0.0).rgb;
 
     f32 sun_cos_theta = dot(C.sun->direction, up_vec);
     f32x2 transmittance_uv = get_transmittance_lut_uv(C.atmosphere, f32x2(h, sun_cos_theta));
-    f32x3 sun_transmittance = C.sky_transmittance_lut.sample_mip(C.sampler, transmittance_uv, 0.0).rgb;
+    f32x3 sun_transmittance = sky_transmittance_lut.sample_mip(sampler, transmittance_uv, 0.0).rgb;
 
     if (!planet_intersection.hasValue) {
         luminance += draw_sun(world_dir, C.sun->direction, 1.0) * C.sun->intensity * sun_transmittance;

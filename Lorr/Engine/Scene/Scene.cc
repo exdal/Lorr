@@ -472,10 +472,10 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, const vuk::Extent3
         .extent = extent,
         .sun = sun_data,
         .atmosphere = atmos_data,
+        .camera = active_camera_data,
         .dirty_transform_ids = self.dirty_transforms,
         .transforms = transforms,
     };
-
     auto rendered_attachment = renderer.render(render_info, composed_scene);
     self.dirty_transforms.clear();
 
@@ -563,8 +563,6 @@ auto Scene::compose(this Scene &self) -> SceneComposeInfo {
     auto gpu_models = std::vector<GPU::Model>();
     auto gpu_meshlet_instances = std::vector<GPU::MeshletInstance>();
     auto gpu_materials = std::vector<GPU::Material>();
-    auto gpu_image_views = std::vector<ImageViewID>();
-    auto gpu_samplers = std::vector<SamplerID>();
 
     for (const auto &[model_uuid, transform_ids] : self.rendering_models) {
         auto *model = app.asset_man.get_model(model_uuid);
@@ -596,11 +594,8 @@ auto Scene::compose(this Scene &self) -> SceneComposeInfo {
                     return ls::nullopt;
                 }
 
-                u32 index = gpu_image_views.size();
                 auto *texture = app.asset_man.get_texture(uuid);
-                gpu_image_views.emplace_back(texture->image_view.id());
-                gpu_samplers.emplace_back(texture->sampler.id());
-                return index;
+                return texture->image_view.index();
             };
 
             gpu_material.albedo_image_index = add_image_if_exists(material->albedo_texture).value_or(~0_u32);
@@ -628,8 +623,6 @@ auto Scene::compose(this Scene &self) -> SceneComposeInfo {
     }
 
     return SceneComposeInfo{
-        .image_view_ids = std::move(gpu_image_views),
-        .samplers = std::move(gpu_samplers),
         .gpu_materials = std::move(gpu_materials),
         .gpu_models = std::move(gpu_models),
         .gpu_meshlet_instances = std::move(gpu_meshlet_instances),

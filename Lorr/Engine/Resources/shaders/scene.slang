@@ -106,9 +106,8 @@ public struct Material {
     public Image2D<f32x4> metallic_rougness_image;
     public Image2D<f32x4> occlusion_image;
 
-    public func sample_albedo_color(f32x2 uv, f32x2 ddx, f32x2 ddy) -> f32x4 {
+    public func sample_albedo_color(in Sampler sampler, f32x2 uv, f32x2 ddx, f32x2 ddy) -> f32x4 {
         if (this.albedo_image.is_valid()) {
-            const let sampler = Sampler::from_index(this.albedo_image.get_index());
             const let color = this.albedo_image.sample_grad(sampler, uv, ddx, ddy);
             return this.albedo_color * color;
         }
@@ -116,18 +115,16 @@ public struct Material {
         return this.albedo_color;
     }
 
-    public func sample_normal_color(f32x2 uv, f32x2 ddx, f32x2 ddy) -> f32x3 {
+    public func sample_normal_color(in Sampler sampler, f32x2 uv, f32x2 ddx, f32x2 ddy) -> f32x3 {
         if (this.normal_image.is_valid()) {
-            const let sampler = Sampler::from_index(this.normal_image.get_index());
             return this.normal_image.sample_grad(sampler, uv, ddx, ddy).rgb;
         }
 
         return { 0.0 };
     }
 
-    public func sample_emissive_color(f32x2 uv, f32x2 ddx, f32x2 ddy) -> f32x3 {
+    public func sample_emissive_color(in Sampler sampler, f32x2 uv, f32x2 ddx, f32x2 ddy) -> f32x3 {
         if (this.emissive_image.is_valid()) {
-            const let sampler = Sampler::from_index(this.emissive_image.get_index());
             const let color = this.emissive_image.sample_grad(sampler, uv, ddx, ddy).rgb;
             return this.emissive_color * color;
         }
@@ -135,10 +132,9 @@ public struct Material {
         return this.emissive_color;
     }
 
-    public func sample_metallic_roughness(f32x2 uv, f32x2 ddx, f32x2 ddy) -> f32x2 {
+    public func sample_metallic_roughness(in Sampler sampler, f32x2 uv, f32x2 ddx, f32x2 ddy) -> f32x2 {
         const let metallic_roughness = f32x2(this.metallic_factor, this.roughness_factor);
         if (this.metallic_rougness_image.is_valid()) {
-            const let sampler = Sampler::from_index(this.metallic_rougness_image.get_index());
             const let color = this.metallic_rougness_image.sample_grad(sampler, uv, ddx, ddy).bg;
             return metallic_roughness * color;
         }
@@ -146,9 +142,8 @@ public struct Material {
         return metallic_roughness;
     }
 
-    public func sample_occlusion_color(f32x2 uv, f32x2 ddx, f32x2 ddy) -> f32 {
+    public func sample_occlusion_color(in Sampler sampler, f32x2 uv, f32x2 ddx, f32x2 ddy) -> f32 {
         if (this.occlusion_image.is_valid()) {
-            const let sampler = Sampler::from_index(this.occlusion_image.get_index());
             return this.occlusion_image.sample_grad(sampler, uv, ddx, ddy).r;
         }
 

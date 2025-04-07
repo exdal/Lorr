@@ -459,16 +459,14 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
                           glm::vec3 scale) {
         auto *info = static_cast<GLTFCallbacks *>(user_data);
 
-        info->model->nodes.push_back(
-            {
-                .name = std::move(name),
-                .child_indices = std::move(child_node_indices),
-                .mesh_index = std::move(mesh_index),
-                .translation = translation,
-                .rotation = rotation,
-                .scale = scale,
-            }
-        );
+        info->model->nodes.push_back({
+            .name = std::move(name),
+            .child_indices = std::move(child_node_indices),
+            .mesh_index = std::move(mesh_index),
+            .translation = translation,
+            .rotation = rotation,
+            .scale = scale,
+        });
 
         if (mesh_index.has_value()) {
             if (info->model->meshes.size() <= mesh_index.value()) {
@@ -771,6 +769,7 @@ auto AssetManager::unload_model(const UUID &uuid) -> void {
 
 auto AssetManager::load_texture(const UUID &uuid, const TextureInfo &info) -> bool {
     ZoneScoped;
+    memory::ScopedStack stack;
 
     {
         std::shared_lock _(impl->mutex);
@@ -836,56 +835,17 @@ auto AssetManager::load_texture(const UUID &uuid, const TextureInfo &info) -> bo
             }
         }
 
-        auto image = Image::create(
-            *impl->device,
-            format,
-            vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eTransferSrc,
-            vuk::ImageType::e2D,
-            extent,
-            1,
-            mip_level_count
-        );
-        if (!image.has_value()) {
-            LS_DEBUGBREAK();
-            return false;
-        }
-
-        auto image_view = ImageView::create(
-            *impl->device,
-            image.value(),
-            vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eTransferSrc,
-            vuk::ImageViewType::e2D,
-            { .aspectMask = vuk::ImageAspectFlagBits::eColor,
-              .baseMipLevel = 0,
-              .levelCount = image->mip_count(),
-              .baseArrayLayer = 0,
-              .layerCount = image->slice_count() }
-        );
-        if (!image_view.has_value()) {
-            LS_DEBUGBREAK();
-            return false;
-        }
-
         auto rel_path = fs::relative(asset->path, impl->root_path);
-        impl->device->set_name(image.value(), fmt::format("{} Image", rel_path));
-        impl->device->set_name(image_view.value(), fmt::format("{} Image View", rel_path));
-
-        texture->image = image.value();
-        texture->image_view = image_view.value();
-        texture->sampler = Sampler::create(
-                               *impl->device,
-                               info.sampler_info.min_filter,
-                               info.sampler_info.mag_filter,
-                               vuk::SamplerMipmapMode::eLinear,
-                               info.sampler_info.address_u,
-                               info.sampler_info.address_v,
-                               vuk::SamplerAddressMode::eRepeat,
-                               vuk::CompareOp::eNever,
-                               0.0,
-                               0.0,
-                               -1000.0
-        )
-                               .value();
+        auto image_info = ImageInfo{
+            .format = format,
+            .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eTransferSrc,
+            .type = vuk::ImageType::e2D,
+            .extent = extent,
+            .slice_count = 1,
+            .mip_count = mip_level_count,
+            .name = stack.format("{} Image", rel_path),
+        };
+        std::tie(texture->image, texture->image_view) = Image::create_with_view(*impl->device, image_info).value();
 
         auto &app = Application::get();
         auto job = Job::create([this, uuid, file_type, file_data = std::move(raw_data)]() mutable {
@@ -914,8 +874,7 @@ auto AssetManager::load_texture(const UUID &uuid, const TextureInfo &info) -> bo
                     }
                     auto image_data = std::move(image_info->data);
 
-                    auto dst_attachment_info = texture->image_view.get_attachment(*impl->device, vuk::ImageUsageFlagBits::eTransferDst);
-                    auto dst_attachment = vuk::declare_ia("dst image", dst_attachment_info);
+                    auto dst_attachment = texture->image_view.discard(*impl->device, "dst image", vuk::ImageUsageFlagBits::eTransferDst);
                     for (u32 level = 0; level < image_info->mip_level_count; level++) {
                         auto mip_data_offset = image_info->per_level_offsets[level];
                         auto level_extent = vuk::Extent3D{

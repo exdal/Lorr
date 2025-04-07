@@ -5,15 +5,19 @@ import gpu;
 import sky;
 import scene;
 
+[[vk::binding(0, 0)]]
+Sampler sampler;
+[[vk::binding(1, 0)]]
+Image2D<f32x4> sky_transmittance_lut;
+[[vk::binding(2, 0)]]
+Image2D<f32x4> sky_multiscattering_lut;
+[[vk::binding(3, 0)]]
+StorageImage2D<f32x4, ImageFormat::RGBA16F> sky_view_lut;
+
 struct PushConstants {
     Atmosphere *atmosphere;
     Sun *sun;
     Camera *camera;
-
-    Sampler sampler;
-    Image2D<f32x4> sky_transmittance_lut;
-    Image2D<f32x4> sky_multiscattering_lut;
-    StorageImage2D<f32x4> sky_view_lut;
 };
 [[vk::push_constant]] PushConstants C;
 
@@ -21,7 +25,7 @@ struct PushConstants {
 [[numthreads(16, 16, 1)]]
 func cs_main(u32x3 thread_id : SV_DispatchThreadID) {
     f32x2 uv = f32x2(f32x2(thread_id.xy) + 0.5) / f32x2(C.atmosphere->sky_view_lut_size.xy);
-    f32x3 eye_pos = f32x3(0.0, C.camera->position.y, 0.0) +
+    f32x3 eye_pos = f32x3(0.0, C.camera->position.y, 0.0) *
                     CAMERA_SCALE_UNIT +
                     f32x3(0.0, C.atmosphere->planet_radius, 0.0);
     f32 h = length(eye_pos);
@@ -56,7 +60,7 @@ func cs_main(u32x3 thread_id : SV_DispatchThreadID) {
         view_zenith_sin_angle * std::safe_sqrt(1.0 - light_view_cos_angle * light_view_cos_angle));
 
     if (!move_to_top_atmosphere(eye_pos, eye_dir, C.atmosphere->atmos_radius)) {
-        C.sky_view_lut.store(thread_id.xy, 0.0);
+        sky_view_lut.store(thread_id.xy, 0.0);
         return;
     }
 
@@ -71,11 +75,11 @@ func cs_main(u32x3 thread_id : SV_DispatchThreadID) {
     info.sampling.min_sample_count = sample_count;
     info.sampling.max_sample_count = sample_count;
 
-    info.transmittance_image = C.sky_transmittance_lut;
-    info.multiscattering_image = C.sky_multiscattering_lut;
+    info.transmittance_image = sky_transmittance_lut;
+    info.multiscattering_image = sky_multiscattering_lut;
 
-    const let result = integrate_single_scattered_luminance(C.atmosphere, C.sampler, info);
+    const let result = integrate_single_scattered_luminance(C.atmosphere, sampler, info);
     const let transmittance = dot(result.transmittance, f32x3(1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f));
 
-    C.sky_view_lut.store(thread_id.xy, f32x4(result.luminance, transmittance));
+    sky_view_lut.store(thread_id.xy, f32x4(result.luminance, transmittance));
 }

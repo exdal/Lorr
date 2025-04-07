@@ -156,7 +156,7 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
 
     self.handle = device_result.value();
 
-    vuk::FunctionPointers vulkan_functions;
+    vuk::FunctionPointers vulkan_functions = {};
     vulkan_functions.vkGetInstanceProcAddr = self.instance.fp_vkGetInstanceProcAddr;
     vulkan_functions.vkGetDeviceProcAddr = self.handle.fp_vkGetDeviceProcAddr;
     vulkan_functions.load_pfns(self.instance, self.handle, true);
@@ -182,23 +182,19 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
     );
 
     executors.push_back(std::make_unique<vuk::ThisThreadExecutor>());
-    self.runtime.emplace(
-        vuk::RuntimeCreateParameters{
-            .instance = self.instance,
-            .device = self.handle,
-            .physical_device = self.physical_device,
-            .executors = std::move(executors),
-            .pointers = vulkan_functions,
-        }
-    );
+    self.runtime.emplace(vuk::RuntimeCreateParameters{
+        .instance = self.instance,
+        .device = self.handle,
+        .physical_device = self.physical_device,
+        .executors = std::move(executors),
+        .pointers = vulkan_functions,
+    });
 
     self.frame_resources.emplace(*self.runtime, frame_count);
     self.allocator.emplace(*self.frame_resources);
     self.runtime->set_shader_target_version(VK_API_VERSION_1_3);
     self.transfer_manager.init(self).value();
     self.shader_compiler = SlangCompiler::create().value();
-
-    self.recreate_bindless_set();
 
     return {};
 }
@@ -279,12 +275,10 @@ auto Device::end_frame(this Device &self, vuk::Value<vuk::ImageAttachment> &&tar
         auto end_time = static_cast<f64>(device->runtime->retrieve_timestamp(end_ts).value_or(0));
         f64 delta = ((end_time / 1e6f) - (start_time / 1e6f)) / 1e3f;
         auto pass_index = start_ts.id / 2;
-        device->gpu_profiler_tasks.push_back(
-            { .startTime = device->gpu_profiler_query_offset,
-              .endTime = device->gpu_profiler_query_offset + delta,
-              .name = name.c_str(),
-              .color = legit::Colors::colors[pass_index % ls::count_of(legit::Colors::colors)] }
-        );
+        device->gpu_profiler_tasks.push_back({ .startTime = device->gpu_profiler_query_offset,
+                                               .endTime = device->gpu_profiler_query_offset + delta,
+                                               .name = name.c_str(),
+                                               .color = legit::Colors::colors[pass_index % ls::count_of(legit::Colors::colors)] });
 
         device->gpu_profiler_query_offset += delta;
     };
@@ -349,18 +343,14 @@ auto Device::create_swap_chain(this Device &self, VkSurfaceKHR surface, ls::opti
     VkPresentModeKHR present_mode = self.frame_count() == 1 ? VK_PRESENT_MODE_FIFO_KHR : VK_PRESENT_MODE_IMMEDIATE_KHR;
     vkb::SwapchainBuilder builder(self.handle, surface);
     builder.set_desired_min_image_count(self.frame_count());
-    builder.set_desired_format(
-        vuk::SurfaceFormatKHR{
-            .format = vuk::Format::eR8G8B8A8Srgb,
-            .colorSpace = vuk::ColorSpaceKHR::eSrgbNonlinear,
-        }
-    );
-    builder.add_fallback_format(
-        vuk::SurfaceFormatKHR{
-            .format = vuk::Format::eB8G8R8A8Srgb,
-            .colorSpace = vuk::ColorSpaceKHR::eSrgbNonlinear,
-        }
-    );
+    builder.set_desired_format(vuk::SurfaceFormatKHR{
+        .format = vuk::Format::eR8G8B8A8Srgb,
+        .colorSpace = vuk::ColorSpaceKHR::eSrgbNonlinear,
+    });
+    builder.add_fallback_format(vuk::SurfaceFormatKHR{
+        .format = vuk::Format::eB8G8R8A8Srgb,
+        .colorSpace = vuk::ColorSpaceKHR::eSrgbNonlinear,
+    });
     builder.set_desired_present_mode(present_mode);
     builder.set_image_usage_flags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
 
@@ -507,59 +497,6 @@ auto Device::destroy(this Device &self, PipelineID id) -> void {
     ZoneScoped;
 
     self.resources.pipelines.destroy_slot(id);
-}
-
-auto Device::bindless_set(this Device &self) -> vuk::PersistentDescriptorSet & {
-    return self.resources.bindless_set;
-}
-
-auto Device::recreate_bindless_set(this Device &self) -> void {
-    ZoneScoped;
-
-    self.wait();
-    self.get_allocator().deallocate({ &self.bindless_set(), 1 });
-
-    const u32 initial_min = 1024;
-    u32 descriptor_sizes[] = {
-        ls::max(initial_min, static_cast<u32>(self.resources.image_views.size() * 2)),
-        ls::max(initial_min, static_cast<u32>(self.resources.image_views.size() * 2)),
-        ls::max(initial_min, static_cast<u32>(self.resources.samplers.size() * 2)),
-    };
-
-    BindlessDescriptorInfo initial_descriptor_infos[] = {
-        { .binding = BindlessDescriptorLayout::Samplers, .type = vuk::DescriptorType::eSampler, .descriptor_count = descriptor_sizes[0] },
-        { .binding = BindlessDescriptorLayout::SampledImages, .type = vuk::DescriptorType::eSampledImage, .descriptor_count = descriptor_sizes[1] },
-        { .binding = BindlessDescriptorLayout::StorageImages, .type = vuk::DescriptorType::eStorageImage, .descriptor_count = descriptor_sizes[2] },
-    };
-    self.bindless_set() = self.create_persistent_descriptor_set(initial_descriptor_infos, 0).release();
-}
-
-auto Device::refresh_bindless_set(this Device &self, ImageViewID image_view_id, const vuk::ImageUsageFlags &usage) -> void {
-    ZoneScoped;
-
-    auto index = SlotMap_decode_id(image_view_id).index;
-    auto &image_view = *self.image_view(image_view_id);
-
-    // Actual stuff
-    if (usage & vuk::ImageUsageFlagBits::eSampled) {
-        self.bindless_set().update_sampled_image(BindlessDescriptorLayout::SampledImages, index, image_view, vuk::ImageLayout::eReadOnlyOptimal);
-    }
-
-    if (usage & vuk::ImageUsageFlagBits::eStorage) {
-        self.bindless_set().update_storage_image(BindlessDescriptorLayout::StorageImages, index, image_view);
-    }
-
-    self.commit_descriptor_set(self.bindless_set());
-}
-
-auto Device::refresh_bindless_set(this Device &self, SamplerID sampler_id) -> void {
-    ZoneScoped;
-
-    auto index = SlotMap_decode_id(sampler_id).index;
-    auto &sampler = *self.sampler(sampler_id);
-
-    self.bindless_set().update_sampler(BindlessDescriptorLayout::Samplers, index, sampler);
-    self.commit_descriptor_set(self.bindless_set());
 }
 
 auto Device::render_frame_profiler(this Device &self) -> void {

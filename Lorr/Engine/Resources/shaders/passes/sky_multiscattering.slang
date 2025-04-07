@@ -7,12 +7,15 @@ import scene;
 
 import embedded.hemisphere;
 
+[[vk::binding(0, 0)]]
+Sampler sampler;
+[[vk::binding(1, 0)]]
+Image2D<f32x4> sky_transmittance_lut;
+[[vk::binding(2, 0)]]
+StorageImage2D<f32x4, ImageFormat::RGBA16F> sky_multiscattering_lut;
+
 struct PushConstants {
     Atmosphere *atmosphere;
-
-    Sampler sampler;
-    Image2D<f32x4> sky_transmittance_lut;
-    StorageImage2D<f32x4> sky_multiscattering_lut;
 };
 [[vk::push_constant]] PushConstants C;
 
@@ -34,13 +37,13 @@ func cs_main(u32x3 thread_id : SV_DispatchThreadID) {
     info.sampling.variable_sample_count = false;
     info.sampling.initial_sample_count = 32;
 
-    info.transmittance_image = C.sky_transmittance_lut;
+    info.transmittance_image = sky_transmittance_lut;
 
     f32x3 luminance = 0.0;
     f32x3 multi_scattering_as_1 = 0.0;
     for (int i = 0; i < 64; i++) {
         info.eye_dir = HEMISPHERE_64[i];
-        const let result = integrate_single_scattered_luminance(C.atmosphere, C.sampler, info);
+        const let result = integrate_single_scattered_luminance(C.atmosphere, sampler, info);
         multi_scattering_as_1 += result.multiscattering_as_1;
         luminance += result.luminance;
     }
@@ -53,5 +56,5 @@ func cs_main(u32x3 thread_id : SV_DispatchThreadID) {
     f32x3 scattered_luminance = luminance * isotropic_phase;
     f32x3 f_ms = 1.0 / (1.0 - multi_scattering_as_1);
 
-    C.sky_multiscattering_lut.store(thread_id.xy, f32x4(scattered_luminance * f_ms, 1.0));
+    sky_multiscattering_lut.store(thread_id.xy, f32x4(scattered_luminance * f_ms, 1.0));
 }

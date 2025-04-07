@@ -3,25 +3,16 @@
 #include "Engine/Graphics/VulkanDevice.hh"
 
 namespace lr {
-auto Image::create(
-    Device &device,
-    vuk::Format format,
-    const vuk::ImageUsageFlags &usage,
-    vuk::ImageType type,
-    vuk::Extent3D extent,
-    u32 slice_count,
-    u32 mip_count,
-    vuk::source_location LOC
-) -> std::expected<Image, vuk::VkException> {
+auto Image::create(Device &device, const ImageInfo &info, LR_CALLSTACK) -> std::expected<Image, vuk::VkException> {
     ZoneScoped;
 
     vuk::ImageCreateInfo create_info = {
-        .imageType = type,
-        .format = format,
-        .extent = extent,
-        .mipLevels = mip_count,
-        .arrayLayers = slice_count,
-        .usage = usage | vuk::ImageUsageFlagBits::eTransferDst,
+        .imageType = info.type,
+        .format = info.format,
+        .extent = info.extent,
+        .mipLevels = info.mip_count,
+        .arrayLayers = info.slice_count,
+        .usage = info.usage | vuk::ImageUsageFlagBits::eTransferDst,
     };
     vuk::Unique<vuk::Image> image_handle(*device.allocator);
     auto result = device.allocator->allocate_images({ &*image_handle, 1 }, { &create_info, 1 }, LOC);
@@ -30,13 +21,70 @@ auto Image::create(
     }
 
     auto image = Image{};
-    image.format_ = format;
-    image.extent_ = extent;
-    image.slice_count_ = slice_count;
-    image.mip_levels_ = mip_count;
+    image.format_ = info.format;
+    image.extent_ = info.extent;
+    image.slice_count_ = info.slice_count;
+    image.mip_levels_ = info.mip_count;
     image.id_ = device.resources.images.create_slot(std::move(image_handle));
+    device.set_name(image, info.name);
 
     return image;
+}
+
+auto Image::create_with_view(Device &device, const ImageInfo &info, LR_CALLSTACK) -> std::expected<std::tuple<Image, ImageView>, vuk::VkException> {
+    ZoneScoped;
+    memory::ScopedStack stack;
+
+    auto view_type = vuk::ImageViewType::eInfer;
+    switch (info.type) {
+        case vuk::ImageType::e1D:
+            view_type = vuk::ImageViewType::e1D;
+            break;
+        case vuk::ImageType::e2D:
+            view_type = vuk::ImageViewType::e2D;
+            break;
+        case vuk::ImageType::e3D:
+            view_type = vuk::ImageViewType::e3D;
+            break;
+        case vuk::ImageType::eInfer:
+            view_type = vuk::ImageViewType::eInfer;
+            break;
+    }
+
+    auto aspect_mask = vuk::ImageAspectFlags{};
+    switch (info.format) {
+        case vuk::Format::eD32Sfloat:
+        case vuk::Format::eD16Unorm:
+        case vuk::Format::eD32SfloatS8Uint:
+        case vuk::Format::eD24UnormS8Uint:
+        case vuk::Format::eD16UnormS8Uint:
+        case vuk::Format::eX8D24UnormPack32:
+            aspect_mask = vuk::ImageAspectFlagBits::eDepth;
+            break;
+        default:
+            aspect_mask = vuk::ImageAspectFlagBits::eColor;
+            break;
+    }
+
+    auto subresource_range = vuk::ImageSubresourceRange{
+        .aspectMask = aspect_mask,
+        .baseMipLevel = 0,
+        .levelCount = info.mip_count,
+        .baseArrayLayer = 0,
+        .layerCount = info.slice_count,
+    };
+    auto image = Image::create(device, info, LOC).value();
+
+    auto view_name = !info.name.empty() ? stack.format("{} View", info.name) : "";
+    auto image_view_info = ImageViewInfo{
+        .image_usage = info.usage,
+        .type = view_type,
+        .subresource_range = subresource_range,
+        .name = view_name,
+    };
+    auto image_view = ImageView::create(device, image, image_view_info, LOC).value();
+
+    return std::make_tuple(image, image_view);
 }
 
 auto Image::format() const -> vuk::Format {
@@ -59,20 +107,13 @@ auto Image::id() const -> ImageID {
     return id_;
 }
 
-auto ImageView::create(
-    Device &device,
-    Image &image,
-    const vuk::ImageUsageFlags &image_usage,
-    vuk::ImageViewType type,
-    const vuk::ImageSubresourceRange &subresource_range,
-    vuk::source_location LOC
-) -> std::expected<ImageView, vuk::VkException> {
+auto ImageView::create(Device &device, Image &image, const ImageViewInfo &info, LR_CALLSTACK) -> std::expected<ImageView, vuk::VkException> {
     ZoneScoped;
 
     auto image_handle = device.image(image.id());
     vuk::ImageViewCreateInfo create_info = {
         .image = image_handle->image,
-        .viewType = type,
+        .viewType = info.type,
         .format = image.format(),
         .components = {
             .r = vuk::ComponentSwizzle::eIdentity,
@@ -80,8 +121,8 @@ auto ImageView::create(
             .b = vuk::ComponentSwizzle::eIdentity,
             .a = vuk::ComponentSwizzle::eIdentity,
         },
-        .subresourceRange = subresource_range,
-        .view_usage = image_usage,
+        .subresourceRange = info.subresource_range,
+        .view_usage = info.image_usage,
     };
     vuk::Unique<vuk::ImageView> image_view_handle(*device.allocator);
     auto result = device.allocator->allocate_image_views({ &*image_view_handle, 1 }, { &create_info, 1 }, LOC);
@@ -92,46 +133,17 @@ auto ImageView::create(
     auto image_view = ImageView{};
     image_view.format_ = image.format();
     image_view.extent_ = image.extent();
-    image_view.type_ = type;
-    image_view.subresource_range_ = subresource_range;
+    image_view.type_ = info.type;
+    image_view.subresource_range_ = info.subresource_range;
     image_view.bound_image_id_ = image.id();
     image_view.id_ = device.resources.image_views.create_slot(std::move(image_view_handle));
-    device.refresh_bindless_set(image_view.id(), image_usage);
+    device.refresh_bindless_set(image_view.id(), info.image_usage);
+    device.set_name(image_view, info.name);
 
     return image_view;
 }
 
-auto ImageView::create_frametime(
-    Device &device,
-    ImageViewID old_image_view_id,
-    vuk::ImageView &raw_handle,
-    const vuk::ImageUsageFlags &image_usage,
-    vuk::ImageViewType type,
-    const vuk::ImageSubresourceRange &subresource_range
-) -> ImageView {
-    ZoneScoped;
-
-    // This is hack
-    vuk::Unique<vuk::ImageView> image_view_handle(*device.allocator, raw_handle);
-    auto image_view = ImageView{};
-    if (old_image_view_id == ImageViewID::Invalid) {
-        image_view.format_ = vuk::Format::eUndefined;
-        image_view.extent_ = vuk::Extent3D{ .width = 0, .height = 0, .depth = 0 };
-        image_view.type_ = type;
-        image_view.subresource_range_ = subresource_range;
-        image_view.bound_image_id_ = ImageID::Invalid;
-        image_view.id_ = device.resources.image_views.create_slot(std::move(image_view_handle));
-    } else {
-        auto *old_image_view = device.resources.image_views.slot(old_image_view_id);
-        old_image_view->swap(image_view_handle);
-    }
-
-    device.refresh_bindless_set(image_view.id(), image_usage);
-
-    return image_view;
-}
-
-auto ImageView::get_attachment(Device &device, const vuk::ImageUsageFlags &usage) const -> vuk::ImageAttachment {
+auto ImageView::to_attachment(Device &device, const vuk::ImageUsageFlags &usage) const -> vuk::ImageAttachment {
     ZoneScoped;
 
     auto *image_handle = device.image(bound_image_id_);
@@ -152,7 +164,7 @@ auto ImageView::get_attachment(Device &device, const vuk::ImageUsageFlags &usage
     };
 }
 
-auto ImageView::get_attachment(Device &device, vuk::ImageAttachment::Preset preset) const -> vuk::ImageAttachment {
+auto ImageView::to_attachment(Device &device, vuk::ImageAttachment::Preset preset) const -> vuk::ImageAttachment {
     ZoneScoped;
 
     auto *image_handle = device.image(bound_image_id_);
@@ -164,17 +176,17 @@ auto ImageView::get_attachment(Device &device, vuk::ImageAttachment::Preset pres
     return attachment;
 }
 
-auto ImageView::discard(Device &device, vuk::Name name, const vuk::ImageUsageFlags &usage) const -> vuk::Value<vuk::ImageAttachment> {
+auto ImageView::discard(Device &device, vuk::Name name, const vuk::ImageUsageFlags &usage, LR_CALLSTACK) const -> vuk::Value<vuk::ImageAttachment> {
     ZoneScoped;
 
-    return vuk::discard_ia(name, this->get_attachment(device, usage));
+    return vuk::discard_ia(name, this->to_attachment(device, usage), LOC);
 }
 
-auto ImageView::acquire(Device &device, vuk::Name name, const vuk::ImageUsageFlags &usage, vuk::Access last_access) const
+auto ImageView::acquire(Device &device, vuk::Name name, const vuk::ImageUsageFlags &usage, vuk::Access last_access, LR_CALLSTACK) const
     -> vuk::Value<vuk::ImageAttachment> {
     ZoneScoped;
 
-    return vuk::acquire_ia(name, this->get_attachment(device, usage), last_access);
+    return vuk::acquire_ia(name, this->to_attachment(device, usage), last_access, LOC);
 }
 
 auto ImageView::format() const -> vuk::Format {
@@ -209,38 +221,23 @@ auto ImageView::index() const -> u32 {
     return SlotMap_decode_id(id_).index;
 }
 
-auto Sampler::create(
-    Device &device,
-    vuk::Filter min_filter,
-    vuk::Filter mag_filter,
-    vuk::SamplerMipmapMode mipmap_mode,
-    vuk::SamplerAddressMode addr_u,
-    vuk::SamplerAddressMode addr_v,
-    vuk::SamplerAddressMode addr_w,
-    vuk::CompareOp compare_op,
-    f32 max_anisotropy,
-    f32 mip_lod_bias,
-    f32 min_lod,
-    f32 max_lod,
-    bool use_anisotropy,
-    [[maybe_unused]] vuk::source_location LOC
-) -> std::expected<Sampler, vuk::VkException> {
+auto Sampler::create(Device &device, const SamplerInfo &info, [[maybe_unused]] vuk::source_location LOC) -> std::expected<Sampler, vuk::VkException> {
     ZoneScoped;
 
     vuk::SamplerCreateInfo create_info = {
-        .magFilter = mag_filter,
-        .minFilter = min_filter,
-        .mipmapMode = mipmap_mode,
-        .addressModeU = addr_u,
-        .addressModeV = addr_v,
-        .addressModeW = addr_w,
-        .mipLodBias = mip_lod_bias,
-        .anisotropyEnable = use_anisotropy,
-        .maxAnisotropy = max_anisotropy,
-        .compareEnable = compare_op != vuk::CompareOp::eNever,
-        .compareOp = compare_op,
-        .minLod = min_lod,
-        .maxLod = max_lod,
+        .magFilter = info.mag_filter,
+        .minFilter = info.min_filter,
+        .mipmapMode = info.mipmap_mode,
+        .addressModeU = info.addr_u,
+        .addressModeV = info.addr_v,
+        .addressModeW = info.addr_w,
+        .mipLodBias = info.mip_lod_bias,
+        .anisotropyEnable = info.use_anisotropy,
+        .maxAnisotropy = info.max_anisotropy,
+        .compareEnable = info.compare_op != vuk::CompareOp::eNever,
+        .compareOp = info.compare_op,
+        .minLod = info.min_lod,
+        .maxLod = info.max_lod,
     };
 
     auto sampler = Sampler{};

@@ -779,13 +779,6 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                 VUK_IA(vuk::eFragmentRead) normal,
                 VUK_IA(vuk::eFragmentRead) emissive,
                 VUK_IA(vuk::eFragmentRead) metallic_roughness_occlusion) {
-                auto nearest_repeat_sampler = vuk::SamplerCreateInfo{
-                    .magFilter = vuk::Filter::eNearest,
-                    .minFilter = vuk::Filter::eNearest,
-                    .addressModeU = vuk::SamplerAddressMode::eRepeat,
-                    .addressModeV = vuk::SamplerAddressMode::eRepeat,
-                };
-
                 auto linear_clamp_sampler = vuk::SamplerCreateInfo{
                     .magFilter = vuk::Filter::eLinear,
                     .minFilter = vuk::Filter::eLinear,
@@ -793,6 +786,14 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                     .addressModeV = vuk::SamplerAddressMode::eClampToEdge,
                     .addressModeW = vuk::SamplerAddressMode::eClampToEdge,
                 };
+
+                auto nearest_repeat_sampler = vuk::SamplerCreateInfo{
+                    .magFilter = vuk::Filter::eNearest,
+                    .minFilter = vuk::Filter::eNearest,
+                    .addressModeU = vuk::SamplerAddressMode::eRepeat,
+                    .addressModeV = vuk::SamplerAddressMode::eRepeat,
+                };
+
                 cmd_list //
                     .bind_graphics_pipeline(pipeline)
                     .set_rasterization({})
@@ -800,8 +801,8 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                     .set_dynamic_state(vuk::DynamicStateFlagBits::eViewport | vuk::DynamicStateFlagBits::eScissor)
                     .set_viewport(0, vuk::Rect2D::framebuffer())
                     .set_scissor(0, vuk::Rect2D::framebuffer())
-                    .bind_sampler(0, 0, nearest_repeat_sampler)
-                    .bind_sampler(0, 1, linear_clamp_sampler)
+                    .bind_sampler(0, 0, linear_clamp_sampler)
+                    .bind_sampler(0, 1, nearest_repeat_sampler)
                     .bind_image(0, 2, sky_transmittance_lut)
                     .bind_image(0, 3, sky_multiscatter_lut)
                     .bind_image(0, 4, depth)

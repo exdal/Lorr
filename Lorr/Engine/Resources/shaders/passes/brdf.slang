@@ -8,20 +8,28 @@ import scene;
 
 [[vk::binding(0, 0)]]
 Sampler linear_clamp_sampler;
+
 [[vk::binding(1, 0)]]
 Sampler nearest_repeat_sampler;
+
 [[vk::binding(2, 0)]]
 Image2D<f32x4> sky_transmittance_lut;
+
 [[vk::binding(3, 0)]]
 Image2D<f32x4> sky_multiscattering_lut;
+
 [[vk::binding(4, 0)]]
 StorageImage2D<f32, ImageFormat::R32F> depth_image;
+
 [[vk::binding(5, 0)]]
 Image2D<f32x4> albedo_image;
+
 [[vk::binding(6, 0)]]
 StorageImage2D<f32x4, ImageFormat::RGBA16F> normal_image;
+
 [[vk::binding(7, 0)]]
 StorageImage2D<f32x3, ImageFormat::R11F_G11F_B10F> emissive_image;
+
 [[vk::binding(8, 0)]]
 StorageImage2D<f32x3, ImageFormat::RGBA8UI> metallic_roughness_occlusion_image;
 

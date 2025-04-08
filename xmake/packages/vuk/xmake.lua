@@ -4,7 +4,7 @@ package("vuk")
     set_homepage("https://github.com/martty")
     set_license("MIT")
 
-    add_urls("https://github.com/exdal/vuk.git", { branch = "set-pick" })
+    add_urls("https://github.com/martty/vuk.git", { branch = "new-FE-dev" })
 
     add_versions("2025.02.26",   "257c1629aaa4200071fb752eb24894d05ce367d4")
     add_versions("2025.02.26.1", "bad2fe0a1e9c355bc2e9533e40d9783cef1b6f07")
@@ -13,6 +13,7 @@ package("vuk")
     add_versions("2025.03.07",   "add40963bb133ec42ec6a4a5d03f8c9b880a273e")
     add_versions("2025.04.08",   "8a768031c3da0a9429cfdc67bb179ec1c14a1501")
     add_versions("2025.04.08.1", "7831d3e7030ed51a3a6466120770718404449c6c")
+    add_versions("2025.04.09",   "d8b6e6462c01f7ce7520671ba1fda4f3152da2c1")
 
     add_configs("debug_allocations", { description = "Debug VMA allocations", default = false, type = "boolean" })
 

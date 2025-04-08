@@ -63,7 +63,6 @@ auto ImGuiRenderer::init(this ImGuiRenderer &self, Device *device) -> void {
 
     auto imgui_ia = transfer_man.upload_staging(self.font_atlas_view, font_data, font_width * font_height * 4)
                         .as_released(vuk::Access::eFragmentSampled, vuk::DomainFlagBits::eGraphicsQueue);
-    imgui_ia->layout = vuk::ImageLayout::eReadOnlyOptimal;
     transfer_man.wait_on(std::move(imgui_ia));
     IM_FREE(font_data);
 

@@ -93,6 +93,11 @@ public enum AlphaMode : u32 {
     Blend,
 };
 
+[[vk::binding(0, 1)]]
+Sampler material_sampler;
+[[vk::binding(1, 1)]]
+Image2D<f32x4> material_images[];
+
 public struct Material {
     public f32x4 albedo_color = {};
     public f32x3 emissive_color = {};
@@ -100,51 +105,56 @@ public struct Material {
     public f32   metallic_factor = 0.0;
     public AlphaMode alpha_mode = AlphaMode::Opaque;
     public f32   alpha_cutoff = 0.0;
-    public Image2D<f32x4> albedo_image;
-    public Image2D<f32x4> normal_image;
-    public Image2D<f32x4> emissive_image;
-    public Image2D<f32x4> metallic_rougness_image;
-    public Image2D<f32x4> occlusion_image;
+    public u32   albedo_image_index = ~0u;
+    public u32   normal_image_index = ~0u;
+    public u32   emissive_image_index = ~0u;
+    public u32   metallic_rougness_image_index = ~0u;
+    public u32   occlusion_image_index = ~0u;
 
-    public func sample_albedo_color(in Sampler sampler, f32x2 uv, f32x2 ddx, f32x2 ddy) -> f32x4 {
-        if (this.albedo_image.is_valid()) {
-            const let color = this.albedo_image.sample_grad(sampler, uv, ddx, ddy);
+    public func sample_albedo_color(f32x2 uv, f32x2 ddx, f32x2 ddy) -> f32x4 {
+        if (this.albedo_image_index != ~0u) {
+            const let color = material_images[this.albedo_image_index]
+                .sample_grad(material_sampler, uv, ddx, ddy);
             return this.albedo_color * color;
         }
 
         return this.albedo_color;
     }
 
-    public func sample_normal_color(in Sampler sampler, f32x2 uv, f32x2 ddx, f32x2 ddy) -> f32x3 {
-        if (this.normal_image.is_valid()) {
-            return this.normal_image.sample_grad(sampler, uv, ddx, ddy).rgb;
+    public func sample_normal_color(f32x2 uv, f32x2 ddx, f32x2 ddy) -> f32x3 {
+        if (this.normal_image_index != ~0u) {
+            return material_images[this.normal_image_index]
+                .sample_grad(material_sampler, uv, ddx, ddy).rgb;
         }
 
         return { 0.0 };
     }
 
-    public func sample_emissive_color(in Sampler sampler, f32x2 uv, f32x2 ddx, f32x2 ddy) -> f32x3 {
-        if (this.emissive_image.is_valid()) {
-            const let color = this.emissive_image.sample_grad(sampler, uv, ddx, ddy).rgb;
+    public func sample_emissive_color(f32x2 uv, f32x2 ddx, f32x2 ddy) -> f32x3 {
+        if (this.emissive_image_index != ~0u) {
+            const let color = material_images[this.emissive_image_index]
+                .sample_grad(material_sampler, uv, ddx, ddy).rgb;
             return this.emissive_color * color;
         }
 
         return this.emissive_color;
     }
 
-    public func sample_metallic_roughness(in Sampler sampler, f32x2 uv, f32x2 ddx, f32x2 ddy) -> f32x2 {
+    public func sample_metallic_roughness(f32x2 uv, f32x2 ddx, f32x2 ddy) -> f32x2 {
         const let metallic_roughness = f32x2(this.metallic_factor, this.roughness_factor);
-        if (this.metallic_rougness_image.is_valid()) {
-            const let color = this.metallic_rougness_image.sample_grad(sampler, uv, ddx, ddy).bg;
+        if (this.metallic_rougness_image_index != ~0u) {
+            const let color = material_images[this.metallic_rougness_image_index]
+                .sample_grad(material_sampler, uv, ddx, ddy).bg;
             return metallic_roughness * color;
         }
 
         return metallic_roughness;
     }
 
-    public func sample_occlusion_color(in Sampler sampler, f32x2 uv, f32x2 ddx, f32x2 ddy) -> f32 {
-        if (this.occlusion_image.is_valid()) {
-            return this.occlusion_image.sample_grad(sampler, uv, ddx, ddy).r;
+    public func sample_occlusion_color(f32x2 uv, f32x2 ddx, f32x2 ddy) -> f32 {
+        if (this.occlusion_image_index != ~0u) {
+            return material_images[this.occlusion_image_index]
+                .sample_grad(material_sampler, uv, ddx, ddy).r;
         }
 
         return 1.0;
@@ -179,7 +189,7 @@ public struct Meshlet {
 
     // ----------------------------------------------------------
 
-    public func triangle(Model *model, u32 i) -> Triangle {
+    public func indices(Model *model, u32 i) -> Triangle {
         return {
             u32(model->local_triangle_indices[this.triangle_offset + i * 3 + 0]),
             u32(model->local_triangle_indices[this.triangle_offset + i * 3 + 1]),
@@ -187,11 +197,11 @@ public struct Meshlet {
         };
     }
 
-    public func indices(Model *model, in Triangle triangle) -> u32x3 {
+    public func vertices(Model *model, in Triangle indices) -> u32x3 {
         return {
-            model->indices[this.index_offset + triangle.x],
-            model->indices[this.index_offset + triangle.y],
-            model->indices[this.index_offset + triangle.z],
+            model->indices[this.index_offset + indices.x],
+            model->indices[this.index_offset + indices.y],
+            model->indices[this.index_offset + indices.z],
         };
     }
 

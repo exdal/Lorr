@@ -473,6 +473,7 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, const vuk::Extent3
         .sun = sun_data,
         .atmosphere = atmos_data,
         .camera = active_camera_data,
+        .cull_flags = self.cull_flags,
         .dirty_transform_ids = self.dirty_transforms,
         .transforms = transforms,
     };
@@ -560,6 +561,7 @@ auto Scene::compose(this Scene &self) -> SceneComposeInfo {
 
     auto &app = Application::get();
 
+    auto rendering_image_view_ids = std::vector<ImageViewID>();
     auto gpu_models = std::vector<GPU::Model>();
     auto gpu_meshlet_instances = std::vector<GPU::MeshletInstance>();
     auto gpu_materials = std::vector<GPU::Material>();
@@ -595,7 +597,9 @@ auto Scene::compose(this Scene &self) -> SceneComposeInfo {
                 }
 
                 auto *texture = app.asset_man.get_texture(uuid);
-                return texture->image_view.index();
+                auto index = rendering_image_view_ids.size();
+                rendering_image_view_ids.push_back(texture->image_view.id());
+                return static_cast<u32>(index);
             };
 
             gpu_material.albedo_image_index = add_image_if_exists(material->albedo_texture).value_or(~0_u32);
@@ -623,6 +627,7 @@ auto Scene::compose(this Scene &self) -> SceneComposeInfo {
     }
 
     return SceneComposeInfo{
+        .rendering_image_view_ids = std::move(rendering_image_view_ids),
         .gpu_materials = std::move(gpu_materials),
         .gpu_models = std::move(gpu_models),
         .gpu_meshlet_instances = std::move(gpu_meshlet_instances),

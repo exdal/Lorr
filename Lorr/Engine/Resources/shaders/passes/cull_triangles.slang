@@ -76,11 +76,10 @@ func CullSmallPrimitive(f32x2x3 vertices, f32x2 viewportExtent) -> bool{
           &&  ((maxBB.y - ((minBB.y & ~SUBPIXEL_MASK) + SUBPIXEL_SAMPLES/2)) < (SUBPIXEL_SAMPLES - 1))));
 }
 
-func test_triangle(Model *model, Meshlet *meshlet, u32 local_id) -> bool {
-    const u32 triangle_index = local_id * 3;
-    const Triangle tri = meshlet->triangle(model, triangle_index);
-    const u32x3 indices = meshlet->indices(model, tri);
-    const f32x3x3 positions = meshlet->positions(model, tri);
+func test_triangle(Model *model, Meshlet *meshlet, u32 triangle_index) -> bool {
+    const Triangle tri = meshlet->indices(model, triangle_index);
+    const u32x3 vertices = meshlet->vertices(model, tri);
+    const f32x3x3 positions = meshlet->positions(model, vertices);
 
     const f32x4 clip_pos_0 = mul(model_view_proj_shared, f32x4(positions[0], 1.0));
     const f32x4 clip_pos_1 = mul(model_view_proj_shared, f32x4(positions[1], 1.0));

@@ -3,6 +3,11 @@
 #include "Engine/Core/Application.hh"
 
 namespace lr {
+enum BindlessDescriptorLayout : u32 {
+    Samplers = 0,
+    SampledImages = 1,
+};
+
 auto SceneRenderer::init(this SceneRenderer &self, Device *device) -> bool {
     self.device = device;
 
@@ -55,6 +60,15 @@ auto SceneRenderer::create_persistent_resources(this SceneRenderer &self) -> voi
     };
     self.nearest_repeat_sampler = Sampler::create(*self.device, nearest_repeat_sampler_info).value();
 
+    BindlessDescriptorInfo bindless_set_info[] = {
+        { .binding = BindlessDescriptorLayout::Samplers, .type = vuk::DescriptorType::eSampler, .descriptor_count = 1 },
+        { .binding = BindlessDescriptorLayout::SampledImages, .type = vuk::DescriptorType::eSampledImage, .descriptor_count = 1024 },
+    };
+    self.bindless_set = self.device->create_persistent_descriptor_set(bindless_set_info, 1).release();
+
+    self.bindless_set.update_sampler(BindlessDescriptorLayout::Samplers, 0, *self.device->sampler(self.linear_repeat_sampler.id()));
+    self.device->commit_descriptor_set(self.bindless_set);
+
     //  ── GRID ────────────────────────────────────────────────────────────
     auto grid_pipeline_info = ShaderCompileInfo{
         .module_name = "editor.grid",
@@ -97,14 +111,6 @@ auto SceneRenderer::create_persistent_resources(this SceneRenderer &self) -> voi
     };
     self.sky_multiscatter_pipeline = Pipeline::create(*self.device, sky_multiscatter_pipeline_info).value();
 
-    auto sky_view_lut_info = ImageInfo{
-        .format = vuk::Format::eR16G16B16A16Sfloat,
-        .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage,
-        .type = vuk::ImageType::e2D,
-        .extent = { .width = 208, .height = 128, .depth = 1 },
-        .name = "Sky View LUT",
-    };
-    std::tie(self.sky_view_lut, self.sky_view_lut_view) = Image::create_with_view(*self.device, sky_view_lut_info).value();
     auto sky_view_pipeline_info = ShaderCompileInfo{
         .module_name = "sky_view",
         .root_path = shaders_root,
@@ -113,15 +119,6 @@ auto SceneRenderer::create_persistent_resources(this SceneRenderer &self) -> voi
     };
     self.sky_view_pipeline = Pipeline::create(*self.device, sky_view_pipeline_info).value();
 
-    auto sky_aerial_perspective_lut_info = ImageInfo{
-        .format = vuk::Format::eR16G16B16A16Sfloat,
-        .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage,
-        .type = vuk::ImageType::e3D,
-        .extent = { .width = 32, .height = 32, .depth = 32 },
-        .name = "Sky Aerial Perspective LUT",
-    };
-    std::tie(self.sky_aerial_perspective_lut, self.sky_aerial_perspective_lut_view) =
-        Image::create_with_view(*self.device, sky_aerial_perspective_lut_info).value();
     auto sky_aerial_perspective_pipeline_info = ShaderCompileInfo{
         .module_name = "sky_aerial_perspective",
         .root_path = shaders_root,
@@ -163,7 +160,7 @@ auto SceneRenderer::create_persistent_resources(this SceneRenderer &self) -> voi
         .shader_path = shaders_root / "passes" / "visbuffer_encode.slang",
         .entry_points = { "vs_main", "fs_main" },
     };
-    self.vis_encode_pipeline = Pipeline::create(*self.device, vis_encode_pipeline_info).value();
+    self.vis_encode_pipeline = Pipeline::create(*self.device, vis_encode_pipeline_info, self.bindless_set).value();
 
     auto vis_decode_pipeline_info = ShaderCompileInfo{
         .module_name = "visbuffer_decode",
@@ -171,7 +168,7 @@ auto SceneRenderer::create_persistent_resources(this SceneRenderer &self) -> voi
         .shader_path = shaders_root / "passes" / "visbuffer_decode.slang",
         .entry_points = { "vs_main", "fs_main" },
     };
-    self.vis_decode_pipeline = Pipeline::create(*self.device, vis_decode_pipeline_info).value();
+    self.vis_decode_pipeline = Pipeline::create(*self.device, vis_decode_pipeline_info, self.bindless_set).value();
 
     //  ── PBR ─────────────────────────────────────────────────────────────
     auto pbr_basic_pipeline_info = ShaderCompileInfo{
@@ -203,6 +200,7 @@ auto SceneRenderer::create_persistent_resources(this SceneRenderer &self) -> voi
          )](vuk::CommandBuffer &cmd_list, VUK_IA(vuk::eComputeRW) dst, VUK_BA(vuk::eComputeRead) atmos) {
             cmd_list //
                 .bind_compute_pipeline(pipeline)
+                .bind_image(0, 0, dst)
                 .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, PushConstants(atmos->device_address))
                 .dispatch_invocations_per_pixel(dst);
 
@@ -217,24 +215,21 @@ auto SceneRenderer::create_persistent_resources(this SceneRenderer &self) -> voi
 
     auto multiscatter_lut_pass = vuk::make_pass(
         "multiscatter lut",
-        [&pipeline = *self.device->pipeline(self.sky_multiscatter_pipeline.id()),
-         &descriptor_set = self.device->bindless_set(),
-         sampler_index = self.linear_clamp_sampler.index(),
-         sky_transmittance_lut_index = self.sky_transmittance_lut_view.index(),
-         sky_multiscattering_lut_index = self.sky_multiscatter_lut_view.index(
-         )](vuk::CommandBuffer &cmd_list, VUK_IA(vuk::eComputeSampled) transmittance_lut, VUK_IA(vuk::eComputeRW) dst, VUK_BA(vuk::eComputeRead) atmos
+        [&pipeline = *self.device->pipeline(self.sky_multiscatter_pipeline.id()), sampler = *self.device->sampler(self.linear_clamp_sampler.id())](
+            vuk::CommandBuffer &cmd_list,
+            VUK_IA(vuk::eComputeSampled) sky_transmittance_lut,
+            VUK_IA(vuk::eComputeRW) sky_multiscatter_lut,
+            VUK_BA(vuk::eComputeRead) atmos
         ) {
             cmd_list //
                 .bind_compute_pipeline(pipeline)
-                .bind_persistent(0, descriptor_set)
-                .push_constants(
-                    vuk::ShaderStageFlagBits::eCompute,
-                    0,
-                    PushConstants(atmos->device_address, sampler_index, sky_transmittance_lut_index, sky_multiscattering_lut_index)
-                )
-                .dispatch_invocations_per_pixel(dst);
+                .bind_sampler(0, 0, { .magFilter = vuk::Filter::eLinear, .minFilter = vuk::Filter::eLinear })
+                .bind_image(0, 1, sky_transmittance_lut)
+                .bind_image(0, 2, sky_multiscatter_lut)
+                .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, PushConstants(atmos->device_address))
+                .dispatch_invocations_per_pixel(sky_multiscatter_lut);
 
-            return std::make_tuple(transmittance_lut, dst, atmos);
+            return std::make_tuple(sky_transmittance_lut, sky_multiscatter_lut, atmos);
         }
     );
 
@@ -250,109 +245,19 @@ auto SceneRenderer::create_persistent_resources(this SceneRenderer &self) -> voi
     transfer_man.wait_on(std::move(multiscatter_lut_attachment));
 }
 
-auto SceneRenderer::create_frame_resources(this SceneRenderer &self, vuk::Format swap_chain_format, vuk::Extent3D swap_chain_extent) -> void {
-    ZoneScoped;
-
-    constexpr static auto FINAL_ATTACHMENT_FORMAT = vuk::Format::eB10G11R11UfloatPack32;
-    constexpr static auto DEPTH_ATTACHMENT_FORMAT = vuk::Format::eD32Sfloat;
-    constexpr static auto VISBUFFER_ATTACHMENT_FORMAT = vuk::Format::eR32Uint;
-    constexpr static auto ALBEDO_ATTACHMENT_FORMAT = vuk::Format::eR8G8B8A8Srgb;
-    constexpr static auto NORMAL_ATTACHMENT_FORMAT = vuk::Format::eR16G16B16A16Sfloat;
-    constexpr static auto EMISSIVE_ATTACHMENT_FORMAT = vuk::Format::eB10G11R11UfloatPack32;
-    constexpr static auto METALLIC_ROUGHNESS_OCCLUSION_FORMAT = vuk::Format::eR8G8B8A8Unorm;
-
-    auto &frame = self.frame_resources.emplace();
-
-    //   ──────────────────────────────────────────────────────────────────────
-    auto result_image_info = ImageInfo{
-        .format = swap_chain_format,
-        .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eColorAttachment,
-        .type = vuk::ImageType::e2D,
-        .extent = swap_chain_extent,
-        .name = "Result Image",
-    };
-    std::tie(frame.result_image, frame.result_image_view) = Image::create_with_view(*self.device, result_image_info).value();
-
-    //   ──────────────────────────────────────────────────────────────────────
-    auto final_image_info = ImageInfo{
-        .format = FINAL_ATTACHMENT_FORMAT,
-        .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eColorAttachment,
-        .type = vuk::ImageType::e2D,
-        .extent = swap_chain_extent,
-        .name = "Final Image",
-    };
-    std::tie(frame.final_image, frame.final_image_view) = Image::create_with_view(*self.device, final_image_info).value();
-
-    //   ──────────────────────────────────────────────────────────────────────
-    auto depth_image_info = ImageInfo{
-        .format = DEPTH_ATTACHMENT_FORMAT,
-        .usage = vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eDepthStencilAttachment,
-        .type = vuk::ImageType::e2D,
-        .extent = swap_chain_extent,
-        .name = "Depth Image",
-    };
-    std::tie(frame.depth_image, frame.depth_image_view) = Image::create_with_view(*self.device, depth_image_info).value();
-
-    //   ──────────────────────────────────────────────────────────────────────
-    auto visbuffer_image_info = ImageInfo{
-        .format = VISBUFFER_ATTACHMENT_FORMAT,
-        .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eColorAttachment,
-        .type = vuk::ImageType::e2D,
-        .extent = swap_chain_extent,
-        .name = "Vis Image",
-    };
-    std::tie(frame.visbuffer_image, frame.visbuffer_image_view) = Image::create_with_view(*self.device, visbuffer_image_info).value();
-
-    //   ──────────────────────────────────────────────────────────────────────
-    auto albedo_image_info = ImageInfo{
-        .format = ALBEDO_ATTACHMENT_FORMAT,
-        .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eColorAttachment,
-        .type = vuk::ImageType::e2D,
-        .extent = swap_chain_extent,
-        .name = "Albedo Image",
-    };
-    std::tie(frame.albedo_image, frame.albedo_image_view) = Image::create_with_view(*self.device, albedo_image_info).value();
-
-    //   ──────────────────────────────────────────────────────────────────────
-    auto normal_image_info = ImageInfo{
-        .format = NORMAL_ATTACHMENT_FORMAT,
-        .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eColorAttachment,
-        .type = vuk::ImageType::e2D,
-        .extent = swap_chain_extent,
-        .name = "Normal Image",
-    };
-    std::tie(frame.normal_image, frame.normal_image_view) = Image::create_with_view(*self.device, normal_image_info).value();
-
-    //   ──────────────────────────────────────────────────────────────────────
-    auto emissive_image_info = ImageInfo{
-        .format = EMISSIVE_ATTACHMENT_FORMAT,
-        .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eColorAttachment,
-        .type = vuk::ImageType::e2D,
-        .extent = swap_chain_extent,
-        .name = "Emissive Image",
-    };
-    std::tie(frame.emissive_image, frame.emissive_image_view) = Image::create_with_view(*self.device, emissive_image_info).value();
-
-    //   ──────────────────────────────────────────────────────────────────────
-    auto metallic_roughness_occlusion_image_info = ImageInfo{
-        .format = METALLIC_ROUGHNESS_OCCLUSION_FORMAT,
-        .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eColorAttachment,
-        .type = vuk::ImageType::e2D,
-        .extent = swap_chain_extent,
-        .name = "Metallic Roughness Occlusion Image",
-    };
-    std::tie(frame.metallic_roughness_occlusion_image, frame.metallic_roughness_occlusion_image_view) =
-        Image::create_with_view(*self.device, metallic_roughness_occlusion_image_info).value();
-}
-
 auto SceneRenderer::compose(this SceneRenderer &self, SceneComposeInfo &compose_info) -> ComposedScene {
     ZoneScoped;
 
     auto &transfer_man = self.device->transfer_man();
 
+    for (u32 i = 0; i < compose_info.rendering_image_view_ids.size(); i++) {
+        auto *image_view = self.device->image_view(compose_info.rendering_image_view_ids[i]);
+        self.bindless_set.update_sampled_image(BindlessDescriptorLayout::SampledImages, i, *image_view, vuk::ImageLayout::eReadOnlyOptimal);
+    }
+    self.device->commit_descriptor_set(self.bindless_set);
+
     // IMPORTANT: Only wait when buffer is being resized!!!
     // We can still copy into gpu buffer if it has enough space.
-
     if (ls::size_bytes(compose_info.gpu_materials) > self.materials_buffer.data_size()) {
         if (self.materials_buffer) {
             self.device->wait();
@@ -397,10 +302,6 @@ auto SceneRenderer::compose(this SceneRenderer &self, SceneComposeInfo &compose_
 auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::option<ComposedScene> &composed_scene)
     -> vuk::Value<vuk::ImageAttachment> {
     ZoneScoped;
-
-    if (!self.frame_resources.has_value()) {
-        self.create_frame_resources(info.format, info.extent);
-    }
 
     auto &transfer_man = self.device->transfer_man();
 
@@ -469,6 +370,104 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
         transforms_buffer = update_transforms_pass(std::move(upload_buffer), std::move(transforms_buffer));
     }
 
+    //   ──────────────────────────────────────────────────────────────────────
+    auto final_attachment = vuk::declare_ia(
+        "final",
+        { .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eColorAttachment,
+          .extent = info.extent,
+          .format = vuk::Format::eB10G11R11UfloatPack32,
+          .sample_count = vuk::Samples::e1,
+          .level_count = 1,
+          .layer_count = 1 }
+    );
+    final_attachment = vuk::clear_image(std::move(final_attachment), vuk::Black<f32>);
+
+    auto depth_attachment = vuk::declare_ia(
+        "depth",
+        { .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eDepthStencilAttachment,
+          .extent = info.extent,
+          .format = vuk::Format::eD32Sfloat,
+          .sample_count = vuk::Samples::e1,
+          .level_count = 1,
+          .layer_count = 1 }
+    );
+    depth_attachment = vuk::clear_image(std::move(depth_attachment), vuk::ClearDepth(1.0));
+
+    auto visbuffer_attachment = vuk::declare_ia(
+        "visbuffer",
+        { .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eColorAttachment,
+          .format = vuk::Format::eR32Uint,
+          .sample_count = vuk::Samples::e1 }
+    );
+    visbuffer_attachment.same_shape_as(final_attachment);
+    visbuffer_attachment = vuk::clear_image(std::move(visbuffer_attachment), vuk::Clear(vuk::ClearColor(~0_u32, 0_u32, 0_u32, 0_u32)));
+
+    auto albedo_attachment = vuk::declare_ia(
+        "albedo",
+        { .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eColorAttachment,
+          .format = vuk::Format::eR8G8B8A8Srgb,
+          .sample_count = vuk::Samples::e1 }
+    );
+    albedo_attachment.same_shape_as(visbuffer_attachment);
+    albedo_attachment = vuk::clear_image(std::move(albedo_attachment), vuk::Black<f32>);
+
+    auto normal_attachment = vuk::declare_ia(
+        "normal",
+        { .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eColorAttachment,
+          .format = vuk::Format::eR16G16B16A16Sfloat,
+          .sample_count = vuk::Samples::e1 }
+    );
+    normal_attachment.same_shape_as(visbuffer_attachment);
+    normal_attachment = vuk::clear_image(std::move(normal_attachment), vuk::Black<f32>);
+
+    auto emissive_attachment = vuk::declare_ia(
+        "emissive",
+        { .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eColorAttachment,
+          .format = vuk::Format::eB10G11R11UfloatPack32,
+          .sample_count = vuk::Samples::e1 }
+    );
+    emissive_attachment.same_shape_as(visbuffer_attachment);
+    emissive_attachment = vuk::clear_image(std::move(emissive_attachment), vuk::Black<f32>);
+
+    auto metallic_roughness_occlusion_attachment = vuk::declare_ia(
+        "metallic roughness occlusion",
+        { .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eColorAttachment,
+          .format = vuk::Format::eR8G8B8A8Unorm,
+          .sample_count = vuk::Samples::e1 }
+    );
+    metallic_roughness_occlusion_attachment.same_shape_as(visbuffer_attachment);
+    metallic_roughness_occlusion_attachment = vuk::clear_image(std::move(metallic_roughness_occlusion_attachment), vuk::Black<f32>);
+
+    auto sky_view_lut_attachment = vuk::declare_ia(
+        "sky view lut",
+        { .image_type = vuk::ImageType::e2D,
+          .extent = self.sky_view_lut_extent,
+          .sample_count = vuk::Samples::e1,
+          .view_type = vuk::ImageViewType::e2D,
+          .level_count = 1,
+          .layer_count = 1 }
+    );
+    sky_view_lut_attachment.same_format_as(final_attachment);
+
+    auto sky_aerial_perspective_attachment = vuk::declare_ia(
+        "sky_aerial_perspective",
+        { .image_type = vuk::ImageType::e3D,
+          .extent = self.sky_aerial_perspective_lut_extent,
+          .sample_count = vuk::Samples::e1,
+          .view_type = vuk::ImageViewType::e3D,
+          .level_count = 1,
+          .layer_count = 1 }
+    );
+    sky_aerial_perspective_attachment.same_format_as(sky_view_lut_attachment);
+
+    auto sky_transmittance_lut_attachment =
+        self.sky_transmittance_lut_view
+            .acquire(*self.device, "sky transmittance lut", vuk::ImageUsageFlagBits::eSampled, vuk::Access::eComputeSampled);
+    auto sky_multiscatter_lut_attachment =
+        self.sky_multiscatter_lut_view.acquire(*self.device, "sky multiscatter lut", vuk::ImageUsageFlagBits::eSampled, vuk::Access::eComputeSampled);
+
+    //   ──────────────────────────────────────────────────────────────────────
+
     auto sun_buffer = vuk::Value<vuk::Buffer>{};
     if (info.sun.has_value()) {
         sun_buffer = transfer_man.scratch_buffer(info.sun.value());
@@ -477,8 +476,8 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
     auto atmosphere_buffer = vuk::Value<vuk::Buffer>{};
     if (info.atmosphere.has_value()) {
         auto atmosphere = info.atmosphere.value();
-        atmosphere.sky_view_lut_size = self.sky_view_lut_view.extent();
-        atmosphere.aerial_perspective_lut_size = self.sky_aerial_perspective_lut_view.extent();
+        atmosphere.sky_view_lut_size = self.sky_view_lut_extent;
+        atmosphere.aerial_perspective_lut_size = self.sky_aerial_perspective_lut_extent;
         atmosphere.transmittance_lut_size = self.sky_transmittance_lut_view.extent();
         atmosphere.multiscattering_lut_size = self.sky_multiscatter_lut_view.extent();
         atmosphere_buffer = transfer_man.scratch_buffer(atmosphere);
@@ -488,64 +487,6 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
     if (info.camera.has_value()) {
         camera_buffer = transfer_man.scratch_buffer(info.camera.value());
     }
-
-    //   ──────────────────────────────────────────────────────────────────────
-    auto final_attachment = self.frame_resources->final_image_view.discard(
-        *self.device,
-        "final attachment",
-        vuk::ImageUsageFlagBits::eColorAttachment | vuk::ImageUsageFlagBits::eSampled
-    );
-    final_attachment = vuk::clear_image(std::move(final_attachment), vuk::Black<f32>);
-
-    auto depth_attachment = self.frame_resources->depth_image_view.discard(
-        *self.device,
-        "depth attachment",
-        vuk::ImageUsageFlagBits::eDepthStencilAttachment | vuk::ImageUsageFlagBits::eStorage
-    );
-    depth_attachment = vuk::clear_image(std::move(depth_attachment), vuk::ClearDepth(1.0));
-
-    auto visbuffer_attachment = self.frame_resources->visbuffer_image_view.discard(
-        *self.device,
-        "visbuffer attachment",
-        vuk::ImageUsageFlagBits::eColorAttachment | vuk::ImageUsageFlagBits::eStorage
-    );
-    visbuffer_attachment = vuk::clear_image(std::move(visbuffer_attachment), vuk::Clear(vuk::ClearColor(~0_u32, 0_u32, 0_u32, 0_u32)));
-
-    auto albedo_attachment = self.frame_resources->albedo_image_view.discard(
-        *self.device,
-        "albedo attachment",
-        vuk::ImageUsageFlagBits::eColorAttachment | vuk::ImageUsageFlagBits::eSampled
-    );
-    albedo_attachment = vuk::clear_image(std::move(albedo_attachment), vuk::Black<f32>);
-
-    auto normal_attachment = self.frame_resources->normal_image_view.discard(
-        *self.device,
-        "normal attachment",
-        vuk::ImageUsageFlagBits::eColorAttachment | vuk::ImageUsageFlagBits::eStorage
-    );
-    normal_attachment = vuk::clear_image(std::move(normal_attachment), vuk::Black<f32>);
-
-    auto emissive_attachment = self.frame_resources->emissive_image_view.discard(
-        *self.device,
-        "emission attachment",
-        vuk::ImageUsageFlagBits::eColorAttachment | vuk::ImageUsageFlagBits::eStorage
-    );
-    emissive_attachment = vuk::clear_image(std::move(emissive_attachment), vuk::Black<f32>);
-
-    auto metallic_roughness_occlusion_attachment = self.frame_resources->metallic_roughness_occlusion_image_view.discard(
-        *self.device,
-        "metallic roughness occlusion attachment",
-        vuk::ImageUsageFlagBits::eColorAttachment | vuk::ImageUsageFlagBits::eStorage
-    );
-    metallic_roughness_occlusion_attachment = vuk::clear_image(std::move(metallic_roughness_occlusion_attachment), vuk::Black<f32>);
-
-    auto sky_transmittance_lut_attachment =
-        self.sky_transmittance_lut_view
-            .acquire(*self.device, "sky transmittance lut", vuk::ImageUsageFlagBits::eSampled, vuk::Access::eComputeSampled);
-    auto sky_multiscatter_lut_attachment =
-        self.sky_multiscatter_lut_view.acquire(*self.device, "sky multiscatter lut", vuk::ImageUsageFlagBits::eSampled, vuk::Access::eComputeSampled);
-
-    //   ──────────────────────────────────────────────────────────────────────
 
     if (self.meshlet_instance_count) {
         vuk::Value<vuk::Buffer> materials_buffer;
@@ -689,10 +630,8 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
         //  ── VISBUFFER ENCODE ────────────────────────────────────────────────
         auto vis_encode_pass = vuk::make_pass(
             "vis encode",
-            [&pipeline = *self.device->pipeline(self.vis_encode_pipeline.id()),
-             &descriptor_set = self.device->bindless_set(),
-             linear_repeat_sampler_index = self.linear_repeat_sampler.index(
-             )](vuk::CommandBuffer &cmd_list,
+            [&pipeline = *self.device->pipeline(self.vis_encode_pipeline.id()), &descriptor_set = self.bindless_set](
+                vuk::CommandBuffer &cmd_list,
                 VUK_BA(vuk::eIndirectRead) triangle_indirect,
                 VUK_BA(vuk::eIndexRead) index_buffer,
                 VUK_IA(vuk::eColorWrite) visbuffer,
@@ -702,7 +641,8 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                 VUK_BA(vuk::eVertexRead) meshlet_instances,
                 VUK_BA(vuk::eVertexRead) transforms,
                 VUK_BA(vuk::eVertexRead) models,
-                VUK_BA(vuk::eFragmentRead) materials) {
+                VUK_BA(vuk::eFragmentRead) materials
+            ) {
                 cmd_list //
                     .bind_graphics_pipeline(pipeline)
                     .set_rasterization({ .cullMode = vuk::CullModeFlagBits::eNone })
@@ -711,7 +651,7 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                     .set_dynamic_state(vuk::DynamicStateFlagBits::eViewport | vuk::DynamicStateFlagBits::eScissor)
                     .set_viewport(0, vuk::Rect2D::framebuffer())
                     .set_scissor(0, vuk::Rect2D::framebuffer())
-                    .bind_persistent(0, descriptor_set)
+                    .bind_persistent(1, descriptor_set)
                     .push_constants(
                         vuk::ShaderStageFlagBits::eVertex | vuk::ShaderStageFlagBits::eFragment,
                         0,
@@ -721,8 +661,7 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                             meshlet_instances->device_address,
                             models->device_address,
                             transforms->device_address,
-                            materials->device_address,
-                            linear_repeat_sampler_index
+                            materials->device_address
                         )
                     )
                     .bind_index_buffer(index_buffer, vuk::IndexType::eUint32)
@@ -757,11 +696,8 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
         //  ── VISBUFFER DECODE ────────────────────────────────────────────────
         auto vis_decode_pass = vuk::make_pass(
             "vis decode",
-            [&pipeline = *self.device->pipeline(self.vis_decode_pipeline.id()),
-             &descriptor_set = self.device->bindless_set(),
-             linear_repeat_sampler_index = self.linear_repeat_sampler.index(),
-             visbuffer_image_index = self.frame_resources->visbuffer_image_view.index(
-             )](vuk::CommandBuffer &cmd_list,
+            [&pipeline = *self.device->pipeline(self.vis_decode_pipeline.id()), &descriptor_set = self.bindless_set](
+                vuk::CommandBuffer &cmd_list,
                 VUK_IA(vuk::eColorWrite) albedo,
                 VUK_IA(vuk::eColorWrite) normal,
                 VUK_IA(vuk::eColorWrite) emissive,
@@ -772,7 +708,8 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                 VUK_BA(vuk::eFragmentRead) models,
                 VUK_BA(vuk::eFragmentRead) transforms,
                 VUK_BA(vuk::eFragmentRead) materials,
-                VUK_IA(vuk::eFragmentRead) visbuffer) {
+                VUK_IA(vuk::eFragmentRead) visbuffer
+            ) {
                 cmd_list //
                     .bind_graphics_pipeline(pipeline)
                     .set_rasterization({ .cullMode = vuk::CullModeFlagBits::eNone })
@@ -784,7 +721,8 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                     .set_dynamic_state(vuk::DynamicStateFlagBits::eViewport | vuk::DynamicStateFlagBits::eScissor)
                     .set_viewport(0, vuk::Rect2D::framebuffer())
                     .set_scissor(0, vuk::Rect2D::framebuffer())
-                    .bind_persistent(0, descriptor_set)
+                    .bind_image(0, 0, visbuffer)
+                    .bind_persistent(1, descriptor_set)
                     .push_constants(
                         vuk::ShaderStageFlagBits::eFragment,
                         0,
@@ -794,9 +732,7 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                             meshlet_instances->device_address,
                             models->device_address,
                             transforms->device_address,
-                            materials->device_address,
-                            linear_repeat_sampler_index,
-                            visbuffer_image_index
+                            materials->device_address
                         )
                     )
                     .draw(3, 1, 0, 1);
@@ -826,20 +762,10 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                 std::move(visbuffer_attachment)
             );
 
-        //  ── PBR BASIC ───────────────────────────────────────────────────────
+        //  ── BRDF ────────────────────────────────────────────────────────────
         auto brdf_pass = vuk::make_pass(
             "brdf",
-            [&pipeline = *self.device->pipeline(self.pbr_basic_pipeline.id()),
-             &descriptor_set = self.device->bindless_set(),
-             linear_clamp_sampler_index = self.linear_clamp_sampler.index(),
-             nearest_repeat_sampler_index = self.nearest_repeat_sampler.index(),
-             sky_transmittance_lut_index = self.sky_transmittance_lut_view.index(),
-             sky_multiscattering_lut_index = self.sky_multiscatter_lut_view.index(),
-             depth_image_index = self.frame_resources->depth_image_view.index(),
-             albedo_image_index = self.frame_resources->albedo_image_view.index(),
-             normal_image_index = self.frame_resources->normal_image_view.index(),
-             emissive_image_index = self.frame_resources->emissive_image_view.index(),
-             metallic_roughness_occlusion_image_index = self.frame_resources->metallic_roughness_occlusion_image_view.index(
+            [&pipeline = *self.device->pipeline(self.pbr_basic_pipeline.id()
              )](vuk::CommandBuffer &cmd_list,
                 VUK_IA(vuk::eColorWrite) dst,
                 VUK_BA(vuk::eFragmentRead) atmosphere,
@@ -851,7 +777,21 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                 VUK_IA(vuk::eFragmentSampled) albedo,
                 VUK_IA(vuk::eFragmentRead) normal,
                 VUK_IA(vuk::eFragmentRead) emissive,
-                VUK_IA(vuk::eFragmentRead) metallic_roughness) {
+                VUK_IA(vuk::eFragmentRead) metallic_roughness_occlusion) {
+                auto nearest_repeat_sampler = vuk::SamplerCreateInfo{
+                    .magFilter = vuk::Filter::eNearest,
+                    .minFilter = vuk::Filter::eNearest,
+                    .addressModeU = vuk::SamplerAddressMode::eRepeat,
+                    .addressModeV = vuk::SamplerAddressMode::eRepeat,
+                };
+
+                auto linear_clamp_sampler = vuk::SamplerCreateInfo{
+                    .magFilter = vuk::Filter::eLinear,
+                    .minFilter = vuk::Filter::eLinear,
+                    .addressModeU = vuk::SamplerAddressMode::eClampToEdge,
+                    .addressModeV = vuk::SamplerAddressMode::eClampToEdge,
+                    .addressModeW = vuk::SamplerAddressMode::eClampToEdge,
+                };
                 cmd_list //
                     .bind_graphics_pipeline(pipeline)
                     .set_rasterization({})
@@ -859,24 +799,19 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                     .set_dynamic_state(vuk::DynamicStateFlagBits::eViewport | vuk::DynamicStateFlagBits::eScissor)
                     .set_viewport(0, vuk::Rect2D::framebuffer())
                     .set_scissor(0, vuk::Rect2D::framebuffer())
-                    .bind_persistent(0, descriptor_set)
+                    .bind_sampler(0, 0, nearest_repeat_sampler)
+                    .bind_sampler(0, 1, linear_clamp_sampler)
+                    .bind_image(0, 2, sky_transmittance_lut)
+                    .bind_image(0, 3, sky_multiscatter_lut)
+                    .bind_image(0, 4, depth)
+                    .bind_image(0, 5, albedo)
+                    .bind_image(0, 6, normal)
+                    .bind_image(0, 7, emissive)
+                    .bind_image(0, 8, metallic_roughness_occlusion)
                     .push_constants(
                         vuk::ShaderStageFlagBits::eFragment,
                         0,
-                        PushConstants(
-                            atmosphere->device_address,
-                            sun->device_address,
-                            camera->device_address,
-                            linear_clamp_sampler_index,
-                            nearest_repeat_sampler_index,
-                            sky_transmittance_lut_index,
-                            sky_multiscattering_lut_index,
-                            depth_image_index,
-                            albedo_image_index,
-                            normal_image_index,
-                            emissive_image_index,
-                            metallic_roughness_occlusion_image_index
-                        )
+                        PushConstants(atmosphere->device_address, sun->device_address, camera->device_address)
                     )
                     .draw(3, 1, 0, 0);
                 return std::make_tuple(dst, atmosphere, sun, camera, sky_transmittance_lut, sky_multiscatter_lut, depth);
@@ -909,17 +844,9 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
 
     if (info.atmosphere.has_value()) {
         //  ── SKY VIEW LUT ────────────────────────────────────────────────────
-        auto sky_view_lut_attachment =
-            self.sky_view_lut_view.discard(*self.device, "sky view lut", vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eSampled);
-
         auto sky_view_pass = vuk::make_pass(
             "sky view",
-            [&pipeline = *self.device->pipeline(self.sky_view_pipeline.id()),
-             &descriptor_set = self.device->bindless_set(),
-             linear_clamp_sampler_index = self.linear_clamp_sampler.index(),
-             sky_transmittance_lut_index = self.sky_transmittance_lut_view.index(),
-             sky_multiscattering_lut_index = self.sky_multiscatter_lut_view.index(),
-             sky_view_lut_index = self.sky_view_lut_view.index(
+            [&pipeline = *self.device->pipeline(self.sky_view_pipeline.id()
              )](vuk::CommandBuffer &cmd_list,
                 VUK_BA(vuk::eComputeRead) atmosphere,
                 VUK_BA(vuk::eComputeRead) sun,
@@ -927,21 +854,24 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                 VUK_IA(vuk::eComputeSampled) sky_transmittance_lut,
                 VUK_IA(vuk::eComputeSampled) sky_multiscatter_lut,
                 VUK_IA(vuk::eComputeRW) sky_view_lut) {
+                auto linear_clamp_sampler = vuk::SamplerCreateInfo{
+                    .magFilter = vuk::Filter::eLinear,
+                    .minFilter = vuk::Filter::eLinear,
+                    .addressModeU = vuk::SamplerAddressMode::eClampToEdge,
+                    .addressModeV = vuk::SamplerAddressMode::eClampToEdge,
+                    .addressModeW = vuk::SamplerAddressMode::eClampToEdge,
+                };
+
                 cmd_list //
                     .bind_compute_pipeline(pipeline)
-                    .bind_persistent(0, descriptor_set)
+                    .bind_sampler(0, 0, linear_clamp_sampler)
+                    .bind_image(0, 1, sky_transmittance_lut)
+                    .bind_image(0, 2, sky_multiscatter_lut)
+                    .bind_image(0, 3, sky_view_lut)
                     .push_constants(
                         vuk::ShaderStageFlagBits::eCompute,
                         0,
-                        PushConstants(
-                            atmosphere->device_address,
-                            sun->device_address,
-                            camera->device_address,
-                            linear_clamp_sampler_index,
-                            sky_transmittance_lut_index,
-                            sky_multiscattering_lut_index,
-                            sky_view_lut_index
-                        )
+                        PushConstants(atmosphere->device_address, sun->device_address, camera->device_address)
                     )
                     .dispatch_invocations_per_pixel(sky_view_lut);
                 return std::make_tuple(sky_view_lut, sky_transmittance_lut, sky_multiscatter_lut, atmosphere, sun, camera);
@@ -965,20 +895,9 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
             );
 
         //  ── SKY AERIAL PERSPECTIVE ──────────────────────────────────────────
-        auto sky_aerial_perspective_attachment = self.sky_aerial_perspective_lut_view.discard(
-            *self.device,
-            "sky aerial perspective",
-            vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eSampled
-        );
-
         auto sky_aerial_perspective_pass = vuk::make_pass(
             "sky aerial perspective",
-            [&pipeline = *self.device->pipeline(self.sky_aerial_perspective_pipeline.id()),
-             &descriptor_set = self.device->bindless_set(),
-             linear_clamp_sampler_index = self.linear_clamp_sampler.index(),
-             sky_transmittance_lut_index = self.sky_transmittance_lut_view.index(),
-             sky_multiscattering_lut_index = self.sky_multiscatter_lut_view.index(),
-             sky_aerial_perspective_lut_index = self.sky_aerial_perspective_lut_view.index(
+            [&pipeline = *self.device->pipeline(self.sky_aerial_perspective_pipeline.id()
              )](vuk::CommandBuffer &cmd_list,
                 VUK_BA(vuk::eComputeRead) atmosphere,
                 VUK_BA(vuk::eComputeRead) sun,
@@ -986,21 +905,24 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                 VUK_IA(vuk::eComputeSampled) sky_transmittance_lut,
                 VUK_IA(vuk::eComputeSampled) sky_multiscatter_lut,
                 VUK_IA(vuk::eComputeWrite) sky_aerial_perspective_lut) {
+                auto linear_clamp_sampler = vuk::SamplerCreateInfo{
+                    .magFilter = vuk::Filter::eLinear,
+                    .minFilter = vuk::Filter::eLinear,
+                    .addressModeU = vuk::SamplerAddressMode::eClampToEdge,
+                    .addressModeV = vuk::SamplerAddressMode::eClampToEdge,
+                    .addressModeW = vuk::SamplerAddressMode::eClampToEdge,
+                };
+
                 cmd_list //
                     .bind_compute_pipeline(pipeline)
-                    .bind_persistent(0, descriptor_set)
+                    .bind_sampler(0, 0, linear_clamp_sampler)
+                    .bind_image(0, 1, sky_transmittance_lut)
+                    .bind_image(0, 2, sky_multiscatter_lut)
+                    .bind_image(0, 3, sky_aerial_perspective_lut)
                     .push_constants(
                         vuk::ShaderStageFlagBits::eCompute,
                         0,
-                        PushConstants(
-                            atmosphere->device_address,
-                            sun->device_address,
-                            camera->device_address,
-                            linear_clamp_sampler_index,
-                            sky_transmittance_lut_index,
-                            sky_multiscattering_lut_index,
-                            sky_aerial_perspective_lut_index
-                        )
+                        PushConstants(atmosphere->device_address, sun->device_address, camera->device_address)
                     )
                     .dispatch_invocations_per_pixel(sky_aerial_perspective_lut);
                 return std::make_tuple(sky_aerial_perspective_lut, sky_transmittance_lut, atmosphere, sun, camera);
@@ -1020,13 +942,7 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
         //  ── SKY FINAL ───────────────────────────────────────────────────────
         auto sky_final_pass = vuk::make_pass(
             "sky final",
-            [&pipeline = *self.device->pipeline(self.sky_final_pipeline.id()),
-             &descriptor_set = self.device->bindless_set(),
-             linear_clamp_sampler_index = self.linear_clamp_sampler.index(),
-             sky_transmittance_lut_index = self.sky_transmittance_lut_view.index(),
-             sky_aerial_perspective_lut_index = self.sky_aerial_perspective_lut_view.index(),
-             sky_view_lut_index = self.sky_view_lut_view.index(),
-             depth_image_index = self.frame_resources->depth_image_view.index(
+            [&pipeline = *self.device->pipeline(self.sky_final_pipeline.id()
              )](vuk::CommandBuffer &cmd_list,
                 VUK_IA(vuk::eColorWrite) dst,
                 VUK_BA(vuk::eFragmentRead) atmosphere,
@@ -1036,6 +952,14 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                 VUK_IA(vuk::eFragmentSampled) sky_aerial_perspective_lut,
                 VUK_IA(vuk::eFragmentSampled) sky_view_lut,
                 VUK_IA(vuk::eFragmentRead) depth) {
+                auto linear_clamp_sampler = vuk::SamplerCreateInfo{
+                    .magFilter = vuk::Filter::eLinear,
+                    .minFilter = vuk::Filter::eLinear,
+                    .addressModeU = vuk::SamplerAddressMode::eClampToEdge,
+                    .addressModeV = vuk::SamplerAddressMode::eClampToEdge,
+                    .addressModeW = vuk::SamplerAddressMode::eClampToEdge,
+                };
+
                 vuk::PipelineColorBlendAttachmentState blend_info = {
                     .blendEnable = true,
                     .srcColorBlendFactor = vuk::BlendFactor::eOne,
@@ -1054,20 +978,15 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                     .set_dynamic_state(vuk::DynamicStateFlagBits::eViewport | vuk::DynamicStateFlagBits::eScissor)
                     .set_viewport(0, vuk::Rect2D::framebuffer())
                     .set_scissor(0, vuk::Rect2D::framebuffer())
-                    .bind_persistent(0, descriptor_set)
+                    .bind_sampler(0, 0, linear_clamp_sampler)
+                    .bind_image(0, 1, sky_transmittance_lut)
+                    .bind_image(0, 2, sky_aerial_perspective_lut)
+                    .bind_image(0, 3, sky_view_lut)
+                    .bind_image(0, 4, depth)
                     .push_constants(
                         vuk::ShaderStageFlagBits::eFragment,
                         0,
-                        PushConstants(
-                            atmosphere->device_address,
-                            sun->device_address,
-                            camera->device_address,
-                            linear_clamp_sampler_index,
-                            sky_transmittance_lut_index,
-                            sky_aerial_perspective_lut_index,
-                            sky_view_lut_index,
-                            depth_image_index
-                        )
+                        PushConstants(atmosphere->device_address, sun->device_address, camera->device_address)
                     )
                     .draw(3, 1, 0, 0);
                 return std::make_tuple(dst, depth, camera);
@@ -1086,15 +1005,19 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
         );
     }
 
-    auto result_attachment = self.frame_resources->result_image_view.discard(*self.device, "result", vuk::ImageUsageFlagBits::eColorAttachment);
+    auto result_attachment = vuk::declare_ia(
+        "result",
+        { .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eColorAttachment,
+          .format = info.format,
+          .sample_count = vuk::Samples::e1,
+          .layer_count = 1 }
+    );
+    result_attachment.same_shape_as(final_attachment);
 
     //  ── TONEMAP ─────────────────────────────────────────────────────────
     auto tonemap_pass = vuk::make_pass(
         "tonemap",
-        [&pipeline = *self.device->pipeline(self.tonemap_pipeline.id()),
-         &descriptor_set = self.device->bindless_set(),
-         nearest_repeat_sampler_index = self.nearest_repeat_sampler.index(),
-         final_image_index = self.frame_resources->final_image_view.index(
+        [&pipeline = *self.device->pipeline(self.tonemap_pipeline.id()
          )](vuk::CommandBuffer &cmd_list, VUK_IA(vuk::Access::eColorWrite) dst, VUK_IA(vuk::Access::eFragmentSampled) src) {
             cmd_list //
                 .bind_graphics_pipeline(pipeline)
@@ -1103,8 +1026,8 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                 .set_dynamic_state(vuk::DynamicStateFlagBits::eViewport | vuk::DynamicStateFlagBits::eScissor)
                 .set_viewport(0, vuk::Rect2D::framebuffer())
                 .set_scissor(0, vuk::Rect2D::framebuffer())
-                .bind_persistent(0, descriptor_set)
-                .push_constants(vuk::ShaderStageFlagBits::eFragment, 0, PushConstants(nearest_repeat_sampler_index, final_image_index))
+                .bind_sampler(0, 0, { .magFilter = vuk::Filter::eLinear, .minFilter = vuk::Filter::eLinear })
+                .bind_image(0, 1, src)
                 .draw(3, 1, 0, 0);
             return dst;
         }
@@ -1130,10 +1053,11 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                 .push_constants(vuk::ShaderStageFlagBits::eVertex | vuk::ShaderStageFlagBits::eFragment, 0, PushConstants(camera->device_address))
                 .draw(3, 1, 0, 0);
 
-            return dst;
+            return std::make_tuple(dst, depth);
         }
     );
-    result_attachment = editor_grid_pass(std::move(result_attachment), std::move(depth_attachment), std::move(camera_buffer));
+    std::tie(result_attachment, depth_attachment) =
+        editor_grid_pass(std::move(result_attachment), std::move(depth_attachment), std::move(camera_buffer));
 
     return result_attachment;
 }

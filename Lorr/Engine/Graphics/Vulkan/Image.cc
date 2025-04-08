@@ -137,7 +137,6 @@ auto ImageView::create(Device &device, Image &image, const ImageViewInfo &info, 
     image_view.subresource_range_ = info.subresource_range;
     image_view.bound_image_id_ = image.id();
     image_view.id_ = device.resources.image_views.create_slot(std::move(image_view_handle));
-    device.refresh_bindless_set(image_view.id(), info.image_usage);
     device.set_name(image_view, info.name);
 
     return image_view;
@@ -244,7 +243,6 @@ auto Sampler::create(Device &device, const SamplerInfo &info, [[maybe_unused]] v
     sampler.id_ = device.resources.samplers.create_slot();
     auto *sampler_handle = device.resources.samplers.slot(sampler.id_);
     *sampler_handle = device.runtime->acquire_sampler(create_info, device.frame_count());
-    device.refresh_bindless_set(sampler.id());
 
     return sampler;
 }

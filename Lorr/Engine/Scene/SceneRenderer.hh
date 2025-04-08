@@ -6,6 +6,7 @@
 
 namespace lr {
 struct SceneComposeInfo {
+    std::vector<ImageViewID> rendering_image_view_ids = {};
     std::vector<GPU::Material> gpu_materials = {};
     std::vector<GPU::Model> gpu_models = {};
     std::vector<GPU::MeshletInstance> gpu_meshlet_instances = {};
@@ -31,30 +32,9 @@ struct SceneRenderInfo {
 };
 
 struct SceneRenderer {
-    struct FrameResources {
-        Image result_image = {};
-        ImageView result_image_view = {};
-
-        Image final_image = {};
-        ImageView final_image_view = {};
-
-        Image depth_image = {};
-        ImageView depth_image_view = {};
-        Image visbuffer_image = {};
-        ImageView visbuffer_image_view = {};
-
-        Image albedo_image = {};
-        ImageView albedo_image_view = {};
-        Image normal_image = {};
-        ImageView normal_image_view = {};
-        Image emissive_image = {};
-        ImageView emissive_image_view = {};
-        Image metallic_roughness_occlusion_image = {};
-        ImageView metallic_roughness_occlusion_image_view = {};
-    };
-
     Device *device = nullptr;
 
+    vuk::PersistentDescriptorSet bindless_set = {};
     Sampler linear_repeat_sampler = {};
     Sampler linear_clamp_sampler = {};
     Sampler nearest_repeat_sampler = {};
@@ -73,11 +53,9 @@ struct SceneRenderer {
     Image sky_multiscatter_lut = {};
     ImageView sky_multiscatter_lut_view = {};
     Pipeline sky_multiscatter_pipeline = {};
-    Image sky_view_lut = {};
-    ImageView sky_view_lut_view = {};
+    vuk::Extent3D sky_view_lut_extent = { .width = 208, .height = 128, .depth = 1 };
     Pipeline sky_view_pipeline = {};
-    Image sky_aerial_perspective_lut = {};
-    ImageView sky_aerial_perspective_lut_view = {};
+    vuk::Extent3D sky_aerial_perspective_lut_extent = { .width = 32, .height = 32, .depth = 32 };
     Pipeline sky_aerial_perspective_pipeline = {};
     Pipeline sky_final_pipeline = {};
 
@@ -90,13 +68,10 @@ struct SceneRenderer {
 
     Pipeline tonemap_pipeline = {};
 
-    ls::option<FrameResources> frame_resources = {};
-
     auto init(this SceneRenderer &, Device *device) -> bool;
     auto destroy(this SceneRenderer &) -> void;
 
     auto create_persistent_resources(this SceneRenderer &) -> void;
-    auto create_frame_resources(this SceneRenderer &, vuk::Format swap_chain_format, vuk::Extent3D swap_chain_extent) -> void;
 
     // Scene
     auto compose(this SceneRenderer &, SceneComposeInfo &compose_info) -> ComposedScene;

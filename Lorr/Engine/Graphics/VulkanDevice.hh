@@ -16,11 +16,6 @@
 #include <vuk/runtime/vk/VkRuntime.hpp>
 #include <vuk/vsl/Core.hpp>
 
-#ifdef VUK_IA
-    #undef VUK_IA
-    #define VUK_IA(access) [[maybe_unused]] vuk::Arg<vuk::ImageAttachment, access, vuk::tag_type<__COUNTER__>>
-#endif
-
 namespace lr {
 struct BindlessDescriptorInfo {
     u32 binding = 0;

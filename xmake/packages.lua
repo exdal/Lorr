@@ -46,4 +46,4 @@ add_requires("vuk 2025.04.08.1", { configs = {
 }, debug = is_mode("debug") or is_mode("asan") })
 
 add_requires("meshoptimizer v0.22", { system = false })
-add_requires("ktx-software v4.3.2", { system = false })
+add_requires("ktx-software v4.4.0", { system = false })

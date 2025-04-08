@@ -354,7 +354,8 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
 
         auto update_transforms_pass = vuk::make_pass(
             "update scene transforms",
-            [upload_offsets = std::move(upload_offsets
+            [upload_offsets = std::move(
+                 upload_offsets
              )](vuk::CommandBuffer &cmd_list, VUK_BA(vuk::Access::eTransferRead) src_buffer, VUK_BA(vuk::Access::eTransferWrite) dst_buffer) {
                 for (usize i = 0; i < upload_offsets.size(); i++) {
                     auto offset = upload_offsets[i];
@@ -442,12 +443,12 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
         "sky view lut",
         { .image_type = vuk::ImageType::e2D,
           .extent = self.sky_view_lut_extent,
+          .format = vuk::Format::eR16G16B16A16Sfloat,
           .sample_count = vuk::Samples::e1,
           .view_type = vuk::ImageViewType::e2D,
           .level_count = 1,
           .layer_count = 1 }
     );
-    sky_view_lut_attachment.same_format_as(final_attachment);
 
     auto sky_aerial_perspective_attachment = vuk::declare_ia(
         "sky_aerial_perspective",

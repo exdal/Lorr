@@ -28,7 +28,6 @@ auto os::file_open(const fs::path &path, FileAccess access) -> std::expected<Fil
 
     HANDLE file_handle = CreateFileW(path.c_str(), flags, share_flags, nullptr, creation_flags, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (file_handle == INVALID_HANDLE_VALUE) {
-        LOG_ERROR("Failed to open file! {}", GetLastError());
         return std::unexpected(FileResult::NoAccess);
     }
 
@@ -224,7 +223,7 @@ auto os::file_watcher_peek(FileWatcherDescriptor &watcher, u8 *buffer, i64 &buff
     }
 
     LOG_TRACE("FileName: {}", file_name);
-    return FileEvent {
+    return FileEvent{
         .file_name = std::move(file_name),
         .action_mask = action_mask,
         .watch_descriptor = static_cast<FileDescriptor>(1),

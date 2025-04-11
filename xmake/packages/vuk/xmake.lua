@@ -4,7 +4,7 @@ package("vuk")
     set_homepage("https://github.com/martty")
     set_license("MIT")
 
-    add_urls("https://github.com/martty/vuk.git", { branch = "new-FE-dev" })
+    add_urls("https://github.com/exdal/vuk.git")
 
     add_versions("2025.02.26",   "257c1629aaa4200071fb752eb24894d05ce367d4")
     add_versions("2025.02.26.1", "bad2fe0a1e9c355bc2e9533e40d9783cef1b6f07")

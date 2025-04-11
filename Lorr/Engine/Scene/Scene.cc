@@ -597,6 +597,10 @@ auto Scene::compose(this Scene &self) -> SceneComposeInfo {
                 }
 
                 auto *texture = app.asset_man.get_texture(uuid);
+                if (!texture) {
+                    return ls::nullopt;
+                }
+
                 auto index = rendering_image_view_ids.size();
                 rendering_image_view_ids.push_back(texture->image_view.id());
                 return static_cast<u32>(index);

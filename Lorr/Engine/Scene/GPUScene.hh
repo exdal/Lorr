@@ -74,11 +74,11 @@ struct Material {
     alignas(4) f32 metallic_factor = 0.0f;
     alignas(4) AlphaMode alpha_mode = AlphaMode::Opaque;
     alignas(4) f32 alpha_cutoff = 0.0f;
-    alignas(4) u32 albedo_image_index = 0;
-    alignas(4) u32 normal_image_index = 0;
-    alignas(4) u32 emissive_image_index = 0;
-    alignas(4) u32 metallic_roughness_image_index = 0;
-    alignas(4) u32 occlusion_image_index = 0;
+    alignas(4) u32 albedo_image_index = ~0_u32;
+    alignas(4) u32 normal_image_index = ~0_u32;
+    alignas(4) u32 emissive_image_index = ~0_u32;
+    alignas(4) u32 metallic_roughness_image_index = ~0_u32;
+    alignas(4) u32 occlusion_image_index = ~0_u32;
 };
 
 struct Meshlet {

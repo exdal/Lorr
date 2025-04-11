@@ -76,10 +76,10 @@ func CullSmallPrimitive(f32x2x3 vertices, f32x2 viewportExtent) -> bool{
           &&  ((maxBB.y - ((minBB.y & ~SUBPIXEL_MASK) + SUBPIXEL_SAMPLES/2)) < (SUBPIXEL_SAMPLES - 1))));
 }
 
-func test_triangle(Model *model, Meshlet *meshlet, u32 triangle_index) -> bool {
-    const Triangle tri = meshlet->indices(model, triangle_index);
-    const u32x3 vertices = meshlet->vertices(model, tri);
-    const f32x3x3 positions = meshlet->positions(model, vertices);
+func test_triangle(in Model model, in Meshlet meshlet, u32 triangle_index) -> bool {
+    const Triangle tri = meshlet.indices(model, triangle_index);
+    const u32x3 vertices = meshlet.vertices(model, tri);
+    const f32x3x3 positions = meshlet.positions(model, vertices);
 
     const f32x4 clip_pos_0 = mul(model_view_proj_shared, f32x4(positions[0], 1.0));
     const f32x4 clip_pos_1 = mul(model_view_proj_shared, f32x4(positions[1], 1.0));
@@ -92,7 +92,7 @@ func test_triangle(Model *model, Meshlet *meshlet, u32 triangle_index) -> bool {
 
     if (C.cull_flags & CullFlags::TriangleBackFace) {
         // https://zeux.io/2023/04/28/triangle-backface-culling/#fnref:3
-        const bool is_backfacing = determinant(mat3(clip_pos_0.xyw, clip_pos_1.xyw, clip_pos_2.xyw)) > 0.0;
+        const bool is_backfacing = determinant(f32x3x3(clip_pos_0.xyw, clip_pos_1.xyw, clip_pos_2.xyw)) >= 0.0001;
         if (is_backfacing) {
             return false;
         }
@@ -125,9 +125,9 @@ void cs_main(uint3 group_id : SV_GroupID, uint3 group_thread_id : SV_GroupThread
     const u32 visible_meshlet_index = group_id.x;
     const u32 meshlet_instance_index = C.visible_meshlet_instances_indices[visible_meshlet_index];
     const MeshletInstance meshlet_instance = C.meshlet_instances[meshlet_instance_index];
-    const Model *model = &C.models[meshlet_instance.model_index];
+    const Model model = C.models[meshlet_instance.model_index];
     const u32 meshlet_index = meshlet_instance.meshlet_index;
-    const Meshlet *meshlet = &model.meshlets[meshlet_index];
+    const Meshlet meshlet = model.meshlets[meshlet_index];
 
     if (local_index == 0) {
         triangles_passed_shared = 0;
@@ -139,7 +139,7 @@ void cs_main(uint3 group_id : SV_GroupID, uint3 group_thread_id : SV_GroupThread
 
     bool triangle_passed = false;
     u32 active_triangle_index = 0;
-    if (local_index < meshlet->triangle_count) {
+    if (local_index < meshlet.triangle_count) {
         triangle_passed = test_triangle(model, meshlet, local_index);
         if (triangle_passed) {
             active_triangle_index = std::atomic_add(triangles_passed_shared, 1, std::memory_order_relaxed);

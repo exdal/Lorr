@@ -169,67 +169,71 @@ public struct Meshlet {
     public u32 triangle_count = 0;
 
     // Takes a local triange index and returns an index to index buffer.
-    public func index(Model *model, u32 i) -> u32 {
-        return u32(model->local_triangle_indices[this.triangle_offset + i]);
+    public func index(in Model model, u32 i) -> u32 {
+        return u32(model.local_triangle_indices[this.triangle_offset + i]);
     }
 
     // Returns index to an actual vertex.
-    public func vertex(Model *model, u32 index) -> u32 {
-        return model->indices[this.index_offset + index];
+    public func vertex(in Model model, u32 index) -> u32 {
+        return model.indices[this.index_offset + index];
     }
 
     // Returns position of a vertex.
-    public func position(Model *model, u32 vertex) -> f32x3 {
-        return model->vertex_positions[this.vertex_offset + vertex];
+    public func position(in Model model, u32 vertex) -> f32x3 {
+        return model.vertex_positions[this.vertex_offset + vertex];
     }
 
-    public func tex_coord(Model *model, u32 vertex) -> f32x2 {
-        return model->texture_coords[this.vertex_offset + vertex];
+    public func tex_coord(in Model model, u32 vertex) -> f32x2 {
+        if (model.texture_coords == nullptr) {
+            return {};
+        }
+
+        return model.texture_coords[this.vertex_offset + vertex];
     }
 
     // ----------------------------------------------------------
 
-    public func indices(Model *model, u32 i) -> Triangle {
+    public func indices(in Model model, u32 i) -> Triangle {
         return {
-            u32(model->local_triangle_indices[this.triangle_offset + i * 3 + 0]),
-            u32(model->local_triangle_indices[this.triangle_offset + i * 3 + 1]),
-            u32(model->local_triangle_indices[this.triangle_offset + i * 3 + 2]),
+            u32(model.local_triangle_indices[this.triangle_offset + i * 3 + 0]),
+            u32(model.local_triangle_indices[this.triangle_offset + i * 3 + 1]),
+            u32(model.local_triangle_indices[this.triangle_offset + i * 3 + 2]),
         };
     }
 
-    public func vertices(Model *model, in Triangle indices) -> u32x3 {
+    public func vertices(in Model model, in Triangle indices) -> u32x3 {
         return {
-            model->indices[this.index_offset + indices.x],
-            model->indices[this.index_offset + indices.y],
-            model->indices[this.index_offset + indices.z],
+            model.indices[this.index_offset + indices.x],
+            model.indices[this.index_offset + indices.y],
+            model.indices[this.index_offset + indices.z]
         };
     }
 
-    public func positions(Model *model, in u32x3 indices) -> f32x3x3 {
+    public func positions(in Model model, in u32x3 vertices) -> f32x3x3 {
         return {
-            model->vertex_positions[this.vertex_offset + indices.x],
-            model->vertex_positions[this.vertex_offset + indices.y],
-            model->vertex_positions[this.vertex_offset + indices.z],
+            model.vertex_positions[this.vertex_offset + vertices.x],
+            model.vertex_positions[this.vertex_offset + vertices.y],
+            model.vertex_positions[this.vertex_offset + vertices.z]
         };
     }
 
-    public func normals(Model *model, in u32x3 indices) -> f32x3x3 {
+    public func normals(in Model model, in u32x3 vertices) -> f32x3x3 {
         return {
-            model->vertex_normals[this.vertex_offset + indices.x],
-            model->vertex_normals[this.vertex_offset + indices.y],
-            model->vertex_normals[this.vertex_offset + indices.z]
+            model.vertex_normals[this.vertex_offset + vertices.x],
+            model.vertex_normals[this.vertex_offset + vertices.y],
+            model.vertex_normals[this.vertex_offset + vertices.z]
         };
     }
 
-    public func tex_coords(Model *model, in u32x3 indices) -> f32x2x3 {
-        if (model->texture_coords == nullptr) {
+    public func tex_coords(in Model model, in u32x3 vertices) -> f32x2x3 {
+        if (model.texture_coords == nullptr) {
             return {};
         }
 
         return {
-            model->texture_coords[this.vertex_offset + indices.x],
-            model->texture_coords[this.vertex_offset + indices.y],
-            model->texture_coords[this.vertex_offset + indices.z],
+            model.texture_coords[this.vertex_offset + vertices.x],
+            model.texture_coords[this.vertex_offset + vertices.y],
+            model.texture_coords[this.vertex_offset + vertices.z]
         };
     }
 };

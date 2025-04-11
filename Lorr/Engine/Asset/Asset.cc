@@ -892,6 +892,7 @@ auto AssetManager::load_texture(const UUID &uuid, const TextureInfo &info) -> bo
                         vuk::copy(std::move(buffer), std::move(dst_mip));
                     }
 
+                    dst_attachment = dst_attachment.as_released(vuk::Access::eFragmentSampled, vuk::DomainFlagBits::eGraphicsQueue);
                     transfer_man.wait_on(std::move(dst_attachment));
                 } break;
                 default: {

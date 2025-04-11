@@ -21,6 +21,18 @@ func vs_main(u32 vertex_index : SV_VertexID) -> VertexOutput{
 
 [[vk::binding(0, 0)]]
 Image2D<u32> visbuffer;
+[[vk::binding(1, 0)]]
+readonly ConstantBuffer<Camera> camera;
+[[vk::binding(2, 0)]]
+readonly StructuredBuffer<u32> visible_meshlet_instances_indices;
+[[vk::binding(3, 0)]]
+readonly StructuredBuffer<MeshletInstance> meshlet_instances;
+[[vk::binding(4, 0)]]
+readonly StructuredBuffer<Model> models;
+[[vk::binding(5, 0)]]
+readonly StructuredBuffer<Transform> transforms;
+[[vk::binding(6, 0)]]
+readonly StructuredBuffer<Material> materials;
 
 struct FragmentOutput {
     f32x4 albedo_color : SV_Target0;
@@ -28,17 +40,6 @@ struct FragmentOutput {
     f32x3 emission_color : SV_Target2;
     f32x4 metallic_roughness_occlusion_color : SV_Target3;
 };
-
-struct PushConstants {
-    Camera *camera;
-    u32 *visible_meshlet_instances_indices;
-    MeshletInstance *meshlet_instances;
-    Model *models;
-    Transform *transforms;
-    Material *materials;
-};
-
-[[vk::push_constant]] PushConstants C;
 
 struct PartialDeriv {
     f32x3 uv_ddx;
@@ -112,21 +113,21 @@ func fs_main(VertexOutput input) -> FragmentOutput {
     }
 
     const VisBuffer vis = { texel };
-    const u32 meshlet_instance_index = C.visible_meshlet_instances_indices[vis.meshlet_instance_index];
-    const MeshletInstance *meshlet_instance = &C.meshlet_instances[meshlet_instance_index];
-    const Model *model = &C.models[meshlet_instance->model_index];
-    const Transform *transform = &C.transforms[meshlet_instance->transform_index];
-    const Material *material = &C.materials[meshlet_instance->material_index];
+    const u32 meshlet_instance_index = visible_meshlet_instances_indices[vis.meshlet_instance_index];
+    const MeshletInstance meshlet_instance = meshlet_instances[meshlet_instance_index];
+    const Model model = models[meshlet_instance.model_index];
+    const Transform transform = transforms[meshlet_instance.transform_index];
+    const Material material = materials[meshlet_instance.material_index];
 
-    const Meshlet *meshlet   = &model->meshlets[meshlet_instance->meshlet_index];
-    const Triangle indices   = meshlet->indices(model, vis.triangle_index);
-    const u32x3 vertices     = meshlet->vertices(model, indices);
-    const f32x3x3 positions  = meshlet->positions(model, vertices);
-    const f32x3x3 normals    = meshlet->normals(model, vertices);
-    const f32x2x3 tex_coords = meshlet->tex_coords(model, vertices);
-    const f32x4x3 world_pos  = transform->to_world_positions(positions);
-    const f32x4x3 clip_pos   = C.camera->to_clip_positions(world_pos);
-    const PartialDeriv deriv = { clip_pos, 2.0 * input.tex_coord - 1.0, C.camera->resolution };
+    const Meshlet meshlet    = model.meshlets[meshlet_instance.meshlet_index];
+    const Triangle indices   = meshlet.indices(model, vis.triangle_index);
+    const u32x3 vertices     = meshlet.vertices(model, indices);
+    const f32x3x3 positions  = meshlet.positions(model, vertices);
+    const f32x3x3 normals    = meshlet.normals(model, vertices);
+    const f32x2x3 tex_coords = meshlet.tex_coords(model, vertices);
+    const f32x4x3 world_pos  = transform.to_world_positions(positions);
+    const f32x4x3 clip_pos   = camera.to_clip_positions(world_pos);
+    const PartialDeriv deriv = { clip_pos, 2.0 * input.tex_coord - 1.0, camera.resolution };
 
     const f32x2 tex_coord_deriv = deriv.interpolate(tex_coords[0], tex_coords[1], tex_coords[2]);
     const f32x2 tex_coord_ddx   = deriv.ddx_of(tex_coords);
@@ -135,14 +136,14 @@ func fs_main(VertexOutput input) -> FragmentOutput {
     FragmentOutput output = {};
 
     // ALBEDO ───────────────────────────────────────────────────────────
-    output.albedo_color = material->sample_albedo_color(
+    output.albedo_color = material.sample_albedo_color(
         tex_coord_deriv, tex_coord_ddx, tex_coord_ddy);
 
     // NORMALS ──────────────────────────────────────────────────────────
     const f32x3 normal_deriv = deriv.interpolate(normals[0], normals[1], normals[2]);
     const f32x3 world_normal = mul(transform.normal, normal_deriv);
     f32x3 N = world_normal;
-    if (material->normal_image_index != ~0u) {
+    if (material.normal_image_index != ~0u) {
         // https://www.jeremyong.com/graphics/2023/12/16/surface-gradient-bump-mapping
         const f32x3x3 world_pos_3d = {
             world_pos[0].xyz,
@@ -160,7 +161,7 @@ func fs_main(VertexOutput input) -> FragmentOutput {
         }
         const f32x3 B = jacobian_sign * sign(dot(pos_ddy, cross(N, pos_ddx))) * cross(N, T);
         const f32x3x3 TBN = f32x3x3(T, -B, N);
-        const f32x2 sampled_normal = material->sample_normal_color(
+        const f32x2 sampled_normal = material.sample_normal_color(
             tex_coord_deriv, tex_coord_ddx, tex_coord_ddy).xy * 2.0 - 1.0;
         const f32 sampled_normal_z = sqrt(max(1.0 - sampled_normal.x * sampled_normal.x - sampled_normal.y * sampled_normal.y, 0.0));
         N = mul(f32x3(sampled_normal, sampled_normal_z), TBN);
@@ -169,16 +170,16 @@ func fs_main(VertexOutput input) -> FragmentOutput {
     output.normal_color.zw = std::vec3_to_oct(world_normal);
 
     // EMISSION ─────────────────────────────────────────────────────────
-    output.emission_color = material->sample_emissive_color(
+    output.emission_color = material.sample_emissive_color(
         tex_coord_deriv, tex_coord_ddx, tex_coord_ddy);
 
     // METALLIC ROUGHNESS ───────────────────────────────────────────────
-    const f32x2 metallic_roughness_color = material->sample_metallic_roughness(
+    const f32x2 metallic_roughness_color = material.sample_metallic_roughness(
         tex_coord_deriv, tex_coord_ddx, tex_coord_ddy);
     output.metallic_roughness_occlusion_color.xy = metallic_roughness_color;
 
     // AMBIENT OCCLUSION ────────────────────────────────────────────────
-    const f32 occlusion_color = material->sample_occlusion_color(
+    const f32 occlusion_color = material.sample_occlusion_color(
         tex_coord_deriv, tex_coord_ddx, tex_coord_ddy);
     output.metallic_roughness_occlusion_color.z = occlusion_color;
 

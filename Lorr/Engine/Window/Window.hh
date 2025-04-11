@@ -51,6 +51,27 @@ struct WindowCallbacks {
     void (*on_close)(void *user_data) = nullptr;
 };
 
+enum class DialogKind : u32 {
+    OpenFile = 0,
+    SaveFile,
+    OpenFolder,
+};
+
+struct FileDialogFilter {
+    std::string_view name = {};
+    std::string_view pattern = {};
+};
+
+struct ShowDialogInfo {
+    DialogKind kind = DialogKind::OpenFile;
+    void *user_data = nullptr;
+    void (*callback)(void *user_data, const c8 *const *files, i32 filter) = nullptr;
+    std::string_view title = {};
+    fs::path spawn_path = {};
+    ls::span<FileDialogFilter> filters = {};
+    bool multi_select = false;
+};
+
 struct WindowInfo {
     constexpr static i32 USE_PRIMARY_MONITOR = 0;
 
@@ -74,6 +95,8 @@ struct Window : Handle<Window> {
     static auto display_at(i32 monitor_id = WindowInfo::USE_PRIMARY_MONITOR) -> ls::option<SystemDisplay>;
     auto get_size() -> glm::uvec2;
     auto get_surface(VkInstance instance) -> VkSurfaceKHR;
+
+    auto show_dialog(const ShowDialogInfo &info) -> void;
 };
 
 } // namespace lr

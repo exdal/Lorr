@@ -84,12 +84,6 @@ auto File::to_stderr(std::string_view str) -> void {
     os::file_stderr(str);
 }
 
-auto File::open_dialog(std::string_view title, FileDialogFlag flags) -> ls::option<fs::path> {
-    ZoneScoped;
-
-    return os::file_dialog(title, flags);
-}
-
 auto FileWatcher::init(const fs::path &root_dir) -> bool {
     this->listener = os::file_watcher_init(root_dir).value();
     this->event_storage.resize(os::file_watcher_buffer_size());

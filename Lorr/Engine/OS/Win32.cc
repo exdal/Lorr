@@ -109,14 +109,6 @@ auto os::file_seek(FileDescriptor file, i64 offset) -> void {
     SetFilePointerEx(reinterpret_cast<HANDLE>(file), li, nullptr, FILE_BEGIN);
 }
 
-auto os::file_dialog(std::string_view title, FileDialogFlag flags) -> ls::option<fs::path> {
-    ZoneScoped;
-
-    // OPENFILENAME ofn = {};
-
-    return {};
-}
-
 auto os::file_stdout(std::string_view str) -> void {
     ZoneScoped;
 

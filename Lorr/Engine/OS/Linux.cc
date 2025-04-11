@@ -113,41 +113,6 @@ auto os::file_seek(FileDescriptor file, i64 offset) -> void {
     lseek64(static_cast<i32>(file), offset, SEEK_SET);
 }
 
-auto os::file_dialog(std::string_view title, FileDialogFlag flags) -> ls::option<fs::path> {
-    ZoneScoped;
-
-    std::cout.flush();
-    if (std::system("zenity --version") != 0) {
-        LOG_ERROR("Zenity is not installed on the system.");
-        return ls::nullopt;
-    }
-
-    auto cmd = fmt::format("zenity --file-selection --title=\"{}\" ", title);
-    if (flags & FileDialogFlag::DirOnly) {
-        cmd += fmt::format("--directory ");
-    }
-    if (flags & FileDialogFlag::Save) {
-        cmd += fmt::format("--save ");
-    }
-    if (flags & FileDialogFlag::Multiselect) {
-        cmd += fmt::format("--multiple ");
-    }
-
-    c8 pipe_data[2048] = {};
-    auto *pipe = popen(cmd.c_str(), "r");
-    if (!pipe) {
-        return ls::nullopt;
-    }
-
-    fgets(pipe_data, ls::count_of(pipe_data) - 1, pipe);
-    std::string path_str = pipe_data;
-    if (path_str.back() == '\n') {
-        path_str.pop_back();
-    }
-
-    return path_str;
-}
-
 void os::file_stdout(std::string_view str) {
     ZoneScoped;
 

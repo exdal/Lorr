@@ -25,7 +25,6 @@ struct File {
     static auto to_string(const fs::path &path) -> std::string;
     static auto to_stdout(std::string_view str) -> void;
     static auto to_stderr(std::string_view str) -> void;
-    static auto open_dialog(std::string_view title, FileDialogFlag flags = FileDialogFlag::None) -> ls::option<fs::path>;
 
     File &operator=(File &&rhs) noexcept {
         this->handle = rhs.handle;

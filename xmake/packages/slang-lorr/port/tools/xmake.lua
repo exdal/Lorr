@@ -5,7 +5,7 @@ local add_generator = function(dir, options)
         set_kind(options.kind or "binary")
         set_languages("cxx17")
         set_warnings("none")
-        --add_rpathdirs("@executable_path")
+        add_rpathdirs("@executable_path")
 
         set_policy("build.fence", true)
 
@@ -32,6 +32,12 @@ local add_generator = function(dir, options)
             end
         end
 
+        if options.defines then
+            for _, v in ipairs(options.defs) do
+                add_defines(v)
+            end
+        end
+
     target_end()
 end
 
@@ -54,6 +60,9 @@ add_generator("$(projectdir)/source/slangc", {
     },
     links = {
         "slang-without-embedded-core-module",
-    }
+    },
+    defines = {
+        "SLANG_BOOTSTRAP=1",
+    },
 })
 

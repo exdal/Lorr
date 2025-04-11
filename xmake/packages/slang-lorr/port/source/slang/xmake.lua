@@ -155,7 +155,6 @@ add_slang_target("slang-common-objects", {
 })
 
 add_slang_target("slang-without-embedded-core-module", {
-    fence = true,
     kind = "shared",
     includes = {
         slang_public_includes,

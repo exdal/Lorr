@@ -18,6 +18,6 @@ add_slang_target("slang-build-all", {
     default = true,
     fence = true,
     deps = {
-        { "slang", "slang-glslang" }
+        { "slang-without-embedded-core-module", "slang", "slang-glslang" }
     },
 })

@@ -22,7 +22,6 @@ function add_slang_target(name, options)
         set_languages("cxx17")
         set_warnings("extra")
         add_rpathdirs("@executable_path")
-        add_ldflags("-Wl,--no-undefined", "-Wl,--build-id", { public = false })
 
         on_config(function (target)
             if is_mode("debug") then

@@ -24,14 +24,6 @@ enum class FileAccess : u32 {
 };
 consteval void enable_bitmask(FileAccess);
 
-enum class FileDialogFlag : u32 {
-    None = 0,
-    DirOnly = 1 << 0,
-    Save = 1 << 1,
-    Multiselect = 1 << 2,
-};
-consteval void enable_bitmask(FileDialogFlag);
-
 // Can we add stdout and other pipes here?
 enum class FileDescriptor : uptr { Invalid = 0 };
 
@@ -62,7 +54,6 @@ namespace os {
     auto file_read(FileDescriptor file, void *data, usize size) -> usize;
     auto file_write(FileDescriptor file, const void *data, usize size) -> usize;
     auto file_seek(FileDescriptor file, i64 offset) -> void;
-    auto file_dialog(std::string_view title, FileDialogFlag dialog_flags) -> ls::option<fs::path>;
     auto file_stdout(std::string_view str) -> void;
     auto file_stderr(std::string_view str) -> void;
 

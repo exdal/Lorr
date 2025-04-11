@@ -41,9 +41,9 @@ add_requires("libsdl3 3.2.8", { configs = {
 
 add_requires("imguizmo-lorr 1.89+WIP")
 add_requires("slang-lorr v2025.6.3")
-add_requires("vuk 2025.03.24.4", { configs = {
+add_requires("vuk 2025.04.08.1", { configs = {
     debug_allocations = false
 }, debug = is_mode("debug") or is_mode("asan") })
 
 add_requires("meshoptimizer v0.22", { system = false })
-add_requires("ktx-software v4.3.2", { system = false })
+add_requires("ktx-software v4.4.0", { system = false })

@@ -52,36 +52,27 @@ auto ImGuiRenderer::init(this ImGuiRenderer &self, Device *device) -> void {
     i32 font_width, font_height;
     imgui.Fonts->GetTexDataAsRGBA32(&font_data, &font_width, &font_height);
 
-    // clang-format off
     auto &transfer_man = device->transfer_man();
-    self.font_atlas_image = Image::create(
-        *device,
-        vuk::Format::eR8G8B8A8Unorm,
-        vuk::ImageUsageFlagBits::eSampled,
-        vuk::ImageType::e2D,
-        vuk::Extent3D(font_width, font_height, 1u))
-        .value();
-    self.font_atlas_view = ImageView::create(
-        *device,
-        self.font_atlas_image,
-        vuk::ImageUsageFlagBits::eSampled,
-        vuk::ImageViewType::e2D,
-        { .aspectMask = vuk::ImageAspectFlagBits::eColor })
-        .value();
-    
+    auto font_atlas_image_info = ImageInfo{
+        .format = vuk::Format::eR8G8B8A8Unorm,
+        .usage = vuk::ImageUsageFlagBits::eSampled,
+        .type = vuk::ImageType::e2D,
+        .extent = vuk::Extent3D(font_width, font_height, 1u),
+    };
+    std::tie(self.font_atlas_image, self.font_atlas_view) = Image::create_with_view(*device, font_atlas_image_info).value();
+
     auto imgui_ia = transfer_man.upload_staging(self.font_atlas_view, font_data, font_width * font_height * 4)
-        .as_released(vuk::Access::eFragmentSampled, vuk::DomainFlagBits::eGraphicsQueue);
-    imgui_ia->layout = vuk::ImageLayout::eReadOnlyOptimal;
+                        .as_released(vuk::Access::eFragmentSampled, vuk::DomainFlagBits::eGraphicsQueue);
     transfer_man.wait_on(std::move(imgui_ia));
     IM_FREE(font_data);
 
-    self.pipeline = Pipeline::create(*device, {
+    auto pipeline_info = ShaderCompileInfo{
         .module_name = "imgui",
         .root_path = shaders_root,
-        .shader_path = shaders_root / "imgui.slang",
+        .shader_path = shaders_root / "passes" / "imgui.slang",
         .entry_points = { "vs_main", "fs_main" },
-    }).value();
-    // clang-format on
+    };
+    self.pipeline = Pipeline::create(*device, pipeline_info).value();
 }
 
 auto ImGuiRenderer::add_image(this ImGuiRenderer &self, vuk::Value<vuk::ImageAttachment> &&attachment) -> ImTextureID {
@@ -99,8 +90,8 @@ auto ImGuiRenderer::add_image(this ImGuiRenderer &self, ImageView &image_view, L
         return acquired_it->second;
     }
 
-    auto attachment_info = image_view.get_attachment(*self.device, vuk::ImageUsageFlagBits::eSampled);
-    auto attachment = vuk::acquire_ia("imgui image", attachment_info, vuk::Access::eFragmentSampled, LOC);
+    auto attachment =
+        image_view.acquire(*self.device, "imgui rendering image", vuk::ImageUsageFlagBits::eSampled, vuk::Access::eFragmentSampled, LOC);
     auto texture_id = self.add_image(std::move(attachment));
     self.acquired_images.emplace(image_view.id(), texture_id);
 
@@ -186,18 +177,13 @@ auto ImGuiRenderer::end_frame(this ImGuiRenderer &self, vuk::Value<vuk::ImageAtt
             VUK_BA(vuk::Access::eIndexRead) index_buf,
             VUK_ARG(vuk::ImageAttachment[], vuk::Access::eFragmentSampled) rendering_images
         ) {
-            struct PushConstants {
-                glm::vec2 translate = {};
-                glm::vec2 scale = {};
-            };
-
-            PushConstants c = {};
-            c.scale = { 2.0f / draw_data->DisplaySize.x, 2.0f / draw_data->DisplaySize.y };
-            c.translate = { -1.0f - draw_data->DisplayPos.x * c.scale.x, -1.0f - draw_data->DisplayPos.y * c.scale.y };
+            auto scale = glm::vec2(2.0f / draw_data->DisplaySize.x, 2.0f / draw_data->DisplaySize.y);
+            auto translate = glm::vec2(-1.0f - draw_data->DisplayPos.x * scale.x, -1.0f - draw_data->DisplayPos.y * scale.y);
+            u32 is_srgb = 0;
 
             cmd_list //
                 .set_dynamic_state(vuk::DynamicStateFlagBits::eViewport | vuk::DynamicStateFlagBits::eScissor)
-                .set_rasterization(vuk::PipelineRasterizationStateCreateInfo {})
+                .set_rasterization(vuk::PipelineRasterizationStateCreateInfo{})
                 .set_color_blend(dst, vuk::BlendPreset::eAlphaBlend)
                 .set_viewport(0, vuk::Rect2D::framebuffer())
                 .bind_graphics_pipeline(pipeline)
@@ -206,9 +192,8 @@ auto ImGuiRenderer::end_frame(this ImGuiRenderer &self, vuk::Value<vuk::ImageAtt
                     0,
                     vertex_buf,
                     0,
-                    vuk::Packed { vuk::Format::eR32G32Sfloat, vuk::Format::eR32G32Sfloat, vuk::Format::eR8G8B8A8Unorm }
-                )
-                .push_constants(vuk::ShaderStageFlagBits::eVertex, 0, c);
+                    vuk::Packed{ vuk::Format::eR32G32Sfloat, vuk::Format::eR32G32Sfloat, vuk::Format::eR8G8B8A8Unorm }
+                );
 
             ImVec2 clip_off = draw_data->DisplayPos;
             ImVec2 clip_scale = draw_data->FramebufferScale;
@@ -244,11 +229,19 @@ auto ImGuiRenderer::end_frame(this ImGuiRenderer &self, vuk::Value<vuk::ImageAtt
                         cmd_list.bind_sampler(0, 0, { .magFilter = vuk::Filter::eLinear, .minFilter = vuk::Filter::eLinear });
                         if (im_cmd.TextureId != 0) {
                             auto index = im_cmd.TextureId - 1;
-                            cmd_list.bind_image(0, 1, rendering_images[index]);
+                            const auto &image = rendering_images[index];
+                            is_srgb = vuk::is_format_srgb(image.format);
+                            cmd_list.bind_image(0, 1, image);
                         } else {
+                            is_srgb = 0;
                             cmd_list.bind_image(0, 1, rendering_images[0]);
                         }
 
+                        cmd_list.push_constants(
+                            vuk::ShaderStageFlagBits::eVertex | vuk::ShaderStageFlagBits::eFragment,
+                            0,
+                            PushConstants(translate, scale, is_srgb)
+                        );
                         cmd_list.draw_indexed(im_cmd.ElemCount, 1, im_cmd.IdxOffset + index_offset, i32(im_cmd.VtxOffset + vertex_offset), 0);
                     }
                 }

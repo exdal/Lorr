@@ -109,7 +109,7 @@ auto TransferManager::upload_staging(this TransferManager &self, ImageView &imag
     ZoneScoped;
 
     std::unique_lock _(self.mutex);
-    auto dst_attachment_info = image_view.get_attachment(*self.device, vuk::ImageUsageFlagBits::eTransferDst);
+    auto dst_attachment_info = image_view.to_attachment(*self.device, vuk::ImageUsageFlagBits::eTransferDst);
     auto result = vuk::host_data_to_image(self.device->allocator.value(), vuk::DomainFlagBits::eGraphicsQueue, dst_attachment_info, data, LOC);
     result = vuk::generate_mips(std::move(result), 0, image_view.mip_count() - 1);
     return result;

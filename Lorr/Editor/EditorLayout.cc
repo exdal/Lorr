@@ -346,10 +346,29 @@ void EditorLayout::render(this EditorLayout &self, vuk::Format format, vuk::Exte
         ImGui::InputText("##project_path", &project_root_path);
         ImGui::SameLine();
         if (ImGui::Button(ICON_MDI_FOLDER_OPEN)) {
-            auto path = File::open_dialog("New Project...", FileDialogFlag::Save | FileDialogFlag::DirOnly);
-            if (path.has_value()) {
-                project_root_path = path->string();
-            }
+            FileDialogFilter dialog_filters[] = {
+                { .name = "Lorr Project File", .pattern = "lrproj" },
+            };
+
+            app.window.show_dialog(
+                { .kind = DialogKind::OpenFolder,
+                  .user_data = &project_root_path,
+                  .callback =
+                      [](void *user_data, const c8 *const *files, i32) {
+                          auto &dst_path = *static_cast<std::string *>(user_data);
+                          if (!files || !*files) {
+                              return;
+                          }
+
+                          const auto first_path_cstr = *files;
+                          auto first_path_len = std::strlen(first_path_cstr);
+                          dst_path = std::string(first_path_cstr, first_path_len);
+                      },
+                  .title = "New Project...",
+                  .spawn_path = fs::current_path(),
+                  .filters = dialog_filters,
+                  .multi_select = false }
+            );
         }
 
         ImGui::Separator();

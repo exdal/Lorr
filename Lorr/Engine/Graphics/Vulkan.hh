@@ -9,14 +9,50 @@
 #include <vuk/runtime/vk/VkSwapchain.hpp>
 #include <vuk/runtime/vk/VkTypes.hpp>
 
-#include "Engine/Memory/SlotMap.hh"
-
 namespace lr {
 enum class BufferID : u64 { Invalid = ~0_u64 };
 enum class ImageID : u64 { Invalid = ~0_u64 };
 enum class ImageViewID : u64 { Invalid = ~0_u64 };
 enum class SamplerID : u64 { Invalid = ~0_u64 };
 enum class PipelineID : u64 { Invalid = ~0_u64 };
+
+template<usize ALIGNMENT, typename... T>
+constexpr auto PushConstants_calc_size() -> usize {
+    auto offset = 0_sz;
+    ((offset = ls::align_up(offset, ALIGNMENT), offset += sizeof(T)), ...);
+    return offset;
+}
+
+template<usize ALIGNMENT, typename... T>
+constexpr auto PushConstants_calc_offsets() {
+    auto offsets = std::array<usize, sizeof...(T)>{};
+    auto offset = 0_sz;
+    auto index = 0_sz;
+    ((offsets[index++] = (offset = ls::align_up(offset, ALIGNMENT), offset), offset += sizeof(T)), ...);
+    return offsets;
+}
+
+template<typename... T>
+struct PushConstants {
+    static_assert((std::is_trivially_copyable_v<T> && ...));
+    constexpr static usize ALIGNMENT = 4;
+    constexpr static usize TOTAL_SIZE = PushConstants_calc_size<ALIGNMENT, T...>();
+    constexpr static auto MEMBER_OFFSETS = PushConstants_calc_offsets<ALIGNMENT, T...>();
+    std::array<u8, TOTAL_SIZE> struct_data = {};
+
+    PushConstants(T... args) {
+        auto index = 0_sz;
+        ((std::memcpy(struct_data.data() + MEMBER_OFFSETS[index++], &args, sizeof(T))), ...);
+    }
+
+    auto data() const -> void * {
+        return struct_data.data();
+    }
+
+    auto size() const -> usize {
+        return struct_data.size();
+    }
+};
 
 /////////////////////////////////
 // DEVICE RESOURCES
@@ -47,17 +83,19 @@ private:
     BufferID id_ = BufferID::Invalid;
 };
 
+struct ImageView;
+struct ImageInfo {
+    vuk::Format format;
+    vuk::ImageUsageFlags usage;
+    vuk::ImageType type;
+    vuk::Extent3D extent;
+    u32 slice_count = 1;
+    u32 mip_count = 1;
+    std::string_view name = {};
+};
 struct Image {
-    static auto create(
-        Device &,
-        vuk::Format format,
-        const vuk::ImageUsageFlags &usage,
-        vuk::ImageType type,
-        vuk::Extent3D extent,
-        u32 slice_count = 1,
-        u32 mip_count = 1,
-        vuk::source_location LOC = vuk::source_location::current()
-    ) -> std::expected<Image, vuk::VkException>;
+    static auto create(Device &, const ImageInfo &info, LR_THISCALL) -> std::expected<Image, vuk::VkException>;
+    static auto create_with_view(Device &, const ImageInfo &info, LR_THISCALL) -> std::expected<std::tuple<Image, ImageView>, vuk::VkException>;
 
     auto format() const -> vuk::Format;
     auto extent() const -> vuk::Extent3D;
@@ -82,20 +120,20 @@ private:
 // automatically parent image format. See:
 // https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VkImageViewCreateInfo.html
 
-struct ImageView {
-    static auto create(
-        Device &,
-        Image &image,
-        const vuk::ImageUsageFlags &image_usage,
-        vuk::ImageViewType type,
-        const vuk::ImageSubresourceRange &subresource_range,
-        vuk::source_location LOC = vuk::source_location::current()
-    ) -> std::expected<ImageView, vuk::VkException>;
+struct ImageViewInfo {
+    vuk::ImageUsageFlags image_usage;
+    vuk::ImageViewType type;
+    vuk::ImageSubresourceRange subresource_range;
+    std::string_view name = {};
+};
 
-    auto get_attachment(Device &, const vuk::ImageUsageFlags &usage) const -> vuk::ImageAttachment;
-    auto get_attachment(Device &, vuk::ImageAttachment::Preset preset) const -> vuk::ImageAttachment;
-    auto discard(Device &, vuk::Name name, const vuk::ImageUsageFlags &usage) const -> vuk::Value<vuk::ImageAttachment>;
-    auto acquire(Device &, vuk::Name name, const vuk::ImageUsageFlags &usage, vuk::Access last_access) const -> vuk::Value<vuk::ImageAttachment>;
+struct ImageView {
+    static auto create(Device &, Image &image, const ImageViewInfo &info, LR_THISCALL) -> std::expected<ImageView, vuk::VkException>;
+
+    auto to_attachment(Device &, const vuk::ImageUsageFlags &usage) const -> vuk::ImageAttachment;
+    auto to_attachment(Device &, vuk::ImageAttachment::Preset preset) const -> vuk::ImageAttachment;
+    auto discard(Device &, vuk::Name name, const vuk::ImageUsageFlags &usage, LR_THISCALL) const -> vuk::Value<vuk::ImageAttachment>;
+    auto acquire(Device &, vuk::Name name, const vuk::ImageUsageFlags &usage, vuk::Access last_access, LR_THISCALL) const -> vuk::Value<vuk::ImageAttachment>;
 
     auto format() const -> vuk::Format;
     auto extent() const -> vuk::Extent3D;
@@ -104,6 +142,7 @@ struct ImageView {
     auto mip_count() const -> u32;
     auto image_id() const -> ImageID;
     auto id() const -> ImageViewID;
+    auto index() const -> u32;
 
     explicit operator bool() const {
         return id_ != ImageViewID::Invalid;
@@ -118,25 +157,26 @@ private:
     ImageViewID id_ = ImageViewID::Invalid;
 };
 
+struct SamplerInfo {
+    vuk::Filter min_filter = vuk::Filter::eLinear;
+    vuk::Filter mag_filter = vuk::Filter::eLinear;
+    vuk::SamplerMipmapMode mipmap_mode = vuk::SamplerMipmapMode::eLinear;
+    vuk::SamplerAddressMode addr_u = vuk::SamplerAddressMode::eRepeat;
+    vuk::SamplerAddressMode addr_v = vuk::SamplerAddressMode::eRepeat;
+    vuk::SamplerAddressMode addr_w = vuk::SamplerAddressMode::eRepeat;
+    vuk::CompareOp compare_op = vuk::CompareOp::eNever;
+    f32 max_anisotropy = 0.0f;
+    f32 mip_lod_bias = 0.0f;
+    f32 min_lod = 0.0f;
+    f32 max_lod = 1000.0f;
+    bool use_anisotropy = false;
+};
+
 struct Sampler {
-    static auto create(
-        Device &,
-        vuk::Filter min_filter,
-        vuk::Filter mag_filter,
-        vuk::SamplerMipmapMode mipmap_mode,
-        vuk::SamplerAddressMode addr_u,
-        vuk::SamplerAddressMode addr_v,
-        vuk::SamplerAddressMode addr_w,
-        vuk::CompareOp compare_op,
-        f32 max_anisotropy = 0,
-        f32 mip_lod_bias = 0,
-        f32 min_lod = 0,
-        f32 max_lod = 1000.0f,
-        bool use_anisotropy = false,
-        vuk::source_location LOC = vuk::source_location::current()
-    ) -> std::expected<Sampler, vuk::VkException>;
+    static auto create(Device &, const SamplerInfo &info, LR_THISCALL) -> std::expected<Sampler, vuk::VkException>;
 
     auto id() const -> SamplerID;
+    auto index() const -> u32;
 
     explicit operator bool() const {
         return id_ != SamplerID::Invalid;

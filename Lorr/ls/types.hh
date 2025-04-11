@@ -60,12 +60,12 @@ const T &max(const T &a, const T &b) {
 }
 
 template<typename T>
-T align_up(T size, u64 alignment) {
+constexpr T align_up(T size, u64 alignment) {
     return T((u64(size) + (alignment - 1)) & ~(alignment - 1));
 }
 
 template<typename T>
-T align_down(T size, u64 alignment) {
+constexpr T align_down(T size, u64 alignment) {
     return T(u64(size) & ~(alignment - 1));
 }
 

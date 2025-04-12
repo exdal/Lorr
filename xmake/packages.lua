@@ -1,8 +1,3 @@
-includes("packages/ImGuizmo/xmake.lua")
-includes("packages/ktx-software/xmake.lua")
-includes("packages/slang-lorr/xmake.lua")
-includes("packages/vuk/xmake.lua")
-
 add_requires("fmt 11.1.4", { configs = {
     header_only = true
 }, system = false })
@@ -39,8 +34,8 @@ add_requires("libsdl3 3.2.8", { configs = {
     x11 = true,
 }, system = false })
 
-add_requires("imguizmo-lorr 1.89+WIP")
-add_requires("slang-lorr v2025.6.3")
+add_requires("imguizmo v1.91.6-docking")
+add_requires("shader-slang v2025.6.3", { system = false })
 add_requires("vuk 2025.04.08.1", { configs = {
     debug_allocations = false
 }, debug = is_mode("debug") or is_mode("asan") })

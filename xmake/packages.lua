@@ -36,7 +36,7 @@ add_requires("libsdl3 3.2.8", { configs = {
 
 add_requires("imguizmo v1.91.6-docking")
 add_requires("shader-slang v2025.6.3", { system = false })
-add_requires("vuk 2025.04.08.1", { configs = {
+add_requires("vuk 2025.04.14", { configs = {
     debug_allocations = false
 }, debug = is_mode("debug") or is_mode("asan") })
 

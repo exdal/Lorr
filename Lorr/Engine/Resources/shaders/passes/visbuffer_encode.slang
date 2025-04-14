@@ -5,18 +5,15 @@ import gpu;
 import scene;
 import visbuffer;
 
-[[vk::binding(0, 0)]]
-readonly ConstantBuffer<Camera> camera;
-[[vk::binding(1, 0)]]
-readonly StructuredBuffer<u32> visible_meshlet_instances_indices;
-[[vk::binding(2, 0)]]
-readonly StructuredBuffer<MeshletInstance> meshlet_instances;
-[[vk::binding(3, 0)]]
-readonly StructuredBuffer<Model> models;
-[[vk::binding(4, 0)]]
-readonly StructuredBuffer<Transform> transforms;
-[[vk::binding(5, 0)]]
-readonly StructuredBuffer<Material> materials;
+struct PushConstants {
+    Camera *camera;
+    u32 *visible_meshlet_instances_indices;
+    MeshletInstance *meshlet_instances;
+    Model *models;
+    Transform *transforms;
+    Material *materials;
+};
+[[vk::push_constant]] PushConstants C;
 
 struct VertexOutput {
     f32x4 position : SV_Position;
@@ -30,10 +27,10 @@ struct VertexOutput {
 [[shader("vertex")]]
 func vs_main(u32 vertex_index : SV_VertexID) -> VertexOutput {
     const VisBuffer vis = { vertex_index };
-    const u32 meshlet_instance_index = visible_meshlet_instances_indices[vis.meshlet_instance_index];
-    const MeshletInstance meshlet_instance = meshlet_instances[meshlet_instance_index];
-    const Model model = models[meshlet_instance.model_index];
-    const Transform transform = transforms[meshlet_instance.transform_index];
+    const u32 meshlet_instance_index = C.visible_meshlet_instances_indices[vis.meshlet_instance_index];
+    const MeshletInstance meshlet_instance = C.meshlet_instances[meshlet_instance_index];
+    const Model model = C.models[meshlet_instance.model_index];
+    const Transform transform = C.transforms[meshlet_instance.transform_index];
     const Meshlet meshlet = model.meshlets[meshlet_instance.meshlet_index];
 
     const u32 index  = meshlet.index(model, vis.triangle_index);
@@ -41,7 +38,7 @@ func vs_main(u32 vertex_index : SV_VertexID) -> VertexOutput {
     const f32x3 vertex_pos = meshlet.position(model, vertex);
     const f32x2 tex_coord  = meshlet.tex_coord(model, vertex);
     const f32x4 world_pos  = transform.to_world_position(vertex_pos);
-    const f32x4 clip_pos   = camera.to_clip_position(world_pos);
+    const f32x4 clip_pos   = C.camera.to_clip_position(world_pos);
 
     VertexOutput output;
     output.position = clip_pos;
@@ -56,7 +53,7 @@ func vs_main(u32 vertex_index : SV_VertexID) -> VertexOutput {
 
 [[shader("fragment")]]
 func fs_main(VertexOutput input) -> u32 {
-    const Material material = materials[input.material_index];
+    const Material material = C.materials[input.material_index];
     if (material.albedo_image_index != ~0u) {
         const f32x2 grad_x = ddx(input.tex_coord);
         const f32x2 grad_y = ddy(input.tex_coord);

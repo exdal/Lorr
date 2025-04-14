@@ -651,13 +651,19 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                     .set_dynamic_state(vuk::DynamicStateFlagBits::eViewport | vuk::DynamicStateFlagBits::eScissor)
                     .set_viewport(0, vuk::Rect2D::framebuffer())
                     .set_scissor(0, vuk::Rect2D::framebuffer())
-                    .bind_buffer(0, 0, camera)
-                    .bind_buffer(0, 1, visible_meshlet_instances_indices)
-                    .bind_buffer(0, 2, meshlet_instances)
-                    .bind_buffer(0, 3, models)
-                    .bind_buffer(0, 4, transforms)
-                    .bind_buffer(0, 5, materials)
                     .bind_persistent(1, descriptor_set)
+                    .push_constants(
+                        vuk::ShaderStageFlagBits::eVertex | vuk::ShaderStageFlagBits::eFragment,
+                        0,
+                        PushConstants(
+                            camera->device_address,
+                            visible_meshlet_instances_indices->device_address,
+                            meshlet_instances->device_address,
+                            models->device_address,
+                            transforms->device_address,
+                            materials->device_address
+                        )
+                    )
                     .bind_index_buffer(index_buffer, vuk::IndexType::eUint32)
                     .draw_indexed_indirect(1, triangle_indirect);
                 return std::make_tuple(visbuffer, depth, camera, visible_meshlet_instances_indices, meshlet_instances, transforms, models, materials);
@@ -716,12 +722,18 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                     .set_viewport(0, vuk::Rect2D::framebuffer())
                     .set_scissor(0, vuk::Rect2D::framebuffer())
                     .bind_image(0, 0, visbuffer)
-                    .bind_buffer(0, 1, camera)
-                    .bind_buffer(0, 2, visible_meshlet_instances_indices)
-                    .bind_buffer(0, 3, meshlet_instances)
-                    .bind_buffer(0, 4, models)
-                    .bind_buffer(0, 5, transforms)
-                    .bind_buffer(0, 6, materials)
+                    .push_constants(
+                        vuk::ShaderStageFlagBits::eFragment,
+                        0,
+                        PushConstants(
+                            camera->device_address,
+                            visible_meshlet_instances_indices->device_address,
+                            meshlet_instances->device_address,
+                            models->device_address,
+                            transforms->device_address,
+                            materials->device_address
+                        )
+                    )
                     .bind_persistent(1, descriptor_set)
                     .draw(3, 1, 0, 1);
                 return std::make_tuple(albedo, normal, emissive, metallic_roughness_occlusion, camera, transforms);

@@ -21,18 +21,16 @@ func vs_main(u32 vertex_index : SV_VertexID) -> VertexOutput{
 
 [[vk::binding(0, 0)]]
 Image2D<u32> visbuffer;
-[[vk::binding(1, 0)]]
-readonly ConstantBuffer<Camera> camera;
-[[vk::binding(2, 0)]]
-readonly StructuredBuffer<u32> visible_meshlet_instances_indices;
-[[vk::binding(3, 0)]]
-readonly StructuredBuffer<MeshletInstance> meshlet_instances;
-[[vk::binding(4, 0)]]
-readonly StructuredBuffer<Model> models;
-[[vk::binding(5, 0)]]
-readonly StructuredBuffer<Transform> transforms;
-[[vk::binding(6, 0)]]
-readonly StructuredBuffer<Material> materials;
+
+struct PushConstants {
+    Camera *camera;
+    u32 *visible_meshlet_instances_indices;
+    MeshletInstance *meshlet_instances;
+    Model *models;
+    Transform *transforms;
+    Material *materials;
+};
+[[vk::push_constant]] PushConstants C;
 
 struct FragmentOutput {
     f32x4 albedo_color : SV_Target0;
@@ -113,11 +111,11 @@ func fs_main(VertexOutput input) -> FragmentOutput {
     }
 
     const VisBuffer vis = { texel };
-    const u32 meshlet_instance_index = visible_meshlet_instances_indices[vis.meshlet_instance_index];
-    const MeshletInstance meshlet_instance = meshlet_instances[meshlet_instance_index];
-    const Model model = models[meshlet_instance.model_index];
-    const Transform transform = transforms[meshlet_instance.transform_index];
-    const Material material = materials[meshlet_instance.material_index];
+    const u32 meshlet_instance_index = C.visible_meshlet_instances_indices[vis.meshlet_instance_index];
+    const MeshletInstance meshlet_instance = C.meshlet_instances[meshlet_instance_index];
+    const Model model = C.models[meshlet_instance.model_index];
+    const Transform transform = C.transforms[meshlet_instance.transform_index];
+    const Material material = C.materials[meshlet_instance.material_index];
 
     const Meshlet meshlet    = model.meshlets[meshlet_instance.meshlet_index];
     const Triangle indices   = meshlet.indices(model, vis.triangle_index);
@@ -126,8 +124,8 @@ func fs_main(VertexOutput input) -> FragmentOutput {
     const f32x3x3 normals    = meshlet.normals(model, vertices);
     const f32x2x3 tex_coords = meshlet.tex_coords(model, vertices);
     const f32x4x3 world_pos  = transform.to_world_positions(positions);
-    const f32x4x3 clip_pos   = camera.to_clip_positions(world_pos);
-    const PartialDeriv deriv = { clip_pos, 2.0 * input.tex_coord - 1.0, camera.resolution };
+    const f32x4x3 clip_pos   = C.camera.to_clip_positions(world_pos);
+    const PartialDeriv deriv = { clip_pos, 2.0 * input.tex_coord - 1.0, C.camera.resolution };
 
     const f32x2 tex_coord_deriv = deriv.interpolate(tex_coords[0], tex_coords[1], tex_coords[2]);
     const f32x2 tex_coord_ddx   = deriv.ddx_of(tex_coords);

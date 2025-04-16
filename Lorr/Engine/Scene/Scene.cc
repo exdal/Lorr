@@ -433,7 +433,6 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, const vuk::Extent3
 
     ls::option<GPU::Sun> sun_data = ls::nullopt;
     ls::option<GPU::Atmosphere> atmos_data = ls::nullopt;
-    ls::option<GPU::Clouds> clouds_data = ls::nullopt;
     directional_light_query.each([&](flecs::entity e, ECS::DirectionalLight &light) {
         auto light_dir_rad = glm::radians(light.direction);
 
@@ -456,28 +455,6 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, const vuk::Extent3
             atmos.ozone_thickness = atmos_info.ozone_thickness;
             atmos.aerial_gain_per_slice = atmos_info.aerial_gain_per_slice;
         }
-
-        if (e.has<ECS::Clouds>()) {
-            const auto &clouds_info = *e.get<ECS::Clouds>();
-            auto &clouds = clouds_data.emplace();
-            clouds.bounds = clouds_info.bounds;
-            clouds.shape_noise_scale = clouds_info.shape_noise_scale;
-            clouds.shape_noise_weights = clouds_info.shape_noise_weights;
-            clouds.detail_noise_scale = clouds_info.detail_noise_scale;
-            clouds.detail_noise_weights = clouds_info.detail_noise_weights;
-            clouds.detail_noise_influence = clouds_info.detail_noise_influence;
-            clouds.coverage = clouds_info.coverage;
-            clouds.general_density = clouds_info.general_density;
-            clouds.phase_values = clouds_info.phase_values;
-            clouds.extinction = clouds_info.extinction;
-            clouds.scattering = clouds_info.scattering;
-            clouds.clouds_step_count = clouds_info.clouds_step_count;
-            clouds.sun_step_count = clouds_info.sun_step_count;
-            clouds.darkness_threshold = clouds_info.darkness_threshold;
-            clouds.draw_distance = clouds_info.draw_distance;
-            clouds.cloud_type = clouds_info.cloud_type;
-            clouds.powder_intensity = clouds_info.powder_intensity;
-        }
     });
 
     ls::option<ComposedScene> composed_scene = ls::nullopt;
@@ -489,25 +466,17 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, const vuk::Extent3
         composed_scene.emplace(renderer.compose(compose_info));
     }
 
-    auto scene_info = GPU::Scene{
-        .camera = active_camera_data.value(),
-        .sun = sun_data.value_or(GPU::Sun{}),
-        .atmosphere = atmos_data.value_or(GPU::Atmosphere{}),
-        .clouds = clouds_data.value_or(GPU::Clouds{}),
-        .cull_flags = self.cull_flags,
-    };
-
     auto transforms = self.transforms.slots_unsafe();
     auto render_info = SceneRenderInfo{
         .format = format,
         .extent = extent,
-        .scene_info = scene_info,
+        .sun = sun_data,
+        .atmosphere = atmos_data,
+        .camera = active_camera_data,
+        .cull_flags = self.cull_flags,
         .dirty_transform_ids = self.dirty_transforms,
         .transforms = transforms,
-        .render_atmos = sun_data.has_value() && atmos_data.has_value(),
-        .render_clouds = clouds_data.has_value(),
     };
-
     auto rendered_attachment = renderer.render(render_info, composed_scene);
     self.dirty_transforms.clear();
 
@@ -592,11 +561,10 @@ auto Scene::compose(this Scene &self) -> SceneComposeInfo {
 
     auto &app = Application::get();
 
+    auto rendering_image_view_ids = std::vector<ImageViewID>();
     auto gpu_models = std::vector<GPU::Model>();
     auto gpu_meshlet_instances = std::vector<GPU::MeshletInstance>();
     auto gpu_materials = std::vector<GPU::Material>();
-    auto gpu_image_views = std::vector<ImageViewID>();
-    auto gpu_samplers = std::vector<SamplerID>();
 
     for (const auto &[model_uuid, transform_ids] : self.rendering_models) {
         auto *model = app.asset_man.get_model(model_uuid);
@@ -628,11 +596,14 @@ auto Scene::compose(this Scene &self) -> SceneComposeInfo {
                     return ls::nullopt;
                 }
 
-                u32 index = gpu_image_views.size();
                 auto *texture = app.asset_man.get_texture(uuid);
-                gpu_image_views.emplace_back(texture->image_view.id());
-                gpu_samplers.emplace_back(texture->sampler.id());
-                return index;
+                if (!texture) {
+                    return ls::nullopt;
+                }
+
+                auto index = rendering_image_view_ids.size();
+                rendering_image_view_ids.push_back(texture->image_view.id());
+                return static_cast<u32>(index);
             };
 
             gpu_material.albedo_image_index = add_image_if_exists(material->albedo_texture).value_or(~0_u32);
@@ -660,8 +631,7 @@ auto Scene::compose(this Scene &self) -> SceneComposeInfo {
     }
 
     return SceneComposeInfo{
-        .image_view_ids = std::move(gpu_image_views),
-        .samplers = std::move(gpu_samplers),
+        .rendering_image_view_ids = std::move(rendering_image_view_ids),
         .gpu_materials = std::move(gpu_materials),
         .gpu_models = std::move(gpu_models),
         .gpu_meshlet_instances = std::move(gpu_meshlet_instances),

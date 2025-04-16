@@ -32,7 +32,7 @@ auto Pipeline::create(Device &device, const ShaderCompileInfo &compile_info, ls:
         }
 
         auto shader_name = fs::relative(compile_info.shader_path, compile_info.root_path);
-        create_info.add_spirv(entry_point->ir, shader_name.string());
+        create_info.add_spirv(entry_point->ir, shader_name.string(), v);
     }
 
     auto *pipeline_handle = device.runtime->get_pipeline(create_info);

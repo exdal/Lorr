@@ -44,13 +44,12 @@ target("Lorr")
         "ls",
         { public = true })
 
-    set_policy("package.precompiled", false)
     add_packages(
         "fmt",
         "libsdl3",
         "vk-bootstrap",
         "imgui",
-        "slang-lorr",
+        "shader-slang",
         "tracy",
         "xxhash",
         "glm",
@@ -63,7 +62,7 @@ target("Lorr")
         "fastgltf",
         "stb",
         "flecs",
-        "imguizmo-lorr",
+        "imguizmo",
         "vuk",
         "meshoptimizer",
         "ktx-software",

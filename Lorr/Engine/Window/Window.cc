@@ -201,7 +201,7 @@ auto Window::display_at(i32 monitor_id) -> ls::option<SystemDisplay> {
         return ls::nullopt;
     }
 
-    return SystemDisplay {
+    return SystemDisplay{
         .name = monitor_name,
         .position = { position_bounds.x, position_bounds.y },
         .work_area = { work_bounds.x, work_bounds.y, work_bounds.w, work_bounds.h },
@@ -223,6 +223,45 @@ auto Window::get_surface(VkInstance instance) -> VkSurfaceKHR {
         return nullptr;
     }
     return surface;
+}
+
+auto Window::show_dialog(const ShowDialogInfo &info) -> void {
+    ZoneScoped;
+    memory::ScopedStack stack;
+
+    auto sdl_filters = stack.alloc<SDL_DialogFileFilter>(info.filters.size());
+    for (const auto &[filter, sdl_filter] : std::views::zip(info.filters, sdl_filters)) {
+        sdl_filter.name = stack.null_terminate_cstr(filter.name);
+        sdl_filter.pattern = stack.null_terminate_cstr(filter.pattern);
+    }
+
+    auto spawn_path_str = info.spawn_path.string();
+    auto sdl_dialog_kind = SDL_FileDialogType{};
+    switch (info.kind) {
+        case DialogKind::OpenFile:
+            sdl_dialog_kind = SDL_FILEDIALOG_OPENFILE;
+            break;
+        case DialogKind::SaveFile:
+            sdl_dialog_kind = SDL_FILEDIALOG_SAVEFILE;
+            break;
+        case DialogKind::OpenFolder:
+            sdl_dialog_kind = SDL_FILEDIALOG_OPENFOLDER;
+            break;
+    }
+
+    auto props = SDL_CreateProperties();
+    LS_DEFER(&) {
+        SDL_DestroyProperties(props);
+    };
+
+    SDL_SetPointerProperty(props, SDL_PROP_FILE_DIALOG_FILTERS_POINTER, sdl_filters.data());
+    SDL_SetNumberProperty(props, SDL_PROP_FILE_DIALOG_NFILTERS_NUMBER, static_cast<i32>(sdl_filters.size()));
+    SDL_SetPointerProperty(props, SDL_PROP_FILE_DIALOG_WINDOW_POINTER, impl->handle);
+    SDL_SetStringProperty(props, SDL_PROP_FILE_DIALOG_LOCATION_STRING, spawn_path_str.c_str());
+    SDL_SetBooleanProperty(props, SDL_PROP_FILE_DIALOG_MANY_BOOLEAN, info.multi_select);
+    SDL_SetStringProperty(props, SDL_PROP_FILE_DIALOG_TITLE_STRING, stack.null_terminate_cstr(info.title));
+
+    SDL_ShowFileDialogWithProperties(sdl_dialog_kind, info.callback, info.user_data, props);
 }
 
 } // namespace lr

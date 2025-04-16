@@ -52,7 +52,7 @@ auto KTX2ImageInfo::parse(ls::span<u8> bytes) -> ls::option<KTX2ImageInfo> {
         std::memcpy(info.data.data() + output_offset, image_data, image_size);
     }
 
-    return std::move(info);
+    return info;
 }
 
 auto KTX2ImageInfo::parse_info(ls::span<u8> bytes) -> ls::option<KTX2ImageInfo> {
@@ -126,7 +126,7 @@ auto KTX2ImageInfo::encode(ls::span<u8> raw_pixels, vuk::Format format, vuk::Ext
     params.verbose = KTX_FALSE;
     params.noSSE = KTX_FALSE;
     params.threadCount = 1;
-    params.compressionLevel = KTX_ETC1S_DEFAULT_COMPRESSION_LEVEL;
+    params.compressionLevel = 3;
     params.qualityLevel = 127;
     params.normalMap = normal;
     result = ktxTexture2_CompressBasisEx(texture, &params);

@@ -19,12 +19,12 @@ To build, simply run `xmake` on project root directory.
 
 If you want to see more verbose build output, you can run build it with `xmake -v` instead.
 
-You can configure your toolchain using `xmake f --toolchain=clang|cl|gcc --mode=debug|release` before running building.
+You can configure your toolchain using `xmake f --toolchain=clang|msvc|gcc --mode=debug|release --policies=package.precompiled:n` before running building.
 Make sure to run `xmake install -o ./build` to get third party binaries.
 
 Example configuration for clang:
 ```
-xmake f --toolchain=clang --runtimes=c++_static --ldflags=-fuse-ld=mold' -m debug
+xmake f --toolchain=clang --runtimes=c++_static --ldflags='-fuse-ld=lld' -m debug --policies=package.precompiled:n
 xmake build
 ```
 

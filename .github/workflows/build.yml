@@ -18,7 +18,7 @@ jobs:
       matrix:
         platform:
           - { runner: windows-latest, os: windows, arch: x64,    toolchain: msvc,     runtime: MT }
-          - { runner: windows-latest, os: windows, arch: x64,    toolchain: clang-cl, runtime: c++_static }
+          - { runner: windows-latest, os: windows, arch: x64,    toolchain: clang-cl, runtime: MT }
           - { runner: ubuntu-latest,  os: linux,   arch: x86_64, toolchain: clang-19, runtime: c++_static }
           - { runner: ubuntu-latest,  os: linux,   arch: x86_64, toolchain: gcc-14,   runtime: stdc++_static }
         mode: [ debug, release ]

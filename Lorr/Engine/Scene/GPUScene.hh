@@ -11,13 +11,6 @@ enum class CullFlags : u32 {
     All = MeshletFrustum | TriangleBackFace | MicroTriangles,
 };
 
-enum class TransformID : u64 { Invalid = ~0_u64 };
-struct Transforms {
-    alignas(4) glm::mat4 local = {};
-    alignas(4) glm::mat4 world = {};
-    alignas(4) glm::mat3 normal = {};
-};
-
 struct Sun {
     alignas(4) glm::vec3 direction = {};
     alignas(4) f32 intensity = 10.0f;
@@ -47,29 +40,6 @@ struct Atmosphere {
     alignas(4) vuk::Extent3D aerial_perspective_lut_size = {};
 };
 
-struct Clouds {
-    alignas(4) glm::vec2 bounds = { 1.0f, 10.0f };
-    alignas(4) glm::vec4 shape_noise_weights = { 0.625f, 0.25f, 0.15f, 0.625f };
-    alignas(4) glm::vec4 detail_noise_weights = { 0.625f, 0.25f, 0.15f, 0.625f };
-    alignas(4) f32 shape_noise_scale = 100.0f;
-    alignas(4) f32 detail_noise_scale = 100.0f;
-    alignas(4) f32 detail_noise_influence = 0.4f;
-    alignas(4) f32 coverage = 0.5f;
-    alignas(4) f32 general_density = 4.0f;
-    // forwards phase, backwards phase, forwards peak mix factor
-    alignas(4) glm::vec3 phase_values = { 0.427f, -0.335f, 0.15f };
-    alignas(4) f32 cloud_type = 0.0f;
-    alignas(4) f32 draw_distance = 5000.0f;
-    alignas(4) f32 darkness_threshold = 0.02f;
-    alignas(4) i32 sun_step_count = 5;
-    alignas(4) i32 clouds_step_count = 64;
-    alignas(4) f32 extinction = 0.22f;
-    alignas(4) f32 scattering = 0.16f;
-    alignas(4) f32 powder_intensity = 10.0;
-
-    alignas(4) vuk::Extent3D noise_lut_size = {};
-};
-
 struct Camera {
     alignas(4) glm::mat4 projection_mat = {};
     alignas(4) glm::mat4 view_mat = {};
@@ -84,13 +54,11 @@ struct Camera {
     alignas(4) glm::vec2 resolution = {};
 };
 
-struct Scene {
-    alignas(4) Camera camera = {};
-    alignas(4) Sun sun = {};
-    alignas(4) Atmosphere atmosphere = {};
-    alignas(4) Clouds clouds = {};
-    alignas(4) u32 meshlet_instance_count = 0;
-    alignas(4) CullFlags cull_flags = {};
+enum class TransformID : u64 { Invalid = ~0_u64 };
+struct Transforms {
+    alignas(4) glm::mat4 local = {};
+    alignas(4) glm::mat4 world = {};
+    alignas(4) glm::mat3 normal = {};
 };
 
 enum class AlphaMode : u32 {
@@ -106,11 +74,11 @@ struct Material {
     alignas(4) f32 metallic_factor = 0.0f;
     alignas(4) AlphaMode alpha_mode = AlphaMode::Opaque;
     alignas(4) f32 alpha_cutoff = 0.0f;
-    alignas(4) u32 albedo_image_index = 0;
-    alignas(4) u32 normal_image_index = 0;
-    alignas(4) u32 emissive_image_index = 0;
-    alignas(4) u32 metallic_roughness_image_index = 0;
-    alignas(4) u32 occlusion_image_index = 0;
+    alignas(4) u32 albedo_image_index = ~0_u32;
+    alignas(4) u32 normal_image_index = ~0_u32;
+    alignas(4) u32 emissive_image_index = ~0_u32;
+    alignas(4) u32 metallic_roughness_image_index = ~0_u32;
+    alignas(4) u32 occlusion_image_index = ~0_u32;
 };
 
 struct Meshlet {

@@ -14,7 +14,6 @@ struct TextureSamplerInfo {
 };
 
 struct TextureInfo {
-    TextureSamplerInfo sampler_info = {};
     bool use_srgb = true;
 
     ls::span<u8> pixels = {}; // Optional
@@ -25,7 +24,6 @@ enum class TextureID : u64 { Invalid = std::numeric_limits<u64>::max() };
 struct Texture {
     Image image = {};
     ImageView image_view = {};
-    Sampler sampler = {};
 };
 
 enum class AlphaMode : u32 {

@@ -320,6 +320,7 @@ auto SlangCompiler::new_session(const SlangSessionInfo &info) -> ls::option<Slan
         { .name = slang::CompilerOptionName::UseUpToDateBinaryModule, .value = { .kind = slang::CompilerOptionValueKind::Int, .intValue0 = 1 } },
         { .name = slang::CompilerOptionName::GLSLForceScalarLayout, .value = { .kind = slang::CompilerOptionValueKind::Int, .intValue0 = 1 } },
         { .name = slang::CompilerOptionName::Language, .value = { .kind = slang::CompilerOptionValueKind::String, .stringValue0 = "slang" } },
+        { .name = slang::CompilerOptionName::VulkanUseEntryPointName, .value = { .kind = slang::CompilerOptionValueKind::Int, .intValue0 = 1 } },
         { .name = slang::CompilerOptionName::DisableWarnings,
           .value = { .kind = slang::CompilerOptionValueKind::String, .stringValue0 = "39001,41012" } },
     };

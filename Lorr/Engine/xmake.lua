@@ -44,7 +44,6 @@ target("Lorr")
         "ls",
         { public = true })
 
-    set_policy("package.precompiled", false)
     add_packages(
         "fmt",
         "libsdl3",

@@ -1,3 +1,4 @@
+set_policy("package.precompiled", false)
 add_repositories("exdal https://github.com/exdal/xmake-repo.git")
 
 includes("xmake/*.lua")

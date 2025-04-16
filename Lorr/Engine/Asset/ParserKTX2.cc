@@ -52,7 +52,7 @@ auto KTX2ImageInfo::parse(ls::span<u8> bytes) -> ls::option<KTX2ImageInfo> {
         std::memcpy(info.data.data() + output_offset, image_data, image_size);
     }
 
-    return std::move(info);
+    return info;
 }
 
 auto KTX2ImageInfo::parse_info(ls::span<u8> bytes) -> ls::option<KTX2ImageInfo> {

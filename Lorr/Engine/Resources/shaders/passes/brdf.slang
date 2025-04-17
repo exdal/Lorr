@@ -6,8 +6,6 @@ import pbr;
 import sky;
 import scene;
 
-import embedded.hemisphere;
-
 [[vk::binding(0, 0)]]
 Sampler linear_clamp_sampler;
 
@@ -67,19 +65,19 @@ f32x4 fs_main(VertexOutput input) : SV_Target {
     const f32x3 albedo_color = albedo_image.sample_mip(nearest_repeat_sampler, input.tex_coord, 0).rgb;
     const f32x4 normal_oct_flat = normal_image.load(pixel_pos);
     const f32x3 mapped_normal = std::oct_to_vec3(normal_oct_flat.xy);
-    const f32x3 world_normal = std::oct_to_vec3(normal_oct_flat.zw);
+    const f32x3 smooth_normal = std::oct_to_vec3(normal_oct_flat.zw);
     const f32x3 emission = emissive_image.load(pixel_pos);
     const f32x3 metallic_roughness_occlusion = metallic_roughness_occlusion_image.load(pixel_pos);
     const f32  metallic = metallic_roughness_occlusion.x;
     const f32  roughness = metallic_roughness_occlusion.y;
-    f32  occlusion = metallic_roughness_occlusion.z;
+    const f32  occlusion = metallic_roughness_occlusion.z;
 
     const f32x4 NDC = f32x4(input.tex_coord * 2.0 - 1.0, depth, 1.0);
     const f32x4 world_position = mul(C.camera->inv_projection_view_mat, NDC);
     const f32x3 ray_pos = world_position.xyz / world_position.w;
 
     // PBR constants
-    const f32x3 N = normalize(lerp(mapped_normal, world_normal, length(world_normal)));
+    const f32x3 N = normalize(lerp(smooth_normal, mapped_normal, length(mapped_normal)));
     const f32x3 V = normalize(C.camera->position - ray_pos);
     const f32x3 L = normalize(C.sun->direction);  // temp
 
@@ -123,14 +121,6 @@ f32x4 fs_main(VertexOutput input) : SV_Target {
           + albedo_color * ambient_color * 0.49 // Planet light
           + albedo_color * 0.13  // Surface color
           + emission;  // Emitted light
-
-    if (occlusion == 0.0) {
-        const f32 RADIUS = 1.0;
-        for (i32 i = 0; i < 24; i++) {
-            const f32x3 kernel_pos = N * HEMISPHERE_64[i];
-            const f32x3 sample_pos = ray_pos + (kernel_pos * RADIUS);
-        }
-    }
 
     // Direct influence over color no matter light position
     color *= occlusion;

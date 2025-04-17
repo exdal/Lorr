@@ -35,6 +35,11 @@ auto SceneRenderer::create_persistent_resources(this SceneRenderer &self) -> voi
         .addr_v = vuk::SamplerAddressMode::eRepeat,
         .addr_w = vuk::SamplerAddressMode::eRepeat,
         .compare_op = vuk::CompareOp::eNever,
+        .max_anisotropy = 16.0f,
+        .mip_lod_bias = 0.0f,
+        .min_lod = 0.0f,
+        .max_lod = 10.0f,
+        .use_anisotropy = true,
     };
     self.linear_repeat_sampler = Sampler::create(*self.device, linear_repeat_sampler_info).value();
 
@@ -722,18 +727,12 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                     .set_viewport(0, vuk::Rect2D::framebuffer())
                     .set_scissor(0, vuk::Rect2D::framebuffer())
                     .bind_image(0, 0, visbuffer)
-                    .push_constants(
-                        vuk::ShaderStageFlagBits::eFragment,
-                        0,
-                        PushConstants(
-                            camera->device_address,
-                            visible_meshlet_instances_indices->device_address,
-                            meshlet_instances->device_address,
-                            models->device_address,
-                            transforms->device_address,
-                            materials->device_address
-                        )
-                    )
+                    .bind_buffer(0, 1, camera)
+                    .bind_buffer(0, 2, visible_meshlet_instances_indices)
+                    .bind_buffer(0, 3, meshlet_instances)
+                    .bind_buffer(0, 4, models)
+                    .bind_buffer(0, 5, transforms)
+                    .bind_buffer(0, 6, materials)
                     .bind_persistent(1, descriptor_set)
                     .draw(3, 1, 0, 1);
                 return std::make_tuple(albedo, normal, emissive, metallic_roughness_occlusion, camera, transforms);

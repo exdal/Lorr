@@ -93,6 +93,12 @@ public enum AlphaMode : u32 {
     Blend,
 };
 
+public struct UVGradient {
+    public f32x2 uv;
+    public f32x2 ddx;
+    public f32x2 ddy;
+};
+
 [[vk::binding(0, 1)]]
 Sampler material_sampler;
 [[vk::binding(1, 1)]]
@@ -111,50 +117,50 @@ public struct Material {
     public u32   metallic_rougness_image_index = ~0u;
     public u32   occlusion_image_index = ~0u;
 
-    public func sample_albedo_color(f32x2 uv, f32x2 ddx, f32x2 ddy) -> f32x4 {
+    public func sample_albedo_color(in UVGradient grad) -> f32x4 {
         if (this.albedo_image_index != ~0u) {
             const let color = material_images[this.albedo_image_index]
-                .sample_grad(material_sampler, uv, ddx, ddy);
+                .sample_grad(material_sampler, grad.uv, grad.ddx, grad.ddy);
             return this.albedo_color * color;
         }
 
         return this.albedo_color;
     }
 
-    public func sample_normal_color(f32x2 uv, f32x2 ddx, f32x2 ddy) -> f32x3 {
+    public func sample_normal_color(in UVGradient grad) -> f32x3 {
         if (this.normal_image_index != ~0u) {
             return material_images[this.normal_image_index]
-                .sample_grad(material_sampler, uv, ddx, ddy).rgb;
+                .sample_grad(material_sampler, grad.uv, grad.ddx, grad.ddy).rgb;
         }
 
         return { 0.0 };
     }
 
-    public func sample_emissive_color(f32x2 uv, f32x2 ddx, f32x2 ddy) -> f32x3 {
+    public func sample_emissive_color(in UVGradient grad) -> f32x3 {
         if (this.emissive_image_index != ~0u) {
             const let color = material_images[this.emissive_image_index]
-                .sample_grad(material_sampler, uv, ddx, ddy).rgb;
+                .sample_grad(material_sampler, grad.uv, grad.ddx, grad.ddy).rgb;
             return this.emissive_color * color;
         }
 
         return this.emissive_color;
     }
 
-    public func sample_metallic_roughness(f32x2 uv, f32x2 ddx, f32x2 ddy) -> f32x2 {
+    public func sample_metallic_roughness(in UVGradient grad) -> f32x2 {
         const let metallic_roughness = f32x2(this.metallic_factor, this.roughness_factor);
         if (this.metallic_rougness_image_index != ~0u) {
             const let color = material_images[this.metallic_rougness_image_index]
-                .sample_grad(material_sampler, uv, ddx, ddy).bg;
+                .sample_grad(material_sampler, grad.uv, grad.ddx, grad.ddy).bg;
             return metallic_roughness * color;
         }
 
         return metallic_roughness;
     }
 
-    public func sample_occlusion_color(f32x2 uv, f32x2 ddx, f32x2 ddy) -> f32 {
+    public func sample_occlusion_color(in UVGradient grad) -> f32 {
         if (this.occlusion_image_index != ~0u) {
             return material_images[this.occlusion_image_index]
-                .sample_grad(material_sampler, uv, ddx, ddy).r;
+                .sample_grad(material_sampler, grad.uv, grad.ddx, grad.ddy).r;
         }
 
         return 1.0;

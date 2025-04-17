@@ -55,10 +55,11 @@ func vs_main(u32 vertex_index : SV_VertexID) -> VertexOutput {
 func fs_main(VertexOutput input) -> u32 {
     const Material material = C.materials[input.material_index];
     if (material.albedo_image_index != ~0u) {
-        const f32x2 grad_x = ddx(input.tex_coord);
-        const f32x2 grad_y = ddy(input.tex_coord);
-        const f32 alpha_color = material.sample_albedo_color(
-            input.tex_coord, grad_x, grad_y).a;
+        UVGradient grad;
+        grad.uv = input.tex_coord;
+        grad.ddx = ddx(input.tex_coord);
+        grad.ddy = ddy(input.tex_coord);
+        const f32 alpha_color = material.sample_albedo_color(grad).a;
         if (alpha_color < clamp(material.alpha_cutoff, 0.001, 1.0)) {
             discard;
         }

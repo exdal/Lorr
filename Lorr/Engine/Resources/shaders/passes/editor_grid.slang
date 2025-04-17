@@ -85,5 +85,4 @@ FragmentOutput fs_main(VertexOutput input) {
     output.color = pristine_grid(pixel_pos, float2(0.005)) * float(t > 0.0);
     output.depth = depth;
     return output;
-
 }

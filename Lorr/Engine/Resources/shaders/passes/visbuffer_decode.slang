@@ -131,7 +131,7 @@ func fs_main(VertexOutput input) -> FragmentOutput {
     const f32x2x3 tex_coords = meshlet.tex_coords(model, vertices);
     const f32x4x3 world_pos  = transform.to_world_positions(positions);
     const f32x4x3 clip_pos   = camera.to_clip_positions(world_pos);
-    const PartialDeriv deriv = { clip_pos, 2.0 * input.tex_coord - 1.0, camera.resolution };
+    const PartialDeriv deriv = { clip_pos, input.tex_coord * 2.0 - 1.0, camera.resolution };
 
     const UVGradient tex_coord_grad = deriv.gradient_of(tex_coords);
 
@@ -143,26 +143,29 @@ func fs_main(VertexOutput input) -> FragmentOutput {
     const f32x3 world_normal = mul(transform.normal, normal_deriv);
     f32x3 N = world_normal;
     if (material.normal_image_index != ~0u) {
-        // https://www.jeremyong.com/graphics/2023/12/16/surface-gradient-bump-mapping
-        const f32x3x3 world_pos_3d = {
-            clip_pos[0].xyz,
-            clip_pos[1].xyz,
-            clip_pos[2].xyz
-        };
-        const f32x3 pos_ddx = mul(world_pos_3d, deriv.uv_ddx);
-        const f32x3 pos_ddy = mul(world_pos_3d, deriv.uv_ddy);
+        const f32x3x3 world_positions = f32x3x3(
+            world_pos[0].xyz,
+            world_pos[1].xyz,
+            world_pos[2].xyz
+        );
+
+        const f32x3 pos_ddx = mul(deriv.uv_ddx, world_positions);
+        const f32x3 pos_ddy = mul(deriv.uv_ddy, world_positions);
+
         const f32x3 pos_ddx_s = pos_ddx - dot(pos_ddx, N) * N;
         const f32x3 pos_ddy_s = pos_ddy - dot(pos_ddy, N) * N;
-        const f32 jacobian_sign = sign(determinant(mat2(tex_coord_grad.ddx, tex_coord_grad.ddy)));
-        f32x3 T = jacobian_sign * (tex_coord_grad.ddy.y * pos_ddx_s - tex_coord_grad.ddx.y * pos_ddy_s);
-        if (jacobian_sign != 0.0) {
+        const f32 jacobian_sign = sign(determinant(f32x2x2(tex_coord_grad.ddx, tex_coord_grad.ddy)));
+
+        f32x3 T = jacobian_sign * (tex_coord_grad.ddy.y * pos_ddx_s - tex_coord_grad.ddx.y * pos_ddy);
+        if (jacobian_sign != 0.0f) {
             T = normalize(T);
         }
         const f32x3 B = jacobian_sign * sign(dot(pos_ddy, cross(N, pos_ddx))) * cross(N, T);
         const f32x3x3 TBN = f32x3x3(T, -B, N);
-        const f32x2 sampled_normal = material.sample_normal_color(tex_coord_grad).xy * 2.0 - 1.0;
-        const f32 sampled_normal_z = sqrt(max(1.0 - sampled_normal.x * sampled_normal.x - sampled_normal.y * sampled_normal.y, 0.0));
-        N = mul(f32x3(sampled_normal, sampled_normal_z), TBN);
+
+        const f32x2 Ns = material.sample_normal_color(tex_coord_grad).xy * 2.0 - 1.0;
+        const f32 Ns_z = sqrt(saturate(1.0f - dot(Ns, Ns)));
+        N = mul(f32x3(Ns, Ns_z), TBN);
     }
     output.normal_color.xy = std::vec3_to_oct(N);
     output.normal_color.zw = std::vec3_to_oct(world_normal);

@@ -61,11 +61,11 @@ public struct Camera {
     }
 
     public func to_clip_positions(in f32x4x3 world_positions) -> f32x4x3 {
-        return {
+        return f32x4x3(
             mul(this.projection_view_mat, world_positions[0]),
             mul(this.projection_view_mat, world_positions[1]),
-            mul(this.projection_view_mat, world_positions[2]),
-        };
+            mul(this.projection_view_mat, world_positions[2])
+        );
     }
 };
 

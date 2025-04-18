@@ -34,11 +34,11 @@ auto SceneRenderer::create_persistent_resources(this SceneRenderer &self) -> voi
         .addr_u = vuk::SamplerAddressMode::eRepeat,
         .addr_v = vuk::SamplerAddressMode::eRepeat,
         .addr_w = vuk::SamplerAddressMode::eRepeat,
-        .compare_op = vuk::CompareOp::eNever,
+        .compare_op = vuk::CompareOp::eGreater,
         .max_anisotropy = 16.0f,
         .mip_lod_bias = 0.0f,
         .min_lod = 0.0f,
-        .max_lod = 10.0f,
+        .max_lod = 1000.0f,
         .use_anisotropy = true,
     };
     self.linear_repeat_sampler = Sampler::create(*self.device, linear_repeat_sampler_info).value();

@@ -126,6 +126,7 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
     vk10_features.fragmentStoresAndAtomics = true;
     vk10_features.shaderInt64 = true;
     vk10_features.multiDrawIndirect = true;
+    vk10_features.samplerAnisotropy = true;
     physical_device_selector.set_required_features(vk10_features);
 
     std::vector<const c8 *> device_extensions;

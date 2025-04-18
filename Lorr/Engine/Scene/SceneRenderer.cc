@@ -34,11 +34,11 @@ auto SceneRenderer::create_persistent_resources(this SceneRenderer &self) -> voi
         .addr_u = vuk::SamplerAddressMode::eRepeat,
         .addr_v = vuk::SamplerAddressMode::eRepeat,
         .addr_w = vuk::SamplerAddressMode::eRepeat,
-        .compare_op = vuk::CompareOp::eGreater,
-        .max_anisotropy = 16.0f,
+        .compare_op = vuk::CompareOp::eNever,
+        .max_anisotropy = 8.0f,
         .mip_lod_bias = 0.0f,
         .min_lod = 0.0f,
-        .max_lod = 1000.0f,
+        .max_lod = 10.0f,
         .use_anisotropy = true,
     };
     self.linear_repeat_sampler = Sampler::create(*self.device, linear_repeat_sampler_info).value();
@@ -74,15 +74,22 @@ auto SceneRenderer::create_persistent_resources(this SceneRenderer &self) -> voi
     self.bindless_set.update_sampler(BindlessDescriptorLayout::Samplers, 0, *self.device->sampler(self.linear_repeat_sampler.id()));
     self.device->commit_descriptor_set(self.bindless_set);
 
-    //  ── GRID ────────────────────────────────────────────────────────────
-    auto grid_pipeline_info = ShaderCompileInfo{
-        .module_name = "editor.grid",
+    //  ── EDITOR ──────────────────────────────────────────────────────────
+    auto editor_grid_pipeline_info = ShaderCompileInfo{
+        .module_name = "editor_grid",
         .root_path = shaders_root,
         .shader_path = shaders_root / "passes" / "editor_grid.slang",
         .entry_points = { "vs_main", "fs_main" },
     };
-    self.grid_pipeline = Pipeline::create(*self.device, grid_pipeline_info).value();
+    self.editor_grid_pipeline = Pipeline::create(*self.device, editor_grid_pipeline_info).value();
 
+    auto editor_mousepick_pipeline_info = ShaderCompileInfo{
+        .module_name = "editor_mousepick",
+        .root_path = shaders_root,
+        .shader_path = shaders_root / "passes" / "editor_mousepick.slang",
+        .entry_points = { "cs_main" },
+    };
+    self.editor_mousepick_pipeline = Pipeline::create(*self.device, editor_mousepick_pipeline_info).value();
     //  ── SKY ─────────────────────────────────────────────────────────────
     auto sky_transmittance_lut_info = ImageInfo{
         .format = vuk::Format::eR16G16B16A16Sfloat,
@@ -407,6 +414,15 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
     visbuffer_attachment.same_shape_as(final_attachment);
     visbuffer_attachment = vuk::clear_image(std::move(visbuffer_attachment), vuk::Clear(vuk::ClearColor(~0_u32, 0_u32, 0_u32, 0_u32)));
 
+    auto overdraw_attachment = vuk::declare_ia(
+        "overdraw",
+        { .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eColorAttachment,
+          .format = vuk::Format::eR32Uint,
+          .sample_count = vuk::Samples::e1 }
+    );
+    overdraw_attachment.same_shape_as(final_attachment);
+    overdraw_attachment = vuk::clear_image(std::move(overdraw_attachment), vuk::Clear(vuk::Black<u32>));
+
     auto albedo_attachment = vuk::declare_ia(
         "albedo",
         { .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eColorAttachment,
@@ -646,7 +662,8 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                 VUK_BA(vuk::eVertexRead) meshlet_instances,
                 VUK_BA(vuk::eVertexRead) transforms,
                 VUK_BA(vuk::eVertexRead) models,
-                VUK_BA(vuk::eFragmentRead) materials
+                VUK_BA(vuk::eFragmentRead) materials,
+                VUK_IA(vuk::eFragmentRW) overdraw
             ) {
                 cmd_list //
                     .bind_graphics_pipeline(pipeline)
@@ -657,21 +674,26 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                     .set_viewport(0, vuk::Rect2D::framebuffer())
                     .set_scissor(0, vuk::Rect2D::framebuffer())
                     .bind_persistent(1, descriptor_set)
-                    .push_constants(
-                        vuk::ShaderStageFlagBits::eVertex | vuk::ShaderStageFlagBits::eFragment,
-                        0,
-                        PushConstants(
-                            camera->device_address,
-                            visible_meshlet_instances_indices->device_address,
-                            meshlet_instances->device_address,
-                            models->device_address,
-                            transforms->device_address,
-                            materials->device_address
-                        )
-                    )
+                    .bind_image(0, 0, overdraw)
+                    .bind_buffer(0, 1, camera)
+                    .bind_buffer(0, 2, visible_meshlet_instances_indices)
+                    .bind_buffer(0, 3, meshlet_instances)
+                    .bind_buffer(0, 4, models)
+                    .bind_buffer(0, 5, transforms)
+                    .bind_buffer(0, 6, materials)
                     .bind_index_buffer(index_buffer, vuk::IndexType::eUint32)
                     .draw_indexed_indirect(1, triangle_indirect);
-                return std::make_tuple(visbuffer, depth, camera, visible_meshlet_instances_indices, meshlet_instances, transforms, models, materials);
+                return std::make_tuple(
+                    visbuffer,
+                    depth,
+                    camera,
+                    visible_meshlet_instances_indices,
+                    meshlet_instances,
+                    transforms,
+                    models,
+                    materials,
+                    overdraw
+                );
             }
         );
 
@@ -683,7 +705,8 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
             meshlet_instances_buffer,
             transforms_buffer,
             models_buffer,
-            materials_buffer
+            materials_buffer,
+            overdraw_attachment
         ) =
             vis_encode_pass(
                 std::move(draw_indexed_cmd_buffer),
@@ -695,7 +718,8 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                 std::move(meshlet_instances_buffer),
                 std::move(transforms_buffer),
                 std::move(models_buffer),
-                std::move(materials_buffer)
+                std::move(materials_buffer),
+                std::move(overdraw_attachment)
             );
 
         //  ── VISBUFFER DECODE ────────────────────────────────────────────────
@@ -735,7 +759,18 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                     .bind_buffer(0, 6, materials)
                     .bind_persistent(1, descriptor_set)
                     .draw(3, 1, 0, 1);
-                return std::make_tuple(albedo, normal, emissive, metallic_roughness_occlusion, camera, transforms);
+
+                return std::make_tuple(
+                    albedo,
+                    normal,
+                    emissive,
+                    metallic_roughness_occlusion,
+                    camera,
+                    visible_meshlet_instances_indices,
+                    meshlet_instances,
+                    transforms,
+                    visbuffer
+                );
             }
         );
 
@@ -745,7 +780,10 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
             emissive_attachment,
             metallic_roughness_occlusion_attachment,
             camera_buffer,
-            transforms_buffer
+            visible_meshlet_instances_buffer,
+            meshlet_instances_buffer,
+            transforms_buffer,
+            visbuffer_attachment
         ) =
             vis_decode_pass(
                 std::move(albedo_attachment),
@@ -760,6 +798,46 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                 std::move(materials_buffer),
                 std::move(visbuffer_attachment)
             );
+
+        //  ── EDITOR MOUSE PICKING ────────────────────────────────────────────
+        if (info.picking_texel) {
+            auto editor_mousepick_pass = vuk::make_pass(
+                "editor mousepick",
+                [&pipeline = *self.device->pipeline(self.editor_mousepick_pipeline.id()),
+                 picking_texel = info.picking_texel.value()](
+                    vuk::CommandBuffer &cmd_list, //
+                    VUK_IA(vuk::eComputeRead) visbuffer,
+                    VUK_BA(vuk::eComputeRead) visible_meshlet_instances_indices,
+                    VUK_BA(vuk::eComputeRead) meshlet_instances,
+                    VUK_BA(vuk::eComputeWrite) picked_transform_index
+                ) {
+                    cmd_list //
+                        .bind_compute_pipeline(pipeline)
+                        .bind_image(0, 0, visbuffer)
+                        .bind_buffer(0, 1, visible_meshlet_instances_indices)
+                        .bind_buffer(0, 2, meshlet_instances)
+                        .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, PushConstants(picked_transform_index->device_address, picking_texel))
+                        .dispatch(1);
+
+                    return picked_transform_index;
+                }
+            );
+
+            auto picked_transform_index_buffer = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eGPUtoCPU, sizeof(u32));
+            picked_transform_index_buffer = editor_mousepick_pass(
+                std::move(visbuffer_attachment),
+                std::move(visible_meshlet_instances_buffer),
+                std::move(meshlet_instances_buffer),
+                std::move(picked_transform_index_buffer)
+            );
+
+            transfer_man.wait_on(std::move(picked_transform_index_buffer));
+            self.device->wait();
+
+            u32 picked_transform_index;
+            std::memcpy(&picked_transform_index, picked_transform_index_buffer->mapped_ptr, sizeof(u32));
+            info.picked_transform_index = picked_transform_index;
+        }
 
         //  ── BRDF ────────────────────────────────────────────────────────────
         auto brdf_pass = vuk::make_pass(
@@ -1037,7 +1115,7 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
     //  ── EDITOR GRID ─────────────────────────────────────────────────────
     auto editor_grid_pass = vuk::make_pass(
         "editor grid",
-        [&pipeline = *self.device->pipeline(self.grid_pipeline.id()
+        [&pipeline = *self.device->pipeline(self.editor_grid_pipeline.id()
          )](vuk::CommandBuffer &cmd_list,
             VUK_IA(vuk::eColorWrite) dst,
             VUK_IA(vuk::eDepthStencilRW) depth,

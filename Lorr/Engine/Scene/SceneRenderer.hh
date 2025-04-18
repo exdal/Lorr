@@ -25,10 +25,12 @@ struct SceneRenderInfo {
     ls::option<GPU::Sun> sun = ls::nullopt;
     ls::option<GPU::Atmosphere> atmosphere = ls::nullopt;
     ls::option<GPU::Camera> camera = ls::nullopt;
+    ls::option<glm::uvec2> picking_texel = ls::nullopt;
     GPU::CullFlags cull_flags = {};
-
     ls::span<GPU::TransformID> dirty_transform_ids = {};
     ls::span<GPU::Transforms> transforms = {};
+
+    ls::option<u32> picked_transform_index = ls::nullopt;
 };
 
 struct SceneRenderer {
@@ -45,7 +47,8 @@ struct SceneRenderer {
     Buffer models_buffer = {};
     Buffer meshlet_instances_buffer = {};
 
-    Pipeline grid_pipeline = {};
+    Pipeline editor_grid_pipeline = {};
+    Pipeline editor_mousepick_pipeline = {};
 
     Image sky_transmittance_lut = {};
     ImageView sky_transmittance_lut_view = {};

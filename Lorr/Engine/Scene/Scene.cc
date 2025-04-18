@@ -387,7 +387,20 @@ auto Scene::find_entity(this Scene &self, std::string_view name) -> flecs::entit
     return self.root.lookup(safe_str);
 }
 
-auto Scene::render(this Scene &self, SceneRenderer &renderer, const vuk::Extent3D &extent, vuk::Format format) -> vuk::Value<vuk::ImageAttachment> {
+auto Scene::find_entity(this Scene &self, u32 transform_index) -> flecs::entity {
+    ZoneScoped;
+
+    for (const auto &[entity, transform_id] : self.entity_transforms_map) {
+        auto i = SlotMap_decode_id(transform_id).index;
+        if (i == transform_index) {
+            return entity;
+        }
+    }
+
+    return {};
+}
+
+auto Scene::render(this Scene &self, SceneRenderer &renderer, SceneRenderInfo &info) -> vuk::Value<vuk::ImageAttachment> {
     ZoneScoped;
 
     // clang-format off
@@ -420,7 +433,7 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, const vuk::Extent3
         camera_data.position = t.position;
         camera_data.near_clip = c.near_clip;
         camera_data.far_clip = c.far_clip;
-        camera_data.resolution = glm::vec2(static_cast<f32>(extent.width), static_cast<f32>(extent.height));
+        camera_data.resolution = glm::vec2(static_cast<f32>(info.extent.width), static_cast<f32>(info.extent.height));
 
         if (!c.freeze_frustum) {
             c.frustum_projection_view_mat = camera_data.projection_view_mat;
@@ -467,17 +480,13 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, const vuk::Extent3
     }
 
     auto transforms = self.transforms.slots_unsafe();
-    auto render_info = SceneRenderInfo{
-        .format = format,
-        .extent = extent,
-        .sun = sun_data,
-        .atmosphere = atmos_data,
-        .camera = active_camera_data,
-        .cull_flags = self.cull_flags,
-        .dirty_transform_ids = self.dirty_transforms,
-        .transforms = transforms,
-    };
-    auto rendered_attachment = renderer.render(render_info, composed_scene);
+    info.sun = sun_data;
+    info.atmosphere = atmos_data;
+    info.camera = active_camera_data;
+    info.cull_flags = self.cull_flags;
+    info.dirty_transform_ids = self.dirty_transforms;
+    info.transforms = transforms;
+    auto rendered_attachment = renderer.render(info, composed_scene);
     self.dirty_transforms.clear();
 
     return rendered_attachment;

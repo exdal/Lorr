@@ -186,6 +186,7 @@ auto ViewportPanel::draw_viewport(this ViewportPanel &self, vuk::Format format, 
     auto window_pos = window_rect.Min;
     auto window_size = window_rect.GetSize();
     auto work_area_size = ImGui::GetContentRegionAvail();
+    auto &io = ImGui::GetIO();
 
     auto *camera = editor_camera.get_mut<ECS::Camera>();
     auto *camera_transform = editor_camera.get_mut<ECS::Transform>();
@@ -201,10 +202,33 @@ auto ViewportPanel::draw_viewport(this ViewportPanel &self, vuk::Format format, 
         ImGuizmo::PopID();
     };
 
-    auto render_extent = vuk::Extent3D(static_cast<u32>(window_size.x), static_cast<u32>(window_size.y), 1);
-    auto scene_render_result = scene->render(app.scene_renderer, render_extent, format);
+    ls::option<glm::uvec2> requested_texel_transform = ls::nullopt;
+    const auto dragging = io.MouseDragMaxDistanceSqr[0] >= (io.MouseDragThreshold * io.MouseDragThreshold);
+    const auto update_visible_entity = ImGui::IsWindowHovered() && !dragging && ImGui::IsMouseReleased(0);
+    if (update_visible_entity) {
+        auto mouse_pos = ImGui::GetMousePos();
+        auto mouse_pos_rel = ImVec2(mouse_pos.x - window_pos.x, mouse_pos.y - window_pos.y);
+        requested_texel_transform.emplace(glm::uvec2(mouse_pos_rel.x, mouse_pos_rel.y));
+    }
+    auto scene_render_info = SceneRenderInfo{
+        .format = format,
+        .extent = vuk::Extent3D(static_cast<u32>(window_size.x), static_cast<u32>(window_size.y), 1),
+        .picking_texel = requested_texel_transform,
+    };
+    auto scene_render_result = scene->render(app.scene_renderer, scene_render_info);
     auto scene_render_image_idx = app.imgui_renderer.add_image(std::move(scene_render_result));
     ImGui::Image(scene_render_image_idx, work_area_size);
+
+    if (update_visible_entity) {
+        if (scene_render_info.picked_transform_index.has_value()) {
+            auto picked_entity = scene->find_entity(scene_render_info.picked_transform_index.value());
+            if (picked_entity) {
+                app.selected_entity = picked_entity;
+            }
+        } else {
+            app.selected_entity = {};
+        }
+    }
 
     if (app.selected_entity && app.selected_entity.has<ECS::Transform>()) {
         auto projection = glm::perspective(glm::radians(camera->fov), camera->aspect_ratio, camera->near_clip, camera->far_clip);

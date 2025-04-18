@@ -69,8 +69,9 @@ public:
 
     // Finds entity in root.
     auto find_entity(this Scene &, std::string_view name) -> flecs::entity;
+    auto find_entity(this Scene &, u32 transform_index) -> flecs::entity;
 
-    auto render(this Scene &, SceneRenderer &renderer, const vuk::Extent3D &extent, vuk::Format format) -> vuk::Value<vuk::ImageAttachment>;
+    auto render(this Scene &, SceneRenderer &renderer, SceneRenderInfo &info) -> vuk::Value<vuk::ImageAttachment>;
     auto tick(this Scene &, f32 delta_time) -> bool;
 
     auto set_name(this Scene &, const std::string &name) -> void;

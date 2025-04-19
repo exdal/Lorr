@@ -22,8 +22,7 @@ auto ImGuiRenderer::init(this ImGuiRenderer &self, Device *device) -> void {
     auto roboto_path = (fonts_root / "Roboto-Regular.ttf").string();
     auto materialdesignicons_path = (fonts_root / FONT_ICON_FILE_NAME_MDI).string();
 
-    //  ── IMGUI CONTEXT
-    //  ───────────────────────────────────────────────────
+    // ── IMGUI CONTEXT ───────────────────────────────────────────────────
     ImGui::CreateContext();
     auto &imgui = ImGui::GetIO();
     imgui.ConfigWindowsMoveFromTitleBarOnly = true;
@@ -36,8 +35,7 @@ auto ImGuiRenderer::init(this ImGuiRenderer &self, Device *device) -> void {
     imgui.BackendFlags |= ImGuiBackendFlags_HasMouseCursors;
     ImGui::StyleColorsDark();
 
-    //  ── FONT ATLAS
-    //  ──────────────────────────────────────────────────────
+    //  ── FONT ATLAS ──────────────────────────────────────────────────────
     ImWchar icons_ranges[] = { ICON_MIN_MDI, ICON_MAX_MDI, 0 };
     ImFontConfig font_config;
     font_config.GlyphMinAdvanceX = 16.0f;

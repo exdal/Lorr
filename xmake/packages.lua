@@ -8,9 +8,12 @@ add_requires("glm 1.0.1", { configs = {
     cxx_standard = "20",
 }, system = false })
 add_requires("plf_colony v7.41")
-add_requires("imgui v1.91.6-docking", { configs = {
+
+add_requires("imguizmo v1.91.8-docking")
+add_requires("imgui v1.91.8-docking", { configs = {
     wchar32 = true,
 }, system = false })
+
 add_requires("simdutf v6.2.0", { system = false })
 add_requires("simdjson v3.12.2", { system = false })
 add_requires("unordered_dense v4.5.0", { system = false })
@@ -34,7 +37,6 @@ add_requires("libsdl3 3.2.8", { configs = {
     x11 = true,
 }, system = false })
 
-add_requires("imguizmo v1.91.6-docking")
 add_requires("shader-slang v2025.6.3", { system = false })
 add_requires("vuk 2025.04.15", { configs = {
     debug_allocations = false

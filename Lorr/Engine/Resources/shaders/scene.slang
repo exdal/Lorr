@@ -7,6 +7,19 @@ public const static f32 CAMERA_SCALE_UNIT     = 0.01;
 public const static f32 INV_CAMERA_SCALE_UNIT = 1.0 / CAMERA_SCALE_UNIT;
 public const static f32 PLANET_RADIUS_OFFSET  = 0.001;
 
+public enum DebugView : i32 {
+    None = 0,
+    Triangles,
+    Meshlets,
+    Overdraw,
+    Albedo,
+    Normal,
+    Emissive,
+    Metallic,
+    Roughness,
+    Occlusion,
+};
+
 [[Flags]]
 public enum CullFlags : u32 {
     MeshletFrustum,

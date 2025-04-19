@@ -3,6 +3,21 @@
 #include "Engine/Graphics/VulkanTypes.hh"
 
 namespace lr::GPU {
+enum class DebugView : i32 {
+    None = 0,
+    Triangles,
+    Meshlets,
+    Overdraw,
+    Albedo,
+    Normal,
+    Emissive,
+    Metallic,
+    Roughness,
+    Occlusion,
+
+    Count,
+};
+
 enum class CullFlags : u32 {
     MeshletFrustum = 1 << 0,
     TriangleBackFace = 1 << 1,

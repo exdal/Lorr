@@ -71,6 +71,10 @@ struct SceneRenderer {
 
     Pipeline tonemap_pipeline = {};
 
+    Pipeline debug_pipeline = {};
+    GPU::DebugView debug_view = GPU::DebugView::None;
+    f32 debug_heatmap_scale = 5.0;
+
     auto init(this SceneRenderer &, Device *device) -> bool;
     auto destroy(this SceneRenderer &) -> void;
 

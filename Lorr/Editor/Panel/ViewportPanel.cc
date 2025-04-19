@@ -151,6 +151,7 @@ auto ViewportPanel::draw_tools(this ViewportPanel &self) -> void {
     ImGui::SetNextWindowPos(editor_camera_popup_pos);
     ImGui::SetNextWindowSize({ editor_camera_popup_width, 0 });
     if (ImGui::BeginPopup("editor_camera")) {
+        auto max_widget_width = editor_camera_popup_width - frame_padding.x * 2;
         auto *scene = app.asset_man.get_scene(app.active_scene_uuid.value());
         auto editor_camera = scene->get_editor_camera();
         auto *camera_transform = editor_camera.get_mut<ECS::Transform>();
@@ -173,6 +174,41 @@ auto ViewportPanel::draw_tools(this ViewportPanel &self) -> void {
         ImGui::CheckboxFlags("Cull Triangle Back Face", &cull_flags, std::to_underlying(GPU::CullFlags::TriangleBackFace));
         ImGui::CheckboxFlags("Cull Micro Triangles", &cull_flags, std::to_underlying(GPU::CullFlags::MicroTriangles));
 
+        ImGui::SeparatorText("Debug View");
+        ImGui::SetNextItemWidth(max_widget_width);
+        constexpr static const c8 *debug_views_str[] = {
+            "None",
+            "Triangles",
+            "Meshlets",
+            "Overdraw",
+            "Albedo",
+            "Normal",
+            "Emissive",
+            "Metallic",
+            "Roughness",
+            "Occlusion",
+        };
+        static_assert(ls::count_of(debug_views_str) == std::to_underlying(GPU::DebugView::Count));
+
+        auto debug_view_idx = reinterpret_cast<std::underlying_type_t<GPU::DebugView> *>(&app.scene_renderer.debug_view);
+        const auto preview_str = debug_views_str[*debug_view_idx];
+        if (ImGui::BeginCombo("", preview_str)) {
+            for (i32 i = 0; i < static_cast<i32>(ls::count_of(debug_views_str)); i++) {
+                const auto is_selected = i == *debug_view_idx;
+                if (ImGui::Selectable(debug_views_str[i], is_selected)) {
+                    *debug_view_idx = i;
+                }
+
+                if (is_selected) {
+                    ImGui::SetItemDefaultFocus();
+                }
+            }
+
+            ImGui::EndCombo();
+        }
+
+        ImGui::SetNextItemWidth(max_widget_width);
+        ImGui::DragFloat("Heatmap scale", &app.scene_renderer.debug_heatmap_scale);
         ImGui::EndPopup();
     }
 }
@@ -231,31 +267,29 @@ auto ViewportPanel::draw_viewport(this ViewportPanel &self, vuk::Format format, 
     }
 
     if (app.selected_entity && app.selected_entity.has<ECS::Transform>()) {
-        auto projection = glm::perspective(glm::radians(camera->fov), camera->aspect_ratio, camera->near_clip, camera->far_clip);
-        // projection[1][1] *= -1;
-
-        auto rotation_mat = glm::mat4_cast(Math::compose_quat(glm::radians(camera_transform->rotation)));
-        auto translation_mat = glm::translate(glm::mat4(1.0f), -camera_transform->position);
-        auto camera_view = rotation_mat * translation_mat;
+        auto camera_forward = glm::vec3(0.0, 0.0, -1.0) * Math::compose_quat(glm::radians(camera_transform->rotation));
+        auto camera_projection = glm::perspective(glm::radians(camera->fov), camera->aspect_ratio, camera->near_clip, camera->far_clip);
+        auto camera_view = glm::lookAt(camera_transform->position, camera_transform->position + camera_forward, glm::vec3(0.0, 1.0, 0.0));
 
         auto *transform = app.selected_entity.get_mut<ECS::Transform>();
-        f32 gizmo_mat[16] = {};
-        ImGuizmo::RecomposeMatrixFromComponents(
-            glm::value_ptr(transform->position),
-            glm::value_ptr(transform->rotation),
-            glm::value_ptr(transform->scale),
-            gizmo_mat
-        );
+
+        const auto &rotation = glm::radians(transform->rotation);
+        auto gizmo_mat = glm::translate(glm::mat4(1.0), transform->position);
+        gizmo_mat *= glm::rotate(glm::mat4(1.0), rotation.x, glm::vec3(1.0, 0.0, 0.0));
+        gizmo_mat *= glm::rotate(glm::mat4(1.0), rotation.y, glm::vec3(0.0, 1.0, 0.0));
+        gizmo_mat *= glm::rotate(glm::mat4(1.0), rotation.z, glm::vec3(0.0, 0.0, 1.0));
+        gizmo_mat *= glm::scale(glm::mat4(1.0), transform->scale);
+
         if (ImGuizmo::Manipulate(
                 glm::value_ptr(camera_view), //
-                glm::value_ptr(projection),
+                glm::value_ptr(camera_projection),
                 static_cast<ImGuizmo::OPERATION>(self.gizmo_op),
-                ImGuizmo::MODE::LOCAL,
-                gizmo_mat
+                ImGuizmo::MODE::WORLD,
+                glm::value_ptr(gizmo_mat)
             ))
         {
             ImGuizmo::DecomposeMatrixToComponents( //
-                gizmo_mat,
+                glm::value_ptr(gizmo_mat),
                 glm::value_ptr(transform->position),
                 glm::value_ptr(transform->rotation),
                 glm::value_ptr(transform->scale)

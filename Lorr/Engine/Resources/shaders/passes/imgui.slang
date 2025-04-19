@@ -40,7 +40,7 @@ func vs_main(VertexInput input) -> VertexOutput {
 
 [[shader("fragment")]]
 f32x4 fs_main(VertexOutput input) : SV_TARGET {
-    f32x4 color_sampled = texture.sample_mip(sampler, input.tex_coord, 0.0) * input.color;
+    f32x4 color_sampled = texture.sample(sampler, input.tex_coord) * input.color;
     f32x3 color = color_sampled.rgb;
 
     if (c.is_srgb == 0) {

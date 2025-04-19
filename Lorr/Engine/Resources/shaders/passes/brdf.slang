@@ -10,7 +10,7 @@ import scene;
 Sampler linear_clamp_sampler;
 
 [[vk::binding(1, 0)]]
-Sampler nearest_repeat_sampler;
+Sampler linear_repeat_sampler;
 
 [[vk::binding(2, 0)]]
 Image2D<f32x4> sky_transmittance_lut;
@@ -62,7 +62,7 @@ f32x4 fs_main(VertexOutput input) : SV_Target {
         discard;
     }
 
-    const f32x3 albedo_color = albedo_image.sample_mip(nearest_repeat_sampler, input.tex_coord, 0).rgb;
+    const f32x3 albedo_color = albedo_image.sample_mip(linear_repeat_sampler, input.tex_coord, 0).rgb;
     const f32x4 normal_oct_flat = normal_image.load(pixel_pos);
     const f32x3 mapped_normal = std::oct_to_vec3(normal_oct_flat.xy);
     const f32x3 smooth_normal = std::oct_to_vec3(normal_oct_flat.zw);

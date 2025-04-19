@@ -29,8 +29,6 @@ struct SceneRenderInfo {
     GPU::CullFlags cull_flags = {};
     ls::span<GPU::TransformID> dirty_transform_ids = {};
     ls::span<GPU::Transforms> transforms = {};
-
-    ls::option<u32> picked_transform_index = ls::nullopt;
 };
 
 struct SceneRenderer {
@@ -49,6 +47,7 @@ struct SceneRenderer {
 
     Pipeline editor_grid_pipeline = {};
     Pipeline editor_mousepick_pipeline = {};
+    ls::option<u32> picked_transform_index = ls::nullopt;
 
     Image sky_transmittance_lut = {};
     ImageView sky_transmittance_lut_view = {};

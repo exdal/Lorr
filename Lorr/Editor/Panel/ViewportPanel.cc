@@ -177,16 +177,7 @@ auto ViewportPanel::draw_tools(this ViewportPanel &self) -> void {
         ImGui::SeparatorText("Debug View");
         ImGui::SetNextItemWidth(max_widget_width);
         constexpr static const c8 *debug_views_str[] = {
-            "None",
-            "Triangles",
-            "Meshlets",
-            "Overdraw",
-            "Albedo",
-            "Normal",
-            "Emissive",
-            "Metallic",
-            "Roughness",
-            "Occlusion",
+            "None", "Triangles", "Meshlets", "Overdraw", "Albedo", "Normal", "Emissive", "Metallic", "Roughness", "Occlusion",
         };
         static_assert(ls::count_of(debug_views_str) == std::to_underlying(GPU::DebugView::Count));
 
@@ -256,8 +247,8 @@ auto ViewportPanel::draw_viewport(this ViewportPanel &self, vuk::Format format, 
     ImGui::Image(scene_render_image_idx, work_area_size);
 
     if (update_visible_entity) {
-        if (scene_render_info.picked_transform_index.has_value()) {
-            auto picked_entity = scene->find_entity(scene_render_info.picked_transform_index.value());
+        if (app.scene_renderer.picked_transform_index.has_value()) {
+            auto picked_entity = scene->find_entity(app.scene_renderer.picked_transform_index.value());
             if (picked_entity) {
                 app.selected_entity = picked_entity;
             }

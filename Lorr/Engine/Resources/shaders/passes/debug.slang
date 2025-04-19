@@ -15,6 +15,21 @@ Image2D<u32> overdraw;
 [[vk::binding(2, 0)]]
 StructuredBuffer<u32, ScalarDataLayout> visible_meshlet_instances_indices;
 
+[[vk::binding(3, 0)]]
+Sampler linear_repeat_sampler;
+
+[[vk::binding(4, 0)]]
+Image2D<f32x4> albedo_image;
+
+[[vk::binding(5, 0)]]
+Image2D<f32x4> normal_image;
+
+[[vk::binding(6, 0)]]
+Image2D<f32x3> emissive_image;
+
+[[vk::binding(7, 0)]]
+Image2D<f32x3> metallic_roughness_occlusion_image;
+
 struct PushConstants {
     DebugView debug_view;
     f32 heatmap_scale;
@@ -68,12 +83,22 @@ func fs_main(VertexOutput input) -> f32x4 {
             const f32 heat = 1.0 - exp2(-draw_count * draw_scale);
             color = inferno(heat);
         } break;
-        case DebugView::Albedo: {} break;
+        case DebugView::Albedo: {
+            color = albedo_image.sample_mip(linear_repeat_sampler, input.tex_coord, 0).rgb;
+        } break;
         case DebugView::Normal: {} break;
-        case DebugView::Emissive: {} break;
-        case DebugView::Metallic: {} break;
-        case DebugView::Roughness: {} break;
-        case DebugView::Occlusion: {} break;
+        case DebugView::Emissive: {
+            color = emissive_image.sample_mip(linear_repeat_sampler, input.tex_coord, 0).rgb;
+        } break;
+        case DebugView::Metallic: {
+            color = metallic_roughness_occlusion_image.sample_mip(linear_repeat_sampler, input.tex_coord, 0).rrr;
+        } break;
+        case DebugView::Roughness: {
+            color = metallic_roughness_occlusion_image.sample_mip(linear_repeat_sampler, input.tex_coord, 0).ggg;
+        } break;
+        case DebugView::Occlusion: {
+            color = metallic_roughness_occlusion_image.sample_mip(linear_repeat_sampler, input.tex_coord, 0).bbb;
+        } break;
         default:;
     }
 

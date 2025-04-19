@@ -582,8 +582,8 @@ static auto encode_visbuffer(
         );
 
     return {
-        .visbuffer_attachment = visbuffer_attachment,
-        .overdraw_attachment = overdraw_attachment,
+        .visbuffer_attachment = std::move(visbuffer_attachment),
+        .overdraw_attachment = std::move(overdraw_attachment),
     };
 }
 
@@ -765,9 +765,9 @@ static auto brdf(
                 .addressModeW = vuk::SamplerAddressMode::eClampToEdge,
             };
 
-            auto nearest_repeat_sampler = vuk::SamplerCreateInfo{
-                .magFilter = vuk::Filter::eNearest,
-                .minFilter = vuk::Filter::eNearest,
+            auto linear_repeat_sampler = vuk::SamplerCreateInfo{
+                .magFilter = vuk::Filter::eLinear,
+                .minFilter = vuk::Filter::eLinear,
                 .addressModeU = vuk::SamplerAddressMode::eRepeat,
                 .addressModeV = vuk::SamplerAddressMode::eRepeat,
             };
@@ -780,7 +780,7 @@ static auto brdf(
                 .set_viewport(0, vuk::Rect2D::framebuffer())
                 .set_scissor(0, vuk::Rect2D::framebuffer())
                 .bind_sampler(0, 0, linear_clamp_sampler)
-                .bind_sampler(0, 1, nearest_repeat_sampler)
+                .bind_sampler(0, 1, linear_repeat_sampler)
                 .bind_image(0, 2, sky_transmittance_lut)
                 .bind_image(0, 3, sky_multiscatter_lut)
                 .bind_image(0, 4, depth)
@@ -827,6 +827,10 @@ static auto draw_debug_view(
     vuk::Value<vuk::ImageAttachment> &target_attachment,
     vuk::Value<vuk::ImageAttachment> &visbuffer_attachment,
     vuk::Value<vuk::ImageAttachment> &overdraw_attachment,
+    vuk::Value<vuk::ImageAttachment> &albedo_attachment,
+    vuk::Value<vuk::ImageAttachment> &normal_attachment,
+    vuk::Value<vuk::ImageAttachment> &emissive_attachment,
+    vuk::Value<vuk::ImageAttachment> &metallic_roughness_occlusion_attachment,
     vuk::Value<vuk::Buffer> &visible_meshlet_instances_indices_buffer
 ) -> void {
     ZoneScoped;
@@ -838,8 +842,19 @@ static auto draw_debug_view(
             VUK_IA(vuk::eColorWrite) dst,
             VUK_IA(vuk::eFragmentRead) visbuffer,
             VUK_IA(vuk::eFragmentRead) overdraw,
-            VUK_BA(vuk::eFragmentRead) visible_meshlet_instances_indices
+            VUK_BA(vuk::eFragmentRead) visible_meshlet_instances_indices,
+            VUK_IA(vuk::eFragmentSampled) albedo,
+            VUK_IA(vuk::eFragmentRead) normal,
+            VUK_IA(vuk::eFragmentRead) emissive,
+            VUK_IA(vuk::eFragmentRead) metallic_roughness_occlusion
         ) {
+            auto linear_repeat_sampler = vuk::SamplerCreateInfo{
+                .magFilter = vuk::Filter::eLinear,
+                .minFilter = vuk::Filter::eLinear,
+                .addressModeU = vuk::SamplerAddressMode::eRepeat,
+                .addressModeV = vuk::SamplerAddressMode::eRepeat,
+            };
+
             cmd_list //
                 .bind_graphics_pipeline(pipeline)
                 .set_rasterization({})
@@ -850,6 +865,11 @@ static auto draw_debug_view(
                 .bind_image(0, 0, visbuffer)
                 .bind_image(0, 1, overdraw)
                 .bind_buffer(0, 2, visible_meshlet_instances_indices)
+                .bind_sampler(0, 3, linear_repeat_sampler)
+                .bind_image(0, 4, albedo)
+                .bind_image(0, 5, normal)
+                .bind_image(0, 6, emissive)
+                .bind_image(0, 7, metallic_roughness_occlusion)
                 .push_constants(vuk::ShaderStageFlagBits::eFragment, 0, PushConstants(std::to_underlying(debug_view), heatmap_scale))
                 .draw(3, 1, 0, 0);
 
@@ -861,7 +881,11 @@ static auto draw_debug_view(
         std::move(target_attachment),
         std::move(visbuffer_attachment),
         std::move(overdraw_attachment),
-        std::move(visible_meshlet_instances_indices_buffer)
+        std::move(visible_meshlet_instances_indices_buffer),
+        std::move(albedo_attachment),
+        std::move(normal_attachment),
+        std::move(emissive_attachment),
+        std::move(metallic_roughness_occlusion_attachment)
     );
 }
 
@@ -1029,6 +1053,48 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
             std::move(reordered_indices_buffer)
         );
 
+        //  ── EDITOR MOUSE PICKING ────────────────────────────────────────────
+        if (info.picking_texel) {
+            auto editor_mousepick_pass = vuk::make_pass(
+                "editor mousepick",
+                [&pipeline = *self.device->pipeline(self.editor_mousepick_pipeline.id()),
+                 picking_texel = info.picking_texel.value(
+                 )](vuk::CommandBuffer &cmd_list, //
+                    VUK_IA(vuk::eComputeRead) visbuffer,
+                    VUK_BA(vuk::eComputeRead) visible_meshlet_instances_indices,
+                    VUK_BA(vuk::eComputeRead) meshlet_instances,
+                    VUK_BA(vuk::eComputeWrite) picked_transform_index_buffer) {
+                    cmd_list //
+                        .bind_compute_pipeline(pipeline)
+                        .bind_image(0, 0, visbuffer)
+                        .bind_buffer(0, 1, visible_meshlet_instances_indices)
+                        .bind_buffer(0, 2, meshlet_instances)
+                        .push_constants(
+                            vuk::ShaderStageFlagBits::eCompute,
+                            0,
+                            PushConstants(picked_transform_index_buffer->device_address, picking_texel)
+                        )
+                        .dispatch(1);
+
+                    return std::make_tuple(visbuffer, visible_meshlet_instances_indices, meshlet_instances, picked_transform_index_buffer);
+                }
+            );
+
+            auto picking_texel_buffer = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eGPUtoCPU, sizeof(u32));
+
+            std::tie(visbuffer_attachment, visible_meshlet_instances_indices_buffer, meshlet_instances_buffer, picking_texel_buffer) =
+                editor_mousepick_pass(
+                    std::move(visbuffer_attachment),
+                    std::move(visible_meshlet_instances_indices_buffer),
+                    std::move(meshlet_instances_buffer),
+                    std::move(picking_texel_buffer)
+                );
+
+            vuk::Compiler temp_compiler;
+            auto copy_foo = picking_texel_buffer;
+            copy_foo.wait(self.device->get_allocator(), temp_compiler);
+        }
+
         //  ── VISBUFFER DECODE ────────────────────────────────────────────────
         auto [albedo_attachment, normal_attachment, emissive_attachment, metallic_roughness_occlusion_attachment] = decode_visbuffer(
             self,
@@ -1058,47 +1124,17 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                 sun_buffer
             );
         } else {
-            draw_debug_view(self, result_attachment, visbuffer_attachment, overdraw_attachment, visible_meshlet_instances_indices_buffer);
-        }
-
-        //  ── EDITOR MOUSE PICKING ────────────────────────────────────────────
-        if (info.picking_texel) {
-            auto editor_mousepick_pass = vuk::make_pass(
-                "editor mousepick",
-                [&pipeline = *self.device->pipeline(self.editor_mousepick_pipeline.id()),
-                 picking_texel = info.picking_texel.value(
-                 )](vuk::CommandBuffer &cmd_list, //
-                    VUK_IA(vuk::eComputeRead) visbuffer,
-                    VUK_BA(vuk::eComputeRead) visible_meshlet_instances_indices,
-                    VUK_BA(vuk::eComputeRead) meshlet_instances,
-                    VUK_BA(vuk::eComputeWrite) picked_transform_index) {
-                    cmd_list //
-                        .bind_compute_pipeline(pipeline)
-                        .bind_image(0, 0, visbuffer)
-                        .bind_buffer(0, 1, visible_meshlet_instances_indices)
-                        .bind_buffer(0, 2, meshlet_instances)
-                        .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, PushConstants(picked_transform_index->device_address, picking_texel))
-                        .dispatch(1);
-
-                    return picked_transform_index;
-                }
+            draw_debug_view(
+                self,
+                result_attachment,
+                visbuffer_attachment,
+                overdraw_attachment,
+                albedo_attachment,
+                normal_attachment,
+                emissive_attachment,
+                metallic_roughness_occlusion_attachment,
+                visible_meshlet_instances_indices_buffer
             );
-
-            auto picked_transform_index_buffer = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eGPUtoCPU, sizeof(u32));
-            //auto *picked_transform_index_ptr = picked_transform_index_buffer->mapped_ptr;
-            picked_transform_index_buffer = editor_mousepick_pass(
-                std::move(visbuffer_attachment),
-                std::move(visible_meshlet_instances_indices_buffer),
-                std::move(meshlet_instances_buffer),
-                std::move(picked_transform_index_buffer)
-            );
-
-            transfer_man.wait_on(std::move(picked_transform_index_buffer));
-            self.device->wait();
-
-            // u32 picked_transform_index;
-            // std::memcpy(&picked_transform_index, picked_transform_index_ptr, sizeof(u32));
-            // info.picked_transform_index = picked_transform_index;
         }
     }
 

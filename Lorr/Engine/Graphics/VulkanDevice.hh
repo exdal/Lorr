@@ -171,6 +171,9 @@ public:
     auto get_allocator() -> vuk::Allocator & {
         return allocator.value();
     }
+    auto get_compiler() -> vuk::Compiler & {
+        return compiler;
+    }
 
     auto render_frame_profiler(this Device &) -> void;
 };

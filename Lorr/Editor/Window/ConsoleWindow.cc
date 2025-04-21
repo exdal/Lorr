@@ -1,20 +1,20 @@
-#include "Editor/Panel/ConsolePanel.hh"
+#include "Editor/Window/ConsoleWindow.hh"
 
 // #include "Engine/Core/Application.hh"
 
-namespace lr {
+namespace led {
 // void log_cb(void *user_Data, const loguru::Message &message) {
-//     auto *console = static_cast<ConsolePanel *>(user_Data);
+//     auto *console = static_cast<ConsoleWindow *>(user_Data);
 //     auto &m = console->messages.emplace_back();
 //     m.verbosity = message.verbosity;
 //     m.message = fmt::format("{}", message.message);
 // }
 
-ConsolePanel::ConsolePanel(std::string name_, bool open_): PanelI(std::move(name_), open_) {
+ConsoleWindow::ConsoleWindow(std::string name_, bool open_) : IWindow(std::move(name_), open_) {
     // loguru::add_callback("editor", log_cb, this, loguru::Verbosity_MAX);
 }
 
-void ConsolePanel::render(this ConsolePanel &self) {
+void ConsoleWindow::render(this ConsoleWindow &self) {
     // auto &app = Application::get();
     // auto &render_pipeline = app.world_render_pipeline;
 
@@ -54,4 +54,4 @@ void ConsolePanel::render(this ConsolePanel &self) {
     ImGui::End();
 }
 
-} // namespace lr
+} // namespace led

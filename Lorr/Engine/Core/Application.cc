@@ -84,10 +84,6 @@ void Application::run(this Application &self) {
 
         self.imgui_renderer.begin_frame(delta_time, swapchain_attachment->extent);
         self.do_update(delta_time);
-        if (self.active_scene_uuid.has_value()) {
-            auto *scene = self.asset_man.get_scene(self.active_scene_uuid.value());
-            scene->tick(static_cast<f32>(delta_time));
-        }
         self.do_render(swapchain_attachment->format, swapchain_attachment->extent);
 
         swapchain_attachment = self.imgui_renderer.end_frame(std::move(swapchain_attachment));
@@ -106,11 +102,6 @@ void Application::shutdown(this Application &self) {
     self.device.wait();
 
     self.should_close = true;
-
-    if (self.active_scene_uuid) {
-        self.asset_man.unload_asset(self.active_scene_uuid.value());
-        self.active_scene_uuid.reset();
-    }
 
     self.do_shutdown();
 

@@ -88,12 +88,34 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
     physical_device_selector.defer_surface_initialization();
     physical_device_selector.set_minimum_version(1, 3);
 
+    std::vector<const c8 *> device_extensions;
+    device_extensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+    device_extensions.push_back(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
+    device_extensions.push_back(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
+    //device_extensions.push_back(VK_KHR_MAINTENANCE_8_EXTENSION_NAME);
+    physical_device_selector.add_required_extensions(device_extensions);
+
+    auto physical_device_result = physical_device_selector.select();
+    if (!physical_device_result) {
+        auto error = physical_device_result.error();
+
+        LOG_ERROR("Failed to select Vulkan Physical Device! {}", error.message());
+        return std::unexpected(VK_ERROR_DEVICE_LOST);
+    }
+
+    self.physical_device = physical_device_result.value();
+
+    VkPhysicalDeviceVulkan14Features vk14_features = {};
+    vk14_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES;
+    vk14_features.pushDescriptor = true;
+
     VkPhysicalDeviceVulkan13Features vk13_features = {};
+    vk13_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
     vk13_features.synchronization2 = true;
     vk13_features.shaderDemoteToHelperInvocation = true;
-    physical_device_selector.set_required_features_13(vk13_features);
 
     VkPhysicalDeviceVulkan12Features vk12_features = {};
+    vk12_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
     vk12_features.descriptorIndexing = true;
     vk12_features.shaderOutputLayer = true;
     vk12_features.shaderSampledImageArrayNonUniformIndexing = true;
@@ -114,38 +136,32 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
     vk12_features.scalarBlockLayout = true;
     vk12_features.shaderInt8 = true;
     vk12_features.shaderSubgroupExtendedTypes = true;
-    physical_device_selector.set_required_features_12(vk12_features);
 
     VkPhysicalDeviceVulkan11Features vk11_features = {};
+    vk11_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
     vk11_features.variablePointers = true;
     vk11_features.variablePointersStorageBuffer = true;
-    physical_device_selector.set_required_features_11(vk11_features);
 
-    VkPhysicalDeviceFeatures vk10_features = {};
-    vk10_features.vertexPipelineStoresAndAtomics = true;
-    vk10_features.fragmentStoresAndAtomics = true;
-    vk10_features.shaderInt64 = true;
-    vk10_features.multiDrawIndirect = true;
-    vk10_features.samplerAnisotropy = true;
-    physical_device_selector.set_required_features(vk10_features);
+    VkPhysicalDeviceMaintenance8FeaturesKHR maintenance_8_features = {};
+    maintenance_8_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_8_FEATURES_KHR;
+    maintenance_8_features.maintenance8 = true;
 
-    std::vector<const c8 *> device_extensions;
-    device_extensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-    device_extensions.push_back(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
-    device_extensions.push_back(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
-    physical_device_selector.add_required_extensions(device_extensions);
-
-    auto physical_device_result = physical_device_selector.select();
-    if (!physical_device_result) {
-        auto error = physical_device_result.error();
-
-        LOG_ERROR("Failed to select Vulkan Physical Device! {}", error.message());
-        return std::unexpected(VK_ERROR_DEVICE_LOST);
-    }
-
-    self.physical_device = physical_device_result.value();
+    VkPhysicalDeviceFeatures2 vk10_features = {};
+    vk10_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    vk10_features.features.vertexPipelineStoresAndAtomics = true;
+    vk10_features.features.fragmentStoresAndAtomics = true;
+    vk10_features.features.shaderInt64 = true;
+    vk10_features.features.multiDrawIndirect = true;
+    vk10_features.features.samplerAnisotropy = true;
 
     vkb::DeviceBuilder device_builder(self.physical_device);
+    device_builder //
+        .add_pNext(&vk14_features)
+        .add_pNext(&vk13_features)
+        .add_pNext(&vk12_features)
+        .add_pNext(&vk11_features)
+        // .add_pNext(&maintenance_8_features)
+        .add_pNext(&vk10_features);
     auto device_result = device_builder.build();
     if (!device_result) {
         auto error = device_result.error();

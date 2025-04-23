@@ -24,7 +24,7 @@ bool json_to_vec(simdjson::ondemand::value &o, glm::vec<N, T> &vec) {
     using U = glm::vec<N, T>;
     for (i32 i = 0; i < U::length(); i++) {
         constexpr static std::string_view components[] = { "x", "y", "z", "w" };
-        vec[i] = static_cast<T>(o[components[i]].get_double());
+        vec[i] = static_cast<T>(o[components[i]].get_double().value_unsafe());
     }
 
     return true;
@@ -80,6 +80,9 @@ auto AssetManager::asset_root_path(AssetType type) -> fs::path {
             return root / "fonts";
         case AssetType::Scene:
             return root / "scenes";
+        case AssetType::Directory:
+            LS_DEBUGBREAK();
+            return "";
     }
 
     LS_UNREACHABLE();
@@ -133,6 +136,9 @@ auto AssetManager::to_asset_type_sv(AssetType type) -> std::string_view {
             return "Font";
         case AssetType::Scene:
             return "Scene";
+        case AssetType::Directory:
+            LS_DEBUGBREAK();
+            return "";
     }
 
     LS_UNREACHABLE();
@@ -340,8 +346,8 @@ auto AssetManager::register_asset(const fs::path &path) -> UUID {
 
     auto asset_path = path;
     asset_path.replace_extension("");
-    auto uuid = UUID::from_string(uuid_json.value()).value();
-    auto type = static_cast<AssetType>(type_json.value().get_uint64());
+    auto uuid = UUID::from_string(uuid_json.value_unsafe()).value();
+    auto type = static_cast<AssetType>(type_json.value_unsafe().get_uint64());
 
     if (!this->register_asset(uuid, type, asset_path)) {
         return UUID(nullptr);
@@ -541,7 +547,7 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
             return false;
         }
 
-        auto material_uuid = UUID::from_string(material_uuid_str.value());
+        auto material_uuid = UUID::from_string(material_uuid_str.value_unsafe());
         if (!material_uuid.has_value()) {
             LOG_ERROR("Failed to import model {}! A material with corrupt UUID.", asset->path);
             return false;
@@ -567,37 +573,37 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
 
         auto &material = materials.emplace_back();
         if (auto member_json = material_json["albedo_color"]; !member_json.error()) {
-            json_to_vec(member_json.value(), material.albedo_color);
+            json_to_vec(member_json.value_unsafe(), material.albedo_color);
         }
         if (auto member_json = material_json["emissive_color"]; !member_json.error()) {
-            json_to_vec(member_json.value(), material.emissive_color);
+            json_to_vec(member_json.value_unsafe(), material.emissive_color);
         }
         if (auto member_json = material_json["roughness_factor"]; !member_json.error()) {
-            material.roughness_factor = static_cast<f32>(member_json.get_double());
+            material.roughness_factor = static_cast<f32>(member_json.get_double().value_unsafe());
         }
         if (auto member_json = material_json["metallic_factor"]; !member_json.error()) {
-            material.metallic_factor = static_cast<f32>(member_json.get_double());
+            material.metallic_factor = static_cast<f32>(member_json.get_double().value_unsafe());
         }
         if (auto member_json = material_json["alpha_mode"]; !member_json.error()) {
-            material.alpha_mode = static_cast<AlphaMode>(member_json.get_uint64().value());
+            material.alpha_mode = static_cast<AlphaMode>(member_json.get_uint64().value_unsafe());
         }
         if (auto member_json = material_json["alpha_cutoff"]; !member_json.error()) {
-            material.alpha_cutoff = static_cast<f32>(member_json.get_double());
+            material.alpha_cutoff = static_cast<f32>(member_json.get_double().value_unsafe());
         }
         if (auto member_json = material_json["albedo_texture"]; !member_json.error()) {
-            material.albedo_texture = UUID::from_string(member_json.get_string().value()).value_or(UUID(nullptr));
+            material.albedo_texture = UUID::from_string(member_json.get_string().value_unsafe()).value_or(UUID(nullptr));
         }
         if (auto member_json = material_json["normal_texture"]; !member_json.error()) {
-            material.normal_texture = UUID::from_string(member_json.get_string().value()).value_or(UUID(nullptr));
+            material.normal_texture = UUID::from_string(member_json.get_string().value_unsafe()).value_or(UUID(nullptr));
         }
         if (auto member_json = material_json["emissive_texture"]; !member_json.error()) {
-            material.emissive_texture = UUID::from_string(member_json.get_string().value()).value_or(UUID(nullptr));
+            material.emissive_texture = UUID::from_string(member_json.get_string().value_unsafe()).value_or(UUID(nullptr));
         }
         if (auto member_json = material_json["metallic_roughness_texture"]; !member_json.error()) {
-            material.metallic_roughness_texture = UUID::from_string(member_json.get_string().value()).value_or(UUID(nullptr));
+            material.metallic_roughness_texture = UUID::from_string(member_json.get_string().value_unsafe()).value_or(UUID(nullptr));
         }
         if (auto member_json = material_json["occlusion_texture"]; !member_json.error()) {
-            material.occlusion_texture = UUID::from_string(member_json.get_string().value()).value_or(UUID(nullptr));
+            material.occlusion_texture = UUID::from_string(member_json.get_string().value_unsafe()).value_or(UUID(nullptr));
         }
     }
 

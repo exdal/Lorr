@@ -53,15 +53,15 @@ func draw_sun(f32x3 world_dir, f32x3 sun_dir, f32 radius) -> f32x3 {
 
 [[shader("fragment")]]
 f32x4 fs_main(VertexOutput input) : SV_TARGET {
-    f32   depth = depth_image.load(u32x2(input.position.xy));
+    f32   depth = depth_image.sample_mip(sampler, input.tex_coord, 0.0);
     f32x3 clip_space = f32x3(input.tex_coord * 2.0 - 1.0, depth);
     f32x4 clip_pos = mul(C.camera->inv_projection_view_mat, f32x4(clip_space, 1.0));
     f32x3 clip_dir = clip_pos.xyz / clip_pos.w;
 
+    const f32x3 sun_dir = normalize(C.sun->direction);
     f32x3 world_dir = normalize(clip_dir - C.camera->position);
-    f32x3 world_pos = f32x3(0.0, C.camera->position.y, 0.0) *
-                       CAMERA_SCALE_UNIT +
-                       f32x3(0.0, C.atmosphere->planet_radius, 0.0);
+    f32x3 world_pos = C.camera->position * CAMERA_SCALE_UNIT;
+    world_pos.y += C.atmosphere->planet_radius + PLANET_RADIUS_OFFSET;
 
     if (depth != 1.0) {
         f32x3 camera_relative_pos = (clip_dir - C.camera->position) * CAMERA_SCALE_UNIT;
@@ -69,22 +69,19 @@ f32x4 fs_main(VertexOutput input) : SV_TARGET {
     }
 
     f32 h = length(world_pos);
-    f32x3 up_vec = normalize(world_pos);
+    f32x3 up = f32x3(0.0, 1.0, 0.0);
+    f32x3 right = normalize(cross(up, world_dir));
+    f32x3 forward = normalize(cross(right, up));
+    f32x2 light_on_plane = normalize(f32x2(dot(sun_dir, forward), dot(sun_dir, right)));
 
-    f32x3 sun_dir = normalize(C.sun->direction);
-    f32x3 right_vec = normalize(cross(up_vec, world_dir));
-    f32x3 forward_vec = normalize(cross(right_vec, up_vec));
-    f32x2 light_on_plane = normalize(f32x2(dot(sun_dir, forward_vec), dot(sun_dir, right_vec)));
-
-    f32 view_zenith_cos_angle = dot(world_dir, up_vec);
-    f32 light_view_cos_angle = light_on_plane.x;
+    f32 view_zenith_cos_angle = dot(world_dir, up);
 
     const let planet_intersection = std::ray_sphere_intersect_nearest(world_pos, world_dir, C.atmosphere->planet_radius);
-    f32x2 uv = get_sky_view_lut_uv(C.atmosphere, planet_intersection.hasValue, view_zenith_cos_angle, light_view_cos_angle, h);
+    f32x2 uv = sky_view_params_to_lut_uv(C.atmosphere, planet_intersection.hasValue, h, view_zenith_cos_angle, light_on_plane);
     f32x3 luminance = sky_view_lut.sample_mip(sampler, uv, 0.0).rgb;
 
-    f32 sun_cos_theta = dot(C.sun->direction, up_vec);
-    f32x2 transmittance_uv = get_transmittance_lut_uv(C.atmosphere, f32x2(h, sun_cos_theta));
+    f32 sun_cos_theta = dot(sun_dir, up);
+    f32x2 transmittance_uv = transmittance_params_to_lut_uv(C.atmosphere, f32x2(h, sun_cos_theta));
     f32x3 sun_transmittance = sky_transmittance_lut.sample_mip(sampler, transmittance_uv, 0.0).rgb;
 
     if (!planet_intersection.hasValue) {

@@ -9,10 +9,11 @@ add_rules("plugin.compile_commands.autoupdate", { outputdir = ".", lsp = "clangd
 set_project("Lorr")
 set_version("1.0.0")
 
--- GLOBAL COMPILE FLAGS --
+-- GLOBAL COMPILER FLAGS --
 set_encodings("utf-8")
 add_cxxflags("cl::/Zc:preprocessor")
 add_cxxflags("clang::-fexperimental-library")
+set_exceptions("no-cxx")
 
 -- WARNINGS --
 set_warnings("allextra", "pedantic")

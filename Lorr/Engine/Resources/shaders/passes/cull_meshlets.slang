@@ -42,6 +42,7 @@ func test_frustum(in mat4 world_transform, in f32x3 aabb_center, in f32x3 aabb_e
         abs(dot(f32x3(0.0, 0.0, 1.0), forward))
     };
 
+    [[unroll]]
     for (uint i = 0; i < 6; i++) {
         if (!test_aabb_vs_plane(world_aabb_center, world_extent, C.camera->frustum_planes[i])) {
             return false;

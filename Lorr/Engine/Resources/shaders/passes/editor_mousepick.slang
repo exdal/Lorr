@@ -7,7 +7,7 @@ import scene;
 import visbuffer;
 
 [[vk::binding(0, 0)]]
-Image2D<u32> visbuffer;
+StorageImage2D<u32, ImageFormat::R32UI> visbuffer_data;
 
 [[vk::binding(1, 0)]]
 StructuredBuffer<u32, ScalarDataLayout> visible_meshlet_instances_indices;
@@ -25,13 +25,13 @@ struct PushConstants {
 [[shader("compute")]]
 [[numthreads(1, 1, 1)]]
 void cs_main() {
-    const u32 texel = visbuffer.load(C.texel);
+    const u32 texel = visbuffer_data.load(C.texel);
     if (texel == ~0u) {
         *C.dst = ~0u;
         return;
     }
 
-    const VisBuffer vis = { texel };
+    const let vis = VisBufferData(texel);
     const u32 meshlet_instance_index = visible_meshlet_instances_indices[vis.meshlet_instance_index];
     const MeshletInstance meshlet_instance = meshlet_instances[meshlet_instance_index];
     *C.dst = meshlet_instance.transform_index;

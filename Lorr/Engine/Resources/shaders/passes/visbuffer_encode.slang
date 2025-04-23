@@ -37,7 +37,7 @@ struct VertexOutput {
 
 [[shader("vertex")]]
 func vs_main(u32 vertex_index : SV_VertexID) -> VertexOutput {
-    const VisBuffer vis = { vertex_index };
+    const let vis = VisBufferData(vertex_index);
     const u32 meshlet_instance_index = visible_meshlet_instances_indices[vis.meshlet_instance_index];
     const MeshletInstance meshlet_instance = meshlet_instances[meshlet_instance_index];
     const Model model = models[meshlet_instance.model_index];
@@ -78,6 +78,6 @@ func fs_main(VertexOutput input) -> u32 {
 
     std::atomic_add(overdraw[u32x2(input.position.xy)], 1u, std::memory_order_acq_rel);
 
-    const VisBuffer vis = { input.meshlet_instance_index, input.triangle_index };
+    const let vis = VisBufferData(input.meshlet_instance_index, input.triangle_index);
     return vis.encode();
 }

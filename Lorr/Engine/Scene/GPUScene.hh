@@ -38,7 +38,7 @@ struct Atmosphere {
     alignas(4) glm::vec3 mie_scatter = { 0.003996f, 0.003996f, 0.003996f };
     alignas(4) f32 mie_density = 1.2f;
     alignas(4) f32 mie_extinction = 0.004440f;
-    alignas(4) f32 mie_asymmetry = 0.8f;
+    alignas(4) f32 mie_asymmetry = 3.6f;
 
     alignas(4) glm::vec3 ozone_absorption = { 0.000650f, 0.001881f, 0.000085f };
     alignas(4) f32 ozone_height = 25.0f;

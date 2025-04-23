@@ -29,6 +29,8 @@ struct SceneRenderInfo {
     GPU::CullFlags cull_flags = {};
     ls::span<GPU::TransformID> dirty_transform_ids = {};
     ls::span<GPU::Transforms> transforms = {};
+
+    ls::option<u32> picked_transform_index = ls::nullopt;
 };
 
 struct SceneRenderer {
@@ -47,7 +49,6 @@ struct SceneRenderer {
 
     Pipeline editor_grid_pipeline = {};
     Pipeline editor_mousepick_pipeline = {};
-    ls::option<u32> picked_transform_index = ls::nullopt;
 
     Image sky_transmittance_lut = {};
     ImageView sky_transmittance_lut_view = {};
@@ -55,7 +56,7 @@ struct SceneRenderer {
     Image sky_multiscatter_lut = {};
     ImageView sky_multiscatter_lut_view = {};
     Pipeline sky_multiscatter_pipeline = {};
-    vuk::Extent3D sky_view_lut_extent = { .width = 208, .height = 128, .depth = 1 };
+    vuk::Extent3D sky_view_lut_extent = { .width = 312, .height = 192, .depth = 1 };
     Pipeline sky_view_pipeline = {};
     vuk::Extent3D sky_aerial_perspective_lut_extent = { .width = 32, .height = 32, .depth = 32 };
     Pipeline sky_aerial_perspective_pipeline = {};
@@ -64,6 +65,7 @@ struct SceneRenderer {
     Pipeline vis_cull_meshlets_pipeline = {};
     Pipeline vis_cull_triangles_pipeline = {};
     Pipeline vis_encode_pipeline = {};
+    Pipeline vis_clear_pipeline = {};
     Pipeline vis_decode_pipeline = {};
 
     Pipeline pbr_basic_pipeline = {};

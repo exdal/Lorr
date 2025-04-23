@@ -7,16 +7,16 @@ import visbuffer;
 #include <fullscreen.slang>
 
 [[vk::binding(0, 0)]]
-Image2D<u32> visbuffer;
+Sampler linear_repeat_sampler;
 
 [[vk::binding(1, 0)]]
-Image2D<u32> overdraw;
+Image2D<u32> visbuffer;
 
 [[vk::binding(2, 0)]]
-StructuredBuffer<u32, ScalarDataLayout> visible_meshlet_instances_indices;
+Image2D<f32> depth_image;
 
 [[vk::binding(3, 0)]]
-Sampler linear_repeat_sampler;
+Image2D<u32> overdraw;
 
 [[vk::binding(4, 0)]]
 Image2D<f32x4> albedo_image;
@@ -29,6 +29,12 @@ Image2D<f32x3> emissive_image;
 
 [[vk::binding(7, 0)]]
 Image2D<f32x3> metallic_roughness_occlusion_image;
+
+[[vk::binding(8, 0)]]
+ConstantBuffer<Camera, ScalarDataLayout> camera;
+
+[[vk::binding(9, 0)]]
+StructuredBuffer<u32, ScalarDataLayout> visible_meshlet_instances_indices;
 
 struct PushConstants {
     DebugView debug_view;
@@ -61,20 +67,21 @@ func inferno(f32 t) -> f32x3 {
 
 [[shader("fragment")]]
 func fs_main(VertexOutput input) -> f32x4 {
-    const u32 texel = visbuffer.load(u32x2(input.position.xy));
+    const u64 texel = visbuffer.load(u32x2(input.position.xy));
     if (texel == ~0u) {
         discard;
     }
 
     f32x3 color = f32x3(0.0, 0.0, 0.0);
-    const VisBuffer vis = { texel };
+    const let vis = VisBuffer(texel);
+    const let vis_data = vis.decode_vis();
     switch (C.debug_view) {
         case DebugView::Triangles: {
-            const u32 h = hash(vis.triangle_index);
+            const u32 h = hash(vis_data.triangle_index);
             color = f32x3(f32(h & 255), f32((h >> 8) & 255), f32((h >> 16) & 255)) / 255.0;
         } break;
         case DebugView::Meshlets: {
-            const u32 h = hash(visible_meshlet_instances_indices[vis.meshlet_instance_index]);
+            const u32 h = hash(visible_meshlet_instances_indices[vis_data.meshlet_instance_index]);
             color = f32x3(f32(h & 255), f32((h >> 8) & 255), f32((h >> 16) & 255)) / 255.0;
         } break;
         case DebugView::Overdraw: {

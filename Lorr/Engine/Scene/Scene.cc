@@ -22,7 +22,7 @@ bool json_to_vec(simdjson::ondemand::value &o, glm::vec<N, T> &vec) {
     using U = glm::vec<N, T>;
     for (i32 i = 0; i < U::length(); i++) {
         constexpr static std::string_view components[] = { "x", "y", "z", "w" };
-        vec[i] = static_cast<T>(o[components[i]].get_double());
+        vec[i] = static_cast<T>(o[components[i]].get_double().value_unsafe());
     }
 
     return true;
@@ -31,7 +31,7 @@ bool json_to_vec(simdjson::ondemand::value &o, glm::vec<N, T> &vec) {
 bool json_to_quat(simdjson::ondemand::value &o, glm::quat &quat) {
     for (i32 i = 0; i < glm::quat::length(); i++) {
         constexpr static std::string_view components[] = { "x", "y", "z", "w" };
-        quat[i] = static_cast<f32>(o[components[i]].get_double());
+        quat[i] = static_cast<f32>(o[components[i]].get_double().value_unsafe());
     }
 
     return true;
@@ -183,7 +183,7 @@ auto Scene::import_from_file(this Scene &self, const fs::path &path) -> bool {
         return false;
     }
 
-    self.set_name(std::string(name_json.value()));
+    self.set_name(std::string(name_json.value_unsafe()));
 
     std::vector<UUID> requested_assets = {};
     auto entities_json = doc["entities"].get_array();
@@ -194,12 +194,12 @@ auto Scene::import_from_file(this Scene &self, const fs::path &path) -> bool {
             return false;
         }
 
-        auto entity_name = entity_name_json.get_string().value();
+        auto entity_name = entity_name_json.get_string().value_unsafe();
         auto e = self.create_entity(std::string(entity_name.begin(), entity_name.end()));
 
         auto entity_tags_json = entity_json["tags"];
         for (auto entity_tag : entity_tags_json.get_array()) {
-            auto tag = self.world->component(stack.null_terminate(entity_tag.get_string()).data());
+            auto tag = self.world->component(stack.null_terminate(entity_tag.get_string().value_unsafe()).data());
             e.add(tag);
         }
 
@@ -211,7 +211,7 @@ auto Scene::import_from_file(this Scene &self, const fs::path &path) -> bool {
                 return false;
             }
 
-            const auto *component_name = stack.null_terminate_cstr(component_name_json.get_string());
+            const auto *component_name = stack.null_terminate_cstr(component_name_json.get_string().value_unsafe());
             auto component_id = self.world->lookup(component_name);
             if (!component_id) {
                 LOG_ERROR("Entity '{}' has invalid component named '{}'!", e.name(), component_name);
@@ -231,19 +231,19 @@ auto Scene::import_from_file(this Scene &self, const fs::path &path) -> bool {
                 std::visit(
                     ls::match{
                         [](const auto &) {},
-                        [&](f32 *v) { *v = static_cast<f32>(member_json.get_double()); },
-                        [&](i32 *v) { *v = static_cast<i32>(member_json.get_int64()); },
-                        [&](u32 *v) { *v = member_json.get_uint64(); },
-                        [&](i64 *v) { *v = member_json.get_int64(); },
-                        [&](u64 *v) { *v = member_json.get_uint64(); },
-                        [&](glm::vec2 *v) { json_to_vec(member_json.value(), *v); },
-                        [&](glm::vec3 *v) { json_to_vec(member_json.value(), *v); },
-                        [&](glm::vec4 *v) { json_to_vec(member_json.value(), *v); },
-                        [&](glm::quat *v) { json_to_quat(member_json.value(), *v); },
+                        [&](f32 *v) { *v = static_cast<f32>(member_json.get_double().value_unsafe()); },
+                        [&](i32 *v) { *v = static_cast<i32>(member_json.get_int64().value_unsafe()); },
+                        [&](u32 *v) { *v = member_json.get_uint64().value_unsafe(); },
+                        [&](i64 *v) { *v = member_json.get_int64().value_unsafe(); },
+                        [&](u64 *v) { *v = member_json.get_uint64().value_unsafe(); },
+                        [&](glm::vec2 *v) { json_to_vec(member_json.value_unsafe(), *v); },
+                        [&](glm::vec3 *v) { json_to_vec(member_json.value_unsafe(), *v); },
+                        [&](glm::vec4 *v) { json_to_vec(member_json.value_unsafe(), *v); },
+                        [&](glm::quat *v) { json_to_quat(member_json.value_unsafe(), *v); },
                         // [&](glm::mat4 *v) {json_to_mat(member_json.value(), *v); },
-                        [&](std::string *v) { *v = member_json.get_string().value(); },
+                        [&](std::string *v) { *v = member_json.get_string().value_unsafe(); },
                         [&](UUID *v) {
-                            *v = UUID::from_string(member_json.get_string().value()).value();
+                            *v = UUID::from_string(member_json.get_string().value_unsafe()).value();
                             requested_assets.push_back(*v);
                         },
                     },
@@ -463,6 +463,7 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, SceneRenderInfo &i
             atmos.mie_scatter = atmos_info.mie_scattering * 1e-3f;
             atmos.mie_density = atmos_info.mie_density;
             atmos.mie_extinction = atmos_info.mie_extinction * 1e-3f;
+            atmos.mie_asymmetry = atmos_info.mie_asymmetry;
             atmos.ozone_absorption = atmos_info.ozone_absorption * 1e-3f;
             atmos.ozone_height = atmos_info.ozone_height;
             atmos.ozone_thickness = atmos_info.ozone_thickness;

@@ -88,7 +88,7 @@ f32x4 fs_main(VertexOutput input) : SV_Target {
     f32 h = length(ray_pos_planet);
     f32x3 up_vec = normalize(ray_pos_planet);
     f32 sun_cos_theta = dot(L, up_vec);
-    f32x2 transmittance_uv = get_transmittance_lut_uv(C.atmosphere, f32x2(h, sun_cos_theta));
+    f32x2 transmittance_uv = transmittance_params_to_lut_uv(C.atmosphere, f32x2(h, sun_cos_theta));
     f32x3 sun_transmittance = sky_transmittance_lut.sample_mip(linear_clamp_sampler, transmittance_uv, 0.0).rgb;
     const let planet_intersection = std::ray_sphere_intersect_nearest(ray_pos_planet, L, C.atmosphere->planet_radius);
     if (planet_intersection.hasValue) {

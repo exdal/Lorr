@@ -40,7 +40,7 @@ static auto read_project_file(const fs::path &path) -> ls::option<ProjectFileInf
         return ls::nullopt;
     }
 
-    return ProjectFileInfo{ .name = std::string(name_json.value()) };
+    return ProjectFileInfo{ .name = std::string(name_json.value_unsafe()) };
 }
 
 auto EditorApp::load_editor_data(this EditorApp &self) -> void {
@@ -75,13 +75,13 @@ auto EditorApp::load_editor_data(this EditorApp &self) -> void {
             continue;
         }
 
-        auto project_info = read_project_file(project_path.value());
+        auto project_info = read_project_file(project_path.value_unsafe());
         if (!project_info) {
-            lr::LOG_ERROR("Failed to read project information for {}!", project_path.value());
+            lr::LOG_ERROR("Failed to read project information for {}!", project_path.value_unsafe());
             continue;
         }
 
-        self.recent_project_infos.emplace(project_path.value(), project_info.value());
+        self.recent_project_infos.emplace(project_path.value_unsafe(), project_info.value());
     }
 }
 
@@ -451,8 +451,11 @@ auto EditorApp::render(this EditorApp &self, vuk::Format format, vuk::Extent3D e
     return true;
 }
 
-auto EditorApp::shutdown(this EditorApp &) -> void {
+auto EditorApp::shutdown(this EditorApp &self) -> void {
     ZoneScoped;
+
+    self.windows.clear();
+    self.active_project.reset();
 }
 
 auto EditorApp::remove_window(this EditorApp &self, usize window_id) -> void {

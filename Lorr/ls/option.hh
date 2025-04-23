@@ -112,9 +112,7 @@ public:
 
     template<typename SelfT>
     [[nodiscard]] constexpr T &&value(this SelfT &&self) {
-        if (!self.has_value()) {
-            throw std::bad_optional_access();
-        }
+        LS_EXPECT(self.has_value());
 
         return std::forward<option_flag<T>>(self).value_;
     }
@@ -147,10 +145,7 @@ public:
     // operators
     template<typename SelfT>
     constexpr T &&operator*(this SelfT &&self) {
-        if (!self.has_value()) {
-            throw std::bad_optional_access();
-        }
-
+        LS_EXPECT(self.has_value());
         return std::forward<option_flag<T>>(self).value_;
     }
 

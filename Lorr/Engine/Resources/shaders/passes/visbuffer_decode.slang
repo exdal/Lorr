@@ -8,7 +8,7 @@ import visbuffer;
 #include <fullscreen.slang>
 
 [[vk::binding(0, 0)]]
-Image2D<u32> visbuffer;
+StorageImage2D<u32, ImageFormat::R32UI> visbuffer;
 
 [[vk::binding(1, 0)]]
 ConstantBuffer<Camera, ScalarDataLayout> camera;
@@ -116,7 +116,7 @@ func fs_main(VertexOutput input) -> FragmentOutput {
 
     FragmentOutput output = {};
 
-    const VisBuffer vis = { texel };
+    const let vis = VisBufferData(texel);
     const u32 meshlet_instance_index = visible_meshlet_instances_indices[vis.meshlet_instance_index];
     const MeshletInstance meshlet_instance = meshlet_instances[meshlet_instance_index];
     const Model model = models[meshlet_instance.model_index];

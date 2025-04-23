@@ -201,8 +201,8 @@ static auto draw_viewport(ViewportWindow &self, vuk::Format format, vuk::Extent3
     ImGui::Image(scene_render_image_idx, work_area_size);
 
     if (update_visible_entity) {
-        if (app.scene_renderer.picked_transform_index.has_value()) {
-            auto picked_entity = active_scene->find_entity(app.scene_renderer.picked_transform_index.value());
+        if (scene_render_info.picked_transform_index.has_value()) {
+            auto picked_entity = active_scene->find_entity(scene_render_info.picked_transform_index.value());
             if (picked_entity) {
                 selected_entity = picked_entity;
             }

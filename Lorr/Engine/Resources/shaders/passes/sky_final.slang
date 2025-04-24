@@ -78,7 +78,9 @@ f32x4 fs_main(VertexOutput input) : SV_TARGET {
 
     const let planet_intersection = std::ray_sphere_intersect_nearest(world_pos, world_dir, C.atmosphere->planet_radius);
     f32x2 uv = sky_view_params_to_lut_uv(C.atmosphere, planet_intersection.hasValue, h, view_zenith_cos_angle, light_on_plane);
-    f32x3 luminance = sky_view_lut.sample_mip(sampler, uv, 0.0).rgb;
+    f32x4 result = sky_view_lut.sample_mip(sampler, uv, 0.0);
+    f32x3 luminance = result.rgb;
+    f32 transmittance = result.a;
 
     f32 sun_cos_theta = dot(sun_dir, up);
     f32x2 transmittance_uv = transmittance_params_to_lut_uv(C.atmosphere, f32x2(h, sun_cos_theta));
@@ -88,6 +90,6 @@ f32x4 fs_main(VertexOutput input) : SV_TARGET {
         luminance += draw_sun(world_dir, C.sun->direction, 1.0) * C.sun->intensity * sun_transmittance;
     }
 
-    return f32x4(luminance, 1.0);
+    return f32x4(luminance, 1.0 - transmittance);
 }
 

@@ -10,25 +10,25 @@ import visbuffer;
 Sampler linear_repeat_sampler;
 
 [[vk::binding(1, 0)]]
-Image2D<u32> visbuffer;
+StorageImage2D<u32, ImageFormat::R32UI> visbuffer_data;
 
 [[vk::binding(2, 0)]]
 Image2D<f32> depth_image;
 
 [[vk::binding(3, 0)]]
-Image2D<u32> overdraw;
+StorageImage2D<u32, ImageFormat::R32UI> overdraw;
 
 [[vk::binding(4, 0)]]
 Image2D<f32x4> albedo_image;
 
 [[vk::binding(5, 0)]]
-Image2D<f32x4> normal_image;
+StorageImage2D<f32x4, ImageFormat::RGBA16F> normal_image;
 
 [[vk::binding(6, 0)]]
-Image2D<f32x3> emissive_image;
+StorageImage2D<f32x3, ImageFormat::R11F_G11F_B10F> emissive_image;
 
 [[vk::binding(7, 0)]]
-Image2D<f32x3> metallic_roughness_occlusion_image;
+StorageImage2D<f32x3, ImageFormat::RGBA8_SNORM> metallic_roughness_occlusion_image;
 
 [[vk::binding(8, 0)]]
 ConstantBuffer<Camera, ScalarDataLayout> camera;
@@ -67,14 +67,13 @@ func inferno(f32 t) -> f32x3 {
 
 [[shader("fragment")]]
 func fs_main(VertexOutput input) -> f32x4 {
-    const u64 texel = visbuffer.load(u32x2(input.position.xy));
+    const u32 texel = visbuffer_data.load(u32x2(input.position.xy));
     if (texel == ~0u) {
         discard;
     }
 
     f32x3 color = f32x3(0.0, 0.0, 0.0);
-    const let vis = VisBuffer(texel);
-    const let vis_data = vis.decode_vis();
+    const let vis_data = VisBufferData(texel);
     switch (C.debug_view) {
         case DebugView::Triangles: {
             const u32 h = hash(vis_data.triangle_index);
@@ -95,16 +94,16 @@ func fs_main(VertexOutput input) -> f32x4 {
         } break;
         case DebugView::Normal: {} break;
         case DebugView::Emissive: {
-            color = emissive_image.sample_mip(linear_repeat_sampler, input.tex_coord, 0).rgb;
+            color = emissive_image.load(u32x2(input.position.xy)).rgb;
         } break;
         case DebugView::Metallic: {
-            color = metallic_roughness_occlusion_image.sample_mip(linear_repeat_sampler, input.tex_coord, 0).rrr;
+            color = metallic_roughness_occlusion_image.load(u32x2(input.position.xy)).rrr;
         } break;
         case DebugView::Roughness: {
-            color = metallic_roughness_occlusion_image.sample_mip(linear_repeat_sampler, input.tex_coord, 0).ggg;
+            color = metallic_roughness_occlusion_image.load(u32x2(input.position.xy)).ggg;
         } break;
         case DebugView::Occlusion: {
-            color = metallic_roughness_occlusion_image.sample_mip(linear_repeat_sampler, input.tex_coord, 0).bbb;
+            color = metallic_roughness_occlusion_image.load(u32x2(input.position.xy)).bbb;
         } break;
         default:;
     }

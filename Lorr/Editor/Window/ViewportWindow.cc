@@ -213,10 +213,10 @@ static auto draw_viewport(ViewportWindow &self, vuk::Format format, vuk::Extent3
 
     if (selected_entity && selected_entity.has<lr::ECS::Transform>()) {
         auto camera_forward = glm::vec3(0.0, 0.0, -1.0) * lr::Math::compose_quat(glm::radians(camera_transform->rotation));
-        auto camera_projection = glm::perspective(glm::radians(camera->fov), camera->aspect_ratio, camera->near_clip, camera->far_clip);
-        auto camera_view = glm::lookAt(camera_transform->position, camera_transform->position + camera_forward, glm::vec3(0.0, 1.0, 0.0));
-        auto *transform = selected_entity.get_mut<lr::ECS::Transform>();
+        auto camera_projection = glm::perspectiveLH_NO(glm::radians(camera->fov), camera->aspect_ratio, camera->far_clip, camera->near_clip);
+        auto camera_view = glm::lookAt(camera_transform->position, camera_transform->position + camera_forward, glm::vec3(0.0, -1.0, 0.0));
 
+        auto *transform = selected_entity.get_mut<lr::ECS::Transform>();
         const auto &rotation = glm::radians(transform->rotation);
         auto gizmo_mat = glm::translate(glm::mat4(1.0), transform->position);
         gizmo_mat *= glm::rotate(glm::mat4(1.0), rotation.x, glm::vec3(1.0, 0.0, 0.0));

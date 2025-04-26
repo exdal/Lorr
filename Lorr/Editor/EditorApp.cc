@@ -267,6 +267,8 @@ bool EditorApp::update(this EditorApp &self, f64 delta_time) {
         }
     }
 
+    self.frame_profiler.measure(&self.device, delta_time);
+
     return true;
 }
 
@@ -324,7 +326,7 @@ static auto draw_menu_bar(EditorApp &self) -> void {
 
         if (ImGui::BeginMenu("View")) {
             if (ImGui::MenuItem("Frame Profiler")) {
-                // self.show_profiler = !self.show_profiler;
+                self.show_profiler = !self.show_profiler;
             }
 
             ImGui::EndMenu();
@@ -382,6 +384,41 @@ static auto draw_welcome_popup(EditorApp &self) -> void {
     if (opening_project) {
         auto project = self.open_project(opening_project.value());
         self.set_active_project(std::move(project));
+    }
+}
+
+static auto draw_profiler(EditorApp &self) -> void {
+    ZoneScoped;
+
+    if (ImGui::Begin("Frame Profiler", &self.show_profiler)) {
+        if (ImPlot::BeginPlot("###profiler")) {
+            ImPlot::SetupAxes("Timeline", "GPU Time", 0, ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit);
+            ImPlot::SetupAxisFormat(ImAxis_X1, "%g s");
+            ImPlot::SetupAxisFormat(ImAxis_Y1, "%g ms");
+            ImPlot::SetupAxisLimits(ImAxis_X1, self.frame_profiler.accumulated_time - 5.0, self.frame_profiler.accumulated_time, ImGuiCond_Always);
+            ImPlot::SetupLegend(ImPlotLocation_NorthWest, ImPlotLegendFlags_Outside);
+
+            for (const auto &[name, stats] : self.frame_profiler.pass_stats) {
+                ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 1.0f);
+                ImPlot::PlotLine(
+                    name.c_str(),
+                    self.frame_profiler.accumulated_times.data.data(),
+                    stats.measured_times.data.data(),
+                    stats.measured_times.size,
+                    0,
+                    stats.measured_times.offset,
+                    sizeof(f64)
+                );
+            }
+
+            ImPlot::EndPlot();
+        }
+
+        if (ImGui::Button("Reset")) {
+            self.frame_profiler.reset();
+        }
+
+        ImGui::End();
     }
 }
 
@@ -447,6 +484,7 @@ auto EditorApp::render(this EditorApp &self, vuk::Format format, vuk::Extent3D e
     }
 
     draw_welcome_popup(self);
+    draw_profiler(self);
 
     return true;
 }

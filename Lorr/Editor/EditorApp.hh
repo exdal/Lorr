@@ -5,6 +5,8 @@
 
 #include "Engine/Core/Application.hh"
 
+#include "Engine/Graphics/FrameProfiler.hh"
+
 namespace led {
 struct EditorApp : lr::Application {
     static EditorApp &get() {
@@ -18,6 +20,9 @@ struct EditorApp : lr::Application {
     ls::option<u32> dockspace_id = ls::nullopt;
 
     ankerl::unordered_dense::map<std::string, lr::UUID> editor_assets = {};
+    lr::FrameProfiler frame_profiler = {};
+
+    bool show_profiler = false;
 
     auto load_editor_data(this EditorApp &) -> void;
     auto save_editor_data(this EditorApp &) -> void;

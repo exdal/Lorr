@@ -262,9 +262,6 @@ auto Device::new_frame(this Device &self, vuk::Swapchain &swap_chain) -> vuk::Va
 auto Device::end_frame(this Device &self, vuk::Value<vuk::ImageAttachment> &&target_attachment) -> void {
     ZoneScoped;
 
-    self.gpu_profiler_query_offset = 0.0;
-    self.gpu_profiler_tasks.clear();
-
     auto on_begin_pass = [](void *user_data, vuk::Name pass_name, vuk::CommandBuffer &cmd_list, vuk::DomainFlagBits) {
         auto *device = static_cast<Device *>(user_data);
         auto query_it = device->pass_queries.find(pass_name);
@@ -280,24 +277,11 @@ auto Device::end_frame(this Device &self, vuk::Value<vuk::ImageAttachment> &&tar
         return static_cast<void *>(&(*query_it));
     };
 
-    auto on_end_pass = [](void *user_data, void *pass_data, vuk::CommandBuffer &cmd_list) {
-        auto *device = static_cast<Device *>(user_data);
+    auto on_end_pass = [](void *, void *pass_data, vuk::CommandBuffer &cmd_list) {
         auto *query_ptr = static_cast<std::pair<const vuk::Name, ls::pair<vuk::Query, vuk::Query>> *>(pass_data);
-        auto &name = query_ptr->first;
         auto &[start_ts, end_ts] = query_ptr->second;
 
         cmd_list.write_timestamp(end_ts);
-
-        auto start_time = static_cast<f64>(device->runtime->retrieve_timestamp(start_ts).value_or(0));
-        auto end_time = static_cast<f64>(device->runtime->retrieve_timestamp(end_ts).value_or(0));
-        f64 delta = ((end_time / 1e6f) - (start_time / 1e6f)) / 1e3f;
-        auto pass_index = start_ts.id / 2;
-        device->gpu_profiler_tasks.push_back({ .startTime = device->gpu_profiler_query_offset,
-                                               .endTime = device->gpu_profiler_query_offset + delta,
-                                               .name = name.c_str(),
-                                               .color = legit::Colors::colors[pass_index % ls::count_of(legit::Colors::colors)] });
-
-        device->gpu_profiler_query_offset += delta;
     };
 
     self.transfer_manager.wait_for_ops(self.compiler);
@@ -514,14 +498,6 @@ auto Device::destroy(this Device &self, PipelineID id) -> void {
     ZoneScoped;
 
     self.resources.pipelines.destroy_slot(id);
-}
-
-auto Device::render_frame_profiler(this Device &self) -> void {
-    ZoneScoped;
-
-    self.gpu_profiler_graph.LoadFrameData(self.gpu_profiler_tasks.data(), self.gpu_profiler_tasks.size());
-    self.gpu_profiler_graph.RenderTimings(600, 10, 200, 0);
-    ImGui::SliderFloat("Graph detail", &self.gpu_profiler_graph.maxFrameTime, 1.0f, 10000.f);
 }
 
 } // namespace lr

@@ -5,8 +5,6 @@
 
 #include "Engine/Memory/SlotMap.hh"
 
-#include "Engine/Util/LegitProfiler.hh"
-
 #include <VkBootstrap.h>
 
 #include <vuk/runtime/vk/Allocator.hpp>
@@ -112,9 +110,6 @@ private:
 
     // Profiling tools
     ankerl::unordered_dense::map<vuk::Name, ls::pair<vuk::Query, vuk::Query>> pass_queries = {};
-    std::vector<legit::ProfilerTask> gpu_profiler_tasks = {};
-    legit::ProfilerGraph gpu_profiler_graph = { 400 };
-    f64 gpu_profiler_query_offset = 0.0;
 
     vkb::Instance instance = {};
     vkb::PhysicalDevice physical_device = {};
@@ -174,7 +169,11 @@ public:
     auto get_compiler() -> vuk::Compiler & {
         return compiler;
     }
-
-    auto render_frame_profiler(this Device &) -> void;
+    auto get_runtime() -> vuk::Runtime & {
+        return *runtime;
+    }
+    auto get_pass_queries() -> auto & {
+        return pass_queries;
+    }
 };
 } // namespace lr

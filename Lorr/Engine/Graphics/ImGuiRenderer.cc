@@ -35,6 +35,9 @@ auto ImGuiRenderer::init(this ImGuiRenderer &self, Device *device) -> void {
     imgui.BackendFlags |= ImGuiBackendFlags_HasMouseCursors;
     ImGui::StyleColorsDark();
 
+    //  ── IMPLOT CONTEXT ──────────────────────────────────────────────────
+    ImPlot::CreateContext();
+
     //  ── FONT ATLAS ──────────────────────────────────────────────────────
     ImWchar icons_ranges[] = { ICON_MIN_MDI, ICON_MAX_MDI, 0 };
     ImFontConfig font_config;

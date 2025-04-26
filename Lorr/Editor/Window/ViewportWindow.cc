@@ -176,7 +176,7 @@ static auto draw_viewport(ViewportWindow &self, vuk::Format format, vuk::Extent3
     ImGuizmo::SetDrawlist();
     ImGuizmo::SetOrthographic(false);
     ImGuizmo::SetRect(window_pos.x, window_pos.y, window_size.x, window_size.y);
-    ImGuizmo::AllowAxisFlip(true);
+    ImGuizmo::AllowAxisFlip(false);
     ImGuizmo::Enable(true);
     ImGuizmo::PushID(1); // surely thats unique enough
     LS_DEFER() {
@@ -212,9 +212,10 @@ static auto draw_viewport(ViewportWindow &self, vuk::Format format, vuk::Extent3
     }
 
     if (selected_entity && selected_entity.has<lr::ECS::Transform>()) {
-        auto camera_forward = glm::vec3(0.0, 0.0, -1.0) * lr::Math::compose_quat(glm::radians(camera_transform->rotation));
-        auto camera_projection = glm::perspectiveLH_NO(glm::radians(camera->fov), camera->aspect_ratio, camera->far_clip, camera->near_clip);
-        auto camera_view = glm::lookAt(camera_transform->position, camera_transform->position + camera_forward, glm::vec3(0.0, -1.0, 0.0));
+        auto camera_forward = glm::vec3(0.0, 0.0, 1.0) * lr::Math::compose_quat(glm::radians(camera_transform->rotation));
+        auto camera_projection = glm::perspectiveNO(glm::radians(camera->fov), camera->aspect_ratio, camera->far_clip, camera->near_clip);
+        auto camera_view = glm::lookAt(camera_transform->position, camera_transform->position + camera_forward, glm::vec3(0.0, 1.0, 0.0));
+        camera_projection[1][1] *= -1.0f;
 
         auto *transform = selected_entity.get_mut<lr::ECS::Transform>();
         const auto &rotation = glm::radians(transform->rotation);
@@ -317,20 +318,20 @@ auto ViewportWindow::render(this ViewportWindow &self, vuk::Format format, vuk::
     const auto should_render = app.active_project && app.active_project->active_scene_uuid;
 
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0, 0.0));
-    ImGui::Begin(self.name.data());
-    ImGui::PopStyleVar();
+    if (ImGui::Begin(self.name.data())) {
+        if (should_render) {
+            draw_viewport(self, format, extent);
+            draw_tools(self);
+        }
 
-    if (should_render) {
-        draw_viewport(self, format, extent);
-        draw_tools(self);
-    }
-
-    auto *current_window = ImGui::GetCurrentWindow();
-    if (app.active_project && ImGui::BeginDragDropTargetCustom(current_window->InnerRect, ImGui::GetID("##viewport_drop_target"))) {
-        on_drop(self);
-        ImGui::EndDragDropTarget();
+        auto *current_window = ImGui::GetCurrentWindow();
+        if (app.active_project && ImGui::BeginDragDropTargetCustom(current_window->InnerRect, ImGui::GetID("##viewport_drop_target"))) {
+            on_drop(self);
+            ImGui::EndDragDropTarget();
+        }
     }
 
     ImGui::End();
+    ImGui::PopStyleVar();
 }
 } // namespace led

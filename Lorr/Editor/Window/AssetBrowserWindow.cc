@@ -476,9 +476,9 @@ void AssetBrowserWindow::render(this AssetBrowserWindow &self) {
 
             ImGui::EndTable();
         }
-
-        ImGui::End();
     }
+
+    ImGui::End();
 }
 
 } // namespace led

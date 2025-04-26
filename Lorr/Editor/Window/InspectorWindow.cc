@@ -192,9 +192,9 @@ void InspectorWindow::render(this InspectorWindow &self) {
         if (app.active_project && app.active_project->active_scene_uuid && app.active_project->selected_entity) {
             draw_inspector(self);
         }
-
-        ImGui::End();
     }
+
+    ImGui::End();
 }
 
 } // namespace led

@@ -73,7 +73,6 @@ void SceneBrowserWindow::render(this SceneBrowserWindow &self) {
 
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0, 0.0));
     if (ImGui::Begin(self.name.data())) {
-        ImGui::PopStyleVar();
 
         ImGuiTableFlags flags = ImGuiTableFlags_Resizable;
         flags |= ImGuiTableFlags_Reorderable;
@@ -102,9 +101,9 @@ void SceneBrowserWindow::render(this SceneBrowserWindow &self) {
             ImGui::EndTable();
         }
         ImGui::PopStyleColor();
-
-        ImGui::End();
     }
+    ImGui::End();
+    ImGui::PopStyleVar();
 }
 
 } // namespace led

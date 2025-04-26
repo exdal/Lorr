@@ -75,21 +75,24 @@ auto SceneRenderer::create_persistent_resources(this SceneRenderer &self) -> voi
     self.device->commit_descriptor_set(self.bindless_set);
 
     //  ── EDITOR ──────────────────────────────────────────────────────────
-    auto editor_grid_pipeline_info = ShaderCompileInfo{
-        .module_name = "editor_grid",
-        .root_path = shaders_root,
-        .shader_path = shaders_root / "passes" / "editor_grid.slang",
+    auto default_slang_session = self.device->new_slang_session({
+        .definitions = { 
+            { "CULLING_MESHLET_COUNT", std::to_string(Model::MAX_MESHLET_INDICES) },
+            { "CULLING_TRIANGLE_COUNT", std::to_string(Model::MAX_MESHLET_PRIMITIVES) },
+        },
+        .root_directory = shaders_root,
+    }).value();
+    auto editor_grid_pipeline_info = PipelineCompileInfo{
+        .module_name = "passes.editor_grid",
         .entry_points = { "vs_main", "fs_main" },
     };
-    self.editor_grid_pipeline = Pipeline::create(*self.device, editor_grid_pipeline_info).value();
+    self.editor_grid_pipeline = Pipeline::create(*self.device, default_slang_session, editor_grid_pipeline_info).value();
 
-    auto editor_mousepick_pipeline_info = ShaderCompileInfo{
-        .module_name = "editor_mousepick",
-        .root_path = shaders_root,
-        .shader_path = shaders_root / "passes" / "editor_mousepick.slang",
+    auto editor_mousepick_pipeline_info = PipelineCompileInfo{
+        .module_name = "passes.editor_mousepick",
         .entry_points = { "cs_main" },
     };
-    self.editor_mousepick_pipeline = Pipeline::create(*self.device, editor_mousepick_pipeline_info).value();
+    self.editor_mousepick_pipeline = Pipeline::create(*self.device, default_slang_session, editor_mousepick_pipeline_info).value();
     //  ── SKY ─────────────────────────────────────────────────────────────
     auto sky_transmittance_lut_info = ImageInfo{
         .format = vuk::Format::eR16G16B16A16Sfloat,
@@ -99,13 +102,11 @@ auto SceneRenderer::create_persistent_resources(this SceneRenderer &self) -> voi
         .name = "Sky Transmittance",
     };
     std::tie(self.sky_transmittance_lut, self.sky_transmittance_lut_view) = Image::create_with_view(*self.device, sky_transmittance_lut_info).value();
-    auto sky_transmittance_pipeline_info = ShaderCompileInfo{
-        .module_name = "sky_transmittance",
-        .root_path = shaders_root,
-        .shader_path = shaders_root / "passes" / "sky_transmittance.slang",
+    auto sky_transmittance_pipeline_info = PipelineCompileInfo{
+        .module_name = "passes.sky_transmittance",
         .entry_points = { "cs_main" },
     };
-    self.sky_transmittance_pipeline = Pipeline::create(*self.device, sky_transmittance_pipeline_info).value();
+    self.sky_transmittance_pipeline = Pipeline::create(*self.device, default_slang_session, sky_transmittance_pipeline_info).value();
 
     auto sky_multiscatter_lut_info = ImageInfo{
         .format = vuk::Format::eR16G16B16A16Sfloat,
@@ -115,106 +116,80 @@ auto SceneRenderer::create_persistent_resources(this SceneRenderer &self) -> voi
         .name = "Sky Multiscatter LUT",
     };
     std::tie(self.sky_multiscatter_lut, self.sky_multiscatter_lut_view) = Image::create_with_view(*self.device, sky_multiscatter_lut_info).value();
-    auto sky_multiscatter_pipeline_info = ShaderCompileInfo{
-        .module_name = "sky_multiscattering",
-        .root_path = shaders_root,
-        .shader_path = shaders_root / "passes" / "sky_multiscattering.slang",
+    auto sky_multiscatter_pipeline_info = PipelineCompileInfo{
+        .module_name = "passes.sky_multiscattering",
         .entry_points = { "cs_main" },
     };
-    self.sky_multiscatter_pipeline = Pipeline::create(*self.device, sky_multiscatter_pipeline_info).value();
+    self.sky_multiscatter_pipeline = Pipeline::create(*self.device, default_slang_session, sky_multiscatter_pipeline_info).value();
 
-    auto sky_view_pipeline_info = ShaderCompileInfo{
-        .module_name = "sky_view",
-        .root_path = shaders_root,
-        .shader_path = shaders_root / "passes" / "sky_view.slang",
+    auto sky_view_pipeline_info = PipelineCompileInfo{
+        .module_name = "passes.sky_view",
         .entry_points = { "cs_main" },
     };
-    self.sky_view_pipeline = Pipeline::create(*self.device, sky_view_pipeline_info).value();
+    self.sky_view_pipeline = Pipeline::create(*self.device, default_slang_session, sky_view_pipeline_info).value();
 
-    auto sky_aerial_perspective_pipeline_info = ShaderCompileInfo{
-        .module_name = "sky_aerial_perspective",
-        .root_path = shaders_root,
-        .shader_path = shaders_root / "passes" / "sky_aerial_perspective.slang",
+    auto sky_aerial_perspective_pipeline_info = PipelineCompileInfo{
+        .module_name = "passes.sky_aerial_perspective",
         .entry_points = { "cs_main" },
     };
-    self.sky_aerial_perspective_pipeline = Pipeline::create(*self.device, sky_aerial_perspective_pipeline_info).value();
+    self.sky_aerial_perspective_pipeline = Pipeline::create(*self.device, default_slang_session, sky_aerial_perspective_pipeline_info).value();
 
-    auto sky_final_pipeline_info = ShaderCompileInfo{
-        .module_name = "sky_final",
-        .root_path = shaders_root,
-        .shader_path = shaders_root / "passes" / "sky_final.slang",
+    auto sky_final_pipeline_info = PipelineCompileInfo{
+        .module_name = "passes.sky_final",
         .entry_points = { "vs_main", "fs_main" },
     };
-    self.sky_final_pipeline = Pipeline::create(*self.device, sky_final_pipeline_info).value();
+    self.sky_final_pipeline = Pipeline::create(*self.device, default_slang_session, sky_final_pipeline_info).value();
 
     //  ── VISBUFFER ───────────────────────────────────────────────────────
-    auto vis_cull_meshlets_pipeline_info = ShaderCompileInfo{
-        .definitions = { { "CULLING_MESHLET_COUNT", std::to_string(Model::MAX_MESHLET_INDICES) } },
-        .module_name = "cull_meshlets",
-        .root_path = shaders_root,
-        .shader_path = shaders_root / "passes" / "cull_meshlets.slang",
+    auto vis_cull_meshlets_pipeline_info = PipelineCompileInfo{
+        .module_name = "passes.cull_meshlets",
         .entry_points = { "cs_main" },
     };
-    self.vis_cull_meshlets_pipeline = Pipeline::create(*self.device, vis_cull_meshlets_pipeline_info).value();
+    self.vis_cull_meshlets_pipeline = Pipeline::create(*self.device, default_slang_session, vis_cull_meshlets_pipeline_info).value();
 
-    auto vis_cull_triangles_pipeline_info = ShaderCompileInfo{
-        .definitions = { { "CULLING_TRIANGLE_COUNT", std::to_string(Model::MAX_MESHLET_PRIMITIVES) } },
-        .module_name = "cull_triangles",
-        .root_path = shaders_root,
-        .shader_path = shaders_root / "passes" / "cull_triangles.slang",
+    auto vis_cull_triangles_pipeline_info = PipelineCompileInfo{
+        .module_name = "passes.cull_triangles",
         .entry_points = { "cs_main" },
     };
-    self.vis_cull_triangles_pipeline = Pipeline::create(*self.device, vis_cull_triangles_pipeline_info).value();
+    self.vis_cull_triangles_pipeline = Pipeline::create(*self.device, default_slang_session, vis_cull_triangles_pipeline_info).value();
 
-    auto vis_encode_pipeline_info = ShaderCompileInfo{
-        .module_name = "visbuffer_encode",
-        .root_path = shaders_root,
-        .shader_path = shaders_root / "passes" / "visbuffer_encode.slang",
+    auto vis_encode_pipeline_info = PipelineCompileInfo{
+        .module_name = "passes.visbuffer_encode",
         .entry_points = { "vs_main", "fs_main" },
     };
-    self.vis_encode_pipeline = Pipeline::create(*self.device, vis_encode_pipeline_info, self.bindless_set).value();
+    self.vis_encode_pipeline = Pipeline::create(*self.device, default_slang_session, vis_encode_pipeline_info, self.bindless_set).value();
 
-    auto vis_clear_pipeline_info = ShaderCompileInfo{
-        .module_name = "visbuffer_clear",
-        .root_path = shaders_root,
-        .shader_path = shaders_root / "passes" / "visbuffer_clear.slang",
+    auto vis_clear_pipeline_info = PipelineCompileInfo{
+        .module_name = "passes.visbuffer_clear",
         .entry_points = { "cs_main" },
     };
-    self.vis_clear_pipeline = Pipeline::create(*self.device, vis_clear_pipeline_info).value();
+    self.vis_clear_pipeline = Pipeline::create(*self.device, default_slang_session, vis_clear_pipeline_info).value();
 
-    auto vis_decode_pipeline_info = ShaderCompileInfo{
-        .module_name = "visbuffer_decode",
-        .root_path = shaders_root,
-        .shader_path = shaders_root / "passes" / "visbuffer_decode.slang",
+    auto vis_decode_pipeline_info = PipelineCompileInfo{
+        .module_name = "passes.visbuffer_decode",
         .entry_points = { "vs_main", "fs_main" },
     };
-    self.vis_decode_pipeline = Pipeline::create(*self.device, vis_decode_pipeline_info, self.bindless_set).value();
+    self.vis_decode_pipeline = Pipeline::create(*self.device, default_slang_session, vis_decode_pipeline_info, self.bindless_set).value();
 
     //  ── PBR ─────────────────────────────────────────────────────────────
-    auto pbr_basic_pipeline_info = ShaderCompileInfo{
-        .module_name = "brdf",
-        .root_path = shaders_root,
-        .shader_path = shaders_root / "passes" / "brdf.slang",
+    auto pbr_basic_pipeline_info = PipelineCompileInfo{
+        .module_name = "passes.brdf",
         .entry_points = { "vs_main", "fs_main" },
     };
-    self.pbr_basic_pipeline = Pipeline::create(*self.device, pbr_basic_pipeline_info).value();
+    self.pbr_basic_pipeline = Pipeline::create(*self.device, default_slang_session, pbr_basic_pipeline_info).value();
 
     //  ── POST PROCESS ────────────────────────────────────────────────────
-    auto tonemap_pipeline_info = ShaderCompileInfo{
-        .module_name = "tonemap",
-        .root_path = shaders_root,
-        .shader_path = shaders_root / "passes" / "tonemap.slang",
+    auto tonemap_pipeline_info = PipelineCompileInfo{
+        .module_name = "passes.tonemap",
         .entry_points = { "vs_main", "fs_main" },
     };
-    self.tonemap_pipeline = Pipeline::create(*self.device, tonemap_pipeline_info).value();
+    self.tonemap_pipeline = Pipeline::create(*self.device, default_slang_session, tonemap_pipeline_info).value();
 
-    auto debug_pipeline_info = ShaderCompileInfo{
-        .module_name = "debug",
-        .root_path = shaders_root,
-        .shader_path = shaders_root / "passes" / "debug.slang",
+    auto debug_pipeline_info = PipelineCompileInfo{
+        .module_name = "passes.debug",
         .entry_points = { "vs_main", "fs_main" },
     };
-    self.debug_pipeline = Pipeline::create(*self.device, debug_pipeline_info).value();
+    self.debug_pipeline = Pipeline::create(*self.device, default_slang_session, debug_pipeline_info).value();
 
     //  ── SKY LUTS ────────────────────────────────────────────────────────
     auto temp_atmos_info = GPU::Atmosphere{};

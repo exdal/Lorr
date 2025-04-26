@@ -2,7 +2,7 @@ module debug;
 
 import gpu;
 import scene;
-import visbuffer;
+import passes.visbuffer;
 
 #include <fullscreen.slang>
 

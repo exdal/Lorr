@@ -3,7 +3,7 @@ module visbuffer_merge;
 import std;
 import gpu;
 import scene;
-import visbuffer;
+import passes.visbuffer;
 
 #include <fullscreen.slang>
 

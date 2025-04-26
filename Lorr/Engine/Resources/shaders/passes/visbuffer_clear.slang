@@ -2,7 +2,7 @@ module visbuffer_clear;
 
 import std;
 import gpu;
-import visbuffer;
+import passes.visbuffer;
 
 [[vk::binding(0, 0)]]
 StorageImage2D<u64, ImageFormat::R64UI> visbuffer_image;

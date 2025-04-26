@@ -1,6 +1,7 @@
 #include "Engine/Graphics/Slang/Compiler.hh"
 
-#include "Engine/Util/VirtualDir.hh"
+#include "Engine/OS/File.hh"
+
 #include "ls/types.hh"
 
 #include <slang-com-ptr.h>
@@ -9,8 +10,8 @@
 #include <algorithm>
 
 namespace lr {
-struct SlangBlob : ISlangBlob {
-    std::vector<u8> m_data = {};
+struct SlangBlobSpan : ISlangBlob {
+    ls::span<u8> m_data = {};
     std::atomic_uint32_t m_refCount = 1;
 
     ISlangUnknown *getInterface(SlangUUID const &) {
@@ -39,8 +40,8 @@ struct SlangBlob : ISlangBlob {
         return m_refCount;
     }
 
-    SlangBlob(const std::vector<u8> &data) : m_data(data) {}
-    virtual ~SlangBlob() = default;
+    SlangBlobSpan(ls::span<u8> data) : m_data(data) {}
+    virtual ~SlangBlobSpan() = default;
     SLANG_NO_THROW void const *SLANG_MCALL getBufferPointer() final {
         return m_data.data();
     };
@@ -55,7 +56,7 @@ struct SlangBlob : ISlangBlob {
 // shaders are preloaded into virtual environment, so ::loadFile would just
 // return already existing shader file.
 struct SlangVirtualFS : ISlangFileSystem {
-    VirtualDir &m_virtual_env;
+    ankerl::unordered_dense::map<std::string, std::vector<u8>> m_loaded_modules;
     fs::path m_root_dir;
     std::atomic_uint32_t m_refCount;
 
@@ -82,7 +83,7 @@ struct SlangVirtualFS : ISlangFileSystem {
         return m_refCount;
     }
 
-    SlangVirtualFS(VirtualDir &virtual_dir, fs::path root_dir) : m_virtual_env(virtual_dir), m_root_dir(std::move(root_dir)), m_refCount(1) {};
+    SlangVirtualFS(fs::path root_dir) : m_loaded_modules({}), m_root_dir(std::move(root_dir)), m_refCount(1) {};
     virtual ~SlangVirtualFS() = default;
 
     ISlangUnknown *getInterface(SlangUUID const &) {
@@ -99,29 +100,28 @@ struct SlangVirtualFS : ISlangFileSystem {
         auto module_name = fs::relative(path, m_root_dir).replace_extension("").string();
         std::ranges::replace(module_name, static_cast<c8>(fs::path::preferred_separator), '.');
 
-        auto it = m_virtual_env.files.find(module_name);
-        if (it == m_virtual_env.files.end()) {
-            if (auto result = m_virtual_env.read_file(module_name, path); result.has_value()) {
-                auto &new_file = result.value().get();
-                *outBlob = new SlangBlob(std::vector<u8>{ new_file.data(), (new_file.data() + new_file.size()) });
+        auto it = m_loaded_modules.find(module_name);
+        if (it == m_loaded_modules.end()) {
+            auto file_bytes = File::to_bytes(path);
+            if (!file_bytes.empty()) {
+                auto new_it = m_loaded_modules.emplace(module_name, std::move(file_bytes));
+                *outBlob = new SlangBlobSpan(new_it.first->second);
 
-                LOG_TRACE("New shader module '{}' is loaded.", module_name);
+                LOG_TRACE("Loaded new shader module '{}'", module_name);
                 return SLANG_OK;
             } else {
                 return SLANG_E_NOT_FOUND;
             }
         } else {
-            auto &file = it->second;
-            *outBlob = new SlangBlob(std::vector<u8>{ file.data(), (file.data() + file.size()) });
+            *outBlob = new SlangBlobSpan(it->second);
             return SLANG_OK;
         }
     }
 };
 
-using SlangSession_H = Handle<struct SlangSession>;
 template<>
 struct Handle<SlangModule>::Impl {
-    SlangSession_H session = {};
+    SlangSession session = {};
     slang::IModule *slang_module = nullptr;
 };
 
@@ -134,7 +134,6 @@ struct Handle<SlangSession>::Impl {
 template<>
 struct Handle<SlangCompiler>::Impl {
     Slang::ComPtr<slang::IGlobalSession> global_session;
-    VirtualDir virtual_dir = {};
 };
 
 auto SlangModule::destroy() -> void {
@@ -267,19 +266,21 @@ auto SlangSession::load_module(const SlangModuleInfo &info) -> ls::option<SlangM
 
     slang::IModule *slang_module = {};
     Slang::ComPtr<slang::IBlob> diagnostics_blob;
-    const auto &path_str = info.path.string();
+    auto source = std::string{};
+
     if (info.source.has_value()) {
-        auto source = stack.null_terminate_cstr(info.source.value());
-        slang_module = impl->session->loadModuleFromSourceString(info.module_name.c_str(), path_str.c_str(), source, diagnostics_blob.writeRef());
+        source = info.source.value();
     } else {
-        auto source_data = File::to_string(info.path);
-        if (source_data.empty()) {
-            LOG_ERROR("Failed to read shader file '{}'!", path_str.c_str());
+        auto path = this->modular_path(info.module_name);
+        source = File::to_string(path);
+        if (source.empty()) {
+            LOG_ERROR("Failed to read shader file '{}'!", path);
             return ls::nullopt;
         }
-        slang_module =
-            impl->session->loadModuleFromSourceString(info.module_name.c_str(), path_str.c_str(), source_data.c_str(), diagnostics_blob.writeRef());
     }
+
+    slang_module =
+        impl->session->loadModuleFromSourceString(info.module_name.c_str(), info.module_name.c_str(), source.c_str(), diagnostics_blob.writeRef());
 
     if (diagnostics_blob) {
         LOG_TRACE("{}", (const char *)diagnostics_blob->getBufferPointer());
@@ -287,9 +288,26 @@ auto SlangSession::load_module(const SlangModuleInfo &info) -> ls::option<SlangM
 
     auto module_impl = new SlangModule::Impl;
     module_impl->slang_module = slang_module;
-    module_impl->session = impl;
+    module_impl->session = SlangSession(impl);
 
     return SlangModule(module_impl);
+}
+
+auto SlangSession::root_directory() const -> const fs::path & {
+    ZoneScoped;
+
+    return impl->shader_virtual_env->m_root_dir;
+}
+
+auto SlangSession::modular_path(const std::string &module_name) -> fs::path {
+    ZoneScoped;
+
+    // path.to.xx -> /resources/shaders/path/to/xx.slang
+    std::string module_name_path = module_name;
+    std::ranges::replace(module_name_path, '.', static_cast<c8>(fs::path::preferred_separator));
+    module_name_path += ".slang";
+
+    return this->root_directory() / module_name_path;
 }
 
 auto SlangCompiler::create() -> ls::option<SlangCompiler> {
@@ -301,6 +319,8 @@ auto SlangCompiler::create() -> ls::option<SlangCompiler> {
 }
 
 auto SlangCompiler::destroy() -> void {
+    ZoneScoped;
+
     delete impl;
     impl = nullptr;
 }
@@ -308,7 +328,7 @@ auto SlangCompiler::destroy() -> void {
 auto SlangCompiler::new_session(const SlangSessionInfo &info) -> ls::option<SlangSession> {
     ZoneScoped;
 
-    auto slang_fs = std::make_unique<SlangVirtualFS>(impl->virtual_dir, info.root_directory);
+    auto slang_fs = std::make_unique<SlangVirtualFS>(info.root_directory);
 
     slang::CompilerOptionEntry entries[] = {
         { .name = slang::CompilerOptionName::Optimization,

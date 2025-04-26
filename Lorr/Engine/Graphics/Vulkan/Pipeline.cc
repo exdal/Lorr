@@ -3,23 +3,17 @@
 #include "Engine/Graphics/VulkanDevice.hh"
 
 namespace lr {
-auto Pipeline::create(Device &device, const ShaderCompileInfo &compile_info, ls::span<vuk::PersistentDescriptorSet> persistent_sets)
+auto Pipeline::create(Device &device, SlangSession &session, const PipelineCompileInfo &compile_info, ls::span<vuk::PersistentDescriptorSet> persistent_sets)
     -> std::expected<Pipeline, vuk::VkException> {
     ZoneScoped;
 
-    auto definitions = compile_info.definitions;
     vuk::PipelineBaseCreateInfo create_info = {};
 
     for (const auto &v : persistent_sets) {
         create_info.explicit_set_layouts.push_back(v.set_layout_create_info);
     }
 
-    auto slang_session = device.new_slang_session({
-        .definitions = definitions,
-        .root_directory = compile_info.root_path,
-    });
-    auto slang_module = slang_session->load_module({
-        .path = compile_info.shader_path,
+    auto slang_module = session.load_module({
         .module_name = compile_info.module_name,
         .source = compile_info.shader_source,
     });
@@ -31,8 +25,7 @@ auto Pipeline::create(Device &device, const ShaderCompileInfo &compile_info, ls:
             return std::unexpected(VK_ERROR_UNKNOWN);
         }
 
-        auto shader_name = fs::relative(compile_info.shader_path, compile_info.root_path);
-        create_info.add_spirv(entry_point->ir, shader_name.string(), v);
+        create_info.add_spirv(entry_point->ir, compile_info.module_name, v);
     }
 
     auto *pipeline_handle = device.runtime->get_pipeline(create_info);

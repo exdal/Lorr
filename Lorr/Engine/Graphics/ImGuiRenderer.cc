@@ -64,13 +64,12 @@ auto ImGuiRenderer::init(this ImGuiRenderer &self, Device *device) -> void {
     transfer_man.wait_on(std::move(imgui_ia));
     IM_FREE(font_data);
 
-    auto pipeline_info = ShaderCompileInfo{
-        .module_name = "imgui",
-        .root_path = shaders_root,
-        .shader_path = shaders_root / "passes" / "imgui.slang",
+    auto slang_session = device->new_slang_session({ .root_directory = shaders_root }).value();
+    auto pipeline_info = PipelineCompileInfo{
+        .module_name = "passes.imgui",
         .entry_points = { "vs_main", "fs_main" },
     };
-    self.pipeline = Pipeline::create(*device, pipeline_info).value();
+    self.pipeline = Pipeline::create(*device, slang_session, pipeline_info).value();
 }
 
 auto ImGuiRenderer::add_image(this ImGuiRenderer &self, vuk::Value<vuk::ImageAttachment> &&attachment) -> ImTextureID {

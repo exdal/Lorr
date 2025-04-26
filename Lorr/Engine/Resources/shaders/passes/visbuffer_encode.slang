@@ -3,7 +3,7 @@ module visbuffer_encode;
 import std;
 import gpu;
 import scene;
-import visbuffer;
+import passes.visbuffer;
 
 [[vk::binding(0, 0)]]
 StorageImage2D<u32, ImageFormat::R32UI> overdraw;

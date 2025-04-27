@@ -92,6 +92,7 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
     device_extensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
     device_extensions.push_back(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
     device_extensions.push_back(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
+    device_extensions.push_back(VK_EXT_SHADER_IMAGE_ATOMIC_INT64_EXTENSION_NAME);
     //device_extensions.push_back(VK_KHR_MAINTENANCE_8_EXTENSION_NAME);
     physical_device_selector.add_required_extensions(device_extensions);
 
@@ -154,6 +155,10 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
     vk10_features.features.multiDrawIndirect = true;
     vk10_features.features.samplerAnisotropy = true;
 
+    VkPhysicalDeviceShaderImageAtomicInt64FeaturesEXT image_atomic_int64_features = {};
+    image_atomic_int64_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_IMAGE_ATOMIC_INT64_FEATURES_EXT;
+    image_atomic_int64_features.shaderImageInt64Atomics = true;
+
     vkb::DeviceBuilder device_builder(self.physical_device);
     device_builder //
         .add_pNext(&vk14_features)
@@ -161,6 +166,7 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
         .add_pNext(&vk12_features)
         .add_pNext(&vk11_features)
         // .add_pNext(&maintenance_8_features)
+        .add_pNext(&image_atomic_int64_features)
         .add_pNext(&vk10_features);
     auto device_result = device_builder.build();
     if (!device_result) {

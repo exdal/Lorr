@@ -360,12 +360,17 @@ static auto draw_welcome_popup(EditorApp &self) -> void {
 
                 auto path_str = stack.format_char("{}", project_path);
                 ImGui::PushID(button_id++);
-                if (ImGui::Button(project_info.name.c_str(), { child_width, 35.0f })) {
+                if (ImGui::Button(project_info.name.c_str(), { -1.0f, 35.0f })) {
                     opening_project = project_path;
                     ImGui::CloseCurrentPopup();
                 }
                 ImGui::SetItemTooltip("%s", path_str);
                 ImGui::PopID();
+            }
+
+            ImGui::SeparatorText("");
+
+            if (ImGui::Button("Import...", { -1.0f, 35.0f })) {
             }
 
             ImGui::EndChild();
@@ -374,7 +379,13 @@ static auto draw_welcome_popup(EditorApp &self) -> void {
         ImGui::SameLine();
 
         if (ImGui::BeginChild("create_project", { child_width, 0.0f })) {
+            static std::string project_dir = {};
             ImGui::SeparatorText("Create Project");
+            ImGui::SetNextItemWidth(child_width * 0.9f);
+            ImGui::InputTextWithHint("", "/path/to/new/project", &project_dir);
+            ImGui::SameLine();
+            ImGui::Button(ICON_MDI_FOLDER, { -1.0, 0.0f });
+
             ImGui::EndChild();
         }
 
@@ -429,8 +440,6 @@ static auto draw_profiler(EditorApp &self) -> void {
 auto EditorApp::render(this EditorApp &self, vuk::Format format, vuk::Extent3D extent) -> bool {
     ZoneScoped;
 
-    const auto &active_project = *self.active_project;
-    const auto &active_scene_uuid = active_project.active_scene_uuid;
     auto *viewport = ImGui::GetMainViewport();
 
     ImGui::SetNextWindowPos(viewport->WorkPos);
@@ -467,17 +476,6 @@ auto EditorApp::render(this EditorApp &self, vuk::Format format, vuk::Extent3D e
     draw_menu_bar(self);
 
     ImGui::End();
-
-    // if (self.show_profiler) {
-    //     auto &io = ImGui::GetIO();
-    //     ImGui::SetNextWindowSizeConstraints(ImVec2(750, 450), ImVec2(FLT_MAX, FLT_MAX));
-    //     ImGui::Begin("Frame Profiler", &self.show_profiler);
-    //     ImGui::Text("Frametime: %.4fms (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
-    //
-    //     app.device.render_frame_profiler();
-    //
-    //     ImGui::End();
-    // }
 
     for (auto &window : self.windows) {
         window->do_render(format, extent);

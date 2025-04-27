@@ -122,6 +122,7 @@ auto Scene::init(this Scene &self, const std::string &name) -> bool {
 auto Scene::destroy(this Scene &self) -> void {
     ZoneScoped;
 
+    self.root.destruct();
     self.root.children([](flecs::entity e) {
         e.each([&](flecs::id component_id) {
             if (!component_id.is_entity()) {
@@ -156,6 +157,89 @@ auto Scene::destroy(this Scene &self) -> void {
     self.world.reset();
 }
 
+static auto json_to_entity(Scene &self, flecs::entity root, simdjson::ondemand::value &json, std::vector<UUID> &requested_assets) -> bool {
+    ZoneScoped;
+    memory::ScopedStack stack;
+
+    auto &world = self.get_world();
+
+    auto entity_name_json = json["name"];
+    if (entity_name_json.error()) {
+        LOG_ERROR("Entities must have names!");
+        return false;
+    }
+
+    auto entity_name = entity_name_json.get_string().value_unsafe();
+    auto e = self.create_entity(std::string(entity_name.begin(), entity_name.end()));
+    e.child_of(root);
+
+    auto entity_tags_json = json["tags"];
+    for (auto entity_tag : entity_tags_json.get_array()) {
+        auto tag = world.component(stack.null_terminate(entity_tag.get_string().value_unsafe()).data());
+        e.add(tag);
+    }
+
+    auto components_json = json["components"];
+    for (auto component_json : components_json.get_array()) {
+        auto component_name_json = component_json["name"];
+        if (component_name_json.error()) {
+            LOG_ERROR("Entity '{}' has corrupt components JSON array.", e.name());
+            return false;
+        }
+
+        const auto *component_name = stack.null_terminate_cstr(component_name_json.get_string().value_unsafe());
+        auto component_id = world.lookup(component_name);
+        if (!component_id) {
+            LOG_ERROR("Entity '{}' has invalid component named '{}'!", e.name(), component_name);
+            return false;
+        }
+
+        LS_EXPECT(self.get_entity_db().is_component_known(component_id));
+        e.add(component_id);
+        ECS::ComponentWrapper component(e, component_id);
+        component.for_each([&](usize &, std::string_view member_name, ECS::ComponentWrapper::Member &member) {
+            auto member_json = component_json[member_name];
+            if (member_json.error()) {
+                // Default construct
+                return;
+            }
+
+            std::visit(
+                ls::match{
+                    [](const auto &) {},
+                    [&](f32 *v) { *v = static_cast<f32>(member_json.get_double().value_unsafe()); },
+                    [&](i32 *v) { *v = static_cast<i32>(member_json.get_int64().value_unsafe()); },
+                    [&](u32 *v) { *v = member_json.get_uint64().value_unsafe(); },
+                    [&](i64 *v) { *v = member_json.get_int64().value_unsafe(); },
+                    [&](u64 *v) { *v = member_json.get_uint64().value_unsafe(); },
+                    [&](glm::vec2 *v) { json_to_vec(member_json.value_unsafe(), *v); },
+                    [&](glm::vec3 *v) { json_to_vec(member_json.value_unsafe(), *v); },
+                    [&](glm::vec4 *v) { json_to_vec(member_json.value_unsafe(), *v); },
+                    [&](glm::quat *v) { json_to_quat(member_json.value_unsafe(), *v); },
+                    // [&](glm::mat4 *v) {json_to_mat(member_json.value(), *v); },
+                    [&](std::string *v) { *v = member_json.get_string().value_unsafe(); },
+                    [&](UUID *v) {
+                        *v = UUID::from_string(member_json.get_string().value_unsafe()).value();
+                        requested_assets.push_back(*v);
+                    },
+                },
+                member
+            );
+        });
+
+        e.modified(component_id);
+    }
+
+    auto children_json = json["children"];
+    for (auto children : children_json) {
+        if (!json_to_entity(self, e, children.value_unsafe(), requested_assets)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 auto Scene::import_from_file(this Scene &self, const fs::path &path) -> bool {
     ZoneScoped;
     memory::ScopedStack stack;
@@ -188,70 +272,8 @@ auto Scene::import_from_file(this Scene &self, const fs::path &path) -> bool {
     std::vector<UUID> requested_assets = {};
     auto entities_json = doc["entities"].get_array();
     for (auto entity_json : entities_json) {
-        auto entity_name_json = entity_json["name"];
-        if (entity_name_json.error()) {
-            LOG_ERROR("Entities must have names!");
+        if (!json_to_entity(self, self.root, entity_json.value_unsafe(), requested_assets)) {
             return false;
-        }
-
-        auto entity_name = entity_name_json.get_string().value_unsafe();
-        auto e = self.create_entity(std::string(entity_name.begin(), entity_name.end()));
-
-        auto entity_tags_json = entity_json["tags"];
-        for (auto entity_tag : entity_tags_json.get_array()) {
-            auto tag = self.world->component(stack.null_terminate(entity_tag.get_string().value_unsafe()).data());
-            e.add(tag);
-        }
-
-        auto components_json = entity_json["components"];
-        for (auto component_json : components_json.get_array()) {
-            auto component_name_json = component_json["name"];
-            if (component_name_json.error()) {
-                LOG_ERROR("Entity '{}' has corrupt components JSON array.", e.name());
-                return false;
-            }
-
-            const auto *component_name = stack.null_terminate_cstr(component_name_json.get_string().value_unsafe());
-            auto component_id = self.world->lookup(component_name);
-            if (!component_id) {
-                LOG_ERROR("Entity '{}' has invalid component named '{}'!", e.name(), component_name);
-                return false;
-            }
-
-            LS_EXPECT(self.entity_db.is_component_known(component_id));
-            e.add(component_id);
-            ECS::ComponentWrapper component(e, component_id);
-            component.for_each([&](usize &, std::string_view member_name, ECS::ComponentWrapper::Member &member) {
-                auto member_json = component_json[member_name];
-                if (member_json.error()) {
-                    // Default construct
-                    return;
-                }
-
-                std::visit(
-                    ls::match{
-                        [](const auto &) {},
-                        [&](f32 *v) { *v = static_cast<f32>(member_json.get_double().value_unsafe()); },
-                        [&](i32 *v) { *v = static_cast<i32>(member_json.get_int64().value_unsafe()); },
-                        [&](u32 *v) { *v = member_json.get_uint64().value_unsafe(); },
-                        [&](i64 *v) { *v = member_json.get_int64().value_unsafe(); },
-                        [&](u64 *v) { *v = member_json.get_uint64().value_unsafe(); },
-                        [&](glm::vec2 *v) { json_to_vec(member_json.value_unsafe(), *v); },
-                        [&](glm::vec3 *v) { json_to_vec(member_json.value_unsafe(), *v); },
-                        [&](glm::vec4 *v) { json_to_vec(member_json.value_unsafe(), *v); },
-                        [&](glm::quat *v) { json_to_quat(member_json.value_unsafe(), *v); },
-                        // [&](glm::mat4 *v) {json_to_mat(member_json.value(), *v); },
-                        [&](std::string *v) { *v = member_json.get_string().value_unsafe(); },
-                        [&](UUID *v) {
-                            *v = UUID::from_string(member_json.get_string().value_unsafe()).value();
-                            requested_assets.push_back(*v);
-                        },
-                    },
-                    member
-                );
-            });
-
-            e.modified(component_id);
         }
     }
 
@@ -266,14 +288,15 @@ auto Scene::import_from_file(this Scene &self, const fs::path &path) -> bool {
     return true;
 }
 
-auto Scene::export_to_file(this Scene &self, const fs::path &path) -> bool {
+auto entity_to_json(JsonWriter &json, flecs::entity root) -> void {
     ZoneScoped;
 
-    JsonWriter json;
-    json.begin_obj();
-    json["name"] = self.name;
-    json["entities"].begin_array();
-    self.root.children([&](flecs::entity e) {
+    auto q = root.world() //
+                 .query_builder()
+                 .with(flecs::ChildOf, root)
+                 .build();
+
+    q.each([&](flecs::entity e) {
         json.begin_obj();
         json["name"] = std::string_view(e.name(), e.name().length());
 
@@ -321,9 +344,23 @@ auto Scene::export_to_file(this Scene &self, const fs::path &path) -> bool {
             json.end_obj();
         }
         json.end_array();
+
+        json["children"].begin_array();
+        entity_to_json(json, e);
+        json.end_array();
+
         json.end_obj();
     });
+}
 
+auto Scene::export_to_file(this Scene &self, const fs::path &path) -> bool {
+    ZoneScoped;
+
+    JsonWriter json;
+    json.begin_obj();
+    json["name"] = self.name;
+    json["entities"].begin_array();
+    entity_to_json(json, self.root);
     json.end_array();
     json.end_obj();
 
@@ -345,12 +382,12 @@ auto Scene::create_entity(this Scene &self, const std::string &name) -> flecs::e
     if (name.empty()) {
         memory::ScopedStack stack;
 
-        auto e = self.world->entity().child_of(self.root);
+        auto e = self.world->entity();
         e.set_name(stack.format_char("Entity {}", e.raw_id()));
         return e;
     }
 
-    return self.world->entity(name_sv).child_of(self.root);
+    return self.world->entity(name_sv);
 }
 
 auto Scene::create_perspective_camera(
@@ -376,7 +413,8 @@ auto Scene::create_editor_camera(this Scene &self) -> void {
     self.create_perspective_camera("editor_camera", { 0.0, 2.0, 0.0 }, { 0, 0, 0 }, 65.0, 1.6)
         .add<ECS::Hidden>()
         .add<ECS::EditorCamera>()
-        .add<ECS::ActiveCamera>();
+        .add<ECS::ActiveCamera>()
+    .child_of(self.root);
 }
 
 auto Scene::find_entity(this Scene &self, std::string_view name) -> flecs::entity {

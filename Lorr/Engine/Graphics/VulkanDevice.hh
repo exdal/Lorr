@@ -39,23 +39,31 @@ public:
     auto init(Device &) -> std::expected<void, vuk::VkException>;
     auto destroy(this TransferManager &) -> void;
 
-    [[nodiscard]] auto
-    alloc_transient_buffer_raw(this TransferManager &, vuk::MemoryUsage usage, usize size, usize alignment = 8, bool frame = true, LR_THISCALL)
+    [[nodiscard]]
+    auto alloc_transient_buffer_raw(this TransferManager &, vuk::MemoryUsage usage, usize size, usize alignment = 8, bool frame = true, LR_THISCALL)
         -> vuk::Buffer;
-    [[nodiscard]] auto
-    alloc_transient_buffer(this TransferManager &, vuk::MemoryUsage usage, usize size, usize alignment = 8, bool frame = true, LR_THISCALL)
+
+    [[nodiscard]]
+    auto alloc_transient_buffer(this TransferManager &, vuk::MemoryUsage usage, usize size, usize alignment = 8, bool frame = true, LR_THISCALL)
         -> vuk::Value<vuk::Buffer>;
-    [[nodiscard]] auto upload_staging(this TransferManager &, vuk::Value<vuk::Buffer> &&src, vuk::Value<vuk::Buffer> &&dst, LR_THISCALL)
+
+    [[nodiscard]]
+    auto upload_staging(this TransferManager &, vuk::Value<vuk::Buffer> &&src, vuk::Value<vuk::Buffer> &&dst, LR_THISCALL) -> vuk::Value<vuk::Buffer>;
+
+    [[nodiscard]]
+    auto upload_staging(this TransferManager &, vuk::Value<vuk::Buffer> &&src, Buffer &dst, u64 dst_offset = 0, LR_THISCALL)
         -> vuk::Value<vuk::Buffer>;
-    [[nodiscard]] auto upload_staging(this TransferManager &, vuk::Value<vuk::Buffer> &&src, Buffer &dst, u64 dst_offset = 0, LR_THISCALL)
+
+    [[nodiscard]]
+    auto upload_staging(this TransferManager &, void *data, u64 data_size, vuk::Value<vuk::Buffer> &&dst, u64 dst_offset = 0, LR_THISCALL)
         -> vuk::Value<vuk::Buffer>;
-    [[nodiscard]] auto
-    upload_staging(this TransferManager &, void *data, u64 data_size, vuk::Value<vuk::Buffer> &&dst, u64 dst_offset = 0, LR_THISCALL)
-        -> vuk::Value<vuk::Buffer>;
-    [[nodiscard]] auto upload_staging(this TransferManager &, void *data, u64 data_size, Buffer &dst, u64 dst_offset = 0, LR_THISCALL)
-        -> vuk::Value<vuk::Buffer>;
-    [[nodiscard]] auto upload_staging(this TransferManager &, ImageView &image_view, void *data, u64 data_size, LR_THISCALL)
-        -> vuk::Value<vuk::ImageAttachment>;
+
+    [[nodiscard]]
+    auto upload_staging(this TransferManager &, void *data, u64 data_size, Buffer &dst, u64 dst_offset = 0, LR_THISCALL) -> vuk::Value<vuk::Buffer>;
+
+    [[nodiscard]]
+    auto upload_staging(this TransferManager &, ImageView &image_view, void *data, u64 data_size, LR_THISCALL) -> vuk::Value<vuk::ImageAttachment>;
+    
     template<typename T>
     [[nodiscard]] auto upload_staging(this TransferManager &self, ls::span<T> span, Buffer &dst, u64 dst_offset = 0, LR_THISCALL)
         -> vuk::Value<vuk::Buffer> {

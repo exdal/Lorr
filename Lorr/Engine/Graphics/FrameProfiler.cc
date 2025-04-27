@@ -16,7 +16,6 @@ auto FrameProfiler::measure(this FrameProfiler &self, Device *device, f64 delta_
         auto [stat_it, inserted] = self.pass_stats.try_emplace(pass_name);
         auto &stat = stat_it->second;
         stat.measured_times.add_point(delta);
-        stat.moving_avg *= (1.0 - stat.moving_avg_weight) + delta * stat.moving_avg_weight;
     }
 
     self.accumulated_times.add_point(self.accumulated_time += delta_time);

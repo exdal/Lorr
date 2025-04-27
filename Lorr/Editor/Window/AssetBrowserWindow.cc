@@ -404,6 +404,7 @@ static auto draw_project_tree(AssetBrowserWindow &self) -> void {
     table_flags |= ImGuiTableFlags_NoPadOuterX;
 
     ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, { 0, 0 });
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.0, 0.0, 0.0, 0.0));
     if (ImGui::BeginTable("project_tree", 1, table_flags)) {
         ImGui::TableNextRow();
         ImGui::TableNextColumn();
@@ -413,6 +414,7 @@ static auto draw_project_tree(AssetBrowserWindow &self) -> void {
         ImGui::EndTable();
     }
     ImGui::PopStyleVar();
+    ImGui::PopStyleColor();
 }
 
 static auto draw_file_paths(AssetBrowserWindow &self) -> void {

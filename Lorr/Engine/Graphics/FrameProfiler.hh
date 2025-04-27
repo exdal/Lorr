@@ -7,8 +7,6 @@
 namespace lr {
 struct PassStat {
     ScrollingBuffer<f64, 10000> measured_times = {};
-    f64 moving_avg = 0.0f;
-    f64 moving_avg_weight = 0.005f;
 };
 
 struct FrameProfiler {

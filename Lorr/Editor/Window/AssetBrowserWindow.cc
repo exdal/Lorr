@@ -201,7 +201,7 @@ static auto draw_dir_contents(AssetBrowserWindow &self) -> void {
     auto dir_image = app.imgui_renderer.add_image(dir_texture->image_view);
 
     ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, { padding, padding });
-    if (ImGui::BeginTable("asset_browser", tile_count, table_flags)) {
+    if (tile_count && ImGui::BeginTable("asset_browser", tile_count, table_flags)) {
         std::vector<AssetDirectory *> deleting_dirs = {}; // this is to avoid iterator corruption
         for (const auto &subdir : self.current_dir->subdirs) {
             ImGui::TableNextColumn();

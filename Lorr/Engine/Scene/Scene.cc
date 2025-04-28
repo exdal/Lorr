@@ -12,8 +12,6 @@
 #include "Engine/Scene/ECSModule/ComponentWrapper.hh"
 #include "Engine/Scene/ECSModule/Core.hh"
 
-#include <algorithm>
-#include <glm/gtx/quaternion.hpp>
 #include <simdjson.h>
 
 namespace lr {
@@ -122,8 +120,12 @@ auto Scene::init(this Scene &self, const std::string &name) -> bool {
 auto Scene::destroy(this Scene &self) -> void {
     ZoneScoped;
 
-    self.root.destruct();
-    self.root.children([](flecs::entity e) {
+    auto q = self.world //
+                 ->query_builder()
+                 .with(flecs::ChildOf, self.root)
+                 .cache_kind(flecs::QueryCacheNone)
+                 .build();
+    q.each([](flecs::entity e) {
         e.each([&](flecs::id component_id) {
             if (!component_id.is_entity()) {
                 return;
@@ -148,6 +150,7 @@ auto Scene::destroy(this Scene &self) -> void {
         });
     });
 
+    self.root.destruct();
     self.name.clear();
     self.root.clear();
     self.transforms.reset();
@@ -232,6 +235,10 @@ static auto json_to_entity(Scene &self, flecs::entity root, simdjson::ondemand::
 
     auto children_json = json["children"];
     for (auto children : children_json) {
+        if (children.error()) {
+            continue;
+        }
+
         if (!json_to_entity(self, e, children.value_unsafe(), requested_assets)) {
             return false;
         }
@@ -272,6 +279,10 @@ auto Scene::import_from_file(this Scene &self, const fs::path &path) -> bool {
     std::vector<UUID> requested_assets = {};
     auto entities_json = doc["entities"].get_array();
     for (auto entity_json : entities_json) {
+        if (entity_json.error()) {
+            continue;
+        }
+
         if (!json_to_entity(self, self.root, entity_json.value_unsafe(), requested_assets)) {
             return false;
         }
@@ -414,7 +425,7 @@ auto Scene::create_editor_camera(this Scene &self) -> void {
         .add<ECS::Hidden>()
         .add<ECS::EditorCamera>()
         .add<ECS::ActiveCamera>()
-    .child_of(self.root);
+        .child_of(self.root);
 }
 
 auto Scene::find_entity(this Scene &self, std::string_view name) -> flecs::entity {

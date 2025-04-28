@@ -242,11 +242,8 @@ static auto draw_dir_contents(AssetBrowserWindow &self) -> void {
             }
         }
 
-        if (ImGui::BeginPopupContextWindow(
-                "asset_browser_ctx",
-                ImGuiPopupFlags_NoOpenOverItems | ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverExistingPopup
-            ))
-        {
+        auto asset_browser_popup_flags = ImGuiPopupFlags_NoOpenOverItems | ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverExistingPopup;
+        if (ImGui::BeginPopupContextWindow("asset_browser_ctx", asset_browser_popup_flags)) {
             if (ImGui::BeginMenu("Create...")) {
                 open_create_dir_popup = ImGui::MenuItem("Directory");
                 ImGui::Separator();

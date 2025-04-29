@@ -39,7 +39,8 @@ add_requires("libsdl3 3.2.8", { configs = {
 
 add_requires("shader-slang v2025.6.3", { system = false })
 add_requires("vuk 2025.04.29", { configs = {
-    debug_allocations = false
+    debug_allocations = false,
+    disable_exceptions = true,
 }, debug = is_mode("debug") })
 
 add_requires("meshoptimizer v0.22", { system = false })

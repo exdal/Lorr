@@ -55,7 +55,7 @@ auto ImGuiRenderer::init(this ImGuiRenderer &self, Device *device) -> void {
 
     auto &transfer_man = device->transfer_man();
     auto font_atlas_image_info = ImageInfo{
-        .format = vuk::Format::eR8G8B8A8Unorm,
+        .format = vuk::Format::eR8G8B8A8Srgb,
         .usage = vuk::ImageUsageFlagBits::eSampled,
         .type = vuk::ImageType::e2D,
         .extent = vuk::Extent3D(font_width, font_height, 1u),
@@ -170,7 +170,7 @@ auto ImGuiRenderer::end_frame(this ImGuiRenderer &self, vuk::Value<vuk::ImageAtt
 
     auto imgui_pass = vuk::make_pass(
         "imgui",
-        [draw_data, &pipeline = *self.device->pipeline(self.pipeline.id())](
+        [draw_data]( //
             vuk::CommandBuffer &cmd_list,
             VUK_IA(vuk::Access::eColorWrite) dst,
             VUK_BA(vuk::Access::eVertexRead) vertex_buf,
@@ -179,14 +179,13 @@ auto ImGuiRenderer::end_frame(this ImGuiRenderer &self, vuk::Value<vuk::ImageAtt
         ) {
             auto scale = glm::vec2(2.0f / draw_data->DisplaySize.x, 2.0f / draw_data->DisplaySize.y);
             auto translate = glm::vec2(-1.0f - draw_data->DisplayPos.x * scale.x, -1.0f - draw_data->DisplayPos.y * scale.y);
-            u32 is_srgb = 0;
 
             cmd_list //
                 .set_dynamic_state(vuk::DynamicStateFlagBits::eViewport | vuk::DynamicStateFlagBits::eScissor)
                 .set_rasterization(vuk::PipelineRasterizationStateCreateInfo{})
                 .set_color_blend(dst, vuk::BlendPreset::eAlphaBlend)
                 .set_viewport(0, vuk::Rect2D::framebuffer())
-                .bind_graphics_pipeline(pipeline)
+                .bind_graphics_pipeline("passes.imgui")
                 .bind_index_buffer(index_buf, sizeof(ImDrawIdx) == 2 ? vuk::IndexType::eUint16 : vuk::IndexType::eUint32)
                 .bind_vertex_buffer(
                     0,
@@ -230,18 +229,12 @@ auto ImGuiRenderer::end_frame(this ImGuiRenderer &self, vuk::Value<vuk::ImageAtt
                         if (im_cmd.TextureId != 0) {
                             auto index = im_cmd.TextureId - 1;
                             const auto &image = rendering_images[index];
-                            is_srgb = vuk::is_format_srgb(image.format);
                             cmd_list.bind_image(0, 1, image);
                         } else {
-                            is_srgb = 0;
                             cmd_list.bind_image(0, 1, rendering_images[0]);
                         }
 
-                        cmd_list.push_constants(
-                            vuk::ShaderStageFlagBits::eVertex | vuk::ShaderStageFlagBits::eFragment,
-                            0,
-                            PushConstants(translate, scale, is_srgb)
-                        );
+                        cmd_list.push_constants(vuk::ShaderStageFlagBits::eVertex, 0, PushConstants(translate, scale));
                         cmd_list.draw_indexed(im_cmd.ElemCount, 1, im_cmd.IdxOffset + index_offset, i32(im_cmd.VtxOffset + vertex_offset), 0);
                     }
                 }

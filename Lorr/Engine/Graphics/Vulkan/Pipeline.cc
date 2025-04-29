@@ -3,8 +3,12 @@
 #include "Engine/Graphics/VulkanDevice.hh"
 
 namespace lr {
-auto Pipeline::create(Device &device, SlangSession &session, const PipelineCompileInfo &compile_info, ls::span<vuk::PersistentDescriptorSet> persistent_sets)
-    -> std::expected<Pipeline, vuk::VkException> {
+auto Pipeline::create(
+    Device &device,
+    SlangSession &session,
+    const PipelineCompileInfo &compile_info,
+    ls::span<vuk::PersistentDescriptorSet> persistent_sets
+) -> std::expected<Pipeline, vuk::VkException> {
     ZoneScoped;
 
     vuk::PipelineBaseCreateInfo create_info = {};
@@ -28,8 +32,9 @@ auto Pipeline::create(Device &device, SlangSession &session, const PipelineCompi
         create_info.add_spirv(entry_point->ir, compile_info.module_name, v);
     }
 
-    auto *pipeline_handle = device.runtime->get_pipeline(create_info);
-    auto pipeline = Pipeline {};
+    device.runtime->create_named_pipeline(compile_info.module_name.c_str(), create_info);
+    auto *pipeline_handle = device.runtime->get_named_pipeline(compile_info.module_name.c_str());
+    auto pipeline = Pipeline{};
     pipeline.id_ = device.resources.pipelines.create_slot();
     *device.resources.pipelines.slot(pipeline.id_) = pipeline_handle;
 

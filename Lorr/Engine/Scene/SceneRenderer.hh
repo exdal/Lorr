@@ -21,11 +21,14 @@ struct ComposedScene {
 struct SceneRenderInfo {
     vuk::Format format = vuk::Format::eR8G8B8A8Srgb;
     vuk::Extent3D extent = {};
+    f32 delta_time = 0.0f;
 
     ls::option<GPU::Sun> sun = ls::nullopt;
     ls::option<GPU::Atmosphere> atmosphere = ls::nullopt;
     ls::option<GPU::Camera> camera = ls::nullopt;
     ls::option<glm::uvec2> picking_texel = ls::nullopt;
+    ls::option<GPU::HistogramInfo> histogram_info = ls::nullopt;
+
     GPU::CullFlags cull_flags = {};
     ls::span<GPU::TransformID> dirty_transform_ids = {};
     ls::span<GPU::Transforms> transforms = {};
@@ -46,33 +49,15 @@ struct SceneRenderer {
     Buffer materials_buffer = {};
     Buffer models_buffer = {};
     Buffer meshlet_instances_buffer = {};
-
-    Pipeline editor_grid_pipeline = {};
-    Pipeline editor_mousepick_pipeline = {};
+    Buffer exposure_buffer = {};
 
     Image sky_transmittance_lut = {};
     ImageView sky_transmittance_lut_view = {};
-    Pipeline sky_transmittance_pipeline = {};
     Image sky_multiscatter_lut = {};
     ImageView sky_multiscatter_lut_view = {};
-    Pipeline sky_multiscatter_pipeline = {};
     vuk::Extent3D sky_view_lut_extent = { .width = 312, .height = 192, .depth = 1 };
-    Pipeline sky_view_pipeline = {};
     vuk::Extent3D sky_aerial_perspective_lut_extent = { .width = 32, .height = 32, .depth = 32 };
-    Pipeline sky_aerial_perspective_pipeline = {};
-    Pipeline sky_final_pipeline = {};
 
-    Pipeline vis_cull_meshlets_pipeline = {};
-    Pipeline vis_cull_triangles_pipeline = {};
-    Pipeline vis_encode_pipeline = {};
-    Pipeline vis_clear_pipeline = {};
-    Pipeline vis_decode_pipeline = {};
-
-    Pipeline pbr_basic_pipeline = {};
-
-    Pipeline tonemap_pipeline = {};
-
-    Pipeline debug_pipeline = {};
     GPU::DebugView debug_view = GPU::DebugView::None;
     f32 debug_heatmap_scale = 5.0;
 

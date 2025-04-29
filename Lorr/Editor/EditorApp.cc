@@ -410,7 +410,7 @@ static auto draw_profiler(EditorApp &self) -> void {
             ImPlot::SetupAxes("Timeline", "GPU Time", 0, ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit);
             ImPlot::SetupAxisFormat(ImAxis_X1, "%g s");
             ImPlot::SetupAxisFormat(ImAxis_Y1, "%g ms");
-            ImPlot::SetupAxisLimits(ImAxis_X1, self.frame_profiler.accumulated_time - 1.0, self.frame_profiler.accumulated_time, ImGuiCond_Always);
+            ImPlot::SetupAxisLimits(ImAxis_X1, self.frame_profiler.accumulated_time - 5.0, self.frame_profiler.accumulated_time, ImGuiCond_Always);
             ImPlot::SetupLegend(ImPlotLocation_NorthWest, ImPlotLegendFlags_Outside);
 
             for (const auto &[name, stats] : self.frame_profiler.pass_stats) {

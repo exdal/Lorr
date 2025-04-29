@@ -194,6 +194,7 @@ static auto draw_viewport(ViewportWindow &self, vuk::Format format, vuk::Extent3
     auto scene_render_info = lr::SceneRenderInfo{
         .format = format,
         .extent = vuk::Extent3D(static_cast<u32>(window_size.x), static_cast<u32>(window_size.y), 1),
+        .delta_time = ImGui::GetIO().DeltaTime,
         .picking_texel = requested_texel_transform,
     };
     auto scene_render_result = active_scene->render(app.scene_renderer, scene_render_info);

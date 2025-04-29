@@ -120,35 +120,36 @@ auto Scene::init(this Scene &self, const std::string &name) -> bool {
 auto Scene::destroy(this Scene &self) -> void {
     ZoneScoped;
 
-    auto q = self.world //
-                 ->query_builder()
-                 .with(flecs::ChildOf, self.root)
-                 .cache_kind(flecs::QueryCacheNone)
-                 .build();
-    q.each([](flecs::entity e) {
-        e.each([&](flecs::id component_id) {
-            if (!component_id.is_entity()) {
-                return;
-            }
+    {
+        auto q = self.world //
+                     ->query_builder()
+                     .with(flecs::ChildOf, self.root)
+                     .build();
+        q.each([](flecs::entity e) {
+            e.each([&](flecs::id component_id) {
+                if (!component_id.is_entity()) {
+                    return;
+                }
 
-            ECS::ComponentWrapper component(e, component_id);
-            if (!component.has_component()) {
-                return;
-            }
+                ECS::ComponentWrapper component(e, component_id);
+                if (!component.has_component()) {
+                    return;
+                }
 
-            component.for_each([&](usize &, std::string_view, ECS::ComponentWrapper::Member &member) {
-                if (auto *component_uuid = std::get_if<UUID *>(&member)) {
-                    const auto &uuid = **component_uuid;
-                    if (uuid) {
-                        auto &app = Application::get();
-                        if (uuid && app.asset_man.get_asset(uuid)) {
-                            app.asset_man.unload_asset(uuid);
+                component.for_each([&](usize &, std::string_view, ECS::ComponentWrapper::Member &member) {
+                    if (auto *component_uuid = std::get_if<UUID *>(&member)) {
+                        const auto &uuid = **component_uuid;
+                        if (uuid) {
+                            auto &app = Application::get();
+                            if (uuid && app.asset_man.get_asset(uuid)) {
+                                app.asset_man.unload_asset(uuid);
+                            }
                         }
                     }
-                }
+                });
             });
         });
-    });
+    }
 
     self.root.destruct();
     self.name.clear();
@@ -495,6 +496,7 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, SceneRenderInfo &i
 
     ls::option<GPU::Sun> sun_data = ls::nullopt;
     ls::option<GPU::Atmosphere> atmos_data = ls::nullopt;
+    ls::option<GPU::HistogramInfo> histogram_data = ls::nullopt;
     directional_light_query.each([&](flecs::entity e, ECS::DirectionalLight &light) {
         auto light_dir_rad = glm::radians(light.direction);
 
@@ -518,6 +520,15 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, SceneRenderInfo &i
             atmos.ozone_thickness = atmos_info.ozone_thickness;
             atmos.aerial_gain_per_slice = atmos_info.aerial_gain_per_slice;
         }
+
+        if (e.has<ECS::AutoExposure>()) {
+            const auto &auto_exposure = *e.get<ECS::AutoExposure>();
+            auto &histogram = histogram_data.emplace();
+            histogram.min_exposure = auto_exposure.min_exposure;
+            histogram.max_exposure = auto_exposure.max_exposure;
+            histogram.adaptation_speed = auto_exposure.adaptation_speed;
+            histogram.ev100_bias = auto_exposure.ev100_bias;
+        }
     });
 
     ls::option<ComposedScene> composed_scene = ls::nullopt;
@@ -533,6 +544,7 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, SceneRenderInfo &i
     info.sun = sun_data;
     info.atmosphere = atmos_data;
     info.camera = active_camera_data;
+    info.histogram_info = histogram_data;
     info.cull_flags = self.cull_flags;
     info.dirty_transform_ids = self.dirty_transforms;
     info.transforms = transforms;

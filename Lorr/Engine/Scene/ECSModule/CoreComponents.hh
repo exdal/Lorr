@@ -79,6 +79,13 @@ ECS_COMPONENT_BEGIN(Clouds)
     ECS_COMPONENT_MEMBER(cloud_type, f32, 0.0f)
 ECS_COMPONENT_END();
 
+ECS_COMPONENT_BEGIN(AutoExposure)
+    ECS_COMPONENT_MEMBER(min_exposure, f32, -6.0f)
+    ECS_COMPONENT_MEMBER(max_exposure, f32, 18.0f)
+    ECS_COMPONENT_MEMBER(adaptation_speed, f32, 1.1f)
+    ECS_COMPONENT_MEMBER(ev100_bias, f32, 1.0f)
+ECS_COMPONENT_END();
+
 // Any entity with this tag won't be serialized
 ECS_COMPONENT_TAG(Hidden);
 

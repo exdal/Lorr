@@ -895,12 +895,9 @@ auto AssetManager::load_texture(const UUID &uuid, const TextureInfo &info) -> bo
         }
     }
 
-    {
-        ZoneScopedN("Lock check");
-        impl->textures_mutex.lock();
-        asset->texture_id = impl->textures.create_slot(Texture{ .image = image, .image_view = image_view });
-        impl->textures_mutex.unlock();
-    }
+    impl->textures_mutex.lock();
+    asset->texture_id = impl->textures.create_slot(Texture{ .image = image, .image_view = image_view });
+    impl->textures_mutex.unlock();
 
     LOG_TRACE("Loaded texture {} {}.", asset->uuid.str(), SlotMap_decode_id(asset->texture_id).index);
 
@@ -918,6 +915,8 @@ auto AssetManager::unload_texture(const UUID &uuid) -> void {
     auto *texture = this->get_texture(asset->texture_id);
     impl->device->destroy(texture->image_view.id());
     impl->device->destroy(texture->image.id());
+
+    LOG_TRACE("Unloaded texture {}.", uuid.str());
 
     impl->textures.destroy_slot(asset->texture_id);
     asset->texture_id = TextureID::Invalid;

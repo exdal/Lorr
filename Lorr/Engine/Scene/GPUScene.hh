@@ -124,4 +124,21 @@ struct Model {
     alignas(8) u64 meshlet_bounds = 0;
     alignas(8) u64 local_triangle_indices = 0;
 };
+
+constexpr static u32 HISTOGRAM_THREADS_X = 16;
+constexpr static u32 HISTOGRAM_THREADS_Y = 16;
+constexpr static u32 HISTOGRAM_BIN_COUNT = HISTOGRAM_THREADS_X * HISTOGRAM_THREADS_Y;
+
+struct HistogramLuminance {
+    alignas(4) f32 adapted_luminance;
+    alignas(4) f32 exposure;
+};
+
+struct HistogramInfo {
+    alignas(4) f32 min_exposure = -6.0f;
+    alignas(4) f32 max_exposure = 18.0f;
+    alignas(4) f32 adaptation_speed = 1.1f;
+    alignas(4) f32 ev100_bias = 1.0f;
+};
+
 } // namespace lr::GPU

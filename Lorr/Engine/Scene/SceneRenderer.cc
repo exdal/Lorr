@@ -597,6 +597,11 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                     .bind_image(0, 0, visbuffer)
                     .bind_image(0, 1, visbuffer_data)
                     .bind_image(0, 2, overdraw)
+                    .push_constants(
+                        vuk::ShaderStageFlagBits::eCompute,
+                        0,
+                        PushConstants(glm::uvec2(visbuffer->extent.width, visbuffer->extent.height))
+                    )
                     .dispatch_invocations_per_pixel(visbuffer);
 
                 return std::make_tuple(visbuffer, visbuffer_data, overdraw);

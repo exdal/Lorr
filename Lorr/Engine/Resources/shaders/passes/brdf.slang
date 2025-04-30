@@ -65,7 +65,7 @@ f32x4 fs_main(VertexOutput input) : SV_Target {
     const f32x3 albedo_color = albedo_image.sample_mip(linear_repeat_sampler, input.tex_coord, 0).rgb;
     const f32x4 normal_oct_flat = normal_image.load(pixel_pos);
     const f32x3 mapped_normal = std::oct_to_vec3(normal_oct_flat.xy);
-    const f32x3 smooth_normal = std::oct_to_vec3(normal_oct_flat.zw);
+    //const f32x3 smooth_normal = std::oct_to_vec3(normal_oct_flat.zw);
     const f32x3 emission = emissive_image.load(pixel_pos);
     const f32x3 metallic_roughness_occlusion = metallic_roughness_occlusion_image.load(pixel_pos);
     const f32  metallic = metallic_roughness_occlusion.x;
@@ -77,7 +77,7 @@ f32x4 fs_main(VertexOutput input) : SV_Target {
     const f32x3 ray_pos = world_position.xyz / world_position.w;
 
     // PBR constants
-    const f32x3 N = normalize(lerp(smooth_normal, mapped_normal, length(mapped_normal)));
+    const f32x3 N = normalize(mapped_normal);
     const f32x3 V = normalize(C.camera->position - ray_pos);
     const f32x3 L = normalize(C.sun->direction);  // temp
 
@@ -106,6 +106,7 @@ f32x4 fs_main(VertexOutput input) : SV_Target {
     sky_info.sampling.max_sample_count = 6;
     sky_info.transmittance_image = sky_transmittance_lut;
     sky_info.multiscattering_image = sky_multiscattering_lut;
+    sky_info.eval_mie_phase = false;
 
     sky_info.eye_dir = f32x3(0.0, -1.0, 0.0);
     const let sky_result_0 = integrate_single_scattered_luminance(C.atmosphere, linear_clamp_sampler, sky_info);

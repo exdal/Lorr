@@ -255,6 +255,8 @@ auto SceneRenderer::create_persistent_resources(this SceneRenderer &self) -> voi
     multiscatter_lut_attachment = multiscatter_lut_attachment.as_released(vuk::eComputeSampled, vuk::DomainFlagBits::eGraphicsQueue);
     transfer_man.wait_on(std::move(transmittance_lut_attachment));
     transfer_man.wait_on(std::move(multiscatter_lut_attachment));
+
+    self.exposure_buffer = Buffer::create(*self.device, sizeof(GPU::HistogramLuminance)).value();
 }
 
 auto SceneRenderer::compose(this SceneRenderer &self, SceneComposeInfo &compose_info) -> ComposedScene {
@@ -305,10 +307,6 @@ auto SceneRenderer::compose(this SceneRenderer &self, SceneComposeInfo &compose_
     auto meshlet_instances_buffer = //
         transfer_man.upload_staging(ls::span(compose_info.gpu_meshlet_instances), self.meshlet_instances_buffer);
 
-    if (self.exposure_buffer) {
-        self.device->destroy(self.exposure_buffer.id());
-    }
-    self.exposure_buffer = Buffer::create(*self.device, sizeof(GPU::HistogramLuminance)).value();
     vuk::fill(vuk::acquire_buf("exposure", *self.device->buffer(self.exposure_buffer.id()), vuk::eNone), 0);
 
     return ComposedScene{
@@ -1258,7 +1256,9 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
         );
 
         auto exposure_buffer = self.exposure_buffer.acquire(*self.device, "exposure", vuk::eNone);
-        exposure_buffer = histogram_average_pass(std::move(histogram_buffer), std::move(exposure_buffer));
+        if (info.histogram_info.has_value()) {
+            exposure_buffer = histogram_average_pass(std::move(histogram_buffer), std::move(exposure_buffer));
+        }
 
         //  ── TONEMAP ─────────────────────────────────────────────────────────
         auto tonemap_pass = vuk::make_pass(

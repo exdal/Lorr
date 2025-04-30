@@ -170,8 +170,9 @@ public struct AtmosphereIntegrateInfo {
     public f32   sun_intensity = 1.0;
     public f32   max_integration_length = 9000000.0;
     public AtmosphereSampling sampling = {};
-    public bool eval_mie_rayleigh_phase = true;
-    public bool eval_planet_luminance = false;
+    public constexpr bool eval_mie_phase = true;
+    public constexpr bool eval_rayleigh_phase = true;
+    public constexpr bool eval_planet_luminance = false;
 
     public Image2D<f32x4> transmittance_image = {};
     public Optional<Image2D<f32x4>> multiscattering_image = none;
@@ -253,8 +254,12 @@ public func integrate_single_scattered_luminance(
         }
 
         f32x3 scattering_phase = 0.0;
-        if (info.eval_mie_rayleigh_phase) {
+        if (info.eval_mie_phase && info.eval_rayleigh_phase) {
             scattering_phase = medium_info.mie_scattering * mie_phase + medium_info.rayleigh_scattering * rayleigh_phase;
+        } else if (info.eval_mie_phase) {
+            scattering_phase = medium_info.mie_scattering * mie_phase + medium_info.rayleigh_scattering * std::uniform_phase();
+        } else if (info.eval_rayleigh_phase) {
+            scattering_phase = medium_info.mie_scattering * std::uniform_phase() + medium_info.rayleigh_scattering * rayleigh_phase;
         } else {
             scattering_phase = medium_info.scattering_sum * std::uniform_phase();
         }

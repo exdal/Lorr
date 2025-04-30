@@ -36,7 +36,8 @@ func cs_main(u32x3 thread_id : SV_DispatchThreadID) {
     AtmosphereIntegrateInfo info = {};
     info.eye_pos = ray_pos;
     info.sun_dir = sun_dir;
-    info.eval_mie_rayleigh_phase = false;
+    info.eval_mie_phase = false;
+    info.eval_rayleigh_phase = false;
     info.eval_planet_luminance = true;
     info.sampling.variable_sample_count = false;
     info.sampling.initial_sample_count = 32;

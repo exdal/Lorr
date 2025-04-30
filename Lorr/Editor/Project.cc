@@ -19,6 +19,7 @@ auto Project::set_active_scene(this Project &self, const lr::UUID &scene_uuid) -
         app.asset_man.unload_scene(self.active_scene_uuid);
     }
 
+    self.selected_entity = {};
     self.active_scene_uuid = scene_uuid;
 
     return true;

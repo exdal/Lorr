@@ -64,7 +64,7 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
     instance_extensions.push_back(VK_KHR_SURFACE_EXTENSION_NAME);
     instance_extensions.push_back("VK_KHR_xcb_surface");
     instance_extensions.push_back("VK_KHR_xlib_surface");
-    // instance_extensions.push_back("VK_KHR_wayland_surface");
+    //instance_extensions.push_back("VK_KHR_wayland_surface");
 #endif
 #if LS_DEBUG
     instance_extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
@@ -77,7 +77,7 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
         auto error = instance_result.error();
         auto vk_error = instance_result.vk_result();
 
-        LOG_ERROR("Failed to initialize Vulkan instance! {}", error.message());
+        LOG_ERROR("Failed to initialize Vulkan instance! {}-{}", error.message(), std::to_underlying(vk_error));
 
         return std::unexpected(vk_error);
     }

@@ -466,14 +466,16 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
                           glm::vec3 scale) {
         auto *info = static_cast<GLTFCallbacks *>(user_data);
 
-        info->model->nodes.push_back({
-            .name = std::move(name),
-            .child_indices = std::move(child_node_indices),
-            .mesh_index = std::move(mesh_index),
-            .translation = translation,
-            .rotation = rotation,
-            .scale = scale,
-        });
+        info->model->nodes.push_back(
+            {
+                .name = std::move(name),
+                .child_indices = std::move(child_node_indices),
+                .mesh_index = std::move(mesh_index),
+                .translation = translation,
+                .rotation = rotation,
+                .scale = scale,
+            }
+        );
 
         if (mesh_index.has_value()) {
             if (info->model->meshes.size() <= mesh_index.value()) {
@@ -843,6 +845,7 @@ auto AssetManager::load_texture(const UUID &uuid, const TextureInfo &info) -> bo
         .name = stack.format("{} Image", rel_path),
     };
     auto [image, image_view] = Image::create_with_view(*impl->device, image_info).value();
+    auto dst_attachment = image_view.discard(*impl->device, "dst image", vuk::ImageUsageFlagBits::eTransferDst);
 
     auto &transfer_man = impl->device->transfer_man();
     switch (file_type) {
@@ -853,10 +856,16 @@ auto AssetManager::load_texture(const UUID &uuid, const TextureInfo &info) -> bo
             if (!parsed_image.has_value()) {
                 return false;
             }
+
+            auto alignment = vuk::format_to_texel_block_size(format);
             auto image_data = std::move(parsed_image->data);
-            auto attachment = transfer_man.upload_staging(image_view, image_data.data(), ls::size_bytes(image_data))
-                                  .as_released(vuk::Access::eFragmentSampled, vuk::DomainFlagBits::eGraphicsQueue);
-            transfer_man.wait_on(std::move(attachment));
+            auto buffer = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eCPUonly, ls::size_bytes(image_data), alignment, false);
+            std::memcpy(buffer->mapped_ptr, image_data.data(), image_data.size());
+
+            dst_attachment = vuk::copy(std::move(buffer), std::move(dst_attachment));
+            dst_attachment = vuk::generate_mips(std::move(dst_attachment), 0, mip_level_count - 1);
+            dst_attachment.as_released(vuk::Access::eFragmentSampled, vuk::DomainFlagBits::eGraphicsQueue);
+            transfer_man.wait_on(std::move(dst_attachment));
         } break;
         case AssetFileType::KTX2: {
             ZoneScopedN("Parse KTX");
@@ -866,7 +875,6 @@ auto AssetManager::load_texture(const UUID &uuid, const TextureInfo &info) -> bo
             }
             auto image_data = std::move(parsed_image->data);
 
-            auto dst_attachment = image_view.discard(*impl->device, "dst image", vuk::ImageUsageFlagBits::eTransferDst);
             for (u32 level = 0; level < parsed_image->mip_level_count; level++) {
                 ZoneScoped;
                 ZoneTextF("Upload KTX mip %u", level);
@@ -1001,7 +1009,7 @@ auto AssetManager::unload_material(const UUID &uuid) -> void {
     }
 
     impl->materials.destroy_slot(asset->material_id);
-    asset->model_id = ModelID::Invalid;
+    asset->material_id = MaterialID::Invalid;
 }
 
 auto AssetManager::load_scene(const UUID &uuid) -> bool {

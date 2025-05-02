@@ -32,10 +32,10 @@ add_requires("lz4 v1.10.0", { system = false })
 add_requires("zstd v1.5.6", { system = false })
 add_requires("flecs v4.0.4", { system = false })
 
-add_requires("libsdl3 3.2.8", { configs = {
+add_requires("libsdl3 3.2.10", { configs = {
     wayland = true,
     x11 = true,
-}, system = false })
+}})
 
 add_requires("shader-slang v2025.6.3", { system = false })
 add_requires("vuk 2025.04.29", { configs = {

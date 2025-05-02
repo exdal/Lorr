@@ -371,8 +371,13 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
 
         auto update_transforms_pass = vuk::make_pass(
             "update scene transforms",
-            [upload_offsets = std::move(upload_offsets
-             )](vuk::CommandBuffer &cmd_list, VUK_BA(vuk::Access::eTransferRead) src_buffer, VUK_BA(vuk::Access::eTransferWrite) dst_buffer) {
+            [upload_offsets = std::move(
+                 upload_offsets
+             )]( //
+                vuk::CommandBuffer &cmd_list,
+                VUK_BA(vuk::Access::eTransferRead) src_buffer,
+                VUK_BA(vuk::Access::eTransferWrite) dst_buffer
+            ) {
                 for (usize i = 0; i < upload_offsets.size(); i++) {
                     auto offset = upload_offsets[i];
                     auto src_subrange = src_buffer->subrange(i * sizeof(GPU::Transforms), sizeof(GPU::Transforms));
@@ -713,7 +718,8 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
         if (info.picking_texel) {
             auto editor_mousepick_pass = vuk::make_pass(
                 "editor mousepick",
-                [picking_texel = info.picking_texel.value()]( //
+                [picking_texel = info.picking_texel.value(
+                 )]( //
                     vuk::CommandBuffer &cmd_list,
                     VUK_IA(vuk::eComputeRead) visbuffer,
                     VUK_BA(vuk::eComputeRead) visible_meshlet_instances_indices,
@@ -1314,8 +1320,8 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
             return std::make_tuple(dst, depth);
         }
     );
-    //std::tie(result_attachment, depth_attachment) =
-    //    editor_grid_pass(std::move(result_attachment), std::move(depth_attachment), std::move(camera_buffer));
+    // std::tie(result_attachment, depth_attachment) =
+    //     editor_grid_pass(std::move(result_attachment), std::move(depth_attachment), std::move(camera_buffer));
 
     return result_attachment;
 }

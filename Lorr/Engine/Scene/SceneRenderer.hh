@@ -39,18 +39,22 @@ struct SceneRenderInfo {
 struct SceneRenderer {
     Device *device = nullptr;
 
+    // Persistent resources
     vuk::PersistentDescriptorSet bindless_set = {};
     Sampler linear_repeat_sampler = {};
     Sampler linear_clamp_sampler = {};
     Sampler nearest_repeat_sampler = {};
+    Buffer exposure_buffer = {};
 
+    // Scene resources
     Buffer transforms_buffer = {};
     u32 meshlet_instance_count = 0;
     Buffer materials_buffer = {};
     Buffer models_buffer = {};
     Buffer meshlet_instances_buffer = {};
-    Buffer exposure_buffer = {};
 
+    // Then what are they?
+    // TODO: Per scene sky settings
     Image sky_transmittance_lut = {};
     ImageView sky_transmittance_lut_view = {};
     Image sky_multiscatter_lut = {};
@@ -68,6 +72,7 @@ struct SceneRenderer {
 
     // Scene
     auto compose(this SceneRenderer &, SceneComposeInfo &compose_info) -> ComposedScene;
+    auto cleanup(this SceneRenderer &) -> void;
     auto render(this SceneRenderer &, SceneRenderInfo &render_info, ls::option<ComposedScene> &composed_scene) -> vuk::Value<vuk::ImageAttachment>;
 };
 

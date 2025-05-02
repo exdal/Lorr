@@ -307,13 +307,43 @@ auto SceneRenderer::compose(this SceneRenderer &self, SceneComposeInfo &compose_
     auto meshlet_instances_buffer = //
         transfer_man.upload_staging(ls::span(compose_info.gpu_meshlet_instances), self.meshlet_instances_buffer);
 
-    vuk::fill(vuk::acquire_buf("exposure", *self.device->buffer(self.exposure_buffer.id()), vuk::eNone), 0);
-
     return ComposedScene{
         .materials_buffer = materials_buffer,
         .models_buffer = models_buffer,
         .meshlet_instances_buffer = meshlet_instances_buffer,
     };
+}
+
+auto SceneRenderer::cleanup(this SceneRenderer &self) -> void {
+    ZoneScoped;
+
+    auto &device = *self.device;
+
+    device.wait();
+
+    vuk::fill(vuk::acquire_buf("exposure", *device.buffer(self.exposure_buffer.id()), vuk::eNone), 0);
+
+    self.meshlet_instance_count = 0;
+
+    if (self.transforms_buffer) {
+        device.destroy(self.transforms_buffer.id());
+        self.transforms_buffer = {};
+    }
+
+    if (self.meshlet_instances_buffer) {
+        device.destroy(self.meshlet_instances_buffer.id());
+        self.meshlet_instances_buffer = {};
+    }
+
+    if (self.materials_buffer) {
+        device.destroy(self.materials_buffer.id());
+        self.materials_buffer = {};
+    }
+
+    if (self.models_buffer) {
+        device.destroy(self.models_buffer.id());
+        self.models_buffer = {};
+    }
 }
 
 auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::option<ComposedScene> &composed_scene)

@@ -24,6 +24,7 @@ enum class TextureID : u64 { Invalid = std::numeric_limits<u64>::max() };
 struct Texture {
     Image image = {};
     ImageView image_view = {};
+    Sampler sampler = {};
 };
 
 enum class AlphaMode : u32 {

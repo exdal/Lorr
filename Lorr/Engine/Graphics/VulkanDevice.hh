@@ -63,7 +63,7 @@ public:
 
     [[nodiscard]]
     auto upload_staging(this TransferManager &, ImageView &image_view, void *data, u64 data_size, LR_THISCALL) -> vuk::Value<vuk::ImageAttachment>;
-    
+
     template<typename T>
     [[nodiscard]] auto upload_staging(this TransferManager &self, ls::span<T> span, Buffer &dst, u64 dst_offset = 0, LR_THISCALL)
         -> vuk::Value<vuk::Buffer> {
@@ -170,6 +170,9 @@ public:
 
     auto get_instance() -> VkInstance {
         return instance.instance;
+    }
+    auto get_native_handle() -> VkDevice {
+        return handle.device;
     }
     auto get_allocator() -> vuk::Allocator & {
         return allocator.value();

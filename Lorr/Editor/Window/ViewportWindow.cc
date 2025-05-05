@@ -100,8 +100,8 @@ static auto draw_tools(ViewportWindow &self) -> void {
 
     ImGui::PopStyleColor(2);
 
-    ImGui::SetNextWindowPos(editor_camera_popup_pos);
-    ImGui::SetNextWindowSize({ editor_camera_popup_width, 0 });
+    ImGui::SetNextWindowPos(editor_camera_popup_pos, ImGuiCond_Appearing);
+    ImGui::SetNextWindowSize({ editor_camera_popup_width, 0 }, ImGuiCond_Appearing);
     if (ImGui::BeginPopup("editor_camera")) {
         auto max_widget_width = editor_camera_popup_width - frame_padding.x * 2;
         auto editor_camera = active_scene->get_editor_camera();
@@ -134,7 +134,7 @@ static auto draw_tools(ViewportWindow &self) -> void {
 
         auto debug_view_idx = reinterpret_cast<std::underlying_type_t<lr::GPU::DebugView> *>(&app.scene_renderer.debug_view);
         const auto preview_str = debug_views_str[*debug_view_idx];
-        if (ImGui::BeginCombo("", preview_str)) {
+        if (ImGui::BeginCombo("##debug_views", preview_str)) {
             for (i32 i = 0; i < static_cast<i32>(ls::count_of(debug_views_str)); i++) {
                 const auto is_selected = i == *debug_view_idx;
                 if (ImGui::Selectable(debug_views_str[i], is_selected)) {
@@ -149,8 +149,12 @@ static auto draw_tools(ViewportWindow &self) -> void {
             ImGui::EndCombo();
         }
 
-        ImGui::SetNextItemWidth(max_widget_width);
-        ImGui::DragFloat("Heatmap scale", &app.scene_renderer.debug_heatmap_scale);
+        if (*debug_view_idx == std::to_underlying(lr::GPU::DebugView::Overdraw)) {
+            ImGui::SeparatorText("Heatmap Scale");
+            ImGui::SetNextItemWidth(max_widget_width);
+            ImGui::DragFloat("##debug_heatmap_scale", &app.scene_renderer.debug_heatmap_scale);
+        }
+
         ImGui::EndPopup();
     }
 }

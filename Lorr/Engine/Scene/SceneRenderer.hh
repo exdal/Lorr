@@ -7,13 +7,11 @@
 namespace lr {
 struct SceneComposeInfo {
     std::vector<ImageViewID> rendering_image_view_ids = {};
-    std::vector<GPU::Material> gpu_materials = {};
     std::vector<GPU::Model> gpu_models = {};
     std::vector<GPU::MeshletInstance> gpu_meshlet_instances = {};
 };
 
 struct ComposedScene {
-    vuk::Value<vuk::Buffer> materials_buffer = {};
     vuk::Value<vuk::Buffer> models_buffer = {};
     vuk::Value<vuk::Buffer> meshlet_instances_buffer = {};
 };
@@ -22,6 +20,9 @@ struct SceneRenderInfo {
     vuk::Format format = vuk::Format::eR8G8B8A8Srgb;
     vuk::Extent3D extent = {};
     f32 delta_time = 0.0f;
+
+    vuk::PersistentDescriptorSet *materials_descriptor_set = nullptr;
+    vuk::Value<vuk::Buffer> materials_buffer = {};
 
     ls::option<GPU::Sun> sun = ls::nullopt;
     ls::option<GPU::Atmosphere> atmosphere = ls::nullopt;
@@ -39,17 +40,10 @@ struct SceneRenderInfo {
 struct SceneRenderer {
     Device *device = nullptr;
 
-    // Persistent resources
-    vuk::PersistentDescriptorSet bindless_set = {};
-    Sampler linear_repeat_sampler = {};
-    Sampler linear_clamp_sampler = {};
-    Sampler nearest_repeat_sampler = {};
-    Buffer exposure_buffer = {};
-
     // Scene resources
+    Buffer exposure_buffer = {};
     Buffer transforms_buffer = {};
     u32 meshlet_instance_count = 0;
-    Buffer materials_buffer = {};
     Buffer models_buffer = {};
     Buffer meshlet_instances_buffer = {};
 

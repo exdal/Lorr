@@ -26,53 +26,7 @@ auto SceneRenderer::create_persistent_resources(this SceneRenderer &self) -> voi
     auto &asset_man = app.asset_man;
     auto &transfer_man = app.device.transfer_man();
     auto shaders_root = asset_man.asset_root_path(AssetType::Shader);
-
-    auto linear_repeat_sampler_info = SamplerInfo{
-        .min_filter = vuk::Filter::eLinear,
-        .mag_filter = vuk::Filter::eLinear,
-        .mipmap_mode = vuk::SamplerMipmapMode::eLinear,
-        .addr_u = vuk::SamplerAddressMode::eRepeat,
-        .addr_v = vuk::SamplerAddressMode::eRepeat,
-        .addr_w = vuk::SamplerAddressMode::eRepeat,
-        .compare_op = vuk::CompareOp::eNever,
-        .max_anisotropy = 8.0f,
-        .mip_lod_bias = 0.0f,
-        .min_lod = 0.0f,
-        .max_lod = 10.0f,
-        .use_anisotropy = true,
-    };
-    self.linear_repeat_sampler = Sampler::create(*self.device, linear_repeat_sampler_info).value();
-
-    auto linear_clamp_sampler_info = SamplerInfo{
-        .min_filter = vuk::Filter::eLinear,
-        .mag_filter = vuk::Filter::eLinear,
-        .mipmap_mode = vuk::SamplerMipmapMode::eLinear,
-        .addr_u = vuk::SamplerAddressMode::eClampToEdge,
-        .addr_v = vuk::SamplerAddressMode::eClampToEdge,
-        .addr_w = vuk::SamplerAddressMode::eClampToEdge,
-        .compare_op = vuk::CompareOp::eNever,
-    };
-    self.linear_clamp_sampler = Sampler::create(*self.device, linear_clamp_sampler_info).value();
-
-    auto nearest_repeat_sampler_info = SamplerInfo{
-        .min_filter = vuk::Filter::eNearest,
-        .mag_filter = vuk::Filter::eNearest,
-        .mipmap_mode = vuk::SamplerMipmapMode::eLinear,
-        .addr_u = vuk::SamplerAddressMode::eRepeat,
-        .addr_v = vuk::SamplerAddressMode::eRepeat,
-        .addr_w = vuk::SamplerAddressMode::eRepeat,
-        .compare_op = vuk::CompareOp::eNever,
-    };
-    self.nearest_repeat_sampler = Sampler::create(*self.device, nearest_repeat_sampler_info).value();
-
-    BindlessDescriptorInfo bindless_set_info[] = {
-        { .binding = BindlessDescriptorLayout::Samplers, .type = vuk::DescriptorType::eSampler, .descriptor_count = 1 },
-        { .binding = BindlessDescriptorLayout::SampledImages, .type = vuk::DescriptorType::eSampledImage, .descriptor_count = 1024 },
-    };
-    self.bindless_set = self.device->create_persistent_descriptor_set(bindless_set_info, 1).release();
-
-    self.bindless_set.update_sampler(BindlessDescriptorLayout::Samplers, 0, *self.device->sampler(self.linear_repeat_sampler.id()));
-    self.device->commit_descriptor_set(self.bindless_set);
+    auto *materials_set = asset_man.get_materials_descriptor_set();
 
     //  ── EDITOR ──────────────────────────────────────────────────────────
     auto default_slang_session = self.device->new_slang_session({
@@ -159,7 +113,7 @@ auto SceneRenderer::create_persistent_resources(this SceneRenderer &self) -> voi
         .module_name = "passes.visbuffer_encode",
         .entry_points = { "vs_main", "fs_main" },
     };
-    Pipeline::create(*self.device, default_slang_session, vis_encode_pipeline_info, self.bindless_set).value();
+    Pipeline::create(*self.device, default_slang_session, vis_encode_pipeline_info, *materials_set).value();
 
     auto vis_clear_pipeline_info = PipelineCompileInfo{
         .module_name = "passes.visbuffer_clear",
@@ -171,7 +125,7 @@ auto SceneRenderer::create_persistent_resources(this SceneRenderer &self) -> voi
         .module_name = "passes.visbuffer_decode",
         .entry_points = { "vs_main", "fs_main" },
     };
-    Pipeline::create(*self.device, default_slang_session, vis_decode_pipeline_info, self.bindless_set).value();
+    Pipeline::create(*self.device, default_slang_session, vis_decode_pipeline_info, *materials_set).value();
 
     //  ── PBR ─────────────────────────────────────────────────────────────
     auto pbr_basic_pipeline_info = PipelineCompileInfo{
@@ -264,22 +218,8 @@ auto SceneRenderer::compose(this SceneRenderer &self, SceneComposeInfo &compose_
 
     auto &transfer_man = self.device->transfer_man();
 
-    for (u32 i = 0; i < compose_info.rendering_image_view_ids.size(); i++) {
-        auto *image_view = self.device->image_view(compose_info.rendering_image_view_ids[i]);
-        self.bindless_set.update_sampled_image(BindlessDescriptorLayout::SampledImages, i, *image_view, vuk::ImageLayout::eReadOnlyOptimal);
-    }
-    self.device->commit_descriptor_set(self.bindless_set);
-
     // IMPORTANT: Only wait when buffer is being resized!!!
     // We can still copy into gpu buffer if it has enough space.
-    if (ls::size_bytes(compose_info.gpu_materials) > self.materials_buffer.data_size()) {
-        if (self.materials_buffer) {
-            self.device->wait();
-            self.device->destroy(self.materials_buffer.id());
-        }
-
-        self.materials_buffer = Buffer::create(*self.device, ls::size_bytes(compose_info.gpu_materials)).value();
-    }
 
     if (ls::size_bytes(compose_info.gpu_models) > self.models_buffer.data_size()) {
         if (self.models_buffer) {
@@ -300,15 +240,12 @@ auto SceneRenderer::compose(this SceneRenderer &self, SceneComposeInfo &compose_
     }
 
     self.meshlet_instance_count = compose_info.gpu_meshlet_instances.size();
-    auto materials_buffer = //
-        transfer_man.upload_staging(ls::span(compose_info.gpu_materials), self.materials_buffer);
     auto models_buffer = //
         transfer_man.upload_staging(ls::span(compose_info.gpu_models), self.models_buffer);
     auto meshlet_instances_buffer = //
         transfer_man.upload_staging(ls::span(compose_info.gpu_meshlet_instances), self.meshlet_instances_buffer);
 
     return ComposedScene{
-        .materials_buffer = materials_buffer,
         .models_buffer = models_buffer,
         .meshlet_instances_buffer = meshlet_instances_buffer,
     };
@@ -333,11 +270,6 @@ auto SceneRenderer::cleanup(this SceneRenderer &self) -> void {
     if (self.meshlet_instances_buffer) {
         device.destroy(self.meshlet_instances_buffer.id());
         self.meshlet_instances_buffer = {};
-    }
-
-    if (self.materials_buffer) {
-        device.destroy(self.materials_buffer.id());
-        self.materials_buffer = {};
     }
 
     if (self.models_buffer) {
@@ -373,30 +305,22 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
     }
 
     auto transforms_buffer = self.transforms_buffer.acquire(*self.device, "Transforms Buffer", vuk::Access::eMemoryRead);
-    if (!info.dirty_transform_ids.empty()) {
-        auto transform_count = rebuild_transforms ? info.transforms.size() : info.dirty_transform_ids.size();
-        auto new_transforms_size_bytes = transform_count * sizeof(GPU::Transforms);
 
+    if (rebuild_transforms) {
+        transforms_buffer = transfer_man.upload_staging(info.transforms, std::move(transforms_buffer));
+    } else if (!info.dirty_transform_ids.empty()) {
+        auto transform_count = info.dirty_transform_ids.size();
+        auto new_transforms_size_bytes = transform_count * sizeof(GPU::Transforms);
         auto upload_buffer = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eCPUonly, new_transforms_size_bytes);
         auto *dst_transform_ptr = reinterpret_cast<GPU::Transforms *>(upload_buffer->mapped_ptr);
         auto upload_offsets = std::vector<u64>(transform_count);
 
-        if (!rebuild_transforms) {
-            for (const auto &[dirty_transform_id, offset] : std::views::zip(info.dirty_transform_ids, upload_offsets)) {
-                auto index = SlotMap_decode_id(dirty_transform_id).index;
-                const auto &transform = info.transforms[index];
-                std::memcpy(dst_transform_ptr, &transform, sizeof(GPU::Transforms));
-                offset = index * sizeof(GPU::Transforms);
-                dst_transform_ptr++;
-            }
-        } else {
-            u64 offset = 0;
-            for (auto &v : upload_offsets) {
-                v = offset;
-                offset += sizeof(GPU::Transforms);
-            }
-
-            std::memcpy(dst_transform_ptr, info.transforms.data(), ls::size_bytes(info.transforms));
+        for (const auto &[dirty_transform_id, offset] : std::views::zip(info.dirty_transform_ids, upload_offsets)) {
+            auto index = SlotMap_decode_id(dirty_transform_id).index;
+            const auto &transform = info.transforms[index];
+            std::memcpy(dst_transform_ptr, &transform, sizeof(GPU::Transforms));
+            offset = index * sizeof(GPU::Transforms);
+            dst_transform_ptr++;
         }
 
         auto update_transforms_pass = vuk::make_pass(
@@ -482,18 +406,18 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
     }
 
     if (self.meshlet_instance_count) {
-        vuk::Value<vuk::Buffer> materials_buffer;
         vuk::Value<vuk::Buffer> models_buffer;
         vuk::Value<vuk::Buffer> meshlet_instances_buffer;
         if (composed_scene.has_value()) {
-            materials_buffer = std::move(composed_scene->materials_buffer);
             models_buffer = std::move(composed_scene->models_buffer);
             meshlet_instances_buffer = std::move(composed_scene->meshlet_instances_buffer);
         } else {
-            materials_buffer = self.materials_buffer.acquire(*self.device, "Materials", vuk::Access::eNone);
             models_buffer = self.models_buffer.acquire(*self.device, "Models", vuk::Access::eNone);
             meshlet_instances_buffer = self.meshlet_instances_buffer.acquire(*self.device, "Meshlet Instances", vuk::Access::eNone);
         }
+
+        auto materials_buffer = std::move(info.materials_buffer);
+        auto *materials_set = info.materials_descriptor_set;
 
         //  ── CULL MESHLETS ───────────────────────────────────────────────────
         auto vis_cull_meshlets_pass = vuk::make_pass(
@@ -673,7 +597,7 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
         //  ── VISBUFFER ENCODE ────────────────────────────────────────────────
         auto vis_encode_pass = vuk::make_pass(
             "vis encode",
-            [&descriptor_set = self.bindless_set](
+            [descriptor_set = materials_set](
                 vuk::CommandBuffer &cmd_list,
                 VUK_BA(vuk::eIndirectRead) triangle_indirect,
                 VUK_BA(vuk::eIndexRead) index_buffer,
@@ -695,7 +619,7 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                     .set_dynamic_state(vuk::DynamicStateFlagBits::eViewport | vuk::DynamicStateFlagBits::eScissor)
                     .set_viewport(0, vuk::Rect2D::framebuffer())
                     .set_scissor(0, vuk::Rect2D::framebuffer())
-                    .bind_persistent(1, descriptor_set)
+                    .bind_persistent(1, *descriptor_set)
                     .bind_image(0, 0, overdraw)
                     .bind_buffer(0, 1, camera)
                     .bind_buffer(0, 2, visible_meshlet_instances_indices)
@@ -791,7 +715,7 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
         //  ── VISBUFFER DECODE ────────────────────────────────────────────────
         auto vis_decode_pass = vuk::make_pass(
             "vis decode",
-            [&descriptor_set = self.bindless_set]( //
+            [descriptor_set = materials_set]( //
                 vuk::CommandBuffer &cmd_list,
                 VUK_IA(vuk::eColorWrite) albedo,
                 VUK_IA(vuk::eColorWrite) normal,
@@ -823,7 +747,7 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                     .bind_buffer(0, 4, models)
                     .bind_buffer(0, 5, transforms)
                     .bind_buffer(0, 6, materials)
-                    .bind_persistent(1, descriptor_set)
+                    .bind_persistent(1, *descriptor_set)
                     .draw(3, 1, 0, 1);
 
                 return std::make_tuple(

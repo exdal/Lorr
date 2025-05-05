@@ -95,6 +95,7 @@ struct Window : Handle<Window> {
     static auto display_at(i32 monitor_id = WindowInfo::USE_PRIMARY_MONITOR) -> ls::option<SystemDisplay>;
     auto get_size() -> glm::uvec2;
     auto get_surface(VkInstance instance) -> VkSurfaceKHR;
+    auto get_handle() -> void *;
 
     auto show_dialog(const ShowDialogInfo &info) -> void;
 };

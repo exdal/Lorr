@@ -25,7 +25,7 @@ add_requires("tracy v0.11.1", { configs = {
     exit = true,
     system_tracing = true,
 }, system = false })
-add_requires("vk-bootstrap v1.4.307", { system = false })
+add_requires("vk-bootstrap v1.4.307", { system = false, debug  = is_mode("debug") })
 add_requires("fastgltf v0.8.0", { system = false, debug = is_mode("debug") })
 add_requires("stb 2024.06.01", { system = false })
 add_requires("lz4 v1.10.0", { system = false })
@@ -33,9 +33,9 @@ add_requires("zstd v1.5.6", { system = false })
 add_requires("flecs v4.0.4", { system = false })
 
 add_requires("libsdl3 3.2.10", { configs = {
-    wayland = true,
+    wayland = false,
     x11 = true,
-}})
+}, system = false, debug  = is_mode("debug") })
 
 add_requires("shader-slang v2025.6.3", { system = false })
 add_requires("vuk 2025.04.29", { configs = {

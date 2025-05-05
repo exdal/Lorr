@@ -64,7 +64,7 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
     instance_extensions.push_back(VK_KHR_SURFACE_EXTENSION_NAME);
     instance_extensions.push_back("VK_KHR_xcb_surface");
     instance_extensions.push_back("VK_KHR_xlib_surface");
-    //instance_extensions.push_back("VK_KHR_wayland_surface");
+    // instance_extensions.push_back("VK_KHR_wayland_surface");
 #endif
 #if LS_DEBUG
     instance_extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
@@ -84,8 +84,11 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
 
     self.instance = instance_result.value();
 
+    LOG_TRACE("Created device.");
+
     vkb::PhysicalDeviceSelector physical_device_selector(self.instance);
     physical_device_selector.defer_surface_initialization();
+    physical_device_selector.disable_portability_subset();
     physical_device_selector.set_minimum_version(1, 3);
 
     std::vector<const c8 *> device_extensions;
@@ -105,6 +108,8 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
     }
 
     self.physical_device = physical_device_result.value();
+
+    LOG_TRACE("Created physical device.");
 
     VkPhysicalDeviceVulkan14Features vk14_features = {};
     vk14_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES;
@@ -179,6 +184,8 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
 
     self.handle = device_result.value();
 
+    LOG_TRACE("Created device.");
+
     vuk::FunctionPointers vulkan_functions = {};
     vulkan_functions.vkGetInstanceProcAddr = self.instance.fp_vkGetInstanceProcAddr;
     vulkan_functions.vkGetDeviceProcAddr = self.handle.fp_vkGetDeviceProcAddr;
@@ -205,19 +212,24 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
     );
 
     executors.push_back(std::make_unique<vuk::ThisThreadExecutor>());
-    self.runtime.emplace(vuk::RuntimeCreateParameters{
-        .instance = self.instance,
-        .device = self.handle,
-        .physical_device = self.physical_device,
-        .executors = std::move(executors),
-        .pointers = vulkan_functions,
-    });
+    self.runtime.emplace(
+        vuk::RuntimeCreateParameters{
+            .instance = self.instance,
+            .device = self.handle,
+            .physical_device = self.physical_device,
+            .executors = std::move(executors),
+            .pointers = vulkan_functions,
+        }
+    );
 
     self.frame_resources.emplace(*self.runtime, frame_count);
     self.allocator.emplace(*self.frame_resources);
     self.runtime->set_shader_target_version(VK_API_VERSION_1_3);
     self.transfer_manager.init(self).value();
     self.shader_compiler = SlangCompiler::create().value();
+
+    LOG_INFO("Initialized device.");
+
 
     return {};
 }
@@ -226,6 +238,7 @@ auto Device::destroy(this Device &self) -> void {
     ZoneScoped;
 
     self.wait();
+
     self.resources.buffers.reset();
     self.resources.images.reset();
     self.resources.image_views.reset();
@@ -350,14 +363,18 @@ auto Device::create_swap_chain(this Device &self, VkSurfaceKHR surface, ls::opti
     VkPresentModeKHR present_mode = self.frame_count() == 1 ? VK_PRESENT_MODE_FIFO_KHR : VK_PRESENT_MODE_IMMEDIATE_KHR;
     vkb::SwapchainBuilder builder(self.handle, surface);
     builder.set_desired_min_image_count(self.frame_count());
-    builder.set_desired_format(vuk::SurfaceFormatKHR{
-        .format = vuk::Format::eR8G8B8A8Srgb,
-        .colorSpace = vuk::ColorSpaceKHR::eSrgbNonlinear,
-    });
-    builder.add_fallback_format(vuk::SurfaceFormatKHR{
-        .format = vuk::Format::eB8G8R8A8Srgb,
-        .colorSpace = vuk::ColorSpaceKHR::eSrgbNonlinear,
-    });
+    builder.set_desired_format(
+        vuk::SurfaceFormatKHR{
+            .format = vuk::Format::eR8G8B8A8Srgb,
+            .colorSpace = vuk::ColorSpaceKHR::eSrgbNonlinear,
+        }
+    );
+    builder.add_fallback_format(
+        vuk::SurfaceFormatKHR{
+            .format = vuk::Format::eB8G8R8A8Srgb,
+            .colorSpace = vuk::ColorSpaceKHR::eSrgbNonlinear,
+        }
+    );
     builder.set_desired_present_mode(present_mode);
     builder.set_image_usage_flags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
 

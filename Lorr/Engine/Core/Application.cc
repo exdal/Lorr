@@ -2,6 +2,12 @@
 
 #include "Engine/OS/Timer.hh"
 
+#include "Engine/Util/renderdoc_app.h"
+
+#include <SDL3/SDL_loadso.h>
+
+static RENDERDOC_API_1_6_0 *renderdoc_api = nullptr;
+
 namespace lr {
 bool Application::init(this Application &self, const ApplicationInfo &info) {
     ZoneScoped;
@@ -13,10 +19,9 @@ bool Application::init(this Application &self, const ApplicationInfo &info) {
         return false;
     }
 
-    self.job_man.emplace(12);
-    self.device.init(3).value();
+    self.job_man.emplace(8);
+    self.device.init(8).value();
     self.asset_man = AssetManager::create(&self.device);
-
     self.window = Window::create(info.window_info);
     auto surface = self.window.get_surface(self.device.get_instance());
     self.swap_chain.emplace(self.device.create_swap_chain(surface).value());
@@ -29,6 +34,22 @@ bool Application::init(this Application &self, const ApplicationInfo &info) {
     }
 
     self.job_man->wait();
+
+    auto *librenderdoc = SDL_LoadObject("librenderdoc.so");
+    if (librenderdoc) {
+        auto RENDERDOC_GetAPI = reinterpret_cast<pRENDERDOC_GetAPI>(SDL_LoadFunction(librenderdoc, "RENDERDOC_GetAPI"));
+        auto renderdoc_result = RENDERDOC_GetAPI(eRENDERDOC_API_Version_1_6_0, (void **)&renderdoc_api);
+        if (renderdoc_result != 1) {
+            LOG_WARN("Failed to initialize Renderdoc API.");
+        }
+    }
+
+    if (renderdoc_api) {
+        renderdoc_api->SetActiveWindow(self.device.get_native_handle(), self.window.get_handle());
+        // renderdoc_api->StartFrameCapture(nullptr, nullptr);
+        renderdoc_api->MaskOverlayBits(eRENDERDOC_Overlay_Default, eRENDERDOC_Overlay_Default);
+    }
+
     self.run();
 
     return true;
@@ -77,7 +98,6 @@ void Application::run(this Application &self) {
         timer.reset();
 
         self.window.poll(window_callbacks);
-        self.job_man->wait();
 
         auto swapchain_attachment = self.device.new_frame(self.swap_chain.value());
         swapchain_attachment = vuk::clear_image(std::move(swapchain_attachment), vuk::Black<f32>);
@@ -104,6 +124,10 @@ void Application::shutdown(this Application &self) {
     self.should_close = true;
 
     self.do_shutdown();
+
+    if (renderdoc_api) {
+        renderdoc_api->EndFrameCapture(nullptr, nullptr);
+    }
 
     self.asset_man.destroy();
     self.scene_renderer.destroy();

@@ -21,10 +21,12 @@ pkgs.mkShell.override { stdenv = pkgs-unstable.llvmPackages_20.libcxxStdenv; } {
     pkgs-unstable.python313Packages.wheel
 
     pkgs.zlib.dev
-    pkgs.sdl3.dev
 
     # for gltfpack
     pkgs-unstable.meshoptimizer
+
+    # for SDL3
+    pkgs-unstable.sdl3
   ];
 
   hardeningDisable = [ "all" ];

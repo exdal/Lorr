@@ -453,6 +453,8 @@ auto Scene::find_entity(this Scene &self, u32 transform_index) -> flecs::entity 
 auto Scene::render(this Scene &self, SceneRenderer &renderer, SceneRenderInfo &info) -> vuk::Value<vuk::ImageAttachment> {
     ZoneScoped;
 
+    auto &app = Application::get();
+
     // clang-format off
     auto camera_query = self.get_world()
         .query_builder<ECS::Transform, ECS::Camera, ECS::ActiveCamera>()
@@ -540,14 +542,15 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, SceneRenderInfo &i
         composed_scene.emplace(renderer.compose(compose_info));
     }
 
-    auto transforms = self.transforms.slots_unsafe();
+    info.materials_descriptor_set = app.asset_man.get_materials_descriptor_set();
+    info.materials_buffer = app.asset_man.get_materials_buffer();
     info.sun = sun_data;
     info.atmosphere = atmos_data;
     info.camera = active_camera_data;
     info.histogram_info = histogram_data;
     info.cull_flags = self.cull_flags;
     info.dirty_transform_ids = self.dirty_transforms;
-    info.transforms = transforms;
+    info.transforms = self.transforms.slots_unsafe();
     auto rendered_attachment = renderer.render(info, composed_scene);
     self.dirty_transforms.clear();
 
@@ -635,7 +638,6 @@ auto Scene::compose(this Scene &self) -> SceneComposeInfo {
     auto rendering_image_view_ids = std::vector<ImageViewID>();
     auto gpu_models = std::vector<GPU::Model>();
     auto gpu_meshlet_instances = std::vector<GPU::MeshletInstance>();
-    auto gpu_materials = std::vector<GPU::Material>();
 
     for (const auto &[model_uuid, transform_ids] : self.rendering_models) {
         auto *model = app.asset_man.get_model(model_uuid);
@@ -651,39 +653,6 @@ auto Scene::compose(this Scene &self) -> SceneComposeInfo {
         gpu_model.meshlet_bounds = model->meshlet_bounds.device_address();
         gpu_model.local_triangle_indices = model->local_triangle_indices.device_address();
 
-        auto material_offset = gpu_materials.size();
-        for (const auto &material_uuid : model->materials) {
-            auto *material = app.asset_man.get_material(material_uuid);
-            auto &gpu_material = gpu_materials.emplace_back();
-            gpu_material.albedo_color = material->albedo_color;
-            gpu_material.emissive_color = material->emissive_color;
-            gpu_material.roughness_factor = material->roughness_factor;
-            gpu_material.metallic_factor = material->metallic_factor;
-            gpu_material.alpha_mode = static_cast<GPU::AlphaMode>(material->alpha_mode);
-            gpu_material.alpha_cutoff = material->alpha_cutoff;
-
-            auto add_image_if_exists = [&](const UUID &uuid) -> ls::option<u32> {
-                if (!uuid) {
-                    return ls::nullopt;
-                }
-
-                auto *texture = app.asset_man.get_texture(uuid);
-                if (!texture) {
-                    return ls::nullopt;
-                }
-
-                auto index = rendering_image_view_ids.size();
-                rendering_image_view_ids.push_back(texture->image_view.id());
-                return static_cast<u32>(index);
-            };
-
-            gpu_material.albedo_image_index = add_image_if_exists(material->albedo_texture).value_or(~0_u32);
-            gpu_material.normal_image_index = add_image_if_exists(material->normal_texture).value_or(~0_u32);
-            gpu_material.emissive_image_index = add_image_if_exists(material->emissive_texture).value_or(~0_u32);
-            gpu_material.metallic_roughness_image_index = add_image_if_exists(material->metallic_roughness_texture).value_or(~0_u32);
-            gpu_material.occlusion_image_index = add_image_if_exists(material->occlusion_texture).value_or(~0_u32);
-        }
-
         //  ── INSTANCING ──────────────────────────────────────────────────────
         for (const auto transform_id : transform_ids) {
             u32 meshlet_offset = 0;
@@ -691,7 +660,7 @@ auto Scene::compose(this Scene &self) -> SceneComposeInfo {
                 for (u32 meshlet_index = 0; meshlet_index < primitive.meshlet_count; meshlet_index++) {
                     auto &meshlet_instance = gpu_meshlet_instances.emplace_back();
                     meshlet_instance.model_index = model_offset;
-                    meshlet_instance.material_index = material_offset + primitive.material_index;
+                    meshlet_instance.material_index = primitive.material_index;
                     meshlet_instance.transform_index = SlotMap_decode_id(transform_id).index;
                     meshlet_instance.meshlet_index = meshlet_index + meshlet_offset;
                 }
@@ -703,7 +672,6 @@ auto Scene::compose(this Scene &self) -> SceneComposeInfo {
 
     return SceneComposeInfo{
         .rendering_image_view_ids = std::move(rendering_image_view_ids),
-        .gpu_materials = std::move(gpu_materials),
         .gpu_models = std::move(gpu_models),
         .gpu_meshlet_instances = std::move(gpu_meshlet_instances),
     };

@@ -380,11 +380,18 @@ static auto draw_welcome_popup(EditorApp &self) -> void {
 
         if (ImGui::BeginChild("create_project", { child_width, 0.0f })) {
             static std::string project_dir = {};
+            static std::string project_name = {};
             ImGui::SeparatorText("Create Project");
+
             ImGui::SetNextItemWidth(child_width * 0.9f);
             ImGui::InputTextWithHint("", "/path/to/new/project", &project_dir);
             ImGui::SameLine();
-            ImGui::Button(ICON_MDI_FOLDER, { -1.0, 0.0f });
+            ImGui::Button(ICON_MDI_FOLDER, { -1.0f, 0.0f });
+            
+            ImGui::SetNextItemWidth(child_width);
+            ImGui::InputTextWithHint("", "Project Name", &project_name);
+            
+            ImGui::Button("Create Project", { -1.0f, 0.0f });
 
             ImGui::EndChild();
         }

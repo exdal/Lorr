@@ -83,9 +83,11 @@ struct AssetManager : Handle<AssetManager> {
 
     auto load_texture(const UUID &uuid, const TextureInfo &info = {}) -> bool;
     auto unload_texture(const UUID &uuid) -> void;
+    auto is_texture_loaded(const UUID &uuid) -> bool;
 
     auto load_material(const UUID &uuid, const Material &material_info) -> bool;
     auto unload_material(const UUID &uuid) -> void;
+    auto is_material_loaded(const UUID &uuid) -> bool;
 
     auto load_scene(const UUID &uuid) -> bool;
     auto unload_scene(const UUID &uuid) -> void;
@@ -111,6 +113,10 @@ struct AssetManager : Handle<AssetManager> {
     auto get_material(MaterialID material_id) -> Material *;
     auto get_scene(const UUID &uuid) -> Scene *;
     auto get_scene(SceneID scene_id) -> Scene *;
+
+    auto set_material_dirty(MaterialID material_id) -> void;
+    auto get_materials_buffer() -> vuk::Value<vuk::Buffer>;
+    auto get_materials_descriptor_set() -> vuk::PersistentDescriptorSet *;
 
 private:
     auto begin_asset_meta(JsonWriter &json, const UUID &uuid, AssetType type) -> void;

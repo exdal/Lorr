@@ -17,13 +17,13 @@ auto Pipeline::create(
         create_info.explicit_set_layouts.push_back(v.set_layout_create_info);
     }
 
-    auto slang_module = session.load_module({
-        .module_name = compile_info.module_name,
-        .source = compile_info.shader_source,
-    });
+    auto slang_module = session.load_module({ .module_name = compile_info.module_name, .source = compile_info.shader_source }).value();
+    LS_DEFER(&) {
+        slang_module.destroy();
+    };
 
     for (auto &v : compile_info.entry_points) {
-        auto entry_point = slang_module->get_entry_point(v);
+        auto entry_point = slang_module.get_entry_point(v);
         if (!entry_point.has_value()) {
             LOG_ERROR("Shader stage '{}' is not found for shader module '{}'", v, compile_info.module_name);
             return std::unexpected(VK_ERROR_UNKNOWN);

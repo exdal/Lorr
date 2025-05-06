@@ -1,5 +1,7 @@
 toolchain("nix-clang")
     set_kind("standalone")
+    set_runtimes("c++_static", "c++_shared", "stdc++_static", "stdc++_shared")
+
     set_toolset("cc", "clang")
     set_toolset("cxx", "clang++")
     set_toolset("ld", "clang++")

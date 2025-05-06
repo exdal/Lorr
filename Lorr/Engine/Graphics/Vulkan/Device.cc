@@ -230,7 +230,6 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
 
     LOG_INFO("Initialized device.");
 
-
     return {};
 }
 
@@ -249,6 +248,9 @@ auto Device::destroy(this Device &self) -> void {
     self.shader_compiler.destroy();
 
     self.frame_resources.reset();
+
+    vuk::current_module->collect_garbage();
+
     self.allocator.reset();
     self.runtime.reset();
     self.compiler.reset();

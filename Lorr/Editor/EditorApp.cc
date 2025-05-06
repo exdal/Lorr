@@ -5,6 +5,7 @@
 #include "Editor/Window/InspectorWindow.hh"
 #include "Editor/Window/SceneBrowserWindow.hh"
 #include "Editor/Window/ViewportWindow.hh"
+#include "Editor/Window/WelcomeWindow.hh"
 
 #include "Editor/Themes.hh"
 
@@ -279,6 +280,7 @@ static auto setup_dockspace(EditorApp &self) -> void {
     auto [console_panel_id, console_panel] = self.add_window<ConsoleWindow>("Console", ICON_MDI_INFORMATION_SLAB_CIRCLE);
     auto [inspector_panel_id, inspector_panel] = self.add_window<InspectorWindow>("Inspector", ICON_MDI_WRENCH);
     auto [scene_browser_panel_id, scene_browser_panel] = self.add_window<SceneBrowserWindow>("Scene Browser", ICON_MDI_FILE_TREE);
+    auto [welcome_panel_id, welcome_panel] = self.add_window<WelcomeWindow>("Welcome", ICON_MDI_ROCKET_LAUNCH);
     auto [viewport_panel_id, viewport_panel] = self.add_window<ViewportWindow>("Viewport", ICON_MDI_EYE);
 
     ImGuiViewport *viewport = ImGui::GetMainViewport();
@@ -298,11 +300,12 @@ static auto setup_dockspace(EditorApp &self) -> void {
     auto right_dock_id = ImGui::DockBuilderSplitNode(main_dock_id, ImGuiDir_Right, 0.25f, nullptr, &main_dock_id);
 
     ImGui::DockBuilderDockWindow("###up_dock", up_dock_id);
-    ImGui::DockBuilderDockWindow(viewport_panel->name.data(), main_dock_id);
-    ImGui::DockBuilderDockWindow(console_panel->name.data(), down_dock_id);
-    ImGui::DockBuilderDockWindow(asset_browser_panel->name.data(), down_dock_id);
-    ImGui::DockBuilderDockWindow(scene_browser_panel->name.data(), left_dock_id);
-    ImGui::DockBuilderDockWindow(inspector_panel->name.data(), right_dock_id);
+    ImGui::DockBuilderDockWindow(viewport_panel->name.c_str(), main_dock_id);
+    ImGui::DockBuilderDockWindow(welcome_panel->name.c_str(), main_dock_id);
+    ImGui::DockBuilderDockWindow(console_panel->name.c_str(), down_dock_id);
+    ImGui::DockBuilderDockWindow(asset_browser_panel->name.c_str(), down_dock_id);
+    ImGui::DockBuilderDockWindow(scene_browser_panel->name.c_str(), left_dock_id);
+    ImGui::DockBuilderDockWindow(inspector_panel->name.c_str(), right_dock_id);
     ImGui::DockBuilderFinish(dockspace_id_tmp);
 }
 

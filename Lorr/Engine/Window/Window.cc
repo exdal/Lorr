@@ -240,9 +240,13 @@ auto Window::get_handle() -> void * {
     const std::string_view video_driver = SDL_GetCurrentVideoDriver();
     if (video_driver == "x11") {
         return reinterpret_cast<void *>(SDL_GetNumberProperty(window_props, SDL_PROP_WINDOW_X11_WINDOW_NUMBER, 0));
+    } else if (video_driver == "wayland") {
+        return SDL_GetPointerProperty(window_props, SDL_PROP_WINDOW_WAYLAND_SURFACE_POINTER, nullptr);
     }
+#elif LS_WINDOWS
+    return SDL_GetPointerProperty(SDL_GetWindowProperties(window), SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr);
 #else
-    #error FIXME
+    #error platform not supported
 #endif
 
     return nullptr;

@@ -41,7 +41,7 @@ struct EditorApp : lr::Application {
     auto shutdown(this EditorApp &) -> void;
 
     template<typename T>
-    auto add_window(this EditorApp &self, std::string name, const c8 *icon, bool open = true) -> std::pair<usize, T *> {
+    auto add_window(this EditorApp &self, std::string name, const c8 *icon = nullptr, bool open = true) -> std::pair<usize, T *> {
         auto window_index = self.windows.size();
         auto icon_name = std::string{};
         if (icon) {

@@ -299,15 +299,15 @@ public func sample_aerial_perspective(
     f32x2 uv,
     f32x3 camera_relative_pos
 ) -> f32x4 {
-    const f32 half_slice_depth = 0.70710678118654752440084436210485f;  // sqrt(0.5f)
-    const f32 aerial_gain_per_slice_inv = (1.0 / atmosphere->aerial_gain_per_slice);
-    const f32 aerial_perspective_lut_depth = f32(atmosphere->aerial_perspective_lut_size.z);
+    const let half_slice_depth = 0.70710678118654752440084436210485f;  // sqrt(0.5f)
+    const let aerial_gain_per_slice_inv = (1.0 / atmosphere->aerial_gain_per_slice);
+    const let aerial_perspective_lut_depth = f32(atmosphere->aerial_perspective_lut_size.z);
 
-    f32 relative_depth = length(camera_relative_pos);
-    f32 linear_slice = relative_depth * aerial_gain_per_slice_inv;
-    f32 linear_w = linear_slice * (1.0 / aerial_perspective_lut_depth);
-    f32 non_linear_w = sqrt(linear_w);
-    f32 non_linear_slice = non_linear_w * aerial_perspective_lut_depth;
+    let relative_depth = length(camera_relative_pos);
+    let linear_slice = relative_depth * aerial_gain_per_slice_inv;
+    let linear_w = linear_slice * (1.0 / aerial_perspective_lut_depth);
+    let non_linear_w = sqrt(linear_w);
+    let non_linear_slice = non_linear_w * aerial_perspective_lut_depth;
 
     f32 weight = 1.0;
     if (non_linear_slice < half_slice_depth) {

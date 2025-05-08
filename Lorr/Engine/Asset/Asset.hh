@@ -117,13 +117,5 @@ struct AssetManager : Handle<AssetManager> {
     auto set_material_dirty(MaterialID material_id) -> void;
     auto get_materials_buffer() -> vuk::Value<vuk::Buffer>;
     auto get_materials_descriptor_set() -> vuk::PersistentDescriptorSet *;
-
-private:
-    auto begin_asset_meta(JsonWriter &json, const UUID &uuid, AssetType type) -> void;
-    auto write_model_asset_meta(JsonWriter &json, ls::span<UUID> material_uuids, ls::span<Material> materials) -> bool;
-    auto write_texture_asset_meta(JsonWriter &json, Texture *texture) -> bool;
-    auto write_material_asset_meta(JsonWriter &json, Material *material) -> bool;
-    auto write_scene_asset_meta(JsonWriter &json, Scene *scene) -> bool;
-    auto end_asset_meta(JsonWriter &json, const fs::path &path) -> bool;
 };
 } // namespace lr

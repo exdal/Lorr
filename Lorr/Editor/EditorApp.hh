@@ -27,7 +27,7 @@ struct EditorApp : lr::Application {
     auto load_editor_data(this EditorApp &) -> void;
     auto save_editor_data(this EditorApp &) -> void;
 
-    auto new_project(this EditorApp &, const fs::path &root_dir, const std::string &name) -> std::unique_ptr<Project>;
+    auto new_project(this EditorApp &, const fs::path &root_path, const std::string &name) -> std::unique_ptr<Project>;
     auto open_project(this EditorApp &, const fs::path &path) -> std::unique_ptr<Project>;
     auto save_project(this EditorApp &, std::unique_ptr<Project> &project) -> void;
     auto set_active_project(this EditorApp &, std::unique_ptr<Project> &&project) -> void;

@@ -613,7 +613,7 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
             ) {
                 cmd_list //
                     .bind_graphics_pipeline("passes.visbuffer_encode")
-                    .set_rasterization({ .cullMode = vuk::CullModeFlagBits::eNone })
+                    .set_rasterization({ .cullMode = vuk::CullModeFlagBits::eBack })
                     .set_depth_stencil({ .depthTestEnable = true, .depthWriteEnable = true, .depthCompareOp = vuk::CompareOp::eLessOrEqual })
                     .set_color_blend(visbuffer, vuk::BlendPreset::eOff)
                     .set_dynamic_state(vuk::DynamicStateFlagBits::eViewport | vuk::DynamicStateFlagBits::eScissor)

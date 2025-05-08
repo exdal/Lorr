@@ -61,6 +61,10 @@ auto Window::create(const WindowInfo &info) -> Window {
         window_flags |= SDL_WINDOW_MAXIMIZED;
     }
 
+    if (info.flags & WindowFlag::Fullscreen) {
+        window_flags |= SDL_WINDOW_FULLSCREEN;
+    }
+
     auto impl = new Impl;
     impl->width = static_cast<u32>(new_width);
     impl->height = static_cast<u32>(new_height);
@@ -244,7 +248,7 @@ auto Window::get_handle() -> void * {
         return SDL_GetPointerProperty(window_props, SDL_PROP_WINDOW_WAYLAND_SURFACE_POINTER, nullptr);
     }
 #elif LS_WINDOWS
-    return SDL_GetPointerProperty(SDL_GetWindowProperties(window), SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr);
+    return SDL_GetPointerProperty(window_props, SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr);
 #else
     #error platform not supported
 #endif

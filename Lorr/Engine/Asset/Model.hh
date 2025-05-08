@@ -81,6 +81,7 @@ struct Model {
         glm::vec3 scale;
     };
 
+    std::vector<UUID> embedded_textures = {};
     std::vector<UUID> materials = {};
     std::vector<Primitive> primitives = {};
     std::vector<Mesh> meshes = {};

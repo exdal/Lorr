@@ -30,6 +30,85 @@ bool json_to_vec(simdjson::ondemand::value &o, glm::vec<N, T> &vec) {
     return true;
 }
 
+auto begin_asset_meta(JsonWriter &json, const UUID &uuid, AssetType type) -> void {
+    ZoneScoped;
+
+    json.begin_obj();
+    json["uuid"] = uuid.str();
+    json["type"] = std::to_underlying(type);
+}
+
+auto write_texture_asset_meta(JsonWriter &, Texture *) -> bool {
+    ZoneScoped;
+
+    return true;
+}
+
+auto write_material_asset_meta(JsonWriter &json, UUID &uuid, Material &material) -> bool {
+    ZoneScoped;
+
+    json.begin_obj();
+    json["uuid"] = uuid.str();
+    json["albedo_color"] = material.albedo_color;
+    json["emissive_color"] = material.emissive_color;
+    json["roughness_factor"] = material.roughness_factor;
+    json["metallic_factor"] = material.metallic_factor;
+    json["alpha_mode"] = std::to_underlying(material.alpha_mode);
+    json["alpha_cutoff"] = material.alpha_cutoff;
+    json["albedo_texture"] = material.albedo_texture.str();
+    json["normal_texture"] = material.normal_texture.str();
+    json["emissive_texture"] = material.emissive_texture.str();
+    json["metallic_roughness_texture"] = material.metallic_roughness_texture.str();
+    json["occlusion_texture"] = material.occlusion_texture.str();
+    json.end_obj();
+
+    return true;
+}
+
+auto write_model_asset_meta(JsonWriter &json, ls::span<UUID> embedded_texture_uuids, ls::span<UUID> material_uuids, ls::span<Material> materials)
+    -> bool {
+    ZoneScoped;
+
+    json["embedded_textures"].begin_array();
+    for (const auto &uuid : embedded_texture_uuids) {
+        json << uuid.str();
+    }
+    json.end_array();
+
+    json["embedded_materials"].begin_array();
+    for (const auto &[material_uuid, material] : std::views::zip(material_uuids, materials)) {
+        write_material_asset_meta(json, material_uuid, material);
+    }
+    json.end_array();
+
+    return true;
+}
+
+auto write_scene_asset_meta(JsonWriter &json, Scene *scene) -> bool {
+    ZoneScoped;
+
+    json["name"] = scene->get_name_sv();
+
+    return true;
+}
+
+auto end_asset_meta(JsonWriter &json, const fs::path &path) -> bool {
+    ZoneScoped;
+
+    json.end_obj();
+
+    auto meta_path = path.string() + ".lrasset";
+    File file(meta_path, FileAccess::Write);
+    if (!file) {
+        return false;
+    }
+
+    file.write(json.stream.view().data(), json.stream.view().length());
+    file.close();
+
+    return true;
+}
+
 template<>
 struct Handle<AssetManager>::Impl {
     Device *device = nullptr;
@@ -200,10 +279,9 @@ auto AssetManager::import_asset(const fs::path &path) -> UUID {
     ZoneScoped;
     memory::ScopedStack stack;
 
-    auto meta_file_path = stack.format("{}.lrasset", path);
-    auto meta_exists = fs::exists(meta_file_path);
-    if (meta_exists) {
-        return this->register_asset(meta_file_path);
+    if (!fs::exists(path)) {
+        LOG_ERROR("Trying to import an asset '{}' that doesn't exist.", path);
+        return UUID(nullptr);
     }
 
     auto asset_type = AssetType::None;
@@ -227,18 +305,25 @@ auto AssetManager::import_asset(const fs::path &path) -> UUID {
         }
     }
 
+    // Check for meta file before creating new asset
+    auto meta_path = stack.format("{}.lrasset", path);
+    if (fs::exists(meta_path)) {
+        return this->register_asset(meta_path);
+    }
+
     auto uuid = this->create_asset(asset_type, path);
     if (!uuid) {
         return UUID(nullptr);
     }
 
     JsonWriter json;
-    this->begin_asset_meta(json, uuid, asset_type);
+    begin_asset_meta(json, uuid, asset_type);
 
     switch (asset_type) {
         case AssetType::Model: {
             auto gltf_model = GLTFModelInfo::parse_info(path);
             auto textures = std::vector<UUID>();
+            auto embedded_textures = std::vector<UUID>();
             for (auto &v : gltf_model->textures) {
                 auto &image = gltf_model->images[v.image_index.value()];
                 auto &texture_uuid = textures.emplace_back();
@@ -246,6 +331,7 @@ auto AssetManager::import_asset(const fs::path &path) -> UUID {
                     ls::match{
                         [&](const std::vector<u8> &) { //
                             texture_uuid = this->create_asset(AssetType::Texture, path);
+                            embedded_textures.push_back(texture_uuid);
                         },
                         [&](const fs::path &image_path) { //
                             texture_uuid = this->import_asset(image_path);
@@ -287,17 +373,17 @@ auto AssetManager::import_asset(const fs::path &path) -> UUID {
                 }
             }
 
-            this->write_model_asset_meta(json, material_uuids, materials);
+            write_model_asset_meta(json, embedded_textures, material_uuids, materials);
         } break;
         case AssetType::Texture: {
             Texture texture = {};
 
-            this->write_texture_asset_meta(json, &texture);
+            write_texture_asset_meta(json, &texture);
         } break;
         default:;
     }
 
-    if (!this->end_asset_meta(json, path)) {
+    if (!end_asset_meta(json, path)) {
         return UUID(nullptr);
     }
 
@@ -456,45 +542,55 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
         return false;
     }
 
-    // TODO: Do we really need this? Maybe only for embedded textures
-    //auto texture_uuids_json = meta_json->doc["texture_uuids"].get_array();
+    auto asset_path = asset->path;
+    asset->acquire_ref();
 
-    auto material_uuids_json = meta_json->doc["material_uuids"].get_array();
-    if (material_uuids_json.error()) {
-        LOG_ERROR("Failed to import model {}! Missing material_uuids filed.", asset->path);
-        return false;
-    }
+    // Below we register new assets, which causes asset pointer to be invalidated.
+    // set this to nullptr so it's obvious when debugging.
+    asset = nullptr;
 
-    // Register UUIDs.
-    for (auto material_uuid_json : material_uuids_json) {
-        auto material_uuid_str = material_uuid_json.get_string();
-        if (material_uuid_str.error()) {
-            LOG_ERROR("Failed to import model {}! A material with corrupt UUID.", asset->path);
+    auto embedded_textures = std::vector<UUID>();
+    auto embedded_texture_uuids_json = meta_json->doc["embedded_textures"].get_array();
+    for (auto embedded_texture_uuid_json : embedded_texture_uuids_json) {
+        auto embedded_texture_uuid_str = embedded_texture_uuid_json.get_string();
+        if (embedded_texture_uuid_str.error()) {
+            LOG_ERROR("Failed to import model {}! An embedded texture with corrupt UUID.", asset_path);
             return false;
         }
 
-        auto material_uuid = UUID::from_string(material_uuid_str.value_unsafe());
-        if (!material_uuid.has_value()) {
-            LOG_ERROR("Failed to import model {}! A material with corrupt UUID.", asset->path);
+        auto embedded_texture_uuid = UUID::from_string(embedded_texture_uuid_str.value_unsafe());
+        if (!embedded_texture_uuid.has_value()) {
+            LOG_ERROR("Failed to import model {}! An embedded texture with corrupt UUID.", asset_path);
             return false;
         }
 
-        this->register_asset(material_uuid.value(), AssetType::Material, asset->path);
-        model->materials.emplace_back(material_uuid.value());
+        embedded_textures.push_back(embedded_texture_uuid.value());
+        this->register_asset(embedded_texture_uuid.value(), AssetType::Texture, asset_path);
     }
 
     // Load registered UUIDs.
-    auto materials_json = meta_json->doc["materials"].get_array();
+    auto materials_json = meta_json->doc["embedded_materials"].get_array();
     if (materials_json.error()) {
-        LOG_ERROR("Failed to import model {}! Missing materials filed.", asset->path);
+        LOG_ERROR("Failed to import model {}! Missing materials filed.", asset_path);
         return false;
     }
 
     auto materials = std::vector<Material>();
     for (auto material_json : materials_json) {
         if (material_json.error()) {
-            LOG_ERROR("Failed to import model {}! A material with error.", asset->path);
+            LOG_ERROR("Failed to import model {}! A material with error.", asset_path);
             return false;
+        }
+
+        if (auto material_uuid_json = material_json["uuid"]; !material_uuid_json.error()) {
+            auto material_uuid = UUID::from_string(material_uuid_json.value_unsafe());
+            if (!material_uuid.has_value()) {
+                LOG_ERROR("Failed to import model {}! A material with corrupt UUID.", asset_path);
+                return false;
+            }
+
+            this->register_asset(material_uuid.value(), AssetType::Material, asset_path);
+            model->materials.emplace_back(material_uuid.value());
         }
 
         auto &material = materials.emplace_back();
@@ -615,7 +711,7 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
 
     GLTFCallbacks gltf_callbacks = { .model = model };
     auto gltf_model = GLTFModelInfo::parse(
-        asset->path,
+        asset_path,
         { .user_data = &gltf_callbacks,
           .on_new_node = on_new_node,
           .on_new_primitive = on_new_primitive,
@@ -625,7 +721,7 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
           .on_access_texcoord = on_access_texcoord }
     );
     if (!gltf_model.has_value()) {
-        LOG_ERROR("Failed to parse Model '{}'!", asset->path);
+        LOG_ERROR("Failed to parse Model '{}'!", asset_path);
         return false;
     }
 
@@ -755,7 +851,6 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
     model->local_triangle_indices = Buffer::create(*impl->device, ls::size_bytes(model_local_triangle_indices)).value();
     transfer_man.wait_on(transfer_man.upload_staging(ls::span(model_local_triangle_indices), model->local_triangle_indices));
 
-    asset->acquire_ref();
     return true;
 }
 
@@ -1154,7 +1249,7 @@ auto AssetManager::export_asset(const UUID &uuid, const fs::path &path) -> bool 
     auto *asset = this->get_asset(uuid);
 
     JsonWriter json = {};
-    this->begin_asset_meta(json, uuid, asset->type);
+    begin_asset_meta(json, uuid, asset->type);
 
     switch (asset->type) {
         case AssetType::Texture: {
@@ -1176,7 +1271,7 @@ auto AssetManager::export_asset(const UUID &uuid, const fs::path &path) -> bool 
             return false;
     }
 
-    return this->end_asset_meta(json, path);
+    return end_asset_meta(json, path);
 }
 
 auto AssetManager::export_texture(const UUID &uuid, JsonWriter &json, const fs::path &) -> bool {
@@ -1184,7 +1279,7 @@ auto AssetManager::export_texture(const UUID &uuid, JsonWriter &json, const fs::
 
     auto *texture = this->get_texture(uuid);
     LS_EXPECT(texture);
-    return this->write_texture_asset_meta(json, texture);
+    return write_texture_asset_meta(json, texture);
 }
 
 auto AssetManager::export_model(const UUID &uuid, JsonWriter &json, const fs::path &) -> bool {
@@ -1198,7 +1293,7 @@ auto AssetManager::export_model(const UUID &uuid, JsonWriter &json, const fs::pa
         material = *this->get_material(material_uuid);
     }
 
-    return this->write_model_asset_meta(json, model->materials, materials);
+    return write_model_asset_meta(json, model->embedded_textures, model->materials, materials);
 }
 
 auto AssetManager::export_scene(const UUID &uuid, JsonWriter &json, const fs::path &path) -> bool {
@@ -1206,7 +1301,7 @@ auto AssetManager::export_scene(const UUID &uuid, JsonWriter &json, const fs::pa
 
     auto *scene = this->get_scene(uuid);
     LS_EXPECT(scene);
-    this->write_scene_asset_meta(json, scene);
+    write_scene_asset_meta(json, scene);
 
     return scene->export_to_file(path);
 }
@@ -1442,96 +1537,6 @@ auto AssetManager::get_materials_descriptor_set() -> vuk::PersistentDescriptorSe
     ZoneScoped;
 
     return &impl->materials_descriptor_set;
-}
-
-auto AssetManager::begin_asset_meta(JsonWriter &json, const UUID &uuid, AssetType type) -> void {
-    ZoneScoped;
-
-    json.begin_obj();
-    json["uuid"] = uuid.str();
-    json["type"] = std::to_underlying(type);
-}
-
-auto AssetManager::write_texture_asset_meta(JsonWriter &, Texture *) -> bool {
-    ZoneScoped;
-
-    return true;
-}
-
-auto AssetManager::write_material_asset_meta(JsonWriter &json, Material *material) -> bool {
-    ZoneScoped;
-
-    json.begin_obj();
-    json["albedo_color"] = material->albedo_color;
-    json["emissive_color"] = material->emissive_color;
-    json["roughness_factor"] = material->roughness_factor;
-    json["metallic_factor"] = material->metallic_factor;
-    json["alpha_mode"] = std::to_underlying(material->alpha_mode);
-    json["alpha_cutoff"] = material->alpha_cutoff;
-    json["albedo_texture"] = material->albedo_texture.str();
-    json["normal_texture"] = material->normal_texture.str();
-    json["emissive_texture"] = material->emissive_texture.str();
-    json["metallic_roughness_texture"] = material->metallic_roughness_texture.str();
-    json["occlusion_texture"] = material->occlusion_texture.str();
-    json.end_obj();
-
-    return true;
-}
-
-auto AssetManager::write_model_asset_meta(JsonWriter &json, ls::span<UUID> material_uuids, ls::span<Material> materials) -> bool {
-    ZoneScoped;
-
-    auto textures = ankerl::unordered_dense::set<UUID>();
-    json["material_uuids"].begin_array();
-    for (const auto &[material_uuid, material] : std::views::zip(material_uuids, materials)) {
-        json << material_uuid.str();
-
-        textures.emplace(material.albedo_texture);
-        textures.emplace(material.normal_texture);
-        textures.emplace(material.emissive_texture);
-        textures.emplace(material.occlusion_texture);
-        textures.emplace(material.metallic_roughness_texture);
-    }
-    json.end_array();
-
-    json["texture_uuids"].begin_array();
-    for (const auto &uuid : textures) {
-        json << uuid.str();
-    }
-    json.end_array();
-
-    json["materials"].begin_array();
-    for (auto &material : materials) {
-        write_material_asset_meta(json, &material);
-    }
-    json.end_array();
-
-    return true;
-}
-
-auto AssetManager::write_scene_asset_meta(JsonWriter &json, Scene *scene) -> bool {
-    ZoneScoped;
-
-    json["name"] = scene->get_name_sv();
-
-    return true;
-}
-
-auto AssetManager::end_asset_meta(JsonWriter &json, const fs::path &path) -> bool {
-    ZoneScoped;
-
-    json.end_obj();
-
-    auto meta_path = path.string() + ".lrasset";
-    File file(meta_path, FileAccess::Write);
-    if (!file) {
-        return false;
-    }
-
-    file.write(json.stream.view().data(), json.stream.view().length());
-    file.close();
-
-    return true;
 }
 
 } // namespace lr

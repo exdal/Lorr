@@ -28,6 +28,7 @@ enum class WindowFlag : u32 {
     Borderless = 1 << 2,
     Maximized = 1 << 3,
     WorkAreaRelative = 1 << 4, // Width and height of the window will be relative to available work area size
+    Fullscreen = 1 << 5,
 };
 consteval void enable_bitmask(WindowFlag);
 

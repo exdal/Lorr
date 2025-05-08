@@ -5,7 +5,6 @@
 #include "Editor/Window/InspectorWindow.hh"
 #include "Editor/Window/SceneBrowserWindow.hh"
 #include "Editor/Window/ViewportWindow.hh"
-#include "Editor/Window/WelcomeWindow.hh"
 
 #include "Editor/Themes.hh"
 
@@ -240,7 +239,7 @@ bool EditorApp::prepare(this EditorApp &self) {
     ZoneScoped;
 
     self.load_editor_data();
-    Theme::dark_gray();
+    Theme::dark();
 
     auto add_texture = [&self](std::string name, const fs::path &path) {
         auto asset_uuid = self.asset_man.create_asset(lr::AssetType::Texture, self.asset_man.asset_root_path(lr::AssetType::Root) / "editor" / path);
@@ -280,7 +279,6 @@ static auto setup_dockspace(EditorApp &self) -> void {
     auto [console_panel_id, console_panel] = self.add_window<ConsoleWindow>("Console", ICON_MDI_INFORMATION_SLAB_CIRCLE);
     auto [inspector_panel_id, inspector_panel] = self.add_window<InspectorWindow>("Inspector", ICON_MDI_WRENCH);
     auto [scene_browser_panel_id, scene_browser_panel] = self.add_window<SceneBrowserWindow>("Scene Browser", ICON_MDI_FILE_TREE);
-    auto [welcome_panel_id, welcome_panel] = self.add_window<WelcomeWindow>("Welcome", ICON_MDI_ROCKET_LAUNCH);
     auto [viewport_panel_id, viewport_panel] = self.add_window<ViewportWindow>("Viewport", ICON_MDI_EYE);
 
     ImGuiViewport *viewport = ImGui::GetMainViewport();
@@ -301,7 +299,6 @@ static auto setup_dockspace(EditorApp &self) -> void {
 
     ImGui::DockBuilderDockWindow("###up_dock", up_dock_id);
     ImGui::DockBuilderDockWindow(viewport_panel->name.c_str(), main_dock_id);
-    ImGui::DockBuilderDockWindow(welcome_panel->name.c_str(), main_dock_id);
     ImGui::DockBuilderDockWindow(console_panel->name.c_str(), down_dock_id);
     ImGui::DockBuilderDockWindow(asset_browser_panel->name.c_str(), down_dock_id);
     ImGui::DockBuilderDockWindow(scene_browser_panel->name.c_str(), left_dock_id);
@@ -343,7 +340,7 @@ static auto draw_welcome_popup(EditorApp &self) -> void {
     ZoneScoped;
 
     auto opening_project = ls::option<fs::path>(ls::nullopt);
-    ImGui::SetNextWindowSize({ 650.0f, 350.0f }, ImGuiCond_Appearing);
+    ImGui::SetNextWindowSize({ 480.0f, 350.0f }, ImGuiCond_Appearing);
     constexpr auto popup_flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings;
     if (ImGui::BeginPopupModal("###welcome", nullptr, popup_flags)) {
         auto content_region = ImGui::GetContentRegionAvail();
@@ -355,48 +352,49 @@ static auto draw_welcome_popup(EditorApp &self) -> void {
         ImGui::InvisibleButton("placeholder", { 0.0f, 75.0f });
 
         //  ── SECTIONS ────────────────────────────────────────────────────────
-        if (ImGui::BeginChild("open_project", { child_width, 0.0f })) {
-            ImGui::SeparatorText("Recent projects");
-            i32 button_id = 0;
-            for (const auto &[project_path, project_info] : self.recent_project_infos) {
-                lr::memory::ScopedStack stack;
+        if (ImGui::BeginTabBar("project_guide")) {
+            if (ImGui::BeginTabItem("Open Project")) {
+                ImGui::SeparatorText("Recent projects");
+                i32 button_id = 0;
+                for (const auto &[project_path, project_info] : self.recent_project_infos) {
+                    lr::memory::ScopedStack stack;
 
-                auto path_str = stack.format_char("{}", project_path);
-                ImGui::PushID(button_id++);
-                if (ImGui::Button(project_info.name.c_str(), { -1.0f, 35.0f })) {
-                    opening_project = project_path;
-                    ImGui::CloseCurrentPopup();
+                    auto path_str = stack.format_char("{}", project_path);
+                    ImGui::PushID(button_id++);
+                    if (ImGui::Button(project_info.name.c_str(), { -1.0f, 35.0f })) {
+                        opening_project = project_path;
+                        ImGui::CloseCurrentPopup();
+                    }
+                    ImGui::SetItemTooltip("%s", path_str);
+                    ImGui::PopID();
                 }
-                ImGui::SetItemTooltip("%s", path_str);
-                ImGui::PopID();
+
+                ImGui::SeparatorText("");
+
+                if (ImGui::Button("Import...", { -1.0f, 35.0f })) {
+                }
+
+                ImGui::EndTabItem();
             }
 
-            ImGui::SeparatorText("");
+            if (ImGui::BeginTabItem("Create Project")) {
+                static std::string project_dir = {};
+                static std::string project_name = {};
+                ImGui::SeparatorText("Create Project");
 
-            if (ImGui::Button("Import...", { -1.0f, 35.0f })) {
+                ImGui::SetNextItemWidth(child_width * 0.9f);
+                ImGui::InputTextWithHint("", "/path/to/new/project", &project_dir);
+                ImGui::SameLine();
+                ImGui::Button(ICON_MDI_FOLDER, { -1.0f, 0.0f });
+
+                ImGui::SetNextItemWidth(child_width);
+                ImGui::InputTextWithHint("", "Project Name", &project_name);
+
+                ImGui::Button("Create Project", { -1.0f, 0.0f });
+                ImGui::EndTabItem();
             }
 
-            ImGui::EndChild();
-        }
-
-        ImGui::SameLine();
-
-        if (ImGui::BeginChild("create_project", { child_width, 0.0f })) {
-            static std::string project_dir = {};
-            static std::string project_name = {};
-            ImGui::SeparatorText("Create Project");
-
-            ImGui::SetNextItemWidth(child_width * 0.9f);
-            ImGui::InputTextWithHint("", "/path/to/new/project", &project_dir);
-            ImGui::SameLine();
-            ImGui::Button(ICON_MDI_FOLDER, { -1.0f, 0.0f });
-            
-            ImGui::SetNextItemWidth(child_width);
-            ImGui::InputTextWithHint("", "Project Name", &project_name);
-            
-            ImGui::Button("Create Project", { -1.0f, 0.0f });
-
-            ImGui::EndChild();
+            ImGui::EndTabBar();
         }
 
         ImGui::EndPopup();
@@ -535,10 +533,12 @@ bool ImGui::drag_vec(i32 id, void *data, usize components, ImGuiDataType data_ty
     if (window->SkipItems)
         return false;
 
-    static ImU32 component_colors[] = { IM_COL32(255, 0, 0, 255),
-                                        IM_COL32(0, 255, 0, 255),
-                                        IM_COL32(0, 0, 255, 255),
-                                        ImGui::GetColorU32(ImGuiCol_Text) };
+    static ImU32 component_colors[] = {
+        IM_COL32(255, 0, 0, 255),
+        IM_COL32(0, 255, 0, 255),
+        IM_COL32(0, 0, 255, 255),
+        ImGui::GetColorU32(ImGuiCol_Text),
+    };
 
     bool value_changed = false;
     ImGui::BeginGroup();
@@ -580,6 +580,8 @@ void ImGui::center_text(std::string_view str) {
 }
 
 bool ImGui::image_button(std::string_view text, ImTextureID texture_id, const ImVec2 &button_size) {
+    lr::memory::ScopedStack stack;
+
     auto &style = ImGui::GetStyle();
     auto min_size = std::min(button_size.x, button_size.y);
     min_size -= style.FramePadding.x * 2.0f;
@@ -591,7 +593,7 @@ bool ImGui::image_button(std::string_view text, ImTextureID texture_id, const Im
     cursor_pos.x += style.FramePadding.x;
     cursor_pos.y += style.FramePadding.y;
     ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, { 0.5, 0.9 });
-    auto pressed = ImGui::Button(text.data(), button_size);
+    auto pressed = ImGui::Button(stack.null_terminate_cstr(text), button_size);
     ImGui::PopStyleVar();
 
     ImGui::SetNextItemAllowOverlap();

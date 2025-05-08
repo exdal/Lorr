@@ -55,7 +55,7 @@ func cs_main(u32x3 thread_id : SV_DispatchThreadID) {
     info.multiscattering_image = sky_multiscattering_lut;
 
     const let result = integrate_single_scattered_luminance(C.atmosphere, sampler, info);
-    const let transmittance = dot(result.transmittance, f32x3(1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f));
+    const let transmittance = dot(result.transmittance, 1.0 / 3.0);
 
     sky_view_lut.store(thread_id.xy, f32x4(result.luminance, transmittance));
 }

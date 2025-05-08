@@ -63,10 +63,13 @@ f32x4 fs_main(VertexOutput input) : SV_Target {
     }
 
     const f32x3 albedo_color = albedo_image.sample_mip(linear_repeat_sampler, input.tex_coord, 0).rgb;
-    const f32x4 normal_oct_flat = normal_image.load(pixel_pos);
-    const f32x3 mapped_normal = std::oct_to_vec3(normal_oct_flat.xy);
-    //const f32x3 smooth_normal = std::oct_to_vec3(normal_oct_flat.zw);
+    
+    const f32x4 mapped_smooth_normal = normal_image.load(pixel_pos);
+    const f32x3 mapped_normal = std::oct_to_vec3(mapped_smooth_normal.xy);
+    const f32x3 smooth_normal = std::oct_to_vec3(mapped_smooth_normal.zw);
+
     const f32x3 emission = emissive_image.load(pixel_pos);
+    
     const f32x3 metallic_roughness_occlusion = metallic_roughness_occlusion_image.load(pixel_pos);
     const f32  metallic = metallic_roughness_occlusion.x;
     const f32  roughness = metallic_roughness_occlusion.y;
@@ -77,9 +80,9 @@ f32x4 fs_main(VertexOutput input) : SV_Target {
     const f32x3 ray_pos = world_position.xyz / world_position.w;
 
     // PBR constants
-    const f32x3 N = normalize(mapped_normal);
     const f32x3 V = normalize(C.camera->position - ray_pos);
     const f32x3 L = normalize(C.sun->direction);  // temp
+    const f32x3 N = normalize(mapped_normal);
 
     // SUN LIGHT COLOR ──────────────────────────────────────────────────
     const f32x3 ray_pos_planet = f32x3(0.0, ray_pos.y, 0.0) *
@@ -99,31 +102,38 @@ f32x4 fs_main(VertexOutput input) : SV_Target {
     // SKY AMBIENT COLOR ────────────────────────────────────────────────
     AtmosphereIntegrateInfo sky_info = {};
     sky_info.eye_pos = ray_pos_planet;
-    sky_info.sun_dir = C.sun->direction;
+    sky_info.sun_dir = L;
     sky_info.sun_intensity = C.sun->intensity;
     sky_info.sampling.variable_sample_count = true;
-    sky_info.sampling.min_sample_count = 6;
-    sky_info.sampling.max_sample_count = 6;
+    sky_info.sampling.min_sample_count = 1;
+    sky_info.sampling.max_sample_count = 4;
     sky_info.transmittance_image = sky_transmittance_lut;
     sky_info.multiscattering_image = sky_multiscattering_lut;
     sky_info.eval_mie_phase = false;
 
     sky_info.eye_dir = f32x3(0.0, -1.0, 0.0);
     const let sky_result_0 = integrate_single_scattered_luminance(C.atmosphere, linear_clamp_sampler, sky_info);
-    sky_info.eye_dir = f32x3(0.0,  1.0, 0.0);
+    sky_info.eye_dir = f32x3(0.0, +1.0, 0.0);
     const let sky_result_1 = integrate_single_scattered_luminance(C.atmosphere, linear_clamp_sampler, sky_info);
-    f32x3 ambient_color = lerp(sky_result_0.luminance, sky_result_1.luminance, saturate(N.y * 0.5 + 0.5));
+    const let sky_gradient = lerp(
+        sky_result_0.luminance,
+        sky_result_1.luminance,
+        saturate(N.y * 0.5 + 0.5));
+    const let ambient_color = std::rec709_oetf(sky_gradient);
+    f32x3 color = albedo_color * ambient_color;
 
     // MATERIAL COLOR ───────────────────────────────────────────────────
+    // https://marmosetco.tumblr.com/post/81245981087
+    const f32x3 R = reflect(-V, N);
+    const f32 horizon_fade = 1.3;
+    f32 horizon = saturate(1.0 + horizon_fade * dot(R, smooth_normal));
+    horizon *= horizon;
+
     const f32 NoL = max(dot(N, L), 0.0);
-    f32x3 color = BRDF(V, N, L, albedo_color, roughness, metallic);
+    f32x3 brdf = BRDF(V, N, L, albedo_color, roughness, metallic);
+    color += brdf * horizon * sun_transmittance * C.sun->intensity * NoL;
+    color += emission;
 
-    color = (color * NoL * sun_transmittance * C.sun->intensity)  // Reflected light
-          + albedo_color * ambient_color * 0.49 // Planet light
-          + albedo_color * 0.13  // Surface color
-          + emission;  // Emitted light
-
-    // Direct influence over color no matter light position
     color *= occlusion;
 
     return f32x4(color, 1.0);

@@ -12,7 +12,7 @@ i32 main(i32 argc, c8 **argv) {
 
     app.init(lr::ApplicationInfo{
         .args = { argv, static_cast<usize>(argc) },
-        .window_info = { .title = "Lorr Editor", .width = 1720, .height = 880, .flags = lr::WindowFlag::Centered, },
+        .window_info = { .title = "Lorr Editor", .width = 1720, .height = 880, .flags = lr::WindowFlag::Fullscreen, },
     });
     return 0;
 }

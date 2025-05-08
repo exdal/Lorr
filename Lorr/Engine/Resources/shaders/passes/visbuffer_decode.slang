@@ -148,10 +148,8 @@ func fs_main(VertexOutput input) -> FragmentOutput {
             world_pos[1].xyz,
             world_pos[2].xyz
         );
-
         const f32x3 pos_ddx = mul(deriv.uv_ddx, world_positions);
         const f32x3 pos_ddy = mul(deriv.uv_ddy, world_positions);
-
         const f32x3 pos_ddx_s = pos_ddx - dot(pos_ddx, N) * N;
         const f32x3 pos_ddy_s = pos_ddy - dot(pos_ddy, N) * N;
         const f32 jacobian_sign = sign(determinant(f32x2x2(tex_coord_grad.ddx, tex_coord_grad.ddy)));
@@ -164,8 +162,9 @@ func fs_main(VertexOutput input) -> FragmentOutput {
         const f32x3x3 TBN = f32x3x3(T, -B, N);
 
         const f32x2 Ns = material.sample_normal_color(tex_coord_grad).xy * 2.0 - 1.0;
-        const f32 Ns_z = sqrt(saturate(1.0f - dot(Ns, Ns)));
-        N = mul(f32x3(Ns, Ns_z), TBN);
+        const f32 Ns_z = sqrt(max(1.0 - Ns.x * Ns.x - Ns.y * Ns.y, 0.0));
+        const f32x3 sampled_normal = normalize(f32x3(Ns, Ns_z));
+        N = mul(sampled_normal, TBN);
     }
     output.normal_color.xy = std::vec3_to_oct(N);
     output.normal_color.zw = std::vec3_to_oct(world_normal);

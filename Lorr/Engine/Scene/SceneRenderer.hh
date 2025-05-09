@@ -6,13 +6,12 @@
 
 namespace lr {
 struct SceneComposeInfo {
-    std::vector<ImageViewID> rendering_image_view_ids = {};
-    std::vector<GPU::Model> gpu_models = {};
+    std::vector<GPU::Mesh> gpu_meshes = {};
     std::vector<GPU::MeshletInstance> gpu_meshlet_instances = {};
 };
 
 struct ComposedScene {
-    vuk::Value<vuk::Buffer> models_buffer = {};
+    vuk::Value<vuk::Buffer> meshes_buffer = {};
     vuk::Value<vuk::Buffer> meshlet_instances_buffer = {};
 };
 
@@ -44,7 +43,7 @@ struct SceneRenderer {
     Buffer exposure_buffer = {};
     Buffer transforms_buffer = {};
     u32 meshlet_instance_count = 0;
-    Buffer models_buffer = {};
+    Buffer meshes_buffer = {};
     Buffer meshlet_instances_buffer = {};
 
     // Then what are they?

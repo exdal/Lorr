@@ -8,7 +8,7 @@ import passes.visbuffer;
 #include <fullscreen.slang>
 
 [[vk::binding(0, 0)]]
-StorageImage2D<u32, ImageFormat::R32UI> visbuffer;
+Image2D<u32> visbuffer;
 
 [[vk::binding(1, 0)]]
 ConstantBuffer<Camera, ScalarDataLayout> camera;
@@ -20,7 +20,7 @@ StructuredBuffer<u32, ScalarDataLayout> visible_meshlet_instances_indices;
 StructuredBuffer<MeshletInstance, ScalarDataLayout> meshlet_instances;
 
 [[vk::binding(4, 0)]]
-StructuredBuffer<Model, ScalarDataLayout> models;
+StructuredBuffer<Mesh, ScalarDataLayout> meshes;
 
 [[vk::binding(5, 0)]]
 StructuredBuffer<Transform, ScalarDataLayout> transforms;
@@ -119,16 +119,16 @@ func fs_main(VertexOutput input) -> FragmentOutput {
     const let vis = VisBufferData(texel);
     const u32 meshlet_instance_index = visible_meshlet_instances_indices[vis.meshlet_instance_index];
     const MeshletInstance meshlet_instance = meshlet_instances[meshlet_instance_index];
-    const Model model = models[meshlet_instance.model_index];
+    const Mesh mesh = meshes[meshlet_instance.mesh_index];
     const Transform transform = transforms[meshlet_instance.transform_index];
     const Material material = materials[meshlet_instance.material_index];
 
-    const Meshlet meshlet    = model.meshlets[meshlet_instance.meshlet_index];
-    const Triangle indices   = meshlet.indices(model, vis.triangle_index);
-    const u32x3 vertices     = meshlet.vertices(model, indices);
-    const f32x3x3 positions  = meshlet.positions(model, vertices);
-    const f32x3x3 normals    = meshlet.normals(model, vertices);
-    const f32x2x3 tex_coords = meshlet.tex_coords(model, vertices);
+    const Meshlet meshlet    = mesh.meshlets[meshlet_instance.meshlet_index];
+    const Triangle indices   = meshlet.indices(mesh, vis.triangle_index);
+    const u32x3 vertices     = meshlet.vertices(mesh, indices);
+    const f32x3x3 positions  = meshlet.positions(mesh, vertices);
+    const f32x3x3 normals    = meshlet.normals(mesh, vertices);
+    const f32x2x3 tex_coords = meshlet.tex_coords(mesh, vertices);
     const f32x4x3 world_pos  = transform.to_world_positions(positions);
     const f32x4x3 clip_pos   = camera.to_clip_positions(world_pos);
     const PartialDeriv deriv = { clip_pos, input.tex_coord * 2.0 - 1.0, camera.resolution };

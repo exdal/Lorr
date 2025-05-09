@@ -85,13 +85,6 @@ static auto draw_hierarchy(SceneBrowserWindow &self) -> void {
 
             ImGui::Separator();
 
-            if (ImGui::MenuItem("Model")) {
-                auto created_entity = active_scene->create_entity();
-                created_entity.set<lr::ECS::Transform>({});
-                created_entity.set<lr::ECS::RenderingModel>({});
-                created_entity.child_of(active_scene->get_root());
-            }
-
             if (ImGui::MenuItem("Directional Light")) {
                 auto created_entity = active_scene->create_entity();
                 created_entity.set<lr::ECS::Transform>({});

@@ -7,7 +7,7 @@ import scene;
 import passes.visbuffer;
 
 [[vk::binding(0, 0)]]
-StorageImage2D<u32, ImageFormat::R32UI> visbuffer_data;
+Image2D<u32> visbuffer_data;
 
 [[vk::binding(1, 0)]]
 StructuredBuffer<u32, ScalarDataLayout> visible_meshlet_instances_indices;

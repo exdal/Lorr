@@ -73,12 +73,16 @@ struct Model {
 
     struct Node {
         std::string name = {};
-        std::vector<u32> child_indices = {};
+        std::vector<usize> child_indices = {};
+        ls::option<usize> mesh_index = ls::nullopt;
+        glm::vec3 translation = {};
+        glm::quat rotation = {};
+        glm::vec3 scale = {};
+    };
 
-        ls::option<u32> mesh_index = ls::nullopt;
-        glm::vec3 translation;
-        glm::quat rotation;
-        glm::vec3 scale;
+    struct Scene {
+        std::string name = {};
+        std::vector<usize> node_indices = {};
     };
 
     std::vector<UUID> embedded_textures = {};
@@ -86,6 +90,9 @@ struct Model {
     std::vector<Primitive> primitives = {};
     std::vector<Mesh> meshes = {};
     std::vector<Node> nodes = {};
+    std::vector<Scene> scenes = {};
+
+    usize default_scene_index = 0;
 
     Buffer indices = {};
     Buffer vertex_positions = {};

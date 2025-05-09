@@ -9,34 +9,15 @@ namespace led {
 auto inspect_asset(lr::UUID &uuid) -> bool {
     lr::memory::ScopedStack stack;
     auto &app = lr::Application::get();
-    auto cursor_pos = ImGui::GetCursorPos();
-    auto avail_region = ImGui::GetContentRegionAvail();
     auto *asset = app.asset_man.get_asset(uuid);
     if (!asset) {
         ImGui::TextUnformatted("Drop a model here.");
         uuid = {};
     } else {
-        const auto &model_name = asset->path.filename();
-        ImGui::TextUnformatted(stack.format_char("Name: {}", model_name));
+        const auto &asset_name = asset->path.filename();
+        ImGui::TextUnformatted(stack.format_char("Name: {}", asset_name));
         ImGui::TextUnformatted(stack.format_char("UUID: {}", uuid.str()));
-    }
-
-    ImGui::SetCursorPos(cursor_pos);
-    ImGui::InvisibleButton(reinterpret_cast<const c8 *>(&uuid), { avail_region.x, 50.0f });
-    if (ImGui::BeginDragDropTarget()) {
-        if (const auto *asset_payload = ImGui::AcceptDragDropPayload("ASSET_BY_UUID")) {
-            auto &dropping_uuid = *static_cast<lr::UUID *>(asset_payload->Data);
-            auto *dropping_asset = app.asset_man.get_asset(dropping_uuid);
-            if (dropping_asset->type == lr::AssetType::Model) {
-                if (uuid != dropping_uuid && app.asset_man.load_model(dropping_uuid) && uuid) {
-                    app.asset_man.unload_model(uuid);
-                }
-                uuid = dropping_uuid;
-
-                return true;
-            }
-        }
-        ImGui::EndDragDropTarget();
+        ImGui::TextUnformatted(stack.format_char("Type: {}", app.asset_man.to_asset_type_sv(asset->type)));
     }
 
     return false;

@@ -12,6 +12,7 @@ namespace led {
 static auto on_drop(ViewportWindow &) -> void {
     auto &app = EditorApp::get();
     auto &active_project = *app.active_project;
+    auto *active_scene = app.asset_man.get_scene(active_project.active_scene_uuid);
 
     if (const auto *asset_payload = ImGui::AcceptDragDropPayload("ASSET_BY_UUID")) {
         auto *uuid = static_cast<lr::UUID *>(asset_payload->Data);
@@ -19,6 +20,11 @@ static auto on_drop(ViewportWindow &) -> void {
         switch (asset->type) {
             case lr::AssetType::Scene: {
                 active_project.set_active_scene(*uuid);
+            } break;
+            case lr::AssetType::Model: {
+                if (active_scene) {
+                    active_scene->create_model_entity(*uuid);
+                }
             } break;
             default:;
         }

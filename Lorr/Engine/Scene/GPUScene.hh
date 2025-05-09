@@ -109,13 +109,13 @@ struct MeshletBounds {
 };
 
 struct MeshletInstance {
-    alignas(4) u32 model_index = 0;
+    alignas(4) u32 mesh_index = 0;
     alignas(4) u32 material_index = 0;
     alignas(4) u32 transform_index = 0;
     alignas(4) u32 meshlet_index = 0;
 };
 
-struct Model {
+struct Mesh {
     alignas(8) u64 indices = 0;
     alignas(8) u64 vertex_positions = 0;
     alignas(8) u64 vertex_normals = 0;

@@ -636,55 +636,30 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
     struct GLTFCallbacks {
         Model *model = nullptr;
 
-        // Per mesh data
         std::vector<glm::vec3> vertex_positions = {};
         std::vector<glm::vec3> vertex_normals = {};
         std::vector<glm::vec2> vertex_texcoords = {};
         std::vector<Model::Index> indices = {};
     };
-    auto on_new_node = [](void *user_data,
-                          [[maybe_unused]] u32 primitive_count,
-                          u32 vertex_count,
-                          u32 index_count,
-                          std::string name,
-                          std::vector<u32> child_node_indices,
-                          ls::option<u32> mesh_index,
-                          glm::vec3 translation,
-                          glm::quat rotation,
-                          glm::vec3 scale) {
-        auto *info = static_cast<GLTFCallbacks *>(user_data);
-
-        info->model->nodes.push_back(
-            {
-                .name = std::move(name),
-                .child_indices = std::move(child_node_indices),
-                .mesh_index = std::move(mesh_index),
-                .translation = translation,
-                .rotation = rotation,
-                .scale = scale,
-            }
-        );
-
-        if (mesh_index.has_value()) {
-            if (info->model->meshes.size() <= mesh_index.value()) {
-                info->model->meshes.resize(mesh_index.value() + 1);
-            }
-
-            info->vertex_positions.resize(info->vertex_positions.size() + vertex_count);
-            info->vertex_normals.resize(info->vertex_normals.size() + vertex_count);
-            info->vertex_texcoords.resize(info->vertex_texcoords.size() + vertex_count);
-            info->indices.resize(info->indices.size() + index_count);
-        }
-    };
     auto on_new_primitive =
         [](void *user_data, u32 mesh_index, u32 material_index, u32 vertex_offset, u32 vertex_count, u32 index_offset, u32 index_count) {
             auto &app = Application::get();
             auto *info = static_cast<GLTFCallbacks *>(user_data);
+            if (info->model->meshes.size() <= mesh_index) {
+                info->model->meshes.resize(mesh_index + 1);
+            }
+
             auto &mesh = info->model->meshes[mesh_index];
             auto primitive_index = info->model->primitives.size();
             auto &primitive = info->model->primitives.emplace_back();
             auto *material_asset = app.asset_man.get_asset(info->model->materials[material_index]);
             auto global_material_index = SlotMap_decode_id(material_asset->material_id).index;
+
+            info->vertex_positions.resize(info->vertex_positions.size() + vertex_count);
+            info->vertex_normals.resize(info->vertex_normals.size() + vertex_count);
+            info->vertex_texcoords.resize(info->vertex_texcoords.size() + vertex_count);
+            info->indices.resize(info->indices.size() + index_count);
+
             mesh.primitive_indices.push_back(primitive_index);
             primitive.material_index = global_material_index;
             primitive.vertex_offset = vertex_offset;
@@ -713,7 +688,6 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
     auto gltf_model = GLTFModelInfo::parse(
         asset_path,
         { .user_data = &gltf_callbacks,
-          .on_new_node = on_new_node,
           .on_new_primitive = on_new_primitive,
           .on_access_index = on_access_index,
           .on_access_position = on_access_position,
@@ -725,6 +699,23 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
         return false;
     }
 
+    //  ── SCENE HIERARCHY ─────────────────────────────────────────────────
+    for (const auto &node : gltf_model->nodes) {
+        model->nodes.push_back(
+            { .name = node.name,
+              .child_indices = node.children,
+              .mesh_index = node.mesh_index,
+              .translation = node.translation,
+              .rotation = node.rotation,
+              .scale = node.scale }
+        );
+    }
+
+    model->default_scene_index = gltf_model->defualt_scene_index.value_or(0_sz);
+    for (const auto &scene : gltf_model->scenes) {
+        model->scenes.push_back({ .name = scene.name, .node_indices = scene.node_indices });
+    }
+
     //  ── MESH PROCESSING ─────────────────────────────────────────────────
     std::vector<glm::vec3> model_vertex_positions = {};
     std::vector<u32> model_indices = {};
@@ -733,11 +724,7 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
     std::vector<GPU::MeshletBounds> model_meshlet_bounds = {};
     std::vector<u8> model_local_triangle_indices = {};
 
-    for (auto &node : model->nodes) {
-        const auto node_transform = glm::scale(glm::translate(glm::mat4(1.0), node.translation) * glm::mat4_cast(node.rotation), node.scale);
-        const auto node_normal_transform = glm::mat3(node_transform);
-
-        const auto &mesh = model->meshes[node.mesh_index.value()];
+    for (const auto &mesh : model->meshes) {
         for (auto primitive_index : mesh.primitive_indices) {
             ZoneScopedN("GPU Meshlet Generation");
 
@@ -750,14 +737,6 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
             auto raw_indices = ls::span(gltf_callbacks.indices.data() + primitive.index_offset, primitive.index_count);
             auto raw_vertex_positions = ls::span(gltf_callbacks.vertex_positions.data() + primitive.vertex_offset, primitive.vertex_count);
             auto raw_vertex_normals = ls::span(gltf_callbacks.vertex_normals.data() + primitive.vertex_offset, primitive.vertex_count);
-
-            for (auto &position : raw_vertex_positions) {
-                position = node_transform * glm::vec4(position, 1.0f);
-            }
-
-            for (auto &normal : raw_vertex_normals) {
-                normal = node_normal_transform * normal;
-            }
 
             auto meshlets = std::vector<GPU::Meshlet>();
             auto meshlet_bounds = std::vector<GPU::MeshletBounds>();

@@ -45,20 +45,23 @@ struct GLTFMaterialInfo {
     ls::option<u32> occlusion_texture_index;
 };
 
+struct GLTFNodeInfo {
+    std::string name = {};
+    ls::option<usize> mesh_index = ls::nullopt;
+    std::vector<usize> children = {};
+    glm::vec3 translation = {};
+    glm::quat rotation = {};
+    glm::vec3 scale = {};
+};
+
+struct GLTFSceneInfo {
+    std::string name = {};
+    std::vector<usize> node_indices = {};
+};
+
 struct GLTFModelCallbacks {
-    // clang-format off
     void *user_data = nullptr;
-    void (*on_new_node)
-       (void *user_data,
-        u32 primitive_count,
-        u32 vertex_count,
-        u32 index_count,
-        std::string name,
-        std::vector<u32> child_node_indices,
-        ls::option<u32> mesh_index,
-        glm::vec3 translation,
-        glm::quat rotation,
-        glm::vec3 scale) = nullptr;
+    // clang-format off
     void (*on_new_primitive)
        (void *user_data,
         u32 mesh_index,
@@ -82,6 +85,9 @@ struct GLTFModelInfo {
     std::vector<GLTFImageInfo> images = {};
     std::vector<GLTFTextureInfo> textures = {};
     std::vector<GLTFMaterialInfo> materials = {};
+    std::vector<GLTFNodeInfo> nodes = {};
+    std::vector<GLTFSceneInfo> scenes = {};
+    ls::option<usize> defualt_scene_index = ls::nullopt;
 
     static auto parse(const fs::path &path, GLTFModelCallbacks callbacks = {}) -> ls::option<GLTFModelInfo>;
     static auto parse_info(const fs::path &path) -> ls::option<GLTFModelInfo>;

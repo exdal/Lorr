@@ -10,25 +10,25 @@ import passes.visbuffer;
 Sampler linear_repeat_sampler;
 
 [[vk::binding(1, 0)]]
-StorageImage2D<u32, ImageFormat::R32UI> visbuffer_data;
+Image2D<u32> visbuffer_data;
 
 [[vk::binding(2, 0)]]
 Image2D<f32> depth_image;
 
 [[vk::binding(3, 0)]]
-StorageImage2D<u32, ImageFormat::R32UI> overdraw;
+Image2D<u32> overdraw;
 
 [[vk::binding(4, 0)]]
 Image2D<f32x4> albedo_image;
 
 [[vk::binding(5, 0)]]
-StorageImage2D<f32x4, ImageFormat::RGBA16F> normal_image;
+Image2D<f32x4> normal_image;
 
 [[vk::binding(6, 0)]]
-StorageImage2D<f32x3, ImageFormat::R11F_G11F_B10F> emissive_image;
+Image2D<f32x3> emissive_image;
 
 [[vk::binding(7, 0)]]
-StorageImage2D<f32x3, ImageFormat::RGBA8_SNORM> metallic_roughness_occlusion_image;
+Image2D<f32x3> metallic_roughness_occlusion_image;
 
 [[vk::binding(8, 0)]]
 ConstantBuffer<Camera, ScalarDataLayout> camera;

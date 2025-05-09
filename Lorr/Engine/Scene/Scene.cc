@@ -89,19 +89,19 @@ auto Scene::init(this Scene &self, const std::string &name) -> bool {
         });
 
     self.world
-        ->observer<ECS::RenderingModel>() //
+        ->observer<ECS::RenderingMesh>() //
         .event(flecs::OnSet)
         .event(flecs::OnRemove)
-        .each([&self](flecs::iter &it, usize i, ECS::RenderingModel &rendering_model) {
-            if (!rendering_model.uuid) {
+        .each([&self](flecs::iter &it, usize i, ECS::RenderingMesh &rendering_mesh) {
+            if (!rendering_mesh.model_uuid) {
                 return;
             }
 
             auto entity = it.entity(i);
             if (it.event() == flecs::OnSet) {
-                self.attach_model(entity, rendering_model.uuid);
+                self.attach_mesh(entity, rendering_mesh.model_uuid, rendering_mesh.mesh_index);
             } else if (it.event() == flecs::OnRemove) {
-                self.detach_model(entity, rendering_model.uuid);
+                self.detach_mesh(entity, rendering_mesh.model_uuid, rendering_mesh.mesh_index);
             }
         });
 
@@ -157,7 +157,7 @@ auto Scene::destroy(this Scene &self) -> void {
     self.transforms.reset();
     self.entity_transforms_map.clear();
     self.dirty_transforms.clear();
-    self.rendering_models.clear();
+    self.rendering_meshes_map.clear();
     self.world.reset();
 }
 
@@ -429,6 +429,50 @@ auto Scene::create_editor_camera(this Scene &self) -> void {
         .child_of(self.root);
 }
 
+auto Scene::create_model_entity(this Scene &self, UUID &importing_model_uuid) -> flecs::entity {
+    ZoneScoped;
+
+    auto &app = Application::get();
+    // sanity check
+    if (!app.asset_man.get_asset(importing_model_uuid)) {
+        LOG_ERROR("Cannot import an invalid model '{}' into the scene!", importing_model_uuid.str());
+        return {};
+    }
+
+    // acquire model
+    if (!app.asset_man.load_model(importing_model_uuid)) {
+        return {};
+    }
+
+    auto *imported_model = app.asset_man.get_model(importing_model_uuid);
+    auto &default_scene = imported_model->scenes[imported_model->default_scene_index];
+    auto root_entity = self.create_entity(self.find_entity(default_scene.name) ? std::string{} : default_scene.name);
+    root_entity.child_of(self.root);
+
+    auto visit_nodes = [&](this auto &visitor, flecs::entity &root, std::vector<usize> &node_indices) -> void {
+        for (const auto node_index : node_indices) {
+            auto &cur_node = imported_model->nodes[node_index];
+            auto node_entity = self.create_entity(self.find_entity(cur_node.name) ? std::string{} : cur_node.name);
+            node_entity.set<ECS::Transform>(
+                { .position = cur_node.translation, .rotation = Math::decompose_quat(cur_node.rotation), .scale = cur_node.scale }
+            );
+
+            if (cur_node.mesh_index.has_value()) {
+                node_entity.set<ECS::RenderingMesh>({ .model_uuid = importing_model_uuid,
+                                                      .mesh_index = static_cast<u32>(cur_node.mesh_index.value()) });
+            }
+
+            node_entity.child_of(root);
+
+            visitor(node_entity, cur_node.child_indices);
+        }
+    };
+
+    visit_nodes(root_entity, default_scene.node_indices);
+
+    return root_entity;
+}
+
 auto Scene::find_entity(this Scene &self, std::string_view name) -> flecs::entity {
     ZoneScoped;
     memory::ScopedStack stack;
@@ -459,8 +503,8 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, SceneRenderInfo &i
     auto camera_query = self.get_world()
         .query_builder<ECS::Transform, ECS::Camera, ECS::ActiveCamera>()
         .build();
-    auto model_query = self.get_world()
-        .query_builder<ECS::RenderingModel>()
+    auto rendering_meshes_query = self.get_world()
+        .query_builder<ECS::RenderingMesh>()
         .build();
     auto directional_light_query = self.get_world()
         .query_builder<ECS::DirectionalLight>()
@@ -635,44 +679,41 @@ auto Scene::compose(this Scene &self) -> SceneComposeInfo {
 
     auto &app = Application::get();
 
-    auto rendering_image_view_ids = std::vector<ImageViewID>();
-    auto gpu_models = std::vector<GPU::Model>();
+    auto gpu_meshes = std::vector<GPU::Mesh>();
     auto gpu_meshlet_instances = std::vector<GPU::MeshletInstance>();
 
-    for (const auto &[model_uuid, transform_ids] : self.rendering_models) {
-        auto *model = app.asset_man.get_model(model_uuid);
+    for (const auto &[rendering_mesh, transform_ids] : self.rendering_meshes_map) {
+        auto *model = app.asset_man.get_model(rendering_mesh.n0);
+        const auto &mesh = model->meshes[rendering_mesh.n1];
 
-        //  ── PER MODEL INFORMATION ───────────────────────────────────────────
-        auto model_offset = gpu_models.size();
-        auto &gpu_model = gpu_models.emplace_back();
-        gpu_model.indices = model->indices.device_address();
-        gpu_model.vertex_positions = model->vertex_positions.device_address();
-        gpu_model.vertex_normals = model->vertex_normals.device_address();
-        gpu_model.texture_coords = model->texture_coords.device_address();
-        gpu_model.meshlets = model->meshlets.device_address();
-        gpu_model.meshlet_bounds = model->meshlet_bounds.device_address();
-        gpu_model.local_triangle_indices = model->local_triangle_indices.device_address();
+        //  ── PER MESH INFORMATION ────────────────────────────────────────────
+        auto mesh_offset = gpu_meshes.size();
+        auto &gpu_mesh = gpu_meshes.emplace_back();
+        gpu_mesh.indices = model->indices.device_address();
+        gpu_mesh.vertex_positions = model->vertex_positions.device_address();
+        gpu_mesh.vertex_normals = model->vertex_normals.device_address();
+        gpu_mesh.texture_coords = model->texture_coords.device_address();
+        gpu_mesh.local_triangle_indices = model->local_triangle_indices.device_address();
+        gpu_mesh.meshlet_bounds = model->meshlet_bounds.device_address();
+        gpu_mesh.meshlets = model->meshlets.device_address();
 
         //  ── INSTANCING ──────────────────────────────────────────────────────
         for (const auto transform_id : transform_ids) {
-            u32 meshlet_offset = 0;
-            for (const auto &primitive : model->primitives) {
+            for (const auto primitive_index : mesh.primitive_indices) {
+                auto &primitive = model->primitives[primitive_index];
                 for (u32 meshlet_index = 0; meshlet_index < primitive.meshlet_count; meshlet_index++) {
                     auto &meshlet_instance = gpu_meshlet_instances.emplace_back();
-                    meshlet_instance.model_index = model_offset;
+                    meshlet_instance.mesh_index = mesh_offset;
                     meshlet_instance.material_index = primitive.material_index;
                     meshlet_instance.transform_index = SlotMap_decode_id(transform_id).index;
-                    meshlet_instance.meshlet_index = meshlet_index + meshlet_offset;
+                    meshlet_instance.meshlet_index = meshlet_index + primitive.meshlet_offset;
                 }
-
-                meshlet_offset += primitive.meshlet_count;
             }
         }
     }
 
     return SceneComposeInfo{
-        .rendering_image_view_ids = std::move(rendering_image_view_ids),
-        .gpu_models = std::move(gpu_models),
+        .gpu_meshes = std::move(gpu_meshes),
         .gpu_meshlet_instances = std::move(gpu_meshlet_instances),
     };
 }
@@ -698,7 +739,7 @@ auto Scene::remove_transform(this Scene &self, flecs::entity entity) -> void {
     self.entity_transforms_map.erase(it);
 }
 
-auto Scene::attach_model(this Scene &self, flecs::entity entity, const UUID &model_uuid) -> bool {
+auto Scene::attach_mesh(this Scene &self, flecs::entity entity, const UUID &model_uuid, usize mesh_index) -> bool {
     ZoneScoped;
 
     auto transforms_it = self.entity_transforms_map.find(entity);
@@ -713,20 +754,20 @@ auto Scene::attach_model(this Scene &self, flecs::entity entity, const UUID &mod
     // Find the old model UUID and detach it from entity.
     // TODO: This is retarded
     auto old_model_uuid = UUID(nullptr);
-    for (const auto &[cur_old_model_uuid, transform_ids] : self.rendering_models) {
+    for (const auto &[cur_old_rendering_mesh, transform_ids] : self.rendering_meshes_map) {
         if (std::ranges::find(transform_ids, transform_id) != transform_ids.end()) {
-            old_model_uuid = cur_old_model_uuid;
+            old_model_uuid = cur_old_rendering_mesh.n0;
             break;
         }
     }
     if (old_model_uuid) {
-        self.detach_model(entity, old_model_uuid);
+        self.detach_mesh(entity, old_model_uuid, mesh_index);
     }
 
-    auto instances_it = self.rendering_models.find(model_uuid);
-    if (instances_it == self.rendering_models.end()) {
+    auto instances_it = self.rendering_meshes_map.find(ls::pair(model_uuid, mesh_index));
+    if (instances_it == self.rendering_meshes_map.end()) {
         bool inserted = false;
-        std::tie(instances_it, inserted) = self.rendering_models.try_emplace(model_uuid);
+        std::tie(instances_it, inserted) = self.rendering_meshes_map.try_emplace(ls::pair(model_uuid, mesh_index));
         if (!inserted) {
             return false;
         }
@@ -740,12 +781,12 @@ auto Scene::attach_model(this Scene &self, flecs::entity entity, const UUID &mod
     return true;
 }
 
-auto Scene::detach_model(this Scene &self, flecs::entity entity, const UUID &model_uuid) -> bool {
+auto Scene::detach_mesh(this Scene &self, flecs::entity entity, const UUID &model_uuid, usize mesh_index) -> bool {
     ZoneScoped;
 
-    auto instances_it = self.rendering_models.find(model_uuid);
+    auto instances_it = self.rendering_meshes_map.find(ls::pair(model_uuid, mesh_index));
     auto transforms_it = self.entity_transforms_map.find(entity);
-    if (instances_it == self.rendering_models.end() || transforms_it == self.entity_transforms_map.end()) {
+    if (instances_it == self.rendering_meshes_map.end() || transforms_it == self.entity_transforms_map.end()) {
         return false;
     }
 
@@ -755,7 +796,7 @@ auto Scene::detach_model(this Scene &self, flecs::entity entity, const UUID &mod
     self.models_dirty = true;
 
     if (instances.empty()) {
-        self.rendering_models.erase(instances_it);
+        self.rendering_meshes_map.erase(instances_it);
     }
 
     return true;

@@ -9,7 +9,7 @@ struct PushConstants {
     u32 *visible_meshlet_instances_indices;
     MeshletInstance *meshlet_instances;
     Transform *transforms;
-    Model *models;
+    Mesh *meshes;
     Camera *camera;
 
     u32 meshlet_instance_count;
@@ -66,11 +66,11 @@ func cs_main(uint3 thread_id : SV_DispatchThreadID) -> void {
     }
 
     const MeshletInstance meshlet_instance = C.meshlet_instances[meshlet_instance_index];
-    const Model model = C.models[meshlet_instance.model_index];
+    const Mesh mesh = C.meshes[meshlet_instance.mesh_index];
     const u32 meshlet_index = meshlet_instance.meshlet_index;
-    const Meshlet meshlet = model.meshlets[meshlet_index];
+    const Meshlet meshlet = mesh.meshlets[meshlet_index];
     const Transform transform = C.transforms[meshlet_instance.transform_index];
-    const MeshletBounds bounds = model.meshlet_bounds[meshlet_index];
+    const MeshletBounds bounds = mesh.meshlet_bounds[meshlet_index];
     const f32x3 aabb_min = bounds.aabb_min;
     const f32x3 aabb_max = bounds.aabb_max;
     const f32x3 aabb_center = (aabb_min + aabb_max) * 0.5;

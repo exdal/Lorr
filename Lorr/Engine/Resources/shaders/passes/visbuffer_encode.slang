@@ -18,7 +18,7 @@ StructuredBuffer<u32, ScalarDataLayout> visible_meshlet_instances_indices;
 StructuredBuffer<MeshletInstance, ScalarDataLayout> meshlet_instances;
 
 [[vk::binding(4, 0)]]
-StructuredBuffer<Model, ScalarDataLayout> models;
+StructuredBuffer<Mesh, ScalarDataLayout> meshes;
 
 [[vk::binding(5, 0)]]
 StructuredBuffer<Transform, ScalarDataLayout> transforms;
@@ -40,14 +40,14 @@ func vs_main(u32 vertex_index : SV_VertexID) -> VertexOutput {
     const let vis = VisBufferData(vertex_index);
     const u32 meshlet_instance_index = visible_meshlet_instances_indices[vis.meshlet_instance_index];
     const MeshletInstance meshlet_instance = meshlet_instances[meshlet_instance_index];
-    const Model model = models[meshlet_instance.model_index];
+    const Mesh mesh = meshes[meshlet_instance.mesh_index];
     const Transform transform = transforms[meshlet_instance.transform_index];
-    const Meshlet meshlet = model.meshlets[meshlet_instance.meshlet_index];
+    const Meshlet meshlet = mesh.meshlets[meshlet_instance.meshlet_index];
 
-    const u32 index  = meshlet.index(model, vis.triangle_index);
-    const u32 vertex = meshlet.vertex(model, index);
-    const f32x3 vertex_pos = meshlet.position(model, vertex);
-    const f32x2 tex_coord  = meshlet.tex_coord(model, vertex);
+    const u32 index  = meshlet.index(mesh, vis.triangle_index);
+    const u32 vertex = meshlet.vertex(mesh, index);
+    const f32x3 vertex_pos = meshlet.position(mesh, vertex);
+    const f32x2 tex_coord  = meshlet.tex_coord(mesh, vertex);
     const f32x4 world_pos  = transform.to_world_position(vertex_pos);
     const f32x4 clip_pos   = camera.to_clip_position(world_pos);
 

@@ -61,9 +61,13 @@ struct AssetManager : Handle<AssetManager> {
     auto init_new_scene(const UUID &uuid, const std::string &name) -> bool;
 
     //  ── Imported Assets ─────────────────────────────────────────────────
+    // If a valid meta file exists in the same path as importing asset, this
+    // function will act like `register_asset`. Otherwise this function will
+    // act like `create_asset` which creates new unique handle to asset with
+    // meta file in the same path.
     auto import_asset(const fs::path &path) -> UUID;
 
-    //  ── Registered Assets ─────────────────────────────────────────────────
+    //  ── Registered Assets ───────────────────────────────────────────────
     // Assets that already exist in project root and have meta file with
     // valid UUID's.
     //

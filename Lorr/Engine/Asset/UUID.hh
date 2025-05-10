@@ -22,7 +22,7 @@ public:
     auto str() const -> std::string;
 
     UUID() = default;
-    explicit UUID(nullptr_t) {};
+    explicit UUID(std::nullptr_t) {};
     UUID(const UUID &other) = default;
     UUID &operator=(const UUID &other) = default;
     UUID(UUID &&other) = default;

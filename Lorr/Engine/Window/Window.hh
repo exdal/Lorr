@@ -28,6 +28,7 @@ enum class WindowFlag : u32 {
     Borderless = 1 << 2,
     Maximized = 1 << 3,
     WorkAreaRelative = 1 << 4, // Width and height of the window will be relative to available work area size
+    Fullscreen = 1 << 5,
 };
 consteval void enable_bitmask(WindowFlag);
 
@@ -95,6 +96,7 @@ struct Window : Handle<Window> {
     static auto display_at(i32 monitor_id = WindowInfo::USE_PRIMARY_MONITOR) -> ls::option<SystemDisplay>;
     auto get_size() -> glm::uvec2;
     auto get_surface(VkInstance instance) -> VkSurfaceKHR;
+    auto get_handle() -> void *;
 
     auto show_dialog(const ShowDialogInfo &info) -> void;
 };

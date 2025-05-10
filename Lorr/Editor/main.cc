@@ -1,7 +1,7 @@
 #include "EditorApp.hh"
 #include "Engine/Window/Window.hh"
 
-static lr::EditorApp app;
+static led::EditorApp app;
 
 lr::Application &lr::Application::get() {
     return app;

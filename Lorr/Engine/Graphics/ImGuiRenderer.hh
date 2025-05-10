@@ -4,6 +4,8 @@
 
 #include <imgui.h>
 
+#include <Engine/Util/implot/implot.h>
+
 namespace lr {
 struct ImGuiRenderer {
     Device *device = nullptr;

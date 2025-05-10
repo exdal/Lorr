@@ -47,7 +47,7 @@ private:
 
     SlotMap<GPU::Transforms, GPU::TransformID> transforms = {};
     ankerl::unordered_dense::map<flecs::entity, GPU::TransformID> entity_transforms_map = {};
-    ankerl::unordered_dense::map<UUID, std::vector<GPU::TransformID>> rendering_models = {};
+    ankerl::unordered_dense::map<ls::pair<UUID, usize>, std::vector<GPU::TransformID>> rendering_meshes_map = {};
 
     std::vector<GPU::TransformID> dirty_transforms = {};
     bool models_dirty = false;
@@ -62,15 +62,21 @@ public:
     auto export_to_file(this Scene &, const fs::path &path) -> bool;
 
     auto create_entity(this Scene &, const std::string &name = {}) -> flecs::entity;
-    auto
-    create_perspective_camera(this Scene &, const std::string &name, const glm::vec3 &position, const glm::vec3 &rotation, f32 fov, f32 aspect_ratio)
-        -> flecs::entity;
+    // clang-format off
+    auto create_perspective_camera(this Scene &, const std::string &name, const glm::vec3 &position, const glm::vec3 &rotation, f32 fov, f32 aspect_ratio) -> flecs::entity;
+    // clang-format on
     auto create_editor_camera(this Scene &) -> void;
+    // Model = collection of meshes.
+    // This function imports every mesh inside the model asset.
+    // The returning entity is a parent, "model" entity where each of
+    // its children contains individual meshes.
+    auto create_model_entity(this Scene &, UUID &importing_model_uuid) -> flecs::entity;
 
     // Finds entity in root.
     auto find_entity(this Scene &, std::string_view name) -> flecs::entity;
+    auto find_entity(this Scene &, u32 transform_index) -> flecs::entity;
 
-    auto render(this Scene &, SceneRenderer &renderer, const vuk::Extent3D &extent, vuk::Format format) -> vuk::Value<vuk::ImageAttachment>;
+    auto render(this Scene &, SceneRenderer &renderer, SceneRenderInfo &info) -> vuk::Value<vuk::ImageAttachment>;
     auto tick(this Scene &, f32 delta_time) -> bool;
 
     auto set_name(this Scene &, const std::string &name) -> void;
@@ -90,8 +96,8 @@ private:
     auto add_transform(this Scene &, flecs::entity entity) -> GPU::TransformID;
     auto remove_transform(this Scene &, flecs::entity entity) -> void;
 
-    auto attach_model(this Scene &, flecs::entity entity, const UUID &model_uuid) -> bool;
-    auto detach_model(this Scene &, flecs::entity entity, const UUID &model_uuid) -> bool;
+    auto attach_mesh(this Scene &, flecs::entity entity, const UUID &model_uuid, usize mesh_index) -> bool;
+    auto detach_mesh(this Scene &, flecs::entity entity, const UUID &model_uuid, usize mesh_index) -> bool;
 
     friend AssetManager;
 };

@@ -6,67 +6,57 @@
 
 namespace lr {
 struct SceneComposeInfo {
-    std::vector<ImageViewID> rendering_image_view_ids = {};
-    std::vector<GPU::Material> gpu_materials = {};
-    std::vector<GPU::Model> gpu_models = {};
+    std::vector<GPU::Mesh> gpu_meshes = {};
     std::vector<GPU::MeshletInstance> gpu_meshlet_instances = {};
 };
 
 struct ComposedScene {
-    vuk::Value<vuk::Buffer> materials_buffer = {};
-    vuk::Value<vuk::Buffer> models_buffer = {};
+    vuk::Value<vuk::Buffer> meshes_buffer = {};
     vuk::Value<vuk::Buffer> meshlet_instances_buffer = {};
 };
 
 struct SceneRenderInfo {
     vuk::Format format = vuk::Format::eR8G8B8A8Srgb;
     vuk::Extent3D extent = {};
+    f32 delta_time = 0.0f;
+
+    vuk::PersistentDescriptorSet *materials_descriptor_set = nullptr;
+    vuk::Value<vuk::Buffer> materials_buffer = {};
 
     ls::option<GPU::Sun> sun = ls::nullopt;
     ls::option<GPU::Atmosphere> atmosphere = ls::nullopt;
     ls::option<GPU::Camera> camera = ls::nullopt;
-    GPU::CullFlags cull_flags = {};
+    ls::option<glm::uvec2> picking_texel = ls::nullopt;
+    ls::option<GPU::HistogramInfo> histogram_info = ls::nullopt;
 
+    GPU::CullFlags cull_flags = {};
     ls::span<GPU::TransformID> dirty_transform_ids = {};
     ls::span<GPU::Transforms> transforms = {};
+
+    ls::option<u32> picked_transform_index = ls::nullopt;
 };
 
 struct SceneRenderer {
     Device *device = nullptr;
 
-    vuk::PersistentDescriptorSet bindless_set = {};
-    Sampler linear_repeat_sampler = {};
-    Sampler linear_clamp_sampler = {};
-    Sampler nearest_repeat_sampler = {};
-
+    // Scene resources
+    Buffer exposure_buffer = {};
     Buffer transforms_buffer = {};
     u32 meshlet_instance_count = 0;
-    Buffer materials_buffer = {};
-    Buffer models_buffer = {};
+    Buffer meshes_buffer = {};
     Buffer meshlet_instances_buffer = {};
 
-    Pipeline grid_pipeline = {};
-
+    // Then what are they?
+    // TODO: Per scene sky settings
     Image sky_transmittance_lut = {};
     ImageView sky_transmittance_lut_view = {};
-    Pipeline sky_transmittance_pipeline = {};
     Image sky_multiscatter_lut = {};
     ImageView sky_multiscatter_lut_view = {};
-    Pipeline sky_multiscatter_pipeline = {};
-    vuk::Extent3D sky_view_lut_extent = { .width = 208, .height = 128, .depth = 1 };
-    Pipeline sky_view_pipeline = {};
+    vuk::Extent3D sky_view_lut_extent = { .width = 312, .height = 192, .depth = 1 };
     vuk::Extent3D sky_aerial_perspective_lut_extent = { .width = 32, .height = 32, .depth = 32 };
-    Pipeline sky_aerial_perspective_pipeline = {};
-    Pipeline sky_final_pipeline = {};
 
-    Pipeline vis_cull_meshlets_pipeline = {};
-    Pipeline vis_cull_triangles_pipeline = {};
-    Pipeline vis_encode_pipeline = {};
-    Pipeline vis_decode_pipeline = {};
-
-    Pipeline pbr_basic_pipeline = {};
-
-    Pipeline tonemap_pipeline = {};
+    GPU::DebugView debug_view = GPU::DebugView::None;
+    f32 debug_heatmap_scale = 5.0;
 
     auto init(this SceneRenderer &, Device *device) -> bool;
     auto destroy(this SceneRenderer &) -> void;
@@ -75,6 +65,7 @@ struct SceneRenderer {
 
     // Scene
     auto compose(this SceneRenderer &, SceneComposeInfo &compose_info) -> ComposedScene;
+    auto cleanup(this SceneRenderer &) -> void;
     auto render(this SceneRenderer &, SceneRenderInfo &render_info, ls::option<ComposedScene> &composed_scene) -> vuk::Value<vuk::ImageAttachment>;
 };
 

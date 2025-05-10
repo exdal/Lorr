@@ -4,6 +4,7 @@ target("Editor")
     add_deps("Lorr")
     add_includedirs("./")
     add_files("**.cc")
+    add_rpathdirs("@executable_path")
 
     add_files("./Resources/**")
     add_rules("lorr.install_resources", {

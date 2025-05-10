@@ -20,6 +20,8 @@ struct Handle<Window>::Impl {
 };
 
 auto Window::create(const WindowInfo &info) -> Window {
+    ZoneScoped;
+
     if (!SDL_Init(SDL_INIT_EVENTS | SDL_INIT_VIDEO)) {
         LOG_ERROR("Failed to initialize SDL! {}", SDL_GetError());
         return Handle(nullptr);
@@ -59,12 +61,20 @@ auto Window::create(const WindowInfo &info) -> Window {
         window_flags |= SDL_WINDOW_MAXIMIZED;
     }
 
+    if (info.flags & WindowFlag::Fullscreen) {
+        window_flags |= SDL_WINDOW_FULLSCREEN;
+    }
+
     auto impl = new Impl;
     impl->width = static_cast<u32>(new_width);
     impl->height = static_cast<u32>(new_height);
     impl->monitor_id = info.monitor;
 
     auto window_properties = SDL_CreateProperties();
+    LS_DEFER(&) {
+        SDL_DestroyProperties(window_properties);
+    };
+
     SDL_SetStringProperty(window_properties, SDL_PROP_WINDOW_CREATE_TITLE_STRING, info.title.c_str());
     SDL_SetNumberProperty(window_properties, SDL_PROP_WINDOW_CREATE_X_NUMBER, new_pos_x);
     SDL_SetNumberProperty(window_properties, SDL_PROP_WINDOW_CREATE_Y_NUMBER, new_pos_y);
@@ -72,7 +82,6 @@ auto Window::create(const WindowInfo &info) -> Window {
     SDL_SetNumberProperty(window_properties, SDL_PROP_WINDOW_CREATE_HEIGHT_NUMBER, new_height);
     SDL_SetNumberProperty(window_properties, SDL_PROP_WINDOW_CREATE_FLAGS_NUMBER, window_flags);
     impl->handle = SDL_CreateWindowWithProperties(window_properties);
-    SDL_DestroyProperties(window_properties);
 
     impl->cursors = {
         SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_DEFAULT),     SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_TEXT),
@@ -222,7 +231,29 @@ auto Window::get_surface(VkInstance instance) -> VkSurfaceKHR {
         LOG_ERROR("{}", SDL_GetError());
         return nullptr;
     }
+
     return surface;
+}
+
+auto Window::get_handle() -> void * {
+    ZoneScoped;
+
+    auto window_props = SDL_GetWindowProperties(impl->handle);
+
+#ifdef LS_LINUX
+    const std::string_view video_driver = SDL_GetCurrentVideoDriver();
+    if (video_driver == "x11") {
+        return reinterpret_cast<void *>(SDL_GetNumberProperty(window_props, SDL_PROP_WINDOW_X11_WINDOW_NUMBER, 0));
+    } else if (video_driver == "wayland") {
+        return SDL_GetPointerProperty(window_props, SDL_PROP_WINDOW_WAYLAND_SURFACE_POINTER, nullptr);
+    }
+#elif LS_WINDOWS
+    return SDL_GetPointerProperty(window_props, SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr);
+#else
+    #error platform not supported
+#endif
+
+    return nullptr;
 }
 
 auto Window::show_dialog(const ShowDialogInfo &info) -> void {

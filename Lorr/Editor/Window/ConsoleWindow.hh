@@ -1,9 +1,9 @@
 #pragma once
 
-#include "Editor/Panel/Panels.hh"
+#include "Editor/Window/IWindow.hh"
 
-namespace lr {
-struct ConsolePanel : PanelI {
+namespace led {
+struct ConsoleWindow : IWindow {
     struct Message {
         u32 verbosity = {};
         std::string message = {};
@@ -11,9 +11,9 @@ struct ConsolePanel : PanelI {
 
     std::vector<Message> messages = {};
 
-    ConsolePanel(std::string name_, bool open_ = true);
+    ConsoleWindow(std::string name_, bool open_ = true);
 
-    void render(this ConsolePanel &);
+    void render(this ConsoleWindow &);
     void do_render(vuk::Format, vuk::Extent3D) override {
         render();
     }

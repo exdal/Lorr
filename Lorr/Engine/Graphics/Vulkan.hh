@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Engine/Graphics/Slang/Compiler.hh"
 #include <vuk/Buffer.hpp>
 #include <vuk/ImageAttachment.hpp>
 #include <vuk/Value.hpp>
@@ -133,7 +134,8 @@ struct ImageView {
     auto to_attachment(Device &, const vuk::ImageUsageFlags &usage) const -> vuk::ImageAttachment;
     auto to_attachment(Device &, vuk::ImageAttachment::Preset preset) const -> vuk::ImageAttachment;
     auto discard(Device &, vuk::Name name, const vuk::ImageUsageFlags &usage, LR_THISCALL) const -> vuk::Value<vuk::ImageAttachment>;
-    auto acquire(Device &, vuk::Name name, const vuk::ImageUsageFlags &usage, vuk::Access last_access, LR_THISCALL) const -> vuk::Value<vuk::ImageAttachment>;
+    auto acquire(Device &, vuk::Name name, const vuk::ImageUsageFlags &usage, vuk::Access last_access, LR_THISCALL) const
+        -> vuk::Value<vuk::ImageAttachment>;
 
     auto format() const -> vuk::Format;
     auto extent() const -> vuk::Extent3D;
@@ -189,18 +191,16 @@ private:
 /////////////////////////////////
 // PIPELINE
 
-struct ShaderCompileInfo {
-    std::vector<ls::pair<std::string, std::string>> definitions = {};
+struct PipelineCompileInfo {
     // Root path is where included modules will be searched and linked
     std::string module_name = {};
-    fs::path root_path = {};
-    fs::path shader_path = {};
     ls::option<std::string_view> shader_source = ls::nullopt;
     std::vector<std::string> entry_points = {};
 };
 
 struct Pipeline {
-    static auto create(Device &, const ShaderCompileInfo &compile_info, ls::span<vuk::PersistentDescriptorSet> persistent_sets = {})
+    static auto
+    create(Device &, SlangSession &session, const PipelineCompileInfo &compile_info, ls::span<vuk::PersistentDescriptorSet> persistent_sets = {})
         -> std::expected<Pipeline, vuk::VkException>;
 
     auto id() const -> PipelineID;

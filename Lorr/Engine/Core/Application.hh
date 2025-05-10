@@ -35,7 +35,6 @@ struct Application {
     ImGuiRenderer imgui_renderer = {};
     SceneRenderer scene_renderer = {};
     AssetManager asset_man = {};
-    ls::option<UUID> active_scene_uuid = ls::nullopt;
 
     bool should_close = false;
 

@@ -3,6 +3,21 @@
 #include "Engine/Graphics/VulkanTypes.hh"
 
 namespace lr::GPU {
+enum class DebugView : i32 {
+    None = 0,
+    Triangles,
+    Meshlets,
+    Overdraw,
+    Albedo,
+    Normal,
+    Emissive,
+    Metallic,
+    Roughness,
+    Occlusion,
+
+    Count,
+};
+
 enum class CullFlags : u32 {
     MeshletFrustum = 1 << 0,
     TriangleBackFace = 1 << 1,
@@ -23,7 +38,7 @@ struct Atmosphere {
     alignas(4) glm::vec3 mie_scatter = { 0.003996f, 0.003996f, 0.003996f };
     alignas(4) f32 mie_density = 1.2f;
     alignas(4) f32 mie_extinction = 0.004440f;
-    alignas(4) f32 mie_asymmetry = 0.8f;
+    alignas(4) f32 mie_asymmetry = 3.6f;
 
     alignas(4) glm::vec3 ozone_absorption = { 0.000650f, 0.001881f, 0.000085f };
     alignas(4) f32 ozone_height = 25.0f;
@@ -94,13 +109,13 @@ struct MeshletBounds {
 };
 
 struct MeshletInstance {
-    alignas(4) u32 model_index = 0;
+    alignas(4) u32 mesh_index = 0;
     alignas(4) u32 material_index = 0;
     alignas(4) u32 transform_index = 0;
     alignas(4) u32 meshlet_index = 0;
 };
 
-struct Model {
+struct Mesh {
     alignas(8) u64 indices = 0;
     alignas(8) u64 vertex_positions = 0;
     alignas(8) u64 vertex_normals = 0;
@@ -109,4 +124,21 @@ struct Model {
     alignas(8) u64 meshlet_bounds = 0;
     alignas(8) u64 local_triangle_indices = 0;
 };
+
+constexpr static u32 HISTOGRAM_THREADS_X = 16;
+constexpr static u32 HISTOGRAM_THREADS_Y = 16;
+constexpr static u32 HISTOGRAM_BIN_COUNT = HISTOGRAM_THREADS_X * HISTOGRAM_THREADS_Y;
+
+struct HistogramLuminance {
+    alignas(4) f32 adapted_luminance;
+    alignas(4) f32 exposure;
+};
+
+struct HistogramInfo {
+    alignas(4) f32 min_exposure = -6.0f;
+    alignas(4) f32 max_exposure = 18.0f;
+    alignas(4) f32 adaptation_speed = 1.1f;
+    alignas(4) f32 ev100_bias = 1.0f;
+};
+
 } // namespace lr::GPU

@@ -29,6 +29,21 @@ public func henyey_greenstein_phase(f32 g, f32 cos_theta) -> f32 {
     return (1.0 - g2) / (4.0 * PI * denom * sqrt(denom));
 }
 
+public func draine_phase(f32 alpha, f32 g, f32 cos_theta) -> f32 {
+    return (1.0 / (4.0 * PI)) *
+           ((1.0 - (g * g)) / pow((1.0 + (g * g) - (2.0 * g * cos_theta)), 3.0 / 2.0)) *
+           ((1.0 + (alpha * cos_theta * cos_theta)) / (1.0 + (alpha * (1.0 / 3.0) * (1.0 + (2.0 * g * g)))));
+}
+
+public func henyey_greenstein_draine_phase(f32 g, f32 cos_theta) -> f32 {
+    const f32 g_hg = exp(-(0.0990567 / (g - 1.67154)));
+    const f32 g_d = exp(-(2.20679 / (g + 3.91029)) - 0.428934);
+    const f32 alpha = exp(3.62489 - (8.29288 / (g + 5.52825)));
+    const f32 w_d = exp(-(0.599085 / (g - 0.641583)) - 0.665888);
+
+    return lerp(draine_phase(0, g_hg, cos_theta), draine_phase(alpha, g_d, cos_theta), w_d);
+}
+
 /// GENERAL MATH
 public func safe_sqrt(f32 x) -> f32 {
     return sqrt(max(0, x));
@@ -101,6 +116,24 @@ public func ray_sphere_intersect_outside(f32x3 ray_origin, f32x3 ray_direction, 
 
 public func ray_rect_intersect(f32x2 bottom_left_0, f32x2 top_right_0, f32x2 bottom_left_1, f32x2 top_right_1) -> bool {
   return !(any(top_right_0 < bottom_left_1) || any(bottom_left_0 > top_right_1));
+}
+
+public func build_orthonormal_basis(f32x3 n) -> f32x3x3 {
+    f32x3 b1;
+    f32x3 b2;
+
+    if (n.z < 0.0) {
+        const f32 a = 1.0 / (1.0 - n.z);
+        const f32 b = n.x * n.y * a;
+        b1 = f32x3(1.0 - n.x * n.x * a, -b, n.x);
+        b2 = f32x3(b, n.y * n.y * a - 1.0, -n.y);
+    } else {
+        const f32 a = 1.0 / (1.0 + n.z);
+        const f32 b = -n.x * n.y * a;
+        b1 = f32x3(1.0 - n.x * n.x * a, b, -n.x);
+        b2 = f32x3(b, 1.0 - n.y * n.y * a, -n.y);
+    }
+    return transpose(f32x3x3(b1, b2, n));
 }
 
 }

@@ -5,8 +5,6 @@
 
 #include "Engine/Memory/SlotMap.hh"
 
-#include "Engine/Util/LegitProfiler.hh"
-
 #include <VkBootstrap.h>
 
 #include <vuk/runtime/vk/Allocator.hpp>
@@ -41,23 +39,31 @@ public:
     auto init(Device &) -> std::expected<void, vuk::VkException>;
     auto destroy(this TransferManager &) -> void;
 
-    [[nodiscard]] auto
-    alloc_transient_buffer_raw(this TransferManager &, vuk::MemoryUsage usage, usize size, usize alignment = 8, bool frame = true, LR_THISCALL)
+    [[nodiscard]]
+    auto alloc_transient_buffer_raw(this TransferManager &, vuk::MemoryUsage usage, usize size, usize alignment = 8, bool frame = true, LR_THISCALL)
         -> vuk::Buffer;
-    [[nodiscard]] auto
-    alloc_transient_buffer(this TransferManager &, vuk::MemoryUsage usage, usize size, usize alignment = 8, bool frame = true, LR_THISCALL)
+
+    [[nodiscard]]
+    auto alloc_transient_buffer(this TransferManager &, vuk::MemoryUsage usage, usize size, usize alignment = 8, bool frame = true, LR_THISCALL)
         -> vuk::Value<vuk::Buffer>;
-    [[nodiscard]] auto upload_staging(this TransferManager &, vuk::Value<vuk::Buffer> &&src, vuk::Value<vuk::Buffer> &&dst, LR_THISCALL)
+
+    [[nodiscard]]
+    auto upload_staging(this TransferManager &, vuk::Value<vuk::Buffer> &&src, vuk::Value<vuk::Buffer> &&dst, LR_THISCALL) -> vuk::Value<vuk::Buffer>;
+
+    [[nodiscard]]
+    auto upload_staging(this TransferManager &, vuk::Value<vuk::Buffer> &&src, Buffer &dst, u64 dst_offset = 0, LR_THISCALL)
         -> vuk::Value<vuk::Buffer>;
-    [[nodiscard]] auto upload_staging(this TransferManager &, vuk::Value<vuk::Buffer> &&src, Buffer &dst, u64 dst_offset = 0, LR_THISCALL)
+
+    [[nodiscard]]
+    auto upload_staging(this TransferManager &, void *data, u64 data_size, vuk::Value<vuk::Buffer> &&dst, u64 dst_offset = 0, LR_THISCALL)
         -> vuk::Value<vuk::Buffer>;
-    [[nodiscard]] auto
-    upload_staging(this TransferManager &, void *data, u64 data_size, vuk::Value<vuk::Buffer> &&dst, u64 dst_offset = 0, LR_THISCALL)
-        -> vuk::Value<vuk::Buffer>;
-    [[nodiscard]] auto upload_staging(this TransferManager &, void *data, u64 data_size, Buffer &dst, u64 dst_offset = 0, LR_THISCALL)
-        -> vuk::Value<vuk::Buffer>;
-    [[nodiscard]] auto upload_staging(this TransferManager &, ImageView &image_view, void *data, u64 data_size, LR_THISCALL)
-        -> vuk::Value<vuk::ImageAttachment>;
+
+    [[nodiscard]]
+    auto upload_staging(this TransferManager &, void *data, u64 data_size, Buffer &dst, u64 dst_offset = 0, LR_THISCALL) -> vuk::Value<vuk::Buffer>;
+
+    [[nodiscard]]
+    auto upload_staging(this TransferManager &, ImageView &image_view, void *data, u64 data_size, LR_THISCALL) -> vuk::Value<vuk::ImageAttachment>;
+
     template<typename T>
     [[nodiscard]] auto upload_staging(this TransferManager &self, ls::span<T> span, Buffer &dst, u64 dst_offset = 0, LR_THISCALL)
         -> vuk::Value<vuk::Buffer> {
@@ -112,9 +118,6 @@ private:
 
     // Profiling tools
     ankerl::unordered_dense::map<vuk::Name, ls::pair<vuk::Query, vuk::Query>> pass_queries = {};
-    std::vector<legit::ProfilerTask> gpu_profiler_tasks = {};
-    legit::ProfilerGraph gpu_profiler_graph = { 400 };
-    f64 gpu_profiler_query_offset = 0.0;
 
     vkb::Instance instance = {};
     vkb::PhysicalDevice physical_device = {};
@@ -136,7 +139,7 @@ public:
     auto transfer_man(this Device &) -> TransferManager &;
     auto new_frame(this Device &, vuk::Swapchain &) -> vuk::Value<vuk::ImageAttachment>;
     auto end_frame(this Device &, vuk::Value<vuk::ImageAttachment> &&target_attachment) -> void;
-    auto wait(this Device &, std::source_location LOC = std::source_location::current()) -> void;
+    auto wait(this Device &, LR_THISCALL) -> void;
 
     auto create_persistent_descriptor_set(this Device &, ls::span<BindlessDescriptorInfo> bindings, u32 index)
         -> vuk::Unique<vuk::PersistentDescriptorSet>;
@@ -168,10 +171,20 @@ public:
     auto get_instance() -> VkInstance {
         return instance.instance;
     }
+    auto get_native_handle() -> VkDevice {
+        return handle.device;
+    }
     auto get_allocator() -> vuk::Allocator & {
         return allocator.value();
     }
-
-    auto render_frame_profiler(this Device &) -> void;
+    auto get_compiler() -> vuk::Compiler & {
+        return compiler;
+    }
+    auto get_runtime() -> vuk::Runtime & {
+        return *runtime;
+    }
+    auto get_pass_queries() -> auto & {
+        return pass_queries;
+    }
 };
 } // namespace lr

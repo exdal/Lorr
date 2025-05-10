@@ -5,23 +5,6 @@ target("Lorr")
     set_pcheader("Engine/pch.hh", { public = true, force = true })
     add_cxxflags("clang::-march=native", "clang_cl::/arch:AVX2", "cl::/arch:AVX2")
 
-    if is_mode("debug") then
-        add_ldflags(
-            "-Wl,--export-dynamic",
-            { tools = { "clang", "gcc" } })
-    elseif is_mode("asan") then
-        set_policy("build.sanitizer.address", true)
-        set_policy("build.sanitizer.undefined", true)
-        set_policy("build.sanitizer.leak", true)
-    elseif is_mode("tsan") then
-        set_policy("build.sanitizer.thread", true)
-        set_optimize("faster")
-        add_cxflags("-g")
-        add_ldflags(
-            "-Wl,--export-dynamic",
-            { tools = { "clang", "gcc" } })
-    end
-
     add_rpathdirs("@executable_path")
     add_includedirs("../", { public = true })
     add_files("**.cc")
@@ -49,6 +32,7 @@ target("Lorr")
         "libsdl3",
         "vk-bootstrap",
         "imgui",
+        "imguizmo",
         "shader-slang",
         "tracy",
         "xxhash",
@@ -62,7 +46,6 @@ target("Lorr")
         "fastgltf",
         "stb",
         "flecs",
-        "imguizmo",
         "vuk",
         "meshoptimizer",
         "ktx-software",

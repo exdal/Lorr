@@ -9,7 +9,6 @@ struct SlangSessionInfo {
 };
 
 struct SlangModuleInfo {
-    fs::path path = {};
     std::string module_name = {};
     ls::option<std::string_view> source = ls::nullopt;
 };
@@ -38,6 +37,8 @@ struct SlangSession : Handle<SlangSession> {
     auto destroy() -> void;
 
     auto load_module(const SlangModuleInfo &info) -> ls::option<SlangModule>;
+    auto root_directory() const -> const fs::path &;
+    auto modular_path(const std::string &module_name) -> fs::path;
 };
 
 struct SlangCompiler : Handle<SlangCompiler> {

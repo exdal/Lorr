@@ -56,20 +56,16 @@ auto UUID::from_string(std::string_view str) -> ls::option<UUID> {
         return val;
     };
 
-    UUID uuid;
-    try {
-        uuid.data._u64[0] = (convert_segment(str, 0, 8).value() << 32) | //
-            (convert_segment(str, 9, 4).value() << 16) | //
-            convert_segment(str, 14, 4).value();
-        uuid.data._u64[1] = (convert_segment(str, 19, 4).value() << 48) | //
-            convert_segment(str, 24, 12).value();
+    UUID uuid = {};
+    uuid.data._u64[0] = (convert_segment(str, 0, 8).value_or(0_u64) << 32) | //
+        (convert_segment(str, 9, 4).value_or(0_u64) << 16) | //
+        convert_segment(str, 14, 4).value_or(0_u64);
+    uuid.data._u64[1] = (convert_segment(str, 19, 4).value_or(0_u64) << 48) | //
+        convert_segment(str, 24, 12).value_or(0_u64);
 
 #ifdef LS_DEBUG
-        uuid.debug = uuid.str();
+    uuid.debug = uuid.str();
 #endif
-    } catch (std::exception &) {
-        return ls::nullopt;
-    }
 
     return uuid;
 }

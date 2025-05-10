@@ -1059,16 +1059,6 @@ auto AssetManager::load_material(const UUID &uuid, const Material &material_info
 
     if (!asset->is_loaded()) {
         asset->material_id = impl->materials.create_slot(const_cast<Material &&>(material_info));
-        auto gpu_materials_bytes_size = impl->materials.size() * sizeof(GPU::Material);
-        if (gpu_materials_bytes_size > impl->materials_buffer.data_size()) {
-            if (impl->materials_buffer.id() != BufferID::Invalid) {
-                impl->device->wait();
-                impl->device->destroy(impl->materials_buffer.id());
-            }
-
-            impl->materials_buffer = Buffer::create(*impl->device, gpu_materials_bytes_size, vuk::MemoryUsage::eGPUonly).value();
-            vuk::fill(impl->materials_buffer.acquire(*impl->device, "materials buffer", vuk::eNone), ~0_u32);
-        }
     }
 
     auto *material = impl->materials.slot(asset->material_id);
@@ -1434,10 +1424,6 @@ auto AssetManager::set_material_dirty(MaterialID material_id) -> void {
 auto AssetManager::get_materials_buffer() -> vuk::Value<vuk::Buffer> {
     ZoneScoped;
 
-    if (!impl->materials_buffer) {
-        return {};
-    }
-
     auto uuid_to_index = [this](UUID &uuid) -> u32 {
         if (!this->is_texture_loaded(uuid)) {
             return ~0_u32;
@@ -1455,41 +1441,84 @@ auto AssetManager::get_materials_buffer() -> vuk::Value<vuk::Buffer> {
         return texture_index;
     };
 
+    auto to_gpu_material = [&](Material *material) -> GPU::Material {
+        return {
+            .albedo_color = material->albedo_color,
+            .emissive_color = material->emissive_color,
+            .roughness_factor = material->roughness_factor,
+            .metallic_factor = material->metallic_factor,
+            .alpha_mode = static_cast<GPU::AlphaMode>(material->alpha_mode),
+            .alpha_cutoff = material->alpha_cutoff,
+            .albedo_image_index = uuid_to_index(material->albedo_texture),
+            .normal_image_index = uuid_to_index(material->normal_texture),
+            .emissive_image_index = uuid_to_index(material->emissive_texture),
+            .metallic_roughness_image_index = uuid_to_index(material->metallic_roughness_texture),
+            .occlusion_image_index = uuid_to_index(material->occlusion_texture),
+        };
+    };
+
     std::shared_lock shared_lock(impl->materials_mutex);
-    auto materials_buffer = impl->materials_buffer.acquire(*impl->device, "materials buffer", vuk::eNone);
+    if (impl->materials.size() == 0) {
+        return {};
+    }
+
+    auto materials_buffer = vuk::Value<vuk::Buffer>{};
+    bool rebuild_materials = false;
+    auto gpu_materials_bytes_size = impl->materials.size() * sizeof(GPU::Material);
+    if (gpu_materials_bytes_size > impl->materials_buffer.data_size()) {
+        if (impl->materials_buffer.id() != BufferID::Invalid) {
+            impl->device->wait();
+            impl->device->destroy(impl->materials_buffer.id());
+        }
+
+        impl->materials_buffer = Buffer::create(*impl->device, gpu_materials_bytes_size, vuk::MemoryUsage::eGPUonly).value();
+        materials_buffer = impl->materials_buffer.acquire(*impl->device, "materials buffer", vuk::eNone);
+        vuk::fill(materials_buffer, ~0_u32);
+        rebuild_materials = true;
+    }
+
+    LS_DEFER(&) {
+        impl->dirty_materials.clear();
+        impl->device->commit_descriptor_set(impl->materials_descriptor_set);
+    };
+
+    auto &transfer_man = impl->device->transfer_man();
+    if (rebuild_materials) {
+        auto dirty_materials_size_bytes = impl->materials.size() * sizeof(GPU::Material);
+        auto upload_buffer = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eCPUonly, dirty_materials_size_bytes);
+        auto *dst_material_ptr = reinterpret_cast<GPU::Material *>(upload_buffer->mapped_ptr);
+
+        // All loaded materials
+        auto all_materials = impl->materials.slots_unsafe();
+        for (auto &dirty_material : all_materials) {
+            auto gpu_material = to_gpu_material(&dirty_material);
+            std::memcpy(dst_material_ptr, &gpu_material, sizeof(GPU::Material));
+            dst_material_ptr++;
+        }
+
+        return transfer_man.upload_staging(std::move(upload_buffer), std::move(materials_buffer));
+    }
+
     auto dirty_material_count = impl->dirty_materials.size();
+    auto dirty_materials_size_bytes = impl->dirty_materials.size() * sizeof(GPU::Material);
+
+    materials_buffer = impl->materials_buffer.acquire(*impl->device, "materials buffer", vuk::eNone);
     if (dirty_material_count == 0) {
         return materials_buffer;
     }
 
-    auto &transfer_man = impl->device->transfer_man();
-    auto dirty_materials_size_bytes = dirty_material_count * sizeof(GPU::Material);
+    auto upload_offsets = std::vector<u64>(dirty_material_count);
     auto upload_buffer = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eCPUonly, dirty_materials_size_bytes);
     auto *dst_material_ptr = reinterpret_cast<GPU::Material *>(upload_buffer->mapped_ptr);
-    auto upload_offsets = std::vector<u64>(dirty_material_count);
-
     for (const auto &[dirty_material_id, offset] : std::views::zip(impl->dirty_materials, upload_offsets)) {
         auto index = SlotMap_decode_id(dirty_material_id).index;
         auto *material = this->get_material(dirty_material_id);
-        auto gpu_material = GPU::Material{};
-        gpu_material.albedo_color = material->albedo_color;
-        gpu_material.emissive_color = material->emissive_color;
-        gpu_material.roughness_factor = material->roughness_factor;
-        gpu_material.metallic_factor = material->metallic_factor;
-        gpu_material.alpha_mode = static_cast<GPU::AlphaMode>(material->alpha_mode);
-        gpu_material.alpha_cutoff = material->alpha_cutoff;
-        gpu_material.albedo_image_index = uuid_to_index(material->albedo_texture);
-        gpu_material.normal_image_index = uuid_to_index(material->normal_texture);
-        gpu_material.emissive_image_index = uuid_to_index(material->emissive_texture);
-        gpu_material.metallic_roughness_image_index = uuid_to_index(material->metallic_roughness_texture);
-        gpu_material.occlusion_image_index = uuid_to_index(material->occlusion_texture);
+        auto gpu_material = to_gpu_material(material);
 
         std::memcpy(dst_material_ptr, &gpu_material, sizeof(GPU::Material));
         offset = index * sizeof(GPU::Material);
         dst_material_ptr++;
     }
-
-    impl->dirty_materials.clear();
 
     auto update_materials_pass = vuk::make_pass(
         "update materials",
@@ -1506,8 +1535,6 @@ auto AssetManager::get_materials_buffer() -> vuk::Value<vuk::Buffer> {
             return dst_buffer;
         }
     );
-
-    impl->device->commit_descriptor_set(impl->materials_descriptor_set);
 
     return update_materials_pass(std::move(upload_buffer), std::move(materials_buffer));
 }

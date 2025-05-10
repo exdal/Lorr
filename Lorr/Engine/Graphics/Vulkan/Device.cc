@@ -320,7 +320,7 @@ auto Device::end_frame(this Device &self, vuk::Value<vuk::ImageAttachment> &&tar
     self.transfer_manager.release();
 }
 
-auto Device::wait(this Device &self, std::source_location LOC) -> void {
+auto Device::wait(this Device &self, LR_CALLSTACK) -> void {
     ZoneScopedN("Device Wait Idle");
 
     LOG_TRACE("Device wait idle triggered at {}:{}!", LOC.file_name(), LOC.line());

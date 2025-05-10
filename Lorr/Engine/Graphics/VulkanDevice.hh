@@ -139,7 +139,7 @@ public:
     auto transfer_man(this Device &) -> TransferManager &;
     auto new_frame(this Device &, vuk::Swapchain &) -> vuk::Value<vuk::ImageAttachment>;
     auto end_frame(this Device &, vuk::Value<vuk::ImageAttachment> &&target_attachment) -> void;
-    auto wait(this Device &, std::source_location LOC = std::source_location::current()) -> void;
+    auto wait(this Device &, LR_THISCALL) -> void;
 
     auto create_persistent_descriptor_set(this Device &, ls::span<BindlessDescriptorInfo> bindings, u32 index)
         -> vuk::Unique<vuk::PersistentDescriptorSet>;

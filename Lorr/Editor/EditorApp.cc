@@ -385,7 +385,8 @@ static auto draw_welcome_popup(EditorApp &self) -> void {
                 ImGui::SetNextItemWidth(child_width * 0.9f);
                 ImGui::InputTextWithHint("", "/path/to/new/project", &project_dir);
                 ImGui::SameLine();
-                ImGui::Button(ICON_MDI_FOLDER, { -1.0f, 0.0f });
+                if (ImGui::Button(ICON_MDI_FOLDER, { -1.0f, 0.0f })) {
+                }
 
                 ImGui::SetNextItemWidth(child_width);
                 ImGui::InputTextWithHint("", "Project Name", &project_name);

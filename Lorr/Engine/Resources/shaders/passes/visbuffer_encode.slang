@@ -72,7 +72,7 @@ func fs_main(VertexOutput input) -> u32 {
         grad.ddy = ddy(input.tex_coord);
         const f32 alpha_color = material.sample_albedo_color(grad).a;
         if (alpha_color < clamp(material.alpha_cutoff, 0.001, 1.0)) {
-            
+            discard;
         }
     }
 

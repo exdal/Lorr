@@ -6,7 +6,7 @@
 #include "Engine/Util/Icons/IconsMaterialDesignIcons.hh"
 
 #include <ImGuizmo.h>
-#include <glm/gtx/quaternion.hpp>
+#include <glm/gtx/matrix_decompose.hpp>
 
 namespace led {
 static auto on_drop(ViewportWindow &) -> void {
@@ -116,14 +116,21 @@ static auto draw_tools(ViewportWindow &self) -> void {
 
         ImGui::SeparatorText("Position");
         ImGui::drag_vec(0, glm::value_ptr(camera_transform->position), 3, ImGuiDataType_Float);
+
         ImGui::SeparatorText("Rotation");
-        ImGui::drag_vec(1, glm::value_ptr(camera_transform->rotation), 3, ImGuiDataType_Float);
+        auto camera_rotation_degrees = glm::degrees(camera_transform->rotation);
+        ImGui::drag_vec(1, glm::value_ptr(camera_rotation_degrees), 3, ImGuiDataType_Float);
+        camera_transform->rotation = glm::radians(lr::Math::normalize_180(camera_rotation_degrees));
+
         ImGui::SeparatorText("FoV");
         ImGui::drag_vec(2, &camera_info->fov, 1, ImGuiDataType_Float);
+
         ImGui::SeparatorText("Far Clip");
         ImGui::drag_vec(3, &camera_info->far_clip, 1, ImGuiDataType_Float);
+
         ImGui::SeparatorText("Velocity");
         ImGui::drag_vec(4, &camera_info->velocity_mul, 1, ImGuiDataType_Float);
+
         ImGui::SeparatorText("Culling");
         ImGui::Checkbox("Freeze frustum", &camera_info->freeze_frustum);
         auto &cull_flags = reinterpret_cast<i32 &>(active_scene->get_cull_flags());
@@ -223,33 +230,42 @@ static auto draw_viewport(ViewportWindow &self, vuk::Format format, vuk::Extent3
     }
 
     if (selected_entity && selected_entity.has<lr::ECS::Transform>()) {
-        auto camera_forward = glm::vec3(0.0, 0.0, 1.0) * lr::Math::compose_quat(glm::radians(camera_transform->rotation));
-        auto camera_projection = glm::perspectiveNO(glm::radians(camera->fov), camera->aspect_ratio, camera->far_clip, camera->near_clip);
+        auto camera_forward = glm::vec3(0.0, 0.0, 1.0) * lr::Math::quat_dir(camera_transform->rotation);
+        auto camera_projection = glm::perspective(glm::radians(camera->fov), camera->aspect_ratio, camera->far_clip, camera->near_clip);
         auto camera_view = glm::lookAt(camera_transform->position, camera_transform->position + camera_forward, glm::vec3(0.0, 1.0, 0.0));
         camera_projection[1][1] *= -1.0f;
 
         auto *transform = selected_entity.get_mut<lr::ECS::Transform>();
-        const auto &rotation = glm::radians(transform->rotation);
-        auto gizmo_mat = glm::translate(glm::mat4(1.0), transform->position);
-        gizmo_mat *= glm::rotate(glm::mat4(1.0), rotation.x, glm::vec3(1.0, 0.0, 0.0));
-        gizmo_mat *= glm::rotate(glm::mat4(1.0), rotation.y, glm::vec3(0.0, 1.0, 0.0));
-        gizmo_mat *= glm::rotate(glm::mat4(1.0), rotation.z, glm::vec3(0.0, 0.0, 1.0));
-        gizmo_mat *= glm::scale(glm::mat4(1.0), transform->scale);
+        auto T = glm::translate(glm::mat4(1.0), transform->position);
+        auto R = glm::mat4_cast(glm::quat(transform->rotation));
+        auto S = glm::scale(glm::mat4(1.0), transform->scale);
+        auto gizmo_mat = T * R * S;
+        auto delta_mat = glm::mat4(1.0f);
 
-        if (ImGuizmo::Manipulate(
-                glm::value_ptr(camera_view), //
-                glm::value_ptr(camera_projection),
-                static_cast<ImGuizmo::OPERATION>(self.gizmo_op),
-                ImGuizmo::MODE::WORLD,
-                glm::value_ptr(gizmo_mat)
-            ))
-        {
-            ImGuizmo::DecomposeMatrixToComponents( //
-                glm::value_ptr(gizmo_mat),
-                glm::value_ptr(transform->position),
-                glm::value_ptr(transform->rotation),
-                glm::value_ptr(transform->scale)
-            );
+        ImGuizmo::Manipulate(
+            glm::value_ptr(camera_view),
+            glm::value_ptr(camera_projection),
+            static_cast<ImGuizmo::OPERATION>(self.gizmo_op),
+            ImGuizmo::MODE::WORLD,
+            glm::value_ptr(gizmo_mat),
+            glm::value_ptr(delta_mat)
+        );
+
+        if (ImGuizmo::IsUsing()) {
+            glm::vec3 scale = {};
+            glm::quat rotation = {};
+            glm::vec3 position = {};
+            glm::vec3 skew = {};
+            glm::vec4 perspective = {};
+            glm::decompose(delta_mat, scale, rotation, position, skew, perspective);
+
+            if (self.gizmo_op == ImGuizmo::TRANSLATE) {
+                transform->position += position;
+            } else if (self.gizmo_op == ImGuizmo::ROTATE) {
+                transform->rotation += glm::eulerAngles(glm::quat(rotation[3], rotation[0], rotation[1], rotation[2]));
+            } else if (self.gizmo_op == ImGuizmo::SCALE) {
+                transform->scale *= scale;
+            }
 
             selected_entity.modified<lr::ECS::Transform>();
         }
@@ -290,11 +306,13 @@ static auto draw_viewport(ViewportWindow &self, vuk::Format format, vuk::Extent3
 
         if (ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
             auto drag = ImGui::GetMouseDragDelta(ImGuiMouseButton_Left, 0);
-            camera_transform->rotation.x += drag.x * 0.1f;
-            camera_transform->rotation.y += drag.y * 0.1f;
-            camera_transform->rotation = lr::Math::normalize_180(camera_transform->rotation);
-
             ImGui::ResetMouseDragDelta(ImGuiMouseButton_Left);
+
+            auto sensitivity = 0.1f;
+            auto camera_rotation_degrees = glm::degrees(camera_transform->rotation);
+            camera_rotation_degrees.x += drag.x * sensitivity;
+            camera_rotation_degrees.y += drag.y * sensitivity;
+            camera_transform->rotation = glm::radians(camera_rotation_degrees);
         }
     }
 }

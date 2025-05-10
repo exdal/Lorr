@@ -12,6 +12,7 @@
 #include "Engine/Scene/ECSModule/ComponentWrapper.hh"
 #include "Engine/Scene/ECSModule/Core.hh"
 
+#include <glm/gtx/matrix_decompose.hpp>
 #include <simdjson.h>
 
 namespace lr {
@@ -108,7 +109,7 @@ auto Scene::init(this Scene &self, const std::string &name) -> bool {
     self.world
         ->system<ECS::Transform, ECS::Camera>() //
         .each([&](flecs::iter &it, usize, ECS::Transform &t, ECS::Camera &c) {
-            auto inv_orient = glm::conjugate(Math::compose_quat(glm::radians(t.rotation)));
+            auto inv_orient = glm::conjugate(Math::quat_dir(t.rotation));
             t.position += glm::vec3(inv_orient * c.axis_velocity * it.delta_time());
 
             c.axis_velocity = {};
@@ -415,7 +416,7 @@ auto Scene::create_perspective_camera(
     return self
         .create_entity(name) //
         .add<ECS::PerspectiveCamera>()
-        .set<ECS::Transform>({ .position = position, .rotation = Math::normalize_180(rotation) })
+        .set<ECS::Transform>({ .position = position, .rotation = glm::radians(Math::normalize_180(rotation)) })
         .set<ECS::Camera>({ .fov = fov, .aspect_ratio = aspect_ratio });
 }
 
@@ -453,9 +454,20 @@ auto Scene::create_model_entity(this Scene &self, UUID &importing_model_uuid) ->
         for (const auto node_index : node_indices) {
             auto &cur_node = imported_model->nodes[node_index];
             auto node_entity = self.create_entity(self.find_entity(cur_node.name) ? std::string{} : cur_node.name);
-            node_entity.set<ECS::Transform>(
-                { .position = cur_node.translation, .rotation = Math::decompose_quat(cur_node.rotation), .scale = cur_node.scale }
-            );
+
+            const auto T = glm::translate(glm::mat4(1.0f), cur_node.translation);
+            const auto R = glm::mat4_cast(cur_node.rotation);
+            const auto S = glm::scale(glm::mat4(1.0f), cur_node.scale);
+            auto TRS = T * R * S;
+            auto transform_comp = ECS::Transform{};
+            {
+                glm::quat rotation = {};
+                glm::vec3 skew = {};
+                glm::vec4 perspective = {};
+                glm::decompose(TRS, transform_comp.scale, rotation, transform_comp.position, skew, perspective);
+                transform_comp.rotation = glm::eulerAngles(glm::quat(rotation[3], rotation[0], rotation[1], rotation[2]));
+            }
+            node_entity.set(transform_comp);
 
             if (cur_node.mesh_index.has_value()) {
                 node_entity.set<ECS::RenderingMesh>({ .model_uuid = importing_model_uuid,
@@ -463,6 +475,7 @@ auto Scene::create_model_entity(this Scene &self, UUID &importing_model_uuid) ->
             }
 
             node_entity.child_of(root);
+            node_entity.modified<lr::ECS::Transform>();
 
             visitor(node_entity, cur_node.child_indices);
         }
@@ -517,7 +530,7 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, SceneRenderInfo &i
         projection_mat[1][1] *= -1;
 
         auto translation_mat = glm::translate(glm::mat4(1.0f), -t.position);
-        auto rotation_mat = glm::mat4_cast(Math::compose_quat(glm::radians(t.rotation)));
+        auto rotation_mat = glm::mat4_cast(Math::quat_dir(t.rotation));
         auto view_mat = rotation_mat * translation_mat;
 
         auto &camera_data = active_camera_data.emplace();
@@ -614,6 +627,21 @@ auto Scene::set_name(this Scene &self, const std::string &name) -> void {
 auto Scene::set_dirty(this Scene &self, flecs::entity entity) -> void {
     ZoneScoped;
 
+    auto visit_parent = [](this auto &visitor, flecs::entity e) -> glm::mat4 {
+        const auto *entity_transform = e.get<ECS::Transform>();
+        const auto T = glm::translate(glm::mat4(1.0), entity_transform->position);
+        const auto R = glm::mat4_cast(glm::quat(entity_transform->rotation));
+        const auto S = glm::scale(glm::mat4(1.0), entity_transform->scale);
+        const auto local_mat = T * R * S;
+
+        auto parent = e.parent();
+        if (parent && parent.has<ECS::Transform>()) {
+            return visitor(parent) * local_mat;
+        } else {
+            return local_mat;
+        }
+    };
+
     LS_EXPECT(entity.has<ECS::Transform>());
     auto it = self.entity_transforms_map.find(entity);
     if (it == self.entity_transforms_map.end()) {
@@ -621,16 +649,9 @@ auto Scene::set_dirty(this Scene &self, flecs::entity entity) -> void {
     }
 
     auto transform_id = it->second;
-    const auto *entity_transform = entity.get<ECS::Transform>();
     auto *gpu_transform = self.transforms.slot(transform_id);
-
-    const auto &rotation = glm::radians(entity_transform->rotation);
-    gpu_transform->local = glm::mat4(1.0);
-    gpu_transform->world = glm::translate(glm::mat4(1.0), entity_transform->position);
-    gpu_transform->world *= glm::rotate(glm::mat4(1.0), rotation.x, glm::vec3(1.0, 0.0, 0.0));
-    gpu_transform->world *= glm::rotate(glm::mat4(1.0), rotation.y, glm::vec3(0.0, 1.0, 0.0));
-    gpu_transform->world *= glm::rotate(glm::mat4(1.0), rotation.z, glm::vec3(0.0, 0.0, 1.0));
-    gpu_transform->world *= glm::scale(glm::mat4(1.0), entity_transform->scale);
+    gpu_transform->local = glm::mat4(1.0f);
+    gpu_transform->world = visit_parent(entity);
     gpu_transform->normal = glm::mat3(gpu_transform->world);
 
     self.dirty_transforms.push_back(transform_id);

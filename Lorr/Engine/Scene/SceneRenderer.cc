@@ -619,7 +619,7 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                     .set_dynamic_state(vuk::DynamicStateFlagBits::eViewport | vuk::DynamicStateFlagBits::eScissor)
                     .set_viewport(0, vuk::Rect2D::framebuffer())
                     .set_scissor(0, vuk::Rect2D::framebuffer())
-                    //.bind_persistent(1, *descriptor_set)
+                    .bind_persistent(1, *descriptor_set)
                     .bind_image(0, 0, overdraw)
                     .bind_buffer(0, 1, camera)
                     .bind_buffer(0, 2, visible_meshlet_instances_indices)
@@ -1274,8 +1274,8 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
             return std::make_tuple(dst, depth);
         }
     );
-    // std::tie(result_attachment, depth_attachment) =
-    //     editor_grid_pass(std::move(result_attachment), std::move(depth_attachment), std::move(camera_buffer));
+    //std::tie(result_attachment, depth_attachment) =
+    //    editor_grid_pass(std::move(result_attachment), std::move(depth_attachment), std::move(camera_buffer));
 
     return result_attachment;
 }

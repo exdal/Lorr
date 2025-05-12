@@ -628,14 +628,17 @@ auto Scene::set_dirty(this Scene &self, flecs::entity entity) -> void {
     ZoneScoped;
 
     auto visit_parent = [](this auto &visitor, flecs::entity e) -> glm::mat4 {
-        const auto *entity_transform = e.get<ECS::Transform>();
-        const auto T = glm::translate(glm::mat4(1.0), entity_transform->position);
-        const auto R = glm::mat4_cast(glm::quat(entity_transform->rotation));
-        const auto S = glm::scale(glm::mat4(1.0), entity_transform->scale);
-        const auto local_mat = T * R * S;
+        auto local_mat = glm::mat4(1.0f);
+        if (e.has<ECS::Transform>()) {
+            const auto *entity_transform = e.get<ECS::Transform>();
+            const auto T = glm::translate(glm::mat4(1.0), entity_transform->position);
+            const auto R = glm::mat4_cast(glm::quat(entity_transform->rotation));
+            const auto S = glm::scale(glm::mat4(1.0), entity_transform->scale);
+            local_mat = T * R * S;
+        }
 
         auto parent = e.parent();
-        if (parent && parent.has<ECS::Transform>()) {
+        if (parent) {
             return visitor(parent) * local_mat;
         } else {
             return local_mat;
@@ -653,8 +656,14 @@ auto Scene::set_dirty(this Scene &self, flecs::entity entity) -> void {
     gpu_transform->local = glm::mat4(1.0f);
     gpu_transform->world = visit_parent(entity);
     gpu_transform->normal = glm::mat3(gpu_transform->world);
-
     self.dirty_transforms.push_back(transform_id);
+
+    // notify children
+    entity.children([](flecs::entity e) {
+        if (e.has<ECS::Transform>()) {
+            e.modified<ECS::Transform>();
+        }
+    });
 }
 
 auto Scene::get_root(this Scene &self) -> flecs::entity {

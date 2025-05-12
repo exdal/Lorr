@@ -1,4 +1,4 @@
-#include "Application.hh"
+#include "Engine/Core/Application.hh"
 
 #include "Engine/OS/Timer.hh"
 
@@ -16,7 +16,6 @@ bool Application::init(this Application &self, const ApplicationInfo &info) {
     self.job_man.emplace(12);
     self.device.init(3).value();
     self.asset_man = AssetManager::create(&self.device);
-
     self.window = Window::create(info.window_info);
     auto surface = self.window.get_surface(self.device.get_instance());
     self.swap_chain.emplace(self.device.create_swap_chain(surface).value());
@@ -29,6 +28,7 @@ bool Application::init(this Application &self, const ApplicationInfo &info) {
     }
 
     self.job_man->wait();
+
     self.run();
 
     return true;
@@ -40,14 +40,14 @@ void Application::run(this Application &self) {
     WindowCallbacks window_callbacks = {};
     window_callbacks.user_data = &self;
     window_callbacks.on_resize = [](void *user_data, glm::uvec2) {
-        auto app = static_cast<Application *>(user_data);
+        auto *app = static_cast<Application *>(user_data);
         app->device.wait();
 
         auto surface = app->window.get_surface(app->device.get_instance());
         app->swap_chain = app->device.create_swap_chain(surface, std::move(app->swap_chain)).value();
     };
     window_callbacks.on_close = [](void *user_data) {
-        auto app = static_cast<Application *>(user_data);
+        auto *app = static_cast<Application *>(user_data);
         app->should_close = true;
     };
     window_callbacks.on_mouse_pos = [](void *user_data, glm::vec2 position, glm::vec2) {
@@ -77,17 +77,12 @@ void Application::run(this Application &self) {
         timer.reset();
 
         self.window.poll(window_callbacks);
-        self.job_man->wait();
 
         auto swapchain_attachment = self.device.new_frame(self.swap_chain.value());
         swapchain_attachment = vuk::clear_image(std::move(swapchain_attachment), vuk::Black<f32>);
 
         self.imgui_renderer.begin_frame(delta_time, swapchain_attachment->extent);
         self.do_update(delta_time);
-        if (self.active_scene_uuid.has_value()) {
-            auto *scene = self.asset_man.get_scene(self.active_scene_uuid.value());
-            scene->tick(static_cast<f32>(delta_time));
-        }
         self.do_render(swapchain_attachment->format, swapchain_attachment->extent);
 
         swapchain_attachment = self.imgui_renderer.end_frame(std::move(swapchain_attachment));
@@ -106,11 +101,6 @@ void Application::shutdown(this Application &self) {
     self.device.wait();
 
     self.should_close = true;
-
-    if (self.active_scene_uuid) {
-        self.asset_man.unload_asset(self.active_scene_uuid.value());
-        self.active_scene_uuid.reset();
-    }
 
     self.do_shutdown();
 

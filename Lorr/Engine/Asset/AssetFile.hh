@@ -12,6 +12,7 @@ enum class AssetType : u32 {
     Material,
     Font,
     Scene,
+    Directory, // Internal use
 };
 
 // List of file extensions supported by Engine.

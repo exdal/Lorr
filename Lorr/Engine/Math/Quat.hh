@@ -4,13 +4,7 @@
 #include <glm/gtx/quaternion.hpp>
 
 namespace lr::Math {
-inline auto decompose_quat(const glm::quat &quat) -> glm::vec3 {
-    ZoneScoped;
-
-    return glm::eulerAngles(quat);
-}
-
-inline auto compose_quat(const glm::vec3 &rotation) -> glm::quat {
+inline auto quat_dir(const glm::vec3 &rotation) -> glm::quat {
     ZoneScoped;
 
     glm::quat orientation = {};

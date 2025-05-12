@@ -77,23 +77,51 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
         auto error = instance_result.error();
         auto vk_error = instance_result.vk_result();
 
-        LOG_ERROR("Failed to initialize Vulkan instance! {}", error.message());
+        LOG_ERROR("Failed to initialize Vulkan instance! {}-{}", error.message(), std::to_underlying(vk_error));
 
         return std::unexpected(vk_error);
     }
 
     self.instance = instance_result.value();
 
+    LOG_TRACE("Created device.");
+
     vkb::PhysicalDeviceSelector physical_device_selector(self.instance);
     physical_device_selector.defer_surface_initialization();
+    physical_device_selector.disable_portability_subset();
     physical_device_selector.set_minimum_version(1, 3);
 
+    std::vector<const c8 *> device_extensions;
+    device_extensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+    device_extensions.push_back(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
+    device_extensions.push_back(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
+    device_extensions.push_back(VK_EXT_SHADER_IMAGE_ATOMIC_INT64_EXTENSION_NAME);
+    //device_extensions.push_back(VK_KHR_MAINTENANCE_8_EXTENSION_NAME);
+    physical_device_selector.add_required_extensions(device_extensions);
+
+    auto physical_device_result = physical_device_selector.select();
+    if (!physical_device_result) {
+        auto error = physical_device_result.error();
+
+        LOG_ERROR("Failed to select Vulkan Physical Device! {}", error.message());
+        return std::unexpected(VK_ERROR_DEVICE_LOST);
+    }
+
+    self.physical_device = physical_device_result.value();
+
+    LOG_TRACE("Created physical device.");
+
+    VkPhysicalDeviceVulkan14Features vk14_features = {};
+    vk14_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES;
+    vk14_features.pushDescriptor = true;
+
     VkPhysicalDeviceVulkan13Features vk13_features = {};
+    vk13_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
     vk13_features.synchronization2 = true;
     vk13_features.shaderDemoteToHelperInvocation = true;
-    physical_device_selector.set_required_features_13(vk13_features);
 
     VkPhysicalDeviceVulkan12Features vk12_features = {};
+    vk12_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
     vk12_features.descriptorIndexing = true;
     vk12_features.shaderOutputLayer = true;
     vk12_features.shaderSampledImageArrayNonUniformIndexing = true;
@@ -114,37 +142,37 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
     vk12_features.scalarBlockLayout = true;
     vk12_features.shaderInt8 = true;
     vk12_features.shaderSubgroupExtendedTypes = true;
-    physical_device_selector.set_required_features_12(vk12_features);
 
     VkPhysicalDeviceVulkan11Features vk11_features = {};
+    vk11_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
     vk11_features.variablePointers = true;
     vk11_features.variablePointersStorageBuffer = true;
-    physical_device_selector.set_required_features_11(vk11_features);
 
-    VkPhysicalDeviceFeatures vk10_features = {};
-    vk10_features.vertexPipelineStoresAndAtomics = true;
-    vk10_features.fragmentStoresAndAtomics = true;
-    vk10_features.shaderInt64 = true;
-    vk10_features.multiDrawIndirect = true;
-    physical_device_selector.set_required_features(vk10_features);
+    VkPhysicalDeviceMaintenance8FeaturesKHR maintenance_8_features = {};
+    maintenance_8_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_8_FEATURES_KHR;
+    maintenance_8_features.maintenance8 = true;
 
-    std::vector<const c8 *> device_extensions;
-    device_extensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-    device_extensions.push_back(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
-    device_extensions.push_back(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
-    physical_device_selector.add_required_extensions(device_extensions);
+    VkPhysicalDeviceFeatures2 vk10_features = {};
+    vk10_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    vk10_features.features.vertexPipelineStoresAndAtomics = true;
+    vk10_features.features.fragmentStoresAndAtomics = true;
+    vk10_features.features.shaderInt64 = true;
+    vk10_features.features.multiDrawIndirect = true;
+    vk10_features.features.samplerAnisotropy = true;
 
-    auto physical_device_result = physical_device_selector.select();
-    if (!physical_device_result) {
-        auto error = physical_device_result.error();
-
-        LOG_ERROR("Failed to select Vulkan Physical Device! {}", error.message());
-        return std::unexpected(VK_ERROR_DEVICE_LOST);
-    }
-
-    self.physical_device = physical_device_result.value();
+    VkPhysicalDeviceShaderImageAtomicInt64FeaturesEXT image_atomic_int64_features = {};
+    image_atomic_int64_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_IMAGE_ATOMIC_INT64_FEATURES_EXT;
+    image_atomic_int64_features.shaderImageInt64Atomics = true;
 
     vkb::DeviceBuilder device_builder(self.physical_device);
+    device_builder //
+        .add_pNext(&vk14_features)
+        .add_pNext(&vk13_features)
+        .add_pNext(&vk12_features)
+        .add_pNext(&vk11_features)
+        // .add_pNext(&maintenance_8_features)
+        .add_pNext(&image_atomic_int64_features)
+        .add_pNext(&vk10_features);
     auto device_result = device_builder.build();
     if (!device_result) {
         auto error = device_result.error();
@@ -155,6 +183,8 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
     }
 
     self.handle = device_result.value();
+
+    LOG_TRACE("Created device.");
 
     vuk::FunctionPointers vulkan_functions = {};
     vulkan_functions.vkGetInstanceProcAddr = self.instance.fp_vkGetInstanceProcAddr;
@@ -182,19 +212,23 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
     );
 
     executors.push_back(std::make_unique<vuk::ThisThreadExecutor>());
-    self.runtime.emplace(vuk::RuntimeCreateParameters{
-        .instance = self.instance,
-        .device = self.handle,
-        .physical_device = self.physical_device,
-        .executors = std::move(executors),
-        .pointers = vulkan_functions,
-    });
+    self.runtime.emplace(
+        vuk::RuntimeCreateParameters{
+            .instance = self.instance,
+            .device = self.handle,
+            .physical_device = self.physical_device,
+            .executors = std::move(executors),
+            .pointers = vulkan_functions,
+        }
+    );
 
     self.frame_resources.emplace(*self.runtime, frame_count);
     self.allocator.emplace(*self.frame_resources);
     self.runtime->set_shader_target_version(VK_API_VERSION_1_3);
     self.transfer_manager.init(self).value();
     self.shader_compiler = SlangCompiler::create().value();
+
+    LOG_INFO("Initialized device.");
 
     return {};
 }
@@ -203,6 +237,7 @@ auto Device::destroy(this Device &self) -> void {
     ZoneScoped;
 
     self.wait();
+
     self.resources.buffers.reset();
     self.resources.images.reset();
     self.resources.image_views.reset();
@@ -213,6 +248,9 @@ auto Device::destroy(this Device &self) -> void {
     self.shader_compiler.destroy();
 
     self.frame_resources.reset();
+
+    vuk::current_module->collect_garbage();
+
     self.allocator.reset();
     self.runtime.reset();
     self.compiler.reset();
@@ -245,9 +283,6 @@ auto Device::new_frame(this Device &self, vuk::Swapchain &swap_chain) -> vuk::Va
 auto Device::end_frame(this Device &self, vuk::Value<vuk::ImageAttachment> &&target_attachment) -> void {
     ZoneScoped;
 
-    self.gpu_profiler_query_offset = 0.0;
-    self.gpu_profiler_tasks.clear();
-
     auto on_begin_pass = [](void *user_data, vuk::Name pass_name, vuk::CommandBuffer &cmd_list, vuk::DomainFlagBits) {
         auto *device = static_cast<Device *>(user_data);
         auto query_it = device->pass_queries.find(pass_name);
@@ -263,24 +298,11 @@ auto Device::end_frame(this Device &self, vuk::Value<vuk::ImageAttachment> &&tar
         return static_cast<void *>(&(*query_it));
     };
 
-    auto on_end_pass = [](void *user_data, void *pass_data, vuk::CommandBuffer &cmd_list) {
-        auto *device = static_cast<Device *>(user_data);
+    auto on_end_pass = [](void *, void *pass_data, vuk::CommandBuffer &cmd_list) {
         auto *query_ptr = static_cast<std::pair<const vuk::Name, ls::pair<vuk::Query, vuk::Query>> *>(pass_data);
-        auto &name = query_ptr->first;
         auto &[start_ts, end_ts] = query_ptr->second;
 
         cmd_list.write_timestamp(end_ts);
-
-        auto start_time = static_cast<f64>(device->runtime->retrieve_timestamp(start_ts).value_or(0));
-        auto end_time = static_cast<f64>(device->runtime->retrieve_timestamp(end_ts).value_or(0));
-        f64 delta = ((end_time / 1e6f) - (start_time / 1e6f)) / 1e3f;
-        auto pass_index = start_ts.id / 2;
-        device->gpu_profiler_tasks.push_back({ .startTime = device->gpu_profiler_query_offset,
-                                               .endTime = device->gpu_profiler_query_offset + delta,
-                                               .name = name.c_str(),
-                                               .color = legit::Colors::colors[pass_index % ls::count_of(legit::Colors::colors)] });
-
-        device->gpu_profiler_query_offset += delta;
     };
 
     self.transfer_manager.wait_for_ops(self.compiler);
@@ -298,7 +320,7 @@ auto Device::end_frame(this Device &self, vuk::Value<vuk::ImageAttachment> &&tar
     self.transfer_manager.release();
 }
 
-auto Device::wait(this Device &self, std::source_location LOC) -> void {
+auto Device::wait(this Device &self, LR_CALLSTACK) -> void {
     ZoneScopedN("Device Wait Idle");
 
     LOG_TRACE("Device wait idle triggered at {}:{}!", LOC.file_name(), LOC.line());
@@ -343,14 +365,18 @@ auto Device::create_swap_chain(this Device &self, VkSurfaceKHR surface, ls::opti
     VkPresentModeKHR present_mode = self.frame_count() == 1 ? VK_PRESENT_MODE_FIFO_KHR : VK_PRESENT_MODE_IMMEDIATE_KHR;
     vkb::SwapchainBuilder builder(self.handle, surface);
     builder.set_desired_min_image_count(self.frame_count());
-    builder.set_desired_format(vuk::SurfaceFormatKHR{
-        .format = vuk::Format::eR8G8B8A8Srgb,
-        .colorSpace = vuk::ColorSpaceKHR::eSrgbNonlinear,
-    });
-    builder.add_fallback_format(vuk::SurfaceFormatKHR{
-        .format = vuk::Format::eB8G8R8A8Srgb,
-        .colorSpace = vuk::ColorSpaceKHR::eSrgbNonlinear,
-    });
+    builder.set_desired_format(
+        vuk::SurfaceFormatKHR{
+            .format = vuk::Format::eR8G8B8A8Srgb,
+            .colorSpace = vuk::ColorSpaceKHR::eSrgbNonlinear,
+        }
+    );
+    builder.add_fallback_format(
+        vuk::SurfaceFormatKHR{
+            .format = vuk::Format::eB8G8R8A8Srgb,
+            .colorSpace = vuk::ColorSpaceKHR::eSrgbNonlinear,
+        }
+    );
     builder.set_desired_present_mode(present_mode);
     builder.set_image_usage_flags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
 
@@ -497,14 +523,6 @@ auto Device::destroy(this Device &self, PipelineID id) -> void {
     ZoneScoped;
 
     self.resources.pipelines.destroy_slot(id);
-}
-
-auto Device::render_frame_profiler(this Device &self) -> void {
-    ZoneScoped;
-
-    self.gpu_profiler_graph.LoadFrameData(self.gpu_profiler_tasks.data(), self.gpu_profiler_tasks.size());
-    self.gpu_profiler_graph.RenderTimings(600, 10, 200, 0);
-    ImGui::SliderFloat("Graph detail", &self.gpu_profiler_graph.maxFrameTime, 1.0f, 10000.f);
 }
 
 } // namespace lr

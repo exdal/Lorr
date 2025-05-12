@@ -23,7 +23,6 @@ struct VertexOutput {
 struct PushConstants {
     f32x2 translate;
     f32x2 scale;
-    u32 is_srgb;
 };
 [[vk::push_constant]] PushConstants c;
 
@@ -33,21 +32,14 @@ func vs_main(VertexInput input) -> VertexOutput {
 
     output.position = f32x4(input.position * c.scale + c.translate, 0.0, 1.0);
     output.tex_coord = input.tex_coord;
-    output.color = input.color;
+    output.color.rgb = std::srgb_to_linear(input.color.rgb);
+    output.color.a = input.color.a;
 
     return output;
 }
 
 [[shader("fragment")]]
 f32x4 fs_main(VertexOutput input) : SV_TARGET {
-    f32x4 color_sampled = texture.sample_mip(sampler, input.tex_coord, 0.0) * input.color;
-    f32x3 color = color_sampled.rgb;
-
-    if (c.is_srgb == 0) {
-        color = std::srgb_to_linear(color);
-    }
-
-    return f32x4(color, color_sampled.a);
+    return texture.sample(sampler, input.tex_coord) * input.color;
 }
-
 

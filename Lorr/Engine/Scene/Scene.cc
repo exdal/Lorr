@@ -12,8 +12,7 @@
 #include "Engine/Scene/ECSModule/ComponentWrapper.hh"
 #include "Engine/Scene/ECSModule/Core.hh"
 
-#include <algorithm>
-#include <glm/gtx/quaternion.hpp>
+#include <glm/gtx/matrix_decompose.hpp>
 #include <simdjson.h>
 
 namespace lr {
@@ -22,7 +21,7 @@ bool json_to_vec(simdjson::ondemand::value &o, glm::vec<N, T> &vec) {
     using U = glm::vec<N, T>;
     for (i32 i = 0; i < U::length(); i++) {
         constexpr static std::string_view components[] = { "x", "y", "z", "w" };
-        vec[i] = static_cast<T>(o[components[i]].get_double());
+        vec[i] = static_cast<T>(o[components[i]].get_double().value_unsafe());
     }
 
     return true;
@@ -31,7 +30,7 @@ bool json_to_vec(simdjson::ondemand::value &o, glm::vec<N, T> &vec) {
 bool json_to_quat(simdjson::ondemand::value &o, glm::quat &quat) {
     for (i32 i = 0; i < glm::quat::length(); i++) {
         constexpr static std::string_view components[] = { "x", "y", "z", "w" };
-        quat[i] = static_cast<f32>(o[components[i]].get_double());
+        quat[i] = static_cast<f32>(o[components[i]].get_double().value_unsafe());
     }
 
     return true;
@@ -91,26 +90,26 @@ auto Scene::init(this Scene &self, const std::string &name) -> bool {
         });
 
     self.world
-        ->observer<ECS::RenderingModel>() //
+        ->observer<ECS::RenderingMesh>() //
         .event(flecs::OnSet)
         .event(flecs::OnRemove)
-        .each([&self](flecs::iter &it, usize i, ECS::RenderingModel &rendering_model) {
-            if (!rendering_model.uuid) {
+        .each([&self](flecs::iter &it, usize i, ECS::RenderingMesh &rendering_mesh) {
+            if (!rendering_mesh.model_uuid) {
                 return;
             }
 
             auto entity = it.entity(i);
             if (it.event() == flecs::OnSet) {
-                self.attach_model(entity, rendering_model.uuid);
+                self.attach_mesh(entity, rendering_mesh.model_uuid, rendering_mesh.mesh_index);
             } else if (it.event() == flecs::OnRemove) {
-                self.detach_model(entity, rendering_model.uuid);
+                self.detach_mesh(entity, rendering_mesh.model_uuid, rendering_mesh.mesh_index);
             }
         });
 
     self.world
         ->system<ECS::Transform, ECS::Camera>() //
         .each([&](flecs::iter &it, usize, ECS::Transform &t, ECS::Camera &c) {
-            auto inv_orient = glm::conjugate(Math::compose_quat(glm::radians(t.rotation)));
+            auto inv_orient = glm::conjugate(Math::quat_dir(t.rotation));
             t.position += glm::vec3(inv_orient * c.axis_velocity * it.delta_time());
 
             c.axis_velocity = {};
@@ -122,38 +121,132 @@ auto Scene::init(this Scene &self, const std::string &name) -> bool {
 auto Scene::destroy(this Scene &self) -> void {
     ZoneScoped;
 
-    self.root.children([](flecs::entity e) {
-        e.each([&](flecs::id component_id) {
-            if (!component_id.is_entity()) {
-                return;
-            }
+    {
+        auto q = self.world //
+                     ->query_builder()
+                     .with(flecs::ChildOf, self.root)
+                     .build();
+        q.each([](flecs::entity e) {
+            e.each([&](flecs::id component_id) {
+                if (!component_id.is_entity()) {
+                    return;
+                }
 
-            ECS::ComponentWrapper component(e, component_id);
-            if (!component.has_component()) {
-                return;
-            }
+                ECS::ComponentWrapper component(e, component_id);
+                if (!component.has_component()) {
+                    return;
+                }
 
-            component.for_each([&](usize &, std::string_view, ECS::ComponentWrapper::Member &member) {
-                if (auto *component_uuid = std::get_if<UUID *>(&member)) {
-                    const auto &uuid = **component_uuid;
-                    if (uuid) {
-                        auto &app = Application::get();
-                        if (uuid && app.asset_man.get_asset(uuid)) {
-                            app.asset_man.unload_asset(uuid);
+                component.for_each([&](usize &, std::string_view, ECS::ComponentWrapper::Member &member) {
+                    if (auto *component_uuid = std::get_if<UUID *>(&member)) {
+                        const auto &uuid = **component_uuid;
+                        if (uuid) {
+                            auto &app = Application::get();
+                            if (uuid && app.asset_man.get_asset(uuid)) {
+                                app.asset_man.unload_asset(uuid);
+                            }
                         }
                     }
-                }
+                });
             });
         });
-    });
+    }
 
+    self.root.destruct();
     self.name.clear();
     self.root.clear();
     self.transforms.reset();
     self.entity_transforms_map.clear();
     self.dirty_transforms.clear();
-    self.rendering_models.clear();
+    self.rendering_meshes_map.clear();
     self.world.reset();
+}
+
+static auto json_to_entity(Scene &self, flecs::entity root, simdjson::ondemand::value &json, std::vector<UUID> &requested_assets) -> bool {
+    ZoneScoped;
+    memory::ScopedStack stack;
+
+    auto &world = self.get_world();
+
+    auto entity_name_json = json["name"];
+    if (entity_name_json.error()) {
+        LOG_ERROR("Entities must have names!");
+        return false;
+    }
+
+    auto entity_name = entity_name_json.get_string().value_unsafe();
+    auto e = self.create_entity(std::string(entity_name.begin(), entity_name.end()));
+    e.child_of(root);
+
+    auto entity_tags_json = json["tags"];
+    for (auto entity_tag : entity_tags_json.get_array()) {
+        auto tag = world.component(stack.null_terminate(entity_tag.get_string().value_unsafe()).data());
+        e.add(tag);
+    }
+
+    auto components_json = json["components"];
+    for (auto component_json : components_json.get_array()) {
+        auto component_name_json = component_json["name"];
+        if (component_name_json.error()) {
+            LOG_ERROR("Entity '{}' has corrupt components JSON array.", e.name());
+            return false;
+        }
+
+        const auto *component_name = stack.null_terminate_cstr(component_name_json.get_string().value_unsafe());
+        auto component_id = world.lookup(component_name);
+        if (!component_id) {
+            LOG_ERROR("Entity '{}' has invalid component named '{}'!", e.name(), component_name);
+            return false;
+        }
+
+        LS_EXPECT(self.get_entity_db().is_component_known(component_id));
+        e.add(component_id);
+        ECS::ComponentWrapper component(e, component_id);
+        component.for_each([&](usize &, std::string_view member_name, ECS::ComponentWrapper::Member &member) {
+            auto member_json = component_json[member_name];
+            if (member_json.error()) {
+                // Default construct
+                return;
+            }
+
+            std::visit(
+                ls::match{
+                    [](const auto &) {},
+                    [&](f32 *v) { *v = static_cast<f32>(member_json.get_double().value_unsafe()); },
+                    [&](i32 *v) { *v = static_cast<i32>(member_json.get_int64().value_unsafe()); },
+                    [&](u32 *v) { *v = member_json.get_uint64().value_unsafe(); },
+                    [&](i64 *v) { *v = member_json.get_int64().value_unsafe(); },
+                    [&](u64 *v) { *v = member_json.get_uint64().value_unsafe(); },
+                    [&](glm::vec2 *v) { json_to_vec(member_json.value_unsafe(), *v); },
+                    [&](glm::vec3 *v) { json_to_vec(member_json.value_unsafe(), *v); },
+                    [&](glm::vec4 *v) { json_to_vec(member_json.value_unsafe(), *v); },
+                    [&](glm::quat *v) { json_to_quat(member_json.value_unsafe(), *v); },
+                    // [&](glm::mat4 *v) {json_to_mat(member_json.value(), *v); },
+                    [&](std::string *v) { *v = member_json.get_string().value_unsafe(); },
+                    [&](UUID *v) {
+                        *v = UUID::from_string(member_json.get_string().value_unsafe()).value();
+                        requested_assets.push_back(*v);
+                    },
+                },
+                member
+            );
+        });
+
+        e.modified(component_id);
+    }
+
+    auto children_json = json["children"];
+    for (auto children : children_json) {
+        if (children.error()) {
+            continue;
+        }
+
+        if (!json_to_entity(self, e, children.value_unsafe(), requested_assets)) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 auto Scene::import_from_file(this Scene &self, const fs::path &path) -> bool {
@@ -183,75 +276,17 @@ auto Scene::import_from_file(this Scene &self, const fs::path &path) -> bool {
         return false;
     }
 
-    self.set_name(std::string(name_json.value()));
+    self.set_name(std::string(name_json.value_unsafe()));
 
     std::vector<UUID> requested_assets = {};
     auto entities_json = doc["entities"].get_array();
     for (auto entity_json : entities_json) {
-        auto entity_name_json = entity_json["name"];
-        if (entity_name_json.error()) {
-            LOG_ERROR("Entities must have names!");
+        if (entity_json.error()) {
+            continue;
+        }
+
+        if (!json_to_entity(self, self.root, entity_json.value_unsafe(), requested_assets)) {
             return false;
-        }
-
-        auto entity_name = entity_name_json.get_string().value();
-        auto e = self.create_entity(std::string(entity_name.begin(), entity_name.end()));
-
-        auto entity_tags_json = entity_json["tags"];
-        for (auto entity_tag : entity_tags_json.get_array()) {
-            auto tag = self.world->component(stack.null_terminate(entity_tag.get_string()).data());
-            e.add(tag);
-        }
-
-        auto components_json = entity_json["components"];
-        for (auto component_json : components_json.get_array()) {
-            auto component_name_json = component_json["name"];
-            if (component_name_json.error()) {
-                LOG_ERROR("Entity '{}' has corrupt components JSON array.", e.name());
-                return false;
-            }
-
-            const auto *component_name = stack.null_terminate_cstr(component_name_json.get_string());
-            auto component_id = self.world->lookup(component_name);
-            if (!component_id) {
-                LOG_ERROR("Entity '{}' has invalid component named '{}'!", e.name(), component_name);
-                return false;
-            }
-
-            LS_EXPECT(self.entity_db.is_component_known(component_id));
-            e.add(component_id);
-            ECS::ComponentWrapper component(e, component_id);
-            component.for_each([&](usize &, std::string_view member_name, ECS::ComponentWrapper::Member &member) {
-                auto member_json = component_json[member_name];
-                if (member_json.error()) {
-                    // Default construct
-                    return;
-                }
-
-                std::visit(
-                    ls::match{
-                        [](const auto &) {},
-                        [&](f32 *v) { *v = static_cast<f32>(member_json.get_double()); },
-                        [&](i32 *v) { *v = static_cast<i32>(member_json.get_int64()); },
-                        [&](u32 *v) { *v = member_json.get_uint64(); },
-                        [&](i64 *v) { *v = member_json.get_int64(); },
-                        [&](u64 *v) { *v = member_json.get_uint64(); },
-                        [&](glm::vec2 *v) { json_to_vec(member_json.value(), *v); },
-                        [&](glm::vec3 *v) { json_to_vec(member_json.value(), *v); },
-                        [&](glm::vec4 *v) { json_to_vec(member_json.value(), *v); },
-                        [&](glm::quat *v) { json_to_quat(member_json.value(), *v); },
-                        // [&](glm::mat4 *v) {json_to_mat(member_json.value(), *v); },
-                        [&](std::string *v) { *v = member_json.get_string().value(); },
-                        [&](UUID *v) {
-                            *v = UUID::from_string(member_json.get_string().value()).value();
-                            requested_assets.push_back(*v);
-                        },
-                    },
-                    member
-                );
-            });
-
-            e.modified(component_id);
         }
     }
 
@@ -266,14 +301,15 @@ auto Scene::import_from_file(this Scene &self, const fs::path &path) -> bool {
     return true;
 }
 
-auto Scene::export_to_file(this Scene &self, const fs::path &path) -> bool {
+auto entity_to_json(JsonWriter &json, flecs::entity root) -> void {
     ZoneScoped;
 
-    JsonWriter json;
-    json.begin_obj();
-    json["name"] = self.name;
-    json["entities"].begin_array();
-    self.root.children([&](flecs::entity e) {
+    auto q = root.world() //
+                 .query_builder()
+                 .with(flecs::ChildOf, root)
+                 .build();
+
+    q.each([&](flecs::entity e) {
         json.begin_obj();
         json["name"] = std::string_view(e.name(), e.name().length());
 
@@ -321,9 +357,23 @@ auto Scene::export_to_file(this Scene &self, const fs::path &path) -> bool {
             json.end_obj();
         }
         json.end_array();
+
+        json["children"].begin_array();
+        entity_to_json(json, e);
+        json.end_array();
+
         json.end_obj();
     });
+}
 
+auto Scene::export_to_file(this Scene &self, const fs::path &path) -> bool {
+    ZoneScoped;
+
+    JsonWriter json;
+    json.begin_obj();
+    json["name"] = self.name;
+    json["entities"].begin_array();
+    entity_to_json(json, self.root);
     json.end_array();
     json.end_obj();
 
@@ -345,12 +395,12 @@ auto Scene::create_entity(this Scene &self, const std::string &name) -> flecs::e
     if (name.empty()) {
         memory::ScopedStack stack;
 
-        auto e = self.world->entity().child_of(self.root);
+        auto e = self.world->entity();
         e.set_name(stack.format_char("Entity {}", e.raw_id()));
         return e;
     }
 
-    return self.world->entity(name_sv).child_of(self.root);
+    return self.world->entity(name_sv);
 }
 
 auto Scene::create_perspective_camera(
@@ -366,7 +416,7 @@ auto Scene::create_perspective_camera(
     return self
         .create_entity(name) //
         .add<ECS::PerspectiveCamera>()
-        .set<ECS::Transform>({ .position = position, .rotation = Math::normalize_180(rotation) })
+        .set<ECS::Transform>({ .position = position, .rotation = glm::radians(Math::normalize_180(rotation)) })
         .set<ECS::Camera>({ .fov = fov, .aspect_ratio = aspect_ratio });
 }
 
@@ -376,7 +426,64 @@ auto Scene::create_editor_camera(this Scene &self) -> void {
     self.create_perspective_camera("editor_camera", { 0.0, 2.0, 0.0 }, { 0, 0, 0 }, 65.0, 1.6)
         .add<ECS::Hidden>()
         .add<ECS::EditorCamera>()
-        .add<ECS::ActiveCamera>();
+        .add<ECS::ActiveCamera>()
+        .child_of(self.root);
+}
+
+auto Scene::create_model_entity(this Scene &self, UUID &importing_model_uuid) -> flecs::entity {
+    ZoneScoped;
+
+    auto &app = Application::get();
+    // sanity check
+    if (!app.asset_man.get_asset(importing_model_uuid)) {
+        LOG_ERROR("Cannot import an invalid model '{}' into the scene!", importing_model_uuid.str());
+        return {};
+    }
+
+    // acquire model
+    if (!app.asset_man.load_model(importing_model_uuid)) {
+        return {};
+    }
+
+    auto *imported_model = app.asset_man.get_model(importing_model_uuid);
+    auto &default_scene = imported_model->scenes[imported_model->default_scene_index];
+    auto root_entity = self.create_entity(self.find_entity(default_scene.name) ? std::string{} : default_scene.name);
+    root_entity.child_of(self.root);
+
+    auto visit_nodes = [&](this auto &visitor, flecs::entity &root, std::vector<usize> &node_indices) -> void {
+        for (const auto node_index : node_indices) {
+            auto &cur_node = imported_model->nodes[node_index];
+            auto node_entity = self.create_entity(self.find_entity(cur_node.name) ? std::string{} : cur_node.name);
+
+            const auto T = glm::translate(glm::mat4(1.0f), cur_node.translation);
+            const auto R = glm::mat4_cast(cur_node.rotation);
+            const auto S = glm::scale(glm::mat4(1.0f), cur_node.scale);
+            auto TRS = T * R * S;
+            auto transform_comp = ECS::Transform{};
+            {
+                glm::quat rotation = {};
+                glm::vec3 skew = {};
+                glm::vec4 perspective = {};
+                glm::decompose(TRS, transform_comp.scale, rotation, transform_comp.position, skew, perspective);
+                transform_comp.rotation = glm::eulerAngles(glm::quat(rotation[3], rotation[0], rotation[1], rotation[2]));
+            }
+            node_entity.set(transform_comp);
+
+            if (cur_node.mesh_index.has_value()) {
+                node_entity.set<ECS::RenderingMesh>({ .model_uuid = importing_model_uuid,
+                                                      .mesh_index = static_cast<u32>(cur_node.mesh_index.value()) });
+            }
+
+            node_entity.child_of(root);
+            node_entity.modified<lr::ECS::Transform>();
+
+            visitor(node_entity, cur_node.child_indices);
+        }
+    };
+
+    visit_nodes(root_entity, default_scene.node_indices);
+
+    return root_entity;
 }
 
 auto Scene::find_entity(this Scene &self, std::string_view name) -> flecs::entity {
@@ -387,15 +494,30 @@ auto Scene::find_entity(this Scene &self, std::string_view name) -> flecs::entit
     return self.root.lookup(safe_str);
 }
 
-auto Scene::render(this Scene &self, SceneRenderer &renderer, const vuk::Extent3D &extent, vuk::Format format) -> vuk::Value<vuk::ImageAttachment> {
+auto Scene::find_entity(this Scene &self, u32 transform_index) -> flecs::entity {
     ZoneScoped;
+
+    for (const auto &[entity, transform_id] : self.entity_transforms_map) {
+        auto i = SlotMap_decode_id(transform_id).index;
+        if (i == transform_index) {
+            return entity;
+        }
+    }
+
+    return {};
+}
+
+auto Scene::render(this Scene &self, SceneRenderer &renderer, SceneRenderInfo &info) -> vuk::Value<vuk::ImageAttachment> {
+    ZoneScoped;
+
+    auto &app = Application::get();
 
     // clang-format off
     auto camera_query = self.get_world()
         .query_builder<ECS::Transform, ECS::Camera, ECS::ActiveCamera>()
         .build();
-    auto model_query = self.get_world()
-        .query_builder<ECS::RenderingModel>()
+    auto rendering_meshes_query = self.get_world()
+        .query_builder<ECS::RenderingMesh>()
         .build();
     auto directional_light_query = self.get_world()
         .query_builder<ECS::DirectionalLight>()
@@ -408,7 +530,7 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, const vuk::Extent3
         projection_mat[1][1] *= -1;
 
         auto translation_mat = glm::translate(glm::mat4(1.0f), -t.position);
-        auto rotation_mat = glm::mat4_cast(Math::compose_quat(glm::radians(t.rotation)));
+        auto rotation_mat = glm::mat4_cast(Math::quat_dir(t.rotation));
         auto view_mat = rotation_mat * translation_mat;
 
         auto &camera_data = active_camera_data.emplace();
@@ -420,7 +542,7 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, const vuk::Extent3
         camera_data.position = t.position;
         camera_data.near_clip = c.near_clip;
         camera_data.far_clip = c.far_clip;
-        camera_data.resolution = glm::vec2(static_cast<f32>(extent.width), static_cast<f32>(extent.height));
+        camera_data.resolution = glm::vec2(static_cast<f32>(info.extent.width), static_cast<f32>(info.extent.height));
 
         if (!c.freeze_frustum) {
             c.frustum_projection_view_mat = camera_data.projection_view_mat;
@@ -433,6 +555,7 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, const vuk::Extent3
 
     ls::option<GPU::Sun> sun_data = ls::nullopt;
     ls::option<GPU::Atmosphere> atmos_data = ls::nullopt;
+    ls::option<GPU::HistogramInfo> histogram_data = ls::nullopt;
     directional_light_query.each([&](flecs::entity e, ECS::DirectionalLight &light) {
         auto light_dir_rad = glm::radians(light.direction);
 
@@ -450,10 +573,20 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, const vuk::Extent3
             atmos.mie_scatter = atmos_info.mie_scattering * 1e-3f;
             atmos.mie_density = atmos_info.mie_density;
             atmos.mie_extinction = atmos_info.mie_extinction * 1e-3f;
+            atmos.mie_asymmetry = atmos_info.mie_asymmetry;
             atmos.ozone_absorption = atmos_info.ozone_absorption * 1e-3f;
             atmos.ozone_height = atmos_info.ozone_height;
             atmos.ozone_thickness = atmos_info.ozone_thickness;
             atmos.aerial_gain_per_slice = atmos_info.aerial_gain_per_slice;
+        }
+
+        if (e.has<ECS::AutoExposure>()) {
+            const auto &auto_exposure = *e.get<ECS::AutoExposure>();
+            auto &histogram = histogram_data.emplace();
+            histogram.min_exposure = auto_exposure.min_exposure;
+            histogram.max_exposure = auto_exposure.max_exposure;
+            histogram.adaptation_speed = auto_exposure.adaptation_speed;
+            histogram.ev100_bias = auto_exposure.ev100_bias;
         }
     });
 
@@ -466,18 +599,16 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, const vuk::Extent3
         composed_scene.emplace(renderer.compose(compose_info));
     }
 
-    auto transforms = self.transforms.slots_unsafe();
-    auto render_info = SceneRenderInfo{
-        .format = format,
-        .extent = extent,
-        .sun = sun_data,
-        .atmosphere = atmos_data,
-        .camera = active_camera_data,
-        .cull_flags = self.cull_flags,
-        .dirty_transform_ids = self.dirty_transforms,
-        .transforms = transforms,
-    };
-    auto rendered_attachment = renderer.render(render_info, composed_scene);
+    info.materials_descriptor_set = app.asset_man.get_materials_descriptor_set();
+    info.materials_buffer = app.asset_man.get_materials_buffer();
+    info.sun = sun_data;
+    info.atmosphere = atmos_data;
+    info.camera = active_camera_data;
+    info.histogram_info = histogram_data;
+    info.cull_flags = self.cull_flags;
+    info.dirty_transform_ids = self.dirty_transforms;
+    info.transforms = self.transforms.slots_unsafe();
+    auto rendered_attachment = renderer.render(info, composed_scene);
     self.dirty_transforms.clear();
 
     return rendered_attachment;
@@ -496,6 +627,24 @@ auto Scene::set_name(this Scene &self, const std::string &name) -> void {
 auto Scene::set_dirty(this Scene &self, flecs::entity entity) -> void {
     ZoneScoped;
 
+    auto visit_parent = [](this auto &visitor, flecs::entity e) -> glm::mat4 {
+        auto local_mat = glm::mat4(1.0f);
+        if (e.has<ECS::Transform>()) {
+            const auto *entity_transform = e.get<ECS::Transform>();
+            const auto T = glm::translate(glm::mat4(1.0), entity_transform->position);
+            const auto R = glm::mat4_cast(glm::quat(entity_transform->rotation));
+            const auto S = glm::scale(glm::mat4(1.0), entity_transform->scale);
+            local_mat = T * R * S;
+        }
+
+        auto parent = e.parent();
+        if (parent) {
+            return visitor(parent) * local_mat;
+        } else {
+            return local_mat;
+        }
+    };
+
     LS_EXPECT(entity.has<ECS::Transform>());
     auto it = self.entity_transforms_map.find(entity);
     if (it == self.entity_transforms_map.end()) {
@@ -503,19 +652,18 @@ auto Scene::set_dirty(this Scene &self, flecs::entity entity) -> void {
     }
 
     auto transform_id = it->second;
-    const auto *entity_transform = entity.get<ECS::Transform>();
     auto *gpu_transform = self.transforms.slot(transform_id);
-
-    const auto &rotation = glm::radians(entity_transform->rotation);
-    gpu_transform->local = glm::mat4(1.0);
-    gpu_transform->world = glm::translate(glm::mat4(1.0), entity_transform->position);
-    gpu_transform->world *= glm::rotate(glm::mat4(1.0), rotation.x, glm::vec3(1.0, 0.0, 0.0));
-    gpu_transform->world *= glm::rotate(glm::mat4(1.0), rotation.y, glm::vec3(0.0, 1.0, 0.0));
-    gpu_transform->world *= glm::rotate(glm::mat4(1.0), rotation.z, glm::vec3(0.0, 0.0, 1.0));
-    gpu_transform->world *= glm::scale(glm::mat4(1.0), entity_transform->scale);
+    gpu_transform->local = glm::mat4(1.0f);
+    gpu_transform->world = visit_parent(entity);
     gpu_transform->normal = glm::mat3(gpu_transform->world);
-
     self.dirty_transforms.push_back(transform_id);
+
+    // notify children
+    entity.children([](flecs::entity e) {
+        if (e.has<ECS::Transform>()) {
+            e.modified<ECS::Transform>();
+        }
+    });
 }
 
 auto Scene::get_root(this Scene &self) -> flecs::entity {
@@ -561,79 +709,41 @@ auto Scene::compose(this Scene &self) -> SceneComposeInfo {
 
     auto &app = Application::get();
 
-    auto rendering_image_view_ids = std::vector<ImageViewID>();
-    auto gpu_models = std::vector<GPU::Model>();
+    auto gpu_meshes = std::vector<GPU::Mesh>();
     auto gpu_meshlet_instances = std::vector<GPU::MeshletInstance>();
-    auto gpu_materials = std::vector<GPU::Material>();
 
-    for (const auto &[model_uuid, transform_ids] : self.rendering_models) {
-        auto *model = app.asset_man.get_model(model_uuid);
+    for (const auto &[rendering_mesh, transform_ids] : self.rendering_meshes_map) {
+        auto *model = app.asset_man.get_model(rendering_mesh.n0);
+        const auto &mesh = model->meshes[rendering_mesh.n1];
 
-        //  ── PER MODEL INFORMATION ───────────────────────────────────────────
-        auto model_offset = gpu_models.size();
-        auto &gpu_model = gpu_models.emplace_back();
-        gpu_model.indices = model->indices.device_address();
-        gpu_model.vertex_positions = model->vertex_positions.device_address();
-        gpu_model.vertex_normals = model->vertex_normals.device_address();
-        gpu_model.texture_coords = model->texture_coords.device_address();
-        gpu_model.meshlets = model->meshlets.device_address();
-        gpu_model.meshlet_bounds = model->meshlet_bounds.device_address();
-        gpu_model.local_triangle_indices = model->local_triangle_indices.device_address();
-
-        auto material_offset = gpu_materials.size();
-        for (const auto &material_uuid : model->materials) {
-            auto *material = app.asset_man.get_material(material_uuid);
-            auto &gpu_material = gpu_materials.emplace_back();
-            gpu_material.albedo_color = material->albedo_color;
-            gpu_material.emissive_color = material->emissive_color;
-            gpu_material.roughness_factor = material->roughness_factor;
-            gpu_material.metallic_factor = material->metallic_factor;
-            gpu_material.alpha_mode = static_cast<GPU::AlphaMode>(material->alpha_mode);
-            gpu_material.alpha_cutoff = material->alpha_cutoff;
-
-            auto add_image_if_exists = [&](const UUID &uuid) -> ls::option<u32> {
-                if (!uuid) {
-                    return ls::nullopt;
-                }
-
-                auto *texture = app.asset_man.get_texture(uuid);
-                if (!texture) {
-                    return ls::nullopt;
-                }
-
-                auto index = rendering_image_view_ids.size();
-                rendering_image_view_ids.push_back(texture->image_view.id());
-                return static_cast<u32>(index);
-            };
-
-            gpu_material.albedo_image_index = add_image_if_exists(material->albedo_texture).value_or(~0_u32);
-            gpu_material.normal_image_index = add_image_if_exists(material->normal_texture).value_or(~0_u32);
-            gpu_material.emissive_image_index = add_image_if_exists(material->emissive_texture).value_or(~0_u32);
-            gpu_material.metallic_roughness_image_index = add_image_if_exists(material->metallic_roughness_texture).value_or(~0_u32);
-            gpu_material.occlusion_image_index = add_image_if_exists(material->occlusion_texture).value_or(~0_u32);
-        }
+        //  ── PER MESH INFORMATION ────────────────────────────────────────────
+        auto mesh_offset = gpu_meshes.size();
+        auto &gpu_mesh = gpu_meshes.emplace_back();
+        gpu_mesh.indices = model->indices.device_address();
+        gpu_mesh.vertex_positions = model->vertex_positions.device_address();
+        gpu_mesh.vertex_normals = model->vertex_normals.device_address();
+        gpu_mesh.texture_coords = model->texture_coords.device_address();
+        gpu_mesh.local_triangle_indices = model->local_triangle_indices.device_address();
+        gpu_mesh.meshlet_bounds = model->meshlet_bounds.device_address();
+        gpu_mesh.meshlets = model->meshlets.device_address();
 
         //  ── INSTANCING ──────────────────────────────────────────────────────
         for (const auto transform_id : transform_ids) {
-            u32 meshlet_offset = 0;
-            for (const auto &primitive : model->primitives) {
+            for (const auto primitive_index : mesh.primitive_indices) {
+                auto &primitive = model->primitives[primitive_index];
                 for (u32 meshlet_index = 0; meshlet_index < primitive.meshlet_count; meshlet_index++) {
                     auto &meshlet_instance = gpu_meshlet_instances.emplace_back();
-                    meshlet_instance.model_index = model_offset;
-                    meshlet_instance.material_index = material_offset + primitive.material_index;
+                    meshlet_instance.mesh_index = mesh_offset;
+                    meshlet_instance.material_index = primitive.material_index;
                     meshlet_instance.transform_index = SlotMap_decode_id(transform_id).index;
-                    meshlet_instance.meshlet_index = meshlet_index + meshlet_offset;
+                    meshlet_instance.meshlet_index = meshlet_index + primitive.meshlet_offset;
                 }
-
-                meshlet_offset += primitive.meshlet_count;
             }
         }
     }
 
     return SceneComposeInfo{
-        .rendering_image_view_ids = std::move(rendering_image_view_ids),
-        .gpu_materials = std::move(gpu_materials),
-        .gpu_models = std::move(gpu_models),
+        .gpu_meshes = std::move(gpu_meshes),
         .gpu_meshlet_instances = std::move(gpu_meshlet_instances),
     };
 }
@@ -659,7 +769,7 @@ auto Scene::remove_transform(this Scene &self, flecs::entity entity) -> void {
     self.entity_transforms_map.erase(it);
 }
 
-auto Scene::attach_model(this Scene &self, flecs::entity entity, const UUID &model_uuid) -> bool {
+auto Scene::attach_mesh(this Scene &self, flecs::entity entity, const UUID &model_uuid, usize mesh_index) -> bool {
     ZoneScoped;
 
     auto transforms_it = self.entity_transforms_map.find(entity);
@@ -674,20 +784,20 @@ auto Scene::attach_model(this Scene &self, flecs::entity entity, const UUID &mod
     // Find the old model UUID and detach it from entity.
     // TODO: This is retarded
     auto old_model_uuid = UUID(nullptr);
-    for (const auto &[cur_old_model_uuid, transform_ids] : self.rendering_models) {
+    for (const auto &[cur_old_rendering_mesh, transform_ids] : self.rendering_meshes_map) {
         if (std::ranges::find(transform_ids, transform_id) != transform_ids.end()) {
-            old_model_uuid = cur_old_model_uuid;
+            old_model_uuid = cur_old_rendering_mesh.n0;
             break;
         }
     }
     if (old_model_uuid) {
-        self.detach_model(entity, old_model_uuid);
+        self.detach_mesh(entity, old_model_uuid, mesh_index);
     }
 
-    auto instances_it = self.rendering_models.find(model_uuid);
-    if (instances_it == self.rendering_models.end()) {
+    auto instances_it = self.rendering_meshes_map.find(ls::pair(model_uuid, mesh_index));
+    if (instances_it == self.rendering_meshes_map.end()) {
         bool inserted = false;
-        std::tie(instances_it, inserted) = self.rendering_models.try_emplace(model_uuid);
+        std::tie(instances_it, inserted) = self.rendering_meshes_map.try_emplace(ls::pair(model_uuid, mesh_index));
         if (!inserted) {
             return false;
         }
@@ -701,12 +811,12 @@ auto Scene::attach_model(this Scene &self, flecs::entity entity, const UUID &mod
     return true;
 }
 
-auto Scene::detach_model(this Scene &self, flecs::entity entity, const UUID &model_uuid) -> bool {
+auto Scene::detach_mesh(this Scene &self, flecs::entity entity, const UUID &model_uuid, usize mesh_index) -> bool {
     ZoneScoped;
 
-    auto instances_it = self.rendering_models.find(model_uuid);
+    auto instances_it = self.rendering_meshes_map.find(ls::pair(model_uuid, mesh_index));
     auto transforms_it = self.entity_transforms_map.find(entity);
-    if (instances_it == self.rendering_models.end() || transforms_it == self.entity_transforms_map.end()) {
+    if (instances_it == self.rendering_meshes_map.end() || transforms_it == self.entity_transforms_map.end()) {
         return false;
     }
 
@@ -716,7 +826,7 @@ auto Scene::detach_model(this Scene &self, flecs::entity entity, const UUID &mod
     self.models_dirty = true;
 
     if (instances.empty()) {
-        self.rendering_models.erase(instances_it);
+        self.rendering_meshes_map.erase(instances_it);
     }
 
     return true;

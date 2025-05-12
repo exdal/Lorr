@@ -4,15 +4,15 @@ import gpu;
 import std;
 import scene;
 
-func from_sub_uvs_to_unit(f32x2 uv, f32x2 res) -> f32x2 {
+public func from_sub_uvs_to_unit(f32x2 uv, f32x2 res) -> f32x2 {
     return (uv - 0.5 / res) * (res / (res - 1.0));
 }
 
-func from_unit_to_sub_uvs(f32x2 uv, f32x2 res) -> f32x2 {
+public func from_unit_to_sub_uvs(f32x2 uv, f32x2 res) -> f32x2 {
     return (uv + 0.5 / res) * (res / (res + 1.0));
 }
 
-public func get_transmittance_lut_uv(Atmosphere *atmosphere, f32x2 p) -> f32x2 {
+public func transmittance_params_to_lut_uv(Atmosphere *atmosphere, f32x2 p) -> f32x2 {
     f32 h = std::safe_sqrt(
         atmosphere->atmos_radius * atmosphere->atmos_radius -
         atmosphere->planet_radius * atmosphere->planet_radius);
@@ -28,7 +28,7 @@ public func get_transmittance_lut_uv(Atmosphere *atmosphere, f32x2 p) -> f32x2 {
     return f32x2(mu, r);
 }
 
-public func get_multiscattering_lut_uv(Atmosphere *atmosphere, f32 altitude, f32 cos_theta) -> f32x2 {
+public func multiscattering_params_to_lut_uv(Atmosphere *atmosphere, f32 altitude, f32 cos_theta) -> f32x2 {
     f32x2 uv = clamp(f32x2(
         cos_theta * 0.5 + 0.5,
         altitude / (atmosphere->atmos_radius - atmosphere->planet_radius)),
@@ -36,32 +36,69 @@ public func get_multiscattering_lut_uv(Atmosphere *atmosphere, f32 altitude, f32
     return from_unit_to_sub_uvs(uv, f32x2(atmosphere->multiscattering_lut_size.xy));
 }
 
-public func get_sky_view_lut_uv(
+public func sky_view_params_to_lut_uv(
     Atmosphere *atmosphere,
     bool intersect_planet,
-    f32 view_zenith_cos,
-    f32 light_view_cos,
-    f32 altitude
+    f32 altitude,
+    f32 view_zenith_cos_angle,
+    f32x2 light_on_plane
 ) -> f32x2 {
-    f32x2 uv = 0.0;
-    f32 horizon = sqrt(altitude * altitude - atmosphere->planet_radius * atmosphere->planet_radius);
+    f32 horizon = std::safe_sqrt(altitude * altitude - atmosphere->planet_radius * atmosphere->planet_radius);
     f32 beta = acos(horizon / altitude);
     f32 zenith_horizon_angle = PI - beta;
-        // Non-linear parametization
+    f32 view_zenith_angle = acos(view_zenith_cos_angle);
+
+    f32x2 uv = 0.0;
     if (!intersect_planet) {
-        f32 coord = acos(view_zenith_cos) / zenith_horizon_angle;
+        f32 coord = view_zenith_angle / zenith_horizon_angle;
         coord = 1.0 - coord;
-        coord = sqrt(coord);
+        coord = std::safe_sqrt(coord);
         coord = 1.0 - coord;
-        uv.y = 0.5 * coord;
+        uv.y = coord * 0.5;
     } else {
-        f32 coord = (acos(view_zenith_cos) - zenith_horizon_angle) / beta;
-        coord = sqrt(coord);
-        uv.y = 0.5 * coord + 0.5;  // Non-linear parametization
+        f32 coord = (view_zenith_angle - zenith_horizon_angle) / beta;
+        coord = std::safe_sqrt(coord);
+        uv.y = coord * 0.5 + 0.5;
     }
 
-    uv.x = sqrt(-light_view_cos * 0.5 + 0.5);
+    f32 theta = atan2(-light_on_plane.y, -light_on_plane.x);
+    uv.x = (theta + PI) / (2.0 * PI);
     return from_unit_to_sub_uvs(uv, f32x2(atmosphere->sky_view_lut_size.xy));
+}
+
+public func uv_to_sky_view_lut_params(
+    Atmosphere *atmosphere,
+    f32x2 uv,
+    f32 altitude
+) -> f32x3 {
+    uv = from_sub_uvs_to_unit(uv, f32x2(atmosphere->sky_view_lut_size.xy));
+    f32 horizon = std::safe_sqrt(altitude * altitude - atmosphere->planet_radius * atmosphere->planet_radius);
+    f32 beta = acos(horizon / altitude);
+    f32 zenith_horizon_angle = PI - beta;
+
+    f32 view_zenith_angle = 0.0;
+    if (uv.y < 0.5) {
+        f32 coord = uv.y * 2.0;
+        coord = 1.0 - coord;
+        coord *= coord;
+        coord = 1.0 - coord;
+        view_zenith_angle = zenith_horizon_angle * coord;
+    } else {
+        f32 coord = uv.y * 2.0 - 1.0;
+        coord *= coord;
+        view_zenith_angle = zenith_horizon_angle + beta * coord;
+    }
+
+    const f32 longitude_view_cos_angle = uv.x * TAU;
+    const f32 view_zenith_cos_angle = cos(view_zenith_angle);
+    const f32 view_zenith_sin_angle = std::safe_sqrt(1.0 - view_zenith_cos_angle * view_zenith_cos_angle) * (view_zenith_angle > 0.0 ? 1.0 : -1.0);
+    const f32 cos_longitude_view_cos_angle = cos(longitude_view_cos_angle);
+    const f32 sin_longitude_view_cos_angle = std::safe_sqrt(1.0 - cos_longitude_view_cos_angle * cos_longitude_view_cos_angle) * (longitude_view_cos_angle <= PI ? 1.0 : -1.0);
+    return f32x3(
+        view_zenith_sin_angle * cos_longitude_view_cos_angle,
+        view_zenith_cos_angle,
+        view_zenith_sin_angle * sin_longitude_view_cos_angle
+    );
 }
 
 public func move_to_top_atmosphere(inout f32x3 pos, f32x3 dir, f32 atmos_radius) -> bool {
@@ -133,8 +170,9 @@ public struct AtmosphereIntegrateInfo {
     public f32   sun_intensity = 1.0;
     public f32   max_integration_length = 9000000.0;
     public AtmosphereSampling sampling = {};
-    public bool eval_mie_rayleigh_phase = true;
-    public bool eval_planet_luminance = false;
+    public constexpr bool eval_mie_phase = true;
+    public constexpr bool eval_rayleigh_phase = true;
+    public constexpr bool eval_planet_luminance = false;
 
     public Image2D<f32x4> transmittance_image = {};
     public Optional<Image2D<f32x4>> multiscattering_image = none;
@@ -177,7 +215,7 @@ public func integrate_single_scattered_luminance(
 
     f32 cos_theta = dot(info.sun_dir, info.eye_dir);
     f32 rayleigh_phase = std::rayleigh_phase(cos_theta);
-    f32 mie_phase = std::henyey_greenstein_phase(atmosphere->mie_asymmetry, cos_theta);
+    f32 mie_phase = std::henyey_greenstein_draine_phase(atmosphere->mie_asymmetry, cos_theta);
 
     f32 step = 0.0;
     f32 delta_step = integration_length / sample_count;
@@ -206,18 +244,22 @@ public func integrate_single_scattered_luminance(
         f32 earth_shadow = std::ray_sphere_intersect_nearest(step_pos - up_vec_scaled, info.sun_dir, atmosphere->planet_radius).hasValue ? 0.0 : 1.0;
         f32 sun_theta = dot(info.sun_dir, up_vec);
 
-        f32x2 transmittance_uv = get_transmittance_lut_uv(atmosphere, f32x2(h, sun_theta));
+        f32x2 transmittance_uv = transmittance_params_to_lut_uv(atmosphere, f32x2(h, sun_theta));
         f32x3 sun_transmittance = info.transmittance_image.sample_mip(lut_sampler, transmittance_uv, 0.0).rgb;
 
         f32x3 MS = 0.0;
         if (info.multiscattering_image.hasValue) {
-            f32x2 multiscatter_uv = get_multiscattering_lut_uv(atmosphere, altitude, sun_theta);
+            f32x2 multiscatter_uv = multiscattering_params_to_lut_uv(atmosphere, altitude, sun_theta);
             MS = info.multiscattering_image.value.sample_mip(lut_sampler, multiscatter_uv, 0.0).rgb;
         }
 
         f32x3 scattering_phase = 0.0;
-        if (info.eval_mie_rayleigh_phase) {
+        if (info.eval_mie_phase && info.eval_rayleigh_phase) {
             scattering_phase = medium_info.mie_scattering * mie_phase + medium_info.rayleigh_scattering * rayleigh_phase;
+        } else if (info.eval_mie_phase) {
+            scattering_phase = medium_info.mie_scattering * mie_phase + medium_info.rayleigh_scattering * std::uniform_phase();
+        } else if (info.eval_rayleigh_phase) {
+            scattering_phase = medium_info.mie_scattering * std::uniform_phase() + medium_info.rayleigh_scattering * rayleigh_phase;
         } else {
             scattering_phase = medium_info.scattering_sum * std::uniform_phase();
         }
@@ -241,7 +283,7 @@ public func integrate_single_scattered_luminance(
         f32 sun_theta = dot(info.sun_dir, up_vec);
         f32 NoL = saturate(dot(normalize(info.sun_dir), normalize(up_vec)));
 
-        f32x2 transmittance_uv = get_transmittance_lut_uv(atmosphere, f32x2(h, sun_theta));
+        f32x2 transmittance_uv = transmittance_params_to_lut_uv(atmosphere, f32x2(h, sun_theta));
         f32x3 sun_transmittance = info.transmittance_image.sample_mip(lut_sampler, transmittance_uv, 0.0).rgb;
 
         result.luminance += info.sun_intensity * (sun_transmittance * result.transmittance * NoL * atmosphere->terrain_albedo / PI);
@@ -257,15 +299,15 @@ public func sample_aerial_perspective(
     f32x2 uv,
     f32x3 camera_relative_pos
 ) -> f32x4 {
-    const f32 half_slice_depth = 0.70710678118654752440084436210485f;  // sqrt(0.5f)
-    const f32 aerial_gain_per_slice_inv = (1.0 / atmosphere->aerial_gain_per_slice);
-    const f32 aerial_perspective_lut_depth = f32(atmosphere->aerial_perspective_lut_size.z);
+    const let half_slice_depth = 0.70710678118654752440084436210485f;  // sqrt(0.5f)
+    const let aerial_gain_per_slice_inv = (1.0 / atmosphere->aerial_gain_per_slice);
+    const let aerial_perspective_lut_depth = f32(atmosphere->aerial_perspective_lut_size.z);
 
-    f32 relative_depth = length(camera_relative_pos);
-    f32 linear_slice = relative_depth * aerial_gain_per_slice_inv;
-    f32 linear_w = linear_slice * (1.0 / aerial_perspective_lut_depth);
-    f32 non_linear_w = sqrt(linear_w);
-    f32 non_linear_slice = non_linear_w * aerial_perspective_lut_depth;
+    let relative_depth = length(camera_relative_pos);
+    let linear_slice = relative_depth * aerial_gain_per_slice_inv;
+    let linear_w = linear_slice * (1.0 / aerial_perspective_lut_depth);
+    let non_linear_w = sqrt(linear_w);
+    let non_linear_slice = non_linear_w * aerial_perspective_lut_depth;
 
     f32 weight = 1.0;
     if (non_linear_slice < half_slice_depth) {

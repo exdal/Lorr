@@ -249,84 +249,89 @@ auto GLTFModelInfo::parse(const fs::path &path, GLTFModelCallbacks callbacks) ->
     }
 
     ///////////////////////////////////////////////
+    // Scene Hierarchy
+    ///////////////////////////////////////////////
+
+    for (const auto &node : asset.nodes) {
+        glm::vec3 translation = {};
+        glm::quat rotation = {};
+        glm::vec3 scale = {};
+        if (auto *trs = std::get_if<fastgltf::TRS>(&node.transform)) {
+            translation = glm::make_vec3(trs->translation.data());
+            rotation = glm::quat(trs->rotation[3], trs->rotation[0], trs->rotation[1], trs->rotation[2]);
+            scale = glm::make_vec3(trs->scale.data());
+        } else if (auto *mat = std::get_if<fastgltf::math::fmat4x4>(&node.transform)) {
+            fastgltf::math::fvec3 scale_array{};
+            fastgltf::math::fquat rotation_array{};
+            fastgltf::math::fvec3 translation_array{};
+            fastgltf::math::decomposeTransformMatrix(*mat, scale_array, rotation_array, translation_array);
+
+            translation = glm::make_vec3(translation_array.data());
+            rotation = glm::quat(rotation_array[3], rotation_array[0], rotation_array[1], rotation_array[2]);
+            scale = glm::make_vec3(scale_array.data());
+        }
+
+        ls::option<usize> mesh_index = ls::nullopt;
+        if (node.meshIndex.has_value()) {
+            mesh_index = node.meshIndex.value();
+        }
+
+        model.nodes.push_back(
+            { .name = std::string(node.name.begin(), node.name.end()),
+              .mesh_index = std::move(mesh_index),
+              .children = std::vector(node.children.begin(), node.children.end()),
+              .translation = translation,
+              .rotation = rotation,
+              .scale = scale }
+        );
+    }
+
+    if (asset.defaultScene.has_value()) {
+        model.defualt_scene_index = asset.defaultScene.value();
+    }
+
+    for (const auto &scene : asset.scenes) {
+        model.scenes.push_back(
+            { .name = std::string(scene.name.begin(), scene.name.end()),
+              .node_indices = std::vector(scene.nodeIndices.begin(), scene.nodeIndices.end()) }
+        );
+    }
+
+    ///////////////////////////////////////////////
     // Geometry
     ///////////////////////////////////////////////
 
+    u32 global_mesh_index = 0;
     u32 global_vertex_offset = 0;
     u32 global_index_offset = 0;
-    for (const auto &node : asset.nodes) {
-        if (!node.meshIndex.has_value()) {
-            continue;
-        }
-
-        auto mesh_index = static_cast<u32>(node.meshIndex.value());
-        auto &mesh = asset.meshes[mesh_index];
-
-        u32 mesh_vertex_count = 0;
-        u32 mesh_index_count = 0;
+    for (const auto &mesh : asset.meshes) {
+        auto mesh_index = global_mesh_index++;
         for (const auto &primitive : mesh.primitives) {
             if (!primitive.materialIndex.has_value()) {
                 continue;
             }
 
-            auto &index_accessor = asset.accessors[primitive.indicesAccessor.value()];
-            mesh_index_count += index_accessor.count;
-            if (auto attrib = primitive.findAttribute("POSITION"); attrib != primitive.attributes.end()) {
-                auto &accessor = asset.accessors[attrib->accessorIndex];
-                mesh_vertex_count += accessor.count;
-            }
-        }
-
-        glm::mat4 transform = {};
-        if (auto *trs = std::get_if<fastgltf::TRS>(&node.transform)) {
-            const auto t = glm::make_vec3(trs->translation.data());
-            const auto r = glm::quat(trs->rotation[3], trs->rotation[0], trs->rotation[1], trs->rotation[2]);
-            const auto s = glm::make_vec3(trs->scale.data());
-
-            const auto rotation_mat = glm::mat4_cast(r);
-            transform = glm::scale(glm::translate(glm::mat4(1.0), t) * rotation_mat, s);
-        } else if (auto *mat = std::get_if<fastgltf::math::fmat4x4>(&node.transform)) {
-            transform = glm::make_mat4(mat->data());
-        }
-
-        fastgltf::math::fmat4x4 local_transform_array{};
-        std::copy_n(&transform[0][0], 16, local_transform_array.data());
-        fastgltf::math::fvec3 scale_array{};
-        fastgltf::math::fquat rotation_array{};
-        fastgltf::math::fvec3 translation_array{};
-        fastgltf::math::decomposeTransformMatrix(local_transform_array, scale_array, rotation_array, translation_array);
-
-        if (callbacks.on_new_node) {
-            auto name = std::string(node.name.begin(), node.name.end());
-            auto child_node_indices = std::vector<u32>(node.children.begin(), node.children.end());
-            ls::option<u32> mesh_index_opt = ls::nullopt;
-            if (node.meshIndex.has_value()) {
-                mesh_index_opt = static_cast<u32>(node.meshIndex.value());
-            }
-
-            callbacks.on_new_node(
-                callbacks.user_data,
-                mesh.primitives.size(),
-                mesh_vertex_count,
-                mesh_index_count,
-                std::move(name),
-                std::move(child_node_indices),
-                std::move(mesh_index_opt),
-                glm::make_vec3(translation_array.data()),
-                glm::quat(rotation_array[3], rotation_array[0], rotation_array[1], rotation_array[2]),
-                glm::make_vec3(scale_array.data())
-            );
-        }
-
-        for (const auto &primitive : mesh.primitives) {
-            if (!primitive.materialIndex.has_value()) {
+            auto position_attrib = primitive.findAttribute("POSITION");
+            if (position_attrib == primitive.attributes.end()) {
                 continue;
             }
 
-            u32 primitive_vertex_count = 0;
-            u32 primitive_index_count = 0;
+            auto &position_accessor = asset.accessors[position_attrib->accessorIndex];
             auto &index_accessor = asset.accessors[primitive.indicesAccessor.value()];
-            primitive_index_count += index_accessor.count;
+            u32 primitive_vertex_count = position_accessor.count;
+            u32 primitive_index_count = index_accessor.count;
+
+            if (callbacks.on_new_primitive) {
+                callbacks.on_new_primitive( //
+                    callbacks.user_data,
+                    mesh_index,
+                    primitive.materialIndex.value(),
+                    global_vertex_offset,
+                    primitive_vertex_count,
+                    global_index_offset,
+                    primitive_index_count
+                );
+            }
 
             if (callbacks.on_access_index) {
                 fastgltf::iterateAccessorWithIndex<u32>(asset, index_accessor, [&](u32 index, usize i) { //
@@ -334,11 +339,8 @@ auto GLTFModelInfo::parse(const fs::path &path, GLTFModelCallbacks callbacks) ->
                 });
             }
 
-            if (auto attrib = primitive.findAttribute("POSITION"); attrib != primitive.attributes.end() && callbacks.on_access_position) {
-                auto &accessor = asset.accessors[attrib->accessorIndex];
-                primitive_vertex_count += accessor.count;
-
-                fastgltf::iterateAccessorWithIndex<glm::vec3>(asset, accessor, [&](glm::vec3 pos, usize i) { //
+            if (callbacks.on_access_position) {
+                fastgltf::iterateAccessorWithIndex<glm::vec3>(asset, position_accessor, [&](glm::vec3 pos, usize i) { //
                     callbacks.on_access_position(callbacks.user_data, mesh_index, global_vertex_offset + i, pos);
                 });
             }
@@ -362,18 +364,6 @@ auto GLTFModelInfo::parse(const fs::path &path, GLTFModelCallbacks callbacks) ->
                 fastgltf::iterateAccessorWithIndex<glm::vec4>(asset, accessor, [&](glm::vec4 color, usize i) { //
                     callbacks.on_access_color(callbacks.user_data, mesh_index, global_vertex_offset + i, color);
                 });
-            }
-
-            if (callbacks.on_new_primitive) {
-                callbacks.on_new_primitive( //
-                    callbacks.user_data,
-                    mesh_index,
-                    primitive.materialIndex.value(),
-                    global_vertex_offset,
-                    primitive_vertex_count,
-                    global_index_offset,
-                    primitive_index_count
-                );
             }
 
             global_vertex_offset += primitive_vertex_count;
@@ -482,7 +472,7 @@ auto GLTFModelInfo::parse_info(const fs::path &path) -> ls::option<GLTFModelInfo
             v.emissiveFactor[2],
             v.emissiveStrength,
         };
-        // material.alpha_mode = static_cast<vk::AlphaMode>(v.alphaMode);
+        material.alpha_mode = static_cast<GLTFAlphaMode>(v.alphaMode);
         material.alpha_cutoff = v.alphaCutoff;
 
         if (auto &tex = pbr.baseColorTexture; tex.has_value()) {

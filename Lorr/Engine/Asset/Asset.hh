@@ -61,9 +61,13 @@ struct AssetManager : Handle<AssetManager> {
     auto init_new_scene(const UUID &uuid, const std::string &name) -> bool;
 
     //  ── Imported Assets ─────────────────────────────────────────────────
+    // If a valid meta file exists in the same path as importing asset, this
+    // function will act like `register_asset`. Otherwise this function will
+    // act like `create_asset` which creates new unique handle to asset with
+    // meta file in the same path.
     auto import_asset(const fs::path &path) -> UUID;
 
-    //  ── Registered Assets ─────────────────────────────────────────────────
+    //  ── Registered Assets ───────────────────────────────────────────────
     // Assets that already exist in project root and have meta file with
     // valid UUID's.
     //
@@ -83,9 +87,11 @@ struct AssetManager : Handle<AssetManager> {
 
     auto load_texture(const UUID &uuid, const TextureInfo &info = {}) -> bool;
     auto unload_texture(const UUID &uuid) -> void;
+    auto is_texture_loaded(const UUID &uuid) -> bool;
 
     auto load_material(const UUID &uuid, const Material &material_info) -> bool;
     auto unload_material(const UUID &uuid) -> void;
+    auto is_material_loaded(const UUID &uuid) -> bool;
 
     auto load_scene(const UUID &uuid) -> bool;
     auto unload_scene(const UUID &uuid) -> void;
@@ -112,12 +118,8 @@ struct AssetManager : Handle<AssetManager> {
     auto get_scene(const UUID &uuid) -> Scene *;
     auto get_scene(SceneID scene_id) -> Scene *;
 
-private:
-    auto begin_asset_meta(JsonWriter &json, const UUID &uuid, AssetType type) -> void;
-    auto write_model_asset_meta(JsonWriter &json, ls::span<UUID> material_uuids, ls::span<Material> materials) -> bool;
-    auto write_texture_asset_meta(JsonWriter &json, Texture *texture) -> bool;
-    auto write_material_asset_meta(JsonWriter &json, Material *material) -> bool;
-    auto write_scene_asset_meta(JsonWriter &json, Scene *scene) -> bool;
-    auto end_asset_meta(JsonWriter &json, const fs::path &path) -> bool;
+    auto set_material_dirty(MaterialID material_id) -> void;
+    auto get_materials_buffer() -> vuk::Value<vuk::Buffer>;
+    auto get_materials_descriptor_set() -> vuk::PersistentDescriptorSet *;
 };
 } // namespace lr

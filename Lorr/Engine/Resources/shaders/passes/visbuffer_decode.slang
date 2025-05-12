@@ -3,34 +3,30 @@ module visbuffer_decode;
 import std;
 import gpu;
 import scene;
-import visbuffer;
+import passes.visbuffer;
 
-struct VertexOutput {
-    f32x4 position : SV_Position;
-    f32x2 tex_coord : TEXCOORD;
-};
-
-[[shader("vertex")]]
-func vs_main(u32 vertex_index : SV_VertexID) -> VertexOutput{
-    VertexOutput output;
-    output.tex_coord = f32x2((vertex_index << 1) & 2, vertex_index & 2);
-    output.position = f32x4(2.0 * output.tex_coord - 1.0, 1.0, 1.0);
-
-    return output;
-}
+#include <fullscreen.slang>
 
 [[vk::binding(0, 0)]]
 Image2D<u32> visbuffer;
 
-struct PushConstants {
-    Camera *camera;
-    u32 *visible_meshlet_instances_indices;
-    MeshletInstance *meshlet_instances;
-    Model *models;
-    Transform *transforms;
-    Material *materials;
-};
-[[vk::push_constant]] PushConstants C;
+[[vk::binding(1, 0)]]
+ConstantBuffer<Camera, ScalarDataLayout> camera;
+
+[[vk::binding(2, 0)]]
+StructuredBuffer<u32, ScalarDataLayout> visible_meshlet_instances_indices;
+
+[[vk::binding(3, 0)]]
+StructuredBuffer<MeshletInstance, ScalarDataLayout> meshlet_instances;
+
+[[vk::binding(4, 0)]]
+StructuredBuffer<Mesh, ScalarDataLayout> meshes;
+
+[[vk::binding(5, 0)]]
+StructuredBuffer<Transform, ScalarDataLayout> transforms;
+
+[[vk::binding(6, 0)]]
+StructuredBuffer<Material, ScalarDataLayout> materials;
 
 struct FragmentOutput {
     f32x4 albedo_color : SV_Target0;
@@ -62,6 +58,7 @@ struct PartialDeriv {
         this.uv_ddy = f32x3(ndc_2.x - ndc_1.x, ndc_0.x - ndc_2.x, ndc_1.x - ndc_0.x) * inv_det * inv_w;
         f32 ddx_sum  = dot(this.uv_ddx, 1.0);
         f32 ddy_sum  = dot(this.uv_ddy, 1.0);
+
         const f32x2 delta    = uv - ndc_0;
         const f32 view_inv_w = inv_w.x + delta.x * ddx_sum + delta.y * ddy_sum;
         const f32 view_w     = 1.0 / view_inv_w;
@@ -82,24 +79,31 @@ struct PartialDeriv {
         this.uv_ddy = view_ddy * (this.lambda * view_inv_w + this.uv_ddy) - this.lambda;
     }
 
-    func interpolate<T : IFloat>(T x, T y, T z) -> T {
-        return x * T(this.lambda.x) + y * T(this.lambda.y) + z * T(this.lambda.z);
+    func interpolate(f32x3 v) -> f32 {
+        return dot(this.lambda, v);
     }
 
-    func ddx_of<let N : int>(vector<f32, N> x, vector<f32, N> y, vector<f32, N> z) -> vector<f32, N> {
-        return x * vector<f32, N>(this.uv_ddx.x) + y * vector<f32, N>(this.uv_ddx.y) + z * vector<f32, N>(this.uv_ddx.z);
+    func interpolate_3x3(f32x3x3 v) -> f32x3 {
+        return f32x3(
+            dot(this.lambda, f32x3(v[0].x, v[1].x, v[2].x)),
+            dot(this.lambda, f32x3(v[0].y, v[1].y, v[2].y)),
+            dot(this.lambda, f32x3(v[0].z, v[1].z, v[2].z))
+        );
     }
 
-    func ddx_of<let C : int, let R : int = 3>(matrix<f32, R, C> x) -> vector<f32, C> {
-        return this.ddx_of(x[0], x[1], x[2]);
-    }
+    func gradient_of(f32x2x3 v) -> UVGradient {
+        const let v0 = f32x3(v[0].x, v[1].x, v[2].x);
+        const let v1 = f32x3(v[0].y, v[1].y, v[2].y);
 
-    func ddy_of<let N : int>(vector<f32, N> x, vector<f32, N> y, vector<f32, N> z) -> vector<f32, N> {
-        return x * vector<f32, N>(this.uv_ddy.x) + y * vector<f32, N>(this.uv_ddy.y) + z * vector<f32, N>(this.uv_ddy.z);
-    }
+        UVGradient grad;
+        grad.uv.x = this.interpolate(v0);
+        grad.uv.y = this.interpolate(v1);
+        grad.ddx.x = dot(this.uv_ddx, v0);
+        grad.ddx.y = dot(this.uv_ddx, v1);
+        grad.ddy.x = dot(this.uv_ddy, v0);
+        grad.ddy.y = dot(this.uv_ddy, v1);
 
-    func ddy_of<let C : int, let R : int = 3>(matrix<f32, R, C> x) -> vector<f32, C> {
-        return this.ddy_of(x[0], x[1], x[2]);
+        return grad;
     }
 };
 
@@ -110,75 +114,70 @@ func fs_main(VertexOutput input) -> FragmentOutput {
         discard;
     }
 
-    const VisBuffer vis = { texel };
-    const u32 meshlet_instance_index = C.visible_meshlet_instances_indices[vis.meshlet_instance_index];
-    const MeshletInstance meshlet_instance = C.meshlet_instances[meshlet_instance_index];
-    const Model model = C.models[meshlet_instance.model_index];
-    const Transform transform = C.transforms[meshlet_instance.transform_index];
-    const Material material = C.materials[meshlet_instance.material_index];
-
-    const Meshlet meshlet    = model.meshlets[meshlet_instance.meshlet_index];
-    const Triangle indices   = meshlet.indices(model, vis.triangle_index);
-    const u32x3 vertices     = meshlet.vertices(model, indices);
-    const f32x3x3 positions  = meshlet.positions(model, vertices);
-    const f32x3x3 normals    = meshlet.normals(model, vertices);
-    const f32x2x3 tex_coords = meshlet.tex_coords(model, vertices);
-    const f32x4x3 world_pos  = transform.to_world_positions(positions);
-    const f32x4x3 clip_pos   = C.camera.to_clip_positions(world_pos);
-    const PartialDeriv deriv = { clip_pos, 2.0 * input.tex_coord - 1.0, C.camera.resolution };
-
-    const f32x2 tex_coord_deriv = deriv.interpolate(tex_coords[0], tex_coords[1], tex_coords[2]);
-    const f32x2 tex_coord_ddx   = deriv.ddx_of(tex_coords);
-    const f32x2 tex_coord_ddy   = deriv.ddy_of(tex_coords);
-
     FragmentOutput output = {};
 
+    const let vis = VisBufferData(texel);
+    const u32 meshlet_instance_index = visible_meshlet_instances_indices[vis.meshlet_instance_index];
+    const MeshletInstance meshlet_instance = meshlet_instances[meshlet_instance_index];
+    const Mesh mesh = meshes[meshlet_instance.mesh_index];
+    const Transform transform = transforms[meshlet_instance.transform_index];
+    const Material material = materials[meshlet_instance.material_index];
+
+    const Meshlet meshlet    = mesh.meshlets[meshlet_instance.meshlet_index];
+    const Triangle indices   = meshlet.indices(mesh, vis.triangle_index);
+    const u32x3 vertices     = meshlet.vertices(mesh, indices);
+    const f32x3x3 positions  = meshlet.positions(mesh, vertices);
+    const f32x3x3 normals    = meshlet.normals(mesh, vertices);
+    const f32x2x3 tex_coords = meshlet.tex_coords(mesh, vertices);
+    const f32x4x3 world_pos  = transform.to_world_positions(positions);
+    const f32x4x3 clip_pos   = camera.to_clip_positions(world_pos);
+    const PartialDeriv deriv = { clip_pos, input.tex_coord * 2.0 - 1.0, camera.resolution };
+
+    const UVGradient tex_coord_grad = deriv.gradient_of(tex_coords);
+
     // ALBEDO ───────────────────────────────────────────────────────────
-    output.albedo_color = material.sample_albedo_color(
-        tex_coord_deriv, tex_coord_ddx, tex_coord_ddy);
+    output.albedo_color = material.sample_albedo_color(tex_coord_grad);
 
     // NORMALS ──────────────────────────────────────────────────────────
-    const f32x3 normal_deriv = deriv.interpolate(normals[0], normals[1], normals[2]);
+    const f32x3 normal_deriv = deriv.interpolate_3x3(normals);
     const f32x3 world_normal = mul(transform.normal, normal_deriv);
     f32x3 N = world_normal;
     if (material.normal_image_index != ~0u) {
-        // https://www.jeremyong.com/graphics/2023/12/16/surface-gradient-bump-mapping
-        const f32x3x3 world_pos_3d = {
+        const f32x3x3 world_positions = f32x3x3(
             world_pos[0].xyz,
             world_pos[1].xyz,
             world_pos[2].xyz
-        };
-        const f32x3 pos_ddx = deriv.ddx_of(world_pos_3d);
-        const f32x3 pos_ddy = deriv.ddy_of(world_pos_3d);
+        );
+        const f32x3 pos_ddx = mul(deriv.uv_ddx, world_positions);
+        const f32x3 pos_ddy = mul(deriv.uv_ddy, world_positions);
         const f32x3 pos_ddx_s = pos_ddx - dot(pos_ddx, N) * N;
         const f32x3 pos_ddy_s = pos_ddy - dot(pos_ddy, N) * N;
-        const f32 jacobian_sign = sign(determinant(mat2(tex_coord_ddx, tex_coord_ddy)));
-        f32x3 T = jacobian_sign * (tex_coord_ddy.y * pos_ddx_s - tex_coord_ddx.y * pos_ddy_s);
-        if (jacobian_sign != 0.0) {
+        const f32 jacobian_sign = sign(determinant(f32x2x2(tex_coord_grad.ddx, tex_coord_grad.ddy)));
+
+        f32x3 T = jacobian_sign * (tex_coord_grad.ddy.y * pos_ddx_s - tex_coord_grad.ddx.y * pos_ddy);
+        if (jacobian_sign != 0.0f) {
             T = normalize(T);
         }
         const f32x3 B = jacobian_sign * sign(dot(pos_ddy, cross(N, pos_ddx))) * cross(N, T);
-        const f32x3x3 TBN = f32x3x3(T, -B, N);
-        const f32x2 sampled_normal = material.sample_normal_color(
-            tex_coord_deriv, tex_coord_ddx, tex_coord_ddy).xy * 2.0 - 1.0;
-        const f32 sampled_normal_z = sqrt(max(1.0 - sampled_normal.x * sampled_normal.x - sampled_normal.y * sampled_normal.y, 0.0));
-        N = mul(f32x3(sampled_normal, sampled_normal_z), TBN);
+        const f32x3x3 TBN = f32x3x3(T, B, N);
+
+        const f32x2 Ns = material.sample_normal_color(tex_coord_grad).xy * 2.0 - 1.0;
+        const f32 Ns_z = sqrt(max(1.0 - Ns.x * Ns.x - Ns.y * Ns.y, 0.0));
+        const f32x3 sampled_normal = normalize(f32x3(Ns, Ns_z));
+        N = mul(sampled_normal, TBN);
     }
     output.normal_color.xy = std::vec3_to_oct(N);
     output.normal_color.zw = std::vec3_to_oct(world_normal);
 
     // EMISSION ─────────────────────────────────────────────────────────
-    output.emission_color = material.sample_emissive_color(
-        tex_coord_deriv, tex_coord_ddx, tex_coord_ddy);
+    output.emission_color = material.sample_emissive_color(tex_coord_grad);
 
     // METALLIC ROUGHNESS ───────────────────────────────────────────────
-    const f32x2 metallic_roughness_color = material.sample_metallic_roughness(
-        tex_coord_deriv, tex_coord_ddx, tex_coord_ddy);
+    const f32x2 metallic_roughness_color = material.sample_metallic_roughness(tex_coord_grad);
     output.metallic_roughness_occlusion_color.xy = metallic_roughness_color;
 
     // AMBIENT OCCLUSION ────────────────────────────────────────────────
-    const f32 occlusion_color = material.sample_occlusion_color(
-        tex_coord_deriv, tex_coord_ddx, tex_coord_ddy);
+    const f32 occlusion_color = material.sample_occlusion_color(tex_coord_grad);
     output.metallic_roughness_occlusion_color.z = occlusion_color;
 
     return output;

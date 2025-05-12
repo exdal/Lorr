@@ -145,11 +145,12 @@ auto TransferManager::scratch_buffer(this TransferManager &self, const void *dat
 auto TransferManager::wait_on(this TransferManager &self, vuk::UntypedValue &&fut) -> void {
     ZoneScoped;
 
-    std::unique_lock _(self.mutex);
 #define WAIT_ON_HOST
 #ifdef WAIT_ON_HOST
-    fut.wait(self.device->get_allocator(), self.device->compiler);
+    thread_local vuk::Compiler transfer_man_compiler;
+    fut.wait(self.device->get_allocator(), transfer_man_compiler);
 #else
+    std::unique_lock _(self.mutex);
     self.futures.push_back(std::move(fut));
 #endif
 }

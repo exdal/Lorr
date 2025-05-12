@@ -21,7 +21,7 @@ public constexpr f32 Fd_Lambert() {
     return 1.0 / PI;
 }
 
-public func GGX_Albedo_Analytic(f32 NdotV, f32 alpha, f32x3 F0) -> f32x3 {
+public func GGX_Albedo_Analytic(f32 NdotV, f32 alpha, f32 F0, f32 F90) -> f32x3 {
     f32 x = NdotV;
     f32 y = alpha;
     f32 x2 = x * x;
@@ -36,7 +36,12 @@ public func GGX_Albedo_Analytic(f32 NdotV, f32 alpha, f32x3 F0) -> f32x3 {
                   f32x4(19.99, 0.2913, 15.86, 300.2) * x * y2 +
                   f32x4(-5.448, 0.6286, 33.37, -285.1) * x2 * y2;
     f32x2 AB = clamp(r.xy / r.zw, 0.0, 1.0);
-    return F0 * AB.x + 1.0 * AB.y;
+    return F0 * AB.x + F90 * AB.y;
+}
+
+public func GGX_energy_compensation(f32 NdotV, f32 alpha, f32x3 Fss) -> f32x3 {
+    f32 Ess = GGX_Albedo_Analytic(NdotV, alpha, 1.0, 1.0).x;
+    return 1.0 + Fss * (1.0 - Ess) / Ess;
 }
 
 public func BRDF(f32x3 V, f32x3 N, f32x3 L, f32x3 albedo, f32 roughness, f32 metallic) -> f32x3 {
@@ -50,20 +55,19 @@ public func BRDF(f32x3 V, f32x3 N, f32x3 L, f32x3 albedo, f32 roughness, f32 met
     f32x3 F0 = 0.16 * reflectance * reflectance * (1.0 - metallic) + albedo * metallic;
 
     // Microfacet
-    f32  roughness2 = roughness * roughness;
-    f32  D  = D_GGX(NoH, roughness2);
+    f32   roughness2 = roughness * roughness;
+    f32   D  = D_GGX(NoH, roughness2);
     f32x3 G2 = Smith_G2_Height_Correlated_GGX_Lagarde(NoV, NoL, roughness2);
     f32x3 F  = F_Schlick(LoH, F0);
 
-    f32x3 comp = GGX_Albedo_Analytic(NoV, roughness2, F0);
+    f32x3 comp = GGX_energy_compensation(NoV, roughness2, F0);
+
     // Reflectance (Cook-Torrance)
     // V already divided by denominator
     f32x3 specular = F * D * G2;
     // Diffuse
     f32x3 diffuse = (1.0 - metallic) * albedo * Fd_Lambert();
     // Frensel combination
-    f32x3 result = (1.0 - comp) * diffuse + specular;
-
-    return result * NoL;
+    return diffuse + specular * comp;
 }
 

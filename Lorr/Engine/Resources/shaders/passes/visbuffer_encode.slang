@@ -71,7 +71,10 @@ func fs_main(VertexOutput input) -> u32 {
         grad.ddx = ddx(input.tex_coord);
         grad.ddy = ddy(input.tex_coord);
         const f32 alpha_color = material.sample_albedo_color(grad).a;
-        if (alpha_color < clamp(material.alpha_cutoff, 0.001, 1.0)) {
+
+        // We are doing deferred, blend alpha mode is not supported in this pass.
+        if (alpha_color < clamp(material.alpha_cutoff, 0.001, 1.0) /* &&
+            material.alpha_mode == AlphaMode::Mask*/) {
             discard;
         }
     }

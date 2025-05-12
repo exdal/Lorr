@@ -339,14 +339,9 @@ static auto draw_menu_bar(EditorApp &self) -> void {
 static auto draw_welcome_popup(EditorApp &self) -> void {
     ZoneScoped;
 
-    auto opening_project = ls::option<fs::path>(ls::nullopt);
     ImGui::SetNextWindowSize({ 480.0f, 350.0f }, ImGuiCond_Appearing);
     constexpr auto popup_flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings;
     if (ImGui::BeginPopupModal("###welcome", nullptr, popup_flags)) {
-        auto content_region = ImGui::GetContentRegionAvail();
-        auto item_spacing = ImGui::GetStyle().ItemSpacing;
-        auto child_width = content_region.x * 0.5f - item_spacing.x * 0.5f;
-
         //  ── HEADERS ─────────────────────────────────────────────────────────
         ImGui::TextUnformatted("placeholder");
         ImGui::InvisibleButton("placeholder", { 0.0f, 75.0f });
@@ -362,8 +357,9 @@ static auto draw_welcome_popup(EditorApp &self) -> void {
                     auto path_str = stack.format_char("{}", project_path);
                     ImGui::PushID(button_id++);
                     if (ImGui::Button(project_info.name.c_str(), { -1.0f, 35.0f })) {
-                        opening_project = project_path;
+                        auto project = self.open_project(project_path);
                         ImGui::CloseCurrentPopup();
+                        self.set_active_project(std::move(project));
                     }
                     ImGui::SetItemTooltip("%s", path_str);
                     ImGui::PopID();
@@ -372,26 +368,76 @@ static auto draw_welcome_popup(EditorApp &self) -> void {
                 ImGui::SeparatorText("");
 
                 if (ImGui::Button("Import...", { -1.0f, 35.0f })) {
+                    self.window.show_dialog(
+                        { .kind = lr::DialogKind::OpenFile,
+                          .user_data = &self,
+                          .title = "Select a project...",
+                          .callback =
+                              [](void *user_data, const c8 *const *files, i32) {
+                                  if (!files || !*files) {
+                                      return;
+                                  }
+
+                                  auto *app = static_cast<EditorApp *>(user_data);
+                                  auto lrporj_file = fs::path(files[0]);
+                                  auto project_info = read_project_file(lrporj_file);
+                                  if (project_info.has_value()) {
+                                      app->recent_project_infos.emplace(lrporj_file, project_info.value());
+                                      app->save_editor_data();
+                                  }
+                              } }
+                    );
                 }
 
                 ImGui::EndTabItem();
             }
 
             if (ImGui::BeginTabItem("Create Project")) {
+                auto content_region = ImGui::GetContentRegionAvail();
+                auto item_spacing = ImGui::GetStyle().ItemSpacing;
+                auto child_width = content_region.x - item_spacing.x * 0.5f;
+
                 static std::string project_dir = {};
                 static std::string project_name = {};
-                ImGui::SeparatorText("Create Project");
 
-                ImGui::SetNextItemWidth(child_width * 0.9f);
-                ImGui::InputTextWithHint("", "/path/to/new/project", &project_dir);
+                ImGui::SeparatorText("Project Directory");
+                ImGui::SetNextItemWidth(child_width * 0.92f);
+                ImGui::InputTextWithHint("##project_dir", "/path/to/new/project", &project_dir);
                 ImGui::SameLine();
                 if (ImGui::Button(ICON_MDI_FOLDER, { -1.0f, 0.0f })) {
+                    self.window.show_dialog(
+                        { .kind = lr::DialogKind::OpenFolder,
+                          .title = "Select a directory...",
+                          .callback =
+                              [](void *, const c8 *const *files, i32) {
+                                  if (!files || !*files) {
+                                      return;
+                                  }
+
+                                  project_dir = files[0];
+                              } }
+                    );
                 }
 
-                ImGui::SetNextItemWidth(child_width);
-                ImGui::InputTextWithHint("", "Project Name", &project_name);
+                ImGui::SeparatorText("Project Name");
+                ImGui::SetNextItemWidth(child_width + ImGui::CalcTextSize(" ").x);
+                ImGui::InputTextWithHint("##project_name", "Shooter Game", &project_name);
 
-                ImGui::Button("Create Project", { -1.0f, 0.0f });
+                ImGui::Spacing();
+
+                auto fields_empty = project_dir.empty() || project_name.empty();
+                ImGui::BeginDisabled(fields_empty);
+                if (ImGui::Button("Create Project", { -1.0f, 35.0f })) {
+                    auto new_project = self.new_project(project_dir, project_name);
+                    if (new_project) {
+                        project_dir.clear();
+                        project_name.clear();
+                        ImGui::CloseCurrentPopup();
+                        self.set_active_project(std::move(new_project));
+                    }
+                }
+                ImGui::EndDisabled();
+
                 ImGui::EndTabItem();
             }
 
@@ -399,11 +445,6 @@ static auto draw_welcome_popup(EditorApp &self) -> void {
         }
 
         ImGui::EndPopup();
-    }
-
-    if (opening_project) {
-        auto project = self.open_project(opening_project.value());
-        self.set_active_project(std::move(project));
     }
 }
 

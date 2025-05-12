@@ -147,8 +147,8 @@ auto TransferManager::wait_on(this TransferManager &self, vuk::UntypedValue &&fu
 
 #define WAIT_ON_HOST
 #ifdef WAIT_ON_HOST
-    vuk::Compiler compiler;
-    fut.wait(self.device->get_allocator(), compiler);
+    thread_local vuk::Compiler transfer_man_compiler;
+    fut.wait(self.device->get_allocator(), transfer_man_compiler);
 #else
     std::unique_lock _(self.mutex);
     self.futures.push_back(std::move(fut));

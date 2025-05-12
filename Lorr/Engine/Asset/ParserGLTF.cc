@@ -472,7 +472,7 @@ auto GLTFModelInfo::parse_info(const fs::path &path) -> ls::option<GLTFModelInfo
             v.emissiveFactor[2],
             v.emissiveStrength,
         };
-        // material.alpha_mode = static_cast<vk::AlphaMode>(v.alphaMode);
+        material.alpha_mode = static_cast<GLTFAlphaMode>(v.alphaMode);
         material.alpha_cutoff = v.alphaCutoff;
 
         if (auto &tex = pbr.baseColorTexture; tex.has_value()) {

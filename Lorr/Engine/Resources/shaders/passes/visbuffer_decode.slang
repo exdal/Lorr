@@ -159,7 +159,7 @@ func fs_main(VertexOutput input) -> FragmentOutput {
             T = normalize(T);
         }
         const f32x3 B = jacobian_sign * sign(dot(pos_ddy, cross(N, pos_ddx))) * cross(N, T);
-        const f32x3x3 TBN = f32x3x3(T, -B, N);
+        const f32x3x3 TBN = f32x3x3(T, B, N);
 
         const f32x2 Ns = material.sample_normal_color(tex_coord_grad).xy * 2.0 - 1.0;
         const f32 Ns_z = sqrt(max(1.0 - Ns.x * Ns.x - Ns.y * Ns.y, 0.0));

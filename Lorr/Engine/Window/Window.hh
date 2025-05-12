@@ -66,11 +66,11 @@ struct FileDialogFilter {
 struct ShowDialogInfo {
     DialogKind kind = DialogKind::OpenFile;
     void *user_data = nullptr;
-    void (*callback)(void *user_data, const c8 *const *files, i32 filter) = nullptr;
     std::string_view title = {};
     fs::path spawn_path = {};
     ls::span<FileDialogFilter> filters = {};
     bool multi_select = false;
+    void (*callback)(void *user_data, const c8 *const *files, i32 filter) = nullptr;
 };
 
 struct WindowInfo {

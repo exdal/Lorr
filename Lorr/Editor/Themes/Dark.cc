@@ -26,7 +26,7 @@ auto Theme::dark() -> void {
 
     // Backgrounds
     colors[ImGuiCol_WindowBg] = bg_mid;
-    colors[ImGuiCol_ChildBg] = bg_dark;
+    colors[ImGuiCol_ChildBg] = bg_mid;
     colors[ImGuiCol_PopupBg] = bg_mid;
     colors[ImGuiCol_FrameBg] = bg_light;
     colors[ImGuiCol_FrameBgHovered] = grab_hover;
@@ -72,7 +72,7 @@ auto Theme::dark() -> void {
     // Tabs
     colors[ImGuiCol_Tab] = bg_dark;
     colors[ImGuiCol_TabHovered] = grab_hover;
-    colors[ImGuiCol_TabActive] = bg_mid;
+    colors[ImGuiCol_TabActive] = bg_light;
     colors[ImGuiCol_TabUnfocused] = bg_dark;
     colors[ImGuiCol_TabUnfocusedActive] = bg_mid;
 

@@ -1435,6 +1435,7 @@ auto AssetManager::get_materials_buffer() -> vuk::Value<vuk::Buffer> {
         auto *image_view = impl->device->image_view(texture->image_view.id());
         auto *sampler = impl->device->sampler(texture->sampler.id());
 
+        std::unique_lock _(impl->materials_mutex);
         impl->materials_descriptor_set.update_sampler(0, texture_index, *sampler);
         impl->materials_descriptor_set.update_sampled_image(1, texture_index, *image_view, vuk::ImageLayout::eShaderReadOnlyOptimal);
 
@@ -1461,6 +1462,7 @@ auto AssetManager::get_materials_buffer() -> vuk::Value<vuk::Buffer> {
     if (impl->materials.size() == 0) {
         return {};
     }
+    shared_lock.unlock();
 
     auto materials_buffer = vuk::Value<vuk::Buffer>{};
     bool rebuild_materials = false;
@@ -1478,6 +1480,7 @@ auto AssetManager::get_materials_buffer() -> vuk::Value<vuk::Buffer> {
     }
 
     LS_DEFER(&) {
+        std::unique_lock _(impl->materials_mutex);
         impl->dirty_materials.clear();
         impl->device->commit_descriptor_set(impl->materials_descriptor_set);
     };

@@ -13,7 +13,7 @@ bool Application::init(this Application &self, const ApplicationInfo &info) {
         return false;
     }
 
-    self.job_man.emplace(12);
+    self.job_man.emplace(1);
     self.device.init(3).value();
     self.asset_man = AssetManager::create(&self.device);
     self.window = Window::create(info.window_info);

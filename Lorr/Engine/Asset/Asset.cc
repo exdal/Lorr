@@ -951,7 +951,6 @@ auto AssetManager::load_texture(const UUID &uuid, const TextureInfo &info) -> bo
         .max_lod = static_cast<f32>(mip_level_count - 1),
         .use_anisotropy = true,
     };
-    auto sampler = Sampler::create(*impl->device, sampler_info).value();
 
     auto &transfer_man = impl->device->transfer_man();
     switch (file_type) {
@@ -1008,10 +1007,10 @@ auto AssetManager::load_texture(const UUID &uuid, const TextureInfo &info) -> bo
     }
 
     impl->textures_mutex.lock();
+    auto sampler = Sampler::create(*impl->device, sampler_info).value();
     asset->texture_id = impl->textures.create_slot(Texture{ .image = image, .image_view = image_view, .sampler = sampler });
-    impl->textures_mutex.unlock();
-
     LOG_TRACE("Loaded texture {} {}.", asset->uuid.str(), SlotMap_decode_id(asset->texture_id).index);
+    impl->textures_mutex.unlock();
 
     return true;
 }
@@ -1435,7 +1434,6 @@ auto AssetManager::get_materials_buffer() -> vuk::Value<vuk::Buffer> {
         auto *image_view = impl->device->image_view(texture->image_view.id());
         auto *sampler = impl->device->sampler(texture->sampler.id());
 
-        std::unique_lock _(impl->materials_mutex);
         impl->materials_descriptor_set.update_sampler(0, texture_index, *sampler);
         impl->materials_descriptor_set.update_sampled_image(1, texture_index, *image_view, vuk::ImageLayout::eShaderReadOnlyOptimal);
 
@@ -1458,15 +1456,30 @@ auto AssetManager::get_materials_buffer() -> vuk::Value<vuk::Buffer> {
         };
     };
 
-    std::shared_lock shared_lock(impl->materials_mutex);
-    if (impl->materials.size() == 0) {
-        return {};
+    auto all_materials_count = 0_sz;
+    auto dirty_materials = std::vector<MaterialID>();
+    {
+        std::shared_lock shared_lock(impl->materials_mutex);
+        if (impl->materials.size() == 0) {
+            return {};
+        }
+
+        shared_lock.unlock();
+        std::unique_lock _(impl->materials_mutex);
+
+        all_materials_count = impl->materials.size();
+
+        // DO NOT MOVE!!! just take a snapshot of the contents
+        dirty_materials = impl->dirty_materials;
+        impl->dirty_materials.clear();
     }
-    shared_lock.unlock();
+
+    auto gpu_materials_bytes_size = all_materials_count * sizeof(GPU::Material);
+    auto dirty_material_count = dirty_materials.size();
+    auto dirty_materials_size_bytes = dirty_materials.size() * sizeof(GPU::Material);
 
     auto materials_buffer = vuk::Value<vuk::Buffer>{};
     bool rebuild_materials = false;
-    auto gpu_materials_bytes_size = impl->materials.size() * sizeof(GPU::Material);
     if (gpu_materials_bytes_size > impl->materials_buffer.data_size()) {
         if (impl->materials_buffer.id() != BufferID::Invalid) {
             impl->device->wait();
@@ -1477,18 +1490,14 @@ auto AssetManager::get_materials_buffer() -> vuk::Value<vuk::Buffer> {
         materials_buffer = impl->materials_buffer.acquire(*impl->device, "materials buffer", vuk::eNone);
         vuk::fill(materials_buffer, ~0_u32);
         rebuild_materials = true;
+    } else if (impl->materials_buffer) {
+        materials_buffer = impl->materials_buffer.acquire(*impl->device, "materials buffer", vuk::eNone);
     }
-
-    LS_DEFER(&) {
-        std::unique_lock _(impl->materials_mutex);
-        impl->dirty_materials.clear();
-        impl->device->commit_descriptor_set(impl->materials_descriptor_set);
-    };
 
     auto &transfer_man = impl->device->transfer_man();
     if (rebuild_materials) {
-        auto dirty_materials_size_bytes = impl->materials.size() * sizeof(GPU::Material);
-        auto upload_buffer = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eCPUonly, dirty_materials_size_bytes);
+        auto _ = std::shared_lock(impl->registry_mutex);
+        auto upload_buffer = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eCPUonly, gpu_materials_bytes_size);
         auto *dst_material_ptr = reinterpret_cast<GPU::Material *>(upload_buffer->mapped_ptr);
 
         // All loaded materials
@@ -1499,47 +1508,44 @@ auto AssetManager::get_materials_buffer() -> vuk::Value<vuk::Buffer> {
             dst_material_ptr++;
         }
 
-        return transfer_man.upload_staging(std::move(upload_buffer), std::move(materials_buffer));
-    }
+        materials_buffer = transfer_man.upload_staging(std::move(upload_buffer), std::move(materials_buffer));
+    } else if (dirty_material_count != 0) {
+        auto upload_offsets = std::vector<u64>(dirty_material_count);
+        auto upload_buffer = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eCPUonly, dirty_materials_size_bytes);
+        auto *dst_material_ptr = reinterpret_cast<GPU::Material *>(upload_buffer->mapped_ptr);
+        for (const auto &[dirty_material_id, offset] : std::views::zip(dirty_materials, upload_offsets)) {
+            auto index = SlotMap_decode_id(dirty_material_id).index;
+            auto *material = this->get_material(dirty_material_id);
+            auto gpu_material = to_gpu_material(material);
 
-    auto dirty_material_count = impl->dirty_materials.size();
-    auto dirty_materials_size_bytes = impl->dirty_materials.size() * sizeof(GPU::Material);
+            std::memcpy(dst_material_ptr, &gpu_material, sizeof(GPU::Material));
+            offset = index * sizeof(GPU::Material);
+            dst_material_ptr++;
+        }
 
-    materials_buffer = impl->materials_buffer.acquire(*impl->device, "materials buffer", vuk::eNone);
-    if (dirty_material_count == 0) {
+        auto update_materials_pass = vuk::make_pass(
+            "update materials",
+            [upload_offsets = std::move(
+                 upload_offsets
+             )](vuk::CommandBuffer &cmd_list, VUK_BA(vuk::Access::eTransferRead) src_buffer, VUK_BA(vuk::Access::eTransferWrite) dst_buffer) {
+                for (usize i = 0; i < upload_offsets.size(); i++) {
+                    auto offset = upload_offsets[i];
+                    auto src_subrange = src_buffer->subrange(i * sizeof(GPU::Material), sizeof(GPU::Material));
+                    auto dst_subrange = dst_buffer->subrange(offset, sizeof(GPU::Material));
+                    cmd_list.copy_buffer(src_subrange, dst_subrange);
+                }
+
+                return dst_buffer;
+            }
+        );
+
+        materials_buffer = update_materials_pass(std::move(upload_buffer), std::move(materials_buffer));
+    } else {
         return materials_buffer;
     }
 
-    auto upload_offsets = std::vector<u64>(dirty_material_count);
-    auto upload_buffer = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eCPUonly, dirty_materials_size_bytes);
-    auto *dst_material_ptr = reinterpret_cast<GPU::Material *>(upload_buffer->mapped_ptr);
-    for (const auto &[dirty_material_id, offset] : std::views::zip(impl->dirty_materials, upload_offsets)) {
-        auto index = SlotMap_decode_id(dirty_material_id).index;
-        auto *material = this->get_material(dirty_material_id);
-        auto gpu_material = to_gpu_material(material);
-
-        std::memcpy(dst_material_ptr, &gpu_material, sizeof(GPU::Material));
-        offset = index * sizeof(GPU::Material);
-        dst_material_ptr++;
-    }
-
-    auto update_materials_pass = vuk::make_pass(
-        "update materials",
-        [upload_offsets = std::move(
-             upload_offsets
-         )](vuk::CommandBuffer &cmd_list, VUK_BA(vuk::Access::eTransferRead) src_buffer, VUK_BA(vuk::Access::eTransferWrite) dst_buffer) {
-            for (usize i = 0; i < upload_offsets.size(); i++) {
-                auto offset = upload_offsets[i];
-                auto src_subrange = src_buffer->subrange(i * sizeof(GPU::Material), sizeof(GPU::Material));
-                auto dst_subrange = dst_buffer->subrange(offset, sizeof(GPU::Material));
-                cmd_list.copy_buffer(src_subrange, dst_subrange);
-            }
-
-            return dst_buffer;
-        }
-    );
-
-    return update_materials_pass(std::move(upload_buffer), std::move(materials_buffer));
+    impl->device->commit_descriptor_set(impl->materials_descriptor_set);
+    return materials_buffer;
 }
 
 auto AssetManager::get_materials_descriptor_set() -> vuk::PersistentDescriptorSet * {

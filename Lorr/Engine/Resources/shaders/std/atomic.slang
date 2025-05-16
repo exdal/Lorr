@@ -117,7 +117,7 @@ public func atomic_add<T : IInteger>(
     __ref T dst,
     T value,
     constexpr MemoryOrder memory_order,
-    constexpr MemoryLocation location = MemoryLocation::Buffer,
+    constexpr MemoryLocation location = MemoryLocation::None,
     constexpr MemoryScope scope = MemoryScope::Workgroup
 ) -> T {
     spirv_type_checks<T>();

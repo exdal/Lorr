@@ -1,5 +1,7 @@
 #include "Engine/Core/JobManager.hh"
 
+#include "Engine/OS/OS.hh"
+
 namespace lr {
 auto Barrier::create() -> Arc<Barrier> {
     return Arc<Barrier>::create();
@@ -65,21 +67,24 @@ JobManager::~JobManager() {
 auto JobManager::shutdown(this JobManager &self) -> void {
     ZoneScoped;
 
-    std::scoped_lock _(self.mutex);
+    std::unique_lock _(self.mutex);
     self.running = false;
     self.condition_var.notify_all();
 }
 
 auto JobManager::worker(this JobManager &self, u32 id) -> void {
     ZoneScoped;
+    memory::ScopedStack stack;
 
     this_thread_worker.id = id;
+    os::set_thread_name(stack.format("Worker {}", id));
+
     LS_DEFER() {
         this_thread_worker.id = ~0_u32;
     };
 
     while (true) {
-        std::unique_lock lock(self.mutex);
+        auto lock = std::unique_lock(self.mutex);
         while (self.jobs.empty()) {
             if (!self.running) {
                 return;
@@ -110,14 +115,16 @@ auto JobManager::worker(this JobManager &self, u32 id) -> void {
 auto JobManager::submit(this JobManager &self, Arc<Job> job, bool prioritize) -> void {
     ZoneScoped;
 
-    std::unique_lock _(self.mutex);
-    self.job_count.fetch_add(1);
-    if (prioritize) {
-        self.jobs.push_front(std::move(job));
-    } else {
-        self.jobs.push_back(std::move(job));
+    {
+        std::unique_lock _(self.mutex);
+        if (prioritize) {
+            self.jobs.push_front(std::move(job));
+        } else {
+            self.jobs.push_back(std::move(job));
+        }
     }
 
+    self.job_count.fetch_add(1);
     self.condition_var.notify_all();
 }
 

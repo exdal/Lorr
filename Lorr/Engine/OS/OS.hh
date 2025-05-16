@@ -77,6 +77,8 @@ namespace os {
 
     //  ── THREADS ─────────────────────────────────────────────────────────
     auto thread_id() -> i64;
+    auto set_thread_name(std::string_view name) -> void;
+    auto set_thread_name(std::thread::native_handle_type thread, std::string_view name) -> void;
 
     //  ── CLOCK ───────────────────────────────────────────────────────────
     auto tsc() -> u64;

@@ -351,7 +351,7 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
         "final",
         { .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eColorAttachment,
           .extent = info.extent,
-          .format = vuk::Format::eB10G11R11UfloatPack32,
+          .format = vuk::Format::eR16G16B16A16Sfloat,
           .sample_count = vuk::Samples::e1,
           .level_count = 1,
           .layer_count = 1 }
@@ -1115,7 +1115,7 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                 };
 
                 vuk::PipelineColorBlendAttachmentState blend_info = {
-                    .blendEnable = true,
+                    .blendEnable = false,
                     .srcColorBlendFactor = vuk::BlendFactor::eOne,
                     .dstColorBlendFactor = vuk::BlendFactor::eSrcAlpha,
                     .colorBlendOp = vuk::BlendOp::eAdd,

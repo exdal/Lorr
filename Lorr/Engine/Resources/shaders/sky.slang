@@ -299,26 +299,31 @@ public func sample_aerial_perspective(
     f32x2 uv,
     f32x3 camera_relative_pos
 ) -> f32x4 {
-    const let half_slice_depth = 0.70710678118654752440084436210485f;  // sqrt(0.5f)
-    const let aerial_gain_per_slice_inv = (1.0 / atmosphere->aerial_gain_per_slice);
-    const let aerial_perspective_lut_depth = f32(atmosphere->aerial_perspective_lut_size.z);
+    const let lut_size = f32x3(atmosphere->aerial_perspective_lut_size);
+    const let per_slice_depth = f32(lut_size.x / lut_size.z);
+    const let aerial_perspective_lut_depth = lut_size.z;
 
-    let relative_depth = length(camera_relative_pos);
-    let linear_slice = relative_depth * aerial_gain_per_slice_inv;
-    let linear_w = linear_slice * (1.0 / aerial_perspective_lut_depth);
+    let relative_depth = max(0.0, length(camera_relative_pos) - atmosphere->aerial_perspective_start_km);
+    let linear_slice = relative_depth * rcp(per_slice_depth);
+    let linear_w = linear_slice * rcp(aerial_perspective_lut_depth);
     let non_linear_w = sqrt(linear_w);
     let non_linear_slice = non_linear_w * aerial_perspective_lut_depth;
 
     f32 weight = 1.0;
+    const let half_slice_depth = 0.70710678118654752440084436210485f;  // sqrt(0.5f)
     if (non_linear_slice < half_slice_depth) {
         weight = saturate(non_linear_slice * non_linear_slice * 2.0);
     }
-    weight *= saturate(relative_depth * INV_CAMERA_SCALE_UNIT);
 
+    const let near_depth_fade_out = 1.0 / 0.00001;
+    weight *= saturate(relative_depth * near_depth_fade_out);
+
+#if 0
+    return f32x4(relative_depth, linear_slice, non_linear_w, linear_w);
+#endif
     f32x4 aerial_perspective = aerial_perspective_lut.sample_mip(sampler, f32x3(uv, non_linear_w), 0.0);
     aerial_perspective.xyz *= weight;
     aerial_perspective.w = 1.0 - (weight * (1.0 - aerial_perspective.w));
 
     return aerial_perspective;
 }
-

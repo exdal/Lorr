@@ -25,8 +25,7 @@ struct PushConstants {
 [[numthreads(16, 16, 1)]]
 func cs_main(u32x3 thread_id : SV_DispatchThreadID) {
     f32x2 uv = f32x2(thread_id.xy) / f32x2(C.atmosphere->sky_view_lut_size.xy);
-    f32x3 eye_pos = C.camera->position * CAMERA_SCALE_UNIT;
-    eye_pos.y += C.atmosphere->planet_radius + PLANET_RADIUS_OFFSET;
+    f32x3 eye_pos = C.atmosphere->eye_pos;
 
     f32 h = length(eye_pos);
     const f32x3 eye_dir = uv_to_sky_view_lut_params(C.atmosphere, uv, h);

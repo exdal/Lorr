@@ -577,7 +577,11 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, SceneRenderInfo &i
             atmos.ozone_absorption = atmos_info.ozone_absorption * 1e-3f;
             atmos.ozone_height = atmos_info.ozone_height;
             atmos.ozone_thickness = atmos_info.ozone_thickness;
-            atmos.aerial_gain_per_slice = atmos_info.aerial_gain_per_slice;
+            atmos.aerial_perspective_start_km = atmos_info.aerial_perspective_start_km;
+
+            f32 eye_altitude = active_camera_data->position.y * GPU::CAMERA_SCALE_UNIT;
+            eye_altitude += atmos.planet_radius + GPU::PLANET_RADIUS_OFFSET;
+            atmos.eye_position = glm::vec3(0.0f, eye_altitude, 0.0f);
         }
 
         if (e.has<ECS::AutoExposure>()) {

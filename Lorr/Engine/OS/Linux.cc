@@ -8,7 +8,7 @@
 #include <sys/sysinfo.h>
 #include <unistd.h>
 
-#include <iostream>
+#include <pthread.h>
 
 typedef struct inotify_event inotify_event_t;
 
@@ -273,6 +273,20 @@ auto os::thread_id() -> i64 {
     ZoneScoped;
 
     return syscall(__NR_gettid);
+}
+
+auto os::set_thread_name(std::string_view name) -> void {
+    ZoneScoped;
+    memory::ScopedStack stack;
+
+    pthread_setname_np(pthread_self(), stack.null_terminate_cstr(name));
+}
+
+auto os::set_thread_name(std::thread::native_handle_type thread, std::string_view name) -> void {
+    ZoneScoped;
+    memory::ScopedStack stack;
+
+    pthread_setname_np(thread, stack.null_terminate_cstr(name));
 }
 
 auto os::tsc() -> u64 {

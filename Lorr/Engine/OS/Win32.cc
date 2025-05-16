@@ -266,6 +266,20 @@ auto os::thread_id() -> i64 {
     return GetCurrentThreadId();
 }
 
+auto os::set_thread_name(std::string_view name) -> void {
+    ZoneScoped;
+
+    auto wide_name = std::wstring(name.begin(), name.end());
+    SetThreadDescription(GetCurrentThread(), wide_name.c_str());
+}
+
+auto os::set_thread_name(std::thread::native_handle_type thread, std::string_view name) -> void {
+    ZoneScoped;
+
+    auto wide_name = std::wstring(name.begin(), name.end());
+    SetThreadDescription(thread, wide_name.c_str());
+}
+
 auto os::tsc() -> u64 {
     ZoneScoped;
 

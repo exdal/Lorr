@@ -24,28 +24,34 @@ struct PushConstants {
 [[shader("compute")]]
 [[numthreads(16, 16, 1)]]
 func cs_main(u32x3 thread_id : SV_DispatchThreadID) {
-    f32x2 uv = f32x2(f32x2(thread_id.xy) + 0.5) / f32x2(C.atmosphere->aerial_perspective_lut_size.xy);
+    const let lut_size = C.atmosphere.aerial_perspective_lut_size;
+    f32x2 uv = f32x2(f32x2(thread_id.xy) + 0.5) / f32x2(lut_size.xy);
     f32x3 clip_space = f32x3(2.0 * uv - 1.0, 1.0);
     f32x4 world_space = mul(C.camera->inv_projection_view_mat, f32x4(clip_space, 1.0));
     f32x3 world_pos = world_space.xyz / world_space.w;
     f32x3 world_dir = normalize(world_pos - C.camera->position);
-    f32x3 eye_pos = f32x3(0.0, C.camera->position.y, 0.0) *
-                    CAMERA_SCALE_UNIT +
-                    f32x3(0.0, C.atmosphere->planet_radius, 0.0);
-    int step_count = int(max(1.0, f32(thread_id.z + 1.0) * 2.0));
-    f32 slice = ((f32(thread_id.z) + 0.5) * (1.0 / C.atmosphere->aerial_perspective_lut_size.z));
-    slice *= slice;
-    slice *= C.atmosphere->aerial_perspective_lut_size.z;
-    f32 t_max = slice * C.atmosphere->aerial_gain_per_slice;
+    f32x3 eye_pos = C.atmosphere->eye_pos;
 
-    f32x3 ray_pos = eye_pos + t_max * world_dir;
+    f32 slice = ((f32(thread_id.z) + 0.5) * (1.0 / lut_size.z));
+    slice *= slice;
+    slice *= lut_size.z;
+
+    const i32 step_count = int(max(1.0, f32(thread_id.z + 1.0) * 2.0));
+    const f32 per_slice_depth = f32(lut_size.x / lut_size.z);
+    const f32 start_depth = C.atmosphere->aerial_perspective_start_km * INV_CAMERA_SCALE_UNIT;
+    f32 t_max = slice * per_slice_depth;
+
+    f32x3 start_pos = eye_pos + start_depth * world_dir;
+    f32x3 ray_pos = start_pos + t_max * world_dir;
     f32 view_height = length(ray_pos);
 
+    /*
     if (view_height <= (C.atmosphere->planet_radius + PLANET_RADIUS_OFFSET)) {
         ray_pos = normalize(ray_pos) * (C.atmosphere->planet_radius + PLANET_RADIUS_OFFSET);
         world_dir = normalize(ray_pos - eye_pos);
         t_max = length(ray_pos - eye_pos);
     }
+    */
 
     f32 t_max_max = t_max;
     view_height = length(eye_pos);
@@ -70,6 +76,7 @@ func cs_main(u32x3 thread_id : SV_DispatchThreadID) {
     info.sun_dir = C.sun->direction;
     info.sun_intensity = C.sun->intensity;
     info.max_integration_length = t_max_max;
+    info.eval_planet_luminance = false;
 
     info.sampling.variable_sample_count = false;
     info.sampling.initial_sample_count = max(1.0, (f32(thread_id.z) + 1.0) * 2.0);

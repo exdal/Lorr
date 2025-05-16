@@ -31,7 +31,13 @@ struct Sun {
     alignas(4) f32 intensity = 10.0f;
 };
 
+constexpr static f32 CAMERA_SCALE_UNIT = 0.01;
+constexpr static f32 INV_CAMERA_SCALE_UNIT = 1.0 / CAMERA_SCALE_UNIT;
+constexpr static f32 PLANET_RADIUS_OFFSET = 0.001;
+
 struct Atmosphere {
+    alignas(4) glm::vec3 eye_position = {}; // this is camera pos but its always above planet_radius
+
     alignas(4) glm::vec3 rayleigh_scatter = { 0.005802f, 0.013558f, 0.033100f };
     alignas(4) f32 rayleigh_density = 8.0f;
 
@@ -45,9 +51,9 @@ struct Atmosphere {
     alignas(4) f32 ozone_thickness = 15.0f;
 
     alignas(4) glm::vec3 terrain_albedo = { 0.3f, 0.3f, 0.3f };
-    alignas(4) f32 aerial_gain_per_slice = 8.0f;
     alignas(4) f32 planet_radius = 6360.0f;
     alignas(4) f32 atmos_radius = 6460.0f;
+    alignas(4) f32 aerial_perspective_start_km = 8.0f;
 
     alignas(4) vuk::Extent3D transmittance_lut_size = {};
     alignas(4) vuk::Extent3D sky_view_lut_size = {};

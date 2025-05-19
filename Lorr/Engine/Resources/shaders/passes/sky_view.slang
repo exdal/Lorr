@@ -21,8 +21,7 @@ struct PushConstants {
 };
 [[vk::push_constant]] PushConstants C;
 
-[[shader("compute")]]
-[[numthreads(16, 16, 1)]]
+[[shader("compute")]] [[numthreads(16, 16, 1)]]
 func cs_main(u32x3 thread_id : SV_DispatchThreadID) {
     f32x2 uv = f32x2(thread_id.xy) / f32x2(C.atmosphere->sky_view_lut_size.xy);
     f32x3 eye_pos = C.atmosphere->eye_pos;

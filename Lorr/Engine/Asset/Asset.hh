@@ -80,21 +80,21 @@ struct AssetManager : Handle<AssetManager> {
     // Load contents of registered assets.
     //
     auto load_asset(const UUID &uuid) -> bool;
-    auto unload_asset(const UUID &uuid) -> void;
+    auto unload_asset(const UUID &uuid) -> bool;
 
     auto load_model(const UUID &uuid) -> bool;
-    auto unload_model(const UUID &uuid) -> void;
+    auto unload_model(const UUID &uuid) -> bool;
 
     auto load_texture(const UUID &uuid, const TextureInfo &info = {}) -> bool;
-    auto unload_texture(const UUID &uuid) -> void;
+    auto unload_texture(const UUID &uuid) -> bool;
     auto is_texture_loaded(const UUID &uuid) -> bool;
 
     auto load_material(const UUID &uuid, const Material &material_info) -> bool;
-    auto unload_material(const UUID &uuid) -> void;
+    auto unload_material(const UUID &uuid) -> bool;
     auto is_material_loaded(const UUID &uuid) -> bool;
 
     auto load_scene(const UUID &uuid) -> bool;
-    auto unload_scene(const UUID &uuid) -> void;
+    auto unload_scene(const UUID &uuid) -> bool;
 
     //  ── Exporting Assets ────────────────────────────────────────────────
     // All export_# functions must have path, developer have freedom to

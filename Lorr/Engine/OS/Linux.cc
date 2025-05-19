@@ -1,5 +1,7 @@
 #include "Engine/OS/OS.hh"
 
+#include "Engine/Memory/Stack.hh"
+
 #include <sys/file.h>
 #include <sys/inotify.h>
 #include <sys/mman.h>

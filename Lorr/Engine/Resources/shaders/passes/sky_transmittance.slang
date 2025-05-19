@@ -14,13 +14,10 @@ struct PushConstants {
 
 [[vk::push_constant]] PushConstants C;
 
-[[shader("compute")]]
-[[numthreads(16, 16, 1)]]
+[[shader("compute")]] [[numthreads(16, 16, 1)]]
 func cs_main(u32x3 thread_id : SV_DispatchThreadID) -> void {
     f32x2 uv = f32x2(f32x2(thread_id.xy) + 0.5) / f32x2(C.atmosphere->transmittance_lut_size.xy);
-    f32 h = std::safe_sqrt(
-        C.atmosphere->atmos_radius * C.atmosphere->atmos_radius -
-        C.atmosphere->planet_radius * C.atmosphere->planet_radius);
+    f32 h = std::safe_sqrt(C.atmosphere->atmos_radius * C.atmosphere->atmos_radius - C.atmosphere->planet_radius * C.atmosphere->planet_radius);
     f32 rho = h * uv.y;
     f32 lut_x = sqrt(rho * rho + C.atmosphere->planet_radius * C.atmosphere->planet_radius);
     f32 d_min = C.atmosphere->atmos_radius - lut_x;

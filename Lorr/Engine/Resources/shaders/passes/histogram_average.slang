@@ -24,15 +24,15 @@ func ev100_from_luminance(f32 luminance) -> f32 {
     return log2(luminance * (ISO * C.ev100_bias / K));
 }
 
-[[shader("compute")]]
-[[numthreads(HISTOGRAM_BIN_COUNT, 1, 1)]]
+[[shader("compute")]] [[numthreads(HISTOGRAM_BIN_COUNT, 1, 1)]]
 func cs_main(u32 gid : SV_GroupIndex) -> void {
     const let count_for_this_bin = gid == 0 ? 0.0 : f32(C.histogram[gid]);
     histogram_shared[gid] = count_for_this_bin * f32(gid);
     std::control_barrier(std::memory_order_acq_rel);
 
     [[unroll]]
-    for (u32 cutoff = (HISTOGRAM_BIN_COUNT >> 1); cutoff > 0; cutoff >>= 1) {
+    for (u32 cutoff = (HISTOGRAM_BIN_COUNT >> 1); cutoff > 0; cutoff >>= 1)
+    {
         if (gid < cutoff) {
             histogram_shared[gid] += histogram_shared[gid + cutoff];
         }
@@ -50,4 +50,3 @@ func cs_main(u32 gid : SV_GroupIndex) -> void {
         C.luminance->exposure = 1.0 / (exp2(ev100) * 1.2);
     }
 }
-

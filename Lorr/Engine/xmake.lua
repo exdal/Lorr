@@ -29,6 +29,7 @@ target("Lorr")
 
     add_packages(
         "fmt",
+        "fmtlog",
         "libsdl3",
         "vk-bootstrap",
         "imgui",

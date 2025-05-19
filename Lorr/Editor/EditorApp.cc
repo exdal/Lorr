@@ -8,6 +8,7 @@
 
 #include "Editor/Themes.hh"
 
+#include "Engine/Memory/Stack.hh"
 #include "Engine/OS/File.hh"
 #include "Engine/Util/JsonWriter.hh"
 
@@ -31,7 +32,7 @@ static auto read_project_file(const fs::path &path) -> ls::option<ProjectFileInf
     sj::ondemand::parser parser;
     auto doc = parser.iterate(json);
     if (doc.error()) {
-        lr::LOG_ERROR("Failed to parse project file! {}", sj::error_message(doc.error()));
+        LOG_ERROR("Failed to parse project file! {}", sj::error_message(doc.error()));
         return ls::nullopt;
     }
 
@@ -64,7 +65,7 @@ auto EditorApp::load_editor_data(this EditorApp &self) -> void {
     sj::ondemand::parser parser;
     auto doc = parser.iterate(json);
     if (doc.error()) {
-        lr::LOG_ERROR("Failed to parse editor data file! {}", sj::error_message(doc.error()));
+        LOG_ERROR("Failed to parse editor data file! {}", sj::error_message(doc.error()));
         return;
     }
 
@@ -77,7 +78,7 @@ auto EditorApp::load_editor_data(this EditorApp &self) -> void {
 
         auto project_info = read_project_file(project_path.value_unsafe());
         if (!project_info) {
-            lr::LOG_ERROR("Failed to read project information for {}!", project_path.value_unsafe());
+            LOG_ERROR("Failed to read project information for {}!", project_path.value_unsafe());
             continue;
         }
 
@@ -110,7 +111,7 @@ auto EditorApp::new_project(this EditorApp &self, const fs::path &root_path, con
     ZoneScoped;
 
     if (!fs::is_directory(root_path)) {
-        lr::LOG_ERROR("New projects must be inside a directory.");
+        LOG_ERROR("New projects must be inside a directory.");
         return nullptr;
     }
 
@@ -136,7 +137,7 @@ auto EditorApp::new_project(this EditorApp &self, const fs::path &root_path, con
         std::error_code err;
         fs::create_directories(proj_root_path, err);
         if (err) {
-            lr::LOG_ERROR("Failed to create directory '{}'! {}", proj_root_path, err.message());
+            LOG_ERROR("Failed to create directory '{}'! {}", proj_root_path, err.message());
             return nullptr;
         }
 
@@ -162,7 +163,7 @@ auto EditorApp::new_project(this EditorApp &self, const fs::path &root_path, con
 
     lr::File file(proj_file_path, lr::FileAccess::Write);
     if (!file) {
-        lr::LOG_ERROR("Failed to open file {}!", proj_file_path);
+        LOG_ERROR("Failed to open file {}!", proj_file_path);
         return nullptr;
     }
 

@@ -3,7 +3,7 @@
 #include "Engine/Graphics/VulkanDevice.hh"
 
 namespace lr {
-auto Buffer::create(Device &device, u64 size, vuk::MemoryUsage memory_usage, vuk::source_location LOC) -> std::expected<Buffer, vuk::VkException> {
+auto Buffer::create(Device &device, u64 size, vuk::MemoryUsage memory_usage, LR_CALLSTACK) -> std::expected<Buffer, vuk::VkException> {
     ZoneScoped;
 
     vuk::BufferCreateInfo create_info = {
@@ -12,16 +12,16 @@ auto Buffer::create(Device &device, u64 size, vuk::MemoryUsage memory_usage, vuk
         .alignment = 8,
     };
 
-    vuk::Unique<vuk::Buffer> buffer_handle(*device.allocator);
-    auto result = device.allocator->allocate_buffers({ &*buffer_handle, 1 }, { &create_info, 1 }, LOC);
+    auto buffer_handle = vuk::Buffer{};
+    auto result = device.allocator->allocate_buffers({ &buffer_handle, 1 }, { &create_info, 1 }, LOC);
     if (!result.holds_value()) {
         return std::unexpected(result.error());
     }
 
-    auto buffer = Buffer {};
-    buffer.data_size_ = buffer_handle->size;
-    buffer.host_data_ = buffer_handle->mapped_ptr;
-    buffer.device_address_ = buffer_handle->device_address;
+    auto buffer = Buffer{};
+    buffer.data_size_ = buffer_handle.size;
+    buffer.host_data_ = buffer_handle.mapped_ptr;
+    buffer.device_address_ = buffer_handle.device_address;
     buffer.id_ = device.resources.buffers.create_slot(std::move(buffer_handle));
 
     return buffer;

@@ -2,6 +2,8 @@
 
 #include "Engine/Graphics/VulkanDevice.hh"
 
+#include "Engine/Memory/Stack.hh"
+
 namespace lr {
 auto Image::create(Device &device, const ImageInfo &info, LR_CALLSTACK) -> std::expected<Image, vuk::VkException> {
     ZoneScoped;
@@ -14,8 +16,8 @@ auto Image::create(Device &device, const ImageInfo &info, LR_CALLSTACK) -> std::
         .arrayLayers = info.slice_count,
         .usage = info.usage | vuk::ImageUsageFlagBits::eTransferDst,
     };
-    vuk::Unique<vuk::Image> image_handle(*device.allocator);
-    auto result = device.allocator->allocate_images({ &*image_handle, 1 }, { &create_info, 1 }, LOC);
+    auto image_handle = vuk::Image{};
+    auto result = device.allocator->allocate_images({ &image_handle, 1 }, { &create_info, 1 }, LOC);
     if (!result.holds_value()) {
         return std::unexpected(result.error());
     }
@@ -110,9 +112,9 @@ auto Image::id() const -> ImageID {
 auto ImageView::create(Device &device, Image &image, const ImageViewInfo &info, LR_CALLSTACK) -> std::expected<ImageView, vuk::VkException> {
     ZoneScoped;
 
-    auto image_handle = device.image(image.id());
+    auto image_handle = device.image(image.id()).value_or(vuk::Image{});
     vuk::ImageViewCreateInfo create_info = {
-        .image = image_handle->image,
+        .image = image_handle.image,
         .viewType = info.type,
         .format = image.format(),
         .components = {
@@ -124,8 +126,8 @@ auto ImageView::create(Device &device, Image &image, const ImageViewInfo &info, 
         .subresourceRange = info.subresource_range,
         .view_usage = info.image_usage,
     };
-    vuk::Unique<vuk::ImageView> image_view_handle(*device.allocator);
-    auto result = device.allocator->allocate_image_views({ &*image_view_handle, 1 }, { &create_info, 1 }, LOC);
+    auto image_view_handle = vuk::ImageView{};
+    auto result = device.allocator->allocate_image_views({ &image_view_handle, 1 }, { &create_info, 1 }, LOC);
     if (!result.holds_value()) {
         return std::unexpected(result.error());
     }
@@ -145,12 +147,12 @@ auto ImageView::create(Device &device, Image &image, const ImageViewInfo &info, 
 auto ImageView::to_attachment(Device &device, const vuk::ImageUsageFlags &usage) const -> vuk::ImageAttachment {
     ZoneScoped;
 
-    auto *image_handle = device.image(bound_image_id_);
-    auto *view_handle = device.image_view(id_);
+    auto image_handle = device.image(bound_image_id_);
+    auto view_handle = device.image_view(id_);
 
     return vuk::ImageAttachment{
-        .image = *image_handle,
-        .image_view = *view_handle,
+        .image = image_handle.value_or(vuk::Image{}),
+        .image_view = view_handle.value_or(vuk::ImageView{}),
         .usage = usage,
         .extent = extent_,
         .format = format_,
@@ -166,11 +168,11 @@ auto ImageView::to_attachment(Device &device, const vuk::ImageUsageFlags &usage)
 auto ImageView::to_attachment(Device &device, vuk::ImageAttachment::Preset preset) const -> vuk::ImageAttachment {
     ZoneScoped;
 
-    auto *image_handle = device.image(bound_image_id_);
-    auto *view_handle = device.image_view(id_);
+    auto image_handle = device.image(bound_image_id_);
+    auto view_handle = device.image_view(id_);
     auto attachment = vuk::ImageAttachment::from_preset(preset, format_, extent_, vuk::Samples::e1);
-    attachment.image = *image_handle;
-    attachment.image_view = *view_handle;
+    attachment.image = image_handle.value_or(vuk::Image{});
+    attachment.image_view = view_handle.value_or(vuk::ImageView{});
 
     return attachment;
 }

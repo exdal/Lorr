@@ -11,12 +11,12 @@ auto Project::set_active_scene(this Project &self, const lr::UUID &scene_uuid) -
     ZoneScoped;
 
     auto &app = EditorApp::get();
-    if (!app.asset_man.load_scene(scene_uuid)) {
-        return false;
-    }
-
     if (self.active_scene_uuid) {
         app.asset_man.unload_scene(self.active_scene_uuid);
+    }
+
+    if (!app.asset_man.load_scene(scene_uuid)) {
+        return false;
     }
 
     app.scene_renderer.cleanup();

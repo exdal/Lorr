@@ -44,12 +44,12 @@ func vs_main(u32 vertex_index : SV_VertexID) -> VertexOutput {
     const Transform transform = transforms[meshlet_instance.transform_index];
     const Meshlet meshlet = mesh.meshlets[meshlet_instance.meshlet_index];
 
-    const u32 index  = meshlet.index(mesh, vis.triangle_index);
+    const u32 index = meshlet.index(mesh, vis.triangle_index);
     const u32 vertex = meshlet.vertex(mesh, index);
     const f32x3 vertex_pos = meshlet.position(mesh, vertex);
-    const f32x2 tex_coord  = meshlet.tex_coord(mesh, vertex);
-    const f32x4 world_pos  = transform.to_world_position(vertex_pos);
-    const f32x4 clip_pos   = camera.to_clip_position(world_pos);
+    const f32x2 tex_coord = meshlet.tex_coord(mesh, vertex);
+    const f32x4 world_pos = transform.to_world_position(vertex_pos);
+    const f32x4 clip_pos = mul(camera.projection_view_mat, f32x4(world_pos.xyz, 1.0));
 
     VertexOutput output;
     output.position = clip_pos;
@@ -74,13 +74,13 @@ func fs_main(VertexOutput input) -> u32 {
 
         // We are doing deferred, blend alpha mode is not supported in this pass.
         if (alpha_color < clamp(material.alpha_cutoff, 0.001, 1.0) /* &&
-            material.alpha_mode == AlphaMode::Mask*/) {
+            material.alpha_mode == AlphaMode::Mask*/)
+        {
             discard;
         }
     }
 
-    std::atomic_add(overdraw[u32x2(input.position.xy)], 1u, std::memory_order_acq_rel, 
-        std::MemoryLocation::Image, std::MemoryScope::Device);
+    std::atomic_add(overdraw[u32x2(input.position.xy)], 1u, std::memory_order_acq_rel, std::MemoryLocation::Image, std::MemoryScope::Device);
 
     const let vis = VisBufferData(input.meshlet_instance_index, input.triangle_index);
     return vis.encode();

@@ -1,5 +1,5 @@
 // C++ Standard Library compatibility layer for Slang.
-// Not sure about naming of this module, might cause some 
+// Not sure about naming of this module, might cause some
 // issues in the future.
 
 module std;

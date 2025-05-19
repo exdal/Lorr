@@ -3,17 +3,36 @@
 #include "Engine/OS/Timer.hh"
 
 namespace lr {
+auto log_cb(
+    [[maybe_unused]] i64 ns,
+    [[maybe_unused]] fmtlog::LogLevel level,
+    [[maybe_unused]] fmt::string_view location,
+    [[maybe_unused]] usize basePos,
+    [[maybe_unused]] fmt::string_view threadName,
+    [[maybe_unused]] fmt::string_view msg,
+    [[maybe_unused]] usize bodyPos,
+    [[maybe_unused]] usize logFilePos
+) -> void {
+    ZoneScoped;
+
+    fmt::println("{}", msg);
+}
+
 bool Application::init(this Application &self, const ApplicationInfo &info) {
     ZoneScoped;
 
-    Logger::init("engine");
+    fmtlog::setThreadName("Main");
+    fmtlog::setLogFile("engine.log", true);
+    fmtlog::setLogCB(log_cb, fmtlog::DBG);
+    fmtlog::setHeaderPattern("[{HMSF}] [{t:<9}] {l}: ");
+    fmtlog::setLogLevel(fmtlog::DBG);
 
     if (!self.do_super_init(info.args)) {
         LOG_FATAL("Super init failed!");
         return false;
     }
 
-    self.job_man.emplace(1);
+    self.job_man.emplace(12);
     self.device.init(3).value();
     self.asset_man = AssetManager::create(&self.device);
     self.window = Window::create(info.window_info);
@@ -88,6 +107,8 @@ void Application::run(this Application &self) {
         swapchain_attachment = self.imgui_renderer.end_frame(std::move(swapchain_attachment));
         self.device.end_frame(std::move(swapchain_attachment));
 
+        fmtlog::poll();
+
         FrameMark;
     }
 
@@ -109,8 +130,6 @@ void Application::shutdown(this Application &self) {
     self.swap_chain.reset();
     self.device.destroy();
     LOG_INFO("Complete!");
-
-    Logger::deinit();
 }
 
 } // namespace lr

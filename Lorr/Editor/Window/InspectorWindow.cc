@@ -2,6 +2,7 @@
 
 #include "Editor/EditorApp.hh"
 
+#include "Engine/Memory/Stack.hh"
 #include "Engine/Scene/ECSModule/ComponentWrapper.hh"
 #include "Engine/Util/Icons/IconsMaterialDesignIcons.hh"
 
@@ -74,7 +75,7 @@ static auto draw_inspector(InspectorWindow &) -> void {
         }
 
         lr::ECS::ComponentWrapper component(selected_entity, component_id);
-        if (!component.has_component()) {
+        if (!component.is_component()) {
             return;
         }
 

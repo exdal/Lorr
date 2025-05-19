@@ -9,15 +9,15 @@ Sampler sampler;
 Image2D<f32x4> texture;
 
 struct VertexInput {
-    f32x2 position  : POSITION;
+    f32x2 position : POSITION;
     f32x2 tex_coord : TEXCOORD;
-    f32x4 color     : COLOR;
+    f32x4 color : COLOR;
 };
 
 struct VertexOutput {
-    f32x4 position     : SV_Position;
-    f32x2 tex_coord    : TEXCOORD;
-    f32x4 color        : COLOR;
+    f32x4 position : SV_Position;
+    f32x2 tex_coord : TEXCOORD;
+    f32x4 color : COLOR;
 };
 
 struct PushConstants {
@@ -39,7 +39,7 @@ func vs_main(VertexInput input) -> VertexOutput {
 }
 
 [[shader("fragment")]]
-f32x4 fs_main(VertexOutput input) : SV_TARGET {
+f32x4 fs_main(VertexOutput input) :
+    SV_TARGET {
     return texture.sample(sampler, input.tex_coord) * input.color;
 }
-

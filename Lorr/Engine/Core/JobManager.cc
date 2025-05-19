@@ -1,5 +1,7 @@
 #include "Engine/Core/JobManager.hh"
 
+#include "Engine/Memory/Stack.hh"
+
 #include "Engine/OS/OS.hh"
 
 namespace lr {
@@ -61,6 +63,7 @@ JobManager::JobManager(u32 threads) {
 JobManager::~JobManager() {
     ZoneScoped;
 
+    std::unique_lock _(this->mutex);
     this->shutdown();
 }
 
@@ -78,6 +81,7 @@ auto JobManager::worker(this JobManager &self, u32 id) -> void {
 
     this_thread_worker.id = id;
     os::set_thread_name(stack.format("Worker {}", id));
+    fmtlog::setThreadName(stack.format_char("Worker {}", id));
 
     LS_DEFER() {
         this_thread_worker.id = ~0_u32;

@@ -21,14 +21,13 @@ struct PushConstants {
 };
 [[vk::push_constant]] PushConstants C;
 
-[[shader("compute")]]
-[[numthreads(16, 16, 1)]]
+[[shader("compute")]] [[numthreads(16, 16, 1)]]
 func cs_main(u32x3 thread_id : SV_DispatchThreadID) {
     const let lut_size = C.atmosphere.aerial_perspective_lut_size;
     f32x2 uv = f32x2(f32x2(thread_id.xy) + 0.5) / f32x2(lut_size.xy);
-    f32x3 clip_space = f32x3(2.0 * uv - 1.0, 1.0);
-    f32x4 world_space = mul(C.camera->inv_projection_view_mat, f32x4(clip_space, 1.0));
-    f32x3 world_pos = world_space.xyz / world_space.w;
+    f32x3 NDC = f32x3(2.0 * uv - 1.0, 1.0);
+    f32x4 world_pos_h = mul(C.camera->inv_projection_view_mat, f32x4(NDC, 1.0));
+    f32x3 world_pos = world_pos_h.xyz / world_pos_h.w;
     f32x3 world_dir = normalize(world_pos - C.camera->position);
     f32x3 eye_pos = C.atmosphere->eye_pos;
 

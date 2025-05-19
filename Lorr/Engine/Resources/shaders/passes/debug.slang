@@ -43,12 +43,12 @@ struct PushConstants {
 [[vk::push_constant]] PushConstants C;
 
 func hash(uint a) -> u32 {
-    a = (a+0x7ed55d16) + (a<<12);
-    a = (a^0xc761c23c) ^ (a>>19);
-    a = (a+0x165667b1) + (a<<5);
-    a = (a+0xd3a2646c) ^ (a<<9);
-    a = (a+0xfd7046c5) + (a<<3);
-    a = (a^0xb55a4f09) ^ (a>>16);
+    a = (a + 0x7ed55d16) + (a << 12);
+    a = (a ^ 0xc761c23c) ^ (a >> 19);
+    a = (a + 0x165667b1) + (a << 5);
+    a = (a + 0xd3a2646c) ^ (a << 9);
+    a = (a + 0xfd7046c5) + (a << 3);
+    a = (a ^ 0xb55a4f09) ^ (a >> 16);
     return a;
 }
 
@@ -92,7 +92,10 @@ func fs_main(VertexOutput input) -> f32x4 {
         case DebugView::Albedo: {
             color = albedo_image.sample_mip(linear_repeat_sampler, input.tex_coord, 0).rgb;
         } break;
-        case DebugView::Normal: {} break;
+        case DebugView::Normal: {
+            const f32x4 N = normal_image.load(u32x2(input.position.xy));
+            color = std::oct_to_vec3(N.xy);
+        } break;
         case DebugView::Emissive: {
             color = emissive_image.load(u32x2(input.position.xy)).rgb;
         } break;
@@ -110,4 +113,3 @@ func fs_main(VertexOutput input) -> f32x4 {
 
     return f32x4(color, 1.0);
 }
-

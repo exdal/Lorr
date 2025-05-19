@@ -11,6 +11,8 @@
 
 #include "Engine/Memory/Hasher.hh"
 
+#include "Engine/Memory/Stack.hh"
+
 #include "Engine/OS/File.hh"
 
 #include "Engine/Scene/ECSModule/Core.hh"
@@ -400,7 +402,7 @@ auto read_meta_file(const fs::path &path) -> std::unique_ptr<AssetMetaFile> {
     ZoneScoped;
 
     if (!path.has_extension() || path.extension() != ".lrasset") {
-        LOG_ERROR("'{}' is not a valid asset file. It must end with .lrasset");
+        LOG_ERROR("'{}' is not a valid asset file. It must end with .lrasset", path);
         return nullptr;
     }
 
@@ -458,6 +460,7 @@ auto AssetManager::register_asset(const fs::path &path) -> UUID {
 auto AssetManager::register_asset(const UUID &uuid, AssetType type, const fs::path &path) -> bool {
     ZoneScoped;
 
+    auto write_lock = std::unique_lock(impl->registry_mutex);
     auto [asset_it, inserted] = impl->registry.try_emplace(uuid);
     if (!inserted) {
         if (asset_it != impl->registry.end()) {
@@ -496,23 +499,25 @@ auto AssetManager::load_asset(const UUID &uuid) -> bool {
     return false;
 }
 
-auto AssetManager::unload_asset(const UUID &uuid) -> void {
+auto AssetManager::unload_asset(const UUID &uuid) -> bool {
     ZoneScoped;
 
     auto *asset = this->get_asset(uuid);
     LS_EXPECT(asset);
     switch (asset->type) {
         case AssetType::Model: {
-            this->unload_model(uuid);
+            return this->unload_model(uuid);
         } break;
         case AssetType::Texture: {
-            this->unload_texture(uuid);
+            return this->unload_texture(uuid);
         } break;
         case AssetType::Scene: {
-            this->unload_scene(uuid);
+            return this->unload_scene(uuid);
         } break;
         default:;
     }
+
+    return false;
 }
 
 auto AssetManager::load_model(const UUID &uuid) -> bool {
@@ -521,13 +526,10 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
 
     auto *asset = this->get_asset(uuid);
     if (asset->is_loaded()) {
-        // Acquire all child assets
-        auto *model = impl->models.slot(asset->model_id);
+        // Model is collection of multiple assets and all child
+        // assets must be alive to safely process meshes.
+        // Don't acquire child refs.
         asset->acquire_ref();
-
-        for (const auto &v : model->materials) {
-            this->load_material(v, {});
-        }
 
         return true;
     }
@@ -833,13 +835,13 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
     return true;
 }
 
-auto AssetManager::unload_model(const UUID &uuid) -> void {
+auto AssetManager::unload_model(const UUID &uuid) -> bool {
     ZoneScoped;
 
     auto *asset = this->get_asset(uuid);
     LS_EXPECT(asset);
     if (!(asset->is_loaded() && asset->release_ref())) {
-        return;
+        return false;
     }
 
     auto *model = this->get_model(asset->model_id);
@@ -863,35 +865,43 @@ auto AssetManager::unload_model(const UUID &uuid) -> void {
 
     impl->models.destroy_slot(asset->model_id);
     asset->model_id = ModelID::Invalid;
+
+    return true;
 }
 
 auto AssetManager::load_texture(const UUID &uuid, const TextureInfo &info) -> bool {
     ZoneScoped;
     memory::ScopedStack stack;
 
-    auto *asset = this->get_asset(uuid);
-    LS_EXPECT(asset);
-    asset->acquire_ref();
+    auto asset_path = fs::path{};
 
-    if (asset->is_loaded()) {
-        return true;
+    {
+        auto read_lock = std::shared_lock(impl->textures_mutex);
+        auto *asset = this->get_asset(uuid);
+        LS_EXPECT(asset);
+        asset->acquire_ref();
+        if (asset->is_loaded()) {
+            return true;
+        }
+
+        asset_path = asset->path;
     }
 
     auto file_type = info.file_type;
     auto raw_data = std::vector<u8>(info.pixels.begin(), info.pixels.end());
     if (info.pixels.empty()) {
-        if (!asset->path.has_extension()) {
-            LOG_ERROR("Trying to load texture \"{}\" without a file extension.", asset->path);
+        if (!asset_path.has_extension()) {
+            LOG_ERROR("Trying to load texture \"{}\" without a file extension.", asset_path);
             return false;
         }
 
-        raw_data = File::to_bytes(asset->path);
+        raw_data = File::to_bytes(asset_path);
         if (raw_data.empty()) {
-            LOG_ERROR("Error reading '{}'. Invalid texture file? Notice the question mark.", asset->path);
+            LOG_ERROR("Error reading '{}'. Invalid texture file? Notice the question mark.", asset_path);
             return false;
         }
 
-        file_type = this->to_asset_file_type(asset->path);
+        file_type = this->to_asset_file_type(asset_path);
     }
 
     auto format = vuk::Format::eUndefined;
@@ -918,12 +928,12 @@ auto AssetManager::load_texture(const UUID &uuid, const TextureInfo &info) -> bo
             mip_level_count = image_info->mip_level_count;
         } break;
         default: {
-            LOG_ERROR("Failed to load texture '{}', invalid extension.", asset->path);
+            LOG_ERROR("Failed to load texture '{}', invalid extension.", asset_path);
             return false;
         }
     }
 
-    auto rel_path = fs::relative(asset->path, impl->root_path);
+    auto rel_path = fs::relative(asset_path, impl->root_path);
     auto image_info = ImageInfo{
         .format = format,
         .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eTransferSrc,
@@ -933,7 +943,23 @@ auto AssetManager::load_texture(const UUID &uuid, const TextureInfo &info) -> bo
         .mip_count = mip_level_count,
         .name = stack.format("{} Image", rel_path),
     };
-    auto [image, image_view] = Image::create_with_view(*impl->device, image_info).value();
+    auto image = Image::create(*impl->device, image_info).value();
+
+    auto subresource_range = vuk::ImageSubresourceRange{
+        .aspectMask = vuk::ImageAspectFlagBits::eColor,
+        .baseMipLevel = 0,
+        .levelCount = mip_level_count,
+        .baseArrayLayer = 0,
+        .layerCount = 1,
+    };
+    auto image_view_info = ImageViewInfo{
+        .image_usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eTransferSrc,
+        .type = vuk::ImageViewType::e2D,
+        .subresource_range = subresource_range,
+        .name = stack.format("{} Image View", rel_path),
+    };
+    auto image_view = ImageView::create(*impl->device, image, image_view_info).value();
+
     auto dst_attachment = image_view.discard(*impl->device, "dst image", vuk::ImageUsageFlagBits::eTransferDst);
     auto alignment = vuk::format_to_texel_block_size(format);
 
@@ -1001,26 +1027,29 @@ auto AssetManager::load_texture(const UUID &uuid, const TextureInfo &info) -> bo
             transfer_man.wait_on(std::move(dst_attachment));
         } break;
         default: {
-            LOG_ERROR("Failed to load texture '{}', invalid extension.", asset->path);
+            LOG_ERROR("Failed to load texture '{}', invalid extension.", asset_path);
             return false;
         }
     }
 
-    impl->textures_mutex.lock();
-    auto sampler = Sampler::create(*impl->device, sampler_info).value();
-    asset->texture_id = impl->textures.create_slot(Texture{ .image = image, .image_view = image_view, .sampler = sampler });
-    LOG_TRACE("Loaded texture {} {}.", asset->uuid.str(), SlotMap_decode_id(asset->texture_id).index);
-    impl->textures_mutex.unlock();
+    {
+        auto write_lock = std::unique_lock(impl->textures_mutex);
+        auto *asset = this->get_asset(uuid);
+        auto sampler = Sampler::create(*impl->device, sampler_info).value();
+        asset->texture_id = impl->textures.create_slot(Texture{ .image = image, .image_view = image_view, .sampler = sampler });
+    }
+
+    LOG_TRACE("Loaded texture {}.", uuid.str());
 
     return true;
 }
 
-auto AssetManager::unload_texture(const UUID &uuid) -> void {
+auto AssetManager::unload_texture(const UUID &uuid) -> bool {
     ZoneScoped;
 
     auto *asset = this->get_asset(uuid);
     if (!asset || (!(asset->is_loaded() && asset->release_ref()))) {
-        return;
+        return false;
     }
 
     auto *texture = this->get_texture(asset->texture_id);
@@ -1031,6 +1060,8 @@ auto AssetManager::unload_texture(const UUID &uuid) -> void {
 
     impl->textures.destroy_slot(asset->texture_id);
     asset->texture_id = TextureID::Invalid;
+
+    return true;
 }
 
 auto AssetManager::is_texture_loaded(const UUID &uuid) -> bool {
@@ -1050,18 +1081,14 @@ auto AssetManager::load_material(const UUID &uuid, const Material &material_info
 
     auto *asset = this->get_asset(uuid);
     LS_EXPECT(asset);
-    // Materials don't explicitly load any resources, they need to increase child resources refs.
-    // if (asset->is_loaded()) {
-    //     asset->acquire_ref();
-    //     return true;
-    // }
-
-    if (!asset->is_loaded()) {
-        asset->material_id = impl->materials.create_slot(const_cast<Material &&>(material_info));
+    if (asset->is_loaded()) {
+        asset->acquire_ref();
+        return true;
     }
 
-    auto *material = impl->materials.slot(asset->material_id);
     auto &app = Application::get();
+    asset->material_id = impl->materials.create_slot(const_cast<Material &&>(material_info));
+    auto *material = impl->materials.slot(asset->material_id);
 
     this->set_material_dirty(asset->material_id);
 
@@ -1109,13 +1136,13 @@ auto AssetManager::load_material(const UUID &uuid, const Material &material_info
     return true;
 }
 
-auto AssetManager::unload_material(const UUID &uuid) -> void {
+auto AssetManager::unload_material(const UUID &uuid) -> bool {
     ZoneScoped;
 
     auto *asset = this->get_asset(uuid);
     LS_EXPECT(asset);
     if (!(asset->is_loaded() && asset->release_ref())) {
-        return;
+        return false;
     }
 
     auto *material = this->get_material(asset->material_id);
@@ -1141,6 +1168,8 @@ auto AssetManager::unload_material(const UUID &uuid) -> void {
 
     impl->materials.destroy_slot(asset->material_id);
     asset->material_id = MaterialID::Invalid;
+
+    return true;
 }
 
 auto AssetManager::is_material_loaded(const UUID &uuid) -> bool {
@@ -1180,6 +1209,12 @@ auto AssetManager::load_scene(const UUID &uuid) -> bool {
     ZoneScoped;
 
     auto *asset = this->get_asset(uuid);
+    LS_EXPECT(asset);
+    asset->acquire_ref();
+    if (asset->is_loaded()) {
+        return true;
+    }
+
     asset->scene_id = impl->scenes.create_slot(std::make_unique<Scene>());
     auto *scene = impl->scenes.slot(asset->scene_id)->get();
 
@@ -1191,17 +1226,16 @@ auto AssetManager::load_scene(const UUID &uuid) -> bool {
         return false;
     }
 
-    asset->acquire_ref();
     return true;
 }
 
-auto AssetManager::unload_scene(const UUID &uuid) -> void {
+auto AssetManager::unload_scene(const UUID &uuid) -> bool {
     ZoneScoped;
 
     auto *asset = this->get_asset(uuid);
     LS_EXPECT(asset);
     if (!(asset->is_loaded() && asset->release_ref())) {
-        return;
+        return false;
     }
 
     auto *scene = this->get_scene(asset->scene_id);
@@ -1209,6 +1243,8 @@ auto AssetManager::unload_scene(const UUID &uuid) -> void {
 
     impl->scenes.destroy_slot(asset->scene_id);
     asset->scene_id = SceneID::Invalid;
+
+    return true;
 }
 
 auto AssetManager::export_asset(const UUID &uuid, const fs::path &path) -> bool {
@@ -1285,7 +1321,11 @@ auto AssetManager::delete_asset(const UUID &uuid) -> void {
     if (asset->is_loaded()) {
         asset->ref_count = ls::min(asset->ref_count, 1_u64);
         this->unload_asset(uuid);
-        impl->registry.erase(uuid);
+
+        {
+            auto write_lock = std::unique_lock(impl->registry_mutex);
+            impl->registry.erase(uuid);
+        }
     }
 
     LOG_TRACE("Deleted asset {}.", uuid.str());
@@ -1294,6 +1334,7 @@ auto AssetManager::delete_asset(const UUID &uuid) -> void {
 auto AssetManager::get_asset(const UUID &uuid) -> Asset * {
     ZoneScoped;
 
+    auto read_lock = std::shared_lock(impl->registry_mutex);
     auto it = impl->registry.find(uuid);
     if (it == impl->registry.end()) {
         return nullptr;
@@ -1431,11 +1472,11 @@ auto AssetManager::get_materials_buffer() -> vuk::Value<vuk::Buffer> {
         auto *texture_asset = this->get_asset(uuid);
         auto *texture = this->get_texture(texture_asset->texture_id);
         auto texture_index = SlotMap_decode_id(texture_asset->texture_id).index;
-        auto *image_view = impl->device->image_view(texture->image_view.id());
-        auto *sampler = impl->device->sampler(texture->sampler.id());
+        auto image_view = impl->device->image_view(texture->image_view.id());
+        auto sampler = impl->device->sampler(texture->sampler.id());
 
-        impl->materials_descriptor_set.update_sampler(0, texture_index, *sampler);
-        impl->materials_descriptor_set.update_sampled_image(1, texture_index, *image_view, vuk::ImageLayout::eShaderReadOnlyOptimal);
+        impl->materials_descriptor_set.update_sampler(0, texture_index, sampler.value());
+        impl->materials_descriptor_set.update_sampled_image(1, texture_index, image_view.value(), vuk::ImageLayout::eShaderReadOnlyOptimal);
 
         return texture_index;
     };

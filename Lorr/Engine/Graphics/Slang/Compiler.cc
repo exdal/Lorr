@@ -1,5 +1,7 @@
 #include "Engine/Graphics/Slang/Compiler.hh"
 
+#include "Engine/Memory/Stack.hh"
+
 #include "Engine/OS/File.hh"
 
 #include "ls/types.hh"

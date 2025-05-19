@@ -29,7 +29,7 @@ struct VertexOutput {
 };
 
 [[shader("vertex")]]
-func vs_main(u32 vertex_index : SV_VertexID) -> VertexOutput{
+func vs_main(u32 vertex_index : SV_VertexID) -> VertexOutput {
     VertexOutput output;
     output.tex_coord = f32x2((vertex_index << 1) & 2, vertex_index & 2);
     output.position = f32x4(2.0 * output.tex_coord - 1.0, 1.0, 1.0);
@@ -47,24 +47,25 @@ func draw_sun(f32x3 world_dir, f32x3 sun_dir, f32 radius) -> f32x3 {
 
     const let offset = min_cos_theta - cosTheta;
     const let gaussianBloom = exp(-offset * 50000.0) * 0.5;
-    const let invBloom = 1.0/(0.02 + offset * 300.0) * 0.01;
+    const let invBloom = 1.0 / (0.02 + offset * 300.0) * 0.01;
     return f32x3(gaussianBloom + invBloom);
 }
 
 [[shader("fragment")]]
-f32x4 fs_main(VertexOutput input) : SV_TARGET {
-    f32   depth = depth_image.sample_mip(sampler, input.tex_coord, 0.0);
+f32x4 fs_main(VertexOutput input) :
+    SV_TARGET {
+    f32 depth = depth_image.sample_mip(sampler, input.tex_coord, 0.0);
     f32x3 NDC = f32x3(input.tex_coord * 2.0 - 1.0, depth);
-    f32x4 world_pos = mul(C.camera->inv_projection_view_mat, f32x4(NDC, 1.0));
-    f32x3 clip_pos = world_pos.xyz / world_pos.w;
+    f32x4 world_pos_h = mul(C.camera->inv_projection_view_mat, f32x4(NDC, 1.0));
+    f32x3 world_pos = world_pos_h.xyz / world_pos_h.w;
     f32x3 camera_pos = C.camera->position;
 
     if (depth != 1.0) {
-        f32x3 camera_relative_pos = (clip_pos - camera_pos) * CAMERA_SCALE_UNIT;
+        f32x3 camera_relative_pos = (world_pos - camera_pos) * CAMERA_SCALE_UNIT;
         return sample_aerial_perspective(C.atmosphere, sky_aerial_perspective_lut, sampler, input.tex_coord, camera_relative_pos);
     }
 
-    f32x3 eye_dir = normalize(clip_pos - C.camera->position);
+    f32x3 eye_dir = normalize(world_pos - C.camera->position);
     f32x3 eye_pos = C.atmosphere->eye_pos;
     f32 h = length(eye_pos);
     f32x3 up = f32x3(0.0, 1.0, 0.0);
@@ -91,4 +92,3 @@ f32x4 fs_main(VertexOutput input) : SV_TARGET {
 
     return f32x4(luminance, 1.0 - transmittance);
 }
-

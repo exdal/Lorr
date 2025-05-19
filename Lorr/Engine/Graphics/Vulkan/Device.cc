@@ -3,26 +3,20 @@
 #include <vuk/runtime/ThisThreadExecutor.hpp>
 
 namespace lr {
-enum BindlessDescriptorLayout : u32 {
-    Samplers = 0,
-    SampledImages = 1,
-    StorageImages = 2,
-};
-
-constexpr Logger::Category to_log_category(VkDebugUtilsMessageSeverityFlagBitsEXT severity) {
+constexpr fmtlog::LogLevel to_log_category(VkDebugUtilsMessageSeverityFlagBitsEXT severity) {
     switch (severity) {
         case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
         case VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT:
-            return Logger::INF;
+            return fmtlog::INF;
         case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT:
-            return Logger::WRN;
+            return fmtlog::WRN;
         case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
-            return Logger::ERR;
+            return fmtlog::ERR;
         default:
             break;
     }
 
-    return Logger::DBG;
+    return fmtlog::DBG;
 }
 
 auto Device::init(this Device &self, usize frame_count) -> std::expected<void, vuk::VkException> {
@@ -43,14 +37,7 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
            [[maybe_unused]] void *pUserData) -> VkBool32 {
             auto type = vkb::to_string_message_type(messageType);
             auto category = to_log_category(messageSeverity);
-            LOG(category,
-                "[VK] "
-                "{}:\n========================================================="
-                "=="
-                "\n{}\n===================================================="
-                "=======",
-                type,
-                pCallbackData->pMessage);
+            FMTLOG(category, "[VK] {}: {}", type, pCallbackData->pMessage);
             return VK_FALSE;
         }
     );
@@ -95,7 +82,7 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
     device_extensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
     device_extensions.push_back(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
     device_extensions.push_back(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
-    device_extensions.push_back(VK_EXT_SHADER_IMAGE_ATOMIC_INT64_EXTENSION_NAME);
+    //device_extensions.push_back(VK_EXT_SHADER_IMAGE_ATOMIC_INT64_EXTENSION_NAME);
     //device_extensions.push_back(VK_KHR_MAINTENANCE_8_EXTENSION_NAME);
     physical_device_selector.add_required_extensions(device_extensions);
 
@@ -166,12 +153,12 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
 
     vkb::DeviceBuilder device_builder(self.physical_device);
     device_builder //
-        .add_pNext(&vk14_features)
+        // .add_pNext(&vk14_features)
         .add_pNext(&vk13_features)
         .add_pNext(&vk12_features)
         .add_pNext(&vk11_features)
         // .add_pNext(&maintenance_8_features)
-        .add_pNext(&image_atomic_int64_features)
+        //.add_pNext(&image_atomic_int64_features)
         .add_pNext(&vk10_features);
     auto device_result = device_builder.build();
     if (!device_result) {
@@ -199,17 +186,17 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
         vuk::create_vkqueue_executor(vulkan_functions, self.handle, graphics_queue, graphics_queue_family_index, vuk::DomainFlagBits::eGraphicsQueue)
     );
 
-    auto compute_queue = self.handle.get_queue(vkb::QueueType::compute).value();
-    auto compute_queue_family_index = self.handle.get_queue_index(vkb::QueueType::compute).value();
-    executors.push_back(
-        vuk::create_vkqueue_executor(vulkan_functions, self.handle, compute_queue, compute_queue_family_index, vuk::DomainFlagBits::eComputeQueue)
-    );
-
-    auto transfer_queue = self.handle.get_queue(vkb::QueueType::transfer).value();
-    auto transfer_queue_family_index = self.handle.get_queue_index(vkb::QueueType::transfer).value();
-    executors.push_back(
-        vuk::create_vkqueue_executor(vulkan_functions, self.handle, transfer_queue, transfer_queue_family_index, vuk::DomainFlagBits::eTransferQueue)
-    );
+    // auto compute_queue = self.handle.get_queue(vkb::QueueType::compute).value();
+    // auto compute_queue_family_index = self.handle.get_queue_index(vkb::QueueType::compute).value();
+    // executors.push_back(
+    //     vuk::create_vkqueue_executor(vulkan_functions, self.handle, compute_queue, compute_queue_family_index, vuk::DomainFlagBits::eComputeQueue)
+    // );
+    //
+    // auto transfer_queue = self.handle.get_queue(vkb::QueueType::transfer).value();
+    // auto transfer_queue_family_index = self.handle.get_queue_index(vkb::QueueType::transfer).value();
+    // executors.push_back(
+    //     vuk::create_vkqueue_executor(vulkan_functions, self.handle, transfer_queue, transfer_queue_family_index, vuk::DomainFlagBits::eTransferQueue)
+    // );
 
     executors.push_back(std::make_unique<vuk::ThisThreadExecutor>());
     self.runtime.emplace(
@@ -225,8 +212,11 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
     self.frame_resources.emplace(*self.runtime, frame_count);
     self.allocator.emplace(*self.frame_resources);
     self.runtime->set_shader_target_version(VK_API_VERSION_1_3);
-    self.transfer_manager.init(self).value();
     self.shader_compiler = SlangCompiler::create().value();
+
+    self.transfer_manager.init(self).value();
+    auto &frame_resource = self.frame_resources->get_next_frame();
+    self.transfer_manager.acquire(frame_resource);
 
     LOG_INFO("Initialized device.");
 
@@ -269,13 +259,18 @@ auto Device::transfer_man(this Device &self) -> TransferManager & {
 auto Device::new_frame(this Device &self, vuk::Swapchain &swap_chain) -> vuk::Value<vuk::ImageAttachment> {
     ZoneScoped;
 
+    if (self.transfer_manager.frame_allocator) {
+        self.transfer_manager.wait_for_ops(self.compiler);
+        self.transfer_manager.release();
+    }
+
+    auto &frame_resource = self.frame_resources->get_next_frame();
+    self.transfer_manager.acquire(frame_resource);
+
     self.runtime->next_frame();
 
     auto acquired_swapchain = vuk::acquire_swapchain(swap_chain);
     auto acquired_image = vuk::acquire_next_image("present_image", std::move(acquired_swapchain));
-
-    auto &frame_resource = self.frame_resources->get_next_frame();
-    self.transfer_manager.acquire(frame_resource);
 
     return acquired_image;
 }
@@ -305,8 +300,6 @@ auto Device::end_frame(this Device &self, vuk::Value<vuk::ImageAttachment> &&tar
         cmd_list.write_timestamp(end_ts);
     };
 
-    self.transfer_manager.wait_for_ops(self.compiler);
-
     auto result = vuk::enqueue_presentation(std::move(target_attachment));
     result.submit(
         *self.transfer_manager.frame_allocator,
@@ -317,7 +310,6 @@ auto Device::end_frame(this Device &self, vuk::Value<vuk::ImageAttachment> &&tar
               .on_end_pass = on_end_pass,
               .user_data = &self,
           } });
-    self.transfer_manager.release();
 }
 
 auto Device::wait(this Device &self, LR_CALLSTACK) -> void {
@@ -456,28 +448,28 @@ auto Device::frame_count(this const Device &self) -> usize {
     return self.frames_in_flight;
 }
 
-auto Device::buffer(this Device &self, BufferID id) -> vuk::Buffer * {
+auto Device::buffer(this Device &self, BufferID id) -> ls::option<vuk::Buffer> {
     ZoneScoped;
 
-    return &self.resources.buffers.slot(id)->get();
+    return self.resources.buffers.slot_clone(id);
 }
 
-auto Device::image(this Device &self, ImageID id) -> vuk::Image * {
+auto Device::image(this Device &self, ImageID id) -> ls::option<vuk::Image> {
     ZoneScoped;
 
-    return &self.resources.images.slot(id)->get();
+    return self.resources.images.slot_clone(id);
 }
 
-auto Device::image_view(this Device &self, ImageViewID id) -> vuk::ImageView * {
+auto Device::image_view(this Device &self, ImageViewID id) -> ls::option<vuk::ImageView> {
     ZoneScoped;
 
-    return &self.resources.image_views.slot(id)->get();
+    return self.resources.image_views.slot_clone(id);
 }
 
-auto Device::sampler(this Device &self, SamplerID id) -> vuk::Sampler * {
+auto Device::sampler(this Device &self, SamplerID id) -> ls::option<vuk::Sampler> {
     ZoneScoped;
 
-    return self.resources.samplers.slot(id);
+    return self.resources.samplers.slot_clone(id);
 }
 
 auto Device::pipeline(this Device &self, PipelineID id) -> vuk::PipelineBaseInfo ** {
@@ -490,7 +482,7 @@ auto Device::destroy(this Device &self, BufferID id) -> void {
     ZoneScoped;
 
     auto *buffer = self.resources.buffers.slot(id);
-    buffer->reset();
+    self.allocator->deallocate({ buffer, 1 });
 
     self.resources.buffers.destroy_slot(id);
 }
@@ -499,7 +491,7 @@ auto Device::destroy(this Device &self, ImageID id) -> void {
     ZoneScoped;
 
     auto *image = self.resources.images.slot(id);
-    image->reset();
+    self.allocator->deallocate({ image, 1 });
 
     self.resources.images.destroy_slot(id);
 }
@@ -508,7 +500,7 @@ auto Device::destroy(this Device &self, ImageViewID id) -> void {
     ZoneScoped;
 
     auto *image_view = self.resources.image_views.slot(id);
-    image_view->reset();
+    self.allocator->deallocate({ image_view, 1 });
 
     self.resources.image_views.destroy_slot(id);
 }

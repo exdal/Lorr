@@ -22,8 +22,7 @@ struct PushConstants {
 
 [[vk::push_constant]] PushConstants C;
 
-[[shader("compute")]]
-[[numthreads(1, 1, 1)]]
+[[shader("compute")]] [[numthreads(1, 1, 1)]]
 void cs_main() {
     const u32 texel = visbuffer_data.load(C.texel);
     if (texel == ~0u) {

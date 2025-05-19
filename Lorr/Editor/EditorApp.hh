@@ -60,7 +60,7 @@ struct EditorApp : lr::Application {
 
     auto do_super_init([[maybe_unused]] ls::span<c8 *> args) -> bool override {
         return true;
-    };
+    }
     auto do_shutdown() -> void override {
         shutdown();
     }

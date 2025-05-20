@@ -545,6 +545,10 @@ auto EditorApp::render(this EditorApp &self, vuk::Format format, vuk::Extent3D e
 auto EditorApp::shutdown(this EditorApp &self) -> void {
     ZoneScoped;
 
+    for (const auto &[name, uuid] : self.editor_assets) {
+        self.asset_man.unload_asset(uuid);
+    }
+
     self.windows.clear();
     self.active_project.reset();
 }

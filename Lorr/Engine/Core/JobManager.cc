@@ -63,7 +63,6 @@ JobManager::JobManager(u32 threads) {
 JobManager::~JobManager() {
     ZoneScoped;
 
-    std::unique_lock _(this->mutex);
     this->shutdown();
 }
 

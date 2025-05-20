@@ -119,17 +119,28 @@ void Application::shutdown(this Application &self) {
     ZoneScoped;
 
     LOG_WARN("Shutting down application...");
+
+    self.job_man->wait();
     self.device.wait();
 
     self.should_close = true;
 
     self.do_shutdown();
 
-    self.asset_man.destroy();
+    self.job_man->shutdown();
+    self.job_man->wait();
+
     self.scene_renderer.destroy();
     self.swap_chain.reset();
+
+    self.asset_man.destroy();
+    fmtlog::poll(true);
+
     self.device.destroy();
+
     LOG_INFO("Complete!");
+
+    fmtlog::poll(true);
 }
 
 } // namespace lr

@@ -52,8 +52,7 @@ func draw_sun(f32x3 world_dir, f32x3 sun_dir, f32 radius) -> f32x3 {
 }
 
 [[shader("fragment")]]
-f32x4 fs_main(VertexOutput input) :
-    SV_TARGET {
+f32x4 fs_main(VertexOutput input) {
     f32 depth = depth_image.sample_mip(sampler, input.tex_coord, 0.0);
     f32x3 NDC = f32x3(input.tex_coord * 2.0 - 1.0, depth);
     f32x4 world_pos_h = mul(C.camera->inv_projection_view_mat, f32x4(NDC, 1.0));

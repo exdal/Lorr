@@ -24,7 +24,8 @@ func ev100_from_luminance(f32 luminance) -> f32 {
     return log2(luminance * (ISO * C.ev100_bias / K));
 }
 
-[[shader("compute")]] [[numthreads(HISTOGRAM_BIN_COUNT, 1, 1)]]
+[[shader("compute")]]
+[[numthreads(HISTOGRAM_BIN_COUNT, 1, 1)]]
 func cs_main(u32 gid : SV_GroupIndex) -> void {
     const let count_for_this_bin = gid == 0 ? 0.0 : f32(C.histogram[gid]);
     histogram_shared[gid] = count_for_this_bin * f32(gid);

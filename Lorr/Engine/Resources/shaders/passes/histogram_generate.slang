@@ -27,7 +27,8 @@ func bin_lum(f32 luminance) -> u32 {
     return u32(log_luminance * f32(HISTOGRAM_BIN_COUNT - 1) + 1.0);
 }
 
-[[shader("compute")]] [[numthreads(HISTOGRAM_THREADS_X, HISTOGRAM_THREADS_Y, 1)]]
+[[shader("compute")]]
+[[numthreads(HISTOGRAM_THREADS_X, HISTOGRAM_THREADS_Y, 1)]]
 func cs_main(u32 group_index : SV_GroupIndex, u32x3 thread_id : SV_DispatchThreadID) -> void {
     histogram_shared[group_index] = 0;
     std::control_barrier(std::memory_order_acq_rel);

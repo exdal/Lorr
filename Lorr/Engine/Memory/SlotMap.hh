@@ -82,6 +82,8 @@ public:
                 self.free_indices.push_back(index);
             }
 
+            self.slots[index] = {};
+
             return true;
         }
 
@@ -103,7 +105,7 @@ public:
 
         auto read_lock = std::shared_lock(self.mutex);
         auto [version, index] = SlotMap_decode_id(id);
-        return index < self.slots.size() && self.versions[index] == version;
+        return index < self.slots.size() && self.versions[index] == version && self.states[index];
     }
 
     auto slot(this Self &self, ID id) -> T * {

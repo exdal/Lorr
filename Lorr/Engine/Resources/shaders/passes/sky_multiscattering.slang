@@ -21,7 +21,8 @@ struct PushConstants {
 
 #define SAMPLE_COUNT 64
 
-[[shader("compute")]] [[numthreads(16, 16, 1)]]
+[[shader("compute")]]
+[[numthreads(16, 16, 1)]]
 func cs_main(u32x3 thread_id : SV_DispatchThreadID) {
     f32x2 uv = f32x2(f32x2(thread_id.xy) + 0.5) / f32x2(C.atmosphere->multiscattering_lut_size.xy);
 

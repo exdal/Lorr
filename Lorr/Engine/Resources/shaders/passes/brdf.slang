@@ -43,7 +43,7 @@ struct PushConstants {
 [[vk::push_constant]] PushConstants C;
 
 [[shader("fragment")]]
-f32x4 fs_main(VertexOutput input) : SV_Target {
+func fs_main(VertexOutput input) -> f32x4 {
     const u32x2 pixel_pos = u32x2(input.position.xy);
     const f32 depth = depth_image.load(pixel_pos);
     if (depth == 1.0) {

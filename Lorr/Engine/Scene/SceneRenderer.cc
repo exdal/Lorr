@@ -15,8 +15,10 @@ auto SceneRenderer::init(this SceneRenderer &self, Device *device) -> bool {
     return true;
 }
 
-auto SceneRenderer::destroy(this SceneRenderer &) -> void {
+auto SceneRenderer::destroy(this SceneRenderer &self) -> void {
     ZoneScoped;
+
+    self.cleanup();
 }
 
 auto SceneRenderer::create_persistent_resources(this SceneRenderer &self) -> void {
@@ -240,10 +242,19 @@ auto SceneRenderer::compose(this SceneRenderer &self, SceneComposeInfo &compose_
     }
 
     self.meshlet_instance_count = compose_info.gpu_meshlet_instances.size();
-    auto meshes_buffer = //
-        transfer_man.upload_staging(ls::span(compose_info.gpu_meshes), self.meshes_buffer);
-    auto meshlet_instances_buffer = //
-        transfer_man.upload_staging(ls::span(compose_info.gpu_meshlet_instances), self.meshlet_instances_buffer);
+    auto meshes_buffer = vuk::Value<vuk::Buffer>{};
+    if (!compose_info.gpu_meshes.empty()) {
+        meshes_buffer = transfer_man.upload_staging(ls::span(compose_info.gpu_meshes), self.meshes_buffer);
+    }
+
+    auto meshlet_instances_buffer = vuk::Value<vuk::Buffer>{};
+    if (!compose_info.gpu_meshlet_instances.empty()) {
+        meshlet_instances_buffer = transfer_man.upload_staging(ls::span(compose_info.gpu_meshlet_instances), self.meshlet_instances_buffer);
+    }
+
+    if (self.exposure_buffer) {
+        vuk::fill(vuk::acquire_buf("exposure", *self.device->buffer(self.exposure_buffer.id()), vuk::eNone), 0);
+    }
 
     return ComposedScene{
         .meshes_buffer = meshes_buffer,
@@ -254,26 +265,22 @@ auto SceneRenderer::compose(this SceneRenderer &self, SceneComposeInfo &compose_
 auto SceneRenderer::cleanup(this SceneRenderer &self) -> void {
     ZoneScoped;
 
-    auto &device = *self.device;
-
-    device.wait();
-
-    vuk::fill(vuk::acquire_buf("exposure", *device.buffer(self.exposure_buffer.id()), vuk::eNone), 0);
+    self.device->wait();
 
     self.meshlet_instance_count = 0;
 
     if (self.transforms_buffer) {
-        device.destroy(self.transforms_buffer.id());
+        self.device->destroy(self.transforms_buffer.id());
         self.transforms_buffer = {};
     }
 
     if (self.meshlet_instances_buffer) {
-        device.destroy(self.meshlet_instances_buffer.id());
+        self.device->destroy(self.meshlet_instances_buffer.id());
         self.meshlet_instances_buffer = {};
     }
 
     if (self.meshes_buffer) {
-        device.destroy(self.meshes_buffer.id());
+        self.device->destroy(self.meshes_buffer.id());
         self.meshes_buffer = {};
     }
 }

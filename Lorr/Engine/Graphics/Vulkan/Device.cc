@@ -226,11 +226,23 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
 auto Device::destroy(this Device &self) -> void {
     ZoneScoped;
 
+    self.frame_resources->get_next_frame();
     self.wait();
 
-    self.resources.buffers.reset();
-    self.resources.images.reset();
-    self.resources.image_views.reset();
+    auto destroy_resource_pool = [&self](auto &pool) -> void {
+        for (auto i = 0_sz; i < pool.size(); i++) {
+            auto *v = pool.slot_from_index(i);
+            if (v) {
+                self.allocator->deallocate({ v, 1 });
+            }
+        }
+
+        pool.reset();
+    };
+
+    destroy_resource_pool(self.resources.buffers);
+    destroy_resource_pool(self.resources.images);
+    destroy_resource_pool(self.resources.image_views);
     self.resources.samplers.reset();
     self.resources.pipelines.reset();
 

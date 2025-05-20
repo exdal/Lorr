@@ -153,6 +153,24 @@ auto AssetManager::create(Device *device) -> AssetManager {
 auto AssetManager::destroy() -> void {
     ZoneScoped;
 
+    auto read_lock = std::shared_lock(impl->registry_mutex);
+    if (impl->materials_buffer) {
+        impl->device->destroy(impl->materials_buffer.id());
+    }
+
+    for (const auto &[asset_uuid, asset] : impl->registry) {
+        // sanity check
+        if (asset.is_loaded() && asset.ref_count != 0) {
+            LOG_ERROR(
+                "A {} asset ({}, {}) with refcount of {} is still alive!",
+                this->to_asset_type_sv(asset.type),
+                asset_uuid.str(),
+                asset.path,
+                asset.ref_count
+            );
+        }
+    }
+
     delete impl;
 }
 
@@ -849,10 +867,6 @@ auto AssetManager::unload_model(const UUID &uuid) -> bool {
         this->unload_material(v);
     }
 
-    model->materials.clear();
-    model->primitives.clear();
-    model->meshes.clear();
-    model->nodes.clear();
     impl->device->destroy(model->indices.id());
     impl->device->destroy(model->vertex_positions.id());
     impl->device->destroy(model->vertex_normals.id());

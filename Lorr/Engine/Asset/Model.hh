@@ -16,7 +16,7 @@ struct TextureSamplerInfo {
 struct TextureInfo {
     bool use_srgb = true;
 
-    ls::span<u8> pixels = {}; // Optional
+    std::vector<u8> embedded_data = {}; // Optional
     AssetFileType file_type = AssetFileType::None; // Optional
 };
 
@@ -46,6 +46,15 @@ struct Material {
     UUID emissive_texture = {};
     UUID metallic_roughness_texture = {};
     UUID occlusion_texture = {};
+};
+
+struct MaterialInfo {
+    Material material = {};
+    TextureInfo albedo_texture_info = {};
+    TextureInfo normal_texture_info = {};
+    TextureInfo emissive_texture_info = {};
+    TextureInfo metallic_roughness_texture_info = {};
+    TextureInfo occlusion_texture_info = {};
 };
 
 enum class ModelID : u64 { Invalid = std::numeric_limits<u64>::max() };

@@ -12,16 +12,14 @@ struct PushConstants {
     f32 min_exposure;
     f32 exposure_range;
     f32 time_coeff;
-    f32 ev100_bias;
+    f32 ISO_K;
 };
 [[vk::push_constant]] PushConstants C;
 
 groupshared f32 histogram_shared[HISTOGRAM_BIN_COUNT];
 
 func ev100_from_luminance(f32 luminance) -> f32 {
-    const f32 K = 12.5;
-    const f32 ISO = 100.0;
-    return log2(luminance * (ISO * C.ev100_bias / K));
+    return log2(luminance * C.ISO_K);
 }
 
 [[shader("compute")]]

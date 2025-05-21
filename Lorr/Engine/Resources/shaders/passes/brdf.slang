@@ -79,6 +79,7 @@ func fs_main(VertexOutput input) -> f32x4 {
     f32 sun_cos_theta = dot(L, up_vec);
     f32x2 transmittance_uv = transmittance_params_to_lut_uv(C.atmosphere, f32x2(h, sun_cos_theta));
     f32x3 sun_transmittance = sky_transmittance_lut.sample_mip(linear_clamp_sampler, transmittance_uv, 0.0).rgb;
+    f32x3 sun_illuminance = sun_transmittance * C.sun->intensity;
 
     // SKY AMBIENT COLOR ────────────────────────────────────────────────
     AtmosphereIntegrateInfo sky_info = {};
@@ -92,13 +93,12 @@ func fs_main(VertexOutput input) -> f32x4 {
     sky_info.multiscattering_image = sky_multiscattering_lut;
     sky_info.eval_mie_phase = false;
 
-    sky_info.eye_dir = f32x3(0.0, -1.0, 0.0);
-    const let sky_result_0 = integrate_single_scattered_luminance(C.atmosphere, linear_clamp_sampler, sky_info);
-    sky_info.eye_dir = f32x3(0.0, +1.0, 0.0);
-    const let sky_result_1 = integrate_single_scattered_luminance(C.atmosphere, linear_clamp_sampler, sky_info);
-    const let sky_gradient = lerp(sky_result_0.luminance, sky_result_1.luminance, saturate(N.y * 0.5 + 0.5));
-    const let ambient_color = std::rec709_oetf(sky_gradient);
-    f32x3 color = albedo_color * ambient_color;
+    sky_info.eye_dir = f32x3(0.0, 1.0, 0.0);
+    const let sky_result = integrate_single_scattered_luminance(C.atmosphere, linear_clamp_sampler, sky_info);
+
+    f32 eye_gradient = dot(N, sky_info.eye_dir);
+    eye_gradient = (eye_gradient + 1.0) * 0.375 + 0.25;
+    f32x3 ambient_contribution = std::rec709_oetf(sky_result.luminance) * albedo_color * occlusion * eye_gradient;
 
     // MATERIAL COLOR ───────────────────────────────────────────────────
     // https://marmosetco.tumblr.com/post/81245981087
@@ -109,10 +109,10 @@ func fs_main(VertexOutput input) -> f32x4 {
 
     const f32 NoL = max(dot(N, L), 0.0);
     f32x3 brdf = BRDF(V, N, L, albedo_color, roughness, metallic);
-    color += brdf * horizon * sun_transmittance * C.sun->intensity * NoL;
-    color += emission;
+    f32x3 material_surface_color = brdf * horizon  * sun_illuminance * NoL;
 
-    color *= occlusion;
+    // FINAL ────────────────────────────────────────────────────────────
+    f32x3 final_color = material_surface_color + ambient_contribution + emission;
 
-    return f32x4(color, 1.0);
+    return f32x4(final_color, 1.0);
 }

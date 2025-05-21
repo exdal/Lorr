@@ -93,8 +93,9 @@ func fs_main(VertexOutput input) -> f32x4 {
             color = albedo_image.sample_mip(linear_repeat_sampler, input.tex_coord, 0).rgb;
         } break;
         case DebugView::Normal: {
-            const f32x4 N = normal_image.load(u32x2(input.position.xy));
-            color = std::oct_to_vec3(N.xy);
+            const f32x4 sampled_normal = normal_image.load(u32x2(input.position.xy));
+            f32x3 mapped_normal = std::oct_to_vec3(sampled_normal.xy);
+            color = mapped_normal * 0.5 + 0.5;
         } break;
         case DebugView::Emissive: {
             color = emissive_image.load(u32x2(input.position.xy)).rgb;

@@ -89,7 +89,7 @@ struct AssetManager : Handle<AssetManager> {
     auto unload_texture(const UUID &uuid) -> bool;
     auto is_texture_loaded(const UUID &uuid) -> bool;
 
-    auto load_material(const UUID &uuid, const Material &material_info) -> bool;
+    auto load_material(const UUID &uuid, const MaterialInfo &info) -> bool;
     auto unload_material(const UUID &uuid) -> bool;
     auto is_material_loaded(const UUID &uuid) -> bool;
 

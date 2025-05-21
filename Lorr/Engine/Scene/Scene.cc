@@ -589,7 +589,7 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, SceneRenderInfo &i
             histogram.min_exposure = auto_exposure.min_exposure;
             histogram.max_exposure = auto_exposure.max_exposure;
             histogram.adaptation_speed = auto_exposure.adaptation_speed;
-            histogram.ev100_bias = auto_exposure.ev100_bias;
+            histogram.ISO_K = auto_exposure.ISO / auto_exposure.K;
         }
     });
 

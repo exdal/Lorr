@@ -1218,7 +1218,7 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                             histogram_info.min_exposure,
                             histogram_info.max_exposure - histogram_info.min_exposure,
                             glm::clamp(static_cast<f32>(1.0f - glm::exp(-histogram_info.adaptation_speed * delta_time)), 0.0f, 1.0f),
-                            histogram_info.ev100_bias
+                            histogram_info.ISO_K
                         )
                     )
                     .dispatch(1);

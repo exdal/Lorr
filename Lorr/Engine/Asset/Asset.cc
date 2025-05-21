@@ -569,6 +569,7 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
     // set this to nullptr so it's obvious when debugging.
     asset = nullptr;
 
+    //  ── INITIAL PARSING ─────────────────────────────────────────────────
     auto embedded_textures = std::vector<UUID>();
     auto embedded_texture_uuids_json = meta_json->doc["embedded_textures"].get_array();
     for (auto embedded_texture_uuid_json : embedded_texture_uuids_json) {
@@ -589,20 +590,20 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
     }
 
     // Load registered UUIDs.
-    auto materials_json = meta_json->doc["embedded_materials"].get_array();
-    if (materials_json.error()) {
+    auto embedded_materials_json = meta_json->doc["embedded_materials"].get_array();
+    if (embedded_materials_json.error()) {
         LOG_ERROR("Failed to import model {}! Missing materials filed.", asset_path);
         return false;
     }
 
-    auto materials = std::vector<Material>();
-    for (auto material_json : materials_json) {
-        if (material_json.error()) {
+    auto embedded_material_infos = std::vector<MaterialInfo>();
+    for (auto embedded_material_json : embedded_materials_json) {
+        if (embedded_material_json.error()) {
             LOG_ERROR("Failed to import model {}! A material with error.", asset_path);
             return false;
         }
 
-        if (auto material_uuid_json = material_json["uuid"]; !material_uuid_json.error()) {
+        if (auto material_uuid_json = embedded_material_json["uuid"]; !material_uuid_json.error()) {
             auto material_uuid = UUID::from_string(material_uuid_json.value_unsafe());
             if (!material_uuid.has_value()) {
                 LOG_ERROR("Failed to import model {}! A material with corrupt UUID.", asset_path);
@@ -613,44 +614,50 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
             model->materials.emplace_back(material_uuid.value());
         }
 
-        auto &material = materials.emplace_back();
-        if (auto member_json = material_json["albedo_color"]; !member_json.error()) {
+        auto &material_info = embedded_material_infos.emplace_back();
+        auto &material = material_info.material;
+        if (auto member_json = embedded_material_json["albedo_color"]; !member_json.error()) {
             json_to_vec(member_json.value_unsafe(), material.albedo_color);
         }
-        if (auto member_json = material_json["emissive_color"]; !member_json.error()) {
+        if (auto member_json = embedded_material_json["emissive_color"]; !member_json.error()) {
             json_to_vec(member_json.value_unsafe(), material.emissive_color);
         }
-        if (auto member_json = material_json["roughness_factor"]; !member_json.error()) {
+        if (auto member_json = embedded_material_json["roughness_factor"]; !member_json.error()) {
             material.roughness_factor = static_cast<f32>(member_json.get_double().value_unsafe());
         }
-        if (auto member_json = material_json["metallic_factor"]; !member_json.error()) {
+        if (auto member_json = embedded_material_json["metallic_factor"]; !member_json.error()) {
             material.metallic_factor = static_cast<f32>(member_json.get_double().value_unsafe());
         }
-        if (auto member_json = material_json["alpha_mode"]; !member_json.error()) {
+        if (auto member_json = embedded_material_json["alpha_mode"]; !member_json.error()) {
             material.alpha_mode = static_cast<AlphaMode>(member_json.get_uint64().value_unsafe());
         }
-        if (auto member_json = material_json["alpha_cutoff"]; !member_json.error()) {
+        if (auto member_json = embedded_material_json["alpha_cutoff"]; !member_json.error()) {
             material.alpha_cutoff = static_cast<f32>(member_json.get_double().value_unsafe());
         }
-        if (auto member_json = material_json["albedo_texture"]; !member_json.error()) {
+        if (auto member_json = embedded_material_json["albedo_texture"]; !member_json.error()) {
             material.albedo_texture = UUID::from_string(member_json.get_string().value_unsafe()).value_or(UUID(nullptr));
+            material_info.albedo_texture_info.use_srgb = true;
         }
-        if (auto member_json = material_json["normal_texture"]; !member_json.error()) {
+        if (auto member_json = embedded_material_json["normal_texture"]; !member_json.error()) {
             material.normal_texture = UUID::from_string(member_json.get_string().value_unsafe()).value_or(UUID(nullptr));
+            material_info.normal_texture_info.use_srgb = false;
         }
-        if (auto member_json = material_json["emissive_texture"]; !member_json.error()) {
+        if (auto member_json = embedded_material_json["emissive_texture"]; !member_json.error()) {
             material.emissive_texture = UUID::from_string(member_json.get_string().value_unsafe()).value_or(UUID(nullptr));
+            material_info.emissive_texture_info.use_srgb = true;
         }
-        if (auto member_json = material_json["metallic_roughness_texture"]; !member_json.error()) {
+        if (auto member_json = embedded_material_json["metallic_roughness_texture"]; !member_json.error()) {
             material.metallic_roughness_texture = UUID::from_string(member_json.get_string().value_unsafe()).value_or(UUID(nullptr));
+            material_info.metallic_roughness_texture_info.use_srgb = false;
         }
-        if (auto member_json = material_json["occlusion_texture"]; !member_json.error()) {
+        if (auto member_json = embedded_material_json["occlusion_texture"]; !member_json.error()) {
             material.occlusion_texture = UUID::from_string(member_json.get_string().value_unsafe()).value_or(UUID(nullptr));
+            material_info.occlusion_texture_info.use_srgb = false;
         }
     }
 
-    for (const auto &[material_uuid, material] : std::views::zip(model->materials, materials)) {
-        this->load_material(material_uuid, material);
+    for (const auto &[material_uuid, material_info] : std::views::zip(model->materials, embedded_material_infos)) {
+        this->load_material(material_uuid, material_info);
     }
 
     struct GLTFCallbacks {
@@ -901,9 +908,9 @@ auto AssetManager::load_texture(const UUID &uuid, const TextureInfo &info) -> bo
         asset_path = asset->path;
     }
 
+    auto raw_data = info.embedded_data;
     auto file_type = info.file_type;
-    auto raw_data = std::vector<u8>(info.pixels.begin(), info.pixels.end());
-    if (info.pixels.empty()) {
+    if (info.embedded_data.empty()) {
         if (!asset_path.has_extension()) {
             LOG_ERROR("Trying to load texture \"{}\" without a file extension.", asset_path);
             return false;
@@ -1069,6 +1076,7 @@ auto AssetManager::unload_texture(const UUID &uuid) -> bool {
     auto *texture = this->get_texture(asset->texture_id);
     impl->device->destroy(texture->image_view.id());
     impl->device->destroy(texture->image.id());
+    impl->device->destroy(texture->sampler.id());
 
     LOG_TRACE("Unloaded texture {}.", uuid.str());
 
@@ -1090,7 +1098,7 @@ auto AssetManager::is_texture_loaded(const UUID &uuid) -> bool {
     return asset->is_loaded();
 }
 
-auto AssetManager::load_material(const UUID &uuid, const Material &material_info) -> bool {
+auto AssetManager::load_material(const UUID &uuid, const MaterialInfo &info) -> bool {
     ZoneScoped;
 
     auto *asset = this->get_asset(uuid);
@@ -1101,46 +1109,61 @@ auto AssetManager::load_material(const UUID &uuid, const Material &material_info
     }
 
     auto &app = Application::get();
-    asset->material_id = impl->materials.create_slot(const_cast<Material &&>(material_info));
+    asset->material_id = impl->materials.create_slot(const_cast<Material &&>(info.material));
     auto *material = impl->materials.slot(asset->material_id);
 
     this->set_material_dirty(asset->material_id);
 
     if (material->albedo_texture) {
-        auto job = Job::create([this, texture_uuid = material->albedo_texture, material_id = asset->material_id]() {
-            this->load_texture(texture_uuid, {});
+        auto job = Job::create([this, //
+                                texture_uuid = material->albedo_texture,
+                                texture_info = info.albedo_texture_info,
+                                material_id = asset->material_id]() {
+            this->load_texture(texture_uuid, texture_info);
             this->set_material_dirty(material_id);
         });
         app.job_man->submit(std::move(job));
     }
 
     if (material->normal_texture) {
-        auto job = Job::create([this, texture_uuid = material->normal_texture, material_id = asset->material_id]() {
-            this->load_texture(texture_uuid, { .use_srgb = false });
+        auto job = Job::create([this, //
+                                texture_uuid = material->normal_texture,
+                                texture_info = info.normal_texture_info,
+                                material_id = asset->material_id]() {
+            this->load_texture(texture_uuid, texture_info);
             this->set_material_dirty(material_id);
         });
         app.job_man->submit(std::move(job));
     }
 
     if (material->emissive_texture) {
-        auto job = Job::create([this, texture_uuid = material->emissive_texture, material_id = asset->material_id]() {
-            this->load_texture(texture_uuid, {});
+        auto job = Job::create([this, //
+                                texture_uuid = material->emissive_texture,
+                                texture_info = info.emissive_texture_info,
+                                material_id = asset->material_id]() {
+            this->load_texture(texture_uuid, texture_info);
             this->set_material_dirty(material_id);
         });
         app.job_man->submit(std::move(job));
     }
 
     if (material->metallic_roughness_texture) {
-        auto job = Job::create([this, texture_uuid = material->metallic_roughness_texture, material_id = asset->material_id]() {
-            this->load_texture(texture_uuid, { .use_srgb = false });
+        auto job = Job::create([this, //
+                                texture_uuid = material->metallic_roughness_texture,
+                                texture_info = info.metallic_roughness_texture_info,
+                                material_id = asset->material_id]() {
+            this->load_texture(texture_uuid, texture_info);
             this->set_material_dirty(material_id);
         });
         app.job_man->submit(std::move(job));
     }
 
     if (material->occlusion_texture) {
-        auto job = Job::create([this, texture_uuid = material->occlusion_texture, material_id = asset->material_id]() {
-            this->load_texture(texture_uuid, { .use_srgb = false });
+        auto job = Job::create([this, //
+                                texture_uuid = material->occlusion_texture,
+                                texture_info = info.occlusion_texture_info,
+                                material_id = asset->material_id]() {
+            this->load_texture(texture_uuid, texture_info);
             this->set_material_dirty(material_id);
         });
         app.job_man->submit(std::move(job));
@@ -1478,9 +1501,9 @@ auto AssetManager::set_material_dirty(MaterialID material_id) -> void {
 auto AssetManager::get_materials_buffer() -> vuk::Value<vuk::Buffer> {
     ZoneScoped;
 
-    auto uuid_to_index = [this](UUID &uuid) -> u32 {
+    auto uuid_to_index = [this](UUID &uuid) -> ls::option<u32> {
         if (!this->is_texture_loaded(uuid)) {
-            return ~0_u32;
+            return ls::nullopt;
         }
 
         auto *texture_asset = this->get_asset(uuid);
@@ -1496,18 +1519,32 @@ auto AssetManager::get_materials_buffer() -> vuk::Value<vuk::Buffer> {
     };
 
     auto to_gpu_material = [&](Material *material) -> GPU::Material {
+        auto albedo_image_index = uuid_to_index(material->albedo_texture);
+        auto normal_image_index = uuid_to_index(material->normal_texture);
+        auto emissive_image_index = uuid_to_index(material->emissive_texture);
+        auto metallic_roughness_image_index = uuid_to_index(material->metallic_roughness_texture);
+        auto occlusion_image_index = uuid_to_index(material->occlusion_texture);
+        auto flags = GPU::MaterialFlag::None;
+        flags |= albedo_image_index.has_value() ? GPU::MaterialFlag::HasAlbedoImage : GPU::MaterialFlag::None;
+        flags |= normal_image_index.has_value() ? GPU::MaterialFlag::HasNormalImage : GPU::MaterialFlag::None;
+        flags |= emissive_image_index.has_value() ? GPU::MaterialFlag::HasEmissiveImage : GPU::MaterialFlag::None;
+        flags |= metallic_roughness_image_index.has_value() ? GPU::MaterialFlag::HasMetallicRoughnessImage : GPU::MaterialFlag::None;
+        flags |= occlusion_image_index.has_value() ? GPU::MaterialFlag::HasOcclusionImage : GPU::MaterialFlag::None;
+
+        //flags |= GPU::MaterialFlag::NormalFlipY;
+
         return {
             .albedo_color = material->albedo_color,
             .emissive_color = material->emissive_color,
             .roughness_factor = material->roughness_factor,
             .metallic_factor = material->metallic_factor,
-            .alpha_mode = static_cast<GPU::AlphaMode>(material->alpha_mode),
             .alpha_cutoff = material->alpha_cutoff,
-            .albedo_image_index = uuid_to_index(material->albedo_texture),
-            .normal_image_index = uuid_to_index(material->normal_texture),
-            .emissive_image_index = uuid_to_index(material->emissive_texture),
-            .metallic_roughness_image_index = uuid_to_index(material->metallic_roughness_texture),
-            .occlusion_image_index = uuid_to_index(material->occlusion_texture),
+            .flags = flags,
+            .albedo_image_index = albedo_image_index.value_or(~0_u32),
+            .normal_image_index = normal_image_index.value_or(~0_u32),
+            .emissive_image_index = emissive_image_index.value_or(~0_u32),
+            .metallic_roughness_image_index = metallic_roughness_image_index.value_or(~0_u32),
+            .occlusion_image_index = occlusion_image_index.value_or(~0_u32),
         };
     };
 

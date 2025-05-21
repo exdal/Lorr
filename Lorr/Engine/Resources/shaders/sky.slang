@@ -4,18 +4,15 @@ import gpu;
 import std;
 import scene;
 
-public
-func from_sub_uvs_to_unit(f32x2 uv, f32x2 res) -> f32x2 {
+public func from_sub_uvs_to_unit(f32x2 uv, f32x2 res) -> f32x2 {
     return (uv - 0.5 / res) * (res / (res - 1.0));
 }
 
-public
-func from_unit_to_sub_uvs(f32x2 uv, f32x2 res) -> f32x2 {
+public func from_unit_to_sub_uvs(f32x2 uv, f32x2 res) -> f32x2 {
     return (uv + 0.5 / res) * (res / (res + 1.0));
 }
 
-public
-func transmittance_params_to_lut_uv(Atmosphere *atmosphere, f32x2 p) -> f32x2 {
+public func transmittance_params_to_lut_uv(Atmosphere *atmosphere, f32x2 p) -> f32x2 {
     f32 h = std::safe_sqrt(atmosphere->atmos_radius * atmosphere->atmos_radius - atmosphere->planet_radius * atmosphere->planet_radius);
     f32 rho = std::safe_sqrt(p.x * p.x - atmosphere->planet_radius * atmosphere->planet_radius);
     f32 discriminant = p.x * p.x * (p.y * p.y - 1.0) + atmosphere->atmos_radius * atmosphere->atmos_radius;
@@ -28,14 +25,12 @@ func transmittance_params_to_lut_uv(Atmosphere *atmosphere, f32x2 p) -> f32x2 {
     return f32x2(mu, r);
 }
 
-public
-func multiscattering_params_to_lut_uv(Atmosphere *atmosphere, f32 altitude, f32 cos_theta) -> f32x2 {
+public func multiscattering_params_to_lut_uv(Atmosphere *atmosphere, f32 altitude, f32 cos_theta) -> f32x2 {
     f32x2 uv = clamp(f32x2(cos_theta * 0.5 + 0.5, altitude / (atmosphere->atmos_radius - atmosphere->planet_radius)), 0.0, 1.0);
     return from_unit_to_sub_uvs(uv, f32x2(atmosphere->multiscattering_lut_size.xy));
 }
 
-public
-func sky_view_params_to_lut_uv(Atmosphere *atmosphere, bool intersect_planet, f32 altitude, f32 view_zenith_cos_angle, f32x2 light_on_plane)
+public func sky_view_params_to_lut_uv(Atmosphere *atmosphere, bool intersect_planet, f32 altitude, f32 view_zenith_cos_angle, f32x2 light_on_plane)
     -> f32x2 {
     f32 horizon = std::safe_sqrt(altitude * altitude - atmosphere->planet_radius * atmosphere->planet_radius);
     f32 beta = acos(horizon / altitude);
@@ -60,8 +55,7 @@ func sky_view_params_to_lut_uv(Atmosphere *atmosphere, bool intersect_planet, f3
     return from_unit_to_sub_uvs(uv, f32x2(atmosphere->sky_view_lut_size.xy));
 }
 
-public
-func uv_to_sky_view_lut_params(Atmosphere *atmosphere, f32x2 uv, f32 altitude) -> f32x3 {
+public func uv_to_sky_view_lut_params(Atmosphere *atmosphere, f32x2 uv, f32 altitude) -> f32x3 {
     uv = from_sub_uvs_to_unit(uv, f32x2(atmosphere->sky_view_lut_size.xy));
     f32 horizon = std::safe_sqrt(altitude * altitude - atmosphere->planet_radius * atmosphere->planet_radius);
     f32 beta = acos(horizon / altitude);
@@ -89,8 +83,7 @@ func uv_to_sky_view_lut_params(Atmosphere *atmosphere, f32x2 uv, f32 altitude) -
     return f32x3(view_zenith_sin_angle * cos_longitude_view_cos_angle, view_zenith_cos_angle, view_zenith_sin_angle * sin_longitude_view_cos_angle);
 }
 
-public
-func move_to_top_atmosphere(inout f32x3 pos, f32x3 dir, f32 atmos_radius) -> bool {
+public func move_to_top_atmosphere(inout f32x3 pos, f32x3 dir, f32 atmos_radius) -> bool {
     f32 h = length(pos);
     if (h > atmos_radius) {
         const let top_intersection = std::ray_sphere_intersect_nearest(pos, dir, atmos_radius);
@@ -105,27 +98,18 @@ func move_to_top_atmosphere(inout f32x3 pos, f32x3 dir, f32 atmos_radius) -> boo
     return true;
 }
 
-public
-struct MediumScattering {
-public
-    f32x3 rayleigh_scattering;
-public
-    f32x3 rayleigh_extinction;
+public struct MediumScattering {
+    public f32x3 rayleigh_scattering;
+    public f32x3 rayleigh_extinction;
 
-public
-    f32x3 mie_scattering;
-public
-    f32x3 mie_extinction;
+    public f32x3 mie_scattering;
+    public f32x3 mie_extinction;
 
-public
-    f32x3 ozone_absorption;
-public
-    f32x3 ozone_extinction;
+    public f32x3 ozone_absorption;
+    public f32x3 ozone_extinction;
 
-public
-    f32x3 scattering_sum;
-public
-    f32x3 extinction_sum;
+    public f32x3 scattering_sum;
+    public f32x3 extinction_sum;
 
     [ForceInline] public __init(Atmosphere *atmosphere, f32 altitude) {
         const f32 rayleigh_density = exp(-altitude / atmosphere->rayleigh_density);
@@ -146,59 +130,36 @@ public
     }
 };
 
-public
-struct AtmosphereLuminance {
-public
-    f32x3 luminance = 0.0;
-public
-    f32x3 multiscattering_as_1 = 0.0;
-public
-    f32x3 transmittance = 1.0;
+public struct AtmosphereLuminance {
+    public f32x3 luminance = 0.0;
+    public f32x3 multiscattering_as_1 = 0.0;
+    public f32x3 transmittance = 1.0;
 };
 
-public
-struct AtmosphereSampling {
-public
-    bool variable_sample_count = false;
-public
-    f32 initial_sample_count = 0.0;
-public
-    f32 min_sample_count = 0.0;
-public
-    f32 max_sample_count = 0.0;
-public
-    f32 inv_distance_to_sample_count_max = 0.01;
+public struct AtmosphereSampling {
+    public bool variable_sample_count = false;
+    public f32 initial_sample_count = 0.0;
+    public f32 min_sample_count = 0.0;
+    public f32 max_sample_count = 0.0;
+    public f32 inv_distance_to_sample_count_max = 0.01;
 };
 
-public
-struct AtmosphereIntegrateInfo {
-public
-    f32x3 eye_pos = {};
-public
-    f32x3 eye_dir = {};
-public
-    f32x3 sun_dir = {};
-public
-    f32 sun_intensity = 1.0;
-public
-    f32 max_integration_length = 9000000.0;
-public
-    AtmosphereSampling sampling = {};
-public
-    constexpr bool eval_mie_phase = true;
-public
-    constexpr bool eval_rayleigh_phase = true;
-public
-    constexpr bool eval_planet_luminance = false;
+public struct AtmosphereIntegrateInfo {
+    public f32x3 eye_pos = {};
+    public f32x3 eye_dir = {};
+    public f32x3 sun_dir = {};
+    public f32 sun_intensity = 1.0;
+    public f32 max_integration_length = 9000000.0;
+    public AtmosphereSampling sampling = {};
+    public constexpr bool eval_mie_phase = true;
+    public constexpr bool eval_rayleigh_phase = true;
+    public constexpr bool eval_planet_luminance = false;
 
-public
-    Image2D<f32x4> transmittance_image = {};
-public
-    Optional<Image2D<f32x4>> multiscattering_image = none;
+    public Image2D<f32x4> transmittance_image = {};
+    public Optional<Image2D<f32x4>> multiscattering_image = none;
 };
 
-public
-func integrate_single_scattered_luminance(Atmosphere *atmosphere, in Sampler lut_sampler, in AtmosphereIntegrateInfo info) -> AtmosphereLuminance {
+public func integrate_single_scattered_luminance(Atmosphere *atmosphere, in Sampler lut_sampler, in AtmosphereIntegrateInfo info) -> AtmosphereLuminance {
     AtmosphereLuminance result = {};
 
     if (dot(info.eye_pos, info.eye_pos) <= atmosphere->planet_radius * atmosphere->planet_radius) {
@@ -311,8 +272,7 @@ func integrate_single_scattered_luminance(Atmosphere *atmosphere, in Sampler lut
     return result;
 }
 
-public
-func sample_aerial_perspective(
+public func sample_aerial_perspective(
     Atmosphere *atmosphere,
     in Image3D<f32x4> aerial_perspective_lut,
     in Sampler sampler,

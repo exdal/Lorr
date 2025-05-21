@@ -82,19 +82,31 @@ struct Transforms {
     alignas(4) glm::mat3 normal = {};
 };
 
-enum class AlphaMode : u32 {
-    Opaque = 0,
-    Mask,
-    Blend,
+enum class MaterialFlag : u32 {
+    None = 0,
+    // Image flags
+    HasAlbedoImage = 1 << 0,
+    HasNormalImage = 1 << 1,
+    HasEmissiveImage = 1 << 2,
+    HasMetallicRoughnessImage = 1 << 3,
+    HasOcclusionImage = 1 << 4,
+    // Normal flags
+    NormalTwoComponent = 1 << 5,
+    NormalFlipY = 1 << 6,
+    // Alpha
+    AlphaOpaque = 1 << 7,
+    AlphaMask = 1 << 8,
+    AlphaBlend = 1 << 9,
 };
+consteval void enable_bitmask(MaterialFlag);
 
 struct Material {
     alignas(4) glm::vec4 albedo_color = { 1.0f, 1.0f, 1.0f, 1.0f };
     alignas(4) glm::vec3 emissive_color = { 0.0f, 0.0f, 0.0f };
     alignas(4) f32 roughness_factor = 0.0f;
     alignas(4) f32 metallic_factor = 0.0f;
-    alignas(4) AlphaMode alpha_mode = AlphaMode::Opaque;
     alignas(4) f32 alpha_cutoff = 0.0f;
+    alignas(4) MaterialFlag flags = MaterialFlag::None;
     alignas(4) u32 albedo_image_index = ~0_u32;
     alignas(4) u32 normal_image_index = ~0_u32;
     alignas(4) u32 emissive_image_index = ~0_u32;
@@ -144,7 +156,7 @@ struct HistogramInfo {
     alignas(4) f32 min_exposure = -6.0f;
     alignas(4) f32 max_exposure = 18.0f;
     alignas(4) f32 adaptation_speed = 1.1f;
-    alignas(4) f32 ev100_bias = 1.0f;
+    alignas(4) f32 ISO_K = 100.0f / 12.5f;
 };
 
 } // namespace lr::GPU

@@ -149,16 +149,35 @@ func fs_main(VertexOutput input) -> FragmentOutput {
     const f32 w = jacobian_sign * sign(dot(pos_ddy, cross(world_normal, pos_ddx)));
     f32x3 bitangent = -w * cross(world_normal, tangent);
     f32x3 normal = world_normal;
+
+#if 1
     const f32 inv_len_N = 1.0 / length(normal);
     tangent *= inv_len_N;
     bitangent *= inv_len_N;
     normal *= inv_len_N;
+#endif
 
-    if (material.normal_image_index != ~0u) {
-        const f32x3 sampled_normal = material.sample_normal_color(tex_coord_grad);
-        const f32x2 Nt = sampled_normal.rg * 2.0 - 1.0;
-        const f32 Nt_z = sqrt(1.0 - Nt.x * Nt.x - Nt.y * Nt.y);
-        normal = Nt.x * tangent + Nt.y * bitangent + Nt_z * normal;
+    if (material.flags & MaterialFlag::HasNormalImage) {
+        f32x3 sampled_normal = material.sample_normal_color(tex_coord_grad);
+        // NOTE: This is here to convert tangent spaces to our correct spaces.
+        // for example, normal map's R component is +Y for our world. @grok is this true?
+        sampled_normal = f32x3(sampled_normal.y, sampled_normal.x, sampled_normal.z);
+
+        if (material.flags & MaterialFlag::NormalTwoComponent) {
+            sampled_normal = f32x3(sampled_normal.yx * 2.0 - 1.0, 0.0);
+            sampled_normal.z = sqrt(1.0 - sampled_normal.x * sampled_normal.x - sampled_normal.y * sampled_normal.y);
+        } else {
+            sampled_normal = sampled_normal * 2.0 - 1.0;
+        }
+
+        if (material.flags & MaterialFlag::NormalFlipY) {
+            sampled_normal.y = -sampled_normal.y;
+        }
+
+        normal = sampled_normal.x * tangent
+               + sampled_normal.y * bitangent
+               + sampled_normal.z * normal;
+        normal = normalize(normal);
     }
 
     output.normal_color.xy = std::vec3_to_oct(normal);

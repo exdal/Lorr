@@ -22,7 +22,7 @@ auto Buffer::create(Device &device, u64 size, vuk::MemoryUsage memory_usage, LR_
     buffer.data_size_ = buffer_handle.size;
     buffer.host_data_ = buffer_handle.mapped_ptr;
     buffer.device_address_ = buffer_handle.device_address;
-    buffer.id_ = device.resources.buffers.create_slot(std::move(buffer_handle));
+    buffer.id_ = device.resources.buffers.create_slot(static_cast<vuk::Buffer &&>(buffer_handle));
 
     return buffer;
 }

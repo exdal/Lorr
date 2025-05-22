@@ -16,11 +16,11 @@ public static constexpr MemoryOrder memory_order_acq_rel = MemoryOrder::AcqRel;
 public static constexpr MemoryOrder memory_order_seq_cst = MemoryOrder::SeqCst;
 
 public enum MemoryLocation : u32 {
-    None      = 0,
-    Buffer    = 0x40,
-    Subgroup  = 0x80,
+    None = 0,
+    Buffer = 0x40,
+    Subgroup = 0x80,
     Workgroup = 0x100,
-    Image     = 0x800,
+    Image = 0x800,
 };
 
 public enum MemoryScope : u32 {
@@ -29,6 +29,7 @@ public enum MemoryScope : u32 {
     Workgroup = 2,
     Subgroup = 3,
     Invocation = 4,
+    Queue = 5,
 };
 
 func spirv_type_checks<T>() -> void {

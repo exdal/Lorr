@@ -41,7 +41,7 @@ add_requires("libsdl3 3.2.10", { configs = {
     x11 = true,
 } })
 
-add_requires("shader-slang v2025.6.3")
+add_requires("shader-slang v2025.9.2")
 add_requires("vuk 2025.05.06", { configs = {
     debug_allocations = false,
     disable_exceptions = true,

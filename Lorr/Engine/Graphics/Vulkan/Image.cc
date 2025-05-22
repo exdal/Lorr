@@ -157,6 +157,7 @@ auto ImageView::to_attachment(Device &device, const vuk::ImageUsageFlags &usage)
         .extent = extent_,
         .format = format_,
         .sample_count = vuk::Samples::e1,
+        .view_type = type_,
         .components = {},
         .base_level = 0,
         .level_count = this->mip_count(),

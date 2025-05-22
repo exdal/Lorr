@@ -83,11 +83,11 @@ public extension<T : ITexelElement, S : __ITextureShape, let F : ImageFormat> St
 };
 
 // StorageImage1D ───────────────────────────────────────────────────
-public typealias StorageImage1D<T : ITexelElement, let F : ImageFormat> = StorageImage<T, __Shape1D, F>;
+public typealias StorageImage1D<T : ITexelElement, let F : ImageFormat = ImageFormat::Undefined> = StorageImage<T, __Shape1D, F>;
 
 // StorageImage2D ───────────────────────────────────────────────────
-public typealias StorageImage2D<T : ITexelElement, let F : ImageFormat> = StorageImage<T, __Shape2D, F>;
+public typealias StorageImage2D<T : ITexelElement, let F : ImageFormat = ImageFormat::Undefined> = StorageImage<T, __Shape2D, F>;
 
 // StorageImage3D ───────────────────────────────────────────────────
-public typealias StorageImage3D<T : ITexelElement, let F : ImageFormat> = StorageImage<T, __Shape3D, F>;
+public typealias StorageImage3D<T : ITexelElement, let F : ImageFormat = ImageFormat::Undefined> = StorageImage<T, __Shape3D, F>;
 

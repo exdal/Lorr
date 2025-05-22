@@ -26,6 +26,7 @@ bool Application::init(this Application &self, const ApplicationInfo &info) {
     fmtlog::setLogCB(log_cb, fmtlog::DBG);
     fmtlog::setHeaderPattern("[{HMSF}] [{t:<9}] {l}: ");
     fmtlog::setLogLevel(fmtlog::DBG);
+    fmtlog::flushOn(fmtlog::WRN);
 
     if (!self.do_super_init(info.args)) {
         LOG_FATAL("Super init failed!");

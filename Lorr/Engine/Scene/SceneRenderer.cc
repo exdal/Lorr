@@ -161,6 +161,19 @@ auto SceneRenderer::create_persistent_resources(this SceneRenderer &self) -> voi
     };
     Pipeline::create(*self.device, default_slang_session, debug_pipeline_info).value();
 
+    auto copy_pipeline_info = PipelineCompileInfo{
+        .module_name = "passes.copy",
+        .entry_points = { "cs_main" },
+    };
+    Pipeline::create(*self.device, default_slang_session, copy_pipeline_info).value();
+
+    //  ── FFX ─────────────────────────────────────────────────────────────
+    auto hiz_pipeline_info = PipelineCompileInfo{
+        .module_name = "passes.hiz",
+        .entry_points = { "cs_main" },
+    };
+    Pipeline::create(*self.device, default_slang_session, hiz_pipeline_info).value();
+
     //  ── SKY LUTS ────────────────────────────────────────────────────────
     auto temp_atmos_info = GPU::Atmosphere{};
     temp_atmos_info.transmittance_lut_size = self.sky_transmittance_lut_view.extent();
@@ -283,6 +296,10 @@ auto SceneRenderer::cleanup(this SceneRenderer &self) -> void {
         self.device->destroy(self.meshes_buffer.id());
         self.meshes_buffer = {};
     }
+
+    if (self.hiz) {
+        self.device->destroy(self.hiz.id());
+    }
 }
 
 auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::option<ComposedScene> &composed_scene)
@@ -389,6 +406,42 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
     auto sky_multiscatter_lut_attachment =
         self.sky_multiscatter_lut_view.acquire(*self.device, "sky multiscatter lut", vuk::ImageUsageFlagBits::eSampled, vuk::Access::eComputeSampled);
 
+    auto square_extent = vuk::Extent3D{
+        .width = std::bit_floor(info.extent.width),
+        .height = std::bit_floor(info.extent.height),
+        .depth = 1,
+    };
+    if (self.hiz.extent() != square_extent) {
+        if (self.hiz) {
+            self.device->destroy(self.hiz.id());
+        }
+
+        auto hiz_info = ImageInfo{
+            .format = vuk::Format::eR32Sfloat,
+            .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage,
+            .type = vuk::ImageType::e2D,
+            .extent = square_extent,
+            .mip_count = std::bit_width(ls::max(square_extent.width, square_extent.height)) - 1_u32,
+            .name = "HiZ",
+        };
+        self.hiz = Image::create(*self.device, hiz_info).value();
+
+        if (self.hiz_view) {
+            self.device->destroy(self.hiz_view.id());
+        }
+
+        auto hiz_view_info = ImageViewInfo{
+            .image_usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage,
+            .type = vuk::ImageViewType::e2D,
+            .subresource_range = { .aspectMask = vuk::ImageAspectFlagBits::eColor, .levelCount = hiz_info.mip_count },
+            .name = "HiZ View",
+        };
+        self.hiz_view = ImageView::create(*self.device, self.hiz, hiz_view_info).value();
+    }
+
+    auto hiz_attachment =
+        self.hiz_view.acquire(*self.device, "hiz", vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage, vuk::eNone);
+
     //   ──────────────────────────────────────────────────────────────────────
 
     const auto debugging = self.debug_view != GPU::DebugView::None;
@@ -485,6 +538,7 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
             "vis cull triangles",
             [cull_flags = info.cull_flags](
                 vuk::CommandBuffer &cmd_list,
+                VUK_IA(vuk::eComputeRead) hiz,
                 VUK_BA(vuk::eIndirectRead) cull_triangles_cmd,
                 VUK_BA(vuk::eComputeWrite) draw_indexed_cmd,
                 VUK_BA(vuk::eComputeRead) visible_meshlet_instances_indices,
@@ -512,6 +566,7 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                     )
                     .dispatch_indirect(cull_triangles_cmd);
                 return std::make_tuple(
+                    hiz,
                     draw_indexed_cmd,
                     visible_meshlet_instances_indices,
                     reordered_indices,
@@ -530,6 +585,7 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
         );
 
         std::tie(
+            hiz_attachment,
             draw_command_buffer,
             visible_meshlet_instances_indices_buffer,
             reordered_indices_buffer,
@@ -539,6 +595,7 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
             camera_buffer
         ) =
             vis_cull_triangles_pass(
+                std::move(hiz_attachment),
                 std::move(cull_triangles_cmd_buffer),
                 std::move(draw_command_buffer),
                 std::move(visible_meshlet_instances_indices_buffer),
@@ -584,7 +641,7 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
 
         auto visbuffer_data_attachment = vuk::declare_ia(
             "visbuffer data",
-            { .usage = vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eColorAttachment,
+            { .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eColorAttachment,
               .format = vuk::Format::eR32Uint,
               .sample_count = vuk::Samples::e1 }
         );
@@ -679,8 +736,7 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
         if (info.picking_texel) {
             auto editor_mousepick_pass = vuk::make_pass(
                 "editor mousepick",
-                [picking_texel = info.picking_texel.value(
-                 )]( //
+                [picking_texel = *info.picking_texel]( //
                     vuk::CommandBuffer &cmd_list,
                     VUK_IA(vuk::eComputeSampled) visbuffer,
                     VUK_BA(vuk::eComputeRead) visible_meshlet_instances_indices,
@@ -718,6 +774,77 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
             std::memcpy(&texel_data, picked_texel->mapped_ptr, sizeof(u32));
             info.picked_transform_index = texel_data;
         }
+
+        auto hiz_copy_pass = vuk::make_pass(
+            "hiz copy",
+            []( //
+                vuk::CommandBuffer &cmd_list,
+                VUK_IA(vuk::eComputeSampled) src,
+                VUK_IA(vuk::eComputeRW) dst
+            ) {
+                cmd_list //
+                    .bind_compute_pipeline("passes.copy")
+                    .bind_image(0, 0, src)
+                    .bind_image(0, 1, dst)
+                    .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, src->extent)
+                    .dispatch_invocations_per_pixel(src);
+
+                return std::make_tuple(src, dst);
+            }
+        );
+        std::tie(depth_attachment, hiz_attachment) = hiz_copy_pass(std::move(depth_attachment), std::move(hiz_attachment));
+
+        auto hiz_generate_pass = vuk::make_pass(
+            "hiz generate",
+            []( //
+                vuk::CommandBuffer &cmd_list,
+                VUK_IA(vuk::eComputeRW | vuk::eComputeSampled) src
+            ) {
+                auto extent = src->extent;
+                auto mip_count = src->level_count;
+                LS_EXPECT(mip_count <= 13);
+
+                vuk::Extent2D dispatch = {
+                    .width = (extent.width + 63) >> 6, // this is ceil
+                    .height = (extent.height + 63) >> 6,
+                };
+
+                static constexpr auto sampler_min_clamp_reduction_mode = VkSamplerReductionModeCreateInfo{
+                    .sType = VK_STRUCTURE_TYPE_SAMPLER_REDUCTION_MODE_CREATE_INFO,
+                    .pNext = nullptr,
+                    .reductionMode = VK_SAMPLER_REDUCTION_MODE_MIN,
+                };
+                auto sampler_info = vuk::SamplerCreateInfo{
+                    .pNext = &sampler_min_clamp_reduction_mode,
+                    .minFilter = vuk::Filter::eLinear,
+                    .addressModeU = vuk::SamplerAddressMode::eClampToEdge,
+                    .addressModeV = vuk::SamplerAddressMode::eClampToEdge,
+                };
+
+                cmd_list //
+                    .image_barrier(src, vuk::eComputeRW, vuk::eComputeSampled, 0, 1)
+                    .bind_compute_pipeline("passes.hiz")
+                    .specialize_constants(0, mip_count)
+                    .specialize_constants(1, dispatch.width * dispatch.height - 1)
+                    .specialize_constants(2, extent.width)
+                    .specialize_constants(3, extent.height)
+                    .bind_sampler(0, 0, sampler_info)
+                    .bind_image(0, 1, src);
+
+                for (u32 i = 0; i < 13; i++) {
+                    cmd_list.bind_image(0, i + 2, src->mip(ls::min(i, mip_count - 1_u32)));
+                }
+
+                *cmd_list.scratch_buffer<u32>(0, 14) = 0;
+                cmd_list.dispatch(dispatch.width, dispatch.height);
+                cmd_list.image_barrier(src, vuk::eComputeSampled, vuk::eComputeRW, 0, 1);
+
+                return src;
+            }
+        );
+
+        hiz_attachment = hiz_generate_pass(std::move(hiz_attachment));
+        transfer_man.wait_on(std::move(hiz_attachment));
 
         //  ── VISBUFFER DECODE ────────────────────────────────────────────────
         auto vis_decode_pass = vuk::make_pass(

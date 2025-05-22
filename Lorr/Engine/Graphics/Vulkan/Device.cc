@@ -129,6 +129,7 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
     vk12_features.scalarBlockLayout = true;
     vk12_features.shaderInt8 = true;
     vk12_features.shaderSubgroupExtendedTypes = true;
+    vk12_features.samplerFilterMinmax = true;
 
     VkPhysicalDeviceVulkan11Features vk11_features = {};
     vk11_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
@@ -153,11 +154,15 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
 
     vkb::DeviceBuilder device_builder(self.physical_device);
     device_builder //
-        // .add_pNext(&vk14_features)
+        .add_pNext(&vk14_features)
         .add_pNext(&vk13_features)
         .add_pNext(&vk12_features)
         .add_pNext(&vk11_features)
+        // Maintenance 8 allows the copy of depth images, but
+        // LLVMPipe doesn't support Image<u64> on shader yet.
         // .add_pNext(&maintenance_8_features)
+
+        // NOTE: LLVMPipe does not support this extension yet
         //.add_pNext(&image_atomic_int64_features)
         .add_pNext(&vk10_features);
     auto device_result = device_builder.build();
@@ -211,7 +216,7 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
 
     self.frame_resources.emplace(*self.runtime, frame_count);
     self.allocator.emplace(*self.frame_resources);
-    self.runtime->set_shader_target_version(VK_API_VERSION_1_3);
+    self.runtime->set_shader_target_version(VK_API_VERSION_1_4);
     self.shader_compiler = SlangCompiler::create().value();
 
     self.transfer_manager.init(self).value();

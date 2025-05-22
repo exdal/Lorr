@@ -9,8 +9,6 @@
 #include <slang-com-ptr.h>
 #include <slang.h>
 
-#include <algorithm>
-
 namespace lr {
 struct SlangBlobSpan : ISlangBlob {
     ls::span<u8> m_data = {};
@@ -167,7 +165,7 @@ auto SlangModule::get_entry_point(std::string_view name) -> ls::option<SlangEntr
             diagnostics_blob.writeRef()
         );
         if (diagnostics_blob) {
-            LOG_TRACE("{}", (const char *)diagnostics_blob->getBufferPointer());
+            LOG_WARN("{}", (const char *)diagnostics_blob->getBufferPointer());
         }
 
         if (SLANG_FAILED(result)) {
@@ -181,7 +179,7 @@ auto SlangModule::get_entry_point(std::string_view name) -> ls::option<SlangEntr
         Slang::ComPtr<slang::IBlob> diagnostics_blob;
         composed_program->link(linked_program.writeRef(), diagnostics_blob.writeRef());
         if (diagnostics_blob) {
-            LOG_TRACE("{}", (const char *)diagnostics_blob->getBufferPointer());
+            LOG_WARN("{}", (const char *)diagnostics_blob->getBufferPointer());
         }
     }
 
@@ -190,7 +188,7 @@ auto SlangModule::get_entry_point(std::string_view name) -> ls::option<SlangEntr
         Slang::ComPtr<slang::IBlob> diagnostics_blob;
         auto result = linked_program->getEntryPointCode(0, 0, spirv_code.writeRef(), diagnostics_blob.writeRef());
         if (diagnostics_blob) {
-            LOG_TRACE("{}", (const char *)diagnostics_blob->getBufferPointer());
+            LOG_WARN("{}", (const char *)diagnostics_blob->getBufferPointer());
         }
 
         if (SLANG_FAILED(result)) {
@@ -285,7 +283,7 @@ auto SlangSession::load_module(const SlangModuleInfo &info) -> ls::option<SlangM
         impl->session->loadModuleFromSourceString(info.module_name.c_str(), info.module_name.c_str(), source.c_str(), diagnostics_blob.writeRef());
 
     if (diagnostics_blob) {
-        LOG_TRACE("{}", (const char *)diagnostics_blob->getBufferPointer());
+        LOG_WARN("{}", (const char *)diagnostics_blob->getBufferPointer());
     }
 
     auto module_impl = new SlangModule::Impl;
@@ -343,8 +341,9 @@ auto SlangCompiler::new_session(const SlangSessionInfo &info) -> ls::option<Slan
         { .name = slang::CompilerOptionName::GLSLForceScalarLayout, .value = { .kind = slang::CompilerOptionValueKind::Int, .intValue0 = 1 } },
         { .name = slang::CompilerOptionName::Language, .value = { .kind = slang::CompilerOptionValueKind::String, .stringValue0 = "slang" } },
         { .name = slang::CompilerOptionName::VulkanUseEntryPointName, .value = { .kind = slang::CompilerOptionValueKind::Int, .intValue0 = 1 } },
-        { .name = slang::CompilerOptionName::DisableWarnings,
-          .value = { .kind = slang::CompilerOptionValueKind::String, .stringValue0 = "39001,41012" } },
+        { .name = slang::CompilerOptionName::DisableWarning, .value = { .kind = slang::CompilerOptionValueKind::String, .stringValue0 = "39001" } },
+        { .name = slang::CompilerOptionName::DisableWarning, .value = { .kind = slang::CompilerOptionValueKind::String, .stringValue0 = "41012" } },
+        { .name = slang::CompilerOptionName::DisableWarning, .value = { .kind = slang::CompilerOptionValueKind::String, .stringValue0 = "41017" } },
     };
     std::vector<slang::PreprocessorMacroDesc> macros;
     macros.reserve(info.definitions.size());

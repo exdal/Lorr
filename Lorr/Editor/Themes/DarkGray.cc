@@ -92,4 +92,4 @@ auto Theme::dark_gray() -> void {
     style.ScrollbarSize = 14;
     style.GrabMinSize = 10;
 }
-}
+} // namespace led

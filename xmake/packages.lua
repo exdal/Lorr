@@ -1,6 +1,9 @@
 add_requires("fmt 11.1.4", { configs = {
     header_only = true
 } })
+add_requires("fmtlog-lr v2.3.0", { configs = {
+    fmt_version = "11.1.4"
+} })
 
 add_requires("xxhash v0.8.3")
 add_requires("glm 1.0.1", { configs = {
@@ -9,7 +12,7 @@ add_requires("glm 1.0.1", { configs = {
 } })
 add_requires("plf_colony v7.41")
 
-add_requires("imguizmo v1.91.8-docking")
+add_requires("imguizmo-lr v1.91.8-docking")
 add_requires("imgui v1.91.8-docking", { configs = {
     wchar32 = true,
 } })
@@ -38,7 +41,7 @@ add_requires("libsdl3 3.2.10", { configs = {
     x11 = true,
 } })
 
-add_requires("shader-slang v2025.6.3")
+add_requires("shader-slang v2025.9.2")
 add_requires("vuk 2025.05.06", { configs = {
     debug_allocations = false,
     disable_exceptions = true,

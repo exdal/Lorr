@@ -4,6 +4,8 @@
 
 #include "Engine/Math/Matrix.hh"
 
+#include "Engine/Memory/Stack.hh"
+
 #include "Engine/OS/File.hh"
 
 #include "Engine/Scene/GPUScene.hh"
@@ -121,35 +123,32 @@ auto Scene::init(this Scene &self, const std::string &name) -> bool {
 auto Scene::destroy(this Scene &self) -> void {
     ZoneScoped;
 
-    {
-        auto q = self.world //
-                     ->query_builder()
-                     .with(flecs::ChildOf, self.root)
-                     .build();
-        q.each([](flecs::entity e) {
-            e.each([&](flecs::id component_id) {
-                if (!component_id.is_entity()) {
-                    return;
-                }
+    auto unloading_assets = std::vector<UUID>();
 
-                ECS::ComponentWrapper component(e, component_id);
-                if (!component.has_component()) {
-                    return;
-                }
+    auto visit_child = [&](this auto &visitor, flecs::entity &e) -> void {
+        e.each([&](flecs::id component_id) {
+            if (!component_id.is_entity()) {
+                return;
+            }
 
-                component.for_each([&](usize &, std::string_view, ECS::ComponentWrapper::Member &member) {
-                    if (auto *component_uuid = std::get_if<UUID *>(&member)) {
-                        const auto &uuid = **component_uuid;
-                        if (uuid) {
-                            auto &app = Application::get();
-                            if (uuid && app.asset_man.get_asset(uuid)) {
-                                app.asset_man.unload_asset(uuid);
-                            }
-                        }
-                    }
-                });
+            ECS::ComponentWrapper component(e, component_id);
+            component.for_each([&](usize &, std::string_view, ECS::ComponentWrapper::Member &member) {
+                if (auto *component_uuid = std::get_if<UUID *>(&member)) {
+                    const auto &uuid = **component_uuid;
+                    unloading_assets.push_back(uuid);
+                }
             });
         });
+
+        e.children([&](flecs::entity child) { visitor(child); });
+    };
+    self.root.children([&](flecs::entity e) { visit_child(e); });
+
+    auto &app = Application::get();
+    for (const auto &uuid : unloading_assets) {
+        if (uuid && app.asset_man.get_asset(uuid)) {
+            app.asset_man.unload_asset(uuid);
+        }
     }
 
     self.root.destruct();
@@ -321,7 +320,7 @@ auto entity_to_json(JsonWriter &json, flecs::entity root) -> void {
             }
 
             ECS::ComponentWrapper component(e, component_id);
-            if (!component.has_component()) {
+            if (!component.is_component()) {
                 json << component.path;
             } else {
                 components.emplace_back(e, component_id);
@@ -577,7 +576,11 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, SceneRenderInfo &i
             atmos.ozone_absorption = atmos_info.ozone_absorption * 1e-3f;
             atmos.ozone_height = atmos_info.ozone_height;
             atmos.ozone_thickness = atmos_info.ozone_thickness;
-            atmos.aerial_gain_per_slice = atmos_info.aerial_gain_per_slice;
+            atmos.aerial_perspective_start_km = atmos_info.aerial_perspective_start_km;
+
+            f32 eye_altitude = active_camera_data->position.y * GPU::CAMERA_SCALE_UNIT;
+            eye_altitude += atmos.planet_radius + GPU::PLANET_RADIUS_OFFSET;
+            atmos.eye_position = glm::vec3(0.0f, eye_altitude, 0.0f);
         }
 
         if (e.has<ECS::AutoExposure>()) {
@@ -586,7 +589,7 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, SceneRenderInfo &i
             histogram.min_exposure = auto_exposure.min_exposure;
             histogram.max_exposure = auto_exposure.max_exposure;
             histogram.adaptation_speed = auto_exposure.adaptation_speed;
-            histogram.ev100_bias = auto_exposure.ev100_bias;
+            histogram.ISO_K = auto_exposure.ISO / auto_exposure.K;
         }
     });
 

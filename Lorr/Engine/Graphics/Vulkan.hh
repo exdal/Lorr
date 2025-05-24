@@ -60,8 +60,7 @@ struct PushConstants {
 struct Device;
 
 struct Buffer {
-    static auto
-    create(Device &, u64 size, vuk::MemoryUsage memory_usage = vuk::MemoryUsage::eGPUonly, vuk::source_location LOC = vuk::source_location::current())
+    static auto create(Device &, u64 size, vuk::MemoryUsage memory_usage = vuk::MemoryUsage::eGPUonly, LR_THISCALL)
         -> std::expected<Buffer, vuk::VkException>;
 
     auto data_size() const -> u64;

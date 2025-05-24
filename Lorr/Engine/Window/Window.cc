@@ -1,5 +1,7 @@
 #include "Engine/Window/Window.hh"
 
+#include "Engine/Memory/Stack.hh"
+
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_dialog.h>
 #include <SDL3/SDL_video.h>

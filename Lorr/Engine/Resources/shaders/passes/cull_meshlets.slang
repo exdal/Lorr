@@ -29,17 +29,9 @@ func test_frustum(in mat4 world_transform, in f32x3 aabb_center, in f32x3 aabb_e
     const f32x3 up = world_transform[1].xyz * aabb_extent.y;
     const f32x3 forward = -world_transform[2].xyz * aabb_extent.z;
     const f32x3 world_extent = {
-        abs(dot(f32x3(1.0, 0.0, 0.0), right)) +
-        abs(dot(f32x3(1.0, 0.0, 0.0), up)) +
-        abs(dot(f32x3(1.0, 0.0, 0.0), forward)),
-
-        abs(dot(f32x3(0.0, 1.0, 0.0), right)) +
-        abs(dot(f32x3(0.0, 1.0, 0.0), up)) +
-        abs(dot(f32x3(0.0, 1.0, 0.0), forward)),
-
-        abs(dot(f32x3(0.0, 0.0, 1.0), right)) +
-        abs(dot(f32x3(0.0, 0.0, 1.0), up)) +
-        abs(dot(f32x3(0.0, 0.0, 1.0), forward))
+        abs(dot(f32x3(1.0, 0.0, 0.0), right)) + abs(dot(f32x3(1.0, 0.0, 0.0), up)) + abs(dot(f32x3(1.0, 0.0, 0.0), forward)),
+        abs(dot(f32x3(0.0, 1.0, 0.0), right)) + abs(dot(f32x3(0.0, 1.0, 0.0), up)) + abs(dot(f32x3(0.0, 1.0, 0.0), forward)),
+        abs(dot(f32x3(0.0, 0.0, 1.0), right)) + abs(dot(f32x3(0.0, 0.0, 1.0), up)) + abs(dot(f32x3(0.0, 0.0, 1.0), forward))
     };
 
     [[unroll]]
@@ -52,9 +44,8 @@ func test_frustum(in mat4 world_transform, in f32x3 aabb_center, in f32x3 aabb_e
     return true;
 }
 
-
 #ifndef CULLING_MESHLET_COUNT
-#define CULLING_MESHLET_COUNT 64
+    #define CULLING_MESHLET_COUNT 64
 #endif
 
 [[shader("compute")]]
@@ -86,5 +77,4 @@ func cs_main(uint3 thread_id : SV_DispatchThreadID) -> void {
         u32 index = std::atomic_add(C.cull_triangles_cmd.x, 1, std::memory_order_relaxed);
         C.visible_meshlet_instances_indices[index] = meshlet_instance_index;
     }
-
 }

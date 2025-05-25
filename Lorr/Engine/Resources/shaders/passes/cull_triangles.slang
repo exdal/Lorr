@@ -19,13 +19,13 @@ struct PushConstants {
 };
 [[vk::push_constant]] PushConstants C;
 
-groupshared u32  base_index_shared;
-groupshared u32  triangles_passed_shared;
+groupshared u32 base_index_shared;
+groupshared u32 triangles_passed_shared;
 groupshared mat4 model_view_proj_shared;
 
 // https://github.com/GPUOpen-Effects/GeometryFX/blob/master/amd_geometryfx/src/Shaders/AMD_GeometryFX_Filtering.hlsl
 // Parameters: vertices in UV space, viewport extent
-func CullSmallPrimitive(f32x2x3 vertices, f32x2 viewportExtent) -> bool{
+func CullSmallPrimitive(f32x2x3 vertices, f32x2 viewportExtent) -> bool {
     const uint SUBPIXEL_BITS = 8;
     const uint SUBPIXEL_MASK = 0xFF;
     const uint SUBPIXEL_SAMPLES = 1 << SUBPIXEL_BITS;
@@ -43,15 +43,11 @@ func CullSmallPrimitive(f32x2x3 vertices, f32x2 viewportExtent) -> bool{
     i32x2 minBB = i32x2(1 << 30, 1 << 30);
     i32x2 maxBB = i32x2(-(1 << 30), -(1 << 30));
 
-    for (uint i = 0; i < 3; ++i)
-    {
+    for (uint i = 0; i < 3; ++i) {
         f32 v = reinterpret<f32>(1 << 23);
         f32x2 screenSpacePositionFP = vertices[i] * viewportExtent;
         // Check if we would overflow after conversion
-        if (screenSpacePositionFP.x < -v ||
-            screenSpacePositionFP.x >  v ||
-            screenSpacePositionFP.y < -v ||
-            screenSpacePositionFP.y >  v) {
+        if (screenSpacePositionFP.x < -v || screenSpacePositionFP.x > v || screenSpacePositionFP.y < -v || screenSpacePositionFP.y > v) {
             return true;
         }
 
@@ -70,10 +66,12 @@ func CullSmallPrimitive(f32x2x3 vertices, f32x2 viewportExtent) -> bool{
     This will also cull very long triangles which fall between
     multiple samples.
     */
-    return !((((minBB.x & SUBPIXEL_MASK) > SUBPIXEL_SAMPLES/2)
-          &&  ((maxBB.x - ((minBB.x & ~SUBPIXEL_MASK) + SUBPIXEL_SAMPLES/2)) < (SUBPIXEL_SAMPLES - 1)))
-          || (((minBB.y & SUBPIXEL_MASK) > SUBPIXEL_SAMPLES/2)
-          &&  ((maxBB.y - ((minBB.y & ~SUBPIXEL_MASK) + SUBPIXEL_SAMPLES/2)) < (SUBPIXEL_SAMPLES - 1))));
+    return !(
+        (((minBB.x & SUBPIXEL_MASK) > SUBPIXEL_SAMPLES / 2)
+         && ((maxBB.x - ((minBB.x & ~SUBPIXEL_MASK) + SUBPIXEL_SAMPLES / 2)) < (SUBPIXEL_SAMPLES - 1)))
+        || (((minBB.y & SUBPIXEL_MASK) > SUBPIXEL_SAMPLES / 2)
+            && ((maxBB.y - ((minBB.y & ~SUBPIXEL_MASK) + SUBPIXEL_SAMPLES / 2)) < (SUBPIXEL_SAMPLES - 1)))
+    );
 }
 
 func test_triangle(in Mesh mesh, in Meshlet meshlet, u32 triangle_index) -> bool {
@@ -99,11 +97,7 @@ func test_triangle(in Mesh mesh, in Meshlet meshlet, u32 triangle_index) -> bool
     }
 
     if (C.cull_flags & CullFlags::MicroTriangles) {
-        const float3x2 uv_pos = {
-            clip_pos_0.xy * 0.5 + 0.5,
-            clip_pos_1.xy * 0.5 + 0.5,
-            clip_pos_2.xy * 0.5 + 0.5
-        };
+        const float3x2 uv_pos = { clip_pos_0.xy * 0.5 + 0.5, clip_pos_1.xy * 0.5 + 0.5, clip_pos_2.xy * 0.5 + 0.5 };
         if (!CullSmallPrimitive(uv_pos, C.camera->resolution)) {
             return false;
         }
@@ -114,7 +108,7 @@ func test_triangle(in Mesh mesh, in Meshlet meshlet, u32 triangle_index) -> bool
 
 // Shut up LSP
 #ifndef CULLING_TRIANGLE_COUNT
-#define CULLING_TRIANGLE_COUNT 64
+    #define CULLING_TRIANGLE_COUNT 64
 #endif
 
 [[shader("compute")]]
@@ -161,4 +155,3 @@ void cs_main(uint3 group_id : SV_GroupID, uint3 group_thread_id : SV_GroupThread
         C.reordered_indices[index_offset + 2] = (visible_meshlet_index << MESHLET_PRIMITIVE_BITS) | ((triangle_index + 2) & MESHLET_PRIMITIVE_MASK);
     }
 }
-

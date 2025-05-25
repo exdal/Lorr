@@ -1,6 +1,6 @@
 toolchain("nix-clang")
     set_kind("standalone")
-    set_runtimes("c++_static", "c++_shared", "stdc++_static", "stdc++_shared")
+    set_runtimes("c++_static", "c++_shared")
 
     set_toolset("cc", "clang")
     set_toolset("cxx", "clang++")
@@ -22,4 +22,12 @@ toolchain("nix-clang")
         toolchain:add("asflags", march)
         toolchain:add("ldflags", march)
         toolchain:add("shflags", march)
+
+        toolchain:add("cxxflags",
+            "-Wshadow",
+            "-Wshadow-all",
+            "-Wno-gnu-line-marker",
+            "-Wno-gnu-anonymous-struct",
+            "-Wno-gnu-zero-variadic-macro-arguments",
+            "-Wno-missing-braces")
     end)

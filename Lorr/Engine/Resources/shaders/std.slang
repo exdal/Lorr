@@ -1,5 +1,5 @@
 // C++ Standard Library compatibility layer for Slang.
-// Not sure about naming of this module, might cause some 
+// Not sure about naming of this module, might cause some
 // issues in the future.
 
 module std;
@@ -12,3 +12,4 @@ __include std.atomic;
 __include std.color;
 __include std.encoding;
 __include std.math;
+__include std.wave;

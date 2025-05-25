@@ -61,5 +61,5 @@ func cs_main(u32x3 thread_id : SV_DispatchThreadID) {
     f32x3 scattered_luminance = luminance * isotropic_phase;
     f32x3 f_ms = 1.0 / (1.0 - multi_scattering_as_1);
 
-    sky_multiscattering_lut.store(thread_id.xy, f32x4(scattered_luminance * f_ms, 1.0));
+    sky_multiscattering_lut.Store(thread_id.xy, f32x4(scattered_luminance * f_ms, 1.0));
 }

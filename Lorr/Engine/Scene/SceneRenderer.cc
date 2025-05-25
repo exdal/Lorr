@@ -792,22 +792,22 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                 return std::make_tuple(src, dst);
             }
         );
-        std::tie(depth_attachment, hiz_attachment) = hiz_copy_pass(std::move(depth_attachment), std::move(hiz_attachment));
+        //std::tie(depth_attachment, hiz_attachment) = hiz_copy_pass(std::move(depth_attachment), std::move(hiz_attachment));
 
+        hiz_attachment = vuk::clear_image(std::move(hiz_attachment), vuk::Black<f32>);
         auto hiz_generate_pass = vuk::make_pass(
             "hiz generate",
             []( //
                 vuk::CommandBuffer &cmd_list,
-                VUK_IA(vuk::eComputeRW | vuk::eComputeSampled) src
+                VUK_IA(vuk::eComputeSampled) src,
+                VUK_IA(vuk::eComputeRW) dst
             ) {
-                auto extent = src->extent;
-                auto mip_count = src->level_count;
-                LS_EXPECT(mip_count <= 13);
+                auto extent = dst->extent;
+                auto mip_count = dst->level_count;
+                LS_EXPECT(mip_count < 13);
 
-                vuk::Extent2D dispatch = {
-                    .width = (extent.width + 63) >> 6, // this is ceil
-                    .height = (extent.height + 63) >> 6,
-                };
+                auto dispatch_x = (extent.width + 63) >> 6;
+                auto dispatch_y = (extent.height + 63) >> 6;
 
                 static constexpr auto sampler_min_clamp_reduction_mode = VkSamplerReductionModeCreateInfo{
                     .sType = VK_STRUCTURE_TYPE_SAMPLER_REDUCTION_MODE_CREATE_INFO,
@@ -822,28 +822,28 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                 };
 
                 cmd_list //
-                    .image_barrier(src, vuk::eComputeRW, vuk::eComputeSampled, 0, 1)
                     .bind_compute_pipeline("passes.hiz")
-                    .specialize_constants(0, mip_count)
-                    .specialize_constants(1, dispatch.width * dispatch.height - 1)
-                    .specialize_constants(2, extent.width)
-                    .specialize_constants(3, extent.height)
-                    .bind_sampler(0, 0, sampler_info)
-                    .bind_image(0, 1, src);
+                    .push_constants(
+                        vuk::ShaderStageFlagBits::eCompute,
+                        0,
+                        PushConstants(glm::uvec2(extent.width, extent.height), mip_count, dispatch_x * dispatch_y, glm::mat2(1.0f))
+                    );
+
+                *cmd_list.scratch_buffer<u32>(0, 0) = 0;
+                cmd_list.bind_sampler(0, 1, sampler_info);
+                cmd_list.bind_image(0, 2, src);
 
                 for (u32 i = 0; i < 13; i++) {
-                    cmd_list.bind_image(0, i + 2, src->mip(ls::min(i, mip_count - 1_u32)));
+                    cmd_list.bind_image(0, i + 3, dst->mip(ls::min(i, mip_count - 1_u32)));
                 }
 
-                *cmd_list.scratch_buffer<u32>(0, 14) = 0;
-                cmd_list.dispatch(dispatch.width, dispatch.height);
-                cmd_list.image_barrier(src, vuk::eComputeSampled, vuk::eComputeRW, 0, 1);
+                cmd_list.dispatch(dispatch_x, dispatch_y);
 
-                return src;
+                return std::make_tuple(src, dst);
             }
         );
 
-        hiz_attachment = hiz_generate_pass(std::move(hiz_attachment));
+        std::tie(depth_attachment, hiz_attachment) = hiz_generate_pass(std::move(depth_attachment), std::move(hiz_attachment));
         transfer_man.wait_on(std::move(hiz_attachment));
 
         //  ── VISBUFFER DECODE ────────────────────────────────────────────────

@@ -4,8 +4,6 @@
 
 #include "Engine/OS/File.hh"
 
-#include "ls/types.hh"
-
 #include <slang-com-ptr.h>
 #include <slang.h>
 
@@ -127,7 +125,7 @@ struct Handle<SlangModule>::Impl {
 
 template<>
 struct Handle<SlangSession>::Impl {
-    std::unique_ptr<SlangVirtualFS> shader_virtual_env;
+    std::unique_ptr<SlangVirtualFS> virtual_fs;
     Slang::ComPtr<slang::ISession> session;
 };
 
@@ -296,7 +294,7 @@ auto SlangSession::load_module(const SlangModuleInfo &info) -> ls::option<SlangM
 auto SlangSession::root_directory() const -> const fs::path & {
     ZoneScoped;
 
-    return impl->shader_virtual_env->m_root_dir;
+    return impl->virtual_fs->m_root_dir;
 }
 
 auto SlangSession::modular_path(const std::string &module_name) -> fs::path {
@@ -344,6 +342,7 @@ auto SlangCompiler::new_session(const SlangSessionInfo &info) -> ls::option<Slan
         { .name = slang::CompilerOptionName::DisableWarning, .value = { .kind = slang::CompilerOptionValueKind::String, .stringValue0 = "39001" } },
         { .name = slang::CompilerOptionName::DisableWarning, .value = { .kind = slang::CompilerOptionValueKind::String, .stringValue0 = "41012" } },
         { .name = slang::CompilerOptionName::DisableWarning, .value = { .kind = slang::CompilerOptionValueKind::String, .stringValue0 = "41017" } },
+        { .name = slang::CompilerOptionName::Capability, .value = { .kind = slang::CompilerOptionValueKind::String, .stringValue0 = "vk_mem_model" } }
     };
     std::vector<slang::PreprocessorMacroDesc> macros;
     macros.reserve(info.definitions.size());
@@ -382,7 +381,7 @@ auto SlangCompiler::new_session(const SlangSessionInfo &info) -> ls::option<Slan
     }
 
     auto session_impl = new SlangSession::Impl;
-    session_impl->shader_virtual_env = std::move(slang_fs);
+    session_impl->virtual_fs = std::move(slang_fs);
     session_impl->session = std::move(session);
 
     return SlangSession(session_impl);

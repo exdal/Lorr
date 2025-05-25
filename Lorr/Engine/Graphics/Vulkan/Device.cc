@@ -125,6 +125,7 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
     vk12_features.hostQueryReset = true;
     // Shader features
     vk12_features.vulkanMemoryModel = true;
+    vk12_features.vulkanMemoryModelDeviceScope = true;
     vk12_features.storageBuffer8BitAccess = true;
     vk12_features.scalarBlockLayout = true;
     vk12_features.shaderInt8 = true;
@@ -135,6 +136,7 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
     vk11_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
     vk11_features.variablePointers = true;
     vk11_features.variablePointersStorageBuffer = true;
+    vk11_features.shaderDrawParameters = true;
 
     VkPhysicalDeviceMaintenance8FeaturesKHR maintenance_8_features = {};
     maintenance_8_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_8_FEATURES_KHR;

@@ -31,7 +31,7 @@ func cs_main(u32x3 thread_id : SV_DispatchThreadID) {
     const f32x3 eye_dir = uv_to_sky_view_lut_params(C.atmosphere, uv, h);
 
     if (!move_to_top_atmosphere(eye_pos, eye_dir, C.atmosphere->atmos_radius)) {
-        sky_view_lut.store(thread_id.xy, 0.0);
+        sky_view_lut.Store(thread_id.xy, 0.0);
         return;
     }
 
@@ -56,5 +56,5 @@ func cs_main(u32x3 thread_id : SV_DispatchThreadID) {
     const let result = integrate_single_scattered_luminance(C.atmosphere, sampler, info);
     const let transmittance = dot(result.transmittance, 1.0 / 3.0);
 
-    sky_view_lut.store(thread_id.xy, f32x4(result.luminance, transmittance));
+    sky_view_lut.Store(thread_id.xy, f32x4(result.luminance, transmittance));
 }

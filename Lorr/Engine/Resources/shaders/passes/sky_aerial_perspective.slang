@@ -58,12 +58,12 @@ func cs_main(u32x3 thread_id : SV_DispatchThreadID) {
     if (view_height >= C.atmosphere->atmos_radius) {
         f32x3 prev_ray_pos = eye_pos;
         if (!move_to_top_atmosphere(eye_pos, world_dir, C.atmosphere->atmos_radius)) {
-            sky_aerial_perspective_lut.store(thread_id, 0.0);
+            sky_aerial_perspective_lut.Store(thread_id, 0.0);
             return;
         }
         f32 length_to_atmosphere = length(prev_ray_pos - eye_pos);
         if (t_max_max < length_to_atmosphere) {
-            sky_aerial_perspective_lut.store(thread_id, 0.0);
+            sky_aerial_perspective_lut.Store(thread_id, 0.0);
             return;
         }
 
@@ -86,5 +86,5 @@ func cs_main(u32x3 thread_id : SV_DispatchThreadID) {
 
     const let result = integrate_single_scattered_luminance(C.atmosphere, sampler, info);
     const let transmittance = dot(result.transmittance, f32x3(1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f));
-    sky_aerial_perspective_lut.store(thread_id, f32x4(result.luminance, transmittance));
+    sky_aerial_perspective_lut.Store(thread_id, f32x4(result.luminance, transmittance));
 }

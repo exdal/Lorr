@@ -6,7 +6,7 @@ import sky;
 import scene;
 
 [[vk::binding(0, 0)]]
-StorageImage2D<f32x4, ImageFormat::RGBA16F> sky_transmittance_lut;
+StorageImage2D<f32x4> sky_transmittance_lut;
 
 struct PushConstants {
     Atmosphere *atmosphere;
@@ -16,7 +16,7 @@ struct PushConstants {
 
 [[shader("compute")]]
 [[numthreads(16, 16, 1)]]
-func cs_main(u32x3 thread_id : SV_DispatchThreadID) -> void {
+func cs_main(u32x2 thread_id : SV_DispatchThreadID) -> void {
     f32x2 uv = f32x2(f32x2(thread_id.xy) + 0.5) / f32x2(C.atmosphere->transmittance_lut_size.xy);
     f32 h = std::safe_sqrt(C.atmosphere->atmos_radius * C.atmosphere->atmos_radius - C.atmosphere->planet_radius * C.atmosphere->planet_radius);
     f32 rho = h * uv.y;
@@ -41,5 +41,5 @@ func cs_main(u32x3 thread_id : SV_DispatchThreadID) -> void {
         optical_depth += medium.extinction_sum * distance_per_step;
     }
 
-    sky_transmittance_lut.store(thread_id.xy, f32x4(exp(-optical_depth), 1.0));
+    sky_transmittance_lut.Store(thread_id, f32x4(exp(-optical_depth), 1.0));
 }

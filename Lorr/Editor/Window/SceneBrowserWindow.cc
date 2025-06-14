@@ -50,6 +50,10 @@ static auto draw_children(SceneBrowserWindow &self, flecs::entity root) -> void 
                 child_entity.child_of(e);
             }
 
+            if (ImGui::MenuItem("Delete")) {
+                active_scene->delete_entity(e);
+            }
+
             ImGui::EndPopup();
         }
 

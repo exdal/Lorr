@@ -68,7 +68,6 @@ public struct Camera {
     public f32x3 position;
     public f32 near_clip;
     public f32 far_clip;
-    public f32x4 frustum_planes[6];
     public f32x2 resolution;
 };
 
@@ -258,9 +257,9 @@ public struct Meshlet {
     }
 };
 
-public struct MeshletBounds {
-    public f32x3 aabb_min = {};
-    public f32x3 aabb_max = {};
+public struct AABB {
+    public f32x3 min = {};
+    public f32x3 max = {};
 };
 
 public struct MeshletInstance {
@@ -276,7 +275,7 @@ public struct Mesh {
     public f32x3 *vertex_normals = nullptr;
     public f32x2 *texture_coords = nullptr;
     public Meshlet *meshlets = nullptr;
-    public MeshletBounds *meshlet_bounds = nullptr;
+    public AABB *meshlet_bounds = nullptr;
     public u8 *local_triangle_indices = nullptr;
 };
 

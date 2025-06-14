@@ -6,39 +6,23 @@ import passes.visbuffer;
 
 #include <fullscreen.slang>
 
-[[vk::binding(0, 0)]]
-Sampler linear_repeat_sampler;
-
-[[vk::binding(1, 0)]]
-Image2D<u32> visbuffer_data;
-
-[[vk::binding(2, 0)]]
-Image2D<f32> depth_image;
-
-[[vk::binding(3, 0)]]
-Image2D<u32> overdraw;
-
-[[vk::binding(4, 0)]]
-Image2D<f32x4> albedo_image;
-
-[[vk::binding(5, 0)]]
-Image2D<f32x4> normal_image;
-
-[[vk::binding(6, 0)]]
-Image2D<f32x3> emissive_image;
-
-[[vk::binding(7, 0)]]
-Image2D<f32x3> metallic_roughness_occlusion_image;
-
-[[vk::binding(8, 0)]]
-ConstantBuffer<Camera, ScalarDataLayout> camera;
-
-[[vk::binding(9, 0)]]
-StructuredBuffer<u32, ScalarDataLayout> visible_meshlet_instances_indices;
+[[vk::binding(0, 0)]] Sampler linear_repeat_sampler;
+[[vk::binding(1, 0)]] Image2D<u32> visbuffer_data;
+[[vk::binding(2, 0)]] Image2D<f32> depth_image;
+[[vk::binding(3, 0)]] Image2D<u32> overdraw;
+[[vk::binding(4, 0)]] Image2D<f32x4> albedo_image;
+[[vk::binding(5, 0)]] Image2D<f32x4> normal_image;
+[[vk::binding(6, 0)]] Image2D<f32x3> emissive_image;
+[[vk::binding(7, 0)]] Image2D<f32x3> metallic_roughness_occlusion_image;
 
 struct PushConstants {
     DebugView debug_view;
     f32 heatmap_scale;
+    u32 *visible_meshlet_instances_indices;
+    MeshletInstance *meshlet_instances;
+    Transform *transforms;
+    Mesh *meshes;
+    Camera *camera;
 };
 [[vk::push_constant]] PushConstants C;
 
@@ -65,23 +49,88 @@ func inferno(f32 t) -> f32x3 {
     return c0 + t * (c1 + t * (c2 + t * (c3 + t * (c4 + t * (c5 + t * c6)))));
 }
 
+vector<T, N> min8<T : __BuiltinFloatingPointType, let N : int>(
+    vector<T, N> p0, vector<T, N> p1, vector<T, N> p2,
+    vector<T, N> p3, vector<T, N> p4, vector<T, N> p5,
+    vector<T, N> p6, vector<T, N> p7) {
+    return min(p0, min(p1, min(p2, min(p3, min(p4, min(p5, min(p6, p7)))))));
+}
+
+vector<T, N> max8<T : __BuiltinFloatingPointType, let N : int>(
+    vector<T, N> p0, vector<T, N> p1, vector<T, N> p2,
+    vector<T, N> p3, vector<T, N> p4, vector<T, N> p5,
+    vector<T, N> p6, vector<T, N> p7) {
+    return max(p0, max(p1, max(p2, max(p3, max(p4, max(p5, max(p6, p7)))))));
+}
+
+func project_aabb(f32x4x4 mvp, f32 near, f32x3 aabb_center, f32x3 aabb_extent) -> Optional<AABB> {
+    let SX = mul(mvp, f32x4(aabb_extent.x, 0.0, 0.0, 0.0));
+    let SY = mul(mvp, f32x4(0.0, aabb_extent.y, 0.0, 0.0));
+    let SZ = mul(mvp, f32x4(0.0, 0.0, aabb_extent.z, 0.0));
+
+    let aabb_half_extent = aabb_extent * 0.5;
+    let P0 = mul(mvp, f32x4(aabb_center - aabb_half_extent, 1.0));
+    let P1 = P0 + SZ;
+    let P2 = P0 + SY;
+    let P3 = P2 + SZ;
+    let P4 = P0 + SX;
+    let P5 = P4 + SZ;
+    let P6 = P4 + SY;
+    let P7 = P6 + SZ;
+
+    let depth = min8(P0, P1, P2, P3, P4, P5, P6, P7).w;
+    if (depth < near)
+        return none;
+
+    let DP0 = P0.xyz / P0.w;
+    let DP1 = P1.xyz / P1.w;
+    let DP2 = P2.xyz / P2.w;
+    let DP3 = P3.xyz / P3.w;
+    let DP4 = P4.xyz / P4.w;
+    let DP5 = P5.xyz / P5.w;
+    let DP6 = P6.xyz / P6.w;
+    let DP7 = P7.xyz / P7.w;
+    let min = min8(DP0, DP1, DP2, DP3, DP4, DP5, DP6, DP7);
+    let max = max8(DP0, DP1, DP2, DP3, DP4, DP5, DP6, DP7);
+    var vaabb = f32x4(min.xy, max.xy);
+    vaabb = vaabb.xwzy * f32x4(0.5f, -0.5f, 0.5f, -0.5f) + 0.5f;
+    return AABB(f32x3(vaabb.xy, min.z), f32x3(vaabb.zw, max.z));
+}
+
 [[shader("fragment")]]
 func fs_main(VertexOutput input) -> f32x4 {
-    const u32 texel = visbuffer_data.load(u32x2(input.position.xy));
+    let texel = visbuffer_data.load(u32x2(input.position.xy));
     if (texel == ~0u) {
         discard;
     }
 
-    f32x3 color = f32x3(0.0, 0.0, 0.0);
-    const let vis_data = VisBufferData(texel);
+    var color = f32x3(0.0, 0.0, 0.0);
+    let vis_data = VisBufferData(texel);
     switch (C.debug_view) {
         case DebugView::Triangles: {
-            const u32 h = hash(vis_data.triangle_index);
+            let h = hash(vis_data.triangle_index);
             color = f32x3(f32(h & 255), f32((h >> 8) & 255), f32((h >> 16) & 255)) / 255.0;
         } break;
         case DebugView::Meshlets: {
-            const u32 h = hash(visible_meshlet_instances_indices[vis_data.meshlet_instance_index]);
-            color = f32x3(f32(h & 255), f32((h >> 8) & 255), f32((h >> 16) & 255)) / 255.0;
+            let visible_meshlet_instance_index = C.visible_meshlet_instances_indices[vis_data.meshlet_instance_index];
+            let meshlet_instance = C.meshlet_instances[visible_meshlet_instance_index];
+            let mesh = C.meshes[meshlet_instance.mesh_index];
+            let meshlet_index = meshlet_instance.meshlet_index;
+            let meshlet = mesh.meshlets[meshlet_index];
+            let transform = C.transforms[meshlet_instance.transform_index];
+            let bounds = mesh.meshlet_bounds[meshlet_index];
+            let aabb_min = bounds.min;
+            let aabb_max = bounds.max;
+            let aabb_extent = aabb_max - aabb_min;
+            let aabb_center = (aabb_min + aabb_max) * 0.5;
+            let mvp = mul(C.camera->frustum_projection_view_mat, transform.world);
+            if (let ndc_aabb = project_aabb(mvp, C.camera->near_clip, aabb_center, aabb_extent)) {
+                AABB aabb = ndc_aabb;
+                color.x = aabb.max.z;
+            }
+
+            //let h = hash(C.visible_meshlet_instances_indices[vis_data.meshlet_instance_index]);
+            //color = f32x3(f32(h & 255), f32((h >> 8) & 255), f32((h >> 16) & 255)) / 255.0;
         } break;
         case DebugView::Overdraw: {
             const f32 draw_scale = clamp(C.heatmap_scale, 0.0, 100.0) / 100.0;

@@ -342,12 +342,14 @@ auto SlangCompiler::new_session(const SlangSessionInfo &info) -> ls::option<Slan
         { .name = slang::CompilerOptionName::DisableWarning, .value = { .kind = slang::CompilerOptionValueKind::String, .stringValue0 = "39001" } },
         { .name = slang::CompilerOptionName::DisableWarning, .value = { .kind = slang::CompilerOptionValueKind::String, .stringValue0 = "41012" } },
         { .name = slang::CompilerOptionName::DisableWarning, .value = { .kind = slang::CompilerOptionValueKind::String, .stringValue0 = "41017" } },
-        { .name = slang::CompilerOptionName::Capability, .value = { .kind = slang::CompilerOptionValueKind::String, .stringValue0 = "vk_mem_model" } }
+        { .name = slang::CompilerOptionName::Capability,
+          .value = { .kind = slang::CompilerOptionValueKind::String, .stringValue0 = "vk_mem_model" } },
+        // { .name = slang::CompilerOptionName::DumpIntermediates, .value = { .kind = slang::CompilerOptionValueKind::Int, .intValue0 = 1 } },
     };
-    std::vector<slang::PreprocessorMacroDesc> macros;
-    macros.reserve(info.definitions.size());
-    for (auto &v : info.definitions) {
-        macros.emplace_back(v.n0.c_str(), v.n1.c_str());
+
+    auto macros = std::vector<slang::PreprocessorMacroDesc>();
+    for (const auto &[macro_name, macro_value] : info.definitions) {
+        macros.emplace_back(macro_name.c_str(), macro_value.c_str());
     }
 
     slang::TargetDesc target_desc = {

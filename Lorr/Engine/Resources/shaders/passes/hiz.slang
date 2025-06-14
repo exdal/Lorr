@@ -4,7 +4,8 @@ import std;
 import gpu;
 
 // Do not remove this comment:
-// Taken from: https://github.dev/SparkyPotato/radiance/blob/main/shaders/passes/mesh/hzb.slang,
+// This shader introduces mip0 fetching from granite and mixes it with:
+// https://github.dev/SparkyPotato/radiance/blob/main/shaders/passes/mesh/hzb.slang,
 // which is based on https://github.com/Themaister/Granite/blob/master/assets/shaders/post/hiz.comp,
 // which is HiZ modification of AMD's Single Pass Downsampler.
 
@@ -19,8 +20,8 @@ import gpu;
 [[vk::binding(6)]]  StorageImage2D<f32> dst_mip_3;
 [[vk::binding(7)]]  StorageImage2D<f32> dst_mip_4;
 [[vk::binding(8)]]  StorageImage2D<f32> dst_mip_5;
-[[vk::binding(9)]]  globallycoherent StorageImage2D<f32> dst_mip_6;
-[[vk::binding(10)]]  StorageImage2D<f32> dst_mip_7;
+[[vk::binding(9)]]  StorageImage2D<f32> dst_mip_6;
+[[vk::binding(10)]] StorageImage2D<f32> dst_mip_7;
 [[vk::binding(11)]] StorageImage2D<f32> dst_mip_8;
 [[vk::binding(12)]] StorageImage2D<f32> dst_mip_9;
 [[vk::binding(13)]] StorageImage2D<f32> dst_mip_10;
@@ -147,10 +148,11 @@ func reduce_mip_simd(u32x2 p, u32 local_id, u32 mip, f32 d) -> f32 {
         p >>= 1;
         d = reduce(f32x4(d, horiz, vert, diag));
         horiz = std::wave_shuffle_xor(d, 0b1000);
-        vert = std::wave_shuffle_xor(d, 0b0100);
-        diag = std::wave_shuffle_xor(d, 0b1100);
-        if ((local_id & 3) == 0)
+        vert  = std::wave_shuffle_xor(d, 0b0100);
+        diag  = std::wave_shuffle_xor(d, 0b1100);
+        if ((local_id & 3) == 0) {
             store(p, mip + 1, d);
+        }
     }
 
     return reduce(f32x4(d, horiz, vert, diag));
@@ -194,7 +196,7 @@ func cs_main(u32x2 group_id : SV_GroupID) -> void {
         return;
     }
 
-    // MIP 4, 5, 6
+    // MIP 4, 5
     if ((local_id & 15) == 0) {
         shared_buffer[local_id >> 4] = d;
     }
@@ -205,6 +207,7 @@ func cs_main(u32x2 group_id : SV_GroupID) -> void {
         d = reduce_mip_simd(group_id * 4 + p, local_id, 4, shared_buffer[local_id]);
     }
 
+    // MIP 6
     if (local_id == 0) {
         store(group_id, 6, d);
     }
@@ -239,7 +242,7 @@ func cs_main(u32x2 group_id : SV_GroupID) -> void {
         return;
     }
 
-    // MIP 10, 11, 12
+    // MIP 10, 11
     if ((local_id & 15) == 0) {
         shared_buffer[local_id >> 4] = d;
     }
@@ -254,6 +257,7 @@ func cs_main(u32x2 group_id : SV_GroupID) -> void {
         return;
     }
 
+    // MIP 12
     if (local_id == 0) {
         store(u32x2(0, 0), 12, d);
     }

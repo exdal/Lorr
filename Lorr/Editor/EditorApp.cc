@@ -328,6 +328,7 @@ static auto draw_menu_bar(EditorApp &self) -> void {
         if (ImGui::BeginMenu("View")) {
             if (ImGui::MenuItem("Frame Profiler")) {
                 self.show_profiler = !self.show_profiler;
+                self.frame_profiler.reset();
             }
 
             ImGui::EndMenu();
@@ -478,10 +479,6 @@ static auto draw_profiler(EditorApp &self) -> void {
             }
 
             ImPlot::EndPlot();
-        }
-
-        if (ImGui::Button("Reset")) {
-            self.frame_profiler.reset();
         }
     }
 

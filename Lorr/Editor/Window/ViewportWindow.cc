@@ -98,6 +98,7 @@ static auto draw_tools(ViewportWindow &self) -> void {
     ImGui::SameLine(right_align_offset);
     if (ImGui::Button(ICON_MDI_CHART_BAR)) {
         app.show_profiler = !app.show_profiler;
+        app.frame_profiler.reset();
     }
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
         ImGui::SetTooltip("Frame Profiler");

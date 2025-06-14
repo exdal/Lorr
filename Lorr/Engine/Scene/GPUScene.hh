@@ -71,7 +71,6 @@ struct Camera {
     alignas(4) glm::vec3 position = {};
     alignas(4) f32 near_clip = {};
     alignas(4) f32 far_clip = {};
-    alignas(4) glm::vec4 frustum_planes[6] = {};
     alignas(4) glm::vec2 resolution = {};
 };
 

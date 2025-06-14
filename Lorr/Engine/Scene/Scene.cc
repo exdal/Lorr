@@ -2,8 +2,6 @@
 
 #include "Engine/Core/Application.hh"
 
-#include "Engine/Math/Matrix.hh"
-
 #include "Engine/Memory/Stack.hh"
 
 #include "Engine/OS/File.hh"
@@ -67,14 +65,38 @@ auto Scene::init(this Scene &self, const std::string &name) -> bool {
         ->observer<ECS::Transform>() //
         .event(flecs::OnSet)
         .event(flecs::OnAdd)
-        .event(flecs::OnRemove)
         .each([&self](flecs::iter &it, usize i, ECS::Transform &) {
             auto entity = it.entity(i);
             if (it.event() == flecs::OnSet) {
                 self.set_dirty(entity);
             } else if (it.event() == flecs::OnAdd) {
                 self.add_transform(entity);
+            }
+        });
+
+    self.world
+        ->observer<ECS::Transform>() //
+        .without<ECS::RenderingMesh>()
+        .event(flecs::OnRemove)
+        .each([&self](flecs::iter &it, usize i, ECS::Transform &) {
+            auto entity = it.entity(i);
+            self.remove_transform(entity);
+        });
+
+    self.world
+        ->observer<ECS::Transform, ECS::RenderingMesh>() //
+        .event(flecs::OnSet)
+        .event(flecs::OnRemove)
+        .each([&self](flecs::iter &it, usize i, ECS::Transform &, ECS::RenderingMesh &rendering_mesh) {
+            if (!rendering_mesh.model_uuid) {
+                return;
+            }
+
+            auto entity = it.entity(i);
+            if (it.event() == flecs::OnSet) {
+                self.attach_mesh(entity, rendering_mesh.model_uuid, rendering_mesh.mesh_index);
             } else if (it.event() == flecs::OnRemove) {
+                self.detach_mesh(entity, rendering_mesh.model_uuid, rendering_mesh.mesh_index);
                 self.remove_transform(entity);
             }
         });
@@ -88,23 +110,6 @@ auto Scene::init(this Scene &self, const std::string &name) -> bool {
                 self.editor_camera = entity;
             } else if (it.event() == flecs::OnRemove) {
                 self.editor_camera.clear();
-            }
-        });
-
-    self.world
-        ->observer<ECS::RenderingMesh>() //
-        .event(flecs::OnSet)
-        .event(flecs::OnRemove)
-        .each([&self](flecs::iter &it, usize i, ECS::RenderingMesh &rendering_mesh) {
-            if (!rendering_mesh.model_uuid) {
-                return;
-            }
-
-            auto entity = it.entity(i);
-            if (it.event() == flecs::OnSet) {
-                self.attach_mesh(entity, rendering_mesh.model_uuid, rendering_mesh.mesh_index);
-            } else if (it.event() == flecs::OnRemove) {
-                self.detach_mesh(entity, rendering_mesh.model_uuid, rendering_mesh.mesh_index);
             }
         });
 
@@ -402,6 +407,12 @@ auto Scene::create_entity(this Scene &self, const std::string &name) -> flecs::e
     return self.world->entity(name_sv);
 }
 
+auto Scene::delete_entity(this Scene &, flecs::entity entity) -> void {
+    ZoneScoped;
+
+    entity.destruct();
+}
+
 auto Scene::create_perspective_camera(
     this Scene &self,
     const std::string &name,
@@ -544,12 +555,11 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, SceneRenderInfo &i
         camera_data.resolution = glm::vec2(static_cast<f32>(info.extent.width), static_cast<f32>(info.extent.height));
 
         if (!c.freeze_frustum) {
+            camera_data.frustum_projection_view_mat = c.frustum_projection_view_mat;
             c.frustum_projection_view_mat = camera_data.projection_view_mat;
-            camera_data.frustum_projection_view_mat = camera_data.projection_view_mat;
         } else {
             camera_data.frustum_projection_view_mat = c.frustum_projection_view_mat;
         }
-        Math::calc_frustum_planes(camera_data.frustum_projection_view_mat, camera_data.frustum_planes);
     });
 
     ls::option<GPU::Sun> sun_data = ls::nullopt;
@@ -818,19 +828,25 @@ auto Scene::detach_mesh(this Scene &self, flecs::entity entity, const UUID &mode
     ZoneScoped;
 
     auto instances_it = self.rendering_meshes_map.find(ls::pair(model_uuid, mesh_index));
-    auto transforms_it = self.entity_transforms_map.find(entity);
-    if (instances_it == self.rendering_meshes_map.end() || transforms_it == self.entity_transforms_map.end()) {
+    if (instances_it == self.rendering_meshes_map.end()) {
         return false;
     }
 
-    const auto transform_id = transforms_it->second;
-    auto &instances = instances_it->second;
-    std::erase_if(instances, [transform_id](const GPU::TransformID &id) { return id == transform_id; });
-    self.models_dirty = true;
+    auto should_remove = true;
+    auto transforms_it = self.entity_transforms_map.find(entity);
+    if (transforms_it != self.entity_transforms_map.end()) {
+        const auto transform_id = transforms_it->second;
+        auto &instances = instances_it->second;
+        std::erase_if(instances, [transform_id](const GPU::TransformID &id) { return id == transform_id; });
 
-    if (instances.empty()) {
+        should_remove = not instances.empty();
+    }
+
+    if (should_remove) {
         self.rendering_meshes_map.erase(instances_it);
     }
+
+    self.models_dirty = true;
 
     return true;
 }

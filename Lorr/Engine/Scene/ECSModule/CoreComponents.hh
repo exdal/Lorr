@@ -29,7 +29,7 @@ ECS_COMPONENT_BEGIN(Camera)
     ECS_COMPONENT_MEMBER(axis_velocity, glm::vec3, { 0.0, 0.0, 0.0 })
     ECS_COMPONENT_MEMBER(velocity_mul, f32, 1.0)
     ECS_COMPONENT_MEMBER(freeze_frustum, bool, false)
-    ECS_COMPONENT_MEMBER(frustum_projection_view_mat, glm::mat4, {})
+    ECS_COMPONENT_MEMBER(frustum_projection_view_mat, glm::mat4, glm::mat4(1.0))
 ECS_COMPONENT_END();
 
 ECS_COMPONENT_TAG(PerspectiveCamera);

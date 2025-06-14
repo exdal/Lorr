@@ -17,7 +17,8 @@ public struct DrawIndexedIndirectCommand {
 };
 
 public enum ImageFormat : i32 {
-    RGBA32F = 1,       // 4 channel 32-bit floating point texture
+    Undefined = 0,
+    RGBA32F,           // 4 channel 32-bit floating point texture
     RGBA16F,           // 4 channel 16-bit floating point texture
     RG32F,             // 2 channel 32-bit floating point texture
     RG16F,             // 2 channel 16-bit floating point texture

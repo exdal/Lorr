@@ -25,14 +25,13 @@ struct PushConstants {
 [[numthreads(16, 16, 1)]]
 func cs_main(u32x3 thread_id : SV_DispatchThreadID) {
     f32x2 uv = f32x2(thread_id.xy) / f32x2(C.atmosphere->sky_view_lut_size.xy);
-    f32x3 eye_pos = C.camera->position * CAMERA_SCALE_UNIT;
-    eye_pos.y += C.atmosphere->planet_radius + PLANET_RADIUS_OFFSET;
+    f32x3 eye_pos = C.atmosphere->eye_pos;
 
     f32 h = length(eye_pos);
     const f32x3 eye_dir = uv_to_sky_view_lut_params(C.atmosphere, uv, h);
 
     if (!move_to_top_atmosphere(eye_pos, eye_dir, C.atmosphere->atmos_radius)) {
-        sky_view_lut.store(thread_id.xy, 0.0);
+        sky_view_lut.Store(thread_id.xy, 0.0);
         return;
     }
 
@@ -57,5 +56,5 @@ func cs_main(u32x3 thread_id : SV_DispatchThreadID) {
     const let result = integrate_single_scattered_luminance(C.atmosphere, sampler, info);
     const let transmittance = dot(result.transmittance, 1.0 / 3.0);
 
-    sky_view_lut.store(thread_id.xy, f32x4(result.luminance, transmittance));
+    sky_view_lut.Store(thread_id.xy, f32x4(result.luminance, transmittance));
 }

@@ -40,11 +40,10 @@ public:
     auto destroy(this TransferManager &) -> void;
 
     [[nodiscard]]
-    auto alloc_transient_buffer_raw(this TransferManager &, vuk::MemoryUsage usage, usize size, usize alignment = 8, bool frame = true, LR_THISCALL)
-        -> vuk::Buffer;
+    auto alloc_transient_buffer_raw(this TransferManager &, vuk::MemoryUsage usage, usize size, usize alignment = 8, LR_THISCALL) -> vuk::Buffer;
 
     [[nodiscard]]
-    auto alloc_transient_buffer(this TransferManager &, vuk::MemoryUsage usage, usize size, usize alignment = 8, bool frame = true, LR_THISCALL)
+    auto alloc_transient_buffer(this TransferManager &, vuk::MemoryUsage usage, usize size, usize alignment = 8, LR_THISCALL)
         -> vuk::Value<vuk::Buffer>;
 
     [[nodiscard]]
@@ -98,9 +97,9 @@ protected:
 };
 
 struct DeviceResources {
-    SlotMap<vuk::Unique<vuk::Buffer>, BufferID> buffers = {};
-    SlotMap<vuk::Unique<vuk::Image>, ImageID> images = {};
-    SlotMap<vuk::Unique<vuk::ImageView>, ImageViewID> image_views = {};
+    SlotMap<vuk::Buffer, BufferID> buffers = {};
+    SlotMap<vuk::Image, ImageID> images = {};
+    SlotMap<vuk::ImageView, ImageViewID> image_views = {};
     SlotMap<vuk::Sampler, SamplerID> samplers = {};
     SlotMap<vuk::PipelineBaseInfo *, PipelineID> pipelines = {};
 };
@@ -152,10 +151,10 @@ public:
     auto set_name(this Device &, ImageView &image_view, std::string_view name) -> void;
 
     auto frame_count(this const Device &) -> usize;
-    auto buffer(this Device &, BufferID) -> vuk::Buffer *;
-    auto image(this Device &, ImageID) -> vuk::Image *;
-    auto image_view(this Device &, ImageViewID) -> vuk::ImageView *;
-    auto sampler(this Device &, SamplerID) -> vuk::Sampler *;
+    auto buffer(this Device &, BufferID) -> ls::option<vuk::Buffer>;
+    auto image(this Device &, ImageID) -> ls::option<vuk::Image>;
+    auto image_view(this Device &, ImageViewID) -> ls::option<vuk::ImageView>;
+    auto sampler(this Device &, SamplerID) -> ls::option<vuk::Sampler>;
     auto pipeline(this Device &, PipelineID) -> vuk::PipelineBaseInfo **;
 
     auto destroy(this Device &, BufferID) -> void;

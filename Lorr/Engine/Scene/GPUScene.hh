@@ -31,7 +31,13 @@ struct Sun {
     alignas(4) f32 intensity = 10.0f;
 };
 
+constexpr static f32 CAMERA_SCALE_UNIT = 0.01;
+constexpr static f32 INV_CAMERA_SCALE_UNIT = 1.0 / CAMERA_SCALE_UNIT;
+constexpr static f32 PLANET_RADIUS_OFFSET = 0.001;
+
 struct Atmosphere {
+    alignas(4) glm::vec3 eye_position = {}; // this is camera pos but its always above planet_radius
+
     alignas(4) glm::vec3 rayleigh_scatter = { 0.005802f, 0.013558f, 0.033100f };
     alignas(4) f32 rayleigh_density = 8.0f;
 
@@ -45,9 +51,9 @@ struct Atmosphere {
     alignas(4) f32 ozone_thickness = 15.0f;
 
     alignas(4) glm::vec3 terrain_albedo = { 0.3f, 0.3f, 0.3f };
-    alignas(4) f32 aerial_gain_per_slice = 8.0f;
     alignas(4) f32 planet_radius = 6360.0f;
     alignas(4) f32 atmos_radius = 6460.0f;
+    alignas(4) f32 aerial_perspective_start_km = 8.0f;
 
     alignas(4) vuk::Extent3D transmittance_lut_size = {};
     alignas(4) vuk::Extent3D sky_view_lut_size = {};
@@ -65,7 +71,6 @@ struct Camera {
     alignas(4) glm::vec3 position = {};
     alignas(4) f32 near_clip = {};
     alignas(4) f32 far_clip = {};
-    alignas(4) glm::vec4 frustum_planes[6] = {};
     alignas(4) glm::vec2 resolution = {};
 };
 
@@ -76,19 +81,31 @@ struct Transforms {
     alignas(4) glm::mat3 normal = {};
 };
 
-enum class AlphaMode : u32 {
-    Opaque = 0,
-    Mask,
-    Blend,
+enum class MaterialFlag : u32 {
+    None = 0,
+    // Image flags
+    HasAlbedoImage = 1 << 0,
+    HasNormalImage = 1 << 1,
+    HasEmissiveImage = 1 << 2,
+    HasMetallicRoughnessImage = 1 << 3,
+    HasOcclusionImage = 1 << 4,
+    // Normal flags
+    NormalTwoComponent = 1 << 5,
+    NormalFlipY = 1 << 6,
+    // Alpha
+    AlphaOpaque = 1 << 7,
+    AlphaMask = 1 << 8,
+    AlphaBlend = 1 << 9,
 };
+consteval void enable_bitmask(MaterialFlag);
 
 struct Material {
     alignas(4) glm::vec4 albedo_color = { 1.0f, 1.0f, 1.0f, 1.0f };
     alignas(4) glm::vec3 emissive_color = { 0.0f, 0.0f, 0.0f };
     alignas(4) f32 roughness_factor = 0.0f;
     alignas(4) f32 metallic_factor = 0.0f;
-    alignas(4) AlphaMode alpha_mode = AlphaMode::Opaque;
     alignas(4) f32 alpha_cutoff = 0.0f;
+    alignas(4) MaterialFlag flags = MaterialFlag::None;
     alignas(4) u32 albedo_image_index = ~0_u32;
     alignas(4) u32 normal_image_index = ~0_u32;
     alignas(4) u32 emissive_image_index = ~0_u32;
@@ -138,7 +155,7 @@ struct HistogramInfo {
     alignas(4) f32 min_exposure = -6.0f;
     alignas(4) f32 max_exposure = 18.0f;
     alignas(4) f32 adaptation_speed = 1.1f;
-    alignas(4) f32 ev100_bias = 1.0f;
+    alignas(4) f32 ISO_K = 100.0f / 12.5f;
 };
 
 } // namespace lr::GPU

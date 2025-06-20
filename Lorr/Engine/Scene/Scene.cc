@@ -61,42 +61,44 @@ auto Scene::init(this Scene &self, const std::string &name) -> bool {
     self.entity_db.import_module(self.world->import <ECS::Core>());
     self.root = self.world->entity();
 
-    self.world
-        ->observer<ECS::Transform>() //
+    self.world->observer<ECS::Transform>()
         .event(flecs::OnSet)
         .event(flecs::OnAdd)
+        .event(flecs::OnRemove)
+        .without<ECS::RenderingMesh>()
         .each([&self](flecs::iter &it, usize i, ECS::Transform &) {
             auto entity = it.entity(i);
             if (it.event() == flecs::OnSet) {
                 self.set_dirty(entity);
             } else if (it.event() == flecs::OnAdd) {
                 self.add_transform(entity);
+                self.set_dirty(entity);
+            } else if (it.event() == flecs::OnRemove) {
+                self.remove_transform(entity);
             }
         });
 
-    self.world
-        ->observer<ECS::Transform>() //
-        .without<ECS::RenderingMesh>()
-        .event(flecs::OnRemove)
-        .each([&self](flecs::iter &it, usize i, ECS::Transform &) {
-            auto entity = it.entity(i);
-            self.remove_transform(entity);
-        });
-
-    self.world
-        ->observer<ECS::Transform, ECS::RenderingMesh>() //
+    self.world->observer<ECS::Transform, ECS::RenderingMesh>()
+        .event(flecs::OnAdd)
         .event(flecs::OnSet)
         .event(flecs::OnRemove)
-        .each([&self](flecs::iter &it, usize i, ECS::Transform &, ECS::RenderingMesh &rendering_mesh) {
-            if (!rendering_mesh.model_uuid) {
-                return;
-            }
-
+        .each([&self](flecs::iter &it, usize i, ECS::Transform &, ECS::RenderingMesh &mc) {
             auto entity = it.entity(i);
+            const auto mesh_event = it.event_id() == self.world->component<ECS::RenderingMesh>();
             if (it.event() == flecs::OnSet) {
-                self.attach_mesh(entity, rendering_mesh.model_uuid, rendering_mesh.mesh_index);
+                if (!self.entity_transforms_map.contains(entity))
+                    self.add_transform(entity);
+                self.set_dirty(entity);
+
+                if (mesh_event && mc.model_uuid)
+                    self.attach_mesh(entity, mc.model_uuid, mc.mesh_index);
+            } else if (it.event() == flecs::OnAdd) {
+                self.add_transform(entity);
+                self.set_dirty(entity);
             } else if (it.event() == flecs::OnRemove) {
-                self.detach_mesh(entity, rendering_mesh.model_uuid, rendering_mesh.mesh_index);
+                if (mc.model_uuid)
+                    self.detach_mesh(entity, mc.model_uuid, mc.mesh_index);
+
                 self.remove_transform(entity);
             }
         });

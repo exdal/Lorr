@@ -40,7 +40,7 @@ add_requires("libsdl3", { configs = {
 } })
 
 add_requires("shader-slang v2025.10.4")
-add_requires("vuk 2025.05.06", { configs = {
+add_requires("vuk 2025.06.15", { configs = {
     debug_allocations = false,
     disable_exceptions = true,
 }, debug = is_mode("debug") })

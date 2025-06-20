@@ -33,20 +33,27 @@ auto ImGuiRenderer::init(this ImGuiRenderer &self, Device *device) -> void {
     imgui.ConfigFlags |= ImGuiConfigFlags_IsSRGB;
     imgui.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;
     imgui.BackendFlags |= ImGuiBackendFlags_HasMouseCursors;
+    //imgui.BackendFlags |= ImGuiBackendFlags_RendererHasTextures;
     ImGui::StyleColorsDark();
 
     //  ── IMPLOT CONTEXT ──────────────────────────────────────────────────
     ImPlot::CreateContext();
 
     //  ── FONT ATLAS ──────────────────────────────────────────────────────
-    ImWchar icons_ranges[] = { ICON_MIN_MDI, ICON_MAX_MDI, 0 };
-    ImFontConfig font_config;
+    ImFontConfig font_config = {};
     font_config.GlyphMinAdvanceX = 16.0f;
     font_config.MergeMode = true;
     font_config.PixelSnapH = true;
+    font_config.OversampleH = 1.0f;
 
-    imgui.Fonts->AddFontFromFileTTF(roboto_path.c_str(), 16.0f, nullptr);
-    imgui.Fonts->AddFontFromFileTTF(materialdesignicons_path.c_str(), 16.0f, &font_config, icons_ranges);
+    auto font_ranges = ImVector<ImWchar>();
+    ImFontGlyphRangesBuilder font_ranges_builder = {};
+    const ImWchar ranges[] = { ICON_MIN_MDI, ICON_MAX_MDI, 0 };
+    font_ranges_builder.AddRanges(ranges);
+    font_ranges_builder.BuildRanges(&font_ranges);
+
+    imgui.Fonts->AddFontFromFileTTF(roboto_path.c_str(), 16.0f);
+    imgui.Fonts->AddFontFromFileTTF(materialdesignicons_path.c_str(), 16.0f, &font_config, font_ranges.Data);
     imgui.Fonts->Build();
 
     u8 *font_data = nullptr;

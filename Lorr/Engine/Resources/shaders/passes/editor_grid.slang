@@ -24,7 +24,7 @@ VertexOutput vs_main(u32 vertex_id : SV_VertexID) {
     const let uv = f32x2((vertex_id << 1) & 2, vertex_id & 2);
     VertexOutput output;
     output.position = f32x4(uv * 2.0 - 1.0, 0.5, 1.0);
-    output.far_pos  = unproject_point(f32x3(output.position.xy, 1.0), C.camera->inv_projection_view_mat);
+    output.far_pos = unproject_point(f32x3(output.position.xy, 1.0), C.camera->inv_projection_view_mat);
     output.near_pos = unproject_point(f32x3(output.position.xy, 0.0), C.camera->inv_projection_view_mat);
 
     return output;
@@ -35,10 +35,7 @@ float4 pristine_grid(float3 uv, float2 lineWidth) {
     float2 ddy = ddy(uv.xz);
     float2 uvDeriv = float2(length(float2(ddx.x, ddy.x)), length(float2(ddx.y, ddy.y)));
     bool2 invertLine = bool2(lineWidth.x > 0.5, lineWidth.y > 0.5);
-    float2 targetWidth = float2(
-      invertLine.x ? 1.0 - lineWidth.x : lineWidth.x,
-      invertLine.y ? 1.0 - lineWidth.y : lineWidth.y
-      );
+    float2 targetWidth = float2(invertLine.x ? 1.0 - lineWidth.x : lineWidth.x, invertLine.y ? 1.0 - lineWidth.y : lineWidth.y);
     float2 drawWidth = clamp(targetWidth, uvDeriv, float2(0.5));
     float2 lineAA = uvDeriv * 1.5;
     float2 gridUV = abs(fract(uv.xz) * 2.0 - 1.0);
@@ -55,10 +52,10 @@ float4 pristine_grid(float3 uv, float2 lineWidth) {
 
     float4 color = float4(0.4, 0.4, 0.4, lerp(grid2.x, 1.0, grid2.y));
     // z axis
-    if(uv.x > -1.0 * minimumx && uv.x < 1.0 * minimumx)
+    if (uv.x > -1.0 * minimumx && uv.x < 1.0 * minimumx)
         color.z = 1.0;
     // x axis
-    if(uv.z > -1.0 * minimumz && uv.z < 1.0 * minimumz)
+    if (uv.z > -1.0 * minimumz && uv.z < 1.0 * minimumz)
         color.x = 1.0;
 
     return color;

@@ -1,13 +1,11 @@
 #include "Engine/Graphics/Slang/Compiler.hh"
 
-#include "Engine/OS/File.hh"
+#include "Engine/Memory/Stack.hh"
 
-#include "ls/types.hh"
+#include "Engine/OS/File.hh"
 
 #include <slang-com-ptr.h>
 #include <slang.h>
-
-#include <algorithm>
 
 namespace lr {
 struct SlangBlobSpan : ISlangBlob {
@@ -127,7 +125,7 @@ struct Handle<SlangModule>::Impl {
 
 template<>
 struct Handle<SlangSession>::Impl {
-    std::unique_ptr<SlangVirtualFS> shader_virtual_env;
+    std::unique_ptr<SlangVirtualFS> virtual_fs;
     Slang::ComPtr<slang::ISession> session;
 };
 
@@ -165,7 +163,7 @@ auto SlangModule::get_entry_point(std::string_view name) -> ls::option<SlangEntr
             diagnostics_blob.writeRef()
         );
         if (diagnostics_blob) {
-            LOG_TRACE("{}", (const char *)diagnostics_blob->getBufferPointer());
+            LOG_WARN("{}", (const char *)diagnostics_blob->getBufferPointer());
         }
 
         if (SLANG_FAILED(result)) {
@@ -179,7 +177,7 @@ auto SlangModule::get_entry_point(std::string_view name) -> ls::option<SlangEntr
         Slang::ComPtr<slang::IBlob> diagnostics_blob;
         composed_program->link(linked_program.writeRef(), diagnostics_blob.writeRef());
         if (diagnostics_blob) {
-            LOG_TRACE("{}", (const char *)diagnostics_blob->getBufferPointer());
+            LOG_WARN("{}", (const char *)diagnostics_blob->getBufferPointer());
         }
     }
 
@@ -188,7 +186,7 @@ auto SlangModule::get_entry_point(std::string_view name) -> ls::option<SlangEntr
         Slang::ComPtr<slang::IBlob> diagnostics_blob;
         auto result = linked_program->getEntryPointCode(0, 0, spirv_code.writeRef(), diagnostics_blob.writeRef());
         if (diagnostics_blob) {
-            LOG_TRACE("{}", (const char *)diagnostics_blob->getBufferPointer());
+            LOG_WARN("{}", (const char *)diagnostics_blob->getBufferPointer());
         }
 
         if (SLANG_FAILED(result)) {
@@ -283,7 +281,7 @@ auto SlangSession::load_module(const SlangModuleInfo &info) -> ls::option<SlangM
         impl->session->loadModuleFromSourceString(info.module_name.c_str(), info.module_name.c_str(), source.c_str(), diagnostics_blob.writeRef());
 
     if (diagnostics_blob) {
-        LOG_TRACE("{}", (const char *)diagnostics_blob->getBufferPointer());
+        LOG_WARN("{}", (const char *)diagnostics_blob->getBufferPointer());
     }
 
     auto module_impl = new SlangModule::Impl;
@@ -296,7 +294,7 @@ auto SlangSession::load_module(const SlangModuleInfo &info) -> ls::option<SlangM
 auto SlangSession::root_directory() const -> const fs::path & {
     ZoneScoped;
 
-    return impl->shader_virtual_env->m_root_dir;
+    return impl->virtual_fs->m_root_dir;
 }
 
 auto SlangSession::modular_path(const std::string &module_name) -> fs::path {
@@ -341,13 +339,17 @@ auto SlangCompiler::new_session(const SlangSessionInfo &info) -> ls::option<Slan
         { .name = slang::CompilerOptionName::GLSLForceScalarLayout, .value = { .kind = slang::CompilerOptionValueKind::Int, .intValue0 = 1 } },
         { .name = slang::CompilerOptionName::Language, .value = { .kind = slang::CompilerOptionValueKind::String, .stringValue0 = "slang" } },
         { .name = slang::CompilerOptionName::VulkanUseEntryPointName, .value = { .kind = slang::CompilerOptionValueKind::Int, .intValue0 = 1 } },
-        { .name = slang::CompilerOptionName::DisableWarnings,
-          .value = { .kind = slang::CompilerOptionValueKind::String, .stringValue0 = "39001,41012" } },
+        { .name = slang::CompilerOptionName::DisableWarning, .value = { .kind = slang::CompilerOptionValueKind::String, .stringValue0 = "39001" } },
+        { .name = slang::CompilerOptionName::DisableWarning, .value = { .kind = slang::CompilerOptionValueKind::String, .stringValue0 = "41012" } },
+        { .name = slang::CompilerOptionName::DisableWarning, .value = { .kind = slang::CompilerOptionValueKind::String, .stringValue0 = "41017" } },
+        { .name = slang::CompilerOptionName::Capability,
+          .value = { .kind = slang::CompilerOptionValueKind::String, .stringValue0 = "vk_mem_model" } },
+        // { .name = slang::CompilerOptionName::DumpIntermediates, .value = { .kind = slang::CompilerOptionValueKind::Int, .intValue0 = 1 } },
     };
-    std::vector<slang::PreprocessorMacroDesc> macros;
-    macros.reserve(info.definitions.size());
-    for (auto &v : info.definitions) {
-        macros.emplace_back(v.n0.c_str(), v.n1.c_str());
+
+    auto macros = std::vector<slang::PreprocessorMacroDesc>();
+    for (const auto &[macro_name, macro_value] : info.definitions) {
+        macros.emplace_back(macro_name.c_str(), macro_value.c_str());
     }
 
     slang::TargetDesc target_desc = {
@@ -381,7 +383,7 @@ auto SlangCompiler::new_session(const SlangSessionInfo &info) -> ls::option<Slan
     }
 
     auto session_impl = new SlangSession::Impl;
-    session_impl->shader_virtual_env = std::move(slang_fs);
+    session_impl->virtual_fs = std::move(slang_fs);
     session_impl->session = std::move(session);
 
     return SlangSession(session_impl);

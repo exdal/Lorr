@@ -28,7 +28,7 @@ void cs_main(u32x2 thread_id : SV_DispatchThreadID) {
     const let vis_data = VisBufferData(~0u, ~0u);
     const let vis = VisBuffer(vis_data, 1.0);
 
-    visbuffer_image[thread_id.xy] = vis.encode();
+    // visbuffer_image[thread_id.xy] = vis.encode();
     visbuffer_data_image[thread_id.xy] = vis_data.encode();
     overdraw_image[thread_id.xy] = 0u;
 }

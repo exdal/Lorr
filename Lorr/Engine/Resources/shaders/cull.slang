@@ -54,8 +54,7 @@ public func project_aabb(f32x4x4 mvp, f32 near, f32x3 aabb_min, f32x3 aabb_exten
 public func test_occlusion(
     in ScreenAabb screen_aabb,
     in Image2D<f32> hiz_image,
-    in Sampler hiz_sampler,
-    in f32x2 camera_res
+    in Sampler hiz_sampler
 ) -> bool {
     var hiz_size = u32x2(0.0);
     var hiz_levels = 0;

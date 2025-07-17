@@ -76,7 +76,7 @@ func cs_main(
     if (visible && (cull_flags & CullFlags::Occlusion)) {
         let prev_mvp = mul(params.camera.frustum_projection_view_mat, transform.world);
         if (let screen_aabb = project_aabb(prev_mvp, params.camera.near_clip, aabb_min, aabb_extent)) {
-            visible = !test_occlusion(screen_aabb, params.hiz_image, params.hiz_sampler, params.camera.resolution);
+            visible = !test_occlusion(screen_aabb, params.hiz_image, params.hiz_sampler);
             if (visible) {
                 let ndc_aabb_max = screen_aabb.max.xy * 2.0 - 1.0;
                 let ndc_aabb_min = screen_aabb.min.xy * 2.0 - 1.0;

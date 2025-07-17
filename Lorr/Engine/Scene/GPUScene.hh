@@ -160,8 +160,6 @@ struct Meshlet {
 struct MeshletBounds {
     alignas(4) glm::vec3 aabb_min = {};
     alignas(4) glm::vec3 aabb_max = {};
-    alignas(4) glm::vec3 sphere_center = {};
-    alignas(4) f32 sphere_radius = 0.0f;
 };
 
 struct MeshletInstance {

@@ -814,14 +814,14 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
                     }
 
                     // SB and Cone Computing
-                    auto sphere_bounds = meshopt_computeMeshletBounds( //
-                        &meshlet_indices[raw_meshlet.vertex_offset],
-                        &local_triangle_indices[raw_meshlet.triangle_offset],
-                        raw_meshlet.triangle_count,
-                        reinterpret_cast<f32 *>(raw_vertex_positions.data()),
-                        raw_vertex_positions.size(),
-                        sizeof(glm::vec3)
-                    );
+                    // auto sphere_bounds = meshopt_computeMeshletBounds( //
+                    //     &meshlet_indices[raw_meshlet.vertex_offset],
+                    //     &local_triangle_indices[raw_meshlet.triangle_offset],
+                    //     raw_meshlet.triangle_count,
+                    //     reinterpret_cast<f32 *>(raw_vertex_positions.data()),
+                    //     raw_vertex_positions.size(),
+                    //     sizeof(glm::vec3)
+                    // );
 
                     meshlet.vertex_offset = vertex_offset;
                     meshlet.index_offset = index_offset + raw_meshlet.vertex_offset;
@@ -829,10 +829,10 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
                     meshlet.triangle_count = raw_meshlet.triangle_count;
                     meshlet_bounds.aabb_min = meshlet_bb_min;
                     meshlet_bounds.aabb_max = meshlet_bb_max;
-                    meshlet_bounds.sphere_center.x = sphere_bounds.center[0];
-                    meshlet_bounds.sphere_center.y = sphere_bounds.center[1];
-                    meshlet_bounds.sphere_center.z = sphere_bounds.center[2];
-                    meshlet_bounds.sphere_radius = sphere_bounds.radius;
+                    // meshlet_bounds.sphere_center.x = sphere_bounds.center[0];
+                    // meshlet_bounds.sphere_center.y = sphere_bounds.center[1];
+                    // meshlet_bounds.sphere_center.z = sphere_bounds.center[2];
+                    // meshlet_bounds.sphere_radius = sphere_bounds.radius;
                 }
 
                 primitive.meshlet_count = meshlet_count;

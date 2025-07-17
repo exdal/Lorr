@@ -18,12 +18,49 @@ enum class DebugView : i32 {
     Count,
 };
 
+struct DrawIndirectCommand {
+    u32 vertex_count = 0;
+    u32 instance_count = 0;
+    u32 first_vertex = 0;
+    u32 first_instance = 0;
+};
+
+struct DebugDrawData {
+    u32 draw_count = 0;
+    u32 capacity = 0;
+};
+
+struct DebugAABB {
+    glm::vec3 position = {};
+    glm::vec3 size = {};
+    glm::vec3 color = {};
+    bool is_ndc = false;
+};
+
+struct DebugRect {
+    glm::vec3 offset = {};
+    glm::vec2 extent = {};
+    glm::vec3 color = {};
+    bool is_ndc = false;
+};
+
+struct DebugDrawer {
+    DrawIndirectCommand aabb_draw_cmd = {};
+    DebugDrawData aabb_data = {};
+    u64 aabb_buffer = 0;
+
+    DrawIndirectCommand rect_draw_cmd = {};
+    DebugDrawData rect_data = {};
+    u64 rect_buffer = 0;
+};
+
 enum class CullFlags : u32 {
     MeshletFrustum = 1 << 0,
     TriangleBackFace = 1 << 1,
     MicroTriangles = 1 << 2,
+    Occlusion = 1 << 3,
 
-    All = MeshletFrustum | TriangleBackFace | MicroTriangles,
+    All = MeshletFrustum | TriangleBackFace | MicroTriangles | Occlusion,
 };
 
 struct Sun {
@@ -123,6 +160,8 @@ struct Meshlet {
 struct MeshletBounds {
     alignas(4) glm::vec3 aabb_min = {};
     alignas(4) glm::vec3 aabb_max = {};
+    alignas(4) glm::vec3 sphere_center = {};
+    alignas(4) f32 sphere_radius = 0.0f;
 };
 
 struct MeshletInstance {

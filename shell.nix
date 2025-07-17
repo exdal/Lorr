@@ -27,7 +27,7 @@ pkgs.mkShell.override { stdenv = pkgs-unstable.llvmPackages_20.libcxxStdenv; } {
     pkgs-unstable.meshoptimizer
 
     # for SDL3
-    (pkgs-unstable.sdl3.override { waylandSupport = false; openglSupport = false; testSupport = false; })
+    pkgs-unstable.sdl3
   ];
 
   shellHook = ''

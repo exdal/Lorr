@@ -766,7 +766,7 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
             auto raw_vertex_normals = ls::span(gltf_callbacks.vertex_normals.data() + primitive.vertex_offset, primitive.vertex_count);
 
             auto meshlets = std::vector<GPU::Meshlet>();
-            auto meshlet_bounds = std::vector<GPU::MeshletBounds>();
+            auto meshlet_bounds_infos = std::vector<GPU::MeshletBounds>();
             auto meshlet_indices = std::vector<u32>();
             auto local_triangle_indices = std::vector<u8>();
             {
@@ -797,12 +797,13 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
                 // Trim meshlets from worst case to current case
                 raw_meshlets.resize(meshlet_count);
                 meshlets.resize(meshlet_count);
-                meshlet_bounds.resize(meshlet_count);
+                meshlet_bounds_infos.resize(meshlet_count);
                 const auto &last_meshlet = raw_meshlets[meshlet_count - 1];
                 meshlet_indices.resize(last_meshlet.vertex_offset + last_meshlet.vertex_count);
                 local_triangle_indices.resize(last_meshlet.triangle_offset + ((last_meshlet.triangle_count * 3 + 3) & ~3_u32));
 
-                for (const auto &[raw_meshlet, meshlet, meshlet_aabb] : std::views::zip(raw_meshlets, meshlets, meshlet_bounds)) {
+                for (const auto &[raw_meshlet, meshlet, meshlet_bounds] : std::views::zip(raw_meshlets, meshlets, meshlet_bounds_infos)) {
+                    // AABB Computing
                     auto meshlet_bb_min = glm::vec3(std::numeric_limits<f32>::max());
                     auto meshlet_bb_max = glm::vec3(std::numeric_limits<f32>::lowest());
                     for (u32 i = 0; i < raw_meshlet.triangle_count * 3; i++) {
@@ -812,12 +813,26 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
                         meshlet_bb_max = glm::max(meshlet_bb_max, tri_pos);
                     }
 
+                    // SB and Cone Computing
+                    auto sphere_bounds = meshopt_computeMeshletBounds( //
+                        &meshlet_indices[raw_meshlet.vertex_offset],
+                        &local_triangle_indices[raw_meshlet.triangle_offset],
+                        raw_meshlet.triangle_count,
+                        reinterpret_cast<f32 *>(raw_vertex_positions.data()),
+                        raw_vertex_positions.size(),
+                        sizeof(glm::vec3)
+                    );
+
                     meshlet.vertex_offset = vertex_offset;
                     meshlet.index_offset = index_offset + raw_meshlet.vertex_offset;
                     meshlet.triangle_offset = triangle_offset + raw_meshlet.triangle_offset;
                     meshlet.triangle_count = raw_meshlet.triangle_count;
-                    meshlet_aabb.aabb_min = meshlet_bb_min;
-                    meshlet_aabb.aabb_max = meshlet_bb_max;
+                    meshlet_bounds.aabb_min = meshlet_bb_min;
+                    meshlet_bounds.aabb_max = meshlet_bb_max;
+                    meshlet_bounds.sphere_center.x = sphere_bounds.center[0];
+                    meshlet_bounds.sphere_center.y = sphere_bounds.center[1];
+                    meshlet_bounds.sphere_center.z = sphere_bounds.center[2];
+                    meshlet_bounds.sphere_radius = sphere_bounds.radius;
                 }
 
                 primitive.meshlet_count = meshlet_count;
@@ -828,7 +843,7 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
             std::ranges::move(raw_vertex_positions, std::back_inserter(model_vertex_positions));
             std::ranges::move(meshlet_indices, std::back_inserter(model_indices));
             std::ranges::move(meshlets, std::back_inserter(model_meshlets));
-            std::ranges::move(meshlet_bounds, std::back_inserter(model_meshlet_bounds));
+            std::ranges::move(meshlet_bounds_infos, std::back_inserter(model_meshlet_bounds));
             std::ranges::move(local_triangle_indices, std::back_inserter(model_local_triangle_indices));
         }
     }

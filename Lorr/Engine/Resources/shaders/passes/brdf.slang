@@ -46,7 +46,7 @@ struct PushConstants {
 func fs_main(VertexOutput input) -> f32x4 {
     const u32x2 pixel_pos = u32x2(input.position.xy);
     const f32 depth = depth_image.load(pixel_pos);
-    if (depth == 1.0) {
+    if (depth == 0.0) {
         discard;
     }
 

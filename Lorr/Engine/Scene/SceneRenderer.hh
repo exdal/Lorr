@@ -58,7 +58,7 @@ struct SceneRenderer {
     Image hiz = {};
     ImageView hiz_view = {};
 
-    GPU::DebugView debug_view = GPU::DebugView::None;
+    bool debug_lines = false;
     f32 debug_heatmap_scale = 5.0;
 
     auto init(this SceneRenderer &, Device *device) -> bool;

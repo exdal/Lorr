@@ -538,7 +538,7 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, SceneRenderInfo &i
 
     ls::option<GPU::Camera> active_camera_data = ls::nullopt;
     camera_query.each([&](flecs::entity, ECS::Transform &t, ECS::Camera &c, ECS::ActiveCamera) {
-        auto projection_mat = glm::perspective(glm::radians(c.fov), c.aspect_ratio, c.near_clip, c.far_clip);
+        auto projection_mat = glm::perspectiveRH_ZO(glm::radians(c.fov), c.aspect_ratio, c.far_clip, c.near_clip);
         projection_mat[1][1] *= -1;
 
         auto translation_mat = glm::translate(glm::mat4(1.0f), -t.position);

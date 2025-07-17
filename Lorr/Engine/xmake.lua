@@ -49,7 +49,7 @@ target("Lorr")
         "flecs",
         "vuk",
         "meshoptimizer",
-        "ktx-software",
+        "ktx",
         { public = true })
 
 target_end()

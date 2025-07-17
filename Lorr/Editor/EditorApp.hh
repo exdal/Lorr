@@ -23,6 +23,7 @@ struct EditorApp : lr::Application {
     lr::FrameProfiler frame_profiler = {};
 
     bool show_profiler = false;
+    bool show_debug = false;
 
     auto load_editor_data(this EditorApp &) -> void;
     auto save_editor_data(this EditorApp &) -> void;

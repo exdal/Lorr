@@ -25,6 +25,7 @@ public enum CullFlags : u32 {
     MeshletFrustum,
     TriangleBackFace,
     MicroTriangles,
+    Occlusion,
 };
 
 public struct Sun {
@@ -257,9 +258,11 @@ public struct Meshlet {
     }
 };
 
-public struct AABB {
-    public f32x3 min = {};
-    public f32x3 max = {};
+public struct MeshletBounds {
+    public f32x3 aabb_min = {};
+    public f32x3 aabb_max = {};
+    public f32x3 sphere_center = {};
+    public f32 sphere_radius = 0.0;
 };
 
 public struct MeshletInstance {
@@ -275,7 +278,7 @@ public struct Mesh {
     public f32x3 *vertex_normals = nullptr;
     public f32x2 *texture_coords = nullptr;
     public Meshlet *meshlets = nullptr;
-    public AABB *meshlet_bounds = nullptr;
+    public MeshletBounds *meshlet_bounds = nullptr;
     public u8 *local_triangle_indices = nullptr;
 };
 

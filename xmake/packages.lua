@@ -34,10 +34,7 @@ add_requires("lz4 v1.10.0")
 add_requires("zstd v1.5.6")
 add_requires("flecs v4.0.4")
 
-add_requires("libsdl3", { configs = {
-    wayland = false,
-    x11 = true,
-} })
+add_requires("libsdl3")
 
 add_requires("shader-slang v2025.10.4")
 add_requires("vuk 2025.06.15", { configs = {
@@ -46,4 +43,4 @@ add_requires("vuk 2025.06.15", { configs = {
 }, debug = is_mode("debug") })
 
 add_requires("meshoptimizer v0.22")
-add_requires("ktx-software v4.4.0")
+add_requires("ktx v4.4.0")

@@ -16,6 +16,13 @@ public struct DrawIndexedIndirectCommand {
     public u32 first_instance;
 };
 
+public struct DrawIndirectCommand {
+    public u32 vertex_count;
+    public u32 instance_count;
+    public u32 first_vertex;
+    public u32 first_instance;
+};
+
 public enum ImageFormat : i32 {
     Undefined = 0,
     RGBA32F,           // 4 channel 32-bit floating point texture

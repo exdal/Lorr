@@ -92,7 +92,7 @@ protected:
     [[nodiscard]] auto scratch_buffer(this TransferManager &, const void *data, u64 size, LR_THISCALL) -> vuk::Value<vuk::Buffer>;
     auto wait_for_ops(this TransferManager &, vuk::Compiler &compiler) -> void;
 
-    auto acquire(this TransferManager &, vuk::DeviceFrameResource &allocator) -> void;
+    auto acquire(this TransferManager &, vuk::DeviceSuperFrameResource &super_frame_resource) -> void;
     auto release(this TransferManager &) -> void;
 };
 

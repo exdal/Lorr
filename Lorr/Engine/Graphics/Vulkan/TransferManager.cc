@@ -24,7 +24,7 @@ auto TransferManager::alloc_transient_buffer_raw(
 ) -> vuk::Buffer {
     ZoneScoped;
 
-    std::unique_lock _(self.mutex);
+    std::shared_lock _(self.mutex);
     auto buffer = *vuk::allocate_buffer(*self.frame_allocator, { .mem_usage = usage, .size = size, .alignment = alignment }, LOC);
     return *buffer;
 }
@@ -101,7 +101,7 @@ auto TransferManager::upload_staging(this TransferManager &self, ImageView &imag
     -> vuk::Value<vuk::ImageAttachment> {
     ZoneScoped;
 
-    std::unique_lock _(self.mutex);
+    std::shared_lock _(self.mutex);
     auto dst_attachment_info = image_view.to_attachment(*self.device, vuk::ImageUsageFlagBits::eTransferDst);
     auto result = vuk::host_data_to_image(self.device->allocator.value(), vuk::DomainFlagBits::eGraphicsQueue, dst_attachment_info, data, LOC);
     result = vuk::generate_mips(std::move(result), 0, image_view.mip_count() - 1);
@@ -156,11 +156,12 @@ auto TransferManager::wait_for_ops(this TransferManager &self, vuk::Compiler &co
     self.futures.clear();
 }
 
-auto TransferManager::acquire(this TransferManager &self, vuk::DeviceFrameResource &allocator) -> void {
+auto TransferManager::acquire(this TransferManager &self, vuk::DeviceSuperFrameResource &super_frame_resource) -> void {
     ZoneScoped;
 
     std::unique_lock _(self.mutex);
-    self.frame_allocator.emplace(allocator);
+    auto &frame_resource = super_frame_resource.get_next_frame();
+    self.frame_allocator.emplace(frame_resource);
 }
 
 auto TransferManager::release(this TransferManager &self) -> void {

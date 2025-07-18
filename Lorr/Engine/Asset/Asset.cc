@@ -1127,8 +1127,7 @@ auto AssetManager::load_material(const UUID &uuid, const MaterialInfo &info) -> 
     asset->material_id = impl->materials.create_slot(const_cast<Material &&>(info.material));
     auto *material = impl->materials.slot(asset->material_id);
 
-    this->set_material_dirty(asset->material_id);
-
+#if 1
     if (material->albedo_texture) {
         auto job = Job::create([this, //
                                 texture_uuid = material->albedo_texture,
@@ -1183,6 +1182,30 @@ auto AssetManager::load_material(const UUID &uuid, const MaterialInfo &info) -> 
         });
         app.job_man->submit(std::move(job));
     }
+#else
+    if (material->albedo_texture) {
+        this->load_texture(material->albedo_texture, info.albedo_texture_info);
+    }
+
+    if (material->normal_texture) {
+        this->load_texture(material->normal_texture, info.normal_texture_info);
+    }
+
+    if (material->emissive_texture) {
+        this->load_texture(material->emissive_texture, info.emissive_texture_info);
+    }
+
+    if (material->metallic_roughness_texture) {
+        this->load_texture(material->metallic_roughness_texture, info.metallic_roughness_texture_info);
+    }
+
+    if (material->occlusion_texture) {
+        this->load_texture(material->occlusion_texture, info.occlusion_texture_info);
+    }
+
+#endif
+
+    this->set_material_dirty(asset->material_id);
 
     asset->acquire_ref();
     return true;

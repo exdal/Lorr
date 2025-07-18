@@ -1,7 +1,9 @@
 add_requires("fmt 11.1.4", { configs = {
     header_only = true
 }, system = false })
-add_requires("fmtlog v2.3.0", { system = false })
+add_requires("fmtlog v2.3.0", { configs = {
+    shared = false,
+}, system = false })
 add_requireconfs("fmt", "fmtlog.fmt", {
     override = true, version = "11.1.3", configs = { header_only = true }
 })
@@ -46,4 +48,4 @@ add_requires("vuk 2025.06.15", { configs = {
 }, debug = is_mode("debug") })
 
 add_requires("meshoptimizer v0.22")
-add_requires("ktx v4.4.0")
+add_requires("ktx v4.4.0", { debug = is_mode("debug") })

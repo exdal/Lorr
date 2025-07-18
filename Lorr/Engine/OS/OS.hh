@@ -57,17 +57,6 @@ namespace os {
     auto file_stdout(std::string_view str) -> void;
     auto file_stderr(std::string_view str) -> void;
 
-    // https://man7.org/linux/man-pages/man7/inotify.7.html
-    // https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-readdirectorychangesw
-    //
-    auto file_watcher_init(const fs::path &root_dir) -> std::expected<FileWatcherDescriptor, FileResult>;
-    auto file_watcher_destroy(FileWatcherDescriptor &watcher) -> void;
-    auto file_watcher_add(FileWatcherDescriptor &watcher, const fs::path &path) -> std::expected<FileDescriptor, FileResult>;
-    auto file_watcher_remove(FileWatcherDescriptor &watcher, FileDescriptor watch_descriptor) -> void;
-    auto file_watcher_read(FileWatcherDescriptor &watcher, u8 *buffer, usize buffer_size) -> std::expected<i64, FileResult>;
-    auto file_watcher_peek(FileWatcherDescriptor &watcher, u8 *buffer, i64 &buffer_offset) -> FileEvent;
-    auto file_watcher_buffer_size() -> i64;
-
     //  ── MEMORY ──────────────────────────────────────────────────────────
     auto mem_page_size() -> u64;
     auto mem_reserve(u64 size) -> void *;

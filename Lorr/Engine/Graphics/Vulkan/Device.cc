@@ -222,8 +222,7 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
     self.shader_compiler = SlangCompiler::create().value();
 
     self.transfer_manager.init(self).value();
-    auto &frame_resource = self.frame_resources->get_next_frame();
-    self.transfer_manager.acquire(frame_resource);
+    self.transfer_manager.acquire(self.frame_resources.value());
 
     LOG_INFO("Initialized device.");
 
@@ -283,9 +282,7 @@ auto Device::new_frame(this Device &self, vuk::Swapchain &swap_chain) -> vuk::Va
         self.transfer_manager.release();
     }
 
-    auto &frame_resource = self.frame_resources->get_next_frame();
-    self.transfer_manager.acquire(frame_resource);
-
+    self.transfer_manager.acquire(self.frame_resources.value());
     self.runtime->next_frame();
 
     auto acquired_swapchain = vuk::acquire_swapchain(swap_chain);

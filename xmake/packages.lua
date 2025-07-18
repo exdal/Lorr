@@ -1,7 +1,10 @@
 add_requires("fmt 11.1.4", { configs = {
     header_only = true
-} })
-add_requires("fmtlog v2.3.0")
+}, system = false })
+add_requires("fmtlog v2.3.0", { system = false })
+add_requireconfs("fmt", "fmtlog.fmt", {
+    override = true, version = "11.1.3", configs = { header_only = true }
+})
 
 add_requires("xxhash v0.8.3")
 add_requires("glm 1.0.1", { configs = {

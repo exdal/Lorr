@@ -4,9 +4,9 @@ import scene;
 import debug_drawer;
 
 struct ShaderParameters {
-    ConstantBuffer<Camera> camera;
-    RWStructuredBuffer<DebugAABB> debug_aabb_draws;
-    RWStructuredBuffer<DebugRect> debug_rect_draws;
+    ConstantBuffer<Camera, ScalarDataLayout> camera;
+    RWStructuredBuffer<DebugAABB, ScalarDataLayout> debug_aabb_draws;
+    RWStructuredBuffer<DebugRect, ScalarDataLayout> debug_rect_draws;
 };
 ParameterBlock<ShaderParameters> params;
 

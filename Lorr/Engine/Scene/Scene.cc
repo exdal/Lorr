@@ -15,6 +15,8 @@
 #include <glm/gtx/matrix_decompose.hpp>
 #include <simdjson.h>
 
+#include <queue>
+
 namespace lr {
 template<glm::length_t N, typename T>
 bool json_to_vec(simdjson::ondemand::value &o, glm::vec<N, T> &vec) {
@@ -59,53 +61,43 @@ auto Scene::init(this Scene &self, const std::string &name) -> bool {
     self.name = name;
     self.world.emplace();
     self.entity_db.import_module(self.world->import <ECS::Core>());
-    self.root = self.world->entity();
 
     self.world->observer<ECS::Transform>()
         .event(flecs::OnSet)
         .event(flecs::OnAdd)
         .event(flecs::OnRemove)
-        .without<ECS::RenderingMesh>()
         .each([&self](flecs::iter &it, usize i, ECS::Transform &) {
             auto entity = it.entity(i);
-            if (it.event() == flecs::OnSet) {
+            auto event = it.event();
+            if (event == flecs::OnSet) {
                 self.set_dirty(entity);
-            } else if (it.event() == flecs::OnAdd) {
+            } else if (event == flecs::OnAdd) {
                 self.add_transform(entity);
                 self.set_dirty(entity);
-            } else if (it.event() == flecs::OnRemove) {
+            } else if (event == flecs::OnRemove) {
                 self.remove_transform(entity);
             }
         });
 
-    self.world->observer<ECS::Transform, ECS::RenderingMesh>()
-        .event(flecs::OnAdd)
+    self.world->observer<ECS::RenderingMesh>()
         .event(flecs::OnSet)
         .event(flecs::OnRemove)
-        .each([&self](flecs::iter &it, usize i, ECS::Transform &, ECS::RenderingMesh &mc) {
+        .each([&self](flecs::iter &it, usize i, ECS::RenderingMesh &mesh) {
+            if (!mesh.model_uuid) {
+                return;
+            }
+
             auto entity = it.entity(i);
-            const auto mesh_event = it.event_id() == self.world->component<ECS::RenderingMesh>();
-            if (it.event() == flecs::OnSet) {
-                if (!self.entity_transforms_map.contains(entity))
-                    self.add_transform(entity);
-                self.set_dirty(entity);
-
-                if (mesh_event && mc.model_uuid)
-                    self.attach_mesh(entity, mc.model_uuid, mc.mesh_index);
-            } else if (it.event() == flecs::OnAdd) {
-                self.add_transform(entity);
-                self.set_dirty(entity);
-            } else if (it.event() == flecs::OnRemove) {
-                if (mc.model_uuid)
-                    self.detach_mesh(entity, mc.model_uuid, mc.mesh_index);
-
-                self.remove_transform(entity);
+            auto event = it.event();
+            if (event == flecs::OnSet) {
+                self.attach_mesh(entity, mesh.model_uuid, mesh.mesh_index);
+            } else if (event == flecs::OnRemove) {
+                self.detach_mesh(entity, mesh.model_uuid, mesh.mesh_index);
             }
         });
 
-    self.world
-        ->observer<ECS::EditorCamera>() //
-        .event(flecs::Monitor)
+    self.world->observer<ECS::EditorCamera>()
+        .event(flecs::Monitor) //
         .each([&self](flecs::iter &it, usize i, ECS::EditorCamera) {
             auto entity = it.entity(i);
             if (it.event() == flecs::OnAdd) {
@@ -123,6 +115,9 @@ auto Scene::init(this Scene &self, const std::string &name) -> bool {
 
             c.axis_velocity = {};
         });
+
+    self.root = self.world->entity();
+    self.root.add<ECS::Transform>();
 
     return true;
 }
@@ -206,6 +201,7 @@ static auto json_to_entity(Scene &self, flecs::entity root, simdjson::ondemand::
         }
 
         LS_EXPECT(self.get_entity_db().is_component_known(component_id));
+
         e.add(component_id);
         ECS::ComponentWrapper component(e, component_id);
         component.for_each([&](usize &, std::string_view member_name, ECS::ComponentWrapper::Member &member) {
@@ -461,6 +457,7 @@ auto Scene::create_model_entity(this Scene &self, UUID &importing_model_uuid) ->
     auto &default_scene = imported_model->scenes[imported_model->default_scene_index];
     auto root_entity = self.create_entity(self.find_entity(default_scene.name) ? std::string{} : default_scene.name);
     root_entity.child_of(self.root);
+    root_entity.add<ECS::Transform>();
 
     auto visit_nodes = [&](this auto &visitor, flecs::entity &root, std::vector<usize> &node_indices) -> void {
         for (const auto node_index : node_indices) {
@@ -642,43 +639,49 @@ auto Scene::set_name(this Scene &self, const std::string &name) -> void {
 auto Scene::set_dirty(this Scene &self, flecs::entity entity) -> void {
     ZoneScoped;
 
-    auto visit_parent = [](this auto &visitor, flecs::entity e) -> glm::mat4 {
-        auto local_mat = glm::mat4(1.0f);
-        if (e.has<ECS::Transform>()) {
-            const auto *entity_transform = e.get<ECS::Transform>();
-            const auto T = glm::translate(glm::mat4(1.0), entity_transform->position);
-            const auto R = glm::mat4_cast(glm::quat(entity_transform->rotation));
-            const auto S = glm::scale(glm::mat4(1.0), entity_transform->scale);
-            local_mat = T * R * S;
-        }
-
-        auto parent = e.parent();
-        if (parent) {
-            return visitor(parent) * local_mat;
-        } else {
-            return local_mat;
-        }
-    };
-
     LS_EXPECT(entity.has<ECS::Transform>());
-    auto it = self.entity_transforms_map.find(entity);
-    if (it == self.entity_transforms_map.end()) {
-        return;
-    }
+    auto bfs_stack = std::queue<flecs::entity>();
+    bfs_stack.push(entity);
 
-    auto transform_id = it->second;
-    auto *gpu_transform = self.transforms.slot(transform_id);
-    gpu_transform->local = glm::mat4(1.0f);
-    gpu_transform->world = visit_parent(entity);
-    gpu_transform->normal = glm::mat3(gpu_transform->world);
-    self.dirty_transforms.push_back(transform_id);
+    while (!bfs_stack.empty()) {
+        auto cur_entity = bfs_stack.front();
+        bfs_stack.pop();
 
-    // notify children
-    entity.children([](flecs::entity e) {
-        if (e.has<ECS::Transform>()) {
-            e.modified<ECS::Transform>();
+        const auto *entity_transform = cur_entity.get<ECS::Transform>();
+        const auto T = glm::translate(glm::mat4(1.0), entity_transform->position);
+        const auto R = glm::mat4_cast(glm::quat(entity_transform->rotation));
+        const auto S = glm::scale(glm::mat4(1.0), entity_transform->scale);
+        auto local_mat = T * R * S;
+        auto world_mat = local_mat;
+
+        auto parent_entity = cur_entity.parent();
+        if (parent_entity.is_valid()) {
+            auto parent_it = self.entity_transforms_map.find(parent_entity);
+            if (parent_it != self.entity_transforms_map.end()) {
+                auto transform_id = parent_it->second;
+                auto *parent_gpu_transform = self.transforms.slot(transform_id);
+                world_mat = parent_gpu_transform->world;
+            }
         }
-    });
+
+        auto cur_it = self.entity_transforms_map.find(cur_entity);
+        if (cur_it == self.entity_transforms_map.end()) {
+            continue;
+        }
+
+        auto transform_id = cur_it->second;
+        auto *gpu_transform = self.transforms.slot(transform_id);
+        gpu_transform->local = local_mat;
+        gpu_transform->world = world_mat * local_mat;
+        gpu_transform->normal = glm::mat3(gpu_transform->world);
+        self.dirty_transforms.push_back(transform_id);
+
+        cur_entity.children([&bfs_stack](flecs::entity e) {
+            if (e.has<ECS::Transform>()) {
+                bfs_stack.push(e);
+            }
+        });
+    }
 }
 
 auto Scene::get_root(this Scene &self) -> flecs::entity {

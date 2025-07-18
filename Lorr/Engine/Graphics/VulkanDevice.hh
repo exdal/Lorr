@@ -40,10 +40,10 @@ public:
     auto destroy(this TransferManager &) -> void;
 
     [[nodiscard]]
-    auto alloc_transient_buffer_raw(this TransferManager &, vuk::MemoryUsage usage, usize size, usize alignment = 8, LR_THISCALL) -> vuk::Buffer;
+    auto alloc_transient_buffer_raw(this TransferManager &, vuk::MemoryUsage usage, usize size, usize alignment = 1, LR_THISCALL) -> vuk::Buffer;
 
     [[nodiscard]]
-    auto alloc_transient_buffer(this TransferManager &, vuk::MemoryUsage usage, usize size, usize alignment = 8, LR_THISCALL)
+    auto alloc_transient_buffer(this TransferManager &, vuk::MemoryUsage usage, usize size, usize alignment = 1, LR_THISCALL)
         -> vuk::Value<vuk::Buffer>;
 
     [[nodiscard]]

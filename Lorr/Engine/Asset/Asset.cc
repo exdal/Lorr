@@ -1595,7 +1595,7 @@ auto AssetManager::get_materials_buffer() -> vuk::Value<vuk::Buffer> {
 
         impl->materials_buffer = Buffer::create(*impl->device, gpu_materials_bytes_size, vuk::MemoryUsage::eGPUonly).value();
         materials_buffer = impl->materials_buffer.acquire(*impl->device, "materials buffer", vuk::eNone);
-        vuk::fill(materials_buffer, ~0_u32);
+        vuk::fill(materials_buffer, 0_u32);
         rebuild_materials = true;
     } else if (impl->materials_buffer) {
         materials_buffer = impl->materials_buffer.acquire(*impl->device, "materials buffer", vuk::eNone);

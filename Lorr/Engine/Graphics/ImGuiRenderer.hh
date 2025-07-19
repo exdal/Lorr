@@ -3,8 +3,7 @@
 #include "Engine/Graphics/Vulkan.hh"
 
 #include <imgui.h>
-
-#include <Engine/Util/implot/implot.h>
+#include <implot.h>
 
 namespace lr {
 struct ImGuiRenderer {

@@ -83,7 +83,7 @@ auto Theme::dark_gray() -> void {
 
     style.WindowPadding = ImVec2(4.0f, 4.0f);
     style.FramePadding = ImVec2(4.0f, 4.0f);
-    style.TabMinWidthForCloseButton = 0.1f;
+    style.TabCloseButtonMinWidthSelected = 0.1f;
     style.CellPadding = ImVec2(8.0f, 4.0f);
     style.ItemSpacing = ImVec2(8.0f, 3.0f);
     style.ItemInnerSpacing = ImVec2(2.0f, 4.0f);

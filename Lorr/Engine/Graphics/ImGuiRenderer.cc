@@ -233,8 +233,8 @@ auto ImGuiRenderer::end_frame(this ImGuiRenderer &self, vuk::Value<vuk::ImageAtt
                         cmd_list.set_scissor(0, scissor);
 
                         cmd_list.bind_sampler(0, 0, { .magFilter = vuk::Filter::eLinear, .minFilter = vuk::Filter::eLinear });
-                        if (im_cmd.TextureId != 0) {
-                            auto index = im_cmd.TextureId - 1;
+                        if (im_cmd.GetTexID() != 0) {
+                            auto index = im_cmd.GetTexID() - 1;
                             const auto &image = rendering_images[index];
                             cmd_list.bind_image(0, 1, image);
                         } else {

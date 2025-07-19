@@ -16,10 +16,19 @@ add_requires("glm 1.0.1", { configs = {
 } })
 add_requires("plf_colony v7.41")
 
-add_requires("imguizmo-lr v1.91.8-docking")
-add_requires("imgui v1.91.8-docking", { configs = {
-    wchar32 = true,
-} })
+local imgui_version = "v1.92.0-docking"
+local imgui_configs = { wchar32 = true }
+add_requires("imgui " .. imgui_version, { configs = imgui_configs })
+
+add_requires("implot 3da8bd34299965d3b0ab124df743fe3e076fa222")
+add_requireconfs("imgui", "implot.imgui", {
+    override = true, version = imgui_version, configs = imgui_configs
+})
+
+add_requires("imguizmo 1.91.3+wip")
+add_requireconfs("imgui", "imguizmo.imgui", {
+    override = true, version = imgui_version, configs = imgui_configs
+})
 
 add_requires("simdutf v6.2.0")
 add_requires("simdjson v3.12.2")

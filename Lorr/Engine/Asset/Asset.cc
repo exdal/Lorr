@@ -997,7 +997,6 @@ auto AssetManager::load_texture(const UUID &uuid, const TextureInfo &info) -> bo
     auto image_view = ImageView::create(*impl->device, image, image_view_info).value();
 
     auto dst_attachment = image_view.discard(*impl->device, "dst image", vuk::ImageUsageFlagBits::eTransferDst);
-    auto alignment = vuk::format_to_texel_block_size(format);
 
     auto sampler_info = SamplerInfo{
         .min_filter = vuk::Filter::eLinear,
@@ -1025,7 +1024,7 @@ auto AssetManager::load_texture(const UUID &uuid, const TextureInfo &info) -> bo
             }
 
             auto image_data = std::move(parsed_image->data);
-            auto buffer = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eCPUonly, ls::size_bytes(image_data), alignment);
+            auto buffer = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eCPUonly, ls::size_bytes(image_data));
             std::memcpy(buffer->mapped_ptr, image_data.data(), image_data.size());
 
             dst_attachment = vuk::copy(std::move(buffer), std::move(dst_attachment));
@@ -1051,7 +1050,7 @@ auto AssetManager::load_texture(const UUID &uuid, const TextureInfo &info) -> bo
                     .depth = 1,
                 };
                 auto size = vuk::compute_image_size(format, level_extent);
-                auto buffer = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eCPUonly, size, alignment);
+                auto buffer = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eCPUonly, size);
 
                 // TODO, WARN: size param might not be safe. Check with asan.
                 std::memcpy(buffer->mapped_ptr, image_data.data() + mip_data_offset, size);

@@ -122,6 +122,8 @@ private:
     vkb::PhysicalDevice physical_device = {};
     vkb::Device handle = {};
 
+    VkPhysicalDeviceLimits device_limits = {};
+
     friend Buffer;
     friend Image;
     friend ImageView;
@@ -184,6 +186,10 @@ public:
     }
     auto get_pass_queries() -> auto & {
         return pass_queries;
+    }
+
+    auto non_coherent_atom_size() -> u32 {
+        return device_limits.nonCoherentAtomSize;
     }
 };
 } // namespace lr

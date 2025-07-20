@@ -185,6 +185,10 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
     vulkan_functions.vkGetDeviceProcAddr = self.handle.fp_vkGetDeviceProcAddr;
     vulkan_functions.load_pfns(self.instance, self.handle, true);
 
+    auto physical_device_properties = VkPhysicalDeviceProperties{};
+    vulkan_functions.vkGetPhysicalDeviceProperties(self.physical_device, &physical_device_properties);
+    self.device_limits = physical_device_properties.limits;
+
     std::vector<std::unique_ptr<vuk::Executor>> executors;
 
     auto graphics_queue = self.handle.get_queue(vkb::QueueType::graphics).value();

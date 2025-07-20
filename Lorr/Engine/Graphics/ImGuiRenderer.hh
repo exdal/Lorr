@@ -8,9 +8,10 @@
 namespace lr {
 struct ImGuiRenderer {
     Device *device = nullptr;
-    Image font_atlas_image = {};
-    ImageView font_atlas_view = {};
     Pipeline pipeline = {};
+    Image font_image = {};
+    ImageView font_image_view = {};
+
     std::vector<vuk::Value<vuk::ImageAttachment>> rendering_images = {};
     ankerl::unordered_dense::map<ImageViewID, ImTextureID> acquired_images = {};
 

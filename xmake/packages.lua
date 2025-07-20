@@ -61,3 +61,5 @@ add_requires("meshoptimizer v0.22")
 add_requires("ktx v4.4.0", {
     -- debug = is_mode("debug")
 })
+
+add_requires("svector v1.0.3")

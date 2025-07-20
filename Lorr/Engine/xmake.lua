@@ -51,6 +51,7 @@ target("Lorr")
         "vuk",
         "meshoptimizer",
         "ktx",
+        "svector",
         { public = true })
 
 target_end()

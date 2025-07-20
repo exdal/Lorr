@@ -40,11 +40,10 @@ public:
     auto destroy(this TransferManager &) -> void;
 
     [[nodiscard]]
-    auto alloc_transient_buffer_raw(this TransferManager &, vuk::MemoryUsage usage, usize size, usize alignment = 1, LR_THISCALL) -> vuk::Buffer;
+    auto alloc_transient_buffer_raw(this TransferManager &, vuk::MemoryUsage usage, usize size, LR_THISCALL) -> vuk::Buffer;
 
     [[nodiscard]]
-    auto alloc_transient_buffer(this TransferManager &, vuk::MemoryUsage usage, usize size, usize alignment = 1, LR_THISCALL)
-        -> vuk::Value<vuk::Buffer>;
+    auto alloc_transient_buffer(this TransferManager &, vuk::MemoryUsage usage, usize size, LR_THISCALL) -> vuk::Value<vuk::Buffer>;
 
     [[nodiscard]]
     auto upload_staging(this TransferManager &, vuk::Value<vuk::Buffer> &&src, vuk::Value<vuk::Buffer> &&dst, LR_THISCALL) -> vuk::Value<vuk::Buffer>;

@@ -362,6 +362,7 @@ static auto draw_welcome_popup(EditorApp &self) -> void {
                         auto project = self.open_project(project_path);
                         ImGui::CloseCurrentPopup();
                         self.set_active_project(std::move(project));
+                        ImGui::PopID();
                         break;
                     }
                     ImGui::SetItemTooltip("%s", path_str);

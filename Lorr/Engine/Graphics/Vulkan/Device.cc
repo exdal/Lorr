@@ -197,17 +197,17 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
         vuk::create_vkqueue_executor(vulkan_functions, self.handle, graphics_queue, graphics_queue_family_index, vuk::DomainFlagBits::eGraphicsQueue)
     );
 
-    // auto compute_queue = self.handle.get_queue(vkb::QueueType::compute).value();
-    // auto compute_queue_family_index = self.handle.get_queue_index(vkb::QueueType::compute).value();
-    // executors.push_back(
-    //     vuk::create_vkqueue_executor(vulkan_functions, self.handle, compute_queue, compute_queue_family_index, vuk::DomainFlagBits::eComputeQueue)
-    // );
-    //
-    // auto transfer_queue = self.handle.get_queue(vkb::QueueType::transfer).value();
-    // auto transfer_queue_family_index = self.handle.get_queue_index(vkb::QueueType::transfer).value();
-    // executors.push_back(
-    //     vuk::create_vkqueue_executor(vulkan_functions, self.handle, transfer_queue, transfer_queue_family_index, vuk::DomainFlagBits::eTransferQueue)
-    // );
+    auto compute_queue = self.handle.get_queue(vkb::QueueType::compute).value();
+    auto compute_queue_family_index = self.handle.get_queue_index(vkb::QueueType::compute).value();
+    executors.push_back(
+        vuk::create_vkqueue_executor(vulkan_functions, self.handle, compute_queue, compute_queue_family_index, vuk::DomainFlagBits::eComputeQueue)
+    );
+
+    auto transfer_queue = self.handle.get_queue(vkb::QueueType::transfer).value();
+    auto transfer_queue_family_index = self.handle.get_queue_index(vkb::QueueType::transfer).value();
+    executors.push_back(
+        vuk::create_vkqueue_executor(vulkan_functions, self.handle, transfer_queue, transfer_queue_family_index, vuk::DomainFlagBits::eTransferQueue)
+    );
 
     executors.push_back(std::make_unique<vuk::ThisThreadExecutor>());
     self.runtime.emplace(

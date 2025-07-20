@@ -542,7 +542,7 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                 VUK_BA(vuk::eComputeRead) meshlet_instances,
                 VUK_BA(vuk::eComputeRead) meshes,
                 VUK_BA(vuk::eComputeRead) transforms,
-                VUK_IA(vuk::eComputeSampled) hiz,
+                VUK_IA(vuk::eComputeRead) hiz,
                 VUK_BA(vuk::eComputeWrite) debug_drawer
             ) {
                 cmd_list //
@@ -855,10 +855,10 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
             "vis decode",
             [descriptor_set = materials_set]( //
                 vuk::CommandBuffer &cmd_list,
-                VUK_IA(vuk::eColorWrite) albedo,
-                VUK_IA(vuk::eColorWrite) normal,
-                VUK_IA(vuk::eColorWrite) emissive,
-                VUK_IA(vuk::eColorWrite) metallic_roughness_occlusion,
+                VUK_IA(vuk::eColorRW) albedo,
+                VUK_IA(vuk::eColorRW) normal,
+                VUK_IA(vuk::eColorRW) emissive,
+                VUK_IA(vuk::eColorRW) metallic_roughness_occlusion,
                 VUK_IA(vuk::eFragmentSampled) visbuffer,
                 VUK_BA(vuk::eFragmentRead) camera,
                 VUK_BA(vuk::eFragmentRead) visible_meshlet_instances_indices,

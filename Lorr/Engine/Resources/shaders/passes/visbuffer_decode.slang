@@ -14,7 +14,7 @@ struct ShaderParameters {
     StructuredBuffer<MeshletInstance> meshlet_instances;
     StructuredBuffer<Mesh> meshes;
     StructuredBuffer<Transform> transforms;
-    StructuredBuffer<Material, ScalarDataLayout> materials;
+    StructuredBuffer<Material> materials;
 };
 ParameterBlock<ShaderParameters> params;
 

@@ -6,10 +6,10 @@ import scene;
 constexpr static u64 MESHLET_DEPTH_BITS = 32u;
 constexpr static u64 MESHLET_DEPTH_MASK = (1u << MESHLET_DEPTH_BITS) - 1u;
 
-constexpr static u32 MESHLET_INSTANCE_ID_BITS = 25u;
+constexpr static u32 MESHLET_INSTANCE_ID_BITS = 24u;
 constexpr static u32 MESHLET_INSTANCE_ID_MASK = (1u << MESHLET_INSTANCE_ID_BITS) - 1u;
 
-public constexpr static u32 MESHLET_PRIMITIVE_BITS = 7u;
+public constexpr static u32 MESHLET_PRIMITIVE_BITS = 8u;
 public constexpr static u32 MESHLET_PRIMITIVE_MASK = (1u << MESHLET_PRIMITIVE_BITS) - 1u;
 
 public struct VisBufferData {

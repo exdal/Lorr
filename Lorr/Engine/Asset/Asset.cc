@@ -995,23 +995,7 @@ auto AssetManager::load_texture(const UUID &uuid, const TextureInfo &info) -> bo
         .name = stack.format("{} Image View", rel_path),
     };
     auto image_view = ImageView::create(*impl->device, image, image_view_info).value();
-
     auto dst_attachment = image_view.discard(*impl->device, "dst image", vuk::ImageUsageFlagBits::eTransferDst);
-
-    auto sampler_info = SamplerInfo{
-        .min_filter = vuk::Filter::eLinear,
-        .mag_filter = vuk::Filter::eLinear,
-        .mipmap_mode = vuk::SamplerMipmapMode::eLinear,
-        .addr_u = vuk::SamplerAddressMode::eRepeat,
-        .addr_v = vuk::SamplerAddressMode::eRepeat,
-        .addr_w = vuk::SamplerAddressMode::eRepeat,
-        .compare_op = vuk::CompareOp::eNever,
-        .max_anisotropy = 8.0f,
-        .mip_lod_bias = 0.0f,
-        .min_lod = 0.0f,
-        .max_lod = static_cast<f32>(mip_level_count - 1),
-        .use_anisotropy = true,
-    };
 
     auto &transfer_man = impl->device->transfer_man();
     switch (file_type) {
@@ -1070,6 +1054,20 @@ auto AssetManager::load_texture(const UUID &uuid, const TextureInfo &info) -> bo
     {
         auto write_lock = std::unique_lock(impl->textures_mutex);
         auto *asset = this->get_asset(uuid);
+        auto sampler_info = SamplerInfo{
+            .min_filter = vuk::Filter::eLinear,
+            .mag_filter = vuk::Filter::eLinear,
+            .mipmap_mode = vuk::SamplerMipmapMode::eLinear,
+            .addr_u = vuk::SamplerAddressMode::eRepeat,
+            .addr_v = vuk::SamplerAddressMode::eRepeat,
+            .addr_w = vuk::SamplerAddressMode::eRepeat,
+            .compare_op = vuk::CompareOp::eNever,
+            .max_anisotropy = 8.0f,
+            .mip_lod_bias = 0.0f,
+            .min_lod = 0.0f,
+            .max_lod = static_cast<f32>(mip_level_count - 1),
+            .use_anisotropy = true,
+        };
         auto sampler = Sampler::create(*impl->device, sampler_info).value();
         asset->texture_id = impl->textures.create_slot(Texture{ .image = image, .image_view = image_view, .sampler = sampler });
     }
@@ -1561,13 +1559,13 @@ auto AssetManager::get_materials_buffer() -> vuk::Value<vuk::Buffer> {
         auto emissive_image_index = uuid_to_index(material->emissive_texture);
         auto metallic_roughness_image_index = uuid_to_index(material->metallic_roughness_texture);
         auto occlusion_image_index = uuid_to_index(material->occlusion_texture);
+
         auto flags = GPU::MaterialFlag::None;
         flags |= albedo_image_index.has_value() ? GPU::MaterialFlag::HasAlbedoImage : GPU::MaterialFlag::None;
         flags |= normal_image_index.has_value() ? GPU::MaterialFlag::HasNormalImage : GPU::MaterialFlag::None;
         flags |= emissive_image_index.has_value() ? GPU::MaterialFlag::HasEmissiveImage : GPU::MaterialFlag::None;
         flags |= metallic_roughness_image_index.has_value() ? GPU::MaterialFlag::HasMetallicRoughnessImage : GPU::MaterialFlag::None;
         flags |= occlusion_image_index.has_value() ? GPU::MaterialFlag::HasOcclusionImage : GPU::MaterialFlag::None;
-
         //flags |= GPU::MaterialFlag::NormalFlipY;
 
         return {
@@ -1588,13 +1586,13 @@ auto AssetManager::get_materials_buffer() -> vuk::Value<vuk::Buffer> {
     auto all_materials_count = 0_sz;
     auto dirty_materials = std::vector<MaterialID>();
     {
-        std::shared_lock shared_lock(impl->materials_mutex);
+        auto read_lock = std::shared_lock(impl->materials_mutex);
         if (impl->materials.size() == 0) {
             return {};
         }
 
-        shared_lock.unlock();
-        std::unique_lock _(impl->materials_mutex);
+        read_lock.unlock();
+        auto write_lock = std::unique_lock(impl->materials_mutex);
 
         all_materials_count = impl->materials.size();
 
@@ -1617,7 +1615,7 @@ auto AssetManager::get_materials_buffer() -> vuk::Value<vuk::Buffer> {
 
         impl->materials_buffer = Buffer::create(*impl->device, gpu_materials_bytes_size, vuk::MemoryUsage::eGPUonly).value();
         materials_buffer = impl->materials_buffer.acquire(*impl->device, "materials buffer", vuk::eNone);
-        vuk::fill(materials_buffer, 0_u32);
+        vuk::fill(materials_buffer, ~0_u32);
         rebuild_materials = true;
     } else if (impl->materials_buffer) {
         materials_buffer = impl->materials_buffer.acquire(*impl->device, "materials buffer", vuk::eNone);

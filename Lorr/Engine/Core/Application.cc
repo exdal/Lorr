@@ -131,6 +131,7 @@ void Application::shutdown(this Application &self) {
     self.job_man->shutdown();
     self.job_man->wait();
 
+    self.imgui_renderer.destroy();
     self.scene_renderer.destroy();
     self.swap_chain.reset();
 

@@ -16,6 +16,8 @@ struct ImGuiRenderer {
     ankerl::unordered_dense::map<ImageViewID, ImTextureID> acquired_images = {};
 
     auto init(this ImGuiRenderer &, Device *device) -> void;
+    auto destroy(this ImGuiRenderer &) -> void;
+
     auto add_font(this ImGuiRenderer &, const fs::path &path) -> ImFont *;
     auto add_image(this ImGuiRenderer &, vuk::Value<vuk::ImageAttachment> &&attachment) -> ImTextureID;
     auto add_image(this ImGuiRenderer &, ImageView &image_view, LR_THISCALL) -> ImTextureID;

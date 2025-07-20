@@ -65,6 +65,16 @@ auto ImGuiRenderer::init(this ImGuiRenderer &self, Device *device) -> void {
     self.pipeline = Pipeline::create(*device, slang_session, pipeline_info).value();
 }
 
+auto ImGuiRenderer::destroy(this ImGuiRenderer &self) -> void {
+    if (self.font_image_view) {
+        self.device->destroy(self.font_image_view.id());
+    }
+
+    if (self.font_image) {
+        self.device->destroy(self.font_image.id());
+    }
+}
+
 auto ImGuiRenderer::add_image(this ImGuiRenderer &self, vuk::Value<vuk::ImageAttachment> &&attachment) -> ImTextureID {
     ZoneScoped;
 

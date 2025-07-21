@@ -1,12 +1,14 @@
-add_requires("fmt 11.1.4", { configs = {
-    header_only = true,
-    shared = false,
-}, system = false })
+local fmt_version = "11.2.0"
+local fmt_configs = { header_only = false, shared = false }
+add_requires("fmt " .. fmt_version, { configs = fmt_configs, system = false })
 add_requires("fmtlog v2.3.0", { configs = {
     shared = false,
 }, system = false })
 add_requireconfs("fmt", "fmtlog.fmt", {
-    override = true, version = "11.1.3", configs = { header_only = true, shared = false }
+    override = true,
+    version = fmt_version,
+    configs = fmt_configs,
+    system = false
 })
 
 add_requires("xxhash v0.8.3")

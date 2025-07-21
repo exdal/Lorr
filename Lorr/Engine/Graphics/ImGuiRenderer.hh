@@ -3,19 +3,21 @@
 #include "Engine/Graphics/Vulkan.hh"
 
 #include <imgui.h>
-
-#include <Engine/Util/implot/implot.h>
+#include <implot.h>
 
 namespace lr {
 struct ImGuiRenderer {
     Device *device = nullptr;
-    Image font_atlas_image = {};
-    ImageView font_atlas_view = {};
     Pipeline pipeline = {};
+    Image font_image = {};
+    ImageView font_image_view = {};
+
     std::vector<vuk::Value<vuk::ImageAttachment>> rendering_images = {};
     ankerl::unordered_dense::map<ImageViewID, ImTextureID> acquired_images = {};
 
     auto init(this ImGuiRenderer &, Device *device) -> void;
+    auto destroy(this ImGuiRenderer &) -> void;
+
     auto add_font(this ImGuiRenderer &, const fs::path &path) -> ImFont *;
     auto add_image(this ImGuiRenderer &, vuk::Value<vuk::ImageAttachment> &&attachment) -> ImTextureID;
     auto add_image(this ImGuiRenderer &, ImageView &image_view, LR_THISCALL) -> ImTextureID;

@@ -8,8 +8,7 @@ on:
     branches: [ master ]
 
 env:
-  VULKAN_VERSION: 1.3.261.1
-  LLVM_VERSION: 19
+  LLVM_VERSION: 20
 
 jobs:
   build:
@@ -19,7 +18,7 @@ jobs:
         platform:
           - { runner: windows-latest, os: windows, arch: x64,    toolchain: msvc,     runtime: MT }
           - { runner: windows-latest, os: windows, arch: x64,    toolchain: clang-cl, runtime: MT }
-          - { runner: ubuntu-latest,  os: linux,   arch: x86_64, toolchain: clang-19, runtime: c++_static }
+          - { runner: ubuntu-latest,  os: linux,   arch: x86_64, toolchain: clang-20, runtime: c++_static }
           - { runner: ubuntu-latest,  os: linux,   arch: x86_64, toolchain: gcc-14,   runtime: stdc++_static }
         mode: [ debug, release ]
 
@@ -80,7 +79,7 @@ jobs:
           key: ${{ matrix.platform.os }}-${{ matrix.platform.arch }}-${{ matrix.mode }}-${{ matrix.platform.runtime }}-${{ matrix.platform.toolchain }}-${{ steps.dep_hash.outputs.hash }}-W${{ steps.cache_key.outputs.key }}
 
       - name: Configure xmake and install dependencies
-        run: xmake config -v --toolchain=${{ matrix.platform.toolchain }} --arch=${{ matrix.platform.arch }} --mode=${{ matrix.mode }} --runtimes=${{ matrix.platform.runtime }} --yes --policies=package.precompiled:n
+        run: xmake config -vD --toolchain=${{ matrix.platform.toolchain }} --arch=${{ matrix.platform.arch }} --mode=${{ matrix.mode }} --runtimes=${{ matrix.platform.runtime }} --yes --policies=package.precompiled:n
 
       # Save dependencies
       - name: Save cached xmake dependencies

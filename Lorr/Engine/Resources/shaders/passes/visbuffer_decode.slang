@@ -7,26 +7,16 @@ import passes.visbuffer;
 
 #include <fullscreen.slang>
 
-[[vk::binding(0, 0)]]
-Image2D<u32> visbuffer;
-
-[[vk::binding(1, 0)]]
-ConstantBuffer<Camera, ScalarDataLayout> camera;
-
-[[vk::binding(2, 0)]]
-StructuredBuffer<u32, ScalarDataLayout> visible_meshlet_instances_indices;
-
-[[vk::binding(3, 0)]]
-StructuredBuffer<MeshletInstance, ScalarDataLayout> meshlet_instances;
-
-[[vk::binding(4, 0)]]
-StructuredBuffer<Mesh, ScalarDataLayout> meshes;
-
-[[vk::binding(5, 0)]]
-StructuredBuffer<Transform, ScalarDataLayout> transforms;
-
-[[vk::binding(6, 0)]]
-StructuredBuffer<Material, ScalarDataLayout> materials;
+struct ShaderParameters {
+    Image2D<u32> visbuffer;
+    ConstantBuffer<Camera> camera;
+    RWStructuredBuffer<u32> visible_meshlet_instances_indices;
+    StructuredBuffer<MeshletInstance> meshlet_instances;
+    StructuredBuffer<Mesh> meshes;
+    StructuredBuffer<Transform> transforms;
+    StructuredBuffer<Material> materials;
+};
+ParameterBlock<ShaderParameters> params;
 
 struct FragmentOutput {
     f32x4 albedo_color : SV_Target0;
@@ -36,137 +26,153 @@ struct FragmentOutput {
 };
 
 struct PartialDeriv {
-    f32x3 uv_ddx;
-    f32x3 uv_ddy;
+    f32x3 ddx;
+    f32x3 ddy;
     f32x3 lambda;
 
-    [[mutating]]
-    __init(in f32x4x3 clip_pos, in f32x2 uv, in f32x2 resolution) {
-        // Partial Derivatives
-        const f32x3 inv_w  = 1.0 / f32x3(clip_pos[0].w, clip_pos[1].w, clip_pos[2].w);
-        const f32x2 ndc_0  = clip_pos[0].xy * inv_w[0];
-        const f32x2 ndc_1  = clip_pos[1].xy * inv_w[1];
-        const f32x2 ndc_2  = clip_pos[2].xy * inv_w[2];
-        // Inverse area of a triangle.
-        // https://cg.ivd.kit.edu/publications/2015/dais/DAIS.pdf
-        // Appendix A:
-        // D = 
-        const f32 inv_det  = 1.0 / determinant(mat2(ndc_2 - ndc_1, ndc_0 - ndc_1));
-        // Lambda 1 =
-        this.uv_ddx = f32x3(ndc_1.y - ndc_2.y, ndc_2.y - ndc_0.y, ndc_0.y - ndc_1.y) * inv_det * inv_w;
-        // Lambda 2 =
-        this.uv_ddy = f32x3(ndc_2.x - ndc_1.x, ndc_0.x - ndc_2.x, ndc_1.x - ndc_0.x) * inv_det * inv_w;
-        f32 ddx_sum  = dot(this.uv_ddx, 1.0);
-        f32 ddy_sum  = dot(this.uv_ddy, 1.0);
-
-        const f32x2 delta    = uv - ndc_0;
-        const f32 view_inv_w = inv_w.x + delta.x * ddx_sum + delta.y * ddy_sum;
-        const f32 view_w     = 1.0 / view_inv_w;
-        this.lambda = {
-            view_w * (inv_w.x + delta.x * this.uv_ddx.x + delta.y * this.uv_ddy.x),
-            view_w * (0.0     + delta.x * this.uv_ddx.y + delta.y * this.uv_ddy.y),
-            view_w * (0.0     + delta.x * this.uv_ddx.z + delta.y * this.uv_ddy.z)
-        };
-        const f32x2 two_over_resolution = 2.0 / resolution;
-        this.uv_ddx *=  two_over_resolution.x;
-        this.uv_ddy *= -two_over_resolution.y;
-        ddx_sum     *=  two_over_resolution.x;
-        ddy_sum     *= -two_over_resolution.y;
-
-        const f32 view_ddx = 1.0 / (view_inv_w + ddx_sum);
-        const f32 view_ddy = 1.0 / (view_inv_w + ddy_sum);
-        this.uv_ddx = view_ddx * (this.lambda * view_inv_w + this.uv_ddx) - this.lambda;
-        this.uv_ddy = view_ddy * (this.lambda * view_inv_w + this.uv_ddy) - this.lambda;
-    }
-
-    func interpolate(f32x3 v) -> f32 {
-        return dot(this.lambda, v);
-    }
-
-    func interpolate_3x3(f32x3x3 v) -> f32x3 {
-        return f32x3(
-            dot(this.lambda, f32x3(v[0].x, v[1].x, v[2].x)),
-            dot(this.lambda, f32x3(v[0].y, v[1].y, v[2].y)),
-            dot(this.lambda, f32x3(v[0].z, v[1].z, v[2].z))
-        );
-    }
-
     func gradient_of(f32x2x3 v) -> UVGradient {
-        const let v0 = f32x3(v[0].x, v[1].x, v[2].x);
-        const let v1 = f32x3(v[0].y, v[1].y, v[2].y);
-
         UVGradient grad;
-        grad.uv.x = this.interpolate(v0);
-        grad.uv.y = this.interpolate(v1);
-        grad.ddx.x = dot(this.uv_ddx, v0);
-        grad.ddx.y = dot(this.uv_ddx, v1);
-        grad.ddy.x = dot(this.uv_ddy, v0);
-        grad.ddy.y = dot(this.uv_ddy, v1);
+        grad.uv = mul(this.lambda, v);
+        grad.ddx = mul(this.ddx, v);
+        grad.ddy = mul(this.ddy, v);
 
         return grad;
     }
 };
 
+func compute_partial_derivatives(in f32x4x3 world_positions, in f32x2 uv, in f32x2 resolution) -> PartialDeriv {
+    PartialDeriv result;
+
+    let clip_pos_0 = mul(params.camera.projection_view_mat, f32x4(world_positions[0].xyz, 1.0));
+    let clip_pos_1 = mul(params.camera.projection_view_mat, f32x4(world_positions[1].xyz, 1.0));
+    let clip_pos_2 = mul(params.camera.projection_view_mat, f32x4(world_positions[2].xyz, 1.0));
+
+    // Partial Derivatives
+    let inv_w = 1.0 / f32x3(clip_pos_0.w, clip_pos_1.w, clip_pos_2.w);
+    let ndc_0 = clip_pos_0.xy * inv_w[0];
+    let ndc_1 = clip_pos_1.xy * inv_w[1];
+    let ndc_2 = clip_pos_2.xy * inv_w[2];
+    // Inverse area of a triangle.
+    // https://cg.ivd.kit.edu/publications/2015/dais/DAIS.pdf
+    // Appendix A:
+    // D =
+    let inv_det = 1.0 / determinant(f32x2x2(ndc_2 - ndc_1, ndc_0 - ndc_1));
+    // Lambda 1 =
+    result.ddx = f32x3(ndc_1.y - ndc_2.y, ndc_2.y - ndc_0.y, ndc_0.y - ndc_1.y) * inv_det * inv_w;
+    // Lambda 2 =
+    result.ddy = f32x3(ndc_2.x - ndc_1.x, ndc_0.x - ndc_2.x, ndc_1.x - ndc_0.x) * inv_det * inv_w;
+    var ddx_sum = dot(result.ddx, 1.0);
+    var ddy_sum = dot(result.ddy, 1.0);
+
+    let delta_v = uv - ndc_0;
+    let interp_inv_w = inv_w.x + delta_v.x * ddx_sum + delta_v.y * ddy_sum;
+    let interp_w = 1.0 / interp_inv_w;
+    result.lambda = f32x3(
+        interp_w * (inv_w[0] + delta_v.x * result.ddx.x + delta_v.y * result.ddy.x),
+        interp_w * (delta_v.x * result.ddx.y + delta_v.y * result.ddy.y),
+        interp_w * (delta_v.x * result.ddx.z + delta_v.y * result.ddy.z)
+    );
+    let two_over_resolution = 2.0 / resolution;
+    result.ddx *= two_over_resolution.x;
+    result.ddy *= -two_over_resolution.y;
+    ddx_sum *= two_over_resolution.x;
+    ddy_sum *= -two_over_resolution.y;
+
+    let interp_ddx_w = 1.0 / (interp_inv_w + ddx_sum);
+    let interp_ddy_w = 1.0 / (interp_inv_w + ddy_sum);
+    result.ddx = interp_ddx_w * (result.lambda * interp_inv_w + result.ddx) - result.lambda;
+    result.ddy = interp_ddy_w * (result.lambda * interp_inv_w + result.ddy) - result.lambda;
+
+    return result;
+}
+
 [[shader("fragment")]]
 func fs_main(VertexOutput input) -> FragmentOutput {
-    const u32 texel = visbuffer.load(u32x2(input.position.xy));
+    let texel = params.visbuffer.load(u32x2(input.position.xy));
     if (texel == ~0u) {
         discard;
     }
 
     FragmentOutput output = {};
 
-    const let vis = VisBufferData(texel);
-    const u32 meshlet_instance_index = visible_meshlet_instances_indices[vis.meshlet_instance_index];
-    const MeshletInstance meshlet_instance = meshlet_instances[meshlet_instance_index];
-    const Mesh mesh = meshes[meshlet_instance.mesh_index];
-    const Transform transform = transforms[meshlet_instance.transform_index];
-    const Material material = materials[meshlet_instance.material_index];
+    let vis = VisBufferData(texel);
+    let meshlet_instance_index = params.visible_meshlet_instances_indices[vis.meshlet_instance_index];
+    let meshlet_instance = params.meshlet_instances[meshlet_instance_index];
+    let mesh = params.meshes[meshlet_instance.mesh_index];
+    let transform = params.transforms[meshlet_instance.transform_index];
+    let material = params.materials[meshlet_instance.material_index];
 
-    const Meshlet meshlet    = mesh.meshlets[meshlet_instance.meshlet_index];
-    const Triangle indices   = meshlet.indices(mesh, vis.triangle_index);
-    const u32x3 vertices     = meshlet.vertices(mesh, indices);
-    const f32x3x3 positions  = meshlet.positions(mesh, vertices);
-    const f32x3x3 normals    = meshlet.normals(mesh, vertices);
-    const f32x2x3 tex_coords = meshlet.tex_coords(mesh, vertices);
-    const f32x4x3 world_pos  = transform.to_world_positions(positions);
-    const f32x4x3 clip_pos   = camera.to_clip_positions(world_pos);
-    const PartialDeriv deriv = { clip_pos, input.tex_coord * 2.0 - 1.0, camera.resolution };
-
-    const UVGradient tex_coord_grad = deriv.gradient_of(tex_coords);
+    let meshlet = mesh.meshlets[meshlet_instance.meshlet_index];
+    let indices = meshlet.indices(mesh, vis.triangle_index);
+    let vertices = meshlet.vertices(mesh, indices);
+    let positions = meshlet.positions(mesh, vertices);
+    let normals = meshlet.normals(mesh, vertices);
+    let tex_coords = meshlet.tex_coords(mesh, vertices);
+    let world_positions = transform.to_world_positions(positions);
+    let NDC = f32x3(input.tex_coord * 2.0 - 1.0, 1.0);
+    let deriv = compute_partial_derivatives(world_positions, NDC.xy, params.camera.resolution);
+    let tex_coord_grad = deriv.gradient_of(tex_coords);
 
     // ALBEDO ───────────────────────────────────────────────────────────
     output.albedo_color = material.sample_albedo_color(tex_coord_grad);
 
     // NORMALS ──────────────────────────────────────────────────────────
-    const f32x3 normal_deriv = deriv.interpolate_3x3(normals);
-    const f32x3 world_normal = mul(transform.normal, normal_deriv);
-    f32x3 N = world_normal;
-    if (material.normal_image_index != ~0u) {
-        const f32x3x3 world_positions = f32x3x3(
-            world_pos[0].xyz,
-            world_pos[1].xyz,
-            world_pos[2].xyz
-        );
-        const f32x3 pos_ddx = mul(deriv.uv_ddx, world_positions);
-        const f32x3 pos_ddy = mul(deriv.uv_ddy, world_positions);
-        const f32x3 pos_ddx_s = pos_ddx - dot(pos_ddx, N) * N;
-        const f32x3 pos_ddy_s = pos_ddy - dot(pos_ddy, N) * N;
-        const f32 jacobian_sign = sign(determinant(f32x2x2(tex_coord_grad.ddx, tex_coord_grad.ddy)));
+    const f32x3x3 camera_relative_world_positions = {
+        world_positions[0].xyz - params.camera.position,
+        world_positions[1].xyz - params.camera.position,
+        world_positions[2].xyz - params.camera.position,
+    };
+    const f32x3 pos_ddx = mul(deriv.ddx, camera_relative_world_positions);
+    const f32x3 pos_ddy = mul(deriv.ddy, camera_relative_world_positions);
 
-        f32x3 T = jacobian_sign * (tex_coord_grad.ddy.y * pos_ddx_s - tex_coord_grad.ddx.y * pos_ddy);
-        if (jacobian_sign != 0.0f) {
-            T = normalize(T);
-        }
-        const f32x3 B = jacobian_sign * sign(dot(pos_ddy, cross(N, pos_ddx))) * cross(N, T);
-        const f32x3x3 TBN = f32x3x3(T, B, N);
+    const f32x3x3 world_normals = transform.to_world_normals(normals);
+    const f32x3 world_normal = mul(deriv.lambda, world_normals);
 
-        const f32x2 Ns = material.sample_normal_color(tex_coord_grad).xy * 2.0 - 1.0;
-        const f32 Ns_z = sqrt(max(1.0 - Ns.x * Ns.x - Ns.y * Ns.y, 0.0));
-        const f32x3 sampled_normal = normalize(f32x3(Ns, Ns_z));
-        N = mul(sampled_normal, TBN);
+    const f32x3 pos_ddx_s = pos_ddx - dot(pos_ddx, world_normal) * world_normal;
+    const f32x3 pos_ddy_s = pos_ddy - dot(pos_ddy, world_normal) * world_normal;
+    const f32x2 uv_ddx = tex_coord_grad.ddx;
+    const f32x2 uv_ddy = tex_coord_grad.ddy;
+
+    const i32 jacobian_sign = sign(uv_ddx.x * uv_ddy.y - uv_ddx.y * uv_ddy.x);
+    f32x3 tangent = jacobian_sign * (uv_ddy.y * pos_ddx_s - uv_ddx.y * pos_ddy_s);
+    if (jacobian_sign != 0.0) {
+        tangent = normalize(tangent);
     }
-    output.normal_color.xy = std::vec3_to_oct(N);
+    const f32 w = jacobian_sign * sign(dot(pos_ddy, cross(world_normal, pos_ddx)));
+    f32x3 bitangent = -w * cross(world_normal, tangent);
+    f32x3 normal = world_normal;
+
+#if 1
+    const f32 inv_len_N = 1.0 / length(normal);
+    tangent *= inv_len_N;
+    bitangent *= inv_len_N;
+    normal *= inv_len_N;
+#endif
+
+    if (material.flags & MaterialFlag::HasNormalImage) {
+        f32x3 sampled_normal = material.sample_normal_color(tex_coord_grad);
+        // NOTE: This is here to convert tangent spaces to our correct spaces.
+        // for example, normal map's R component is +Y for our world. @grok is this true?
+        sampled_normal = f32x3(sampled_normal.y, sampled_normal.x, sampled_normal.z);
+
+        if (material.flags & MaterialFlag::NormalTwoComponent) {
+            sampled_normal = f32x3(sampled_normal.yx * 2.0 - 1.0, 0.0);
+            sampled_normal.z = sqrt(1.0 - sampled_normal.x * sampled_normal.x - sampled_normal.y * sampled_normal.y);
+        } else {
+            sampled_normal = sampled_normal * 2.0 - 1.0;
+        }
+
+        if (material.flags & MaterialFlag::NormalFlipY) {
+            sampled_normal.y = -sampled_normal.y;
+        }
+
+        normal = sampled_normal.x * tangent
+               + sampled_normal.y * bitangent
+               + sampled_normal.z * normal;
+        normal = normalize(normal);
+    }
+
+    output.normal_color.xy = std::vec3_to_oct(normal);
     output.normal_color.zw = std::vec3_to_oct(world_normal);
 
     // EMISSION ─────────────────────────────────────────────────────────

@@ -1,52 +1,73 @@
 #include "Editor/Window/ConsoleWindow.hh"
 
-// #include "Engine/Core/Application.hh"
+#include "Engine/Util/Icons/IconsMaterialDesignIcons.hh"
 
 namespace led {
-// void log_cb(void *user_Data, const loguru::Message &message) {
-//     auto *console = static_cast<ConsoleWindow *>(user_Data);
-//     auto &m = console->messages.emplace_back();
-//     m.verbosity = message.verbosity;
-//     m.message = fmt::format("{}", message.message);
-// }
 
-ConsoleWindow::ConsoleWindow(std::string name_, bool open_) : IWindow(std::move(name_), open_) {
-    // loguru::add_callback("editor", log_cb, this, loguru::Verbosity_MAX);
+static auto log_messages = std::vector<ls::pair<std::string, fmtlog::LogLevel>>{};
+
+void log_cb(
+    [[maybe_unused]] i64 ns,
+    [[maybe_unused]] fmtlog::LogLevel level,
+    [[maybe_unused]] fmt::string_view location,
+    [[maybe_unused]] usize basePos,
+    [[maybe_unused]] fmt::string_view threadName,
+    [[maybe_unused]] fmt::string_view msg,
+    [[maybe_unused]] usize bodyPos,
+    [[maybe_unused]] usize logFilePos
+) {
+    ZoneScoped;
+
+    fmt::println("{}", msg);
+    msg.remove_prefix(bodyPos);
+    log_messages.emplace_back(std::string(msg.begin(), msg.end()), level);
 }
 
-void ConsoleWindow::render(this ConsoleWindow &self) {
-    // auto &app = Application::get();
-    // auto &render_pipeline = app.world_render_pipeline;
+ConsoleWindow::ConsoleWindow(std::string name_, bool open_) : IWindow(std::move(name_), open_) {
+    ZoneScoped;
+
+    // acquire log cb
+    fmtlog::setLogCB(log_cb, fmtlog::DBG);
+}
+
+auto ConsoleWindow::render(this ConsoleWindow &self) -> void {
+    ZoneScoped;
 
     if (ImGui::Begin(self.name.data())) {
-        ImGuiListClipper clipper;
-        clipper.Begin(static_cast<i32>(self.messages.size()));
-        while (clipper.Step()) {
-            for (i32 line_no = clipper.DisplayStart; line_no < clipper.DisplayEnd; line_no++) {
-                auto &m = self.messages[line_no];
+        for (const auto &[message, verbosity] : log_messages) {
+            auto color = IM_COL32(255, 255, 255, 255);
 
-                // ImGui::PushFont(render_pipeline.im_fa_big);
-                // switch (m.verbosity) {
-                //     case loguru::Verbosity_WARNING:
-                //         ImGui::TextColored(ImVec4(1.0, 1.0, 0.0, 1.0), Icon::fa::triangle_exclamation);
-                //         break;
-                //     case loguru::Verbosity_ERROR:
-                //     case loguru::Verbosity_FATAL:
-                //         ImGui::TextColored(ImVec4(0.90234375f, 0.296875f, 0.234375f, 1.0), Icon::fa::circle_exclamation);
-                //         break;
-                //     default:
-                //         ImGui::TextUnformatted(Icon::fa::circle_info);
-                //         break;
-                // }
-                //
-                // ImGui::PopFont();
-
-                ImGui::SameLine();
-                ImGui::TextUnformatted(m.message.c_str());
-                ImGui::Separator();
+            switch (verbosity) {
+                case fmtlog::DBG: {
+                    color = IM_COL32(155, 155, 155, 255);
+                    ImGui::Text("  %s |", ICON_MDI_BUG);
+                } break;
+                case fmtlog::INF: {
+                    color = IM_COL32(0, 255, 0, 255);
+                    ImGui::Text("  %s |", ICON_MDI_INFORMATION_VARIANT_CIRCLE);
+                } break;
+                case fmtlog::WRN: {
+                    color = IM_COL32(255, 255, 0, 255);
+                    ImGui::Text("  %s |", ICON_MDI_ALERT);
+                } break;
+                case fmtlog::ERR: {
+                    color = IM_COL32(255, 0, 0, 255);
+                    ImGui::Text("  %s |", ICON_MDI_ALERT_OCTAGON);
+                } break;
+                default:
+                    ImGui::Text("  ");
+                    break;
             }
+
+            auto rect_min = ImGui::GetItemRectMin();
+            auto spacing = ImGui::GetStyle().FramePadding.x / 2.0f;
+            auto *draw_list = ImGui::GetWindowDrawList();
+            auto rect_max = ImGui::GetItemRectMax();
+            draw_list->AddLine({ rect_min.x + spacing, rect_min.y }, { rect_min.x + spacing, rect_max.y }, color, 4);
+
+            ImGui::SameLine();
+            ImGui::TextUnformatted(message.c_str());
         }
-        clipper.End();
 
         if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY()) {
             ImGui::SetScrollHereY(1.0f);

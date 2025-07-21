@@ -15,37 +15,21 @@ auto TransferManager::destroy(this TransferManager &self) -> void {
     self.release();
 }
 
-auto TransferManager::alloc_transient_buffer_raw(
-    this TransferManager &self,
-    vuk::MemoryUsage usage,
-    usize size,
-    usize alignment,
-    bool frame,
-    vuk::source_location LOC
-) -> vuk::Buffer {
+auto TransferManager::alloc_transient_buffer_raw(this TransferManager &self, vuk::MemoryUsage usage, usize size, vuk::source_location LOC)
+    -> vuk::Buffer {
     ZoneScoped;
 
-    std::unique_lock _(self.mutex);
-    auto *allocator = &self.device->allocator.value();
-    if (self.frame_allocator.has_value() && frame) {
-        allocator = &self.frame_allocator.value();
-    }
-
-    auto buffer = *vuk::allocate_buffer(*allocator, { .mem_usage = usage, .size = size, .alignment = alignment }, LOC);
+    std::shared_lock _(self.mutex);
+    auto buffer =
+        *vuk::allocate_buffer(*self.device->allocator, { .mem_usage = usage, .size = size, .alignment = self.device->non_coherent_atom_size() }, LOC);
     return *buffer;
 }
 
-auto TransferManager::alloc_transient_buffer(
-    this TransferManager &self,
-    vuk::MemoryUsage usage,
-    usize size,
-    usize alignment,
-    bool frame,
-    vuk::source_location LOC
-) -> vuk::Value<vuk::Buffer> {
+auto TransferManager::alloc_transient_buffer(this TransferManager &self, vuk::MemoryUsage usage, usize size, vuk::source_location LOC)
+    -> vuk::Value<vuk::Buffer> {
     ZoneScoped;
 
-    auto buffer = self.alloc_transient_buffer_raw(usage, size, alignment, frame, LOC);
+    auto buffer = self.alloc_transient_buffer_raw(usage, size, LOC);
     return vuk::acquire_buf("transient buffer", buffer, vuk::Access::eNone, LOC);
 }
 
@@ -70,7 +54,7 @@ auto TransferManager::upload_staging(this TransferManager &self, vuk::Value<vuk:
     -> vuk::Value<vuk::Buffer> {
     ZoneScoped;
 
-    auto *dst_handle = self.device->buffer(dst.id());
+    auto dst_handle = self.device->buffer(dst.id());
     auto dst_buffer = vuk::discard_buf("dst", dst_handle->subrange(dst_offset, src->size), LOC);
     return self.upload_staging(std::move(src), std::move(dst_buffer), LOC);
 }
@@ -85,7 +69,7 @@ auto TransferManager::upload_staging(
 ) -> vuk::Value<vuk::Buffer> {
     ZoneScoped;
 
-    auto cpu_buffer = self.alloc_transient_buffer(vuk::MemoryUsage::eCPUonly, data_size, 8, true, LOC);
+    auto cpu_buffer = self.alloc_transient_buffer(vuk::MemoryUsage::eCPUonly, data_size, LOC);
     std::memcpy(cpu_buffer->mapped_ptr, data, data_size);
 
     auto dst_buffer = vuk::discard_buf("dst", dst->subrange(dst_offset, cpu_buffer->size), LOC);
@@ -96,10 +80,10 @@ auto TransferManager::upload_staging(this TransferManager &self, void *data, u64
     -> vuk::Value<vuk::Buffer> {
     ZoneScoped;
 
-    auto cpu_buffer = self.alloc_transient_buffer(vuk::MemoryUsage::eCPUonly, data_size, 8, true, LOC);
+    auto cpu_buffer = self.alloc_transient_buffer(vuk::MemoryUsage::eCPUonly, data_size, LOC);
     std::memcpy(cpu_buffer->mapped_ptr, data, data_size);
 
-    auto *dst_handle = self.device->buffer(dst.id());
+    auto dst_handle = self.device->buffer(dst.id());
     auto dst_buffer = vuk::discard_buf("dst", dst_handle->subrange(dst_offset, cpu_buffer->size), LOC);
     return self.upload_staging(std::move(cpu_buffer), std::move(dst_buffer), LOC);
 }
@@ -108,7 +92,7 @@ auto TransferManager::upload_staging(this TransferManager &self, ImageView &imag
     -> vuk::Value<vuk::ImageAttachment> {
     ZoneScoped;
 
-    std::unique_lock _(self.mutex);
+    std::shared_lock _(self.mutex);
     auto dst_attachment_info = image_view.to_attachment(*self.device, vuk::ImageUsageFlagBits::eTransferDst);
     auto result = vuk::host_data_to_image(self.device->allocator.value(), vuk::DomainFlagBits::eGraphicsQueue, dst_attachment_info, data, LOC);
     result = vuk::generate_mips(std::move(result), 0, image_view.mip_count() - 1);
@@ -136,7 +120,7 @@ auto TransferManager::scratch_buffer(this TransferManager &self, const void *dat
 
     return upload_pass(std::move(cpu_buffer), std::move(gpu_buffer));
 #else
-    auto buffer = self.alloc_transient_buffer(vuk::MemoryUsage::eGPUtoCPU, size, 8, true, LOC);
+    auto buffer = self.alloc_transient_buffer(vuk::MemoryUsage::eGPUtoCPU, size, LOC);
     std::memcpy(buffer->mapped_ptr, data, size);
     return buffer;
 #endif
@@ -163,11 +147,12 @@ auto TransferManager::wait_for_ops(this TransferManager &self, vuk::Compiler &co
     self.futures.clear();
 }
 
-auto TransferManager::acquire(this TransferManager &self, vuk::DeviceFrameResource &allocator) -> void {
+auto TransferManager::acquire(this TransferManager &self, vuk::DeviceSuperFrameResource &super_frame_resource) -> void {
     ZoneScoped;
 
     std::unique_lock _(self.mutex);
-    self.frame_allocator.emplace(allocator);
+    auto &frame_resource = super_frame_resource.get_next_frame();
+    self.frame_allocator.emplace(frame_resource);
 }
 
 auto TransferManager::release(this TransferManager &self) -> void {

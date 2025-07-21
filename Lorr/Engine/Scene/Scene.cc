@@ -2,7 +2,7 @@
 
 #include "Engine/Core/Application.hh"
 
-#include "Engine/Math/Matrix.hh"
+#include "Engine/Memory/Stack.hh"
 
 #include "Engine/OS/File.hh"
 
@@ -14,6 +14,8 @@
 
 #include <glm/gtx/matrix_decompose.hpp>
 #include <simdjson.h>
+
+#include <queue>
 
 namespace lr {
 template<glm::length_t N, typename T>
@@ -59,50 +61,49 @@ auto Scene::init(this Scene &self, const std::string &name) -> bool {
     self.name = name;
     self.world.emplace();
     self.entity_db.import_module(self.world->import <ECS::Core>());
-    self.root = self.world->entity();
 
-    self.world
-        ->observer<ECS::Transform>() //
+    self.world->observer<ECS::Transform>()
         .event(flecs::OnSet)
         .event(flecs::OnAdd)
         .event(flecs::OnRemove)
         .each([&self](flecs::iter &it, usize i, ECS::Transform &) {
             auto entity = it.entity(i);
-            if (it.event() == flecs::OnSet) {
+            auto event = it.event();
+            if (event == flecs::OnSet) {
                 self.set_dirty(entity);
-            } else if (it.event() == flecs::OnAdd) {
+            } else if (event == flecs::OnAdd) {
                 self.add_transform(entity);
-            } else if (it.event() == flecs::OnRemove) {
+                self.set_dirty(entity);
+            } else if (event == flecs::OnRemove) {
                 self.remove_transform(entity);
             }
         });
 
-    self.world
-        ->observer<ECS::EditorCamera>() //
-        .event(flecs::Monitor)
+    self.world->observer<ECS::RenderingMesh>()
+        .event(flecs::OnSet)
+        .event(flecs::OnRemove)
+        .each([&self](flecs::iter &it, usize i, ECS::RenderingMesh &mesh) {
+            if (!mesh.model_uuid) {
+                return;
+            }
+
+            auto entity = it.entity(i);
+            auto event = it.event();
+            if (event == flecs::OnSet) {
+                self.attach_mesh(entity, mesh.model_uuid, mesh.mesh_index);
+            } else if (event == flecs::OnRemove) {
+                self.detach_mesh(entity, mesh.model_uuid, mesh.mesh_index);
+            }
+        });
+
+    self.world->observer<ECS::EditorCamera>()
+        .event(flecs::Monitor) //
         .each([&self](flecs::iter &it, usize i, ECS::EditorCamera) {
             auto entity = it.entity(i);
             if (it.event() == flecs::OnAdd) {
                 self.editor_camera = entity;
             } else if (it.event() == flecs::OnRemove) {
                 self.editor_camera.clear();
-            }
-        });
-
-    self.world
-        ->observer<ECS::RenderingMesh>() //
-        .event(flecs::OnSet)
-        .event(flecs::OnRemove)
-        .each([&self](flecs::iter &it, usize i, ECS::RenderingMesh &rendering_mesh) {
-            if (!rendering_mesh.model_uuid) {
-                return;
-            }
-
-            auto entity = it.entity(i);
-            if (it.event() == flecs::OnSet) {
-                self.attach_mesh(entity, rendering_mesh.model_uuid, rendering_mesh.mesh_index);
-            } else if (it.event() == flecs::OnRemove) {
-                self.detach_mesh(entity, rendering_mesh.model_uuid, rendering_mesh.mesh_index);
             }
         });
 
@@ -115,41 +116,41 @@ auto Scene::init(this Scene &self, const std::string &name) -> bool {
             c.axis_velocity = {};
         });
 
+    self.root = self.world->entity();
+    self.root.add<ECS::Transform>();
+
     return true;
 }
 
 auto Scene::destroy(this Scene &self) -> void {
     ZoneScoped;
 
-    {
-        auto q = self.world //
-                     ->query_builder()
-                     .with(flecs::ChildOf, self.root)
-                     .build();
-        q.each([](flecs::entity e) {
-            e.each([&](flecs::id component_id) {
-                if (!component_id.is_entity()) {
-                    return;
-                }
+    auto unloading_assets = std::vector<UUID>();
 
-                ECS::ComponentWrapper component(e, component_id);
-                if (!component.has_component()) {
-                    return;
-                }
+    auto visit_child = [&](this auto &visitor, flecs::entity &e) -> void {
+        e.each([&](flecs::id component_id) {
+            if (!component_id.is_entity()) {
+                return;
+            }
 
-                component.for_each([&](usize &, std::string_view, ECS::ComponentWrapper::Member &member) {
-                    if (auto *component_uuid = std::get_if<UUID *>(&member)) {
-                        const auto &uuid = **component_uuid;
-                        if (uuid) {
-                            auto &app = Application::get();
-                            if (uuid && app.asset_man.get_asset(uuid)) {
-                                app.asset_man.unload_asset(uuid);
-                            }
-                        }
-                    }
-                });
+            ECS::ComponentWrapper component(e, component_id);
+            component.for_each([&](usize &, std::string_view, ECS::ComponentWrapper::Member &member) {
+                if (auto *component_uuid = std::get_if<UUID *>(&member)) {
+                    const auto &uuid = **component_uuid;
+                    unloading_assets.push_back(uuid);
+                }
             });
         });
+
+        e.children([&](flecs::entity child) { visitor(child); });
+    };
+    self.root.children([&](flecs::entity e) { visit_child(e); });
+
+    auto &app = Application::get();
+    for (const auto &uuid : unloading_assets) {
+        if (uuid && app.asset_man.get_asset(uuid)) {
+            app.asset_man.unload_asset(uuid);
+        }
     }
 
     self.root.destruct();
@@ -200,6 +201,7 @@ static auto json_to_entity(Scene &self, flecs::entity root, simdjson::ondemand::
         }
 
         LS_EXPECT(self.get_entity_db().is_component_known(component_id));
+
         e.add(component_id);
         ECS::ComponentWrapper component(e, component_id);
         component.for_each([&](usize &, std::string_view member_name, ECS::ComponentWrapper::Member &member) {
@@ -321,7 +323,7 @@ auto entity_to_json(JsonWriter &json, flecs::entity root) -> void {
             }
 
             ECS::ComponentWrapper component(e, component_id);
-            if (!component.has_component()) {
+            if (!component.is_component()) {
                 json << component.path;
             } else {
                 components.emplace_back(e, component_id);
@@ -403,6 +405,12 @@ auto Scene::create_entity(this Scene &self, const std::string &name) -> flecs::e
     return self.world->entity(name_sv);
 }
 
+auto Scene::delete_entity(this Scene &, flecs::entity entity) -> void {
+    ZoneScoped;
+
+    entity.destruct();
+}
+
 auto Scene::create_perspective_camera(
     this Scene &self,
     const std::string &name,
@@ -449,6 +457,7 @@ auto Scene::create_model_entity(this Scene &self, UUID &importing_model_uuid) ->
     auto &default_scene = imported_model->scenes[imported_model->default_scene_index];
     auto root_entity = self.create_entity(self.find_entity(default_scene.name) ? std::string{} : default_scene.name);
     root_entity.child_of(self.root);
+    root_entity.add<ECS::Transform>();
 
     auto visit_nodes = [&](this auto &visitor, flecs::entity &root, std::vector<usize> &node_indices) -> void {
         for (const auto node_index : node_indices) {
@@ -526,7 +535,7 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, SceneRenderInfo &i
 
     ls::option<GPU::Camera> active_camera_data = ls::nullopt;
     camera_query.each([&](flecs::entity, ECS::Transform &t, ECS::Camera &c, ECS::ActiveCamera) {
-        auto projection_mat = glm::perspective(glm::radians(c.fov), c.aspect_ratio, c.near_clip, c.far_clip);
+        auto projection_mat = glm::perspectiveRH_ZO(glm::radians(c.fov), c.aspect_ratio, c.far_clip, c.near_clip);
         projection_mat[1][1] *= -1;
 
         auto translation_mat = glm::translate(glm::mat4(1.0f), -t.position);
@@ -545,12 +554,11 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, SceneRenderInfo &i
         camera_data.resolution = glm::vec2(static_cast<f32>(info.extent.width), static_cast<f32>(info.extent.height));
 
         if (!c.freeze_frustum) {
+            camera_data.frustum_projection_view_mat = c.frustum_projection_view_mat;
             c.frustum_projection_view_mat = camera_data.projection_view_mat;
-            camera_data.frustum_projection_view_mat = camera_data.projection_view_mat;
         } else {
             camera_data.frustum_projection_view_mat = c.frustum_projection_view_mat;
         }
-        Math::calc_frustum_planes(camera_data.frustum_projection_view_mat, camera_data.frustum_planes);
     });
 
     ls::option<GPU::Sun> sun_data = ls::nullopt;
@@ -577,7 +585,11 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, SceneRenderInfo &i
             atmos.ozone_absorption = atmos_info.ozone_absorption * 1e-3f;
             atmos.ozone_height = atmos_info.ozone_height;
             atmos.ozone_thickness = atmos_info.ozone_thickness;
-            atmos.aerial_gain_per_slice = atmos_info.aerial_gain_per_slice;
+            atmos.aerial_perspective_start_km = atmos_info.aerial_perspective_start_km;
+
+            f32 eye_altitude = active_camera_data->position.y * GPU::CAMERA_SCALE_UNIT;
+            eye_altitude += atmos.planet_radius + GPU::PLANET_RADIUS_OFFSET;
+            atmos.eye_position = glm::vec3(0.0f, eye_altitude, 0.0f);
         }
 
         if (e.has<ECS::AutoExposure>()) {
@@ -586,7 +598,7 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, SceneRenderInfo &i
             histogram.min_exposure = auto_exposure.min_exposure;
             histogram.max_exposure = auto_exposure.max_exposure;
             histogram.adaptation_speed = auto_exposure.adaptation_speed;
-            histogram.ev100_bias = auto_exposure.ev100_bias;
+            histogram.ISO_K = auto_exposure.ISO / auto_exposure.K;
         }
     });
 
@@ -627,43 +639,49 @@ auto Scene::set_name(this Scene &self, const std::string &name) -> void {
 auto Scene::set_dirty(this Scene &self, flecs::entity entity) -> void {
     ZoneScoped;
 
-    auto visit_parent = [](this auto &visitor, flecs::entity e) -> glm::mat4 {
-        auto local_mat = glm::mat4(1.0f);
-        if (e.has<ECS::Transform>()) {
-            const auto *entity_transform = e.get<ECS::Transform>();
-            const auto T = glm::translate(glm::mat4(1.0), entity_transform->position);
-            const auto R = glm::mat4_cast(glm::quat(entity_transform->rotation));
-            const auto S = glm::scale(glm::mat4(1.0), entity_transform->scale);
-            local_mat = T * R * S;
-        }
-
-        auto parent = e.parent();
-        if (parent) {
-            return visitor(parent) * local_mat;
-        } else {
-            return local_mat;
-        }
-    };
-
     LS_EXPECT(entity.has<ECS::Transform>());
-    auto it = self.entity_transforms_map.find(entity);
-    if (it == self.entity_transforms_map.end()) {
-        return;
-    }
+    auto bfs_stack = std::queue<flecs::entity>();
+    bfs_stack.push(entity);
 
-    auto transform_id = it->second;
-    auto *gpu_transform = self.transforms.slot(transform_id);
-    gpu_transform->local = glm::mat4(1.0f);
-    gpu_transform->world = visit_parent(entity);
-    gpu_transform->normal = glm::mat3(gpu_transform->world);
-    self.dirty_transforms.push_back(transform_id);
+    while (!bfs_stack.empty()) {
+        auto cur_entity = bfs_stack.front();
+        bfs_stack.pop();
 
-    // notify children
-    entity.children([](flecs::entity e) {
-        if (e.has<ECS::Transform>()) {
-            e.modified<ECS::Transform>();
+        const auto *entity_transform = cur_entity.get<ECS::Transform>();
+        const auto T = glm::translate(glm::mat4(1.0), entity_transform->position);
+        const auto R = glm::mat4_cast(glm::quat(entity_transform->rotation));
+        const auto S = glm::scale(glm::mat4(1.0), entity_transform->scale);
+        auto local_mat = T * R * S;
+        auto world_mat = local_mat;
+
+        auto parent_entity = cur_entity.parent();
+        if (parent_entity.is_valid()) {
+            auto parent_it = self.entity_transforms_map.find(parent_entity);
+            if (parent_it != self.entity_transforms_map.end()) {
+                auto transform_id = parent_it->second;
+                auto *parent_gpu_transform = self.transforms.slot(transform_id);
+                world_mat = parent_gpu_transform->world;
+            }
         }
-    });
+
+        auto cur_it = self.entity_transforms_map.find(cur_entity);
+        if (cur_it == self.entity_transforms_map.end()) {
+            continue;
+        }
+
+        auto transform_id = cur_it->second;
+        auto *gpu_transform = self.transforms.slot(transform_id);
+        gpu_transform->local = local_mat;
+        gpu_transform->world = world_mat * local_mat;
+        gpu_transform->normal = glm::mat3(gpu_transform->world);
+        self.dirty_transforms.push_back(transform_id);
+
+        cur_entity.children([&bfs_stack](flecs::entity e) {
+            if (e.has<ECS::Transform>()) {
+                bfs_stack.push(e);
+            }
+        });
+    }
 }
 
 auto Scene::get_root(this Scene &self) -> flecs::entity {
@@ -815,19 +833,25 @@ auto Scene::detach_mesh(this Scene &self, flecs::entity entity, const UUID &mode
     ZoneScoped;
 
     auto instances_it = self.rendering_meshes_map.find(ls::pair(model_uuid, mesh_index));
-    auto transforms_it = self.entity_transforms_map.find(entity);
-    if (instances_it == self.rendering_meshes_map.end() || transforms_it == self.entity_transforms_map.end()) {
+    if (instances_it == self.rendering_meshes_map.end()) {
         return false;
     }
 
-    const auto transform_id = transforms_it->second;
-    auto &instances = instances_it->second;
-    std::erase_if(instances, [transform_id](const GPU::TransformID &id) { return id == transform_id; });
-    self.models_dirty = true;
+    auto should_remove = true;
+    auto transforms_it = self.entity_transforms_map.find(entity);
+    if (transforms_it != self.entity_transforms_map.end()) {
+        const auto transform_id = transforms_it->second;
+        auto &instances = instances_it->second;
+        std::erase_if(instances, [transform_id](const GPU::TransformID &id) { return id == transform_id; });
 
-    if (instances.empty()) {
+        should_remove = not instances.empty();
+    }
+
+    if (should_remove) {
         self.rendering_meshes_map.erase(instances_it);
     }
+
+    self.models_dirty = true;
 
     return true;
 }

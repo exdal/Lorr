@@ -33,39 +33,29 @@ auto ImGuiRenderer::init(this ImGuiRenderer &self, Device *device) -> void {
     imgui.ConfigFlags |= ImGuiConfigFlags_IsSRGB;
     imgui.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;
     imgui.BackendFlags |= ImGuiBackendFlags_HasMouseCursors;
+    imgui.BackendFlags |= ImGuiBackendFlags_RendererHasTextures;
     ImGui::StyleColorsDark();
 
     //  ── IMPLOT CONTEXT ──────────────────────────────────────────────────
     ImPlot::CreateContext();
 
     //  ── FONT ATLAS ──────────────────────────────────────────────────────
-    ImWchar icons_ranges[] = { ICON_MIN_MDI, ICON_MAX_MDI, 0 };
-    ImFontConfig font_config;
+    ImFontConfig font_config = {};
     font_config.GlyphMinAdvanceX = 16.0f;
     font_config.MergeMode = true;
     font_config.PixelSnapH = true;
+    font_config.OversampleH = 0.0f;
 
-    imgui.Fonts->AddFontFromFileTTF(roboto_path.c_str(), 16.0f, nullptr);
-    imgui.Fonts->AddFontFromFileTTF(materialdesignicons_path.c_str(), 16.0f, &font_config, icons_ranges);
-    imgui.Fonts->Build();
+    auto font_ranges = ImVector<ImWchar>();
+    ImFontGlyphRangesBuilder font_ranges_builder = {};
+    const ImWchar ranges[] = { ICON_MIN_MDI, ICON_MAX_MDI, 0 };
+    font_ranges_builder.AddRanges(ranges);
+    font_ranges_builder.BuildRanges(&font_ranges);
 
-    u8 *font_data = nullptr;
-    i32 font_width, font_height;
-    imgui.Fonts->GetTexDataAsRGBA32(&font_data, &font_width, &font_height);
-
-    auto &transfer_man = device->transfer_man();
-    auto font_atlas_image_info = ImageInfo{
-        .format = vuk::Format::eR8G8B8A8Srgb,
-        .usage = vuk::ImageUsageFlagBits::eSampled,
-        .type = vuk::ImageType::e2D,
-        .extent = vuk::Extent3D(font_width, font_height, 1u),
-    };
-    std::tie(self.font_atlas_image, self.font_atlas_view) = Image::create_with_view(*device, font_atlas_image_info).value();
-
-    auto imgui_ia = transfer_man.upload_staging(self.font_atlas_view, font_data, font_width * font_height * 4)
-                        .as_released(vuk::Access::eFragmentSampled, vuk::DomainFlagBits::eGraphicsQueue);
-    transfer_man.wait_on(std::move(imgui_ia));
-    IM_FREE(font_data);
+    auto *roboto_font = imgui.Fonts->AddFontFromFileTTF(roboto_path.c_str(), 16.0f);
+    imgui.Fonts->AddFontFromFileTTF(materialdesignicons_path.c_str(), 16.0f, &font_config, font_ranges.Data);
+    imgui.Fonts->TexDesiredFormat = ImTextureFormat_RGBA32;
+    imgui.FontDefault = roboto_font;
 
     auto slang_session = device->new_slang_session({ .root_directory = shaders_root }).value();
     auto pipeline_info = PipelineCompileInfo{
@@ -73,6 +63,16 @@ auto ImGuiRenderer::init(this ImGuiRenderer &self, Device *device) -> void {
         .entry_points = { "vs_main", "fs_main" },
     };
     self.pipeline = Pipeline::create(*device, slang_session, pipeline_info).value();
+}
+
+auto ImGuiRenderer::destroy(this ImGuiRenderer &self) -> void {
+    if (self.font_image_view) {
+        self.device->destroy(self.font_image_view.id());
+    }
+
+    if (self.font_image) {
+        self.device->destroy(self.font_image.id());
+    }
 }
 
 auto ImGuiRenderer::add_image(this ImGuiRenderer &self, vuk::Value<vuk::ImageAttachment> &&attachment) -> ImTextureID {
@@ -108,7 +108,6 @@ auto ImGuiRenderer::begin_frame(this ImGuiRenderer &self, f64 delta_time, const 
 
     self.rendering_images.clear();
     self.acquired_images.clear();
-    self.add_image(self.font_atlas_view);
 
     ImGui::NewFrame();
     ImGuizmo::BeginFrame();
@@ -150,7 +149,99 @@ auto ImGuiRenderer::end_frame(this ImGuiRenderer &self, vuk::Value<vuk::ImageAtt
     ImGui::Render();
 
     auto &transfer_man = self.device->transfer_man();
-    ImDrawData *draw_data = ImGui::GetDrawData();
+    auto *draw_data = ImGui::GetDrawData();
+
+    if (draw_data->Textures) {
+        for (auto *texture : *draw_data->Textures) {
+            auto acquired = false;
+            auto acquired_image = vuk::Value<vuk::ImageAttachment>{};
+            auto upload_offset = vuk::Offset3D(texture->UpdateRect.x, texture->UpdateRect.y, 0);
+            auto upload_extent = vuk::Extent3D(texture->UpdateRect.w, texture->UpdateRect.h, 1);
+
+            switch (texture->Status) {
+                case ImTextureStatus_WantCreate: {
+                    auto image_info = ImageInfo{
+                        .format = vuk::Format::eR8G8B8A8Srgb,
+                        .usage = vuk::ImageUsageFlagBits::eSampled,
+                        .type = vuk::ImageType::e2D,
+                        .extent = vuk::Extent3D(texture->Width, texture->Height, 1u),
+                        .name = "ImGui Font",
+                    };
+                    std::tie(self.font_image, self.font_image_view) = Image::create_with_view(*self.device, image_info).value();
+                    acquired_image = self.font_image_view.acquire(
+                        *self.device,
+                        "imgui image",
+                        vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eTransferDst,
+                        vuk::eNone
+                    );
+                    acquired = true;
+
+                    upload_offset = {};
+                    upload_extent = image_info.extent;
+
+                    [[fallthrough]];
+                }
+                case ImTextureStatus_WantUpdates: {
+                    auto buffer_alignment = self.device->non_coherent_atom_size();
+                    auto upload_pitch = upload_extent.width * texture->BytesPerPixel;
+                    auto buffer_size = ls::align_up(upload_pitch * upload_extent.height, buffer_alignment);
+                    auto upload_buffer = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eCPUonly, buffer_size);
+                    auto *buffer_ptr = reinterpret_cast<u8 *>(upload_buffer->mapped_ptr);
+                    for (auto y = 0_u32; y < upload_extent.height; y++) {
+                        std::memcpy(
+                            buffer_ptr + upload_pitch * y,
+                            texture->GetPixelsAt(upload_offset.x, upload_offset.y + static_cast<i32>(y)),
+                            upload_pitch
+                        );
+                    }
+
+                    auto upload_pass = vuk::make_pass(
+                        "upload",
+                        [upload_offset, upload_extent](
+                            vuk::CommandBuffer &cmd_list, //
+                            VUK_BA(vuk::eTransferRead) src,
+                            VUK_IA(vuk::eTransferWrite) dst
+                        ) {
+                            auto buffer_copy_region = vuk::BufferImageCopy{
+                                .bufferOffset = src->offset,
+                                .imageSubresource = { .aspectMask = vuk::ImageAspectFlagBits::eColor, .layerCount = 1 },
+                                .imageOffset = upload_offset,
+                                .imageExtent = upload_extent,
+                            };
+                            cmd_list.copy_buffer_to_image(src, dst, buffer_copy_region);
+                            return dst;
+                        }
+                    );
+
+                    if (!acquired) {
+                        acquired_image = self.font_image_view.acquire(
+                            *self.device,
+                            "imgui image",
+                            vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eTransferDst,
+                            vuk::eNone
+                        );
+                    }
+
+                    acquired_image = upload_pass(std::move(upload_buffer), std::move(acquired_image));
+                    auto texture_id = self.add_image(std::move(acquired_image));
+                    texture->SetTexID(texture_id);
+                    texture->SetStatus(ImTextureStatus_OK);
+                } break;
+                case ImTextureStatus_OK: {
+                    acquired_image =
+                        self.font_image_view.acquire(*self.device, "imgui image", vuk::ImageUsageFlagBits::eSampled, vuk::eFragmentSampled);
+                    auto texture_id = self.add_image(std::move(acquired_image));
+                    texture->SetTexID(texture_id);
+                } break;
+                case ImTextureStatus_WantDestroy: {
+                    self.device->destroy(self.font_image.id());
+                    self.device->destroy(self.font_image_view.id());
+                } break;
+                case ImTextureStatus_Destroyed:;
+            }
+        }
+    }
+
     u64 vertex_size_bytes = draw_data->TotalVtxCount * sizeof(ImDrawVert);
     u64 index_size_bytes = draw_data->TotalIdxCount * sizeof(ImDrawIdx);
     if (!draw_data || vertex_size_bytes == 0) {
@@ -226,13 +317,9 @@ auto ImGuiRenderer::end_frame(this ImGuiRenderer &self, vuk::Value<vuk::ImageAtt
                         cmd_list.set_scissor(0, scissor);
 
                         cmd_list.bind_sampler(0, 0, { .magFilter = vuk::Filter::eLinear, .minFilter = vuk::Filter::eLinear });
-                        if (im_cmd.TextureId != 0) {
-                            auto index = im_cmd.TextureId - 1;
-                            const auto &image = rendering_images[index];
-                            cmd_list.bind_image(0, 1, image);
-                        } else {
-                            cmd_list.bind_image(0, 1, rendering_images[0]);
-                        }
+                        auto index = im_cmd.GetTexID() - 1;
+                        const auto &image = rendering_images[index];
+                        cmd_list.bind_image(0, 1, image);
 
                         cmd_list.push_constants(vuk::ShaderStageFlagBits::eVertex, 0, PushConstants(translate, scale));
                         cmd_list.draw_indexed(im_cmd.ElemCount, 1, im_cmd.IdxOffset + index_offset, i32(im_cmd.VtxOffset + vertex_offset), 0);

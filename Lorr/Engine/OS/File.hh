@@ -41,24 +41,4 @@ struct File {
     }
 };
 
-struct FileWatcher {
-    FileWatcherDescriptor listener = {};
-    ankerl::unordered_dense::map<FileDescriptor, fs::path> watching_dirs = {};
-    std::vector<u8> event_storage = {};
-    i64 storage_offset = 0;
-    i64 avail_storage_size = 0;
-
-    ~FileWatcher() {
-        close();
-    }
-
-    auto init(const fs::path &root_dir) -> bool;
-    auto event_buffer_size() -> usize;
-    auto watch_dir(const fs::path &path) -> FileDescriptor;
-    auto remove_dir(FileDescriptor watch_descriptor) -> void;
-    auto peek() -> ls::option<FileEvent>;
-    auto get_path(FileDescriptor descriptor) -> const fs::path &;
-    auto close() -> void;
-};
-
 } // namespace lr

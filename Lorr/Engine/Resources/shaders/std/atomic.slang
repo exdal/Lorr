@@ -16,19 +16,11 @@ public static constexpr MemoryOrder memory_order_acq_rel = MemoryOrder::AcqRel;
 public static constexpr MemoryOrder memory_order_seq_cst = MemoryOrder::SeqCst;
 
 public enum MemoryLocation : u32 {
-    None      = 0,
-    Buffer    = 0x40,
-    Subgroup  = 0x80,
+    None = 0,
+    Buffer = 0x40,
+    Subgroup = 0x80,
     Workgroup = 0x100,
-    Image     = 0x800,
-};
-
-public enum MemoryScope : u32 {
-    CrossDevice = 0,
-    Device = 1,
-    Workgroup = 2,
-    Subgroup = 3,
-    Invocation = 4,
+    Image = 0x800,
 };
 
 func spirv_type_checks<T>() -> void {
@@ -117,7 +109,7 @@ public func atomic_add<T : IInteger>(
     __ref T dst,
     T value,
     constexpr MemoryOrder memory_order,
-    constexpr MemoryLocation location = MemoryLocation::Buffer,
+    constexpr MemoryLocation location = MemoryLocation::None,
     constexpr MemoryScope scope = MemoryScope::Workgroup
 ) -> T {
     spirv_type_checks<T>();

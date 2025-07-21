@@ -54,7 +54,7 @@ public:
     auto create_slot(this Self &self, T &&v = {}) -> ID {
         ZoneScoped;
 
-        std::unique_lock _(self.mutex);
+        auto write_lock = std::unique_lock(self.mutex);
         if (not self.free_indices.empty()) {
             auto index = self.free_indices.back();
             self.free_indices.pop_back();
@@ -74,13 +74,15 @@ public:
         ZoneScoped;
 
         if (self.is_valid(id)) {
-            std::unique_lock lock(self.mutex);
+            auto write_lock = std::unique_lock(self.mutex);
             auto index = SlotMap_decode_id(id).index;
             self.states[index] = false;
             self.versions[index] += 1;
             if (self.versions[index] < ~0_u32) {
                 self.free_indices.push_back(index);
             }
+
+            self.slots[index] = {};
 
             return true;
         }
@@ -91,7 +93,7 @@ public:
     auto reset(this Self &self) -> void {
         ZoneScoped;
 
-        std::unique_lock _(self.mutex);
+        auto write_lock = std::unique_lock(self.mutex);
         self.slots.clear();
         self.versions.clear();
         self.states.clear();
@@ -101,16 +103,16 @@ public:
     auto is_valid(this const Self &self, ID id) -> bool {
         ZoneScoped;
 
-        std::shared_lock _(self.mutex);
+        auto read_lock = std::shared_lock(self.mutex);
         auto [version, index] = SlotMap_decode_id(id);
-        return index < self.slots.size() && self.versions[index] == version;
+        return index < self.slots.size() && self.versions[index] == version && self.states[index];
     }
 
     auto slot(this Self &self, ID id) -> T * {
         ZoneScoped;
 
         if (self.is_valid(id)) {
-            std::shared_lock _(self.mutex);
+            auto read_lock = std::shared_lock(self.mutex);
             auto index = SlotMap_decode_id(id).index;
             return &self.slots[index];
         }
@@ -118,10 +120,22 @@ public:
         return nullptr;
     }
 
+    auto slot_clone(this Self &self, ID id) -> ls::option<T> {
+        ZoneScoped;
+
+        if (self.is_valid(id)) {
+            auto read_lock = std::shared_lock(self.mutex);
+            auto index = SlotMap_decode_id(id).index;
+            return self.slots[index];
+        }
+
+        return ls::nullopt;
+    }
+
     auto slot_from_index(this Self &self, usize index) -> T * {
         ZoneScoped;
 
-        std::shared_lock _(self.mutex);
+        auto read_lock = std::shared_lock(self.mutex);
         if (index < self.slots.size() && self.states[index]) {
             return &self.slots[index];
         }
@@ -132,28 +146,22 @@ public:
     auto size(this const Self &self) -> usize {
         ZoneScoped;
 
-        std::shared_lock _(self.mutex);
+        auto read_lock = std::shared_lock(self.mutex);
         return self.slots.size() - self.free_indices.size();
     }
 
     auto capacity(this const Self &self) -> usize {
         ZoneScoped;
 
-        std::shared_lock _(self.mutex);
+        auto read_lock = std::shared_lock(self.mutex);
         return self.slots.size();
     }
 
     auto slots_unsafe(this Self &self) -> ls::span<T> {
         ZoneScoped;
 
-        std::shared_lock _(self.mutex);
+        auto read_lock = std::shared_lock(self.mutex);
         return self.slots;
-    }
-
-    auto get_mutex(this Self &self) -> std::shared_mutex & {
-        ZoneScoped;
-
-        return self.mutex;
     }
 };
 } // namespace lr

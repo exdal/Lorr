@@ -1,6 +1,15 @@
-add_requires("fmt 11.1.4", { configs = {
-    header_only = true
-} })
+local fmt_version = "11.2.0"
+local fmt_configs = { header_only = false, shared = false }
+add_requires("fmt " .. fmt_version, { configs = fmt_configs, system = false })
+add_requires("fmtlog v2.3.0", { configs = {
+    shared = false,
+}, system = false })
+add_requireconfs("fmt", "fmtlog.fmt", {
+    override = true,
+    version = fmt_version,
+    configs = fmt_configs,
+    system = false
+})
 
 add_requires("xxhash v0.8.3")
 add_requires("glm 1.0.1", { configs = {
@@ -9,10 +18,19 @@ add_requires("glm 1.0.1", { configs = {
 } })
 add_requires("plf_colony v7.41")
 
-add_requires("imguizmo v1.91.8-docking")
-add_requires("imgui v1.91.8-docking", { configs = {
-    wchar32 = true,
-} })
+local imgui_version = "v1.92.0-docking"
+local imgui_configs = { wchar32 = true }
+add_requires("imgui " .. imgui_version, { configs = imgui_configs })
+
+add_requires("implot 3da8bd34299965d3b0ab124df743fe3e076fa222")
+add_requireconfs("imgui", "implot.imgui", {
+    override = true, version = imgui_version, configs = imgui_configs
+})
+
+add_requires("imguizmo 1.91.3+wip")
+add_requireconfs("imgui", "imguizmo.imgui", {
+    override = true, version = imgui_version, configs = imgui_configs
+})
 
 add_requires("simdutf v6.2.0")
 add_requires("simdjson v3.12.2")
@@ -33,16 +51,17 @@ add_requires("lz4 v1.10.0")
 add_requires("zstd v1.5.6")
 add_requires("flecs v4.0.4")
 
-add_requires("libsdl3 3.2.10", { configs = {
-    wayland = false,
-    x11 = true,
-} })
+add_requires("libsdl3")
 
-add_requires("shader-slang v2025.6.3")
-add_requires("vuk 2025.05.06", { configs = {
+add_requires("shader-slang v2025.12.1")
+add_requires("vuk 2025.06.15", { configs = {
     debug_allocations = false,
     disable_exceptions = true,
 }, debug = is_mode("debug") })
 
 add_requires("meshoptimizer v0.22")
-add_requires("ktx-software v4.4.0")
+add_requires("ktx v4.4.0", {
+    -- debug = is_mode("debug")
+})
+
+add_requires("svector v1.0.3")

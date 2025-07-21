@@ -29,10 +29,12 @@ target("Lorr")
 
     add_packages(
         "fmt",
+        "fmtlog",
         "libsdl3",
         "vk-bootstrap",
         "imgui",
         "imguizmo",
+        "implot",
         "shader-slang",
         "tracy",
         "xxhash",
@@ -48,7 +50,8 @@ target("Lorr")
         "flecs",
         "vuk",
         "meshoptimizer",
-        "ktx-software",
+        "ktx",
+        "svector",
         { public = true })
 
 target_end()

@@ -3,26 +3,20 @@
 #include <vuk/runtime/ThisThreadExecutor.hpp>
 
 namespace lr {
-enum BindlessDescriptorLayout : u32 {
-    Samplers = 0,
-    SampledImages = 1,
-    StorageImages = 2,
-};
-
-constexpr Logger::Category to_log_category(VkDebugUtilsMessageSeverityFlagBitsEXT severity) {
+constexpr fmtlog::LogLevel to_log_category(VkDebugUtilsMessageSeverityFlagBitsEXT severity) {
     switch (severity) {
         case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
         case VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT:
-            return Logger::INF;
+            return fmtlog::INF;
         case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT:
-            return Logger::WRN;
+            return fmtlog::WRN;
         case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
-            return Logger::ERR;
+            return fmtlog::ERR;
         default:
             break;
     }
 
-    return Logger::DBG;
+    return fmtlog::DBG;
 }
 
 auto Device::init(this Device &self, usize frame_count) -> std::expected<void, vuk::VkException> {
@@ -43,14 +37,7 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
            [[maybe_unused]] void *pUserData) -> VkBool32 {
             auto type = vkb::to_string_message_type(messageType);
             auto category = to_log_category(messageSeverity);
-            LOG(category,
-                "[VK] "
-                "{}:\n========================================================="
-                "=="
-                "\n{}\n===================================================="
-                "=======",
-                type,
-                pCallbackData->pMessage);
+            FMTLOG(category, "[VK] {}: {}", type, pCallbackData->pMessage);
             return VK_FALSE;
         }
     );
@@ -95,7 +82,7 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
     device_extensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
     device_extensions.push_back(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
     device_extensions.push_back(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
-    device_extensions.push_back(VK_EXT_SHADER_IMAGE_ATOMIC_INT64_EXTENSION_NAME);
+    //device_extensions.push_back(VK_EXT_SHADER_IMAGE_ATOMIC_INT64_EXTENSION_NAME);
     //device_extensions.push_back(VK_KHR_MAINTENANCE_8_EXTENSION_NAME);
     physical_device_selector.add_required_extensions(device_extensions);
 
@@ -138,15 +125,18 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
     vk12_features.hostQueryReset = true;
     // Shader features
     vk12_features.vulkanMemoryModel = true;
+    vk12_features.vulkanMemoryModelDeviceScope = true;
     vk12_features.storageBuffer8BitAccess = true;
     vk12_features.scalarBlockLayout = true;
     vk12_features.shaderInt8 = true;
     vk12_features.shaderSubgroupExtendedTypes = true;
+    vk12_features.samplerFilterMinmax = true;
 
     VkPhysicalDeviceVulkan11Features vk11_features = {};
     vk11_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
     vk11_features.variablePointers = true;
     vk11_features.variablePointersStorageBuffer = true;
+    vk11_features.shaderDrawParameters = true;
 
     VkPhysicalDeviceMaintenance8FeaturesKHR maintenance_8_features = {};
     maintenance_8_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_8_FEATURES_KHR;
@@ -170,8 +160,12 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
         .add_pNext(&vk13_features)
         .add_pNext(&vk12_features)
         .add_pNext(&vk11_features)
+        // Maintenance 8 allows the copy of depth images, but
+        // LLVMPipe doesn't support Image<u64> on shader yet.
         // .add_pNext(&maintenance_8_features)
-        .add_pNext(&image_atomic_int64_features)
+
+        // NOTE: LLVMPipe does not support this extension yet
+        //.add_pNext(&image_atomic_int64_features)
         .add_pNext(&vk10_features);
     auto device_result = device_builder.build();
     if (!device_result) {
@@ -190,6 +184,10 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
     vulkan_functions.vkGetInstanceProcAddr = self.instance.fp_vkGetInstanceProcAddr;
     vulkan_functions.vkGetDeviceProcAddr = self.handle.fp_vkGetDeviceProcAddr;
     vulkan_functions.load_pfns(self.instance, self.handle, true);
+
+    auto physical_device_properties = VkPhysicalDeviceProperties{};
+    vulkan_functions.vkGetPhysicalDeviceProperties(self.physical_device, &physical_device_properties);
+    self.device_limits = physical_device_properties.limits;
 
     std::vector<std::unique_ptr<vuk::Executor>> executors;
 
@@ -224,9 +222,11 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
 
     self.frame_resources.emplace(*self.runtime, frame_count);
     self.allocator.emplace(*self.frame_resources);
-    self.runtime->set_shader_target_version(VK_API_VERSION_1_3);
-    self.transfer_manager.init(self).value();
+    self.runtime->set_shader_target_version(VK_API_VERSION_1_4);
     self.shader_compiler = SlangCompiler::create().value();
+
+    self.transfer_manager.init(self).value();
+    self.transfer_manager.acquire(self.frame_resources.value());
 
     LOG_INFO("Initialized device.");
 
@@ -236,11 +236,23 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
 auto Device::destroy(this Device &self) -> void {
     ZoneScoped;
 
+    self.frame_resources->get_next_frame();
     self.wait();
 
-    self.resources.buffers.reset();
-    self.resources.images.reset();
-    self.resources.image_views.reset();
+    auto destroy_resource_pool = [&self](auto &pool) -> void {
+        for (auto i = 0_sz; i < pool.size(); i++) {
+            auto *v = pool.slot_from_index(i);
+            if (v) {
+                self.allocator->deallocate({ v, 1 });
+            }
+        }
+
+        pool.reset();
+    };
+
+    destroy_resource_pool(self.resources.buffers);
+    destroy_resource_pool(self.resources.images);
+    destroy_resource_pool(self.resources.image_views);
     self.resources.samplers.reset();
     self.resources.pipelines.reset();
 
@@ -269,13 +281,16 @@ auto Device::transfer_man(this Device &self) -> TransferManager & {
 auto Device::new_frame(this Device &self, vuk::Swapchain &swap_chain) -> vuk::Value<vuk::ImageAttachment> {
     ZoneScoped;
 
+    if (self.transfer_manager.frame_allocator) {
+        self.transfer_manager.wait_for_ops(self.compiler);
+        self.transfer_manager.release();
+    }
+
+    self.transfer_manager.acquire(self.frame_resources.value());
     self.runtime->next_frame();
 
     auto acquired_swapchain = vuk::acquire_swapchain(swap_chain);
     auto acquired_image = vuk::acquire_next_image("present_image", std::move(acquired_swapchain));
-
-    auto &frame_resource = self.frame_resources->get_next_frame();
-    self.transfer_manager.acquire(frame_resource);
 
     return acquired_image;
 }
@@ -305,8 +320,6 @@ auto Device::end_frame(this Device &self, vuk::Value<vuk::ImageAttachment> &&tar
         cmd_list.write_timestamp(end_ts);
     };
 
-    self.transfer_manager.wait_for_ops(self.compiler);
-
     auto result = vuk::enqueue_presentation(std::move(target_attachment));
     result.submit(
         *self.transfer_manager.frame_allocator,
@@ -317,7 +330,6 @@ auto Device::end_frame(this Device &self, vuk::Value<vuk::ImageAttachment> &&tar
               .on_end_pass = on_end_pass,
               .user_data = &self,
           } });
-    self.transfer_manager.release();
 }
 
 auto Device::wait(this Device &self, LR_CALLSTACK) -> void {
@@ -456,28 +468,28 @@ auto Device::frame_count(this const Device &self) -> usize {
     return self.frames_in_flight;
 }
 
-auto Device::buffer(this Device &self, BufferID id) -> vuk::Buffer * {
+auto Device::buffer(this Device &self, BufferID id) -> ls::option<vuk::Buffer> {
     ZoneScoped;
 
-    return &self.resources.buffers.slot(id)->get();
+    return self.resources.buffers.slot_clone(id);
 }
 
-auto Device::image(this Device &self, ImageID id) -> vuk::Image * {
+auto Device::image(this Device &self, ImageID id) -> ls::option<vuk::Image> {
     ZoneScoped;
 
-    return &self.resources.images.slot(id)->get();
+    return self.resources.images.slot_clone(id);
 }
 
-auto Device::image_view(this Device &self, ImageViewID id) -> vuk::ImageView * {
+auto Device::image_view(this Device &self, ImageViewID id) -> ls::option<vuk::ImageView> {
     ZoneScoped;
 
-    return &self.resources.image_views.slot(id)->get();
+    return self.resources.image_views.slot_clone(id);
 }
 
-auto Device::sampler(this Device &self, SamplerID id) -> vuk::Sampler * {
+auto Device::sampler(this Device &self, SamplerID id) -> ls::option<vuk::Sampler> {
     ZoneScoped;
 
-    return self.resources.samplers.slot(id);
+    return self.resources.samplers.slot_clone(id);
 }
 
 auto Device::pipeline(this Device &self, PipelineID id) -> vuk::PipelineBaseInfo ** {
@@ -490,7 +502,7 @@ auto Device::destroy(this Device &self, BufferID id) -> void {
     ZoneScoped;
 
     auto *buffer = self.resources.buffers.slot(id);
-    buffer->reset();
+    self.allocator->deallocate({ buffer, 1 });
 
     self.resources.buffers.destroy_slot(id);
 }
@@ -499,7 +511,7 @@ auto Device::destroy(this Device &self, ImageID id) -> void {
     ZoneScoped;
 
     auto *image = self.resources.images.slot(id);
-    image->reset();
+    self.allocator->deallocate({ image, 1 });
 
     self.resources.images.destroy_slot(id);
 }
@@ -508,7 +520,7 @@ auto Device::destroy(this Device &self, ImageViewID id) -> void {
     ZoneScoped;
 
     auto *image_view = self.resources.image_views.slot(id);
-    image_view->reset();
+    self.allocator->deallocate({ image_view, 1 });
 
     self.resources.image_views.destroy_slot(id);
 }

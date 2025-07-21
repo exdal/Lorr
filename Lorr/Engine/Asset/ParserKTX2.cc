@@ -122,13 +122,21 @@ auto KTX2ImageInfo::encode(ls::span<u8> raw_pixels, vuk::Format format, vuk::Ext
 
     ktxBasisParams params = {};
     params.structSize = sizeof(ktxBasisParams);
-    params.uastc = KTX_FALSE;
     params.verbose = KTX_FALSE;
     params.noSSE = KTX_FALSE;
     params.threadCount = 1;
-    params.compressionLevel = 3;
-    params.qualityLevel = 127;
-    params.normalMap = normal;
+
+    // ETC1S
+    // params.compressionLevel = 3;
+    // params.qualityLevel = 127;
+    // params.normalMap = normal;
+
+    // UASTC
+    params.uastc = KTX_TRUE;
+    params.uastcFlags = KTX_PACK_UASTC_LEVEL_DEFAULT;
+    params.uastcRDO = normal ? KTX_FALSE : KTX_TRUE;
+    params.uastcRDONoMultithreading = true;
+
     result = ktxTexture2_CompressBasisEx(texture, &params);
     if (result != KTX_SUCCESS) {
         LOG_ERROR("Cannot compress texture! {}", static_cast<u32>(result));

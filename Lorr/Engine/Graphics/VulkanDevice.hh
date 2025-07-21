@@ -40,12 +40,10 @@ public:
     auto destroy(this TransferManager &) -> void;
 
     [[nodiscard]]
-    auto alloc_transient_buffer_raw(this TransferManager &, vuk::MemoryUsage usage, usize size, usize alignment = 8, bool frame = true, LR_THISCALL)
-        -> vuk::Buffer;
+    auto alloc_transient_buffer_raw(this TransferManager &, vuk::MemoryUsage usage, usize size, LR_THISCALL) -> vuk::Buffer;
 
     [[nodiscard]]
-    auto alloc_transient_buffer(this TransferManager &, vuk::MemoryUsage usage, usize size, usize alignment = 8, bool frame = true, LR_THISCALL)
-        -> vuk::Value<vuk::Buffer>;
+    auto alloc_transient_buffer(this TransferManager &, vuk::MemoryUsage usage, usize size, LR_THISCALL) -> vuk::Value<vuk::Buffer>;
 
     [[nodiscard]]
     auto upload_staging(this TransferManager &, vuk::Value<vuk::Buffer> &&src, vuk::Value<vuk::Buffer> &&dst, LR_THISCALL) -> vuk::Value<vuk::Buffer>;
@@ -93,14 +91,14 @@ protected:
     [[nodiscard]] auto scratch_buffer(this TransferManager &, const void *data, u64 size, LR_THISCALL) -> vuk::Value<vuk::Buffer>;
     auto wait_for_ops(this TransferManager &, vuk::Compiler &compiler) -> void;
 
-    auto acquire(this TransferManager &, vuk::DeviceFrameResource &allocator) -> void;
+    auto acquire(this TransferManager &, vuk::DeviceSuperFrameResource &super_frame_resource) -> void;
     auto release(this TransferManager &) -> void;
 };
 
 struct DeviceResources {
-    SlotMap<vuk::Unique<vuk::Buffer>, BufferID> buffers = {};
-    SlotMap<vuk::Unique<vuk::Image>, ImageID> images = {};
-    SlotMap<vuk::Unique<vuk::ImageView>, ImageViewID> image_views = {};
+    SlotMap<vuk::Buffer, BufferID> buffers = {};
+    SlotMap<vuk::Image, ImageID> images = {};
+    SlotMap<vuk::ImageView, ImageViewID> image_views = {};
     SlotMap<vuk::Sampler, SamplerID> samplers = {};
     SlotMap<vuk::PipelineBaseInfo *, PipelineID> pipelines = {};
 };
@@ -122,6 +120,8 @@ private:
     vkb::Instance instance = {};
     vkb::PhysicalDevice physical_device = {};
     vkb::Device handle = {};
+
+    VkPhysicalDeviceLimits device_limits = {};
 
     friend Buffer;
     friend Image;
@@ -152,10 +152,10 @@ public:
     auto set_name(this Device &, ImageView &image_view, std::string_view name) -> void;
 
     auto frame_count(this const Device &) -> usize;
-    auto buffer(this Device &, BufferID) -> vuk::Buffer *;
-    auto image(this Device &, ImageID) -> vuk::Image *;
-    auto image_view(this Device &, ImageViewID) -> vuk::ImageView *;
-    auto sampler(this Device &, SamplerID) -> vuk::Sampler *;
+    auto buffer(this Device &, BufferID) -> ls::option<vuk::Buffer>;
+    auto image(this Device &, ImageID) -> ls::option<vuk::Image>;
+    auto image_view(this Device &, ImageViewID) -> ls::option<vuk::ImageView>;
+    auto sampler(this Device &, SamplerID) -> ls::option<vuk::Sampler>;
     auto pipeline(this Device &, PipelineID) -> vuk::PipelineBaseInfo **;
 
     auto destroy(this Device &, BufferID) -> void;
@@ -185,6 +185,10 @@ public:
     }
     auto get_pass_queries() -> auto & {
         return pass_queries;
+    }
+
+    auto non_coherent_atom_size() -> u32 {
+        return device_limits.nonCoherentAtomSize;
     }
 };
 } // namespace lr

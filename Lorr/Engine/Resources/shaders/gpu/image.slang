@@ -46,9 +46,6 @@ __generic<T : ITexelElement>
 public typealias Image1D = Image<T, __Shape1D>;
 
 public extension<T : ITexelElement> Image1D<T> {
-    public func load(u32 texel, u32 mip = 0) -> T {
-        return this.Load(i32x2(texel, mip));
-    }
 };
 
 // Image2D ──────────────────────────────────────────────────────────
@@ -56,7 +53,11 @@ public typealias Image2D<T : ITexelElement> = Image<T, __Shape2D>;
 
 public extension<T : ITexelElement> Image2D<T> {
     public func load(u32x2 texel, u32 mip = 0) -> T {
-        return this.Load(i32x3(texel, mip));
+        let coord = __vectorReshape<2>(texel);
+        return spirv_asm {
+            %sampled: __sampledType(T) = OpImageFetch $this $coord Lod $mip;
+            __truncate $$T result __sampledType(T) %sampled;
+        };
     }
 };
 
@@ -64,30 +65,30 @@ public extension<T : ITexelElement> Image2D<T> {
 public typealias Image3D<T : ITexelElement> = Image<T, __Shape3D>;
 
 public extension<T : ITexelElement> Image3D<T> {
-    public func load(u32x3 texel, u32 mip = 0) -> T {
-        return this.Load(i32x4(texel, mip));
-    }
 };
 
 // StorageImage ────────────────────────────────────────────────────────────
 public typealias StorageImage<T : ITexelElement, S : __ITextureShape, let F : ImageFormat> = _Texture<T, S, 0, 0, 0, 1, 0, 0, F>;
-
 public extension<T : ITexelElement, S : __ITextureShape, let F : ImageFormat> StorageImage<T, S, F> {
-    public func load(vector<u32, S.dimensions> texel) -> T {
-        return this.Load(texel);
+    public func load(vector<u32, S.dimensions> texel, MemoryScope scope = MemoryScope::Device) -> T {
+        return spirv_asm {
+            %sampled:__sampledType(T) = OpImageRead $this $texel NonPrivateTexel|MakeTexelVisible $scope;
+            __truncate $$T result __sampledType(T) %sampled;
+        };
     }
-
-    public func store(vector<u32, S.dimensions> texel, T value) -> void {
-        this.Store(texel, value);
+    
+    public func store(vector<u32, S.dimensions> texel, T value, MemoryScope scope = MemoryScope::Device) -> void {
+        spirv_asm {
+            OpImageWrite $this $texel __convertTexel(value) NonPrivateTexel|MakeTexelAvailable $scope;
+        };
     }
 };
 
 // StorageImage1D ───────────────────────────────────────────────────
-public typealias StorageImage1D<T : ITexelElement, let F : ImageFormat> = StorageImage<T, __Shape1D, F>;
+public typealias StorageImage1D<T : ITexelElement, let F : ImageFormat = ImageFormat::Undefined> = StorageImage<T, __Shape1D, F>;
 
 // StorageImage2D ───────────────────────────────────────────────────
-public typealias StorageImage2D<T : ITexelElement, let F : ImageFormat> = StorageImage<T, __Shape2D, F>;
+public typealias StorageImage2D<T : ITexelElement, let F : ImageFormat = ImageFormat::Undefined> = StorageImage<T, __Shape2D, F>;
 
 // StorageImage3D ───────────────────────────────────────────────────
-public typealias StorageImage3D<T : ITexelElement, let F : ImageFormat> = StorageImage<T, __Shape3D, F>;
-
+public typealias StorageImage3D<T : ITexelElement, let F : ImageFormat = ImageFormat::Undefined> = StorageImage<T, __Shape3D, F>;

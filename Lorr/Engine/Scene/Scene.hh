@@ -62,6 +62,7 @@ public:
     auto export_to_file(this Scene &, const fs::path &path) -> bool;
 
     auto create_entity(this Scene &, const std::string &name = {}) -> flecs::entity;
+    auto delete_entity(this Scene &, flecs::entity entity) -> void;
     // clang-format off
     auto create_perspective_camera(this Scene &, const std::string &name, const glm::vec3 &position, const glm::vec3 &rotation, f32 fov, f32 aspect_ratio) -> flecs::entity;
     // clang-format on

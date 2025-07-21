@@ -24,7 +24,7 @@ struct PushConstants {
 
 [[shader("compute")]]
 [[numthreads(1, 1, 1)]]
-void cs_main() {
+func cs_main() -> void {
     const u32 texel = visbuffer_data.load(C.texel);
     if (texel == ~0u) {
         *C.dst = ~0u;

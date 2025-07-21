@@ -98,18 +98,26 @@ static auto draw_tools(ViewportWindow &self) -> void {
     ImGui::SameLine(right_align_offset);
     if (ImGui::Button(ICON_MDI_CHART_BAR)) {
         app.show_profiler = !app.show_profiler;
+        app.frame_profiler.reset();
     }
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
         ImGui::SetTooltip("Frame Profiler");
     }
     right_align_offset -= button_size.x;
 
+    ImGui::SameLine(right_align_offset);
+    if (ImGui::Button(ICON_MDI_BUG)) {
+        app.show_debug = !app.show_debug;
+    }
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+        ImGui::SetTooltip("Debug");
+    }
+    right_align_offset -= button_size.x;
     ImGui::PopStyleColor(2);
 
     ImGui::SetNextWindowPos(editor_camera_popup_pos, ImGuiCond_Appearing);
     ImGui::SetNextWindowSize({ editor_camera_popup_width, 0 }, ImGuiCond_Appearing);
     if (ImGui::BeginPopup("editor_camera")) {
-        auto max_widget_width = editor_camera_popup_width - frame_padding.x * 2;
         auto editor_camera = active_scene->get_editor_camera();
         auto *camera_transform = editor_camera.get_mut<lr::ECS::Transform>();
         auto *camera_info = editor_camera.get_mut<lr::ECS::Camera>();
@@ -131,44 +139,16 @@ static auto draw_tools(ViewportWindow &self) -> void {
         ImGui::SeparatorText("Velocity");
         ImGui::drag_vec(4, &camera_info->velocity_mul, 1, ImGuiDataType_Float);
 
-        ImGui::SeparatorText("Culling");
-        ImGui::Checkbox("Freeze frustum", &camera_info->freeze_frustum);
+        ImGui::EndPopup();
+    }
+
+    if (app.show_debug) {
         auto &cull_flags = reinterpret_cast<i32 &>(active_scene->get_cull_flags());
         ImGui::CheckboxFlags("Cull Meshlet Frustum", &cull_flags, std::to_underlying(lr::GPU::CullFlags::MeshletFrustum));
         ImGui::CheckboxFlags("Cull Triangle Back Face", &cull_flags, std::to_underlying(lr::GPU::CullFlags::TriangleBackFace));
         ImGui::CheckboxFlags("Cull Micro Triangles", &cull_flags, std::to_underlying(lr::GPU::CullFlags::MicroTriangles));
-
-        ImGui::SeparatorText("Debug View");
-        ImGui::SetNextItemWidth(max_widget_width);
-        constexpr static const c8 *debug_views_str[] = {
-            "None", "Triangles", "Meshlets", "Overdraw", "Albedo", "Normal", "Emissive", "Metallic", "Roughness", "Occlusion",
-        };
-        static_assert(ls::count_of(debug_views_str) == std::to_underlying(lr::GPU::DebugView::Count));
-
-        auto debug_view_idx = reinterpret_cast<std::underlying_type_t<lr::GPU::DebugView> *>(&app.scene_renderer.debug_view);
-        const auto preview_str = debug_views_str[*debug_view_idx];
-        if (ImGui::BeginCombo("##debug_views", preview_str)) {
-            for (i32 i = 0; i < static_cast<i32>(ls::count_of(debug_views_str)); i++) {
-                const auto is_selected = i == *debug_view_idx;
-                if (ImGui::Selectable(debug_views_str[i], is_selected)) {
-                    *debug_view_idx = i;
-                }
-
-                if (is_selected) {
-                    ImGui::SetItemDefaultFocus();
-                }
-            }
-
-            ImGui::EndCombo();
-        }
-
-        if (*debug_view_idx == std::to_underlying(lr::GPU::DebugView::Overdraw)) {
-            ImGui::SeparatorText("Heatmap Scale");
-            ImGui::SetNextItemWidth(max_widget_width);
-            ImGui::DragFloat("##debug_heatmap_scale", &app.scene_renderer.debug_heatmap_scale);
-        }
-
-        ImGui::EndPopup();
+        ImGui::CheckboxFlags("Cull Occlusion", &cull_flags, std::to_underlying(lr::GPU::CullFlags::Occlusion));
+        ImGui::Checkbox("Debug Lines", &app.scene_renderer.debug_lines);
     }
 }
 
@@ -304,9 +284,9 @@ static auto draw_viewport(ViewportWindow &self, vuk::Format format, vuk::Extent3
             camera->axis_velocity.x = 0.0;
         }
 
-        if (ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
-            auto drag = ImGui::GetMouseDragDelta(ImGuiMouseButton_Left, 0);
-            ImGui::ResetMouseDragDelta(ImGuiMouseButton_Left);
+        if (ImGui::IsMouseDragging(ImGuiMouseButton_Right)) {
+            auto drag = ImGui::GetMouseDragDelta(ImGuiMouseButton_Right, 0);
+            ImGui::ResetMouseDragDelta(ImGuiMouseButton_Right);
 
             auto sensitivity = 0.1f;
             auto camera_rotation_degrees = glm::degrees(camera_transform->rotation);

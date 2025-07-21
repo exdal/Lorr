@@ -8,6 +8,7 @@
 
 #include "Editor/Themes.hh"
 
+#include "Engine/Memory/Stack.hh"
 #include "Engine/OS/File.hh"
 #include "Engine/Util/JsonWriter.hh"
 
@@ -31,7 +32,7 @@ static auto read_project_file(const fs::path &path) -> ls::option<ProjectFileInf
     sj::ondemand::parser parser;
     auto doc = parser.iterate(json);
     if (doc.error()) {
-        lr::LOG_ERROR("Failed to parse project file! {}", sj::error_message(doc.error()));
+        LOG_ERROR("Failed to parse project file! {}", sj::error_message(doc.error()));
         return ls::nullopt;
     }
 
@@ -64,7 +65,7 @@ auto EditorApp::load_editor_data(this EditorApp &self) -> void {
     sj::ondemand::parser parser;
     auto doc = parser.iterate(json);
     if (doc.error()) {
-        lr::LOG_ERROR("Failed to parse editor data file! {}", sj::error_message(doc.error()));
+        LOG_ERROR("Failed to parse editor data file! {}", sj::error_message(doc.error()));
         return;
     }
 
@@ -77,7 +78,7 @@ auto EditorApp::load_editor_data(this EditorApp &self) -> void {
 
         auto project_info = read_project_file(project_path.value_unsafe());
         if (!project_info) {
-            lr::LOG_ERROR("Failed to read project information for {}!", project_path.value_unsafe());
+            LOG_ERROR("Failed to read project information for {}!", project_path.value_unsafe());
             continue;
         }
 
@@ -110,7 +111,7 @@ auto EditorApp::new_project(this EditorApp &self, const fs::path &root_path, con
     ZoneScoped;
 
     if (!fs::is_directory(root_path)) {
-        lr::LOG_ERROR("New projects must be inside a directory.");
+        LOG_ERROR("New projects must be inside a directory.");
         return nullptr;
     }
 
@@ -136,7 +137,7 @@ auto EditorApp::new_project(this EditorApp &self, const fs::path &root_path, con
         std::error_code err;
         fs::create_directories(proj_root_path, err);
         if (err) {
-            lr::LOG_ERROR("Failed to create directory '{}'! {}", proj_root_path, err.message());
+            LOG_ERROR("Failed to create directory '{}'! {}", proj_root_path, err.message());
             return nullptr;
         }
 
@@ -162,7 +163,7 @@ auto EditorApp::new_project(this EditorApp &self, const fs::path &root_path, con
 
     lr::File file(proj_file_path, lr::FileAccess::Write);
     if (!file) {
-        lr::LOG_ERROR("Failed to open file {}!", proj_file_path);
+        LOG_ERROR("Failed to open file {}!", proj_file_path);
         return nullptr;
     }
 
@@ -327,6 +328,7 @@ static auto draw_menu_bar(EditorApp &self) -> void {
         if (ImGui::BeginMenu("View")) {
             if (ImGui::MenuItem("Frame Profiler")) {
                 self.show_profiler = !self.show_profiler;
+                self.frame_profiler.reset();
             }
 
             ImGui::EndMenu();
@@ -360,6 +362,8 @@ static auto draw_welcome_popup(EditorApp &self) -> void {
                         auto project = self.open_project(project_path);
                         ImGui::CloseCurrentPopup();
                         self.set_active_project(std::move(project));
+                        ImGui::PopID();
+                        break;
                     }
                     ImGui::SetItemTooltip("%s", path_str);
                     ImGui::PopID();
@@ -478,10 +482,6 @@ static auto draw_profiler(EditorApp &self) -> void {
 
             ImPlot::EndPlot();
         }
-
-        if (ImGui::Button("Reset")) {
-            self.frame_profiler.reset();
-        }
     }
 
     ImGui::End();
@@ -543,6 +543,10 @@ auto EditorApp::render(this EditorApp &self, vuk::Format format, vuk::Extent3D e
 
 auto EditorApp::shutdown(this EditorApp &self) -> void {
     ZoneScoped;
+
+    for (const auto &[name, uuid] : self.editor_assets) {
+        self.asset_man.unload_asset(uuid);
+    }
 
     self.windows.clear();
     self.active_project.reset();

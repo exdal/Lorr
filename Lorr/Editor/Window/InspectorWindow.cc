@@ -2,6 +2,7 @@
 
 #include "Editor/EditorApp.hh"
 
+#include "Engine/Memory/Stack.hh"
 #include "Engine/Scene/ECSModule/ComponentWrapper.hh"
 #include "Engine/Util/Icons/IconsMaterialDesignIcons.hh"
 
@@ -74,7 +75,7 @@ static auto draw_inspector(InspectorWindow &) -> void {
         }
 
         lr::ECS::ComponentWrapper component(selected_entity, component_id);
-        if (!component.has_component()) {
+        if (!component.is_component()) {
             return;
         }
 
@@ -159,7 +160,17 @@ static auto draw_inspector(InspectorWindow &) -> void {
 
     ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal);
 
-    for (const auto &v : removing_components) {
+    for (auto &v : removing_components) {
+        auto component = lr::ECS::ComponentWrapper(selected_entity, v);
+        component.for_each([&](usize &, std::string_view, lr::ECS::ComponentWrapper::Member &member) {
+            if (auto *component_uuid = std::get_if<lr::UUID *>(&member)) {
+                const auto &uuid = **component_uuid;
+                if (uuid) {
+                    app.asset_man.unload_asset(uuid);
+                }
+            }
+        });
+
         selected_entity.remove(v);
     }
     removing_components.clear();

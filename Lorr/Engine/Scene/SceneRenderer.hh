@@ -55,7 +55,10 @@ struct SceneRenderer {
     vuk::Extent3D sky_view_lut_extent = { .width = 312, .height = 192, .depth = 1 };
     vuk::Extent3D sky_aerial_perspective_lut_extent = { .width = 32, .height = 32, .depth = 32 };
 
-    GPU::DebugView debug_view = GPU::DebugView::None;
+    Image hiz = {};
+    ImageView hiz_view = {};
+
+    bool debug_lines = false;
     f32 debug_heatmap_scale = 5.0;
 
     auto init(this SceneRenderer &, Device *device) -> bool;

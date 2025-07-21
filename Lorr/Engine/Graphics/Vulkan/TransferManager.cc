@@ -21,7 +21,7 @@ auto TransferManager::alloc_transient_buffer_raw(this TransferManager &self, vuk
 
     std::shared_lock _(self.mutex);
     auto buffer =
-        *vuk::allocate_buffer(*self.frame_allocator, { .mem_usage = usage, .size = size, .alignment = self.device->non_coherent_atom_size() }, LOC);
+        *vuk::allocate_buffer(*self.device->allocator, { .mem_usage = usage, .size = size, .alignment = self.device->non_coherent_atom_size() }, LOC);
     return *buffer;
 }
 

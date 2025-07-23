@@ -72,13 +72,12 @@ func CullSmallPrimitive(f32x2x3 vertices, f32x2 viewportExtent) -> bool {
 }
 
 func test_triangle(in Mesh mesh, in Meshlet meshlet, in f32x2 resolution, CullFlags cull_flags, u32 triangle_index) -> bool {
-    const Triangle tri = meshlet.indices(mesh, triangle_index);
-    const u32x3 vertices = meshlet.vertices(mesh, tri);
-    const f32x3x3 positions = meshlet.positions(mesh, vertices);
+    let indices = meshlet.indices(mesh, triangle_index);
+    let positions = meshlet.positions(mesh, indices);
 
-    const f32x4 clip_pos_0 = mul(model_view_proj_shared, f32x4(positions[0], 1.0));
-    const f32x4 clip_pos_1 = mul(model_view_proj_shared, f32x4(positions[1], 1.0));
-    const f32x4 clip_pos_2 = mul(model_view_proj_shared, f32x4(positions[2], 1.0));
+    let clip_pos_0 = mul(model_view_proj_shared, f32x4(positions[0], 1.0));
+    let clip_pos_1 = mul(model_view_proj_shared, f32x4(positions[1], 1.0));
+    let clip_pos_2 = mul(model_view_proj_shared, f32x4(positions[2], 1.0));
 
     // Cull all triangles behind camera
     if (clip_pos_0.z < 0.0 && clip_pos_1.z < 0.0 && clip_pos_2.z < 0.0) {
@@ -127,7 +126,7 @@ func cs_main(
 
     if (local_index == 0) {
         triangles_passed_shared = 0;
-        const Transform transform = params.transforms[meshlet_instance.transform_index];
+        let transform = params.transforms[meshlet_instance.transform_index];
         model_view_proj_shared = mul(params.camera->projection_view_mat, transform.world);
     }
 
@@ -151,7 +150,7 @@ func cs_main(
     std::control_barrier(std::memory_order_acq_rel);
 
     if (triangle_passed) {
-        const u32 index_offset = base_index_shared + active_triangle_index * 3;
+        let index_offset = base_index_shared + active_triangle_index * 3;
         params.reordered_indices[index_offset + 0] = (visible_meshlet_index << MESHLET_PRIMITIVE_BITS) | ((triangle_index + 0) & MESHLET_PRIMITIVE_MASK);
         params.reordered_indices[index_offset + 1] = (visible_meshlet_index << MESHLET_PRIMITIVE_BITS) | ((triangle_index + 1) & MESHLET_PRIMITIVE_MASK);
         params.reordered_indices[index_offset + 2] = (visible_meshlet_index << MESHLET_PRIMITIVE_BITS) | ((triangle_index + 2) & MESHLET_PRIMITIVE_MASK);

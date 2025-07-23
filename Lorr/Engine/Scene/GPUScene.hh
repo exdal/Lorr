@@ -150,13 +150,6 @@ struct Material {
     alignas(4) u32 occlusion_image_index = ~0_u32;
 };
 
-struct Meshlet {
-    alignas(4) u32 vertex_offset = 0;
-    alignas(4) u32 index_offset = 0;
-    alignas(4) u32 triangle_offset = 0;
-    alignas(4) u32 triangle_count = 0;
-};
-
 struct MeshletBounds {
     alignas(4) glm::vec3 aabb_min = {};
     alignas(4) glm::vec3 aabb_max = {};
@@ -177,6 +170,7 @@ struct Mesh {
     alignas(8) u64 meshlets = 0;
     alignas(8) u64 meshlet_bounds = 0;
     alignas(8) u64 local_triangle_indices = 0;
+    alignas(8) u64 indirect_vertex_indices = 0;
 };
 
 constexpr static u32 HISTOGRAM_THREADS_X = 16;

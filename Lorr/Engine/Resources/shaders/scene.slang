@@ -141,7 +141,7 @@ public struct Material {
 
     public func sample_albedo_color(in UVGradient grad) -> f32x4 {
         if (this.flags & MaterialFlag::HasAlbedoImage) {
-            const let color = material_images[this.albedo_image_index]
+            let color = material_images[this.albedo_image_index]
                 .sample_grad(material_samplers[this.albedo_image_index], grad.uv, grad.ddx, grad.ddy);
             return this.albedo_color * color;
         }
@@ -160,7 +160,7 @@ public struct Material {
 
     public func sample_emissive_color(in UVGradient grad) -> f32x3 {
         if (this.flags & MaterialFlag::HasEmissiveImage) {
-            const let color = material_images[this.emissive_image_index]
+            let color = material_images[this.emissive_image_index]
                 .sample_grad(material_samplers[this.emissive_image_index], grad.uv, grad.ddx, grad.ddy).rgb;
             return this.emissive_color * color;
         }
@@ -169,9 +169,9 @@ public struct Material {
     }
 
     public func sample_metallic_roughness(in UVGradient grad) -> f32x2 {
-        const let metallic_roughness = f32x2(this.metallic_factor, this.roughness_factor);
+        let metallic_roughness = f32x2(this.metallic_factor, this.roughness_factor);
         if (this.flags & MaterialFlag::HasMetallicRoughnessImage) {
-            const let color = material_images[this.metallic_rougness_image_index]
+            let color = material_images[this.metallic_rougness_image_index]
                 .sample_grad(material_samplers[this.metallic_rougness_image_index], grad.uv, grad.ddx, grad.ddy).bg;
             return metallic_roughness * color;
         }
@@ -189,72 +189,65 @@ public struct Material {
     }
 };
 
-public typealias Triangle = u32x3;
 public struct Meshlet {
     public u32 vertex_offset = 0;
-    public u32 index_offset = 0;
     public u32 triangle_offset = 0;
+    public u32 vertex_count = 0;
     public u32 triangle_count = 0;
 
     // Takes a local triange index and returns an index to index buffer.
     public func index(in Mesh mesh, u32 i) -> u32 {
-        return u32(mesh.local_triangle_indices[this.triangle_offset + i]);
-    }
-
-    // Returns index to an actual vertex.
-    public func vertex(in Mesh mesh, u32 index) -> u32 {
-        return mesh.indices[this.index_offset + index];
+        let local_triangle_index = u32(mesh.local_triangle_indices[this.triangle_offset + i]);
+        return mesh.indirect_vertex_indices[this.vertex_offset + local_triangle_index];
     }
 
     // Returns position of a vertex.
-    public func position(in Mesh mesh, u32 vertex) -> f32x3 {
-        return mesh.vertex_positions[this.vertex_offset + vertex];
+    public func position(in Mesh mesh, u32 index) -> f32x3 {
+        return mesh.vertex_positions[index];
     }
 
-    public func tex_coord(in Mesh mesh, u32 vertex) -> f32x2 {
+    public func tex_coord(in Mesh mesh, u32 index) -> f32x2 {
         if (mesh.texture_coords == nullptr) {
             return {};
         }
 
-        return mesh.texture_coords[this.vertex_offset + vertex];
+        return mesh.texture_coords[index];
     }
 
     // ----------------------------------------------------------
 
-    public func indices(in Mesh mesh, u32 i) -> Triangle {
-        return {
+    public func indices(in Mesh mesh, u32 i) -> u32x3 {
+        let local_triangle_indices = u32x3(
             u32(mesh.local_triangle_indices[this.triangle_offset + i * 3 + 0]),
             u32(mesh.local_triangle_indices[this.triangle_offset + i * 3 + 1]),
             u32(mesh.local_triangle_indices[this.triangle_offset + i * 3 + 2]),
-        };
+        );
+
+        return { mesh.indirect_vertex_indices[this.vertex_offset + local_triangle_indices.x],
+                 mesh.indirect_vertex_indices[this.vertex_offset + local_triangle_indices.y],
+                 mesh.indirect_vertex_indices[this.vertex_offset + local_triangle_indices.z] };
     }
 
-    public func vertices(in Mesh mesh, in Triangle indices) -> u32x3 {
-        return { mesh.indices[this.index_offset + indices.x],
-                 mesh.indices[this.index_offset + indices.y],
-                 mesh.indices[this.index_offset + indices.z] };
+    public func positions(in Mesh mesh, in u32x3 indices) -> f32x3x3 {
+        return { mesh.vertex_positions[indices.x],
+                 mesh.vertex_positions[indices.y],
+                 mesh.vertex_positions[indices.z] };
     }
 
-    public func positions(in Mesh mesh, in u32x3 vertices) -> f32x3x3 {
-        return { mesh.vertex_positions[this.vertex_offset + vertices.x],
-                 mesh.vertex_positions[this.vertex_offset + vertices.y],
-                 mesh.vertex_positions[this.vertex_offset + vertices.z] };
+    public func normals(in Mesh mesh, in u32x3 indices) -> f32x3x3 {
+        return { mesh.vertex_normals[indices.x],
+                 mesh.vertex_normals[indices.y],
+                 mesh.vertex_normals[indices.z] };
     }
 
-    public func normals(in Mesh mesh, in u32x3 vertices) -> f32x3x3 {
-        return { mesh.vertex_normals[this.vertex_offset + vertices.x],
-                 mesh.vertex_normals[this.vertex_offset + vertices.y],
-                 mesh.vertex_normals[this.vertex_offset + vertices.z] };
-    }
-
-    public func tex_coords(in Mesh mesh, in u32x3 vertices) -> f32x2x3 {
+    public func tex_coords(in Mesh mesh, in u32x3 indices) -> f32x2x3 {
         if (mesh.texture_coords == nullptr) {
             return {};
         }
 
-        return { mesh.texture_coords[this.vertex_offset + vertices.x],
-                 mesh.texture_coords[this.vertex_offset + vertices.y],
-                 mesh.texture_coords[this.vertex_offset + vertices.z] };
+        return { mesh.texture_coords[indices.x],
+                 mesh.texture_coords[indices.y],
+                 mesh.texture_coords[indices.z] };
     }
 };
 
@@ -278,6 +271,7 @@ public struct Mesh {
     public Meshlet *meshlets = nullptr;
     public MeshletBounds *meshlet_bounds = nullptr;
     public u8 *local_triangle_indices = nullptr;
+    public u32 *indirect_vertex_indices = nullptr;
 };
 
 public struct Light {

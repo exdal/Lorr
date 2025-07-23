@@ -30,6 +30,8 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
     instance_builder.set_engine_version(1, 0, 0);
     instance_builder.enable_validation_layers(false); // use vkconfig ui...
     instance_builder.request_validation_layers(false);
+    instance_builder.add_debug_messenger_severity(VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT);
+    instance_builder.add_debug_messenger_type(VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT);
     instance_builder.set_debug_callback(
         [](VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
            VkDebugUtilsMessageTypeFlagsEXT messageType,
@@ -58,7 +60,7 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
 #endif
 
     instance_builder.enable_extensions(instance_extensions);
-    instance_builder.require_api_version(1, 3, 0);
+    instance_builder.require_api_version(1, 4, 0);
     auto instance_result = instance_builder.build();
     if (!instance_result) {
         auto error = instance_result.error();
@@ -86,15 +88,26 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
     //device_extensions.push_back(VK_KHR_MAINTENANCE_8_EXTENSION_NAME);
     physical_device_selector.add_required_extensions(device_extensions);
 
-    auto physical_device_result = physical_device_selector.select();
-    if (!physical_device_result) {
-        auto error = physical_device_result.error();
+    auto physical_device_select_result = physical_device_selector.select_devices();
+    if (!physical_device_select_result) {
+        auto error = physical_device_select_result.error();
 
         LOG_ERROR("Failed to select Vulkan Physical Device! {}", error.message());
         return std::unexpected(VK_ERROR_DEVICE_LOST);
     }
 
-    self.physical_device = physical_device_result.value();
+    const auto &physical_devices = physical_device_select_result.value();
+
+    for (const auto &[physical_device, physical_device_index] : std::views::zip(physical_devices, std::views::iota(0_u32))) {
+        LOG_INFO("Vulkan compatible device: [{}] = {}", physical_device_index, physical_device.name);
+    }
+
+#if 0
+    // for me, this is llvmpipe, comes in handy when shit keeps crashes
+    self.physical_device = physical_devices[1];
+#else
+    self.physical_device = physical_devices[0];
+#endif
 
     LOG_TRACE("Created physical device.");
 
@@ -197,17 +210,17 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
         vuk::create_vkqueue_executor(vulkan_functions, self.handle, graphics_queue, graphics_queue_family_index, vuk::DomainFlagBits::eGraphicsQueue)
     );
 
-    auto compute_queue = self.handle.get_queue(vkb::QueueType::compute).value();
-    auto compute_queue_family_index = self.handle.get_queue_index(vkb::QueueType::compute).value();
-    executors.push_back(
-        vuk::create_vkqueue_executor(vulkan_functions, self.handle, compute_queue, compute_queue_family_index, vuk::DomainFlagBits::eComputeQueue)
-    );
-
-    auto transfer_queue = self.handle.get_queue(vkb::QueueType::transfer).value();
-    auto transfer_queue_family_index = self.handle.get_queue_index(vkb::QueueType::transfer).value();
-    executors.push_back(
-        vuk::create_vkqueue_executor(vulkan_functions, self.handle, transfer_queue, transfer_queue_family_index, vuk::DomainFlagBits::eTransferQueue)
-    );
+    // auto compute_queue = self.handle.get_queue(vkb::QueueType::compute).value();
+    // auto compute_queue_family_index = self.handle.get_queue_index(vkb::QueueType::compute).value();
+    // executors.push_back(
+    //     vuk::create_vkqueue_executor(vulkan_functions, self.handle, compute_queue, compute_queue_family_index, vuk::DomainFlagBits::eComputeQueue)
+    // );
+    //
+    // auto transfer_queue = self.handle.get_queue(vkb::QueueType::transfer).value();
+    // auto transfer_queue_family_index = self.handle.get_queue_index(vkb::QueueType::transfer).value();
+    // executors.push_back(
+    //     vuk::create_vkqueue_executor(vulkan_functions, self.handle, transfer_queue, transfer_queue_family_index, vuk::DomainFlagBits::eTransferQueue)
+    // );
 
     executors.push_back(std::make_unique<vuk::ThisThreadExecutor>());
     self.runtime.emplace(

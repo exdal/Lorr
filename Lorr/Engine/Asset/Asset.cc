@@ -744,133 +744,145 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
     }
 
     //  ── MESH PROCESSING ─────────────────────────────────────────────────
-    std::vector<glm::vec3> model_vertex_positions = {};
-    std::vector<u32> model_indices = {};
+    auto model_indices = std::move(gltf_callbacks.indices);
+    auto model_vertices = std::move(gltf_callbacks.vertex_positions);
+    auto model_normals = std::move(gltf_callbacks.vertex_normals);
+    auto model_texcoords = std::move(gltf_callbacks.vertex_texcoords);
 
-    std::vector<GPU::Meshlet> model_meshlets = {};
-    std::vector<GPU::MeshletBounds> model_meshlet_bounds = {};
-    std::vector<u8> model_local_triangle_indices = {};
+    auto processed_indices = std::vector<u32>();
+    auto processed_vertices = std::vector<glm::vec3>();
+    auto processed_normals = std::vector<glm::vec3>();
+    auto processed_texcoords = std::vector<glm::vec2>();
+    auto processed_meshlets = std::vector<meshopt_Meshlet>();
+    auto processed_meshlet_bounds = std::vector<GPU::MeshletBounds>();
+    auto processed_indirect_vertex_indices = std::vector<u32>();
+    auto processed_local_triangle_indices = std::vector<u8>();
 
-    for (const auto &mesh : model->meshes) {
-        for (auto primitive_index : mesh.primitive_indices) {
-            ZoneScopedN("GPU Meshlet Generation");
+    for (const auto &gltf_mesh : model->meshes) {
+        for (auto primitive_index : gltf_mesh.primitive_indices) {
+            ZoneNamedN(z, "GPU Meshlet Generation", true);
 
             auto &primitive = model->primitives[primitive_index];
-            auto vertex_offset = model_vertex_positions.size();
-            auto index_offset = model_indices.size();
-            auto triangle_offset = model_local_triangle_indices.size();
-            auto meshlet_offset = model_meshlets.size();
+            auto meshlet_offset = processed_meshlets.size();
 
-            auto raw_indices = ls::span(gltf_callbacks.indices.data() + primitive.index_offset, primitive.index_count);
-            auto raw_vertex_positions = ls::span(gltf_callbacks.vertex_positions.data() + primitive.vertex_offset, primitive.vertex_count);
-            auto raw_vertex_normals = ls::span(gltf_callbacks.vertex_normals.data() + primitive.vertex_offset, primitive.vertex_count);
-
-            auto meshlets = std::vector<GPU::Meshlet>();
-            auto meshlet_bounds_infos = std::vector<GPU::MeshletBounds>();
-            auto meshlet_indices = std::vector<u32>();
-            auto local_triangle_indices = std::vector<u8>();
+            auto indices = std::vector<u32>();
+            auto vertices = std::vector<glm::vec3>();
+            auto normals = std::vector<glm::vec3>();
+            auto texcoords = std::vector<glm::vec2>();
             {
-                ZoneScopedN("Build Meshlets");
-                // Worst case count
-                auto max_meshlets = meshopt_buildMeshletsBound( //
-                    raw_indices.size(),
-                    Model::MAX_MESHLET_INDICES,
-                    Model::MAX_MESHLET_PRIMITIVES
-                );
-                auto raw_meshlets = std::vector<meshopt_Meshlet>(max_meshlets);
-                meshlet_indices.resize(max_meshlets * Model::MAX_MESHLET_INDICES);
-                local_triangle_indices.resize(max_meshlets * Model::MAX_MESHLET_PRIMITIVES * 3);
-                auto meshlet_count = meshopt_buildMeshlets( //
-                    raw_meshlets.data(),
-                    meshlet_indices.data(),
-                    local_triangle_indices.data(),
-                    raw_indices.data(),
-                    raw_indices.size(),
-                    reinterpret_cast<f32 *>(raw_vertex_positions.data()),
-                    raw_vertex_positions.size(),
-                    sizeof(glm::vec3),
-                    Model::MAX_MESHLET_INDICES,
-                    Model::MAX_MESHLET_PRIMITIVES,
-                    0.0
-                );
+                ZoneNamedN(z2, "Remap geometry", true);
 
-                // Trim meshlets from worst case to current case
-                raw_meshlets.resize(meshlet_count);
-                meshlets.resize(meshlet_count);
-                meshlet_bounds_infos.resize(meshlet_count);
-                const auto &last_meshlet = raw_meshlets[meshlet_count - 1];
-                meshlet_indices.resize(last_meshlet.vertex_offset + last_meshlet.vertex_count);
-                local_triangle_indices.resize(last_meshlet.triangle_offset + ((last_meshlet.triangle_count * 3 + 3) & ~3_u32));
+                auto raw_indices = std::span(model_indices.data() + primitive.index_offset, primitive.index_count);
+                auto raw_vertices = std::span(model_vertices.data() + primitive.vertex_offset, primitive.vertex_count);
+                auto raw_normals = std::span(model_normals.data() + primitive.vertex_offset, primitive.vertex_count);
+                auto raw_texcoords = std::span(model_texcoords.data() + primitive.vertex_offset, primitive.vertex_count);
 
-                for (const auto &[raw_meshlet, meshlet, meshlet_bounds] : std::views::zip(raw_meshlets, meshlets, meshlet_bounds_infos)) {
-                    // AABB Computing
-                    auto meshlet_bb_min = glm::vec3(std::numeric_limits<f32>::max());
-                    auto meshlet_bb_max = glm::vec3(std::numeric_limits<f32>::lowest());
-                    for (u32 i = 0; i < raw_meshlet.triangle_count * 3; i++) {
-                        const auto &tri_pos = raw_vertex_positions
-                            [meshlet_indices[raw_meshlet.vertex_offset + local_triangle_indices[raw_meshlet.triangle_offset + i]]];
-                        meshlet_bb_min = glm::min(meshlet_bb_min, tri_pos);
-                        meshlet_bb_max = glm::max(meshlet_bb_max, tri_pos);
-                    }
+                // clang-format off
+                auto remapped_vertices = std::vector<u32>(raw_vertices.size());
+                auto vertex_count = meshopt_optimizeVertexFetchRemap(remapped_vertices.data(), raw_indices.data(), raw_indices.size(), primitive.vertex_count);
 
-                    // SB and Cone Computing
-                    // auto sphere_bounds = meshopt_computeMeshletBounds( //
-                    //     &meshlet_indices[raw_meshlet.vertex_offset],
-                    //     &local_triangle_indices[raw_meshlet.triangle_offset],
-                    //     raw_meshlet.triangle_count,
-                    //     reinterpret_cast<f32 *>(raw_vertex_positions.data()),
-                    //     raw_vertex_positions.size(),
-                    //     sizeof(glm::vec3)
-                    // );
+                vertices.resize(vertex_count);
+                meshopt_remapVertexBuffer(vertices.data(), raw_vertices.data(), raw_vertices.size(), sizeof(glm::vec3), remapped_vertices.data());
+                
+                normals.resize(vertex_count);
+                meshopt_remapVertexBuffer(normals.data(), raw_normals.data(), raw_normals.size(), sizeof(glm::vec3), remapped_vertices.data());
 
-                    meshlet.vertex_offset = vertex_offset;
-                    meshlet.index_offset = index_offset + raw_meshlet.vertex_offset;
-                    meshlet.triangle_offset = triangle_offset + raw_meshlet.triangle_offset;
-                    meshlet.triangle_count = raw_meshlet.triangle_count;
-                    meshlet_bounds.aabb_min = meshlet_bb_min;
-                    meshlet_bounds.aabb_max = meshlet_bb_max;
-                    // meshlet_bounds.sphere_center.x = sphere_bounds.center[0];
-                    // meshlet_bounds.sphere_center.y = sphere_bounds.center[1];
-                    // meshlet_bounds.sphere_center.z = sphere_bounds.center[2];
-                    // meshlet_bounds.sphere_radius = sphere_bounds.radius;
+                texcoords.resize(vertex_count);
+                meshopt_remapVertexBuffer(texcoords.data(), raw_texcoords.data(), raw_texcoords.size(), sizeof(glm::vec2), remapped_vertices.data());
+
+                indices.resize(raw_indices.size());
+                meshopt_remapIndexBuffer(indices.data(), raw_indices.data(), primitive.index_count, remapped_vertices.data());
+                // clang-format on
+
+                {
+                    auto optimized_indices = std::vector<u32>(raw_indices.size());
+                    meshopt_optimizeVertexCache(optimized_indices.data(), indices.data(), indices.size(), vertex_count);
+                    indices = std::move(optimized_indices);
                 }
-
-                primitive.meshlet_count = meshlet_count;
-                primitive.meshlet_offset = meshlet_offset;
-                primitive.local_triangle_indices_offset = triangle_offset;
             }
 
-            std::ranges::move(raw_vertex_positions, std::back_inserter(model_vertex_positions));
-            std::ranges::move(meshlet_indices, std::back_inserter(model_indices));
-            std::ranges::move(meshlets, std::back_inserter(model_meshlets));
-            std::ranges::move(meshlet_bounds_infos, std::back_inserter(model_meshlet_bounds));
-            std::ranges::move(local_triangle_indices, std::back_inserter(model_local_triangle_indices));
+            // Worst case count
+            auto max_meshlet_count = meshopt_buildMeshletsBound(indices.size(), Model::MAX_MESHLET_INDICES, Model::MAX_MESHLET_PRIMITIVES);
+            auto meshlets = std::vector<meshopt_Meshlet>(max_meshlet_count);
+            auto indirect_vertex_indices = std::vector<u32>(max_meshlet_count * Model::MAX_MESHLET_INDICES);
+            auto local_triangle_indices = std::vector<u8>(max_meshlet_count * Model::MAX_MESHLET_PRIMITIVES * 3);
+
+            auto meshlet_count = meshopt_buildMeshlets(
+                meshlets.data(),
+                indirect_vertex_indices.data(),
+                local_triangle_indices.data(),
+                indices.data(),
+                indices.size(),
+                reinterpret_cast<f32 *>(vertices.data()),
+                vertices.size(),
+                sizeof(glm::vec3),
+                Model::MAX_MESHLET_INDICES,
+                Model::MAX_MESHLET_PRIMITIVES,
+                0.0
+            );
+
+            // Trim meshlets from worst case to current case
+            meshlets.resize(meshlet_count);
+            const auto &last_meshlet = meshlets[meshlet_count - 1];
+            indirect_vertex_indices.resize(last_meshlet.vertex_offset + last_meshlet.vertex_count);
+            local_triangle_indices.resize(last_meshlet.triangle_offset + ((last_meshlet.triangle_count * 3 + 3) & ~3_u32));
+
+            auto meshlet_bounds = std::vector<GPU::MeshletBounds>(meshlet_count);
+            for (const auto &[meshlet, meshlet_aabb] : std::views::zip(meshlets, meshlet_bounds)) {
+                // AABB computation
+                auto meshlet_bb_min = glm::vec3(std::numeric_limits<f32>::max());
+                auto meshlet_bb_max = glm::vec3(std::numeric_limits<f32>::lowest());
+                for (u32 i = 0; i < meshlet.triangle_count * 3; i++) {
+                    const auto &tri_pos =
+                        vertices[indirect_vertex_indices[meshlet.vertex_offset + local_triangle_indices[meshlet.triangle_offset + i]]];
+                    meshlet_bb_min = glm::min(meshlet_bb_min, tri_pos);
+                    meshlet_bb_max = glm::max(meshlet_bb_max, tri_pos);
+                }
+
+                meshlet_aabb.aabb_min = meshlet_bb_min;
+                meshlet_aabb.aabb_max = meshlet_bb_max;
+            }
+
+            primitive.meshlet_count = static_cast<u32>(meshlet_count);
+            primitive.meshlet_offset = static_cast<u32>(meshlet_offset);
+
+            std::ranges::move(indices, std::back_inserter(processed_indices));
+            std::ranges::move(vertices, std::back_inserter(processed_vertices));
+            std::ranges::move(normals, std::back_inserter(processed_normals));
+            std::ranges::move(texcoords, std::back_inserter(processed_texcoords));
+            std::ranges::move(meshlets, std::back_inserter(processed_meshlets));
+            std::ranges::move(meshlet_bounds, std::back_inserter(processed_meshlet_bounds));
+            std::ranges::move(local_triangle_indices, std::back_inserter(processed_local_triangle_indices));
+            std::ranges::move(indirect_vertex_indices, std::back_inserter(processed_indirect_vertex_indices));
         }
     }
 
     auto &transfer_man = impl->device->transfer_man();
-    model->indices = Buffer::create(*impl->device, ls::size_bytes(model_indices)).value();
-    transfer_man.wait_on(transfer_man.upload_staging(ls::span(model_indices), model->indices));
+    model->indices = Buffer::create(*impl->device, ls::size_bytes(processed_indices)).value();
+    transfer_man.wait_on(transfer_man.upload_staging(ls::span(processed_indices), model->indices));
 
-    model->vertex_positions = Buffer::create(*impl->device, ls::size_bytes(model_vertex_positions)).value();
-    transfer_man.wait_on(transfer_man.upload_staging(ls::span(model_vertex_positions), model->vertex_positions));
+    model->vertex_positions = Buffer::create(*impl->device, ls::size_bytes(processed_vertices)).value();
+    transfer_man.wait_on(transfer_man.upload_staging(ls::span(processed_vertices), model->vertex_positions));
 
-    model->vertex_normals = Buffer::create(*impl->device, ls::size_bytes(gltf_callbacks.vertex_normals)).value();
-    transfer_man.wait_on(transfer_man.upload_staging(ls::span(gltf_callbacks.vertex_normals), model->vertex_normals));
+    model->vertex_normals = Buffer::create(*impl->device, ls::size_bytes(processed_normals)).value();
+    transfer_man.wait_on(transfer_man.upload_staging(ls::span(processed_normals), model->vertex_normals));
 
-    if (!gltf_callbacks.vertex_texcoords.empty()) {
-        model->texture_coords = Buffer::create(*impl->device, ls::size_bytes(gltf_callbacks.vertex_texcoords)).value();
-        transfer_man.wait_on(transfer_man.upload_staging(ls::span(gltf_callbacks.vertex_texcoords), model->texture_coords));
+    if (!processed_texcoords.empty()) {
+        model->texture_coords = Buffer::create(*impl->device, ls::size_bytes(processed_texcoords)).value();
+        transfer_man.wait_on(transfer_man.upload_staging(ls::span(processed_texcoords), model->texture_coords));
     }
 
-    model->meshlets = Buffer::create(*impl->device, ls::size_bytes(model_meshlets)).value();
-    transfer_man.wait_on(transfer_man.upload_staging(ls::span(model_meshlets), model->meshlets));
+    model->meshlets = Buffer::create(*impl->device, ls::size_bytes(processed_meshlets)).value();
+    transfer_man.wait_on(transfer_man.upload_staging(ls::span(processed_meshlets), model->meshlets));
 
-    model->meshlet_bounds = Buffer::create(*impl->device, ls::size_bytes(model_meshlet_bounds)).value();
-    transfer_man.wait_on(transfer_man.upload_staging(ls::span(model_meshlet_bounds), model->meshlet_bounds));
+    model->meshlet_bounds = Buffer::create(*impl->device, ls::size_bytes(processed_meshlet_bounds)).value();
+    transfer_man.wait_on(transfer_man.upload_staging(ls::span(processed_meshlet_bounds), model->meshlet_bounds));
 
-    model->local_triangle_indices = Buffer::create(*impl->device, ls::size_bytes(model_local_triangle_indices)).value();
-    transfer_man.wait_on(transfer_man.upload_staging(ls::span(model_local_triangle_indices), model->local_triangle_indices));
+    model->local_triangle_indices = Buffer::create(*impl->device, ls::size_bytes(processed_local_triangle_indices)).value();
+    transfer_man.wait_on(transfer_man.upload_staging(ls::span(processed_local_triangle_indices), model->local_triangle_indices));
+
+    model->indirect_vertex_indices = Buffer::create(*impl->device, ls::size_bytes(processed_indirect_vertex_indices)).value();
+    transfer_man.wait_on(transfer_man.upload_staging(ls::span(processed_indirect_vertex_indices), model->indirect_vertex_indices));
 
     return true;
 }
@@ -898,6 +910,7 @@ auto AssetManager::unload_model(const UUID &uuid) -> bool {
     impl->device->destroy(model->meshlets.id());
     impl->device->destroy(model->meshlet_bounds.id());
     impl->device->destroy(model->local_triangle_indices.id());
+    impl->device->destroy(model->indirect_vertex_indices.id());
 
     impl->models.destroy_slot(asset->model_id);
     asset->model_id = ModelID::Invalid;

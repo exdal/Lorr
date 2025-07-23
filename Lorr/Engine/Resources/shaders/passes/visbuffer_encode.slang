@@ -7,7 +7,7 @@ import passes.visbuffer;
 
 struct ShaderParameters {
     ConstantBuffer<Camera> camera;
-    RWStructuredBuffer<u32> visible_meshlet_instances_indices;
+    StructuredBuffer<u32> visible_meshlet_instances_indices;
     StructuredBuffer<MeshletInstance> meshlet_instances;
     StructuredBuffer<Mesh> meshes;
     StructuredBuffer<Transform> transforms;
@@ -35,9 +35,8 @@ func vs_main(u32 vertex_index : SV_VertexID) -> VertexOutput {
     let meshlet = mesh.meshlets[meshlet_instance.meshlet_index];
 
     let index = meshlet.index(mesh, vis.triangle_index);
-    let vertex = meshlet.vertex(mesh, index);
-    let vertex_pos = meshlet.position(mesh, vertex);
-    let tex_coord = meshlet.tex_coord(mesh, vertex);
+    let vertex_pos = meshlet.position(mesh, index);
+    let tex_coord = meshlet.tex_coord(mesh, index);
     let world_pos = transform.to_world_position(vertex_pos);
     let clip_pos = mul(params.camera.projection_view_mat, f32x4(world_pos.xyz, 1.0));
 
@@ -45,7 +44,7 @@ func vs_main(u32 vertex_index : SV_VertexID) -> VertexOutput {
     output.position = clip_pos;
     output.vertex_pos = vertex_pos;
     output.tex_coord = tex_coord;
-    output.meshlet_instance_index = vis.meshlet_instance_index;
+    output.meshlet_instance_index = meshlet_instance_index;
     output.triangle_index = vis.triangle_index / 3;
     output.material_index = meshlet_instance.material_index;
 

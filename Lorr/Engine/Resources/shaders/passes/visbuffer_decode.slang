@@ -10,7 +10,6 @@ import passes.visbuffer;
 struct ShaderParameters {
     Image2D<u32> visbuffer;
     ConstantBuffer<Camera> camera;
-    RWStructuredBuffer<u32> visible_meshlet_instances_indices;
     StructuredBuffer<MeshletInstance> meshlet_instances;
     StructuredBuffer<Mesh> meshes;
     StructuredBuffer<Transform> transforms;
@@ -96,18 +95,17 @@ func fs_main(VertexOutput input) -> FragmentOutput {
     FragmentOutput output = {};
 
     let vis = VisBufferData(texel);
-    let meshlet_instance_index = params.visible_meshlet_instances_indices[vis.meshlet_instance_index];
+    let meshlet_instance_index = vis.meshlet_instance_index;
     let meshlet_instance = params.meshlet_instances[meshlet_instance_index];
     let mesh = params.meshes[meshlet_instance.mesh_index];
     let transform = params.transforms[meshlet_instance.transform_index];
     let material = params.materials[meshlet_instance.material_index];
-
     let meshlet = mesh.meshlets[meshlet_instance.meshlet_index];
+
     let indices = meshlet.indices(mesh, vis.triangle_index);
-    let vertices = meshlet.vertices(mesh, indices);
-    let positions = meshlet.positions(mesh, vertices);
-    let normals = meshlet.normals(mesh, vertices);
-    let tex_coords = meshlet.tex_coords(mesh, vertices);
+    let positions = meshlet.positions(mesh, indices);
+    let normals = meshlet.normals(mesh, indices);
+    let tex_coords = meshlet.tex_coords(mesh, indices);
     let world_positions = transform.to_world_positions(positions);
     let NDC = f32x3(input.tex_coord * 2.0 - 1.0, 1.0);
     let deriv = compute_partial_derivatives(world_positions, NDC.xy, params.camera.resolution);

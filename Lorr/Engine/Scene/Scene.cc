@@ -742,6 +742,7 @@ auto Scene::compose(this Scene &self) -> SceneComposeInfo {
         gpu_mesh.vertex_normals = model->vertex_normals.device_address();
         gpu_mesh.texture_coords = model->texture_coords.device_address();
         gpu_mesh.local_triangle_indices = model->local_triangle_indices.device_address();
+        gpu_mesh.indirect_vertex_indices = model->indirect_vertex_indices.device_address();
         gpu_mesh.meshlet_bounds = model->meshlet_bounds.device_address();
         gpu_mesh.meshlets = model->meshlets.device_address();
 

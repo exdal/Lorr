@@ -859,9 +859,8 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                 VUK_IA(vuk::eColorRW) normal,
                 VUK_IA(vuk::eColorRW) emissive,
                 VUK_IA(vuk::eColorRW) metallic_roughness_occlusion,
-                VUK_IA(vuk::eFragmentSampled) visbuffer,
+                VUK_IA(vuk::eFragmentRead) visbuffer,
                 VUK_BA(vuk::eFragmentRead) camera,
-                VUK_BA(vuk::eFragmentRead) visible_meshlet_instances_indices,
                 VUK_BA(vuk::eFragmentRead) meshlet_instances,
                 VUK_BA(vuk::eFragmentRead) meshes,
                 VUK_BA(vuk::eFragmentRead) transforms,
@@ -878,14 +877,13 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                     .set_dynamic_state(vuk::DynamicStateFlagBits::eViewport | vuk::DynamicStateFlagBits::eScissor)
                     .set_viewport(0, vuk::Rect2D::framebuffer())
                     .set_scissor(0, vuk::Rect2D::framebuffer())
+                    .bind_persistent(1, *descriptor_set)
                     .bind_image(0, 0, visbuffer)
                     .bind_buffer(0, 1, camera)
-                    .bind_buffer(0, 2, visible_meshlet_instances_indices)
-                    .bind_buffer(0, 3, meshlet_instances)
-                    .bind_buffer(0, 4, meshes)
-                    .bind_buffer(0, 5, transforms)
-                    .bind_buffer(0, 6, materials)
-                    .bind_persistent(1, *descriptor_set)
+                    .bind_buffer(0, 2, meshlet_instances)
+                    .bind_buffer(0, 3, meshes)
+                    .bind_buffer(0, 4, transforms)
+                    .bind_buffer(0, 5, materials)
                     .draw(3, 1, 0, 1);
 
                 return std::make_tuple(
@@ -895,7 +893,6 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                     metallic_roughness_occlusion,
                     visbuffer,
                     camera,
-                    visible_meshlet_instances_indices,
                     meshlet_instances,
                     meshes,
                     transforms
@@ -946,7 +943,6 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
             metallic_roughness_occlusion_attachment,
             visbuffer_attachment,
             camera_buffer,
-            visible_meshlet_instances_indices_buffer,
             meshlet_instances_buffer,
             meshes_buffer,
             transforms_buffer
@@ -958,7 +954,6 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                 std::move(metallic_roughness_occlusion_attachment),
                 std::move(visbuffer_attachment),
                 std::move(camera_buffer),
-                std::move(visible_meshlet_instances_indices_buffer),
                 std::move(meshlet_instances_buffer),
                 std::move(meshes_buffer),
                 std::move(transforms_buffer),

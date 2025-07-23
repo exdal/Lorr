@@ -46,7 +46,7 @@ func vs_main(u32 vertex_index : SV_VertexID) -> VertexOutput {
     output.tex_coord = tex_coord;
     output.meshlet_instance_index = meshlet_instance_index;
     output.triangle_index = vis.triangle_index / 3;
-    output.material_index = meshlet_instance.material_index;
+    output.material_index = mesh.material_index;
 
     return output;
 }

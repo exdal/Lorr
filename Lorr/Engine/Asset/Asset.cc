@@ -680,7 +680,6 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
             auto primitive_index = info->model->primitives.size();
             auto &primitive = info->model->primitives.emplace_back();
             auto *material_asset = app.asset_man.get_asset(info->model->materials[material_index]);
-            auto global_material_index = SlotMap_decode_id(material_asset->material_id).index;
 
             info->vertex_positions.resize(info->vertex_positions.size() + vertex_count);
             info->vertex_normals.resize(info->vertex_normals.size() + vertex_count);
@@ -688,7 +687,7 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
             info->indices.resize(info->indices.size() + index_count);
 
             mesh.primitive_indices.push_back(primitive_index);
-            primitive.material_index = global_material_index;
+            primitive.material_id = material_asset->material_id;
             primitive.vertex_offset = vertex_offset;
             primitive.vertex_count = vertex_count;
             primitive.index_offset = index_offset;
@@ -749,21 +748,14 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
     auto model_normals = std::move(gltf_callbacks.vertex_normals);
     auto model_texcoords = std::move(gltf_callbacks.vertex_texcoords);
 
-    auto processed_indices = std::vector<u32>();
-    auto processed_vertices = std::vector<glm::vec3>();
-    auto processed_normals = std::vector<glm::vec3>();
-    auto processed_texcoords = std::vector<glm::vec2>();
-    auto processed_meshlets = std::vector<meshopt_Meshlet>();
-    auto processed_meshlet_bounds = std::vector<GPU::MeshletBounds>();
-    auto processed_indirect_vertex_indices = std::vector<u32>();
-    auto processed_local_triangle_indices = std::vector<u8>();
-
+    auto &transfer_man = impl->device->transfer_man();
     for (const auto &gltf_mesh : model->meshes) {
         for (auto primitive_index : gltf_mesh.primitive_indices) {
             ZoneNamedN(z, "GPU Meshlet Generation", true);
 
             auto &primitive = model->primitives[primitive_index];
-            auto meshlet_offset = processed_meshlets.size();
+            auto &gpu_mesh = model->gpu_meshes.emplace_back();
+            auto &gpu_mesh_buffer = model->gpu_mesh_buffers.emplace_back();
 
             auto indices = std::vector<u32>();
             auto vertices = std::vector<glm::vec3>();
@@ -843,46 +835,62 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
                 meshlet_aabb.aabb_max = meshlet_bb_max;
             }
 
-            primitive.meshlet_count = static_cast<u32>(meshlet_count);
-            primitive.meshlet_offset = static_cast<u32>(meshlet_offset);
+            auto upload_size = 0 //
+                + ls::size_bytes(indices) //
+                + ls::size_bytes(vertices) //
+                + ls::size_bytes(normals) //
+                + ls::size_bytes(texcoords) //
+                + ls::size_bytes(meshlets) //
+                + ls::size_bytes(meshlet_bounds) //
+                + ls::size_bytes(local_triangle_indices) //
+                + ls::size_bytes(indirect_vertex_indices);
+            gpu_mesh_buffer = Buffer::create(*impl->device, upload_size, vuk::MemoryUsage::eGPUonly).value();
+            auto gpu_mesh_bda = gpu_mesh_buffer.device_address();
 
-            std::ranges::move(indices, std::back_inserter(processed_indices));
-            std::ranges::move(vertices, std::back_inserter(processed_vertices));
-            std::ranges::move(normals, std::back_inserter(processed_normals));
-            std::ranges::move(texcoords, std::back_inserter(processed_texcoords));
-            std::ranges::move(meshlets, std::back_inserter(processed_meshlets));
-            std::ranges::move(meshlet_bounds, std::back_inserter(processed_meshlet_bounds));
-            std::ranges::move(local_triangle_indices, std::back_inserter(processed_local_triangle_indices));
-            std::ranges::move(indirect_vertex_indices, std::back_inserter(processed_indirect_vertex_indices));
+            auto cpu_mesh_buffer = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eCPUonly, upload_size);
+            auto cpu_mesh_ptr = reinterpret_cast<u8 *>(cpu_mesh_buffer->mapped_ptr);
+            auto upload_offset = 0_u64;
+
+            gpu_mesh.indices = gpu_mesh_bda + upload_offset;
+            std::memcpy(cpu_mesh_ptr + upload_offset, indices.data(), ls::size_bytes(indices));
+            upload_offset += ls::size_bytes(indices);
+
+            gpu_mesh.vertex_positions = gpu_mesh_bda + upload_offset;
+            std::memcpy(cpu_mesh_ptr + upload_offset, vertices.data(), ls::size_bytes(vertices));
+            upload_offset += ls::size_bytes(vertices);
+
+            gpu_mesh.vertex_normals = gpu_mesh_bda + upload_offset;
+            std::memcpy(cpu_mesh_ptr + upload_offset, normals.data(), ls::size_bytes(normals));
+            upload_offset += ls::size_bytes(normals);
+
+            if (!texcoords.empty()) {
+                gpu_mesh.texture_coords = gpu_mesh_bda + upload_offset;
+                std::memcpy(cpu_mesh_ptr + upload_offset, texcoords.data(), ls::size_bytes(texcoords));
+                upload_offset += ls::size_bytes(texcoords);
+            }
+
+            gpu_mesh.meshlets = gpu_mesh_bda + upload_offset;
+            std::memcpy(cpu_mesh_ptr + upload_offset, meshlets.data(), ls::size_bytes(meshlets));
+            upload_offset += ls::size_bytes(meshlets);
+
+            gpu_mesh.meshlet_bounds = gpu_mesh_bda + upload_offset;
+            std::memcpy(cpu_mesh_ptr + upload_offset, meshlet_bounds.data(), ls::size_bytes(meshlet_bounds));
+            upload_offset += ls::size_bytes(meshlet_bounds);
+
+            gpu_mesh.local_triangle_indices = gpu_mesh_bda + upload_offset;
+            std::memcpy(cpu_mesh_ptr + upload_offset, local_triangle_indices.data(), ls::size_bytes(local_triangle_indices));
+            upload_offset += ls::size_bytes(local_triangle_indices);
+
+            gpu_mesh.indirect_vertex_indices = gpu_mesh_bda + upload_offset;
+            std::memcpy(cpu_mesh_ptr + upload_offset, indirect_vertex_indices.data(), ls::size_bytes(indirect_vertex_indices));
+            upload_offset += ls::size_bytes(indirect_vertex_indices);
+
+            gpu_mesh.material_index = SlotMap_decode_id(primitive.material_id).index;
+            gpu_mesh.meshlet_count = meshlet_count;
+
+            transfer_man.wait_on(std::move(transfer_man.upload_staging(std::move(cpu_mesh_buffer), gpu_mesh_buffer)));
         }
     }
-
-    auto &transfer_man = impl->device->transfer_man();
-    model->indices = Buffer::create(*impl->device, ls::size_bytes(processed_indices)).value();
-    transfer_man.wait_on(transfer_man.upload_staging(ls::span(processed_indices), model->indices));
-
-    model->vertex_positions = Buffer::create(*impl->device, ls::size_bytes(processed_vertices)).value();
-    transfer_man.wait_on(transfer_man.upload_staging(ls::span(processed_vertices), model->vertex_positions));
-
-    model->vertex_normals = Buffer::create(*impl->device, ls::size_bytes(processed_normals)).value();
-    transfer_man.wait_on(transfer_man.upload_staging(ls::span(processed_normals), model->vertex_normals));
-
-    if (!processed_texcoords.empty()) {
-        model->texture_coords = Buffer::create(*impl->device, ls::size_bytes(processed_texcoords)).value();
-        transfer_man.wait_on(transfer_man.upload_staging(ls::span(processed_texcoords), model->texture_coords));
-    }
-
-    model->meshlets = Buffer::create(*impl->device, ls::size_bytes(processed_meshlets)).value();
-    transfer_man.wait_on(transfer_man.upload_staging(ls::span(processed_meshlets), model->meshlets));
-
-    model->meshlet_bounds = Buffer::create(*impl->device, ls::size_bytes(processed_meshlet_bounds)).value();
-    transfer_man.wait_on(transfer_man.upload_staging(ls::span(processed_meshlet_bounds), model->meshlet_bounds));
-
-    model->local_triangle_indices = Buffer::create(*impl->device, ls::size_bytes(processed_local_triangle_indices)).value();
-    transfer_man.wait_on(transfer_man.upload_staging(ls::span(processed_local_triangle_indices), model->local_triangle_indices));
-
-    model->indirect_vertex_indices = Buffer::create(*impl->device, ls::size_bytes(processed_indirect_vertex_indices)).value();
-    transfer_man.wait_on(transfer_man.upload_staging(ls::span(processed_indirect_vertex_indices), model->indirect_vertex_indices));
 
     return true;
 }
@@ -1574,12 +1582,12 @@ auto AssetManager::get_materials_buffer() -> vuk::Value<vuk::Buffer> {
         auto occlusion_image_index = uuid_to_index(material->occlusion_texture);
 
         auto flags = GPU::MaterialFlag::None;
-        flags |= albedo_image_index.has_value() ? GPU::MaterialFlag::HasAlbedoImage : GPU::MaterialFlag::None;
-        flags |= normal_image_index.has_value() ? GPU::MaterialFlag::HasNormalImage : GPU::MaterialFlag::None;
-        flags |= emissive_image_index.has_value() ? GPU::MaterialFlag::HasEmissiveImage : GPU::MaterialFlag::None;
-        flags |= metallic_roughness_image_index.has_value() ? GPU::MaterialFlag::HasMetallicRoughnessImage : GPU::MaterialFlag::None;
-        flags |= occlusion_image_index.has_value() ? GPU::MaterialFlag::HasOcclusionImage : GPU::MaterialFlag::None;
-        //flags |= GPU::MaterialFlag::NormalFlipY;
+        // flags |= albedo_image_index.has_value() ? GPU::MaterialFlag::HasAlbedoImage : GPU::MaterialFlag::None;
+        // flags |= normal_image_index.has_value() ? GPU::MaterialFlag::HasNormalImage : GPU::MaterialFlag::None;
+        // flags |= emissive_image_index.has_value() ? GPU::MaterialFlag::HasEmissiveImage : GPU::MaterialFlag::None;
+        // flags |= metallic_roughness_image_index.has_value() ? GPU::MaterialFlag::HasMetallicRoughnessImage : GPU::MaterialFlag::None;
+        // flags |= occlusion_image_index.has_value() ? GPU::MaterialFlag::HasOcclusionImage : GPU::MaterialFlag::None;
+        // flags |= GPU::MaterialFlag::NormalFlipY;
 
         return {
             .albedo_color = material->albedo_color,

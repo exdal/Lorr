@@ -22,6 +22,7 @@ target("Lorr")
     })
 
     add_options("profile")
+    add_options("use_llvmpipe")
 
     add_deps(
         "ls",

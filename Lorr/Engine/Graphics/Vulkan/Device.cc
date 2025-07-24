@@ -78,7 +78,11 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
     vkb::PhysicalDeviceSelector physical_device_selector(self.instance);
     physical_device_selector.defer_surface_initialization();
     physical_device_selector.disable_portability_subset();
-    physical_device_selector.set_minimum_version(1, 3);
+    physical_device_selector.set_minimum_version(1, 4);
+#ifdef LR_USE_LLVMPIPE
+    physical_device_selector.prefer_gpu_device_type(vkb::PreferredDeviceType::cpu);
+    physical_device_selector.allow_any_gpu_device_type(false);
+#endif
 
     std::vector<const c8 *> device_extensions;
     device_extensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
@@ -88,7 +92,7 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
     //device_extensions.push_back(VK_KHR_MAINTENANCE_8_EXTENSION_NAME);
     physical_device_selector.add_required_extensions(device_extensions);
 
-    auto physical_device_select_result = physical_device_selector.select_devices();
+    auto physical_device_select_result = physical_device_selector.select();
     if (!physical_device_select_result) {
         auto error = physical_device_select_result.error();
 
@@ -96,20 +100,9 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
         return std::unexpected(VK_ERROR_DEVICE_LOST);
     }
 
-    const auto &physical_devices = physical_device_select_result.value();
+    self.physical_device = physical_device_select_result.value();
 
-    for (const auto &[physical_device, physical_device_index] : std::views::zip(physical_devices, std::views::iota(0_u32))) {
-        LOG_INFO("Vulkan compatible device: [{}] = {}", physical_device_index, physical_device.name);
-    }
-
-#if 0
-    // for me, this is llvmpipe, comes in handy when shit keeps crashes
-    self.physical_device = physical_devices[1];
-#else
-    self.physical_device = physical_devices[0];
-#endif
-
-    LOG_TRACE("Created physical device.");
+    LOG_TRACE("Selected physical device \"{}\".", self.physical_device.name);
 
     VkPhysicalDeviceVulkan14Features vk14_features = {};
     vk14_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES;
@@ -210,17 +203,19 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
         vuk::create_vkqueue_executor(vulkan_functions, self.handle, graphics_queue, graphics_queue_family_index, vuk::DomainFlagBits::eGraphicsQueue)
     );
 
-    // auto compute_queue = self.handle.get_queue(vkb::QueueType::compute).value();
-    // auto compute_queue_family_index = self.handle.get_queue_index(vkb::QueueType::compute).value();
-    // executors.push_back(
-    //     vuk::create_vkqueue_executor(vulkan_functions, self.handle, compute_queue, compute_queue_family_index, vuk::DomainFlagBits::eComputeQueue)
-    // );
-    //
-    // auto transfer_queue = self.handle.get_queue(vkb::QueueType::transfer).value();
-    // auto transfer_queue_family_index = self.handle.get_queue_index(vkb::QueueType::transfer).value();
-    // executors.push_back(
-    //     vuk::create_vkqueue_executor(vulkan_functions, self.handle, transfer_queue, transfer_queue_family_index, vuk::DomainFlagBits::eTransferQueue)
-    // );
+#ifndef LR_USE_LLVMPIPE
+    auto compute_queue = self.handle.get_queue(vkb::QueueType::compute).value();
+    auto compute_queue_family_index = self.handle.get_queue_index(vkb::QueueType::compute).value();
+    executors.push_back(
+        vuk::create_vkqueue_executor(vulkan_functions, self.handle, compute_queue, compute_queue_family_index, vuk::DomainFlagBits::eComputeQueue)
+    );
+
+    auto transfer_queue = self.handle.get_queue(vkb::QueueType::transfer).value();
+    auto transfer_queue_family_index = self.handle.get_queue_index(vkb::QueueType::transfer).value();
+    executors.push_back(
+        vuk::create_vkqueue_executor(vulkan_functions, self.handle, transfer_queue, transfer_queue_family_index, vuk::DomainFlagBits::eTransferQueue)
+    );
+#endif
 
     executors.push_back(std::make_unique<vuk::ThisThreadExecutor>());
     self.runtime.emplace(

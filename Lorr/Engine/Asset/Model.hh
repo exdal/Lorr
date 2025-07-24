@@ -103,15 +103,5 @@ struct Model {
     std::vector<Buffer> gpu_mesh_buffers = {};
 
     usize default_scene_index = 0;
-
-    // TODO: Make this one buffer
-    Buffer indices = {};
-    Buffer vertex_positions = {};
-    Buffer vertex_normals = {};
-    Buffer texture_coords = {};
-    Buffer meshlets = {};
-    Buffer meshlet_bounds = {};
-    Buffer local_triangle_indices = {};
-    Buffer indirect_vertex_indices = {};
 };
 } // namespace lr

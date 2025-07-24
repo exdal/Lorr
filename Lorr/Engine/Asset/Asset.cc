@@ -909,16 +909,9 @@ auto AssetManager::unload_model(const UUID &uuid) -> bool {
         this->unload_material(v);
     }
 
-    impl->device->destroy(model->indices.id());
-    impl->device->destroy(model->vertex_positions.id());
-    impl->device->destroy(model->vertex_normals.id());
-    if (model->texture_coords) {
-        impl->device->destroy(model->texture_coords.id());
+    for (const auto &buffer : model->gpu_mesh_buffers) {
+        impl->device->destroy(buffer.id());
     }
-    impl->device->destroy(model->meshlets.id());
-    impl->device->destroy(model->meshlet_bounds.id());
-    impl->device->destroy(model->local_triangle_indices.id());
-    impl->device->destroy(model->indirect_vertex_indices.id());
 
     impl->models.destroy_slot(asset->model_id);
     asset->model_id = ModelID::Invalid;
@@ -1582,11 +1575,11 @@ auto AssetManager::get_materials_buffer() -> vuk::Value<vuk::Buffer> {
         auto occlusion_image_index = uuid_to_index(material->occlusion_texture);
 
         auto flags = GPU::MaterialFlag::None;
-        // flags |= albedo_image_index.has_value() ? GPU::MaterialFlag::HasAlbedoImage : GPU::MaterialFlag::None;
-        // flags |= normal_image_index.has_value() ? GPU::MaterialFlag::HasNormalImage : GPU::MaterialFlag::None;
-        // flags |= emissive_image_index.has_value() ? GPU::MaterialFlag::HasEmissiveImage : GPU::MaterialFlag::None;
-        // flags |= metallic_roughness_image_index.has_value() ? GPU::MaterialFlag::HasMetallicRoughnessImage : GPU::MaterialFlag::None;
-        // flags |= occlusion_image_index.has_value() ? GPU::MaterialFlag::HasOcclusionImage : GPU::MaterialFlag::None;
+        flags |= albedo_image_index.has_value() ? GPU::MaterialFlag::HasAlbedoImage : GPU::MaterialFlag::None;
+        flags |= normal_image_index.has_value() ? GPU::MaterialFlag::HasNormalImage : GPU::MaterialFlag::None;
+        flags |= emissive_image_index.has_value() ? GPU::MaterialFlag::HasEmissiveImage : GPU::MaterialFlag::None;
+        flags |= metallic_roughness_image_index.has_value() ? GPU::MaterialFlag::HasMetallicRoughnessImage : GPU::MaterialFlag::None;
+        flags |= occlusion_image_index.has_value() ? GPU::MaterialFlag::HasOcclusionImage : GPU::MaterialFlag::None;
         // flags |= GPU::MaterialFlag::NormalFlipY;
 
         return {

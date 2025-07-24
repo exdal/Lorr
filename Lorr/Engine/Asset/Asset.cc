@@ -678,6 +678,8 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
 
             auto &mesh = info->model->meshes[mesh_index];
             auto primitive_index = info->model->primitives.size();
+            info->model->gpu_meshes.emplace_back();
+            info->model->gpu_mesh_buffers.emplace_back();
             auto &primitive = info->model->primitives.emplace_back();
             auto *material_asset = app.asset_man.get_asset(info->model->materials[material_index]);
 
@@ -754,8 +756,8 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
             ZoneNamedN(z, "GPU Meshlet Generation", true);
 
             auto &primitive = model->primitives[primitive_index];
-            auto &gpu_mesh = model->gpu_meshes.emplace_back();
-            auto &gpu_mesh_buffer = model->gpu_mesh_buffers.emplace_back();
+            auto &gpu_mesh = model->gpu_meshes[primitive_index];
+            auto &gpu_mesh_buffer = model->gpu_mesh_buffers[primitive_index];
 
             auto indices = std::vector<u32>();
             auto vertices = std::vector<glm::vec3>();
@@ -764,10 +766,10 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
             {
                 ZoneNamedN(z2, "Remap geometry", true);
 
-                auto raw_indices = std::span(model_indices.data() + primitive.index_offset, primitive.index_count);
-                auto raw_vertices = std::span(model_vertices.data() + primitive.vertex_offset, primitive.vertex_count);
-                auto raw_normals = std::span(model_normals.data() + primitive.vertex_offset, primitive.vertex_count);
-                auto raw_texcoords = std::span(model_texcoords.data() + primitive.vertex_offset, primitive.vertex_count);
+                auto raw_indices = ls::span(model_indices.data() + primitive.index_offset, primitive.index_count);
+                auto raw_vertices = ls::span(model_vertices.data() + primitive.vertex_offset, primitive.vertex_count);
+                auto raw_normals = ls::span(model_normals.data() + primitive.vertex_offset, primitive.vertex_count);
+                auto raw_texcoords = ls::span(model_texcoords.data() + primitive.vertex_offset, primitive.vertex_count);
 
                 // clang-format off
                 auto remapped_vertices = std::vector<u32>(raw_vertices.size());
@@ -779,8 +781,10 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
                 normals.resize(vertex_count);
                 meshopt_remapVertexBuffer(normals.data(), raw_normals.data(), raw_normals.size(), sizeof(glm::vec3), remapped_vertices.data());
 
-                texcoords.resize(vertex_count);
-                meshopt_remapVertexBuffer(texcoords.data(), raw_texcoords.data(), raw_texcoords.size(), sizeof(glm::vec2), remapped_vertices.data());
+                if (!raw_texcoords.empty()) {
+                    texcoords.resize(vertex_count);
+                    meshopt_remapVertexBuffer(texcoords.data(), raw_texcoords.data(), raw_texcoords.size(), sizeof(glm::vec2), remapped_vertices.data());
+                }
 
                 indices.resize(raw_indices.size());
                 meshopt_remapIndexBuffer(indices.data(), raw_indices.data(), primitive.index_count, remapped_vertices.data());
@@ -885,10 +889,9 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
             std::memcpy(cpu_mesh_ptr + upload_offset, indirect_vertex_indices.data(), ls::size_bytes(indirect_vertex_indices));
             upload_offset += ls::size_bytes(indirect_vertex_indices);
 
-            gpu_mesh.material_index = SlotMap_decode_id(primitive.material_id).index;
-            gpu_mesh.meshlet_count = meshlet_count;
-
             transfer_man.wait_on(std::move(transfer_man.upload_staging(std::move(cpu_mesh_buffer), gpu_mesh_buffer)));
+
+            primitive.meshlet_count = meshlet_count;
         }
     }
 

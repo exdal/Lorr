@@ -121,13 +121,12 @@ func cs_main(
     let meshlet_instance_index = params.visible_meshlet_instances_indices[visible_meshlet_index];
     let meshlet_instance = params.meshlet_instances[meshlet_instance_index];
     let mesh = params.meshes[meshlet_instance.mesh_index];
-    let meshlet_index = meshlet_instance.meshlet_index;
-    let meshlet = mesh.meshlets[meshlet_index];
+    let meshlet = mesh.meshlets[meshlet_instance.meshlet_index];
 
     if (local_index == 0) {
         triangles_passed_shared = 0;
         let transform = params.transforms[meshlet_instance.transform_index];
-        model_view_proj_shared = mul(params.camera->projection_view_mat, transform.world);
+        model_view_proj_shared = mul(params.camera.projection_view_mat, transform.world);
     }
 
     std::control_barrier(std::memory_order_acq_rel);
@@ -151,8 +150,8 @@ func cs_main(
 
     if (triangle_passed) {
         let index_offset = base_index_shared + active_triangle_index * 3;
-        params.reordered_indices[index_offset + 0] = (visible_meshlet_index << MESHLET_PRIMITIVE_BITS) | ((triangle_index + 0) & MESHLET_PRIMITIVE_MASK);
-        params.reordered_indices[index_offset + 1] = (visible_meshlet_index << MESHLET_PRIMITIVE_BITS) | ((triangle_index + 1) & MESHLET_PRIMITIVE_MASK);
-        params.reordered_indices[index_offset + 2] = (visible_meshlet_index << MESHLET_PRIMITIVE_BITS) | ((triangle_index + 2) & MESHLET_PRIMITIVE_MASK);
+        params.reordered_indices[index_offset + 0] = (meshlet_instance_index << MESHLET_PRIMITIVE_BITS) | ((triangle_index + 0) & MESHLET_PRIMITIVE_MASK);
+        params.reordered_indices[index_offset + 1] = (meshlet_instance_index << MESHLET_PRIMITIVE_BITS) | ((triangle_index + 1) & MESHLET_PRIMITIVE_MASK);
+        params.reordered_indices[index_offset + 2] = (meshlet_instance_index << MESHLET_PRIMITIVE_BITS) | ((triangle_index + 2) & MESHLET_PRIMITIVE_MASK);
     }
 }

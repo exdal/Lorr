@@ -536,14 +536,14 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
             "vis cull meshlets",
             [meshlet_instance_count = self.meshlet_instance_count, cull_flags = info.cull_flags](
                 vuk::CommandBuffer &cmd_list,
-                VUK_BA(vuk::eComputeWrite) cull_triangles_cmd,
+                VUK_BA(vuk::eComputeRW) cull_triangles_cmd,
                 VUK_BA(vuk::eComputeRead) camera,
                 VUK_BA(vuk::eComputeWrite) visible_meshlet_instances_indices,
                 VUK_BA(vuk::eComputeRead) meshlet_instances,
                 VUK_BA(vuk::eComputeRead) meshes,
                 VUK_BA(vuk::eComputeRead) transforms,
                 VUK_IA(vuk::eComputeRead) hiz,
-                VUK_BA(vuk::eComputeWrite) debug_drawer
+                VUK_BA(vuk::eComputeRW) debug_drawer
             ) {
                 cmd_list //
                     .bind_compute_pipeline("passes.cull_meshlets")
@@ -558,6 +558,7 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                     .bind_buffer(0, 8, debug_drawer)
                     .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, PushConstants(meshlet_instance_count, cull_flags))
                     .dispatch((meshlet_instance_count + Model::MAX_MESHLET_INDICES - 1) / Model::MAX_MESHLET_INDICES);
+
                 return std::make_tuple(
                     cull_triangles_cmd,
                     camera,
@@ -602,8 +603,8 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
             [cull_flags = info.cull_flags](
                 vuk::CommandBuffer &cmd_list,
                 VUK_BA(vuk::eIndirectRead) cull_triangles_cmd,
-                VUK_BA(vuk::eComputeWrite) draw_indexed_cmd,
-                VUK_BA(vuk::eComputeWrite) camera,
+                VUK_BA(vuk::eComputeRW) draw_indexed_cmd,
+                VUK_BA(vuk::eComputeRead) camera,
                 VUK_BA(vuk::eComputeRead) visible_meshlet_instances_indices,
                 VUK_BA(vuk::eComputeRead) meshlet_instances,
                 VUK_BA(vuk::eComputeRead) meshes,
@@ -621,6 +622,7 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                     .bind_buffer(0, 6, reordered_indices)
                     .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, cull_flags)
                     .dispatch_indirect(cull_triangles_cmd);
+
                 return std::make_tuple(
                     draw_indexed_cmd,
                     camera,
@@ -707,10 +709,9 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                 vuk::CommandBuffer &cmd_list,
                 VUK_BA(vuk::eIndirectRead) triangle_indirect,
                 VUK_BA(vuk::eIndexRead) index_buffer,
-                VUK_IA(vuk::eColorWrite) visbuffer,
+                VUK_IA(vuk::eColorRW) visbuffer,
                 VUK_IA(vuk::eDepthStencilRW) depth,
                 VUK_BA(vuk::eVertexRead) camera,
-                VUK_BA(vuk::eVertexRead) visible_meshlet_instances_indices,
                 VUK_BA(vuk::eVertexRead) meshlet_instances,
                 VUK_BA(vuk::eVertexRead) transforms,
                 VUK_BA(vuk::eVertexRead) meshes,
@@ -727,25 +728,15 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                     .set_scissor(0, vuk::Rect2D::framebuffer())
                     .bind_persistent(1, *descriptor_set)
                     .bind_buffer(0, 0, camera)
-                    .bind_buffer(0, 1, visible_meshlet_instances_indices)
-                    .bind_buffer(0, 2, meshlet_instances)
-                    .bind_buffer(0, 3, meshes)
-                    .bind_buffer(0, 4, transforms)
-                    .bind_buffer(0, 5, materials)
-                    .bind_image(0, 6, overdraw)
+                    .bind_buffer(0, 1, meshlet_instances)
+                    .bind_buffer(0, 2, meshes)
+                    .bind_buffer(0, 3, transforms)
+                    .bind_buffer(0, 4, materials)
+                    .bind_image(0, 5, overdraw)
                     .bind_index_buffer(index_buffer, vuk::IndexType::eUint32)
                     .draw_indexed_indirect(1, triangle_indirect);
-                return std::make_tuple(
-                    visbuffer,
-                    depth,
-                    camera,
-                    visible_meshlet_instances_indices,
-                    meshlet_instances,
-                    transforms,
-                    meshes,
-                    materials,
-                    overdraw
-                );
+
+                return std::make_tuple(visbuffer, depth, camera, meshlet_instances, transforms, meshes, materials, overdraw);
             }
         );
 
@@ -753,7 +744,6 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
             visbuffer_attachment,
             depth_attachment,
             camera_buffer,
-            visible_meshlet_instances_indices_buffer,
             meshlet_instances_buffer,
             transforms_buffer,
             meshes_buffer,
@@ -766,7 +756,6 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                 std::move(visbuffer_attachment),
                 std::move(depth_attachment),
                 std::move(camera_buffer),
-                std::move(visible_meshlet_instances_indices_buffer),
                 std::move(meshlet_instances_buffer),
                 std::move(transforms_buffer),
                 std::move(meshes_buffer),
@@ -781,15 +770,13 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                 [picking_texel = *info.picking_texel](
                     vuk::CommandBuffer &cmd_list,
                     VUK_IA(vuk::eComputeSampled) visbuffer,
-                    VUK_BA(vuk::eComputeRead) visible_meshlet_instances_indices,
                     VUK_BA(vuk::eComputeRead) meshlet_instances,
                     VUK_BA(vuk::eComputeWrite) picked_transform_index_buffer
                 ) {
                     cmd_list //
                         .bind_compute_pipeline("passes.editor_mousepick")
                         .bind_image(0, 0, visbuffer)
-                        .bind_buffer(0, 1, visible_meshlet_instances_indices)
-                        .bind_buffer(0, 2, meshlet_instances)
+                        .bind_buffer(0, 1, meshlet_instances)
                         .push_constants(
                             vuk::ShaderStageFlagBits::eCompute,
                             0,
@@ -802,8 +789,7 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
             );
 
             auto picking_texel_buffer = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eGPUtoCPU, sizeof(u32));
-            auto picked_texel =
-                editor_mousepick_pass(visbuffer_attachment, visible_meshlet_instances_indices_buffer, meshlet_instances_buffer, picking_texel_buffer);
+            auto picked_texel = editor_mousepick_pass(visbuffer_attachment, meshlet_instances_buffer, picking_texel_buffer);
 
             vuk::Compiler temp_compiler;
             picked_texel.wait(self.device->get_allocator(), temp_compiler);
@@ -1013,6 +999,7 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                         .bind_buffer(0, 10, sun)
                         .bind_buffer(0, 11, camera)
                         .draw(3, 1, 0, 0);
+
                     return std::make_tuple(dst, atmosphere, sun, camera, sky_transmittance_lut, sky_multiscatter_lut, depth);
                 }
             );

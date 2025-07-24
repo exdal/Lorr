@@ -10,9 +10,6 @@ import passes.visbuffer;
 Image2D<u32> visbuffer_data;
 
 [[vk::binding(1, 0)]]
-StructuredBuffer<u32, ScalarDataLayout> visible_meshlet_instances_indices;
-
-[[vk::binding(2, 0)]]
 StructuredBuffer<MeshletInstance, ScalarDataLayout> meshlet_instances;
 
 struct PushConstants {
@@ -31,8 +28,7 @@ func cs_main() -> void {
         return;
     }
 
-    const let vis = VisBufferData(texel);
-    const u32 meshlet_instance_index = visible_meshlet_instances_indices[vis.meshlet_instance_index];
-    const MeshletInstance meshlet_instance = meshlet_instances[meshlet_instance_index];
+    let vis = VisBufferData(texel);
+    let meshlet_instance = meshlet_instances[vis.meshlet_instance_index];
     *C.dst = meshlet_instance.transform_index;
 }

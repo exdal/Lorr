@@ -259,6 +259,7 @@ public struct MeshletBounds {
 public struct MeshletInstance {
     public u32 mesh_index = 0;
     public u32 transform_index = 0;
+    public u32 material_index = 0;
     public u32 meshlet_index = 0;
 };
 
@@ -271,8 +272,6 @@ public struct Mesh {
     public MeshletBounds *meshlet_bounds = nullptr;
     public u8 *local_triangle_indices = nullptr;
     public u32 *indirect_vertex_indices = nullptr;
-    public u32 meshlet_count = 0;
-    public u32 material_index = 0;
 };
 
 public struct Light {

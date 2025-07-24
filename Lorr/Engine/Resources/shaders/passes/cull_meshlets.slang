@@ -57,10 +57,8 @@ func cs_main(
 
     let meshlet_instance = params.meshlet_instances[meshlet_instance_index];
     let mesh = params.meshes[meshlet_instance.mesh_index];
-    let meshlet_index = meshlet_instance.meshlet_index;
-    let meshlet = mesh.meshlets[meshlet_index];
+    let bounds = mesh.meshlet_bounds[meshlet_instance.meshlet_index];
     let transform = params.transforms[meshlet_instance.transform_index];
-    let bounds = mesh.meshlet_bounds[meshlet_index];
 
     let aabb_min = bounds.aabb_min;
     let aabb_max = bounds.aabb_max;
@@ -71,6 +69,13 @@ func cs_main(
     if (visible && (cull_flags & CullFlags::MeshletFrustum)) {
         let cur_mvp = mul(params.camera.projection_view_mat, transform.world);
         visible = test_frustum(cur_mvp, aabb_center, aabb_extent);
+
+        var debug_aabb = DebugAABB();
+        debug_aabb.position = mul(transform.world, f32x4(aabb_center, 1.0)).xyz;
+        debug_aabb.size = mul(transform.world, f32x4(aabb_extent, 0.0)).xyz;
+        debug_aabb.color = f32x3(0.0, 1.0, 0.0);
+        debug_aabb.coord = DebugDrawCoord::World;
+        debug_draw_aabb(params.debug_drawer[0], debug_aabb);
     }
 
     if (visible && (cull_flags & CullFlags::Occlusion)) {
@@ -86,13 +91,6 @@ func cs_main(
                 debug_rect.color = f32x3(1.0, 0.0, 0.0);
                 debug_rect.coord = DebugDrawCoord::NDC;
                 debug_draw_rect(params.debug_drawer[0], debug_rect);
-
-                var debug_aabb = DebugAABB();
-                debug_aabb.position = mul(transform.world, f32x4(aabb_center, 1.0)).xyz;
-                debug_aabb.size = mul(transform.world, f32x4(aabb_extent, 0.0)).xyz;
-                debug_aabb.color = f32x3(0.0, 1.0, 0.0);
-                debug_aabb.coord = DebugDrawCoord::World;
-                debug_draw_aabb(params.debug_drawer[0], debug_aabb);
             }
         }
     }

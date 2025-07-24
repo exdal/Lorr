@@ -60,7 +60,7 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
 #endif
 
     instance_builder.enable_extensions(instance_extensions);
-    instance_builder.require_api_version(1, 4, 0);
+    instance_builder.require_api_version(1, 3, 0);
     auto instance_result = instance_builder.build();
     if (!instance_result) {
         auto error = instance_result.error();
@@ -78,7 +78,7 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
     vkb::PhysicalDeviceSelector physical_device_selector(self.instance);
     physical_device_selector.defer_surface_initialization();
     physical_device_selector.disable_portability_subset();
-    physical_device_selector.set_minimum_version(1, 4);
+    physical_device_selector.set_minimum_version(1, 3);
 #ifdef LR_USE_LLVMPIPE
     physical_device_selector.prefer_gpu_device_type(vkb::PreferredDeviceType::cpu);
     physical_device_selector.allow_any_gpu_device_type(false);

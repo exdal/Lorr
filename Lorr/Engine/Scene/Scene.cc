@@ -732,17 +732,24 @@ auto Scene::compose(this Scene &self) -> SceneComposeInfo {
 
     for (const auto &[rendering_mesh, transform_ids] : self.rendering_meshes_map) {
         auto *model = app.asset_man.get_model(rendering_mesh.n0);
-        const auto &gpu_mesh = model->gpu_meshes[rendering_mesh.n1];
-        auto mesh_index = static_cast<u32>(gpu_meshes.size());
-        gpu_meshes.emplace_back(gpu_mesh);
+        const auto &mesh = model->meshes[rendering_mesh.n1];
 
         //  ── INSTANCING ──────────────────────────────────────────────────────
         for (const auto transform_id : transform_ids) {
-            for (u32 meshlet_index = 0; meshlet_index < gpu_mesh.meshlet_count; meshlet_index++) {
-                auto &meshlet_instance = gpu_meshlet_instances.emplace_back();
-                meshlet_instance.mesh_index = mesh_index;
-                meshlet_instance.transform_index = SlotMap_decode_id(transform_id).index;
-                meshlet_instance.meshlet_index = meshlet_index;
+            for (auto primitive_index : mesh.primitive_indices) {
+                const auto &primitive = model->primitives[primitive_index];
+                const auto &gpu_mesh = model->gpu_meshes[primitive_index];
+
+                auto mesh_index = static_cast<u32>(gpu_meshes.size());
+                gpu_meshes.push_back(gpu_mesh);
+
+                for (u32 meshlet_index = 0; meshlet_index < primitive.meshlet_count; meshlet_index++) {
+                    auto &meshlet_instance = gpu_meshlet_instances.emplace_back();
+                    meshlet_instance.mesh_index = mesh_index;
+                    meshlet_instance.transform_index = SlotMap_decode_id(transform_id).index;
+                    meshlet_instance.material_index = SlotMap_decode_id(primitive.material_id).index;
+                    meshlet_instance.meshlet_index = meshlet_index;
+                }
             }
         }
     }

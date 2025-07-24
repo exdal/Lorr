@@ -158,6 +158,7 @@ struct MeshletBounds {
 struct MeshletInstance {
     alignas(4) u32 mesh_index = 0;
     alignas(4) u32 transform_index = 0;
+    alignas(4) u32 material_index = 0;
     alignas(4) u32 meshlet_index = 0;
 };
 
@@ -170,8 +171,6 @@ struct Mesh {
     alignas(8) u64 meshlet_bounds = 0;
     alignas(8) u64 local_triangle_indices = 0;
     alignas(8) u64 indirect_vertex_indices = 0;
-    alignas(4) u32 meshlet_count = 0;
-    alignas(4) u32 material_index = 0;
 };
 
 constexpr static u32 HISTOGRAM_THREADS_X = 16;

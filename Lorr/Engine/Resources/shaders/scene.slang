@@ -190,15 +190,15 @@ public struct Material {
 };
 
 public struct Meshlet {
-    public u32 vertex_offset = 0;
-    public u32 triangle_offset = 0;
+    public u32 indirect_vertex_index_offset = 0;
+    public u32 local_triangle_index_offset = 0;
     public u32 vertex_count = 0;
     public u32 triangle_count = 0;
 
     // Takes a local triange index and returns an index to index buffer.
     public func index(in Mesh mesh, u32 i) -> u32 {
-        let local_triangle_index = u32(mesh.local_triangle_indices[this.triangle_offset + i]);
-        return mesh.indirect_vertex_indices[this.vertex_offset + local_triangle_index];
+        let local_triangle_index = u32(mesh.local_triangle_indices[this.local_triangle_index_offset + i]);
+        return mesh.indirect_vertex_indices[this.indirect_vertex_index_offset + local_triangle_index];
     }
 
     // Returns position of a vertex.
@@ -218,14 +218,14 @@ public struct Meshlet {
 
     public func indices(in Mesh mesh, u32 i) -> u32x3 {
         let local_triangle_indices = u32x3(
-            u32(mesh.local_triangle_indices[this.triangle_offset + i * 3 + 0]),
-            u32(mesh.local_triangle_indices[this.triangle_offset + i * 3 + 1]),
-            u32(mesh.local_triangle_indices[this.triangle_offset + i * 3 + 2]),
+            u32(mesh.local_triangle_indices[this.local_triangle_index_offset + i * 3 + 0]),
+            u32(mesh.local_triangle_indices[this.local_triangle_index_offset + i * 3 + 1]),
+            u32(mesh.local_triangle_indices[this.local_triangle_index_offset + i * 3 + 2]),
         );
 
-        return { mesh.indirect_vertex_indices[this.vertex_offset + local_triangle_indices.x],
-                 mesh.indirect_vertex_indices[this.vertex_offset + local_triangle_indices.y],
-                 mesh.indirect_vertex_indices[this.vertex_offset + local_triangle_indices.z] };
+        return { mesh.indirect_vertex_indices[this.indirect_vertex_index_offset + local_triangle_indices.x],
+                 mesh.indirect_vertex_indices[this.indirect_vertex_index_offset + local_triangle_indices.y],
+                 mesh.indirect_vertex_indices[this.indirect_vertex_index_offset + local_triangle_indices.z] };
     }
 
     public func positions(in Mesh mesh, in u32x3 indices) -> f32x3x3 {
@@ -270,6 +270,10 @@ public struct MeshLOD {
     public u32 meshlet_count = 0;
     public f32 error = 0.0;
 };
+
+#ifndef MESH_MAX_LODS
+#define MESH_MAX_LODS 8
+#endif
 
 public struct Mesh {
     public u32 *indices = nullptr;

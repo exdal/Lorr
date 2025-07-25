@@ -67,7 +67,6 @@ struct Model {
 
     struct Primitive {
         MaterialID material_id = MaterialID::Invalid;
-        u32 meshlet_count = 0;
         u32 vertex_count = 0;
         u32 vertex_offset = 0;
         u32 index_count = 0;

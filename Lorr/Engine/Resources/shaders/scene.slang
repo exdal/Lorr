@@ -263,6 +263,14 @@ public struct MeshletInstance {
     public u32 meshlet_index = 0;
 };
 
+public struct MeshLOD {
+    public u32 index_offset = 0;
+    public u32 index_count = 0;
+    public u32 meshlet_offset = 0;
+    public u32 meshlet_count = 0;
+    public f32 error = 0.0;
+};
+
 public struct Mesh {
     public u32 *indices = nullptr;
     public f32x3 *vertex_positions = nullptr;
@@ -272,6 +280,9 @@ public struct Mesh {
     public MeshletBounds *meshlet_bounds = nullptr;
     public u8 *local_triangle_indices = nullptr;
     public u32 *indirect_vertex_indices = nullptr;
+    public u32 lod_count = 0;
+    public u32 _padding = 0;
+    public MeshLOD lods[MESH_MAX_LODS] = {};
 };
 
 public struct Light {

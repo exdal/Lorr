@@ -162,7 +162,17 @@ struct MeshletInstance {
     alignas(4) u32 meshlet_index = 0;
 };
 
+struct MeshLOD {
+    alignas(4) u32 index_offset = 0;
+    alignas(4) u32 index_count = 0;
+    alignas(4) u32 meshlet_offset = 0;
+    alignas(4) u32 meshlet_count = 0;
+    alignas(4) f32 error = 0.0f;
+};
+
 struct Mesh {
+    constexpr static auto MAX_LODS = 1_sz;
+
     alignas(8) u64 indices = 0;
     alignas(8) u64 vertex_positions = 0;
     alignas(8) u64 vertex_normals = 0;
@@ -171,6 +181,9 @@ struct Mesh {
     alignas(8) u64 meshlet_bounds = 0;
     alignas(8) u64 local_triangle_indices = 0;
     alignas(8) u64 indirect_vertex_indices = 0;
+    alignas(4) u32 lod_count = 0;
+    alignas(4) u32 padding = 0; // we want to be extra safe here
+    alignas(4) MeshLOD lods[MAX_LODS] = {};
 };
 
 constexpr static u32 HISTOGRAM_THREADS_X = 16;

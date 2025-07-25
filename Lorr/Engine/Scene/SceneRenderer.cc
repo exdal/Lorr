@@ -35,6 +35,7 @@ auto SceneRenderer::create_persistent_resources(this SceneRenderer &self) -> voi
         .definitions = {
             { "CULLING_MESHLET_COUNT", std::to_string(Model::MAX_MESHLET_INDICES) },
             { "CULLING_TRIANGLE_COUNT", std::to_string(Model::MAX_MESHLET_PRIMITIVES) },
+            { "MESH_MAX_LODS", std::to_string(GPU::Mesh::MAX_LODS) },
             { "HISTOGRAM_THREADS_X", std::to_string(GPU::HISTOGRAM_THREADS_X) },
             { "HISTOGRAM_THREADS_Y", std::to_string(GPU::HISTOGRAM_THREADS_Y) },
         },

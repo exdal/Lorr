@@ -737,13 +737,13 @@ auto Scene::compose(this Scene &self) -> SceneComposeInfo {
         //  ── INSTANCING ──────────────────────────────────────────────────────
         for (auto primitive_index : mesh.primitive_indices) {
             const auto &gpu_mesh = model->gpu_meshes[primitive_index];
-            auto lod_index = gpu_mesh.lod_count - 1;
-            const auto &lod = gpu_mesh.lods[lod_index];
-
             auto mesh_index = static_cast<u32>(gpu_meshes.size());
             gpu_meshes.emplace_back(gpu_mesh);
 
             for (const auto transform_id : transform_ids) {
+                auto lod_index = gpu_mesh.lod_count - 1;
+                const auto &lod = gpu_mesh.lods[lod_index];
+
                 for (u32 meshlet_index = 0; meshlet_index < lod.meshlet_count; meshlet_index++) {
                     auto &meshlet_instance = gpu_meshlet_instances.emplace_back();
                     meshlet_instance.mesh_index = mesh_index;

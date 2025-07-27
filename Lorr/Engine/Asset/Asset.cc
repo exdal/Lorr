@@ -836,27 +836,33 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
                 if (lod_index == 0) {
                     simplified_indices = std::vector<u32>(mesh_indices.begin(), mesh_indices.end());
                 } else {
+                    const auto &last_lod = gpu_mesh.lods[lod_index - 1];
                     auto lod_index_count = ((last_lod_indices.size() + 5_sz) / 6_sz) * 3_sz;
                     simplified_indices.resize(last_lod_indices.size(), 0_u32);
-                    const auto target_error = std::numeric_limits<f32>::max();
+                    constexpr auto TARGET_ERROR = std::numeric_limits<f32>::max();
+                    constexpr f32 NORMAL_WEIGHTS[] = { 1.0f, 1.0f, 1.0f };
 
                     auto result_error = 0.0f;
-                    auto result_index_count = meshopt_simplify(
+                    auto result_index_count = meshopt_simplifyWithAttributes(
                         simplified_indices.data(),
                         last_lod_indices.data(),
                         last_lod_indices.size(),
                         reinterpret_cast<const f32 *>(mesh_vertices.data()),
                         mesh_vertices.size(),
                         sizeof(glm::vec3),
+                        reinterpret_cast<const f32 *>(mesh_normals.data()),
+                        sizeof(glm::vec3),
+                        NORMAL_WEIGHTS,
+                        ls::count_of(NORMAL_WEIGHTS),
+                        nullptr,
                         lod_index_count,
-                        target_error,
+                        TARGET_ERROR,
                         0,
                         &result_error
                     );
 
-                    cur_lod.error = result_error;
-
-                    if (result_index_count > (lod_index_count + lod_index_count / 2) || result_error > 0.5) {
+                    cur_lod.error = last_lod.error + result_error;
+                    if (result_index_count > (lod_index_count + lod_index_count / 2) || result_error > 0.5 || result_index_count < 6) {
                         // Error bound
                         break;
                     }

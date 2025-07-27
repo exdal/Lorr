@@ -96,11 +96,12 @@ func fs_main(VertexOutput input) -> FragmentOutput {
     let meshlet_instance_index = vis.meshlet_instance_index;
     let meshlet_instance = params.meshlet_instances[meshlet_instance_index];
     let mesh = params.meshes[meshlet_instance.mesh_index];
-    let material = params.materials[meshlet_instance.material_index];
+    let material = params.materials[mesh.material_index];
     let transform = params.transforms[meshlet_instance.transform_index];
-    let meshlet = mesh.meshlets[meshlet_instance.meshlet_index];
+    let mesh_lod = mesh.lods[meshlet_instance.lod_index];
+    let meshlet = mesh_lod.meshlets[meshlet_instance.meshlet_index];
 
-    let indices = meshlet.indices(mesh, vis.triangle_index);
+    let indices = meshlet.indices(mesh_lod, vis.triangle_index);
     let positions = meshlet.positions(mesh, indices);
     let normals = meshlet.normals(mesh, indices);
     let tex_coords = meshlet.tex_coords(mesh, indices);

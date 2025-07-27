@@ -57,7 +57,8 @@ func cs_main(
 
     let meshlet_instance = params.meshlet_instances[meshlet_instance_index];
     let mesh = params.meshes[meshlet_instance.mesh_index];
-    let bounds = mesh.meshlet_bounds[meshlet_instance.meshlet_index];
+    let mesh_lod = mesh.lods[meshlet_instance.lod_index];
+    let bounds = mesh_lod.meshlet_bounds[meshlet_instance.meshlet_index];
     let transform = params.transforms[meshlet_instance.transform_index];
 
     let aabb_min = bounds.aabb_min;

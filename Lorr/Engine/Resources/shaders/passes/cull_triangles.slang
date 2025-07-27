@@ -71,10 +71,7 @@ func CullSmallPrimitive(f32x2x3 vertices, f32x2 viewportExtent) -> bool {
     );
 }
 
-func test_triangle(in Mesh mesh, in Meshlet meshlet, in f32x2 resolution, CullFlags cull_flags, u32 triangle_index) -> bool {
-    let indices = meshlet.indices(mesh, triangle_index);
-    let positions = meshlet.positions(mesh, indices);
-
+func test_triangle(in f32x3x3 positions, in f32x2 resolution, CullFlags cull_flags, u32 triangle_index) -> bool {
     let clip_pos_0 = mul(model_view_proj_shared, f32x4(positions[0], 1.0));
     let clip_pos_1 = mul(model_view_proj_shared, f32x4(positions[1], 1.0));
     let clip_pos_2 = mul(model_view_proj_shared, f32x4(positions[2], 1.0));
@@ -121,7 +118,8 @@ func cs_main(
     let meshlet_instance_index = params.visible_meshlet_instances_indices[visible_meshlet_index];
     let meshlet_instance = params.meshlet_instances[meshlet_instance_index];
     let mesh = params.meshes[meshlet_instance.mesh_index];
-    let meshlet = mesh.meshlets[meshlet_instance.meshlet_index];
+    let mesh_lod = mesh.lods[meshlet_instance.lod_index];
+    let meshlet = mesh_lod.meshlets[meshlet_instance.meshlet_index];
 
     if (local_index == 0) {
         triangles_passed_shared = 0;
@@ -134,7 +132,9 @@ func cs_main(
     var triangle_passed = false;
     var active_triangle_index = 0;
     if (local_index < meshlet.triangle_count) {
-        triangle_passed = test_triangle(mesh, meshlet, params.camera.resolution, cull_flags, local_index);
+        let indices = meshlet.indices(mesh_lod, local_index);
+        let positions = meshlet.positions(mesh, indices);
+        triangle_passed = test_triangle(positions, params.camera.resolution, cull_flags, local_index);
         if (triangle_passed) {
             active_triangle_index = std::atomic_add(triangles_passed_shared, 1, std::memory_order_relaxed);
         }

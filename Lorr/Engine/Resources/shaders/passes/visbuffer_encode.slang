@@ -28,11 +28,12 @@ struct VertexOutput {
 func vs_main(u32 vertex_index : SV_VertexID) -> VertexOutput {
     let vis = VisBufferData(vertex_index);
     let meshlet_instance = params.meshlet_instances[vis.meshlet_instance_index];
-    let mesh = params.meshes[meshlet_instance.mesh_index];
     let transform = params.transforms[meshlet_instance.transform_index];
-    let meshlet = mesh.meshlets[meshlet_instance.meshlet_index];
+    let mesh = params.meshes[meshlet_instance.mesh_index];
+    let mesh_lod = mesh.lods[meshlet_instance.lod_index];
+    let meshlet = mesh_lod.meshlets[meshlet_instance.meshlet_index];
 
-    let index = meshlet.index(mesh, vis.triangle_index);
+    let index = meshlet.index(mesh_lod, vis.triangle_index);
     let vertex_pos = meshlet.position(mesh, index);
     let tex_coord = meshlet.tex_coord(mesh, index);
     let world_pos = transform.to_world_position(vertex_pos);
@@ -44,7 +45,7 @@ func vs_main(u32 vertex_index : SV_VertexID) -> VertexOutput {
     output.tex_coord = tex_coord;
     output.meshlet_instance_index = vis.meshlet_instance_index;
     output.triangle_index = vis.triangle_index / 3;
-    output.material_index = meshlet_instance.material_index;
+    output.material_index = mesh.material_index;
 
     return output;
 }

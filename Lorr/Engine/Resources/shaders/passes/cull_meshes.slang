@@ -5,17 +5,22 @@ import cull;
 import debug_drawer;
 
 struct ShaderParameters {
-    RWStructuredBuffer<DispatchIndirectCommand> cull_meshlets_cmd;
     ConstantBuffer<Camera> camera;
-    RWStructuredBuffer<u32> visible_mesh_instances_indices;
-    StructuredBuffer<MeshInstance> mesh_instance;
+    StructuredBuffer<MeshInstance> mesh_instances;
     StructuredBuffer<Mesh> meshes;
     StructuredBuffer<Transform> transforms;
+
+    RWStructuredBuffer<DispatchIndirectCommand> cull_meshlets_cmd;
+    RWStructuredBuffer<u32> visible_mesh_instances_indices;
     RWStructuredBuffer<DebugDrawer> debug_drawer;
 };
 
 #ifndef CULLING_MESHES_COUNT
     #define CULLING_MESHES_COUNT 64
+#endif
+
+#ifndef CULLING_MESHLET_COUNT
+    #define CULLING_MESHLET_COUNT 64
 #endif
 
 [[shader("compute")]]
@@ -31,7 +36,7 @@ func cs_main(
         return;
     }
 
-    let mesh_instance = params.mesh_instance[mesh_instance_index];
+    let mesh_instance = params.mesh_instances[mesh_instance_index];
     let mesh = params.meshes[mesh_instance.mesh_index];
     let mesh_lod = mesh.lods[mesh_instance.lod_index];
     let transform = params.transforms[mesh_instance.transform_index];
@@ -55,7 +60,8 @@ func cs_main(
     }
 
     if (visible) {
-        let index = std::atomic_add(params.cull_meshlets_cmd[0].x, mesh_lod.meshlet_count, std::memory_order_relaxed);
+        let workgroup_count = (mesh_lod.meshlet_count + (CULLING_MESHLET_COUNT - 1)) / CULLING_MESHLET_COUNT;
+        let index = std::atomic_add(params.cull_meshlets_cmd[0].x, workgroup_count, std::memory_order_relaxed);
         params.visible_mesh_instances_indices[index] = mesh_instance_index;
     }
 }

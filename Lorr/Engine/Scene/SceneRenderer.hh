@@ -46,6 +46,7 @@ struct SceneRenderer {
     Buffer transforms_buffer = {};
     u32 meshlet_instance_count = 0;
     Buffer meshlet_instances_buffer = {};
+    u32 mesh_instance_count = 0;
     Buffer mesh_instances_buffer = {};
     Buffer meshes_buffer = {};
 

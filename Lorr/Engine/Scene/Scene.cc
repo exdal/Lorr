@@ -745,7 +745,7 @@ auto Scene::compose(this Scene &self) -> SceneComposeInfo {
             for (const auto transform_id : transform_ids) {
                 auto mesh_instance_index = static_cast<u32>(gpu_mesh_instances.size());
 
-                auto lod_index = gpu_mesh.lod_count - 1;
+                auto lod_index = 0;
                 const auto &lod = gpu_mesh.lods[lod_index];
 
                 auto &mesh_instance = gpu_mesh_instances.emplace_back();

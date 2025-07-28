@@ -33,6 +33,7 @@ auto SceneRenderer::create_persistent_resources(this SceneRenderer &self) -> voi
     //  ── EDITOR ──────────────────────────────────────────────────────────
     auto default_slang_session = self.device->new_slang_session({
         .definitions = {
+            { "CULLING_MESH_COUNT", "64" },
             { "CULLING_MESHLET_COUNT", std::to_string(Model::MAX_MESHLET_INDICES) },
             { "CULLING_TRIANGLE_COUNT", std::to_string(Model::MAX_MESHLET_PRIMITIVES) },
             { "MESH_MAX_LODS", std::to_string(GPU::Mesh::MAX_LODS) },
@@ -100,6 +101,12 @@ auto SceneRenderer::create_persistent_resources(this SceneRenderer &self) -> voi
     Pipeline::create(*self.device, default_slang_session, sky_final_pipeline_info).value();
 
     //  ── VISBUFFER ───────────────────────────────────────────────────────
+    auto vis_cull_meshes_pipeline_info = PipelineCompileInfo{
+        .module_name = "passes.cull_meshes",
+        .entry_points = { "cs_main" },
+    };
+    Pipeline::create(*self.device, default_slang_session, vis_cull_meshes_pipeline_info).value();
+
     auto vis_cull_meshlets_pipeline_info = PipelineCompileInfo{
         .module_name = "passes.cull_meshlets",
         .entry_points = { "cs_main" },
@@ -264,7 +271,6 @@ auto SceneRenderer::compose(this SceneRenderer &self, SceneComposeInfo &compose_
         self.meshes_buffer = Buffer::create(*self.device, ls::size_bytes(compose_info.gpu_meshes)).value();
     }
 
-    self.meshlet_instance_count = compose_info.gpu_meshlet_instances.size();
     auto meshlet_instances_buffer = vuk::Value<vuk::Buffer>{};
     if (!compose_info.gpu_meshlet_instances.empty()) {
         meshlet_instances_buffer = transfer_man.upload_staging(ls::span(compose_info.gpu_meshlet_instances), self.meshlet_instances_buffer);
@@ -284,6 +290,9 @@ auto SceneRenderer::compose(this SceneRenderer &self, SceneComposeInfo &compose_
         vuk::fill(vuk::acquire_buf("exposure", *self.device->buffer(self.exposure_buffer.id()), vuk::eNone), 0);
     }
 
+    self.meshlet_instance_count = compose_info.gpu_meshlet_instances.size();
+    self.mesh_instance_count = compose_info.gpu_mesh_instances.size();
+
     return ComposedScene{
         .meshlet_instances_buffer = meshlet_instances_buffer,
         .mesh_instances_buffer = mesh_instances_buffer,
@@ -296,7 +305,7 @@ auto SceneRenderer::cleanup(this SceneRenderer &self) -> void {
 
     self.device->wait();
 
-    self.meshlet_instance_count = 0;
+    self.mesh_instance_count = 0;
 
     if (self.transforms_buffer) {
         self.device->destroy(self.transforms_buffer.id());
@@ -538,7 +547,7 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
         camera_buffer = transfer_man.scratch_buffer(info.camera.value());
     }
 
-    if (self.meshlet_instance_count) {
+    if (self.mesh_instance_count) {
         auto meshlet_instances_buffer = vuk::Value<vuk::Buffer>{};
         auto mesh_instances_buffer = vuk::Value<vuk::Buffer>{};
         auto meshes_buffer = vuk::Value<vuk::Buffer>{};
@@ -555,11 +564,64 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
         auto materials_buffer = std::move(info.materials_buffer);
         auto *materials_set = info.materials_descriptor_set;
 
+        //  ── CULL MESHES ─────────────────────────────────────────────────────
+        auto vis_cull_meshes_pass = vuk::make_pass(
+            "vis cull meshes",
+            [mesh_instance_count = self.mesh_instance_count, cull_flags = info.cull_flags](
+                vuk::CommandBuffer &cmd_list,
+                VUK_BA(vuk::eComputeRead) camera,
+                VUK_BA(vuk::eComputeRead) mesh_instances,
+                VUK_BA(vuk::eComputeRead) meshes,
+                VUK_BA(vuk::eComputeRead) transforms,
+                VUK_BA(vuk::eComputeRW) cull_meshlets_cmd,
+                VUK_BA(vuk::eComputeWrite) visible_mesh_instances_indices,
+                VUK_BA(vuk::eComputeRW) debug_drawer
+            ) {
+                cmd_list //
+                    .bind_compute_pipeline("passes.cull_meshes")
+                    .bind_buffer(0, 0, camera)
+                    .bind_buffer(0, 1, mesh_instances)
+                    .bind_buffer(0, 2, meshes)
+                    .bind_buffer(0, 3, transforms)
+                    .bind_buffer(0, 4, cull_meshlets_cmd)
+                    .bind_buffer(0, 5, visible_mesh_instances_indices)
+                    .bind_buffer(0, 6, debug_drawer)
+                    .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, PushConstants(mesh_instance_count, cull_flags))
+                    .dispatch_invocations(mesh_instance_count);
+
+                return std::make_tuple(camera, mesh_instances, meshes, transforms, cull_meshlets_cmd, visible_mesh_instances_indices, debug_drawer);
+            }
+        );
+
+        auto cull_meshlets_cmd_buffer = transfer_man.scratch_buffer<vuk::DispatchIndirectCommand>({ .x = 0, .y = 1, .z = 1 });
+        auto visible_mesh_instances_indices_buffer =
+            transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eGPUonly, self.mesh_instance_count * sizeof(u32));
+
+        std::tie(
+            camera_buffer,
+            mesh_instances_buffer,
+            meshes_buffer,
+            transforms_buffer,
+            cull_meshlets_cmd_buffer,
+            visible_mesh_instances_indices_buffer,
+            debug_drawer_buffer
+        ) =
+            vis_cull_meshes_pass(
+                std::move(camera_buffer),
+                std::move(mesh_instances_buffer),
+                std::move(meshes_buffer),
+                std::move(transforms_buffer),
+                std::move(cull_meshlets_cmd_buffer),
+                std::move(visible_mesh_instances_indices_buffer),
+                std::move(debug_drawer_buffer)
+            );
+
         //  ── CULL MESHLETS ───────────────────────────────────────────────────
         auto vis_cull_meshlets_pass = vuk::make_pass(
             "vis cull meshlets",
             [meshlet_instance_count = self.meshlet_instance_count, cull_flags = info.cull_flags](
                 vuk::CommandBuffer &cmd_list,
+                VUK_BA(vuk::eIndirectRead) dispatch_cmd,
                 VUK_BA(vuk::eComputeRead) camera,
                 VUK_BA(vuk::eComputeRead) meshlet_instances,
                 VUK_BA(vuk::eComputeRead) mesh_instances,
@@ -583,7 +645,7 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                     .bind_buffer(0, 8, visible_meshlet_instances_indices)
                     .bind_buffer(0, 9, debug_drawer)
                     .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, PushConstants(meshlet_instance_count, cull_flags))
-                    .dispatch_invocations(meshlet_instance_count);
+                    .dispatch_indirect(dispatch_cmd);
 
                 return std::make_tuple(
                     camera,
@@ -615,6 +677,7 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
             debug_drawer_buffer
         ) =
             vis_cull_meshlets_pass(
+                std::move(cull_meshlets_cmd_buffer),
                 std::move(camera_buffer),
                 std::move(meshlet_instances_buffer),
                 std::move(mesh_instances_buffer),

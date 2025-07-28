@@ -12,6 +12,9 @@ Image2D<u32> visbuffer_data;
 [[vk::binding(1, 0)]]
 StructuredBuffer<MeshletInstance, ScalarDataLayout> meshlet_instances;
 
+[[vk::binding(2, 0)]]
+StructuredBuffer<MeshInstance, ScalarDataLayout> mesh_instances;
+
 struct PushConstants {
     u32 *dst;
     u32x2 texel;
@@ -30,5 +33,6 @@ func cs_main() -> void {
 
     let vis = VisBufferData(texel);
     let meshlet_instance = meshlet_instances[vis.meshlet_instance_index];
-    *C.dst = meshlet_instance.transform_index;
+    let mesh_instance = mesh_instances[meshlet_instance.mesh_instance_index];
+    *C.dst = mesh_instance.transform_index;
 }

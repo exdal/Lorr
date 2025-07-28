@@ -8,12 +8,14 @@ import passes.visbuffer;
 #include <fullscreen.slang>
 
 struct ShaderParameters {
-    Image2D<u32> visbuffer;
     ConstantBuffer<Camera> camera;
     StructuredBuffer<MeshletInstance> meshlet_instances;
+    StructuredBuffer<MeshInstance> mesh_instances;
     StructuredBuffer<Mesh> meshes;
     StructuredBuffer<Transform> transforms;
     StructuredBuffer<Material> materials;
+
+    Image2D<u32> visbuffer;
 };
 ParameterBlock<ShaderParameters> params;
 
@@ -95,10 +97,11 @@ func fs_main(VertexOutput input) -> FragmentOutput {
     let vis = VisBufferData(texel);
     let meshlet_instance_index = vis.meshlet_instance_index;
     let meshlet_instance = params.meshlet_instances[meshlet_instance_index];
-    let mesh = params.meshes[meshlet_instance.mesh_index];
+    let mesh_instance = params.mesh_instances[meshlet_instance.mesh_instance_index];
+    let mesh = params.meshes[mesh_instance.mesh_index];
     let material = params.materials[mesh.material_index];
-    let transform = params.transforms[meshlet_instance.transform_index];
-    let mesh_lod = mesh.lods[meshlet_instance.lod_index];
+    let transform = params.transforms[mesh_instance.transform_index];
+    let mesh_lod = mesh.lods[mesh_instance.lod_index];
     let meshlet = mesh_lod.meshlets[meshlet_instance.meshlet_index];
 
     let indices = meshlet.indices(mesh_lod, vis.triangle_index);

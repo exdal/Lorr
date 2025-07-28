@@ -5,38 +5,18 @@ import cull;
 import debug_drawer;
 
 struct ShaderParameters {
-    RWStructuredBuffer<DispatchIndirectCommand> cull_triangles_cmd;
     ConstantBuffer<Camera> camera;
-    RWStructuredBuffer<u32> visible_meshlet_instances_indices;
     StructuredBuffer<MeshletInstance> meshlet_instances;
+    StructuredBuffer<MeshInstance> mesh_instances;
     StructuredBuffer<Mesh> meshes;
     StructuredBuffer<Transform> transforms;
     Image2D<f32> hiz_image;
     Sampler hiz_sampler;
+
+    RWStructuredBuffer<DispatchIndirectCommand> cull_triangles_cmd;
+    RWStructuredBuffer<u32> visible_meshlet_instances_indices;
     RWStructuredBuffer<DebugDrawer> debug_drawer;
 };
-
-func test_frustum(in f32x4x4 mvp, in f32x3 aabb_center, in f32x3 aabb_extent) -> bool {
-    f32x4 planes[] = {
-        normalize_plane(mvp[3] + mvp[0]),
-        normalize_plane(mvp[3] - mvp[0]),
-        normalize_plane(mvp[3] + mvp[1]),
-        normalize_plane(mvp[3] - mvp[1]),
-        normalize_plane(mvp[2])
-    };
-
-    let aabb_half_extent = aabb_extent * 0.5;
-    [[unroll]]
-    for (uint i = 0; i < planes.getCount(); i++) {
-        let flip = asuint(planes[i].xyz) & 0x80000000;
-        let sign_flipped = asfloat(asuint(aabb_half_extent) ^ flip);
-        if (dot(aabb_center + sign_flipped, planes[i].xyz) <= -planes[i].w) {
-            return false;
-        }
-    }
-
-    return true;
-}
 
 #ifndef CULLING_MESHLET_COUNT
     #define CULLING_MESHLET_COUNT 64
@@ -56,10 +36,11 @@ func cs_main(
     }
 
     let meshlet_instance = params.meshlet_instances[meshlet_instance_index];
-    let mesh = params.meshes[meshlet_instance.mesh_index];
-    let mesh_lod = mesh.lods[meshlet_instance.lod_index];
+    let mesh_instance = params.mesh_instances[meshlet_instance.mesh_instance_index];
+    let mesh = params.meshes[mesh_instance.mesh_index];
+    let transform = params.transforms[mesh_instance.transform_index];
+    let mesh_lod = mesh.lods[mesh_instance.lod_index];
     let bounds = mesh_lod.meshlet_bounds[meshlet_instance.meshlet_index];
-    let transform = params.transforms[meshlet_instance.transform_index];
 
     let aabb_min = bounds.aabb_min;
     let aabb_max = bounds.aabb_max;

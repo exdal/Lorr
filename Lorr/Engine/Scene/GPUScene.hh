@@ -150,23 +150,28 @@ struct Material {
     alignas(4) u32 occlusion_image_index = ~0_u32;
 };
 
-struct Meshlet {
-    alignas(4) u32 indirect_vertex_index_offset = 0;
-    alignas(4) u32 local_triangle_index_offset = 0;
-    alignas(4) u32 vertex_count = 0;
-    alignas(4) u32 triangle_count = 0;
-};
-
-struct MeshletBounds {
+struct Bounds {
     alignas(4) glm::vec3 aabb_min = {};
     alignas(4) glm::vec3 aabb_max = {};
 };
 
 struct MeshletInstance {
+    alignas(4) u32 mesh_instance_index = 0;
+    alignas(4) u32 meshlet_index = 0;
+};
+
+struct MeshInstance {
     alignas(4) u32 mesh_index = 0;
     alignas(4) u32 lod_index = 0;
+    alignas(4) u32 material_index = 0;
     alignas(4) u32 transform_index = 0;
-    alignas(4) u32 meshlet_index = 0;
+};
+
+struct Meshlet {
+    alignas(4) u32 indirect_vertex_index_offset = 0;
+    alignas(4) u32 local_triangle_index_offset = 0;
+    alignas(4) u32 vertex_count = 0;
+    alignas(4) u32 triangle_count = 0;
 };
 
 struct MeshLOD {
@@ -185,9 +190,10 @@ struct Mesh {
     alignas(8) u64 vertex_positions = 0;
     alignas(8) u64 vertex_normals = 0;
     alignas(8) u64 texture_coords = 0;
-    alignas(4) u32 material_index = 0;
+    alignas(4) u32 _padding = 0;
     alignas(4) u32 lod_count = 0;
     alignas(8) MeshLOD lods[MAX_LODS] = {};
+    alignas(4) Bounds bounds = {};
 };
 
 constexpr static u32 HISTOGRAM_THREADS_X = 16;

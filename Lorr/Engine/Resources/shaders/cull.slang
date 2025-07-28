@@ -51,6 +51,29 @@ public func project_aabb(f32x4x4 mvp, f32 near, f32x3 aabb_min, f32x3 aabb_exten
     return ret;
 }
 
+
+public func test_frustum(in f32x4x4 mvp, in f32x3 aabb_center, in f32x3 aabb_extent) -> bool {
+    f32x4 planes[] = {
+        normalize_plane(mvp[3] + mvp[0]),
+        normalize_plane(mvp[3] - mvp[0]),
+        normalize_plane(mvp[3] + mvp[1]),
+        normalize_plane(mvp[3] - mvp[1]),
+        normalize_plane(mvp[2])
+    };
+
+    let aabb_half_extent = aabb_extent * 0.5;
+    [[unroll]]
+    for (uint i = 0; i < planes.getCount(); i++) {
+        let flip = asuint(planes[i].xyz) & 0x80000000;
+        let sign_flipped = asfloat(asuint(aabb_half_extent) ^ flip);
+        if (dot(aabb_center + sign_flipped, planes[i].xyz) <= -planes[i].w) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 public func test_occlusion(
     in ScreenAabb screen_aabb,
     in Image2D<f32> hiz_image,

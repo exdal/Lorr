@@ -7,12 +7,14 @@ import scene;
 import passes.visbuffer;
 
 struct ShaderParameters {
-    RWStructuredBuffer<DrawIndexedIndirectCommand> draw_cmd;
     ConstantBuffer<Camera> camera;
     StructuredBuffer<u32> visible_meshlet_instances_indices;
     StructuredBuffer<MeshletInstance> meshlet_instances;
+    StructuredBuffer<MeshInstance> mesh_instances;
     StructuredBuffer<Mesh> meshes;
     StructuredBuffer<Transform> transforms;
+
+    RWStructuredBuffer<DrawIndexedIndirectCommand> draw_cmd;
     RWStructuredBuffer<u32> reordered_indices;
 };
 
@@ -117,13 +119,14 @@ func cs_main(
     let visible_meshlet_index = group_id.x;
     let meshlet_instance_index = params.visible_meshlet_instances_indices[visible_meshlet_index];
     let meshlet_instance = params.meshlet_instances[meshlet_instance_index];
-    let mesh = params.meshes[meshlet_instance.mesh_index];
-    let mesh_lod = mesh.lods[meshlet_instance.lod_index];
+    let mesh_instance = params.mesh_instances[meshlet_instance.mesh_instance_index];
+    let mesh = params.meshes[mesh_instance.mesh_index];
+    let mesh_lod = mesh.lods[mesh_instance.lod_index];
     let meshlet = mesh_lod.meshlets[meshlet_instance.meshlet_index];
 
     if (local_index == 0) {
         triangles_passed_shared = 0;
-        let transform = params.transforms[meshlet_instance.transform_index];
+        let transform = params.transforms[mesh_instance.transform_index];
         model_view_proj_shared = mul(params.camera.projection_view_mat, transform.world);
     }
 

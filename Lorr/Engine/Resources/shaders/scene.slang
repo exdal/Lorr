@@ -251,22 +251,27 @@ public struct Meshlet {
     }
 };
 
-public struct MeshletBounds {
+public struct Bounds {
     public f32x3 aabb_min = {};
     public f32x3 aabb_max = {};
 };
 
 public struct MeshletInstance {
+    public u32 mesh_instance_index = 0;
+    public u32 meshlet_index = 0;
+};
+
+public struct MeshInstance {
     public u32 mesh_index = 0;
     public u32 lod_index = 0;
+    public u32 material_index = 0;
     public u32 transform_index = 0;
-    public u32 meshlet_index = 0;
 };
 
 public struct MeshLOD {
     public u32 *indices = nullptr;
     public Meshlet *meshlets = nullptr;
-    public MeshletBounds *meshlet_bounds = nullptr;
+    public Bounds *meshlet_bounds = nullptr;
     public u8 *local_triangle_indices = nullptr;
     public u32 *indirect_vertex_indices = nullptr;
     public u32 meshlet_count = 0;
@@ -284,6 +289,7 @@ public struct Mesh {
     public u32 material_index = 0;
     public u32 lod_count = 0;
     public MeshLOD lods[MESH_MAX_LODS] = {};
+    public Bounds bounds = {};
 };
 
 public struct Light {

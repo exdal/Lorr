@@ -728,27 +728,35 @@ auto Scene::compose(this Scene &self) -> SceneComposeInfo {
     auto &app = Application::get();
 
     auto gpu_meshes = std::vector<GPU::Mesh>();
+    auto gpu_mesh_instances = std::vector<GPU::MeshInstance>();
     auto gpu_meshlet_instances = std::vector<GPU::MeshletInstance>();
 
     for (const auto &[rendering_mesh, transform_ids] : self.rendering_meshes_map) {
         auto *model = app.asset_man.get_model(rendering_mesh.n0);
         const auto &mesh = model->meshes[rendering_mesh.n1];
 
-        //  ── INSTANCING ──────────────────────────────────────────────────────
         for (auto primitive_index : mesh.primitive_indices) {
+            const auto &primitive = model->primitives[primitive_index];
             const auto &gpu_mesh = model->gpu_meshes[primitive_index];
             auto mesh_index = static_cast<u32>(gpu_meshes.size());
             gpu_meshes.emplace_back(gpu_mesh);
 
+            //  ── INSTANCING ──────────────────────────────────────────────────
             for (const auto transform_id : transform_ids) {
+                auto mesh_instance_index = static_cast<u32>(gpu_mesh_instances.size());
+
                 auto lod_index = gpu_mesh.lod_count - 1;
                 const auto &lod = gpu_mesh.lods[lod_index];
 
+                auto &mesh_instance = gpu_mesh_instances.emplace_back();
+                mesh_instance.mesh_index = mesh_index;
+                mesh_instance.lod_index = lod_index;
+                mesh_instance.material_index = SlotMap_decode_id(primitive.material_id).index;
+                mesh_instance.transform_index = SlotMap_decode_id(transform_id).index;
+
                 for (u32 meshlet_index = 0; meshlet_index < lod.meshlet_count; meshlet_index++) {
                     auto &meshlet_instance = gpu_meshlet_instances.emplace_back();
-                    meshlet_instance.mesh_index = mesh_index;
-                    meshlet_instance.lod_index = lod_index;
-                    meshlet_instance.transform_index = SlotMap_decode_id(transform_id).index;
+                    meshlet_instance.mesh_instance_index = mesh_instance_index;
                     meshlet_instance.meshlet_index = meshlet_index;
                 }
             }
@@ -757,6 +765,7 @@ auto Scene::compose(this Scene &self) -> SceneComposeInfo {
 
     return SceneComposeInfo{
         .gpu_meshes = std::move(gpu_meshes),
+        .gpu_mesh_instances = std::move(gpu_mesh_instances),
         .gpu_meshlet_instances = std::move(gpu_meshlet_instances),
     };
 }

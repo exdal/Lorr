@@ -768,8 +768,6 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
             auto &gpu_mesh = model->gpu_meshes[primitive_index];
             auto &gpu_mesh_buffer = model->gpu_mesh_buffers[primitive_index];
 
-            gpu_mesh.material_index = SlotMap_decode_id(primitive.material_id).index;
-
             //  ── Geometry remapping ──────────────────────────────────────────────
             auto primitive_indices = ls::span(model_indices.data() + primitive.index_offset, primitive.index_count);
             auto primitive_vertices = ls::span(model_vertices.data() + primitive.vertex_offset, primitive.vertex_count);
@@ -903,7 +901,7 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
                 indirect_vertex_indices.resize(last_meshlet.vertex_offset + last_meshlet.vertex_count);
                 local_triangle_indices.resize(last_meshlet.triangle_offset + ((last_meshlet.triangle_count * 3 + 3) & ~3_u32));
 
-                auto meshlet_bounds = std::vector<GPU::MeshletBounds>(meshlet_count);
+                auto meshlet_bounds = std::vector<GPU::Bounds>(meshlet_count);
                 for (const auto &[raw_meshlet, meshlet, meshlet_aabb] : std::views::zip(raw_meshlets, meshlets, meshlet_bounds)) {
                     // AABB computation
                     auto meshlet_bb_min = glm::vec3(std::numeric_limits<f32>::max());
@@ -922,6 +920,9 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
 
                     meshlet_aabb.aabb_min = meshlet_bb_min;
                     meshlet_aabb.aabb_max = meshlet_bb_max;
+
+                    gpu_mesh.bounds.aabb_max = glm::max(gpu_mesh.bounds.aabb_max, meshlet_bb_max);
+                    gpu_mesh.bounds.aabb_min = glm::max(gpu_mesh.bounds.aabb_min, meshlet_bb_min);
                 }
 
                 auto lod_upload_size = 0 //
@@ -983,12 +984,13 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
             }
 
             // ignore spilling out buffer size by alignment
-            auto gpu_mesh_buffer_val = gpu_mesh_buffer.discard(*impl->device, "gpu mesh buffer", 0, mesh_upload_size);
-            gpu_mesh_buffer_val = transfer_man.upload_staging(std::move(cpu_mesh_buffer), std::move(gpu_mesh_buffer_val));
-            transfer_man.wait_on(std::move(gpu_mesh_buffer_val));
+            auto gpu_mesh_buffer_handle = impl->device->buffer(gpu_mesh_buffer.id());
+            auto gpu_mesh_subrange = vuk::discard_buf("mesh", gpu_mesh_buffer_handle->subrange(0, mesh_upload_size));
+            gpu_mesh_subrange = transfer_man.upload_staging(std::move(cpu_mesh_buffer), std::move(gpu_mesh_subrange));
+            transfer_man.wait_on(std::move(gpu_mesh_subrange));
 
             for (auto lod_index = 0_sz; lod_index < gpu_mesh.lod_count; lod_index++) {
-                auto &[lod_cpu_buffer, lod_upload_size] = lod_cpu_buffers[lod_index];
+                auto &&[lod_cpu_buffer, lod_upload_size] = lod_cpu_buffers[lod_index];
                 auto &lod = gpu_mesh.lods[lod_index];
 
                 lod.indices += gpu_mesh_bda + mesh_upload_offset;
@@ -997,8 +999,7 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
                 lod.local_triangle_indices += gpu_mesh_bda + mesh_upload_offset;
                 lod.indirect_vertex_indices += gpu_mesh_bda + mesh_upload_offset;
 
-                // auto cpu_lod_subrange = lod_cpu_buffer.subrange(mesh_upload_offset, lod_upload_size);
-                auto gpu_lod_subrange = gpu_mesh_buffer.discard(*impl->device, "gpu mesh buffer", mesh_upload_offset, lod_upload_size);
+                auto gpu_lod_subrange = vuk::discard_buf("mesh lod subrange", gpu_mesh_buffer_handle->subrange(mesh_upload_offset, lod_upload_size));
                 gpu_lod_subrange = transfer_man.upload_staging(std::move(lod_cpu_buffer), std::move(gpu_lod_subrange));
                 transfer_man.wait_on(std::move(gpu_lod_subrange));
 

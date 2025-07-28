@@ -7,12 +7,14 @@
 namespace lr {
 struct SceneComposeInfo {
     std::vector<GPU::Mesh> gpu_meshes = {};
+    std::vector<GPU::MeshInstance> gpu_mesh_instances = {};
     std::vector<GPU::MeshletInstance> gpu_meshlet_instances = {};
 };
 
 struct ComposedScene {
-    vuk::Value<vuk::Buffer> meshes_buffer = {};
     vuk::Value<vuk::Buffer> meshlet_instances_buffer = {};
+    vuk::Value<vuk::Buffer> mesh_instances_buffer = {};
+    vuk::Value<vuk::Buffer> meshes_buffer = {};
 };
 
 struct SceneRenderInfo {
@@ -43,8 +45,9 @@ struct SceneRenderer {
     Buffer exposure_buffer = {};
     Buffer transforms_buffer = {};
     u32 meshlet_instance_count = 0;
-    Buffer meshes_buffer = {};
     Buffer meshlet_instances_buffer = {};
+    Buffer mesh_instances_buffer = {};
+    Buffer meshes_buffer = {};
 
     // Then what are they?
     // TODO: Per scene sky settings

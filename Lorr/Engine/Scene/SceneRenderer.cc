@@ -341,6 +341,7 @@ auto SceneRenderer::prepare_frame(this SceneRenderer &self, FramePrepareInfo &in
         }
 
         self.device->commit_descriptor_set(self.materials_descriptor_set);
+        self.device->wait(); // I have no idea how to enable UPDATE_AFTER_BIND in vuk
     }
 
     if (!info.dirty_material_indices.empty()) {

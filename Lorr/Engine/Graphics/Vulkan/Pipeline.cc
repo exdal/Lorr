@@ -13,8 +13,8 @@ auto Pipeline::create(
 
     vuk::PipelineBaseCreateInfo create_info = {};
 
-    for (const auto &v : persistent_sets) {
-        create_info.explicit_set_layouts.push_back(v.set_layout_create_info);
+    for (const auto &set : persistent_sets) {
+        create_info.explicit_set_layouts.push_back(set.set_layout_create_info);
     }
 
     auto slang_module = session.load_module({ .module_name = compile_info.module_name, .source = compile_info.shader_source }).value();

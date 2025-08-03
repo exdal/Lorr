@@ -99,7 +99,7 @@ func fs_main(VertexOutput input) -> FragmentOutput {
     let meshlet_instance = params.meshlet_instances[meshlet_instance_index];
     let mesh_instance = params.mesh_instances[meshlet_instance.mesh_instance_index];
     let mesh = params.meshes[mesh_instance.mesh_index];
-    let material = params.materials[mesh.material_index];
+    let material = params.materials[mesh_instance.material_index];
     let transform = params.transforms[mesh_instance.transform_index];
     let mesh_lod = mesh.lods[mesh_instance.lod_index];
     let meshlet = mesh_lod.meshlets[meshlet_instance.meshlet_index];

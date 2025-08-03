@@ -11,7 +11,7 @@ struct ShaderParameters {
     StructuredBuffer<MeshInstance> mesh_instances;
     StructuredBuffer<Mesh> meshes;
     StructuredBuffer<Transform> transforms;
-    StructuredBuffer<Material, ScalarDataLayout> materials;
+    StructuredBuffer<Material> materials;
     StorageImage2D<u32, ImageFormat::R32UI> overdraw;
 };
 ParameterBlock<ShaderParameters> params;
@@ -47,7 +47,7 @@ func vs_main(u32 vertex_index : SV_VertexID) -> VertexOutput {
     output.tex_coord = tex_coord;
     output.meshlet_instance_index = vis.meshlet_instance_index;
     output.triangle_index = vis.triangle_index / 3;
-    output.material_index = mesh.material_index;
+    output.material_index = mesh_instance.material_index;
 
     return output;
 }
@@ -55,7 +55,7 @@ func vs_main(u32 vertex_index : SV_VertexID) -> VertexOutput {
 [[shader("fragment")]]
 func fs_main(VertexOutput input) -> u32 {
     let material = params.materials[input.material_index];
-    if (material.albedo_image_index != ~0u) {
+    if (material.flags & MaterialFlag::HasAlbedoImage) {
         UVGradient grad;
         grad.uv = input.tex_coord;
         grad.ddx = ddx(input.tex_coord);

@@ -4,6 +4,8 @@ import scene;
 import cull;
 import debug_drawer;
 
+#include <assert.slang>
+
 struct ShaderParameters {
     ConstantBuffer<Camera> camera;
     StructuredBuffer<MeshletInstance> meshlet_instances;
@@ -72,6 +74,7 @@ func cs_main(
 
     if (visible) {
         let index = std::atomic_add(params.cull_triangles_cmd[0].x, 1, std::memory_order_relaxed);
+        assert(index < meshlet_instance_count);
         params.visible_meshlet_instances_indices[index] = meshlet_instance_index;
     }
 }

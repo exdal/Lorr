@@ -22,13 +22,17 @@ enum class PipelineID : u64 { Invalid = ~0_u64 };
 struct Device;
 
 struct Buffer {
-    static auto create(Device &, u64 size, vuk::MemoryUsage memory_usage = vuk::MemoryUsage::eGPUonly, LR_THISCALL)
+    [[nodiscard]] static auto create(Device &, u64 size, vuk::MemoryUsage memory_usage = vuk::MemoryUsage::eGPUonly, LR_THISCALL)
         -> std::expected<Buffer, vuk::VkException>;
 
     auto data_size() const -> u64;
     auto device_address() const -> u64;
     auto host_ptr() const -> u8 *;
     auto id() const -> BufferID;
+
+    // if new_size is smaller than current size, this will do nothing
+    [[nodiscard]] auto resize(Device &, u64 new_size, vuk::MemoryUsage memory_usage = vuk::MemoryUsage::eGPUonly, LR_THISCALL)
+        -> std::expected<Buffer, vuk::VkException>;
 
     auto acquire(Device &, vuk::Name name, vuk::Access access, u64 offset = 0, u64 size = ~0_u64) -> vuk::Value<vuk::Buffer>;
     auto discard(Device &, vuk::Name name, u64 offset = 0, u64 size = ~0_u64) -> vuk::Value<vuk::Buffer>;

@@ -62,6 +62,6 @@ func cs_main(
     if (visible) {
         let workgroup_count = (mesh_lod.meshlet_count + (CULLING_MESHLET_COUNT - 1)) / CULLING_MESHLET_COUNT;
         let index = std::atomic_add(params.cull_meshlets_cmd[0].x, workgroup_count, std::memory_order_relaxed);
-        params.visible_mesh_instances_indices[index] = mesh_instance_index;
+        // params.visible_mesh_instances_indices[index] = mesh_instance_index;
     }
 }

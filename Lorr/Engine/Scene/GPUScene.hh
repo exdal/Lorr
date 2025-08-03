@@ -180,12 +180,18 @@ struct MeshLOD {
     alignas(8) u64 meshlet_bounds = 0;
     alignas(8) u64 local_triangle_indices = 0;
     alignas(8) u64 indirect_vertex_indices = 0;
+
+    alignas(4) u32 indices_count = 0;
     alignas(4) u32 meshlet_count = 0;
+    alignas(4) u32 meshlet_bounds_count = 0;
+    alignas(4) u32 local_triangle_indices_count = 0;
+    alignas(4) u32 indirect_vertex_indices_count = 0;
+
     alignas(4) f32 error = 0.0f;
 };
 
 struct Mesh {
-    constexpr static auto MAX_LODS = 8_sz;
+    constexpr static auto MAX_LODS = 1_sz;
 
     alignas(8) u64 vertex_positions = 0;
     alignas(8) u64 vertex_normals = 0;

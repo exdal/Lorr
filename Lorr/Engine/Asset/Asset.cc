@@ -123,12 +123,11 @@ struct Handle<AssetManager>::Impl {
 
     std::shared_mutex textures_mutex = {};
     SlotMap<Texture, TextureID> textures = {};
+    std::vector<TextureID> dirty_textures = {};
 
     std::shared_mutex materials_mutex = {};
-    vuk::PersistentDescriptorSet materials_descriptor_set = {};
     SlotMap<Material, MaterialID> materials = {};
     std::vector<MaterialID> dirty_materials = {};
-    Buffer materials_buffer = {};
 
     SlotMap<std::unique_ptr<Scene>, SceneID> scenes = {};
 };
@@ -142,12 +141,6 @@ auto AssetManager::create(Device *device) -> AssetManager {
     impl->device = device;
     impl->root_path = fs::current_path();
 
-    BindlessDescriptorInfo bindless_set_info[] = {
-        { .binding = 0, .type = vuk::DescriptorType::eSampler, .descriptor_count = 1024 },
-        { .binding = 1, .type = vuk::DescriptorType::eSampledImage, .descriptor_count = 1024 },
-    };
-    impl->materials_descriptor_set = device->create_persistent_descriptor_set(bindless_set_info, 1).release();
-
     return self;
 }
 
@@ -155,9 +148,6 @@ auto AssetManager::destroy() -> void {
     ZoneScoped;
 
     auto read_lock = std::shared_lock(impl->registry_mutex);
-    if (impl->materials_buffer) {
-        impl->device->destroy(impl->materials_buffer.id());
-    }
 
     for (const auto &[asset_uuid, asset] : impl->registry) {
         // sanity check
@@ -955,7 +945,11 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
                 std::memcpy(cpu_lod_ptr + upload_offset, indirect_vertex_indices.data(), ls::size_bytes(indirect_vertex_indices));
                 upload_offset += ls::size_bytes(indirect_vertex_indices);
 
+                cur_lod.indices_count = simplified_indices.size();
                 cur_lod.meshlet_count = meshlet_count;
+                cur_lod.meshlet_bounds_count = meshlet_bounds.size();
+                cur_lod.local_triangle_indices_count = local_triangle_indices.size();
+                cur_lod.indirect_vertex_indices_count = indirect_vertex_indices.size();
 
                 lod_cpu_buffers[lod_index] = ls::pair(cpu_lod_buffer, lod_upload_size);
                 upload_size += lod_upload_size;
@@ -1200,6 +1194,8 @@ auto AssetManager::load_texture(const UUID &uuid, const TextureInfo &info) -> bo
         };
         auto sampler = Sampler::create(*impl->device, sampler_info).value();
         asset->texture_id = impl->textures.create_slot(Texture{ .image = image, .image_view = image_view, .sampler = sampler });
+        write_lock.unlock();
+        this->set_texture_dirty(asset->texture_id);
     }
 
     LOG_TRACE("Loaded texture {}.", uuid.str());
@@ -1231,7 +1227,7 @@ auto AssetManager::unload_texture(const UUID &uuid) -> bool {
 auto AssetManager::is_texture_loaded(const UUID &uuid) -> bool {
     ZoneScoped;
 
-    std::shared_lock _(impl->textures_mutex);
+    auto read_lock = std::shared_lock(impl->textures_mutex);
     auto *asset = this->get_asset(uuid);
     if (!asset) {
         return false;
@@ -1649,166 +1645,56 @@ auto AssetManager::get_scene(SceneID scene_id) -> Scene * {
     return impl->scenes.slot(scene_id)->get();
 }
 
+auto AssetManager::set_texture_dirty(TextureID texture_id) -> void {
+    ZoneScoped;
+
+    auto read_lock = std::shared_lock(impl->textures_mutex);
+    if (std::ranges::find(impl->dirty_textures, texture_id) != impl->dirty_textures.end()) {
+        return;
+    }
+
+    read_lock.unlock();
+    auto write_lock = std::unique_lock(impl->textures_mutex);
+    impl->dirty_textures.emplace_back(texture_id);
+}
+
+auto AssetManager::get_dirty_texture_ids() -> std::vector<TextureID> {
+    ZoneScoped;
+
+    auto read_lock = std::shared_lock(impl->textures_mutex);
+    auto dirty_textures = std::vector(impl->dirty_textures);
+
+    read_lock.unlock();
+    auto write_lock = std::unique_lock(impl->textures_mutex);
+    impl->dirty_textures.clear();
+
+    return dirty_textures;
+}
+
 auto AssetManager::set_material_dirty(MaterialID material_id) -> void {
     ZoneScoped;
 
-    std::shared_lock shared_lock(impl->materials_mutex);
+    auto read_lock = std::shared_lock(impl->materials_mutex);
     if (std::ranges::find(impl->dirty_materials, material_id) != impl->dirty_materials.end()) {
         return;
     }
 
-    shared_lock.unlock();
-    impl->materials_mutex.lock();
+    read_lock.unlock();
+    auto write_lock = std::unique_lock(impl->materials_mutex);
     impl->dirty_materials.emplace_back(material_id);
-    impl->materials_mutex.unlock();
 }
 
-auto AssetManager::get_materials_buffer() -> vuk::Value<vuk::Buffer> {
+auto AssetManager::get_dirty_material_ids() -> std::vector<MaterialID> {
     ZoneScoped;
 
-    auto uuid_to_index = [this](UUID &uuid) -> ls::option<u32> {
-        if (!this->is_texture_loaded(uuid)) {
-            return ls::nullopt;
-        }
+    auto read_lock = std::shared_lock(impl->materials_mutex);
+    auto dirty_materials = std::vector(impl->dirty_materials);
 
-        auto *texture_asset = this->get_asset(uuid);
-        auto *texture = this->get_texture(texture_asset->texture_id);
-        auto texture_index = SlotMap_decode_id(texture_asset->texture_id).index;
-        auto image_view = impl->device->image_view(texture->image_view.id());
-        auto sampler = impl->device->sampler(texture->sampler.id());
+    read_lock.unlock();
+    auto write_lock = std::unique_lock(impl->materials_mutex);
+    impl->dirty_materials.clear();
 
-        impl->materials_descriptor_set.update_sampler(0, texture_index, sampler.value());
-        impl->materials_descriptor_set.update_sampled_image(1, texture_index, image_view.value(), vuk::ImageLayout::eShaderReadOnlyOptimal);
-
-        return texture_index;
-    };
-
-    auto to_gpu_material = [&](Material *material) -> GPU::Material {
-        auto albedo_image_index = uuid_to_index(material->albedo_texture);
-        auto normal_image_index = uuid_to_index(material->normal_texture);
-        auto emissive_image_index = uuid_to_index(material->emissive_texture);
-        auto metallic_roughness_image_index = uuid_to_index(material->metallic_roughness_texture);
-        auto occlusion_image_index = uuid_to_index(material->occlusion_texture);
-
-        auto flags = GPU::MaterialFlag::None;
-        // flags |= albedo_image_index.has_value() ? GPU::MaterialFlag::HasAlbedoImage : GPU::MaterialFlag::None;
-        // flags |= normal_image_index.has_value() ? GPU::MaterialFlag::HasNormalImage : GPU::MaterialFlag::None;
-        // flags |= emissive_image_index.has_value() ? GPU::MaterialFlag::HasEmissiveImage : GPU::MaterialFlag::None;
-        // flags |= metallic_roughness_image_index.has_value() ? GPU::MaterialFlag::HasMetallicRoughnessImage : GPU::MaterialFlag::None;
-        // flags |= occlusion_image_index.has_value() ? GPU::MaterialFlag::HasOcclusionImage : GPU::MaterialFlag::None;
-        // flags |= GPU::MaterialFlag::NormalFlipY;
-
-        return {
-            .albedo_color = material->albedo_color,
-            .emissive_color = material->emissive_color,
-            .roughness_factor = material->roughness_factor,
-            .metallic_factor = material->metallic_factor,
-            .alpha_cutoff = material->alpha_cutoff,
-            .flags = flags,
-            .albedo_image_index = albedo_image_index.value_or(~0_u32),
-            .normal_image_index = normal_image_index.value_or(~0_u32),
-            .emissive_image_index = emissive_image_index.value_or(~0_u32),
-            .metallic_roughness_image_index = metallic_roughness_image_index.value_or(~0_u32),
-            .occlusion_image_index = occlusion_image_index.value_or(~0_u32),
-        };
-    };
-
-    auto all_materials_count = 0_sz;
-    auto dirty_materials = std::vector<MaterialID>();
-    {
-        auto read_lock = std::shared_lock(impl->materials_mutex);
-        if (impl->materials.size() == 0) {
-            return {};
-        }
-
-        read_lock.unlock();
-        auto write_lock = std::unique_lock(impl->materials_mutex);
-
-        all_materials_count = impl->materials.size();
-
-        // DO NOT MOVE!!! just take a snapshot of the contents
-        dirty_materials = impl->dirty_materials;
-        impl->dirty_materials.clear();
-    }
-
-    auto gpu_materials_bytes_size = all_materials_count * sizeof(GPU::Material);
-    auto dirty_material_count = dirty_materials.size();
-    auto dirty_materials_size_bytes = dirty_materials.size() * sizeof(GPU::Material);
-
-    auto materials_buffer = vuk::Value<vuk::Buffer>{};
-    bool rebuild_materials = false;
-    if (gpu_materials_bytes_size > impl->materials_buffer.data_size()) {
-        if (impl->materials_buffer.id() != BufferID::Invalid) {
-            impl->device->wait();
-            impl->device->destroy(impl->materials_buffer.id());
-        }
-
-        impl->materials_buffer = Buffer::create(*impl->device, gpu_materials_bytes_size, vuk::MemoryUsage::eGPUonly).value();
-        materials_buffer = impl->materials_buffer.acquire(*impl->device, "materials buffer", vuk::eNone);
-        vuk::fill(materials_buffer, ~0_u32);
-        rebuild_materials = true;
-    } else if (impl->materials_buffer) {
-        materials_buffer = impl->materials_buffer.acquire(*impl->device, "materials buffer", vuk::eNone);
-    }
-
-    auto &transfer_man = impl->device->transfer_man();
-    if (rebuild_materials) {
-        auto _ = std::shared_lock(impl->registry_mutex);
-        auto upload_buffer = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eCPUonly, gpu_materials_bytes_size);
-        auto *dst_material_ptr = reinterpret_cast<GPU::Material *>(upload_buffer->mapped_ptr);
-
-        // All loaded materials
-        auto all_materials = impl->materials.slots_unsafe();
-        for (auto &dirty_material : all_materials) {
-            auto gpu_material = to_gpu_material(&dirty_material);
-            std::memcpy(dst_material_ptr, &gpu_material, sizeof(GPU::Material));
-            dst_material_ptr++;
-        }
-
-        materials_buffer = transfer_man.upload_staging(std::move(upload_buffer), std::move(materials_buffer));
-    } else if (dirty_material_count != 0) {
-        auto upload_offsets = std::vector<u64>(dirty_material_count);
-        auto upload_buffer = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eCPUonly, dirty_materials_size_bytes);
-        auto *dst_material_ptr = reinterpret_cast<GPU::Material *>(upload_buffer->mapped_ptr);
-        for (const auto &[dirty_material_id, offset] : std::views::zip(dirty_materials, upload_offsets)) {
-            auto index = SlotMap_decode_id(dirty_material_id).index;
-            auto *material = this->get_material(dirty_material_id);
-            auto gpu_material = to_gpu_material(material);
-
-            std::memcpy(dst_material_ptr, &gpu_material, sizeof(GPU::Material));
-            offset = index * sizeof(GPU::Material);
-            dst_material_ptr++;
-        }
-
-        auto update_materials_pass = vuk::make_pass(
-            "update materials",
-            [upload_offsets = std::move(
-                 upload_offsets
-             )](vuk::CommandBuffer &cmd_list, VUK_BA(vuk::Access::eTransferRead) src_buffer, VUK_BA(vuk::Access::eTransferWrite) dst_buffer) {
-                for (usize i = 0; i < upload_offsets.size(); i++) {
-                    auto offset = upload_offsets[i];
-                    auto src_subrange = src_buffer->subrange(i * sizeof(GPU::Material), sizeof(GPU::Material));
-                    auto dst_subrange = dst_buffer->subrange(offset, sizeof(GPU::Material));
-                    cmd_list.copy_buffer(src_subrange, dst_subrange);
-                }
-
-                return dst_buffer;
-            }
-        );
-
-        materials_buffer = update_materials_pass(std::move(upload_buffer), std::move(materials_buffer));
-    } else {
-        return materials_buffer;
-    }
-
-    impl->device->commit_descriptor_set(impl->materials_descriptor_set);
-    return materials_buffer;
-}
-
-auto AssetManager::get_materials_descriptor_set() -> vuk::PersistentDescriptorSet * {
-    ZoneScoped;
-
-    return &impl->materials_descriptor_set;
+    return dirty_materials;
 }
 
 } // namespace lr

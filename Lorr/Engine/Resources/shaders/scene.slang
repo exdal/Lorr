@@ -3,6 +3,8 @@ module scene;
 import std;
 import gpu;
 
+#include <assert.slang>
+
 public const static f32 CAMERA_SCALE_UNIT = 0.01;
 public const static f32 INV_CAMERA_SCALE_UNIT = 1.0 / CAMERA_SCALE_UNIT;
 public const static f32 PLANET_RADIUS_OFFSET = 0.001;
@@ -197,7 +199,10 @@ public struct Meshlet {
 
     // Takes a local triange index and returns an index to index buffer.
     public func index(in MeshLOD mesh_lod, u32 i) -> u32 {
+        assert(this.local_triangle_index_offset + i < mesh_lod.local_triangle_indices_count);
         let local_triangle_index = u32(mesh_lod.local_triangle_indices[this.local_triangle_index_offset + i]);
+
+        assert(this.indirect_vertex_index_offset + local_triangle_index < mesh_lod.indirect_vertex_indices_count);
         return mesh_lod.indirect_vertex_indices[this.indirect_vertex_index_offset + local_triangle_index];
     }
 
@@ -274,7 +279,11 @@ public struct MeshLOD {
     public Bounds *meshlet_bounds = nullptr;
     public u8 *local_triangle_indices = nullptr;
     public u32 *indirect_vertex_indices = nullptr;
+    public u32 indices_count = 0;
     public u32 meshlet_count = 0;
+    public u32 meshlet_bounds_count = 0;
+    public u32 local_triangle_indices_count = 0;
+    public u32 indirect_vertex_indices_count = 0;
     public f32 error = 0.0;
 };
 
@@ -286,7 +295,7 @@ public struct Mesh {
     public f32x3 *vertex_positions = nullptr;
     public f32x3 *vertex_normals = nullptr;
     public f32x2 *texture_coords = nullptr;
-    public u32 material_index = 0;
+    public u32 _padding = 0;
     public u32 lod_count = 0;
     public MeshLOD lods[MESH_MAX_LODS] = {};
     public Bounds bounds = {};

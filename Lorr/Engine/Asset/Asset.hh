@@ -118,8 +118,10 @@ struct AssetManager : Handle<AssetManager> {
     auto get_scene(const UUID &uuid) -> Scene *;
     auto get_scene(SceneID scene_id) -> Scene *;
 
+    auto set_texture_dirty(TextureID texture_id) -> void;
+    auto get_dirty_texture_ids() -> std::vector<TextureID>;
+
     auto set_material_dirty(MaterialID material_id) -> void;
-    auto get_materials_buffer() -> vuk::Value<vuk::Buffer>;
-    auto get_materials_descriptor_set() -> vuk::PersistentDescriptorSet *;
+    auto get_dirty_material_ids() -> std::vector<MaterialID>;
 };
 } // namespace lr

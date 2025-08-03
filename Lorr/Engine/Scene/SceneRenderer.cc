@@ -28,11 +28,51 @@ auto SceneRenderer::create_persistent_resources(this SceneRenderer &self) -> voi
     auto &asset_man = app.asset_man;
     auto &transfer_man = app.device.transfer_man();
     auto shaders_root = asset_man.asset_root_path(AssetType::Shader);
-    auto *materials_set = asset_man.get_materials_descriptor_set();
+
+    constexpr auto MATERIAL_COUNT = 1024_sz;
+    BindlessDescriptorInfo bindless_set_info[] = {
+        { .binding = 0, .type = vuk::DescriptorType::eSampler, .descriptor_count = MATERIAL_COUNT },
+        { .binding = 1, .type = vuk::DescriptorType::eSampledImage, .descriptor_count = MATERIAL_COUNT },
+    };
+    self.materials_descriptor_set = self.device->create_persistent_descriptor_set(bindless_set_info, 1).release();
+    auto invalid_image_info = ImageInfo{
+        .format = vuk::Format::eR8G8B8A8Srgb,
+        .usage = vuk::ImageUsageFlagBits::eSampled,
+        .type = vuk::ImageType::e2D,
+        .extent = { .width = 1, .height = 1, .depth = 1 },
+        .name = "Invalid",
+    };
+    std::tie(self.invalid_image, self.invalid_image_view) = Image::create_with_view(*self.device, invalid_image_info).value();
+    auto invalid_image = self.device->image_view(self.invalid_image_view.id());
+
+    auto full_white = 0xFFFFFFFF_u32;
+    transfer_man.wait_on(transfer_man.upload_staging(self.invalid_image_view, &full_white, sizeof(decltype(full_white))));
+
+    auto invalid_sampler_info = SamplerInfo{
+        .min_filter = vuk::Filter::eLinear,
+        .mag_filter = vuk::Filter::eLinear,
+        .mipmap_mode = vuk::SamplerMipmapMode::eLinear,
+        .addr_u = vuk::SamplerAddressMode::eRepeat,
+        .addr_v = vuk::SamplerAddressMode::eRepeat,
+        .addr_w = vuk::SamplerAddressMode::eRepeat,
+        .compare_op = vuk::CompareOp::eNever,
+    };
+    auto invalid_sampler = Sampler::create(*self.device, invalid_sampler_info).value();
+    auto invalid_sampler_handle = self.device->sampler(invalid_sampler.id());
+
+    for (auto i = 0_sz; i < MATERIAL_COUNT; i++) {
+        self.materials_descriptor_set.update_sampler(0, i, *invalid_sampler_handle);
+        self.materials_descriptor_set.update_sampled_image(1, i, *invalid_image, vuk::ImageLayout::eShaderReadOnlyOptimal);
+    }
+    self.device->commit_descriptor_set(self.materials_descriptor_set);
+    self.device->destroy(invalid_sampler.id());
 
     //  ── EDITOR ──────────────────────────────────────────────────────────
     auto default_slang_session = self.device->new_slang_session({
         .definitions = {
+#ifdef LS_DEBUG
+            { "ENABLE_ASSERTIONS", "1" },
+#endif // DEBUG
             { "CULLING_MESH_COUNT", "64" },
             { "CULLING_MESHLET_COUNT", std::to_string(Model::MAX_MESHLET_INDICES) },
             { "CULLING_TRIANGLE_COUNT", std::to_string(Model::MAX_MESHLET_PRIMITIVES) },
@@ -123,7 +163,7 @@ auto SceneRenderer::create_persistent_resources(this SceneRenderer &self) -> voi
         .module_name = "passes.visbuffer_encode",
         .entry_points = { "vs_main", "fs_main" },
     };
-    Pipeline::create(*self.device, default_slang_session, vis_encode_pipeline_info, *materials_set).value();
+    Pipeline::create(*self.device, default_slang_session, vis_encode_pipeline_info, self.materials_descriptor_set).value();
 
     auto vis_clear_pipeline_info = PipelineCompileInfo{
         .module_name = "passes.visbuffer_clear",
@@ -135,7 +175,7 @@ auto SceneRenderer::create_persistent_resources(this SceneRenderer &self) -> voi
         .module_name = "passes.visbuffer_decode",
         .entry_points = { "vs_main", "fs_main" },
     };
-    Pipeline::create(*self.device, default_slang_session, vis_decode_pipeline_info, *materials_set).value();
+    Pipeline::create(*self.device, default_slang_session, vis_decode_pipeline_info, self.materials_descriptor_set).value();
 
     //  ── PBR ─────────────────────────────────────────────────────────────
     auto pbr_basic_pipeline_info = PipelineCompileInfo{
@@ -234,177 +274,152 @@ auto SceneRenderer::create_persistent_resources(this SceneRenderer &self) -> voi
     transfer_man.wait_on(std::move(multiscatter_lut_attachment));
 
     self.exposure_buffer = Buffer::create(*self.device, sizeof(GPU::HistogramLuminance)).value();
+    vuk::fill(vuk::acquire_buf("exposure", *self.device->buffer(self.exposure_buffer.id()), vuk::eNone), 0);
 }
 
-auto SceneRenderer::compose(this SceneRenderer &self, SceneComposeInfo &compose_info) -> ComposedScene {
+auto SceneRenderer::prepare_frame(this SceneRenderer &self, FramePrepareInfo &info) -> PreparedFrame {
     ZoneScoped;
 
     auto &transfer_man = self.device->transfer_man();
+    auto prepared_frame = PreparedFrame{};
 
-    // IMPORTANT: Only wait when buffer is being resized!!!
-    // We can still copy into gpu buffer if it has enough space.
+    if (!info.dirty_transform_ids.empty()) {
+        auto rebuild_transforms = !self.materials_buffer || self.transforms_buffer.data_size() <= info.gpu_transforms.size_bytes();
+        self.transforms_buffer = self.transforms_buffer.resize(*self.device, info.gpu_transforms.size_bytes()).value();
 
-    if (ls::size_bytes(compose_info.gpu_meshlet_instances) > self.meshlet_instances_buffer.data_size()) {
-        if (self.meshlet_instances_buffer) {
-            self.device->wait();
-            self.device->destroy(self.meshlet_instances_buffer.id());
-        }
+        if (rebuild_transforms) {
+            // If we resize buffer, we need to refill it again, so individual uploads are not required.
+            prepared_frame.transforms_buffer = transfer_man.upload_staging(info.gpu_transforms, self.transforms_buffer);
+        } else {
+            // Buffer is not resized, upload individual transforms.
 
-        self.meshlet_instances_buffer = Buffer::create(*self.device, ls::size_bytes(compose_info.gpu_meshlet_instances)).value();
-    }
+            auto dirty_transforms_count = info.dirty_transform_ids.size();
+            auto dirty_transforms_size_bytes = dirty_transforms_count * sizeof(GPU::Transforms);
+            auto upload_buffer = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eCPUtoGPU, dirty_transforms_size_bytes);
+            auto *dst_transform_ptr = reinterpret_cast<GPU::Transforms *>(upload_buffer->mapped_ptr);
+            auto upload_offsets = std::vector<u64>(dirty_transforms_count);
 
-    if (ls::size_bytes(compose_info.gpu_mesh_instances) > self.mesh_instances_buffer.data_size()) {
-        if (self.mesh_instances_buffer) {
-            self.device->wait();
-            self.device->destroy(self.mesh_instances_buffer.id());
-        }
-
-        self.mesh_instances_buffer = Buffer::create(*self.device, ls::size_bytes(compose_info.gpu_mesh_instances)).value();
-    }
-
-    if (ls::size_bytes(compose_info.gpu_meshes) > self.meshes_buffer.data_size()) {
-        if (self.meshes_buffer) {
-            self.device->wait();
-            self.device->destroy(self.meshes_buffer.id());
-        }
-
-        self.meshes_buffer = Buffer::create(*self.device, ls::size_bytes(compose_info.gpu_meshes)).value();
-    }
-
-    auto meshlet_instances_buffer = vuk::Value<vuk::Buffer>{};
-    if (!compose_info.gpu_meshlet_instances.empty()) {
-        meshlet_instances_buffer = transfer_man.upload_staging(ls::span(compose_info.gpu_meshlet_instances), self.meshlet_instances_buffer);
-    }
-
-    auto mesh_instances_buffer = vuk::Value<vuk::Buffer>{};
-    if (!compose_info.gpu_mesh_instances.empty()) {
-        mesh_instances_buffer = transfer_man.upload_staging(ls::span(compose_info.gpu_mesh_instances), self.mesh_instances_buffer);
-    }
-
-    auto meshes_buffer = vuk::Value<vuk::Buffer>{};
-    if (!compose_info.gpu_meshes.empty()) {
-        meshes_buffer = transfer_man.upload_staging(ls::span(compose_info.gpu_meshes), self.meshes_buffer);
-    }
-
-    if (self.exposure_buffer) {
-        vuk::fill(vuk::acquire_buf("exposure", *self.device->buffer(self.exposure_buffer.id()), vuk::eNone), 0);
-    }
-
-    self.meshlet_instance_count = compose_info.gpu_meshlet_instances.size();
-    self.mesh_instance_count = compose_info.gpu_mesh_instances.size();
-
-    return ComposedScene{
-        .meshlet_instances_buffer = meshlet_instances_buffer,
-        .mesh_instances_buffer = mesh_instances_buffer,
-        .meshes_buffer = meshes_buffer,
-    };
-}
-
-auto SceneRenderer::cleanup(this SceneRenderer &self) -> void {
-    ZoneScoped;
-
-    self.device->wait();
-
-    self.mesh_instance_count = 0;
-
-    if (self.transforms_buffer) {
-        self.device->destroy(self.transforms_buffer.id());
-        self.transforms_buffer = {};
-    }
-
-    if (self.meshlet_instances_buffer) {
-        self.device->destroy(self.meshlet_instances_buffer.id());
-        self.meshlet_instances_buffer = {};
-    }
-
-    if (self.mesh_instances_buffer) {
-        self.device->destroy(self.mesh_instances_buffer.id());
-        self.mesh_instances_buffer = {};
-    }
-
-    if (self.meshes_buffer) {
-        self.device->destroy(self.meshes_buffer.id());
-        self.meshes_buffer = {};
-    }
-
-    if (self.hiz_view) {
-        self.device->destroy(self.hiz_view.id());
-        self.hiz_view = {};
-    }
-
-    if (self.hiz) {
-        self.device->destroy(self.hiz.id());
-        self.hiz = {};
-    }
-}
-
-auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::option<ComposedScene> &composed_scene)
-    -> vuk::Value<vuk::ImageAttachment> {
-    ZoneScoped;
-
-    auto &transfer_man = self.device->transfer_man();
-
-    //  ── ENTITY TRANSFORMS ───────────────────────────────────────────────
-    //
-    // WARN: compose_info.transforms contains _ALL_ transforms!!!
-    //
-    bool rebuild_transforms = false;
-    if (info.transforms.size_bytes() > self.transforms_buffer.data_size()) {
-        if (self.transforms_buffer.id() != BufferID::Invalid) {
-            // Device wait here is important, do not remove it. Why?
-            // We are using ONE transform buffer for all frames, if
-            // this buffer gets destroyed in current frame, previous
-            // rendering frame buffer will get corrupt and crash GPU.
-            self.device->wait();
-            self.device->destroy(self.transforms_buffer.id());
-        }
-
-        self.transforms_buffer = Buffer::create(*self.device, info.transforms.size_bytes(), vuk::MemoryUsage::eGPUonly).value();
-
-        rebuild_transforms = true;
-    }
-
-    auto transforms_buffer = self.transforms_buffer.acquire(*self.device, "Transforms Buffer", vuk::Access::eMemoryRead);
-
-    if (rebuild_transforms) {
-        transforms_buffer = transfer_man.upload_staging(info.transforms, std::move(transforms_buffer));
-    } else if (!info.dirty_transform_ids.empty()) {
-        auto transform_count = info.dirty_transform_ids.size();
-        auto new_transforms_size_bytes = transform_count * sizeof(GPU::Transforms);
-        auto upload_buffer = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eCPUonly, new_transforms_size_bytes);
-        auto *dst_transform_ptr = reinterpret_cast<GPU::Transforms *>(upload_buffer->mapped_ptr);
-        auto upload_offsets = std::vector<u64>(transform_count);
-
-        for (const auto &[dirty_transform_id, offset] : std::views::zip(info.dirty_transform_ids, upload_offsets)) {
-            auto index = SlotMap_decode_id(dirty_transform_id).index;
-            const auto &transform = info.transforms[index];
-            std::memcpy(dst_transform_ptr, &transform, sizeof(GPU::Transforms));
-            offset = index * sizeof(GPU::Transforms);
-            dst_transform_ptr++;
-        }
-
-        auto update_transforms_pass = vuk::make_pass(
-            "update scene transforms",
-            [upload_offsets = std::move(
-                 upload_offsets
-             )]( //
-                vuk::CommandBuffer &cmd_list,
-                VUK_BA(vuk::Access::eTransferRead) src_buffer,
-                VUK_BA(vuk::Access::eTransferWrite) dst_buffer
-            ) {
-                for (usize i = 0; i < upload_offsets.size(); i++) {
-                    auto offset = upload_offsets[i];
-                    auto src_subrange = src_buffer->subrange(i * sizeof(GPU::Transforms), sizeof(GPU::Transforms));
-                    auto dst_subrange = dst_buffer->subrange(offset, sizeof(GPU::Transforms));
-                    cmd_list.copy_buffer(src_subrange, dst_subrange);
-                }
-
-                return dst_buffer;
+            for (const auto &[dirty_transform_id, offset] : std::views::zip(info.dirty_transform_ids, upload_offsets)) {
+                auto index = SlotMap_decode_id(dirty_transform_id).index;
+                const auto &transform = info.gpu_transforms[index];
+                std::memcpy(dst_transform_ptr, &transform, sizeof(GPU::Transforms));
+                offset = index * sizeof(GPU::Transforms);
+                dst_transform_ptr++;
             }
-        );
 
-        transforms_buffer = update_transforms_pass(std::move(upload_buffer), std::move(transforms_buffer));
+            auto update_transforms_pass = vuk::make_pass(
+                "update scene transforms",
+                [upload_offsets = std::move(upload_offsets)](
+                    vuk::CommandBuffer &cmd_list, //
+                    VUK_BA(vuk::Access::eTransferRead) src_buffer,
+                    VUK_BA(vuk::Access::eTransferWrite) dst_buffer
+                ) {
+                    for (usize i = 0; i < upload_offsets.size(); i++) {
+                        auto offset = upload_offsets[i];
+                        auto src_subrange = src_buffer->subrange(i * sizeof(GPU::Transforms), sizeof(GPU::Transforms));
+                        auto dst_subrange = dst_buffer->subrange(offset, sizeof(GPU::Transforms));
+                        cmd_list.copy_buffer(src_subrange, dst_subrange);
+                    }
+
+                    return dst_buffer;
+                }
+            );
+
+            prepared_frame.transforms_buffer = self.transforms_buffer.acquire(*self.device, "transforms", vuk::Access::eMemoryRead);
+            prepared_frame.transforms_buffer = update_transforms_pass(std::move(upload_buffer), std::move(prepared_frame.transforms_buffer));
+        }
+    } else if (self.transforms_buffer) {
+        prepared_frame.transforms_buffer = self.transforms_buffer.acquire(*self.device, "transforms", vuk::Access::eMemoryRead);
     }
+
+    if (!info.dirty_texture_indices.empty()) {
+        for (const auto &[texture_pair, index] : std::views::zip(info.dirty_textures, info.dirty_texture_indices)) {
+            auto image_view = self.device->image_view(texture_pair.n0);
+            auto sampler = self.device->sampler(texture_pair.n1);
+            self.materials_descriptor_set.update_sampler(0, index, sampler.value());
+            self.materials_descriptor_set.update_sampled_image(1, index, image_view.value(), vuk::ImageLayout::eShaderReadOnlyOptimal);
+        }
+
+        self.device->commit_descriptor_set(self.materials_descriptor_set);
+    }
+
+    if (!info.dirty_material_indices.empty()) {
+        auto rebuild_materials = !self.materials_buffer || self.materials_buffer.data_size() <= info.gpu_materials.size_bytes();
+        self.materials_buffer = self.materials_buffer.resize(*self.device, info.gpu_materials.size_bytes()).value();
+
+        if (rebuild_materials) {
+            prepared_frame.materials_buffer = transfer_man.upload_staging(info.gpu_materials, self.materials_buffer);
+        } else {
+            // TODO: Literally repeating code, find a solution to this
+            auto dirty_materials_count = info.dirty_material_indices.size();
+            auto dirty_materials_size_bytes = dirty_materials_count * sizeof(GPU::Material);
+            auto upload_buffer = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eCPUtoGPU, dirty_materials_size_bytes);
+            auto *dst_materials_ptr = upload_buffer->mapped_ptr;
+            auto upload_offsets = std::vector<u32>(dirty_materials_count);
+
+            for (const auto &[dirty_material, index, offset] : std::views::zip(info.gpu_materials, info.dirty_material_indices, upload_offsets)) {
+                std::memcpy(dst_materials_ptr, &dirty_material, sizeof(GPU::Material));
+                offset = index * sizeof(GPU::Material);
+                dst_materials_ptr++;
+            }
+
+            auto update_materials_pass = vuk::make_pass(
+                "update scene materials",
+                [upload_offsets = std::move(upload_offsets)](
+                    vuk::CommandBuffer &cmd_list, //
+                    VUK_BA(vuk::Access::eTransferRead) src_buffer,
+                    VUK_BA(vuk::Access::eTransferWrite) dst_buffer
+                ) {
+                    for (usize i = 0; i < upload_offsets.size(); i++) {
+                        auto offset = upload_offsets[i];
+                        auto src_subrange = src_buffer->subrange(i * sizeof(GPU::Material), sizeof(GPU::Material));
+                        auto dst_subrange = dst_buffer->subrange(offset, sizeof(GPU::Material));
+                        cmd_list.copy_buffer(src_subrange, dst_subrange);
+                    }
+
+                    return dst_buffer;
+                }
+            );
+
+            prepared_frame.materials_buffer = self.materials_buffer.acquire(*self.device, "materials", vuk::eMemoryRead);
+            prepared_frame.materials_buffer = update_materials_pass(std::move(upload_buffer), std::move(prepared_frame.materials_buffer));
+        }
+    } else if (self.materials_buffer) {
+        prepared_frame.materials_buffer = self.materials_buffer.acquire(*self.device, "materials", vuk::eMemoryRead);
+    }
+
+    if (!info.gpu_meshes.empty()) {
+        self.meshes_buffer = self.meshes_buffer.resize(*self.device, info.gpu_meshes.size_bytes()).value();
+        prepared_frame.meshes_buffer = transfer_man.upload_staging(info.gpu_meshes, self.meshes_buffer);
+    } else if (self.meshes_buffer) {
+        prepared_frame.meshes_buffer = self.meshes_buffer.acquire(*self.device, "meshes", vuk::eMemoryRead);
+    }
+
+    if (!info.gpu_mesh_instances.empty()) {
+        self.mesh_instances_buffer = self.mesh_instances_buffer.resize(*self.device, info.gpu_mesh_instances.size_bytes()).value();
+        prepared_frame.mesh_instances_buffer = transfer_man.upload_staging(info.gpu_mesh_instances, self.mesh_instances_buffer);
+
+        self.mesh_instance_count = info.gpu_mesh_instances.size();
+    } else if (self.mesh_instances_buffer) {
+        prepared_frame.mesh_instances_buffer = self.mesh_instances_buffer.acquire(*self.device, "mesh instances", vuk::eMemoryRead);
+    }
+
+    if (!info.gpu_meshlet_instances.empty()) {
+        self.meshlet_instances_buffer = self.meshlet_instances_buffer.resize(*self.device, info.gpu_meshlet_instances.size_bytes()).value();
+        prepared_frame.meshlet_instances_buffer = transfer_man.upload_staging(info.gpu_meshlet_instances, self.meshlet_instances_buffer);
+
+        self.meshlet_instance_count = info.gpu_meshlet_instances.size();
+    } else if (self.meshlet_instances_buffer) {
+        prepared_frame.meshlet_instances_buffer = self.meshlet_instances_buffer.acquire(*self.device, "meshlet instances", vuk::eMemoryRead);
+    }
+
+    return prepared_frame;
+}
+
+auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, PreparedFrame &frame) -> vuk::Value<vuk::ImageAttachment> {
+    ZoneScoped;
+
+    auto &transfer_man = self.device->transfer_man();
 
     //   ──────────────────────────────────────────────────────────────────────
     auto final_attachment = vuk::declare_ia(
@@ -548,21 +563,11 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
     }
 
     if (self.mesh_instance_count) {
-        auto meshlet_instances_buffer = vuk::Value<vuk::Buffer>{};
-        auto mesh_instances_buffer = vuk::Value<vuk::Buffer>{};
-        auto meshes_buffer = vuk::Value<vuk::Buffer>{};
-        if (composed_scene.has_value()) {
-            meshlet_instances_buffer = std::move(composed_scene->meshlet_instances_buffer);
-            mesh_instances_buffer = std::move(composed_scene->mesh_instances_buffer);
-            meshes_buffer = std::move(composed_scene->meshes_buffer);
-        } else {
-            meshlet_instances_buffer = self.meshlet_instances_buffer.acquire(*self.device, "meshlet instances", vuk::Access::eNone);
-            mesh_instances_buffer = self.mesh_instances_buffer.acquire(*self.device, "mesh instances", vuk::Access::eNone);
-            meshes_buffer = self.meshes_buffer.acquire(*self.device, "meshes", vuk::Access::eNone);
-        }
-
-        auto materials_buffer = std::move(info.materials_buffer);
-        auto *materials_set = info.materials_descriptor_set;
+        auto transforms_buffer = std::move(frame.transforms_buffer);
+        auto meshes_buffer = std::move(frame.meshes_buffer);
+        auto mesh_instances_buffer = std::move(frame.mesh_instances_buffer);
+        auto meshlet_instances_buffer = std::move(frame.meshlet_instances_buffer);
+        auto materials_buffer = std::move(frame.materials_buffer);
 
         //  ── CULL MESHES ─────────────────────────────────────────────────────
         auto vis_cull_meshes_pass = vuk::make_pass(
@@ -802,7 +807,7 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
         //  ── VISBUFFER ENCODE ────────────────────────────────────────────────
         auto vis_encode_pass = vuk::make_pass(
             "vis encode",
-            [descriptor_set = materials_set](
+            [descriptor_set = &self.materials_descriptor_set](
                 vuk::CommandBuffer &cmd_list,
                 VUK_BA(vuk::eIndirectRead) triangle_indirect,
                 VUK_BA(vuk::eIndexRead) index_buffer,
@@ -942,7 +947,7 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
         //  ── VISBUFFER DECODE ────────────────────────────────────────────────
         auto vis_decode_pass = vuk::make_pass(
             "vis decode",
-            [descriptor_set = materials_set]( //
+            [descriptor_set = &self.materials_descriptor_set]( //
                 vuk::CommandBuffer &cmd_list,
                 VUK_BA(vuk::eFragmentRead) camera,
                 VUK_BA(vuk::eFragmentRead) meshlet_instances,
@@ -1456,7 +1461,7 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
                 cmd_list //
                     .bind_graphics_pipeline("passes.debug")
                     .set_rasterization({ .polygonMode = vuk::PolygonMode::eFill, .lineWidth = 1.8f })
-                    .set_primitive_topology(vuk::PrimitiveTopology::eLineStrip)
+                    .set_primitive_topology(vuk::PrimitiveTopology::eLineList)
                     .set_color_blend(dst, vuk::BlendPreset::eOff)
                     .set_dynamic_state(vuk::DynamicStateFlagBits::eViewport | vuk::DynamicStateFlagBits::eScissor)
                     .set_viewport(0, vuk::Rect2D::framebuffer())
@@ -1487,6 +1492,49 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, ls::
     }
 
     return result_attachment;
+}
+
+auto SceneRenderer::cleanup(this SceneRenderer &self) -> void {
+    ZoneScoped;
+
+    self.device->wait();
+
+    self.mesh_instance_count = 0;
+
+    if (self.transforms_buffer) {
+        self.device->destroy(self.transforms_buffer.id());
+        self.transforms_buffer = {};
+    }
+
+    if (self.meshlet_instances_buffer) {
+        self.device->destroy(self.meshlet_instances_buffer.id());
+        self.meshlet_instances_buffer = {};
+    }
+
+    if (self.mesh_instances_buffer) {
+        self.device->destroy(self.mesh_instances_buffer.id());
+        self.mesh_instances_buffer = {};
+    }
+
+    if (self.meshes_buffer) {
+        self.device->destroy(self.meshes_buffer.id());
+        self.meshes_buffer = {};
+    }
+
+    if (self.materials_buffer) {
+        self.device->destroy(self.materials_buffer.id());
+        self.materials_buffer = {};
+    }
+
+    if (self.hiz_view) {
+        self.device->destroy(self.hiz_view.id());
+        self.hiz_view = {};
+    }
+
+    if (self.hiz) {
+        self.device->destroy(self.hiz.id());
+        self.hiz = {};
+    }
 }
 
 } // namespace lr

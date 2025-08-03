@@ -354,7 +354,7 @@ auto SceneRenderer::prepare_frame(this SceneRenderer &self, FramePrepareInfo &in
             auto dirty_materials_count = info.dirty_material_indices.size();
             auto dirty_materials_size_bytes = dirty_materials_count * sizeof(GPU::Material);
             auto upload_buffer = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eCPUtoGPU, dirty_materials_size_bytes);
-            auto *dst_materials_ptr = upload_buffer->mapped_ptr;
+            auto *dst_materials_ptr = reinterpret_cast<GPU::Material *>(upload_buffer->mapped_ptr);
             auto upload_offsets = std::vector<u32>(dirty_materials_count);
 
             for (const auto &[dirty_material, index, offset] : std::views::zip(info.gpu_materials, info.dirty_material_indices, upload_offsets)) {

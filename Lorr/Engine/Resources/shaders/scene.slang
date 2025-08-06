@@ -138,7 +138,7 @@ public struct Material {
     public u32 albedo_image_index = ~0u;
     public u32 normal_image_index = ~0u;
     public u32 emissive_image_index = ~0u;
-    public u32 metallic_rougness_image_index = ~0u;
+    public u32 metallic_roughness_image_index = ~0u;
     public u32 occlusion_image_index = ~0u;
 
     public func sample_albedo_color(in UVGradient grad) -> f32x4 {
@@ -173,8 +173,8 @@ public struct Material {
     public func sample_metallic_roughness(in UVGradient grad) -> f32x2 {
         let metallic_roughness = f32x2(this.metallic_factor, this.roughness_factor);
         if (this.flags & MaterialFlag::HasMetallicRoughnessImage) {
-            let color = material_images[this.metallic_rougness_image_index]
-                .sample_grad(material_samplers[this.metallic_rougness_image_index], grad.uv, grad.ddx, grad.ddy).bg;
+            let color = material_images[this.metallic_roughness_image_index]
+                .sample_grad(material_samplers[this.metallic_roughness_image_index], grad.uv, grad.ddx, grad.ddy).bg;
             return metallic_roughness * color;
         }
 

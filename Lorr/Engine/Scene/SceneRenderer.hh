@@ -64,8 +64,6 @@ struct SceneRenderer {
 
     // Then what are they?
     // TODO: Per scene sky settings
-    Image invalid_image = {};
-    ImageView invalid_image_view = {};
     Image sky_transmittance_lut = {};
     ImageView sky_transmittance_lut_view = {};
     Image sky_multiscatter_lut = {};

@@ -173,7 +173,7 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
         .add_pNext(&vk13_features)
         .add_pNext(&vk12_features)
         .add_pNext(&vk11_features)
-        .add_pNext(&robustness_2_features)
+        //.add_pNext(&robustness_2_features)
         // Maintenance 8 allows the copy of depth images, but
         // LLVMPipe doesn't support Image<u64> on shader yet.
         // WARN: this extension is only supported by
@@ -379,7 +379,7 @@ auto Device::create_persistent_descriptor_set(
     auto pool_info = VkDescriptorPoolCreateInfo{
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
         .pNext = nullptr,
-        .flags = pool_flags,
+        .flags = static_cast<VkDescriptorPoolCreateFlags>(pool_flags),
         .maxSets = 1,
         .poolSizeCount = static_cast<u32>(descriptor_sizes.size()),
         .pPoolSizes = descriptor_sizes.data(),

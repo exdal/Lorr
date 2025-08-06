@@ -44,8 +44,8 @@ auto SceneRenderer::create_persistent_resources(this SceneRenderer &self) -> voi
     };
 
     VkDescriptorBindingFlags bindless_set_binding_flags[] = {
-        VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT | VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT,
-        VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT | VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT,
+        VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT | VK_DESCRIPTOR_BINDING_UPDATE_UNUSED_WHILE_PENDING_BIT | VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT,
+        VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT | VK_DESCRIPTOR_BINDING_UPDATE_UNUSED_WHILE_PENDING_BIT | VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT,
     };
     self.materials_descriptor_set = self.device->create_persistent_descriptor_set(1, bindless_set_info, bindless_set_binding_flags);
 
@@ -365,7 +365,7 @@ auto SceneRenderer::prepare_frame(this SceneRenderer &self, FramePrepareInfo &in
         }
 
         self.device->commit_descriptor_set(descriptor_writes);
-        // self.device->wait(); // I have no idea how to enable UPDATE_AFTER_BIND in vuk
+        self.device->wait(); // TODO: figure out the invalid descriptor situation
     }
 
     if (!info.dirty_material_indices.empty()) {

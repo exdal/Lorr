@@ -54,6 +54,7 @@ func vs_main(u32 vertex_index : SV_VertexID) -> VertexOutput {
 
 [[shader("fragment")]]
 func fs_main(VertexOutput input) -> u32 {
+#if 1
     let material = params.materials[input.material_index];
     if (material.flags & MaterialFlag::HasAlbedoImage) {
         UVGradient grad;
@@ -67,6 +68,7 @@ func fs_main(VertexOutput input) -> u32 {
             discard;
         }
     }
+#endif
 
     std::atomic_add(params.overdraw[u32x2(input.position.xy)], 1u, std::memory_order_acq_rel, std::MemoryLocation::Image, MemoryScope::QueueFamily);
 

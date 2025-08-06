@@ -30,42 +30,24 @@ auto SceneRenderer::create_persistent_resources(this SceneRenderer &self) -> voi
     auto shaders_root = asset_man.asset_root_path(AssetType::Shader);
 
     constexpr auto MATERIAL_COUNT = 1024_sz;
-    BindlessDescriptorInfo bindless_set_info[] = {
-        { .binding = 0, .type = vuk::DescriptorType::eSampler, .descriptor_count = MATERIAL_COUNT },
-        { .binding = 1, .type = vuk::DescriptorType::eSampledImage, .descriptor_count = MATERIAL_COUNT },
+    VkDescriptorSetLayoutBinding bindless_set_info[] = {
+        { .binding = 0,
+          .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER,
+          .descriptorCount = MATERIAL_COUNT,
+          .stageFlags = VK_SHADER_STAGE_ALL,
+          .pImmutableSamplers = nullptr },
+        { .binding = 1,
+          .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+          .descriptorCount = MATERIAL_COUNT,
+          .stageFlags = VK_SHADER_STAGE_ALL,
+          .pImmutableSamplers = nullptr },
     };
-    self.materials_descriptor_set = self.device->create_persistent_descriptor_set(bindless_set_info, 1).release();
-    auto invalid_image_info = ImageInfo{
-        .format = vuk::Format::eR8G8B8A8Srgb,
-        .usage = vuk::ImageUsageFlagBits::eSampled,
-        .type = vuk::ImageType::e2D,
-        .extent = { .width = 1, .height = 1, .depth = 1 },
-        .name = "Invalid",
+
+    VkDescriptorBindingFlags bindless_set_binding_flags[] = {
+        VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT | VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT,
+        VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT | VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT,
     };
-    std::tie(self.invalid_image, self.invalid_image_view) = Image::create_with_view(*self.device, invalid_image_info).value();
-    auto invalid_image = self.device->image_view(self.invalid_image_view.id());
-
-    auto full_white = 0xFFFFFFFF_u32;
-    transfer_man.wait_on(transfer_man.upload_staging(self.invalid_image_view, &full_white, sizeof(decltype(full_white))));
-
-    auto invalid_sampler_info = SamplerInfo{
-        .min_filter = vuk::Filter::eLinear,
-        .mag_filter = vuk::Filter::eLinear,
-        .mipmap_mode = vuk::SamplerMipmapMode::eLinear,
-        .addr_u = vuk::SamplerAddressMode::eRepeat,
-        .addr_v = vuk::SamplerAddressMode::eRepeat,
-        .addr_w = vuk::SamplerAddressMode::eRepeat,
-        .compare_op = vuk::CompareOp::eNever,
-    };
-    auto invalid_sampler = Sampler::create(*self.device, invalid_sampler_info).value();
-    auto invalid_sampler_handle = self.device->sampler(invalid_sampler.id());
-
-    for (auto i = 0_sz; i < MATERIAL_COUNT; i++) {
-        self.materials_descriptor_set.update_sampler(0, i, *invalid_sampler_handle);
-        self.materials_descriptor_set.update_sampled_image(1, i, *invalid_image, vuk::ImageLayout::eShaderReadOnlyOptimal);
-    }
-    self.device->commit_descriptor_set(self.materials_descriptor_set);
-    self.device->destroy(invalid_sampler.id());
+    self.materials_descriptor_set = self.device->create_persistent_descriptor_set(1, bindless_set_info, bindless_set_binding_flags);
 
     //  ── EDITOR ──────────────────────────────────────────────────────────
     auto default_slang_session = self.device->new_slang_session({
@@ -333,15 +315,57 @@ auto SceneRenderer::prepare_frame(this SceneRenderer &self, FramePrepareInfo &in
     }
 
     if (!info.dirty_texture_indices.empty()) {
-        for (const auto &[texture_pair, index] : std::views::zip(info.dirty_textures, info.dirty_texture_indices)) {
-            auto image_view = self.device->image_view(texture_pair.n0);
-            auto sampler = self.device->sampler(texture_pair.n1);
-            self.materials_descriptor_set.update_sampler(0, index, sampler.value());
-            self.materials_descriptor_set.update_sampled_image(1, index, image_view.value(), vuk::ImageLayout::eShaderReadOnlyOptimal);
+        auto sampler_descriptor_infos = std::vector<VkDescriptorImageInfo>();
+        auto image_descriptor_infos = std::vector<VkDescriptorImageInfo>();
+        for (const auto &[image_view_id, sampler_id] : info.dirty_textures) {
+            auto image_view = self.device->image_view(image_view_id);
+            auto sampler = self.device->sampler(sampler_id);
+
+            sampler_descriptor_infos.push_back(
+                { .sampler = sampler.value().payload, //
+                  .imageView = nullptr,
+                  .imageLayout = VK_IMAGE_LAYOUT_UNDEFINED }
+            );
+            image_descriptor_infos.push_back(
+                { .sampler = nullptr, //
+                  .imageView = image_view.value().payload,
+                  .imageLayout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL }
+            );
         }
 
-        self.device->commit_descriptor_set(self.materials_descriptor_set);
-        self.device->wait(); // I have no idea how to enable UPDATE_AFTER_BIND in vuk
+        auto descriptor_writes = std::vector<VkWriteDescriptorSet>();
+        for (const auto &[i, descriptor_index] : std::views::zip(std::views::iota(0_u32), info.dirty_texture_indices)) {
+            auto sampler_write = VkWriteDescriptorSet{
+                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .pNext = nullptr,
+                .dstSet = self.materials_descriptor_set.backing_set,
+                .dstBinding = 0,
+                .dstArrayElement = descriptor_index,
+                .descriptorCount = 1,
+                .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER,
+                .pImageInfo = &sampler_descriptor_infos[i],
+                .pBufferInfo = nullptr,
+                .pTexelBufferView = nullptr,
+            };
+            descriptor_writes.push_back(sampler_write);
+
+            auto image_write = VkWriteDescriptorSet{
+                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .pNext = nullptr,
+                .dstSet = self.materials_descriptor_set.backing_set,
+                .dstBinding = 1,
+                .dstArrayElement = descriptor_index,
+                .descriptorCount = 1,
+                .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+                .pImageInfo = &image_descriptor_infos[i],
+                .pBufferInfo = nullptr,
+                .pTexelBufferView = nullptr,
+            };
+            descriptor_writes.push_back(image_write);
+        }
+
+        self.device->commit_descriptor_set(descriptor_writes);
+        // self.device->wait(); // I have no idea how to enable UPDATE_AFTER_BIND in vuk
     }
 
     if (!info.dirty_material_indices.empty()) {

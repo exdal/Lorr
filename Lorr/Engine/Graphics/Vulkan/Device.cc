@@ -2,6 +2,12 @@
 
 #include <vuk/runtime/ThisThreadExecutor.hpp>
 
+// i hate this
+PFN_vkCreateDescriptorPool vk_CreateDescriptorPool;
+PFN_vkCreateDescriptorSetLayout vk_CreateDescriptorSetLayout;
+PFN_vkAllocateDescriptorSets vk_AllocateDescriptorSets;
+PFN_vkUpdateDescriptorSets vk_UpdateDescriptorSets;
+
 namespace lr {
 constexpr fmtlog::LogLevel to_log_category(VkDebugUtilsMessageSeverityFlagBitsEXT severity) {
     switch (severity) {
@@ -88,6 +94,7 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
     device_extensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
     device_extensions.push_back(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
     device_extensions.push_back(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
+    device_extensions.push_back(VK_EXT_ROBUSTNESS_2_EXTENSION_NAME);
     //device_extensions.push_back(VK_EXT_SHADER_IMAGE_ATOMIC_INT64_EXTENSION_NAME);
     //device_extensions.push_back(VK_KHR_MAINTENANCE_8_EXTENSION_NAME);
     physical_device_selector.add_required_extensions(device_extensions);
@@ -144,10 +151,6 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
     vk11_features.variablePointersStorageBuffer = true;
     vk11_features.shaderDrawParameters = true;
 
-    VkPhysicalDeviceMaintenance8FeaturesKHR maintenance_8_features = {};
-    maintenance_8_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_8_FEATURES_KHR;
-    maintenance_8_features.maintenance8 = true;
-
     VkPhysicalDeviceFeatures2 vk10_features = {};
     vk10_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     vk10_features.features.vertexPipelineStoresAndAtomics = true;
@@ -156,9 +159,13 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
     vk10_features.features.multiDrawIndirect = true;
     vk10_features.features.samplerAnisotropy = true;
 
-    VkPhysicalDeviceShaderImageAtomicInt64FeaturesEXT image_atomic_int64_features = {};
-    image_atomic_int64_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_IMAGE_ATOMIC_INT64_FEATURES_EXT;
-    image_atomic_int64_features.shaderImageInt64Atomics = true;
+    VkPhysicalDeviceMaintenance8FeaturesKHR maintenance_8_features = {};
+    maintenance_8_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_8_FEATURES_KHR;
+    maintenance_8_features.maintenance8 = true;
+
+    VkPhysicalDeviceRobustness2FeaturesEXT robustness_2_features = {};
+    robustness_2_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT;
+    robustness_2_features.nullDescriptor = true;
 
     vkb::DeviceBuilder device_builder(self.physical_device);
     device_builder //
@@ -166,12 +173,11 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
         .add_pNext(&vk13_features)
         .add_pNext(&vk12_features)
         .add_pNext(&vk11_features)
+        .add_pNext(&robustness_2_features)
         // Maintenance 8 allows the copy of depth images, but
         // LLVMPipe doesn't support Image<u64> on shader yet.
+        // WARN: this extension is only supported by
         // .add_pNext(&maintenance_8_features)
-
-        // NOTE: LLVMPipe does not support this extension yet
-        //.add_pNext(&image_atomic_int64_features)
         .add_pNext(&vk10_features);
     auto device_result = device_builder.build();
     if (!device_result) {
@@ -190,6 +196,11 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
     vulkan_functions.vkGetInstanceProcAddr = self.instance.fp_vkGetInstanceProcAddr;
     vulkan_functions.vkGetDeviceProcAddr = self.handle.fp_vkGetDeviceProcAddr;
     vulkan_functions.load_pfns(self.instance, self.handle, true);
+
+    vk_CreateDescriptorPool = vulkan_functions.vkCreateDescriptorPool;
+    vk_CreateDescriptorSetLayout = vulkan_functions.vkCreateDescriptorSetLayout;
+    vk_AllocateDescriptorSets = vulkan_functions.vkAllocateDescriptorSets;
+    vk_UpdateDescriptorSets = vulkan_functions.vkUpdateDescriptorSets;
 
     auto physical_device_properties = VkPhysicalDeviceProperties{};
     vulkan_functions.vkGetPhysicalDeviceProperties(self.physical_device, &physical_device_properties);
@@ -337,7 +348,8 @@ auto Device::end_frame(this Device &self, vuk::Value<vuk::ImageAttachment> &&tar
               .on_begin_pass = on_begin_pass,
               .on_end_pass = on_end_pass,
               .user_data = &self,
-          } });
+          } }
+    );
 }
 
 auto Device::wait(this Device &self, LR_CALLSTACK) -> void {
@@ -347,35 +359,81 @@ auto Device::wait(this Device &self, LR_CALLSTACK) -> void {
     self.runtime->wait_idle();
 }
 
-auto Device::create_persistent_descriptor_set(this Device &self, ls::span<BindlessDescriptorInfo> bindings, u32 index)
-    -> vuk::Unique<vuk::PersistentDescriptorSet> {
+auto Device::create_persistent_descriptor_set(
+    this Device &self,
+    u32 set_index,
+    ls::span<VkDescriptorSetLayoutBinding> bindings,
+    ls::span<VkDescriptorBindingFlags> binding_flags
+) -> vuk::PersistentDescriptorSet {
     ZoneScoped;
 
-    u32 descriptor_count = 0;
-    auto raw_bindings = std::vector<VkDescriptorSetLayoutBinding>(bindings.size());
-    auto binding_flags = std::vector<VkDescriptorBindingFlags>(bindings.size());
-    for (const auto &[binding, raw_binding, raw_binding_flags] : std::views::zip(bindings, raw_bindings, binding_flags)) {
-        raw_binding.binding = binding.binding;
-        raw_binding.descriptorType = vuk::DescriptorBinding::vk_descriptor_type(binding.type);
-        raw_binding.descriptorCount = binding.descriptor_count;
-        raw_binding.stageFlags = VK_SHADER_STAGE_ALL;
-        raw_binding_flags = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
-        descriptor_count += binding.descriptor_count;
+    LS_EXPECT(bindings.size() == binding_flags.size());
+
+    auto descriptor_sizes = std::vector<VkDescriptorPoolSize>();
+    for (const auto &binding : bindings) {
+        LS_EXPECT(binding.descriptorType < VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT);
+        descriptor_sizes.emplace_back(binding.descriptorType, binding.descriptorCount);
     }
 
-    vuk::DescriptorSetLayoutCreateInfo layout_ci = {
-        .index = index,
-        .bindings = std::move(raw_bindings),
-        .flags = std::move(binding_flags),
+    auto pool_flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
+    auto pool_info = VkDescriptorPoolCreateInfo{
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = pool_flags,
+        .maxSets = 1,
+        .poolSizeCount = static_cast<u32>(descriptor_sizes.size()),
+        .pPoolSizes = descriptor_sizes.data(),
+    };
+    auto pool = VkDescriptorPool{};
+    vk_CreateDescriptorPool(self.handle, &pool_info, nullptr, &pool);
+
+    auto set_layout_binding_flags_info = VkDescriptorSetLayoutBindingFlagsCreateInfo{
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
+        .pNext = nullptr,
+        .bindingCount = static_cast<u32>(binding_flags.size()),
+        .pBindingFlags = binding_flags.data(),
     };
 
-    return self.runtime->create_persistent_descriptorset(self.allocator.value(), layout_ci, descriptor_count);
+    auto set_layout_info = VkDescriptorSetLayoutCreateInfo{
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .pNext = &set_layout_binding_flags_info,
+        .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT,
+        .bindingCount = static_cast<u32>(bindings.size()),
+        .pBindings = bindings.data(),
+    };
+    auto set_layout = VkDescriptorSetLayout{};
+    vk_CreateDescriptorSetLayout(self.handle, &set_layout_info, nullptr, &set_layout);
+
+    auto set_alloc_info = VkDescriptorSetAllocateInfo{
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .pNext = nullptr,
+        .descriptorPool = pool,
+        .descriptorSetCount = 1,
+        .pSetLayouts = &set_layout,
+    };
+    auto descriptor_set = VkDescriptorSet{};
+    vk_AllocateDescriptorSets(self.handle, &set_alloc_info, &descriptor_set);
+
+    auto persistent_set_create_info = vuk::DescriptorSetLayoutCreateInfo{
+        .dslci = set_layout_info,
+        .index = set_index,
+        .bindings = std::vector(bindings.begin(), bindings.end()),
+        .flags = std::vector(binding_flags.begin(), binding_flags.end()),
+    };
+    return vuk::PersistentDescriptorSet{
+        .backing_pool = pool,
+        .set_layout_create_info = persistent_set_create_info,
+        .set_layout = set_layout,
+        .backing_set = descriptor_set,
+        .wdss = {},
+        .descriptor_bindings = {},
+    };
 }
 
-auto Device::commit_descriptor_set(this Device &self, vuk::PersistentDescriptorSet &set) -> void {
+auto Device::commit_descriptor_set(this Device &self, ls::span<VkWriteDescriptorSet> writes) -> void {
     ZoneScoped;
 
-    set.commit(self.runtime.value());
+    vk_UpdateDescriptorSets(self.handle, writes.size(), writes.data(), 0, nullptr);
 }
 
 auto Device::create_swap_chain(this Device &self, VkSurfaceKHR surface, ls::option<vuk::Swapchain> old_swap_chain)

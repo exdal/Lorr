@@ -15,12 +15,6 @@
 #include <vuk/vsl/Core.hpp>
 
 namespace lr {
-struct BindlessDescriptorInfo {
-    u32 binding = 0;
-    vuk::DescriptorType type = {};
-    u32 descriptor_count = 0;
-};
-
 struct TransferManager {
 private:
     Device *device = nullptr;
@@ -141,9 +135,13 @@ public:
     auto end_frame(this Device &, vuk::Value<vuk::ImageAttachment> &&target_attachment) -> void;
     auto wait(this Device &, LR_THISCALL) -> void;
 
-    auto create_persistent_descriptor_set(this Device &, ls::span<BindlessDescriptorInfo> bindings, u32 index)
-        -> vuk::Unique<vuk::PersistentDescriptorSet>;
-    auto commit_descriptor_set(this Device &, vuk::PersistentDescriptorSet &set) -> void;
+    auto create_persistent_descriptor_set(
+        this Device &,
+        u32 set_index,
+        ls::span<VkDescriptorSetLayoutBinding> bindings,
+        ls::span<VkDescriptorBindingFlags> binding_flags
+    ) -> vuk::PersistentDescriptorSet;
+    auto commit_descriptor_set(this Device &, ls::span<VkWriteDescriptorSet> writes) -> void;
     auto create_swap_chain(this Device &, VkSurfaceKHR surface, ls::option<vuk::Swapchain> old_swap_chain = ls::nullopt)
         -> std::expected<vuk::Swapchain, vuk::VkException>;
 

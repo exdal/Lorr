@@ -15,6 +15,10 @@ auto Pipeline::create(
 
     for (const auto &set : persistent_sets) {
         create_info.explicit_set_layouts.push_back(set.set_layout_create_info);
+        for (const auto &[binding, binding_flags] : std::views::zip(set.set_layout_create_info.bindings, set.set_layout_create_info.flags)) {
+            create_info
+                .set_binding_flags(set.set_layout_create_info.index, binding.binding, static_cast<vuk::DescriptorBindingFlagBits>(binding_flags));
+        }
     }
 
     auto slang_module = session.load_module({ .module_name = compile_info.module_name, .source = compile_info.shader_source }).value();

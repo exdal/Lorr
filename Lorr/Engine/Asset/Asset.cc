@@ -1526,7 +1526,7 @@ auto AssetManager::delete_asset(const UUID &uuid) -> void {
         }
     }
 
-    LOG_TRACE("Deleted asset {}.", uuid.str());
+    // LOG_TRACE("Deleted asset {}.", uuid.str());
 }
 
 auto AssetManager::get_asset(const UUID &uuid) -> Asset * {

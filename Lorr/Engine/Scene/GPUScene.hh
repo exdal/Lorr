@@ -109,6 +109,7 @@ struct Camera {
     alignas(4) f32 near_clip = {};
     alignas(4) f32 far_clip = {};
     alignas(4) glm::vec2 resolution = {};
+    alignas(4) f32 acceptable_lod_error = 0.0f;
 };
 
 enum class TransformID : u64 { Invalid = ~0_u64 };
@@ -143,16 +144,19 @@ struct Material {
     alignas(4) f32 metallic_factor = 0.0f;
     alignas(4) f32 alpha_cutoff = 0.0f;
     alignas(4) MaterialFlag flags = MaterialFlag::None;
-    alignas(4) u32 albedo_image_index = ~0_u32;
-    alignas(4) u32 normal_image_index = ~0_u32;
-    alignas(4) u32 emissive_image_index = ~0_u32;
-    alignas(4) u32 metallic_roughness_image_index = ~0_u32;
-    alignas(4) u32 occlusion_image_index = ~0_u32;
+    alignas(4) u32 sampler_index = 0;
+    alignas(4) u32 albedo_image_index = 0;
+    alignas(4) u32 normal_image_index = 0;
+    alignas(4) u32 emissive_image_index = 0;
+    alignas(4) u32 metallic_roughness_image_index = 0;
+    alignas(4) u32 occlusion_image_index = 0;
 };
 
 struct Bounds {
-    alignas(4) glm::vec3 aabb_min = {};
-    alignas(4) glm::vec3 aabb_max = {};
+    alignas(4) glm::vec3 aabb_center = {};
+    alignas(4) glm::vec3 aabb_extent = {};
+    alignas(4) glm::vec3 sphere_center = {};
+    alignas(4) f32 sphere_radius = 0.0f;
 };
 
 struct MeshletInstance {
@@ -191,7 +195,7 @@ struct MeshLOD {
 };
 
 struct Mesh {
-    constexpr static auto MAX_LODS = 1_sz;
+    constexpr static auto MAX_LODS = 8_sz;
 
     alignas(8) u64 vertex_positions = 0;
     alignas(8) u64 vertex_normals = 0;

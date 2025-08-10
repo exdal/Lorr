@@ -249,6 +249,63 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
 
     LOG_INFO("Initialized device.");
 
+    if (auto err = self.init_resources(); !err) {
+        return err;
+    }
+
+    LOG_INFO("Initialized device resources.");
+
+    return {};
+}
+
+auto Device::init_resources(this Device &self) -> std::expected<void, vuk::VkException> {
+    constexpr auto MAX_DESCRIPTORS = 1024_sz;
+    VkDescriptorSetLayoutBinding bindless_set_info[] = {
+        // Samplers
+        { .binding = DescriptorTable_SamplerIndex,
+          .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER,
+          .descriptorCount = MAX_DESCRIPTORS,
+          .stageFlags = VK_SHADER_STAGE_ALL,
+          .pImmutableSamplers = nullptr },
+        // Sampled Images
+        { .binding = DescriptorTable_SampledImageIndex,
+          .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+          .descriptorCount = MAX_DESCRIPTORS,
+          .stageFlags = VK_SHADER_STAGE_ALL,
+          .pImmutableSamplers = nullptr },
+        // Storage Images
+        { .binding = DescriptorTable_StorageImageIndex,
+          .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+          .descriptorCount = MAX_DESCRIPTORS,
+          .stageFlags = VK_SHADER_STAGE_ALL,
+          .pImmutableSamplers = nullptr },
+    };
+
+    constexpr static auto bindless_flags = VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT | VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
+    VkDescriptorBindingFlags bindless_set_binding_flags[] = {
+        bindless_flags,
+        bindless_flags,
+        bindless_flags,
+    };
+    self.resources.descriptor_set = self.create_persistent_descriptor_set(1, bindless_set_info, bindless_set_binding_flags);
+
+    auto invalid_image_info = ImageInfo{
+        .format = vuk::Format::eR8G8B8A8Srgb,
+        .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage,
+        .type = vuk::ImageType::e2D,
+        .extent = vuk::Extent3D(1_u32, 1_u32, 1_u32),
+        .name = "Invalid Placeholder Image",
+    };
+    auto [invalid_image, invalid_image_view] = Image::create_with_view(self, invalid_image_info).value();
+
+    auto invalid_image_data = 0xFFFFFFFF_u32;
+    auto fut = self.transfer_manager.upload_staging(invalid_image_view, &invalid_image_data, sizeof(u32));
+    fut = fut.as_released(vuk::Access::eFragmentSampled, vuk::DomainFlagBits::eGraphicsQueue);
+    self.transfer_manager.wait_on(std::move(fut));
+
+    auto invalid_sampler_info = SamplerInfo{};
+    std::ignore = Sampler::create(self, invalid_sampler_info).value();
+
     return {};
 }
 
@@ -355,7 +412,7 @@ auto Device::end_frame(this Device &self, vuk::Value<vuk::ImageAttachment> &&tar
 auto Device::wait(this Device &self, LR_CALLSTACK) -> void {
     ZoneScopedN("Device Wait Idle");
 
-    LOG_TRACE("Device wait idle triggered at {}:{}!", LOC.file_name(), LOC.line());
+    LOG_TRACE("Device wait idle triggered at {}!", LOC);
     self.runtime->wait_idle();
 }
 

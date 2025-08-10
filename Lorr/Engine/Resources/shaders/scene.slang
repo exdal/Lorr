@@ -72,6 +72,7 @@ public struct Camera {
     public f32 near_clip;
     public f32 far_clip;
     public f32x2 resolution;
+    public f32 acceptable_lod_error;
 };
 
 public struct Transform {
@@ -107,9 +108,11 @@ public struct UVGradient {
 };
 
 [[vk::binding(0, 1)]]
-Sampler material_samplers[];
+Sampler bindless_samplers[];
 [[vk::binding(1, 1)]]
-Image2D<f32x4> material_images[];
+Image2D<f32x4> bindless_images[];
+[[vk::binding(2, 1)]]
+StorageImage2D<f32x4> bindless_storage_images[];
 
 public enum MaterialFlag : u32 {
     None = 0,
@@ -135,16 +138,17 @@ public struct Material {
     public f32 metallic_factor = 0.0;
     public f32 alpha_cutoff = 0.0;
     public MaterialFlag flags = MaterialFlag::None;
-    public u32 albedo_image_index = ~0u;
-    public u32 normal_image_index = ~0u;
-    public u32 emissive_image_index = ~0u;
-    public u32 metallic_roughness_image_index = ~0u;
-    public u32 occlusion_image_index = ~0u;
+    public u32 sampler_index = 0;
+    public u32 albedo_image_index = 0;
+    public u32 normal_image_index = 0;
+    public u32 emissive_image_index = 0;
+    public u32 metallic_roughness_image_index = 0;
+    public u32 occlusion_image_index = 0;
 
     public func sample_albedo_color(in UVGradient grad) -> f32x4 {
         if (this.flags & MaterialFlag::HasAlbedoImage) {
-            let color = material_images[this.albedo_image_index]
-                .sample_grad(material_samplers[this.albedo_image_index], grad.uv, grad.ddx, grad.ddy);
+            let color = bindless_images[this.albedo_image_index]
+                .sample_grad(bindless_samplers[this.sampler_index], grad.uv, grad.ddx, grad.ddy);
             return this.albedo_color * color;
         }
 
@@ -152,18 +156,14 @@ public struct Material {
     }
 
     public func sample_normal_color(in UVGradient grad) -> f32x3 {
-        if (this.flags & MaterialFlag::HasNormalImage) {
-            return material_images[this.normal_image_index]
-                .sample_grad(material_samplers[this.normal_image_index], grad.uv, grad.ddx, grad.ddy).rgb;
-        }
-
-        return { 0.0 };
+        return bindless_images[this.normal_image_index]
+            .sample_grad(bindless_samplers[this.sampler_index], grad.uv, grad.ddx, grad.ddy).rgb;
     }
 
     public func sample_emissive_color(in UVGradient grad) -> f32x3 {
         if (this.flags & MaterialFlag::HasEmissiveImage) {
-            let color = material_images[this.emissive_image_index]
-                .sample_grad(material_samplers[this.emissive_image_index], grad.uv, grad.ddx, grad.ddy).rgb;
+            let color = bindless_images[this.emissive_image_index]
+                .sample_grad(bindless_samplers[this.sampler_index], grad.uv, grad.ddx, grad.ddy).rgb;
             return this.emissive_color * color;
         }
 
@@ -173,8 +173,8 @@ public struct Material {
     public func sample_metallic_roughness(in UVGradient grad) -> f32x2 {
         let metallic_roughness = f32x2(this.metallic_factor, this.roughness_factor);
         if (this.flags & MaterialFlag::HasMetallicRoughnessImage) {
-            let color = material_images[this.metallic_roughness_image_index]
-                .sample_grad(material_samplers[this.metallic_roughness_image_index], grad.uv, grad.ddx, grad.ddy).bg;
+            let color = bindless_images[this.metallic_roughness_image_index]
+                .sample_grad(bindless_samplers[this.sampler_index], grad.uv, grad.ddx, grad.ddy).bg;
             return metallic_roughness * color;
         }
 
@@ -183,8 +183,8 @@ public struct Material {
 
     public func sample_occlusion_color(in UVGradient grad) -> f32 {
         if (this.flags & MaterialFlag::HasOcclusionImage) {
-            return material_images[this.occlusion_image_index]
-                .sample_grad(material_samplers[this.occlusion_image_index], grad.uv, grad.ddx, grad.ddy).r;
+            return bindless_images[this.occlusion_image_index]
+                .sample_grad(bindless_samplers[this.sampler_index], grad.uv, grad.ddx, grad.ddy).r;
         }
 
         return 1.0;
@@ -257,8 +257,10 @@ public struct Meshlet {
 };
 
 public struct Bounds {
-    public f32x3 aabb_min = {};
-    public f32x3 aabb_max = {};
+    public f32x3 aabb_center = {};
+    public f32x3 aabb_extent = {};
+    public f32x3 sphere_center = {};
+    public f32 sphere_radius = 0.0f;
 };
 
 public struct MeshletInstance {

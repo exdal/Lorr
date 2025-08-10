@@ -7,10 +7,7 @@
 namespace lr {
 struct FramePrepareInfo {
     u32 mesh_instance_count = 0;
-    u32 meshlet_instance_count = 0;
-
-    ls::span<u32> dirty_texture_indices = {};
-    ls::span<ls::pair<ImageViewID, SamplerID>> dirty_textures = {};
+    u32 max_meshlet_instance_count = 0;
 
     ls::span<GPU::TransformID> dirty_transform_ids = {};
     ls::span<GPU::Transforms> gpu_transforms = {};
@@ -20,14 +17,16 @@ struct FramePrepareInfo {
 
     ls::span<GPU::Mesh> gpu_meshes = {};
     ls::span<GPU::MeshInstance> gpu_mesh_instances = {};
-    ls::span<GPU::MeshletInstance> gpu_meshlet_instances = {};
 };
 
 struct PreparedFrame {
+    u32 mesh_instance_count = 0;
     vuk::Value<vuk::Buffer> transforms_buffer = {};
     vuk::Value<vuk::Buffer> meshes_buffer = {};
     vuk::Value<vuk::Buffer> mesh_instances_buffer = {};
     vuk::Value<vuk::Buffer> meshlet_instances_buffer = {};
+    vuk::Value<vuk::Buffer> visible_meshlet_instances_indices_buffer = {};
+    vuk::Value<vuk::Buffer> reordered_indices_buffer = {};
     vuk::Value<vuk::Buffer> materials_buffer = {};
 };
 
@@ -53,13 +52,9 @@ struct SceneRenderer {
     Buffer exposure_buffer = {};
     Buffer transforms_buffer = {};
 
-    u32 mesh_instance_count = 0;
-    u32 meshlet_instance_count = 0;
     Buffer mesh_instances_buffer = {};
     Buffer meshes_buffer = {};
-    Buffer meshlet_instances_buffer = {};
 
-    vuk::PersistentDescriptorSet materials_descriptor_set = {};
     Buffer materials_buffer = {};
 
     // Then what are they?

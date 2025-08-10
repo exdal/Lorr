@@ -153,6 +153,8 @@ auto Scene::destroy(this Scene &self) -> void {
         }
     }
 
+    self.mesh_instance_count = 0;
+    self.max_meshlet_instance_count = 0;
     self.root.destruct();
     self.name.clear();
     self.root.clear();
@@ -550,13 +552,9 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, SceneRenderInfo &i
         camera_data.near_clip = c.near_clip;
         camera_data.far_clip = c.far_clip;
         camera_data.resolution = glm::vec2(static_cast<f32>(info.extent.width), static_cast<f32>(info.extent.height));
-
-        if (!c.freeze_frustum) {
-            camera_data.frustum_projection_view_mat = c.frustum_projection_view_mat;
-            c.frustum_projection_view_mat = camera_data.projection_view_mat;
-        } else {
-            camera_data.frustum_projection_view_mat = c.frustum_projection_view_mat;
-        }
+        camera_data.acceptable_lod_error = c.acceptable_lod_error;
+        camera_data.frustum_projection_view_mat = c.frustum_projection_view_mat;
+        c.frustum_projection_view_mat = camera_data.projection_view_mat;
     });
 
     ls::option<GPU::Sun> sun_data = ls::nullopt;
@@ -712,9 +710,9 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer) -> Prepared
 
     auto &app = Application::get();
 
+    auto max_meshlet_instance_count = 0_u32;
     auto gpu_meshes = std::vector<GPU::Mesh>();
     auto gpu_mesh_instances = std::vector<GPU::MeshInstance>();
-    auto gpu_meshlet_instances = std::vector<GPU::MeshletInstance>();
 
     if (self.models_dirty) {
         for (const auto &[rendering_mesh, transform_ids] : self.rendering_meshes_map) {
@@ -729,44 +727,30 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer) -> Prepared
 
                 //  ── INSTANCING ──────────────────────────────────────────────────
                 for (const auto transform_id : transform_ids) {
-                    auto mesh_instance_index = static_cast<u32>(gpu_mesh_instances.size());
-
-                    auto lod_index = 0;
-                    const auto &lod = gpu_mesh.lods[lod_index];
+                    auto lod0_index = 0;
+                    const auto &lod0 = gpu_mesh.lods[lod0_index];
 
                     auto &mesh_instance = gpu_mesh_instances.emplace_back();
                     mesh_instance.mesh_index = mesh_index;
-                    mesh_instance.lod_index = lod_index;
+                    mesh_instance.lod_index = lod0_index;
                     mesh_instance.material_index = SlotMap_decode_id(primitive.material_id).index;
                     mesh_instance.transform_index = SlotMap_decode_id(transform_id).index;
-
-                    for (u32 meshlet_index = 0; meshlet_index < lod.meshlet_count; meshlet_index++) {
-                        auto &meshlet_instance = gpu_meshlet_instances.emplace_back();
-                        meshlet_instance.mesh_instance_index = mesh_instance_index;
-                        meshlet_instance.meshlet_index = meshlet_index;
-                    }
+                    max_meshlet_instance_count += lod0.meshlet_count;
                 }
             }
         }
+
+        self.mesh_instance_count = gpu_mesh_instances.size();
+        self.max_meshlet_instance_count = max_meshlet_instance_count;
     }
 
-    auto dirty_texture_ids = app.asset_man.get_dirty_texture_ids();
-    auto dirty_texture_indices = std::vector<u32>(dirty_texture_ids.size());
-    auto dirty_textures = std::vector<ls::pair<ImageViewID, SamplerID>>(dirty_texture_ids.size());
-    for (const auto &[texture_pair, index, id] : std::views::zip(dirty_textures, dirty_texture_indices, dirty_texture_ids)) {
-        auto *texture = app.asset_man.get_texture(id);
-        texture_pair = ls::pair(texture->image_view.id(), texture->sampler.id());
-        index = SlotMap_decode_id(id).index;
-    }
-
-    auto uuid_to_index = [&](const UUID &uuid) -> ls::option<u32> {
+    auto uuid_to_image_index = [&](const UUID &uuid) -> ls::option<u32> {
         if (!app.asset_man.is_texture_loaded(uuid)) {
             return ls::nullopt;
         }
 
-        auto *texture_asset = app.asset_man.get_asset(uuid);
-
-        return SlotMap_decode_id(texture_asset->texture_id).index;
+        auto *texture = app.asset_man.get_texture(uuid);
+        return texture->image_view.index();
     };
 
     auto dirty_material_ids = app.asset_man.get_dirty_material_ids();
@@ -774,14 +758,20 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer) -> Prepared
     auto dirty_material_indices = std::vector<u32>(dirty_material_ids.size());
     for (const auto &[gpu_material, index, id] : std::views::zip(gpu_materials, dirty_material_indices, dirty_material_ids)) {
         const auto *material = app.asset_man.get_material(id);
-        auto albedo_image_index = uuid_to_index(material->albedo_texture);
-        auto normal_image_index = uuid_to_index(material->normal_texture);
-        auto emissive_image_index = uuid_to_index(material->emissive_texture);
-        auto metallic_roughness_image_index = uuid_to_index(material->metallic_roughness_texture);
-        auto occlusion_image_index = uuid_to_index(material->occlusion_texture);
+        auto albedo_image_index = uuid_to_image_index(material->albedo_texture);
+        auto normal_image_index = uuid_to_image_index(material->normal_texture);
+        auto emissive_image_index = uuid_to_image_index(material->emissive_texture);
+        auto metallic_roughness_image_index = uuid_to_image_index(material->metallic_roughness_texture);
+        auto occlusion_image_index = uuid_to_image_index(material->occlusion_texture);
+        auto sampler_index = 0_u32;
 
         auto flags = GPU::MaterialFlag::None;
-        flags |= albedo_image_index.has_value() ? GPU::MaterialFlag::HasAlbedoImage : GPU::MaterialFlag::None;
+        if (albedo_image_index.has_value()) {
+            auto *texture = app.asset_man.get_texture(material->albedo_texture);
+            sampler_index = texture->sampler.index();
+            flags |= GPU::MaterialFlag::HasAlbedoImage;
+        }
+
         flags |= normal_image_index.has_value() ? GPU::MaterialFlag::HasNormalImage : GPU::MaterialFlag::None;
         flags |= emissive_image_index.has_value() ? GPU::MaterialFlag::HasEmissiveImage : GPU::MaterialFlag::None;
         flags |= metallic_roughness_image_index.has_value() ? GPU::MaterialFlag::HasMetallicRoughnessImage : GPU::MaterialFlag::None;
@@ -793,26 +783,25 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer) -> Prepared
         gpu_material.metallic_factor = material->metallic_factor;
         gpu_material.alpha_cutoff = material->alpha_cutoff;
         gpu_material.flags = flags;
-        gpu_material.albedo_image_index = albedo_image_index.value_or(~0_u32);
-        gpu_material.normal_image_index = normal_image_index.value_or(~0_u32);
-        gpu_material.emissive_image_index = emissive_image_index.value_or(~0_u32);
-        gpu_material.metallic_roughness_image_index = metallic_roughness_image_index.value_or(~0_u32);
-        gpu_material.occlusion_image_index = occlusion_image_index.value_or(~0_u32);
+        gpu_material.sampler_index = sampler_index;
+        gpu_material.albedo_image_index = albedo_image_index.value_or(0_u32);
+        gpu_material.normal_image_index = normal_image_index.value_or(0_u32);
+        gpu_material.emissive_image_index = emissive_image_index.value_or(0_u32);
+        gpu_material.metallic_roughness_image_index = metallic_roughness_image_index.value_or(0_u32);
+        gpu_material.occlusion_image_index = occlusion_image_index.value_or(0_u32);
 
         index = SlotMap_decode_id(id).index;
     }
 
     auto prepare_info = FramePrepareInfo{
-        .mesh_instance_count = static_cast<u32>(self.rendering_meshes_map.size()),
-        .dirty_texture_indices = dirty_texture_indices,
-        .dirty_textures = dirty_textures,
+        .mesh_instance_count = self.mesh_instance_count,
+        .max_meshlet_instance_count = self.max_meshlet_instance_count,
         .dirty_transform_ids = self.dirty_transforms,
         .gpu_transforms = self.transforms.slots_unsafe(),
         .dirty_material_indices = dirty_material_indices,
         .gpu_materials = gpu_materials,
         .gpu_meshes = gpu_meshes,
         .gpu_mesh_instances = gpu_mesh_instances,
-        .gpu_meshlet_instances = gpu_meshlet_instances,
     };
     auto prepared_frame = renderer.prepare_frame(prepare_info);
 

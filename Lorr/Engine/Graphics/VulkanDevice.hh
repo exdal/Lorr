@@ -89,12 +89,19 @@ protected:
     auto release(this TransferManager &) -> void;
 };
 
+enum : u32 {
+    DescriptorTable_SamplerIndex = 0,
+    DescriptorTable_SampledImageIndex,
+    DescriptorTable_StorageImageIndex,
+};
+
 struct DeviceResources {
     SlotMap<vuk::Buffer, BufferID> buffers = {};
     SlotMap<vuk::Image, ImageID> images = {};
     SlotMap<vuk::ImageView, ImageViewID> image_views = {};
     SlotMap<vuk::Sampler, SamplerID> samplers = {};
     SlotMap<vuk::PipelineBaseInfo *, PipelineID> pipelines = {};
+    vuk::PersistentDescriptorSet descriptor_set = {};
 };
 
 struct Device {
@@ -126,6 +133,8 @@ private:
 
 public:
     auto init(this Device &, usize frame_count) -> std::expected<void, vuk::VkException>;
+    auto init_resources(this Device &) -> std::expected<void, vuk::VkException>;
+
     auto destroy(this Device &) -> void;
 
     auto new_slang_session(this Device &, const SlangSessionInfo &info) -> ls::option<SlangSession>;
@@ -183,6 +192,9 @@ public:
     }
     auto get_pass_queries() -> auto & {
         return pass_queries;
+    }
+    auto get_descriptor_set() -> auto & {
+        return resources.descriptor_set;
     }
 
     auto non_coherent_atom_size() -> u32 {

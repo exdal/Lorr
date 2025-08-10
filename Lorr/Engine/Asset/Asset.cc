@@ -123,7 +123,6 @@ struct Handle<AssetManager>::Impl {
 
     std::shared_mutex textures_mutex = {};
     SlotMap<Texture, TextureID> textures = {};
-    std::vector<TextureID> dirty_textures = {};
 
     std::shared_mutex materials_mutex = {};
     SlotMap<Material, MaterialID> materials = {};
@@ -845,7 +844,7 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
                         nullptr,
                         lod_index_count,
                         TARGET_ERROR,
-                        0,
+                        meshopt_SimplifyLockBorder,
                         &result_error
                     );
 
@@ -891,8 +890,10 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
                 indirect_vertex_indices.resize(last_meshlet.vertex_offset + last_meshlet.vertex_count);
                 local_triangle_indices.resize(last_meshlet.triangle_offset + ((last_meshlet.triangle_count * 3 + 3) & ~3_u32));
 
+                auto mesh_bb_min = glm::vec3(std::numeric_limits<f32>::max());
+                auto mesh_bb_max = glm::vec3(std::numeric_limits<f32>::lowest());
                 auto meshlet_bounds = std::vector<GPU::Bounds>(meshlet_count);
-                for (const auto &[raw_meshlet, meshlet, meshlet_aabb] : std::views::zip(raw_meshlets, meshlets, meshlet_bounds)) {
+                for (const auto &[raw_meshlet, meshlet, bounds] : std::views::zip(raw_meshlets, meshlets, meshlet_bounds)) {
                     // AABB computation
                     auto meshlet_bb_min = glm::vec3(std::numeric_limits<f32>::max());
                     auto meshlet_bb_max = glm::vec3(std::numeric_limits<f32>::lowest());
@@ -903,17 +904,32 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
                         meshlet_bb_max = glm::max(meshlet_bb_max, tri_pos);
                     }
 
+                    // Sphere and Cone computation
+                    auto sphere_bounds = meshopt_computeMeshletBounds(
+                        &indirect_vertex_indices[raw_meshlet.vertex_offset],
+                        &local_triangle_indices[raw_meshlet.triangle_offset],
+                        raw_meshlet.triangle_count,
+                        reinterpret_cast<f32 *>(mesh_vertices.data()),
+                        vertex_count,
+                        sizeof(glm::vec3)
+                    );
+
                     meshlet.indirect_vertex_index_offset = raw_meshlet.vertex_offset;
                     meshlet.local_triangle_index_offset = raw_meshlet.triangle_offset;
                     meshlet.vertex_count = raw_meshlet.vertex_count;
                     meshlet.triangle_count = raw_meshlet.triangle_count;
 
-                    meshlet_aabb.aabb_min = meshlet_bb_min;
-                    meshlet_aabb.aabb_max = meshlet_bb_max;
+                    bounds.aabb_center = (meshlet_bb_max + meshlet_bb_min) * 0.5f;
+                    bounds.aabb_extent = meshlet_bb_max - meshlet_bb_min;
+                    bounds.sphere_center = glm::make_vec3(sphere_bounds.center);
+                    bounds.sphere_radius = sphere_bounds.radius;
 
-                    gpu_mesh.bounds.aabb_max = glm::max(gpu_mesh.bounds.aabb_max, meshlet_bb_max);
-                    gpu_mesh.bounds.aabb_min = glm::min(gpu_mesh.bounds.aabb_min, meshlet_bb_min);
+                    mesh_bb_min = glm::min(mesh_bb_min, meshlet_bb_min);
+                    mesh_bb_max = glm::max(mesh_bb_max, meshlet_bb_max);
                 }
+
+                gpu_mesh.bounds.aabb_center = (mesh_bb_max + mesh_bb_min) * 0.5f;
+                gpu_mesh.bounds.aabb_extent = mesh_bb_max - mesh_bb_min;
 
                 auto lod_upload_size = 0 //
                     + ls::size_bytes(simplified_indices) //
@@ -977,7 +993,6 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
                 mesh_upload_offset += ls::size_bytes(mesh_texcoords);
             }
 
-            // ignore spilling out buffer size by alignment
             auto gpu_mesh_buffer_handle = impl->device->buffer(gpu_mesh_buffer.id());
             auto gpu_mesh_subrange = vuk::discard_buf("mesh", gpu_mesh_buffer_handle->subrange(0, mesh_upload_size));
             gpu_mesh_subrange = transfer_man.upload_staging(std::move(cpu_mesh_buffer), std::move(gpu_mesh_subrange));
@@ -1093,6 +1108,22 @@ auto AssetManager::load_texture(const UUID &uuid, const TextureInfo &info) -> bo
         }
     }
 
+    auto sampler_info = SamplerInfo{
+        .min_filter = vuk::Filter::eLinear,
+        .mag_filter = vuk::Filter::eLinear,
+        .mipmap_mode = vuk::SamplerMipmapMode::eLinear,
+        .addr_u = vuk::SamplerAddressMode::eRepeat,
+        .addr_v = vuk::SamplerAddressMode::eRepeat,
+        .addr_w = vuk::SamplerAddressMode::eRepeat,
+        .compare_op = vuk::CompareOp::eNever,
+        .max_anisotropy = 8.0f,
+        .mip_lod_bias = 0.0f,
+        .min_lod = 0.0f,
+        .max_lod = static_cast<f32>(mip_level_count - 1),
+        .use_anisotropy = true,
+    };
+    auto sampler = Sampler::create(*impl->device, sampler_info).value();
+
     auto rel_path = fs::relative(asset_path, impl->root_path);
     auto image_info = ImageInfo{
         .format = format,
@@ -1178,24 +1209,7 @@ auto AssetManager::load_texture(const UUID &uuid, const TextureInfo &info) -> bo
     {
         auto write_lock = std::unique_lock(impl->textures_mutex);
         auto *asset = this->get_asset(uuid);
-        auto sampler_info = SamplerInfo{
-            .min_filter = vuk::Filter::eLinear,
-            .mag_filter = vuk::Filter::eLinear,
-            .mipmap_mode = vuk::SamplerMipmapMode::eLinear,
-            .addr_u = vuk::SamplerAddressMode::eRepeat,
-            .addr_v = vuk::SamplerAddressMode::eRepeat,
-            .addr_w = vuk::SamplerAddressMode::eRepeat,
-            .compare_op = vuk::CompareOp::eNever,
-            .max_anisotropy = 8.0f,
-            .mip_lod_bias = 0.0f,
-            .min_lod = 0.0f,
-            .max_lod = static_cast<f32>(mip_level_count - 1),
-            .use_anisotropy = true,
-        };
-        auto sampler = Sampler::create(*impl->device, sampler_info).value();
         asset->texture_id = impl->textures.create_slot(Texture{ .image = image, .image_view = image_view, .sampler = sampler });
-        write_lock.unlock();
-        this->set_texture_dirty(asset->texture_id);
     }
 
     LOG_TRACE("Loaded texture {}.", uuid.str());
@@ -1643,32 +1657,6 @@ auto AssetManager::get_scene(SceneID scene_id) -> Scene * {
     }
 
     return impl->scenes.slot(scene_id)->get();
-}
-
-auto AssetManager::set_texture_dirty(TextureID texture_id) -> void {
-    ZoneScoped;
-
-    auto read_lock = std::shared_lock(impl->textures_mutex);
-    if (std::ranges::find(impl->dirty_textures, texture_id) != impl->dirty_textures.end()) {
-        return;
-    }
-
-    read_lock.unlock();
-    auto write_lock = std::unique_lock(impl->textures_mutex);
-    impl->dirty_textures.emplace_back(texture_id);
-}
-
-auto AssetManager::get_dirty_texture_ids() -> std::vector<TextureID> {
-    ZoneScoped;
-
-    auto read_lock = std::shared_lock(impl->textures_mutex);
-    auto dirty_textures = std::vector(impl->dirty_textures);
-
-    read_lock.unlock();
-    auto write_lock = std::unique_lock(impl->textures_mutex);
-    impl->dirty_textures.clear();
-
-    return dirty_textures;
 }
 
 auto AssetManager::set_material_dirty(MaterialID material_id) -> void {

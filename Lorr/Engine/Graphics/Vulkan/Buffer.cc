@@ -43,6 +43,19 @@ auto Buffer::id() const -> BufferID {
     return id_;
 }
 
+auto Buffer::resize(Device &device, u64 new_size, vuk::MemoryUsage memory_usage, LR_CALLSTACK) -> std::expected<Buffer, vuk::VkException> {
+    if (new_size > this->data_size()) {
+        if (this->id() != BufferID::Invalid) {
+            device.wait();
+            device.destroy(this->id());
+        }
+
+        return Buffer::create(device, new_size, memory_usage, LOC);
+    }
+
+    return *this;
+}
+
 auto Buffer::acquire(Device &device, vuk::Name name, vuk::Access access, u64 offset, u64 size) -> vuk::Value<vuk::Buffer> {
     ZoneScoped;
 

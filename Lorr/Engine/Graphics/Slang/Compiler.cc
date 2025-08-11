@@ -332,7 +332,8 @@ auto SlangCompiler::new_session(const SlangSessionInfo &info) -> ls::option<Slan
     slang::CompilerOptionEntry entries[] = {
         { .name = slang::CompilerOptionName::Optimization, .value = { .kind = slang::CompilerOptionValueKind::Int, .intValue0 = SLANG_OPTIMIZATION_LEVEL_MAXIMAL } },
 #if LS_DEBUG
-        { .name = slang::CompilerOptionName::DebugInformationFormat, .value = { .kind = slang::CompilerOptionValueKind::Int, .intValue0 = SLANG_DEBUG_INFO_FORMAT_C7 } },
+        { .name = slang::CompilerOptionName::DebugInformationFormat, .value = { .kind = slang::CompilerOptionValueKind::Int, .intValue0 = SLANG_DEBUG_INFO_FORMAT_DEFAULT } },
+        { .name = slang::CompilerOptionName::DebugInformation, .value = { .kind = slang::CompilerOptionValueKind::Int, .intValue0 = SLANG_DEBUG_INFO_LEVEL_MAXIMAL } },
 #endif
         { .name = slang::CompilerOptionName::UseUpToDateBinaryModule, .value = { .kind = slang::CompilerOptionValueKind::Int, .intValue0 = 1 } },
         { .name = slang::CompilerOptionName::GLSLForceScalarLayout, .value = { .kind = slang::CompilerOptionValueKind::Int, .intValue0 = 1 } },
@@ -343,7 +344,7 @@ auto SlangCompiler::new_session(const SlangSessionInfo &info) -> ls::option<Slan
         { .name = slang::CompilerOptionName::DisableWarning, .value = { .kind = slang::CompilerOptionValueKind::String, .stringValue0 = "41017" } },
         { .name = slang::CompilerOptionName::Capability, .value = { .kind = slang::CompilerOptionValueKind::String, .stringValue0 = "vk_mem_model" } },
         { .name = slang::CompilerOptionName::Capability, .value = { .kind = slang::CompilerOptionValueKind::String, .stringValue0 = "spvGroupNonUniformBallot" } },
-        { .name = slang::CompilerOptionName::Capability, .value = { .kind = slang::CompilerOptionValueKind::String, .stringValue0 = "spvGroupNonUniformShuffle" } }
+        { .name = slang::CompilerOptionName::Capability, .value = { .kind = slang::CompilerOptionValueKind::String, .stringValue0 = "spvGroupNonUniformShuffle" } },
         // { .name = slang::CompilerOptionName::DumpIntermediates, .value = { .kind = slang::CompilerOptionValueKind::Int, .intValue0 = 1 } },
     };
     // clang-format on

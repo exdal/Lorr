@@ -36,9 +36,9 @@ add_requires("simdutf v6.2.0")
 add_requires("simdjson v3.12.2")
 add_requires("unordered_dense v4.5.0")
 add_requires("tracy v0.11.1", { configs = {
-    tracy_enable = false,
-    on_demand = true,
-    callstack = true,
+    tracy_enable = has_config("profile"),
+    on_demand = has_config("profile"),
+    callstack = has_config("profile"),
     callstack_inlines = false,
     code_transfer = true,
     exit = true,
@@ -54,14 +54,12 @@ add_requires("flecs v4.0.4")
 add_requires("libsdl3")
 
 add_requires("shader-slang v2025.12.1")
-add_requires("vuk 2025.06.15", { configs = {
+add_requires("vuk 2025.07.09", { configs = {
     debug_allocations = false,
     disable_exceptions = true,
 }, debug = is_mode("debug") })
 
-add_requires("meshoptimizer v0.22")
-add_requires("ktx v4.4.0", {
-    -- debug = is_mode("debug")
-})
+add_requires("meshoptimizer v0.24")
+add_requires("ktx v4.4.0")
 
 add_requires("svector v1.0.3")

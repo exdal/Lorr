@@ -7,12 +7,14 @@ import scene;
 import passes.visbuffer;
 
 struct ShaderParameters {
-    RWStructuredBuffer<DrawIndexedIndirectCommand> draw_cmd;
     ConstantBuffer<Camera> camera;
     StructuredBuffer<u32> visible_meshlet_instances_indices;
     StructuredBuffer<MeshletInstance> meshlet_instances;
+    StructuredBuffer<MeshInstance> mesh_instances;
     StructuredBuffer<Mesh> meshes;
     StructuredBuffer<Transform> transforms;
+
+    RWStructuredBuffer<DrawIndexedIndirectCommand> draw_cmd;
     RWStructuredBuffer<u32> reordered_indices;
 };
 
@@ -71,14 +73,10 @@ func CullSmallPrimitive(f32x2x3 vertices, f32x2 viewportExtent) -> bool {
     );
 }
 
-func test_triangle(in Mesh mesh, in Meshlet meshlet, in f32x2 resolution, CullFlags cull_flags, u32 triangle_index) -> bool {
-    const Triangle tri = meshlet.indices(mesh, triangle_index);
-    const u32x3 vertices = meshlet.vertices(mesh, tri);
-    const f32x3x3 positions = meshlet.positions(mesh, vertices);
-
-    const f32x4 clip_pos_0 = mul(model_view_proj_shared, f32x4(positions[0], 1.0));
-    const f32x4 clip_pos_1 = mul(model_view_proj_shared, f32x4(positions[1], 1.0));
-    const f32x4 clip_pos_2 = mul(model_view_proj_shared, f32x4(positions[2], 1.0));
+func test_triangle(in f32x3x3 positions, in f32x2 resolution, CullFlags cull_flags, u32 triangle_index) -> bool {
+    let clip_pos_0 = mul(model_view_proj_shared, f32x4(positions[0], 1.0));
+    let clip_pos_1 = mul(model_view_proj_shared, f32x4(positions[1], 1.0));
+    let clip_pos_2 = mul(model_view_proj_shared, f32x4(positions[2], 1.0));
 
     // Cull all triangles behind camera
     if (clip_pos_0.z < 0.0 && clip_pos_1.z < 0.0 && clip_pos_2.z < 0.0) {
@@ -121,14 +119,15 @@ func cs_main(
     let visible_meshlet_index = group_id.x;
     let meshlet_instance_index = params.visible_meshlet_instances_indices[visible_meshlet_index];
     let meshlet_instance = params.meshlet_instances[meshlet_instance_index];
-    let mesh = params.meshes[meshlet_instance.mesh_index];
-    let meshlet_index = meshlet_instance.meshlet_index;
-    let meshlet = mesh.meshlets[meshlet_index];
+    let mesh_instance = params.mesh_instances[meshlet_instance.mesh_instance_index];
+    let mesh = params.meshes[mesh_instance.mesh_index];
+    let mesh_lod = mesh.lods[mesh_instance.lod_index];
+    let meshlet = mesh_lod.meshlets[meshlet_instance.meshlet_index];
 
     if (local_index == 0) {
         triangles_passed_shared = 0;
-        const Transform transform = params.transforms[meshlet_instance.transform_index];
-        model_view_proj_shared = mul(params.camera->projection_view_mat, transform.world);
+        let transform = params.transforms[mesh_instance.transform_index];
+        model_view_proj_shared = mul(params.camera.projection_view_mat, transform.world);
     }
 
     std::control_barrier(std::memory_order_acq_rel);
@@ -136,7 +135,9 @@ func cs_main(
     var triangle_passed = false;
     var active_triangle_index = 0;
     if (local_index < meshlet.triangle_count) {
-        triangle_passed = test_triangle(mesh, meshlet, params.camera.resolution, cull_flags, local_index);
+        let indices = meshlet.indices(mesh_lod, local_index);
+        let positions = meshlet.positions(mesh, indices);
+        triangle_passed = test_triangle(positions, params.camera.resolution, cull_flags, local_index);
         if (triangle_passed) {
             active_triangle_index = std::atomic_add(triangles_passed_shared, 1, std::memory_order_relaxed);
         }
@@ -151,9 +152,9 @@ func cs_main(
     std::control_barrier(std::memory_order_acq_rel);
 
     if (triangle_passed) {
-        const u32 index_offset = base_index_shared + active_triangle_index * 3;
-        params.reordered_indices[index_offset + 0] = (visible_meshlet_index << MESHLET_PRIMITIVE_BITS) | ((triangle_index + 0) & MESHLET_PRIMITIVE_MASK);
-        params.reordered_indices[index_offset + 1] = (visible_meshlet_index << MESHLET_PRIMITIVE_BITS) | ((triangle_index + 1) & MESHLET_PRIMITIVE_MASK);
-        params.reordered_indices[index_offset + 2] = (visible_meshlet_index << MESHLET_PRIMITIVE_BITS) | ((triangle_index + 2) & MESHLET_PRIMITIVE_MASK);
+        let index_offset = base_index_shared + active_triangle_index * 3;
+        params.reordered_indices[index_offset + 0] = (meshlet_instance_index << MESHLET_PRIMITIVE_BITS) | ((triangle_index + 0) & MESHLET_PRIMITIVE_MASK);
+        params.reordered_indices[index_offset + 1] = (meshlet_instance_index << MESHLET_PRIMITIVE_BITS) | ((triangle_index + 1) & MESHLET_PRIMITIVE_MASK);
+        params.reordered_indices[index_offset + 2] = (meshlet_instance_index << MESHLET_PRIMITIVE_BITS) | ((triangle_index + 2) & MESHLET_PRIMITIVE_MASK);
     }
 }

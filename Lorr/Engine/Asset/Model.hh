@@ -4,6 +4,7 @@
 #include "Engine/Asset/UUID.hh"
 
 #include "Engine/Graphics/Vulkan.hh"
+#include "Engine/Scene/GPUScene.hh"
 
 namespace lr {
 struct TextureSamplerInfo {
@@ -65,10 +66,7 @@ struct Model {
     using Index = u32;
 
     struct Primitive {
-        u32 material_index = 0;
-        u32 meshlet_count = 0;
-        u32 meshlet_offset = 0;
-        u32 local_triangle_indices_offset = 0;
+        MaterialID material_id = MaterialID::Invalid;
         u32 vertex_count = 0;
         u32 vertex_offset = 0;
         u32 index_count = 0;
@@ -101,14 +99,9 @@ struct Model {
     std::vector<Node> nodes = {};
     std::vector<Scene> scenes = {};
 
-    usize default_scene_index = 0;
+    std::vector<GPU::Mesh> gpu_meshes = {};
+    std::vector<Buffer> gpu_mesh_buffers = {};
 
-    Buffer indices = {};
-    Buffer vertex_positions = {};
-    Buffer vertex_normals = {};
-    Buffer texture_coords = {};
-    Buffer meshlets = {};
-    Buffer meshlet_bounds = {};
-    Buffer local_triangle_indices = {};
+    usize default_scene_index = 0;
 };
 } // namespace lr

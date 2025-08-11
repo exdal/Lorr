@@ -79,8 +79,10 @@ auto JobManager::worker(this JobManager &self, u32 id) -> void {
     memory::ScopedStack stack;
 
     this_thread_worker.id = id;
-    os::set_thread_name(stack.format("Worker {}", id));
-    fmtlog::setThreadName(stack.format_char("Worker {}", id));
+
+    const auto *thread_name = stack.format_char("Worker {}", id);
+    os::set_thread_name(thread_name);
+    fmtlog::setThreadName(thread_name);
 
     LS_DEFER() {
         this_thread_worker.id = ~0_u32;

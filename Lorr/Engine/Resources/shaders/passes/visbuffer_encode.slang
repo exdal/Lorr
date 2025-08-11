@@ -7,11 +7,11 @@ import passes.visbuffer;
 
 struct ShaderParameters {
     ConstantBuffer<Camera> camera;
-    RWStructuredBuffer<u32> visible_meshlet_instances_indices;
     StructuredBuffer<MeshletInstance> meshlet_instances;
+    StructuredBuffer<MeshInstance> mesh_instances;
     StructuredBuffer<Mesh> meshes;
     StructuredBuffer<Transform> transforms;
-    StructuredBuffer<Material, ScalarDataLayout> materials;
+    StructuredBuffer<Material> materials;
     StorageImage2D<u32, ImageFormat::R32UI> overdraw;
 };
 ParameterBlock<ShaderParameters> params;
@@ -28,16 +28,16 @@ struct VertexOutput {
 [[shader("vertex")]]
 func vs_main(u32 vertex_index : SV_VertexID) -> VertexOutput {
     let vis = VisBufferData(vertex_index);
-    let meshlet_instance_index = params.visible_meshlet_instances_indices[vis.meshlet_instance_index];
-    let meshlet_instance = params.meshlet_instances[meshlet_instance_index];
-    let mesh = params.meshes[meshlet_instance.mesh_index];
-    let transform = params.transforms[meshlet_instance.transform_index];
-    let meshlet = mesh.meshlets[meshlet_instance.meshlet_index];
+    let meshlet_instance = params.meshlet_instances[vis.meshlet_instance_index];
+    let mesh_instance = params.mesh_instances[meshlet_instance.mesh_instance_index];
+    let mesh = params.meshes[mesh_instance.mesh_index];
+    let mesh_lod = mesh.lods[mesh_instance.lod_index];
+    let transform = params.transforms[mesh_instance.transform_index];
+    let meshlet = mesh_lod.meshlets[meshlet_instance.meshlet_index];
 
-    let index = meshlet.index(mesh, vis.triangle_index);
-    let vertex = meshlet.vertex(mesh, index);
-    let vertex_pos = meshlet.position(mesh, vertex);
-    let tex_coord = meshlet.tex_coord(mesh, vertex);
+    let index = meshlet.index(mesh_lod, vis.triangle_index);
+    let vertex_pos = meshlet.position(mesh, index);
+    let tex_coord = meshlet.tex_coord(mesh, index);
     let world_pos = transform.to_world_position(vertex_pos);
     let clip_pos = mul(params.camera.projection_view_mat, f32x4(world_pos.xyz, 1.0));
 
@@ -47,31 +47,31 @@ func vs_main(u32 vertex_index : SV_VertexID) -> VertexOutput {
     output.tex_coord = tex_coord;
     output.meshlet_instance_index = vis.meshlet_instance_index;
     output.triangle_index = vis.triangle_index / 3;
-    output.material_index = meshlet_instance.material_index;
+    output.material_index = mesh_instance.material_index;
 
     return output;
 }
 
 [[shader("fragment")]]
 func fs_main(VertexOutput input) -> u32 {
+#if 1
     let material = params.materials[input.material_index];
-    if (material.albedo_image_index != ~0u) {
+    if (material.flags & MaterialFlag::HasAlbedoImage) {
         UVGradient grad;
         grad.uv = input.tex_coord;
         grad.ddx = ddx(input.tex_coord);
         grad.ddy = ddy(input.tex_coord);
-        const f32 alpha_color = material.sample_albedo_color(grad).a;
+        let alpha_color = material.sample_albedo_color(grad).a;
 
         // We are doing deferred, blend alpha mode is not supported in this pass.
-        if (alpha_color < clamp(material.alpha_cutoff, 0.001, 1.0) /* &&
-            material.alpha_mode == AlphaMode::Mask*/)
-        {
+        if (alpha_color < clamp(material.alpha_cutoff, 0.001, 1.0)) {
             discard;
         }
     }
+#endif
 
     std::atomic_add(params.overdraw[u32x2(input.position.xy)], 1u, std::memory_order_acq_rel, std::MemoryLocation::Image, MemoryScope::QueueFamily);
 
-    const let vis = VisBufferData(input.meshlet_instance_index, input.triangle_index);
+    let vis = VisBufferData(input.meshlet_instance_index, input.triangle_index);
     return vis.encode();
 }

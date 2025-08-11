@@ -4,6 +4,8 @@
 
 #include "Engine/Memory/Stack.hh"
 
+#include <ankerl/svector.h>
+
 namespace lr {
 auto Image::create(Device &device, const ImageInfo &info, LR_CALLSTACK) -> std::expected<Image, vuk::VkException> {
     ZoneScoped;
@@ -132,6 +134,22 @@ auto ImageView::create(Device &device, Image &image, const ImageViewInfo &info, 
         return std::unexpected(result.error());
     }
 
+    auto image_descriptors = ankerl::svector<VkDescriptorImageInfo, 2>();
+    if (info.image_usage & vuk::ImageUsageFlagBits::eSampled) {
+        image_descriptors.push_back(
+            { .sampler = nullptr, //
+              .imageView = image_view_handle.payload,
+              .imageLayout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL }
+        );
+    }
+    if (info.image_usage & vuk::ImageUsageFlagBits::eStorage) {
+        image_descriptors.push_back(
+            { .sampler = nullptr, //
+              .imageView = image_view_handle.payload,
+              .imageLayout = VK_IMAGE_LAYOUT_GENERAL }
+        );
+    }
+
     auto image_view = ImageView{};
     image_view.format_ = image.format();
     image_view.extent_ = image.extent();
@@ -140,6 +158,38 @@ auto ImageView::create(Device &device, Image &image, const ImageViewInfo &info, 
     image_view.bound_image_id_ = image.id();
     image_view.id_ = device.resources.image_views.create_slot(static_cast<vuk::ImageView &&>(image_view_handle));
     device.set_name(image_view, info.name);
+
+    auto &bindless_set = device.get_descriptor_set();
+    auto descriptor_writes = ankerl::svector<VkWriteDescriptorSet, 2>();
+    if (info.image_usage & vuk::ImageUsageFlagBits::eSampled) {
+        descriptor_writes.push_back(
+            { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, //
+              .pNext = nullptr,
+              .dstSet = bindless_set.backing_set,
+              .dstBinding = DescriptorTable_SampledImageIndex,
+              .dstArrayElement = image_view.index(),
+              .descriptorCount = 1,
+              .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+              .pImageInfo = &image_descriptors[0],
+              .pBufferInfo = nullptr,
+              .pTexelBufferView = nullptr }
+        );
+    }
+    if (info.image_usage & vuk::ImageUsageFlagBits::eStorage) {
+        descriptor_writes.push_back(
+            { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, //
+              .pNext = nullptr,
+              .dstSet = bindless_set.backing_set,
+              .dstBinding = DescriptorTable_StorageImageIndex,
+              .dstArrayElement = image_view.index(),
+              .descriptorCount = 1,
+              .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+              .pImageInfo = &image_descriptors[1],
+              .pBufferInfo = nullptr,
+              .pTexelBufferView = nullptr }
+        );
+    }
+    device.commit_descriptor_set({ descriptor_writes.begin(), descriptor_writes.size() });
 
     return image_view;
 }
@@ -243,9 +293,28 @@ auto Sampler::create(Device &device, const SamplerInfo &info, [[maybe_unused]] v
     };
 
     auto sampler = Sampler{};
-    sampler.id_ = device.resources.samplers.create_slot();
-    auto *sampler_handle = device.resources.samplers.slot(sampler.id_);
-    *sampler_handle = device.runtime->acquire_sampler(create_info, device.frame_count());
+    auto sampler_handle = device.runtime->acquire_sampler(create_info, device.frame_count());
+    auto sampler_descriptor = VkDescriptorImageInfo{
+        .sampler = sampler_handle.payload,
+        .imageView = nullptr,
+        .imageLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+    };
+    sampler.id_ = device.resources.samplers.create_slot(static_cast<vuk::Sampler &&>(sampler_handle));
+
+    auto &bindless_set = device.get_descriptor_set();
+    auto descriptor_write = VkWriteDescriptorSet{
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, //
+        .pNext = nullptr,
+        .dstSet = bindless_set.backing_set,
+        .dstBinding = DescriptorTable_SamplerIndex,
+        .dstArrayElement = sampler.index(),
+        .descriptorCount = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER,
+        .pImageInfo = &sampler_descriptor,
+        .pBufferInfo = nullptr,
+        .pTexelBufferView = nullptr,
+    };
+    device.commit_descriptor_set(descriptor_write);
 
     return sampler;
 }

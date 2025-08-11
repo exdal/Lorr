@@ -153,6 +153,8 @@ auto Scene::destroy(this Scene &self) -> void {
         }
     }
 
+    self.mesh_instance_count = 0;
+    self.max_meshlet_instance_count = 0;
     self.root.destruct();
     self.name.clear();
     self.root.clear();
@@ -519,8 +521,6 @@ auto Scene::find_entity(this Scene &self, u32 transform_index) -> flecs::entity 
 auto Scene::render(this Scene &self, SceneRenderer &renderer, SceneRenderInfo &info) -> vuk::Value<vuk::ImageAttachment> {
     ZoneScoped;
 
-    auto &app = Application::get();
-
     // clang-format off
     auto camera_query = self.get_world()
         .query_builder<ECS::Transform, ECS::Camera, ECS::ActiveCamera>()
@@ -552,13 +552,9 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, SceneRenderInfo &i
         camera_data.near_clip = c.near_clip;
         camera_data.far_clip = c.far_clip;
         camera_data.resolution = glm::vec2(static_cast<f32>(info.extent.width), static_cast<f32>(info.extent.height));
-
-        if (!c.freeze_frustum) {
-            camera_data.frustum_projection_view_mat = c.frustum_projection_view_mat;
-            c.frustum_projection_view_mat = camera_data.projection_view_mat;
-        } else {
-            camera_data.frustum_projection_view_mat = c.frustum_projection_view_mat;
-        }
+        camera_data.acceptable_lod_error = c.acceptable_lod_error;
+        camera_data.frustum_projection_view_mat = c.frustum_projection_view_mat;
+        c.frustum_projection_view_mat = camera_data.projection_view_mat;
     });
 
     ls::option<GPU::Sun> sun_data = ls::nullopt;
@@ -602,28 +598,15 @@ auto Scene::render(this Scene &self, SceneRenderer &renderer, SceneRenderInfo &i
         }
     });
 
-    ls::option<ComposedScene> composed_scene = ls::nullopt;
-    if (self.models_dirty) {
-        memory::ScopedStack stack;
-        self.models_dirty = false;
+    auto prepared_frame = self.prepare_frame(renderer);
 
-        auto compose_info = self.compose();
-        composed_scene.emplace(renderer.compose(compose_info));
-    }
-
-    info.materials_descriptor_set = app.asset_man.get_materials_descriptor_set();
-    info.materials_buffer = app.asset_man.get_materials_buffer();
     info.sun = sun_data;
     info.atmosphere = atmos_data;
     info.camera = active_camera_data;
     info.histogram_info = histogram_data;
     info.cull_flags = self.cull_flags;
-    info.dirty_transform_ids = self.dirty_transforms;
-    info.transforms = self.transforms.slots_unsafe();
-    auto rendered_attachment = renderer.render(info, composed_scene);
-    self.dirty_transforms.clear();
 
-    return rendered_attachment;
+    return renderer.render(info, prepared_frame);
 }
 
 auto Scene::tick(this Scene &self, f32 delta_time) -> bool {
@@ -722,48 +705,110 @@ auto Scene::get_cull_flags(this Scene &self) -> GPU::CullFlags & {
     return self.cull_flags;
 }
 
-auto Scene::compose(this Scene &self) -> SceneComposeInfo {
+auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer) -> PreparedFrame {
     ZoneScoped;
 
     auto &app = Application::get();
 
+    auto max_meshlet_instance_count = 0_u32;
     auto gpu_meshes = std::vector<GPU::Mesh>();
-    auto gpu_meshlet_instances = std::vector<GPU::MeshletInstance>();
+    auto gpu_mesh_instances = std::vector<GPU::MeshInstance>();
 
-    for (const auto &[rendering_mesh, transform_ids] : self.rendering_meshes_map) {
-        auto *model = app.asset_man.get_model(rendering_mesh.n0);
-        const auto &mesh = model->meshes[rendering_mesh.n1];
+    if (self.models_dirty) {
+        for (const auto &[rendering_mesh, transform_ids] : self.rendering_meshes_map) {
+            auto *model = app.asset_man.get_model(rendering_mesh.n0);
+            const auto &mesh = model->meshes[rendering_mesh.n1];
 
-        //  ── PER MESH INFORMATION ────────────────────────────────────────────
-        auto mesh_offset = gpu_meshes.size();
-        auto &gpu_mesh = gpu_meshes.emplace_back();
-        gpu_mesh.indices = model->indices.device_address();
-        gpu_mesh.vertex_positions = model->vertex_positions.device_address();
-        gpu_mesh.vertex_normals = model->vertex_normals.device_address();
-        gpu_mesh.texture_coords = model->texture_coords.device_address();
-        gpu_mesh.local_triangle_indices = model->local_triangle_indices.device_address();
-        gpu_mesh.meshlet_bounds = model->meshlet_bounds.device_address();
-        gpu_mesh.meshlets = model->meshlets.device_address();
+            for (auto primitive_index : mesh.primitive_indices) {
+                const auto &primitive = model->primitives[primitive_index];
+                const auto &gpu_mesh = model->gpu_meshes[primitive_index];
+                auto mesh_index = static_cast<u32>(gpu_meshes.size());
+                gpu_meshes.emplace_back(gpu_mesh);
 
-        //  ── INSTANCING ──────────────────────────────────────────────────────
-        for (const auto transform_id : transform_ids) {
-            for (const auto primitive_index : mesh.primitive_indices) {
-                auto &primitive = model->primitives[primitive_index];
-                for (u32 meshlet_index = 0; meshlet_index < primitive.meshlet_count; meshlet_index++) {
-                    auto &meshlet_instance = gpu_meshlet_instances.emplace_back();
-                    meshlet_instance.mesh_index = mesh_offset;
-                    meshlet_instance.material_index = primitive.material_index;
-                    meshlet_instance.transform_index = SlotMap_decode_id(transform_id).index;
-                    meshlet_instance.meshlet_index = meshlet_index + primitive.meshlet_offset;
+                //  ── INSTANCING ──────────────────────────────────────────────────
+                for (const auto transform_id : transform_ids) {
+                    auto lod0_index = 0;
+                    const auto &lod0 = gpu_mesh.lods[lod0_index];
+
+                    auto &mesh_instance = gpu_mesh_instances.emplace_back();
+                    mesh_instance.mesh_index = mesh_index;
+                    mesh_instance.lod_index = lod0_index;
+                    mesh_instance.material_index = SlotMap_decode_id(primitive.material_id).index;
+                    mesh_instance.transform_index = SlotMap_decode_id(transform_id).index;
+                    max_meshlet_instance_count += lod0.meshlet_count;
                 }
             }
         }
+
+        self.mesh_instance_count = gpu_mesh_instances.size();
+        self.max_meshlet_instance_count = max_meshlet_instance_count;
     }
 
-    return SceneComposeInfo{
-        .gpu_meshes = std::move(gpu_meshes),
-        .gpu_meshlet_instances = std::move(gpu_meshlet_instances),
+    auto uuid_to_image_index = [&](const UUID &uuid) -> ls::option<u32> {
+        if (!app.asset_man.is_texture_loaded(uuid)) {
+            return ls::nullopt;
+        }
+
+        auto *texture = app.asset_man.get_texture(uuid);
+        return texture->image_view.index();
     };
+
+    auto dirty_material_ids = app.asset_man.get_dirty_material_ids();
+    auto gpu_materials = std::vector<GPU::Material>(dirty_material_ids.size());
+    auto dirty_material_indices = std::vector<u32>(dirty_material_ids.size());
+    for (const auto &[gpu_material, index, id] : std::views::zip(gpu_materials, dirty_material_indices, dirty_material_ids)) {
+        const auto *material = app.asset_man.get_material(id);
+        auto albedo_image_index = uuid_to_image_index(material->albedo_texture);
+        auto normal_image_index = uuid_to_image_index(material->normal_texture);
+        auto emissive_image_index = uuid_to_image_index(material->emissive_texture);
+        auto metallic_roughness_image_index = uuid_to_image_index(material->metallic_roughness_texture);
+        auto occlusion_image_index = uuid_to_image_index(material->occlusion_texture);
+        auto sampler_index = 0_u32;
+
+        auto flags = GPU::MaterialFlag::None;
+        if (albedo_image_index.has_value()) {
+            auto *texture = app.asset_man.get_texture(material->albedo_texture);
+            sampler_index = texture->sampler.index();
+            flags |= GPU::MaterialFlag::HasAlbedoImage;
+        }
+
+        flags |= normal_image_index.has_value() ? GPU::MaterialFlag::HasNormalImage : GPU::MaterialFlag::None;
+        flags |= emissive_image_index.has_value() ? GPU::MaterialFlag::HasEmissiveImage : GPU::MaterialFlag::None;
+        flags |= metallic_roughness_image_index.has_value() ? GPU::MaterialFlag::HasMetallicRoughnessImage : GPU::MaterialFlag::None;
+        flags |= occlusion_image_index.has_value() ? GPU::MaterialFlag::HasOcclusionImage : GPU::MaterialFlag::None;
+
+        gpu_material.albedo_color = material->albedo_color;
+        gpu_material.emissive_color = material->emissive_color;
+        gpu_material.roughness_factor = material->roughness_factor;
+        gpu_material.metallic_factor = material->metallic_factor;
+        gpu_material.alpha_cutoff = material->alpha_cutoff;
+        gpu_material.flags = flags;
+        gpu_material.sampler_index = sampler_index;
+        gpu_material.albedo_image_index = albedo_image_index.value_or(0_u32);
+        gpu_material.normal_image_index = normal_image_index.value_or(0_u32);
+        gpu_material.emissive_image_index = emissive_image_index.value_or(0_u32);
+        gpu_material.metallic_roughness_image_index = metallic_roughness_image_index.value_or(0_u32);
+        gpu_material.occlusion_image_index = occlusion_image_index.value_or(0_u32);
+
+        index = SlotMap_decode_id(id).index;
+    }
+
+    auto prepare_info = FramePrepareInfo{
+        .mesh_instance_count = self.mesh_instance_count,
+        .max_meshlet_instance_count = self.max_meshlet_instance_count,
+        .dirty_transform_ids = self.dirty_transforms,
+        .gpu_transforms = self.transforms.slots_unsafe(),
+        .dirty_material_indices = dirty_material_indices,
+        .gpu_materials = gpu_materials,
+        .gpu_meshes = gpu_meshes,
+        .gpu_mesh_instances = gpu_mesh_instances,
+    };
+    auto prepared_frame = renderer.prepare_frame(prepare_info);
+
+    self.models_dirty = false;
+    self.dirty_transforms.clear();
+
+    return prepared_frame;
 }
 
 auto Scene::add_transform(this Scene &self, flecs::entity entity) -> GPU::TransformID {

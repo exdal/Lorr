@@ -15,12 +15,6 @@
 #include <vuk/vsl/Core.hpp>
 
 namespace lr {
-struct BindlessDescriptorInfo {
-    u32 binding = 0;
-    vuk::DescriptorType type = {};
-    u32 descriptor_count = 0;
-};
-
 struct TransferManager {
 private:
     Device *device = nullptr;
@@ -95,12 +89,19 @@ protected:
     auto release(this TransferManager &) -> void;
 };
 
+enum : u32 {
+    DescriptorTable_SamplerIndex = 0,
+    DescriptorTable_SampledImageIndex,
+    DescriptorTable_StorageImageIndex,
+};
+
 struct DeviceResources {
     SlotMap<vuk::Buffer, BufferID> buffers = {};
     SlotMap<vuk::Image, ImageID> images = {};
     SlotMap<vuk::ImageView, ImageViewID> image_views = {};
     SlotMap<vuk::Sampler, SamplerID> samplers = {};
     SlotMap<vuk::PipelineBaseInfo *, PipelineID> pipelines = {};
+    vuk::PersistentDescriptorSet descriptor_set = {};
 };
 
 struct Device {
@@ -132,6 +133,8 @@ private:
 
 public:
     auto init(this Device &, usize frame_count) -> std::expected<void, vuk::VkException>;
+    auto init_resources(this Device &) -> std::expected<void, vuk::VkException>;
+
     auto destroy(this Device &) -> void;
 
     auto new_slang_session(this Device &, const SlangSessionInfo &info) -> ls::option<SlangSession>;
@@ -141,9 +144,13 @@ public:
     auto end_frame(this Device &, vuk::Value<vuk::ImageAttachment> &&target_attachment) -> void;
     auto wait(this Device &, LR_THISCALL) -> void;
 
-    auto create_persistent_descriptor_set(this Device &, ls::span<BindlessDescriptorInfo> bindings, u32 index)
-        -> vuk::Unique<vuk::PersistentDescriptorSet>;
-    auto commit_descriptor_set(this Device &, vuk::PersistentDescriptorSet &set) -> void;
+    auto create_persistent_descriptor_set(
+        this Device &,
+        u32 set_index,
+        ls::span<VkDescriptorSetLayoutBinding> bindings,
+        ls::span<VkDescriptorBindingFlags> binding_flags
+    ) -> vuk::PersistentDescriptorSet;
+    auto commit_descriptor_set(this Device &, ls::span<VkWriteDescriptorSet> writes) -> void;
     auto create_swap_chain(this Device &, VkSurfaceKHR surface, ls::option<vuk::Swapchain> old_swap_chain = ls::nullopt)
         -> std::expected<vuk::Swapchain, vuk::VkException>;
 
@@ -185,6 +192,9 @@ public:
     }
     auto get_pass_queries() -> auto & {
         return pass_queries;
+    }
+    auto get_descriptor_set() -> auto & {
+        return resources.descriptor_set;
     }
 
     auto non_coherent_atom_size() -> u32 {

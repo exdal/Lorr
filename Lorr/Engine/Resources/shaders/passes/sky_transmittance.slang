@@ -38,7 +38,7 @@ func cs_main(
     for (f32 i = 0.0; i < STEP_COUNT; i += 1.0) {
         ray_pos += sun_dir * distance_per_step;
         let ray_altitude = length(ray_pos) - params.atmosphere.planet_radius;
-        const let medium = MediumScattering(params.atmosphere, ray_altitude);
+        let medium = MediumScattering(params.atmosphere, ray_altitude);
         optical_depth += medium.extinction_sum * distance_per_step;
     }
 

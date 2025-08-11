@@ -51,6 +51,8 @@ private:
 
     std::vector<GPU::TransformID> dirty_transforms = {};
     bool models_dirty = false;
+    u32 mesh_instance_count = 0;
+    u32 max_meshlet_instance_count = 0;
 
     GPU::CullFlags cull_flags = GPU::CullFlags::All;
 
@@ -92,7 +94,7 @@ public:
     auto get_cull_flags(this Scene &) -> GPU::CullFlags &;
 
 private:
-    auto compose(this Scene &) -> SceneComposeInfo;
+    auto prepare_frame(this Scene &, SceneRenderer &renderer) -> PreparedFrame;
 
     auto add_transform(this Scene &, flecs::entity entity) -> GPU::TransformID;
     auto remove_transform(this Scene &, flecs::entity entity) -> void;

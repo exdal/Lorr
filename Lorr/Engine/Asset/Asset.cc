@@ -4,7 +4,7 @@
 #include "Engine/Asset/ParserKTX2.hh"
 #include "Engine/Asset/ParserSTB.hh"
 
-#include "Engine/Core/Application.hh"
+#include "Engine/Core/App.hh"
 
 #include "Engine/Core/Logger.hh"
 #include "Engine/Graphics/VulkanDevice.hh"
@@ -112,62 +112,35 @@ auto end_asset_meta(JsonWriter &json, const fs::path &path) -> bool {
     return true;
 }
 
-template<>
-struct Handle<AssetManager>::Impl {
-    Device *device = nullptr;
-    fs::path root_path = fs::current_path();
-    AssetRegistry registry = {};
-
-    std::shared_mutex registry_mutex = {};
-    SlotMap<Model, ModelID> models = {};
-
-    std::shared_mutex textures_mutex = {};
-    SlotMap<Texture, TextureID> textures = {};
-
-    std::shared_mutex materials_mutex = {};
-    SlotMap<Material, MaterialID> materials = {};
-    std::vector<MaterialID> dirty_materials = {};
-
-    SlotMap<std::unique_ptr<Scene>, SceneID> scenes = {};
-};
-
-auto AssetManager::create(Device *device) -> AssetManager {
+auto AssetManager::init(this AssetManager &) -> bool {
     ZoneScoped;
 
-    auto impl = new Impl;
-    auto self = AssetManager(impl);
-
-    impl->device = device;
-    impl->root_path = fs::current_path();
-
-    return self;
+    return true;
 }
 
-auto AssetManager::destroy() -> void {
+auto AssetManager::destroy(this AssetManager &self) -> void {
     ZoneScoped;
 
-    auto read_lock = std::shared_lock(impl->registry_mutex);
+    auto read_lock = std::shared_lock(self.registry_mutex);
 
-    for (const auto &[asset_uuid, asset] : impl->registry) {
+    for (const auto &[asset_uuid, asset] : self.registry) {
         // sanity check
         if (asset.is_loaded() && asset.ref_count != 0) {
-            LOG_ERROR(
+            LOG_TRACE(
                 "A {} asset ({}, {}) with refcount of {} is still alive!",
-                this->to_asset_type_sv(asset.type),
+                self.to_asset_type_sv(asset.type),
                 asset_uuid.str(),
                 asset.path,
                 asset.ref_count
             );
         }
     }
-
-    delete impl;
 }
 
-auto AssetManager::asset_root_path(AssetType type) -> fs::path {
+auto AssetManager::asset_root_path(this AssetManager &self, AssetType type) -> fs::path {
     ZoneScoped;
 
-    auto root = impl->root_path / "resources";
+    auto root = self.root_path / "resources";
     switch (type) {
         case AssetType::Root:
             return root;
@@ -191,7 +164,7 @@ auto AssetManager::asset_root_path(AssetType type) -> fs::path {
     LS_UNREACHABLE();
 }
 
-auto AssetManager::to_asset_file_type(const fs::path &path) -> AssetFileType {
+auto AssetManager::to_asset_file_type(this AssetManager &, const fs::path &path) -> AssetFileType {
     ZoneScoped;
     memory::ScopedStack stack;
 
@@ -221,7 +194,7 @@ auto AssetManager::to_asset_file_type(const fs::path &path) -> AssetFileType {
     }
 }
 
-auto AssetManager::to_asset_type_sv(AssetType type) -> std::string_view {
+auto AssetManager::to_asset_type_sv(this AssetManager &, AssetType type) -> std::string_view {
     ZoneScoped;
 
     switch (type) {
@@ -247,15 +220,15 @@ auto AssetManager::to_asset_type_sv(AssetType type) -> std::string_view {
     LS_UNREACHABLE();
 }
 
-auto AssetManager::registry() const -> const AssetRegistry & {
-    return impl->registry;
+auto AssetManager::get_registry(this AssetManager &self) -> const AssetRegistry & {
+    return self.registry;
 }
 
-auto AssetManager::create_asset(AssetType type, const fs::path &path) -> UUID {
+auto AssetManager::create_asset(this AssetManager &self, AssetType type, const fs::path &path) -> UUID {
     ZoneScoped;
 
     auto uuid = UUID::generate_random();
-    auto [asset_it, inserted] = impl->registry.try_emplace(uuid);
+    auto [asset_it, inserted] = self.registry.try_emplace(uuid);
     if (!inserted) {
         LOG_ERROR("Cannot create assert '{}'!", uuid.str());
         return UUID(nullptr);
@@ -269,12 +242,12 @@ auto AssetManager::create_asset(AssetType type, const fs::path &path) -> UUID {
     return asset.uuid;
 }
 
-auto AssetManager::init_new_scene(const UUID &uuid, const std::string &name) -> bool {
+auto AssetManager::init_new_scene(this AssetManager &self, const UUID &uuid, const std::string &name) -> bool {
     ZoneScoped;
 
-    auto *asset = this->get_asset(uuid);
-    asset->scene_id = impl->scenes.create_slot(std::make_unique<Scene>());
-    auto *scene = impl->scenes.slot(asset->scene_id)->get();
+    auto *asset = self.get_asset(uuid);
+    asset->scene_id = self.scenes.create_slot(std::make_unique<Scene>());
+    auto *scene = self.scenes.slot(asset->scene_id)->get();
     if (!scene->init(name)) {
         return false;
     }
@@ -285,7 +258,7 @@ auto AssetManager::init_new_scene(const UUID &uuid, const std::string &name) -> 
     return true;
 }
 
-auto AssetManager::import_asset(const fs::path &path) -> UUID {
+auto AssetManager::import_asset(this AssetManager &self, const fs::path &path) -> UUID {
     ZoneScoped;
     memory::ScopedStack stack;
 
@@ -295,9 +268,9 @@ auto AssetManager::import_asset(const fs::path &path) -> UUID {
     }
 
     auto asset_type = AssetType::None;
-    switch (this->to_asset_file_type(path)) {
+    switch (self.to_asset_file_type(path)) {
         case AssetFileType::Meta: {
-            return this->register_asset(path);
+            return self.register_asset(path);
         }
         case AssetFileType::GLB:
         case AssetFileType::GLTF: {
@@ -318,10 +291,10 @@ auto AssetManager::import_asset(const fs::path &path) -> UUID {
     // Check for meta file before creating new asset
     auto meta_path = stack.format("{}.lrasset", path);
     if (fs::exists(meta_path)) {
-        return this->register_asset(meta_path);
+        return self.register_asset(meta_path);
     }
 
-    auto uuid = this->create_asset(asset_type, path);
+    auto uuid = self.create_asset(asset_type, path);
     if (!uuid) {
         return UUID(nullptr);
     }
@@ -340,11 +313,11 @@ auto AssetManager::import_asset(const fs::path &path) -> UUID {
                 std::visit(
                     ls::match{
                         [&](const std::vector<u8> &) { //
-                            texture_uuid = this->create_asset(AssetType::Texture, path);
+                            texture_uuid = self.create_asset(AssetType::Texture, path);
                             embedded_textures.push_back(texture_uuid);
                         },
                         [&](const fs::path &image_path) { //
-                            texture_uuid = this->import_asset(image_path);
+                            texture_uuid = self.import_asset(image_path);
                         },
                     },
                     image.image_data
@@ -354,7 +327,7 @@ auto AssetManager::import_asset(const fs::path &path) -> UUID {
             auto material_uuids = std::vector<UUID>(gltf_model->materials.size());
             auto materials = std::vector<Material>(gltf_model->materials.size());
             for (const auto &[material_uuid, material, gltf_material] : std::views::zip(material_uuids, materials, gltf_model->materials)) {
-                material_uuid = this->create_asset(AssetType::Material);
+                material_uuid = self.create_asset(AssetType::Material);
                 material.albedo_color = gltf_material.albedo_color;
                 material.emissive_color = gltf_material.emissive_color;
                 material.roughness_factor = gltf_material.roughness_factor;
@@ -432,7 +405,7 @@ auto read_meta_file(const fs::path &path) -> std::unique_ptr<AssetMetaFile> {
     return result;
 }
 
-auto AssetManager::register_asset(const fs::path &path) -> UUID {
+auto AssetManager::register_asset(this AssetManager &self, const fs::path &path) -> UUID {
     ZoneScoped;
     memory::ScopedStack stack;
 
@@ -458,20 +431,20 @@ auto AssetManager::register_asset(const fs::path &path) -> UUID {
     auto uuid = UUID::from_string(uuid_json.value_unsafe()).value();
     auto type = static_cast<AssetType>(type_json.value_unsafe().get_uint64());
 
-    if (!this->register_asset(uuid, type, asset_path)) {
+    if (!self.register_asset(uuid, type, asset_path)) {
         return UUID(nullptr);
     }
 
     return uuid;
 }
 
-auto AssetManager::register_asset(const UUID &uuid, AssetType type, const fs::path &path) -> bool {
+auto AssetManager::register_asset(this AssetManager &self, const UUID &uuid, AssetType type, const fs::path &path) -> bool {
     ZoneScoped;
 
-    auto write_lock = std::unique_lock(impl->registry_mutex);
-    auto [asset_it, inserted] = impl->registry.try_emplace(uuid);
+    auto write_lock = std::unique_lock(self.registry_mutex);
+    auto [asset_it, inserted] = self.registry.try_emplace(uuid);
     if (!inserted) {
-        if (asset_it != impl->registry.end()) {
+        if (asset_it != self.registry.end()) {
             // Tried a reinsert, asset already exists
             return true;
         }
@@ -487,19 +460,19 @@ auto AssetManager::register_asset(const UUID &uuid, AssetType type, const fs::pa
     return true;
 }
 
-auto AssetManager::load_asset(const UUID &uuid) -> bool {
+auto AssetManager::load_asset(this AssetManager &self, const UUID &uuid) -> bool {
     ZoneScoped;
 
-    auto *asset = this->get_asset(uuid);
+    auto *asset = self.get_asset(uuid);
     switch (asset->type) {
         case AssetType::Model: {
-            return this->load_model(uuid);
+            return self.load_model(uuid);
         }
         case AssetType::Texture: {
-            return this->load_texture(uuid);
+            return self.load_texture(uuid);
         }
         case AssetType::Scene: {
-            return this->load_scene(uuid);
+            return self.load_scene(uuid);
         }
         default:;
     }
@@ -507,20 +480,20 @@ auto AssetManager::load_asset(const UUID &uuid) -> bool {
     return false;
 }
 
-auto AssetManager::unload_asset(const UUID &uuid) -> bool {
+auto AssetManager::unload_asset(this AssetManager &self, const UUID &uuid) -> bool {
     ZoneScoped;
 
-    auto *asset = this->get_asset(uuid);
+    auto *asset = self.get_asset(uuid);
     LS_EXPECT(asset);
     switch (asset->type) {
         case AssetType::Model: {
-            return this->unload_model(uuid);
+            return self.unload_model(uuid);
         } break;
         case AssetType::Texture: {
-            return this->unload_texture(uuid);
+            return self.unload_texture(uuid);
         } break;
         case AssetType::Scene: {
-            return this->unload_scene(uuid);
+            return self.unload_scene(uuid);
         } break;
         default:;
     }
@@ -528,11 +501,11 @@ auto AssetManager::unload_asset(const UUID &uuid) -> bool {
     return false;
 }
 
-auto AssetManager::load_model(const UUID &uuid) -> bool {
+auto AssetManager::load_model(this AssetManager &self, const UUID &uuid) -> bool {
     ZoneScoped;
     memory::ScopedStack stack;
 
-    auto *asset = this->get_asset(uuid);
+    auto *asset = self.get_asset(uuid);
     if (asset->is_loaded()) {
         // Model is collection of multiple assets and all child
         // assets must be alive to safely process meshes.
@@ -542,8 +515,8 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
         return true;
     }
 
-    asset->model_id = impl->models.create_slot();
-    auto *model = impl->models.slot(asset->model_id);
+    asset->model_id = self.models.create_slot();
+    auto *model = self.models.slot(asset->model_id);
 
     fs::path meta_path = asset->path.string() + ".lrasset";
     auto meta_json = read_meta_file(meta_path);
@@ -576,7 +549,7 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
         }
 
         embedded_textures.push_back(embedded_texture_uuid.value());
-        this->register_asset(embedded_texture_uuid.value(), AssetType::Texture, asset_path);
+        self.register_asset(embedded_texture_uuid.value(), AssetType::Texture, asset_path);
     }
 
     // Load registered UUIDs.
@@ -600,7 +573,7 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
                 return false;
             }
 
-            this->register_asset(material_uuid.value(), AssetType::Material, asset_path);
+            self.register_asset(material_uuid.value(), AssetType::Material, asset_path);
             model->materials.emplace_back(material_uuid.value());
         }
 
@@ -647,10 +620,11 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
     }
 
     for (const auto &[material_uuid, material_info] : std::views::zip(model->materials, embedded_material_infos)) {
-        this->load_material(material_uuid, material_info);
+        self.load_material(material_uuid, material_info);
     }
 
     struct GLTFCallbacks {
+        AssetManager *asset_man = nullptr;
         Model *model = nullptr;
 
         std::vector<glm::vec3> vertex_positions = {};
@@ -660,7 +634,6 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
     };
     auto on_new_primitive =
         [](void *user_data, u32 mesh_index, u32 material_index, u32 vertex_offset, u32 vertex_count, u32 index_offset, u32 index_count) {
-            auto &app = Application::get();
             auto *info = static_cast<GLTFCallbacks *>(user_data);
             if (info->model->meshes.size() <= mesh_index) {
                 info->model->meshes.resize(mesh_index + 1);
@@ -669,7 +642,7 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
             auto &mesh = info->model->meshes[mesh_index];
             auto primitive_index = info->model->primitives.size();
             auto &primitive = info->model->primitives.emplace_back();
-            auto *material_asset = app.asset_man.get_asset(info->model->materials[material_index]);
+            auto *material_asset = info->asset_man->get_asset(info->model->materials[material_index]);
 
             info->model->gpu_meshes.emplace_back();
             info->model->gpu_mesh_buffers.emplace_back();
@@ -703,7 +676,7 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
         info->vertex_texcoords[offset] = texcoord;
     };
 
-    GLTFCallbacks gltf_callbacks = { .model = model };
+    GLTFCallbacks gltf_callbacks = { .asset_man = &self, .model = model };
     auto gltf_model = GLTFModelInfo::parse(
         asset_path,
         { .user_data = &gltf_callbacks,
@@ -718,7 +691,8 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
         return false;
     }
 
-    auto &transfer_man = impl->device->transfer_man();
+    auto &device = App::mod<Device>();
+    auto &transfer_man = device.transfer_man();
 
     //  ── SCENE HIERARCHY ─────────────────────────────────────────────────
     for (const auto &node : gltf_model->nodes) {
@@ -972,7 +946,7 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
             }
 
             auto mesh_upload_offset = 0_u64;
-            gpu_mesh_buffer = Buffer::create(*impl->device, upload_size, vuk::MemoryUsage::eGPUonly).value();
+            gpu_mesh_buffer = Buffer::create(device, upload_size, vuk::MemoryUsage::eGPUonly).value();
 
             // Mesh first
             auto cpu_mesh_buffer = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eCPUonly, mesh_upload_size);
@@ -993,7 +967,7 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
                 mesh_upload_offset += ls::size_bytes(mesh_texcoords);
             }
 
-            auto gpu_mesh_buffer_handle = impl->device->buffer(gpu_mesh_buffer.id());
+            auto gpu_mesh_buffer_handle = device.buffer(gpu_mesh_buffer.id());
             auto gpu_mesh_subrange = vuk::discard_buf("mesh", gpu_mesh_buffer_handle->subrange(0, mesh_upload_size));
             gpu_mesh_subrange = transfer_man.upload_staging(std::move(cpu_mesh_buffer), std::move(gpu_mesh_subrange));
             transfer_man.wait_on(std::move(gpu_mesh_subrange));
@@ -1020,39 +994,40 @@ auto AssetManager::load_model(const UUID &uuid) -> bool {
     return true;
 }
 
-auto AssetManager::unload_model(const UUID &uuid) -> bool {
+auto AssetManager::unload_model(this AssetManager &self, const UUID &uuid) -> bool {
     ZoneScoped;
 
-    auto *asset = this->get_asset(uuid);
+    auto *asset = self.get_asset(uuid);
     LS_EXPECT(asset);
     if (!(asset->is_loaded() && asset->release_ref())) {
         return false;
     }
 
-    auto *model = this->get_model(asset->model_id);
+    auto *model = self.get_model(asset->model_id);
     for (auto &v : model->materials) {
-        this->unload_material(v);
+        self.unload_material(v);
     }
 
+    auto &device = App::mod<Device>();
     for (const auto &buffer : model->gpu_mesh_buffers) {
-        impl->device->destroy(buffer.id());
+        device.destroy(buffer.id());
     }
 
-    impl->models.destroy_slot(asset->model_id);
+    self.models.destroy_slot(asset->model_id);
     asset->model_id = ModelID::Invalid;
 
     return true;
 }
 
-auto AssetManager::load_texture(const UUID &uuid, const TextureInfo &info) -> bool {
+auto AssetManager::load_texture(this AssetManager &self, const UUID &uuid, const TextureInfo &info) -> bool {
     ZoneScoped;
     memory::ScopedStack stack;
 
     auto asset_path = fs::path{};
 
     {
-        auto read_lock = std::shared_lock(impl->textures_mutex);
-        auto *asset = this->get_asset(uuid);
+        auto read_lock = std::shared_lock(self.textures_mutex);
+        auto *asset = self.get_asset(uuid);
         LS_EXPECT(asset);
         asset->acquire_ref();
         if (asset->is_loaded()) {
@@ -1076,7 +1051,7 @@ auto AssetManager::load_texture(const UUID &uuid, const TextureInfo &info) -> bo
             return false;
         }
 
-        file_type = this->to_asset_file_type(asset_path);
+        file_type = self.to_asset_file_type(asset_path);
     }
 
     auto format = vuk::Format::eUndefined;
@@ -1108,6 +1083,9 @@ auto AssetManager::load_texture(const UUID &uuid, const TextureInfo &info) -> bo
         }
     }
 
+    auto &device = App::mod<Device>();
+    auto &transfer_man = device.transfer_man();
+
     auto sampler_info = SamplerInfo{
         .min_filter = vuk::Filter::eLinear,
         .mag_filter = vuk::Filter::eLinear,
@@ -1122,9 +1100,9 @@ auto AssetManager::load_texture(const UUID &uuid, const TextureInfo &info) -> bo
         .max_lod = static_cast<f32>(mip_level_count - 1),
         .use_anisotropy = true,
     };
-    auto sampler = Sampler::create(*impl->device, sampler_info).value();
+    auto sampler = Sampler::create(device, sampler_info).value();
 
-    auto rel_path = fs::relative(asset_path, impl->root_path);
+    auto rel_path = fs::relative(asset_path, self.root_path);
     auto image_info = ImageInfo{
         .format = format,
         .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eTransferSrc,
@@ -1134,7 +1112,7 @@ auto AssetManager::load_texture(const UUID &uuid, const TextureInfo &info) -> bo
         .mip_count = mip_level_count,
         .name = stack.format("{} Image", rel_path),
     };
-    auto image = Image::create(*impl->device, image_info).value();
+    auto image = Image::create(device, image_info).value();
 
     auto subresource_range = vuk::ImageSubresourceRange{
         .aspectMask = vuk::ImageAspectFlagBits::eColor,
@@ -1149,10 +1127,9 @@ auto AssetManager::load_texture(const UUID &uuid, const TextureInfo &info) -> bo
         .subresource_range = subresource_range,
         .name = stack.format("{} Image View", rel_path),
     };
-    auto image_view = ImageView::create(*impl->device, image, image_view_info).value();
-    auto dst_attachment = image_view.discard(*impl->device, "dst image", vuk::ImageUsageFlagBits::eTransferDst);
+    auto image_view = ImageView::create(device, image, image_view_info).value();
+    auto dst_attachment = image_view.discard(device, "dst image", vuk::ImageUsageFlagBits::eTransferDst);
 
-    auto &transfer_man = impl->device->transfer_man();
     switch (file_type) {
         case AssetFileType::PNG:
         case AssetFileType::JPEG: {
@@ -1207,9 +1184,9 @@ auto AssetManager::load_texture(const UUID &uuid, const TextureInfo &info) -> bo
     }
 
     {
-        auto write_lock = std::unique_lock(impl->textures_mutex);
-        auto *asset = this->get_asset(uuid);
-        asset->texture_id = impl->textures.create_slot(Texture{ .image = image, .image_view = image_view, .sampler = sampler });
+        auto write_lock = std::unique_lock(self.textures_mutex);
+        auto *asset = self.get_asset(uuid);
+        asset->texture_id = self.textures.create_slot(Texture{ .image = image, .image_view = image_view, .sampler = sampler });
     }
 
     LOG_TRACE("Loaded texture {}.", uuid.str());
@@ -1217,32 +1194,33 @@ auto AssetManager::load_texture(const UUID &uuid, const TextureInfo &info) -> bo
     return true;
 }
 
-auto AssetManager::unload_texture(const UUID &uuid) -> bool {
+auto AssetManager::unload_texture(this AssetManager &self, const UUID &uuid) -> bool {
     ZoneScoped;
 
-    auto *asset = this->get_asset(uuid);
+    auto *asset = self.get_asset(uuid);
     if (!asset || (!(asset->is_loaded() && asset->release_ref()))) {
         return false;
     }
 
-    auto *texture = this->get_texture(asset->texture_id);
-    impl->device->destroy(texture->image_view.id());
-    impl->device->destroy(texture->image.id());
-    impl->device->destroy(texture->sampler.id());
+    auto &device = App::mod<Device>();
+    auto *texture = self.get_texture(asset->texture_id);
+    device.destroy(texture->image_view.id());
+    device.destroy(texture->image.id());
+    device.destroy(texture->sampler.id());
 
     LOG_TRACE("Unloaded texture {}.", uuid.str());
 
-    impl->textures.destroy_slot(asset->texture_id);
+    self.textures.destroy_slot(asset->texture_id);
     asset->texture_id = TextureID::Invalid;
 
     return true;
 }
 
-auto AssetManager::is_texture_loaded(const UUID &uuid) -> bool {
+auto AssetManager::is_texture_loaded(this AssetManager &self, const UUID &uuid) -> bool {
     ZoneScoped;
 
-    auto read_lock = std::shared_lock(impl->textures_mutex);
-    auto *asset = this->get_asset(uuid);
+    auto read_lock = std::shared_lock(self.textures_mutex);
+    auto *asset = self.get_asset(uuid);
     if (!asset) {
         return false;
     }
@@ -1250,185 +1228,184 @@ auto AssetManager::is_texture_loaded(const UUID &uuid) -> bool {
     return asset->is_loaded();
 }
 
-auto AssetManager::load_material(const UUID &uuid, const MaterialInfo &info) -> bool {
+auto AssetManager::load_material(this AssetManager &self, const UUID &uuid, const MaterialInfo &info) -> bool {
     ZoneScoped;
 
-    auto *asset = this->get_asset(uuid);
+    auto *asset = self.get_asset(uuid);
     LS_EXPECT(asset);
     if (asset->is_loaded()) {
         asset->acquire_ref();
         return true;
     }
 
-    auto &app = Application::get();
-    asset->material_id = impl->materials.create_slot(const_cast<Material &&>(info.material));
-    auto *material = impl->materials.slot(asset->material_id);
+    asset->material_id = self.materials.create_slot(const_cast<Material &&>(info.material));
+    auto *material = self.materials.slot(asset->material_id);
 
 #if 1
     if (material->albedo_texture) {
-        auto job = Job::create([this, //
+        auto job = Job::create([&self, //
                                 texture_uuid = material->albedo_texture,
                                 texture_info = info.albedo_texture_info,
                                 material_id = asset->material_id]() {
-            this->load_texture(texture_uuid, texture_info);
-            this->set_material_dirty(material_id);
+            self.load_texture(texture_uuid, texture_info);
+            self.set_material_dirty(material_id);
         });
-        app.job_man->submit(std::move(job));
+        App::submit_job(std::move(job));
     }
 
     if (material->normal_texture) {
-        auto job = Job::create([this, //
+        auto job = Job::create([&self, //
                                 texture_uuid = material->normal_texture,
                                 texture_info = info.normal_texture_info,
                                 material_id = asset->material_id]() {
-            this->load_texture(texture_uuid, texture_info);
-            this->set_material_dirty(material_id);
+            self.load_texture(texture_uuid, texture_info);
+            self.set_material_dirty(material_id);
         });
-        app.job_man->submit(std::move(job));
+        App::submit_job(std::move(job));
     }
 
     if (material->emissive_texture) {
-        auto job = Job::create([this, //
+        auto job = Job::create([&self, //
                                 texture_uuid = material->emissive_texture,
                                 texture_info = info.emissive_texture_info,
                                 material_id = asset->material_id]() {
-            this->load_texture(texture_uuid, texture_info);
-            this->set_material_dirty(material_id);
+            self.load_texture(texture_uuid, texture_info);
+            self.set_material_dirty(material_id);
         });
-        app.job_man->submit(std::move(job));
+        App::submit_job(std::move(job));
     }
 
     if (material->metallic_roughness_texture) {
-        auto job = Job::create([this, //
+        auto job = Job::create([&self, //
                                 texture_uuid = material->metallic_roughness_texture,
                                 texture_info = info.metallic_roughness_texture_info,
                                 material_id = asset->material_id]() {
-            this->load_texture(texture_uuid, texture_info);
-            this->set_material_dirty(material_id);
+            self.load_texture(texture_uuid, texture_info);
+            self.set_material_dirty(material_id);
         });
-        app.job_man->submit(std::move(job));
+        App::submit_job(std::move(job));
     }
 
     if (material->occlusion_texture) {
-        auto job = Job::create([this, //
+        auto job = Job::create([&self, //
                                 texture_uuid = material->occlusion_texture,
                                 texture_info = info.occlusion_texture_info,
                                 material_id = asset->material_id]() {
-            this->load_texture(texture_uuid, texture_info);
-            this->set_material_dirty(material_id);
+            self.load_texture(texture_uuid, texture_info);
+            self.set_material_dirty(material_id);
         });
-        app.job_man->submit(std::move(job));
+        App::submit_job(std::move(job));
     }
 #else
     if (material->albedo_texture) {
-        this->load_texture(material->albedo_texture, info.albedo_texture_info);
+        self.load_texture(material->albedo_texture, info.albedo_texture_info);
     }
 
     if (material->normal_texture) {
-        this->load_texture(material->normal_texture, info.normal_texture_info);
+        self.load_texture(material->normal_texture, info.normal_texture_info);
     }
 
     if (material->emissive_texture) {
-        this->load_texture(material->emissive_texture, info.emissive_texture_info);
+        self.load_texture(material->emissive_texture, info.emissive_texture_info);
     }
 
     if (material->metallic_roughness_texture) {
-        this->load_texture(material->metallic_roughness_texture, info.metallic_roughness_texture_info);
+        self.load_texture(material->metallic_roughness_texture, info.metallic_roughness_texture_info);
     }
 
     if (material->occlusion_texture) {
-        this->load_texture(material->occlusion_texture, info.occlusion_texture_info);
+        self.load_texture(material->occlusion_texture, info.occlusion_texture_info);
     }
 
 #endif
 
-    this->set_material_dirty(asset->material_id);
+    self.set_material_dirty(asset->material_id);
 
     asset->acquire_ref();
     return true;
 }
 
-auto AssetManager::unload_material(const UUID &uuid) -> bool {
+auto AssetManager::unload_material(this AssetManager &self, const UUID &uuid) -> bool {
     ZoneScoped;
 
-    auto *asset = this->get_asset(uuid);
+    auto *asset = self.get_asset(uuid);
     LS_EXPECT(asset);
     if (!(asset->is_loaded() && asset->release_ref())) {
         return false;
     }
 
-    auto *material = this->get_material(asset->material_id);
+    auto *material = self.get_material(asset->material_id);
     if (material->albedo_texture) {
-        this->unload_texture(material->albedo_texture);
+        self.unload_texture(material->albedo_texture);
     }
 
     if (material->normal_texture) {
-        this->unload_texture(material->normal_texture);
+        self.unload_texture(material->normal_texture);
     }
 
     if (material->emissive_texture) {
-        this->unload_texture(material->emissive_texture);
+        self.unload_texture(material->emissive_texture);
     }
 
     if (material->metallic_roughness_texture) {
-        this->unload_texture(material->metallic_roughness_texture);
+        self.unload_texture(material->metallic_roughness_texture);
     }
 
     if (material->occlusion_texture) {
-        this->unload_texture(material->occlusion_texture);
+        self.unload_texture(material->occlusion_texture);
     }
 
-    impl->materials.destroy_slot(asset->material_id);
+    self.materials.destroy_slot(asset->material_id);
     asset->material_id = MaterialID::Invalid;
 
     return true;
 }
 
-auto AssetManager::is_material_loaded(const UUID &uuid) -> bool {
+auto AssetManager::is_material_loaded(this AssetManager &self, const UUID &uuid) -> bool {
     ZoneScoped;
 
-    auto *asset = this->get_asset(uuid);
+    auto *asset = self.get_asset(uuid);
     // Parent asset is not loaded, skip
     if (!asset || !asset->is_loaded()) {
         return false;
     }
 
-    auto *material = this->get_material(asset->material_id);
-    if (material->albedo_texture && this->is_texture_loaded(material->albedo_texture)) {
+    auto *material = self.get_material(asset->material_id);
+    if (material->albedo_texture && self.is_texture_loaded(material->albedo_texture)) {
         return false;
     }
 
-    if (material->normal_texture && this->is_texture_loaded(material->normal_texture)) {
+    if (material->normal_texture && self.is_texture_loaded(material->normal_texture)) {
         return false;
     }
 
-    if (material->emissive_texture && this->is_texture_loaded(material->emissive_texture)) {
+    if (material->emissive_texture && self.is_texture_loaded(material->emissive_texture)) {
         return false;
     }
 
-    if (material->metallic_roughness_texture && this->is_texture_loaded(material->metallic_roughness_texture)) {
+    if (material->metallic_roughness_texture && self.is_texture_loaded(material->metallic_roughness_texture)) {
         return false;
     }
 
-    if (material->occlusion_texture && this->is_texture_loaded(material->occlusion_texture)) {
+    if (material->occlusion_texture && self.is_texture_loaded(material->occlusion_texture)) {
         return false;
     }
 
     return true;
 }
 
-auto AssetManager::load_scene(const UUID &uuid) -> bool {
+auto AssetManager::load_scene(this AssetManager &self, const UUID &uuid) -> bool {
     ZoneScoped;
 
-    auto *asset = this->get_asset(uuid);
+    auto *asset = self.get_asset(uuid);
     LS_EXPECT(asset);
     asset->acquire_ref();
     if (asset->is_loaded()) {
         return true;
     }
 
-    asset->scene_id = impl->scenes.create_slot(std::make_unique<Scene>());
-    auto *scene = impl->scenes.slot(asset->scene_id)->get();
+    asset->scene_id = self.scenes.create_slot(std::make_unique<Scene>());
+    auto *scene = self.scenes.slot(asset->scene_id)->get();
 
     if (!scene->init("unnamed_scene")) {
         return false;
@@ -1441,45 +1418,45 @@ auto AssetManager::load_scene(const UUID &uuid) -> bool {
     return true;
 }
 
-auto AssetManager::unload_scene(const UUID &uuid) -> bool {
+auto AssetManager::unload_scene(this AssetManager &self, const UUID &uuid) -> bool {
     ZoneScoped;
 
-    auto *asset = this->get_asset(uuid);
+    auto *asset = self.get_asset(uuid);
     LS_EXPECT(asset);
     if (!(asset->is_loaded() && asset->release_ref())) {
         return false;
     }
 
-    auto *scene = this->get_scene(asset->scene_id);
+    auto *scene = self.get_scene(asset->scene_id);
     scene->destroy();
 
-    impl->scenes.destroy_slot(asset->scene_id);
+    self.scenes.destroy_slot(asset->scene_id);
     asset->scene_id = SceneID::Invalid;
 
     return true;
 }
 
-auto AssetManager::export_asset(const UUID &uuid, const fs::path &path) -> bool {
+auto AssetManager::export_asset(this AssetManager &self, const UUID &uuid, const fs::path &path) -> bool {
     ZoneScoped;
 
-    auto *asset = this->get_asset(uuid);
+    auto *asset = self.get_asset(uuid);
 
     JsonWriter json = {};
     begin_asset_meta(json, uuid, asset->type);
 
     switch (asset->type) {
         case AssetType::Texture: {
-            if (!this->export_texture(asset->uuid, json, path)) {
+            if (!self.export_texture(asset->uuid, json, path)) {
                 return false;
             }
         } break;
         case AssetType::Model: {
-            if (!this->export_model(asset->uuid, json, path)) {
+            if (!self.export_model(asset->uuid, json, path)) {
                 return false;
             }
         } break;
         case AssetType::Scene: {
-            if (!this->export_scene(asset->uuid, json, path)) {
+            if (!self.export_scene(asset->uuid, json, path)) {
                 return false;
             }
         } break;
@@ -1490,75 +1467,75 @@ auto AssetManager::export_asset(const UUID &uuid, const fs::path &path) -> bool 
     return end_asset_meta(json, path);
 }
 
-auto AssetManager::export_texture(const UUID &uuid, JsonWriter &json, const fs::path &) -> bool {
+auto AssetManager::export_texture(this AssetManager &self, const UUID &uuid, JsonWriter &json, const fs::path &) -> bool {
     ZoneScoped;
 
-    auto *texture = this->get_texture(uuid);
+    auto *texture = self.get_texture(uuid);
     LS_EXPECT(texture);
     return write_texture_asset_meta(json, texture);
 }
 
-auto AssetManager::export_model(const UUID &uuid, JsonWriter &json, const fs::path &) -> bool {
+auto AssetManager::export_model(this AssetManager &self, const UUID &uuid, JsonWriter &json, const fs::path &) -> bool {
     ZoneScoped;
 
-    auto *model = this->get_model(uuid);
+    auto *model = self.get_model(uuid);
     LS_EXPECT(model);
 
     auto materials = std::vector<Material>(model->materials.size());
     for (const auto &[material_uuid, material] : std::views::zip(model->materials, materials)) {
-        material = *this->get_material(material_uuid);
+        material = *self.get_material(material_uuid);
     }
 
     return write_model_asset_meta(json, model->embedded_textures, model->materials, materials);
 }
 
-auto AssetManager::export_scene(const UUID &uuid, JsonWriter &json, const fs::path &path) -> bool {
+auto AssetManager::export_scene(this AssetManager &self, const UUID &uuid, JsonWriter &json, const fs::path &path) -> bool {
     ZoneScoped;
 
-    auto *scene = this->get_scene(uuid);
+    auto *scene = self.get_scene(uuid);
     LS_EXPECT(scene);
     write_scene_asset_meta(json, scene);
 
     return scene->export_to_file(path);
 }
 
-auto AssetManager::delete_asset(const UUID &uuid) -> void {
+auto AssetManager::delete_asset(this AssetManager &self, const UUID &uuid) -> void {
     ZoneScoped;
 
-    auto *asset = this->get_asset(uuid);
+    auto *asset = self.get_asset(uuid);
     if (asset->ref_count > 0) {
         LOG_WARN("Deleting alive asset {} with {} references!", asset->uuid.str(), asset->ref_count);
     }
 
     if (asset->is_loaded()) {
         asset->ref_count = ls::min(asset->ref_count, 1_u64);
-        this->unload_asset(uuid);
+        self.unload_asset(uuid);
 
         {
-            auto write_lock = std::unique_lock(impl->registry_mutex);
-            impl->registry.erase(uuid);
+            auto write_lock = std::unique_lock(self.registry_mutex);
+            self.registry.erase(uuid);
         }
     }
 
     // LOG_TRACE("Deleted asset {}.", uuid.str());
 }
 
-auto AssetManager::get_asset(const UUID &uuid) -> Asset * {
+auto AssetManager::get_asset(this AssetManager &self, const UUID &uuid) -> Asset * {
     ZoneScoped;
 
-    auto read_lock = std::shared_lock(impl->registry_mutex);
-    auto it = impl->registry.find(uuid);
-    if (it == impl->registry.end()) {
+    auto read_lock = std::shared_lock(self.registry_mutex);
+    auto it = self.registry.find(uuid);
+    if (it == self.registry.end()) {
         return nullptr;
     }
 
     return &it->second;
 }
 
-auto AssetManager::get_model(const UUID &uuid) -> Model * {
+auto AssetManager::get_model(this AssetManager &self, const UUID &uuid) -> Model * {
     ZoneScoped;
 
-    auto *asset = this->get_asset(uuid);
+    auto *asset = self.get_asset(uuid);
     if (asset == nullptr) {
         return nullptr;
     }
@@ -1568,23 +1545,23 @@ auto AssetManager::get_model(const UUID &uuid) -> Model * {
         return nullptr;
     }
 
-    return impl->models.slot(asset->model_id);
+    return self.models.slot(asset->model_id);
 }
 
-auto AssetManager::get_model(ModelID model_id) -> Model * {
+auto AssetManager::get_model(this AssetManager &self, ModelID model_id) -> Model * {
     ZoneScoped;
 
     if (model_id == ModelID::Invalid) {
         return nullptr;
     }
 
-    return impl->models.slot(model_id);
+    return self.models.slot(model_id);
 }
 
-auto AssetManager::get_texture(const UUID &uuid) -> Texture * {
+auto AssetManager::get_texture(this AssetManager &self, const UUID &uuid) -> Texture * {
     ZoneScoped;
 
-    auto *asset = this->get_asset(uuid);
+    auto *asset = self.get_asset(uuid);
     if (asset == nullptr) {
         return nullptr;
     }
@@ -1594,23 +1571,23 @@ auto AssetManager::get_texture(const UUID &uuid) -> Texture * {
         return nullptr;
     }
 
-    return impl->textures.slot(asset->texture_id);
+    return self.textures.slot(asset->texture_id);
 }
 
-auto AssetManager::get_texture(TextureID texture_id) -> Texture * {
+auto AssetManager::get_texture(this AssetManager &self, TextureID texture_id) -> Texture * {
     ZoneScoped;
 
     if (texture_id == TextureID::Invalid) {
         return nullptr;
     }
 
-    return impl->textures.slot(texture_id);
+    return self.textures.slot(texture_id);
 }
 
-auto AssetManager::get_material(const UUID &uuid) -> Material * {
+auto AssetManager::get_material(this AssetManager &self, const UUID &uuid) -> Material * {
     ZoneScoped;
 
-    auto *asset = this->get_asset(uuid);
+    auto *asset = self.get_asset(uuid);
     if (asset == nullptr) {
         return nullptr;
     }
@@ -1620,23 +1597,23 @@ auto AssetManager::get_material(const UUID &uuid) -> Material * {
         return nullptr;
     }
 
-    return impl->materials.slot(asset->material_id);
+    return self.materials.slot(asset->material_id);
 }
 
-auto AssetManager::get_material(MaterialID material_id) -> Material * {
+auto AssetManager::get_material(this AssetManager &self, MaterialID material_id) -> Material * {
     ZoneScoped;
 
     if (material_id == MaterialID::Invalid) {
         return nullptr;
     }
 
-    return impl->materials.slot(material_id);
+    return self.materials.slot(material_id);
 }
 
-auto AssetManager::get_scene(const UUID &uuid) -> Scene * {
+auto AssetManager::get_scene(this AssetManager &self, const UUID &uuid) -> Scene * {
     ZoneScoped;
 
-    auto *asset = this->get_asset(uuid);
+    auto *asset = self.get_asset(uuid);
     if (asset == nullptr) {
         return nullptr;
     }
@@ -1646,41 +1623,41 @@ auto AssetManager::get_scene(const UUID &uuid) -> Scene * {
         return nullptr;
     }
 
-    return impl->scenes.slot(asset->scene_id)->get();
+    return self.scenes.slot(asset->scene_id)->get();
 }
 
-auto AssetManager::get_scene(SceneID scene_id) -> Scene * {
+auto AssetManager::get_scene(this AssetManager &self, SceneID scene_id) -> Scene * {
     ZoneScoped;
 
     if (scene_id == SceneID::Invalid) {
         return nullptr;
     }
 
-    return impl->scenes.slot(scene_id)->get();
+    return self.scenes.slot(scene_id)->get();
 }
 
-auto AssetManager::set_material_dirty(MaterialID material_id) -> void {
+auto AssetManager::set_material_dirty(this AssetManager &self, MaterialID material_id) -> void {
     ZoneScoped;
 
-    auto read_lock = std::shared_lock(impl->materials_mutex);
-    if (std::ranges::find(impl->dirty_materials, material_id) != impl->dirty_materials.end()) {
+    auto read_lock = std::shared_lock(self.materials_mutex);
+    if (std::ranges::find(self.dirty_materials, material_id) != self.dirty_materials.end()) {
         return;
     }
 
     read_lock.unlock();
-    auto write_lock = std::unique_lock(impl->materials_mutex);
-    impl->dirty_materials.emplace_back(material_id);
+    auto write_lock = std::unique_lock(self.materials_mutex);
+    self.dirty_materials.emplace_back(material_id);
 }
 
-auto AssetManager::get_dirty_material_ids() -> std::vector<MaterialID> {
+auto AssetManager::get_dirty_material_ids(this AssetManager &self) -> std::vector<MaterialID> {
     ZoneScoped;
 
-    auto read_lock = std::shared_lock(impl->materials_mutex);
-    auto dirty_materials = std::vector(impl->dirty_materials);
+    auto read_lock = std::shared_lock(self.materials_mutex);
+    auto dirty_materials = std::vector(self.dirty_materials);
 
     read_lock.unlock();
-    auto write_lock = std::unique_lock(impl->materials_mutex);
-    impl->dirty_materials.clear();
+    auto write_lock = std::unique_lock(self.materials_mutex);
+    self.dirty_materials.clear();
 
     return dirty_materials;
 }

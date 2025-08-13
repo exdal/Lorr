@@ -104,8 +104,6 @@ struct SlangVirtualFS : ISlangFileSystem {
             if (!file_bytes.empty()) {
                 auto new_it = m_loaded_modules.emplace(module_name, std::move(file_bytes));
                 *outBlob = new SlangBlobSpan(new_it.first->second);
-
-                LOG_TRACE("Loaded new shader module '{}'", module_name);
                 return SLANG_OK;
             } else {
                 return SLANG_E_NOT_FOUND;

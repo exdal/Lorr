@@ -1,6 +1,10 @@
 #include "Editor/Window/AssetBrowserWindow.hh"
 
-#include "Editor/EditorApp.hh"
+#include "EditorModule.hh"
+#include "Engine/Asset/Asset.hh"
+#include "Engine/Core/App.hh"
+
+#include "Engine/Graphics/ImGuiRenderer.hh"
 #include "Engine/Util/Icons/IconsMaterialDesignIcons.hh"
 
 namespace led {
@@ -56,10 +60,10 @@ auto populate_directory(AssetDirectory *dir, const AssetDirectoryCallbacks &call
 AssetDirectory::AssetDirectory(fs::path path_, AssetDirectory *parent_) : path(std::move(path_)), parent(parent_) {}
 
 AssetDirectory::~AssetDirectory() {
-    auto &app = lr::Application::get();
+    auto &asset_man = lr::App::mod<lr::AssetManager>();
     for (const auto &asset_uuid : this->asset_uuids) {
-        if (app.asset_man.get_asset(asset_uuid)) {
-            app.asset_man.delete_asset(asset_uuid);
+        if (asset_man.get_asset(asset_uuid)) {
+            asset_man.delete_asset(asset_uuid);
         }
     }
 }
@@ -78,8 +82,8 @@ auto AssetDirectory::add_subdir(this AssetDirectory &self, std::unique_ptr<Asset
 }
 
 auto AssetDirectory::add_asset(this AssetDirectory &self, const fs::path &path) -> lr::UUID {
-    auto &app = lr::Application::get();
-    auto asset_uuid = app.asset_man.import_asset(path);
+    auto &asset_man = lr::App::mod<lr::AssetManager>();
+    auto asset_uuid = asset_man.import_asset(path);
     if (!asset_uuid) {
         return lr::UUID(nullptr);
     }
@@ -181,7 +185,9 @@ auto AssetBrowserWindow::find_directory(this AssetBrowserWindow &self, const fs:
 }
 
 static auto draw_dir_contents(AssetBrowserWindow &self) -> void {
-    auto &app = EditorApp::get();
+    auto &asset_man = lr::App::mod<lr::AssetManager>();
+    auto &imgui_renderer = lr::App::mod<lr::ImGuiRenderer>();
+    auto &editor = lr::App::mod<EditorModule>();
 
     i32 table_flags = ImGuiTableFlags_ContextMenuInBody;
     table_flags |= ImGuiTableFlags_ScrollY;
@@ -197,8 +203,8 @@ static auto draw_dir_contents(AssetBrowserWindow &self) -> void {
     bool open_create_dir_popup = false;
     bool open_create_scene_popup = false;
 
-    auto *dir_texture = app.get_asset_texture(lr::AssetType::Directory);
-    auto dir_image = app.imgui_renderer.add_image(dir_texture->image_view);
+    auto *dir_texture = editor.get_asset_texture(lr::AssetType::Directory);
+    auto dir_image = imgui_renderer.add_image(dir_texture->image_view);
 
     ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, { padding, padding });
     if (tile_count && ImGui::BeginTable("asset_browser", tile_count, table_flags)) {
@@ -227,14 +233,14 @@ static auto draw_dir_contents(AssetBrowserWindow &self) -> void {
         for (const auto &uuid : self.current_dir->asset_uuids) {
             ImGui::TableNextColumn();
 
-            auto *asset = app.asset_man.get_asset(uuid);
+            auto *asset = asset_man.get_asset(uuid);
             if (!asset) {
                 continue;
             }
 
             const auto &file_name = asset->path.filename().string();
-            auto *asset_texture = app.get_asset_texture(asset);
-            auto asset_image = app.imgui_renderer.add_image(asset_texture->image_view);
+            auto *asset_texture = editor.get_asset_texture(asset);
+            auto asset_image = imgui_renderer.add_image(asset_texture->image_view);
             ImGui::image_button(file_name, asset_image, button_size);
             if (ImGui::BeginDragDropSource()) {
                 ImGui::SetDragDropPayload("ASSET_BY_UUID", &asset->uuid, sizeof(lr::UUID));
@@ -326,11 +332,11 @@ static auto draw_dir_contents(AssetBrowserWindow &self) -> void {
                     auto new_scene_path = self.current_dir->path / (new_scene_name + ".json");
                     if (!fs::exists(new_scene_path)) {
                         new_scene_err = false;
-                        auto new_scene_uuid = app.asset_man.create_asset(lr::AssetType::Scene, new_scene_path);
-                        new_scene_err |= !app.asset_man.init_new_scene(new_scene_uuid, new_scene_name);
-                        new_scene_err |= !app.asset_man.export_asset(new_scene_uuid, new_scene_path);
+                        auto new_scene_uuid = asset_man.create_asset(lr::AssetType::Scene, new_scene_path);
+                        new_scene_err |= !asset_man.init_new_scene(new_scene_uuid, new_scene_name);
+                        new_scene_err |= !asset_man.export_asset(new_scene_uuid, new_scene_path);
                         if (!new_scene_err) {
-                            app.asset_man.unload_scene(new_scene_uuid);
+                            asset_man.unload_scene(new_scene_uuid);
                             self.current_dir->refresh();
                             ImGui::CloseCurrentPopup();
                         }
@@ -445,17 +451,17 @@ static auto draw_file_paths(AssetBrowserWindow &self) -> void {
 void AssetBrowserWindow::render(this AssetBrowserWindow &self) {
     ZoneScoped;
 
-    auto &app = EditorApp::get();
+    auto &editor = lr::App::mod<EditorModule>();
 
     // If we just opened the project and home dir is missing
-    if (app.active_project && self.home_dir == nullptr) {
-        auto new_home_dir = self.add_directory(app.active_project->root_dir);
+    if (editor.active_project && self.home_dir == nullptr) {
+        auto new_home_dir = self.add_directory(editor.active_project->root_dir);
         self.current_dir = new_home_dir.get();
         self.home_dir = std::move(new_home_dir);
     }
 
     if (ImGui::Begin(self.name.data(), nullptr, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse)) {
-        if (app.active_project) {
+        if (editor.active_project) {
             draw_file_paths(self);
         }
 
@@ -465,11 +471,11 @@ void AssetBrowserWindow::render(this AssetBrowserWindow &self) {
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
 
-            if (app.active_project) {
+            if (editor.active_project) {
                 draw_project_tree(self);
             }
             ImGui::TableNextColumn();
-            if (app.active_project) {
+            if (editor.active_project) {
                 draw_dir_contents(self);
             }
 

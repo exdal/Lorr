@@ -1,16 +1,19 @@
 #include "Editor/Window/InspectorWindow.hh"
 
-#include "Editor/EditorApp.hh"
+#include "Editor/EditorModule.hh"
 
 #include "Engine/Memory/Stack.hh"
 #include "Engine/Scene/ECSModule/ComponentWrapper.hh"
 #include "Engine/Util/Icons/IconsMaterialDesignIcons.hh"
 
+#include "Engine/Asset/Asset.hh"
+#include "Engine/Core/App.hh"
+
 namespace led {
 auto inspect_asset(lr::UUID &uuid) -> bool {
     lr::memory::ScopedStack stack;
-    auto &app = lr::Application::get();
-    auto *asset = app.asset_man.get_asset(uuid);
+    auto &asset_man = lr::App::mod<lr::AssetManager>();
+    auto *asset = asset_man.get_asset(uuid);
     if (!asset) {
         ImGui::TextUnformatted("Drop a model here.");
         uuid = {};
@@ -18,17 +21,19 @@ auto inspect_asset(lr::UUID &uuid) -> bool {
         const auto &asset_name = asset->path.filename();
         ImGui::TextUnformatted(stack.format_char("Name: {}", asset_name));
         ImGui::TextUnformatted(stack.format_char("UUID: {}", uuid.str()));
-        ImGui::TextUnformatted(stack.format_char("Type: {}", app.asset_man.to_asset_type_sv(asset->type)));
+        ImGui::TextUnformatted(stack.format_char("Type: {}", asset_man.to_asset_type_sv(asset->type)));
     }
 
     return false;
 }
 
 static auto draw_inspector(InspectorWindow &) -> void {
-    auto &app = led::EditorApp::get();
-    auto &active_project = *app.active_project;
+    auto &editor = lr::App::mod<EditorModule>();
+    auto &asset_man = lr::App::mod<lr::AssetManager>();
+
+    auto &active_project = *editor.active_project;
     auto &active_scene_uuid = active_project.active_scene_uuid;
-    auto *active_scene = app.asset_man.get_scene(active_scene_uuid);
+    auto *active_scene = asset_man.get_scene(active_scene_uuid);
     auto &selected_entity = active_project.selected_entity;
     auto region = ImGui::GetContentRegionAvail();
 
@@ -166,7 +171,7 @@ static auto draw_inspector(InspectorWindow &) -> void {
             if (auto *component_uuid = std::get_if<lr::UUID *>(&member)) {
                 const auto &uuid = **component_uuid;
                 if (uuid) {
-                    app.asset_man.unload_asset(uuid);
+                    asset_man.unload_asset(uuid);
                 }
             }
         });
@@ -180,8 +185,9 @@ InspectorWindow::InspectorWindow(std::string name_, bool open_) : IWindow(std::m
 
 void InspectorWindow::render(this InspectorWindow &self) {
     if (ImGui::Begin(self.name.data())) {
-        auto &app = EditorApp::get();
-        if (app.active_project && app.active_project->active_scene_uuid && app.active_project->selected_entity) {
+        auto &editor = lr::App::mod<EditorModule>();
+
+        if (editor.active_project && editor.active_project->active_scene_uuid && editor.active_project->selected_entity) {
             draw_inspector(self);
         }
     }

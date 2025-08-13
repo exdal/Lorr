@@ -46,7 +46,7 @@ struct SceneRenderInfo {
 };
 
 struct SceneRenderer {
-    Device *device = nullptr;
+    static constexpr auto MODULE_NAME = "Scene Renderer";
 
     // Scene resources
     Buffer exposure_buffer = {};
@@ -71,10 +71,8 @@ struct SceneRenderer {
 
     bool debug_lines = false;
 
-    auto init(this SceneRenderer &, Device *device) -> bool;
+    auto init(this SceneRenderer &) -> bool;
     auto destroy(this SceneRenderer &) -> void;
-
-    auto create_persistent_resources(this SceneRenderer &) -> void;
 
     // Scene
     auto prepare_frame(this SceneRenderer &, FramePrepareInfo &info) -> PreparedFrame;

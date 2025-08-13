@@ -1,6 +1,10 @@
 #include "Engine/Scene/SceneRenderer.hh"
 
-#include "Engine/Core/Application.hh"
+#include "Engine/Asset/Asset.hh"
+
+#include "Engine/Core/App.hh"
+
+#include "Engine/Graphics/VulkanDevice.hh"
 
 namespace lr {
 enum BindlessDescriptorLayout : u32 {
@@ -8,30 +12,17 @@ enum BindlessDescriptorLayout : u32 {
     SampledImages = 1,
 };
 
-auto SceneRenderer::init(this SceneRenderer &self, Device *device) -> bool {
-    self.device = device;
-
-    self.create_persistent_resources();
-    return true;
-}
-
-auto SceneRenderer::destroy(this SceneRenderer &self) -> void {
+auto SceneRenderer::init(this SceneRenderer &self) -> bool {
     ZoneScoped;
 
-    self.cleanup();
-}
-
-auto SceneRenderer::create_persistent_resources(this SceneRenderer &self) -> void {
-    ZoneScoped;
-
-    auto &app = Application::get();
-    auto &asset_man = app.asset_man;
-    auto &transfer_man = app.device.transfer_man();
-    auto &bindless_descriptor_set = app.device.get_descriptor_set();
+    auto &device = App::mod<Device>();
+    auto &bindless_descriptor_set = device.get_descriptor_set();
+    auto &transfer_man = device.transfer_man();
+    auto &asset_man = App::mod<AssetManager>();
     auto shaders_root = asset_man.asset_root_path(AssetType::Shader);
 
     //  ── EDITOR ──────────────────────────────────────────────────────────
-    auto default_slang_session = self.device->new_slang_session({
+    auto default_slang_session = device.new_slang_session({
         .definitions = {
 #ifdef LS_DEBUG
             { "ENABLE_ASSERTIONS", "1" },
@@ -49,13 +40,13 @@ auto SceneRenderer::create_persistent_resources(this SceneRenderer &self) -> voi
         .module_name = "passes.editor_grid",
         .entry_points = { "vs_main", "fs_main" },
     };
-    Pipeline::create(*self.device, default_slang_session, editor_grid_pipeline_info).value();
+    Pipeline::create(device, default_slang_session, editor_grid_pipeline_info).value();
 
     auto editor_mousepick_pipeline_info = PipelineCompileInfo{
         .module_name = "passes.editor_mousepick",
         .entry_points = { "cs_main" },
     };
-    Pipeline::create(*self.device, default_slang_session, editor_mousepick_pipeline_info).value();
+    Pipeline::create(device, default_slang_session, editor_mousepick_pipeline_info).value();
     //  ── SKY ─────────────────────────────────────────────────────────────
     auto sky_transmittance_lut_info = ImageInfo{
         .format = vuk::Format::eR16G16B16A16Sfloat,
@@ -64,12 +55,12 @@ auto SceneRenderer::create_persistent_resources(this SceneRenderer &self) -> voi
         .extent = { .width = 256, .height = 64, .depth = 1 },
         .name = "Sky Transmittance",
     };
-    std::tie(self.sky_transmittance_lut, self.sky_transmittance_lut_view) = Image::create_with_view(*self.device, sky_transmittance_lut_info).value();
+    std::tie(self.sky_transmittance_lut, self.sky_transmittance_lut_view) = Image::create_with_view(device, sky_transmittance_lut_info).value();
     auto sky_transmittance_pipeline_info = PipelineCompileInfo{
         .module_name = "passes.sky_transmittance",
         .entry_points = { "cs_main" },
     };
-    Pipeline::create(*self.device, default_slang_session, sky_transmittance_pipeline_info).value();
+    Pipeline::create(device, default_slang_session, sky_transmittance_pipeline_info).value();
 
     auto sky_multiscatter_lut_info = ImageInfo{
         .format = vuk::Format::eR16G16B16A16Sfloat,
@@ -78,118 +69,118 @@ auto SceneRenderer::create_persistent_resources(this SceneRenderer &self) -> voi
         .extent = { .width = 32, .height = 32, .depth = 1 },
         .name = "Sky Multiscatter LUT",
     };
-    std::tie(self.sky_multiscatter_lut, self.sky_multiscatter_lut_view) = Image::create_with_view(*self.device, sky_multiscatter_lut_info).value();
+    std::tie(self.sky_multiscatter_lut, self.sky_multiscatter_lut_view) = Image::create_with_view(device, sky_multiscatter_lut_info).value();
     auto sky_multiscatter_pipeline_info = PipelineCompileInfo{
         .module_name = "passes.sky_multiscattering",
         .entry_points = { "cs_main" },
     };
-    Pipeline::create(*self.device, default_slang_session, sky_multiscatter_pipeline_info).value();
+    Pipeline::create(device, default_slang_session, sky_multiscatter_pipeline_info).value();
 
     auto sky_view_pipeline_info = PipelineCompileInfo{
         .module_name = "passes.sky_view",
         .entry_points = { "cs_main" },
     };
-    Pipeline::create(*self.device, default_slang_session, sky_view_pipeline_info).value();
+    Pipeline::create(device, default_slang_session, sky_view_pipeline_info).value();
 
     auto sky_aerial_perspective_pipeline_info = PipelineCompileInfo{
         .module_name = "passes.sky_aerial_perspective",
         .entry_points = { "cs_main" },
     };
-    Pipeline::create(*self.device, default_slang_session, sky_aerial_perspective_pipeline_info).value();
+    Pipeline::create(device, default_slang_session, sky_aerial_perspective_pipeline_info).value();
 
     auto sky_final_pipeline_info = PipelineCompileInfo{
         .module_name = "passes.sky_final",
         .entry_points = { "vs_main", "fs_main" },
     };
-    Pipeline::create(*self.device, default_slang_session, sky_final_pipeline_info).value();
+    Pipeline::create(device, default_slang_session, sky_final_pipeline_info).value();
 
     //  ── VISBUFFER ───────────────────────────────────────────────────────
     auto generate_cull_commands_pipeline_info = PipelineCompileInfo{
         .module_name = "passes.generate_cull_commands",
         .entry_points = { "cs_main" },
     };
-    Pipeline::create(*self.device, default_slang_session, generate_cull_commands_pipeline_info).value();
+    Pipeline::create(device, default_slang_session, generate_cull_commands_pipeline_info).value();
 
     auto vis_select_lods_pipeline_info = PipelineCompileInfo{
         .module_name = "passes.select_lods",
         .entry_points = { "cs_main" },
     };
-    Pipeline::create(*self.device, default_slang_session, vis_select_lods_pipeline_info).value();
+    Pipeline::create(device, default_slang_session, vis_select_lods_pipeline_info).value();
 
     auto vis_cull_meshlets_pipeline_info = PipelineCompileInfo{
         .module_name = "passes.cull_meshlets",
         .entry_points = { "cs_main" },
     };
-    Pipeline::create(*self.device, default_slang_session, vis_cull_meshlets_pipeline_info).value();
+    Pipeline::create(device, default_slang_session, vis_cull_meshlets_pipeline_info).value();
 
     auto vis_cull_triangles_pipeline_info = PipelineCompileInfo{
         .module_name = "passes.cull_triangles",
         .entry_points = { "cs_main" },
     };
-    Pipeline::create(*self.device, default_slang_session, vis_cull_triangles_pipeline_info).value();
+    Pipeline::create(device, default_slang_session, vis_cull_triangles_pipeline_info).value();
 
     auto vis_encode_pipeline_info = PipelineCompileInfo{
         .module_name = "passes.visbuffer_encode",
         .entry_points = { "vs_main", "fs_main" },
     };
-    Pipeline::create(*self.device, default_slang_session, vis_encode_pipeline_info, bindless_descriptor_set).value();
+    Pipeline::create(device, default_slang_session, vis_encode_pipeline_info, bindless_descriptor_set).value();
 
     auto vis_clear_pipeline_info = PipelineCompileInfo{
         .module_name = "passes.visbuffer_clear",
         .entry_points = { "cs_main" },
     };
-    Pipeline::create(*self.device, default_slang_session, vis_clear_pipeline_info).value();
+    Pipeline::create(device, default_slang_session, vis_clear_pipeline_info).value();
 
     auto vis_decode_pipeline_info = PipelineCompileInfo{
         .module_name = "passes.visbuffer_decode",
         .entry_points = { "vs_main", "fs_main" },
     };
-    Pipeline::create(*self.device, default_slang_session, vis_decode_pipeline_info, bindless_descriptor_set).value();
+    Pipeline::create(device, default_slang_session, vis_decode_pipeline_info, bindless_descriptor_set).value();
 
     //  ── PBR ─────────────────────────────────────────────────────────────
     auto pbr_basic_pipeline_info = PipelineCompileInfo{
         .module_name = "passes.brdf",
         .entry_points = { "vs_main", "fs_main" },
     };
-    Pipeline::create(*self.device, default_slang_session, pbr_basic_pipeline_info).value();
+    Pipeline::create(device, default_slang_session, pbr_basic_pipeline_info).value();
 
     //  ── POST PROCESS ────────────────────────────────────────────────────
     auto histogram_generate_pipeline_info = PipelineCompileInfo{
         .module_name = "passes.histogram_generate",
         .entry_points = { "cs_main" },
     };
-    Pipeline::create(*self.device, default_slang_session, histogram_generate_pipeline_info).value();
+    Pipeline::create(device, default_slang_session, histogram_generate_pipeline_info).value();
 
     auto histogram_average_pipeline_info = PipelineCompileInfo{
         .module_name = "passes.histogram_average",
         .entry_points = { "cs_main" },
     };
-    Pipeline::create(*self.device, default_slang_session, histogram_average_pipeline_info).value();
+    Pipeline::create(device, default_slang_session, histogram_average_pipeline_info).value();
 
     auto tonemap_pipeline_info = PipelineCompileInfo{
         .module_name = "passes.tonemap",
         .entry_points = { "vs_main", "fs_main" },
     };
-    Pipeline::create(*self.device, default_slang_session, tonemap_pipeline_info).value();
+    Pipeline::create(device, default_slang_session, tonemap_pipeline_info).value();
 
     auto debug_pipeline_info = PipelineCompileInfo{
         .module_name = "passes.debug",
         .entry_points = { "vs_main", "fs_main" },
     };
-    Pipeline::create(*self.device, default_slang_session, debug_pipeline_info).value();
+    Pipeline::create(device, default_slang_session, debug_pipeline_info).value();
 
     auto copy_pipeline_info = PipelineCompileInfo{
         .module_name = "passes.copy",
         .entry_points = { "cs_main" },
     };
-    Pipeline::create(*self.device, default_slang_session, copy_pipeline_info).value();
+    Pipeline::create(device, default_slang_session, copy_pipeline_info).value();
 
     //  ── FFX ─────────────────────────────────────────────────────────────
     auto hiz_pipeline_info = PipelineCompileInfo{
         .module_name = "passes.hiz",
         .entry_points = { "cs_main" },
     };
-    Pipeline::create(*self.device, default_slang_session, hiz_pipeline_info).value();
+    Pipeline::create(device, default_slang_session, hiz_pipeline_info).value();
 
     //  ── SKY LUTS ────────────────────────────────────────────────────────
     auto temp_atmos_info = GPU::Atmosphere{};
@@ -208,9 +199,7 @@ auto SceneRenderer::create_persistent_resources(this SceneRenderer &self) -> voi
             return std::make_tuple(dst, atmos);
         });
 
-    auto transmittance_lut_attachment =
-        self.sky_transmittance_lut_view.discard(*self.device, "sky transmittance lut", vuk::ImageUsageFlagBits::eStorage);
-
+    auto transmittance_lut_attachment = self.sky_transmittance_lut_view.discard(device, "sky transmittance lut", vuk::ImageUsageFlagBits::eStorage);
     std::tie(transmittance_lut_attachment, temp_atmos) = transmittance_lut_pass(std::move(transmittance_lut_attachment), std::move(temp_atmos));
 
     auto multiscatter_lut_pass = vuk::make_pass(
@@ -231,9 +220,7 @@ auto SceneRenderer::create_persistent_resources(this SceneRenderer &self) -> voi
         }
     );
 
-    auto multiscatter_lut_attachment =
-        self.sky_multiscatter_lut_view.discard(*self.device, "sky multiscatter lut", vuk::ImageUsageFlagBits::eStorage);
-
+    auto multiscatter_lut_attachment = self.sky_multiscatter_lut_view.discard(device, "sky multiscatter lut", vuk::ImageUsageFlagBits::eStorage);
     std::tie(transmittance_lut_attachment, multiscatter_lut_attachment, temp_atmos) =
         multiscatter_lut_pass(std::move(transmittance_lut_attachment), std::move(multiscatter_lut_attachment), std::move(temp_atmos));
 
@@ -242,19 +229,28 @@ auto SceneRenderer::create_persistent_resources(this SceneRenderer &self) -> voi
     transfer_man.wait_on(std::move(transmittance_lut_attachment));
     transfer_man.wait_on(std::move(multiscatter_lut_attachment));
 
-    self.exposure_buffer = Buffer::create(*self.device, sizeof(GPU::HistogramLuminance)).value();
-    vuk::fill(vuk::acquire_buf("exposure", *self.device->buffer(self.exposure_buffer.id()), vuk::eNone), 0);
+    self.exposure_buffer = Buffer::create(device, sizeof(GPU::HistogramLuminance)).value();
+    vuk::fill(vuk::acquire_buf("exposure", *device.buffer(self.exposure_buffer.id()), vuk::eNone), 0);
+
+    return true;
+}
+
+auto SceneRenderer::destroy(this SceneRenderer &self) -> void {
+    ZoneScoped;
+
+    self.cleanup();
 }
 
 auto SceneRenderer::prepare_frame(this SceneRenderer &self, FramePrepareInfo &info) -> PreparedFrame {
     ZoneScoped;
 
-    auto &transfer_man = self.device->transfer_man();
+    auto &device = App::mod<Device>();
+    auto &transfer_man = device.transfer_man();
     auto prepared_frame = PreparedFrame{};
 
     if (!info.dirty_transform_ids.empty()) {
         auto rebuild_transforms = !self.materials_buffer || self.transforms_buffer.data_size() <= info.gpu_transforms.size_bytes();
-        self.transforms_buffer = self.transforms_buffer.resize(*self.device, info.gpu_transforms.size_bytes()).value();
+        self.transforms_buffer = self.transforms_buffer.resize(device, info.gpu_transforms.size_bytes()).value();
 
         if (rebuild_transforms) {
             // If we resize buffer, we need to refill it again, so individual uploads are not required.
@@ -294,16 +290,16 @@ auto SceneRenderer::prepare_frame(this SceneRenderer &self, FramePrepareInfo &in
                 }
             );
 
-            prepared_frame.transforms_buffer = self.transforms_buffer.acquire(*self.device, "transforms", vuk::Access::eMemoryRead);
+            prepared_frame.transforms_buffer = self.transforms_buffer.acquire(device, "transforms", vuk::Access::eMemoryRead);
             prepared_frame.transforms_buffer = update_transforms_pass(std::move(upload_buffer), std::move(prepared_frame.transforms_buffer));
         }
     } else if (self.transforms_buffer) {
-        prepared_frame.transforms_buffer = self.transforms_buffer.acquire(*self.device, "transforms", vuk::Access::eMemoryRead);
+        prepared_frame.transforms_buffer = self.transforms_buffer.acquire(device, "transforms", vuk::Access::eMemoryRead);
     }
 
     if (!info.dirty_material_indices.empty()) {
         auto rebuild_materials = !self.materials_buffer || self.materials_buffer.data_size() <= info.gpu_materials.size_bytes();
-        self.materials_buffer = self.materials_buffer.resize(*self.device, info.gpu_materials.size_bytes()).value();
+        self.materials_buffer = self.materials_buffer.resize(device, info.gpu_materials.size_bytes()).value();
 
         if (rebuild_materials) {
             prepared_frame.materials_buffer = transfer_man.upload_staging(info.gpu_materials, self.materials_buffer);
@@ -339,25 +335,25 @@ auto SceneRenderer::prepare_frame(this SceneRenderer &self, FramePrepareInfo &in
                 }
             );
 
-            prepared_frame.materials_buffer = self.materials_buffer.acquire(*self.device, "materials", vuk::eMemoryRead);
+            prepared_frame.materials_buffer = self.materials_buffer.acquire(device, "materials", vuk::eMemoryRead);
             prepared_frame.materials_buffer = update_materials_pass(std::move(upload_buffer), std::move(prepared_frame.materials_buffer));
         }
     } else if (self.materials_buffer) {
-        prepared_frame.materials_buffer = self.materials_buffer.acquire(*self.device, "materials", vuk::eMemoryRead);
+        prepared_frame.materials_buffer = self.materials_buffer.acquire(device, "materials", vuk::eMemoryRead);
     }
 
     if (!info.gpu_meshes.empty()) {
-        self.meshes_buffer = self.meshes_buffer.resize(*self.device, info.gpu_meshes.size_bytes()).value();
+        self.meshes_buffer = self.meshes_buffer.resize(device, info.gpu_meshes.size_bytes()).value();
         prepared_frame.meshes_buffer = transfer_man.upload_staging(info.gpu_meshes, self.meshes_buffer);
     } else if (self.meshes_buffer) {
-        prepared_frame.meshes_buffer = self.meshes_buffer.acquire(*self.device, "meshes", vuk::eMemoryRead);
+        prepared_frame.meshes_buffer = self.meshes_buffer.acquire(device, "meshes", vuk::eMemoryRead);
     }
 
     if (!info.gpu_mesh_instances.empty()) {
-        self.mesh_instances_buffer = self.mesh_instances_buffer.resize(*self.device, info.gpu_mesh_instances.size_bytes()).value();
+        self.mesh_instances_buffer = self.mesh_instances_buffer.resize(device, info.gpu_mesh_instances.size_bytes()).value();
         prepared_frame.mesh_instances_buffer = transfer_man.upload_staging(info.gpu_mesh_instances, self.mesh_instances_buffer);
     } else if (self.mesh_instances_buffer) {
-        prepared_frame.mesh_instances_buffer = self.mesh_instances_buffer.acquire(*self.device, "mesh instances", vuk::eMemoryRead);
+        prepared_frame.mesh_instances_buffer = self.mesh_instances_buffer.acquire(device, "mesh instances", vuk::eMemoryRead);
     }
 
     if (info.max_meshlet_instance_count > 0) {
@@ -379,8 +375,9 @@ auto SceneRenderer::prepare_frame(this SceneRenderer &self, FramePrepareInfo &in
 auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, PreparedFrame &frame) -> vuk::Value<vuk::ImageAttachment> {
     ZoneScoped;
 
-    auto &transfer_man = self.device->transfer_man();
-    auto &bindless_descriptor_set = self.device->get_descriptor_set();
+    auto &device = App::mod<Device>();
+    auto &transfer_man = device.transfer_man();
+    auto &bindless_descriptor_set = device.get_descriptor_set();
 
     //   ──────────────────────────────────────────────────────────────────────
     auto final_attachment = vuk::declare_ia(
@@ -413,10 +410,9 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, Prep
     depth_attachment = vuk::clear_image(std::move(depth_attachment), vuk::DepthZero);
 
     auto sky_transmittance_lut_attachment =
-        self.sky_transmittance_lut_view
-            .acquire(*self.device, "sky transmittance lut", vuk::ImageUsageFlagBits::eSampled, vuk::Access::eComputeSampled);
+        self.sky_transmittance_lut_view.acquire(device, "sky transmittance lut", vuk::ImageUsageFlagBits::eSampled, vuk::Access::eComputeSampled);
     auto sky_multiscatter_lut_attachment =
-        self.sky_multiscatter_lut_view.acquire(*self.device, "sky multiscatter lut", vuk::ImageUsageFlagBits::eSampled, vuk::Access::eComputeSampled);
+        self.sky_multiscatter_lut_view.acquire(device, "sky multiscatter lut", vuk::ImageUsageFlagBits::eSampled, vuk::Access::eComputeSampled);
 
     auto hiz_extent = vuk::Extent3D{
         .width = (info.extent.width + 63_u32) & ~63_u32,
@@ -427,11 +423,11 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, Prep
     auto hiz_attachment = vuk::Value<vuk::ImageAttachment>{};
     if (self.hiz.extent() != hiz_extent || !self.hiz) {
         if (self.hiz_view) {
-            self.device->destroy(self.hiz_view.id());
+            device.destroy(self.hiz_view.id());
         }
 
         if (self.hiz) {
-            self.device->destroy(self.hiz.id());
+            device.destroy(self.hiz.id());
         }
 
         auto hiz_info = ImageInfo{
@@ -442,7 +438,7 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, Prep
             .mip_count = std::bit_width(ls::max(hiz_extent.width, hiz_extent.height)) - 1_u32,
             .name = "HiZ",
         };
-        self.hiz = Image::create(*self.device, hiz_info).value();
+        self.hiz = Image::create(device, hiz_info).value();
 
         auto hiz_view_info = ImageViewInfo{
             .image_usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage,
@@ -450,14 +446,12 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, Prep
             .subresource_range = { .aspectMask = vuk::ImageAspectFlagBits::eColor, .levelCount = hiz_info.mip_count },
             .name = "HiZ View",
         };
-        self.hiz_view = ImageView::create(*self.device, self.hiz, hiz_view_info).value();
+        self.hiz_view = ImageView::create(device, self.hiz, hiz_view_info).value();
 
-        hiz_attachment =
-            self.hiz_view.acquire(*self.device, "HiZ", vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage, vuk::eNone);
+        hiz_attachment = self.hiz_view.acquire(device, "HiZ", vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage, vuk::eNone);
         hiz_attachment = vuk::clear_image(std::move(hiz_attachment), vuk::DepthZero);
     } else {
-        hiz_attachment =
-            self.hiz_view.acquire(*self.device, "HiZ", vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage, vuk::eComputeRW);
+        hiz_attachment = self.hiz_view.acquire(device, "HiZ", vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage, vuk::eComputeRW);
     }
 
     static constexpr auto sampler_min_clamp_reduction_mode = VkSamplerReductionModeCreateInfo{
@@ -877,7 +871,7 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, Prep
             auto picked_texel = editor_mousepick_pass(visbuffer_attachment, meshlet_instances_buffer, mesh_instances_buffer, picking_texel_buffer);
 
             vuk::Compiler temp_compiler;
-            picked_texel.wait(self.device->get_allocator(), temp_compiler);
+            picked_texel.wait(device.get_allocator(), temp_compiler);
 
             u32 texel_data = 0;
             std::memcpy(&texel_data, picked_texel->mapped_ptr, sizeof(u32));
@@ -1370,7 +1364,7 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, Prep
             }
         );
 
-    auto exposure_buffer = self.exposure_buffer.acquire(*self.device, "exposure", vuk::eNone);
+    auto exposure_buffer = self.exposure_buffer.acquire(device, "exposure", vuk::eNone);
     if (info.histogram_info.has_value()) {
         exposure_buffer = histogram_average_pass(std::move(histogram_buffer), std::move(exposure_buffer));
     }
@@ -1474,35 +1468,37 @@ auto SceneRenderer::render(this SceneRenderer &self, SceneRenderInfo &info, Prep
 auto SceneRenderer::cleanup(this SceneRenderer &self) -> void {
     ZoneScoped;
 
-    self.device->wait();
+    auto &device = App::mod<Device>();
+
+    device.wait();
 
     if (self.transforms_buffer) {
-        self.device->destroy(self.transforms_buffer.id());
+        device.destroy(self.transforms_buffer.id());
         self.transforms_buffer = {};
     }
 
     if (self.mesh_instances_buffer) {
-        self.device->destroy(self.mesh_instances_buffer.id());
+        device.destroy(self.mesh_instances_buffer.id());
         self.mesh_instances_buffer = {};
     }
 
     if (self.meshes_buffer) {
-        self.device->destroy(self.meshes_buffer.id());
+        device.destroy(self.meshes_buffer.id());
         self.meshes_buffer = {};
     }
 
     if (self.materials_buffer) {
-        self.device->destroy(self.materials_buffer.id());
+        device.destroy(self.materials_buffer.id());
         self.materials_buffer = {};
     }
 
     if (self.hiz_view) {
-        self.device->destroy(self.hiz_view.id());
+        device.destroy(self.hiz_view.id());
         self.hiz_view = {};
     }
 
     if (self.hiz) {
-        self.device->destroy(self.hiz.id());
+        device.destroy(self.hiz.id());
         self.hiz = {};
     }
 }

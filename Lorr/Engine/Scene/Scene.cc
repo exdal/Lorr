@@ -1,6 +1,8 @@
 #include "Engine/Scene/Scene.hh"
 
-#include "Engine/Core/Application.hh"
+#include "Engine/Asset/Asset.hh"
+
+#include "Engine/Core/App.hh"
 
 #include "Engine/Memory/Stack.hh"
 
@@ -146,10 +148,10 @@ auto Scene::destroy(this Scene &self) -> void {
     };
     self.root.children([&](flecs::entity e) { visit_child(e); });
 
-    auto &app = Application::get();
+    auto &asset_man = App::mod<AssetManager>();
     for (const auto &uuid : unloading_assets) {
-        if (uuid && app.asset_man.get_asset(uuid)) {
-            app.asset_man.unload_asset(uuid);
+        if (uuid && asset_man.get_asset(uuid)) {
+            asset_man.unload_asset(uuid);
         }
     }
 
@@ -296,9 +298,9 @@ auto Scene::import_from_file(this Scene &self, const fs::path &path) -> bool {
 
     LOG_TRACE("Loading scene {} with {} assets...", self.name, requested_assets.size());
     for (const auto &uuid : requested_assets) {
-        auto &app = Application::get();
-        if (uuid && app.asset_man.get_asset(uuid)) {
-            app.asset_man.load_asset(uuid);
+        auto &asset_man = App::mod<AssetManager>();
+        if (uuid && asset_man.get_asset(uuid)) {
+            asset_man.load_asset(uuid);
         }
     }
 
@@ -443,19 +445,20 @@ auto Scene::create_editor_camera(this Scene &self) -> void {
 auto Scene::create_model_entity(this Scene &self, UUID &importing_model_uuid) -> flecs::entity {
     ZoneScoped;
 
-    auto &app = Application::get();
+    auto &asset_man = App::mod<AssetManager>();
+
     // sanity check
-    if (!app.asset_man.get_asset(importing_model_uuid)) {
+    if (!asset_man.get_asset(importing_model_uuid)) {
         LOG_ERROR("Cannot import an invalid model '{}' into the scene!", importing_model_uuid.str());
         return {};
     }
 
     // acquire model
-    if (!app.asset_man.load_model(importing_model_uuid)) {
+    if (!asset_man.load_model(importing_model_uuid)) {
         return {};
     }
 
-    auto *imported_model = app.asset_man.get_model(importing_model_uuid);
+    auto *imported_model = asset_man.get_model(importing_model_uuid);
     auto &default_scene = imported_model->scenes[imported_model->default_scene_index];
     auto root_entity = self.create_entity(self.find_entity(default_scene.name) ? std::string{} : default_scene.name);
     root_entity.child_of(self.root);
@@ -708,7 +711,7 @@ auto Scene::get_cull_flags(this Scene &self) -> GPU::CullFlags & {
 auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer) -> PreparedFrame {
     ZoneScoped;
 
-    auto &app = Application::get();
+    auto &asset_man = App::mod<AssetManager>();
 
     auto max_meshlet_instance_count = 0_u32;
     auto gpu_meshes = std::vector<GPU::Mesh>();
@@ -716,7 +719,7 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer) -> Prepared
 
     if (self.models_dirty) {
         for (const auto &[rendering_mesh, transform_ids] : self.rendering_meshes_map) {
-            auto *model = app.asset_man.get_model(rendering_mesh.n0);
+            auto *model = asset_man.get_model(rendering_mesh.n0);
             const auto &mesh = model->meshes[rendering_mesh.n1];
 
             for (auto primitive_index : mesh.primitive_indices) {
@@ -745,19 +748,19 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer) -> Prepared
     }
 
     auto uuid_to_image_index = [&](const UUID &uuid) -> ls::option<u32> {
-        if (!app.asset_man.is_texture_loaded(uuid)) {
+        if (!asset_man.is_texture_loaded(uuid)) {
             return ls::nullopt;
         }
 
-        auto *texture = app.asset_man.get_texture(uuid);
+        auto *texture = asset_man.get_texture(uuid);
         return texture->image_view.index();
     };
 
-    auto dirty_material_ids = app.asset_man.get_dirty_material_ids();
+    auto dirty_material_ids = asset_man.get_dirty_material_ids();
     auto gpu_materials = std::vector<GPU::Material>(dirty_material_ids.size());
     auto dirty_material_indices = std::vector<u32>(dirty_material_ids.size());
     for (const auto &[gpu_material, index, id] : std::views::zip(gpu_materials, dirty_material_indices, dirty_material_ids)) {
-        const auto *material = app.asset_man.get_material(id);
+        const auto *material = asset_man.get_material(id);
         auto albedo_image_index = uuid_to_image_index(material->albedo_texture);
         auto normal_image_index = uuid_to_image_index(material->normal_texture);
         auto emissive_image_index = uuid_to_image_index(material->emissive_texture);
@@ -767,7 +770,7 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer) -> Prepared
 
         auto flags = GPU::MaterialFlag::None;
         if (albedo_image_index.has_value()) {
-            auto *texture = app.asset_man.get_texture(material->albedo_texture);
+            auto *texture = asset_man.get_texture(material->albedo_texture);
             sampler_index = texture->sampler.index();
             flags |= GPU::MaterialFlag::HasAlbedoImage;
         }

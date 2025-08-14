@@ -8,6 +8,7 @@ namespace lr::ECS {
 struct ComponentWrapper {
     using Member = std::variant<
         std::monostate,
+        bool *,
         f32 *,
         i32 *,
         u32 *,
@@ -59,7 +60,9 @@ struct ComponentWrapper {
             Member data = std::monostate{};
             auto member_type = flecs::entity(world, member.type);
 
-            if (member_type == flecs::F32) {
+            if (member_type == flecs::Bool) {
+                data = reinterpret_cast<bool *>(self.members_data + member.offset);
+            } else if (member_type == flecs::F32) {
                 data = reinterpret_cast<f32 *>(self.members_data + member.offset);
             } else if (member_type == flecs::I32) {
                 data = reinterpret_cast<i32 *>(self.members_data + member.offset);

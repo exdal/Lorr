@@ -79,7 +79,7 @@ public:
     auto find_entity(this Scene &, std::string_view name) -> flecs::entity;
     auto find_entity(this Scene &, u32 transform_index) -> flecs::entity;
 
-    auto render(this Scene &, SceneRenderer &renderer, SceneRenderInfo &info) -> vuk::Value<vuk::ImageAttachment>;
+    auto prepare_frame(this Scene &, SceneRenderer &renderer) -> PreparedFrame;
     auto tick(this Scene &, f32 delta_time) -> bool;
 
     auto set_name(this Scene &, const std::string &name) -> void;
@@ -94,8 +94,6 @@ public:
     auto get_cull_flags(this Scene &) -> GPU::CullFlags &;
 
 private:
-    auto prepare_frame(this Scene &, SceneRenderer &renderer) -> PreparedFrame;
-
     auto add_transform(this Scene &, flecs::entity entity) -> GPU::TransformID;
     auto remove_transform(this Scene &, flecs::entity entity) -> void;
 

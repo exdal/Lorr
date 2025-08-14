@@ -110,6 +110,7 @@ static auto draw_inspector(InspectorWindow &) -> void {
                 std::visit(
                     ls::match{
                         [](const auto &) {},
+                        [&](bool *v) { component_modified |= ImGui::Checkbox("", v); },
                         [&](f32 *v) { component_modified |= ImGui::drag_vec(0, v, 1, ImGuiDataType_Float); },
                         [&](i32 *v) { component_modified |= ImGui::drag_vec(0, v, 1, ImGuiDataType_S32); },
                         [&](u32 *v) { component_modified |= ImGui::drag_vec(0, v, 1, ImGuiDataType_U32); },

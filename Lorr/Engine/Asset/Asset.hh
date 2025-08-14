@@ -77,6 +77,7 @@ struct AssetManager {
     // act like `create_asset` which creates new unique handle to asset with
     // meta file in the same path.
     auto import_asset(this AssetManager &, const fs::path &path) -> UUID;
+    auto import_project(this AssetManager &, const fs::path &path) -> void;
 
     //  ── Registered Assets ───────────────────────────────────────────────
     // Assets that already exist in project root and have meta file with

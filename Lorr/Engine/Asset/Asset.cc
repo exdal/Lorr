@@ -373,6 +373,15 @@ auto AssetManager::import_asset(this AssetManager &self, const fs::path &path) -
     return uuid;
 }
 
+auto AssetManager::import_project(this AssetManager &self, const fs::path &path) -> void {
+    ZoneScoped;
+
+    for (const auto &entry : fs::recursive_directory_iterator(path)) {
+        const auto &cur_path = entry.path();
+        self.import_asset(cur_path);
+    }
+}
+
 struct AssetMetaFile {
     simdjson::padded_string contents;
     simdjson::ondemand::parser parser;

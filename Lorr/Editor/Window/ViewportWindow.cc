@@ -178,6 +178,7 @@ static auto draw_viewport(ViewportWindow &self, vuk::Format format, vuk::Extent3
 
     auto *camera = editor_camera.get_mut<lr::ECS::Camera>();
     auto *camera_transform = editor_camera.get_mut<lr::ECS::Transform>();
+    camera->resolution = { window_size.x, window_size.y };
     camera->aspect_ratio = window_size.x / window_size.y;
 
     ImGuizmo::SetDrawlist();
@@ -198,14 +199,27 @@ static auto draw_viewport(ViewportWindow &self, vuk::Format format, vuk::Extent3
         auto mouse_pos_rel = ImVec2(mouse_pos.x - window_pos.x, mouse_pos.y - window_pos.y);
         requested_texel_transform.emplace(glm::uvec2(mouse_pos_rel.x, mouse_pos_rel.y));
     }
-    auto scene_render_info = lr::SceneRenderInfo{
+
+    auto prepared_frame = active_scene->prepare_frame(scene_renderer);
+
+    auto viewport_attachment_info = vuk::ImageAttachment{
+        .image_type = vuk::ImageType::e2D,
+        .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eColorAttachment,
+        .extent = { .width = static_cast<u32>(window_size.x), .height = static_cast<u32>(window_size.y), .depth = 1 },
         .format = format,
-        .extent = vuk::Extent3D(static_cast<u32>(window_size.x), static_cast<u32>(window_size.y), 1),
+        .sample_count = vuk::Samples::e1,
+        .view_type = vuk::ImageViewType::e2D,
+        .level_count = 1,
+        .layer_count = 1,
+    };
+    auto viewport_attachment = vuk::declare_ia("viewport", viewport_attachment_info);
+    auto scene_render_info = lr::SceneRenderInfo{
         .delta_time = ImGui::GetIO().DeltaTime,
+        .cull_flags = active_scene->get_cull_flags(),
         .picking_texel = requested_texel_transform,
     };
-    auto scene_render_result = active_scene->render(scene_renderer, scene_render_info);
-    auto scene_render_image_idx = imgui_renderer.add_image(std::move(scene_render_result));
+    viewport_attachment = scene_renderer.render(std::move(viewport_attachment), scene_render_info, prepared_frame);
+    auto scene_render_image_idx = imgui_renderer.add_image(std::move(viewport_attachment));
     ImGui::Image(scene_render_image_idx, work_area_size);
 
     if (update_visible_entity) {

@@ -197,11 +197,8 @@ auto ImGuiRenderer::end_frame(this ImGuiRenderer &self, vuk::Value<vuk::ImageAtt
                     auto upload_buffer = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eCPUonly, buffer_size);
                     auto *buffer_ptr = reinterpret_cast<u8 *>(upload_buffer->mapped_ptr);
                     for (auto y = 0_u32; y < upload_extent.height; y++) {
-                        std::memcpy(
-                            buffer_ptr + upload_pitch * y,
-                            texture->GetPixelsAt(upload_offset.x, upload_offset.y + static_cast<i32>(y)),
-                            upload_pitch
-                        );
+                        auto *pixels = static_cast<u8 *>(texture->GetPixelsAt(upload_offset.x, upload_offset.y + static_cast<i32>(y)));
+                        std::memcpy(buffer_ptr + upload_pitch * y, pixels, upload_pitch);
                     }
 
                     auto upload_pass = vuk::make_pass(
@@ -250,9 +247,15 @@ auto ImGuiRenderer::end_frame(this ImGuiRenderer &self, vuk::Value<vuk::ImageAtt
         }
     }
 
+    auto imgui_rendering_images_arr = vuk::declare_array("imgui rendering images", std::span(self.rendering_images));
+
     u64 vertex_size_bytes = draw_data->TotalVtxCount * sizeof(ImDrawVert);
     u64 index_size_bytes = draw_data->TotalIdxCount * sizeof(ImDrawIdx);
     if (!draw_data || vertex_size_bytes == 0) {
+        if (!self.rendering_images.empty()) {
+            transfer_man.wait_on(std::move(imgui_rendering_images_arr));
+        }
+
         return std::move(attachment);
     }
 
@@ -341,8 +344,6 @@ auto ImGuiRenderer::end_frame(this ImGuiRenderer &self, vuk::Value<vuk::ImageAtt
             return dst;
         }
     );
-
-    auto imgui_rendering_images_arr = vuk::declare_array("imgui rendering images", std::span(self.rendering_images));
 
     return imgui_pass(std::move(attachment), std::move(vertex_buffer), std::move(index_buffer), std::move(imgui_rendering_images_arr));
 }

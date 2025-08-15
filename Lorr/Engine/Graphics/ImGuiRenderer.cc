@@ -1,6 +1,8 @@
 #include "Engine/Graphics/ImGuiRenderer.hh"
 
-#include "Engine/Core/Application.hh"
+#include "Engine/Asset/Asset.hh"
+
+#include "Engine/Core/App.hh"
 
 #include "Engine/Graphics/VulkanDevice.hh"
 
@@ -9,16 +11,16 @@
 #include <SDL3/SDL_mouse.h>
 
 #include "Engine/Util/Icons/IconsMaterialDesignIcons.hh"
+#include "Engine/Window/Window.hh"
 
 namespace lr {
-auto ImGuiRenderer::init(this ImGuiRenderer &self, Device *device) -> void {
+auto ImGuiRenderer::init(this ImGuiRenderer &self) -> bool {
     ZoneScoped;
 
-    self.device = device;
-
-    auto &app = Application::get();
-    auto shaders_root = app.asset_man.asset_root_path(AssetType::Shader);
-    auto fonts_root = app.asset_man.asset_root_path(AssetType::Font);
+    auto &asset_man = App::mod<AssetManager>();
+    auto &device = App::mod<Device>();
+    auto shaders_root = asset_man.asset_root_path(AssetType::Shader);
+    auto fonts_root = asset_man.asset_root_path(AssetType::Font);
     auto roboto_path = (fonts_root / "Roboto-Regular.ttf").string();
     auto materialdesignicons_path = (fonts_root / FONT_ICON_FILE_NAME_MDI).string();
 
@@ -57,21 +59,30 @@ auto ImGuiRenderer::init(this ImGuiRenderer &self, Device *device) -> void {
     imgui.Fonts->TexDesiredFormat = ImTextureFormat_RGBA32;
     imgui.FontDefault = roboto_font;
 
-    auto slang_session = device->new_slang_session({ .root_directory = shaders_root }).value();
+    auto slang_session = device.new_slang_session({ .root_directory = shaders_root }).value();
     auto pipeline_info = PipelineCompileInfo{
         .module_name = "passes.imgui",
         .entry_points = { "vs_main", "fs_main" },
     };
-    self.pipeline = Pipeline::create(*device, slang_session, pipeline_info).value();
+    self.pipeline = Pipeline::create(device, slang_session, pipeline_info).value();
+
+    auto &window = App::mod<Window>();
+    window.add_listener(self);
+
+    return true;
 }
 
 auto ImGuiRenderer::destroy(this ImGuiRenderer &self) -> void {
+    ZoneScoped;
+
+    auto &device = App::mod<Device>();
+
     if (self.font_image_view) {
-        self.device->destroy(self.font_image_view.id());
+        device.destroy(self.font_image_view.id());
     }
 
     if (self.font_image) {
-        self.device->destroy(self.font_image.id());
+        device.destroy(self.font_image.id());
     }
 }
 
@@ -85,13 +96,14 @@ auto ImGuiRenderer::add_image(this ImGuiRenderer &self, vuk::Value<vuk::ImageAtt
 auto ImGuiRenderer::add_image(this ImGuiRenderer &self, ImageView &image_view, LR_CALLSTACK) -> ImTextureID {
     ZoneScoped;
 
+    auto &device = App::mod<Device>();
+
     auto acquired_it = self.acquired_images.find(image_view.id());
     if (acquired_it != self.acquired_images.end()) {
         return acquired_it->second;
     }
 
-    auto attachment =
-        image_view.acquire(*self.device, "imgui rendering image", vuk::ImageUsageFlagBits::eSampled, vuk::Access::eFragmentSampled, LOC);
+    auto attachment = image_view.acquire(device, "imgui rendering image", vuk::ImageUsageFlagBits::eSampled, vuk::Access::eFragmentSampled, LOC);
     auto texture_id = self.add_image(std::move(attachment));
     self.acquired_images.emplace(image_view.id(), texture_id);
 
@@ -101,7 +113,6 @@ auto ImGuiRenderer::add_image(this ImGuiRenderer &self, ImageView &image_view, L
 auto ImGuiRenderer::begin_frame(this ImGuiRenderer &self, f64 delta_time, const vuk::Extent3D &extent) -> void {
     ZoneScoped;
 
-    auto &app = Application::get();
     auto &imgui = ImGui::GetIO();
     imgui.DeltaTime = static_cast<f32>(delta_time);
     imgui.DisplaySize = ImVec2(static_cast<f32>(extent.width), static_cast<f32>(extent.height));
@@ -116,31 +127,31 @@ auto ImGuiRenderer::begin_frame(this ImGuiRenderer &self, f64 delta_time, const 
         return;
     }
 
-    auto imgui_cursor = ImGui::GetMouseCursor();
-    if (imgui.MouseDrawCursor || imgui_cursor == ImGuiMouseCursor_None) {
-        app.window.show_cursor(false);
-    } else {
-        auto next_cursor = WindowCursor::Arrow;
-        // clang-format off
-        switch (imgui_cursor) {
-            case ImGuiMouseCursor_Arrow: next_cursor = WindowCursor::Arrow; break;
-            case ImGuiMouseCursor_TextInput: next_cursor = WindowCursor::TextInput; break;
-            case ImGuiMouseCursor_ResizeAll: next_cursor = WindowCursor::ResizeAll; break;
-            case ImGuiMouseCursor_ResizeNS: next_cursor = WindowCursor::ResizeNS; break;
-            case ImGuiMouseCursor_ResizeEW: next_cursor = WindowCursor::ResizeEW; break;
-            case ImGuiMouseCursor_ResizeNESW: next_cursor = WindowCursor::ResizeNESW; break;
-            case ImGuiMouseCursor_ResizeNWSE: next_cursor = WindowCursor::ResizeNWSE; break;
-            case ImGuiMouseCursor_Hand: next_cursor = WindowCursor::Hand; break;
-            case ImGuiMouseCursor_NotAllowed: next_cursor = WindowCursor::NotAllowed; break;
-            default: break;
-        }
-        // clang-format on
-        app.window.show_cursor(true);
-
-        if (app.window.get_cursor() != next_cursor) {
-            app.window.set_cursor(next_cursor);
-        }
-    }
+    // auto imgui_cursor = ImGui::GetMouseCursor();
+    // if (imgui.MouseDrawCursor || imgui_cursor == ImGuiMouseCursor_None) {
+    //     app.window.show_cursor(false);
+    // } else {
+    //     auto next_cursor = WindowCursor::Arrow;
+    //     // clang-format off
+    //     switch (imgui_cursor) {
+    //         case ImGuiMouseCursor_Arrow: next_cursor = WindowCursor::Arrow; break;
+    //         case ImGuiMouseCursor_TextInput: next_cursor = WindowCursor::TextInput; break;
+    //         case ImGuiMouseCursor_ResizeAll: next_cursor = WindowCursor::ResizeAll; break;
+    //         case ImGuiMouseCursor_ResizeNS: next_cursor = WindowCursor::ResizeNS; break;
+    //         case ImGuiMouseCursor_ResizeEW: next_cursor = WindowCursor::ResizeEW; break;
+    //         case ImGuiMouseCursor_ResizeNESW: next_cursor = WindowCursor::ResizeNESW; break;
+    //         case ImGuiMouseCursor_ResizeNWSE: next_cursor = WindowCursor::ResizeNWSE; break;
+    //         case ImGuiMouseCursor_Hand: next_cursor = WindowCursor::Hand; break;
+    //         case ImGuiMouseCursor_NotAllowed: next_cursor = WindowCursor::NotAllowed; break;
+    //         default: break;
+    //     }
+    //     // clang-format on
+    //     app.window.show_cursor(true);
+    //
+    //     if (app.window.get_cursor() != next_cursor) {
+    //         app.window.set_cursor(next_cursor);
+    //     }
+    // }
 }
 
 auto ImGuiRenderer::end_frame(this ImGuiRenderer &self, vuk::Value<vuk::ImageAttachment> &&attachment) -> vuk::Value<vuk::ImageAttachment> {
@@ -148,7 +159,8 @@ auto ImGuiRenderer::end_frame(this ImGuiRenderer &self, vuk::Value<vuk::ImageAtt
 
     ImGui::Render();
 
-    auto &transfer_man = self.device->transfer_man();
+    auto &device = App::mod<Device>();
+    auto &transfer_man = device.transfer_man();
     auto *draw_data = ImGui::GetDrawData();
 
     if (draw_data->Textures) {
@@ -167,13 +179,10 @@ auto ImGuiRenderer::end_frame(this ImGuiRenderer &self, vuk::Value<vuk::ImageAtt
                         .extent = vuk::Extent3D(texture->Width, texture->Height, 1u),
                         .name = "ImGui Font",
                     };
-                    std::tie(self.font_image, self.font_image_view) = Image::create_with_view(*self.device, image_info).value();
-                    acquired_image = self.font_image_view.acquire(
-                        *self.device,
-                        "imgui image",
-                        vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eTransferDst,
-                        vuk::eNone
-                    );
+                    std::tie(self.font_image, self.font_image_view) = Image::create_with_view(device, image_info).value();
+                    acquired_image =
+                        self.font_image_view
+                            .acquire(device, "imgui image", vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eTransferDst, vuk::eNone);
                     acquired = true;
 
                     upload_offset = {};
@@ -182,17 +191,14 @@ auto ImGuiRenderer::end_frame(this ImGuiRenderer &self, vuk::Value<vuk::ImageAtt
                     [[fallthrough]];
                 }
                 case ImTextureStatus_WantUpdates: {
-                    auto buffer_alignment = self.device->non_coherent_atom_size();
+                    auto buffer_alignment = device.non_coherent_atom_size();
                     auto upload_pitch = upload_extent.width * texture->BytesPerPixel;
                     auto buffer_size = ls::align_up(upload_pitch * upload_extent.height, buffer_alignment);
                     auto upload_buffer = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eCPUonly, buffer_size);
                     auto *buffer_ptr = reinterpret_cast<u8 *>(upload_buffer->mapped_ptr);
                     for (auto y = 0_u32; y < upload_extent.height; y++) {
-                        std::memcpy(
-                            buffer_ptr + upload_pitch * y,
-                            texture->GetPixelsAt(upload_offset.x, upload_offset.y + static_cast<i32>(y)),
-                            upload_pitch
-                        );
+                        auto *pixels = static_cast<u8 *>(texture->GetPixelsAt(upload_offset.x, upload_offset.y + static_cast<i32>(y)));
+                        std::memcpy(buffer_ptr + upload_pitch * y, pixels, upload_pitch);
                     }
 
                     auto upload_pass = vuk::make_pass(
@@ -215,7 +221,7 @@ auto ImGuiRenderer::end_frame(this ImGuiRenderer &self, vuk::Value<vuk::ImageAtt
 
                     if (!acquired) {
                         acquired_image = self.font_image_view.acquire(
-                            *self.device,
+                            device,
                             "imgui image",
                             vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eTransferDst,
                             vuk::eNone
@@ -228,23 +234,28 @@ auto ImGuiRenderer::end_frame(this ImGuiRenderer &self, vuk::Value<vuk::ImageAtt
                     texture->SetStatus(ImTextureStatus_OK);
                 } break;
                 case ImTextureStatus_OK: {
-                    acquired_image =
-                        self.font_image_view.acquire(*self.device, "imgui image", vuk::ImageUsageFlagBits::eSampled, vuk::eFragmentSampled);
+                    acquired_image = self.font_image_view.acquire(device, "imgui image", vuk::ImageUsageFlagBits::eSampled, vuk::eFragmentSampled);
                     auto texture_id = self.add_image(std::move(acquired_image));
                     texture->SetTexID(texture_id);
                 } break;
                 case ImTextureStatus_WantDestroy: {
-                    self.device->destroy(self.font_image.id());
-                    self.device->destroy(self.font_image_view.id());
+                    device.destroy(self.font_image.id());
+                    device.destroy(self.font_image_view.id());
                 } break;
                 case ImTextureStatus_Destroyed:;
             }
         }
     }
 
+    auto imgui_rendering_images_arr = vuk::declare_array("imgui rendering images", std::span(self.rendering_images));
+
     u64 vertex_size_bytes = draw_data->TotalVtxCount * sizeof(ImDrawVert);
     u64 index_size_bytes = draw_data->TotalIdxCount * sizeof(ImDrawIdx);
     if (!draw_data || vertex_size_bytes == 0) {
+        if (!self.rendering_images.empty()) {
+            transfer_man.wait_on(std::move(imgui_rendering_images_arr));
+        }
+
         return std::move(attachment);
     }
 
@@ -334,9 +345,34 @@ auto ImGuiRenderer::end_frame(this ImGuiRenderer &self, vuk::Value<vuk::ImageAtt
         }
     );
 
-    auto imgui_rendering_images_arr = vuk::declare_array("imgui rendering images", std::span(self.rendering_images));
-
     return imgui_pass(std::move(attachment), std::move(vertex_buffer), std::move(index_buffer), std::move(imgui_rendering_images_arr));
+}
+
+auto ImGuiRenderer::window_event(this ImGuiRenderer &self, SDL_Event &e) -> void {
+    ZoneScoped;
+
+    switch (e.type) {
+        case SDL_EVENT_MOUSE_MOTION: {
+            self.on_mouse_pos({ e.motion.x, e.motion.y });
+        } break;
+        case SDL_EVENT_MOUSE_BUTTON_DOWN:
+        case SDL_EVENT_MOUSE_BUTTON_UP: {
+            auto state = e.type == SDL_EVENT_MOUSE_BUTTON_DOWN;
+            self.on_mouse_button(e.button.button, state);
+        } break;
+        case SDL_EVENT_MOUSE_WHEEL: {
+            self.on_mouse_scroll({ e.wheel.x, e.wheel.y });
+        } break;
+        case SDL_EVENT_KEY_DOWN:
+        case SDL_EVENT_KEY_UP: {
+            auto state = e.type == SDL_EVENT_KEY_DOWN;
+            self.on_key(e.key.key, e.key.scancode, e.key.mod, state);
+        } break;
+        case SDL_EVENT_TEXT_INPUT: {
+            self.on_text_input(e.text.text);
+        } break;
+        default:;
+    }
 }
 
 auto ImGuiRenderer::on_mouse_pos(this ImGuiRenderer &, glm::vec2 pos) -> void {

@@ -25,10 +25,8 @@ constexpr fmtlog::LogLevel to_log_category(VkDebugUtilsMessageSeverityFlagBitsEX
     return fmtlog::DBG;
 }
 
-auto Device::init(this Device &self, usize frame_count) -> std::expected<void, vuk::VkException> {
+auto Device::init(this Device &self) -> bool {
     ZoneScoped;
-
-    self.frames_in_flight = frame_count;
 
     vkb::InstanceBuilder instance_builder;
     instance_builder.set_app_name("Lorr App");
@@ -36,8 +34,8 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
     instance_builder.set_engine_version(1, 0, 0);
     instance_builder.enable_validation_layers(false); // use vkconfig ui...
     instance_builder.request_validation_layers(false);
-    instance_builder.add_debug_messenger_severity(VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT);
-    instance_builder.add_debug_messenger_type(VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT);
+    // instance_builder.add_debug_messenger_severity(VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT);
+    // instance_builder.add_debug_messenger_type(VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT);
     instance_builder.set_debug_callback(
         [](VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
            VkDebugUtilsMessageTypeFlagsEXT messageType,
@@ -74,7 +72,7 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
 
         LOG_ERROR("Failed to initialize Vulkan instance! {}-{}", error.message(), std::to_underlying(vk_error));
 
-        return std::unexpected(vk_error);
+        return false;
     }
 
     self.instance = instance_result.value();
@@ -104,7 +102,7 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
         auto error = physical_device_select_result.error();
 
         LOG_ERROR("Failed to select Vulkan Physical Device! {}", error.message());
-        return std::unexpected(VK_ERROR_DEVICE_LOST);
+        return false;
     }
 
     self.physical_device = physical_device_select_result.value();
@@ -182,10 +180,9 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
     auto device_result = device_builder.build();
     if (!device_result) {
         auto error = device_result.error();
-        auto vk_error = device_result.vk_result();
 
         LOG_ERROR("Failed to select Vulkan Device! {}", error.message());
-        return std::unexpected(vk_error);
+        return false;
     }
 
     self.handle = device_result.value();
@@ -239,7 +236,7 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
         }
     );
 
-    self.frame_resources.emplace(*self.runtime, frame_count);
+    self.frame_resources.emplace(*self.runtime, self.frames_in_flight);
     self.allocator.emplace(*self.frame_resources);
     self.runtime->set_shader_target_version(VK_API_VERSION_1_4);
     self.shader_compiler = SlangCompiler::create().value();
@@ -250,12 +247,12 @@ auto Device::init(this Device &self, usize frame_count) -> std::expected<void, v
     LOG_INFO("Initialized device.");
 
     if (auto err = self.init_resources(); !err) {
-        return err;
+        return false;
     }
 
     LOG_INFO("Initialized device resources.");
 
-    return {};
+    return true;
 }
 
 auto Device::init_resources(this Device &self) -> std::expected<void, vuk::VkException> {
@@ -290,7 +287,7 @@ auto Device::init_resources(this Device &self) -> std::expected<void, vuk::VkExc
     self.resources.descriptor_set = self.create_persistent_descriptor_set(1, bindless_set_info, bindless_set_binding_flags);
 
     auto invalid_image_info = ImageInfo{
-        .format = vuk::Format::eR8G8B8A8Srgb,
+        .format = vuk::Format::eR8G8B8A8Unorm,
         .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage,
         .type = vuk::ImageType::e2D,
         .extent = vuk::Extent3D(1_u32, 1_u32, 1_u32),
@@ -397,16 +394,19 @@ auto Device::end_frame(this Device &self, vuk::Value<vuk::ImageAttachment> &&tar
     };
 
     auto result = vuk::enqueue_presentation(std::move(target_attachment));
-    result.submit(
-        *self.transfer_manager.frame_allocator,
-        self.compiler,
-        { .graph_label = {},
-          .callbacks = {
-              .on_begin_pass = on_begin_pass,
-              .on_end_pass = on_end_pass,
-              .user_data = &self,
-          } }
-    );
+    try {
+        result.submit(
+            *self.transfer_manager.frame_allocator,
+            self.compiler,
+            { .graph_label = {},
+              .callbacks = {
+                  .on_begin_pass = on_begin_pass,
+                  .on_end_pass = on_end_pass,
+                  .user_data = &self,
+              } }
+        );
+    } catch (std::exception &e) {
+    }
 }
 
 auto Device::wait(this Device &self, LR_CALLSTACK) -> void {

@@ -2,18 +2,18 @@ module tonemap;
 
 import std;
 import gpu;
+import scene;
 
 #include <passes/histogram.slang>
 
-[[vk::binding(0, 0)]]
-Sampler sampler;
-[[vk::binding(1, 0)]]
-Image2D<f32x4> input_image;
+struct ShaderParameters {
+    Sampler sampler;
+    Image2D<f32x4> input_image;
 
-struct PushConstants {
-    HistogramLuminance *luminance;
+    ConstantBuffer<Environment> environment;
+    ConstantBuffer<HistogramLuminance> histogram_luminance;
 };
-[[vk::push_constant]] PushConstants C;
+uniform ParameterBlock<ShaderParameters> params;
 
 struct VertexOutput {
     f32x4 position : SV_Position;
@@ -148,9 +148,11 @@ float3 agx_tonemapping(float3 color) {
 
 [[shader("fragment")]]
 f32x4 fs_main(VertexOutput input) {
-    f32x3 color = input_image.sample_mip(sampler, input.tex_coord, 0.0).rgb;
-    const f32 exposure = C.luminance->exposure;
-    color = color * (exposure + 1.0);
+    f32x3 color = params.input_image.sample_mip(params.sampler, input.tex_coord, 0.0).rgb;
+    if (params.environment.flags & EnvironmentFlags::HasEyeAdaptation) {
+        let exposure = params.histogram_luminance.exposure;
+        color = color * (exposure + 1.0);
+    }
 
     //color = ACES_Film(color);
     //color = ACES_Fitted(color);

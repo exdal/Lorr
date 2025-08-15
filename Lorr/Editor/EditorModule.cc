@@ -1,4 +1,4 @@
-#include "Editor/EditorApp.hh"
+#include "Editor/EditorModule.hh"
 
 #include "Editor/Window/AssetBrowserWindow.hh"
 #include "Editor/Window/ConsoleWindow.hh"
@@ -8,12 +8,16 @@
 
 #include "Editor/Themes.hh"
 
+#include "Engine/Core/App.hh"
+#include "Engine/Graphics/ImGuiRenderer.hh"
 #include "Engine/Memory/Stack.hh"
 #include "Engine/OS/File.hh"
 #include "Engine/Util/JsonWriter.hh"
 
 #include "Engine/Util/Icons/IconsMaterialDesignIcons.hh"
+#include "Engine/Window/Window.hh"
 
+#include <implot.h>
 #include <simdjson.h>
 namespace sj = simdjson;
 
@@ -44,10 +48,11 @@ static auto read_project_file(const fs::path &path) -> ls::option<ProjectFileInf
     return ProjectFileInfo{ .name = std::string(name_json.value_unsafe()) };
 }
 
-auto EditorApp::load_editor_data(this EditorApp &self) -> void {
+auto EditorModule::load_editor_data(this EditorModule &self) -> void {
     ZoneScoped;
 
-    auto data_file_path = self.asset_man.asset_root_path(lr::AssetType::Root) / "editor.json";
+    auto &asset_man = lr::App::mod<lr::AssetManager>();
+    auto data_file_path = asset_man.asset_root_path(lr::AssetType::Root) / "editor.json";
     if (!fs::exists(data_file_path)) {
         self.save_editor_data();
         return;
@@ -86,10 +91,11 @@ auto EditorApp::load_editor_data(this EditorApp &self) -> void {
     }
 }
 
-auto EditorApp::save_editor_data(this EditorApp &self) -> void {
+auto EditorModule::save_editor_data(this EditorModule &self) -> void {
     ZoneScoped;
 
-    auto data_file_path = self.asset_man.asset_root_path(lr::AssetType::Root) / "editor.json";
+    auto &asset_man = lr::App::mod<lr::AssetManager>();
+    auto data_file_path = asset_man.asset_root_path(lr::AssetType::Root) / "editor.json";
     lr::JsonWriter json;
     json.begin_obj();
     json["recent_projects"].begin_array();
@@ -107,7 +113,7 @@ auto EditorApp::save_editor_data(this EditorApp &self) -> void {
     file.close();
 }
 
-auto EditorApp::new_project(this EditorApp &self, const fs::path &root_path, const std::string &name) -> std::unique_ptr<Project> {
+auto EditorModule::new_project(this EditorModule &self, const fs::path &root_path, const std::string &name) -> std::unique_ptr<Project> {
     ZoneScoped;
 
     if (!fs::is_directory(root_path)) {
@@ -178,7 +184,7 @@ auto EditorApp::new_project(this EditorApp &self, const fs::path &root_path, con
     return project;
 }
 
-auto EditorApp::open_project(this EditorApp &self, const fs::path &path) -> std::unique_ptr<Project> {
+auto EditorModule::open_project(this EditorModule &self, const fs::path &path) -> std::unique_ptr<Project> {
     ZoneScoped;
 
     const auto &proj_root_dir = path.parent_path();
@@ -195,56 +201,59 @@ auto EditorApp::open_project(this EditorApp &self, const fs::path &path) -> std:
     return project;
 }
 
-auto EditorApp::save_project(this EditorApp &self, std::unique_ptr<Project> &project) -> void {
+auto EditorModule::save_project(this EditorModule &, std::unique_ptr<Project> &project) -> void {
     ZoneScoped;
 
     if (!project->active_scene_uuid) {
         return;
     }
 
+    auto &asset_man = lr::App::mod<lr::AssetManager>();
     const auto &scene_uuid = project->active_scene_uuid;
-    auto *scene_asset = self.asset_man.get_asset(scene_uuid);
-    self.asset_man.export_asset(scene_uuid, scene_asset->path);
+    auto *scene_asset = asset_man.get_asset(scene_uuid);
+    asset_man.export_asset(scene_uuid, scene_asset->path);
 }
 
-auto EditorApp::set_active_project(this EditorApp &self, std::unique_ptr<Project> &&project) -> void {
+auto EditorModule::set_active_project(this EditorModule &self, std::unique_ptr<Project> &&project) -> void {
     ZoneScoped;
 
     self.active_project = std::move(project);
 }
 
-auto EditorApp::get_asset_texture(this EditorApp &self, lr::Asset *asset) -> lr::Texture * {
+auto EditorModule::get_asset_texture(this EditorModule &self, lr::Asset *asset) -> lr::Texture * {
     ZoneScoped;
 
     return self.get_asset_texture(asset->type);
 }
 
-auto EditorApp::get_asset_texture(this EditorApp &self, lr::AssetType asset_type) -> lr::Texture * {
+auto EditorModule::get_asset_texture(this EditorModule &self, lr::AssetType asset_type) -> lr::Texture * {
     ZoneScoped;
 
+    auto &asset_man = lr::App::mod<lr::AssetManager>();
     switch (asset_type) {
         case lr::AssetType::Model:
-            return self.asset_man.get_texture(self.editor_assets["model"]);
+            return asset_man.get_texture(self.editor_assets["model"]);
         case lr::AssetType::Texture:
-            return self.asset_man.get_texture(self.editor_assets["texture"]);
+            return asset_man.get_texture(self.editor_assets["texture"]);
         case lr::AssetType::Scene:
-            return self.asset_man.get_texture(self.editor_assets["scene"]);
+            return asset_man.get_texture(self.editor_assets["scene"]);
         case lr::AssetType::Directory:
-            return self.asset_man.get_texture(self.editor_assets["dir"]);
+            return asset_man.get_texture(self.editor_assets["dir"]);
         default:
-            return self.asset_man.get_texture(self.editor_assets["file"]);
+            return asset_man.get_texture(self.editor_assets["file"]);
     }
 }
 
-bool EditorApp::prepare(this EditorApp &self) {
+bool EditorModule::init(this EditorModule &self) {
     ZoneScoped;
 
     self.load_editor_data();
     Theme::dark();
 
     auto add_texture = [&self](std::string name, const fs::path &path) {
-        auto asset_uuid = self.asset_man.create_asset(lr::AssetType::Texture, self.asset_man.asset_root_path(lr::AssetType::Root) / "editor" / path);
-        self.asset_man.load_texture(asset_uuid);
+        auto &asset_man = lr::App::mod<lr::AssetManager>();
+        auto asset_uuid = asset_man.create_asset(lr::AssetType::Texture, asset_man.asset_root_path(lr::AssetType::Root) / "editor" / path);
+        asset_man.load_texture(asset_uuid);
         self.editor_assets.emplace(name, asset_uuid);
     };
 
@@ -257,23 +266,37 @@ bool EditorApp::prepare(this EditorApp &self) {
     return true;
 }
 
-bool EditorApp::update(this EditorApp &self, f64 delta_time) {
+bool EditorModule::update(this EditorModule &self, f64 delta_time) {
     ZoneScoped;
+
+    auto &asset_man = lr::App::mod<lr::AssetManager>();
+    auto &device = lr::App::mod<lr::Device>();
+    auto &window = lr::App::mod<lr::Window>();
+    auto &imgui_renderer = lr::App::mod<lr::ImGuiRenderer>();
+
+    auto swapchain_attachment = device.new_frame(window.swap_chain.value());
+    swapchain_attachment = vuk::clear_image(std::move(swapchain_attachment), vuk::Black<f32>);
+    imgui_renderer.begin_frame(delta_time, swapchain_attachment->extent);
 
     if (self.active_project) {
         const auto &active_scene_uuid = self.active_project->active_scene_uuid;
         if (active_scene_uuid) {
-            auto *active_scene = self.asset_man.get_scene(active_scene_uuid);
+            auto *active_scene = asset_man.get_scene(active_scene_uuid);
             active_scene->tick(static_cast<f32>(delta_time));
         }
     }
 
-    self.frame_profiler.measure(&self.device, delta_time);
+    self.render(swapchain_attachment->format, swapchain_attachment->extent);
+
+    self.frame_profiler.measure(&device, delta_time);
+
+    swapchain_attachment = imgui_renderer.end_frame(std::move(swapchain_attachment));
+    device.end_frame(std::move(swapchain_attachment));
 
     return true;
 }
 
-static auto setup_dockspace(EditorApp &self) -> void {
+static auto setup_dockspace(EditorModule &self) -> void {
     ZoneScoped;
 
     auto [asset_browser_panel_id, asset_browser_panel] = self.add_window<AssetBrowserWindow>("Asset Browser", ICON_MDI_IMAGE_MULTIPLE);
@@ -307,7 +330,7 @@ static auto setup_dockspace(EditorApp &self) -> void {
     ImGui::DockBuilderFinish(dockspace_id_tmp);
 }
 
-static auto draw_menu_bar(EditorApp &self) -> void {
+static auto draw_menu_bar(EditorModule &self) -> void {
     ZoneScoped;
 
     if (ImGui::BeginMenuBar()) {
@@ -319,7 +342,7 @@ static auto draw_menu_bar(EditorApp &self) -> void {
             ImGui::Separator();
 
             if (ImGui::MenuItem("Exit")) {
-                self.should_close = true;
+                lr::App::close();
             }
 
             ImGui::EndMenu();
@@ -338,9 +361,10 @@ static auto draw_menu_bar(EditorApp &self) -> void {
     }
 }
 
-static auto draw_welcome_popup(EditorApp &self) -> void {
+static auto draw_welcome_popup(EditorModule &self) -> void {
     ZoneScoped;
 
+    auto &window = lr::App::mod<lr::Window>();
     ImGui::SetNextWindowSize({ 480.0f, 350.0f }, ImGuiCond_Appearing);
     constexpr auto popup_flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings;
     if (ImGui::BeginPopupModal("###welcome", nullptr, popup_flags)) {
@@ -372,24 +396,23 @@ static auto draw_welcome_popup(EditorApp &self) -> void {
                 ImGui::SeparatorText("");
 
                 if (ImGui::Button("Import...", { -1.0f, 35.0f })) {
-                    self.window.show_dialog(
+                    window.show_dialog(
                         { .kind = lr::DialogKind::OpenFile,
                           .user_data = &self,
                           .title = "Select a project...",
-                          .callback =
-                              [](void *user_data, const c8 *const *files, i32) {
-                                  if (!files || !*files) {
-                                      return;
-                                  }
+                          .callback = [](void *user_data, const c8 *const *files, i32) {
+                              if (!files || !*files) {
+                                  return;
+                              }
 
-                                  auto *app = static_cast<EditorApp *>(user_data);
-                                  auto lrporj_file = fs::path(files[0]);
-                                  auto project_info = read_project_file(lrporj_file);
-                                  if (project_info.has_value()) {
-                                      app->recent_project_infos.emplace(lrporj_file, project_info.value());
-                                      app->save_editor_data();
-                                  }
-                              } }
+                              auto *app = static_cast<EditorModule *>(user_data);
+                              auto lrporj_file = fs::path(files[0]);
+                              auto project_info = read_project_file(lrporj_file);
+                              if (project_info.has_value()) {
+                                  app->recent_project_infos.emplace(lrporj_file, project_info.value());
+                                  app->save_editor_data();
+                              }
+                          } }
                     );
                 }
 
@@ -409,17 +432,14 @@ static auto draw_welcome_popup(EditorApp &self) -> void {
                 ImGui::InputTextWithHint("##project_dir", "/path/to/new/project", &project_dir);
                 ImGui::SameLine();
                 if (ImGui::Button(ICON_MDI_FOLDER, { -1.0f, 0.0f })) {
-                    self.window.show_dialog(
-                        { .kind = lr::DialogKind::OpenFolder,
-                          .title = "Select a directory...",
-                          .callback =
-                              [](void *, const c8 *const *files, i32) {
-                                  if (!files || !*files) {
-                                      return;
-                                  }
+                    window.show_dialog(
+                        { .kind = lr::DialogKind::OpenFolder, .title = "Select a directory...", .callback = [](void *, const c8 *const *files, i32) {
+                             if (!files || !*files) {
+                                 return;
+                             }
 
-                                  project_dir = files[0];
-                              } }
+                             project_dir = files[0];
+                         } }
                     );
                 }
 
@@ -452,7 +472,7 @@ static auto draw_welcome_popup(EditorApp &self) -> void {
     }
 }
 
-static auto draw_profiler(EditorApp &self) -> void {
+static auto draw_profiler(EditorModule &self) -> void {
     ZoneScoped;
 
     if (!self.show_profiler) {
@@ -487,7 +507,7 @@ static auto draw_profiler(EditorApp &self) -> void {
     ImGui::End();
 }
 
-auto EditorApp::render(this EditorApp &self, vuk::Format format, vuk::Extent3D extent) -> bool {
+auto EditorModule::render(this EditorModule &self, vuk::Format format, vuk::Extent3D extent) -> bool {
     ZoneScoped;
 
     auto *viewport = ImGui::GetMainViewport();
@@ -541,18 +561,19 @@ auto EditorApp::render(this EditorApp &self, vuk::Format format, vuk::Extent3D e
     return true;
 }
 
-auto EditorApp::shutdown(this EditorApp &self) -> void {
+auto EditorModule::destroy(this EditorModule &self) -> void {
     ZoneScoped;
 
+    auto &asset_man = lr::App::mod<lr::AssetManager>();
     for (const auto &[name, uuid] : self.editor_assets) {
-        self.asset_man.unload_asset(uuid);
+        asset_man.unload_asset(uuid);
     }
 
     self.windows.clear();
     self.active_project.reset();
 }
 
-auto EditorApp::remove_window(this EditorApp &self, usize window_id) -> void {
+auto EditorModule::remove_window(this EditorModule &self, usize window_id) -> void {
     ZoneScoped;
 
     self.windows.erase(self.windows.begin() + static_cast<std::ranges::range_difference_t<decltype(self.windows)>>(window_id));

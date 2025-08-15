@@ -105,6 +105,8 @@ struct DeviceResources {
 };
 
 struct Device {
+    constexpr static auto MODULE_NAME = "Vulkan Device";
+
 private:
     usize frames_in_flight = 0;
     ls::option<vuk::Runtime> runtime;
@@ -132,9 +134,9 @@ private:
     friend TransferManager;
 
 public:
-    auto init(this Device &, usize frame_count) -> std::expected<void, vuk::VkException>;
+    Device(usize frame_count_) : frames_in_flight(frame_count_) {}
+    auto init(this Device &) -> bool;
     auto init_resources(this Device &) -> std::expected<void, vuk::VkException>;
-
     auto destroy(this Device &) -> void;
 
     auto new_slang_session(this Device &, const SlangSessionInfo &info) -> ls::option<SlangSession>;

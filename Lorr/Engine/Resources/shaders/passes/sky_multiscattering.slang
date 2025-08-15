@@ -10,7 +10,7 @@ import embedded.hemisphere;
 struct ShaderParameters {
     Sampler sampler;
     Image2D<f32x4> sky_transmittance_lut;
-    ConstantBuffer<Atmosphere> atmosphere;
+    ConstantBuffer<Environment> environment;
     StorageImage2D<f32x4, ImageFormat::RGBA16F> sky_multiscattering_lut;
 };
 
@@ -22,10 +22,10 @@ func cs_main(
     u32x3 thread_id : SV_DispatchThreadID,
     uniform ParameterBlock<ShaderParameters> params
 ) -> void {
-    f32x2 uv = f32x2(f32x2(thread_id.xy) + 0.5) / f32x2(params.atmosphere.multiscattering_lut_size.xy);
+    f32x2 uv = f32x2(f32x2(thread_id.xy) + 0.5) / f32x2(params.environment.multiscattering_lut_size.xy);
 
-    const f32 atmosphere_thickness = params.atmosphere.atmos_radius - params.atmosphere.planet_radius;
-    const f32 altitude = params.atmosphere.planet_radius + uv.y * atmosphere_thickness + PLANET_RADIUS_OFFSET;
+    let atmosphere_thickness = params.environment.atmos_atmos_radius - params.environment.atmos_planet_radius;
+    let altitude = params.environment.atmos_planet_radius + uv.y * atmosphere_thickness + PLANET_RADIUS_OFFSET;
 
     f32 sun_cos_theta = uv.x * 2.0 - 1.0;
     f32x3 sun_dir = f32x3(0.0, sun_cos_theta, std::safe_sqrt(1.0 - sun_cos_theta * sun_cos_theta));
@@ -46,7 +46,7 @@ func cs_main(
     f32x3 multi_scattering_as_1 = 0.0;
     for (int i = 0; i < SAMPLE_COUNT; i++) {
         info.eye_dir = HEMISPHERE_64[i];
-        const let result = integrate_single_scattered_luminance(params.atmosphere, params.sampler, info);
+        const let result = integrate_single_scattered_luminance(params.environment, params.sampler, info);
         multi_scattering_as_1 += result.multiscattering_as_1;
         luminance += result.luminance;
     }

@@ -1,10 +1,11 @@
 #pragma once
 
-#include "Engine/Core/Handle.hh"
-
-#include <vulkan/vulkan_core.h>
-
+#include <SDL3/SDL_events.h>
 #include <SDL3/SDL_keycode.h>
+#include <SDL3/SDL_mouse.h>
+#include <SDL3/SDL_video.h>
+
+#include <vuk/runtime/vk/VkSwapchain.hpp>
 
 namespace lr {
 enum class WindowCursor {
@@ -41,17 +42,6 @@ struct SystemDisplay {
     f32 refresh_rate = 30.0f;
 };
 
-struct WindowCallbacks {
-    void *user_data = nullptr;
-    void (*on_resize)(void *user_data, glm::uvec2 size) = nullptr;
-    void (*on_mouse_pos)(void *user_data, glm::vec2 position, glm::vec2 relative) = nullptr;
-    void (*on_mouse_button)(void *user_data, u8 button, bool down) = nullptr;
-    void (*on_mouse_scroll)(void *user_data, glm::vec2 offset) = nullptr;
-    void (*on_text_input)(void *user_data, const c8 *text) = nullptr;
-    void (*on_key)(void *user_data, SDL_Keycode key_code, SDL_Scancode scan_code, u16 mods, bool down) = nullptr;
-    void (*on_close)(void *user_data) = nullptr;
-};
-
 enum class DialogKind : u32 {
     OpenFile = 0,
     SaveFile,
@@ -74,31 +64,52 @@ struct ShowDialogInfo {
 };
 
 struct WindowInfo {
-    constexpr static i32 USE_PRIMARY_MONITOR = 0;
-
     std::string title = {};
-    std::string icon = {};
-    i32 monitor = USE_PRIMARY_MONITOR;
-    u32 width = 0;
-    u32 height = 0;
+    SystemDisplay *display = nullptr;
+    i32 width = 0;
+    i32 height = 0;
     WindowFlag flags = WindowFlag::None;
 };
 
-struct Window : Handle<Window> {
-    static auto create(const WindowInfo &info) -> Window;
-    auto destroy() -> void;
+struct Window {
+    constexpr static auto MODULE_NAME = "Window";
 
-    auto poll(const WindowCallbacks &callbacks) -> void;
-    auto set_cursor(WindowCursor cursor) -> void;
-    auto get_cursor() -> WindowCursor;
-    auto show_cursor(bool show) -> void;
+    std::string title = {};
+    i32 width = 0;
+    i32 height = 0;
+    WindowFlag flags = WindowFlag::None;
+    SystemDisplay *display = nullptr;
 
-    static auto display_at(i32 monitor_id = WindowInfo::USE_PRIMARY_MONITOR) -> ls::option<SystemDisplay>;
-    auto get_size() -> glm::uvec2;
-    auto get_surface(VkInstance instance) -> VkSurfaceKHR;
-    auto get_handle() -> void *;
+    SDL_Window *handle = nullptr;
+    ls::option<vuk::Swapchain> swap_chain = ls::nullopt;
 
-    auto show_dialog(const ShowDialogInfo &info) -> void;
+    WindowCursor current_cursor = WindowCursor::Arrow;
+    glm::uvec2 cursor_position = {};
+    std::array<SDL_Cursor *, usize(WindowCursor::Count)> cursors = {};
+    std::vector<std::function<void(SDL_Event &)>> event_listeners = {};
+
+    static auto init_sdl() -> bool;
+    static auto display_at(i32 monitor_id) -> ls::option<SystemDisplay>;
+
+    Window(const WindowInfo &info);
+    auto init(this Window &) -> bool;
+    auto destroy(this Window &) -> void;
+    auto update(this Window &, f64) -> void;
+
+    auto set_cursor(this Window &, WindowCursor cursor) -> void;
+    auto get_cursor(this Window &) -> WindowCursor;
+    auto show_cursor(this Window &, bool show) -> void;
+
+    template<typename T>
+    auto add_listener(T &listener) {
+        event_listeners.push_back([&listener](SDL_Event &e) { listener.window_event(e); });
+    }
+
+    auto get_size(this Window &) -> glm::ivec2;
+    auto get_surface(this Window &, VkInstance instance) -> VkSurfaceKHR;
+    auto get_handle(this Window &) -> void *;
+
+    auto show_dialog(this Window &, const ShowDialogInfo &info) -> void;
 };
 
 } // namespace lr

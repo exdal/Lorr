@@ -1,20 +1,24 @@
 #include "Editor/Window/SceneBrowserWindow.hh"
 
-#include "Editor/EditorApp.hh"
+#include "Editor/EditorModule.hh"
 
 #include "Engine/Memory/Stack.hh"
 #include "Engine/Scene/ECSModule/Core.hh"
 
 #include "Engine/Util/Icons/IconsMaterialDesignIcons.hh"
 
+#include "Engine/Asset/Asset.hh"
+#include "Engine/Core/App.hh"
+
 namespace led {
 static auto draw_children(SceneBrowserWindow &self, flecs::entity root) -> void {
     ZoneScoped;
 
-    auto &app = EditorApp::get();
-    auto &active_project = *app.active_project;
+    auto &asset_man = lr::App::mod<lr::AssetManager>();
+    auto &editor = lr::App::mod<EditorModule>();
+    auto &active_project = *editor.active_project;
     auto &active_scene_uuid = active_project.active_scene_uuid;
-    auto *active_scene = app.asset_man.get_scene(active_scene_uuid);
+    auto *active_scene = asset_man.get_scene(active_scene_uuid);
     auto &selected_entity = active_project.selected_entity;
     auto &world = active_scene->get_world();
 
@@ -70,10 +74,11 @@ static auto draw_children(SceneBrowserWindow &self, flecs::entity root) -> void 
 static auto draw_hierarchy(SceneBrowserWindow &self) -> void {
     ZoneScoped;
 
-    auto &app = EditorApp::get();
-    auto &active_project = *app.active_project;
+    auto &asset_man = lr::App::mod<lr::AssetManager>();
+    auto &editor = lr::App::mod<EditorModule>();
+    auto &active_project = *editor.active_project;
     auto &active_scene_uuid = active_project.active_scene_uuid;
-    auto *active_scene = app.asset_man.get_scene(active_scene_uuid);
+    auto *active_scene = asset_man.get_scene(active_scene_uuid);
 
     draw_children(self, active_scene->get_root());
 
@@ -89,11 +94,10 @@ static auto draw_hierarchy(SceneBrowserWindow &self) -> void {
 
             ImGui::Separator();
 
-            if (ImGui::MenuItem("Directional Light")) {
+            if (ImGui::MenuItem("Environment")) {
                 auto created_entity = active_scene->create_entity();
                 created_entity.set<lr::ECS::Transform>({});
-                created_entity.set<lr::ECS::DirectionalLight>({});
-                created_entity.set<lr::ECS::Atmosphere>({});
+                created_entity.set<lr::ECS::Environment>({});
                 created_entity.child_of(active_scene->get_root());
             }
 
@@ -132,8 +136,8 @@ void SceneBrowserWindow::render(this SceneBrowserWindow &self) {
             ImGui::TableHeadersRow();
 
             ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, { 0, 0 });
-            auto &app = EditorApp::get();
-            if (app.active_project && app.active_project->active_scene_uuid) {
+            auto &editor = lr::App::mod<EditorModule>();
+            if (editor.active_project && editor.active_project->active_scene_uuid) {
                 draw_hierarchy(self);
             }
             ImGui::PopStyleVar();

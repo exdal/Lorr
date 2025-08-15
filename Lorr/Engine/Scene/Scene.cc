@@ -1,6 +1,8 @@
 #include "Engine/Scene/Scene.hh"
 
-#include "Engine/Core/Application.hh"
+#include "Engine/Asset/Asset.hh"
+
+#include "Engine/Core/App.hh"
 
 #include "Engine/Memory/Stack.hh"
 
@@ -146,10 +148,10 @@ auto Scene::destroy(this Scene &self) -> void {
     };
     self.root.children([&](flecs::entity e) { visit_child(e); });
 
-    auto &app = Application::get();
+    auto &asset_man = App::mod<AssetManager>();
     for (const auto &uuid : unloading_assets) {
-        if (uuid && app.asset_man.get_asset(uuid)) {
-            app.asset_man.unload_asset(uuid);
+        if (uuid && asset_man.get_asset(uuid)) {
+            asset_man.unload_asset(uuid);
         }
     }
 
@@ -296,9 +298,9 @@ auto Scene::import_from_file(this Scene &self, const fs::path &path) -> bool {
 
     LOG_TRACE("Loading scene {} with {} assets...", self.name, requested_assets.size());
     for (const auto &uuid : requested_assets) {
-        auto &app = Application::get();
-        if (uuid && app.asset_man.get_asset(uuid)) {
-            app.asset_man.load_asset(uuid);
+        auto &asset_man = App::mod<AssetManager>();
+        if (uuid && asset_man.get_asset(uuid)) {
+            asset_man.load_asset(uuid);
         }
     }
 
@@ -443,19 +445,20 @@ auto Scene::create_editor_camera(this Scene &self) -> void {
 auto Scene::create_model_entity(this Scene &self, UUID &importing_model_uuid) -> flecs::entity {
     ZoneScoped;
 
-    auto &app = Application::get();
+    auto &asset_man = App::mod<AssetManager>();
+
     // sanity check
-    if (!app.asset_man.get_asset(importing_model_uuid)) {
+    if (!asset_man.get_asset(importing_model_uuid)) {
         LOG_ERROR("Cannot import an invalid model '{}' into the scene!", importing_model_uuid.str());
         return {};
     }
 
     // acquire model
-    if (!app.asset_man.load_model(importing_model_uuid)) {
+    if (!asset_man.load_model(importing_model_uuid)) {
         return {};
     }
 
-    auto *imported_model = app.asset_man.get_model(importing_model_uuid);
+    auto *imported_model = asset_man.get_model(importing_model_uuid);
     auto &default_scene = imported_model->scenes[imported_model->default_scene_index];
     auto root_entity = self.create_entity(self.find_entity(default_scene.name) ? std::string{} : default_scene.name);
     root_entity.child_of(self.root);
@@ -516,97 +519,6 @@ auto Scene::find_entity(this Scene &self, u32 transform_index) -> flecs::entity 
     }
 
     return {};
-}
-
-auto Scene::render(this Scene &self, SceneRenderer &renderer, SceneRenderInfo &info) -> vuk::Value<vuk::ImageAttachment> {
-    ZoneScoped;
-
-    // clang-format off
-    auto camera_query = self.get_world()
-        .query_builder<ECS::Transform, ECS::Camera, ECS::ActiveCamera>()
-        .build();
-    auto rendering_meshes_query = self.get_world()
-        .query_builder<ECS::RenderingMesh>()
-        .build();
-    auto directional_light_query = self.get_world()
-        .query_builder<ECS::DirectionalLight>()
-        .build();
-    // clang-format on
-
-    ls::option<GPU::Camera> active_camera_data = ls::nullopt;
-    camera_query.each([&](flecs::entity, ECS::Transform &t, ECS::Camera &c, ECS::ActiveCamera) {
-        auto projection_mat = glm::perspectiveRH_ZO(glm::radians(c.fov), c.aspect_ratio, c.far_clip, c.near_clip);
-        projection_mat[1][1] *= -1;
-
-        auto translation_mat = glm::translate(glm::mat4(1.0f), -t.position);
-        auto rotation_mat = glm::mat4_cast(Math::quat_dir(t.rotation));
-        auto view_mat = rotation_mat * translation_mat;
-
-        auto &camera_data = active_camera_data.emplace();
-        camera_data.projection_mat = projection_mat;
-        camera_data.view_mat = view_mat;
-        camera_data.projection_view_mat = camera_data.projection_mat * camera_data.view_mat;
-        camera_data.inv_view_mat = glm::inverse(camera_data.view_mat);
-        camera_data.inv_projection_view_mat = glm::inverse(camera_data.projection_view_mat);
-        camera_data.position = t.position;
-        camera_data.near_clip = c.near_clip;
-        camera_data.far_clip = c.far_clip;
-        camera_data.resolution = glm::vec2(static_cast<f32>(info.extent.width), static_cast<f32>(info.extent.height));
-        camera_data.acceptable_lod_error = c.acceptable_lod_error;
-        camera_data.frustum_projection_view_mat = c.frustum_projection_view_mat;
-        c.frustum_projection_view_mat = camera_data.projection_view_mat;
-    });
-
-    ls::option<GPU::Sun> sun_data = ls::nullopt;
-    ls::option<GPU::Atmosphere> atmos_data = ls::nullopt;
-    ls::option<GPU::HistogramInfo> histogram_data = ls::nullopt;
-    directional_light_query.each([&](flecs::entity e, ECS::DirectionalLight &light) {
-        auto light_dir_rad = glm::radians(light.direction);
-
-        auto &sun = sun_data.emplace();
-        sun.direction.x = glm::cos(light_dir_rad.x) * glm::sin(light_dir_rad.y);
-        sun.direction.y = glm::sin(light_dir_rad.x) * glm::sin(light_dir_rad.y);
-        sun.direction.z = glm::cos(light_dir_rad.y);
-        sun.intensity = light.intensity;
-
-        if (e.has<ECS::Atmosphere>()) {
-            const auto &atmos_info = *e.get<ECS::Atmosphere>();
-            auto &atmos = atmos_data.emplace();
-            atmos.rayleigh_scatter = atmos_info.rayleigh_scattering * 1e-3f;
-            atmos.rayleigh_density = atmos_info.rayleigh_density;
-            atmos.mie_scatter = atmos_info.mie_scattering * 1e-3f;
-            atmos.mie_density = atmos_info.mie_density;
-            atmos.mie_extinction = atmos_info.mie_extinction * 1e-3f;
-            atmos.mie_asymmetry = atmos_info.mie_asymmetry;
-            atmos.ozone_absorption = atmos_info.ozone_absorption * 1e-3f;
-            atmos.ozone_height = atmos_info.ozone_height;
-            atmos.ozone_thickness = atmos_info.ozone_thickness;
-            atmos.aerial_perspective_start_km = atmos_info.aerial_perspective_start_km;
-
-            f32 eye_altitude = active_camera_data->position.y * GPU::CAMERA_SCALE_UNIT;
-            eye_altitude += atmos.planet_radius + GPU::PLANET_RADIUS_OFFSET;
-            atmos.eye_position = glm::vec3(0.0f, eye_altitude, 0.0f);
-        }
-
-        if (e.has<ECS::AutoExposure>()) {
-            const auto &auto_exposure = *e.get<ECS::AutoExposure>();
-            auto &histogram = histogram_data.emplace();
-            histogram.min_exposure = auto_exposure.min_exposure;
-            histogram.max_exposure = auto_exposure.max_exposure;
-            histogram.adaptation_speed = auto_exposure.adaptation_speed;
-            histogram.ISO_K = auto_exposure.ISO / auto_exposure.K;
-        }
-    });
-
-    auto prepared_frame = self.prepare_frame(renderer);
-
-    info.sun = sun_data;
-    info.atmosphere = atmos_data;
-    info.camera = active_camera_data;
-    info.histogram_info = histogram_data;
-    info.cull_flags = self.cull_flags;
-
-    return renderer.render(info, prepared_frame);
 }
 
 auto Scene::tick(this Scene &self, f32 delta_time) -> bool {
@@ -708,7 +620,73 @@ auto Scene::get_cull_flags(this Scene &self) -> GPU::CullFlags & {
 auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer) -> PreparedFrame {
     ZoneScoped;
 
-    auto &app = Application::get();
+    auto &asset_man = App::mod<AssetManager>();
+
+    // clang-format off
+    auto camera_query = self.get_world()
+        .query_builder<ECS::Transform, ECS::Camera, ECS::ActiveCamera>()
+        .build();
+    auto rendering_meshes_query = self.get_world()
+        .query_builder<ECS::RenderingMesh>()
+        .build();
+    auto environment_query = self.get_world()
+        .query_builder<ECS::Environment>()
+        .build();
+    // clang-format on
+
+    ls::option<GPU::Camera> active_camera_data = ls::nullopt;
+    camera_query.each([&active_camera_data](flecs::entity, ECS::Transform &t, ECS::Camera &c, ECS::ActiveCamera) {
+        auto projection_mat = glm::perspectiveRH_ZO(glm::radians(c.fov), c.aspect_ratio, c.far_clip, c.near_clip);
+        projection_mat[1][1] *= -1;
+
+        auto translation_mat = glm::translate(glm::mat4(1.0f), -t.position);
+        auto rotation_mat = glm::mat4_cast(Math::quat_dir(t.rotation));
+        auto view_mat = rotation_mat * translation_mat;
+
+        auto &camera_data = active_camera_data.emplace(GPU::Camera{});
+        camera_data.projection_mat = projection_mat;
+        camera_data.view_mat = view_mat;
+        camera_data.projection_view_mat = camera_data.projection_mat * camera_data.view_mat;
+        camera_data.inv_view_mat = glm::inverse(camera_data.view_mat);
+        camera_data.inv_projection_view_mat = glm::inverse(camera_data.projection_view_mat);
+        camera_data.position = t.position;
+        camera_data.near_clip = c.near_clip;
+        camera_data.far_clip = c.far_clip;
+        camera_data.resolution = c.resolution;
+        camera_data.acceptable_lod_error = c.acceptable_lod_error;
+        camera_data.frustum_projection_view_mat = c.frustum_projection_view_mat;
+        c.frustum_projection_view_mat = camera_data.projection_view_mat;
+    });
+
+    ls::option<GPU::Environment> environment_data = ls::nullopt;
+    environment_query.each([&environment_data](flecs::entity, ECS::Environment &environment_comp) {
+        auto &environment = environment_data.emplace(GPU::Environment{});
+        environment.flags |= environment_comp.sun ? GPU::EnvironmentFlags::HasSun : 0;
+        environment.flags |= environment_comp.atmos ? GPU::EnvironmentFlags::HasAtmosphere : 0;
+        environment.flags |= environment_comp.eye_adaptation ? GPU::EnvironmentFlags::HasEyeAdaptation : 0;
+
+        auto light_dir_rad = glm::radians(environment_comp.sun_direction);
+        environment.sun_direction = {
+            glm::cos(light_dir_rad.x) * glm::sin(light_dir_rad.y),
+            glm::sin(light_dir_rad.x) * glm::sin(light_dir_rad.y),
+            glm::cos(light_dir_rad.y),
+        };
+        environment.sun_intensity = environment_comp.sun_intensity;
+        environment.atmos_rayleigh_scatter = environment_comp.atmos_rayleigh_scattering * 1e-3f;
+        environment.atmos_rayleigh_density = environment_comp.atmos_rayleigh_density;
+        environment.atmos_mie_scatter = environment_comp.atmos_mie_scattering * 1e-3f;
+        environment.atmos_mie_density = environment_comp.atmos_mie_density;
+        environment.atmos_mie_extinction = environment_comp.atmos_mie_extinction * 1e-3f;
+        environment.atmos_mie_asymmetry = environment_comp.atmos_mie_asymmetry;
+        environment.atmos_ozone_absorption = environment_comp.atmos_ozone_absorption * 1e-3f;
+        environment.atmos_ozone_height = environment_comp.atmos_ozone_height;
+        environment.atmos_ozone_thickness = environment_comp.atmos_ozone_thickness;
+        environment.atmos_aerial_perspective_start_km = environment_comp.atmos_aerial_perspective_start_km;
+        environment.eye_min_exposure = environment_comp.eye_min_exposure;
+        environment.eye_max_exposure = environment_comp.eye_max_exposure;
+        environment.eye_adaptation_speed = environment_comp.eye_adaptation_speed;
+        environment.eye_ISO_K = environment_comp.eye_iso / environment_comp.eye_k;
+    });
 
     auto max_meshlet_instance_count = 0_u32;
     auto gpu_meshes = std::vector<GPU::Mesh>();
@@ -716,7 +694,7 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer) -> Prepared
 
     if (self.models_dirty) {
         for (const auto &[rendering_mesh, transform_ids] : self.rendering_meshes_map) {
-            auto *model = app.asset_man.get_model(rendering_mesh.n0);
+            auto *model = asset_man.get_model(rendering_mesh.n0);
             const auto &mesh = model->meshes[rendering_mesh.n1];
 
             for (auto primitive_index : mesh.primitive_indices) {
@@ -745,19 +723,19 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer) -> Prepared
     }
 
     auto uuid_to_image_index = [&](const UUID &uuid) -> ls::option<u32> {
-        if (!app.asset_man.is_texture_loaded(uuid)) {
+        if (!asset_man.is_texture_loaded(uuid)) {
             return ls::nullopt;
         }
 
-        auto *texture = app.asset_man.get_texture(uuid);
+        auto *texture = asset_man.get_texture(uuid);
         return texture->image_view.index();
     };
 
-    auto dirty_material_ids = app.asset_man.get_dirty_material_ids();
+    auto dirty_material_ids = asset_man.get_dirty_material_ids();
     auto gpu_materials = std::vector<GPU::Material>(dirty_material_ids.size());
     auto dirty_material_indices = std::vector<u32>(dirty_material_ids.size());
     for (const auto &[gpu_material, index, id] : std::views::zip(gpu_materials, dirty_material_indices, dirty_material_ids)) {
-        const auto *material = app.asset_man.get_material(id);
+        const auto *material = asset_man.get_material(id);
         auto albedo_image_index = uuid_to_image_index(material->albedo_texture);
         auto normal_image_index = uuid_to_image_index(material->normal_texture);
         auto emissive_image_index = uuid_to_image_index(material->emissive_texture);
@@ -767,7 +745,7 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer) -> Prepared
 
         auto flags = GPU::MaterialFlag::None;
         if (albedo_image_index.has_value()) {
-            auto *texture = app.asset_man.get_texture(material->albedo_texture);
+            auto *texture = asset_man.get_texture(material->albedo_texture);
             sampler_index = texture->sampler.index();
             flags |= GPU::MaterialFlag::HasAlbedoImage;
         }
@@ -802,6 +780,8 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer) -> Prepared
         .gpu_materials = gpu_materials,
         .gpu_meshes = gpu_meshes,
         .gpu_mesh_instances = gpu_mesh_instances,
+        .environment = environment_data.value_or(GPU::Environment{}),
+        .camera = active_camera_data.value_or(GPU::Camera{}),
     };
     auto prepared_frame = renderer.prepare_frame(prepare_info);
 

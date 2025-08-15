@@ -63,40 +63,47 @@ enum class CullFlags : u32 {
     All = MeshletFrustum | TriangleBackFace | MicroTriangles | Occlusion,
 };
 
-struct Sun {
-    alignas(4) glm::vec3 direction = {};
-    alignas(4) f32 intensity = 10.0f;
+enum EnvironmentFlags : u32 {
+    None = 0,
+    HasSun = 1 << 0,
+    HasAtmosphere = 1 << 1,
+    HasEyeAdaptation = 1 << 2,
 };
 
-constexpr static f32 CAMERA_SCALE_UNIT = 0.01;
-constexpr static f32 INV_CAMERA_SCALE_UNIT = 1.0 / CAMERA_SCALE_UNIT;
-constexpr static f32 PLANET_RADIUS_OFFSET = 0.001;
-
-struct Atmosphere {
-    alignas(4) glm::vec3 eye_position = {}; // this is camera pos but its always above planet_radius
-
-    alignas(4) glm::vec3 rayleigh_scatter = { 0.005802f, 0.013558f, 0.033100f };
-    alignas(4) f32 rayleigh_density = 8.0f;
-
-    alignas(4) glm::vec3 mie_scatter = { 0.003996f, 0.003996f, 0.003996f };
-    alignas(4) f32 mie_density = 1.2f;
-    alignas(4) f32 mie_extinction = 0.004440f;
-    alignas(4) f32 mie_asymmetry = 3.6f;
-
-    alignas(4) glm::vec3 ozone_absorption = { 0.000650f, 0.001881f, 0.000085f };
-    alignas(4) f32 ozone_height = 25.0f;
-    alignas(4) f32 ozone_thickness = 15.0f;
-
-    alignas(4) glm::vec3 terrain_albedo = { 0.3f, 0.3f, 0.3f };
-    alignas(4) f32 planet_radius = 6360.0f;
-    alignas(4) f32 atmos_radius = 6460.0f;
-    alignas(4) f32 aerial_perspective_start_km = 8.0f;
+struct Environment {
+    alignas(4) u32 flags = EnvironmentFlags::None;
+    // Sun
+    alignas(4) glm::vec3 sun_direction = {};
+    alignas(4) f32 sun_intensity = 10.0f;
+    // Atmosphere
+    alignas(4) glm::vec3 atmos_rayleigh_scatter = { 0.005802f, 0.013558f, 0.033100f };
+    alignas(4) f32 atmos_rayleigh_density = 8.0f;
+    alignas(4) glm::vec3 atmos_mie_scatter = { 0.003996f, 0.003996f, 0.003996f };
+    alignas(4) f32 atmos_mie_density = 1.2f;
+    alignas(4) f32 atmos_mie_extinction = 0.004440f;
+    alignas(4) f32 atmos_mie_asymmetry = 3.6f;
+    alignas(4) glm::vec3 atmos_ozone_absorption = { 0.000650f, 0.001881f, 0.000085f };
+    alignas(4) f32 atmos_ozone_height = 25.0f;
+    alignas(4) f32 atmos_ozone_thickness = 15.0f;
+    alignas(4) glm::vec3 atmos_terrain_albedo = { 0.3f, 0.3f, 0.3f };
+    alignas(4) f32 atmos_planet_radius = 6360.0f;
+    alignas(4) f32 atmos_atmos_radius = 6460.0f;
+    alignas(4) f32 atmos_aerial_perspective_start_km = 8.0f;
+    // Eye adaptation
+    alignas(4) f32 eye_min_exposure = -6.0f;
+    alignas(4) f32 eye_max_exposure = 18.0f;
+    alignas(4) f32 eye_adaptation_speed = 1.1f;
+    alignas(4) f32 eye_ISO_K = 100.0f / 12.5f;
 
     alignas(4) vuk::Extent3D transmittance_lut_size = {};
     alignas(4) vuk::Extent3D sky_view_lut_size = {};
     alignas(4) vuk::Extent3D multiscattering_lut_size = {};
     alignas(4) vuk::Extent3D aerial_perspective_lut_size = {};
 };
+
+constexpr static f32 CAMERA_SCALE_UNIT = 0.01;
+constexpr static f32 INV_CAMERA_SCALE_UNIT = 1.0 / CAMERA_SCALE_UNIT;
+constexpr static f32 PLANET_RADIUS_OFFSET = 0.001;
 
 struct Camera {
     alignas(4) glm::mat4 projection_mat = {};
@@ -211,15 +218,8 @@ constexpr static u32 HISTOGRAM_THREADS_Y = 16;
 constexpr static u32 HISTOGRAM_BIN_COUNT = HISTOGRAM_THREADS_X * HISTOGRAM_THREADS_Y;
 
 struct HistogramLuminance {
-    alignas(4) f32 adapted_luminance;
-    alignas(4) f32 exposure;
-};
-
-struct HistogramInfo {
-    alignas(4) f32 min_exposure = -6.0f;
-    alignas(4) f32 max_exposure = 18.0f;
-    alignas(4) f32 adaptation_speed = 1.1f;
-    alignas(4) f32 ISO_K = 100.0f / 12.5f;
+    f32 adapted_luminance = 0.0f;
+    f32 exposure = 0.0f;
 };
 
 } // namespace lr::GPU

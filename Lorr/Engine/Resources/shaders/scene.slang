@@ -3,8 +3,6 @@ module scene;
 import std;
 import gpu;
 
-#include <assert.slang>
-
 public const static f32 CAMERA_SCALE_UNIT = 0.01;
 public const static f32 INV_CAMERA_SCALE_UNIT = 1.0 / CAMERA_SCALE_UNIT;
 public const static f32 PLANET_RADIUS_OFFSET = 0.001;
@@ -30,35 +28,43 @@ public enum CullFlags : u32 {
     Occlusion,
 };
 
-public struct Sun {
-    public f32x3 direction;
-    public f32 intensity;
+[[Flags]]
+public enum EnvironmentFlags : u32 {
+    None = 0,
+    HasSun = 1 << 0,
+    HasAtmosphere = 1 << 1,
+    HasEyeAdaptation = 1 << 2,
 };
 
-public struct Atmosphere {
-    public f32x3 eye_pos;
+public struct Environment {
+    public EnvironmentFlags flags = EnvironmentFlags::None;
+    // Sun
+    public f32x3 sun_direction = {};
+    public f32 sun_intensity = 10.0f;
+    // Atmosphere
+    public f32x3 atmos_rayleigh_scatter = { 0.005802f, 0.013558f, 0.033100f };
+    public f32 atmos_rayleigh_density = 8.0f;
+    public f32x3 atmos_mie_scatter = { 0.003996f, 0.003996f, 0.003996f };
+    public f32 atmos_mie_density = 1.2f;
+    public f32 atmos_mie_extinction = 0.004440f;
+    public f32 atmos_mie_asymmetry = 3.6f;
+    public f32x3 atmos_ozone_absorption = { 0.000650f, 0.001881f, 0.000085f };
+    public f32 atmos_ozone_height = 25.0f;
+    public f32 atmos_ozone_thickness = 15.0f;
+    public f32x3 atmos_terrain_albedo = { 0.3f, 0.3f, 0.3f };
+    public f32 atmos_planet_radius = 6360.0f;
+    public f32 atmos_atmos_radius = 6460.0f;
+    public f32 atmos_aerial_perspective_start_km = 8.0f;
+    // Eye adaptation
+    public f32 eye_min_exposure = -6.0f;
+    public f32 eye_max_exposure = 18.0f;
+    public f32 eye_adaptation_speed = 1.1f;
+    public f32 eye_ISO_K = 100.0f / 12.5f;
 
-    public f32x3 rayleigh_scatter;
-    public f32 rayleigh_density;
-
-    public f32x3 mie_scatter;
-    public f32 mie_density;
-    public f32 mie_extinction;
-    public f32 mie_asymmetry;
-
-    public f32x3 ozone_absorption;
-    public f32 ozone_height;
-    public f32 ozone_thickness;
-
-    public f32x3 terrain_albedo;
-    public f32 planet_radius;
-    public f32 atmos_radius;
-    public f32 aerial_perspective_start_km;
-
-    public i32x3 transmittance_lut_size;
-    public i32x3 sky_view_lut_size;
-    public i32x3 multiscattering_lut_size;
-    public i32x3 aerial_perspective_lut_size;
+    public i32x3 transmittance_lut_size = {};
+    public i32x3 sky_view_lut_size = {};
+    public i32x3 multiscattering_lut_size = {};
+    public i32x3 aerial_perspective_lut_size = {};
 };
 
 public struct Camera {
@@ -199,10 +205,7 @@ public struct Meshlet {
 
     // Takes a local triange index and returns an index to index buffer.
     public func index(in MeshLOD mesh_lod, u32 i) -> u32 {
-        assert(this.local_triangle_index_offset + i < mesh_lod.local_triangle_indices_count);
         let local_triangle_index = u32(mesh_lod.local_triangle_indices[this.local_triangle_index_offset + i]);
-
-        assert(this.indirect_vertex_index_offset + local_triangle_index < mesh_lod.indirect_vertex_indices_count);
         return mesh_lod.indirect_vertex_indices[this.indirect_vertex_index_offset + local_triangle_index];
     }
 

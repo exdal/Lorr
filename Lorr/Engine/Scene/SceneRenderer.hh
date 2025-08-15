@@ -17,10 +17,14 @@ struct FramePrepareInfo {
 
     ls::span<GPU::Mesh> gpu_meshes = {};
     ls::span<GPU::MeshInstance> gpu_mesh_instances = {};
+
+    GPU::Environment environment = {};
+    GPU::Camera camera = {};
 };
 
 struct PreparedFrame {
     u32 mesh_instance_count = 0;
+    GPU::EnvironmentFlags environment_flags = GPU::EnvironmentFlags::None;
     vuk::Value<vuk::Buffer> transforms_buffer = {};
     vuk::Value<vuk::Buffer> meshes_buffer = {};
     vuk::Value<vuk::Buffer> mesh_instances_buffer = {};
@@ -28,28 +32,23 @@ struct PreparedFrame {
     vuk::Value<vuk::Buffer> visible_meshlet_instances_indices_buffer = {};
     vuk::Value<vuk::Buffer> reordered_indices_buffer = {};
     vuk::Value<vuk::Buffer> materials_buffer = {};
+    vuk::Value<vuk::Buffer> environment_buffer = {};
+    vuk::Value<vuk::Buffer> camera_buffer = {};
 };
 
 struct SceneRenderInfo {
-    vuk::Format format = vuk::Format::eR8G8B8A8Srgb;
-    vuk::Extent3D extent = {};
     f32 delta_time = 0.0f;
     GPU::CullFlags cull_flags = {};
 
-    ls::option<GPU::Sun> sun = ls::nullopt;
-    ls::option<GPU::Atmosphere> atmosphere = ls::nullopt;
-    ls::option<GPU::Camera> camera = ls::nullopt;
     ls::option<glm::uvec2> picking_texel = ls::nullopt;
-    ls::option<GPU::HistogramInfo> histogram_info = ls::nullopt;
-
     ls::option<u32> picked_transform_index = ls::nullopt;
 };
 
 struct SceneRenderer {
-    Device *device = nullptr;
+    static constexpr auto MODULE_NAME = "Scene Renderer";
 
     // Scene resources
-    Buffer exposure_buffer = {};
+    Buffer histogram_luminance_buffer = {};
     Buffer transforms_buffer = {};
 
     Buffer mesh_instances_buffer = {};
@@ -71,14 +70,13 @@ struct SceneRenderer {
 
     bool debug_lines = false;
 
-    auto init(this SceneRenderer &, Device *device) -> bool;
+    auto init(this SceneRenderer &) -> bool;
     auto destroy(this SceneRenderer &) -> void;
-
-    auto create_persistent_resources(this SceneRenderer &) -> void;
 
     // Scene
     auto prepare_frame(this SceneRenderer &, FramePrepareInfo &info) -> PreparedFrame;
-    auto render(this SceneRenderer &, SceneRenderInfo &render_info, PreparedFrame &frame) -> vuk::Value<vuk::ImageAttachment>;
+    auto render(this SceneRenderer &, vuk::Value<vuk::ImageAttachment> &&dst_attachment, SceneRenderInfo &render_info, PreparedFrame &frame)
+        -> vuk::Value<vuk::ImageAttachment>;
     auto cleanup(this SceneRenderer &) -> void;
 };
 

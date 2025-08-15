@@ -1,22 +1,27 @@
 #include "Editor/Window/ViewportWindow.hh"
 
-#include "Editor/EditorApp.hh"
+#include "Editor/EditorModule.hh"
 
+#include "Engine/Graphics/ImGuiRenderer.hh"
 #include "Engine/Scene/ECSModule/Core.hh"
 #include "Engine/Util/Icons/IconsMaterialDesignIcons.hh"
+
+#include "Engine/Asset/Asset.hh"
+#include "Engine/Core/App.hh"
 
 #include <ImGuizmo.h>
 #include <glm/gtx/matrix_decompose.hpp>
 
 namespace led {
 static auto on_drop(ViewportWindow &) -> void {
-    auto &app = EditorApp::get();
-    auto &active_project = *app.active_project;
-    auto *active_scene = app.asset_man.get_scene(active_project.active_scene_uuid);
+    auto &asset_man = lr::App::mod<lr::AssetManager>();
+    auto &editor = lr::App::mod<EditorModule>();
+    auto &active_project = *editor.active_project;
+    auto *active_scene = asset_man.get_scene(active_project.active_scene_uuid);
 
     if (const auto *asset_payload = ImGui::AcceptDragDropPayload("ASSET_BY_UUID")) {
         auto *uuid = static_cast<lr::UUID *>(asset_payload->Data);
-        auto *asset = app.asset_man.get_asset(*uuid);
+        auto *asset = asset_man.get_asset(*uuid);
         switch (asset->type) {
             case lr::AssetType::Scene: {
                 active_project.set_active_scene(*uuid);
@@ -32,9 +37,10 @@ static auto on_drop(ViewportWindow &) -> void {
 }
 
 static auto draw_tools(ViewportWindow &self) -> void {
-    auto &app = EditorApp::get();
-    auto &active_project = *app.active_project;
-    auto *active_scene = app.asset_man.get_scene(active_project.active_scene_uuid);
+    auto &asset_man = lr::App::mod<lr::AssetManager>();
+    auto &editor = lr::App::mod<EditorModule>();
+    auto &active_project = *editor.active_project;
+    auto *active_scene = asset_man.get_scene(active_project.active_scene_uuid);
 
     auto *current_window = ImGui::GetCurrentWindow();
     auto window_rect = current_window->InnerRect;
@@ -97,8 +103,8 @@ static auto draw_tools(ViewportWindow &self) -> void {
 
     ImGui::SameLine(right_align_offset);
     if (ImGui::Button(ICON_MDI_CHART_BAR)) {
-        app.show_profiler = !app.show_profiler;
-        app.frame_profiler.reset();
+        editor.show_profiler = !editor.show_profiler;
+        editor.frame_profiler.reset();
     }
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
         ImGui::SetTooltip("Frame Profiler");
@@ -107,7 +113,7 @@ static auto draw_tools(ViewportWindow &self) -> void {
 
     ImGui::SameLine(right_align_offset);
     if (ImGui::Button(ICON_MDI_BUG)) {
-        app.show_debug = !app.show_debug;
+        editor.show_debug = !editor.show_debug;
     }
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
         ImGui::SetTooltip("Debug");
@@ -142,20 +148,24 @@ static auto draw_tools(ViewportWindow &self) -> void {
         ImGui::EndPopup();
     }
 
-    if (app.show_debug) {
+    if (editor.show_debug) {
         auto &cull_flags = reinterpret_cast<i32 &>(active_scene->get_cull_flags());
         ImGui::CheckboxFlags("Cull Meshlet Frustum", &cull_flags, std::to_underlying(lr::GPU::CullFlags::MeshletFrustum));
         ImGui::CheckboxFlags("Cull Triangle Back Face", &cull_flags, std::to_underlying(lr::GPU::CullFlags::TriangleBackFace));
         ImGui::CheckboxFlags("Cull Micro Triangles", &cull_flags, std::to_underlying(lr::GPU::CullFlags::MicroTriangles));
         ImGui::CheckboxFlags("Cull Occlusion", &cull_flags, std::to_underlying(lr::GPU::CullFlags::Occlusion));
-        ImGui::Checkbox("Debug Lines", &app.scene_renderer.debug_lines);
+        // ImGui::Checkbox("Debug Lines", &editor.scene_renderer.debug_lines);
     }
 }
 
 static auto draw_viewport(ViewportWindow &self, vuk::Format format, vuk::Extent3D) -> void {
-    auto &app = EditorApp::get();
-    auto &active_project = *app.active_project;
-    auto *active_scene = app.asset_man.get_scene(active_project.active_scene_uuid);
+    auto &asset_man = lr::App::mod<lr::AssetManager>();
+    auto &editor = lr::App::mod<EditorModule>();
+    auto &scene_renderer = lr::App::mod<lr::SceneRenderer>();
+    auto &imgui_renderer = lr::App::mod<lr::ImGuiRenderer>();
+
+    auto &active_project = *editor.active_project;
+    auto *active_scene = asset_man.get_scene(active_project.active_scene_uuid);
     auto &selected_entity = active_project.selected_entity;
 
     auto editor_camera = active_scene->get_editor_camera();
@@ -168,6 +178,7 @@ static auto draw_viewport(ViewportWindow &self, vuk::Format format, vuk::Extent3
 
     auto *camera = editor_camera.get_mut<lr::ECS::Camera>();
     auto *camera_transform = editor_camera.get_mut<lr::ECS::Transform>();
+    camera->resolution = { window_size.x, window_size.y };
     camera->aspect_ratio = window_size.x / window_size.y;
 
     ImGuizmo::SetDrawlist();
@@ -188,14 +199,27 @@ static auto draw_viewport(ViewportWindow &self, vuk::Format format, vuk::Extent3
         auto mouse_pos_rel = ImVec2(mouse_pos.x - window_pos.x, mouse_pos.y - window_pos.y);
         requested_texel_transform.emplace(glm::uvec2(mouse_pos_rel.x, mouse_pos_rel.y));
     }
-    auto scene_render_info = lr::SceneRenderInfo{
+
+    auto prepared_frame = active_scene->prepare_frame(scene_renderer);
+
+    auto viewport_attachment_info = vuk::ImageAttachment{
+        .image_type = vuk::ImageType::e2D,
+        .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eColorAttachment,
+        .extent = { .width = static_cast<u32>(window_size.x), .height = static_cast<u32>(window_size.y), .depth = 1 },
         .format = format,
-        .extent = vuk::Extent3D(static_cast<u32>(window_size.x), static_cast<u32>(window_size.y), 1),
+        .sample_count = vuk::Samples::e1,
+        .view_type = vuk::ImageViewType::e2D,
+        .level_count = 1,
+        .layer_count = 1,
+    };
+    auto viewport_attachment = vuk::declare_ia("viewport", viewport_attachment_info);
+    auto scene_render_info = lr::SceneRenderInfo{
         .delta_time = ImGui::GetIO().DeltaTime,
+        .cull_flags = active_scene->get_cull_flags(),
         .picking_texel = requested_texel_transform,
     };
-    auto scene_render_result = active_scene->render(app.scene_renderer, scene_render_info);
-    auto scene_render_image_idx = app.imgui_renderer.add_image(std::move(scene_render_result));
+    viewport_attachment = scene_renderer.render(std::move(viewport_attachment), scene_render_info, prepared_frame);
+    auto scene_render_image_idx = imgui_renderer.add_image(std::move(viewport_attachment));
     ImGui::Image(scene_render_image_idx, work_area_size);
 
     if (update_visible_entity) {
@@ -323,8 +347,8 @@ ViewportWindow::ViewportWindow(std::string name_, bool open_) : IWindow(std::mov
 }
 
 auto ViewportWindow::render(this ViewportWindow &self, vuk::Format format, vuk::Extent3D extent) -> void {
-    auto &app = EditorApp::get();
-    const auto should_render = app.active_project && app.active_project->active_scene_uuid;
+    auto &editor = lr::App::mod<EditorModule>();
+    const auto should_render = editor.active_project && editor.active_project->active_scene_uuid;
 
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0, 0.0));
     if (ImGui::Begin(self.name.data())) {
@@ -334,7 +358,7 @@ auto ViewportWindow::render(this ViewportWindow &self, vuk::Format format, vuk::
         }
 
         auto *current_window = ImGui::GetCurrentWindow();
-        if (app.active_project && ImGui::BeginDragDropTargetCustom(current_window->InnerRect, ImGui::GetID("##viewport_drop_target"))) {
+        if (editor.active_project && ImGui::BeginDragDropTargetCustom(current_window->InnerRect, ImGui::GetID("##viewport_drop_target"))) {
             on_drop(self);
             ImGui::EndDragDropTarget();
         }

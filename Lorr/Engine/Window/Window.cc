@@ -93,6 +93,8 @@ auto Window::init(this Window &self) -> bool {
     }
 
     if (self.flags & WindowFlag::Fullscreen) {
+        self.width = self.display->resolution.x;
+        self.height = self.display->resolution.y;
         window_flags |= SDL_WINDOW_FULLSCREEN;
     }
 

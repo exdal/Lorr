@@ -9,12 +9,17 @@ i32 main(i32, c8 **) {
 
     lr::Window::init_sdl();
     auto primary_display = lr::Window::display_at(0).value();
+    auto window_info = lr::WindowInfo{
+        .title = "Lorr Editor",
+        .display = &primary_display,
+        .width = 1720,
+        .height = 880,
+        .flags = lr::WindowFlag::Centered | lr::WindowFlag::Resizable,
+    };
 
     lr::AppBuilder() //
         .module<lr::Device>(3)
-        .module<lr::Window>(
-            lr::WindowInfo{ .title = "Lorr Editor", .width = 1720, .height = 880, .flags = lr::WindowFlag::Centered | lr::WindowFlag::Resizable }
-        )
+        .module<lr::Window>(window_info)
         .module<lr::AssetManager>()
         .module<lr::ImGuiRenderer>()
         .module<lr::SceneRenderer>()

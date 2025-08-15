@@ -56,7 +56,8 @@ auto RuntimeModule::update(this RuntimeModule &self, f64 delta_time) -> void {
                 continue;
             }
 
-            if (ImGui::Button(asset.path.c_str())) {
+            const auto &path_str = asset.path.string();
+            if (ImGui::Button(path_str.c_str())) {
                 if (self.active_scene_uuid) {
                     asset_man.unload_scene(self.active_scene_uuid);
                 }

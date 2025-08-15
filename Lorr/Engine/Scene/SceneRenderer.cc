@@ -254,7 +254,7 @@ auto SceneRenderer::prepare_frame(this SceneRenderer &self, FramePrepareInfo &in
     auto prepared_frame = PreparedFrame{};
 
     if (!info.dirty_transform_ids.empty()) {
-        auto rebuild_transforms = !self.materials_buffer || self.transforms_buffer.data_size() <= info.gpu_transforms.size_bytes();
+        auto rebuild_transforms = !self.transforms_buffer || self.transforms_buffer.data_size() <= info.gpu_transforms.size_bytes();
         self.transforms_buffer = self.transforms_buffer.resize(device, info.gpu_transforms.size_bytes()).value();
 
         if (rebuild_transforms) {

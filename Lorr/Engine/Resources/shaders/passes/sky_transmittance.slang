@@ -31,7 +31,7 @@ func cs_main(
     f32x3 sun_dir = f32x3(0.0, sqrt(1.0 - lut_y * lut_y), lut_y);
     f32x3 ray_pos = f32x3(0.0, 0.0, lut_x);
 
-    const f32 STEP_COUNT = 1000.0;
+    const f32 STEP_COUNT = 420.0;
     f32 distance = std::ray_sphere_intersect_nearest(ray_pos, sun_dir, params.environment.atmos_atmos_radius).value;
     f32 distance_per_step = distance / STEP_COUNT;
     f32x3 optical_depth = 0.0;

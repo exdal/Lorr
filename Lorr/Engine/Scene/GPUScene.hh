@@ -76,13 +76,13 @@ struct Environment {
     alignas(4) glm::vec3 sun_direction = {};
     alignas(4) f32 sun_intensity = 10.0f;
     // Atmosphere
-    alignas(4) glm::vec3 atmos_rayleigh_scatter = { 0.005802f, 0.013558f, 0.033100f };
+    alignas(4) glm::vec3 atmos_rayleigh_scatter = { 0.005802f, 0.014338f, 0.032800f };
     alignas(4) f32 atmos_rayleigh_density = 8.0f;
     alignas(4) glm::vec3 atmos_mie_scatter = { 0.003996f, 0.003996f, 0.003996f };
     alignas(4) f32 atmos_mie_density = 1.2f;
     alignas(4) f32 atmos_mie_extinction = 0.004440f;
-    alignas(4) f32 atmos_mie_asymmetry = 3.6f;
-    alignas(4) glm::vec3 atmos_ozone_absorption = { 0.000650f, 0.001881f, 0.000085f };
+    alignas(4) f32 atmos_mie_asymmetry = 3.5f;
+    alignas(4) glm::vec3 atmos_ozone_absorption = { 0.000650f, 0.001781f, 0.000085f };
     alignas(4) f32 atmos_ozone_height = 25.0f;
     alignas(4) f32 atmos_ozone_thickness = 15.0f;
     alignas(4) glm::vec3 atmos_terrain_albedo = { 0.3f, 0.3f, 0.3f };

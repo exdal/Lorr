@@ -56,6 +56,8 @@ private:
 
     GPU::CullFlags cull_flags = GPU::CullFlags::All;
 
+    GPU::Environment last_environment = {};
+
 public:
     auto init(this Scene &, const std::string &name) -> bool;
     auto destroy(this Scene &) -> void;

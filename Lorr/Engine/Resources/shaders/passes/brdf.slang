@@ -58,7 +58,7 @@ func fs_main(VertexOutput input) -> f32x4 {
     var sky_luminance = f32x3(1.0);
     if (params.environment.flags & (EnvironmentFlags::HasSun | EnvironmentFlags::HasAtmosphere)) {
         // SUN LIGHT COLOR ──────────────────────────────────────────────────
-        var eye_altitude = world_position.y * CAMERA_SCALE_UNIT;
+        var eye_altitude = max(world_position.y, 0.0) * CAMERA_SCALE_UNIT;
         eye_altitude += params.environment.atmos_planet_radius + PLANET_RADIUS_OFFSET;
         var eye_pos = f32x3(0.0, eye_altitude, 0.0);
         let up_vec = f32x3(0.0, 1.0, 0.0);

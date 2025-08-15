@@ -8,6 +8,7 @@ namespace lr {
 struct FramePrepareInfo {
     u32 mesh_instance_count = 0;
     u32 max_meshlet_instance_count = 0;
+    bool regenerate_sky = false;
 
     ls::span<GPU::TransformID> dirty_transform_ids = {};
     ls::span<GPU::Transforms> gpu_transforms = {};
@@ -34,6 +35,8 @@ struct PreparedFrame {
     vuk::Value<vuk::Buffer> materials_buffer = {};
     vuk::Value<vuk::Buffer> environment_buffer = {};
     vuk::Value<vuk::Buffer> camera_buffer = {};
+    vuk::Value<vuk::ImageAttachment> sky_transmittance_lut = {};
+    vuk::Value<vuk::ImageAttachment> sky_multiscatter_lut = {};
 };
 
 struct SceneRenderInfo {

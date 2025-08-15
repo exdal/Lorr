@@ -242,9 +242,7 @@ public func integrate_single_scattered_luminance(
         let medium_info = MediumScattering(environment, altitude);
 
         f32x3 up_vec = normalize(step_pos);
-        f32x3 up_vec_scaled = PLANET_RADIUS_OFFSET * up_vec;
-        f32 earth_shadow = std::ray_sphere_intersect_nearest(
-            step_pos - up_vec_scaled, info.sun_dir, environment.atmos_planet_radius).hasValue ? 0.0 : 1.0;
+        f32 earth_shadow = std::ray_sphere_intersect_nearest(step_pos, info.sun_dir, environment.atmos_planet_radius).hasValue ? 0.0 : 1.0;
         f32 sun_theta = dot(info.sun_dir, up_vec);
 
         f32x2 transmittance_uv = transmittance_params_to_lut_uv(
@@ -274,6 +272,10 @@ public func integrate_single_scattered_luminance(
 
         f32x3 integral = (sun_luminance - sun_luminance * step_transmittance) / medium_info.extinction_sum;
         f32x3 ms_integral = (medium_info.scattering_sum - medium_info.scattering_sum * step_transmittance) / medium_info.extinction_sum;
+
+        let extinction_zero = medium_info.extinction_sum == f32x3(0.0);
+        integral = select(extinction_zero, f32x3(0.0), integral);
+        ms_integral = select(extinction_zero, f32x3(0.0), ms_integral);
 
         result.luminance += info.sun_intensity * (integral * result.transmittance);
         result.multiscattering_as_1 += ms_integral * result.transmittance;

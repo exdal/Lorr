@@ -218,6 +218,7 @@ static auto json_to_entity(Scene &self, flecs::entity root, simdjson::ondemand::
             std::visit(
                 ls::match{
                     [](const auto &) {},
+                    [&](bool *v) { *v = member_json.get_bool().value_unsafe(); },
                     [&](f32 *v) { *v = static_cast<f32>(member_json.get_double().value_unsafe()); },
                     [&](i32 *v) { *v = static_cast<i32>(member_json.get_int64().value_unsafe()); },
                     [&](u32 *v) { *v = member_json.get_uint64().value_unsafe(); },
@@ -344,6 +345,7 @@ auto entity_to_json(JsonWriter &json, flecs::entity root) -> void {
                 std::visit(
                     ls::match{
                         [](const auto &) {},
+                        [&](bool *v) { member_json = *v; },
                         [&](f32 *v) { member_json = *v; },
                         [&](i32 *v) { member_json = *v; },
                         [&](u32 *v) { member_json = *v; },
@@ -484,8 +486,10 @@ auto Scene::create_model_entity(this Scene &self, UUID &importing_model_uuid) ->
             node_entity.set(transform_comp);
 
             if (cur_node.mesh_index.has_value()) {
-                node_entity.set<ECS::RenderingMesh>({ .model_uuid = importing_model_uuid,
-                                                      .mesh_index = static_cast<u32>(cur_node.mesh_index.value()) });
+                node_entity.set<ECS::RenderingMesh>({
+                    .model_uuid = importing_model_uuid,
+                    .mesh_index = static_cast<u32>(cur_node.mesh_index.value()),
+                });
             }
 
             node_entity.child_of(root);
@@ -658,9 +662,8 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer) -> Prepared
         c.frustum_projection_view_mat = camera_data.projection_view_mat;
     });
 
-    ls::option<GPU::Environment> environment_data = ls::nullopt;
-    environment_query.each([&environment_data](flecs::entity, ECS::Environment &environment_comp) {
-        auto &environment = environment_data.emplace(GPU::Environment{});
+    GPU::Environment environment = {};
+    environment_query.each([&environment](flecs::entity, ECS::Environment &environment_comp) {
         environment.flags |= environment_comp.sun ? GPU::EnvironmentFlags::HasSun : 0;
         environment.flags |= environment_comp.atmos ? GPU::EnvironmentFlags::HasAtmosphere : 0;
         environment.flags |= environment_comp.eye_adaptation ? GPU::EnvironmentFlags::HasEyeAdaptation : 0;
@@ -687,6 +690,21 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer) -> Prepared
         environment.eye_adaptation_speed = environment_comp.eye_adaptation_speed;
         environment.eye_ISO_K = environment_comp.eye_iso / environment_comp.eye_k;
     });
+
+    auto regenerate_sky = false;
+    regenerate_sky |= self.last_environment.atmos_rayleigh_scatter != environment.atmos_rayleigh_scatter;
+    regenerate_sky |= self.last_environment.atmos_rayleigh_density != environment.atmos_rayleigh_density;
+    regenerate_sky |= self.last_environment.atmos_mie_scatter != environment.atmos_mie_scatter;
+    regenerate_sky |= self.last_environment.atmos_mie_density != environment.atmos_mie_density;
+    regenerate_sky |= self.last_environment.atmos_mie_extinction != environment.atmos_mie_extinction;
+    regenerate_sky |= self.last_environment.atmos_mie_asymmetry != environment.atmos_mie_asymmetry;
+    regenerate_sky |= self.last_environment.atmos_ozone_absorption != environment.atmos_ozone_absorption;
+    regenerate_sky |= self.last_environment.atmos_ozone_height != environment.atmos_ozone_height;
+    regenerate_sky |= self.last_environment.atmos_ozone_thickness != environment.atmos_ozone_thickness;
+    regenerate_sky |= self.last_environment.atmos_terrain_albedo != environment.atmos_terrain_albedo;
+    regenerate_sky |= self.last_environment.atmos_atmos_radius != environment.atmos_atmos_radius;
+    regenerate_sky |= self.last_environment.atmos_planet_radius != environment.atmos_planet_radius;
+    self.last_environment = environment;
 
     auto max_meshlet_instance_count = 0_u32;
     auto gpu_meshes = std::vector<GPU::Mesh>();
@@ -774,13 +792,14 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer) -> Prepared
     auto prepare_info = FramePrepareInfo{
         .mesh_instance_count = self.mesh_instance_count,
         .max_meshlet_instance_count = self.max_meshlet_instance_count,
+        .regenerate_sky = regenerate_sky,
         .dirty_transform_ids = self.dirty_transforms,
         .gpu_transforms = self.transforms.slots_unsafe(),
         .dirty_material_indices = dirty_material_indices,
         .gpu_materials = gpu_materials,
         .gpu_meshes = gpu_meshes,
         .gpu_mesh_instances = gpu_mesh_instances,
-        .environment = environment_data.value_or(GPU::Environment{}),
+        .environment = environment,
         .camera = active_camera_data.value_or(GPU::Camera{}),
     };
     auto prepared_frame = renderer.prepare_frame(prepare_info);

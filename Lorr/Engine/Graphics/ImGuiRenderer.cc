@@ -272,8 +272,8 @@ auto ImGuiRenderer::end_frame(this ImGuiRenderer &self, vuk::Value<vuk::ImageAtt
 
     auto imgui_pass = vuk::make_pass(
         "imgui",
-        [draw_data]( //
-            vuk::CommandBuffer &cmd_list,
+        [draw_data](
+            vuk::CommandBuffer &cmd_list, //
             VUK_IA(vuk::Access::eColorWrite) dst,
             VUK_BA(vuk::Access::eVertexRead) vertex_buf,
             VUK_BA(vuk::Access::eIndexRead) index_buf,

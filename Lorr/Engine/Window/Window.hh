@@ -8,6 +8,40 @@
 #include <vuk/runtime/vk/VkSwapchain.hpp>
 
 namespace lr {
+enum class DialogKind : u32 {
+    OpenFile = 0,
+    SaveFile,
+    OpenFolder,
+};
+
+struct FileDialogFilter {
+    std::string_view name = {};
+    std::string_view pattern = {};
+};
+
+struct ShowDialogInfo {
+    DialogKind kind = DialogKind::OpenFile;
+    void *user_data = nullptr;
+    std::string_view title = {};
+    fs::path spawn_path = {};
+    ls::span<FileDialogFilter> filters = {};
+    bool multi_select = false;
+    void (*callback)(void *user_data, const c8 *const *files, i32 filter) = nullptr;
+};
+
+enum class KeyState : u32 {
+    Up = 0,
+    Down = 1 << 0,
+    Repeat = 1 << 1,
+};
+consteval void enable_bitmask(KeyState);
+
+struct KeyEvent {
+    SDL_Keycode key = {};
+    SDL_Keymod mod = {};
+    KeyState state = KeyState::Up;
+};
+
 enum class WindowCursor {
     Arrow,
     TextInput,
@@ -42,27 +76,6 @@ struct SystemDisplay {
     f32 refresh_rate = 30.0f;
 };
 
-enum class DialogKind : u32 {
-    OpenFile = 0,
-    SaveFile,
-    OpenFolder,
-};
-
-struct FileDialogFilter {
-    std::string_view name = {};
-    std::string_view pattern = {};
-};
-
-struct ShowDialogInfo {
-    DialogKind kind = DialogKind::OpenFile;
-    void *user_data = nullptr;
-    std::string_view title = {};
-    fs::path spawn_path = {};
-    ls::span<FileDialogFilter> filters = {};
-    bool multi_select = false;
-    void (*callback)(void *user_data, const c8 *const *files, i32 filter) = nullptr;
-};
-
 struct WindowInfo {
     std::string title = {};
     SystemDisplay *display = nullptr;
@@ -87,6 +100,7 @@ struct Window {
     glm::uvec2 cursor_position = {};
     std::array<SDL_Cursor *, usize(WindowCursor::Count)> cursors = {};
     std::vector<std::function<void(SDL_Event &)>> event_listeners = {};
+    ankerl::unordered_dense::map<SDL_Scancode, KeyEvent> key_events = {};
 
     static auto init_sdl() -> bool;
     static auto display_at(i32 monitor_id) -> ls::option<SystemDisplay>;

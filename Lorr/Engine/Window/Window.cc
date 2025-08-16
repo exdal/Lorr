@@ -148,8 +148,20 @@ auto Window::update(this Window &self, f64) -> void {
                 auto &device = App::mod<Device>();
 
                 device.wait();
+                self.width = e.window.data1;
+                self.height = e.window.data2;
+
                 auto surface = self.get_surface(device.get_instance());
                 self.swap_chain = device.create_swap_chain(surface, std::move(self.swap_chain)).value();
+            } break;
+            case SDL_EVENT_KEY_DOWN: {
+                auto state = KeyState::Up;
+                state |= e.key.down ? KeyState::Down : KeyState::Up;
+                state |= e.key.repeat ? KeyState::Repeat : KeyState::Up;
+                self.key_events.try_emplace(e.key.scancode, e.key.key, e.key.mod, state);
+            } break;
+            case SDL_EVENT_KEY_UP: {
+                self.key_events.try_emplace(e.key.scancode, e.key.key, e.key.mod, KeyState::Up);
             } break;
             case SDL_EVENT_QUIT: {
                 App::close();

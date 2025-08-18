@@ -174,7 +174,6 @@ auto SceneRenderer::init(this SceneRenderer &self) -> bool {
     };
     Pipeline::create(device, default_slang_session, copy_pipeline_info).value();
 
-    //  ── FFX ─────────────────────────────────────────────────────────────
     auto hiz_pipeline_info = PipelineCompileInfo{
         .module_name = "passes.hiz",
         .entry_points = { "cs_main" },

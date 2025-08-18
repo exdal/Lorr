@@ -7,6 +7,12 @@
 #include "Engine/Scene/ECSModule/Core.hh"
 #include "Engine/Window/Window.hh"
 
+struct Runtime {
+    Runtime(flecs::world &world) {
+        world.component("");
+    }
+};
+
 auto RuntimeModule::init(this RuntimeModule &self) -> bool {
     LOG_TRACE("Actvie world: {}", self.world_path);
 
@@ -36,7 +42,6 @@ auto RuntimeModule::update(this RuntimeModule &self, f64 delta_time) -> void {
 
         camera_query.each([&window](flecs::entity, lr::ECS::Camera &c, lr::ECS::ActiveCamera) {
             c.resolution = glm::vec2(window.width, window.height);
-            c.aspect_ratio = c.resolution.x / c.resolution.y;
         });
 
         active_scene->tick(static_cast<f32>(delta_time));

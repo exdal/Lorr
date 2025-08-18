@@ -43,7 +43,6 @@ private:
     flecs::entity root = {};
     ls::option<flecs::world> world = ls::nullopt;
     SceneEntityDB entity_db = {};
-    flecs::entity editor_camera = {};
 
     SlotMap<GPU::Transforms, GPU::TransformID> transforms = {};
     ankerl::unordered_dense::map<flecs::entity, GPU::TransformID> entity_transforms_map = {};
@@ -67,10 +66,8 @@ public:
 
     auto create_entity(this Scene &, const std::string &name = {}) -> flecs::entity;
     auto delete_entity(this Scene &, flecs::entity entity) -> void;
-    // clang-format off
-    auto create_perspective_camera(this Scene &, const std::string &name, const glm::vec3 &position, const glm::vec3 &rotation, f32 fov, f32 aspect_ratio) -> flecs::entity;
-    // clang-format on
-    auto create_editor_camera(this Scene &) -> void;
+    auto create_perspective_camera(this Scene &, const std::string &name, const glm::vec3 &position, const glm::vec3 &rotation, f32 fov)
+        -> flecs::entity;
     // Model = collection of meshes.
     // This function imports every mesh inside the model asset.
     // The returning entity is a parent, "model" entity where each of
@@ -81,7 +78,8 @@ public:
     auto find_entity(this Scene &, std::string_view name) -> flecs::entity;
     auto find_entity(this Scene &, u32 transform_index) -> flecs::entity;
 
-    auto prepare_frame(this Scene &, SceneRenderer &renderer) -> PreparedFrame;
+    // If we really want to render something, camera needs to be there
+    auto prepare_frame(this Scene &, SceneRenderer &renderer, GPU::Camera fallback_camera = {}) -> PreparedFrame;
     auto tick(this Scene &, f32 delta_time) -> bool;
 
     auto set_name(this Scene &, const std::string &name) -> void;
@@ -89,7 +87,6 @@ public:
 
     auto get_root(this Scene &) -> flecs::entity;
     auto get_world(this Scene &) -> flecs::world &;
-    auto get_editor_camera(this Scene &) -> flecs::entity;
     auto get_name(this Scene &) -> const std::string &;
     auto get_name_sv(this Scene &) -> std::string_view;
     auto get_entity_db(this Scene &) -> SceneEntityDB &;

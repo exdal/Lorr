@@ -252,8 +252,6 @@ auto AssetManager::init_new_scene(this AssetManager &self, const UUID &uuid, con
         return false;
     }
 
-    scene->create_editor_camera();
-
     asset->acquire_ref();
     return true;
 }

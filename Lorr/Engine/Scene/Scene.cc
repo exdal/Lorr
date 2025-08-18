@@ -98,17 +98,6 @@ auto Scene::init(this Scene &self, const std::string &name) -> bool {
             }
         });
 
-    self.world->observer<ECS::EditorCamera>()
-        .event(flecs::Monitor) //
-        .each([&self](flecs::iter &it, usize i, ECS::EditorCamera) {
-            auto entity = it.entity(i);
-            if (it.event() == flecs::OnAdd) {
-                self.editor_camera = entity;
-            } else if (it.event() == flecs::OnRemove) {
-                self.editor_camera.clear();
-            }
-        });
-
     self.world
         ->system<ECS::Transform, ECS::Camera>() //
         .each([&](flecs::iter &it, usize, ECS::Transform &t, ECS::Camera &c) {
@@ -417,30 +406,15 @@ auto Scene::delete_entity(this Scene &, flecs::entity entity) -> void {
     entity.destruct();
 }
 
-auto Scene::create_perspective_camera(
-    this Scene &self,
-    const std::string &name,
-    const glm::vec3 &position,
-    const glm::vec3 &rotation,
-    f32 fov,
-    f32 aspect_ratio
-) -> flecs::entity {
+auto Scene::create_perspective_camera(this Scene &self, const std::string &name, const glm::vec3 &position, const glm::vec3 &rotation, f32 fov)
+    -> flecs::entity {
     ZoneScoped;
 
     return self
         .create_entity(name) //
         .add<ECS::PerspectiveCamera>()
         .set<ECS::Transform>({ .position = position, .rotation = glm::radians(Math::normalize_180(rotation)) })
-        .set<ECS::Camera>({ .fov = fov, .aspect_ratio = aspect_ratio });
-}
-
-auto Scene::create_editor_camera(this Scene &self) -> void {
-    ZoneScoped;
-
-    self.create_perspective_camera("editor_camera", { 0.0, 2.0, 0.0 }, { 0, 0, 0 }, 65.0, 1.6)
-        .add<ECS::Hidden>()
-        .add<ECS::EditorCamera>()
-        .add<ECS::ActiveCamera>()
+        .set<ECS::Camera>({ .fov = fov })
         .child_of(self.root);
 }
 
@@ -595,12 +569,6 @@ auto Scene::get_world(this Scene &self) -> flecs::world & {
     return self.world.value();
 }
 
-auto Scene::get_editor_camera(this Scene &self) -> flecs::entity {
-    ZoneScoped;
-
-    return self.editor_camera;
-}
-
 auto Scene::get_name(this Scene &self) -> const std::string & {
     ZoneScoped;
 
@@ -621,7 +589,7 @@ auto Scene::get_cull_flags(this Scene &self) -> GPU::CullFlags & {
     return self.cull_flags;
 }
 
-auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer) -> PreparedFrame {
+auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer, GPU::Camera fallback_camera) -> PreparedFrame {
     ZoneScoped;
 
     auto &asset_man = App::mod<AssetManager>();
@@ -640,7 +608,8 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer) -> Prepared
 
     ls::option<GPU::Camera> active_camera_data = ls::nullopt;
     camera_query.each([&active_camera_data](flecs::entity, ECS::Transform &t, ECS::Camera &c, ECS::ActiveCamera) {
-        auto projection_mat = glm::perspectiveRH_ZO(glm::radians(c.fov), c.aspect_ratio, c.far_clip, c.near_clip);
+        auto aspect_ratio = c.resolution.x / c.resolution.y;
+        auto projection_mat = glm::perspectiveRH_ZO(glm::radians(c.fov), aspect_ratio, c.far_clip, c.near_clip);
         projection_mat[1][1] *= -1;
 
         auto translation_mat = glm::translate(glm::mat4(1.0f), -t.position);
@@ -800,7 +769,7 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer) -> Prepared
         .gpu_meshes = gpu_meshes,
         .gpu_mesh_instances = gpu_mesh_instances,
         .environment = environment,
-        .camera = active_camera_data.value_or(GPU::Camera{}),
+        .camera = active_camera_data.value_or(fallback_camera),
     };
     auto prepared_frame = renderer.prepare_frame(prepare_info);
 

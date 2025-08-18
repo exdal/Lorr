@@ -9,6 +9,8 @@
 #include "Engine/Asset/Asset.hh"
 #include "Engine/Core/App.hh"
 
+#include "Engine/Math/Quat.hh"
+
 #include <ImGuizmo.h>
 #include <glm/gtx/matrix_decompose.hpp>
 
@@ -187,7 +189,29 @@ static auto draw_viewport(ViewportWindow &self, vuk::Format format, vuk::Extent3
         requested_texel_transform.emplace(glm::uvec2(mouse_pos_rel.x, mouse_pos_rel.y));
     }
 
-    self.editor_camera.resolution = { window_size.x, window_size.y };
+    {
+        // Update editor camera
+        self.editor_camera.resolution = { window_size.x, window_size.y };
+        auto projection_mat = glm::perspective(
+            glm::radians(self.editor_camera.fov),
+            self.editor_camera.aspect_ratio(),
+            self.editor_camera.far_clip,
+            self.editor_camera.near_clip
+        );
+        projection_mat[1][1] *= -1.0f;
+
+        auto translation_mat = glm::translate(glm::mat4(1.0f), -self.editor_camera.position);
+        auto rotation_mat = glm::mat4_cast(lr::Math::quat_dir(self.editor_camera.rotation));
+        auto view_mat = rotation_mat * translation_mat;
+        auto projection_view_mat = projection_mat * view_mat;
+        self.editor_camera.projection_mat = projection_mat;
+        self.editor_camera.view_mat = view_mat;
+        self.editor_camera.projection_view_mat = projection_mat * view_mat;
+        self.editor_camera.inv_view_mat = glm::inverse(view_mat);
+        self.editor_camera.inv_projection_view_mat = glm::inverse(projection_view_mat);
+        self.editor_camera.acceptable_lod_error = 2.0f;
+    }
+
     auto prepared_frame = active_scene->prepare_frame(scene_renderer, self.editor_camera); // NOLINT(cppcoreguidelines-slicing)
 
     auto viewport_attachment_info = vuk::ImageAttachment{
@@ -223,12 +247,7 @@ static auto draw_viewport(ViewportWindow &self, vuk::Format format, vuk::Extent3
 
     if (selected_entity && selected_entity.has<lr::ECS::Transform>()) {
         auto camera_forward = glm::vec3(0.0, 0.0, 1.0) * lr::Math::quat_dir(self.editor_camera.rotation);
-        auto camera_projection = glm::perspective(
-            glm::radians(self.editor_camera.fov),
-            self.editor_camera.aspect_ratio(),
-            self.editor_camera.far_clip,
-            self.editor_camera.near_clip
-        );
+        auto camera_projection = glm::perspective(glm::radians(self.editor_camera.fov), self.editor_camera.aspect_ratio(), self.editor_camera.far_clip, self.editor_camera.near_clip);
         auto camera_view = glm::lookAt(self.editor_camera.position, self.editor_camera.position + camera_forward, glm::vec3(0.0, 1.0, 0.0));
         camera_projection[1][1] *= -1.0f;
 

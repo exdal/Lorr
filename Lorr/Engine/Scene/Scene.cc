@@ -190,7 +190,7 @@ static auto json_to_entity(Scene &self, flecs::entity root, simdjson::ondemand::
         auto component_id = world.lookup(component_name);
         if (!component_id) {
             LOG_ERROR("Entity '{}' has invalid component named '{}'!", e.name(), component_name);
-            return false;
+            continue;
         }
 
         LS_EXPECT(self.get_entity_db().is_component_known(component_id));

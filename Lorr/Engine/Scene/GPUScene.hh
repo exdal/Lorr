@@ -113,8 +113,8 @@ struct Camera {
     alignas(4) glm::mat4 inv_projection_view_mat = {};
     alignas(4) glm::mat4 frustum_projection_view_mat = {};
     alignas(4) glm::vec3 position = {};
-    alignas(4) f32 near_clip = {};
-    alignas(4) f32 far_clip = {};
+    alignas(4) f32 near_clip = 0.01f;
+    alignas(4) f32 far_clip = 1000.0f;
     alignas(4) glm::vec2 resolution = {};
     alignas(4) f32 acceptable_lod_error = 0.0f;
 };

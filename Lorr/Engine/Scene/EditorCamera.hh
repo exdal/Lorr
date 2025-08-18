@@ -4,7 +4,6 @@
 
 namespace lr {
 struct EditorCamera : GPU::Camera {
-    glm::vec3 position = {};
     glm::vec3 rotation = {};
     glm::vec3 velocity = {};
     f32 fov = 65.0f;

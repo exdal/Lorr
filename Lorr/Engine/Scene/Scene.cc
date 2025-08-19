@@ -589,7 +589,7 @@ auto Scene::get_cull_flags(this Scene &self) -> GPU::CullFlags & {
     return self.cull_flags;
 }
 
-auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer, GPU::Camera fallback_camera) -> PreparedFrame {
+auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer, ls::option<GPU::Camera> override_camera) -> PreparedFrame {
     ZoneScoped;
 
     auto &asset_man = App::mod<AssetManager>();
@@ -606,30 +606,32 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer, GPU::Camera
         .build();
     // clang-format on
 
-    ls::option<GPU::Camera> active_camera_data = ls::nullopt;
-    camera_query.each([&active_camera_data](flecs::entity, ECS::Transform &t, ECS::Camera &c, ECS::ActiveCamera) {
-        auto aspect_ratio = c.resolution.x / c.resolution.y;
-        auto projection_mat = glm::perspectiveRH_ZO(glm::radians(c.fov), aspect_ratio, c.far_clip, c.near_clip);
-        projection_mat[1][1] *= -1;
+    ls::option<GPU::Camera> active_camera_data = override_camera;
+    if (!active_camera_data.has_value()) {
+        camera_query.each([&active_camera_data](flecs::entity, ECS::Transform &t, ECS::Camera &c, ECS::ActiveCamera) {
+            auto aspect_ratio = c.resolution.x / c.resolution.y;
+            auto projection_mat = glm::perspectiveRH_ZO(glm::radians(c.fov), aspect_ratio, c.far_clip, c.near_clip);
+            projection_mat[1][1] *= -1;
 
-        auto translation_mat = glm::translate(glm::mat4(1.0f), -t.position);
-        auto rotation_mat = glm::mat4_cast(Math::quat_dir(t.rotation));
-        auto view_mat = rotation_mat * translation_mat;
+            auto translation_mat = glm::translate(glm::mat4(1.0f), -t.position);
+            auto rotation_mat = glm::mat4_cast(Math::quat_dir(t.rotation));
+            auto view_mat = rotation_mat * translation_mat;
 
-        auto &camera_data = active_camera_data.emplace(GPU::Camera{});
-        camera_data.projection_mat = projection_mat;
-        camera_data.view_mat = view_mat;
-        camera_data.projection_view_mat = camera_data.projection_mat * camera_data.view_mat;
-        camera_data.inv_view_mat = glm::inverse(camera_data.view_mat);
-        camera_data.inv_projection_view_mat = glm::inverse(camera_data.projection_view_mat);
-        camera_data.position = t.position;
-        camera_data.near_clip = c.near_clip;
-        camera_data.far_clip = c.far_clip;
-        camera_data.resolution = c.resolution;
-        camera_data.acceptable_lod_error = c.acceptable_lod_error;
-        camera_data.frustum_projection_view_mat = c.frustum_projection_view_mat;
-        c.frustum_projection_view_mat = camera_data.projection_view_mat;
-    });
+            auto &camera_data = active_camera_data.emplace(GPU::Camera{});
+            camera_data.projection_mat = projection_mat;
+            camera_data.view_mat = view_mat;
+            camera_data.projection_view_mat = camera_data.projection_mat * camera_data.view_mat;
+            camera_data.inv_view_mat = glm::inverse(camera_data.view_mat);
+            camera_data.inv_projection_view_mat = glm::inverse(camera_data.projection_view_mat);
+            camera_data.position = t.position;
+            camera_data.near_clip = c.near_clip;
+            camera_data.far_clip = c.far_clip;
+            camera_data.resolution = c.resolution;
+            camera_data.acceptable_lod_error = c.acceptable_lod_error;
+            camera_data.frustum_projection_view_mat = c.frustum_projection_view_mat;
+            c.frustum_projection_view_mat = camera_data.projection_view_mat;
+        });
+    }
 
     GPU::Environment environment = {};
     environment_query.each([&environment](flecs::entity, ECS::Environment &environment_comp) {
@@ -769,7 +771,7 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer, GPU::Camera
         .gpu_meshes = gpu_meshes,
         .gpu_mesh_instances = gpu_mesh_instances,
         .environment = environment,
-        .camera = active_camera_data.value_or(fallback_camera),
+        .camera = active_camera_data.value_or(GPU::Camera{}),
     };
     auto prepared_frame = renderer.prepare_frame(prepare_info);
 

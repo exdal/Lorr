@@ -169,6 +169,7 @@ static auto draw_viewport(ViewportWindow &self, vuk::Format format, vuk::Extent3
     auto window_size = window_rect.GetSize();
     auto work_area_size = ImGui::GetContentRegionAvail();
     auto &io = ImGui::GetIO();
+    auto delta_time = io.DeltaTime;
 
     ImGuizmo::SetDrawlist();
     ImGuizmo::SetOrthographic(false);
@@ -190,9 +191,48 @@ static auto draw_viewport(ViewportWindow &self, vuk::Format format, vuk::Extent3
     }
 
     {
+        constexpr auto EDITOR_CAMERA_MAX_VELOCITY = 2.0f;
+        constexpr auto EDITOR_CAMERA_ACCELERATION = 8.0f;
+        constexpr auto EDITOR_CAMERA_DECELERATION = 12.0f;
+
         // Update editor camera
+        auto target_velocity = glm::vec3(0.0f);
+        if (!ImGuizmo::IsUsingAny() && ImGui::IsWindowHovered()) {
+            if (ImGui::IsKeyDown(ImGuiKey_W)) {
+                target_velocity.z = -EDITOR_CAMERA_MAX_VELOCITY;
+            }
+
+            if (ImGui::IsKeyDown(ImGuiKey_S)) {
+                target_velocity.z = EDITOR_CAMERA_MAX_VELOCITY;
+            }
+
+            if (ImGui::IsKeyDown(ImGuiKey_A)) {
+                target_velocity.x = -EDITOR_CAMERA_MAX_VELOCITY;
+            }
+
+            if (ImGui::IsKeyDown(ImGuiKey_D)) {
+                target_velocity.x = EDITOR_CAMERA_MAX_VELOCITY;
+            }
+
+            if (ImGui::IsMouseDragging(ImGuiMouseButton_Right)) {
+                auto drag = ImGui::GetMouseDragDelta(ImGuiMouseButton_Right, 0);
+                ImGui::ResetMouseDragDelta(ImGuiMouseButton_Right);
+
+                auto sensitivity = 0.1f;
+                auto camera_rotation_degrees = glm::degrees(self.editor_camera.rotation);
+                camera_rotation_degrees.x += drag.x * sensitivity;
+                camera_rotation_degrees.y += drag.y * sensitivity;
+                self.editor_camera.rotation = glm::radians(camera_rotation_degrees);
+            }
+        }
+
+        auto inv_orient = glm::conjugate(lr::Math::quat_dir(self.editor_camera.rotation));
+        auto acceleration_rate = (glm::length(target_velocity) > 0.0f) ? EDITOR_CAMERA_ACCELERATION : EDITOR_CAMERA_DECELERATION;
+        self.editor_camera.velocity = glm::mix(self.editor_camera.velocity, target_velocity, glm::min(1.0f, acceleration_rate * delta_time));
+        self.editor_camera.position += inv_orient * self.editor_camera.velocity * delta_time;
+
         self.editor_camera.resolution = { window_size.x, window_size.y };
-        auto projection_mat = glm::perspective(
+        auto projection_mat = glm::perspectiveRH_ZO(
             glm::radians(self.editor_camera.fov),
             self.editor_camera.aspect_ratio(),
             self.editor_camera.far_clip,
@@ -204,6 +244,7 @@ static auto draw_viewport(ViewportWindow &self, vuk::Format format, vuk::Extent3
         auto rotation_mat = glm::mat4_cast(lr::Math::quat_dir(self.editor_camera.rotation));
         auto view_mat = rotation_mat * translation_mat;
         auto projection_view_mat = projection_mat * view_mat;
+
         self.editor_camera.projection_mat = projection_mat;
         self.editor_camera.view_mat = view_mat;
         self.editor_camera.projection_view_mat = projection_mat * view_mat;
@@ -226,7 +267,7 @@ static auto draw_viewport(ViewportWindow &self, vuk::Format format, vuk::Extent3
     };
     auto viewport_attachment = vuk::declare_ia("viewport", viewport_attachment_info);
     auto scene_render_info = lr::SceneRenderInfo{
-        .delta_time = ImGui::GetIO().DeltaTime,
+        .delta_time = delta_time,
         .cull_flags = active_scene->get_cull_flags(),
         .picking_texel = requested_texel_transform,
     };
@@ -247,7 +288,12 @@ static auto draw_viewport(ViewportWindow &self, vuk::Format format, vuk::Extent3
 
     if (selected_entity && selected_entity.has<lr::ECS::Transform>()) {
         auto camera_forward = glm::vec3(0.0, 0.0, 1.0) * lr::Math::quat_dir(self.editor_camera.rotation);
-        auto camera_projection = glm::perspective(glm::radians(self.editor_camera.fov), self.editor_camera.aspect_ratio(), self.editor_camera.far_clip, self.editor_camera.near_clip);
+        auto camera_projection = glm::perspective(
+            glm::radians(self.editor_camera.fov),
+            self.editor_camera.aspect_ratio(),
+            self.editor_camera.far_clip,
+            self.editor_camera.near_clip
+        );
         auto camera_view = glm::lookAt(self.editor_camera.position, self.editor_camera.position + camera_forward, glm::vec3(0.0, 1.0, 0.0));
         camera_projection[1][1] *= -1.0f;
 
@@ -284,37 +330,6 @@ static auto draw_viewport(ViewportWindow &self, vuk::Format format, vuk::Extent3
             }
 
             selected_entity.modified<lr::ECS::Transform>();
-        }
-    }
-
-    //  ── CAMERA CONTROLLER ───────────────────────────────────────────────
-    if (!ImGuizmo::IsUsingAny() && ImGui::IsWindowHovered()) {
-        constexpr auto EDITOR_CAMERA_VELOCITY = 2.0f;
-        if (ImGui::IsKeyDown(ImGuiKey_W)) {
-            self.editor_camera.velocity.z = -EDITOR_CAMERA_VELOCITY;
-        }
-
-        if (ImGui::IsKeyDown(ImGuiKey_S)) {
-            self.editor_camera.velocity.z = EDITOR_CAMERA_VELOCITY;
-        }
-
-        if (ImGui::IsKeyDown(ImGuiKey_A)) {
-            self.editor_camera.velocity.x = -EDITOR_CAMERA_VELOCITY;
-        }
-
-        if (ImGui::IsKeyDown(ImGuiKey_D)) {
-            self.editor_camera.velocity.x = EDITOR_CAMERA_VELOCITY;
-        }
-
-        if (ImGui::IsMouseDragging(ImGuiMouseButton_Right)) {
-            auto drag = ImGui::GetMouseDragDelta(ImGuiMouseButton_Right, 0);
-            ImGui::ResetMouseDragDelta(ImGuiMouseButton_Right);
-
-            auto sensitivity = 0.1f;
-            auto camera_rotation_degrees = glm::degrees(self.editor_camera.rotation);
-            camera_rotation_degrees.x += drag.x * sensitivity;
-            camera_rotation_degrees.y += drag.y * sensitivity;
-            self.editor_camera.rotation = glm::radians(camera_rotation_degrees);
         }
     }
 }

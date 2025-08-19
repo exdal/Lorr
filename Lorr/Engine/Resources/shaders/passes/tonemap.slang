@@ -561,11 +561,11 @@ f32x4 fs_main(VertexOutput input) {
     //color = ACES_Film(color);
     //color = ACES_Fitted(color);
     //color = PBRNeutralToneMapping(color);  // this looks like shit, figure out why
-    // color = agx_tonemapping(color);
-    GT7ToneMapping gt7;
-    gt7.initializeAsSDR();
-    f32x3 gt7_color;
-    gt7.applyToneMapping(color, gt7_color);
+    color = agx_tonemapping(color);
+    //GT7ToneMapping gt7;
+    //gt7.initializeAsSDR();
+    //f32x3 gt7_color;
+    //gt7.applyToneMapping(color, gt7_color);
 
-    return f32x4(gt7_color, 1.0);
+    return f32x4(color, 1.0);
 }

@@ -79,7 +79,7 @@ public:
     auto find_entity(this Scene &, u32 transform_index) -> flecs::entity;
 
     // If we really want to render something, camera needs to be there
-    auto prepare_frame(this Scene &, SceneRenderer &renderer, GPU::Camera fallback_camera = {}) -> PreparedFrame;
+    auto prepare_frame(this Scene &, SceneRenderer &renderer, ls::option<GPU::Camera> override_camera = ls::nullopt) -> PreparedFrame;
     auto tick(this Scene &, f32 delta_time) -> bool;
 
     auto set_name(this Scene &, const std::string &name) -> void;

@@ -140,16 +140,21 @@ static auto draw_tools(ViewportWindow &self) -> void {
         ImGui::SeparatorText("Far Clip");
         ImGui::drag_vec(3, &self.editor_camera.far_clip, 1, ImGuiDataType_Float);
 
+        ImGui::SeparatorText("Max Velocity");
+        ImGui::drag_vec(4, &self.editor_camera.max_velocity, 1, ImGuiDataType_Float);
+
         ImGui::EndPopup();
     }
 
     if (editor.show_debug) {
         auto &cull_flags = reinterpret_cast<i32 &>(active_scene->get_cull_flags());
+        auto &scene_renderer = lr::App::mod<lr::SceneRenderer>();
+
         ImGui::CheckboxFlags("Cull Meshlet Frustum", &cull_flags, std::to_underlying(lr::GPU::CullFlags::MeshletFrustum));
         ImGui::CheckboxFlags("Cull Triangle Back Face", &cull_flags, std::to_underlying(lr::GPU::CullFlags::TriangleBackFace));
         ImGui::CheckboxFlags("Cull Micro Triangles", &cull_flags, std::to_underlying(lr::GPU::CullFlags::MicroTriangles));
         ImGui::CheckboxFlags("Cull Occlusion", &cull_flags, std::to_underlying(lr::GPU::CullFlags::Occlusion));
-        // ImGui::Checkbox("Debug Lines", &editor.scene_renderer.debug_lines);
+        ImGui::Checkbox("Debug Lines", &scene_renderer.debug_lines);
     }
 }
 
@@ -191,27 +196,31 @@ static auto draw_viewport(ViewportWindow &self, vuk::Format format, vuk::Extent3
     }
 
     {
-        constexpr auto EDITOR_CAMERA_MAX_VELOCITY = 2.0f;
-        constexpr auto EDITOR_CAMERA_ACCELERATION = 8.0f;
-        constexpr auto EDITOR_CAMERA_DECELERATION = 12.0f;
-
         // Update editor camera
         auto target_velocity = glm::vec3(0.0f);
         if (!ImGuizmo::IsUsingAny() && ImGui::IsWindowHovered()) {
             if (ImGui::IsKeyDown(ImGuiKey_W)) {
-                target_velocity.z = -EDITOR_CAMERA_MAX_VELOCITY;
+                target_velocity.z = -self.editor_camera.max_velocity;
             }
 
             if (ImGui::IsKeyDown(ImGuiKey_S)) {
-                target_velocity.z = EDITOR_CAMERA_MAX_VELOCITY;
+                target_velocity.z = self.editor_camera.max_velocity;
             }
 
             if (ImGui::IsKeyDown(ImGuiKey_A)) {
-                target_velocity.x = -EDITOR_CAMERA_MAX_VELOCITY;
+                target_velocity.x = -self.editor_camera.max_velocity;
             }
 
             if (ImGui::IsKeyDown(ImGuiKey_D)) {
-                target_velocity.x = EDITOR_CAMERA_MAX_VELOCITY;
+                target_velocity.x = self.editor_camera.max_velocity;
+            }
+
+            if (ImGui::IsKeyDown(ImGuiKey_E)) {
+                target_velocity.y = self.editor_camera.max_velocity;
+            }
+
+            if (ImGui::IsKeyDown(ImGuiKey_Q)) {
+                target_velocity.y = -self.editor_camera.max_velocity;
             }
 
             if (ImGui::IsMouseDragging(ImGuiMouseButton_Right)) {
@@ -226,31 +235,8 @@ static auto draw_viewport(ViewportWindow &self, vuk::Format format, vuk::Extent3
             }
         }
 
-        auto inv_orient = glm::conjugate(lr::Math::quat_dir(self.editor_camera.rotation));
-        auto acceleration_rate = (glm::length(target_velocity) > 0.0f) ? EDITOR_CAMERA_ACCELERATION : EDITOR_CAMERA_DECELERATION;
-        self.editor_camera.velocity = glm::mix(self.editor_camera.velocity, target_velocity, glm::min(1.0f, acceleration_rate * delta_time));
-        self.editor_camera.position += inv_orient * self.editor_camera.velocity * delta_time;
-
         self.editor_camera.resolution = { window_size.x, window_size.y };
-        auto projection_mat = glm::perspectiveRH_ZO(
-            glm::radians(self.editor_camera.fov),
-            self.editor_camera.aspect_ratio(),
-            self.editor_camera.far_clip,
-            self.editor_camera.near_clip
-        );
-        projection_mat[1][1] *= -1.0f;
-
-        auto translation_mat = glm::translate(glm::mat4(1.0f), -self.editor_camera.position);
-        auto rotation_mat = glm::mat4_cast(lr::Math::quat_dir(self.editor_camera.rotation));
-        auto view_mat = rotation_mat * translation_mat;
-        auto projection_view_mat = projection_mat * view_mat;
-
-        self.editor_camera.projection_mat = projection_mat;
-        self.editor_camera.view_mat = view_mat;
-        self.editor_camera.projection_view_mat = projection_mat * view_mat;
-        self.editor_camera.inv_view_mat = glm::inverse(view_mat);
-        self.editor_camera.inv_projection_view_mat = glm::inverse(projection_view_mat);
-        self.editor_camera.acceptable_lod_error = 2.0f;
+        self.editor_camera.update(delta_time, target_velocity);
     }
 
     auto prepared_frame = active_scene->prepare_frame(scene_renderer, self.editor_camera); // NOLINT(cppcoreguidelines-slicing)

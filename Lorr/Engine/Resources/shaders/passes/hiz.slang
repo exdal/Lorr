@@ -3,10 +3,10 @@ module hiz;
 import std;
 import gpu;
 
-// Do not remove this comment:
-// Taken from: https://github.dev/SparkyPotato/radiance/blob/main/shaders/passes/mesh/hzb.slang,
-// which is based on https://github.com/Themaister/Granite/blob/master/assets/shaders/post/hiz.comp,
-// which is HiZ modification of AMD's Single Pass Downsampler.
+// Credits:
+// - https://github.dev/SparkyPotato/radiance/blob/main/shaders/passes/mesh/hzb.slang,
+// - https://github.com/Themaister/Granite/blob/master/assets/shaders/post/hiz.comp,
+// - AMD's Single Pass Downsampler.
 
 [[vk::binding(0)]] globallycoherent RWStructuredBuffer<u32> spd_global_atomic;
 

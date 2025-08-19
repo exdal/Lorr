@@ -101,7 +101,7 @@ public func test_occlusion(
 
     let size = max_texel - min_texel + 1;
     let max_size = max(size.x, size.y);
-    var mip = firstbithigh(max_size - 1) - 1;
+    var mip = firstbithigh(max_size - 1);
     let smin = min_texel >> mip;
     let smax = max_texel >> mip;
     if (any(smax - smin > 1)) {

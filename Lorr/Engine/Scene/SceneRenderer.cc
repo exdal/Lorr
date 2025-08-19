@@ -180,6 +180,12 @@ auto SceneRenderer::init(this SceneRenderer &self) -> bool {
     };
     Pipeline::create(device, default_slang_session, hiz_pipeline_info).value();
 
+    auto hiz_slow_pipeline_info = PipelineCompileInfo{
+        .module_name = "passes.hiz_slow",
+        .entry_points = { "cs_main" },
+    };
+    Pipeline::create(device, default_slang_session, hiz_slow_pipeline_info).value();
+
     self.histogram_luminance_buffer = Buffer::create(device, sizeof(GPU::HistogramLuminance)).value();
     vuk::fill(vuk::acquire_buf("histogram luminance", *device.buffer(self.histogram_luminance_buffer.id()), vuk::eNone), 0);
 
@@ -507,7 +513,7 @@ static auto draw_sky(
     auto sky_final_pass = vuk::make_pass(
         "sky final",
         [](vuk::CommandBuffer &cmd_list, //
-           VUK_IA(vuk::eColorWrite) dst,
+           VUK_IA(vuk::eColorRW) dst,
            VUK_IA(vuk::eFragmentSampled) sky_transmittance_lut,
            VUK_IA(vuk::eFragmentSampled) sky_aerial_perspective_lut,
            VUK_IA(vuk::eFragmentSampled) sky_view_lut,
@@ -1071,6 +1077,38 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
             }
         );
 
+        auto hiz_generate_slow_pass = vuk::make_pass(
+            "hiz generate slow",
+            [](vuk::CommandBuffer &cmd_list, //
+               VUK_IA(vuk::eComputeSampled) src,
+               VUK_IA(vuk::eComputeRW) dst) {
+                auto extent = dst->extent;
+                auto mip_count = dst->level_count;
+
+                cmd_list //
+                    .bind_compute_pipeline("passes.hiz_slow")
+                    .bind_sampler(0, 0, hiz_sampler_info);
+
+                for (auto i = 0_u32; i < mip_count; i++) {
+                    auto mip_width = std::max(1_u32, extent.width >> i);
+                    auto mip_height = std::max(1_u32, extent.height >> i);
+
+                    auto mip = dst->mip(i);
+                    if (i == 0) {
+                        cmd_list.bind_image(0, 1, src);
+                    } else {
+                        cmd_list.bind_image(0, 1, dst->mip(i - 1));
+                    }
+
+                    cmd_list.bind_image(0, 2, mip);
+                    cmd_list.push_constants(vuk::ShaderStageFlagBits::eCompute, 0, PushConstants(mip_width, mip_height));
+                    cmd_list.dispatch_invocations(mip_width, mip_height);
+                }
+
+                return std::make_tuple(src, dst);
+            }
+        );
+
         std::tie(depth_attachment, hiz_attachment) = hiz_generate_pass(std::move(depth_attachment), std::move(hiz_attachment));
 
         //  ── VISBUFFER DECODE ────────────────────────────────────────────────
@@ -1192,7 +1230,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
         auto brdf_pass = vuk::make_pass(
             "brdf",
             [](vuk::CommandBuffer &cmd_list, //
-               VUK_IA(vuk::eColorWrite) dst,
+               VUK_IA(vuk::eColorRW) dst,
                VUK_BA(vuk::eFragmentRead) environment,
                VUK_BA(vuk::eFragmentRead) camera,
                VUK_IA(vuk::eFragmentSampled) sky_transmittance_lut,
@@ -1329,7 +1367,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
     auto tonemap_pass = vuk::make_pass(
         "tonemap",
         [](vuk::CommandBuffer &cmd_list, //
-           VUK_IA(vuk::eColorWrite) dst,
+           VUK_IA(vuk::eColorRW) dst,
            VUK_IA(vuk::eFragmentSampled) src,
            VUK_BA(vuk::eFragmentRead) environment,
            VUK_BA(vuk::eFragmentRead) histogram_luminance) {
@@ -1379,7 +1417,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
         auto debug_pass = vuk::make_pass(
             "debug pass",
             [](vuk::CommandBuffer &cmd_list, //
-               VUK_IA(vuk::eColorWrite) dst,
+               VUK_IA(vuk::eColorRW) dst,
                VUK_BA(vuk::eIndirectRead) indirect_buffer,
                VUK_BA(vuk::eVertexRead) camera,
                VUK_BA(vuk::eVertexRead) debug_aabb_draws,

@@ -40,29 +40,12 @@ bool json_to_quat(simdjson::ondemand::value &o, glm::quat &quat) {
     return true;
 }
 
-auto SceneEntityDB::import_module(this SceneEntityDB &self, flecs::entity module) -> void {
-    ZoneScoped;
-
-    self.imported_modules.emplace_back(module);
-    module.children([&](flecs::id id) { self.components.push_back(id); });
-}
-
-auto SceneEntityDB::is_component_known(this SceneEntityDB &self, flecs::id component_id) -> bool {
-    ZoneScoped;
-
-    return std::ranges::any_of(self.components, [&](const auto &id) { return id == component_id; });
-}
-
-auto SceneEntityDB::get_components(this SceneEntityDB &self) -> ls::span<flecs::id> {
-    return self.components;
-}
-
 auto Scene::init(this Scene &self, const std::string &name) -> bool {
     ZoneScoped;
 
     self.name = name;
     self.world.emplace();
-    self.entity_db.import_module(self.world->import <ECS::Core>());
+    self.import_module<ECS::Core>();
 
     self.world->observer<ECS::Transform>()
         .event(flecs::OnSet)
@@ -96,15 +79,6 @@ auto Scene::init(this Scene &self, const std::string &name) -> bool {
             } else if (event == flecs::OnRemove) {
                 self.detach_mesh(entity, mesh.model_uuid, mesh.mesh_index);
             }
-        });
-
-    self.world
-        ->system<ECS::Transform, ECS::Camera>() //
-        .each([&](flecs::iter &it, usize, ECS::Transform &t, ECS::Camera &c) {
-            auto inv_orient = glm::conjugate(Math::quat_dir(t.rotation));
-            t.position += glm::vec3(inv_orient * c.axis_velocity * it.delta_time());
-
-            c.axis_velocity = {};
         });
 
     self.root = self.world->entity();
@@ -193,7 +167,7 @@ static auto json_to_entity(Scene &self, flecs::entity root, simdjson::ondemand::
             continue;
         }
 
-        LS_EXPECT(self.get_entity_db().is_component_known(component_id));
+        LS_EXPECT(self.is_component_known(component_id));
 
         e.add(component_id);
         ECS::ComponentWrapper component(e, component_id);
@@ -243,6 +217,18 @@ static auto json_to_entity(Scene &self, flecs::entity root, simdjson::ondemand::
     }
 
     return true;
+}
+
+auto Scene::import_module(this Scene &self, flecs::entity module_entity) -> void {
+    ZoneScoped;
+
+    module_entity.children([&](flecs::id id) { self.known_component_ids.push_back(id); });
+}
+
+auto Scene::is_component_known(this Scene &self, flecs::id component_id) -> bool {
+    ZoneScoped;
+
+    return std::ranges::any_of(self.known_component_ids, [&](const auto &id) { return id == component_id; });
 }
 
 auto Scene::import_from_file(this Scene &self, const fs::path &path) -> bool {
@@ -406,15 +392,14 @@ auto Scene::delete_entity(this Scene &, flecs::entity entity) -> void {
     entity.destruct();
 }
 
-auto Scene::create_perspective_camera(this Scene &self, const std::string &name, const glm::vec3 &position, const glm::vec3 &rotation, f32 fov)
+auto Scene::create_perspective_camera(this Scene &self, const std::string &name, const glm::vec3 &position, f32 yaw, f32 pitch, f32 fov)
     -> flecs::entity {
     ZoneScoped;
 
     return self
         .create_entity(name) //
         .add<ECS::PerspectiveCamera>()
-        .set<ECS::Transform>({ .position = position, .rotation = glm::radians(Math::normalize_180(rotation)) })
-        .set<ECS::Camera>({ .fov = fov })
+        .set<ECS::Camera>({ .position = position, .yaw = yaw, .pitch = pitch, .fov = fov })
         .child_of(self.root);
 }
 
@@ -522,7 +507,7 @@ auto Scene::set_dirty(this Scene &self, flecs::entity entity) -> void {
 
         const auto *entity_transform = cur_entity.get<ECS::Transform>();
         const auto T = glm::translate(glm::mat4(1.0), entity_transform->position);
-        const auto R = glm::mat4_cast(glm::quat(entity_transform->rotation));
+        const auto R = glm::mat4_cast(Math::quat_dir(entity_transform->rotation));
         const auto S = glm::scale(glm::mat4(1.0), entity_transform->scale);
         auto local_mat = T * R * S;
         auto world_mat = local_mat;
@@ -581,10 +566,6 @@ auto Scene::get_name_sv(this Scene &self) -> std::string_view {
     return self.name;
 }
 
-auto Scene::get_entity_db(this Scene &self) -> SceneEntityDB & {
-    return self.entity_db;
-}
-
 auto Scene::get_cull_flags(this Scene &self) -> GPU::CullFlags & {
     return self.cull_flags;
 }
@@ -596,7 +577,7 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer, ls::option<
 
     // clang-format off
     auto camera_query = self.get_world()
-        .query_builder<ECS::Transform, ECS::Camera, ECS::ActiveCamera>()
+        .query_builder<ECS::Camera, ECS::ActiveCamera>()
         .build();
     auto rendering_meshes_query = self.get_world()
         .query_builder<ECS::RenderingMesh>()
@@ -608,14 +589,18 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer, ls::option<
 
     ls::option<GPU::Camera> active_camera_data = override_camera;
     if (!active_camera_data.has_value()) {
-        camera_query.each([&active_camera_data](flecs::entity, ECS::Transform &t, ECS::Camera &c, ECS::ActiveCamera) {
+        camera_query.each([&active_camera_data](flecs::entity, ECS::Camera &c, ECS::ActiveCamera) {
             auto aspect_ratio = c.resolution.x / c.resolution.y;
             auto projection_mat = glm::perspectiveRH_ZO(glm::radians(c.fov), aspect_ratio, c.far_clip, c.near_clip);
             projection_mat[1][1] *= -1;
 
-            auto translation_mat = glm::translate(glm::mat4(1.0f), -t.position);
-            auto rotation_mat = glm::mat4_cast(Math::quat_dir(t.rotation));
-            auto view_mat = rotation_mat * translation_mat;
+            auto direction = glm::vec3(
+                glm::cos(glm::radians(c.yaw)) * glm::cos(glm::radians(c.pitch)),
+                glm::sin(glm::radians(c.pitch)),
+                glm::sin(glm::radians(c.yaw)) * glm::cos(glm::radians(c.pitch))
+            );
+            direction = glm::normalize(direction);
+            auto view_mat = glm::lookAt(c.position, c.position + direction, glm::vec3(0.0f, 1.0f, 0.0f));
 
             auto &camera_data = active_camera_data.emplace(GPU::Camera{});
             camera_data.projection_mat = projection_mat;
@@ -623,7 +608,7 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer, ls::option<
             camera_data.projection_view_mat = camera_data.projection_mat * camera_data.view_mat;
             camera_data.inv_view_mat = glm::inverse(camera_data.view_mat);
             camera_data.inv_projection_view_mat = glm::inverse(camera_data.projection_view_mat);
-            camera_data.position = t.position;
+            camera_data.position = c.position;
             camera_data.near_clip = c.near_clip;
             camera_data.far_clip = c.far_clip;
             camera_data.resolution = c.resolution;

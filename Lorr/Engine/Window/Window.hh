@@ -101,6 +101,9 @@ struct Window {
     std::array<SDL_Cursor *, usize(WindowCursor::Count)> cursors = {};
     std::vector<std::function<void(SDL_Event &)>> event_listeners = {};
     ankerl::unordered_dense::map<SDL_Scancode, KeyEvent> key_events = {};
+    glm::vec2 mouse_pos = {};
+    glm::vec2 mouse_pos_delta = {};
+    bool mouse_moved = false;
 
     static auto init_sdl() -> bool;
     static auto display_at(i32 monitor_id) -> ls::option<SystemDisplay>;
@@ -110,14 +113,17 @@ struct Window {
     auto destroy(this Window &) -> void;
     auto update(this Window &, f64) -> void;
 
-    auto set_cursor(this Window &, WindowCursor cursor) -> void;
-    auto get_cursor(this Window &) -> WindowCursor;
-    auto show_cursor(this Window &, bool show) -> void;
-
     template<typename T>
     auto add_listener(T &listener) {
         event_listeners.push_back([&listener](SDL_Event &e) { listener.window_event(e); });
     }
+
+    auto check_key_state(this Window &, SDL_Scancode scancode, KeyState state) -> bool;
+
+    auto set_relative_mouse(this Window &, bool enabled) -> void;
+    auto set_cursor(this Window &, WindowCursor cursor) -> void;
+    auto get_cursor(this Window &) -> WindowCursor;
+    auto show_cursor(this Window &, bool show) -> void;
 
     auto get_size(this Window &) -> glm::ivec2;
     auto get_surface(this Window &, VkInstance instance) -> VkSurfaceKHR;

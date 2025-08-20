@@ -25,16 +25,6 @@ struct ankerl::unordered_dense::hash<flecs::entity> {
 };
 
 namespace lr {
-struct SceneEntityDB {
-    ankerl::unordered_dense::map<flecs::id, std::string_view> component_icons = {};
-    std::vector<flecs::id> components = {};
-    std::vector<flecs::entity> imported_modules = {};
-
-    auto import_module(this SceneEntityDB &, flecs::entity module) -> void;
-    auto is_component_known(this SceneEntityDB &, flecs::id component_id) -> bool;
-    auto get_components(this SceneEntityDB &) -> ls::span<flecs::id>;
-};
-
 struct AssetManager;
 enum class SceneID : u64 { Invalid = ~0_u64 };
 struct Scene {
@@ -42,7 +32,7 @@ private:
     std::string name = {};
     flecs::entity root = {};
     ls::option<flecs::world> world = ls::nullopt;
-    SceneEntityDB entity_db = {};
+    std::vector<flecs::id> known_component_ids = {};
 
     SlotMap<GPU::Transforms, GPU::TransformID> transforms = {};
     ankerl::unordered_dense::map<flecs::entity, GPU::TransformID> entity_transforms_map = {};
@@ -61,13 +51,21 @@ public:
     auto init(this Scene &, const std::string &name) -> bool;
     auto destroy(this Scene &) -> void;
 
+    template<typename T>
+    auto import_module(this Scene &self) -> void {
+        ZoneScoped;
+
+        return self.import_module(self.world->import <T>());
+    }
+    auto import_module(this Scene &, flecs::entity module_entity) -> void;
+    auto is_component_known(this Scene &, flecs::id component_id) -> bool;
+
     auto import_from_file(this Scene &, const fs::path &path) -> bool;
     auto export_to_file(this Scene &, const fs::path &path) -> bool;
 
     auto create_entity(this Scene &, const std::string &name = {}) -> flecs::entity;
     auto delete_entity(this Scene &, flecs::entity entity) -> void;
-    auto create_perspective_camera(this Scene &, const std::string &name, const glm::vec3 &position, const glm::vec3 &rotation, f32 fov)
-        -> flecs::entity;
+    auto create_perspective_camera(this Scene &, const std::string &name, const glm::vec3 &position, f32 yaw, f32 pitch, f32 fov) -> flecs::entity;
     // Model = collection of meshes.
     // This function imports every mesh inside the model asset.
     // The returning entity is a parent, "model" entity where each of
@@ -89,8 +87,11 @@ public:
     auto get_world(this Scene &) -> flecs::world &;
     auto get_name(this Scene &) -> const std::string &;
     auto get_name_sv(this Scene &) -> std::string_view;
-    auto get_entity_db(this Scene &) -> SceneEntityDB &;
     auto get_cull_flags(this Scene &) -> GPU::CullFlags &;
+
+    auto get_known_component_ids(this Scene &self) -> auto {
+        return ls::span(self.known_component_ids);
+    }
 
 private:
     auto add_transform(this Scene &, flecs::entity entity) -> GPU::TransformID;

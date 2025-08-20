@@ -113,6 +113,7 @@ auto Window::init(this Window &self) -> bool {
 
     SDL_GetWindowSizeInPixels(self.handle, &self.width, &self.height);
     SDL_StartTextInput(self.handle);
+
     self.cursors = {
         SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_DEFAULT),     SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_TEXT),
         SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_MOVE),        SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_NS_RESIZE),
@@ -141,6 +142,7 @@ auto Window::destroy(this Window &self) -> void {
 auto Window::update(this Window &self, f64) -> void {
     ZoneScoped;
 
+    self.mouse_moved = false;
     SDL_Event e = {};
     while (SDL_PollEvent(&e) != 0) {
         switch (e.type) {
@@ -158,10 +160,15 @@ auto Window::update(this Window &self, f64) -> void {
                 auto state = KeyState::Up;
                 state |= e.key.down ? KeyState::Down : KeyState::Up;
                 state |= e.key.repeat ? KeyState::Repeat : KeyState::Up;
-                self.key_events.try_emplace(e.key.scancode, e.key.key, e.key.mod, state);
+                self.key_events[e.key.scancode] = { .key = e.key.key, .mod = e.key.mod, .state = state };
             } break;
             case SDL_EVENT_KEY_UP: {
-                self.key_events.try_emplace(e.key.scancode, e.key.key, e.key.mod, KeyState::Up);
+                self.key_events[e.key.scancode] = { .key = e.key.key, .mod = e.key.mod, .state = KeyState::Up };
+            } break;
+            case SDL_EVENT_MOUSE_MOTION: {
+                self.mouse_pos_delta = glm::vec2(e.motion.xrel, e.motion.yrel);
+                self.mouse_pos = glm::vec2(e.motion.x, e.motion.y);
+                self.mouse_moved = true;
             } break;
             case SDL_EVENT_QUIT: {
                 App::close();
@@ -173,6 +180,21 @@ auto Window::update(this Window &self, f64) -> void {
             cb(e);
         }
     }
+}
+
+auto Window::check_key_state(this Window &self, SDL_Scancode scancode, KeyState state) -> bool {
+    auto it = self.key_events.find(scancode);
+    if (it == self.key_events.end()) {
+        return state == KeyState::Up;
+    }
+
+    return it->second.state & state;
+}
+
+auto Window::set_relative_mouse(this Window &self, bool enabled) -> void {
+    ZoneScoped;
+
+    SDL_SetWindowRelativeMouseMode(self.handle, enabled);
 }
 
 auto Window::set_cursor(this Window &self, WindowCursor cursor) -> void {

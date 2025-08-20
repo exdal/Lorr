@@ -9,7 +9,44 @@
 
 struct Runtime {
     Runtime(flecs::world &world) {
-        world.component("");
+        auto &window = lr::App::mod<lr::Window>();
+        world
+            .system<lr::ECS::Camera, lr::ECS::ActiveCamera>() //
+            .each([&](flecs::iter &it, usize, lr::ECS::Camera &c, lr::ECS::ActiveCamera) {
+                auto target_velocity = glm::vec3(0.0f);
+                if (window.check_key_state(SDL_SCANCODE_W, lr::KeyState::Down)) {
+                    target_velocity.z = -c.max_velocity;
+                }
+
+                if (window.check_key_state(SDL_SCANCODE_S, lr::KeyState::Down)) {
+                    target_velocity.z = c.max_velocity;
+                }
+
+                if (window.check_key_state(SDL_SCANCODE_A, lr::KeyState::Down)) {
+                    target_velocity.x = -c.max_velocity;
+                }
+
+                if (window.check_key_state(SDL_SCANCODE_D, lr::KeyState::Down)) {
+                    target_velocity.x = c.max_velocity;
+                }
+
+                if (window.check_key_state(SDL_SCANCODE_E, lr::KeyState::Down)) {
+                    target_velocity.y = c.max_velocity;
+                }
+
+                if (window.check_key_state(SDL_SCANCODE_Q, lr::KeyState::Down)) {
+                    target_velocity.y = -c.max_velocity;
+                }
+
+                if (window.mouse_moved) {
+                    auto sensitivity = 0.2f;
+                    c.yaw += window.mouse_pos_delta.x * sensitivity;
+                    c.pitch = glm::clamp(c.pitch - window.mouse_pos_delta.y * sensitivity, -89.9f, 89.9f);
+                }
+
+                auto acceleration_rate = glm::length(target_velocity) > 0.0f ? c.accel_speed : c.decel_speed;
+                c.velocity = glm::mix(c.velocity, target_velocity, glm::min(1.0f, acceleration_rate * it.delta_time()));
+            });
     }
 };
 
@@ -64,10 +101,14 @@ auto RuntimeModule::update(this RuntimeModule &self, f64 delta_time) -> void {
             const auto &path_str = asset.path.string();
             if (ImGui::Button(path_str.c_str())) {
                 if (self.active_scene_uuid) {
+                    window.set_relative_mouse(false);
                     asset_man.unload_scene(self.active_scene_uuid);
                 }
 
                 if (asset_man.load_scene(asset_uuid)) {
+                    window.set_relative_mouse(true);
+                    auto *scene_asset = asset_man.get_scene(asset_uuid);
+                    scene_asset->import_module<Runtime>();
                     self.active_scene_uuid = asset_uuid;
                 }
             }

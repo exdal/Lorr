@@ -497,7 +497,6 @@ auto Device::create_swap_chain(this Device &self, VkSurfaceKHR surface, ls::opti
     -> std::expected<vuk::Swapchain, vuk::VkException> {
     ZoneScoped;
 
-    VkPresentModeKHR present_mode = self.frame_count() == 1 ? VK_PRESENT_MODE_FIFO_KHR : VK_PRESENT_MODE_IMMEDIATE_KHR;
     vkb::SwapchainBuilder builder(self.handle, surface);
     builder.set_desired_min_image_count(self.frame_count());
     builder.set_desired_format(
@@ -512,7 +511,14 @@ auto Device::create_swap_chain(this Device &self, VkSurfaceKHR surface, ls::opti
             .colorSpace = vuk::ColorSpaceKHR::eSrgbNonlinear,
         }
     );
-    builder.set_desired_present_mode(present_mode);
+
+    if (self.frame_count() != 1) {
+        builder.set_desired_present_mode(VK_PRESENT_MODE_MAILBOX_KHR);
+        builder.add_fallback_present_mode(VK_PRESENT_MODE_IMMEDIATE_KHR);
+    } else {
+        builder.set_desired_present_mode(VK_PRESENT_MODE_FIFO_KHR);
+    }
+    builder.add_fallback_present_mode(VK_PRESENT_MODE_FIFO_KHR);
     builder.set_image_usage_flags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
 
     auto recycling = false;

@@ -285,7 +285,7 @@ static auto draw_viewport(ViewportWindow &self, vuk::Format format, vuk::Extent3
 
         auto *transform = selected_entity.get_mut<lr::ECS::Transform>();
         auto T = glm::translate(glm::mat4(1.0), transform->position);
-        auto R = glm::mat4_cast(glm::quat(transform->rotation));
+        auto R = glm::mat4_cast(lr::Math::quat_dir(transform->rotation));
         auto S = glm::scale(glm::mat4(1.0), transform->scale);
         auto gizmo_mat = T * R * S;
         auto delta_mat = glm::mat4(1.0f);

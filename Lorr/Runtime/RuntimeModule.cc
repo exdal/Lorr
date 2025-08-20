@@ -93,6 +93,7 @@ auto RuntimeModule::update(this RuntimeModule &self, f64 delta_time) -> void {
 
     if (ImGui::Begin("Runtime")) {
         const auto &registry = asset_man.get_registry();
+        auto loading_scene_uuid = lr::UUID(nullptr);
         for (const auto &[asset_uuid, asset] : registry) {
             if (asset.type != lr::AssetType::Scene) {
                 continue;
@@ -100,19 +101,24 @@ auto RuntimeModule::update(this RuntimeModule &self, f64 delta_time) -> void {
 
             const auto &path_str = asset.path.string();
             if (ImGui::Button(path_str.c_str())) {
-                if (self.active_scene_uuid) {
-                    window.set_relative_mouse(false);
-                    asset_man.unload_scene(self.active_scene_uuid);
-                }
-
-                if (asset_man.load_scene(asset_uuid)) {
-                    window.set_relative_mouse(true);
-                    auto *scene_asset = asset_man.get_scene(asset_uuid);
-                    scene_asset->import_module<Runtime>();
-                    self.active_scene_uuid = asset_uuid;
-                }
+                loading_scene_uuid = asset_uuid;
             }
         }
+
+        if (loading_scene_uuid) {
+            if (self.active_scene_uuid) {
+                window.set_relative_mouse(false);
+                asset_man.unload_scene(self.active_scene_uuid);
+            }
+
+            if (asset_man.load_scene(loading_scene_uuid)) {
+                window.set_relative_mouse(true);
+                auto *scene_asset = asset_man.get_scene(loading_scene_uuid);
+                scene_asset->import_module<Runtime>();
+                self.active_scene_uuid = loading_scene_uuid;
+            }
+        }
+
     }
     ImGui::End();
 

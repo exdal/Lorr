@@ -12,6 +12,20 @@ enum BindlessDescriptorLayout : u32 {
     SampledImages = 1,
 };
 
+static constexpr auto sampler_min_clamp_reduction_mode = VkSamplerReductionModeCreateInfo{
+    .sType = VK_STRUCTURE_TYPE_SAMPLER_REDUCTION_MODE_CREATE_INFO,
+    .pNext = nullptr,
+    .reductionMode = VK_SAMPLER_REDUCTION_MODE_MIN,
+};
+static constexpr auto hiz_sampler_info = vuk::SamplerCreateInfo{
+    .pNext = &sampler_min_clamp_reduction_mode,
+    .magFilter = vuk::Filter::eLinear,
+    .minFilter = vuk::Filter::eLinear,
+    .mipmapMode = vuk::SamplerMipmapMode::eNearest,
+    .addressModeU = vuk::SamplerAddressMode::eClampToEdge,
+    .addressModeV = vuk::SamplerAddressMode::eClampToEdge,
+};
+
 auto SceneRenderer::init(this SceneRenderer &self) -> bool {
     ZoneScoped;
 
@@ -205,6 +219,12 @@ auto SceneRenderer::prepare_frame(this SceneRenderer &self, FramePrepareInfo &in
     auto &transfer_man = device.transfer_man();
     auto prepared_frame = PreparedFrame{};
 
+    auto zero_fill_pass = vuk::make_pass("zero fill", [](vuk::CommandBuffer &command_buffer, VUK_BA(vuk::eTransferWrite) dst) {
+        command_buffer.fill_buffer(dst, 0_u32);
+
+        return dst;
+    });
+
     if (!info.dirty_transform_ids.empty()) {
         auto rebuild_transforms = !self.transforms_buffer || self.transforms_buffer.data_size() <= info.gpu_transforms.size_bytes();
         self.transforms_buffer = self.transforms_buffer.resize(device, info.gpu_transforms.size_bytes()).value();
@@ -214,7 +234,6 @@ auto SceneRenderer::prepare_frame(this SceneRenderer &self, FramePrepareInfo &in
             prepared_frame.transforms_buffer = transfer_man.upload_staging(info.gpu_transforms, self.transforms_buffer);
         } else {
             // Buffer is not resized, upload individual transforms.
-
             auto dirty_transforms_count = info.dirty_transform_ids.size();
             auto dirty_transforms_size_bytes = dirty_transforms_count * sizeof(GPU::Transforms);
             auto upload_buffer = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eCPUtoGPU, dirty_transforms_size_bytes);
@@ -316,12 +335,22 @@ auto SceneRenderer::prepare_frame(this SceneRenderer &self, FramePrepareInfo &in
     if (info.max_meshlet_instance_count > 0) {
         prepared_frame.meshlet_instances_buffer =
             transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eGPUonly, info.max_meshlet_instance_count * sizeof(GPU::MeshletInstance));
-        prepared_frame.visible_meshlet_instances_indices_buffer =
-            transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eGPUonly, info.max_meshlet_instance_count * sizeof(u32));
-        prepared_frame.reordered_indices_buffer = transfer_man.alloc_transient_buffer(
-            vuk::MemoryUsage::eGPUonly,
-            info.max_meshlet_instance_count * Model::MAX_MESHLET_PRIMITIVES * 3 * sizeof(u32)
-        );
+
+        auto meshlet_instance_visibility_mask_size_bytes = (info.max_meshlet_instance_count + 31) / 32 * sizeof(u32);
+        if (meshlet_instance_visibility_mask_size_bytes > self.meshlet_instance_visibility_mask_buffer.data_size()) {
+            self.meshlet_instance_visibility_mask_buffer =
+                self.meshlet_instance_visibility_mask_buffer.resize(device, meshlet_instance_visibility_mask_size_bytes).value();
+            prepared_frame.meshlet_instance_visibility_mask_buffer =
+                self.meshlet_instance_visibility_mask_buffer.acquire(device, "meshlet instance visibility mask", vuk::eNone);
+            prepared_frame.meshlet_instance_visibility_mask_buffer =
+                zero_fill_pass(std::move(prepared_frame.meshlet_instance_visibility_mask_buffer));
+        } else {
+            prepared_frame.meshlet_instance_visibility_mask_buffer =
+                self.meshlet_instance_visibility_mask_buffer.acquire(device, "meshlet instance visibility mask", vuk::eMemoryRead);
+        }
+    } else {
+        device.destroy(self.meshlet_instance_visibility_mask_buffer.id());
+        self.meshlet_instance_visibility_mask_buffer = {};
     }
 
     info.environment.transmittance_lut_size = self.sky_transmittance_lut_view.extent();
@@ -332,6 +361,7 @@ auto SceneRenderer::prepare_frame(this SceneRenderer &self, FramePrepareInfo &in
     prepared_frame.camera_buffer = transfer_man.scratch_buffer(info.camera);
 
     prepared_frame.mesh_instance_count = info.mesh_instance_count;
+    prepared_frame.max_meshlet_instance_count = info.max_meshlet_instance_count;
     prepared_frame.environment_flags = static_cast<GPU::EnvironmentFlags>(info.environment.flags);
 
     if (info.regenerate_sky || !self.sky_transmittance_lut_view) {
@@ -389,6 +419,350 @@ auto SceneRenderer::prepare_frame(this SceneRenderer &self, FramePrepareInfo &in
     }
 
     return prepared_frame;
+}
+
+static auto cull_scene(
+    bool late_pass,
+    u32 max_meshlet_instance_count,
+    GPU::CullFlags cull_flags,
+    TransferManager &transfer_man,
+    vuk::Value<vuk::ImageAttachment> &hiz_attachment,
+    vuk::Value<vuk::Buffer> &cull_meshlets_cmd_buffer,
+    vuk::Value<vuk::Buffer> &visible_meshlet_instances_count_buffer,
+    vuk::Value<vuk::Buffer> &meshlet_instance_visibility_mask_buffer,
+    vuk::Value<vuk::Buffer> &meshes_buffer,
+    vuk::Value<vuk::Buffer> &mesh_instances_buffer,
+    vuk::Value<vuk::Buffer> &meshlet_instances_buffer,
+    vuk::Value<vuk::Buffer> &transforms_buffer,
+    vuk::Value<vuk::Buffer> &camera_buffer,
+    vuk::Value<vuk::Buffer> &debug_drawer_buffer
+) -> std::tuple<vuk::Value<vuk::Buffer>, vuk::Value<vuk::Buffer>> {
+    ZoneScoped;
+
+    //  ── CULL MESHLETS ───────────────────────────────────────────────────
+    auto vis_cull_meshlets_pass = vuk::make_pass(
+        "vis cull meshlets",
+        [late_pass, cull_flags](
+            vuk::CommandBuffer &cmd_list,
+            VUK_BA(vuk::eIndirectRead) dispatch_cmd,
+            VUK_BA(vuk::eComputeRead) camera,
+            VUK_BA(vuk::eComputeRead) meshlet_instances,
+            VUK_BA(vuk::eComputeRead) mesh_instances,
+            VUK_BA(vuk::eComputeRead) meshes,
+            VUK_BA(vuk::eComputeRead) transforms,
+            VUK_IA(vuk::eComputeRead) hiz,
+            VUK_BA(vuk::eComputeRead) visible_meshlet_instances_count,
+            VUK_BA(vuk::eComputeRW) meshlet_instance_visibility_mask,
+            VUK_BA(vuk::eComputeRW) cull_triangles_cmd,
+            VUK_BA(vuk::eComputeWrite) visible_meshlet_instances_indices,
+            VUK_BA(vuk::eComputeRW) debug_drawer
+        ) {
+            cmd_list //
+                .bind_compute_pipeline("passes.cull_meshlets")
+                .bind_buffer(0, 0, camera)
+                .bind_buffer(0, 1, meshlet_instances)
+                .bind_buffer(0, 2, mesh_instances)
+                .bind_buffer(0, 3, meshes)
+                .bind_buffer(0, 4, transforms)
+                .bind_image(0, 5, hiz)
+                .bind_sampler(0, 6, hiz_sampler_info)
+                .bind_buffer(0, 7, visible_meshlet_instances_count)
+                .bind_buffer(0, 8, meshlet_instance_visibility_mask)
+                .bind_buffer(0, 9, cull_triangles_cmd)
+                .bind_buffer(0, 10, visible_meshlet_instances_indices)
+                .bind_buffer(0, 11, debug_drawer)
+                .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, cull_flags)
+                .specialize_constants(0, late_pass ? 1 : 0)
+                .dispatch_indirect(dispatch_cmd);
+
+            return std::make_tuple(
+                dispatch_cmd,
+                camera,
+                meshlet_instances,
+                mesh_instances,
+                meshes,
+                transforms,
+                hiz,
+                visible_meshlet_instances_count,
+                meshlet_instance_visibility_mask,
+                cull_triangles_cmd,
+                visible_meshlet_instances_indices,
+                debug_drawer
+            );
+        }
+    );
+
+    auto cull_triangles_cmd_buffer = transfer_man.scratch_buffer<vuk::DispatchIndirectCommand>({ .x = 0, .y = 1, .z = 1 });
+    auto visible_meshlet_instances_indices_buffer =
+        transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eGPUonly, max_meshlet_instance_count * sizeof(u32));
+
+    std::tie(
+        cull_meshlets_cmd_buffer,
+        camera_buffer,
+        meshlet_instances_buffer,
+        mesh_instances_buffer,
+        meshes_buffer,
+        transforms_buffer,
+        hiz_attachment,
+        visible_meshlet_instances_count_buffer,
+        meshlet_instance_visibility_mask_buffer,
+        cull_triangles_cmd_buffer,
+        visible_meshlet_instances_indices_buffer,
+        debug_drawer_buffer
+    ) =
+        vis_cull_meshlets_pass(
+            std::move(cull_meshlets_cmd_buffer),
+            std::move(camera_buffer),
+            std::move(meshlet_instances_buffer),
+            std::move(mesh_instances_buffer),
+            std::move(meshes_buffer),
+            std::move(transforms_buffer),
+            std::move(hiz_attachment),
+            std::move(visible_meshlet_instances_count_buffer),
+            std::move(meshlet_instance_visibility_mask_buffer),
+            std::move(cull_triangles_cmd_buffer),
+            std::move(visible_meshlet_instances_indices_buffer),
+            std::move(debug_drawer_buffer)
+        );
+
+    //  ── CULL TRIANGLES ──────────────────────────────────────────────────
+    auto vis_cull_triangles_pass = vuk::make_pass(
+        "vis cull triangles",
+        [cull_flags](
+            vuk::CommandBuffer &cmd_list,
+            VUK_BA(vuk::eIndirectRead) cull_triangles_cmd,
+            VUK_BA(vuk::eComputeRead) camera,
+            VUK_BA(vuk::eComputeRead) visible_meshlet_instances_indices,
+            VUK_BA(vuk::eComputeRead) meshlet_instances,
+            VUK_BA(vuk::eComputeRead) mesh_instances,
+            VUK_BA(vuk::eComputeRead) meshes,
+            VUK_BA(vuk::eComputeRead) transforms,
+            VUK_BA(vuk::eComputeRW) draw_indexed_cmd,
+            VUK_BA(vuk::eComputeWrite) reordered_indices
+        ) {
+            cmd_list //
+                .bind_compute_pipeline("passes.cull_triangles")
+                .bind_buffer(0, 0, camera)
+                .bind_buffer(0, 1, visible_meshlet_instances_indices)
+                .bind_buffer(0, 2, meshlet_instances)
+                .bind_buffer(0, 3, mesh_instances)
+                .bind_buffer(0, 4, meshes)
+                .bind_buffer(0, 5, transforms)
+                .bind_buffer(0, 6, draw_indexed_cmd)
+                .bind_buffer(0, 7, reordered_indices)
+                .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, cull_flags)
+                .dispatch_indirect(cull_triangles_cmd);
+
+            return std::make_tuple(
+                camera,
+                visible_meshlet_instances_indices,
+                meshlet_instances,
+                mesh_instances,
+                meshes,
+                transforms,
+                draw_indexed_cmd,
+                reordered_indices
+            );
+        }
+    );
+
+    auto draw_command_buffer = transfer_man.scratch_buffer<vuk::DrawIndexedIndirectCommand>({ .instanceCount = 1 });
+    auto reordered_indices_buffer =
+        transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eGPUonly, max_meshlet_instance_count * Model::MAX_MESHLET_PRIMITIVES * 3 * sizeof(u32));
+
+    std::tie(
+        camera_buffer,
+        visible_meshlet_instances_indices_buffer,
+        meshlet_instances_buffer,
+        mesh_instances_buffer,
+        meshes_buffer,
+        transforms_buffer,
+        draw_command_buffer,
+        reordered_indices_buffer
+    ) =
+        vis_cull_triangles_pass(
+            std::move(cull_triangles_cmd_buffer),
+            std::move(camera_buffer),
+            std::move(visible_meshlet_instances_indices_buffer),
+            std::move(meshlet_instances_buffer),
+            std::move(mesh_instances_buffer),
+            std::move(meshes_buffer),
+            std::move(transforms_buffer),
+            std::move(draw_command_buffer),
+            std::move(reordered_indices_buffer)
+        );
+
+    return std::make_tuple(draw_command_buffer, reordered_indices_buffer);
+}
+
+static auto draw_visbuffer(
+    vuk::PersistentDescriptorSet &descriptor_set,
+    vuk::Value<vuk::ImageAttachment> &depth_attachment,
+    vuk::Value<vuk::ImageAttachment> &visbuffer_attachment,
+    vuk::Value<vuk::ImageAttachment> &overdraw_attachment,
+    vuk::Value<vuk::Buffer> &draw_command_buffer,
+    vuk::Value<vuk::Buffer> &reordered_indices_buffer,
+    vuk::Value<vuk::Buffer> &meshes_buffer,
+    vuk::Value<vuk::Buffer> &mesh_instances_buffer,
+    vuk::Value<vuk::Buffer> &meshlet_instances_buffer,
+    vuk::Value<vuk::Buffer> &transforms_buffer,
+    vuk::Value<vuk::Buffer> &materials_buffer,
+    vuk::Value<vuk::Buffer> &camera_buffer
+) -> void {
+    ZoneScoped;
+
+    auto vis_clear_pass = vuk::make_pass(
+        "vis clear",
+        [](vuk::CommandBuffer &cmd_list, //
+           VUK_IA(vuk::eComputeWrite) visbuffer,
+           VUK_IA(vuk::eComputeWrite) overdraw) {
+            cmd_list //
+                .bind_compute_pipeline("passes.visbuffer_clear")
+                .bind_image(0, 0, visbuffer)
+                .bind_image(0, 1, overdraw)
+                .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, PushConstants(glm::uvec2(visbuffer->extent.width, visbuffer->extent.height)))
+                .dispatch_invocations_per_pixel(visbuffer);
+
+            return std::make_tuple(visbuffer, overdraw);
+        }
+    );
+
+    std::tie(visbuffer_attachment, overdraw_attachment) = vis_clear_pass(std::move(visbuffer_attachment), std::move(overdraw_attachment));
+
+    auto vis_encode_pass = vuk::make_pass(
+        "vis encode",
+        [&descriptor_set](
+            vuk::CommandBuffer &cmd_list,
+            VUK_BA(vuk::eIndirectRead) triangle_indirect,
+            VUK_BA(vuk::eIndexRead) index_buffer,
+            VUK_BA(vuk::eVertexRead) camera,
+            VUK_BA(vuk::eVertexRead) meshlet_instances,
+            VUK_BA(vuk::eVertexRead) mesh_instances,
+            VUK_BA(vuk::eVertexRead) meshes,
+            VUK_BA(vuk::eVertexRead) transforms,
+            VUK_BA(vuk::eFragmentRead) materials,
+            VUK_IA(vuk::eColorRW) visbuffer,
+            VUK_IA(vuk::eDepthStencilRW) depth,
+            VUK_IA(vuk::eFragmentRW) overdraw
+        ) {
+            cmd_list //
+                .bind_graphics_pipeline("passes.visbuffer_encode")
+                .set_rasterization({ .cullMode = vuk::CullModeFlagBits::eBack })
+                .set_depth_stencil({ .depthTestEnable = true, .depthWriteEnable = true, .depthCompareOp = vuk::CompareOp::eGreaterOrEqual })
+                .set_color_blend(visbuffer, vuk::BlendPreset::eOff)
+                .set_dynamic_state(vuk::DynamicStateFlagBits::eViewport | vuk::DynamicStateFlagBits::eScissor)
+                .set_viewport(0, vuk::Rect2D::framebuffer())
+                .set_scissor(0, vuk::Rect2D::framebuffer())
+                .bind_persistent(1, descriptor_set)
+                .bind_buffer(0, 0, camera)
+                .bind_buffer(0, 1, meshlet_instances)
+                .bind_buffer(0, 2, mesh_instances)
+                .bind_buffer(0, 3, meshes)
+                .bind_buffer(0, 4, transforms)
+                .bind_buffer(0, 5, materials)
+                .bind_image(0, 6, overdraw)
+                .bind_index_buffer(index_buffer, vuk::IndexType::eUint32)
+                .draw_indexed_indirect(1, triangle_indirect);
+
+            return std::make_tuple(camera, meshlet_instances, mesh_instances, meshes, transforms, materials, visbuffer, depth, overdraw);
+        }
+    );
+
+    std::tie(
+        camera_buffer,
+        meshlet_instances_buffer,
+        mesh_instances_buffer,
+        meshes_buffer,
+        transforms_buffer,
+        materials_buffer,
+        visbuffer_attachment,
+        depth_attachment,
+        overdraw_attachment
+    ) =
+        vis_encode_pass(
+            std::move(draw_command_buffer),
+            std::move(reordered_indices_buffer),
+            std::move(camera_buffer),
+            std::move(meshlet_instances_buffer),
+            std::move(mesh_instances_buffer),
+            std::move(meshes_buffer),
+            std::move(transforms_buffer),
+            std::move(materials_buffer),
+            std::move(visbuffer_attachment),
+            std::move(depth_attachment),
+            std::move(overdraw_attachment)
+        );
+}
+
+static auto draw_hiz(vuk::Value<vuk::ImageAttachment> &hiz_attachment, vuk::Value<vuk::ImageAttachment> &depth_attachment) -> void {
+    ZoneScoped;
+
+    auto hiz_generate_pass = vuk::make_pass(
+        "hiz generate",
+        [](vuk::CommandBuffer &cmd_list, //
+           VUK_IA(vuk::eComputeSampled) src,
+           VUK_IA(vuk::eComputeRW) dst) {
+            auto extent = dst->extent;
+            auto mip_count = dst->level_count;
+            LS_EXPECT(mip_count < 13);
+
+            auto dispatch_x = (extent.width + 63) >> 6;
+            auto dispatch_y = (extent.height + 63) >> 6;
+
+            cmd_list //
+                .bind_compute_pipeline("passes.hiz")
+                .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, PushConstants(mip_count, (dispatch_x * dispatch_y) - 1, glm::mat2(1.0f)))
+                .specialize_constants(0, extent.width == extent.height && (extent.width & (extent.width - 1)) == 0 ? 1u : 0u)
+                .specialize_constants(1, extent.width)
+                .specialize_constants(2, extent.height);
+
+            *cmd_list.scratch_buffer<u32>(0, 0) = 0;
+            cmd_list.bind_sampler(0, 1, hiz_sampler_info);
+            cmd_list.bind_image(0, 2, src);
+
+            for (u32 i = 0; i < 13; i++) {
+                cmd_list.bind_image(0, i + 3, dst->mip(ls::min(i, mip_count - 1_u32)));
+            }
+
+            cmd_list.dispatch(dispatch_x, dispatch_y);
+
+            return std::make_tuple(src, dst);
+        }
+    );
+
+    auto hiz_generate_slow_pass = vuk::make_pass(
+        "hiz generate slow",
+        [](vuk::CommandBuffer &cmd_list, //
+           VUK_IA(vuk::eComputeSampled) src,
+           VUK_IA(vuk::eComputeRW) dst) {
+            auto extent = dst->extent;
+            auto mip_count = dst->level_count;
+
+            cmd_list //
+                .bind_compute_pipeline("passes.hiz_slow")
+                .bind_sampler(0, 0, hiz_sampler_info);
+
+            for (auto i = 0_u32; i < mip_count; i++) {
+                auto mip_width = std::max(1_u32, extent.width >> i);
+                auto mip_height = std::max(1_u32, extent.height >> i);
+
+                auto mip = dst->mip(i);
+                if (i == 0) {
+                    cmd_list.bind_image(0, 1, src);
+                } else {
+                    cmd_list.bind_image(0, 1, dst->mip(i - 1));
+                }
+
+                cmd_list.bind_image(0, 2, mip);
+                cmd_list.push_constants(vuk::ShaderStageFlagBits::eCompute, 0, PushConstants(mip_width, mip_height));
+                cmd_list.dispatch_invocations(mip_width, mip_height);
+            }
+
+            return std::make_tuple(src, dst);
+        }
+    );
+
+    std::tie(depth_attachment, hiz_attachment) = hiz_generate_pass(std::move(depth_attachment), std::move(hiz_attachment));
 }
 
 static auto draw_sky(
@@ -637,19 +1011,6 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
         hiz_attachment = self.hiz_view.acquire(device, "HiZ", vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage, vuk::eComputeRW);
     }
 
-    static constexpr auto sampler_min_clamp_reduction_mode = VkSamplerReductionModeCreateInfo{
-        .sType = VK_STRUCTURE_TYPE_SAMPLER_REDUCTION_MODE_CREATE_INFO,
-        .pNext = nullptr,
-        .reductionMode = VK_SAMPLER_REDUCTION_MODE_MIN,
-    };
-    static constexpr auto hiz_sampler_info = vuk::SamplerCreateInfo{
-        .pNext = &sampler_min_clamp_reduction_mode,
-        .magFilter = vuk::Filter::eLinear,
-        .minFilter = vuk::Filter::eLinear,
-        .mipmapMode = vuk::SamplerMipmapMode::eNearest,
-        .addressModeU = vuk::SamplerAddressMode::eClampToEdge,
-        .addressModeV = vuk::SamplerAddressMode::eClampToEdge,
-    };
     //   ──────────────────────────────────────────────────────────────────────
 
     const auto debugging = self.debug_lines;
@@ -686,11 +1047,28 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
     auto sky_multiscatter_lut_attachment = std::move(frame.sky_multiscatter_lut);
 
     if (frame.mesh_instance_count) {
+        auto visbuffer_attachment = vuk::declare_ia(
+            "visbuffer",
+            { .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eColorAttachment,
+              .format = vuk::Format::eR32Uint,
+              .sample_count = vuk::Samples::e1 }
+        );
+        visbuffer_attachment.same_shape_as(final_attachment);
+
+        auto overdraw_attachment = vuk::declare_ia(
+            "overdraw",
+            { .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage,
+              .format = vuk::Format::eR32Uint,
+              .sample_count = vuk::Samples::e1 }
+        );
+        overdraw_attachment.same_shape_as(final_attachment);
+
         auto transforms_buffer = std::move(frame.transforms_buffer);
         auto meshes_buffer = std::move(frame.meshes_buffer);
         auto mesh_instances_buffer = std::move(frame.mesh_instances_buffer);
         auto meshlet_instances_buffer = std::move(frame.meshlet_instances_buffer);
         auto materials_buffer = std::move(frame.materials_buffer);
+        auto meshlet_visibility_mask_buffer = std::move(frame.meshlet_instance_visibility_mask_buffer);
 
         //  ── CULL MESHES ─────────────────────────────────────────────────────
         auto vis_select_lods_pass = vuk::make_pass(
@@ -761,250 +1139,71 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
         std::tie(visible_meshlet_instances_count_buffer, cull_meshlets_cmd_buffer) =
             generate_cull_commands_pass(std::move(visible_meshlet_instances_count_buffer), std::move(cull_meshlets_cmd_buffer));
 
-        //  ── CULL MESHLETS ───────────────────────────────────────────────────
-        auto vis_cull_meshlets_pass = vuk::make_pass(
-            "vis cull meshlets",
-            [cull_flags = info.cull_flags](
-                vuk::CommandBuffer &cmd_list,
-                VUK_BA(vuk::eIndirectRead) dispatch_cmd,
-                VUK_BA(vuk::eComputeRead) camera,
-                VUK_BA(vuk::eComputeRead) meshlet_instances,
-                VUK_BA(vuk::eComputeRead) mesh_instances,
-                VUK_BA(vuk::eComputeRead) meshes,
-                VUK_BA(vuk::eComputeRead) transforms,
-                VUK_IA(vuk::eComputeRead) hiz,
-                VUK_BA(vuk::eComputeRead) visible_meshlet_instances_count,
-                VUK_BA(vuk::eComputeRW) cull_triangles_cmd,
-                VUK_BA(vuk::eComputeWrite) visible_meshlet_instances_indices,
-                VUK_BA(vuk::eComputeRW) debug_drawer
-            ) {
-                cmd_list //
-                    .bind_compute_pipeline("passes.cull_meshlets")
-                    .bind_buffer(0, 0, camera)
-                    .bind_buffer(0, 1, meshlet_instances)
-                    .bind_buffer(0, 2, mesh_instances)
-                    .bind_buffer(0, 3, meshes)
-                    .bind_buffer(0, 4, transforms)
-                    .bind_image(0, 5, hiz)
-                    .bind_sampler(0, 6, hiz_sampler_info)
-                    .bind_buffer(0, 7, visible_meshlet_instances_count)
-                    .bind_buffer(0, 8, cull_triangles_cmd)
-                    .bind_buffer(0, 9, visible_meshlet_instances_indices)
-                    .bind_buffer(0, 10, debug_drawer)
-                    .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, cull_flags)
-                    .dispatch_indirect(dispatch_cmd);
-
-                return std::make_tuple(
-                    camera,
-                    meshlet_instances,
-                    mesh_instances,
-                    meshes,
-                    transforms,
-                    hiz,
-                    cull_triangles_cmd,
-                    visible_meshlet_instances_indices,
-                    debug_drawer
-                );
-            }
-        );
-
-        auto cull_triangles_cmd_buffer = transfer_man.scratch_buffer<vuk::DispatchIndirectCommand>({ .x = 0, .y = 1, .z = 1 });
-        auto visible_meshlet_instances_indices_buffer = std::move(frame.visible_meshlet_instances_indices_buffer);
-
-        std::tie(
-            camera_buffer,
-            meshlet_instances_buffer,
-            mesh_instances_buffer,
-            meshes_buffer,
-            transforms_buffer,
+        auto [early_draw_command_buffer, early_reordered_indices_buffer] = cull_scene(
+            false,
+            frame.max_meshlet_instance_count,
+            info.cull_flags,
+            transfer_man,
             hiz_attachment,
-            cull_triangles_cmd_buffer,
-            visible_meshlet_instances_indices_buffer,
-            debug_drawer_buffer
-        ) =
-            vis_cull_meshlets_pass(
-                std::move(cull_meshlets_cmd_buffer),
-                std::move(camera_buffer),
-                std::move(meshlet_instances_buffer),
-                std::move(mesh_instances_buffer),
-                std::move(meshes_buffer),
-                std::move(transforms_buffer),
-                std::move(hiz_attachment),
-                std::move(visible_meshlet_instances_count_buffer),
-                std::move(cull_triangles_cmd_buffer),
-                std::move(visible_meshlet_instances_indices_buffer),
-                std::move(debug_drawer_buffer)
-            );
-
-        //  ── CULL TRIANGLES ──────────────────────────────────────────────────
-        auto vis_cull_triangles_pass = vuk::make_pass(
-            "vis cull triangles",
-            [cull_flags = info.cull_flags](
-                vuk::CommandBuffer &cmd_list,
-                VUK_BA(vuk::eIndirectRead) cull_triangles_cmd,
-                VUK_BA(vuk::eComputeRead) camera,
-                VUK_BA(vuk::eComputeRead) visible_meshlet_instances_indices,
-                VUK_BA(vuk::eComputeRead) meshlet_instances,
-                VUK_BA(vuk::eComputeRead) mesh_instances,
-                VUK_BA(vuk::eComputeRead) meshes,
-                VUK_BA(vuk::eComputeRead) transforms,
-                VUK_BA(vuk::eComputeRW) draw_indexed_cmd,
-                VUK_BA(vuk::eComputeWrite) reordered_indices
-            ) {
-                cmd_list //
-                    .bind_compute_pipeline("passes.cull_triangles")
-                    .bind_buffer(0, 0, camera)
-                    .bind_buffer(0, 1, visible_meshlet_instances_indices)
-                    .bind_buffer(0, 2, meshlet_instances)
-                    .bind_buffer(0, 3, mesh_instances)
-                    .bind_buffer(0, 4, meshes)
-                    .bind_buffer(0, 5, transforms)
-                    .bind_buffer(0, 6, draw_indexed_cmd)
-                    .bind_buffer(0, 7, reordered_indices)
-                    .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, cull_flags)
-                    .dispatch_indirect(cull_triangles_cmd);
-
-                return std::make_tuple(
-                    camera,
-                    visible_meshlet_instances_indices,
-                    meshlet_instances,
-                    mesh_instances,
-                    meshes,
-                    transforms,
-                    draw_indexed_cmd,
-                    reordered_indices
-                );
-            }
-        );
-
-        auto draw_command_buffer = transfer_man.scratch_buffer<vuk::DrawIndexedIndirectCommand>({ .instanceCount = 1 });
-        auto reordered_indices_buffer = std::move(frame.reordered_indices_buffer);
-
-        std::tie(
-            camera_buffer,
-            visible_meshlet_instances_indices_buffer,
-            meshlet_instances_buffer,
-            mesh_instances_buffer,
+            cull_meshlets_cmd_buffer,
+            visible_meshlet_instances_count_buffer,
+            meshlet_visibility_mask_buffer,
             meshes_buffer,
+            mesh_instances_buffer,
+            meshlet_instances_buffer,
             transforms_buffer,
-            draw_command_buffer,
-            reordered_indices_buffer
-        ) =
-            vis_cull_triangles_pass(
-                std::move(cull_triangles_cmd_buffer),
-                std::move(camera_buffer),
-                std::move(visible_meshlet_instances_indices_buffer),
-                std::move(meshlet_instances_buffer),
-                std::move(mesh_instances_buffer),
-                std::move(meshes_buffer),
-                std::move(transforms_buffer),
-                std::move(draw_command_buffer),
-                std::move(reordered_indices_buffer)
-            );
-
-        //  ── VISBUFFER CLEAR ─────────────────────────────────────────────────
-        auto vis_clear_pass = vuk::make_pass(
-            "vis clear",
-            [](vuk::CommandBuffer &cmd_list, //
-               VUK_IA(vuk::eComputeWrite) visbuffer,
-               VUK_IA(vuk::eComputeWrite) overdraw) {
-                cmd_list //
-                    .bind_compute_pipeline("passes.visbuffer_clear")
-                    .bind_image(0, 0, visbuffer)
-                    .bind_image(0, 1, overdraw)
-                    .push_constants(
-                        vuk::ShaderStageFlagBits::eCompute,
-                        0,
-                        PushConstants(glm::uvec2(visbuffer->extent.width, visbuffer->extent.height))
-                    )
-                    .dispatch_invocations_per_pixel(visbuffer);
-
-                return std::make_tuple(visbuffer, overdraw);
-            }
-        );
-
-        auto visbuffer_attachment = vuk::declare_ia(
-            "visbuffer",
-            { .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eColorAttachment,
-              .format = vuk::Format::eR32Uint,
-              .sample_count = vuk::Samples::e1 }
-        );
-        visbuffer_attachment.same_shape_as(final_attachment);
-
-        auto overdraw_attachment = vuk::declare_ia(
-            "overdraw",
-            { .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eColorAttachment,
-              .format = vuk::Format::eR32Uint,
-              .sample_count = vuk::Samples::e1 }
-        );
-        overdraw_attachment.same_shape_as(final_attachment);
-
-        std::tie(visbuffer_attachment, overdraw_attachment) = vis_clear_pass(std::move(visbuffer_attachment), std::move(overdraw_attachment));
-
-        //  ── VISBUFFER ENCODE ────────────────────────────────────────────────
-        auto vis_encode_pass = vuk::make_pass(
-            "vis encode",
-            [descriptor_set = &bindless_descriptor_set](
-                vuk::CommandBuffer &cmd_list,
-                VUK_BA(vuk::eIndirectRead) triangle_indirect,
-                VUK_BA(vuk::eIndexRead) index_buffer,
-                VUK_BA(vuk::eVertexRead) camera,
-                VUK_BA(vuk::eVertexRead) meshlet_instances,
-                VUK_BA(vuk::eVertexRead) mesh_instances,
-                VUK_BA(vuk::eVertexRead) meshes,
-                VUK_BA(vuk::eVertexRead) transforms,
-                VUK_BA(vuk::eFragmentRead) materials,
-                VUK_IA(vuk::eColorRW) visbuffer,
-                VUK_IA(vuk::eDepthStencilRW) depth,
-                VUK_IA(vuk::eFragmentRW) overdraw
-            ) {
-                cmd_list //
-                    .bind_graphics_pipeline("passes.visbuffer_encode")
-                    .set_rasterization({ .cullMode = vuk::CullModeFlagBits::eBack })
-                    .set_depth_stencil({ .depthTestEnable = true, .depthWriteEnable = true, .depthCompareOp = vuk::CompareOp::eGreaterOrEqual })
-                    .set_color_blend(visbuffer, vuk::BlendPreset::eOff)
-                    .set_dynamic_state(vuk::DynamicStateFlagBits::eViewport | vuk::DynamicStateFlagBits::eScissor)
-                    .set_viewport(0, vuk::Rect2D::framebuffer())
-                    .set_scissor(0, vuk::Rect2D::framebuffer())
-                    .bind_persistent(1, *descriptor_set)
-                    .bind_buffer(0, 0, camera)
-                    .bind_buffer(0, 1, meshlet_instances)
-                    .bind_buffer(0, 2, mesh_instances)
-                    .bind_buffer(0, 3, meshes)
-                    .bind_buffer(0, 4, transforms)
-                    .bind_buffer(0, 5, materials)
-                    .bind_image(0, 6, overdraw)
-                    .bind_index_buffer(index_buffer, vuk::IndexType::eUint32)
-                    .draw_indexed_indirect(1, triangle_indirect);
-
-                return std::make_tuple(camera, meshlet_instances, mesh_instances, meshes, transforms, materials, visbuffer, depth, overdraw);
-            }
-        );
-
-        std::tie(
             camera_buffer,
-            meshlet_instances_buffer,
-            mesh_instances_buffer,
+            debug_drawer_buffer
+        );
+
+        draw_visbuffer(
+            bindless_descriptor_set,
+            depth_attachment,
+            visbuffer_attachment,
+            overdraw_attachment,
+            early_draw_command_buffer,
+            early_reordered_indices_buffer,
             meshes_buffer,
+            mesh_instances_buffer,
+            meshlet_instances_buffer,
             transforms_buffer,
             materials_buffer,
-            visbuffer_attachment,
+            camera_buffer
+        );
+
+        draw_hiz(hiz_attachment, depth_attachment);
+
+        auto [late_draw_command_buffer, late_reordered_indices_buffer] = cull_scene(
+            true,
+            frame.max_meshlet_instance_count,
+            info.cull_flags,
+            transfer_man,
+            hiz_attachment,
+            cull_meshlets_cmd_buffer,
+            visible_meshlet_instances_count_buffer,
+            meshlet_visibility_mask_buffer,
+            meshes_buffer,
+            mesh_instances_buffer,
+            meshlet_instances_buffer,
+            transforms_buffer,
+            camera_buffer,
+            debug_drawer_buffer
+        );
+
+        draw_visbuffer(
+            bindless_descriptor_set,
             depth_attachment,
-            overdraw_attachment
-        ) =
-            vis_encode_pass(
-                std::move(draw_command_buffer),
-                std::move(reordered_indices_buffer),
-                std::move(camera_buffer),
-                std::move(meshlet_instances_buffer),
-                std::move(mesh_instances_buffer),
-                std::move(meshes_buffer),
-                std::move(transforms_buffer),
-                std::move(materials_buffer),
-                std::move(visbuffer_attachment),
-                std::move(depth_attachment),
-                std::move(overdraw_attachment)
-            );
+            visbuffer_attachment,
+            overdraw_attachment,
+            late_draw_command_buffer,
+            late_reordered_indices_buffer,
+            meshes_buffer,
+            mesh_instances_buffer,
+            meshlet_instances_buffer,
+            transforms_buffer,
+            materials_buffer,
+            camera_buffer
+        );
 
         //  ── EDITOR MOUSE PICKING ────────────────────────────────────────────
         if (info.picking_texel) {
@@ -1043,73 +1242,6 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
             std::memcpy(&texel_data, picked_texel->mapped_ptr, sizeof(u32));
             info.picked_transform_index = texel_data;
         }
-
-        auto hiz_generate_pass = vuk::make_pass(
-            "hiz generate",
-            [](vuk::CommandBuffer &cmd_list, //
-               VUK_IA(vuk::eComputeSampled) src,
-               VUK_IA(vuk::eComputeRW) dst) {
-                auto extent = dst->extent;
-                auto mip_count = dst->level_count;
-                LS_EXPECT(mip_count < 13);
-
-                auto dispatch_x = (extent.width + 63) >> 6;
-                auto dispatch_y = (extent.height + 63) >> 6;
-
-                cmd_list //
-                    .bind_compute_pipeline("passes.hiz")
-                    .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, PushConstants(mip_count, (dispatch_x * dispatch_y) - 1, glm::mat2(1.0f)))
-                    .specialize_constants(0, extent.width == extent.height && (extent.width & (extent.width - 1)) == 0 ? 1u : 0u)
-                    .specialize_constants(1, extent.width)
-                    .specialize_constants(2, extent.height);
-
-                *cmd_list.scratch_buffer<u32>(0, 0) = 0;
-                cmd_list.bind_sampler(0, 1, hiz_sampler_info);
-                cmd_list.bind_image(0, 2, src);
-
-                for (u32 i = 0; i < 13; i++) {
-                    cmd_list.bind_image(0, i + 3, dst->mip(ls::min(i, mip_count - 1_u32)));
-                }
-
-                cmd_list.dispatch(dispatch_x, dispatch_y);
-
-                return std::make_tuple(src, dst);
-            }
-        );
-
-        auto hiz_generate_slow_pass = vuk::make_pass(
-            "hiz generate slow",
-            [](vuk::CommandBuffer &cmd_list, //
-               VUK_IA(vuk::eComputeSampled) src,
-               VUK_IA(vuk::eComputeRW) dst) {
-                auto extent = dst->extent;
-                auto mip_count = dst->level_count;
-
-                cmd_list //
-                    .bind_compute_pipeline("passes.hiz_slow")
-                    .bind_sampler(0, 0, hiz_sampler_info);
-
-                for (auto i = 0_u32; i < mip_count; i++) {
-                    auto mip_width = std::max(1_u32, extent.width >> i);
-                    auto mip_height = std::max(1_u32, extent.height >> i);
-
-                    auto mip = dst->mip(i);
-                    if (i == 0) {
-                        cmd_list.bind_image(0, 1, src);
-                    } else {
-                        cmd_list.bind_image(0, 1, dst->mip(i - 1));
-                    }
-
-                    cmd_list.bind_image(0, 2, mip);
-                    cmd_list.push_constants(vuk::ShaderStageFlagBits::eCompute, 0, PushConstants(mip_width, mip_height));
-                    cmd_list.dispatch_invocations(mip_width, mip_height);
-                }
-
-                return std::make_tuple(src, dst);
-            }
-        );
-
-        std::tie(depth_attachment, hiz_attachment) = hiz_generate_pass(std::move(depth_attachment), std::move(hiz_attachment));
 
         //  ── VISBUFFER DECODE ────────────────────────────────────────────────
         auto vis_decode_pass = vuk::make_pass(
@@ -1478,6 +1610,11 @@ auto SceneRenderer::cleanup(this SceneRenderer &self) -> void {
     if (self.meshes_buffer) {
         device.destroy(self.meshes_buffer.id());
         self.meshes_buffer = {};
+    }
+
+    if (self.meshlet_instance_visibility_mask_buffer) {
+        device.destroy(self.meshlet_instance_visibility_mask_buffer.id());
+        self.meshlet_instance_visibility_mask_buffer = {};
     }
 
     if (self.materials_buffer) {

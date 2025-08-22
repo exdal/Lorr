@@ -825,7 +825,7 @@ auto AssetManager::load_model(this AssetManager &self, const UUID &uuid) -> bool
                         nullptr,
                         lod_index_count,
                         TARGET_ERROR,
-                        meshopt_SimplifyLockBorder,
+                        meshopt_SimplifyLockBorder | meshopt_SimplifyPermissive,
                         &result_error
                     );
 

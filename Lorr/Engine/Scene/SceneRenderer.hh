@@ -25,13 +25,13 @@ struct FramePrepareInfo {
 
 struct PreparedFrame {
     u32 mesh_instance_count = 0;
+    u32 max_meshlet_instance_count = 0;
     GPU::EnvironmentFlags environment_flags = GPU::EnvironmentFlags::None;
     vuk::Value<vuk::Buffer> transforms_buffer = {};
     vuk::Value<vuk::Buffer> meshes_buffer = {};
     vuk::Value<vuk::Buffer> mesh_instances_buffer = {};
     vuk::Value<vuk::Buffer> meshlet_instances_buffer = {};
-    vuk::Value<vuk::Buffer> visible_meshlet_instances_indices_buffer = {};
-    vuk::Value<vuk::Buffer> reordered_indices_buffer = {};
+    vuk::Value<vuk::Buffer> meshlet_instance_visibility_mask_buffer = {};
     vuk::Value<vuk::Buffer> materials_buffer = {};
     vuk::Value<vuk::Buffer> environment_buffer = {};
     vuk::Value<vuk::Buffer> camera_buffer = {};
@@ -56,6 +56,7 @@ struct SceneRenderer {
 
     Buffer mesh_instances_buffer = {};
     Buffer meshes_buffer = {};
+    Buffer meshlet_instance_visibility_mask_buffer = {};
 
     Buffer materials_buffer = {};
 

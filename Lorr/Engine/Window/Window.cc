@@ -194,8 +194,10 @@ auto Window::check_key_state(this Window &self, SDL_Scancode scancode, KeyState 
 
 auto Window::set_relative_mouse(this Window &self, bool enabled) -> void {
     ZoneScoped;
-    auto center_rect = SDL_Rect{ .x = self.width / 2, .y = self.height / 2, .w = 1, .h = 1 };
-    SDL_SetWindowMouseRect(self.handle, &center_rect);
+
+    auto warp_rect = SDL_Rect{ .x = self.width / 2, .y = self.height / 2, .w = 1, .h = 1 };
+    SDL_SetWindowMouseRect(self.handle, enabled ? &warp_rect : nullptr);
+
     SDL_SetWindowRelativeMouseMode(self.handle, enabled);
 }
 

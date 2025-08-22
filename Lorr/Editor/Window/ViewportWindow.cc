@@ -229,8 +229,8 @@ static auto draw_viewport(ViewportWindow &self, vuk::Format format, vuk::Extent3
                 ImGui::ResetMouseDragDelta(ImGuiMouseButton_Left);
 
                 auto sensitivity = 0.1f;
-                self.editor_camera.yaw -= drag.x * sensitivity;
-                self.editor_camera.pitch += drag.y * sensitivity;
+                self.editor_camera.yaw += drag.x * sensitivity;
+                self.editor_camera.pitch -= drag.y * sensitivity;
                 self.editor_camera.pitch = glm::clamp(self.editor_camera.pitch, -89.9f, 89.9f);
             }
         }

@@ -130,9 +130,10 @@ static auto draw_tools(ViewportWindow &self) -> void {
         ImGui::drag_vec(0, glm::value_ptr(self.editor_camera.position), 3, ImGuiDataType_Float);
 
         ImGui::SeparatorText("Rotation");
-        auto camera_rotation_degrees = glm::degrees(self.editor_camera.rotation);
-        ImGui::drag_vec(1, glm::value_ptr(camera_rotation_degrees), 3, ImGuiDataType_Float);
-        self.editor_camera.rotation = glm::radians(lr::Math::normalize_180(camera_rotation_degrees));
+        auto camera_yaw_pitch = glm::vec2(self.editor_camera.yaw, self.editor_camera.pitch);
+        ImGui::drag_vec(1, glm::value_ptr(camera_yaw_pitch), 2, ImGuiDataType_Float);
+        self.editor_camera.yaw = camera_yaw_pitch.x;
+        self.editor_camera.pitch = camera_yaw_pitch.y;
 
         ImGui::SeparatorText("FoV");
         ImGui::drag_vec(2, &self.editor_camera.fov, 1, ImGuiDataType_Float);
@@ -200,19 +201,19 @@ static auto draw_viewport(ViewportWindow &self, vuk::Format format, vuk::Extent3
         auto target_velocity = glm::vec3(0.0f);
         if (!ImGuizmo::IsUsingAny() && ImGui::IsWindowHovered()) {
             if (ImGui::IsKeyDown(ImGuiKey_W)) {
-                target_velocity.z = -self.editor_camera.max_velocity;
+                target_velocity.x = self.editor_camera.max_velocity;
             }
 
             if (ImGui::IsKeyDown(ImGuiKey_S)) {
-                target_velocity.z = self.editor_camera.max_velocity;
-            }
-
-            if (ImGui::IsKeyDown(ImGuiKey_A)) {
                 target_velocity.x = -self.editor_camera.max_velocity;
             }
 
             if (ImGui::IsKeyDown(ImGuiKey_D)) {
-                target_velocity.x = self.editor_camera.max_velocity;
+                target_velocity.z = self.editor_camera.max_velocity;
+            }
+
+            if (ImGui::IsKeyDown(ImGuiKey_A)) {
+                target_velocity.z = -self.editor_camera.max_velocity;
             }
 
             if (ImGui::IsKeyDown(ImGuiKey_E)) {
@@ -223,15 +224,14 @@ static auto draw_viewport(ViewportWindow &self, vuk::Format format, vuk::Extent3
                 target_velocity.y = -self.editor_camera.max_velocity;
             }
 
-            if (ImGui::IsMouseDragging(ImGuiMouseButton_Right)) {
-                auto drag = ImGui::GetMouseDragDelta(ImGuiMouseButton_Right, 0);
-                ImGui::ResetMouseDragDelta(ImGuiMouseButton_Right);
+            if (ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
+                auto drag = ImGui::GetMouseDragDelta(ImGuiMouseButton_Left, 0);
+                ImGui::ResetMouseDragDelta(ImGuiMouseButton_Left);
 
                 auto sensitivity = 0.1f;
-                auto camera_rotation_degrees = glm::degrees(self.editor_camera.rotation);
-                camera_rotation_degrees.x += drag.x * sensitivity;
-                camera_rotation_degrees.y += drag.y * sensitivity;
-                self.editor_camera.rotation = glm::radians(camera_rotation_degrees);
+                self.editor_camera.yaw -= drag.x * sensitivity;
+                self.editor_camera.pitch += drag.y * sensitivity;
+                self.editor_camera.pitch = glm::clamp(self.editor_camera.pitch, -89.9f, 89.9f);
             }
         }
 
@@ -273,15 +273,14 @@ static auto draw_viewport(ViewportWindow &self, vuk::Format format, vuk::Extent3
     }
 
     if (selected_entity && selected_entity.has<lr::ECS::Transform>()) {
-        auto camera_forward = glm::vec3(0.0, 0.0, 1.0) * lr::Math::quat_dir(self.editor_camera.rotation);
-        auto camera_projection = glm::perspective(
+        auto camera_direction = self.editor_camera.direction();
+        auto camera_projection = glm::perspectiveRH_ZO(
             glm::radians(self.editor_camera.fov),
             self.editor_camera.aspect_ratio(),
             self.editor_camera.far_clip,
             self.editor_camera.near_clip
         );
-        auto camera_view = glm::lookAt(self.editor_camera.position, self.editor_camera.position + camera_forward, glm::vec3(0.0, 1.0, 0.0));
-        camera_projection[1][1] *= -1.0f;
+        auto camera_view = glm::lookAt(self.editor_camera.position, self.editor_camera.position + camera_direction, glm::vec3(0.0, 1.0, 0.0));
 
         auto *transform = selected_entity.get_mut<lr::ECS::Transform>();
         auto T = glm::translate(glm::mat4(1.0), transform->position);

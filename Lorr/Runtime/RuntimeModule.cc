@@ -11,23 +11,23 @@ struct Runtime {
     Runtime(flecs::world &world) {
         auto &window = lr::App::mod<lr::Window>();
         world
-            .system<lr::ECS::Camera, lr::ECS::ActiveCamera>() //
-            .each([&](flecs::iter &it, usize, lr::ECS::Camera &c, lr::ECS::ActiveCamera) {
+            .system<lr::ECS::Transform, lr::ECS::Camera, lr::ECS::ActiveCamera>() //
+            .each([&](flecs::iter &it, usize, lr::ECS::Transform &t, lr::ECS::Camera &c, lr::ECS::ActiveCamera) {
                 auto target_velocity = glm::vec3(0.0f);
                 if (window.check_key_state(SDL_SCANCODE_W, lr::KeyState::Down)) {
-                    target_velocity.z = -c.max_velocity;
+                    target_velocity.x = c.max_velocity;
                 }
 
                 if (window.check_key_state(SDL_SCANCODE_S, lr::KeyState::Down)) {
-                    target_velocity.z = c.max_velocity;
-                }
-
-                if (window.check_key_state(SDL_SCANCODE_A, lr::KeyState::Down)) {
                     target_velocity.x = -c.max_velocity;
                 }
 
                 if (window.check_key_state(SDL_SCANCODE_D, lr::KeyState::Down)) {
-                    target_velocity.x = c.max_velocity;
+                    target_velocity.z = c.max_velocity;
+                }
+
+                if (window.check_key_state(SDL_SCANCODE_A, lr::KeyState::Down)) {
+                    target_velocity.z = -c.max_velocity;
                 }
 
                 if (window.check_key_state(SDL_SCANCODE_E, lr::KeyState::Down)) {
@@ -39,13 +39,26 @@ struct Runtime {
                 }
 
                 if (window.mouse_moved) {
-                    auto sensitivity = 0.2f;
-                    c.yaw += window.mouse_pos_delta.x * sensitivity;
-                    c.pitch = glm::clamp(c.pitch - window.mouse_pos_delta.y * sensitivity, -89.9f, 89.9f);
+                    auto mouse_pos_delta = window.get_delta_mouse_pos();
+                    auto sensitivity = 0.1f;
+                    t.rotation.x += mouse_pos_delta.x * sensitivity;
+                    t.rotation.y -= mouse_pos_delta.y * sensitivity;
+                    t.rotation.y = glm::clamp(t.rotation.y, -89.9f, 89.9f);
                 }
 
                 auto acceleration_rate = glm::length(target_velocity) > 0.0f ? c.accel_speed : c.decel_speed;
                 c.velocity = glm::mix(c.velocity, target_velocity, glm::min(1.0f, acceleration_rate * it.delta_time()));
+
+                auto direction = glm::vec3(
+                    glm::cos(glm::radians(t.rotation.x)) * glm::cos(glm::radians(t.rotation.y)),
+                    glm::sin(glm::radians(t.rotation.y)),
+                    glm::sin(glm::radians(t.rotation.x)) * glm::cos(glm::radians(t.rotation.y))
+                );
+                direction = glm::normalize(direction);
+                auto up = glm::vec3(0.0f, 1.0f, 0.0f);
+                auto right = glm::normalize(glm::cross(direction, up));
+                auto world_velocity = c.velocity.x * direction + c.velocity.y * up + c.velocity.z * right;
+                t.position += world_velocity * it.delta_time();
             });
     }
 };
@@ -118,7 +131,6 @@ auto RuntimeModule::update(this RuntimeModule &self, f64 delta_time) -> void {
                 self.active_scene_uuid = loading_scene_uuid;
             }
         }
-
     }
     ImGui::End();
 

@@ -4,6 +4,7 @@
 
 #include "Engine/Core/App.hh"
 
+#include "Engine/Math/Quat.hh"
 #include "Engine/Memory/Stack.hh"
 
 #include "Engine/OS/File.hh"
@@ -399,7 +400,8 @@ auto Scene::create_perspective_camera(this Scene &self, const std::string &name,
     return self
         .create_entity(name) //
         .add<ECS::PerspectiveCamera>()
-        .set<ECS::Camera>({ .position = position, .yaw = yaw, .pitch = pitch, .fov = fov })
+        .set<ECS::Transform>({ .position = position, .rotation = { yaw, pitch, 0.0f } })
+        .set<ECS::Camera>({ .fov = fov })
         .child_of(self.root);
 }
 
@@ -577,7 +579,7 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer, ls::option<
 
     // clang-format off
     auto camera_query = self.get_world()
-        .query_builder<ECS::Camera, ECS::ActiveCamera>()
+        .query_builder<ECS::Transform, ECS::Camera, ECS::ActiveCamera>()
         .build();
     auto rendering_meshes_query = self.get_world()
         .query_builder<ECS::RenderingMesh>()
@@ -589,18 +591,18 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer, ls::option<
 
     ls::option<GPU::Camera> active_camera_data = override_camera;
     if (!active_camera_data.has_value()) {
-        camera_query.each([&active_camera_data](flecs::entity, ECS::Camera &c, ECS::ActiveCamera) {
+        camera_query.each([&active_camera_data](flecs::entity, ECS::Transform &t, ECS::Camera &c, ECS::ActiveCamera) {
             auto aspect_ratio = c.resolution.x / c.resolution.y;
             auto projection_mat = glm::perspectiveRH_ZO(glm::radians(c.fov), aspect_ratio, c.far_clip, c.near_clip);
             projection_mat[1][1] *= -1;
 
             auto direction = glm::vec3(
-                glm::cos(glm::radians(c.yaw)) * glm::cos(glm::radians(c.pitch)),
-                glm::sin(glm::radians(c.pitch)),
-                glm::sin(glm::radians(c.yaw)) * glm::cos(glm::radians(c.pitch))
+                glm::cos(glm::radians(t.rotation.x)) * glm::cos(glm::radians(t.rotation.y)),
+                glm::sin(glm::radians(t.rotation.y)),
+                glm::sin(glm::radians(t.rotation.x)) * glm::cos(glm::radians(t.rotation.y))
             );
             direction = glm::normalize(direction);
-            auto view_mat = glm::lookAt(c.position, c.position + direction, glm::vec3(0.0f, 1.0f, 0.0f));
+            auto view_mat = glm::lookAt(t.position, t.position + direction, glm::vec3(0.0f, 1.0f, 0.0f));
 
             auto &camera_data = active_camera_data.emplace(GPU::Camera{});
             camera_data.projection_mat = projection_mat;
@@ -608,7 +610,7 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer, ls::option<
             camera_data.projection_view_mat = camera_data.projection_mat * camera_data.view_mat;
             camera_data.inv_view_mat = glm::inverse(camera_data.view_mat);
             camera_data.inv_projection_view_mat = glm::inverse(camera_data.projection_view_mat);
-            camera_data.position = c.position;
+            camera_data.position = t.position;
             camera_data.near_clip = c.near_clip;
             camera_data.far_clip = c.far_clip;
             camera_data.resolution = c.resolution;

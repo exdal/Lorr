@@ -102,7 +102,6 @@ struct Window {
     std::vector<std::function<void(SDL_Event &)>> event_listeners = {};
     ankerl::unordered_dense::map<SDL_Scancode, KeyEvent> key_events = {};
     glm::vec2 mouse_pos = {};
-    glm::vec2 mouse_pos_delta = {};
     bool mouse_moved = false;
 
     static auto init_sdl() -> bool;
@@ -121,6 +120,7 @@ struct Window {
     auto check_key_state(this Window &, SDL_Scancode scancode, KeyState state) -> bool;
 
     auto set_relative_mouse(this Window &, bool enabled) -> void;
+    auto get_delta_mouse_pos(this Window &) -> glm::vec2;
     auto set_cursor(this Window &, WindowCursor cursor) -> void;
     auto get_cursor(this Window &) -> WindowCursor;
     auto show_cursor(this Window &, bool show) -> void;

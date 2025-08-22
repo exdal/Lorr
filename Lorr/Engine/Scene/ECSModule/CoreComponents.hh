@@ -22,9 +22,6 @@ ECS_COMPONENT_BEGIN(Transform)
 ECS_COMPONENT_END();
 
 ECS_COMPONENT_BEGIN(Camera)
-    ECS_COMPONENT_MEMBER(position, glm::vec3, {0.0f, 0.0f, 0.0f})
-    ECS_COMPONENT_MEMBER(yaw, f32, 0.0f)
-    ECS_COMPONENT_MEMBER(pitch, f32, 0.0f)
     ECS_COMPONENT_MEMBER(fov, f32, 90.0f)
     ECS_COMPONENT_MEMBER(resolution, glm::vec2, {})
     ECS_COMPONENT_MEMBER(near_clip, f32, 0.1f)

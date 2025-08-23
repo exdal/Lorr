@@ -14,8 +14,9 @@ struct ShaderParameters {
 func cs_main(
     u32x2 thread_id : SV_DispatchThreadID,
     uniform ParameterBlock<ShaderParameters> params,
-    uniform u32x2 src_image_size
+    uniform u32x2 src_image_size,
+    uniform u32 mip_index
 ) -> void {
-    let c = params.src_image.sample(params.sampler, (f32x2(thread_id) + 0.5) / f32x2(src_image_size)).r;
+    let c = params.src_image.sample_mip(params.sampler, (f32x2(thread_id) + 0.5) / f32x2(src_image_size), mip_index).r;
     params.dst_mip.store(thread_id.xy, c);
 }

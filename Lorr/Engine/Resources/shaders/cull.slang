@@ -101,13 +101,7 @@ public func test_occlusion(
 
     let size = max_texel - min_texel + 1;
     let max_size = max(size.x, size.y);
-    var mip = firstbithigh(max_size - 1);
-    let smin = min_texel >> mip;
-    let smax = max_texel >> mip;
-    if (any(smax - smin > 1)) {
-        mip += 1;
-    }
-
+    var mip = max(0.0, ceil(log2(max_size)));
     var uv = (min_uv + max_uv) * 0.5;
     let d = hiz_image.sample_mip(hiz_sampler, uv, mip);
     return screen_aabb.max.z <= d;

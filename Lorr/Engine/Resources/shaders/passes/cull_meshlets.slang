@@ -24,10 +24,6 @@ import debug_drawer;
     #define CULLING_MESHLET_COUNT 64
 #endif
 
-// TODO: Replace this when vuk can support bool constants
-constexpr static bool IS_EARLY = LATE == 0;
-constexpr static bool IS_LATE = LATE == 1;
-
 [[shader("compute")]]
 [[numthreads(CULLING_MESHLET_COUNT, 1, 1)]]
 func cs_main(
@@ -40,6 +36,11 @@ func cs_main(
         return;
     }
 
+    let mask_index = meshlet_instance_index / 32;
+    let bit_index = meshlet_instance_index - mask_index * 32;
+    let visibility_bit = 1 << bit_index;
+    let was_visible = (meshlet_visibility_mask[mask_index] & visibility_bit) != 0;
+
     let meshlet_instance = meshlet_instances[meshlet_instance_index];
     let mesh_instance = mesh_instances[meshlet_instance.mesh_instance_index];
     let mesh = meshes[mesh_instance.mesh_index];
@@ -48,41 +49,18 @@ func cs_main(
     let bounds = mesh_lod.meshlet_bounds[meshlet_instance.meshlet_index];
 
     var visible = true;
-
-    let mask_index = meshlet_instance_index / 32;
-    let bit_index = meshlet_instance_index - mask_index * 32;
-    let visibility_bit = 1 << bit_index;
-    let was_visible = bool(meshlet_visibility_mask[mask_index] & visibility_bit);
-
     if (visible && (cull_flags & CullFlags::MeshletFrustum)) {
-        let cur_mvp = mul(camera.projection_view_mat, transform.world);
-        visible = test_frustum(cur_mvp, bounds.aabb_center, bounds.aabb_extent);
+        let mvp = mul(camera.projection_view_mat, transform.world);
+        visible = test_frustum(mvp, bounds.aabb_center, bounds.aabb_extent);
     }
 
-    if (IS_LATE && visible && (cull_flags & CullFlags::Occlusion)) {
-        let prev_mvp = mul(camera.frustum_projection_view_mat, transform.world);
-        if (let screen_aabb = project_aabb(prev_mvp, camera.near_clip, bounds.aabb_center, bounds.aabb_extent)) {
-            visible = !test_occlusion(screen_aabb, hiz_image, hiz_sampler);
-            if (visible && true) {
-                let ndc_aabb_max = screen_aabb.max.xy * 2.0 - 1.0;
-                let ndc_aabb_min = screen_aabb.min.xy * 2.0 - 1.0;
-                var debug_rect = DebugRect();
-                debug_rect.offset = f32x3((ndc_aabb_max + ndc_aabb_min) * 0.5, screen_aabb.max.z);
-                debug_rect.extent = ndc_aabb_max - ndc_aabb_min;
-                debug_rect.color = f32x3(1.0, 0.0, 0.0);
-                debug_rect.coord = DebugDrawCoord::NDC;
-                debug_draw_rect(debug_drawer[0], debug_rect);
-            }
-        }
+    /*
+    if (visible) {
+        std::atomic_or(meshlet_visibility_mask[mask_index], visibility_bit, std::memory_order_relaxed);
+    } else {
+        std::atomic_and(meshlet_visibility_mask[mask_index], ~visibility_bit, std::memory_order_relaxed);
     }
-
-    if (IS_LATE && (cull_flags & CullFlags::Occlusion)) {
-        if (visible) {
-            std::atomic_or(meshlet_visibility_mask[mask_index], visibility_bit, std::memory_order_relaxed);
-        } else {
-            std::atomic_and(meshlet_visibility_mask[mask_index], ~visibility_bit, std::memory_order_relaxed);
-        }
-    }
+    */
 
     if (visible) {
         let index = std::atomic_add(cull_triangles_cmd[0].x, 1, std::memory_order_relaxed);

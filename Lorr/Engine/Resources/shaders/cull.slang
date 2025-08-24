@@ -88,7 +88,8 @@ public func test_frustum(in f32x4x4 mvp, in f32x3 aabb_center, in f32x3 aabb_ext
 public func test_occlusion(
     in ScreenAabb screen_aabb,
     in Image2D<f32> hiz_image,
-    in Sampler hiz_sampler
+    in Sampler hiz_sampler,
+    in constexpr bool ceiling
 ) -> bool {
     var hiz_size = u32x2(0.0);
     var hiz_levels = 0;
@@ -101,7 +102,13 @@ public func test_occlusion(
 
     let size = max_texel - min_texel + 1;
     let max_size = max(size.x, size.y);
-    var mip = max(0.0, ceil(log2(max_size)));
+    var mip = 0.0;
+    if (ceiling) {
+        mip = max(0.0, ceil(log2(max_size)));
+    } else {
+        mip = floor(log2(max_size));
+    }
+
     var uv = (min_uv + max_uv) * 0.5;
     let d = hiz_image.sample_mip(hiz_sampler, uv, mip);
     return screen_aabb.max.z <= d;

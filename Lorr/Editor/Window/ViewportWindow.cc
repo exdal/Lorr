@@ -151,10 +151,12 @@ static auto draw_tools(ViewportWindow &self) -> void {
         auto &cull_flags = reinterpret_cast<i32 &>(active_scene->get_cull_flags());
         auto &scene_renderer = lr::App::mod<lr::SceneRenderer>();
 
+        ImGui::CheckboxFlags("Cull Mesh Frustum", &cull_flags, std::to_underlying(lr::GPU::CullFlags::MeshFrustum));
+        ImGui::CheckboxFlags("Cull Mesh Occlusion", &cull_flags, std::to_underlying(lr::GPU::CullFlags::MeshOcclusion));
         ImGui::CheckboxFlags("Cull Meshlet Frustum", &cull_flags, std::to_underlying(lr::GPU::CullFlags::MeshletFrustum));
+        ImGui::CheckboxFlags("Cull Meshlet Occlusion", &cull_flags, std::to_underlying(lr::GPU::CullFlags::MeshletOcclusion));
         ImGui::CheckboxFlags("Cull Triangle Back Face", &cull_flags, std::to_underlying(lr::GPU::CullFlags::TriangleBackFace));
         ImGui::CheckboxFlags("Cull Micro Triangles", &cull_flags, std::to_underlying(lr::GPU::CullFlags::MicroTriangles));
-        ImGui::CheckboxFlags("Cull Occlusion", &cull_flags, std::to_underlying(lr::GPU::CullFlags::Occlusion));
         ImGui::Checkbox("Debug Lines", &scene_renderer.debug_lines);
     }
 }

@@ -5,6 +5,7 @@
 #include "Engine/Core/App.hh"
 
 #include "Engine/Graphics/VulkanDevice.hh"
+#include "Engine/Memory/Stack.hh"
 
 namespace lr {
 enum BindlessDescriptorLayout : u32 {
@@ -447,16 +448,18 @@ static auto cull_meshes(
     vuk::Value<vuk::Buffer> &meshes_buffer,
     vuk::Value<vuk::Buffer> &mesh_instances_buffer,
     vuk::Value<vuk::Buffer> &meshlet_instances_buffer,
-    vuk::Value<vuk::Buffer> &visible_meshlet_instances_count_buffer,
+    vuk::Value<vuk::Buffer> &early_visible_meshlet_instances_count_buffer,
+    vuk::Value<vuk::Buffer> &late_visible_meshlet_instances_count_buffer,
     vuk::Value<vuk::Buffer> &mesh_visibility_mask_buffer,
     vuk::Value<vuk::Buffer> &transforms_buffer,
     vuk::Value<vuk::Buffer> &camera_buffer,
     vuk::Value<vuk::Buffer> &debug_drawer_buffer
 ) -> vuk::Value<vuk::Buffer> {
     ZoneScoped;
+    memory::ScopedStack stack;
 
     auto vis_cull_meshes_pass = vuk::make_pass(
-        "vis cull meshes",
+        stack.format("vis cull meshes {}", late ? "late" : "early"),
         [mesh_instance_count, cull_flags, late](
             vuk::CommandBuffer &cmd_list,
             VUK_BA(vuk::eComputeRead) camera,
@@ -466,7 +469,8 @@ static auto cull_meshes(
             VUK_BA(vuk::eComputeRW) mesh_instances,
             VUK_BA(vuk::eComputeRW) meshlet_instances,
             VUK_BA(vuk::eComputeRW) mesh_visibility_mask,
-            VUK_BA(vuk::eComputeRW) visible_meshlet_instances_count,
+            VUK_BA(vuk::eComputeRW) early_visible_meshlet_instances_count,
+            VUK_BA(vuk::eComputeRW) late_visible_meshlet_instances_count,
             VUK_BA(vuk::eComputeRW) debug_drawer
         ) {
             cmd_list //
@@ -479,8 +483,9 @@ static auto cull_meshes(
                 .bind_buffer(0, 5, mesh_instances)
                 .bind_buffer(0, 6, meshlet_instances)
                 .bind_buffer(0, 7, mesh_visibility_mask)
-                .bind_buffer(0, 8, visible_meshlet_instances_count)
-                .bind_buffer(0, 9, debug_drawer)
+                .bind_buffer(0, 8, early_visible_meshlet_instances_count)
+                .bind_buffer(0, 9, late_visible_meshlet_instances_count)
+                .bind_buffer(0, 10, debug_drawer)
                 .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, PushConstants(mesh_instance_count, cull_flags))
                 .specialize_constants(0, late ? 1 : 0)
                 .dispatch_invocations(mesh_instance_count);
@@ -493,7 +498,8 @@ static auto cull_meshes(
                 mesh_instances,
                 meshlet_instances,
                 mesh_visibility_mask,
-                visible_meshlet_instances_count,
+                early_visible_meshlet_instances_count,
+                late_visible_meshlet_instances_count,
                 debug_drawer
             );
         }
@@ -507,7 +513,8 @@ static auto cull_meshes(
         mesh_instances_buffer,
         meshlet_instances_buffer,
         mesh_visibility_mask_buffer,
-        visible_meshlet_instances_count_buffer,
+        early_visible_meshlet_instances_count_buffer,
+        late_visible_meshlet_instances_count_buffer,
         debug_drawer_buffer
     ) =
         vis_cull_meshes_pass(
@@ -518,39 +525,50 @@ static auto cull_meshes(
             std::move(mesh_instances_buffer),
             std::move(meshlet_instances_buffer),
             std::move(mesh_visibility_mask_buffer),
-            std::move(visible_meshlet_instances_count_buffer),
+            std::move(early_visible_meshlet_instances_count_buffer),
+            std::move(late_visible_meshlet_instances_count_buffer),
             std::move(debug_drawer_buffer)
         );
 
     auto generate_cull_commands_pass = vuk::make_pass(
-        "generate cull commands",
-        [](vuk::CommandBuffer &cmd_list, //
-           VUK_BA(vuk::eComputeRead) visible_meshlet_instances_count,
-           VUK_BA(vuk::eComputeRW) cull_meshlets_cmd) {
+        stack.format("generate cull commands {}", late ? "late" : "early"),
+        [late](
+            vuk::CommandBuffer &cmd_list, //
+            VUK_BA(vuk::eComputeRead) early_visible_meshlet_instances_count,
+            VUK_BA(vuk::eComputeRead) late_visible_meshlet_instances_count,
+            VUK_BA(vuk::eComputeRW) cull_meshlets_cmd
+        ) {
             cmd_list //
                 .bind_compute_pipeline("passes.generate_cull_commands")
-                .bind_buffer(0, 0, visible_meshlet_instances_count)
-                .bind_buffer(0, 1, cull_meshlets_cmd)
+                .bind_buffer(0, 0, early_visible_meshlet_instances_count)
+                .bind_buffer(0, 1, late_visible_meshlet_instances_count)
+                .bind_buffer(0, 2, cull_meshlets_cmd)
+                .specialize_constants(0, late ? 1 : 0)
                 .dispatch(1);
 
-            return std::make_tuple(visible_meshlet_instances_count, cull_meshlets_cmd);
+            return std::make_tuple(early_visible_meshlet_instances_count, late_visible_meshlet_instances_count, cull_meshlets_cmd);
         }
     );
 
     auto cull_meshlets_cmd_buffer = transfer_man.scratch_buffer<vuk::DispatchIndirectCommand>({ .x = 0, .y = 1, .z = 1 });
-    std::tie(visible_meshlet_instances_count_buffer, cull_meshlets_cmd_buffer) =
-        generate_cull_commands_pass(std::move(visible_meshlet_instances_count_buffer), std::move(cull_meshlets_cmd_buffer));
+    std::tie(early_visible_meshlet_instances_count_buffer, late_visible_meshlet_instances_count_buffer, cull_meshlets_cmd_buffer) =
+        generate_cull_commands_pass(
+            std::move(early_visible_meshlet_instances_count_buffer),
+            std::move(late_visible_meshlet_instances_count_buffer),
+            std::move(cull_meshlets_cmd_buffer)
+        );
 
     return cull_meshlets_cmd_buffer;
 }
 
 static auto cull_meshlets(
-    bool late_pass,
+    bool late,
     GPU::CullFlags cull_flags,
     TransferManager &transfer_man,
     vuk::Value<vuk::ImageAttachment> &hiz_attachment,
     vuk::Value<vuk::Buffer> &cull_meshlets_cmd_buffer,
-    vuk::Value<vuk::Buffer> &visible_meshlet_instances_count_buffer,
+    vuk::Value<vuk::Buffer> &early_visible_meshlet_instances_count_buffer,
+    vuk::Value<vuk::Buffer> &late_visible_meshlet_instances_count_buffer,
     vuk::Value<vuk::Buffer> &meshlet_instance_visibility_mask_buffer,
     vuk::Value<vuk::Buffer> &visible_meshlet_instances_indices_buffer,
     vuk::Value<vuk::Buffer> &reordered_indices_buffer,
@@ -562,11 +580,12 @@ static auto cull_meshlets(
     vuk::Value<vuk::Buffer> &debug_drawer_buffer
 ) -> vuk::Value<vuk::Buffer> {
     ZoneScoped;
+    memory::ScopedStack stack;
 
     //  ── CULL MESHLETS ───────────────────────────────────────────────────
     auto vis_cull_meshlets_pass = vuk::make_pass(
-        "vis cull meshlets",
-        [late_pass, cull_flags](
+        stack.format("vis cull meshlets {}", late ? "late" : "early"),
+        [late, cull_flags](
             vuk::CommandBuffer &cmd_list,
             VUK_BA(vuk::eIndirectRead) dispatch_cmd,
             VUK_BA(vuk::eComputeRead) camera,
@@ -575,7 +594,8 @@ static auto cull_meshlets(
             VUK_BA(vuk::eComputeRead) meshes,
             VUK_BA(vuk::eComputeRead) transforms,
             VUK_IA(vuk::eComputeSampled) hiz,
-            VUK_BA(vuk::eComputeRead) visible_meshlet_instances_count,
+            VUK_BA(vuk::eComputeRead) early_visible_meshlet_instances_count,
+            VUK_BA(vuk::eComputeRead) late_visible_meshlet_instances_count,
             VUK_BA(vuk::eComputeRW) meshlet_instance_visibility_mask,
             VUK_BA(vuk::eComputeRW) cull_triangles_cmd,
             VUK_BA(vuk::eComputeWrite) visible_meshlet_instances_indices,
@@ -590,13 +610,14 @@ static auto cull_meshlets(
                 .bind_buffer(0, 4, transforms)
                 .bind_image(0, 5, hiz)
                 .bind_sampler(0, 6, hiz_sampler_info)
-                .bind_buffer(0, 7, visible_meshlet_instances_count)
-                .bind_buffer(0, 8, meshlet_instance_visibility_mask)
-                .bind_buffer(0, 9, cull_triangles_cmd)
-                .bind_buffer(0, 10, visible_meshlet_instances_indices)
-                .bind_buffer(0, 11, debug_drawer)
+                .bind_buffer(0, 7, early_visible_meshlet_instances_count)
+                .bind_buffer(0, 8, late_visible_meshlet_instances_count)
+                .bind_buffer(0, 9, meshlet_instance_visibility_mask)
+                .bind_buffer(0, 10, cull_triangles_cmd)
+                .bind_buffer(0, 11, visible_meshlet_instances_indices)
+                .bind_buffer(0, 12, debug_drawer)
                 .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, cull_flags)
-                .specialize_constants(0, late_pass ? 1 : 0)
+                .specialize_constants(0, late ? 1 : 0)
                 .dispatch_indirect(dispatch_cmd);
 
             return std::make_tuple(
@@ -607,7 +628,8 @@ static auto cull_meshlets(
                 meshes,
                 transforms,
                 hiz,
-                visible_meshlet_instances_count,
+                early_visible_meshlet_instances_count,
+                late_visible_meshlet_instances_count,
                 meshlet_instance_visibility_mask,
                 cull_triangles_cmd,
                 visible_meshlet_instances_indices,
@@ -626,7 +648,8 @@ static auto cull_meshlets(
         meshes_buffer,
         transforms_buffer,
         hiz_attachment,
-        visible_meshlet_instances_count_buffer,
+        early_visible_meshlet_instances_count_buffer,
+        late_visible_meshlet_instances_count_buffer,
         meshlet_instance_visibility_mask_buffer,
         cull_triangles_cmd_buffer,
         visible_meshlet_instances_indices_buffer,
@@ -640,7 +663,8 @@ static auto cull_meshlets(
             std::move(meshes_buffer),
             std::move(transforms_buffer),
             std::move(hiz_attachment),
-            std::move(visible_meshlet_instances_count_buffer),
+            std::move(early_visible_meshlet_instances_count_buffer),
+            std::move(late_visible_meshlet_instances_count_buffer),
             std::move(meshlet_instance_visibility_mask_buffer),
             std::move(cull_triangles_cmd_buffer),
             std::move(visible_meshlet_instances_indices_buffer),
@@ -649,7 +673,7 @@ static auto cull_meshlets(
 
     //  ── CULL TRIANGLES ──────────────────────────────────────────────────
     auto vis_cull_triangles_pass = vuk::make_pass(
-        "vis cull triangles",
+        stack.format("vis cull triangles {}", late ? "late" : "early"),
         [cull_flags](
             vuk::CommandBuffer &cmd_list,
             VUK_BA(vuk::eIndirectRead) cull_triangles_cmd,
@@ -716,6 +740,7 @@ static auto cull_meshlets(
 }
 
 static auto draw_visbuffer(
+    bool late,
     vuk::PersistentDescriptorSet &descriptor_set,
     vuk::Value<vuk::ImageAttachment> &depth_attachment,
     vuk::Value<vuk::ImageAttachment> &visbuffer_attachment,
@@ -730,9 +755,10 @@ static auto draw_visbuffer(
     vuk::Value<vuk::Buffer> &camera_buffer
 ) -> void {
     ZoneScoped;
+    memory::ScopedStack stack;
 
     auto vis_encode_pass = vuk::make_pass(
-        "vis encode",
+        stack.format("vis encode {}", late ? "late" : "early"),
         [&descriptor_set](
             vuk::CommandBuffer &cmd_list,
             VUK_BA(vuk::eIndirectRead) triangle_indirect,
@@ -1208,13 +1234,15 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
         auto mesh_visibility_mask_buffer = std::move(frame.mesh_instance_visibility_mask_buffer);
         auto meshlet_visibility_mask_buffer = std::move(frame.meshlet_instance_visibility_mask_buffer);
 
-        auto visible_meshlet_instances_count_buffer = transfer_man.scratch_buffer<u32>({ 0 });
         auto visible_meshlet_instances_indices_buffer =
             transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eGPUonly, frame.max_meshlet_instance_count * sizeof(u32));
         auto reordered_indices_buffer = transfer_man.alloc_transient_buffer(
             vuk::MemoryUsage::eGPUonly,
             frame.max_meshlet_instance_count * Model::MAX_MESHLET_PRIMITIVES * 3 * sizeof(u32)
         );
+
+        auto early_visible_meshlet_instances_count_buffer = transfer_man.scratch_buffer(0_u32);
+        auto late_visible_meshlet_instances_count_buffer = transfer_man.scratch_buffer(0_u32);
 
         auto early_cull_meshlets_cmd_buffer = cull_meshes(
             false, // early
@@ -1225,7 +1253,8 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
             meshes_buffer,
             mesh_instances_buffer,
             meshlet_instances_buffer,
-            visible_meshlet_instances_count_buffer,
+            early_visible_meshlet_instances_count_buffer,
+            late_visible_meshlet_instances_count_buffer,
             mesh_visibility_mask_buffer,
             transforms_buffer,
             camera_buffer,
@@ -1238,7 +1267,8 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
             transfer_man,
             hiz_attachment,
             early_cull_meshlets_cmd_buffer,
-            visible_meshlet_instances_count_buffer,
+            early_visible_meshlet_instances_count_buffer,
+            late_visible_meshlet_instances_count_buffer,
             meshlet_visibility_mask_buffer,
             visible_meshlet_instances_indices_buffer,
             reordered_indices_buffer,
@@ -1251,6 +1281,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
         );
 
         draw_visbuffer(
+            false, // early
             bindless_descriptor_set,
             depth_attachment,
             visbuffer_attachment,
@@ -1276,7 +1307,8 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
             meshes_buffer,
             mesh_instances_buffer,
             meshlet_instances_buffer,
-            visible_meshlet_instances_count_buffer,
+            early_visible_meshlet_instances_count_buffer,
+            late_visible_meshlet_instances_count_buffer,
             mesh_visibility_mask_buffer,
             transforms_buffer,
             camera_buffer,
@@ -1289,7 +1321,8 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
             transfer_man,
             hiz_attachment,
             late_cull_meshlets_cmd_buffer,
-            visible_meshlet_instances_count_buffer,
+            early_visible_meshlet_instances_count_buffer,
+            late_visible_meshlet_instances_count_buffer,
             meshlet_visibility_mask_buffer,
             visible_meshlet_instances_indices_buffer,
             reordered_indices_buffer,
@@ -1302,6 +1335,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
         );
 
         draw_visbuffer(
+            true, // late
             bindless_descriptor_set,
             depth_attachment,
             visbuffer_attachment,

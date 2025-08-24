@@ -55,12 +55,14 @@ struct DebugDrawer {
 };
 
 enum class CullFlags : u32 {
-    MeshletFrustum = 1 << 0,
-    TriangleBackFace = 1 << 1,
-    MicroTriangles = 1 << 2,
-    Occlusion = 1 << 3,
+    MeshFrustum = 1 << 0,
+    MeshOcclusion = 1 << 1,
+    MeshletFrustum = 1 << 2,
+    MeshletOcclusion = 1 << 3,
+    TriangleBackFace = 1 << 4,
+    MicroTriangles = 1 << 5,
 
-    All = MeshletFrustum | TriangleBackFace | MicroTriangles | Occlusion,
+    All = ~0_u32,
 };
 
 enum EnvironmentFlags : u32 {

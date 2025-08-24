@@ -22,10 +22,12 @@ public enum DebugView : i32 {
 
 [[Flags]]
 public enum CullFlags : u32 {
+    MeshFrustum,
+    MeshOcclusion,
     MeshletFrustum,
+    MeshletOcclusion,
     TriangleBackFace,
     MicroTriangles,
-    Occlusion,
 };
 
 [[Flags]]

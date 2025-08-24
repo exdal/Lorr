@@ -1,17 +1,17 @@
 import std;
 import gpu;
 
-struct ShaderParameters {
-    StructuredBuffer<u32> meshlet_instances_count;
-
-    RWStructuredBuffer<DispatchIndirectCommand> cull_meshlets_cmd;
-};
+[[vk::constant_id(0)]] const u32 LATE = 0;
+[[vk::binding(0)]] StructuredBuffer<u32> early_visible_meshlet_instances_count;
+[[vk::binding(1)]] StructuredBuffer<u32> late_visible_meshlet_instances_count;
+[[vk::binding(2)]] RWStructuredBuffer<DispatchIndirectCommand> cull_meshlets_cmd;
 
 [[shader("compute")]]
 [[numthreads(1, 1, 1)]]
-func cs_main(
-    uniform ParameterBlock<ShaderParameters> params
-) -> void {
-    params.cull_meshlets_cmd[0].x = (params.meshlet_instances_count[0] + (CULLING_MESHLET_COUNT - 1)) / CULLING_MESHLET_COUNT;
+func cs_main() -> void {
+    if (LATE == 0) {
+        cull_meshlets_cmd[0].x = (early_visible_meshlet_instances_count[0] + (CULLING_MESHLET_COUNT - 1)) / CULLING_MESHLET_COUNT;
+    } else {
+        cull_meshlets_cmd[0].x = (late_visible_meshlet_instances_count[0] + (CULLING_MESHLET_COUNT - 1)) / CULLING_MESHLET_COUNT;
+    }
 }
-

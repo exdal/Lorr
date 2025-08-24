@@ -13,8 +13,9 @@ import debug_drawer;
 [[vk::binding(5)]] RWStructuredBuffer<MeshInstance> mesh_instances;
 [[vk::binding(6)]] RWStructuredBuffer<MeshletInstance> meshlet_instances;
 [[vk::binding(7)]] RWStructuredBuffer<u32> mesh_visibility_mask;
-[[vk::binding(8)]] RWStructuredBuffer<u32> meshlet_instances_count;
-[[vk::binding(9)]] RWStructuredBuffer<DebugDrawer> debug_drawer;
+[[vk::binding(8)]] RWStructuredBuffer<u32> early_visible_meshlet_instances_count;
+[[vk::binding(9)]] RWStructuredBuffer<u32> late_visible_meshlet_instances_count;
+[[vk::binding(10)]] RWStructuredBuffer<DebugDrawer> debug_drawer;
 
 #ifndef CULLING_MESHES_COUNT
     #define CULLING_MESHES_COUNT 64
@@ -39,21 +40,29 @@ func cs_main(
     let transform = transforms[mesh_instance.transform_index];
     let mvp = mul(camera.projection_view_mat, transform.world);
 
-    var visible = (LATE == 1) ? true : was_visible;
-    if (visible) {
+    let cull_occlusion = (cull_flags & CullFlags::MeshOcclusion) != 0;
+
+    var visible = true;
+    if (LATE == 0 && !was_visible) {
+        // During previous frame, if mesh was NOT visible, we don't render it.
+        visible = false;
+    }
+
+    if (visible && (cull_flags & CullFlags::MeshFrustum)) {
         visible = test_frustum(mvp, mesh.bounds.aabb_center, mesh.bounds.aabb_extent);
     }
 
-    if (LATE == 1 && visible && (cull_flags & CullFlags::Occlusion)) {
+    if (LATE == 1 && visible && cull_occlusion) {
         if (let screen_aabb = project_aabb(mvp, camera.near_clip, mesh.bounds.aabb_center, mesh.bounds.aabb_extent)) {
-            visible = !test_occlusion(screen_aabb, hiz_image, hiz_sampler);
+            visible = !test_occlusion(screen_aabb, hiz_image, hiz_sampler, true);
+
             if (visible && true) {
                 let ndc_aabb_max = screen_aabb.max.xy * 2.0 - 1.0;
                 let ndc_aabb_min = screen_aabb.min.xy * 2.0 - 1.0;
                 var debug_rect = DebugRect();
                 debug_rect.offset = f32x3((ndc_aabb_max + ndc_aabb_min) * 0.5, screen_aabb.max.z);
                 debug_rect.extent = ndc_aabb_max - ndc_aabb_min;
-                debug_rect.color = f32x3(1.0, 0.0, 0.0);
+                debug_rect.color = f32x3(1.0, 0.0, 1.0);
                 debug_rect.coord = DebugDrawCoord::NDC;
                 debug_draw_rect(debug_drawer[0], debug_rect);
             }
@@ -92,7 +101,14 @@ func cs_main(
 
         mesh_instance.lod_index = lod_index;
         let mesh_lod = mesh.lods[lod_index];
-        let meshlet_instance_offset = std::atomic_add(meshlet_instances_count[0], mesh_lod.meshlet_count, std::memory_order_relaxed);
+        var meshlet_instance_offset = 0;
+        if (LATE == 0) {
+            meshlet_instance_offset = std::atomic_add(early_visible_meshlet_instances_count[0], mesh_lod.meshlet_count, std::memory_order_relaxed);
+        } else {
+            meshlet_instance_offset = std::atomic_add(late_visible_meshlet_instances_count[0], mesh_lod.meshlet_count, std::memory_order_relaxed);
+            meshlet_instance_offset += early_visible_meshlet_instances_count[0];
+        }
+
         for (u32 i = 0; i < mesh_lod.meshlet_count; i++) {
             let offset = meshlet_instance_offset + i;
             var meshlet_instance = MeshletInstance();

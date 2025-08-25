@@ -106,7 +106,7 @@ func cs_main(
             meshlet_instance_offset = std::atomic_add(early_visible_meshlet_instances_count[0], mesh_lod.meshlet_count, std::memory_order_relaxed);
         } else {
             meshlet_instance_offset = std::atomic_add(late_visible_meshlet_instances_count[0], mesh_lod.meshlet_count, std::memory_order_relaxed);
-            meshlet_instance_offset += early_visible_meshlet_instances_count[0];
+            //meshlet_instance_offset += max(0, i32(early_visible_meshlet_instances_count[0]) - 1);
         }
 
         for (u32 i = 0; i < mesh_lod.meshlet_count; i++) {

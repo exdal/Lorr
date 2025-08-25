@@ -39,9 +39,10 @@ func cs_main(
 
     var meshlet_instance_index = local_meshlet_instance_index;
     if (LATE == 1) {
-        meshlet_instance_index += early_visible_meshlet_instances_count[0];
+        //meshlet_instance_index += early_visible_meshlet_instances_count[0];
     }
 
+#if 0
     let mask_index = meshlet_instance_index / 32;
     let bit_index = meshlet_instance_index - (mask_index * 32);
     let visibility_bit = 1 << bit_index;
@@ -57,61 +58,52 @@ func cs_main(
     let cull_occlusion = (cull_flags & CullFlags::MeshletOcclusion) != 0;
     let mvp = mul(camera.projection_view_mat, transform.world);
 
-#if 1
-    var visible = true;
-    if (LATE == 0 && !was_visible) {
-        // During previous frame, if meshlet was NOT visible, we don't render it.
-        visible = false;
-    }
+    if (LATE == 0) {
+        var visible = was_visible;
+        if (visible) {
+            visible = test_frustum(mvp, bounds.aabb_center, bounds.aabb_extent);
+        }
 
-    var skip = false;
-    if (LATE == 1 && was_visible) {
-        skip = true;
-    }
+        if (visible) {
+            let index = std::atomic_add(cull_triangles_cmd[0].x, 1, std::memory_order_relaxed);
+            visible_meshlet_instances_indices[index] = meshlet_instance_index;
+        }
+    } else {
+        var visible = true;
+        if (visible) {
+            visible = test_frustum(mvp, bounds.aabb_center, bounds.aabb_extent);
+        }
 
-    if (visible && (cull_flags & CullFlags::MeshletFrustum)) {
-        visible = test_frustum(mvp, bounds.aabb_center, bounds.aabb_extent);
-    }
+        if (visible && cull_occlusion) {
+            if (let screen_aabb = project_aabb(mvp, camera.near_clip, bounds.aabb_center, bounds.aabb_extent)) {
+                visible = !test_occlusion(screen_aabb, hiz_image, hiz_sampler, false);
 
-    if (LATE == 1 && visible && cull_occlusion) {
-        if (let screen_aabb = project_aabb(mvp, camera.near_clip, bounds.aabb_center, bounds.aabb_extent)) {
-            visible = !test_occlusion(screen_aabb, hiz_image, hiz_sampler, false);
-
-            if (visible && true) {
-                let ndc_aabb_max = screen_aabb.max.xy * 2.0 - 1.0;
-                let ndc_aabb_min = screen_aabb.min.xy * 2.0 - 1.0;
-                var debug_rect = DebugRect();
-                debug_rect.offset = f32x3((ndc_aabb_max + ndc_aabb_min) * 0.5, screen_aabb.max.z);
-                debug_rect.extent = ndc_aabb_max - ndc_aabb_min;
-                debug_rect.color = f32x3(1.0, 0.0, 0.0);
-                debug_rect.coord = DebugDrawCoord::NDC;
-                debug_draw_rect(debug_drawer[0], debug_rect);
+                if (visible && true) {
+                    let ndc_aabb_max = screen_aabb.max.xy * 2.0 - 1.0;
+                    let ndc_aabb_min = screen_aabb.min.xy * 2.0 - 1.0;
+                    var debug_rect = DebugRect();
+                    debug_rect.offset = f32x3((ndc_aabb_max + ndc_aabb_min) * 0.5, screen_aabb.max.z);
+                    debug_rect.extent = ndc_aabb_max - ndc_aabb_min;
+                    debug_rect.color = f32x3(1.0, 0.0, 0.0);
+                    debug_rect.coord = DebugDrawCoord::NDC;
+                    debug_draw_rect(debug_drawer[0], debug_rect);
+                }
             }
         }
-    }
 
-    if (LATE == 1 && cull_occlusion) {
+        if (visible && !was_visible) {
+            let index = std::atomic_add(cull_triangles_cmd[0].x, 1, std::memory_order_relaxed);
+            visible_meshlet_instances_indices[index] = meshlet_instance_index;
+        }
+
         if (visible) {
-            std::atomic_or(meshlet_visibility_mask[mask_index], visibility_bit, std::memory_order_acq_rel);
+            std::atomic_or(meshlet_visibility_mask[mask_index], visibility_bit, std::memory_order_relaxed);
         } else {
-            std::atomic_and(meshlet_visibility_mask[mask_index], ~visibility_bit, std::memory_order_acq_rel);
+            std::atomic_and(meshlet_visibility_mask[mask_index], ~visibility_bit, std::memory_order_relaxed);
         }
     }
-
-    if (visible && !skip) {
-        let index = std::atomic_add(cull_triangles_cmd[0].x, 1, std::memory_order_relaxed);
-        visible_meshlet_instances_indices[index] = meshlet_instance_index;
-    }
-
 #else
-    var visible = true;
-    if (visible && (cull_flags & CullFlags::MeshletFrustum)) {
-        visible = test_frustum(mvp, bounds.aabb_center, bounds.aabb_extent);
-    }
-
-    if (visible) {
-        let index = std::atomic_add(cull_triangles_cmd[0].x, 1, std::memory_order_relaxed);
-        visible_meshlet_instances_indices[index] = meshlet_instance_index;
-    }
+    let index = std::atomic_add(cull_triangles_cmd[0].x, 1, std::memory_order_relaxed);
+    visible_meshlet_instances_indices[index] = meshlet_instance_index;
 #endif
 }

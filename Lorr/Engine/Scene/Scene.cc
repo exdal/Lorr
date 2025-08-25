@@ -720,16 +720,16 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer, ls::option<
         auto sampler_index = 0_u32;
 
         auto flags = GPU::MaterialFlag::None;
-        if (albedo_image_index.has_value()) {
-            auto *texture = asset_man.get_texture(material->albedo_texture);
-            sampler_index = texture->sampler.index();
-            flags |= GPU::MaterialFlag::HasAlbedoImage;
-        }
-
-        flags |= normal_image_index.has_value() ? GPU::MaterialFlag::HasNormalImage : GPU::MaterialFlag::None;
-        flags |= emissive_image_index.has_value() ? GPU::MaterialFlag::HasEmissiveImage : GPU::MaterialFlag::None;
-        flags |= metallic_roughness_image_index.has_value() ? GPU::MaterialFlag::HasMetallicRoughnessImage : GPU::MaterialFlag::None;
-        flags |= occlusion_image_index.has_value() ? GPU::MaterialFlag::HasOcclusionImage : GPU::MaterialFlag::None;
+        // if (albedo_image_index.has_value()) {
+        //     auto *texture = asset_man.get_texture(material->albedo_texture);
+        //     sampler_index = texture->sampler.index();
+        //     flags |= GPU::MaterialFlag::HasAlbedoImage;
+        // }
+        //
+        // flags |= normal_image_index.has_value() ? GPU::MaterialFlag::HasNormalImage : GPU::MaterialFlag::None;
+        // flags |= emissive_image_index.has_value() ? GPU::MaterialFlag::HasEmissiveImage : GPU::MaterialFlag::None;
+        // flags |= metallic_roughness_image_index.has_value() ? GPU::MaterialFlag::HasMetallicRoughnessImage : GPU::MaterialFlag::None;
+        // flags |= occlusion_image_index.has_value() ? GPU::MaterialFlag::HasOcclusionImage : GPU::MaterialFlag::None;
 
         gpu_material.albedo_color = material->albedo_color;
         gpu_material.emissive_color = material->emissive_color;

@@ -75,7 +75,7 @@ public struct Camera {
     public mat4 projection_view_mat;
     public mat4 inv_view_mat;
     public mat4 inv_projection_view_mat;
-    public mat4 frustum_projection_view_mat;
+    public mat4 prev_projection_view_mat;
     public f32x3 position;
     public f32 near_clip;
     public f32 far_clip;

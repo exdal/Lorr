@@ -34,8 +34,8 @@ auto Device::init(this Device &self) -> bool {
     instance_builder.set_engine_version(1, 0, 0);
     instance_builder.enable_validation_layers(false); // use vkconfig ui...
     instance_builder.request_validation_layers(false);
-    // instance_builder.add_debug_messenger_severity(VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT);
-    // instance_builder.add_debug_messenger_type(VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT);
+    instance_builder.add_debug_messenger_severity(VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT);
+    instance_builder.add_debug_messenger_type(VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT);
     instance_builder.set_debug_callback(
         [](VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
            VkDebugUtilsMessageTypeFlagsEXT messageType,

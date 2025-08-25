@@ -19,10 +19,12 @@ auto TransferManager::alloc_transient_buffer_raw(this TransferManager &self, vuk
     -> vuk::Buffer {
     ZoneScoped;
 
-    std::shared_lock _(self.mutex);
-    auto buffer =
-        *vuk::allocate_buffer(*self.device->allocator, { .mem_usage = usage, .size = size, .alignment = self.device->non_coherent_atom_size() }, LOC);
-    return *buffer;
+    auto read_lock = std::shared_lock(self.mutex);
+    auto buffer = vuk::Buffer{};
+    auto buffer_info = vuk::BufferCreateInfo{ .mem_usage = usage, .size = size, .alignment = self.device->non_coherent_atom_size() };
+    self.device->allocator->allocate_buffers(std::span{ &buffer, 1 }, std::span{ &buffer_info, 1 }, LOC);
+
+    return buffer;
 }
 
 auto TransferManager::alloc_transient_buffer(this TransferManager &self, vuk::MemoryUsage usage, usize size, vuk::source_location LOC)

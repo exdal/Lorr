@@ -372,7 +372,7 @@ static auto draw_welcome_popup(EditorModule &self) -> void {
     if (ImGui::BeginPopupModal("###welcome", nullptr, popup_flags)) {
         //  ── HEADERS ─────────────────────────────────────────────────────────
         ImGui::TextUnformatted("placeholder");
-        ImGui::InvisibleButton("placeholder", { 0.0f, 75.0f });
+        ImGui::InvisibleButton("placeholder", { -FLT_MAX, 75.0f });
 
         //  ── SECTIONS ────────────────────────────────────────────────────────
         if (ImGui::BeginTabBar("project_guide")) {

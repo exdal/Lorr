@@ -242,7 +242,7 @@ static auto draw_dir_contents(AssetBrowserWindow &self) -> void {
             auto *asset_texture = editor.get_asset_texture(asset);
             auto asset_image = imgui_renderer.add_image(asset_texture->image_view);
             ImGui::image_button(file_name, asset_image, button_size);
-            if (ImGui::BeginDragDropSource()) {
+            if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
                 ImGui::SetDragDropPayload("ASSET_BY_UUID", &asset->uuid, sizeof(lr::UUID));
                 ImGui::EndDragDropSource();
             }

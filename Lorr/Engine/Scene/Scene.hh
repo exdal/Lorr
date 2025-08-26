@@ -37,8 +37,10 @@ private:
     SlotMap<GPU::Transforms, GPU::TransformID> transforms = {};
     ankerl::unordered_dense::map<flecs::entity, GPU::TransformID> entity_transforms_map = {};
     ankerl::unordered_dense::map<ls::pair<UUID, usize>, std::vector<GPU::TransformID>> rendering_meshes_map = {};
-
     std::vector<GPU::TransformID> dirty_transforms = {};
+
+    std::vector<GPU::Material> gpu_materials = {};
+
     bool models_dirty = false;
     u32 mesh_instance_count = 0;
     u32 max_meshlet_instance_count = 0;

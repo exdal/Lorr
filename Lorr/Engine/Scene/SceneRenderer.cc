@@ -5,7 +5,6 @@
 #include "Engine/Core/App.hh"
 
 #include "Engine/Graphics/VulkanDevice.hh"
-#include "Engine/Memory/Stack.hh"
 
 namespace lr {
 enum BindlessDescriptorLayout : u32 {

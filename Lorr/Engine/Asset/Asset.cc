@@ -838,6 +838,7 @@ auto AssetManager::load_model(this AssetManager &self, const UUID &uuid) -> bool
                     simplified_indices.resize(result_index_count);
                 }
 
+                gpu_mesh.vertex_count = mesh_vertices.size();
                 gpu_mesh.lod_count += 1;
                 last_lod_indices = simplified_indices;
 

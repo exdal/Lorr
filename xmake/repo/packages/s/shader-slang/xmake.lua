@@ -16,6 +16,7 @@ package("shader-slang")
 
         add_versions("v2025.10.4", "c2edcfdada38feb345725613c516a842700437f6fa55910b567b9058c415ce8f")
         add_versions("v2025.12.1", "8f34b98391562ce6f97d899e934645e2c4466a02e66b69f69651ff1468553b27")
+        add_versions("v2025.15",   "1eaa24f1f0483f8b8cc4b95153c815394d2f6cae08dbaf8b18d6b7975b8bbe03")
     end
 
     on_install("windows|x64", "linux|x86_64", function (package)

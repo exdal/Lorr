@@ -1,3 +1,5 @@
+add_repositories("local repo", {rootdir = os.scriptdir()})
+
 local fmt_version = "11.2.0"
 local fmt_configs = { header_only = false, shared = false }
 add_requires("fmt " .. fmt_version, { configs = fmt_configs, system = false })
@@ -53,7 +55,7 @@ add_requires("flecs v4.0.4")
 
 add_requires("libsdl3")
 
-add_requires("shader-slang v2025.12.1")
+add_requires("shader-slang v2025.15")
 add_requires("vuk 2025.07.09", { configs = {
     debug_allocations = false,
     disable_exceptions = false,

@@ -1,0 +1,20 @@
+// raddbg 0.9.21 project file
+
+recent_file: path: "../../AppData/Local/.xmake/packages/v/vuk/2025.07.09/9522f98b6e404372ad5e00af87c4b4f9/include/vuk/Exception.hpp"
+recent_file: path: "Lorr/Engine/Scene/SceneRenderer.cc"
+recent_file: path: "Lorr/Engine/Graphics/Slang/Compiler.cc"
+recent_file: path: "Lorr/Engine/Graphics/Vulkan/Pipeline.cc"
+recent_file: path: "../../AppData/Local/.xmake/cache/packages/2508/v/vuk/2025.07.09/source/vuk/src/runtime/vk/DeviceVkResource.cpp"
+recent_file: path: "../../../../SDKBuild/build-X64-1.4.321.1/Vulkan-ValidationLayers/layers/chassis/chassis_manual.cpp"
+recent_file: path: "../../../../SDKBuild/build-X64-1.4.321.1/Vulkan-ValidationLayers/layers/chassis/dispatch_object_manual.cpp"
+recent_file: path: "../../AppData/Local/.xmake/packages/v/vuk/2025.07.09/9522f98b6e404372ad5e00af87c4b4f9/include/vuk/Value.hpp"
+recent_file: path: "Lorr/Engine/Graphics/VulkanDevice.hh"
+recent_file: path: "Lorr/Engine/Graphics/Vulkan/TransferManager.cc"
+recent_file: path: "../../AppData/Local/.xmake/packages/v/vuk/2025.07.09/9522f98b6e404372ad5e00af87c4b4f9/include/vuk/RenderGraph.hpp"
+recent_file: path: "../../../../Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.42.34433/include/expected"
+target:
+{
+  executable: "build/windows/x64/debug/Editor.exe"
+  working_directory: "build/windows/x64/debug"
+  enabled: 1
+}

@@ -35,15 +35,15 @@ func cs_main(
     uniform i32x3 src_extent
 ) -> void {
     histogram_shared[group_index] = 0;
-    std::control_barrier(std::memory_order_acq_rel);
+    GroupMemoryBarrierWithGroupSync();
 
     if (all(thread_id.xy < src_extent.xy)) {
-        const f32x3 color = params.src_image.load(thread_id.xy).rgb;
+        const f32x3 color = params.src_image.Load(u32x3(thread_id.xy, 0)).rgb;
         const f32 luminance = std::rec2020_to_xyz(color).y;
         const u32 bin_index = bin_lum(luminance, params.environment.eye_max_exposure, params.environment.eye_min_exposure);
-        std::atomic_add(histogram_shared[bin_index], 1, std::memory_order_acq_rel);
+        __atomic_add(histogram_shared[bin_index], 1, MemoryOrder::AcquireRelease);
     }
 
-    std::control_barrier(std::memory_order_acq_rel);
-    std::atomic_add(params.histogram_bin_indices[group_index], histogram_shared[group_index], std::memory_order_relaxed);
+    GroupMemoryBarrierWithGroupSync();
+    __atomic_add(params.histogram_bin_indices[group_index], histogram_shared[group_index], MemoryOrder::Relaxed);
 }

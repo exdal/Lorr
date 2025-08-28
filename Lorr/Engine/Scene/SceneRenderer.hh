@@ -30,7 +30,6 @@ struct PreparedFrame {
     vuk::Value<vuk::Buffer> transforms_buffer = {};
     vuk::Value<vuk::Buffer> meshes_buffer = {};
     vuk::Value<vuk::Buffer> mesh_instances_buffer = {};
-    vuk::Value<vuk::Buffer> meshlet_instances_buffer = {};
     vuk::Value<vuk::Buffer> materials_buffer = {};
     vuk::Value<vuk::Buffer> environment_buffer = {};
     vuk::Value<vuk::Buffer> camera_buffer = {};

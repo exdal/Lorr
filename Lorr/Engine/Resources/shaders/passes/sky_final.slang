@@ -48,7 +48,7 @@ func fs_main(
     VertexOutput input,
     uniform ParameterBlock<ShaderParameters> params
 ) -> f32x4 {
-    f32 depth = params.depth_image.sample_mip(params.sampler, input.tex_coord, 0.0);
+    f32 depth = params.depth_image.SampleLevel(params.sampler, input.tex_coord, 0.0);
     f32x3 NDC = f32x3(input.tex_coord * 2.0 - 1.0, depth);
     f32x4 world_pos_h = mul(params.camera.inv_projection_view_mat, f32x4(NDC, 1.0));
     f32x3 world_pos = world_pos_h.xyz / world_pos_h.w;
@@ -86,7 +86,7 @@ func fs_main(
         eye_altitude,
         view_zenith_cos_angle,
         light_on_plane);
-    f32x4 result = params.sky_view_lut.sample_mip(params.sampler, uv, 0.0);
+    f32x4 result = params.sky_view_lut.SampleLevel(params.sampler, uv, 0.0);
     f32x3 luminance = result.rgb;
     f32 transmittance = result.a;
 
@@ -95,7 +95,7 @@ func fs_main(
         params.environment.atmos_atmos_radius,
         params.environment.atmos_planet_radius,
         f32x2(eye_altitude, sun_cos_theta));
-    f32x3 sun_transmittance = params.sky_transmittance_lut.sample_mip(params.sampler, transmittance_uv, 0.0).rgb;
+    f32x3 sun_transmittance = params.sky_transmittance_lut.SampleLevel(params.sampler, transmittance_uv, 0.0).rgb;
 
     if (!planet_intersection.hasValue) {
         luminance += draw_sun(eye_dir, params.environment.sun_direction, 1.0) * params.environment.sun_intensity * sun_transmittance;

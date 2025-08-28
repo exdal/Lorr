@@ -17,6 +17,6 @@ func cs_main(
     uniform u32x2 src_image_size,
     uniform u32 mip_index
 ) -> void {
-    let c = params.src_image.sample_mip(params.sampler, (f32x2(thread_id) + 0.5) / f32x2(src_image_size), mip_index).r;
-    params.dst_mip.store(thread_id.xy, c);
+    let c = params.src_image.SampleLevel(params.sampler, (f32x2(thread_id) + 0.5) / f32x2(src_image_size), mip_index).r;
+    params.dst_mip.Store(thread_id.xy, c);
 }

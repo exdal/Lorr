@@ -110,6 +110,6 @@ public func test_occlusion(
     }
 
     var uv = (min_uv + max_uv) * 0.5;
-    let d = hiz_image.sample_mip(hiz_sampler, uv, mip);
+    let d = hiz_image.SampleLevel(hiz_sampler, uv, mip);
     return screen_aabb.max.z <= d;
 }

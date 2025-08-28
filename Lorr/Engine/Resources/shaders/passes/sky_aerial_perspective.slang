@@ -69,13 +69,14 @@ func cs_main(
         t_max_max = max(0.0, t_max_max - length_to_atmosphere);
     }
 
-    AtmosphereIntegrateInfo info = {};
+    AtmosphereIntegrateInfo info;
     info.eye_pos = eye_pos;
     info.eye_dir = world_dir;
     info.sun_dir = params.environment.sun_direction;
     info.sun_intensity = params.environment.sun_intensity;
     info.max_integration_length = t_max_max;
     info.eval_planet_luminance = false;
+    info.eval_multiscattering = true;
 
     info.sampling.variable_sample_count = false;
     info.sampling.initial_sample_count = max(1.0, (f32(thread_id.z) + 1.0) * 2.0);

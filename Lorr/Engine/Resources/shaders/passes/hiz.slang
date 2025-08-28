@@ -20,7 +20,7 @@ typealias HiZMip = StorageImage2D<f32, ImageFormat::R32F>;
 [[vk::binding(6)]]  HiZMip dst_mip_3;
 [[vk::binding(7)]]  HiZMip dst_mip_4;
 [[vk::binding(8)]]  HiZMip dst_mip_5;
-[[vk::binding(9)]]  HiZMip dst_mip_6;
+[[vk::binding(9)]]  globallycoherent  HiZMip dst_mip_6;
 [[vk::binding(10)]] HiZMip dst_mip_7;
 [[vk::binding(11)]] HiZMip dst_mip_8;
 [[vk::binding(12)]] HiZMip dst_mip_9;
@@ -85,7 +85,7 @@ func reduce(f32x4 v) -> f32 {
 }
 
 func store(u32x2 texel, u32 mip, f32 v) -> void {
-    get_mip_image(mip).store(texel, v, mip == 6 ? MemoryScope::QueueFamily : MemoryScope::Device);
+    get_mip_image(mip).Store(texel, v);
 }
 
 func store_2x2(u32x2 p, u32 mip, f32x4 v) -> void {
@@ -97,7 +97,7 @@ func store_2x2(u32x2 p, u32 mip, f32x4 v) -> void {
 
 func load(u32x2 texel) -> f32 {
     f32x2 uv = f32x2(texel) * inv_src_extent + inv_src_extent;
-    return src_image.sample_mip(sampler, uv, 0);
+    return src_image.SampleLevel(sampler, uv, 0);
 }
 
 func load_2x2(u32x2 p) -> f32x4 {
@@ -121,7 +121,7 @@ func load_mid(u32x2 texel) -> f32 {
         texel = min(texel, src_extent >> 6);
     }
 
-    return dst_mip_6.load(texel, MemoryScope.QueueFamily);
+    return dst_mip_6.Load(texel);
 }
 
 func load_mid_2x2(u32x2 p) -> f32x4 {
@@ -214,7 +214,7 @@ func cs_main(u32x2 group_id : SV_GroupID) -> void {
         shared_buffer[local_id >> 4] = d;
     }
 
-    std::control_barrier(std::memory_order_acq_rel);
+    GroupMemoryBarrierWithGroupSync();
 
     if (local_id < 16) {
         d = reduce_mip_simd(group_id * 4 + p, local_id, 4, shared_buffer[local_id]);
@@ -228,15 +228,13 @@ func cs_main(u32x2 group_id : SV_GroupID) -> void {
         return;
     }
 
-    std::control_barrier(std::memory_order_acq_rel,
-        MemoryScope::Workgroup, MemoryScope::QueueFamily,
-        std::MemoryLocation::Image | std::MemoryLocation::Workgroup);
-    
+    AllMemoryBarrierWithGroupSync();
+
     if (local_id == 0) {
-        is_last = std::atomic_add(spd_global_atomic[0], 1, std::memory_order_acq_rel) == C.work_group_count - 1;
+        is_last = __atomic_add(spd_global_atomic[0], 1, MemoryOrder::AcquireRelease) == C.work_group_count - 1;
     }
 
-    std::control_barrier(std::memory_order_acq_rel);
+    GroupMemoryBarrierWithGroupSync();
     if (!is_last) {
         return;
     }
@@ -259,7 +257,7 @@ func cs_main(u32x2 group_id : SV_GroupID) -> void {
         shared_buffer[local_id >> 4] = d;
     }
 
-    std::control_barrier(std::memory_order_acq_rel);
+    GroupMemoryBarrierWithGroupSync();
 
     if (local_id < 16) {
         d = reduce_mip_simd(p, local_id, 10, shared_buffer[local_id]);

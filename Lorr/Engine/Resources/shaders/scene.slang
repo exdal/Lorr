@@ -3,6 +3,8 @@ module scene;
 import std;
 import gpu;
 
+#include <assert.slang>
+
 public const static f32 CAMERA_SCALE_UNIT = 0.01;
 public const static f32 INV_CAMERA_SCALE_UNIT = 1.0 / CAMERA_SCALE_UNIT;
 public const static f32 PLANET_RADIUS_OFFSET = 0.001;
@@ -156,7 +158,7 @@ public struct Material {
     public func sample_albedo_color(in UVGradient grad) -> f32x4 {
         if (this.flags & MaterialFlag::HasAlbedoImage) {
             let color = bindless_images[this.albedo_image_index]
-                .sample_grad(bindless_samplers[this.sampler_index], grad.uv, grad.ddx, grad.ddy);
+                .SampleGrad(bindless_samplers[this.sampler_index], grad.uv, grad.ddx, grad.ddy);
             return this.albedo_color * color;
         }
 
@@ -165,13 +167,13 @@ public struct Material {
 
     public func sample_normal_color(in UVGradient grad) -> f32x3 {
         return bindless_images[this.normal_image_index]
-            .sample_grad(bindless_samplers[this.sampler_index], grad.uv, grad.ddx, grad.ddy).rgb;
+            .SampleGrad(bindless_samplers[this.sampler_index], grad.uv, grad.ddx, grad.ddy).rgb;
     }
 
     public func sample_emissive_color(in UVGradient grad) -> f32x3 {
         if (this.flags & MaterialFlag::HasEmissiveImage) {
             let color = bindless_images[this.emissive_image_index]
-                .sample_grad(bindless_samplers[this.sampler_index], grad.uv, grad.ddx, grad.ddy).rgb;
+                .SampleGrad(bindless_samplers[this.sampler_index], grad.uv, grad.ddx, grad.ddy).rgb;
             return this.emissive_color * color;
         }
 
@@ -182,7 +184,7 @@ public struct Material {
         let metallic_roughness = f32x2(this.metallic_factor, this.roughness_factor);
         if (this.flags & MaterialFlag::HasMetallicRoughnessImage) {
             let color = bindless_images[this.metallic_roughness_image_index]
-                .sample_grad(bindless_samplers[this.sampler_index], grad.uv, grad.ddx, grad.ddy).bg;
+                .SampleGrad(bindless_samplers[this.sampler_index], grad.uv, grad.ddx, grad.ddy).bg;
             return metallic_roughness * color;
         }
 
@@ -192,7 +194,7 @@ public struct Material {
     public func sample_occlusion_color(in UVGradient grad) -> f32 {
         if (this.flags & MaterialFlag::HasOcclusionImage) {
             return bindless_images[this.occlusion_image_index]
-                .sample_grad(bindless_samplers[this.sampler_index], grad.uv, grad.ddx, grad.ddy).r;
+                .SampleGrad(bindless_samplers[this.sampler_index], grad.uv, grad.ddx, grad.ddy).r;
         }
 
         return 1.0;

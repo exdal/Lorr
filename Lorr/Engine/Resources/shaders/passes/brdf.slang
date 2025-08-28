@@ -26,21 +26,21 @@ ParameterBlock<ShaderParameters> params;
 
 [[shader("fragment")]]
 func fs_main(VertexOutput input) -> f32x4 {
-    let pixel_pos = u32x2(input.position.xy);
-    let depth = params.depth_image.load(pixel_pos);
+    let pixel_pos = u32x3(u32x2(input.position.xy), 0);
+    let depth = params.depth_image.Load(pixel_pos);
     if (depth == 0.0) {
         discard;
     }
 
-    let albedo_color = params.albedo_image.sample_mip(params.linear_repeat_sampler, input.tex_coord, 0).rgb;
+    let albedo_color = params.albedo_image.SampleLevel(params.linear_repeat_sampler, input.tex_coord, 0).rgb;
 
-    let mapped_smooth_normal = params.normal_image.load(pixel_pos);
+    let mapped_smooth_normal = params.normal_image.Load(pixel_pos);
     let mapped_normal = std::oct_to_vec3(mapped_smooth_normal.xy);
     let smooth_normal = std::oct_to_vec3(mapped_smooth_normal.zw);
 
-    let emission = params.emissive_image.load(pixel_pos);
+    let emission = params.emissive_image.Load(pixel_pos);
 
-    let metallic_roughness_occlusion = params.metallic_roughness_occlusion_image.load(pixel_pos);
+    let metallic_roughness_occlusion = params.metallic_roughness_occlusion_image.Load(pixel_pos);
     let metallic = metallic_roughness_occlusion.x;
     let roughness = metallic_roughness_occlusion.y;
     let occlusion = metallic_roughness_occlusion.z;
@@ -67,11 +67,11 @@ func fs_main(VertexOutput input) -> f32x4 {
             params.environment.atmos_atmos_radius,
             params.environment.atmos_planet_radius,
             f32x2(eye_altitude, sun_cos_theta));
-        f32x3 sun_transmittance = params.sky_transmittance_lut.sample_mip(params.linear_clamp_sampler, transmittance_uv, 0.0).rgb;
+        f32x3 sun_transmittance = params.sky_transmittance_lut.SampleLevel(params.linear_clamp_sampler, transmittance_uv, 0.0).rgb;
         sun_illuminance = sun_transmittance * params.environment.sun_intensity;
 
         // SKY AMBIENT COLOR ────────────────────────────────────────────────
-        AtmosphereIntegrateInfo sky_info = {};
+        AtmosphereIntegrateInfo sky_info;
         sky_info.eye_pos = eye_pos;
         sky_info.eye_dir = up_vec;
         sky_info.sun_dir = L;
@@ -81,6 +81,7 @@ func fs_main(VertexOutput input) -> f32x4 {
         sky_info.sampling.max_sample_count = 4;
         sky_info.transmittance_image = params.sky_transmittance_lut;
         sky_info.multiscattering_image = params.sky_multiscattering_lut;
+        sky_info.eval_multiscattering = true;
         sky_info.eval_mie_phase = false;
         let sky_result = integrate_single_scattered_luminance(params.environment, params.linear_clamp_sampler, sky_info);
 

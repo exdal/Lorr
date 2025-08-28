@@ -89,7 +89,7 @@ func compute_partial_derivatives(in f32x4x3 world_positions, in f32x2 uv, in f32
 
 [[shader("fragment")]]
 func fs_main(VertexOutput input) -> FragmentOutput {
-    let texel = params.visbuffer.load(u32x2(input.position.xy));
+    let texel = params.visbuffer.Load(u32x3(u32x2(input.position.xy), 0));
     if (texel == ~0u) {
         discard;
     }
@@ -114,6 +114,8 @@ func fs_main(VertexOutput input) -> FragmentOutput {
     let tex_coord_grad = deriv.gradient_of(tex_coords);
 
     FragmentOutput output = {};
+    output.albedo_color.x = tex_coords[0].x;
+    return output;
 
     // ALBEDO ───────────────────────────────────────────────────────────
     output.albedo_color = material.sample_albedo_color(tex_coord_grad);

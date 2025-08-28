@@ -332,11 +332,6 @@ auto SceneRenderer::prepare_frame(this SceneRenderer &self, FramePrepareInfo &in
         prepared_frame.mesh_instances_buffer = self.mesh_instances_buffer.acquire(device, "mesh instances", vuk::eMemoryRead);
     }
 
-    if (info.max_meshlet_instance_count > 0) {
-        prepared_frame.meshlet_instances_buffer =
-            transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eGPUonly, info.max_meshlet_instance_count * sizeof(GPU::MeshletInstance));
-    }
-
     info.environment.transmittance_lut_size = self.sky_transmittance_lut_view.extent();
     info.environment.sky_view_lut_size = self.sky_view_lut_extent;
     info.environment.multiscattering_lut_size = self.sky_multiscatter_lut_view.extent();
@@ -443,15 +438,7 @@ static auto cull_meshes(
                 .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, PushConstants(mesh_instance_count, cull_flags))
                 .dispatch_invocations(mesh_instance_count);
 
-            return std::make_tuple(
-                camera,
-                meshes,
-                transforms,
-                mesh_instances,
-                meshlet_instances,
-                visible_meshlet_instances_count,
-                debug_drawer
-            );
+            return std::make_tuple(camera, meshes, transforms, mesh_instances, meshlet_instances, visible_meshlet_instances_count, debug_drawer);
         }
     );
 
@@ -491,10 +478,7 @@ static auto cull_meshes(
 
     auto cull_meshlets_cmd_buffer = transfer_man.scratch_buffer<vuk::DispatchIndirectCommand>({ .x = 0, .y = 1, .z = 1 });
     std::tie(visible_meshlet_instances_count_buffer, cull_meshlets_cmd_buffer) =
-        generate_cull_commands_pass(
-            std::move(visible_meshlet_instances_count_buffer),
-            std::move(cull_meshlets_cmd_buffer)
-        );
+        generate_cull_commands_pass(std::move(visible_meshlet_instances_count_buffer), std::move(cull_meshlets_cmd_buffer));
 
     return cull_meshlets_cmd_buffer;
 }
@@ -1152,9 +1136,10 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
         auto transforms_buffer = std::move(frame.transforms_buffer);
         auto meshes_buffer = std::move(frame.meshes_buffer);
         auto mesh_instances_buffer = std::move(frame.mesh_instances_buffer);
-        auto meshlet_instances_buffer = std::move(frame.meshlet_instances_buffer);
         auto materials_buffer = std::move(frame.materials_buffer);
 
+        auto meshlet_instances_buffer =
+            transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eGPUonly, frame.max_meshlet_instance_count * sizeof(GPU::MeshletInstance));
         auto visible_meshlet_instances_indices_buffer =
             transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eGPUonly, frame.max_meshlet_instance_count * sizeof(u32));
         auto reordered_indices_buffer = transfer_man.alloc_transient_buffer(
@@ -1275,7 +1260,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                     .set_dynamic_state(vuk::DynamicStateFlagBits::eViewport | vuk::DynamicStateFlagBits::eScissor)
                     .set_viewport(0, vuk::Rect2D::framebuffer())
                     .set_scissor(0, vuk::Rect2D::framebuffer())
-                    .bind_persistent(1, *descriptor_set)
+                    //.bind_persistent(1, *descriptor_set)
                     .bind_buffer(0, 0, camera)
                     .bind_buffer(0, 1, meshlet_instances)
                     .bind_buffer(0, 2, mesh_instances)

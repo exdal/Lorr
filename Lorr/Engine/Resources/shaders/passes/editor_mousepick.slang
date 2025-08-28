@@ -25,7 +25,7 @@ struct PushConstants {
 [[shader("compute")]]
 [[numthreads(1, 1, 1)]]
 func cs_main() -> void {
-    const u32 texel = visbuffer_data.load(C.texel);
+    const u32 texel = visbuffer_data.Load(u32x3(C.texel, 0));
     if (texel == ~0u) {
         *C.dst = ~0u;
         return;

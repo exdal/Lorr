@@ -130,7 +130,7 @@ func cs_main(
         model_view_proj_shared = mul(params.camera.projection_view_mat, transform.world);
     }
 
-    std::control_barrier(std::memory_order_acq_rel);
+    GroupMemoryBarrierWithGroupSync();
 
     var triangle_passed = false;
     var active_triangle_index = 0;
@@ -138,23 +138,28 @@ func cs_main(
         let indices = meshlet.indices(mesh_lod, local_index);
         let positions = meshlet.positions(mesh, indices);
         triangle_passed = test_triangle(positions, params.camera.resolution, cull_flags, local_index);
+        triangle_passed = true;
         if (triangle_passed) {
-            active_triangle_index = std::atomic_add(triangles_passed_shared, 1, std::memory_order_relaxed);
+            active_triangle_index = __atomic_add(triangles_passed_shared, 1, MemoryOrder::Relaxed);
         }
     }
 
-    std::control_barrier(std::memory_order_acq_rel);
+    GroupMemoryBarrierWithGroupSync();
 
     if (local_index == 0) {
-        base_index_shared = std::atomic_add(params.draw_cmd[0].index_count, triangles_passed_shared * 3, std::memory_order_relaxed);
+        base_index_shared = __atomic_add(params.draw_cmd[0].index_count, triangles_passed_shared * 3, MemoryOrder::Relaxed);
     }
 
-    std::control_barrier(std::memory_order_acq_rel);
+    GroupMemoryBarrierWithGroupSync();
 
     if (triangle_passed) {
+        u32 struct_count, struct_stride;
+        params.reordered_indices.GetDimensions(struct_count, struct_stride);
         let index_offset = base_index_shared + active_triangle_index * 3;
-        params.reordered_indices[index_offset + 0] = (meshlet_instance_index << MESHLET_PRIMITIVE_BITS) | ((triangle_index + 0) & MESHLET_PRIMITIVE_MASK);
-        params.reordered_indices[index_offset + 1] = (meshlet_instance_index << MESHLET_PRIMITIVE_BITS) | ((triangle_index + 1) & MESHLET_PRIMITIVE_MASK);
-        params.reordered_indices[index_offset + 2] = (meshlet_instance_index << MESHLET_PRIMITIVE_BITS) | ((triangle_index + 2) & MESHLET_PRIMITIVE_MASK);
+        if (index_offset + 2 < struct_count) {
+            params.reordered_indices[index_offset + 0] = (meshlet_instance_index << MESHLET_PRIMITIVE_BITS) | ((triangle_index + 0) & MESHLET_PRIMITIVE_MASK);
+            params.reordered_indices[index_offset + 1] = (meshlet_instance_index << MESHLET_PRIMITIVE_BITS) | ((triangle_index + 1) & MESHLET_PRIMITIVE_MASK);
+            params.reordered_indices[index_offset + 2] = (meshlet_instance_index << MESHLET_PRIMITIVE_BITS) | ((triangle_index + 2) & MESHLET_PRIMITIVE_MASK);
+        }
     }
 }

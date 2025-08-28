@@ -29,15 +29,14 @@ func cs_main(
 ) -> void {
     let count_for_this_bin = gid == 0 ? 0.0 : f32(params.histogram_bin_indices[gid]);
     histogram_shared[gid] = count_for_this_bin * f32(gid);
-    std::control_barrier(std::memory_order_acq_rel);
+    GroupMemoryBarrierWithGroupSync();
 
     [[unroll]]
     for (u32 cutoff = (HISTOGRAM_BIN_COUNT >> 1); cutoff > 0; cutoff >>= 1) {
         if (gid < cutoff) {
             histogram_shared[gid] += histogram_shared[gid + cutoff];
         }
-
-        std::control_barrier(std::memory_order_acq_rel);
+        GroupMemoryBarrierWithGroupSync();
     }
 
     if (gid == 0) {

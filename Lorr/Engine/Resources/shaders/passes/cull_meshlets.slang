@@ -45,7 +45,7 @@ func cs_main(
     let cull_occlusion = (cull_flags & CullFlags::MeshletOcclusion) != 0;
 
     var visible = true;
-    if (visible) {
+    if (visible && cull_frustum) {
         let mvp = mul(camera.projection_view_mat, transform.world);
         visible = test_frustum(mvp, bounds.aabb_center, bounds.aabb_extent);
     }
@@ -69,7 +69,7 @@ func cs_main(
     }
 
     if (visible) {
-        let index = std::atomic_add(cull_triangles_cmd[0].x, 1, std::memory_order_relaxed);
+        let index = __atomic_add(cull_triangles_cmd[0].x, 1, MemoryOrder::Relaxed);
         visible_meshlet_instances_indices[index] = meshlet_instance_index;
     }
 }

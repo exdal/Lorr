@@ -39,7 +39,7 @@ func cs_main(
     let sun_zenith_cos_angle = dot(normalize(params.environment.sun_direction), up_vec);
     let sun_dir = normalize(f32x3(std::safe_sqrt(1.0 - sun_zenith_cos_angle * sun_zenith_cos_angle), sun_zenith_cos_angle, 0.0));
 
-    AtmosphereIntegrateInfo info;
+    AtmosphereIntegrateInfo info = {};
     info.eye_pos = eye_pos;
     info.eye_dir = eye_dir;
     info.sun_dir = sun_dir;
@@ -49,12 +49,8 @@ func cs_main(
     info.sampling.variable_sample_count = true;
     info.sampling.min_sample_count = sample_count;
     info.sampling.max_sample_count = sample_count;
-
-    info.transmittance_image = params.sky_transmittance_lut;
-    info.multiscattering_image = params.sky_multiscattering_lut;
     info.eval_multiscattering = true;
-
-    let result = integrate_single_scattered_luminance(params.environment, params.sampler, info);
+    let result = integrate_single_scattered_luminance(info, params.environment, params.sampler, params.sky_transmittance_lut, params.sky_multiscattering_lut);
     let transmittance = dot(result.transmittance, 1.0 / 3.0);
 
     params.sky_view_lut.Store(thread_id.xy, f32x4(result.luminance, transmittance));

@@ -173,15 +173,14 @@ public struct AtmosphereIntegrateInfo {
     public constexpr bool eval_rayleigh_phase = true;
     public constexpr bool eval_planet_luminance = false;
     public constexpr bool eval_multiscattering = false;
-
-    public Image2D<f32x4> transmittance_image = {};
-    public Image2D<f32x4> multiscattering_image = {};
 };
 
 public func integrate_single_scattered_luminance(
+    in AtmosphereIntegrateInfo info,
     in Environment environment,
     in Sampler lut_sampler,
-    in AtmosphereIntegrateInfo info
+    in Image2D<f32x4> transmittance_image = {},
+    in Image2D<f32x4> multiscattering_image = {}
 ) -> AtmosphereLuminance {
     AtmosphereLuminance result = {};
 
@@ -248,13 +247,13 @@ public func integrate_single_scattered_luminance(
 
         f32x2 transmittance_uv = transmittance_params_to_lut_uv(
             environment.atmos_atmos_radius, environment.atmos_planet_radius, f32x2(h, sun_theta));
-        f32x3 sun_transmittance = info.transmittance_image.SampleLevel(lut_sampler, transmittance_uv, 0.0).rgb;
+        f32x3 sun_transmittance = transmittance_image.SampleLevel(lut_sampler, transmittance_uv, 0.0).rgb;
 
         f32x3 MS = 0.0;
         if (info.eval_multiscattering) {
             f32x2 multiscatter_uv = multiscattering_params_to_lut_uv(
                 environment.atmos_atmos_radius, environment.atmos_planet_radius, environment.multiscattering_lut_size.xy, altitude, sun_theta);
-            MS = info.multiscattering_image.SampleLevel(lut_sampler, multiscatter_uv, 0.0).rgb;
+            MS = multiscattering_image.SampleLevel(lut_sampler, multiscatter_uv, 0.0).rgb;
         }
 
         f32x3 scattering_phase = 0.0;
@@ -292,7 +291,7 @@ public func integrate_single_scattered_luminance(
         f32 NoL = saturate(dot(normalize(info.sun_dir), normalize(up_vec)));
 
         f32x2 transmittance_uv = transmittance_params_to_lut_uv(environment.atmos_atmos_radius, environment.atmos_planet_radius, f32x2(h, sun_theta));
-        f32x3 sun_transmittance = info.transmittance_image.SampleLevel(lut_sampler, transmittance_uv, 0.0).rgb;
+        f32x3 sun_transmittance = transmittance_image.SampleLevel(lut_sampler, transmittance_uv, 0.0).rgb;
 
         result.luminance += info.sun_intensity * (sun_transmittance * result.transmittance * NoL * environment.atmos_terrain_albedo / PI);
     }

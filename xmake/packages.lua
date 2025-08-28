@@ -61,7 +61,7 @@ add_requires("vuk 2025.07.09", { configs = {
     disable_exceptions = false,
 }, debug = is_mode("debug") })
 
-add_requires("meshoptimizer v0.25")
+add_requires("meshoptimizer v0.24")
 add_requires("ktx v4.4.0", { debug = true })
 
 add_requires("svector v1.0.3")

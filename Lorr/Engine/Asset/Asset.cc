@@ -799,7 +799,6 @@ auto AssetManager::load_model(this AssetManager &self, const UUID &uuid) -> bool
                 ZoneNamedN(z, "GPU Meshlet Generation", true);
 
                 auto &cur_lod = gpu_mesh.lods[lod_index];
-
                 auto simplified_indices = std::vector<u32>();
                 if (lod_index == 0) {
                     simplified_indices = std::vector<u32>(mesh_indices.begin(), mesh_indices.end());
@@ -825,7 +824,7 @@ auto AssetManager::load_model(this AssetManager &self, const UUID &uuid) -> bool
                         nullptr,
                         lod_index_count,
                         TARGET_ERROR,
-                        meshopt_SimplifyLockBorder | meshopt_SimplifyPermissive,
+                        meshopt_SimplifyLockBorder,
                         &result_error
                     );
 
@@ -880,8 +879,16 @@ auto AssetManager::load_model(this AssetManager &self, const UUID &uuid) -> bool
                     auto meshlet_bb_min = glm::vec3(std::numeric_limits<f32>::max());
                     auto meshlet_bb_max = glm::vec3(std::numeric_limits<f32>::lowest());
                     for (u32 i = 0; i < raw_meshlet.triangle_count * 3; i++) {
-                        const auto &tri_pos = mesh_vertices
-                            [indirect_vertex_indices[raw_meshlet.vertex_offset + local_triangle_indices[raw_meshlet.triangle_offset + i]]];
+                        auto local_triangle_index_offset = raw_meshlet.triangle_offset + i;
+                        LS_EXPECT(local_triangle_index_offset < local_triangle_indices.size());
+                        auto local_triangle_index = local_triangle_indices[local_triangle_index_offset];
+                        LS_EXPECT(local_triangle_index < raw_meshlet.vertex_count);
+                        auto indirect_vertex_index_offset = raw_meshlet.vertex_offset + local_triangle_index;
+                        LS_EXPECT(indirect_vertex_index_offset < indirect_vertex_indices.size());
+                        auto indirect_vertex_index = indirect_vertex_indices[indirect_vertex_index_offset];
+                        LS_EXPECT(indirect_vertex_index < vertex_count);
+
+                        const auto &tri_pos = mesh_vertices[indirect_vertex_index];
                         meshlet_bb_min = glm::min(meshlet_bb_min, tri_pos);
                         meshlet_bb_max = glm::max(meshlet_bb_max, tri_pos);
                     }

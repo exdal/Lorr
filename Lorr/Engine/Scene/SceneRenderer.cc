@@ -1260,7 +1260,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                     .set_dynamic_state(vuk::DynamicStateFlagBits::eViewport | vuk::DynamicStateFlagBits::eScissor)
                     .set_viewport(0, vuk::Rect2D::framebuffer())
                     .set_scissor(0, vuk::Rect2D::framebuffer())
-                    //.bind_persistent(1, *descriptor_set)
+                    .bind_persistent(1, *descriptor_set)
                     .bind_buffer(0, 0, camera)
                     .bind_buffer(0, 1, meshlet_instances)
                     .bind_buffer(0, 2, mesh_instances)
@@ -1321,31 +1321,31 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
         metallic_roughness_occlusion_attachment.same_shape_as(visbuffer_attachment);
         metallic_roughness_occlusion_attachment = vuk::clear_image(std::move(metallic_roughness_occlusion_attachment), vuk::Black<f32>);
 
-        // std::tie(
-        //     camera_buffer,
-        //     meshlet_instances_buffer,
-        //     mesh_instances_buffer,
-        //     meshes_buffer,
-        //     transforms_buffer,
-        //     visbuffer_attachment,
-        //     albedo_attachment,
-        //     normal_attachment,
-        //     emissive_attachment,
-        //     metallic_roughness_occlusion_attachment
-        // ) =
-        //     vis_decode_pass(
-        //         std::move(camera_buffer),
-        //         std::move(meshlet_instances_buffer),
-        //         std::move(mesh_instances_buffer),
-        //         std::move(meshes_buffer),
-        //         std::move(transforms_buffer),
-        //         std::move(materials_buffer),
-        //         std::move(visbuffer_attachment),
-        //         std::move(albedo_attachment),
-        //         std::move(normal_attachment),
-        //         std::move(emissive_attachment),
-        //         std::move(metallic_roughness_occlusion_attachment)
-        //     );
+        std::tie(
+            camera_buffer,
+            meshlet_instances_buffer,
+            mesh_instances_buffer,
+            meshes_buffer,
+            transforms_buffer,
+            visbuffer_attachment,
+            albedo_attachment,
+            normal_attachment,
+            emissive_attachment,
+            metallic_roughness_occlusion_attachment
+        ) =
+            vis_decode_pass(
+                std::move(camera_buffer),
+                std::move(meshlet_instances_buffer),
+                std::move(mesh_instances_buffer),
+                std::move(meshes_buffer),
+                std::move(transforms_buffer),
+                std::move(materials_buffer),
+                std::move(visbuffer_attachment),
+                std::move(albedo_attachment),
+                std::move(normal_attachment),
+                std::move(emissive_attachment),
+                std::move(metallic_roughness_occlusion_attachment)
+            );
 
         //  ── BRDF ────────────────────────────────────────────────────────────
         auto brdf_pass = vuk::make_pass(

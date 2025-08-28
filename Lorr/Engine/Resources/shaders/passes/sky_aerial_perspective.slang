@@ -69,7 +69,7 @@ func cs_main(
         t_max_max = max(0.0, t_max_max - length_to_atmosphere);
     }
 
-    AtmosphereIntegrateInfo info;
+    AtmosphereIntegrateInfo info = {};
     info.eye_pos = eye_pos;
     info.eye_dir = world_dir;
     info.sun_dir = params.environment.sun_direction;
@@ -81,10 +81,7 @@ func cs_main(
     info.sampling.variable_sample_count = false;
     info.sampling.initial_sample_count = max(1.0, (f32(thread_id.z) + 1.0) * 2.0);
 
-    info.transmittance_image = params.sky_transmittance_lut;
-    info.multiscattering_image = params.sky_multiscattering_lut;
-
-    let result = integrate_single_scattered_luminance(params.environment, params.sampler, info);
+    let result = integrate_single_scattered_luminance(info, params.environment, params.sampler, params.sky_transmittance_lut, params.sky_multiscattering_lut);
     let transmittance = dot(result.transmittance, f32x3(1.0f / 3.0f));
     params.sky_aerial_perspective_lut.Store(thread_id, f32x4(result.luminance, transmittance));
 }

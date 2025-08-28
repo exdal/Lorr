@@ -71,7 +71,7 @@ func fs_main(VertexOutput input) -> f32x4 {
         sun_illuminance = sun_transmittance * params.environment.sun_intensity;
 
         // SKY AMBIENT COLOR ────────────────────────────────────────────────
-        AtmosphereIntegrateInfo sky_info;
+        AtmosphereIntegrateInfo sky_info = {};
         sky_info.eye_pos = eye_pos;
         sky_info.eye_dir = up_vec;
         sky_info.sun_dir = L;
@@ -79,11 +79,10 @@ func fs_main(VertexOutput input) -> f32x4 {
         sky_info.sampling.variable_sample_count = true;
         sky_info.sampling.min_sample_count = 1;
         sky_info.sampling.max_sample_count = 4;
-        sky_info.transmittance_image = params.sky_transmittance_lut;
-        sky_info.multiscattering_image = params.sky_multiscattering_lut;
         sky_info.eval_multiscattering = true;
         sky_info.eval_mie_phase = false;
-        let sky_result = integrate_single_scattered_luminance(params.environment, params.linear_clamp_sampler, sky_info);
+        let sky_result = integrate_single_scattered_luminance(
+            sky_info, params.environment, params.linear_clamp_sampler, params.sky_transmittance_lut, params.sky_multiscattering_lut);
 
         var eye_gradient = dot(N, up_vec);
         eye_gradient = (eye_gradient + 1.0) * 0.375 + 0.25;

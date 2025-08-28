@@ -94,6 +94,7 @@ func fs_main(VertexOutput input) -> FragmentOutput {
         discard;
     }
 
+    FragmentOutput output = {};
     let vis = VisBufferData(texel);
     let meshlet_instance_index = vis.meshlet_instance_index;
     let meshlet_instance = params.meshlet_instances[meshlet_instance_index];
@@ -105,6 +106,11 @@ func fs_main(VertexOutput input) -> FragmentOutput {
     let meshlet = mesh_lod.meshlets[meshlet_instance.meshlet_index];
 
     let indices = meshlet.indices(mesh_lod, vis.triangle_index);
+    if (any(indices > (mesh.vertex_count - 1))) {
+        // we are somehow OOB'ing
+        return output;
+    }
+
     let positions = meshlet.positions(mesh, indices);
     let normals = meshlet.normals(mesh, indices);
     let tex_coords = meshlet.tex_coords(mesh, indices);
@@ -112,10 +118,6 @@ func fs_main(VertexOutput input) -> FragmentOutput {
     let NDC = f32x3(input.tex_coord * 2.0 - 1.0, 1.0);
     let deriv = compute_partial_derivatives(world_positions, NDC.xy, params.camera.resolution);
     let tex_coord_grad = deriv.gradient_of(tex_coords);
-
-    FragmentOutput output = {};
-    output.albedo_color.x = tex_coords[0].x;
-    return output;
 
     // ALBEDO ───────────────────────────────────────────────────────────
     output.albedo_color = material.sample_albedo_color(tex_coord_grad);

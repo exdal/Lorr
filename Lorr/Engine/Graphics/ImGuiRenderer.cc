@@ -191,10 +191,8 @@ auto ImGuiRenderer::end_frame(this ImGuiRenderer &self, vuk::Value<vuk::ImageAtt
                     [[fallthrough]];
                 }
                 case ImTextureStatus_WantUpdates: {
-                    auto buffer_alignment = device.non_coherent_atom_size();
                     auto upload_pitch = upload_extent.width * texture->BytesPerPixel;
-                    auto buffer_size = ls::align_up(upload_pitch * upload_extent.height, buffer_alignment);
-                    auto upload_buffer = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eCPUonly, buffer_size);
+                    auto upload_buffer = transfer_man.alloc_image_buffer(vuk::Format::eR8G8B8A8Srgb, upload_extent);
                     auto *buffer_ptr = reinterpret_cast<u8 *>(upload_buffer->mapped_ptr);
                     for (auto y = 0_u32; y < upload_extent.height; y++) {
                         auto *pixels = static_cast<u8 *>(texture->GetPixelsAt(upload_offset.x, upload_offset.y + static_cast<i32>(y)));

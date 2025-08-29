@@ -984,7 +984,7 @@ auto AssetManager::load_model(this AssetManager &self, const UUID &uuid) -> bool
 
             auto gpu_mesh_buffer_handle = device.buffer(gpu_mesh_buffer.id());
             auto gpu_mesh_subrange = vuk::discard_buf("mesh", gpu_mesh_buffer_handle->subrange(0, mesh_upload_size));
-            gpu_mesh_subrange = transfer_man.upload_staging(std::move(cpu_mesh_buffer), std::move(gpu_mesh_subrange));
+            gpu_mesh_subrange = transfer_man.upload(std::move(cpu_mesh_buffer), std::move(gpu_mesh_subrange));
             transfer_man.wait_on(std::move(gpu_mesh_subrange));
 
             for (auto lod_index = 0_sz; lod_index < gpu_mesh.lod_count; lod_index++) {
@@ -998,7 +998,7 @@ auto AssetManager::load_model(this AssetManager &self, const UUID &uuid) -> bool
                 lod.indirect_vertex_indices += gpu_mesh_bda + mesh_upload_offset;
 
                 auto gpu_lod_subrange = vuk::discard_buf("mesh lod subrange", gpu_mesh_buffer_handle->subrange(mesh_upload_offset, lod_upload_size));
-                gpu_lod_subrange = transfer_man.upload_staging(std::move(lod_cpu_buffer), std::move(gpu_lod_subrange));
+                gpu_lod_subrange = transfer_man.upload(std::move(lod_cpu_buffer), std::move(gpu_lod_subrange));
                 transfer_man.wait_on(std::move(gpu_lod_subrange));
 
                 mesh_upload_offset += lod_upload_size;
@@ -1155,7 +1155,7 @@ auto AssetManager::load_texture(this AssetManager &self, const UUID &uuid, const
             }
 
             auto image_data = std::move(parsed_image->data);
-            auto buffer = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eCPUonly, ls::size_bytes(image_data));
+            auto buffer = transfer_man.alloc_image_buffer(format, extent);
             std::memcpy(buffer->mapped_ptr, image_data.data(), image_data.size());
 
             dst_attachment = vuk::copy(std::move(buffer), std::move(dst_attachment));
@@ -1181,7 +1181,7 @@ auto AssetManager::load_texture(this AssetManager &self, const UUID &uuid, const
                     .depth = 1,
                 };
                 auto size = vuk::compute_image_size(format, level_extent);
-                auto buffer = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eCPUonly, size);
+                auto buffer = transfer_man.alloc_image_buffer(format, level_extent);
 
                 // TODO, WARN: size param might not be safe. Check with asan.
                 std::memcpy(buffer->mapped_ptr, image_data.data() + mip_data_offset, size);

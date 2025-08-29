@@ -286,23 +286,6 @@ auto Device::init_resources(this Device &self) -> std::expected<void, vuk::VkExc
     };
     self.resources.descriptor_set = self.create_persistent_descriptor_set(1, bindless_set_info, bindless_set_binding_flags);
 
-    auto invalid_image_info = ImageInfo{
-        .format = vuk::Format::eR8G8B8A8Unorm,
-        .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage,
-        .type = vuk::ImageType::e2D,
-        .extent = vuk::Extent3D(1_u32, 1_u32, 1_u32),
-        .name = "Invalid Placeholder Image",
-    };
-    auto [invalid_image, invalid_image_view] = Image::create_with_view(self, invalid_image_info).value();
-
-    auto invalid_image_data = 0xFFFFFFFF_u32;
-    auto fut = self.transfer_manager.upload_staging(invalid_image_view, &invalid_image_data, sizeof(u32));
-    fut = fut.as_released(vuk::Access::eFragmentSampled, vuk::DomainFlagBits::eGraphicsQueue);
-    self.transfer_manager.wait_on(std::move(fut));
-
-    auto invalid_sampler_info = SamplerInfo{};
-    std::ignore = Sampler::create(self, invalid_sampler_info).value();
-
     return {};
 }
 

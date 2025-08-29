@@ -228,10 +228,11 @@ auto SceneRenderer::prepare_frame(this SceneRenderer &self, FramePrepareInfo &in
     if (!info.dirty_transform_ids.empty()) {
         auto rebuild_transforms = !self.transforms_buffer || self.transforms_buffer.data_size() <= info.gpu_transforms.size_bytes();
         self.transforms_buffer = self.transforms_buffer.resize(device, info.gpu_transforms.size_bytes()).value();
+        prepared_frame.transforms_buffer = self.transforms_buffer.acquire(device, "transforms", rebuild_transforms ? vuk::eNone : vuk::eMemoryRead);
 
         if (rebuild_transforms) {
             // If we resize buffer, we need to refill it again, so individual uploads are not required.
-            prepared_frame.transforms_buffer = transfer_man.upload_staging(info.gpu_transforms, self.transforms_buffer);
+            prepared_frame.transforms_buffer = transfer_man.upload(info.gpu_transforms, std::move(prepared_frame.transforms_buffer));
         } else {
             // Buffer is not resized, upload individual transforms.
             auto dirty_transforms_count = info.dirty_transform_ids.size();
@@ -266,7 +267,6 @@ auto SceneRenderer::prepare_frame(this SceneRenderer &self, FramePrepareInfo &in
                 }
             );
 
-            prepared_frame.transforms_buffer = self.transforms_buffer.acquire(device, "transforms", vuk::Access::eMemoryRead);
             prepared_frame.transforms_buffer = update_transforms_pass(std::move(upload_buffer), std::move(prepared_frame.transforms_buffer));
         }
     } else if (self.transforms_buffer) {
@@ -276,9 +276,10 @@ auto SceneRenderer::prepare_frame(this SceneRenderer &self, FramePrepareInfo &in
     if (!info.dirty_material_indices.empty()) {
         auto rebuild_materials = !self.materials_buffer || self.materials_buffer.data_size() <= info.gpu_materials.size_bytes();
         self.materials_buffer = self.materials_buffer.resize(device, info.gpu_materials.size_bytes()).value();
+        prepared_frame.materials_buffer = self.materials_buffer.acquire(device, "materials", rebuild_materials ? vuk::eNone : vuk::eMemoryRead);
 
         if (rebuild_materials) {
-            prepared_frame.materials_buffer = transfer_man.upload_staging(info.gpu_materials, self.materials_buffer);
+            prepared_frame.materials_buffer = transfer_man.upload(info.gpu_materials, std::move(prepared_frame.materials_buffer));
         } else {
             // TODO: Literally repeating code, find a solution to this
             auto dirty_materials_count = info.dirty_material_indices.size();
@@ -311,7 +312,6 @@ auto SceneRenderer::prepare_frame(this SceneRenderer &self, FramePrepareInfo &in
                 }
             );
 
-            prepared_frame.materials_buffer = self.materials_buffer.acquire(device, "materials", vuk::eMemoryRead);
             prepared_frame.materials_buffer = update_materials_pass(std::move(upload_buffer), std::move(prepared_frame.materials_buffer));
         }
     } else if (self.materials_buffer) {
@@ -320,14 +320,16 @@ auto SceneRenderer::prepare_frame(this SceneRenderer &self, FramePrepareInfo &in
 
     if (!info.gpu_meshes.empty()) {
         self.meshes_buffer = self.meshes_buffer.resize(device, info.gpu_meshes.size_bytes()).value();
-        prepared_frame.meshes_buffer = transfer_man.upload_staging(info.gpu_meshes, self.meshes_buffer);
+        prepared_frame.meshes_buffer = self.meshes_buffer.acquire(device, "meshes", vuk::eNone);
+        prepared_frame.meshes_buffer = transfer_man.upload(info.gpu_meshes, std::move(prepared_frame.meshes_buffer));
     } else if (self.meshes_buffer) {
         prepared_frame.meshes_buffer = self.meshes_buffer.acquire(device, "meshes", vuk::eMemoryRead);
     }
 
     if (!info.gpu_mesh_instances.empty()) {
         self.mesh_instances_buffer = self.mesh_instances_buffer.resize(device, info.gpu_mesh_instances.size_bytes()).value();
-        prepared_frame.mesh_instances_buffer = transfer_man.upload_staging(info.gpu_mesh_instances, self.mesh_instances_buffer);
+        prepared_frame.mesh_instances_buffer = self.mesh_instances_buffer.acquire(device, "mesh instances", vuk::eNone);
+        prepared_frame.mesh_instances_buffer = transfer_man.upload(info.gpu_mesh_instances, std::move(prepared_frame.mesh_instances_buffer));
     } else if (self.mesh_instances_buffer) {
         prepared_frame.mesh_instances_buffer = self.mesh_instances_buffer.acquire(device, "mesh instances", vuk::eMemoryRead);
     }

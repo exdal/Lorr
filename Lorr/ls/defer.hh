@@ -9,7 +9,7 @@ template<typename Fn>
 struct defer {
     Fn func;
 
-    defer(Fn func_): func(std::move(func_)) {}
+    defer(Fn func_) : func(std::move(func_)) {}
 
     ~defer() {
         func();

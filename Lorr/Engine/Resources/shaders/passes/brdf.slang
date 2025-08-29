@@ -50,12 +50,12 @@ func fs_main(VertexOutput input) -> f32x4 {
     let world_position = world_position_h.xyz / world_position_h.w;
 
     // PBR constants
-    const f32x3 V = normalize(params.camera.position - world_position);
-    const f32x3 L = normalize(params.environment.sun_direction); // temp
-    const f32x3 N = mapped_normal;
+    let V = normalize(params.camera.position - world_position);
+    let L = normalize(params.environment.sun_direction); // temp
+    let N = normalize(mapped_normal);
 
     var sun_illuminance = f32x3(1.0);
-    var sky_luminance = f32x3(1.0);
+    var sky_luminance = f32x3(0.1);
     if (params.environment.flags & (EnvironmentFlags::HasSun | EnvironmentFlags::HasAtmosphere)) {
         // SUN LIGHT COLOR ──────────────────────────────────────────────────
         var eye_altitude = max(world_position.y, 0.0) * CAMERA_SCALE_UNIT;
@@ -89,21 +89,24 @@ func fs_main(VertexOutput input) -> f32x4 {
         sky_luminance = std::rec709_oetf(sky_result.luminance) * eye_gradient;
     }
 
-    f32x3 ambient_contribution = sky_luminance * albedo_color * occlusion;
+    let ambient_contribution = sky_luminance * albedo_color * occlusion;
 
     // MATERIAL COLOR ───────────────────────────────────────────────────
     // https://marmosetco.tumblr.com/post/81245981087
-    const f32x3 R = reflect(-V, N);
-    const f32 horizon_fade = 1.3;
-    f32 horizon = saturate(1.0 + horizon_fade * dot(R, smooth_normal));
+    let R = reflect(-V, N);
+    let horizon_fade = 1.3;
+    var horizon = saturate(1.0 + horizon_fade * dot(R, smooth_normal));
     horizon *= horizon;
 
-    const f32 NoL = max(dot(N, L), 0.0);
-    f32x3 brdf = BRDF(V, N, L, albedo_color, roughness, metallic);
-    f32x3 material_surface_color = brdf * horizon  * sun_illuminance * NoL;
+    var material_surface_color = f32x3(0.0);
+    let NoL = max(dot(N, L), 0.0);
+    if (NoL > 0.0) {
+        let brdf = BRDF(V, N, L, albedo_color, roughness, metallic);
+        material_surface_color = brdf * horizon * sun_illuminance * NoL;
+    }
 
     // FINAL ────────────────────────────────────────────────────────────
-    f32x3 final_color = material_surface_color + ambient_contribution + emission;
+    let final_color = material_surface_color + ambient_contribution + emission;
 
     return f32x4(final_color, 1.0);
 }

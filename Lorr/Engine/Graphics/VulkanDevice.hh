@@ -38,7 +38,7 @@ public:
     auto alloc_transient_buffer(this TransferManager &, vuk::MemoryUsage usage, usize size, LR_THISCALL) noexcept -> vuk::Value<vuk::Buffer>;
 
     [[nodiscard]]
-    auto alloc_image_buffer(this TransferManager &, vuk::Format format, vuk::Extent3D extent) noexcept -> vuk::Value<vuk::Buffer>;
+    auto alloc_image_buffer(this TransferManager &, vuk::Format format, vuk::Extent3D extent, LR_THISCALL) noexcept -> vuk::Value<vuk::Buffer>;
 
     [[nodiscard]]
     auto upload(this TransferManager &, vuk::Value<vuk::Buffer> &&src, vuk::Value<vuk::Buffer> &&dst, LR_THISCALL) -> vuk::Value<vuk::Buffer>;

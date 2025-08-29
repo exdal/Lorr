@@ -21,12 +21,13 @@ auto TransferManager::alloc_transient_buffer(this TransferManager &self, vuk::Me
 
     auto buffer = vuk::Buffer{};
     auto buffer_info = vuk::BufferCreateInfo{ .mem_usage = usage, .size = size, .alignment = self.device->non_coherent_atom_size() };
-    self.frame_allocator->allocate_buffers(std::span{ &buffer, 1 }, std::span{ &buffer_info, 1 }, LOC);
+    self.frame_allocator->allocate_buffers({ &buffer, 1 }, { &buffer_info, 1 }, LOC);
 
-    return vuk::acquire_buf("transient buffer", buffer, vuk::Access::eNone, LOC);
+    return vuk::acquire_buf("transient buffer", buffer, vuk::eNone, LOC);
 }
 
-auto TransferManager::alloc_image_buffer(this TransferManager &self, vuk::Format format, vuk::Extent3D extent) noexcept -> vuk::Value<vuk::Buffer> {
+auto TransferManager::alloc_image_buffer(this TransferManager &self, vuk::Format format, vuk::Extent3D extent, vuk::source_location LOC) noexcept
+    -> vuk::Value<vuk::Buffer> {
     ZoneScoped;
 
     auto write_lock = std::unique_lock(self.mutex);
@@ -35,9 +36,9 @@ auto TransferManager::alloc_image_buffer(this TransferManager &self, vuk::Format
 
     auto buffer_handle = vuk::Buffer{};
     auto buffer_info = vuk::BufferCreateInfo{ .mem_usage = vuk::MemoryUsage::eCPUtoGPU, .size = size, .alignment = alignment };
-    self.device->allocator->allocate_buffers({ &buffer_handle, 1 }, { &buffer_info, 1 });
+    self.device->allocator->allocate_buffers({ &buffer_handle, 1 }, { &buffer_info, 1 }, LOC);
 
-    auto buffer = vuk::acquire_buf("image buffer", buffer_handle, vuk::Access::eNone);
+    auto buffer = vuk::acquire_buf("image buffer", buffer_handle, vuk::eNone, LOC);
     self.image_buffers.emplace(buffer);
 
     return buffer;

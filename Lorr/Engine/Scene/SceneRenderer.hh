@@ -30,6 +30,7 @@ struct PreparedFrame {
     vuk::Value<vuk::Buffer> transforms_buffer = {};
     vuk::Value<vuk::Buffer> meshes_buffer = {};
     vuk::Value<vuk::Buffer> mesh_instances_buffer = {};
+    vuk::Value<vuk::Buffer> mesh_instance_visibility_mask_buffer = {};
     vuk::Value<vuk::Buffer> materials_buffer = {};
     vuk::Value<vuk::Buffer> environment_buffer = {};
     vuk::Value<vuk::Buffer> camera_buffer = {};
@@ -54,11 +55,10 @@ struct SceneRenderer {
 
     Buffer mesh_instances_buffer = {};
     Buffer meshes_buffer = {};
+    Buffer mesh_instance_visibility_mask_buffer = {};
 
     Buffer materials_buffer = {};
 
-    // Then what are they?
-    // TODO: Per scene sky settings
     Image sky_transmittance_lut = {};
     ImageView sky_transmittance_lut_view = {};
     Image sky_multiscatter_lut = {};
@@ -74,7 +74,6 @@ struct SceneRenderer {
     auto init(this SceneRenderer &) -> bool;
     auto destroy(this SceneRenderer &) -> void;
 
-    // Scene
     auto prepare_frame(this SceneRenderer &, FramePrepareInfo &info) -> PreparedFrame;
     auto render(this SceneRenderer &, vuk::Value<vuk::ImageAttachment> &&dst_attachment, SceneRenderInfo &render_info, PreparedFrame &frame)
         -> vuk::Value<vuk::ImageAttachment>;

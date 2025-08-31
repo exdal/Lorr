@@ -6,6 +6,7 @@ import debug_drawer;
 
 #include <assert.slang>
 
+[[vk::constant_id(0)]] const u32 LATE = 0;
 [[vk::binding(0)]] ConstantBuffer<Camera> camera;
 [[vk::binding(1)]] StructuredBuffer<MeshletInstance> meshlet_instances;
 [[vk::binding(2)]] StructuredBuffer<MeshInstance> mesh_instances;
@@ -28,10 +29,14 @@ func cs_main(
     uint3 thread_id : SV_DispatchThreadID,
     uniform CullFlags cull_flags
 ) -> void {
-    let meshlet_instance_count = visible_meshlet_instances_count[0];
-    let meshlet_instance_index = thread_id.x;
+    let meshlet_instance_count = visible_meshlet_instances_count[LATE];
+    var meshlet_instance_index = thread_id.x;
     if (meshlet_instance_index >= meshlet_instance_count) {
         return;
+    }
+
+    if (LATE == 1) {
+        meshlet_instance_index += visible_meshlet_instances_count[0];
     }
 
     let meshlet_instance = meshlet_instances[meshlet_instance_index];
@@ -48,24 +53,6 @@ func cs_main(
     if (visible && cull_frustum) {
         let mvp = mul(camera.projection_view_mat, transform.world);
         visible = test_frustum(mvp, bounds.aabb_center, bounds.aabb_extent);
-    }
-
-    if (visible && cull_occlusion) {
-        let mvp_prev = mul(camera.prev_projection_view_mat, transform.world);
-        if (let screen_aabb = project_aabb(mvp_prev, camera.near_clip, bounds.aabb_center, bounds.aabb_extent)) {
-            visible = !test_occlusion(screen_aabb, hiz_image, hiz_sampler, false);
-
-            if (visible && true) {
-                let ndc_aabb_max = screen_aabb.max.xy * 2.0 - 1.0;
-                let ndc_aabb_min = screen_aabb.min.xy * 2.0 - 1.0;
-                var debug_rect = DebugRect();
-                debug_rect.offset = f32x3((ndc_aabb_max + ndc_aabb_min) * 0.5, screen_aabb.max.z);
-                debug_rect.extent = ndc_aabb_max - ndc_aabb_min;
-                debug_rect.color = f32x3(1.0, 0.0, 0.0);
-                debug_rect.coord = DebugDrawCoord::NDC;
-                debug_draw_rect(debug_drawer[0], debug_rect);
-            }
-        }
     }
 
     if (visible) {

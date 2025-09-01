@@ -825,7 +825,7 @@ static auto draw_hiz(vuk::Value<vuk::ImageAttachment> &hiz_attachment, vuk::Valu
         "hiz generate slow",
         [](vuk::CommandBuffer &cmd_list, //
            VUK_IA(vuk::eComputeSampled) src,
-           VUK_IA(vuk::eComputeWrite) dst) {
+           VUK_IA(vuk::eComputeRW) dst) {
             auto extent = dst->extent;
             auto mip_count = dst->level_count;
 
@@ -841,13 +841,17 @@ static auto draw_hiz(vuk::Value<vuk::ImageAttachment> &hiz_attachment, vuk::Valu
                 if (i == 0) {
                     cmd_list.bind_image(0, 1, src);
                 } else {
-                    cmd_list.bind_image(0, 1, dst->mip(i - 1));
+                    auto mip = dst->mip(i - 1);
+                    cmd_list.image_barrier(mip, vuk::eComputeWrite, vuk::eComputeSampled);
+                    cmd_list.bind_image(0, 1, mip);
                 }
 
                 cmd_list.bind_image(0, 2, mip);
                 cmd_list.push_constants(vuk::ShaderStageFlagBits::eCompute, 0, PushConstants(mip_width, mip_height, i));
                 cmd_list.dispatch_invocations(mip_width, mip_height);
             }
+
+            cmd_list.image_barrier(dst, vuk::eComputeSampled, vuk::eComputeRW);
 
             return std::make_tuple(src, dst);
         }
@@ -1342,7 +1346,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                 VUK_BA(vuk::eFragmentRead) meshes,
                 VUK_BA(vuk::eFragmentRead) transforms,
                 VUK_BA(vuk::eFragmentRead) materials,
-                VUK_IA(vuk::eFragmentRead) visbuffer,
+                VUK_IA(vuk::eFragmentSampled) visbuffer,
                 VUK_IA(vuk::eColorRW) albedo,
                 VUK_IA(vuk::eColorRW) normal,
                 VUK_IA(vuk::eColorRW) emissive,
@@ -1539,7 +1543,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
         auto histogram_generate_pass = vuk::make_pass(
             "histogram generate",
             [](vuk::CommandBuffer &cmd_list, //
-               VUK_IA(vuk::eComputeRead) src_image,
+               VUK_IA(vuk::eComputeSampled) src_image,
                VUK_BA(vuk::eComputeRead) environment,
                VUK_BA(vuk::eComputeRW) histogram_bin_indices) {
                 cmd_list.bind_compute_pipeline("passes.histogram_generate")
@@ -1590,7 +1594,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
            VUK_IA(vuk::eColorRW) dst,
            VUK_IA(vuk::eFragmentSampled) src,
            VUK_BA(vuk::eFragmentRead) environment,
-           VUK_BA(vuk::eFragmentRead) histogram_luminance) {
+           VUK_BA(vuk::eFragmentUniformRead) histogram_luminance) {
             cmd_list //
                 .bind_graphics_pipeline("passes.tonemap")
                 .set_rasterization({})

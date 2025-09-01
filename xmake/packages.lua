@@ -56,7 +56,7 @@ add_requires("flecs v4.0.4")
 add_requires("libsdl3")
 
 add_requires("shader-slang v2025.15")
-add_requires("vuk 2025.07.09", { configs = {
+add_requires("vuk 2025.09.01", { configs = {
     debug_allocations = false,
     disable_exceptions = false,
 }, debug = is_mode("debug") })

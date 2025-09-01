@@ -11,7 +11,7 @@ struct ShaderParameters {
     Image2D<f32x4> input_image;
 
     ConstantBuffer<Environment> environment;
-    StructuredBuffer<HistogramLuminance> histogram_luminance;
+    ConstantBuffer<HistogramLuminance> histogram_luminance;
 };
 uniform ParameterBlock<ShaderParameters> params;
 
@@ -554,7 +554,7 @@ struct GT7ToneMapping
 f32x4 fs_main(VertexOutput input) {
     f32x3 color = params.input_image.SampleLevel(params.sampler, input.tex_coord, 0.0).rgb;
     if (params.environment.flags & EnvironmentFlags::HasEyeAdaptation) {
-        let exposure = params.histogram_luminance[0].exposure;
+        let exposure = params.histogram_luminance.exposure;
         color = color * (exposure + 1.0);
     }
 

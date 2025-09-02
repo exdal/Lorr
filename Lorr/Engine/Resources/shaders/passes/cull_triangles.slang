@@ -112,14 +112,9 @@ func cs_main(
     uint3 group_thread_id : SV_GroupThreadID,
     uniform CullFlags cull_flags
 ) -> void {
-    let visible_meshlet_instance_count = visible_meshlet_instances_count[u32(LATE)];
     var visible_meshlet_instance_index = group_id.x;
-    if (visible_meshlet_instance_index >= visible_meshlet_instance_count) {
-        return;
-    }
-
     if (LATE) {
-        visible_meshlet_instance_index += visible_meshlet_instances_count[1];
+        visible_meshlet_instance_index += visible_meshlet_instances_count[0];
     }
 
     let local_index = group_thread_id.x;

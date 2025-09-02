@@ -339,13 +339,6 @@ auto SceneRenderer::prepare_frame(this SceneRenderer &self, FramePrepareInfo &in
         prepared_frame.mesh_instances_buffer = self.mesh_instances_buffer.acquire(device, "mesh instances", vuk::eNone);
         prepared_frame.mesh_instances_buffer = transfer_man.upload(info.gpu_mesh_instances, std::move(prepared_frame.mesh_instances_buffer));
 
-        auto mesh_instance_visibility_mask_size_bytes = (info.mesh_instance_count + 31) / 32 * sizeof(u32);
-        self.mesh_instance_visibility_mask_buffer =
-            self.mesh_instance_visibility_mask_buffer.resize(device, mesh_instance_visibility_mask_size_bytes).value();
-        prepared_frame.mesh_instance_visibility_mask_buffer =
-            self.mesh_instance_visibility_mask_buffer.acquire(device, "mesh instance visibility mask", vuk::eNone);
-        prepared_frame.mesh_instance_visibility_mask_buffer = zero_fill_pass(std::move(prepared_frame.mesh_instance_visibility_mask_buffer));
-
         auto meshlet_instance_visibility_mask_size_bytes = (info.max_meshlet_instance_count + 31) / 32 * sizeof(u32);
         self.meshlet_instance_visibility_mask_buffer =
             self.meshlet_instance_visibility_mask_buffer.resize(device, meshlet_instance_visibility_mask_size_bytes).value();
@@ -354,8 +347,6 @@ auto SceneRenderer::prepare_frame(this SceneRenderer &self, FramePrepareInfo &in
         prepared_frame.meshlet_instance_visibility_mask_buffer = zero_fill_pass(std::move(prepared_frame.meshlet_instance_visibility_mask_buffer));
     } else if (self.mesh_instances_buffer) {
         prepared_frame.mesh_instances_buffer = self.mesh_instances_buffer.acquire(device, "mesh instances", vuk::eMemoryRead);
-        prepared_frame.mesh_instance_visibility_mask_buffer =
-            self.mesh_instance_visibility_mask_buffer.acquire(device, "mesh instance visibility mask", vuk::eMemoryRead);
         prepared_frame.meshlet_instance_visibility_mask_buffer =
             self.meshlet_instance_visibility_mask_buffer.acquire(device, "meshlet instances visibility mask", vuk::eMemoryRead);
     }
@@ -1190,7 +1181,6 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
         auto meshes_buffer = std::move(frame.meshes_buffer);
         auto mesh_instances_buffer = std::move(frame.mesh_instances_buffer);
         auto materials_buffer = std::move(frame.materials_buffer);
-        auto mesh_instance_visibility_mask_buffer = std::move(frame.mesh_instance_visibility_mask_buffer);
         auto meshlet_instance_visibility_mask_buffer = std::move(frame.meshlet_instance_visibility_mask_buffer);
 
         auto meshlet_instances_buffer =
@@ -1718,11 +1708,6 @@ auto SceneRenderer::cleanup(this SceneRenderer &self) -> void {
     if (self.meshes_buffer) {
         device.destroy(self.meshes_buffer.id());
         self.meshes_buffer = {};
-    }
-
-    if (self.mesh_instance_visibility_mask_buffer) {
-        device.destroy(self.mesh_instance_visibility_mask_buffer.id());
-        self.mesh_instance_visibility_mask_buffer = {};
     }
 
     if (self.meshlet_instance_visibility_mask_buffer) {

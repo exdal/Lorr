@@ -30,7 +30,6 @@ struct PreparedFrame {
     vuk::Value<vuk::Buffer> transforms_buffer = {};
     vuk::Value<vuk::Buffer> meshes_buffer = {};
     vuk::Value<vuk::Buffer> mesh_instances_buffer = {};
-    vuk::Value<vuk::Buffer> mesh_instance_visibility_mask_buffer = {};
     vuk::Value<vuk::Buffer> meshlet_instance_visibility_mask_buffer = {};
     vuk::Value<vuk::Buffer> materials_buffer = {};
     vuk::Value<vuk::Buffer> environment_buffer = {};
@@ -56,7 +55,6 @@ struct SceneRenderer {
 
     Buffer mesh_instances_buffer = {};
     Buffer meshes_buffer = {};
-    Buffer mesh_instance_visibility_mask_buffer = {};
     Buffer meshlet_instance_visibility_mask_buffer = {};
 
     Buffer materials_buffer = {};

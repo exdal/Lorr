@@ -97,19 +97,14 @@ public func test_occlusion(
 
     let min_uv = screen_aabb.min.xy;
     let max_uv = screen_aabb.max.xy;
-    let min_texel = u32x2(clamp(min_uv * f32x2(hiz_size), 0.0, hiz_size - 1.0));
-    let max_texel = u32x2(clamp(max_uv * f32x2(hiz_size), 0.0, hiz_size - 1.0));
+    let min_texel = u32x2(max(min_uv * f32x2(hiz_size), 0.0));
+    let max_texel = u32x2(min(max_uv * f32x2(hiz_size), hiz_size - 1.0));
 
-    let size = max_texel - min_texel + 1;
+    let size = max_texel - min_texel;
     let max_size = max(size.x, size.y);
-    var mip = 0.0;
-    if (ceiling) {
-        mip = max(0.0, ceil(log2(max_size)));
-    } else {
-        mip = floor(log2(max_size));
-    }
+    let mip = max(floor(log2(max_size)) - 1.0, 0.0);
 
     var uv = (min_uv + max_uv) * 0.5;
     let d = hiz_image.SampleLevel(hiz_sampler, uv, mip);
-    return screen_aabb.max.z <= d;
+    return screen_aabb.max.z < d;
 }

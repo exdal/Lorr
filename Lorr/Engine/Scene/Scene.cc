@@ -664,6 +664,7 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer, ls::option<
     regenerate_sky |= self.last_environment.atmos_planet_radius != environment.atmos_planet_radius;
     self.last_environment = environment;
 
+    auto meshlet_instance_visibility_offset = 0_u32;
     auto max_meshlet_instance_count = 0_u32;
     auto gpu_meshes = std::vector<GPU::Mesh>();
     auto gpu_mesh_instances = std::vector<GPU::MeshInstance>();
@@ -689,6 +690,9 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer, ls::option<
                     mesh_instance.lod_index = lod0_index;
                     mesh_instance.material_index = SlotMap_decode_id(primitive.material_id).index;
                     mesh_instance.transform_index = SlotMap_decode_id(transform_id).index;
+                    mesh_instance.meshlet_instance_visibility_offset = meshlet_instance_visibility_offset;
+
+                    meshlet_instance_visibility_offset += lod0.meshlet_count;
                     max_meshlet_instance_count += lod0.meshlet_count;
                 }
             }

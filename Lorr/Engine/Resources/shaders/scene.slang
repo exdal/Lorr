@@ -280,6 +280,7 @@ public struct MeshInstance {
     public u32 lod_index = 0;
     public u32 material_index = 0;
     public u32 transform_index = 0;
+    public u32 meshlet_instance_visibility_offset = 0;
 };
 
 public struct MeshLOD {

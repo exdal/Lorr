@@ -178,6 +178,7 @@ struct MeshInstance {
     alignas(4) u32 lod_index = 0;
     alignas(4) u32 material_index = 0;
     alignas(4) u32 transform_index = 0;
+    alignas(4) u32 meshlet_instance_visibility_offset = 0;
 };
 
 struct Meshlet {
@@ -204,7 +205,7 @@ struct MeshLOD {
 };
 
 struct Mesh {
-    constexpr static auto MAX_LODS = 1_sz;
+    constexpr static auto MAX_LODS = 8_sz;
 
     alignas(8) u64 vertex_positions = 0;
     alignas(8) u64 vertex_normals = 0;

@@ -4,7 +4,6 @@ import scene;
 import cull;
 import debug_drawer;
 
-[[vk::constant_id(0)]] const u32 LATE = 0;
 [[vk::binding(0)]] ConstantBuffer<Camera> camera;
 [[vk::binding(1)]] StructuredBuffer<Mesh> meshes;
 [[vk::binding(2)]] StructuredBuffer<Transform> transforms;
@@ -12,9 +11,8 @@ import debug_drawer;
 [[vk::binding(4)]] Sampler hiz_sampler;
 [[vk::binding(5)]] RWStructuredBuffer<MeshInstance> mesh_instances;
 [[vk::binding(6)]] RWStructuredBuffer<MeshletInstance> meshlet_instances;
-[[vk::binding(7)]] RWStructuredBuffer<u32> mesh_instance_visibility_mask;
-[[vk::binding(8)]] RWStructuredBuffer<u32> visible_meshlet_instances_count;
-[[vk::binding(9)]] RWStructuredBuffer<DebugDrawer> debug_drawer;
+[[vk::binding(7)]] RWStructuredBuffer<u32> visible_meshlet_instances_count;
+[[vk::binding(8)]] RWStructuredBuffer<DebugDrawer> debug_drawer;
 
 #ifndef CULLING_MESHES_COUNT
 #define CULLING_MESHES_COUNT 64
@@ -32,116 +30,51 @@ func cs_main(
         return;
     }
 
-    let mask_index = mesh_instance_index / 32;
-    let bit_index = mesh_instance_index - mask_index * 32;
-    let visibility_bit = 1 << bit_index;
-    let was_visible = (mesh_instance_visibility_mask[mask_index] & visibility_bit) != 0;
-
     let mesh_instance = &mesh_instances[mesh_instance_index];
     let mesh = meshes[mesh_instance.mesh_index];
     let transform = transforms[mesh_instance.transform_index];
     let mvp = mul(camera.projection_view_mat, transform.world);
 
     let cull_frustum = (cull_flags & CullFlags::MeshFrustum) != 0;
-    let cull_occlusion = (cull_flags & CullFlags::MeshOcclusion) != 0;
-    let lod_index = 0;
-
-    if (LATE == 0) {
-        var visible = was_visible;
-        if (visible) {
-            visible = test_frustum(mvp, mesh.bounds.aabb_center, mesh.bounds.aabb_extent);
-        }
-
-        let should_draw = visible;
-        if (should_draw) {
-            mesh_instance.lod_index = lod_index;
-            let mesh_lod = mesh.lods[lod_index];
-            let meshlet_count = mesh_lod.meshlet_count;
-            let base_meshlet_instance_offset = __atomic_add(visible_meshlet_instances_count[0], meshlet_count, MemoryOrder::Relaxed);
-            for (u32 i = 0; i < meshlet_count; i++) {
-                let offset = base_meshlet_instance_offset + i;
-                var meshlet_instance = MeshletInstance();
-                meshlet_instance.mesh_instance_index = mesh_instance_index;
-                meshlet_instance.meshlet_index = i;
-                meshlet_instances[offset] = meshlet_instance;
-            }
-        }
-    } else {
-        var visible = true;
-
-        var in_frustum = true;
-        if (visible) {
-            in_frustum = test_frustum(mvp, mesh.bounds.aabb_center, mesh.bounds.aabb_extent);
-        }
-
-        visible = visible && in_frustum;
-
-        var passed_occlusion = true;
-        if (visible) {
-            if (let screen_aabb = project_aabb(mvp, camera.near_clip, mesh.bounds.aabb_center, mesh.bounds.aabb_extent)) {
-                passed_occlusion = !test_occlusion(screen_aabb, hiz_image, hiz_sampler, true);
-                if (passed_occlusion && true) {
-                    let ndc_aabb_max = screen_aabb.max.xy * 2.0 - 1.0;
-                    let ndc_aabb_min = screen_aabb.min.xy * 2.0 - 1.0;
-                    var debug_rect = DebugRect();
-                    debug_rect.offset = f32x3((ndc_aabb_max + ndc_aabb_min) * 0.5, screen_aabb.max.z);
-                    debug_rect.extent = ndc_aabb_max - ndc_aabb_min;
-                    debug_rect.color = f32x3(1.0, 0.0, 1.0);
-                    debug_rect.coord = DebugDrawCoord::NDC;
-                    debug_draw_rect(debug_drawer[0], debug_rect);
-                }
-            }
-        }
-
-        let fallback = visible && !passed_occlusion && !was_visible;
-        visible = in_frustum && (passed_occlusion || fallback);
-        let should_draw = visible && !was_visible;
-        if (should_draw) {
-            mesh_instance.lod_index = lod_index;
-            let mesh_lod = mesh.lods[lod_index];
-            let meshlet_count = mesh_lod.meshlet_count;
-            let base_meshlet_instance_offset = __atomic_add(visible_meshlet_instances_count[0], meshlet_count, MemoryOrder::Relaxed);
-            for (u32 i = 0; i < meshlet_count; i++) {
-                let offset = base_meshlet_instance_offset + i;
-                var meshlet_instance = MeshletInstance();
-                meshlet_instance.mesh_instance_index = mesh_instance_index;
-                meshlet_instance.meshlet_index = i;
-                meshlet_instances[offset] = meshlet_instance;
-            }
-        }
-
-        if (in_frustum && passed_occlusion) {
-            __atomic_or(mesh_instance_visibility_mask[mask_index], visibility_bit, MemoryOrder::Relaxed);
-        } else {
-            __atomic_and(mesh_instance_visibility_mask[mask_index], ~visibility_bit, MemoryOrder::Relaxed);
-        }
+    if (cull_frustum && !test_frustum(mvp, mesh.bounds.aabb_center, mesh.bounds.aabb_extent)) {
+        return;
     }
 
-#if 0
-        // Credits:
-        // - https://github.com/Sunset-Flock/Timberdoodle/blob/786f141e261dff4756e7f1a67dd7f7a5e1277956/src/scene/mesh_lod.hpp#L45
-        let aabb_center = mul(transform.world, f32x4(mesh.bounds.aabb_center, 1.0)).xyz;
-        let aabb_extent_x = length(transform.world[0]) * mesh.bounds.aabb_extent.x;
-        let aabb_extent_y = length(transform.world[1]) * mesh.bounds.aabb_extent.y;
-        let aabb_extent_z = length(transform.world[2]) * mesh.bounds.aabb_extent.z;
-        let aabb_rough_extent = max(max(aabb_extent_x, aabb_extent_y), aabb_extent_z);
-        let aabb_rough_camera_distance = max(length(aabb_center - camera.position) - 0.5 * aabb_rough_extent, 0.0);
+    var lod_index = 0;
+#if 1
+    // Credits:
+    // - https://github.com/Sunset-Flock/Timberdoodle/blob/786f141e261dff4756e7f1a67dd7f7a5e1277956/src/scene/mesh_lod.hpp#L45
+    let aabb_center = mul(transform.world, f32x4(mesh.bounds.aabb_center, 1.0)).xyz;
+    let aabb_extent_x = length(transform.world[0]) * mesh.bounds.aabb_extent.x;
+    let aabb_extent_y = length(transform.world[1]) * mesh.bounds.aabb_extent.y;
+    let aabb_extent_z = length(transform.world[2]) * mesh.bounds.aabb_extent.z;
+    let aabb_rough_extent = max(max(aabb_extent_x, aabb_extent_y), aabb_extent_z);
+    let aabb_rough_camera_distance = max(length(aabb_center - camera.position) - 0.5 * aabb_rough_extent, 0.0);
 
-        // Avoiding the atan here
-        let rough_resolution = max(camera.resolution.x, camera.resolution.y);
-        let fov90_distance_to_screen_ratio = 2.0f;
-        let pixel_size_at_1m = fov90_distance_to_screen_ratio / rough_resolution;
-        let aabb_size_at_1m = (aabb_rough_extent / aabb_rough_camera_distance);
-        let rough_aabb_pixel_size = aabb_size_at_1m / pixel_size_at_1m;
+    // Avoiding the atan here
+    let rough_resolution = max(camera.resolution.x, camera.resolution.y);
+    let fov90_distance_to_screen_ratio = 2.0f;
+    let pixel_size_at_1m = fov90_distance_to_screen_ratio / rough_resolution;
+    let aabb_size_at_1m = (aabb_rough_extent / aabb_rough_camera_distance);
+    let rough_aabb_pixel_size = aabb_size_at_1m / pixel_size_at_1m;
 
-        for (var i = 1; i < mesh.lod_count; i++) {
-            let mesh_lod = mesh.lods[i];
-            let rough_pixel_error = rough_aabb_pixel_size * mesh_lod.error;
-            if (rough_pixel_error < camera.acceptable_lod_error) {
-                lod_index = i;
-            } else {
-                break;
-            }
+    for (var i = 1; i < mesh.lod_count; i++) {
+        let mesh_lod = mesh.lods[i];
+        let rough_pixel_error = rough_aabb_pixel_size * mesh_lod.error;
+        if (rough_pixel_error < camera.acceptable_lod_error) {
+            lod_index = i;
+        } else {
+            break;
         }
+    }
 #endif
+    mesh_instance.lod_index = lod_index;
+    let mesh_lod = mesh.lods[lod_index];
+    let meshlet_count = mesh_lod.meshlet_count;
+    var base_meshlet_instance_offset = __atomic_add(visible_meshlet_instances_count[2], meshlet_count, MemoryOrder::Relaxed);
+    for (u32 i = 0; i < meshlet_count; i++) {
+        let offset = base_meshlet_instance_offset + i;
+        meshlet_instances[offset].mesh_instance_index = mesh_instance_index;
+        meshlet_instances[offset].meshlet_index = i;
+    }
 }

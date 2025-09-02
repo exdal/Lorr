@@ -70,7 +70,7 @@ func fs_main(VertexOutput input) -> u32 {
     }
 #endif
 
-    InterlockedAdd(params.overdraw[u32x2(input.position.xy)], 1u);
+    __atomic_add(params.overdraw[u32x2(input.position.xy)], 1u, MemoryOrder::AcquireRelease);
 
     let vis = VisBufferData(input.meshlet_instance_index, input.triangle_index);
     return vis.encode();

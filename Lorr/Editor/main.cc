@@ -18,7 +18,7 @@ i32 main(i32, c8 **) {
     };
 
     lr::AppBuilder() //
-        .module<lr::Device>(1)
+        .module<lr::Device>(3)
         .module<lr::Window>(window_info)
         .module<lr::AssetManager>()
         .module<lr::ImGuiRenderer>()

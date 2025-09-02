@@ -158,6 +158,7 @@ static auto draw_tools(ViewportWindow &self) -> void {
         ImGui::CheckboxFlags("Cull Triangle Back Face", &cull_flags, std::to_underlying(lr::GPU::CullFlags::TriangleBackFace));
         ImGui::CheckboxFlags("Cull Micro Triangles", &cull_flags, std::to_underlying(lr::GPU::CullFlags::MicroTriangles));
         ImGui::Checkbox("Debug Lines", &scene_renderer.debug_lines);
+        ImGui::SliderFloat("Overdraw Heatmap", &scene_renderer.overdraw_heatmap_scale, 0.0f, 100.0f);
     }
 }
 

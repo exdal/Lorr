@@ -1,12 +1,11 @@
 import std;
 import gpu;
 
-[[vk::constant_id(0)]] const u32 LATE = 0;
 [[vk::binding(0)]] StructuredBuffer<u32> visible_meshlet_instances_count;
 [[vk::binding(1)]] RWStructuredBuffer<DispatchIndirectCommand> cull_meshlets_cmd;
 
 [[shader("compute")]]
 [[numthreads(1, 1, 1)]]
 func cs_main() -> void {
-    cull_meshlets_cmd[0].x = (visible_meshlet_instances_count[LATE] + (CULLING_MESHLET_COUNT - 1)) / CULLING_MESHLET_COUNT;
+    cull_meshlets_cmd[0].x = (visible_meshlet_instances_count[2] + (CULLING_MESHLET_COUNT - 1)) / CULLING_MESHLET_COUNT;
 }

@@ -40,6 +40,7 @@ auto SceneRenderer::init(this SceneRenderer &self) -> bool {
         .definitions = {
 #ifdef LS_DEBUG
             { "ENABLE_ASSERTIONS", "1" },
+            { "DEBUG_DRAW", "1" },
 #endif // DEBUG
             { "CULLING_MESH_COUNT", "64" },
             { "CULLING_MESHLET_COUNT", std::to_string(Model::MAX_MESHLET_INDICES) },
@@ -201,6 +202,12 @@ auto SceneRenderer::init(this SceneRenderer &self) -> bool {
     };
     Pipeline::create(device, default_slang_session, hiz_slow_pipeline_info).value();
 
+    auto visualize_overdraw_pipeline_info = PipelineCompileInfo{
+        .module_name = "passes.visualize_overdraw",
+        .entry_points = { "vs_main", "fs_main" },
+    };
+    Pipeline::create(device, default_slang_session, visualize_overdraw_pipeline_info).value();
+
     self.histogram_luminance_buffer = Buffer::create(device, sizeof(GPU::HistogramLuminance)).value();
     vuk::fill(vuk::acquire_buf("histogram luminance", *device.buffer(self.histogram_luminance_buffer.id()), vuk::eNone), 0);
 
@@ -338,10 +345,19 @@ auto SceneRenderer::prepare_frame(this SceneRenderer &self, FramePrepareInfo &in
         prepared_frame.mesh_instance_visibility_mask_buffer =
             self.mesh_instance_visibility_mask_buffer.acquire(device, "mesh instance visibility mask", vuk::eNone);
         prepared_frame.mesh_instance_visibility_mask_buffer = zero_fill_pass(std::move(prepared_frame.mesh_instance_visibility_mask_buffer));
+
+        auto meshlet_instance_visibility_mask_size_bytes = (info.max_meshlet_instance_count + 31) / 32 * sizeof(u32);
+        self.meshlet_instance_visibility_mask_buffer =
+            self.meshlet_instance_visibility_mask_buffer.resize(device, meshlet_instance_visibility_mask_size_bytes).value();
+        prepared_frame.meshlet_instance_visibility_mask_buffer =
+            self.meshlet_instance_visibility_mask_buffer.acquire(device, "meshlet instances visibility mask", vuk::eNone);
+        prepared_frame.meshlet_instance_visibility_mask_buffer = zero_fill_pass(std::move(prepared_frame.meshlet_instance_visibility_mask_buffer));
     } else if (self.mesh_instances_buffer) {
         prepared_frame.mesh_instances_buffer = self.mesh_instances_buffer.acquire(device, "mesh instances", vuk::eMemoryRead);
         prepared_frame.mesh_instance_visibility_mask_buffer =
             self.mesh_instance_visibility_mask_buffer.acquire(device, "mesh instance visibility mask", vuk::eMemoryRead);
+        prepared_frame.meshlet_instance_visibility_mask_buffer =
+            self.meshlet_instance_visibility_mask_buffer.acquire(device, "meshlet instances visibility mask", vuk::eMemoryRead);
     }
 
     info.environment.transmittance_lut_size = self.sky_transmittance_lut_view.extent();
@@ -413,13 +429,11 @@ auto SceneRenderer::prepare_frame(this SceneRenderer &self, FramePrepareInfo &in
 }
 
 static auto cull_meshes(
-    bool late,
     GPU::CullFlags cull_flags,
     u32 mesh_instance_count,
     TransferManager &transfer_man,
     vuk::Value<vuk::Buffer> &meshes_buffer,
     vuk::Value<vuk::Buffer> &mesh_instances_buffer,
-    vuk::Value<vuk::Buffer> &mesh_instance_visibility_mask_buffer,
     vuk::Value<vuk::Buffer> &meshlet_instances_buffer,
     vuk::Value<vuk::Buffer> &visible_meshlet_instances_count_buffer,
     vuk::Value<vuk::Buffer> &transforms_buffer,
@@ -428,11 +442,10 @@ static auto cull_meshes(
     vuk::Value<vuk::Buffer> &debug_drawer_buffer
 ) -> vuk::Value<vuk::Buffer> {
     ZoneScoped;
-    memory::ScopedStack stack;
 
     auto vis_cull_meshes_pass = vuk::make_pass(
-        stack.format("vis cull meshes {}", late ? "late" : "early"),
-        [late, cull_flags, mesh_instance_count](
+        "vis cull meshes",
+        [cull_flags, mesh_instance_count](
             vuk::CommandBuffer &cmd_list,
             VUK_BA(vuk::eComputeRead) camera,
             VUK_BA(vuk::eComputeRead) meshes,
@@ -440,7 +453,6 @@ static auto cull_meshes(
             VUK_IA(vuk::eComputeSampled) hiz,
             VUK_BA(vuk::eComputeRW) mesh_instances,
             VUK_BA(vuk::eComputeRW) meshlet_instances,
-            VUK_BA(vuk::eComputeRW) mesh_instance_visibility_mask,
             VUK_BA(vuk::eComputeRW) visible_meshlet_instances_count,
             VUK_BA(vuk::eComputeRW) debug_drawer
         ) {
@@ -453,24 +465,12 @@ static auto cull_meshes(
                 .bind_sampler(0, 4, hiz_sampler_info)
                 .bind_buffer(0, 5, mesh_instances)
                 .bind_buffer(0, 6, meshlet_instances)
-                .bind_buffer(0, 7, mesh_instance_visibility_mask)
-                .bind_buffer(0, 8, visible_meshlet_instances_count)
-                .bind_buffer(0, 9, debug_drawer)
+                .bind_buffer(0, 7, visible_meshlet_instances_count)
+                .bind_buffer(0, 8, debug_drawer)
                 .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, PushConstants(mesh_instance_count, cull_flags))
-                .specialize_constants(0, late)
                 .dispatch_invocations(mesh_instance_count);
 
-            return std::make_tuple(
-                camera,
-                meshes,
-                transforms,
-                hiz,
-                mesh_instances,
-                meshlet_instances,
-                mesh_instance_visibility_mask,
-                visible_meshlet_instances_count,
-                debug_drawer
-            );
+            return std::make_tuple(camera, meshes, transforms, hiz, mesh_instances, meshlet_instances, visible_meshlet_instances_count, debug_drawer);
         }
     );
 
@@ -481,7 +481,6 @@ static auto cull_meshes(
         hiz_attachment,
         mesh_instances_buffer,
         meshlet_instances_buffer,
-        mesh_instance_visibility_mask_buffer,
         visible_meshlet_instances_count_buffer,
         debug_drawer_buffer
     ) =
@@ -492,23 +491,19 @@ static auto cull_meshes(
             std::move(hiz_attachment),
             std::move(mesh_instances_buffer),
             std::move(meshlet_instances_buffer),
-            std::move(mesh_instance_visibility_mask_buffer),
             std::move(visible_meshlet_instances_count_buffer),
             std::move(debug_drawer_buffer)
         );
 
     auto generate_cull_commands_pass = vuk::make_pass(
-        stack.format("generate cull commands {}", late ? "late" : "early"),
-        [late](
-            vuk::CommandBuffer &cmd_list, //
-            VUK_BA(vuk::eComputeRead) visible_meshlet_instances_count,
-            VUK_BA(vuk::eComputeRW) cull_meshlets_cmd
-        ) {
+        "generate cull commands",
+        [](vuk::CommandBuffer &cmd_list, //
+           VUK_BA(vuk::eComputeRead) visible_meshlet_instances_count,
+           VUK_BA(vuk::eComputeRW) cull_meshlets_cmd) {
             cmd_list //
                 .bind_compute_pipeline("passes.generate_cull_commands")
                 .bind_buffer(0, 0, visible_meshlet_instances_count)
                 .bind_buffer(0, 1, cull_meshlets_cmd)
-                .specialize_constants(0, late)
                 .dispatch(1);
 
             return std::make_tuple(visible_meshlet_instances_count, cull_meshlets_cmd);
@@ -530,6 +525,7 @@ static auto cull_meshlets(
     vuk::Value<vuk::Buffer> &cull_meshlets_cmd_buffer,
     vuk::Value<vuk::Buffer> &visible_meshlet_instances_count_buffer,
     vuk::Value<vuk::Buffer> &visible_meshlet_instances_indices_buffer,
+    vuk::Value<vuk::Buffer> &meshlet_instance_visibility_mask_buffer,
     vuk::Value<vuk::Buffer> &reordered_indices_buffer,
     vuk::Value<vuk::Buffer> &meshes_buffer,
     vuk::Value<vuk::Buffer> &mesh_instances_buffer,
@@ -553,13 +549,12 @@ static auto cull_meshlets(
             VUK_BA(vuk::eComputeRead) meshes,
             VUK_BA(vuk::eComputeRead) transforms,
             VUK_IA(vuk::eComputeSampled) hiz,
-            VUK_BA(vuk::eComputeRead) visible_meshlet_instances_count,
-            VUK_BA(vuk::eComputeWrite) visible_meshlet_instances_indices,
+            VUK_BA(vuk::eComputeRW) visible_meshlet_instances_count,
+            VUK_BA(vuk::eComputeRW) visible_meshlet_instances_indices,
+            VUK_BA(vuk::eComputeRW) meshlet_instance_visibility_mask,
             VUK_BA(vuk::eComputeRW) cull_triangles_cmd,
             VUK_BA(vuk::eComputeRW) debug_drawer
         ) {
-            // cmd_list.image_barrier(hiz, vuk::eComputeRW, vuk::eComputeSampled, 0, hiz->level_count);
-
             cmd_list //
                 .bind_compute_pipeline("passes.cull_meshlets")
                 .bind_buffer(0, 0, camera)
@@ -571,8 +566,9 @@ static auto cull_meshlets(
                 .bind_sampler(0, 6, hiz_sampler_info)
                 .bind_buffer(0, 7, visible_meshlet_instances_count)
                 .bind_buffer(0, 8, visible_meshlet_instances_indices)
-                .bind_buffer(0, 9, cull_triangles_cmd)
-                .bind_buffer(0, 10, debug_drawer)
+                .bind_buffer(0, 9, meshlet_instance_visibility_mask)
+                .bind_buffer(0, 10, cull_triangles_cmd)
+                .bind_buffer(0, 11, debug_drawer)
                 .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, cull_flags)
                 .specialize_constants(0, late)
                 .dispatch_indirect(dispatch_cmd);
@@ -587,6 +583,7 @@ static auto cull_meshlets(
                 hiz,
                 visible_meshlet_instances_count,
                 visible_meshlet_instances_indices,
+                meshlet_instance_visibility_mask,
                 cull_triangles_cmd,
                 debug_drawer
             );
@@ -605,6 +602,7 @@ static auto cull_meshlets(
         hiz_attachment,
         visible_meshlet_instances_count_buffer,
         visible_meshlet_instances_indices_buffer,
+        meshlet_instance_visibility_mask_buffer,
         cull_triangles_cmd_buffer,
         debug_drawer_buffer
     ) =
@@ -618,6 +616,7 @@ static auto cull_meshlets(
             std::move(hiz_attachment),
             std::move(visible_meshlet_instances_count_buffer),
             std::move(visible_meshlet_instances_indices_buffer),
+            std::move(meshlet_instance_visibility_mask_buffer),
             std::move(cull_triangles_cmd_buffer),
             std::move(debug_drawer_buffer)
         );
@@ -625,10 +624,11 @@ static auto cull_meshlets(
     //  ── CULL TRIANGLES ──────────────────────────────────────────────────
     auto vis_cull_triangles_pass = vuk::make_pass(
         stack.format("vis cull triangles {}", late ? "late" : "early"),
-        [cull_flags](
+        [late, cull_flags](
             vuk::CommandBuffer &cmd_list,
             VUK_BA(vuk::eIndirectRead) cull_triangles_cmd,
             VUK_BA(vuk::eComputeRead) camera,
+            VUK_BA(vuk::eComputeRead) visible_meshlet_instances_count,
             VUK_BA(vuk::eComputeRead) visible_meshlet_instances_indices,
             VUK_BA(vuk::eComputeRead) meshlet_instances,
             VUK_BA(vuk::eComputeRead) mesh_instances,
@@ -640,18 +640,21 @@ static auto cull_meshlets(
             cmd_list //
                 .bind_compute_pipeline("passes.cull_triangles")
                 .bind_buffer(0, 0, camera)
-                .bind_buffer(0, 1, visible_meshlet_instances_indices)
-                .bind_buffer(0, 2, meshlet_instances)
-                .bind_buffer(0, 3, mesh_instances)
-                .bind_buffer(0, 4, meshes)
-                .bind_buffer(0, 5, transforms)
-                .bind_buffer(0, 6, draw_indexed_cmd)
-                .bind_buffer(0, 7, reordered_indices)
+                .bind_buffer(0, 1, visible_meshlet_instances_count)
+                .bind_buffer(0, 2, visible_meshlet_instances_indices)
+                .bind_buffer(0, 3, meshlet_instances)
+                .bind_buffer(0, 4, mesh_instances)
+                .bind_buffer(0, 5, meshes)
+                .bind_buffer(0, 6, transforms)
+                .bind_buffer(0, 7, draw_indexed_cmd)
+                .bind_buffer(0, 8, reordered_indices)
                 .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, cull_flags)
+                .specialize_constants(0, late)
                 .dispatch_indirect(cull_triangles_cmd);
 
             return std::make_tuple(
                 camera,
+                visible_meshlet_instances_count,
                 visible_meshlet_instances_indices,
                 meshlet_instances,
                 mesh_instances,
@@ -667,6 +670,7 @@ static auto cull_meshlets(
 
     std::tie(
         camera_buffer,
+        visible_meshlet_instances_count_buffer,
         visible_meshlet_instances_indices_buffer,
         meshlet_instances_buffer,
         mesh_instances_buffer,
@@ -678,6 +682,7 @@ static auto cull_meshlets(
         vis_cull_triangles_pass(
             std::move(cull_triangles_cmd_buffer),
             std::move(camera_buffer),
+            std::move(visible_meshlet_instances_count_buffer),
             std::move(visible_meshlet_instances_indices_buffer),
             std::move(meshlet_instances_buffer),
             std::move(mesh_instances_buffer),
@@ -1186,6 +1191,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
         auto mesh_instances_buffer = std::move(frame.mesh_instances_buffer);
         auto materials_buffer = std::move(frame.materials_buffer);
         auto mesh_instance_visibility_mask_buffer = std::move(frame.mesh_instance_visibility_mask_buffer);
+        auto meshlet_instance_visibility_mask_buffer = std::move(frame.meshlet_instance_visibility_mask_buffer);
 
         auto meshlet_instances_buffer =
             transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eGPUonly, frame.max_meshlet_instance_count * sizeof(GPU::MeshletInstance));
@@ -1195,16 +1201,14 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
             vuk::MemoryUsage::eGPUonly,
             frame.max_meshlet_instance_count * Model::MAX_MESHLET_PRIMITIVES * 3 * sizeof(u32)
         );
-        auto visible_meshlet_instances_count_buffer = transfer_man.scratch_buffer<u32[2]>({});
 
-        auto early_cull_meshlets_cmd_buffer = cull_meshes(
-            false,
+        auto visible_meshlet_instances_count_buffer = transfer_man.scratch_buffer<u32[3]>({});
+        auto cull_meshlets_cmd_buffer = cull_meshes(
             info.cull_flags,
             frame.mesh_instance_count,
             transfer_man,
             meshes_buffer,
             mesh_instances_buffer,
-            mesh_instance_visibility_mask_buffer,
             meshlet_instances_buffer,
             visible_meshlet_instances_count_buffer,
             transforms_buffer,
@@ -1218,9 +1222,10 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
             info.cull_flags,
             transfer_man,
             hiz_attachment,
-            early_cull_meshlets_cmd_buffer,
+            cull_meshlets_cmd_buffer,
             visible_meshlet_instances_count_buffer,
             visible_meshlet_instances_indices_buffer,
+            meshlet_instance_visibility_mask_buffer,
             reordered_indices_buffer,
             meshes_buffer,
             mesh_instances_buffer,
@@ -1248,30 +1253,15 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
 
         draw_hiz(hiz_attachment, depth_attachment);
 
-        auto late_cull_meshlets_cmd_buffer = cull_meshes(
-            true,
-            info.cull_flags,
-            frame.mesh_instance_count,
-            transfer_man,
-            meshes_buffer,
-            mesh_instances_buffer,
-            mesh_instance_visibility_mask_buffer,
-            meshlet_instances_buffer,
-            visible_meshlet_instances_count_buffer,
-            transforms_buffer,
-            hiz_attachment,
-            camera_buffer,
-            debug_drawer_buffer
-        );
-
         auto late_draw_visbuffer_cmd_buffer = cull_meshlets(
             true,
             info.cull_flags,
             transfer_man,
             hiz_attachment,
-            late_cull_meshlets_cmd_buffer,
+            cull_meshlets_cmd_buffer,
             visible_meshlet_instances_count_buffer,
             visible_meshlet_instances_indices_buffer,
+            meshlet_instance_visibility_mask_buffer,
             reordered_indices_buffer,
             meshes_buffer,
             mesh_instances_buffer,
@@ -1333,6 +1323,32 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
             u32 texel_data = 0;
             std::memcpy(&texel_data, picked_texel->mapped_ptr, sizeof(u32));
             info.picked_transform_index = texel_data;
+        }
+
+        if (self.overdraw_heatmap_scale > 0.0f) {
+            auto visualize_overdraw_pass = vuk::make_pass(
+                "visualize overdraw",
+                [scale = self.overdraw_heatmap_scale](
+                    vuk::CommandBuffer &cmd_list, //
+                    VUK_IA(vuk::eColorRW) dst,
+                    VUK_IA(vuk::eFragmentSampled) overdraw
+                ) {
+                    cmd_list //
+                        .bind_graphics_pipeline("passes.visualize_overdraw")
+                        .set_rasterization({})
+                        .set_color_blend(dst, vuk::BlendPreset::eOff)
+                        .set_dynamic_state(vuk::DynamicStateFlagBits::eViewport | vuk::DynamicStateFlagBits::eScissor)
+                        .set_viewport(0, vuk::Rect2D::framebuffer())
+                        .set_scissor(0, vuk::Rect2D::framebuffer())
+                        .bind_image(0, 0, overdraw)
+                        .push_constants(vuk::ShaderStageFlagBits::eFragment, 0, scale)
+                        .draw(3, 1, 0, 0);
+
+                    return dst;
+                }
+            );
+
+            return visualize_overdraw_pass(std::move(dst_attachment), std::move(overdraw_attachment));
         }
 
         //  ── VISBUFFER DECODE ────────────────────────────────────────────────
@@ -1707,6 +1723,11 @@ auto SceneRenderer::cleanup(this SceneRenderer &self) -> void {
     if (self.mesh_instance_visibility_mask_buffer) {
         device.destroy(self.mesh_instance_visibility_mask_buffer.id());
         self.mesh_instance_visibility_mask_buffer = {};
+    }
+
+    if (self.meshlet_instance_visibility_mask_buffer) {
+        device.destroy(self.meshlet_instance_visibility_mask_buffer.id());
+        self.meshlet_instance_visibility_mask_buffer = {};
     }
 
     if (self.materials_buffer) {

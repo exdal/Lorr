@@ -252,8 +252,6 @@ auto AssetManager::init_new_scene(this AssetManager &self, const UUID &uuid, con
         return false;
     }
 
-    scene->create_editor_camera();
-
     asset->acquire_ref();
     return true;
 }
@@ -801,7 +799,6 @@ auto AssetManager::load_model(this AssetManager &self, const UUID &uuid) -> bool
                 ZoneNamedN(z, "GPU Meshlet Generation", true);
 
                 auto &cur_lod = gpu_mesh.lods[lod_index];
-
                 auto simplified_indices = std::vector<u32>();
                 if (lod_index == 0) {
                     simplified_indices = std::vector<u32>(mesh_indices.begin(), mesh_indices.end());
@@ -840,6 +837,7 @@ auto AssetManager::load_model(this AssetManager &self, const UUID &uuid) -> bool
                     simplified_indices.resize(result_index_count);
                 }
 
+                gpu_mesh.vertex_count = mesh_vertices.size();
                 gpu_mesh.lod_count += 1;
                 last_lod_indices = simplified_indices;
 
@@ -881,8 +879,16 @@ auto AssetManager::load_model(this AssetManager &self, const UUID &uuid) -> bool
                     auto meshlet_bb_min = glm::vec3(std::numeric_limits<f32>::max());
                     auto meshlet_bb_max = glm::vec3(std::numeric_limits<f32>::lowest());
                     for (u32 i = 0; i < raw_meshlet.triangle_count * 3; i++) {
-                        const auto &tri_pos = mesh_vertices
-                            [indirect_vertex_indices[raw_meshlet.vertex_offset + local_triangle_indices[raw_meshlet.triangle_offset + i]]];
+                        auto local_triangle_index_offset = raw_meshlet.triangle_offset + i;
+                        LS_EXPECT(local_triangle_index_offset < local_triangle_indices.size());
+                        auto local_triangle_index = local_triangle_indices[local_triangle_index_offset];
+                        LS_EXPECT(local_triangle_index < raw_meshlet.vertex_count);
+                        auto indirect_vertex_index_offset = raw_meshlet.vertex_offset + local_triangle_index;
+                        LS_EXPECT(indirect_vertex_index_offset < indirect_vertex_indices.size());
+                        auto indirect_vertex_index = indirect_vertex_indices[indirect_vertex_index_offset];
+                        LS_EXPECT(indirect_vertex_index < vertex_count);
+
+                        const auto &tri_pos = mesh_vertices[indirect_vertex_index];
                         meshlet_bb_min = glm::min(meshlet_bb_min, tri_pos);
                         meshlet_bb_max = glm::max(meshlet_bb_max, tri_pos);
                     }
@@ -978,7 +984,7 @@ auto AssetManager::load_model(this AssetManager &self, const UUID &uuid) -> bool
 
             auto gpu_mesh_buffer_handle = device.buffer(gpu_mesh_buffer.id());
             auto gpu_mesh_subrange = vuk::discard_buf("mesh", gpu_mesh_buffer_handle->subrange(0, mesh_upload_size));
-            gpu_mesh_subrange = transfer_man.upload_staging(std::move(cpu_mesh_buffer), std::move(gpu_mesh_subrange));
+            gpu_mesh_subrange = transfer_man.upload(std::move(cpu_mesh_buffer), std::move(gpu_mesh_subrange));
             transfer_man.wait_on(std::move(gpu_mesh_subrange));
 
             for (auto lod_index = 0_sz; lod_index < gpu_mesh.lod_count; lod_index++) {
@@ -992,7 +998,7 @@ auto AssetManager::load_model(this AssetManager &self, const UUID &uuid) -> bool
                 lod.indirect_vertex_indices += gpu_mesh_bda + mesh_upload_offset;
 
                 auto gpu_lod_subrange = vuk::discard_buf("mesh lod subrange", gpu_mesh_buffer_handle->subrange(mesh_upload_offset, lod_upload_size));
-                gpu_lod_subrange = transfer_man.upload_staging(std::move(lod_cpu_buffer), std::move(gpu_lod_subrange));
+                gpu_lod_subrange = transfer_man.upload(std::move(lod_cpu_buffer), std::move(gpu_lod_subrange));
                 transfer_man.wait_on(std::move(gpu_lod_subrange));
 
                 mesh_upload_offset += lod_upload_size;
@@ -1149,7 +1155,7 @@ auto AssetManager::load_texture(this AssetManager &self, const UUID &uuid, const
             }
 
             auto image_data = std::move(parsed_image->data);
-            auto buffer = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eCPUonly, ls::size_bytes(image_data));
+            auto buffer = transfer_man.alloc_image_buffer(format, extent);
             std::memcpy(buffer->mapped_ptr, image_data.data(), image_data.size());
 
             dst_attachment = vuk::copy(std::move(buffer), std::move(dst_attachment));
@@ -1175,7 +1181,7 @@ auto AssetManager::load_texture(this AssetManager &self, const UUID &uuid, const
                     .depth = 1,
                 };
                 auto size = vuk::compute_image_size(format, level_extent);
-                auto buffer = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eCPUonly, size);
+                auto buffer = transfer_man.alloc_image_buffer(format, level_extent);
 
                 // TODO, WARN: size param might not be safe. Check with asan.
                 std::memcpy(buffer->mapped_ptr, image_data.data() + mip_data_offset, size);

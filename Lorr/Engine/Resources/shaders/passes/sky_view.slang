@@ -31,7 +31,7 @@ func cs_main(
         eye_altitude);
 
     if (!move_to_top_atmosphere(eye_pos, eye_dir, params.environment.atmos_atmos_radius)) {
-        params.sky_view_lut.store(thread_id.xy, 0.0);
+        params.sky_view_lut.Store(thread_id.xy, 0.0);
         return;
     }
 
@@ -49,12 +49,9 @@ func cs_main(
     info.sampling.variable_sample_count = true;
     info.sampling.min_sample_count = sample_count;
     info.sampling.max_sample_count = sample_count;
-
-    info.transmittance_image = params.sky_transmittance_lut;
-    info.multiscattering_image = params.sky_multiscattering_lut;
-
-    let result = integrate_single_scattered_luminance(params.environment, params.sampler, info);
+    info.eval_multiscattering = true;
+    let result = integrate_single_scattered_luminance(info, params.environment, params.sampler, params.sky_transmittance_lut, params.sky_multiscattering_lut);
     let transmittance = dot(result.transmittance, 1.0 / 3.0);
 
-    params.sky_view_lut.store(thread_id.xy, f32x4(result.luminance, transmittance));
+    params.sky_view_lut.Store(thread_id.xy, f32x4(result.luminance, transmittance));
 }

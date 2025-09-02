@@ -9,6 +9,8 @@
 #include "Engine/Asset/Asset.hh"
 #include "Engine/Core/App.hh"
 
+#include "Engine/Math/Quat.hh"
+
 #include <ImGuizmo.h>
 #include <glm/gtx/matrix_decompose.hpp>
 
@@ -124,37 +126,39 @@ static auto draw_tools(ViewportWindow &self) -> void {
     ImGui::SetNextWindowPos(editor_camera_popup_pos, ImGuiCond_Appearing);
     ImGui::SetNextWindowSize({ editor_camera_popup_width, 0 }, ImGuiCond_Appearing);
     if (ImGui::BeginPopup("editor_camera")) {
-        auto editor_camera = active_scene->get_editor_camera();
-        auto *camera_transform = editor_camera.get_mut<lr::ECS::Transform>();
-        auto *camera_info = editor_camera.get_mut<lr::ECS::Camera>();
-
         ImGui::SeparatorText("Position");
-        ImGui::drag_vec(0, glm::value_ptr(camera_transform->position), 3, ImGuiDataType_Float);
+        ImGui::drag_vec(0, glm::value_ptr(self.editor_camera.position), 3, ImGuiDataType_Float);
 
         ImGui::SeparatorText("Rotation");
-        auto camera_rotation_degrees = glm::degrees(camera_transform->rotation);
-        ImGui::drag_vec(1, glm::value_ptr(camera_rotation_degrees), 3, ImGuiDataType_Float);
-        camera_transform->rotation = glm::radians(lr::Math::normalize_180(camera_rotation_degrees));
+        auto camera_yaw_pitch = glm::vec2(self.editor_camera.yaw, self.editor_camera.pitch);
+        ImGui::drag_vec(1, glm::value_ptr(camera_yaw_pitch), 2, ImGuiDataType_Float);
+        self.editor_camera.yaw = camera_yaw_pitch.x;
+        self.editor_camera.pitch = camera_yaw_pitch.y;
 
         ImGui::SeparatorText("FoV");
-        ImGui::drag_vec(2, &camera_info->fov, 1, ImGuiDataType_Float);
+        ImGui::drag_vec(2, &self.editor_camera.fov, 1, ImGuiDataType_Float);
 
         ImGui::SeparatorText("Far Clip");
-        ImGui::drag_vec(3, &camera_info->far_clip, 1, ImGuiDataType_Float);
+        ImGui::drag_vec(3, &self.editor_camera.far_clip, 1, ImGuiDataType_Float);
 
-        ImGui::SeparatorText("Velocity");
-        ImGui::drag_vec(4, &camera_info->velocity_mul, 1, ImGuiDataType_Float);
+        ImGui::SeparatorText("Max Velocity");
+        ImGui::drag_vec(4, &self.editor_camera.max_velocity, 1, ImGuiDataType_Float);
 
         ImGui::EndPopup();
     }
 
     if (editor.show_debug) {
         auto &cull_flags = reinterpret_cast<i32 &>(active_scene->get_cull_flags());
+        auto &scene_renderer = lr::App::mod<lr::SceneRenderer>();
+
+        ImGui::CheckboxFlags("Cull Mesh Frustum", &cull_flags, std::to_underlying(lr::GPU::CullFlags::MeshFrustum));
+        ImGui::CheckboxFlags("Cull Mesh Occlusion", &cull_flags, std::to_underlying(lr::GPU::CullFlags::MeshOcclusion));
         ImGui::CheckboxFlags("Cull Meshlet Frustum", &cull_flags, std::to_underlying(lr::GPU::CullFlags::MeshletFrustum));
+        ImGui::CheckboxFlags("Cull Meshlet Occlusion", &cull_flags, std::to_underlying(lr::GPU::CullFlags::MeshletOcclusion));
         ImGui::CheckboxFlags("Cull Triangle Back Face", &cull_flags, std::to_underlying(lr::GPU::CullFlags::TriangleBackFace));
         ImGui::CheckboxFlags("Cull Micro Triangles", &cull_flags, std::to_underlying(lr::GPU::CullFlags::MicroTriangles));
-        ImGui::CheckboxFlags("Cull Occlusion", &cull_flags, std::to_underlying(lr::GPU::CullFlags::Occlusion));
-        // ImGui::Checkbox("Debug Lines", &editor.scene_renderer.debug_lines);
+        ImGui::Checkbox("Debug Lines", &scene_renderer.debug_lines);
+        ImGui::SliderFloat("Overdraw Heatmap", &scene_renderer.overdraw_heatmap_scale, 0.0f, 100.0f);
     }
 }
 
@@ -168,18 +172,13 @@ static auto draw_viewport(ViewportWindow &self, vuk::Format format, vuk::Extent3
     auto *active_scene = asset_man.get_scene(active_project.active_scene_uuid);
     auto &selected_entity = active_project.selected_entity;
 
-    auto editor_camera = active_scene->get_editor_camera();
     auto *current_window = ImGui::GetCurrentWindow();
     auto window_rect = current_window->InnerRect;
     auto window_pos = window_rect.Min;
     auto window_size = window_rect.GetSize();
     auto work_area_size = ImGui::GetContentRegionAvail();
     auto &io = ImGui::GetIO();
-
-    auto *camera = editor_camera.get_mut<lr::ECS::Camera>();
-    auto *camera_transform = editor_camera.get_mut<lr::ECS::Transform>();
-    camera->resolution = { window_size.x, window_size.y };
-    camera->aspect_ratio = window_size.x / window_size.y;
+    auto delta_time = io.DeltaTime;
 
     ImGuizmo::SetDrawlist();
     ImGuizmo::SetOrthographic(false);
@@ -200,7 +199,50 @@ static auto draw_viewport(ViewportWindow &self, vuk::Format format, vuk::Extent3
         requested_texel_transform.emplace(glm::uvec2(mouse_pos_rel.x, mouse_pos_rel.y));
     }
 
-    auto prepared_frame = active_scene->prepare_frame(scene_renderer);
+    {
+        // Update editor camera
+        auto target_velocity = glm::vec3(0.0f);
+        if (!ImGuizmo::IsUsingAny() && ImGui::IsWindowHovered()) {
+            if (ImGui::IsKeyDown(ImGuiKey_W)) {
+                target_velocity.x = self.editor_camera.max_velocity;
+            }
+
+            if (ImGui::IsKeyDown(ImGuiKey_S)) {
+                target_velocity.x = -self.editor_camera.max_velocity;
+            }
+
+            if (ImGui::IsKeyDown(ImGuiKey_D)) {
+                target_velocity.z = self.editor_camera.max_velocity;
+            }
+
+            if (ImGui::IsKeyDown(ImGuiKey_A)) {
+                target_velocity.z = -self.editor_camera.max_velocity;
+            }
+
+            if (ImGui::IsKeyDown(ImGuiKey_E)) {
+                target_velocity.y = self.editor_camera.max_velocity;
+            }
+
+            if (ImGui::IsKeyDown(ImGuiKey_Q)) {
+                target_velocity.y = -self.editor_camera.max_velocity;
+            }
+
+            if (ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
+                auto drag = ImGui::GetMouseDragDelta(ImGuiMouseButton_Left, 0);
+                ImGui::ResetMouseDragDelta(ImGuiMouseButton_Left);
+
+                auto sensitivity = 0.1f;
+                self.editor_camera.yaw += drag.x * sensitivity;
+                self.editor_camera.pitch -= drag.y * sensitivity;
+                self.editor_camera.pitch = glm::clamp(self.editor_camera.pitch, -89.9f, 89.9f);
+            }
+        }
+
+        self.editor_camera.resolution = { window_size.x, window_size.y };
+        self.editor_camera.update(delta_time, target_velocity);
+    }
+
+    auto prepared_frame = active_scene->prepare_frame(scene_renderer, self.editor_camera); // NOLINT(cppcoreguidelines-slicing)
 
     auto viewport_attachment_info = vuk::ImageAttachment{
         .image_type = vuk::ImageType::e2D,
@@ -214,7 +256,7 @@ static auto draw_viewport(ViewportWindow &self, vuk::Format format, vuk::Extent3
     };
     auto viewport_attachment = vuk::declare_ia("viewport", viewport_attachment_info);
     auto scene_render_info = lr::SceneRenderInfo{
-        .delta_time = ImGui::GetIO().DeltaTime,
+        .delta_time = delta_time,
         .cull_flags = active_scene->get_cull_flags(),
         .picking_texel = requested_texel_transform,
     };
@@ -234,14 +276,18 @@ static auto draw_viewport(ViewportWindow &self, vuk::Format format, vuk::Extent3
     }
 
     if (selected_entity && selected_entity.has<lr::ECS::Transform>()) {
-        auto camera_forward = glm::vec3(0.0, 0.0, 1.0) * lr::Math::quat_dir(camera_transform->rotation);
-        auto camera_projection = glm::perspective(glm::radians(camera->fov), camera->aspect_ratio, camera->far_clip, camera->near_clip);
-        auto camera_view = glm::lookAt(camera_transform->position, camera_transform->position + camera_forward, glm::vec3(0.0, 1.0, 0.0));
-        camera_projection[1][1] *= -1.0f;
+        auto camera_direction = self.editor_camera.direction();
+        auto camera_projection = glm::perspectiveRH_ZO(
+            glm::radians(self.editor_camera.fov),
+            self.editor_camera.aspect_ratio(),
+            self.editor_camera.far_clip,
+            self.editor_camera.near_clip
+        );
+        auto camera_view = glm::lookAt(self.editor_camera.position, self.editor_camera.position + camera_direction, glm::vec3(0.0, 1.0, 0.0));
 
         auto *transform = selected_entity.get_mut<lr::ECS::Transform>();
         auto T = glm::translate(glm::mat4(1.0), transform->position);
-        auto R = glm::mat4_cast(glm::quat(transform->rotation));
+        auto R = glm::mat4_cast(lr::Math::quat_dir(transform->rotation));
         auto S = glm::scale(glm::mat4(1.0), transform->scale);
         auto gizmo_mat = T * R * S;
         auto delta_mat = glm::mat4(1.0f);
@@ -272,51 +318,6 @@ static auto draw_viewport(ViewportWindow &self, vuk::Format format, vuk::Extent3
             }
 
             selected_entity.modified<lr::ECS::Transform>();
-        }
-    }
-
-    //  ── CAMERA CONTROLLER ───────────────────────────────────────────────
-    if (!ImGuizmo::IsUsingAny() && ImGui::IsWindowHovered()) {
-        bool reset_z = false;
-        bool reset_x = false;
-
-        if (ImGui::IsKeyDown(ImGuiKey_W)) {
-            camera->axis_velocity.z = -camera->velocity_mul;
-            reset_z |= true;
-        }
-
-        if (ImGui::IsKeyDown(ImGuiKey_S)) {
-            camera->axis_velocity.z = camera->velocity_mul;
-            reset_z |= true;
-        }
-
-        if (ImGui::IsKeyDown(ImGuiKey_A)) {
-            camera->axis_velocity.x = -camera->velocity_mul;
-            reset_x |= true;
-        }
-
-        if (ImGui::IsKeyDown(ImGuiKey_D)) {
-            camera->axis_velocity.x = camera->velocity_mul;
-            reset_x |= true;
-        }
-
-        if (!reset_z) {
-            camera->axis_velocity.z = 0.0;
-        }
-
-        if (!reset_x) {
-            camera->axis_velocity.x = 0.0;
-        }
-
-        if (ImGui::IsMouseDragging(ImGuiMouseButton_Right)) {
-            auto drag = ImGui::GetMouseDragDelta(ImGuiMouseButton_Right, 0);
-            ImGui::ResetMouseDragDelta(ImGuiMouseButton_Right);
-
-            auto sensitivity = 0.1f;
-            auto camera_rotation_degrees = glm::degrees(camera_transform->rotation);
-            camera_rotation_degrees.x += drag.x * sensitivity;
-            camera_rotation_degrees.y += drag.y * sensitivity;
-            camera_transform->rotation = glm::radians(camera_rotation_degrees);
         }
     }
 }

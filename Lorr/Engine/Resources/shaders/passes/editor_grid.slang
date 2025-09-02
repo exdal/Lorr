@@ -3,6 +3,11 @@ module editor_grid;
 import std;
 import scene;
 
+struct ShaderParameters {
+    ConstantBuffer<Camera> camera;
+};
+uniform ParameterBlock<ShaderParameters> params;
+
 struct VertexOutput {
     f32x4 position : SV_Position;
     f32x3 near_pos;
@@ -14,18 +19,13 @@ func unproject_point(f32x3 position, in mat4 inv_proj_view_mat) -> f32x3 {
     return p.xyz / p.w;
 }
 
-struct PushConstants {
-    Camera *camera;
-};
-[[vk::push_constant]] PushConstants C;
-
 [[shader("vertex")]]
 VertexOutput vs_main(u32 vertex_id : SV_VertexID) {
     const let uv = f32x2((vertex_id << 1) & 2, vertex_id & 2);
     VertexOutput output;
     output.position = f32x4(uv * 2.0 - 1.0, 0.5, 1.0);
-    output.far_pos = unproject_point(f32x3(output.position.xy, 1.0), C.camera->inv_projection_view_mat);
-    output.near_pos = unproject_point(f32x3(output.position.xy, 0.0), C.camera->inv_projection_view_mat);
+    output.far_pos = unproject_point(f32x3(output.position.xy, 1.0), params.camera.inv_projection_view_mat);
+    output.near_pos = unproject_point(f32x3(output.position.xy, 0.0), params.camera.inv_projection_view_mat);
 
     return output;
 }
@@ -70,16 +70,17 @@ struct FragmentOutput {
 FragmentOutput fs_main(VertexOutput input) {
     FragmentOutput output;
     float t = -input.near_pos.y / (input.far_pos.y - input.near_pos.y);
-    if (t < 0.0)
-        discard;
+    if (t != 0.0) {
+        //discard;
+    }
 
     float3 pixel_pos = input.near_pos + t * (input.far_pos - input.near_pos);
     pixel_pos.y -= 0.1;
 
-    float4 clip_space_pos = mul(C.camera->projection_view_mat, float4(pixel_pos, 1.0));
+    float4 clip_space_pos = mul(params.camera.projection_view_mat, float4(pixel_pos, 1.0));
     float depth = clip_space_pos.z / clip_space_pos.w;
 
-    output.color = pristine_grid(pixel_pos, float2(0.005)) * float(t > 0.0);
+    output.color = pristine_grid(pixel_pos, float2(0.005));
     output.depth = depth;
     return output;
 }

@@ -37,23 +37,22 @@ func cs_main(
     info.eval_mie_phase = false;
     info.eval_rayleigh_phase = false;
     info.eval_planet_luminance = true;
+    info.eval_multiscattering = false;
     info.sampling.variable_sample_count = false;
     info.sampling.initial_sample_count = 32;
-
-    info.transmittance_image = params.sky_transmittance_lut;
 
     f32x3 luminance = 0.0;
     f32x3 multi_scattering_as_1 = 0.0;
     for (int i = 0; i < SAMPLE_COUNT; i++) {
         info.eye_dir = HEMISPHERE_64[i];
-        const let result = integrate_single_scattered_luminance(params.environment, params.sampler, info);
+        let result = integrate_single_scattered_luminance(info, params.environment, params.sampler, params.sky_transmittance_lut, params.sky_transmittance_lut);
         multi_scattering_as_1 += result.multiscattering_as_1;
         luminance += result.luminance;
     }
 
-    const let sphere_solid_angle = 4.0f * PI;
-    const let isotropic_phase = 1.0f / sphere_solid_angle;
-    const let inv_sample_count = 1.0 / f32(SAMPLE_COUNT);
+    let sphere_solid_angle = 4.0f * PI;
+    let isotropic_phase = 1.0f / sphere_solid_angle;
+    let inv_sample_count = 1.0 / f32(SAMPLE_COUNT);
     luminance *= sphere_solid_angle * inv_sample_count;
     multi_scattering_as_1 *= inv_sample_count;
     f32x3 scattered_luminance = luminance * isotropic_phase;

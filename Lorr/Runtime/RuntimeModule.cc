@@ -7,6 +7,62 @@
 #include "Engine/Scene/ECSModule/Core.hh"
 #include "Engine/Window/Window.hh"
 
+struct Runtime {
+    Runtime(flecs::world &world) {
+        auto &window = lr::App::mod<lr::Window>();
+        world
+            .system<lr::ECS::Transform, lr::ECS::Camera, lr::ECS::ActiveCamera>() //
+            .each([&](flecs::iter &it, usize, lr::ECS::Transform &t, lr::ECS::Camera &c, lr::ECS::ActiveCamera) {
+                auto target_velocity = glm::vec3(0.0f);
+                if (window.check_key_state(SDL_SCANCODE_W, lr::KeyState::Down)) {
+                    target_velocity.x = c.max_velocity;
+                }
+
+                if (window.check_key_state(SDL_SCANCODE_S, lr::KeyState::Down)) {
+                    target_velocity.x = -c.max_velocity;
+                }
+
+                if (window.check_key_state(SDL_SCANCODE_D, lr::KeyState::Down)) {
+                    target_velocity.z = c.max_velocity;
+                }
+
+                if (window.check_key_state(SDL_SCANCODE_A, lr::KeyState::Down)) {
+                    target_velocity.z = -c.max_velocity;
+                }
+
+                if (window.check_key_state(SDL_SCANCODE_E, lr::KeyState::Down)) {
+                    target_velocity.y = c.max_velocity;
+                }
+
+                if (window.check_key_state(SDL_SCANCODE_Q, lr::KeyState::Down)) {
+                    target_velocity.y = -c.max_velocity;
+                }
+
+                if (window.mouse_moved) {
+                    auto mouse_pos_delta = window.get_delta_mouse_pos();
+                    auto sensitivity = 0.1f;
+                    t.rotation.x += mouse_pos_delta.x * sensitivity;
+                    t.rotation.y -= mouse_pos_delta.y * sensitivity;
+                    t.rotation.y = glm::clamp(t.rotation.y, -89.9f, 89.9f);
+                }
+
+                auto acceleration_rate = glm::length(target_velocity) > 0.0f ? c.accel_speed : c.decel_speed;
+                c.velocity = glm::mix(c.velocity, target_velocity, glm::min(1.0f, acceleration_rate * it.delta_time()));
+
+                auto direction = glm::vec3(
+                    glm::cos(glm::radians(t.rotation.x)) * glm::cos(glm::radians(t.rotation.y)),
+                    glm::sin(glm::radians(t.rotation.y)),
+                    glm::sin(glm::radians(t.rotation.x)) * glm::cos(glm::radians(t.rotation.y))
+                );
+                direction = glm::normalize(direction);
+                auto up = glm::vec3(0.0f, 1.0f, 0.0f);
+                auto right = glm::normalize(glm::cross(direction, up));
+                auto world_velocity = c.velocity.x * direction + c.velocity.y * up + c.velocity.z * right;
+                t.position += world_velocity * it.delta_time();
+            });
+    }
+};
+
 auto RuntimeModule::init(this RuntimeModule &self) -> bool {
     LOG_TRACE("Actvie world: {}", self.world_path);
 
@@ -36,7 +92,6 @@ auto RuntimeModule::update(this RuntimeModule &self, f64 delta_time) -> void {
 
         camera_query.each([&window](flecs::entity, lr::ECS::Camera &c, lr::ECS::ActiveCamera) {
             c.resolution = glm::vec2(window.width, window.height);
-            c.aspect_ratio = c.resolution.x / c.resolution.y;
         });
 
         active_scene->tick(static_cast<f32>(delta_time));
@@ -51,6 +106,7 @@ auto RuntimeModule::update(this RuntimeModule &self, f64 delta_time) -> void {
 
     if (ImGui::Begin("Runtime")) {
         const auto &registry = asset_man.get_registry();
+        auto loading_scene_uuid = lr::UUID(nullptr);
         for (const auto &[asset_uuid, asset] : registry) {
             if (asset.type != lr::AssetType::Scene) {
                 continue;
@@ -58,13 +114,21 @@ auto RuntimeModule::update(this RuntimeModule &self, f64 delta_time) -> void {
 
             const auto &path_str = asset.path.string();
             if (ImGui::Button(path_str.c_str())) {
-                if (self.active_scene_uuid) {
-                    asset_man.unload_scene(self.active_scene_uuid);
-                }
+                loading_scene_uuid = asset_uuid;
+            }
+        }
 
-                if (asset_man.load_scene(asset_uuid)) {
-                    self.active_scene_uuid = asset_uuid;
-                }
+        if (loading_scene_uuid) {
+            if (self.active_scene_uuid) {
+                window.set_relative_mouse(false);
+                asset_man.unload_scene(self.active_scene_uuid);
+            }
+
+            if (asset_man.load_scene(loading_scene_uuid)) {
+                window.set_relative_mouse(true);
+                auto *scene_asset = asset_man.get_scene(loading_scene_uuid);
+                scene_asset->import_module<Runtime>();
+                self.active_scene_uuid = loading_scene_uuid;
             }
         }
     }

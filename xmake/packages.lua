@@ -1,3 +1,5 @@
+add_repositories("local repo", {rootdir = os.scriptdir()})
+
 local fmt_version = "11.2.0"
 local fmt_configs = { header_only = false, shared = false }
 add_requires("fmt " .. fmt_version, { configs = fmt_configs, system = false })
@@ -53,13 +55,13 @@ add_requires("flecs v4.0.4")
 
 add_requires("libsdl3")
 
-add_requires("shader-slang v2025.12.1")
-add_requires("vuk 2025.07.09", { configs = {
+add_requires("shader-slang v2025.15")
+add_requires("vuk 2025.09.01", { configs = {
     debug_allocations = false,
     disable_exceptions = false,
 }, debug = is_mode("debug") })
 
 add_requires("meshoptimizer v0.24")
-add_requires("ktx v4.4.0")
+add_requires("ktx v4.4.0", { debug = is_plat("windows") })
 
 add_requires("svector v1.0.3")

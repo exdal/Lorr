@@ -45,22 +45,22 @@ public func BRDF(f32x3 V, f32x3 N, f32x3 L, f32x3 albedo, f32 roughness, f32 met
     f32 NoH = max(dot(N, H), 0.0);
     f32 LoH = max(dot(L, H), 0.0);
 
-    const f32 reflectance = 0.5;
-    f32x3 F0 = 0.16 * reflectance * reflectance * (1.0 - metallic) + albedo * metallic;
+    let reflectance = 0.04;
+    let F0 = 0.16 * reflectance * reflectance * (1.0 - metallic) + albedo * metallic;
 
     // Microfacet
-    f32 roughness2 = roughness * roughness;
-    f32 D = D_GGX(NoH, roughness2);
-    f32x3 G2 = Smith_G2_Height_Correlated_GGX_Lagarde(NoV, NoL, roughness2);
-    f32x3 F = F_Schlick(LoH, F0);
-
-    f32x3 comp = GGX_energy_compensation(NoV, roughness2, F0);
+    let roughness2 = roughness * roughness;
+    let D = D_GGX(NoH, roughness2);
+    let G2 = Smith_G2_Height_Correlated_GGX_Lagarde(NoV, NoL, roughness2);
+    let F = F_Schlick(LoH, F0);
+    let J = GGX_energy_compensation(NoV, roughness2, F0);
 
     // Reflectance (Cook-Torrance)
     // V already divided by denominator
-    f32x3 specular = F * D * G2;
+    let specular = F * D * G2;
     // Diffuse
-    f32x3 diffuse = (1.0 - metallic) * albedo * Fd_Lambert();
+    let kd = (1.0 - metallic) * (1.0 - F);
+    let diffuse = kd * albedo * Fd_Lambert();
     // Frensel combination
-    return diffuse + specular * comp;
+    return (diffuse + specular) * J;
 }

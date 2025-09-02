@@ -40,9 +40,6 @@ namespace fs = std::filesystem;
 #include <fmt/format.h>
 #include <fmt/std.h>
 
-#include "Engine/Math/Quat.hh"
-#include "Engine/Math/Rotation.hh"
-
 #include "Core/Logger.hh"
 #include <ankerl/unordered_dense.h>
 #include <plf_colony.h>

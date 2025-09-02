@@ -93,6 +93,8 @@ auto Window::init(this Window &self) -> bool {
     }
 
     if (self.flags & WindowFlag::Fullscreen) {
+        self.width = self.display->resolution.x;
+        self.height = self.display->resolution.y;
         window_flags |= SDL_WINDOW_FULLSCREEN;
     }
 
@@ -111,6 +113,7 @@ auto Window::init(this Window &self) -> bool {
 
     SDL_GetWindowSizeInPixels(self.handle, &self.width, &self.height);
     SDL_StartTextInput(self.handle);
+
     self.cursors = {
         SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_DEFAULT),     SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_TEXT),
         SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_MOVE),        SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_NS_RESIZE),
@@ -139,6 +142,7 @@ auto Window::destroy(this Window &self) -> void {
 auto Window::update(this Window &self, f64) -> void {
     ZoneScoped;
 
+    self.mouse_moved = false;
     SDL_Event e = {};
     while (SDL_PollEvent(&e) != 0) {
         switch (e.type) {
@@ -146,8 +150,26 @@ auto Window::update(this Window &self, f64) -> void {
                 auto &device = App::mod<Device>();
 
                 device.wait();
+                self.width = e.window.data1;
+                self.height = e.window.data2;
+
                 auto surface = self.get_surface(device.get_instance());
                 self.swap_chain = device.create_swap_chain(surface, std::move(self.swap_chain)).value();
+
+                self.set_relative_mouse(SDL_GetWindowRelativeMouseMode(self.handle));
+            } break;
+            case SDL_EVENT_KEY_DOWN: {
+                auto state = KeyState::Up;
+                state |= e.key.down ? KeyState::Down : KeyState::Up;
+                state |= e.key.repeat ? KeyState::Repeat : KeyState::Up;
+                self.key_events[e.key.scancode] = { .key = e.key.key, .mod = e.key.mod, .state = state };
+            } break;
+            case SDL_EVENT_KEY_UP: {
+                self.key_events[e.key.scancode] = { .key = e.key.key, .mod = e.key.mod, .state = KeyState::Up };
+            } break;
+            case SDL_EVENT_MOUSE_MOTION: {
+                self.mouse_pos = glm::vec2(e.motion.x, e.motion.y);
+                self.mouse_moved = true;
             } break;
             case SDL_EVENT_QUIT: {
                 App::close();
@@ -159,6 +181,33 @@ auto Window::update(this Window &self, f64) -> void {
             cb(e);
         }
     }
+}
+
+auto Window::check_key_state(this Window &self, SDL_Scancode scancode, KeyState state) -> bool {
+    auto it = self.key_events.find(scancode);
+    if (it == self.key_events.end()) {
+        return state == KeyState::Up;
+    }
+
+    return it->second.state & state;
+}
+
+auto Window::set_relative_mouse(this Window &self, bool enabled) -> void {
+    ZoneScoped;
+
+    auto warp_rect = SDL_Rect{ .x = self.width / 2, .y = self.height / 2, .w = 1, .h = 1 };
+    SDL_SetWindowMouseRect(self.handle, enabled ? &warp_rect : nullptr);
+
+    SDL_SetWindowRelativeMouseMode(self.handle, enabled);
+}
+
+auto Window::get_delta_mouse_pos(this Window &) -> glm::vec2 {
+    ZoneScoped;
+
+    auto result = glm::vec2();
+    SDL_GetRelativeMouseState(&result.x, &result.y);
+
+    return result;
 }
 
 auto Window::set_cursor(this Window &self, WindowCursor cursor) -> void {

@@ -8,6 +8,7 @@ namespace lr {
 struct FramePrepareInfo {
     u32 mesh_instance_count = 0;
     u32 max_meshlet_instance_count = 0;
+    bool regenerate_sky = false;
 
     ls::span<GPU::TransformID> dirty_transform_ids = {};
     ls::span<GPU::Transforms> gpu_transforms = {};
@@ -24,16 +25,18 @@ struct FramePrepareInfo {
 
 struct PreparedFrame {
     u32 mesh_instance_count = 0;
+    u32 max_meshlet_instance_count = 0;
     GPU::EnvironmentFlags environment_flags = GPU::EnvironmentFlags::None;
     vuk::Value<vuk::Buffer> transforms_buffer = {};
     vuk::Value<vuk::Buffer> meshes_buffer = {};
     vuk::Value<vuk::Buffer> mesh_instances_buffer = {};
-    vuk::Value<vuk::Buffer> meshlet_instances_buffer = {};
-    vuk::Value<vuk::Buffer> visible_meshlet_instances_indices_buffer = {};
-    vuk::Value<vuk::Buffer> reordered_indices_buffer = {};
+    vuk::Value<vuk::Buffer> mesh_instance_visibility_mask_buffer = {};
+    vuk::Value<vuk::Buffer> meshlet_instance_visibility_mask_buffer = {};
     vuk::Value<vuk::Buffer> materials_buffer = {};
     vuk::Value<vuk::Buffer> environment_buffer = {};
     vuk::Value<vuk::Buffer> camera_buffer = {};
+    vuk::Value<vuk::ImageAttachment> sky_transmittance_lut = {};
+    vuk::Value<vuk::ImageAttachment> sky_multiscatter_lut = {};
 };
 
 struct SceneRenderInfo {
@@ -53,11 +56,11 @@ struct SceneRenderer {
 
     Buffer mesh_instances_buffer = {};
     Buffer meshes_buffer = {};
+    Buffer mesh_instance_visibility_mask_buffer = {};
+    Buffer meshlet_instance_visibility_mask_buffer = {};
 
     Buffer materials_buffer = {};
 
-    // Then what are they?
-    // TODO: Per scene sky settings
     Image sky_transmittance_lut = {};
     ImageView sky_transmittance_lut_view = {};
     Image sky_multiscatter_lut = {};
@@ -69,11 +72,11 @@ struct SceneRenderer {
     ImageView hiz_view = {};
 
     bool debug_lines = false;
+    f32 overdraw_heatmap_scale = 0.0f;
 
     auto init(this SceneRenderer &) -> bool;
     auto destroy(this SceneRenderer &) -> void;
 
-    // Scene
     auto prepare_frame(this SceneRenderer &, FramePrepareInfo &info) -> PreparedFrame;
     auto render(this SceneRenderer &, vuk::Value<vuk::ImageAttachment> &&dst_attachment, SceneRenderInfo &render_info, PreparedFrame &frame)
         -> vuk::Value<vuk::ImageAttachment>;

@@ -40,5 +40,5 @@ func vs_main(VertexInput input) -> VertexOutput {
 
 [[shader("fragment")]]
 func fs_main(VertexOutput input) -> f32x4 {
-    return texture.sample(sampler, input.tex_coord) * input.color;
+    return texture.Sample(sampler, input.tex_coord) * input.color;
 }

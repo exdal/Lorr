@@ -80,10 +80,6 @@ static auto draw_inspector(InspectorWindow &) -> void {
         }
 
         lr::ECS::ComponentWrapper component(selected_entity, component_id);
-        if (!component.is_component()) {
-            return;
-        }
-
         auto name_with_icon = stack.format_char("{}", component.name);
         ImGui::PushID(static_cast<i32>(component_id));
         if (ImGui::CollapsingHeader(name_with_icon, nullptr, ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -95,43 +91,45 @@ static auto draw_inspector(InspectorWindow &) -> void {
             ImGui::TableSetupColumn("label", 0, 0.5f);
             ImGui::TableSetupColumn("property", ImGuiTableColumnFlags_WidthStretch);
 
-            ImGui::PushID(component.members_data);
-            component.for_each([&](usize &i, std::string_view member_name, lr::ECS::ComponentWrapper::Member &member) {
-                // Draw prop label
-                ImGui::TableNextRow();
-                ImGui::TableNextColumn();
+            if (component.is_component()) {
+                ImGui::PushID(component.members_data);
+                component.for_each([&](usize &i, std::string_view member_name, lr::ECS::ComponentWrapper::Member &member) {
+                    // Draw prop label
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
 
-                ImGui::SetCursorPosY(ImGui::GetCursorPosY() + ImGui::GetStyle().FramePadding.y);
-                ImGui::TextUnformatted(member_name.data(), member_name.data() + member_name.length());
-                ImGui::TableNextColumn();
+                    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + ImGui::GetStyle().FramePadding.y);
+                    ImGui::TextUnformatted(member_name.data(), member_name.data() + member_name.length());
+                    ImGui::TableNextColumn();
 
-                bool component_modified = false;
-                ImGui::PushID(static_cast<i32>(i));
-                std::visit(
-                    ls::match{
-                        [](const auto &) {},
-                        [&](bool *v) { component_modified |= ImGui::Checkbox("", v); },
-                        [&](f32 *v) { component_modified |= ImGui::drag_vec(0, v, 1, ImGuiDataType_Float); },
-                        [&](i32 *v) { component_modified |= ImGui::drag_vec(0, v, 1, ImGuiDataType_S32); },
-                        [&](u32 *v) { component_modified |= ImGui::drag_vec(0, v, 1, ImGuiDataType_U32); },
-                        [&](i64 *v) { component_modified |= ImGui::drag_vec(0, v, 1, ImGuiDataType_S64); },
-                        [&](u64 *v) { component_modified |= ImGui::drag_vec(0, v, 1, ImGuiDataType_U64); },
-                        [&](glm::vec2 *v) { component_modified |= ImGui::drag_vec(0, glm::value_ptr(*v), 2, ImGuiDataType_Float); },
-                        [&](glm::vec3 *v) { component_modified |= ImGui::drag_vec(0, glm::value_ptr(*v), 3, ImGuiDataType_Float); },
-                        [&](glm::vec4 *v) { component_modified |= ImGui::drag_vec(0, glm::value_ptr(*v), 4, ImGuiDataType_Float); },
-                        [](std::string *v) { ImGui::InputText("", v); },
-                        [&](lr::UUID *v) { component_modified |= inspect_asset(*v); },
-                    },
-                    member
-                );
+                    bool component_modified = false;
+                    ImGui::PushID(static_cast<i32>(i));
+                    std::visit(
+                        ls::match{
+                            [](const auto &) {},
+                            [&](bool *v) { component_modified |= ImGui::Checkbox("", v); },
+                            [&](f32 *v) { component_modified |= ImGui::drag_vec(0, v, 1, ImGuiDataType_Float); },
+                            [&](i32 *v) { component_modified |= ImGui::drag_vec(0, v, 1, ImGuiDataType_S32); },
+                            [&](u32 *v) { component_modified |= ImGui::drag_vec(0, v, 1, ImGuiDataType_U32); },
+                            [&](i64 *v) { component_modified |= ImGui::drag_vec(0, v, 1, ImGuiDataType_S64); },
+                            [&](u64 *v) { component_modified |= ImGui::drag_vec(0, v, 1, ImGuiDataType_U64); },
+                            [&](glm::vec2 *v) { component_modified |= ImGui::drag_vec(0, glm::value_ptr(*v), 2, ImGuiDataType_Float); },
+                            [&](glm::vec3 *v) { component_modified |= ImGui::drag_vec(0, glm::value_ptr(*v), 3, ImGuiDataType_Float); },
+                            [&](glm::vec4 *v) { component_modified |= ImGui::drag_vec(0, glm::value_ptr(*v), 4, ImGuiDataType_Float); },
+                            [](std::string *v) { ImGui::InputText("", v); },
+                            [&](lr::UUID *v) { component_modified |= inspect_asset(*v); },
+                        },
+                        member
+                    );
+                    ImGui::PopID();
+
+                    if (component_modified) {
+                        selected_entity.modified(component_id.entity());
+                    }
+                });
                 ImGui::PopID();
+            }
 
-                if (component_modified) {
-                    selected_entity.modified(component_id.entity());
-                }
-            });
-
-            ImGui::PopID();
             ImGui::EndTable();
 
             if (ImGui::Button("Remove Component", ImVec2(region.x, 0))) {
@@ -150,8 +148,7 @@ static auto draw_inspector(InspectorWindow &) -> void {
     ImGui::SetNextWindowPos(ImGui::GetCursorScreenPos());
     ImGui::SetNextWindowSize({ region.x, 0 });
     if (ImGui::BeginPopup("add_component")) {
-        auto &entity_db = active_scene->get_entity_db();
-        auto all_components = entity_db.get_components();
+        auto all_components = active_scene->get_known_component_ids();
         for (const auto &component : all_components) { //
             lr::memory::ScopedStack stack;
             ImGui::PushID(static_cast<i32>(component.raw_id()));

@@ -24,11 +24,12 @@ ECS_COMPONENT_END();
 ECS_COMPONENT_BEGIN(Camera)
     ECS_COMPONENT_MEMBER(fov, f32, 90.0f)
     ECS_COMPONENT_MEMBER(resolution, glm::vec2, {})
-    ECS_COMPONENT_MEMBER(aspect_ratio, f32, 1.777f)
     ECS_COMPONENT_MEMBER(near_clip, f32, 0.1f)
     ECS_COMPONENT_MEMBER(far_clip, f32, 1000.0f)
-    ECS_COMPONENT_MEMBER(axis_velocity, glm::vec3, { 0.0, 0.0, 0.0 })
-    ECS_COMPONENT_MEMBER(velocity_mul, f32, 1.0)
+    ECS_COMPONENT_MEMBER(velocity, glm::vec3, { 0.0, 0.0, 0.0 })
+    ECS_COMPONENT_MEMBER(max_velocity, f32, 1.0f)
+    ECS_COMPONENT_MEMBER(accel_speed, f32, 1.0f)
+    ECS_COMPONENT_MEMBER(decel_speed, f32, 1.0f)
     ECS_COMPONENT_MEMBER(frustum_projection_view_mat, glm::mat4, glm::mat4(1.0))
     ECS_COMPONENT_MEMBER(acceptable_lod_error, f32, 2.0f)
 ECS_COMPONENT_END();
@@ -36,7 +37,6 @@ ECS_COMPONENT_END();
 ECS_COMPONENT_TAG(PerspectiveCamera);
 ECS_COMPONENT_TAG(OrthographicCamera);
 ECS_COMPONENT_TAG(ActiveCamera);
-ECS_COMPONENT_TAG(EditorCamera);
 
 ECS_COMPONENT_BEGIN(RenderingMesh)
     ECS_COMPONENT_MEMBER(model_uuid, UUID, {})
@@ -65,8 +65,5 @@ ECS_COMPONENT_BEGIN(Environment)
     ECS_COMPONENT_MEMBER(eye_iso, f32, 100.0f)
     ECS_COMPONENT_MEMBER(eye_k, f32, 12.5f)
 ECS_COMPONENT_END();
-
-// Any entity with this tag won't be serialized
-ECS_COMPONENT_TAG(Hidden);
 
 // clang-format on

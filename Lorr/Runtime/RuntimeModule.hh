@@ -5,6 +5,7 @@
 struct RuntimeModule {
     static constexpr auto MODULE_NAME = "Runtime";
 
+    bool debugging = false;
     fs::path world_path = {};
     lr::UUID active_scene_uuid = lr::UUID(nullptr);
 

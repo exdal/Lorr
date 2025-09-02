@@ -25,16 +25,6 @@ struct ankerl::unordered_dense::hash<flecs::entity> {
 };
 
 namespace lr {
-struct SceneEntityDB {
-    ankerl::unordered_dense::map<flecs::id, std::string_view> component_icons = {};
-    std::vector<flecs::id> components = {};
-    std::vector<flecs::entity> imported_modules = {};
-
-    auto import_module(this SceneEntityDB &, flecs::entity module) -> void;
-    auto is_component_known(this SceneEntityDB &, flecs::id component_id) -> bool;
-    auto get_components(this SceneEntityDB &) -> ls::span<flecs::id>;
-};
-
 struct AssetManager;
 enum class SceneID : u64 { Invalid = ~0_u64 };
 struct Scene {
@@ -42,33 +32,42 @@ private:
     std::string name = {};
     flecs::entity root = {};
     ls::option<flecs::world> world = ls::nullopt;
-    SceneEntityDB entity_db = {};
-    flecs::entity editor_camera = {};
+    std::vector<flecs::id> known_component_ids = {};
 
     SlotMap<GPU::Transforms, GPU::TransformID> transforms = {};
     ankerl::unordered_dense::map<flecs::entity, GPU::TransformID> entity_transforms_map = {};
     ankerl::unordered_dense::map<ls::pair<UUID, usize>, std::vector<GPU::TransformID>> rendering_meshes_map = {};
-
     std::vector<GPU::TransformID> dirty_transforms = {};
+
+    std::vector<GPU::Material> gpu_materials = {};
+
     bool models_dirty = false;
     u32 mesh_instance_count = 0;
     u32 max_meshlet_instance_count = 0;
 
     GPU::CullFlags cull_flags = GPU::CullFlags::All;
 
+    GPU::Environment last_environment = {};
+
 public:
     auto init(this Scene &, const std::string &name) -> bool;
     auto destroy(this Scene &) -> void;
+
+    template<typename T>
+    auto import_module(this Scene &self) -> void {
+        ZoneScoped;
+
+        return self.import_module(self.world->import <T>());
+    }
+    auto import_module(this Scene &, flecs::entity module_entity) -> void;
+    auto is_component_known(this Scene &, flecs::id component_id) -> bool;
 
     auto import_from_file(this Scene &, const fs::path &path) -> bool;
     auto export_to_file(this Scene &, const fs::path &path) -> bool;
 
     auto create_entity(this Scene &, const std::string &name = {}) -> flecs::entity;
     auto delete_entity(this Scene &, flecs::entity entity) -> void;
-    // clang-format off
-    auto create_perspective_camera(this Scene &, const std::string &name, const glm::vec3 &position, const glm::vec3 &rotation, f32 fov, f32 aspect_ratio) -> flecs::entity;
-    // clang-format on
-    auto create_editor_camera(this Scene &) -> void;
+    auto create_perspective_camera(this Scene &, const std::string &name, const glm::vec3 &position, f32 yaw, f32 pitch, f32 fov) -> flecs::entity;
     // Model = collection of meshes.
     // This function imports every mesh inside the model asset.
     // The returning entity is a parent, "model" entity where each of
@@ -79,7 +78,8 @@ public:
     auto find_entity(this Scene &, std::string_view name) -> flecs::entity;
     auto find_entity(this Scene &, u32 transform_index) -> flecs::entity;
 
-    auto prepare_frame(this Scene &, SceneRenderer &renderer) -> PreparedFrame;
+    // If we really want to render something, camera needs to be there
+    auto prepare_frame(this Scene &, SceneRenderer &renderer, ls::option<GPU::Camera> override_camera = ls::nullopt) -> PreparedFrame;
     auto tick(this Scene &, f32 delta_time) -> bool;
 
     auto set_name(this Scene &, const std::string &name) -> void;
@@ -87,11 +87,13 @@ public:
 
     auto get_root(this Scene &) -> flecs::entity;
     auto get_world(this Scene &) -> flecs::world &;
-    auto get_editor_camera(this Scene &) -> flecs::entity;
     auto get_name(this Scene &) -> const std::string &;
     auto get_name_sv(this Scene &) -> std::string_view;
-    auto get_entity_db(this Scene &) -> SceneEntityDB &;
     auto get_cull_flags(this Scene &) -> GPU::CullFlags &;
+
+    auto get_known_component_ids(this Scene &self) -> auto {
+        return ls::span(self.known_component_ids);
+    }
 
 private:
     auto add_transform(this Scene &, flecs::entity entity) -> GPU::TransformID;

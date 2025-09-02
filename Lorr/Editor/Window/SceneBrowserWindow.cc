@@ -25,7 +25,6 @@ static auto draw_children(SceneBrowserWindow &self, flecs::entity root) -> void 
     auto q = world //
                  .query_builder()
                  .with(flecs::ChildOf, root)
-                 .without<lr::ECS::Hidden>()
                  .build();
 
     ImGui::TableNextRow();

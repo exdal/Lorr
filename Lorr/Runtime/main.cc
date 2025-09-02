@@ -18,10 +18,17 @@ i32 main(i32 argc, c8 **argv) {
 
     lr::Window::init_sdl();
     auto primary_display = lr::Window::display_at(0).value();
+    auto window_info = lr::WindowInfo{
+        .title = "Example Game",
+        .display = &primary_display,
+        .width = 1720,
+        .height = 880,
+        .flags = lr::WindowFlag::Fullscreen,
+    };
 
     lr::AppBuilder() //
-        .module<lr::Device>(3)
-        .module<lr::Window>(lr::WindowInfo{ .title = "Example Game", .width = 1720, .height = 880, .flags = lr::WindowFlag::Centered })
+        .module<lr::Device>(1)
+        .module<lr::Window>(window_info)
         .module<lr::AssetManager>()
         .module<lr::ImGuiRenderer>()
         .module<lr::SceneRenderer>()

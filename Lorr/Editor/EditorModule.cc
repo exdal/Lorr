@@ -365,12 +365,14 @@ static auto draw_welcome_popup(EditorModule &self) -> void {
     ZoneScoped;
 
     auto &window = lr::App::mod<lr::Window>();
-    ImGui::SetNextWindowSize({ 480.0f, 350.0f }, ImGuiCond_Appearing);
+    auto center_window = glm::vec2(window.get_size()) * 0.5f;
+    ImGui::SetNextWindowSize({ 480.0f, 350.0f }, ImGuiCond_Always);
+    ImGui::SetNextWindowPos({ center_window.x, center_window.y }, ImGuiCond_Always, { 0.5f, 0.5f });
     constexpr auto popup_flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings;
     if (ImGui::BeginPopupModal("###welcome", nullptr, popup_flags)) {
         //  ── HEADERS ─────────────────────────────────────────────────────────
         ImGui::TextUnformatted("placeholder");
-        ImGui::InvisibleButton("placeholder", { 0.0f, 75.0f });
+        ImGui::InvisibleButton("placeholder", { -FLT_MAX, 75.0f });
 
         //  ── SECTIONS ────────────────────────────────────────────────────────
         if (ImGui::BeginTabBar("project_guide")) {

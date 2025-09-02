@@ -34,8 +34,8 @@ auto Device::init(this Device &self) -> bool {
     instance_builder.set_engine_version(1, 0, 0);
     instance_builder.enable_validation_layers(false); // use vkconfig ui...
     instance_builder.request_validation_layers(false);
-    // instance_builder.add_debug_messenger_severity(VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT);
-    // instance_builder.add_debug_messenger_type(VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT);
+    instance_builder.add_debug_messenger_severity(VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT);
+    instance_builder.add_debug_messenger_type(VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT);
     instance_builder.set_debug_callback(
         [](VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
            VkDebugUtilsMessageTypeFlagsEXT messageType,
@@ -286,23 +286,6 @@ auto Device::init_resources(this Device &self) -> std::expected<void, vuk::VkExc
     };
     self.resources.descriptor_set = self.create_persistent_descriptor_set(1, bindless_set_info, bindless_set_binding_flags);
 
-    auto invalid_image_info = ImageInfo{
-        .format = vuk::Format::eR8G8B8A8Unorm,
-        .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage,
-        .type = vuk::ImageType::e2D,
-        .extent = vuk::Extent3D(1_u32, 1_u32, 1_u32),
-        .name = "Invalid Placeholder Image",
-    };
-    auto [invalid_image, invalid_image_view] = Image::create_with_view(self, invalid_image_info).value();
-
-    auto invalid_image_data = 0xFFFFFFFF_u32;
-    auto fut = self.transfer_manager.upload_staging(invalid_image_view, &invalid_image_data, sizeof(u32));
-    fut = fut.as_released(vuk::Access::eFragmentSampled, vuk::DomainFlagBits::eGraphicsQueue);
-    self.transfer_manager.wait_on(std::move(fut));
-
-    auto invalid_sampler_info = SamplerInfo{};
-    std::ignore = Sampler::create(self, invalid_sampler_info).value();
-
     return {};
 }
 
@@ -497,7 +480,6 @@ auto Device::create_swap_chain(this Device &self, VkSurfaceKHR surface, ls::opti
     -> std::expected<vuk::Swapchain, vuk::VkException> {
     ZoneScoped;
 
-    VkPresentModeKHR present_mode = self.frame_count() == 1 ? VK_PRESENT_MODE_FIFO_KHR : VK_PRESENT_MODE_IMMEDIATE_KHR;
     vkb::SwapchainBuilder builder(self.handle, surface);
     builder.set_desired_min_image_count(self.frame_count());
     builder.set_desired_format(
@@ -512,7 +494,14 @@ auto Device::create_swap_chain(this Device &self, VkSurfaceKHR surface, ls::opti
             .colorSpace = vuk::ColorSpaceKHR::eSrgbNonlinear,
         }
     );
-    builder.set_desired_present_mode(present_mode);
+
+    if (self.frame_count() != 1) {
+        builder.set_desired_present_mode(VK_PRESENT_MODE_MAILBOX_KHR);
+        builder.add_fallback_present_mode(VK_PRESENT_MODE_IMMEDIATE_KHR);
+    } else {
+        builder.set_desired_present_mode(VK_PRESENT_MODE_FIFO_KHR);
+    }
+    builder.add_fallback_present_mode(VK_PRESENT_MODE_FIFO_KHR);
     builder.set_image_usage_flags(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
 
     auto recycling = false;

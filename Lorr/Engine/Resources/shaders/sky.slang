@@ -172,15 +172,15 @@ public struct AtmosphereIntegrateInfo {
     public constexpr bool eval_mie_phase = true;
     public constexpr bool eval_rayleigh_phase = true;
     public constexpr bool eval_planet_luminance = false;
-
-    public Image2D<f32x4> transmittance_image = {};
-    public Optional<Image2D<f32x4>> multiscattering_image = none;
+    public constexpr bool eval_multiscattering = false;
 };
 
 public func integrate_single_scattered_luminance(
+    in AtmosphereIntegrateInfo info,
     in Environment environment,
     in Sampler lut_sampler,
-    in AtmosphereIntegrateInfo info
+    in Image2D<f32x4> transmittance_image = {},
+    in Image2D<f32x4> multiscattering_image = {}
 ) -> AtmosphereLuminance {
     AtmosphereLuminance result = {};
 
@@ -242,20 +242,18 @@ public func integrate_single_scattered_luminance(
         let medium_info = MediumScattering(environment, altitude);
 
         f32x3 up_vec = normalize(step_pos);
-        f32x3 up_vec_scaled = PLANET_RADIUS_OFFSET * up_vec;
-        f32 earth_shadow = std::ray_sphere_intersect_nearest(
-            step_pos - up_vec_scaled, info.sun_dir, environment.atmos_planet_radius).hasValue ? 0.0 : 1.0;
+        f32 earth_shadow = std::ray_sphere_intersect_nearest(step_pos, info.sun_dir, environment.atmos_planet_radius).hasValue ? 0.0 : 1.0;
         f32 sun_theta = dot(info.sun_dir, up_vec);
 
         f32x2 transmittance_uv = transmittance_params_to_lut_uv(
             environment.atmos_atmos_radius, environment.atmos_planet_radius, f32x2(h, sun_theta));
-        f32x3 sun_transmittance = info.transmittance_image.sample_mip(lut_sampler, transmittance_uv, 0.0).rgb;
+        f32x3 sun_transmittance = transmittance_image.SampleLevel(lut_sampler, transmittance_uv, 0.0).rgb;
 
         f32x3 MS = 0.0;
-        if (info.multiscattering_image.hasValue) {
+        if (info.eval_multiscattering) {
             f32x2 multiscatter_uv = multiscattering_params_to_lut_uv(
                 environment.atmos_atmos_radius, environment.atmos_planet_radius, environment.multiscattering_lut_size.xy, altitude, sun_theta);
-            MS = info.multiscattering_image.value.sample_mip(lut_sampler, multiscatter_uv, 0.0).rgb;
+            MS = multiscattering_image.SampleLevel(lut_sampler, multiscatter_uv, 0.0).rgb;
         }
 
         f32x3 scattering_phase = 0.0;
@@ -275,6 +273,10 @@ public func integrate_single_scattered_luminance(
         f32x3 integral = (sun_luminance - sun_luminance * step_transmittance) / medium_info.extinction_sum;
         f32x3 ms_integral = (medium_info.scattering_sum - medium_info.scattering_sum * step_transmittance) / medium_info.extinction_sum;
 
+        let extinction_zero = medium_info.extinction_sum == f32x3(0.0);
+        integral = select(extinction_zero, f32x3(0.0), integral);
+        ms_integral = select(extinction_zero, f32x3(0.0), ms_integral);
+
         result.luminance += info.sun_intensity * (integral * result.transmittance);
         result.multiscattering_as_1 += ms_integral * result.transmittance;
         result.transmittance *= step_transmittance;
@@ -289,7 +291,7 @@ public func integrate_single_scattered_luminance(
         f32 NoL = saturate(dot(normalize(info.sun_dir), normalize(up_vec)));
 
         f32x2 transmittance_uv = transmittance_params_to_lut_uv(environment.atmos_atmos_radius, environment.atmos_planet_radius, f32x2(h, sun_theta));
-        f32x3 sun_transmittance = info.transmittance_image.sample_mip(lut_sampler, transmittance_uv, 0.0).rgb;
+        f32x3 sun_transmittance = transmittance_image.SampleLevel(lut_sampler, transmittance_uv, 0.0).rgb;
 
         result.luminance += info.sun_intensity * (sun_transmittance * result.transmittance * NoL * environment.atmos_terrain_albedo / PI);
     }
@@ -327,7 +329,7 @@ public func sample_aerial_perspective(
 #if 0
     return f32x4(relative_depth, linear_slice, non_linear_w, linear_w);
 #endif
-    f32x4 aerial_perspective = aerial_perspective_lut.sample_mip(sampler, f32x3(uv, non_linear_w), 0.0);
+    f32x4 aerial_perspective = aerial_perspective_lut.SampleLevel(sampler, f32x3(uv, non_linear_w), 0.0);
     aerial_perspective.xyz *= weight;
     aerial_perspective.w = 1.0 - (weight * (1.0 - aerial_perspective.w));
 

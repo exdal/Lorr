@@ -74,7 +74,9 @@ func cs_main(
     sum_weight += bottom_left_weight;
     sum_weight += bottom_right_weight;
 
-    let denoised_visibility = sum / sum_weight;
+    var denoised_visibility = sum / sum_weight;
+    let power = 2.0;
+    denoised_visibility = pow(max(denoised_visibility, 0.0f), power);
 
     params.ambient_occlusion.Store(pixel_coordinates, denoised_visibility);
 }

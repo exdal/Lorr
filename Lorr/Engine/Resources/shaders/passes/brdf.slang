@@ -46,7 +46,7 @@ func fs_main(VertexOutput input) -> f32x4 {
     let roughness = metallic_roughness_occlusion.y;
     let baked_occlusion = metallic_roughness_occlusion.z;
     let screen_space_occlusion = params.ambient_occlusion.Load(pixel_pos).r;
-    let occlusion = min(baked_occlusion, screen_space_occlusion);
+    let occlusion = baked_occlusion * screen_space_occlusion;
 
     let NDC = f32x3(input.tex_coord * 2.0 - 1.0, depth);
     let world_position_h = mul(params.camera.inv_projection_view_mat, f32x4(NDC, 1.0));

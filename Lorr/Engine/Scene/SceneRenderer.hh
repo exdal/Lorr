@@ -34,6 +34,7 @@ struct PreparedFrame {
     vuk::Value<vuk::Buffer> materials_buffer = {};
     vuk::Value<vuk::Buffer> environment_buffer = {};
     vuk::Value<vuk::Buffer> camera_buffer = {};
+    vuk::Value<vuk::Buffer> directional_camera_buffer = {};
     vuk::Value<vuk::ImageAttachment> sky_transmittance_lut = {};
     vuk::Value<vuk::ImageAttachment> sky_multiscatter_lut = {};
 };
@@ -68,6 +69,9 @@ struct SceneRenderer {
 
     Image hiz = {};
     ImageView hiz_view = {};
+
+    Image hilbert_noise_lut = {};
+    ImageView hilbert_noise_lut_view = {};
 
     bool debug_lines = false;
     f32 overdraw_heatmap_scale = 0.0f;

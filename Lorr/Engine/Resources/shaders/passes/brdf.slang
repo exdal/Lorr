@@ -14,6 +14,7 @@ struct ShaderParameters {
     Image2D<f32x4> sky_transmittance_lut;
     Image2D<f32x4> sky_multiscattering_lut;
     Image2D<f32> depth_image;
+    Image2D<f32> ambient_occlusion;
     Image2D<f32x4> albedo_image;
     Image2D<f32x4> normal_image;
     Image2D<f32x3> emissive_image;
@@ -43,7 +44,9 @@ func fs_main(VertexOutput input) -> f32x4 {
     let metallic_roughness_occlusion = params.metallic_roughness_occlusion_image.Load(pixel_pos);
     let metallic = metallic_roughness_occlusion.x;
     let roughness = metallic_roughness_occlusion.y;
-    let occlusion = metallic_roughness_occlusion.z;
+    let baked_occlusion = metallic_roughness_occlusion.z;
+    let screen_space_occlusion = params.ambient_occlusion.Load(pixel_pos).r;
+    let occlusion = min(baked_occlusion, screen_space_occlusion);
 
     let NDC = f32x3(input.tex_coord * 2.0 - 1.0, depth);
     let world_position_h = mul(params.camera.inv_projection_view_mat, f32x4(NDC, 1.0));
@@ -89,7 +92,7 @@ func fs_main(VertexOutput input) -> f32x4 {
         sky_luminance = std::rec709_oetf(sky_result.luminance) * eye_gradient;
     }
 
-    let ambient_contribution = sky_luminance * albedo_color * occlusion;
+    let indirect_illuminance = sky_luminance * albedo_color * occlusion;
 
     // MATERIAL COLOR ───────────────────────────────────────────────────
     // https://marmosetco.tumblr.com/post/81245981087
@@ -102,11 +105,11 @@ func fs_main(VertexOutput input) -> f32x4 {
     let NoL = max(dot(N, L), 0.0);
     if (NoL > 0.0) {
         let brdf = BRDF(V, N, L, albedo_color, roughness, metallic);
-        material_surface_color = brdf * horizon * sun_illuminance * NoL;
+        material_surface_color = brdf * horizon * sun_illuminance * NoL * occlusion;
     }
 
     // FINAL ────────────────────────────────────────────────────────────
-    let final_color = material_surface_color + ambient_contribution + emission;
+    let final_color = material_surface_color + indirect_illuminance + emission;
 
     return f32x4(final_color, 1.0);
 }

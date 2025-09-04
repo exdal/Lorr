@@ -430,7 +430,7 @@ auto Scene::create_model_entity(this Scene &self, UUID &importing_model_uuid) ->
     auto visit_nodes = [&](this auto &visitor, flecs::entity &root, std::vector<usize> &node_indices) -> void {
         for (const auto node_index : node_indices) {
             auto &cur_node = imported_model->nodes[node_index];
-            auto node_entity = self.create_entity(self.find_entity(cur_node.name) ? std::string{} : cur_node.name);
+            auto node_entity = self.create_entity();
 
             const auto T = glm::translate(glm::mat4(1.0f), cur_node.translation);
             const auto R = glm::mat4_cast(cur_node.rotation);
@@ -606,17 +606,16 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer, ls::option<
 
             auto &camera_data = active_camera_data.emplace(GPU::Camera{});
             camera_data.projection_mat = projection_mat;
+            camera_data.inv_projection_mat = glm::inverse(projection_mat);
             camera_data.view_mat = view_mat;
-            camera_data.projection_view_mat = camera_data.projection_mat * camera_data.view_mat;
             camera_data.inv_view_mat = glm::inverse(camera_data.view_mat);
+            camera_data.projection_view_mat = camera_data.projection_mat * camera_data.view_mat;
             camera_data.inv_projection_view_mat = glm::inverse(camera_data.projection_view_mat);
             camera_data.position = t.position;
             camera_data.near_clip = c.near_clip;
             camera_data.far_clip = c.far_clip;
             camera_data.resolution = c.resolution;
             camera_data.acceptable_lod_error = c.acceptable_lod_error;
-            camera_data.frustum_projection_view_mat = c.frustum_projection_view_mat;
-            c.frustum_projection_view_mat = camera_data.projection_view_mat;
         });
     }
 

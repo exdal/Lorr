@@ -30,7 +30,6 @@ ECS_COMPONENT_BEGIN(Camera)
     ECS_COMPONENT_MEMBER(max_velocity, f32, 1.0f)
     ECS_COMPONENT_MEMBER(accel_speed, f32, 1.0f)
     ECS_COMPONENT_MEMBER(decel_speed, f32, 1.0f)
-    ECS_COMPONENT_MEMBER(frustum_projection_view_mat, glm::mat4, glm::mat4(1.0))
     ECS_COMPONENT_MEMBER(acceptable_lod_error, f32, 2.0f)
 ECS_COMPONENT_END();
 

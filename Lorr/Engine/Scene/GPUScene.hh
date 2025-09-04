@@ -109,11 +109,11 @@ constexpr static f32 PLANET_RADIUS_OFFSET = 0.001;
 
 struct Camera {
     alignas(4) glm::mat4 projection_mat = {};
+    alignas(4) glm::mat4 inv_projection_mat = {};
     alignas(4) glm::mat4 view_mat = {};
-    alignas(4) glm::mat4 projection_view_mat = {};
     alignas(4) glm::mat4 inv_view_mat = {};
+    alignas(4) glm::mat4 projection_view_mat = {};
     alignas(4) glm::mat4 inv_projection_view_mat = {};
-    alignas(4) glm::mat4 frustum_projection_view_mat = {};
     alignas(4) glm::vec3 position = {};
     alignas(4) f32 near_clip = 0.01f;
     alignas(4) f32 far_clip = 1000.0f;

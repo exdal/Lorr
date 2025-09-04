@@ -156,6 +156,7 @@ auto Device::init(this Device &self) -> bool {
     vk10_features.features.shaderInt64 = true;
     vk10_features.features.multiDrawIndirect = true;
     vk10_features.features.samplerAnisotropy = true;
+    vk10_features.features.shaderImageGatherExtended = true;
 
     VkPhysicalDeviceMaintenance8FeaturesKHR maintenance_8_features = {};
     maintenance_8_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_8_FEATURES_KHR;

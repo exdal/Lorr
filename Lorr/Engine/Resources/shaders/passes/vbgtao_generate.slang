@@ -74,12 +74,12 @@ func load_and_reconstruct_view_space_position(
 
 func calculate_edges(
     i32x2 pixel_coord,
-    f32x2 uv,
+    in f32x2 resolution,
     in Texture2D<f32> src_depth,
     in SamplerState sampler_point_clamp,
     in RWTexture2D<u32> edges
 ) -> f32 {
-    // TODO: Replace gather
+    let uv = f32x2(pixel_coord) / resolution;
     let depths_upper_left = src_depth.GatherRed(sampler_point_clamp, uv);
     let depths_bottom_right = src_depth.GatherRed(sampler_point_clamp, uv, i32x2(1, 1));
     let depth_center = depths_upper_left.y;
@@ -153,7 +153,8 @@ func cs_main(
     let falloff_add = falloff_from / falloff_range + 1.0;
     
     let uv = (f32x2(pixel_coordinates) + 0.5) / params.camera.resolution;
-    var pixel_depth = calculate_edges(pixel_coordinates, uv, params.prefiltered_depth, params.point_clamp_sampler, params.depth_differences);
+    var pixel_depth = calculate_edges(
+        pixel_coordinates, params.camera.resolution, params.prefiltered_depth, params.point_clamp_sampler, params.depth_differences);
     pixel_depth += 0.00001;
     let pixel_position = reconstruct_view_space_position(uv, pixel_depth, params.camera);
     let pixel_normal = load_normal_view_space(uv, params.camera, params.normals, params.point_clamp_sampler);
@@ -189,8 +190,10 @@ func cs_main(
             let sample = s * sample_mul;
             
             let sample_mip_level = clamp(log2(length(sample * params.camera.resolution)) - 3.3, 0.0, 5.0); // https://github.com/GameTechDev/XeGTAO#memory-bandwidth-bottleneck
-            let sample_position_1 = load_and_reconstruct_view_space_position(uv + sample, sample_mip_level, params.camera, params.prefiltered_depth, params.linear_clamp_sampler);
-            let sample_position_2 = load_and_reconstruct_view_space_position(uv - sample, sample_mip_level, params.camera, params.prefiltered_depth, params.linear_clamp_sampler);
+            let sample_position_1 = load_and_reconstruct_view_space_position(
+                uv + sample, sample_mip_level, params.camera, params.prefiltered_depth, params.linear_clamp_sampler);
+            let sample_position_2 = load_and_reconstruct_view_space_position(
+                uv - sample, sample_mip_level, params.camera, params.prefiltered_depth, params.linear_clamp_sampler);
             
             let sample_difference_1 = sample_position_1 - pixel_position;
             let sample_difference_2 = sample_position_2 - pixel_position;

@@ -221,8 +221,16 @@ constexpr static u32 HISTOGRAM_THREADS_Y = 16;
 constexpr static u32 HISTOGRAM_BIN_COUNT = HISTOGRAM_THREADS_X * HISTOGRAM_THREADS_Y;
 
 struct HistogramLuminance {
-    f32 adapted_luminance = 0.0f;
-    f32 exposure = 0.0f;
+    alignas(4) f32 adapted_luminance = 0.0f;
+    alignas(4) f32 exposure = 0.0f;
+};
+
+struct VBGTAO {
+    alignas(4) f32 thickness = {};
+    alignas(4) f32 depth_range_scale_factor = {};
+    alignas(4) f32 default_radius = {};
+    alignas(4) f32 default_radius_multiplier = {};
+    alignas(4) f32 falloff_range = {};
 };
 
 } // namespace lr::GPU

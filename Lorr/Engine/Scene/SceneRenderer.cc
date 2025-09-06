@@ -1168,8 +1168,8 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
     depth_attachment = vuk::clear_image(std::move(depth_attachment), vuk::DepthZero);
 
     auto hiz_extent = vuk::Extent3D{
-        .width = (dst_attachment->extent.width + 63_u32) & ~63_u32,
-        .height = (dst_attachment->extent.height + 63_u32) & ~63_u32,
+        .width = (dst_attachment->extent.width + 1) >> 1,
+        .height = (dst_attachment->extent.height + 1) >> 1,
         .depth = 1,
     };
 
@@ -1580,6 +1580,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                     auto nearest_clamp_sampler = vuk::SamplerCreateInfo{
                         .magFilter = vuk::Filter::eNearest,
                         .minFilter = vuk::Filter::eNearest,
+                        .mipmapMode = vuk::SamplerMipmapMode::eNearest,
                         .addressModeU = vuk::SamplerAddressMode::eClampToEdge,
                         .addressModeV = vuk::SamplerAddressMode::eClampToEdge,
                         .addressModeW = vuk::SamplerAddressMode::eClampToEdge,

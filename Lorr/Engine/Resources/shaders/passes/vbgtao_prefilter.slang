@@ -48,7 +48,7 @@ func cs_main(
     int2 pixel_coordinates3 = pixel_coordinates0 + int2(1, 1);
 
     float2 depths_uv = float2(pixel_coordinates0) / f32x2(depth_extent.xy);
-    float4 depths = params.src_depth.Gather(params.point_clamp_sampler, depths_uv, int2(1,1));
+    float4 depths = params.src_depth.GatherRed(params.point_clamp_sampler, depths_uv, int2(1,1));
 
     params.dst_depth_mip0[pixel_coordinates0] = depths.w;
     params.dst_depth_mip0[pixel_coordinates1] = depths.z;

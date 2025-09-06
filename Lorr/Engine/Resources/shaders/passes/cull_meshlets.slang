@@ -61,7 +61,7 @@ func cs_main(
 
     if (LATE && visible && cull_occlusion) {
         if (let screen_aabb = project_aabb(mvp, camera.near_clip, bounds.aabb_center, bounds.aabb_extent)) {
-            visible = !test_occlusion(screen_aabb, hiz_image, hiz_sampler, false);
+            visible = !test_occlusion(screen_aabb, hiz_image, hiz_sampler);
 #ifdef DEBUG_DRAW
             if (visible) {
                 let ndc_aabb_max = screen_aabb.max.xy * 2.0 - 1.0;

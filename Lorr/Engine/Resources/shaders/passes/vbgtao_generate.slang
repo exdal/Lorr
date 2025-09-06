@@ -7,6 +7,8 @@ import std;
 import gpu;
 import scene;
 
+constexpr static let SECTOR_COUNT = 32u;
+
 struct ShaderParameters {
     ConstantBuffer<Camera> camera;
     Texture2D<f32> prefiltered_depth;
@@ -21,6 +23,7 @@ struct ShaderParameters {
 f32 fast_sqrt(f32 x) {
     return (asfloat( 0x1fbd1df5 + ( asint( x ) >> 1 ) ));
 }
+
 // input [-1, 1] and output [0, PI], from https://seblagarde.wordpress.com/2014/12/01/inverse-trigonometric-functions-gpu-optimization-for-amd-gcn-architecture/
 f32 fast_acos(f32 inX) { 
     f32 x = abs(inX); 
@@ -45,7 +48,7 @@ func load_normal_view_space(
     in SamplerState sampler_point_clamp
 ) -> f32x3 {
     let packed_normals = normals.SampleLevel(sampler_point_clamp, uv, 0.0);
-    var world_normal = std::oct_to_vec3(packed_normals.zw);
+    var world_normal = std::octahedral_decode(packed_normals.zw);
     world_normal = mul(camera.view_mat, f32x4(world_normal, 0.0)).xyz;
     return normalize(world_normal);
 }
@@ -55,21 +58,10 @@ func reconstruct_view_space_position(
     f32 depth,
     in Camera camera
 ) -> f32x3 {
-    let clip_xy = f32x2(uv.x * 2.0 - 1.0, 1.0 - 2.0 * uv.y);
+    let clip_xy = uv * 2.0 - 1.0;
     let t = mul(camera.inv_projection_mat, f32x4(clip_xy, depth, 1.0));
     let view_xyz = t.xyz / t.w;
     return view_xyz;
-}
-
-func load_and_reconstruct_view_space_position(
-    f32x2 uv,
-    f32 sample_mip_level,
-    in Camera camera,
-    in Texture2D<f32> src_depth,
-    in SamplerState sampler_linear_clamp
-) -> f32x3 {
-    let depth = src_depth.SampleLevel(sampler_linear_clamp, uv, sample_mip_level).r;
-    return reconstruct_view_space_position(uv, depth, camera);
 }
 
 func calculate_edges(
@@ -107,35 +99,37 @@ func calculate_edges(
 func updateSectors(
     f32 min_horizon,
     f32 max_horizon,
-    f32 samples_per_slice,
     u32 bitmask,
 ) -> u32 {
-    let start_horizon = u32(min_horizon * samples_per_slice);
-    let angle_horizon = u32(ceil((max_horizon - min_horizon) * samples_per_slice));
-    
-    return bitfieldInsert(bitmask, 0xFFFFFFFFu, start_horizon, angle_horizon);
+    let startHorizonInt = uint(min_horizon * float(SECTOR_COUNT));
+    // ceil: Sample needs to at least touch a sector to activate it
+    // round: Sample needs to cover at least half a sector to activate it
+    // floor: Sample needs to cover the entire sector to activate it
+    let angleHorizonInt = uint(ceil(saturate(max_horizon - min_horizon) * float(SECTOR_COUNT)));
+    let angleHorizonBitfield = angleHorizonInt > 0u ? (0xFFFFFFFFu >> (SECTOR_COUNT-angleHorizonInt)) : 0u;
+    let currentOccludedBitfield = angleHorizonBitfield << startHorizonInt;
+    return bitmask | currentOccludedBitfield;
 }
 
-func processSample(
+func calc_visibility_mask(
+    u32 bitmask,
     f32 thickness,
     f32x3 delta_position,
-    f32x3 view_vec,
+    f32x3 view_dir,
     f32 sampling_direction,
     f32x2 n,
-    f32 samples_per_slice,
-    inout u32 bitmask,
-) -> void {
-    let delta_position_back_face = delta_position - view_vec * thickness;
-    
+) -> u32 {
+    let delta_position_back_face = delta_position - view_dir * thickness;
+
     var front_back_horizon = f32x2(
-        fast_acos(dot(normalize(delta_position), view_vec)),
-        fast_acos(dot(normalize(delta_position_back_face), view_vec)),
+        fast_acos(dot(normalize(delta_position), view_dir)),
+        fast_acos(dot(normalize(delta_position_back_face), view_dir)),
     );
-    
-    front_back_horizon = saturate(fma(f32x2(sampling_direction), -front_back_horizon, n));
+
+    front_back_horizon = saturate(((sampling_direction * -front_back_horizon) + n + HALF_PI) / PI);
     front_back_horizon = select(sampling_direction >= 0.0, front_back_horizon.yx, front_back_horizon.xy);
-    
-    bitmask = updateSectors(front_back_horizon.x, front_back_horizon.y, samples_per_slice, bitmask);
+
+    return updateSectors(front_back_horizon.x, front_back_horizon.y, bitmask);
 }
 
 [[numthreads(16, 16, 1)]]
@@ -144,69 +138,76 @@ func cs_main(
     uniform ParameterBlock<ShaderParameters> params,
 ) -> void {
     let thickness = 0.25;
-    let slice_count = 3.0;
+    let slice_count = 9.0;
     let samples_per_slice_side = 3.0;
-    let effect_radius = 0.5 * 1.457;
-    let falloff_range = 0.615 * effect_radius;
-    let falloff_from = effect_radius * (1.0 - 0.615);
-    let falloff_mul = -1.0 / falloff_range;
-    let falloff_add = falloff_from / falloff_range + 1.0;
+    let depth_range_scale_factor = 0.75;
+    let default_radius = 0.5;
+    let default_radius_mul = 1.457;
+    let default_falloff_range = 0.615;
+
+    let effect_radius = depth_range_scale_factor * default_radius * default_radius_mul;
+    let falloff_range = default_falloff_range * effect_radius;
+    let falloff_from  = effect_radius * (1.0f - default_falloff_range);
+    let falloff_MUL = -1.0f / falloff_range;
+    let falloff_add = falloff_from / (falloff_range) + 1.0f;
+    let mip_sampling_offset = 3.30;
     
     let uv = (f32x2(pixel_coordinates) + 0.5) / params.camera.resolution;
     var pixel_depth = calculate_edges(
         pixel_coordinates, params.camera.resolution, params.prefiltered_depth, params.point_clamp_sampler, params.depth_differences);
     pixel_depth += 0.00001;
-    let pixel_position = reconstruct_view_space_position(uv, pixel_depth, params.camera);
-    let pixel_normal = load_normal_view_space(uv, params.camera, params.normals, params.point_clamp_sampler);
-    let view_vec = normalize(-pixel_position);
+    let origin = reconstruct_view_space_position(uv, pixel_depth, params.camera);
+    let view_dir = normalize(-origin);
+    let normal = load_normal_view_space(uv, params.camera, params.normals, params.point_clamp_sampler);
+
     let noise = load_noise(pixel_coordinates, params.hilbert_noise);
-    let sample_scale = (-0.5 * effect_radius * params.camera.projection_mat[0][0]) / pixel_position.z;
+    let sample_scale = -(0.5 * effect_radius * params.camera.projection_mat[0][0]) / origin.z;
+
     var visibility = 0.0;
-    var occluded_sample_count = 0u;
     for (var slice_t = 0.0; slice_t < slice_count; slice_t += 1.0) {
-        let slice = slice_t + noise.x;
-        let phi = (PI / slice_count) * slice;
+        let slice = (slice_t + noise.x) / slice_count;
+        let phi = slice * PI;
         let omega = f32x2(cos(phi), sin(phi));
-        
+
         let direction = f32x3(omega.xy, 0.0);
-        let orthographic_direction = direction - (dot(direction, view_vec) * view_vec);
-        let axis = cross(direction, view_vec);
-        let projected_normal = pixel_normal - axis * dot(pixel_normal, axis);
-        let projected_normal_length = max(length(projected_normal), 1e-6);
-        
+        let orthographic_direction = normalize(direction - (dot(direction, view_dir) * view_dir));
+        let axis = cross(direction, view_dir);
+        let projected_normal = normal - axis * dot(normal, axis);
+        let projected_normal_length = length(projected_normal);
+
         let sign_norm = sign(dot(orthographic_direction, projected_normal));
-        let cos_norm = saturate(dot(projected_normal, view_vec) / projected_normal_length);
-        let n = f32x2(((PI * 0.5) - sign_norm * fast_acos(cos_norm)) * (1.0 / PI));
-        
+        let cos_norm = saturate(dot(projected_normal, normal) / projected_normal_length);
+        let n = sign_norm * fast_acos(cos_norm);
+
         var bitmask = 0u;
-        
         let sample_mul = f32x2(omega.x, -omega.y) * sample_scale;
         for (var sample_t = 0.0; sample_t < samples_per_slice_side; sample_t += 1.0) {
-            var sample_noise = (slice_t + sample_t * samples_per_slice_side) * 0.6180339887498948482;
-            sample_noise = fract(noise.y + sample_noise);
-            
-            var s = (sample_t + sample_noise) / samples_per_slice_side;
-            s *= s; // https://github.com/GameTechDev/XeGTAO#sample-distribution
-            let sample = s * sample_mul;
-            
-            let sample_mip_level = clamp(log2(length(sample * params.camera.resolution)) - 3.3, 0.0, 5.0); // https://github.com/GameTechDev/XeGTAO#memory-bandwidth-bottleneck
-            let sample_position_1 = load_and_reconstruct_view_space_position(
-                uv + sample, sample_mip_level, params.camera, params.prefiltered_depth, params.linear_clamp_sampler);
-            let sample_position_2 = load_and_reconstruct_view_space_position(
-                uv - sample, sample_mip_level, params.camera, params.prefiltered_depth, params.linear_clamp_sampler);
-            
-            let sample_difference_1 = sample_position_1 - pixel_position;
-            let sample_difference_2 = sample_position_2 - pixel_position;
-            
-            processSample(thickness, sample_difference_1, view_vec, -1.0, n, samples_per_slice_side * 2.0, bitmask);
-            processSample(thickness, sample_difference_2, view_vec, 1.0, n, samples_per_slice_side * 2.0, bitmask);
+            var sample = (slice + sample_t * samples_per_slice_side) * 0.6180339887498948482;
+            sample = fract(noise.y + sample);
+
+            var s  = (sample_t + sample) / samples_per_slice_side;
+            s *= s;
+
+            let sample_offset = s * sample_mul;
+            let sample_screen_pos_1 = uv + sample_offset;
+            let sample_screen_pos_2 = uv - sample_offset;
+
+            let sample_mip_level = clamp(log2(length(sample_offset * params.camera.resolution)) - mip_sampling_offset, 0.0, 5.0);
+            let depth_1 = params.prefiltered_depth.SampleLevel(params.linear_clamp_sampler, sample_screen_pos_1, sample_mip_level).r;
+            let depth_2 = params.prefiltered_depth.SampleLevel(params.linear_clamp_sampler, sample_screen_pos_2, sample_mip_level).r;
+
+            let sample_position_1 = reconstruct_view_space_position(sample_screen_pos_1, depth_1, params.camera);
+            let sample_position_2 = reconstruct_view_space_position(sample_screen_pos_2, depth_2, params.camera);
+
+            let sample_delta_1 = sample_position_1 - origin;
+            let sample_delta_2 = sample_position_2 - origin;
+            bitmask = calc_visibility_mask(bitmask, thickness, sample_delta_1, view_dir,  1.0, n);
+            bitmask = calc_visibility_mask(bitmask, thickness, sample_delta_2, view_dir, -1.0, n);
         }
-        
-        let bit_count = countbits(bitmask);
-        occluded_sample_count += bit_count;
+
+        visibility += 1.0 - f32(countbits(bitmask)) / f32(SECTOR_COUNT);
     }
-    
-    visibility = 1.0 - f32(occluded_sample_count) / (slice_count * 2.0 * samples_per_slice_side);
-    visibility = clamp(visibility, 0.03, 1.0);
-    params.ambient_occlusion[pixel_coordinates] = visibility;
+
+    let ao = saturate(visibility / slice_count);
+    params.ambient_occlusion[pixel_coordinates] = ao;
 }

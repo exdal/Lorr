@@ -36,8 +36,8 @@ func fs_main(VertexOutput input) -> f32x4 {
     let albedo_color = params.albedo_image.SampleLevel(params.linear_repeat_sampler, input.tex_coord, 0).rgb;
 
     let mapped_smooth_normal = params.normal_image.Load(pixel_pos);
-    let mapped_normal = std::oct_to_vec3(mapped_smooth_normal.xy);
-    let smooth_normal = std::oct_to_vec3(mapped_smooth_normal.zw);
+    let mapped_normal = std::octahedral_decode(mapped_smooth_normal.xy);
+    let smooth_normal = std::octahedral_decode(mapped_smooth_normal.zw);
 
     let emission = params.emissive_image.Load(pixel_pos);
 
@@ -55,7 +55,7 @@ func fs_main(VertexOutput input) -> f32x4 {
     // PBR constants
     let V = normalize(params.camera.position - world_position);
     let L = normalize(params.environment.sun_direction); // temp
-    let N = normalize(mapped_normal);
+    let N = mapped_normal;
 
     var sun_illuminance = f32x3(1.0);
     var sky_luminance = f32x3(0.1);
@@ -102,7 +102,7 @@ func fs_main(VertexOutput input) -> f32x4 {
     horizon *= horizon;
 
     var material_surface_color = f32x3(0.0);
-    let NoL = max(dot(N, L), 0.0);
+    let NoL = max(dot(N, L), 0.0001);
     if (NoL > 0.0) {
         let brdf = BRDF(V, N, L, albedo_color, roughness, metallic);
         material_surface_color = brdf * horizon * sun_illuminance * NoL * occlusion;

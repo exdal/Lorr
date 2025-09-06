@@ -205,7 +205,7 @@ struct MeshLOD {
 };
 
 struct Mesh {
-    constexpr static auto MAX_LODS = 8_sz;
+    constexpr static auto MAX_LODS = 1_sz;
 
     alignas(8) u64 vertex_positions = 0;
     alignas(8) u64 vertex_normals = 0;

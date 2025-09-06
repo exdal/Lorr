@@ -88,23 +88,24 @@ public func test_frustum(in f32x4x4 mvp, in f32x3 aabb_center, in f32x3 aabb_ext
 public func test_occlusion(
     in ScreenAabb screen_aabb,
     in Image2D<f32> hiz_image,
-    in Sampler hiz_sampler,
-    in constexpr bool ceiling
+    in Sampler hiz_sampler
 ) -> bool {
-    var hiz_size = u32x2(0.0);
+    var width: u32;
+    var height: u32;
     var hiz_levels = 0;
-    hiz_image.GetDimensions(0, hiz_size.x, hiz_size.y, hiz_levels);
+    hiz_image.GetDimensions(0, width, height, hiz_levels);
+    let hiz_size = f32x2(width, height);
 
-    let min_uv = screen_aabb.min.xy;
-    let max_uv = screen_aabb.max.xy;
-    let min_texel = u32x2(max(min_uv * f32x2(hiz_size), 0.0));
-    let max_texel = u32x2(min(max_uv * f32x2(hiz_size), hiz_size - 1.0));
+    let min_uv = screen_aabb.min.xy * hiz_size;
+    let max_uv = screen_aabb.max.xy * hiz_size;
+    let min_texel = u32x2(max(min_uv, 0.0));
+    let max_texel = u32x2(min(max_uv, hiz_size - 1.0));
 
     let size = max_texel - min_texel;
     let max_size = max(size.x, size.y);
-    let mip = max(floor(log2(max_size)) - 1.0, 0.0);
+    var mip = max(floor(log2(max_size)), 0);
 
-    var uv = (min_uv + max_uv) * 0.5;
+    let uv = ((f32x2(min_texel) + f32x2(max_texel)) * 0.5f) / hiz_size;
     let d = hiz_image.SampleLevel(hiz_sampler, uv, mip);
-    return screen_aabb.max.z < d;
+    return screen_aabb.max.z <= d;
 }

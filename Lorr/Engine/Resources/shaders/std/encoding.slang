@@ -4,20 +4,24 @@ public namespace std {
 // Unit vectors octahedral encoding
 // "Survey of Efficient Representations for Independent Unit Vectors"
 // http://jcgt.org/published/0003/02/01
-public func oct_to_vec3(f32x2 e) -> f32x3 {
-    f32x3 v = f32x3(e.xy, 1.0 - abs(e.x) - abs(e.y));
-    const let sign_not_zero = f32x2((v.x >= 0.0) ? +1.0 : -1.0, (v.y >= 0.0) ? +1.0 : -1.0);
-    if (v.z < 0.0) {
-        v.xy = (1.0 - abs(v.yx)) * sign_not_zero;
-    }
-
-    return normalize(v);
+func octahedral_decode_signed(f32x2 v) -> f32x3 {
+    var n = f32x3(v.xy, 1.0 - abs(v.x) - abs(v.y));
+    let t = saturate(-n.z);
+    let w = select(n.xy >= 0.0, f32x2(-t), f32x2(t));
+    n = f32x3(n.xy + w, n.z);
+    return normalize(n);
 }
 
-public func vec3_to_oct(f32x3 v) -> f32x2 {
-    const let p = v.xy * (1.0 / (abs(v.x) + abs(v.y) + abs(v.z)));
-    const let sign_not_zero = f32x2((p.x >= 0.0) ? 1.0 : -1.0, (p.y >= 0.0) ? 1.0 : -1.0);
-    return (v.z <= 0.0) ? ((1.0 - abs(p.yx)) * sign_not_zero) : p;
+public func octahedral_decode(f32x2 v) -> f32x3 {
+    let f = v * 2.0 - 1.0;
+    return octahedral_decode_signed(f);
+}
+
+public func octahedral_encode(f32x3 v) -> f32x2 {
+    var n = v / (abs(v.x) + abs(v.y) + abs(v.z));
+    let octahedral_wrap = (1.0 - abs(n.yx)) * select(n.xy > f32x2(0.0), f32x2(1.0), f32x2(-1.0));
+    let n_xy = select(n.z >= 0.0, n.xy, octahedral_wrap);
+    return n_xy * 0.5 + 0.5;
 }
 
 }

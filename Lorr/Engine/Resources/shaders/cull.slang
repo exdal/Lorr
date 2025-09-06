@@ -107,5 +107,6 @@ public func test_occlusion(
 
     let uv = ((f32x2(min_texel) + f32x2(max_texel)) * 0.5f) / hiz_size;
     let d = hiz_image.SampleLevel(hiz_sampler, uv, mip);
-    return screen_aabb.max.z <= d;
+    constexpr static let EPSILON = 1e-7;
+    return screen_aabb.max.z <= d - EPSILON;
 }

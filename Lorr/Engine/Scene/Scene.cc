@@ -587,6 +587,9 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer, ls::option<
     auto environment_query = self.get_world()
         .query_builder<ECS::Environment>()
         .build();
+    auto vbgtao_query = self.get_world()
+        .query_builder<ECS::VBGTAO>()
+        .build();
     // clang-format on
 
     ls::option<GPU::Camera> active_camera_data = override_camera;
@@ -662,6 +665,22 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer, ls::option<
     regenerate_sky |= self.last_environment.atmos_atmos_radius != environment.atmos_atmos_radius;
     regenerate_sky |= self.last_environment.atmos_planet_radius != environment.atmos_planet_radius;
     self.last_environment = environment;
+
+    auto vbgtao = ls::option<GPU::VBGTAO>();
+    vbgtao_query.each([&vbgtao](flecs::entity, ECS::VBGTAO &vbgtao_comp) {
+        vbgtao.emplace(
+            GPU::VBGTAO{
+                .thickness = vbgtao_comp.thickness,
+                .depth_range_scale_factor = vbgtao_comp.depth_range_scale_factor,
+                .radius = vbgtao_comp.radius,
+                .radius_multiplier = vbgtao_comp.radius_multiplier,
+                .slice_count = glm::ceil(vbgtao_comp.slice_count),
+                .sample_count_per_slice = glm::ceil(vbgtao_comp.sample_count_per_slice),
+                .denoise_power = vbgtao_comp.denoise_power,
+                .linear_thickness_multiplier = vbgtao_comp.linear_thickness_multiplier,
+            }
+        );
+    });
 
     auto meshlet_instance_visibility_offset = 0_u32;
     auto max_meshlet_instance_count = 0_u32;
@@ -743,7 +762,7 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer, ls::option<
         flags |= metallic_roughness_image_index.has_value() ? GPU::MaterialFlag::HasMetallicRoughnessImage : GPU::MaterialFlag::None;
         flags |= occlusion_image_index.has_value() ? GPU::MaterialFlag::HasOcclusionImage : GPU::MaterialFlag::None;
 
-        auto gpu_material = GPU::Material {
+        auto gpu_material = GPU::Material{
             .albedo_color = material->albedo_color,
             .emissive_color = material->emissive_color,
             .roughness_factor = material->roughness_factor,
@@ -773,6 +792,7 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer, ls::option<
         .gpu_mesh_instances = gpu_mesh_instances,
         .environment = environment,
         .camera = active_camera_data.value_or(GPU::Camera{}),
+        .vbgtao = vbgtao,
     };
     auto prepared_frame = renderer.prepare_frame(prepare_info);
 

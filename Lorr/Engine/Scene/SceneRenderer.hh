@@ -21,6 +21,7 @@ struct FramePrepareInfo {
 
     GPU::Environment environment = {};
     GPU::Camera camera = {};
+    ls::option<GPU::VBGTAO> vbgtao = {};
 };
 
 struct PreparedFrame {
@@ -37,6 +38,7 @@ struct PreparedFrame {
     vuk::Value<vuk::Buffer> directional_camera_buffer = {};
     vuk::Value<vuk::ImageAttachment> sky_transmittance_lut = {};
     vuk::Value<vuk::ImageAttachment> sky_multiscatter_lut = {};
+    ls::option<GPU::VBGTAO> vbgtao = {};
 };
 
 struct SceneRenderInfo {

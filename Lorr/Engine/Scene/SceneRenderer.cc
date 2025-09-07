@@ -521,6 +521,8 @@ auto SceneRenderer::prepare_frame(this SceneRenderer &self, FramePrepareInfo &in
             self.sky_multiscatter_lut_view.acquire(device, "sky multiscatter lut", vuk::ImageUsageFlagBits::eSampled, vuk::Access::eComputeSampled);
     }
 
+    prepared_frame.vbgtao = info.vbgtao;
+
     return prepared_frame;
 }
 
@@ -1571,7 +1573,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
         vbgtao_occlusion_attachment.same_shape_as(final_attachment);
         vbgtao_occlusion_attachment = vuk::clear_image(std::move(vbgtao_occlusion_attachment), vuk::White<f32>);
 
-        if (true) {
+        if (frame.vbgtao.has_value()) {
             auto vbgtao_prefilter_pass = vuk::make_pass(
                 "vbgtao prefilter",
                 [](vuk::CommandBuffer &command_buffer, //
@@ -1617,7 +1619,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
 
             auto vbgtao_generate_pass = vuk::make_pass(
                 "vbgtao generate",
-                [](vuk::CommandBuffer &command_buffer, //
+                [vbgtao = frame.vbgtao.value()](vuk::CommandBuffer &command_buffer, //
                    VUK_BA(vuk::eComputeUniformRead) camera,
                    VUK_IA(vuk::eComputeSampled) prefiltered_depth,
                    VUK_IA(vuk::eComputeSampled) normals,
@@ -1651,6 +1653,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                         .bind_image(0, 5, depth_differences)
                         .bind_sampler(0, 6, nearest_clamp_sampler)
                         .bind_sampler(0, 7, linear_clamp_sampler)
+                        .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, vbgtao)
                         .dispatch_invocations_per_pixel(ambient_occlusion);
 
                     return std::make_tuple(camera, normals, ambient_occlusion, depth_differences);
@@ -1688,7 +1691,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
 
             auto vbgtao_denoise_pass = vuk::make_pass(
                 "vbgtao denoise",
-                [](vuk::CommandBuffer &command_buffer, //
+                [power = frame.vbgtao->denoise_power](vuk::CommandBuffer &command_buffer, //
                    VUK_IA(vuk::eComputeSampled) noisy_occlusion,
                    VUK_IA(vuk::eComputeSampled) depth_differences,
                    VUK_IA(vuk::eComputeRW) ambient_occlusion) {
@@ -1706,6 +1709,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                         .bind_image(0, 1, depth_differences)
                         .bind_image(0, 2, ambient_occlusion)
                         .bind_sampler(0, 3, nearest_clamp_sampler)
+                        .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, PushConstants(noisy_occlusion->extent, power))
                         .dispatch_invocations_per_pixel(ambient_occlusion);
 
                     return ambient_occlusion;

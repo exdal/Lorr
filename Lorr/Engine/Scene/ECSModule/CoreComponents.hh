@@ -65,4 +65,15 @@ ECS_COMPONENT_BEGIN(Environment)
     ECS_COMPONENT_MEMBER(eye_k, f32, 12.5f)
 ECS_COMPONENT_END();
 
+ECS_COMPONENT_BEGIN(VBGTAO)
+    ECS_COMPONENT_MEMBER(thickness, f32, 0.25f)
+    ECS_COMPONENT_MEMBER(depth_range_scale_factor, f32, 0.75f)
+    ECS_COMPONENT_MEMBER(radius, f32, 0.5f)
+    ECS_COMPONENT_MEMBER(radius_multiplier, f32, 1.457f)
+    ECS_COMPONENT_MEMBER(slice_count, f32, 3.0f)
+    ECS_COMPONENT_MEMBER(sample_count_per_slice, f32, 3.0f)
+    ECS_COMPONENT_MEMBER(denoise_power, f32, 1.1f)
+    ECS_COMPONENT_MEMBER(linear_thickness_multiplier, f32, 300.0f)
+ECS_COMPONENT_END();
+
 // clang-format on

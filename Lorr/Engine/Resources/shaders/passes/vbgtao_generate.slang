@@ -134,23 +134,13 @@ func calc_visibility_mask(
 
 [[numthreads(16, 16, 1)]]
 func cs_main(
-    const uint2 pixel_coordinates : SV_DispatchThreadID, 
+    const uint2 pixel_coordinates : SV_DispatchThreadID,
     uniform ParameterBlock<ShaderParameters> params,
+    uniform VBGTAO settings
 ) -> void {
-    let thickness = 0.25;
-    let slice_count = 9.0;
-    let samples_per_slice_side = 3.0;
-    let depth_range_scale_factor = 0.75;
-    let default_radius = 0.5;
-    let default_radius_mul = 1.457;
-    let default_falloff_range = 0.615;
-
-    let effect_radius = depth_range_scale_factor * default_radius * default_radius_mul;
-    let falloff_range = default_falloff_range * effect_radius;
-    let falloff_from  = effect_radius * (1.0f - default_falloff_range);
-    let falloff_MUL = -1.0f / falloff_range;
-    let falloff_add = falloff_from / (falloff_range) + 1.0f;
+    let effect_radius = settings.depth_range_scale_factor * settings.radius * settings.radius_multiplier;
     let mip_sampling_offset = 3.30;
+    let inv_far = 1.0 / params.camera.far_clip;
     
     let uv = (f32x2(pixel_coordinates) + 0.5) / params.camera.resolution;
     var pixel_depth = calculate_edges(
@@ -160,12 +150,15 @@ func cs_main(
     let view_dir = normalize(-origin);
     let normal = load_normal_view_space(uv, params.camera, params.normals, params.point_clamp_sampler);
 
+    let linear_depth = -origin.z * inv_far;
+    let thickness = settings.thickness * saturate(linear_depth) * settings.linear_thickness_multiplier;
+
     let noise = load_noise(pixel_coordinates, params.hilbert_noise);
     let sample_scale = -(0.5 * effect_radius * params.camera.projection_mat[0][0]) / origin.z;
 
     var visibility = 0.0;
-    for (var slice_t = 0.0; slice_t < slice_count; slice_t += 1.0) {
-        let slice = (slice_t + noise.x) / slice_count;
+    for (var slice_t = 0.0; slice_t < settings.slice_count; slice_t += 1.0) {
+        let slice = (slice_t + noise.x) / settings.slice_count;
         let phi = slice * PI;
         let omega = f32x2(cos(phi), sin(phi));
 
@@ -181,11 +174,11 @@ func cs_main(
 
         var bitmask = 0u;
         let sample_mul = f32x2(omega.x, -omega.y) * sample_scale;
-        for (var sample_t = 0.0; sample_t < samples_per_slice_side; sample_t += 1.0) {
-            var sample = (slice + sample_t * samples_per_slice_side) * 0.6180339887498948482;
+        for (var sample_t = 0.0; sample_t < settings.sample_count_per_slice; sample_t += 1.0) {
+            var sample = (slice + sample_t * settings.sample_count_per_slice) * 0.6180339887498948482;
             sample = fract(noise.y + sample);
 
-            var s  = (sample_t + sample) / samples_per_slice_side;
+            var s  = (sample_t + sample) / settings.sample_count_per_slice;
             s *= s;
 
             let sample_offset = s * sample_mul;
@@ -208,6 +201,6 @@ func cs_main(
         visibility += 1.0 - f32(countbits(bitmask)) / f32(SECTOR_COUNT);
     }
 
-    let ao = saturate(visibility / slice_count);
+    let ao = saturate(visibility / settings.slice_count);
     params.ambient_occlusion[pixel_coordinates] = ao;
 }

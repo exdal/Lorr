@@ -313,7 +313,10 @@ public struct Light {
 public struct VBGTAO {
     public f32 thickness;
     public f32 depth_range_scale_factor;
-    public f32 default_radius;
-    public f32 default_radius_multiplier;
-    public f32 falloff_range;
+    public f32 radius;
+    public f32 radius_multiplier;
+    public f32 slice_count;
+    public f32 sample_count_per_slice;
+    public f32 denoise_power;
+    public f32 linear_thickness_multiplier;
 };

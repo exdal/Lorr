@@ -226,11 +226,14 @@ struct HistogramLuminance {
 };
 
 struct VBGTAO {
-    alignas(4) f32 thickness = {};
-    alignas(4) f32 depth_range_scale_factor = {};
-    alignas(4) f32 default_radius = {};
-    alignas(4) f32 default_radius_multiplier = {};
-    alignas(4) f32 falloff_range = {};
+    alignas(4) f32 thickness = 0.25f;
+    alignas(4) f32 depth_range_scale_factor = 0.75f;
+    alignas(4) f32 radius = 0.5f;
+    alignas(4) f32 radius_multiplier = 1.457f;
+    alignas(4) f32 slice_count = 3.0f;
+    alignas(4) f32 sample_count_per_slice = 3.0f;
+    alignas(4) f32 denoise_power = 1.1f;
+    alignas(4) f32 linear_thickness_multiplier = 300.0f;
 };
 
 } // namespace lr::GPU

@@ -358,7 +358,7 @@ auto SlangCompiler::new_session(const SlangSessionInfo &info) -> ls::option<Slan
         .format = SLANG_SPIRV,
         .profile = impl->global_session->findProfile("spirv_1_5"),
         .flags = SLANG_TARGET_FLAG_GENERATE_SPIRV_DIRECTLY,
-        .floatingPointMode = SLANG_FLOATING_POINT_MODE_FAST,
+        //.floatingPointMode = SLANG_FLOATING_POINT_MODE_FAST,
         .lineDirectiveMode = SLANG_LINE_DIRECTIVE_MODE_STANDARD,
         .forceGLSLScalarBufferLayout = true,
         .compilerOptionEntries = entries,

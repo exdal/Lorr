@@ -79,11 +79,8 @@ func fs_main(VertexOutput input) -> f32x4 {
         sky_info.eye_dir = up_vec;
         sky_info.sun_dir = L;
         sky_info.sun_intensity = params.environment.sun_intensity;
-        sky_info.sampling.variable_sample_count = true;
-        sky_info.sampling.min_sample_count = 1;
-        sky_info.sampling.max_sample_count = 4;
+        sky_info.step_count = 1;
         sky_info.eval_multiscattering = true;
-        sky_info.eval_mie_phase = false;
         let sky_result = integrate_single_scattered_luminance(
             sky_info, params.environment, params.linear_clamp_sampler, params.sky_transmittance_lut, params.sky_multiscattering_lut);
 

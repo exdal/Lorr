@@ -66,7 +66,7 @@ struct SceneRenderer {
     ImageView sky_transmittance_lut_view = {};
     Image sky_multiscatter_lut = {};
     ImageView sky_multiscatter_lut_view = {};
-    vuk::Extent3D sky_view_lut_extent = { .width = 312, .height = 192, .depth = 1 };
+    vuk::Extent3D sky_view_lut_extent = { .width = 192, .height = 108, .depth = 1 };
     vuk::Extent3D sky_aerial_perspective_lut_extent = { .width = 32, .height = 32, .depth = 32 };
 
     Image hiz = {};

@@ -81,7 +81,7 @@ auto SceneRenderer::init(this SceneRenderer &self) -> bool {
         .format = vuk::Format::eR16G16B16A16Sfloat,
         .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage,
         .type = vuk::ImageType::e2D,
-        .extent = { .width = 32, .height = 32, .depth = 1 },
+        .extent = { .width = 64, .height = 64, .depth = 1 },
         .name = "Sky Multiscatter LUT",
     };
     std::tie(self.sky_multiscatter_lut, self.sky_multiscatter_lut_view) = Image::create_with_view(device, sky_multiscatter_lut_info).value();
@@ -500,7 +500,7 @@ auto SceneRenderer::prepare_frame(this SceneRenderer &self, FramePrepareInfo &in
                     .bind_image(0, 1, sky_transmittance_lut)
                     .bind_buffer(0, 2, environment)
                     .bind_image(0, 3, sky_multiscatter_lut)
-                    .dispatch_invocations_per_pixel(sky_multiscatter_lut);
+                    .dispatch(sky_multiscatter_lut->extent.width, sky_multiscatter_lut->extent.height);
 
                 return std::make_tuple(sky_transmittance_lut, sky_multiscatter_lut, environment);
             }

@@ -138,6 +138,7 @@ auto Device::init(this Device &self) -> bool {
     vk12_features.vulkanMemoryModel = true;
     vk12_features.vulkanMemoryModelDeviceScope = true;
     vk12_features.storageBuffer8BitAccess = true;
+    vk12_features.uniformAndStorageBuffer8BitAccess = true;
     vk12_features.scalarBlockLayout = true;
     vk12_features.shaderInt8 = true;
     vk12_features.shaderSubgroupExtendedTypes = true;
@@ -154,6 +155,7 @@ auto Device::init(this Device &self) -> bool {
     vk10_features.features.vertexPipelineStoresAndAtomics = true;
     vk10_features.features.fragmentStoresAndAtomics = true;
     vk10_features.features.shaderInt64 = true;
+    vk10_features.features.shaderInt16 = true;
     vk10_features.features.multiDrawIndirect = true;
     vk10_features.features.samplerAnisotropy = true;
     vk10_features.features.shaderImageGatherExtended = true;

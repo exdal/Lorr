@@ -600,9 +600,9 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer, ls::option<
             projection_mat[1][1] *= -1;
 
             auto direction = glm::vec3(
-                glm::cos(glm::radians(t.rotation.x)) * glm::cos(glm::radians(t.rotation.y)),
-                glm::sin(glm::radians(t.rotation.y)),
-                glm::sin(glm::radians(t.rotation.x)) * glm::cos(glm::radians(t.rotation.y))
+                glm::cos(glm::radians(t.rotation.x)) * glm::sin(glm::radians(t.rotation.y)),
+                glm::sin(glm::radians(t.rotation.x)) * glm::sin(glm::radians(t.rotation.y)),
+                glm::cos(glm::radians(t.rotation.y))
             );
             direction = glm::normalize(direction);
             auto view_mat = glm::lookAt(t.position, t.position + direction, glm::vec3(0.0f, 1.0f, 0.0f));
@@ -644,6 +644,7 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer, ls::option<
         environment.atmos_ozone_absorption = environment_comp.atmos_ozone_absorption * 1e-3f;
         environment.atmos_ozone_height = environment_comp.atmos_ozone_height;
         environment.atmos_ozone_thickness = environment_comp.atmos_ozone_thickness;
+        environment.atmos_terrain_albedo = environment_comp.atmos_terrain_albedo;
         environment.atmos_aerial_perspective_start_km = environment_comp.atmos_aerial_perspective_start_km;
         environment.eye_min_exposure = environment_comp.eye_min_exposure;
         environment.eye_max_exposure = environment_comp.eye_max_exposure;
@@ -664,6 +665,7 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer, ls::option<
     regenerate_sky |= self.last_environment.atmos_terrain_albedo != environment.atmos_terrain_albedo;
     regenerate_sky |= self.last_environment.atmos_atmos_radius != environment.atmos_atmos_radius;
     regenerate_sky |= self.last_environment.atmos_planet_radius != environment.atmos_planet_radius;
+    regenerate_sky |= self.last_environment.atmos_terrain_albedo != environment.atmos_terrain_albedo;
     self.last_environment = environment;
 
     auto vbgtao = ls::option<GPU::VBGTAO>();

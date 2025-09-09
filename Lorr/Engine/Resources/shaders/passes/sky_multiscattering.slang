@@ -14,49 +14,60 @@ struct ShaderParameters {
     StorageImage2D<f32x4, ImageFormat::RGBA16F> sky_multiscattering_lut;
 };
 
+#define GOLDEN_RATIO 1.6180339
 #define SAMPLE_COUNT 64
 
+static groupshared AtmosphereLuminance luminance_shared[2];
+
 [[shader("compute")]]
-[[numthreads(16, 16, 1)]]
+[[numthreads(1, 1, SAMPLE_COUNT)]]
 func cs_main(
     u32x3 thread_id : SV_DispatchThreadID,
+    u32 group_index : SV_GroupIndex,
     uniform ParameterBlock<ShaderParameters> params
 ) -> void {
-    f32x2 uv = f32x2(f32x2(thread_id.xy) + 0.5) / f32x2(params.environment.multiscattering_lut_size.xy);
+    var uv = f32x2(f32x2(thread_id.xy) + 0.5) / f32x2(params.environment.multiscattering_lut_size.xy);
+    uv = from_sub_uvs_to_unit(uv, f32x2(params.environment.multiscattering_lut_size.xy));
 
     let atmosphere_thickness = params.environment.atmos_atmos_radius - params.environment.atmos_planet_radius;
     let altitude = params.environment.atmos_planet_radius + uv.y * atmosphere_thickness + PLANET_RADIUS_OFFSET;
 
-    f32 sun_cos_theta = uv.x * 2.0 - 1.0;
-    f32x3 sun_dir = f32x3(0.0, sun_cos_theta, std::safe_sqrt(1.0 - sun_cos_theta * sun_cos_theta));
-    f32x3 ray_pos = f32x3(0.0, altitude, 0.0);
+    let sun_zenith_angle = uv.x * 2.0 - 1.0;
+    let sun_dir = f32x3(0.0, sun_zenith_angle, std::safe_sqrt(1.0 - saturate(sun_zenith_angle * sun_zenith_angle)));
+    let eye_pos = f32x3(0.0, altitude, 0.0);
+
+    let theta = acos(1.0f - 2.0f * (thread_id.z + 0.5f) / f32(SAMPLE_COUNT));
+    let phi = (2 * PI * thread_id.z) / GOLDEN_RATIO;
+    let eye_dir = f32x3(
+        cos(phi) * sin(theta),
+        cos(theta),
+        sin(phi) * sin(theta),
+    );
 
     AtmosphereIntegrateInfo info = {};
-    info.eye_pos = ray_pos;
+    info.eye_pos = eye_pos;
+    info.eye_dir = eye_dir;
     info.sun_dir = sun_dir;
-    info.eval_mie_phase = false;
-    info.eval_rayleigh_phase = false;
-    info.eval_planet_luminance = true;
+    info.eval_planet_luminance = false;
     info.eval_multiscattering = false;
-    info.sampling.variable_sample_count = false;
-    info.sampling.initial_sample_count = 32;
+    info.step_count = 32.0;
+    var result = integrate_single_scattered_luminance(info, params.environment, params.sampler, params.sky_transmittance_lut, params.sky_transmittance_lut);
+    result.multiscattering_as_1 = WaveActiveSum(result.multiscattering_as_1);
+    result.luminance = WaveActiveSum(result.luminance);
 
-    f32x3 luminance = 0.0;
-    f32x3 multi_scattering_as_1 = 0.0;
-    for (int i = 0; i < SAMPLE_COUNT; i++) {
-        info.eye_dir = HEMISPHERE_64[i];
-        let result = integrate_single_scattered_luminance(info, params.environment, params.sampler, params.sky_transmittance_lut, params.sky_transmittance_lut);
-        multi_scattering_as_1 += result.multiscattering_as_1;
-        luminance += result.luminance;
+    GroupMemoryBarrierWithGroupSync();
+
+    if (WaveIsFirstLane()) {
+        let index = group_index > 0 ? 1 : 0;
+        luminance_shared[index] = result;
     }
 
-    let sphere_solid_angle = 4.0f * PI;
-    let isotropic_phase = 1.0f / sphere_solid_angle;
-    let inv_sample_count = 1.0 / f32(SAMPLE_COUNT);
-    luminance *= sphere_solid_angle * inv_sample_count;
-    multi_scattering_as_1 *= inv_sample_count;
-    f32x3 scattered_luminance = luminance * isotropic_phase;
-    f32x3 f_ms = 1.0 / (1.0 - multi_scattering_as_1);
+    GroupMemoryBarrierWithGroupSync();
 
-    params.sky_multiscattering_lut.Store(thread_id.xy, f32x4(scattered_luminance * f_ms, 1.0));
+    if (group_index == 0) {
+        let ms_sum = (luminance_shared[0].multiscattering_as_1 + luminance_shared[1].multiscattering_as_1) / f32(SAMPLE_COUNT);
+        let luminance_sum = (luminance_shared[0].luminance + luminance_shared[1].luminance) / f32(SAMPLE_COUNT);
+        let luminance = luminance_sum * (1.0 / (1.0 - ms_sum));
+        params.sky_multiscattering_lut.Store(thread_id.xy, f32x4(luminance, 1.0));
+    }
 }

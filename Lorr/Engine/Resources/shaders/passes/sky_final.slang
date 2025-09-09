@@ -30,17 +30,18 @@ func vs_main(u32 vertex_index : SV_VertexID) -> VertexOutput {
 }
 
 func draw_sun(f32x3 world_dir, f32x3 sun_dir, f32 radius) -> f32x3 {
-    const let min_cos_theta = cos(radius * PI / 180.0);
+    let min_cos_theta = cos(radius * PI / 250.0);
+    let cosTheta = dot(world_dir, sun_dir);
+    return cosTheta >= min_cos_theta ? 1.0 : 0.0;
+}
 
-    const let cosTheta = dot(world_dir, sun_dir);
-    if (cosTheta >= min_cos_theta) {
-        return 1.0;
-    }
-
-    const let offset = min_cos_theta - cosTheta;
-    const let gaussianBloom = exp(-offset * 50000.0) * 0.5;
-    const let invBloom = 1.0 / (0.02 + offset * 300.0) * 0.01;
-    return f32x3(gaussianBloom + invBloom);
+func build_orthonormal_basis(f32x3 z_basis) -> f32x3x3 {
+    let sign = copysign(1.0, z_basis.z);
+    let a = -1.0 / (sign + z_basis.z);
+    let b = z_basis.x * z_basis.y * a;
+    let x_basis = f32x3(1.0 + sign * z_basis.x * z_basis.x * a, sign * b, -sign * z_basis.x);
+    let y_basis = f32x3(b, sign + z_basis.y * z_basis.y * a, -z_basis.y);
+    return f32x3x3(x_basis, y_basis, z_basis);
 }
 
 [[shader("fragment")]]
@@ -65,41 +66,43 @@ func fs_main(
             params.environment.atmos_aerial_perspective_start_km);
     }
 
-    let eye_dir = normalize(world_pos - params.camera.position);
+    let up = f32x3(0.0, 1.0, 0.0);
     var eye_altitude = params.camera.position.y * CAMERA_SCALE_UNIT;
     eye_altitude += params.environment.atmos_planet_radius + PLANET_RADIUS_OFFSET;
     let eye_pos = f32x3(0.0, eye_altitude, 0.0);
-    let up = f32x3(0.0, 1.0, 0.0);
-    let right = normalize(cross(up, eye_dir));
-    let forward = normalize(cross(right, up));
-    let sun_dir = normalize(params.environment.sun_direction);
-    let light_on_plane = normalize(f32x2(dot(sun_dir, forward), dot(sun_dir, right)));
 
-    f32 view_zenith_cos_angle = dot(eye_dir, up);
+    var sun_dir = (params.environment.sun_direction);
+    var eye_dir = normalize(world_pos - params.camera.position);
 
-    const let planet_intersection = std::ray_sphere_intersect_nearest(eye_pos, eye_dir, params.environment.atmos_planet_radius);
-    f32x2 uv = sky_view_params_to_lut_uv(
+    let view_zenith_cos_angle = acos(dot(eye_dir, up));
+    let light_view_cos_angle = acos(clamp(dot(
+        normalize(f32x3(sun_dir.x, 0.0, sun_dir.z)),
+        normalize(f32x3(eye_dir.x, 0.0, eye_dir.z)),
+    ), -1.0, 1.0));
+    let planet_intersection = std::ray_sphere_intersect_nearest(eye_pos, eye_dir, params.environment.atmos_planet_radius);
+    let uv = sky_view_params_to_lut_uv(
         params.environment.atmos_atmos_radius,
         params.environment.atmos_planet_radius,
         params.environment.sky_view_lut_size.xy,
-        planet_intersection.hasValue,
+        planet_intersection != -1.0,
         eye_altitude,
         view_zenith_cos_angle,
-        light_on_plane);
-    f32x4 result = params.sky_view_lut.SampleLevel(params.sampler, uv, 0.0);
-    f32x3 luminance = result.rgb;
-    f32 transmittance = result.a;
+        light_view_cos_angle);
 
-    f32 sun_cos_theta = dot(sun_dir, up);
-    f32x2 transmittance_uv = transmittance_params_to_lut_uv(
+    let result = params.sky_view_lut.SampleLevel(params.sampler, uv, 0.0);
+    let atmos_luminance = result.rgb * result.a;
+    var color = atmos_luminance * params.environment.sun_intensity;
+
+    let sun_cos_theta = dot(sun_dir, up);
+    let transmittance_uv = transmittance_params_to_lut_uv(
         params.environment.atmos_atmos_radius,
         params.environment.atmos_planet_radius,
         f32x2(eye_altitude, sun_cos_theta));
-    f32x3 sun_transmittance = params.sky_transmittance_lut.SampleLevel(params.sampler, transmittance_uv, 0.0).rgb;
+    let sun_transmittance = params.sky_transmittance_lut.SampleLevel(params.sampler, transmittance_uv, 0.0).rgb;
 
-    if (!planet_intersection.hasValue) {
-        luminance += draw_sun(eye_dir, params.environment.sun_direction, 1.0) * params.environment.sun_intensity * sun_transmittance;
+    if (planet_intersection == -1.0) {
+        color += draw_sun(eye_dir, params.environment.sun_direction, 1.0) * params.environment.sun_intensity * sun_transmittance;
     }
 
-    return f32x4(luminance, 1.0 - transmittance);
+    return f32x4(color, 1.0);
 }

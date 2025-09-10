@@ -26,6 +26,7 @@ func cs_main(
     u32 group_index : SV_GroupIndex,
     uniform ParameterBlock<ShaderParameters> params
 ) -> void {
+    let i = f32(thread_id.z);
     var uv = f32x2(f32x2(thread_id.xy) + 0.5) / f32x2(params.environment.multiscattering_lut_size.xy);
     uv = from_sub_uvs_to_unit(uv, f32x2(params.environment.multiscattering_lut_size.xy));
 
@@ -33,14 +34,14 @@ func cs_main(
     let altitude = params.environment.atmos_planet_radius + uv.y * atmosphere_thickness + PLANET_RADIUS_OFFSET;
 
     let sun_zenith_angle = uv.x * 2.0 - 1.0;
-    let sun_dir = f32x3(0.0, sun_zenith_angle, std::safe_sqrt(1.0 - saturate(sun_zenith_angle * sun_zenith_angle)));
+    let sun_dir = f32x3(0.0, sun_zenith_angle, std::safe_sqrt(saturate(1.0 - sun_zenith_angle * sun_zenith_angle)));
     let eye_pos = f32x3(0.0, altitude, 0.0);
 
-    let theta = acos(1.0f - 2.0f * (thread_id.z + 0.5f) / f32(SAMPLE_COUNT));
-    let phi = (2 * PI * thread_id.z) / GOLDEN_RATIO;
+    let phi = acos(1.0 - 2.0 * (i + 0.5) / f32(SAMPLE_COUNT));
+    let theta = TAU * i / GOLDEN_RATIO;
     let eye_dir = f32x3(
-        cos(phi) * sin(theta),
-        cos(theta),
+        sin(phi) * cos(theta),
+        cos(phi),
         sin(phi) * sin(theta),
     );
 
@@ -48,7 +49,7 @@ func cs_main(
     info.eye_pos = eye_pos;
     info.eye_dir = eye_dir;
     info.sun_dir = sun_dir;
-    info.eval_planet_luminance = false;
+    info.eval_planet_luminance = true;
     info.eval_multiscattering = false;
     info.step_count = 32.0;
     var result = integrate_single_scattered_luminance(info, params.environment, params.sampler, params.sky_transmittance_lut, params.sky_transmittance_lut);

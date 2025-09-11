@@ -46,6 +46,8 @@ auto SceneRenderer::init(this SceneRenderer &self) -> bool {
             { "CULLING_MESHLET_COUNT", std::to_string(Model::MAX_MESHLET_INDICES) },
             { "CULLING_TRIANGLE_COUNT", std::to_string(Model::MAX_MESHLET_PRIMITIVES) },
             { "MESH_MAX_LODS", std::to_string(GPU::Mesh::MAX_LODS) },
+            { "MAX_DIRECTIONAL_LIGHT_CASCADES", std::to_string(GPU::DirectionalLight::MAX_DIRECTIONAL_LIGHT_CASCADES) },
+            { "MAX_DIRECTIONAL_LIGHTS", std::to_string(GPU::Lights::MAX_DIRECTIONAL_LIGHTS) },
             { "HISTOGRAM_THREADS_X", std::to_string(GPU::HISTOGRAM_THREADS_X) },
             { "HISTOGRAM_THREADS_Y", std::to_string(GPU::HISTOGRAM_THREADS_Y) },
         },
@@ -1619,13 +1621,15 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
 
             auto vbgtao_generate_pass = vuk::make_pass(
                 "vbgtao generate",
-                [vbgtao = frame.vbgtao.value()](vuk::CommandBuffer &command_buffer, //
-                   VUK_BA(vuk::eComputeUniformRead) camera,
-                   VUK_IA(vuk::eComputeSampled) prefiltered_depth,
-                   VUK_IA(vuk::eComputeSampled) normals,
-                   VUK_IA(vuk::eComputeSampled) hilbert_noise,
-                   VUK_IA(vuk::eComputeRW) ambient_occlusion,
-                   VUK_IA(vuk::eComputeRW) depth_differences) {
+                [vbgtao = frame.vbgtao.value()](
+                    vuk::CommandBuffer &command_buffer, //
+                    VUK_BA(vuk::eComputeUniformRead) camera,
+                    VUK_IA(vuk::eComputeSampled) prefiltered_depth,
+                    VUK_IA(vuk::eComputeSampled) normals,
+                    VUK_IA(vuk::eComputeSampled) hilbert_noise,
+                    VUK_IA(vuk::eComputeRW) ambient_occlusion,
+                    VUK_IA(vuk::eComputeRW) depth_differences
+                ) {
                     auto nearest_clamp_sampler = vuk::SamplerCreateInfo{
                         .magFilter = vuk::Filter::eNearest,
                         .minFilter = vuk::Filter::eNearest,
@@ -1691,10 +1695,12 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
 
             auto vbgtao_denoise_pass = vuk::make_pass(
                 "vbgtao denoise",
-                [power = frame.vbgtao->denoise_power](vuk::CommandBuffer &command_buffer, //
-                   VUK_IA(vuk::eComputeSampled) noisy_occlusion,
-                   VUK_IA(vuk::eComputeSampled) depth_differences,
-                   VUK_IA(vuk::eComputeRW) ambient_occlusion) {
+                [power = frame.vbgtao->denoise_power](
+                    vuk::CommandBuffer &command_buffer, //
+                    VUK_IA(vuk::eComputeSampled) noisy_occlusion,
+                    VUK_IA(vuk::eComputeSampled) depth_differences,
+                    VUK_IA(vuk::eComputeRW) ambient_occlusion
+                ) {
                     auto nearest_clamp_sampler = vuk::SamplerCreateInfo{
                         .magFilter = vuk::Filter::eNearest,
                         .minFilter = vuk::Filter::eNearest,

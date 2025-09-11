@@ -305,9 +305,29 @@ public struct Mesh {
     public Bounds bounds = {};
 };
 
-public struct Light {
-    public f32x3 position = {};
-    public f32x3 color = {};
+#ifndef MAX_DIRECTIONAL_LIGHT_CASCADES
+#define MAX_DIRECTIONAL_LIGHT_CASCADES 6
+#endif
+
+public struct DirectionalLight {
+    public struct Cascade {
+        public f32x4 projection;
+    };
+
+    public Cascade cascades[MAX_DIRECTIONAL_LIGHT_CASCADES];
+    public u32 cascade_count;
+    public f32x4 color;
+    public f32x3 direction;
+};
+
+#ifndef MAX_DIRECTIONAL_LIGHTS
+#define MAX_DIRECTIONAL_LIGHTS 1
+#endif
+
+public struct Lights {
+    public u32 directional_light_count;
+    public u32 _unused;
+    public DirectionalLight directional_lights[MAX_DIRECTIONAL_LIGHTS];
 };
 
 public struct VBGTAO {

@@ -205,7 +205,7 @@ struct MeshLOD {
 };
 
 struct Mesh {
-    constexpr static auto MAX_LODS = 1_sz;
+    constexpr static auto MAX_LODS = 8_sz;
 
     alignas(8) u64 vertex_positions = 0;
     alignas(8) u64 vertex_normals = 0;
@@ -223,6 +223,26 @@ constexpr static u32 HISTOGRAM_BIN_COUNT = HISTOGRAM_THREADS_X * HISTOGRAM_THREA
 struct HistogramLuminance {
     alignas(4) f32 adapted_luminance = 0.0f;
     alignas(4) f32 exposure = 0.0f;
+};
+
+struct DirectionalLight {
+    constexpr static auto MAX_DIRECTIONAL_LIGHT_CASCADES = 6_sz;
+    struct Cascade {
+        alignas(4) glm::vec4 projection = {};
+    };
+
+    alignas(4) Cascade cascades[MAX_DIRECTIONAL_LIGHT_CASCADES] = {};
+    alignas(4) u32 cascade_count = 0;
+    alignas(4) glm::vec4 color = {};
+    alignas(4) glm::vec3 direction = {};
+};
+
+struct Lights {
+    constexpr static auto MAX_DIRECTIONAL_LIGHTS = 1_u32;
+
+    alignas(4) u32 directional_light_count = 0;
+    alignas(4) u32 _unused = 0; // for future light types
+    alignas(8) DirectionalLight directional_lights[MAX_DIRECTIONAL_LIGHTS] = {};
 };
 
 struct VBGTAO {

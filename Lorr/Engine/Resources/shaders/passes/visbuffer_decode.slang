@@ -207,7 +207,7 @@ func fs_main(
             Nt = Nt * 2.0 - 1.0;
         }
 
-        if (true || material.flags & MaterialFlag::NormalFlipY) {
+        if (material.flags & MaterialFlag::NormalFlipY) {
             Nt.y = -Nt.y;
         }
 
@@ -225,11 +225,11 @@ func fs_main(
     output.emission_color = material.sample_emissive_color(uv, uv_ddx, uv_ddy);
 
     // METALLIC ROUGHNESS ───────────────────────────────────────────────
-    const f32x2 metallic_roughness_color = material.sample_metallic_roughness(uv, uv_ddx, uv_ddy);
+    let metallic_roughness_color = material.sample_metallic_roughness(uv, uv_ddx, uv_ddy);
     output.metallic_roughness_occlusion_color.xy = metallic_roughness_color;
 
     // AMBIENT OCCLUSION ────────────────────────────────────────────────
-    const f32 occlusion_color = material.sample_occlusion_color(uv, uv_ddx, uv_ddy);
+    let occlusion_color = material.sample_occlusion_color(uv, uv_ddx, uv_ddy);
     output.metallic_roughness_occlusion_color.z = occlusion_color;
 
     return output;

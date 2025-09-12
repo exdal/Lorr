@@ -74,24 +74,8 @@ func fs_main(
     var sun_dir = (params.environment.sun_direction);
     var eye_dir = normalize(world_pos - params.camera.position);
 
-    let view_zenith_cos_angle = acos(dot(eye_dir, up));
-    let light_view_cos_angle = acos(clamp(dot(
-        normalize(f32x3(sun_dir.x, 0.0, sun_dir.z)),
-        normalize(f32x3(eye_dir.x, 0.0, eye_dir.z)),
-    ), -1.0, 1.0));
     let planet_intersection = std::ray_sphere_intersect_nearest(eye_pos, eye_dir, params.environment.atmos_planet_radius);
-    let uv = sky_view_params_to_lut_uv(
-        params.environment.atmos_atmos_radius,
-        params.environment.atmos_planet_radius,
-        params.environment.sky_view_lut_size.xy,
-        planet_intersection != -1.0,
-        eye_altitude,
-        view_zenith_cos_angle,
-        light_view_cos_angle);
-
-    let result = params.sky_view_lut.SampleLevel(params.sampler, uv, 0.0);
-    let atmos_luminance = result.rgb * result.a;
-    var color = atmos_luminance * params.environment.sun_intensity;
+    var color = get_atmosphere_illuminance_along_ray(eye_pos, eye_dir, sun_dir, params.environment, params.sampler, params.sky_view_lut);
 
     let sun_cos_theta = dot(sun_dir, up);
     let transmittance_uv = transmittance_params_to_lut_uv(

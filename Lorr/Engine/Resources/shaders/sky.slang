@@ -282,3 +282,32 @@ public func sample_aerial_perspective(
 
     return aerial_perspective;
 }
+
+public func get_atmosphere_illuminance_along_ray(
+    f32x3 eye_pos,
+    f32x3 eye_dir,
+    f32x3 sun_dir,
+    in Environment environment,
+    in Sampler sampler,
+    in Image2D<f32x4> sky_view_image
+) -> f32x3 {
+    let height = length(eye_pos);
+    let view_zenith_cos_angle = acos(dot(eye_dir, f32x3(0.0, 1.0, 0.0)));
+    let light_view_cos_angle = acos(clamp(dot(
+        normalize(f32x3(sun_dir.x, 0.0, sun_dir.z)),
+        normalize(f32x3(eye_dir.x, 0.0, eye_dir.z)),
+    ), -1.0, 1.0));
+    let planet_intersection = std::ray_sphere_intersect_nearest(eye_pos, eye_dir, environment.atmos_planet_radius);
+    let uv = sky_view_params_to_lut_uv(
+        environment.atmos_atmos_radius,
+        environment.atmos_planet_radius,
+        environment.sky_view_lut_size.xy,
+        planet_intersection != -1.0,
+        height,
+        view_zenith_cos_angle,
+        light_view_cos_angle);
+
+    let result = sky_view_image.SampleLevel(sampler, uv, 0.0);
+    let atmos_luminance = result.rgb * result.a;
+    return atmos_luminance * environment.sun_intensity;
+}

@@ -13,8 +13,8 @@ public f32 Smith_G2_Height_Correlated_GGX_Lagarde(f32 NoV, f32 NoL, f32 roughnes
     return saturate(0.5f / (GGXV + GGXL));
 }
 
-public f32x3 F_Schlick(f32 LoH, f32x3 specular_albedo) {
-    return specular_albedo + (1.0 - specular_albedo) * pow(1.0 - LoH, 5.0);
+public f32x3 F_Schlick(f32 u, f32x3 F0) {
+    return F0 + (1.0 - F0) * pow(1.0 - u, 5.0);
 }
 
 public constexpr f32 Fd_Lambert() {

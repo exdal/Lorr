@@ -67,6 +67,7 @@ struct SceneRenderer {
     Image sky_multiscatter_lut = {};
     ImageView sky_multiscatter_lut_view = {};
     vuk::Extent3D sky_view_lut_extent = { .width = 192, .height = 108, .depth = 1 };
+    vuk::Extent3D sky_cubemap_extent = { .width = 32, .height = 32, .depth = 1 };
     vuk::Extent3D sky_aerial_perspective_lut_extent = { .width = 32, .height = 32, .depth = 32 };
 
     Image hiz = {};
@@ -77,6 +78,7 @@ struct SceneRenderer {
 
     bool debug_lines = false;
     f32 overdraw_heatmap_scale = 0.0f;
+    u32 frame_index = 0;
 
     auto init(this SceneRenderer &) -> bool;
     auto destroy(this SceneRenderer &) -> void;

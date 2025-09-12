@@ -53,10 +53,10 @@ func fs_main(VertexOutput input) -> f32x4 {
     // PBR constants
     let V = normalize(params.camera.position - world_position);
     let L = normalize(params.environment.sun_direction); // temp
-    let N = mapped_normal;
+    let N = normalize(mapped_normal);
     let R = reflect(-V, N);
 
-    var indirect_illuminance = f32x3(1.0);
+    var indirect_illuminance = f32x3(0.0);
 
     var sun_illuminance = f32x3(1.0);
     if ((params.environment.flags & EnvironmentFlags::HasSun) != 0u) {
@@ -75,13 +75,13 @@ func fs_main(VertexOutput input) -> f32x4 {
     if ((params.environment.flags & EnvironmentFlags::HasAtmosphere) != 0u) {
         let specular_sample = params.sky_cubemap.SampleLevel(params.linear_clamp_sampler, R, 0.0);
         let diffuse_sample = params.sky_cubemap.SampleLevel(params.linear_clamp_sampler, N, 0.0);
-        
+
         let specular_sky = specular_sample.rgb * specular_sample.a;
         let diffuse_sky = diffuse_sample.rgb * diffuse_sample.a;
-        
+
         let NoV = abs(dot(N, V)) + 1e-5;
         let reflectance = 0.04;
-        let F0 = 0.16 * reflectance * reflectance * (1.0 - metallic) + albedo_color * metallic;
+        let F0 = lerp(reflectance, albedo_color, metallic);
         let F = F_Schlick(NoV, F0);
         let kD = (1.0 - metallic) * (1.0 - F);
         let diffuse = kD * diffuse_sky * albedo_color * Fd_Lambert();
@@ -100,7 +100,7 @@ func fs_main(VertexOutput input) -> f32x4 {
     horizon *= horizon;
 
     var material_surface_color = f32x3(0.0);
-    let NoL = max(dot(N, L), 0.0001);
+    let NoL = max(dot(N, L), 0.0);
     if (NoL > 0.0) {
         let brdf = BRDF(V, N, L, albedo_color, roughness, metallic);
         material_surface_color = brdf * horizon * sun_illuminance * NoL * occlusion;

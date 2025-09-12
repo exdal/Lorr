@@ -1243,8 +1243,8 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
     depth_attachment = vuk::clear_image(std::move(depth_attachment), vuk::DepthZero);
 
     auto hiz_extent = vuk::Extent3D{
-        .width = (dst_attachment->extent.width + 1) >> 1,
-        .height = (dst_attachment->extent.height + 1) >> 1,
+        .width = std::bit_ceil((dst_attachment->extent.width + 1) >> 1),
+        .height = std::bit_ceil((dst_attachment->extent.height + 1) >> 1),
         .depth = 1,
     };
 

@@ -600,9 +600,9 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer, ls::option<
             projection_mat[1][1] *= -1;
 
             auto direction = glm::vec3(
-                glm::cos(glm::radians(t.rotation.x)) * glm::sin(glm::radians(t.rotation.y)),
-                glm::sin(glm::radians(t.rotation.x)) * glm::sin(glm::radians(t.rotation.y)),
-                glm::cos(glm::radians(t.rotation.y))
+                glm::cos(glm::radians(t.rotation.x)) * glm::cos(glm::radians(t.rotation.y)),
+                glm::sin(glm::radians(t.rotation.y)),
+                glm::sin(glm::radians(t.rotation.x)) * glm::cos(glm::radians(t.rotation.y))
             );
             direction = glm::normalize(direction);
             auto view_mat = glm::lookAt(t.position, t.position + direction, glm::vec3(0.0f, 1.0f, 0.0f));

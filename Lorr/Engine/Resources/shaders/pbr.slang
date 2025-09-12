@@ -46,7 +46,7 @@ public func BRDF(f32x3 V, f32x3 N, f32x3 L, f32x3 albedo, f32 roughness, f32 met
     f32 LoH = max(dot(L, H), 0.0);
 
     let reflectance = 0.04;
-    let F0 = 0.16 * reflectance * reflectance * (1.0 - metallic) + albedo * metallic;
+    let F0 = lerp(reflectance, albedo, metallic);
 
     // Microfacet
     let roughness2 = roughness * roughness;

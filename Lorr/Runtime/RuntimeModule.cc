@@ -96,9 +96,10 @@ auto RuntimeModule::update(this RuntimeModule &self, f64 delta_time) -> void {
 
         active_scene->tick(static_cast<f32>(delta_time));
 
-        auto prepared_frame = active_scene->prepare_frame(scene_renderer);
+        auto prepared_frame = active_scene->prepare_frame(scene_renderer, window.swap_chain->images.size());
         auto scene_render_info = lr::SceneRenderInfo{
             .delta_time = static_cast<f32>(delta_time),
+            .image_index = window.swap_chain->image_index,
             .cull_flags = active_scene->get_cull_flags(),
         };
         swapchain_attachment = scene_renderer.render(std::move(swapchain_attachment), scene_render_info, prepared_frame);

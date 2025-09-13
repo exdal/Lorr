@@ -572,7 +572,7 @@ auto Scene::get_cull_flags(this Scene &self) -> GPU::CullFlags & {
     return self.cull_flags;
 }
 
-auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer, ls::option<GPU::Camera> override_camera) -> PreparedFrame {
+auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer, u32 image_count, ls::option<GPU::Camera> override_camera) -> PreparedFrame {
     ZoneScoped;
 
     auto &asset_man = App::mod<AssetManager>();
@@ -783,6 +783,7 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer, ls::option<
     }
 
     auto prepare_info = FramePrepareInfo{
+        .image_count = image_count,
         .mesh_instance_count = self.mesh_instance_count,
         .max_meshlet_instance_count = self.max_meshlet_instance_count,
         .regenerate_sky = regenerate_sky,

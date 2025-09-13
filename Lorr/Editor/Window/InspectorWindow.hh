@@ -7,8 +7,8 @@ struct InspectorWindow : IWindow {
     InspectorWindow(std::string name_, bool open_ = true);
 
     auto render(this InspectorWindow &) -> void;
-    void do_render(vuk::Format, vuk::Extent3D) override {
+    void do_render(vuk::Swapchain &) override {
         render();
     }
 };
-} // namespace lr
+} // namespace led

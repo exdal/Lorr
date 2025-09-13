@@ -7,8 +7,8 @@ struct ConsoleWindow : IWindow {
     ConsoleWindow(std::string name_, bool open_ = true);
 
     void render(this ConsoleWindow &);
-    void do_render(vuk::Format, vuk::Extent3D) override {
+    void do_render(vuk::Swapchain &) override {
         render();
     }
 };
-} // namespace lr
+} // namespace led

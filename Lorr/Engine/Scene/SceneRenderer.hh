@@ -6,6 +6,7 @@
 
 namespace lr {
 struct FramePrepareInfo {
+    u32 image_count = 0;
     u32 mesh_instance_count = 0;
     u32 max_meshlet_instance_count = 0;
     bool regenerate_sky = false;
@@ -43,6 +44,7 @@ struct PreparedFrame {
 
 struct SceneRenderInfo {
     f32 delta_time = 0.0f;
+    u32 image_index = 0;
     GPU::CullFlags cull_flags = {};
 
     ls::option<glm::uvec2> picking_texel = ls::nullopt;

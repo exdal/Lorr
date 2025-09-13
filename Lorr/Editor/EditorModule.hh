@@ -36,7 +36,7 @@ struct EditorModule {
 
     auto init(this EditorModule &) -> bool;
     auto update(this EditorModule &, f64 delta_time) -> bool;
-    auto render(this EditorModule &, vuk::Format format, vuk::Extent3D extent) -> bool;
+    auto render(this EditorModule &, vuk::Swapchain &swap_chain) -> bool;
     auto destroy(this EditorModule &) -> void;
 
     template<typename T>

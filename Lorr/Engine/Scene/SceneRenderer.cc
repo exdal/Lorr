@@ -1283,8 +1283,6 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
             self.hiz_view.acquire(device, "HiZ", vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage, vuk::eComputeSampled);
     }
 
-    //   ──────────────────────────────────────────────────────────────────────
-
     const auto debugging = self.debug_lines;
     auto debug_drawer_buffer = vuk::Value<vuk::Buffer>{};
     auto debug_draw_aabb_buffer = vuk::Value<vuk::Buffer>{};
@@ -1465,7 +1463,6 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
             camera_buffer
         );
 
-        //  ── EDITOR MOUSE PICKING ────────────────────────────────────────────
         if (info.picking_texel) {
             auto editor_mousepick_pass = vuk::make_pass(
                 "editor mousepick",

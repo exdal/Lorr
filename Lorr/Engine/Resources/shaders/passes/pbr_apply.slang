@@ -59,9 +59,14 @@ func fs_main(VertexOutput input) -> f32x4 {
     var indirect_illuminance = f32x3(0.0);
 
     var sun_illuminance = f32x3(1.0);
+    var intersects_planet = false;
     if ((params.environment.flags & EnvironmentFlags::HasSun) != 0u) {
         var eye_altitude = max(world_position.y, 0.0) * CAMERA_SCALE_UNIT;
         eye_altitude += params.environment.atmos_planet_radius + PLANET_RADIUS_OFFSET;
+        let planet_intersection = std::ray_sphere_intersect_nearest(
+            f32x3(world_position.x, world_position.y + eye_altitude, world_position.z), L, params.environment.atmos_planet_radius);
+        intersects_planet = planet_intersection != -1.0;
+
         f32 sun_cos_theta = dot(L, f32x3(0.0, 1.0, 0.0));
 
         f32x2 transmittance_uv = transmittance_params_to_lut_uv(
@@ -101,13 +106,13 @@ func fs_main(VertexOutput input) -> f32x4 {
 
     var material_surface_color = f32x3(0.0);
     let NoL = max(dot(N, L), 0.0);
-    if (NoL > 0.0) {
+    if (!intersects_planet && NoL > 0.0) {
         let brdf = BRDF(V, N, L, albedo_color, roughness, metallic);
         material_surface_color = brdf * horizon * sun_illuminance * NoL * occlusion;
     }
 
     // FINAL ────────────────────────────────────────────────────────────
-    let base_ambient_color = f32x3(0.05);
+    let base_ambient_color = f32x3(0.0);
     let indirect_illuminance_sum = indirect_illuminance + (base_ambient_color * albedo_color * occlusion);
     let final_color = material_surface_color + indirect_illuminance_sum + emission;
 

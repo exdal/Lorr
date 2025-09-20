@@ -973,6 +973,7 @@ static auto draw_hiz(vuk::Value<vuk::ImageAttachment> &hiz_attachment, vuk::Valu
 
 static auto draw_sky(
     SceneRenderer &self,
+    u32 frame_index,
     vuk::Value<vuk::ImageAttachment> &sky_transmittance_lut_attachment,
     vuk::Value<vuk::ImageAttachment> &sky_multiscatter_lut_attachment,
     vuk::Value<vuk::Buffer> &environment_buffer,
@@ -1046,11 +1047,13 @@ static auto draw_sky(
 
     auto sky_cubemap_pass = vuk::make_pass(
         "sky cubemap",
-        [frame_index = self.frame_index](vuk::CommandBuffer &cmd_list, //
-           VUK_IA(vuk::eComputeSampled) sky_view_lut,
-           VUK_BA(vuk::eComputeRead) environment,
-           VUK_BA(vuk::eComputeRead) camera,
-           VUK_IA(vuk::eComputeRW) sky_cubemap) {
+        [frame_index](
+            vuk::CommandBuffer &cmd_list, //
+            VUK_IA(vuk::eComputeSampled) sky_view_lut,
+            VUK_BA(vuk::eComputeRead) environment,
+            VUK_BA(vuk::eComputeRead) camera,
+            VUK_IA(vuk::eComputeRW) sky_cubemap
+        ) {
             auto linear_clamp_sampler = vuk::SamplerCreateInfo{
                 .magFilter = vuk::Filter::eLinear,
                 .minFilter = vuk::Filter::eLinear,
@@ -1221,7 +1224,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
     auto &device = App::mod<Device>();
     auto &transfer_man = device.transfer_man();
     auto &bindless_descriptor_set = device.get_descriptor_set();
-    self.frame_index += 1;
+    auto frame_index = self.frame_counter++;
 
     //   ──────────────────────────────────────────────────────────────────────
     auto final_attachment = vuk::declare_ia(
@@ -1321,7 +1324,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
 
     if (frame.environment_flags & GPU::EnvironmentFlags::HasAtmosphere) {
         std::tie(sky_view_lut_attachment, sky_cubemap_attachment) =
-            draw_sky(self, sky_transmittance_lut_attachment, sky_multiscatter_lut_attachment, environment_buffer, camera_buffer);
+            draw_sky(self, frame_index, sky_transmittance_lut_attachment, sky_multiscatter_lut_attachment, environment_buffer, camera_buffer);
     }
 
     if (frame.mesh_instance_count) {

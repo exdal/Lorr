@@ -80,7 +80,7 @@ struct SceneRenderer {
 
     bool debug_lines = false;
     f32 overdraw_heatmap_scale = 0.0f;
-    u32 frame_index = 0;
+    u32 frame_counter = 0;
 
     auto init(this SceneRenderer &) -> bool;
     auto destroy(this SceneRenderer &) -> void;

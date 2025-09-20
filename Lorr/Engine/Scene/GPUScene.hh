@@ -238,6 +238,9 @@ struct DirectionalLight {
 };
 
 struct Lights {
+    // If we increase this, realistically we would need to support
+    // multiple lights for sky atmosphere aswell, which would increase
+    // raymach counts (per sun count), and this means less performance
     constexpr static auto MAX_DIRECTIONAL_LIGHTS = 1_u32;
 
     alignas(4) u32 directional_light_count = 0;

@@ -3,9 +3,9 @@ add_repositories("local repo", {rootdir = os.scriptdir()})
 local fmt_version = "11.2.0"
 local fmt_configs = { header_only = false, shared = false }
 add_requires("fmt " .. fmt_version, { configs = fmt_configs, system = false })
-add_requires("fmtlog v2.3.0", { configs = {
+add_requires("local@fmtlog v2.3.0", { configs = {
     shared = false,
-}, system = false })
+}, system = false, alias = "fmtlog-lr" })
 add_requireconfs("fmt", "fmtlog.fmt", {
     override = true,
     version = fmt_version,
@@ -68,6 +68,6 @@ add_requires("vuk 2025.09.01", { configs = {
 }, debug = is_mode("debug"), system = false })
 
 add_requires("meshoptimizer v0.24", {system = false})
-add_requires("ktx v4.4.0", { debug = is_plat("windows"), system = false })
+add_requires("ktx v4.4.0", { debug = false, system = false })
 
 add_requires("svector v1.0.3", {system = false})

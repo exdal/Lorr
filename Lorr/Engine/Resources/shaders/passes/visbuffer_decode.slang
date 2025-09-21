@@ -30,15 +30,6 @@ struct PartialDeriv {
     f32x3 ddx;
     f32x3 ddy;
     f32x3 lambda;
-
-    func gradient_of(f32x2x3 v) -> UVGradient {
-        UVGradient grad;
-        grad.uv = mul(this.lambda, v);
-        grad.ddx = mul(this.ddx, v);
-        grad.ddy = mul(this.ddy, v);
-
-        return grad;
-    }
 };
 
 func compute_partial_derivatives(in f32x4x3 world_positions, in f32x2 uv, in f32x2 resolution) -> PartialDeriv {
@@ -73,11 +64,11 @@ func compute_partial_derivatives(in f32x4x3 world_positions, in f32x2 uv, in f32
         interp_w * (delta_v.x * result.ddx.y + delta_v.y * result.ddy.y),
         interp_w * (delta_v.x * result.ddx.z + delta_v.y * result.ddy.z)
     );
-    let two_over_resolution = 2.0 / resolution;
-    result.ddx *= two_over_resolution.x;
-    result.ddy *= -two_over_resolution.y;
-    ddx_sum *= two_over_resolution.x;
-    ddy_sum *= -two_over_resolution.y;
+    let inv_resolution = 1.0 / resolution;
+    result.ddx *= inv_resolution.x;
+    result.ddy *= -inv_resolution.y;
+    ddx_sum *= inv_resolution.x;
+    ddy_sum *= -inv_resolution.y;
 
     let interp_ddx_w = 1.0 / (interp_inv_w + ddx_sum);
     let interp_ddy_w = 1.0 / (interp_inv_w + ddy_sum);
@@ -87,8 +78,69 @@ func compute_partial_derivatives(in f32x4x3 world_positions, in f32x2 uv, in f32
     return result;
 }
 
+func prepare_world_normal(
+    world_normal: f32x3,
+    double_sided: bool,
+    is_front: bool,
+) -> f32x3 {
+    var output = world_normal;
+    // NOTE: When NOT using normal-mapping, if looking at the back face of a double-sided
+    // material, the normal needs to be inverted. This is a branchless version of that.
+    output = (f32(!double_sided || is_front) * 2.0 - 1.0) * output;
+    return normalize(output);
+}
+
+func calculate_world_tangent(
+    world_normal: f32x3,
+    ddx_world_position: f32x3,
+    ddy_world_position: f32x3,
+    ddx_uv: f32x2,
+    ddy_uv: f32x2,
+) -> f32x4 {
+    let ddx_world_position_s = ddx_world_position - dot(ddx_world_position, world_normal) * world_normal;
+    let ddy_world_position_s = ddy_world_position - dot(ddy_world_position, world_normal) * world_normal;
+    let jacobian_sign = sign(ddx_uv.x * ddy_uv.y - ddx_uv.y * ddy_uv.x);
+    var world_tangent = jacobian_sign * (ddy_uv.y * ddx_world_position_s - ddx_uv.y * ddy_world_position_s);
+    if (jacobian_sign != 0.0) {
+        world_tangent = normalize(world_tangent);
+    }
+
+    let w = jacobian_sign * sign(dot(ddy_world_position, cross(world_normal, ddx_world_position)));
+    return f32x4(world_tangent, -w);
+}
+
+func calculate_tbn_mikktspace(world_normal: f32x3, world_tangent: f32x4) -> f32x3x3 {
+    // NOTE: The mikktspace method of normal mapping explicitly requires that the world normal NOT
+    // be re-normalized in the fragment shader. This is primarily to match the way mikktspace
+    // bakes vertex tangents and normal maps so that this is the exact inverse. Blender, Unity,
+    // Unreal Engine, Godot, and more all use the mikktspace method. Do not change this code
+    // unless you really know what you are doing.
+    // http://www.mikktspace.com/
+    var N = world_normal;
+
+    // NOTE: The mikktspace method of normal mapping explicitly requires that these NOT be
+    // normalized nor any Gram-Schmidt applied to ensure the vertex normal is orthogonal to the
+    // vertex tangent! Do not change this code unless you really know what you are doing.
+    // http://www.mikktspace.com/
+    var T = world_tangent.xyz;
+    var B = world_tangent.w * cross(N, T);
+
+#if 1
+    // https://www.jeremyong.com/graphics/2023/12/16/surface-gradient-bump-mapping/#a-note-on-mikktspace-usage
+    let inverse_length_n = 1.0 / length(N);
+    T *= inverse_length_n;
+    B *= inverse_length_n;
+    N *= inverse_length_n;
+#endif
+
+    return f32x3x3(T, B, N);
+}
+
 [[shader("fragment")]]
-func fs_main(VertexOutput input) -> FragmentOutput {
+func fs_main(
+    VertexOutput input,
+    bool is_front : SV_IsFrontFace
+) -> FragmentOutput {
     let texel = params.visbuffer.Load(u32x3(u32x2(input.position.xy), 0));
     if (texel == ~0u) {
         discard;
@@ -113,83 +165,71 @@ func fs_main(VertexOutput input) -> FragmentOutput {
 
     let positions = meshlet.positions(mesh, indices);
     let normals = meshlet.normals(mesh, indices);
-    let tex_coords = meshlet.tex_coords(mesh, indices);
     let world_positions = transform.to_world_positions(positions);
     let NDC = f32x3(input.tex_coord * 2.0 - 1.0, 1.0);
     let deriv = compute_partial_derivatives(world_positions, NDC.xy, params.camera.resolution);
-    let tex_coord_grad = deriv.gradient_of(tex_coords);
+
+    let tex_coords = meshlet.tex_coords(mesh, indices);
+    let uv = mul(deriv.lambda, tex_coords);
+    let uv_ddx = mul(deriv.ddx, tex_coords);
+    let uv_ddy = mul(deriv.ddy, tex_coords);
 
     // ALBEDO ───────────────────────────────────────────────────────────
-    output.albedo_color = material.sample_albedo_color(tex_coord_grad);
+    output.albedo_color = material.sample_albedo_color(uv, uv_ddx, uv_ddy);
 
     // NORMALS ──────────────────────────────────────────────────────────
-    const f32x3x3 camera_relative_world_positions = {
+    let camera_relative_world_positions = f32x3x3(
         world_positions[0].xyz - params.camera.position,
         world_positions[1].xyz - params.camera.position,
         world_positions[2].xyz - params.camera.position,
-    };
-    const f32x3 pos_ddx = mul(deriv.ddx, camera_relative_world_positions);
-    const f32x3 pos_ddy = mul(deriv.ddy, camera_relative_world_positions);
+    );
+    let pos_ddx = mul(deriv.ddx, camera_relative_world_positions);
+    let pos_ddy = mul(deriv.ddy, camera_relative_world_positions);
 
-    const f32x3x3 world_normals = transform.to_world_normals(normals);
-    const f32x3 world_normal = mul(deriv.lambda, world_normals);
+    let double_sided = false;
 
-    const f32x3 pos_ddx_s = pos_ddx - dot(pos_ddx, world_normal) * world_normal;
-    const f32x3 pos_ddy_s = pos_ddy - dot(pos_ddy, world_normal) * world_normal;
-    const f32x2 uv_ddx = tex_coord_grad.ddx;
-    const f32x2 uv_ddy = tex_coord_grad.ddy;
+    let world_normals = transform.to_world_normals(normals);
+    var world_normal = mul(deriv.lambda, world_normals);
+    var normal = prepare_world_normal(world_normal, double_sided, is_front);
 
-    const i32 jacobian_sign = sign(uv_ddx.x * uv_ddy.y - uv_ddx.y * uv_ddy.x);
-    f32x3 tangent = jacobian_sign * (uv_ddy.y * pos_ddx_s - uv_ddx.y * pos_ddy_s);
-    if (jacobian_sign != 0.0) {
-        tangent = normalize(tangent);
-    }
-    const f32 w = jacobian_sign * sign(dot(pos_ddy, cross(world_normal, pos_ddx)));
-    f32x3 bitangent = -w * cross(world_normal, tangent);
-    f32x3 normal = world_normal;
-
-#if 1
-    const f32 inv_len_N = 1.0 / length(normal);
-    tangent *= inv_len_N;
-    bitangent *= inv_len_N;
-    normal *= inv_len_N;
-#endif
-
-    if (material.flags & MaterialFlag::HasNormalImage) {
-        f32x3 sampled_normal = material.sample_normal_color(tex_coord_grad);
-        // NOTE: This is here to convert tangent spaces to our correct spaces.
-        // for example, normal map's R component is +Y for our world. @grok is this true?
-        sampled_normal = f32x3(sampled_normal.y, sampled_normal.x, sampled_normal.z);
-
+    if ((material.flags & MaterialFlag::HasNormalImage) != 0) {
+        let sampled_normal = material.sample_normal_color(uv, uv_ddx, uv_ddy);
+        let world_tangent = calculate_world_tangent(world_normal, pos_ddx, pos_ddy, uv_ddx, uv_ddy);
+        let TBN = calculate_tbn_mikktspace(normal, world_tangent);
+        let T = TBN[0];
+        let B = TBN[1];
+        let N = TBN[2];
+        var Nt = sampled_normal;
         if (material.flags & MaterialFlag::NormalTwoComponent) {
-            sampled_normal = f32x3(sampled_normal.yx * 2.0 - 1.0, 0.0);
-            sampled_normal.z = sqrt(1.0 - sampled_normal.x * sampled_normal.x - sampled_normal.y * sampled_normal.y);
+            Nt = f32x3(Nt.rg * 2.0 - 1.0, 0.0);
+            Nt.z = sqrt(1.0 - Nt.x * Nt.x - Nt.y * Nt.y);
         } else {
-            sampled_normal = sampled_normal * 2.0 - 1.0;
+            Nt = Nt * 2.0 - 1.0;
         }
 
         if (material.flags & MaterialFlag::NormalFlipY) {
-            sampled_normal.y = -sampled_normal.y;
+            Nt.y = -Nt.y;
         }
 
-        normal = sampled_normal.x * tangent
-               + sampled_normal.y * bitangent
-               + sampled_normal.z * normal;
-        normal = normalize(normal);
+        if (double_sided && !is_front) {
+            Nt = -Nt;
+        }
+
+        normal = normalize(Nt.x * T + Nt.y * B + Nt.z * N);
     }
 
-    output.normal_color.xy = std::vec3_to_oct(normal);
-    output.normal_color.zw = std::vec3_to_oct(world_normal);
+    output.normal_color.xy = std::octahedral_encode(normal);
+    output.normal_color.zw = std::octahedral_encode(world_normal);
 
     // EMISSION ─────────────────────────────────────────────────────────
-    output.emission_color = material.sample_emissive_color(tex_coord_grad);
+    output.emission_color = material.sample_emissive_color(uv, uv_ddx, uv_ddy);
 
     // METALLIC ROUGHNESS ───────────────────────────────────────────────
-    const f32x2 metallic_roughness_color = material.sample_metallic_roughness(tex_coord_grad);
+    let metallic_roughness_color = material.sample_metallic_roughness(uv, uv_ddx, uv_ddy);
     output.metallic_roughness_occlusion_color.xy = metallic_roughness_color;
 
     // AMBIENT OCCLUSION ────────────────────────────────────────────────
-    const f32 occlusion_color = material.sample_occlusion_color(tex_coord_grad);
+    let occlusion_color = material.sample_occlusion_color(uv, uv_ddx, uv_ddy);
     output.metallic_roughness_occlusion_color.z = occlusion_color;
 
     return output;

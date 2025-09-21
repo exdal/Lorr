@@ -162,7 +162,7 @@ static auto draw_tools(ViewportWindow &self) -> void {
     }
 }
 
-static auto draw_viewport(ViewportWindow &self, vuk::Format format, vuk::Extent3D) -> void {
+static auto draw_viewport(ViewportWindow &self, vuk::Swapchain &swap_chain) -> void {
     auto &asset_man = lr::App::mod<lr::AssetManager>();
     auto &editor = lr::App::mod<EditorModule>();
     auto &scene_renderer = lr::App::mod<lr::SceneRenderer>();
@@ -242,13 +242,14 @@ static auto draw_viewport(ViewportWindow &self, vuk::Format format, vuk::Extent3
         self.editor_camera.update(delta_time, target_velocity);
     }
 
-    auto prepared_frame = active_scene->prepare_frame(scene_renderer, self.editor_camera); // NOLINT(cppcoreguidelines-slicing)
+    auto prepared_frame =
+        active_scene->prepare_frame(scene_renderer, swap_chain.images.size(), self.editor_camera); // NOLINT(cppcoreguidelines-slicing)
 
     auto viewport_attachment_info = vuk::ImageAttachment{
         .image_type = vuk::ImageType::e2D,
         .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eColorAttachment,
         .extent = { .width = static_cast<u32>(window_size.x), .height = static_cast<u32>(window_size.y), .depth = 1 },
-        .format = format,
+        .format = swap_chain.images[0].format,
         .sample_count = vuk::Samples::e1,
         .view_type = vuk::ImageViewType::e2D,
         .level_count = 1,
@@ -257,6 +258,7 @@ static auto draw_viewport(ViewportWindow &self, vuk::Format format, vuk::Extent3
     auto viewport_attachment = vuk::declare_ia("viewport", viewport_attachment_info);
     auto scene_render_info = lr::SceneRenderInfo{
         .delta_time = delta_time,
+        .image_index = swap_chain.image_index,
         .cull_flags = active_scene->get_cull_flags(),
         .picking_texel = requested_texel_transform,
     };
@@ -347,14 +349,14 @@ ViewportWindow::ViewportWindow(std::string name_, bool open_) : IWindow(std::mov
     this->gizmo_op = ImGuizmo::TRANSLATE;
 }
 
-auto ViewportWindow::render(this ViewportWindow &self, vuk::Format format, vuk::Extent3D extent) -> void {
+auto ViewportWindow::render(this ViewportWindow &self, vuk::Swapchain &swap_chain) -> void {
     auto &editor = lr::App::mod<EditorModule>();
     const auto should_render = editor.active_project && editor.active_project->active_scene_uuid;
 
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0, 0.0));
     if (ImGui::Begin(self.name.data())) {
         if (should_render) {
-            draw_viewport(self, format, extent);
+            draw_viewport(self, swap_chain);
             draw_tools(self);
         }
 

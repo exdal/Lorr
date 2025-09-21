@@ -12,9 +12,9 @@ struct ViewportWindow : IWindow {
 
     ViewportWindow(std::string name_, bool open_ = true);
 
-    auto render(this ViewportWindow &, vuk::Format format, vuk::Extent3D extent) -> void;
-    void do_render(vuk::Format format, vuk::Extent3D extent) override {
-        render(format, extent);
+    auto render(this ViewportWindow &, vuk::Swapchain &swap_chain) -> void;
+    void do_render(vuk::Swapchain &swap_chain) override {
+        render(swap_chain);
     }
 };
-} // namespace lr
+} // namespace led

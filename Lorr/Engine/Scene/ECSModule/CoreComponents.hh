@@ -30,7 +30,6 @@ ECS_COMPONENT_BEGIN(Camera)
     ECS_COMPONENT_MEMBER(max_velocity, f32, 1.0f)
     ECS_COMPONENT_MEMBER(accel_speed, f32, 1.0f)
     ECS_COMPONENT_MEMBER(decel_speed, f32, 1.0f)
-    ECS_COMPONENT_MEMBER(frustum_projection_view_mat, glm::mat4, glm::mat4(1.0))
     ECS_COMPONENT_MEMBER(acceptable_lod_error, f32, 2.0f)
 ECS_COMPONENT_END();
 
@@ -57,6 +56,7 @@ ECS_COMPONENT_BEGIN(Environment)
     ECS_COMPONENT_MEMBER(atmos_ozone_absorption, glm::vec3, { 0.650f, 1.881f, 0.085f })
     ECS_COMPONENT_MEMBER(atmos_ozone_height, f32, 25.0f)
     ECS_COMPONENT_MEMBER(atmos_ozone_thickness, f32, 15.0f)
+    ECS_COMPONENT_MEMBER(atmos_terrain_albedo, glm::vec3, { 0.3f, 0.3f, 0.3f })
     ECS_COMPONENT_MEMBER(atmos_aerial_perspective_start_km, f32, 8.0f)
     ECS_COMPONENT_MEMBER(eye_adaptation, bool, true)
     ECS_COMPONENT_MEMBER(eye_min_exposure, f32, -6.0f)
@@ -64,6 +64,17 @@ ECS_COMPONENT_BEGIN(Environment)
     ECS_COMPONENT_MEMBER(eye_adaptation_speed, f32, 1.1f)
     ECS_COMPONENT_MEMBER(eye_iso, f32, 100.0f)
     ECS_COMPONENT_MEMBER(eye_k, f32, 12.5f)
+ECS_COMPONENT_END();
+
+ECS_COMPONENT_BEGIN(VBGTAO)
+    ECS_COMPONENT_MEMBER(thickness, f32, 0.25f)
+    ECS_COMPONENT_MEMBER(depth_range_scale_factor, f32, 0.75f)
+    ECS_COMPONENT_MEMBER(radius, f32, 0.5f)
+    ECS_COMPONENT_MEMBER(radius_multiplier, f32, 1.457f)
+    ECS_COMPONENT_MEMBER(slice_count, f32, 3.0f)
+    ECS_COMPONENT_MEMBER(sample_count_per_slice, f32, 3.0f)
+    ECS_COMPONENT_MEMBER(denoise_power, f32, 1.1f)
+    ECS_COMPONENT_MEMBER(linear_thickness_multiplier, f32, 300.0f)
 ECS_COMPONENT_END();
 
 // clang-format on

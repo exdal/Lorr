@@ -1,5 +1,6 @@
 implementing std;
 
+public static constexpr f32 HALF_PI = 1.57079632679;
 public static constexpr f32 PI = 3.1415926535897932384626433832795;
 public static constexpr f32 TAU = 6.283185307179586476925286766559;
 
@@ -68,17 +69,19 @@ public func ray_sphere_intersect(f32x3 ray_origin, f32x3 ray_direction, f32 sphe
     return (-b + f32x2(-1.0, 1.0) * sqrt_delta) / (2.0 * a);
 }
 
-public func ray_sphere_intersect_nearest(f32x3 ray_origin, f32x3 ray_direction, f32 sphere_radius) -> Optional<f32> {
-    const let sol = ray_sphere_intersect(ray_origin, ray_direction, sphere_radius);
-    if (!sol.hasValue) {
-        return none;
+public func ray_sphere_intersect_nearest(f32x3 ray_origin, f32x3 ray_direction, f32 sphere_radius) -> f32 {
+    let a = dot(ray_direction, ray_direction);
+    let b = 2.0 * dot(ray_direction, ray_origin);
+    let c = dot(ray_origin, ray_origin) - (sphere_radius * sphere_radius);
+    let delta = b * b - 4.0 * a * c;
+    if (delta < 0.0 || a == 0.0) {
+        return -1.0;
     }
 
-    const let sol0 = sol.value.x;
-    const let sol1 = sol.value.y;
-
+    let sol0 = (-b - safe_sqrt(delta)) / (2.0 * a);
+    let sol1 = (-b + safe_sqrt(delta)) / (2.0 * a);
     if (sol0 < 0.0 && sol1 < 0.0) {
-        return none;
+        return -1.0;
     }
 
     if (sol0 < 0.0) {

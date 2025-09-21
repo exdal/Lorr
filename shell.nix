@@ -27,7 +27,14 @@ pkgs.mkShell.override { stdenv = pkgs.llvmPackages_20.libcxxStdenv; } {
     pkgs.meshoptimizer
 
     # for SDL3
-    pkgs.sdl3
+    pkgs.xorg.libX11
+    pkgs.xorg.libxcb
+    pkgs.xorg.libXScrnSaver
+    pkgs.xorg.libXcursor
+    pkgs.xorg.libXext
+    pkgs.xorg.libXfixes
+    pkgs.xorg.libXi
+    pkgs.xorg.libXrandr
   ];
 
   shellHook = ''

@@ -19,12 +19,11 @@ auto EditorCamera::update(this EditorCamera &self, f32 delta_time, const glm::ve
 
     auto view_mat = glm::lookAt(self.position, self.position + direction, up);
     auto projection_view_mat = projection_mat * view_mat;
-
-    self.frustum_projection_view_mat = self.projection_view_mat;
     self.projection_mat = projection_mat;
+    self.inv_projection_mat = glm::inverse(projection_mat);
     self.view_mat = view_mat;
-    self.projection_view_mat = projection_mat * view_mat;
     self.inv_view_mat = glm::inverse(view_mat);
+    self.projection_view_mat = projection_mat * view_mat;
     self.inv_projection_view_mat = glm::inverse(projection_view_mat);
     self.acceptable_lod_error = 2.0f;
 }

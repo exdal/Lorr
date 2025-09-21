@@ -6,6 +6,7 @@
 
 namespace lr {
 struct FramePrepareInfo {
+    u32 image_count = 0;
     u32 mesh_instance_count = 0;
     u32 max_meshlet_instance_count = 0;
     bool regenerate_sky = false;
@@ -21,6 +22,7 @@ struct FramePrepareInfo {
 
     GPU::Environment environment = {};
     GPU::Camera camera = {};
+    ls::option<GPU::VBGTAO> vbgtao = {};
 };
 
 struct PreparedFrame {
@@ -30,17 +32,19 @@ struct PreparedFrame {
     vuk::Value<vuk::Buffer> transforms_buffer = {};
     vuk::Value<vuk::Buffer> meshes_buffer = {};
     vuk::Value<vuk::Buffer> mesh_instances_buffer = {};
-    vuk::Value<vuk::Buffer> mesh_instance_visibility_mask_buffer = {};
     vuk::Value<vuk::Buffer> meshlet_instance_visibility_mask_buffer = {};
     vuk::Value<vuk::Buffer> materials_buffer = {};
     vuk::Value<vuk::Buffer> environment_buffer = {};
     vuk::Value<vuk::Buffer> camera_buffer = {};
+    vuk::Value<vuk::Buffer> directional_camera_buffer = {};
     vuk::Value<vuk::ImageAttachment> sky_transmittance_lut = {};
     vuk::Value<vuk::ImageAttachment> sky_multiscatter_lut = {};
+    ls::option<GPU::VBGTAO> vbgtao = {};
 };
 
 struct SceneRenderInfo {
     f32 delta_time = 0.0f;
+    u32 image_index = 0;
     GPU::CullFlags cull_flags = {};
 
     ls::option<glm::uvec2> picking_texel = ls::nullopt;
@@ -56,7 +60,6 @@ struct SceneRenderer {
 
     Buffer mesh_instances_buffer = {};
     Buffer meshes_buffer = {};
-    Buffer mesh_instance_visibility_mask_buffer = {};
     Buffer meshlet_instance_visibility_mask_buffer = {};
 
     Buffer materials_buffer = {};
@@ -65,14 +68,19 @@ struct SceneRenderer {
     ImageView sky_transmittance_lut_view = {};
     Image sky_multiscatter_lut = {};
     ImageView sky_multiscatter_lut_view = {};
-    vuk::Extent3D sky_view_lut_extent = { .width = 312, .height = 192, .depth = 1 };
+    vuk::Extent3D sky_view_lut_extent = { .width = 192, .height = 108, .depth = 1 };
+    vuk::Extent3D sky_cubemap_extent = { .width = 32, .height = 32, .depth = 1 };
     vuk::Extent3D sky_aerial_perspective_lut_extent = { .width = 32, .height = 32, .depth = 32 };
 
     Image hiz = {};
     ImageView hiz_view = {};
 
+    Image hilbert_noise_lut = {};
+    ImageView hilbert_noise_lut_view = {};
+
     bool debug_lines = false;
     f32 overdraw_heatmap_scale = 0.0f;
+    u32 frame_counter = 0;
 
     auto init(this SceneRenderer &) -> bool;
     auto destroy(this SceneRenderer &) -> void;

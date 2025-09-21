@@ -430,7 +430,7 @@ auto Scene::create_model_entity(this Scene &self, UUID &importing_model_uuid) ->
     auto visit_nodes = [&](this auto &visitor, flecs::entity &root, std::vector<usize> &node_indices) -> void {
         for (const auto node_index : node_indices) {
             auto &cur_node = imported_model->nodes[node_index];
-            auto node_entity = self.create_entity(self.find_entity(cur_node.name) ? std::string{} : cur_node.name);
+            auto node_entity = self.create_entity();
 
             const auto T = glm::translate(glm::mat4(1.0f), cur_node.translation);
             const auto R = glm::mat4_cast(cur_node.rotation);
@@ -572,7 +572,7 @@ auto Scene::get_cull_flags(this Scene &self) -> GPU::CullFlags & {
     return self.cull_flags;
 }
 
-auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer, ls::option<GPU::Camera> override_camera) -> PreparedFrame {
+auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer, u32 image_count, ls::option<GPU::Camera> override_camera) -> PreparedFrame {
     ZoneScoped;
 
     auto &asset_man = App::mod<AssetManager>();
@@ -586,6 +586,9 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer, ls::option<
         .build();
     auto environment_query = self.get_world()
         .query_builder<ECS::Environment>()
+        .build();
+    auto vbgtao_query = self.get_world()
+        .query_builder<ECS::VBGTAO>()
         .build();
     // clang-format on
 
@@ -606,17 +609,16 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer, ls::option<
 
             auto &camera_data = active_camera_data.emplace(GPU::Camera{});
             camera_data.projection_mat = projection_mat;
+            camera_data.inv_projection_mat = glm::inverse(projection_mat);
             camera_data.view_mat = view_mat;
-            camera_data.projection_view_mat = camera_data.projection_mat * camera_data.view_mat;
             camera_data.inv_view_mat = glm::inverse(camera_data.view_mat);
+            camera_data.projection_view_mat = camera_data.projection_mat * camera_data.view_mat;
             camera_data.inv_projection_view_mat = glm::inverse(camera_data.projection_view_mat);
             camera_data.position = t.position;
             camera_data.near_clip = c.near_clip;
             camera_data.far_clip = c.far_clip;
             camera_data.resolution = c.resolution;
             camera_data.acceptable_lod_error = c.acceptable_lod_error;
-            camera_data.frustum_projection_view_mat = c.frustum_projection_view_mat;
-            c.frustum_projection_view_mat = camera_data.projection_view_mat;
         });
     }
 
@@ -642,6 +644,7 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer, ls::option<
         environment.atmos_ozone_absorption = environment_comp.atmos_ozone_absorption * 1e-3f;
         environment.atmos_ozone_height = environment_comp.atmos_ozone_height;
         environment.atmos_ozone_thickness = environment_comp.atmos_ozone_thickness;
+        environment.atmos_terrain_albedo = environment_comp.atmos_terrain_albedo;
         environment.atmos_aerial_perspective_start_km = environment_comp.atmos_aerial_perspective_start_km;
         environment.eye_min_exposure = environment_comp.eye_min_exposure;
         environment.eye_max_exposure = environment_comp.eye_max_exposure;
@@ -662,7 +665,24 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer, ls::option<
     regenerate_sky |= self.last_environment.atmos_terrain_albedo != environment.atmos_terrain_albedo;
     regenerate_sky |= self.last_environment.atmos_atmos_radius != environment.atmos_atmos_radius;
     regenerate_sky |= self.last_environment.atmos_planet_radius != environment.atmos_planet_radius;
+    regenerate_sky |= self.last_environment.atmos_terrain_albedo != environment.atmos_terrain_albedo;
     self.last_environment = environment;
+
+    auto vbgtao = ls::option<GPU::VBGTAO>();
+    vbgtao_query.each([&vbgtao](flecs::entity, ECS::VBGTAO &vbgtao_comp) {
+        vbgtao.emplace(
+            GPU::VBGTAO{
+                .thickness = vbgtao_comp.thickness,
+                .depth_range_scale_factor = vbgtao_comp.depth_range_scale_factor,
+                .radius = vbgtao_comp.radius,
+                .radius_multiplier = vbgtao_comp.radius_multiplier,
+                .slice_count = glm::ceil(vbgtao_comp.slice_count),
+                .sample_count_per_slice = glm::ceil(vbgtao_comp.sample_count_per_slice),
+                .denoise_power = vbgtao_comp.denoise_power,
+                .linear_thickness_multiplier = vbgtao_comp.linear_thickness_multiplier,
+            }
+        );
+    });
 
     auto meshlet_instance_visibility_offset = 0_u32;
     auto max_meshlet_instance_count = 0_u32;
@@ -744,7 +764,7 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer, ls::option<
         flags |= metallic_roughness_image_index.has_value() ? GPU::MaterialFlag::HasMetallicRoughnessImage : GPU::MaterialFlag::None;
         flags |= occlusion_image_index.has_value() ? GPU::MaterialFlag::HasOcclusionImage : GPU::MaterialFlag::None;
 
-        auto gpu_material = GPU::Material {
+        auto gpu_material = GPU::Material{
             .albedo_color = material->albedo_color,
             .emissive_color = material->emissive_color,
             .roughness_factor = material->roughness_factor,
@@ -763,6 +783,7 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer, ls::option<
     }
 
     auto prepare_info = FramePrepareInfo{
+        .image_count = image_count,
         .mesh_instance_count = self.mesh_instance_count,
         .max_meshlet_instance_count = self.max_meshlet_instance_count,
         .regenerate_sky = regenerate_sky,
@@ -774,6 +795,7 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer, ls::option<
         .gpu_mesh_instances = gpu_mesh_instances,
         .environment = environment,
         .camera = active_camera_data.value_or(GPU::Camera{}),
+        .vbgtao = vbgtao,
     };
     auto prepared_frame = renderer.prepare_frame(prepare_info);
 

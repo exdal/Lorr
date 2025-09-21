@@ -1109,11 +1109,11 @@ auto AssetManager::load_texture(this AssetManager &self, const UUID &uuid, const
         .addr_v = vuk::SamplerAddressMode::eRepeat,
         .addr_w = vuk::SamplerAddressMode::eRepeat,
         .compare_op = vuk::CompareOp::eNever,
-        .max_anisotropy = 8.0f,
+        .max_anisotropy = 1.0f,
         .mip_lod_bias = 0.0f,
         .min_lod = 0.0f,
-        .max_lod = static_cast<f32>(mip_level_count - 1),
-        .use_anisotropy = true,
+        .max_lod = 1000.0f,
+        .use_anisotropy = false,
     };
     auto sampler = Sampler::create(device, sampler_info).value();
 

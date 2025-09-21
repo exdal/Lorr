@@ -33,8 +33,8 @@ struct AssetBrowserWindow : IWindow {
     auto find_directory(this AssetBrowserWindow &, const fs::path &path) -> AssetDirectory *;
 
     void render(this AssetBrowserWindow &);
-    void do_render(vuk::Format, vuk::Extent3D) override {
+    void do_render(vuk::Swapchain &) override {
         render();
     }
 };
-} // namespace lr
+} // namespace led

@@ -57,11 +57,10 @@ func fs_main(VertexOutput input) -> u32 {
 #if 1
     let material = params.materials[input.material_index];
     if (material.flags & MaterialFlag::HasAlbedoImage) {
-        UVGradient grad;
-        grad.uv = input.tex_coord;
-        grad.ddx = ddx(input.tex_coord);
-        grad.ddy = ddy(input.tex_coord);
-        let alpha_color = material.sample_albedo_color(grad).a;
+        let uv = input.tex_coord;
+        let uv_ddx = ddx(input.tex_coord);
+        let uv_ddy = ddy(input.tex_coord);
+        let alpha_color = material.sample_albedo_color(uv, uv_ddx, uv_ddy).a;
 
         // We are doing deferred, blend alpha mode is not supported in this pass.
         if (alpha_color < clamp(material.alpha_cutoff, 0.001, 1.0)) {

@@ -32,52 +32,52 @@ public enum CullFlags : u32 {
     MicroTriangles,
 };
 
-[[Flags]]
 public enum EnvironmentFlags : u32 {
     None = 0,
     HasSun = 1 << 0,
     HasAtmosphere = 1 << 1,
     HasEyeAdaptation = 1 << 2,
+    HasVBGTAO = 1 << 3,
 };
 
 public struct Environment {
-    public EnvironmentFlags flags = EnvironmentFlags::None;
+    public EnvironmentFlags flags;
     // Sun
-    public f32x3 sun_direction = {};
-    public f32 sun_intensity = 10.0f;
+    public f32x3 sun_direction;
+    public f32 sun_intensity;
     // Atmosphere
-    public f32x3 atmos_rayleigh_scatter = { 0.005802f, 0.013558f, 0.033100f };
-    public f32 atmos_rayleigh_density = 8.0f;
-    public f32x3 atmos_mie_scatter = { 0.003996f, 0.003996f, 0.003996f };
-    public f32 atmos_mie_density = 1.2f;
-    public f32 atmos_mie_extinction = 0.004440f;
-    public f32 atmos_mie_asymmetry = 3.6f;
-    public f32x3 atmos_ozone_absorption = { 0.000650f, 0.001881f, 0.000085f };
-    public f32 atmos_ozone_height = 25.0f;
-    public f32 atmos_ozone_thickness = 15.0f;
-    public f32x3 atmos_terrain_albedo = { 0.3f, 0.3f, 0.3f };
-    public f32 atmos_planet_radius = 6360.0f;
-    public f32 atmos_atmos_radius = 6460.0f;
-    public f32 atmos_aerial_perspective_start_km = 8.0f;
+    public f32x3 atmos_rayleigh_scatter;
+    public f32 atmos_rayleigh_density;
+    public f32x3 atmos_mie_scatter;
+    public f32 atmos_mie_density;
+    public f32 atmos_mie_extinction;
+    public f32 atmos_mie_asymmetry;
+    public f32x3 atmos_ozone_absorption;
+    public f32 atmos_ozone_height;
+    public f32 atmos_ozone_thickness;
+    public f32x3 atmos_terrain_albedo;
+    public f32 atmos_planet_radius;
+    public f32 atmos_atmos_radius;
+    public f32 atmos_aerial_perspective_start_km;
     // Eye adaptation
-    public f32 eye_min_exposure = -6.0f;
-    public f32 eye_max_exposure = 18.0f;
-    public f32 eye_adaptation_speed = 1.1f;
-    public f32 eye_ISO_K = 100.0f / 12.5f;
+    public f32 eye_min_exposure;
+    public f32 eye_max_exposure;
+    public f32 eye_adaptation_speed;
+    public f32 eye_ISO_K;
 
-    public i32x3 transmittance_lut_size = {};
-    public i32x3 sky_view_lut_size = {};
-    public i32x3 multiscattering_lut_size = {};
-    public i32x3 aerial_perspective_lut_size = {};
+    public i32x3 transmittance_lut_size;
+    public i32x3 sky_view_lut_size;
+    public i32x3 multiscattering_lut_size;
+    public i32x3 aerial_perspective_lut_size;
 };
 
 public struct Camera {
     public mat4 projection_mat;
+    public mat4 inv_projection_mat;
     public mat4 view_mat;
-    public mat4 projection_view_mat;
     public mat4 inv_view_mat;
+    public mat4 projection_view_mat;
     public mat4 inv_projection_view_mat;
-    public mat4 prev_projection_view_mat;
     public f32x3 position;
     public f32 near_clip;
     public f32 far_clip;
@@ -109,12 +109,6 @@ public struct Transform {
     public func to_world_normals(in f32x3x3 normals) -> f32x3x3 {
         return { mul(this.normal, normals[0]), mul(this.normal, normals[1]), mul(this.normal, normals[2]) };
     }
-};
-
-public struct UVGradient {
-    public f32x2 uv;
-    public f32x2 ddx;
-    public f32x2 ddy;
 };
 
 [[vk::binding(0, 1)]]
@@ -155,46 +149,46 @@ public struct Material {
     public u32 metallic_roughness_image_index = 0;
     public u32 occlusion_image_index = 0;
 
-    public func sample_albedo_color(in UVGradient grad) -> f32x4 {
+    public func sample_albedo_color(f32x2 uv, f32x2 ddx, f32x2 ddy) -> f32x4 {
         if (this.flags & MaterialFlag::HasAlbedoImage) {
             let color = bindless_images[this.albedo_image_index]
-                .SampleGrad(bindless_samplers[this.sampler_index], grad.uv, grad.ddx, grad.ddy);
+                .SampleGrad(bindless_samplers[this.sampler_index], uv, ddx, ddy);
             return this.albedo_color * color;
         }
 
         return this.albedo_color;
     }
 
-    public func sample_normal_color(in UVGradient grad) -> f32x3 {
+    public func sample_normal_color(f32x2 uv, f32x2 ddx, f32x2 ddy) -> f32x3 {
         return bindless_images[this.normal_image_index]
-            .SampleGrad(bindless_samplers[this.sampler_index], grad.uv, grad.ddx, grad.ddy).rgb;
+            .SampleGrad(bindless_samplers[this.sampler_index], uv, ddx, ddy).rgb;
     }
 
-    public func sample_emissive_color(in UVGradient grad) -> f32x3 {
+    public func sample_emissive_color(f32x2 uv, f32x2 ddx, f32x2 ddy) -> f32x3 {
         if (this.flags & MaterialFlag::HasEmissiveImage) {
             let color = bindless_images[this.emissive_image_index]
-                .SampleGrad(bindless_samplers[this.sampler_index], grad.uv, grad.ddx, grad.ddy).rgb;
+                .SampleGrad(bindless_samplers[this.sampler_index], uv, ddx, ddy).rgb;
             return this.emissive_color * color;
         }
 
         return this.emissive_color;
     }
 
-    public func sample_metallic_roughness(in UVGradient grad) -> f32x2 {
+    public func sample_metallic_roughness(f32x2 uv, f32x2 ddx, f32x2 ddy) -> f32x2 {
         let metallic_roughness = f32x2(this.metallic_factor, this.roughness_factor);
         if (this.flags & MaterialFlag::HasMetallicRoughnessImage) {
             let color = bindless_images[this.metallic_roughness_image_index]
-                .SampleGrad(bindless_samplers[this.sampler_index], grad.uv, grad.ddx, grad.ddy).bg;
+                .SampleGrad(bindless_samplers[this.sampler_index], uv, ddx, ddy).bg;
             return metallic_roughness * color;
         }
 
         return metallic_roughness;
     }
 
-    public func sample_occlusion_color(in UVGradient grad) -> f32 {
+    public func sample_occlusion_color(f32x2 uv, f32x2 ddx, f32x2 ddy) -> f32 {
         if (this.flags & MaterialFlag::HasOcclusionImage) {
             return bindless_images[this.occlusion_image_index]
-                .SampleGrad(bindless_samplers[this.sampler_index], grad.uv, grad.ddx, grad.ddy).r;
+                .SampleGrad(bindless_samplers[this.sampler_index], uv, ddx, ddy).r;
         }
 
         return 1.0;
@@ -311,7 +305,38 @@ public struct Mesh {
     public Bounds bounds = {};
 };
 
-public struct Light {
-    public f32x3 position = {};
-    public f32x3 color = {};
+#ifndef MAX_DIRECTIONAL_LIGHT_CASCADES
+#define MAX_DIRECTIONAL_LIGHT_CASCADES 6
+#endif
+
+public struct DirectionalLight {
+    public struct Cascade {
+        public f32x4 projection;
+    };
+
+    public Cascade cascades[MAX_DIRECTIONAL_LIGHT_CASCADES];
+    public u32 cascade_count;
+    public f32x4 color;
+    public f32x3 direction;
+};
+
+#ifndef MAX_DIRECTIONAL_LIGHTS
+#define MAX_DIRECTIONAL_LIGHTS 1
+#endif
+
+public struct Lights {
+    public u32 directional_light_count;
+    public u32 _unused;
+    public DirectionalLight directional_lights[MAX_DIRECTIONAL_LIGHTS];
+};
+
+public struct VBGTAO {
+    public f32 thickness;
+    public f32 depth_range_scale_factor;
+    public f32 radius;
+    public f32 radius_multiplier;
+    public f32 slice_count;
+    public f32 sample_count_per_slice;
+    public f32 denoise_power;
+    public f32 linear_thickness_multiplier;
 };

@@ -109,11 +109,11 @@ constexpr static f32 PLANET_RADIUS_OFFSET = 0.001;
 
 struct Camera {
     alignas(4) glm::mat4 projection_mat = {};
+    alignas(4) glm::mat4 inv_projection_mat = {};
     alignas(4) glm::mat4 view_mat = {};
-    alignas(4) glm::mat4 projection_view_mat = {};
     alignas(4) glm::mat4 inv_view_mat = {};
+    alignas(4) glm::mat4 projection_view_mat = {};
     alignas(4) glm::mat4 inv_projection_view_mat = {};
-    alignas(4) glm::mat4 frustum_projection_view_mat = {};
     alignas(4) glm::vec3 position = {};
     alignas(4) f32 near_clip = 0.01f;
     alignas(4) f32 far_clip = 1000.0f;
@@ -221,8 +221,42 @@ constexpr static u32 HISTOGRAM_THREADS_Y = 16;
 constexpr static u32 HISTOGRAM_BIN_COUNT = HISTOGRAM_THREADS_X * HISTOGRAM_THREADS_Y;
 
 struct HistogramLuminance {
-    f32 adapted_luminance = 0.0f;
-    f32 exposure = 0.0f;
+    alignas(4) f32 adapted_luminance = 0.0f;
+    alignas(4) f32 exposure = 0.0f;
+};
+
+struct DirectionalLight {
+    constexpr static auto MAX_DIRECTIONAL_LIGHT_CASCADES = 6_sz;
+    struct Cascade {
+        alignas(4) glm::vec4 projection = {};
+    };
+
+    alignas(4) Cascade cascades[MAX_DIRECTIONAL_LIGHT_CASCADES] = {};
+    alignas(4) u32 cascade_count = 0;
+    alignas(4) glm::vec4 color = {};
+    alignas(4) glm::vec3 direction = {};
+};
+
+struct Lights {
+    // If we increase this, realistically we would need to support
+    // multiple lights for sky atmosphere aswell, which would increase
+    // raymach counts (per sun count), and this means less performance
+    constexpr static auto MAX_DIRECTIONAL_LIGHTS = 1_u32;
+
+    alignas(4) u32 directional_light_count = 0;
+    alignas(4) u32 _unused = 0; // for future light types
+    alignas(8) DirectionalLight directional_lights[MAX_DIRECTIONAL_LIGHTS] = {};
+};
+
+struct VBGTAO {
+    alignas(4) f32 thickness = 0.25f;
+    alignas(4) f32 depth_range_scale_factor = 0.75f;
+    alignas(4) f32 radius = 0.5f;
+    alignas(4) f32 radius_multiplier = 1.457f;
+    alignas(4) f32 slice_count = 3.0f;
+    alignas(4) f32 sample_count_per_slice = 3.0f;
+    alignas(4) f32 denoise_power = 1.1f;
+    alignas(4) f32 linear_thickness_multiplier = 300.0f;
 };
 
 } // namespace lr::GPU

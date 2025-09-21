@@ -1,5 +1,5 @@
+set_policy("package.requires_lock", true)
 set_policy("package.precompiled", false)
-add_repositories("exdal https://github.com/exdal/xmake-repo.git")
 
 includes("xmake/*.lua")
 

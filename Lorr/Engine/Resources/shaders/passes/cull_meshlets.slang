@@ -27,11 +27,12 @@ import debug_drawer;
 [[shader("compute")]]
 [[numthreads(CULLING_MESHLET_COUNT, 1, 1)]]
 func cs_main(
-    uint3 thread_id : SV_DispatchThreadID,
+    uint group_thread_id : SV_GroupThreadID,
+    uint global_thread_id : SV_DispatchThreadID,
     uniform CullFlags cull_flags
 ) -> void {
     let meshlet_instance_count = visible_meshlet_instances_count[2];
-    let meshlet_instance_index = thread_id.x;
+    let meshlet_instance_index = global_thread_id;
     if (meshlet_instance_index >= meshlet_instance_count) {
         return;
     }
@@ -61,7 +62,7 @@ func cs_main(
 
     if (LATE && visible && cull_occlusion) {
         if (let screen_aabb = project_aabb(mvp, camera.near_clip, bounds.aabb_center, bounds.aabb_extent)) {
-            visible = !test_occlusion(screen_aabb, hiz_image, hiz_sampler, false);
+            visible = !test_occlusion(screen_aabb, hiz_image, hiz_sampler);
 #ifdef DEBUG_DRAW
             if (visible) {
                 let ndc_aabb_max = screen_aabb.max.xy * 2.0 - 1.0;
@@ -94,9 +95,9 @@ func cs_main(
 
     if (LATE) {
         if (visible) {
-            __atomic_or(meshlet_instance_visibility_mask[mask_index], visibility_bit, MemoryOrder::AcquireRelease);
+            __atomic_or(meshlet_instance_visibility_mask[mask_index], visibility_bit, MemoryOrder::Relaxed);
         } else {
-            __atomic_and(meshlet_instance_visibility_mask[mask_index], ~visibility_bit, MemoryOrder::AcquireRelease);
+            __atomic_and(meshlet_instance_visibility_mask[mask_index], ~visibility_bit, MemoryOrder::Relaxed);
         }
     }
 }

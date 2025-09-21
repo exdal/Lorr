@@ -286,7 +286,7 @@ bool EditorModule::update(this EditorModule &self, f64 delta_time) {
         }
     }
 
-    self.render(swapchain_attachment->format, swapchain_attachment->extent);
+    self.render(window.swap_chain.value());
 
     self.frame_profiler.measure(&device, delta_time);
 
@@ -509,7 +509,7 @@ static auto draw_profiler(EditorModule &self) -> void {
     ImGui::End();
 }
 
-auto EditorModule::render(this EditorModule &self, vuk::Format format, vuk::Extent3D extent) -> bool {
+auto EditorModule::render(this EditorModule &self, vuk::Swapchain &swap_chain) -> bool {
     ZoneScoped;
 
     auto *viewport = ImGui::GetMainViewport();
@@ -550,7 +550,7 @@ auto EditorModule::render(this EditorModule &self, vuk::Format format, vuk::Exte
     ImGui::End();
 
     for (auto &window : self.windows) {
-        window->do_render(format, extent);
+        window->do_render(swap_chain);
     }
 
     if (!self.active_project) {
@@ -620,7 +620,7 @@ bool ImGui::drag_vec(i32 id, void *data, usize components, ImGuiDataType data_ty
         }
 
         ImGui::PushID(static_cast<i32>(i));
-        value_changed |= ImGui::DragScalar("", data_type, data, 0.01f);
+        value_changed |= ImGui::DragScalar("", data_type, data, 0.1f);
         ImGui::PopItemWidth();
         ImGui::PopID();
 

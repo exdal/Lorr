@@ -14,3 +14,4 @@ out/
 compile_commands.json
 .luarc.json
 .notes/
+xmake-requires.lock

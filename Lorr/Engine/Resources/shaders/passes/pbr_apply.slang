@@ -3,6 +3,7 @@ import std;
 import pbr;
 import sky;
 import scene;
+import shadow;
 
 #include <fullscreen.slang>
 
@@ -17,6 +18,7 @@ struct ShaderParameters {
     Image2D<f32x4> normal_image;
     Image2D<f32x3> emissive_image;
     Image2D<f32x3> metallic_roughness_occlusion_image;
+    Texture2DArray<f32> directional_light_shadowmap;
 
     ConstantBuffer<Environment> environment;
     ConstantBuffer<Camera> camera;
@@ -109,8 +111,15 @@ func fs_main(VertexOutput input) -> f32x4 {
     var material_surface_color = f32x3(0.0);
     let NoL = max(dot(N, L), 0.0);
     if (!intersects_planet && NoL > 0.0) {
+        let view_z = -mul(params.camera.view_mat, f32x4(world_position, 1.0)).z;
+        let directional_shadow = sample_shadow_map(
+            directional_light,
+            params.directional_light_shadowmap,
+            params.linear_clamp_sampler,
+            view_z, world_position, N, L);
+
         let brdf = BRDF(V, N, L, albedo_color, roughness, metallic);
-        material_surface_color = brdf * horizon * sun_illuminance * NoL * occlusion;
+        material_surface_color = brdf * horizon * sun_illuminance * NoL * occlusion * directional_shadow;
     }
 
     // FINAL ────────────────────────────────────────────────────────────

@@ -695,7 +695,7 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer, u32 image_c
 
     ls::option<GPU::Camera> active_camera_data = override_camera;
     if (!active_camera_data.has_value()) {
-        camera_query.each([&active_camera_data](flecs::entity, ECS::Transform &t, ECS::Camera &c, ECS::ActiveCamera) {
+        camera_query.each([&active_camera_data](flecs::entity, const ECS::Transform &t, const ECS::Camera &c, const ECS::ActiveCamera) {
             auto aspect_ratio = c.resolution.x / c.resolution.y;
             auto projection_mat = glm::perspectiveRH_ZO(glm::radians(c.fov), aspect_ratio, c.far_clip, c.near_clip);
             projection_mat[1][1] *= -1;
@@ -726,7 +726,7 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer, u32 image_c
     }
 
     GPU::Environment environment = {};
-    environment_query.each([&environment](flecs::entity, ECS::Environment &environment_comp) {
+    environment_query.each([&environment](flecs::entity, const ECS::Environment &environment_comp) {
         environment.flags |= environment_comp.atmos ? GPU::EnvironmentFlags::HasAtmosphere : 0;
         environment.flags |= environment_comp.eye_adaptation ? GPU::EnvironmentFlags::HasEyeAdaptation : 0;
 
@@ -747,7 +747,7 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer, u32 image_c
         environment.eye_ISO_K = environment_comp.eye_iso / environment_comp.eye_k;
     });
 
-    directional_light_query.each([&environment](flecs::entity, const ECS::DirectionalLight &directional_light_comp) {
+    directional_light_query.each([&environment, &active_camera_data](flecs::entity, const ECS::DirectionalLight &directional_light_comp) {
         auto &directional_light = environment.lights.directional_light;
         environment.flags |= GPU::EnvironmentFlags::HasSun;
 
@@ -764,6 +764,10 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer, u32 image_c
         directional_light.cascades_overlap_proportion = directional_light_comp.cascade_overlap_propotion;
         directional_light.depth_bias = directional_light_comp.depth_bias;
         directional_light.normal_bias = directional_light_comp.normal_bias;
+
+        if (directional_light_comp.cascade_count > 0) {
+            calculate_cascaded_shadow_matrices(directional_light, directional_light_comp, *active_camera_data);
+        }
     });
 
     auto regenerate_sky = false;

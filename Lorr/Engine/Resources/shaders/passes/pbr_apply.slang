@@ -34,8 +34,8 @@ func fs_main(VertexOutput input) -> f32x4 {
     let albedo_color = params.albedo_image.SampleLevel(params.linear_repeat_sampler, input.tex_coord, 0).rgb;
 
     let mapped_smooth_normal = params.normal_image.Load(pixel_pos);
-    let mapped_normal = std::octahedral_decode(mapped_smooth_normal.xy);
-    let smooth_normal = std::octahedral_decode(mapped_smooth_normal.zw);
+    let mapped_normal = std::octahedral_decode(mapped_smooth_normal.rg);
+    let smooth_normal = std::octahedral_decode(mapped_smooth_normal.ba);
 
     let emission = params.emissive_image.Load(pixel_pos);
 
@@ -78,7 +78,8 @@ func fs_main(VertexOutput input) -> f32x4 {
     }
 
     if ((params.environment.flags & EnvironmentFlags::HasAtmosphere) != 0u) {
-        let specular_sample = params.sky_cubemap.SampleLevel(params.linear_clamp_sampler, R, 0.0);
+        let reflection_dir = lerp(N, R, 1.0 - roughness);
+        let specular_sample = params.sky_cubemap.SampleLevel(params.linear_clamp_sampler, reflection_dir, 0.0);
         let diffuse_sample = params.sky_cubemap.SampleLevel(params.linear_clamp_sampler, N, 0.0);
 
         let specular_sky = specular_sample.rgb * specular_sample.a;
@@ -112,7 +113,7 @@ func fs_main(VertexOutput input) -> f32x4 {
     }
 
     // FINAL ────────────────────────────────────────────────────────────
-    let base_ambient_color = f32x3(0.0);
+    let base_ambient_color = f32x3(0.04) * sun_illuminance;
     let indirect_illuminance_sum = indirect_illuminance + (base_ambient_color * albedo_color * occlusion);
     let final_color = material_surface_color + indirect_illuminance_sum + emission;
 

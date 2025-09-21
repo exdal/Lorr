@@ -1251,40 +1251,16 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
         .depth = 1,
     };
 
-    auto hiz_attachment = vuk::Value<vuk::ImageAttachment>{};
-    if (self.hiz.extent() != hiz_extent || !self.hiz) {
-        if (self.hiz_view) {
-            device.destroy(self.hiz_view.id());
-        }
-
-        if (self.hiz) {
-            device.destroy(self.hiz.id());
-        }
-
-        auto hiz_info = ImageInfo{
-            .format = vuk::Format::eR32Sfloat,
-            .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage,
-            .type = vuk::ImageType::e2D,
-            .extent = hiz_extent,
-            .mip_count = std::bit_width(ls::max(hiz_extent.width, hiz_extent.height)) - 1_u32,
-            .name = "HiZ",
-        };
-        self.hiz = Image::create(device, hiz_info).value();
-
-        auto hiz_view_info = ImageViewInfo{
-            .image_usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage,
-            .type = vuk::ImageViewType::e2D,
-            .subresource_range = { .aspectMask = vuk::ImageAspectFlagBits::eColor, .levelCount = hiz_info.mip_count },
-            .name = "HiZ View",
-        };
-        self.hiz_view = ImageView::create(device, self.hiz, hiz_view_info).value();
-
-        hiz_attachment = self.hiz_view.acquire(device, "HiZ", vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage, vuk::eNone);
-        hiz_attachment = vuk::clear_image(std::move(hiz_attachment), vuk::DepthZero);
-    } else {
-        hiz_attachment =
-            self.hiz_view.acquire(device, "HiZ", vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage, vuk::eComputeSampled);
-    }
+    auto hiz_attachment = vuk::declare_ia(
+        "hiz",
+        { .usage = vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eSampled,
+          .extent = hiz_extent,
+          .format = vuk::Format::eR32Sfloat,
+          .sample_count = vuk::SampleCountFlagBits::e1,
+          .level_count = static_cast<u32>(std::bit_width(glm::max(hiz_extent.width, hiz_extent.height))),
+          .layer_count = 1 }
+    );
+    hiz_attachment = vuk::clear_image(std::move(hiz_attachment), vuk::DepthZero);
 
     const auto debugging = self.debug_lines;
     auto debug_drawer_buffer = vuk::Value<vuk::Buffer>{};
@@ -2066,16 +2042,6 @@ auto SceneRenderer::cleanup(this SceneRenderer &self) -> void {
     if (self.materials_buffer) {
         device.destroy(self.materials_buffer.id());
         self.materials_buffer = {};
-    }
-
-    if (self.hiz_view) {
-        device.destroy(self.hiz_view.id());
-        self.hiz_view = {};
-    }
-
-    if (self.hiz) {
-        device.destroy(self.hiz.id());
-        self.hiz = {};
     }
 }
 

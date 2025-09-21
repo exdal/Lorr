@@ -72,9 +72,6 @@ struct SceneRenderer {
     vuk::Extent3D sky_cubemap_extent = { .width = 32, .height = 32, .depth = 1 };
     vuk::Extent3D sky_aerial_perspective_lut_extent = { .width = 32, .height = 32, .depth = 32 };
 
-    Image hiz = {};
-    ImageView hiz_view = {};
-
     Image hilbert_noise_lut = {};
     ImageView hilbert_noise_lut_view = {};
 

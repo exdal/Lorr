@@ -32,6 +32,34 @@ public enum CullFlags : u32 {
     MicroTriangles,
 };
 
+
+
+#ifndef MAX_DIRECTIONAL_LIGHT_CASCADES
+#define MAX_DIRECTIONAL_LIGHT_CASCADES 6
+#endif
+
+public struct DirectionalLight {
+    public struct Cascade {
+        public f32x4x4 projection_view_mat;
+        public f32 far_bound;
+        public f32 texel_size;
+    };
+
+    public Cascade cascades[MAX_DIRECTIONAL_LIGHT_CASCADES];
+    public f32x3 base_ambient_color;
+    public f32 intensity;
+    public f32x3 direction;
+    public u32 cascade_count;
+    public u32 cascade_size;
+    public f32 cascades_overlap_proportion;
+    public f32 depth_bias;
+    public f32 normal_bias;
+};
+
+public struct Lights {
+    public DirectionalLight directional_light;
+};
+
 public enum EnvironmentFlags : u32 {
     None = 0,
     HasSun = 1 << 0,
@@ -43,8 +71,7 @@ public enum EnvironmentFlags : u32 {
 public struct Environment {
     public EnvironmentFlags flags;
     // Sun
-    public f32x3 sun_direction;
-    public f32 sun_intensity;
+    public Lights lights;
     // Atmosphere
     public f32x3 atmos_rayleigh_scatter;
     public f32 atmos_rayleigh_density;
@@ -79,10 +106,12 @@ public struct Camera {
     public mat4 projection_view_mat;
     public mat4 inv_projection_view_mat;
     public f32x3 position;
+    public f32x2 resolution;
     public f32 near_clip;
     public f32 far_clip;
-    public f32x2 resolution;
     public f32 acceptable_lod_error;
+    public f32 fov_deg;
+    public f32 aspect_ratio;
 };
 
 public struct Transform {
@@ -303,31 +332,6 @@ public struct Mesh {
     public u32 lod_count = 0;
     public MeshLOD lods[MESH_MAX_LODS] = {};
     public Bounds bounds = {};
-};
-
-#ifndef MAX_DIRECTIONAL_LIGHT_CASCADES
-#define MAX_DIRECTIONAL_LIGHT_CASCADES 6
-#endif
-
-public struct DirectionalLight {
-    public struct Cascade {
-        public f32x4 projection;
-    };
-
-    public Cascade cascades[MAX_DIRECTIONAL_LIGHT_CASCADES];
-    public u32 cascade_count;
-    public f32x4 color;
-    public f32x3 direction;
-};
-
-#ifndef MAX_DIRECTIONAL_LIGHTS
-#define MAX_DIRECTIONAL_LIGHTS 1
-#endif
-
-public struct Lights {
-    public u32 directional_light_count;
-    public u32 _unused;
-    public DirectionalLight directional_lights[MAX_DIRECTIONAL_LIGHTS];
 };
 
 public struct VBGTAO {

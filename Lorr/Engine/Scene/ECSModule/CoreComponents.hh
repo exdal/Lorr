@@ -43,9 +43,6 @@ ECS_COMPONENT_BEGIN(RenderingMesh)
 ECS_COMPONENT_END();
 
 ECS_COMPONENT_BEGIN(Environment)
-    ECS_COMPONENT_MEMBER(sun, bool, true)
-    ECS_COMPONENT_MEMBER(sun_direction, glm::vec2, { 90.0, 45.0 })
-    ECS_COMPONENT_MEMBER(sun_intensity, f32, 10.0)
     ECS_COMPONENT_MEMBER(atmos, bool, true)
     ECS_COMPONENT_MEMBER(atmos_rayleigh_scattering, glm::vec3, { 5.802f, 13.558f, 33.100f })
     ECS_COMPONENT_MEMBER(atmos_rayleigh_density, f32, 8.0)
@@ -64,6 +61,20 @@ ECS_COMPONENT_BEGIN(Environment)
     ECS_COMPONENT_MEMBER(eye_adaptation_speed, f32, 1.1f)
     ECS_COMPONENT_MEMBER(eye_iso, f32, 100.0f)
     ECS_COMPONENT_MEMBER(eye_k, f32, 12.5f)
+ECS_COMPONENT_END();
+
+ECS_COMPONENT_BEGIN(DirectionalLight)
+    ECS_COMPONENT_MEMBER(direction, glm::vec2, {90.0f, 45.0f})
+    ECS_COMPONENT_MEMBER(base_ambient_color, glm::vec3, {0.4f, 0.4f, 0.4f})
+    ECS_COMPONENT_MEMBER(intensity, f32, 10.0f)
+    ECS_COMPONENT_MEMBER(shadow_map_resolution, u32, 2048)
+    ECS_COMPONENT_MEMBER(cascade_count, u32, 4)
+    ECS_COMPONENT_MEMBER(first_cascade_far_bound, f32, 30.0f)
+    ECS_COMPONENT_MEMBER(maximum_shadow_distance, f32, 150.0f)
+    ECS_COMPONENT_MEMBER(minimum_shadow_distance, f32, 0.01f)
+    ECS_COMPONENT_MEMBER(cascade_overlap_propotion, f32, 0.2f)
+    ECS_COMPONENT_MEMBER(depth_bias, f32, 0.002f)
+    ECS_COMPONENT_MEMBER(normal_bias, f32, 1.8f)
 ECS_COMPONENT_END();
 
 ECS_COMPONENT_BEGIN(VBGTAO)

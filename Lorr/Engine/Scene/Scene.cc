@@ -41,6 +41,104 @@ bool json_to_quat(simdjson::ondemand::value &o, glm::quat &quat) {
     return true;
 }
 
+auto get_frustum_corners(f32 fov, f32 aspect_ratio, f32 z_near, f32 z_far) -> std::array<glm::vec3, 8> {
+    auto tan_half_fov = glm::tan(glm::radians(fov) / 2.0f);
+    auto a = glm::abs(z_near) * tan_half_fov;
+    auto b = glm::abs(z_far) * tan_half_fov;
+
+    return std::array<glm::vec3, 8>{
+        glm::vec3(a * aspect_ratio, -a, z_near), // bottom right
+        glm::vec3(a * aspect_ratio, a, z_near), // top right
+        glm::vec3(-a * aspect_ratio, a, z_near), // top left
+        glm::vec3(-a * aspect_ratio, -a, z_near), // bottom left
+        glm::vec3(b * aspect_ratio, -b, z_far), // bottom right
+        glm::vec3(b * aspect_ratio, b, z_far), // top right
+        glm::vec3(-b * aspect_ratio, b, z_far), // top left
+        glm::vec3(-b * aspect_ratio, -b, z_far), // bottom left
+    };
+}
+
+auto calculate_cascade_bounds(usize cascade_count, f32 nearest_bound, f32 maximum_shadow_distance)
+    -> std::array<f32, GPU::DirectionalLight::MAX_DIRECTIONAL_LIGHT_CASCADES> {
+    if (cascade_count == 1) {
+        return { maximum_shadow_distance };
+    }
+    auto base = glm::pow(maximum_shadow_distance / nearest_bound, 1.0f / static_cast<f32>(cascade_count - 1));
+
+    auto result = std::array<f32, GPU::DirectionalLight::MAX_DIRECTIONAL_LIGHT_CASCADES>();
+    for (u32 i = 0; i < cascade_count; i++) {
+        result[i] = nearest_bound * glm::pow(base, static_cast<f32>(i));
+    }
+
+    return result;
+}
+
+auto calculate_cascaded_shadow_matrices(GPU::DirectionalLight &light, const ECS::DirectionalLight &light_comp, const GPU::Camera &camera) -> void {
+    ZoneScoped;
+
+    auto overlap_factor = 1.0f - light_comp.cascade_overlap_propotion;
+    auto far_bounds = calculate_cascade_bounds(light.cascade_count, light_comp.first_cascade_far_bound, light_comp.maximum_shadow_distance);
+    auto near_bounds = std::array<f32, GPU::DirectionalLight::MAX_DIRECTIONAL_LIGHT_CASCADES>();
+    near_bounds[0] = light_comp.minimum_shadow_distance;
+    for (u32 i = 1; i < light.cascade_count; i++) {
+        near_bounds[i] = overlap_factor * far_bounds[i - 1];
+    }
+
+    auto forward = glm::normalize(light.direction);
+    auto up = (glm::abs(glm::dot(forward, glm::vec3(0, 1, 0))) > 0.99f) ? glm::vec3(0, 0, 1) : glm::vec3(0, 1, 0);
+    auto right = glm::normalize(glm::cross(up, forward));
+    up = glm::normalize(glm::cross(forward, right));
+
+    auto world_from_light = glm::mat4(glm::vec4(right, 0.0f), glm::vec4(up, 0.0f), glm::vec4(forward, 0.0f), glm::vec4(0.0f, 0.0f, 0.0f, 1.0f));
+    auto light_to_world_inverse = glm::transpose(world_from_light);
+    auto camera_to_world = camera.inv_view_mat;
+
+    for (u32 cascade_index = 0; cascade_index < light.cascade_count; ++cascade_index) {
+        auto &cascade = light.cascades[cascade_index];
+        auto split_near = near_bounds[cascade_index];
+        auto split_far = far_bounds[cascade_index];
+        auto corners = get_frustum_corners(camera.fov_deg, camera.aspect_ratio, -split_near, -split_far);
+
+        auto min = glm::vec3(std::numeric_limits<f32>::max());
+        auto max = glm::vec3(std::numeric_limits<f32>::lowest());
+        for (const auto &corner : corners) {
+            auto world_corner = camera_to_world * glm::vec4(corner, 1.0f);
+            auto light_view_corner = glm::vec3(light_to_world_inverse * world_corner);
+            min = glm::min(min, light_view_corner);
+            max = glm::max(max, light_view_corner);
+        }
+
+        auto body_diagonal = glm::length2(corners[0] - corners[6]);
+        auto far_plane_diagonal = glm::length2(corners[4] - corners[6]);
+        auto cascade_diameter = glm::ceil(glm::sqrt(glm::max(body_diagonal, far_plane_diagonal)));
+        f32 cascade_texel_size = cascade_diameter / static_cast<f32>(light.cascade_size);
+
+        glm::vec3 center = glm::vec3(
+            glm::floor((min.x + max.x) * 0.5f / cascade_texel_size) * cascade_texel_size,
+            glm::floor((min.y + max.y) * 0.5f / cascade_texel_size) * cascade_texel_size,
+            max.z
+        );
+
+        auto cascade_from_world =
+            glm::mat4(light_to_world_inverse[0], light_to_world_inverse[1], light_to_world_inverse[2], glm::vec4(-center, 1.0f));
+
+        auto z_extension = camera.far_clip * 0.5f;
+        auto extended_min_z = min.z - z_extension;
+        auto extended_max_z = max.z + z_extension;
+        auto r = 1.0f / (extended_max_z - extended_min_z);
+        auto clip_from_cascade = glm::mat4(
+            glm::vec4(2.0 / cascade_diameter, 0.0, 0.0, 0.0),
+            glm::vec4(0.0, 2.0 / cascade_diameter, 0.0, 0.0),
+            glm::vec4(0.0, 0.0, r, 0.0),
+            glm::vec4(0.0, 0.0, -extended_min_z * r, 1.0)
+        );
+
+        cascade.projection_view_mat = clip_from_cascade * cascade_from_world;
+        cascade.far_bound = split_far;
+        cascade.texel_size = cascade_texel_size;
+    }
+}
+
 auto Scene::init(this Scene &self, const std::string &name) -> bool {
     ZoneScoped;
 
@@ -584,6 +682,9 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer, u32 image_c
     auto rendering_meshes_query = self.get_world()
         .query_builder<ECS::RenderingMesh>()
         .build();
+    auto directional_light_query = self.get_world()
+        .query_builder<ECS::DirectionalLight>()
+        .build();
     auto environment_query = self.get_world()
         .query_builder<ECS::Environment>()
         .build();
@@ -615,26 +716,20 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer, u32 image_c
             camera_data.projection_view_mat = camera_data.projection_mat * camera_data.view_mat;
             camera_data.inv_projection_view_mat = glm::inverse(camera_data.projection_view_mat);
             camera_data.position = t.position;
+            camera_data.resolution = c.resolution;
             camera_data.near_clip = c.near_clip;
             camera_data.far_clip = c.far_clip;
-            camera_data.resolution = c.resolution;
             camera_data.acceptable_lod_error = c.acceptable_lod_error;
+            camera_data.fov_deg = c.fov;
+            camera_data.aspect_ratio = aspect_ratio;
         });
     }
 
     GPU::Environment environment = {};
     environment_query.each([&environment](flecs::entity, ECS::Environment &environment_comp) {
-        environment.flags |= environment_comp.sun ? GPU::EnvironmentFlags::HasSun : 0;
         environment.flags |= environment_comp.atmos ? GPU::EnvironmentFlags::HasAtmosphere : 0;
         environment.flags |= environment_comp.eye_adaptation ? GPU::EnvironmentFlags::HasEyeAdaptation : 0;
 
-        auto light_dir_rad = glm::radians(environment_comp.sun_direction);
-        environment.sun_direction = {
-            glm::cos(light_dir_rad.x) * glm::sin(light_dir_rad.y),
-            glm::sin(light_dir_rad.x) * glm::sin(light_dir_rad.y),
-            glm::cos(light_dir_rad.y),
-        };
-        environment.sun_intensity = environment_comp.sun_intensity;
         environment.atmos_rayleigh_scatter = environment_comp.atmos_rayleigh_scattering * 1e-3f;
         environment.atmos_rayleigh_density = environment_comp.atmos_rayleigh_density;
         environment.atmos_mie_scatter = environment_comp.atmos_mie_scattering * 1e-3f;
@@ -650,6 +745,25 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer, u32 image_c
         environment.eye_max_exposure = environment_comp.eye_max_exposure;
         environment.eye_adaptation_speed = environment_comp.eye_adaptation_speed;
         environment.eye_ISO_K = environment_comp.eye_iso / environment_comp.eye_k;
+    });
+
+    directional_light_query.each([&environment](flecs::entity, const ECS::DirectionalLight &directional_light_comp) {
+        auto &directional_light = environment.lights.directional_light;
+        environment.flags |= GPU::EnvironmentFlags::HasSun;
+
+        auto light_dir_rad = glm::radians(directional_light_comp.direction);
+        directional_light.direction = {
+            glm::cos(light_dir_rad.x) * glm::sin(light_dir_rad.y),
+            glm::sin(light_dir_rad.x) * glm::sin(light_dir_rad.y),
+            glm::cos(light_dir_rad.y),
+        };
+        directional_light.base_ambient_color = directional_light_comp.base_ambient_color;
+        directional_light.intensity = directional_light_comp.intensity;
+        directional_light.cascade_count = directional_light_comp.cascade_count;
+        directional_light.cascade_size = directional_light_comp.shadow_map_resolution;
+        directional_light.cascades_overlap_proportion = directional_light_comp.cascade_overlap_propotion;
+        directional_light.depth_bias = directional_light_comp.depth_bias;
+        directional_light.normal_bias = directional_light_comp.normal_bias;
     });
 
     auto regenerate_sky = false;

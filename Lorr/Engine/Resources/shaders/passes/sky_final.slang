@@ -53,6 +53,7 @@ func fs_main(
     f32x3 NDC = f32x3(input.tex_coord * 2.0 - 1.0, depth);
     f32x4 world_pos_h = mul(params.camera.inv_projection_view_mat, f32x4(NDC, 1.0));
     f32x3 world_pos = world_pos_h.xyz / world_pos_h.w;
+    let directional_light = params.environment.lights.directional_light;
     f32x3 camera_pos = params.camera.position;
 
     if (depth != 0.0) {
@@ -71,11 +72,20 @@ func fs_main(
     eye_altitude += params.environment.atmos_planet_radius + PLANET_RADIUS_OFFSET;
     let eye_pos = f32x3(0.0, eye_altitude, 0.0);
 
-    var sun_dir = (params.environment.sun_direction);
+    var sun_dir = directional_light.direction;
     var eye_dir = normalize(world_pos - params.camera.position);
 
     let planet_intersection = std::ray_sphere_intersect_nearest(eye_pos, eye_dir, params.environment.atmos_planet_radius);
-    var color = get_atmosphere_illuminance_along_ray(eye_pos, eye_dir, sun_dir, params.environment, params.sampler, params.sky_view_lut);
+    var color = get_atmosphere_illuminance_along_ray(
+        eye_pos,
+        eye_dir,
+        sun_dir,
+        directional_light.intensity,
+        params.environment.atmos_atmos_radius,
+        params.environment.atmos_planet_radius,
+        params.environment.sky_view_lut_size.xy,
+        params.sampler,
+        params.sky_view_lut);
 
     let sun_cos_theta = dot(sun_dir, up);
     let transmittance_uv = transmittance_params_to_lut_uv(
@@ -85,7 +95,7 @@ func fs_main(
     let sun_transmittance = params.sky_transmittance_lut.SampleLevel(params.sampler, transmittance_uv, 0.0).rgb;
 
     if (planet_intersection == -1.0) {
-        color += draw_sun(eye_dir, params.environment.sun_direction, 1.0) * params.environment.sun_intensity * sun_transmittance;
+        color += draw_sun(eye_dir, sun_dir, 1.0) * directional_light.intensity * sun_transmittance;
     }
 
     return f32x4(color, 1.0);

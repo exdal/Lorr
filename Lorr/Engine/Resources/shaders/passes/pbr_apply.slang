@@ -49,10 +49,11 @@ func fs_main(VertexOutput input) -> f32x4 {
     let NDC = f32x3(input.tex_coord * 2.0 - 1.0, depth);
     let world_position_h = mul(params.camera.inv_projection_view_mat, f32x4(NDC, 1.0));
     let world_position = world_position_h.xyz / world_position_h.w;
+    let directional_light = params.environment.lights.directional_light;
 
     // PBR constants
+    let L = directional_light.direction;
     let V = normalize(params.camera.position - world_position);
-    let L = normalize(params.environment.sun_direction); // temp
     let N = normalize(mapped_normal);
     let R = reflect(-V, N);
 
@@ -74,7 +75,7 @@ func fs_main(VertexOutput input) -> f32x4 {
             params.environment.atmos_planet_radius,
             f32x2(eye_altitude, sun_cos_theta));
         f32x3 sun_transmittance = params.sky_transmittance_lut.SampleLevel(params.linear_clamp_sampler, transmittance_uv, 0.0).rgb;
-        sun_illuminance = sun_transmittance * params.environment.sun_intensity;
+        sun_illuminance = sun_transmittance * directional_light.intensity;
     }
 
     if ((params.environment.flags & EnvironmentFlags::HasAtmosphere) != 0u) {

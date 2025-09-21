@@ -96,6 +96,8 @@ func cs_main(
     eye_altitude += params.environment.atmos_planet_radius + PLANET_RADIUS_OFFSET;
     let eye_pos = f32x3(0.0, eye_altitude, 0.0);
 
+    let directional_light = params.environment.lights.directional_light;
+
     // these values are hardcoded
     let sample_count = 128;
     let subgroup_size = 32;
@@ -107,7 +109,15 @@ func cs_main(
         rand_seed((i * subgroup_size + sg_thread_id + seed * sample_count));
         let input_dir = rand_hemi_dir(output_dir);
         let result = get_atmosphere_illuminance_along_ray(
-            eye_pos, input_dir, params.environment.sun_direction, params.environment, params.sampler, params.sky_view_lut);
+            eye_pos,
+            input_dir,
+            directional_light.direction,
+            directional_light.intensity,
+            params.environment.atmos_atmos_radius,
+            params.environment.atmos_planet_radius,
+            params.environment.sky_view_lut_size.xy,
+            params.sampler,
+            params.sky_view_lut);
 
         let cos_weighed_result = result * dot(output_dir, input_dir);
         accumulated_result += std::subgroup_inclusive_add(cos_weighed_result);

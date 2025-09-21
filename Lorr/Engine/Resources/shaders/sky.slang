@@ -287,7 +287,10 @@ public func get_atmosphere_illuminance_along_ray(
     f32x3 eye_pos,
     f32x3 eye_dir,
     f32x3 sun_dir,
-    in Environment environment,
+    f32 sun_intensity,
+    f32 atmos_radius,
+    f32 planet_radius,
+    i32x2 sky_view_lut_size,
     in Sampler sampler,
     in Image2D<f32x4> sky_view_image
 ) -> f32x3 {
@@ -297,11 +300,11 @@ public func get_atmosphere_illuminance_along_ray(
         normalize(f32x3(sun_dir.x, 0.0, sun_dir.z)),
         normalize(f32x3(eye_dir.x, 0.0, eye_dir.z)),
     ), -1.0, 1.0));
-    let planet_intersection = std::ray_sphere_intersect_nearest(eye_pos, eye_dir, environment.atmos_planet_radius);
+    let planet_intersection = std::ray_sphere_intersect_nearest(eye_pos, eye_dir, planet_radius);
     let uv = sky_view_params_to_lut_uv(
-        environment.atmos_atmos_radius,
-        environment.atmos_planet_radius,
-        environment.sky_view_lut_size.xy,
+        atmos_radius,
+        planet_radius,
+        sky_view_lut_size,
         planet_intersection != -1.0,
         height,
         view_zenith_cos_angle,
@@ -309,5 +312,5 @@ public func get_atmosphere_illuminance_along_ray(
 
     let result = sky_view_image.SampleLevel(sampler, uv, 0.0);
     let atmos_luminance = result.rgb * result.a;
-    return atmos_luminance * environment.sun_intensity;
+    return atmos_luminance * sun_intensity;
 }

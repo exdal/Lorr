@@ -65,6 +65,29 @@ enum class CullFlags : u32 {
     All = ~0_u32,
 };
 
+struct DirectionalLight {
+    constexpr static auto MAX_DIRECTIONAL_LIGHT_CASCADES = 6_sz;
+    struct Cascade {
+        alignas(4) glm::mat4 projection_view_mat = {};
+        alignas(4) f32 far_bound = {};
+        alignas(4) f32 texel_size = {};
+    };
+
+    alignas(4) Cascade cascades[MAX_DIRECTIONAL_LIGHT_CASCADES] = {};
+    alignas(4) glm::vec3 base_ambient_color = {};
+    alignas(4) f32 intensity = {};
+    alignas(4) glm::vec3 direction = {};
+    alignas(4) u32 cascade_count = {};
+    alignas(4) u32 cascade_size = {};
+    alignas(4) f32 cascades_overlap_proportion = {};
+    alignas(4) f32 depth_bias = {};
+    alignas(4) f32 normal_bias = {};
+};
+
+struct Lights {
+    alignas(4) DirectionalLight directional_light = {};
+};
+
 enum EnvironmentFlags : u32 {
     None = 0,
     HasSun = 1 << 0,
@@ -75,8 +98,7 @@ enum EnvironmentFlags : u32 {
 struct Environment {
     alignas(4) u32 flags = EnvironmentFlags::None;
     // Sun
-    alignas(4) glm::vec3 sun_direction = {};
-    alignas(4) f32 sun_intensity = 10.0f;
+    alignas(4) Lights lights = {};
     // Atmosphere
     alignas(4) glm::vec3 atmos_rayleigh_scatter = { 0.005802f, 0.014338f, 0.032800f };
     alignas(4) f32 atmos_rayleigh_density = 8.0f;
@@ -115,10 +137,12 @@ struct Camera {
     alignas(4) glm::mat4 projection_view_mat = {};
     alignas(4) glm::mat4 inv_projection_view_mat = {};
     alignas(4) glm::vec3 position = {};
+    alignas(4) glm::vec2 resolution = {};
     alignas(4) f32 near_clip = 0.01f;
     alignas(4) f32 far_clip = 1000.0f;
-    alignas(4) glm::vec2 resolution = {};
     alignas(4) f32 acceptable_lod_error = 0.0f;
+    alignas(4) f32 fov_deg = 65.0f;
+    alignas(4) f32 aspect_ratio = 1.777f;
 };
 
 enum class TransformID : u64 { Invalid = ~0_u64 };
@@ -223,29 +247,6 @@ constexpr static u32 HISTOGRAM_BIN_COUNT = HISTOGRAM_THREADS_X * HISTOGRAM_THREA
 struct HistogramLuminance {
     alignas(4) f32 adapted_luminance = 0.0f;
     alignas(4) f32 exposure = 0.0f;
-};
-
-struct DirectionalLight {
-    constexpr static auto MAX_DIRECTIONAL_LIGHT_CASCADES = 6_sz;
-    struct Cascade {
-        alignas(4) glm::vec4 projection = {};
-    };
-
-    alignas(4) Cascade cascades[MAX_DIRECTIONAL_LIGHT_CASCADES] = {};
-    alignas(4) u32 cascade_count = 0;
-    alignas(4) glm::vec4 color = {};
-    alignas(4) glm::vec3 direction = {};
-};
-
-struct Lights {
-    // If we increase this, realistically we would need to support
-    // multiple lights for sky atmosphere aswell, which would increase
-    // raymach counts (per sun count), and this means less performance
-    constexpr static auto MAX_DIRECTIONAL_LIGHTS = 1_u32;
-
-    alignas(4) u32 directional_light_count = 0;
-    alignas(4) u32 _unused = 0; // for future light types
-    alignas(8) DirectionalLight directional_lights[MAX_DIRECTIONAL_LIGHTS] = {};
 };
 
 struct VBGTAO {

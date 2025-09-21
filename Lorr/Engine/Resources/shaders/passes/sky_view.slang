@@ -35,6 +35,7 @@ func cs_main(
         uv,
         eye_altitude);
 
+    let directional_light = params.environment.lights.directional_light;
     let view_zenith_angle = sky_params.x;
     let light_view_angle = sky_params.y;
     let eye_dir = f32x3(
@@ -49,14 +50,14 @@ func cs_main(
     }
 
     let up_vec = f32x3(0.0, 1.0, 0.0);
-    let sun_zenith_cos_angle = dot(params.environment.sun_direction, up_vec);
+    let sun_zenith_cos_angle = dot(directional_light.direction, up_vec);
     let sun_dir = normalize(f32x3(std::safe_sqrt(1.0 - sun_zenith_cos_angle * sun_zenith_cos_angle), sun_zenith_cos_angle, 0.0));
 
     AtmosphereIntegrateInfo info = {};
     info.eye_pos = eye_pos;
     info.eye_dir = eye_dir;
     info.sun_dir = sun_dir;
-    info.sun_intensity = params.environment.sun_intensity;
+    info.sun_intensity = directional_light.intensity;
     info.step_count = 32.0;
     info.eval_multiscattering = true;
     info.eval_planet_luminance = false;

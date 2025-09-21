@@ -47,7 +47,6 @@ auto SceneRenderer::init(this SceneRenderer &self) -> bool {
             { "CULLING_TRIANGLE_COUNT", std::to_string(Model::MAX_MESHLET_PRIMITIVES) },
             { "MESH_MAX_LODS", std::to_string(GPU::Mesh::MAX_LODS) },
             { "MAX_DIRECTIONAL_LIGHT_CASCADES", std::to_string(GPU::DirectionalLight::MAX_DIRECTIONAL_LIGHT_CASCADES) },
-            { "MAX_DIRECTIONAL_LIGHTS", std::to_string(GPU::Lights::MAX_DIRECTIONAL_LIGHTS) },
             { "HISTOGRAM_THREADS_X", std::to_string(GPU::HISTOGRAM_THREADS_X) },
             { "HISTOGRAM_THREADS_Y", std::to_string(GPU::HISTOGRAM_THREADS_Y) },
         },
@@ -432,45 +431,7 @@ auto SceneRenderer::prepare_frame(this SceneRenderer &self, FramePrepareInfo &in
     info.environment.multiscattering_lut_size = self.sky_multiscatter_lut_view.extent();
     info.environment.aerial_perspective_lut_size = self.sky_aerial_perspective_lut_extent;
     prepared_frame.environment_buffer = transfer_man.scratch_buffer(info.environment);
-
-    // glm::vec3 corners[8] = {};
-    // glm::vec3 ndc_corners[8] = {
-    //     glm::vec3(-1.0f, 1.0f, 0.0f), glm::vec3(1.0f, 1.0f, 0.0f), glm::vec3(1.0f, -1.0f, 0.0f), glm::vec3(-1.0f, -1.0f, 0.0f),
-    //     glm::vec3(-1.0f, 1.0f, 1.0f), glm::vec3(1.0f, 1.0f, 1.0f), glm::vec3(1.0f, -1.0f, 1.0f), glm::vec3(-1.0f, -1.0f, 1.0f),
-    // };
-    //
-    // for (int i = 0; i < 8; ++i) {
-    //     auto world_corner = info.camera.inv_projection_view_mat * glm::vec4(ndc_corners[i], 1.0f);
-    //     corners[i] = glm::vec3(world_corner) / world_corner.w;
-    // }
-    //
-    // auto center = glm::vec3(0.0f);
-    // for (const auto &c : corners) {
-    //     center += c;
-    // }
-    // center /= static_cast<f32>(ls::count_of(corners));
-    //
-    // auto shadow_map_size = 512.0f;
-    // auto light_pos = center - info.environment.sun_direction * (shadow_map_size * 0.5f);
-    // auto light_target = center;
-    // auto up = glm::vec3(0, 1, 0);
-    // if (1.0f - glm::abs(glm::dot(info.environment.sun_direction, up)) < 1e-4f) {
-    //     up = glm::vec3(0, 0, 1);
-    // }
-    //
-    // auto view_mat = glm::lookAt(light_pos, glm::vec3(0), up);
-    // auto projection_mat = glm::orthoRH_ZO(
-    //     -shadow_map_size * 0.5f,
-    //     shadow_map_size * 0.5f,
-    //     -shadow_map_size * 0.5f,
-    //     shadow_map_size * 0.5f,
-    //     -shadow_map_size * 0.5f,
-    //     shadow_map_size * 0.5f
-    // );
-    // projection_mat[1][1] *= -1.0;
-
     prepared_frame.camera_buffer = transfer_man.scratch_buffer(info.camera);
-
     prepared_frame.mesh_instance_count = info.mesh_instance_count;
     prepared_frame.max_meshlet_instance_count = info.max_meshlet_instance_count;
     prepared_frame.environment_flags = static_cast<GPU::EnvironmentFlags>(info.environment.flags);

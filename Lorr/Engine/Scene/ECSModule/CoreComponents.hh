@@ -66,7 +66,7 @@ ECS_COMPONENT_END();
 
 ECS_COMPONENT_BEGIN(DirectionalLight)
     ECS_COMPONENT_MEMBER(direction, glm::vec2, {90.0f, 45.0f})
-    ECS_COMPONENT_MEMBER(base_ambient_color, glm::vec3, {0.4f, 0.4f, 0.4f})
+    ECS_COMPONENT_MEMBER(base_ambient_color, glm::vec3, {0.02f, 0.02f, 0.02f})
     ECS_COMPONENT_MEMBER(intensity, f32, 10.0f)
     ECS_COMPONENT_MEMBER(shadow_map_resolution, u32, 2048)
     ECS_COMPONENT_MEMBER(cascade_count, u32, 4)

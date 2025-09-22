@@ -1540,7 +1540,6 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
               .level_count = 1,
               .layer_count = directional_light_cascade_count }
         );
-        directional_light_shadowmap_attachment = vuk::clear_image(std::move(directional_light_shadowmap_attachment), vuk::DepthZero);
 
         if (frame.directional_light.has_value()) {
             auto directional_light_resolution = glm::vec2(directional_light_shadowmap_size, directional_light_shadowmap_size);

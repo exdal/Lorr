@@ -57,7 +57,7 @@ func fs_main(
     let world_position = world_position_h.xyz / world_position_h.w;
 
     // PBR constants
-    let L = directional_light->direction;
+    let L = directional_light.direction;
     let V = normalize(params.camera.position - world_position);
     let N = normalize(mapped_normal);
     let R = reflect(-V, N);
@@ -118,10 +118,10 @@ func fs_main(
             directional_light_cascades,
             params.directional_light_shadowmap,
             params.linear_clamp_sampler,
-            view_z, world_position, N, L);
+            view_z, world_position, N);
 
         let brdf = BRDF(V, N, L, albedo_color, roughness, metallic);
-        material_surface_color = brdf * horizon * sun_illuminance * NoL * occlusion * directional_shadow;
+        material_surface_color = brdf * horizon * sun_illuminance * NoL * directional_shadow * occlusion;
     }
 
     // FINAL ────────────────────────────────────────────────────────────

@@ -51,7 +51,7 @@ target("Lorr")
         "flecs",
         "vuk",
         "meshoptimizer",
-        "ktx",
+        "ktx-lr",
         "svector",
         { public = true })
 

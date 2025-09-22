@@ -1316,15 +1316,27 @@ auto SceneRenderer::prepare_frame(this SceneRenderer &self, FramePrepareInfo &in
     }
 
     prepared_frame.camera_buffer = transfer_man.scratch_buffer(info.camera);
+
+    auto directional_light_cascade_count = 1_u32;
     if (info.directional_light.has_value()) {
         auto &directional_light = info.directional_light.value();
         prepared_frame.directional_light_buffer = transfer_man.scratch_buffer(directional_light);
 
+        directional_light_cascade_count = ls::max(1_u32, directional_light.cascade_count);
         for (u32 i = 0_u32; i < directional_light.cascade_count; i++) {
             prepared_frame.directional_light_cascade_projections[i] = info.directional_light_cascades[i].projection_view_mat;
         }
     }
-    prepared_frame.directional_light_cascades_buffer = transfer_man.scratch_buffer(info.directional_light_cascades);
+
+    prepared_frame.directional_light_cascades_buffer =
+        transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eGPUtoCPU, directional_light_cascade_count * sizeof(GPU::DirectionalLightCascade));
+    if (info.directional_light.has_value() && info.directional_light->cascade_count > 0) {
+        std::memcpy(
+            prepared_frame.directional_light_cascades_buffer->mapped_ptr,
+            info.directional_light_cascades.data(),
+            info.directional_light_cascades.size_bytes()
+        );
+    }
 
     if (info.atmosphere.has_value()) {
         auto &atmosphere = info.atmosphere.value();

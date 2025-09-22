@@ -68,6 +68,6 @@ add_requires("vuk 2025.09.01", { configs = {
 }, debug = is_mode("debug"), system = false })
 
 add_requires("meshoptimizer v0.24", {system = false})
-add_requires("ktx v4.4.0", { debug = false, system = false })
+add_requires("local@ktx v4.4.0", { debug = is_plat("windows"), system = false, alias = "ktx-lr" })
 
 add_requires("svector v1.0.3", {system = false})

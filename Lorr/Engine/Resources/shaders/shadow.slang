@@ -42,7 +42,7 @@ public func get_cascade_index(DirectionalLightCascade *cascades, u32 cascade_cou
     return cascade_count - 1;
 }
 
-func get_cascade_sample_info(
+public func get_cascade_sample_info(
     in DirectionalLightCascade cascade,
     f32x3 world_position,
     f32x3 normal,
@@ -77,8 +77,7 @@ public func sample_shadow_map(
     SamplerState shadow_sampler,
     f32 view_z,
     f32x3 world_position,
-    f32x3 normal,
-    f32x3 light_direction
+    f32x3 normal
 ) -> f32 {
     let cascade_index = get_cascade_index(cascades, light.cascade_count, view_z);
     let this_cascade = cascades[cascade_index];
@@ -86,9 +85,13 @@ public func sample_shadow_map(
         this_cascade,
         world_position,
         normal,
-        light_direction,
+        light.direction,
         light.normal_bias,
         light.depth_bias);
+
+    if (this_cascade_sample_info.w == 0.0) {
+        return 1.0;
+    }
 
     let shadow_depth = shadow_map.SampleLevel(shadow_sampler, f32x3(this_cascade_sample_info.xy, cascade_index), 0.0);
     var shadow = this_cascade_sample_info.z < shadow_depth ? 0.0 : 1.0;
@@ -103,9 +106,13 @@ public func sample_shadow_map(
                 next_cascade,
                 world_position,
                 normal,
-                light_direction,
+                light.direction,
                 light.normal_bias,
                 light.depth_bias);
+
+            if (next_cascade_sample_info.w == 0.0) {
+                return shadow;
+            }
 
             let next_shadow_depth = shadow_map.SampleLevel(shadow_sampler, f32x3(next_cascade_sample_info.xy, next_cascade_index), 0.0);
             let next_cascade_shadow = next_cascade_sample_info.z < next_shadow_depth ? 0.0 : 1.0;

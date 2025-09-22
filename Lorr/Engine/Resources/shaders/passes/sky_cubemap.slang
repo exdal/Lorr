@@ -11,7 +11,7 @@ typealias RWTextureCube<T:ITexelElement=float4, let sampleCount:int=0, let forma
 struct ShaderParameters {
     Sampler sampler;
     Image2D<f32x4> sky_view_lut;
-    ConstantBuffer<Environment> environment;
+    ConstantBuffer<Atmosphere> atmosphere;
     ConstantBuffer<Camera> camera;
     RWTextureCube<f32x4> ibl_cube;
 };
@@ -93,10 +93,8 @@ func cs_main(
 
     let up = f32x3(0.0, 1.0, 0.0);
     var eye_altitude = params.camera.position.y * CAMERA_SCALE_UNIT;
-    eye_altitude += params.environment.atmos_planet_radius + PLANET_RADIUS_OFFSET;
+    eye_altitude += params.atmosphere.planet_radius + PLANET_RADIUS_OFFSET;
     let eye_pos = f32x3(0.0, eye_altitude, 0.0);
-
-    let directional_light = params.environment.lights.directional_light;
 
     // these values are hardcoded
     let sample_count = 128;
@@ -109,15 +107,12 @@ func cs_main(
         rand_seed((i * subgroup_size + sg_thread_id + seed * sample_count));
         let input_dir = rand_hemi_dir(output_dir);
         let result = get_atmosphere_illuminance_along_ray(
-            eye_pos,
-            input_dir,
-            directional_light.direction,
-            directional_light.intensity,
-            params.environment.atmos_atmos_radius,
-            params.environment.atmos_planet_radius,
-            params.environment.sky_view_lut_size.xy,
+            params.atmosphere,
             params.sampler,
-            params.sky_view_lut);
+            params.sky_view_lut,
+            eye_pos,
+            input_dir
+        );
 
         let cos_weighed_result = result * dot(output_dir, input_dir);
         accumulated_result += std::subgroup_inclusive_add(cos_weighed_result);

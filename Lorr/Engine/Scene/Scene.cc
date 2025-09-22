@@ -59,13 +59,13 @@ auto get_frustum_corners(f32 fov, f32 aspect_ratio, f32 z_near, f32 z_far) -> st
 }
 
 auto calculate_cascade_bounds(usize cascade_count, f32 nearest_bound, f32 maximum_shadow_distance)
-    -> std::array<f32, GPU::DirectionalLight::MAX_DIRECTIONAL_LIGHT_CASCADES> {
+    -> std::array<f32, GPU::DirectionalLight::MAX_CASCADE_COUNT> {
     if (cascade_count == 1) {
         return { maximum_shadow_distance };
     }
     auto base = glm::pow(maximum_shadow_distance / nearest_bound, 1.0f / static_cast<f32>(cascade_count - 1));
 
-    auto result = std::array<f32, GPU::DirectionalLight::MAX_DIRECTIONAL_LIGHT_CASCADES>();
+    auto result = std::array<f32, GPU::DirectionalLight::MAX_CASCADE_COUNT>();
     for (u32 i = 0; i < cascade_count; i++) {
         result[i] = nearest_bound * glm::pow(base, static_cast<f32>(i));
     }
@@ -73,12 +73,17 @@ auto calculate_cascade_bounds(usize cascade_count, f32 nearest_bound, f32 maximu
     return result;
 }
 
-auto calculate_cascaded_shadow_matrices(GPU::DirectionalLight &light, const ECS::DirectionalLight &light_comp, const GPU::Camera &camera) -> void {
+auto calculate_cascaded_shadow_matrices(
+    GPU::DirectionalLight &light,
+    ls::span<GPU::DirectionalLightCascade> cascades,
+    const ECS::DirectionalLight &light_comp,
+    const GPU::Camera &camera
+) -> void {
     ZoneScoped;
 
     auto overlap_factor = 1.0f - light_comp.cascade_overlap_propotion;
     auto far_bounds = calculate_cascade_bounds(light.cascade_count, light_comp.first_cascade_far_bound, light_comp.maximum_shadow_distance);
-    auto near_bounds = std::array<f32, GPU::DirectionalLight::MAX_DIRECTIONAL_LIGHT_CASCADES>();
+    auto near_bounds = std::array<f32, GPU::DirectionalLight::MAX_CASCADE_COUNT>();
     near_bounds[0] = light_comp.minimum_shadow_distance;
     for (u32 i = 1; i < light.cascade_count; i++) {
         near_bounds[i] = overlap_factor * far_bounds[i - 1];
@@ -94,7 +99,7 @@ auto calculate_cascaded_shadow_matrices(GPU::DirectionalLight &light, const ECS:
     auto camera_to_world = camera.inv_view_mat;
 
     for (u32 cascade_index = 0; cascade_index < light.cascade_count; ++cascade_index) {
-        auto &cascade = light.cascades[cascade_index];
+        auto &cascade = cascades[cascade_index];
         auto split_near = near_bounds[cascade_index];
         auto split_far = far_bounds[cascade_index];
         auto corners = get_frustum_corners(camera.fov_deg, camera.aspect_ratio, -split_near, -split_far);
@@ -679,17 +684,20 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer, u32 image_c
     auto camera_query = self.get_world()
         .query_builder<ECS::Transform, ECS::Camera, ECS::ActiveCamera>()
         .build();
-    auto rendering_meshes_query = self.get_world()
-        .query_builder<ECS::RenderingMesh>()
-        .build();
     auto directional_light_query = self.get_world()
         .query_builder<ECS::DirectionalLight>()
         .build();
-    auto environment_query = self.get_world()
-        .query_builder<ECS::Environment>()
+    auto atmosphere_query = self.get_world()
+        .query_builder<ECS::Atmosphere>()
+        .build();
+    auto eye_adaptation_query = self.get_world()
+        .query_builder<ECS::EyeAdaptation>()
         .build();
     auto vbgtao_query = self.get_world()
         .query_builder<ECS::VBGTAO>()
+        .build();
+    auto rendering_meshes_query = self.get_world()
+        .query_builder<ECS::RenderingMesh>()
         .build();
     // clang-format on
 
@@ -725,31 +733,12 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer, u32 image_c
         });
     }
 
-    GPU::Environment environment = {};
-    environment_query.each([&environment](flecs::entity, const ECS::Environment &environment_comp) {
-        environment.flags |= environment_comp.atmos ? GPU::EnvironmentFlags::HasAtmosphere : 0;
-        environment.flags |= environment_comp.eye_adaptation ? GPU::EnvironmentFlags::HasEyeAdaptation : 0;
-
-        environment.atmos_rayleigh_scatter = environment_comp.atmos_rayleigh_scattering * 1e-3f;
-        environment.atmos_rayleigh_density = environment_comp.atmos_rayleigh_density;
-        environment.atmos_mie_scatter = environment_comp.atmos_mie_scattering * 1e-3f;
-        environment.atmos_mie_density = environment_comp.atmos_mie_density;
-        environment.atmos_mie_extinction = environment_comp.atmos_mie_extinction * 1e-3f;
-        environment.atmos_mie_asymmetry = environment_comp.atmos_mie_asymmetry;
-        environment.atmos_ozone_absorption = environment_comp.atmos_ozone_absorption * 1e-3f;
-        environment.atmos_ozone_height = environment_comp.atmos_ozone_height;
-        environment.atmos_ozone_thickness = environment_comp.atmos_ozone_thickness;
-        environment.atmos_terrain_albedo = environment_comp.atmos_terrain_albedo;
-        environment.atmos_aerial_perspective_start_km = environment_comp.atmos_aerial_perspective_start_km;
-        environment.eye_min_exposure = environment_comp.eye_min_exposure;
-        environment.eye_max_exposure = environment_comp.eye_max_exposure;
-        environment.eye_adaptation_speed = environment_comp.eye_adaptation_speed;
-        environment.eye_ISO_K = environment_comp.eye_iso / environment_comp.eye_k;
-    });
-
-    directional_light_query.each([&environment, &active_camera_data](flecs::entity, const ECS::DirectionalLight &directional_light_comp) {
-        auto &directional_light = environment.lights.directional_light;
-        environment.flags |= GPU::EnvironmentFlags::HasSun;
+    ls::option<GPU::DirectionalLight> directional_light_data = ls::nullopt;
+    GPU::DirectionalLightCascade directional_light_cascades[GPU::DirectionalLight::MAX_CASCADE_COUNT] = {};
+    directional_light_query.each([&directional_light_data,
+                                  &directional_light_cascades,
+                                  &active_camera_data](flecs::entity, const ECS::DirectionalLight &directional_light_comp) {
+        auto &directional_light = directional_light_data.emplace();
 
         auto light_dir_rad = glm::radians(directional_light_comp.direction);
         directional_light.direction = {
@@ -759,32 +748,70 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer, u32 image_c
         };
         directional_light.base_ambient_color = directional_light_comp.base_ambient_color;
         directional_light.intensity = directional_light_comp.intensity;
-        directional_light.cascade_count = directional_light_comp.cascade_count;
+        directional_light.cascade_count = ls::min(directional_light_comp.cascade_count, GPU::DirectionalLight::MAX_CASCADE_COUNT);
         directional_light.cascade_size = directional_light_comp.shadow_map_resolution;
         directional_light.cascades_overlap_proportion = directional_light_comp.cascade_overlap_propotion;
         directional_light.depth_bias = directional_light_comp.depth_bias;
         directional_light.normal_bias = directional_light_comp.normal_bias;
 
         if (directional_light_comp.cascade_count > 0) {
-            calculate_cascaded_shadow_matrices(directional_light, directional_light_comp, *active_camera_data);
+            calculate_cascaded_shadow_matrices(directional_light, directional_light_cascades, directional_light_comp, *active_camera_data);
         }
     });
 
+    ls::option<GPU::Atmosphere> atmosphere_data = ls::nullopt;
+    atmosphere_query.each([&atmosphere_data, &active_camera_data, &directional_light_data](flecs::entity, const ECS::Atmosphere &atmos_comp) {
+        auto &atmosphere = atmosphere_data.emplace();
+        atmosphere.rayleigh_scatter = atmos_comp.rayleigh_scattering * 1e-3f;
+        atmosphere.rayleigh_density = atmos_comp.rayleigh_density;
+        atmosphere.mie_scatter = atmos_comp.mie_scattering * 1e-3f;
+        atmosphere.mie_density = atmos_comp.mie_density;
+        atmosphere.mie_extinction = atmos_comp.mie_extinction * 1e-3f;
+        atmosphere.mie_asymmetry = atmos_comp.mie_asymmetry;
+        atmosphere.ozone_absorption = atmos_comp.ozone_absorption * 1e-3f;
+        atmosphere.ozone_height = atmos_comp.ozone_height;
+        atmosphere.ozone_thickness = atmos_comp.ozone_thickness;
+        atmosphere.terrain_albedo = atmos_comp.terrain_albedo;
+        atmosphere.aerial_perspective_start_km = atmos_comp.aerial_perspective_start_km;
+
+        if (active_camera_data.has_value()) {
+            atmosphere.eye_height = active_camera_data->position.y * GPU::CAMERA_SCALE_UNIT;
+            atmosphere.eye_height += atmosphere.planet_radius + GPU::PLANET_RADIUS_OFFSET;
+        }
+
+        if (directional_light_data.has_value()) {
+            atmosphere.sun_direction = directional_light_data->direction;
+            atmosphere.sun_intensity = directional_light_data->intensity;
+        }
+    });
+
+    ls::option<GPU::EyeAdaptation> eye_adaptation_data = ls::nullopt;
+    eye_adaptation_query.each([&eye_adaptation_data](flecs::entity, const ECS::EyeAdaptation &eye_adaptation_comp) {
+        auto &eye_adaptation = eye_adaptation_data.emplace();
+        eye_adaptation.min_exposure = eye_adaptation_comp.min_exposure;
+        eye_adaptation.max_exposure = eye_adaptation_comp.max_exposure;
+        eye_adaptation.adaptation_speed = eye_adaptation_comp.adaptation_speed;
+        eye_adaptation.ISO_K = eye_adaptation_comp.ISO / eye_adaptation_comp.K;
+    });
+
     auto regenerate_sky = false;
-    regenerate_sky |= self.last_environment.atmos_rayleigh_scatter != environment.atmos_rayleigh_scatter;
-    regenerate_sky |= self.last_environment.atmos_rayleigh_density != environment.atmos_rayleigh_density;
-    regenerate_sky |= self.last_environment.atmos_mie_scatter != environment.atmos_mie_scatter;
-    regenerate_sky |= self.last_environment.atmos_mie_density != environment.atmos_mie_density;
-    regenerate_sky |= self.last_environment.atmos_mie_extinction != environment.atmos_mie_extinction;
-    regenerate_sky |= self.last_environment.atmos_mie_asymmetry != environment.atmos_mie_asymmetry;
-    regenerate_sky |= self.last_environment.atmos_ozone_absorption != environment.atmos_ozone_absorption;
-    regenerate_sky |= self.last_environment.atmos_ozone_height != environment.atmos_ozone_height;
-    regenerate_sky |= self.last_environment.atmos_ozone_thickness != environment.atmos_ozone_thickness;
-    regenerate_sky |= self.last_environment.atmos_terrain_albedo != environment.atmos_terrain_albedo;
-    regenerate_sky |= self.last_environment.atmos_atmos_radius != environment.atmos_atmos_radius;
-    regenerate_sky |= self.last_environment.atmos_planet_radius != environment.atmos_planet_radius;
-    regenerate_sky |= self.last_environment.atmos_terrain_albedo != environment.atmos_terrain_albedo;
-    self.last_environment = environment;
+    if (atmosphere_data.has_value()) {
+        auto &atmosphere = atmosphere_data.value();
+        regenerate_sky |= self.last_atmosphere.rayleigh_scatter != atmosphere.rayleigh_scatter;
+        regenerate_sky |= self.last_atmosphere.rayleigh_density != atmosphere.rayleigh_density;
+        regenerate_sky |= self.last_atmosphere.mie_scatter != atmosphere.mie_scatter;
+        regenerate_sky |= self.last_atmosphere.mie_density != atmosphere.mie_density;
+        regenerate_sky |= self.last_atmosphere.mie_extinction != atmosphere.mie_extinction;
+        regenerate_sky |= self.last_atmosphere.mie_asymmetry != atmosphere.mie_asymmetry;
+        regenerate_sky |= self.last_atmosphere.ozone_absorption != atmosphere.ozone_absorption;
+        regenerate_sky |= self.last_atmosphere.ozone_height != atmosphere.ozone_height;
+        regenerate_sky |= self.last_atmosphere.ozone_thickness != atmosphere.ozone_thickness;
+        regenerate_sky |= self.last_atmosphere.terrain_albedo != atmosphere.terrain_albedo;
+        regenerate_sky |= self.last_atmosphere.atmos_radius != atmosphere.atmos_radius;
+        regenerate_sky |= self.last_atmosphere.planet_radius != atmosphere.planet_radius;
+        regenerate_sky |= self.last_atmosphere.terrain_albedo != atmosphere.terrain_albedo;
+        self.last_atmosphere = atmosphere;
+    }
 
     auto vbgtao = ls::option<GPU::VBGTAO>();
     vbgtao_query.each([&vbgtao](flecs::entity, ECS::VBGTAO &vbgtao_comp) {
@@ -911,8 +938,11 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer, u32 image_c
         .gpu_materials = self.gpu_materials,
         .gpu_meshes = gpu_meshes,
         .gpu_mesh_instances = gpu_mesh_instances,
-        .environment = environment,
         .camera = active_camera_data.value_or(GPU::Camera{}),
+        .directional_light = directional_light_data,
+        .directional_light_cascades = directional_light_cascades,
+        .atmosphere = atmosphere_data,
+        .eye_adaptation = eye_adaptation_data,
         .vbgtao = vbgtao,
     };
     auto prepared_frame = renderer.prepare_frame(prepare_info);

@@ -20,28 +20,34 @@ struct FramePrepareInfo {
     ls::span<GPU::Mesh> gpu_meshes = {};
     ls::span<GPU::MeshInstance> gpu_mesh_instances = {};
 
-    GPU::Environment environment = {};
     GPU::Camera camera = {};
-    ls::option<GPU::VBGTAO> vbgtao = {};
+    ls::option<GPU::DirectionalLight> directional_light = ls::nullopt;
+    ls::span<GPU::DirectionalLightCascade> directional_light_cascades = {};
+    ls::option<GPU::Atmosphere> atmosphere = ls::nullopt;
+    ls::option<GPU::EyeAdaptation> eye_adaptation = ls::nullopt;
+    ls::option<GPU::VBGTAO> vbgtao = ls::nullopt;
 };
 
 struct PreparedFrame {
     u32 mesh_instance_count = 0;
     u32 max_meshlet_instance_count = 0;
-    GPU::EnvironmentFlags environment_flags = GPU::EnvironmentFlags::None;
     vuk::Value<vuk::Buffer> transforms_buffer = {};
     vuk::Value<vuk::Buffer> meshes_buffer = {};
     vuk::Value<vuk::Buffer> mesh_instances_buffer = {};
     vuk::Value<vuk::Buffer> meshlet_instance_visibility_mask_buffer = {};
     vuk::Value<vuk::Buffer> materials_buffer = {};
-    vuk::Value<vuk::Buffer> environment_buffer = {};
     vuk::Value<vuk::Buffer> camera_buffer = {};
-    vuk::Value<vuk::Buffer> directional_camera_buffer = {};
+    vuk::Value<vuk::Buffer> directional_light_buffer = {};
+    vuk::Value<vuk::Buffer> directional_light_cascades_buffer = {};
+    vuk::Value<vuk::Buffer> atmosphere_buffer = {};
+    vuk::Value<vuk::Buffer> eye_adaptation_buffer = {};
+    vuk::Value<vuk::Buffer> vbgtao_buffer = {};
     vuk::Value<vuk::ImageAttachment> sky_transmittance_lut = {};
     vuk::Value<vuk::ImageAttachment> sky_multiscatter_lut = {};
+
     GPU::Camera camera = {};
     ls::option<GPU::DirectionalLight> directional_light = ls::nullopt;
-    ls::option<GPU::VBGTAO> vbgtao = ls::nullopt;
+    glm::mat4 directional_light_cascade_projections[GPU::DirectionalLight::MAX_CASCADE_COUNT] = {};
 };
 
 struct SceneRenderInfo {

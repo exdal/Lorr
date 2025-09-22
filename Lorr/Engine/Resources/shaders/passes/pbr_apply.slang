@@ -20,13 +20,17 @@ struct ShaderParameters {
     Image2D<f32x3> metallic_roughness_occlusion_image;
     Texture2DArray<f32> directional_light_shadowmap;
 
-    ConstantBuffer<Environment> environment;
     ConstantBuffer<Camera> camera;
 };
 ParameterBlock<ShaderParameters> params;
 
 [[shader("fragment")]]
-func fs_main(VertexOutput input) -> f32x4 {
+func fs_main(
+    VertexOutput input,
+    uniform Atmosphere *atmosphere,
+    uniform DirectionalLight *directional_light,
+    uniform DirectionalLightCascade *directional_light_cascades
+) -> f32x4 {
     let pixel_pos = u32x3(u32x2(input.position.xy), 0);
     let depth = params.depth_image.Load(pixel_pos);
     if (depth == 0.0) {
@@ -51,10 +55,9 @@ func fs_main(VertexOutput input) -> f32x4 {
     let NDC = f32x3(input.tex_coord * 2.0 - 1.0, depth);
     let world_position_h = mul(params.camera.inv_projection_view_mat, f32x4(NDC, 1.0));
     let world_position = world_position_h.xyz / world_position_h.w;
-    let directional_light = params.environment.lights.directional_light;
 
     // PBR constants
-    let L = directional_light.direction;
+    let L = directional_light->direction;
     let V = normalize(params.camera.position - world_position);
     let N = normalize(mapped_normal);
     let R = reflect(-V, N);
@@ -63,24 +66,22 @@ func fs_main(VertexOutput input) -> f32x4 {
 
     var sun_illuminance = f32x3(1.0);
     var intersects_planet = false;
-    if ((params.environment.flags & EnvironmentFlags::HasSun) != 0u) {
+    if (atmosphere) {
         var eye_altitude = max(world_position.y, 0.0) * CAMERA_SCALE_UNIT;
-        eye_altitude += params.environment.atmos_planet_radius + PLANET_RADIUS_OFFSET;
+        eye_altitude += atmosphere->planet_radius + PLANET_RADIUS_OFFSET;
         let planet_intersection = std::ray_sphere_intersect_nearest(
-            f32x3(world_position.x, world_position.y + eye_altitude, world_position.z), L, params.environment.atmos_planet_radius);
+            f32x3(world_position.x, world_position.y + eye_altitude, world_position.z), L, atmosphere->planet_radius);
         intersects_planet = planet_intersection != -1.0;
 
         f32 sun_cos_theta = dot(L, f32x3(0.0, 1.0, 0.0));
 
         f32x2 transmittance_uv = transmittance_params_to_lut_uv(
-            params.environment.atmos_atmos_radius,
-            params.environment.atmos_planet_radius,
+            atmosphere->atmos_radius,
+            atmosphere->planet_radius,
             f32x2(eye_altitude, sun_cos_theta));
         f32x3 sun_transmittance = params.sky_transmittance_lut.SampleLevel(params.linear_clamp_sampler, transmittance_uv, 0.0).rgb;
         sun_illuminance = sun_transmittance * directional_light.intensity;
-    }
 
-    if ((params.environment.flags & EnvironmentFlags::HasAtmosphere) != 0u) {
         let reflection_dir = lerp(N, R, 1.0 - roughness);
         let specular_sample = params.sky_cubemap.SampleLevel(params.linear_clamp_sampler, reflection_dir, 0.0);
         let diffuse_sample = params.sky_cubemap.SampleLevel(params.linear_clamp_sampler, N, 0.0);
@@ -114,6 +115,7 @@ func fs_main(VertexOutput input) -> f32x4 {
         let view_z = -mul(params.camera.view_mat, f32x4(world_position, 1.0)).z;
         let directional_shadow = sample_shadow_map(
             directional_light,
+            directional_light_cascades,
             params.directional_light_shadowmap,
             params.linear_clamp_sampler,
             view_z, world_position, N, L);
@@ -123,7 +125,7 @@ func fs_main(VertexOutput input) -> f32x4 {
     }
 
     // FINAL ────────────────────────────────────────────────────────────
-    let base_ambient_color = f32x3(0.04) * sun_illuminance;
+    let base_ambient_color = directional_light.base_ambient_color * sun_illuminance;
     let indirect_illuminance_sum = indirect_illuminance + (base_ambient_color * albedo_color * occlusion);
     let final_color = material_surface_color + indirect_illuminance_sum + emission;
 

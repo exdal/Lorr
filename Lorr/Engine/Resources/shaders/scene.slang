@@ -3,8 +3,6 @@ module scene;
 import std;
 import gpu;
 
-#include <assert.slang>
-
 public const static f32 CAMERA_SCALE_UNIT = 0.01;
 public const static f32 INV_CAMERA_SCALE_UNIT = 1.0 / CAMERA_SCALE_UNIT;
 public const static f32 PLANET_RADIUS_OFFSET = 0.001;
@@ -32,72 +30,6 @@ public enum CullFlags : u32 {
     MicroTriangles,
 };
 
-
-
-#ifndef MAX_DIRECTIONAL_LIGHT_CASCADES
-#define MAX_DIRECTIONAL_LIGHT_CASCADES 6
-#endif
-
-public struct DirectionalLight {
-    public struct Cascade {
-        public f32x4x4 projection_view_mat;
-        public f32 far_bound;
-        public f32 texel_size;
-    };
-
-    public Cascade cascades[MAX_DIRECTIONAL_LIGHT_CASCADES];
-    public f32x3 base_ambient_color;
-    public f32 intensity;
-    public f32x3 direction;
-    public u32 cascade_count;
-    public u32 cascade_size;
-    public f32 cascades_overlap_proportion;
-    public f32 depth_bias;
-    public f32 normal_bias;
-};
-
-public struct Lights {
-    public DirectionalLight directional_light;
-};
-
-public enum EnvironmentFlags : u32 {
-    None = 0,
-    HasSun = 1 << 0,
-    HasAtmosphere = 1 << 1,
-    HasEyeAdaptation = 1 << 2,
-    HasVBGTAO = 1 << 3,
-};
-
-public struct Environment {
-    public EnvironmentFlags flags;
-    // Sun
-    public Lights lights;
-    // Atmosphere
-    public f32x3 atmos_rayleigh_scatter;
-    public f32 atmos_rayleigh_density;
-    public f32x3 atmos_mie_scatter;
-    public f32 atmos_mie_density;
-    public f32 atmos_mie_extinction;
-    public f32 atmos_mie_asymmetry;
-    public f32x3 atmos_ozone_absorption;
-    public f32 atmos_ozone_height;
-    public f32 atmos_ozone_thickness;
-    public f32x3 atmos_terrain_albedo;
-    public f32 atmos_planet_radius;
-    public f32 atmos_atmos_radius;
-    public f32 atmos_aerial_perspective_start_km;
-    // Eye adaptation
-    public f32 eye_min_exposure;
-    public f32 eye_max_exposure;
-    public f32 eye_adaptation_speed;
-    public f32 eye_ISO_K;
-
-    public i32x3 transmittance_lut_size;
-    public i32x3 sky_view_lut_size;
-    public i32x3 multiscattering_lut_size;
-    public i32x3 aerial_perspective_lut_size;
-};
-
 public struct Camera {
     public mat4 projection_mat;
     public mat4 inv_projection_mat;
@@ -112,6 +44,74 @@ public struct Camera {
     public f32 acceptable_lod_error;
     public f32 fov_deg;
     public f32 aspect_ratio;
+};
+
+#ifndef MAX_DIRECTIONAL_LIGHT_CASCADES
+#define MAX_DIRECTIONAL_LIGHT_CASCADES 6
+#endif
+
+public struct DirectionalLightCascade {
+    public f32x4x4 projection_view_mat;
+    public f32 far_bound;
+    public f32 texel_size;
+};
+
+public struct DirectionalLight {
+    public f32x3 base_ambient_color;
+    public f32 intensity;
+    public f32x3 direction;
+    public u32 cascade_count;
+    public u32 cascade_size;
+    public f32 cascades_overlap_proportion;
+    public f32 depth_bias;
+    public f32 normal_bias;
+};
+
+public struct Lights {
+    public DirectionalLight *directional_light;
+    public DirectionalLightCascade *directional_light_cascades;
+};
+
+public struct Atmosphere {
+    public f32x3 sun_direction;
+    public f32 eye_height;
+    public f32x3 rayleigh_scatter;
+    public f32 rayleigh_density;
+    public f32x3 mie_scatter;
+    public f32 mie_density;
+    public f32 mie_extinction;
+    public f32 mie_asymmetry;
+    public f32x3 ozone_absorption;
+    public f32 ozone_height;
+    public f32 ozone_thickness;
+    public f32x3 terrain_albedo;
+    public f32 planet_radius;
+    public f32 atmos_radius;
+    public f32 aerial_perspective_start_km;
+    public f32 sun_intensity;
+
+    public i32x3 transmittance_lut_size;
+    public i32x3 sky_view_lut_size;
+    public i32x3 multiscattering_lut_size;
+    public i32x3 aerial_perspective_lut_size;
+};
+
+public struct EyeAdaptation {
+    public f32 min_exposure;
+    public f32 max_exposure;
+    public f32 adaptation_speed;
+    public f32 ISO_K;
+};
+
+public struct VBGTAO {
+    public f32 thickness;
+    public f32 depth_range_scale_factor;
+    public f32 radius;
+    public f32 radius_multiplier;
+    public f32 slice_count;
+    public f32 sample_count_per_slice;
+    public f32 denoise_power;
+    public f32 linear_thickness_multiplier;
 };
 
 public struct Transform {
@@ -332,15 +332,4 @@ public struct Mesh {
     public u32 lod_count = 0;
     public MeshLOD lods[MESH_MAX_LODS] = {};
     public Bounds bounds = {};
-};
-
-public struct VBGTAO {
-    public f32 thickness;
-    public f32 depth_range_scale_factor;
-    public f32 radius;
-    public f32 radius_multiplier;
-    public f32 slice_count;
-    public f32 sample_count_per_slice;
-    public f32 denoise_power;
-    public f32 linear_thickness_multiplier;
 };

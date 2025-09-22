@@ -10,7 +10,7 @@ import embedded.hemisphere;
 struct ShaderParameters {
     Sampler sampler;
     Image2D<f32x4> sky_transmittance_lut;
-    ConstantBuffer<Environment> environment;
+    ConstantBuffer<Atmosphere> atmosphere;
     StorageImage2D<f32x4, ImageFormat::RGBA16F> sky_multiscattering_lut;
 };
 
@@ -27,11 +27,11 @@ func cs_main(
     uniform ParameterBlock<ShaderParameters> params
 ) -> void {
     let i = f32(thread_id.z);
-    var uv = f32x2(f32x2(thread_id.xy) + 0.5) / f32x2(params.environment.multiscattering_lut_size.xy);
-    uv = from_sub_uvs_to_unit(uv, f32x2(params.environment.multiscattering_lut_size.xy));
+    var uv = f32x2(f32x2(thread_id.xy) + 0.5) / f32x2(params.atmosphere.multiscattering_lut_size.xy);
+    uv = from_sub_uvs_to_unit(uv, f32x2(params.atmosphere.multiscattering_lut_size.xy));
 
-    let atmosphere_thickness = params.environment.atmos_atmos_radius - params.environment.atmos_planet_radius;
-    let altitude = params.environment.atmos_planet_radius + uv.y * atmosphere_thickness + PLANET_RADIUS_OFFSET;
+    let atmosphere_thickness = params.atmosphere.atmos_radius - params.atmosphere.planet_radius;
+    let altitude = params.atmosphere.planet_radius + uv.y * atmosphere_thickness + PLANET_RADIUS_OFFSET;
 
     let sun_zenith_angle = uv.x * 2.0 - 1.0;
     let sun_dir = f32x3(0.0, sun_zenith_angle, std::safe_sqrt(saturate(1.0 - sun_zenith_angle * sun_zenith_angle)));
@@ -52,7 +52,7 @@ func cs_main(
     info.eval_planet_luminance = true;
     info.eval_multiscattering = false;
     info.step_count = 32.0;
-    var result = integrate_single_scattered_luminance(info, params.environment, params.sampler, params.sky_transmittance_lut, params.sky_transmittance_lut);
+    var result = integrate_single_scattered_luminance(info, params.atmosphere, params.sampler, params.sky_transmittance_lut, params.sky_transmittance_lut);
     result.multiscattering_as_1 = WaveActiveSum(result.multiscattering_as_1);
     result.luminance = WaveActiveSum(result.luminance);
 

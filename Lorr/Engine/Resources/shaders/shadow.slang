@@ -74,7 +74,7 @@ public func sample_shadow_map(
     DirectionalLight *light,
     DirectionalLightCascade *cascades,
     Texture2DArray<f32> shadow_map,
-    SamplerState shadow_sampler,
+    SamplerComparisonState shadow_sampler,
     f32 view_z,
     f32x3 world_position,
     f32x3 normal
@@ -93,10 +93,10 @@ public func sample_shadow_map(
         return 1.0;
     }
 
-    let shadow_depth = shadow_map.SampleLevel(shadow_sampler, f32x3(this_cascade_sample_info.xy, cascade_index), 0.0);
-    var shadow = this_cascade_sample_info.z < shadow_depth ? 0.0 : 1.0;
+    var shadow = shadow_map.SampleCmpLevelZero(
+        shadow_sampler, f32x3(this_cascade_sample_info.xy, cascade_index), this_cascade_sample_info.z);
 
-    let next_cascade_index = cascade_index + 1u;
+    let next_cascade_index = cascade_index + 1;
     if (next_cascade_index < light.cascade_count) {
         let this_far_bound = this_cascade.far_bound;
         let next_near_bound = (1.0 - light.cascades_overlap_proportion) * this_far_bound;
@@ -114,10 +114,11 @@ public func sample_shadow_map(
                 return shadow;
             }
 
-            let next_shadow_depth = shadow_map.SampleLevel(shadow_sampler, f32x3(next_cascade_sample_info.xy, next_cascade_index), 0.0);
-            let next_cascade_shadow = next_cascade_sample_info.z < next_shadow_depth ? 0.0 : 1.0;
+            let next_cascade_shadow = shadow_map.SampleCmpLevelZero(
+                shadow_sampler, f32x3(next_cascade_sample_info.xy, next_cascade_index), next_cascade_sample_info.z);
             shadow = lerp(shadow, next_cascade_shadow, (view_z - next_near_bound) / (this_far_bound - next_near_bound));
         }
     }
+
     return shadow;
 }

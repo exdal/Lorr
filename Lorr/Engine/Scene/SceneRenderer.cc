@@ -18,13 +18,37 @@ static constexpr auto sampler_min_clamp_reduction_mode = VkSamplerReductionModeC
     .pNext = nullptr,
     .reductionMode = VK_SAMPLER_REDUCTION_MODE_MIN,
 };
-static constexpr auto hiz_sampler_info = vuk::SamplerCreateInfo{
+static constexpr auto hiz_sampler = vuk::SamplerCreateInfo{
     .pNext = &sampler_min_clamp_reduction_mode,
     .magFilter = vuk::Filter::eLinear,
     .minFilter = vuk::Filter::eLinear,
     .mipmapMode = vuk::SamplerMipmapMode::eNearest,
     .addressModeU = vuk::SamplerAddressMode::eClampToEdge,
     .addressModeV = vuk::SamplerAddressMode::eClampToEdge,
+};
+
+static constexpr auto linear_clamp_sampler = vuk::SamplerCreateInfo{
+    .magFilter = vuk::Filter::eLinear,
+    .minFilter = vuk::Filter::eLinear,
+    .addressModeU = vuk::SamplerAddressMode::eClampToEdge,
+    .addressModeV = vuk::SamplerAddressMode::eClampToEdge,
+    .addressModeW = vuk::SamplerAddressMode::eClampToEdge,
+};
+
+static constexpr auto linear_repeat_sampler = vuk::SamplerCreateInfo{
+    .magFilter = vuk::Filter::eLinear,
+    .minFilter = vuk::Filter::eLinear,
+    .addressModeU = vuk::SamplerAddressMode::eRepeat,
+    .addressModeV = vuk::SamplerAddressMode::eRepeat,
+};
+
+static constexpr auto nearest_clamp_sampler = vuk::SamplerCreateInfo{
+    .magFilter = vuk::Filter::eNearest,
+    .minFilter = vuk::Filter::eNearest,
+    .mipmapMode = vuk::SamplerMipmapMode::eNearest,
+    .addressModeU = vuk::SamplerAddressMode::eClampToEdge,
+    .addressModeV = vuk::SamplerAddressMode::eClampToEdge,
+    .addressModeW = vuk::SamplerAddressMode::eClampToEdge,
 };
 
 static auto cull_meshes(
@@ -168,7 +192,7 @@ static auto cull_meshlets(
                 .bind_buffer(0, 2, meshes)
                 .bind_buffer(0, 3, transforms)
                 .bind_image(0, 4, hiz)
-                .bind_sampler(0, 5, hiz_sampler_info)
+                .bind_sampler(0, 5, hiz_sampler)
                 .bind_buffer(0, 6, visible_meshlet_instances_count)
                 .bind_buffer(0, 7, early_visible_meshlet_instances_count)
                 .bind_buffer(0, 8, late_visible_meshlet_instances_count)
@@ -375,6 +399,75 @@ static auto draw_visbuffer(
             std::move(depth_attachment),
             std::move(overdraw_attachment)
         );
+}
+
+static auto shadowmap_cull_meshes(
+    TransferManager &transfer_man,
+    u32 mesh_instance_count,
+    u32 cascade_index,
+    glm::mat4 &frustum_projection_view,
+    vuk::Value<vuk::Buffer> &meshes_buffer,
+    vuk::Value<vuk::Buffer> &mesh_instances_buffer,
+    vuk::Value<vuk::Buffer> &meshlet_instances_buffer,
+    vuk::Value<vuk::Buffer> &visible_meshlet_instances_count_buffer,
+    vuk::Value<vuk::Buffer> &transforms_buffer
+) -> vuk::Value<vuk::Buffer> {
+    ZoneScoped;
+    memory::ScopedStack stack;
+
+    auto vis_cull_meshes_pass = vuk::make_pass(
+        stack.format("shadowmap cull meshes cascade {}", cascade_index),
+        [mesh_instance_count, cascade_index, frustum_projection_view](
+            vuk::CommandBuffer &cmd_list,
+            VUK_BA(vuk::eComputeRead) meshes,
+            VUK_BA(vuk::eComputeRead) transforms,
+            VUK_BA(vuk::eComputeRW) mesh_instances,
+            VUK_BA(vuk::eComputeRW) meshlet_instances,
+            VUK_BA(vuk::eComputeRW) visible_meshlet_instances_count
+        ) {
+            cmd_list //
+                .bind_compute_pipeline("passes.shadowmap_cull_meshes")
+                .bind_buffer(0, 0, meshes)
+                .bind_buffer(0, 1, transforms)
+                .bind_buffer(0, 2, mesh_instances)
+                .bind_buffer(0, 3, meshlet_instances)
+                .bind_buffer(0, 4, visible_meshlet_instances_count)
+                .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, PushConstants(mesh_instance_count, cascade_index, frustum_projection_view))
+                .dispatch_invocations(mesh_instance_count);
+
+            return std::make_tuple(meshes, transforms, mesh_instances, meshlet_instances, visible_meshlet_instances_count);
+        }
+    );
+
+    std::tie(meshes_buffer, transforms_buffer, mesh_instances_buffer, meshlet_instances_buffer, visible_meshlet_instances_count_buffer) =
+        vis_cull_meshes_pass(
+            std::move(meshes_buffer),
+            std::move(transforms_buffer),
+            std::move(mesh_instances_buffer),
+            std::move(meshlet_instances_buffer),
+            std::move(visible_meshlet_instances_count_buffer)
+        );
+
+    auto generate_cull_commands_pass = vuk::make_pass(
+        "generate cull commands",
+        [](vuk::CommandBuffer &cmd_list, //
+           VUK_BA(vuk::eComputeRead) visible_meshlet_instances_count,
+           VUK_BA(vuk::eComputeRW) cull_meshlets_cmd) {
+            cmd_list //
+                .bind_compute_pipeline("passes.generate_cull_commands")
+                .bind_buffer(0, 0, visible_meshlet_instances_count)
+                .bind_buffer(0, 1, cull_meshlets_cmd)
+                .dispatch(1);
+
+            return std::make_tuple(visible_meshlet_instances_count, cull_meshlets_cmd);
+        }
+    );
+
+    auto cull_meshlets_cmd_buffer = transfer_man.scratch_buffer<vuk::DispatchIndirectCommand>({ .x = 0, .y = 1, .z = 1 });
+    std::tie(visible_meshlet_instances_count_buffer, cull_meshlets_cmd_buffer) =
+        generate_cull_commands_pass(std::move(visible_meshlet_instances_count_buffer), std::move(cull_meshlets_cmd_buffer));
+
+    return cull_meshlets_cmd_buffer;
 }
 
 auto cull_shadowmap_meshlets(
@@ -612,7 +705,7 @@ static auto draw_hiz(vuk::Value<vuk::ImageAttachment> &hiz_attachment, vuk::Valu
                 .specialize_constants(2, extent.height);
 
             *cmd_list.scratch_buffer<u32>(0, 0) = 0;
-            cmd_list.bind_sampler(0, 1, hiz_sampler_info);
+            cmd_list.bind_sampler(0, 1, hiz_sampler);
             cmd_list.bind_image(0, 2, src);
 
             for (u32 i = 0; i < 13; i++) {
@@ -635,7 +728,7 @@ static auto draw_hiz(vuk::Value<vuk::ImageAttachment> &hiz_attachment, vuk::Valu
 
             cmd_list //
                 .bind_compute_pipeline("passes.hiz_slow")
-                .bind_sampler(0, 0, hiz_sampler_info);
+                .bind_sampler(0, 0, hiz_sampler);
 
             for (auto i = 0_u32; i < mip_count; i++) {
                 auto mip_width = std::max(1_u32, extent.width >> i);
@@ -708,14 +801,6 @@ static auto draw_sky(
            VUK_BA(vuk::eComputeRead) atmosphere,
            VUK_BA(vuk::eComputeRead) camera,
            VUK_IA(vuk::eComputeRW) sky_view_lut) {
-            auto linear_clamp_sampler = vuk::SamplerCreateInfo{
-                .magFilter = vuk::Filter::eLinear,
-                .minFilter = vuk::Filter::eLinear,
-                .addressModeU = vuk::SamplerAddressMode::eClampToEdge,
-                .addressModeV = vuk::SamplerAddressMode::eClampToEdge,
-                .addressModeW = vuk::SamplerAddressMode::eClampToEdge,
-            };
-
             cmd_list //
                 .bind_compute_pipeline("passes.sky_view")
                 .bind_sampler(0, 0, linear_clamp_sampler)
@@ -747,14 +832,6 @@ static auto draw_sky(
             VUK_BA(vuk::eComputeRead) camera,
             VUK_IA(vuk::eComputeRW) sky_cubemap
         ) {
-            auto linear_clamp_sampler = vuk::SamplerCreateInfo{
-                .magFilter = vuk::Filter::eLinear,
-                .minFilter = vuk::Filter::eLinear,
-                .addressModeU = vuk::SamplerAddressMode::eClampToEdge,
-                .addressModeV = vuk::SamplerAddressMode::eClampToEdge,
-                .addressModeW = vuk::SamplerAddressMode::eClampToEdge,
-            };
-
             cmd_list //
                 .bind_compute_pipeline("passes.sky_cubemap")
                 .bind_sampler(0, 0, linear_clamp_sampler)
@@ -812,14 +889,6 @@ static auto apply_sky(
            VUK_BA(vuk::eComputeRead) atmosphere,
            VUK_BA(vuk::eComputeRead) camera,
            VUK_IA(vuk::eComputeRW) sky_aerial_perspective_lut) {
-            auto linear_clamp_sampler = vuk::SamplerCreateInfo{
-                .magFilter = vuk::Filter::eLinear,
-                .minFilter = vuk::Filter::eLinear,
-                .addressModeU = vuk::SamplerAddressMode::eClampToEdge,
-                .addressModeV = vuk::SamplerAddressMode::eClampToEdge,
-                .addressModeW = vuk::SamplerAddressMode::eClampToEdge,
-            };
-
             cmd_list //
                 .bind_compute_pipeline("passes.sky_aerial_perspective")
                 .bind_sampler(0, 0, linear_clamp_sampler)
@@ -854,14 +923,6 @@ static auto apply_sky(
            VUK_IA(vuk::eFragmentSampled) depth,
            VUK_BA(vuk::eFragmentRead) atmosphere,
            VUK_BA(vuk::eFragmentRead) camera) {
-            auto linear_clamp_sampler = vuk::SamplerCreateInfo{
-                .magFilter = vuk::Filter::eLinear,
-                .minFilter = vuk::Filter::eLinear,
-                .addressModeU = vuk::SamplerAddressMode::eClampToEdge,
-                .addressModeV = vuk::SamplerAddressMode::eClampToEdge,
-                .addressModeW = vuk::SamplerAddressMode::eClampToEdge,
-            };
-
             vuk::PipelineColorBlendAttachmentState blend_info = {
                 .blendEnable = true,
                 .srcColorBlendFactor = vuk::BlendFactor::eOne,
@@ -1035,6 +1096,12 @@ auto SceneRenderer::init(this SceneRenderer &self) -> bool {
         .entry_points = { "vs_main", "fs_main" },
     };
     Pipeline::create(device, default_slang_session, vis_decode_pipeline_info, bindless_descriptor_set).value();
+
+    auto shadowmap_cull_meshes = PipelineCompileInfo{
+        .module_name = "passes.shadowmap_cull_meshes",
+        .entry_points = { "cs_main" },
+    };
+    Pipeline::create(device, default_slang_session, shadowmap_cull_meshes).value();
 
     auto shadowmap_cull_meshlets = PipelineCompileInfo{
         .module_name = "passes.shadowmap_cull_meshlets",
@@ -1548,20 +1615,16 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                 auto &current_cascade_projection_view = frame.directional_light_cascade_projections[cascade_index];
 
                 auto all_visible_meshlet_instances_count_buffer = transfer_man.scratch_buffer<u32>({});
-                auto cull_meshlets_cmd_buffer = cull_meshes(
+                auto cull_meshlets_cmd_buffer = shadowmap_cull_meshes(
                     transfer_man,
-                    GPU::CullFlags::MeshFrustum,
                     frame.mesh_instance_count,
+                    cascade_index,
                     current_cascade_projection_view,
-                    frame.camera.position,
-                    frame.camera.resolution,
-                    frame.camera.acceptable_lod_error,
                     meshes_buffer,
                     mesh_instances_buffer,
                     meshlet_instances_buffer,
                     all_visible_meshlet_instances_count_buffer,
-                    transforms_buffer,
-                    debug_drawer_buffer
+                    transforms_buffer
                 );
                 auto visible_meshlet_instances_count_buffer = transfer_man.scratch_buffer<u32>({});
                 auto draw_shadowmap_cmd_buffer = cull_shadowmap_meshlets(
@@ -1925,15 +1988,6 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                 [](vuk::CommandBuffer &command_buffer, //
                    VUK_IA(vuk::eComputeSampled) depth_input,
                    VUK_IA(vuk::eComputeRW) dst_image) {
-                    auto nearest_clamp_sampler = vuk::SamplerCreateInfo{
-                        .magFilter = vuk::Filter::eNearest,
-                        .minFilter = vuk::Filter::eNearest,
-                        .mipmapMode = vuk::SamplerMipmapMode::eNearest,
-                        .addressModeU = vuk::SamplerAddressMode::eClampToEdge,
-                        .addressModeV = vuk::SamplerAddressMode::eClampToEdge,
-                        .addressModeW = vuk::SamplerAddressMode::eClampToEdge,
-                    };
-
                     command_buffer.bind_compute_pipeline("passes.vbgtao_prefilter")
                         .bind_image(0, 0, depth_input)
                         .bind_image(0, 1, dst_image->mip(0))
@@ -1973,24 +2027,6 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                    VUK_BA(vuk::eComputeRead) vbgtao,
                    VUK_IA(vuk::eComputeRW) ambient_occlusion,
                    VUK_IA(vuk::eComputeRW) depth_differences) {
-                    auto nearest_clamp_sampler = vuk::SamplerCreateInfo{
-                        .magFilter = vuk::Filter::eNearest,
-                        .minFilter = vuk::Filter::eNearest,
-                        .mipmapMode = vuk::SamplerMipmapMode::eNearest,
-                        .addressModeU = vuk::SamplerAddressMode::eClampToEdge,
-                        .addressModeV = vuk::SamplerAddressMode::eClampToEdge,
-                        .addressModeW = vuk::SamplerAddressMode::eClampToEdge,
-                    };
-
-                    auto linear_clamp_sampler = vuk::SamplerCreateInfo{
-                        .magFilter = vuk::Filter::eLinear,
-                        .minFilter = vuk::Filter::eLinear,
-                        .mipmapMode = vuk::SamplerMipmapMode::eLinear,
-                        .addressModeU = vuk::SamplerAddressMode::eClampToEdge,
-                        .addressModeV = vuk::SamplerAddressMode::eClampToEdge,
-                        .addressModeW = vuk::SamplerAddressMode::eClampToEdge,
-                    };
-
                     command_buffer.bind_compute_pipeline("passes.vbgtao_generate")
                         .bind_sampler(0, 0, nearest_clamp_sampler)
                         .bind_sampler(0, 1, linear_clamp_sampler)
@@ -2045,15 +2081,6 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                    VUK_IA(vuk::eComputeSampled) depth_differences,
                    VUK_BA(vuk::eComputeRead) vbgtao,
                    VUK_IA(vuk::eComputeRW) ambient_occlusion) {
-                    auto nearest_clamp_sampler = vuk::SamplerCreateInfo{
-                        .magFilter = vuk::Filter::eNearest,
-                        .minFilter = vuk::Filter::eNearest,
-                        .mipmapMode = vuk::SamplerMipmapMode::eNearest,
-                        .addressModeU = vuk::SamplerAddressMode::eClampToEdge,
-                        .addressModeV = vuk::SamplerAddressMode::eClampToEdge,
-                        .addressModeW = vuk::SamplerAddressMode::eClampToEdge,
-                    };
-
                     command_buffer.bind_compute_pipeline("passes.vbgtao_denoise")
                         .bind_sampler(0, 0, nearest_clamp_sampler)
                         .bind_image(0, 1, noisy_occlusion)
@@ -2092,19 +2119,14 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                VUK_IA(vuk::eFragmentSampled) emissive,
                VUK_IA(vuk::eFragmentSampled) metallic_roughness_occlusion,
                VUK_IA(vuk::eFragmentSampled) directional_light_shadowmap) {
-                auto linear_clamp_sampler = vuk::SamplerCreateInfo{
+                auto directional_light_sampler = vuk::SamplerCreateInfo{
                     .magFilter = vuk::Filter::eLinear,
                     .minFilter = vuk::Filter::eLinear,
                     .addressModeU = vuk::SamplerAddressMode::eClampToEdge,
                     .addressModeV = vuk::SamplerAddressMode::eClampToEdge,
                     .addressModeW = vuk::SamplerAddressMode::eClampToEdge,
-                };
-
-                auto linear_repeat_sampler = vuk::SamplerCreateInfo{
-                    .magFilter = vuk::Filter::eLinear,
-                    .minFilter = vuk::Filter::eLinear,
-                    .addressModeU = vuk::SamplerAddressMode::eRepeat,
-                    .addressModeV = vuk::SamplerAddressMode::eRepeat,
+                    .compareEnable = true,
+                    .compareOp = vuk::CompareOp::eGreaterOrEqual,
                 };
 
                 cmd_list //
@@ -2125,7 +2147,8 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                     .bind_image(0, 8, emissive)
                     .bind_image(0, 9, metallic_roughness_occlusion)
                     .bind_image(0, 10, directional_light_shadowmap)
-                    .bind_buffer(0, 11, camera)
+                    .bind_sampler(0, 11, directional_light_sampler)
+                    .bind_buffer(0, 12, camera)
                     .push_constants(
                         vuk::ShaderStageFlagBits::eFragment,
                         0,

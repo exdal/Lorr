@@ -18,7 +18,7 @@ static constexpr auto sampler_min_clamp_reduction_mode = VkSamplerReductionModeC
     .pNext = nullptr,
     .reductionMode = VK_SAMPLER_REDUCTION_MODE_MIN,
 };
-static constexpr auto hiz_sampler_info = vuk::SamplerCreateInfo{
+static constexpr auto hiz_sampler = vuk::SamplerCreateInfo{
     .pNext = &sampler_min_clamp_reduction_mode,
     .magFilter = vuk::Filter::eLinear,
     .minFilter = vuk::Filter::eLinear,
@@ -26,6 +26,918 @@ static constexpr auto hiz_sampler_info = vuk::SamplerCreateInfo{
     .addressModeU = vuk::SamplerAddressMode::eClampToEdge,
     .addressModeV = vuk::SamplerAddressMode::eClampToEdge,
 };
+
+static constexpr auto linear_clamp_sampler = vuk::SamplerCreateInfo{
+    .magFilter = vuk::Filter::eLinear,
+    .minFilter = vuk::Filter::eLinear,
+    .addressModeU = vuk::SamplerAddressMode::eClampToEdge,
+    .addressModeV = vuk::SamplerAddressMode::eClampToEdge,
+    .addressModeW = vuk::SamplerAddressMode::eClampToEdge,
+};
+
+static constexpr auto linear_repeat_sampler = vuk::SamplerCreateInfo{
+    .magFilter = vuk::Filter::eLinear,
+    .minFilter = vuk::Filter::eLinear,
+    .addressModeU = vuk::SamplerAddressMode::eRepeat,
+    .addressModeV = vuk::SamplerAddressMode::eRepeat,
+};
+
+static constexpr auto nearest_clamp_sampler = vuk::SamplerCreateInfo{
+    .magFilter = vuk::Filter::eNearest,
+    .minFilter = vuk::Filter::eNearest,
+    .mipmapMode = vuk::SamplerMipmapMode::eNearest,
+    .addressModeU = vuk::SamplerAddressMode::eClampToEdge,
+    .addressModeV = vuk::SamplerAddressMode::eClampToEdge,
+    .addressModeW = vuk::SamplerAddressMode::eClampToEdge,
+};
+
+static auto cull_meshes(
+    TransferManager &transfer_man,
+    GPU::CullFlags cull_flags,
+    u32 mesh_instance_count,
+    glm::mat4 &frustum_projection_view,
+    glm::vec3 &observer_position,
+    glm::vec2 &observer_resolution,
+    f32 acceptable_lod_error,
+    vuk::Value<vuk::Buffer> &meshes_buffer,
+    vuk::Value<vuk::Buffer> &mesh_instances_buffer,
+    vuk::Value<vuk::Buffer> &meshlet_instances_buffer,
+    vuk::Value<vuk::Buffer> &visible_meshlet_instances_count_buffer,
+    vuk::Value<vuk::Buffer> &transforms_buffer,
+    vuk::Value<vuk::Buffer> &debug_drawer_buffer
+) -> vuk::Value<vuk::Buffer> {
+    ZoneScoped;
+
+    auto vis_cull_meshes_pass = vuk::make_pass(
+        "vis cull meshes",
+        [cull_flags, mesh_instance_count, frustum_projection_view, observer_position, observer_resolution, acceptable_lod_error](
+            vuk::CommandBuffer &cmd_list,
+            VUK_BA(vuk::eComputeRead) meshes,
+            VUK_BA(vuk::eComputeRead) transforms,
+            VUK_BA(vuk::eComputeRW) mesh_instances,
+            VUK_BA(vuk::eComputeRW) meshlet_instances,
+            VUK_BA(vuk::eComputeRW) visible_meshlet_instances_count,
+            VUK_BA(vuk::eComputeRW) debug_drawer
+        ) {
+            cmd_list //
+                .bind_compute_pipeline("passes.cull_meshes")
+                .bind_buffer(0, 0, meshes)
+                .bind_buffer(0, 1, transforms)
+                .bind_buffer(0, 2, mesh_instances)
+                .bind_buffer(0, 3, meshlet_instances)
+                .bind_buffer(0, 4, visible_meshlet_instances_count)
+                .bind_buffer(0, 5, debug_drawer)
+                .push_constants(
+                    vuk::ShaderStageFlagBits::eCompute,
+                    0,
+                    PushConstants(
+                        mesh_instance_count,
+                        cull_flags,
+                        frustum_projection_view,
+                        observer_position,
+                        glm::max(observer_resolution.x, observer_resolution.y),
+                        acceptable_lod_error
+                    )
+                )
+                .dispatch_invocations(mesh_instance_count);
+
+            return std::make_tuple(meshes, transforms, mesh_instances, meshlet_instances, visible_meshlet_instances_count, debug_drawer);
+        }
+    );
+
+    std::tie(
+        meshes_buffer,
+        transforms_buffer,
+        mesh_instances_buffer,
+        meshlet_instances_buffer,
+        visible_meshlet_instances_count_buffer,
+        debug_drawer_buffer
+    ) =
+        vis_cull_meshes_pass(
+            std::move(meshes_buffer),
+            std::move(transforms_buffer),
+            std::move(mesh_instances_buffer),
+            std::move(meshlet_instances_buffer),
+            std::move(visible_meshlet_instances_count_buffer),
+            std::move(debug_drawer_buffer)
+        );
+
+    auto generate_cull_commands_pass = vuk::make_pass(
+        "generate cull commands",
+        [](vuk::CommandBuffer &cmd_list, //
+           VUK_BA(vuk::eComputeRead) visible_meshlet_instances_count,
+           VUK_BA(vuk::eComputeRW) cull_meshlets_cmd) {
+            cmd_list //
+                .bind_compute_pipeline("passes.generate_cull_commands")
+                .bind_buffer(0, 0, visible_meshlet_instances_count)
+                .bind_buffer(0, 1, cull_meshlets_cmd)
+                .dispatch(1);
+
+            return std::make_tuple(visible_meshlet_instances_count, cull_meshlets_cmd);
+        }
+    );
+
+    auto cull_meshlets_cmd_buffer = transfer_man.scratch_buffer<vuk::DispatchIndirectCommand>({ .x = 0, .y = 1, .z = 1 });
+    std::tie(visible_meshlet_instances_count_buffer, cull_meshlets_cmd_buffer) =
+        generate_cull_commands_pass(std::move(visible_meshlet_instances_count_buffer), std::move(cull_meshlets_cmd_buffer));
+
+    return cull_meshlets_cmd_buffer;
+}
+
+static auto cull_meshlets(
+    TransferManager &transfer_man,
+    bool late,
+    GPU::CullFlags cull_flags,
+    f32 near_clip,
+    glm::vec2 &resolution,
+    glm::mat4 &projection_view,
+    vuk::Value<vuk::ImageAttachment> &hiz_attachment,
+    vuk::Value<vuk::Buffer> &cull_meshlets_cmd_buffer,
+    vuk::Value<vuk::Buffer> &visible_meshlet_instances_count_buffer,
+    vuk::Value<vuk::Buffer> &early_visible_meshlet_instances_count_buffer,
+    vuk::Value<vuk::Buffer> &late_visible_meshlet_instances_count_buffer,
+    vuk::Value<vuk::Buffer> &visible_meshlet_instances_indices_buffer,
+    vuk::Value<vuk::Buffer> &meshlet_instance_visibility_mask_buffer,
+    vuk::Value<vuk::Buffer> &reordered_indices_buffer,
+    vuk::Value<vuk::Buffer> &meshes_buffer,
+    vuk::Value<vuk::Buffer> &mesh_instances_buffer,
+    vuk::Value<vuk::Buffer> &meshlet_instances_buffer,
+    vuk::Value<vuk::Buffer> &transforms_buffer
+) -> vuk::Value<vuk::Buffer> {
+    ZoneScoped;
+    memory::ScopedStack stack;
+
+    //  ── CULL MESHLETS ───────────────────────────────────────────────────
+    auto vis_cull_meshlets_pass = vuk::make_pass(
+        stack.format("vis cull meshlets {}", late ? "late" : "early"),
+        [late, cull_flags, near_clip, projection_view](
+            vuk::CommandBuffer &cmd_list,
+            VUK_BA(vuk::eIndirectRead) dispatch_cmd,
+            VUK_BA(vuk::eComputeRead) meshlet_instances,
+            VUK_BA(vuk::eComputeRead) mesh_instances,
+            VUK_BA(vuk::eComputeRead) meshes,
+            VUK_BA(vuk::eComputeRead) transforms,
+            VUK_IA(vuk::eComputeSampled) hiz,
+            VUK_BA(vuk::eComputeRead) visible_meshlet_instances_count,
+            VUK_BA(vuk::eComputeRW) early_visible_meshlet_instances_count,
+            VUK_BA(vuk::eComputeRW) late_visible_meshlet_instances_count,
+            VUK_BA(vuk::eComputeRW) visible_meshlet_instances_indices,
+            VUK_BA(vuk::eComputeRW) meshlet_instance_visibility_mask,
+            VUK_BA(vuk::eComputeRW) cull_triangles_cmd
+        ) {
+            cmd_list //
+                .bind_compute_pipeline("passes.cull_meshlets")
+                .bind_buffer(0, 0, meshlet_instances)
+                .bind_buffer(0, 1, mesh_instances)
+                .bind_buffer(0, 2, meshes)
+                .bind_buffer(0, 3, transforms)
+                .bind_image(0, 4, hiz)
+                .bind_sampler(0, 5, hiz_sampler)
+                .bind_buffer(0, 6, visible_meshlet_instances_count)
+                .bind_buffer(0, 7, early_visible_meshlet_instances_count)
+                .bind_buffer(0, 8, late_visible_meshlet_instances_count)
+                .bind_buffer(0, 9, visible_meshlet_instances_indices)
+                .bind_buffer(0, 10, meshlet_instance_visibility_mask)
+                .bind_buffer(0, 11, cull_triangles_cmd)
+                .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, PushConstants(cull_flags, near_clip, projection_view))
+                .specialize_constants(0, late)
+                .dispatch_indirect(dispatch_cmd);
+
+            return std::make_tuple(
+                dispatch_cmd,
+                meshlet_instances,
+                mesh_instances,
+                meshes,
+                transforms,
+                hiz,
+                visible_meshlet_instances_count,
+                early_visible_meshlet_instances_count,
+                late_visible_meshlet_instances_count,
+                visible_meshlet_instances_indices,
+                meshlet_instance_visibility_mask,
+                cull_triangles_cmd
+            );
+        }
+    );
+
+    auto cull_triangles_cmd_buffer = transfer_man.scratch_buffer<vuk::DispatchIndirectCommand>({ .x = 0, .y = 1, .z = 1 });
+
+    std::tie(
+        cull_meshlets_cmd_buffer,
+        meshlet_instances_buffer,
+        mesh_instances_buffer,
+        meshes_buffer,
+        transforms_buffer,
+        hiz_attachment,
+        visible_meshlet_instances_count_buffer,
+        early_visible_meshlet_instances_count_buffer,
+        late_visible_meshlet_instances_count_buffer,
+        visible_meshlet_instances_indices_buffer,
+        meshlet_instance_visibility_mask_buffer,
+        cull_triangles_cmd_buffer
+    ) =
+        vis_cull_meshlets_pass(
+            std::move(cull_meshlets_cmd_buffer),
+            std::move(meshlet_instances_buffer),
+            std::move(mesh_instances_buffer),
+            std::move(meshes_buffer),
+            std::move(transforms_buffer),
+            std::move(hiz_attachment),
+            std::move(visible_meshlet_instances_count_buffer),
+            std::move(early_visible_meshlet_instances_count_buffer),
+            std::move(late_visible_meshlet_instances_count_buffer),
+            std::move(visible_meshlet_instances_indices_buffer),
+            std::move(meshlet_instance_visibility_mask_buffer),
+            std::move(cull_triangles_cmd_buffer)
+        );
+
+    //  ── CULL TRIANGLES ──────────────────────────────────────────────────
+    auto vis_cull_triangles_pass = vuk::make_pass(
+        stack.format("vis cull triangles {}", late ? "late" : "early"),
+        [late, cull_flags, resolution, projection_view](
+            vuk::CommandBuffer &cmd_list,
+            VUK_BA(vuk::eIndirectRead) cull_triangles_cmd,
+            VUK_BA(vuk::eComputeRead) early_visible_meshlet_instances_count,
+            VUK_BA(vuk::eComputeRead) visible_meshlet_instances_indices,
+            VUK_BA(vuk::eComputeRead) meshlet_instances,
+            VUK_BA(vuk::eComputeRead) mesh_instances,
+            VUK_BA(vuk::eComputeRead) meshes,
+            VUK_BA(vuk::eComputeRead) transforms,
+            VUK_BA(vuk::eComputeRW) draw_indexed_cmd,
+            VUK_BA(vuk::eComputeWrite) reordered_indices
+        ) {
+            cmd_list //
+                .bind_compute_pipeline("passes.cull_triangles")
+                .bind_buffer(0, 0, early_visible_meshlet_instances_count)
+                .bind_buffer(0, 1, visible_meshlet_instances_indices)
+                .bind_buffer(0, 2, meshlet_instances)
+                .bind_buffer(0, 3, mesh_instances)
+                .bind_buffer(0, 4, meshes)
+                .bind_buffer(0, 5, transforms)
+                .bind_buffer(0, 6, draw_indexed_cmd)
+                .bind_buffer(0, 7, reordered_indices)
+                .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, PushConstants(cull_flags, resolution, projection_view))
+                .specialize_constants(0, late)
+                .dispatch_indirect(cull_triangles_cmd);
+
+            return std::make_tuple(
+                early_visible_meshlet_instances_count,
+                visible_meshlet_instances_indices,
+                meshlet_instances,
+                mesh_instances,
+                meshes,
+                transforms,
+                draw_indexed_cmd,
+                reordered_indices
+            );
+        }
+    );
+
+    auto draw_command_buffer = transfer_man.scratch_buffer<vuk::DrawIndexedIndirectCommand>({ .instanceCount = 1 });
+
+    std::tie(
+        early_visible_meshlet_instances_count_buffer,
+        visible_meshlet_instances_indices_buffer,
+        meshlet_instances_buffer,
+        mesh_instances_buffer,
+        meshes_buffer,
+        transforms_buffer,
+        draw_command_buffer,
+        reordered_indices_buffer
+    ) =
+        vis_cull_triangles_pass(
+            std::move(cull_triangles_cmd_buffer),
+            std::move(early_visible_meshlet_instances_count_buffer),
+            std::move(visible_meshlet_instances_indices_buffer),
+            std::move(meshlet_instances_buffer),
+            std::move(mesh_instances_buffer),
+            std::move(meshes_buffer),
+            std::move(transforms_buffer),
+            std::move(draw_command_buffer),
+            std::move(reordered_indices_buffer)
+        );
+
+    return draw_command_buffer;
+}
+
+static auto draw_visbuffer(
+    bool late,
+    glm::mat4 &projection_view,
+    vuk::PersistentDescriptorSet &descriptor_set,
+    vuk::Value<vuk::ImageAttachment> &depth_attachment,
+    vuk::Value<vuk::ImageAttachment> &visbuffer_attachment,
+    vuk::Value<vuk::ImageAttachment> &overdraw_attachment,
+    vuk::Value<vuk::Buffer> &draw_command_buffer,
+    vuk::Value<vuk::Buffer> &reordered_indices_buffer,
+    vuk::Value<vuk::Buffer> &meshes_buffer,
+    vuk::Value<vuk::Buffer> &mesh_instances_buffer,
+    vuk::Value<vuk::Buffer> &meshlet_instances_buffer,
+    vuk::Value<vuk::Buffer> &transforms_buffer,
+    vuk::Value<vuk::Buffer> &materials_buffer
+) -> void {
+    ZoneScoped;
+    memory::ScopedStack stack;
+
+    auto vis_encode_pass = vuk::make_pass(
+        stack.format("vis encode {}", late ? "late" : "early"),
+        [&descriptor_set, projection_view](
+            vuk::CommandBuffer &cmd_list,
+            VUK_BA(vuk::eIndirectRead) triangle_indirect,
+            VUK_BA(vuk::eIndexRead) index_buffer,
+            VUK_BA(vuk::eVertexRead) meshlet_instances,
+            VUK_BA(vuk::eVertexRead) mesh_instances,
+            VUK_BA(vuk::eVertexRead) meshes,
+            VUK_BA(vuk::eVertexRead) transforms,
+            VUK_BA(vuk::eFragmentRead) materials,
+            VUK_IA(vuk::eColorRW) visbuffer,
+            VUK_IA(vuk::eDepthStencilRW) depth,
+            VUK_IA(vuk::eFragmentRW) overdraw
+        ) {
+            cmd_list //
+                .bind_graphics_pipeline("passes.visbuffer_encode")
+                .set_rasterization({ .cullMode = vuk::CullModeFlagBits::eBack })
+                .set_depth_stencil({ .depthTestEnable = true, .depthWriteEnable = true, .depthCompareOp = vuk::CompareOp::eGreaterOrEqual })
+                .set_color_blend(visbuffer, vuk::BlendPreset::eOff)
+                .set_dynamic_state(vuk::DynamicStateFlagBits::eViewport | vuk::DynamicStateFlagBits::eScissor)
+                .set_viewport(0, vuk::Rect2D::framebuffer())
+                .set_scissor(0, vuk::Rect2D::framebuffer())
+                .bind_persistent(1, descriptor_set)
+                .bind_buffer(0, 0, meshlet_instances)
+                .bind_buffer(0, 1, mesh_instances)
+                .bind_buffer(0, 2, meshes)
+                .bind_buffer(0, 3, transforms)
+                .bind_buffer(0, 4, materials)
+                .bind_image(0, 5, overdraw)
+                .bind_index_buffer(index_buffer, vuk::IndexType::eUint32)
+                .push_constants(vuk::ShaderStageFlagBits::eVertex, 0, projection_view)
+                .draw_indexed_indirect(1, triangle_indirect);
+
+            return std::make_tuple(index_buffer, meshlet_instances, mesh_instances, meshes, transforms, materials, visbuffer, depth, overdraw);
+        }
+    );
+
+    std::tie(
+        reordered_indices_buffer,
+        meshlet_instances_buffer,
+        mesh_instances_buffer,
+        meshes_buffer,
+        transforms_buffer,
+        materials_buffer,
+        visbuffer_attachment,
+        depth_attachment,
+        overdraw_attachment
+    ) =
+        vis_encode_pass(
+            std::move(draw_command_buffer),
+            std::move(reordered_indices_buffer),
+            std::move(meshlet_instances_buffer),
+            std::move(mesh_instances_buffer),
+            std::move(meshes_buffer),
+            std::move(transforms_buffer),
+            std::move(materials_buffer),
+            std::move(visbuffer_attachment),
+            std::move(depth_attachment),
+            std::move(overdraw_attachment)
+        );
+}
+
+static auto shadowmap_cull_meshes(
+    TransferManager &transfer_man,
+    u32 mesh_instance_count,
+    u32 cascade_index,
+    glm::mat4 &frustum_projection_view,
+    vuk::Value<vuk::Buffer> &meshes_buffer,
+    vuk::Value<vuk::Buffer> &mesh_instances_buffer,
+    vuk::Value<vuk::Buffer> &meshlet_instances_buffer,
+    vuk::Value<vuk::Buffer> &visible_meshlet_instances_count_buffer,
+    vuk::Value<vuk::Buffer> &transforms_buffer
+) -> vuk::Value<vuk::Buffer> {
+    ZoneScoped;
+    memory::ScopedStack stack;
+
+    auto vis_cull_meshes_pass = vuk::make_pass(
+        stack.format("shadowmap cull meshes cascade {}", cascade_index),
+        [mesh_instance_count, cascade_index, frustum_projection_view](
+            vuk::CommandBuffer &cmd_list,
+            VUK_BA(vuk::eComputeRead) meshes,
+            VUK_BA(vuk::eComputeRead) transforms,
+            VUK_BA(vuk::eComputeRW) mesh_instances,
+            VUK_BA(vuk::eComputeRW) meshlet_instances,
+            VUK_BA(vuk::eComputeRW) visible_meshlet_instances_count
+        ) {
+            cmd_list //
+                .bind_compute_pipeline("passes.shadowmap_cull_meshes")
+                .bind_buffer(0, 0, meshes)
+                .bind_buffer(0, 1, transforms)
+                .bind_buffer(0, 2, mesh_instances)
+                .bind_buffer(0, 3, meshlet_instances)
+                .bind_buffer(0, 4, visible_meshlet_instances_count)
+                .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, PushConstants(mesh_instance_count, cascade_index, frustum_projection_view))
+                .dispatch_invocations(mesh_instance_count);
+
+            return std::make_tuple(meshes, transforms, mesh_instances, meshlet_instances, visible_meshlet_instances_count);
+        }
+    );
+
+    std::tie(meshes_buffer, transforms_buffer, mesh_instances_buffer, meshlet_instances_buffer, visible_meshlet_instances_count_buffer) =
+        vis_cull_meshes_pass(
+            std::move(meshes_buffer),
+            std::move(transforms_buffer),
+            std::move(mesh_instances_buffer),
+            std::move(meshlet_instances_buffer),
+            std::move(visible_meshlet_instances_count_buffer)
+        );
+
+    auto generate_cull_commands_pass = vuk::make_pass(
+        "generate cull commands",
+        [](vuk::CommandBuffer &cmd_list, //
+           VUK_BA(vuk::eComputeRead) visible_meshlet_instances_count,
+           VUK_BA(vuk::eComputeRW) cull_meshlets_cmd) {
+            cmd_list //
+                .bind_compute_pipeline("passes.generate_cull_commands")
+                .bind_buffer(0, 0, visible_meshlet_instances_count)
+                .bind_buffer(0, 1, cull_meshlets_cmd)
+                .dispatch(1);
+
+            return std::make_tuple(visible_meshlet_instances_count, cull_meshlets_cmd);
+        }
+    );
+
+    auto cull_meshlets_cmd_buffer = transfer_man.scratch_buffer<vuk::DispatchIndirectCommand>({ .x = 0, .y = 1, .z = 1 });
+    std::tie(visible_meshlet_instances_count_buffer, cull_meshlets_cmd_buffer) =
+        generate_cull_commands_pass(std::move(visible_meshlet_instances_count_buffer), std::move(cull_meshlets_cmd_buffer));
+
+    return cull_meshlets_cmd_buffer;
+}
+
+auto cull_shadowmap_meshlets(
+    TransferManager &transfer_man,
+    u32 cascade_index,
+    glm::vec2 &resolution,
+    glm::mat4 &projection_view,
+    vuk::Value<vuk::Buffer> &cull_meshlets_cmd_buffer,
+    vuk::Value<vuk::Buffer> &all_visible_meshlet_instances_count_buffer,
+    vuk::Value<vuk::Buffer> &visible_meshlet_instances_count_buffer,
+    vuk::Value<vuk::Buffer> &visible_meshlet_instances_indices_buffer,
+    vuk::Value<vuk::Buffer> &reordered_indices_buffer,
+    vuk::Value<vuk::Buffer> &meshes_buffer,
+    vuk::Value<vuk::Buffer> &mesh_instances_buffer,
+    vuk::Value<vuk::Buffer> &meshlet_instances_buffer,
+    vuk::Value<vuk::Buffer> &transforms_buffer
+) -> vuk::Value<vuk::Buffer> {
+    ZoneScoped;
+    memory::ScopedStack stack;
+
+    //  ── CULL MESHLETS ───────────────────────────────────────────────────
+    auto shadowmap_cull_meshlets_pass = vuk::make_pass(
+        stack.format("shadowmap cull meshlets cascade {}", cascade_index),
+        [projection_view](
+            vuk::CommandBuffer &cmd_list,
+            VUK_BA(vuk::eIndirectRead) dispatch_cmd,
+            VUK_BA(vuk::eComputeRead) meshlet_instances,
+            VUK_BA(vuk::eComputeRead) mesh_instances,
+            VUK_BA(vuk::eComputeRead) meshes,
+            VUK_BA(vuk::eComputeRead) transforms,
+            VUK_BA(vuk::eComputeRead) all_visible_meshlet_instances_count,
+            VUK_BA(vuk::eComputeRW) visible_meshlet_instances_count,
+            VUK_BA(vuk::eComputeRW) visible_meshlet_instances_indices,
+            VUK_BA(vuk::eComputeRW) cull_triangles_cmd
+        ) {
+            cmd_list //
+                .bind_compute_pipeline("passes.shadowmap_cull_meshlets")
+                .bind_buffer(0, 0, meshlet_instances)
+                .bind_buffer(0, 1, mesh_instances)
+                .bind_buffer(0, 2, meshes)
+                .bind_buffer(0, 3, transforms)
+                .bind_buffer(0, 4, all_visible_meshlet_instances_count)
+                .bind_buffer(0, 5, visible_meshlet_instances_count)
+                .bind_buffer(0, 6, visible_meshlet_instances_indices)
+                .bind_buffer(0, 7, cull_triangles_cmd)
+                .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, projection_view)
+                .dispatch_indirect(dispatch_cmd);
+
+            return std::make_tuple(
+                dispatch_cmd,
+                meshlet_instances,
+                mesh_instances,
+                meshes,
+                transforms,
+                all_visible_meshlet_instances_count,
+                visible_meshlet_instances_count,
+                visible_meshlet_instances_indices,
+                cull_triangles_cmd
+            );
+        }
+    );
+
+    auto cull_triangles_cmd_buffer = transfer_man.scratch_buffer<vuk::DispatchIndirectCommand>({ .x = 0, .y = 1, .z = 1 });
+
+    std::tie(
+        cull_meshlets_cmd_buffer,
+        meshlet_instances_buffer,
+        mesh_instances_buffer,
+        meshes_buffer,
+        transforms_buffer,
+        all_visible_meshlet_instances_count_buffer,
+        visible_meshlet_instances_count_buffer,
+        visible_meshlet_instances_indices_buffer,
+        cull_triangles_cmd_buffer
+    ) =
+        shadowmap_cull_meshlets_pass(
+            std::move(cull_meshlets_cmd_buffer),
+            std::move(meshlet_instances_buffer),
+            std::move(mesh_instances_buffer),
+            std::move(meshes_buffer),
+            std::move(transforms_buffer),
+            std::move(all_visible_meshlet_instances_count_buffer),
+            std::move(visible_meshlet_instances_count_buffer),
+            std::move(visible_meshlet_instances_indices_buffer),
+            std::move(cull_triangles_cmd_buffer)
+        );
+
+    //  ── CULL TRIANGLES ──────────────────────────────────────────────────
+    auto shadowmap_cull_triangles_pass = vuk::make_pass(
+        stack.format("shadowmap cull triangles cascade {}", cascade_index),
+        [resolution, projection_view](
+            vuk::CommandBuffer &cmd_list,
+            VUK_BA(vuk::eIndirectRead) cull_triangles_cmd,
+            VUK_BA(vuk::eComputeRead) visible_meshlet_instances_count,
+            VUK_BA(vuk::eComputeRead) visible_meshlet_instances_indices,
+            VUK_BA(vuk::eComputeRead) meshlet_instances,
+            VUK_BA(vuk::eComputeRead) mesh_instances,
+            VUK_BA(vuk::eComputeRead) meshes,
+            VUK_BA(vuk::eComputeRead) transforms,
+            VUK_BA(vuk::eComputeRW) draw_indexed_cmd,
+            VUK_BA(vuk::eComputeWrite) reordered_indices
+        ) {
+            auto cull_flags = GPU::CullFlags::All;
+            cmd_list //
+                .bind_compute_pipeline("passes.cull_triangles")
+                .bind_buffer(0, 0, visible_meshlet_instances_count)
+                .bind_buffer(0, 1, visible_meshlet_instances_indices)
+                .bind_buffer(0, 2, meshlet_instances)
+                .bind_buffer(0, 3, mesh_instances)
+                .bind_buffer(0, 4, meshes)
+                .bind_buffer(0, 5, transforms)
+                .bind_buffer(0, 6, draw_indexed_cmd)
+                .bind_buffer(0, 7, reordered_indices)
+                .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, PushConstants(cull_flags, resolution, projection_view))
+                .specialize_constants(0, false)
+                .dispatch_indirect(cull_triangles_cmd);
+
+            return std::make_tuple(
+                visible_meshlet_instances_count,
+                visible_meshlet_instances_indices,
+                meshlet_instances,
+                mesh_instances,
+                meshes,
+                transforms,
+                draw_indexed_cmd,
+                reordered_indices
+            );
+        }
+    );
+
+    auto draw_command_buffer = transfer_man.scratch_buffer<vuk::DrawIndexedIndirectCommand>({ .instanceCount = 1 });
+
+    std::tie(
+        visible_meshlet_instances_count_buffer,
+        visible_meshlet_instances_indices_buffer,
+        meshlet_instances_buffer,
+        mesh_instances_buffer,
+        meshes_buffer,
+        transforms_buffer,
+        draw_command_buffer,
+        reordered_indices_buffer
+    ) =
+        shadowmap_cull_triangles_pass(
+            std::move(cull_triangles_cmd_buffer),
+            std::move(visible_meshlet_instances_count_buffer),
+            std::move(visible_meshlet_instances_indices_buffer),
+            std::move(meshlet_instances_buffer),
+            std::move(mesh_instances_buffer),
+            std::move(meshes_buffer),
+            std::move(transforms_buffer),
+            std::move(draw_command_buffer),
+            std::move(reordered_indices_buffer)
+        );
+
+    return draw_command_buffer;
+}
+
+auto draw_shadowmap(
+    u32 cascade_index,
+    glm::mat4 &projection_view,
+    vuk::Value<vuk::ImageAttachment> &depth_attachment,
+    vuk::Value<vuk::Buffer> &draw_command_buffer,
+    vuk::Value<vuk::Buffer> &reordered_indices_buffer,
+    vuk::Value<vuk::Buffer> &meshes_buffer,
+    vuk::Value<vuk::Buffer> &mesh_instances_buffer,
+    vuk::Value<vuk::Buffer> &meshlet_instances_buffer,
+    vuk::Value<vuk::Buffer> &transforms_buffer
+) -> void {
+    ZoneScoped;
+    memory::ScopedStack stack;
+
+    auto draw_shadowmap_pass = vuk::make_pass(
+        stack.format("draw shadowmap casecade {}", cascade_index),
+        [projection_view](
+            vuk::CommandBuffer &cmd_list,
+            VUK_BA(vuk::eIndirectRead) triangle_indirect,
+            VUK_BA(vuk::eIndexRead) index_buffer,
+            VUK_BA(vuk::eVertexRead) meshlet_instances,
+            VUK_BA(vuk::eVertexRead) mesh_instances,
+            VUK_BA(vuk::eVertexRead) meshes,
+            VUK_BA(vuk::eVertexRead) transforms,
+            VUK_IA(vuk::eDepthStencilRW) depth
+        ) {
+            cmd_list //
+                .bind_graphics_pipeline("passes.shadowmap_draw")
+                .set_rasterization({ .cullMode = vuk::CullModeFlagBits::eBack })
+                .set_depth_stencil({ .depthTestEnable = true, .depthWriteEnable = true, .depthCompareOp = vuk::CompareOp::eGreaterOrEqual })
+                .set_dynamic_state(vuk::DynamicStateFlagBits::eViewport | vuk::DynamicStateFlagBits::eScissor)
+                .set_viewport(0, vuk::Rect2D::framebuffer())
+                .set_scissor(0, vuk::Rect2D::framebuffer())
+                .bind_buffer(0, 0, meshlet_instances)
+                .bind_buffer(0, 1, mesh_instances)
+                .bind_buffer(0, 2, meshes)
+                .bind_buffer(0, 3, transforms)
+                .bind_index_buffer(index_buffer, vuk::IndexType::eUint32)
+                .push_constants(vuk::ShaderStageFlagBits::eVertex, 0, projection_view)
+                .draw_indexed_indirect(1, triangle_indirect);
+
+            return std::make_tuple(index_buffer, meshlet_instances, mesh_instances, meshes, transforms, depth);
+        }
+    );
+
+    std::tie(reordered_indices_buffer, meshlet_instances_buffer, mesh_instances_buffer, meshes_buffer, transforms_buffer, depth_attachment) =
+        draw_shadowmap_pass(
+            std::move(draw_command_buffer),
+            std::move(reordered_indices_buffer),
+            std::move(meshlet_instances_buffer),
+            std::move(mesh_instances_buffer),
+            std::move(meshes_buffer),
+            std::move(transforms_buffer),
+            std::move(depth_attachment)
+        );
+}
+
+static auto draw_hiz(vuk::Value<vuk::ImageAttachment> &hiz_attachment, vuk::Value<vuk::ImageAttachment> &depth_attachment) -> void {
+    ZoneScoped;
+
+    auto hiz_generate_pass = vuk::make_pass(
+        "hiz generate",
+        [](vuk::CommandBuffer &cmd_list, //
+           VUK_IA(vuk::eComputeSampled) src,
+           VUK_IA(vuk::eComputeRW) dst) {
+            auto extent = dst->extent;
+            auto mip_count = dst->level_count;
+            LS_EXPECT(mip_count < 13);
+
+            auto dispatch_x = (extent.width + 63) >> 6;
+            auto dispatch_y = (extent.height + 63) >> 6;
+
+            cmd_list //
+                .bind_compute_pipeline("passes.hiz")
+                .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, PushConstants(mip_count, (dispatch_x * dispatch_y) - 1, glm::mat2(1.0f)))
+                .specialize_constants(0, extent.width == extent.height && (extent.width & (extent.width - 1)) == 0 ? 1u : 0u)
+                .specialize_constants(1, extent.width)
+                .specialize_constants(2, extent.height);
+
+            *cmd_list.scratch_buffer<u32>(0, 0) = 0;
+            cmd_list.bind_sampler(0, 1, hiz_sampler);
+            cmd_list.bind_image(0, 2, src);
+
+            for (u32 i = 0; i < 13; i++) {
+                cmd_list.bind_image(0, i + 3, dst->mip(ls::min(i, mip_count - 1_u32)));
+            }
+
+            cmd_list.dispatch(dispatch_x, dispatch_y);
+
+            return std::make_tuple(src, dst);
+        }
+    );
+
+    auto hiz_generate_slow_pass = vuk::make_pass(
+        "hiz generate slow",
+        [](vuk::CommandBuffer &cmd_list, //
+           VUK_IA(vuk::eComputeSampled) src,
+           VUK_IA(vuk::eComputeRW) dst) {
+            auto extent = dst->extent;
+            auto mip_count = dst->level_count;
+
+            cmd_list //
+                .bind_compute_pipeline("passes.hiz_slow")
+                .bind_sampler(0, 0, hiz_sampler);
+
+            for (auto i = 0_u32; i < mip_count; i++) {
+                auto mip_width = std::max(1_u32, extent.width >> i);
+                auto mip_height = std::max(1_u32, extent.height >> i);
+
+                auto mip = dst->mip(i);
+                if (i == 0) {
+                    cmd_list.bind_image(0, 1, src);
+                } else {
+                    auto mip = dst->mip(i - 1);
+                    cmd_list.image_barrier(mip, vuk::eComputeWrite, vuk::eComputeSampled);
+                    cmd_list.bind_image(0, 1, mip);
+                }
+
+                cmd_list.bind_image(0, 2, mip);
+                cmd_list.push_constants(vuk::ShaderStageFlagBits::eCompute, 0, PushConstants(mip_width, mip_height, i));
+                cmd_list.dispatch_invocations(mip_width, mip_height);
+            }
+
+            cmd_list.image_barrier(dst, vuk::eComputeSampled, vuk::eComputeRW);
+
+            return std::make_tuple(src, dst);
+        }
+    );
+
+    std::tie(depth_attachment, hiz_attachment) = hiz_generate_slow_pass(std::move(depth_attachment), std::move(hiz_attachment));
+}
+
+static auto draw_sky(
+    u32 frame_index,
+    vuk::Value<vuk::ImageAttachment> &sky_view_lut_attachment,
+    vuk::Value<vuk::ImageAttachment> &sky_cubemap_attachment,
+    vuk::Value<vuk::ImageAttachment> &sky_transmittance_lut_attachment,
+    vuk::Value<vuk::ImageAttachment> &sky_multiscatter_lut_attachment,
+    vuk::Value<vuk::Buffer> &atmosphere_buffer,
+    vuk::Value<vuk::Buffer> &camera_buffer
+) -> void {
+    ZoneScoped;
+
+    //  ── SKY VIEW LUT ────────────────────────────────────────────────────
+    auto sky_view_pass = vuk::make_pass(
+        "sky view",
+        [](vuk::CommandBuffer &cmd_list, //
+           VUK_IA(vuk::eComputeSampled) sky_transmittance_lut,
+           VUK_IA(vuk::eComputeSampled) sky_multiscatter_lut,
+           VUK_BA(vuk::eComputeRead) atmosphere,
+           VUK_BA(vuk::eComputeRead) camera,
+           VUK_IA(vuk::eComputeRW) sky_view_lut) {
+            cmd_list //
+                .bind_compute_pipeline("passes.sky_view")
+                .bind_sampler(0, 0, linear_clamp_sampler)
+                .bind_image(0, 1, sky_transmittance_lut)
+                .bind_image(0, 2, sky_multiscatter_lut)
+                .bind_buffer(0, 3, atmosphere)
+                .bind_buffer(0, 4, camera)
+                .bind_image(0, 5, sky_view_lut)
+                .dispatch_invocations_per_pixel(sky_view_lut);
+            return std::make_tuple(sky_transmittance_lut, sky_multiscatter_lut, atmosphere, camera, sky_view_lut);
+        }
+    );
+
+    std::tie(sky_transmittance_lut_attachment, sky_multiscatter_lut_attachment, atmosphere_buffer, camera_buffer, sky_view_lut_attachment) =
+        sky_view_pass(
+            std::move(sky_transmittance_lut_attachment),
+            std::move(sky_multiscatter_lut_attachment),
+            std::move(atmosphere_buffer),
+            std::move(camera_buffer),
+            std::move(sky_view_lut_attachment)
+        );
+
+    auto sky_cubemap_pass = vuk::make_pass(
+        "sky cubemap",
+        [frame_index](
+            vuk::CommandBuffer &cmd_list, //
+            VUK_IA(vuk::eComputeSampled) sky_view_lut,
+            VUK_BA(vuk::eComputeRead) atmosphere,
+            VUK_BA(vuk::eComputeRead) camera,
+            VUK_IA(vuk::eComputeRW) sky_cubemap
+        ) {
+            cmd_list //
+                .bind_compute_pipeline("passes.sky_cubemap")
+                .bind_sampler(0, 0, linear_clamp_sampler)
+                .bind_image(0, 1, sky_view_lut)
+                .bind_buffer(0, 2, atmosphere)
+                .bind_buffer(0, 3, camera)
+                .bind_image(0, 4, sky_cubemap)
+                .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, frame_index)
+                .dispatch((sky_cubemap->extent.width + 2 - 1) / 2, (sky_cubemap->extent.height + 2 - 1) / 2, 6);
+
+            return std::make_tuple(sky_view_lut, atmosphere, camera, sky_cubemap);
+        }
+    );
+
+    std::tie(sky_view_lut_attachment, atmosphere_buffer, camera_buffer, sky_cubemap_attachment) = sky_cubemap_pass(
+        std::move(sky_view_lut_attachment),
+        std::move(atmosphere_buffer),
+        std::move(camera_buffer),
+        std::move(sky_cubemap_attachment)
+    );
+}
+
+static auto apply_sky(
+    SceneRenderer &self,
+    vuk::Value<vuk::ImageAttachment> &dst_attachment,
+    vuk::Value<vuk::ImageAttachment> &depth_attachment,
+    vuk::Value<vuk::ImageAttachment> &sky_view_lut_attachment,
+    vuk::Value<vuk::ImageAttachment> &sky_transmittance_lut_attachment,
+    vuk::Value<vuk::ImageAttachment> &sky_multiscatter_lut_attachment,
+    vuk::Value<vuk::Buffer> &atmosphere_buffer,
+    vuk::Value<vuk::Buffer> &camera_buffer
+) -> void {
+    ZoneScoped;
+
+    auto sky_aerial_perspective_attachment = vuk::declare_ia(
+        "sky aerial perspective",
+        { .image_type = vuk::ImageType::e3D,
+          .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage,
+          .extent = self.sky_aerial_perspective_lut_extent,
+          .sample_count = vuk::Samples::e1,
+          .view_type = vuk::ImageViewType::e3D,
+          .level_count = 1,
+          .layer_count = 1 }
+    );
+    sky_aerial_perspective_attachment.same_format_as(sky_view_lut_attachment);
+
+    //  ── SKY AERIAL PERSPECTIVE ──────────────────────────────────────────
+    auto sky_aerial_perspective_pass = vuk::make_pass(
+        "sky aerial perspective",
+        [](vuk::CommandBuffer &cmd_list, //
+           VUK_IA(vuk::eComputeSampled) sky_transmittance_lut,
+           VUK_IA(vuk::eComputeSampled) sky_multiscatter_lut,
+           VUK_BA(vuk::eComputeRead) atmosphere,
+           VUK_BA(vuk::eComputeRead) camera,
+           VUK_IA(vuk::eComputeRW) sky_aerial_perspective_lut) {
+            cmd_list //
+                .bind_compute_pipeline("passes.sky_aerial_perspective")
+                .bind_sampler(0, 0, linear_clamp_sampler)
+                .bind_image(0, 1, sky_transmittance_lut)
+                .bind_image(0, 2, sky_multiscatter_lut)
+                .bind_buffer(0, 3, atmosphere)
+                .bind_buffer(0, 4, camera)
+                .bind_image(0, 5, sky_aerial_perspective_lut)
+                .dispatch_invocations_per_pixel(sky_aerial_perspective_lut);
+
+            return std::make_tuple(sky_transmittance_lut, sky_multiscatter_lut, atmosphere, camera, sky_aerial_perspective_lut);
+        }
+    );
+
+    std::tie(sky_transmittance_lut_attachment, sky_multiscatter_lut_attachment, atmosphere_buffer, camera_buffer, sky_aerial_perspective_attachment) =
+        sky_aerial_perspective_pass(
+            std::move(sky_transmittance_lut_attachment),
+            std::move(sky_multiscatter_lut_attachment),
+            std::move(atmosphere_buffer),
+            std::move(camera_buffer),
+            std::move(sky_aerial_perspective_attachment)
+        );
+
+    //  ── SKY FINAL ───────────────────────────────────────────────────────
+    auto sky_final_pass = vuk::make_pass(
+        "sky final",
+        [](vuk::CommandBuffer &cmd_list, //
+           VUK_IA(vuk::eColorRW) dst,
+           VUK_IA(vuk::eFragmentSampled) sky_transmittance_lut,
+           VUK_IA(vuk::eFragmentSampled) sky_aerial_perspective_lut,
+           VUK_IA(vuk::eFragmentSampled) sky_view_lut,
+           VUK_IA(vuk::eFragmentSampled) depth,
+           VUK_BA(vuk::eFragmentRead) atmosphere,
+           VUK_BA(vuk::eFragmentRead) camera) {
+            vuk::PipelineColorBlendAttachmentState blend_info = {
+                .blendEnable = true,
+                .srcColorBlendFactor = vuk::BlendFactor::eOne,
+                .dstColorBlendFactor = vuk::BlendFactor::eSrcAlpha,
+                .colorBlendOp = vuk::BlendOp::eAdd,
+                .srcAlphaBlendFactor = vuk::BlendFactor::eZero,
+                .dstAlphaBlendFactor = vuk::BlendFactor::eOne,
+                .alphaBlendOp = vuk::BlendOp::eAdd,
+            };
+
+            cmd_list //
+                .bind_graphics_pipeline("passes.sky_final")
+                .set_rasterization({})
+                .set_depth_stencil({})
+                .set_color_blend(dst, blend_info)
+                .set_dynamic_state(vuk::DynamicStateFlagBits::eViewport | vuk::DynamicStateFlagBits::eScissor)
+                .set_viewport(0, vuk::Rect2D::framebuffer())
+                .set_scissor(0, vuk::Rect2D::framebuffer())
+                .bind_sampler(0, 0, linear_clamp_sampler)
+                .bind_image(0, 1, sky_transmittance_lut)
+                .bind_image(0, 2, sky_aerial_perspective_lut)
+                .bind_image(0, 3, sky_view_lut)
+                .bind_image(0, 4, depth)
+                .bind_buffer(0, 5, atmosphere)
+                .bind_buffer(0, 6, camera)
+                .draw(3, 1, 0, 0);
+
+            return std::make_tuple(dst, depth, atmosphere, camera);
+        }
+    );
+
+    std::tie(dst_attachment, depth_attachment, atmosphere_buffer, camera_buffer) = sky_final_pass(
+        std::move(dst_attachment),
+        std::move(sky_transmittance_lut_attachment),
+        std::move(sky_aerial_perspective_attachment),
+        std::move(sky_view_lut_attachment),
+        std::move(depth_attachment),
+        std::move(atmosphere_buffer),
+        std::move(camera_buffer)
+    );
+}
 
 auto SceneRenderer::init(this SceneRenderer &self) -> bool {
     ZoneScoped;
@@ -41,13 +953,12 @@ auto SceneRenderer::init(this SceneRenderer &self) -> bool {
 #ifdef LS_DEBUG
             { "ENABLE_ASSERTIONS", "1" },
             { "DEBUG_DRAW", "1" },
-#endif // DEBUG
+#endif
             { "CULLING_MESH_COUNT", "64" },
             { "CULLING_MESHLET_COUNT", std::to_string(Model::MAX_MESHLET_INDICES) },
             { "CULLING_TRIANGLE_COUNT", std::to_string(Model::MAX_MESHLET_PRIMITIVES) },
             { "MESH_MAX_LODS", std::to_string(GPU::Mesh::MAX_LODS) },
-            { "MAX_DIRECTIONAL_LIGHT_CASCADES", std::to_string(GPU::DirectionalLight::MAX_DIRECTIONAL_LIGHT_CASCADES) },
-            { "MAX_DIRECTIONAL_LIGHTS", std::to_string(GPU::Lights::MAX_DIRECTIONAL_LIGHTS) },
+            { "MAX_DIRECTIONAL_LIGHT_CASCADES", std::to_string(GPU::DirectionalLight::MAX_CASCADE_COUNT) },
             { "HISTOGRAM_THREADS_X", std::to_string(GPU::HISTOGRAM_THREADS_X) },
             { "HISTOGRAM_THREADS_Y", std::to_string(GPU::HISTOGRAM_THREADS_Y) },
         },
@@ -159,6 +1070,24 @@ auto SceneRenderer::init(this SceneRenderer &self) -> bool {
         .entry_points = { "vs_main", "fs_main" },
     };
     Pipeline::create(device, default_slang_session, vis_decode_pipeline_info, bindless_descriptor_set).value();
+
+    auto shadowmap_cull_meshes = PipelineCompileInfo{
+        .module_name = "passes.shadowmap_cull_meshes",
+        .entry_points = { "cs_main" },
+    };
+    Pipeline::create(device, default_slang_session, shadowmap_cull_meshes).value();
+
+    auto shadowmap_cull_meshlets = PipelineCompileInfo{
+        .module_name = "passes.shadowmap_cull_meshlets",
+        .entry_points = { "cs_main" },
+    };
+    Pipeline::create(device, default_slang_session, shadowmap_cull_meshlets).value();
+
+    auto shadowmap_draw = PipelineCompileInfo{
+        .module_name = "passes.shadowmap_draw",
+        .entry_points = { "vs_main" },
+    };
+    Pipeline::create(device, default_slang_session, shadowmap_draw).value();
 
     //  ── PBR ─────────────────────────────────────────────────────────────
     auto pbr_apply_pipeline_info = PipelineCompileInfo{
@@ -427,101 +1356,101 @@ auto SceneRenderer::prepare_frame(this SceneRenderer &self, FramePrepareInfo &in
             self.meshlet_instance_visibility_mask_buffer.acquire(device, "meshlet instances visibility mask", vuk::eMemoryRead);
     }
 
-    info.environment.transmittance_lut_size = self.sky_transmittance_lut_view.extent();
-    info.environment.sky_view_lut_size = self.sky_view_lut_extent;
-    info.environment.multiscattering_lut_size = self.sky_multiscatter_lut_view.extent();
-    info.environment.aerial_perspective_lut_size = self.sky_aerial_perspective_lut_extent;
-    prepared_frame.environment_buffer = transfer_man.scratch_buffer(info.environment);
-
-    // glm::vec3 corners[8] = {};
-    // glm::vec3 ndc_corners[8] = {
-    //     glm::vec3(-1.0f, 1.0f, 0.0f), glm::vec3(1.0f, 1.0f, 0.0f), glm::vec3(1.0f, -1.0f, 0.0f), glm::vec3(-1.0f, -1.0f, 0.0f),
-    //     glm::vec3(-1.0f, 1.0f, 1.0f), glm::vec3(1.0f, 1.0f, 1.0f), glm::vec3(1.0f, -1.0f, 1.0f), glm::vec3(-1.0f, -1.0f, 1.0f),
-    // };
-    //
-    // for (int i = 0; i < 8; ++i) {
-    //     auto world_corner = info.camera.inv_projection_view_mat * glm::vec4(ndc_corners[i], 1.0f);
-    //     corners[i] = glm::vec3(world_corner) / world_corner.w;
-    // }
-    //
-    // auto center = glm::vec3(0.0f);
-    // for (const auto &c : corners) {
-    //     center += c;
-    // }
-    // center /= static_cast<f32>(ls::count_of(corners));
-    //
-    // auto shadow_map_size = 512.0f;
-    // auto light_pos = center - info.environment.sun_direction * (shadow_map_size * 0.5f);
-    // auto light_target = center;
-    // auto up = glm::vec3(0, 1, 0);
-    // if (1.0f - glm::abs(glm::dot(info.environment.sun_direction, up)) < 1e-4f) {
-    //     up = glm::vec3(0, 0, 1);
-    // }
-    //
-    // auto view_mat = glm::lookAt(light_pos, glm::vec3(0), up);
-    // auto projection_mat = glm::orthoRH_ZO(
-    //     -shadow_map_size * 0.5f,
-    //     shadow_map_size * 0.5f,
-    //     -shadow_map_size * 0.5f,
-    //     shadow_map_size * 0.5f,
-    //     -shadow_map_size * 0.5f,
-    //     shadow_map_size * 0.5f
-    // );
-    // projection_mat[1][1] *= -1.0;
-
     prepared_frame.camera_buffer = transfer_man.scratch_buffer(info.camera);
+
+    auto directional_light_cascade_count = 1_u32;
+    if (info.directional_light.has_value()) {
+        auto &directional_light = info.directional_light.value();
+        prepared_frame.directional_light_buffer = transfer_man.scratch_buffer(directional_light);
+
+        directional_light_cascade_count = ls::max(1_u32, directional_light.cascade_count);
+        for (u32 i = 0_u32; i < directional_light.cascade_count; i++) {
+            prepared_frame.directional_light_cascade_projections[i] = info.directional_light_cascades[i].projection_view_mat;
+        }
+    }
+
+    prepared_frame.directional_light_cascades_buffer =
+        transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eGPUtoCPU, directional_light_cascade_count * sizeof(GPU::DirectionalLightCascade));
+    if (info.directional_light.has_value() && info.directional_light->cascade_count > 0) {
+        std::memcpy(
+            prepared_frame.directional_light_cascades_buffer->mapped_ptr,
+            info.directional_light_cascades.data(),
+            info.directional_light_cascades.size_bytes()
+        );
+    }
+
+    if (info.atmosphere.has_value()) {
+        auto &atmosphere = info.atmosphere.value();
+        atmosphere.transmittance_lut_size = self.sky_transmittance_lut_view.extent();
+        atmosphere.sky_view_lut_size = self.sky_view_lut_extent;
+        atmosphere.multiscattering_lut_size = self.sky_multiscatter_lut_view.extent();
+        atmosphere.aerial_perspective_lut_size = self.sky_aerial_perspective_lut_extent;
+
+        prepared_frame.atmosphere_buffer = transfer_man.scratch_buffer(atmosphere);
+        prepared_frame.has_atmosphere = true;
+    }
+
+    if (info.eye_adaptation.has_value()) {
+        auto &eye_adaptation = info.eye_adaptation.value();
+        prepared_frame.eye_adaptation_buffer = transfer_man.scratch_buffer(eye_adaptation);
+        prepared_frame.has_eye_adaptation = true;
+    }
+
+    if (info.vbgtao.has_value()) {
+        auto &vbgtao = info.vbgtao.value();
+        prepared_frame.vbgtao_buffer = transfer_man.scratch_buffer(vbgtao);
+        prepared_frame.has_vbgtao = true;
+    }
 
     prepared_frame.mesh_instance_count = info.mesh_instance_count;
     prepared_frame.max_meshlet_instance_count = info.max_meshlet_instance_count;
-    prepared_frame.environment_flags = static_cast<GPU::EnvironmentFlags>(info.environment.flags);
 
     if (info.regenerate_sky || !self.sky_transmittance_lut_view) {
         auto transmittance_lut_pass = vuk::make_pass(
             "transmittance lut",
             [](vuk::CommandBuffer &cmd_list, //
                VUK_IA(vuk::eComputeRW) dst,
-               VUK_BA(vuk::eComputeRead) environment) {
+               VUK_BA(vuk::eComputeRead) atmosphere) {
                 cmd_list //
                     .bind_compute_pipeline("passes.sky_transmittance")
                     .bind_image(0, 0, dst)
-                    .bind_buffer(0, 1, environment)
+                    .bind_buffer(0, 1, atmosphere)
                     .dispatch_invocations_per_pixel(dst);
 
-                return std::make_tuple(dst, environment);
+                return std::make_tuple(dst, atmosphere);
             }
         );
 
         prepared_frame.sky_transmittance_lut =
             self.sky_transmittance_lut_view.discard(device, "sky transmittance lut", vuk::ImageUsageFlagBits::eStorage);
-        std::tie(prepared_frame.sky_transmittance_lut, prepared_frame.environment_buffer) =
-            transmittance_lut_pass(std::move(prepared_frame.sky_transmittance_lut), std::move(prepared_frame.environment_buffer));
+        std::tie(prepared_frame.sky_transmittance_lut, prepared_frame.atmosphere_buffer) =
+            transmittance_lut_pass(std::move(prepared_frame.sky_transmittance_lut), std::move(prepared_frame.atmosphere_buffer));
 
         auto multiscatter_lut_pass = vuk::make_pass(
             "multiscatter lut",
             [](vuk::CommandBuffer &cmd_list, //
                VUK_IA(vuk::eComputeSampled) sky_transmittance_lut,
                VUK_IA(vuk::eComputeRW) sky_multiscatter_lut,
-               VUK_BA(vuk::eComputeRead) environment) {
+               VUK_BA(vuk::eComputeRead) atmosphere) {
                 cmd_list //
                     .bind_compute_pipeline("passes.sky_multiscattering")
                     .bind_sampler(0, 0, { .magFilter = vuk::Filter::eLinear, .minFilter = vuk::Filter::eLinear })
                     .bind_image(0, 1, sky_transmittance_lut)
-                    .bind_buffer(0, 2, environment)
+                    .bind_buffer(0, 2, atmosphere)
                     .bind_image(0, 3, sky_multiscatter_lut)
                     .dispatch(sky_multiscatter_lut->extent.width, sky_multiscatter_lut->extent.height);
 
-                return std::make_tuple(sky_transmittance_lut, sky_multiscatter_lut, environment);
+                return std::make_tuple(sky_transmittance_lut, sky_multiscatter_lut, atmosphere);
             }
         );
 
         prepared_frame.sky_multiscatter_lut =
             self.sky_multiscatter_lut_view.discard(device, "sky multiscatter lut", vuk::ImageUsageFlagBits::eStorage);
-        std::tie(prepared_frame.sky_transmittance_lut, prepared_frame.sky_multiscatter_lut, prepared_frame.environment_buffer) =
-            multiscatter_lut_pass(
-                std::move(prepared_frame.sky_transmittance_lut),
-                std::move(prepared_frame.sky_multiscatter_lut),
-                std::move(prepared_frame.environment_buffer)
-            );
+        std::tie(prepared_frame.sky_transmittance_lut, prepared_frame.sky_multiscatter_lut, prepared_frame.atmosphere_buffer) = multiscatter_lut_pass(
+            std::move(prepared_frame.sky_transmittance_lut),
+            std::move(prepared_frame.sky_multiscatter_lut),
+            std::move(prepared_frame.atmosphere_buffer)
+        );
     } else {
         prepared_frame.sky_transmittance_lut =
             self.sky_transmittance_lut_view.acquire(device, "sky transmittance lut", vuk::ImageUsageFlagBits::eSampled, vuk::Access::eComputeSampled);
@@ -529,692 +1458,10 @@ auto SceneRenderer::prepare_frame(this SceneRenderer &self, FramePrepareInfo &in
             self.sky_multiscatter_lut_view.acquire(device, "sky multiscatter lut", vuk::ImageUsageFlagBits::eSampled, vuk::Access::eComputeSampled);
     }
 
-    prepared_frame.vbgtao = info.vbgtao;
+    prepared_frame.camera = info.camera;
+    prepared_frame.directional_light = info.directional_light;
 
     return prepared_frame;
-}
-
-static auto cull_meshes(
-    GPU::CullFlags cull_flags,
-    u32 mesh_instance_count,
-    TransferManager &transfer_man,
-    vuk::Value<vuk::Buffer> &meshes_buffer,
-    vuk::Value<vuk::Buffer> &mesh_instances_buffer,
-    vuk::Value<vuk::Buffer> &meshlet_instances_buffer,
-    vuk::Value<vuk::Buffer> &visible_meshlet_instances_count_buffer,
-    vuk::Value<vuk::Buffer> &transforms_buffer,
-    vuk::Value<vuk::ImageAttachment> &hiz_attachment,
-    vuk::Value<vuk::Buffer> &camera_buffer,
-    vuk::Value<vuk::Buffer> &debug_drawer_buffer
-) -> vuk::Value<vuk::Buffer> {
-    ZoneScoped;
-
-    auto vis_cull_meshes_pass = vuk::make_pass(
-        "vis cull meshes",
-        [cull_flags, mesh_instance_count](
-            vuk::CommandBuffer &cmd_list,
-            VUK_BA(vuk::eComputeRead) camera,
-            VUK_BA(vuk::eComputeRead) meshes,
-            VUK_BA(vuk::eComputeRead) transforms,
-            VUK_IA(vuk::eComputeSampled) hiz,
-            VUK_BA(vuk::eComputeRW) mesh_instances,
-            VUK_BA(vuk::eComputeRW) meshlet_instances,
-            VUK_BA(vuk::eComputeRW) visible_meshlet_instances_count,
-            VUK_BA(vuk::eComputeRW) debug_drawer
-        ) {
-            cmd_list //
-                .bind_compute_pipeline("passes.cull_meshes")
-                .bind_buffer(0, 0, camera)
-                .bind_buffer(0, 1, meshes)
-                .bind_buffer(0, 2, transforms)
-                .bind_image(0, 3, hiz)
-                .bind_sampler(0, 4, hiz_sampler_info)
-                .bind_buffer(0, 5, mesh_instances)
-                .bind_buffer(0, 6, meshlet_instances)
-                .bind_buffer(0, 7, visible_meshlet_instances_count)
-                .bind_buffer(0, 8, debug_drawer)
-                .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, PushConstants(mesh_instance_count, cull_flags))
-                .dispatch_invocations(mesh_instance_count);
-
-            return std::make_tuple(camera, meshes, transforms, hiz, mesh_instances, meshlet_instances, visible_meshlet_instances_count, debug_drawer);
-        }
-    );
-
-    std::tie(
-        camera_buffer,
-        meshes_buffer,
-        transforms_buffer,
-        hiz_attachment,
-        mesh_instances_buffer,
-        meshlet_instances_buffer,
-        visible_meshlet_instances_count_buffer,
-        debug_drawer_buffer
-    ) =
-        vis_cull_meshes_pass(
-            std::move(camera_buffer),
-            std::move(meshes_buffer),
-            std::move(transforms_buffer),
-            std::move(hiz_attachment),
-            std::move(mesh_instances_buffer),
-            std::move(meshlet_instances_buffer),
-            std::move(visible_meshlet_instances_count_buffer),
-            std::move(debug_drawer_buffer)
-        );
-
-    auto generate_cull_commands_pass = vuk::make_pass(
-        "generate cull commands",
-        [](vuk::CommandBuffer &cmd_list, //
-           VUK_BA(vuk::eComputeRead) visible_meshlet_instances_count,
-           VUK_BA(vuk::eComputeRW) cull_meshlets_cmd) {
-            cmd_list //
-                .bind_compute_pipeline("passes.generate_cull_commands")
-                .bind_buffer(0, 0, visible_meshlet_instances_count)
-                .bind_buffer(0, 1, cull_meshlets_cmd)
-                .dispatch(1);
-
-            return std::make_tuple(visible_meshlet_instances_count, cull_meshlets_cmd);
-        }
-    );
-
-    auto cull_meshlets_cmd_buffer = transfer_man.scratch_buffer<vuk::DispatchIndirectCommand>({ .x = 0, .y = 1, .z = 1 });
-    std::tie(visible_meshlet_instances_count_buffer, cull_meshlets_cmd_buffer) =
-        generate_cull_commands_pass(std::move(visible_meshlet_instances_count_buffer), std::move(cull_meshlets_cmd_buffer));
-
-    return cull_meshlets_cmd_buffer;
-}
-
-static auto cull_meshlets(
-    bool late,
-    GPU::CullFlags cull_flags,
-    TransferManager &transfer_man,
-    vuk::Value<vuk::ImageAttachment> &hiz_attachment,
-    vuk::Value<vuk::Buffer> &cull_meshlets_cmd_buffer,
-    vuk::Value<vuk::Buffer> &visible_meshlet_instances_count_buffer,
-    vuk::Value<vuk::Buffer> &visible_meshlet_instances_indices_buffer,
-    vuk::Value<vuk::Buffer> &meshlet_instance_visibility_mask_buffer,
-    vuk::Value<vuk::Buffer> &reordered_indices_buffer,
-    vuk::Value<vuk::Buffer> &meshes_buffer,
-    vuk::Value<vuk::Buffer> &mesh_instances_buffer,
-    vuk::Value<vuk::Buffer> &meshlet_instances_buffer,
-    vuk::Value<vuk::Buffer> &transforms_buffer,
-    vuk::Value<vuk::Buffer> &camera_buffer,
-    vuk::Value<vuk::Buffer> &debug_drawer_buffer
-) -> vuk::Value<vuk::Buffer> {
-    ZoneScoped;
-    memory::ScopedStack stack;
-
-    //  ── CULL MESHLETS ───────────────────────────────────────────────────
-    auto vis_cull_meshlets_pass = vuk::make_pass(
-        stack.format("vis cull meshlets {}", late ? "late" : "early"),
-        [late, cull_flags](
-            vuk::CommandBuffer &cmd_list,
-            VUK_BA(vuk::eIndirectRead) dispatch_cmd,
-            VUK_BA(vuk::eComputeRead) camera,
-            VUK_BA(vuk::eComputeRead) meshlet_instances,
-            VUK_BA(vuk::eComputeRead) mesh_instances,
-            VUK_BA(vuk::eComputeRead) meshes,
-            VUK_BA(vuk::eComputeRead) transforms,
-            VUK_IA(vuk::eComputeSampled) hiz,
-            VUK_BA(vuk::eComputeRW) visible_meshlet_instances_count,
-            VUK_BA(vuk::eComputeRW) visible_meshlet_instances_indices,
-            VUK_BA(vuk::eComputeRW) meshlet_instance_visibility_mask,
-            VUK_BA(vuk::eComputeRW) cull_triangles_cmd,
-            VUK_BA(vuk::eComputeRW) debug_drawer
-        ) {
-            cmd_list //
-                .bind_compute_pipeline("passes.cull_meshlets")
-                .bind_buffer(0, 0, camera)
-                .bind_buffer(0, 1, meshlet_instances)
-                .bind_buffer(0, 2, mesh_instances)
-                .bind_buffer(0, 3, meshes)
-                .bind_buffer(0, 4, transforms)
-                .bind_image(0, 5, hiz)
-                .bind_sampler(0, 6, hiz_sampler_info)
-                .bind_buffer(0, 7, visible_meshlet_instances_count)
-                .bind_buffer(0, 8, visible_meshlet_instances_indices)
-                .bind_buffer(0, 9, meshlet_instance_visibility_mask)
-                .bind_buffer(0, 10, cull_triangles_cmd)
-                .bind_buffer(0, 11, debug_drawer)
-                .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, cull_flags)
-                .specialize_constants(0, late)
-                .dispatch_indirect(dispatch_cmd);
-
-            return std::make_tuple(
-                dispatch_cmd,
-                camera,
-                meshlet_instances,
-                mesh_instances,
-                meshes,
-                transforms,
-                hiz,
-                visible_meshlet_instances_count,
-                visible_meshlet_instances_indices,
-                meshlet_instance_visibility_mask,
-                cull_triangles_cmd,
-                debug_drawer
-            );
-        }
-    );
-
-    auto cull_triangles_cmd_buffer = transfer_man.scratch_buffer<vuk::DispatchIndirectCommand>({ .x = 0, .y = 1, .z = 1 });
-
-    std::tie(
-        cull_meshlets_cmd_buffer,
-        camera_buffer,
-        meshlet_instances_buffer,
-        mesh_instances_buffer,
-        meshes_buffer,
-        transforms_buffer,
-        hiz_attachment,
-        visible_meshlet_instances_count_buffer,
-        visible_meshlet_instances_indices_buffer,
-        meshlet_instance_visibility_mask_buffer,
-        cull_triangles_cmd_buffer,
-        debug_drawer_buffer
-    ) =
-        vis_cull_meshlets_pass(
-            std::move(cull_meshlets_cmd_buffer),
-            std::move(camera_buffer),
-            std::move(meshlet_instances_buffer),
-            std::move(mesh_instances_buffer),
-            std::move(meshes_buffer),
-            std::move(transforms_buffer),
-            std::move(hiz_attachment),
-            std::move(visible_meshlet_instances_count_buffer),
-            std::move(visible_meshlet_instances_indices_buffer),
-            std::move(meshlet_instance_visibility_mask_buffer),
-            std::move(cull_triangles_cmd_buffer),
-            std::move(debug_drawer_buffer)
-        );
-
-    //  ── CULL TRIANGLES ──────────────────────────────────────────────────
-    auto vis_cull_triangles_pass = vuk::make_pass(
-        stack.format("vis cull triangles {}", late ? "late" : "early"),
-        [late, cull_flags](
-            vuk::CommandBuffer &cmd_list,
-            VUK_BA(vuk::eIndirectRead) cull_triangles_cmd,
-            VUK_BA(vuk::eComputeRead) camera,
-            VUK_BA(vuk::eComputeRead) visible_meshlet_instances_count,
-            VUK_BA(vuk::eComputeRead) visible_meshlet_instances_indices,
-            VUK_BA(vuk::eComputeRead) meshlet_instances,
-            VUK_BA(vuk::eComputeRead) mesh_instances,
-            VUK_BA(vuk::eComputeRead) meshes,
-            VUK_BA(vuk::eComputeRead) transforms,
-            VUK_BA(vuk::eComputeRW) draw_indexed_cmd,
-            VUK_BA(vuk::eComputeWrite) reordered_indices
-        ) {
-            cmd_list //
-                .bind_compute_pipeline("passes.cull_triangles")
-                .bind_buffer(0, 0, camera)
-                .bind_buffer(0, 1, visible_meshlet_instances_count)
-                .bind_buffer(0, 2, visible_meshlet_instances_indices)
-                .bind_buffer(0, 3, meshlet_instances)
-                .bind_buffer(0, 4, mesh_instances)
-                .bind_buffer(0, 5, meshes)
-                .bind_buffer(0, 6, transforms)
-                .bind_buffer(0, 7, draw_indexed_cmd)
-                .bind_buffer(0, 8, reordered_indices)
-                .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, cull_flags)
-                .specialize_constants(0, late)
-                .dispatch_indirect(cull_triangles_cmd);
-
-            return std::make_tuple(
-                camera,
-                visible_meshlet_instances_count,
-                visible_meshlet_instances_indices,
-                meshlet_instances,
-                mesh_instances,
-                meshes,
-                transforms,
-                draw_indexed_cmd,
-                reordered_indices
-            );
-        }
-    );
-
-    auto draw_command_buffer = transfer_man.scratch_buffer<vuk::DrawIndexedIndirectCommand>({ .instanceCount = 1 });
-
-    std::tie(
-        camera_buffer,
-        visible_meshlet_instances_count_buffer,
-        visible_meshlet_instances_indices_buffer,
-        meshlet_instances_buffer,
-        mesh_instances_buffer,
-        meshes_buffer,
-        transforms_buffer,
-        draw_command_buffer,
-        reordered_indices_buffer
-    ) =
-        vis_cull_triangles_pass(
-            std::move(cull_triangles_cmd_buffer),
-            std::move(camera_buffer),
-            std::move(visible_meshlet_instances_count_buffer),
-            std::move(visible_meshlet_instances_indices_buffer),
-            std::move(meshlet_instances_buffer),
-            std::move(mesh_instances_buffer),
-            std::move(meshes_buffer),
-            std::move(transforms_buffer),
-            std::move(draw_command_buffer),
-            std::move(reordered_indices_buffer)
-        );
-
-    return draw_command_buffer;
-}
-
-static auto draw_visbuffer(
-    bool late,
-    vuk::PersistentDescriptorSet &descriptor_set,
-    vuk::Value<vuk::ImageAttachment> &depth_attachment,
-    vuk::Value<vuk::ImageAttachment> &visbuffer_attachment,
-    vuk::Value<vuk::ImageAttachment> &overdraw_attachment,
-    vuk::Value<vuk::Buffer> &draw_command_buffer,
-    vuk::Value<vuk::Buffer> &reordered_indices_buffer,
-    vuk::Value<vuk::Buffer> &meshes_buffer,
-    vuk::Value<vuk::Buffer> &mesh_instances_buffer,
-    vuk::Value<vuk::Buffer> &meshlet_instances_buffer,
-    vuk::Value<vuk::Buffer> &transforms_buffer,
-    vuk::Value<vuk::Buffer> &materials_buffer,
-    vuk::Value<vuk::Buffer> &camera_buffer
-) -> void {
-    ZoneScoped;
-    memory::ScopedStack stack;
-
-    auto vis_encode_pass = vuk::make_pass(
-        stack.format("vis encode {}", late ? "late" : "early"),
-        [&descriptor_set](
-            vuk::CommandBuffer &cmd_list,
-            VUK_BA(vuk::eIndirectRead) triangle_indirect,
-            VUK_BA(vuk::eIndexRead) index_buffer,
-            VUK_BA(vuk::eVertexRead) camera,
-            VUK_BA(vuk::eVertexRead) meshlet_instances,
-            VUK_BA(vuk::eVertexRead) mesh_instances,
-            VUK_BA(vuk::eVertexRead) meshes,
-            VUK_BA(vuk::eVertexRead) transforms,
-            VUK_BA(vuk::eFragmentRead) materials,
-            VUK_IA(vuk::eColorRW) visbuffer,
-            VUK_IA(vuk::eDepthStencilRW) depth,
-            VUK_IA(vuk::eFragmentRW) overdraw
-        ) {
-            cmd_list //
-                .bind_graphics_pipeline("passes.visbuffer_encode")
-                .set_rasterization({ .cullMode = vuk::CullModeFlagBits::eBack })
-                .set_depth_stencil({ .depthTestEnable = true, .depthWriteEnable = true, .depthCompareOp = vuk::CompareOp::eGreaterOrEqual })
-                .set_color_blend(visbuffer, vuk::BlendPreset::eOff)
-                .set_dynamic_state(vuk::DynamicStateFlagBits::eViewport | vuk::DynamicStateFlagBits::eScissor)
-                .set_viewport(0, vuk::Rect2D::framebuffer())
-                .set_scissor(0, vuk::Rect2D::framebuffer())
-                .bind_persistent(1, descriptor_set)
-                .bind_buffer(0, 0, camera)
-                .bind_buffer(0, 1, meshlet_instances)
-                .bind_buffer(0, 2, mesh_instances)
-                .bind_buffer(0, 3, meshes)
-                .bind_buffer(0, 4, transforms)
-                .bind_buffer(0, 5, materials)
-                .bind_image(0, 6, overdraw)
-                .bind_index_buffer(index_buffer, vuk::IndexType::eUint32)
-                .draw_indexed_indirect(1, triangle_indirect);
-
-            return std::make_tuple(
-                index_buffer,
-                camera,
-                meshlet_instances,
-                mesh_instances,
-                meshes,
-                transforms,
-                materials,
-                visbuffer,
-                depth,
-                overdraw
-            );
-        }
-    );
-
-    std::tie(
-        reordered_indices_buffer,
-        camera_buffer,
-        meshlet_instances_buffer,
-        mesh_instances_buffer,
-        meshes_buffer,
-        transforms_buffer,
-        materials_buffer,
-        visbuffer_attachment,
-        depth_attachment,
-        overdraw_attachment
-    ) =
-        vis_encode_pass(
-            std::move(draw_command_buffer),
-            std::move(reordered_indices_buffer),
-            std::move(camera_buffer),
-            std::move(meshlet_instances_buffer),
-            std::move(mesh_instances_buffer),
-            std::move(meshes_buffer),
-            std::move(transforms_buffer),
-            std::move(materials_buffer),
-            std::move(visbuffer_attachment),
-            std::move(depth_attachment),
-            std::move(overdraw_attachment)
-        );
-}
-
-static auto draw_hiz(vuk::Value<vuk::ImageAttachment> &hiz_attachment, vuk::Value<vuk::ImageAttachment> &depth_attachment) -> void {
-    ZoneScoped;
-
-    auto hiz_generate_pass = vuk::make_pass(
-        "hiz generate",
-        [](vuk::CommandBuffer &cmd_list, //
-           VUK_IA(vuk::eComputeSampled) src,
-           VUK_IA(vuk::eComputeRW) dst) {
-            auto extent = dst->extent;
-            auto mip_count = dst->level_count;
-            LS_EXPECT(mip_count < 13);
-
-            auto dispatch_x = (extent.width + 63) >> 6;
-            auto dispatch_y = (extent.height + 63) >> 6;
-
-            cmd_list //
-                .bind_compute_pipeline("passes.hiz")
-                .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, PushConstants(mip_count, (dispatch_x * dispatch_y) - 1, glm::mat2(1.0f)))
-                .specialize_constants(0, extent.width == extent.height && (extent.width & (extent.width - 1)) == 0 ? 1u : 0u)
-                .specialize_constants(1, extent.width)
-                .specialize_constants(2, extent.height);
-
-            *cmd_list.scratch_buffer<u32>(0, 0) = 0;
-            cmd_list.bind_sampler(0, 1, hiz_sampler_info);
-            cmd_list.bind_image(0, 2, src);
-
-            for (u32 i = 0; i < 13; i++) {
-                cmd_list.bind_image(0, i + 3, dst->mip(ls::min(i, mip_count - 1_u32)));
-            }
-
-            cmd_list.dispatch(dispatch_x, dispatch_y);
-
-            return std::make_tuple(src, dst);
-        }
-    );
-
-    auto hiz_generate_slow_pass = vuk::make_pass(
-        "hiz generate slow",
-        [](vuk::CommandBuffer &cmd_list, //
-           VUK_IA(vuk::eComputeSampled) src,
-           VUK_IA(vuk::eComputeRW) dst) {
-            auto extent = dst->extent;
-            auto mip_count = dst->level_count;
-
-            cmd_list //
-                .bind_compute_pipeline("passes.hiz_slow")
-                .bind_sampler(0, 0, hiz_sampler_info);
-
-            for (auto i = 0_u32; i < mip_count; i++) {
-                auto mip_width = std::max(1_u32, extent.width >> i);
-                auto mip_height = std::max(1_u32, extent.height >> i);
-
-                auto mip = dst->mip(i);
-                if (i == 0) {
-                    cmd_list.bind_image(0, 1, src);
-                } else {
-                    auto mip = dst->mip(i - 1);
-                    cmd_list.image_barrier(mip, vuk::eComputeWrite, vuk::eComputeSampled);
-                    cmd_list.bind_image(0, 1, mip);
-                }
-
-                cmd_list.bind_image(0, 2, mip);
-                cmd_list.push_constants(vuk::ShaderStageFlagBits::eCompute, 0, PushConstants(mip_width, mip_height, i));
-                cmd_list.dispatch_invocations(mip_width, mip_height);
-            }
-
-            cmd_list.image_barrier(dst, vuk::eComputeSampled, vuk::eComputeRW);
-
-            return std::make_tuple(src, dst);
-        }
-    );
-
-    std::tie(depth_attachment, hiz_attachment) = hiz_generate_slow_pass(std::move(depth_attachment), std::move(hiz_attachment));
-}
-
-static auto draw_sky(
-    SceneRenderer &self,
-    u32 frame_index,
-    vuk::Value<vuk::ImageAttachment> &sky_transmittance_lut_attachment,
-    vuk::Value<vuk::ImageAttachment> &sky_multiscatter_lut_attachment,
-    vuk::Value<vuk::Buffer> &environment_buffer,
-    vuk::Value<vuk::Buffer> &camera_buffer
-) -> std::tuple<vuk::Value<vuk::ImageAttachment>, vuk::Value<vuk::ImageAttachment>> {
-    ZoneScoped;
-
-    auto sky_view_lut_attachment = vuk::declare_ia(
-        "sky view lut",
-        { .image_type = vuk::ImageType::e2D,
-          .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage,
-          .extent = self.sky_view_lut_extent,
-          .format = vuk::Format::eR16G16B16A16Sfloat,
-          .sample_count = vuk::Samples::e1,
-          .view_type = vuk::ImageViewType::e2D,
-          .level_count = 1,
-          .layer_count = 1 }
-    );
-
-    auto sky_cubemap_attachment = vuk::declare_ia(
-        "sky cubemap",
-        { .image_flags = vuk::ImageCreateFlagBits::eCubeCompatible,
-          .image_type = vuk::ImageType::e2D,
-          .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage,
-          .extent = self.sky_cubemap_extent,
-          .format = vuk::Format::eR16G16B16A16Sfloat,
-          .sample_count = vuk::Samples::e1,
-          .view_type = vuk::ImageViewType::eCube,
-          .level_count = 1,
-          .layer_count = 6 }
-    );
-
-    //  ── SKY VIEW LUT ────────────────────────────────────────────────────
-    auto sky_view_pass = vuk::make_pass(
-        "sky view",
-        [](vuk::CommandBuffer &cmd_list, //
-           VUK_IA(vuk::eComputeSampled) sky_transmittance_lut,
-           VUK_IA(vuk::eComputeSampled) sky_multiscatter_lut,
-           VUK_BA(vuk::eComputeRead) environment,
-           VUK_BA(vuk::eComputeRead) camera,
-           VUK_IA(vuk::eComputeRW) sky_view_lut) {
-            auto linear_clamp_sampler = vuk::SamplerCreateInfo{
-                .magFilter = vuk::Filter::eLinear,
-                .minFilter = vuk::Filter::eLinear,
-                .addressModeU = vuk::SamplerAddressMode::eClampToEdge,
-                .addressModeV = vuk::SamplerAddressMode::eClampToEdge,
-                .addressModeW = vuk::SamplerAddressMode::eClampToEdge,
-            };
-
-            cmd_list //
-                .bind_compute_pipeline("passes.sky_view")
-                .bind_sampler(0, 0, linear_clamp_sampler)
-                .bind_image(0, 1, sky_transmittance_lut)
-                .bind_image(0, 2, sky_multiscatter_lut)
-                .bind_buffer(0, 3, environment)
-                .bind_buffer(0, 4, camera)
-                .bind_image(0, 5, sky_view_lut)
-                .dispatch_invocations_per_pixel(sky_view_lut);
-            return std::make_tuple(sky_transmittance_lut, sky_multiscatter_lut, environment, camera, sky_view_lut);
-        }
-    );
-
-    std::tie(sky_transmittance_lut_attachment, sky_multiscatter_lut_attachment, environment_buffer, camera_buffer, sky_view_lut_attachment) =
-        sky_view_pass(
-            std::move(sky_transmittance_lut_attachment),
-            std::move(sky_multiscatter_lut_attachment),
-            std::move(environment_buffer),
-            std::move(camera_buffer),
-            std::move(sky_view_lut_attachment)
-        );
-
-    auto sky_cubemap_pass = vuk::make_pass(
-        "sky cubemap",
-        [frame_index](
-            vuk::CommandBuffer &cmd_list, //
-            VUK_IA(vuk::eComputeSampled) sky_view_lut,
-            VUK_BA(vuk::eComputeRead) environment,
-            VUK_BA(vuk::eComputeRead) camera,
-            VUK_IA(vuk::eComputeRW) sky_cubemap
-        ) {
-            auto linear_clamp_sampler = vuk::SamplerCreateInfo{
-                .magFilter = vuk::Filter::eLinear,
-                .minFilter = vuk::Filter::eLinear,
-                .addressModeU = vuk::SamplerAddressMode::eClampToEdge,
-                .addressModeV = vuk::SamplerAddressMode::eClampToEdge,
-                .addressModeW = vuk::SamplerAddressMode::eClampToEdge,
-            };
-
-            cmd_list //
-                .bind_compute_pipeline("passes.sky_cubemap")
-                .bind_sampler(0, 0, linear_clamp_sampler)
-                .bind_image(0, 1, sky_view_lut)
-                .bind_buffer(0, 2, environment)
-                .bind_buffer(0, 3, camera)
-                .bind_image(0, 4, sky_cubemap)
-                .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, frame_index)
-                .dispatch((sky_cubemap->extent.width + 2 - 1) / 2, (sky_cubemap->extent.height + 2 - 1) / 2, 6);
-
-            return std::make_tuple(sky_view_lut, environment, camera, sky_cubemap);
-        }
-    );
-
-    std::tie(sky_view_lut_attachment, environment_buffer, camera_buffer, sky_cubemap_attachment) = sky_cubemap_pass(
-        std::move(sky_view_lut_attachment),
-        std::move(environment_buffer),
-        std::move(camera_buffer),
-        std::move(sky_cubemap_attachment)
-    );
-
-    return std::make_tuple(sky_view_lut_attachment, sky_cubemap_attachment);
-}
-
-static auto apply_sky(
-    SceneRenderer &self,
-    vuk::Value<vuk::ImageAttachment> &dst_attachment,
-    vuk::Value<vuk::ImageAttachment> &depth_attachment,
-    vuk::Value<vuk::ImageAttachment> &sky_view_lut_attachment,
-    vuk::Value<vuk::ImageAttachment> &sky_transmittance_lut_attachment,
-    vuk::Value<vuk::ImageAttachment> &sky_multiscatter_lut_attachment,
-    vuk::Value<vuk::Buffer> &environment_buffer,
-    vuk::Value<vuk::Buffer> &camera_buffer
-) -> void {
-    ZoneScoped;
-
-    auto sky_aerial_perspective_attachment = vuk::declare_ia(
-        "sky aerial perspective",
-        { .image_type = vuk::ImageType::e3D,
-          .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage,
-          .extent = self.sky_aerial_perspective_lut_extent,
-          .sample_count = vuk::Samples::e1,
-          .view_type = vuk::ImageViewType::e3D,
-          .level_count = 1,
-          .layer_count = 1 }
-    );
-    sky_aerial_perspective_attachment.same_format_as(sky_view_lut_attachment);
-
-    //  ── SKY AERIAL PERSPECTIVE ──────────────────────────────────────────
-    auto sky_aerial_perspective_pass = vuk::make_pass(
-        "sky aerial perspective",
-        [](vuk::CommandBuffer &cmd_list, //
-           VUK_IA(vuk::eComputeSampled) sky_transmittance_lut,
-           VUK_IA(vuk::eComputeSampled) sky_multiscatter_lut,
-           VUK_BA(vuk::eComputeRead) environment,
-           VUK_BA(vuk::eComputeRead) camera,
-           VUK_IA(vuk::eComputeRW) sky_aerial_perspective_lut) {
-            auto linear_clamp_sampler = vuk::SamplerCreateInfo{
-                .magFilter = vuk::Filter::eLinear,
-                .minFilter = vuk::Filter::eLinear,
-                .addressModeU = vuk::SamplerAddressMode::eClampToEdge,
-                .addressModeV = vuk::SamplerAddressMode::eClampToEdge,
-                .addressModeW = vuk::SamplerAddressMode::eClampToEdge,
-            };
-
-            cmd_list //
-                .bind_compute_pipeline("passes.sky_aerial_perspective")
-                .bind_sampler(0, 0, linear_clamp_sampler)
-                .bind_image(0, 1, sky_transmittance_lut)
-                .bind_image(0, 2, sky_multiscatter_lut)
-                .bind_buffer(0, 3, environment)
-                .bind_buffer(0, 4, camera)
-                .bind_image(0, 5, sky_aerial_perspective_lut)
-                .dispatch_invocations_per_pixel(sky_aerial_perspective_lut);
-
-            return std::make_tuple(sky_transmittance_lut, sky_multiscatter_lut, environment, camera, sky_aerial_perspective_lut);
-        }
-    );
-
-    std::tie(
-        sky_transmittance_lut_attachment,
-        sky_multiscatter_lut_attachment,
-        environment_buffer,
-        camera_buffer,
-        sky_aerial_perspective_attachment
-    ) =
-        sky_aerial_perspective_pass(
-            std::move(sky_transmittance_lut_attachment),
-            std::move(sky_multiscatter_lut_attachment),
-            std::move(environment_buffer),
-            std::move(camera_buffer),
-            std::move(sky_aerial_perspective_attachment)
-        );
-
-    //  ── SKY FINAL ───────────────────────────────────────────────────────
-    auto sky_final_pass = vuk::make_pass(
-        "sky final",
-        [](vuk::CommandBuffer &cmd_list, //
-           VUK_IA(vuk::eColorRW) dst,
-           VUK_IA(vuk::eFragmentSampled) sky_transmittance_lut,
-           VUK_IA(vuk::eFragmentSampled) sky_aerial_perspective_lut,
-           VUK_IA(vuk::eFragmentSampled) sky_view_lut,
-           VUK_IA(vuk::eFragmentSampled) depth,
-           VUK_BA(vuk::eFragmentRead) environment,
-           VUK_BA(vuk::eFragmentRead) camera) {
-            auto linear_clamp_sampler = vuk::SamplerCreateInfo{
-                .magFilter = vuk::Filter::eLinear,
-                .minFilter = vuk::Filter::eLinear,
-                .addressModeU = vuk::SamplerAddressMode::eClampToEdge,
-                .addressModeV = vuk::SamplerAddressMode::eClampToEdge,
-                .addressModeW = vuk::SamplerAddressMode::eClampToEdge,
-            };
-
-            vuk::PipelineColorBlendAttachmentState blend_info = {
-                .blendEnable = true,
-                .srcColorBlendFactor = vuk::BlendFactor::eOne,
-                .dstColorBlendFactor = vuk::BlendFactor::eSrcAlpha,
-                .colorBlendOp = vuk::BlendOp::eAdd,
-                .srcAlphaBlendFactor = vuk::BlendFactor::eZero,
-                .dstAlphaBlendFactor = vuk::BlendFactor::eOne,
-                .alphaBlendOp = vuk::BlendOp::eAdd,
-            };
-
-            cmd_list //
-                .bind_graphics_pipeline("passes.sky_final")
-                .set_rasterization({})
-                .set_depth_stencil({})
-                .set_color_blend(dst, blend_info)
-                .set_dynamic_state(vuk::DynamicStateFlagBits::eViewport | vuk::DynamicStateFlagBits::eScissor)
-                .set_viewport(0, vuk::Rect2D::framebuffer())
-                .set_scissor(0, vuk::Rect2D::framebuffer())
-                .bind_sampler(0, 0, linear_clamp_sampler)
-                .bind_image(0, 1, sky_transmittance_lut)
-                .bind_image(0, 2, sky_aerial_perspective_lut)
-                .bind_image(0, 3, sky_view_lut)
-                .bind_image(0, 4, depth)
-                .bind_buffer(0, 5, environment)
-                .bind_buffer(0, 6, camera)
-                .draw(3, 1, 0, 0);
-
-            return std::make_tuple(dst, depth, environment, camera);
-        }
-    );
-
-    std::tie(dst_attachment, depth_attachment, environment_buffer, camera_buffer) = sky_final_pass(
-        std::move(dst_attachment),
-        std::move(sky_transmittance_lut_attachment),
-        std::move(sky_aerial_perspective_attachment),
-        std::move(sky_view_lut_attachment),
-        std::move(depth_attachment),
-        std::move(environment_buffer),
-        std::move(camera_buffer)
-    );
 }
 
 auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttachment> &&dst_attachment, SceneRenderInfo &info, PreparedFrame &frame)
@@ -1251,40 +1498,16 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
         .depth = 1,
     };
 
-    auto hiz_attachment = vuk::Value<vuk::ImageAttachment>{};
-    if (self.hiz.extent() != hiz_extent || !self.hiz) {
-        if (self.hiz_view) {
-            device.destroy(self.hiz_view.id());
-        }
-
-        if (self.hiz) {
-            device.destroy(self.hiz.id());
-        }
-
-        auto hiz_info = ImageInfo{
-            .format = vuk::Format::eR32Sfloat,
-            .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage,
-            .type = vuk::ImageType::e2D,
-            .extent = hiz_extent,
-            .mip_count = std::bit_width(ls::max(hiz_extent.width, hiz_extent.height)) - 1_u32,
-            .name = "HiZ",
-        };
-        self.hiz = Image::create(device, hiz_info).value();
-
-        auto hiz_view_info = ImageViewInfo{
-            .image_usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage,
-            .type = vuk::ImageViewType::e2D,
-            .subresource_range = { .aspectMask = vuk::ImageAspectFlagBits::eColor, .levelCount = hiz_info.mip_count },
-            .name = "HiZ View",
-        };
-        self.hiz_view = ImageView::create(device, self.hiz, hiz_view_info).value();
-
-        hiz_attachment = self.hiz_view.acquire(device, "HiZ", vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage, vuk::eNone);
-        hiz_attachment = vuk::clear_image(std::move(hiz_attachment), vuk::DepthZero);
-    } else {
-        hiz_attachment =
-            self.hiz_view.acquire(device, "HiZ", vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage, vuk::eComputeSampled);
-    }
+    auto hiz_attachment = vuk::declare_ia(
+        "hiz",
+        { .usage = vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eSampled,
+          .extent = hiz_extent,
+          .format = vuk::Format::eR32Sfloat,
+          .sample_count = vuk::SampleCountFlagBits::e1,
+          .level_count = static_cast<u32>(std::bit_width(glm::max(hiz_extent.width, hiz_extent.height))),
+          .layer_count = 1 }
+    );
+    hiz_attachment = vuk::clear_image(std::move(hiz_attachment), vuk::DepthZero);
 
     const auto debugging = self.debug_lines;
     auto debug_drawer_buffer = vuk::Value<vuk::Buffer>{};
@@ -1314,20 +1537,137 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
         debug_drawer_buffer = transfer_man.scratch_buffer<GPU::DebugDrawer>({});
     }
 
-    auto environment_buffer = std::move(frame.environment_buffer);
     auto camera_buffer = std::move(frame.camera_buffer);
+    auto directional_light_buffer = std::move(frame.directional_light_buffer);
+    auto directional_light_cascades_buffer = std::move(frame.directional_light_cascades_buffer);
+    auto atmosphere_buffer = std::move(frame.atmosphere_buffer);
 
-    auto sky_view_lut_attachment = vuk::Value<vuk::ImageAttachment>{};
-    auto sky_cubemap_attachment = vuk::Value<vuk::ImageAttachment>{};
     auto sky_transmittance_lut_attachment = std::move(frame.sky_transmittance_lut);
     auto sky_multiscatter_lut_attachment = std::move(frame.sky_multiscatter_lut);
+    auto sky_view_lut_attachment = vuk::declare_ia(
+        "sky view lut",
+        { .image_type = vuk::ImageType::e2D,
+          .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage,
+          .extent = self.sky_view_lut_extent,
+          .format = vuk::Format::eR16G16B16A16Sfloat,
+          .sample_count = vuk::Samples::e1,
+          .view_type = vuk::ImageViewType::e2D,
+          .level_count = 1,
+          .layer_count = 1 }
+    );
+    sky_view_lut_attachment = vuk::clear_image(std::move(sky_view_lut_attachment), vuk::Black<f32>);
 
-    if (frame.environment_flags & GPU::EnvironmentFlags::HasAtmosphere) {
-        std::tie(sky_view_lut_attachment, sky_cubemap_attachment) =
-            draw_sky(self, frame_index, sky_transmittance_lut_attachment, sky_multiscatter_lut_attachment, environment_buffer, camera_buffer);
+    auto sky_cubemap_attachment = vuk::declare_ia(
+        "sky cubemap",
+        { .image_flags = vuk::ImageCreateFlagBits::eCubeCompatible,
+          .image_type = vuk::ImageType::e2D,
+          .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage,
+          .extent = self.sky_cubemap_extent,
+          .format = vuk::Format::eR16G16B16A16Sfloat,
+          .sample_count = vuk::Samples::e1,
+          .view_type = vuk::ImageViewType::eCube,
+          .layout = vuk::ImageLayout::eGeneral,
+          .level_count = 1,
+          .layer_count = 6 }
+    );
+
+    if (frame.has_atmosphere) {
+        draw_sky(
+            frame_index,
+            sky_view_lut_attachment,
+            sky_cubemap_attachment,
+            sky_transmittance_lut_attachment,
+            sky_multiscatter_lut_attachment,
+            atmosphere_buffer,
+            camera_buffer
+        );
     }
 
     if (frame.mesh_instance_count) {
+        auto transforms_buffer = std::move(frame.transforms_buffer);
+        auto meshes_buffer = std::move(frame.meshes_buffer);
+        auto mesh_instances_buffer = std::move(frame.mesh_instances_buffer);
+        auto materials_buffer = std::move(frame.materials_buffer);
+        auto meshlet_instance_visibility_mask_buffer = std::move(frame.meshlet_instance_visibility_mask_buffer);
+        auto meshlet_instances_buffer =
+            transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eGPUonly, frame.max_meshlet_instance_count * sizeof(GPU::MeshletInstance));
+        auto visible_meshlet_instances_indices_buffer =
+            transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eGPUonly, frame.max_meshlet_instance_count * sizeof(u32));
+        auto reordered_indices_buffer = transfer_man.alloc_transient_buffer(
+            vuk::MemoryUsage::eGPUonly,
+            frame.max_meshlet_instance_count * Model::MAX_MESHLET_PRIMITIVES * 3 * sizeof(u32)
+        );
+
+        /// GEOMETRY PREPASS ///
+        //
+        // Cascaded shadowmaps
+        auto directional_light_info = frame.directional_light.value_or(GPU::DirectionalLight{});
+        auto directional_light_cascade_count = ls::max(directional_light_info.cascade_count, 1_u32);
+        auto directional_light_shadowmap_size = ls::max(directional_light_info.cascade_size, 1_u32);
+        auto directional_light_shadowmap_extent =
+            vuk::Extent3D{ .width = directional_light_shadowmap_size, .height = directional_light_shadowmap_size, .depth = 1 };
+        auto directional_light_shadowmap_attachment = vuk::declare_ia(
+            "directional light shadowmap",
+            { .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eDepthStencilAttachment,
+              .extent = directional_light_shadowmap_extent,
+              .format = vuk::Format::eD32Sfloat,
+              .sample_count = vuk::SampleCountFlagBits::e1,
+              .level_count = 1,
+              .layer_count = directional_light_cascade_count }
+        );
+        directional_light_shadowmap_attachment = vuk::clear_image(std::move(directional_light_shadowmap_attachment), vuk::DepthZero);
+
+        if (frame.directional_light.has_value()) {
+            auto directional_light_resolution = glm::vec2(directional_light_shadowmap_size, directional_light_shadowmap_size);
+            for (u32 cascade_index = 0; cascade_index < directional_light_cascade_count; cascade_index++) {
+                auto current_cascade_attachment = directional_light_shadowmap_attachment.layer(cascade_index);
+                auto &current_cascade_projection_view = frame.directional_light_cascade_projections[cascade_index];
+
+                auto all_visible_meshlet_instances_count_buffer = transfer_man.scratch_buffer<u32>({});
+                auto cull_meshlets_cmd_buffer = shadowmap_cull_meshes(
+                    transfer_man,
+                    frame.mesh_instance_count,
+                    cascade_index,
+                    current_cascade_projection_view,
+                    meshes_buffer,
+                    mesh_instances_buffer,
+                    meshlet_instances_buffer,
+                    all_visible_meshlet_instances_count_buffer,
+                    transforms_buffer
+                );
+                auto visible_meshlet_instances_count_buffer = transfer_man.scratch_buffer<u32>({});
+                auto draw_shadowmap_cmd_buffer = cull_shadowmap_meshlets(
+                    transfer_man,
+                    cascade_index,
+                    directional_light_resolution,
+                    current_cascade_projection_view,
+                    cull_meshlets_cmd_buffer,
+                    all_visible_meshlet_instances_count_buffer,
+                    visible_meshlet_instances_count_buffer,
+                    visible_meshlet_instances_indices_buffer,
+                    reordered_indices_buffer,
+                    meshes_buffer,
+                    mesh_instances_buffer,
+                    meshlet_instances_buffer,
+                    transforms_buffer
+                );
+
+                draw_shadowmap(
+                    cascade_index,
+                    current_cascade_projection_view,
+                    current_cascade_attachment,
+                    draw_shadowmap_cmd_buffer,
+                    reordered_indices_buffer,
+                    meshes_buffer,
+                    mesh_instances_buffer,
+                    meshlet_instances_buffer,
+                    transforms_buffer
+                );
+            }
+        }
+
+        // Visibility buffer
+
         auto visbuffer_attachment = vuk::declare_ia(
             "visbuffer",
             { .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eColorAttachment,
@@ -1366,56 +1706,50 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
 
         std::tie(visbuffer_attachment, overdraw_attachment) = vis_clear_pass(std::move(visbuffer_attachment), std::move(overdraw_attachment));
 
-        auto transforms_buffer = std::move(frame.transforms_buffer);
-        auto meshes_buffer = std::move(frame.meshes_buffer);
-        auto mesh_instances_buffer = std::move(frame.mesh_instances_buffer);
-        auto materials_buffer = std::move(frame.materials_buffer);
-        auto meshlet_instance_visibility_mask_buffer = std::move(frame.meshlet_instance_visibility_mask_buffer);
+        auto visible_meshlet_instances_count_buffer = transfer_man.scratch_buffer<u32>({});
+        auto early_visible_meshlet_instances_count_buffer = transfer_man.scratch_buffer<u32>({});
+        auto late_visible_meshlet_instances_count_buffer = transfer_man.scratch_buffer<u32>({});
 
-        auto meshlet_instances_buffer =
-            transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eGPUonly, frame.max_meshlet_instance_count * sizeof(GPU::MeshletInstance));
-        auto visible_meshlet_instances_indices_buffer =
-            transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eGPUonly, frame.max_meshlet_instance_count * sizeof(u32));
-        auto reordered_indices_buffer = transfer_man.alloc_transient_buffer(
-            vuk::MemoryUsage::eGPUonly,
-            frame.max_meshlet_instance_count * Model::MAX_MESHLET_PRIMITIVES * 3 * sizeof(u32)
-        );
-
-        auto visible_meshlet_instances_count_buffer = transfer_man.scratch_buffer<u32[3]>({});
         auto cull_meshlets_cmd_buffer = cull_meshes(
+            transfer_man,
             info.cull_flags,
             frame.mesh_instance_count,
-            transfer_man,
+            frame.camera.projection_view_mat,
+            frame.camera.position,
+            frame.camera.resolution,
+            frame.camera.acceptable_lod_error,
             meshes_buffer,
             mesh_instances_buffer,
             meshlet_instances_buffer,
             visible_meshlet_instances_count_buffer,
             transforms_buffer,
-            hiz_attachment,
-            camera_buffer,
             debug_drawer_buffer
         );
 
         auto early_draw_visbuffer_cmd_buffer = cull_meshlets(
+            transfer_man,
             false,
             info.cull_flags,
-            transfer_man,
+            frame.camera.near_clip,
+            frame.camera.resolution,
+            frame.camera.projection_view_mat,
             hiz_attachment,
             cull_meshlets_cmd_buffer,
             visible_meshlet_instances_count_buffer,
+            early_visible_meshlet_instances_count_buffer,
+            late_visible_meshlet_instances_count_buffer,
             visible_meshlet_instances_indices_buffer,
             meshlet_instance_visibility_mask_buffer,
             reordered_indices_buffer,
             meshes_buffer,
             mesh_instances_buffer,
             meshlet_instances_buffer,
-            transforms_buffer,
-            camera_buffer,
-            debug_drawer_buffer
+            transforms_buffer
         );
 
         draw_visbuffer(
             false,
+            frame.camera.projection_view_mat,
             bindless_descriptor_set,
             depth_attachment,
             visbuffer_attachment,
@@ -1426,32 +1760,35 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
             mesh_instances_buffer,
             meshlet_instances_buffer,
             transforms_buffer,
-            materials_buffer,
-            camera_buffer
+            materials_buffer
         );
 
         draw_hiz(hiz_attachment, depth_attachment);
 
         auto late_draw_visbuffer_cmd_buffer = cull_meshlets(
+            transfer_man,
             true,
             info.cull_flags,
-            transfer_man,
+            frame.camera.near_clip,
+            frame.camera.resolution,
+            frame.camera.projection_view_mat,
             hiz_attachment,
             cull_meshlets_cmd_buffer,
             visible_meshlet_instances_count_buffer,
+            early_visible_meshlet_instances_count_buffer,
+            late_visible_meshlet_instances_count_buffer,
             visible_meshlet_instances_indices_buffer,
             meshlet_instance_visibility_mask_buffer,
             reordered_indices_buffer,
             meshes_buffer,
             mesh_instances_buffer,
             meshlet_instances_buffer,
-            transforms_buffer,
-            camera_buffer,
-            debug_drawer_buffer
+            transforms_buffer
         );
 
         draw_visbuffer(
             true,
+            frame.camera.projection_view_mat,
             bindless_descriptor_set,
             depth_attachment,
             visbuffer_attachment,
@@ -1462,8 +1799,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
             mesh_instances_buffer,
             meshlet_instances_buffer,
             transforms_buffer,
-            materials_buffer,
-            camera_buffer
+            materials_buffer
         );
 
         if (info.picking_texel) {
@@ -1654,21 +1990,13 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
         vbgtao_occlusion_attachment.same_shape_as(final_attachment);
         vbgtao_occlusion_attachment = vuk::clear_image(std::move(vbgtao_occlusion_attachment), vuk::White<f32>);
 
-        if (frame.vbgtao.has_value()) {
+        if (frame.has_vbgtao) {
+            auto vbgtao_buffer = std::move(frame.vbgtao_buffer);
             auto vbgtao_prefilter_pass = vuk::make_pass(
                 "vbgtao prefilter",
                 [](vuk::CommandBuffer &command_buffer, //
                    VUK_IA(vuk::eComputeSampled) depth_input,
                    VUK_IA(vuk::eComputeRW) dst_image) {
-                    auto nearest_clamp_sampler = vuk::SamplerCreateInfo{
-                        .magFilter = vuk::Filter::eNearest,
-                        .minFilter = vuk::Filter::eNearest,
-                        .mipmapMode = vuk::SamplerMipmapMode::eNearest,
-                        .addressModeU = vuk::SamplerAddressMode::eClampToEdge,
-                        .addressModeV = vuk::SamplerAddressMode::eClampToEdge,
-                        .addressModeW = vuk::SamplerAddressMode::eClampToEdge,
-                    };
-
                     command_buffer.bind_compute_pipeline("passes.vbgtao_prefilter")
                         .bind_image(0, 0, depth_input)
                         .bind_image(0, 1, dst_image->mip(0))
@@ -1700,46 +2028,27 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
 
             auto vbgtao_generate_pass = vuk::make_pass(
                 "vbgtao generate",
-                [vbgtao = frame.vbgtao.value()](
-                    vuk::CommandBuffer &command_buffer, //
-                    VUK_BA(vuk::eComputeUniformRead) camera,
-                    VUK_IA(vuk::eComputeSampled) prefiltered_depth,
-                    VUK_IA(vuk::eComputeSampled) normals,
-                    VUK_IA(vuk::eComputeSampled) hilbert_noise,
-                    VUK_IA(vuk::eComputeRW) ambient_occlusion,
-                    VUK_IA(vuk::eComputeRW) depth_differences
-                ) {
-                    auto nearest_clamp_sampler = vuk::SamplerCreateInfo{
-                        .magFilter = vuk::Filter::eNearest,
-                        .minFilter = vuk::Filter::eNearest,
-                        .mipmapMode = vuk::SamplerMipmapMode::eNearest,
-                        .addressModeU = vuk::SamplerAddressMode::eClampToEdge,
-                        .addressModeV = vuk::SamplerAddressMode::eClampToEdge,
-                        .addressModeW = vuk::SamplerAddressMode::eClampToEdge,
-                    };
-
-                    auto linear_clamp_sampler = vuk::SamplerCreateInfo{
-                        .magFilter = vuk::Filter::eLinear,
-                        .minFilter = vuk::Filter::eLinear,
-                        .mipmapMode = vuk::SamplerMipmapMode::eLinear,
-                        .addressModeU = vuk::SamplerAddressMode::eClampToEdge,
-                        .addressModeV = vuk::SamplerAddressMode::eClampToEdge,
-                        .addressModeW = vuk::SamplerAddressMode::eClampToEdge,
-                    };
-
+                [](vuk::CommandBuffer &command_buffer, //
+                   VUK_BA(vuk::eComputeUniformRead) camera,
+                   VUK_IA(vuk::eComputeSampled) prefiltered_depth,
+                   VUK_IA(vuk::eComputeSampled) normals,
+                   VUK_IA(vuk::eComputeSampled) hilbert_noise,
+                   VUK_BA(vuk::eComputeRead) vbgtao,
+                   VUK_IA(vuk::eComputeRW) ambient_occlusion,
+                   VUK_IA(vuk::eComputeRW) depth_differences) {
                     command_buffer.bind_compute_pipeline("passes.vbgtao_generate")
-                        .bind_buffer(0, 0, camera)
-                        .bind_image(0, 1, prefiltered_depth)
-                        .bind_image(0, 2, normals)
-                        .bind_image(0, 3, hilbert_noise)
-                        .bind_image(0, 4, ambient_occlusion)
-                        .bind_image(0, 5, depth_differences)
-                        .bind_sampler(0, 6, nearest_clamp_sampler)
-                        .bind_sampler(0, 7, linear_clamp_sampler)
-                        .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, vbgtao)
+                        .bind_sampler(0, 0, nearest_clamp_sampler)
+                        .bind_sampler(0, 1, linear_clamp_sampler)
+                        .bind_image(0, 2, prefiltered_depth)
+                        .bind_image(0, 3, normals)
+                        .bind_image(0, 4, hilbert_noise)
+                        .bind_buffer(0, 5, camera)
+                        .bind_buffer(0, 6, vbgtao)
+                        .bind_image(0, 7, ambient_occlusion)
+                        .bind_image(0, 8, depth_differences)
                         .dispatch_invocations_per_pixel(ambient_occlusion);
 
-                    return std::make_tuple(camera, normals, ambient_occlusion, depth_differences);
+                    return std::make_tuple(camera, normals, vbgtao, ambient_occlusion, depth_differences);
                 }
             );
 
@@ -1763,38 +2072,31 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
             auto hilbert_noise_lut_attachment =
                 self.hilbert_noise_lut_view.acquire(device, "hilbert noise", vuk::ImageUsageFlagBits::eSampled, vuk::eComputeSampled);
 
-            std::tie(camera_buffer, normal_attachment, vbgtao_noisy_occlusion_attachment, vbgtao_depth_differences_attachment) = vbgtao_generate_pass(
-                std::move(camera_buffer),
-                std::move(vbgtao_depth_attachment),
-                std::move(normal_attachment),
-                std::move(hilbert_noise_lut_attachment),
-                std::move(vbgtao_noisy_occlusion_attachment),
-                std::move(vbgtao_depth_differences_attachment)
-            );
+            std::tie(camera_buffer, normal_attachment, vbgtao_buffer, vbgtao_noisy_occlusion_attachment, vbgtao_depth_differences_attachment) =
+                vbgtao_generate_pass(
+                    std::move(camera_buffer),
+                    std::move(vbgtao_depth_attachment),
+                    std::move(normal_attachment),
+                    std::move(hilbert_noise_lut_attachment),
+                    std::move(vbgtao_buffer),
+                    std::move(vbgtao_noisy_occlusion_attachment),
+                    std::move(vbgtao_depth_differences_attachment)
+                );
 
             auto vbgtao_denoise_pass = vuk::make_pass(
                 "vbgtao denoise",
-                [power = frame.vbgtao->denoise_power](
-                    vuk::CommandBuffer &command_buffer, //
-                    VUK_IA(vuk::eComputeSampled) noisy_occlusion,
-                    VUK_IA(vuk::eComputeSampled) depth_differences,
-                    VUK_IA(vuk::eComputeRW) ambient_occlusion
-                ) {
-                    auto nearest_clamp_sampler = vuk::SamplerCreateInfo{
-                        .magFilter = vuk::Filter::eNearest,
-                        .minFilter = vuk::Filter::eNearest,
-                        .mipmapMode = vuk::SamplerMipmapMode::eNearest,
-                        .addressModeU = vuk::SamplerAddressMode::eClampToEdge,
-                        .addressModeV = vuk::SamplerAddressMode::eClampToEdge,
-                        .addressModeW = vuk::SamplerAddressMode::eClampToEdge,
-                    };
-
+                [](vuk::CommandBuffer &command_buffer, //
+                   VUK_IA(vuk::eComputeSampled) noisy_occlusion,
+                   VUK_IA(vuk::eComputeSampled) depth_differences,
+                   VUK_BA(vuk::eComputeRead) vbgtao,
+                   VUK_IA(vuk::eComputeRW) ambient_occlusion) {
                     command_buffer.bind_compute_pipeline("passes.vbgtao_denoise")
-                        .bind_image(0, 0, noisy_occlusion)
-                        .bind_image(0, 1, depth_differences)
-                        .bind_image(0, 2, ambient_occlusion)
-                        .bind_sampler(0, 3, nearest_clamp_sampler)
-                        .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, PushConstants(noisy_occlusion->extent, power))
+                        .bind_sampler(0, 0, nearest_clamp_sampler)
+                        .bind_image(0, 1, noisy_occlusion)
+                        .bind_image(0, 2, depth_differences)
+                        .bind_buffer(0, 3, vbgtao)
+                        .bind_image(0, 4, ambient_occlusion)
+                        .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, PushConstants(noisy_occlusion->extent))
                         .dispatch_invocations_per_pixel(ambient_occlusion);
 
                     return ambient_occlusion;
@@ -1804,37 +2106,40 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
             vbgtao_occlusion_attachment = vbgtao_denoise_pass(
                 std::move(vbgtao_noisy_occlusion_attachment),
                 std::move(vbgtao_depth_differences_attachment),
+                std::move(vbgtao_buffer),
                 std::move(vbgtao_occlusion_attachment)
             );
         }
 
+        auto pbr_context = GPU::PBRContext{
+            .atmosphere = frame.has_atmosphere ? atmosphere_buffer->device_address : 0,
+            .directional_light = frame.directional_light.has_value() ? directional_light_buffer->device_address : 0,
+            .directional_light_cascades = frame.directional_light.has_value() ? directional_light_cascades_buffer->device_address : 0,
+        };
         auto pbr_pass = vuk::make_pass(
             "pbr",
-            [](vuk::CommandBuffer &cmd_list, //
-               VUK_IA(vuk::eColorRW) dst,
-               VUK_BA(vuk::eFragmentRead) environment,
-               VUK_BA(vuk::eFragmentRead) camera,
-               VUK_IA(vuk::eFragmentSampled) sky_transmittance_lut,
-               VUK_IA(vuk::eFragmentSampled) sky_cubemap,
-               VUK_IA(vuk::eFragmentSampled) depth,
-               VUK_IA(vuk::eFragmentSampled) ambient_occlusion,
-               VUK_IA(vuk::eFragmentSampled) albedo,
-               VUK_IA(vuk::eFragmentSampled) normal,
-               VUK_IA(vuk::eFragmentSampled) emissive,
-               VUK_IA(vuk::eFragmentSampled) metallic_roughness_occlusion) {
-                auto linear_clamp_sampler = vuk::SamplerCreateInfo{
+            [pbr_context](
+                vuk::CommandBuffer &cmd_list, //
+                VUK_IA(vuk::eColorRW) dst,
+                VUK_BA(vuk::eFragmentRead) camera,
+                VUK_IA(vuk::eFragmentSampled) sky_transmittance_lut,
+                VUK_IA(vuk::eFragmentSampled) sky_cubemap,
+                VUK_IA(vuk::eFragmentSampled) depth,
+                VUK_IA(vuk::eFragmentSampled) ambient_occlusion,
+                VUK_IA(vuk::eFragmentSampled) albedo,
+                VUK_IA(vuk::eFragmentSampled) normal,
+                VUK_IA(vuk::eFragmentSampled) emissive,
+                VUK_IA(vuk::eFragmentSampled) metallic_roughness_occlusion,
+                VUK_IA(vuk::eFragmentSampled) directional_light_shadowmap
+            ) {
+                auto directional_light_sampler = vuk::SamplerCreateInfo{
                     .magFilter = vuk::Filter::eLinear,
                     .minFilter = vuk::Filter::eLinear,
                     .addressModeU = vuk::SamplerAddressMode::eClampToEdge,
                     .addressModeV = vuk::SamplerAddressMode::eClampToEdge,
                     .addressModeW = vuk::SamplerAddressMode::eClampToEdge,
-                };
-
-                auto linear_repeat_sampler = vuk::SamplerCreateInfo{
-                    .magFilter = vuk::Filter::eLinear,
-                    .minFilter = vuk::Filter::eLinear,
-                    .addressModeU = vuk::SamplerAddressMode::eRepeat,
-                    .addressModeV = vuk::SamplerAddressMode::eRepeat,
+                    .compareEnable = true,
+                    .compareOp = vuk::CompareOp::eGreaterOrEqual,
                 };
 
                 cmd_list //
@@ -1854,31 +2159,32 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                     .bind_image(0, 7, normal)
                     .bind_image(0, 8, emissive)
                     .bind_image(0, 9, metallic_roughness_occlusion)
-                    .bind_buffer(0, 10, environment)
-                    .bind_buffer(0, 11, camera)
+                    .bind_image(0, 10, directional_light_shadowmap)
+                    .bind_sampler(0, 11, directional_light_sampler)
+                    .bind_buffer(0, 12, camera)
+                    .push_constants(vuk::ShaderStageFlagBits::eFragment, 0, pbr_context)
                     .draw(3, 1, 0, 0);
 
-                return std::make_tuple(dst, environment, camera, sky_transmittance_lut, sky_cubemap, depth);
+                return std::make_tuple(dst, camera, sky_transmittance_lut, sky_cubemap, depth);
             }
         );
 
-        std::tie(final_attachment, environment_buffer, camera_buffer, sky_transmittance_lut_attachment, sky_cubemap_attachment, depth_attachment) =
-            pbr_pass(
-                std::move(final_attachment),
-                std::move(environment_buffer),
-                std::move(camera_buffer),
-                std::move(sky_transmittance_lut_attachment),
-                std::move(sky_cubemap_attachment),
-                std::move(depth_attachment),
-                std::move(vbgtao_occlusion_attachment),
-                std::move(albedo_attachment),
-                std::move(normal_attachment),
-                std::move(emissive_attachment),
-                std::move(metallic_roughness_occlusion_attachment)
-            );
+        std::tie(final_attachment, camera_buffer, sky_transmittance_lut_attachment, sky_cubemap_attachment, depth_attachment) = pbr_pass(
+            std::move(final_attachment),
+            std::move(camera_buffer),
+            std::move(sky_transmittance_lut_attachment),
+            std::move(sky_cubemap_attachment),
+            std::move(depth_attachment),
+            std::move(vbgtao_occlusion_attachment),
+            std::move(albedo_attachment),
+            std::move(normal_attachment),
+            std::move(emissive_attachment),
+            std::move(metallic_roughness_occlusion_attachment),
+            std::move(directional_light_shadowmap_attachment)
+        );
     }
 
-    if (frame.environment_flags & GPU::EnvironmentFlags::HasAtmosphere) {
+    if (frame.has_atmosphere) {
         apply_sky(
             self,
             final_attachment,
@@ -1886,69 +2192,71 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
             sky_view_lut_attachment,
             sky_transmittance_lut_attachment,
             sky_multiscatter_lut_attachment,
-            environment_buffer,
+            atmosphere_buffer,
             camera_buffer
         );
     }
 
+    auto eye_adaptation_buffer = std::move(frame.eye_adaptation_buffer);
     auto histogram_luminance_buffer = self.histogram_luminance_buffer.acquire(device, "histogram luminance", vuk::eFragmentRead);
-    if (frame.environment_flags & GPU::EnvironmentFlags::HasEyeAdaptation) {
+    if (frame.has_eye_adaptation) {
         //  ── HISTOGRAM GENERATE ──────────────────────────────────────────────
         auto histogram_generate_pass = vuk::make_pass(
             "histogram generate",
             [](vuk::CommandBuffer &cmd_list, //
                VUK_IA(vuk::eComputeSampled) src_image,
-               VUK_BA(vuk::eComputeRead) environment,
+               VUK_BA(vuk::eComputeRead) eye_adaptation,
                VUK_BA(vuk::eComputeRW) histogram_bin_indices) {
                 cmd_list.bind_compute_pipeline("passes.histogram_generate")
                     .bind_image(0, 0, src_image)
-                    .bind_buffer(0, 1, environment)
+                    .bind_buffer(0, 1, eye_adaptation)
                     .bind_buffer(0, 2, histogram_bin_indices)
                     .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, src_image->extent)
                     .dispatch_invocations_per_pixel(src_image);
 
-                return std::make_tuple(src_image, environment, histogram_bin_indices);
+                return std::make_tuple(src_image, eye_adaptation, histogram_bin_indices);
             }
         );
 
         auto histogram_bin_indices_buffer = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eGPUonly, GPU::HISTOGRAM_BIN_COUNT * sizeof(u32));
         vuk::fill(histogram_bin_indices_buffer, 0);
-        std::tie(final_attachment, environment_buffer, histogram_bin_indices_buffer) =
-            histogram_generate_pass(std::move(final_attachment), std::move(environment_buffer), std::move(histogram_bin_indices_buffer));
+        std::tie(final_attachment, eye_adaptation_buffer, histogram_bin_indices_buffer) =
+            histogram_generate_pass(std::move(final_attachment), std::move(eye_adaptation_buffer), std::move(histogram_bin_indices_buffer));
 
         //  ── HISTOGRAM AVERAGE ───────────────────────────────────────────────
         auto histogram_average_pass = vuk::make_pass(
             "histogram average",
             [pixel_count = f32(dst_attachment->extent.width * dst_attachment->extent.height), delta_time = info.delta_time](
                 vuk::CommandBuffer &cmd_list, //
-                VUK_BA(vuk::eComputeRead) environment,
+                VUK_BA(vuk::eComputeRead) eye_adaptation,
                 VUK_BA(vuk::eComputeRead) histogram_bin_indices,
                 VUK_BA(vuk::eComputeRW) histogram_luminance
             ) {
                 cmd_list //
                     .bind_compute_pipeline("passes.histogram_average")
-                    .bind_buffer(0, 0, environment)
+                    .bind_buffer(0, 0, eye_adaptation)
                     .bind_buffer(0, 1, histogram_bin_indices)
                     .bind_buffer(0, 2, histogram_luminance)
                     .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, PushConstants(pixel_count, delta_time))
                     .dispatch(1);
 
-                return std::make_tuple(environment, histogram_luminance);
+                return std::make_tuple(eye_adaptation, histogram_luminance);
             }
         );
 
-        std::tie(environment_buffer, histogram_luminance_buffer) =
-            histogram_average_pass(std::move(environment_buffer), std::move(histogram_bin_indices_buffer), std::move(histogram_luminance_buffer));
+        std::tie(eye_adaptation_buffer, histogram_luminance_buffer) =
+            histogram_average_pass(std::move(eye_adaptation_buffer), std::move(histogram_bin_indices_buffer), std::move(histogram_luminance_buffer));
     }
 
     //  ── TONEMAP ─────────────────────────────────────────────────────────
     auto tonemap_pass = vuk::make_pass(
         "tonemap",
-        [](vuk::CommandBuffer &cmd_list, //
-           VUK_IA(vuk::eColorRW) dst,
-           VUK_IA(vuk::eFragmentSampled) src,
-           VUK_BA(vuk::eFragmentRead) environment,
-           VUK_BA(vuk::eFragmentUniformRead) histogram_luminance) {
+        [has_eye_adaptation = frame.has_eye_adaptation](
+            vuk::CommandBuffer &cmd_list, //
+            VUK_IA(vuk::eColorRW) dst,
+            VUK_IA(vuk::eFragmentSampled) src,
+            VUK_BA(vuk::eFragmentUniformRead) histogram_luminance
+        ) {
             cmd_list //
                 .bind_graphics_pipeline("passes.tonemap")
                 .set_rasterization({})
@@ -1958,15 +2266,14 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                 .set_scissor(0, vuk::Rect2D::framebuffer())
                 .bind_sampler(0, 0, { .magFilter = vuk::Filter::eLinear, .minFilter = vuk::Filter::eLinear })
                 .bind_image(0, 1, src)
-                .bind_buffer(0, 2, environment)
-                .bind_buffer(0, 3, histogram_luminance)
+                .bind_buffer(0, 2, histogram_luminance)
+                .push_constants(vuk::ShaderStageFlagBits::eFragment, 0, static_cast<u32>(has_eye_adaptation))
                 .draw(3, 1, 0, 0);
 
             return dst;
         }
     );
-    dst_attachment =
-        tonemap_pass(std::move(dst_attachment), std::move(final_attachment), std::move(environment_buffer), std::move(histogram_luminance_buffer));
+    dst_attachment = tonemap_pass(std::move(dst_attachment), std::move(final_attachment), std::move(histogram_luminance_buffer));
 
     //  ── EDITOR GRID ─────────────────────────────────────────────────────
     auto editor_grid_pass = vuk::make_pass(
@@ -2066,16 +2373,6 @@ auto SceneRenderer::cleanup(this SceneRenderer &self) -> void {
     if (self.materials_buffer) {
         device.destroy(self.materials_buffer.id());
         self.materials_buffer = {};
-    }
-
-    if (self.hiz_view) {
-        device.destroy(self.hiz_view.id());
-        self.hiz_view = {};
-    }
-
-    if (self.hiz) {
-        device.destroy(self.hiz.id());
-        self.hiz = {};
     }
 }
 

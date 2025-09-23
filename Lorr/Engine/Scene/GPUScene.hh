@@ -65,44 +65,6 @@ enum class CullFlags : u32 {
     All = ~0_u32,
 };
 
-enum EnvironmentFlags : u32 {
-    None = 0,
-    HasSun = 1 << 0,
-    HasAtmosphere = 1 << 1,
-    HasEyeAdaptation = 1 << 2,
-};
-
-struct Environment {
-    alignas(4) u32 flags = EnvironmentFlags::None;
-    // Sun
-    alignas(4) glm::vec3 sun_direction = {};
-    alignas(4) f32 sun_intensity = 10.0f;
-    // Atmosphere
-    alignas(4) glm::vec3 atmos_rayleigh_scatter = { 0.005802f, 0.014338f, 0.032800f };
-    alignas(4) f32 atmos_rayleigh_density = 8.0f;
-    alignas(4) glm::vec3 atmos_mie_scatter = { 0.003996f, 0.003996f, 0.003996f };
-    alignas(4) f32 atmos_mie_density = 1.2f;
-    alignas(4) f32 atmos_mie_extinction = 0.004440f;
-    alignas(4) f32 atmos_mie_asymmetry = 3.5f;
-    alignas(4) glm::vec3 atmos_ozone_absorption = { 0.000650f, 0.001781f, 0.000085f };
-    alignas(4) f32 atmos_ozone_height = 25.0f;
-    alignas(4) f32 atmos_ozone_thickness = 15.0f;
-    alignas(4) glm::vec3 atmos_terrain_albedo = { 0.3f, 0.3f, 0.3f };
-    alignas(4) f32 atmos_planet_radius = 6360.0f;
-    alignas(4) f32 atmos_atmos_radius = 6460.0f;
-    alignas(4) f32 atmos_aerial_perspective_start_km = 8.0f;
-    // Eye adaptation
-    alignas(4) f32 eye_min_exposure = -6.0f;
-    alignas(4) f32 eye_max_exposure = 18.0f;
-    alignas(4) f32 eye_adaptation_speed = 1.1f;
-    alignas(4) f32 eye_ISO_K = 100.0f / 12.5f;
-
-    alignas(4) vuk::Extent3D transmittance_lut_size = {};
-    alignas(4) vuk::Extent3D sky_view_lut_size = {};
-    alignas(4) vuk::Extent3D multiscattering_lut_size = {};
-    alignas(4) vuk::Extent3D aerial_perspective_lut_size = {};
-};
-
 constexpr static f32 CAMERA_SCALE_UNIT = 0.01;
 constexpr static f32 INV_CAMERA_SCALE_UNIT = 1.0 / CAMERA_SCALE_UNIT;
 constexpr static f32 PLANET_RADIUS_OFFSET = 0.001;
@@ -115,10 +77,84 @@ struct Camera {
     alignas(4) glm::mat4 projection_view_mat = {};
     alignas(4) glm::mat4 inv_projection_view_mat = {};
     alignas(4) glm::vec3 position = {};
+    alignas(4) glm::vec2 resolution = {};
     alignas(4) f32 near_clip = 0.01f;
     alignas(4) f32 far_clip = 1000.0f;
-    alignas(4) glm::vec2 resolution = {};
     alignas(4) f32 acceptable_lod_error = 0.0f;
+    alignas(4) f32 fov_deg = 65.0f;
+    alignas(4) f32 aspect_ratio = 1.777f;
+};
+
+struct DirectionalLightCascade {
+    alignas(4) glm::mat4 projection_view_mat = {};
+    alignas(4) f32 far_bound = {};
+    alignas(4) f32 texel_size = {};
+};
+
+struct DirectionalLight {
+    constexpr static auto MAX_CASCADE_COUNT = 6_u32;
+
+    alignas(4) glm::vec3 base_ambient_color = {};
+    alignas(4) f32 intensity = {};
+    alignas(4) glm::vec3 direction = {};
+    alignas(4) u32 cascade_count = {};
+    alignas(4) u32 cascade_size = {};
+    alignas(4) f32 cascades_overlap_proportion = {};
+    alignas(4) f32 depth_bias = {};
+    alignas(4) f32 normal_bias = {};
+};
+
+struct Lights {
+    alignas(8) u64 directional_light = 0;
+    alignas(8) u64 directional_light_cascades = 0;
+};
+
+struct Atmosphere {
+    alignas(4) glm::vec3 sun_direction = {};
+    alignas(4) f32 eye_height = {};
+    alignas(4) glm::vec3 rayleigh_scatter = { 0.005802f, 0.014338f, 0.032800f };
+    alignas(4) f32 rayleigh_density = 8.0f;
+    alignas(4) glm::vec3 mie_scatter = { 0.003996f, 0.003996f, 0.003996f };
+    alignas(4) f32 mie_density = 1.2f;
+    alignas(4) f32 mie_extinction = 0.004440f;
+    alignas(4) f32 mie_asymmetry = 3.5f;
+    alignas(4) glm::vec3 ozone_absorption = { 0.000650f, 0.001781f, 0.000085f };
+    alignas(4) f32 ozone_height = 25.0f;
+    alignas(4) f32 ozone_thickness = 15.0f;
+    alignas(4) glm::vec3 terrain_albedo = { 0.3f, 0.3f, 0.3f };
+    alignas(4) f32 planet_radius = 6360.0f;
+    alignas(4) f32 atmos_radius = 6460.0f;
+    alignas(4) f32 aerial_perspective_start_km = 8.0f;
+    alignas(4) f32 sun_intensity = {};
+
+    alignas(4) vuk::Extent3D transmittance_lut_size = {};
+    alignas(4) vuk::Extent3D sky_view_lut_size = {};
+    alignas(4) vuk::Extent3D multiscattering_lut_size = {};
+    alignas(4) vuk::Extent3D aerial_perspective_lut_size = {};
+};
+
+struct PBRContext {
+    alignas(8) u64 atmosphere = 0;
+    alignas(8) u64 directional_light = 0;
+    alignas(8) u64 directional_light_cascades = 0;
+};
+
+struct EyeAdaptation {
+    alignas(4) f32 min_exposure = -6.0f;
+    alignas(4) f32 max_exposure = 18.0f;
+    alignas(4) f32 adaptation_speed = 1.1f;
+    alignas(4) f32 ISO_K = 100.0f / 12.5f;
+};
+
+struct VBGTAO {
+    alignas(4) f32 thickness = 0.25f;
+    alignas(4) f32 depth_range_scale_factor = 0.75f;
+    alignas(4) f32 radius = 0.5f;
+    alignas(4) f32 radius_multiplier = 1.457f;
+    alignas(4) f32 slice_count = 3.0f;
+    alignas(4) f32 sample_count_per_slice = 3.0f;
+    alignas(4) f32 denoise_power = 1.1f;
+    alignas(4) f32 linear_thickness_multiplier = 300.0f;
 };
 
 enum class TransformID : u64 { Invalid = ~0_u64 };
@@ -223,40 +259,6 @@ constexpr static u32 HISTOGRAM_BIN_COUNT = HISTOGRAM_THREADS_X * HISTOGRAM_THREA
 struct HistogramLuminance {
     alignas(4) f32 adapted_luminance = 0.0f;
     alignas(4) f32 exposure = 0.0f;
-};
-
-struct DirectionalLight {
-    constexpr static auto MAX_DIRECTIONAL_LIGHT_CASCADES = 6_sz;
-    struct Cascade {
-        alignas(4) glm::vec4 projection = {};
-    };
-
-    alignas(4) Cascade cascades[MAX_DIRECTIONAL_LIGHT_CASCADES] = {};
-    alignas(4) u32 cascade_count = 0;
-    alignas(4) glm::vec4 color = {};
-    alignas(4) glm::vec3 direction = {};
-};
-
-struct Lights {
-    // If we increase this, realistically we would need to support
-    // multiple lights for sky atmosphere aswell, which would increase
-    // raymach counts (per sun count), and this means less performance
-    constexpr static auto MAX_DIRECTIONAL_LIGHTS = 1_u32;
-
-    alignas(4) u32 directional_light_count = 0;
-    alignas(4) u32 _unused = 0; // for future light types
-    alignas(8) DirectionalLight directional_lights[MAX_DIRECTIONAL_LIGHTS] = {};
-};
-
-struct VBGTAO {
-    alignas(4) f32 thickness = 0.25f;
-    alignas(4) f32 depth_range_scale_factor = 0.75f;
-    alignas(4) f32 radius = 0.5f;
-    alignas(4) f32 radius_multiplier = 1.457f;
-    alignas(4) f32 slice_count = 3.0f;
-    alignas(4) f32 sample_count_per_slice = 3.0f;
-    alignas(4) f32 denoise_power = 1.1f;
-    alignas(4) f32 linear_thickness_multiplier = 300.0f;
 };
 
 } // namespace lr::GPU

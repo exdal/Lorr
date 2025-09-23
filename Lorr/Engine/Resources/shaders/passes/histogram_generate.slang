@@ -8,8 +8,7 @@ import scene;
 
 struct ShaderParameters {
     Image2D<f32x4> src_image;
-
-    ConstantBuffer<Environment> environment;
+    ConstantBuffer<EyeAdaptation> eye_adaptation;
 
     RWStructuredBuffer<u32> histogram_bin_indices;
 };
@@ -40,7 +39,7 @@ func cs_main(
     if (all(thread_id.xy < src_extent.xy)) {
         const f32x3 color = params.src_image.Load(u32x3(thread_id.xy, 0)).rgb;
         const f32 luminance = std::rec2020_to_xyz(color).y;
-        const u32 bin_index = bin_lum(luminance, params.environment.eye_max_exposure, params.environment.eye_min_exposure);
+        const u32 bin_index = bin_lum(luminance, params.eye_adaptation.max_exposure, params.eye_adaptation.min_exposure);
         __atomic_add(histogram_shared[bin_index], 1, MemoryOrder::AcquireRelease);
     }
 

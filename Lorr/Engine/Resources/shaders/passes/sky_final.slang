@@ -11,7 +11,7 @@ struct ShaderParameters {
     Image3D<f32x4> sky_aerial_perspective_lut;
     Image2D<f32x4> sky_view_lut;
     Image2D<f32> depth_image;
-    ConstantBuffer<Environment> environment;
+    ConstantBuffer<Atmosphere> atmosphere;
     ConstantBuffer<Camera> camera;
 };
 
@@ -60,32 +60,37 @@ func fs_main(
         return sample_aerial_perspective(
             params.sky_aerial_perspective_lut,
             params.sampler,
-            params.environment.aerial_perspective_lut_size,
+            params.atmosphere.aerial_perspective_lut_size,
             input.tex_coord,
             camera_relative_pos,
-            params.environment.atmos_aerial_perspective_start_km);
+            params.atmosphere.aerial_perspective_start_km);
     }
 
     let up = f32x3(0.0, 1.0, 0.0);
     var eye_altitude = params.camera.position.y * CAMERA_SCALE_UNIT;
-    eye_altitude += params.environment.atmos_planet_radius + PLANET_RADIUS_OFFSET;
+    eye_altitude += params.atmosphere.planet_radius + PLANET_RADIUS_OFFSET;
     let eye_pos = f32x3(0.0, eye_altitude, 0.0);
 
-    var sun_dir = (params.environment.sun_direction);
     var eye_dir = normalize(world_pos - params.camera.position);
 
-    let planet_intersection = std::ray_sphere_intersect_nearest(eye_pos, eye_dir, params.environment.atmos_planet_radius);
-    var color = get_atmosphere_illuminance_along_ray(eye_pos, eye_dir, sun_dir, params.environment, params.sampler, params.sky_view_lut);
+    let planet_intersection = std::ray_sphere_intersect_nearest(eye_pos, eye_dir, params.atmosphere.planet_radius);
+    var color = get_atmosphere_illuminance_along_ray(
+        params.atmosphere,
+        params.sampler,
+        params.sky_view_lut,
+        eye_pos,
+        eye_dir
+    );
 
-    let sun_cos_theta = dot(sun_dir, up);
+    let sun_cos_theta = dot(params.atmosphere.sun_direction, up);
     let transmittance_uv = transmittance_params_to_lut_uv(
-        params.environment.atmos_atmos_radius,
-        params.environment.atmos_planet_radius,
+        params.atmosphere.atmos_radius,
+        params.atmosphere.planet_radius,
         f32x2(eye_altitude, sun_cos_theta));
     let sun_transmittance = params.sky_transmittance_lut.SampleLevel(params.sampler, transmittance_uv, 0.0).rgb;
 
     if (planet_intersection == -1.0) {
-        color += draw_sun(eye_dir, params.environment.sun_direction, 1.0) * params.environment.sun_intensity * sun_transmittance;
+        color += draw_sun(eye_dir, params.atmosphere.sun_direction, 1.0) * params.atmosphere.sun_intensity * sun_transmittance;
     }
 
     return f32x4(color, 1.0);

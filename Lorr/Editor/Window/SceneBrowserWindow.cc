@@ -91,15 +91,6 @@ static auto draw_hierarchy(SceneBrowserWindow &self) -> void {
                 created_entity.child_of(active_scene->get_root());
             }
 
-            ImGui::Separator();
-
-            if (ImGui::MenuItem("Environment")) {
-                auto created_entity = active_scene->create_entity();
-                created_entity.set<lr::ECS::Transform>({});
-                created_entity.set<lr::ECS::Environment>({});
-                created_entity.child_of(active_scene->get_root());
-            }
-
             ImGui::EndMenu();
         }
 

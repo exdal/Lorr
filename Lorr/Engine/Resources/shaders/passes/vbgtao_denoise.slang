@@ -3,10 +3,12 @@ import gpu;
 import scene;
 
 struct ShaderParameters {
+    Sampler point_clamp_sampler;
     Texture2D<f32> occlusion_noisy;
     Texture2D<u32> depth_differences;
+    ConstantBuffer<VBGTAO> vbgtao;
+
     RWTexture2D<f32> ambient_occlusion;
-    Sampler point_clamp_sampler;
 };
 
 [[shader("compute")]]
@@ -15,7 +17,6 @@ func cs_main(
     u32x2 thread_id : SV_DispatchThreadID,
     uniform ParameterBlock<ShaderParameters> params,
     uniform i32x3 occlusion_noisy_extent,
-    uniform f32 power
 ) -> void {
     let pixel_coordinates = i32x2(thread_id.xy);
     let uv = f32x2(pixel_coordinates) / f32x2(occlusion_noisy_extent.xy);
@@ -76,7 +77,7 @@ func cs_main(
     sum_weight += bottom_right_weight;
 
     var denoised_visibility = sum / sum_weight;
-    denoised_visibility = pow(max(denoised_visibility, 0.0f), power);
+    denoised_visibility = pow(max(denoised_visibility, 0.0f), params.vbgtao.denoise_power);
 
     params.ambient_occlusion.Store(pixel_coordinates, denoised_visibility);
 }

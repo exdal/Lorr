@@ -123,17 +123,17 @@ public struct MediumScattering {
     public f32x3 extinction_sum;
 
     [ForceInline]
-    public __init(in Environment environment, f32 altitude) {
-        let mie_density = exp(-altitude / environment.atmos_mie_density);
-        let rayleigh_density = exp(-altitude / environment.atmos_rayleigh_density);
-        let ozone_density = max(0.0, 1.0 - abs(altitude - environment.atmos_ozone_height) / environment.atmos_ozone_thickness);
+    public __init(in Atmosphere atmosphere, f32 altitude) {
+        let mie_density = exp(-altitude / atmosphere.mie_density);
+        let rayleigh_density = exp(-altitude / atmosphere.rayleigh_density);
+        let ozone_density = max(0.0, 1.0 - abs(altitude - atmosphere.ozone_height) / atmosphere.ozone_thickness);
 
-        let mie_extinction = environment.atmos_mie_extinction * mie_density;
-        let rayleigh_extinction = environment.atmos_rayleigh_scatter * rayleigh_density;
-        let ozone_extinction = environment.atmos_ozone_absorption * ozone_density;
+        let mie_extinction = atmosphere.mie_extinction * mie_density;
+        let rayleigh_extinction = atmosphere.rayleigh_scatter * rayleigh_density;
+        let ozone_extinction = atmosphere.ozone_absorption * ozone_density;
 
-        this.mie_scattering = environment.atmos_mie_scatter * mie_density;
-        this.rayleigh_scattering = environment.atmos_rayleigh_scatter * rayleigh_density;
+        this.mie_scattering = atmosphere.mie_scatter * mie_density;
+        this.rayleigh_scattering = atmosphere.rayleigh_scatter * rayleigh_density;
         this.extinction_sum = mie_extinction + rayleigh_extinction + ozone_extinction;
     }
 };
@@ -155,19 +155,19 @@ public struct AtmosphereIntegrateInfo {
 
 public func integrate_single_scattered_luminance(
     in AtmosphereIntegrateInfo info,
-    in Environment environment,
+    in Atmosphere atmosphere,
     in Sampler lut_sampler,
     in Image2D<f32x4> transmittance_image = {},
     in Image2D<f32x4> multiscattering_image = {}
 ) -> AtmosphereLuminance {
     AtmosphereLuminance result = {};
 
-    if (dot(info.eye_pos, info.eye_pos) <= environment.atmos_planet_radius * environment.atmos_planet_radius) {
+    if (dot(info.eye_pos, info.eye_pos) <= atmosphere.planet_radius * atmosphere.planet_radius) {
         return result;
     }
 
-    let planet_intersection = std::ray_sphere_intersect_nearest(info.eye_pos, info.eye_dir, environment.atmos_planet_radius);
-    let atmos_intersection = std::ray_sphere_intersect_nearest(info.eye_pos, info.eye_dir, environment.atmos_atmos_radius);
+    let planet_intersection = std::ray_sphere_intersect_nearest(info.eye_pos, info.eye_dir, atmosphere.planet_radius);
+    let atmos_intersection = std::ray_sphere_intersect_nearest(info.eye_pos, info.eye_dir, atmosphere.atmos_radius);
     var integration_length = 0.0;
     if (atmos_intersection == -1.0) {
         // No intersection
@@ -181,7 +181,7 @@ public func integrate_single_scattered_luminance(
 
     let cos_theta = dot(info.sun_dir, info.eye_dir);
     let rayleigh_phase = std::rayleigh_phase(cos_theta);
-    let mie_phase = std::henyey_greenstein_draine_phase(environment.atmos_mie_asymmetry, cos_theta);
+    let mie_phase = std::henyey_greenstein_draine_phase(atmosphere.mie_asymmetry, cos_theta);
 
     var transmittance_sum = f32x3(1.0);
     var step_length = integration_length / info.step_count;
@@ -194,26 +194,26 @@ public func integrate_single_scattered_luminance(
         let step_pos = info.eye_pos + new_ray_shift * info.eye_dir;
 
         let h = length(step_pos);
-        let altitude = h - environment.atmos_planet_radius;
-        let medium_info = MediumScattering(environment, altitude);
+        let altitude = h - atmosphere.planet_radius;
+        let medium_info = MediumScattering(atmosphere, altitude);
         let scattering_sum = medium_info.rayleigh_scattering + medium_info.mie_scattering;
 
         let up = normalize(step_pos);
         let sun_theta = dot(info.sun_dir, up);
 
         let transmittance_uv = transmittance_params_to_lut_uv(
-            environment.atmos_atmos_radius, environment.atmos_planet_radius, f32x2(h, sun_theta));
+            atmosphere.atmos_radius, atmosphere.planet_radius, f32x2(h, sun_theta));
         let sun_transmittance = transmittance_image.SampleLevel(lut_sampler, transmittance_uv, 0.0).rgb;
 
         var MS = f32x3(0.0);
         if (info.eval_multiscattering) {
             let multiscatter_uv = multiscattering_params_to_lut_uv(
-                environment.atmos_atmos_radius, environment.atmos_planet_radius, environment.multiscattering_lut_size.xy, altitude, sun_theta);
+                atmosphere.atmos_radius, atmosphere.planet_radius, atmosphere.multiscattering_lut_size.xy, altitude, sun_theta);
             MS = multiscattering_image.SampleLevel(lut_sampler, multiscatter_uv, 0.0).rgb;
         }
 
         var scattering_phase = medium_info.mie_scattering * mie_phase + medium_info.rayleigh_scattering * rayleigh_phase;
-        let earth_shadow = std::ray_sphere_intersect_nearest(step_pos, info.sun_dir, environment.atmos_planet_radius) == -1.0 ? 1.0 : 0.0;
+        let earth_shadow = std::ray_sphere_intersect_nearest(step_pos, info.sun_dir, atmosphere.planet_radius) == -1.0 ? 1.0 : 0.0;
         let sun_luminance = earth_shadow * sun_transmittance * scattering_phase + (MS * scattering_sum);
         let step_transmittance = exp(-step_length * medium_info.extinction_sum);
 
@@ -237,10 +237,10 @@ public func integrate_single_scattered_luminance(
         let sun_theta = dot(info.sun_dir, up);
         let NoL = saturate(dot(normalize(info.sun_dir), normalize(up)));
 
-        let transmittance_uv = transmittance_params_to_lut_uv(environment.atmos_atmos_radius, environment.atmos_planet_radius, f32x2(h, sun_theta));
+        let transmittance_uv = transmittance_params_to_lut_uv(atmosphere.atmos_radius, atmosphere.planet_radius, f32x2(h, sun_theta));
         let sun_transmittance = transmittance_image.SampleLevel(lut_sampler, transmittance_uv, 0.0).rgb;
 
-        result.luminance += sun_transmittance * transmittance_sum * NoL * environment.atmos_terrain_albedo / PI;
+        result.luminance += sun_transmittance * transmittance_sum * NoL * atmosphere.terrain_albedo / PI;
     }
 
     return result;
@@ -284,24 +284,23 @@ public func sample_aerial_perspective(
 }
 
 public func get_atmosphere_illuminance_along_ray(
-    f32x3 eye_pos,
-    f32x3 eye_dir,
-    f32x3 sun_dir,
-    in Environment environment,
+    in Atmosphere atmosphere,
     in Sampler sampler,
-    in Image2D<f32x4> sky_view_image
+    in Image2D<f32x4> sky_view_image,
+    f32x3 eye_pos,
+    f32x3 eye_dir
 ) -> f32x3 {
     let height = length(eye_pos);
     let view_zenith_cos_angle = acos(dot(eye_dir, f32x3(0.0, 1.0, 0.0)));
     let light_view_cos_angle = acos(clamp(dot(
-        normalize(f32x3(sun_dir.x, 0.0, sun_dir.z)),
+        normalize(f32x3(atmosphere.sun_direction.x, 0.0, atmosphere.sun_direction.z)),
         normalize(f32x3(eye_dir.x, 0.0, eye_dir.z)),
     ), -1.0, 1.0));
-    let planet_intersection = std::ray_sphere_intersect_nearest(eye_pos, eye_dir, environment.atmos_planet_radius);
+    let planet_intersection = std::ray_sphere_intersect_nearest(eye_pos, eye_dir, atmosphere.planet_radius);
     let uv = sky_view_params_to_lut_uv(
-        environment.atmos_atmos_radius,
-        environment.atmos_planet_radius,
-        environment.sky_view_lut_size.xy,
+        atmosphere.atmos_radius,
+        atmosphere.planet_radius,
+        atmosphere.sky_view_lut_size.xy,
         planet_intersection != -1.0,
         height,
         view_zenith_cos_angle,
@@ -309,5 +308,5 @@ public func get_atmosphere_illuminance_along_ray(
 
     let result = sky_view_image.SampleLevel(sampler, uv, 0.0);
     let atmos_luminance = result.rgb * result.a;
-    return atmos_luminance * environment.sun_intensity;
+    return atmos_luminance * atmosphere.sun_intensity;
 }

@@ -133,6 +133,12 @@ struct Atmosphere {
     alignas(4) vuk::Extent3D aerial_perspective_lut_size = {};
 };
 
+struct PBRContext {
+    alignas(8) u64 atmosphere = 0;
+    alignas(8) u64 directional_light = 0;
+    alignas(8) u64 directional_light_cascades = 0;
+};
+
 struct EyeAdaptation {
     alignas(4) f32 min_exposure = -6.0f;
     alignas(4) f32 max_exposure = 18.0f;

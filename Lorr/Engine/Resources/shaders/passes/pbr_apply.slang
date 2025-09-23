@@ -28,9 +28,7 @@ ParameterBlock<ShaderParameters> params;
 [[shader("fragment")]]
 func fs_main(
     VertexOutput input,
-    uniform Atmosphere *atmosphere,
-    uniform DirectionalLight *directional_light,
-    uniform DirectionalLightCascade *directional_light_cascades
+    uniform PBRContext context
 ) -> f32x4 {
     let pixel_pos = u32x3(u32x2(input.position.xy), 0);
     let depth = params.depth_image.Load(pixel_pos);
@@ -58,26 +56,30 @@ func fs_main(
     let world_position = world_position_h.xyz / world_position_h.w;
 
     // PBR constants
-    let L = directional_light.direction;
+    let Li = context.directional_light ? context.directional_light.intensity : 1.0;
+    let L = context.atmosphere ? context.atmosphere.sun_direction : f32x3(0.0, 1.0, 0.0);
     let V = normalize(params.camera.position - world_position);
     let N = normalize(mapped_normal);
     let R = reflect(-V, N);
 
     var indirect_illuminance = f32x3(0.0);
     var sun_illuminance = f32x3(1.0);
-    if (atmosphere) {
+    if (context.atmosphere) {
+        let planet_radius = context.atmosphere.planet_radius;
+        let atmos_radius = context.atmosphere.atmos_radius;
+
         var eye_altitude = max(world_position.y, 0.0) * CAMERA_SCALE_UNIT;
-        eye_altitude += atmosphere->planet_radius + PLANET_RADIUS_OFFSET;
+        eye_altitude += planet_radius + PLANET_RADIUS_OFFSET;
 
         f32 sun_cos_theta = dot(L, f32x3(0.0, 1.0, 0.0));
         let horizon_darkening = smoothstep(-0.1, 0.3, sun_cos_theta);
 
         f32x2 transmittance_uv = transmittance_params_to_lut_uv(
-            atmosphere->atmos_radius,
-            atmosphere->planet_radius,
+            atmos_radius,
+            planet_radius,
             f32x2(eye_altitude, sun_cos_theta));
         f32x3 sun_transmittance = params.sky_transmittance_lut.SampleLevel(params.linear_clamp_sampler, transmittance_uv, 0.0).rgb;
-        sun_illuminance = sun_transmittance * directional_light.intensity * horizon_darkening;
+        sun_illuminance = sun_transmittance * Li * horizon_darkening;
 
         let reflection_dir = lerp(N, R, 1.0 - roughness);
         let specular_sample = params.sky_cubemap.SampleLevel(params.linear_clamp_sampler, reflection_dir, 0.0);
@@ -107,21 +109,25 @@ func fs_main(
     var material_surface_color = f32x3(0.0);
     let NoL = max(dot(N, L), 0.0);
     if (NoL > 0.0) {
-        let view_z = -mul(params.camera.view_mat, f32x4(world_position, 1.0)).z;
-        let directional_shadow = sample_shadow_map(
-            directional_light,
-            directional_light_cascades,
-            params.directional_light_shadowmap,
-            params.directional_light_sampler,
-            view_z, world_position, N);
+        var directional_shadow = 1.0;
+        if (context.directional_light_cascades) {
+            let view_z = -mul(params.camera.view_mat, f32x4(world_position, 1.0)).z;
+            directional_shadow = sample_shadow_map(
+                context.directional_light,
+                context.directional_light_cascades,
+                params.directional_light_shadowmap,
+                params.directional_light_sampler,
+                view_z, world_position, N);
+        }
 
         let brdf = BRDF(V, N, L, albedo_color, roughness, metallic);
-        material_surface_color = brdf * horizon * sun_illuminance * NoL * directional_shadow * occlusion;
+        material_surface_color = brdf * horizon * sun_illuminance * NoL * directional_shadow;
     }
 
     // FINAL ────────────────────────────────────────────────────────────
-    let ambient_contribution = directional_light.base_ambient_color * albedo_color * sun_illuminance * occlusion;
-    let indirect_illuminance_sum = indirect_illuminance + ambient_contribution;
+    let base_ambient_color = context.directional_light ? context.directional_light.base_ambient_color : f32x3(0.02);
+    let ambient_contribution = base_ambient_color * albedo_color * sun_illuminance;
+    let indirect_illuminance_sum = (indirect_illuminance + ambient_contribution) * occlusion;
     let final_color = material_surface_color + indirect_illuminance_sum + emission;
 
     return f32x4(final_color, 1.0);

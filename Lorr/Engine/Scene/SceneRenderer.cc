@@ -758,39 +758,15 @@ static auto draw_hiz(vuk::Value<vuk::ImageAttachment> &hiz_attachment, vuk::Valu
 }
 
 static auto draw_sky(
-    SceneRenderer &self,
     u32 frame_index,
+    vuk::Value<vuk::ImageAttachment> &sky_view_lut_attachment,
+    vuk::Value<vuk::ImageAttachment> &sky_cubemap_attachment,
     vuk::Value<vuk::ImageAttachment> &sky_transmittance_lut_attachment,
     vuk::Value<vuk::ImageAttachment> &sky_multiscatter_lut_attachment,
     vuk::Value<vuk::Buffer> &atmosphere_buffer,
     vuk::Value<vuk::Buffer> &camera_buffer
-) -> std::tuple<vuk::Value<vuk::ImageAttachment>, vuk::Value<vuk::ImageAttachment>> {
+) -> void {
     ZoneScoped;
-
-    auto sky_view_lut_attachment = vuk::declare_ia(
-        "sky view lut",
-        { .image_type = vuk::ImageType::e2D,
-          .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage,
-          .extent = self.sky_view_lut_extent,
-          .format = vuk::Format::eR16G16B16A16Sfloat,
-          .sample_count = vuk::Samples::e1,
-          .view_type = vuk::ImageViewType::e2D,
-          .level_count = 1,
-          .layer_count = 1 }
-    );
-
-    auto sky_cubemap_attachment = vuk::declare_ia(
-        "sky cubemap",
-        { .image_flags = vuk::ImageCreateFlagBits::eCubeCompatible,
-          .image_type = vuk::ImageType::e2D,
-          .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage,
-          .extent = self.sky_cubemap_extent,
-          .format = vuk::Format::eR16G16B16A16Sfloat,
-          .sample_count = vuk::Samples::e1,
-          .view_type = vuk::ImageViewType::eCube,
-          .level_count = 1,
-          .layer_count = 6 }
-    );
 
     //  ── SKY VIEW LUT ────────────────────────────────────────────────────
     auto sky_view_pass = vuk::make_pass(
@@ -852,8 +828,6 @@ static auto draw_sky(
         std::move(camera_buffer),
         std::move(sky_cubemap_attachment)
     );
-
-    return std::make_tuple(sky_view_lut_attachment, sky_cubemap_attachment);
 }
 
 static auto apply_sky(
@@ -979,7 +953,7 @@ auto SceneRenderer::init(this SceneRenderer &self) -> bool {
 #ifdef LS_DEBUG
             { "ENABLE_ASSERTIONS", "1" },
             { "DEBUG_DRAW", "1" },
-#endif // DEBUG
+#endif
             { "CULLING_MESH_COUNT", "64" },
             { "CULLING_MESHLET_COUNT", std::to_string(Model::MAX_MESHLET_INDICES) },
             { "CULLING_TRIANGLE_COUNT", std::to_string(Model::MAX_MESHLET_PRIMITIVES) },
@@ -1413,16 +1387,19 @@ auto SceneRenderer::prepare_frame(this SceneRenderer &self, FramePrepareInfo &in
         atmosphere.aerial_perspective_lut_size = self.sky_aerial_perspective_lut_extent;
 
         prepared_frame.atmosphere_buffer = transfer_man.scratch_buffer(atmosphere);
+        prepared_frame.has_atmosphere = true;
     }
 
     if (info.eye_adaptation.has_value()) {
         auto &eye_adaptation = info.eye_adaptation.value();
         prepared_frame.eye_adaptation_buffer = transfer_man.scratch_buffer(eye_adaptation);
+        prepared_frame.has_eye_adaptation = true;
     }
 
     if (info.vbgtao.has_value()) {
         auto &vbgtao = info.vbgtao.value();
         prepared_frame.vbgtao_buffer = transfer_man.scratch_buffer(vbgtao);
+        prepared_frame.has_vbgtao = true;
     }
 
     prepared_frame.mesh_instance_count = info.mesh_instance_count;
@@ -1565,14 +1542,45 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
     auto directional_light_cascades_buffer = std::move(frame.directional_light_cascades_buffer);
     auto atmosphere_buffer = std::move(frame.atmosphere_buffer);
 
-    auto sky_view_lut_attachment = vuk::Value<vuk::ImageAttachment>{};
-    auto sky_cubemap_attachment = vuk::Value<vuk::ImageAttachment>{};
     auto sky_transmittance_lut_attachment = std::move(frame.sky_transmittance_lut);
     auto sky_multiscatter_lut_attachment = std::move(frame.sky_multiscatter_lut);
+    auto sky_view_lut_attachment = vuk::declare_ia(
+        "sky view lut",
+        { .image_type = vuk::ImageType::e2D,
+          .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage,
+          .extent = self.sky_view_lut_extent,
+          .format = vuk::Format::eR16G16B16A16Sfloat,
+          .sample_count = vuk::Samples::e1,
+          .view_type = vuk::ImageViewType::e2D,
+          .level_count = 1,
+          .layer_count = 1 }
+    );
+    sky_view_lut_attachment = vuk::clear_image(std::move(sky_view_lut_attachment), vuk::Black<f32>);
 
-    if (atmosphere_buffer.node) {
-        std::tie(sky_view_lut_attachment, sky_cubemap_attachment) =
-            draw_sky(self, frame_index, sky_transmittance_lut_attachment, sky_multiscatter_lut_attachment, atmosphere_buffer, camera_buffer);
+    auto sky_cubemap_attachment = vuk::declare_ia(
+        "sky cubemap",
+        { .image_flags = vuk::ImageCreateFlagBits::eCubeCompatible,
+          .image_type = vuk::ImageType::e2D,
+          .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eStorage,
+          .extent = self.sky_cubemap_extent,
+          .format = vuk::Format::eR16G16B16A16Sfloat,
+          .sample_count = vuk::Samples::e1,
+          .view_type = vuk::ImageViewType::eCube,
+          .layout = vuk::ImageLayout::eGeneral,
+          .level_count = 1,
+          .layer_count = 6 }
+    );
+
+    if (frame.has_atmosphere) {
+        draw_sky(
+            frame_index,
+            sky_view_lut_attachment,
+            sky_cubemap_attachment,
+            sky_transmittance_lut_attachment,
+            sky_multiscatter_lut_attachment,
+            atmosphere_buffer,
+            camera_buffer
+        );
     }
 
     if (frame.mesh_instance_count) {
@@ -1607,6 +1615,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
               .level_count = 1,
               .layer_count = directional_light_cascade_count }
         );
+        directional_light_shadowmap_attachment = vuk::clear_image(std::move(directional_light_shadowmap_attachment), vuk::DepthZero);
 
         if (frame.directional_light.has_value()) {
             auto directional_light_resolution = glm::vec2(directional_light_shadowmap_size, directional_light_shadowmap_size);
@@ -1981,7 +1990,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
         vbgtao_occlusion_attachment.same_shape_as(final_attachment);
         vbgtao_occlusion_attachment = vuk::clear_image(std::move(vbgtao_occlusion_attachment), vuk::White<f32>);
 
-        if (frame.vbgtao_buffer.node) {
+        if (frame.has_vbgtao) {
             auto vbgtao_buffer = std::move(frame.vbgtao_buffer);
             auto vbgtao_prefilter_pass = vuk::make_pass(
                 "vbgtao prefilter",
@@ -2102,23 +2111,27 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
             );
         }
 
+        auto pbr_context = GPU::PBRContext{
+            .atmosphere = frame.has_atmosphere ? atmosphere_buffer->device_address : 0,
+            .directional_light = frame.directional_light.has_value() ? directional_light_buffer->device_address : 0,
+            .directional_light_cascades = frame.directional_light.has_value() ? directional_light_cascades_buffer->device_address : 0,
+        };
         auto pbr_pass = vuk::make_pass(
             "pbr",
-            [](vuk::CommandBuffer &cmd_list, //
-               VUK_IA(vuk::eColorRW) dst,
-               VUK_BA(vuk::eFragmentRead) camera,
-               VUK_BA(vuk::eFragmentRead) atmosphere,
-               VUK_BA(vuk::eFragmentRead) directional_light,
-               VUK_BA(vuk::eFragmentRead) directional_light_cascades,
-               VUK_IA(vuk::eFragmentSampled) sky_transmittance_lut,
-               VUK_IA(vuk::eFragmentSampled) sky_cubemap,
-               VUK_IA(vuk::eFragmentSampled) depth,
-               VUK_IA(vuk::eFragmentSampled) ambient_occlusion,
-               VUK_IA(vuk::eFragmentSampled) albedo,
-               VUK_IA(vuk::eFragmentSampled) normal,
-               VUK_IA(vuk::eFragmentSampled) emissive,
-               VUK_IA(vuk::eFragmentSampled) metallic_roughness_occlusion,
-               VUK_IA(vuk::eFragmentSampled) directional_light_shadowmap) {
+            [pbr_context](
+                vuk::CommandBuffer &cmd_list, //
+                VUK_IA(vuk::eColorRW) dst,
+                VUK_BA(vuk::eFragmentRead) camera,
+                VUK_IA(vuk::eFragmentSampled) sky_transmittance_lut,
+                VUK_IA(vuk::eFragmentSampled) sky_cubemap,
+                VUK_IA(vuk::eFragmentSampled) depth,
+                VUK_IA(vuk::eFragmentSampled) ambient_occlusion,
+                VUK_IA(vuk::eFragmentSampled) albedo,
+                VUK_IA(vuk::eFragmentSampled) normal,
+                VUK_IA(vuk::eFragmentSampled) emissive,
+                VUK_IA(vuk::eFragmentSampled) metallic_roughness_occlusion,
+                VUK_IA(vuk::eFragmentSampled) directional_light_shadowmap
+            ) {
                 auto directional_light_sampler = vuk::SamplerCreateInfo{
                     .magFilter = vuk::Filter::eLinear,
                     .minFilter = vuk::Filter::eLinear,
@@ -2149,39 +2162,29 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                     .bind_image(0, 10, directional_light_shadowmap)
                     .bind_sampler(0, 11, directional_light_sampler)
                     .bind_buffer(0, 12, camera)
-                    .push_constants(
-                        vuk::ShaderStageFlagBits::eFragment,
-                        0,
-                        PushConstants(atmosphere->device_address, directional_light->device_address, directional_light_cascades->device_address)
-                    )
+                    .push_constants(vuk::ShaderStageFlagBits::eFragment, 0, pbr_context)
                     .draw(3, 1, 0, 0);
 
-                return std::make_tuple(dst, camera, atmosphere, sky_transmittance_lut, sky_cubemap, depth);
+                return std::make_tuple(dst, camera, sky_transmittance_lut, sky_cubemap, depth);
             }
         );
 
-        if (directional_light_buffer.node && atmosphere_buffer.node) {
-            std::tie(final_attachment, camera_buffer, atmosphere_buffer, sky_transmittance_lut_attachment, sky_cubemap_attachment, depth_attachment) =
-                pbr_pass(
-                    std::move(final_attachment),
-                    std::move(camera_buffer),
-                    std::move(atmosphere_buffer),
-                    std::move(directional_light_buffer),
-                    std::move(directional_light_cascades_buffer),
-                    std::move(sky_transmittance_lut_attachment),
-                    std::move(sky_cubemap_attachment),
-                    std::move(depth_attachment),
-                    std::move(vbgtao_occlusion_attachment),
-                    std::move(albedo_attachment),
-                    std::move(normal_attachment),
-                    std::move(emissive_attachment),
-                    std::move(metallic_roughness_occlusion_attachment),
-                    std::move(directional_light_shadowmap_attachment)
-                );
-        }
+        std::tie(final_attachment, camera_buffer, sky_transmittance_lut_attachment, sky_cubemap_attachment, depth_attachment) = pbr_pass(
+            std::move(final_attachment),
+            std::move(camera_buffer),
+            std::move(sky_transmittance_lut_attachment),
+            std::move(sky_cubemap_attachment),
+            std::move(depth_attachment),
+            std::move(vbgtao_occlusion_attachment),
+            std::move(albedo_attachment),
+            std::move(normal_attachment),
+            std::move(emissive_attachment),
+            std::move(metallic_roughness_occlusion_attachment),
+            std::move(directional_light_shadowmap_attachment)
+        );
     }
 
-    if (atmosphere_buffer.node) {
+    if (frame.has_atmosphere) {
         apply_sky(
             self,
             final_attachment,
@@ -2196,7 +2199,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
 
     auto eye_adaptation_buffer = std::move(frame.eye_adaptation_buffer);
     auto histogram_luminance_buffer = self.histogram_luminance_buffer.acquire(device, "histogram luminance", vuk::eFragmentRead);
-    if (eye_adaptation_buffer.node) {
+    if (frame.has_eye_adaptation) {
         //  ── HISTOGRAM GENERATE ──────────────────────────────────────────────
         auto histogram_generate_pass = vuk::make_pass(
             "histogram generate",
@@ -2248,7 +2251,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
     //  ── TONEMAP ─────────────────────────────────────────────────────────
     auto tonemap_pass = vuk::make_pass(
         "tonemap",
-        [has_eye_adaptation = !!eye_adaptation_buffer.node](
+        [has_eye_adaptation = frame.has_eye_adaptation](
             vuk::CommandBuffer &cmd_list, //
             VUK_IA(vuk::eColorRW) dst,
             VUK_IA(vuk::eFragmentSampled) src,

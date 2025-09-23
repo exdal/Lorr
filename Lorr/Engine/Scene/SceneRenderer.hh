@@ -45,6 +45,9 @@ struct PreparedFrame {
     vuk::Value<vuk::ImageAttachment> sky_transmittance_lut = {};
     vuk::Value<vuk::ImageAttachment> sky_multiscatter_lut = {};
 
+    bool has_atmosphere = false;
+    bool has_eye_adaptation = false;
+    bool has_vbgtao = false;
     GPU::Camera camera = {};
     ls::option<GPU::DirectionalLight> directional_light = ls::nullopt;
     glm::mat4 directional_light_cascade_projections[GPU::DirectionalLight::MAX_CASCADE_COUNT] = {};

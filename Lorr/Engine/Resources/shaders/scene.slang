@@ -96,6 +96,12 @@ public struct Atmosphere {
     public i32x3 aerial_perspective_lut_size;
 };
 
+public struct PBRContext {
+    public Atmosphere *atmosphere;
+    public DirectionalLight *directional_light;
+    public DirectionalLightCascade *directional_light_cascades;
+};
+
 public struct EyeAdaptation {
     public f32 min_exposure;
     public f32 max_exposure;

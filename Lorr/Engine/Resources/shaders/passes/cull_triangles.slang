@@ -70,7 +70,7 @@ func CullSmallPrimitive(f32x2x3 vertices, f32x2 viewportExtent) -> bool {
     );
 }
 
-func test_triangle(in f32x3x3 positions, in f32x2 resolution, CullFlags cull_flags, u32 triangle_index) -> bool {
+func test_triangle(in f32x3x3 positions, CullFlags cull_flags, u32 triangle_index) -> bool {
     let clip_pos_0 = mul(model_view_proj_shared, f32x4(positions[0], 1.0));
     let clip_pos_1 = mul(model_view_proj_shared, f32x4(positions[1], 1.0));
     let clip_pos_2 = mul(model_view_proj_shared, f32x4(positions[2], 1.0));
@@ -88,12 +88,12 @@ func test_triangle(in f32x3x3 positions, in f32x2 resolution, CullFlags cull_fla
         }
     }
 
-    if (cull_flags & CullFlags::MicroTriangles) {
-        const float3x2 uv_pos = { clip_pos_0.xy * 0.5 + 0.5, clip_pos_1.xy * 0.5 + 0.5, clip_pos_2.xy * 0.5 + 0.5 };
-        if (!CullSmallPrimitive(uv_pos, resolution)) {
-            return false;
-        }
-    }
+    // if (cull_flags & CullFlags::MicroTriangles) {
+    //     const float3x2 uv_pos = { clip_pos_0.xy * 0.5 + 0.5, clip_pos_1.xy * 0.5 + 0.5, clip_pos_2.xy * 0.5 + 0.5 };
+    //     if (!CullSmallPrimitive(uv_pos, resolution)) {
+    //         return false;
+    //     }
+    // }
 
     return true;
 }
@@ -109,7 +109,6 @@ func cs_main(
     uint3 group_id : SV_GroupID,
     uint3 group_thread_id : SV_GroupThreadID,
     uniform CullFlags cull_flags,
-    uniform f32x2 resolution,
     uniform f32x4x4 projection_view
 ) -> void {
     var visible_meshlet_instance_index = group_id.x;
@@ -126,7 +125,7 @@ func cs_main(
 
     if (local_index == 0) {
         triangles_passed_shared = 0;
-    
+
         let mesh = meshes[mesh_instance.mesh_index];
         let mesh_lod = mesh.lods[mesh_instance.lod_index];
         let meshlet = mesh_lod.meshlets[meshlet_instance.meshlet_index];
@@ -147,7 +146,7 @@ func cs_main(
 
         let indices = meshlet.indices(mesh_lod, local_index);
         let positions = meshlet.positions(mesh, indices);
-        triangle_passed = test_triangle(positions, resolution, cull_flags, local_index);
+        triangle_passed = test_triangle(positions, cull_flags, local_index);
         if (triangle_passed) {
             active_triangle_index = __atomic_add(triangles_passed_shared, 1, MemoryOrder::Relaxed);
         }

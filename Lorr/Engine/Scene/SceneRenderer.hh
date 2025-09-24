@@ -22,7 +22,7 @@ struct FramePrepareInfo {
 
     GPU::Camera camera = {};
     ls::option<GPU::DirectionalLight> directional_light = ls::nullopt;
-    ls::span<GPU::DirectionalLightCascade> directional_light_cascades = {};
+    ls::span<glm::mat4> directional_light_clipmap_projection_view_mats = {};
     ls::option<GPU::Atmosphere> atmosphere = ls::nullopt;
     ls::option<GPU::EyeAdaptation> eye_adaptation = ls::nullopt;
     ls::option<GPU::VBGTAO> vbgtao = ls::nullopt;
@@ -38,19 +38,21 @@ struct PreparedFrame {
     vuk::Value<vuk::Buffer> materials_buffer = {};
     vuk::Value<vuk::Buffer> camera_buffer = {};
     vuk::Value<vuk::Buffer> directional_light_buffer = {};
-    vuk::Value<vuk::Buffer> directional_light_cascades_buffer = {};
+    vuk::Value<vuk::Buffer> directional_light_clipmaps_buffer = {};
     vuk::Value<vuk::Buffer> atmosphere_buffer = {};
     vuk::Value<vuk::Buffer> eye_adaptation_buffer = {};
     vuk::Value<vuk::Buffer> vbgtao_buffer = {};
     vuk::Value<vuk::ImageAttachment> sky_transmittance_lut = {};
     vuk::Value<vuk::ImageAttachment> sky_multiscatter_lut = {};
+    vuk::Value<vuk::ImageAttachment> vsm_page_table = {};
+    vuk::Value<vuk::ImageAttachment> vsm_physical_pages = {};
 
     bool has_atmosphere = false;
     bool has_eye_adaptation = false;
     bool has_vbgtao = false;
     GPU::Camera camera = {};
     ls::option<GPU::DirectionalLight> directional_light = ls::nullopt;
-    glm::mat4 directional_light_cascade_projections[GPU::DirectionalLight::MAX_CASCADE_COUNT] = {};
+    glm::mat4 directional_light_clipmap_projection_view_mats[GPU::DirectionalLight::MAX_CLIPMAP_COUNT] = {};
 };
 
 struct SceneRenderInfo {
@@ -85,6 +87,14 @@ struct SceneRenderer {
 
     Image hilbert_noise_lut = {};
     ImageView hilbert_noise_lut_view = {};
+
+    // Many of the old papers related to virtual texturing
+    // also calls this texture "indirection", same can be
+    // said for VSM articles existed before Matej's
+    Image vsm_page_table = {};
+    ImageView vsm_page_table_view = {};
+    Image vsm_physical_pages = {};
+    ImageView vsm_physical_pages_view = {};
 
     bool debug_lines = false;
     f32 overdraw_heatmap_scale = 0.0f;

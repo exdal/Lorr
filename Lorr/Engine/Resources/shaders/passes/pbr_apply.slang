@@ -18,8 +18,7 @@ struct ShaderParameters {
     Image2D<f32x4> normal_image;
     Image2D<f32x3> emissive_image;
     Image2D<f32x3> metallic_roughness_occlusion_image;
-    Texture2DArray<f32> directional_light_shadowmap;
-    SamplerComparisonState directional_light_sampler;
+    Image2D<f32> vsm_page_table;
 
     ConstantBuffer<Camera> camera;
 };
@@ -110,15 +109,15 @@ func fs_main(
     let NoL = max(dot(N, L), 0.0);
     if (NoL > 0.0) {
         var directional_shadow = 1.0;
-        if (context.directional_light_cascades) {
-            let view_z = -mul(params.camera.view_mat, f32x4(world_position, 1.0)).z;
-            directional_shadow = sample_shadow_map(
-                context.directional_light,
-                context.directional_light_cascades,
-                params.directional_light_shadowmap,
-                params.directional_light_sampler,
-                view_z, world_position, N);
-        }
+        // if (context.directional_light_cascades) {
+        //     let view_z = -mul(params.camera.view_mat, f32x4(world_position, 1.0)).z;
+        //     directional_shadow = sample_shadow_map(
+        //         context.directional_light,
+        //         context.directional_light_cascades,
+        //         params.directional_light_shadowmap,
+        //         params.directional_light_sampler,
+        //         view_z, world_position, N);
+        // }
 
         let brdf = BRDF(V, N, L, albedo_color, roughness, metallic);
         material_surface_color = brdf * horizon * sun_illuminance * NoL * directional_shadow;

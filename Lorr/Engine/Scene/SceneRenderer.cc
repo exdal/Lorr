@@ -18,6 +18,7 @@ static constexpr auto sampler_min_clamp_reduction_mode = VkSamplerReductionModeC
     .pNext = nullptr,
     .reductionMode = VK_SAMPLER_REDUCTION_MODE_MIN,
 };
+
 static constexpr auto hiz_sampler = vuk::SamplerCreateInfo{
     .pNext = &sampler_min_clamp_reduction_mode,
     .magFilter = vuk::Filter::eLinear,
@@ -149,7 +150,6 @@ static auto cull_meshlets(
     bool late,
     GPU::CullFlags cull_flags,
     f32 near_clip,
-    glm::vec2 &resolution,
     glm::mat4 &projection_view,
     vuk::Value<vuk::ImageAttachment> &hiz_attachment,
     vuk::Value<vuk::Buffer> &cull_meshlets_cmd_buffer,
@@ -254,7 +254,7 @@ static auto cull_meshlets(
     //  ── CULL TRIANGLES ──────────────────────────────────────────────────
     auto vis_cull_triangles_pass = vuk::make_pass(
         stack.format("vis cull triangles {}", late ? "late" : "early"),
-        [late, cull_flags, resolution, projection_view](
+        [late, cull_flags, projection_view](
             vuk::CommandBuffer &cmd_list,
             VUK_BA(vuk::eIndirectRead) cull_triangles_cmd,
             VUK_BA(vuk::eComputeRead) early_visible_meshlet_instances_count,
@@ -276,7 +276,7 @@ static auto cull_meshlets(
                 .bind_buffer(0, 5, transforms)
                 .bind_buffer(0, 6, draw_indexed_cmd)
                 .bind_buffer(0, 7, reordered_indices)
-                .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, PushConstants(cull_flags, resolution, projection_view))
+                .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, PushConstants(cull_flags, projection_view))
                 .specialize_constants(0, late)
                 .dispatch_indirect(cull_triangles_cmd);
 
@@ -401,7 +401,7 @@ static auto draw_visbuffer(
         );
 }
 
-static auto shadowmap_cull_meshes(
+static auto vsm_cull_meshes(
     TransferManager &transfer_man,
     u32 mesh_instance_count,
     u32 cascade_index,
@@ -416,7 +416,7 @@ static auto shadowmap_cull_meshes(
     memory::ScopedStack stack;
 
     auto vis_cull_meshes_pass = vuk::make_pass(
-        stack.format("shadowmap cull meshes cascade {}", cascade_index),
+        stack.format("vsm cull meshes clipmap {}", cascade_index),
         [mesh_instance_count, cascade_index, frustum_projection_view](
             vuk::CommandBuffer &cmd_list,
             VUK_BA(vuk::eComputeRead) meshes,
@@ -426,7 +426,7 @@ static auto shadowmap_cull_meshes(
             VUK_BA(vuk::eComputeRW) visible_meshlet_instances_count
         ) {
             cmd_list //
-                .bind_compute_pipeline("passes.shadowmap_cull_meshes")
+                .bind_compute_pipeline("passes.vsm_cull_meshes")
                 .bind_buffer(0, 0, meshes)
                 .bind_buffer(0, 1, transforms)
                 .bind_buffer(0, 2, mesh_instances)
@@ -470,10 +470,9 @@ static auto shadowmap_cull_meshes(
     return cull_meshlets_cmd_buffer;
 }
 
-auto cull_shadowmap_meshlets(
+auto cull_vsm_meshlets(
     TransferManager &transfer_man,
     u32 cascade_index,
-    glm::vec2 &resolution,
     glm::mat4 &projection_view,
     vuk::Value<vuk::Buffer> &cull_meshlets_cmd_buffer,
     vuk::Value<vuk::Buffer> &all_visible_meshlet_instances_count_buffer,
@@ -489,8 +488,8 @@ auto cull_shadowmap_meshlets(
     memory::ScopedStack stack;
 
     //  ── CULL MESHLETS ───────────────────────────────────────────────────
-    auto shadowmap_cull_meshlets_pass = vuk::make_pass(
-        stack.format("shadowmap cull meshlets cascade {}", cascade_index),
+    auto vsm_cull_meshlets_pass = vuk::make_pass(
+        stack.format("vsm cull meshlets clipmap {}", cascade_index),
         [projection_view](
             vuk::CommandBuffer &cmd_list,
             VUK_BA(vuk::eIndirectRead) dispatch_cmd,
@@ -504,7 +503,7 @@ auto cull_shadowmap_meshlets(
             VUK_BA(vuk::eComputeRW) cull_triangles_cmd
         ) {
             cmd_list //
-                .bind_compute_pipeline("passes.shadowmap_cull_meshlets")
+                .bind_compute_pipeline("passes.vsm_cull_meshlets")
                 .bind_buffer(0, 0, meshlet_instances)
                 .bind_buffer(0, 1, mesh_instances)
                 .bind_buffer(0, 2, meshes)
@@ -543,7 +542,7 @@ auto cull_shadowmap_meshlets(
         visible_meshlet_instances_indices_buffer,
         cull_triangles_cmd_buffer
     ) =
-        shadowmap_cull_meshlets_pass(
+        vsm_cull_meshlets_pass(
             std::move(cull_meshlets_cmd_buffer),
             std::move(meshlet_instances_buffer),
             std::move(mesh_instances_buffer),
@@ -556,9 +555,9 @@ auto cull_shadowmap_meshlets(
         );
 
     //  ── CULL TRIANGLES ──────────────────────────────────────────────────
-    auto shadowmap_cull_triangles_pass = vuk::make_pass(
-        stack.format("shadowmap cull triangles cascade {}", cascade_index),
-        [resolution, projection_view](
+    auto vsm_cull_triangles_pass = vuk::make_pass(
+        stack.format("vsm cull triangles clipmap {}", cascade_index),
+        [projection_view](
             vuk::CommandBuffer &cmd_list,
             VUK_BA(vuk::eIndirectRead) cull_triangles_cmd,
             VUK_BA(vuk::eComputeRead) visible_meshlet_instances_count,
@@ -581,7 +580,7 @@ auto cull_shadowmap_meshlets(
                 .bind_buffer(0, 5, transforms)
                 .bind_buffer(0, 6, draw_indexed_cmd)
                 .bind_buffer(0, 7, reordered_indices)
-                .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, PushConstants(cull_flags, resolution, projection_view))
+                .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, PushConstants(cull_flags, projection_view))
                 .specialize_constants(0, false)
                 .dispatch_indirect(cull_triangles_cmd);
 
@@ -610,7 +609,7 @@ auto cull_shadowmap_meshlets(
         draw_command_buffer,
         reordered_indices_buffer
     ) =
-        shadowmap_cull_triangles_pass(
+        vsm_cull_triangles_pass(
             std::move(cull_triangles_cmd_buffer),
             std::move(visible_meshlet_instances_count_buffer),
             std::move(visible_meshlet_instances_indices_buffer),
@@ -625,7 +624,7 @@ auto cull_shadowmap_meshlets(
     return draw_command_buffer;
 }
 
-auto draw_shadowmap(
+auto draw_vsm(
     u32 cascade_index,
     glm::mat4 &projection_view,
     vuk::Value<vuk::ImageAttachment> &depth_attachment,
@@ -639,8 +638,8 @@ auto draw_shadowmap(
     ZoneScoped;
     memory::ScopedStack stack;
 
-    auto draw_shadowmap_pass = vuk::make_pass(
-        stack.format("draw shadowmap casecade {}", cascade_index),
+    auto draw_vsm_pass = vuk::make_pass(
+        stack.format("draw vsm clipmap {}", cascade_index),
         [projection_view](
             vuk::CommandBuffer &cmd_list,
             VUK_BA(vuk::eIndirectRead) triangle_indirect,
@@ -652,9 +651,9 @@ auto draw_shadowmap(
             VUK_IA(vuk::eDepthStencilRW) depth
         ) {
             cmd_list //
-                .bind_graphics_pipeline("passes.shadowmap_draw")
+                .bind_graphics_pipeline("passes.vsm_draw")
                 .set_rasterization({ .cullMode = vuk::CullModeFlagBits::eBack })
-                .set_depth_stencil({ .depthTestEnable = true, .depthWriteEnable = true, .depthCompareOp = vuk::CompareOp::eGreaterOrEqual })
+                .set_depth_stencil({ .depthTestEnable = true, .depthWriteEnable = false, .depthCompareOp = vuk::CompareOp::eGreaterOrEqual })
                 .set_dynamic_state(vuk::DynamicStateFlagBits::eViewport | vuk::DynamicStateFlagBits::eScissor)
                 .set_viewport(0, vuk::Rect2D::framebuffer())
                 .set_scissor(0, vuk::Rect2D::framebuffer())
@@ -671,7 +670,7 @@ auto draw_shadowmap(
     );
 
     std::tie(reordered_indices_buffer, meshlet_instances_buffer, mesh_instances_buffer, meshes_buffer, transforms_buffer, depth_attachment) =
-        draw_shadowmap_pass(
+        draw_vsm_pass(
             std::move(draw_command_buffer),
             std::move(reordered_indices_buffer),
             std::move(meshlet_instances_buffer),
@@ -958,7 +957,6 @@ auto SceneRenderer::init(this SceneRenderer &self) -> bool {
             { "CULLING_MESHLET_COUNT", std::to_string(Model::MAX_MESHLET_INDICES) },
             { "CULLING_TRIANGLE_COUNT", std::to_string(Model::MAX_MESHLET_PRIMITIVES) },
             { "MESH_MAX_LODS", std::to_string(GPU::Mesh::MAX_LODS) },
-            { "MAX_DIRECTIONAL_LIGHT_CASCADES", std::to_string(GPU::DirectionalLight::MAX_CASCADE_COUNT) },
             { "HISTOGRAM_THREADS_X", std::to_string(GPU::HISTOGRAM_THREADS_X) },
             { "HISTOGRAM_THREADS_Y", std::to_string(GPU::HISTOGRAM_THREADS_Y) },
         },
@@ -1071,23 +1069,23 @@ auto SceneRenderer::init(this SceneRenderer &self) -> bool {
     };
     Pipeline::create(device, default_slang_session, vis_decode_pipeline_info, bindless_descriptor_set).value();
 
-    auto shadowmap_cull_meshes = PipelineCompileInfo{
-        .module_name = "passes.shadowmap_cull_meshes",
+    auto vsm_cull_meshes = PipelineCompileInfo{
+        .module_name = "passes.vsm_cull_meshes",
         .entry_points = { "cs_main" },
     };
-    Pipeline::create(device, default_slang_session, shadowmap_cull_meshes).value();
+    Pipeline::create(device, default_slang_session, vsm_cull_meshes).value();
 
-    auto shadowmap_cull_meshlets = PipelineCompileInfo{
-        .module_name = "passes.shadowmap_cull_meshlets",
+    auto vsm_cull_meshlets = PipelineCompileInfo{
+        .module_name = "passes.vsm_cull_meshlets",
         .entry_points = { "cs_main" },
     };
-    Pipeline::create(device, default_slang_session, shadowmap_cull_meshlets).value();
+    Pipeline::create(device, default_slang_session, vsm_cull_meshlets).value();
 
-    auto shadowmap_draw = PipelineCompileInfo{
-        .module_name = "passes.shadowmap_draw",
+    auto vsm_draw = PipelineCompileInfo{
+        .module_name = "passes.vsm_draw",
         .entry_points = { "vs_main" },
     };
-    Pipeline::create(device, default_slang_session, shadowmap_draw).value();
+    Pipeline::create(device, default_slang_session, vsm_draw).value();
 
     //  ── PBR ─────────────────────────────────────────────────────────────
     auto pbr_apply_pipeline_info = PipelineCompileInfo{
@@ -1358,24 +1356,24 @@ auto SceneRenderer::prepare_frame(this SceneRenderer &self, FramePrepareInfo &in
 
     prepared_frame.camera_buffer = transfer_man.scratch_buffer(info.camera);
 
-    auto directional_light_cascade_count = 1_u32;
+    auto directional_light_clipmap_count = 1_u32;
     if (info.directional_light.has_value()) {
         auto &directional_light = info.directional_light.value();
         prepared_frame.directional_light_buffer = transfer_man.scratch_buffer(directional_light);
 
-        directional_light_cascade_count = ls::max(1_u32, directional_light.cascade_count);
-        for (u32 i = 0_u32; i < directional_light.cascade_count; i++) {
-            prepared_frame.directional_light_cascade_projections[i] = info.directional_light_cascades[i].projection_view_mat;
+        directional_light_clipmap_count = ls::max(1_u32, directional_light.clipmap_count);
+        for (u32 i = 0_u32; i < directional_light.clipmap_count; i++) {
+            prepared_frame.directional_light_clipmap_projection_view_mats[i] = info.directional_light_clipmap_projection_view_mats[i];
         }
     }
 
-    prepared_frame.directional_light_cascades_buffer =
-        transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eGPUtoCPU, directional_light_cascade_count * sizeof(GPU::DirectionalLightCascade));
-    if (info.directional_light.has_value() && info.directional_light->cascade_count > 0) {
+    prepared_frame.directional_light_clipmaps_buffer =
+        transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eGPUtoCPU, directional_light_clipmap_count * sizeof(glm::mat4));
+    if (info.directional_light.has_value() && info.directional_light->clipmap_count > 0) {
         std::memcpy(
-            prepared_frame.directional_light_cascades_buffer->mapped_ptr,
-            info.directional_light_cascades.data(),
-            info.directional_light_cascades.size_bytes()
+            prepared_frame.directional_light_clipmaps_buffer->mapped_ptr,
+            info.directional_light_clipmap_projection_view_mats.data(),
+            info.directional_light_clipmap_projection_view_mats.size_bytes()
         );
     }
 
@@ -1456,6 +1454,39 @@ auto SceneRenderer::prepare_frame(this SceneRenderer &self, FramePrepareInfo &in
             self.sky_transmittance_lut_view.acquire(device, "sky transmittance lut", vuk::ImageUsageFlagBits::eSampled, vuk::Access::eComputeSampled);
         prepared_frame.sky_multiscatter_lut =
             self.sky_multiscatter_lut_view.acquire(device, "sky multiscatter lut", vuk::ImageUsageFlagBits::eSampled, vuk::Access::eComputeSampled);
+    }
+
+    if (!self.vsm_page_table_view) {
+        auto vsm_page_table_info = ImageInfo{
+            .format = vuk::Format::eR32Uint,
+            .usage = vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eSampled,
+            .type = vuk::ImageType::e2D,
+            .extent = { .width = GPU::VSM_PAGE_TABLE_SIZE, .height = GPU::VSM_PAGE_TABLE_SIZE, .depth = 1 },
+            .mip_count = GPU::VSM_PAGE_TABLE_MIP_COUNT,
+            .name = "VSM Page Table",
+        };
+        std::tie(self.vsm_page_table, self.vsm_page_table_view) = Image::create_with_view(device, vsm_page_table_info).value();
+
+        auto vsm_physical_pages_size = static_cast<u32>(glm::ceil(glm::sqrt(GPU::VSM_PAGE_COUNT)) * GPU::VSM_PAGE_SIZE);
+        auto vsm_physical_pages_info = ImageInfo{
+            .format = vuk::Format::eR32Sfloat,
+            .usage = vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eSampled,
+            .type = vuk::ImageType::e2D,
+            .extent = { .width = vsm_physical_pages_size, .height = vsm_physical_pages_size, .depth = 1 },
+            .mip_count = 1,
+            .name = "VSM Physical Pages",
+        };
+        std::tie(self.vsm_physical_pages, self.vsm_physical_pages_view) = Image::create_with_view(device, vsm_physical_pages_info).value();
+
+        prepared_frame.vsm_page_table = self.vsm_page_table_view.discard(device, "vsm page table", vuk::ImageUsageFlagBits::eStorage);
+        prepared_frame.vsm_page_table = vuk::clear_image(std::move(prepared_frame.vsm_page_table), vuk::Black<u32>);
+        prepared_frame.vsm_physical_pages = self.vsm_physical_pages_view.discard(device, "vsm physical pages", vuk::ImageUsageFlagBits::eStorage);
+        prepared_frame.vsm_physical_pages = vuk::clear_image(std::move(prepared_frame.vsm_physical_pages), vuk::Black<f32>);
+    } else {
+        prepared_frame.vsm_page_table =
+            self.vsm_page_table_view.acquire(device, "vsm page table", vuk::ImageUsageFlagBits::eStorage, vuk::eFragmentSampled);
+        prepared_frame.vsm_physical_pages =
+            self.vsm_physical_pages_view.acquire(device, "vsm physical pages", vuk::ImageUsageFlagBits::eStorage, vuk::eFragmentSampled);
     }
 
     prepared_frame.camera = info.camera;
@@ -1539,11 +1570,13 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
 
     auto camera_buffer = std::move(frame.camera_buffer);
     auto directional_light_buffer = std::move(frame.directional_light_buffer);
-    auto directional_light_cascades_buffer = std::move(frame.directional_light_cascades_buffer);
+    auto directional_light_clipmaps_buffer = std::move(frame.directional_light_clipmaps_buffer);
     auto atmosphere_buffer = std::move(frame.atmosphere_buffer);
 
     auto sky_transmittance_lut_attachment = std::move(frame.sky_transmittance_lut);
     auto sky_multiscatter_lut_attachment = std::move(frame.sky_multiscatter_lut);
+    auto vsm_page_table_attachment = std::move(frame.vsm_page_table);
+    auto vsm_physical_pages_attachment = std::move(frame.vsm_physical_pages);
     auto sky_view_lut_attachment = vuk::declare_ia(
         "sky view lut",
         { .image_type = vuk::ImageType::e2D,
@@ -1600,35 +1633,18 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
 
         /// GEOMETRY PREPASS ///
         //
-        // Cascaded shadowmaps
+        // Virtual shadowmaps
         auto directional_light_info = frame.directional_light.value_or(GPU::DirectionalLight{});
-        auto directional_light_cascade_count = ls::max(directional_light_info.cascade_count, 1_u32);
-        auto directional_light_shadowmap_size = ls::max(directional_light_info.cascade_size, 1_u32);
-        auto directional_light_shadowmap_extent =
-            vuk::Extent3D{ .width = directional_light_shadowmap_size, .height = directional_light_shadowmap_size, .depth = 1 };
-        auto directional_light_shadowmap_attachment = vuk::declare_ia(
-            "directional light shadowmap",
-            { .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eDepthStencilAttachment,
-              .extent = directional_light_shadowmap_extent,
-              .format = vuk::Format::eD32Sfloat,
-              .sample_count = vuk::SampleCountFlagBits::e1,
-              .level_count = 1,
-              .layer_count = directional_light_cascade_count }
-        );
-        directional_light_shadowmap_attachment = vuk::clear_image(std::move(directional_light_shadowmap_attachment), vuk::DepthZero);
-
         if (frame.directional_light.has_value()) {
-            auto directional_light_resolution = glm::vec2(directional_light_shadowmap_size, directional_light_shadowmap_size);
-            for (u32 cascade_index = 0; cascade_index < directional_light_cascade_count; cascade_index++) {
-                auto current_cascade_attachment = directional_light_shadowmap_attachment.layer(cascade_index);
-                auto &current_cascade_projection_view = frame.directional_light_cascade_projections[cascade_index];
+            for (u32 clipmap_index = 0; clipmap_index < directional_light_info.clipmap_count; clipmap_index++) {
+                auto &current_clipmap_projection_view_mat = frame.directional_light_clipmap_projection_view_mats[clipmap_index];
 
                 auto all_visible_meshlet_instances_count_buffer = transfer_man.scratch_buffer<u32>({});
-                auto cull_meshlets_cmd_buffer = shadowmap_cull_meshes(
+                auto cull_meshlets_cmd_buffer = vsm_cull_meshes(
                     transfer_man,
                     frame.mesh_instance_count,
-                    cascade_index,
-                    current_cascade_projection_view,
+                    clipmap_index,
+                    current_clipmap_projection_view_mat,
                     meshes_buffer,
                     mesh_instances_buffer,
                     meshlet_instances_buffer,
@@ -1636,11 +1652,10 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                     transforms_buffer
                 );
                 auto visible_meshlet_instances_count_buffer = transfer_man.scratch_buffer<u32>({});
-                auto draw_shadowmap_cmd_buffer = cull_shadowmap_meshlets(
+                auto draw_vsm_cmd_buffer = cull_vsm_meshlets(
                     transfer_man,
-                    cascade_index,
-                    directional_light_resolution,
-                    current_cascade_projection_view,
+                    clipmap_index,
+                    current_clipmap_projection_view_mat,
                     cull_meshlets_cmd_buffer,
                     all_visible_meshlet_instances_count_buffer,
                     visible_meshlet_instances_count_buffer,
@@ -1652,17 +1667,17 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                     transforms_buffer
                 );
 
-                draw_shadowmap(
-                    cascade_index,
-                    current_cascade_projection_view,
-                    current_cascade_attachment,
-                    draw_shadowmap_cmd_buffer,
-                    reordered_indices_buffer,
-                    meshes_buffer,
-                    mesh_instances_buffer,
-                    meshlet_instances_buffer,
-                    transforms_buffer
-                );
+                // draw_shadowmap(
+                //     clipmap_index,
+                //     current_clipmap_projection_view_mat,
+                //     current_cascade_attachment,
+                //     draw_shadowmap_cmd_buffer,
+                //     reordered_indices_buffer,
+                //     meshes_buffer,
+                //     mesh_instances_buffer,
+                //     meshlet_instances_buffer,
+                //     transforms_buffer
+                // );
             }
         }
 
@@ -1731,7 +1746,6 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
             false,
             info.cull_flags,
             frame.camera.near_clip,
-            frame.camera.resolution,
             frame.camera.projection_view_mat,
             hiz_attachment,
             cull_meshlets_cmd_buffer,
@@ -1770,7 +1784,6 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
             true,
             info.cull_flags,
             frame.camera.near_clip,
-            frame.camera.resolution,
             frame.camera.projection_view_mat,
             hiz_attachment,
             cull_meshlets_cmd_buffer,
@@ -2114,7 +2127,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
         auto pbr_context = GPU::PBRContext{
             .atmosphere = frame.has_atmosphere ? atmosphere_buffer->device_address : 0,
             .directional_light = frame.directional_light.has_value() ? directional_light_buffer->device_address : 0,
-            .directional_light_cascades = frame.directional_light.has_value() ? directional_light_cascades_buffer->device_address : 0,
+            .directional_light_clipmaps = frame.directional_light.has_value() ? directional_light_clipmaps_buffer->device_address : 0,
         };
         auto pbr_pass = vuk::make_pass(
             "pbr",
@@ -2130,7 +2143,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                 VUK_IA(vuk::eFragmentSampled) normal,
                 VUK_IA(vuk::eFragmentSampled) emissive,
                 VUK_IA(vuk::eFragmentSampled) metallic_roughness_occlusion,
-                VUK_IA(vuk::eFragmentSampled) directional_light_shadowmap
+                VUK_IA(vuk::eFragmentSampled) vsm_page_table
             ) {
                 auto directional_light_sampler = vuk::SamplerCreateInfo{
                     .magFilter = vuk::Filter::eLinear,
@@ -2159,9 +2172,8 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                     .bind_image(0, 7, normal)
                     .bind_image(0, 8, emissive)
                     .bind_image(0, 9, metallic_roughness_occlusion)
-                    .bind_image(0, 10, directional_light_shadowmap)
-                    .bind_sampler(0, 11, directional_light_sampler)
-                    .bind_buffer(0, 12, camera)
+                    .bind_image(0, 10, vsm_page_table)
+                    .bind_buffer(0, 11, camera)
                     .push_constants(vuk::ShaderStageFlagBits::eFragment, 0, pbr_context)
                     .draw(3, 1, 0, 0);
 
@@ -2180,7 +2192,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
             std::move(normal_attachment),
             std::move(emissive_attachment),
             std::move(metallic_roughness_occlusion_attachment),
-            std::move(directional_light_shadowmap_attachment)
+            std::move(vsm_page_table_attachment)
         );
     }
 

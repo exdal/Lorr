@@ -41,122 +41,9 @@ bool json_to_quat(simdjson::ondemand::value &o, glm::quat &quat) {
     return true;
 }
 
-auto get_frustum_corners(f32 fov, f32 aspect_ratio, f32 z_near, f32 z_far) -> std::array<glm::vec3, 8> {
-    auto tan_half_fov = glm::tan(glm::radians(fov) / 2.0f);
-    auto a = glm::abs(z_near) * tan_half_fov;
-    auto b = glm::abs(z_far) * tan_half_fov;
-
-    return std::array<glm::vec3, 8>{
-        glm::vec3(a * aspect_ratio, -a, z_near), // bottom right
-        glm::vec3(a * aspect_ratio, a, z_near), // top right
-        glm::vec3(-a * aspect_ratio, a, z_near), // top left
-        glm::vec3(-a * aspect_ratio, -a, z_near), // bottom left
-        glm::vec3(b * aspect_ratio, -b, z_far), // bottom right
-        glm::vec3(b * aspect_ratio, b, z_far), // top right
-        glm::vec3(-b * aspect_ratio, b, z_far), // top left
-        glm::vec3(-b * aspect_ratio, -b, z_far), // bottom left
-    };
-}
-
-auto calculate_cascade_bounds(usize cascade_count, f32 nearest_bound, f32 maximum_shadow_distance)
-    -> std::array<f32, GPU::DirectionalLight::MAX_CASCADE_COUNT> {
-    if (cascade_count == 1) {
-        return { maximum_shadow_distance };
-    }
-    auto base = glm::pow(maximum_shadow_distance / nearest_bound, 1.0f / static_cast<f32>(cascade_count - 1));
-
-    auto result = std::array<f32, GPU::DirectionalLight::MAX_CASCADE_COUNT>();
-    for (u32 i = 0; i < cascade_count; i++) {
-        result[i] = nearest_bound * glm::pow(base, static_cast<f32>(i));
-    }
-
-    return result;
-}
-
-auto calculate_cascaded_shadow_matrices(
-    GPU::DirectionalLight &light,
-    ls::span<GPU::DirectionalLightCascade> cascades,
-    const ECS::DirectionalLight &light_comp,
-    const GPU::Camera &camera
-) -> void {
-    ZoneScoped;
-
-    auto overlap_factor = 1.0f - light_comp.cascade_overlap_propotion;
-    auto far_bounds = calculate_cascade_bounds(light.cascade_count, light_comp.first_cascade_far_bound, light_comp.maximum_shadow_distance);
-    auto near_bounds = std::array<f32, GPU::DirectionalLight::MAX_CASCADE_COUNT>();
-    near_bounds[0] = light_comp.minimum_shadow_distance;
-    for (u32 i = 1; i < light.cascade_count; i++) {
-        near_bounds[i] = overlap_factor * far_bounds[i - 1];
-    }
-
-    auto forward = glm::normalize(light.direction);
-    auto up = (glm::abs(glm::dot(forward, glm::vec3(0, 1, 0))) > 0.99f) ? glm::vec3(0, 0, 1) : glm::vec3(0, 1, 0);
-    auto right = glm::normalize(glm::cross(up, forward));
-    up = glm::normalize(glm::cross(forward, right));
-
-    auto world_from_light = glm::transpose(
-        glm::mat4(
-            glm::vec4(right, 0.0f), //
-            glm::vec4(up, 0.0f),
-            glm::vec4(forward, 0.0f),
-            glm::vec4(0.0f, 0.0f, 0.0f, 1.0f)
-        )
-    );
-    auto camera_to_world = camera.inv_view_mat;
-
-    for (u32 cascade_index = 0; cascade_index < light.cascade_count; ++cascade_index) {
-        auto &cascade = cascades[cascade_index];
-        auto split_near = near_bounds[cascade_index];
-        auto split_far = far_bounds[cascade_index];
-        auto corners = get_frustum_corners(camera.fov_deg, camera.aspect_ratio, -split_near, -split_far);
-
-        auto min = glm::vec3(std::numeric_limits<f32>::max());
-        auto max = glm::vec3(std::numeric_limits<f32>::lowest());
-        for (const auto &corner : corners) {
-            auto world_corner = camera_to_world * glm::vec4(corner, 1.0f);
-            auto light_view_corner = glm::vec3(world_from_light * world_corner);
-            min = glm::min(min, light_view_corner);
-            max = glm::max(max, light_view_corner);
-        }
-
-        auto body_diagonal = glm::length2(corners[0] - corners[6]);
-        auto far_plane_diagonal = glm::length2(corners[4] - corners[6]);
-        auto cascade_diameter = glm::ceil(glm::sqrt(glm::max(body_diagonal, far_plane_diagonal)));
-        f32 cascade_texel_size = cascade_diameter / static_cast<f32>(light.cascade_size);
-
-        glm::vec3 center = glm::vec3(
-            glm::floor((min.x + max.x) * 0.5f / cascade_texel_size) * cascade_texel_size,
-            glm::floor((min.y + max.y) * 0.5f / cascade_texel_size) * cascade_texel_size,
-            max.z
-        );
-
-        auto cascade_from_world = glm::mat4(
-            world_from_light[0], //
-            world_from_light[1],
-            world_from_light[2],
-            glm::vec4(-center, 1.0f)
-        );
-
-        auto z_extension = camera.far_clip * 0.5f;
-        auto extended_min_z = min.z - z_extension;
-        auto extended_max_z = max.z + z_extension;
-        auto r = 1.0f / (extended_max_z - extended_min_z);
-        auto clip_from_cascade = glm::mat4(
-            glm::vec4(2.0 / cascade_diameter, 0.0, 0.0, 0.0),
-            glm::vec4(0.0, 2.0 / cascade_diameter, 0.0, 0.0),
-            glm::vec4(0.0, 0.0, r, 0.0),
-            glm::vec4(0.0, 0.0, -extended_min_z * r, 1.0)
-        );
-
-        cascade.projection_view_mat = clip_from_cascade * cascade_from_world;
-        cascade.far_bound = split_far;
-        cascade.texel_size = cascade_texel_size;
-    }
-}
-
 auto calculate_virtual_shadow_matrices(
     GPU::DirectionalLight &light,
-    ls::span<GPU::DirectionalLightCascade> clipmaps,
+    ls::span<glm::mat4> clipmap_projection_view_mats,
     const ECS::DirectionalLight &light_comp,
     const GPU::Camera &camera
 ) -> void {
@@ -170,44 +57,25 @@ auto calculate_virtual_shadow_matrices(
 
     auto forward = glm::normalize(light.direction);
     auto up = (glm::abs(glm::dot(forward, glm::vec3(0, 1, 0))) > 0.99f) ? glm::vec3(0, 0, 1) : glm::vec3(0, 1, 0);
-    auto right = glm::normalize(glm::cross(up, forward));
-    up = glm::normalize(glm::cross(forward, right));
-    auto world_from_light = glm::transpose(
-        glm::mat4(
-            glm::vec4(right, 0.0f), //
-            glm::vec4(up, 0.0f),
-            glm::vec4(forward, 0.0f),
-            glm::vec4(0.0f, 0.0f, 0.0f, 1.0f)
-        )
-    );
+    auto world_from_light = glm::lookAt(forward, glm::vec3(0.0f), up);
 
-    for (u32 clipmap_index = 0; clipmap_index < light.cascade_count; clipmap_index++) {
-        auto &clipmap = clipmaps[clipmap_index];
-        auto far_bound = light_comp.first_cascade_far_bound * static_cast<f32>(1 << clipmap_index);
-        auto clipmap_half_extent = far_bound * 0.5f;
-        auto texel_size = far_bound / static_cast<f32>(light.cascade_size);
-
-        auto center = glm::vec3(0.0f);
-        auto clipmap_from_world = glm::mat4(
-            world_from_light[0], //
-            world_from_light[1],
-            world_from_light[2],
-            glm::vec4(-center, 1.0f)
-        );
+    for (u32 clipmap_index = 0; clipmap_index < light.clipmap_count; clipmap_index++) {
+        auto clipmap_extent = light_comp.first_clipmap_width * static_cast<f32>(1 << clipmap_index);
+        auto clipmap_half_extent = clipmap_extent * 0.5f;
 
         auto z_extension = camera.far_clip * 0.5f;
         auto z_near = -z_extension;
         auto z_far = z_extension;
-        auto z_range = 1.0f / (z_far - z_near);
+        auto r = 1.0f / (z_far - z_near);
         auto clip_from_clipmap = glm::mat4(
             glm::vec4(2.0f / clipmap_half_extent, 0.0f, 0.0f, 0.0f),
             glm::vec4(0.0f, 2.0f / clipmap_half_extent, 0.0f, 0.0f),
-            glm::vec4(0.0f, 0.0f, z_range, 0.0f),
-            glm::vec4(0.0f, 0.0f, -z_near * z_range, 1.0f)
+            glm::vec4(0.0f, 0.0f, r, 0.0f),
+            glm::vec4(0.0f, 0.0f, -z_near * r, 1.0f)
         );
 
         // Offset projection to page
-        auto page_table_size = static_cast<f32>(light_comp.vsm_page_table_size);
+        auto page_table_size = static_cast<f32>(GPU::VSM_PAGE_TABLE_SIZE);
         auto clip_position = clip_from_clipmap * world_from_light * glm::vec4(camera.position, 1.0f);
         auto ndc_position = glm::vec2(clip_position) / clip_position.w;
         auto center_uv_position = ndc_position * 0.5f;
@@ -216,9 +84,7 @@ auto calculate_virtual_shadow_matrices(
         auto shifted_projection_mat = glm::translate(glm::mat4(1.0f), glm::vec3(-page_shift, 0.0f)) * clip_from_clipmap;
         auto clipmap_from_page = glm::inverse(clip_from_clipmap) * shifted_projection_mat * world_from_light;
 
-        clipmap.projection_view_mat = clip_from_clipmap * clipmap_from_page;
-        clipmap.texel_size = texel_size;
-        clipmap.far_bound = far_bound;
+        clipmap_projection_view_mats[clipmap_index] = clip_from_clipmap * clipmap_from_page;
     }
 }
 
@@ -812,9 +678,9 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer, u32 image_c
     }
 
     ls::option<GPU::DirectionalLight> directional_light_data = ls::nullopt;
-    GPU::DirectionalLightCascade directional_light_cascades[GPU::DirectionalLight::MAX_CASCADE_COUNT] = {};
+    glm::mat4 directional_light_clipmap_projection_view_mats[GPU::DirectionalLight::MAX_CLIPMAP_COUNT] = {};
     directional_light_query.each([&directional_light_data,
-                                  &directional_light_cascades,
+                                  &directional_light_clipmap_projection_view_mats,
                                   &active_camera_data](flecs::entity, const ECS::DirectionalLight &directional_light_comp) {
         auto &directional_light = directional_light_data.emplace();
 
@@ -826,14 +692,17 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer, u32 image_c
         };
         directional_light.base_ambient_color = directional_light_comp.base_ambient_color;
         directional_light.intensity = directional_light_comp.intensity;
-        directional_light.cascade_count = ls::min(directional_light_comp.cascade_count, GPU::DirectionalLight::MAX_CASCADE_COUNT);
-        directional_light.cascade_size = directional_light_comp.shadow_map_resolution;
-        directional_light.cascades_overlap_proportion = directional_light_comp.cascade_overlap_propotion;
+        directional_light.clipmap_count = ls::min(directional_light_comp.clipmap_count, GPU::DirectionalLight::MAX_CLIPMAP_COUNT);
         directional_light.depth_bias = directional_light_comp.depth_bias;
         directional_light.normal_bias = directional_light_comp.normal_bias;
 
-        if (directional_light_comp.cascade_count > 0) {
-            calculate_virtual_shadow_matrices(directional_light, directional_light_cascades, directional_light_comp, *active_camera_data);
+        if (directional_light_comp.clipmap_count > 0) {
+            calculate_virtual_shadow_matrices(
+                directional_light,
+                directional_light_clipmap_projection_view_mats,
+                directional_light_comp,
+                *active_camera_data
+            );
         }
     });
 
@@ -1018,7 +887,7 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer, u32 image_c
         .gpu_mesh_instances = gpu_mesh_instances,
         .camera = active_camera_data.value_or(GPU::Camera{}),
         .directional_light = directional_light_data,
-        .directional_light_cascades = directional_light_cascades,
+        .directional_light_clipmap_projection_view_mats = directional_light_clipmap_projection_view_mats,
         .atmosphere = atmosphere_data,
         .eye_adaptation = eye_adaptation_data,
         .vbgtao = vbgtao,

@@ -46,30 +46,18 @@ public struct Camera {
     public f32 aspect_ratio;
 };
 
-#ifndef MAX_DIRECTIONAL_LIGHT_CASCADES
-#define MAX_DIRECTIONAL_LIGHT_CASCADES 6
-#endif
-
-public struct DirectionalLightCascade {
-    public f32x4x4 projection_view_mat;
-    public f32 far_bound;
-    public f32 texel_size;
-};
-
 public struct DirectionalLight {
     public f32x3 base_ambient_color;
     public f32 intensity;
     public f32x3 direction;
-    public u32 cascade_count;
-    public u32 cascade_size;
-    public f32 cascades_overlap_proportion;
+    public u32 clipmap_count;
     public f32 depth_bias;
     public f32 normal_bias;
 };
 
 public struct Lights {
     public DirectionalLight *directional_light;
-    public DirectionalLightCascade *directional_light_cascades;
+    public f32x4x4 *directional_light_clipmap_projection_views;
 };
 
 public struct Atmosphere {
@@ -99,7 +87,7 @@ public struct Atmosphere {
 public struct PBRContext {
     public Atmosphere *atmosphere;
     public DirectionalLight *directional_light;
-    public DirectionalLightCascade *directional_light_cascades;
+    public f32x4x4 *directional_light_clipmap_projection_views;
 };
 
 public struct EyeAdaptation {

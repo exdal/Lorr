@@ -2,6 +2,8 @@
 
 #include "Engine/Graphics/VulkanTypes.hh"
 
+#include <bit>
+
 namespace lr::GPU {
 enum class DebugView : i32 {
     None = 0,
@@ -85,32 +87,27 @@ struct Camera {
     alignas(4) f32 aspect_ratio = 1.777f;
 };
 
-struct DirectionalLightCascade {
-    alignas(4) glm::mat4 projection_view_mat = {};
-    alignas(4) f32 far_bound = {};
-    alignas(4) f32 texel_size = {};
-};
-
-struct DirectionalLightClipmap {
-    alignas(4) glm::mat4 projection_view_mat = {};
-};
+constexpr static u32 VSM_PAGE_SIZE = 128;
+constexpr static u32 VSM_PAGE_COUNT = 1024;
+constexpr static u32 VSM_MIN_VIRTUAL_EXTENT = VSM_PAGE_SIZE;
+constexpr static u32 VSM_MAX_VIRTUAL_EXTENT = 4096;
+constexpr static u32 VSM_PAGE_TABLE_SIZE = VSM_MAX_VIRTUAL_EXTENT / VSM_PAGE_SIZE;
+constexpr static u32 VSM_PAGE_TABLE_MIP_COUNT = std::bit_width(VSM_PAGE_TABLE_SIZE);
 
 struct DirectionalLight {
-    constexpr static auto MAX_CASCADE_COUNT = 6_u32;
+    constexpr static auto MAX_CLIPMAP_COUNT = 32_u32;
 
     alignas(4) glm::vec3 base_ambient_color = {};
     alignas(4) f32 intensity = {};
     alignas(4) glm::vec3 direction = {};
-    alignas(4) u32 cascade_count = {};
-    alignas(4) u32 cascade_size = {};
-    alignas(4) f32 cascades_overlap_proportion = {};
+    alignas(4) u32 clipmap_count = {};
     alignas(4) f32 depth_bias = {};
     alignas(4) f32 normal_bias = {};
 };
 
 struct Lights {
     alignas(8) u64 directional_light = 0;
-    alignas(8) u64 directional_light_cascades = 0;
+    alignas(8) u64 directional_light_clipmap_projection_views = 0;
 };
 
 struct Atmosphere {
@@ -140,7 +137,7 @@ struct Atmosphere {
 struct PBRContext {
     alignas(8) u64 atmosphere = 0;
     alignas(8) u64 directional_light = 0;
-    alignas(8) u64 directional_light_cascades = 0;
+    alignas(8) u64 directional_light_clipmaps = 0;
 };
 
 struct EyeAdaptation {

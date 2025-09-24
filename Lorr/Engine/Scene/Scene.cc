@@ -162,11 +162,16 @@ auto calculate_virtual_shadow_matrices(
 ) -> void {
     ZoneScoped;
 
+    // * Stable matrices *
+    // We want our directional light matrix to be "stable" aka positionless.
+    // This is to not keep getting cache hits on the virtual pages each time
+    // camera moves. Later, we will offset the resulting projection view mat
+    // per each page.
+
     auto forward = glm::normalize(light.direction);
     auto up = (glm::abs(glm::dot(forward, glm::vec3(0, 1, 0))) > 0.99f) ? glm::vec3(0, 0, 1) : glm::vec3(0, 1, 0);
     auto right = glm::normalize(glm::cross(up, forward));
     up = glm::normalize(glm::cross(forward, right));
-
     auto world_from_light = glm::transpose(
         glm::mat4(
             glm::vec4(right, 0.0f), //
@@ -178,8 +183,11 @@ auto calculate_virtual_shadow_matrices(
 
     for (u32 clipmap_index = 0; clipmap_index < light.cascade_count; clipmap_index++) {
         auto &clipmap = clipmaps[clipmap_index];
-        auto clipmap_extent = light_comp.first_cascade_far_bound * static_cast<f32>(1 << clipmap_index) * 0.5f;
-        auto center = glm::vec3(world_from_light * glm::vec4(camera.position, 1.0f));
+        auto far_bound = light_comp.first_cascade_far_bound * static_cast<f32>(1 << clipmap_index);
+        auto clipmap_half_extent = far_bound * 0.5f;
+        auto texel_size = far_bound / static_cast<f32>(light.cascade_size);
+
+        auto center = glm::vec3(0.0f);
         auto clipmap_from_world = glm::mat4(
             world_from_light[0], //
             world_from_light[1],
@@ -192,12 +200,25 @@ auto calculate_virtual_shadow_matrices(
         auto z_far = z_extension;
         auto z_range = 1.0f / (z_far - z_near);
         auto clip_from_clipmap = glm::mat4(
-            glm::vec4(2.0f / clipmap_extent, 0.0f, 0.0f, 0.0f),
-            glm::vec4(0.0f, 2.0f / clipmap_extent, 0.0f, 0.0f),
+            glm::vec4(2.0f / clipmap_half_extent, 0.0f, 0.0f, 0.0f),
+            glm::vec4(0.0f, 2.0f / clipmap_half_extent, 0.0f, 0.0f),
             glm::vec4(0.0f, 0.0f, z_range, 0.0f),
             glm::vec4(0.0f, 0.0f, -z_near * z_range, 1.0f)
         );
-        clipmap.projection_view_mat = clip_from_clipmap * clipmap_from_world;
+
+        // Offset projection to page
+        auto page_table_size = static_cast<f32>(light_comp.vsm_page_table_size);
+        auto clip_position = clip_from_clipmap * world_from_light * glm::vec4(camera.position, 1.0f);
+        auto ndc_position = glm::vec2(clip_position) / clip_position.w;
+        auto center_uv_position = ndc_position * 0.5f;
+        auto page_offset = glm::ivec2(center_uv_position * glm::vec2(page_table_size));
+        auto page_shift = (glm::vec2(page_offset) / glm::vec2(page_table_size)) * 2.0f;
+        auto shifted_projection_mat = glm::translate(glm::mat4(1.0f), glm::vec3(-page_shift, 0.0f)) * clip_from_clipmap;
+        auto clipmap_from_page = glm::inverse(clip_from_clipmap) * shifted_projection_mat * world_from_light;
+
+        clipmap.projection_view_mat = clip_from_clipmap * clipmap_from_page;
+        clipmap.texel_size = texel_size;
+        clipmap.far_bound = far_bound;
     }
 }
 

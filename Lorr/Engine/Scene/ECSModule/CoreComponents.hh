@@ -76,6 +76,7 @@ ECS_COMPONENT_BEGIN(DirectionalLight)
     ECS_COMPONENT_MEMBER(cascade_overlap_propotion, f32, 0.2f)
     ECS_COMPONENT_MEMBER(depth_bias, f32, 0.002f)
     ECS_COMPONENT_MEMBER(normal_bias, f32, 1.8f)
+    ECS_COMPONENT_MEMBER(vsm_page_table_size, u32, 128)
 ECS_COMPONENT_END();
 
 ECS_COMPONENT_BEGIN(VBGTAO)

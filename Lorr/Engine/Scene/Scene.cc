@@ -124,8 +124,12 @@ auto calculate_cascaded_shadow_matrices(
             max.z
         );
 
-        auto cascade_from_world =
-            glm::mat4(light_to_world_inverse[0], light_to_world_inverse[1], light_to_world_inverse[2], glm::vec4(-center, 1.0f));
+        auto cascade_from_world = glm::mat4(
+            light_to_world_inverse[0], //
+            light_to_world_inverse[1],
+            light_to_world_inverse[2],
+            glm::vec4(-center, 1.0f)
+        );
 
         auto z_extension = camera.far_clip * 0.5f;
         auto extended_min_z = min.z - z_extension;
@@ -141,6 +145,33 @@ auto calculate_cascaded_shadow_matrices(
         cascade.projection_view_mat = clip_from_cascade * cascade_from_world;
         cascade.far_bound = split_far;
         cascade.texel_size = cascade_texel_size;
+    }
+}
+
+auto calculate_virtual_shadow_matrices(
+    GPU::DirectionalLight &light,
+    ls::span<GPU::DirectionalLightCascade> cascades,
+    const ECS::DirectionalLight &light_comp,
+    const GPU::Camera &camera
+) -> void {
+    ZoneScoped;
+
+    auto forward = glm::normalize(light.direction);
+    auto up = (glm::abs(glm::dot(forward, glm::vec3(0, 1, 0))) > 0.99f) ? glm::vec3(0, 0, 1) : glm::vec3(0, 1, 0);
+    auto right = glm::normalize(glm::cross(up, forward));
+    up = glm::normalize(glm::cross(forward, right));
+
+    auto world_from_light = glm::mat4(
+        glm::vec4(right, 0.0f), //
+        glm::vec4(up, 0.0f),
+        glm::vec4(forward, 0.0f),
+        glm::vec4(0.0f, 0.0f, 0.0f, 1.0f)
+    );
+    auto light_to_world_inverse = glm::transpose(world_from_light);
+    auto camera_to_world = camera.inv_view_mat;
+
+    for (u32 cascade_index = 0; cascade_index < light.cascade_count; ++cascade_index) {
+        auto &cascade = cascades[cascade_index];
     }
 }
 

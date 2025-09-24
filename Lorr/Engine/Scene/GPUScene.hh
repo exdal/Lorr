@@ -91,6 +91,10 @@ struct DirectionalLightCascade {
     alignas(4) f32 texel_size = {};
 };
 
+struct DirectionalLightClipmap {
+    alignas(4) glm::mat4 projection_view_mat = {};
+};
+
 struct DirectionalLight {
     constexpr static auto MAX_CASCADE_COUNT = 6_u32;
 

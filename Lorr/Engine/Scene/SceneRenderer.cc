@@ -653,7 +653,7 @@ auto draw_vsm(
             cmd_list //
                 .bind_graphics_pipeline("passes.vsm_draw")
                 .set_rasterization({ .cullMode = vuk::CullModeFlagBits::eBack })
-                .set_depth_stencil({ .depthTestEnable = true, .depthWriteEnable = false, .depthCompareOp = vuk::CompareOp::eGreaterOrEqual })
+                .set_depth_stencil({ .depthTestEnable = true, .depthWriteEnable = true, .depthCompareOp = vuk::CompareOp::eGreaterOrEqual })
                 .set_dynamic_state(vuk::DynamicStateFlagBits::eViewport | vuk::DynamicStateFlagBits::eScissor)
                 .set_viewport(0, vuk::Rect2D::framebuffer())
                 .set_scissor(0, vuk::Rect2D::framebuffer())
@@ -1635,10 +1635,21 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
         //
         // Virtual shadowmaps
         auto directional_light_info = frame.directional_light.value_or(GPU::DirectionalLight{});
+        auto vsm_depth_attachment = vuk::declare_ia(
+            "vsm depth",
+            { .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eDepthStencilAttachment,
+              .extent = { .width = GPU::VSM_MAX_VIRTUAL_EXTENT, .height = GPU::VSM_MAX_VIRTUAL_EXTENT, .depth = 1 },
+              .format = vuk::Format::eD32Sfloat,
+              .sample_count = vuk::Samples::e1,
+              .level_count = 1,
+              .layer_count = 1 }
+        );
+
         if (frame.directional_light.has_value()) {
             for (u32 clipmap_index = 0; clipmap_index < directional_light_info.clipmap_count; clipmap_index++) {
-                auto &current_clipmap_projection_view_mat = frame.directional_light_clipmap_projection_view_mats[clipmap_index];
+                vsm_depth_attachment = vuk::clear_image(std::move(vsm_depth_attachment), vuk::Black<f32>);
 
+                auto &current_clipmap_projection_view_mat = frame.directional_light_clipmap_projection_view_mats[clipmap_index];
                 auto all_visible_meshlet_instances_count_buffer = transfer_man.scratch_buffer<u32>({});
                 auto cull_meshlets_cmd_buffer = vsm_cull_meshes(
                     transfer_man,
@@ -1667,17 +1678,17 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                     transforms_buffer
                 );
 
-                // draw_shadowmap(
-                //     clipmap_index,
-                //     current_clipmap_projection_view_mat,
-                //     current_cascade_attachment,
-                //     draw_shadowmap_cmd_buffer,
-                //     reordered_indices_buffer,
-                //     meshes_buffer,
-                //     mesh_instances_buffer,
-                //     meshlet_instances_buffer,
-                //     transforms_buffer
-                // );
+                draw_vsm(
+                    clipmap_index,
+                    current_clipmap_projection_view_mat,
+                    vsm_depth_attachment,
+                    draw_vsm_cmd_buffer,
+                    reordered_indices_buffer,
+                    meshes_buffer,
+                    mesh_instances_buffer,
+                    meshlet_instances_buffer,
+                    transforms_buffer
+                );
             }
         }
 

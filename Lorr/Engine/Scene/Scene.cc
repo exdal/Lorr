@@ -55,7 +55,7 @@ auto calculate_virtual_shadow_matrices(
     // camera moves. Later, we will offset the resulting projection view mat
     // per each page.
 
-    auto forward = glm::normalize(light.direction);
+    auto forward = glm::normalize(-light.direction);
     auto up = (glm::abs(glm::dot(forward, glm::vec3(0, 1, 0))) > 0.99f) ? glm::vec3(0, 0, 1) : glm::vec3(0, 1, 0);
     auto world_from_light = glm::lookAt(forward, glm::vec3(0.0f), up);
 
@@ -64,14 +64,13 @@ auto calculate_virtual_shadow_matrices(
         auto clipmap_half_extent = clipmap_extent * 0.5f;
 
         auto z_extension = camera.far_clip * 0.5f;
-        auto z_near = -z_extension;
-        auto z_far = z_extension;
-        auto r = 1.0f / (z_far - z_near);
-        auto clip_from_clipmap = glm::mat4(
-            glm::vec4(2.0f / clipmap_half_extent, 0.0f, 0.0f, 0.0f),
-            glm::vec4(0.0f, 2.0f / clipmap_half_extent, 0.0f, 0.0f),
-            glm::vec4(0.0f, 0.0f, r, 0.0f),
-            glm::vec4(0.0f, 0.0f, -z_near * r, 1.0f)
+        auto clip_from_clipmap = glm::ortho(
+            -clipmap_half_extent, //
+            clipmap_half_extent,
+            -clipmap_half_extent,
+            clipmap_half_extent,
+            -z_extension,
+            z_extension
         );
 
         // Offset projection to page
@@ -85,6 +84,8 @@ auto calculate_virtual_shadow_matrices(
         auto clipmap_from_page = glm::inverse(clip_from_clipmap) * shifted_projection_mat * world_from_light;
 
         clipmap_projection_view_mats[clipmap_index] = clip_from_clipmap * clipmap_from_page;
+
+        fmt::println("clipmap{}: uv = {}, {}", clipmap_index, center_uv_position.x, center_uv_position.y);
     }
 }
 

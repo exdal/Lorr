@@ -13,7 +13,8 @@ import cull;
 [[vk::binding(6)]] RWStructuredBuffer<MeshletInstanceVisibility> visibility;
 [[vk::binding(7)]] StructuredBuffer<Transform> transforms;
 [[vk::binding(8)]] RWStructuredBuffer<u32> visible_meshlet_instances_indices;
-[[vk::binding(9)]] RWStructuredBuffer<DispatchIndirectCommand> cull_triangles_cmd;
+[[vk::binding(9)]] RWStructuredBuffer<u32> meshlet_instance_visibility_mask;
+[[vk::binding(10)]] RWStructuredBuffer<DispatchIndirectCommand> cull_triangles_cmd;
 
 #ifndef CULLING_MESHLET_COUNT
 #define CULLING_MESHLET_COUNT 64
@@ -24,8 +25,7 @@ import cull;
 func cs_main(
     uint group_thread_id : SV_GroupThreadID,
     uint global_thread_id : SV_DispatchThreadID,
-    uniform CullFlags cull_flags,
-    uniform u32 *meshlet_instance_visibility_mask
+    uniform CullFlags cull_flags
 ) -> void {
     let meshlet_instance_index = global_thread_id;
     if (meshlet_instance_index >= visibility[0].total_visible_meshlet_instances) {

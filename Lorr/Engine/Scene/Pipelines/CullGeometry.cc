@@ -109,11 +109,8 @@ auto SceneRenderer::cull_for_camera(this SceneRenderer &, vuk::Value<vuk::Buffer
                VUK_BA(vuk::eComputeRW) cull_meshlets_cmd) {
                 cmd_list //
                     .bind_compute_pipeline("passes.generate_cull_commands")
-                    .push_constants(
-                        vuk::ShaderStageFlagBits::eCompute,
-                        0,
-                        PushConstants(visibility->device_address, cull_meshlets_cmd->device_address)
-                    )
+                    .bind_buffer(0, 0, visibility)
+                    .bind_buffer(0, 1, cull_meshlets_cmd)
                     .dispatch(1);
 
                 return std::make_tuple(visibility, cull_meshlets_cmd);
@@ -145,13 +142,9 @@ auto SceneRenderer::cull_for_camera(this SceneRenderer &, vuk::Value<vuk::Buffer
             generate_cull_commands_pass(std::move(context.visibility_buffer), std::move(context.cull_meshlets_cmd_buffer));
     }
 
-    auto meshlet_instance_visibility_mask_ptr = (static_cast<u32>(context.cull_flags) & static_cast<u32>(GPU::CullFlags::MeshletOcclusion)) != 0
-        ? context.meshlet_instance_visibility_mask_buffer->device_address
-        : 0;
-
     auto cull_meshlets_pass = vuk::make_pass(
         stack.format("cull meshlets {}", context.late ? "late" : "early"),
-        [late = context.late, cull_flags = context.cull_flags, meshlet_instance_visibility_mask_ptr](
+        [late = context.late, cull_flags = context.cull_flags](
             vuk::CommandBuffer &cmd_list,
             VUK_BA(vuk::eIndirectRead) dispatch_cmd,
             VUK_BA(vuk::eComputeRead) camera,
@@ -161,6 +154,7 @@ auto SceneRenderer::cull_for_camera(this SceneRenderer &, vuk::Value<vuk::Buffer
             VUK_BA(vuk::eComputeRW) visibility,
             VUK_BA(vuk::eComputeRead) transforms,
             VUK_BA(vuk::eComputeRW) visible_meshlet_instances_indices,
+            VUK_BA(vuk::eComputeRW) meshlet_instance_visibility_mask,
             VUK_BA(vuk::eComputeRW) cull_triangles_cmd,
             VUK_IA(vuk::eComputeSampled) hiz
         ) {
@@ -175,8 +169,9 @@ auto SceneRenderer::cull_for_camera(this SceneRenderer &, vuk::Value<vuk::Buffer
                 .bind_buffer(0, 6, visibility)
                 .bind_buffer(0, 7, transforms)
                 .bind_buffer(0, 8, visible_meshlet_instances_indices)
-                .bind_buffer(0, 9, cull_triangles_cmd)
-                .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, PushConstants(cull_flags, meshlet_instance_visibility_mask_ptr))
+                .bind_buffer(0, 9, meshlet_instance_visibility_mask)
+                .bind_buffer(0, 10, cull_triangles_cmd)
+                .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, cull_flags)
                 .specialize_constants(0, late)
                 .dispatch_indirect(dispatch_cmd);
 
@@ -189,6 +184,7 @@ auto SceneRenderer::cull_for_camera(this SceneRenderer &, vuk::Value<vuk::Buffer
                 visibility,
                 transforms,
                 visible_meshlet_instances_indices,
+                meshlet_instance_visibility_mask,
                 cull_triangles_cmd,
                 hiz
             );
@@ -206,6 +202,7 @@ auto SceneRenderer::cull_for_camera(this SceneRenderer &, vuk::Value<vuk::Buffer
         context.visibility_buffer,
         context.transforms_buffer,
         context.visible_meshlet_instances_indices_buffer,
+        context.meshlet_instance_visibility_mask_buffer,
         cull_triangles_cmd_buffer,
         context.hiz_attachment
     ) =
@@ -218,6 +215,7 @@ auto SceneRenderer::cull_for_camera(this SceneRenderer &, vuk::Value<vuk::Buffer
             std::move(context.visibility_buffer),
             std::move(context.transforms_buffer),
             std::move(context.visible_meshlet_instances_indices_buffer),
+            std::move(context.meshlet_instance_visibility_mask_buffer),
             std::move(cull_triangles_cmd_buffer),
             std::move(context.hiz_attachment)
         );

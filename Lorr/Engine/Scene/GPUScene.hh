@@ -57,6 +57,7 @@ struct DebugDrawer {
 };
 
 enum class CullFlags : u32 {
+    None = 0,
     MeshFrustum = 1 << 0,
     MeshOcclusion = 1 << 1,
     MeshletFrustum = 1 << 2,

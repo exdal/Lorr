@@ -56,16 +56,18 @@ struct DebugDrawer {
     u64 rect_buffer = 0;
 };
 
-enum class CullFlags : u32 {
-    None = 0,
-    MeshFrustum = 1 << 0,
-    MeshOcclusion = 1 << 1,
-    MeshletFrustum = 1 << 2,
-    MeshletOcclusion = 1 << 3,
-    TriangleBackFace = 1 << 4,
-    MicroTriangles = 1 << 5,
+struct CullFlags {
+    enum : u32 {
+        None = 0,
+        MeshFrustum = 1 << 0,
+        MeshOcclusion = 1 << 1,
+        MeshletFrustum = 1 << 2,
+        MeshletOcclusion = 1 << 3,
+        TriangleBackFace = 1 << 4,
+        MicroTriangles = 1 << 5,
 
-    All = ~0_u32,
+        All = ~0_u32,
+    };
 };
 
 constexpr static f32 CAMERA_SCALE_UNIT = 0.01;
@@ -172,23 +174,24 @@ struct Transforms {
     alignas(4) glm::mat3 normal = {};
 };
 
-enum class MaterialFlag : u32 {
-    None = 0,
-    // Image flags
-    HasAlbedoImage = 1 << 0,
-    HasNormalImage = 1 << 1,
-    HasEmissiveImage = 1 << 2,
-    HasMetallicRoughnessImage = 1 << 3,
-    HasOcclusionImage = 1 << 4,
-    // Normal flags
-    NormalTwoComponent = 1 << 5,
-    NormalFlipY = 1 << 6,
-    // Alpha
-    AlphaOpaque = 1 << 7,
-    AlphaMask = 1 << 8,
-    AlphaBlend = 1 << 9,
+struct MaterialFlag {
+    enum : u32 {
+        None = 0,
+        // Image flags
+        HasAlbedoImage = 1 << 0,
+        HasNormalImage = 1 << 1,
+        HasEmissiveImage = 1 << 2,
+        HasMetallicRoughnessImage = 1 << 3,
+        HasOcclusionImage = 1 << 4,
+        // Normal flags
+        NormalTwoComponent = 1 << 5,
+        NormalFlipY = 1 << 6,
+        // Alpha
+        AlphaOpaque = 1 << 7,
+        AlphaMask = 1 << 8,
+        AlphaBlend = 1 << 9,
+    };
 };
-consteval void enable_bitmask(MaterialFlag);
 
 struct Material {
     alignas(4) glm::vec4 albedo_color = { 1.0f, 1.0f, 1.0f, 1.0f };
@@ -196,7 +199,7 @@ struct Material {
     alignas(4) f32 roughness_factor = 0.0f;
     alignas(4) f32 metallic_factor = 0.0f;
     alignas(4) f32 alpha_cutoff = 0.0f;
-    alignas(4) MaterialFlag flags = MaterialFlag::None;
+    alignas(4) u32 flags = MaterialFlag::None;
     alignas(4) u32 sampler_index = 0;
     alignas(4) u32 albedo_image_index = 0;
     alignas(4) u32 normal_image_index = 0;

@@ -352,11 +352,11 @@ auto SceneRenderer::init(this SceneRenderer &self) -> bool {
     };
     Pipeline::create(device, default_slang_session, vis_decode_pipeline_info, bindless_descriptor_set).value();
 
-    auto vsm_draw = PipelineCompileInfo{
-        .module_name = "passes.vsm_draw",
+    auto vis_depth_only_pipeline_info = PipelineCompileInfo{
+        .module_name = "passes.visbuffer_depth_only",
         .entry_points = { "vs_main" },
     };
-    Pipeline::create(device, default_slang_session, vsm_draw).value();
+    Pipeline::create(device, default_slang_session, vis_depth_only_pipeline_info).value();
 
     //  ── PBR ─────────────────────────────────────────────────────────────
     auto pbr_apply_pipeline_info = PipelineCompileInfo{
@@ -944,7 +944,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
 
         std::tie(visbuffer_attachment, overdraw_attachment) = vis_clear_pass(std::move(visbuffer_attachment), std::move(overdraw_attachment));
 
-        auto geometry_context = GeometryContext{
+        auto main_geometry_context = GeometryContext{
             .cull_flags = info.cull_flags,
             .mesh_instance_count = frame.mesh_instance_count,
             .max_meshlet_instance_count = frame.max_meshlet_instance_count,
@@ -963,22 +963,22 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
             .materials_buffer = std::move(materials_buffer),
         };
 
-        geometry_context.late = false;
-        self.cull_for_camera(camera_buffer, geometry_context);
-        self.draw_for_camera(camera_buffer, geometry_context);
+        main_geometry_context.late = false;
+        self.cull_for_camera(camera_buffer, main_geometry_context);
+        self.draw_for_camera(camera_buffer, main_geometry_context);
 
-        self.generate_hiz(geometry_context);
+        self.generate_hiz(main_geometry_context);
 
-        geometry_context.late = true;
-        self.cull_for_camera(camera_buffer, geometry_context);
-        self.draw_for_camera(camera_buffer, geometry_context);
+        main_geometry_context.late = true;
+        self.cull_for_camera(camera_buffer, main_geometry_context);
+        self.draw_for_camera(camera_buffer, main_geometry_context);
 
         // Virtual shadowmaps
         // auto directional_light_info = frame.directional_light.value_or(GPU::DirectionalLight{});
-        //
         // if (frame.directional_light.has_value()) {
         //     ImGui::Begin("Clipmaps");
         //     for (u32 clipmap_index = 0; clipmap_index < directional_light_info.clipmap_count; clipmap_index++) {
+        //         auto &current_clipmap = frame.directional_light_clipmaps[clipmap_index];
         //         auto vsm_depth_attachment = vuk::declare_ia(
         //             "vsm depth",
         //             { .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eDepthStencilAttachment,
@@ -989,48 +989,21 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
         //               .layer_count = 1 }
         //         );
         //         vsm_depth_attachment = vuk::clear_image(std::move(vsm_depth_attachment), vuk::Black<f32>);
-        //
-        //         auto &current_clipmap = frame.directional_light_clipmaps[clipmap_index];
-        //         auto all_visible_meshlet_instances_count_buffer = transfer_man.scratch_buffer<u32>({});
-        //         auto cull_meshlets_cmd_buffer = vsm_cull_meshes(
-        //             transfer_man,
-        //             frame.mesh_instance_count,
-        //             clipmap_index,
-        //             current_clipmap.projection_view_mat,
-        //             meshes_buffer,
-        //             mesh_instances_buffer,
-        //             meshlet_instances_buffer,
-        //             all_visible_meshlet_instances_count_buffer,
-        //             transforms_buffer
-        //         );
-        //         auto visible_meshlet_instances_count_buffer = transfer_man.scratch_buffer<u32>({});
-        //         auto draw_vsm_cmd_buffer = cull_vsm_meshlets(
-        //             transfer_man,
-        //             clipmap_index,
-        //             current_clipmap.projection_view_mat,
-        //             cull_meshlets_cmd_buffer,
-        //             all_visible_meshlet_instances_count_buffer,
-        //             visible_meshlet_instances_count_buffer,
-        //             visible_meshlet_instances_indices_buffer,
-        //             reordered_indices_buffer,
-        //             meshes_buffer,
-        //             mesh_instances_buffer,
-        //             meshlet_instances_buffer,
-        //             transforms_buffer
-        //         );
-        //
-        //         draw_vsm(
-        //             clipmap_index,
-        //             current_clipmap.projection_view_mat,
-        //             vsm_depth_attachment,
-        //             draw_vsm_cmd_buffer,
-        //             reordered_indices_buffer,
-        //             meshes_buffer,
-        //             mesh_instances_buffer,
-        //             meshlet_instances_buffer,
-        //             transforms_buffer
-        //         );
-        //
+
+        //         auto vsm_camera_buffer = transfer_man.scratch_buffer<GPU::Camera>({
+        //             .projection_view_mat = current_clipmap.projection_view_mat,
+        //             .resolution = glm::vec2(GPU::VSM_MAX_VIRTUAL_EXTENT),
+        //         });
+
+        //         auto vsm_geometry_context = main_geometry_context;
+        //         vsm_geometry_context.cull_flags =
+        //             GPU::CullFlags::MeshFrustum | GPU::CullFlags::MeshletFrustum | GPU::CullFlags::TriangleBackFace | GPU::CullFlags::MicroTriangles;
+        //         vsm_geometry_context.late = false;
+        //         vsm_geometry_context.depth_attachment = vsm_depth_attachment;
+        //         self.cull_for_camera(vsm_camera_buffer, vsm_geometry_context);
+        //         self.draw_depth_for_camera(vsm_camera_buffer, vsm_geometry_context);
+        //         vsm_depth_attachment = std::move(vsm_geometry_context.depth_attachment);
+
         //         auto &imgui_renderer = lr::App::mod<lr::ImGuiRenderer>();
         //         auto id = imgui_renderer.add_image(std::move(vsm_depth_attachment));
         //         memory::ScopedStack stack;
@@ -1040,7 +1013,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
         //     }
         //     ImGui::End();
         // }
-        //
+
         if (info.picking_texel) {
             auto editor_mousepick_pass = vuk::make_pass(
                 "editor mousepick",
@@ -1101,7 +1074,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                 }
             );
 
-            return visualize_overdraw_pass(std::move(dst_attachment), std::move(geometry_context.overdraw_attachment));
+            return visualize_overdraw_pass(std::move(dst_attachment), std::move(main_geometry_context.overdraw_attachment));
         }
 
         //  ── VISBUFFER DECODE ────────────────────────────────────────────────
@@ -1157,8 +1130,8 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
             }
         );
 
-        visbuffer_attachment = std::move(geometry_context.visbuffer_attachment);
-        depth_attachment = std::move(geometry_context.depth_attachment);
+        visbuffer_attachment = std::move(main_geometry_context.visbuffer_attachment);
+        depth_attachment = std::move(main_geometry_context.depth_attachment);
 
         auto albedo_attachment = vuk::declare_ia(
             "albedo",
@@ -1210,11 +1183,11 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
         ) =
             vis_decode_pass(
                 std::move(camera_buffer),
-                std::move(geometry_context.meshlet_instances_buffer),
-                std::move(geometry_context.mesh_instances_buffer),
-                std::move(geometry_context.meshes_buffer),
-                std::move(geometry_context.transforms_buffer),
-                std::move(geometry_context.materials_buffer),
+                std::move(main_geometry_context.meshlet_instances_buffer),
+                std::move(main_geometry_context.mesh_instances_buffer),
+                std::move(main_geometry_context.meshes_buffer),
+                std::move(main_geometry_context.transforms_buffer),
+                std::move(main_geometry_context.materials_buffer),
                 std::move(visbuffer_attachment),
                 std::move(albedo_attachment),
                 std::move(normal_attachment),

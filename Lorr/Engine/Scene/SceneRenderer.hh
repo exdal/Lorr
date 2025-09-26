@@ -15,7 +15,7 @@ struct MeshletInstanceVisibility {
 };
 
 struct GeometryContext {
-    GPU::CullFlags cull_flags = GPU::CullFlags::All;
+    u32 cull_flags = GPU::CullFlags::All;
     u32 mesh_instance_count = 0;
     u32 max_meshlet_instance_count = 0;
     bool late = false;
@@ -92,7 +92,7 @@ struct PreparedFrame {
 struct SceneRenderInfo {
     f32 delta_time = 0.0f;
     u32 image_index = 0;
-    GPU::CullFlags cull_flags = {};
+    u32 cull_flags = {};
 
     ls::option<glm::uvec2> picking_texel = ls::nullopt;
     ls::option<u32> picked_transform_index = ls::nullopt;
@@ -145,6 +145,7 @@ struct SceneRenderer {
     auto generate_hiz(this SceneRenderer &, GeometryContext &context) -> void;
     auto cull_for_camera(this SceneRenderer &, vuk::Value<vuk::Buffer> &camera_buffer, GeometryContext &context) -> void;
     auto draw_for_camera(this SceneRenderer &, vuk::Value<vuk::Buffer> &camera_buffer, GeometryContext &context) -> void;
+    auto draw_depth_for_camera(this SceneRenderer &, vuk::Value<vuk::Buffer> &camera_buffer, GeometryContext &context) -> void;
 };
 
 } // namespace lr

@@ -616,7 +616,7 @@ auto Scene::get_name_sv(this Scene &self) -> std::string_view {
     return self.name;
 }
 
-auto Scene::get_cull_flags(this Scene &self) -> GPU::CullFlags & {
+auto Scene::get_cull_flags(this Scene &self) -> u32 & {
     return self.cull_flags;
 }
 
@@ -841,7 +841,7 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer, u32 image_c
         auto occlusion_image_index = uuid_to_image_index(material->occlusion_texture);
         auto sampler_index = 0_u32;
 
-        auto flags = GPU::MaterialFlag::None;
+        u32 flags = GPU::MaterialFlag::None;
         if (albedo_image_index.has_value()) {
             auto *texture = asset_man.get_texture(material->albedo_texture);
             sampler_index = texture->sampler.index();

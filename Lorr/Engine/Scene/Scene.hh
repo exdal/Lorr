@@ -45,7 +45,7 @@ private:
     u32 mesh_instance_count = 0;
     u32 max_meshlet_instance_count = 0;
 
-    GPU::CullFlags cull_flags = GPU::CullFlags::All;
+    u32 cull_flags = GPU::CullFlags::All;
 
     GPU::Atmosphere last_atmosphere = {};
 
@@ -90,7 +90,7 @@ public:
     auto get_world(this Scene &) -> flecs::world &;
     auto get_name(this Scene &) -> const std::string &;
     auto get_name_sv(this Scene &) -> std::string_view;
-    auto get_cull_flags(this Scene &) -> GPU::CullFlags &;
+    auto get_cull_flags(this Scene &) -> u32 &;
 
     auto get_known_component_ids(this Scene &self) -> auto {
         return ls::span(self.known_component_ids);

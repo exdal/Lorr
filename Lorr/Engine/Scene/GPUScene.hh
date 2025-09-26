@@ -94,6 +94,11 @@ constexpr static u32 VSM_MAX_VIRTUAL_EXTENT = 4096;
 constexpr static u32 VSM_PAGE_TABLE_SIZE = VSM_MAX_VIRTUAL_EXTENT / VSM_PAGE_SIZE;
 constexpr static u32 VSM_PAGE_TABLE_MIP_COUNT = std::bit_width(VSM_PAGE_TABLE_SIZE);
 
+struct VirtualClipmap {
+    alignas(4) glm::mat4 projection_view_mat = {};
+    alignas(4) glm::ivec2 page_offset = {};
+};
+
 struct DirectionalLight {
     constexpr static auto MAX_CLIPMAP_COUNT = 32_u32;
 
@@ -101,13 +106,14 @@ struct DirectionalLight {
     alignas(4) f32 intensity = {};
     alignas(4) glm::vec3 direction = {};
     alignas(4) u32 clipmap_count = {};
+    alignas(4) f32 first_clipmap_width = {};
     alignas(4) f32 depth_bias = {};
     alignas(4) f32 normal_bias = {};
 };
 
 struct Lights {
     alignas(8) u64 directional_light = 0;
-    alignas(8) u64 directional_light_clipmap_projection_views = 0;
+    alignas(8) u64 directional_light_clipmaps = 0;
 };
 
 struct Atmosphere {

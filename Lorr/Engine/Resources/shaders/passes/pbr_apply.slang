@@ -24,6 +24,29 @@ struct ShaderParameters {
 };
 ParameterBlock<ShaderParameters> params;
 
+func hsv_to_rgb(f32x3 hsv) -> f32x3 {
+    let n = f32x3(5.0, 3.0, 1.0);
+    let k = (n + hsv.x / 1.0471975512) % 6.0;
+    return hsv.z - hsv.z * hsv.y * max(f32x3(0.0), min(k, min(4.0 - k, f32x3(1.0))));
+}
+
+public func cascade_debug_visualization(
+    f32x3 output_color,
+    u32 cascade_index,
+    u32 clipamp_count
+) -> f32x3 {
+    let overlay_alpha = 0.70;
+    let cascade_color_hsv = f32x3(
+        f32(cascade_index) / f32(clipamp_count + 1u) * TAU,
+        1.0,
+        0.5
+    );
+    let cascade_color = hsv_to_rgb(cascade_color_hsv);
+    return f32x3(
+        (1.0 - overlay_alpha) * output_color.rgb + overlay_alpha * cascade_color
+    );
+}
+
 [[shader("fragment")]]
 func fs_main(
     VertexOutput input,
@@ -50,9 +73,7 @@ func fs_main(
     let screen_space_occlusion = params.ambient_occlusion.Load(pixel_pos).r;
     let occlusion = baked_occlusion * screen_space_occlusion;
 
-    let NDC = f32x3(input.tex_coord * 2.0 - 1.0, depth);
-    let world_position_h = mul(params.camera.inv_projection_view_mat, f32x4(NDC, 1.0));
-    let world_position = world_position_h.xyz / world_position_h.w;
+    let world_position = params.camera.unproject_uv(input.tex_coord, depth);
 
     // PBR constants
     let Li = context.directional_light ? context.directional_light.intensity : 1.0;
@@ -127,7 +148,7 @@ func fs_main(
     let base_ambient_color = context.directional_light ? context.directional_light.base_ambient_color : f32x3(0.02);
     let ambient_contribution = base_ambient_color * albedo_color * sun_illuminance;
     let indirect_illuminance_sum = (indirect_illuminance + ambient_contribution) * occlusion;
-    let final_color = material_surface_color + indirect_illuminance_sum + emission;
+    var final_color = material_surface_color + indirect_illuminance_sum + emission;
 
     return f32x4(final_color, 1.0);
 }

@@ -134,6 +134,7 @@ auto Device::init(this Device &self) -> bool {
     vk12_features.timelineSemaphore = true;
     vk12_features.bufferDeviceAddress = true;
     vk12_features.hostQueryReset = true;
+    vk12_features.storagePushConstant8 = true;
     // Shader features
     vk12_features.vulkanMemoryModel = true;
     vk12_features.vulkanMemoryModelDeviceScope = true;

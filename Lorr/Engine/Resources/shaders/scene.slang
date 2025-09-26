@@ -44,6 +44,17 @@ public struct Camera {
     public f32 acceptable_lod_error;
     public f32 fov_deg;
     public f32 aspect_ratio;
+
+    public func unproject_uv(f32x2 uv, f32 depth) -> f32x3 {
+        let ndc = f32x4(uv * 2.0 - 1.0, depth, 1.0);
+        let world_pos_h = mul(this.inv_projection_view_mat, ndc);
+        return world_pos_h.xyz / world_pos_h.w;
+    }
+};
+
+public struct VirtualClipmap {
+    public f32x4x4 projection_view_mat;
+    public i32x2 page_offset;
 };
 
 public struct DirectionalLight {
@@ -51,13 +62,26 @@ public struct DirectionalLight {
     public f32 intensity;
     public f32x3 direction;
     public u32 clipmap_count;
+    public f32 first_clipmap_width;
     public f32 depth_bias;
     public f32 normal_bias;
+
+    public func get_clipmap_index(in Camera camera, f32x2 uv, f32 depth) -> u32 {
+        let texel_size = 1.0 / camera.resolution;
+        let uv_left = uv + f32x2(-texel_size.x, 0.0);
+        let uv_right = uv + f32x2(texel_size.x, 0.0);
+        let left_v = camera.unproject_uv(uv_left, depth);
+        let right_v = camera.unproject_uv(uv_right, depth);
+        let d = distance(left_v, right_v);
+
+        let clipmap_length = this.first_clipmap_width / (camera.far_clip * 0.5);
+        return clamp(u32(ceil(log2(d / clipmap_length))), 0, this.clipmap_count - 1);
+    }
 };
 
 public struct Lights {
     public DirectionalLight *directional_light;
-    public f32x4x4 *directional_light_clipmap_projection_views;
+    public VirtualClipmap *directional_light_clipmaps;
 };
 
 public struct Atmosphere {
@@ -87,7 +111,7 @@ public struct Atmosphere {
 public struct PBRContext {
     public Atmosphere *atmosphere;
     public DirectionalLight *directional_light;
-    public f32x4x4 *directional_light_clipmap_projection_views;
+    public VirtualClipmap *directional_light_clipmaps;
 };
 
 public struct EyeAdaptation {
@@ -326,4 +350,10 @@ public struct Mesh {
     public u32 lod_count = 0;
     public MeshLOD lods[MESH_MAX_LODS] = {};
     public Bounds bounds = {};
+};
+
+public struct MeshletInstanceVisibility {
+    public u32 total_visible_meshlet_instances;
+    public u32 early_visible_meshlet_instances;
+    public u32 late_visible_meshlet_instances;
 };

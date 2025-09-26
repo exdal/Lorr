@@ -1,18 +1,19 @@
 import std;
 import gpu;
 import scene;
-
-import passes.visbuffer;
+import visbuffer;
 
 [[vk::constant_id(0)]] const bool LATE = false;
-[[vk::binding(0)]] StructuredBuffer<u32> early_visible_meshlet_instances_count;
-[[vk::binding(1)]] StructuredBuffer<u32> visible_meshlet_instances_indices;
-[[vk::binding(2)]] StructuredBuffer<MeshletInstance> meshlet_instances;
-[[vk::binding(3)]] StructuredBuffer<MeshInstance> mesh_instances;
-[[vk::binding(4)]] StructuredBuffer<Mesh> meshes;
+[[vk::binding(0)]] ConstantBuffer<Camera> camera;
+[[vk::binding(1)]] StructuredBuffer<Mesh> meshes;
+[[vk::binding(2)]] StructuredBuffer<MeshInstance> mesh_instances;
+[[vk::binding(3)]] StructuredBuffer<MeshletInstance> meshlet_instances;
+[[vk::binding(4)]] StructuredBuffer<MeshletInstanceVisibility> visibility;
 [[vk::binding(5)]] StructuredBuffer<Transform> transforms;
-[[vk::binding(6)]] RWStructuredBuffer<DrawIndexedIndirectCommand> draw_cmd;
+[[vk::binding(6)]] StructuredBuffer<u32> visible_meshlet_instances_indices;
 [[vk::binding(7)]] RWStructuredBuffer<u32> reordered_indices;
+[[vk::binding(8)]] RWStructuredBuffer<DrawIndexedIndirectCommand> draw_cmd;
+
 
 groupshared u32 base_index_shared;
 groupshared u32 triangles_passed_shared;
@@ -70,7 +71,7 @@ func CullSmallPrimitive(f32x2x3 vertices, f32x2 viewportExtent) -> bool {
     );
 }
 
-func test_triangle(in f32x3x3 positions, CullFlags cull_flags, u32 triangle_index) -> bool {
+func test_triangle(CullFlags cull_flags, in f32x3x3 positions, f32x2 resolution, u32 triangle_index) -> bool {
     let clip_pos_0 = mul(model_view_proj_shared, f32x4(positions[0], 1.0));
     let clip_pos_1 = mul(model_view_proj_shared, f32x4(positions[1], 1.0));
     let clip_pos_2 = mul(model_view_proj_shared, f32x4(positions[2], 1.0));
@@ -88,12 +89,12 @@ func test_triangle(in f32x3x3 positions, CullFlags cull_flags, u32 triangle_inde
         }
     }
 
-    // if (cull_flags & CullFlags::MicroTriangles) {
-    //     const float3x2 uv_pos = { clip_pos_0.xy * 0.5 + 0.5, clip_pos_1.xy * 0.5 + 0.5, clip_pos_2.xy * 0.5 + 0.5 };
-    //     if (!CullSmallPrimitive(uv_pos, resolution)) {
-    //         return false;
-    //     }
-    // }
+    if (cull_flags & CullFlags::MicroTriangles) {
+        const float3x2 uv_pos = { clip_pos_0.xy * 0.5 + 0.5, clip_pos_1.xy * 0.5 + 0.5, clip_pos_2.xy * 0.5 + 0.5 };
+        if (!CullSmallPrimitive(uv_pos, resolution)) {
+            return false;
+        }
+    }
 
     return true;
 }
@@ -109,11 +110,10 @@ func cs_main(
     uint3 group_id : SV_GroupID,
     uint3 group_thread_id : SV_GroupThreadID,
     uniform CullFlags cull_flags,
-    uniform f32x4x4 projection_view
 ) -> void {
     var visible_meshlet_instance_index = group_id.x;
     if (LATE) {
-        visible_meshlet_instance_index += early_visible_meshlet_instances_count[0];
+        visible_meshlet_instance_index += visibility[0].early_visible_meshlet_instances;
     }
 
     let local_index = group_thread_id.x;
@@ -132,7 +132,7 @@ func cs_main(
         meshlet_triangle_count_shared = meshlet.triangle_count;
 
         let transform = transforms[mesh_instance.transform_index];
-        model_view_proj_shared = mul(projection_view, transform.world);
+        model_view_proj_shared = mul(camera.projection_view_mat, transform.world);
     }
 
     GroupMemoryBarrierWithGroupSync();
@@ -146,7 +146,7 @@ func cs_main(
 
         let indices = meshlet.indices(mesh_lod, local_index);
         let positions = meshlet.positions(mesh, indices);
-        triangle_passed = test_triangle(positions, cull_flags, local_index);
+        triangle_passed = test_triangle(cull_flags, positions, camera.resolution, local_index);
         if (triangle_passed) {
             active_triangle_index = __atomic_add(triangles_passed_shared, 1, MemoryOrder::Relaxed);
         }

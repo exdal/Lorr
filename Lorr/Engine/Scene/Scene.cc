@@ -43,7 +43,7 @@ bool json_to_quat(simdjson::ondemand::value &o, glm::quat &quat) {
 
 auto calculate_virtual_shadow_matrices(
     GPU::DirectionalLight &light,
-    ls::span<glm::mat4> clipmap_projection_view_mats,
+    ls::span<GPU::VirtualClipmap> directional_light_clipmaps,
     const ECS::DirectionalLight &light_comp,
     const GPU::Camera &camera
 ) -> void {
@@ -60,6 +60,7 @@ auto calculate_virtual_shadow_matrices(
     auto world_from_light = glm::lookAt(forward, glm::vec3(0.0f), up);
 
     for (u32 clipmap_index = 0; clipmap_index < light.clipmap_count; clipmap_index++) {
+        auto &clipmap = directional_light_clipmaps[clipmap_index];
         auto clipmap_extent = light_comp.first_clipmap_width * static_cast<f32>(1 << clipmap_index);
         auto clipmap_half_extent = clipmap_extent * 0.5f;
 
@@ -83,9 +84,8 @@ auto calculate_virtual_shadow_matrices(
         auto shifted_projection_mat = glm::translate(glm::mat4(1.0f), glm::vec3(-page_shift, 0.0f)) * clip_from_clipmap;
         auto clipmap_from_page = glm::inverse(clip_from_clipmap) * shifted_projection_mat * world_from_light;
 
-        clipmap_projection_view_mats[clipmap_index] = clip_from_clipmap * clipmap_from_page;
-
-        fmt::println("clipmap{}: uv = {}, {}", clipmap_index, center_uv_position.x, center_uv_position.y);
+        clipmap.projection_view_mat = clip_from_clipmap * clipmap_from_page;
+        clipmap.page_offset = page_offset;
     }
 }
 
@@ -679,9 +679,9 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer, u32 image_c
     }
 
     ls::option<GPU::DirectionalLight> directional_light_data = ls::nullopt;
-    glm::mat4 directional_light_clipmap_projection_view_mats[GPU::DirectionalLight::MAX_CLIPMAP_COUNT] = {};
+    GPU::VirtualClipmap directional_light_clipmaps[GPU::DirectionalLight::MAX_CLIPMAP_COUNT] = {};
     directional_light_query.each([&directional_light_data,
-                                  &directional_light_clipmap_projection_view_mats,
+                                  &directional_light_clipmaps,
                                   &active_camera_data](flecs::entity, const ECS::DirectionalLight &directional_light_comp) {
         auto &directional_light = directional_light_data.emplace();
 
@@ -694,16 +694,12 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer, u32 image_c
         directional_light.base_ambient_color = directional_light_comp.base_ambient_color;
         directional_light.intensity = directional_light_comp.intensity;
         directional_light.clipmap_count = ls::min(directional_light_comp.clipmap_count, GPU::DirectionalLight::MAX_CLIPMAP_COUNT);
+        directional_light.first_clipmap_width = directional_light_comp.first_clipmap_width;
         directional_light.depth_bias = directional_light_comp.depth_bias;
         directional_light.normal_bias = directional_light_comp.normal_bias;
 
         if (directional_light_comp.clipmap_count > 0) {
-            calculate_virtual_shadow_matrices(
-                directional_light,
-                directional_light_clipmap_projection_view_mats,
-                directional_light_comp,
-                *active_camera_data
-            );
+            calculate_virtual_shadow_matrices(directional_light, directional_light_clipmaps, directional_light_comp, *active_camera_data);
         }
     });
 
@@ -888,7 +884,7 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer, u32 image_c
         .gpu_mesh_instances = gpu_mesh_instances,
         .camera = active_camera_data.value_or(GPU::Camera{}),
         .directional_light = directional_light_data,
-        .directional_light_clipmap_projection_view_mats = directional_light_clipmap_projection_view_mats,
+        .directional_light_clipmaps = directional_light_clipmaps,
         .atmosphere = atmosphere_data,
         .eye_adaptation = eye_adaptation_data,
         .vbgtao = vbgtao,

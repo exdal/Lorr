@@ -5,6 +5,40 @@
 #include "Engine/Scene/GPUScene.hh"
 
 namespace lr {
+struct MeshletInstanceVisibility {
+    // This is incremented __ONLY__ during cull MESHES pass.
+    u32 total_visible_meshlet_instances = 0;
+    // Number of meshlets that were visible on first cull MESHLETS pass.
+    u32 early_visible_meshlet_instances = 0;
+    // Same as above, but if requested (used for two pass occlusion tests)
+    u32 late_visible_meshlet_instances = 0;
+};
+
+struct GeometryContext {
+    GPU::CullFlags cull_flags = GPU::CullFlags::All;
+    u32 mesh_instance_count = 0;
+    u32 max_meshlet_instance_count = 0;
+    bool late = false;
+
+    vuk::Value<vuk::ImageAttachment> depth_attachment = {};
+    vuk::Value<vuk::ImageAttachment> hiz_attachment = {};
+    vuk::Value<vuk::ImageAttachment> visbuffer_attachment = {};
+    vuk::Value<vuk::ImageAttachment> overdraw_attachment = {};
+    vuk::Value<vuk::Buffer> meshes_buffer = {};
+    vuk::Value<vuk::Buffer> mesh_instances_buffer = {};
+    vuk::Value<vuk::Buffer> meshlet_instances_buffer = {};
+    vuk::Value<vuk::Buffer> visible_meshlet_instances_indices_buffer = {};
+    vuk::Value<vuk::Buffer> meshlet_instance_visibility_mask_buffer = {};
+    vuk::Value<vuk::Buffer> transforms_buffer = {};
+    vuk::Value<vuk::Buffer> debug_drawer_buffer = {};
+    vuk::Value<vuk::Buffer> reordered_indices_buffer = {};
+    vuk::Value<vuk::Buffer> materials_buffer = {};
+
+    vuk::Value<vuk::Buffer> visibility_buffer = {};
+    vuk::Value<vuk::Buffer> cull_meshlets_cmd_buffer = {};
+    vuk::Value<vuk::Buffer> draw_geometry_cmd_buffer = {};
+};
+
 struct FramePrepareInfo {
     u32 image_count = 0;
     u32 mesh_instance_count = 0;
@@ -22,7 +56,7 @@ struct FramePrepareInfo {
 
     GPU::Camera camera = {};
     ls::option<GPU::DirectionalLight> directional_light = ls::nullopt;
-    ls::span<glm::mat4> directional_light_clipmap_projection_view_mats = {};
+    ls::span<GPU::VirtualClipmap> directional_light_clipmaps = {};
     ls::option<GPU::Atmosphere> atmosphere = ls::nullopt;
     ls::option<GPU::EyeAdaptation> eye_adaptation = ls::nullopt;
     ls::option<GPU::VBGTAO> vbgtao = ls::nullopt;
@@ -52,7 +86,7 @@ struct PreparedFrame {
     bool has_vbgtao = false;
     GPU::Camera camera = {};
     ls::option<GPU::DirectionalLight> directional_light = ls::nullopt;
-    glm::mat4 directional_light_clipmap_projection_view_mats[GPU::DirectionalLight::MAX_CLIPMAP_COUNT] = {};
+    GPU::VirtualClipmap directional_light_clipmaps[GPU::DirectionalLight::MAX_CLIPMAP_COUNT] = {};
 };
 
 struct SceneRenderInfo {
@@ -107,6 +141,10 @@ struct SceneRenderer {
     auto render(this SceneRenderer &, vuk::Value<vuk::ImageAttachment> &&dst_attachment, SceneRenderInfo &render_info, PreparedFrame &frame)
         -> vuk::Value<vuk::ImageAttachment>;
     auto cleanup(this SceneRenderer &) -> void;
+
+    auto generate_hiz(this SceneRenderer &, vuk::Value<vuk::ImageAttachment> &depth_attachment, vuk::Value<vuk::ImageAttachment> &hiz_attachment) -> void;
+    auto cull_for_camera(this SceneRenderer &, vuk::Value<vuk::Buffer> &camera_buffer, GeometryContext &context) -> void;
+    auto draw_for_camera(this SceneRenderer &, vuk::Value<vuk::Buffer> &camera_buffer, GeometryContext &context) -> void;
 };
 
 } // namespace lr

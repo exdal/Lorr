@@ -1,10 +1,7 @@
-module editor_mousepick;
-
 import std;
 import gpu;
 import scene;
-
-import passes.visbuffer;
+import visbuffer;
 
 [[vk::binding(0, 0)]]
 Image2D<u32> visbuffer_data;

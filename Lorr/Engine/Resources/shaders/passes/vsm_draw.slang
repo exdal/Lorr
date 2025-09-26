@@ -1,8 +1,7 @@
 import std;
 import gpu;
 import scene;
-
-import passes.visbuffer;
+import visbuffer;
 
 struct ShaderParameters {
     StructuredBuffer<MeshletInstance> meshlet_instances;

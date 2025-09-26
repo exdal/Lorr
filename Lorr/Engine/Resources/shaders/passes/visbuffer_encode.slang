@@ -1,19 +1,9 @@
-module visbuffer_encode;
-
 import std;
 import gpu;
 import scene;
-import passes.visbuffer;
+import visbuffer;
 
-struct ShaderParameters {
-    StructuredBuffer<MeshletInstance> meshlet_instances;
-    StructuredBuffer<MeshInstance> mesh_instances;
-    StructuredBuffer<Mesh> meshes;
-    StructuredBuffer<Transform> transforms;
-    StructuredBuffer<Material> materials;
-    StorageImage2D<u32, ImageFormat::R32UI> overdraw;
-};
-ParameterBlock<ShaderParameters> params;
+[[vk::binding(0)]] StorageImage2D<u32, ImageFormat::R32UI> overdraw;
 
 struct VertexOutput {
     f32x4 position : SV_Position;
@@ -24,24 +14,33 @@ struct VertexOutput {
     nointerpolation u32 material_index;
 };
 
+struct PushConstants {
+    Camera *camera;
+    Mesh *meshes;
+    MeshInstance *mesh_instances;
+    MeshletInstance *meshlet_instances;
+    Transform *transforms;
+    Material *materials;
+};
+[[vk::push_constant]] PushConstants C;
+
 [[shader("vertex")]]
 func vs_main(
     u32 vertex_index : SV_VertexID,
-    uniform f32x4x4 observer_projection_view_mat
 ) -> VertexOutput {
     let vis = VisBufferData(vertex_index);
-    let meshlet_instance = params.meshlet_instances[vis.meshlet_instance_index];
-    let mesh_instance = params.mesh_instances[meshlet_instance.mesh_instance_index];
-    let mesh = params.meshes[mesh_instance.mesh_index];
+    let meshlet_instance = C.meshlet_instances[vis.meshlet_instance_index];
+    let mesh_instance = C.mesh_instances[meshlet_instance.mesh_instance_index];
+    let mesh = C.meshes[mesh_instance.mesh_index];
     let mesh_lod = mesh.lods[mesh_instance.lod_index];
-    let transform = params.transforms[mesh_instance.transform_index];
+    let transform = C.transforms[mesh_instance.transform_index];
     let meshlet = mesh_lod.meshlets[meshlet_instance.meshlet_index];
 
     let index = meshlet.index(mesh_lod, vis.triangle_index);
     let vertex_pos = meshlet.position(mesh, index);
     let tex_coord = meshlet.tex_coord(mesh, index);
     let world_pos = transform.to_world_position(vertex_pos);
-    let clip_pos = mul(observer_projection_view_mat, f32x4(world_pos.xyz, 1.0));
+    let clip_pos = mul(C.camera.projection_view_mat, f32x4(world_pos.xyz, 1.0));
 
     VertexOutput output;
     output.position = clip_pos;
@@ -55,9 +54,11 @@ func vs_main(
 }
 
 [[shader("fragment")]]
-func fs_main(VertexOutput input) -> u32 {
+func fs_main(
+    VertexOutput input
+) -> u32 {
 #if 1
-    let material = params.materials[input.material_index];
+    let material = C.materials[input.material_index];
     if (material.flags & MaterialFlag::HasAlbedoImage) {
         let uv = input.tex_coord;
         let uv_ddx = ddx(input.tex_coord);
@@ -71,7 +72,7 @@ func fs_main(VertexOutput input) -> u32 {
     }
 #endif
 
-    __atomic_add(params.overdraw[u32x2(input.position.xy)], 1u, MemoryOrder::AcquireRelease);
+    __atomic_add(overdraw[u32x2(input.position.xy)], 1u, MemoryOrder::AcquireRelease);
 
     let vis = VisBufferData(input.meshlet_instance_index, input.triangle_index);
     return vis.encode();

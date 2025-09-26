@@ -4,18 +4,16 @@ import scene;
 import cull;
 
 [[vk::constant_id(0)]] const bool LATE = false;
-[[vk::binding(0)]] StructuredBuffer<MeshletInstance> meshlet_instances;
-[[vk::binding(1)]] StructuredBuffer<MeshInstance> mesh_instances;
-[[vk::binding(2)]] StructuredBuffer<Mesh> meshes;
-[[vk::binding(3)]] StructuredBuffer<Transform> transforms;
-[[vk::binding(4)]] Image2D<f32> hiz_image;
-[[vk::binding(5)]] Sampler hiz_sampler;
-[[vk::binding(6)]] StructuredBuffer<u32> visible_meshlet_instances_count;
-[[vk::binding(7)]] RWStructuredBuffer<u32> early_visible_meshlet_instances_count;
-[[vk::binding(8)]] RWStructuredBuffer<u32> late_visible_meshlet_instances_count;
-[[vk::binding(9)]] RWStructuredBuffer<u32> visible_meshlet_instances_indices;
-[[vk::binding(10)]] RWStructuredBuffer<u32> meshlet_instance_visibility_mask;
-[[vk::binding(11)]] RWStructuredBuffer<DispatchIndirectCommand> cull_triangles_cmd;
+[[vk::binding(0)]] Image2D<f32> hiz_image;
+[[vk::binding(1)]] Sampler hiz_sampler;
+[[vk::binding(2)]] ConstantBuffer<Camera> camera;
+[[vk::binding(3)]] StructuredBuffer<Mesh> meshes;
+[[vk::binding(4)]] StructuredBuffer<MeshInstance> mesh_instances;
+[[vk::binding(5)]] StructuredBuffer<MeshletInstance> meshlet_instances;
+[[vk::binding(6)]] RWStructuredBuffer<MeshletInstanceVisibility> visibility;
+[[vk::binding(7)]] StructuredBuffer<Transform> transforms;
+[[vk::binding(8)]] RWStructuredBuffer<u32> visible_meshlet_instances_indices;
+[[vk::binding(9)]] RWStructuredBuffer<DispatchIndirectCommand> cull_triangles_cmd;
 
 #ifndef CULLING_MESHLET_COUNT
 #define CULLING_MESHLET_COUNT 64
@@ -27,19 +25,17 @@ func cs_main(
     uint group_thread_id : SV_GroupThreadID,
     uint global_thread_id : SV_DispatchThreadID,
     uniform CullFlags cull_flags,
-    uniform f32 near_clip,
-    uniform f32x4x4 projection_view,
+    uniform u32 *meshlet_instance_visibility_mask
 ) -> void {
-    let meshlet_instance_count = visible_meshlet_instances_count[0];
     let meshlet_instance_index = global_thread_id;
-    if (meshlet_instance_index >= meshlet_instance_count) {
+    if (meshlet_instance_index >= visibility[0].total_visible_meshlet_instances) {
         return;
     }
 
     let meshlet_instance = meshlet_instances[meshlet_instance_index];
     let mesh_instance = mesh_instances[meshlet_instance.mesh_instance_index];
     let transform = transforms[mesh_instance.transform_index];
-    let mvp = mul(projection_view, transform.world);
+    let mvp = mul(camera.projection_view_mat, transform.world);
 
     let mesh = meshes[mesh_instance.mesh_index];
     let mesh_lod = mesh.lods[mesh_instance.lod_index];
@@ -50,7 +46,7 @@ func cs_main(
 
     var visibility_mask_index = 0;
     var visibility_bit = 0;
-    var was_visible = false;
+    var was_visible = true;
     if (cull_occlusion) {
         let meshlet_instance_visibility_index = mesh_instance.meshlet_instance_visibility_offset + meshlet_instance.meshlet_index;
         visibility_mask_index = meshlet_instance_visibility_index / 32;
@@ -65,7 +61,7 @@ func cs_main(
     }
 
     if (LATE && visible && cull_occlusion) {
-        if (let screen_aabb = project_aabb(mvp, near_clip, bounds.aabb_center, bounds.aabb_extent)) {
+        if (let screen_aabb = project_aabb(mvp, camera.near_clip, bounds.aabb_center, bounds.aabb_extent)) {
             visible = !test_occlusion(screen_aabb, hiz_image, hiz_sampler);
         }
     }
@@ -73,11 +69,10 @@ func cs_main(
     if (visible && (!LATE || !was_visible)) {
         var index = 0;
         if (!LATE) {
-            index = __atomic_add(early_visible_meshlet_instances_count[0], 1, MemoryOrder::Relaxed);
+            index = __atomic_add(visibility[0].early_visible_meshlet_instances, 1, MemoryOrder::Relaxed);
         } else {
-            let early_count = early_visible_meshlet_instances_count[0];
-            let late_offset = __atomic_add(late_visible_meshlet_instances_count[0], 1, MemoryOrder::Relaxed);
-            index = early_count + late_offset;
+            let late_offset = __atomic_add(visibility[0].late_visible_meshlet_instances, 1, MemoryOrder::Relaxed);
+            index = late_offset + visibility[0].early_visible_meshlet_instances;
         }
 
         visible_meshlet_instances_indices[index] = meshlet_instance_index;

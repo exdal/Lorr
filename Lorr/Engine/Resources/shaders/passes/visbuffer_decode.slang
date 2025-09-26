@@ -1,9 +1,7 @@
-module visbuffer_decode;
-
 import std;
 import gpu;
 import scene;
-import passes.visbuffer;
+import visbuffer;
 
 #include <fullscreen.slang>
 

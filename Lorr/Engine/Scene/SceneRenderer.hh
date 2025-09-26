@@ -142,7 +142,7 @@ struct SceneRenderer {
         -> vuk::Value<vuk::ImageAttachment>;
     auto cleanup(this SceneRenderer &) -> void;
 
-    auto generate_hiz(this SceneRenderer &, vuk::Value<vuk::ImageAttachment> &depth_attachment, vuk::Value<vuk::ImageAttachment> &hiz_attachment) -> void;
+    auto generate_hiz(this SceneRenderer &, GeometryContext &context) -> void;
     auto cull_for_camera(this SceneRenderer &, vuk::Value<vuk::Buffer> &camera_buffer, GeometryContext &context) -> void;
     auto draw_for_camera(this SceneRenderer &, vuk::Value<vuk::Buffer> &camera_buffer, GeometryContext &context) -> void;
 };

@@ -20,11 +20,7 @@ static constexpr auto hiz_sampler = vuk::SamplerCreateInfo{
     .addressModeV = vuk::SamplerAddressMode::eClampToEdge,
 };
 
-auto SceneRenderer::generate_hiz(
-    this SceneRenderer &,
-    vuk::Value<vuk::ImageAttachment> &depth_attachment,
-    vuk::Value<vuk::ImageAttachment> &hiz_attachment
-) -> void {
+auto SceneRenderer::generate_hiz(this SceneRenderer &, GeometryContext &context) -> void {
     ZoneScoped;
 
     auto hiz_generate_slow_pass = vuk::make_pass(
@@ -63,7 +59,8 @@ auto SceneRenderer::generate_hiz(
         }
     );
 
-    std::tie(depth_attachment, hiz_attachment) = hiz_generate_slow_pass(std::move(depth_attachment), std::move(hiz_attachment));
+    std::tie(context.depth_attachment, context.hiz_attachment) =
+        hiz_generate_slow_pass(std::move(context.depth_attachment), std::move(context.hiz_attachment));
 }
 
 auto SceneRenderer::cull_for_camera(this SceneRenderer &, vuk::Value<vuk::Buffer> &camera_buffer, GeometryContext &context) -> void {

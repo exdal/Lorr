@@ -36,21 +36,15 @@ auto SceneRenderer::draw_for_camera(this SceneRenderer &, vuk::Value<vuk::Buffer
                 .set_dynamic_state(vuk::DynamicStateFlagBits::eViewport | vuk::DynamicStateFlagBits::eScissor)
                 .set_viewport(0, vuk::Rect2D::framebuffer())
                 .set_scissor(0, vuk::Rect2D::framebuffer())
-                .bind_image(0, 0, overdraw)
+                .bind_buffer(0, 0, camera)
+                .bind_buffer(0, 1, meshes)
+                .bind_buffer(0, 2, mesh_instances)
+                .bind_buffer(0, 3, meshlet_instances)
+                .bind_buffer(0, 4, transforms)
+                .bind_buffer(0, 5, materials)
+                .bind_image(0, 6, overdraw)
                 .bind_index_buffer(index_buffer, vuk::IndexType::eUint32)
                 .bind_persistent(1, descriptor_set)
-                .push_constants(
-                    vuk::ShaderStageFlagBits::eVertex | vuk::ShaderStageFlagBits::eFragment,
-                    0,
-                    PushConstants(
-                        camera->device_address,
-                        meshes->device_address,
-                        mesh_instances->device_address,
-                        meshlet_instances->device_address,
-                        transforms->device_address,
-                        materials->device_address
-                    )
-                )
                 .draw_indexed_indirect(1, triangle_indirect);
 
             return std::make_tuple(

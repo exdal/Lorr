@@ -948,26 +948,26 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
             .cull_flags = info.cull_flags,
             .mesh_instance_count = frame.mesh_instance_count,
             .max_meshlet_instance_count = frame.max_meshlet_instance_count,
-            .depth_attachment = depth_attachment,
-            .hiz_attachment = hiz_attachment,
-            .visbuffer_attachment = visbuffer_attachment,
-            .overdraw_attachment = overdraw_attachment,
-            .meshes_buffer = meshes_buffer,
-            .mesh_instances_buffer = mesh_instances_buffer,
-            .meshlet_instances_buffer = meshlet_instances_buffer,
-            .visible_meshlet_instances_indices_buffer = visible_meshlet_instances_indices_buffer,
-            .meshlet_instance_visibility_mask_buffer = meshlet_instance_visibility_mask_buffer,
-            .transforms_buffer = transforms_buffer,
-            .debug_drawer_buffer = debug_drawer_buffer,
-            .reordered_indices_buffer = reordered_indices_buffer,
-            .materials_buffer = materials_buffer,
+            .depth_attachment = std::move(depth_attachment),
+            .hiz_attachment = std::move(hiz_attachment),
+            .visbuffer_attachment = std::move(visbuffer_attachment),
+            .overdraw_attachment = std::move(overdraw_attachment),
+            .meshes_buffer = std::move(meshes_buffer),
+            .mesh_instances_buffer = std::move(mesh_instances_buffer),
+            .meshlet_instances_buffer = std::move(meshlet_instances_buffer),
+            .visible_meshlet_instances_indices_buffer = std::move(visible_meshlet_instances_indices_buffer),
+            .meshlet_instance_visibility_mask_buffer = std::move(meshlet_instance_visibility_mask_buffer),
+            .transforms_buffer = std::move(transforms_buffer),
+            .debug_drawer_buffer = std::move(debug_drawer_buffer),
+            .reordered_indices_buffer = std::move(reordered_indices_buffer),
+            .materials_buffer = std::move(materials_buffer),
         };
 
         geometry_context.late = false;
         self.cull_for_camera(camera_buffer, geometry_context);
         self.draw_for_camera(camera_buffer, geometry_context);
 
-        self.generate_hiz(depth_attachment, hiz_attachment);
+        self.generate_hiz(geometry_context);
 
         geometry_context.late = true;
         self.cull_for_camera(camera_buffer, geometry_context);
@@ -1101,7 +1101,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                 }
             );
 
-            return visualize_overdraw_pass(std::move(dst_attachment), std::move(overdraw_attachment));
+            return visualize_overdraw_pass(std::move(dst_attachment), std::move(geometry_context.overdraw_attachment));
         }
 
         //  ── VISBUFFER DECODE ────────────────────────────────────────────────
@@ -1157,6 +1157,9 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
             }
         );
 
+        visbuffer_attachment = std::move(geometry_context.visbuffer_attachment);
+        depth_attachment = std::move(geometry_context.depth_attachment);
+
         auto albedo_attachment = vuk::declare_ia(
             "albedo",
             { .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eColorAttachment,
@@ -1207,11 +1210,11 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
         ) =
             vis_decode_pass(
                 std::move(camera_buffer),
-                std::move(meshlet_instances_buffer),
-                std::move(mesh_instances_buffer),
-                std::move(meshes_buffer),
-                std::move(transforms_buffer),
-                std::move(materials_buffer),
+                std::move(geometry_context.meshlet_instances_buffer),
+                std::move(geometry_context.mesh_instances_buffer),
+                std::move(geometry_context.meshes_buffer),
+                std::move(geometry_context.transforms_buffer),
+                std::move(geometry_context.materials_buffer),
                 std::move(visbuffer_attachment),
                 std::move(albedo_attachment),
                 std::move(normal_attachment),

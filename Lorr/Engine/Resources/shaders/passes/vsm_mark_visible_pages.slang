@@ -44,7 +44,6 @@ func cs_main(
     // This entire loop is called "waterfall", used to avoid
     // atomic operations per thread, the execution cascades
     // down each iteration to save huge time
-
     var first_thread_visible = false;
     var done = false;
     while (!done) {

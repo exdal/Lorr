@@ -379,6 +379,12 @@ auto SceneRenderer::init(this SceneRenderer &self) -> bool {
     };
     Pipeline::create(device, default_slang_session, vsm_allocate_pages_pipeline_info).value();
 
+    auto vsm_draw_physical_pages_pipeline_info = PipelineCompileInfo{
+        .module_name = "passes.vsm_draw_physical_pages",
+        .entry_points = { "cs_main" },
+    };
+    Pipeline::create(device, default_slang_session, vsm_draw_physical_pages_pipeline_info).value();
+
     //  ── PBR ─────────────────────────────────────────────────────────────
     auto pbr_apply_pipeline_info = PipelineCompileInfo{
         .module_name = "passes.pbr_apply",
@@ -660,7 +666,7 @@ auto SceneRenderer::prepare_frame(this SceneRenderer &self, FramePrepareInfo &in
     }
 
     prepared_frame.directional_light_clipmaps_buffer =
-        transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eGPUtoCPU, directional_light_clipmap_count * sizeof(glm::mat4));
+        transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eGPUtoCPU, directional_light_clipmap_count * sizeof(GPU::VirtualClipmap));
     if (info.directional_light.has_value() && info.directional_light->clipmap_count > 0) {
         std::memcpy(
             prepared_frame.directional_light_clipmaps_buffer->mapped_ptr,
@@ -761,7 +767,7 @@ auto SceneRenderer::prepare_frame(this SceneRenderer &self, FramePrepareInfo &in
 
         auto vsm_physical_pages_size = static_cast<u32>(glm::ceil(glm::sqrt(GPU::VSM_PAGE_COUNT)) * GPU::VSM_PAGE_SIZE);
         auto vsm_physical_pages_info = ImageInfo{
-            .format = vuk::Format::eR32Sfloat,
+            .format = vuk::Format::eR32Uint,
             .usage = vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eSampled,
             .type = vuk::ImageType::e2D,
             .extent = { .width = vsm_physical_pages_size, .height = vsm_physical_pages_size, .depth = 1 },
@@ -776,7 +782,8 @@ auto SceneRenderer::prepare_frame(this SceneRenderer &self, FramePrepareInfo &in
         prepared_frame.vsm_physical_pages = vuk::clear_image(std::move(prepared_frame.vsm_physical_pages), vuk::Black<f32>);
 
         // TODO, WARN: If scene doesnt have any lights in frame 0, all this shit will be invalidated
-        self.vsm_page_visibility_mask_buffer = Buffer::create(device, GPU::VSM_PAGE_COUNT * sizeof(u32) / 32, vuk::MemoryUsage::eGPUonly).value();
+        self.vsm_page_visibility_mask_buffer =
+            Buffer::create(device, (GPU::VSM_PAGE_COUNT + 31) / 32 * sizeof(u32), vuk::MemoryUsage::eGPUonly).value();
         prepared_frame.vsm_page_visibility_mask_buffer = self.vsm_page_visibility_mask_buffer.discard(device, "vsm page visibility");
         prepared_frame.vsm_page_visibility_mask_buffer = zero_fill_pass(std::move(prepared_frame.vsm_page_visibility_mask_buffer));
         self.vsm_allocation_requests_buffer = Buffer::create(device, GPU::VSM_PAGE_COUNT * sizeof(GPU::VSMAllocRequest)).value();
@@ -1257,17 +1264,41 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
 
             vsm_page_table_attachment = vsm_free_invisible_pages_pass(std::move(vsm_page_table_attachment));
 
+            auto vsm_allocate_pages_pass = vuk::make_pass(
+                "vsm allocate pages",
+                [](vuk::CommandBuffer &cmd_list, //
+                   VUK_BA(vuk::eComputeUniformRead) allocator,
+                   VUK_BA(vuk::eComputeRW) page_visibility_mask,
+                   VUK_IA(vuk::eComputeRW) page_table) {
+                    cmd_list.bind_compute_pipeline("passes.vsm_allocate_pages")
+                        .bind_buffer(0, 0, allocator)
+                        .bind_buffer(0, 1, page_visibility_mask)
+                        .bind_image(0, 2, page_table)
+                        .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, (GPU::VSM_PAGE_COUNT + 31) / 32)
+                        .dispatch(1);
+
+                    return page_table;
+                }
+            );
+
+            vsm_page_table_attachment = vsm_allocate_pages_pass(
+                std::move(vsm_page_allocator_buffer),
+                std::move(vsm_page_visibility_mask_buffer),
+                std::move(vsm_page_table_attachment)
+            );
+
+            auto vsm_depth_attachment = vuk::declare_ia(
+                "vsm depth",
+                { .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eDepthStencilAttachment,
+                  .extent = { .width = GPU::VSM_MAX_VIRTUAL_EXTENT, .height = GPU::VSM_MAX_VIRTUAL_EXTENT, .depth = 1 },
+                  .format = vuk::Format::eD32Sfloat,
+                  .sample_count = vuk::Samples::e1,
+                  .level_count = 1,
+                  .layer_count = 1 }
+            );
+
             for (u32 clipmap_index = 0; clipmap_index < directional_light_info.clipmap_count; clipmap_index++) {
                 auto &current_clipmap = frame.directional_light_clipmaps[clipmap_index];
-                auto vsm_depth_attachment = vuk::declare_ia(
-                    "vsm depth",
-                    { .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eDepthStencilAttachment,
-                      .extent = { .width = GPU::VSM_MAX_VIRTUAL_EXTENT, .height = GPU::VSM_MAX_VIRTUAL_EXTENT, .depth = 1 },
-                      .format = vuk::Format::eD32Sfloat,
-                      .sample_count = vuk::Samples::e1,
-                      .level_count = 1,
-                      .layer_count = 1 }
-                );
                 vsm_depth_attachment = vuk::clear_image(std::move(vsm_depth_attachment), vuk::Black<f32>);
                 vsm_geometry_context.depth_attachment = std::move(vsm_depth_attachment);
 
@@ -1281,6 +1312,49 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
 
                 vsm_depth_attachment = std::move(vsm_geometry_context.depth_attachment);
                 debug_drawer_buffer = std::move(vsm_geometry_context.debug_drawer_buffer);
+
+                auto vsm_draw_physical_pages_pass = vuk::make_pass(
+                    "vsm draw physical pages",
+                    [clipmap_index](
+                        vuk::CommandBuffer &cmd_list, //
+                        VUK_BA(vuk::eComputeUniformRead) directional_light,
+                        VUK_BA(vuk::eComputeRead) clipmaps,
+                        VUK_IA(vuk::eComputeSampled) depth,
+                        VUK_IA(vuk::eComputeSampled) page_table,
+                        VUK_IA(vuk::eComputeRW) physical_pages
+                    ) {
+                        cmd_list //
+                            .bind_compute_pipeline("passes.vsm_draw_physical_pages")
+                            .bind_buffer(0, 0, directional_light)
+                            .bind_buffer(0, 1, clipmaps)
+                            .bind_image(0, 2, depth)
+                            .bind_image(0, 3, page_table)
+                            .bind_image(0, 4, physical_pages)
+                            .push_constants(
+                                vuk::ShaderStageFlagBits::eCompute,
+                                0,
+                                PushConstants(clipmap_index, page_table->extent, physical_pages->extent, depth->extent)
+                            )
+                            .dispatch_invocations_per_pixel(depth);
+
+                        return std::make_tuple(directional_light, clipmaps, depth, page_table, physical_pages);
+                    }
+                );
+
+                std::tie(
+                    directional_light_buffer,
+                    directional_light_clipmaps_buffer,
+                    vsm_depth_attachment,
+                    vsm_page_table_attachment,
+                    vsm_physical_pages_attachment
+                ) =
+                    vsm_draw_physical_pages_pass(
+                        std::move(directional_light_buffer),
+                        std::move(directional_light_clipmaps_buffer),
+                        std::move(vsm_depth_attachment),
+                        std::move(vsm_page_table_attachment),
+                        std::move(vsm_physical_pages_attachment)
+                    );
             }
         }
 

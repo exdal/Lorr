@@ -13,8 +13,21 @@ ParameterBlock<ShaderParameters> params;
 
 func poll_requests(u32 mask_count, u32 request_index) -> void {
     let request = params.allocator.requests[request_index];
-    for (var mask_index = 0; mask_index < mask_count; mask_index++) {
-        let mask = params.page_visibility_mask[mask_index];
+    for (var i = 0; i < mask_count; i++) {
+        let mask = params.page_visibility_mask[i];
+        let bit = firstbitlow(~mask);
+        if (bit != -1) {
+            let physical_page_index = i * 32 + bit;
+            params.page_visibility_mask[i] |= 1 << bit;
+
+            let page_data = params.page_tables.Load(request.page_table_address);
+            var page = VSMPageMetadata(page_data);
+            page.set_physical_address(physical_page_index);
+            page.set_dirty(true);
+            page.set_backed(true);
+            params.page_tables.Store(request.page_table_address, page.data);
+            return;
+        }
     }
 }
 

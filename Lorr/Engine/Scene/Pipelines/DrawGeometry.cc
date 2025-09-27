@@ -151,4 +151,44 @@ auto SceneRenderer::draw_depth_for_camera(this SceneRenderer &, vuk::Value<vuk::
             std::move(context.depth_attachment)
         );
 }
+
+auto SceneRenderer::pick_visbuffer(this SceneRenderer &, const glm::uvec2 &picking_texel, GeometryContext &context) -> u32 {
+    ZoneScoped;
+
+    auto &device = App::mod<Device>();
+    auto &transfer_man = device.transfer_man();
+
+    auto editor_mousepick_pass = vuk::make_pass(
+        "editor mousepick",
+        [picking_texel](
+            vuk::CommandBuffer &cmd_list,
+            VUK_IA(vuk::eComputeSampled) visbuffer,
+            VUK_BA(vuk::eComputeRead) meshlet_instances,
+            VUK_BA(vuk::eComputeRead) mesh_instances,
+            VUK_BA(vuk::eComputeWrite) picked_transform_index_buffer
+        ) {
+            cmd_list //
+                .bind_compute_pipeline("passes.editor_mousepick")
+                .bind_image(0, 0, visbuffer)
+                .bind_buffer(0, 1, meshlet_instances)
+                .bind_buffer(0, 2, mesh_instances)
+                .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, PushConstants(picked_transform_index_buffer->device_address, picking_texel))
+                .dispatch(1);
+
+            return picked_transform_index_buffer;
+        }
+    );
+
+    auto picked_texel_buffer = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eGPUtoCPU, sizeof(u32));
+    auto picked_texel =
+        editor_mousepick_pass(context.visbuffer_attachment, context.meshlet_instances_buffer, context.mesh_instances_buffer, picked_texel_buffer);
+
+    vuk::Compiler temp_compiler;
+    picked_texel.wait(device.get_allocator(), temp_compiler);
+
+    u32 texel_data = 0;
+    std::memcpy(&texel_data, picked_texel->mapped_ptr, sizeof(u32));
+
+    return texel_data;
+}
 } // namespace lr

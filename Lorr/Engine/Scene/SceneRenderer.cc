@@ -973,83 +973,16 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
         self.cull_for_camera(camera_buffer, main_geometry_context);
         self.draw_for_camera(camera_buffer, main_geometry_context);
 
-        // Virtual shadowmaps
-        // auto directional_light_info = frame.directional_light.value_or(GPU::DirectionalLight{});
-        // if (frame.directional_light.has_value()) {
-        //     ImGui::Begin("Clipmaps");
-        //     for (u32 clipmap_index = 0; clipmap_index < directional_light_info.clipmap_count; clipmap_index++) {
-        //         auto &current_clipmap = frame.directional_light_clipmaps[clipmap_index];
-        //         auto vsm_depth_attachment = vuk::declare_ia(
-        //             "vsm depth",
-        //             { .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eDepthStencilAttachment,
-        //               .extent = { .width = GPU::VSM_MAX_VIRTUAL_EXTENT, .height = GPU::VSM_MAX_VIRTUAL_EXTENT, .depth = 1 },
-        //               .format = vuk::Format::eD32Sfloat,
-        //               .sample_count = vuk::Samples::e1,
-        //               .level_count = 1,
-        //               .layer_count = 1 }
-        //         );
-        //         vsm_depth_attachment = vuk::clear_image(std::move(vsm_depth_attachment), vuk::Black<f32>);
-
-        //         auto vsm_camera_buffer = transfer_man.scratch_buffer<GPU::Camera>({
-        //             .projection_view_mat = current_clipmap.projection_view_mat,
-        //             .resolution = glm::vec2(GPU::VSM_MAX_VIRTUAL_EXTENT),
-        //         });
-
-        //         auto vsm_geometry_context = main_geometry_context;
-        //         vsm_geometry_context.cull_flags =
-        //             GPU::CullFlags::MeshFrustum | GPU::CullFlags::MeshletFrustum | GPU::CullFlags::TriangleBackFace | GPU::CullFlags::MicroTriangles;
-        //         vsm_geometry_context.late = false;
-        //         vsm_geometry_context.depth_attachment = vsm_depth_attachment;
-        //         self.cull_for_camera(vsm_camera_buffer, vsm_geometry_context);
-        //         self.draw_depth_for_camera(vsm_camera_buffer, vsm_geometry_context);
-        //         vsm_depth_attachment = std::move(vsm_geometry_context.depth_attachment);
-
-        //         auto &imgui_renderer = lr::App::mod<lr::ImGuiRenderer>();
-        //         auto id = imgui_renderer.add_image(std::move(vsm_depth_attachment));
-        //         memory::ScopedStack stack;
-        //         if (ImGui::CollapsingHeader(stack.format_char("Clipmap {}", clipmap_index))) {
-        //             ImGui::Image(id, { 512, 512 });
-        //         }
-        //     }
-        //     ImGui::End();
-        // }
-
         if (info.picking_texel) {
-            auto editor_mousepick_pass = vuk::make_pass(
-                "editor mousepick",
-                [picking_texel = *info.picking_texel](
-                    vuk::CommandBuffer &cmd_list,
-                    VUK_IA(vuk::eComputeSampled) visbuffer,
-                    VUK_BA(vuk::eComputeRead) meshlet_instances,
-                    VUK_BA(vuk::eComputeRead) mesh_instances,
-                    VUK_BA(vuk::eComputeWrite) picked_transform_index_buffer
-                ) {
-                    cmd_list //
-                        .bind_compute_pipeline("passes.editor_mousepick")
-                        .bind_image(0, 0, visbuffer)
-                        .bind_buffer(0, 1, meshlet_instances)
-                        .bind_buffer(0, 2, mesh_instances)
-                        .push_constants(
-                            vuk::ShaderStageFlagBits::eCompute,
-                            0,
-                            PushConstants(picked_transform_index_buffer->device_address, picking_texel)
-                        )
-                        .dispatch(1);
-
-                    return picked_transform_index_buffer;
-                }
-            );
-
-            auto picking_texel_buffer = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eGPUtoCPU, sizeof(u32));
-            auto picked_texel = editor_mousepick_pass(visbuffer_attachment, meshlet_instances_buffer, mesh_instances_buffer, picking_texel_buffer);
-
-            vuk::Compiler temp_compiler;
-            picked_texel.wait(device.get_allocator(), temp_compiler);
-
-            u32 texel_data = 0;
-            std::memcpy(&texel_data, picked_texel->mapped_ptr, sizeof(u32));
-            info.picked_transform_index = texel_data;
+            info.picked_transform_index = self.pick_visbuffer(*info.picking_texel, main_geometry_context);
         }
+
+        visbuffer_attachment = std::move(main_geometry_context.visbuffer_attachment);
+        depth_attachment = std::move(main_geometry_context.depth_attachment);
+        visible_meshlet_instances_indices_buffer = std::move(main_geometry_context.visible_meshlet_instances_indices_buffer);
+        meshlet_instance_visibility_mask_buffer = std::move(main_geometry_context.meshlet_instance_visibility_mask_buffer);
+        reordered_indices_buffer = std::move(main_geometry_context.reordered_indices_buffer);
+        debug_drawer_buffer = std::move(main_geometry_context.debug_drawer_buffer);
 
         if (self.overdraw_heatmap_scale > 0.0f) {
             auto visualize_overdraw_pass = vuk::make_pass(
@@ -1130,9 +1063,6 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
             }
         );
 
-        visbuffer_attachment = std::move(main_geometry_context.visbuffer_attachment);
-        depth_attachment = std::move(main_geometry_context.depth_attachment);
-
         auto albedo_attachment = vuk::declare_ia(
             "albedo",
             { .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eColorAttachment,
@@ -1194,6 +1124,60 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                 std::move(emissive_attachment),
                 std::move(metallic_roughness_occlusion_attachment)
             );
+
+        // Virtual shadowmaps
+        auto directional_light_info = frame.directional_light.value_or(GPU::DirectionalLight{});
+        if (frame.directional_light.has_value()) {
+            auto vsm_geometry_context = GeometryContext{
+                .cull_flags =
+                    GPU::CullFlags::MeshFrustum | GPU::CullFlags::MeshletFrustum | GPU::CullFlags::TriangleBackFace | GPU::CullFlags::MicroTriangles,
+                .mesh_instance_count = frame.mesh_instance_count,
+                .max_meshlet_instance_count = frame.max_meshlet_instance_count,
+                .hiz_attachment = main_geometry_context.hiz_attachment,
+                .meshes_buffer = std::move(meshes_buffer),
+                .mesh_instances_buffer = std::move(mesh_instances_buffer),
+                .meshlet_instances_buffer = std::move(meshlet_instances_buffer),
+                .visible_meshlet_instances_indices_buffer = std::move(visible_meshlet_instances_indices_buffer),
+                .meshlet_instance_visibility_mask_buffer = std::move(meshlet_instance_visibility_mask_buffer),
+                .transforms_buffer = std::move(transforms_buffer),
+                .reordered_indices_buffer = std::move(reordered_indices_buffer),
+            };
+
+            ImGui::Begin("Clipmaps");
+            for (u32 clipmap_index = 0; clipmap_index < directional_light_info.clipmap_count; clipmap_index++) {
+                auto &current_clipmap = frame.directional_light_clipmaps[clipmap_index];
+                auto vsm_depth_attachment = vuk::declare_ia(
+                    "vsm depth",
+                    { .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eDepthStencilAttachment,
+                      .extent = { .width = GPU::VSM_MAX_VIRTUAL_EXTENT, .height = GPU::VSM_MAX_VIRTUAL_EXTENT, .depth = 1 },
+                      .format = vuk::Format::eD32Sfloat,
+                      .sample_count = vuk::Samples::e1,
+                      .level_count = 1,
+                      .layer_count = 1 }
+                );
+                vsm_depth_attachment = vuk::clear_image(std::move(vsm_depth_attachment), vuk::Black<f32>);
+                vsm_geometry_context.depth_attachment = std::move(vsm_depth_attachment);
+
+                auto vsm_camera_buffer = transfer_man.scratch_buffer<GPU::Camera>({
+                    .projection_view_mat = current_clipmap.projection_view_mat,
+                    .resolution = glm::vec2(GPU::VSM_MAX_VIRTUAL_EXTENT),
+                });
+
+                self.cull_for_camera(vsm_camera_buffer, vsm_geometry_context);
+                self.draw_depth_for_camera(vsm_camera_buffer, vsm_geometry_context);
+
+                vsm_depth_attachment = std::move(vsm_geometry_context.depth_attachment);
+                debug_drawer_buffer = std::move(vsm_geometry_context.debug_drawer_buffer);
+
+                auto &imgui_renderer = lr::App::mod<lr::ImGuiRenderer>();
+                auto id = imgui_renderer.add_image(std::move(vsm_depth_attachment));
+                memory::ScopedStack stack;
+                if (ImGui::CollapsingHeader(stack.format_char("Clipmap {}", clipmap_index))) {
+                    ImGui::Image(id, { 512, 512 });
+                }
+            }
+            ImGui::End();
+        }
 
         // VBGTAO
         auto vbgtao_occlusion_attachment = vuk::declare_ia(

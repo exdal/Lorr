@@ -146,6 +146,7 @@ struct SceneRenderer {
     auto cull_for_camera(this SceneRenderer &, vuk::Value<vuk::Buffer> &camera_buffer, GeometryContext &context) -> void;
     auto draw_for_camera(this SceneRenderer &, vuk::Value<vuk::Buffer> &camera_buffer, GeometryContext &context) -> void;
     auto draw_depth_for_camera(this SceneRenderer &, vuk::Value<vuk::Buffer> &camera_buffer, GeometryContext &context) -> void;
+    auto pick_visbuffer(this SceneRenderer &, const glm::uvec2 &picking_texel, GeometryContext &context) -> u32;
 };
 
 } // namespace lr

@@ -14,14 +14,14 @@ import debug_drawer;
 [[vk::binding(3)]] RWStructuredBuffer<MeshletInstance> meshlet_instances;
 [[vk::binding(4)]] RWStructuredBuffer<MeshletInstanceVisibility> visibility;
 [[vk::binding(5)]] StructuredBuffer<Transform> transforms;
-[[vk::binding(6)]] RWStructuredBuffer<DebugDrawer> debug_drawer;
 
 [[shader("compute")]]
 [[numthreads(CULLING_MESH_COUNT, 1, 1)]]
 func cs_main(
     uint3 thread_id : SV_DispatchThreadID,
     uniform u32 mesh_instances_count,
-    uniform CullFlags cull_flags
+    uniform CullFlags cull_flags,
+    // uniform DebugDrawer *debug_drawer,
 ) -> void {
     let mesh_instance_index = thread_id.x;
     if (mesh_instance_index >= mesh_instances_count) {
@@ -63,13 +63,15 @@ func cs_main(
     }
 #endif
 
-#ifdef DEBUG_DRAW
-    var debug_aabb = DebugAABB();
-    debug_aabb.position = aabb_center;
-    debug_aabb.size = aabb_extent;
-    debug_aabb.color = f32x3(0.0, 0.0, 1.0);
-    debug_aabb.coord = DebugDrawCoord::World;
-    debug_draw_aabb(debug_drawer[0], debug_aabb);
+#if 0
+    if (debug_drawer) {
+        var debug_aabb = DebugAABB();
+        debug_aabb.position = aabb_center;
+        debug_aabb.size = aabb_extent;
+        debug_aabb.color = f32x3(0.0, 0.0, 1.0);
+        debug_aabb.coord = DebugDrawCoord::World;
+        debug_draw_aabb(debug_drawer[0], debug_aabb);
+    }
 #endif
 
     mesh_instances[mesh_instance_index].lod_index = lod_index;

@@ -45,7 +45,6 @@ func cs_main(
         let pageCorner = 128 * i32x2(physical_page_address / atlasWidth, physical_page_address % atlasWidth);
         let depthUint = asuint(depth);
         let physicalTexel = pageCorner + pageTexel;
-        __atomic_min(params.physical_pages[physicalTexel], depthUint);
-        printf("written %d to %d, %d\n", depthUint, physicalTexel.x, physicalTexel.y);
+        __atomic_max(params.physical_pages[physicalTexel], depthUint);
     }
 }

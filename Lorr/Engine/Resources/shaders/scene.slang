@@ -52,9 +52,26 @@ public struct Camera {
     }
 };
 
+public struct VirtualClipmapInfo {
+    public f32x2 wrapped_vsm_uv;
+    public i32x2 page_address;
+    public f32x3 light_pos;
+    public f32 projected_depth;
+};
+
 public struct VirtualClipmap {
     public f32x4x4 projection_view_mat;
     public i32x2 page_offset;
+
+    public func get_clipmap_info(f32x3 world_pos, i32x2 page_table_extent) -> VirtualClipmapInfo {
+        let light_pos_h = mul(this.projection_view_mat, f32x4(world_pos, 1.0));
+        let projected_depth = light_pos_h.z / light_pos_h.w;
+        let light_pos = light_pos_h.xyz / light_pos_h.w;
+        let wrapped_uv = fract(light_pos.xy * 0.5 + 0.5);
+        let page_address = i32x2(wrapped_uv * f32x2(page_table_extent));
+
+        return VirtualClipmapInfo(wrapped_uv, page_address, light_pos, projected_depth);
+    }
 };
 
 public struct DirectionalLight {
@@ -67,15 +84,31 @@ public struct DirectionalLight {
     public f32 normal_bias;
 
     public func get_clipmap_index(in Camera camera, f32x2 uv, f32 depth) -> u32 {
-        let texel_size = 1.0 / camera.resolution;
-        let uv_left = uv + f32x2(-texel_size.x, 0.0);
-        let uv_right = uv + f32x2(texel_size.x, 0.0);
-        let left_v = camera.unproject_uv(uv_left, depth);
-        let right_v = camera.unproject_uv(uv_right, depth);
-        let d = distance(left_v, right_v);
-
+#if 1
+        // 2x2 diagonal pixel footprint calculation for better spatial information.
+        // if this shit is too slow fallback to 2x1 approach (top down or left right)
+        let inv_resolution = 1.0 / camera.resolution;
+        let uv_offset = inv_resolution * 0.5;
+        let top_left = uv + f32x2(uv_offset.x, uv_offset.y);
+        let top_right = uv + f32x2(-uv_offset.x, uv_offset.y);
+        let bottom_left = uv + f32x2(uv_offset.x, -uv_offset.y);
+        let bottom_right = uv + f32x2(-uv_offset.x, uv_offset.y);
+        let dx = distance(
+            camera.unproject_uv(top_left, depth),
+            camera.unproject_uv(bottom_right, depth)
+        );
+        let dy = distance(
+            camera.unproject_uv(top_right, depth),
+            camera.unproject_uv(bottom_left, depth)
+        );
+        let d = min(dx, dy);
+#else
+        let center_pos = camera.unproject_uv(uv, depth);
+        let d = length(center_pos - camera.position);
+#endif
+        let bias = 1.0;
         let clipmap_length = this.first_clipmap_width / (camera.far_clip * 0.5);
-        return clamp(u32(ceil(log2(d / clipmap_length))), 0, this.clipmap_count - 1);
+        return u32(clamp(ceil(log2((d / clipmap_length) * bias)), 0.0, this.clipmap_count - 1.0));
     }
 };
 

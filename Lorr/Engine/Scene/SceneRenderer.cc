@@ -6,9 +6,6 @@
 
 #include "Engine/Graphics/VulkanDevice.hh"
 
-#include "Engine/Graphics/ImGuiRenderer.hh"
-#include "Engine/Memory/Stack.hh"
-
 namespace lr {
 enum BindlessDescriptorLayout : u32 {
     Samplers = 0,
@@ -357,6 +354,24 @@ auto SceneRenderer::init(this SceneRenderer &self) -> bool {
         .entry_points = { "vs_main" },
     };
     Pipeline::create(device, default_slang_session, vis_depth_only_pipeline_info).value();
+
+    auto vsm_reset_page_visibility_pipeline_info = PipelineCompileInfo{
+        .module_name = "passes.vsm_reset_page_visibility",
+        .entry_points = { "cs_main" },
+    };
+    Pipeline::create(device, default_slang_session, vsm_reset_page_visibility_pipeline_info).value();
+
+    auto vsm_mark_visible_pages_pipeline_info = PipelineCompileInfo{
+        .module_name = "passes.vsm_mark_visible_pages",
+        .entry_points = { "cs_main" },
+    };
+    Pipeline::create(device, default_slang_session, vsm_mark_visible_pages_pipeline_info).value();
+
+    // auto vsm_free_invisible_pages_pipeline_info = PipelineCompileInfo{
+    //     .module_name = "passes.vsm_free_invisible_pages",
+    //     .entry_points = { "cs_main" },
+    // };
+    // Pipeline::create(device, default_slang_session, vsm_free_invisible_pages_pipeline_info).value();
 
     //  ── PBR ─────────────────────────────────────────────────────────────
     auto pbr_apply_pipeline_info = PipelineCompileInfo{
@@ -1143,7 +1158,63 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                 .reordered_indices_buffer = std::move(reordered_indices_buffer),
             };
 
-            ImGui::Begin("Clipmaps");
+            auto vsm_reset_page_visibility_pass = vuk::make_pass(
+                "vsm reset page visibility",
+                [](vuk::CommandBuffer &cmd_list, //
+                   VUK_IA(vuk::eComputeRW) page_table) {
+                    cmd_list.bind_compute_pipeline("passes.vsm_reset_page_visibility")
+                        .bind_image(0, 0, page_table)
+                        .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, page_table->extent)
+                        .dispatch_invocations_per_pixel(page_table);
+
+                    return page_table;
+                }
+            );
+
+            vsm_page_table_attachment = vsm_reset_page_visibility_pass(std::move(vsm_page_table_attachment));
+
+            auto vsm_mark_visible_pages_pass = vuk::make_pass(
+                "vsm mark visible pages",
+                [](vuk::CommandBuffer &cmd_list, //
+                   VUK_BA(vuk::eComputeUniformRead) camera,
+                   VUK_BA(vuk::eComputeUniformRead) directional_light,
+                   VUK_BA(vuk::eComputeRead) clipmaps,
+                   VUK_IA(vuk::eComputeSampled) depth,
+                   VUK_IA(vuk::eComputeRW) page_table,
+                   VUK_BA(vuk::eComputeRW) page_visibility_mask) {
+                    cmd_list.bind_compute_pipeline("passes.vsm_mark_visible_pages")
+                        .bind_buffer(0, 0, camera)
+                        .bind_buffer(0, 1, directional_light)
+                        .bind_buffer(0, 2, clipmaps)
+                        .bind_image(0, 3, depth)
+                        .bind_image(0, 4, page_table)
+                        .bind_buffer(0, 5, page_visibility_mask)
+                        .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, PushConstants(page_table->extent, depth->extent))
+                        .dispatch_invocations_per_pixel(depth);
+
+                    return std::make_tuple(camera, directional_light, clipmaps, depth, page_table, page_visibility_mask);
+                }
+            );
+
+            auto vsm_page_visibility_mask = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eGPUonly, GPU::VSM_PAGE_COUNT * sizeof(u32) / 32);
+
+            std::tie(
+                camera_buffer,
+                directional_light_buffer,
+                directional_light_clipmaps_buffer,
+                depth_attachment,
+                vsm_page_table_attachment,
+                vsm_page_visibility_mask
+            ) =
+                vsm_mark_visible_pages_pass(
+                    std::move(camera_buffer),
+                    std::move(directional_light_buffer),
+                    std::move(directional_light_clipmaps_buffer),
+                    std::move(depth_attachment),
+                    std::move(vsm_page_table_attachment),
+                    std::move(vsm_page_visibility_mask)
+                );
+
             for (u32 clipmap_index = 0; clipmap_index < directional_light_info.clipmap_count; clipmap_index++) {
                 auto &current_clipmap = frame.directional_light_clipmaps[clipmap_index];
                 auto vsm_depth_attachment = vuk::declare_ia(
@@ -1168,15 +1239,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
 
                 vsm_depth_attachment = std::move(vsm_geometry_context.depth_attachment);
                 debug_drawer_buffer = std::move(vsm_geometry_context.debug_drawer_buffer);
-
-                auto &imgui_renderer = lr::App::mod<lr::ImGuiRenderer>();
-                auto id = imgui_renderer.add_image(std::move(vsm_depth_attachment));
-                memory::ScopedStack stack;
-                if (ImGui::CollapsingHeader(stack.format_char("Clipmap {}", clipmap_index))) {
-                    ImGui::Image(id, { 512, 512 });
-                }
             }
-            ImGui::End();
         }
 
         // VBGTAO

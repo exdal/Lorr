@@ -149,6 +149,8 @@ func fs_main(
     let ambient_contribution = base_ambient_color * albedo_color * sun_illuminance;
     let indirect_illuminance_sum = (indirect_illuminance + ambient_contribution) * occlusion;
     var final_color = material_surface_color + indirect_illuminance_sum + emission;
+    let ci = context.directional_light.get_clipmap_index(params.camera, input.tex_coord, depth);
+    final_color = cascade_debug_visualization(final_color, ci, context.directional_light.clipmap_count);
 
     return f32x4(final_color, 1.0);
 }

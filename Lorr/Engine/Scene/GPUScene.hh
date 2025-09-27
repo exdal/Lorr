@@ -97,6 +97,16 @@ constexpr static u32 VSM_MAX_VIRTUAL_EXTENT = 4096;
 constexpr static u32 VSM_PAGE_TABLE_SIZE = VSM_MAX_VIRTUAL_EXTENT / VSM_PAGE_SIZE;
 constexpr static u32 VSM_PAGE_TABLE_MIP_COUNT = std::bit_width(VSM_PAGE_TABLE_SIZE);
 
+struct VSMAllocRequest {
+    alignas(4) glm::ivec2 page_table_address = {};
+};
+
+struct VSMPageAllocator {
+    alignas(4) u32 active_request_count = {};
+    alignas(4) u32 _pad = {};
+    alignas(8) u64 requests = {};
+};
+
 struct VirtualClipmap {
     alignas(4) glm::mat4 projection_view_mat = {};
     alignas(4) glm::ivec2 page_offset = {};

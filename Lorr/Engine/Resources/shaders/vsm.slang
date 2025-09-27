@@ -60,3 +60,18 @@ public struct VSMPageMetadata {
         this.data = (this.data & VSM_PAGE_PHYSICAL_ADDRESS_MASK) | ((new_physical_address & VSM_PAGE_PHYSICAL_ADDRESS_MASK) << 16u);
     }
 };
+
+public struct VSMAllocRequest {
+    public i32x2 page_table_address;
+};
+
+public struct VSMPageAllocator {
+    public u32 active_request_count;
+    u32 _pad;
+    public VSMAllocRequest *requests;
+};
+
+public func push_page_alloc_request(__ref VSMPageAllocator allocator, in VSMAllocRequest request) -> void {
+    let index = __atomic_add(allocator.active_request_count, 1, MemoryOrder::AcquireRelease);
+    allocator.requests[index] = request;
+}

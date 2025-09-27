@@ -12,6 +12,7 @@ struct ShaderParameters {
 
     StorageImage2D<u32, ImageFormat::R32UI> page_tables;
     RWStructuredBuffer<u32> page_visibility_mask;
+    RWStructuredBuffer<VSMPageAllocator> allocator;
 };
 
 [[shader("compute")]]
@@ -37,16 +38,18 @@ func cs_main(
     let clipmap_index = params.directional_light.get_clipmap_index(params.camera, uv, depth);
     let clipmap = params.clipmaps[clipmap_index];
     let clipmap_info = clipmap.get_clipmap_info(world_pos, page_table_extent.xy);
+    let page_table_address = clipmap_info.page_table_address;
 
     // The algorithm described in the page 3 of the paper:
     // This entire loop is called "waterfall", used to avoid
     // atomic operations per thread, the execution cascades
     // down each iteration to save huge time
+
     var first_thread_visible = false;
     var done = false;
     while (!done) {
-        let subgroup_address = WaveReadLaneFirst(clipmap_info.page_address);
-        if (all(subgroup_address == clipmap_info.page_address)) {
+        let subgroup_address = WaveReadLaneFirst(page_table_address);
+        if (all(subgroup_address == page_table_address)) {
             if (WaveIsFirstLane()) {
                 first_thread_visible = true;
             }
@@ -55,22 +58,23 @@ func cs_main(
     }
 
     if (first_thread_visible) {
-        // Set it to visible
-        let page_data = __atomic_or(params.page_tables[clipmap_info.page_address], VSM_PAGE_VISIBLE_BIT);
-        let page_metadata = VSMPageMetadata(page_data);
-        printf("%d", page_metadata.get_physical_address());
+        // Mark it as visible
+        let page_data = __atomic_or(params.page_tables[page_table_address], VSM_PAGE_VISIBLE_BIT);
+        let page = VSMPageMetadata(page_data);
 
         // Did the page just became visible?
-        if (!page_metadata.is_visible()) {
-            if (page_metadata.is_backed()) {
+        if (!page.is_visible()) {
+            if (page.is_backed()) {
                 // we already have allocated this page, and it was marked visible
-                let physical_address = page_metadata.get_physical_address();
+                // keep track of visible and backed pages so the allocator wont overwrite it
+                let physical_address = page.get_physical_address();
                 let visibility_mask_index = physical_address / 32;
                 let bit_index = physical_address % 32;
                 let visibility_bit = 1 << bit_index;
                 __atomic_or(params.page_visibility_mask[visibility_mask_index], visibility_bit, MemoryOrder::Relaxed);
             } else {
-                // TODO: This is pagefault, handle an allocation request
+                let alloc_request = VSMAllocRequest(page_table_address);
+                push_page_alloc_request(params.allocator[0], alloc_request);
             }
         }
     }

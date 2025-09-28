@@ -10,7 +10,7 @@ struct ShaderParameters {
 
     Image2D<f32> depth_image;
 
-    StorageImage2D<u32, ImageFormat::R32UI> page_tables;
+    RWTexture2DArray<u32, ImageFormat::R32UI> page_tables;
     RWStructuredBuffer<u32> page_visibility_mask;
     RWStructuredBuffer<VSMPageAllocator> allocator;
 };
@@ -37,8 +37,8 @@ func cs_main(
 
     let clipmap_index = params.directional_light.get_clipmap_index(params.camera, uv, depth);
     let clipmap = params.clipmaps[clipmap_index];
-    let clipmap_info = clipmap.get_clipmap_info(world_pos, page_table_extent.xy);
-    let page_table_address = clipmap_info.page_table_address;
+    let clipmap_info = clipmap.get_clipmap_info(world_pos, page_table_extent);
+    let page_table_address = i32x3(clipmap_info.wrapped_vsm_texel, clipmap_index);
 
     // The algorithm described in the page 3 of the paper:
     // This entire loop is called "waterfall", used to avoid
@@ -58,7 +58,7 @@ func cs_main(
 
     if (first_thread_visible) {
         // Mark it as visible
-        let page_data = __atomic_or(params.page_tables[page_table_address], VSM_PAGE_VISIBLE_BIT);
+        let page_data = __atomic_or(params.page_tables[page_table_address], VSM_PAGE_VISIBLE_BIT, MemoryOrder::Relaxed);
         let page = VSMPageMetadata(page_data);
 
         // Did the page just became visible?

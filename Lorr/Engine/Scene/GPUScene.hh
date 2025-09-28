@@ -98,7 +98,7 @@ constexpr static u32 VSM_PAGE_TABLE_SIZE = VSM_MAX_VIRTUAL_EXTENT / VSM_PAGE_SIZ
 constexpr static u32 VSM_PAGE_TABLE_MIP_COUNT = std::bit_width(VSM_PAGE_TABLE_SIZE);
 
 struct VSMAllocRequest {
-    alignas(4) glm::ivec2 page_table_address = {};
+    alignas(4) glm::ivec3 page_table_address = {};
 };
 
 struct VSMPageAllocator {

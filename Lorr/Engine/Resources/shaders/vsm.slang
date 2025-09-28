@@ -62,7 +62,7 @@ public struct VSMPageMetadata {
 };
 
 public struct VSMAllocRequest {
-    public i32x2 page_table_address;
+    public i32x3 page_table_address;
 };
 
 public struct VSMPageAllocator {

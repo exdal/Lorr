@@ -127,8 +127,9 @@ struct SceneRenderer {
     // Many of the old papers related to virtual texturing
     // also calls this texture "indirection", same can be
     // said for VSM articles existed before Matej's
-    Image vsm_page_table = {};
-    ImageView vsm_page_table_view = {};
+    vuk::Unique<vuk::Image> vsm_page_tables{};
+    vuk::Unique<vuk::ImageView> vsm_page_tables_view{};
+    vuk::ImageAttachment vsm_page_tables_attachment = {};
     Image vsm_physical_pages = {};
     ImageView vsm_physical_pages_view = {};
     Buffer vsm_page_visibility_mask_buffer = {};
@@ -149,7 +150,6 @@ struct SceneRenderer {
     auto generate_hiz(this SceneRenderer &, GeometryContext &context) -> void;
     auto cull_for_camera(this SceneRenderer &, vuk::Value<vuk::Buffer> &camera_buffer, GeometryContext &context) -> void;
     auto draw_for_camera(this SceneRenderer &, vuk::Value<vuk::Buffer> &camera_buffer, GeometryContext &context) -> void;
-    auto draw_depth_for_camera(this SceneRenderer &, vuk::Value<vuk::Buffer> &camera_buffer, GeometryContext &context) -> void;
     auto pick_visbuffer(this SceneRenderer &, const glm::uvec2 &picking_texel, GeometryContext &context) -> u32;
 };
 

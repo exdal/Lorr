@@ -73,6 +73,7 @@ auto calculate_virtual_shadow_matrices(
             -z_extension,
             z_extension
         );
+        clip_from_clipmap[1][1] *= -1.0f;
 
         // Offset projection to page
         auto page_table_size = static_cast<f32>(GPU::VSM_PAGE_TABLE_SIZE);

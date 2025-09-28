@@ -54,7 +54,7 @@ public struct Camera {
 
 public struct VirtualClipmapInfo {
     public f32x2 wrapped_vsm_uv;
-    public i32x2 page_table_address;
+    public i32x2 wrapped_vsm_texel;
     public f32x3 light_pos;
     public f32 projected_depth;
 };
@@ -63,14 +63,14 @@ public struct VirtualClipmap {
     public f32x4x4 projection_view_mat;
     public i32x2 page_offset;
 
-    public func get_clipmap_info(f32x3 world_pos, i32x2 page_table_extent) -> VirtualClipmapInfo {
+    public func get_clipmap_info(f32x3 world_pos, i32x3 page_table_extent) -> VirtualClipmapInfo {
         let light_pos_h = mul(this.projection_view_mat, f32x4(world_pos, 1.0));
         let projected_depth = light_pos_h.z / light_pos_h.w;
         let light_pos = light_pos_h.xyz / light_pos_h.w;
         let wrapped_uv = fract(light_pos.xy * 0.5 + 0.5);
-        let page_table_address = i32x2(wrapped_uv * f32x2(page_table_extent));
+        let wrapped_texel = i32x2(wrapped_uv * f32x2(page_table_extent.xy));
 
-        return VirtualClipmapInfo(wrapped_uv, page_table_address, light_pos, projected_depth);
+        return VirtualClipmapInfo(wrapped_uv, wrapped_texel, light_pos, projected_depth);
     }
 };
 

@@ -54,6 +54,10 @@ public func mod(f32x3 x, f32x3 y) -> f32x3 {
   return x - y * floor(x / y);
 }
 
+public func mod(f32x2 x, f32x2 y) -> f32x2 {
+  return x - y * floor(x / y);
+}
+
 /// INTERSECTION
 public func ray_sphere_intersect(f32x3 ray_origin, f32x3 ray_direction, f32 sphere_radius) -> Optional<f32x2> {
     const let a = dot(ray_direction, ray_direction);

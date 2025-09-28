@@ -22,7 +22,7 @@ func inferno(f32 t) -> f32x3 {
 [[shader("fragment")]]
 func fs_main(
     VertexOutput input,
-    uniform ShaderParameters params,
+    uniform ParameterBlock<ShaderParameters> params,
     uniform f32 heatmap_scale
 ) -> f32x4 {
     let draw_scale = clamp(heatmap_scale, 0.0, 100.0) / 100.0;

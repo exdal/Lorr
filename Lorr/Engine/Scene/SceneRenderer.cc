@@ -4,7 +4,10 @@
 
 #include "Engine/Core/App.hh"
 
+#include "Engine/Graphics/ImGuiRenderer.hh"
 #include "Engine/Graphics/VulkanDevice.hh"
+
+#include <vuk/runtime/vk/AllocatorHelpers.hpp>
 
 namespace lr {
 enum BindlessDescriptorLayout : u32 {
@@ -349,12 +352,6 @@ auto SceneRenderer::init(this SceneRenderer &self) -> bool {
     };
     Pipeline::create(device, default_slang_session, vis_decode_pipeline_info, bindless_descriptor_set).value();
 
-    auto vis_depth_only_pipeline_info = PipelineCompileInfo{
-        .module_name = "passes.visbuffer_depth_only",
-        .entry_points = { "vs_main" },
-    };
-    Pipeline::create(device, default_slang_session, vis_depth_only_pipeline_info).value();
-
     auto vsm_reset_page_visibility_pipeline_info = PipelineCompileInfo{
         .module_name = "passes.vsm_reset_page_visibility",
         .entry_points = { "cs_main" },
@@ -381,9 +378,15 @@ auto SceneRenderer::init(this SceneRenderer &self) -> bool {
 
     auto vsm_draw_physical_pages_pipeline_info = PipelineCompileInfo{
         .module_name = "passes.vsm_draw_physical_pages",
-        .entry_points = { "cs_main" },
+        .entry_points = { "vs_main", "fs_main" },
     };
     Pipeline::create(device, default_slang_session, vsm_draw_physical_pages_pipeline_info).value();
+
+    auto vsm_debug_pipeline_info = PipelineCompileInfo{
+        .module_name = "passes.vsm_debug",
+        .entry_points = { "vs_main", "fs_main" },
+    };
+    Pipeline::create(device, default_slang_session, vsm_debug_pipeline_info).value();
 
     //  ── PBR ─────────────────────────────────────────────────────────────
     auto pbr_apply_pipeline_info = PipelineCompileInfo{
@@ -754,16 +757,25 @@ auto SceneRenderer::prepare_frame(this SceneRenderer &self, FramePrepareInfo &in
             self.sky_multiscatter_lut_view.acquire(device, "sky multiscatter lut", vuk::ImageUsageFlagBits::eSampled, vuk::Access::eComputeSampled);
     }
 
-    if (!self.vsm_page_table_view) {
-        auto vsm_page_table_info = ImageInfo{
-            .format = vuk::Format::eR32Uint,
-            .usage = vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eSampled,
-            .type = vuk::ImageType::e2D,
+    if (!self.vsm_page_tables) {
+        self.vsm_page_tables_attachment = vuk::ImageAttachment{
+            .usage = vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eTransferDst,
             .extent = { .width = GPU::VSM_PAGE_TABLE_SIZE, .height = GPU::VSM_PAGE_TABLE_SIZE, .depth = 1 },
-            .mip_count = GPU::VSM_PAGE_TABLE_MIP_COUNT,
-            .name = "VSM Page Table",
+            .format = vuk::Format::eR32Uint,
+            .sample_count = vuk::Samples::e1,
+            .view_type = vuk::ImageViewType::e2DArray,
+            .base_level = 0,
+            .level_count = 1,
+            .base_layer = 0,
+            .layer_count = 6,
         };
-        std::tie(self.vsm_page_table, self.vsm_page_table_view) = Image::create_with_view(device, vsm_page_table_info).value();
+        self.vsm_page_tables = *vuk::allocate_image(device.get_allocator(), self.vsm_page_tables_attachment);
+        self.vsm_page_tables_attachment.image = *self.vsm_page_tables;
+        self.vsm_page_tables_view = *vuk::allocate_image_view(device.get_allocator(), self.vsm_page_tables_attachment);
+        self.vsm_page_tables_attachment.image_view = *self.vsm_page_tables_view;
+
+        prepared_frame.vsm_page_table = vuk::discard_ia("vsm page tables", self.vsm_page_tables_attachment);
+        prepared_frame.vsm_page_table = vuk::clear_image(std::move(prepared_frame.vsm_page_table), vuk::Black<u32>);
 
         auto vsm_physical_pages_size = static_cast<u32>(glm::ceil(glm::sqrt(GPU::VSM_PAGE_COUNT)) * GPU::VSM_PAGE_SIZE);
         auto vsm_physical_pages_info = ImageInfo{
@@ -776,8 +788,6 @@ auto SceneRenderer::prepare_frame(this SceneRenderer &self, FramePrepareInfo &in
         };
         std::tie(self.vsm_physical_pages, self.vsm_physical_pages_view) = Image::create_with_view(device, vsm_physical_pages_info).value();
 
-        prepared_frame.vsm_page_table = self.vsm_page_table_view.discard(device, "vsm page table", vuk::ImageUsageFlagBits::eStorage);
-        prepared_frame.vsm_page_table = vuk::clear_image(std::move(prepared_frame.vsm_page_table), vuk::Black<u32>);
         prepared_frame.vsm_physical_pages = self.vsm_physical_pages_view.discard(device, "vsm physical pages", vuk::ImageUsageFlagBits::eStorage);
         prepared_frame.vsm_physical_pages = vuk::clear_image(std::move(prepared_frame.vsm_physical_pages), vuk::Black<f32>);
 
@@ -790,10 +800,9 @@ auto SceneRenderer::prepare_frame(this SceneRenderer &self, FramePrepareInfo &in
         prepared_frame.vsm_allocation_requests_buffer = self.vsm_allocation_requests_buffer.discard(device, "vsm alloc requests");
         prepared_frame.vsm_allocation_requests_buffer = zero_fill_pass(std::move(prepared_frame.vsm_allocation_requests_buffer));
     } else {
-        prepared_frame.vsm_page_table =
-            self.vsm_page_table_view.acquire(device, "vsm page table", vuk::ImageUsageFlagBits::eStorage, vuk::eFragmentSampled);
+        prepared_frame.vsm_page_table = vuk::acquire_ia("vsm page tables", self.vsm_page_tables_attachment, vuk::eFragmentSampled);
         prepared_frame.vsm_physical_pages =
-            self.vsm_physical_pages_view.acquire(device, "vsm physical pages", vuk::ImageUsageFlagBits::eStorage, vuk::eFragmentSampled);
+            self.vsm_physical_pages_view.acquire(device, "vsm physical pages", vuk::ImageUsageFlagBits::eStorage, vuk::eComputeRW);
         prepared_frame.vsm_page_visibility_mask_buffer =
             self.vsm_page_visibility_mask_buffer.acquire(device, "vsm page visibility mask", vuk::eMemoryRW);
         prepared_frame.vsm_allocation_requests_buffer = self.vsm_allocation_requests_buffer.acquire(device, "vsm alloc requests", vuk::eMemoryRW);
@@ -1201,6 +1210,15 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
 
             vsm_page_table_attachment = vsm_reset_page_visibility_pass(std::move(vsm_page_table_attachment));
 
+            auto vsm_clear_visibility_mask_pass =
+                vuk::make_pass("vsm clear visibility mask", [](vuk::CommandBuffer &command_buffer, VUK_BA(vuk::eTransferWrite) dst) {
+                    command_buffer.fill_buffer(dst, 0_u32);
+
+                    return dst;
+                });
+
+            vsm_page_visibility_mask_buffer = vsm_clear_visibility_mask_pass(std::move(vsm_page_visibility_mask_buffer));
+
             auto vsm_mark_visible_pages_pass = vuk::make_pass(
                 "vsm mark visible pages",
                 [](vuk::CommandBuffer &cmd_list, //
@@ -1227,6 +1245,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
             );
 
             auto vsm_page_allocator_buffer = transfer_man.scratch_buffer<GPU::VSMPageAllocator>({
+                .active_request_count = 0,
                 .requests = vsm_allocation_requests_buffer->device_address,
             });
 
@@ -1287,6 +1306,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                 std::move(vsm_page_table_attachment)
             );
 
+            // DUMMY -- vuk doesnt allow attachmentless passes
             auto vsm_depth_attachment = vuk::declare_ia(
                 "vsm depth",
                 { .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eDepthStencilAttachment,
@@ -1299,8 +1319,6 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
 
             for (u32 clipmap_index = 0; clipmap_index < directional_light_info.clipmap_count; clipmap_index++) {
                 auto &current_clipmap = frame.directional_light_clipmaps[clipmap_index];
-                vsm_depth_attachment = vuk::clear_image(std::move(vsm_depth_attachment), vuk::Black<f32>);
-                vsm_geometry_context.depth_attachment = std::move(vsm_depth_attachment);
 
                 auto vsm_camera_buffer = transfer_man.scratch_buffer<GPU::Camera>({
                     .projection_view_mat = current_clipmap.projection_view_mat,
@@ -1308,54 +1326,145 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                 });
 
                 self.cull_for_camera(vsm_camera_buffer, vsm_geometry_context);
-                self.draw_depth_for_camera(vsm_camera_buffer, vsm_geometry_context);
-
-                vsm_depth_attachment = std::move(vsm_geometry_context.depth_attachment);
-                debug_drawer_buffer = std::move(vsm_geometry_context.debug_drawer_buffer);
-
                 auto vsm_draw_physical_pages_pass = vuk::make_pass(
                     "vsm draw physical pages",
                     [clipmap_index](
-                        vuk::CommandBuffer &cmd_list, //
-                        VUK_BA(vuk::eComputeUniformRead) directional_light,
-                        VUK_BA(vuk::eComputeRead) clipmaps,
-                        VUK_IA(vuk::eComputeSampled) depth,
-                        VUK_IA(vuk::eComputeSampled) page_table,
-                        VUK_IA(vuk::eComputeRW) physical_pages
+                        vuk::CommandBuffer &cmd_list,
+                        VUK_BA(vuk::eIndirectRead) triangle_indirect,
+                        VUK_BA(vuk::eIndexRead) index_buffer,
+                        VUK_BA(vuk::eVertexRead) directional_light,
+                        VUK_BA(vuk::eVertexRead) meshes,
+                        VUK_BA(vuk::eVertexRead) mesh_instances,
+                        VUK_BA(vuk::eVertexRead) meshlet_instances,
+                        VUK_BA(vuk::eVertexRead) transforms,
+                        VUK_BA(vuk::eVertexRead | vuk::eFragmentRead) clipmaps,
+                        VUK_IA(vuk::eFragmentSampled) page_tables,
+                        VUK_IA(vuk::eFragmentRW) physical_pages,
+                        VUK_IA(vuk::eDepthStencilRW) dummy_depth
                     ) {
+                        auto viewport_rect = vuk::Rect2D{
+                            .offset = { .x = 0, .y = 0 },
+                            .extent = { .width = GPU::VSM_MAX_VIRTUAL_EXTENT, .height = GPU::VSM_MAX_VIRTUAL_EXTENT },
+                        };
                         cmd_list //
-                            .bind_compute_pipeline("passes.vsm_draw_physical_pages")
+                            .bind_graphics_pipeline("passes.vsm_draw_physical_pages")
+                            .set_rasterization({ .cullMode = vuk::CullModeFlagBits::eBack })
+                            .set_depth_stencil({ .depthCompareOp = vuk::CompareOp::eGreaterOrEqual })
+                            .set_dynamic_state(vuk::DynamicStateFlagBits::eViewport | vuk::DynamicStateFlagBits::eScissor)
+                            .set_viewport(0, viewport_rect)
+                            .set_scissor(0, vuk::Rect2D::framebuffer())
                             .bind_buffer(0, 0, directional_light)
-                            .bind_buffer(0, 1, clipmaps)
-                            .bind_image(0, 2, depth)
-                            .bind_image(0, 3, page_table)
-                            .bind_image(0, 4, physical_pages)
+                            .bind_buffer(0, 1, meshes)
+                            .bind_buffer(0, 2, mesh_instances)
+                            .bind_buffer(0, 3, meshlet_instances)
+                            .bind_buffer(0, 4, transforms)
+                            .bind_buffer(0, 5, clipmaps)
+                            .bind_image(0, 6, page_tables)
+                            .bind_image(0, 7, physical_pages)
+                            .bind_index_buffer(index_buffer, vuk::IndexType::eUint32)
                             .push_constants(
-                                vuk::ShaderStageFlagBits::eCompute,
+                                vuk::ShaderStageFlagBits::eVertex | vuk::ShaderStageFlagBits::eFragment,
                                 0,
-                                PushConstants(clipmap_index, page_table->extent, physical_pages->extent, depth->extent)
+                                PushConstants(
+                                    page_tables->extent,
+                                    clipmap_index,
+                                    physical_pages->extent,
+                                    GPU::VSM_PAGE_SIZE,
+                                    GPU::VSM_PAGE_TABLE_SIZE
+                                )
                             )
-                            .dispatch_invocations_per_pixel(depth);
+                            .draw_indexed_indirect(1, triangle_indirect);
 
-                        return std::make_tuple(directional_light, clipmaps, depth, page_table, physical_pages);
+                        return std::make_tuple(
+                            index_buffer, //
+                            directional_light,
+                            meshes,
+                            mesh_instances,
+                            meshlet_instances,
+                            transforms,
+                            clipmaps,
+                            page_tables,
+                            physical_pages,
+                            dummy_depth
+                        );
                     }
                 );
 
                 std::tie(
+                    vsm_geometry_context.reordered_indices_buffer,
                     directional_light_buffer,
+                    vsm_geometry_context.meshes_buffer,
+                    vsm_geometry_context.mesh_instances_buffer,
+                    vsm_geometry_context.meshlet_instances_buffer,
+                    vsm_geometry_context.transforms_buffer,
                     directional_light_clipmaps_buffer,
-                    vsm_depth_attachment,
                     vsm_page_table_attachment,
-                    vsm_physical_pages_attachment
+                    vsm_physical_pages_attachment,
+                    vsm_depth_attachment
                 ) =
                     vsm_draw_physical_pages_pass(
+                        std::move(vsm_geometry_context.draw_geometry_cmd_buffer),
+                        std::move(vsm_geometry_context.reordered_indices_buffer),
                         std::move(directional_light_buffer),
+                        std::move(vsm_geometry_context.meshes_buffer),
+                        std::move(vsm_geometry_context.mesh_instances_buffer),
+                        std::move(vsm_geometry_context.meshlet_instances_buffer),
+                        std::move(vsm_geometry_context.transforms_buffer),
                         std::move(directional_light_clipmaps_buffer),
-                        std::move(vsm_depth_attachment),
                         std::move(vsm_page_table_attachment),
-                        std::move(vsm_physical_pages_attachment)
+                        std::move(vsm_physical_pages_attachment),
+                        std::move(vsm_depth_attachment)
                     );
+
+                debug_drawer_buffer = std::move(vsm_geometry_context.debug_drawer_buffer);
             }
+        }
+
+        auto vsm_debug_attachment = vuk::declare_ia(
+            "vsm debug",
+            { .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eColorAttachment,
+              .extent = { .width = 512, .height = 512, .depth = 1 },
+              .format = vuk::Format::eR8G8B8A8Unorm,
+              .sample_count = vuk::Samples::e1,
+              .level_count = 1,
+              .layer_count = 1 }
+        );
+
+        auto debugging_clipmap_index = 0_u32;
+        static auto debug_index = 0_i32;
+        auto vsm_debug_pass = vuk::make_pass(
+            "vsm debug pages",
+            [debugging_clipmap_index](
+                vuk::CommandBuffer &cmd_list, //
+                VUK_IA(vuk::eColorRW) dst,
+                VUK_IA(vuk::eFragmentSampled) page_tables,
+                VUK_IA(vuk::eFragmentSampled) physical_pages
+            ) {
+                cmd_list.bind_graphics_pipeline("passes.vsm_debug")
+                    .set_rasterization({})
+                    .set_color_blend(dst, vuk::BlendPreset::eOff)
+                    .set_dynamic_state(vuk::DynamicStateFlagBits::eViewport | vuk::DynamicStateFlagBits::eScissor)
+                    .set_viewport(0, vuk::Rect2D::framebuffer())
+                    .set_scissor(0, vuk::Rect2D::framebuffer())
+                    .bind_sampler(0, 0, nearest_clamp_sampler)
+                    .bind_image(0, 1, page_tables)
+                    .bind_image(0, 2, physical_pages)
+                    .push_constants(vuk::ShaderStageFlagBits::eFragment, 0, PushConstants(debugging_clipmap_index, debug_index))
+                    .draw(3, 1, 0, 0);
+
+                return std::make_tuple(dst, page_tables, physical_pages);
+            }
+        );
+
+        std::tie(vsm_debug_attachment, vsm_page_table_attachment, vsm_physical_pages_attachment) =
+            vsm_debug_pass(std::move(vsm_debug_attachment), std::move(vsm_page_table_attachment), std::move(vsm_physical_pages_attachment));
+
+        auto &imgui_renderer = App::mod<ImGuiRenderer>();
+        {
+            ImGui::Begin("VSM Debug");
+            ImGui::DragInt("Debug", &debug_index);
+            ImGui::Image(imgui_renderer.add_image(std::move(vsm_debug_attachment)), { 512, 512 });
+            ImGui::End();
         }
 
         // VBGTAO

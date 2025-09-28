@@ -7,12 +7,13 @@ struct ShaderParameters {
     ConstantBuffer<VSMPageAllocator> allocator;
 
     RWStructuredBuffer<u32> page_visibility_mask;
-    StorageImage2D<u32, ImageFormat::R32UI> page_tables;
+    RWTexture2DArray<u32, ImageFormat::R32UI> page_tables;
 };
 ParameterBlock<ShaderParameters> params;
 
 func poll_requests(u32 mask_count, u32 request_index) -> void {
     let request = params.allocator.requests[request_index];
+
     for (var i = 0; i < mask_count; i++) {
         let mask = params.page_visibility_mask[i];
         let bit = firstbitlow(~mask);

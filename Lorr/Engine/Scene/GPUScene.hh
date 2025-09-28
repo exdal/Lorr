@@ -103,8 +103,9 @@ struct VSMAllocRequest {
 
 struct VSMPageAllocator {
     alignas(4) u32 active_request_count = {};
-    alignas(4) u32 _pad = {};
+    alignas(4) u32 dirty_physical_page_count = {};
     alignas(8) u64 requests = {};
+    alignas(8) u64 dirty_physical_page_addresses = {};
 };
 
 struct VirtualClipmap {

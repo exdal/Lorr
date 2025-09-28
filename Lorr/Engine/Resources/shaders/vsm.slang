@@ -67,11 +67,17 @@ public struct VSMAllocRequest {
 
 public struct VSMPageAllocator {
     public u32 active_request_count;
-    u32 _pad;
+    public u32 dirty_physical_page_count;
     public VSMAllocRequest *requests;
+    public u32 *dirty_physical_page_addresses;
 };
 
 public func push_page_alloc_request(__ref VSMPageAllocator allocator, in VSMAllocRequest request) -> void {
     let index = __atomic_add(allocator.active_request_count, 1, MemoryOrder::AcquireRelease);
     allocator.requests[index] = request;
+}
+
+public func push_dirty_physical_page(__ref VSMPageAllocator allocator, u32 physical_page_address) -> void {
+    let index = __atomic_add(allocator.dirty_physical_page_count, 1, MemoryOrder::AcquireRelease);
+    allocator.dirty_physical_page_addresses[index] = physical_page_address;
 }

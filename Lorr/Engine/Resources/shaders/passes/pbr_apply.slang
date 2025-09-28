@@ -4,6 +4,7 @@ import pbr;
 import sky;
 import scene;
 import shadow;
+import vsm;
 
 #include <fullscreen.slang>
 
@@ -18,7 +19,8 @@ struct ShaderParameters {
     Image2D<f32x4> normal_image;
     Image2D<f32x3> emissive_image;
     Image2D<f32x3> metallic_roughness_occlusion_image;
-    Image2D<f32> vsm_page_table;
+    Texture2DArray<u32> vsm_page_table;
+    Texture2D<u32> vsm_physical_pages;
 
     ConstantBuffer<Camera> camera;
 };
@@ -50,7 +52,9 @@ public func cascade_debug_visualization(
 [[shader("fragment")]]
 func fs_main(
     VertexOutput input,
-    uniform PBRContext context
+    uniform PBRContext context,
+    uniform i32x3 page_table_extent,
+    uniform i32 page_size,
 ) -> f32x4 {
     let pixel_pos = u32x3(u32x2(input.position.xy), 0);
     let depth = params.depth_image.Load(pixel_pos);
@@ -130,15 +134,24 @@ func fs_main(
     let NoL = max(dot(N, L), 0.0);
     if (NoL > 0.0) {
         var directional_shadow = 1.0;
-        // if (context.directional_light_cascades) {
-        //     let view_z = -mul(params.camera.view_mat, f32x4(world_position, 1.0)).z;
-        //     directional_shadow = sample_shadow_map(
-        //         context.directional_light,
-        //         context.directional_light_cascades,
-        //         params.directional_light_shadowmap,
-        //         params.directional_light_sampler,
-        //         view_z, world_position, N);
-        // }
+        if (false && context.directional_light_clipmaps) {
+            let clipmap_index = context.directional_light.get_clipmap_index(params.camera, input.tex_coord, depth);
+            let clipmap = context.directional_light_clipmaps[clipmap_index];
+            let clipmap_info = clipmap.get_clipmap_info(world_position, page_table_extent);
+            let page_table_address = i32x3(clipmap_info.wrapped_vsm_texel, clipmap_index);
+            let page_data = params.vsm_page_table.Load(i32x4(page_table_address, 0));
+            let page = VSMPageMetadata(page_data);
+            if (page.is_backed()) {
+                let physical_page_address = page.get_physical_address();
+                let physical_page_coords = i32x2(physical_page_address / page_table_extent.x, physical_page_address % page_table_extent.x);
+                let physical_page_offset = physical_page_coords * page_size;
+                let page_uv = page_table_extent.xy * std::mod(clipmap_info.wrapped_vsm_uv, 1.0 / f32x2(page_table_extent.xy));
+                let page_texel = i32x2(page_uv * page_size);
+                let physical_texel = physical_page_offset + page_texel;
+                let shadow = params.vsm_physical_pages.Load(i32x3(physical_texel, 0));
+                directional_shadow = ((shadow + context.directional_light.depth_bias) < clipmap_info.projected_depth) ? 1.0 : 0.0;
+            }
+        }
 
         let brdf = BRDF(V, N, L, albedo_color, roughness, metallic);
         material_surface_color = brdf * horizon * sun_illuminance * NoL * directional_shadow;
@@ -149,8 +162,16 @@ func fs_main(
     let ambient_contribution = base_ambient_color * albedo_color * sun_illuminance;
     let indirect_illuminance_sum = (indirect_illuminance + ambient_contribution) * occlusion;
     var final_color = material_surface_color + indirect_illuminance_sum + emission;
-    let ci = context.directional_light.get_clipmap_index(params.camera, input.tex_coord, depth);
-    final_color = cascade_debug_visualization(final_color, ci, context.directional_light.clipmap_count);
+
+    if (context.directional_light_clipmaps) {
+        let clipmap_index = context.directional_light.get_clipmap_index(params.camera, input.tex_coord, depth);
+        let clipmap = context.directional_light_clipmaps[clipmap_index];
+        let clipmap_info = clipmap.get_clipmap_info(world_position, page_table_extent);
+        let pageUv = fract(clipmap_info.light_pos);
+        if (pageUv.x < .01 || pageUv.y < .01 || pageUv.x > .99 || pageUv.y > .99) {
+            return f32x4(1, 0, 0, 1);
+        }
+    }
 
     return f32x4(final_color, 1.0);
 }

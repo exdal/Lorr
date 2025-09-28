@@ -78,6 +78,7 @@ struct PreparedFrame {
     vuk::Value<vuk::Buffer> vbgtao_buffer = {};
     vuk::Value<vuk::Buffer> vsm_page_visibility_mask_buffer = {};
     vuk::Value<vuk::Buffer> vsm_allocation_requests_buffer = {};
+    vuk::Value<vuk::Buffer> vsm_dirty_physical_page_addresses_buffer = {};
     vuk::Value<vuk::ImageAttachment> sky_transmittance_lut = {};
     vuk::Value<vuk::ImageAttachment> sky_multiscatter_lut = {};
     vuk::Value<vuk::ImageAttachment> vsm_page_table = {};
@@ -134,6 +135,7 @@ struct SceneRenderer {
     ImageView vsm_physical_pages_view = {};
     Buffer vsm_page_visibility_mask_buffer = {};
     Buffer vsm_allocation_requests_buffer = {};
+    Buffer vsm_dirty_physical_page_addresses_buffer = {};
 
     bool debug_lines = false;
     f32 overdraw_heatmap_scale = 0.0f;

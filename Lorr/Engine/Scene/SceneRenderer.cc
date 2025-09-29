@@ -819,7 +819,7 @@ auto SceneRenderer::prepare_frame(this SceneRenderer &self, FramePrepareInfo &in
     } else {
         prepared_frame.vsm_page_table = vuk::acquire_ia("vsm page tables", self.vsm_page_tables_attachment, vuk::eFragmentSampled);
         prepared_frame.vsm_physical_pages =
-            self.vsm_physical_pages_view.acquire(device, "vsm physical pages", vuk::ImageUsageFlagBits::eStorage, vuk::eComputeRW);
+            self.vsm_physical_pages_view.acquire(device, "vsm physical pages", vuk::ImageUsageFlagBits::eStorage, vuk::eFragmentSampled);
         prepared_frame.vsm_page_visibility_mask_buffer =
             self.vsm_page_visibility_mask_buffer.acquire(device, "vsm page visibility mask", vuk::eMemoryRW);
         prepared_frame.vsm_allocation_requests_buffer = self.vsm_allocation_requests_buffer.acquire(device, "vsm alloc requests", vuk::eMemoryRW);
@@ -1212,8 +1212,11 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                 .visible_meshlet_instances_indices_buffer = std::move(visible_meshlet_instances_indices_buffer),
                 .meshlet_instance_visibility_mask_buffer = std::move(meshlet_instance_visibility_mask_buffer),
                 .transforms_buffer = std::move(transforms_buffer),
+                .debug_drawer_buffer = std::move(debug_drawer_buffer),
                 .reordered_indices_buffer = std::move(reordered_indices_buffer),
             };
+
+            vsm_page_table_attachment = vuk::clear_image(std::move(vsm_page_table_attachment), vuk::Black<u32>);
 
             auto vsm_reset_page_visibility_pass = vuk::make_pass(
                 "vsm reset page visibility",
@@ -1313,7 +1316,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                         .bind_buffer(0, 0, allocator)
                         .bind_buffer(0, 1, page_visibility_mask)
                         .bind_image(0, 2, page_table)
-                        .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, (GPU::VSM_PAGE_COUNT + 31) / 32)
+                        .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, GPU::VSM_MAX_VIRTUAL_EXTENT / GPU::VSM_PAGE_SIZE)
                         .dispatch(1);
 
                     return std::make_tuple(page_table, allocator);
@@ -1398,6 +1401,8 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                     .resolution = glm::vec2(GPU::VSM_MAX_VIRTUAL_EXTENT),
                 });
 
+                vsm_depth_attachment = vuk::clear_image(std::move(vsm_depth_attachment), vuk::DepthZero);
+
                 self.cull_for_camera(vsm_camera_buffer, vsm_geometry_context);
                 auto vsm_draw_physical_pages_pass = vuk::make_pass(
                     "vsm draw physical pages",
@@ -1423,7 +1428,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                         cmd_list //
                             .bind_graphics_pipeline("passes.vsm_draw_physical_pages")
                             .set_rasterization({ .cullMode = vuk::CullModeFlagBits::eBack })
-                            .set_depth_stencil({ .depthCompareOp = vuk::CompareOp::eGreaterOrEqual })
+                            .set_depth_stencil({ .depthWriteEnable = true, .depthTestEnable = true, .depthCompareOp = vuk::CompareOp::eGreaterOrEqual })
                             .set_dynamic_state(vuk::DynamicStateFlagBits::eViewport | vuk::DynamicStateFlagBits::eScissor)
                             .set_viewport(0, viewport_rect)
                             .set_scissor(0, vuk::Rect2D::framebuffer())
@@ -1443,8 +1448,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                                     page_tables->extent,
                                     clipmap_index,
                                     physical_pages->extent,
-                                    GPU::VSM_PAGE_SIZE,
-                                    GPU::VSM_PAGE_TABLE_SIZE
+                                    GPU::VSM_PAGE_SIZE
                                 )
                             )
                             .draw_indexed_indirect(1, triangle_indirect);
@@ -1489,9 +1493,10 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                         std::move(vsm_physical_pages_attachment),
                         std::move(vsm_depth_attachment)
                     );
-
-                debug_drawer_buffer = std::move(vsm_geometry_context.debug_drawer_buffer);
             }
+
+            //return vsm_depth_attachment;
+            debug_drawer_buffer = std::move(vsm_geometry_context.debug_drawer_buffer);
         }
 
         auto vsm_debug_attachment = vuk::declare_ia(
@@ -1504,16 +1509,14 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
               .layer_count = 1 }
         );
 
-        auto debugging_clipmap_index = 0_u32;
-        static auto debug_index = 0_i32;
+        static auto debugging_clipmap_index = 0_i32;
+        static auto debug_index = 0_u32;
         auto vsm_debug_pass = vuk::make_pass(
             "vsm debug pages",
-            [debugging_clipmap_index](
-                vuk::CommandBuffer &cmd_list, //
-                VUK_IA(vuk::eColorRW) dst,
-                VUK_IA(vuk::eFragmentSampled) page_tables,
-                VUK_IA(vuk::eFragmentSampled) physical_pages
-            ) {
+            [](vuk::CommandBuffer &cmd_list, //
+               VUK_IA(vuk::eColorRW) dst,
+               VUK_IA(vuk::eFragmentSampled) page_tables,
+               VUK_IA(vuk::eFragmentSampled) physical_pages) {
                 cmd_list.bind_graphics_pipeline("passes.vsm_debug")
                     .set_rasterization({})
                     .set_color_blend(dst, vuk::BlendPreset::eOff)
@@ -1536,7 +1539,21 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
         auto &imgui_renderer = App::mod<ImGuiRenderer>();
         {
             ImGui::Begin("VSM Debug");
-            ImGui::DragInt("Debug", &debug_index);
+            constexpr static const c8 *combo_items[] = {"Page Tables", "Physical Page"};
+            if (ImGui::BeginCombo("##vsm_debug_combo", combo_items[debug_index])) {
+                for (auto i = 0_sz; i < ls::count_of(combo_items); i++) {
+                    auto is_selected = debug_index == i;
+                    if (ImGui::Selectable(combo_items[i], is_selected)) {
+                        debug_index = i;
+                    }
+
+                    if (is_selected) {
+                        ImGui::SetItemDefaultFocus();
+                    }
+                }
+                ImGui::EndCombo();
+            }
+            ImGui::SliderInt("Clipmap", &debugging_clipmap_index, 0, 6);
             ImGui::Image(imgui_renderer.add_image(std::move(vsm_debug_attachment)), { 512, 512 });
             ImGui::End();
         }

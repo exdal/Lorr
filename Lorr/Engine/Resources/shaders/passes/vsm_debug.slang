@@ -21,7 +21,7 @@ func fs_main(
     var color = f32x3(0.0);
     switch (debug) {
         case 0: {
-            let page_data = params.page_tables.SampleLevel(params.sampler, f32x3(input.tex_coord, 0.0), 0.0);
+            let page_data = params.page_tables.SampleLevel(params.sampler, f32x3(input.tex_coord, f32(clipmap_index)), 0.0);
             let page = VSMPageMetadata(page_data);
             if (page.is_visible()) {
                 color.r = 1.0;

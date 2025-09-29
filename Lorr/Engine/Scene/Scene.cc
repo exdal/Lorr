@@ -57,8 +57,12 @@ auto calculate_virtual_shadow_matrices(
 
     auto page_table_size = static_cast<f32>(GPU::VSM_PAGE_TABLE_SIZE);
     auto forward = glm::normalize(-light.direction);
-    auto up = (glm::abs(1.0 - glm::dot(forward, glm::vec3(0, 1, 0))) > 0.99f) ? glm::vec3(0, 0, 1) : glm::vec3(0, 1, 0);
-    auto world_from_light = glm::lookAt(glm::vec3(0.0f), forward, up);
+    auto up = glm::vec3(0.0f, 1.0f, 0.0f);
+    if (1.0f - glm::abs(glm::dot(forward, up)) < 1e-5f) {
+        up = glm::vec3(0.0f, 0.0f, 1.0f);
+    }
+
+    auto world_from_light = glm::lookAtRH(glm::vec3(0.0f), forward, up);
 
     for (u32 clipmap_index = 0; clipmap_index < light.clipmap_count; clipmap_index++) {
         auto &clipmap = directional_light_clipmaps[clipmap_index];
@@ -78,7 +82,7 @@ auto calculate_virtual_shadow_matrices(
         auto clip_position = clip_from_clipmap * world_from_light * glm::vec4(camera.position, 1.0f);
         auto ndc_position = glm::vec2(clip_position) / clip_position.w;
         auto center_uv_position = ndc_position * 0.5f;
-        auto page_offset = glm::ivec2(center_uv_position * glm::vec2(page_table_size));
+        auto page_offset = glm::ivec2(glm::ceil(center_uv_position * glm::vec2(page_table_size)));
         auto page_shift = (glm::vec2(page_offset) / glm::vec2(page_table_size)) * 2.0f;
         auto shifted_projection_mat = glm::translate(glm::mat4(1.0f), glm::vec3(-page_shift, 0.0f)) * clip_from_clipmap;
         auto clipmap_from_page = glm::inverse(clip_from_clipmap) * shifted_projection_mat * world_from_light;

@@ -14,14 +14,14 @@ import debug_drawer;
 [[vk::binding(3)]] RWStructuredBuffer<MeshletInstance> meshlet_instances;
 [[vk::binding(4)]] RWStructuredBuffer<MeshletInstanceVisibility> visibility;
 [[vk::binding(5)]] StructuredBuffer<Transform> transforms;
+[[vk::binding(6)]] RWStructuredBuffer<DebugDrawer> debug_drawer;
 
 [[shader("compute")]]
 [[numthreads(CULLING_MESH_COUNT, 1, 1)]]
 func cs_main(
     uint3 thread_id : SV_DispatchThreadID,
     uniform u32 mesh_instances_count,
-    uniform CullFlags cull_flags,
-    // uniform DebugDrawer *debug_drawer,
+    uniform CullFlags cull_flags
 ) -> void {
     let mesh_instance_index = thread_id.x;
     if (mesh_instance_index >= mesh_instances_count) {
@@ -39,7 +39,7 @@ func cs_main(
     }
 
     let aabb_center = mul(transform.world, f32x4(mesh.bounds.aabb_center, 1.0)).xyz;
-    let aabb_extent = mul(transform.world, f32x4(mesh.bounds.aabb_extent, 0.0)).xyz;
+    let aabb_extent = abs(mul(transform.world, f32x4(mesh.bounds.aabb_extent, 0.0)).xyz);
     var lod_index = 0;
 #if 1
     // Credits:
@@ -63,15 +63,13 @@ func cs_main(
     }
 #endif
 
-#if 0
-    if (debug_drawer) {
-        var debug_aabb = DebugAABB();
-        debug_aabb.position = aabb_center;
-        debug_aabb.size = aabb_extent;
-        debug_aabb.color = f32x3(0.0, 0.0, 1.0);
-        debug_aabb.coord = DebugDrawCoord::World;
-        debug_draw_aabb(debug_drawer[0], debug_aabb);
-    }
+#ifdef DEBUG_DRAW
+    var debug_aabb = DebugAABB();
+    debug_aabb.position = aabb_center;
+    debug_aabb.size = aabb_extent;
+    debug_aabb.color = f32x3(0.0, 0.0, 1.0);
+    debug_aabb.coord = DebugDrawCoord::World;
+    debug_draw_aabb(debug_drawer[0], debug_aabb);
 #endif
 
     mesh_instances[mesh_instance_index].lod_index = lod_index;

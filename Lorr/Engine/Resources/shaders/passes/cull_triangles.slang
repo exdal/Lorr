@@ -14,11 +14,9 @@ import visbuffer;
 [[vk::binding(7)]] RWStructuredBuffer<u32> reordered_indices;
 [[vk::binding(8)]] RWStructuredBuffer<DrawIndexedIndirectCommand> draw_cmd;
 
-
 groupshared u32 base_index_shared;
 groupshared u32 triangles_passed_shared;
 groupshared mat4 model_view_proj_shared;
-groupshared u32 meshlet_triangle_count_shared;
 
 // https://github.com/GPUOpen-Effects/GeometryFX/blob/master/amd_geometryfx/src/Shaders/AMD_GeometryFX_Filtering.hlsl
 // Parameters: vertices in UV space, viewport extent
@@ -122,14 +120,12 @@ func cs_main(
     let meshlet_instance_index = visible_meshlet_instances_indices[visible_meshlet_instance_index];
     let meshlet_instance = meshlet_instances[meshlet_instance_index];
     let mesh_instance = mesh_instances[meshlet_instance.mesh_instance_index];
+    let mesh = meshes[mesh_instance.mesh_index];
+    let mesh_lod = mesh.lods[mesh_instance.lod_index];
+    let meshlet = mesh_lod.meshlets[meshlet_instance.meshlet_index];
 
     if (local_index == 0) {
         triangles_passed_shared = 0;
-
-        let mesh = meshes[mesh_instance.mesh_index];
-        let mesh_lod = mesh.lods[mesh_instance.lod_index];
-        let meshlet = mesh_lod.meshlets[meshlet_instance.meshlet_index];
-        meshlet_triangle_count_shared = meshlet.triangle_count;
 
         let transform = transforms[mesh_instance.transform_index];
         model_view_proj_shared = mul(camera.projection_view_mat, transform.world);
@@ -139,7 +135,7 @@ func cs_main(
 
     var triangle_passed = false;
     var active_triangle_index = 0;
-    if (local_index < meshlet_triangle_count_shared) {
+    if (local_index < meshlet.triangle_count) {
         let mesh = meshes[mesh_instance.mesh_index];
         let mesh_lod = mesh.lods[mesh_instance.lod_index];
         let meshlet = mesh_lod.meshlets[meshlet_instance.meshlet_index];

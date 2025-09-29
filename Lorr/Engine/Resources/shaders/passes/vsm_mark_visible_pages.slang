@@ -37,8 +37,8 @@ func cs_main(
 
     let clipmap_index = params.directional_light.get_clipmap_index(params.camera, uv, depth);
     let clipmap = params.clipmaps[clipmap_index];
-    let clipmap_info = clipmap.get_clipmap_info(world_pos, page_table_extent);
-    let page_table_address = i32x3(clipmap_info.wrapped_texel, clipmap_index);
+    let wrapped_coords = vsm_clip_info_to_wrapped_coords(uv, clipmap.page_offset, page_table_extent.xy);
+    let page_table_address = i32x3(wrapped_coords, clipmap_index);
 
     // The algorithm described in the page 3 of the paper:
     // This entire loop is called "waterfall", used to avoid
@@ -59,6 +59,7 @@ func cs_main(
     if (first_thread_visible) {
         // Mark it as visible
         let page_data = __atomic_or(params.page_tables[page_table_address], VSM_PAGE_VISIBLE_BIT, MemoryOrder::Relaxed);
+        //__atomic_or(params.page_tables[page_table_address], VSM_PAGE_DIRTY_BIT, MemoryOrder::Relaxed);
         let page = VSMPageMetadata(page_data);
 
         // Did the page just became visible?

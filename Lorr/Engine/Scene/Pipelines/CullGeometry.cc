@@ -82,7 +82,8 @@ auto SceneRenderer::cull_for_camera(this SceneRenderer &, vuk::Value<vuk::Buffer
                 VUK_BA(vuk::eComputeRW) mesh_instances,
                 VUK_BA(vuk::eComputeRW) meshlet_instances,
                 VUK_BA(vuk::eComputeRW) visibility,
-                VUK_BA(vuk::eComputeRead) transforms
+                VUK_BA(vuk::eComputeRead) transforms,
+                VUK_BA(vuk::eComputeRW) debug_drawer
             ) {
                 cmd_list //
                     .bind_compute_pipeline("passes.cull_meshes")
@@ -92,10 +93,11 @@ auto SceneRenderer::cull_for_camera(this SceneRenderer &, vuk::Value<vuk::Buffer
                     .bind_buffer(0, 3, meshlet_instances)
                     .bind_buffer(0, 4, visibility)
                     .bind_buffer(0, 5, transforms)
+                    .bind_buffer(0, 6, debug_drawer)
                     .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, PushConstants(mesh_instance_count, cull_flags))
                     .dispatch_invocations(mesh_instance_count);
 
-                return std::make_tuple(camera, meshes, mesh_instances, meshlet_instances, visibility, transforms);
+                return std::make_tuple(camera, meshes, mesh_instances, meshlet_instances, visibility, transforms, debug_drawer);
             }
         );
 
@@ -121,7 +123,8 @@ auto SceneRenderer::cull_for_camera(this SceneRenderer &, vuk::Value<vuk::Buffer
             context.mesh_instances_buffer,
             context.meshlet_instances_buffer,
             context.visibility_buffer,
-            context.transforms_buffer
+            context.transforms_buffer,
+            context.debug_drawer_buffer
         ) =
             cull_meshes_pass(
                 std::move(camera_buffer),
@@ -129,7 +132,8 @@ auto SceneRenderer::cull_for_camera(this SceneRenderer &, vuk::Value<vuk::Buffer
                 std::move(context.mesh_instances_buffer),
                 std::move(context.meshlet_instances_buffer),
                 std::move(context.visibility_buffer),
-                std::move(context.transforms_buffer)
+                std::move(context.transforms_buffer),
+                std::move(context.debug_drawer_buffer)
             );
 
         context.cull_meshlets_cmd_buffer = transfer_man.scratch_buffer<vuk::DispatchIndirectCommand>({ .x = 0, .y = 1, .z = 1 });

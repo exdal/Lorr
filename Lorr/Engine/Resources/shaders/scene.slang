@@ -70,9 +70,9 @@ public struct VirtualClipmap {
         let light_pos = light_pos_h.xyz / light_pos_h.w;
         let wrapped_uv = fract(light_pos.xy * 0.5 + 0.5);
         let wrapped_texel = i32x2(wrapped_uv * f32x2(page_table_extent.xy));
-        let page_uv = page_table_extent.xy * std::mod(wrapped_uv, 1.0 / f32x2(page_table_extent.xy));
+        let phyical_page_uv = page_table_extent.xy * std::mod(wrapped_uv, 1.0 / f32x2(page_table_extent.xy));
 
-        return VirtualClipmapInfo(page_uv, wrapped_uv, wrapped_texel, light_pos, projected_depth);
+        return VirtualClipmapInfo(phyical_page_uv, wrapped_uv, wrapped_texel, light_pos, projected_depth);
     }
 };
 

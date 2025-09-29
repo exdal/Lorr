@@ -81,3 +81,22 @@ public func push_dirty_physical_page(__ref VSMPageAllocator allocator, u32 physi
     let index = __atomic_add(allocator.dirty_physical_page_count, 1, MemoryOrder::AcquireRelease);
     allocator.dirty_physical_page_addresses[index] = physical_page_address;
 }
+
+public func vsm_page_coords_to_wrapped_coords(f32x2 page_coords, i32x2 page_offset, f32x2 page_table_extent) -> i32x2 {
+    let vsm_toroidal_pix_coords = page_coords.xy + page_offset;
+    let vsm_wrapped_pix_coords = i32x2(std::mod(vsm_toroidal_pix_coords.xy, page_table_extent));
+    return vsm_wrapped_pix_coords;
+}
+
+public func vsm_clip_info_to_wrapped_coords(f32x2 uv, i32x2 page_offset, f32x2 page_table_extent) -> i32x2 {
+    let vsm_page_pix_coords = i32x2(floor(uv * page_table_extent));;
+    return vsm_page_coords_to_wrapped_coords(vsm_page_pix_coords, page_offset, page_table_extent);
+}
+
+public func virtual_uv_to_physical_texel(f32x2 virtual_uv, i32x2 physical_page_coords, i32 page_size, f32x2 physical_pages_extent) -> i32x2 {
+    let virtual_texel_coord = i32x2(virtual_uv * physical_pages_extent);
+    let in_page_texel_coord = i32x2(std::mod(virtual_texel_coord, page_size));
+    let in_memory_offset = physical_page_coords * page_size;
+    let memory_texel_coord = in_memory_offset + in_page_texel_coord;
+    return memory_texel_coord;
+}

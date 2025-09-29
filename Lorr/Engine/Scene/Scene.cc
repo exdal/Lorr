@@ -55,7 +55,7 @@ auto calculate_virtual_shadow_matrices(
     // camera moves. Later, we will offset the resulting projection view mat
     // per each page.
 
-    auto page_table_size = static_cast<f32>(GPU::VSM_PAGE_TABLE_SIZE);
+    auto page_table_size = static_cast<f32>(GPU::VSM_DIRECTIONAL_PAGE_TABLE_SIZE);
     auto forward = glm::normalize(-light.direction);
     auto up = glm::vec3(0.0f, 1.0f, 0.0f);
     if (1.0f - glm::abs(glm::dot(forward, up)) < 1e-5f) {
@@ -82,7 +82,7 @@ auto calculate_virtual_shadow_matrices(
         auto clip_position = clip_from_clipmap * world_from_light * glm::vec4(camera.position, 1.0f);
         auto ndc_position = glm::vec2(clip_position) / clip_position.w;
         auto center_uv_position = ndc_position * 0.5f;
-        auto page_offset = glm::ivec2(glm::ceil(center_uv_position * glm::vec2(page_table_size)));
+        auto page_offset = glm::ivec2(center_uv_position * glm::vec2(page_table_size));
         auto page_shift = (glm::vec2(page_offset) / glm::vec2(page_table_size)) * 2.0f;
         auto shifted_projection_mat = glm::translate(glm::mat4(1.0f), glm::vec3(-page_shift, 0.0f)) * clip_from_clipmap;
         auto clipmap_from_page = glm::inverse(clip_from_clipmap) * shifted_projection_mat * world_from_light;
@@ -699,7 +699,7 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer, u32 image_c
         directional_light.clipmap_count = ls::min(directional_light_comp.clipmap_count, GPU::DirectionalLight::MAX_CLIPMAP_COUNT);
         directional_light.clipmap_selection_bias = directional_light_comp.clipmap_selection_bias;
         directional_light.first_clipmap_width = directional_light_comp.first_clipmap_width;
-        directional_light.virtual_extent = GPU::VSM_MAX_VIRTUAL_EXTENT;
+        directional_light.virtual_extent = GPU::VSM_DIRECTIONAL_IMAGE_SIZE;
         directional_light.z_length = directional_light_comp.z_length;
         directional_light.depth_bias = directional_light_comp.depth_bias;
         directional_light.normal_bias = directional_light_comp.normal_bias;

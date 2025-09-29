@@ -772,7 +772,7 @@ auto SceneRenderer::prepare_frame(this SceneRenderer &self, FramePrepareInfo &in
     if (!self.vsm_page_tables) {
         self.vsm_page_tables_attachment = vuk::ImageAttachment{
             .usage = vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eTransferDst,
-            .extent = { .width = GPU::VSM_PAGE_TABLE_SIZE, .height = GPU::VSM_PAGE_TABLE_SIZE, .depth = 1 },
+            .extent = { .width = GPU::VSM_DIRECTIONAL_PAGE_TABLE_SIZE, .height = GPU::VSM_DIRECTIONAL_PAGE_TABLE_SIZE, .depth = 1 },
             .format = vuk::Format::eR32Uint,
             .sample_count = vuk::Samples::e1,
             .view_type = vuk::ImageViewType::e2DArray,
@@ -789,12 +789,11 @@ auto SceneRenderer::prepare_frame(this SceneRenderer &self, FramePrepareInfo &in
         prepared_frame.vsm_page_table = vuk::discard_ia("vsm page tables", self.vsm_page_tables_attachment);
         prepared_frame.vsm_page_table = vuk::clear_image(std::move(prepared_frame.vsm_page_table), vuk::Black<u32>);
 
-        auto vsm_physical_pages_size = static_cast<u32>(glm::ceil(glm::sqrt(GPU::VSM_PAGE_COUNT)) * GPU::VSM_PAGE_SIZE);
         auto vsm_physical_pages_info = ImageInfo{
             .format = vuk::Format::eR32Uint,
             .usage = vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eSampled,
             .type = vuk::ImageType::e2D,
-            .extent = { .width = vsm_physical_pages_size, .height = vsm_physical_pages_size, .depth = 1 },
+            .extent = { .width = GPU::VSM_DIRECTIONAL_IMAGE_SIZE, .height = GPU::VSM_DIRECTIONAL_IMAGE_SIZE, .depth = 1 },
             .mip_count = 1,
             .name = "VSM Physical Pages",
         };
@@ -805,15 +804,15 @@ auto SceneRenderer::prepare_frame(this SceneRenderer &self, FramePrepareInfo &in
 
         // TODO, WARN: If scene doesnt have any lights in frame 0, all this shit will be invalidated
         self.vsm_page_visibility_mask_buffer =
-            Buffer::create(device, (GPU::VSM_PAGE_COUNT + 31) / 32 * sizeof(u32), vuk::MemoryUsage::eGPUonly).value();
+            Buffer::create(device, GPU::VSM_DIRECTIONAL_PAGE_MASK_COUNT * sizeof(u32), vuk::MemoryUsage::eGPUonly).value();
         prepared_frame.vsm_page_visibility_mask_buffer = self.vsm_page_visibility_mask_buffer.discard(device, "vsm page visibility");
         prepared_frame.vsm_page_visibility_mask_buffer = zero_fill_pass(std::move(prepared_frame.vsm_page_visibility_mask_buffer));
 
-        self.vsm_allocation_requests_buffer = Buffer::create(device, GPU::VSM_PAGE_COUNT * sizeof(GPU::VSMAllocRequest)).value();
+        self.vsm_allocation_requests_buffer = Buffer::create(device, GPU::VSM_DIRECTIONAL_MAX_PAGE_COUNT * sizeof(GPU::VSMAllocRequest)).value();
         prepared_frame.vsm_allocation_requests_buffer = self.vsm_allocation_requests_buffer.discard(device, "vsm alloc requests");
         prepared_frame.vsm_allocation_requests_buffer = zero_fill_pass(std::move(prepared_frame.vsm_allocation_requests_buffer));
 
-        self.vsm_dirty_physical_page_addresses_buffer = Buffer::create(device, GPU::VSM_PAGE_COUNT * sizeof(u32)).value();
+        self.vsm_dirty_physical_page_addresses_buffer = Buffer::create(device, GPU::VSM_DIRECTIONAL_MAX_PAGE_COUNT * sizeof(u32)).value();
         prepared_frame.vsm_dirty_physical_page_addresses_buffer =
             self.vsm_dirty_physical_page_addresses_buffer.discard(device, "vsm dirty physical pages");
     } else {
@@ -1216,7 +1215,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                 .reordered_indices_buffer = std::move(reordered_indices_buffer),
             };
 
-            vsm_page_table_attachment = vuk::clear_image(std::move(vsm_page_table_attachment), vuk::Black<u32>);
+            // vsm_page_table_attachment = vuk::clear_image(std::move(vsm_page_table_attachment), vuk::Black<u32>);
 
             auto vsm_reset_page_visibility_pass = vuk::make_pass(
                 "vsm reset page visibility",
@@ -1260,7 +1259,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                         .bind_image(0, 4, page_table)
                         .bind_buffer(0, 5, page_visibility_mask)
                         .bind_buffer(0, 6, allocator)
-                        .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, PushConstants(page_table->extent, depth->extent))
+                        .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, PushConstants(depth->extent, GPU::VSM_DIRECTIONAL_PAGE_TABLE_SIZE))
                         .dispatch_invocations_per_pixel(depth);
 
                     return std::make_tuple(camera, directional_light, clipmaps, depth, page_table, page_visibility_mask, allocator);
@@ -1316,7 +1315,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                         .bind_buffer(0, 0, allocator)
                         .bind_buffer(0, 1, page_visibility_mask)
                         .bind_image(0, 2, page_table)
-                        .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, GPU::VSM_MAX_VIRTUAL_EXTENT / GPU::VSM_PAGE_SIZE)
+                        .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, GPU::VSM_DIRECTIONAL_PAGE_MASK_COUNT)
                         .dispatch(1);
 
                     return std::make_tuple(page_table, allocator);
@@ -1368,7 +1367,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                         .push_constants(
                             vuk::ShaderStageFlagBits::eCompute,
                             0,
-                            PushConstants(physical_pages->extent, GPU::VSM_PAGE_SIZE, GPU::VSM_PAGE_TABLE_SIZE)
+                            PushConstants(GPU::VSM_DIRECTIONAL_IMAGE_SIZE, GPU::VSM_DIRECTIONAL_PAGE_TABLE_SIZE, GPU::VSM_PAGE_SIZE)
                         )
                         .dispatch_indirect(clear_cmd);
 
@@ -1386,7 +1385,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
             auto vsm_depth_attachment = vuk::declare_ia(
                 "vsm depth",
                 { .usage = vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eDepthStencilAttachment,
-                  .extent = { .width = GPU::VSM_MAX_VIRTUAL_EXTENT, .height = GPU::VSM_MAX_VIRTUAL_EXTENT, .depth = 1 },
+                  .extent = { .width = GPU::VSM_DIRECTIONAL_IMAGE_SIZE, .height = GPU::VSM_DIRECTIONAL_IMAGE_SIZE, .depth = 1 },
                   .format = vuk::Format::eD32Sfloat,
                   .sample_count = vuk::Samples::e1,
                   .level_count = 1,
@@ -1398,7 +1397,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
 
                 auto vsm_camera_buffer = transfer_man.scratch_buffer<GPU::Camera>({
                     .projection_view_mat = current_clipmap.projection_view_mat,
-                    .resolution = glm::vec2(GPU::VSM_MAX_VIRTUAL_EXTENT),
+                    .resolution = glm::vec2(GPU::VSM_DIRECTIONAL_IMAGE_SIZE),
                 });
 
                 vsm_depth_attachment = vuk::clear_image(std::move(vsm_depth_attachment), vuk::DepthZero);
@@ -1422,13 +1421,15 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                     ) {
                         auto viewport_rect = vuk::Rect2D{
                             .offset = { .x = 0, .y = 0 },
-                            .extent = { .width = GPU::VSM_MAX_VIRTUAL_EXTENT, .height = GPU::VSM_MAX_VIRTUAL_EXTENT },
+                            .extent = { .width = GPU::VSM_DIRECTIONAL_IMAGE_SIZE, .height = GPU::VSM_DIRECTIONAL_IMAGE_SIZE },
                             ._relative = {},
                         };
                         cmd_list //
                             .bind_graphics_pipeline("passes.vsm_draw_physical_pages")
                             .set_rasterization({ .cullMode = vuk::CullModeFlagBits::eBack })
-                            .set_depth_stencil({ .depthWriteEnable = true, .depthTestEnable = true, .depthCompareOp = vuk::CompareOp::eGreaterOrEqual })
+                            .set_depth_stencil(
+                                { .depthTestEnable = true, .depthWriteEnable = true, .depthCompareOp = vuk::CompareOp::eGreaterOrEqual }
+                            )
                             .set_dynamic_state(vuk::DynamicStateFlagBits::eViewport | vuk::DynamicStateFlagBits::eScissor)
                             .set_viewport(0, viewport_rect)
                             .set_scissor(0, vuk::Rect2D::framebuffer())
@@ -1444,12 +1445,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                             .push_constants(
                                 vuk::ShaderStageFlagBits::eVertex | vuk::ShaderStageFlagBits::eFragment,
                                 0,
-                                PushConstants(
-                                    page_tables->extent,
-                                    clipmap_index,
-                                    physical_pages->extent,
-                                    GPU::VSM_PAGE_SIZE
-                                )
+                                PushConstants(clipmap_index, GPU::VSM_DIRECTIONAL_IMAGE_SIZE, GPU::VSM_DIRECTIONAL_PAGE_TABLE_SIZE, GPU::VSM_PAGE_SIZE)
                             )
                             .draw_indexed_indirect(1, triangle_indirect);
 
@@ -1539,7 +1535,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
         auto &imgui_renderer = App::mod<ImGuiRenderer>();
         {
             ImGui::Begin("VSM Debug");
-            constexpr static const c8 *combo_items[] = {"Page Tables", "Physical Page"};
+            constexpr static const c8 *combo_items[] = { "Page Tables", "Physical Pages" };
             if (ImGui::BeginCombo("##vsm_debug_combo", combo_items[debug_index])) {
                 for (auto i = 0_sz; i < ls::count_of(combo_items); i++) {
                     auto is_selected = debug_index == i;
@@ -1734,7 +1730,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                     .push_constants(
                         vuk::ShaderStageFlagBits::eFragment,
                         0,
-                        PushConstants(pbr_context, vsm_physical_pages->extent, vsm_page_tables->extent, GPU::VSM_PAGE_SIZE)
+                        PushConstants(pbr_context, GPU::VSM_DIRECTIONAL_IMAGE_SIZE, GPU::VSM_DIRECTIONAL_PAGE_TABLE_SIZE, GPU::VSM_PAGE_SIZE)
                     )
                     .draw(3, 1, 0, 0);
 

@@ -14,9 +14,9 @@ import vsm;
 [[vk::binding(7)]] StorageImage2D<u32, ImageFormat::R32UI> physical_pages;
 
 struct PushConstants {
-    i32x3 page_table_extent;
     u32 clipmap_index;
-    i32x3 physical_page_extent;
+    u32 physical_page_size;
+    u32 page_table_size;
     u32 page_size;
 };
 [[vk::push_constant]] PushConstants C;
@@ -51,25 +51,22 @@ func vs_main(u32 vertex_index : SV_VertexID) -> VertexOutput {
 
 [[shader("fragment")]]
 func fs_main(VertexOutput input) -> void {
-    let physical_page_extent = f32x2(C.physical_page_extent.xy);
-    let page_table_extent = f32x2(C.page_table_extent.xy);
-
     let clipmap = clipmaps[C.clipmap_index];
     let page_offset = clipmap.page_offset;
 
-    let virtual_uv = input.position.xy / physical_page_extent;
-    let wrapped_coords = vsm_clip_info_to_wrapped_coords(virtual_uv, page_offset, page_table_extent);
+    let virtual_uv = input.position.xy / C.physical_page_size;
+    let wrapped_coords = vsm_clip_info_to_wrapped_coords(virtual_uv, page_offset, C.page_table_size);
     let page_address = i32x3(i32x2(wrapped_coords), C.clipmap_index);
     let page = VSMPageMetadata(page_tables.Load(i32x4(page_address, 0)));
     if (page.is_backed() && page.is_dirty()) {
         let physical_page_address = page.get_physical_address();
-        let physical_page_count = C.physical_page_extent.x / C.page_size;
+        let physical_page_count = C.physical_page_size / C.page_size;
         let physical_page_coords = i32x2(
             physical_page_address / physical_page_count,
             physical_page_address % physical_page_count
         );
 
-        let physical_page_texel_coord = virtual_uv_to_physical_texel(virtual_uv, physical_page_coords, C.page_size, physical_page_extent);
+        let physical_page_texel_coord = virtual_uv_to_physical_texel(virtual_uv, physical_page_coords, C.page_size, C.physical_page_size);
         __atomic_max(physical_pages[physical_page_texel_coord], asuint(saturate(input.position.z / input.position.w)));
     }
 }

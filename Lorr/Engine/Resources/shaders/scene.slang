@@ -53,10 +53,7 @@ public struct Camera {
 };
 
 public struct VirtualClipmapInfo {
-    public f32x2 phyical_page_uv;
-    public f32x2 wrapped_uv;
-    public i32x2 wrapped_texel;
-    public f32x3 light_pos;
+    public f32x2 clip_uv;
     public f32 projected_depth;
 };
 
@@ -64,15 +61,13 @@ public struct VirtualClipmap {
     public f32x4x4 projection_view_mat;
     public i32x2 page_offset;
 
-    public func get_clipmap_info(f32x3 world_pos, i32x3 page_table_extent) -> VirtualClipmapInfo {
+    public func get_clipmap_info(f32x3 world_pos) -> VirtualClipmapInfo {
         let light_pos_h = mul(this.projection_view_mat, f32x4(world_pos, 1.0));
-        let projected_depth = light_pos_h.z / light_pos_h.w;
         let light_pos = light_pos_h.xyz / light_pos_h.w;
-        let wrapped_uv = fract(light_pos.xy * 0.5 + 0.5);
-        let wrapped_texel = i32x2(wrapped_uv * f32x2(page_table_extent.xy));
-        let phyical_page_uv = page_table_extent.xy * std::mod(wrapped_uv, 1.0 / f32x2(page_table_extent.xy));
+        let clip_uv = (light_pos.xy + 1.0) * 0.5;
+        let projected_depth = light_pos_h.z / light_pos_h.w;
 
-        return VirtualClipmapInfo(phyical_page_uv, wrapped_uv, wrapped_texel, light_pos, projected_depth);
+        return VirtualClipmapInfo(clip_uv, projected_depth);
     }
 };
 
@@ -109,7 +104,7 @@ public struct DirectionalLight {
         let d = min(dx, dy);
 #else
         let center_pos = camera.unproject_uv(uv, depth);
-        let d = length(center_pos - camera.position);
+        let d = length(camera.position - center_pos);
 #endif
         let texel_length = (this.first_clipmap_width * 2.0) / this.virtual_extent;
         let clipmap_level_f = log2(d / texel_length);

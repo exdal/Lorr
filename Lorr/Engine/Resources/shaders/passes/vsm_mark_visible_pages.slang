@@ -20,8 +20,8 @@ struct ShaderParameters {
 func cs_main(
     u32x2 thread_id : SV_DispatchThreadID,
     uniform ParameterBlock<ShaderParameters> params,
-    uniform i32x3 page_table_extent,
     uniform i32x3 depth_extent,
+    uniform i32 page_table_size,
 ) -> void {
     if (any(thread_id >= u32x2(depth_extent.xy))) {
         return;
@@ -37,7 +37,8 @@ func cs_main(
 
     let clipmap_index = params.directional_light.get_clipmap_index(params.camera, uv, depth);
     let clipmap = params.clipmaps[clipmap_index];
-    let wrapped_coords = vsm_clip_info_to_wrapped_coords(uv, clipmap.page_offset, page_table_extent.xy);
+    let clipmap_info = clipmap.get_clipmap_info(world_pos);
+    let wrapped_coords = vsm_clip_info_to_wrapped_coords(clipmap_info.clip_uv, clipmap.page_offset, page_table_size);
     let page_table_address = i32x3(wrapped_coords, clipmap_index);
 
     // The algorithm described in the page 3 of the paper:

@@ -2,8 +2,6 @@
 
 #include "Engine/Graphics/VulkanTypes.hh"
 
-#include <bit>
-
 namespace lr::GPU {
 enum class DebugView : i32 {
     None = 0,
@@ -90,12 +88,12 @@ struct Camera {
     alignas(4) f32 aspect_ratio = 1.777f;
 };
 
-constexpr static u32 VSM_PAGE_SIZE = 128;
-constexpr static u32 VSM_PAGE_COUNT = 1024;
-constexpr static u32 VSM_MIN_VIRTUAL_EXTENT = VSM_PAGE_SIZE;
-constexpr static u32 VSM_MAX_VIRTUAL_EXTENT = 4096;
-constexpr static u32 VSM_PAGE_TABLE_SIZE = VSM_MAX_VIRTUAL_EXTENT / VSM_PAGE_SIZE;
-constexpr static u32 VSM_PAGE_TABLE_MIP_COUNT = std::bit_width(VSM_PAGE_TABLE_SIZE);
+constexpr static u32 VSM_PAGE_SIZE = 64;
+
+constexpr static u32 VSM_DIRECTIONAL_IMAGE_SIZE = 4096;
+constexpr static u32 VSM_DIRECTIONAL_PAGE_TABLE_SIZE = VSM_DIRECTIONAL_IMAGE_SIZE / VSM_PAGE_SIZE;
+constexpr static u32 VSM_DIRECTIONAL_MAX_PAGE_COUNT = VSM_DIRECTIONAL_PAGE_TABLE_SIZE * VSM_DIRECTIONAL_PAGE_TABLE_SIZE;
+constexpr static u32 VSM_DIRECTIONAL_PAGE_MASK_COUNT = (VSM_DIRECTIONAL_MAX_PAGE_COUNT + 31) / 32;
 
 struct VSMAllocRequest {
     alignas(4) glm::ivec3 page_table_address = {};

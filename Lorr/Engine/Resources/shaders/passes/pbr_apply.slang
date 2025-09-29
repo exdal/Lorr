@@ -63,9 +63,9 @@ func hash(uint a) -> u32 {
 func fs_main(
     VertexOutput input,
     uniform PBRContext context,
-    uniform i32x3 physical_tables_extent,
-    uniform i32x3 page_table_extent,
-    uniform i32 page_size,
+    uniform u32 physical_image_size,
+    uniform u32 page_table_size,
+    uniform u32 page_size,
 ) -> f32x4 {
     let pixel_pos = u32x3(u32x2(input.position.xy), 0);
     let depth = params.depth_image.Load(pixel_pos);
@@ -148,21 +148,31 @@ func fs_main(
         if (context.directional_light_clipmaps) {
             let clipmap_index = context.directional_light.get_clipmap_index(params.camera, input.tex_coord, depth);
             let clipmap = context.directional_light_clipmaps[clipmap_index];
-            let clipmap_info = clipmap.get_clipmap_info(world_position, page_table_extent);
-            let wrapped_coords = vsm_clip_info_to_wrapped_coords(clipmap_info.wrapped_uv, clipmap.page_offset, page_table_extent.xy);
+            let clipmap_info = clipmap.get_clipmap_info(world_position);
+            let wrapped_coords = vsm_clip_info_to_wrapped_coords(clipmap_info.clip_uv, clipmap.page_offset, page_table_size);
             let page_table_address = i32x3(wrapped_coords, clipmap_index);
             let page_data = params.vsm_page_table.Load(i32x4(page_table_address, 0));
             let page = VSMPageMetadata(page_data);
             if (page.is_backed()) {
                 let physical_page_address = page.get_physical_address();
-                let physical_page_count = physical_tables_extent.x / page_size;
+                let physical_page_count = physical_image_size / page_size;
                 let physical_page_coords = i32x2(
                     physical_page_address / physical_page_count,
                     physical_page_address % physical_page_count
                 );
-                let physical_page_texel_coord = virtual_uv_to_physical_texel(clipmap_info.wrapped_uv, physical_page_coords, page_size, physical_tables_extent.xy);
+                let physical_page_texel_coord = virtual_uv_to_physical_texel(clipmap_info.clip_uv, physical_page_coords, page_size, physical_image_size);
                 let shadow_depth = asfloat(params.vsm_physical_pages.Load(i32x3(physical_page_texel_coord, 0)));
                 directional_shadow = (clipmap_info.projected_depth < (shadow_depth - context.directional_light.depth_bias)) ? 0.0 : 1.0;
+
+                // DEBUGGING
+                let in_page_texel_coords = i32x2(std::mod(physical_page_texel_coord, page_size));
+                let near_border = any(in_page_texel_coords < 5) || any(in_page_texel_coords > page_size - 5);
+                if (directional_shadow == 1.0 && near_border) {
+                    let hsv = f32x3(f32(clipmap_index) / f32(context.directional_light.clipmap_count + 1) * TAU, 1.0, 0.5);
+                    let line_color = hsv_to_rgb(hsv);
+
+                    return f32x4(line_color, 1.0);
+                }
             }
         }
 
@@ -175,26 +185,6 @@ func fs_main(
     let ambient_contribution = base_ambient_color * albedo_color * sun_illuminance;
     let indirect_illuminance_sum = (indirect_illuminance + ambient_contribution) * occlusion;
     var final_color = material_surface_color + indirect_illuminance_sum + emission;
-
-    if (context.directional_light_clipmaps) {
-        let clipmap_index = context.directional_light.get_clipmap_index(params.camera, input.tex_coord, depth);
-        let clipmap = context.directional_light_clipmaps[clipmap_index];
-        let clipmap_info = clipmap.get_clipmap_info(world_position, page_table_extent);
-        let wrapped_coords = vsm_clip_info_to_wrapped_coords(input.tex_coord, clipmap.page_offset, page_table_extent.xy);
-        let page_table_address = i32x3(wrapped_coords, clipmap_index);
-        let page_data = params.vsm_page_table.Load(i32x4(page_table_address, 0));
-        let page = VSMPageMetadata(page_data);
-        if (page.is_visible()) {
-            let physical_address = page.get_physical_address();
-            // final_color = cascade_debug_visualization(final_color, clipmap_index, context.directional_light.clipmap_count);
-            //let h = hash(clipmap_index);
-            //final_color = f32x3(f32(h & 255), f32((h >> 8) & 255), f32((h >> 16) & 255)) / 255.0;
-            let v = fract(clipmap_info.phyical_page_uv);
-            if (any(v.xy < 0.02) || any(v.xy > 0.98)) {
-                final_color = 1.0 / final_color;
-            }
-        }
-    }
 
     return f32x4(final_color, 1.0);
 }

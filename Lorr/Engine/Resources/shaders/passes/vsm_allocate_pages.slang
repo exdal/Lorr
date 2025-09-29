@@ -38,7 +38,6 @@ func cs_main(
     u32x2 thread_id : SV_DispatchThreadID,
     uniform u32 visible_bit_mask_count,
 ) -> void {
-    printf("Allocs: %d\n", params.allocator.active_request_count);
     for (var i = 0; i < params.allocator.active_request_count; i++) {
         poll_requests(visible_bit_mask_count, i);
     }

@@ -120,7 +120,10 @@ struct DirectionalLight {
     alignas(4) f32 intensity = {};
     alignas(4) glm::vec3 direction = {};
     alignas(4) u32 clipmap_count = {};
+    alignas(4) f32 clipmap_selection_bias = {};
     alignas(4) f32 first_clipmap_width = {};
+    alignas(4) f32 virtual_extent = {};
+    alignas(4) f32 z_length = {};
     alignas(4) f32 depth_bias = {};
     alignas(4) f32 normal_bias = {};
 };

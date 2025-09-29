@@ -61,7 +61,11 @@ func fs_main(VertexOutput input) -> void {
 
     if (page.is_backed() && page.is_dirty()) {
         let physical_page_address = page.get_physical_address();
-        let physical_page_coords = i32x2(physical_page_address / C.page_table_size, physical_page_address % C.page_table_size);
+        let atlas_width = C.physical_page_extent.x / C.page_size;
+        let physical_page_coords = i32x2(
+            physical_page_address / atlas_width,
+            physical_page_address % atlas_width
+        );
         let physical_page_offset = physical_page_coords * C.page_size;
 
         let virtual_texel = i32x2(input.position.xy);

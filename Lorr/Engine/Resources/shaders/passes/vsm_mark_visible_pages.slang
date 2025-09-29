@@ -38,7 +38,7 @@ func cs_main(
     let clipmap_index = params.directional_light.get_clipmap_index(params.camera, uv, depth);
     let clipmap = params.clipmaps[clipmap_index];
     let clipmap_info = clipmap.get_clipmap_info(world_pos, page_table_extent);
-    let page_table_address = i32x3(clipmap_info.wrapped_vsm_texel, clipmap_index);
+    let page_table_address = i32x3(clipmap_info.wrapped_texel, clipmap_index);
 
     // The algorithm described in the page 3 of the paper:
     // This entire loop is called "waterfall", used to avoid

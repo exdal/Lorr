@@ -1222,7 +1222,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                     cmd_list.bind_compute_pipeline("passes.vsm_reset_page_visibility")
                         .bind_image(0, 0, page_table)
                         .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, page_table->extent)
-                        .dispatch_invocations_per_pixel(page_table);
+                        .dispatch_invocations_per_pixel(page_table, 1.0f, 1.0f, static_cast<f32>(page_table->layer_count));
 
                     return page_table;
                 }
@@ -1295,7 +1295,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                     cmd_list.bind_compute_pipeline("passes.vsm_free_invisible_pages")
                         .bind_image(0, 0, page_table)
                         .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, page_table->extent)
-                        .dispatch_invocations_per_pixel(page_table);
+                        .dispatch_invocations_per_pixel(page_table, 1.0f, 1.0f, static_cast<f32>(page_table->layer_count));
 
                     return page_table;
                 }
@@ -1341,7 +1341,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                         .bind_buffer(0, 1, clear_cmd)
                         .bind_buffer(0, 2, allocator)
                         .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, page_table->extent)
-                        .dispatch_invocations_per_pixel(page_table);
+                        .dispatch_invocations_per_pixel(page_table, 1.0f, 1.0f, static_cast<f32>(page_table->layer_count));
 
                     return std::make_tuple(page_table, allocator, clear_cmd);
                 }
@@ -1362,7 +1362,11 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                     cmd_list.bind_compute_pipeline("passes.vsm_clear_dirty_pages")
                         .bind_buffer(0, 0, allocator)
                         .bind_image(0, 1, physical_pages)
-                        .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, PushConstants(GPU::VSM_PAGE_SIZE, GPU::VSM_PAGE_TABLE_SIZE))
+                        .push_constants(
+                            vuk::ShaderStageFlagBits::eCompute,
+                            0,
+                            PushConstants(physical_pages->extent, GPU::VSM_PAGE_SIZE, GPU::VSM_PAGE_TABLE_SIZE)
+                        )
                         .dispatch_indirect(clear_cmd);
 
                     return std::make_tuple(allocator, physical_pages);
@@ -1414,6 +1418,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                         auto viewport_rect = vuk::Rect2D{
                             .offset = { .x = 0, .y = 0 },
                             .extent = { .width = GPU::VSM_MAX_VIRTUAL_EXTENT, .height = GPU::VSM_MAX_VIRTUAL_EXTENT },
+                            ._relative = {},
                         };
                         cmd_list //
                             .bind_graphics_pipeline("passes.vsm_draw_physical_pages")
@@ -1709,7 +1714,11 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                     .bind_image(0, 10, vsm_page_tables)
                     .bind_image(0, 11, vsm_physical_pages)
                     .bind_buffer(0, 12, camera)
-                    .push_constants(vuk::ShaderStageFlagBits::eFragment, 0, PushConstants(pbr_context, vsm_page_tables->extent, GPU::VSM_PAGE_SIZE))
+                    .push_constants(
+                        vuk::ShaderStageFlagBits::eFragment,
+                        0,
+                        PushConstants(pbr_context, vsm_physical_pages->extent, vsm_page_tables->extent, GPU::VSM_PAGE_SIZE)
+                    )
                     .draw(3, 1, 0, 0);
 
                 return std::make_tuple(dst, camera, sky_transmittance_lut, sky_cubemap, depth);

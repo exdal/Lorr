@@ -37,7 +37,7 @@ func fs_main(
         } break;
         case 1: {
             let physical_page = params.physical_pages.SampleLevel(params.sampler, input.tex_coord, 0.0);
-            color = pow(f32x3(asfloat(physical_page)), 0.3);
+            color = asfloat(physical_page);
         } break;
         default:;
     }

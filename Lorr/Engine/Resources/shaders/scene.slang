@@ -53,8 +53,9 @@ public struct Camera {
 };
 
 public struct VirtualClipmapInfo {
-    public f32x2 wrapped_vsm_uv;
-    public i32x2 wrapped_vsm_texel;
+    public f32x2 phyical_page_uv;
+    public f32x2 wrapped_uv;
+    public i32x2 wrapped_texel;
     public f32x3 light_pos;
     public f32 projected_depth;
 };
@@ -69,8 +70,9 @@ public struct VirtualClipmap {
         let light_pos = light_pos_h.xyz / light_pos_h.w;
         let wrapped_uv = fract(light_pos.xy * 0.5 + 0.5);
         let wrapped_texel = i32x2(wrapped_uv * f32x2(page_table_extent.xy));
+        let page_uv = page_table_extent.xy * std::mod(wrapped_uv, 1.0 / f32x2(page_table_extent.xy));
 
-        return VirtualClipmapInfo(wrapped_uv, wrapped_texel, light_pos, projected_depth);
+        return VirtualClipmapInfo(page_uv, wrapped_uv, wrapped_texel, light_pos, projected_depth);
     }
 };
 
@@ -79,7 +81,10 @@ public struct DirectionalLight {
     public f32 intensity;
     public f32x3 direction;
     public u32 clipmap_count;
+    public f32 clipmap_selection_bias;
     public f32 first_clipmap_width;
+    public f32 virtual_extent;
+    public f32 z_length;
     public f32 depth_bias;
     public f32 normal_bias;
 
@@ -106,9 +111,11 @@ public struct DirectionalLight {
         let center_pos = camera.unproject_uv(uv, depth);
         let d = length(center_pos - camera.position);
 #endif
-        let bias = 1.0;
-        let clipmap_length = this.first_clipmap_width / (camera.far_clip * 0.5);
-        return u32(clamp(ceil(log2((d / clipmap_length) * bias)), 0.0, this.clipmap_count - 1.0));
+        let texel_length = (this.first_clipmap_width * 2.0) / this.virtual_extent;
+        let clipmap_level_f = log2(d / texel_length);
+        let clipmap_level = u32(max(clipmap_level_f + this.clipmap_selection_bias, 0.0));
+
+        return min(clipmap_level, this.clipmap_count - 1);
     }
 };
 

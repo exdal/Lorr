@@ -49,10 +49,21 @@ public func cascade_debug_visualization(
     );
 }
 
+func hash(uint a) -> u32 {
+    a = (a + 0x7ed55d16) + (a << 12);
+    a = (a ^ 0xc761c23c) ^ (a >> 19);
+    a = (a + 0x165667b1) + (a << 5);
+    a = (a + 0xd3a2646c) ^ (a << 9);
+    a = (a + 0xfd7046c5) + (a << 3);
+    a = (a ^ 0xb55a4f09) ^ (a >> 16);
+    return a;
+}
+
 [[shader("fragment")]]
 func fs_main(
     VertexOutput input,
     uniform PBRContext context,
+    uniform i32x3 physical_tables_extent,
     uniform i32x3 page_table_extent,
     uniform i32 page_size,
 ) -> f32x4 {
@@ -134,22 +145,28 @@ func fs_main(
     let NoL = max(dot(N, L), 0.0);
     if (NoL > 0.0) {
         var directional_shadow = 1.0;
-        if (false && context.directional_light_clipmaps) {
+        if (context.directional_light_clipmaps) {
             let clipmap_index = context.directional_light.get_clipmap_index(params.camera, input.tex_coord, depth);
             let clipmap = context.directional_light_clipmaps[clipmap_index];
             let clipmap_info = clipmap.get_clipmap_info(world_position, page_table_extent);
-            let page_table_address = i32x3(clipmap_info.wrapped_vsm_texel, clipmap_index);
+            let page_table_address = i32x3(clipmap_info.wrapped_texel, clipmap_index);
             let page_data = params.vsm_page_table.Load(i32x4(page_table_address, 0));
             let page = VSMPageMetadata(page_data);
             if (page.is_backed()) {
+                let physical_page_uv = clipmap_info.phyical_page_uv;
+                let physical_page_texel = i32x2(physical_page_uv * page_size);
                 let physical_page_address = page.get_physical_address();
-                let physical_page_coords = i32x2(physical_page_address / page_table_extent.x, physical_page_address % page_table_extent.x);
+
+                let atlas_width = physical_tables_extent.x / page_size;
+                let physical_page_coords = i32x2(
+                    physical_page_address / atlas_width,
+                    physical_page_address % atlas_width
+                );
                 let physical_page_offset = physical_page_coords * page_size;
-                let page_uv = page_table_extent.xy * std::mod(clipmap_info.wrapped_vsm_uv, 1.0 / f32x2(page_table_extent.xy));
-                let page_texel = i32x2(page_uv * page_size);
-                let physical_texel = physical_page_offset + page_texel;
-                let shadow = params.vsm_physical_pages.Load(i32x3(physical_texel, 0));
-                directional_shadow = ((shadow + context.directional_light.depth_bias) < clipmap_info.projected_depth) ? 1.0 : 0.0;
+                let physical_texel = physical_page_offset + physical_page_texel;
+
+                let shadow_depth = asfloat(params.vsm_physical_pages.Load(i32x3(physical_texel, 0)));
+                directional_shadow = (clipmap_info.projected_depth < (shadow_depth - context.directional_light.depth_bias)) ? 0.0 : 1.0;
             }
         }
 
@@ -167,9 +184,14 @@ func fs_main(
         let clipmap_index = context.directional_light.get_clipmap_index(params.camera, input.tex_coord, depth);
         let clipmap = context.directional_light_clipmaps[clipmap_index];
         let clipmap_info = clipmap.get_clipmap_info(world_position, page_table_extent);
-        let pageUv = fract(clipmap_info.light_pos);
-        if (pageUv.x < .01 || pageUv.y < .01 || pageUv.x > .99 || pageUv.y > .99) {
-            return f32x4(1, 0, 0, 1);
+        let page_table_address = i32x3(clipmap_info.wrapped_texel, clipmap_index);
+        let page_data = params.vsm_page_table.Load(i32x4(page_table_address, 0));
+        let page = VSMPageMetadata(page_data);
+        if (page.is_visible()) {
+            let physical_address = page.get_physical_address();
+            // final_color = cascade_debug_visualization(final_color, clipmap_index, context.directional_light.clipmap_count);
+            //let h = hash(clipmap_index);
+            //final_color = f32x3(f32(h & 255), f32((h >> 8) & 255), f32((h >> 16) & 255)) / 255.0;
         }
     }
 

@@ -55,28 +55,26 @@ auto calculate_virtual_shadow_matrices(
     // camera moves. Later, we will offset the resulting projection view mat
     // per each page.
 
+    auto page_table_size = static_cast<f32>(GPU::VSM_PAGE_TABLE_SIZE);
     auto forward = glm::normalize(-light.direction);
-    auto up = (glm::abs(glm::dot(forward, glm::vec3(0, 1, 0))) > 0.99f) ? glm::vec3(0, 0, 1) : glm::vec3(0, 1, 0);
-    auto world_from_light = glm::lookAt(forward, glm::vec3(0.0f), up);
+    auto up = (glm::abs(1.0 - glm::dot(forward, glm::vec3(0, 1, 0))) > 0.99f) ? glm::vec3(0, 0, 1) : glm::vec3(0, 1, 0);
+    auto world_from_light = glm::lookAt(glm::vec3(0.0f), forward, up);
 
     for (u32 clipmap_index = 0; clipmap_index < light.clipmap_count; clipmap_index++) {
         auto &clipmap = directional_light_clipmaps[clipmap_index];
-        auto clipmap_extent = light_comp.first_clipmap_width * static_cast<f32>(1 << clipmap_index);
-        auto clipmap_half_extent = clipmap_extent * 0.5f;
+        auto clipmap_scale = static_cast<f32>(1 << clipmap_index);
+        auto clipmap_extent = light_comp.first_clipmap_width * clipmap_scale * 0.5f;
 
-        auto z_extension = camera.far_clip * 0.5f;
-        auto clip_from_clipmap = glm::ortho(
-            -clipmap_half_extent, //
-            clipmap_half_extent,
-            -clipmap_half_extent,
-            clipmap_half_extent,
-            -z_extension,
-            z_extension
+        auto clip_from_clipmap = glm::orthoRH_ZO(
+            -clipmap_extent, //
+            clipmap_extent,
+            -clipmap_extent,
+            clipmap_extent,
+            light_comp.z_length * 0.5f,
+            -light_comp.z_length * 0.5f
         );
         clip_from_clipmap[1][1] *= -1.0f;
 
-        // Offset projection to page
-        auto page_table_size = static_cast<f32>(GPU::VSM_PAGE_TABLE_SIZE);
         auto clip_position = clip_from_clipmap * world_from_light * glm::vec4(camera.position, 1.0f);
         auto ndc_position = glm::vec2(clip_position) / clip_position.w;
         auto center_uv_position = ndc_position * 0.5f;
@@ -695,7 +693,10 @@ auto Scene::prepare_frame(this Scene &self, SceneRenderer &renderer, u32 image_c
         directional_light.base_ambient_color = directional_light_comp.base_ambient_color;
         directional_light.intensity = directional_light_comp.intensity;
         directional_light.clipmap_count = ls::min(directional_light_comp.clipmap_count, GPU::DirectionalLight::MAX_CLIPMAP_COUNT);
+        directional_light.clipmap_selection_bias = directional_light_comp.clipmap_selection_bias;
         directional_light.first_clipmap_width = directional_light_comp.first_clipmap_width;
+        directional_light.virtual_extent = GPU::VSM_MAX_VIRTUAL_EXTENT;
+        directional_light.z_length = directional_light_comp.z_length;
         directional_light.depth_bias = directional_light_comp.depth_bias;
         directional_light.normal_bias = directional_light_comp.normal_bias;
 

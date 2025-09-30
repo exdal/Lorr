@@ -56,14 +56,14 @@ func fs_main(VertexOutput input) -> void {
 
     let virtual_uv = input.position.xy / C.physical_page_size;
     let wrapped_coords = vsm_clip_info_to_wrapped_coords(virtual_uv, page_offset, C.page_table_size);
-    let page_address = i32x3(i32x2(wrapped_coords), C.clipmap_index);
+    let page_address = i32x3(wrapped_coords, C.clipmap_index);
     let page = VSMPageMetadata(page_tables.Load(i32x4(page_address, 0)));
     if (page.is_backed() && page.is_dirty()) {
         let physical_page_address = page.get_physical_address();
         let physical_page_count = C.physical_page_size / C.page_size;
         let physical_page_coords = i32x2(
-            physical_page_address / physical_page_count,
-            physical_page_address % physical_page_count
+            physical_page_address % physical_page_count,
+            physical_page_address / physical_page_count
         );
 
         let physical_page_texel_coord = virtual_uv_to_physical_texel(virtual_uv, physical_page_coords, C.page_size, C.physical_page_size);

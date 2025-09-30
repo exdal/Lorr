@@ -68,14 +68,15 @@ auto calculate_virtual_shadow_matrices(
         auto &clipmap = directional_light_clipmaps[clipmap_index];
         auto clipmap_scale = static_cast<f32>(1 << clipmap_index);
         auto clipmap_extent = light_comp.first_clipmap_width * clipmap_scale * 0.5f;
+        auto clipmap_depth = light_comp.z_length * clipmap_scale * 0.5f;
 
         auto clip_from_clipmap = glm::orthoRH_ZO(
             -clipmap_extent, //
             clipmap_extent,
             -clipmap_extent,
             clipmap_extent,
-            light_comp.z_length * 0.5f,
-            -light_comp.z_length * 0.5f
+            clipmap_depth,
+            -clipmap_depth
         );
         clip_from_clipmap[1][1] *= -1.0f;
 

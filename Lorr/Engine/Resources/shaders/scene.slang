@@ -64,7 +64,7 @@ public struct VirtualClipmap {
     public func get_clipmap_info(f32x3 world_pos) -> VirtualClipmapInfo {
         let light_pos_h = mul(this.projection_view_mat, f32x4(world_pos, 1.0));
         let light_pos = light_pos_h.xyz / light_pos_h.w;
-        let clip_uv = (light_pos.xy + 1.0) * 0.5;
+        let clip_uv = fract(light_pos.xy * 0.5 + 0.5);
         let projected_depth = light_pos_h.z / light_pos_h.w;
 
         return VirtualClipmapInfo(clip_uv, projected_depth);
@@ -104,11 +104,11 @@ public struct DirectionalLight {
         let d = min(dx, dy);
 #else
         let center_pos = camera.unproject_uv(uv, depth);
-        let d = length(camera.position - center_pos);
+        let d = length(center_pos - camera.position);
 #endif
         let texel_length = (this.first_clipmap_width * 2.0) / this.virtual_extent;
-        let clipmap_level_f = log2(d / texel_length);
-        let clipmap_level = u32(max(clipmap_level_f + this.clipmap_selection_bias, 0.0));
+        let clipmap_level_f = log2(d / texel_length) + this.clipmap_selection_bias;
+        let clipmap_level = u32(max(clipmap_level_f, 0.0));
 
         return min(clipmap_level, this.clipmap_count - 1);
     }

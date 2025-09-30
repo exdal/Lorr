@@ -7,6 +7,8 @@
 #include "Engine/Graphics/ImGuiRenderer.hh"
 #include "Engine/Graphics/VulkanDevice.hh"
 
+#include "Engine/Memory/Stack.hh"
+
 #include <vuk/runtime/vk/AllocatorHelpers.hpp>
 
 namespace lr {
@@ -1215,7 +1217,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                 .reordered_indices_buffer = std::move(reordered_indices_buffer),
             };
 
-            // vsm_page_table_attachment = vuk::clear_image(std::move(vsm_page_table_attachment), vuk::Black<u32>);
+            vsm_page_table_attachment = vuk::clear_image(std::move(vsm_page_table_attachment), vuk::Black<u32>);
 
             auto vsm_reset_page_visibility_pass = vuk::make_pass(
                 "vsm reset page visibility",
@@ -1393,6 +1395,8 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
             );
 
             for (u32 clipmap_index = 0; clipmap_index < directional_light_info.clipmap_count; clipmap_index++) {
+                memory::ScopedStack stack;
+
                 auto &current_clipmap = frame.directional_light_clipmaps[clipmap_index];
 
                 auto vsm_camera_buffer = transfer_man.scratch_buffer<GPU::Camera>({
@@ -1404,7 +1408,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
 
                 self.cull_for_camera(vsm_camera_buffer, vsm_geometry_context);
                 auto vsm_draw_physical_pages_pass = vuk::make_pass(
-                    "vsm draw physical pages",
+                    stack.format("vsm draw clipmap {}", clipmap_index),
                     [clipmap_index](
                         vuk::CommandBuffer &cmd_list,
                         VUK_BA(vuk::eIndirectRead) triangle_indirect,
@@ -1426,10 +1430,8 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                         };
                         cmd_list //
                             .bind_graphics_pipeline("passes.vsm_draw_physical_pages")
-                            .set_rasterization({ .cullMode = vuk::CullModeFlagBits::eBack })
-                            .set_depth_stencil(
-                                { .depthTestEnable = true, .depthWriteEnable = true, .depthCompareOp = vuk::CompareOp::eGreaterOrEqual }
-                            )
+                            .set_rasterization({ .cullMode = vuk::CullModeFlagBits::eNone })
+                            .set_depth_stencil({ .depthWriteEnable = true, .depthCompareOp = vuk::CompareOp::eGreaterOrEqual })
                             .set_dynamic_state(vuk::DynamicStateFlagBits::eViewport | vuk::DynamicStateFlagBits::eScissor)
                             .set_viewport(0, viewport_rect)
                             .set_scissor(0, vuk::Rect2D::framebuffer())
@@ -1445,7 +1447,12 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                             .push_constants(
                                 vuk::ShaderStageFlagBits::eVertex | vuk::ShaderStageFlagBits::eFragment,
                                 0,
-                                PushConstants(clipmap_index, GPU::VSM_DIRECTIONAL_IMAGE_SIZE, GPU::VSM_DIRECTIONAL_PAGE_TABLE_SIZE, GPU::VSM_PAGE_SIZE)
+                                PushConstants(
+                                    clipmap_index,
+                                    GPU::VSM_DIRECTIONAL_IMAGE_SIZE,
+                                    GPU::VSM_DIRECTIONAL_PAGE_TABLE_SIZE,
+                                    GPU::VSM_PAGE_SIZE
+                                )
                             )
                             .draw_indexed_indirect(1, triangle_indirect);
 

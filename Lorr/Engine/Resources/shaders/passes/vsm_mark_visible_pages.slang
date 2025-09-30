@@ -69,8 +69,8 @@ func cs_main(
                 // we already have allocated this page, and it was marked visible
                 // keep track of visible and backed pages so the allocator wont overwrite it
                 let physical_address = page.get_physical_address();
-                let visibility_mask_index = physical_address / 32;
-                let bit_index = physical_address % 32;
+                let visibility_mask_index = physical_address % 32;
+                let bit_index = physical_address / 32;
                 let visibility_bit = 1 << bit_index;
                 __atomic_or(params.page_visibility_mask[visibility_mask_index], visibility_bit, MemoryOrder::Relaxed);
             } else {

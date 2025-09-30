@@ -84,11 +84,15 @@ public func push_dirty_physical_page(__ref VSMPageAllocator allocator, u32 physi
 
 public func vsm_page_coords_to_wrapped_coords(i32x2 page_coords, i32x2 page_offset, i32 page_table_size) -> i32x2 {
     let vsm_toroidal_pix_coords = page_coords.xy + page_offset;
-    let vsm_wrapped_pix_coords = ((vsm_toroidal_pix_coords % page_table_size) + page_table_size) % page_table_size;
+    let vsm_wrapped_pix_coords = i32x2(std::mod(f32x2(vsm_toroidal_pix_coords), f32x2(page_table_size)));
     return vsm_wrapped_pix_coords;
 }
 
 public func vsm_clip_info_to_wrapped_coords(f32x2 uv, i32x2 page_offset, i32 page_table_size) -> i32x2 {
+    if (any(uv < 0.0) || any(uv > 1.0)) {
+        return i32x2(-1, -1);
+    }
+
     let vsm_page_pix_coords = i32x2(floor(uv * f32(page_table_size)));
     return vsm_page_coords_to_wrapped_coords(vsm_page_pix_coords, page_offset, page_table_size);
 }

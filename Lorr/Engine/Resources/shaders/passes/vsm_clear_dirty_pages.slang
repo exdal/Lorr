@@ -23,10 +23,10 @@ func cs_main(
     let physical_page_address = params.allocator.dirty_physical_page_addresses[thread_id.z];
     let physical_page_count = physical_page_size / page_size;
     let physical_page_coords = i32x2(
-        physical_page_address / physical_page_count,
-        physical_page_address % physical_page_count
+        physical_page_address % physical_page_count,
+        physical_page_address / physical_page_count
     );
     let physical_page_offset = physical_page_coords * page_size;
     let physical_texel = physical_page_offset + thread_id.xy;
-    params.physical_pages.Store(physical_texel, 0);
+    params.physical_pages.Store(physical_texel, asuint(0.0));
 }

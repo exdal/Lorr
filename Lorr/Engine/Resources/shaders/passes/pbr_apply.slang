@@ -32,20 +32,13 @@ func hsv_to_rgb(f32x3 hsv) -> f32x3 {
     return hsv.z - hsv.z * hsv.y * max(f32x3(0.0), min(k, min(4.0 - k, f32x3(1.0))));
 }
 
-public func cascade_debug_visualization(
+public func blend(
     f32x3 output_color,
-    u32 cascade_index,
-    u32 clipamp_count
+    f32x3 input_color
 ) -> f32x3 {
     let overlay_alpha = 0.70;
-    let cascade_color_hsv = f32x3(
-        f32(cascade_index) / f32(clipamp_count + 1u) * TAU,
-        1.0,
-        0.5
-    );
-    let cascade_color = hsv_to_rgb(cascade_color_hsv);
     return f32x3(
-        (1.0 - overlay_alpha) * output_color.rgb + overlay_alpha * cascade_color
+        (1.0 - overlay_alpha) * output_color.rgb + overlay_alpha * input_color
     );
 }
 
@@ -141,6 +134,7 @@ func fs_main(
     var horizon = saturate(1.0 + horizon_fade * dot(R, smooth_normal));
     horizon *= horizon;
 
+    var clipmap_color = f32x3(0.0);
     var material_surface_color = f32x3(0.0);
     let NoL = max(dot(N, L), 0.0);
     if (NoL > 0.0) {
@@ -153,12 +147,16 @@ func fs_main(
             let page_table_address = i32x3(wrapped_coords, clipmap_index);
             let page_data = params.vsm_page_table.Load(i32x4(page_table_address, 0));
             let page = VSMPageMetadata(page_data);
+
+            let line_hsv = f32x3(f32(clipmap_index) / f32(context.directional_light.clipmap_count + 1) * TAU, 1.0, 0.5);
+            clipmap_color = hsv_to_rgb(line_hsv);
+
             if (page.is_backed()) {
                 let physical_page_address = page.get_physical_address();
                 let physical_page_count = physical_image_size / page_size;
                 let physical_page_coords = i32x2(
-                    physical_page_address / physical_page_count,
-                    physical_page_address % physical_page_count
+                    physical_page_address % physical_page_count,
+                    physical_page_address / physical_page_count
                 );
                 let physical_page_texel_coord = virtual_uv_to_physical_texel(clipmap_info.clip_uv, physical_page_coords, page_size, physical_image_size);
                 let shadow_depth = asfloat(params.vsm_physical_pages.Load(i32x3(physical_page_texel_coord, 0)));
@@ -166,12 +164,9 @@ func fs_main(
 
                 // DEBUGGING
                 let in_page_texel_coords = i32x2(std::mod(physical_page_texel_coord, page_size));
-                let near_border = any(in_page_texel_coords < 5) || any(in_page_texel_coords > page_size - 5);
-                if (directional_shadow == 1.0 && near_border) {
-                    let hsv = f32x3(f32(clipmap_index) / f32(context.directional_light.clipmap_count + 1) * TAU, 1.0, 0.5);
-                    let line_color = hsv_to_rgb(hsv);
-
-                    return f32x4(line_color, 1.0);
+                let near_border = any(in_page_texel_coords < 2) || any(in_page_texel_coords > page_size - 2);
+                if (near_border) {
+                    return f32x4(clipmap_color, 1.0);
                 }
             }
         }
@@ -185,6 +180,7 @@ func fs_main(
     let ambient_contribution = base_ambient_color * albedo_color * sun_illuminance;
     let indirect_illuminance_sum = (indirect_illuminance + ambient_contribution) * occlusion;
     var final_color = material_surface_color + indirect_illuminance_sum + emission;
+    // final_color = blend(final_color, clipmap_color);
 
     return f32x4(final_color, 1.0);
 }

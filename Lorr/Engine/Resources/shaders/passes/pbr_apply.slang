@@ -36,7 +36,7 @@ public func blend(
     f32x3 output_color,
     f32x3 input_color
 ) -> f32x3 {
-    let overlay_alpha = 0.70;
+    let overlay_alpha = 0.50;
     return f32x3(
         (1.0 - overlay_alpha) * output_color.rgb + overlay_alpha * input_color
     );
@@ -135,6 +135,8 @@ func fs_main(
     horizon *= horizon;
 
     var clipmap_color = f32x3(0.0);
+    var page_overlay_color = f32x3(0.0);
+
     var material_surface_color = f32x3(0.0);
     let NoL = max(dot(N, L), 0.0);
     if (NoL > 0.0) {
@@ -152,15 +154,14 @@ func fs_main(
             clipmap_color = hsv_to_rgb(line_hsv);
 
             if (page.is_backed()) {
-                let physical_page_address = page.get_physical_address();
-                let physical_page_count = physical_image_size / page_size;
-                let physical_page_coords = i32x2(
-                    physical_page_address % physical_page_count,
-                    physical_page_address / physical_page_count
-                );
+                let physical_page_coords = page.get_physical_coords(physical_image_size, page_size);
                 let physical_page_texel_coord = virtual_uv_to_physical_texel(clipmap_info.clip_uv, physical_page_coords, page_size, physical_image_size);
                 let shadow_depth = asfloat(params.vsm_physical_pages.Load(i32x3(physical_page_texel_coord, 0)));
-                directional_shadow = (clipmap_info.projected_depth < (shadow_depth - context.directional_light.depth_bias)) ? 0.0 : 1.0;
+
+                let max_bias = exp2(f32(clipmap_index)) * 0.1;
+                var bias = min(max_bias, 0.01 + calc_shadow_bias(clipmap_index, context.directional_light.get_first_clipmap_texel_length(), N, L) / NoL);
+                bias = bias / context.directional_light.z_length;
+                directional_shadow = ((shadow_depth + bias) < clipmap_info.projected_depth) ? 0.0 : 1.0;
 
                 // DEBUGGING
                 let in_page_texel_coords = i32x2(std::mod(physical_page_texel_coord, page_size));
@@ -180,7 +181,7 @@ func fs_main(
     let ambient_contribution = base_ambient_color * albedo_color * sun_illuminance;
     let indirect_illuminance_sum = (indirect_illuminance + ambient_contribution) * occlusion;
     var final_color = material_surface_color + indirect_illuminance_sum + emission;
-    // final_color = blend(final_color, clipmap_color);
+    final_color = blend(final_color, page_overlay_color);
 
     return f32x4(final_color, 1.0);
 }

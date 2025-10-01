@@ -1431,7 +1431,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                         cmd_list //
                             .bind_graphics_pipeline("passes.vsm_draw_physical_pages")
                             .set_rasterization({ .cullMode = vuk::CullModeFlagBits::eNone })
-                            .set_depth_stencil({ .depthWriteEnable = true, .depthCompareOp = vuk::CompareOp::eGreaterOrEqual })
+                            .set_depth_stencil({ .depthWriteEnable = false, .depthCompareOp = vuk::CompareOp::eNever })
                             .set_dynamic_state(vuk::DynamicStateFlagBits::eViewport | vuk::DynamicStateFlagBits::eScissor)
                             .set_viewport(0, viewport_rect)
                             .set_scissor(0, vuk::Rect2D::framebuffer())

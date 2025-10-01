@@ -15,7 +15,7 @@ import vsm;
 
 struct PushConstants {
     u32 clipmap_index;
-    u32 physical_page_size;
+    u32 physical_page_image_size;
     u32 page_table_size;
     u32 page_size;
 };
@@ -54,19 +54,14 @@ func fs_main(VertexOutput input) -> void {
     let clipmap = clipmaps[C.clipmap_index];
     let page_offset = clipmap.page_offset;
 
-    let virtual_uv = input.position.xy / C.physical_page_size;
+    let virtual_uv = input.position.xy / C.physical_page_image_size;
     let wrapped_coords = vsm_clip_info_to_wrapped_coords(virtual_uv, page_offset, C.page_table_size);
     let page_address = i32x3(wrapped_coords, C.clipmap_index);
     let page = VSMPageMetadata(page_tables.Load(i32x4(page_address, 0)));
     if (page.is_backed() && page.is_dirty()) {
-        let physical_page_address = page.get_physical_address();
-        let physical_page_count = C.physical_page_size / C.page_size;
-        let physical_page_coords = i32x2(
-            physical_page_address % physical_page_count,
-            physical_page_address / physical_page_count
-        );
+        let physical_page_coords = page.get_physical_coords(C.physical_page_image_size, C.page_size);
 
-        let physical_page_texel_coord = virtual_uv_to_physical_texel(virtual_uv, physical_page_coords, C.page_size, C.physical_page_size);
-        __atomic_max(physical_pages[physical_page_texel_coord], asuint(saturate(input.position.z / input.position.w)));
+        let physical_page_texel_coord = virtual_uv_to_physical_texel(virtual_uv, physical_page_coords, C.page_size, C.physical_page_image_size);
+        __atomic_min(physical_pages[physical_page_texel_coord], asuint(saturate(input.position.z / input.position.w)));
     }
 }

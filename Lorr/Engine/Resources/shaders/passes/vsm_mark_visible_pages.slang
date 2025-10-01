@@ -45,7 +45,7 @@ func cs_main(
     // This entire loop is called "waterfall", used to avoid
     // atomic operations per thread, the execution cascades
     // down each iteration to save huge time
-    var first_thread_visible = false;
+    var first_thread_visible = all(wrapped_coords >= 0);
     var done = false;
     while (!done) {
         let subgroup_address = WaveReadLaneFirst(page_table_address);
@@ -60,7 +60,6 @@ func cs_main(
     if (first_thread_visible) {
         // Mark it as visible
         let page_data = __atomic_or(params.page_tables[page_table_address], VSM_PAGE_VISIBLE_BIT, MemoryOrder::Relaxed);
-        //__atomic_or(params.page_tables[page_table_address], VSM_PAGE_DIRTY_BIT, MemoryOrder::Relaxed);
         let page = VSMPageMetadata(page_data);
 
         // Did the page just became visible?
@@ -69,8 +68,8 @@ func cs_main(
                 // we already have allocated this page, and it was marked visible
                 // keep track of visible and backed pages so the allocator wont overwrite it
                 let physical_address = page.get_physical_address();
-                let visibility_mask_index = physical_address % 32;
-                let bit_index = physical_address / 32;
+                let visibility_mask_index = physical_address / 32;
+                let bit_index = physical_address % 32;
                 let visibility_bit = 1 << bit_index;
                 __atomic_or(params.page_visibility_mask[visibility_mask_index], visibility_bit, MemoryOrder::Relaxed);
             } else {

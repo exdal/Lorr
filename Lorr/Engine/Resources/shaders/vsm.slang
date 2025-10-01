@@ -55,6 +55,15 @@ public struct VSMPageMetadata {
         return this.data >> VSM_PAGE_PHYSICAL_ADDRESS_BITS;
     }
 
+    public func get_physical_coords(u32 physical_page_image_size, u32 page_size) -> u32x2 {
+        let physical_address = this.get_physical_address();
+        let physical_page_count = physical_page_image_size / page_size;
+        return u32x2(
+            physical_address % physical_page_count,
+            physical_address / physical_page_count
+        );
+    }
+
     [mutating]
     public func set_physical_address(u32 new_physical_address) -> void {
         this.data = (this.data & VSM_PAGE_PHYSICAL_ADDRESS_MASK) | ((new_physical_address & VSM_PAGE_PHYSICAL_ADDRESS_MASK) << 16u);
@@ -103,4 +112,12 @@ public func virtual_uv_to_physical_texel(f32x2 virtual_uv, i32x2 physical_page_c
     let in_memory_offset = physical_page_coords * page_size;
     let memory_texel_coord = in_memory_offset + in_page_texel_coord;
     return memory_texel_coord;
+}
+
+public func calc_shadow_bias(u32 clipmap_index, f32 first_clipmap_texel_length, f32x3 N, f32x3 L) -> f32 {
+    let clipmap_texel_size = exp2(f32(clipmap_index)) * first_clipmap_texel_length;
+    let sqrt2 = 1.41421356;
+    let q = 2.0 / 1048576.0;
+    let b = sqrt2 * clipmap_texel_size * 0.5;
+    return q + b * length(cross(N, L));
 }

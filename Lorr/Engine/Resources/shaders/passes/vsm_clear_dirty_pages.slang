@@ -28,5 +28,5 @@ func cs_main(
     );
     let physical_page_offset = physical_page_coords * page_size;
     let physical_texel = physical_page_offset + thread_id.xy;
-    params.physical_pages.Store(physical_texel, asuint(0.0));
+    params.physical_pages.Store(physical_texel, asuint(1.0));
 }

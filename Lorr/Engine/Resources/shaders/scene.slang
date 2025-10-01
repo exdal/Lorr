@@ -64,12 +64,14 @@ public struct VirtualClipmap {
     public func get_clipmap_info(f32x3 world_pos) -> VirtualClipmapInfo {
         let light_pos_h = mul(this.projection_view_mat, f32x4(world_pos, 1.0));
         let light_pos = light_pos_h.xyz / light_pos_h.w;
-        let clip_uv = fract(light_pos.xy * 0.5 + 0.5);
+        let clip_uv = fract((light_pos.xy + 1.0) * 0.5);
         let projected_depth = light_pos_h.z / light_pos_h.w;
 
         return VirtualClipmapInfo(clip_uv, projected_depth);
     }
 };
+
+#define VMS_USE_DIAG_PIXEL_FOOTPRINT 1
 
 public struct DirectionalLight {
     public f32x3 base_ambient_color;
@@ -83,16 +85,24 @@ public struct DirectionalLight {
     public f32 depth_bias;
     public f32 normal_bias;
 
+    public func get_first_clipmap_texel_length() -> f32 {
+#if VMS_USE_DIAG_PIXEL_FOOTPRINT
+        return (this.first_clipmap_width * 2.0) / this.virtual_extent;
+#else
+        return this.first_clipmap_width * 2.0;
+#endif
+    }
+
     public func get_clipmap_index(in Camera camera, f32x2 uv, f32 depth) -> u32 {
-#if 1
+#if VMS_USE_DIAG_PIXEL_FOOTPRINT
         // 2x2 diagonal pixel footprint calculation for better spatial information.
         // if this shit is too slow fallback to 2x1 approach (top down or left right)
         let inv_resolution = 1.0 / camera.resolution;
         let uv_offset = inv_resolution * 0.5;
-        let top_left = uv + f32x2(uv_offset.x, uv_offset.y);
-        let top_right = uv + f32x2(-uv_offset.x, uv_offset.y);
-        let bottom_left = uv + f32x2(uv_offset.x, -uv_offset.y);
-        let bottom_right = uv + f32x2(-uv_offset.x, uv_offset.y);
+        let top_left = uv + f32x2(-uv_offset.x, -uv_offset.y);
+        let top_right = uv + f32x2(uv_offset.x, -uv_offset.y);
+        let bottom_left = uv + f32x2(-uv_offset.x, uv_offset.y);
+        let bottom_right = uv + f32x2(uv_offset.x, uv_offset.y);
         let dx = distance(
             camera.unproject_uv(top_left, depth),
             camera.unproject_uv(bottom_right, depth)
@@ -101,12 +111,12 @@ public struct DirectionalLight {
             camera.unproject_uv(top_right, depth),
             camera.unproject_uv(bottom_left, depth)
         );
-        let d = min(dx, dy);
+        let d = max(dx, dy);
 #else
         let center_pos = camera.unproject_uv(uv, depth);
         let d = length(center_pos - camera.position);
 #endif
-        let texel_length = (this.first_clipmap_width * 2.0) / this.virtual_extent;
+        let texel_length = this.get_first_clipmap_texel_length();
         let clipmap_level_f = log2(d / texel_length) + this.clipmap_selection_bias;
         let clipmap_level = u32(max(clipmap_level_f, 0.0));
 

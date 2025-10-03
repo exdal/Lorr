@@ -59,7 +59,7 @@ func cs_main(
 
     if (first_thread_visible) {
         // Mark it as visible
-        let page_data = __atomic_or(params.page_tables[page_table_address], VSM_PAGE_VISIBLE_BIT, MemoryOrder::Relaxed);
+        let page_data = __atomic_or(params.page_tables[page_table_address], u32(VSMPageState.Visible), MemoryOrder::Relaxed);
         let page = VSMPageMetadata(page_data);
 
         // Did the page just became visible?

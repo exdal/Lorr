@@ -131,8 +131,12 @@ struct SceneRenderer {
     vuk::Unique<vuk::Image> vsm_page_tables{};
     vuk::Unique<vuk::ImageView> vsm_page_tables_view{};
     vuk::ImageAttachment vsm_page_tables_attachment = {};
-    Image vsm_physical_pages = {};
-    ImageView vsm_physical_pages_view = {};
+    vuk::Unique<vuk::Image> vsm_physical_pages{};
+    // vuk doesnt support mutable image views in attachments
+    vuk::Unique<vuk::ImageView> vsm_physical_pages_f32_view{};
+    vuk::Unique<vuk::ImageView> vsm_physical_pages_u32_view{};
+    vuk::ImageAttachment vsm_physical_pages_attachment = {};
+
     Buffer vsm_page_visibility_mask_buffer = {};
     Buffer vsm_allocation_requests_buffer = {};
     Buffer vsm_dirty_physical_page_addresses_buffer = {};

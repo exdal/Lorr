@@ -543,6 +543,8 @@ auto SceneRenderer::prepare_frame(this SceneRenderer &self, FramePrepareInfo &in
 
     auto &device = App::mod<Device>();
     auto &transfer_man = device.transfer_man();
+    auto &allocator = device.get_allocator();
+
     auto prepared_frame = PreparedFrame{};
 
     auto zero_fill_pass = vuk::make_pass("zero fill", [](vuk::CommandBuffer &command_buffer, VUK_BA(vuk::eTransferWrite) dst) {
@@ -783,26 +785,37 @@ auto SceneRenderer::prepare_frame(this SceneRenderer &self, FramePrepareInfo &in
             .base_layer = 0,
             .layer_count = 6,
         };
-        self.vsm_page_tables = *vuk::allocate_image(device.get_allocator(), self.vsm_page_tables_attachment);
+        self.vsm_page_tables = *vuk::allocate_image(allocator, self.vsm_page_tables_attachment);
         self.vsm_page_tables_attachment.image = *self.vsm_page_tables;
-        self.vsm_page_tables_view = *vuk::allocate_image_view(device.get_allocator(), self.vsm_page_tables_attachment);
+        self.vsm_page_tables_view = *vuk::allocate_image_view(allocator, self.vsm_page_tables_attachment);
         self.vsm_page_tables_attachment.image_view = *self.vsm_page_tables_view;
 
         prepared_frame.vsm_page_table = vuk::discard_ia("vsm page tables", self.vsm_page_tables_attachment);
         prepared_frame.vsm_page_table = vuk::clear_image(std::move(prepared_frame.vsm_page_table), vuk::Black<u32>);
 
-        auto vsm_physical_pages_info = ImageInfo{
-            .format = vuk::Format::eR32Uint,
-            .usage = vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eSampled,
-            .type = vuk::ImageType::e2D,
+        self.vsm_physical_pages_attachment = vuk::ImageAttachment{
+            .image_flags = vuk::ImageCreateFlagBits::eMutableFormat,
+            .usage = vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eTransferDst,
             .extent = { .width = GPU::VSM_DIRECTIONAL_IMAGE_SIZE, .height = GPU::VSM_DIRECTIONAL_IMAGE_SIZE, .depth = 1 },
-            .mip_count = 1,
-            .name = "VSM Physical Pages",
+            .format = vuk::Format::eR32Sfloat,
+            .sample_count = vuk::Samples::e1,
+            .view_type = vuk::ImageViewType::e2D,
+            .base_level = 0,
+            .level_count = 1,
+            .base_layer = 0,
+            .layer_count = 1,
         };
-        std::tie(self.vsm_physical_pages, self.vsm_physical_pages_view) = Image::create_with_view(device, vsm_physical_pages_info).value();
+        self.vsm_physical_pages = *vuk::allocate_image(allocator, self.vsm_physical_pages_attachment);
+        self.vsm_physical_pages_attachment.image = *self.vsm_physical_pages;
+        self.vsm_physical_pages_f32_view = *vuk::allocate_image_view(allocator, self.vsm_physical_pages_attachment);
+        self.vsm_physical_pages_attachment.image_view = *self.vsm_physical_pages_f32_view;
 
-        prepared_frame.vsm_physical_pages = self.vsm_physical_pages_view.discard(device, "vsm physical pages", vuk::ImageUsageFlagBits::eStorage);
-        prepared_frame.vsm_physical_pages = vuk::clear_image(std::move(prepared_frame.vsm_physical_pages), vuk::Black<f32>);
+        auto vsm_physical_pages_u32_attachment = self.vsm_physical_pages_attachment;
+        vsm_physical_pages_u32_attachment.format = vuk::Format::eR32Uint;
+        self.vsm_physical_pages_u32_view = *vuk::allocate_image_view(allocator, vsm_physical_pages_u32_attachment);
+
+        prepared_frame.vsm_physical_pages = vuk::discard_ia("vsm physical pages", self.vsm_physical_pages_attachment);
+        prepared_frame.vsm_physical_pages = vuk::clear_image(std::move(prepared_frame.vsm_physical_pages), vuk::DepthZero);
 
         // TODO, WARN: If scene doesnt have any lights in frame 0, all this shit will be invalidated
         self.vsm_page_visibility_mask_buffer =
@@ -812,15 +825,13 @@ auto SceneRenderer::prepare_frame(this SceneRenderer &self, FramePrepareInfo &in
 
         self.vsm_allocation_requests_buffer = Buffer::create(device, GPU::VSM_DIRECTIONAL_MAX_PAGE_COUNT * sizeof(GPU::VSMAllocRequest)).value();
         prepared_frame.vsm_allocation_requests_buffer = self.vsm_allocation_requests_buffer.discard(device, "vsm alloc requests");
-        prepared_frame.vsm_allocation_requests_buffer = zero_fill_pass(std::move(prepared_frame.vsm_allocation_requests_buffer));
 
-        self.vsm_dirty_physical_page_addresses_buffer = Buffer::create(device, GPU::VSM_DIRECTIONAL_MAX_PAGE_COUNT * sizeof(u32)).value();
+        self.vsm_dirty_physical_page_addresses_buffer = Buffer::create(device, GPU::VSM_DIRECTIONAL_MAX_PAGE_COUNT * sizeof(glm::uvec2)).value();
         prepared_frame.vsm_dirty_physical_page_addresses_buffer =
             self.vsm_dirty_physical_page_addresses_buffer.discard(device, "vsm dirty physical pages");
     } else {
         prepared_frame.vsm_page_table = vuk::acquire_ia("vsm page tables", self.vsm_page_tables_attachment, vuk::eFragmentSampled);
-        prepared_frame.vsm_physical_pages =
-            self.vsm_physical_pages_view.acquire(device, "vsm physical pages", vuk::ImageUsageFlagBits::eStorage, vuk::eFragmentSampled);
+        prepared_frame.vsm_physical_pages = vuk::acquire_ia("vsm physical pages", self.vsm_physical_pages_attachment, vuk::eFragmentSampled);
         prepared_frame.vsm_page_visibility_mask_buffer =
             self.vsm_page_visibility_mask_buffer.acquire(device, "vsm page visibility mask", vuk::eMemoryRW);
         prepared_frame.vsm_allocation_requests_buffer = self.vsm_allocation_requests_buffer.acquire(device, "vsm alloc requests", vuk::eMemoryRW);
@@ -1217,7 +1228,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                 .reordered_indices_buffer = std::move(reordered_indices_buffer),
             };
 
-            vsm_page_table_attachment = vuk::clear_image(std::move(vsm_page_table_attachment), vuk::Black<u32>);
+            // vsm_page_table_attachment = vuk::clear_image(std::move(vsm_page_table_attachment), vuk::Black<u32>);
 
             auto vsm_reset_page_visibility_pass = vuk::make_pass(
                 "vsm reset page visibility",
@@ -1234,15 +1245,6 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
 
             vsm_page_table_attachment = vsm_reset_page_visibility_pass(std::move(vsm_page_table_attachment));
 
-            auto vsm_clear_visibility_mask_pass =
-                vuk::make_pass("vsm clear visibility mask", [](vuk::CommandBuffer &command_buffer, VUK_BA(vuk::eTransferWrite) dst) {
-                    command_buffer.fill_buffer(dst, 0_u32);
-
-                    return dst;
-                });
-
-            vsm_page_visibility_mask_buffer = vsm_clear_visibility_mask_pass(std::move(vsm_page_visibility_mask_buffer));
-
             auto vsm_mark_visible_pages_pass = vuk::make_pass(
                 "vsm mark visible pages",
                 [](vuk::CommandBuffer &cmd_list, //
@@ -1253,7 +1255,12 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                    VUK_IA(vuk::eComputeRW) page_table,
                    VUK_BA(vuk::eComputeRW) page_visibility_mask,
                    VUK_BA(vuk::eComputeRW) allocator) {
-                    cmd_list.bind_compute_pipeline("passes.vsm_mark_visible_pages")
+                    cmd_list //
+                        .fill_buffer(page_visibility_mask, 0_u32)
+                        .memory_barrier(vuk::eComputeWrite, vuk::eComputeRead);
+
+                    cmd_list //
+                        .bind_compute_pipeline("passes.vsm_mark_visible_pages")
                         .bind_buffer(0, 0, camera)
                         .bind_buffer(0, 1, directional_light)
                         .bind_buffer(0, 2, clipmaps)
@@ -1344,7 +1351,11 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                         .bind_image(0, 0, page_table)
                         .bind_buffer(0, 1, clear_cmd)
                         .bind_buffer(0, 2, allocator)
-                        .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, page_table->extent)
+                        .push_constants(
+                            vuk::ShaderStageFlagBits::eCompute,
+                            0,
+                            PushConstants(page_table->extent, GPU::VSM_DIRECTIONAL_IMAGE_SIZE, GPU::VSM_PAGE_SIZE)
+                        )
                         .dispatch_invocations_per_pixel(page_table, 1.0f, 1.0f, static_cast<f32>(page_table->layer_count));
 
                     return std::make_tuple(page_table, allocator, clear_cmd);
@@ -1366,11 +1377,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                     cmd_list.bind_compute_pipeline("passes.vsm_clear_dirty_pages")
                         .bind_buffer(0, 0, allocator)
                         .bind_image(0, 1, physical_pages)
-                        .push_constants(
-                            vuk::ShaderStageFlagBits::eCompute,
-                            0,
-                            PushConstants(GPU::VSM_DIRECTIONAL_IMAGE_SIZE, GPU::VSM_DIRECTIONAL_PAGE_TABLE_SIZE, GPU::VSM_PAGE_SIZE)
-                        )
+                        .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, GPU::VSM_PAGE_SIZE)
                         .dispatch_indirect(clear_cmd);
 
                     return std::make_tuple(allocator, physical_pages);
@@ -1409,7 +1416,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                 self.cull_for_camera(vsm_camera_buffer, vsm_geometry_context);
                 auto vsm_draw_physical_pages_pass = vuk::make_pass(
                     stack.format("vsm draw clipmap {}", clipmap_index),
-                    [clipmap_index](
+                    [clipmap_index, vsm_physical_pages_u32_view = *self.vsm_physical_pages_u32_view](
                         vuk::CommandBuffer &cmd_list,
                         VUK_BA(vuk::eIndirectRead) triangle_indirect,
                         VUK_BA(vuk::eIndexRead) index_buffer,
@@ -1442,7 +1449,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                             .bind_buffer(0, 4, transforms)
                             .bind_buffer(0, 5, clipmaps)
                             .bind_image(0, 6, page_tables)
-                            .bind_image(0, 7, physical_pages)
+                            .bind_image(0, 7, vsm_physical_pages_u32_view, vuk::ImageLayout::eGeneral)
                             .bind_index_buffer(index_buffer, vuk::IndexType::eUint32)
                             .push_constants(
                                 vuk::ShaderStageFlagBits::eVertex | vuk::ShaderStageFlagBits::eFragment,

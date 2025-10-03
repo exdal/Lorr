@@ -99,10 +99,10 @@ public struct DirectionalLight {
         // if this shit is too slow fallback to 2x1 approach (top down or left right)
         let inv_resolution = 1.0 / camera.resolution;
         let uv_offset = inv_resolution * 0.5;
-        let top_left = uv + f32x2(-uv_offset.x, -uv_offset.y);
-        let top_right = uv + f32x2(uv_offset.x, -uv_offset.y);
-        let bottom_left = uv + f32x2(-uv_offset.x, uv_offset.y);
-        let bottom_right = uv + f32x2(uv_offset.x, uv_offset.y);
+        let top_left = uv + f32x2(-uv_offset.x, uv_offset.y);
+        let top_right = uv + f32x2(uv_offset.x, uv_offset.y);
+        let bottom_left = uv + f32x2(-uv_offset.x, -uv_offset.y);
+        let bottom_right = uv + f32x2(uv_offset.x, -uv_offset.y);
         let dx = distance(
             camera.unproject_uv(top_left, depth),
             camera.unproject_uv(bottom_right, depth)

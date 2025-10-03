@@ -6,7 +6,7 @@ import vsm;
 struct ShaderParameters {
     SamplerState sampler;
     Texture2DArray<u32> page_tables;
-    Texture2D<u32> physical_pages;
+    Texture2D<f32> physical_pages;
 };
 
 #include <fullscreen.slang>
@@ -37,7 +37,7 @@ func fs_main(
         } break;
         case 1: {
             let physical_page = params.physical_pages.SampleLevel(params.sampler, input.tex_coord, 0.0);
-            color = asfloat(physical_page);
+            color = physical_page;
         } break;
         default:;
     }

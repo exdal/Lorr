@@ -20,7 +20,7 @@ struct ShaderParameters {
     Image2D<f32x3> emissive_image;
     Image2D<f32x3> metallic_roughness_occlusion_image;
     Texture2DArray<u32> vsm_page_table;
-    Texture2D<u32> vsm_physical_pages;
+    Texture2D<f32> vsm_physical_pages;
 
     ConstantBuffer<Camera> camera;
 };
@@ -85,7 +85,7 @@ func fs_main(
 
     // PBR constants
     let Li = context.directional_light ? context.directional_light.intensity : 1.0;
-    let L = context.atmosphere ? context.atmosphere.sun_direction : f32x3(0.0, 1.0, 0.0);
+    let L = context.atmosphere ? normalize(context.atmosphere.sun_direction) : f32x3(0.0, 1.0, 0.0);
     let V = normalize(params.camera.position - world_position);
     let N = normalize(mapped_normal);
     let R = reflect(-V, N);
@@ -156,7 +156,7 @@ func fs_main(
             if (page.is_backed()) {
                 let physical_page_coords = page.get_physical_coords(physical_image_size, page_size);
                 let physical_page_texel_coord = virtual_uv_to_physical_texel(clipmap_info.clip_uv, physical_page_coords, page_size, physical_image_size);
-                let shadow_depth = asfloat(params.vsm_physical_pages.Load(i32x3(physical_page_texel_coord, 0)));
+                let shadow_depth = params.vsm_physical_pages.Load(i32x3(physical_page_texel_coord, 0));
 
                 let max_bias = exp2(f32(clipmap_index)) * 0.1;
                 var bias = min(max_bias, 0.01 + calc_shadow_bias(clipmap_index, context.directional_light.get_first_clipmap_texel_length(), N, L) / NoL);
@@ -181,7 +181,6 @@ func fs_main(
     let ambient_contribution = base_ambient_color * albedo_color * sun_illuminance;
     let indirect_illuminance_sum = (indirect_illuminance + ambient_contribution) * occlusion;
     var final_color = material_surface_color + indirect_illuminance_sum + emission;
-    final_color = blend(final_color, page_overlay_color);
 
     return f32x4(final_color, 1.0);
 }

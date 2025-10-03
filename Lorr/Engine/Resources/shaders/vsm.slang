@@ -1,12 +1,16 @@
 import std;
 
 /// VSM PAGE METADATA BITS (0-15)
-// Is page visible?
-public constexpr static u32 VSM_PAGE_VISIBLE_BIT = 1u;
-// Is page dirty (happens during "page faults", or cache hits)?
-public constexpr static u32 VSM_PAGE_DIRTY_BIT = 2u;
-// Is page backed by physical image?
-public constexpr static u32 VSM_PAGE_BACKED_BIT = 4u;
+[Flags]
+public enum VSMPageState : u32 {
+    // Is page visible?
+    Visible,
+    // Is page dirty (happens during "page faults", or cache hits)?
+    Dirty,
+    // Is page backed by physical image?
+    Backed
+};
+
 // How many bits we reserve for metadata part?
 public constexpr static u32 VSM_METADATA_BITS = 16u;
 public constexpr static u32 VSM_METADATA_MASK = (1u << VSM_METADATA_BITS) - 1u;
@@ -24,31 +28,31 @@ public struct VSMPageMetadata {
     }
 
     public func is_visible() -> bool {
-        return (this.data & VSM_PAGE_VISIBLE_BIT) != 0;
+        return (this.data & VSMPageState.Visible) != 0;
     }
 
     [mutating]
     public func set_visible(bool v) -> void {
         // first we need to clear already set bit, and set the actual value we want
-        this.data = (this.data & ~VSM_PAGE_VISIBLE_BIT) | (VSM_PAGE_VISIBLE_BIT * u32(v));
+        this.data = (this.data & ~VSMPageState.Visible) | (VSMPageState.Visible * u32(v));
     }
 
     public func is_dirty() -> bool {
-        return (this.data & VSM_PAGE_DIRTY_BIT) != 0;
+        return (this.data & VSMPageState.Dirty) != 0;
     }
 
     [mutating]
     public func set_dirty(bool v) -> void {
-        this.data = (this.data & ~VSM_PAGE_DIRTY_BIT) | (VSM_PAGE_DIRTY_BIT * u32(v));
+        this.data = (this.data & ~VSMPageState.Dirty) | (VSMPageState.Dirty * u32(v));
     }
 
     public func is_backed() -> bool {
-        return (this.data & VSM_PAGE_BACKED_BIT) != 0;
+        return (this.data & VSMPageState.Backed) != 0;
     }
 
     [mutating]
     public func set_backed(bool v) -> void {
-        this.data = (this.data & ~VSM_PAGE_BACKED_BIT) | (VSM_PAGE_BACKED_BIT * u32(v));
+        this.data = (this.data & ~VSMPageState.Backed) | (VSMPageState.Backed * u32(v));
     }
 
     public func get_physical_address() -> u32 {
@@ -78,7 +82,7 @@ public struct VSMPageAllocator {
     public u32 active_request_count;
     public u32 dirty_physical_page_count;
     public VSMAllocRequest *requests;
-    public u32 *dirty_physical_page_addresses;
+    public u32x2 *dirty_physical_page_coords;
 };
 
 public func push_page_alloc_request(__ref VSMPageAllocator allocator, in VSMAllocRequest request) -> void {
@@ -86,9 +90,9 @@ public func push_page_alloc_request(__ref VSMPageAllocator allocator, in VSMAllo
     allocator.requests[index] = request;
 }
 
-public func push_dirty_physical_page(__ref VSMPageAllocator allocator, u32 physical_page_address) -> void {
+public func push_dirty_physical_page(__ref VSMPageAllocator allocator, u32x2 physical_page_address) -> void {
     let index = __atomic_add(allocator.dirty_physical_page_count, 1, MemoryOrder::AcquireRelease);
-    allocator.dirty_physical_page_addresses[index] = physical_page_address;
+    allocator.dirty_physical_page_coords[index] = physical_page_address;
 }
 
 public func vsm_page_coords_to_wrapped_coords(i32x2 page_coords, i32x2 page_offset, i32 page_table_size) -> i32x2 {

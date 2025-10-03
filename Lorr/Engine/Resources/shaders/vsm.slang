@@ -102,7 +102,7 @@ public func vsm_page_coords_to_wrapped_coords(i32x2 page_coords, i32x2 page_offs
 }
 
 public func vsm_clip_info_to_wrapped_coords(f32x2 uv, i32x2 page_offset, i32 page_table_size) -> i32x2 {
-    if (any(uv < 0.0) || any(uv > 1.0)) {
+    if (any(uv <= 0.0) || any(uv >= 1.0)) {
         return i32x2(-1, -1);
     }
 
@@ -112,7 +112,7 @@ public func vsm_clip_info_to_wrapped_coords(f32x2 uv, i32x2 page_offset, i32 pag
 
 public func virtual_uv_to_physical_texel(f32x2 virtual_uv, i32x2 physical_page_coords, i32 page_size, i32 physical_image_size) -> i32x2 {
     let virtual_texel_coord = i32x2(virtual_uv * f32(physical_image_size));
-    let in_page_texel_coord = i32x2(std::mod(virtual_texel_coord, page_size));
+    let in_page_texel_coord = i32x2(std::mod(f32x2(virtual_texel_coord), f32x2(page_size)));
     let in_memory_offset = physical_page_coords * page_size;
     let memory_texel_coord = in_memory_offset + in_page_texel_coord;
     return memory_texel_coord;

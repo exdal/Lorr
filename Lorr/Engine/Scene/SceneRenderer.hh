@@ -137,10 +137,6 @@ struct SceneRenderer {
     vuk::Unique<vuk::ImageView> vsm_physical_pages_u32_view{};
     vuk::ImageAttachment vsm_physical_pages_attachment = {};
 
-    Buffer vsm_page_visibility_mask_buffer = {};
-    Buffer vsm_allocation_requests_buffer = {};
-    Buffer vsm_dirty_physical_page_addresses_buffer = {};
-
     bool debug_lines = false;
     f32 overdraw_heatmap_scale = 0.0f;
     u32 frame_counter = 0;

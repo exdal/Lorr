@@ -821,10 +821,13 @@ auto SceneRenderer::prepare_frame(this SceneRenderer &self, FramePrepareInfo &in
         prepared_frame.vsm_physical_pages = vuk::acquire_ia("vsm physical pages", self.vsm_physical_pages_attachment, vuk::eFragmentSampled);
     }
 
-    prepared_frame.vsm_page_visibility_mask_buffer = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eGPUonly, GPU::VSM_DIRECTIONAL_PAGE_MASK_COUNT * sizeof(u32));
+    prepared_frame.vsm_page_visibility_mask_buffer =
+        transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eGPUonly, GPU::VSM_DIRECTIONAL_PAGE_MASK_COUNT * sizeof(u32));
     prepared_frame.vsm_page_visibility_mask_buffer = zero_fill_pass(std::move(prepared_frame.vsm_page_visibility_mask_buffer));
-    prepared_frame.vsm_allocation_requests_buffer = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eGPUonly, GPU::VSM_DIRECTIONAL_MAX_PAGE_COUNT * sizeof(GPU::VSMAllocRequest));
-    prepared_frame.vsm_dirty_physical_page_addresses_buffer = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eGPUonly, GPU::VSM_DIRECTIONAL_MAX_PAGE_COUNT * sizeof(glm::uvec2));
+    prepared_frame.vsm_allocation_requests_buffer =
+        transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eGPUonly, GPU::VSM_DIRECTIONAL_MAX_PAGE_COUNT * sizeof(GPU::VSMAllocRequest));
+    prepared_frame.vsm_dirty_physical_page_addresses_buffer =
+        transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eGPUonly, GPU::VSM_DIRECTIONAL_MAX_PAGE_COUNT * sizeof(glm::uvec2));
     prepared_frame.camera = info.camera;
     prepared_frame.directional_light = info.directional_light;
 

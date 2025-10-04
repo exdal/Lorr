@@ -18,8 +18,8 @@ func poll_requests(u32 mask_count, u32 request_index) -> void {
         let mask = params.page_visibility_mask[i];
         let bit = firstbitlow(~mask);
         if (bit != -1) {
-            let physical_page_index = i * 32 + bit;
             params.page_visibility_mask[i] |= 1 << bit;
+            let physical_page_index = i * 32 + bit;
 
             let page_data = params.page_tables.Load(request.page_table_address);
             var page = VSMPageMetadata(page_data);

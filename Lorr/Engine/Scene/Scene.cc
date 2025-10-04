@@ -61,17 +61,15 @@ auto calculate_virtual_shadow_matrices(
         up = glm::vec3(0.0f, 0.0f, 1.0f);
     }
 
+    auto page_table_size = glm::vec2(GPU::VSM_DIRECTIONAL_PAGE_TABLE_SIZE);
     auto camera_position = glm::vec4(camera.position, 1.0f);
     auto clipmap_view = glm::lookAtRH(glm::vec3(0.0f), forward, up);
-    auto uv_page_size = static_cast<f32>(GPU::VSM_PAGE_SIZE) / static_cast<f32>(GPU::VSM_DIRECTIONAL_IMAGE_SIZE);
-    auto ndc_page_size = uv_page_size * 2.0f;
 
     for (u32 clipmap_index = 0; clipmap_index < light.clipmap_count; clipmap_index++) {
         auto &clipmap = directional_light_clipmaps[clipmap_index];
         auto clipmap_scale = static_cast<f32>(1 << clipmap_index);
-        auto clipmap_extent = light_comp.first_clipmap_width * clipmap_scale * 0.5f;
+        auto clipmap_extent = light_comp.first_clipmap_width * clipmap_scale;
         auto clipmap_depth = light_comp.z_length;
-        auto first_clipmap_near = light_comp.fixed_z_length ? 1.0f : clipmap_depth;
 
         auto clipmap_projection = glm::orthoRH_ZO(
             -clipmap_extent, //
@@ -83,19 +81,16 @@ auto calculate_virtual_shadow_matrices(
         );
         clipmap_projection[1][1] *= -1.0f;
 
-        auto clipmap_projection_view = clipmap_projection * clipmap_view;
-        auto target_position = clipmap_projection_view * camera_position;
-        auto ndc_position = glm::vec3(target_position) / target_position.w;
-        auto uv_position = glm::ceil(glm::vec2(ndc_position) / ndc_page_size);
-
-        auto ndc_page_aligned_position = glm::vec4(uv_position * ndc_page_size, ndc_position.z, 1.0f);
-        auto world_page_aligned_position = glm::vec3(glm::inverse(clipmap_projection_view) * ndc_page_aligned_position);
-
-        auto clipmap_position = world_page_aligned_position + light_comp.first_clipmap_height_offset * first_clipmap_near * -forward;
-        auto final_clipmap_view = glm::lookAtRH(clipmap_position, clipmap_position + glm::normalize(forward), up);
+        auto clip_position = clipmap_projection * clipmap_view * camera_position;
+        auto ndc_position = glm::vec2(clip_position) / clip_position.w;
+        auto center_uv_position = ndc_position * 0.5f;
+        auto page_offset = glm::ivec2(center_uv_position * page_table_size);
+        auto page_shift = (glm::vec2(page_offset) / page_table_size) * 2.0f;
+        auto shifted_projection = glm::translate(glm::mat4(1.0f), glm::vec3(-page_shift, 0.0f)) * clipmap_projection;
+        auto final_clipmap_view = glm::inverse(clipmap_projection) * shifted_projection * clipmap_view;
 
         clipmap.projection_view_mat = clipmap_projection * final_clipmap_view;
-        clipmap.page_offset = glm::ivec2(uv_position);
+        clipmap.page_offset = page_offset;
     }
 }
 

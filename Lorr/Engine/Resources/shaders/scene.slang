@@ -111,7 +111,7 @@ public struct DirectionalLight {
             camera.unproject_uv(top_right, depth),
             camera.unproject_uv(bottom_left, depth)
         );
-        let d = max(dx, dy);
+        let d = min(dx, dy);
 #else
         let center_pos = camera.unproject_uv(uv, depth);
         let d = length(center_pos - camera.position);

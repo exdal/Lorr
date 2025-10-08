@@ -7,27 +7,29 @@ import vsm;
 [[vk::binding(0)]] StructuredBuffer<VirtualClipmap> clipmaps;
 [[vk::binding(1)]] StructuredBuffer<Mesh> meshes;
 [[vk::binding(2)]] StructuredBuffer<MeshInstance> mesh_instances;
-[[vk::binding(3)]] StructuredBuffer<Transform> transforms;
-[[vk::binding(4)]] RWTexture2DArray<u32, ImageFormat::R32UI> page_tables;
+[[vk::binding(3)]] StructuredBuffer<u32> dirty_mesh_instance_indices;
+[[vk::binding(4)]] StructuredBuffer<Transform> transforms;
+[[vk::binding(5)]] RWTexture2DArray<u32, ImageFormat::R32UI> page_tables;
 
 [[shader("compute")]]
 [[numthreads(64, 1, 1)]]
 func cs_main(
     u32x3 thread_id : SV_DispatchThreadID,
-    uniform u32 mesh_instances_count,
-    uniform u32 page_table_size,
-    uniform u32 invalidated_page_size,
-    uniform u32 invalidated_pages_per_axis
+    uniform u32 dirty_mesh_instances_count,
+    uniform i32 page_table_size,
+    uniform i32 invalidated_page_size,
+    uniform i32 invalidated_pages_per_axis
 ) -> void {
-    let mesh_instance_index = thread_id.x;
-    if (mesh_instance_index >= mesh_instances_count) {
+    let dirty_mesh_instance_index = thread_id.x;
+    if (dirty_mesh_instance_index >= dirty_mesh_instances_count) {
         return;
     }
 
     let linear_page_index = thread_id.y;
-    let page_x = linear_page_index % invalidated_pages_per_axis;
-    let page_y = linear_page_index / invalidated_pages_per_axis;
+    let page_x = i32(linear_page_index % invalidated_pages_per_axis);
+    let page_y = i32(linear_page_index / invalidated_pages_per_axis);
 
+    let mesh_instance_index = dirty_mesh_instance_indices[dirty_mesh_instance_index];
     let mesh_instance = mesh_instances[mesh_instance_index];
     let mesh = meshes[mesh_instance.mesh_index];
     let transform = transforms[mesh_instance.transform_index];
@@ -48,7 +50,9 @@ func cs_main(
                 let page_table_address = i32x3(wrapped_coords, clipmap_index);
                 var page = VSMPageMetadata(page_tables.Load(page_table_address));
                 if (page.is_backed()) {
-                    page.set_backed(false);
+                    page.data = 0;
+                    page.set_invalidated(true); // DEBUG
+
                     page_tables.Store(page_table_address, page.data);
                 }
             }

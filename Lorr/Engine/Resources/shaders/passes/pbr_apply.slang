@@ -168,6 +168,8 @@ func fs_main(
                 let near_border = any(in_page_texel_coords < 2) || any(in_page_texel_coords > page_size - 2);
                 if (near_border) {
                     return f32x4(clipmap_color, 1.0);
+                } else if (page.is_invalidated() && directional_shadow == 1.0) {
+                    return f32x4(1.0, 0.0, 1.0, 1.0);
                 }
             }
         }

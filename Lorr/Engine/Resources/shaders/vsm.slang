@@ -8,7 +8,9 @@ public enum VSMPageState : u32 {
     // Is page dirty (happens during "page faults", or cache hits)?
     Dirty,
     // Is page backed by physical image?
-    Backed
+    Backed,
+    // DEBUG: Is dynamically invalidated
+    Invalidated,
 };
 
 // How many bits we reserve for metadata part?
@@ -53,6 +55,15 @@ public struct VSMPageMetadata {
     [mutating]
     public func set_backed(bool v) -> void {
         this.data = (this.data & ~VSMPageState.Backed) | (VSMPageState.Backed * u32(v));
+    }
+
+    public func is_invalidated() -> bool {
+        return (this.data & VSMPageState.Invalidated) != 0;
+    }
+
+    [mutating]
+    public func set_invalidated(bool v) -> void {
+        this.data = (this.data & ~VSMPageState.Invalidated) | (VSMPageState.Invalidated * u32(v));
     }
 
     public func get_physical_address() -> u32 {

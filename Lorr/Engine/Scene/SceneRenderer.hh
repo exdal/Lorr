@@ -67,10 +67,12 @@ struct FramePrepareInfo {
 
 struct PreparedFrame {
     u32 mesh_instance_count = 0;
+    u32 dirty_mesh_instance_count = 0;
     u32 max_meshlet_instance_count = 0;
     vuk::Value<vuk::Buffer> transforms_buffer = {};
     vuk::Value<vuk::Buffer> meshes_buffer = {};
     vuk::Value<vuk::Buffer> mesh_instances_buffer = {};
+    vuk::Value<vuk::Buffer> dirty_mesh_instance_indices_buffer = {};
     vuk::Value<vuk::Buffer> meshlet_instance_visibility_mask_buffer = {};
     vuk::Value<vuk::Buffer> materials_buffer = {};
     vuk::Value<vuk::Buffer> camera_buffer = {};

@@ -20,5 +20,6 @@ func cs_main(
     var page = VSMPageMetadata(params.page_tables.Load(thread_id));
     page.set_visible(false);
     page.set_dirty(false);
+    page.set_invalidated(false);
     params.page_tables.Store(thread_id, page.data);
 }

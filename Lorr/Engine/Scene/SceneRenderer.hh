@@ -5,6 +5,7 @@
 #include "Engine/Scene/GPUScene.hh"
 
 namespace lr {
+enum class MeshInstanceID : u64 { Invalid = ~0_u64 };
 struct MeshletInstanceVisibility {
     // This is incremented __ONLY__ during cull MESHES pass.
     u32 total_visible_meshlet_instances = 0;
@@ -26,6 +27,7 @@ struct GeometryContext {
     vuk::Value<vuk::ImageAttachment> overdraw_attachment = {};
     vuk::Value<vuk::Buffer> meshes_buffer = {};
     vuk::Value<vuk::Buffer> mesh_instances_buffer = {};
+    vuk::Value<vuk::Buffer> dirty_mesh_instances_buffer = {};
     vuk::Value<vuk::Buffer> meshlet_instances_buffer = {};
     vuk::Value<vuk::Buffer> visible_meshlet_instances_indices_buffer = {};
     vuk::Value<vuk::Buffer> meshlet_instance_visibility_mask_buffer = {};
@@ -53,6 +55,7 @@ struct FramePrepareInfo {
 
     ls::span<GPU::Mesh> gpu_meshes = {};
     ls::span<GPU::MeshInstance> gpu_mesh_instances = {};
+    ls::span<MeshInstanceID> dirty_mesh_instance_ids = {};
 
     GPU::Camera camera = {};
     ls::option<GPU::DirectionalLight> directional_light = ls::nullopt;
@@ -105,14 +108,14 @@ struct SceneRenderer {
     static constexpr auto MODULE_NAME = "Scene Renderer";
 
     // Scene resources
-    Buffer histogram_luminance_buffer = {};
-    Buffer transforms_buffer = {};
+    vuk::Unique<vuk::Buffer> histogram_luminance_buffer{};
+    vuk::Unique<vuk::Buffer> transforms_buffer{};
 
-    Buffer mesh_instances_buffer = {};
-    Buffer meshes_buffer = {};
-    Buffer meshlet_instance_visibility_mask_buffer = {};
+    vuk::Unique<vuk::Buffer> mesh_instances_buffer{};
+    vuk::Unique<vuk::Buffer> meshes_buffer{};
+    vuk::Unique<vuk::Buffer> meshlet_instance_visibility_mask_buffer{};
 
-    Buffer materials_buffer = {};
+    vuk::Unique<vuk::Buffer> materials_buffer{};
 
     Image sky_transmittance_lut = {};
     ImageView sky_transmittance_lut_view = {};

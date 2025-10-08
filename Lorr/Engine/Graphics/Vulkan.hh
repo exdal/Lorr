@@ -132,7 +132,7 @@ struct SamplerInfo {
     vuk::SamplerAddressMode addr_v = vuk::SamplerAddressMode::eRepeat;
     vuk::SamplerAddressMode addr_w = vuk::SamplerAddressMode::eRepeat;
     vuk::CompareOp compare_op = vuk::CompareOp::eNever;
-    f32 max_anisotropy = 0.0f;
+    f32 max_anisotropy = 1.0f;
     f32 mip_lod_bias = 0.0f;
     f32 min_lod = 0.0f;
     f32 max_lod = 1000.0f;
@@ -142,15 +142,41 @@ struct SamplerInfo {
 struct Sampler {
     static auto create(Device &, const SamplerInfo &info, LR_THISCALL) -> std::expected<Sampler, vuk::VkException>;
 
-    auto id() const -> SamplerID;
+    auto id() const -> SamplerID {
+        return id_;
+    }
     auto index() const -> u32;
 
+    auto min_filter() const -> vuk::Filter {
+        return min_filter_;
+    }
+    auto mag_filter() const -> vuk::Filter {
+        return mag_filter_;
+    }
+    auto mipmap_mode() const -> vuk::SamplerMipmapMode {
+        return mipmap_mode_;
+    }
+    auto addr_u() const -> vuk::SamplerAddressMode {
+        return addr_u_;
+    }
+    auto addr_v() const -> vuk::SamplerAddressMode {
+        return addr_v_;
+    }
+    auto addr_w() const -> vuk::SamplerAddressMode {
+        return addr_w_;
+    }
     explicit operator bool() const {
         return id_ != SamplerID::Invalid;
     }
 
 private:
     SamplerID id_ = SamplerID::Invalid;
+    vuk::Filter min_filter_ = vuk::Filter::eLinear;
+    vuk::Filter mag_filter_ = vuk::Filter::eLinear;
+    vuk::SamplerMipmapMode mipmap_mode_ = vuk::SamplerMipmapMode::eLinear;
+    vuk::SamplerAddressMode addr_u_ = vuk::SamplerAddressMode::eRepeat;
+    vuk::SamplerAddressMode addr_v_ = vuk::SamplerAddressMode::eRepeat;
+    vuk::SamplerAddressMode addr_w_ = vuk::SamplerAddressMode::eRepeat;
 };
 
 /////////////////////////////////

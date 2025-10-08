@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Engine/Asset/AssetFile.hh"
+#include "Engine/Asset/Material.hh"
 #include "Engine/Asset/Model.hh"
 #include "Engine/Asset/UUID.hh"
 

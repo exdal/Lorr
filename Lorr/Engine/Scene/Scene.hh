@@ -26,6 +26,13 @@ struct ankerl::unordered_dense::hash<flecs::entity> {
 
 namespace lr {
 struct AssetManager;
+struct MeshInstance {
+    UUID model_uuid = UUID(nullptr);
+    usize mesh_node_index = 0;
+    UUID material_uuid = UUID(nullptr);
+    GPU::TransformID transform_id = GPU::TransformID::Invalid;
+};
+
 enum class SceneID : u64 { Invalid = ~0_u64 };
 struct Scene {
 private:
@@ -35,9 +42,12 @@ private:
     std::vector<flecs::id> known_component_ids = {};
 
     SlotMap<GPU::Transforms, GPU::TransformID> transforms = {};
-    ankerl::unordered_dense::map<flecs::entity, GPU::TransformID> entity_transforms_map = {};
-    ankerl::unordered_dense::map<ls::pair<UUID, usize>, std::vector<GPU::TransformID>> rendering_meshes_map = {};
-    std::vector<GPU::TransformID> dirty_transforms = {};
+    std::vector<GPU::TransformID> dirty_transform_ids = {};
+    ankerl::unordered_dense::map<flecs::entity, GPU::TransformID> entity_to_transform_id = {};
+
+    SlotMap<MeshInstance, MeshInstanceID> mesh_instances = {};
+    ankerl::unordered_dense::map<flecs::entity, MeshInstanceID> entity_to_mesh_instance_id = {};
+    std::vector<MeshInstanceID> dirty_mesh_instance_ids = {};
 
     std::vector<GPU::Material> gpu_materials = {};
 
@@ -100,8 +110,9 @@ private:
     auto add_transform(this Scene &, flecs::entity entity) -> GPU::TransformID;
     auto remove_transform(this Scene &, flecs::entity entity) -> void;
 
-    auto attach_mesh(this Scene &, flecs::entity entity, const UUID &model_uuid, usize mesh_index) -> bool;
-    auto detach_mesh(this Scene &, flecs::entity entity, const UUID &model_uuid, usize mesh_index) -> bool;
+    // set `material_uuid` to a valid material UUID to override original material of mesh
+    auto attach_mesh(this Scene &, flecs::entity entity, const UUID &model_uuid, usize mesh_index, const UUID &material_uuid = {}) -> bool;
+    auto detach_mesh(this Scene &, flecs::entity entity) -> bool;
 
     friend AssetManager;
 };

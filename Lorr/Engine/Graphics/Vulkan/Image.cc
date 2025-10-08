@@ -319,10 +319,6 @@ auto Sampler::create(Device &device, const SamplerInfo &info, [[maybe_unused]] v
     return sampler;
 }
 
-auto Sampler::id() const -> SamplerID {
-    return id_;
-}
-
 auto Sampler::index() const -> u32 {
     return SlotMap_decode_id(id_).index;
 }

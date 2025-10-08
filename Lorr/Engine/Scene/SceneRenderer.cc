@@ -227,6 +227,7 @@ auto SceneRenderer::init(this SceneRenderer &self) -> bool {
     ZoneScoped;
 
     auto &device = App::mod<Device>();
+    auto &allocator = device.get_allocator();
     auto &bindless_descriptor_set = device.get_descriptor_set();
     auto &asset_man = App::mod<AssetManager>();
     auto shaders_root = asset_man.asset_root_path(AssetType::Shader);
@@ -354,6 +355,12 @@ auto SceneRenderer::init(this SceneRenderer &self) -> bool {
     };
     Pipeline::create(device, default_slang_session, vis_decode_pipeline_info, bindless_descriptor_set).value();
 
+    auto vsm_invalidate_pages_pipeline_info = PipelineCompileInfo{
+        .module_name = "passes.vsm_invalidate_pages",
+        .entry_points = { "cs_main" },
+    };
+    Pipeline::create(device, default_slang_session, vsm_invalidate_pages_pipeline_info).value();
+
     auto vsm_reset_page_visibility_pipeline_info = PipelineCompileInfo{
         .module_name = "passes.vsm_reset_page_visibility",
         .entry_points = { "cs_main" },
@@ -476,8 +483,9 @@ auto SceneRenderer::init(this SceneRenderer &self) -> bool {
     };
     Pipeline::create(device, default_slang_session, vbgtao_denoise_pipeline_info).value();
 
-    self.histogram_luminance_buffer = Buffer::create(device, sizeof(GPU::HistogramLuminance)).value();
-    vuk::fill(vuk::acquire_buf("histogram luminance", *device.buffer(self.histogram_luminance_buffer.id()), vuk::eNone), 0);
+    self.histogram_luminance_buffer =
+        *vuk::allocate_buffer(allocator, { .mem_usage = vuk::MemoryUsage::eGPUonly, .size = sizeof(GPU::HistogramLuminance) });
+    vuk::fill(vuk::acquire_buf("histogram luminance", *self.histogram_luminance_buffer, vuk::eNone), 0_u32);
 
     // Hilbert Noise LUT
     constexpr auto HILBERT_NOISE_LUT_WIDTH = 64_u32;
@@ -554,9 +562,14 @@ auto SceneRenderer::prepare_frame(this SceneRenderer &self, FramePrepareInfo &in
     });
 
     if (!info.dirty_transform_ids.empty()) {
-        auto rebuild_transforms = !self.transforms_buffer || self.transforms_buffer.data_size() <= info.gpu_transforms.size_bytes();
-        self.transforms_buffer = self.transforms_buffer.resize(device, info.gpu_transforms.size_bytes()).value();
-        prepared_frame.transforms_buffer = self.transforms_buffer.acquire(device, "transforms", rebuild_transforms ? vuk::eNone : vuk::eMemoryRead);
+        auto rebuild_transforms = !self.transforms_buffer || self.transforms_buffer->size < info.gpu_transforms.size_bytes();
+        if (rebuild_transforms) {
+            self.transforms_buffer =
+                *vuk::allocate_buffer(allocator, { .mem_usage = vuk::MemoryUsage::eGPUonly, .size = info.gpu_transforms.size_bytes() });
+        }
+
+        prepared_frame.transforms_buffer =
+            vuk::acquire_buf("transforms", *self.transforms_buffer, rebuild_transforms ? vuk::eNone : vuk::eMemoryRead);
 
         if (rebuild_transforms) {
             // If we resize buffer, we need to refill it again, so individual uploads are not required.
@@ -598,13 +611,17 @@ auto SceneRenderer::prepare_frame(this SceneRenderer &self, FramePrepareInfo &in
             prepared_frame.transforms_buffer = update_transforms_pass(std::move(upload_buffer), std::move(prepared_frame.transforms_buffer));
         }
     } else if (self.transforms_buffer) {
-        prepared_frame.transforms_buffer = self.transforms_buffer.acquire(device, "transforms", vuk::Access::eMemoryRead);
+        prepared_frame.transforms_buffer = vuk::acquire_buf("transforms", *self.transforms_buffer, vuk::Access::eMemoryRead);
     }
 
     if (!info.dirty_material_indices.empty()) {
-        auto rebuild_materials = !self.materials_buffer || self.materials_buffer.data_size() <= info.gpu_materials.size_bytes();
-        self.materials_buffer = self.materials_buffer.resize(device, info.gpu_materials.size_bytes()).value();
-        prepared_frame.materials_buffer = self.materials_buffer.acquire(device, "materials", rebuild_materials ? vuk::eNone : vuk::eMemoryRead);
+        auto rebuild_materials = !self.materials_buffer || self.materials_buffer->size < info.gpu_materials.size_bytes();
+        if (rebuild_materials) {
+            self.materials_buffer =
+                *vuk::allocate_buffer(allocator, { .mem_usage = vuk::MemoryUsage::eGPUonly, .size = info.gpu_materials.size_bytes() });
+        }
+
+        prepared_frame.materials_buffer = vuk::acquire_buf("materials", *self.materials_buffer, rebuild_materials ? vuk::eNone : vuk::eMemoryRead);
 
         if (rebuild_materials) {
             prepared_frame.materials_buffer = transfer_man.upload(info.gpu_materials, std::move(prepared_frame.materials_buffer));
@@ -643,32 +660,43 @@ auto SceneRenderer::prepare_frame(this SceneRenderer &self, FramePrepareInfo &in
             prepared_frame.materials_buffer = update_materials_pass(std::move(upload_buffer), std::move(prepared_frame.materials_buffer));
         }
     } else if (self.materials_buffer) {
-        prepared_frame.materials_buffer = self.materials_buffer.acquire(device, "materials", vuk::eMemoryRead);
+        prepared_frame.materials_buffer = vuk::acquire_buf("materials", *self.materials_buffer, vuk::eMemoryRead);
     }
 
     if (!info.gpu_meshes.empty()) {
-        self.meshes_buffer = self.meshes_buffer.resize(device, info.gpu_meshes.size_bytes()).value();
-        prepared_frame.meshes_buffer = self.meshes_buffer.acquire(device, "meshes", vuk::eNone);
+        if (!self.meshes_buffer || self.meshes_buffer->size < info.gpu_meshes.size_bytes()) {
+            self.meshes_buffer = *vuk::allocate_buffer(allocator, { .mem_usage = vuk::MemoryUsage::eGPUonly, .size = info.gpu_meshes.size_bytes() });
+        }
+
+        prepared_frame.meshes_buffer = vuk::acquire_buf("meshes", *self.meshes_buffer, vuk::eNone);
         prepared_frame.meshes_buffer = transfer_man.upload(info.gpu_meshes, std::move(prepared_frame.meshes_buffer));
     } else if (self.meshes_buffer) {
-        prepared_frame.meshes_buffer = self.meshes_buffer.acquire(device, "meshes", vuk::eMemoryRead);
+        prepared_frame.meshes_buffer = vuk::acquire_buf("meshes", *self.meshes_buffer, vuk::eMemoryRead);
     }
 
     if (!info.gpu_mesh_instances.empty()) {
-        self.mesh_instances_buffer = self.mesh_instances_buffer.resize(device, info.gpu_mesh_instances.size_bytes()).value();
-        prepared_frame.mesh_instances_buffer = self.mesh_instances_buffer.acquire(device, "mesh instances", vuk::eNone);
+        if (!self.mesh_instances_buffer || self.mesh_instances_buffer->size < info.gpu_mesh_instances.size_bytes()) {
+            self.mesh_instances_buffer =
+                *vuk::allocate_buffer(allocator, { .mem_usage = vuk::MemoryUsage::eGPUonly, .size = info.gpu_mesh_instances.size_bytes() });
+        }
+        prepared_frame.mesh_instances_buffer = vuk::acquire_buf("mesh instances", *self.mesh_instances_buffer, vuk::eNone);
         prepared_frame.mesh_instances_buffer = transfer_man.upload(info.gpu_mesh_instances, std::move(prepared_frame.mesh_instances_buffer));
 
         auto meshlet_instance_visibility_mask_size_bytes = (info.max_meshlet_instance_count + 31) / 32 * sizeof(u32);
-        self.meshlet_instance_visibility_mask_buffer =
-            self.meshlet_instance_visibility_mask_buffer.resize(device, meshlet_instance_visibility_mask_size_bytes).value();
+        if (!self.meshlet_instance_visibility_mask_buffer
+            || self.meshlet_instance_visibility_mask_buffer->size < meshlet_instance_visibility_mask_size_bytes)
+        {
+            self.meshlet_instance_visibility_mask_buffer =
+                *vuk::allocate_buffer(allocator, { .mem_usage = vuk::MemoryUsage::eGPUonly, .size = meshlet_instance_visibility_mask_size_bytes });
+        }
+
         prepared_frame.meshlet_instance_visibility_mask_buffer =
-            self.meshlet_instance_visibility_mask_buffer.acquire(device, "meshlet instances visibility mask", vuk::eNone);
+            vuk::acquire_buf("meshlet instances visibility mask", *self.meshlet_instance_visibility_mask_buffer, vuk::eNone);
         prepared_frame.meshlet_instance_visibility_mask_buffer = zero_fill_pass(std::move(prepared_frame.meshlet_instance_visibility_mask_buffer));
     } else if (self.mesh_instances_buffer) {
-        prepared_frame.mesh_instances_buffer = self.mesh_instances_buffer.acquire(device, "mesh instances", vuk::eMemoryRead);
+        prepared_frame.mesh_instances_buffer = vuk::acquire_buf("mesh instances", *self.mesh_instances_buffer, vuk::eMemoryRead);
         prepared_frame.meshlet_instance_visibility_mask_buffer =
-            self.meshlet_instance_visibility_mask_buffer.acquire(device, "meshlet instances visibility mask", vuk::eMemoryRead);
+            vuk::acquire_buf("meshlet instances visibility mask", *self.meshlet_instance_visibility_mask_buffer, vuk::eMemoryRead);
     }
 
     prepared_frame.camera_buffer = transfer_man.scratch_buffer(info.camera);
@@ -1201,25 +1229,50 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
         // Virtual shadowmaps
         auto directional_light_info = frame.directional_light.value_or(GPU::DirectionalLight{});
         if (frame.directional_light.has_value()) {
-            auto vsm_geometry_context = GeometryContext{
-                .cull_flags =
-                    GPU::CullFlags::MeshFrustum | GPU::CullFlags::MeshletFrustum | GPU::CullFlags::TriangleBackFace | GPU::CullFlags::MicroTriangles,
-                .mesh_instance_count = frame.mesh_instance_count,
-                .max_meshlet_instance_count = frame.max_meshlet_instance_count,
-                .hiz_attachment = main_geometry_context.hiz_attachment,
-                .meshes_buffer = std::move(meshes_buffer),
-                .mesh_instances_buffer = std::move(mesh_instances_buffer),
-                .meshlet_instances_buffer = std::move(meshlet_instances_buffer),
-                .visible_meshlet_instances_indices_buffer = std::move(visible_meshlet_instances_indices_buffer),
-                .meshlet_instance_visibility_mask_buffer = std::move(meshlet_instance_visibility_mask_buffer),
-                .transforms_buffer = std::move(transforms_buffer),
-                .debug_drawer_buffer = std::move(debug_drawer_buffer),
-                .reordered_indices_buffer = std::move(reordered_indices_buffer),
-            };
-
             if (frame_index == 0) {
                 vsm_page_table_attachment = vuk::clear_image(std::move(vsm_page_table_attachment), vuk::Black<u32>);
             }
+
+            auto vsm_invalidate_pages_pass = vuk::make_pass(
+                "vsm invalidate pages",
+                [mesh_instance_count = frame.mesh_instance_count, clipmap_count = directional_light_info.clipmap_count](
+                    vuk::CommandBuffer &cmd_list, //
+                    VUK_BA(vuk::eComputeRead) clipmaps,
+                    VUK_BA(vuk::eComputeRead) meshes,
+                    VUK_BA(vuk::eComputeRead) mesh_instances,
+                    VUK_BA(vuk::eComputeRead) transforms,
+                    VUK_IA(vuk::eComputeRW) page_table
+                ) {
+                    cmd_list.bind_compute_pipeline("passes.vsm_invalidate_pages")
+                        .bind_buffer(0, 0, clipmaps)
+                        .bind_buffer(0, 1, meshes)
+                        .bind_buffer(0, 2, mesh_instances)
+                        .bind_buffer(0, 3, transforms)
+                        .bind_image(0, 4, page_table)
+                        .push_constants(
+                            vuk::ShaderStageFlagBits::eCompute,
+                            0,
+                            PushConstants(
+                                mesh_instance_count,
+                                GPU::VSM_DIRECTIONAL_PAGE_TABLE_SIZE,
+                                GPU::VSM_DIRECTIONAL_INVALIDATED_PAGES_SIZE,
+                                GPU::VSM_DIRECTIONAL_INVALIDATED_PAGES_PER_AXIS
+                            )
+                        )
+                        .dispatch_invocations(mesh_instance_count, GPU::VSM_DIRECTIONAL_INVALIDATED_PAGES_SIZE, clipmap_count);
+
+                    return std::make_tuple(clipmaps, meshes, mesh_instances, transforms, page_table);
+                }
+            );
+
+            std::tie(directional_light_clipmaps_buffer, meshes_buffer, mesh_instances_buffer, transforms_buffer, vsm_page_table_attachment) =
+                vsm_invalidate_pages_pass(
+                    std::move(directional_light_clipmaps_buffer),
+                    std::move(meshes_buffer),
+                    std::move(mesh_instances_buffer),
+                    std::move(transforms_buffer),
+                    std::move(vsm_page_table_attachment)
+                );
 
             auto vsm_reset_page_visibility_pass = vuk::make_pass(
                 "vsm reset page visibility",
@@ -1388,6 +1441,21 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                   .layer_count = 1 }
             );
 
+            auto vsm_geometry_context = GeometryContext{
+                .cull_flags =
+                    GPU::CullFlags::MeshFrustum | GPU::CullFlags::MeshletFrustum | GPU::CullFlags::TriangleBackFace | GPU::CullFlags::MicroTriangles,
+                .mesh_instance_count = frame.mesh_instance_count,
+                .max_meshlet_instance_count = frame.max_meshlet_instance_count,
+                .hiz_attachment = main_geometry_context.hiz_attachment,
+                .meshes_buffer = std::move(meshes_buffer),
+                .mesh_instances_buffer = std::move(mesh_instances_buffer),
+                .meshlet_instances_buffer = std::move(meshlet_instances_buffer),
+                .visible_meshlet_instances_indices_buffer = std::move(visible_meshlet_instances_indices_buffer),
+                .meshlet_instance_visibility_mask_buffer = std::move(meshlet_instance_visibility_mask_buffer),
+                .transforms_buffer = std::move(transforms_buffer),
+                .debug_drawer_buffer = std::move(debug_drawer_buffer),
+                .reordered_indices_buffer = std::move(reordered_indices_buffer),
+            };
             for (u32 clipmap_index = 0; clipmap_index < directional_light_info.clipmap_count; clipmap_index++) {
                 memory::ScopedStack stack;
 
@@ -1769,7 +1837,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
     }
 
     auto eye_adaptation_buffer = std::move(frame.eye_adaptation_buffer);
-    auto histogram_luminance_buffer = self.histogram_luminance_buffer.acquire(device, "histogram luminance", vuk::eFragmentRead);
+    auto histogram_luminance_buffer = vuk::acquire_buf("histogram luminance", *self.histogram_luminance_buffer, vuk::eFragmentRead);
     if (frame.has_eye_adaptation) {
         //  ── HISTOGRAM GENERATE ──────────────────────────────────────────────
         auto histogram_generate_pass = vuk::make_pass(
@@ -1914,37 +1982,8 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
     return dst_attachment;
 }
 
-auto SceneRenderer::cleanup(this SceneRenderer &self) -> void {
+auto SceneRenderer::cleanup(this SceneRenderer &) -> void {
     ZoneScoped;
-
-    auto &device = App::mod<Device>();
-
-    device.wait();
-
-    if (self.transforms_buffer) {
-        device.destroy(self.transforms_buffer.id());
-        self.transforms_buffer = {};
-    }
-
-    if (self.mesh_instances_buffer) {
-        device.destroy(self.mesh_instances_buffer.id());
-        self.mesh_instances_buffer = {};
-    }
-
-    if (self.meshes_buffer) {
-        device.destroy(self.meshes_buffer.id());
-        self.meshes_buffer = {};
-    }
-
-    if (self.meshlet_instance_visibility_mask_buffer) {
-        device.destroy(self.meshlet_instance_visibility_mask_buffer.id());
-        self.meshlet_instance_visibility_mask_buffer = {};
-    }
-
-    if (self.materials_buffer) {
-        device.destroy(self.materials_buffer.id());
-        self.materials_buffer = {};
-    }
 }
 
 } // namespace lr

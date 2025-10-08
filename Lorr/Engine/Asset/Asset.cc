@@ -1,6 +1,5 @@
 #include "Engine/Asset/Asset.hh"
 
-#include "Engine/Asset/ParserGLTF.hh"
 #include "Engine/Asset/ParserKTX2.hh"
 #include "Engine/Asset/ParserSTB.hh"
 
@@ -17,13 +16,117 @@
 
 #include "Engine/Scene/ECSModule/Core.hh"
 
+#include <fastgltf/core.hpp>
+#include <fastgltf/tools.hpp>
+#include <fastgltf/types.hpp>
+
 #include <ankerl/svector.h>
 #include <meshoptimizer.h>
 #include <simdjson.h>
 
+#include <queue>
+
+template<>
+struct fastgltf::ElementTraits<glm::vec4> : fastgltf::ElementTraitsBase<glm::vec4, AccessorType::Vec4, float> {};
+template<>
+struct fastgltf::ElementTraits<glm::vec3> : fastgltf::ElementTraitsBase<glm::vec3, AccessorType::Vec3, float> {};
+template<>
+struct fastgltf::ElementTraits<glm::vec2> : fastgltf::ElementTraitsBase<glm::vec2, AccessorType::Vec2, float> {};
+
 namespace lr {
+auto get_default_gltf_extensions() -> fastgltf::Extensions {
+    auto extensions = fastgltf::Extensions::None;
+    extensions |= fastgltf::Extensions::KHR_mesh_quantization;
+    extensions |= fastgltf::Extensions::KHR_texture_transform;
+    extensions |= fastgltf::Extensions::KHR_texture_basisu;
+    extensions |= fastgltf::Extensions::KHR_lights_punctual;
+    extensions |= fastgltf::Extensions::KHR_materials_specular;
+    extensions |= fastgltf::Extensions::KHR_materials_ior;
+    extensions |= fastgltf::Extensions::KHR_materials_iridescence;
+    extensions |= fastgltf::Extensions::KHR_materials_volume;
+    extensions |= fastgltf::Extensions::KHR_materials_transmission;
+    extensions |= fastgltf::Extensions::KHR_materials_clearcoat;
+    extensions |= fastgltf::Extensions::KHR_materials_emissive_strength;
+    extensions |= fastgltf::Extensions::KHR_materials_sheen;
+    extensions |= fastgltf::Extensions::KHR_materials_unlit;
+    extensions |= fastgltf::Extensions::KHR_materials_anisotropy;
+    extensions |= fastgltf::Extensions::EXT_meshopt_compression;
+    extensions |= fastgltf::Extensions::EXT_texture_webp;
+    extensions |= fastgltf::Extensions::MSFT_texture_dds;
+
+    return extensions;
+}
+
+auto get_default_gltf_options() -> fastgltf::Options {
+    auto options = fastgltf::Options::None;
+    options |= fastgltf::Options::LoadExternalBuffers;
+    // options |= fastgltf::Options::DontRequireValidAssetMember;
+
+    return options;
+}
+
+auto gltf_mime_type_to_asset_file_type(fastgltf::MimeType mime) -> AssetFileType {
+    switch (mime) {
+        case fastgltf::MimeType::JPEG:
+            return AssetFileType::JPEG;
+        case fastgltf::MimeType::PNG:
+            return AssetFileType::PNG;
+        case fastgltf::MimeType::KTX2:
+            return AssetFileType::KTX2;
+        default:
+            return AssetFileType::None;
+    }
+}
+
+auto gltf_sampler_to_sampler(const fastgltf::Sampler &gltf_sampler) -> SamplerInfo {
+    auto get_address_mode = [](fastgltf::Wrap v) -> vuk::SamplerAddressMode {
+        switch (v) {
+            case fastgltf::Wrap::ClampToEdge:
+                return vuk::SamplerAddressMode::eClampToEdge;
+            case fastgltf::Wrap::MirroredRepeat:
+                return vuk::SamplerAddressMode::eMirroredRepeat;
+            case fastgltf::Wrap::Repeat:
+                return vuk::SamplerAddressMode::eRepeat;
+        }
+    };
+
+    auto get_filter_mode = [](fastgltf::Filter v) -> vuk::Filter {
+        switch (v) {
+            case fastgltf::Filter::Nearest:
+            case fastgltf::Filter::NearestMipMapNearest:
+            case fastgltf::Filter::NearestMipMapLinear:
+                return vuk::Filter::eNearest;
+            case fastgltf::Filter::Linear:
+            case fastgltf::Filter::LinearMipMapNearest:
+            case fastgltf::Filter::LinearMipMapLinear:
+                return vuk::Filter::eLinear;
+        }
+    };
+
+    auto get_mip_filter_mode = [](fastgltf::Filter v) -> vuk::SamplerMipmapMode {
+        switch (v) {
+            case fastgltf::Filter::Nearest:
+            case fastgltf::Filter::NearestMipMapNearest:
+            case fastgltf::Filter::NearestMipMapLinear:
+                return vuk::SamplerMipmapMode::eNearest;
+            case fastgltf::Filter::Linear:
+            case fastgltf::Filter::LinearMipMapNearest:
+            case fastgltf::Filter::LinearMipMapLinear:
+                return vuk::SamplerMipmapMode::eLinear;
+        }
+    };
+
+    return SamplerInfo{
+        .min_filter = get_filter_mode(gltf_sampler.minFilter.value_or(fastgltf::Filter::Linear)),
+        .mag_filter = get_filter_mode(gltf_sampler.magFilter.value_or(fastgltf::Filter::Linear)),
+        .mipmap_mode = get_mip_filter_mode(gltf_sampler.minFilter.value_or(fastgltf::Filter::Linear)),
+        .addr_u = get_address_mode(gltf_sampler.wrapS),
+        .addr_v = get_address_mode(gltf_sampler.wrapT),
+    };
+}
+
 template<glm::length_t N, typename T>
-bool json_to_vec(simdjson::ondemand::value &o, glm::vec<N, T> &vec) {
+auto json_to_vec(simdjson::ondemand::value &o, glm::vec<N, T> &vec) -> bool {
     using U = glm::vec<N, T>;
     for (i32 i = 0; i < U::length(); i++) {
         constexpr static std::string_view components[] = { "x", "y", "z", "w" };
@@ -41,35 +144,182 @@ auto begin_asset_meta(JsonWriter &json, const UUID &uuid, AssetType type) -> voi
     json["type"] = std::to_underlying(type);
 }
 
-auto write_texture_asset_meta(JsonWriter &, Texture *) -> bool {
+auto sampler_address_mode_to_str(vuk::SamplerAddressMode &v) -> std::string_view {
     ZoneScoped;
 
-    return true;
+    switch (v) {
+        case vuk::SamplerAddressMode::eRepeat:
+            return "REPEAT";
+        case vuk::SamplerAddressMode::eMirroredRepeat:
+            return "MIRRORED_REPEAT";
+        case vuk::SamplerAddressMode::eClampToEdge:
+            return "CLAMP_TO_EDGE";
+        case vuk::SamplerAddressMode::eClampToBorder:
+            return "CLAMP_TO_BORDER";
+        case vuk::SamplerAddressMode::eMirrorClampToEdge:
+            return "MIRROR_CLAMP_TO_EDGE";
+    }
 }
 
-auto write_material_asset_meta(JsonWriter &json, UUID &uuid, Material &material) -> bool {
+auto str_to_sampler_address_mode(std::string_view v) -> vuk::SamplerAddressMode {
+    ZoneScoped;
+
+    switch (fnv64_str(v)) {
+        case fnv64_c("REPEAT"):
+            return vuk::SamplerAddressMode::eRepeat;
+        case fnv64_c("MIRRORED_REPEAT"):
+            return vuk::SamplerAddressMode::eMirroredRepeat;
+        case fnv64_c("CLAMP_TO_EDGE"):
+            return vuk::SamplerAddressMode::eClampToEdge;
+        case fnv64_c("CLAMP_TO_BORDER"):
+            return vuk::SamplerAddressMode::eClampToBorder;
+        case fnv64_c("MIRROR_CLAMP_TO_EDGE"):
+            return vuk::SamplerAddressMode::eMirrorClampToEdge;
+        default:;
+    }
+
+    return vuk::SamplerAddressMode::eRepeat;
+}
+
+auto sampler_filter_to_str(vuk::Filter &v) -> std::string_view {
+    ZoneScoped;
+
+    switch (v) {
+        case vuk::Filter::eNearest:
+            return "NEAREST";
+        case vuk::Filter::eLinear:
+            return "LINEAR";
+        case vuk::Filter::eCubicIMG:
+            return "CUBIC";
+    }
+}
+
+auto str_to_sampler_filter(std::string_view v) -> vuk::Filter {
+    ZoneScoped;
+
+    switch (fnv64_str(v)) {
+        case fnv64_c("NEAREST"):
+            return vuk::Filter::eNearest;
+        case fnv64_c("LINEAR"):
+            return vuk::Filter::eLinear;
+        case fnv64_c("CUBIC"):
+            return vuk::Filter::eCubicIMG;
+        default:;
+    }
+
+    return vuk::Filter::eLinear;
+}
+
+auto sampler_mipmap_mode_to_str(vuk::SamplerMipmapMode &v) -> std::string_view {
+    ZoneScoped;
+
+    switch (v) {
+        case vuk::SamplerMipmapMode::eNearest:
+            return "NEAREST";
+        case vuk::SamplerMipmapMode::eLinear:
+            return "LINEAR";
+    }
+}
+
+auto str_to_sampler_mipmap_mode(std::string_view v) -> vuk::SamplerMipmapMode {
+    ZoneScoped;
+
+    switch (fnv64_str(v)) {
+        case fnv64_c("NEAREST"):
+            return vuk::SamplerMipmapMode::eNearest;
+        case fnv64_c("LINEAR"):
+            return vuk::SamplerMipmapMode::eLinear;
+        default:;
+    }
+
+    return vuk::SamplerMipmapMode::eLinear;
+}
+
+auto write_sampler_meta(JsonWriter &json, SamplerInfo &sampler) -> bool {
     ZoneScoped;
 
     json.begin_obj();
-    json["uuid"] = uuid.str();
-    json["albedo_color"] = material.albedo_color;
-    json["emissive_color"] = material.emissive_color;
-    json["roughness_factor"] = material.roughness_factor;
-    json["metallic_factor"] = material.metallic_factor;
-    json["alpha_mode"] = std::to_underlying(material.alpha_mode);
-    json["alpha_cutoff"] = material.alpha_cutoff;
-    json["albedo_texture"] = material.albedo_texture.str();
-    json["normal_texture"] = material.normal_texture.str();
-    json["emissive_texture"] = material.emissive_texture.str();
-    json["metallic_roughness_texture"] = material.metallic_roughness_texture.str();
-    json["occlusion_texture"] = material.occlusion_texture.str();
+    json["address_u"] = sampler_address_mode_to_str(sampler.addr_u);
+    json["address_v"] = sampler_address_mode_to_str(sampler.addr_v);
+    json["min_filter"] = sampler_filter_to_str(sampler.min_filter);
+    json["mag_filter"] = sampler_filter_to_str(sampler.mag_filter);
+    json["mipmap_mode"] = sampler_mipmap_mode_to_str(sampler.mipmap_mode);
     json.end_obj();
 
     return true;
 }
 
-auto write_model_asset_meta(JsonWriter &json, ls::span<UUID> embedded_texture_uuids, ls::span<UUID> material_uuids, ls::span<Material> materials)
-    -> bool {
+auto json_to_sampler_info(simdjson::ondemand::value &v) -> SamplerInfo {
+    ZoneScoped;
+
+    auto info = SamplerInfo{};
+    if (auto r = v["address_u"]; !r.error()) {
+        info.addr_u = str_to_sampler_address_mode(r.get_string().value_unsafe());
+    }
+    if (auto r = v["address_v"]; !r.error()) {
+        info.addr_v = str_to_sampler_address_mode(r.get_string().value_unsafe());
+    }
+    if (auto r = v["min_filter"]; !r.error()) {
+        info.min_filter = str_to_sampler_filter(r.get_string().value_unsafe());
+    }
+    if (auto r = v["mag_filter"]; !r.error()) {
+        info.mag_filter = str_to_sampler_filter(r.get_string().value_unsafe());
+    }
+    if (auto r = v["mipmap_mode"]; !r.error()) {
+        info.mipmap_mode = str_to_sampler_mipmap_mode(r.get_string().value_unsafe());
+    }
+
+    return info;
+}
+
+auto write_texture_asset_meta(JsonWriter &json, TextureInfo &texture_info) -> bool {
+    ZoneScoped;
+
+    json.begin_obj();
+    json["use_srgb"] = texture_info.use_srgb;
+    json.end_obj();
+
+    return true;
+}
+
+auto write_material_asset_meta(JsonWriter &json, UUID &uuid, MaterialInfo &material_info) -> bool {
+    ZoneScoped;
+
+    json.begin_obj();
+    json["uuid"] = uuid.str();
+    json["albedo_color"] = material_info.albedo_color;
+    json["emissive_color"] = material_info.emissive_color;
+    json["roughness_factor"] = material_info.roughness_factor;
+    json["metallic_factor"] = material_info.metallic_factor;
+    json["alpha_mode"] = std::to_underlying(material_info.alpha_mode);
+    json["alpha_cutoff"] = material_info.alpha_cutoff;
+
+    json["albedo_texture"] = material_info.albedo_texture.str();
+    write_sampler_meta(json["albedo_sampler"], material_info.albedo_sampler_info);
+
+    json["normal_texture"] = material_info.normal_texture.str();
+    write_sampler_meta(json["normal_sampler"], material_info.normal_sampler_info);
+
+    json["emissive_texture"] = material_info.emissive_texture.str();
+    write_sampler_meta(json["emissive_sampler"], material_info.emissive_sampler_info);
+
+    json["metallic_roughness_texture"] = material_info.metallic_roughness_texture.str();
+    write_sampler_meta(json["metallic_roughness_sampler"], material_info.metallic_roughness_sampler_info);
+
+    json["occlusion_texture"] = material_info.occlusion_texture.str();
+    write_sampler_meta(json["occlusion_sampler"], material_info.occlusion_sampler_info);
+
+    json.end_obj();
+
+    return true;
+}
+
+auto write_model_asset_meta(
+    JsonWriter &json,
+    ls::span<UUID> embedded_texture_uuids,
+    ls::span<UUID> material_uuids,
+    ls::span<MaterialInfo> material_infos
+) -> bool {
     ZoneScoped;
 
     json["embedded_textures"].begin_array();
@@ -79,7 +329,7 @@ auto write_model_asset_meta(JsonWriter &json, ls::span<UUID> embedded_texture_uu
     json.end_array();
 
     json["embedded_materials"].begin_array();
-    for (const auto &[material_uuid, material] : std::views::zip(material_uuids, materials)) {
+    for (const auto &[material_uuid, material] : std::views::zip(material_uuids, material_infos)) {
         write_material_asset_meta(json, material_uuid, material);
     }
     json.end_array();
@@ -110,6 +360,101 @@ auto end_asset_meta(JsonWriter &json, const fs::path &path) -> bool {
     file.close();
 
     return true;
+}
+
+auto import_gltf(AssetManager &self, const fs::path &path, JsonWriter &json) -> bool {
+    ZoneScoped;
+
+    auto gltf_buffer = fastgltf::GltfDataBuffer::FromPath(path);
+    auto gltf_type = fastgltf::determineGltfFileType(gltf_buffer.get());
+    if (gltf_type == fastgltf::GltfType::Invalid) {
+        LOG_ERROR("GLTF model type is invalid!");
+        return false;
+    }
+
+    auto gltf_parser = fastgltf::Parser(get_default_gltf_extensions());
+    auto gltf_result = gltf_parser.loadGltf(gltf_buffer.get(), path.parent_path(), get_default_gltf_options());
+    if (!gltf_result) {
+        LOG_ERROR("Failed to load GLTF! {}", fastgltf::getErrorMessage(gltf_result.error()));
+        return false;
+    }
+
+    auto gltf_asset = std::move(gltf_result.get());
+
+    auto textures = std::vector<UUID>();
+    auto embedded_textures = std::vector<UUID>();
+    for (const auto &v : gltf_asset.images) {
+        auto &texture_uuid = textures.emplace_back();
+        std::visit(
+            ls::match{
+                [](const auto &) {},
+                [&](const fastgltf::sources::ByteView &) {
+                    // Embedded buffer
+                    texture_uuid = self.create_asset(AssetType::Texture, path);
+                    embedded_textures.push_back(texture_uuid);
+                },
+                [&](const fastgltf::sources::BufferView &) {
+                    // Embedded buffer
+                    texture_uuid = self.create_asset(AssetType::Texture, path);
+                    embedded_textures.push_back(texture_uuid);
+                },
+                [&](const fastgltf::sources::Array &) {
+                    // Embedded array
+                    texture_uuid = self.create_asset(AssetType::Texture, path);
+                    embedded_textures.push_back(texture_uuid);
+                },
+                [&](const fastgltf::sources::URI &uri) {
+                    // External file
+                    const auto &image_path = uri.uri.path();
+                    texture_uuid = self.import_asset(image_path);
+                },
+            },
+            v.data
+        );
+    }
+
+    auto assign_gltf_texture = [&](UUID &texture_uuid, SamplerInfo &sampler_info, const auto &gltf_texture) {
+        if (gltf_texture.has_value()) {
+            auto &texture_info = gltf_texture.value();
+            auto &gltf_texture = gltf_asset.textures[texture_info.textureIndex];
+
+            if (gltf_texture.imageIndex.value()) {
+                texture_uuid = textures[gltf_texture.imageIndex.value()];
+            }
+
+            if (gltf_texture.samplerIndex.has_value()) {
+                auto &gltf_sampler = gltf_asset.samplers[gltf_texture.samplerIndex.value()];
+                sampler_info = gltf_sampler_to_sampler(gltf_sampler);
+            }
+        }
+    };
+
+    auto material_uuids = std::vector<UUID>(gltf_asset.materials.size());
+    auto material_infos = std::vector<MaterialInfo>(gltf_asset.materials.size());
+    for (const auto &[material_uuid, material_info, gltf_material] : std::views::zip(material_uuids, material_infos, gltf_asset.materials)) {
+        const auto &pbr_data = gltf_material.pbrData;
+
+        material_uuid = self.create_asset(AssetType::Material);
+
+        material_info.albedo_color = glm::make_vec4(pbr_data.baseColorFactor.data());
+        material_info.emissive_color = glm::vec4(glm::make_vec3(gltf_material.emissiveFactor.data()), gltf_material.emissiveStrength);
+        material_info.roughness_factor = pbr_data.roughnessFactor;
+        material_info.metallic_factor = pbr_data.metallicFactor;
+        material_info.alpha_mode = static_cast<AlphaMode>(gltf_material.alphaMode);
+        material_info.alpha_cutoff = gltf_material.alphaCutoff;
+
+        assign_gltf_texture(material_info.albedo_texture, material_info.albedo_sampler_info, pbr_data.baseColorTexture);
+        assign_gltf_texture(material_info.normal_texture, material_info.normal_sampler_info, gltf_material.normalTexture);
+        assign_gltf_texture(material_info.emissive_texture, material_info.emissive_sampler_info, gltf_material.emissiveTexture);
+        assign_gltf_texture(
+            material_info.metallic_roughness_texture,
+            material_info.metallic_roughness_sampler_info,
+            pbr_data.metallicRoughnessTexture
+        );
+        assign_gltf_texture(material_info.occlusion_texture, material_info.occlusion_sampler_info, gltf_material.occlusionTexture);
+    }
+
+    return write_model_asset_meta(json, embedded_textures, material_uuids, material_infos);
 }
 
 auto AssetManager::init(this AssetManager &) -> bool {
@@ -302,64 +647,12 @@ auto AssetManager::import_asset(this AssetManager &self, const fs::path &path) -
 
     switch (asset_type) {
         case AssetType::Model: {
-            auto gltf_model = GLTFModelInfo::parse_info(path);
-            auto textures = std::vector<UUID>();
-            auto embedded_textures = std::vector<UUID>();
-            for (auto &v : gltf_model->textures) {
-                auto &image = gltf_model->images[v.image_index.value()];
-                auto &texture_uuid = textures.emplace_back();
-                std::visit(
-                    ls::match{
-                        [&](const std::vector<u8> &) { //
-                            texture_uuid = self.create_asset(AssetType::Texture, path);
-                            embedded_textures.push_back(texture_uuid);
-                        },
-                        [&](const fs::path &image_path) { //
-                            texture_uuid = self.import_asset(image_path);
-                        },
-                    },
-                    image.image_data
-                );
-            }
-
-            auto material_uuids = std::vector<UUID>(gltf_model->materials.size());
-            auto materials = std::vector<Material>(gltf_model->materials.size());
-            for (const auto &[material_uuid, material, gltf_material] : std::views::zip(material_uuids, materials, gltf_model->materials)) {
-                material_uuid = self.create_asset(AssetType::Material);
-                material.albedo_color = gltf_material.albedo_color;
-                material.emissive_color = gltf_material.emissive_color;
-                material.roughness_factor = gltf_material.roughness_factor;
-                material.metallic_factor = gltf_material.metallic_factor;
-                material.alpha_mode = static_cast<AlphaMode>(gltf_material.alpha_mode);
-                material.alpha_cutoff = gltf_material.alpha_cutoff;
-
-                if (auto tex_idx = gltf_material.albedo_texture_index; tex_idx.has_value()) {
-                    material.albedo_texture = textures[tex_idx.value()];
-                }
-
-                if (auto tex_idx = gltf_material.normal_texture_index; tex_idx.has_value()) {
-                    material.normal_texture = textures[tex_idx.value()];
-                }
-
-                if (auto tex_idx = gltf_material.emissive_texture_index; tex_idx.has_value()) {
-                    material.emissive_texture = textures[tex_idx.value()];
-                }
-
-                if (auto tex_idx = gltf_material.metallic_roughness_texture_index; tex_idx.has_value()) {
-                    material.metallic_roughness_texture = textures[tex_idx.value()];
-                }
-
-                if (auto tex_idx = gltf_material.occlusion_texture_index; tex_idx.has_value()) {
-                    material.occlusion_texture = textures[tex_idx.value()];
-                }
-            }
-
-            write_model_asset_meta(json, embedded_textures, material_uuids, materials);
+            import_gltf(self, path, json);
         } break;
         case AssetType::Texture: {
-            Texture texture = {};
+            TextureInfo texture_info = {};
 
-            write_texture_asset_meta(json, &texture);
+            write_texture_asset_meta(json, texture_info);
         } break;
         default:;
     }
@@ -512,51 +805,50 @@ auto AssetManager::load_model(this AssetManager &self, const UUID &uuid) -> bool
     ZoneScoped;
     memory::ScopedStack stack;
 
-    auto *asset = self.get_asset(uuid);
-    if (asset->is_loaded()) {
-        // Model is collection of multiple assets and all child
-        // assets must be alive to safely process meshes.
-        // Don't acquire child refs.
-        asset->acquire_ref();
+    auto asset_path = fs::path{};
+    {
+        auto *asset = self.get_asset(uuid);
+        if (asset->is_loaded()) {
+            // Model is collection of multiple assets and all child
+            // assets must be alive to safely process meshes.
+            // Don't acquire child refs.
+            asset->acquire_ref();
 
-        return true;
+            return true;
+        }
+
+        asset_path = asset->path;
+        asset->acquire_ref();
     }
 
-    asset->model_id = self.models.create_slot();
-    auto *model = self.models.slot(asset->model_id);
+    auto model = Model{};
 
-    fs::path meta_path = asset->path.string() + ".lrasset";
+    // Initial parsing
+    auto gltf_buffer = fastgltf::GltfDataBuffer::FromPath(asset_path);
+    auto gltf_type = fastgltf::determineGltfFileType(gltf_buffer.get());
+    if (gltf_type == fastgltf::GltfType::Invalid) {
+        LOG_ERROR("GLTF model type is invalid!");
+        return false;
+    }
+
+    auto gltf_parser = fastgltf::Parser(get_default_gltf_extensions());
+    auto gltf_result = gltf_parser.loadGltf(gltf_buffer.get(), asset_path.parent_path(), get_default_gltf_options());
+    if (!gltf_result) {
+        LOG_ERROR("Failed to load GLTF! {}", fastgltf::getErrorMessage(gltf_result.error()));
+        return false;
+    }
+
+    auto gltf_asset = std::move(gltf_result.get());
+    if (gltf_asset.scenes.size() != 1) {
+        LOG_ERROR("Error loading {}. The GLTF scene can only contain one scene.", asset_path);
+        return false;
+    }
+
+    auto meta_path = fs::path(asset_path.string() + ".lrasset");
     auto meta_json = read_meta_file(meta_path);
     if (!meta_json) {
         LOG_ERROR("Model assets require proper meta file.");
         return false;
-    }
-
-    auto asset_path = asset->path;
-    asset->acquire_ref();
-
-    // Below we register new assets, which causes asset pointer to be invalidated.
-    // set this to nullptr so it's obvious when debugging.
-    asset = nullptr;
-
-    //  ── INITIAL PARSING ─────────────────────────────────────────────────
-    auto embedded_textures = std::vector<UUID>();
-    auto embedded_texture_uuids_json = meta_json->doc["embedded_textures"].get_array();
-    for (auto embedded_texture_uuid_json : embedded_texture_uuids_json) {
-        auto embedded_texture_uuid_str = embedded_texture_uuid_json.get_string();
-        if (embedded_texture_uuid_str.error()) {
-            LOG_ERROR("Failed to import model {}! An embedded texture with corrupt UUID.", asset_path);
-            return false;
-        }
-
-        auto embedded_texture_uuid = UUID::from_string(embedded_texture_uuid_str.value_unsafe());
-        if (!embedded_texture_uuid.has_value()) {
-            LOG_ERROR("Failed to import model {}! An embedded texture with corrupt UUID.", asset_path);
-            return false;
-        }
-
-        embedded_textures.push_back(embedded_texture_uuid.value());
-        self.register_asset(embedded_texture_uuid.value(), AssetType::Texture, asset_path);
     }
 
     // Load registered UUIDs.
@@ -581,219 +873,192 @@ auto AssetManager::load_model(this AssetManager &self, const UUID &uuid) -> bool
             }
 
             self.register_asset(material_uuid.value(), AssetType::Material, asset_path);
-            model->materials.emplace_back(material_uuid.value());
+            model.materials.emplace_back(material_uuid.value());
         }
 
         auto &material_info = embedded_material_infos.emplace_back();
-        auto &material = material_info.material;
         if (auto member_json = embedded_material_json["albedo_color"]; !member_json.error()) {
-            json_to_vec(member_json.value_unsafe(), material.albedo_color);
+            json_to_vec(member_json.value_unsafe(), material_info.albedo_color);
         }
         if (auto member_json = embedded_material_json["emissive_color"]; !member_json.error()) {
-            json_to_vec(member_json.value_unsafe(), material.emissive_color);
+            json_to_vec(member_json.value_unsafe(), material_info.emissive_color);
         }
         if (auto member_json = embedded_material_json["roughness_factor"]; !member_json.error()) {
-            material.roughness_factor = static_cast<f32>(member_json.get_double().value_unsafe());
+            material_info.roughness_factor = static_cast<f32>(member_json.get_double().value_unsafe());
         }
         if (auto member_json = embedded_material_json["metallic_factor"]; !member_json.error()) {
-            material.metallic_factor = static_cast<f32>(member_json.get_double().value_unsafe());
+            material_info.metallic_factor = static_cast<f32>(member_json.get_double().value_unsafe());
         }
         if (auto member_json = embedded_material_json["alpha_mode"]; !member_json.error()) {
-            material.alpha_mode = static_cast<AlphaMode>(member_json.get_uint64().value_unsafe());
+            material_info.alpha_mode = static_cast<AlphaMode>(member_json.get_uint64().value_unsafe());
         }
         if (auto member_json = embedded_material_json["alpha_cutoff"]; !member_json.error()) {
-            material.alpha_cutoff = static_cast<f32>(member_json.get_double().value_unsafe());
+            material_info.alpha_cutoff = static_cast<f32>(member_json.get_double().value_unsafe());
         }
         if (auto member_json = embedded_material_json["albedo_texture"]; !member_json.error()) {
-            material.albedo_texture = UUID::from_string(member_json.get_string().value_unsafe()).value_or(UUID(nullptr));
-            material_info.albedo_texture_info.use_srgb = true;
+            material_info.albedo_texture = UUID::from_string(member_json.get_string().value_unsafe()).value_or(UUID(nullptr));
+        }
+        if (auto member_json = embedded_material_json["albedo_sampler"]; !member_json.error()) {
+            material_info.albedo_sampler_info = json_to_sampler_info(member_json.value_unsafe());
         }
         if (auto member_json = embedded_material_json["normal_texture"]; !member_json.error()) {
-            material.normal_texture = UUID::from_string(member_json.get_string().value_unsafe()).value_or(UUID(nullptr));
-            material_info.normal_texture_info.use_srgb = false;
+            material_info.normal_texture = UUID::from_string(member_json.get_string().value_unsafe()).value_or(UUID(nullptr));
+        }
+        if (auto member_json = embedded_material_json["normal_sampler"]; !member_json.error()) {
+            material_info.normal_sampler_info = json_to_sampler_info(member_json.value_unsafe());
         }
         if (auto member_json = embedded_material_json["emissive_texture"]; !member_json.error()) {
-            material.emissive_texture = UUID::from_string(member_json.get_string().value_unsafe()).value_or(UUID(nullptr));
-            material_info.emissive_texture_info.use_srgb = true;
+            material_info.emissive_texture = UUID::from_string(member_json.get_string().value_unsafe()).value_or(UUID(nullptr));
+        }
+        if (auto member_json = embedded_material_json["emissive_sampler"]; !member_json.error()) {
+            material_info.emissive_sampler_info = json_to_sampler_info(member_json.value_unsafe());
         }
         if (auto member_json = embedded_material_json["metallic_roughness_texture"]; !member_json.error()) {
-            material.metallic_roughness_texture = UUID::from_string(member_json.get_string().value_unsafe()).value_or(UUID(nullptr));
-            material_info.metallic_roughness_texture_info.use_srgb = false;
+            material_info.metallic_roughness_texture = UUID::from_string(member_json.get_string().value_unsafe()).value_or(UUID(nullptr));
+        }
+        if (auto member_json = embedded_material_json["metallic_roughness_sampler"]; !member_json.error()) {
+            material_info.metallic_roughness_sampler_info = json_to_sampler_info(member_json.value_unsafe());
         }
         if (auto member_json = embedded_material_json["occlusion_texture"]; !member_json.error()) {
-            material.occlusion_texture = UUID::from_string(member_json.get_string().value_unsafe()).value_or(UUID(nullptr));
-            material_info.occlusion_texture_info.use_srgb = false;
+            material_info.occlusion_texture = UUID::from_string(member_json.get_string().value_unsafe()).value_or(UUID(nullptr));
+        }
+        if (auto member_json = embedded_material_json["occlusion_sampler"]; !member_json.error()) {
+            material_info.occlusion_sampler_info = json_to_sampler_info(member_json.value_unsafe());
         }
     }
 
-    for (const auto &[material_uuid, material_info] : std::views::zip(model->materials, embedded_material_infos)) {
+    for (const auto &[material_uuid, material_info] : std::views::zip(model.materials, embedded_material_infos)) {
         self.load_material(material_uuid, material_info);
-    }
-
-    struct GLTFCallbacks {
-        AssetManager *asset_man = nullptr;
-        Model *model = nullptr;
-
-        std::vector<glm::vec3> vertex_positions = {};
-        std::vector<glm::vec3> vertex_normals = {};
-        std::vector<glm::vec2> vertex_texcoords = {};
-        std::vector<Model::Index> indices = {};
-    };
-    auto on_new_primitive =
-        [](void *user_data, u32 mesh_index, u32 material_index, u32 vertex_offset, u32 vertex_count, u32 index_offset, u32 index_count) {
-            auto *info = static_cast<GLTFCallbacks *>(user_data);
-            if (info->model->meshes.size() <= mesh_index) {
-                info->model->meshes.resize(mesh_index + 1);
-            }
-
-            auto &mesh = info->model->meshes[mesh_index];
-            auto primitive_index = info->model->primitives.size();
-            auto &primitive = info->model->primitives.emplace_back();
-            auto *material_asset = info->asset_man->get_asset(info->model->materials[material_index]);
-
-            info->model->gpu_meshes.emplace_back();
-            info->model->gpu_mesh_buffers.emplace_back();
-
-            info->vertex_positions.resize(info->vertex_positions.size() + vertex_count);
-            info->vertex_normals.resize(info->vertex_normals.size() + vertex_count);
-            info->vertex_texcoords.resize(info->vertex_texcoords.size() + vertex_count);
-            info->indices.resize(info->indices.size() + index_count);
-
-            mesh.primitive_indices.push_back(primitive_index);
-            primitive.material_id = material_asset->material_id;
-            primitive.vertex_offset = vertex_offset;
-            primitive.vertex_count = vertex_count;
-            primitive.index_offset = index_offset;
-            primitive.index_count = index_count;
-        };
-    auto on_access_index = [](void *user_data, u32, u64 offset, u32 index) {
-        auto *info = static_cast<GLTFCallbacks *>(user_data);
-        info->indices[offset] = index;
-    };
-    auto on_access_position = [](void *user_data, u32, u64 offset, glm::vec3 position) {
-        auto *info = static_cast<GLTFCallbacks *>(user_data);
-        info->vertex_positions[offset] = position;
-    };
-    auto on_access_normal = [](void *user_data, u32, u64 offset, glm::vec3 normal) {
-        auto *info = static_cast<GLTFCallbacks *>(user_data);
-        info->vertex_normals[offset] = normal;
-    };
-    auto on_access_texcoord = [](void *user_data, u32, u64 offset, glm::vec2 texcoord) {
-        auto *info = static_cast<GLTFCallbacks *>(user_data);
-        info->vertex_texcoords[offset] = texcoord;
-    };
-
-    GLTFCallbacks gltf_callbacks = { .asset_man = &self, .model = model };
-    auto gltf_model = GLTFModelInfo::parse(
-        asset_path,
-        { .user_data = &gltf_callbacks,
-          .on_new_primitive = on_new_primitive,
-          .on_access_index = on_access_index,
-          .on_access_position = on_access_position,
-          .on_access_normal = on_access_normal,
-          .on_access_texcoord = on_access_texcoord }
-    );
-    if (!gltf_model.has_value()) {
-        LOG_ERROR("Failed to parse Model '{}'!", asset_path);
-        return false;
     }
 
     auto &device = App::mod<Device>();
     auto &transfer_man = device.transfer_man();
 
-    //  ── SCENE HIERARCHY ─────────────────────────────────────────────────
-    for (const auto &node : gltf_model->nodes) {
-        model->nodes.push_back(
-            { .name = node.name,
-              .child_indices = node.children,
-              .mesh_index = node.mesh_index,
-              .translation = node.translation,
-              .rotation = node.rotation,
-              .scale = node.scale }
-        );
+    struct NodeToProcess {
+        usize gltf_node_index = 0;
+        ls::option<usize> parent_mesh_group_index = ls::nullopt;
+    };
+
+    auto &gltf_default_scene = gltf_asset.scenes[gltf_asset.defaultScene.value_or(0_sz)];
+    auto nodes_to_process = std::queue<NodeToProcess>();
+    for (auto node_index : gltf_default_scene.nodeIndices) {
+        nodes_to_process.push({ node_index, ls::nullopt });
     }
 
-    model->default_scene_index = gltf_model->defualt_scene_index.value_or(0_sz);
-    for (const auto &scene : gltf_model->scenes) {
-        model->scenes.push_back({ .name = scene.name, .node_indices = scene.node_indices });
-    }
+    while (!nodes_to_process.empty()) {
+        auto [gltf_node_index, parent_group_index] = nodes_to_process.front();
+        nodes_to_process.pop();
 
-    //  ── MESH PROCESSING ─────────────────────────────────────────────────
-    auto model_indices = std::move(gltf_callbacks.indices);
-    auto model_vertices = std::move(gltf_callbacks.vertex_positions);
-    auto model_normals = std::move(gltf_callbacks.vertex_normals);
-    auto model_texcoords = std::move(gltf_callbacks.vertex_texcoords);
+        const auto &node = gltf_asset.nodes[gltf_node_index];
 
-    // for each model (aka gltf scene):
-    // - for each mesh:
-    // - - for each primitive:
-    // - - - for each lod:
-    // - - - - generate lods
-    // - - - - optimize and remap geometry
-    // - - - - calculate meshlets and bounds
-    //
-    for (const auto &mesh : model->meshes) {
-        for (auto primitive_index : mesh.primitive_indices) {
-            auto &primitive = model->primitives[primitive_index];
-            auto &gpu_mesh = model->gpu_meshes[primitive_index];
-            auto &gpu_mesh_buffer = model->gpu_mesh_buffers[primitive_index];
+        auto current_group_index = model.mesh_groups.size();
+        auto &mesh_group = model.mesh_groups.emplace_back();
+        mesh_group.name = node.name;
 
-            //  ── Geometry remapping ──────────────────────────────────────────────
-            auto primitive_indices = ls::span(model_indices.data() + primitive.index_offset, primitive.index_count);
-            auto primitive_vertices = ls::span(model_vertices.data() + primitive.vertex_offset, primitive.vertex_count);
-            auto primitive_normals = ls::span(model_normals.data() + primitive.vertex_offset, primitive.vertex_count);
-            auto primitive_texcoords = ls::span(model_texcoords.data() + primitive.vertex_offset, primitive.vertex_count);
+        if (parent_group_index.has_value()) {
+            auto &parent_group = model.mesh_groups[parent_group_index.value()];
+            parent_group.child_indices.push_back(current_group_index);
+        }
 
-            auto remapped_vertices = std::vector<u32>(primitive_vertices.size());
-            auto vertex_count = meshopt_optimizeVertexFetchRemap(
-                remapped_vertices.data(),
-                primitive_indices.data(),
-                primitive_indices.size(),
-                primitive.vertex_count
-            );
+        for (auto child_node_index : node.children) {
+            nodes_to_process.push({ child_node_index, current_group_index });
+        }
 
-            auto mesh_vertices = std::vector<glm::vec3>(vertex_count);
-            meshopt_remapVertexBuffer(
-                mesh_vertices.data(),
-                primitive_vertices.data(),
-                primitive_vertices.size(),
-                sizeof(glm::vec3),
-                remapped_vertices.data()
-            );
+        // Node translation
+        auto translation = glm::vec3{};
+        auto rotation = glm::quat{};
+        auto scale = glm::vec3{};
+        if (auto *trs = std::get_if<fastgltf::TRS>(&node.transform)) {
+            translation = glm::make_vec3(trs->translation.data());
+            rotation = glm::quat(trs->rotation[3], trs->rotation[0], trs->rotation[1], trs->rotation[2]);
+            scale = glm::make_vec3(trs->scale.data());
+        } else if (auto *mat = std::get_if<fastgltf::math::fmat4x4>(&node.transform)) {
+            auto scale_array = fastgltf::math::fvec3{};
+            auto rotation_array = fastgltf::math::fquat{};
+            auto translation_array = fastgltf::math::fvec3{};
+            fastgltf::math::decomposeTransformMatrix(*mat, scale_array, rotation_array, translation_array);
 
-            auto mesh_normals = std::vector<glm::vec3>(vertex_count);
-            meshopt_remapVertexBuffer(
-                mesh_normals.data(),
-                primitive_normals.data(),
-                primitive_normals.size(),
-                sizeof(glm::vec3),
-                remapped_vertices.data()
-            );
+            translation = glm::make_vec3(translation_array.data());
+            rotation = glm::quat(rotation_array[3], rotation_array[0], rotation_array[1], rotation_array[2]);
+            scale = glm::make_vec3(scale_array.data());
+        }
 
-            auto mesh_texcoords = std::vector<glm::vec2>();
-            if (!primitive_texcoords.empty()) {
-                mesh_texcoords.resize(vertex_count);
-                meshopt_remapVertexBuffer(
-                    mesh_texcoords.data(),
-                    primitive_texcoords.data(),
-                    primitive_texcoords.size(),
-                    sizeof(glm::vec2),
-                    remapped_vertices.data()
-                );
+        mesh_group.translation = translation;
+        mesh_group.rotation = rotation;
+        mesh_group.scale = scale;
+
+        if (!node.meshIndex.has_value()) {
+            continue;
+        }
+
+        const auto &gltf_mesh = gltf_asset.meshes[node.meshIndex.value()];
+        for (const auto &gltf_primitive : gltf_mesh.primitives) {
+            if (!gltf_primitive.indicesAccessor.has_value() || !gltf_primitive.materialIndex.has_value()) {
+                continue;
             }
 
-            auto mesh_indices = std::vector<u32>(primitive.index_count);
-            meshopt_remapIndexBuffer(mesh_indices.data(), primitive_indices.data(), primitive_indices.size(), remapped_vertices.data());
+            auto gpu_mesh = GPU::Mesh{};
 
-            //  ── LOD generation ──────────────────────────────────────────────────
+            auto &index_accessor = gltf_asset.accessors[gltf_primitive.indicesAccessor.value()];
+            auto raw_indices = std::vector<u32>(index_accessor.count);
+            fastgltf::iterateAccessorWithIndex<u32>(gltf_asset, index_accessor, [&](u32 index, usize i) { //
+                raw_indices[i] = index;
+            });
+
+            auto vertex_count = 0_u32;
+            auto vertex_remap = std::vector<u32>();
+            auto positions = std::vector<glm::vec3>();
+            if (auto attrib = gltf_primitive.findAttribute("POSITION"); attrib != gltf_primitive.attributes.end()) {
+                auto &accessor = gltf_asset.accessors[attrib->accessorIndex];
+                auto raw_positions = std::vector<glm::vec3>(accessor.count);
+                vertex_remap.resize(accessor.count);
+
+                fastgltf::iterateAccessorWithIndex<glm::vec3>(gltf_asset, accessor, [&](glm::vec3 pos, usize i) { //
+                    raw_positions[i] = pos;
+                });
+
+                vertex_count = meshopt_optimizeVertexFetchRemap(vertex_remap.data(), raw_indices.data(), raw_indices.size(), raw_positions.size());
+
+                positions.resize(vertex_count);
+                meshopt_remapVertexBuffer(positions.data(), raw_positions.data(), raw_positions.size(), sizeof(glm::vec3), vertex_remap.data());
+            }
+
+            auto normals = std::vector<glm::vec3>();
+            if (auto attrib = gltf_primitive.findAttribute("NORMAL"); attrib != gltf_primitive.attributes.end()) {
+                auto &accessor = gltf_asset.accessors[attrib->accessorIndex];
+                auto raw_normals = std::vector<glm::vec3>(accessor.count);
+
+                fastgltf::iterateAccessorWithIndex<glm::vec3>(gltf_asset, accessor, [&](glm::vec3 normal, usize i) { //
+                    raw_normals[i] = normal;
+                });
+
+                normals.resize(vertex_count);
+                meshopt_remapVertexBuffer(normals.data(), raw_normals.data(), raw_normals.size(), sizeof(glm::vec3), vertex_remap.data());
+            }
+
+            auto texcoords = std::vector<glm::vec2>();
+            if (auto attrib = gltf_primitive.findAttribute("TEXCOORD_0"); attrib != gltf_primitive.attributes.end()) {
+                auto &accessor = gltf_asset.accessors[attrib->accessorIndex];
+                auto raw_texcoords = std::vector<glm::vec2>(accessor.count);
+
+                fastgltf::iterateAccessorWithIndex<glm::vec2>(gltf_asset, accessor, [&](glm::vec2 uv, usize i) { //
+                    raw_texcoords[i] = uv;
+                });
+
+                texcoords.resize(vertex_count);
+                meshopt_remapVertexBuffer(texcoords.data(), raw_texcoords.data(), raw_texcoords.size(), sizeof(glm::vec2), vertex_remap.data());
+            }
+
+            auto indices = std::vector<u32>(index_accessor.count);
+            meshopt_remapIndexBuffer(indices.data(), raw_indices.data(), raw_indices.size(), vertex_remap.data());
 
             const auto mesh_upload_size = 0 //
-                + ls::size_bytes(mesh_vertices) //
-                + ls::size_bytes(mesh_normals) //
-                + ls::size_bytes(mesh_texcoords);
+                + ls::size_bytes(positions) //
+                + ls::size_bytes(normals) //
+                + ls::size_bytes(texcoords);
             auto upload_size = mesh_upload_size;
 
-            ls::pair<vuk::Value<vuk::Buffer>, u64> lod_cpu_buffers[GPU::Mesh::MAX_LODS] = {};
+            auto lod_cpu_buffers = std::array<ls::pair<vuk::Value<vuk::Buffer>, u64>, GPU::Mesh::MAX_LODS>();
             auto last_lod_indices = std::vector<u32>();
             for (auto lod_index = 0_sz; lod_index < GPU::Mesh::MAX_LODS; lod_index++) {
                 ZoneNamedN(z, "GPU Meshlet Generation", true);
@@ -801,7 +1066,7 @@ auto AssetManager::load_model(this AssetManager &self, const UUID &uuid) -> bool
                 auto &cur_lod = gpu_mesh.lods[lod_index];
                 auto simplified_indices = std::vector<u32>();
                 if (lod_index == 0) {
-                    simplified_indices = std::vector<u32>(mesh_indices.begin(), mesh_indices.end());
+                    simplified_indices = std::vector<u32>(indices.begin(), indices.end());
                 } else {
                     const auto &last_lod = gpu_mesh.lods[lod_index - 1];
                     auto lod_index_count = ((last_lod_indices.size() + 5_sz) / 6_sz) * 3_sz;
@@ -814,10 +1079,10 @@ auto AssetManager::load_model(this AssetManager &self, const UUID &uuid) -> bool
                         simplified_indices.data(),
                         last_lod_indices.data(),
                         last_lod_indices.size(),
-                        reinterpret_cast<const f32 *>(mesh_vertices.data()),
-                        mesh_vertices.size(),
+                        reinterpret_cast<const f32 *>(positions.data()),
+                        vertex_count,
                         sizeof(glm::vec3),
-                        reinterpret_cast<const f32 *>(mesh_normals.data()),
+                        reinterpret_cast<const f32 *>(normals.data()),
                         sizeof(glm::vec3),
                         NORMAL_WEIGHTS,
                         ls::count_of(NORMAL_WEIGHTS),
@@ -837,7 +1102,6 @@ auto AssetManager::load_model(this AssetManager &self, const UUID &uuid) -> bool
                     simplified_indices.resize(result_index_count);
                 }
 
-                gpu_mesh.vertex_count = mesh_vertices.size();
                 gpu_mesh.lod_count += 1;
                 last_lod_indices = simplified_indices;
 
@@ -856,8 +1120,8 @@ auto AssetManager::load_model(this AssetManager &self, const UUID &uuid) -> bool
                     local_triangle_indices.data(),
                     simplified_indices.data(),
                     simplified_indices.size(),
-                    reinterpret_cast<const f32 *>(mesh_vertices.data()),
-                    mesh_vertices.size(),
+                    reinterpret_cast<const f32 *>(positions.data()),
+                    vertex_count,
                     sizeof(glm::vec3),
                     Model::MAX_MESHLET_INDICES,
                     Model::MAX_MESHLET_PRIMITIVES,
@@ -888,7 +1152,7 @@ auto AssetManager::load_model(this AssetManager &self, const UUID &uuid) -> bool
                         auto indirect_vertex_index = indirect_vertex_indices[indirect_vertex_index_offset];
                         LS_EXPECT(indirect_vertex_index < vertex_count);
 
-                        const auto &tri_pos = mesh_vertices[indirect_vertex_index];
+                        const auto &tri_pos = positions[indirect_vertex_index];
                         meshlet_bb_min = glm::min(meshlet_bb_min, tri_pos);
                         meshlet_bb_max = glm::max(meshlet_bb_max, tri_pos);
                     }
@@ -898,7 +1162,7 @@ auto AssetManager::load_model(this AssetManager &self, const UUID &uuid) -> bool
                         &indirect_vertex_indices[raw_meshlet.vertex_offset],
                         &local_triangle_indices[raw_meshlet.triangle_offset],
                         raw_meshlet.triangle_count,
-                        reinterpret_cast<f32 *>(mesh_vertices.data()),
+                        reinterpret_cast<f32 *>(positions.data()),
                         vertex_count,
                         sizeof(glm::vec3)
                     );
@@ -961,7 +1225,7 @@ auto AssetManager::load_model(this AssetManager &self, const UUID &uuid) -> bool
             }
 
             auto mesh_upload_offset = 0_u64;
-            gpu_mesh_buffer = Buffer::create(device, upload_size, vuk::MemoryUsage::eGPUonly).value();
+            auto gpu_mesh_buffer = Buffer::create(device, upload_size, vuk::MemoryUsage::eGPUonly).value();
 
             // Mesh first
             auto cpu_mesh_buffer = transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eCPUonly, mesh_upload_size);
@@ -969,17 +1233,17 @@ auto AssetManager::load_model(this AssetManager &self, const UUID &uuid) -> bool
 
             auto gpu_mesh_bda = gpu_mesh_buffer.device_address();
             gpu_mesh.vertex_positions = gpu_mesh_bda + mesh_upload_offset;
-            std::memcpy(cpu_mesh_ptr + mesh_upload_offset, mesh_vertices.data(), ls::size_bytes(mesh_vertices));
-            mesh_upload_offset += ls::size_bytes(mesh_vertices);
+            std::memcpy(cpu_mesh_ptr + mesh_upload_offset, positions.data(), ls::size_bytes(positions));
+            mesh_upload_offset += ls::size_bytes(positions);
 
             gpu_mesh.vertex_normals = gpu_mesh_bda + mesh_upload_offset;
-            std::memcpy(cpu_mesh_ptr + mesh_upload_offset, mesh_normals.data(), ls::size_bytes(mesh_normals));
-            mesh_upload_offset += ls::size_bytes(mesh_normals);
+            std::memcpy(cpu_mesh_ptr + mesh_upload_offset, normals.data(), ls::size_bytes(normals));
+            mesh_upload_offset += ls::size_bytes(normals);
 
-            if (!mesh_texcoords.empty()) {
+            if (!texcoords.empty()) {
                 gpu_mesh.texture_coords = gpu_mesh_bda + mesh_upload_offset;
-                std::memcpy(cpu_mesh_ptr + mesh_upload_offset, mesh_texcoords.data(), ls::size_bytes(mesh_texcoords));
-                mesh_upload_offset += ls::size_bytes(mesh_texcoords);
+                std::memcpy(cpu_mesh_ptr + mesh_upload_offset, texcoords.data(), ls::size_bytes(texcoords));
+                mesh_upload_offset += ls::size_bytes(texcoords);
             }
 
             auto gpu_mesh_buffer_handle = device.buffer(gpu_mesh_buffer.id());
@@ -1003,7 +1267,20 @@ auto AssetManager::load_model(this AssetManager &self, const UUID &uuid) -> bool
 
                 mesh_upload_offset += lod_upload_size;
             }
+
+            auto mesh_index = model.gpu_meshes.size();
+            const auto &initial_material = model.materials[gltf_primitive.materialIndex.value()];
+            mesh_group.mesh_indices.push_back(mesh_index);
+            model.initial_materials.push_back(initial_material);
+            model.gpu_meshes.push_back(gpu_mesh);
+            model.gpu_mesh_buffers.push_back(gpu_mesh_buffer);
         }
+    }
+
+    {
+        // auto write_lock = std::unique_lock(self.models_mutex);
+        auto *asset = self.get_asset(uuid);
+        asset->model_id = self.models.create_slot(std::move(model));
     }
 
     return true;
@@ -1052,22 +1329,18 @@ auto AssetManager::load_texture(this AssetManager &self, const UUID &uuid, const
         asset_path = asset->path;
     }
 
-    auto raw_data = info.embedded_data;
-    auto file_type = info.file_type;
-    if (info.embedded_data.empty()) {
-        if (!asset_path.has_extension()) {
-            LOG_ERROR("Trying to load texture \"{}\" without a file extension.", asset_path);
-            return false;
-        }
-
-        raw_data = File::to_bytes(asset_path);
-        if (raw_data.empty()) {
-            LOG_ERROR("Error reading '{}'. Invalid texture file? Notice the question mark.", asset_path);
-            return false;
-        }
-
-        file_type = self.to_asset_file_type(asset_path);
+    if (!asset_path.has_extension()) {
+        LOG_ERROR("Trying to load texture \"{}\" without a file extension.", asset_path);
+        return false;
     }
+
+    auto raw_data = File::to_bytes(asset_path);
+    if (raw_data.empty()) {
+        LOG_ERROR("Error reading '{}'. Invalid texture file? Notice the question mark.", asset_path);
+        return false;
+    }
+
+    auto file_type = self.to_asset_file_type(asset_path);
 
     auto format = vuk::Format::eUndefined;
     auto extent = vuk::Extent3D{};
@@ -1100,22 +1373,6 @@ auto AssetManager::load_texture(this AssetManager &self, const UUID &uuid, const
 
     auto &device = App::mod<Device>();
     auto &transfer_man = device.transfer_man();
-
-    auto sampler_info = SamplerInfo{
-        .min_filter = vuk::Filter::eLinear,
-        .mag_filter = vuk::Filter::eLinear,
-        .mipmap_mode = vuk::SamplerMipmapMode::eLinear,
-        .addr_u = vuk::SamplerAddressMode::eRepeat,
-        .addr_v = vuk::SamplerAddressMode::eRepeat,
-        .addr_w = vuk::SamplerAddressMode::eRepeat,
-        .compare_op = vuk::CompareOp::eNever,
-        .max_anisotropy = 1.0f,
-        .mip_lod_bias = 0.0f,
-        .min_lod = 0.0f,
-        .max_lod = 1000.0f,
-        .use_anisotropy = false,
-    };
-    auto sampler = Sampler::create(device, sampler_info).value();
 
     auto rel_path = fs::relative(asset_path, self.root_path);
     auto image_info = ImageInfo{
@@ -1201,7 +1458,7 @@ auto AssetManager::load_texture(this AssetManager &self, const UUID &uuid, const
     {
         auto write_lock = std::unique_lock(self.textures_mutex);
         auto *asset = self.get_asset(uuid);
-        asset->texture_id = self.textures.create_slot(Texture{ .image = image, .image_view = image_view, .sampler = sampler });
+        asset->texture_id = self.textures.create_slot(Texture{ .image = image, .image_view = image_view });
     }
 
     LOG_TRACE("Loaded texture {}.", uuid.str());
@@ -1221,7 +1478,6 @@ auto AssetManager::unload_texture(this AssetManager &self, const UUID &uuid) -> 
     auto *texture = self.get_texture(asset->texture_id);
     device.destroy(texture->image_view.id());
     device.destroy(texture->image.id());
-    device.destroy(texture->sampler.id());
 
     LOG_TRACE("Unloaded texture {}.", uuid.str());
 
@@ -1253,86 +1509,65 @@ auto AssetManager::load_material(this AssetManager &self, const UUID &uuid, cons
         return true;
     }
 
-    asset->material_id = self.materials.create_slot(const_cast<Material &&>(info.material));
-    auto *material = self.materials.slot(asset->material_id);
+    auto &device = App::mod<Device>();
+    asset->material_id = self.materials.create_slot(
+        { .albedo_color = info.albedo_color,
+          .emissive_color = info.emissive_color,
+          .roughness_factor = info.roughness_factor,
+          .metallic_factor = info.metallic_factor,
+          .alpha_mode = info.alpha_mode,
+          .alpha_cutoff = info.alpha_cutoff,
+          .albedo_texture = info.albedo_texture,
+          .albedo_sampler = Sampler::create(device, info.albedo_sampler_info).value_or(Sampler{}),
+          .normal_texture = info.normal_texture,
+          .normal_sampler = Sampler::create(device, info.normal_sampler_info).value_or(Sampler{}),
+          .emissive_texture = info.emissive_texture,
+          .emissive_sampler = Sampler::create(device, info.emissive_sampler_info).value_or(Sampler{}),
+          .metallic_roughness_texture = info.metallic_roughness_texture,
+          .metallic_roughness_sampler = Sampler::create(device, info.metallic_roughness_sampler_info).value_or(Sampler{}),
+          .occlusion_texture = info.occlusion_texture,
+          .occlusion_sampler = Sampler::create(device, info.occlusion_sampler_info).value_or(Sampler{}) }
+    );
 
-#if 1
-    if (material->albedo_texture) {
-        auto job = Job::create([&self, //
-                                texture_uuid = material->albedo_texture,
-                                texture_info = info.albedo_texture_info,
-                                material_id = asset->material_id]() {
-            self.load_texture(texture_uuid, texture_info);
+    if (info.albedo_texture) {
+        auto job = Job::create([&self, texture_uuid = info.albedo_texture, material_id = asset->material_id]() {
+            self.load_texture(texture_uuid);
             self.set_material_dirty(material_id);
         });
         App::submit_job(std::move(job));
     }
 
-    if (material->normal_texture) {
-        auto job = Job::create([&self, //
-                                texture_uuid = material->normal_texture,
-                                texture_info = info.normal_texture_info,
-                                material_id = asset->material_id]() {
-            self.load_texture(texture_uuid, texture_info);
+    if (info.normal_texture) {
+        auto job = Job::create([&self, texture_uuid = info.normal_texture, material_id = asset->material_id]() {
+            self.load_texture(texture_uuid, { .use_srgb = false });
             self.set_material_dirty(material_id);
         });
         App::submit_job(std::move(job));
     }
 
-    if (material->emissive_texture) {
-        auto job = Job::create([&self, //
-                                texture_uuid = material->emissive_texture,
-                                texture_info = info.emissive_texture_info,
-                                material_id = asset->material_id]() {
-            self.load_texture(texture_uuid, texture_info);
+    if (info.emissive_texture) {
+        auto job = Job::create([&self, texture_uuid = info.emissive_texture, material_id = asset->material_id]() {
+            self.load_texture(texture_uuid);
             self.set_material_dirty(material_id);
         });
         App::submit_job(std::move(job));
     }
 
-    if (material->metallic_roughness_texture) {
-        auto job = Job::create([&self, //
-                                texture_uuid = material->metallic_roughness_texture,
-                                texture_info = info.metallic_roughness_texture_info,
-                                material_id = asset->material_id]() {
-            self.load_texture(texture_uuid, texture_info);
+    if (info.metallic_roughness_texture) {
+        auto job = Job::create([&self, texture_uuid = info.metallic_roughness_texture, material_id = asset->material_id]() {
+            self.load_texture(texture_uuid, { .use_srgb = false });
             self.set_material_dirty(material_id);
         });
         App::submit_job(std::move(job));
     }
 
-    if (material->occlusion_texture) {
-        auto job = Job::create([&self, //
-                                texture_uuid = material->occlusion_texture,
-                                texture_info = info.occlusion_texture_info,
-                                material_id = asset->material_id]() {
-            self.load_texture(texture_uuid, texture_info);
+    if (info.occlusion_texture) {
+        auto job = Job::create([&self, texture_uuid = info.occlusion_texture, material_id = asset->material_id]() {
+            self.load_texture(texture_uuid, { .use_srgb = false });
             self.set_material_dirty(material_id);
         });
         App::submit_job(std::move(job));
     }
-#else
-    if (material->albedo_texture) {
-        self.load_texture(material->albedo_texture, info.albedo_texture_info);
-    }
-
-    if (material->normal_texture) {
-        self.load_texture(material->normal_texture, info.normal_texture_info);
-    }
-
-    if (material->emissive_texture) {
-        self.load_texture(material->emissive_texture, info.emissive_texture_info);
-    }
-
-    if (material->metallic_roughness_texture) {
-        self.load_texture(material->metallic_roughness_texture, info.metallic_roughness_texture_info);
-    }
-
-    if (material->occlusion_texture) {
-        self.load_texture(material->occlusion_texture, info.occlusion_texture_info);
-    }
-
-#endif
 
     self.set_material_dirty(asset->material_id);
 
@@ -1487,7 +1722,11 @@ auto AssetManager::export_texture(this AssetManager &self, const UUID &uuid, Jso
 
     auto *texture = self.get_texture(uuid);
     LS_EXPECT(texture);
-    return write_texture_asset_meta(json, texture);
+    auto texture_info = TextureInfo{
+        .use_srgb = vuk::is_format_srgb(texture->image.format()),
+    };
+
+    return write_texture_asset_meta(json, texture_info);
 }
 
 auto AssetManager::export_model(this AssetManager &self, const UUID &uuid, JsonWriter &json, const fs::path &) -> bool {
@@ -1496,12 +1735,39 @@ auto AssetManager::export_model(this AssetManager &self, const UUID &uuid, JsonW
     auto *model = self.get_model(uuid);
     LS_EXPECT(model);
 
-    auto materials = std::vector<Material>(model->materials.size());
-    for (const auto &[material_uuid, material] : std::views::zip(model->materials, materials)) {
-        material = *self.get_material(material_uuid);
+    auto get_sampler_info = [](const Sampler &sampler) -> SamplerInfo {
+        return SamplerInfo{
+            .min_filter = sampler.min_filter(),
+            .mag_filter = sampler.mag_filter(),
+            .mipmap_mode = sampler.mipmap_mode(),
+            .addr_u = sampler.addr_u(),
+            .addr_v = sampler.addr_v(),
+            .addr_w = sampler.addr_w(),
+        };
+    };
+
+    auto material_infos = std::vector<MaterialInfo>(model->materials.size());
+    for (const auto &[material_uuid, material_info] : std::views::zip(model->materials, material_infos)) {
+        auto *material = self.get_material(material_uuid);
+        material_info.albedo_color = material->albedo_color;
+        material_info.emissive_color = material->emissive_color;
+        material_info.roughness_factor = material->roughness_factor;
+        material_info.metallic_factor = material->metallic_factor;
+        material_info.alpha_mode = material->alpha_mode;
+        material_info.alpha_cutoff = material->alpha_cutoff;
+        material_info.albedo_texture = material->albedo_texture;
+        material_info.albedo_sampler_info = get_sampler_info(material->albedo_sampler);
+        material_info.normal_texture = material->normal_texture;
+        material_info.normal_sampler_info = get_sampler_info(material->normal_sampler);
+        material_info.emissive_texture = material->emissive_texture;
+        material_info.emissive_sampler_info = get_sampler_info(material->emissive_sampler);
+        material_info.metallic_roughness_texture = material->metallic_roughness_texture;
+        material_info.metallic_roughness_sampler_info = get_sampler_info(material->metallic_roughness_sampler);
+        material_info.occlusion_texture = material->occlusion_texture;
+        material_info.occlusion_sampler_info = get_sampler_info(material->occlusion_sampler);
     }
 
-    return write_model_asset_meta(json, model->embedded_textures, model->materials, materials);
+    return write_model_asset_meta(json, model->embedded_textures, model->materials, material_infos);
 }
 
 auto AssetManager::export_scene(this AssetManager &self, const UUID &uuid, JsonWriter &json, const fs::path &path) -> bool {

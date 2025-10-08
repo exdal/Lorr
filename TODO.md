@@ -13,12 +13,12 @@
 - [ ] Clouds (Kind of done but it looks like shit)
 - [ ] Water simulation
 - [x] Meshlets and Meshlet Culling
-- [ ] Ambient Occlusion (GTAO)
-- [ ] Frustum Culling
-- [ ] Occlusion Culling
+- [X] Ambient Occlusion (GTAO)
+- [x] Frustum Culling
+- [x] Occlusion Culling
 - [x] Visbuffer
 - [x] Deferred PBR
-- [ ] Virtual Shadow Maps
+- [X] Virtual Shadow Maps
 - [ ] Terrain Generation
 - [ ] Bloom
 - [ ] Lens Flare

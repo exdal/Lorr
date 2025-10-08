@@ -89,9 +89,12 @@ struct Camera {
 };
 
 constexpr static u32 VSM_PAGE_SIZE = 64;
+constexpr static u32 VSM_INVALIDATED_PAGE_SIZE = 1 << 3;
 
 constexpr static u32 VSM_DIRECTIONAL_IMAGE_SIZE = 1 << 12;
 constexpr static u32 VSM_DIRECTIONAL_PAGE_TABLE_SIZE = VSM_DIRECTIONAL_IMAGE_SIZE / VSM_PAGE_SIZE;
+constexpr static u32 VSM_DIRECTIONAL_INVALIDATED_PAGES_PER_AXIS = VSM_DIRECTIONAL_PAGE_TABLE_SIZE / VSM_INVALIDATED_PAGE_SIZE;
+constexpr static u32 VSM_DIRECTIONAL_INVALIDATED_PAGES_SIZE = VSM_DIRECTIONAL_INVALIDATED_PAGES_PER_AXIS * VSM_DIRECTIONAL_INVALIDATED_PAGES_PER_AXIS;
 constexpr static u32 VSM_DIRECTIONAL_MAX_PAGE_COUNT = VSM_DIRECTIONAL_PAGE_TABLE_SIZE * VSM_DIRECTIONAL_PAGE_TABLE_SIZE;
 constexpr static u32 VSM_DIRECTIONAL_PAGE_MASK_COUNT = (VSM_DIRECTIONAL_MAX_PAGE_COUNT + 31) / 32;
 
@@ -109,6 +112,7 @@ struct VSMPageAllocator {
 struct VirtualClipmap {
     alignas(4) glm::mat4 projection_view_mat = {};
     alignas(4) glm::ivec2 page_offset = {};
+    alignas(4) f32 z_near = {};
 };
 
 struct DirectionalLight {
@@ -212,12 +216,16 @@ struct Material {
     alignas(4) f32 metallic_factor = 0.0f;
     alignas(4) f32 alpha_cutoff = 0.0f;
     alignas(4) u32 flags = MaterialFlag::None;
-    alignas(4) u32 sampler_index = 0;
     alignas(4) u32 albedo_image_index = 0;
+    alignas(4) u32 albedo_sampler_index = 0;
     alignas(4) u32 normal_image_index = 0;
+    alignas(4) u32 normal_sampler_index = 0;
     alignas(4) u32 emissive_image_index = 0;
+    alignas(4) u32 emissive_sampler_index = 0;
     alignas(4) u32 metallic_roughness_image_index = 0;
+    alignas(4) u32 metallic_roughness_sampler_index = 0;
     alignas(4) u32 occlusion_image_index = 0;
+    alignas(4) u32 occlusion_sampler_index = 0;
 };
 
 struct Bounds {

@@ -60,6 +60,7 @@ public struct VirtualClipmapInfo {
 public struct VirtualClipmap {
     public f32x4x4 projection_view_mat;
     public i32x2 page_offset;
+    public f32 z_near;
 
     public func get_clipmap_info(f32x3 world_pos) -> VirtualClipmapInfo {
         let light_pos_h = mul(this.projection_view_mat, f32x4(world_pos, 1.0));
@@ -234,17 +235,21 @@ public struct Material {
     public f32 metallic_factor = 0.0;
     public f32 alpha_cutoff = 0.0;
     public MaterialFlag flags = MaterialFlag::None;
-    public u32 sampler_index = 0;
     public u32 albedo_image_index = 0;
+    public u32 albedo_sampler_index = 0;
     public u32 normal_image_index = 0;
+    public u32 normal_sampler_index = 0;
     public u32 emissive_image_index = 0;
+    public u32 emissive_sampler_index = 0;
     public u32 metallic_roughness_image_index = 0;
+    public u32 metallic_roughness_sampler_index = 0;
     public u32 occlusion_image_index = 0;
+    public u32 occlusion_sampler_index = 0;
 
     public func sample_albedo_color(f32x2 uv, f32x2 ddx, f32x2 ddy) -> f32x4 {
         if (this.flags & MaterialFlag::HasAlbedoImage) {
             let color = bindless_images[this.albedo_image_index]
-                .SampleGrad(bindless_samplers[this.sampler_index], uv, ddx, ddy);
+                .SampleGrad(bindless_samplers[this.albedo_sampler_index], uv, ddx, ddy);
             return this.albedo_color * color;
         }
 
@@ -253,13 +258,13 @@ public struct Material {
 
     public func sample_normal_color(f32x2 uv, f32x2 ddx, f32x2 ddy) -> f32x3 {
         return bindless_images[this.normal_image_index]
-            .SampleGrad(bindless_samplers[this.sampler_index], uv, ddx, ddy).rgb;
+            .SampleGrad(bindless_samplers[this.normal_sampler_index], uv, ddx, ddy).rgb;
     }
 
     public func sample_emissive_color(f32x2 uv, f32x2 ddx, f32x2 ddy) -> f32x3 {
         if (this.flags & MaterialFlag::HasEmissiveImage) {
             let color = bindless_images[this.emissive_image_index]
-                .SampleGrad(bindless_samplers[this.sampler_index], uv, ddx, ddy).rgb;
+                .SampleGrad(bindless_samplers[this.emissive_sampler_index], uv, ddx, ddy).rgb;
             return this.emissive_color * color;
         }
 
@@ -270,7 +275,7 @@ public struct Material {
         let metallic_roughness = f32x2(this.metallic_factor, this.roughness_factor);
         if (this.flags & MaterialFlag::HasMetallicRoughnessImage) {
             let color = bindless_images[this.metallic_roughness_image_index]
-                .SampleGrad(bindless_samplers[this.sampler_index], uv, ddx, ddy).bg;
+                .SampleGrad(bindless_samplers[this.metallic_roughness_sampler_index], uv, ddx, ddy).bg;
             return metallic_roughness * color;
         }
 
@@ -280,7 +285,7 @@ public struct Material {
     public func sample_occlusion_color(f32x2 uv, f32x2 ddx, f32x2 ddy) -> f32 {
         if (this.flags & MaterialFlag::HasOcclusionImage) {
             return bindless_images[this.occlusion_image_index]
-                .SampleGrad(bindless_samplers[this.sampler_index], uv, ddx, ddy).r;
+                .SampleGrad(bindless_samplers[this.occlusion_sampler_index], uv, ddx, ddy).r;
         }
 
         return 1.0;

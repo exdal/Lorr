@@ -564,6 +564,7 @@ auto SceneRenderer::prepare_frame(this SceneRenderer &self, FramePrepareInfo &in
     if (!info.dirty_transform_ids.empty()) {
         auto rebuild_transforms = !self.transforms_buffer || self.transforms_buffer->size < info.gpu_transforms.size_bytes();
         if (rebuild_transforms) {
+            device.wait();
             self.transforms_buffer =
                 *vuk::allocate_buffer(allocator, { .mem_usage = vuk::MemoryUsage::eGPUonly, .size = info.gpu_transforms.size_bytes() });
         }
@@ -617,6 +618,7 @@ auto SceneRenderer::prepare_frame(this SceneRenderer &self, FramePrepareInfo &in
     if (!info.dirty_material_indices.empty()) {
         auto rebuild_materials = !self.materials_buffer || self.materials_buffer->size < info.gpu_materials.size_bytes();
         if (rebuild_materials) {
+            device.wait();
             self.materials_buffer =
                 *vuk::allocate_buffer(allocator, { .mem_usage = vuk::MemoryUsage::eGPUonly, .size = info.gpu_materials.size_bytes() });
         }
@@ -633,7 +635,8 @@ auto SceneRenderer::prepare_frame(this SceneRenderer &self, FramePrepareInfo &in
             auto *dst_materials_ptr = reinterpret_cast<GPU::Material *>(upload_buffer->mapped_ptr);
             auto upload_offsets = std::vector<u32>(dirty_materials_count);
 
-            for (const auto &[dirty_material, index, offset] : std::views::zip(info.gpu_materials, info.dirty_material_indices, upload_offsets)) {
+            for (const auto &[index, offset] : std::views::zip(info.dirty_material_indices, upload_offsets)) {
+                const auto &dirty_material = info.gpu_materials[index];
                 std::memcpy(dst_materials_ptr, &dirty_material, sizeof(GPU::Material));
                 offset = index * sizeof(GPU::Material);
                 dst_materials_ptr++;
@@ -665,6 +668,7 @@ auto SceneRenderer::prepare_frame(this SceneRenderer &self, FramePrepareInfo &in
 
     if (!info.gpu_meshes.empty()) {
         if (!self.meshes_buffer || self.meshes_buffer->size < info.gpu_meshes.size_bytes()) {
+            device.wait();
             self.meshes_buffer = *vuk::allocate_buffer(allocator, { .mem_usage = vuk::MemoryUsage::eGPUonly, .size = info.gpu_meshes.size_bytes() });
         }
 
@@ -676,16 +680,18 @@ auto SceneRenderer::prepare_frame(this SceneRenderer &self, FramePrepareInfo &in
 
     if (!info.gpu_mesh_instances.empty()) {
         if (!self.mesh_instances_buffer || self.mesh_instances_buffer->size < info.gpu_mesh_instances.size_bytes()) {
+            device.wait();
             self.mesh_instances_buffer =
                 *vuk::allocate_buffer(allocator, { .mem_usage = vuk::MemoryUsage::eGPUonly, .size = info.gpu_mesh_instances.size_bytes() });
         }
         prepared_frame.mesh_instances_buffer = vuk::acquire_buf("mesh instances", *self.mesh_instances_buffer, vuk::eNone);
         prepared_frame.mesh_instances_buffer = transfer_man.upload(info.gpu_mesh_instances, std::move(prepared_frame.mesh_instances_buffer));
 
-        auto meshlet_instance_visibility_mask_size_bytes = (info.max_meshlet_instance_count + 31) / 32 * sizeof(u32);
+        auto meshlet_instance_visibility_mask_size_bytes = ((info.max_meshlet_instance_count + 31) / 32) * sizeof(u32);
         if (!self.meshlet_instance_visibility_mask_buffer
             || self.meshlet_instance_visibility_mask_buffer->size < meshlet_instance_visibility_mask_size_bytes)
         {
+            device.wait();
             self.meshlet_instance_visibility_mask_buffer =
                 *vuk::allocate_buffer(allocator, { .mem_usage = vuk::MemoryUsage::eGPUonly, .size = meshlet_instance_visibility_mask_size_bytes });
         }

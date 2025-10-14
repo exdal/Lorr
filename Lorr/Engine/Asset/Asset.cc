@@ -16,6 +16,8 @@
 
 #include "Engine/Scene/ECSModule/Core.hh"
 
+#include <glm/gtx/matrix_decompose.hpp>
+
 #include <fastgltf/core.hpp>
 #include <fastgltf/tools.hpp>
 #include <fastgltf/types.hpp>
@@ -934,53 +936,48 @@ auto AssetManager::load_model(this AssetManager &self, const UUID &uuid) -> bool
     auto &device = App::mod<Device>();
     auto &transfer_man = device.transfer_man();
 
-    struct NodeToProcess {
-        usize gltf_node_index = 0;
-        ls::option<usize> parent_mesh_group_index = ls::nullopt;
-    };
-
     auto &gltf_default_scene = gltf_asset.scenes[gltf_asset.defaultScene.value_or(0_sz)];
-    auto nodes_to_process = std::queue<NodeToProcess>();
+    struct ProcessingNode {
+        usize gltf_node_index = 0;
+        usize parent_mesh_group_index = 0;
+    };
+    auto processing_gltf_nodes = std::queue<ProcessingNode>();
+
+    auto &root_mesh_group = model.mesh_groups.emplace_back();
+    root_mesh_group.name = gltf_default_scene.name;
     for (auto node_index : gltf_default_scene.nodeIndices) {
-        nodes_to_process.push({ node_index, ls::nullopt });
+        processing_gltf_nodes.push({ node_index, 0 });
     }
 
-    while (!nodes_to_process.empty()) {
-        auto [gltf_node_index, parent_group_index] = nodes_to_process.front();
-        nodes_to_process.pop();
-
+    while (!processing_gltf_nodes.empty()) {
+        auto [gltf_node_index, parent_mesh_group_index] = processing_gltf_nodes.front();
         const auto &node = gltf_asset.nodes[gltf_node_index];
+        auto &parent_mesh_group = model.mesh_groups[parent_mesh_group_index];
+        processing_gltf_nodes.pop();
 
-        auto current_group_index = model.mesh_groups.size();
+        auto mesh_group_index = model.mesh_groups.size();
+        parent_mesh_group.child_indices.push_back(mesh_group_index);
+
         auto &mesh_group = model.mesh_groups.emplace_back();
         mesh_group.name = node.name;
 
-        if (parent_group_index.has_value()) {
-            auto &parent_group = model.mesh_groups[parent_group_index.value()];
-            parent_group.child_indices.push_back(current_group_index);
-        }
-
         for (auto child_node_index : node.children) {
-            nodes_to_process.push({ child_node_index, current_group_index });
+            processing_gltf_nodes.push({ child_node_index, mesh_group_index });
         }
 
         // Node translation
         auto translation = glm::vec3{};
-        auto rotation = glm::quat{};
+        auto rotation = glm::quat::wxyz(1.0f, 0.0f, 0.0f, 0.0f);
         auto scale = glm::vec3{};
         if (auto *trs = std::get_if<fastgltf::TRS>(&node.transform)) {
             translation = glm::make_vec3(trs->translation.data());
-            rotation = glm::quat(trs->rotation[3], trs->rotation[0], trs->rotation[1], trs->rotation[2]);
+            rotation = glm::quat::wxyz(trs->rotation.w(), trs->rotation.x(), trs->rotation.y(), trs->rotation.z());
             scale = glm::make_vec3(trs->scale.data());
         } else if (auto *mat = std::get_if<fastgltf::math::fmat4x4>(&node.transform)) {
-            auto scale_array = fastgltf::math::fvec3{};
-            auto rotation_array = fastgltf::math::fquat{};
-            auto translation_array = fastgltf::math::fvec3{};
-            fastgltf::math::decomposeTransformMatrix(*mat, scale_array, rotation_array, translation_array);
-
-            translation = glm::make_vec3(translation_array.data());
-            rotation = glm::quat(rotation_array[3], rotation_array[0], rotation_array[1], rotation_array[2]);
-            scale = glm::make_vec3(scale_array.data());
+            auto transform_mat = glm::make_mat4x4(mat->data());
+            auto skew = glm::vec3{};
+            auto perspective = glm::vec4{};
+            glm::decompose(transform_mat, scale, rotation, translation, skew, perspective);
         }
 
         mesh_group.translation = translation;

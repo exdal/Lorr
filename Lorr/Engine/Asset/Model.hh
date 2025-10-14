@@ -19,7 +19,7 @@ struct Model {
         std::vector<usize> child_indices = {};
         std::vector<usize> mesh_indices = {};
         glm::vec3 translation = {};
-        glm::quat rotation = {};
+        glm::quat rotation = glm::quat::wxyz(1.0f, 0.0f, 0.0f, 0.0f);
         glm::vec3 scale = {};
     };
 

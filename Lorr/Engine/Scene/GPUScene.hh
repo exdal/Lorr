@@ -88,7 +88,7 @@ struct Camera {
     alignas(4) f32 aspect_ratio = 1.777f;
 };
 
-constexpr static u32 VSM_PAGE_SIZE = 64;
+constexpr static u32 VSM_PAGE_SIZE = 128;
 constexpr static u32 VSM_INVALIDATED_PAGE_SIZE = 1 << 3;
 
 constexpr static u32 VSM_DIRECTIONAL_IMAGE_SIZE = 1 << 12;
@@ -116,7 +116,7 @@ struct VirtualClipmap {
 };
 
 struct DirectionalLight {
-    constexpr static auto MAX_CLIPMAP_COUNT = 32_u32;
+    constexpr static auto MAX_CLIPMAP_COUNT = 8_u32;
 
     alignas(4) glm::vec3 base_ambient_color = {};
     alignas(4) f32 intensity = {};

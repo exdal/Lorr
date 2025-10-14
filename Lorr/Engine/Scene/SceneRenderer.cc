@@ -355,6 +355,12 @@ auto SceneRenderer::init(this SceneRenderer &self) -> bool {
     };
     Pipeline::create(device, default_slang_session, vis_decode_pipeline_info, bindless_descriptor_set).value();
 
+    auto vsm_hash_pages_pipeline_info = PipelineCompileInfo{
+        .module_name = "passes.vsm_hash_pages",
+        .entry_points = { "cs_main" },
+    };
+    Pipeline::create(device, default_slang_session, vsm_hash_pages_pipeline_info).value();
+
     auto vsm_invalidate_pages_pipeline_info = PipelineCompileInfo{
         .module_name = "passes.vsm_invalidate_pages",
         .entry_points = { "cs_main" },
@@ -705,24 +711,13 @@ auto SceneRenderer::prepare_frame(this SceneRenderer &self, FramePrepareInfo &in
             vuk::acquire_buf("meshlet instances visibility mask", *self.meshlet_instance_visibility_mask_buffer, vuk::eMemoryRead);
     }
 
-    auto dirty_mesh_instance_indices_buffer =
-        transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eCPUtoGPU, ls::max(1_sz, info.dirty_mesh_instance_ids.size()) * sizeof(u32));
-    if (!info.dirty_mesh_instance_ids.empty()) {
-        for (const auto &[mesh_instance_id, i] : std::views::zip(info.dirty_mesh_instance_ids, std::views::iota(0_u32))) {
-            auto mesh_instance_index = SlotMap_decode_id(mesh_instance_id).index;
-            auto offset = i * sizeof(u32);
-            std::memcpy(dirty_mesh_instance_indices_buffer->mapped_ptr + offset, &mesh_instance_index, sizeof(u32));
-        }
-    }
-    prepared_frame.dirty_mesh_instance_indices_buffer = dirty_mesh_instance_indices_buffer;
-    prepared_frame.dirty_mesh_instance_count = info.dirty_mesh_instance_ids.size();
-
     prepared_frame.camera_buffer = transfer_man.scratch_buffer(info.camera);
 
     auto directional_light_clipmap_count = 1_u32;
     if (info.directional_light.has_value()) {
         auto &directional_light = info.directional_light.value();
         prepared_frame.directional_light_buffer = transfer_man.scratch_buffer(directional_light);
+        prepared_frame.sun_moved = info.sun_moved;
 
         directional_light_clipmap_count = ls::max(1_u32, directional_light.clipmap_count);
         for (u32 i = 0_u32; i < directional_light.clipmap_count; i++) {
@@ -829,7 +824,7 @@ auto SceneRenderer::prepare_frame(this SceneRenderer &self, FramePrepareInfo &in
             .base_level = 0,
             .level_count = 1,
             .base_layer = 0,
-            .layer_count = 6,
+            .layer_count = GPU::DirectionalLight::MAX_CLIPMAP_COUNT,
         };
         self.vsm_page_tables = *vuk::allocate_image(allocator, self.vsm_page_tables_attachment);
         self.vsm_page_tables_attachment.image = *self.vsm_page_tables;
@@ -838,6 +833,25 @@ auto SceneRenderer::prepare_frame(this SceneRenderer &self, FramePrepareInfo &in
 
         prepared_frame.vsm_page_table = vuk::discard_ia("vsm page tables", self.vsm_page_tables_attachment);
         prepared_frame.vsm_page_table = vuk::clear_image(std::move(prepared_frame.vsm_page_table), vuk::Black<u32>);
+
+        self.vsm_page_hash_tables_attachment = vuk::ImageAttachment{
+            .usage = vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eTransferDst,
+            .extent = { .width = GPU::VSM_DIRECTIONAL_PAGE_TABLE_SIZE, .height = GPU::VSM_DIRECTIONAL_PAGE_TABLE_SIZE, .depth = 1 },
+            .format = vuk::Format::eR32Uint,
+            .sample_count = vuk::Samples::e1,
+            .view_type = vuk::ImageViewType::e2DArray,
+            .base_level = 0,
+            .level_count = 1,
+            .base_layer = 0,
+            .layer_count = GPU::DirectionalLight::MAX_CLIPMAP_COUNT,
+        };
+        self.vsm_page_hash_tables = *vuk::allocate_image(allocator, self.vsm_page_hash_tables_attachment);
+        self.vsm_page_hash_tables_attachment.image = *self.vsm_page_hash_tables;
+        self.vsm_page_hash_tables_view = *vuk::allocate_image_view(allocator, self.vsm_page_hash_tables_attachment);
+        self.vsm_page_hash_tables_attachment.image_view = *self.vsm_page_hash_tables_view;
+
+        prepared_frame.vsm_page_hash_table = vuk::discard_ia("vsm page hash tables", self.vsm_page_hash_tables_attachment);
+        prepared_frame.vsm_page_hash_table = vuk::clear_image(std::move(prepared_frame.vsm_page_hash_table), vuk::Black<u32>);
 
         self.vsm_physical_pages_attachment = vuk::ImageAttachment{
             .image_flags = vuk::ImageCreateFlagBits::eMutableFormat,
@@ -863,13 +877,13 @@ auto SceneRenderer::prepare_frame(this SceneRenderer &self, FramePrepareInfo &in
         prepared_frame.vsm_physical_pages = vuk::discard_ia("vsm physical pages", self.vsm_physical_pages_attachment);
         prepared_frame.vsm_physical_pages = vuk::clear_image(std::move(prepared_frame.vsm_physical_pages), vuk::DepthZero);
     } else {
-        prepared_frame.vsm_page_table = vuk::acquire_ia("vsm page tables", self.vsm_page_tables_attachment, vuk::eFragmentSampled);
+        prepared_frame.vsm_page_table = vuk::acquire_ia("vsm page table", self.vsm_page_tables_attachment, vuk::eFragmentSampled);
+        prepared_frame.vsm_page_hash_table = vuk::acquire_ia("vsm page hash table", self.vsm_page_hash_tables_attachment, vuk::eComputeRW);
         prepared_frame.vsm_physical_pages = vuk::acquire_ia("vsm physical pages", self.vsm_physical_pages_attachment, vuk::eFragmentSampled);
     }
 
     prepared_frame.vsm_page_visibility_mask_buffer =
         transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eGPUonly, GPU::VSM_DIRECTIONAL_PAGE_MASK_COUNT * sizeof(u32));
-    prepared_frame.vsm_page_visibility_mask_buffer = zero_fill_pass(std::move(prepared_frame.vsm_page_visibility_mask_buffer));
     prepared_frame.vsm_allocation_requests_buffer =
         transfer_man.alloc_transient_buffer(vuk::MemoryUsage::eGPUonly, GPU::VSM_DIRECTIONAL_MAX_PAGE_COUNT * sizeof(GPU::VSMAllocRequest));
     prepared_frame.vsm_dirty_physical_page_addresses_buffer =
@@ -962,6 +976,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
     auto sky_multiscatter_lut_attachment = std::move(frame.sky_multiscatter_lut);
 
     auto vsm_page_table_attachment = std::move(frame.vsm_page_table);
+    auto vsm_prev_page_hash_table_attachment = std::move(frame.vsm_page_hash_table);
     auto vsm_physical_pages_attachment = std::move(frame.vsm_physical_pages);
     auto vsm_page_visibility_mask_buffer = std::move(frame.vsm_page_visibility_mask_buffer);
     auto vsm_allocation_requests_buffer = std::move(frame.vsm_allocation_requests_buffer);
@@ -1010,7 +1025,6 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
         auto transforms_buffer = std::move(frame.transforms_buffer);
         auto meshes_buffer = std::move(frame.meshes_buffer);
         auto mesh_instances_buffer = std::move(frame.mesh_instances_buffer);
-        auto dirty_mesh_instance_indices_buffer = std::move(frame.dirty_mesh_instance_indices_buffer);
         auto materials_buffer = std::move(frame.materials_buffer);
         auto meshlet_instance_visibility_mask_buffer = std::move(frame.meshlet_instance_visibility_mask_buffer);
         auto meshlet_instances_buffer =
@@ -1248,9 +1262,29 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
         // Virtual shadowmaps
         auto directional_light_info = frame.directional_light.value_or(GPU::DirectionalLight{});
         if (frame.directional_light.has_value()) {
-            if (frame_index == 0) {
+            if (frame.sun_moved) {
                 vsm_page_table_attachment = vuk::clear_image(std::move(vsm_page_table_attachment), vuk::Black<u32>);
+                vsm_prev_page_hash_table_attachment = vuk::clear_image(std::move(vsm_prev_page_hash_table_attachment), vuk::Black<u32>);
             }
+
+            auto vsm_page_hash_table_attachment = vuk::declare_ia(
+                "vsm current page hash table",
+                { .usage = vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eTransferDst,
+                  .extent = { .width = GPU::VSM_DIRECTIONAL_PAGE_TABLE_SIZE, .height = GPU::VSM_DIRECTIONAL_PAGE_TABLE_SIZE, .depth = 1 },
+                  .format = vuk::Format::eR32Uint,
+                  .sample_count = vuk::Samples::e1,
+                  .view_type = vuk::ImageViewType::e2DArray,
+                  .base_level = 0,
+                  .level_count = 1,
+                  .base_layer = 0,
+                  .layer_count = GPU::DirectionalLight::MAX_CLIPMAP_COUNT }
+            );
+            vsm_page_hash_table_attachment = vuk::clear_image(std::move(vsm_page_hash_table_attachment), vuk::Black<u32>);
+
+            auto vsm_page_allocator_buffer = transfer_man.scratch_buffer<GPU::VSMPageAllocator>({
+                .requests = vsm_allocation_requests_buffer->device_address,
+                .dirty_physical_page_addresses = vsm_dirty_physical_page_addresses_buffer->device_address,
+            });
 
             auto vsm_reset_page_visibility_pass = vuk::make_pass(
                 "vsm reset page visibility",
@@ -1267,60 +1301,70 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
 
             vsm_page_table_attachment = vsm_reset_page_visibility_pass(std::move(vsm_page_table_attachment));
 
-            auto vsm_page_allocator_buffer = transfer_man.scratch_buffer<GPU::VSMPageAllocator>({
-                .requests = vsm_allocation_requests_buffer->device_address,
-                .dirty_physical_page_addresses = vsm_dirty_physical_page_addresses_buffer->device_address,
-            });
-
-            auto vsm_invalidate_pages_pass = vuk::make_pass(
-                "vsm invalidate pages",
-                [dirty_mesh_instance_count = frame.dirty_mesh_instance_count, clipmap_count = directional_light_info.clipmap_count](
+            auto vsm_hash_pages_pass = vuk::make_pass(
+                "vsm hash pages",
+                [mesh_instance_count = frame.mesh_instance_count](
                     vuk::CommandBuffer &cmd_list, //
                     VUK_BA(vuk::eComputeRead) clipmaps,
                     VUK_BA(vuk::eComputeRead) meshes,
                     VUK_BA(vuk::eComputeRead) mesh_instances,
-                    VUK_BA(vuk::eComputeRead) dirty_mesh_instances_indices,
                     VUK_BA(vuk::eComputeRead) transforms,
-                    VUK_IA(vuk::eComputeRW) page_table
+                    VUK_IA(vuk::eComputeRW) page_hash_table
                 ) {
-                    cmd_list.bind_compute_pipeline("passes.vsm_invalidate_pages")
+                    cmd_list //
+                        .bind_compute_pipeline("passes.vsm_hash_pages")
                         .bind_buffer(0, 0, clipmaps)
                         .bind_buffer(0, 1, meshes)
                         .bind_buffer(0, 2, mesh_instances)
-                        .bind_buffer(0, 3, dirty_mesh_instances_indices)
-                        .bind_buffer(0, 4, transforms)
-                        .bind_image(0, 5, page_table)
+                        .bind_buffer(0, 3, transforms)
+                        .bind_image(0, 4, page_hash_table)
                         .push_constants(
                             vuk::ShaderStageFlagBits::eCompute,
                             0,
                             PushConstants(
-                                dirty_mesh_instance_count,
+                                mesh_instance_count,
                                 GPU::VSM_DIRECTIONAL_PAGE_TABLE_SIZE,
                                 GPU::VSM_DIRECTIONAL_INVALIDATED_PAGES_SIZE,
                                 GPU::VSM_DIRECTIONAL_INVALIDATED_PAGES_PER_AXIS
                             )
                         )
-                        .dispatch_invocations(dirty_mesh_instance_count, GPU::VSM_DIRECTIONAL_INVALIDATED_PAGES_SIZE, clipmap_count);
+                        .dispatch_invocations(mesh_instance_count, GPU::VSM_DIRECTIONAL_INVALIDATED_PAGES_SIZE, page_hash_table->layer_count);
 
-                    return std::make_tuple(clipmaps, meshes, mesh_instances, transforms, page_table);
+                    return std::make_tuple(clipmaps, meshes, mesh_instances, transforms, page_hash_table);
                 }
             );
 
-            std::tie(
-                directional_light_clipmaps_buffer,
-                meshes_buffer,
-                mesh_instances_buffer,
-                transforms_buffer,
-                vsm_page_table_attachment
-            ) =
-                vsm_invalidate_pages_pass(
+            std::tie(directional_light_clipmaps_buffer, meshes_buffer, mesh_instances_buffer, transforms_buffer, vsm_page_hash_table_attachment) =
+                vsm_hash_pages_pass(
                     std::move(directional_light_clipmaps_buffer),
                     std::move(meshes_buffer),
                     std::move(mesh_instances_buffer),
-                    std::move(dirty_mesh_instance_indices_buffer),
                     std::move(transforms_buffer),
-                    std::move(vsm_page_table_attachment)
+                    std::move(vsm_page_hash_table_attachment)
                 );
+
+            auto vsm_invalidate_pages_pass = vuk::make_pass(
+                "vsm invalidate pages",
+                [](vuk::CommandBuffer &cmd_list, //
+                   VUK_IA(vuk::eComputeSampled) page_hash_table,
+                   VUK_IA(vuk::eComputeRW) prev_page_hash_table,
+                   VUK_IA(vuk::eComputeRW) page_table) {
+                    cmd_list.bind_compute_pipeline("passes.vsm_invalidate_pages")
+                        .bind_image(0, 0, page_hash_table)
+                        .bind_image(0, 1, prev_page_hash_table)
+                        .bind_image(0, 2, page_table)
+                        .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, page_table->extent)
+                        .dispatch_invocations_per_pixel(page_table, 1.0f, 1.0f, static_cast<f32>(page_table->layer_count));
+
+                    return std::make_tuple(page_hash_table, prev_page_hash_table, page_table);
+                }
+            );
+
+            std::tie(vsm_page_hash_table_attachment, vsm_prev_page_hash_table_attachment, vsm_page_table_attachment) = vsm_invalidate_pages_pass(
+                std::move(vsm_page_hash_table_attachment),
+                std::move(vsm_prev_page_hash_table_attachment),
+                std::move(vsm_page_table_attachment)
+            );
 
             auto vsm_mark_visible_pages_pass = vuk::make_pass(
                 "vsm mark visible pages",
@@ -1330,9 +1374,10 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                    VUK_BA(vuk::eComputeRead) clipmaps,
                    VUK_IA(vuk::eComputeSampled) depth,
                    VUK_IA(vuk::eComputeRW) page_table,
-                   VUK_BA(vuk::eComputeRW) page_visibility_mask,
+                   VUK_BA(vuk::eComputeRW | vuk::eTransferRW) page_visibility_mask,
                    VUK_BA(vuk::eComputeRW) allocator) {
                     cmd_list //
+                        .fill_buffer(page_visibility_mask, 0_u32)
                         .bind_compute_pipeline("passes.vsm_mark_visible_pages")
                         .bind_buffer(0, 0, camera)
                         .bind_buffer(0, 1, directional_light)

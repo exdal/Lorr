@@ -116,6 +116,14 @@ static auto draw_inspector(InspectorWindow &) -> void {
                             [&](glm::vec2 *v) { component_modified |= ImGui::drag_vec(0, glm::value_ptr(*v), 2, ImGuiDataType_Float); },
                             [&](glm::vec3 *v) { component_modified |= ImGui::drag_vec(0, glm::value_ptr(*v), 3, ImGuiDataType_Float); },
                             [&](glm::vec4 *v) { component_modified |= ImGui::drag_vec(0, glm::value_ptr(*v), 4, ImGuiDataType_Float); },
+                            [&](glm::quat *v) {
+                                auto euler_deg = glm::degrees(glm::eulerAngles(*v));
+                                component_modified |= ImGui::drag_vec(0, glm::value_ptr(euler_deg), 3, ImGuiDataType_Float);
+                                if (component_modified) {
+                                    auto wrapped_deg = glm::mod(euler_deg + 180.0f, 360.0f) - 180.0f;
+                                    *v = glm::quat(glm::radians(wrapped_deg));
+                                }
+                            },
                             [](std::string *v) { ImGui::InputText("", v); },
                             [&](lr::UUID *v) { component_modified |= inspect_asset(*v); },
                         },

@@ -27,7 +27,6 @@ struct GeometryContext {
     vuk::Value<vuk::ImageAttachment> overdraw_attachment = {};
     vuk::Value<vuk::Buffer> meshes_buffer = {};
     vuk::Value<vuk::Buffer> mesh_instances_buffer = {};
-    vuk::Value<vuk::Buffer> dirty_mesh_instances_buffer = {};
     vuk::Value<vuk::Buffer> meshlet_instances_buffer = {};
     vuk::Value<vuk::Buffer> visible_meshlet_instances_indices_buffer = {};
     vuk::Value<vuk::Buffer> meshlet_instance_visibility_mask_buffer = {};
@@ -46,6 +45,7 @@ struct FramePrepareInfo {
     u32 mesh_instance_count = 0;
     u32 max_meshlet_instance_count = 0;
     bool regenerate_sky = false;
+    bool sun_moved = false;
 
     ls::span<GPU::TransformID> dirty_transform_ids = {};
     ls::span<GPU::Transforms> gpu_transforms = {};
@@ -55,7 +55,6 @@ struct FramePrepareInfo {
 
     ls::span<GPU::Mesh> gpu_meshes = {};
     ls::span<GPU::MeshInstance> gpu_mesh_instances = {};
-    ls::span<MeshInstanceID> dirty_mesh_instance_ids = {};
 
     GPU::Camera camera = {};
     ls::option<GPU::DirectionalLight> directional_light = ls::nullopt;
@@ -67,12 +66,10 @@ struct FramePrepareInfo {
 
 struct PreparedFrame {
     u32 mesh_instance_count = 0;
-    u32 dirty_mesh_instance_count = 0;
     u32 max_meshlet_instance_count = 0;
     vuk::Value<vuk::Buffer> transforms_buffer = {};
     vuk::Value<vuk::Buffer> meshes_buffer = {};
     vuk::Value<vuk::Buffer> mesh_instances_buffer = {};
-    vuk::Value<vuk::Buffer> dirty_mesh_instance_indices_buffer = {};
     vuk::Value<vuk::Buffer> meshlet_instance_visibility_mask_buffer = {};
     vuk::Value<vuk::Buffer> materials_buffer = {};
     vuk::Value<vuk::Buffer> camera_buffer = {};
@@ -87,8 +84,10 @@ struct PreparedFrame {
     vuk::Value<vuk::ImageAttachment> sky_transmittance_lut = {};
     vuk::Value<vuk::ImageAttachment> sky_multiscatter_lut = {};
     vuk::Value<vuk::ImageAttachment> vsm_page_table = {};
+    vuk::Value<vuk::ImageAttachment> vsm_page_hash_table = {};
     vuk::Value<vuk::ImageAttachment> vsm_physical_pages = {};
 
+    bool sun_moved = false;
     bool has_atmosphere = false;
     bool has_eye_adaptation = false;
     bool has_vbgtao = false;
@@ -130,12 +129,15 @@ struct SceneRenderer {
     Image hilbert_noise_lut = {};
     ImageView hilbert_noise_lut_view = {};
 
-    // Many of the old papers related to virtual texturing
-    // also calls this texture "indirection", same can be
-    // said for VSM articles existed before Matej's
+    // This is also called indirection texture
     vuk::Unique<vuk::Image> vsm_page_tables{};
     vuk::Unique<vuk::ImageView> vsm_page_tables_view{};
     vuk::ImageAttachment vsm_page_tables_attachment = {};
+
+    vuk::Unique<vuk::Image> vsm_page_hash_tables{};
+    vuk::Unique<vuk::ImageView> vsm_page_hash_tables_view{};
+    vuk::ImageAttachment vsm_page_hash_tables_attachment = {};
+
     vuk::Unique<vuk::Image> vsm_physical_pages{};
     // vuk doesnt support mutable image views in attachments
     vuk::Unique<vuk::ImageView> vsm_physical_pages_f32_view{};

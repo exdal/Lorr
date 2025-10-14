@@ -9,8 +9,6 @@
 #include "Engine/Asset/Asset.hh"
 #include "Engine/Core/App.hh"
 
-#include "Engine/Math/Quat.hh"
-
 #include <ImGuizmo.h>
 #include <glm/gtx/matrix_decompose.hpp>
 
@@ -282,14 +280,14 @@ static auto draw_viewport(ViewportWindow &self, vuk::Swapchain &swap_chain) -> v
         auto camera_projection = glm::perspectiveRH_ZO(
             glm::radians(self.editor_camera.fov),
             self.editor_camera.aspect_ratio(),
-            self.editor_camera.far_clip,
-            self.editor_camera.near_clip
+            self.editor_camera.near_clip,
+            self.editor_camera.far_clip
         );
         auto camera_view = glm::lookAt(self.editor_camera.position, self.editor_camera.position + camera_direction, glm::vec3(0.0, 1.0, 0.0));
 
         auto *transform = selected_entity.get_mut<lr::ECS::Transform>();
         auto T = glm::translate(glm::mat4(1.0), transform->position);
-        auto R = glm::mat4_cast(lr::Math::quat_dir(transform->rotation));
+        auto R = glm::mat4_cast(transform->rotation);
         auto S = glm::scale(glm::mat4(1.0), transform->scale);
         auto gizmo_mat = T * R * S;
         auto delta_mat = glm::mat4(1.0f);
@@ -298,7 +296,7 @@ static auto draw_viewport(ViewportWindow &self, vuk::Swapchain &swap_chain) -> v
             glm::value_ptr(camera_view),
             glm::value_ptr(camera_projection),
             static_cast<ImGuizmo::OPERATION>(self.gizmo_op),
-            ImGuizmo::MODE::WORLD,
+            ImGuizmo::MODE::LOCAL,
             glm::value_ptr(gizmo_mat),
             glm::value_ptr(delta_mat)
         );
@@ -314,7 +312,7 @@ static auto draw_viewport(ViewportWindow &self, vuk::Swapchain &swap_chain) -> v
             if (self.gizmo_op == ImGuizmo::TRANSLATE) {
                 transform->position += position;
             } else if (self.gizmo_op == ImGuizmo::ROTATE) {
-                transform->rotation += glm::eulerAngles(glm::quat(rotation[3], rotation[0], rotation[1], rotation[2]));
+                transform->rotation = rotation * transform->rotation;
             } else if (self.gizmo_op == ImGuizmo::SCALE) {
                 transform->scale *= scale;
             }

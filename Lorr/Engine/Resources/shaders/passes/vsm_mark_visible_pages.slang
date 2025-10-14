@@ -59,15 +59,15 @@ func cs_main(
 
     if (first_thread_visible) {
         // Mark it as visible
-        let page_data = __atomic_or(params.page_tables[page_table_address], u32(VSMPageState.Visible), MemoryOrder::Relaxed);
-        let page = VSMPageMetadata(page_data);
+        let prev_page_data = __atomic_or(params.page_tables[page_table_address], u32(VSMPageState.Visible), MemoryOrder::Relaxed);
+        let prev_page = VSMPageMetadata(prev_page_data);
 
         // Did the page just became visible?
-        if (!page.is_visible()) {
-            if (page.is_backed()) {
+        if (!prev_page.is_visible()) {
+            if (prev_page.is_backed()) {
                 // we already have allocated this page, and it was marked visible
                 // keep track of visible and backed pages so the allocator wont overwrite it
-                let physical_address = page.get_physical_address();
+                let physical_address = prev_page.get_physical_address();
                 let visibility_mask_index = physical_address / 32;
                 let bit_index = physical_address % 32;
                 let visibility_bit = 1 << bit_index;

@@ -29,6 +29,11 @@ public struct VSMPageMetadata {
         this.data = data;
     }
 
+    [mutating]
+    public func reset() -> void {
+        this.data = 0;
+    }
+
     public func is_visible() -> bool {
         return (this.data & VSMPageState.Visible) != 0;
     }

@@ -37,7 +37,7 @@ func fs_main(
         } break;
         case 1: {
             let physical_page = params.physical_pages.SampleLevel(params.sampler, input.tex_coord, 0.0);
-            color = physical_page;
+            color = 1.0 - physical_page;
         } break;
         default:;
     }

@@ -47,7 +47,6 @@ private:
 
     SlotMap<MeshInstance, MeshInstanceID> mesh_instances = {};
     ankerl::unordered_dense::map<flecs::entity, MeshInstanceID> entity_to_mesh_instance_id = {};
-    std::vector<MeshInstanceID> dirty_mesh_instance_ids = {};
 
     std::vector<GPU::Material> gpu_materials = {};
 
@@ -57,6 +56,7 @@ private:
 
     u32 cull_flags = GPU::CullFlags::All;
 
+    GPU::DirectionalLight last_directional_light = {};
     GPU::Atmosphere last_atmosphere = {};
 
 public:
@@ -75,9 +75,9 @@ public:
     auto import_from_file(this Scene &, const fs::path &path) -> bool;
     auto export_to_file(this Scene &, const fs::path &path) -> bool;
 
-    auto create_entity(this Scene &, const std::string &name = {}) -> flecs::entity;
+    auto create_entity(this Scene &, std::string_view name = {}) -> flecs::entity;
     auto delete_entity(this Scene &, flecs::entity entity) -> void;
-    auto create_perspective_camera(this Scene &, const std::string &name, const glm::vec3 &position, f32 yaw, f32 pitch, f32 fov) -> flecs::entity;
+    auto create_perspective_camera(this Scene &, std::string_view name, const glm::vec3 &position, f32 yaw, f32 pitch, f32 fov) -> flecs::entity;
     // Model = collection of meshes.
     // This function imports every mesh inside the model asset.
     // The returning entity is a parent, "model" entity where each of

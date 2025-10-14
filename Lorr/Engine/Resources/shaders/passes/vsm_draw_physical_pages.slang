@@ -12,6 +12,7 @@ import vsm;
 [[vk::binding(5)]] StructuredBuffer<VirtualClipmap> clipmaps;
 [[vk::binding(6)]] Texture2DArray<u32> page_tables;
 [[vk::binding(7)]] [[format("r32ui")]] RWTexture2D<u32> physical_pages;
+[[vk::binding(8)]] [[format("r32ui")]] RWTexture2D<u32> page_hashes;
 
 struct PushConstants {
     u32 clipmap_index;
@@ -62,6 +63,6 @@ func fs_main(VertexOutput input) -> void {
         let physical_page_coords = page.get_physical_coords(C.physical_page_image_size, C.page_size);
 
         let physical_page_texel_coord = virtual_uv_to_physical_texel(virtual_uv, physical_page_coords, C.page_size, C.physical_page_image_size);
-        __atomic_min(physical_pages[physical_page_texel_coord], asuint(input.position.z));
+        __atomic_min(physical_pages[physical_page_texel_coord], asuint(input.position.z / input.position.w));
     }
 }

@@ -162,7 +162,7 @@ func fs_main(
                 var bias = min(max_bias, 0.01 + calc_shadow_bias(clipmap_index, context.directional_light.get_first_clipmap_texel_length(), N, L) / NoL);
                 bias = bias / context.directional_light.z_length;
                 directional_shadow = ((shadow_depth + bias) < clipmap_info.projected_depth) ? 0.0 : 1.0;
-
+#if 0
                 // DEBUGGING
                 let in_page_texel_coords = i32x2(std::mod(physical_page_texel_coord, page_size));
                 let near_border = any(in_page_texel_coords < 2) || any(in_page_texel_coords > page_size - 2);
@@ -171,6 +171,7 @@ func fs_main(
                 } else if (page.is_invalidated() && directional_shadow == 1.0) {
                     return f32x4(1.0, 0.0, 1.0, 1.0);
                 }
+#endif
             }
         }
 

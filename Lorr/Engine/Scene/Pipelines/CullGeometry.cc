@@ -43,9 +43,9 @@ auto SceneRenderer::generate_hiz(this SceneRenderer &, GeometryContext &context)
                 if (i == 0) {
                     cmd_list.bind_image(0, 1, src);
                 } else {
-                    auto mip = dst->mip(i - 1);
-                    cmd_list.image_barrier(mip, vuk::eComputeWrite, vuk::eComputeSampled);
-                    cmd_list.bind_image(0, 1, mip);
+                    auto prev_mip = dst->mip(i - 1);
+                    cmd_list.image_barrier(prev_mip, vuk::eComputeWrite, vuk::eComputeSampled);
+                    cmd_list.bind_image(0, 1, prev_mip);
                 }
 
                 cmd_list.bind_image(0, 2, mip);

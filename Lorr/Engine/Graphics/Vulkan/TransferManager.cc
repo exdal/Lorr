@@ -35,7 +35,7 @@ auto TransferManager::alloc_image_buffer(this TransferManager &self, vuk::Format
     auto size = vuk::compute_image_size(format, extent);
 
     auto buffer_handle = vuk::Buffer{};
-    auto buffer_info = vuk::BufferCreateInfo{ .mem_usage = vuk::MemoryUsage::eCPUtoGPU, .size = size, .alignment = alignment };
+    auto buffer_info = vuk::BufferCreateInfo{ .mem_usage = vuk::MemoryUsage::eCPUonly, .size = size, .alignment = alignment };
     self.device->allocator->allocate_buffers({ &buffer_handle, 1 }, { &buffer_info, 1 }, LOC);
 
     auto buffer = vuk::acquire_buf("image buffer", buffer_handle, vuk::eNone, LOC);
@@ -69,16 +69,16 @@ auto TransferManager::upload(this TransferManager &, vuk::Value<vuk::Buffer> &&s
     auto upload_pass = vuk::make_pass(
         "upload",
         [](vuk::CommandBuffer &cmd_list, //
-           VUK_BA(vuk::eTransferRead) src,
-           VUK_IA(vuk::eTransferWrite) dst) {
+           VUK_BA(vuk::eTransferRead) src_,
+           VUK_IA(vuk::eTransferWrite) dst_) {
             auto buffer_copy_region = vuk::BufferImageCopy{
-                .bufferOffset = src->offset,
+                .bufferOffset = src_->offset,
                 .imageSubresource = { .aspectMask = vuk::ImageAspectFlagBits::eColor, .layerCount = 1 },
                 .imageOffset = {},
-                .imageExtent = dst->extent,
+                .imageExtent = dst_->extent,
             };
-            cmd_list.copy_buffer_to_image(src, dst, buffer_copy_region);
-            return dst;
+            cmd_list.copy_buffer_to_image(src_, dst_, buffer_copy_region);
+            return dst_;
         },
         vuk::DomainFlagBits::eAny,
         LOC

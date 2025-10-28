@@ -3,7 +3,7 @@ target("Lorr")
     set_languages("cxx23")
     add_forceincludes("Engine/pch.hh", { public = true, force = true })
     set_pcheader("Engine/pch.hh", { public = true, force = true })
-    add_cxxflags("clang::-march=native", "clang_cl::/arch:AVX2", "cl::/arch:AVX2")
+    -- add_cxxflags("clang::-march=native", "clang_cl::/arch:AVX2", "cl::/arch:AVX2")
 
     add_rpathdirs("@executable_path")
     add_includedirs("../", { public = true })

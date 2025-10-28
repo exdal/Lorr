@@ -7,7 +7,7 @@
 i32 main(i32, c8 **) {
     ZoneScoped;
 
-    lr::Window::init_sdl();
+    LS_EXPECT(lr::Window::init_sdl());
     auto primary_display = lr::Window::display_at(0).value();
     auto window_info = lr::WindowInfo{
         .title = "Lorr Editor",

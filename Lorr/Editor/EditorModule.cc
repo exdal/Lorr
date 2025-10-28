@@ -250,7 +250,7 @@ bool EditorModule::init(this EditorModule &self) {
     self.load_editor_data();
     Theme::dark();
 
-    auto add_texture = [&self](std::string name, const fs::path &path) {
+    auto add_texture = [&self](const std::string &name, const fs::path &path) {
         auto &asset_man = lr::App::mod<lr::AssetManager>();
         auto asset_uuid = asset_man.create_asset(lr::AssetType::Texture, asset_man.asset_root_path(lr::AssetType::Root) / "editor" / path);
         asset_man.load_texture(asset_uuid);

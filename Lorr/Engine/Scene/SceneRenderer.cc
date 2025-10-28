@@ -1267,9 +1267,9 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                 vsm_prev_page_hash_table_attachment = vuk::clear_image(std::move(vsm_prev_page_hash_table_attachment), vuk::Black<u32>);
             }
 
-            auto vsm_page_hash_table_attachment = vuk::declare_ia(
+            auto vsm_curr_page_hash_table_attachment = vuk::declare_ia(
                 "vsm current page hash table",
-                { .usage = vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eTransferDst,
+                { .usage = vuk::ImageUsageFlagBits::eStorage | vuk::ImageUsageFlagBits::eSampled | vuk::ImageUsageFlagBits::eTransferSrc,
                   .extent = { .width = GPU::VSM_DIRECTIONAL_PAGE_TABLE_SIZE, .height = GPU::VSM_DIRECTIONAL_PAGE_TABLE_SIZE, .depth = 1 },
                   .format = vuk::Format::eR32Uint,
                   .sample_count = vuk::Samples::e1,
@@ -1279,7 +1279,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                   .base_layer = 0,
                   .layer_count = GPU::DirectionalLight::MAX_CLIPMAP_COUNT }
             );
-            vsm_page_hash_table_attachment = vuk::clear_image(std::move(vsm_page_hash_table_attachment), vuk::Black<u32>);
+            vsm_curr_page_hash_table_attachment = vuk::clear_image(std::move(vsm_curr_page_hash_table_attachment), vuk::Black<u32>);
 
             auto vsm_page_allocator_buffer = transfer_man.scratch_buffer<GPU::VSMPageAllocator>({
                 .requests = vsm_allocation_requests_buffer->device_address,
@@ -1303,7 +1303,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
 
             auto vsm_hash_pages_pass = vuk::make_pass(
                 "vsm hash pages",
-                [mesh_instance_count = frame.mesh_instance_count](
+                [mesh_instance_count = frame.mesh_instance_count, clipmap_count = directional_light_info.clipmap_count](
                     vuk::CommandBuffer &cmd_list, //
                     VUK_BA(vuk::eComputeRead) clipmaps,
                     VUK_BA(vuk::eComputeRead) meshes,
@@ -1328,19 +1328,25 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                                 GPU::VSM_DIRECTIONAL_INVALIDATED_PAGES_PER_AXIS
                             )
                         )
-                        .dispatch_invocations(mesh_instance_count, GPU::VSM_DIRECTIONAL_INVALIDATED_PAGES_SIZE, page_hash_table->layer_count);
+                        .dispatch_invocations(mesh_instance_count, GPU::VSM_DIRECTIONAL_INVALIDATED_PAGES_SIZE, clipmap_count);
 
                     return std::make_tuple(clipmaps, meshes, mesh_instances, transforms, page_hash_table);
                 }
             );
 
-            std::tie(directional_light_clipmaps_buffer, meshes_buffer, mesh_instances_buffer, transforms_buffer, vsm_page_hash_table_attachment) =
+            std::tie(
+                directional_light_clipmaps_buffer,
+                meshes_buffer,
+                mesh_instances_buffer,
+                transforms_buffer,
+                vsm_curr_page_hash_table_attachment
+            ) =
                 vsm_hash_pages_pass(
                     std::move(directional_light_clipmaps_buffer),
                     std::move(meshes_buffer),
                     std::move(mesh_instances_buffer),
                     std::move(transforms_buffer),
-                    std::move(vsm_page_hash_table_attachment)
+                    std::move(vsm_curr_page_hash_table_attachment)
                 );
 
             auto vsm_invalidate_pages_pass = vuk::make_pass(
@@ -1360,11 +1366,14 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                 }
             );
 
-            std::tie(vsm_page_hash_table_attachment, vsm_prev_page_hash_table_attachment, vsm_page_table_attachment) = vsm_invalidate_pages_pass(
-                std::move(vsm_page_hash_table_attachment),
+            std::tie(vsm_curr_page_hash_table_attachment, vsm_prev_page_hash_table_attachment, vsm_page_table_attachment) = vsm_invalidate_pages_pass(
+                std::move(vsm_curr_page_hash_table_attachment),
                 std::move(vsm_prev_page_hash_table_attachment),
                 std::move(vsm_page_table_attachment)
             );
+
+            vsm_prev_page_hash_table_attachment =
+                vuk::copy(std::move(vsm_curr_page_hash_table_attachment), std::move(vsm_prev_page_hash_table_attachment));
 
             auto vsm_mark_visible_pages_pass = vuk::make_pass(
                 "vsm mark visible pages",
@@ -1375,7 +1384,8 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                    VUK_IA(vuk::eComputeSampled) depth,
                    VUK_IA(vuk::eComputeRW) page_table,
                    VUK_BA(vuk::eComputeRW | vuk::eTransferRW) page_visibility_mask,
-                   VUK_BA(vuk::eComputeRW) allocator) {
+                   VUK_BA(vuk::eComputeRW) allocator,
+                   VUK_IA(vuk::eComputeRW) page_hashes) {
                     cmd_list //
                         .fill_buffer(page_visibility_mask, 0_u32)
                         .bind_compute_pipeline("passes.vsm_mark_visible_pages")
@@ -1389,7 +1399,7 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                         .push_constants(vuk::ShaderStageFlagBits::eCompute, 0, PushConstants(depth->extent, GPU::VSM_DIRECTIONAL_PAGE_TABLE_SIZE))
                         .dispatch_invocations_per_pixel(depth);
 
-                    return std::make_tuple(camera, directional_light, clipmaps, depth, page_table, page_visibility_mask, allocator);
+                    return std::make_tuple(camera, directional_light, clipmaps, depth, page_table, page_visibility_mask, allocator, page_hashes);
                 }
             );
 
@@ -1400,7 +1410,8 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                 depth_attachment,
                 vsm_page_table_attachment,
                 vsm_page_visibility_mask_buffer,
-                vsm_page_allocator_buffer
+                vsm_page_allocator_buffer,
+                vsm_prev_page_hash_table_attachment
             ) =
                 vsm_mark_visible_pages_pass(
                     std::move(camera_buffer),
@@ -1409,7 +1420,8 @@ auto SceneRenderer::render(this SceneRenderer &self, vuk::Value<vuk::ImageAttach
                     std::move(depth_attachment),
                     std::move(vsm_page_table_attachment),
                     std::move(vsm_page_visibility_mask_buffer),
-                    std::move(vsm_page_allocator_buffer)
+                    std::move(vsm_page_allocator_buffer),
+                    std::move(vsm_prev_page_hash_table_attachment)
                 );
 
             auto vsm_free_invisible_pages_pass = vuk::make_pass(

@@ -5,7 +5,7 @@ import cull;
 import vsm;
 
 [[vk::binding(0)]] Texture2DArray<u32> page_hash_table;
-[[vk::binding(1)]] RWTexture2DArray<u32, ImageFormat::R32UI> previous_page_hash_table;
+[[vk::binding(1)]] Texture2DArray<u32> previous_page_hash_table;
 [[vk::binding(2)]] RWTexture2DArray<u32, ImageFormat::R32UI> page_table;
 
 [[shader("compute")]]
@@ -20,7 +20,7 @@ func cs_main(
 
     let page_address = i32x3(thread_id);
     let current_hash = page_hash_table.Load(i32x4(page_address, 0));
-    let previous_hash = previous_page_hash_table.Load(page_address);
+    let previous_hash = previous_page_hash_table.Load(i32x4(page_address, 0));
 
     if (current_hash != previous_hash) {
         var page = VSMPageMetadata(page_table.Load(page_address));
@@ -28,7 +28,6 @@ func cs_main(
             page.reset();
             page.set_invalidated(true);
             page_table.Store(page_address, page.data);
-            previous_page_hash_table.Store(page_address, current_hash);
         }
     }
 }

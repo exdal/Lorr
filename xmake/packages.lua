@@ -1,6 +1,6 @@
 add_repositories("local repo", {rootdir = os.scriptdir()})
 
-local fmt_version = "11.2.0"
+local fmt_version = "12.0.0"
 local fmt_configs = { header_only = false, shared = false }
 add_requires("fmt " .. fmt_version, { configs = fmt_configs, system = false })
 add_requires("local@fmtlog v2.3.0", { configs = {
@@ -57,9 +57,7 @@ add_requires("lz4 v1.10.0", {system = false})
 add_requires("zstd v1.5.6", {system = false})
 add_requires("flecs v4.0.4", {system = false})
 
-add_requires("libsdl3 3.2.16", { configs = {
-    wayland = false
-}, system = false})
+add_requires("libsdl3", {})
 
 add_requires("shader-slang v2025.15", {system = false})
 add_requires("vuk 2025.09.01", { configs = {

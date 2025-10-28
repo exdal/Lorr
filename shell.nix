@@ -9,10 +9,10 @@ pkgs.mkShell.override { stdenv = pkgs.llvmPackages_21.libcxxStdenv; } {
     pkgs.xmake
     pkgs.
 
-    pkgs.llvmPackages_20.bintools-unwrapped
-    pkgs.llvmPackages_20.libcxx.dev
-    pkgs.llvmPackages_20.compiler-rt
-    (pkgs.llvmPackages_20.clang-tools.override { enableLibcxx = true; })
+    pkgs.llvmPackages_21.bintools-unwrapped
+    pkgs.llvmPackages_21.libcxx.dev
+    pkgs.llvmPackages_21.compiler-rt
+    (pkgs.llvmPackages_21.clang-tools.override { enableLibcxx = true; })
     pkgs.mold
 
     pkgs.pkg-config
@@ -27,14 +27,15 @@ pkgs.mkShell.override { stdenv = pkgs.llvmPackages_21.libcxxStdenv; } {
     pkgs.meshoptimizer
 
     # for SDL3
-    pkgs.xorg.libX11
-    pkgs.xorg.libxcb
-    pkgs.xorg.libXScrnSaver
-    pkgs.xorg.libXcursor
-    pkgs.xorg.libXext
-    pkgs.xorg.libXfixes
-    pkgs.xorg.libXi
-    pkgs.xorg.libXrandr
+    pkgs.sdl3
+    # pkgs.xorg.libX11
+    # pkgs.xorg.libxcb
+    # pkgs.xorg.libXScrnSaver
+    # pkgs.xorg.libXcursor
+    # pkgs.xorg.libXext
+    # pkgs.xorg.libXfixes
+    # pkgs.xorg.libXi
+    # pkgs.xorg.libXrandr
   ];
 
   shellHook = ''

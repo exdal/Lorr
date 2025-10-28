@@ -27,6 +27,10 @@ func xxhash32(u32 seed, f32x4 p) -> u32 {
     return v ^ (v >> 16);
 }
 
+func hash_combine(u32 a, u32 b) -> u32 {
+    return a ^ (b + 0x9e3779b9 + (a << 6U) + (a >> 2U));
+}
+
 [[shader("compute")]]
 [[numthreads(64, 1, 1)]]
 func cs_main(

@@ -39,10 +39,10 @@ struct ModuleRegistry {
         auto deleter = [](void *self) { delete static_cast<T *>(self); };
         auto &module = registry.try_emplace(type_index, ModulePtr(new T(std::forward<Args>(args)...), deleter)).first->second;
 
-        init_callbacks.push_back([module = static_cast<T *>(module.get())]() { return module->init(); });
-        destroy_callbacks.push_back([module = static_cast<T *>(module.get())]() { module->destroy(); });
+        init_callbacks.push_back([m = static_cast<T *>(module.get())]() { return m->init(); });
+        destroy_callbacks.push_back([m = static_cast<T *>(module.get())]() { m->destroy(); });
         if constexpr (ModuleHasUpdate<T>) {
-            update_callbacks.push_back([module = static_cast<T *>(module.get())](f64 delta_time) { module->update(delta_time); });
+            update_callbacks.push_back([m = static_cast<T *>(module.get())](f64 delta_time) { m->update(delta_time); });
         } else {
             update_callbacks.emplace_back(ls::nullopt);
         }

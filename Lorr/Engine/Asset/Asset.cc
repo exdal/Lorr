@@ -415,10 +415,9 @@ auto import_gltf(AssetManager &self, const fs::path &path, JsonWriter &json) -> 
         );
     }
 
-    auto assign_gltf_texture = [&](UUID &texture_uuid, SamplerInfo &sampler_info, const auto &gltf_texture) {
-        if (gltf_texture.has_value()) {
-            auto &texture_info = gltf_texture.value();
-            auto &gltf_texture = gltf_asset.textures[texture_info.textureIndex];
+    auto assign_gltf_texture = [&](UUID &texture_uuid, SamplerInfo &sampler_info, const auto &gltf_texture_info) {
+        if (gltf_texture_info.has_value()) {
+            auto &gltf_texture = gltf_asset.textures[gltf_texture_info->textureIndex];
 
             if (gltf_texture.imageIndex.value()) {
                 texture_uuid = textures[gltf_texture.imageIndex.value()];
